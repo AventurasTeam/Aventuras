@@ -3,6 +3,7 @@ import { useRouter, type Href } from 'expo-router'
 import { useEffect, useMemo, useState } from 'react'
 
 import { AppActionsMenu } from '@/components/compounds/app-actions-menu'
+import { readerHref } from '@/components/reader/reader-href'
 import { ScreenShell } from '@/components/shells/screen-shell'
 import { AppBannerHost } from '@/components/story/app-banner-host'
 import { StoryConfigRecoveryDialog } from '@/components/story/story-config-recovery-dialog'
@@ -101,7 +102,7 @@ export default function Index() {
   const goWizard = (draftId?: string) =>
     router.push((draftId ? `/wizard?draftId=${draftId}` : '/wizard') as Href)
 
-  const navigateToStory = (branchId: string) => router.push(`/reader-composer/${branchId}`)
+  const navigateToStory = (branchId: string) => router.push(readerHref(branchId))
 
   const navigateToAbout = (storyId: string) => () =>
     router.push(`/story-settings/${storyId}?tab=about`)

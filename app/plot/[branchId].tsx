@@ -347,7 +347,7 @@ export default function PlotRoute() {
     {
       key: 'story',
       label: storyTitle ?? t('reader:placeholderTitle'),
-      onPress: () => navigateGuarded(`/reader-composer/${branchId}`),
+      onPress: () => navigateGuarded(readerHref(branchId)),
     },
     { key: 'plot', label: t('plot:title') },
   ]

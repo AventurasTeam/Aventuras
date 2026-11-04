@@ -3,6 +3,7 @@ import { useFocusEffect, useLocalSearchParams, useRouter, type Href } from 'expo
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { BackHandler, Platform, View } from 'react-native'
 
+import { readerHref } from '@/components/reader/reader-href'
 import { Button } from '@/components/ui/button'
 import { Text } from '@/components/ui/text'
 import { DiscardDroppedRowsDialog } from '@/components/wizard/discard-dropped-rows-dialog'
@@ -258,7 +259,7 @@ export default function WizardRoute() {
           finishWizard(
             wizardStore.getWizard().state,
             ctx,
-            (branchId) => router.replace(`/reader-composer/${branchId}` as Href),
+            (branchId) => router.replace(readerHref(branchId)),
             {
               defaultStorySettings,
               embeddingModelId,

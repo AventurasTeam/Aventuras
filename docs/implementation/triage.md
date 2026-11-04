@@ -141,14 +141,6 @@ slice-planning gate forces its resolution before that slice is planned.
   flat props type, where a union on `variant` would make in-story callers
   pass it. Raised 2026-11-02 by Slice 5.1's closing review.
 
-- **The reader path is still built by hand.** `readerHref`
-  (`components/reader/reader-href.ts`) is the slice's one builder, but
-  `app/wizard.tsx`, `app/index.tsx`, `app/plot/[branchId].tsx`,
-  `app/world/[branchId].tsx`, `app/story-settings/[storyId].tsx` and
-  `components/compounds/go-to-group.ts` still write
-  `/reader-composer/${…}` themselves. Raised 2026-11-02 by 5.3's task
-  reviews.
-
 - **`isEditableTarget` has never had a story on the upward path.**
   `reader-surface.tsx` guards typing in a field from the scroll-key
   gestures. 5.3 pins the downward half with a story; nothing fails if
