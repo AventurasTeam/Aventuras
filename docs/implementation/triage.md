@@ -177,23 +177,6 @@ slice-planning gate forces its resolution before that slice is planned.
   that's left. Raised 2026-11-02 by Slice 5.3's Android measure;
   narrowed 2026-11-03 by the delayed veil.
 
-- **A jump to the window's oldest row lands without its break, and at
-  the branch's top can shift.** A target already in the window lands at
-  once and reads nothing (`components/reader/use-entry-jump.ts`), so
-  when it is the window's oldest loaded row, the previous chapter's end
-  row isn't loaded and its break doesn't exist when it lands; a later
-  boundary load mounts the break just above the screen. On a branch
-  whose first row is the window's oldest with `hasOlder` still true (a
-  50-row branch, or a last boundary load of exactly 50), entry 1 shifts
-  up about 12 px when the shimmer drops. Reading the row above first
-  doesn't hold on native: expo-dom injects the landing call before the
-  route's props emission, so the document lands on the old layout. A fix
-  has to order the landing after the document commits the host's write,
-  a bridge-contract change; the sliding window in
-  [`followups.md`](../followups.md#ux)'s "Native reader rows rerender
-  per emission" reworks this path. Raised 2026-11-03 by 5.3's final
-  review.
-
 - **A shrinking viewport can pull a landing to the bottom.** The
   surface's `ResizeObserver` (`components/reader/reader-surface.tsx`)
   writes `scrollTop` to the bottom when the viewport shrinks under a
