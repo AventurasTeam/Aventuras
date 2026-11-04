@@ -160,20 +160,6 @@ slice-planning gate forces its resolution before that slice is planned.
   not checked whether the seed trips it. Raised 2026-11-02 by 5.3's task
   reviews.
 
-- **Four doc lines read stale after 5.3.**
-  [`story-list.md`](../ui/screens/story-list/story-list.md#story-card--text-first)
-  says the card shows the current chapter "for active stories", where
-  [`story-card.md`](../ui/patterns/story-card.md) and the shipped card
-  label archived stories too.
-  [`navigation.md`](../ui/foundations/mobile/navigation.md)'s phone diagram
-  labels the top bar ~44 px, while `--bar-h-md` runs 48 to 64 px by
-  density. [Milestone 5](./milestones/05-chapters-chapter-close/milestone.md)
-  still describes C5's percent interim and C16's `Count labels` flip,
-  which 5.3 never needed, since it binds 5.1 directly.
-  [`delta-log-row.md`](../ui/patterns/delta-log-row.md)'s Plot `Used by`
-  entry links Plot's mobile section, not its History tab. Raised
-  2026-11-02 by 5.3's task reviews.
-
 - **A `DeltaLogRow`'s name hides its content.** On a pressable row the
   `aria-label` replaces the row's text as its name, so a screen reader
   never hears the summary, field path, source or time, and two rows of

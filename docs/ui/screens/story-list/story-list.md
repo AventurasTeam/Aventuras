@@ -130,7 +130,8 @@ viewport.
     only self-contained commands; the Story List's Actions entries
     are `New story` and `Import story…`.
 - **Meta row** — mode name (written out: "Adventure" / "Creative"),
-  current chapter (for active stories), last-opened relative time.
+  current chapter (active and archived stories), last-opened relative
+  time.
   Draft stories skip the chapter part — their draft-ness is already
   signaled by the `Draft` badge in the title row.
 - **Description** — 3 lines with ellipsis overflow (more generous

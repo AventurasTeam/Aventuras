@@ -45,7 +45,7 @@ master-detail sub-header or breadcrumb does the location job).
 ```
 Reader (phone) — non-root, back on the left:
   ┌─────────────────────────────────────────────────────┐
-  │ [←] [Aria's Descent…]         [pill] [⛭] [⚲]        │  ← top bar (~44 px)
+  │ [←] [Aria's Descent…]         [pill] [⛭] [⚲]        │  ← top bar (48–64 px by density)
   ├─────────────────────────────────────────────────────┤
   │ ▰▰▰▰▱▱▱▱▱▱▱                                          │  ← progress strip (~3 px)
   ├─────────────────────────────────────────────────────┤

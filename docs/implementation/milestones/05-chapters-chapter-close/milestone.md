@@ -440,14 +440,12 @@ Provider: [Slice 5.1](./slices/01-token-measure.md). Consumers: 5.2, 5.3,
   `canClose` says the region holds an entry that can end a chapter, and
   `Ready to close` and `Close chapter…`'s availability both read it. It
   refetches on `settleCount` and the tail, as `useEntryIndex` does
-  (`hooks/use-entry-index.ts:67`); a content edit runs in the reversal
+  (`hooks/use-entry-index.ts`); a content edit runs in the reversal
   bracket, so it ticks `settleCount`.
 - **`ScreenShell.chapterProgress`** (`components/shells/screen-shell.tsx:49`)
-  takes the hook's return, with `tokens` and `threshold` optional until
-  5.1 lands, plus `onChapterProgressPress` from the route. Tone comes
-  from `chapterProgressTone` in `lib/chapters`, returning `'success'`,
-  `'warning'` or `'danger'` at canon's 80 and 90. Whichever of 5.1 and
-  5.3 lands first creates it, so they can't each hold a copy.
+  takes the hook's return, plus `onChapterProgressPress` from the
+  route. Tone comes from `chapterProgressTone` in `lib/chapters`,
+  returning `'success'`, `'warning'` or `'danger'` at canon's 80 and 90.
 - **`lib/chapters` takes no value import of `@/lib/db`.** The seed sits
   below `lib/db/index.ts:123`, and `'use dom'` reader code can't reach the
   DB. It holds pure rules and constants, and 5.1's boundaries rule holds
@@ -455,8 +453,6 @@ Provider: [Slice 5.1](./slices/01-token-measure.md). Consumers: 5.2, 5.3,
   one-time check. Stores, actions, retrieval and the hooks bring `lib/db`
   in at runtime, so the rule bars value imports of every lib module and
   of app code. Bare lib files such as `lib/keyword-terms` stay open.
-
-Until 5.1 lands, consumers render a percent with no number.
 
 ### C6 — What the banner's `N of M` counts
 
@@ -763,7 +759,6 @@ on a chapter no close wrote, so it ships hidden.
 
 | Flip                          | Provider | Host |
 | ----------------------------- | -------- | ---- |
-| Count labels                  | 5.1      | 5.3  |
 | `Manage chapters →`           | 5.7      | 5.3  |
 | `Close chapter manually`      | 5.10     | 5.3  |
 | `Close chapter…`              | 5.10     | 5.7  |
