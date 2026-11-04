@@ -331,6 +331,23 @@ verified against the code first. Resolve with the slice each names.
   filter, search and the peek reset when the reader's branch changes),
   so no per-branch view map is needed. The stacked-route twin of the
   composer-draft entry above. Routed from triage 2026-10-09.
+- **M6.3 — `documentPainted` resets only on `onReady`.** In
+  `app/reader-composer/[branchId].tsx`, `documentPainted` and its ref
+  turn false in `handleReady` and true in `handleFirstPaint`, so if
+  `ReaderDocument` remounts behind the placeholder, the boot veil and
+  `entryLinkReady` read the old document's paint until the new one sends
+  `onReady`. Worse, the document's handle goes stale: expo's DOM
+  wrapper (`node_modules/expo/src/dom/webview-wrapper.tsx`) builds its
+  ref proxy only while `ref.current` is null and never clears it, so
+  after a remount `documentRef` still points at the first WebView, and
+  every later `jumpToEntry` or `jumpToBottom` is dropped silently: an
+  out-of-window jump's veil stays up for its 30 s bound, and an
+  in-window jump does nothing. Shown with expo's wrapper and a stand-in
+  WebView, not on a device. No remount within one route instance is
+  reachable today; an in-place branch switch would make one, and would
+  also log a false `reader.document_reloaded`, which reads the same
+  painted state. Raised 2026-11-03 by 5.3's Task 9 review; the stale
+  handle added by 5.3's slice review. Routed from triage 2026-11-04.
 - **M6 — The lead must be per-branch and delta-logged.** Two branches
   with different leads is a valid use case (developer, 2026-09-28), and
   a story-level `definition.leadEntityId` dangles on any branch lacking
