@@ -45,6 +45,21 @@ export async function readEntryPosition(
   return row?.position ?? null
 }
 
+/** The position of the nearest row above `position` on the branch, or null at the branch top. */
+export async function readPositionAbove(
+  branchId: string,
+  position: number,
+  db: DbCtx['db'],
+): Promise<number | null> {
+  const [row] = await db
+    .select({ position: storyEntries.position })
+    .from(storyEntries)
+    .where(and(eq(storyEntries.branchId, branchId), lt(storyEntries.position, position)))
+    .orderBy(desc(storyEntries.position))
+    .limit(1)
+  return row?.position ?? null
+}
+
 /** `fromPosition <= position < beforePosition`, ascending. */
 export async function readEntriesBetween(
   branchId: string,

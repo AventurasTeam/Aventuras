@@ -119,6 +119,7 @@ export {
   readEntriesBefore,
   readEntriesBetween,
   readEntryPosition,
+  readPositionAbove,
   readRecentEntries,
 } from './story-entries/recent-window'
 export { STORY_ENTRY_REJECTION, type StoryEntryRejectionCode } from './story-entries/register'

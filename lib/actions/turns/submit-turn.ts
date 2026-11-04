@@ -72,8 +72,8 @@ export async function submitTurn(
         // so CTRL-Z reverses the whole turn as one group (milestone.md C6).
         const turnActionId = generateId('act')
 
-        // Tail position from committed rows, not the in-memory store's count: real
-        // branches have position gaps, so a count lands mid-story and collides.
+        // Tail position from committed rows, not the in-memory store's count: the store
+        // holds a window, so a count lands mid-story and collides.
         // Queued per-branch so a second submit can't read the same MAX before the
         // first one's insert lands.
         const [tail] = await ctx.db

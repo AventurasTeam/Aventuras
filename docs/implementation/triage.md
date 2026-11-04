@@ -529,20 +529,6 @@ slice-planning gate forces its resolution before that slice is planned.
   Seen in a story probe. A fix needs the strip's element to reach the
   popover's close. Raised 2026-11-03 by 5.3's slice review.
 
-- **The branch top is defined two ways.**
-  [`reader-composer.md`](../ui/screens/reader-composer/reader-composer.md#loaded-set-model)
-  says a non-root branch's top is its first post-fork entry, while
-  [`data-model.md`](../data-model.md#branch-model)'s fork copies entries
-  1..N into the new branch, and 5.3's jump (`readsBranchTop`,
-  `components/reader/use-entry-jump.ts`) treats the row with nothing
-  above it as the top. Separately, `lib/actions/turns/submit-turn.ts`
-  says real branches have position gaps, while `use-entry-jump.ts`
-  relies on there being none; no writer that leaves one was found
-  (entries append at the tail, a rollback deletes a suffix, and the
-  system entry is cleared before an action and re-appended at the
-  tail). A gap would drop the boundary shimmer early and stop older
-  loads above it. Raised 2026-11-03 by 5.3's slice review.
-
 - **The theme CSS generator has no runtime caller.**
   `lib/themes/core/css-generator.ts` has had no caller outside its tests
   since M1: `global.css` is written by hand and guarded by
