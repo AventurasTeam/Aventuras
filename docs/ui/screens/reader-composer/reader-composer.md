@@ -158,8 +158,8 @@ inside the template.
   chapter's `end_entry_id` worldTime).
 - **Chapter popover rows** — each row shows a time range. Range
   endpoints are computed as `min(worldTime)` and `max(worldTime)`
-  across the chapter's entries (excluding flashbacks with
-  `worldTime = 0`), then formatted via the same formatter. The
+  across the chapter's entries that carry one, the opening's `0`
+  included, then formatted via the same formatter. The
   min/max computation keeps the range coherent even when manual
   `worldTime` edits put entries out of narrative order.
 
@@ -492,8 +492,8 @@ manual edits; no cascade is triggered.
 
 The host (`reader-composer`) is responsible for computing the
 monotonicity-break flag per entry (walk-back over the entries
-collection, compare against the most recent preceding entry with
-`worldTime > 0`) and passing `worldTimeMonotonicityBreak` to
+collection, compare against the most recent preceding entry with a
+`worldTime`) and passing `worldTimeMonotonicityBreak` to
 EntryCard. The walk is O(N) per list render, cached against the
 entries collection identity.
 

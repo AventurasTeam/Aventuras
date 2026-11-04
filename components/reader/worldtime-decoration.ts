@@ -22,9 +22,7 @@ const EDITABLE_KINDS = new Set<StoryEntry['kind']>(['user_action', 'ai_reply', '
  * narrative (position) order: the walk only ever compares against the most
  * recently decorated predecessor, so an out-of-order input produces wrong
  * flags silently rather than an error. The first decorated entry has no
- * ancestor and is never flagged. worldTime === 0 marks a flashback — never
- * flagged, never the ancestor a later entry compares against
- * (docs/ui/patterns/entry-card.md → World-time footer).
+ * ancestor and is never flagged.
  */
 export function decorateWorldTime(
   entries: StoryEntry[],
@@ -58,11 +56,11 @@ export function decorateWorldTime(
     }
 
     const decoration: WorldTimeDecoration = { label, raw: worldTime }
-    if (prev != null && worldTime > 0 && worldTime < prev.worldTime) {
+    if (prev != null && worldTime < prev.worldTime) {
       decoration.previousLabel = prev.label
     }
     decorations[row.id] = decoration
-    if (worldTime > 0) prev = { worldTime, label }
+    prev = { worldTime, label }
   }
 
   // A broken displayFormat fails for every row at once, taking the label, the

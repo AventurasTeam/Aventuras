@@ -892,20 +892,6 @@ appears (e.g. asset sha256 content-addressing): point the shim at
 `expo-crypto`'s `randomUUID` — one file, one native dep, a
 dev-client rebuild.
 
-#### worldTime === 0 is overloaded
-
-**`worldTime === 0` is overloaded: story origin and flashback
-sentinel.** The opening entry and every user action that inherits
-from it sit at 0, `lib/calendar/render.ts` special-cases 0, and the
-classifier emits 0 for flashbacks. The monotonicity check therefore
-cannot see a genuine backwards jump that lands exactly on 0 — it is
-indistinguishable from a flashback and stays unflagged.
-`docs/ui/patterns/entry-card.md` prescribes this convention, so
-Slice 3.8 implements it as specified; the note exists so the next
-person to ask "why is this regression not warned about?" finds the
-answer. Revisit if flashbacks ever get their own marker.
-Raised 2026-08-15 by the Slice 3.8 Task 2 review.
-
 #### A delta whose target table left the registry cannot be reversed
 
 `reverseReplayDeltas` resolves `deltas.target_table` through the

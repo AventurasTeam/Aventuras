@@ -828,7 +828,8 @@ populates the new entry's metadata:
   new number — not worth the cost or the narrative-text churn. **For
   detected flashback / memory framing
   ("she remembered...", "25 years earlier..."), the classifier emits
-  0** — main-timeline clock doesn't advance during recalled scenes.
+  a delta of 0** — main-timeline clock doesn't advance during recalled
+  scenes.
   Cumulative monotonicity holds when written by the classifier
   alone; user manual `worldTime` edits (see
   [`data-model.md → In-world time tracking`](./data-model.md#in-world-time-tracking))

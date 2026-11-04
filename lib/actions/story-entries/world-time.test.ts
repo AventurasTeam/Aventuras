@@ -179,8 +179,7 @@ describe('updateEntryWorldTime', () => {
   })
 
   // 0 is the accept boundary of the storage invariant, not an edge to reject:
-  // openings are always worldTime 0, and resetting an entry back to 0 undoes a
-  // bad classifier advance or re-marks a flashback.
+  // openings are always worldTime 0.
   it('accepts worldTime 0', async () => {
     const { db, runInTransaction } = await createTestDb()
     const ctx = { db, runInTransaction }
