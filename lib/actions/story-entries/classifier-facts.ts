@@ -19,7 +19,7 @@ const invalidationScopeSchema = z.object({
 
 // Recorded at write time rather than re-derived at reversal time, because the tail can
 // move without this delta moving with it (data-model.md -> Entry mutability & rollback).
-export const INVALIDATION_SCOPE_KEY = `${PAYLOAD_META_PREFIX}invalidationScope`
+export const INVALIDATION_SCOPE_KEY = `${PAYLOAD_META_PREFIX}invalidationScope` as const
 
 /**
  * The entries a content edit invalidates, or null when it invalidates none.
@@ -94,12 +94,17 @@ export async function resolveContentEditInvalidation(
   return { ...(await invalidationForScope(branchId, scope, ctx)), scope }
 }
 
+/** A content delta's undo payload; `metadata` and the scope are absent, not null, when unset. */
+export type ContentEditUndoPayload = Pick<StoryEntry, 'content' | 'contentTokens'> & {
+  metadata?: Record<string, unknown>
+} & { [K in typeof INVALIDATION_SCOPE_KEY]?: InvalidationScope }
+
 /** The content delta's payload: prior prose and count, the metadata undo if written, the scope. */
 export function contentEditUndoPayload(
   previous: Pick<StoryEntry, 'content' | 'contentTokens'>,
   scope: InvalidationScope | null,
   metadataUndo?: Record<string, unknown>,
-): Record<string, unknown> {
+): ContentEditUndoPayload {
   return {
     content: previous.content,
     contentTokens: previous.contentTokens,

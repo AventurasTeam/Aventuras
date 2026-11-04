@@ -134,13 +134,6 @@ slice-planning gate forces its resolution before that slice is planned.
   `error instanceof Error ? …` log field has 40 or more sites and no
   shared helper. Each needs a new home and a sweep of files on main.
   Raised 2026-11-02 by Slice 5.1's closing review.
-- **Two older types the token slice builds on stay loose.**
-  `contentEditUndoPayload` (`lib/actions/story-entries/classifier-facts.ts:98`)
-  returns `Record<string, unknown>`, though its keys are known.
-  `ScreenShell`'s `chapterProgress` is in-story only by doc comment on a
-  flat props type, where a union on `variant` would make in-story callers
-  pass it. Raised 2026-11-02 by Slice 5.1's closing review.
-
 - **`isEditableTarget` has never had a story on the upward path.**
   `reader-surface.tsx` guards typing in a field from the scroll-key
   gestures. 5.3 pins the downward half with a story; nothing fails if
