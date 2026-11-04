@@ -320,13 +320,6 @@ slice-planning gate forces its resolution before that slice is planned.
   list. Seen on the Fold in 5.3's phone pass; the route's back handler
   predates the slice. Raised 2026-11-03.
 
-- **Reader story plays log `Cannot find single active touch`.** The
-  synthetic `Event('touchstart')` and `touchend` dispatches in
-  `components/reader/reader-surface.stories.tsx` carry no `touches`, and
-  React Native Web's responder logs this error for each. The plays still
-  pass, but the noise hides real errors in a run's console. Raised
-  2026-11-02 by 5.3's fling-halt review.
-
 - **The jump landing loop wants a pure decision function.**
   `startLanding` in `components/reader/reader-surface.tsx` now holds
   about nine closure variables and four gates (layout, finger, wheel

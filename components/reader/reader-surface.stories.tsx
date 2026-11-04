@@ -1,6 +1,6 @@
 import type { Meta, StoryObj } from '@storybook/react-native-web-vite'
 import { useEffect, useRef, useState, type ComponentProps } from 'react'
-import { expect, fn, screen, userEvent, waitFor, within } from 'storybook/test'
+import { expect, fn, screen, spyOn, userEvent, waitFor, within } from 'storybook/test'
 
 import { EARTH_GREGORIAN } from '@/lib/calendar'
 import type { CutOffMark, StoryEntry, SystemFailureMeta } from '@/lib/db'
@@ -189,6 +189,22 @@ const meta = {
 
 export default meta
 type Story = StoryObj<typeof meta>
+
+// One real touch, gone on touchend. A bare Event carries no touch lists, so React Native Web's
+// responder makes one up that touchend never removes, and logs "Cannot find single active touch".
+function dispatchTouch(target: Element, type: 'touchstart' | 'touchmove' | 'touchend') {
+  const touch = new Touch({ identifier: 1, target, clientX: 0, clientY: 0 })
+  const active = type === 'touchend' ? [] : [touch]
+  target.dispatchEvent(
+    new TouchEvent(type, {
+      bubbles: true,
+      cancelable: true,
+      touches: active,
+      targetTouches: active,
+      changedTouches: [touch],
+    }),
+  )
+}
 
 export const Default: Story = {}
 
@@ -560,11 +576,29 @@ export const ShrinkDuringTouchHolds: Story = {
   play: async () => {
     const scroller = readerScroller()
     await settleLanding(scroller)
-    scroller.dispatchEvent(new Event('touchstart', { bubbles: true }))
+    dispatchTouch(scroller, 'touchstart')
     const scrollTop = scroller.scrollTop
     await shrinkViewport(scroller)
     expect(scroller.scrollTop).toBe(scrollTop)
     expect(distanceFromBottom(scroller)).toBeCloseTo(BANNER_HEIGHT_PX, 0)
+  },
+}
+
+/** The plays' touches are whole gestures to React Native Web's responder, so a run logs no error. */
+export const TouchGestureLogsNoResponderError: Story = {
+  args: { rows: OVERFLOW_ROWS },
+  play: async () => {
+    const scroller = readerScroller()
+    await settleLanding(scroller)
+    const errors = spyOn(console, 'error')
+    try {
+      dispatchTouch(scroller, 'touchstart')
+      dispatchTouch(scroller, 'touchmove')
+      dispatchTouch(scroller, 'touchend')
+      expect(errors.mock.calls.flat().join(' ')).not.toContain('Cannot find single active touch')
+    } finally {
+      errors.mockRestore()
+    }
   },
 }
 
@@ -574,9 +608,9 @@ export const ShrinkAfterTouchKeepsBaseline: Story = {
   play: async () => {
     const scroller = readerScroller()
     await settleLanding(scroller)
-    scroller.dispatchEvent(new Event('touchstart', { bubbles: true }))
+    dispatchTouch(scroller, 'touchstart')
     await shrinkViewport(scroller)
-    scroller.dispatchEvent(new Event('touchend', { bubbles: true }))
+    dispatchTouch(scroller, 'touchend')
     // 40 px up: outside the tolerance against the current height, inside it (40 - 49) against
     // the height before the skipped shrink.
     await scrollToDistance(scroller, 40)
@@ -938,8 +972,8 @@ export const StreamEndSettleBrokenByTouch: Story = {
     await endStream()
     expect(entryRow('reply')).toBeInstanceOf(HTMLElement)
     expect(document.querySelector('[data-grown="false"]')).toBeInstanceOf(HTMLElement)
-    scroller.dispatchEvent(new Event('touchstart', { bubbles: true }))
-    scroller.dispatchEvent(new Event('touchmove', { bubbles: true }))
+    dispatchTouch(scroller, 'touchstart')
+    dispatchTouch(scroller, 'touchmove')
     scroller.scrollTop = scroller.scrollHeight - scroller.clientHeight - 100
     const scrollTop = scroller.scrollTop
     await replyGrown()
@@ -1276,7 +1310,7 @@ export const BreakDuringTouchHolds: Story = {
     const scroller = scrollerOf('o1')
     await settleLanding(scroller)
     const scrollTop = scroller.scrollTop
-    scroller.dispatchEvent(new Event('touchstart', { bubbles: true }))
+    dispatchTouch(scroller, 'touchstart')
     await pressCommit()
     await scrollSettled(scroller)
     expect(scroller.scrollTop).toBe(scrollTop)
@@ -1886,9 +1920,9 @@ const LANDING_BREAKERS: Record<string, (scroller: HTMLElement) => void> = {
   wheelUp: (s) => s.dispatchEvent(new WheelEvent('wheel', { deltaY: -100, bubbles: true })),
   wheelDown: (s) => s.dispatchEvent(new WheelEvent('wheel', { deltaY: 100, bubbles: true })),
   touchDrag: (s) => {
-    s.dispatchEvent(new Event('touchstart', { bubbles: true }))
-    s.dispatchEvent(new Event('touchmove', { bubbles: true }))
-    s.dispatchEvent(new Event('touchend', { bubbles: true }))
+    dispatchTouch(s, 'touchstart')
+    dispatchTouch(s, 'touchmove')
+    dispatchTouch(s, 'touchend')
   },
   scrollbarPress: pressScrollbar,
   upwardKey: (s) => s.dispatchEvent(new KeyboardEvent('keydown', { key: 'PageUp', bubbles: true })),
@@ -2289,12 +2323,12 @@ export const JumpWaitsOutARestingFinger: Story = {
     const scroller = scrollerOf('o1')
     await settleLanding(scroller)
     const before = scroller.scrollTop
-    scroller.dispatchEvent(new Event('touchstart', { bubbles: true }))
+    dispatchTouch(scroller, 'touchstart')
     press('Jump')
     await outlastLanding()
     expect(scroller.scrollTop).toBe(before)
     expect(args.onEntryLanded).not.toHaveBeenCalled()
-    scroller.dispatchEvent(new Event('touchend', { bubbles: true }))
+    dispatchTouch(scroller, 'touchend')
     await landedOn(JUMP_TARGET, scroller)
     await waitFor(() => expect(args.onEntryLanded).toHaveBeenCalledWith(JUMP_TARGET))
   },
