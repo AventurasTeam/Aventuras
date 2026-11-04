@@ -152,7 +152,6 @@ class ImportExportService {
     if (!root) return null
 
     const tree = buildTree({
-      source: 'pack',
       appVersion: await getVersion(),
       name: fullPack.pack.name,
       description: fullPack.pack.description ?? undefined,

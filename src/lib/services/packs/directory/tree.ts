@@ -28,7 +28,6 @@ import {
   parsePackFile,
   serializePackFile,
   serializeTemplate,
-  type TreeSource,
 } from './serialize'
 
 export interface StoredTemplate {
@@ -37,7 +36,6 @@ export interface StoredTemplate {
 }
 
 export interface TreeInput {
-  source: TreeSource
   appVersion: string
   name: string
   description?: string
@@ -101,7 +99,6 @@ export function buildTree(input: TreeInput): Tree {
     PACK_FILE,
     serializePackFile({
       formatVersion: DIRECTORY_FORMAT_VERSION,
-      source: input.source,
       name: input.name,
       description: input.description,
       author: input.author,
@@ -120,7 +117,6 @@ export function buildTree(input: TreeInput): Tree {
 /** The tree for the prompt text this version of the app ships, which no edit can reach. */
 export function buildShippedBaselineTree(appVersion: string): Tree {
   return buildTree({
-    source: 'shipped-baseline',
     appVersion,
     name: 'Aventuras shipped prompts',
     description: 'The prompt text this version of Aventuras ships. Exported as a merge base.',

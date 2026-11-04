@@ -35,7 +35,6 @@ async function exportThenImport(rewriteLineEndings: boolean) {
   )
 
   const tree = buildTree({
-    source: 'pack',
     appVersion: '0.7.9',
     name: 'My Pack',
     templates: stored,
@@ -102,7 +101,6 @@ describe('a tree written by format 1', () => {
 
   it('imports as the same pack the current format writes', () => {
     const current = buildTree({
-      source: 'pack',
       appVersion: '0.7.9',
       name: 'My Pack',
       templates: stored,

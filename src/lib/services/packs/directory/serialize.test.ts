@@ -11,7 +11,6 @@ import {
 
 const packFile: WrittenPackFile = {
   formatVersion: DIRECTORY_FORMAT_VERSION,
-  source: 'pack',
   name: 'My Pack',
   description: 'A pack',
   author: 'Someone',
@@ -51,11 +50,11 @@ describe('serializePackFile', () => {
     expect(yaml.indexOf('aside_frequency')).toBeLessThan(yaml.indexOf('writing_style'))
   })
 
-  it('writes the format version and source, and no application version or timestamp', () => {
+  it('writes the format version, and no application version, source or timestamp', () => {
     const yaml = serializePackFile(packFile)
     expect(yaml).toContain(`formatVersion: ${DIRECTORY_FORMAT_VERSION}`)
     expect(yaml).not.toContain('appVersion')
-    expect(yaml).toContain('source: pack')
+    expect(yaml).not.toContain('source')
     expect(yaml).not.toMatch(/\d{4}-\d{2}-\d{2}/)
   })
 

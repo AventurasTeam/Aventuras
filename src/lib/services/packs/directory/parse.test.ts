@@ -5,7 +5,6 @@ import { validateTree } from './parse'
 
 const packYaml = serializePackFile({
   formatVersion: DIRECTORY_FORMAT_VERSION,
-  source: 'pack',
   name: 'My Pack',
   variables: [
     {
@@ -34,7 +33,6 @@ describe('validateTree', () => {
     const result = validateTree(tree())
 
     expect(result.valid).toBe(true)
-    expect(result.source).toBe('pack')
     expect(result.pack!.name).toBe('My Pack')
     expect(result.pack!.templates.map((t) => t.templateId)).toEqual(['adventure', 'adventure-user'])
     expect(result.pack!.variables).toHaveLength(1)
@@ -115,7 +113,6 @@ describe('validateTree', () => {
   it('refuses a format version it cannot read', () => {
     const future = serializePackFile({
       formatVersion: DIRECTORY_FORMAT_VERSION + 1,
-      source: 'pack',
       name: 'From the future',
       variables: [],
     })
@@ -125,17 +122,15 @@ describe('validateTree', () => {
     expect(result.structuralErrors[0]).toContain('format version')
   })
 
-  it('carries the shipped-baseline marker through', () => {
+  it('imports a shipped baseline as a pack without custom variables', () => {
     const baseline = serializePackFile({
       formatVersion: DIRECTORY_FORMAT_VERSION,
-      source: 'shipped-baseline',
       name: 'Aventuras shipped prompts',
       variables: [],
     })
 
     const result = validateTree(tree({ [PACK_FILE]: baseline }))
     expect(result.valid).toBe(true)
-    expect(result.source).toBe('shipped-baseline')
     expect(result.pack!.variables).toEqual([])
   })
 })

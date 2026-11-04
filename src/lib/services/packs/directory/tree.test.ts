@@ -21,7 +21,6 @@ import {
 } from './tree'
 
 const input: TreeInput = {
-  source: 'pack',
   appVersion: '0.7.9',
   name: 'My Pack',
   templates: [
@@ -99,9 +98,8 @@ describe('buildShippedBaselineTree', () => {
     expect(shippedTemplateRows().length).toBeGreaterThan(PROMPT_TEMPLATES.length)
   })
 
-  it('declares itself a shipped baseline with no custom variables', () => {
+  it('declares no custom variables', () => {
     const packFile = buildShippedBaselineTree('0.7.9').get(PACK_FILE)!
-    expect(packFile).toContain('source: shipped-baseline')
     expect(packFile).toContain('variables: []')
   })
 

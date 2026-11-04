@@ -202,10 +202,10 @@ name, and **no timestamp** — a value that moves between two exports of the sam
 merge and says nothing the commit does not.
 
 **`pack.yaml` holds nothing that changes between releases.** A custom tree always differs from the shipped
-baseline in `source` and `name`, and git merges adjacent changed lines as one hunk, so any per-release value
-beside them — an application version, a versioned baseline name — conflicts with the custom branch on every
-release. Without one, the baseline's `pack.yaml` is the same in `base` and `theirs` and drops out of the
-merge. The version lives in `_reference/version.md`, a file of its own beside the two variable lists it
+baseline in `name`, and git merges adjacent changed lines as one hunk, so any per-release value beside it —
+an application version, a versioned baseline name — conflicts with the custom branch on every release.
+Without one, the baseline's `pack.yaml` is the same in `base` and `theirs` and drops out of the merge. It
+records no `source` either: nothing read it, and the branch a tree sits on already says whose it is. The version lives in `_reference/version.md`, a file of its own beside the two variable lists it
 describes: when a custom tree was last exported by a release whose baseline export was skipped, the version
 conflicts, and as one isolated line whose answer is always "take theirs". Nothing under `_reference/`
 depends on the exported templates, so an edit never touches it.

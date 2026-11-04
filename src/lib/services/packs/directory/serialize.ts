@@ -12,14 +12,11 @@ import { CustomVariableSchema } from '../validation'
 /** Version of the directory layout, not of any pack. */
 export const DIRECTORY_FORMAT_VERSION = 2
 
-/** Whether a tree came from a pack's stored rows or from the text the app ships. */
-export type TreeSource = 'pack' | 'shipped-baseline'
-
+// Unknown keys are dropped, so an earlier tree's `source` still parses.
 const PackFileSchema = z.object({
   formatVersion: z.number().int().positive(),
   /** Written by format 1 only. */
   appVersion: z.string().optional(),
-  source: z.enum(['pack', 'shipped-baseline']),
   name: z.string().min(1),
   description: z.string().optional(),
   author: z.string().optional(),
@@ -52,7 +49,6 @@ function bySortOrderThenName(
 export function serializePackFile(file: WrittenPackFile): string {
   const ordered: Record<string, unknown> = {
     formatVersion: file.formatVersion,
-    source: file.source,
     name: file.name,
   }
   if (file.description !== undefined) ordered.description = file.description
