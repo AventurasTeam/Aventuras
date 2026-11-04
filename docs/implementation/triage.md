@@ -105,23 +105,6 @@ slice-planning gate forces its resolution before that slice is planned.
   and the `landedId` effect). From reading, not run; the row fade before
   Q7 behaved the same. Raised 2026-11-02 by 5.3's Q7 review.
 
-- **An accent override would fade the dark landed tint below its
-  floor.** Under an override, default-light's and default-dark's
-  `--selection-bg` is derived
-  ([`color.md → Accent-derivation algorithm`](../ui/foundations/color.md#accent-derivation-algorithm)),
-  and dark's is 30% accent over `--bg-base`, already soft. But
-  default-dark's `--landed-tint-share`, 22%, was tuned for its own
-  `#1e3a8a`. With the curated blue `#2563eb`, default-dark's own
-  accent, the landed card's peak falls to OKLab ΔE 2.3 on an
-  `ai_reply` and 3.9 on a `user_action`, below the 4.7 floor the
-  registry invariant holds dark themes to
-  ([`tokens.md → Color slots`](../ui/foundations/tokens.md#color-slots)).
-  Red, teal, violet and neutral grey give 1.9 to 2.6 on an `ai_reply`.
-  The override isn't wired yet: only the `accentOverride` setting
-  exists. The likely fix is to derive the share in JS where the theme
-  is applied, beside `--selection-bg`, and move the invariant onto that
-  derivation. Raised 2026-11-02 by 5.3's Q10 review.
-
 - **A shrinking viewport can pull a landing to the bottom.** The
   surface's `ResizeObserver` (`components/reader/reader-surface.tsx`)
   writes `scrollTop` to the bottom when the viewport shrinks under a
