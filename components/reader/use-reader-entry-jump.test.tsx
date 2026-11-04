@@ -80,6 +80,14 @@ describe('useReaderEntryJump', () => {
     expect(result.current.veil.isWaiting()).toBe(false)
   })
 
+  it('keeps the wait when the row signals before its held landing is sent', async () => {
+    const { result } = mount(false)
+    await act(() => result.current.jump('entry_10'))
+
+    act(() => result.current.landed('entry_10'))
+    expect(result.current.veil.isWaiting()).toBe(true)
+  })
+
   it('holds a landing made after a reload took the reader down', async () => {
     const { result, rerender } = mount(true)
     rerender({ branchId: BRANCH, ready: false })
@@ -128,6 +136,30 @@ describe('useReaderEntryJump', () => {
     rerender({ branchId: BRANCH, ready: false })
     expect(result.current.veil.isWaiting()).toBe(true)
     await act(() => again)
+  })
+
+  it('keeps the wait when an older landing of the same row signals during the read', async () => {
+    vi.spyOn(logger, 'warn').mockImplementation(() => {})
+    const { result } = mount(true)
+    await act(() => result.current.jump('entry_10'))
+    entriesStore.hydrate(
+      BRANCH,
+      Array.from({ length: 50 }, (_, i) => row(71 + i)),
+    )
+    expect(result.current.veil.isWaiting()).toBe(false)
+
+    let again!: Promise<void>
+    act(() => {
+      again = result.current.jump('entry_10')
+    })
+    act(() => result.current.landed('entry_10'))
+    expect(result.current.veil.isWaiting()).toBe(true)
+
+    await act(() => again)
+    expect(send.mock.calls).toEqual([['entry_10'], ['entry_10']])
+    expect(result.current.veil.isWaiting()).toBe(true)
+    act(() => result.current.landed('entry_10'))
+    expect(result.current.veil.isWaiting()).toBe(false)
   })
 
   it('lifts the veil when a reload loses a landing already sent', async () => {
