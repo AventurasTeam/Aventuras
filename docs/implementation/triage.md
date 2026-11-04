@@ -76,11 +76,6 @@ slice-planning gate forces its resolution before that slice is planned.
   a leaf the mock could import `countTokens`, as `scripts/mock-llm/control.ts`
   already value-imports `@/lib`, though long-run counts would change and
   that wants an E2E run. Raised 2026-11-01 by Slice 5.1's review.
-- **Two definitions of the open region omit `system`.**
-  [`data-model.md → Chapters / memory system`](../data-model.md#chapters--memory-system)
-  and `readPromptBuffer`'s docblock (`lib/retrieval/buffer.ts:49`) define
-  it by `chapter_id IS NULL` alone, while `openRegionWhere` also leaves
-  out `system` rows. Raised 2026-11-01 by Slice 5.1's review.
 - **A stale `node_modules` ships dependencies without their patches.**
   After a pull that adds or changes a file in `patches/`, nothing makes
   a developer run `pnpm install`: `lefthook.yml` has no post-merge or

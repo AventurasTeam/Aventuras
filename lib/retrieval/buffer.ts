@@ -46,7 +46,7 @@ export function warnOnDuplicatePositions(rows: readonly StoryEntry[], branchId: 
 
 /**
  * cadence.md → Composition rule. Its "current chapter" is the open region:
- * entries whose `chapterId` is null (data-model.md → Chapters / memory system).
+ * non-system entries whose `chapterId` is null (data-model.md → Chapters / memory system).
  *
  * Straight from SQLite, never `entriesStore`: that store starts at the last
  * ENTRIES_WINDOW_SIZE rows and only grows with scroll-up paging, so a window

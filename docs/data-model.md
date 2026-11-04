@@ -3251,8 +3251,8 @@ broadly are designed in [`docs/memory/`](./memory/README.md).
 
 **Open chapter has no row.** Only closed chapters are persisted as
 `chapters` rows. Entries in the "open region" (after the latest
-closed chapter's end) simply have `chapter_id IS NULL` until a
-chapter is created that includes them.
+closed chapter's end; a `system` row is never part of it) simply have
+`chapter_id IS NULL` until a chapter is created that includes them.
 
 **Boundary trigger.** Per-story token threshold
 (`stories.settings.chapterTokenThreshold`, default 24k, user-
