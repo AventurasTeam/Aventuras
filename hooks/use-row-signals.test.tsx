@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { QueryClientProvider, type QueryClient } from '@tanstack/react-query'
+import { onlineManager, QueryClientProvider, type QueryClient } from '@tanstack/react-query'
 import { act, cleanup, render, waitFor } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
@@ -207,6 +207,7 @@ describe('useRowSignals', () => {
   })
   afterEach(() => {
     cleanup()
+    onlineManager.setOnline(true)
   })
 
   it('composes in-scene from the tail and recently-classified from the read window', async () => {
@@ -293,6 +294,18 @@ describe('useRowSignals', () => {
 
     act(() => generationStore.finishRun('r1'))
     await waitFor(() => expect(reads.boundaries).toHaveBeenCalledTimes(2))
+  })
+
+  // The read is local, so a lost network must not pause it.
+  it('reads while the app is offline', async () => {
+    seedOneReply('br_1', [], [entity('char_c', 'character')])
+    reads.boundaries.mockResolvedValue({ fresh: 2, fading: null })
+    reads.deltas.mockResolvedValue([delta('char_c', 3)])
+    act(() => onlineManager.setOnline(false))
+
+    renderProbe()
+
+    await waitFor(() => expect(latest?.recentlyClassified.rows.get('char_c')).toBe('fresh'))
   })
 
   it('keeps the previous window visible while a same-branch refetch is pending', async () => {

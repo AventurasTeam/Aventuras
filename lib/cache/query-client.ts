@@ -1,8 +1,9 @@
 import { QueryClient } from '@tanstack/react-query'
 
-// Off-label: this cache memoizes compute-derived values (e.g. the future diff
-// cache), not network state. Defaults disable every automatic refetch and never
-// expire entries — invalidation is always explicit.
+// Every query is a local SQLite read or a compute-derived value, never network state: nothing
+// refetches on its own, a failure is logged rather than retried, and a read runs whatever the
+// browser says about the network (TanStack's default pauses it on the window's `offline` event).
+// A revisited key is rare, so entries go after 30 s rather than holding rows for 5 minutes.
 export function createQueryClient(): QueryClient {
   return new QueryClient({
     defaultOptions: {
@@ -10,6 +11,9 @@ export function createQueryClient(): QueryClient {
         staleTime: Infinity,
         refetchOnWindowFocus: false,
         refetchOnReconnect: false,
+        networkMode: 'always',
+        retry: false,
+        gcTime: 30_000,
       },
     },
   })

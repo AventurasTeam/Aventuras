@@ -91,11 +91,6 @@ export function useEntryIndex(
   const { data, error, refetch, isFetching } = useQuery({
     queryKey: ['entry-index', branchId, settleCount, tailId],
     enabled: branchId !== '' && !disabled,
-    // Local DB read, not a flaky network call — a failure is worth surfacing, not retried.
-    retry: false,
-    // A revisited key (branch switch back, tailId walking backward) is rare but still
-    // correct — no reason to hold a whole branch's rows for the default 5-minute gc.
-    gcTime: 30_000,
     queryFn: () => read(branchId),
   })
 

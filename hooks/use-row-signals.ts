@@ -67,8 +67,6 @@ export function useRowSignals(branchId: string): RowSignalsSnapshot {
   const { data, error } = useQuery({
     queryKey: ['row-signals', branchId, latestReplyId, fadingReplyId, settleCount],
     enabled: branchId !== '' && latestReplyId != null,
-    // Local DB read, not a flaky network call — a failure is worth surfacing, not retried.
-    retry: false,
     queryFn: async (): Promise<SignalWindow> => {
       // Manual scene edits don't refetch; live entries may carry edits this window can't explain.
       const snapshot = entries

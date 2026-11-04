@@ -67,19 +67,6 @@ slice-planning gate forces its resolution before that slice is planned.
   [`reader-composer.md`](../ui/screens/reader-composer/reader-composer.md#transient-pipeline-failures--system-entries-in-chat)
   lists `Fix profile · Dismiss` for a missing provider. Existing drift
   that no M5 slice owns. Raised 2026-11-01 by the M5 promotion.
-- **React Query reads pause offline in the Electron renderer.**
-  `createQueryClient` (`lib/cache/query-client.ts`) sets no
-  `networkMode`, so once the window's `offline` event fires a read on a
-  new key pauses, though these are local SQLite reads.
-  `useEntryIndex` (`hooks/use-entry-index.ts:91`) and `useRowSignals`
-  (`hooks/use-row-signals.ts:67`) have this on main, and
-  `useChapterProgress` opts out for itself, as 5.3's
-  `useChapterTimeRanges` and `useStoryChapterNumbers` do. One default in
-  `createQueryClient` fixes the two, and the three hooks' own lines can
-  then go. Raised 2026-11-01 by Slice 5.1's planning. The same three
-  hooks also repeat `retry: false` and `gcTime: 30_000`, so a shared set
-  of options for local reads, or client defaults, would cover all three
-  lines; added 2026-11-03 by 5.3's slice review.
 - **The mock LLM's token count has no run guard.**
   `scripts/mock-llm/respond/wire.ts:48-52` keeps its own `countO200k`,
   though its comment says it mirrors `countTokens`. On a fixture with a

@@ -9,4 +9,11 @@ describe('app query client', () => {
     expect(queries?.refetchOnWindowFocus).toBe(false)
     expect(queries?.refetchOnReconnect).toBe(false)
   })
+
+  it('reads locally: runs offline, never retries, and collects an unused key after 30 s', () => {
+    const queries = createQueryClient().getDefaultOptions().queries
+    expect(queries?.networkMode).toBe('always')
+    expect(queries?.retry).toBe(false)
+    expect(queries?.gcTime).toBe(30_000)
+  })
 })

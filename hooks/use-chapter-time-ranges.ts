@@ -40,11 +40,6 @@ export function useChapterTimeRanges(
     // branch, since branch copies share chapter ids.
     placeholderData: (previous, previousQuery) =>
       previousQuery?.queryKey[1] === branchId ? previous : undefined,
-    // Local DB read, not a flaky network call — a failure is worth logging, not retrying.
-    retry: false,
-    gcTime: 30_000,
-    // A local read: TanStack's default pauses it while the browser reports no network.
-    networkMode: 'always',
   })
 
   return { ranges: data ?? NO_RANGES, refetch }

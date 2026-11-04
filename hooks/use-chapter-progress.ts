@@ -43,11 +43,6 @@ export function useChapterProgress(storyId: string | null | undefined): ChapterP
   const { data } = useQuery({
     queryKey: ['chapter-progress', branchId, settleCount, tailId],
     queryFn: branchId == null ? skipToken : () => readSeries(branchId),
-    // Local DB read, not a flaky network call — a failure is worth logging, not retrying.
-    retry: false,
-    gcTime: 30_000,
-    // A local read: TanStack's default pauses it while the browser reports no network.
-    networkMode: 'always',
   })
 
   // data is undefined while a new key loads and after a failed read; hold the last read, tagged by
