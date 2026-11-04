@@ -12,7 +12,7 @@ import { CustomVariableSchema } from '../validation'
 /** Version of the directory layout, not of any pack. */
 export const DIRECTORY_FORMAT_VERSION = 2
 
-// Unknown keys are dropped, so an earlier tree's `source` still parses.
+// Unknown keys are dropped, so a key an earlier format wrote never fails a parse.
 const PackFileSchema = z.object({
   formatVersion: z.number().int().positive(),
   /** Written by format 1 only. */

@@ -177,6 +177,12 @@ export interface FolderChanges {
   prunePaths: string[]
   /** The part of `prunePaths` whose template the tree writes again in another folder: moved, not lost. */
   movedPaths: string[]
+  /** How many prompts `movedPaths` are, a prompt's user-message half not counted apart. */
+  movedPromptCount: number
+  /** The rest of `prunePaths`: files that are really gone. */
+  deletedPaths: string[]
+  /** Some of `deletedPaths` sit where a prompt would, so a note of the user's may be among them. */
+  deletesPrompt: boolean
   /** Applied before the tree is written, so the export's own file can take the old name. */
   renames: FileRename[]
   /** Files of a folder the export does not own that the tree overwrites. */
@@ -190,15 +196,40 @@ function replacedFiles(paths: string[], tree: Tree, renames: FileRename[]): stri
   return paths.filter((path) => written.has(path.toLowerCase()) && !movedAside.has(path)).toSorted()
 }
 
-/** Pruned template files whose id the tree still writes, which is what makes them a move. */
-function movedTemplatePaths(prunePaths: string[], tree: Tree): string[] {
-  const writtenIds = new Set(
-    [...tree.keys()].map((path) => templateIdFromPath(path)?.toLowerCase()),
-  )
-  return prunePaths.filter((path) => {
+/**
+ * Pruned template files that are a move: the tree writes the same id at a path the folder does not
+ * already hold, and no other pruned file has claimed it. Any other copy of that id is a deletion.
+ */
+function movedTemplatePaths(prunePaths: string[], tree: Tree, existingPaths: string[]): string[] {
+  const existing = new Set(existingPaths.map((path) => path.toLowerCase()))
+  const newPathById = new Map<string, string>()
+  for (const path of tree.keys()) {
     const templateId = templateIdFromPath(path)
-    return templateId !== null && writtenIds.has(templateId.toLowerCase())
+    if (templateId !== null) newPathById.set(templateId.toLowerCase(), path)
+  }
+
+  const claimed = new Set<string>()
+  return prunePaths.filter((path) => {
+    const key = templateIdFromPath(path)?.toLowerCase()
+    if (key === undefined || claimed.has(key)) return false
+    const newPath = newPathById.get(key)
+    if (newPath === undefined || existing.has(newPath.toLowerCase())) return false
+    claimed.add(key)
+    return true
   })
+}
+
+/** Prompts among template paths: a user-message half belongs to the prompt it completes. */
+function countPrompts(templatePaths: string[]): number {
+  const ids = templatePaths
+    .map((path) => templateIdFromPath(path)?.toLowerCase())
+    .filter((templateId) => templateId !== undefined)
+    .map((templateId) =>
+      templateId.endsWith(USER_HALF_SUFFIX)
+        ? templateId.slice(0, -USER_HALF_SUFFIX.length)
+        : templateId,
+    )
+  return new Set(ids).size
 }
 
 /** Every root path spelling `name`, compared without case: one file on Windows and macOS, several on Linux. */
@@ -230,10 +261,16 @@ export function planFolderChanges(
   if (origin === 'earlier') prunePaths.push(...findRootFiles(paths, ABOUT_FILE))
   const sorted = prunePaths.toSorted()
   const renames = origin === 'current' ? [] : planReadmeRenames(paths)
+  const movedPaths = movedTemplatePaths(sorted, tree, paths)
+  const moved = new Set(movedPaths)
+  const deletedPaths = sorted.filter((path) => !moved.has(path))
 
   return {
     prunePaths: sorted,
-    movedPaths: movedTemplatePaths(sorted, tree),
+    movedPaths,
+    movedPromptCount: countPrompts(movedPaths),
+    deletedPaths,
+    deletesPrompt: deletedPaths.some((path) => classifyPath(path) === 'template'),
     renames,
     replacedPaths: origin === 'foreign' ? replacedFiles(paths, tree, renames) : [],
   }

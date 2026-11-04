@@ -13,6 +13,7 @@
   import { errMessage } from '#lib/utils/error.ts'
   import { Skeleton } from '#lib/components/ui/skeleton/index.ts'
   import ConfirmModal from '#lib/components/shared/ConfirmModal.svelte'
+  import { packDeletionDescription } from './packDeletion'
   import { Trash2 } from '@lucide/svelte'
   import { fade } from 'svelte/transition'
   import PromptPackCard from './PromptPackCard.svelte'
@@ -36,8 +37,19 @@
   // Delete confirmation state
   let deleteTarget = $state<PresetPack | null>(null)
   let deleting = $state(false)
-  /** Stories bound to the pack, which `deletePack` refuses; known before Delete is offered. */
-  let deleteBlockers = $derived(deleteTarget ? (usageCounts.get(deleteTarget.id) ?? 0) : 0)
+  /** What the confirmation shows; kept past closing so the closing modal does not go blank. */
+  let deleteShown = $state<{ name: string; storyTitles: string[] }>({ name: '', storyTitles: [] })
+
+  /** Read when asked, not from the list's counts, which a story removed since loading leaves stale. */
+  async function askToDelete(pack: PresetPack) {
+    try {
+      deleteShown = { name: pack.name, storyTitles: await database.getPackStoryTitles(pack.id) }
+      deleteTarget = pack
+    } catch (e) {
+      console.error('Failed to read the stories using the pack:', e)
+      ui.showToast(`Could not check the stories using this pack: ${errMessage(e)}`, 'error')
+    }
+  }
 
   // Update-from-file state
   let updateTarget = $state<PresetPack | null>(null)
@@ -291,11 +303,7 @@
         onUpdateFromDirectory={pack.isDefault || !canUseDirectories
           ? undefined
           : () => handleUpdateFromDirectory(pack)}
-        onDelete={pack.isDefault
-          ? undefined
-          : () => {
-              deleteTarget = pack
-            }}
+        onDelete={pack.isDefault ? undefined : () => void askToDelete(pack)}
       />
     {/each}
   </div>
@@ -343,17 +351,13 @@
 <ConfirmModal
   open={!!deleteTarget}
   onCancel={() => (deleteTarget = null)}
-  title={`Delete the pack “${deleteTarget?.name ?? ''}”`}
-  description={deleteBlockers === 0
-    ? 'Its prompts and custom variables will be deleted.'
-    : deleteBlockers === 1
-      ? '1 story uses this pack. Remove it before deleting the pack.'
-      : `${deleteBlockers} stories use this pack. Remove them before deleting the pack.`}
+  title={`Delete the pack “${deleteShown.name}”`}
+  description={packDeletionDescription(deleteShown.storyTitles)}
   action={{
     label: 'Delete',
     icon: Trash2,
     tone: 'delete',
-    disabled: deleteBlockers > 0,
+    disabled: deleteShown.storyTitles.length > 0,
     onConfirm: () => void handleConfirmDelete(),
   }}
   busy={deleting}

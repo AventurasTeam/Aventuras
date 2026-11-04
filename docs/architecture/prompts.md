@@ -223,8 +223,10 @@ since Linux can hold several. Renames run before the write, through `plugin-fs`'
 confirmation lists them beside the deletions. A folder emptied by the prune is removed after it, so a
 migrated tree keeps no unnumbered group folders. Import reads both formats.
 
-A pruned template file whose id the tree writes again is a **move**, by the same rule that makes the
-filename the identity, so the confirmation counts moves in one line and lists only what is really going.
+A pruned template file whose id the tree writes again, at a path the folder does not already hold, is a
+**move**, by the same rule that makes the filename the identity; a second copy of that id is a deletion. The
+confirmation counts moved prompts in one line, a user-message half with its prompt, and lists only what is
+really going.
 Listed among the deletions, a migration's ~80 moves would bury the one prompt a pack actually dropped.
 In a folder the export does not own, the plan also names each existing file the tree would overwrite, so
 the confirmation lists them rather than warning that some might be.

@@ -203,22 +203,56 @@ describe('planFolderChanges', () => {
   })
 
   it('tells templates that move to a numbered folder from files that are gone', () => {
-    const { movedPaths } = planFolderChanges(formatOne, tree, 'earlier')
+    const { movedPaths, movedPromptCount, deletedPaths, deletesPrompt } = planFolderChanges(
+      formatOne,
+      tree,
+      'earlier',
+    )
     expect(movedPaths).toEqual([
       'Other/retired-prompt.md',
       'Story Generation/adventure-user.md',
       'Story Generation/adventure.md',
     ])
+    // `adventure` and its user half are one prompt.
+    expect(movedPromptCount).toBe(2)
+    expect(deletedPaths).toEqual([
+      ABOUT_FILE,
+      `${REFERENCE_DIR}/template-status.md`,
+      `${REFERENCE_DIR}/template-variables.md`,
+    ])
+    expect(deletesPrompt).toBe(false)
   })
 
   it('still counts a template the pack no longer has as deleted, not moved', () => {
-    const { prunePaths, movedPaths } = planFolderChanges(
+    const { prunePaths, movedPaths, deletedPaths, deletesPrompt } = planFolderChanges(
       [...tree.keys(), '02 Analysis/dropped-prompt.md'],
       tree,
       'current',
     )
     expect(prunePaths).toEqual(['02 Analysis/dropped-prompt.md'])
     expect(movedPaths).toEqual([])
+    expect(deletedPaths).toEqual(['02 Analysis/dropped-prompt.md'])
+    expect(deletesPrompt).toBe(true)
+  })
+
+  it('counts a second copy of a template already in place as deleted, not moved', () => {
+    const { movedPaths, deletedPaths } = planFolderChanges(
+      [...tree.keys(), 'drafts/adventure.md'],
+      tree,
+      'current',
+    )
+    expect(movedPaths).toEqual([])
+    expect(deletedPaths).toEqual(['drafts/adventure.md'])
+  })
+
+  it('counts only one of two old copies of a template as the move', () => {
+    const { movedPaths, deletedPaths } = planFolderChanges(
+      [PACK_FILE, 'Story Generation/adventure.md', 'drafts/adventure.md'],
+      tree,
+      'earlier',
+    )
+    expect(movedPaths).toHaveLength(1)
+    expect(deletedPaths.filter((path) => path.endsWith('adventure.md'))).toHaveLength(1)
   })
 
   it('takes the next free name when README_user.md is taken', () => {

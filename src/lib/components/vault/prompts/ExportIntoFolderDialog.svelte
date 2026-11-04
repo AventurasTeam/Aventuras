@@ -1,6 +1,5 @@
 <script lang="ts">
   import type { DirectoryExportPlan } from '#lib/services/packs/import-export.ts'
-  import { classifyPath } from '#lib/services/packs/directory/layout.ts'
   import ActionModal from '#lib/components/shared/ActionModal.svelte'
   import { FEATURE_COLORS, type ActionTone } from '#lib/components/shared/featureColors.ts'
   import { cn } from '#lib/utils/cn.ts'
@@ -14,12 +13,12 @@
 
   let { plan, onConfirm, onCancel }: Props = $props()
 
-  let moves = $derived(plan?.movedPaths ?? [])
-  let deletions = $derived((plan?.prunePaths ?? []).filter((path) => !moves.includes(path)))
+  let movedPrompts = $derived(plan?.movedPromptCount ?? 0)
+  let deletions = $derived(plan?.deletedPaths ?? [])
   let renames = $derived(plan?.renames ?? [])
   let replaced = $derived(plan?.replacedPaths ?? [])
   let foreign = $derived(plan?.origin === 'foreign')
-  let deletesPrompt = $derived(deletions.some((path) => classifyPath(path) === 'template'))
+  let deletesPrompt = $derived(plan?.deletesPrompt ?? false)
 
   let tone = $derived<ActionTone>(
     deletions.length > 0 ? 'delete' : replaced.length > 0 ? 'overwrite' : 'default',
@@ -31,7 +30,7 @@
     <span class="block">
       It was exported by an older version of Aventuras and is brought up to the current layout.
     </span>
-  {:else if plan?.origin === 'current' && moves.length > 0}
+  {:else if plan?.origin === 'current' && movedPrompts > 0}
     <span class="block">This version of Aventuras groups some prompts differently.</span>
   {/if}
   {#if deletesPrompt}
@@ -66,10 +65,10 @@
   action={{ label: 'Export', tone, onConfirm }}
 >
   <div class="flex flex-col gap-4">
-    {#if moves.length > 0}
+    {#if movedPrompts > 0}
       <p class="text-sm">
         <span class="font-medium">Moved into new folders:</span>
-        {moves.length === 1 ? '1 prompt' : `${moves.length} prompts`}
+        {movedPrompts === 1 ? '1 prompt' : `${movedPrompts} prompts`}
       </p>
     {/if}
     {#if renames.length > 0}
