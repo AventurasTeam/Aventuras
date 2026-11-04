@@ -88,26 +88,6 @@ slice-planning gate forces its resolution before that slice is planned.
   It holds for all five patches. pnpm 10.33.1 has
   `verify-deps-before-run`, which checks before any `pnpm run`. Raised
   2026-11-03 by PR #700's closing review.
-- **Slice 5.1's doc needs three corrections.** Its brief kept the doc
-  read-only for the closing review.
-  - [Implementation notes](./milestones/05-chapters-chapter-close/slices/01-token-measure.md#implementation-notes)
-    say the guard's overflow comes at "at least about 700,000 tokens".
-    That's the density of `x` alone. The limit is about 5.6 million code
-    points of one run whatever its shape, and a run of spaces reaches it
-    at about 43,700 tokens, dashes at 87,400 and newlines at 350,000. The
-    note's conclusion holds for a better reason: counting 5.5 million
-    spaces blocks for about 120 s under Node first, and past the limit
-    the turn fails with nothing written.
-  - Scope and Acceptance describe the `lib/chapters` rule as a `disallow`
-    on `lib/db`. It now bars value imports of every lib module and of app
-    code, per
-    [C5](./milestones/05-chapters-chapter-close/milestone.md#c5--token-reads-and-the-progress-hook).
-  - Implementation notes say a tap during the build is untested. The
-    closing review ran three on the emulator, and each was queued and
-    handled 23 ms after the build ended.
-
-  Raised 2026-11-02 by Slice 5.1's closing review.
-
 - **A route mounted during a read starts the strip at 0.**
   `useChapterProgress` holds its last read per hook, so World, Plot or
   Story Settings mounting while a read runs show 0 until it lands, though
