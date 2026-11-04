@@ -521,14 +521,6 @@ slice-planning gate forces its resolution before that slice is planned.
   needs a per-landing token on the signal, a bridge-contract change.
   From reading, not reproduced. Raised 2026-11-03 by 5.3's slice review.
 
-- **Escape after a strip-opened chapter popover focuses the chip.** On
-  web, the progress strip's hit area opens the popover through the
-  chapter chip's trigger (`components/reader/reader-chapter-chips.tsx`),
-  so closing it returns focus to the chip, not to the strip that opened
-  it, where the dialog pattern returns focus to the invoking element.
-  Seen in a story probe. A fix needs the strip's element to reach the
-  popover's close. Raised 2026-11-03 by 5.3's slice review.
-
 - **The theme CSS generator has no runtime caller.**
   `lib/themes/core/css-generator.ts` has had no caller outside its tests
   since M1: `global.css` is written by hand and guarded by

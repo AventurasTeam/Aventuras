@@ -154,9 +154,24 @@ function PopoverArm({ onOpenChange, ref, ...content }: ArmProps) {
     lastClosedRow.current.focus()
   }
 
+  // Radix returns focus to the trigger; a popover the handle opened returns it to what opened it.
+  const opener = useRef<HTMLElement | null>(null)
+  const returnFocusToOpener = (event: Event) => {
+    const target = opener.current
+    opener.current = null
+    if (target == null || !target.isConnected) return
+    event.preventDefault()
+    target.focus()
+  }
+
   useImperativeHandle(ref, () => ({
     open: () => {
-      if (!pressStartedOutside.started()) trigger.current?.open()
+      if (pressStartedOutside.started()) return
+      if (Platform.OS === 'web') {
+        const active = document.activeElement
+        opener.current = active instanceof HTMLElement && active !== document.body ? active : null
+      }
+      trigger.current?.open()
     },
     close,
   }))
@@ -166,6 +181,7 @@ function PopoverArm({ onOpenChange, ref, ...content }: ArmProps) {
       ariaLabel={t('chapters:popover.title')}
       onOpenChange={changeOpen}
       onOpenAutoFocus={focusLastClosedRow}
+      onCloseAutoFocus={returnFocusToOpener}
     >
       <PopoverTrigger ref={trigger} asChild>
         <ChapterChip number={content.number} expanded={open} />

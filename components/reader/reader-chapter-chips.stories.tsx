@@ -189,6 +189,45 @@ export const StripPressToggles: Story = {
   },
 }
 
+/** The dialog pattern returns focus to what opened it, here the strip, not the chip. */
+export const StripOpenedEscapeFocusesStrip: Story = {
+  render: (args) => <StripHarness {...args} />,
+  play: async () => {
+    const strip = await screen.findByTestId('chapter-progress-hit')
+    await userEvent.click(strip)
+    await waitFor(() => expect(screen.getByText('1 · in progress')).toBeVisible(), {
+      timeout: 5_000,
+    })
+
+    await userEvent.keyboard('{Escape}')
+    await waitFor(() => expect(screen.queryByText('1 · in progress')).toBeNull())
+    await waitFor(() => expect(strip).toHaveFocus())
+  },
+}
+
+/** A chip-opened popover still returns focus to the chip, after a strip-opened one has closed. */
+export const ChipOpenedEscapeFocusesChip: Story = {
+  render: (args) => <StripHarness {...args} />,
+  play: async () => {
+    const strip = await screen.findByTestId('chapter-progress-hit')
+    const chip = screen.getByRole('button', { name: 'Chapter 1' })
+    await userEvent.click(strip)
+    await waitFor(() => expect(screen.getByText('1 · in progress')).toBeVisible(), {
+      timeout: 5_000,
+    })
+    await userEvent.keyboard('{Escape}')
+    await waitFor(() => expect(strip).toHaveFocus())
+
+    await userEvent.click(chip)
+    await waitFor(() => expect(screen.getByText('1 · in progress')).toBeVisible(), {
+      timeout: 5_000,
+    })
+    await userEvent.keyboard('{Escape}')
+    await waitFor(() => expect(screen.queryByText('1 · in progress')).toBeNull())
+    await waitFor(() => expect(chip).toHaveFocus())
+  },
+}
+
 export const ClosesWhenFocusLeavesPhone: Story = {
   globals: { viewport: { value: 'mobile1' } },
   render: (args) => <FocusLossHarness {...args} />,
