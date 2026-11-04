@@ -567,6 +567,14 @@
   }
 }
 
+/* --fg-primary over --selection-bg is the pair color.md's AA gate checks. */
+@layer base {
+  ::selection {
+    background-color: var(--selection-bg);
+    color: var(--fg-primary);
+  }
+}
+
 @layer utilities {
   /* Tailwind v4 ships `field-sizing-content`; we're on v3.4 where
    * it doesn't exist. Define it explicitly so Textarea's web

@@ -35,7 +35,7 @@ const webTransitionClasses = 'transition-[color,box-shadow] outline-none'
 const textInputClasses = cn(
   'text-sm text-fg-primary',
   Platform.select({
-    web: cn('placeholder:text-fg-muted selection:bg-accent selection:text-accent-fg outline-none'),
+    web: cn('placeholder:text-fg-muted outline-none'),
     native: 'placeholder:text-fg-muted',
   }),
 )

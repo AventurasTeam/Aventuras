@@ -174,7 +174,7 @@ export function TagInput({
   const inputClasses = cn(
     'min-h-control-md min-w-[60px] flex-1 text-sm text-fg-primary',
     Platform.select({
-      web: 'placeholder:text-fg-muted selection:bg-accent selection:text-accent-fg outline-none',
+      web: 'placeholder:text-fg-muted outline-none',
       native: 'placeholder:text-fg-muted',
     }),
     inputClassName,

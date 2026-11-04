@@ -3,6 +3,7 @@ import { useState, type ComponentProps } from 'react'
 import { View } from 'react-native'
 import { expect, fn, screen, userEvent, waitFor } from 'storybook/test'
 
+import { expectThemeSelection } from '@/components/ui/selection-probe'
 import { Text } from '@/components/ui/text'
 import { themes } from '@/lib/themes'
 
@@ -37,6 +38,13 @@ function Harness({
 
 export const Empty: Story = {
   render: () => <Harness placeholder="Add tags…" />,
+}
+
+export const SelectsWithTheThemeTint: Story = {
+  render: () => <Harness placeholder="Add tags…" />,
+  play: ({ canvasElement }) => {
+    expectThemeSelection(canvasElement.querySelector('input')!)
+  },
 }
 
 export const Populated: Story = {

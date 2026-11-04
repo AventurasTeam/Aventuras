@@ -97,17 +97,6 @@ slice-planning gate forces its resolution before that slice is planned.
   still lists delta-log rows as having no role and no label. Raised
   2026-11-02 by 5.3's task reviews.
 
-- **`--selection-bg` selects no text.**
-  [`color.md`](../ui/foundations/color.md#final-slot-inventory) and
-  [`tokens.md`](../ui/foundations/tokens.md#color-slots) give it the
-  text-selection role, but nothing applies it there: inputs select with
-  `selection:bg-accent selection:text-accent-fg` (`components/ui/input.tsx`,
-  `components/ui/textarea.tsx`, `components/compounds/tag-input.tsx`), and
-  narrative prose has no `::selection` rule. Since 5.3's Q7 a jump's landed
-  card tint is its only use. Either apply it to selection, and decide
-  whether inputs move to it, or narrow its documented role. Raised
-  2026-11-02 by 5.3's Q7 review.
-
 - **A second jump to the landed row doesn't restart its tint.** Within
   1.5 s of a landing, a jump to the same entry calls `setLandedId` with
   the id it already holds, so neither the clear timer nor the card's CSS

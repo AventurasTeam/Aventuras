@@ -4,6 +4,7 @@ import { View } from 'react-native'
 
 import { themes } from '@/lib/themes'
 
+import { expectThemeSelection } from './selection-probe'
 import { Text } from './text'
 import { Textarea } from './textarea'
 
@@ -29,6 +30,17 @@ export const Default: Story = {
       <Textarea {...args} />
     </View>
   ),
+}
+
+export const SelectsWithTheThemeTint: Story = {
+  render: () => (
+    <View style={{ width: 360 }}>
+      <Textarea defaultValue="Selected text" rows={3} />
+    </View>
+  ),
+  play: ({ canvasElement }) => {
+    expectThemeSelection(canvasElement.querySelector('textarea')!)
+  },
 }
 
 export const Controlled: Story = {
