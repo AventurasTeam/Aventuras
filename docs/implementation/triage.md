@@ -158,25 +158,6 @@ slice-planning gate forces its resolution before that slice is planned.
   it is already at full strength, or accept it. Computed from tokens,
   not recorded. Raised 2026-11-02 by 5.3's Q10 review.
 
-- **A gesture made before a jump's veil shows is lost, and the landing
-  yanks the view.** `useEntryJump` (`components/reader/use-entry-jump.ts`)
-  reads the target's rows from the database before it calls `land`, and
-  its `superseded` check knows only a newer jump or a branch change, so a
-  scroll, drag or wheel during the read isn't seen and `land` then moves
-  the view to the target anyway. The jump veil shows only after a short
-  delay (Slice 5.3's Q15), so the window left is the shorter of that delay
-  and the host read, which took 84 ms at the median at 20 chapters and
-  372 ms at 60 (Galaxy Z Fold, release build, from the
-  [Android measure](./milestones/05-chapters-chapter-close/slices/03-reader-chapters.md#android-measure)).
-  Once the veil shows it swallows touches: on the Fold, two swipes across
-  it moved nothing and didn't cancel the landing. On web a scroll key
-  with the page focused can still reach the reader under it. On desktop
-  a trackpad scroll started during the read is still a live wheel chain
-  when the landing arrives, so the landing holds it for up to about 3 s
-  rather than only moving the view. Nothing is built for the window
-  that's left. Raised 2026-11-02 by Slice 5.3's Android measure;
-  narrowed 2026-11-03 by the delayed veil.
-
 - **A shrinking viewport can pull a landing to the bottom.** The
   surface's `ResizeObserver` (`components/reader/reader-surface.tsx`)
   writes `scrollTop` to the bottom when the viewport shrinks under a
