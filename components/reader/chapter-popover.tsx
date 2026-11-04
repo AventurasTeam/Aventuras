@@ -73,9 +73,13 @@ export type ChapterPopoverProps = {
 
 type Arm = { root: string; row: string; list: ViewStyle }
 
-// A list needs a bound to scroll: PopoverContent has no cap on web, and a Sheet's list takes what
-// its detent leaves over.
-const POPOVER_ARM: Arm = { root: 'gap-3 p-3', row: 'min-h-control-md', list: { maxHeight: 320 } }
+// A list needs a bound to scroll: 320 on a popover, which shrinks it in a short window so the
+// actions stay on screen; a Sheet's list takes what its detent leaves over.
+const POPOVER_ARM: Arm = {
+  root: 'min-h-0 shrink gap-3 p-3',
+  row: 'min-h-control-md',
+  list: { maxHeight: 320, flexShrink: 1 },
+}
 // rn-primitives' Popover content claims the touch responder, which stalls a plain ScrollView on
 // Android; gesture-handler's doesn't use the responder system.
 const POPOVER_SCROLL = GestureScrollView as ScrollComponent

@@ -207,13 +207,6 @@ slice-planning gate forces its resolution before that slice is planned.
   counts a touch fling as mid-gesture. Read from the code, not
   reproduced; added 2026-11-03 by 5.3's slice review.
 
-- **The chapter popover's fixed cap has no short-window handling.**
-  Its list stops at 320 px, so the long-list popover measures 472 px,
-  and below about 560 px of window height its actions can fall
-  off-screen with nothing to scroll them. Not run at that height;
-  Electron sets no minimum window height. Raised 2026-11-02 by 5.3's
-  task reviews.
-
 - **A chip's hit slop misses the phone floor at compact density.**
   `CHIP_HIT_SLOP` (`components/ui/chip.tsx`) gives 32 + 8 = 40 px at
   compact on phone, Browse included, under
