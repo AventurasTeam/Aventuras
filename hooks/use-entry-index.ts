@@ -77,8 +77,8 @@ const FAILED = { ...EMPTY, failed: true }
 
 /**
  * Branch entries for `entry #n` labels, chapter buckets and the entry-ref picker.
- * settleCount + tailId together cover every story_entries write: a new write path must settle
- * a run/reversal or move the tail, or the index goes stale. Stale only shows an anchor as
+ * settleCount + tailId together cover every write to a column the index reads: a new write path
+ * must settle a run/reversal or move the tail, or the index goes stale. Stale only shows an anchor as
  * falsely live/dangling — never re-pointed to a different entry.
  * `enabled: false` skips the read and reads not ready (still `failed` if the last read errored).
  * `seedFromLastRead`: with no window of its own, show the branch's last read by a seeding hook

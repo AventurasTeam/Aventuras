@@ -84,9 +84,8 @@ export async function submitTurn(
           .limit(1)
         // Scene state (membership, location, worldTime) inherits from the last
         // non-system entry: a system tail carries null metadata and would reset
-        // it. M2 has no classifier, so this propagates the opening's values
-        // forward until piggyback/classifier (M3+) emits fresh ones. Position
-        // still comes from the overall tail so numbering never collides.
+        // it. Position still comes from the overall tail so numbering never
+        // collides.
         const [sceneTail] = await ctx.db
           .select({ metadata: storyEntries.metadata })
           .from(storyEntries)

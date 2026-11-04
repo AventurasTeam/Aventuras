@@ -11,8 +11,8 @@ export type AutoscrollMachine = {
    * Hard disengage on an explicit user gesture (wheel-up, touch drag).
    * Positional `userScrolled` alone can't win against per-chunk re-pins: the
    * user never accumulates more than the at-bottom tolerance between two pins
-   * unless they out-scroll the token rate. Doesn't latch — the next
-   * `userScrolled` at the bottom re-engages.
+   * unless they out-scroll the token rate. Latches: `userScrolled` re-engages only after the
+   * reader has left the bottom band, or a stream starts or ends.
    */
   userInterrupted(): void
   autoscrollApplied(pos: { distanceFromBottomPx: number }): void

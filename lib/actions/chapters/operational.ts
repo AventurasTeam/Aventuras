@@ -5,7 +5,7 @@ import { chaptersStore } from '@/lib/stores'
 
 import type { DbCtx } from '../types'
 
-// Non-delta write seam for the compute-lifecycle column (driver lands in M3).
+// Non-delta write seam for the compute-lifecycle column.
 export async function setChapterOperationalFlags(
   branchId: string,
   id: string,

@@ -81,12 +81,6 @@ slice-planning gate forces its resolution before that slice is planned.
   and `readPromptBuffer`'s docblock (`lib/retrieval/buffer.ts:49`) define
   it by `chapter_id IS NULL` alone, while `openRegionWhere` also leaves
   out `system` rows. Raised 2026-11-01 by Slice 5.1's review.
-- **`useEntryIndex`'s docblock overclaims.** `hooks/use-entry-index.ts:67`
-  says `settleCount` and the tail cover every `story_entries` write, but
-  world-time edits and system entries move neither. It's harmless there,
-  since `readEntryIndex` selects no metadata and excludes `system`.
-  `useChapterProgress`' docblock has the narrower wording. Raised
-  2026-11-01 by Slice 5.1's review.
 - **A stale `node_modules` ships dependencies without their patches.**
   After a pull that adds or changes a file in `patches/`, nothing makes
   a developer run `pnpm install`: `lefthook.yml` has no post-merge or
@@ -99,10 +93,6 @@ slice-planning gate forces its resolution before that slice is planned.
   It holds for all five patches. pnpm 10.33.1 has
   `verify-deps-before-run`, which checks before any `pnpm run`. Raised
   2026-11-03 by PR #700's closing review.
-- **A test comment cites a slice.**
-  `lib/actions/story-entries/register.test.ts:308` names the slice "Kind
-  coverage", a class `.claude/rules/code.md` bans. Raised 2026-11-01 by
-  Slice 5.1's review.
 - **Two docs lag the tokenizer.**
   [`tech-stack.md → js-tiktoken`](../tech-stack.md#6-js-tiktoken) says
   `cl100k_base` or `o200k_base` and that tables load on demand, where
@@ -164,10 +154,6 @@ slice-planning gate forces its resolution before that slice is planned.
   gestures. 5.3 pins the downward half with a story; nothing fails if
   the guard goes from the upward one. Raised 2026-11-02 by 5.3's task
   reviews.
-
-- **`userInterrupted`'s comment says the opposite of its code.**
-  `lib/reader-scroll/autoscroll.ts` says it "Doesn't latch", and the
-  body latches. Raised 2026-11-02 by 5.3's task reviews.
 
 - **`history-tab.test.tsx` may hold a rare timing flake.** The test at
   `components/history/history-tab.test.tsx:307` failed once during a
