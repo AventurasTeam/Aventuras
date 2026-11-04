@@ -1469,7 +1469,7 @@
         onStop={stopProfileModels}
       />
       {#if referenceProfileWarningReason}
-        <p class="text-warning mt-1 text-xs">
+        <p class="mt-1 text-xs text-amber-600 dark:text-amber-400">
           This profile is used for reference image generation, but {referenceProfileWarningReason}
         </p>
       {:else}
