@@ -90,9 +90,13 @@ export function ListRow({
           selected && 'bg-bg-sunken',
           recentlyClassified === 'fresh' && 'bg-recently-classified-bg',
           interactive && (filled ? 'active:opacity-90' : 'active:bg-tint-press'),
+          // Inset: an outside ring clips in the scroller a row sits in.
           Platform.select({
             web: interactive
-              ? cn('cursor-pointer', filled ? 'hover:opacity-90' : 'hover:bg-tint-hover')
+              ? cn(
+                  'cursor-pointer outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-focus-ring',
+                  filled ? 'hover:opacity-90' : 'hover:bg-tint-hover',
+                )
               : '',
           }),
           disabled && 'opacity-50',

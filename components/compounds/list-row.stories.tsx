@@ -4,6 +4,7 @@ import { View } from 'react-native'
 import { expect, fn, screen, userEvent, waitFor } from 'storybook/test'
 
 import { EntityKindIcon } from '@/components/entity/entity-kind-icon'
+import { expectInsetFocusRing } from '@/components/ui/focus-ring-probe'
 import { Icon } from '@/components/ui/icon'
 import { Tag } from '@/components/ui/tag'
 import { Text } from '@/components/ui/text'
@@ -46,6 +47,9 @@ export const Minimal: Story = {
   args: {
     label: 'Plain row',
     onPress: fn(),
+  },
+  play: async () => {
+    await expectInsetFocusRing(await screen.findByRole('button', { name: 'Plain row' }))
   },
 }
 

@@ -176,16 +176,17 @@ commits which tokens swap, not the duration.
 - **Trigger.** `:focus-visible` semantics — keyboard focus only.
   Mouse-click activations skip the ring.
 - **Ring.** 2px solid `--focus-ring`.
-- **Offset.** 2px gap from element edge — ring sits outside the
-  element on the surrounding canvas.
+- **Offset.** None: the ring sits flush against the element's edge.
+  A list row, which fills its scroller edge to edge, draws it inset,
+  since a scroller clips anything drawn outside it.
 - **Applies to.** Any focusable interactive element — buttons,
   inputs, list rows, links, settings rows.
 
-Implementation footnote: web (RN Web) renders via
-`outline: 2px solid var(--focus-ring); outline-offset: 2px`. Native
-(Expo) renders the same visual contract via
-`box-shadow: 0 0 0 2px transparent, 0 0 0 4px var(--focus-ring)`
-or RN's equivalent — the implementation pass picks the glue.
+Implementation footnote: web (RN Web) renders
+`focus-visible:ring-2 focus-visible:ring-focus-ring`, a box-shadow,
+with `outline-none` to drop the browser's own outline; a row adds
+`focus-visible:ring-inset`. Native (Expo) renders the same visual
+contract by RN's equivalent — the implementation pass picks the glue.
 
 ### Disabled
 

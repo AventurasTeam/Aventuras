@@ -159,15 +159,6 @@ slice-planning gate forces its resolution before that slice is planned.
   `/reader-composer/${…}` themselves. Raised 2026-11-02 by 5.3's task
   reviews.
 
-- **A pressable row has the browser's focus outline, not the canon
-  ring.** `components/compounds/delta-log-row.tsx` and
-  `components/compounds/list-row.tsx` show `outline: auto 1px` under
-  `:focus-visible` in Chromium, where
-  [`color.md`](../ui/foundations/color.md#focus) gives list rows the 2 px
-  `--focus-ring`. 5.3 makes History's rows interactive in production and
-  the slice leaves its focus styling unchanged. Raised 2026-11-02 by 5.3's
-  task reviews.
-
 - **`isEditableTarget` has never had a story on the upward path.**
   `reader-surface.tsx` guards typing in a field from the scroll-key
   gestures. 5.3 pins the downward half with a story; nothing fails if
