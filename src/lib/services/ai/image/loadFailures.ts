@@ -6,6 +6,7 @@ export const LOADED_LISTS = [
   'loras',
   'textEncoders',
   'vaes',
+  'clipTypes',
 ] as const
 
 export type LoadedList = (typeof LOADED_LISTS)[number]
@@ -17,6 +18,7 @@ export const LOADED_LIST_LABELS: Record<LoadedList, string> = {
   loras: 'LoRAs',
   textEncoders: 'Text encoders',
   vaes: 'VAEs',
+  clipTypes: 'CLIP types',
 }
 
 export interface LoadFailure {

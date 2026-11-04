@@ -14,6 +14,7 @@
   import {
     listImageModelsByProvider,
     getProviderSamplerInfo,
+    getProviderClipTypes,
     listLoras,
     generateImage,
     takesApiKey,
@@ -84,17 +85,6 @@
     { value: ComfyMode.UnetTxt2Img, label: 'UNet / Z-Image Text to Image' },
   ] as const
 
-  const clipTypeItems = [
-    { value: 'lumina2', label: 'Lumina 2' },
-    { value: 'flux', label: 'Flux' },
-    { value: 'sd3', label: 'SD3' },
-    { value: 'stable_audio', label: 'Stable Audio' },
-    { value: 'mochi', label: 'Mochi' },
-    { value: 'ltxv', label: 'LTX Video' },
-    { value: 'cosmos', label: 'Cosmos' },
-    { value: 'wan', label: 'Wan' },
-    { value: 'hidream', label: 'HiDream' },
-  ] as const
   const weightDtypeItems = [
     { value: 'default', label: 'default' },
     { value: 'fp8_e4m3fn', label: 'fp8_e4m3fn' },
@@ -239,10 +229,17 @@
   let profileWeightDtype = $state('default')
   let availableClips = $state<string[]>([])
   let availableVaes = $state<string[]>([])
+  let availableClipTypes = $state<string[]>([])
   // Fields the form filled from a single-entry server list, as opposed to ones the user set.
   const autoFilled = $state({ clip: false, vae: false })
   const clipItems = $derived(availableClips.map((c) => ({ value: c, label: c })))
   const vaeItems = $derived(availableVaes.map((v) => ({ value: v, label: v })))
+  const clipTypeItems = $derived(availableClipTypes.map((t) => ({ value: t, label: t })))
+  const clipTypeUnlisted = $derived(
+    !!profileClipType &&
+      availableClipTypes.length > 0 &&
+      !availableClipTypes.includes(profileClipType),
+  )
 
   const needsWorkflow = $derived(
     profileProviderType === 'comfyui' &&
@@ -404,6 +401,11 @@
             }
           },
         ),
+        read(
+          'clipTypes',
+          () => getProviderClipTypes(baseUrl, request.signal),
+          (types) => (availableClipTypes = types),
+        ),
       )
     }
 
@@ -439,6 +441,7 @@
       if (invalid || profileModelsKey !== modelListKey(providerType, apiKey, baseUrl)) {
         profileModels = []
         profileModelsKey = null
+        availableClipTypes = []
         profileLoadFailures = []
       }
       if (invalid) {
@@ -1968,14 +1971,25 @@
             <Label>CLIP Type</Label>
             <Autocomplete
               items={clipTypeItems}
-              selected={clipTypeItems.find((s) => s.value === profileClipType)}
+              selected={clipTypeItems.find((s) => s.value === profileClipType) ??
+                (profileClipType ? { value: profileClipType, label: profileClipType } : undefined)}
               onSelect={(v) => {
                 profileClipType = (v as { value: string }).value
+              }}
+              allowCustom={true}
+              onCustomSelect={(v) => {
+                profileClipType = v
               }}
               itemLabel={(s: { label: string }) => s.label}
               itemValue={(s: { value: string }) => s.value}
               placeholder="Select CLIP type"
             />
+            {#if clipTypeUnlisted}
+              <p class="text-muted-foreground text-xs" role="status">
+                "{profileClipType}" is not in the list this server reports. It will be sent as
+                typed.
+              </p>
+            {/if}
           </div>
 
           <div class="space-y-2">
