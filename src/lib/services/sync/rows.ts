@@ -171,35 +171,55 @@ export function viewRows(rows: SyncRow[], search: string, prefs: SyncListPrefs):
   }
 }
 
-function sameItem(a: SyncRow, b: SyncRow): boolean {
-  if (a.local && b.local && a.local.localId === b.local.localId) return true
-  return !!a.remote && !!b.remote && a.remote.localId === b.remote.localId
+/** The list as it stood before a transfer, held until the user reorders or leaves it. */
+export interface HeldOrder {
+  rows: SyncRow[]
+  /** The transferred row's key. */
+  after: string
+  /** Keys of rows the transfer created, which go after it rather than at the end. */
+  created: readonly string[]
+}
+
+/** Matches a held row to its fresh one by either device's id, as a get can replace the local id. */
+function matcher(rows: SyncRow[]): (old: SyncRow) => SyncRow | undefined {
+  const byLocal = new Map(rows.flatMap((r) => (r.local ? [[r.local.localId, r] as const] : [])))
+  const byRemote = new Map(rows.flatMap((r) => (r.remote ? [[r.remote.localId, r] as const] : [])))
+  return (old) =>
+    (old.local && byLocal.get(old.local.localId)) ||
+    (old.remote && byRemote.get(old.remote.localId)) ||
+    undefined
+}
+
+/** Keys of `rows` that match none of `held`. */
+export function newRowKeys(held: SyncRow[], rows: SyncRow[]): string[] {
+  const matched = new Set(held.map(matcher(rows)))
+  return rows.filter((r) => !matched.has(r)).map((r) => r.key)
 }
 
 /**
  * Keeps the rows on screen in the order they had, with their fresh data, so a transfer does not
- * move or hide them. Rows that are new since go after the row with key `after`.
+ * move or hide them. Rows the transfer created follow its row; any other new row goes last.
  */
-export function holdOrder(
-  view: SyncListView,
-  rows: SyncRow[],
-  held: SyncRow[],
-  after: string,
-): SyncListView {
-  const unmatched = new Set(rows)
+export function holdOrder(view: SyncListView, rows: SyncRow[], held: HeldOrder): SyncListView {
+  const find = matcher(rows)
   const kept: SyncRow[] = []
-  for (const old of held) {
-    const fresh = [...unmatched].find((r) => sameItem(old, r))
-    if (!fresh) continue
-    unmatched.delete(fresh)
+  const used = new Set<SyncRow>()
+  for (const old of held.rows) {
+    const fresh = find(old)
+    if (!fresh || used.has(fresh)) continue
+    used.add(fresh)
     kept.push(fresh)
   }
-  const added = view.rows.filter((r) => unmatched.has(r))
-  const anchor = held.find((r) => r.key === after)
-  const at = anchor ? kept.findIndex((r) => sameItem(anchor, r)) : -1
+  const created = new Set(held.created)
+  const added = view.rows.filter((r) => !used.has(r))
+  const fromTransfer = added.filter((r) => created.has(r.key))
+  const others = added.filter((r) => !created.has(r.key))
+  const anchor = held.rows.find((r) => r.key === held.after)
+  const fresh = anchor && find(anchor)
+  const at = fresh ? kept.indexOf(fresh) : -1
   const shown = new Set(view.rows)
   return {
-    rows: at === -1 ? [...kept, ...added] : kept.toSpliced(at + 1, 0, ...added),
+    rows: [...kept.toSpliced(at === -1 ? kept.length : at + 1, 0, ...fromTransfer), ...others],
     hidden: view.hidden - kept.filter((r) => !shown.has(r)).length,
   }
 }

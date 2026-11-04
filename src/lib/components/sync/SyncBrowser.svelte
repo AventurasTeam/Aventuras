@@ -19,6 +19,7 @@
   import SyncDialog from './SyncDialog.svelte'
   import type { ExportTracking } from '#lib/services/export.ts'
   import type { PackBindingResolution } from '#lib/services/import/index.ts'
+  import type { HeldOrder } from '#lib/services/sync/index.ts'
   import {
     DEFAULT_LIST_PREFS,
     NEEDS_ACTION,
@@ -32,6 +33,7 @@
     fetchListing,
     formatAgo,
     holdOrder,
+    newRowKeys,
     listLocalItems,
     loadListPrefs,
     pullEnvelope,
@@ -101,11 +103,13 @@
   let sheet = $state<ListTool | null>(null)
   let openRow = $state<SyncRow | null>(null)
   let packConfirm = $state<{ row: SyncRow; stories: number } | null>(null)
+  /** What the pack question shows, kept through its close transition. */
+  let packAsked = $state<{ row: SyncRow; stories: number } | null>(null)
   let busy = $state<string | null>(null)
   let notice = $state<string | null>(null)
   let error = $state<string | null>(null)
   /** The list as it stood before the latest transfer, kept until the user reorders or leaves it. */
-  let held = $state.raw<{ rows: SyncRow[]; after: string } | null>(null)
+  let held = $state.raw<HeldOrder | null>(null)
   /** Sends the other device has yet to accept, by sync id. */
   const sent = new SvelteMap<string, SyncVector>()
 
@@ -115,7 +119,7 @@
   const currentRows = $derived(section ? (rowsBySection[section] ?? []) : [])
   const view = $derived.by(() => {
     const fresh = viewRows(currentRows, search, currentPrefs)
-    return held ? holdOrder(fresh, currentRows, held.rows, held.after) : fresh
+    return held ? holdOrder(fresh, currentRows, held) : fresh
   })
   const counts = $derived(countByStatus(currentRows))
 
@@ -188,8 +192,10 @@
       total: rows.length,
       both: c.changedOnBoth,
       sameName: c.sameName,
-      send: c.newerHere + c.onlyHere,
-      get: c.newerThere + c.onlyThere,
+      newer: c.newerHere + c.newerThere,
+      onlyHere: c.onlyHere,
+      onlyThere: c.onlyThere,
+      inSync: c.inSync,
     }
   }
 
@@ -234,7 +240,8 @@
     if (!section || busy) return
     const name = section
     busy = row.key
-    held = { rows: view.rows, after: row.key }
+    const before = view.rows
+    held = { rows: before, after: row.key, created: [] }
     error = null
     notice = null
     openRow = null
@@ -243,6 +250,7 @@
       const message = await work(name)
       await onApplied(name)
       await loadSection(name)
+      if (held) held = { ...held, created: newRowKeys(before, rowsBySection[name] ?? []) }
       if (message) notice = message
     } catch (e) {
       error = e instanceof Error ? e.message : 'Transfer failed'
@@ -290,6 +298,7 @@
       if (stories > 0 && packConfirm?.row !== row) {
         openRow = null
         packConfirm = { row, stories }
+        packAsked = packConfirm
         return
       }
     }
@@ -356,7 +365,7 @@
           <span class="font-medium">{SECTION_LABELS[name]}</span>
           {#if !summary}
             <span class="text-muted-foreground text-xs">Loading...</span>
-          {:else if summary.both + summary.sameName + summary.send + summary.get === 0}
+          {:else if summary.inSync === summary.total}
             <span class="text-muted-foreground text-xs">
               {summary.total === 0 ? 'Nothing to sync' : `All ${summary.total} in sync`}
             </span>
@@ -372,14 +381,19 @@
                   {summary.sameName} same name
                 </span>
               {/if}
-              {#if summary.send}
-                <span class="rounded-full px-2 py-0.5 text-xs {STATUS_CLASSES.onlyHere}">
-                  {summary.send} to send
+              {#if summary.newer}
+                <span class="rounded-full px-2 py-0.5 text-xs {STRAIGHT_SYNC_BADGE}">
+                  {summary.newer} newer
                 </span>
               {/if}
-              {#if summary.get}
+              {#if summary.onlyHere}
+                <span class="rounded-full px-2 py-0.5 text-xs {STATUS_CLASSES.onlyHere}">
+                  {summary.onlyHere} only here
+                </span>
+              {/if}
+              {#if summary.onlyThere}
                 <span class="rounded-full px-2 py-0.5 text-xs {STATUS_CLASSES.onlyThere}">
-                  {summary.get} to get
+                  {summary.onlyThere} only on remote
                 </span>
               {/if}
             </span>
@@ -544,7 +558,15 @@
       {/snippet}
     </SyncDialog>
   {:else}
-    <Popover.Root bind:open={() => sheet === tool, (open) => (sheet = open ? tool : null)}>
+    <Popover.Root
+      bind:open={
+        () => sheet === tool,
+        (open) => {
+          if (open) sheet = tool
+          else if (sheet === tool) sheet = null
+        }
+      }
+    >
       <Popover.Trigger>
         {#snippet child({ props })}
           <FilterButton
@@ -643,6 +665,7 @@
 <ActionModal
   open={!!packConfirm}
   onCancel={() => (packConfirm = null)}
+  onClosed={() => (packAsked = null)}
   title="Replace this pack"
   action={{
     label: 'Replace',
@@ -653,10 +676,10 @@
   }}
 >
   {#snippet description()}
-    {#if packConfirm}
-      {packConfirm.stories}
-      {packConfirm.stories === 1 ? 'story uses' : 'stories use'} "{packConfirm.row.name}" on this
-      device and will narrate through the incoming version.
+    {#if packAsked}
+      {packAsked.stories}
+      {packAsked.stories === 1 ? 'story uses' : 'stories use'} "{packAsked.row.name}" on this device
+      and will narrate through the incoming version.
     {/if}
   {/snippet}
 </ActionModal>

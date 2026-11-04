@@ -7,6 +7,7 @@ import {
   countByStatus,
   formatAgo,
   holdOrder,
+  newRowKeys,
   parseListPrefs,
   sortRows,
   viewRows,
@@ -181,7 +182,11 @@ describe('holdOrder', () => {
       [remote('There', shared('t', { peer: 1 })), remote('Both', shared('b', { a: 0, peer: 1 }))],
       'peer',
     )
-    const view = holdOrder(viewRows(after, '', needsAction), after, held, 'there:r-There')
+    const view = holdOrder(viewRows(after, '', needsAction), after, {
+      rows: held,
+      after: 'there:r-There',
+      created: newRowKeys(held, after),
+    })
     expect(view.rows.map((r) => r.name)).toEqual(held.map((r) => r.name))
     expect(view.rows.find((r) => r.name === 'There')?.status).toBe('inSync')
     expect(view.hidden).toBe(0)
@@ -195,10 +200,30 @@ describe('holdOrder', () => {
       'peer',
     )
     const both = held.find((r) => r.name === 'Both')!
-    const view = holdOrder(viewRows(after, '', needsAction), after, held, both.key)
+    const view = holdOrder(viewRows(after, '', needsAction), after, {
+      rows: held,
+      after: both.key,
+      created: newRowKeys(held, after),
+    })
     const names = view.rows.map((r) => r.name)
     expect(names[names.indexOf('Both') + 1]).toBe('Both (copy)')
     expect(names).toHaveLength(4)
+  })
+
+  it('puts a row that arrived another way last', () => {
+    const after = buildRows(
+      'stories',
+      [local('Here'), local('Both', shared('b', { a: 1, peer: 0 })), local('Pushed')],
+      [remote('There'), remote('Both', shared('b', { a: 0, peer: 1 }))],
+      'peer',
+    )
+    const both = held.find((r) => r.name === 'Both')!
+    const view = holdOrder(viewRows(after, '', needsAction), after, {
+      rows: held,
+      after: both.key,
+      created: [],
+    })
+    expect(view.rows.at(-1)?.name).toBe('Pushed')
   })
 })
 

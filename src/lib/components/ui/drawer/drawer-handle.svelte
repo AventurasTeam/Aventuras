@@ -11,6 +11,6 @@
 
 <DrawerPrimitive.Handle
   bind:ref
-  class={cn('bg-muted relative z-10 mx-auto mt-4 h-2 w-[100px] rounded-full', className)}
+  class={cn('bg-muted mx-auto mt-4 h-2 w-[100px] rounded-full', className)}
   {...restProps}
 />

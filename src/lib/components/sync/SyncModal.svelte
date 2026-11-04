@@ -506,6 +506,10 @@
     syncMessage = null
   }
 
+  const TRIO_ROW = 'flex w-full flex-col gap-2 sm:grid sm:w-fit sm:auto-cols-fr sm:grid-flow-col'
+  const TRIO_BUTTON = 'sm:min-w-34'
+  const three = $derived(receivedTarget?.kind === 'sameName')
+
   const title = $derived.by(() => {
     switch (ui.syncMode) {
       case 'select':
@@ -677,7 +681,7 @@
 </script>
 
 <ResponsiveModal.Root open={ui.syncModalOpen} {onOpenChange}>
-  <ResponsiveModal.Content class="flex max-h-[85dvh] flex-col gap-0 p-0 sm:max-w-lg">
+  <ResponsiveModal.Content handle={false} class="flex max-h-[85dvh] flex-col gap-0 p-0 sm:max-w-lg">
     <ModalHeader {title} closeButton />
 
     <div class="min-h-0 min-w-0 flex-1 overflow-y-auto px-6 py-4">
@@ -786,15 +790,23 @@
                 A prompt pack must still be selected before the received story can be imported.
               </p>
             {/if}
-            <div class={PAIR_ROW}>
-              <Button variant="outline" class={PAIR_BUTTON} onclick={discardReceived}>Cancel</Button
+            <!-- Three choices stack on a phone; the pair layout fits only two. -->
+            <div class={three ? TRIO_ROW : PAIR_ROW}>
+              <Button
+                variant="outline"
+                class={three ? TRIO_BUTTON : PAIR_BUTTON}
+                onclick={discardReceived}
               >
-              {#if receivedTarget?.kind === 'sameName'}
-                <Button variant="outline" class={PAIR_BUTTON} onclick={() => importReceived(null)}>
+                Cancel
+              </Button>
+              {#if three}
+                <Button variant="outline" class={TRIO_BUTTON} onclick={() => importReceived(null)}>
                   Add as new
                 </Button>
               {/if}
-              <Button class={PAIR_BUTTON} onclick={retryReceived}>Replace</Button>
+              <Button class={three ? TRIO_BUTTON : PAIR_BUTTON} onclick={retryReceived}>
+                Replace
+              </Button>
             </div>
           </div>
         {:else if received}

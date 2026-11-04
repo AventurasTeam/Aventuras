@@ -5,7 +5,7 @@
 <script lang="ts">
   import type { Snippet } from 'svelte'
   import * as ResponsiveModal from '#lib/components/ui/responsive-modal/index.ts'
-  import { getResponsiveModalContext } from '#lib/components/ui/responsive-modal/index.ts'
+  import * as Drawer from '#lib/components/ui/drawer/index.ts'
   import { cn } from '#lib/utils/cn.ts'
 
   interface Props {
@@ -17,17 +17,21 @@
   }
 
   let { title, titleIcon, closeButton = false }: Props = $props()
-  const { isMobile: sheet } = getResponsiveModalContext()
+  const { isMobile: sheet } = ResponsiveModal.getResponsiveModalContext()
 </script>
 
-<!-- On a sheet the band reaches up behind the handle (1.5rem), so the top edge is one colour. -->
+<!-- On a sheet the band holds the handle, so the top edge is one colour: pass `handle={false}`
+     to the content. -->
 <ResponsiveModal.Header
   class={cn(
     'bg-muted/40 border-b px-6 py-4 text-center sm:text-center',
-    sheet.current && '-mt-6 rounded-t-[10px] pt-10',
+    sheet.current && 'rounded-t-[10px]',
   )}
   {closeButton}
 >
+  {#if sheet.current}
+    <Drawer.Handle class="mt-0 mb-2" />
+  {/if}
   <ResponsiveModal.Title
     class={cn('text-center break-words', titleIcon && 'flex items-center justify-center gap-2')}
   >

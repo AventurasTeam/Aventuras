@@ -34,7 +34,8 @@ export {
   countByStatus,
   formatAgo,
   holdOrder,
+  newRowKeys,
   parseListPrefs,
   viewRows,
 } from './rows'
-export type { SyncListView } from './rows'
+export type { HeldOrder, SyncListView } from './rows'
