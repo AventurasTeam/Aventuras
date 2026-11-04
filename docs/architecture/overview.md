@@ -636,7 +636,7 @@ extra whose failure never fails the listing. Whether a provider takes an API key
 provider (`PROVIDER_API_KEY` in the registry, `PROVIDER_BASE_URL` in `providers/baseUrls.ts`, which also holds each default), and the settings form and
 `hasRequiredCredentials` read those tables. The form keeps a value typed for another provider, so the
 registry builds a provider only from the fields it has an input for (`connectionFor`): a leftover base URL
-is not sent to NanoGPT, nor a leftover API key to A1111. Discovery (`listModels`, `getSamplerInfo`,
+is not sent to OpenRouter, nor a leftover API key to A1111. Discovery (`listModels`, `getSamplerInfo`,
 `listLoras`) takes an `AbortSignal`. The profile form debounces key and base URL edits, aborts the request
 a newer one or Stop replaces, and writes only what the current request returns. A cancelled model list is
 never cached, even when an adapter answers with a partial one. Migration `042` moved image settings that still named an

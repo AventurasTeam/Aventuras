@@ -10,7 +10,7 @@ export type BaseUrlRule =
 
 // `required` has no endpoint of its own to default to; `none` always runs on its default.
 export const PROVIDER_BASE_URL: Record<ImageProviderType, BaseUrlRule> = {
-  nanogpt: { mode: 'none', default: 'https://api.nano-gpt.com/api/v1' },
+  nanogpt: { mode: 'optional', default: 'https://api.nano-gpt.com/api/v1' },
   openai: { mode: 'optional', default: 'https://api.openai.com/v1' },
   'openai-compatible': { mode: 'required' },
   openrouter: { mode: 'none', default: 'https://openrouter.ai/api/v1' },

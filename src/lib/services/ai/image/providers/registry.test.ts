@@ -189,14 +189,14 @@ describe('Image Provider Registry', () => {
       expect(baseUrlMode('openai-compatible')).toBe('required')
     })
 
-    it.each(['openai', 'zhipu', 'comfyui', 'a1111'] satisfies ImageProviderType[])(
+    it.each(['nanogpt', 'openai', 'zhipu', 'comfyui', 'a1111'] satisfies ImageProviderType[])(
       'makes it optional for %s',
       (providerType) => {
         expect(baseUrlMode(providerType)).toBe('optional')
       },
     )
 
-    it.each(['nanogpt', 'openrouter', 'pollinations', 'google'] satisfies ImageProviderType[])(
+    it.each(['openrouter', 'pollinations', 'google'] satisfies ImageProviderType[])(
       'offers none for the fixed endpoint of %s',
       (providerType) => {
         expect(baseUrlMode(providerType)).toBe('none')
@@ -847,7 +847,12 @@ describe('Image Provider Registry', () => {
 
   describe('hidden connection fields', () => {
     it.each([
-      ['nanogpt', 'key', 'https://stale.test', { apiKey: 'key', baseUrl: undefined }],
+      [
+        'nanogpt',
+        'key',
+        'https://partner.test',
+        { apiKey: 'key', baseUrl: 'https://partner.test' },
+      ],
       ['openrouter', 'key', 'https://stale.test', { apiKey: 'key', baseUrl: undefined }],
       ['a1111', 'stale-key', 'http://sd.test', { apiKey: '', baseUrl: 'http://sd.test' }],
       ['comfyui', 'stale-key', 'http://comfy.test', { apiKey: '', baseUrl: 'http://comfy.test' }],
