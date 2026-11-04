@@ -257,7 +257,7 @@ modes).
 --border-strong:  #b89876
 
 --focus-ring:     #8b3a14
---selection-bg:   #e8d8a8
+--selection-bg:   #dccda0
 
 --recently-classified-bg: #f0d68a
 ```

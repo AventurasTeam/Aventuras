@@ -79,6 +79,8 @@ the inventory below is the slot list at a glance.
   picks it so the peak stands out from its fainter card kind
   (`--bg-raised` or `--bg-sunken`) at least as far as default-light's
   tint from its `--bg-sunken` (OKLab ΔE). It is not a colour slot.
+  Light themes paint the tint at full strength, so their
+  `--selection-bg` is held to the same floor on both card kinds.
 - **Pattern-driven (1).** `--recently-classified-bg` — row tint
   for the recently-classified pattern (per
   [`../patterns/entity.md`](../patterns/entity.md)). Two visual

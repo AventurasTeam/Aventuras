@@ -122,16 +122,6 @@ slice-planning gate forces its resolution before that slice is planned.
   is applied, beside `--selection-bg`, and move the invariant onto that
   derivation. Raised 2026-11-02 by 5.3's Q10 review.
 
-- **Parchment's landed tint barely shows on a `user_action` card.**
-  Light themes paint `--selection-bg` at full strength. Parchment's
-  `#e8d8a8` is only OKLab ΔE 1.7 (WCAG 1.04) from its `--bg-sunken`
-  `#ecdcb4`. Default-light's tint, by contrast, is 4.7 from its own,
-  which is the floor dark themes are now held to. Q10 left light themes
-  out by decision, so nothing pins this. Either hold light themes to the
-  same floor, which would need parchment's tint to change colour since
-  it is already at full strength, or accept it. Computed from tokens,
-  not recorded. Raised 2026-11-02 by 5.3's Q10 review.
-
 - **A shrinking viewport can pull a landing to the bottom.** The
   surface's `ResizeObserver` (`components/reader/reader-surface.tsx`)
   writes `scrollTop` to the bottom when the viewport shrinks under a
