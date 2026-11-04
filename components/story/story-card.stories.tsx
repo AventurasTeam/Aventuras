@@ -100,7 +100,8 @@ export const Archived: StoryT = {
   args: { story: makeStoryRow({ id: 's1', status: 'archived' }), ...handlers },
 }
 
-export const ArchivedDraft: StoryT = {
+/** An archived story before its chapter read lands; an archived draft never exists. */
+export const ArchivedBeforeChapterRead: StoryT = {
   ...cardCentered,
   args: {
     story: makeStoryRow({ id: 's1', status: 'archived', chapterLabel: null }),

@@ -152,14 +152,6 @@ slice-planning gate forces its resolution before that slice is planned.
   [`touch.md`](../ui/foundations/mobile/touch.md)'s 44 px floor, which
   holds at every density. Raised 2026-11-02 by 5.3's task reviews.
 
-- **Two test fixtures model states that can't happen.**
-  `ArchivedDraft` in `components/story/story-card.stories.tsx` is a
-  state [`story-card.md`](../ui/patterns/story-card.md) says never
-  exists. `worldTimeOf` in `e2e/tests/reader-worldtime-edit.spec.ts`
-  reads an entry by id alone, though entry ids repeat across branches;
-  not checked whether the seed trips it. Raised 2026-11-02 by 5.3's task
-  reviews.
-
 - **A `DeltaLogRow`'s name hides its content.** On a pressable row the
   `aria-label` replaces the row's text as its name, so a screen reader
   never hears the summary, field path, source or time, and two rows of
