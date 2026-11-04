@@ -513,6 +513,16 @@ code before it moved; resolve with the slice it names.
   already anticipates a main-process emit path, which is where the design
   should start. Surfaced by Slice 3.12a review (2026-08-19), routed
   2026-08-20.
+- **M7.1 — A chip's hit slop misses the phone floor at compact
+  density.** `CHIP_HIT_SLOP` (`components/ui/chip.tsx`) gives 32 + 8 =
+  40 px at compact on phone, Browse included, under
+  [`touch.md`](../ui/foundations/mobile/touch.md)'s 44 px floor, which
+  holds at every density. Raised 2026-11-02 by 5.3's task reviews.
+  Checked 2026-11-04: `touch.md`'s 44 px floor names phone rows and form
+  inputs, and `chips.md` sizes the slop for `regular`, the phone
+  default, so whether a chip owes 44 px at compact is the question;
+  `IconAction` has the same gap, 40 to 42 px. Unreachable until the
+  density toggle lands. Routed from triage 2026-11-04.
 - **M7.1 — The reasoning slider must stay below the model's output cap.**
   The Anthropic SDK sends max output plus the thinking budget as
   `max_tokens`, so the two can't clash on their own, but it then clamps to

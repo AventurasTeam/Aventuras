@@ -61,15 +61,6 @@ slice-planning gate forces its resolution before that slice is planned.
   did not re-run the suite serially — the evidence above is still as of
   `edce17b8`.
 
-- **The mock LLM's token count has no run guard.**
-  `scripts/mock-llm/respond/wire.ts:48-52` keeps its own `countO200k`,
-  though its comment says it mirrors `countTokens`. On a fixture with a
-  run over 512 code points the two differ by a few tokens per cut, and
-  the mock pays the quadratic cost. No `e2e/` or mock fixture repeats
-  100 times or more, so nothing hits this today. Now that `lib/tokens` is
-  a leaf the mock could import `countTokens`, as `scripts/mock-llm/control.ts`
-  already value-imports `@/lib`, though long-run counts would change and
-  that wants an E2E run. Raised 2026-11-01 by Slice 5.1's review.
 - **A stale `node_modules` ships dependencies without their patches.**
   After a pull that adds or changes a file in `patches/`, nothing makes
   a developer run `pnpm install`: `lefthook.yml` has no post-merge or
@@ -82,20 +73,6 @@ slice-planning gate forces its resolution before that slice is planned.
   It holds for all five patches. pnpm 10.33.1 has
   `verify-deps-before-run`, which checks before any `pnpm run`. Raised
   2026-11-03 by PR #700's closing review.
-- **A route mounted during a read starts the strip at 0.**
-  `useChapterProgress` holds its last read per hook, so World, Plot or
-  Story Settings mounting while a read runs show 0 until it lands, though
-  the hidden reader still holds the number. The window is the read's own
-  length, on the order of milliseconds, and it heals by itself. Slice
-  5.3's count labels make it readable. `useEntryIndex`'s
-  `seedFromLastRead` is the precedent if it ever shows. Raised 2026-11-02
-  by Slice 5.1's closing review.
-- **Two test and logging helpers have no home yet.** The `run()` and
-  `entry()` factories repeat across `hooks` tests: the terminal stub
-  appears in 28 files, and more than 12 define their own `entry`. The
-  `error instanceof Error ? …` log field has 40 or more sites and no
-  shared helper. Each needs a new home and a sweep of files on main.
-  Raised 2026-11-02 by Slice 5.1's closing review.
 - **What marks a flashback is stated two ways.**
   [`reader-composer.md`](../ui/screens/reader-composer/reader-composer.md#top-bar--in-world-time-display),
   [`entry-card.md`](../ui/patterns/entry-card.md#world-time-footer) and
@@ -124,12 +101,6 @@ slice-planning gate forces its resolution before that slice is planned.
   guard. [`reader-document.md`](../ui/patterns/reader-document.md#entry-list-fully-rendered-flow-layout)
   counts a touch fling as mid-gesture. Read from the code, not
   reproduced; added 2026-11-03 by 5.3's slice review.
-
-- **A chip's hit slop misses the phone floor at compact density.**
-  `CHIP_HIT_SLOP` (`components/ui/chip.tsx`) gives 32 + 8 = 40 px at
-  compact on phone, Browse included, under
-  [`touch.md`](../ui/foundations/mobile/touch.md)'s 44 px floor, which
-  holds at every density. Raised 2026-11-02 by 5.3's task reviews.
 
 - **A `DeltaLogRow`'s name hides its content.** On a pressable row the
   `aria-label` replaces the row's text as its name, so a screen reader

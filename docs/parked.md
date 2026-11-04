@@ -1988,6 +1988,17 @@ Parked at M5's promotion, 2026-11-01.
 
 ### UX (parked)
 
+#### A route mounted during a read starts the strip at 0
+
+`useChapterProgress` holds its last read per hook, so World, Plot or
+Story Settings mounting while a read runs show 0 until it lands, though
+the hidden reader still holds the number. The window is the read's own
+length, on the order of milliseconds, and it heals by itself. Slice
+5.3's count labels make it readable. `useEntryIndex`'s
+`seedFromLastRead` is the precedent if it ever shows. Raised 2026-11-02
+by Slice 5.1's closing review. Parked 2026-11-04; the signal is the 0
+showing in use.
+
 #### Drag-and-drop file import for ImportDialog
 
 [`ImportDialog`](./ui/patterns/import-dialog.md) ships v1 with
@@ -3653,6 +3664,38 @@ design; the signal is users regenerating cut-off replies to finish them,
 or asking to continue one.
 
 ### Code structure (parked)
+
+#### Two test and logging helpers have no home yet
+
+The `run()` and `entry()` factories repeat across `hooks` tests: the
+terminal stub appears in 28 files, and more than 12 define their own
+`entry`. The `error instanceof Error ? …` log field has 40 or more sites
+and no shared helper. Each needs a new home and a sweep of files on
+main. Raised 2026-11-02 by Slice 5.1's closing review. Counted
+2026-11-04: `terminal: Promise.resolve()` sits in 29 files, 5 of them in
+`hooks/`; 33 files define an `entry` factory; the `instanceof Error`
+idiom has 134 lines in 90 non-test files, with six private helpers
+already (`use-history-chunks.ts`, `save-session.tsx`,
+`use-row-save-session.ts`, `model-card.ts`, and two in
+`electron/embedder`, which compiles apart).
+`lib/db/__tests__/test-db.ts` is the precedent for a shared test helper.
+Parked 2026-11-04; the signal is a slice that already touches most of
+those sites, since a sweep of about 90 files nears the review cap.
+
+#### The mock LLM's token count has no run guard
+
+`scripts/mock-llm/respond/wire.ts:48-52` keeps its own `countO200k`,
+though its comment says it mirrors `countTokens`. On a fixture with a
+run over 512 code points the two differ by a few tokens per cut, and the
+mock pays the quadratic cost. No `e2e/` or mock fixture repeats 100
+times or more, so nothing hits this today. Now that `lib/tokens` is a
+leaf the mock could import `countTokens`, as
+`scripts/mock-llm/control.ts` already value-imports `@/lib`, though
+long-run counts would change and that wants an E2E run. Raised
+2026-11-01 by Slice 5.1's review. Checked 2026-11-04: no fixture in
+`e2e/`, `scripts/mock-llm` or `scripts/seed` holds a run over 512 code
+points, and `scripts/seed/long-branch.ts` already imports `countTokens`.
+Parked 2026-11-04; the signal is a fixture with such a run.
 
 #### Unsaved-changes guard folder placement
 
