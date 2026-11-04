@@ -3,6 +3,8 @@
  * Used by both TemplatePreview (rendering) and TestVariablesModal (pre-filling inputs).
  */
 
+import { ITEM_LOCATION_OPTIONS } from '#lib/utils/itemLocation.ts'
+
 export const systemSamples: Record<string, string> = {
   protagonistName: 'Aria',
   currentLocation: 'The Whispering Woods',
@@ -42,8 +44,8 @@ export const runtimeSamples: Record<string, string> = {
   existingItems: 'Enchanted Compass, Shadow Cloak, Moonstone Pendant',
   existingBeats: 'Discovered the hidden map, Met the wandering sage',
   storyBeatTypes: 'discovery, encounter, revelation, conflict, resolution',
-  itemLocationOptions: 'inventory, equipped, location, npc',
-  defaultItemLocation: 'location',
+  itemLocationOptions: ITEM_LOCATION_OPTIONS,
+  defaultItemLocation: 'inventory',
 
   // Memory Service
   chapterContent: '[Chapter entries to summarize...]',
