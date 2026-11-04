@@ -5,6 +5,7 @@
 <script lang="ts">
   import type { Snippet } from 'svelte'
   import * as ResponsiveModal from '#lib/components/ui/responsive-modal/index.ts'
+  import { getResponsiveModalContext } from '#lib/components/ui/responsive-modal/index.ts'
   import { cn } from '#lib/utils/cn.ts'
 
   interface Props {
@@ -16,10 +17,15 @@
   }
 
   let { title, titleIcon, closeButton = false }: Props = $props()
+  const { isMobile: sheet } = getResponsiveModalContext()
 </script>
 
+<!-- On a sheet the band reaches up behind the handle (1.5rem), so the top edge is one colour. -->
 <ResponsiveModal.Header
-  class="bg-muted/40 border-b px-6 py-4 text-center sm:text-center"
+  class={cn(
+    'bg-muted/40 border-b px-6 py-4 text-center sm:text-center',
+    sheet.current && '-mt-6 rounded-t-[10px] pt-10',
+  )}
   {closeButton}
 >
   <ResponsiveModal.Title
