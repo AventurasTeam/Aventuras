@@ -14,10 +14,12 @@ type LogFn = (kind: LogKind, fields?: Record<string, unknown>, opts?: LogOpts) =
 export type Logger = { error: LogFn; warn: LogFn; debug: LogFn }
 
 // Bypasses the master gate on both surfaces — store write and console mirror — so the Logs
-// tab and console never disagree. Unhandled rejections can't be reproduced on request, and
-// their retraction signals must bypass with them. Policy: docs/observability.md#console-mirroring.
+// tab and console never disagree. Unhandled rejections and uncaught errors can't be reproduced on
+// request, and the retraction signals must bypass with them. Policy:
+// docs/observability.md#console-mirroring.
 const ALWAYS_RECORDED: ReadonlySet<LogKind> = new Set([
   'app.unhandled_rejection',
+  'app.uncaught_error',
   'app.rejection_handled_late',
   'app.rejection_tracker_unavailable',
 ])

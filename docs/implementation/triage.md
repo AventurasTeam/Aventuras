@@ -87,10 +87,6 @@ slice-planning gate forces its resolution before that slice is planned.
   since `readEntryIndex` selects no metadata and excludes `system`.
   `useChapterProgress`' docblock has the narrower wording. Raised
   2026-11-01 by Slice 5.1's review.
-- **Uncaught synchronous renderer errors reach no diagnostics entry.**
-  `lib/boot/rejection-handler.ts:67` listens for `unhandledrejection`
-  only, so on desktop a throw in a timer or an idle callback reaches the
-  console alone. Raised 2026-11-01 by Slice 5.1's review.
 - **A stale `node_modules` ships dependencies without their patches.**
   After a pull that adds or changes a file in `patches/`, nothing makes
   a developer run `pnpm install`: `lefthook.yml` has no post-merge or

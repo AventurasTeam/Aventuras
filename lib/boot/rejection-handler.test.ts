@@ -31,13 +31,37 @@ afterEach(() => {
 })
 
 describe('registerRejectionHandler', () => {
-  it('registers unhandledrejection and rejectionhandled listeners once each', () => {
+  it('registers unhandledrejection, rejectionhandled and error listeners once each', () => {
     const addEventListener = vi.fn()
     registerRejectionHandler({ addEventListener })
     registerRejectionHandler({ addEventListener })
-    expect(addEventListener).toHaveBeenCalledTimes(2)
+    expect(addEventListener).toHaveBeenCalledTimes(3)
     expect(addEventListener).toHaveBeenCalledWith('unhandledrejection', expect.any(Function))
     expect(addEventListener).toHaveBeenCalledWith('rejectionhandled', expect.any(Function))
+    expect(addEventListener).toHaveBeenCalledWith('error', expect.any(Function))
+  })
+
+  it('logs an uncaught error with its stack, even when the diagnostics gate is OFF', () => {
+    configureDiagnosticsGate({ isEnabled: () => false, isDebugEnabled: () => false })
+    const addEventListener = vi.fn()
+    registerRejectionHandler({ addEventListener })
+    captureListener(addEventListener, 'error')({ error: new Error('boom'), message: 'boom' })
+    const { logEntries } = getDiagnosticsSnapshot()
+    expect(logEntries).toHaveLength(1)
+    expect(logEntries[0].kind).toBe('app.uncaught_error')
+    expect(logEntries[0].level).toBe('error')
+    const error = String(logEntries[0].fields.error)
+    expect(error).toContain('boom')
+    expect(error).toContain('rejection-handler.test.ts')
+  })
+
+  it('logs the message of an uncaught error event that carries no error', () => {
+    const addEventListener = vi.fn()
+    registerRejectionHandler({ addEventListener })
+    captureListener(addEventListener, 'error')({ message: 'Script error.' })
+    const { logEntries } = getDiagnosticsSnapshot()
+    expect(logEntries).toHaveLength(1)
+    expect(logEntries[0].fields.error).toBe('Script error.')
   })
 
   it('logs the stack (not just the message) with a per-event id when the DOM listener fires', () => {
