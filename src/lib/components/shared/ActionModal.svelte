@@ -419,7 +419,7 @@
       <ResponsiveModal.Header
         class={cn(
           'bg-muted/40 border-b px-6 py-4 text-center sm:text-center',
-          compact && 'md:w-0 md:min-w-full',
+          compact && 'wrap-anywhere md:w-0 md:min-w-full',
         )}
         closeButton={false}
       >
@@ -447,7 +447,7 @@
           onscroll={measureJump}
         >
           {#if children || description}
-            <div class={cn('space-y-3 px-6 py-4', compact && 'md:w-0 md:min-w-full')}>
+            <div class={cn('space-y-3 px-6 py-4', compact && 'wrap-anywhere md:w-0 md:min-w-full')}>
               {#if typeof description === 'string'}
                 <ResponsiveModal.Description>{description}</ResponsiveModal.Description>
               {:else if description}

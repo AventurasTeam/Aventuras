@@ -109,10 +109,12 @@ class ImportExportService {
   /** Where an existing tree's files sit, and which of them this export would leave behind. */
   private async planWrite(root: string, tree: Tree): Promise<DirectoryExportPlan> {
     let existingPaths: string[] = []
+    let directoryPaths: string[] = []
     let packFileText: string | undefined
     try {
       const existing = await readTree(root)
       existingPaths = existing.allPaths
+      directoryPaths = existing.directoryPaths
       packFileText = existing.contents.get(PACK_FILE)
     } catch (e) {
       // Without its contents nothing can be pruned, moved aside or named before it is overwritten.
@@ -129,7 +131,7 @@ class ImportExportService {
         'This folder was exported by a newer version of Aventuras. Update the app to export into it.',
       )
     }
-    const changes = planFolderChanges(existingPaths, tree, origin)
+    const changes = planFolderChanges(existingPaths, tree, origin, directoryPaths)
 
     return {
       root,

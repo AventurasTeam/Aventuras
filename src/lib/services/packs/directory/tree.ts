@@ -237,9 +237,9 @@ function findRootFiles(paths: string[], name: string): string[] {
   return paths.filter((path) => path.toLowerCase() === name.toLowerCase())
 }
 
-/** Each `README.md` the export did not write moves to the next free `README_user[_N].md`. */
-function planReadmeRenames(paths: string[]): FileRename[] {
-  const taken = new Set(paths.map((path) => path.toLowerCase()))
+/** Each `README.md` the export did not write moves to the next name no file or folder has. */
+function planReadmeRenames(paths: string[], directoryPaths: string[]): FileRename[] {
+  const taken = new Set([...paths, ...directoryPaths].map((path) => path.toLowerCase()))
   return findRootFiles(paths, README_FILE)
     .toSorted()
     .map((from) => {
@@ -255,12 +255,14 @@ export function planFolderChanges(
   existingPaths: string[],
   tree: Tree,
   origin: Exclude<FolderOrigin, 'newer'>,
+  directoryPaths: string[] = [],
 ): FolderChanges {
   const paths = existingPaths.map(normalizePath)
   const prunePaths = origin === 'foreign' ? [] : planPrune(paths, tree)
   if (origin === 'earlier') prunePaths.push(...findRootFiles(paths, ABOUT_FILE))
   const sorted = prunePaths.toSorted()
-  const renames = origin === 'current' ? [] : planReadmeRenames(paths)
+  const renames =
+    origin === 'current' ? [] : planReadmeRenames(paths, directoryPaths.map(normalizePath))
   const movedPaths = movedTemplatePaths(sorted, tree, paths)
   const moved = new Set(movedPaths)
   const deletedPaths = sorted.filter((path) => !moved.has(path))

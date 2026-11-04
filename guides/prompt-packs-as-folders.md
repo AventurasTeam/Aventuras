@@ -29,8 +29,9 @@ Three things make that work:
 
 - **One prompt, one file.** git can then merge each prompt on its own and show you exactly which
   lines a release touched and how they cross your edits.
-- **Nothing in the folder changes unless a prompt does.** Two exports of the same pack are
-  byte-identical, so a commit only ever holds real changes.
+- **Nothing in the folder changes unless something real does.** Two exports of the same pack by
+  the same version of Aventuras are byte-identical. A new version also rewrites `README.md` and
+  `_reference/`, so a release's commit can hold those even when no prompt changed.
 - **The shipped prompts can be exported on their own**, from the text compiled into Aventuras, so
   no edit you made in the app can leak into what you merge from.
 

@@ -255,6 +255,12 @@ describe('planFolderChanges', () => {
     expect(deletedPaths.filter((path) => path.endsWith('adventure.md'))).toHaveLength(1)
   })
 
+  it('passes over a name a folder already has', () => {
+    expect(
+      planFolderChanges([README_FILE], tree, 'foreign', ['README_user.md', 'notes']).renames,
+    ).toEqual([{ from: README_FILE, to: 'README_user_2.md' }])
+  })
+
   it('takes the next free name when README_user.md is taken', () => {
     const taken = [...formatOne, 'readme_user.md', 'README_user_2.md']
     expect(planFolderChanges(taken, tree, 'earlier').renames).toEqual([
