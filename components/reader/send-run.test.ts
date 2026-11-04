@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { PERIODIC_CLASSIFIER_KIND } from '@/lib/classifier'
+import { logger } from '@/lib/diagnostics'
 import { CLASSIFIER_HELD, PER_TURN_KIND, SUGGESTION_REFRESH_KIND } from '@/lib/pipeline'
 import {
   awaitRunTerminal,
@@ -18,6 +19,7 @@ import {
   composerShowsCancel,
   findSendRun,
   passRefusalOf,
+  reportSendThrow,
   pillRunOf,
   sendGapOpen,
   sendRunStreams,
@@ -421,5 +423,46 @@ describe('passRefusalOf', () => {
     ).toBeNull()
     expect(passRefusalOf({ ...ran, outcome: 'aborted', beforeTurn: true })).toBeNull()
     expect(passRefusalOf({ ...ran, outcome: 'completed' })).toBeNull()
+  })
+})
+
+describe('reportSendThrow', () => {
+  it('logs the throw and writes its failure entry with the message as detail', async () => {
+    const errorSpy = vi.spyOn(logger, 'error').mockImplementation(() => {})
+    const writeEntry = vi.fn(async (_detail: string) => {})
+    const handBack = vi.fn()
+
+    await reportSendThrow('br_1', new Error('write refused'), writeEntry, handBack)
+
+    expect(errorSpy).toHaveBeenCalledExactlyOnceWith('pipeline.submit_failed', {
+      branchId: 'br_1',
+      error: 'write refused',
+    })
+    expect(writeEntry).toHaveBeenCalledExactlyOnceWith('write refused')
+    expect(handBack).not.toHaveBeenCalled()
+    errorSpy.mockRestore()
+  })
+
+  it('hands the text back and resolves when the failure entry cannot be written', async () => {
+    const errorSpy = vi.spyOn(logger, 'error').mockImplementation(() => {})
+    const handBack = vi.fn()
+
+    await expect(
+      reportSendThrow(
+        'br_1',
+        new Error('write refused'),
+        async () => {
+          throw new Error('db gone')
+        },
+        handBack,
+      ),
+    ).resolves.toBeUndefined()
+
+    expect(errorSpy).toHaveBeenLastCalledWith('pipeline.submit_failure_entry_failed', {
+      branchId: 'br_1',
+      error: 'db gone',
+    })
+    expect(handBack).toHaveBeenCalledOnce()
+    errorSpy.mockRestore()
   })
 })

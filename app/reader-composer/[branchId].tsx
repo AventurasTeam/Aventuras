@@ -62,6 +62,7 @@ import {
   composerShowsCancel,
   passRefusalOf,
   pillRunOf,
+  reportSendThrow,
   sendGapOpen,
   sendRunStreams,
   type PassRefusal,
@@ -801,12 +802,11 @@ export default function ReaderComposerRoute() {
         // submitTurn throws on a rejected user_action write — treat a thrown
         // failure like a structured 'failed' outcome so the UI surfaces an
         // error and stays retriable instead of hanging.
-        await showTurnFailure(
-          {
-            kind: 'orchestrator',
-            detail: err instanceof Error ? err.message : String(err),
-          },
-          submission,
+        await reportSendThrow(
+          branchId,
+          err,
+          (detail) => showTurnFailure({ kind: 'orchestrator', detail }, submission),
+          () => handBackSubmission(submission),
         )
       } finally {
         endDispatch()
@@ -821,6 +821,7 @@ export default function ReaderComposerRoute() {
       restoreSystemTail,
       showTurnFailure,
       showPassFailure,
+      handBackSubmission,
       beginDispatch,
       endDispatch,
       branchUnchanged,

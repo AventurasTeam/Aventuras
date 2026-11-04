@@ -174,9 +174,12 @@ convention, and the expectation that subsystems route through
 - `pipeline.*` — `phase_failed`, `run_aborted`, `recovered`,
   `phase_exception_hook_failed` (error: a pipeline's failure hook threw
   after its rollback committed; for the periodic classifier both record
-  attempts failed, and the branch stays `running` until boot recovery)
-- `action_layer.*` — `user_write_rejected`, `constraint_violation`,
-  `reversal_refused` (error: an undo, redo, rollback, prose edit or
+  attempts failed, and the branch stays `running` until boot recovery),
+  `submit_failed` (error, `components/reader/send-run.ts`: a Send
+  threw rather than returning an outcome; its failure entry follows)
+  and `submit_failure_entry_failed` (error: that entry's write threw
+  too, and the Send's text went back to the composer)
+- `action_layer.*` — `reversal_refused` (error: an undo, redo, rollback, prose edit or
   regenerate refused as an integrity error, logged with its refusal
   kind), `row_held_twice` (error: two deletes in the log hold one row,
   which a sound log never produces),

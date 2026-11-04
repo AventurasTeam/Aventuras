@@ -1,4 +1,5 @@
 import type { SubmitTurnResult } from '@/lib/actions'
+import { logger } from '@/lib/diagnostics'
 import {
   CLASSIFIER_HELD,
   PER_TURN_KIND,
@@ -107,4 +108,27 @@ export function passRefusalOf(result: SubmitTurnResult): PassRefusal | null {
     return { held: false, error: result.error }
   if (result.outcome === 'rejected' && result.blockedBy === CLASSIFIER_HELD) return { held: true }
   return null
+}
+
+/**
+ * A Send that threw: logs it and writes its failure entry. When that write throws too, the text
+ * goes back to the composer rather than leave no card and no draft. Never rejects.
+ */
+export async function reportSendThrow(
+  branchId: string,
+  error: unknown,
+  writeEntry: (detail: string) => Promise<void>,
+  handBack: () => void,
+): Promise<void> {
+  const detail = error instanceof Error ? error.message : String(error)
+  logger.error('pipeline.submit_failed', { branchId, error: detail })
+  try {
+    await writeEntry(detail)
+  } catch (entryError) {
+    logger.error('pipeline.submit_failure_entry_failed', {
+      branchId,
+      error: entryError instanceof Error ? entryError.message : String(entryError),
+    })
+    handBack()
+  }
 }

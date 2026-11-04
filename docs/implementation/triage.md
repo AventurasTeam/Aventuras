@@ -138,14 +138,6 @@ slice-planning gate forces its resolution before that slice is planned.
   5.3's count labels make it readable. `useEntryIndex`'s
   `seedFromLastRead` is the precedent if it ever shows. Raised 2026-11-02
   by Slice 5.1's closing review.
-- **A failed Send logs nothing.** The reader's catch
-  (`app/reader-composer/[branchId].tsx:804`) writes the failure card and
-  no log line, and nothing emits `action_layer.user_write_rejected`, which
-  [`observability.md → Subsystem emission inventory`](../observability.md#subsystem-emission-inventory)
-  lists. Slice 5.1 adds one route there, `countTokens` throwing on a run
-  of about 5.6 million code points, and the card still shows the failure.
-  The fix belongs with every user write, not this one. Raised 2026-11-02
-  by Slice 5.1's closing review.
 - **Two test and logging helpers have no home yet.** The `run()` and
   `entry()` factories repeat across `hooks` tests: the terminal stub
   appears in 28 files, and more than 12 define their own `entry`. The
