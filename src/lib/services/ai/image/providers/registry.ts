@@ -456,5 +456,18 @@ export async function listLoras(baseUrl?: string, signal?: AbortSignal): Promise
   return (await provider.listLoras?.(signal)) ?? []
 }
 
+/** CLIP types a ComfyUI server accepts. Rejects when the server cannot be read. */
+export async function getProviderClipTypes(
+  baseUrl?: string,
+  signal?: AbortSignal,
+): Promise<string[]> {
+  const provider = createComfyProvider({
+    apiKey: '',
+    baseUrl,
+    timeoutMs: settings.apiSettings.llmTimeoutMs,
+  })
+  return (await provider.listClipTypes?.(signal)) ?? []
+}
+
 // Re-export types for convenience
 export type { ImageModelInfo, ImageGenerateResult } from './types'

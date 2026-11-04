@@ -24,6 +24,7 @@ export {
   listImageModelsByProvider,
   getProviderSamplerInfo,
   listLoras,
+  getProviderClipTypes,
   requiresApiKey,
   takesApiKey,
   baseUrlMode,
