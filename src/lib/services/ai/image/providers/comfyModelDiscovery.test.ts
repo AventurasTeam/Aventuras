@@ -71,9 +71,10 @@ describe('ComfyUI model discovery', () => {
     await provider.listModels(undefined, signal)
     await provider.listLoras!(signal)
     await provider.getSamplerInfo!(signal).catch(() => {})
+    await provider.listClipTypes!(signal).catch(() => {})
 
     const calls = vi.mocked(imageGetFetch).mock.calls
-    expect(calls).toHaveLength(4)
+    expect(calls).toHaveLength(5)
     for (const [, , options] of calls) expect(options?.signal).toBe(signal)
   })
 
@@ -128,6 +129,45 @@ describe('ComfyUI model discovery', () => {
     expect((error as Error).message.split('\n')[0]).toBe(
       'ComfyUI sent an unreadable /object_info/KSampler reply',
     )
+  })
+
+  describe('CLIP types', () => {
+    const clipLoader = (type: unknown[]) => reply({ CLIPLoader: { input: { required: { type } } } })
+
+    it('reads the types from the CLIPLoader node', async () => {
+      vi.mocked(imageGetFetch).mockResolvedValue(clipLoader([['lumina2', 'flux', 'wan']]))
+      expect(await createComfyProvider({ apiKey: '' }).listClipTypes!()).toEqual([
+        'lumina2',
+        'flux',
+        'wan',
+      ])
+      expect(vi.mocked(imageGetFetch).mock.calls[0][0]).toBe(
+        'http://localhost:8188/object_info/CLIPLoader',
+      )
+    })
+
+    it('reads the options of the COMBO form and drops non-string entries', async () => {
+      vi.mocked(imageGetFetch).mockResolvedValue(
+        clipLoader(['COMBO', { options: ['lumina2', 7, 'flux'] }]),
+      )
+      expect(await createComfyProvider({ apiKey: '' }).listClipTypes!()).toEqual([
+        'lumina2',
+        'flux',
+      ])
+    })
+
+    it.each([
+      ['no CLIPLoader node', {}],
+      ['a type that is not an array', { CLIPLoader: { input: { required: { type: 'x' } } } }],
+    ])('names the endpoint on the first line of a reply with %s', async (_, body) => {
+      vi.mocked(imageGetFetch).mockResolvedValue(reply(body))
+      const error = await createComfyProvider({ apiKey: '' }).listClipTypes!().catch(
+        (e: Error) => e,
+      )
+      expect((error as Error).message.split('\n')[0]).toBe(
+        'ComfyUI sent an unreadable /object_info/CLIPLoader reply',
+      )
+    })
   })
 
   it('rejects a model folder reply that is not a list', async () => {

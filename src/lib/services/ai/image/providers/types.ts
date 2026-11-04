@@ -80,6 +80,7 @@ export interface ImageProvider {
   // ComfyUI specific
   getSamplerInfo?(signal?: AbortSignal): Promise<ComfySamplerInfo>
   listLoras?(signal?: AbortSignal): Promise<string[]>
+  listClipTypes?(signal?: AbortSignal): Promise<string[]>
 }
 
 export interface ImageProviderConfig {

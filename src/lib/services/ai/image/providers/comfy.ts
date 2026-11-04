@@ -471,6 +471,14 @@ const KSamplerInfo = z.object({
   }),
 })
 
+const CLIPLoaderInfo = z.object({
+  CLIPLoader: z.object({
+    input: z.object({
+      required: z.object({ type: z.array(z.unknown()) }),
+    }),
+  }),
+})
+
 const ComboConfig = z.object({ options: z.array(z.unknown()) })
 
 const isString = (value: unknown): value is string => typeof value === 'string'
@@ -710,6 +718,21 @@ export function createComfyProvider(config: ImageProviderConfig): ImageProvider 
       }
       const { sampler_name, scheduler } = info.data.KSampler.input.required
       return { samplers: choices(sampler_name), schedulers: choices(scheduler) }
+    },
+
+    async listClipTypes(signal?: AbortSignal): Promise<string[]> {
+      const response = await imageGetFetch(endpoint(baseUrl, 'object_info/CLIPLoader'), undefined, {
+        serviceId: 'comfy-clip-types',
+        timeoutMs: config.timeoutMs,
+        signal,
+      })
+      const info = CLIPLoaderInfo.safeParse(await response.json())
+      if (!info.success) {
+        throw new Error(
+          `ComfyUI sent an unreadable /object_info/CLIPLoader reply\n${z.prettifyError(info.error)}`,
+        )
+      }
+      return choices(info.data.CLIPLoader.input.required.type)
     },
   }
 }
