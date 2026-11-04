@@ -5,6 +5,7 @@ import { describedBy } from '@/components/ui/accessible-description'
 import { ReasonTooltip } from '@/components/ui/reason-tooltip'
 import { Text } from '@/components/ui/text'
 import { POINTER_EVENTS_NONE } from '@/constants/styles'
+import { t } from '@/lib/i18n'
 import type { RecentlyClassified } from '@/lib/row-signals'
 import { cn } from '@/lib/utils'
 
@@ -49,7 +50,7 @@ type ListRowProps = {
   selected?: boolean
   onPress?: () => void
   disabled?: boolean
-  /** Explains a disabled row through its accessibility hint and a web tooltip. */
+  /** Explains a disabled row in its accessible name and a web tooltip. */
   disabledReason?: string
   className?: string
   /** The row's pressable, e.g. for moving focus to it. */
@@ -140,14 +141,15 @@ export function ListRow({
         ref={ref}
         onPress={interactive ? onPress : undefined}
         disabled={!interactive}
-        accessibilityRole={interactive ? 'button' : undefined}
-        aria-label={accessibilityLabel ?? label}
+        accessibilityRole="button"
+        aria-label={
+          reason != null
+            ? t('common:disabledWithReason', { label: accessibilityLabel ?? label, reason })
+            : (accessibilityLabel ?? label)
+        }
         aria-selected={selected}
         // The name stands for the row's content, so its description rides separately.
-        {...describedBy(
-          description != null ? [descriptionId] : [],
-          [description, reason].filter((part) => part != null).join(', '),
-        )}
+        {...describedBy(description != null ? [descriptionId] : [], description ?? '')}
         className={cn(
           rowClassName,
           interactive && (filled ? 'active:opacity-90' : 'active:bg-tint-press'),
