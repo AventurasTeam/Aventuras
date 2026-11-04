@@ -216,15 +216,6 @@ slice-planning gate forces its resolution before that slice is planned.
   counts a touch fling as mid-gesture. Read from the code, not
   reproduced; added 2026-11-03 by 5.3's slice review.
 
-- **Three overlay primitives carry stale or missing behaviour.**
-  `components/ui/popover.tsx` never clears rn-primitives' responder
-  claim on native, so every scroller inside a Popover has to route
-  around it. `components/ui/scroll-component.tsx` says gorhom's scroll
-  view "lacks most ScrollView methods", which its declared type
-  contradicts. A bottom `Sheet` ignores Escape on web
-  (`components/ui/sheet.tsx`), which matters in a narrow Electron window
-  at phone tier. Raised 2026-11-02 by 5.3's task reviews.
-
 - **The chapter popover's fixed cap has no short-window handling.**
   Its list stops at 320 px, so the long-list popover measures 472 px,
   and below about 560 px of window height its actions can fall
