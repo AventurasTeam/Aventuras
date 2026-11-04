@@ -252,12 +252,6 @@ slice-planning gate forces its resolution before that slice is planned.
   there. Predates Slice 5.3. Read from the code, not reproduced. Raised
   2026-11-03 by 5.3's final review.
 
-- **The reader's back arrow does nothing after a cold deep link.** A
-  reader opened by `aventuras://reader-composer/<branch>` from a stopped
-  app has no screen under it, and its `←` doesn't fall back to the story
-  list. Seen on the Fold in 5.3's phone pass; the route's back handler
-  predates the slice. Raised 2026-11-03.
-
 - **The jump landing loop wants a pure decision function.**
   `startLanding` in `components/reader/reader-surface.tsx` now holds
   about nine closure variables and four gates (layout, finger, wheel

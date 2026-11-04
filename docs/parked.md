@@ -2583,7 +2583,9 @@ the same on Android, since the scheme is registered in every build.
 There, Back does nothing: the reader, World, Story Settings, App
 Settings, Diagnostics and the wizard call `router.back()`, which
 expo-router queues as a `GO_BACK` that the stack router drops at
-index 0. When deep links land, choose between canon's empty-stack exit
+index 0. Seen on a Galaxy Z Fold in Slice 5.3's phone pass
+(2026-11-03), from a cold `aventuras://reader-composer/<branch>`.
+When deep links land, choose between canon's empty-stack exit
 confirm
 ([`ui/principles.md → Stack-aware Return`](./ui/principles.md#stack-aware-return))
 and Expo's documented `unstable_settings = { initialRouteName: 'index' }`,
