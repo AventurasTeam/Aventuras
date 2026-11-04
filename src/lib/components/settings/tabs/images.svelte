@@ -81,7 +81,7 @@
     { value: ComfyMode.CustomWorkflow, label: 'Custom Workflow' },
     { value: ComfyMode.BasicTxt2Img, label: 'Basic Text to Image' },
     { value: ComfyMode.LoraTxt2Img, label: 'LoRA Text to Image' },
-    { value: ComfyMode.UnetTxt2Img, label: 'UNet / Flux Text to Image' },
+    { value: ComfyMode.UnetTxt2Img, label: 'UNet / Z-Image Text to Image' },
   ] as const
 
   const clipTypeItems = [
