@@ -327,7 +327,8 @@ export async function resolveSweep(
 // Buckets per rollback-confirm.md, whose world-state row is scoped to the other
 // narrative tables. An entry-scoped delta is spared by the survival anchor unless its
 // entry is being deleted, so counting one here would charge the user twice for a loss
-// the entries line already reports.
+// the entries line already reports. No chapter delta is world state either: a create is
+// the re-open the chapters line reports, and the rest (a close's report) count nowhere.
 // A cleared parent logs no delta but still moves a place, so it counts as a change.
 export function rollbackCountsOf({ rows, refClears }: ReversalSet): RollbackCounts {
   let entries = 0
@@ -336,8 +337,9 @@ export function rollbackCountsOf({ rows, refClears }: ReversalSet): RollbackCoun
   for (const r of rows) {
     if (r.targetTable === 'story_entries') {
       if (r.op === 'create') entries++
-    } else if (r.op === 'create' && r.targetTable === 'chapters') chapters++
-    else worldStateChanges++
+    } else if (r.targetTable === 'chapters') {
+      if (r.op === 'create') chapters++
+    } else worldStateChanges++
   }
   return { entries, chapters, worldStateChanges }
 }

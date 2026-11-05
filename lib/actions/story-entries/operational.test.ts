@@ -451,6 +451,72 @@ describe('rollbackToEntry', () => {
     expect(counts).toEqual({ entries: 2, chapters: 0, worldStateChanges: 2 })
   })
 
+  // rollback-confirm.md → Counts: a chapter's create is the re-open; none of its deltas is
+  // world state.
+  it('counts a chapter by its create alone, and none of its other deltas as world state', async () => {
+    const { db, runInTransaction } = await createTestDb()
+    const ctx = { db, runInTransaction }
+    await seedBranchWithTurns(db, ctx)
+    const created = await applyDeltaAction(
+      {
+        action: {
+          kind: 'createChapter',
+          source: 'chapter_close',
+          payload: {
+            entry: {
+              id: 'chap_1',
+              branchId: 'b1',
+              sequenceNumber: 1,
+              title: 'The road out',
+              summary: 'Aria leaves the keep before dawn.',
+              theme: 'Departure',
+              startEntryId: 'op',
+              endEntryId: 't2',
+              tokenCount: 3,
+              closedAt: 1,
+              createdAt: 1,
+              updatedAt: 1,
+            },
+          },
+        },
+        actionId: 'close1',
+        branchId: 'b1',
+        entryId: 't2',
+      },
+      ctx,
+    )
+    const reported = await applyDeltaAction(
+      {
+        action: {
+          kind: 'updateChapter',
+          source: 'chapter_close',
+          payload: {
+            branchId: 'b1',
+            id: 'chap_1',
+            patch: {
+              closeReport: {
+                version: 1,
+                actionId: 'close1',
+                calls: [],
+                stopped: [],
+                noToolCalls: true,
+              },
+            },
+          },
+        },
+        actionId: 'close1',
+        branchId: 'b1',
+        entryId: 't2',
+      },
+      ctx,
+    )
+    expect([created.status, reported.status]).toEqual(['ok', 'ok'])
+
+    // ent_a's create and update stay the window's only world state, as without the chapter.
+    const counts = await getRollbackCounts('b1', 't2', ctx)
+    expect(counts).toEqual({ entries: 2, chapters: 1, worldStateChanges: 2 })
+  })
+
   it('brackets the sweep with reversalInProgress (set then cleared)', async () => {
     const { db, runInTransaction } = await createTestDb()
     const ctx = { db, runInTransaction }
