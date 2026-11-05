@@ -72,6 +72,13 @@ describe('decorateWorldTime', () => {
     expect(out[rows[2].id]?.previousLabel).toBeUndefined()
   })
 
+  it('does not flag a 0 that repeats an earlier 0, as a story still at its origin', () => {
+    const rows = [entry('opening', 0), entry('user_action', 0)]
+    const out = decorateWorldTime(rows, FRAME)
+    expect(out[rows[1].id]?.raw).toBe(0)
+    expect(out[rows[1].id]?.previousLabel).toBeUndefined()
+  })
+
   it('never flags the head of the window', () => {
     const rows = [entry('ai_reply', 5)]
     const out = decorateWorldTime(rows, FRAME)
