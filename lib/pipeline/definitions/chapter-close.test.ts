@@ -215,7 +215,7 @@ describe('openCloseFixture', () => {
       expect(row.contentTokens, `entry ${row.position}`).toBeGreaterThan(0)
 
     const creates = await f.ctx.db
-      .select({ targetId: deltas.targetId, actionId: deltas.actionId })
+      .select({ targetId: deltas.targetId, actionId: deltas.actionId, entryId: deltas.entryId })
       .from(deltas)
       .where(and(eq(deltas.targetTable, 'story_entries'), eq(deltas.op, 'create')))
     expect(creates.map((d) => d.targetId).sort()).toEqual(
@@ -225,6 +225,10 @@ describe('openCloseFixture', () => {
         .sort(),
     )
     expect(new Set(creates.map((d) => d.actionId)).size).toBe(6)
+    for (const create of creates) {
+      const kind = f.entries.find((e) => e.id === create.targetId)!.kind
+      expect(create.entryId, create.targetId).toBe(kind === 'ai_reply' ? create.targetId : null)
+    }
     expect(await readClassifierStatus(f.branchId, f.ctx)).toMatchObject({
       state: 'idle',
       processedThrough: 13,
@@ -365,14 +369,17 @@ describe('a cancelled close', () => {
       ...Array.from({ length: K }, () => 'stampEntryChapter'),
     ])
     expect(await branchState()).toEqual(before)
+    expect(entriesStore.getEntries().size).toBe(f.entries.length)
     expect([...entriesStore.getEntries().values()].every((e) => e.chapterId === null)).toBe(true)
     expect(chaptersStore.getChapters().size).toBe(0)
     expect(generationStore.getTxState().deferred.get(f.branchId)).toEqual({ close: true })
   })
 
   it('writes nothing when cancelled during the metadata call', async () => {
-    vi.mocked(generateStructured).mockImplementation(async () => {
-      liveClose()?.abortController.abort()
+    let callSawCancel = false
+    vi.mocked(generateStructured).mockImplementation(async (_t, _p, _s, _c, signal) => {
+      liveClose()!.abortController.abort()
+      callSawCancel = signal.aborted
       return { status: 'aborted', recoverable: [] }
     })
     const before = await branchState()
@@ -385,6 +392,7 @@ describe('a cancelled close', () => {
 
     expect(run.outcome).toBe('aborted')
     expect(emitted).toEqual([])
+    expect(callSawCancel).toBe(true)
     expect(await branchState()).toEqual(before)
     expect(generationStore.getTxState().deferred.get(f.branchId)).toEqual({ close: true })
   })
