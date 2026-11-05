@@ -832,6 +832,9 @@ export const RepeatJumpRestartsTheLandedTint: Story = {
     const firstClearedAt = firstLandedAt + 1_700
     await new Promise((resolve) => setTimeout(resolve, firstClearedAt - performance.now()))
     expect(entryRow('o1')).toHaveAttribute('data-landed')
+    await waitFor(() => expect(entryRow('o1')).not.toHaveAttribute('data-landed'), {
+      timeout: 4_000,
+    })
   },
 }
 
