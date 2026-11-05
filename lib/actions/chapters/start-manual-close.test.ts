@@ -166,7 +166,7 @@ describe('startManualClose refusals', () => {
   })
 
   it('refuses while an entry past the watermark is unprocessed', async () => {
-    await setClassifierStatus({ state: 'idle', processedThrough: tailPosition() - 2 })
+    await setClassifierStatus({ state: 'idle', processedThrough: tailPosition() - 1 })
 
     await expectRefused(
       await startManualClose(f.branchId, lastReply(), f.ctx),
