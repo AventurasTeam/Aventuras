@@ -31,7 +31,8 @@ commit-msg:
       run: ./scripts/check-commit-msg.sh {1}
 
 # pnpm's verifyDepsBeforeRun misses a patch or lockfile change that comes without a package.json
-# change; these warn when HEAD moves across one.
+# change; these warn when HEAD moves across one. post-commit catches a merge finished after a
+# conflict, which runs no post-merge.
 post-checkout:
   commands:
     deps-changed:
@@ -39,8 +40,12 @@ post-checkout:
 post-merge:
   commands:
     deps-changed:
-      run: ./scripts/check-deps-changed.sh post-merge
+      run: ./scripts/check-deps-changed.sh post-merge {1}
 post-rewrite:
   commands:
     deps-changed:
       run: ./scripts/check-deps-changed.sh post-rewrite {1}
+post-commit:
+  commands:
+    deps-changed:
+      run: ./scripts/check-deps-changed.sh post-commit

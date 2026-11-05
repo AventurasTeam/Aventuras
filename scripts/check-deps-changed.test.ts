@@ -1,5 +1,5 @@
 import { execFileSync, spawnSync } from 'node:child_process'
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
+import { mkdirSync, mkdtempSync, rmSync, symlinkSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -78,5 +78,34 @@ describe('check-deps-changed.sh', () => {
 
     git('update-ref', 'ORIG_HEAD', patch)
     expect(run('post-merge', '0')).toEqual(QUIET)
+  })
+
+  it("compares a squash merge's staged changes against HEAD", () => {
+    writeFileSync(join(dir, 'pnpm-lock.yaml'), 'lockfileVersion: 9.0\nsquashed: true\n')
+    git('add', 'pnpm-lock.yaml')
+    expect(run('post-merge', '1')).toEqual(WARNS)
+
+    git('reset', '-q', '--hard')
+    writeFileSync(join(dir, 'src/app.ts'), 'export const squashed = true\n')
+    git('add', 'src/app.ts')
+    expect(run('post-merge', '1')).toEqual(QUIET)
+  })
+
+  it('checks a merge finished by a commit, and no ordinary commit', () => {
+    expect(run('post-commit')).toEqual(QUIET)
+
+    git('checkout', '-q', '-b', 'side', unrelated)
+    commit('pnpm-lock.yaml', 'lockfileVersion: 9.0\nside: true\n')
+    git('checkout', '-q', '-')
+    git('merge', '-q', '--no-ff', '--no-edit', 'side')
+    expect(run('post-commit')).toEqual(WARNS)
+  })
+
+  it("doesn't tell a worktree on another checkout's node_modules to install through it", () => {
+    symlinkSync(tmpdir(), join(dir, 'node_modules'))
+    const { status, output } = run('post-checkout', base, lockfile, '1')
+    expect(status).toBe(0)
+    expect(output).toContain("node_modules here is another checkout's")
+    expect(output).not.toContain(WARNING)
   })
 })
