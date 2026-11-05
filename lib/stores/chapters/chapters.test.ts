@@ -20,6 +20,7 @@ function chapterRow(id: string, sequenceNumber: number, title: string): Chapter 
     embeddingStale: 0,
     createdAt: 1,
     updatedAt: 1,
+    closeReport: null,
   }
 }
 

@@ -1,7 +1,7 @@
 import { eq } from 'drizzle-orm'
 import { describe, expect, it } from 'vitest'
 
-import { branches, chapters, deltas, stories, type NewChapter } from '@/lib/db'
+import { branches, chapters, deltas, stories, type CloseReport, type NewChapter } from '@/lib/db'
 import { createTestDb } from '@/lib/db/__tests__/test-db'
 import { chaptersStore } from '@/lib/stores'
 
@@ -38,6 +38,14 @@ const CHAPTER: NewChapter = {
   updatedAt: 1,
 }
 
+const REPORT: CloseReport = {
+  version: 1,
+  actionId: 'act_c',
+  calls: [],
+  stopped: [],
+  noToolCalls: true,
+}
+
 async function rowFor(db: Awaited<ReturnType<typeof setup>>['db'], id: string) {
   const [r] = await db.select().from(chapters).where(eq(chapters.id, id))
   return r
@@ -57,6 +65,52 @@ describe('chapters CRUD arms', () => {
     expect((await rowFor(db, 'chap_1')).title).toBe('The Gathering Storm')
     expect(chaptersStore.getById('chap_1')?.keywords).toEqual(['war', 'omen'])
     expect(chaptersStore.getBySequenceNumber(1)?.id).toBe('chap_1')
+  })
+
+  it('create writes a close report into the row, and null when the entry has none', async () => {
+    const { db, ctx } = await setup()
+    await applyDeltaAction(
+      {
+        action: {
+          kind: 'createChapter',
+          source: 'chapter_close',
+          payload: { entry: { ...CHAPTER, closeReport: REPORT } },
+        },
+        actionId: 'act_c',
+        branchId: 'br_1',
+      },
+      ctx,
+    )
+    await applyDeltaAction(
+      {
+        action: {
+          kind: 'createChapter',
+          source: 'chapter_close',
+          payload: { entry: { ...CHAPTER, id: 'chap_2', sequenceNumber: 2 } },
+        },
+        actionId: 'act_c2',
+        branchId: 'br_1',
+      },
+      ctx,
+    )
+    expect((await rowFor(db, 'chap_1')).closeReport).toEqual(REPORT)
+    expect((await rowFor(db, 'chap_2')).closeReport).toBeNull()
+  })
+
+  it('rejects a malformed close report on create (no row, no delta)', async () => {
+    const { db, ctx } = await setup()
+    const bad = { ...CHAPTER, closeReport: { version: 1 } } as unknown as NewChapter
+    const result = await applyDeltaAction(
+      {
+        action: { kind: 'createChapter', source: 'chapter_close', payload: { entry: bad } },
+        actionId: 'act_bad',
+        branchId: 'br_1',
+      },
+      ctx,
+    )
+    expect(result.status).toBe('rejected')
+    expect(await rowFor(db, 'chap_1')).toBeUndefined()
+    expect((await db.select().from(deltas)).length).toBe(0)
   })
 
   it('a write to a non-held branch no-ops against the store', async () => {

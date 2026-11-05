@@ -121,6 +121,7 @@ function chapter(id: string, branchId: string): Chapter {
     embeddingStale: 1,
     createdAt: 1,
     updatedAt: 1,
+    closeReport: null,
   }
 }
 

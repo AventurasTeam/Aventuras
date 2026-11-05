@@ -62,6 +62,7 @@ function fullRow(entry: NewChapter): Chapter {
     embeddingStale: entry.embeddingStale ?? 1,
     createdAt: entry.createdAt,
     updatedAt: entry.updatedAt,
+    closeReport: entry.closeReport ?? null,
   }
 }
 
