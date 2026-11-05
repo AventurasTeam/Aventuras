@@ -24,9 +24,8 @@ export type RunState = {
   inputs?: unknown
   intermediates: Record<string, unknown>
   lastResult?: { status: 'completed' | 'aborted' | 'failed' }
-  // Resolves when the run reaches commit or abort. Lets a context that did not
-  // start the run (the interrupt, Cancel & leave, a yieldsTo abort) await its
-  // terminal without holding the runPipeline promise.
+  // Resolves at commit or abort: lets a context that didn't start the run (interrupt, Cancel &
+  // leave, yieldsTo abort) await its end without the runPipeline promise.
   terminal: Promise<void>
   resolveTerminal: () => void
 }
@@ -46,7 +45,7 @@ export type TxState = {
   pendingTurns: ReadonlySet<PendingTurn>
   /** Interrupted runs, run before that branch's next turn; in memory only. */
   deferred: ReadonlyMap<string, DeferredWork>
-  /** A close owed on a branch; null end = boundary selection. In memory only. */
+  /** In memory only. */
   pendingClose: ReadonlyMap<string, PendingClose>
 }
 

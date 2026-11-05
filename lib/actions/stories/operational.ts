@@ -164,7 +164,7 @@ async function loadAndPublish(
     .from(happeningAwareness)
     .where(eq(happeningAwareness.branchId, branchId))
   if (!isCurrentRequest()) return { status: 'cancelled' }
-  // Milestone C4: the report stays out of chaptersStore, which keeps whether a row has one.
+  // C4: the report stays out of chaptersStore, which keeps whether a row has one.
   const { closeReport: _closeReport, ...chapterColumns } = getTableColumns(chapters)
   const chapterRows = await ctx.db
     .select({

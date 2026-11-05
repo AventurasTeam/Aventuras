@@ -274,7 +274,7 @@ describe('loadOpenStory', () => {
     expect(storiesStore.getStories().openFailures.story_1).toBeUndefined()
   })
 
-  // Milestone C4: the report stays out of the store; the flag is a boolean, never SQLite's 0 or 1.
+  // C4: the report stays out of the store; the flag is a boolean, never SQLite's 0 or 1.
   it('hydrates each chapter without its report, flagging whether it has one', async () => {
     const { db, ctx } = await setup()
     await db.insert(stories).values({

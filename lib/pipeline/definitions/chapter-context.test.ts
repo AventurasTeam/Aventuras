@@ -47,7 +47,7 @@ const THREADS = [
 
 const SUMMARY = 'Kael left the keep at dawn with the stolen sigil.'
 
-// Each mode's paragraph on reading a user's turn (ui/principles.md → Mode), as the system half says it.
+// Each mode's paragraph on reading a user's turn (ui/principles.md → Mode), as the system says it.
 const ADVENTURE_TURN_RULE = 'Each is what the lead does, says or attempts'
 const CREATIVE_TURN_RULE = 'Each is a direction or prose'
 

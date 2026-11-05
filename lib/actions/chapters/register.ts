@@ -102,10 +102,10 @@ const updateHandler: ActionHandler = async (action, branchId, ctx) => {
   for (const col of UPDATABLE) {
     if (!(col in patch)) continue
     set[col] = patch[col]
-    // No columnSchemas: every column, the JSON report included, takes its whole prior value as undo.
+    // No columnSchemas: every column, the JSON report included, undoes to its whole prior value.
     undoPayload[col] = current[col as keyof Chapter]
   }
-  // A patch that parsed but touched no updatable column (e.g. closed_at only) would
+  // A patch that parsed but touched no updatable column (fixed columns only) would
   // otherwise reach Drizzle's .set({}) and throw "No values to set" — reject instead.
   if (Object.keys(set).length === 0)
     return {

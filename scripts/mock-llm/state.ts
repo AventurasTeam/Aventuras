@@ -200,7 +200,7 @@ function defaultLanes(): Record<string, Lane> {
     // A refresh that resolves nothing is a run failure, so the default is not
     // the empty list the other lanes use.
     'suggestion-refresh': lane([canned('Three chips', { suggestions: SAMPLE_SUGGESTIONS })]),
-    // The close names no rows by id, so unlike the classifier defaults this one can say something.
+    // Names no rows by id, so unlike the classifier defaults it can carry content.
     'chapter-metadata': lane([
       canned('The flooded stair', {
         title: 'The Bell Under the Water',

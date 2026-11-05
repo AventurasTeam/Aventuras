@@ -1,8 +1,7 @@
 import type { TemplateSources } from '../types'
 
-// architecture.md → System and user halves: the system half is the instructions and the story's
-// mode; the chapter, the summary before it and the threads are per call. The mode paragraph is
-// classifier-mode-rule.ts's reading of a user's turn, worded for a summary.
+// architecture.md → System and user halves: the mode sits in the system half; the chapter, prior
+// summary and threads are per call. Mode paragraph: classifier-mode-rule.ts's, worded for a summary.
 export const CHAPTER_METADATA: TemplateSources = {
   system: `You are closing a chapter of an ongoing story. Read the whole chapter below and give it a title, a summary, a theme and keywords. Report only what the chapter's prose supports; never invent.
 

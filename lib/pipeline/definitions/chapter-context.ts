@@ -13,7 +13,7 @@ export type ChapterContext = {
 // chapter-close.md → Phase 2 reads the active threads; a pending one is as open.
 const OPEN_THREAD_STATUSES: ReadonlySet<ThreadStatus> = new Set(['pending', 'active'])
 
-/** The metadata call's context: the range as the narrator reads it, the summary before it, the open threads, the mode. */
+/** The metadata call's context: the range as narrated, prior summary, open threads, mode. */
 export function buildChapterContext(input: {
   entries: readonly StoryEntry[]
   previousChapterSummary: string | null

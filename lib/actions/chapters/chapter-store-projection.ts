@@ -1,7 +1,7 @@
 import type { StorePatch } from '../delta/registry'
 
 /**
- * Milestone C4: the report stays out of chaptersStore, which keeps only whether a row has one.
+ * C4: the report stays out of chaptersStore, which keeps only whether a row has one.
  * An update patch carries only what was written, so one without `closeReport` leaves the flag.
  */
 export function projectChapterPatch(p: StorePatch): StorePatch {

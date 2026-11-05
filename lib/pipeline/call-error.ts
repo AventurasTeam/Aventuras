@@ -40,14 +40,14 @@ export type StructuredCallFailure = Exclude<GenerateStructuredResult<unknown>, {
 
 /**
  * A structured call that didn't return a value, as the run's error. `lastError` keeps the bare
- * cause for a status block; the error is what the reader shows.
+ * cause for a status block; the error is what the reader shows. An `aborted` result must be an
+ * expiry: the caller returns a cancel as an aborted phase first.
  */
 export function structuredCallFailure(
   result: StructuredCallFailure,
   call: { target: ResolveTarget; phaseName: string; timeoutMs: number },
 ): { lastError: string; error: PipelineError } {
   switch (result.status) {
-    // Only an expiry reaches here: the caller returns a cancel as an aborted phase first.
     case 'aborted':
       return {
         lastError: `timeout after ${call.timeoutMs}ms`,
@@ -68,7 +68,6 @@ export function structuredCallFailure(
           phaseName: call.phaseName,
         },
       }
-    // A cut reply fails as reply-cut-off, so the reader's entry can name the limit.
     case 'failed':
       return {
         lastError: describeCallRetryError(result.error),
