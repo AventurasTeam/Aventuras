@@ -835,6 +835,22 @@ export const RepeatJumpRestartsTheLandedTint: Story = {
   },
 }
 
+/** A repeat jump between the fade running out and the timer clearing the row still replays it. */
+export const RepeatJumpReplaysAFinishedFade: Story = {
+  args: { rows: OVERFLOW_ROWS },
+  render: (args) => <LandingSignalHarness {...args} />,
+  play: async () => {
+    await settleLanding(readerScroller())
+    const jump = screen.getByRole('button', { name: 'Jump to o1' })
+    jump.click()
+    await waitFor(() => expect(landedFade()).toBeDefined())
+    landedFade()?.finish()
+    expect(entryRow('o1')).toHaveAttribute('data-landed')
+    jump.click()
+    await waitFor(() => expect(landedFade()?.playState).toBe('running'))
+  },
+}
+
 /** A row already in place lands without a write, and must still lift the veil. */
 export const EntryLandedWithoutAWrite: Story = {
   args: { rows: OVERFLOW_ROWS, onEntryLanded: fn(async () => {}) },
