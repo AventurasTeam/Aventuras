@@ -105,6 +105,13 @@ test.describe('first chapter — a close from the dev route', () => {
           ).toString(),
         )
         await expect(devChapterClose.closeAt(page, END_POSITION)).toBeVisible({ timeout: 30_000 })
+        // The drain re-runs on run_complete only when idle, so a close during a pass is never embedded.
+        await expect
+          .poll(() => branchStaleTotal(page, branchId), {
+            timeout: 120_000,
+            message: 'the open-time drain never went quiet',
+          })
+          .toBe(0)
         await devChapterClose.closeAt(page, END_POSITION).click()
         await expect
           .poll(
@@ -112,7 +119,8 @@ test.describe('first chapter — a close from the dev route', () => {
               (
                 await queryApp(
                   page,
-                  `SELECT outcome FROM pipeline_runs WHERE kind = 'chapter-close'`,
+                  `SELECT outcome FROM pipeline_runs WHERE kind = 'chapter-close' AND story_id = ?`,
+                  [HERO_STORY],
                 )
               ).flat(),
             { timeout: 30_000, message: 'the close run did not complete' },
@@ -121,7 +129,8 @@ test.describe('first chapter — a close from the dev route', () => {
         await expect(devChapterClose.result(page)).toContainText('completed')
         const runs = (await queryApp(
           page,
-          `SELECT action_id FROM pipeline_runs WHERE kind = 'chapter-close'`,
+          `SELECT action_id FROM pipeline_runs WHERE kind = 'chapter-close' AND story_id = ?`,
+          [HERO_STORY],
         )) as [string][]
         const rows = (await queryApp(
           page,
