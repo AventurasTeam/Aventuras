@@ -2,11 +2,9 @@ import { and, asc, eq, gt, sql, type SQL } from 'drizzle-orm'
 
 import { boundedSignal } from '@/lib/abort'
 import {
-  describeCallRetryError,
+  CALL_TIMEOUT_DEFAULT_MS,
+  callTimeoutMs,
   generateStructured,
-  profileTimeoutMs,
-  resolveModel,
-  type GenerateStructuredResult,
   type ResolveModelConfig,
 } from '@/lib/ai'
 import { CHAPTER_CLOSE_KIND } from '@/lib/chapters'
@@ -65,14 +63,8 @@ import { readClassifierStatus } from './memory-chain'
 import { PER_TURN_KIND } from './per-turn'
 import { definePipeline } from '../authoring/define'
 import { getPipeline } from '../authoring/registry'
-import { pipelineErrorDetail, retriedAttemptEvents, toPipelineError } from '../call-error'
-import type {
-  PhaseContext,
-  PhaseEmittedEvent,
-  PhaseResult,
-  PipelineError,
-  ResolverInput,
-} from '../types'
+import { pipelineErrorDetail, retriedAttemptEvents, structuredCallFailure } from '../call-error'
+import type { PhaseContext, PhaseEmittedEvent, PhaseResult, ResolverInput } from '../types'
 
 export { PERIODIC_CLASSIFIER_KIND }
 
@@ -101,17 +93,13 @@ async function readWindowEntries(
 }
 
 /** classifier.md → Failure policy: the bound when the classifier profile sets no timeout. */
-export const PASS_TIMEOUT_DEFAULT_MS = 600_000
+export const PASS_TIMEOUT_DEFAULT_MS = CALL_TIMEOUT_DEFAULT_MS
 
 const CLASSIFY_PHASE = 'classify'
 
 /** The classifier profile's `timeout` over the whole structured call, retries included. */
 export function passTimeoutMs(config: ResolveModelConfig): number {
-  const resolved = resolveModel('classifier', config)
-  // A story override resolves to no profile params.
-  return (
-    profileTimeoutMs(resolved.ok ? resolved.params.timeout : undefined) ?? PASS_TIMEOUT_DEFAULT_MS
-  )
+  return callTimeoutMs('classifier', config)
 }
 
 /** classifier.md → What the classifier reads → Known happenings, for a window that isn't empty. */
@@ -132,44 +120,6 @@ export async function readKnownHappenings(
     recentEntryIds,
     madeFromRecent: await readHappeningsMadeFrom(db, branchId, recentEntryIds),
   })
-}
-
-type CallFailure = Exclude<GenerateStructuredResult<unknown>, { status: 'ok' }>
-
-// `lastError` keeps the bare cause for the status block; the run's error is what the reader shows.
-function passFailure(
-  result: CallFailure,
-  timeoutMs: number,
-): { lastError: string; error: PipelineError } {
-  switch (result.status) {
-    // Only an expiry reaches here: a cancel has already returned `aborted`.
-    case 'aborted':
-      return {
-        lastError: `timeout after ${timeoutMs}ms`,
-        error: {
-          kind: 'provider',
-          reason: 'timeout',
-          detail: `classifier: timeout after ${timeoutMs}ms`,
-        },
-      }
-    // A config fault, so the reader's entry can offer its fix.
-    case 'not-configured':
-      return {
-        lastError: result.kind,
-        error: {
-          kind: 'config-resolver',
-          failure: result.kind,
-          target: 'classifier',
-          phaseName: CLASSIFY_PHASE,
-        },
-      }
-    // A cut reply fails as reply-cut-off, so the reader's entry can name the limit.
-    case 'failed':
-      return {
-        lastError: describeCallRetryError(result.error),
-        error: toPipelineError(result.error, 'classifier'),
-      }
-  }
 }
 
 // The per-turn writer's keys for a cut condition and visual value (per-turn-creates.ts, apply.ts).
@@ -351,7 +301,11 @@ export async function* periodicClassifierPhase(
   if (result.status !== 'ok') {
     // An expiry aborts the call as a cancel does, but it is a provider fault: it fails the pass,
     // leaving the watermark, so the next Send owes the pass (classifier.md → Failure policy).
-    const failure = passFailure(result, timeoutMs)
+    const failure = structuredCallFailure(result, {
+      target: 'classifier',
+      phaseName: CLASSIFY_PHASE,
+      timeoutMs,
+    })
     await writeStatus(
       ctx,
       nextStatusOnFailure(status, { error: failure.lastError, at: Date.now() }),

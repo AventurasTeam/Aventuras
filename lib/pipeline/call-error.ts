@@ -1,7 +1,9 @@
 import {
+  describeCallRetryError,
   describeContextWindow,
   describeReplyCutOff,
   type CallRetryError,
+  type GenerateStructuredResult,
   type ResolveTarget,
 } from '@/lib/ai'
 
@@ -31,6 +33,47 @@ export function toPipelineError(e: CallRetryError, target: ResolveTarget): Pipel
       const { tier: _tier, ...failure } = e
       return { kind: 'reply-cut-off', target, ...failure }
     }
+  }
+}
+
+export type StructuredCallFailure = Exclude<GenerateStructuredResult<unknown>, { status: 'ok' }>
+
+/**
+ * A structured call that didn't return a value, as the run's error. `lastError` keeps the bare
+ * cause for a status block; the error is what the reader shows.
+ */
+export function structuredCallFailure(
+  result: StructuredCallFailure,
+  call: { target: ResolveTarget; phaseName: string; timeoutMs: number },
+): { lastError: string; error: PipelineError } {
+  switch (result.status) {
+    // Only an expiry reaches here: the caller returns a cancel as an aborted phase first.
+    case 'aborted':
+      return {
+        lastError: `timeout after ${call.timeoutMs}ms`,
+        error: {
+          kind: 'provider',
+          reason: 'timeout',
+          detail: `${call.target}: timeout after ${call.timeoutMs}ms`,
+        },
+      }
+    // A config fault, so the reader's entry can offer its fix.
+    case 'not-configured':
+      return {
+        lastError: result.kind,
+        error: {
+          kind: 'config-resolver',
+          failure: result.kind,
+          target: call.target,
+          phaseName: call.phaseName,
+        },
+      }
+    // A cut reply fails as reply-cut-off, so the reader's entry can name the limit.
+    case 'failed':
+      return {
+        lastError: describeCallRetryError(result.error),
+        error: toPipelineError(result.error, call.target),
+      }
   }
 }
 
