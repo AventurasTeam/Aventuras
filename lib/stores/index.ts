@@ -110,6 +110,7 @@ export {
 export type {
   DeferredWork,
   DeferredWorkKind,
+  PendingClose,
   PendingTurn,
   RunState,
   TxState,

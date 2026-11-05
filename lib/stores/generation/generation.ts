@@ -25,14 +25,17 @@ export type RunState = {
   intermediates: Record<string, unknown>
   lastResult?: { status: 'completed' | 'aborted' | 'failed' }
   // Resolves when the run reaches commit or abort. Lets a context that did not
-  // start the run (chapter-close drain, prose-reversal cancel, a yieldsTo abort)
-  // await its terminal without holding the runPipeline promise.
+  // start the run (the interrupt, Cancel & leave, a yieldsTo abort) await its
+  // terminal without holding the runPipeline promise.
   terminal: Promise<void>
   resolveTerminal: () => void
 }
 
 /** A turn admitted on its branch but not yet registered as a run; identity is the token. */
 export type PendingTurn = { readonly branchId: string }
+
+/** A close owed on a branch: the end the user picked, or null for boundary selection. */
+export type PendingClose = { readonly endEntryId: string | null }
 
 // reversalInProgress: a prose reversal's interrupt->sweep window; blocks interruptible starts and
 // user dispatch. pendingTurns: generation-pipeline.md → Gate derivation as a selector.
@@ -43,6 +46,8 @@ export type TxState = {
   pendingTurns: ReadonlySet<PendingTurn>
   /** Interrupted runs, run before that branch's next turn; in memory only. */
   deferred: ReadonlyMap<string, DeferredWork>
+  /** A close owed on a branch; null end = boundary selection. In memory only. */
+  pendingClose: ReadonlyMap<string, PendingClose>
 }
 
 // A pending turn counts: it is about to raise the hard gate, and a reversal opened in the gap
@@ -91,6 +96,16 @@ function withDeferral(
   return next
 }
 
+function withoutPendingClose(
+  pendingClose: ReadonlyMap<string, PendingClose>,
+  branchId: string,
+): ReadonlyMap<string, PendingClose> {
+  if (!pendingClose.has(branchId)) return pendingClose
+  const next = new Map(pendingClose)
+  next.delete(branchId)
+  return next
+}
+
 type GenerationState = {
   txState: TxState
   // Each bracketPendingTurn body, from its mark until it settles, past the mark's end at
@@ -106,14 +121,20 @@ type GenerationState = {
     phase: string,
     result: { status: 'completed' | 'aborted' | 'failed' },
   ) => void
-  /** Removes the run and swaps in `successor` atomically; a pass or close clears its deferral. */
+  /**
+   * Removes the run and swaps in `successor` atomically; a pass or close clears its deferral, and
+   * a close its branch's pending close.
+   */
   finishRun: (runId: string, successor?: RunState) => void
   /**
    * Removes the run. For an interruptible pass or close, `'aborted'` records it deferred on its
-   * branch; `'failed'` and `'unwound'` leave the record as it was: only a commit clears it.
-   * Returns the slot this call newly recorded, or null.
+   * branch; `'failed'` and `'unwound'` leave the record as it was: only a commit clears it. A
+   * pending close stays on every outcome. Returns the slot this call newly recorded, or null.
    */
   abortRun: (runId: string, outcome: 'aborted' | 'failed' | 'unwound') => DeferredWorkKind | null
+  /** Writes the branch's owed close, replacing any. */
+  setPendingClose: (branchId: string, record: PendingClose) => void
+  clearPendingClose: (branchId: string) => void
   setReversalInProgress: (value: boolean) => void
   /** Marks a turn pending on `branchId` until `body` settles; `body` may end the mark sooner. */
   bracketPendingTurn: <T>(
@@ -128,6 +149,7 @@ const emptyTxState = (): TxState => ({
   reversalInProgress: false,
   pendingTurns: new Set(),
   deferred: new Map(),
+  pendingClose: new Map(),
 })
 
 const store = createStore<GenerationState>()((set) => ({
@@ -163,7 +185,14 @@ const store = createStore<GenerationState>()((set) => ({
       const deferred = run?.interruptible
         ? withDeferral(s.txState.deferred, run.branchId, run.interruptible, false)
         : s.txState.deferred
-      return { txState: { ...s.txState, runs, deferred }, settleCount: s.settleCount + 1 }
+      const pendingClose =
+        run?.interruptible === 'close'
+          ? withoutPendingClose(s.txState.pendingClose, run.branchId)
+          : s.txState.pendingClose
+      return {
+        txState: { ...s.txState, runs, deferred, pendingClose },
+        settleCount: s.settleCount + 1,
+      }
     }),
   abortRun: (runId, outcome) => {
     let recorded: DeferredWorkKind | null = null
@@ -181,6 +210,19 @@ const store = createStore<GenerationState>()((set) => ({
     })
     return recorded
   },
+  setPendingClose: (branchId, record) =>
+    set((s) => {
+      const pendingClose = new Map(s.txState.pendingClose)
+      pendingClose.set(branchId, { endEntryId: record.endEntryId })
+      return { txState: { ...s.txState, pendingClose } }
+    }),
+  clearPendingClose: (branchId) =>
+    set((s) => {
+      const pendingClose = withoutPendingClose(s.txState.pendingClose, branchId)
+      return pendingClose === s.txState.pendingClose
+        ? s
+        : { txState: { ...s.txState, pendingClose } }
+    }),
   setReversalInProgress: (value) =>
     set((s) => ({
       txState: { ...s.txState, reversalInProgress: value },
@@ -253,6 +295,8 @@ export const generationStore = {
   recordPhaseResult: api.recordPhaseResult,
   finishRun: api.finishRun,
   abortRun: api.abortRun,
+  setPendingClose: api.setPendingClose,
+  clearPendingClose: api.clearPendingClose,
   setReversalInProgress: api.setReversalInProgress,
   bracketPendingTurn: api.bracketPendingTurn,
   /** Fires after every state change; returns the unsubscribe. */
