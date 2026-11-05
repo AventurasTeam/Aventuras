@@ -119,6 +119,24 @@ describe('startManualClose refusals', () => {
     await expectRefused(await pending, MANUAL_CLOSE_REFUSAL.branchNotOpen)
   })
 
+  it('refuses when the open story moves to another branch while the checks awaited', async () => {
+    const pending = startManualClose(f.branchId, lastReply(), f.ctx)
+    currentStoryStore.set({ ...currentStoryStore.getCurrentStory()!, branchId: 'br_elsewhere' })
+
+    await expectRefused(await pending, MANUAL_CLOSE_REFUSAL.branchNotOpen)
+  })
+
+  it('refuses a swap that began while the checks awaited', async () => {
+    const pending = startManualClose(f.branchId, lastReply(), f.ctx)
+    const open = currentStoryStore.getCurrentStory()!
+    currentStoryStore.set({
+      ...open,
+      settings: { ...open.settings, embedding_swap_target: 'other-embedder' },
+    })
+
+    await expectRefused(await pending, MANUAL_CLOSE_REFUSAL.swapPending)
+  })
+
   it('refuses a branch held by a pass left running', async () => {
     await setClassifierStatus({ state: 'running', processedThrough: tailPosition() })
 
