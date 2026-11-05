@@ -340,6 +340,8 @@ them.
 - All entries in the closed range (the chapter's content).
 - The previous chapter's summary, if any, for narrative continuity.
 - Active thread titles + statuses.
+- The story's mode, since the user's turns are read by it
+  ([`ui/principles.md → Mode`](../ui/principles.md#1-mode--users-relationship-to-the-story)).
 
 **Output (structured):**
 
