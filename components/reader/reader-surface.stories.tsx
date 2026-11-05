@@ -591,12 +591,16 @@ export const TouchGestureLogsNoResponderError: Story = {
     const scroller = readerScroller()
     await settleLanding(scroller)
     const errors = spyOn(console, 'error')
+    const gesture = ['touchstart', 'touchmove', 'touchend'] as const
+    const delivered: string[] = []
+    const record = (event: Event) => delivered.push(event.type)
+    for (const type of gesture) scroller.addEventListener(type, record)
     try {
-      dispatchTouch(scroller, 'touchstart')
-      dispatchTouch(scroller, 'touchmove')
-      dispatchTouch(scroller, 'touchend')
+      for (const type of gesture) dispatchTouch(scroller, type)
+      expect(delivered).toEqual(gesture)
       expect(errors.mock.calls.flat().join(' ')).not.toContain('Cannot find single active touch')
     } finally {
+      for (const type of gesture) scroller.removeEventListener(type, record)
       errors.mockRestore()
     }
   },
