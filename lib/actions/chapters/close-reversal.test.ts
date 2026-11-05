@@ -318,9 +318,9 @@ describe('reversing a close that ran', () => {
     expect(settled.outcome).toBe('recovered')
     expect(settled.finishedAt).not.toBeNull()
     expect(
-      formatRecoveryReport({ ...report, heldStoryIds: [] }, { [fx.storyId]: 'Treasure Island' }),
+      formatRecoveryReport({ ...report, heldStoryIds: [] }, { [fx.storyId]: 'The Crossing' }),
     ).toBe(
-      'An interrupted shutdown was detected in Treasure Island. The chapter-close pass was reverted; your story content is intact.',
+      'An interrupted shutdown was detected in The Crossing. The chapter-close pass was reverted; your story content is intact.',
     )
   })
 })
