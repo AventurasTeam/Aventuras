@@ -34,20 +34,21 @@ async function loadAboveWindow(
 }
 
 /**
- * Loads the page above the window, one load at a time. A read the window moved under (a reload
- * shrank it, a jump grew it, the branch left) is read again from the new top, or dropped, so the
- * window stays contiguous and `onBoundary` reports the top the window actually has.
+ * Loads the page above the window, one load at a time per branch. A read the window moved under (a
+ * reload shrank it, a jump grew it, the branch left) is read again from the new top, or dropped, so
+ * the window stays contiguous and `onBoundary` reports the top the window actually has.
  */
 export function useLoadOlderEntries(
   branchId: string,
   db: DbCtx['db'],
   onBoundary: (hasOlder: boolean) => void,
 ): () => Promise<void> {
-  const loadingRef = useRef(false)
+  // The reader route keeps this hook across a branch switch, while the branch left may be reading.
+  const loadingRef = useRef(new Set<string>())
   return useCallback(async () => {
-    if (loadingRef.current) return
-    loadingRef.current = true
+    if (loadingRef.current.has(branchId)) return
+    loadingRef.current.add(branchId)
     await loadAboveWindow(branchId, db, onBoundary)
-    loadingRef.current = false
+    loadingRef.current.delete(branchId)
   }, [branchId, db, onBoundary])
 }

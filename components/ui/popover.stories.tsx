@@ -241,11 +241,14 @@ export const TallContentScrollsInsideItsBox: Story = {
     await userEvent.click(screen.getByRole('button', { name: 'Open tall popover' }))
     const box = await screen.findByRole('dialog', { name: 'Tall popover' })
     const last = await screen.findByText('Last line')
+    expect(box.getBoundingClientRect().bottom).toBeLessThanOrEqual(window.innerHeight)
+    expect(box.scrollHeight).toBeGreaterThan(box.clientHeight)
     box.scrollTop = box.scrollHeight
     await waitFor(() =>
       expect(last.getBoundingClientRect().bottom).toBeLessThanOrEqual(
         box.getBoundingClientRect().bottom,
       ),
     )
+    expect(box.scrollTop).toBeGreaterThan(0)
   },
 }
