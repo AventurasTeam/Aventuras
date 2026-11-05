@@ -73,9 +73,13 @@ export type ChapterPopoverProps = {
 
 type Arm = { root: string; row: string; list: ViewStyle }
 
-// A list needs a bound to scroll: PopoverContent has no cap on web, and a Sheet's list takes what
-// its detent leaves over.
-const POPOVER_ARM: Arm = { root: 'gap-3 p-3', row: 'min-h-control-md', list: { maxHeight: 320 } }
+// A list needs a bound to scroll: 320 on a popover, which shrinks it in a short window so the
+// actions stay on screen; a Sheet's list takes what its detent leaves over.
+const POPOVER_ARM: Arm = {
+  root: 'min-h-0 shrink gap-3 p-3',
+  row: 'min-h-control-md',
+  list: { maxHeight: 320, flexShrink: 1 },
+}
 // rn-primitives' Popover content claims the touch responder, which stalls a plain ScrollView on
 // Android; gesture-handler's doesn't use the responder system.
 const POPOVER_SCROLL = GestureScrollView as ScrollComponent
@@ -154,9 +158,28 @@ function PopoverArm({ onOpenChange, ref, ...content }: ArmProps) {
     lastClosedRow.current.focus()
   }
 
+  // Radix returns focus to the trigger; a popover the handle opened returns it to what opened it.
+  // Neither does after an outside press or focus, which has put focus where the user wanted it.
+  const opener = useRef<HTMLElement | null>(null)
+  const interactedOutside = useRef(false)
+  const returnFocusToOpener = (event: Event) => {
+    const target = opener.current
+    opener.current = null
+    const outside = interactedOutside.current
+    interactedOutside.current = false
+    if (outside || target == null || !target.isConnected) return
+    event.preventDefault()
+    target.focus()
+  }
+
   useImperativeHandle(ref, () => ({
     open: () => {
-      if (!pressStartedOutside.started()) trigger.current?.open()
+      if (pressStartedOutside.started()) return
+      if (Platform.OS === 'web') {
+        const active = document.activeElement
+        opener.current = active instanceof HTMLElement && active !== document.body ? active : null
+      }
+      trigger.current?.open()
     },
     close,
   }))
@@ -166,6 +189,7 @@ function PopoverArm({ onOpenChange, ref, ...content }: ArmProps) {
       ariaLabel={t('chapters:popover.title')}
       onOpenChange={changeOpen}
       onOpenAutoFocus={focusLastClosedRow}
+      onCloseAutoFocus={returnFocusToOpener}
     >
       <PopoverTrigger ref={trigger} asChild>
         <ChapterChip number={content.number} expanded={open} />
@@ -174,6 +198,9 @@ function PopoverArm({ onOpenChange, ref, ...content }: ArmProps) {
         align="start"
         className="w-80 p-0"
         onPointerDownOutside={pressStartedOutside.mark}
+        onInteractOutside={() => {
+          interactedOutside.current = true
+        }}
       >
         <ScrollComponentContext.Provider value={POPOVER_SCROLL}>
           <OverlayBody {...content} arm={POPOVER_ARM} close={close} lastClosedRow={lastClosedRow} />

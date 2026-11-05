@@ -29,8 +29,10 @@ rescans the whole sequence — quadratic in the length of that one word.
 Prose splits into many short words that merge independently, which is
 why its cost stays flat as length grows.
 
-The `o200k` encoder build is a separate one-time ~272 ms, paid once in
-a process, by `warmTokenEncoder` or the first `countTokens` call.
+The `o200k` encoder build is a separate one-time cost of a few hundred
+ms on desktop (`lib/tokens/index.ts` keeps the measured figures), paid
+once in a process, by `warmTokenEncoder` or the first `countTokens`
+call.
 
 ## How to apply
 

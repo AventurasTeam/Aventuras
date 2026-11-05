@@ -10,6 +10,7 @@ import { useCallback, useEffect, useMemo, useState, type ReactElement } from 're
 import { AppActionsMenu } from '@/components/compounds/app-actions-menu'
 import { Breadcrumb, type BreadcrumbSegment } from '@/components/compounds/breadcrumb'
 import { StoryStatusPill } from '@/components/compounds/story-status-pill'
+import { readerHref } from '@/components/reader/reader-href'
 import { ScreenShell } from '@/components/shells/screen-shell'
 import { StorySettingsShell } from '@/components/shells/story-settings-shell'
 import { AboutPanel } from '@/components/story-settings/about-panel'
@@ -322,10 +323,7 @@ function StorySettingsSurface({ storyId }: { storyId: string | undefined }) {
             label: row.title,
             onPress:
               currentBranchId != null
-                ? () =>
-                    session.requestLeave(() =>
-                      surfaceNavigate(`/reader-composer/${currentBranchId}`),
-                    )
+                ? () => session.requestLeave(() => surfaceNavigate(readerHref(currentBranchId)))
                 : undefined,
           },
         ]

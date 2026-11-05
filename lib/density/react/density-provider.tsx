@@ -1,7 +1,6 @@
 // Web density provider. Sets `data-density` attribute on the
 // document body so CSS vars defined per `[data-density="X"]` block
-// (emitted by css-generator.ts into global.css) resolve from any
-// descendant.
+// in global.css resolve from any descendant.
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react'
 
 import { useTier } from '@/hooks/use-tier'

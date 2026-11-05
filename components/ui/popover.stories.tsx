@@ -1,6 +1,6 @@
 import type { Meta, StoryObj } from '@storybook/react-native-web-vite'
 import { View } from 'react-native'
-import { expect, screen, userEvent } from 'storybook/test'
+import { expect, screen, userEvent, waitFor } from 'storybook/test'
 
 import { Button } from './button'
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from './dialog'
@@ -17,6 +17,8 @@ const meta: Meta<typeof Popover> = {
 
 export default meta
 type Story = StoryObj<typeof Popover>
+
+const TALL_BLOCK = { height: 2_000 }
 
 export const Default: Story = {
   render: () => (
@@ -214,5 +216,39 @@ export const OverAModal: Story = {
     )
     expect(topMost).not.toBeNull()
     expect(content.contains(topMost) || content === topMost).toBe(true)
+  },
+}
+
+/** Content taller than the room below its trigger scrolls inside the box, not past its border. */
+export const TallContentScrollsInsideItsBox: Story = {
+  parameters: { layout: 'fullscreen' },
+  render: () => (
+    <View className="items-start p-8">
+      <Popover ariaLabel="Tall popover">
+        <PopoverTrigger asChild>
+          <Button>
+            <Text>Open tall popover</Text>
+          </Button>
+        </PopoverTrigger>
+        <PopoverContent>
+          <View style={TALL_BLOCK} />
+          <Text>Last line</Text>
+        </PopoverContent>
+      </Popover>
+    </View>
+  ),
+  play: async () => {
+    await userEvent.click(screen.getByRole('button', { name: 'Open tall popover' }))
+    const box = await screen.findByRole('dialog', { name: 'Tall popover' })
+    const last = await screen.findByText('Last line')
+    expect(box.getBoundingClientRect().bottom).toBeLessThanOrEqual(window.innerHeight)
+    expect(box.scrollHeight).toBeGreaterThan(box.clientHeight)
+    box.scrollTop = box.scrollHeight
+    await waitFor(() =>
+      expect(last.getBoundingClientRect().bottom).toBeLessThanOrEqual(
+        box.getBoundingClientRect().bottom,
+      ),
+    )
+    expect(box.scrollTop).toBeGreaterThan(0)
   },
 }

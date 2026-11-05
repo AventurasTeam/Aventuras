@@ -331,6 +331,23 @@ verified against the code first. Resolve with the slice each names.
   filter, search and the peek reset when the reader's branch changes),
   so no per-branch view map is needed. The stacked-route twin of the
   composer-draft entry above. Routed from triage 2026-10-09.
+- **M6.3 — `documentPainted` resets only on `onReady`.** In
+  `app/reader-composer/[branchId].tsx`, `documentPainted` and its ref
+  turn false in `handleReady` and true in `handleFirstPaint`, so if
+  `ReaderDocument` remounts behind the placeholder, the boot veil and
+  `entryLinkReady` read the old document's paint until the new one sends
+  `onReady`. Worse, the document's handle goes stale: expo's DOM
+  wrapper (`node_modules/expo/src/dom/webview-wrapper.tsx`) builds its
+  ref proxy only while `ref.current` is null and never clears it, so
+  after a remount `documentRef` still points at the first WebView, and
+  every later `jumpToEntry` or `jumpToBottom` is dropped silently: an
+  out-of-window jump's veil stays up for its 30 s bound, and an
+  in-window jump does nothing. Shown with expo's wrapper and a stand-in
+  WebView, not on a device. No remount within one route instance is
+  reachable today; an in-place branch switch would make one, and would
+  also log a false `reader.document_reloaded`, which reads the same
+  painted state. Raised 2026-11-03 by 5.3's Task 9 review; the stale
+  handle added by 5.3's slice review. Routed from triage 2026-11-04.
 - **M6 — The lead must be per-branch and delta-logged.** Two branches
   with different leads is a valid use case (developer, 2026-09-28), and
   a story-level `definition.leadEntityId` dangles on any branch lacking
@@ -496,6 +513,16 @@ code before it moved; resolve with the slice it names.
   already anticipates a main-process emit path, which is where the design
   should start. Surfaced by Slice 3.12a review (2026-08-19), routed
   2026-08-20.
+- **M7.1 — A chip's hit slop misses the phone floor at compact
+  density.** `CHIP_HIT_SLOP` (`components/ui/chip.tsx`) gives 32 + 8 =
+  40 px at compact on phone, Browse included, under
+  [`touch.md`](../ui/foundations/mobile/touch.md)'s 44 px floor, which
+  holds at every density. Raised 2026-11-02 by 5.3's task reviews.
+  Checked 2026-11-04: `touch.md`'s 44 px floor names phone rows and form
+  inputs, and `chips.md` sizes the slop for `regular`, the phone
+  default, so whether a chip owes 44 px at compact is the question;
+  `IconAction` has the same gap, 40 to 42 px. Unreachable until the
+  density toggle lands. Routed from triage 2026-11-04.
 - **M7.1 — The reasoning slider must stay below the model's output cap.**
   The Anthropic SDK sends max output plus the thinking budget as
   `max_tokens`, so the two can't clash on their own, but it then clamps to

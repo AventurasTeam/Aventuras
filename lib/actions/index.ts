@@ -116,8 +116,10 @@ export {
 export { bracketProseReversal, classifierWatermarkClampOps } from './story-entries/prose-reversal'
 export {
   ENTRIES_WINDOW_SIZE,
+  readEntriesBefore,
   readEntriesBetween,
   readEntryPosition,
+  readPositionAbove,
   readRecentEntries,
 } from './story-entries/recent-window'
 export { STORY_ENTRY_REJECTION, type StoryEntryRejectionCode } from './story-entries/register'

@@ -1,4 +1,5 @@
 import type { ActionGroup } from '@/components/compounds/actions-menu'
+import { readerHref } from '@/components/reader/reader-href'
 import { t } from '@/lib/i18n'
 
 export const IN_STORY_SURFACES = [
@@ -24,7 +25,7 @@ const ENTRY: Record<InStorySurface, SurfaceEntry> = {
   reader: {
     id: 'open-reader',
     label: () => t('chrome.goTo.openReader'),
-    route: (story) => `/reader-composer/${story.branchId}`,
+    route: (story) => readerHref(story.branchId),
   },
   world: {
     id: 'open-world',

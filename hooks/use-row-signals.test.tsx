@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { QueryClientProvider, type QueryClient } from '@tanstack/react-query'
+import { onlineManager, QueryClientProvider, type QueryClient } from '@tanstack/react-query'
 import { act, cleanup, render, waitFor } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
@@ -207,6 +207,7 @@ describe('useRowSignals', () => {
   })
   afterEach(() => {
     cleanup()
+    onlineManager.setOnline(true)
   })
 
   it('composes in-scene from the tail and recently-classified from the read window', async () => {
@@ -293,6 +294,18 @@ describe('useRowSignals', () => {
 
     act(() => generationStore.finishRun('r1'))
     await waitFor(() => expect(reads.boundaries).toHaveBeenCalledTimes(2))
+  })
+
+  // The read is local, so a lost network must not pause it.
+  it('reads while the app is offline', async () => {
+    seedOneReply('br_1', [], [entity('char_c', 'character')])
+    reads.boundaries.mockResolvedValue({ fresh: 2, fading: null })
+    reads.deltas.mockResolvedValue([delta('char_c', 3)])
+    act(() => onlineManager.setOnline(false))
+
+    renderProbe()
+
+    await waitFor(() => expect(latest?.recentlyClassified.rows.get('char_c')).toBe('fresh'))
   })
 
   it('keeps the previous window visible while a same-branch refetch is pending', async () => {
@@ -419,7 +432,7 @@ describe('useRowSignals', () => {
     expect(latest?.recentlyClassified.rows.size).toBe(0)
 
     // A real re-render (no new fetch — error/branchId unchanged) must not re-log; a render-body
-    // log (vs. the effect) would fire here and bump the count.
+    // log (vs. the fetch) would fire here and bump the count.
     act(() => {
       entitiesStore.hydrate('br_1', [entity('char_z', 'character')])
     })
@@ -521,6 +534,27 @@ describe('useRowSignals', () => {
     })
     // Positive control: once the new read resolves, its own window lands.
     await waitFor(() => expect(latest?.recentlyClassified.rows.get('char_a')).toBe('fresh'))
+  })
+
+  // The reader's rail stays mounted, hidden, under routes that mount their own.
+  it('logs a failed read once across mounted instances', async () => {
+    seedOneReply()
+    const warnSpy = vi.spyOn(logger, 'warn').mockImplementation(() => {})
+    reads.boundaries.mockRejectedValue(new Error('boom'))
+
+    render(
+      <QueryClientProvider client={createQueryClient()}>
+        <ProbeA />
+        <ProbeB />
+      </QueryClientProvider>,
+    )
+
+    await waitFor(() => expect(warnSpy).toHaveBeenCalled())
+    await act(async () => {})
+    expect(reads.boundaries).toHaveBeenCalledTimes(1)
+    expect(warnSpy).toHaveBeenCalledTimes(1)
+
+    warnSpy.mockRestore()
   })
 
   it('shares one read across two instances on the same branch after a settle', async () => {

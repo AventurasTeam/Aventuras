@@ -1115,9 +1115,11 @@ lands at once; a wheel after a pause or in the other direction is a
 new gesture and drops the jump
 ([`reader-document.md → Entry list`](../../patterns/reader-document.md#entry-list-fully-rendered-flow-layout)).
 
-**"Branch top" semantics.** First entry of the **current branch** —
-first post-fork entry on a non-root branch, or entry #1 of the root
-branch. The reader does not walk fork chains across branches.
+**"Branch top" semantics.** First entry of the **current branch**,
+the row with nothing above it. A fork copies entries 1..N
+([`data-model.md → Branch model`](../../../data-model.md#branch-model)),
+so a non-root branch's top is its copy of entry #1, not its first
+post-fork entry. The reader does not walk fork chains across branches.
 Cross-branch navigation is the
 [Branch navigator](./branch-navigator/branch-navigator.md)'s
 domain.

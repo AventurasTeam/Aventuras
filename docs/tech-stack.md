@@ -91,8 +91,8 @@ Provider-agnostic LLM layer. Same shape as the old app — proven choice.
 Token counting for the chapter-close threshold (default 24k per-story, configurable) and general context-budget accounting.
 
 - Pure-JS, works on both RN-native (Expo) and RN-Web (Electron)
-- Default encoding `cl100k_base` or `o200k_base` — approximates all modern LLMs well enough for threshold detection
-- Load encoding tables on demand to keep base bundle size modest
+- Encoding `o200k_base` (`lib/tokens`) — tracks the modern vocabulary scale, and approximates all modern LLMs well enough for threshold detection
+- The 2.2 MB rank table is a static import, so `countTokens` stays synchronous for the pure ranker; the encoder builds once, on first count
 - Accepted drift: the 24k threshold is a heuristic, so a few percent variance between OpenAI and Claude/Gemini tokenizers is irrelevant
 
 ### 7. jsonrepair
@@ -162,21 +162,18 @@ UI-string translation: menus, buttons, labels, settings, error messages — ever
 - Locale detection via `expo-localization` (native) and `navigator.language` (web) on first boot; user override lands in story-level settings eventually
 - **Install day-one** — every UI component uses translated strings from the start; retrofitting hardcoded strings later is the kind of tax we want to avoid
 
+### 12. TanStack Query (React Query)
+
+Adopted off-label, as a cache for values computed from SQLite that no Zustand store holds: the per-branch token series, the entry index, row signals, chapter time ranges and numbers, and later the diff cache. Zustand stays the loaded-data store (item 2).
+
+- `createQueryClient` (`lib/cache/query-client.ts`) sets the defaults for local reads: never stale, no automatic refetch, no retry, network mode `always` so a read doesn't pause on the window's `offline` event, and a 30 s gc
+- Not a network cache: external calls (LLM, image generation, TTS) are one-shot operations that persist artifacts, and the Vercel AI SDK's own hooks handle streaming state
+
 ---
 
 ## Deferred
 
 Items considered and parked. Revisit when a specific need arises.
-
-### TanStack Query (React Query)
-
-Considered and not adopted. For this app's access patterns, RQ's value doesn't land:
-
-- No network cache to manage — SQLite reads are local and fast, nothing to go stale
-- External calls (LLM, image generation, TTS) are one-shot operations that persist artifacts, not cacheable reads — and Vercel AI SDK's own hooks handle streaming state
-- Zustand covers the "loaded data" role (see item 2)
-
-Reconsider if cross-device sync lands (below) — polling a remote source for deltas is one genuine RQ-shaped use case. Even then, install locally within the sync module rather than app-wide.
 
 ### Cross-device sync via Google Drive
 

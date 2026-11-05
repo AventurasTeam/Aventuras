@@ -3,9 +3,11 @@ import { PortalHost } from '@rn-primitives/portal'
 import type { Preview } from '@storybook/react-native-web-vite'
 import { QueryClientProvider } from '@tanstack/react-query'
 import { useEffect, useState, type ReactNode } from 'react'
+import { Dimensions } from 'react-native'
 import { GestureHandlerRootView } from 'react-native-gesture-handler'
 import { SafeAreaProvider } from 'react-native-safe-area-context'
 
+import { tierForWidth } from '@/hooks/use-tier'
 import { createQueryClient } from '@/lib/cache'
 import { DensityProvider, useDensity, type DensitySetting } from '@/lib/density'
 import { themes as registryThemes, ThemeProvider, useTheme } from '@/lib/themes'
@@ -70,7 +72,16 @@ const densityOptions: { value: DensitySetting; title: string }[] = [
   { value: 'comfortable', title: 'Comfortable' },
 ]
 
+// RN-web's Dimensions re-reads the viewport only on visualViewport's resize event, which lands
+// after the first commit of a story whose viewport just changed, so that commit took the previous
+// width's tier. Firing it here lets a story's first commit read its own viewport.
+function syncDimensionsToViewport(): void {
+  if (tierForWidth(Dimensions.get('window').width) === tierForWidth(window.innerWidth)) return
+  window.visualViewport?.dispatchEvent(new Event('resize'))
+}
+
 const preview: Preview = {
+  beforeEach: syncDimensionsToViewport,
   parameters: {
     controls: { matchers: { color: /(background|color)$/i, date: /Date$/i } },
     a11y: {

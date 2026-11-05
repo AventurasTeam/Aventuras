@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { QueryClientProvider, type QueryClient } from '@tanstack/react-query'
+import { onlineManager, QueryClientProvider, type QueryClient } from '@tanstack/react-query'
 import { act, cleanup, render, waitFor } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
@@ -97,6 +97,7 @@ describe('useEntryIndex', () => {
   })
   afterEach(() => {
     cleanup()
+    onlineManager.setOnline(true)
   })
 
   it('reads once for a branch and lists entries newest first', async () => {
@@ -186,6 +187,18 @@ describe('useEntryIndex', () => {
 
     act(() => generationStore.finishRun('r1'))
     await waitFor(() => expect(reads.index).toHaveBeenCalledTimes(2))
+  })
+
+  // The read is local, so a lost network must not pause it.
+  it('reads while the app is offline', async () => {
+    entriesStore.hydrate('br_1', [entry('e1', 1)])
+    reads.index.mockResolvedValue([ref('e1', 1)])
+    act(() => onlineManager.setOnline(false))
+
+    renderProbe()
+
+    await waitFor(() => expect(latest?.ready).toBe(true))
+    expect(latest?.entries.map((e) => e.id)).toEqual(['e1'])
   })
 
   it('re-reads when the tail moves without a settle', async () => {
@@ -384,6 +397,28 @@ describe('useEntryIndex', () => {
     expect(latest?.ready).toBe(false)
     expect(latest?.failed).toBe(true)
     expect(latest?.entries).toEqual([])
+
+    warnSpy.mockRestore()
+  })
+
+  // The reader's rail and peek stay mounted, hidden, under routes that mount their own.
+  it('logs a failed read once across mounted instances', async () => {
+    entriesStore.hydrate('br_1', [entry('e1', 1)])
+    const warnSpy = vi.spyOn(logger, 'warn').mockImplementation(() => {})
+    reads.index.mockRejectedValue(new Error('boom'))
+
+    render(
+      <QueryClientProvider client={createQueryClient()}>
+        <Probe />
+        <Probe />
+        <Probe enabled={false} />
+      </QueryClientProvider>,
+    )
+
+    await waitFor(() => expect(warnSpy).toHaveBeenCalled())
+    await act(async () => {})
+    expect(reads.index).toHaveBeenCalledTimes(1)
+    expect(warnSpy).toHaveBeenCalledTimes(1)
 
     warnSpy.mockRestore()
   })

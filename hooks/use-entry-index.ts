@@ -41,6 +41,19 @@ const readFromDb: EntryIndexRead = (branchId) => readEntryIndex(branchId, db)
 
 const EntryIndexReadContext = createContext<EntryIndexRead>(readFromDb)
 
+// Logs from the shared fetch, since every mounted observer receives the same error.
+async function readLogged(read: EntryIndexRead, branchId: string): Promise<readonly EntryRef[]> {
+  try {
+    return await read(branchId)
+  } catch (error) {
+    logger.warn('app.entry_index_read_failed', {
+      branchId,
+      error: error instanceof Error ? error.message : String(error),
+    })
+    throw error
+  }
+}
+
 /**
  * Swaps the entry read for stories, which have no app database. The read isn't in the query key,
  * so keep one read per QueryClient; a gorhom Sheet's content doesn't see a provider outside it.
@@ -64,8 +77,8 @@ const FAILED = { ...EMPTY, failed: true }
 
 /**
  * Branch entries for `entry #n` labels, chapter buckets and the entry-ref picker.
- * settleCount + tailId together cover every story_entries write: a new write path must settle
- * a run/reversal or move the tail, or the index goes stale. Stale only shows an anchor as
+ * settleCount + tailId together cover every write to a column the index reads: a new write path
+ * must settle a run/reversal or move the tail, or the index goes stale. Stale only shows an anchor as
  * falsely live/dangling — never re-pointed to a different entry.
  * `enabled: false` skips the read and reads not ready (still `failed` if the last read errored).
  * `seedFromLastRead`: with no window of its own, show the branch's last read by a seeding hook
@@ -91,12 +104,7 @@ export function useEntryIndex(
   const { data, error, refetch, isFetching } = useQuery({
     queryKey: ['entry-index', branchId, settleCount, tailId],
     enabled: branchId !== '' && !disabled,
-    // Local DB read, not a flaky network call — a failure is worth surfacing, not retried.
-    retry: false,
-    // A revisited key (branch switch back, tailId walking backward) is rare but still
-    // correct — no reason to hold a whole branch's rows for the default 5-minute gc.
-    gcTime: 30_000,
-    queryFn: () => read(branchId),
+    queryFn: () => readLogged(read, branchId),
   })
 
   // data is undefined during a pending refetch and after an error; keep the last
@@ -117,14 +125,6 @@ export function useEntryIndex(
   useEffect(() => {
     if (seeds && data != null) client.setQueryData(lastReadKey(branchId), data)
   }, [seeds, data, client, branchId])
-
-  useEffect(() => {
-    if (error == null) return
-    logger.warn('app.entry_index_read_failed', {
-      branchId,
-      error: error instanceof Error ? error.message : String(error),
-    })
-  }, [error, branchId])
 
   return useMemo(() => {
     const retry = () => void refetch()

@@ -518,7 +518,7 @@ export default function WorldRoute() {
     {
       key: 'story',
       label: storyTitle ?? t('reader:placeholderTitle'),
-      onPress: () => navigateGuarded(`/reader-composer/${branchId}`),
+      onPress: () => navigateGuarded(readerHref(branchId)),
     },
     { key: 'world', label: t('world:title') },
   ]

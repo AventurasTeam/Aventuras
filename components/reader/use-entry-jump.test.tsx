@@ -1,5 +1,6 @@
 // @vitest-environment jsdom
 import { act, cleanup, renderHook } from '@testing-library/react'
+import { and, eq } from 'drizzle-orm'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { readEntriesBetween, readEntryPosition } from '@/lib/actions'
@@ -197,6 +198,30 @@ describe('useEntryJump', () => {
 
     expectContiguous(1, TOTAL)
     expect(topLoaded).not.toHaveBeenCalled()
+  })
+
+  // Nothing writes a gap today, but nothing promises positions stay gapless either.
+  it('reads from the nearest row above across a gap, and says nothing of the top', async () => {
+    await ctx.db
+      .delete(storyEntries)
+      .where(and(eq(storyEntries.branchId, BRANCH), eq(storyEntries.position, 999)))
+
+    await jump()(idAt(1000))
+
+    expect(loadedPositions()).toEqual([998, ...span(1000, TOTAL).map((r) => r.position)])
+    expect(topLoaded).not.toHaveBeenCalled()
+    expect(land).toHaveBeenCalledExactlyOnceWith(idAt(1000))
+  })
+
+  it('tells the host the branch top is loaded when the branch starts past position 1', async () => {
+    await ctx.db
+      .delete(storyEntries)
+      .where(and(eq(storyEntries.branchId, BRANCH), eq(storyEntries.position, 1)))
+
+    await jump()(idAt(2))
+
+    expectContiguous(2, TOTAL)
+    expect(topLoaded).toHaveBeenCalledTimes(1)
   })
 
   it('reads nothing and says nothing of the branch top for a row in the window', async () => {

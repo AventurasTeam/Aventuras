@@ -1,5 +1,5 @@
 import { useQuery } from '@tanstack/react-query'
-import { useEffect, useMemo, useState } from 'react'
+import { useMemo, useState } from 'react'
 
 import { db, type EntityKind } from '@/lib/db'
 import { logger } from '@/lib/diagnostics'
@@ -42,6 +42,26 @@ type SignalWindow = {
 }
 const EMPTY_WINDOW: SignalWindow = { entries: [], deltas: [], replyEdits: [], boundaries: null }
 
+// Logs from the shared fetch, since every mounted observer receives the same error.
+async function readSignalWindow(
+  branchId: string,
+  snapshot: readonly SignalEntry[],
+): Promise<SignalWindow> {
+  try {
+    const boundaries = await readTurnBoundaries(db, branchId, snapshot)
+    if (boundaries == null) return EMPTY_WINDOW
+    const deltas = await readSignalDeltas(db, branchId, boundaries.fading ?? boundaries.fresh)
+    const replyEdits = await readReplyEdits(db, branchId, latestReplyIds(snapshot))
+    return { entries: snapshot, deltas, replyEdits, boundaries }
+  } catch (error) {
+    logger.warn('app.row_signals_read_failed', {
+      branchId,
+      error: error instanceof Error ? error.message : String(error),
+    })
+    throw error
+  }
+}
+
 export function useRowSignals(branchId: string): RowSignalsSnapshot {
   // Raw maps are stable; a fresh derived array here would break useSyncExternalStore's contract.
   const entryRows = entriesStore.useEntries((m) => m)
@@ -64,20 +84,11 @@ export function useRowSignals(branchId: string): RowSignalsSnapshot {
   // settleCount marks the moment a run's writes are final; shared across every mounted instance.
   const settleCount = generationStore.useGeneration((s) => s.settleCount)
 
-  const { data, error } = useQuery({
+  const { data } = useQuery({
     queryKey: ['row-signals', branchId, latestReplyId, fadingReplyId, settleCount],
     enabled: branchId !== '' && latestReplyId != null,
-    // Local DB read, not a flaky network call — a failure is worth surfacing, not retried.
-    retry: false,
-    queryFn: async (): Promise<SignalWindow> => {
-      // Manual scene edits don't refetch; live entries may carry edits this window can't explain.
-      const snapshot = entries
-      const boundaries = await readTurnBoundaries(db, branchId, snapshot)
-      if (boundaries == null) return EMPTY_WINDOW
-      const deltas = await readSignalDeltas(db, branchId, boundaries.fading ?? boundaries.fresh)
-      const replyEdits = await readReplyEdits(db, branchId, latestReplyIds(snapshot))
-      return { entries: snapshot, deltas, replyEdits, boundaries }
-    },
+    // Manual scene edits don't refetch; live entries may carry edits this window can't explain.
+    queryFn: () => readSignalWindow(branchId, entries),
   })
 
   // data is undefined during a pending refetch and after an error; keep the last
@@ -92,12 +103,6 @@ export function useRowSignals(branchId: string): RowSignalsSnapshot {
   if (good !== lastGood) setLastGood(good)
 
   const signalWindow = good?.window ?? EMPTY_WINDOW
-
-  useEffect(() => {
-    if (error == null) return
-    const message = error instanceof Error ? error.message : String(error)
-    logger.warn('app.row_signals_read_failed', { branchId, error: message })
-  }, [error, branchId])
 
   const categoryOf = useMemo(() => {
     const kinds = new Map(entities.map((e) => [e.id, e.kind]))

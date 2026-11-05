@@ -305,8 +305,7 @@ describe('deleteStoryEntry arm', () => {
     if (result.status === 'rejected') expect(result.code).toBe('opening-delete-blocked')
   })
 
-  // Slice "Kind coverage": user_action / ai_reply / system are created + deleted
-  // like any entry (the system stub's UI vocabulary lands with later consumers).
+  // user_action, ai_reply and system are created and deleted like any entry.
   it.each(['user_action', 'ai_reply', 'system'] as const)(
     'create -> delete -> reverse round-trips kind=%s',
     async (kind) => {

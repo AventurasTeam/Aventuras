@@ -7,6 +7,7 @@ import { ScreenShell } from '@/components/shells/screen-shell'
 import { Text } from '@/components/ui/text'
 import { EARTH_GREGORIAN } from '@/lib/calendar'
 import type { Chapter, StoryEntry } from '@/lib/db'
+import { t } from '@/lib/i18n'
 import { chaptersStore } from '@/lib/stores'
 
 import {
@@ -186,6 +187,64 @@ export const StripPressToggles: Story = {
     await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)))
     expect(screen.queryByText('1 · in progress')).toBeNull()
     await expect(chip).toHaveAttribute('aria-expanded', 'false')
+  },
+}
+
+/** The dialog pattern returns focus to what opened it, here the strip, not the chip. */
+export const StripOpenedEscapeFocusesStrip: Story = {
+  render: (args) => <StripHarness {...args} />,
+  play: async () => {
+    const strip = await screen.findByTestId('chapter-progress-hit')
+    await userEvent.click(strip)
+    await waitFor(() => expect(screen.getByText('1 · in progress')).toBeVisible(), {
+      timeout: 5_000,
+    })
+
+    await userEvent.keyboard('{Escape}')
+    await waitFor(() => expect(screen.queryByText('1 · in progress')).toBeNull())
+    await waitFor(() => expect(strip).toHaveFocus())
+  },
+}
+
+/** An outside press keeps the focus it moved: a strip-opened popover doesn't take it back. */
+export const StripOpenedOutsidePressKeepsFocus: Story = {
+  render: (args) => <StripHarness {...args} />,
+  play: async () => {
+    const strip = await screen.findByTestId('chapter-progress-hit')
+    await userEvent.click(strip)
+    await waitFor(() => expect(screen.getByText('1 · in progress')).toBeVisible(), {
+      timeout: 5_000,
+    })
+
+    const settings = screen.getByRole('button', { name: t('chrome.storySettings') })
+    await userEvent.click(settings)
+    await waitFor(() => expect(screen.queryByText('1 · in progress')).toBeNull())
+    // Radix runs the close focus a task after the content unmounts.
+    await new Promise((resolve) => setTimeout(resolve, 100))
+    expect(settings).toHaveFocus()
+  },
+}
+
+/** A chip-opened popover still returns focus to the chip, after a strip-opened one has closed. */
+export const ChipOpenedEscapeFocusesChip: Story = {
+  render: (args) => <StripHarness {...args} />,
+  play: async () => {
+    const strip = await screen.findByTestId('chapter-progress-hit')
+    const chip = screen.getByRole('button', { name: 'Chapter 1' })
+    await userEvent.click(strip)
+    await waitFor(() => expect(screen.getByText('1 · in progress')).toBeVisible(), {
+      timeout: 5_000,
+    })
+    await userEvent.keyboard('{Escape}')
+    await waitFor(() => expect(strip).toHaveFocus())
+
+    await userEvent.click(chip)
+    await waitFor(() => expect(screen.getByText('1 · in progress')).toBeVisible(), {
+      timeout: 5_000,
+    })
+    await userEvent.keyboard('{Escape}')
+    await waitFor(() => expect(screen.queryByText('1 · in progress')).toBeNull())
+    await waitFor(() => expect(chip).toHaveFocus())
   },
 }
 

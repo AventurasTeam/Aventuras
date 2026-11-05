@@ -140,6 +140,26 @@ No open items.
   and the document would no longer share. Raised 2026-11-02 by Slice
   5.3's Android measure (developer decision Q13).
 
+  **A jump to the window's oldest row lands without its break, and at
+  the branch's top can shift.** A target already in the window lands at
+  once and reads nothing (`components/reader/use-entry-jump.ts`), so
+  when it is the window's oldest loaded row, the previous chapter's end
+  row isn't loaded and its break doesn't exist when it lands; a later
+  boundary load mounts the break just above the screen. On a branch
+  whose first row is the window's oldest with `hasOlder` still true (a
+  50-row branch, or a last boundary load of exactly 50), entry 1 shifts
+  up about 12 px when the shimmer drops. Reading the row above first
+  doesn't hold on native: expo-dom injects the landing call before the
+  route's props emission, so the document lands on the old layout. A fix
+  has to order the landing after the document commits the host's write,
+  a bridge-contract change; the sliding window above reworks this
+  path. Raised 2026-11-03 by 5.3's final review. Checked 2026-11-04:
+  the shift is exactly `JUMP_LANDING_GAP_PX`, and the bridge change is
+  probably avoidable, since the loop re-measures the break every frame
+  and a landing the host sends from its own post-commit effect is
+  injected after expo's props emission. Not run. Routed from triage
+  2026-11-04.
+
 ## Tuning and play testing
 
 v1 work held for the end of the cycle, once every base system is

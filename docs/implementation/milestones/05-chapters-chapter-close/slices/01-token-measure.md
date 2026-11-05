@@ -131,9 +131,11 @@ that path counts for itself.
     can pass the runtime handle.
 - **`lib/chapters`.** A new module of pure rules and constants, with no
   value import of `@/lib/db` (C5). The same `boundaries/dependencies`
-  addition holds that, with a `disallow` on `lib/db` limited by
-  `dependency: { kind: 'value' }`, so a later slice can't add one past a
-  one-time check. It's narrower than `lib/tokens`' leaf rule, since
+  addition holds that, with a `disallow` on value imports of any lib
+  module or app code, since stores, actions, retrieval and the progress
+  hook all bring `lib/db` in at runtime, so a later slice can't add one
+  past a one-time check. Single-file `lib` modules stay open, so it's
+  narrower than `lib/tokens`' leaf rule, since
   [Slice 5.7](./07-chapter-timeline.md) imports `lib/keyword-terms`
   here. Types from `@/lib/db` use the `import type` declaration: the
   rule reads `import { type X }` as a value import, and that's the
@@ -365,10 +367,14 @@ and numbers corrected.
   so one such reply would stall each later call while it sits in the
   buffer, and [Slice 5.5b](./05b-identity-threads.md) counts per tool
   step. `TOKENIZER_IDENTITY.version` stays: it names the vocabulary,
-  which didn't change. One run of about 5.6 million code units overflows
-  V8's regexp stack and `countTokens` throws, where the encoder alone
-  didn't. That's at least about 700,000 tokens, so it stays; Hermes is
-  unmeasured.
+  which didn't change. One run of about 5.6 million code points,
+  whatever its characters, overflows V8's regexp stack and
+  `countTokens` throws, where the encoder alone didn't. That is about
+  43,700 tokens for a run of spaces, 87,400 for dashes, 350,000 for
+  newlines and 700,000 for `x`. It stays: counting a run of spaces that
+  long would block for about 120 s under Node first (projected from the
+  per-piece cost), and past the limit the Send fails before its row is
+  written. Hermes is unmeasured.
 - **`chapters.token_count` is a snapshot at close (developer decision,
   2026-11-01).** An edit in a closed chapter leaves it, and a re-close
   after a delete recomputes it. That needs no new write path, and
@@ -417,7 +423,9 @@ and numbers corrected.
   against two, and the warmed runs also carried a temporary count of
   about 0.5 s on the JS thread that shipped code doesn't, so it likely
   overstates the cost. `first-paint` is when the host hears of it, not
-  when the user sees it. A tap during the build is untested. Without the
+  when the user sees it. The closing review ran three taps on the
+  emulator during the build; each was queued and handled 23 ms after it
+  ended. Text entry during the build is untested. Without the
   warm that second lands on the first Send, and past first paint, where
   a plain timer would put it, it lands while someone may be typing; no
   timer was measured. On the same device a count of 2,006 characters of

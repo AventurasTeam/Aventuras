@@ -75,7 +75,12 @@ claim in `components/ui/dialog.tsx` fixes every dialog in the app at
 once, which is the point of owning the wrapper — but the fix stops
 at Dialog. `@rn-primitives/popover` and `@rn-primitives/select` stamp
 the same prop, and `Select` / `MultiSelect` still route around it
-with RNGH rather than clearing it.
+with RNGH rather than clearing it. Don't clear it in `Popover`: there
+the claim does work. Its native `Overlay` is a `Pressable` that
+closes the popover (`closeOnPress` defaults to true), so without the
+claim a tap on the content's blank space would close it. A scroller
+inside a `Popover` routes around the claim with RNGH, as
+`components/reader/chapter-popover.tsx` does.
 
 Related: [Portal drops custom contexts on native](./rn-primitives-portal-context.md)
 for the other native-only Dialog trap.

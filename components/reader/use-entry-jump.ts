@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from 'react'
 
-import { readEntriesBetween, readEntryPosition } from '@/lib/actions'
+import { readEntriesBetween, readEntryPosition, readPositionAbove } from '@/lib/actions'
 import type { DbCtx, StoryEntry } from '@/lib/db'
 import { logger } from '@/lib/diagnostics'
 import { t } from '@/lib/i18n'
@@ -12,7 +12,7 @@ import { toast } from '@/lib/toast'
 // busy one.
 export const JUMP_VEIL_TIMEOUT_MS = 30_000
 
-function oldestLoadedPosition(branchId: string): number | null {
+export function oldestLoadedPosition(branchId: string): number | null {
   let oldest: number | null = null
   for (const row of entriesStore.getEntries().values()) {
     if (row.branchId === branchId && (oldest === null || row.position < oldest)) {
@@ -43,10 +43,21 @@ async function readToWindow(
   return null
 }
 
-// Positions on a branch have no gaps: entries append at the tail and only a rollback deletes, from
-// an entry to the tail (data-model.md → Entry mutability & rollback). No row above means the top.
-function readsBranchTop(rows: readonly StoryEntry[], position: number): boolean {
-  return rows.length > 0 && rows[0]!.position === position
+/**
+ * The rows from the nearest row above `position` to the window, and whether that row is the branch
+ * top; null when superseded. Not from position - 1, which a gap may leave empty: a break hangs off
+ * the previous chapter's end row, so a chapter jump lands under its heading only with it loaded.
+ */
+async function readFromAbove(
+  branchId: string,
+  position: number,
+  db: DbCtx['db'],
+  superseded: () => boolean,
+): Promise<{ rows: StoryEntry[]; branchTop: boolean } | null> {
+  const above = await readPositionAbove(branchId, position, db)
+  if (superseded()) return null
+  const rows = await readToWindow(branchId, above ?? position, db, superseded)
+  return rows === null ? null : { rows, branchTop: above === null }
 }
 
 /** A superseded jump is logged but not toasted: a newer jump or a branch change replaced it. */
@@ -241,15 +252,13 @@ export function useEntryJump(
           toast.warning(t('reader:jumpEntryGone'))
           return
         }
-        // From the row above: a break hangs off the previous chapter's end row, so a chapter jump
-        // lands under its heading only with that row loaded.
-        const rows = await readToWindow(branchId, position - 1, ctx.db, superseded)
-        if (rows === null) {
+        const read = await readFromAbove(branchId, position, ctx.db, superseded)
+        if (read === null) {
           if (current()) release()
           return
         }
-        if (readsBranchTop(rows, position)) topLoaded()
-        entriesStore.insertMany(branchId, rows)
+        if (read.branchTop) topLoaded()
+        entriesStore.insertMany(branchId, read.rows)
         if (entriesStore.getById(entryId) === undefined) {
           release()
           toast.warning(t('reader:jumpEntryGone'))

@@ -492,17 +492,42 @@ export const ShortListWheelThenGrowsShowsLastRow: Story = {
   },
 }
 
-/** Runs `play` with the window resized to `width`, then puts it back; a no-op outside Vitest. */
-async function withWindowWidth(width: number, play: () => Promise<void>) {
+/** Runs `play` with the window resized, then puts it back; a no-op outside Vitest. */
+async function withWindowSize(
+  size: { width?: number; height?: number },
+  play: () => Promise<void>,
+) {
   const browser = await import('vitest/browser').catch(() => null)
   if (browser == null) return
   const original = { width: window.innerWidth, height: window.innerHeight }
-  await browser.page.viewport(width, original.height)
+  await browser.page.viewport(size.width ?? original.width, size.height ?? original.height)
   try {
     await play()
   } finally {
     await browser.page.viewport(original.width, original.height)
   }
+}
+
+const withWindowWidth = (width: number, play: () => Promise<void>) =>
+  withWindowSize({ width }, play)
+
+// Electron sets no minimum window height; the popover measures about 472 px with a long list.
+export const LongListShortWindowKeepsActions: Story = {
+  args: { closed: LONG_LIST },
+  play: async () => {
+    await withWindowSize({ height: 380 }, async () => {
+      await waitForTier('desktop')
+      await openOverlay(31)
+      const manage = screen.getByRole('button', { name: 'Manage chapters →' })
+      await waitFor(() =>
+        expect(manage.getBoundingClientRect().bottom).toBeLessThanOrEqual(window.innerHeight),
+      )
+      const list = await listScroller()
+      await expect(list.clientHeight).toBeGreaterThan(0)
+      await expect(list.scrollHeight).toBeGreaterThan(list.clientHeight)
+      await expectOpenedOnLastRow()
+    })
+  },
 }
 
 // The open arm unmounts with the tier; its owner would otherwise keep reading an overlay that's

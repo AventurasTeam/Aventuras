@@ -72,8 +72,8 @@ export async function submitTurn(
         // so CTRL-Z reverses the whole turn as one group (milestone.md C6).
         const turnActionId = generateId('act')
 
-        // Tail position from committed rows, not the in-memory store's count: real
-        // branches have position gaps, so a count lands mid-story and collides.
+        // Tail position from committed rows, not the in-memory store's count: the store
+        // holds a window, so a count lands mid-story and collides.
         // Queued per-branch so a second submit can't read the same MAX before the
         // first one's insert lands.
         const [tail] = await ctx.db
@@ -84,9 +84,8 @@ export async function submitTurn(
           .limit(1)
         // Scene state (membership, location, worldTime) inherits from the last
         // non-system entry: a system tail carries null metadata and would reset
-        // it. M2 has no classifier, so this propagates the opening's values
-        // forward until piggyback/classifier (M3+) emits fresh ones. Position
-        // still comes from the overall tail so numbering never collides.
+        // it. Position still comes from the overall tail so numbering never
+        // collides.
         const [sceneTail] = await ctx.db
           .select({ metadata: storyEntries.metadata })
           .from(storyEntries)

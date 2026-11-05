@@ -84,7 +84,12 @@ export function DeltaLogRow({ delta, onPress, className }: DeltaLogRowProps) {
       className={cn(
         'flex-row items-start gap-2.5 px-row-x-md py-row-y-md',
         interactive && 'active:bg-tint-press',
-        Platform.select({ web: interactive ? 'cursor-pointer hover:bg-tint-hover' : '' }),
+        // Inset: an outside ring clips in the scroller a row sits in.
+        Platform.select({
+          web: interactive
+            ? 'cursor-pointer outline-none hover:bg-tint-hover focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-focus-ring'
+            : '',
+        }),
         className,
       )}
     >

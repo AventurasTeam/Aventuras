@@ -2,6 +2,7 @@ import type { Meta, StoryObj } from '@storybook/react-native-web-vite'
 import { View } from 'react-native'
 import { expect, fn, screen, userEvent, waitFor } from 'storybook/test'
 
+import { expectInsetFocusRing } from '@/components/ui/focus-ring-probe'
 import { Text } from '@/components/ui/text'
 import { themes } from '@/lib/themes'
 
@@ -39,6 +40,9 @@ type Story = StoryObj<typeof DeltaLogRow>
 
 export const UpdateOp: Story = {
   args: { delta: baseDelta, onPress: fn() },
+  play: async () => {
+    await expectInsetFocusRing(await screen.findByTestId('delta-log-row'))
+  },
 }
 
 export const CreateOp: Story = {

@@ -1,5 +1,4 @@
 import { useIsFocused } from '@react-navigation/native'
-import { and, desc, eq, lt } from 'drizzle-orm'
 import { useLocalSearchParams, useRouter } from 'expo-router'
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { Platform, View } from 'react-native'
@@ -22,6 +21,7 @@ import {
 import { useContentEditing } from '@/components/reader/content-editing'
 import { EntryJumpVeil } from '@/components/reader/entry-jump-veil'
 import { readerPillPhase } from '@/components/reader/generation-phase'
+import { routeJumpToBottom } from '@/components/reader/jump-to-bottom'
 import {
   draftSubmission,
   readPassFailureCustody,
@@ -62,6 +62,7 @@ import {
   composerShowsCancel,
   passRefusalOf,
   pillRunOf,
+  reportSendThrow,
   sendGapOpen,
   sendRunStreams,
   type PassRefusal,
@@ -82,6 +83,7 @@ import {
   useSystemEntryActions,
 } from '@/components/reader/system-entry-actions'
 import { useLiveRollbackCounts } from '@/components/reader/use-live-rollback-counts'
+import { useLoadOlderEntries } from '@/components/reader/use-load-older-entries'
 import { useReaderEntryJump } from '@/components/reader/use-reader-entry-jump'
 import { useWorldTimeEditing } from '@/components/reader/world-time-editing'
 import { WorldTimeEditSheet } from '@/components/reader/worldtime-edit-sheet'
@@ -125,13 +127,7 @@ import {
 } from '@/lib/actions'
 import { copyText } from '@/lib/clipboard'
 import { wrapComposerText, wrapHasSubject, type ComposerMode } from '@/lib/composer-wrap'
-import {
-  db,
-  runInTransaction,
-  storyEntries,
-  type StoryEntry,
-  type SystemFailureMeta,
-} from '@/lib/db'
+import { db, runInTransaction, type SystemFailureMeta } from '@/lib/db'
 import { logger } from '@/lib/diagnostics'
 import { refreshEmbeddingStatus } from '@/lib/embedder-swap'
 import { t } from '@/lib/i18n'
@@ -524,23 +520,7 @@ export default function ReaderComposerRoute() {
     setHasOlder(recent.length >= ENTRIES_WINDOW_SIZE)
   }, [branchId])
 
-  const loadOlderEntries = useCallback(async () => {
-    const loadedPositions = [...entriesStore.getEntries().values()]
-      .filter((e) => e.branchId === branchId)
-      .map((e) => e.position)
-    if (loadedPositions.length === 0) return
-    const minPosition = Math.min(...loadedPositions)
-
-    const older = (await db
-      .select()
-      .from(storyEntries)
-      .where(and(eq(storyEntries.branchId, branchId), lt(storyEntries.position, minPosition)))
-      .orderBy(desc(storyEntries.position))
-      .limit(ENTRIES_WINDOW_SIZE)) as StoryEntry[]
-
-    entriesStore.insertMany(branchId, older)
-    setHasOlder(older.length >= ENTRIES_WINDOW_SIZE)
-  }, [branchId])
+  const loadOlderEntries = useLoadOlderEntries(branchId, db, setHasOlder)
 
   useEffect(() => {
     // Never rejects: internally try/caught, logs embedder.status_refresh_failed on its own.
@@ -822,12 +802,11 @@ export default function ReaderComposerRoute() {
         // submitTurn throws on a rejected user_action write — treat a thrown
         // failure like a structured 'failed' outcome so the UI surfaces an
         // error and stays retriable instead of hanging.
-        await showTurnFailure(
-          {
-            kind: 'orchestrator',
-            detail: err instanceof Error ? err.message : String(err),
-          },
-          submission,
+        await reportSendThrow(
+          branchId,
+          err,
+          (detail) => showTurnFailure({ kind: 'orchestrator', detail }, submission),
+          () => handBackSubmission(submission),
         )
       } finally {
         endDispatch()
@@ -842,6 +821,7 @@ export default function ReaderComposerRoute() {
       restoreSystemTail,
       showTurnFailure,
       showPassFailure,
+      handBackSubmission,
       beginDispatch,
       endDispatch,
       branchUnchanged,
@@ -1418,12 +1398,17 @@ export default function ReaderComposerRoute() {
 
   // Touch-tier path to undo/redo (the shortcut is keyboard-only).
   const hasRedo = undoRedoStore.useUndoRedo((s) => s.redoStack.length > 0)
-  // Engage/settle semantics live in the surface's own jumpToBottom; the host
-  // only routes the request to whichever mount is live on this platform.
-  const jumpToBottom = useCallback(() => {
-    if (Platform.OS === 'web') surfaceRef.current?.jumpToBottom()
-    else documentRef.current?.jumpToBottom()
-  }, [])
+  // Engage/settle semantics live in the surface's own jumpToBottom; the host only routes it.
+  const jumpToBottom = useCallback(
+    () =>
+      routeJumpToBottom(
+        Platform.OS,
+        surfaceRef.current,
+        documentRef.current,
+        documentPaintedRef.current,
+      ),
+    [],
+  )
   const openChapterPopover = useCallback(() => chapterChipsRef.current?.openPopover(), [])
   const markBranchTopLoaded = useCallback(() => setHasOlder(false), [])
   const sendEntryLanding = useCallback((entryId: string) => {

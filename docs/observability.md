@@ -174,9 +174,12 @@ convention, and the expectation that subsystems route through
 - `pipeline.*` — `phase_failed`, `run_aborted`, `recovered`,
   `phase_exception_hook_failed` (error: a pipeline's failure hook threw
   after its rollback committed; for the periodic classifier both record
-  attempts failed, and the branch stays `running` until boot recovery)
-- `action_layer.*` — `user_write_rejected`, `constraint_violation`,
-  `reversal_refused` (error: an undo, redo, rollback, prose edit or
+  attempts failed, and the branch stays `running` until boot recovery),
+  `submit_failed` (error, `components/reader/send-run.ts`: a Send
+  threw rather than returning an outcome; its failure entry follows)
+  and `submit_failure_entry_failed` (error: that entry's write threw
+  too, and the Send's text went back to the composer)
+- `action_layer.*` — `reversal_refused` (error: an undo, redo, rollback, prose edit or
   regenerate refused as an integrity error, logged with its refusal
   kind), `row_held_twice` (error: two deletes in the log hold one row,
   which a sound log never produces),
@@ -258,10 +261,14 @@ convention, and the expectation that subsystems route through
   window), `pad_width_invalid`
 - `app.*` — cross-cutting runtime events not owned by a single
   subsystem. The global rejection handler's backstop
-  (`lib/boot/rejection-handler.ts`) emits three kinds, all always
+  (`lib/boot/rejection-handler.ts`) emits four kinds, all always
   recorded regardless of the master gate — see Console mirroring,
   below: `unhandled_rejection`, `rejection_handled_late`,
-  `rejection_tracker_unavailable`. `row_signals_read_failed`
+  `rejection_tracker_unavailable`, `uncaught_error`.
+  `clipboard_copy_failed` (a copy whose write threw) and
+  `clipboard_unavailable` (warn, a copy on web with no Clipboard API),
+  both from `lib/clipboard`; the user sees the copy-failed toast after
+  either. `row_signals_read_failed`
   (`hooks/use-row-signals.ts`, a bounded-read failure),
   `entry_index_read_failed` (`hooks/use-entry-index.ts`, same shape),
   `chapter_progress_read_failed` (`hooks/use-chapter-progress.ts`, same
@@ -360,7 +367,9 @@ convention, and the expectation that subsystems route through
   logged for a jump a newer one or a branch change replaced). The route
   adds `document_reloaded` (warn, `app/reader-composer/[branchId].tsx`:
   a reader document that had painted booted again, a reload or a
-  renderer kill)
+  renderer kill), and loading older entries adds `load_older_failed`
+  (warn, `components/reader/use-load-older-entries.ts`: the read above
+  the window threw, and the boundary shimmer stays for the next scroll)
 
 Kinds grow organically as subsystems land.
 
@@ -376,7 +385,7 @@ Build-time launch config may override the stored default to ON in
 session; this is launch-config-detail, not contract. Production
 builds always default OFF at the stored level.
 
-**Three kinds bypass the master gate**, all from
+**Four kinds bypass the master gate**, all from
 `lib/boot/rejection-handler.ts`'s backstop, all in `ALWAYS_RECORDED`
 (`lib/diagnostics/core/logger.ts`) for the same reason: each is
 either the one signal a user cannot be asked to reproduce, or a
@@ -396,13 +405,16 @@ signal that corrects or explains one that already bypassed.
   for the same reason its accusation does — a retraction gated out
   of every configuration that recorded the accusation would read as
   a permanent false positive instead of a correction.
-- `app.clipboard_copy_failed` and `app.clipboard_unavailable` — a copy
-  whose write threw, and a copy on web with no Clipboard API, at warn
-  (`lib/clipboard`). The user sees the copy-failed toast after either.
 - `app.rejection_tracker_unavailable` — no tracker could be
   installed at all; the signal that the backstop itself isn't
   running, which matters most in exactly the configuration
   (production, diagnostics off) where it would otherwise be silent.
+- `app.uncaught_error` — a synchronous throw nothing caught, from the
+  window's `error` event on web and Electron: a timer, an idle
+  callback, or a render React couldn't recover from. Carries `error`,
+  the stack, or the event's message when it carries no error. Native
+  has no route: a fatal error there ends the process, and the store
+  doesn't outlive it.
 
 The bypass covers **both surfaces**: a bypassing kind writes its
 store entry and mirrors to `console.<level>`, exactly as it would
@@ -822,10 +834,10 @@ The in-memory-only stance changes the privacy profile materially.
   through this path; they exist only inside the HTTP wrapper's
   local scope during a single request lifecycle.
 - **One exception**: `app.unhandled_rejection` and its paired
-  `app.rejection_handled_late` / `app.rejection_tracker_unavailable`
-  (Console mirroring, above) write even while the master toggle is
-  off. `report()` passes the rejection's `.stack` / `.message`
-  through `redactSecretsInText`
+  `app.rejection_handled_late` / `app.rejection_tracker_unavailable`,
+  and `app.uncaught_error` (Console mirroring, above), write even
+  while the master toggle is off. `report()` and `reportUncaught()`
+  pass the error's `.stack` / `.message` through `redactSecretsInText`
   (`lib/diagnostics/sinks/http-redaction.ts`). State the true claim
   plainly, because it reframes the section: **the substring pass
   redacts any configured key of 6+ characters found verbatim anywhere

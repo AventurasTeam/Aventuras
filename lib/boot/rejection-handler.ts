@@ -48,6 +48,18 @@ function report(reason: unknown, id: number): void {
   logger.error('app.unhandled_rejection', { error, id })
 }
 
+// An ErrorEvent from a cross-origin script carries no error, only a message.
+function reportUncaught(ev: unknown): void {
+  const { error, message } = ev as { error?: unknown; message?: unknown }
+  let text: string
+  try {
+    text = redactSecretsInText(messageFor(error ?? message))
+  } catch {
+    text = UNREPORTABLE_REASON
+  }
+  logger.error('app.uncaught_error', { error: text })
+}
+
 function reportHandledLate(id: number | undefined): void {
   if (id === undefined) return
   logger.warn('app.rejection_handled_late', { id })
@@ -74,6 +86,9 @@ export function registerRejectionHandler(target: RejectionTarget = globalThis): 
       const { promise } = ev as { promise?: Promise<unknown> }
       reportHandledLate(promise != null ? idsByPromise.get(promise) : undefined)
     })
+    // A throw in a timer, an idle callback or a render React couldn't recover. Bubble phase, so a
+    // failed image or script load, which doesn't bubble, stays out.
+    target.addEventListener('error', reportUncaught)
     return
   }
 

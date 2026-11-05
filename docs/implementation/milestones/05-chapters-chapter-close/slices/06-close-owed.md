@@ -488,6 +488,13 @@ confirm at slice planning. Canon follows the answer.
   keeps `Retry` beside its fix (`system-entry-actions.test.tsx:838`). The
   listener writes after the gate lifts, so a Send in that gap leaves the
   entry standing until the next Send's tail drop.
+- **A turn's `config-resolver` entry offers Retry.**
+  `useSystemEntryActions` (`components/reader/system-entry-actions.tsx`)
+  returns `onRetry` unless the pass is `held` or `resolved`, where
+  [`reader-composer.md`](../../../../ui/screens/reader-composer/reader-composer.md#transient-pipeline-failures--system-entries-in-chat)
+  lists `Fix profile · Dismiss` for a missing provider. Existing drift
+  beside the gate this slice edits. Raised 2026-11-01 by the M5
+  promotion. Routed from triage 2026-11-04.
 - **What does a manual start hold?** Branch queue, pending mark,
   `withTurnAdmission`, `isStorySwapPending`. The scope keeps 5.2's shape:
   the swap and busy refusals, the record's write and the start land in
