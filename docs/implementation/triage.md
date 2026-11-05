@@ -61,18 +61,6 @@ slice-planning gate forces its resolution before that slice is planned.
   did not re-run the suite serially — the evidence above is still as of
   `edce17b8`.
 
-- **A stale `node_modules` ships dependencies without their patches.**
-  After a pull that adds or changes a file in `patches/`, nothing makes
-  a developer run `pnpm install`: `lefthook.yml` has no post-merge or
-  post-checkout step, and `verifyDepsBeforeRun` is unset in
-  `pnpm-workspace.yaml`. Metro then bundles the unpatched package
-  without a word. For `patches/expo.patch` that brings back Android
-  readers stuck on `Loading story…`, which a phone shows and the
-  emulator doesn't
-  ([lesson](./lessons-learned/expo-dom-boot-script-races-the-bundle.md)).
-  It holds for all five patches. pnpm 10.33.1 has
-  `verify-deps-before-run`, which checks before any `pnpm run`. Raised
-  2026-11-03 by PR #700's closing review.
 - **A scrollbar drag isn't a gesture to the reader's pins.**
   `gestureActiveRef` in `components/reader/reader-surface.tsx` tracks
   touch only, and a scrollbar press interrupts only at pointerdown, so a

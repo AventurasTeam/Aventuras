@@ -52,6 +52,9 @@ Metro's transform cache is not split: every checkout shares
 `node_modules`, and suspected of serving a stale route tree to one that
 symlinks it; see
 [a worktree with symlinked `node_modules` needs its own Metro cache](./implementation/lessons-learned/metro-cache-shared-across-worktrees.md).
+Such a worktree also fails pnpm's dependency check on every `pnpm run`
+or `pnpm exec`; see
+[pnpm and patches](./code-conventions.md#pnpm-and-patches).
 
 The DevTools port is what the `electron-app` MCP server attaches to:
 `.mcp.json` points it at `AVENTURAS_DEVTOOLS_PORT`, defaulting to 9222,

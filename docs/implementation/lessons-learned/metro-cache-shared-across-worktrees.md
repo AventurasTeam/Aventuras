@@ -48,6 +48,11 @@ checkout's and nothing collides, so the cause lies elsewhere.
 
 ## How to apply
 
+- **pnpm refuses to run in such a worktree** unless its dependency
+  check is off: prefix each command with
+  `pnpm_config_verify_deps_before_run=false`
+  ([pnpm and patches](../../code-conventions.md#pnpm-and-patches)).
+
 - **Before `pnpm build:web` in a scratch worktree with symlinked
   `node_modules`**, give Metro a cache of its own with a scratch-only
   edit to `metro.config.js`, never committed:

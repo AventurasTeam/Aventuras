@@ -16,6 +16,10 @@ overrides:
 # warning on an exit-0 install. These patches are load-bearing on Android, where
 # CI never runs — fail the install instead.
 ignorePatchFailures: false
+# A pull that changes patches/ or the lockfile installs nothing by itself, and
+# Metro would bundle the unpatched packages without a word: stop any `pnpm run`
+# or `pnpm exec` while node_modules is out of sync instead.
+verifyDepsBeforeRun: error
 patchedDependencies:
   '@gorhom/bottom-sheet': patches/@gorhom__bottom-sheet.patch
   expo: patches/expo.patch

@@ -323,6 +323,16 @@ referenced from `pnpm-lock.yaml` via `patchedDependencies`. Add or
 edit a patch through pnpm's patch workflow so the lockfile entry and
 the patch file stay in sync; never hand-edit installed package files.
 
+A pull that changes a patch or the lockfile installs nothing by
+itself, so `verifyDepsBeforeRun: error` in `pnpm-workspace.yaml`
+stops any `pnpm run` or `pnpm exec` while `node_modules` is out of
+sync, with a hint to run `pnpm install`. Without it Metro bundles the
+unpatched package silently. A scratch worktree whose `node_modules` is
+a symlink to another checkout's always reads as out of sync, even at
+the same commit, because pnpm records each patch by its absolute
+path. Run pnpm there with `pnpm_config_verify_deps_before_run=false`,
+or call `node_modules/.bin` directly.
+
 ## Commenting and imports
 
 Canonical home for both stays in
