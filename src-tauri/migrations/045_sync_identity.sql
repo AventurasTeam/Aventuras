@@ -190,39 +190,6 @@ BEGIN
   ON CONFLICT (sync_id, device_id) DO UPDATE SET counter = counter + 1;
 END;
 
-CREATE TRIGGER sync_edit_pack_runtime_variables_ins AFTER INSERT ON pack_runtime_variables
-WHEN NOT EXISTS (SELECT 1 FROM sync_suspend)
-BEGIN
-  UPDATE preset_packs SET updated_at = CAST(unixepoch('subsec') * 1000 AS INTEGER) WHERE id = NEW.pack_id;
-  INSERT INTO sync_vector (sync_id, device_id, counter)
-  SELECT i.sync_id, d.device_id, 1
-  FROM sync_identity i, sync_device d
-  WHERE i.entity_type = 'pack' AND i.local_id = NEW.pack_id AND d.is_self = 1
-  ON CONFLICT (sync_id, device_id) DO UPDATE SET counter = counter + 1;
-END;
-
-CREATE TRIGGER sync_edit_pack_runtime_variables_upd AFTER UPDATE ON pack_runtime_variables
-WHEN NOT EXISTS (SELECT 1 FROM sync_suspend)
-BEGIN
-  UPDATE preset_packs SET updated_at = CAST(unixepoch('subsec') * 1000 AS INTEGER) WHERE id = NEW.pack_id;
-  INSERT INTO sync_vector (sync_id, device_id, counter)
-  SELECT i.sync_id, d.device_id, 1
-  FROM sync_identity i, sync_device d
-  WHERE i.entity_type = 'pack' AND i.local_id = NEW.pack_id AND d.is_self = 1
-  ON CONFLICT (sync_id, device_id) DO UPDATE SET counter = counter + 1;
-END;
-
-CREATE TRIGGER sync_edit_pack_runtime_variables_del AFTER DELETE ON pack_runtime_variables
-WHEN NOT EXISTS (SELECT 1 FROM sync_suspend)
-BEGIN
-  UPDATE preset_packs SET updated_at = CAST(unixepoch('subsec') * 1000 AS INTEGER) WHERE id = OLD.pack_id;
-  INSERT INTO sync_vector (sync_id, device_id, counter)
-  SELECT i.sync_id, d.device_id, 1
-  FROM sync_identity i, sync_device d
-  WHERE i.entity_type = 'pack' AND i.local_id = OLD.pack_id AND d.is_self = 1
-  ON CONFLICT (sync_id, device_id) DO UPDATE SET counter = counter + 1;
-END;
-
 CREATE TRIGGER sync_edit_story_entries_ins AFTER INSERT ON story_entries
 WHEN NOT EXISTS (SELECT 1 FROM sync_suspend)
 BEGIN

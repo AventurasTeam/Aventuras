@@ -61,12 +61,11 @@
   /**
    * Settle which pack the incoming story binds to, before the transfer writes or deletes anything.
    *
-   * This runs ahead of `deleteStory` on purpose. Both receive paths remove the story they are
-   * replacing *before* importing, so a question asked any later would let a cancel destroy the
-   * copy being replaced and put nothing in its place.
+   * This runs before the transfer writes anything, so a cancel leaves this device as it was.
    *
-   * Sync can ask at all because it is user-driven: the payload is already downloaded and no
-   * remote party is waiting. A background sync would need a different answer here.
+   * Sync can ask at all because it is user-driven: the payload is already downloaded, and a
+   * sender waiting on a push hears `waiting` once its timeout passes. A background sync would
+   * need a different answer here.
    *
    * Returns the resolution, or `null` if the user backed out — in which case the caller must
    * return without touching anything.
@@ -112,7 +111,7 @@
   let received = $state<{ envelope: SyncEnvelope; peer: SyncPeer; requestId: string } | null>(null)
   /** Null until worked out, so a failed lookup cannot leave the previous item's target behind. */
   let receivedTarget = $state<ReceiveTarget | null>(null)
-  /** Read once: a replacing import that fails has already deleted the story. */
+  /** The replaced story's sync state, read before a successful import deletes the story. */
   let receivedPrevious: Awaited<ReturnType<typeof storySyncRecord>> = null
   /** Stories on this device bound to the pack being replaced. */
   let receivedPackUsers = $state(0)
@@ -207,6 +206,11 @@
       // Taking empties the native queue, so whatever is not claimed now waits here, in order.
       const items = await syncService.takeReceivedItems()
       if (items.length === 0) return
+      if (!ui.syncModalOpen) {
+        // Taken while the screen was closing, after it declined what it could see.
+        for (const { requestId } of items) answerPush(requestId, { data: 'declined' })
+        return
+      }
       if (received || receivingStory) {
         receivedQueue = [...receivedQueue, ...items]
         return
@@ -276,7 +280,7 @@
     if (next) {
       receivedQueue = remaining
       void claimReceivedItem(next)
-    } else {
+    } else if (ui.syncModalOpen) {
       startPolling()
     }
   }
@@ -384,9 +388,8 @@
     receivingStory = false
 
     if (importError) {
-      // Keep the payload pending rather than dropping it. The poller already cleared the server's
-      // copy, so this is the only remaining chance to retry, and a replacement import that failed
-      // after deleting the local story makes that retry the user's only way back.
+      // Keep the payload pending rather than dropping it. The poller already took the server's
+      // copy, so this is the only remaining chance to retry.
       error = importError
       return
     }
@@ -706,7 +709,10 @@
 </script>
 
 <ResponsiveModal.Root open={ui.syncModalOpen} {onOpenChange}>
-  <ResponsiveModal.Content handle={false} class="flex max-h-[85dvh] flex-col gap-0 p-0 sm:max-w-lg">
+  <ResponsiveModal.Content
+    handle={false}
+    class="flex max-h-(--modal-max-height) flex-col gap-0 p-0 sm:max-w-lg"
+  >
     <ModalHeader {title} closeButton />
 
     <div class="min-h-0 min-w-0 flex-1 overflow-y-auto px-6 py-4">
@@ -738,7 +744,7 @@
         <div
           class="bg-destructive/15 text-destructive mb-4 flex items-center gap-2 rounded-lg p-3 text-sm"
         >
-          <AlertTriangle class="h-4 w-4 shrink-0" />
+          <AlertTriangle class="size-4 shrink-0" />
           {error}
         </div>
       {/if}
@@ -752,7 +758,7 @@
           >
             <CardHeader class="flex flex-row items-center gap-4 space-y-0 p-4">
               <div class="bg-primary/10 rounded-lg p-3">
-                <QrCode class="text-primary h-6 w-6" />
+                <QrCode class="text-primary size-6" />
               </div>
               <div>
                 <CardTitle class="text-base">Show connection code</CardTitle>
@@ -764,7 +770,7 @@
           <Card class="hover:bg-muted/50 cursor-pointer transition-colors" onclick={startScanMode}>
             <CardHeader class="flex flex-row items-center gap-4 space-y-0 p-4">
               <div class="bg-primary/10 rounded-lg p-3">
-                <Camera class="text-primary h-6 w-6" />
+                <Camera class="text-primary size-6" />
               </div>
               <div>
                 <CardTitle class="text-base">Connect to a device</CardTitle>
@@ -777,7 +783,7 @@
         <!-- QR Code Display -->
         {#if receivingStory || loading}
           <div class="flex flex-col items-center justify-center py-12">
-            <Loader2 class="text-primary h-8 w-8 animate-spin" />
+            <Loader2 class="text-primary size-8 animate-spin" />
             <p class="text-muted-foreground mt-4">
               {receivingStory
                 ? loading
@@ -789,10 +795,8 @@
         {:else if showReceivedConflict && received}
           <!-- Conflict warning for received push -->
           <div class="flex flex-col items-center py-4 text-center">
-            <div
-              class="mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-amber-500/20"
-            >
-              <AlertTriangle class="h-8 w-8 text-amber-500" />
+            <div class="mb-4 flex size-16 items-center justify-center rounded-full bg-amber-500/20">
+              <AlertTriangle class="size-8 text-amber-500" />
             </div>
             <h3 class="mb-2 text-lg font-semibold">Already on this device</h3>
             <p class="text-muted-foreground mb-4 break-words">
@@ -879,7 +883,7 @@
                 <img
                   src="data:image/png;base64,{serverInfo.qrCodeBase64}"
                   alt="QR Code"
-                  class="h-64 w-64"
+                  class="size-64"
                 />
               </div>
               <p class="text-muted-foreground text-sm">
@@ -902,10 +906,8 @@
         <!-- Version Mismatch Warning -->
         {#if showVersionWarning}
           <div class="flex flex-col items-center py-4 text-center">
-            <div
-              class="mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-amber-500/20"
-            >
-              <AlertTriangle class="h-8 w-8 text-amber-500" />
+            <div class="mb-4 flex size-16 items-center justify-center rounded-full bg-amber-500/20">
+              <AlertTriangle class="size-8 text-amber-500" />
             </div>
             <h3 class="mb-2 text-lg font-semibold">Version mismatch</h3>
             <p class="text-muted-foreground mb-2">

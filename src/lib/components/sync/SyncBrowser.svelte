@@ -15,6 +15,9 @@
   import * as Popover from '#lib/components/ui/popover/index.ts'
   import { createIsMobile } from '#lib/hooks/is-mobile.svelte.ts'
   import { Input } from '#lib/components/ui/input/index.ts'
+  import { Checkbox } from '#lib/components/ui/checkbox/index.ts'
+  import { Label } from '#lib/components/ui/label/index.ts'
+  import * as RadioGroup from '#lib/components/ui/radio-group/index.ts'
   import SyncDialog from './SyncDialog.svelte'
   import type { ExportTracking } from '#lib/services/export.ts'
   import type { PackBindingResolution } from '#lib/services/import/index.ts'
@@ -68,6 +71,7 @@
   }
 
   let { connection, self, tracking, resolvePack, onApplied, onDisconnect }: Props = $props()
+  const uid = $props.id()
 
   const SECTION_LABELS: Record<SyncSection, string> = {
     stories: 'Stories',
@@ -88,8 +92,9 @@
   }
   const isMobile = createIsMobile()
 
+  const SORTS: readonly SyncSort[] = ['status', 'name', 'lastSynced', 'lastChanged']
   const SORT_LABELS: Record<SyncSort, { label: string; hint: string }> = {
-    status: { label: 'Status', hint: 'Changed on both first, in sync last' },
+    status: { label: 'Status', hint: 'Newer on either device first, in sync last' },
     name: { label: 'Name', hint: 'A to Z' },
     lastSynced: { label: 'Last synced', hint: 'With the remote device; never synced last' },
     lastChanged: { label: 'Last changed', hint: 'Newest change on either device' },
@@ -261,9 +266,20 @@
   function send(row: SyncRow) {
     const local = row.local
     if (!local) return
-    const theirs = row.remote?.syncId === local.syncId ? (row.remote?.vector ?? null) : null
+    // A same-name item with no identity takes the remote one's, so the send replaces it there.
+    const pairWith = row.status === 'sameName' && !local.syncId ? row.remote?.syncId : undefined
+    const syncId = local.syncId ?? pairWith
+    const theirs = syncId && row.remote?.syncId === syncId ? row.remote.vector : null
     return transfer(row, async (name) => {
-      const { outcome } = await sendItem(connection, self, name, local.localId, tracking(), theirs)
+      const { outcome } = await sendItem(
+        connection,
+        self,
+        name,
+        local.localId,
+        tracking(),
+        theirs,
+        pairWith ?? undefined,
+      )
       if (outcome === 'declined') return 'The remote device declined it.'
       if (outcome === 'waiting') {
         return 'No answer yet. Once the remote device accepts it, reopen this section to see it.'
@@ -285,7 +301,13 @@
 
   async function get(row: SyncRow) {
     if (section === 'packs' && row.local) {
-      const stories = await storiesUsingPack(row.local.localId)
+      let stories: number
+      try {
+        stories = await storiesUsingPack(row.local.localId)
+      } catch (e) {
+        error = e instanceof Error ? e.message : 'Could not check which stories use this pack'
+        return
+      }
       if (stories > 0 && packConfirm?.row !== row) {
         openRow = null
         packConfirm = { row, stories }
@@ -335,7 +357,7 @@
   <div
     class="bg-destructive/15 text-destructive mb-3 flex items-center gap-2 rounded-lg p-3 text-sm"
   >
-    <AlertTriangle class="h-4 w-4 shrink-0" />
+    <AlertTriangle class="size-4 shrink-0" />
     {error}
   </div>
 {/if}
@@ -392,7 +414,7 @@
             </span>
           {/if}
         </span>
-        <ChevronRight class="text-muted-foreground h-5 w-5 shrink-0" />
+        <ChevronRight class="text-muted-foreground size-5 shrink-0" />
       </button>
     {/each}
   </div>
@@ -404,7 +426,7 @@
       aria-label="Back to sections"
       onclick={() => (section = null)}
     >
-      <ChevronLeft class="h-5 w-5" />
+      <ChevronLeft class="size-5" />
     </Button>
     <h3 class="font-semibold">{SECTION_LABELS[section]}</h3>
   </div>
@@ -438,7 +460,7 @@
           </span>
         </button>
         {#if busy === row.key}
-          <Loader2 class="text-primary mx-6 h-5 w-5 shrink-0 animate-spin" />
+          <Loader2 class="text-primary mx-6 size-5 shrink-0 animate-spin" />
         {:else if row.action}
           <Button
             class={cn('min-w-20 shrink-0', isStraightSync(row.status) && STRAIGHT_SYNC_BUTTON)}
@@ -486,47 +508,46 @@
   </div>
   <div class="divide-y">
     {#each STATUS_ORDER as status, i (i)}
-      <label class="flex min-h-12 items-center gap-3">
-        <input
-          type="checkbox"
-          class="accent-primary h-5 w-5"
+      <Label for="{uid}-status-{status}" class="flex min-h-12 items-center gap-3 font-normal">
+        <Checkbox
+          id="{uid}-status-{status}"
           checked={currentPrefs.statuses.includes(status)}
-          onchange={(e) => toggleStatus(status, e.currentTarget.checked)}
+          onCheckedChange={(on) => toggleStatus(status, on)}
         />
         <span class="flex-1">{statusLabel(status)}</span>
         <span class="text-muted-foreground text-sm">{counts[status]}</span>
-      </label>
+      </Label>
     {/each}
   </div>
 {/snippet}
 
 {#snippet sortOptions()}
-  <div class="divide-y">
-    {#each Object.entries(SORT_LABELS) as [sort, { label, hint }] (sort)}
-      <label class="flex min-h-14 items-center gap-3">
-        <input
-          type="radio"
-          name="sync-sort"
-          class="accent-primary h-5 w-5"
-          checked={currentPrefs.sort === sort}
-          onchange={() => updatePrefs({ sort: sort as SyncSort })}
-        />
+  <RadioGroup.Root
+    value={currentPrefs.sort}
+    onValueChange={(value) => {
+      const sort = SORTS.find((s) => s === value)
+      if (sort) updatePrefs({ sort })
+    }}
+    class="gap-0 divide-y"
+  >
+    {#each SORTS as sort, i (i)}
+      <Label for="{uid}-sort-{sort}" class="flex min-h-14 items-center gap-3 font-normal">
+        <RadioGroup.Item value={sort} id="{uid}-sort-{sort}" />
         <span class="flex flex-col">
-          <span>{label}</span>
-          <span class="text-muted-foreground text-xs">{hint}</span>
+          <span>{SORT_LABELS[sort].label}</span>
+          <span class="text-muted-foreground text-xs">{SORT_LABELS[sort].hint}</span>
         </span>
-      </label>
+      </Label>
     {/each}
-  </div>
-  <label class="flex min-h-12 items-center gap-3">
-    <input
-      type="checkbox"
-      class="accent-primary h-5 w-5"
+  </RadioGroup.Root>
+  <Label for="{uid}-reversed" class="flex min-h-12 items-center gap-3 font-normal">
+    <Checkbox
+      id="{uid}-reversed"
       checked={currentPrefs.reversed}
-      onchange={(e) => updatePrefs({ reversed: e.currentTarget.checked })}
+      onCheckedChange={(reversed) => updatePrefs({ reversed })}
     />
     Reversed
-  </label>
+  </Label>
 {/snippet}
 
 <!-- A popover under its button on desktop, a sheet with Apply on a phone. -->

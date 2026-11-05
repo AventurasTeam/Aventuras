@@ -3,6 +3,7 @@ use image::Luma;
 use qrcode::QrCode;
 use std::io::Cursor;
 use std::sync::Arc;
+use std::time::Duration;
 use tauri::{AppHandle, Emitter, State};
 use tokio::sync::Mutex;
 use uuid::Uuid;
@@ -149,6 +150,22 @@ pub async fn take_received_items(state: State<'_, SyncState>) -> Result<Vec<Rece
     })
 }
 
+/// The slowest link a transfer is given time for, in bytes per second.
+const SLOWEST_TRANSFER: u64 = 50_000;
+/// A pulled item's size is unknown until it arrives, so a pull gets this long to download.
+const PULL_DOWNLOAD: Duration = Duration::from_secs(300);
+
+/// Time to move an item's bytes, on top of the server's wait: a request's timeout covers both.
+fn transfer_allowance(action: &SyncAction) -> Duration {
+    match action {
+        SyncAction::Push { payload } => {
+            Duration::from_secs(payload.len() as u64 / SLOWEST_TRANSFER)
+        }
+        SyncAction::Pull { .. } => PULL_DOWNLOAD,
+        SyncAction::List { .. } | SyncAction::SettleVector { .. } => Duration::ZERO,
+    }
+}
+
 /// Send one request to a remote sync server. Answers with the remote webview's reply.
 #[tauri::command]
 pub async fn sync_request(
@@ -159,6 +176,7 @@ pub async fn sync_request(
     action: SyncAction,
 ) -> Result<String, String> {
     let url = format!("http://{}:{}/sync", ip, port);
+    let allowance = transfer_allowance(&action);
 
     let request = SyncRequest {
         token,
@@ -168,14 +186,14 @@ pub async fn sync_request(
     };
 
     let client = reqwest::Client::builder()
-        .connect_timeout(std::time::Duration::from_secs(10))
+        .connect_timeout(Duration::from_secs(10))
         .build()
         .map_err(|e| format!("Connection failed: {}", e))?;
     let response = client
         .post(&url)
         .json(&request)
         // Past the server's wait, so its own timeout is the one reported.
-        .timeout(WEBVIEW_TIMEOUT + std::time::Duration::from_secs(30))
+        .timeout(WEBVIEW_TIMEOUT + Duration::from_secs(30) + allowance)
         .send()
         .await
         .map_err(|e| format!("Connection failed: {}", e))?;

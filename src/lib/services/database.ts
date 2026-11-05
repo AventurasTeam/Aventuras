@@ -4213,11 +4213,18 @@ class DatabaseService {
     return Object.fromEntries(rows.map((r) => [r.device_id, r.counter]))
   }
 
-  /** Favourite state stays out: it belongs to the device. */
-  vaultCharacterReplaceStatement(c: VaultCharacter): SqlBatchStatement {
+  /**
+   * Favourite state stays out: it belongs to the device. `metadataPatch` is merged into the stored
+   * metadata, so keys only this device holds stay, and a null removes a key.
+   */
+  vaultCharacterReplaceStatement(
+    c: VaultCharacter,
+    metadataPatch: Record<string, unknown>,
+  ): SqlBatchStatement {
     return {
       sql: `UPDATE character_vault SET name = ?, description = ?, traits = ?,
-              visual_descriptors = ?, portrait = ?, tags = ?, metadata = ?
+              visual_descriptors = ?, portrait = ?, tags = ?,
+              metadata = json_patch(COALESCE(metadata, '{}'), ?)
             WHERE id = ?`,
       params: [
         c.name,
@@ -4226,32 +4233,39 @@ class DatabaseService {
         JSON.stringify(c.visualDescriptors),
         c.portrait,
         JSON.stringify(c.tags),
-        c.metadata ? JSON.stringify(c.metadata) : null,
+        JSON.stringify(metadataPatch),
         c.id,
       ],
     }
   }
 
-  vaultLorebookReplaceStatement(l: VaultLorebook): SqlBatchStatement {
+  vaultLorebookReplaceStatement(
+    l: VaultLorebook,
+    metadataPatch: Record<string, unknown>,
+  ): SqlBatchStatement {
     return {
-      sql: `UPDATE lorebook_vault SET name = ?, description = ?, entries = ?, tags = ?, metadata = ?
+      sql: `UPDATE lorebook_vault SET name = ?, description = ?, entries = ?, tags = ?,
+              metadata = json_patch(COALESCE(metadata, '{}'), ?)
             WHERE id = ?`,
       params: [
         l.name,
         l.description,
         JSON.stringify(l.entries.map(withUniqueVaultEntryTerms)),
         JSON.stringify(l.tags),
-        l.metadata ? JSON.stringify(l.metadata) : null,
+        JSON.stringify(metadataPatch),
         l.id,
       ],
     }
   }
 
-  vaultScenarioReplaceStatement(s: VaultScenario): SqlBatchStatement {
+  vaultScenarioReplaceStatement(
+    s: VaultScenario,
+    metadataPatch: Record<string, unknown>,
+  ): SqlBatchStatement {
     return {
       sql: `UPDATE scenario_vault SET name = ?, description = ?, setting_seed = ?, npcs = ?,
               primary_character_name = ?, first_message = ?, alternate_greetings = ?,
-              starting_time = ?, tags = ?, metadata = ?
+              starting_time = ?, tags = ?, metadata = json_patch(COALESCE(metadata, '{}'), ?)
             WHERE id = ?`,
       params: [
         s.name,
@@ -4263,7 +4277,7 @@ class DatabaseService {
         JSON.stringify(s.alternateGreetings),
         s.startingTime ? JSON.stringify(s.startingTime) : null,
         JSON.stringify(s.tags),
-        s.metadata ? JSON.stringify(s.metadata) : null,
+        JSON.stringify(metadataPatch),
         s.id,
       ],
     }

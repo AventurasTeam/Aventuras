@@ -59,7 +59,9 @@ Root tables use `AFTER UPDATE OF <columns>`, which is where "what counts as an e
 Favourites, branch switches, retry and generation state, and a story's pack do not count: they
 describe how the item is used on that device. Tables holding a story's content count on every
 insert, update and delete, except `world_state_changes` (always written beside something counted),
-`world_state_snapshots` (not exported), `background_images` and `kept_separate`.
+`world_state_snapshots` (not exported), `background_images` and `kept_separate`. A pack's
+`pack_runtime_variables` do not count either: its export does not carry them, so a transfer could
+not deliver the edit the status would promise.
 
 The same child-table triggers set `stories.updated_at`, for every story, and `preset_packs.updated_at`.
 Setting either is not an edit: neither column is in a root trigger's list.
@@ -82,10 +84,13 @@ is many statements plus image streaming in Rust, and the frontend cannot `BEGIN`
   writes the identity, the vector with its old timestamps, and the sender's `updated_at`.
 - **Vault item, pack:** one `database.transaction()` batch writes the content, then the vector. The
   vector write overrides what the batch counted, which is why the device's own row is always written.
-  Favourite state is left alone: it belongs to the device. A pack is updated in place because
+  Favourite state is left alone: it belongs to the device, and an item new here arrives
+  unfavourited. Only the portable metadata keys are replaced; what this device recorded, such as
+  where the item was first imported from, stays. A pack is updated in place because
   `stories.pack_id` is `ON DELETE RESTRICT`.
 
-`sync_suspend` is for migrations only; see [persistence.md](persistence.md).
+`sync_suspend` is for migrations, and for a startup write every device on a version makes alike,
+such as the template backfill in `packs/pack-service.ts`; see [persistence.md](persistence.md).
 
 ## Resolving a conflict
 
@@ -119,11 +124,12 @@ truth.
 
 Rust holds no data. A `list`, `pull` or `settleVector` request is emitted as `sync://request` with a
 request ID, and the handler waits on a oneshot until `sync_respond` arrives, up to
-`WEBVIEW_TIMEOUT`. Client timeouts are longer, so the server's message is the one reported. Nothing
-is exported up front, so a listing is always current and carries no content. Pushes go to a queue
-the receiving modal polls, because the receiver may need to ask its user something. It takes the
-queue whole, so a push arriving between a read and a clear cannot be lost. Each queued item carries
-its request ID, and the answer comes back through `sync_respond` the same way.
+`WEBVIEW_TIMEOUT`. Client timeouts are longer, so the server's message is the one reported, plus
+time to move the bytes: a push gets more by its size, a pull a fixed allowance. Nothing is exported
+up front, so a listing is always current and carries no content. Pushes go to a queue the receiving
+modal polls, because the receiver may need to ask its user something. It takes the queue whole, so a
+push arriving between a read and a clear cannot be lost. Each queued item carries its request ID,
+and the answer comes back through `sync_respond` the same way.
 
 Items travel in a `SyncEnvelope`: section, sync ID, vector, `updatedAt`, name, and `document`, the
 item's existing export as text. On the wire the header is one JSON line and the document follows

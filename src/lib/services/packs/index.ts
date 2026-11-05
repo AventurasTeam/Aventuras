@@ -12,3 +12,5 @@ export type {
   RuntimeVariableType,
   RuntimeVarsMap,
 } from './types'
+export { importExportService } from './import-export'
+export { validatePackImport, type PackExport } from './validation'

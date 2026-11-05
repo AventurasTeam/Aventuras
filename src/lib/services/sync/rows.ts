@@ -8,7 +8,9 @@ import type {
   SyncSort,
   SyncStatus,
 } from '#lib/types/sync.ts'
+import { SYNC_SECTIONS } from '#lib/types/sync.ts'
 import { compareVectors } from './vectors'
+import { isObject } from './guards'
 
 /** A straight sync in either direction first, then what needs a decision. */
 export const STATUS_ORDER: readonly SyncStatus[] = [
@@ -237,17 +239,22 @@ export function formatAgo(time: number, now = Date.now()): string {
   return `${Math.floor(days / 30)}mo ago`
 }
 
+function isSort(value: unknown): value is SyncSort {
+  return typeof value === 'string' && Object.hasOwn(COMPARATORS, value)
+}
+
 /** Stored preferences, tolerating anything an older or damaged value holds. */
 export function parseListPrefs(raw: string | null): Partial<Record<SyncSection, SyncListPrefs>> {
   try {
-    const parsed = raw ? JSON.parse(raw) : null
-    if (!parsed || typeof parsed !== 'object') return {}
+    const parsed: unknown = raw ? JSON.parse(raw) : null
+    if (!isObject(parsed)) return {}
     const prefs: Partial<Record<SyncSection, SyncListPrefs>> = {}
-    for (const [section, value] of Object.entries(parsed)) {
-      const v = value as Partial<SyncListPrefs> | null
-      if (!v || !Array.isArray(v.statuses) || !v.sort || !(v.sort in COMPARATORS)) continue
-      prefs[section as SyncSection] = {
-        statuses: v.statuses.filter((s) => STATUS_ORDER.includes(s)),
+    for (const section of SYNC_SECTIONS) {
+      const v = parsed[section]
+      if (!isObject(v) || !Array.isArray(v.statuses) || !isSort(v.sort)) continue
+      const stored: unknown[] = v.statuses
+      prefs[section] = {
+        statuses: STATUS_ORDER.filter((s) => stored.includes(s)),
         sort: v.sort,
         reversed: !!v.reversed,
       }

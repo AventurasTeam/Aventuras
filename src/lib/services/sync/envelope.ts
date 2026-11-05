@@ -1,4 +1,5 @@
 import type { SyncEnvelope } from '#lib/types/sync.ts'
+import { isEnvelopeHeader } from './guards'
 
 /**
  * The header as one JSON line, then the document verbatim.
@@ -13,6 +14,7 @@ export function encodeEnvelope({ document, ...header }: SyncEnvelope): string {
 
 export function decodeEnvelope(text: string): SyncEnvelope {
   const split = text.indexOf('\n')
-  if (split < 0) throw new Error('Received an invalid payload')
-  return { ...JSON.parse(text.slice(0, split)), document: text.slice(split + 1) }
+  const header: unknown = split < 0 ? null : JSON.parse(text.slice(0, split))
+  if (!isEnvelopeHeader(header)) throw new Error('Received an invalid payload')
+  return { ...header, document: text.slice(split + 1) }
 }

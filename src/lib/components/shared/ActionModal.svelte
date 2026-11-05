@@ -378,7 +378,7 @@
 >
   <ResponsiveModal.Content
     class={cn(
-      'flex max-h-[85dvh] flex-col gap-0 p-0',
+      'flex max-h-(--modal-max-height) flex-col gap-0 p-0',
       { md: 'max-w-md', lg: 'max-w-lg', '2xl': 'max-w-2xl' }[size],
       // Inset from a phone's edges, where the dialog would otherwise run full width.
       'w-[calc(100%-2rem)] rounded-lg',

@@ -6,7 +6,7 @@ import {
   vaultLorebookToExchange,
   wrapExchange,
 } from '#lib/services/exchange/index.ts'
-import { importExportService } from '#lib/services/packs/import-export.ts'
+import { importExportService } from '#lib/services/packs/index.ts'
 import type { SyncEntityType, SyncLocalItem, SyncSection } from '#lib/types/sync.ts'
 import type { ExportTracking } from '#lib/services/export.ts'
 import { syncService } from './service'

@@ -20,7 +20,10 @@
 </script>
 
 <ResponsiveModal.Root bind:open={() => open, (next) => !next && onClose()}>
-  <ResponsiveModal.Content handle={false} class="flex max-h-[85dvh] max-w-md flex-col gap-0 p-0">
+  <ResponsiveModal.Content
+    handle={false}
+    class="flex max-h-(--modal-max-height) max-w-md flex-col gap-0 p-0"
+  >
     <ModalHeader {title} />
     <div class="min-h-0 flex-1 space-y-3 overflow-y-auto px-6 py-4">
       {@render children()}

@@ -1,6 +1,7 @@
 import { database } from '#lib/services/database.ts'
 import { PROMPT_TEMPLATES } from '#lib/services/prompts/templates/index.ts'
 import { hashContent } from './hash'
+import { packTemplateStatement } from './replace-statements'
 import {
   classifyTemplates,
   isUntouched,
@@ -121,9 +122,25 @@ class PackService {
       }
       if (missing.size === 0) continue
 
-      for (const [templateId, content] of missing) {
-        await database.setPackTemplateContent(pack.id, templateId, content, true)
-      }
+      const now = Date.now()
+      const inserts = await Promise.all(
+        [...missing].map(async ([templateId, content]) =>
+          packTemplateStatement({
+            id: crypto.randomUUID(),
+            packId: pack.id,
+            templateId,
+            content,
+            contentHash: await hashContent(content),
+            now,
+          }),
+        ),
+      )
+      // Every device on this version adds the same rows, so they are not an edit to sync.
+      await database.transaction([
+        { sql: "INSERT INTO sync_suspend (reason) VALUES ('template backfill')", params: [] },
+        ...inserts,
+        { sql: "DELETE FROM sync_suspend WHERE reason = 'template backfill'", params: [] },
+      ])
       console.log('[PackService] Backfilled missing templates', {
         pack: pack.id,
         added: [...missing.keys()],

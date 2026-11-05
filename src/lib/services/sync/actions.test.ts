@@ -118,6 +118,16 @@ describe('applyItem', () => {
     expect(writes().at(-1)?.sql).toBe('SET TIME')
   })
 
+  it("leaves a new item unfavourited and a replaced one's own metadata alone", async () => {
+    await actions.applyItem(envelope(), peer, null)
+    expect(db.addVaultCharacter.mock.calls[0][0]).toMatchObject({ favorite: false })
+
+    await actions.applyItem(envelope(), peer, 'local-1')
+    expect(db.vaultCharacterReplaceStatement).toHaveBeenLastCalledWith(expect.anything(), {
+      cardVersion: null,
+    })
+  })
+
   it('removes a new row whose sync state could not be written', async () => {
     db.transaction.mockRejectedValueOnce(new Error('locked'))
 
@@ -277,6 +287,14 @@ describe('sendItem', () => {
     expect(pushed().vector).toEqual({ me: 2 })
   })
 
+  it('gives an item with no identity the sync ID of the same-name item it replaces', async () => {
+    await actions.sendItem(connection, self, 'characters', 'c', tracking, { pc: 4 }, 'theirs')
+
+    expect(
+      writes().find((s) => s.sql.includes('INSERT OR IGNORE INTO sync_identity'))?.params,
+    ).toEqual(['character', 'c', 'theirs'])
+  })
+
   it('resolves over a version with edits this one lacks, without recording it', async () => {
     const sent = await actions.sendItem(connection, self, 'characters', 'c', tracking, { pc: 4 })
 
@@ -339,6 +357,16 @@ describe('answerSyncRequest', () => {
     requestId: 'r',
     peer,
     action,
+  })
+
+  it("refuses a peer that has this device's ID", async () => {
+    const clone = {
+      requestId: 'r',
+      peer: self,
+      action: { type: 'list' as const, section: 'packs' as const },
+    }
+    await expect(actions.answerSyncRequest(clone, tracking)).rejects.toThrow('same sync ID')
+    expect(db.transaction).not.toHaveBeenCalled()
   })
 
   it('leaves last-sync times out of a listing', async () => {

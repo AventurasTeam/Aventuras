@@ -2,7 +2,7 @@
  * Types for the local network sync feature
  */
 
-/** Must match `PROTOCOL_VERSION` in `src-tauri/src/sync/types.rs`. */
+/** Must match `PROTOCOL_VERSION` in `src-tauri/src/sync/types.rs`; `guards.test.ts` checks it. */
 export const SYNC_PROTOCOL_VERSION = 2
 
 export const SYNC_SECTIONS = ['stories', 'characters', 'lorebooks', 'scenarios', 'packs'] as const

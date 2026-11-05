@@ -58,6 +58,8 @@ mod tests {
         "world_state_snapshots",
         "background_images",
         "kept_separate",
+        // Not part of a pack's export, so a transfer could not carry an edit to it.
+        "pack_runtime_variables",
     ];
 
     async fn exec(pool: &SqlitePool, sql: &'static str) {

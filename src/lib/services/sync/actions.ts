@@ -1,5 +1,6 @@
 import { database, type SyncRecord } from '#lib/services/database.ts'
 import {
+  PORTABLE_METADATA,
   exchangeToCharacter,
   exchangeToScenario,
   exchangeToVaultLorebook,
@@ -8,8 +9,11 @@ import {
 import type { ExchangeDocument, ExchangeEntity } from '#lib/services/exchange/index.ts'
 import { exportService, type ExportTracking } from '#lib/services/export.ts'
 import type { ImportResult, PackBindingResolution } from '#lib/services/import/index.ts'
-import { importExportService } from '#lib/services/packs/import-export.ts'
-import { validatePackImport, type PackExport } from '#lib/services/packs/validation.ts'
+import {
+  importExportService,
+  validatePackImport,
+  type PackExport,
+} from '#lib/services/packs/index.ts'
 import { isAndroid, isIos } from '#lib/utils/platform.ts'
 import type {
   SyncConnectionData,
@@ -24,6 +28,7 @@ import type {
   SyncWebviewRequest,
 } from '#lib/types/sync.ts'
 import { decodeEnvelope, encodeEnvelope } from './envelope'
+import { isObject, isSyncListing } from './guards'
 import { parseListPrefs } from './rows'
 import { SECTION_ENTITY, exportDocument, listLocalItems } from './sections'
 import { syncService } from './service'
@@ -73,14 +78,20 @@ async function serverListing(section: SyncSection): Promise<SyncListing> {
   }
 }
 
-/** Gives the item an identity if this is its first transfer, and reads its current vector. */
-async function identified(section: SyncSection, localId: string, selfId: string) {
+/**
+ * Gives the item an identity if this is its first transfer, `syncId` when given, and reads its
+ * current vector.
+ */
+async function identified(
+  section: SyncSection,
+  localId: string,
+  selfId: string,
+  syncId: string = crypto.randomUUID(),
+) {
   const entityType = SECTION_ENTITY[section]
   const [item] = await database.getSyncListing(section, localId)
   if (!item) throw new Error('That item no longer exists')
-  await database.transaction(
-    ensureIdentityStatements(entityType, localId, crypto.randomUUID(), selfId),
-  )
+  await database.transaction(ensureIdentityStatements(entityType, localId, syncId, selfId))
   const record = await database.getSyncRecord(entityType, localId)
   if (!record) throw new Error('That item no longer exists')
   return record
@@ -106,12 +117,19 @@ async function envelopeFor(
   }
 }
 
+// A database restored from another device's backup carries its ID, and two devices counting
+// under one ID would read a real conflict as one side being newer.
+const SAME_DEVICE =
+  "Both devices have the same sync ID, as happens when one was restored from the other's backup. Syncing them would mix up their edits."
+
 /** Answers a request from a connected device. */
 export async function answerSyncRequest(
   request: SyncWebviewRequest,
   tracking: ExportTracking,
 ): Promise<string> {
   const { peer, action } = request
+  const self = await database.getSyncSelf()
+  if (peer.deviceId === self.deviceId) throw new Error(SAME_DEVICE)
   await database.transaction([rememberDeviceStatement(peer.deviceId, peer.name)])
 
   switch (action.type) {
@@ -119,7 +137,6 @@ export async function answerSyncRequest(
       return JSON.stringify(await serverListing(action.section))
 
     case 'pull': {
-      const self = await database.getSyncSelf()
       const { syncId, vector } = await identified(action.section, action.localId, self.deviceId)
       return encodeEnvelope(
         await envelopeFor(action.section, action.localId, tracking, syncId, vector),
@@ -127,7 +144,6 @@ export async function answerSyncRequest(
     }
 
     case 'settleVector': {
-      const self = await database.getSyncSelf()
       const entityType = SECTION_ENTITY[action.section]
       const localId = await database.findSyncedLocalId(entityType, action.syncId)
       const current = await database.getSyncVector(action.syncId)
@@ -163,7 +179,10 @@ export async function fetchListing(
   section: SyncSection,
 ): Promise<SyncListing> {
   const reply = await syncService.request(connection, self, { type: 'list', section })
-  const listing: SyncListing = JSON.parse(reply)
+  const listing: unknown = JSON.parse(reply)
+  if (!isSyncListing(listing))
+    throw new Error('The other device sent a listing this one cannot read')
+  if (listing.device.deviceId === self.deviceId) throw new Error(SAME_DEVICE)
   await database.transaction([
     rememberDeviceStatement(listing.device.deviceId, listing.device.name),
   ])
@@ -181,7 +200,8 @@ const pendingSends = new Map<string, PendingSend>()
 
 /**
  * Sends an item. `theirs` is the other device's vector for this item, when sending replaces a
- * version with edits this one lacks.
+ * version with edits this one lacks. `pairWith` is the other device's sync ID for a same-name item
+ * this one replaces: an item with no identity takes it, so the receiver finds what to replace.
  *
  * Waits for the receiver's answer. Nothing is written here: it can still refuse, and a resolved
  * vector kept for a send that never landed would outrank edits this device has not seen. A send
@@ -194,8 +214,9 @@ export async function sendItem(
   localId: string,
   tracking: ExportTracking,
   theirs: SyncVector | null,
+  pairWith?: string,
 ): Promise<{ syncId: string; vector: SyncVector; outcome: SyncPushOutcome }> {
-  const record = await identified(section, localId, self.deviceId)
+  const record = await identified(section, localId, self.deviceId, pairWith)
   const { syncId } = record
   const vector =
     theirs && compareVectors(record.vector, theirs) !== 'newerHere'
@@ -282,7 +303,8 @@ export async function settleVector(
     expected: envelope.vector,
     vector,
   })
-  return (JSON.parse(reply) as { settled?: unknown }).settled === true
+  const answer: unknown = JSON.parse(reply)
+  return isObject(answer) && answer.settled === true
 }
 
 export type ReceiveTarget =
@@ -335,17 +357,25 @@ async function addItem(
   switch (envelope.section) {
     case 'characters': {
       const { data } = exchangeDocument(envelope.document, 'character')
-      await database.addVaultCharacter({ ...exchangeToCharacter(data, local), name })
+      await database.addVaultCharacter({
+        ...exchangeToCharacter(data, local),
+        name,
+        favorite: false,
+      })
       return { localId: local.id, name }
     }
     case 'lorebooks': {
       const { data } = exchangeDocument(envelope.document, 'lorebook')
-      await database.addVaultLorebook({ ...exchangeToVaultLorebook(data, local), name })
+      await database.addVaultLorebook({
+        ...exchangeToVaultLorebook(data, local),
+        name,
+        favorite: false,
+      })
       return { localId: local.id, name }
     }
     case 'scenarios': {
       const { data } = exchangeDocument(envelope.document, 'scenario')
-      await database.addVaultScenario({ ...exchangeToScenario(data, local), name })
+      await database.addVaultScenario({ ...exchangeToScenario(data, local), name, favorite: false })
       return { localId: local.id, name }
     }
     case 'packs': {
@@ -358,6 +388,17 @@ async function addItem(
     case 'stories':
       throw new Error('Stories are imported separately')
   }
+}
+
+/**
+ * The portable metadata keys only, a missing one as null, so a replace updates those and leaves
+ * what only this device records, such as where and in what format the item was first imported.
+ */
+function portablePatch(
+  entity: ExchangeEntity,
+  metadata: Record<string, unknown> | null | undefined,
+): Record<string, unknown> {
+  return Object.fromEntries(PORTABLE_METADATA[entity].map((key) => [key, metadata?.[key] ?? null]))
 }
 
 async function removeItem(section: SyncSection, localId: string): Promise<void> {
@@ -435,17 +476,38 @@ export async function applyItem(
   switch (envelope.section) {
     case 'characters': {
       const { data } = exchangeDocument(envelope.document, 'character')
-      content = [database.vaultCharacterReplaceStatement(exchangeToCharacter(data, update))]
+      content = [
+        database.vaultCharacterReplaceStatement(
+          exchangeToCharacter(data, update),
+          portablePatch('character', data.metadata),
+        ),
+      ]
       break
     }
     case 'lorebooks': {
       const { data } = exchangeDocument(envelope.document, 'lorebook')
-      content = [database.vaultLorebookReplaceStatement(exchangeToVaultLorebook(data, update))]
+      const lorebook = exchangeToVaultLorebook(data, update)
+      // The entry counts follow the content; the format stays the one this device imported.
+      const counts = lorebook.metadata && {
+        totalEntries: lorebook.metadata.totalEntries,
+        entryBreakdown: lorebook.metadata.entryBreakdown,
+      }
+      content = [
+        database.vaultLorebookReplaceStatement(lorebook, {
+          ...portablePatch('lorebook', data.metadata),
+          ...counts,
+        }),
+      ]
       break
     }
     case 'scenarios': {
       const { data } = exchangeDocument(envelope.document, 'scenario')
-      content = [database.vaultScenarioReplaceStatement(exchangeToScenario(data, update))]
+      content = [
+        database.vaultScenarioReplaceStatement(
+          exchangeToScenario(data, update),
+          portablePatch('scenario', data.metadata),
+        ),
+      ]
       break
     }
     case 'packs': {
