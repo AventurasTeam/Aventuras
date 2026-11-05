@@ -8,6 +8,7 @@ const ROUTES = [
   { href: '/dev/db-check', label: 'DB check (M1.2 smoke)' },
   { href: '/dev/reseed', label: 'Reseed database (wipe + seed dataset)' },
   { href: '/dev/probe-captures', label: 'Probe captures (M3.5 smoke)' },
+  { href: '/dev/chapter-close', label: 'Chapter close (manual start)' },
   { href: '/dev/foundations', label: 'Foundations explorer' },
   { href: '/dev/button', label: 'Button' },
   { href: '/dev/text', label: 'Text' },
