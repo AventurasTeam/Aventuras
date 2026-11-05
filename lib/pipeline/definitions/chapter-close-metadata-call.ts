@@ -1,4 +1,4 @@
-import { and, asc, eq, lte } from 'drizzle-orm'
+import { and, asc, between, eq, inArray, ne } from 'drizzle-orm'
 
 import { boundedSignal } from '@/lib/abort'
 import {
@@ -7,7 +7,7 @@ import {
   type ResolveModelConfig,
   type ResolveTarget,
 } from '@/lib/ai'
-import { openRegionWhere, storyEntries, type DbCtx, type StoryEntry } from '@/lib/db'
+import { storyEntries, type DbCtx, type StoryEntry } from '@/lib/db'
 import { renderTemplate, TEMPLATE_IDS } from '@/lib/prompts'
 import { appSettingsStore, chaptersStore, currentStoryStore, threadsStore } from '@/lib/stores'
 
@@ -24,21 +24,34 @@ import type { PhaseContext, PhaseEmittedEvent, PipelineError } from '../types'
 
 const TARGET = 'lore-mgmt' satisfies ResolveTarget
 
-/** The chapter's prose: the open region's whole rows through the end entry, oldest first. */
+/** The range's whole non-system rows, start entry through end, oldest first, stamped or not. */
 export async function readCloseRangeEntries(
   db: DbCtx['db'],
   branchId: string,
   range: CloseRange,
 ): Promise<StoryEntry[]> {
-  const [end] = await db
-    .select({ position: storyEntries.position })
+  const bounds = await db
+    .select({ id: storyEntries.id, position: storyEntries.position })
     .from(storyEntries)
-    .where(and(eq(storyEntries.branchId, branchId), eq(storyEntries.id, range.endEntryId)))
-  if (!end) return []
+    .where(
+      and(
+        eq(storyEntries.branchId, branchId),
+        inArray(storyEntries.id, [range.startEntryId, range.endEntryId]),
+      ),
+    )
+  const start = bounds.find((b) => b.id === range.startEntryId)
+  const end = bounds.find((b) => b.id === range.endEntryId)
+  if (!start || !end) return []
   return (await db
     .select()
     .from(storyEntries)
-    .where(and(openRegionWhere(branchId), lte(storyEntries.position, end.position)))
+    .where(
+      and(
+        eq(storyEntries.branchId, branchId),
+        ne(storyEntries.kind, 'system'),
+        between(storyEntries.position, start.position, end.position),
+      ),
+    )
     .orderBy(asc(storyEntries.position), asc(storyEntries.createdAt))) as StoryEntry[]
 }
 

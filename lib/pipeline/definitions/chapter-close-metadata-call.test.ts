@@ -233,26 +233,32 @@ beforeEach(async () => {
 })
 
 describe('readCloseRangeEntries', () => {
-  it('reads the whole open-region rows through the end entry, oldest first', async () => {
+  it("reads the range's whole non-system rows, oldest first", async () => {
     const rows = await readCloseRangeEntries(phaseDb.db, 'b1', RANGE)
     expect(rows.map((e) => e.id)).toEqual(['e1', 'e2', 'e3', 'e5', 'e6'])
     // Whole rows: the trailing block is the builder's to strip.
     expect(rows[2]).toMatchObject({ id: 'e3', kind: 'ai_reply', content: ENTRIES[2]!.content })
   })
 
-  it("starts after a closed chapter's stamped rows", async () => {
+  it("starts at the range's start, past a closed chapter's rows", async () => {
     hydrateEntries(
       phaseDb,
       'b1',
       ENTRIES.map((e) => (e.position <= 3 ? { ...e, chapterId: 'chap_first' } : e)),
     )
-    const rows = await readCloseRangeEntries(phaseDb.db, 'b1', RANGE)
+    const rows = await readCloseRangeEntries(phaseDb.db, 'b1', { ...RANGE, startEntryId: 'e5' })
     expect(rows.map((e) => e.id)).toEqual(['e5', 'e6'])
   })
 
-  // x2 is another branch's row: a fork copies rows with their ids, so an end id alone is ambiguous.
+  // x2 is another branch's row: a fork copies rows with their ids, so an id alone is ambiguous.
   it('reads nothing for an end entry the branch does not have', async () => {
     expect(await readCloseRangeEntries(phaseDb.db, 'b1', { ...RANGE, endEntryId: 'x2' })).toEqual(
+      [],
+    )
+  })
+
+  it('reads nothing for a start entry the branch does not have', async () => {
+    expect(await readCloseRangeEntries(phaseDb.db, 'b1', { ...RANGE, startEntryId: 'x2' })).toEqual(
       [],
     )
   })

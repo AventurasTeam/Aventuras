@@ -22,6 +22,7 @@ import { CHAPTER_CLOSE_RESOLVES, ensureChapterClosePipelineRegistered } from './
 import { closeAgentPhase } from './chapter-close-agent'
 import { closeBoundaryPhase } from './chapter-close-boundary'
 import { closeMetadataPhase } from './chapter-close-metadata'
+import { readCloseRangeEntries } from './chapter-close-metadata-call'
 import { closeReportPhase } from './chapter-close-report'
 import { readClassifierStatus } from './memory-chain'
 import { expectRan } from '../__tests__/harness'
@@ -344,6 +345,29 @@ describe('a committed close', () => {
     const start = f.entries.find((e) => e.position === positionOf(first) + 1)!
     expect(row).toMatchObject({ sequenceNumber: 2, startEntryId: start.id, endEntryId: second })
     expect(row!.tokenCount).toBe(await sqlTokenSum(start.position, positionOf(second)))
+  })
+
+  // C2: a phase after the stamps reads the range by its ids, as one before them does.
+  it("reads each closed chapter's range back as the rows it stamped", async () => {
+    await runClose(f.replyIds[2]!)
+    await runClose(f.replyIds[5]!)
+
+    const rows = await entryRows()
+    const closed = await chapterRows()
+    expect(closed).toHaveLength(2)
+    for (const chapter of closed) {
+      const stamped = rows.filter((e) => e.chapterId === chapter.id).map((e) => e.id)
+      expect(stamped.length, chapter.id).toBeGreaterThan(0)
+      const read = await readCloseRangeEntries(f.ctx.db, f.branchId, {
+        chapterId: chapter.id,
+        startEntryId: chapter.startEntryId,
+        endEntryId: chapter.endEntryId,
+      })
+      expect(
+        read.map((e) => e.id),
+        chapter.id,
+      ).toEqual(stamped)
+    }
   })
 })
 
