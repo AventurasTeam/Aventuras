@@ -78,7 +78,11 @@ No open items.
   reader holds a grown window re-sends it for each update, about 72 s at
   20 chapters if no update merged, counting commit and stringify only.
   That is arithmetic, not measured, and the reply's lag is the closer
-  proxy.
+  proxy. The sliding-window slice below takes a close's stamp burst on
+  a grown window as an acceptance case, since
+  [Slice 5.2](./implementation/milestones/05-chapters-chapter-close/slices/02-first-chapter.md#implementation-notes)
+  measured the burst on a 50-row reader only (developer decision,
+  2026-11-05).
 
   On a long story a jump to an early chapter can outlast the jump veil's
   30 s bound (`JUMP_VEIL_TIMEOUT_MS` in

@@ -499,6 +499,30 @@ model other than any it judges, then reads every description against
 the turns by `scripts/classifier-eval/judge-brief.md`, which also says
 how far its counts can be trusted.
 
+`pnpm dataset:chapter` builds a played story to measure a chapter close
+on, and is no test either: it rebuilds `dist` and runs
+`e2e/tests/dataset-chapter.build.spec.ts`, which skips unless
+`DATASET_CHAPTER_OUT` (where the database goes), `SMOKE_LLM_URL` and
+`SMOKE_LLM_MODEL` are set. It makes an adventure story through the
+wizard from `scripts/dataset-chapter/`: _Treasure Island_'s first nine
+chapters cut at paragraphs into an opening and replies, each reply
+paired with a first-person action a model wrote once
+(`pnpm dataset:actions`) and committed beside the text. The harness
+mock streams each reply and serves the wizard, while the real server
+serves the classifier and `lore-mgmt` profiles, so with piggyback off
+every turn runs the per-turn classifier and the periodic pass on it,
+with the real embedder. The drive resends a Send its owed pass refused
+or a turn that failed, fails on a reply or action that commits
+different from the dataset, and lowers the cadence to 1 before the last
+turn so the watermark reaches the tail. It then asserts what a close
+needs: an open region of 22k to 26k `content_tokens` ending on a reply,
+the watermark at its tail, and a create delta behind every entry past
+the opening. It copies the database, with no WAL beside it, to
+`DATASET_CHAPTER_OUT` and prints the branch, for `AVENTURAS_DB_PATH`,
+`pnpm device:push-db` and `PROBE_BRANCH_ID`. The file stays out of git
+([Fixture + seed contract](#fixture--seed-contract)), and a rebuild
+writes different classifier rows.
+
 ## Selector strategy
 
 Three tiers, cheapest and most stable first. Reach for a lower tier
