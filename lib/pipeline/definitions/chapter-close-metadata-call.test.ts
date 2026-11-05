@@ -246,15 +246,13 @@ describe('readCloseRangeEntries', () => {
       'b1',
       ENTRIES.map((e) => (e.position <= 3 ? { ...e, chapterId: 'chap_first' } : e)),
     )
-    const rows = await readCloseRangeEntries(phaseDb.db, 'b1', {
-      ...RANGE,
-      startEntryId: 'e5',
-    })
+    const rows = await readCloseRangeEntries(phaseDb.db, 'b1', RANGE)
     expect(rows.map((e) => e.id)).toEqual(['e5', 'e6'])
   })
 
+  // x2 is another branch's row: a fork copies rows with their ids, so an end id alone is ambiguous.
   it('reads nothing for an end entry the branch does not have', async () => {
-    expect(await readCloseRangeEntries(phaseDb.db, 'b1', { ...RANGE, endEntryId: 'e99' })).toEqual(
+    expect(await readCloseRangeEntries(phaseDb.db, 'b1', { ...RANGE, endEntryId: 'x2' })).toEqual(
       [],
     )
   })
@@ -503,6 +501,18 @@ describe('requestChapterMetadata', () => {
         status: 'failed',
         error: { kind: 'provider', reason: 'timeout', detail: 'lore-mgmt: timeout after 45000ms' },
       })
+    })
+
+    it('disarms the bound once the call settles', async () => {
+      generateStructuredMock.mockResolvedValue({ status: 'ok', value: REPLY, recoverable: [] })
+      vi.useFakeTimers()
+      try {
+        const { outcome } = await drain(phaseCtx())
+        expect(outcome).toMatchObject({ status: 'ok' })
+        expect(vi.getTimerCount()).toBe(0)
+      } finally {
+        vi.useRealTimers()
+      }
     })
 
     it('bounds the call at ten minutes when the lore-mgmt profile sets no timeout', async () => {
