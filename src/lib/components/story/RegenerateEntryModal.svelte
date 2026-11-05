@@ -32,7 +32,9 @@
   })
 
   // A regenerate the reader confirms keeps none of their or Tidy's changes in its range.
+  // Settled first: the handler takes the lease in the same tick, and the claim would refuse it.
   function regenerate(entryId: string, retry: boolean) {
+    ui.settleRegenerate()
     if (retry) void ui.triggerRetryLastMessage(KEEP_NONE)
     else void ui.triggerRegenerateNarration(entryId, KEEP_NONE)
   }
@@ -83,7 +85,6 @@
     const { entry, retry } = pending
     pending = null
     regenerate(entry.id, retry)
-    ui.settleRegenerate()
   }
 
   function cancel() {

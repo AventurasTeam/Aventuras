@@ -150,6 +150,11 @@ export function isExplanationFoldId(id: string): id is ExplanationFoldId {
   return (EXPLANATION_FOLD_IDS as readonly string[]).includes(id)
 }
 
+/** `retry` restores the backup taken before the last action; otherwise the narration alone. */
+export interface RegenerateRequest {
+  entryId: string
+  retry: boolean
+}
 class UIStore {
   activePanel = $state<ActivePanel>('story')
   sidebarTab = $state<SidebarTab>('characters')
@@ -160,7 +165,7 @@ class UIStore {
   checkpointFormEntryId = $state<string | null>(null)
   deleteEntryId = $state<string | null>(null)
   deleteChapterId = $state<string | null>(null)
-  regenerateRequest = $state<{ entryId: string; retry: boolean } | null>(null)
+  regenerateRequest = $state<RegenerateRequest | null>(null)
   // From the press until its generation holds the lease or the reader cancels.
   regeneratePending = $state(false)
   branchCheckpointId = $state<string | null>(null)
@@ -466,14 +471,13 @@ class UIStore {
     this.deleteChapterId = chapterId
   }
 
-  /** `retry` restores the backup taken before the last action; otherwise the narration alone. */
-  requestRegenerate(request: { entryId: string; retry: boolean }) {
+  requestRegenerate(request: RegenerateRequest) {
     if (this.regeneratePending) return
     this.regeneratePending = true
     this.regenerateRequest = request
   }
 
-  takeRegenerateRequest() {
+  takeRegenerateRequest(): RegenerateRequest | null {
     const request = this.regenerateRequest
     this.regenerateRequest = null
     return request

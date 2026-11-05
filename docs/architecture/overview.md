@@ -474,8 +474,9 @@ after it observes the abort. So a Stop on any turn leaves the action as the last
 action's card offers **Generate a response** for any action nothing answers, however it got there
 (a Stop, a deleted narration, the app closing mid-turn).
 
-A press on Regenerate locks the entries at once (`ui.regeneratePending`), before the previews that
-precede the lease, so a repeated press starts nothing.
+A press on Regenerate claims the branch at once (`ui.regeneratePending`), before the previews that
+precede the lease: the entries lock, and the store refuses a new generation or a branch switch as
+if the lease were held. A repeated press starts nothing.
 
 **Why the switch is refused rather than the writes redirected.** `applyClassificationResult` reads
 the active branch and mutates the in-memory `characters`/`locations`/`items`/`storyBeats` arrays,

@@ -506,6 +506,12 @@
    * (retry, regenerate) has already put it there. Called any earlier it computes a position
    * one lower than the stored key and can never match.
    */
+  /** Only right once the story is where retrieval ran: the key carries the position. */
+  function cachedRetrievalFor(actionContent: string): RetrievalResult | null {
+    const key = retrievalKeyFor(actionContent)
+    return key ? ui.retrievalResultFor(key) : null
+  }
+
   function retrievalKeyFor(actionContent: string): RetrievalCacheKey | null {
     const current = story.currentStory
     if (!current) return null
@@ -619,10 +625,10 @@
     const releaseKeepAlive = useBackgroundService
       ? await holdBackgroundKeepAlive(() => {
           keepAliveEnded = true
-          // Before the narration is saved, end the turn like the in-app Stop; afterwards only
-          // the later phases are cut short.
+          // Before the narration is complete, end the turn like the in-app Stop; from then on,
+          // its save included, only the later phases are cut short.
           activeAbortController?.abort()
-          if (!ending.narrationSaved) handleStopGeneration()
+          if (!stopUnavailable) handleStopGeneration()
         }, settings.experimentalFeatures.generationNotifications)
       : () => {}
     let turnRecordId = ''
@@ -1299,6 +1305,7 @@
     ui.setGenerating(false)
     // The stopped turn kept none of its activations, so the next one runs retrieval again.
     ui.setLastRetrievalResult(null)
+    ui.setLastLorebookRetrieval(null)
   }
 
   async function handleRetry() {
@@ -1374,11 +1381,10 @@
       // The rewind above put the story back exactly where the previous turn's retrieval was
       // computed, so that result is still the right one — same branch, same position, same
       // action. Read after the undo, since the key is position-sensitive.
-      const cachedRetrieval = retrievalKeyFor(userActionEntry.content)
       await generateResponse(lease, userActionEntry.id, userActionEntry.content, {
         countStyleReview: false,
         styleReviewSource: 'regenerate',
-        cachedRetrievalResult: cachedRetrieval ? ui.retrievalResultFor(cachedRetrieval) : null,
+        cachedRetrievalResult: cachedRetrievalFor(userActionEntry.content),
       })
     })
   }
@@ -1393,10 +1399,9 @@
 
     await withGenerationLease(async (lease) => {
       ui.clearSuggestions(storyId)
-      const cachedRetrieval = retrievalKeyFor(userActionEntry.content)
       await generateResponse(lease, userActionEntry.id, userActionEntry.content, {
         styleReviewSource: 'generate-from-action',
-        cachedRetrievalResult: cachedRetrieval ? ui.retrievalResultFor(cachedRetrieval) : null,
+        cachedRetrievalResult: cachedRetrievalFor(userActionEntry.content),
       })
     })
   }
@@ -1466,12 +1471,11 @@
 
       // Read here rather than before the rewind: the key carries the position, so it only
       // matches once the restore has put the story back where retrieval ran.
-      const cacheKey = retrievalKeyFor(promptContent)
 
       await generateResponse(lease, userActionEntry.id, promptContent, {
         countStyleReview: false,
         styleReviewSource: 'retry-last-message',
-        cachedRetrievalResult: cacheKey ? ui.retrievalResultFor(cacheKey) : null,
+        cachedRetrievalResult: cachedRetrievalFor(promptContent),
         inputTranslation,
       })
     })

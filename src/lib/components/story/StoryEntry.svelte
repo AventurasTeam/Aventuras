@@ -1956,7 +1956,7 @@
         <p class="text-muted-foreground hidden text-xs sm:block">
           Ctrl+Enter to save, Esc to cancel
         </p>
-        {#if canSaveAndRegenerate}
+        {#if canSaveAndRegenerate && !isLastEntry}
           <p class="hidden items-center gap-1 text-xs text-amber-500/80 sm:flex">
             Regenerate narration after significant changes
             <RotateCcw class="h-3 w-3" />

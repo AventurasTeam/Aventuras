@@ -4958,7 +4958,7 @@ class StoryStore {
     // Creating a branch ends by switching to it, so it is a branch switch with a write in
     // front. Refused before that write: the alternative leaves the branch created and the
     // story still on the old one.
-    if (this.generationLease) {
+    if (this.isGenerationClaimed) {
       throw new Error(
         'Cannot create a branch while a generation is in progress: creating one switches to it.',
       )
@@ -5286,6 +5286,11 @@ class StoryStore {
     return this.pendingBranchSwitches > 0
   }
 
+  /** A pressed Regenerate claims the branch before its lease, while it previews the revert. */
+  private get isGenerationClaimed(): boolean {
+    return this.generationLease !== null || ui.regeneratePending
+  }
+
   /** True while a generation holds the branch. Drives the switch affordances. */
   get isGenerationLeaseHeld(): boolean {
     return this.generationLease !== null
@@ -5324,7 +5329,7 @@ class StoryStore {
    * otherwise have begun.
    */
   acquireGenerationLease(): GenerationLease {
-    if (this.generationLease) {
+    if (this.isGenerationClaimed) {
       throw new Error(this.generationBusyMessage('start a generation'))
     }
     if (this.pendingBranchSwitches > 0) {
@@ -5400,7 +5405,7 @@ class StoryStore {
     // reaches this point after a generation has begun. Stands in for world-state application
     // being unable to target a branch other than the one loaded — see "The generation lease"
     // in docs/architecture/overview.md for why, and for when this can be lifted.
-    if (this.generationLease) {
+    if (this.isGenerationClaimed) {
       throw new Error(this.generationBusyMessage('switch branches'))
     }
 
