@@ -686,7 +686,11 @@
   async function declineWaitingPushes() {
     const waiting = receivedQueue.map((item) => item.requestId)
     receivedQueue = []
-    if (received && !loading) waiting.push(received.requestId)
+    if (received && !loading) {
+      waiting.push(received.requestId)
+      // Stops a preparation still running from applying what the sender was told was declined.
+      receivedSession++
+    }
     if (serverInfo) {
       const queued = await syncService.takeReceivedItems().catch(() => [])
       waiting.push(...queued.map((item) => item.requestId))
