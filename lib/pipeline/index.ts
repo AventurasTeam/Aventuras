@@ -6,6 +6,7 @@ export {
   PER_TURN_KIND,
   type PerTurnPhaseName,
 } from './definitions/per-turn'
+export { CHAPTER_CLOSE_KIND } from '@/lib/chapters'
 export {
   fallbackClassifierSchema,
   fallbackClassifierWithSuggestionsSchema,

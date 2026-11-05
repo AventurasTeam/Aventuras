@@ -9,6 +9,7 @@ import {
   type GenerateStructuredResult,
   type ResolveModelConfig,
 } from '@/lib/ai'
+import { CHAPTER_CLOSE_KIND } from '@/lib/chapters'
 import {
   buildClassifierActions,
   buildClassifierWindow,
@@ -522,7 +523,12 @@ export function ensurePeriodicClassifierPipelineRegistered(): void {
       gateBehavior: 'hard-gate',
       interruptible: 'pass',
       concurrencyPolicy: {
-        blockedBy: [PER_TURN_KIND, PERIODIC_CLASSIFIER_KIND, 'chapter-close', 'translation-retry'],
+        blockedBy: [
+          PER_TURN_KIND,
+          PERIODIC_CLASSIFIER_KIND,
+          CHAPTER_CLOSE_KIND,
+          'translation-retry',
+        ],
       },
     })
   }

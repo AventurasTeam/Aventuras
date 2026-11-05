@@ -1,6 +1,7 @@
 import { useCallback } from 'react'
 
 import type { GenerationPhase } from '@/components/compounds/generation-status-pill'
+import { CHAPTER_CLOSE_KIND } from '@/lib/chapters'
 import { PERIODIC_CLASSIFIER_KIND } from '@/lib/classifier'
 import { t } from '@/lib/i18n'
 import { PER_TURN_KIND, SUGGESTION_REFRESH_KIND } from '@/lib/pipeline'
@@ -80,7 +81,7 @@ export function generationGateReason(
 ): string | undefined {
   if (!editBlocked) return undefined
   if (runKind === PERIODIC_CLASSIFIER_KIND) return t('generationGate.updatingMemory')
-  if (runKind === 'chapter-close') return t('generationGate.chapterClose')
+  if (runKind === CHAPTER_CLOSE_KIND) return t('generationGate.chapterClose')
   if (runKind === SUGGESTION_REFRESH_KIND) return t('generationGate.suggestionRefresh')
   return t('generationGate.inFlight')
 }
@@ -125,7 +126,7 @@ export function useStoryGenerationGate(
 
 export function storySettingsGenerationPhase(kind: string): StorySettingsGenerationPhase {
   if (kind === PERIODIC_CLASSIFIER_KIND) return 'updating-memory'
-  if (kind === 'chapter-close') return 'closing-chapter'
+  if (kind === CHAPTER_CLOSE_KIND) return 'closing-chapter'
   if (kind === SUGGESTION_REFRESH_KIND) return 'refreshing-suggestions'
   return 'generating-narrative'
 }

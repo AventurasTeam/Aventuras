@@ -1,4 +1,5 @@
 import type { GenerationPhase } from '@/components/compounds/generation-status-pill'
+import { CHAPTER_CLOSE_KIND } from '@/lib/chapters'
 import { PERIODIC_CLASSIFIER_KIND } from '@/lib/classifier'
 import type { PerTurnPhaseName } from '@/lib/pipeline'
 
@@ -14,7 +15,7 @@ const PILL_PHASE_BY_TURN_PHASE: Record<string, GenerationPhase | undefined> = {
 // Kind wins over phase: the map above covers only per-turn, so another pipeline
 // would borrow its labels and disagree with Story Settings (generation-run.ts).
 const PILL_PHASE_BY_RUN_KIND: Record<string, GenerationPhase | undefined> = {
-  'chapter-close': 'closing-chapter',
+  [CHAPTER_CLOSE_KIND]: 'closing-chapter',
   // Not 'classifying': that phase is the per-turn piggyback fallback, the turn's own work.
   [PERIODIC_CLASSIFIER_KIND]: 'updating-memory',
 }
