@@ -1,7 +1,7 @@
 import type { Meta, StoryObj } from '@storybook/react-native-web-vite'
 import { Star } from 'lucide-react-native'
 import { View } from 'react-native'
-import { expect, fn, screen, userEvent, waitFor } from 'storybook/test'
+import { expect, fireEvent, fn, screen, userEvent, waitFor } from 'storybook/test'
 
 import { EntityKindIcon } from '@/components/entity/entity-kind-icon'
 import { expectInsetFocusRing } from '@/components/ui/focus-ring-probe'
@@ -104,6 +104,31 @@ export const WithDescription: Story = {
       onPress={fn()}
     />
   ),
+  play: async () => {
+    expect(
+      screen.getByRole('button', { name: "The Empress's missing courier" }),
+    ).toHaveAccessibleDescription(
+      'Long-running thread spanning chapters 3–7. The courier carried a sealed message that has not been delivered.',
+    )
+  },
+}
+
+/** No press: the row isn't a control, so it isn't named, focusable or announced as disabled. */
+export const DisplayOnlyIsNotAControl: Story = {
+  render: () => (
+    <ListRow
+      label="Aiko"
+      description="Archivist of the eastern wing"
+      leading={<EntityKindIcon kind="character" />}
+    />
+  ),
+  play: async ({ canvasElement }) => {
+    expect(screen.queryByRole('button')).toBeNull()
+    expect(canvasElement.querySelector('[aria-disabled]')).toBeNull()
+    expect(canvasElement.querySelector('[aria-label="Aiko"]')).toBeNull()
+    expect(canvasElement.querySelector('[tabindex]')).toBeNull()
+    expect(screen.getByText('Archivist of the eastern wing')).toBeVisible()
+  },
 }
 
 /**
@@ -342,9 +367,26 @@ export const DisabledDoesNotFire: Story = {
     />
   ),
   play: async ({ args }) => {
-    // Disabled rows don't carry the button role at all — no element
-    // to dispatch onPress against.
-    expect(screen.queryByRole('button', { name: 'Aiko' })).not.toBeInTheDocument()
+    const row = screen.getByRole('button', { name: 'Aiko' })
+    expect(row).toHaveAttribute('aria-disabled', 'true')
+    fireEvent.click(row)
     expect(args.onPress).not.toHaveBeenCalled()
+  },
+}
+
+export const DisabledNamesItsReason: Story = {
+  render: () => (
+    <ListRow
+      label="Aiko"
+      description="Archivist of the eastern wing"
+      disabled
+      disabledReason="Retired characters can't be edited"
+      onPress={fn()}
+    />
+  ),
+  play: async () => {
+    const row = screen.getByRole('button', { name: "Aiko, Retired characters can't be edited" })
+    expect(row).toHaveAttribute('aria-disabled', 'true')
+    expect(row).toHaveAccessibleDescription('Archivist of the eastern wing')
   },
 }

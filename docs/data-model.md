@@ -2399,14 +2399,13 @@ manipulation with no cascade — one user edit writes one delta; the
 flags entries whose `worldTime` is less than the most recent
 preceding main-timeline entry.
 
-**Editing a flashback entry's `worldTime`** (away from `0`)
-effectively promotes it out of flashback framing under the current
-convention — the entry becomes indistinguishable from a regular
-main-timeline entry at the chosen time. The future `sceneTime` exit
-(see below), when it lands, restores the distinction by separating
-"scene-depicted time" from "main-timeline elapsed." Until then,
-treat manual `worldTime` edits on flashback entries as deliberate
-promotion.
+**A flashback has no marker of its own.** Its delta of `0` keeps the
+running clock, so it reads as a main-timeline entry at that time, and
+a `worldTime` of `0` means only the story's origin: an entry edited
+back to `0` mid-story is flagged like any other backwards jump. The
+future `sceneTime` exit (see below), when it lands, gives a flashback
+its own time by separating "scene-depicted time" from "main-timeline
+elapsed."
 
 **Downstream consumers tolerate any non-negative `worldTime`.**
 Happenings derivation, threads, retrieval recency, character ageing,

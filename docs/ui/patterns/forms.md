@@ -470,8 +470,11 @@ Implementation shape:
 - **NativeWind 4 variant bridges.** `placeholder:` resolves to
   `placeholderTextColor` on RN; `aria-invalid:` honors the ARIA
   attribute on both platforms.
-- **Selection color** uses `--accent` / `--accent-fg` (web only —
-  RN doesn't surface text-selection colors).
+- **Selection color** is the app's `--selection-bg` under
+  `--fg-primary`
+  ([`color.md → Final slot inventory`](../foundations/color.md#final-slot-inventory)),
+  set once for every surface rather than per input (web only — RN
+  doesn't surface text-selection colors).
 
 ---
 

@@ -841,9 +841,12 @@ same string as a tooltip without opening the overlay.
 present, a small warning glyph (`text-warning` color) renders
 inline preceding the footer label. The host computes the prop by
 walking entries once per list render, comparing each entry's
-`worldTime` against the most recent preceding entry with
-`worldTime > 0` (flashbacks with `worldTime = 0` are skipped — they
-use the existing non-main-timeline convention). The indicator
+`worldTime` against the most recent preceding entry with one. A
+`worldTime` of `0` is the story's origin and compares like any other,
+so an entry set back to it mid-story is flagged; a flashback keeps the
+running clock
+([`data-model.md → In-world time tracking`](../../data-model.md#in-world-time-tracking)),
+so it isn't. The indicator
 persists as state, not event — present whenever the violation
 holds, cleared on next render when the user fixes it.
 

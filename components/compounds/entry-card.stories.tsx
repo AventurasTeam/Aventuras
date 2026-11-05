@@ -4,6 +4,7 @@ import { View } from 'react-native'
 import { expect, fn, screen, userEvent, waitFor, within } from 'storybook/test'
 
 import { cutOffNoticeText } from '@/components/reader/cut-off-copy'
+import { expectThemeSelection } from '@/components/ui/selection-probe'
 import { Text } from '@/components/ui/text'
 import { EARTH_GREGORIAN } from '@/lib/calendar'
 import { t } from '@/lib/i18n'
@@ -90,6 +91,14 @@ export const AiKind: StoryT = {
     meta: aiMeta,
     reasoning:
       'The user is being aggressive but the figure is meant to read as a warden — let me lean on supernatural restraint rather than a fight scene. Use kinesthetic detail (sword going still) to telegraph "you cannot win this without thinking".',
+  },
+}
+
+export const ProseSelectsWithTheThemeTint: StoryT = {
+  ...wrap,
+  args: { ...baseProps, ...aiEntry },
+  play: async () => {
+    expectThemeSelection(await screen.findByText(aiEntry.content))
   },
 }
 

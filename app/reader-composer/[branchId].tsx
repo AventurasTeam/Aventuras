@@ -425,6 +425,7 @@ export default function ReaderComposerRoute() {
   const surfaceRef = useRef<ReaderSurfaceHandle>(null)
   const documentRef = useRef<ReaderDocumentRef>(null)
   const chapterChipsRef = useRef<ReaderChapterChipsHandle>(null)
+  const [chapterPopoverOpen, setChapterPopoverOpen] = useState(false)
   const [syncNonce, setSyncNonce] = useState(0)
   const [documentPainted, setDocumentPainted] = useState(false)
 
@@ -1216,8 +1217,8 @@ export default function ReaderComposerRoute() {
         }
         return
       }
-      // Both confirm arms open the cascade modal in M3; M5.2 swaps the
-      // chapter-close arm's copy without touching this path.
+      // Both confirm arms open the cascade modal; the chapter-close arm's own copy (M5.2)
+      // swaps in without touching this path.
       const target = entriesStore.getById(entryId)
       setRollback({
         mode: 'regenerate',
@@ -1585,10 +1586,12 @@ export default function ReaderComposerRoute() {
             progress={chapterProgress}
             isFocused={isFocused}
             onJumpToEntry={followEntry}
+            onOpenChange={setChapterPopoverOpen}
           />
         ) : undefined
       }
       chapterProgress={chapterProgress}
+      chapterProgressExpanded={chapterPopoverOpen}
       onChapterProgressPress={
         tier !== 'phone' && hydrationSucceeded ? openChapterPopover : undefined
       }

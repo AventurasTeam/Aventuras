@@ -64,13 +64,19 @@ describe('decorateWorldTime', () => {
     expect(out[rows[1].id]?.previousLabel).toBe(out[rows[0].id]?.label)
   })
 
-  it('skips worldTime=0 flashbacks as subjects and as ancestors', () => {
+  it('flags an entry set back to 0 and compares the next one against it', () => {
     const rows = [entry('ai_reply', 120), entry('ai_reply', 0), entry('ai_reply', 60)]
     const out = decorateWorldTime(rows, FRAME)
-    expect(out[rows[1].id]?.previousLabel).toBeUndefined()
-    // compares against 120 (the zero is skipped), so 60 IS flagged
     expect(out[rows[0].id]?.label).toBeTruthy()
-    expect(out[rows[2].id]?.previousLabel).toBe(out[rows[0].id]?.label)
+    expect(out[rows[1].id]?.previousLabel).toBe(out[rows[0].id]?.label)
+    expect(out[rows[2].id]?.previousLabel).toBeUndefined()
+  })
+
+  it('does not flag a 0 that repeats an earlier 0, as a story still at its origin', () => {
+    const rows = [entry('opening', 0), entry('user_action', 0)]
+    const out = decorateWorldTime(rows, FRAME)
+    expect(out[rows[1].id]?.raw).toBe(0)
+    expect(out[rows[1].id]?.previousLabel).toBeUndefined()
   })
 
   it('never flags the head of the window', () => {
@@ -80,8 +86,6 @@ describe('decorateWorldTime', () => {
   })
 
   it('system entries are undecorated and do not participate as ancestors', () => {
-    // worldTime > 0 (not the flashback 0 already covered above) so this
-    // isolates the kind gate from the worldTime>0 ancestry guard.
     const rows = [entry('ai_reply', 120), entry('system', 60), entry('ai_reply', 90)]
     const out = decorateWorldTime(rows, FRAME)
     expect(out[rows[1].id]).toBeUndefined()

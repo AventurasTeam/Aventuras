@@ -800,6 +800,60 @@ export const EntryLandedOnLanding: Story = {
   },
 }
 
+// Inside the first landing's 1.5 s fade, so its tint is still running at the second jump.
+const REPEAT_JUMP_AFTER_MS = 800
+
+function landedFade(): Animation | undefined {
+  const card = entryRow('o1').querySelector('.reader-entry-card')
+  return card
+    ?.getAnimations()
+    .find(
+      (animation) =>
+        animation instanceof CSSAnimation &&
+        animation.animationName.startsWith('reader-card-landed'),
+    )
+}
+
+/** A second jump to the row just landed replays its fade and restarts the timer that clears it. */
+export const RepeatJumpRestartsTheLandedTint: Story = {
+  args: { rows: OVERFLOW_ROWS },
+  render: (args) => <LandingSignalHarness {...args} />,
+  play: async () => {
+    await settleLanding(readerScroller())
+    const jump = screen.getByRole('button', { name: 'Jump to o1' })
+    jump.click()
+    await waitFor(() => expect(landedFade()).toBeDefined())
+    const firstLandedAt = performance.now()
+    await new Promise((resolve) => setTimeout(resolve, REPEAT_JUMP_AFTER_MS))
+    const before = Number(landedFade()?.currentTime)
+    jump.click()
+    await waitFor(() => expect(Number(landedFade()?.currentTime)).toBeLessThan(before))
+    // Past the first landing's clear, which the second landing's timer replaced.
+    const firstClearedAt = firstLandedAt + 1_700
+    await new Promise((resolve) => setTimeout(resolve, firstClearedAt - performance.now()))
+    expect(entryRow('o1')).toHaveAttribute('data-landed')
+    await waitFor(() => expect(entryRow('o1')).not.toHaveAttribute('data-landed'), {
+      timeout: 4_000,
+    })
+  },
+}
+
+/** A repeat jump between the fade running out and the timer clearing the row still replays it. */
+export const RepeatJumpReplaysAFinishedFade: Story = {
+  args: { rows: OVERFLOW_ROWS },
+  render: (args) => <LandingSignalHarness {...args} />,
+  play: async () => {
+    await settleLanding(readerScroller())
+    const jump = screen.getByRole('button', { name: 'Jump to o1' })
+    jump.click()
+    await waitFor(() => expect(landedFade()).toBeDefined())
+    landedFade()?.finish()
+    expect(entryRow('o1')).toHaveAttribute('data-landed')
+    jump.click()
+    await waitFor(() => expect(landedFade()?.playState).toBe('running'))
+  },
+}
+
 /** A row already in place lands without a write, and must still lift the veil. */
 export const EntryLandedWithoutAWrite: Story = {
   args: { rows: OVERFLOW_ROWS, onEntryLanded: fn(async () => {}) },

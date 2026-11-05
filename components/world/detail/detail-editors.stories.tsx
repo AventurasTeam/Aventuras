@@ -239,9 +239,10 @@ export const RelationshipAddNeedsAView: Story = {
 export const RelationshipsBlocked: Story = {
   args: { relationships: THREE_STATES, blocked: true },
   play: async () => {
-    // A disabled ListRow drops its button role (list-row.stories.tsx → DisabledDoesNotFire).
-    await expect(await screen.findByText('Add relationship', {}, WAIT)).toBeVisible()
-    await expect(screen.queryByRole('button', { name: 'Add relationship' })).not.toBeInTheDocument()
+    // A disabled ListRow stays a button and names its gate reason.
+    await expect(
+      await screen.findByRole('button', { name: `Add relationship, ${BLOCKED_REASON}` }, WAIT),
+    ).toHaveAttribute('aria-disabled', 'true')
     await userEvent.click(screen.getByRole('button', { name: /^Mira/ }))
     const card = within(screen.getByTestId('relationship-0'))
     await expect(await card.findByRole('textbox', { name: 'Your view' }, WAIT)).toHaveAttribute(

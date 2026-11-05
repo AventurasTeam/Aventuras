@@ -58,10 +58,19 @@ describe('readChapterTimeRanges', () => {
     )
   })
 
-  it('leaves out a row at 0 and a row with no world time', async () => {
-    const db = await seed([row('ch_1', 0), row('ch_1', 120), row('ch_1', null), row('ch_1', 300)])
+  it('starts a range at the opening, at 0, and leaves out a row with no world time', async () => {
+    const db = await seed([
+      row('ch_1', 0, { kind: 'opening' }),
+      row('ch_1', 120),
+      row('ch_1', null),
+      row('ch_1', 300),
+      row(null, 0),
+    ])
 
-    expect((await readChapterTimeRanges('b1', db)).get('ch_1')).toEqual({ first: 120, last: 300 })
+    const ranges = await readChapterTimeRanges('b1', db)
+
+    expect(ranges.get('ch_1')).toEqual({ first: 0, last: 300 })
+    expect(ranges.get(null)).toEqual({ first: 0, last: 0 })
   })
 
   it('leaves out a system row, on a chapter and in the open region', async () => {
@@ -86,7 +95,7 @@ describe('readChapterTimeRanges', () => {
   })
 
   it('has no key for a chapter with no time, or an open region with none', async () => {
-    const db = await seed([row('ch_1', 0), row('ch_1', null), row('ch_2', 120), row(null, 0)])
+    const db = await seed([row('ch_1', null), row('ch_2', 120), row(null, null)])
 
     const ranges = await readChapterTimeRanges('b1', db)
 

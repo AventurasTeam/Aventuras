@@ -117,7 +117,7 @@ export const themes: readonly Theme[] = [
       '--border': '#d4c099',
       '--border-strong': '#b89876',
       '--focus-ring': '#8b3a14',
-      '--selection-bg': '#e8d8a8',
+      '--selection-bg': '#dccda0',
       '--recently-classified-bg': '#f0d68a',
       '--tint-hover': 'rgba(58, 40, 24, 0.12)',
       '--tint-press': 'rgba(58, 40, 24, 0.20)',

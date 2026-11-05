@@ -17,7 +17,7 @@ Agents in this repo have internalized "don't narrate what the code does."
 They have not internalized brevity. A measured range (5 commits, 155 files)
 carried 1733 added comment lines against 12830 added source lines — **13.5%** —
 concentrated in 540 blocks of three lines or more. Almost none of it narrated
-the *what*. It was legitimate *why*, inflated four-to-eleven lines wide.
+the _what_. It was legitimate _why_, inflated four-to-eleven lines wide.
 
 **So the primary verdict is COMPRESS, not DELETE.** A pass that only hunts for
 comments restating their own identifiers will find almost nothing here and
@@ -47,7 +47,7 @@ Not autonomously after every edit. This is a range-scoped sweep.
 
 The `pr-review-toolkit:comment-analyzer` agent available in this environment
 pulls the opposite direction — it carries an "Assess Completeness" pass that
-recommends *adding* context "for the least experienced future maintainer."
+recommends _adding_ context "for the least experienced future maintainer."
 Running it on this repo makes the problem worse. This skill supersedes it.
 
 ## Checklist
@@ -55,7 +55,7 @@ Running it on this repo makes the problem worse. This skill supersedes it.
 Track as tasks; complete in order:
 
 1. **Read the rule at runtime.** `.claude/rules/code.md → Commenting
-   discipline`. It is the spec; this skill is only the procedure. If the two
+discipline`. It is the spec; this skill is only the procedure. If the two
    disagree, the rule wins — and say so in the summary.
 2. **Enumerate.** `node .agents/skills/aventuras-comment-audit/find-comment-blocks.mjs <range>`.
    Prints totals and the batch plan as JSON.
@@ -82,6 +82,8 @@ Remove entirely. The classes `code.md` bans outright:
 - **Narrates the what.** The identifiers already say it.
 - **References the task, PR, slice, or a recent fix** — "added for the cast
   flow", "per review feedback", "fixes #123". Belongs in the commit message.
+  A forward pointer to an unshipped milestone and a contract id are not this
+  class; `code.md` keeps them.
 - **Compares to a prior approach** — "we used to…", "the previous approach
   didn't work", "no longer guarantees…". Git history owns this.
 - **Section headers** in a file that has no sections (`// ---- helpers ----`).

@@ -78,6 +78,9 @@ function isEditableTarget(target: Node): boolean {
   )
 }
 
+const isLandedFade = (animation: Animation): boolean =>
+  animation instanceof CSSAnimation && animation.animationName.startsWith('reader-card-landed')
+
 // A chapter jump opens under its heading: the break above a row lands in the row's place.
 function landingElement(rowEl: HTMLElement): HTMLElement {
   const previous = rowEl.previousElementSibling
@@ -521,7 +524,9 @@ export function ReaderSurface({
   }, [hasOlder])
 
   const landingRafRef = useRef(0)
-  const [landedId, setLandedId] = useState<string | null>(null)
+  // A fresh object per landing, so a repeat landing on the same row restarts the clear timer.
+  const [landed, setLanded] = useState<{ entryId: string } | null>(null)
+  const landedId = landed?.entryId ?? null
   const stopLanding = useCallback(() => {
     landingRef.current = null
     reportLanded()
@@ -585,7 +590,10 @@ export function ReaderSurface({
         // The fade's clock starts here, so a delayed landing can't spend it on a row off screen.
         if (!highlighted) {
           highlighted = true
-          setLandedId(landing.entryId)
+          setLanded({ entryId: landing.entryId })
+          // A row still tinted keeps its attribute, so CSS alone wouldn't replay its fade.
+          for (const animation of rowEl.querySelector('.reader-entry-card')?.getAnimations() ?? [])
+            if (isLandedFade(animation)) animation.currentTime = 0
           // Once painted; a newer jump in between has already reported this one as dropped.
           requestAnimationFrame(() =>
             requestAnimationFrame(() => {
@@ -635,7 +643,7 @@ export function ReaderSurface({
   )
   useLayoutEffect(() => {
     stopLanding()
-    setLandedId(null)
+    setLanded(null)
   }, [branchKey, stopLanding])
   // After the anchor rule's effect, on its keys: landing cancels any hold that effect just started.
   // One rule per frame; a landing is measured from the row, so it needs no compensation of its own.
@@ -645,10 +653,10 @@ export function ReaderSurface({
     startLanding()
   }, [rows, hasOlder, startLanding])
   useEffect(() => {
-    if (landedId == null) return
-    const timer = setTimeout(() => setLandedId(null), LANDED_HIGHLIGHT_MS)
+    if (landed == null) return
+    const timer = setTimeout(() => setLanded(null), LANDED_HIGHLIGHT_MS)
     return () => clearTimeout(timer)
-  }, [landedId])
+  }, [landed])
 
   const handleScroll = useCallback(
     (event: UIEvent<HTMLDivElement>) => {

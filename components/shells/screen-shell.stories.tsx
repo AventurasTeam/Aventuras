@@ -413,6 +413,15 @@ export const ChapterProgressTooltip: Story = {
   },
 }
 
+/** The strip is a second trigger for the chapter popover, so it reports the popover open too. */
+export const ChapterProgressExpanded: Story = {
+  render: () => stripShell({ onChapterProgressPress: noop, chapterProgressExpanded: true }),
+  play: async () => {
+    const hit = await screen.findByRole('button', { name: t('chapters:popover.title') })
+    expect(hit).toHaveAttribute('aria-expanded', 'true')
+  },
+}
+
 export const ChapterProgressNoThreshold: Story = {
   render: () => stripShell({ chapterProgress: { ...progressAt(0), threshold: 0 } }),
   play: async () => {
@@ -428,6 +437,7 @@ export const ChapterProgressPress: Story = {
     // Named for what it opens, as the chapter chip is, not after the bar it sits on.
     const hit = await screen.findByRole('button', { name: t('chapters:popover.title') })
     expect(hit).toHaveAttribute('aria-haspopup', 'dialog')
+    expect(hit).toHaveAttribute('aria-expanded', 'false')
     const strip = screen.getByRole('progressbar', { name: t('chrome.chapterProgress') })
     // A progressbar's children are presentational, and a touch can't land outside a 3 px parent.
     expect(strip.contains(hit)).toBe(false)

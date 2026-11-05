@@ -1,5 +1,7 @@
+import { useId } from 'react'
 import { Platform, Pressable, View } from 'react-native'
 
+import { describedBy } from '@/components/ui/accessible-description'
 import { Text } from '@/components/ui/text'
 import { t } from '@/lib/i18n'
 import { cn } from '@/lib/utils'
@@ -56,6 +58,7 @@ const OP_STYLES: Record<DeltaOp, { container: string; label: string }> = {
 
 export function DeltaLogRow({ delta, onPress, className }: DeltaLogRowProps) {
   const interactive = onPress != null
+  const id = useId()
   const op = OP_STYLES[delta.op]
   const opLabel = t(`history:op.${delta.op}`)
   // Rows of one target read alike, so a pressable row's name carries its entry.
@@ -73,26 +76,13 @@ export function DeltaLogRow({ delta, onPress, className }: DeltaLogRowProps) {
     delta.entryId != null ? delta.entryId : null,
     delta.createdAtRelative,
   ].filter((part): part is string => part != null)
+  const meta = metaParts.join(' · ')
+  const fieldId = `${id}-field`
+  const summaryId = `${id}-summary`
+  const metaId = `${id}-meta`
 
-  return (
-    <Pressable
-      onPress={interactive ? onPress : undefined}
-      disabled={!interactive}
-      accessibilityRole={interactive ? 'button' : undefined}
-      testID="delta-log-row"
-      aria-label={rowLabel}
-      className={cn(
-        'flex-row items-start gap-2.5 px-row-x-md py-row-y-md',
-        interactive && 'active:bg-tint-press',
-        // Inset: an outside ring clips in the scroller a row sits in.
-        Platform.select({
-          web: interactive
-            ? 'cursor-pointer outline-none hover:bg-tint-hover focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-focus-ring'
-            : '',
-        }),
-        className,
-      )}
-    >
+  const content = (
+    <>
       <View className={cn('mt-0.5 shrink-0 rounded-full px-2 py-0.5', op.container)}>
         <Text className={cn('text-xs font-medium', op.label)}>{opLabel}</Text>
       </View>
@@ -107,21 +97,61 @@ export function DeltaLogRow({ delta, onPress, className }: DeltaLogRowProps) {
               <Text variant="muted" size="sm">
                 ·
               </Text>
-              <Text variant="muted" size="sm" numberOfLines={1} className="shrink">
+              <Text
+                nativeID={fieldId}
+                variant="muted"
+                size="sm"
+                numberOfLines={1}
+                className="shrink"
+              >
                 {delta.fieldPath}
               </Text>
             </>
           ) : null}
         </View>
 
-        <Text size="sm" numberOfLines={2}>
+        <Text nativeID={summaryId} size="sm" numberOfLines={2}>
           {delta.summary}
         </Text>
 
-        <Text variant="muted" size="xs" numberOfLines={1}>
-          {metaParts.join(' · ')}
+        <Text nativeID={metaId} variant="muted" size="xs" numberOfLines={1}>
+          {meta}
         </Text>
       </View>
+    </>
+  )
+
+  const rowClassName = 'flex-row items-start gap-2.5 px-row-x-md py-row-y-md'
+  // Not a control, so nothing to name or disable: its text reads as it shows.
+  if (!interactive) {
+    return (
+      <View testID="delta-log-row" className={cn(rowClassName, className)}>
+        {content}
+      </View>
+    )
+  }
+  return (
+    <Pressable
+      onPress={onPress}
+      accessibilityRole="button"
+      testID="delta-log-row"
+      aria-label={rowLabel}
+      // A button's name stands for its content, so the change itself rides as its description.
+      {...describedBy(
+        delta.fieldPath != null ? [fieldId, summaryId, metaId] : [summaryId, metaId],
+        [delta.fieldPath, delta.summary, meta].filter((part) => part != null).join(', '),
+      )}
+      className={cn(
+        rowClassName,
+        'active:bg-tint-press',
+        // Inset: an outside ring clips in the scroller a row sits in.
+        Platform.select({
+          web: 'cursor-pointer outline-none hover:bg-tint-hover focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-focus-ring',
+        }),
+        className,
+      )}
+    >
+      {content}
     </Pressable>
   )
 }

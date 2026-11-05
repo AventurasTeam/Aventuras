@@ -182,12 +182,15 @@ passes none and stays non-interactive. The Diagnostics delta log's
 link is an
 [M7 carried deferral](../../implementation/roadmap.md#m7--app-settings--diagnostics--onboarding).
 
-The row's accessible name is `<op> <target>` (`update Kael`). A
-pressable row whose `entryId` is non-null adds the entry label after
-a comma (`update Kael, entry #47`), because rows of one target read
-alike while a press opens different entries. That holds for any
-host's pressable row, whatever its press opens. A non-interactive row
-keeps `<op> <target>`, as does a pressable row with no `entryId`.
+A pressable row is a button named `<op> <target>` (`update Kael`). A
+row whose `entryId` is non-null adds the entry label after a comma
+(`update Kael, entry #47`), because rows of one target read alike
+while a press opens different entries. That holds for any host's
+pressable row, whatever its press opens. A button's name stands for
+its content, so the field path, summary and meta line are its
+description, read after the name. A non-interactive row isn't a
+control: it has no name and isn't announced as disabled, and its text
+reads as it shows.
 
 ## Storybook (DeltaLogRow)
 

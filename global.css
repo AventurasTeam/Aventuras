@@ -231,7 +231,7 @@
     --border: #d4c099;
     --border-strong: #b89876;
     --focus-ring: #8b3a14;
-    --selection-bg: #e8d8a8;
+    --selection-bg: #dccda0;
     --recently-classified-bg: #f0d68a;
     --font-reading:
       'Charter', 'Iowan Old Style', 'Source Serif Pro', Georgia, 'Cambria', 'Liberation Serif',
@@ -567,6 +567,14 @@
   }
 }
 
+/* --fg-primary over --selection-bg is the pair color.md's AA gate checks. */
+@layer base {
+  ::selection {
+    background-color: var(--selection-bg);
+    color: var(--fg-primary);
+  }
+}
+
 @layer utilities {
   /* Tailwind v4 ships `field-sizing-content`; we're on v3.4 where
    * it doesn't exist. Define it explicitly so Textarea's web
@@ -686,14 +694,16 @@
 }
 
 /* No `to` frame: each card kind fades back to its own background. The duration is
- * --reader-landed-ms, set inline by the surface from the constant that clears the attribute. */
+ * --reader-landed-ms, set inline by the surface from the constant that clears the attribute.
+ * Forwards holds that background, keeping a run-out fade findable for a repeat landing to rewind
+ * until the attribute clears. */
 @keyframes reader-card-landed {
   from {
     background-color: var(--selection-bg);
   }
 }
 [data-landed] > .reader-entry-card {
-  animation: reader-card-landed var(--reader-landed-ms) ease-out;
+  animation: reader-card-landed var(--reader-landed-ms) ease-out forwards;
 }
 
 /* A layer over whichever kind's own background, at the theme's --landed-tint-share, since full

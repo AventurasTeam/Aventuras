@@ -217,9 +217,8 @@ async function* suggestionEmissionPhase(
   return { status: 'completed' }
 }
 
-// Declared no-op in M3, mirroring per-turn's user-action translation slot: no
-// translation settings UI ships before M7.2, so chip text stays source-language
-// until the M8.1 real call drops in here.
+// A no-op, mirroring per-turn's user-action translation slot: with no translation settings
+// UI yet (M7.2), chip text stays source-language until the real call (M8.1) drops in here.
 async function* suggestionTranslationPhase(
   ctx: PhaseContext,
 ): AsyncGenerator<PhaseEmittedEvent, PhaseResult> {

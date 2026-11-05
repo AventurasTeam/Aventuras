@@ -99,6 +99,24 @@ describe('theme registry', () => {
     }
   })
 
+  // A light theme paints its tint at full strength, so its --selection-bg alone must reach the floor.
+  it("every light theme's tint reaches default-light's floor on both card kinds", () => {
+    const light = themes.find((t) => t.id === 'default-light')
+    if (light === undefined) throw new Error('default-light is not in the registry')
+    const tint = (theme: (typeof themes)[number], card: '--bg-raised' | '--bg-sunken') =>
+      oklabDistance(
+        oklab(channels(theme.colors['--selection-bg'])),
+        oklab(channels(theme.colors[card])),
+      )
+    const floor = tint(light, '--bg-sunken')
+    for (const theme of themes) {
+      if (theme.mode !== 'light') continue
+      for (const card of ['--bg-raised', '--bg-sunken'] as const) {
+        expect(tint(theme, card), `${theme.id} on ${card}`).toBeGreaterThanOrEqual(floor)
+      }
+    }
+  })
+
   it('a semantic text slot differs from its fill only where the fill fails as text', () => {
     const moved = themes.flatMap((theme) =>
       (['success', 'warning', 'danger', 'info'] as const)

@@ -32,7 +32,21 @@ export function useReaderEntryJump(
     },
     [send],
   )
-  const { jump: jumpEntry, veil, landed, lost } = useEntryJump(branchId, ctx, land, topLoaded)
+  const {
+    jump: jumpEntry,
+    veil,
+    landed: landedEntry,
+    lost,
+  } = useEntryJump(branchId, ctx, land, topLoaded)
+  // Only a landing already sent can land: a late signal from an earlier landing of the same row
+  // would otherwise lift a newer jump's veil while its read is still out.
+  const landed = useCallback(
+    (entryId: string) => {
+      const landing = landingRef.current
+      if (landing?.sent && landing.entryId === entryId) landedEntry(entryId)
+    },
+    [landedEntry],
+  )
   // A newer jump replaces the landing held or sent before it, even while the veil stays up: a stale
   // sent id lost to a reload could otherwise match the newer target and lift its veil mid-read.
   const jump = useCallback(

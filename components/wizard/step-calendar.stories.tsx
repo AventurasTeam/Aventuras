@@ -7,7 +7,7 @@ import { appSettingsStore, wizardStore } from '@/lib/stores'
 
 import { StepCalendar } from './step-calendar'
 
-// Test-only registry so the swap stories can pick a second calendar — the M2
+// Test-only registry so the swap stories can pick a second calendar — the
 // built-in registry ships only earth-gregorian, so a real swap through the
 // picker is otherwise unreachable. StepCalendar's `calendars` prop injects
 // these into the REAL component (not a wiring copy), so handleSelect +
@@ -118,7 +118,7 @@ export const EarthGregorianSelected: Story = {
     expect(screen.getByText('Earth (Gregorian)')).toBeInTheDocument()
 
     // Summary panel — tier rows + subdivisions/eras, derived from the real
-    // EARTH_GREGORIAN definition (no subdivisions, no eras in M2). Each row's
+    // EARTH_GREGORIAN definition (no subdivisions, no eras). Each row's
     // text node is prefixed with "· " by the CalendarPicker compound itself.
     await waitFor(() => expect(screen.getByText(/constant: 12 months/)).toBeInTheDocument())
     expect(screen.getByText(/table: 28–31 days/)).toBeInTheDocument()
@@ -138,7 +138,7 @@ export const EarthGregorianSelected: Story = {
     // No calendar has been swapped yet — no reset notice.
     expect(screen.queryByText('Origin reset for the new calendar.')).not.toBeInTheDocument()
 
-    // Earth's eras are null in M2 — the (dormant) era branch stays absent.
+    // Earth's eras are null, so the dormant era branch stays absent.
     expect(screen.queryByText('Era selection lands in a later milestone.')).not.toBeInTheDocument()
   },
 }

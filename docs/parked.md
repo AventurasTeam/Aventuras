@@ -892,20 +892,6 @@ appears (e.g. asset sha256 content-addressing): point the shim at
 `expo-crypto`'s `randomUUID` — one file, one native dep, a
 dev-client rebuild.
 
-#### worldTime === 0 is overloaded
-
-**`worldTime === 0` is overloaded: story origin and flashback
-sentinel.** The opening entry and every user action that inherits
-from it sit at 0, `lib/calendar/render.ts` special-cases 0, and the
-classifier emits 0 for flashbacks. The monotonicity check therefore
-cannot see a genuine backwards jump that lands exactly on 0 — it is
-indistinguishable from a flashback and stays unflagged.
-`docs/ui/patterns/entry-card.md` prescribes this convention, so
-Slice 3.8 implements it as specified; the note exists so the next
-person to ask "why is this regression not warned about?" finds the
-answer. Revisit if flashbacks ever get their own marker.
-Raised 2026-08-15 by the Slice 3.8 Task 2 review.
-
 #### A delta whose target table left the registry cannot be reversed
 
 `reverseReplayDeltas` resolves `deltas.target_table` through the
@@ -3262,6 +3248,31 @@ tap; `null` or `''` fall back to a template that reads "Tap to none
 the Bottom Sheet" there, so only a non-empty string replaces it. That matters once the scrim joins the
 accessibility tree as part of the dialog fix.
 
+#### The native chapter list's pin doesn't follow a TalkBack scroll
+
+In `components/reader/chapter-popover.tsx`, native unpins the list
+only in `onScrollBeginDrag`. An accessibility scroll (TalkBack's
+scroll actions start no drag) leaves the list pinned, so a later
+`onContentSizeChange` or `onLayout` pulls it back to the last row: a
+chapter closing while the list is open, range labels arriving after a
+refetch, or a Sheet height drag. Raised 2026-11-03 by PR #698's
+review.
+
+Web's upward-offset rule may carry over to both native arms. The phone
+Sheet holds a pinned list at its end until gorhom unlocks it, so the
+list no longer snaps to the top before the unlock, and the tablet
+Popover scrolls in gesture-handler's `ScrollView` with no Sheet lock.
+Not tried. A fix must show on a device that a TalkBack scroll unpins
+the list, that the phone Sheet still rises on its last rows, and that
+a later content-size or layout change doesn't pull a TalkBack-scrolled
+list back. Read from the code, not reproduced.
+
+Parked 2026-11-05 as degraded rather than broken: the list stays
+scrollable, and only a content or layout change while it is open pulls
+it back. Revisit with
+[Android bottom sheets are not dialogs for TalkBack](#android-bottom-sheets-are-not-dialogs-for-talkback),
+on a deliberate a11y pass, or on any report from real TalkBack use.
+
 #### Unset affordance for optional story-settings keys
 
 **Story settings has no unset affordance for optional keys.**
@@ -3662,6 +3673,15 @@ over the joined text, the fallback reading which reply, and its own
 regenerate and undo rules. Parked 2026-10-26 by the cut-off replies
 design; the signal is users regenerating cut-off replies to finish them,
 or asking to continue one.
+
+#### Space on an entry's media controls
+
+Slice 5.3's slice review, 2026-11-03, left Space on a `<button>` or
+`<summary>` in entry HTML to the control; `<video controls>` and
+`<audio controls>`, which the entry sanitizer allows, may take Space
+too and weren't probed. Revisit when an entry with media controls is
+reported, or when the sanitizer's allowlist changes. Routed from
+triage 2026-11-05.
 
 ### Code structure (parked)
 

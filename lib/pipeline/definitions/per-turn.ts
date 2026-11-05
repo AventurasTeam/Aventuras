@@ -550,7 +550,7 @@ async function* userActionTranslationPhase(
   const open = currentStoryStore.getCurrentStory()
   const target = open?.settings.translation.targetLanguage ?? null
   if (target !== null && target !== 'en') {
-    // Unreachable in M2 (no UI sets a non-en target); guard so M8.1 sees the seam.
+    // Unreachable until a UI sets a non-en target (M7.2); logged so M8.1's call finds the seam.
     ctx.log.debug('translation.short_circuit_bypassed', { target })
   }
   return { status: 'completed' }

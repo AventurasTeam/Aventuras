@@ -158,8 +158,8 @@ inside the template.
   chapter's `end_entry_id` worldTime).
 - **Chapter popover rows** — each row shows a time range. Range
   endpoints are computed as `min(worldTime)` and `max(worldTime)`
-  across the chapter's entries (excluding flashbacks with
-  `worldTime = 0`), then formatted via the same formatter. The
+  across the chapter's entries that carry one, the opening's `0`
+  included, then formatted via the same formatter. The
   min/max computation keeps the range coherent even when manual
   `worldTime` edits put entries out of narrative order.
 
@@ -492,8 +492,8 @@ manual edits; no cascade is triggered.
 
 The host (`reader-composer`) is responsible for computing the
 monotonicity-break flag per entry (walk-back over the entries
-collection, compare against the most recent preceding entry with
-`worldTime > 0`) and passing `worldTimeMonotonicityBreak` to
+collection, compare against the most recent preceding entry with a
+`worldTime`) and passing `worldTimeMonotonicityBreak` to
 EntryCard. The walk is O(N) per list render, cached against the
 entries collection identity.
 
@@ -1161,7 +1161,9 @@ scrollbar (macOS's default), which takes none, isn't one
 
 **Re-engage (auto).** User scrolls back to within ~80px of bottom
 while still in the same stream → autoscroll re-engages. Viewport
-pins back to streaming entry's bottom.
+pins back to streaming entry's bottom once the scroll rests: a
+reader still under a finger, a fling or a scrollbar drag isn't
+written to.
 
 **Stream end.** Engaged / disengaged state resets. Next stream
 re-evaluates the engage condition fresh. An engaged end holds the
@@ -1185,8 +1187,13 @@ control back. A disengaged end moves nothing.
 **Viewport shrink at the bottom.** When the reader's viewport loses
 height while the user sits within ~20px of the bottom (the
 [jump button's](#jump-buttons) near-bottom tolerance), the viewport
-re-pins to the bottom, with or without a stream, unless a finger is
-down. The motivating trigger is the
+re-pins to the bottom, with or without a stream. Like every write the
+user didn't ask for, it
+[waits for scroll rest](../../patterns/reader-document.md#entry-list-fully-rendered-flow-layout):
+under a finger, a fling's momentum or a scrollbar drag, it reads the
+distance again once the scroll rests, so a reader the gesture carried
+away keeps their place. It skips a reader with a jump pending or
+landing. The motivating trigger is the
 [memory banner](../../principles.md#affordance-loci) mounting below
 the top bar as a pass starts, right after a reply commits. The
 stream-end settle above leaves the reader at the bottom, and holds
@@ -1209,8 +1216,9 @@ a reader sitting at the bottom, with no scroll event to raise the
 break that mounts while the reader sits within ~20px of the bottom
 re-pins it, as the viewport shrink above does; the distance is read
 against the previous commit's height, since the new commit already
-holds the break. It skips a reader under a finger, one with a jump
-pending or landing, and one that isn't laid out. Further up, the
+holds the break. It waits for scroll rest as the viewport shrink
+does, and skips a reader with a jump pending or landing, and one that
+isn't laid out. Further up, the
 break's height is uncompensated, as any change between the leading row
 and the viewport is
 ([`reader-document.md → Entry list`](../../patterns/reader-document.md#entry-list-fully-rendered-flow-layout)).

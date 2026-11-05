@@ -760,9 +760,10 @@ export const EveryControlBlocked: Story = {
     await expect(location).toBeDisabled()
     await expect(location.closest('[title]')).toHaveAttribute('title', BLOCKED_REASON)
     await expect(screen.getByRole('button', { name: 'Open The Drowned Market' })).toBeEnabled()
-    // A disabled ListRow drops its button role (list-row.stories.tsx → DisabledDoesNotFire).
-    await expect(screen.getByText('Add relationship')).toBeVisible()
-    await expect(screen.queryByRole('button', { name: 'Add relationship' })).not.toBeInTheDocument()
+    // A disabled ListRow stays a button and names its gate reason.
+    await expect(
+      screen.getByRole('button', { name: `Add relationship, ${BLOCKED_REASON}` }),
+    ).toHaveAttribute('aria-disabled', 'true')
     await expectGateReason(screen.getByText('Add relationship'))
     await userEvent.click(screen.getByRole('button', { name: 'More actions' }))
     await expect(

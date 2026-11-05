@@ -232,13 +232,13 @@ type BottomSheetContentProps = SheetContentShared & {
   anchor?: 'bottom'
   size?: SheetSize
   /**
-   * `false` holds the sheet open against drag-down, a scrim tap and Android back (which it then
-   * swallows), for a pending action or an unsaved edit.
+   * `false` holds the sheet open against drag-down, a scrim tap, Android back (which it then
+   * swallows) and Escape on web, for a pending action or an unsaved edit.
    */
   dismissable?: boolean
   /**
-   * Called when a held sheet refuses a scrim tap or Android back, to raise the editor's unsaved-
-   * changes guard. Drag-down has no refusal to report: the sheet snaps back.
+   * Called when a held sheet refuses a scrim tap, Android back or Escape, to raise the editor's
+   * unsaved-changes guard. Drag-down has no refusal to report: the sheet snaps back.
    */
   onDismissRefused?: () => void
   /**

@@ -160,6 +160,110 @@ No open items.
   injected after expo's props emission. Not run. Routed from triage
   2026-11-04.
 
+- **The jump landing loop wants a pure decision function.**
+  `startLanding` in `components/reader/reader-surface.tsx` now holds
+  about nine closure variables and four gates (layout, finger, wheel
+  chain, rest), the one-frame touch halt, the wheel hold and the settle
+  rule, tested only through rAF-timed plays. A per-frame decision
+  function in `lib/reader-scroll`, beside `createAutoscrollMachine`
+  (inputs: laid out, finger down, chain live, scroll position, row
+  offset, height; outputs: write, hide or restore overflow, highlight,
+  done), would make those rules unit-testable. A `useEntryLanding` hook
+  would only move the coupling. Do it before the next behaviour change
+  to the landing loop. Raised 2026-11-03 by 5.3's fling-halt review.
+  Routed from triage 2026-11-05. Three known gaps wait on it:
+  - **The wheel hold can start a frame late.** Whether the chain is
+    still arriving is judged by handling time (`performance.now()`
+    against the last wheel handled), so when the commit that brings a
+    pending target's row outlasts the 100 ms chain gap, the first
+    landing frame reads the chain as ended and writes no hold, and
+    momentum queued behind the commit scrolls the reader for a frame
+    before the landing corrects it. Trigger: on desktop, a popover jump
+    above the window during trackpad momentum, with a row commit over
+    100 ms. Extracting the loop alone won't fix it, since the caller
+    would still compute "chain live" the same way: judge it by the
+    wheel events' own times, as `handleWheel` already does for whether
+    a wheel continues the chain. That remedy is doubtful, reasoned and
+    not run: when the landing frame runs before the queued wheel
+    handlers, neither time exists yet. Done when
+    `JumpPendingHaltsWheelMomentumOnceItsRowArrives`
+    (`components/reader/reader-surface.stories.tsx`) expects zero
+    unheld frames again, with no allowance for `commitOutlastedChain`,
+    under a commit forced past 100 ms. A slow CI runner showed it;
+    raised 2026-11-03 by PR #698's review.
+  - **A landing never settles while a reply streams.** `settled` needs
+    the scroller's height unchanged, and every chunk changes it, so the
+    loop runs to its 600-frame cap (about 10 s at 60 Hz, 5 s at
+    120 Hz), moving a target near the tail up as the reply makes room
+    and keeping the break re-pin off meanwhile. Decide whether growth
+    below the target counts against settling. Raised 2026-11-03 by
+    5.3's slice review. On the Fold the target held still, against
+    that prediction: in 5.3's device session (release build, unfolded),
+    a near-tail jump pressed about 3 s into a 30 chars/s reply landed
+    with its target as high as the content allowed, about 250 px below
+    the top, and the reader's upper half didn't visibly move from the
+    landing at 5.6 s to 30 s while the reply grew below. The fixture
+    was modified to put a closed one-entry chapter on the tail. Why it
+    held isn't known. Checked against the code on 2026-11-05:
+    `settled` compares `scrollHeight`, which a chunk changes only when
+    it wraps a line or opens a block, so a 30 chars/s reply leaves ten
+    still frames between wraps and the loop settles there, which likely
+    explains the Fold. The cap is reached only when wraps come faster
+    than every ten frames. Not run.
+  - **Two rules fail no test when removed:** the 600-frame cap and the
+    height part of the settle rule. Pin both in unit tests once the
+    loop is a function. Raised 2026-11-03 by 5.3's slice review.
+
+- **A scrollbar drag isn't a gesture to the reader's pins.**
+  `gestureActiveRef` in `components/reader/reader-surface.tsx` tracks
+  touch only, and a scrollbar press interrupts only at pointerdown, so a
+  pin that starts during a thumb drag (stream end, viewport shrink, a
+  chapter break) can tug the view for about 10 frames. Raised 2026-11-02
+  by 5.3's task reviews. Nor is a touch fling's momentum:
+  `gestureActiveRef` turns false at `touchend`, so a close's break that
+  commits in the first frame or two of an upward fling from the bottom,
+  while the reader still reads within ~20 px of it, re-pins against the
+  fling, and the viewport-shrink re-pin, older than 5.3, has the same
+  guard. [`reader-document.md`](./ui/patterns/reader-document.md#entry-list-fully-rendered-flow-layout)
+  counts a touch fling as mid-gesture. Read from the code, not
+  reproduced; added 2026-11-03 by 5.3's slice review.
+  Two more gaps of the kind, read from the code and not run: a touch
+  drag that leaves the ~80 px band and comes back re-engages autoscroll
+  under the finger, and the next chunk writes `scrollTop` beneath it;
+  and `handleTouchEnd` clears `gestureActiveRef` on any lift, so a
+  second finger still down counts as none. Raised 2026-11-04 by the
+  triage pass. Decided 2026-11-05: every write the user didn't ask for
+  waits for scroll rest, as `reader-document.md` says, and
+  `reader-composer.md` now agrees. Build it on a rest signal apart from
+  `gestureActiveRef`, which the landing loop's write gate reads; a
+  scrollbar drag needs a probe of what ends it. Routed from triage
+  2026-11-05.
+
+- **A shrinking viewport can pull a landing to the bottom.** The
+  surface's `ResizeObserver` (`components/reader/reader-surface.tsx`)
+  writes `scrollTop` to the bottom when the viewport shrinks under a
+  reader near the bottom, with no landing guard, so an Android keyboard
+  opening during a landing that starts near the bottom pulls the reader
+  there. Predates Slice 5.3. Read from the code, not reproduced. Raised
+  2026-11-03 by 5.3's final review.
+  Checked against the code on 2026-11-05, not run: the landing loop
+  re-lands the row about two frames later, so the pull is a jolt, not a
+  lost landing. The guard is the chapter break's, built with the rest
+  rule above. Routed from triage 2026-11-05.
+
+- **The reader's bottom geometry is still read only at a few moments.**
+  `syncJumpButton` (`components/reader/reader-surface.tsx`) raises the
+  jump-to-bottom button as a stream grows below the reader and through
+  a landing, but other growth below still waits for a scroll event: the
+  commit that replaces a streaming card, a reply's late layout, a
+  classifier write that makes a row taller. Separately, the chapter
+  break's re-pin reads the reader's distance against the last commit's
+  height, and in one story setup late layout had shrunk the content
+  14 px since that commit (4 of 4 runs), so a reader 10 px from the
+  bottom read as 24 px and wasn't re-pinned; the cause isn't pinned
+  down. Both from 5.3's slice review, 2026-11-03, in stories, not on a
+  device. Routed from triage 2026-11-05.
+
 ## Tuning and play testing
 
 v1 work held for the end of the cycle, once every base system is

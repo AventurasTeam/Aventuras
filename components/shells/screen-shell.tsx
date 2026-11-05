@@ -57,6 +57,9 @@ type ScreenShellProps = {
    */
   onChapterProgressPress?: () => void
 
+  /** Whether the dialog `onChapterProgressPress` opens is open, for the hit area's aria-expanded. */
+  chapterProgressExpanded?: boolean
+
   /**
    * Banner stack above the bar (AI-not-configured, profile-errors).
    * Shell positions the slot; per-screen logic decides what's in it.
@@ -101,6 +104,7 @@ export function ScreenShell({
   statusSlot,
   chapterProgress,
   onChapterProgressPress,
+  chapterProgressExpanded = false,
   banners,
   hideSelfReferentialIcon = false,
   onBack,
@@ -172,7 +176,9 @@ export function ScreenShell({
   const canPressProgress = onChapterProgressPress != null
   // aria-haspopup is a web-only DOM attribute RN's prop types don't model.
   const progressPopupProps =
-    canPressProgress && Platform.OS === 'web' ? ({ 'aria-haspopup': 'dialog' } as object) : null
+    canPressProgress && Platform.OS === 'web'
+      ? ({ 'aria-haspopup': 'dialog', 'aria-expanded': chapterProgressExpanded } as object)
+      : null
   const progressCounts =
     chapterProgress != null && chapterProgress.threshold > 0
       ? chapterProgressCounts(chapterProgress)

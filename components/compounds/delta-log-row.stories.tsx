@@ -4,6 +4,7 @@ import { expect, fn, screen, userEvent, waitFor } from 'storybook/test'
 
 import { expectInsetFocusRing } from '@/components/ui/focus-ring-probe'
 import { Text } from '@/components/ui/text'
+import { t } from '@/lib/i18n'
 import { themes } from '@/lib/themes'
 
 import { DeltaLogRow, type Delta } from './delta-log-row'
@@ -160,11 +161,27 @@ export const PressableNameWithoutEntry: Story = {
   },
 }
 
-export const NonInteractiveNameIgnoresEntry: Story = {
-  args: { delta: baseDelta },
+export const PressableDescribesTheChange: Story = {
+  args: { delta: baseDelta, onPress: fn() },
   play: async () => {
+    const meta = [t('history:source.ai_classifier'), 'entry #47', '2h ago'].join(' · ')
+    expect(
+      screen.getByRole('button', { name: 'update Kael, entry #47' }),
+    ).toHaveAccessibleDescription(
+      `state.traits Added "former soldier"; was ["brave", "loyal"] ${meta}`,
+    )
+  },
+}
+
+export const NonInteractiveIsNotAControl: Story = {
+  args: { delta: baseDelta },
+  play: async ({ canvasElement }) => {
     expect(screen.queryByRole('button')).toBeNull()
-    expect(screen.getByTestId('delta-log-row')).toHaveAttribute('aria-label', 'update Kael')
+    const row = screen.getByTestId('delta-log-row')
+    expect(row).not.toHaveAttribute('aria-label')
+    expect(canvasElement.querySelector('[aria-disabled]')).toBeNull()
+    expect(row).not.toHaveAttribute('tabindex')
+    expect(row).toHaveTextContent('Added "former soldier"')
   },
 }
 

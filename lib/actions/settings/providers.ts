@@ -127,7 +127,7 @@ export async function setAssignments(
 // One-control "use this model for narrative and agent tasks": creates a fresh
 // narrative + agent profile, assigns ALL six agents to the agent profile, and
 // sets the default provider. Replaces any existing profiles/assignments (the
-// interim form owns exactly one provider in M2).
+// interim form owns exactly one provider until the settings screen (M7)).
 export async function quickWireModel(
   modelRef: { providerId: string; modelId: string },
   ctx: DbCtx,

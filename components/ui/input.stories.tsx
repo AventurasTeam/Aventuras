@@ -7,6 +7,7 @@ import { themes } from '@/lib/themes'
 
 import { Icon } from './icon'
 import { Input } from './input'
+import { expectThemeSelection } from './selection-probe'
 import { Text } from './text'
 
 const meta: Meta<typeof Input> = {
@@ -30,6 +31,17 @@ export const Default: Story = {
       <Input {...args} />
     </View>
   ),
+}
+
+export const SelectsWithTheThemeTint: Story = {
+  render: () => (
+    <View style={{ width: 320 }}>
+      <Input defaultValue="Selected text" />
+    </View>
+  ),
+  play: ({ canvasElement }) => {
+    expectThemeSelection(canvasElement.querySelector('input')!)
+  },
 }
 
 export const Controlled: Story = {

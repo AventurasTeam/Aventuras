@@ -115,7 +115,7 @@ export default meta
 type Story = StoryObj<typeof meta>
 
 /**
- * Every canonical tab renders the M3 placeholder. The play function
+ * Every canonical tab renders its placeholder. The play function
  * pins the shell's core invariant: all eight panels are mounted, not
  * just the active one — a section's draft has to survive a tab switch
  * because the whole surface is one save session.
@@ -138,8 +138,8 @@ export const PlaceholderTab: Story = {
 }
 
 /**
- * One filled tab beside seven placeholders — the M3 shape, where only
- * the sections this milestone ships have bodies.
+ * One filled tab beside seven placeholders, as when only some sections
+ * have bodies.
  */
 export const FilledTab: Story = {
   args: {

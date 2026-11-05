@@ -96,7 +96,7 @@ export function Textarea({
         'w-full rounded-md border border-border bg-bg-base px-row-x-md py-row-y-md text-sm text-fg-primary',
         Platform.select({
           web: cn(
-            'selection:bg-accent selection:text-accent-fg placeholder:text-fg-muted',
+            'placeholder:text-fg-muted',
             'outline-none transition-[color,box-shadow]',
             'field-sizing-content resize-y',
           ),

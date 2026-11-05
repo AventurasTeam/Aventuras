@@ -31,7 +31,7 @@ vi.mock('@/lib/embedder', async (importOriginal) => {
 const LOCAL_MODEL = 'Xenova/all-MiniLM-L6-v2'
 const EMBED_CTX = { exec: async () => {}, resolveProvider: () => undefined }
 
-// Consolidated full-flow integration test for Slice M2.3. Each unit (finish.ts,
+// Full-flow integration test for the wizard. Each unit (finish.ts,
 // createStoryWithBranch, session/draft actions, the structured-output parse
 // path, IdBiMap/substitution) already has its own suite — this file proves the
 // SEAMS between them: a real UUID minted in the wizard survives a placeholder
@@ -284,8 +284,7 @@ describe('wizard full-flow integration', () => {
     })
   })
 
-  // AC4 — draft round-trip: every field populated across all 3 M2 steps
-  // survives saveStoryDraft -> loadDraft, then finishWizard promotes the same
+  // AC4 — draft round-trip: every populated field survives saveStoryDraft -> loadDraft, then finishWizard promotes the same
   // draft row to active with zero deltas and clears its wizard_sessions row.
   it('AC4: saveStoryDraft -> loadDraft round-trips all populated fields, then Finish promotes the draft in place', async () => {
     const { db, ctx } = await setup()

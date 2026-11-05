@@ -1,6 +1,5 @@
 // Context groups drive include-compatibility (a template in group G may include
 // only G-tagged or `staticContent` macros) and editor variable awareness.
-// M2 ships generationContext + wizard + staticContent; others land with their features.
 export const CONTEXT_GROUPS = [
   'generationContext',
   'classifierContext',
