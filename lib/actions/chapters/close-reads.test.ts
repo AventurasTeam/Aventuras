@@ -88,9 +88,9 @@ describe('reads after a close', () => {
         protectedBuffer: 12,
       }),
     ).toEqual([...closed.slice(-4), ...current])
-    // Full: the whole current chapter, the floor of 4 already met.
+    // Full: the whole current chapter; the partial term would give 4, so this tells the modes apart.
     expect(
-      await buffer(fx, { fullChapterInBuffer: true, partialChapterBuffer: 10, protectedBuffer: 4 }),
+      await buffer(fx, { fullChapterInBuffer: true, partialChapterBuffer: 4, protectedBuffer: 4 }),
     ).toEqual(current)
   })
 
