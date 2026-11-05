@@ -183,7 +183,9 @@ No open items.
     100 ms. Extracting the loop alone won't fix it, since the caller
     would still compute "chain live" the same way: judge it by the
     wheel events' own times, as `handleWheel` already does for whether
-    a wheel continues the chain. Done when
+    a wheel continues the chain. That remedy is doubtful, reasoned and
+    not run: when the landing frame runs before the queued wheel
+    handlers, neither time exists yet. Done when
     `JumpPendingHaltsWheelMomentumOnceItsRowArrives`
     (`components/reader/reader-surface.stories.tsx`) expects zero
     unheld frames again, with no allowance for `commitOutlastedChain`,
@@ -202,7 +204,12 @@ No open items.
     the top, and the reader's upper half didn't visibly move from the
     landing at 5.6 s to 30 s while the reply grew below. The fixture
     was modified to put a closed one-entry chapter on the tail. Why it
-    held isn't known.
+    held isn't known. Checked against the code on 2026-11-05:
+    `settled` compares `scrollHeight`, which a chunk changes only when
+    it wraps a line or opens a block, so a 30 chars/s reply leaves ten
+    still frames between wraps and the loop settles there, which likely
+    explains the Fold. The cap is reached only when wraps come faster
+    than every ten frames. Not run.
   - **Two rules fail no test when removed:** the 600-frame cap and the
     height part of the settle rule. Pin both in unit tests once the
     loop is a function. Raised 2026-11-03 by 5.3's slice review.
