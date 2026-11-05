@@ -65,6 +65,15 @@ describe('closeReportSchema', () => {
   // C4: a later field may join v1; a reader built before it must still accept the report.
   it('accepts a field it does not know', () => {
     expect(closeReportSchema.safeParse({ ...FULL, closeMs: 1234 }).success).toBe(true)
+    expect(
+      closeReportSchema.safeParse({
+        ...FULL,
+        calls: [
+          { ...FULL.calls[0], durationMs: 5, rows: [{ ...FULL.calls[0]!.rows[0], kind: 'x' }] },
+        ],
+        stopped: [{ ...FULL.stopped[0], note: 'x' }],
+      }).success,
+    ).toBe(true)
   })
 
   it('refuses an unknown task', () => {
@@ -90,6 +99,11 @@ describe('closeReportSchema', () => {
         stopped: [{ task: 'weather', part: 2, reason: 'budget' }],
       }).success,
     ).toBe(false)
+  })
+
+  it('refuses a stop with a negative part', () => {
+    const stopped = [{ task: 'threads', part: -1, reason: 'budget' }]
+    expect(closeReportSchema.safeParse({ ...FULL, stopped }).success).toBe(false)
   })
 
   it('refuses another version', () => {
