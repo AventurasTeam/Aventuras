@@ -561,6 +561,16 @@ that ran)
 
 _Populated at finish: notable deviations from the plan and resolved developer decisions._
 
+- **A report undone to null (criterion 11).** CTRL-Z of a close reverses
+  its create along with its report, so no step of the store walk on a
+  real close leaves a row whose report went back to null.
+  `projectChapterPatch`'s update arm with `closeReport: null` pins that
+  reading (`chapter-store-projection.test.ts`), and the walk in
+  `close-report-store.test.ts` pins every step a close reaches.
+- **`fullRow` and the walk.** A close's create carries no report, which
+  lands by the update, so the walk can't see `fullRow` drop
+  `closeReport`. `close-report-store.test.ts` adds a create carrying one,
+  which that mutation turns red.
 - **The metadata prompt reads the story's mode (developer: "Q2: A").**
   The plan's system half read every user turn as "the narration decides
   what happened" and kept `mode` out of the `chapter` group. Canon reads
