@@ -9,6 +9,7 @@ export const TEMPLATE_IDS = {
   piggybackFallbackClassifier: 'tmpl_piggyback_fallback_classifier',
   periodicClassifier: 'tmpl_periodic_classifier',
   suggestionRefresh: 'tmpl_suggestion_refresh',
+  chapterMetadata: 'tmpl_chapter_metadata',
   wizardOpening: 'tmpl_wizard_opening',
   wizardOpeningRefine: 'tmpl_wizard_opening_refine',
   wizardTitleChips: 'tmpl_wizard_title_chips',

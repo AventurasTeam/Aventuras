@@ -4,6 +4,7 @@ export const CONTEXT_GROUPS = [
   'generationContext',
   'classifierContext',
   'wizard',
+  'chapter',
   'staticContent',
 ] as const
 export type ContextGroup = (typeof CONTEXT_GROUPS)[number]
