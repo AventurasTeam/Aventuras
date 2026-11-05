@@ -162,11 +162,15 @@ function PopoverArm({ onOpenChange, ref, ...content }: ArmProps) {
   }
 
   // Radix returns focus to the trigger; a popover the handle opened returns it to what opened it.
+  // Neither does after an outside press or focus, which has put focus where the user wanted it.
   const opener = useRef<HTMLElement | null>(null)
+  const interactedOutside = useRef(false)
   const returnFocusToOpener = (event: Event) => {
     const target = opener.current
     opener.current = null
-    if (target == null || !target.isConnected) return
+    const outside = interactedOutside.current
+    interactedOutside.current = false
+    if (outside || target == null || !target.isConnected) return
     event.preventDefault()
     target.focus()
   }
@@ -197,6 +201,9 @@ function PopoverArm({ onOpenChange, ref, ...content }: ArmProps) {
         align="start"
         className="w-80 p-0"
         onPointerDownOutside={pressStartedOutside.mark}
+        onInteractOutside={() => {
+          interactedOutside.current = true
+        }}
       >
         <ScrollComponentContext.Provider value={POPOVER_SCROLL}>
           <OverlayBody {...content} arm={POPOVER_ARM} close={close} lastClosedRow={lastClosedRow} />

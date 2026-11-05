@@ -7,6 +7,7 @@ import { ScreenShell } from '@/components/shells/screen-shell'
 import { Text } from '@/components/ui/text'
 import { EARTH_GREGORIAN } from '@/lib/calendar'
 import type { Chapter, StoryEntry } from '@/lib/db'
+import { t } from '@/lib/i18n'
 import { chaptersStore } from '@/lib/stores'
 
 import {
@@ -202,6 +203,25 @@ export const StripOpenedEscapeFocusesStrip: Story = {
     await userEvent.keyboard('{Escape}')
     await waitFor(() => expect(screen.queryByText('1 · in progress')).toBeNull())
     await waitFor(() => expect(strip).toHaveFocus())
+  },
+}
+
+/** An outside press keeps the focus it moved: a strip-opened popover doesn't take it back. */
+export const StripOpenedOutsidePressKeepsFocus: Story = {
+  render: (args) => <StripHarness {...args} />,
+  play: async () => {
+    const strip = await screen.findByTestId('chapter-progress-hit')
+    await userEvent.click(strip)
+    await waitFor(() => expect(screen.getByText('1 · in progress')).toBeVisible(), {
+      timeout: 5_000,
+    })
+
+    const settings = screen.getByRole('button', { name: t('chrome.storySettings') })
+    await userEvent.click(settings)
+    await waitFor(() => expect(screen.queryByText('1 · in progress')).toBeNull())
+    // Radix runs the close focus a task after the content unmounts.
+    await new Promise((resolve) => setTimeout(resolve, 100))
+    expect(settings).toHaveFocus()
   },
 }
 

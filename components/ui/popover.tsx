@@ -162,8 +162,9 @@ function PopoverContent({
                   'z-50 w-72 rounded-md border border-border bg-bg-overlay p-4 outline-none',
                   // Web fade-in — native uses reanimated FadeIn. Radix's available height caps it,
                   // as nativeMaxHeight does on native: Electron sets no minimum window height.
+                  // Content taller than the cap scrolls rather than spilling past the border.
                   Platform.select({
-                    web: 'max-h-[var(--radix-popover-content-available-height)] animate-fade-in',
+                    web: 'max-h-[var(--radix-popover-content-available-height)] animate-fade-in overflow-y-auto',
                   }),
                   className,
                 )}
