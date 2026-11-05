@@ -6,7 +6,7 @@ import { chaptersStore } from '@/lib/stores'
 
 import { projectChapterPatch } from './chapter-store-projection'
 import { cascadedDelete, rowCascade } from '../delta/delete-cascade'
-import { register, type ActionHandler } from '../delta/registry'
+import { register, undefinedColumn, type ActionHandler } from '../delta/registry'
 import type { DeltaSource } from '../types'
 
 const cascade = rowCascade('chapter')
@@ -93,13 +93,16 @@ const updateHandler: ActionHandler = async (action, branchId, ctx) => {
     .where(and(eq(chapters.branchId, bid), eq(chapters.id, id)))
   if (!current)
     return { status: 'rejected', reason: `update target chapters ${bid}:${id} not found` }
+  const blank = undefinedColumn(patch, UPDATABLE)
+  if (blank != null)
+    return { status: 'rejected', reason: `invalid chapter patch: ${blank} is undefined` }
 
   const set: Record<string, unknown> = {}
   const undoPayload: Record<string, unknown> = {}
   for (const col of UPDATABLE) {
     if (!(col in patch)) continue
     set[col] = patch[col]
-    // No columnSchemas registered: flat arrays + scalars take the whole prior value as undo.
+    // No columnSchemas: every column, the JSON report included, takes its whole prior value as undo.
     undoPayload[col] = current[col as keyof Chapter]
   }
   // A patch that parsed but touched no updatable column (e.g. closed_at only) would

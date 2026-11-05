@@ -425,6 +425,37 @@ describe('chapters store projection', () => {
     await expectStoreMirrors(db, true)
   })
 
+  // Drizzle skips an undefined key, so letting one through would flag the store without writing.
+  it.each([
+    ['beside another column', { title: 'New', closeReport: undefined }],
+    ['alone', { closeReport: undefined }],
+  ])(
+    'rejects an undefined report %s (no write, no flag change, no delta)',
+    async (_name, patch) => {
+      const { db, ctx } = await setup()
+      await createWith(ctx, { ...CHAPTER, closeReport: REPORT })
+      const result = await applyDeltaAction(
+        {
+          action: {
+            kind: 'updateChapter',
+            source: 'chapter_close',
+            payload: { branchId: 'br_1', id: 'chap_1', patch },
+          },
+          actionId: 'act_undef',
+          branchId: 'br_1',
+        },
+        ctx,
+      )
+      expect(result).toEqual({
+        status: 'rejected',
+        reason: 'invalid chapter patch: closeReport is undefined',
+      })
+      expect((await rowFor(db, 'chap_1')).closeReport).toEqual(REPORT)
+      await expectStoreMirrors(db, true)
+      expect((await db.select().from(deltas)).length).toBe(1)
+    },
+  )
+
   it('rejects a malformed report on update (no write, no delta)', async () => {
     const { db, ctx } = await setup()
     await createWith(ctx, CHAPTER)
