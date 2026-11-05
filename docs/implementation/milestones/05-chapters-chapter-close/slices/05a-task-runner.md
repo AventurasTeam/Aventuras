@@ -152,6 +152,34 @@ and tools sit under `lib/pipeline/definitions/close-agent/`.
     `updateLore`, `updateThread` and `updateHappening` included:
     `rejected`, with nothing written.
 
+**The close's create and stamps as one group (developer decision,
+2026-11-05).**
+
+- Once `delta_group_emitted` lands, the metadata phase emits
+  `createChapter` and every `stampEntryChapter` as one group, in C1's
+  order. Each stamp stays its own delta anchored on the end entry, so
+  reversal and the survival anchor read it as they do now. The
+  developer moved it here whatever the measure said: "So what i'm
+  thinking is we should take the results as they are right now and move
+  it to the batch writer no matter what just because it's the more
+  correct way to do it in my opinion."
+- The `close_report` update stays a write of its own after the group:
+  one group can't create and update a chapter row, since
+  `updateChapter` reads committed rows.
+- [Slice 5.2](./02-first-chapter.md)'s mid-burst cases are re-pointed or
+  dropped here, since a group lands whole: criterion 5's abort between
+  stamps, criterion 22's Cancel and head reversal mid-burst, criterion
+  23's boot recovery mid-burst, and its accepted mid-close display, a
+  surface reading a partial range.
+- A hard bar (developer: "Q11: A"): on a release Android build with a
+  50-row reader, the close's write burst has no JS-thread stall over
+  500 ms, timed as the longest gap between 16 ms ticks with the stop
+  moment counted as a tick. 5.2 measured about 1.1 s with a delta per
+  stamp, its [Close measure](./02-first-chapter.md#close-measure). One
+  group is one uninterruptible chunk, so if the group alone doesn't
+  bring the stall under 500 ms, its store patches go out in chunks with
+  a yield between them, or an equivalent this slice picks.
+
 **The later-turn reader (C12).**
 
 - `lib/actions/delta/later-turn.ts` selects a row's later deltas by

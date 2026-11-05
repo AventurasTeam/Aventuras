@@ -107,3 +107,42 @@ slice-planning gate forces its resolution before that slice is planned.
   `chapter-close-metadata-call.ts`; `per-turn.ts` builds it inline
   too). One builder would keep a new field from being missed at one of
   them.
+
+- **Seeded entry creates carry no anchor.** The dev seed's
+  `createStoryEntry` deltas have `entryId: null`
+  (`lib/db/devtools/seed-dataset.ts`), while a real reply's create is
+  anchored on itself. Rollback treats both alike, but
+  `lib/actions/story-entries/pre-entry-locations.ts` keys on that anchor
+  and falls back on the seed. Surfaced by Slice 5.2's review.
+- **The seed's fork at `entry_hero_0040` has no chapters.** A real fork
+  there would copy `chap_hero_1`, whose anchor (29) survives, per the
+  data-model branch-copy manifest.
+- **The long-branch fixture's chapters have no deltas.**
+  `scripts/seed/long-branch.ts` writes chapters and entries with no
+  create or close deltas, so a rollback or CTRL-Z on a long branch
+  refuses `no-create`. Fine while it stays a read-only performance
+  fixture.
+- **The rollback preview counts more tables as world state than canon
+  lists.** `rollbackCountsOf` (`lib/actions/story-entries/operational.ts`)
+  counts `translations`, `branch_era_flips` and `character_relationships`
+  deltas there, while
+  [`rollback-confirm.md → Counts`](../ui/screens/reader-composer/rollback-confirm/rollback-confirm.md#counts)
+  lists only entities, lore, threads, happenings and entry assets. A
+  swept translation of a deleted entry may count twice. Unverified that
+  these deltas land in real rollback windows.
+- **`single()` lives in the World module.** The route-param helper
+  (`components/world/world-selection.ts:9`) is imported by Plot, the
+  reader, `plot-selection` and the dev chapter-close route.
+- **`/dev/*` routes are reachable by deep link in a release build.**
+  `app/dev/_layout.tsx` has no `__DEV__` gate; only the Settings button
+  to the dev index does. For the chapter-close route this is Slice 5.2's
+  decision; for `/dev/reseed` and the rest it is unexamined.
+- **The embedder drain drops a run's idle note while a pass runs.**
+  `noteIdle` (`lib/embedder/drain.ts:198-204`) does nothing mid-pass, and
+  the pass's row list predates the run's writes, so a row made stale by a
+  run inside one batch stays stale until the next `run_complete` or turn.
+  Retrieval stays correct (the drain is warm-cache only); quiescence can
+  be put off. `kick` already records a pending re-run.
+- **A harness comment assumes WAL.** `e2e/harness/db.ts:17` justifies
+  `queryApp` by "a second file handle can miss a WAL-buffered write", but
+  the desktop database runs in rollback-journal mode.

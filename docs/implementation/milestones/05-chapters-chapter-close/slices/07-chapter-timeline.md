@@ -437,6 +437,16 @@ any change amends the scope above.
   is `NOT NULL`. Default: yes, stored as an empty string, which also drops
   it from the collapsed line.
 
+- **How does a rollback count a user's chapter edit it sweeps?**
+  [Slice 5.2](./02-first-chapter.md) made `rollbackCountsOf` count a
+  `chapters` delta only as a create (developer decision), so a close's
+  `close_report` update no longer reads as world state. A user's own
+  `updateChapter` (a title or summary save, anchored on no entry) on a
+  chapter the rollback spares is still reverted by its log position, and
+  the confirm modal now reports nothing for it. Suggested: count a
+  non-create `chapters` delta when its chapter's create isn't in the
+  swept set, which keeps the close's report silent.
+
 ## Implementation notes
 
 _Populated at finish: notable deviations from the plan and resolved developer decisions._

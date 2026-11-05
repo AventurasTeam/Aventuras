@@ -217,12 +217,15 @@ anchor reverses positionally, which is the seed's bug.
 - `story_entries.chapter_id` stays FK-less
   (`lib/db/story-entries/story-entries.table.ts:19`), because redo runs
   newest-first and stamps land before their chapter row.
-- Stamps go through the shipped `delta_emitted` path, a burst under one
-  `actionId`. The metadata phase checks `abortSignal` between stamps,
-  since the orchestrator reads an abort only between phases and each
-  stamp is its own transaction and store patch. The group seam is 5.5a's,
-  so a move to one group, if measurement asks for it, comes after that
-  lands.
+- Slice 5.2 sends the stamps through the shipped `delta_emitted` path, a
+  burst under one `actionId`, and its metadata phase checks
+  `abortSignal` between stamps, since the orchestrator reads an abort
+  only between phases and each stamp is its own transaction and store
+  patch. The move to one group is decided (developer, 2026-11-05) and
+  lands in [Slice 5.5a](./slices/05a-task-runner.md) once
+  `delta_group_emitted` does: the create and every stamp as one group,
+  each stamp still its own delta anchored on the end entry, and the
+  `close_report` update a write of its own after it.
 
 ### C2 — Pipeline shape
 
@@ -380,12 +383,12 @@ type CloseReportCall = {
   out of the review.** Normalization is code with no `why` or `turns`,
   and its keys are a spelling cleanup.
 - **The report stays out of `chaptersStore`.** Story open hydrates chapter
-  rows whole (`lib/actions/stories/operational.ts:167`), and the create
+  rows whole (`lib/actions/stories/operational.ts:168`), and the create
   handler, the update handler and redo all patch the row
-  (`lib/actions/chapters/register.ts:88,146`,
-  `lib/actions/delta/redo.ts:325-330`), while the store casts past its
+  (`lib/actions/chapters/register.ts:77,138`,
+  `lib/actions/delta/redo.ts:329`), while the store casts past its
   row type (`lib/stores/factory/working-set-store.ts:28,33`). So one
-  projection sits at the `patcher` (`register.ts:182`), which all three
+  projection sits at the `patcher` (`register.ts:174`), which all three
   share. On create it drops `closeReport` and derives `hasCloseReport`.
   On update it does so only when `closeReport` is a key of `columns`,
   since an update patch carries only what was written: a title save must
