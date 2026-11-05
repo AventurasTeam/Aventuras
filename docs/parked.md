@@ -3255,8 +3255,8 @@ only in `onScrollBeginDrag`. An accessibility scroll (TalkBack's
 scroll actions start no drag) leaves the list pinned, so a later
 `onContentSizeChange` or `onLayout` pulls it back to the last row: a
 chapter closing while the list is open, range labels arriving after a
-refetch, a Sheet height drag, or an unfold. Raised 2026-11-03 by
-PR #698's review.
+refetch, or a Sheet height drag. Raised 2026-11-03 by PR #698's
+review.
 
 Web's upward-offset rule may carry over to both native arms. The phone
 Sheet holds a pinned list at its end until gorhom unlocks it, so the
