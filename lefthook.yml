@@ -29,3 +29,18 @@ commit-msg:
   commands:
     message-shape:
       run: ./scripts/check-commit-msg.sh {1}
+
+# pnpm's verifyDepsBeforeRun misses a patch or lockfile change that comes without a package.json
+# change; these warn when HEAD moves across one.
+post-checkout:
+  commands:
+    deps-changed:
+      run: ./scripts/check-deps-changed.sh post-checkout {1} {2} {3}
+post-merge:
+  commands:
+    deps-changed:
+      run: ./scripts/check-deps-changed.sh post-merge
+post-rewrite:
+  commands:
+    deps-changed:
+      run: ./scripts/check-deps-changed.sh post-rewrite {1}
