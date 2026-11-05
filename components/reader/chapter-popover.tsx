@@ -6,6 +6,7 @@ import {
   useRef,
   useState,
   type ReactElement,
+  type ReactNode,
   type Ref,
 } from 'react'
 import {
@@ -62,6 +63,7 @@ export type ChapterPopoverProps = {
   /** Oldest first. */
   closed: readonly ChapterPopoverRow[]
   sinceLabel: string | null
+  /** Its `startEntryId` is the open row's jump; null leaves that row unpressable. */
   progress: ChapterProgress
   onOpenChange?: (open: boolean) => void
   onJumpToChapter: (startEntryId: string) => void
@@ -149,16 +151,16 @@ function usePressStartedOutside() {
 
 function PopoverArm({ onOpenChange, ref, ...content }: ArmProps) {
   const trigger = useRef<TriggerRef>(null)
-  const lastClosedRow = useRef<View>(null)
+  const lastRow = useRef<View>(null)
   const [open, changeOpen] = useReportedOpen(onOpenChange)
   const pressStartedOutside = usePressStartedOutside()
   const close = () => trigger.current?.close()
 
   // Radix's default is the first row, far above the last one the list opens on.
-  const focusLastClosedRow = (event: Event) => {
-    if (lastClosedRow.current == null) return
+  const focusLastRow = (event: Event) => {
+    if (lastRow.current == null) return
     event.preventDefault()
-    lastClosedRow.current.focus()
+    lastRow.current.focus()
   }
 
   // Radix returns focus to the trigger; a popover the handle opened returns it to what opened it.
@@ -191,7 +193,7 @@ function PopoverArm({ onOpenChange, ref, ...content }: ArmProps) {
     <Popover
       ariaLabel={t('chapters:popover.title')}
       onOpenChange={changeOpen}
-      onOpenAutoFocus={focusLastClosedRow}
+      onOpenAutoFocus={focusLastRow}
       onCloseAutoFocus={returnFocusToOpener}
     >
       <PopoverTrigger ref={trigger} asChild>
@@ -206,7 +208,7 @@ function PopoverArm({ onOpenChange, ref, ...content }: ArmProps) {
         }}
       >
         <ScrollComponentContext.Provider value={POPOVER_SCROLL}>
-          <OverlayBody {...content} arm={POPOVER_ARM} close={close} lastClosedRow={lastClosedRow} />
+          <OverlayBody {...content} arm={POPOVER_ARM} close={close} lastRow={lastRow} />
         </ScrollComponentContext.Provider>
       </PopoverContent>
     </Popover>
@@ -247,7 +249,8 @@ function SheetUnlockWatcher({ onUnlocked }: { onUnlocked: () => void }) {
 type OverlayBodyProps = Omit<ArmProps, 'onOpenChange' | 'ref'> & {
   arm: Arm
   close: () => void
-  lastClosedRow?: Ref<View>
+  /** The last pressable row, which takes focus on open. */
+  lastRow?: Ref<View>
 }
 
 function OverlayBody({
@@ -260,7 +263,7 @@ function OverlayBody({
   onManageChapters,
   arm,
   close,
-  lastClosedRow,
+  lastRow,
 }: OverlayBodyProps) {
   const list = useRef<ScrollComponentHandle>(null)
   const contentHeight = useRef(0)
@@ -303,6 +306,11 @@ function OverlayBody({
     scrollToEnd()
     requestAnimationFrame(scrollToEnd)
   }
+  const jump = (startEntryId: string) => () => {
+    close()
+    onJumpToChapter(startEntryId)
+  }
+  const openStart = progress.startEntryId
 
   return (
     <View className={arm.root}>
@@ -332,20 +340,27 @@ function OverlayBody({
           }}
         >
           {closed.map((row, index) => (
-            <ClosedRow
+            <ChapterRow
               key={row.id}
-              ref={index === closed.length - 1 ? lastClosedRow : undefined}
-              row={row}
+              ref={openStart == null && index === closed.length - 1 ? lastRow : undefined}
               className={arm.row}
-              onPress={() => {
-                close()
-                onJumpToChapter(row.startEntryId)
-              }}
-            />
+              onPress={jump(row.startEntryId)}
+            >
+              <Text size="sm" numberOfLines={1}>
+                {t('chapters:popover.closedRow', { number: row.number, title: row.title })}
+              </Text>
+              {row.rangeLabel != null ? (
+                <Text size="xs" variant="muted">
+                  {row.rangeLabel}
+                </Text>
+              ) : null}
+            </ChapterRow>
           ))}
-          <View
+          <ChapterRow
+            ref={openStart != null ? lastRow : undefined}
             testID="chapter-popover-open"
-            className={cn(ROW_CLASS, arm.row, 'rounded-sm bg-tint-press')}
+            className={arm.row}
+            onPress={openStart != null ? jump(openStart) : undefined}
           >
             <Text size="sm" className="font-medium">
               {t('chapters:popover.inProgress', { number })}
@@ -355,7 +370,7 @@ function OverlayBody({
                 {t('chapters:popover.since', { time: sinceLabel })}
               </Text>
             ) : null}
-          </View>
+          </ChapterRow>
         </ContextScrollView>
       </PinnedEndContext.Provider>
 
@@ -388,20 +403,31 @@ function OverlayBody({
 
 const ROW_CLASS = 'justify-center gap-0.5 px-row-x-md py-row-y-sm'
 
-function ClosedRow({
-  row,
+/** Pressable with an `onPress`, plain without: an open chapter with no entry yet has no jump. */
+function ChapterRow({
   className,
   onPress,
+  testID,
   ref,
+  children,
 }: {
-  row: ChapterPopoverRow
   className: string
-  onPress: () => void
+  onPress?: () => void
+  testID?: string
   ref?: Ref<View>
+  children: ReactNode
 }) {
+  if (onPress == null) {
+    return (
+      <View testID={testID} className={cn(ROW_CLASS, className)}>
+        {children}
+      </View>
+    )
+  }
   return (
     <Pressable
       ref={ref}
+      testID={testID}
       accessibilityRole="button"
       onPress={onPress}
       className={cn(
@@ -413,14 +439,7 @@ function ClosedRow({
         }),
       )}
     >
-      <Text size="sm" numberOfLines={1}>
-        {t('chapters:popover.closedRow', { number: row.number, title: row.title })}
-      </Text>
-      {row.rangeLabel != null ? (
-        <Text size="xs" variant="muted">
-          {row.rangeLabel}
-        </Text>
-      ) : null}
+      {children}
     </Pressable>
   )
 }

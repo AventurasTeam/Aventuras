@@ -34,7 +34,7 @@ function BodyPlaceholder({ label }: { label: string }) {
 }
 
 function progressAt(percent: number): ChapterProgress {
-  return chapterProgressOf([{ kind: 'ai_reply', tokens: percent * 240 }], 24_000)
+  return chapterProgressOf([{ id: 'entry_1', kind: 'ai_reply', tokens: percent * 240 }], 24_000)
 }
 
 const STRIP_VARIANTS = [progressAt(0), progressAt(50), progressAt(100)]

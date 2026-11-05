@@ -49,7 +49,11 @@ const PROGRESS: ChapterProgress = {
   percent: 35.08,
   tone: 'success',
   canClose: true,
+  startEntryId: 'entry_3',
 }
+
+// Right after a close at the tail: the open chapter has no entry to jump to.
+const EMPTY_OPEN: ChapterProgress = { ...PROGRESS, tokens: 0, percent: 0, startEntryId: null }
 
 function TierMark() {
   return <Text testID="tier">{useTier()}</Text>
@@ -150,11 +154,12 @@ async function expectContents(args: ChapterPopoverProps) {
   await expect(screen.getByRole('button', { name: /2 · The Warden's Mark/ })).toBeVisible()
   await expect(screen.getByText('Day 2, dawn → Day 3, dusk')).toBeVisible()
 
-  const openRow = screen.getByTestId('chapter-popover-open')
-  await expect(openRow).toHaveTextContent('3 · in progress')
+  // Pressable like the closed rows, and no resting fill that would read as a selection.
+  const openRow = screen.getByRole('button', { name: /3 · in progress/ })
+  await expect(openRow).toBe(screen.getByTestId('chapter-popover-open'))
   await expect(openRow).toHaveTextContent('since Day 3, dusk')
-  await expect(openRow).toHaveClass('bg-tint-press')
-  await expect(openRow.closest('[role="button"]')).toBeNull()
+  await expect(openRow).not.toHaveClass('bg-tint-press')
+  await expect(screen.getByText('3 · in progress')).toHaveClass('font-medium')
 
   await expect(screen.getByText('chapter progress · 8,420 / 24,000 tok')).toBeVisible()
   const fill = screen.getByTestId('chapter-progress-fill')
@@ -272,6 +277,35 @@ export const JumpClosesFirst: Story = {
   },
 }
 
+export const OpenRowJumpsToItsStart: Story = {
+  play: async ({ args }) => {
+    await waitForTier('desktop')
+    await openOverlay()
+    await userEvent.click(screen.getByRole('button', { name: /3 · in progress/ }))
+
+    await expect(args.onJumpToChapter).toHaveBeenCalledTimes(1)
+    await expect(args.onJumpToChapter).toHaveBeenCalledWith('entry_3')
+    expectClosedBeforeCalled(args.onOpenChange, args.onJumpToChapter)
+    await waitFor(() => expect(screen.queryByText('3 · in progress')).toBeNull())
+  },
+}
+
+export const EmptyOpenRowIsPlain: Story = {
+  args: { progress: EMPTY_OPEN },
+  play: async ({ args }) => {
+    await waitForTier('desktop')
+    await openOverlay()
+    const openRow = screen.getByTestId('chapter-popover-open')
+    await expect(openRow).not.toHaveAttribute('role', 'button')
+    await expect(screen.queryByRole('button', { name: /3 · in progress/ })).toBeNull()
+    await expect(screen.getByRole('button', { name: /2 · The Warden's Mark/ })).toBeVisible()
+
+    await userEvent.click(openRow)
+    await expect(args.onJumpToChapter).not.toHaveBeenCalled()
+    await expect(screen.getByText('3 · in progress')).toBeVisible()
+  },
+}
+
 export const JumpClosesFirstPhone: Story = {
   globals: PHONE,
   play: async ({ args }) => {
@@ -336,14 +370,39 @@ export const FocusStartsOnLastRow: Story = {
     await waitForTier('desktop')
     await openOverlay(31)
     await expectOpenedOnLastRow()
-    const lastRow = screen.getByRole('button', { name: /30 · Chapter title 30/ })
-    await waitFor(() => expect(lastRow).toHaveFocus(), ANIMATION)
+    const openRow = screen.getByRole('button', { name: /31 · in progress/ })
+    await waitFor(() => expect(openRow).toHaveFocus(), ANIMATION)
     await expectOpenedOnLastRow()
   },
 }
 
+export const FocusSkipsAnEmptyOpenRow: Story = {
+  args: { closed: LONG_LIST, progress: EMPTY_OPEN },
+  play: async () => {
+    await waitForTier('desktop')
+    await openOverlay(31)
+    await expectOpenedOnLastRow()
+    const lastClosedRow = screen.getByRole('button', { name: /30 · Chapter title 30/ })
+    await waitFor(() => expect(lastClosedRow).toHaveFocus(), ANIMATION)
+    await expectOpenedOnLastRow()
+  },
+}
+
+// Chapter 1 still open: its row is the only way back to the branch's first entry.
 export const NoClosedRows: Story = {
-  args: { closed: [] },
+  args: { closed: [], progress: { ...PROGRESS, startEntryId: 'entry_1' } },
+  play: async ({ args }) => {
+    await waitForTier('desktop')
+    await openOverlay(1)
+    const openRow = screen.getByRole('button', { name: /1 · in progress/ })
+    await waitFor(() => expect(openRow).toHaveFocus(), ANIMATION)
+    await userEvent.click(openRow)
+    await expect(args.onJumpToChapter).toHaveBeenCalledWith('entry_1')
+  },
+}
+
+export const NoRowToFocus: Story = {
+  args: { closed: [], progress: EMPTY_OPEN },
   play: async () => {
     await waitForTier('desktop')
     await openOverlay(1)

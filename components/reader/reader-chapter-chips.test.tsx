@@ -56,6 +56,7 @@ const PROGRESS: ChapterProgress = {
   percent: 35,
   tone: 'success',
   canClose: true,
+  startEntryId: 'e_open',
 }
 
 function chapter(sequenceNumber: number, branchId = 'br_1'): Chapter {

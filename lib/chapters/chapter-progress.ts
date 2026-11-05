@@ -9,11 +9,16 @@ export type ChapterProgress = Readonly<{
   percent: number
   tone: ChapterProgressTone
   canClose: boolean
+  /** The open region's first entry, where the open chapter starts; null while it holds none. */
+  startEntryId: string | null
 }>
 
-/** `percent` is 0–100, and reads 0 for a non-positive or non-finite threshold. */
+/**
+ * `series` oldest first, as `openRegionSeries` reads it. `percent` is 0–100, and reads 0 for a
+ * non-positive or non-finite threshold.
+ */
 export function chapterProgressOf(
-  series: readonly { kind: StoryEntry['kind']; tokens: number }[],
+  series: readonly { id: string; kind: StoryEntry['kind']; tokens: number }[],
   threshold: number,
 ): ChapterProgress {
   const tokens = series.reduce((sum, row) => sum + row.tokens, 0)
@@ -25,5 +30,6 @@ export function chapterProgressOf(
     percent,
     tone: chapterProgressTone(percent),
     canClose: series.some(canEndChapter),
+    startEntryId: series[0]?.id ?? null,
   }
 }

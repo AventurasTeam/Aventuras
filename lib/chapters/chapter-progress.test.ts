@@ -5,7 +5,8 @@ import type { StoryEntry } from '@/lib/db'
 import { canEndChapter } from './can-end-chapter'
 import { chapterProgressOf } from './chapter-progress'
 
-const row = (kind: StoryEntry['kind'], tokens = 0) => ({ kind, tokens })
+let nextId = 0
+const row = (kind: StoryEntry['kind'], tokens = 0) => ({ id: `e${++nextId}`, kind, tokens })
 
 describe('canEndChapter', () => {
   it.each([
@@ -31,6 +32,7 @@ describe('chapterProgressOf', () => {
       percent: 25,
       tone: 'success',
       canClose: true,
+      startEntryId: expect.any(String),
     })
   })
 
@@ -41,6 +43,7 @@ describe('chapterProgressOf', () => {
       percent: 0,
       tone: 'success',
       canClose: false,
+      startEntryId: null,
     })
   })
 
@@ -91,5 +94,12 @@ describe('chapterProgressOf', () => {
       chapterProgressOf([row('opening'), row('user_action'), row('ai_reply')], 100).canClose,
     ).toBe(true)
     expect(chapterProgressOf([row('ai_reply'), row('user_action')], 100).canClose).toBe(true)
+  })
+
+  it("starts at the region's first row, and nowhere while it has none", () => {
+    const series = [row('user_action'), row('ai_reply'), row('user_action')]
+    expect(chapterProgressOf(series, 100).startEntryId).toBe(series[0]?.id)
+    expect(chapterProgressOf(series.slice(1), 100).startEntryId).toBe(series[1]?.id)
+    expect(chapterProgressOf([], 100).startEntryId).toBeNull()
   })
 })

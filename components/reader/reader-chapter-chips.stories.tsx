@@ -44,7 +44,14 @@ const ARGS: ReaderChapterChipsProps = {
     calendar: EARTH_GREGORIAN,
     origin: { year: 2024, month: 1, day: 1, hour: 0, minute: 0, second: 0 },
   },
-  progress: { tokens: 8_420, threshold: 24_000, percent: 35, tone: 'success', canClose: true },
+  progress: {
+    tokens: 8_420,
+    threshold: 24_000,
+    percent: 35,
+    tone: 'success',
+    canClose: true,
+    startEntryId: 'tail',
+  },
   isFocused: true,
   onJumpToEntry: noop,
 }

@@ -108,8 +108,13 @@ signal to close.
 
 **Chapter popover contents:**
 
-- **Chapter list** — closed chapters + the current one (labeled
-  `in progress`, highlighted). Closed chapters click to jump.
+- **Chapter list** — closed chapters, then the current one, labeled
+  `in progress` in medium weight with no fill, so it doesn't read as a
+  selection. Every row clicks to jump to its chapter's first entry,
+  the current one included: its first entry sits under its break, or
+  at the branch's top for chapter 1. A current chapter with no entry
+  yet, right after a close, has nothing to jump to and isn't
+  clickable.
 - **Progress bar + label** — `chapter progress · 8,420 / 24,000 tok`
 - **Close chapter manually** — primary action; opens the
   [chapter-close modal](../chapter-timeline/chapter-timeline.md#chapter-close-modal)

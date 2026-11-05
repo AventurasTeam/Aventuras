@@ -27,7 +27,7 @@ vi.mock('@/lib/db', async (importOriginal) => ({
   openRegionSeries: reads.series,
 }))
 
-const ZEROS = { tokens: 0, percent: 0, tone: 'success', canClose: false }
+const ZEROS = { tokens: 0, percent: 0, tone: 'success', canClose: false, startEntryId: null }
 
 function openStory({ branchId = 'b1', threshold = 1_000 } = {}): void {
   currentStoryStore.set({
@@ -142,6 +142,7 @@ describe('useChapterProgress', () => {
       percent: 25,
       tone: 'success',
       canClose: true,
+      startEntryId: 'e1',
     })
     expect(reads.series).toHaveBeenCalledTimes(1)
     expect(reads.series).toHaveBeenCalledWith('b1', { db: {} })
