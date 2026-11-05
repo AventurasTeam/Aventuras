@@ -461,6 +461,31 @@ describe('stampEntryChapter', () => {
     expect(await closeDeltas(ctx)).toEqual([])
   })
 
+  it("stamps only its own branch's row, as entry ids repeat across branches", async () => {
+    const ctx = await stampFixture(null)
+    await ctx.db.insert(branches).values({ id: 'b2', storyId: 's1', name: 'fork', createdAt: 1 })
+    await ctx.db.insert(storyEntries).values({
+      id: 'e1',
+      branchId: 'b2',
+      position: 1,
+      kind: 'ai_reply',
+      content: PROSE,
+      contentTokens: countTokens(PROSE),
+      chapterId: null,
+      metadata: { sceneEntities: [], currentLocationId: null, worldTime: 60 },
+      createdAt: 1,
+    })
+
+    expect(await stamp(ctx)).toMatchObject({ status: 'ok' })
+
+    const [other] = await ctx.db
+      .select()
+      .from(storyEntries)
+      .where(and(eq(storyEntries.branchId, 'b2'), eq(storyEntries.id, 'e1')))
+    expect(other!.chapterId).toBeNull()
+    expect((await entryRow(ctx))!.chapterId).toBe('chap_new')
+  })
+
   it('refuses a payload naming another branch and writes nothing', async () => {
     const ctx = await stampFixture(null)
 
