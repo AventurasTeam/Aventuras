@@ -64,6 +64,18 @@ describe('registerRejectionHandler', () => {
     expect(logEntries[0].fields.error).toBe('Script error.')
   })
 
+  it('redacts a known secret embedded in an uncaught error stack', () => {
+    setHttpCallKnownSecretValues(['sk-test-abc'])
+    const addEventListener = vi.fn()
+    registerRejectionHandler({ addEventListener })
+    const err = new Error('fetch failed')
+    err.stack = 'Error: fetch failed\n    at https://api.example.test/v1?api_key=sk-test-abc'
+    captureListener(addEventListener, 'error')({ error: err, message: 'fetch failed' })
+    const error = String(getDiagnosticsSnapshot().logEntries[0].fields.error)
+    expect(error).not.toContain('sk-test-abc')
+    expect(error).toContain('api_key=***')
+  })
+
   it('logs the stack (not just the message) with a per-event id when the DOM listener fires', () => {
     const addEventListener = vi.fn()
     registerRejectionHandler({ addEventListener })
