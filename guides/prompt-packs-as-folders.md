@@ -150,9 +150,9 @@ that are really going away. A prompt your pack no longer has is in that list, no
 Bring both branches up to date before the first merge. Export the shipped prompts onto `shipped`
 and commit, then export your pack onto `my-pack` and commit, then merge. Doing `my-pack` first moves
 its own `README.md` aside, where merging an old `my-pack` would collide with the new `README.md` on
-`shipped`. Even then, that first merge conflicts once in `pack.yaml`, where the old layout kept the
-version next to the name: keep your side (`git checkout --ours pack.yaml`, then `git add pack.yaml`).
-Later releases leave `pack.yaml` alone.
+`shipped`. That first merge may still conflict in `pack.yaml`, where the old layout kept the version
+next to the name. If git reports a conflict there, keep your side (`git checkout --ours pack.yaml`,
+then `git add pack.yaml`). Later releases leave `pack.yaml` alone.
 
 ## 6. What is in an exported folder
 
@@ -213,8 +213,9 @@ the whole line it was on.
 
 That asymmetry is worth remembering when merging: a conflict that mangles a tag stops you at the
 door, while one that mangles a variable name passes silently. Nothing flags an unknown name for
-you: after a merge that touched a prompt's variables, compare the names in it with the lists in
-`_reference/` by hand, rather than assuming a clean import means a correct prompt.
+you: after a merge that touched a prompt's variables, compare the names in it by hand with the
+lists in `_reference/` and your pack's custom variables in `pack.yaml`, rather than assuming a clean
+import means a correct prompt.
 
 ## 9. What an import reads
 

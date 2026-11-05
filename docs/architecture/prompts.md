@@ -225,7 +225,8 @@ write, through `plugin-fs`'s `rename`, and the confirmation lists them beside th
 waits on that confirmation, so each target is checked again before anything moves, and one that appeared
 meanwhile stops the export. A folder emptied by the prune is removed after it, so a
 migrated tree keeps no unnumbered group folders; one left holding only the metadata an OS drops into
-folders it shows (`.DS_Store`, `desktop.ini`, `Thumbs.db`) counts as emptied and goes with it. Import reads
+folders it shows (`.DS_Store`, `desktop.ini`, `Thumbs.db`) counts as emptied: those files go first, then
+the folder, never recursively, so a file that arrived since the listing keeps it. Import reads
 both formats.
 
 A pruned template file whose id the tree writes again, at a path the folder does not already hold, is a

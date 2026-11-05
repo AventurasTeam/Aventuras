@@ -125,8 +125,13 @@ export async function writeTree(
   for (const folder of emptiedFolderCandidates(prunePaths)) {
     const entries = await readDir(joinPath(root, folder))
     const files = entries.filter((entry) => entry.isFile).map((entry) => entry.name)
-    if (files.length === entries.length && holdsOnlyOsClutter(files)) {
-      await remove(joinPath(root, folder), { recursive: true })
+    if (files.length !== entries.length || !holdsOnlyOsClutter(files)) continue
+    for (const name of files) await remove(joinPath(root, `${folder}/${name}`))
+    // Not recursive: a file that arrived since the listing keeps the folder, and the export.
+    try {
+      await remove(joinPath(root, folder))
+    } catch (e) {
+      console.warn(`[directory] Left ${folder} in place:`, e)
     }
   }
 }
