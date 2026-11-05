@@ -1,9 +1,10 @@
 import { and, eq } from 'drizzle-orm'
 
-import type { Chapter, NewChapter } from '@/lib/db'
+import type { Chapter, CloseReport, NewChapter } from '@/lib/db'
 import { chapterWriteSchema, chapters, KIND_FIELDS } from '@/lib/db'
 import { chaptersStore } from '@/lib/stores'
 
+import { projectChapterPatch } from './chapter-store-projection'
 import { cascadedDelete, rowCascade } from '../delta/delete-cascade'
 import { register, type ActionHandler } from '../delta/registry'
 import type { DeltaSource } from '../types'
@@ -11,14 +12,11 @@ import type { DeltaSource } from '../types'
 const cascade = rowCascade('chapter')
 
 type ChapterUpdatePatch = Partial<{
-  sequenceNumber: number
   title: string
   summary: string
   theme: string
   keywords: string[]
-  startEntryId: string
-  endEntryId: string
-  tokenCount: number
+  closeReport: CloseReport | null
 }>
 
 declare module '@/lib/actions/action-map' {
@@ -32,18 +30,8 @@ declare module '@/lib/actions/action-map' {
   }
 }
 
-// Delta-logged columns. Operational (embedding_stale), timestamps (closed_at,
-// created_at, updated_at), and the PK (id, branch_id) are never in this set.
-const UPDATABLE = [
-  'sequenceNumber',
-  'title',
-  'summary',
-  'theme',
-  'keywords',
-  'startEntryId',
-  'endEntryId',
-  'tokenCount',
-] as const
+// What a write after the close may change: its number, range and token snapshot are fixed there.
+const UPDATABLE = ['title', 'summary', 'theme', 'keywords', 'closeReport'] as const
 
 function fullRow(entry: NewChapter): Chapter {
   // Apply SQLite defaults so the inserted row and the store create-patch row are byte-identical.
@@ -180,7 +168,7 @@ export function registerChapters(): void {
       updateChapter: updateHandler,
       deleteChapter: deleteHandler,
     },
-    patcher: (branchId, p) => chaptersStore.patch(branchId, p),
+    patcher: (branchId, p) => chaptersStore.patch(branchId, projectChapterPatch(p)),
     cascade,
   })
 }

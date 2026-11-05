@@ -6,7 +6,6 @@ import type { RowSignalsSnapshot } from '@/hooks/use-row-signals'
 import {
   STORY_SETTINGS_DEFAULTS,
   storyDefinitionSchema,
-  type Chapter,
   type Entity,
   type Happening,
   type Lore,
@@ -20,6 +19,7 @@ import {
   loreStore,
   resetAllStores,
   threadsStore,
+  type StoreChapter,
 } from '@/lib/stores'
 
 import { railChipTintOf, railStripOf, useRailData } from './use-rail-data'
@@ -105,7 +105,7 @@ function happening(id: string, branchId = 'br_1'): Happening {
   }
 }
 
-function chapter(id: string, branchId: string): Chapter {
+function chapter(id: string, branchId: string): StoreChapter {
   return {
     id,
     branchId,
@@ -121,7 +121,7 @@ function chapter(id: string, branchId: string): Chapter {
     embeddingStale: 1,
     createdAt: 1,
     updatedAt: 1,
-    closeReport: null,
+    hasCloseReport: false,
   }
 }
 

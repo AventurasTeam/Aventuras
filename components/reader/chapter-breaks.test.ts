@@ -1,11 +1,27 @@
 import { describe, expect, it } from 'vitest'
 
-import type { Chapter, StoryEntry } from '@/lib/db'
+import type { StoryEntry } from '@/lib/db'
+import type { StoreChapter } from '@/lib/stores'
 
 import { chapterBreaksOf } from './chapter-breaks'
 
-const chapter = (sequenceNumber: number, endEntryId: string, branchId = 'br_1') =>
-  ({ id: `chap_${sequenceNumber}`, branchId, sequenceNumber, endEntryId }) as Chapter
+const chapter = (sequenceNumber: number, endEntryId: string, branchId = 'br_1'): StoreChapter => ({
+  id: `chap_${sequenceNumber}`,
+  branchId,
+  sequenceNumber,
+  title: `Chapter ${sequenceNumber}`,
+  summary: '',
+  theme: '',
+  keywords: [],
+  startEntryId: `start_${sequenceNumber}`,
+  endEntryId,
+  tokenCount: 0,
+  closedAt: 1,
+  embeddingStale: 0,
+  createdAt: 1,
+  updatedAt: 1,
+  hasCloseReport: false,
+})
 
 const row = (id: string, branchId = 'br_1') => ({ id, branchId }) as StoryEntry
 

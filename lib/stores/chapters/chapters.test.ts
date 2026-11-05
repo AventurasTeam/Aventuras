@@ -1,10 +1,8 @@
 import { describe, expect, it } from 'vitest'
 
-import type { Chapter } from '@/lib/db'
+import { chaptersStore, type StoreChapter } from './chapters'
 
-import { chaptersStore } from './chapters'
-
-function chapterRow(id: string, sequenceNumber: number, title: string): Chapter {
+function chapterRow(id: string, sequenceNumber: number, title: string): StoreChapter {
   return {
     id,
     branchId: 'br_1',
@@ -20,7 +18,7 @@ function chapterRow(id: string, sequenceNumber: number, title: string): Chapter 
     embeddingStale: 0,
     createdAt: 1,
     updatedAt: 1,
-    closeReport: null,
+    hasCloseReport: false,
   }
 }
 

@@ -144,7 +144,8 @@ describe('chapters CRUD arms', () => {
     expect((await db.select().from(deltas)).length).toBe(0)
   })
 
-  it('rejects an update whose patch has no updatable fields (closed_at-only — no throw, no delta)', async () => {
+  // A chapter's number, range and token snapshot are fixed at its close; closed_at never moves.
+  it('rejects an update whose patch has only fixed columns (no throw, no delta)', async () => {
     const { db, ctx } = await setup()
     await applyDeltaAction(
       {
@@ -154,25 +155,41 @@ describe('chapters CRUD arms', () => {
       },
       ctx,
     )
-    // closed_at is in chapterWriteSchema but NOT in UPDATABLE, so it parses but yields an empty set.
+    // Each parses against chapterWriteSchema, so only UPDATABLE can refuse them.
+    const fixed = {
+      sequenceNumber: 2,
+      startEntryId: 'se_2',
+      endEntryId: 'se_41',
+      tokenCount: 26000,
+      closedAt: 999,
+    }
     const result = await applyDeltaAction(
       {
         action: {
           kind: 'updateChapter',
           source: 'user_edit',
-          payload: { branchId: 'br_1', id: 'chap_1', patch: { closedAt: 999 } as never },
+          payload: { branchId: 'br_1', id: 'chap_1', patch: fixed as never },
         },
         actionId: 'act_noop',
         branchId: 'br_1',
       },
       ctx,
     )
-    expect(result.status).toBe('rejected')
-    expect((await rowFor(db, 'chap_1')).closedAt).toBe(100) // unchanged
+    expect(result).toEqual({
+      status: 'rejected',
+      reason: 'update patch for chapters br_1:chap_1 has no updatable fields',
+    })
+    expect(await rowFor(db, 'chap_1')).toMatchObject({
+      sequenceNumber: 1,
+      startEntryId: 'se_1',
+      endEntryId: 'se_40',
+      tokenCount: 24000,
+      closedAt: 100,
+    })
     expect((await db.select().from(deltas)).length).toBe(1) // only the create delta
   })
 
-  it('update on keywords (whole-array) + scalar + structural fields; reverse-replay restores row + store', async () => {
+  it('update on keywords (whole-array) + scalar fields; reverse-replay restores row + store', async () => {
     const { db, ctx } = await setup()
     await applyDeltaAction(
       {
@@ -195,8 +212,7 @@ describe('chapters CRUD arms', () => {
               keywords: ['war'], // whole-array change (shrink)
               title: 'War Breaks', // scalar change
               summary: 'War has come.', // scalar change
-              tokenCount: 26000, // scalar change
-              endEntryId: 'se_45', // structural field change
+              theme: 'open war', // scalar change
             },
           },
         },
@@ -210,13 +226,12 @@ describe('chapters CRUD arms', () => {
     expect((await rowFor(db, 'chap_1')).title).toBe('War Breaks')
     expect(chaptersStore.getById('chap_1')?.keywords).toEqual(['war'])
 
-    // reverse-replay restores the whole prior array + scalars + structural field
+    // reverse-replay restores the whole prior array + scalars
     expect(await reverseReplayDeltas('act_u', ctx)).toBe(1)
     const back = await rowFor(db, 'chap_1')
     expect(back.title).toBe('The Gathering Storm')
     expect(back.summary).toBe('Heroes assemble as war looms.')
-    expect(back.tokenCount).toBe(24000)
-    expect(back.endEntryId).toBe('se_40')
+    expect(back.theme).toBe('rising tension')
     expect(back.keywords).toEqual(['war', 'omen'])
     expect(chaptersStore.getById('chap_1')?.keywords).toEqual(['war', 'omen'])
   })
@@ -284,7 +299,7 @@ describe('chapters CRUD arms', () => {
         action: {
           kind: 'updateChapter',
           source: 'user_edit',
-          payload: { branchId: 'br_1', id: 'chap_1', patch: { tokenCount: 99999 } },
+          payload: { branchId: 'br_1', id: 'chap_1', patch: { title: 'War Breaks' } },
         },
         actionId: 'act_u1',
         branchId: 'br_1',
@@ -324,5 +339,113 @@ describe('chapters CRUD arms', () => {
       ctx,
     )
     expect((await rowFor(db, 'chap_1')).embeddingStale).toBe(1) // embedded column changed
+  })
+})
+
+// Milestone C4: the store row is the DB row less `closeReport`, plus `hasCloseReport`.
+describe('chapters store projection', () => {
+  async function expectStoreMirrors(
+    db: Awaited<ReturnType<typeof setup>>['db'],
+    hasCloseReport: boolean,
+  ) {
+    const stored = chaptersStore.getById('chap_1')
+    expect(stored).toBeDefined()
+    const { hasCloseReport: flag, ...storeRest } = stored!
+    const { closeReport: _closeReport, ...dbRest } = await rowFor(db, 'chap_1')
+    expect(storeRest).toEqual(dbRest)
+    expect(flag).toBe(hasCloseReport)
+  }
+
+  async function createWith(ctx: Awaited<ReturnType<typeof setup>>['ctx'], entry: NewChapter) {
+    await applyDeltaAction(
+      {
+        action: { kind: 'createChapter', source: 'chapter_close', payload: { entry } },
+        actionId: 'act_c',
+        branchId: 'br_1',
+      },
+      ctx,
+    )
+  }
+
+  async function updateWith(
+    ctx: Awaited<ReturnType<typeof setup>>['ctx'],
+    write: {
+      actionId: string
+      source: 'chapter_close' | 'user_edit'
+      patch: { title?: string; closeReport?: CloseReport | null }
+    },
+  ) {
+    const result = await applyDeltaAction(
+      {
+        action: {
+          kind: 'updateChapter',
+          source: write.source,
+          payload: { branchId: 'br_1', id: 'chap_1', patch: write.patch },
+        },
+        actionId: write.actionId,
+        branchId: 'br_1',
+      },
+      ctx,
+    )
+    expect(result.status).toBe('ok')
+  }
+
+  it('flags a created row by whether it carries a report', async () => {
+    const { db, ctx } = await setup()
+    await createWith(ctx, { ...CHAPTER, closeReport: REPORT })
+    await expectStoreMirrors(db, true)
+  })
+
+  it('flags the report update, and clears the flag when it is reversed', async () => {
+    const { db, ctx } = await setup()
+    await createWith(ctx, CHAPTER)
+    await expectStoreMirrors(db, false)
+    await updateWith(ctx, {
+      actionId: 'act_report',
+      source: 'chapter_close',
+      patch: { closeReport: REPORT },
+    })
+    expect((await rowFor(db, 'chap_1')).closeReport).toEqual(REPORT)
+    await expectStoreMirrors(db, true)
+    expect(await reverseReplayDeltas('act_report', ctx)).toBe(1)
+    expect((await rowFor(db, 'chap_1')).closeReport).toBeNull()
+    await expectStoreMirrors(db, false)
+  })
+
+  it('leaves the flag alone through a title save and its reversal', async () => {
+    const { db, ctx } = await setup()
+    await createWith(ctx, { ...CHAPTER, closeReport: REPORT })
+    await updateWith(ctx, {
+      actionId: 'act_title',
+      source: 'user_edit',
+      patch: { title: 'War Breaks' },
+    })
+    await expectStoreMirrors(db, true)
+    expect(await reverseReplayDeltas('act_title', ctx)).toBe(1)
+    await expectStoreMirrors(db, true)
+  })
+
+  it('rejects a malformed report on update (no write, no delta)', async () => {
+    const { db, ctx } = await setup()
+    await createWith(ctx, CHAPTER)
+    const result = await applyDeltaAction(
+      {
+        action: {
+          kind: 'updateChapter',
+          source: 'chapter_close',
+          payload: {
+            branchId: 'br_1',
+            id: 'chap_1',
+            patch: { closeReport: { version: 1 } as unknown as CloseReport },
+          },
+        },
+        actionId: 'act_bad',
+        branchId: 'br_1',
+      },
+      ctx,
+    )
+    expect(result.status).toBe('rejected')
+    expect((await rowFor(db, 'chap_1')).closeReport).toBeNull()
+    expect((await db.select().from(deltas)).length).toBe(1)
   })
 })

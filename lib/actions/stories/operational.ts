@@ -1,4 +1,4 @@
-import { eq } from 'drizzle-orm'
+import { eq, getTableColumns, sql } from 'drizzle-orm'
 
 import {
   branches,
@@ -164,7 +164,15 @@ async function loadAndPublish(
     .from(happeningAwareness)
     .where(eq(happeningAwareness.branchId, branchId))
   if (!isCurrentRequest()) return { status: 'cancelled' }
-  const chapterRows = await ctx.db.select().from(chapters).where(eq(chapters.branchId, branchId))
+  // Milestone C4: the report stays out of chaptersStore, which keeps whether a row has one.
+  const { closeReport: _closeReport, ...chapterColumns } = getTableColumns(chapters)
+  const chapterRows = await ctx.db
+    .select({
+      ...chapterColumns,
+      hasCloseReport: sql<boolean>`${chapters.closeReport} IS NOT NULL`.mapWith(Boolean),
+    })
+    .from(chapters)
+    .where(eq(chapters.branchId, branchId))
   if (!isCurrentRequest()) return { status: 'cancelled' }
   const relationshipRows = await ctx.db
     .select()
