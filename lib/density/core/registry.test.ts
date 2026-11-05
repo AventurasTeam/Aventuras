@@ -1,9 +1,38 @@
+import { readFileSync } from 'node:fs'
+import { join } from 'node:path'
+
 import { describe, expect, it } from 'vitest'
 
 import { densityTokens } from './registry'
-import { DENSITY_TOKEN_KEYS, DENSITY_VALUES } from '../types'
+import { DENSITY_TOKEN_KEYS, DENSITY_VALUES, type DensityValue } from '../types'
+
+function cssBlock(css: string, start: number): string {
+  return css.slice(start, css.indexOf('}', start))
+}
 
 describe('density registry', () => {
+  // global.css is hand-kept, and the web build reads only global.css; :root boots as compact.
+  it('global.css carries every slot of every density', () => {
+    const css = readFileSync(join(process.cwd(), 'global.css'), 'utf8')
+    const rootStart = [...css.matchAll(/:root \{/g)]
+      .map((match) => match.index)
+      .find((start) => cssBlock(css, start).includes('--control-h-'))
+    expect(rootStart, 'no :root density block').toBeDefined()
+    const blocks: [string, string, DensityValue][] = [
+      [':root', cssBlock(css, rootStart ?? 0), 'compact'],
+      ...DENSITY_VALUES.map((density): [string, string, DensityValue] => {
+        const start = css.indexOf(`[data-density='${density}'] {`)
+        expect(start, `${density} has no block`).toBeGreaterThan(-1)
+        return [density, cssBlock(css, start), density]
+      }),
+    ]
+    for (const [name, block, density] of blocks) {
+      for (const key of DENSITY_TOKEN_KEYS) {
+        expect(block, `${name} ${key}`).toContain(`${key}: ${densityTokens[density][key]};`)
+      }
+    }
+  })
+
   it('contains all three density values', () => {
     expect(Object.keys(densityTokens).sort()).toEqual([...DENSITY_VALUES].sort())
   })

@@ -60,12 +60,3 @@ slice-planning gate forces its resolution before that slice is planned.
   to get. Held rather than routed in the 2026-09-09 triage pass, which
   did not re-run the suite serially — the evidence above is still as of
   `edce17b8`.
-
-- **The theme CSS generator has no runtime caller.**
-  `lib/themes/core/css-generator.ts` has had no caller outside its tests
-  since M1: `global.css` is written by hand and guarded by
-  `lib/themes/core/registry.test.ts`. 5.3 kept the generator in step
-  with each dark theme's `--landed-tint-share`, but nothing checks the
-  two agree. Wire it into a build step or a test that compares its
-  output with `global.css`, or drop it. Raised 2026-11-03 by 5.3's slice
-  review.
