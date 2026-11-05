@@ -23,7 +23,11 @@ import {
 import { createTestDb } from '@/lib/db/__tests__/test-db'
 import { __resetDiagnosticsGate } from '@/lib/diagnostics'
 import { embedClassifierDescriptions } from '@/lib/embedder-swap'
-import { __resetRegistry as __resetPipelineRegistry, getPipeline } from '@/lib/pipeline'
+import {
+  __resetRegistry as __resetPipelineRegistry,
+  CHAPTER_CLOSE_KIND,
+  getPipeline,
+} from '@/lib/pipeline'
 import {
   __resetClassifierEmbedder,
   classifierEmbedder,
@@ -389,6 +393,15 @@ describe('runBootstrap', () => {
 
     expect(classifierEmbedder()).toBe(embedClassifierDescriptions)
     expect(getPipeline(PERIODIC_CLASSIFIER_KIND).kind).toBe(PERIODIC_CLASSIFIER_KIND)
+  })
+
+  it('registers the chapter close', async () => {
+    __resetPipelineRegistry()
+    await seedRow()
+
+    await runBootstrap(ctx)
+
+    expect(getPipeline(CHAPTER_CLOSE_KIND).kind).toBe('chapter-close')
   })
 
   it('reverses an orphaned pass at boot and hands its branch back to the cadence', async () => {

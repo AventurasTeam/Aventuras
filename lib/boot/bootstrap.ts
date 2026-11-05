@@ -22,6 +22,7 @@ import { t } from '@/lib/i18n'
 import {
   configureClassifierEmbedder,
   configureDeltaActionPort,
+  ensureChapterClosePipelineRegistered,
   ensurePeriodicClassifierPipelineRegistered,
   pipelineEventBus,
   recoverInFlightRuns,
@@ -107,8 +108,9 @@ export async function runBootstrap(ctx: DbCtx): Promise<BootHydrateResult> {
   ensureDeltaActionPort()
   wireDrainWorker(ctx)
   configureClassifierEmbedder(embedClassifierDescriptions)
-  // per-turn's chain names the pass at a turn's commit; an unregistered kind chains nothing.
+  // A chain names its successor's kind at commit, and an unregistered kind chains nothing.
   ensurePeriodicClassifierPipelineRegistered()
+  ensureChapterClosePipelineRegistered()
   // Recovery must never block boot: a failure of the orphan pass itself (not just
   // a per-orphan delta) is logged and reported, and boot proceeds to hydrate.
   let recovery: RecoveryReport | null = null
