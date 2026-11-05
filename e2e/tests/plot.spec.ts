@@ -71,7 +71,7 @@ test.describe.serial('Plot panel', () => {
     await expect(plot.row(page, 'Expose the Syndicate broker')).toBeVisible()
 
     await plot.segmentCell(page, 'happening').click()
-    // Two closed chapters (entries 1-58) plus open region from 59 — all three buckets exercised.
+    // Two closed chapters (entries 1-57) plus open region from 58 — all three buckets exercised.
     // hap_pact anchors entry 59 (seed-dataset.ts), a real open-region row — Current isn't empty.
     await expect(plot.tierHeader(page, t('plot:buckets.current'))).toHaveAttribute(
       'aria-expanded',
