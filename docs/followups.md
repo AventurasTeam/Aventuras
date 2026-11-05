@@ -214,6 +214,56 @@ No open items.
     height part of the settle rule. Pin both in unit tests once the
     loop is a function. Raised 2026-11-03 by 5.3's slice review.
 
+- **A scrollbar drag isn't a gesture to the reader's pins.**
+  `gestureActiveRef` in `components/reader/reader-surface.tsx` tracks
+  touch only, and a scrollbar press interrupts only at pointerdown, so a
+  pin that starts during a thumb drag (stream end, viewport shrink, a
+  chapter break) can tug the view for about 10 frames. Raised 2026-11-02
+  by 5.3's task reviews. Nor is a touch fling's momentum:
+  `gestureActiveRef` turns false at `touchend`, so a close's break that
+  commits in the first frame or two of an upward fling from the bottom,
+  while the reader still reads within ~20 px of it, re-pins against the
+  fling, and the viewport-shrink re-pin, older than 5.3, has the same
+  guard. [`reader-document.md`](./ui/patterns/reader-document.md#entry-list-fully-rendered-flow-layout)
+  counts a touch fling as mid-gesture. Read from the code, not
+  reproduced; added 2026-11-03 by 5.3's slice review.
+  Two more gaps of the kind, read from the code and not run: a touch
+  drag that leaves the ~80 px band and comes back re-engages autoscroll
+  under the finger, and the next chunk writes `scrollTop` beneath it;
+  and `handleTouchEnd` clears `gestureActiveRef` on any lift, so a
+  second finger still down counts as none. Raised 2026-11-04 by the
+  triage pass. Decided 2026-11-05: every write the user didn't ask for
+  waits for scroll rest, as `reader-document.md` says, and
+  `reader-composer.md` now agrees. Build it on a rest signal apart from
+  `gestureActiveRef`, which the landing loop's write gate reads; a
+  scrollbar drag needs a probe of what ends it. Routed from triage
+  2026-11-05.
+
+- **A shrinking viewport can pull a landing to the bottom.** The
+  surface's `ResizeObserver` (`components/reader/reader-surface.tsx`)
+  writes `scrollTop` to the bottom when the viewport shrinks under a
+  reader near the bottom, with no landing guard, so an Android keyboard
+  opening during a landing that starts near the bottom pulls the reader
+  there. Predates Slice 5.3. Read from the code, not reproduced. Raised
+  2026-11-03 by 5.3's final review.
+  Checked against the code on 2026-11-05, not run: the landing loop
+  re-lands the row about two frames later, so the pull is a jolt, not a
+  lost landing. The guard is the chapter break's, built with the rest
+  rule above. Routed from triage 2026-11-05.
+
+- **The reader's bottom geometry is still read only at a few moments.**
+  `syncJumpButton` (`components/reader/reader-surface.tsx`) raises the
+  jump-to-bottom button as a stream grows below the reader and through
+  a landing, but other growth below still waits for a scroll event: the
+  commit that replaces a streaming card, a reply's late layout, a
+  classifier write that makes a row taller. Separately, the chapter
+  break's re-pin reads the reader's distance against the last commit's
+  height, and in one story setup late layout had shrunk the content
+  14 px since that commit (4 of 4 runs), so a reader 10 px from the
+  bottom read as 24 px and wasn't re-pinned; the cause isn't pinned
+  down. Both from 5.3's slice review, 2026-11-03, in stories, not on a
+  device. Routed from triage 2026-11-05.
+
 ## Tuning and play testing
 
 v1 work held for the end of the cycle, once every base system is

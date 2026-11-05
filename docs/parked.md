@@ -3674,6 +3674,15 @@ regenerate and undo rules. Parked 2026-10-26 by the cut-off replies
 design; the signal is users regenerating cut-off replies to finish them,
 or asking to continue one.
 
+#### Space on an entry's media controls
+
+Slice 5.3's slice review, 2026-11-03, left Space on a `<button>` or
+`<summary>` in entry HTML to the control; `<video controls>` and
+`<audio controls>`, which the entry sanitizer allows, may take Space
+too and weren't probed. Revisit when an entry with media controls is
+reported, or when the sanitizer's allowlist changes. Routed from
+triage 2026-11-05.
+
 ### Code structure (parked)
 
 #### Two test and logging helpers have no home yet
