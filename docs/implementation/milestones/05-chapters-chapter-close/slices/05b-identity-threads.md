@@ -450,6 +450,15 @@ literals so a test can't derive its expectation from the constant.
   starts read the same way, and check how many rows it brings on the
   dataset chapter.
 
+- **Does a close's entity write read as the turn's first move?**
+  `firstLocationWrites` (`lib/actions/story-entries/pre-entry-locations.ts`)
+  takes any entity write anchored on an entry as that entry's turn's own.
+  A close anchors every write on its end entry
+  ([milestone C1](../milestone.md#c1--a-closes-delta-shape)), so a task
+  that writes `current_location_id` for a character the end turn didn't
+  move would read as that turn's first move. Unverified; check before the
+  first task that writes a location lands.
+
 ## Implementation notes
 
 _Populated at finish: notable deviations from the plan and resolved developer decisions._

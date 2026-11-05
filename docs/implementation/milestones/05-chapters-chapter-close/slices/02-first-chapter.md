@@ -560,3 +560,21 @@ that ran)
 ## Implementation notes
 
 _Populated at finish: notable deviations from the plan and resolved developer decisions._
+
+- **The metadata prompt reads the story's mode (developer: "Q2: A").**
+  The plan's system half read every user turn as "the narration decides
+  what happened" and kept `mode` out of the `chapter` group. Canon reads
+  a turn by mode
+  ([`ui/principles.md → Mode`](../../../../ui/principles.md#1-mode--users-relationship-to-the-story)),
+  so `mode` joined `VARIABLES.chapter` and `ChapterContext`, the system
+  half branches its user-turn paragraph as `macro_classifier_mode_rule`
+  does, worded for a summary, and
+  [`chapter-close.md → Phase 2`](../../../../memory/chapter-close.md#phase-2--chapter-metadata)
+  lists the mode in the prompt context.
+- **A close's range is read by its ids.** The plan's
+  `readCloseRangeEntries` read the open region through the end, which
+  returns nothing once the stamps land; it now reads the non-system rows
+  between the range's start and end positions, as
+  [C2](../milestone.md#c2--pipeline-shape) has phases read the range.
+  Sound while entries are only appended at the tail: a feature that
+  inserts mid-story should also require the stamp once it has landed.

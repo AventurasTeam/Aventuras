@@ -60,3 +60,50 @@ slice-planning gate forces its resolution before that slice is planned.
   to get. Held rather than routed in the 2026-09-09 triage pass, which
   did not re-run the suite serially — the evidence above is still as of
   `edce17b8`.
+
+- **`chaptersStore.patch` takes a raw row from any caller.** The
+  working-set store's `patch` casts `p.row` and `p.columns` to the row
+  type (`lib/stores/factory/working-set-store.ts:28,33`), so a direct
+  caller would put `closeReport` into the store, skipping the
+  projection at the chapters patcher. Today only the patcher and the
+  hydrate write the store; the guarantee is convention. Surfaced by
+  Slice 5.2's review.
+- **The chapters update keeps unchanged columns in its undo payload.**
+  Unlike lore (`lib/actions/lore/register.ts:125-130`), which drops
+  them because History reads an undo payload's keys as the fields that
+  changed (`lib/actions/chapters/register.ts`, the update handler).
+  Matters once a chapter edit shows in History. Surfaced by Slice 5.2's
+  review.
+- **Partial `TxState` fixtures escape the type checker.**
+  `lib/pipeline/definitions/suggestion-refresh.test.ts:207-212` builds
+  one cast `as never`, already without `deferred` and `pendingClose`,
+  so a new `TxState` field never flags it. Harmless while
+  `isUserEditBlocked` reads only what it has.
+- **A bundled template's group is declared twice, unchecked.**
+  `lib/prompts/bundled/index.ts` sets each template's `group` (read by
+  the include validator) and `TEMPLATE_GROUPS` declares it again;
+  changing one alone leaves every prompt test green. Applies to every
+  template.
+- **The story-entry handlers' branch scope is untested on update and
+  delete.** `lib/actions/story-entries/register.test.ts`'s `seed`
+  creates only branch `b1`, so dropping the branch condition from
+  those handlers' writes stays green (entry ids repeat across branches:
+  the PK is `(branch_id, id)`). The stamp handler's case shows the
+  shape.
+- **Refusal codes repeated as literals.** `'branch-not-open'`
+  (`lib/actions/classifier/run-now.ts:11`) and `'embedder-swap'`
+  (`lib/actions/turns/submit-turn.ts:38`) restate
+  `MANUAL_CLOSE_REFUSAL.branchNotOpen` and `.swapPending`
+  (`lib/actions/chapters/start-manual-close.ts`).
+- **Pre-flight reads the open story's settings after two awaits.**
+  `lib/pipeline/runtime/orchestrator.ts:537-540` reads
+  `currentStoryStore.getCurrentStory()?.settings` after `beginRun` and
+  `settleUserWrites`; a story switch in between checks the wrong
+  story's settings. Unverified as reachable.
+- **`ResolveModelConfig` is built inline at each structured caller**
+  (`lib/pipeline/runtime/preflight.ts:18`, and under
+  `lib/pipeline/definitions/`: `periodic-classifier.ts`,
+  `suggestion-refresh.ts`, `per-turn-piggyback.ts`,
+  `chapter-close-metadata-call.ts`; `per-turn.ts` builds it inline
+  too). One builder would keep a new field from being missed at one of
+  them.
