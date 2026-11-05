@@ -17,6 +17,10 @@ export {
 } from './definitions/description-embedder'
 export { readSceneSource } from './definitions/entry-reads'
 export { ensurePeriodicClassifierPipelineRegistered } from './definitions/periodic-classifier'
+export {
+  CHAPTER_CLOSE_RESOLVES,
+  ensureChapterClosePipelineRegistered,
+} from './definitions/chapter-close'
 export { CLASSIFIER_HELD, isClassifierHeld, owedPassAtSend } from './definitions/memory-chain'
 export { runClassifierPass } from './definitions/classifier-pass'
 export {
