@@ -107,7 +107,7 @@ BEGIN
   DELETE FROM sync_identity WHERE entity_type = 'pack' AND local_id = OLD.id;
 END;
 
-CREATE TRIGGER sync_edit_stories AFTER UPDATE OF title, description, genre, template_id, settings, memory_config, mode, custom_variable_values ON stories
+CREATE TRIGGER sync_edit_stories AFTER UPDATE OF title, description, genre, template_id, settings, memory_config, mode, custom_variable_values, time_tracker ON stories
 WHEN NOT EXISTS (SELECT 1 FROM sync_suspend)
 BEGIN
   INSERT INTO sync_vector (sync_id, device_id, counter)

@@ -304,12 +304,6 @@ pub(crate) fn migrations() -> Vec<Migration> {
             sql: include_str!("../migrations/045_sync_identity.sql"),
             kind: MigrationKind::Up,
         },
-        Migration {
-            version: 46,
-            description: "sync_story_time_tracker",
-            sql: include_str!("../migrations/046_sync_story_time_tracker.sql"),
-            kind: MigrationKind::Up,
-        },
     ]
 }
 

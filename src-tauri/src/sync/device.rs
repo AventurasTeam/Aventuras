@@ -66,7 +66,7 @@ mod tests {
 
     async fn schema() -> SqlitePool {
         let pool = memory_pool().await;
-        run_migrations(&pool, 0, 46).await;
+        run_migrations(&pool, 0, 45).await;
         exec(&pool, "UPDATE sync_device SET device_id = 'me'").await;
         pool
     }
