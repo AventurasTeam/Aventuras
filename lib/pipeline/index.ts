@@ -21,7 +21,13 @@ export {
   CHAPTER_CLOSE_RESOLVES,
   ensureChapterClosePipelineRegistered,
 } from './definitions/chapter-close'
-export { CLASSIFIER_HELD, isClassifierHeld, owedPassAtSend } from './definitions/memory-chain'
+export {
+  CLASSIFIER_HELD,
+  isClassifierHeld,
+  owedPassAtSend,
+  readClassifierStatus,
+  unprocessedEntryCount,
+} from './definitions/memory-chain'
 export { runClassifierPass } from './definitions/classifier-pass'
 export {
   ensureSuggestionRefreshPipelineRegistered,
