@@ -278,6 +278,14 @@ export function planFolderChanges(
   }
 }
 
+/** Files an OS drops into a folder it has shown, which do not make the folder the user's. */
+const OS_CLUTTER = new Set(['.ds_store', 'desktop.ini', 'thumbs.db'])
+
+/** Whether a folder holding these files counts as empty once the prune has run. */
+export function holdsOnlyOsClutter(fileNames: string[]): boolean {
+  return fileNames.every((name) => OS_CLUTTER.has(name.toLowerCase()))
+}
+
 /**
  * Folders that may be left empty once `prunePaths` are gone, deepest first, so a parent is
  * checked after its children.

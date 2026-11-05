@@ -205,10 +205,11 @@ merge and says nothing the commit does not.
 baseline in `name`, and git merges adjacent changed lines as one hunk, so any per-release value beside it —
 an application version, a versioned baseline name — conflicts with the custom branch on every release.
 Without one, the baseline's `pack.yaml` is the same in `base` and `theirs` and drops out of the merge. It
-records no `source` either: nothing read it, and the branch a tree sits on already says whose it is. The version lives in `_reference/version.md`, a file of its own beside the two variable lists it
-describes: when a custom tree was last exported by a release whose baseline export was skipped, the version
-conflicts, and as one isolated line whose answer is always "take theirs". Nothing under `_reference/`
-depends on the exported templates, so an edit never touches it.
+records no `source` either: nothing read it, and the branch a tree sits on already says whose it is. The
+version lives in `_reference/version.md`, a file of its own beside the two variable lists it describes.
+When a custom tree was last exported by a release between two baseline exports, `version.md`, the variable
+lists and `README.md` can conflict, and since all of them are generated the answer is always "take theirs".
+Nothing under `_reference/` depends on the exported templates, so an edit never touches it.
 
 **`README.md` is `guides/prompt-packs-as-folders.md`**, imported with `?raw` so the user guide and every
 tree's README are one text, and the README a tree carries is the guide from the version that wrote it. It is
@@ -223,7 +224,9 @@ since Linux can hold several. A folder with the target's name counts as taken. R
 write, through `plugin-fs`'s `rename`, and the confirmation lists them beside the deletions. The plan
 waits on that confirmation, so each target is checked again before anything moves, and one that appeared
 meanwhile stops the export. A folder emptied by the prune is removed after it, so a
-migrated tree keeps no unnumbered group folders. Import reads both formats.
+migrated tree keeps no unnumbered group folders; one left holding only the metadata an OS drops into
+folders it shows (`.DS_Store`, `desktop.ini`, `Thumbs.db`) counts as emptied and goes with it. Import reads
+both formats.
 
 A pruned template file whose id the tree writes again, at a path the folder does not already hold, is a
 **move**, by the same rule that makes the filename the identity; a second copy of that id is a deletion. The

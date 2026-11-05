@@ -13,6 +13,7 @@ import {
   buildShippedBaselineTree,
   buildTree,
   emptiedFolderCandidates,
+  holdsOnlyOsClutter,
   folderOrigin,
   planFolderChanges,
   planPrune,
@@ -303,6 +304,17 @@ describe('planFolderChanges', () => {
       'foreign',
     )
     expect(replacedPaths).toEqual(['.GitAttributes'])
+  })
+})
+
+describe('holdsOnlyOsClutter', () => {
+  it('counts a folder holding only OS metadata as empty', () => {
+    expect(holdsOnlyOsClutter([])).toBe(true)
+    expect(holdsOnlyOsClutter(['.DS_Store', 'Thumbs.db', 'desktop.ini'])).toBe(true)
+  })
+
+  it('keeps a folder holding anything else', () => {
+    expect(holdsOnlyOsClutter(['.DS_Store', 'notes.txt'])).toBe(false)
   })
 })
 

@@ -13,12 +13,18 @@
 
   let { plan, onConfirm, onCancel }: Props = $props()
 
-  let movedPrompts = $derived(plan?.movedPromptCount ?? 0)
-  let deletions = $derived(plan?.deletedPaths ?? [])
-  let renames = $derived(plan?.renames ?? [])
-  let replaced = $derived(plan?.replacedPaths ?? [])
-  let foreign = $derived(plan?.origin === 'foreign')
-  let deletesPrompt = $derived(plan?.deletesPrompt ?? false)
+  /** The last plan, kept while the modal fades out after `plan` is cleared. */
+  let shown = $state<DirectoryExportPlan | null>(null)
+  $effect.pre(() => {
+    if (plan) shown = plan
+  })
+
+  let movedPrompts = $derived(shown?.movedPromptCount ?? 0)
+  let deletions = $derived(shown?.deletedPaths ?? [])
+  let renames = $derived(shown?.renames ?? [])
+  let replaced = $derived(shown?.replacedPaths ?? [])
+  let foreign = $derived(shown?.origin === 'foreign')
+  let deletesPrompt = $derived(shown?.deletesPrompt ?? false)
 
   let tone = $derived<ActionTone>(
     deletions.length > 0 ? 'delete' : replaced.length > 0 ? 'overwrite' : 'default',
@@ -26,11 +32,11 @@
 </script>
 
 {#snippet description()}
-  {#if plan?.origin === 'earlier'}
+  {#if shown?.origin === 'earlier'}
     <span class="block">
       It was exported by an older version of Aventuras and is brought up to the current layout.
     </span>
-  {:else if plan?.origin === 'current' && movedPrompts > 0}
+  {:else if shown?.origin === 'current' && movedPrompts > 0}
     <span class="block">This version of Aventuras groups some prompts differently.</span>
   {/if}
   {#if deletesPrompt}

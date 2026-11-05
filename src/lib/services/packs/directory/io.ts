@@ -17,7 +17,7 @@ import {
   writeTextFile,
 } from '@tauri-apps/plugin-fs'
 import { classifyPath } from './layout'
-import { emptiedFolderCandidates, type FolderChanges, type Tree } from './tree'
+import { emptiedFolderCandidates, holdsOnlyOsClutter, type FolderChanges, type Tree } from './tree'
 
 /** Ask for a directory, adding it to the fs scope. `null` if the user cancelled. */
 export async function pickDirectory(title: string): Promise<string | null> {
@@ -123,6 +123,10 @@ export async function writeTree(
 
   // Only folders the prune emptied: one the user left empty themselves is not touched.
   for (const folder of emptiedFolderCandidates(prunePaths)) {
-    if ((await readDir(joinPath(root, folder))).length === 0) await remove(joinPath(root, folder))
+    const entries = await readDir(joinPath(root, folder))
+    const files = entries.filter((entry) => entry.isFile).map((entry) => entry.name)
+    if (files.length === entries.length && holdsOnlyOsClutter(files)) {
+      await remove(joinPath(root, folder), { recursive: true })
+    }
   }
 }
