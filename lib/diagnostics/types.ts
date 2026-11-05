@@ -43,7 +43,7 @@ export type TurnCapture = {
   kind: string
   branchId: string
   // Grouping key — the turn this run is attributed to. Undefined for a per-turn run
-  // that never produced an entry. Stamped by the orchestrator from M2/M3 onward.
+  // that never produced an entry.
   anchorEntryId?: string
   targetEntryId?: string
   startedAt: number

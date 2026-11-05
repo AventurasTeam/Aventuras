@@ -13,9 +13,9 @@ const PLACES_INSTRUCTION =
 const PARENT_RULE =
   "Set a new place's parent to top only when nothing in Places could contain it, as for the story's first place or a city when Places holds only cities. Leave its parent out when something in Places could contain it and the prose doesn't say which; when unsure, leave it out."
 
-// M2-shaped context: opening + a couple of entries, one entity, empty genre /
-// tone / setting (M2 stories carry these empty until M3.6).
-const m2Context = {
+// A minimal context: opening + a couple of entries, one entity, empty genre /
+// tone / setting.
+const minimalContext = {
   definition: {
     mode: 'adventure',
     genre: { promptBody: '' },
@@ -105,10 +105,10 @@ const thing = (id: string, name: string, over: Partial<Entity> = {}, state: obje
   makeEntity({ id, kind: 'item', name, state: { at_location_id: null, ...state }, ...over })
 
 describe('bundled per-turn template — empty-guard contract', () => {
-  const out = renderTemplate(TEMPLATE_IDS.perTurnNarrative, m2Context).user
+  const out = renderTemplate(TEMPLATE_IDS.perTurnNarrative, minimalContext).user
 
   it('emits no dangling section headers for empty genre/tone/setting', () => {
-    const { system } = renderTemplate(TEMPLATE_IDS.perTurnNarrative, m2Context)
+    const { system } = renderTemplate(TEMPLATE_IDS.perTurnNarrative, minimalContext)
     expect(system).not.toContain('# Setting')
     expect(system).not.toContain('# Genre')
     expect(system).not.toContain('# Tone')
@@ -129,7 +129,7 @@ describe('bundled per-turn template — empty-guard contract', () => {
   // architecture.md → System and user halves: every history marks the user's turns.
   it("wraps the user's turns in <user_turn>, leaving the opening and replies bare", () => {
     const { user } = renderTemplate(TEMPLATE_IDS.perTurnNarrative, {
-      ...m2Context,
+      ...minimalContext,
       entries: [
         { kind: 'opening', content: 'The gate groaned open.' },
         { kind: 'user_action', content: 'I step through.\n\nThen I wait.' },
@@ -142,7 +142,7 @@ describe('bundled per-turn template — empty-guard contract', () => {
   })
 
   it('matches the recorded snapshot', () => {
-    expect(renderTemplate(TEMPLATE_IDS.perTurnNarrative, m2Context)).toMatchSnapshot()
+    expect(renderTemplate(TEMPLATE_IDS.perTurnNarrative, minimalContext)).toMatchSnapshot()
   })
 
   // Both branches asserted directly: the snapshot pins whichever one the fixture
@@ -150,7 +150,7 @@ describe('bundled per-turn template — empty-guard contract', () => {
   // breaking.
   it('measures the delta from the previous entry when the action consumed no time', () => {
     const rendered = renderTemplate(TEMPLATE_IDS.perTurnNarrative, {
-      ...m2Context,
+      ...minimalContext,
       piggybackFires: true,
       worldTimeDeltaBasis: 'sinceLastAiReply',
     }).user
@@ -159,7 +159,7 @@ describe('bundled per-turn template — empty-guard contract', () => {
 
   it("measures the delta from the action's end when the action already advanced time", () => {
     const rendered = renderTemplate(TEMPLATE_IDS.perTurnNarrative, {
-      ...m2Context,
+      ...minimalContext,
       piggybackFires: true,
       worldTimeDeltaBasis: 'sinceUserAction',
     }).user
@@ -172,7 +172,7 @@ describe('bundled per-turn template — empty-guard contract', () => {
   it('matches the recorded snapshot with a retrieval pass behind it', () => {
     expect(
       renderTemplate(TEMPLATE_IDS.perTurnNarrative, {
-        ...m2Context,
+        ...minimalContext,
         structuralLocation: {
           id: 'loc_1',
           kind: 'location',
@@ -220,7 +220,7 @@ describe('bundled per-turn template — empty-guard contract', () => {
   // moved below them silently breaks promotion and location choice; the snapshot shows a hunk move.
   it('renders the memory blocks and the map before the instructions that refer back to them', () => {
     const withMemory = renderTemplate(TEMPLATE_IDS.perTurnNarrative, {
-      ...m2Context,
+      ...minimalContext,
       placesListed: true,
       locationMap: [{ id: 'loc_1', name: 'The Keep', depth: 0 }],
       retrievedEntities: [rankedRow('char_2', 'Mira')],
@@ -239,7 +239,7 @@ describe('bundled per-turn template — empty-guard contract', () => {
   // re-trims by it sends the model less prose than the caller composed.
   it('renders every entry it is handed, ignoring partialChapterBuffer', () => {
     const rendered = renderTemplate(TEMPLATE_IDS.perTurnNarrative, {
-      ...m2Context,
+      ...minimalContext,
       userSettings: { partialChapterBuffer: 1 },
       entries: [{ content: 'alpha-line' }, { content: 'beta-line' }, { content: 'gamma-line' }],
     }).user
@@ -250,7 +250,7 @@ describe('bundled per-turn template — empty-guard contract', () => {
 
   it('renders a ranked off-scene entity with promotion instructions', () => {
     const rendered = renderTemplate(TEMPLATE_IDS.perTurnNarrative, {
-      ...m2Context,
+      ...minimalContext,
       retrievedEntities: [rankedRow('char_2', 'Lord Eldrin', 'staged', 'An exiled noble.')],
     }).user
     expect(rendered).toContain('# The wider world')
@@ -264,9 +264,9 @@ describe('bundled per-turn template — empty-guard contract', () => {
   // roster would send rows nothing measured against the entity budget.
   it('does not dump the branch roster when nothing was retrieved', () => {
     const rendered = renderTemplate(TEMPLATE_IDS.perTurnNarrative, {
-      ...m2Context,
+      ...minimalContext,
       entities: [
-        ...m2Context.entities,
+        ...minimalContext.entities,
         {
           id: 'char_2',
           kind: 'character',
@@ -287,7 +287,7 @@ describe('bundled per-turn template — empty-guard contract', () => {
 
   it('renders the pinned-entity block from the structural floor, not from the roster', () => {
     const rendered = renderTemplate(TEMPLATE_IDS.perTurnNarrative, {
-      ...m2Context,
+      ...minimalContext,
       structuralPinnedEntities: [
         {
           id: 'char_3',
@@ -307,7 +307,7 @@ describe('bundled per-turn template — empty-guard contract', () => {
 
   it('renders the calendar vocabulary section when calendarVocabulary is provided', () => {
     const contextWithCalendar = {
-      ...m2Context,
+      ...minimalContext,
       calendarVocabulary: {
         baseUnitName: 'second',
         secondsPerBaseUnit: 1,
@@ -323,7 +323,7 @@ describe('bundled per-turn template — empty-guard contract', () => {
 
   it("gives a base unit's length in seconds only when it isn't one second", () => {
     const { system } = renderTemplate(TEMPLATE_IDS.perTurnNarrative, {
-      ...m2Context,
+      ...minimalContext,
       calendarVocabulary: {
         baseUnitName: 'day',
         secondsPerBaseUnit: 86400,
@@ -334,13 +334,13 @@ describe('bundled per-turn template — empty-guard contract', () => {
   })
 
   it('omits the calendar section when calendarVocabulary is absent', () => {
-    const { system } = renderTemplate(TEMPLATE_IDS.perTurnNarrative, m2Context)
+    const { system } = renderTemplate(TEMPLATE_IDS.perTurnNarrative, minimalContext)
     expect(system).not.toContain('# Calendar')
   })
 
   it('renders the current location from the structural floor, with its ID', () => {
     const rendered = renderTemplate(TEMPLATE_IDS.perTurnNarrative, {
-      ...m2Context,
+      ...minimalContext,
       structuralLocation: {
         id: 'loc_1',
         kind: 'location',
@@ -355,7 +355,7 @@ describe('bundled per-turn template — empty-guard contract', () => {
 
   it('drops the colon on a current location with no description', () => {
     const rendered = renderTemplate(TEMPLATE_IDS.perTurnNarrative, {
-      ...m2Context,
+      ...minimalContext,
       structuralLocation: { id: 'loc_2', kind: 'location', status: 'active', name: 'Old Mill' },
     }).user
     expect(rendered).toContain('[loc_2] Old Mill')
@@ -366,7 +366,7 @@ describe('bundled per-turn template — empty-guard contract', () => {
   // currentLocationId, avoids a dangling header; the map must not hang off it (templateContextMap).
   it('omits the location block when the floor seats none, but still offers the map', () => {
     const rendered = renderTemplate(TEMPLATE_IDS.perTurnNarrative, {
-      ...m2Context,
+      ...minimalContext,
       currentLocationId: 'loc_1',
       structuralLocation: null,
       placesListed: true,
@@ -382,7 +382,7 @@ describe('bundled per-turn template — empty-guard contract', () => {
   // an ID the model can name (piggyback.md → What the writer sees).
   it('offers every listed place as a <current_location> target, retrieved or not', () => {
     const rendered = renderTemplate(TEMPLATE_IDS.perTurnNarrative, {
-      ...m2Context,
+      ...minimalContext,
       structuralLocation: {
         id: 'loc_1',
         kind: 'location',
@@ -403,7 +403,7 @@ describe('bundled per-turn template — empty-guard contract', () => {
   // An instruction naming "an ID from Places" has no referent without the block.
   it('drops the map and its instruction when the branch has no listed place', () => {
     const rendered = renderTemplate(TEMPLATE_IDS.perTurnNarrative, {
-      ...m2Context,
+      ...minimalContext,
       retrievedEntities: [rankedRow('char_9', 'Mira', 'active', 'A courier.')],
     }).user
     expect(rendered).not.toContain('# Places')
@@ -417,7 +417,7 @@ describe('bundled per-turn template — empty-guard contract', () => {
   // locationIds stays a pinned variable for custom packs; the bundled template uses the map.
   it('does not render locationIds', () => {
     const rendered = renderTemplate(TEMPLATE_IDS.perTurnNarrative, {
-      ...m2Context,
+      ...minimalContext,
       locationIds: ['loc_1'],
     }).user
     expect(rendered).not.toContain('loc_1')
@@ -429,10 +429,10 @@ describe('bundled per-turn template — empty-guard contract', () => {
   // without the de-dupe the same row renders under both headers.
   it('renders an in-scene entity that is also the current location only once', () => {
     const rendered = renderTemplate(TEMPLATE_IDS.perTurnNarrative, {
-      ...m2Context,
+      ...minimalContext,
       sceneEntities: ['char_1', 'loc_1'],
       entities: [
-        ...m2Context.entities,
+        ...minimalContext.entities,
         {
           id: 'loc_1',
           kind: 'location',
@@ -458,7 +458,7 @@ describe('bundled per-turn template — empty-guard contract', () => {
 
   it('keeps the # In scene block out entirely when the location is its only member', () => {
     const rendered = renderTemplate(TEMPLATE_IDS.perTurnNarrative, {
-      ...m2Context,
+      ...minimalContext,
       sceneEntities: ['loc_1'],
       entities: [
         {
@@ -487,11 +487,11 @@ describe('bundled per-turn template — empty-guard contract', () => {
   // removes; the block's own trailer would otherwise supply an identical one.
   it('drops the description line on an in-scene entity that has none', () => {
     const rendered = renderTemplate(TEMPLATE_IDS.perTurnNarrative, {
-      ...m2Context,
+      ...minimalContext,
       sceneEntities: ['char_1', 'char_2'],
       entities: [
-        { ...m2Context.entities[0], description: null },
-        { ...m2Context.entities[0], id: 'char_2', name: 'Bex', description: 'A quiet smith.' },
+        { ...minimalContext.entities[0], description: null },
+        { ...minimalContext.entities[0], id: 'char_2', name: 'Bex', description: 'A quiet smith.' },
       ],
     }).user
     expect(rendered).toContain('## Aria [char_1]\n\n## Bex [char_2]\nA quiet smith.')
@@ -500,9 +500,9 @@ describe('bundled per-turn template — empty-guard contract', () => {
   // Names only on the map: an off-scene place's description still competes for retrieval budget.
   it('lists an off-scene location on the map by name, without its description', () => {
     const rendered = renderTemplate(TEMPLATE_IDS.perTurnNarrative, {
-      ...m2Context,
+      ...minimalContext,
       entities: [
-        ...m2Context.entities,
+        ...minimalContext.entities,
         {
           id: 'loc_1',
           kind: 'location',
@@ -523,7 +523,7 @@ describe('bundled per-turn template — empty-guard contract', () => {
 
 describe('bundled per-turn template — piggybackFires gating', () => {
   const contextWithEverything = {
-    ...m2Context,
+    ...minimalContext,
     piggybackFires: false,
     retrievedEntities: [rankedRow('char_2', 'Lord Eldrin', 'staged', 'An exiled noble.')],
     structuralLocation: {
@@ -617,7 +617,7 @@ describe('bundled per-turn template — the location map and item lines', () => 
     description: 'A quiet smith.',
   })
   const render = (over: Record<string, unknown>) =>
-    renderTemplate(TEMPLATE_IDS.perTurnNarrative, { ...m2Context, ...over }).user
+    renderTemplate(TEMPLATE_IDS.perTurnNarrative, { ...minimalContext, ...over }).user
 
   it('nests the map two spaces per level, with IDs when piggyback fires', () => {
     expect(render({ placesListed: true, locationMap: MAP })).toContain(
@@ -905,7 +905,7 @@ describe('bundled per-turn template — the location map and item lines', () => 
 })
 
 describe('bundled per-turn template — create instructions', () => {
-  const rendered = renderTemplate(TEMPLATE_IDS.perTurnNarrative, m2Context).user
+  const rendered = renderTemplate(TEMPLATE_IDS.perTurnNarrative, minimalContext).user
 
   // A model copies the skeleton's order, and canon's example declares before it uses; the parser
   // doesn't care. <scene_entities>, which may name a new item, still leads.
@@ -925,7 +925,7 @@ describe('bundled per-turn template — create instructions', () => {
     )
     expect(rendered).not.toContain('<current_location>the ID from Places')
     const withPlaces = renderTemplate(TEMPLATE_IDS.perTurnNarrative, {
-      ...m2Context,
+      ...minimalContext,
       placesListed: true,
       locationMap: [{ id: 'loc_1', name: 'The Keep', depth: 0 }],
     }).user
@@ -937,7 +937,7 @@ describe('bundled per-turn template — create instructions', () => {
   // A branch whose only places are retired lists them by name alone: no ID to point the model at.
   it('lists retired places by name but offers no ID from Places for them', () => {
     const retiredOnly = renderTemplate(TEMPLATE_IDS.perTurnNarrative, {
-      ...m2Context,
+      ...minimalContext,
       placesListed: false,
       locationMap: [
         { retired: true, id: null, name: 'Port Vellis', depth: 0, retiredReason: 'burned' },
@@ -1004,7 +1004,7 @@ describe('bundled per-turn template — create instructions', () => {
 
   it('leaves the create instructions out when piggyback does not fire', () => {
     const off = renderTemplate(TEMPLATE_IDS.perTurnNarrative, {
-      ...m2Context,
+      ...minimalContext,
       piggybackFires: false,
     }).user
     expect(off).not.toContain('<new_location')
@@ -1019,7 +1019,7 @@ describe('bundled per-turn template — create instructions', () => {
 
 describe('bundled per-turn template — suggestionsFire gating', () => {
   const suggestionContext = {
-    ...m2Context,
+    ...minimalContext,
     suggestionsFire: true,
     suggestionCount: 2,
     suggestionSlots: [
@@ -1099,7 +1099,7 @@ describe('bundled per-turn template — system and user halves', () => {
   const OUTPUT_FORMAT =
     'Write the next beat of the story as prose. Do not break character or step outside the story to speak to the user.'
   const everything = {
-    ...m2Context,
+    ...minimalContext,
     definition: {
       mode: 'adventure',
       setting: 'A keep on a hill.',
@@ -1196,7 +1196,7 @@ describe('bundled per-turn template — system and user halves', () => {
   })
 
   it('is the standing instructions and the output-format line for a story with no setting, genre, tone or calendar', () => {
-    const { system } = renderTemplate(TEMPLATE_IDS.perTurnNarrative, m2Context)
+    const { system } = renderTemplate(TEMPLATE_IDS.perTurnNarrative, minimalContext)
     expect(headings(system)).toEqual([])
     expect(system).toMatch(/^You are the narrator of an interactive story/)
     expect(system).toMatch(/\n\nThe user's turns are marked with <user_turn> tags[^\n]+\n\n/)
@@ -1259,8 +1259,8 @@ describe('bundled per-turn template — standing instructions', () => {
   const KAEL = { id: 'c1', name: 'Kael' }
   const systemFor = (mode: string, narration: string, lead: typeof KAEL | null) =>
     renderTemplate(TEMPLATE_IDS.perTurnNarrative, {
-      ...m2Context,
-      definition: { ...m2Context.definition, mode, narration },
+      ...minimalContext,
+      definition: { ...minimalContext.definition, mode, narration },
       lead,
     }).system
 

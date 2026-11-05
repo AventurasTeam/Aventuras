@@ -5,8 +5,8 @@ import { appSettingsStore } from '@/lib/stores'
 type AppBannerHostProps = { onConfigureProvider: () => void }
 
 /**
- * Thin priority resolver for app-level banners. M2 has one reachable variant
- * (no-providers); embedder + profile-errors land later in priority order.
+ * Thin priority resolver for app-level banners. One variant is reachable so far
+ * (no-providers); embedder + profile-errors join later in priority order.
  */
 export function AppBannerHost({ onConfigureProvider }: AppBannerHostProps) {
   const noProviders = appSettingsStore.useAppSettings((s) => s.providers.length === 0)

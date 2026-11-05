@@ -31,6 +31,13 @@ surprising.
 - Comments that reference the current task, PR, or recent fix
   ("added for X flow", "fixes #123", "used by Y screen"). Those
   belong in the commit message and rot as the codebase evolves.
+- Comments that cite the slice or task that added the code ("Slice
+  2.7 Task 7", "per the reader note"), or describe a shipped milestone
+  as the present ("Dormant in M2"). A pointer forward to unshipped
+  work may stay, the missing capability first and the milestone after
+  ("no settings UI yet (M7)"); once that milestone ships, it is stale.
+  A contract or acceptance-criterion id ("C6", "AC4") names a spec,
+  not a history, and stays.
 - Comments that compare to a prior approach ("the previous approach
   X didn't work, we're doing Y now", "we used to do Z but…").
   Git history is the source of truth for what changed and why.

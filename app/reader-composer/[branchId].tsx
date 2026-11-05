@@ -1216,8 +1216,8 @@ export default function ReaderComposerRoute() {
         }
         return
       }
-      // Both confirm arms open the cascade modal in M3; M5.2 swaps the
-      // chapter-close arm's copy without touching this path.
+      // Both confirm arms open the cascade modal; the chapter-close arm's own copy (M5.2)
+      // swaps in without touching this path.
       const target = entriesStore.getById(entryId)
       setRollback({
         mode: 'regenerate',

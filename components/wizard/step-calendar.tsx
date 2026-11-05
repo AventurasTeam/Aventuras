@@ -90,8 +90,8 @@ function toSummaryData(
 }
 
 // Thin branch point only — the full era-picker widget (era dropdown, flip
-// preview) is scoped to M8.3. Dormant in M2: earth-gregorian, the only
-// built-in calendar, always has eras: null.
+// preview) is scoped to M8.3. Dormant meanwhile: earth-gregorian, the
+// only built-in calendar, has eras: null.
 function EraStub({ eras: _eras }: { eras: EraDeclaration }) {
   return (
     <View className="gap-1">

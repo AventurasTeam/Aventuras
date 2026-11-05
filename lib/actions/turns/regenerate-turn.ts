@@ -61,7 +61,7 @@ export type RegenerateTurnResult =
       userActionContent: string
       /**
        * False when the follow-up unwind did not land, leaving the originating
-       * user_action standing: the branch is NOT in the M2 failed-turn state, so
+       * user_action standing: the branch is NOT in the failed-turn state, so
        * `userActionContent` must not be offered as a retryable submission — a
        * resend would duplicate the action. Always true when the run completed,
        * since no unwind is owed.
@@ -204,7 +204,7 @@ export async function regenerateTurn(
             runInTransaction: ctx.runInTransaction,
           })
 
-          // Non-success converges to the M2 failed-turn state: the standing
+          // Non-success converges to the failed-turn state: the standing
           // user_action unwinds too, so Retry / draft-restore re-enter through
           // the normal submit path without duplicating the action.
           let converged = true

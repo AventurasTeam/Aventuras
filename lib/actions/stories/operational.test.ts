@@ -38,7 +38,7 @@ vi.mock('@/lib/tokens', async (importOriginal) => ({
   warmTokenEncoder: tokens.warm,
 }))
 
-// openStory now runs loadOpenStory (Slice 2.7 Task 7) before navigating, which
+// openStory runs loadOpenStory before navigating, which
 // requires a config that parses — story_1 needs a valid definition/settings so
 // the existing "resolves branch, touches, navigates" behavior stays reachable.
 const STORY_DEFINITION = storyDefinitionSchema.parse({

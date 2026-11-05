@@ -200,7 +200,7 @@ const KIND_BUBBLE: Record<EntryKind, string> = {
   opening: 'bg-bg-raised border-border',
   system: 'bg-bg-base border-warning',
   // Near-parity with ai_reply: the commit swap should not visually re-frame
-  // the card (reader note, 2026-07-19).
+  // the card.
   streaming: 'bg-bg-raised border-border',
 }
 

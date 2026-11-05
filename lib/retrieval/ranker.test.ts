@@ -572,7 +572,7 @@ describe('blend with absent query vectors', () => {
   })
 })
 
-/** What the M3.5 simulator calls; the guarded surface is their value closure. */
+/** What the probe's simulator calls; the guarded surface is their value closure. */
 const PURE_ENTRIES = ['ranker.ts', 'queries.ts']
 
 // `import type` is erased at build, so only value imports pull the graph in.

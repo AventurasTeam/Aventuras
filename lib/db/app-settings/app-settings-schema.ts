@@ -10,7 +10,7 @@ export const appearanceSchema = z.object({
   // user pick and is never overridden by the OS.
   themeId: z.string().default('system'),
   readerFontScale: z.number().default(1),
-  // DB-only until the M7.1 appearance tab exposes it (reader note 2026-07-19).
+  // DB-only until the appearance tab exposes it (M7.1).
   showJumpToBottom: z.boolean().default(true),
   // reader-composer.md → State model: the Browse rail's manual preference, app-global.
   readerRailCollapsed: z.boolean().default(false),
