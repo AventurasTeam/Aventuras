@@ -100,6 +100,14 @@ export const EXAMPLES: Record<string, unknown> = {
   // run failure, so an empty default would fail any spec that reaches ⟳
   // without calling setStructured. cat1 is the first enabled category.
   'suggestion-refresh': { suggestions: [{ categoryRef: 'cat1', text: 'You press on.' }] },
+  // Mock-shaped, like the wizard's below: a spec asserting on a chapter's title is visibly
+  // reading a default it forgot to override with setStructured.
+  'chapter-metadata': {
+    title: 'Mock chapter',
+    summary: 'Mock chapter summary.',
+    theme: 'mock',
+    keywords: ['mock'],
+  },
 
   // Wizard assist. Nothing here is written until the user imports it, so the
   // inertness rule the classifier defaults follow does not apply — and could

@@ -200,6 +200,16 @@ function defaultLanes(): Record<string, Lane> {
     // A refresh that resolves nothing is a run failure, so the default is not
     // the empty list the other lanes use.
     'suggestion-refresh': lane([canned('Three chips', { suggestions: SAMPLE_SUGGESTIONS })]),
+    // The close names no rows by id, so unlike the classifier defaults this one can say something.
+    'chapter-metadata': lane([
+      canned('The flooded stair', {
+        title: 'The Bell Under the Water',
+        summary:
+          'You come down into the flooded quarter with a drawn blade while the rooftop bells answer each other. The stair gives under you, and something unhurried moves in the water below. The chapter ends at the waterline, the bells still calling.',
+        theme: 'descent',
+        keywords: ['the drowned city', 'the bells', 'the flooded stair', 'the thing in the water'],
+      }),
+    ]),
 
     ...wizardLanes(),
   }
