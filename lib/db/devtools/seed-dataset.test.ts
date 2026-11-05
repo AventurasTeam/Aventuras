@@ -216,8 +216,6 @@ describe('seed id substitution contract', () => {
   })
 })
 
-// A link row with no create delta of its own makes any rollback that removes its parent refuse
-// `no-create` (generation-pipeline.md → Reverse-replay), so the seeded stories could not roll back.
 const BATCH = 100
 const HERO_MAIN = 'br_hero_main'
 
@@ -229,6 +227,8 @@ async function seededDb() {
   return handle
 }
 
+// A link row with no create delta makes any rollback removing its parent refuse `no-create`
+// (generation-pipeline.md → Reverse-replay): seeded stories must roll back.
 describe('seeded rollback', () => {
   afterEach(() => {
     resetAllStores()

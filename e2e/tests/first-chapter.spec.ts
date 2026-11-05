@@ -30,10 +30,9 @@ const REPLY = `${REPLY_MARKER} the gate-warden reads the pact and lifts the bar.
 
 type OpenRow = [id: string, position: number, kind: string]
 
-// Reached by URL, with docs/testing.md → Harness structure's two-part justification: no in-app path
-// leads here under E2E, since Settings renders its /dev link only under __DEV__
-// (app/settings/index.tsx), false in both launch modes; and this route is the close's only start
-// until the real starts replace it (Slice 5.10), which moves this spec off it.
+// Reached by URL (docs/testing.md → Harness structure): no in-app path leads here under E2E, as
+// Settings renders its /dev link only under __DEV__ (app/settings/index.tsx), false in both launch
+// modes; the route is the close's only start until the real starts replace it (Slice 5.10).
 test.describe('first chapter — a close from the dev route', () => {
   let app: LaunchedApp
   let mock: MockLlm

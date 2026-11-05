@@ -132,7 +132,7 @@ describe('reversing a close that ran', () => {
     )
 
     expect(selectUndoTarget(closedLog)).toEqual({ actionId: tx.actionId, kind: 'group' })
-    // The tick C5's hook and useEntryIndex refetch on, and where criterion 28's CTRL-Z bar ends.
+    // The tick C5's hook refetches on, and where criterion 28's CTRL-Z bar ends.
     const settledBeforeUndo = generationStore.getSettleCount()
     expect(await undoLastAction(fx.branchId, fx.ctx)).toEqual({ status: 'ok' })
     expect(generationStore.getSettleCount()).toBeGreaterThan(settledBeforeUndo)

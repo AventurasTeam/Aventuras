@@ -1790,12 +1790,9 @@ const appSettingsRow: NewAppSettings = {
       modelRef: { providerId: 'prov_local', modelId: 'seed/narrative' },
     }),
   ],
-  // 'suggestion', 'wizard-assist' and 'lore-mgmt' reuse the classifier profile rather than
-  // seeding dedicated ones: resolveModel keys purely on assignments[target] ->
-  // profile id (no kind/target coupling), and no fixture scenario needs a
-  // model/temperature for either distinct from the classifier's. Every agent
-  // target the app actually calls is listed — an unassigned one resolves to
-  // 'no-profile-assigned' and never reaches the provider at all.
+  // 'suggestion', 'wizard-assist' and 'lore-mgmt' reuse the classifier profile: no fixture needs a
+  // distinct model/temperature for any of them. List every agent target the app calls — an
+  // unassigned one resolves to 'no-profile-assigned' and never reaches the provider.
   assignments: {
     narrative: 'prof_narrative',
     classifier: 'prof_classifier',

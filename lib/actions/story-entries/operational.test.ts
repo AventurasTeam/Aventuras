@@ -445,14 +445,12 @@ describe('rollbackToEntry', () => {
 
     await updateStoryEntryContent('b1', 't3', 'edited prose', ctx)
 
-    // t3 is inside the window, so its delta is swept — but the entries line already
-    // reports that loss (rollback-confirm.md).
+    // t3's delta is swept, but the entries line already reports that loss (rollback-confirm.md).
     const counts = await getRollbackCounts('b1', 't2', ctx)
     expect(counts).toEqual({ entries: 2, chapters: 0, worldStateChanges: 2 })
   })
 
-  // rollback-confirm.md → Counts: a chapter's create is the re-open; none of its deltas is
-  // world state.
+  // rollback-confirm.md → Counts: the create is the re-open; no chapter delta is world state.
   it('counts a chapter by its create alone, and none of its other deltas as world state', async () => {
     const { db, runInTransaction } = await createTestDb()
     const ctx = { db, runInTransaction }
@@ -512,7 +510,7 @@ describe('rollbackToEntry', () => {
     )
     expect([created.status, reported.status]).toEqual(['ok', 'ok'])
 
-    // ent_a's create and update stay the window's only world state, as without the chapter.
+    // Only ent_a's create and update count as world state.
     const counts = await getRollbackCounts('b1', 't2', ctx)
     expect(counts).toEqual({ entries: 2, chapters: 1, worldStateChanges: 2 })
   })
