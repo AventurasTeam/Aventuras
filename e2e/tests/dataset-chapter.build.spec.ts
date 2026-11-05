@@ -1,5 +1,5 @@
 import { copyFileSync, existsSync } from 'node:fs'
-import { join } from 'node:path'
+import { dirname, join } from 'node:path'
 import { DatabaseSync } from 'node:sqlite'
 
 import { expect, test, type Page } from '@playwright/test'
@@ -50,6 +50,9 @@ const EDITABLE_WAIT_MS = 120_000
 // A run's row lands right after its trigger: a Send's click, a turn's commit.
 const ROW_WAIT_MS = 15_000
 const STATUS_SETTLE_MS = 10_000
+// A refused Send's text back in the composer, after its entry's write and reload.
+const DRAFT_RETURN_MS = 30_000
+// The first Send and up to three resends.
 const SENDS_PER_TURN = 4
 // A ceiling, not an estimate: about 66 turns, a third of them chaining a pass on the real model.
 const BUILD_TIMEOUT_MS = 5 * 60 * 60 * 1000
@@ -210,7 +213,13 @@ const replyCount = (d: Drive): Promise<number> =>
 // chains nothing and runs before the next Send instead.
 async function settleChainedPass(d: Drive, turnRow: number): Promise<string> {
   const pass = async () => (await runsAfter(d, turnRow)).find((run) => run.kind === PERIODIC)
-  if ((await pass()) === undefined && !(await passDue(d))) return 'none due'
+  // In this order: a pass inserts its row before it writes `running`, so a pass starting
+  // between the reads is caught by the later one.
+  const noneDue = async () =>
+    !(await passDue(d)) &&
+    (await classifierStatus(d)).state !== 'running' &&
+    (await pass()) === undefined
+  if (await noneDue()) return 'none due'
   if (!(await becomes(async () => (await pass()) !== undefined, ROW_WAIT_MS)))
     return 'none chained (owed at the next Send)'
   await expect
@@ -269,6 +278,8 @@ async function landTurn(
       if (entry.pass !== 'failed')
         throw new Error(`${label}: the Send failed, not by a failed pass: ${entry.content}`)
       log(`${label}: send ${send} refused by its owed pass`)
+      // reader-composer.md → Custody of the turn's text: it goes back to the empty composer.
+      await expect(reader.composer(d.page)).toHaveValue(turn.action, { timeout: DRAFT_RETURN_MS })
       continue
     }
     if (run.outcome !== 'completed') {
@@ -380,11 +391,13 @@ async function assertDatasetBranch(d: Drive, dataset: ShapedDataset): Promise<st
     'entries past the opening with no create delta',
   ).toBe(0)
 
-  // A floor, not a target: under half means the per-turn classifier mostly failed.
+  // A floor, not a target: under half means the per-turn classifier mostly failed. Read from the
+  // turn's own report; `sceneEntities` is inherited, so a failed call keeps the previous scene.
   const scened = await scalar(
     page,
     `SELECT COUNT(*) FROM story_entries
-     WHERE branch_id = ? AND kind = 'ai_reply' AND json_array_length(metadata, '$.sceneEntities') > 0`,
+     WHERE branch_id = ? AND kind = 'ai_reply'
+       AND COALESCE(json_array_length(metadata, '$.stateReport.sceneEntities'), 0) > 0`,
     [branchId],
   )
   expect(scened, 'replies the per-turn classifier gave a scene').toBeGreaterThanOrEqual(
@@ -404,22 +417,31 @@ async function assertDatasetBranch(d: Drive, dataset: ShapedDataset): Promise<st
     expect(count, `${table} the classifiers wrote`).toBeGreaterThan(0)
     written.push(`${table} ${count}`)
   }
-  return `entries: ${entries}\ntokens: ${tokens}\nreplies with a scene: ${scened}\nclassifier-written: ${written.join(', ')}`
+  return `entries: ${entries}\ntokens: ${tokens}\nreplies with a reported scene: ${scened}\nclassifier-written: ${written.join(', ')}`
 }
 
-// device:push-db refuses a database with a WAL or journal beside it, and a stale sidecar beside
-// the copy would replay over it on its next open.
+// A stale sidecar beside the copy would replay over it on its next open. Checked before the drive
+// too, so a bad path fails in seconds rather than after it.
+function assertExportTarget(out: string): void {
+  expect(existsSync(dirname(out)), `${dirname(out)} exists`).toBe(true)
+  for (const suffix of ['-wal', '-shm', '-journal'])
+    expect(existsSync(`${out}${suffix}`), `${out}${suffix} would replay over the copy`).toBe(false)
+}
+
+// device:push-db refuses a database with a WAL or journal beside it. The desktop DB runs a
+// rollback journal, where a read rolls back a hot journal a forced exit left; under WAL the
+// checkpoint folds the log in. Each is a no-op in the other mode.
 function exportDatabase(dbPath: string, out: string): void {
   const sqlite = new DatabaseSync(dbPath)
   try {
+    sqlite.prepare('SELECT COUNT(*) FROM sqlite_schema').get()
     sqlite.exec('PRAGMA wal_checkpoint(TRUNCATE)')
   } finally {
     sqlite.close()
   }
   for (const suffix of ['-wal', '-journal'])
-    expect(existsSync(`${dbPath}${suffix}`), `${dbPath}${suffix} after the checkpoint`).toBe(false)
-  for (const suffix of ['-wal', '-shm', '-journal'])
-    expect(existsSync(`${out}${suffix}`), `${out}${suffix} would replay over the copy`).toBe(false)
+    expect(existsSync(`${dbPath}${suffix}`), `${dbPath}${suffix} after recovery`).toBe(false)
+  assertExportTarget(out)
   copyFileSync(dbPath, out)
 }
 
@@ -442,6 +464,7 @@ test.describe('dataset chapter — build', () => {
     // A cold embedder cache downloads ~24 MB before launch.
     test.setTimeout(300_000)
     const env = readEnv()
+    assertExportTarget(env.out)
     const seeded = createSeededUserDataDir()
     userDataDir = seeded.userDataDir
     dbPath = seeded.dbPath

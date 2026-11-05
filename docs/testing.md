@@ -444,7 +444,7 @@ their effects through the DB bridge.
 
 ### Real-provider checks
 
-Two opt-in checks talk to a real OpenAI-compatible server instead, and
+Three opt-in checks talk to a real OpenAI-compatible server instead, and
 skip unless `SMOKE_LLM_URL` (its `/v1` URL) and `SMOKE_LLM_MODEL` (a
 model it serves) are set. The
 `classifier-real-provider.smoke.spec.ts` spec sends turns on the seeded
@@ -517,11 +517,13 @@ different from the dataset, and lowers the cadence to 1 before the last
 turn so the watermark reaches the tail. It then asserts what a close
 needs: an open region of 22k to 26k `content_tokens` ending on a reply,
 the watermark at its tail, and a create delta behind every entry past
-the opening. It copies the database, with no WAL beside it, to
+the opening. It copies the database, with no journal or WAL beside it, to
 `DATASET_CHAPTER_OUT` and prints the branch, for `AVENTURAS_DB_PATH`,
 `pnpm device:push-db` and `PROBE_BRANCH_ID`. The file stays out of git
 ([Fixture + seed contract](#fixture--seed-contract)), and a rebuild
-writes different classifier rows.
+writes different classifier rows. The copy holds the provider settings
+as the build wrote them, `SMOKE_LLM_KEY` included, so a hosted key
+leaves with the file.
 
 ## Selector strategy
 
