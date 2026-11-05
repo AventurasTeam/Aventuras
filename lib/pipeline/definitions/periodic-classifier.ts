@@ -52,7 +52,6 @@ import {
   happeningAwarenessStore,
   happeningsStore,
   threadsStore,
-  type OpenStory,
 } from '@/lib/stores'
 import { resolveLead } from '@/lib/world'
 
@@ -61,6 +60,7 @@ import { classifierEmbedder } from './description-embedder'
 import { readHappeningsMadeFrom, readRecentEntryIds, readStoryPlace } from './entry-reads'
 import { readClassifierStatus } from './memory-chain'
 import { PER_TURN_KIND } from './per-turn'
+import { storesHoldBranch } from './stores-hold-branch'
 import { definePipeline } from '../authoring/define'
 import { getPipeline } from '../authoring/registry'
 import { pipelineErrorDetail, retriedAttemptEvents, structuredCallFailure } from '../call-error'
@@ -175,19 +175,6 @@ async function writeSuccess(
 
 function advanceWatermark(ctx: StatusCtx, coversThrough: number): Promise<void> {
   return patchStatus(ctx, watermarkKey(coversThrough))
-}
-
-// The entity stores hold one branch: filtered for a branch they don't hold, they leave an empty
-// roster to prompt, reconcile and plan against.
-function storesHoldBranch(
-  open: OpenStory | null,
-  ctx: Pick<PhaseContext, 'storyId' | 'branchId'>,
-): open is OpenStory {
-  return (
-    open?.branchId === ctx.branchId &&
-    open.storyId === ctx.storyId &&
-    entitiesStore.getLoadedBranch() === ctx.branchId
-  )
 }
 
 function branchEntities(branchId: string): Entity[] {
