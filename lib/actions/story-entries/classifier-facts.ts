@@ -53,8 +53,8 @@ async function resolveInvalidationScope(
 
 // The arms meet a delta, not an edit call, so they identify one by payload shape. Sound
 // because of the converse: no other story_entries update delta carries a `content` key --
-// updateStoryEntryMetadata writes `{ metadata }`, and the delete handler's whole-row
-// payload does carry one but is excluded by the op.
+// updateStoryEntryMetadata writes `{ metadata }`, stampEntryChapter `{ chapterId }`, and the
+// delete handler's whole-row payload does carry one but is excluded by the op.
 export function isContentEditDelta(
   delta: Pick<Delta, 'targetTable' | 'op' | 'undoPayload'>,
 ): boolean {

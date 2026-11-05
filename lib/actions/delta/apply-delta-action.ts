@@ -52,6 +52,7 @@ const LOCK_KEY: { [K in ProductionKind]: LockKey<K> } = {
   createStoryEntry: null,
   updateStoryEntryMetadata: null,
   deleteStoryEntry: null,
+  stampEntryChapter: null,
   createEntity: null,
   updateEntity: entityRow,
   deleteEntity: entityDelete,

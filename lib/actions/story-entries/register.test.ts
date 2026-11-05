@@ -2,11 +2,13 @@ import { and, eq } from 'drizzle-orm'
 import { afterEach, describe, expect, it } from 'vitest'
 
 import { applyDeltaAction, reverseReplayDeltas } from '@/lib/actions'
-import { branches, stories, storyEntries } from '@/lib/db'
+import { branches, deltas, stories, storyEntries, type DbCtx } from '@/lib/db'
 import { createTestDb } from '@/lib/db/__tests__/test-db'
 import { promptProse } from '@/lib/piggyback'
 import { entriesStore } from '@/lib/stores'
 import { countTokens } from '@/lib/tokens'
+
+import { isContentEditDelta } from './classifier-facts'
 
 afterEach(() => entriesStore.__reset())
 
@@ -363,4 +365,110 @@ describe('deleteStoryEntry arm', () => {
       expect(entriesStore.getById('e1')).toEqual(entry)
     },
   )
+})
+
+// C1: a close stamps each entry with its own delta, so a reversal restores one row per delta.
+describe('stampEntryChapter', () => {
+  const PROSE = 'The ferry slid out into the black water, and the lamps of Harrow fell behind.'
+
+  async function stampFixture(prior: string | null): Promise<DbCtx> {
+    const { db, runInTransaction } = await createTestDb()
+    await seed(db)
+    await db.insert(storyEntries).values({
+      id: 'e1',
+      branchId: 'b1',
+      position: 1,
+      kind: 'ai_reply',
+      content: PROSE,
+      contentTokens: countTokens(PROSE),
+      chapterId: prior,
+      metadata: { sceneEntities: [], currentLocationId: null, worldTime: 60 },
+      createdAt: 1,
+    })
+    entriesStore.hydrate('b1', await db.select().from(storyEntries))
+    return { db, runInTransaction }
+  }
+
+  const stamp = (ctx: DbCtx, over: { branchId?: string; id?: string } = {}) =>
+    applyDeltaAction(
+      {
+        action: {
+          kind: 'stampEntryChapter',
+          source: 'chapter_close',
+          payload: { branchId: 'b1', id: 'e1', chapterId: 'chap_new', ...over },
+        },
+        actionId: 'act_close',
+        branchId: 'b1',
+        entryId: 'e1',
+      },
+      ctx,
+    )
+
+  const entryRow = async (ctx: DbCtx) =>
+    (await ctx.db.select().from(storyEntries).where(eq(storyEntries.id, 'e1')))[0]
+  const closeDeltas = (ctx: DbCtx) =>
+    ctx.db.select().from(deltas).where(eq(deltas.actionId, 'act_close'))
+
+  it('writes only chapter_id and records the prior value as its whole undo', async () => {
+    const ctx = await stampFixture(null)
+    const before = await entryRow(ctx)
+
+    expect(await stamp(ctx)).toMatchObject({ status: 'ok' })
+
+    expect(await entryRow(ctx)).toEqual({ ...before, chapterId: 'chap_new' })
+    const [delta] = await closeDeltas(ctx)
+    expect(delta).toMatchObject({
+      targetTable: 'story_entries',
+      targetId: 'e1',
+      op: 'update',
+      source: 'chapter_close',
+      entryId: 'e1',
+    })
+    expect(delta!.undoPayload).toEqual({ chapterId: null })
+    expect(isContentEditDelta(delta!)).toBe(false)
+    expect(entriesStore.getById('e1')?.chapterId).toBe('chap_new')
+  })
+
+  it('restores the chapter the entry held before, on undo', async () => {
+    const ctx = await stampFixture('chap_old')
+    await stamp(ctx)
+    const [delta] = await closeDeltas(ctx)
+    expect(delta!.undoPayload).toEqual({ chapterId: 'chap_old' })
+
+    await reverseReplayDeltas('act_close', ctx)
+
+    expect((await entryRow(ctx))!.chapterId).toBe('chap_old')
+    expect(entriesStore.getById('e1')?.chapterId).toBe('chap_old')
+  })
+
+  it('clears the stamp on undo when the entry held none', async () => {
+    const ctx = await stampFixture(null)
+    expect(await stamp(ctx)).toMatchObject({ status: 'ok' })
+
+    await reverseReplayDeltas('act_close', ctx)
+
+    expect((await entryRow(ctx))!.chapterId).toBeNull()
+    expect(entriesStore.getById('e1')?.chapterId).toBeNull()
+  })
+
+  it('refuses an entry that is not there and logs nothing', async () => {
+    const ctx = await stampFixture(null)
+
+    expect(await stamp(ctx, { id: 'e_missing' })).toMatchObject({
+      status: 'rejected',
+      code: 'not-found',
+    })
+    expect(await closeDeltas(ctx)).toEqual([])
+  })
+
+  it('refuses a payload naming another branch and writes nothing', async () => {
+    const ctx = await stampFixture(null)
+
+    expect(await stamp(ctx, { branchId: 'b2' })).toMatchObject({
+      status: 'rejected',
+      reason: expect.stringContaining('branch mismatch'),
+    })
+    expect((await entryRow(ctx))!.chapterId).toBeNull()
+    expect(await closeDeltas(ctx)).toEqual([])
+  })
 })
