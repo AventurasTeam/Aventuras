@@ -2,8 +2,8 @@ import { z } from 'zod'
 
 import { dedupeTerms } from '@/lib/keyword-terms'
 
-// A pattern, not a trim transform: z.toJSONSchema throws on a transform, and a blank field must
-// fail the parse so the call retries it.
+// A pattern keeps the schema plain JSON Schema and fails a blank field as a parse, so the call
+// retries it.
 const nonBlank = z.string().regex(/\S/)
 
 /** chapter-close.md → Phase 2 — chapter metadata: the call's reply. */

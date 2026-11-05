@@ -51,6 +51,7 @@ describe('templateContextMap', () => {
       'entries',
       'previousChapterSummary',
       'threads',
+      'mode',
     ])
   })
 

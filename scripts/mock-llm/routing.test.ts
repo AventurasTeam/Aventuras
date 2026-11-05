@@ -124,6 +124,7 @@ describe('classifyRequest', () => {
       ],
       previousChapterSummary: 'Kael crossed the marsh and lost the sigil.',
       threads: [{ title: 'Find the heir', status: 'active' }],
+      mode: 'adventure',
     })
     expect(classifyRequest(await requestAsSent(shape.schema, user, system))).toMatchObject({
       lane: 'structured',

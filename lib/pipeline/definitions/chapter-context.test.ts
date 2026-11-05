@@ -47,12 +47,17 @@ const THREADS = [
 
 const SUMMARY = 'Kael left the keep at dawn with the stolen sigil.'
 
+// Each mode's paragraph on reading a user's turn (ui/principles.md → Mode), as the system half says it.
+const ADVENTURE_TURN_RULE = 'Each is what the lead does, says or attempts'
+const CREATIVE_TURN_RULE = 'Each is a direction or prose'
+
 describe('buildChapterContext', () => {
   it('emits exactly the variables pinned for the chapter group, nothing more', () => {
     const context = buildChapterContext({
       entries: ENTRIES,
       previousChapterSummary: null,
       threads: [],
+      mode: 'adventure',
     })
     const declared = VARIABLES.chapter.map((v) => v.name)
     expect(Object.keys(context).sort()).toEqual([...declared].sort())
@@ -70,6 +75,7 @@ describe('buildChapterContext', () => {
       entries: ENTRIES,
       previousChapterSummary: null,
       threads: [],
+      mode: 'adventure',
     })
     expect(entries).toEqual([
       {
@@ -91,6 +97,7 @@ describe('buildChapterContext', () => {
       entries: ENTRIES,
       previousChapterSummary: null,
       threads: THREADS,
+      mode: 'adventure',
     })
     expect(threads).toEqual([
       { title: 'Find the heir', status: 'active' },
@@ -98,21 +105,43 @@ describe('buildChapterContext', () => {
     ])
   })
 
+  it("carries the story's mode", () => {
+    for (const mode of ['adventure', 'creative'] as const) {
+      expect(
+        buildChapterContext({ entries: ENTRIES, previousChapterSummary: null, threads: [], mode })
+          .mode,
+      ).toBe(mode)
+    }
+  })
+
   it("carries the previous chapter's summary, or null for a branch's first", () => {
     expect(
-      buildChapterContext({ entries: ENTRIES, previousChapterSummary: SUMMARY, threads: [] })
-        .previousChapterSummary,
+      buildChapterContext({
+        entries: ENTRIES,
+        previousChapterSummary: SUMMARY,
+        threads: [],
+        mode: 'adventure',
+      }).previousChapterSummary,
     ).toBe(SUMMARY)
     expect(
-      buildChapterContext({ entries: ENTRIES, previousChapterSummary: null, threads: [] })
-        .previousChapterSummary,
+      buildChapterContext({
+        entries: ENTRIES,
+        previousChapterSummary: null,
+        threads: [],
+        mode: 'adventure',
+      }).previousChapterSummary,
     ).toBeNull()
   })
 
   it('renders the chapter, the one before it and the open threads in the user half alone', () => {
     const { system, user } = renderTemplate(
       TEMPLATE_IDS.chapterMetadata,
-      buildChapterContext({ entries: ENTRIES, previousChapterSummary: SUMMARY, threads: THREADS }),
+      buildChapterContext({
+        entries: ENTRIES,
+        previousChapterSummary: SUMMARY,
+        threads: THREADS,
+        mode: 'adventure',
+      }),
     )
     expect(user).toContain(`# The previous chapter\n${SUMMARY}`)
     expect(user).toContain('- Find the heir (active)\n- The debt to the guild (pending)')
@@ -129,10 +158,59 @@ describe('buildChapterContext', () => {
   it('leaves out the previous chapter and the threads when there are none', () => {
     const { user } = renderTemplate(
       TEMPLATE_IDS.chapterMetadata,
-      buildChapterContext({ entries: ENTRIES, previousChapterSummary: null, threads: [] }),
+      buildChapterContext({
+        entries: ENTRIES,
+        previousChapterSummary: null,
+        threads: [],
+        mode: 'adventure',
+      }),
     )
     expect(user).not.toContain('# The previous chapter')
     expect(user).not.toContain('# Open threads')
     expect(user.startsWith('# The chapter\n')).toBe(true)
+  })
+
+  // A creative prose turn is part of the story; an adventure's speech stands unless contradicted.
+  it("reads a user's turn by the story's mode", () => {
+    const creative = renderTemplate(
+      TEMPLATE_IDS.chapterMetadata,
+      buildChapterContext({
+        entries: [
+          entry(
+            4,
+            'user_action',
+            'Kael burned the letter before Mora could read it, and rode north.',
+          ),
+          entry(5, 'ai_reply', 'The road north was empty under a low sky.'),
+        ],
+        previousChapterSummary: null,
+        threads: [],
+        mode: 'creative',
+      }),
+    )
+    expect(creative.system).toContain(CREATIVE_TURN_RULE)
+    expect(creative.system).toContain('One that reads as prose is part of the story')
+    expect(creative.system).not.toContain(ADVENTURE_TURN_RULE)
+    expect(creative.user).toContain('<user_turn>\nKael burned the letter')
+
+    const adventure = renderTemplate(
+      TEMPLATE_IDS.chapterMetadata,
+      buildChapterContext({
+        entries: [
+          entry(4, 'user_action', 'I tell Mora the heir is dead.'),
+          entry(5, 'ai_reply', 'Mora turns away.'),
+        ],
+        previousChapterSummary: null,
+        threads: [],
+        mode: 'adventure',
+      }),
+    )
+    expect(adventure.system).toContain(ADVENTURE_TURN_RULE)
+    expect(adventure.system).toContain(
+      'what the lead says stands unless the narration contradicts it',
+    )
+    expect(adventure.system).toContain('outside quoted speech, its "I" is the lead')
+    expect(adventure.system).not.toContain(CREATIVE_TURN_RULE)
+    expect(adventure.user).toContain('<user_turn>\nI tell Mora the heir is dead.\n</user_turn>')
   })
 })

@@ -598,6 +598,14 @@ export const VARIABLES: Record<ContextGroup, VariableDef[]> = {
         "The branch's open threads, those pending or active, each by title (on one line) and status. No ids, so the call needs no placeholder map.",
       required: true,
     },
+    {
+      name: 'mode',
+      type: "'adventure' | 'creative'",
+      category: 'Story Config',
+      description:
+        "The story's mode, which decides what a user's turn establishes: an adventure's is the lead's attempt, a creative story's a direction or prose.",
+      required: true,
+    },
   ],
   staticContent: [],
 }

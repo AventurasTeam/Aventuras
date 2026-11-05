@@ -1,4 +1,4 @@
-import type { StoryEntry, Thread, ThreadStatus } from '@/lib/db'
+import type { StoryEntry, StoryMode, Thread, ThreadStatus } from '@/lib/db'
 import { promptProse } from '@/lib/piggyback'
 import { oneLine } from '@/lib/text'
 
@@ -7,16 +7,18 @@ export type ChapterContext = {
   entries: { position: number; kind: StoryEntry['kind']; content: string }[]
   previousChapterSummary: string | null
   threads: { title: string; status: ThreadStatus }[]
+  mode: StoryMode
 }
 
 // chapter-close.md → Phase 2 reads the active threads; a pending one is as open.
 const OPEN_THREAD_STATUSES: ReadonlySet<ThreadStatus> = new Set(['pending', 'active'])
 
-/** The metadata call's context: the range as the narrator reads it, the summary before it, the open threads. */
+/** The metadata call's context: the range as the narrator reads it, the summary before it, the open threads, the mode. */
 export function buildChapterContext(input: {
   entries: readonly StoryEntry[]
   previousChapterSummary: string | null
   threads: readonly Pick<Thread, 'title' | 'status'>[]
+  mode: StoryMode
 }): ChapterContext {
   return {
     entries: input.entries.map((e) => ({
@@ -28,5 +30,6 @@ export function buildChapterContext(input: {
     threads: input.threads
       .filter((t) => OPEN_THREAD_STATUSES.has(t.status))
       .map((t) => ({ title: oneLine(t.title), status: t.status })),
+    mode: input.mode,
   }
 }
