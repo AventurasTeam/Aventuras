@@ -139,26 +139,14 @@ pub async fn sync_respond(
     Ok(())
 }
 
-/// Get items that were pushed to this server
+/// Takes every item pushed to this server, in one step so a push arriving meanwhile is not lost.
 #[tauri::command]
-pub async fn get_received_items(state: State<'_, SyncState>) -> Result<Vec<ReceivedItem>, String> {
+pub async fn take_received_items(state: State<'_, SyncState>) -> Result<Vec<ReceivedItem>, String> {
     let server_state = state.server_state.lock().await;
-    if let Some(ref ss) = *server_state {
-        let received = ss.received.lock().await;
-        Ok(received.clone())
-    } else {
-        Ok(Vec::new())
-    }
-}
-
-/// Clear received items after processing
-#[tauri::command]
-pub async fn clear_received_items(state: State<'_, SyncState>) -> Result<(), String> {
-    let server_state = state.server_state.lock().await;
-    if let Some(ref ss) = *server_state {
-        ss.received.lock().await.clear();
-    }
-    Ok(())
+    Ok(match *server_state {
+        Some(ref ss) => std::mem::take(&mut *ss.received.lock().await),
+        None => Vec::new(),
+    })
 }
 
 /// Send one request to a remote sync server. Answers with the remote webview's reply.

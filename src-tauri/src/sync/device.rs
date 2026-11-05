@@ -66,7 +66,7 @@ mod tests {
 
     async fn schema() -> SqlitePool {
         let pool = memory_pool().await;
-        run_migrations(&pool, 0, 45).await;
+        run_migrations(&pool, 0, 46).await;
         exec(&pool, "UPDATE sync_device SET device_id = 'me'").await;
         pool
     }
@@ -227,6 +227,13 @@ mod tests {
         .await;
         assert_eq!(counter(&pool, "ss").await, Some(3));
         assert!(story_time(&pool).await > 0);
+    }
+
+    #[tokio::test]
+    async fn a_time_tracker_edit_counts() {
+        let pool = synced_story().await;
+        exec(&pool, "UPDATE stories SET time_tracker = '{}'").await;
+        assert_eq!(counter(&pool, "ss").await, Some(2));
     }
 
     #[tokio::test]

@@ -76,6 +76,8 @@ async function serverListing(section: SyncSection): Promise<SyncListing> {
 /** Gives the item an identity if this is its first transfer, and reads its current vector. */
 async function identified(section: SyncSection, localId: string, selfId: string) {
   const entityType = SECTION_ENTITY[section]
+  const [item] = await database.getSyncListing(section, localId)
+  if (!item) throw new Error('That item no longer exists')
   await database.transaction(
     ensureIdentityStatements(entityType, localId, crypto.randomUUID(), selfId),
   )
@@ -129,7 +131,11 @@ export async function answerSyncRequest(
       const entityType = SECTION_ENTITY[action.section]
       const localId = await database.findSyncedLocalId(entityType, action.syncId)
       const current = await database.getSyncVector(action.syncId)
-      const settled = !!localId && compareVectors(current, action.expected) === 'inSync'
+      const proposal = compareVectors(action.vector, action.expected)
+      const settled =
+        !!localId &&
+        compareVectors(current, action.expected) === 'inSync' &&
+        (proposal === 'inSync' || proposal === 'newerHere')
       if (settled) {
         await database.transaction(
           adoptVectorStatements({
@@ -164,13 +170,22 @@ export async function fetchListing(
   return listing
 }
 
+/** A send not yet seen in the other device's listing, with this device's vector when it went. */
+export interface PendingSend {
+  vector: SyncVector
+  baseline: SyncVector
+}
+
+/** Outlives the sync modal, so a send accepted after it closed is still recognised. */
+const pendingSends = new Map<string, PendingSend>()
+
 /**
  * Sends an item. `theirs` is the other device's vector for this item, when sending replaces a
  * version with edits this one lacks.
  *
- * Waits for the receiver's answer. Nothing is recorded here: it can still refuse, and a resolved
- * vector kept for a send that never landed would outrank edits this device has not seen. Returns
- * what `confirmSends` looks for in a later listing.
+ * Waits for the receiver's answer. Nothing is written here: it can still refuse, and a resolved
+ * vector kept for a send that never landed would outrank edits this device has not seen. A send
+ * not declined waits in memory for `confirmSends` to see it in a later listing.
  */
 export async function sendItem(
   connection: SyncConnectionData,
@@ -193,19 +208,23 @@ export async function sendItem(
     payload: encodeEnvelope(envelope),
   })
   const outcome = reply === 'applied' || reply === 'declined' ? reply : 'waiting'
+  if (outcome !== 'declined') pendingSends.set(syncId, { vector, baseline: record.vector })
   return { syncId, vector, outcome }
 }
 
-/** Records sends the other device's listing shows it has applied. */
+/**
+ * Records sends the other device's listing shows it has applied. One whose item was edited here
+ * since it went is dropped instead: adopting the sent vector would erase that edit's count.
+ */
 export async function confirmSends(
   section: SyncSection,
   items: SyncListItem[],
   peer: SyncPeer,
-  sent: Map<string, SyncVector>,
+  sent: Map<string, PendingSend> = pendingSends,
 ): Promise<void> {
   const landed = items.filter((item) => {
-    const vector = item.syncId ? sent.get(item.syncId) : undefined
-    return vector && item.vector && compareVectors(item.vector, vector) === 'inSync'
+    const send = item.syncId ? sent.get(item.syncId) : undefined
+    return send && item.vector && compareVectors(item.vector, send.vector) === 'inSync'
   })
   if (landed.length === 0) return
 
@@ -215,9 +234,12 @@ export async function confirmSends(
   for (const { syncId } of landed) {
     const id = syncId as string
     const localId = await database.findSyncedLocalId(entityType, id)
-    const vector = sent.get(id)
+    const send = sent.get(id)
     sent.delete(id)
-    if (!localId || !vector) continue
+    if (!localId || !send) continue
+    const current = await database.getSyncVector(id)
+    if (compareVectors(current, send.baseline) !== 'inSync') continue
+    const { vector } = send
     await database.transaction(
       adoptVectorStatements({
         entityType,
@@ -252,14 +274,15 @@ export async function settleVector(
   self: SyncPeer,
   envelope: SyncEnvelope,
   vector: SyncVector,
-): Promise<void> {
-  await syncService.request(connection, self, {
+): Promise<boolean> {
+  const reply = await syncService.request(connection, self, {
     type: 'settleVector',
     section: envelope.section,
     syncId: envelope.syncId,
     expected: envelope.vector,
     vector,
   })
+  return (JSON.parse(reply) as { settled?: unknown }).settled === true
 }
 
 export type ReceiveTarget =
@@ -337,6 +360,21 @@ async function addItem(
   }
 }
 
+async function removeItem(section: SyncSection, localId: string): Promise<void> {
+  switch (section) {
+    case 'characters':
+      return database.deleteVaultCharacter(localId)
+    case 'lorebooks':
+      return database.deleteVaultLorebook(localId)
+    case 'scenarios':
+      return database.deleteVaultScenario(localId)
+    case 'packs':
+      return database.deletePack(localId)
+    case 'stories':
+      return syncService.deleteStory(localId)
+  }
+}
+
 export interface ApplyResult {
   localId: string
   /** The vector the item ended with, which differs from the envelope's after a resolution. */
@@ -367,10 +405,16 @@ export async function applyItem(
 
   if (!existingId) {
     const added = await addItem(envelope, envelope.name)
-    await database.transaction([
-      ...adopt(added.localId, envelope.vector),
-      database.syncedTimeStatement(envelope.section, added.localId, envelope.updatedAt),
-    ])
+    try {
+      await database.transaction([
+        ...adopt(added.localId, envelope.vector),
+        database.syncedTimeStatement(envelope.section, added.localId, envelope.updatedAt),
+      ])
+    } catch (e) {
+      // Untracked, the row would come back as a second copy when the transfer is retried.
+      await removeItem(envelope.section, added.localId).catch(() => {})
+      throw e
+    }
     return {
       localId: added.localId,
       vector: envelope.vector,
@@ -430,7 +474,7 @@ export async function storySyncRecord(storyId: string): Promise<SyncRecord | nul
 
 /**
  * Applies a story, replacing `existingId` if given. `previous` comes from the caller because a
- * failed import has already deleted the original, and a retry has to carry the same history.
+ * replaced original's sync rows go with it, after the import and before the history is written.
  */
 export async function applyStory(
   envelope: SyncEnvelope,
@@ -489,9 +533,10 @@ export async function importSyncedStory(
   existingStoryId: string | null,
   packBinding: PackBindingResolution,
 ): Promise<ImportResult> {
-  if (existingStoryId) await syncService.deleteStory(existingStoryId)
-
-  return exportService.importFromContent(storyJson, true, {
+  const result = await exportService.importFromContent(storyJson, true, {
     resolvePackBinding: async () => packBinding,
   })
+  // The import takes new ids, so the original goes only once its replacement is in.
+  if (result.success && existingStoryId) await syncService.deleteStory(existingStoryId)
+  return result
 }

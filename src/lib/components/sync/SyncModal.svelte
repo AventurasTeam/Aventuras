@@ -204,17 +204,17 @@
 
   async function checkForReceivedItems() {
     try {
-      const items = await syncService.getReceivedItems()
-      if (items.length > 0) {
-        if (received || receivingStory) return
-        // The native API clears its whole queue at once. Keep every payload after the claimed
-        // one locally, then process them in order after the active transfer finishes.
-        const [item, ...queued] = items
-        receivedQueue = queued
-        stopPolling()
-        await syncService.clearReceivedItems()
-        await claimReceivedItem(item)
+      // Taking empties the native queue, so whatever is not claimed now waits here, in order.
+      const items = await syncService.takeReceivedItems()
+      if (items.length === 0) return
+      if (received || receivingStory) {
+        receivedQueue = [...receivedQueue, ...items]
+        return
       }
+      const [item, ...queued] = items
+      receivedQueue = [...receivedQueue, ...queued]
+      stopPolling()
+      await claimReceivedItem(item)
     } catch {
       // Ignore polling errors
     }
@@ -604,10 +604,18 @@
   }
 
   async function handleQrScanned(data: string) {
+    let parsed: SyncConnectionData
+    try {
+      parsed = syncService.parseQrCode(data)
+    } catch (e) {
+      // Another QR code in view: keep scanning for the right one.
+      error = e instanceof Error ? e.message : 'Not a connection code'
+      return
+    }
     await stopScanner()
 
     try {
-      await pair(syncService.parseQrCode(data))
+      await pair(parsed)
     } catch (e) {
       error = e instanceof Error ? e.message : 'Connection failed'
       ui.setSyncMode('select')
@@ -670,7 +678,20 @@
     // hidden modal back to its connected state while cleanup is running.
     ui.closeSyncModal()
     cancelPendingPackMapping()
+    await declineWaitingPushes()
     await cleanup()
+  }
+
+  /** Answers every push still waiting, so its sender hears now rather than after its timeout. */
+  async function declineWaitingPushes() {
+    const waiting = receivedQueue.map((item) => item.requestId)
+    receivedQueue = []
+    if (received && !loading) waiting.push(received.requestId)
+    if (serverInfo) {
+      const queued = await syncService.takeReceivedItems().catch(() => [])
+      waiting.push(...queued.map((item) => item.requestId))
+    }
+    for (const requestId of waiting) answerPush(requestId, { data: 'declined' })
   }
 
   function onOpenChange(open: boolean) {

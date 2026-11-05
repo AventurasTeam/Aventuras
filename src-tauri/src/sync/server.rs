@@ -19,6 +19,8 @@ pub const WEBVIEW_TIMEOUT: Duration = Duration::from_secs(60);
 
 /// A push's reply when its receiver has not answered in time. The item stays queued.
 const PUSH_UNANSWERED: &str = "waiting";
+/// Pushes queued while the receiver decides; past this a push is refused rather than held.
+const MAX_QUEUED_PUSHES: usize = 8;
 
 const UPDATE_NEEDED: &str = "This device is on a different sync version. Update both devices.";
 
@@ -95,12 +97,19 @@ impl ServerState {
 
     /// Queue a pushed item and wait for its receiver's answer.
     async fn receive(&self, peer: SyncPeer, payload: String) -> Result<String, String> {
-        let (request_id, rx) = self.register().await;
-        self.received.lock().await.push(ReceivedItem {
-            request_id: request_id.clone(),
-            peer,
-            payload,
-        });
+        let (request_id, rx) = {
+            let mut received = self.received.lock().await;
+            if received.len() >= MAX_QUEUED_PUSHES {
+                return Err("The other device has too many items waiting. Try again later.".into());
+            }
+            let (request_id, rx) = self.register().await;
+            received.push(ReceivedItem {
+                request_id: request_id.clone(),
+                peer,
+                payload,
+            });
+            (request_id, rx)
+        };
         self.wait(&request_id, rx)
             .await
             .unwrap_or_else(|| Ok(PUSH_UNANSWERED.to_string()))
@@ -319,5 +328,16 @@ mod tests {
         }
         assert_eq!(state.received.lock().await.len(), 1);
         assert!(state.pending.lock().await.is_empty());
+    }
+
+    #[tokio::test]
+    async fn a_push_past_the_queue_limit_is_refused() {
+        let (mut state, _) = silent_server();
+        state.timeout = Duration::from_millis(1);
+        for _ in 0..MAX_QUEUED_PUSHES {
+            respond(&state, push()).await;
+        }
+        assert!(message(respond(&state, push()).await).contains("too many items"));
+        assert_eq!(state.received.lock().await.len(), MAX_QUEUED_PUSHES);
     }
 }

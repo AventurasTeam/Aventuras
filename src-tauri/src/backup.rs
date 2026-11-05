@@ -123,15 +123,27 @@ pub async fn restore_database(app: AppHandle, zip_path: String) -> Result<(), St
     .map_err(|e| format!("restore task failed: {e}"))?
 }
 
-/// Runs on the blocking restore thread, against a staged file nothing else has open.
+/// Runs on the blocking restore thread, against a staged file nothing else has open. A file that
+/// passes the header check but that SQLite cannot read has no identity to protect, so only a
+/// readable one can fail the restore here.
 fn rekey_device(staged: &Path) -> Result<(), String> {
     tauri::async_runtime::block_on(async {
-        let pool = SqlitePoolOptions::new()
+        let Ok(pool) = SqlitePoolOptions::new()
             .max_connections(1)
             .connect_with(SqliteConnectOptions::new().filename(staged))
             .await
-            .map_err(|e| format!("failed to open restored database: {e}"))?;
-        let result = assign_new_device_id(&pool).await;
+        else {
+            return Ok(());
+        };
+        let readable = sqlx::query("SELECT 1 FROM sqlite_master LIMIT 1")
+            .fetch_optional(&pool)
+            .await
+            .is_ok();
+        let result = if readable {
+            assign_new_device_id(&pool).await
+        } else {
+            Ok(())
+        };
         pool.close().await;
         result
     })
@@ -175,10 +187,11 @@ fn restore_db_from_file(file: File, target: &Path) -> Result<(), String> {
         return Err(e);
     }
 
-    // Passing the header check does not mean SQLite can read the file, and one it cannot read has
-    // no identity to protect, so this does not decide the restore.
     if let Err(e) = rekey_device(&staged) {
-        eprintln!("Restored database keeps its device ID: {e}");
+        let _ = std::fs::remove_file(&staged);
+        return Err(format!(
+            "failed to give the restored database a device ID: {e}"
+        ));
     }
 
     // 3. Swap. Renaming (rather than copying) the live DB aside costs no extra disk space, which

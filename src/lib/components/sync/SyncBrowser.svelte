@@ -1,6 +1,5 @@
 <script lang="ts">
   import { onMount, untrack, type Snippet } from 'svelte'
-  import { SvelteMap } from 'svelte/reactivity'
   import {
     AlertTriangle,
     ArrowUpDown,
@@ -52,7 +51,6 @@
     SyncPeer,
     SyncRow,
     SyncSection,
-    SyncVector,
     SyncSort,
     SyncStatus,
   } from '#lib/types/sync.ts'
@@ -80,6 +78,8 @@
   }
 
   const DIALOG_BUTTON = 'w-full sm:w-auto sm:min-w-34'
+  const UNSETTLED =
+    'Received, but the remote device changed it meanwhile, so it may still show as out of sync.'
 
   type ListTool = 'filter' | 'sort'
   const LIST_TOOLS: Record<ListTool, { label: string; title: string }> = {
@@ -110,8 +110,6 @@
   let error = $state<string | null>(null)
   /** The list as it stood before the latest transfer, kept until the user reorders or leaves it. */
   let held = $state.raw<HeldOrder | null>(null)
-  /** Sends the other device has yet to accept, by sync id. */
-  const sent = new SvelteMap<string, SyncVector>()
 
   const currentPrefs = $derived(
     section ? (prefs[section] ?? DEFAULT_LIST_PREFS) : DEFAULT_LIST_PREFS,
@@ -167,7 +165,7 @@
   /** Each listing is read as the rows are built, so a slow section cannot show stale local data. */
   async function loadSection(name: SyncSection): Promise<void> {
     const listing = await fetchListing(connection, self, name)
-    await confirmSends(name, listing.items, listing.device, sent)
+    await confirmSends(name, listing.items, listing.device)
     const local = await listLocalItems(name)
     peer = listing.device
     rowsBySection[name] = buildRows(name, local, listing.items, listing.device.deviceId)
@@ -175,7 +173,8 @@
 
   onMount(() => {
     void untrack(async () => {
-      prefs = await loadListPrefs()
+      // Preferences are a convenience; the sections load without them.
+      prefs = await loadListPrefs().catch(() => ({}))
       try {
         await Promise.all(SYNC_SECTIONS.map(loadSection))
       } catch (e) {
@@ -264,16 +263,8 @@
     if (!local) return
     const theirs = row.remote?.syncId === local.syncId ? (row.remote?.vector ?? null) : null
     return transfer(row, async (name) => {
-      const { syncId, vector, outcome } = await sendItem(
-        connection,
-        self,
-        name,
-        local.localId,
-        tracking(),
-        theirs,
-      )
+      const { outcome } = await sendItem(connection, self, name, local.localId, tracking(), theirs)
       if (outcome === 'declined') return 'The remote device declined it.'
-      sent.set(syncId, vector)
       if (outcome === 'waiting') {
         return 'No answer yet. Once the remote device accepts it, reopen this section to see it.'
       }
@@ -313,12 +304,14 @@
         const previous = existingId ? await storySyncRecord(existingId) : null
         const result = await applyStory(envelope, peer, existingId, binding, previous)
         if (!result.success) throw new Error(result.error ?? 'Import failed')
-        if (result.vector) await settleVector(connection, self, envelope, result.vector)
+        if (result.vector && !(await settleVector(connection, self, envelope, result.vector))) {
+          return UNSETTLED
+        }
         return
       }
 
       const result = await applyItem(envelope, peer, existingId)
-      await settleVector(connection, self, envelope, result.vector)
+      if (!(await settleVector(connection, self, envelope, result.vector))) return UNSETTLED
       if (result.renamedTo) return `Received as "${result.renamedTo}": that name was taken.`
     })
   }

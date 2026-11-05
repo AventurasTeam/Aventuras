@@ -16,6 +16,7 @@ const db = {
   setSyncDeviceName: vi.fn(),
   getSyncListing: vi.fn(),
   addVaultCharacter: vi.fn(),
+  deleteVaultCharacter: vi.fn(),
   updateStory: vi.fn(),
   transaction: vi.fn(),
   vaultCharacterReplaceStatement: vi.fn(() => ({ sql: 'REPLACE CHARACTER' })),
@@ -117,6 +118,13 @@ describe('applyItem', () => {
     expect(writes().at(-1)?.sql).toBe('SET TIME')
   })
 
+  it('removes a new row whose sync state could not be written', async () => {
+    db.transaction.mockRejectedValueOnce(new Error('locked'))
+
+    await expect(actions.applyItem(envelope(), peer, null)).rejects.toThrow('locked')
+    expect(db.deleteVaultCharacter).toHaveBeenCalledOnce()
+  })
+
   it('replaces in one batch that keeps the local id, with the vector after the content', async () => {
     db.getSyncRecord.mockResolvedValue({ syncId: 'sync-1', vector: { pc: 1 }, lastSynced: {} })
 
@@ -191,6 +199,14 @@ describe('applyStory', () => {
 
     expect(result.success).toBe(false)
     expect(db.transaction).not.toHaveBeenCalled()
+  })
+
+  it('keeps the original when the replacing import fails', async () => {
+    importFromContent.mockResolvedValue({ success: false, error: 'boom' })
+
+    await actions.applyStory(story, peer, 'old-story', binding, null)
+
+    expect(sync.deleteStory).not.toHaveBeenCalled()
   })
 
   it('imports without deleting when nothing is replaced', async () => {
@@ -288,7 +304,8 @@ describe('confirmSends', () => {
   beforeEach(() => db.findSyncedLocalId.mockResolvedValue('c'))
 
   it('records a send once the other device holds its vector', async () => {
-    const sent = new Map([['sync-1', { me: 3, pc: 4 }]])
+    const sent = new Map([['sync-1', { vector: { me: 3, pc: 4 }, baseline: { me: 2 } }]])
+    db.getSyncVector.mockResolvedValue({ me: 2 })
 
     await actions.confirmSends('characters', [item({ me: 3, pc: 4 })], peer, sent)
 
@@ -298,12 +315,22 @@ describe('confirmSends', () => {
   })
 
   it('leaves a send the other device has not applied', async () => {
-    const sent = new Map([['sync-1', { me: 3, pc: 4 }]])
+    const sent = new Map([['sync-1', { vector: { me: 3, pc: 4 }, baseline: { me: 2 } }]])
 
     await actions.confirmSends('characters', [item({ pc: 4 })], peer, sent)
 
     expect(vectorWrites()).toEqual([])
     expect(sent.size).toBe(1)
+  })
+
+  it('keeps an edit made here while the send waited', async () => {
+    const sent = new Map([['sync-1', { vector: { me: 3, pc: 4 }, baseline: { me: 2 } }]])
+    db.getSyncVector.mockResolvedValue({ me: 3 })
+
+    await actions.confirmSends('characters', [item({ me: 3, pc: 4 })], peer, sent)
+
+    expect(vectorWrites()).toEqual([])
+    expect(sent.size).toBe(0)
   })
 })
 
@@ -371,6 +398,33 @@ describe('answerSyncRequest', () => {
 
     expect(JSON.parse(await actions.answerSyncRequest(settle, tracking))).toEqual({ settled: true })
     expect(vectorWrites()).toContainEqual(['sync-1', 'me', 3, null])
+  })
+
+  it('refuses a proposed vector behind the expected one', async () => {
+    db.findSyncedLocalId.mockResolvedValue('c')
+    db.getSyncVector.mockResolvedValue({ pc: 2 })
+
+    const behind = request({
+      type: 'settleVector',
+      section: 'characters',
+      syncId: 'sync-1',
+      expected: { pc: 2 },
+      vector: { pc: 1 },
+    })
+    const reply = await actions.answerSyncRequest(behind, tracking)
+
+    expect(JSON.parse(reply)).toEqual({ settled: false })
+    expect(vectorWrites()).toEqual([])
+  })
+
+  it('writes no identity for an item that no longer exists', async () => {
+    await expect(
+      actions.answerSyncRequest(
+        request({ type: 'pull', section: 'characters', localId: 'gone' }),
+        tracking,
+      ),
+    ).rejects.toThrow('no longer exists')
+    expect(db.transaction).toHaveBeenCalledTimes(1)
   })
 
   it('refuses a settled vector when the item moved on', async () => {

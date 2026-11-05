@@ -23,8 +23,7 @@ use backup::{
     export_story_avt, restore_database,
 };
 use sync::commands::{
-    clear_received_items, get_received_items, start_sync_server, stop_sync_server, sync_request,
-    sync_respond,
+    start_sync_server, stop_sync_server, sync_request, sync_respond, take_received_items,
 };
 
 #[tauri::command]
@@ -305,6 +304,12 @@ pub(crate) fn migrations() -> Vec<Migration> {
             sql: include_str!("../migrations/045_sync_identity.sql"),
             kind: MigrationKind::Up,
         },
+        Migration {
+            version: 46,
+            description: "sync_story_time_tracker",
+            sql: include_str!("../migrations/046_sync_story_time_tracker.sql"),
+            kind: MigrationKind::Up,
+        },
     ]
 }
 
@@ -357,8 +362,7 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             start_sync_server,
             stop_sync_server,
-            get_received_items,
-            clear_received_items,
+            take_received_items,
             sync_request,
             sync_respond,
             is_ios,

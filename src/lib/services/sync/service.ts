@@ -44,18 +44,9 @@ class SyncService {
     return invoke('stop_sync_server')
   }
 
-  /**
-   * Get items that were pushed to this server
-   */
-  async getReceivedItems(): Promise<SyncReceivedItem[]> {
-    return invoke('get_received_items')
-  }
-
-  /**
-   * Clear received items after processing
-   */
-  async clearReceivedItems(): Promise<void> {
-    return invoke('clear_received_items')
+  /** Takes every item pushed to this server, emptying its queue. */
+  async takeReceivedItems(): Promise<SyncReceivedItem[]> {
+    return invoke('take_received_items')
   }
 
   /**

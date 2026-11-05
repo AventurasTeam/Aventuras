@@ -77,9 +77,9 @@ turns the triggers off for this. A global flag outside a transaction could stay 
 leaving later edits uncounted with no sign of it, and a story import cannot be one transaction: it
 is many statements plus image streaming in Rust, and the frontend cannot `BEGIN`.
 
-- **Story:** read the old rows, delete the story, import under a new ID, which has no identity so
-  the triggers do nothing, then one batch writes the identity, the vector with its old timestamps,
-  and the sender's `updated_at`.
+- **Story:** read the old rows, import under a new ID, which has no identity so the triggers do
+  nothing, and only then delete the original, so a failed import leaves it in place. One batch then
+  writes the identity, the vector with its old timestamps, and the sender's `updated_at`.
 - **Vault item, pack:** one `database.transaction()` batch writes the content, then the vector. The
   vector write overrides what the batch counted, which is why the device's own row is always written.
   Favourite state is left alone: it belongs to the device. A pack is updated in place because
@@ -95,29 +95,35 @@ older.
 
 A send records nothing locally, resolved or not. The receiver can refuse a push, so a resolved
 vector kept at send time would outrank edits this device has never seen: the row would read as newer
-here, and a plain Send would overwrite them without asking. The client remembers what it sent, and
-when a listing shows the other device holding that vector, it adopts it and stamps the last sync.
-Until then the row keeps its status.
+here, and a plain Send would overwrite them without asking. The client remembers what it sent, in
+memory for the app's lifetime so closing the sync screen does not forget it, and when a listing
+shows the other device holding that vector, it adopts it and stamps the last sync. Until then the
+row keeps its status. If the item was edited here since it went, the send is dropped instead:
+adopting would erase that edit's count.
 
 The push request stays open until the receiver applies the item (`applied`) or declines it
 (`declined`), so the sender re-reads the section once, when there is something to see, and nothing
 polls. A receiver may be across the room, so after `WEBVIEW_TIMEOUT` the server replies `waiting`
 and keeps the item queued. A later answer has no one to reach; the sender's next listing shows it.
+Closing the receiving sync screen declines every push still waiting, and a queue already holding
+eight refuses the next.
 
 After a pull the client sends `settleVector` with the vector it replaced and the one it ended with,
-and the server adopts the new one only if its own still matches. That is the only point the server
-learns the item landed, so it stamps its last sync there rather than when serving the pull. No
-content moves, so the server does not ask. If the item changed in the meantime, it refuses, and the
-next listing shows the truth.
+and the server adopts the new one only if its own still matches and the new one covers it. That is
+the only point the server learns the item landed, so it stamps its last sync there rather than when
+serving the pull. No content moves, so the server does not ask. If the item changed in the meantime,
+it refuses, the client says the item may still read as out of sync, and the next listing shows the
+truth.
 
 ## The server asks its webview
 
-Rust holds no data. A `list`, `pull` or `settleVector` request is emitted as `sync://request` with
-a request ID, and the handler waits on a oneshot until `sync_respond` arrives, up to
+Rust holds no data. A `list`, `pull` or `settleVector` request is emitted as `sync://request` with a
+request ID, and the handler waits on a oneshot until `sync_respond` arrives, up to
 `WEBVIEW_TIMEOUT`. Client timeouts are longer, so the server's message is the one reported. Nothing
 is exported up front, so a listing is always current and carries no content. Pushes go to a queue
-the receiving modal polls, because the receiver may need to ask its user something. Each queued item
-carries its request ID, and the answer comes back through `sync_respond` the same way.
+the receiving modal polls, because the receiver may need to ask its user something. It takes the
+queue whole, so a push arriving between a read and a clear cannot be lost. Each queued item carries
+its request ID, and the answer comes back through `sync_respond` the same way.
 
 Items travel in a `SyncEnvelope`: section, sync ID, vector, `updatedAt`, name, and `document`, the
 item's existing export as text. On the wire the header is one JSON line and the document follows
