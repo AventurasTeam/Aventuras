@@ -1,7 +1,7 @@
 import { readFileSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
 
-import { describe, expect, it } from 'vitest'
+import { beforeAll, describe, expect, it } from 'vitest'
 
 import { countTokens } from '@/lib/tokens'
 
@@ -13,6 +13,7 @@ import {
   loadShapedDataset,
   paragraphsOf,
   REPLY_TARGET_TOKENS,
+  type ShapedDataset,
   shapeDataset,
   splitReplies,
 } from './shape'
@@ -32,6 +33,10 @@ describe('paragraphsOf', () => {
       paragraphsOf('The tide went out\n  and did not come back.\n   \n\nThe gulls stayed.\n'),
     ).toEqual(['The tide went out and did not come back.', 'The gulls stayed.'])
   })
+
+  it('splits on a spaces-only line standing alone', () => {
+    expect(paragraphsOf('A\n  \nB')).toEqual(['A', 'B'])
+  })
 })
 
 describe('splitReplies', () => {
@@ -50,6 +55,14 @@ describe('splitReplies', () => {
     const { opening, replies } = splitReplies([short, long, after].join('\n\n'), countTokens(short))
     expect(opening).toBe(short)
     expect(replies).toEqual([long, after])
+  })
+
+  it('keeps a first paragraph longer than the target whole as the opening', () => {
+    const long = ['a', 'b', 'c', 'd', 'e', 'f'].map(harbour).join(' ')
+    const after = harbour('after')
+    const { opening, replies } = splitReplies([long, after].join('\n\n'), countTokens(harbour('a')))
+    expect(opening).toBe(long)
+    expect(replies).toEqual([after])
   })
 
   it('refuses a text with nothing after the opening', () => {
@@ -92,8 +105,12 @@ describe('the Treasure Island text', () => {
 })
 
 describe('shapeDataset', () => {
-  const { replies } = splitReplies(TEXT, REPLY_TARGET_TOKENS)
-  const actions = replies.map((_, i) => `I take turn ${i + 1}.`)
+  let replies: string[]
+  let actions: string[]
+  beforeAll(() => {
+    replies = splitReplies(TEXT, REPLY_TARGET_TOKENS).replies
+    actions = replies.map((_, i) => `I take turn ${i + 1}.`)
+  })
 
   it('pairs each action with its reply, in order', () => {
     const dataset = shapeDataset(TEXT, actions)
@@ -101,13 +118,34 @@ describe('shapeDataset', () => {
     expect(dataset.turns.map((turn) => turn.reply)).toEqual(replies)
   })
 
-  it('refuses an action count that differs from the replies', () => {
+  it('refuses an action count that differs from the replies, fewer or more', () => {
     expect(() => shapeDataset(TEXT, actions.slice(1))).toThrow(/actions for \d+ replies/)
+    expect(() => shapeDataset(TEXT, [...actions, 'I wait.'])).toThrow(/actions for \d+ replies/)
+  })
+})
+
+describe('datasetTokens', () => {
+  it('sums the opening, every action and every reply', () => {
+    const dataset: ShapedDataset = {
+      opening: harbour('opening'),
+      turns: [
+        { action: 'I wait.', reply: harbour('first') },
+        {
+          action: 'I knock twice at the door.',
+          reply: `${harbour('second')}\n\n${harbour('third')}`,
+        },
+      ],
+    }
+    const strings = [dataset.opening, ...dataset.turns.flatMap((turn) => [turn.action, turn.reply])]
+    expect(datasetTokens(dataset)).toBe(strings.reduce((sum, text) => sum + countTokens(text), 0))
   })
 })
 
 describe('the committed dataset', () => {
-  const dataset = loadShapedDataset(fileURLToPath(new URL('.', import.meta.url).href))
+  let dataset: ShapedDataset
+  beforeAll(() => {
+    dataset = loadShapedDataset(fileURLToPath(new URL('.', import.meta.url).href))
+  })
 
   it('sums, opening and actions and replies, inside the band over about 130 entries', () => {
     const tokens = datasetTokens(dataset)

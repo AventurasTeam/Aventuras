@@ -70,8 +70,8 @@ async function complete(
       ],
       temperature: 0.4,
       max_tokens: 2048,
-      // A thinking model spends the whole budget reasoning and returns an empty turn.
-      chat_template_kwargs: { enable_thinking: false },
+      // llama.cpp/vLLM only: stops a thinking model spending the budget on reasoning.
+      ...(LLM_KEY ? {} : { chat_template_kwargs: { enable_thinking: false } }),
       stream: false,
     }),
     signal: AbortSignal.timeout(CALL_TIMEOUT_MS),
