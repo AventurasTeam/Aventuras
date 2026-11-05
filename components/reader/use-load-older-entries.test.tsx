@@ -148,6 +148,24 @@ describe('useLoadOlderEntries', () => {
     expect(readEntriesBefore).toHaveBeenCalledTimes(2)
   })
 
+  it("runs the next branch's load while the branch it left is still reading", async () => {
+    const hook = renderHook(({ branchId }) => useLoadOlderEntries(branchId, db, onBoundary), {
+      initialProps: { branchId: BRANCH },
+    })
+    const release = holdNextRead()
+    const leaving = hook.result.current()
+
+    entriesStore.hydrate(OTHER, span(11, 60, OTHER))
+    hook.rerender({ branchId: OTHER })
+    await hook.result.current()
+
+    expect(loadedPositions()).toEqual(span(1, 60).map((r) => r.position))
+    expect(onBoundary).toHaveBeenCalledExactlyOnceWith(false)
+    release()
+    await leaving
+    expect(onBoundary).toHaveBeenCalledOnce()
+  })
+
   it('logs a failed read, resolves, and lets the next load run', async () => {
     const warnSpy = vi.spyOn(logger, 'warn').mockImplementation(() => {})
     const load = loadOlder()
