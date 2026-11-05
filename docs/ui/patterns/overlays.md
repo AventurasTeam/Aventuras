@@ -161,11 +161,13 @@ the other anchor reads fails typecheck rather than doing nothing:
   holds the sheet open against drag-down, a scrim tap and Android
   back, which it then swallows so the route doesn't pop. Set `false`
   for a sheet that must commit or cancel explicitly: a pending save,
-  or an editor holding unsaved input. Esc on a web bottom sheet waits
-  on its focus handling (roadmap M9.5); the right anchor dismisses
-  on Esc and an outside click as a Radix dialog does.
+  or an editor holding unsaved input. On web Esc dismisses a bottom
+  sheet too, the newest first, and a held one refuses it as it does a
+  scrim tap; the right anchor dismisses on Esc and an outside click as
+  a Radix dialog does.
 - `onDismissRefused?: () => void` — bottom only. Called when a held
-  sheet refuses a scrim tap or Android back, so an editor can raise
+  sheet refuses a scrim tap, Android back or Escape on web, so an
+  editor can raise
   the [in-edit guard](../foundations/mobile/layout.md#sheet-behavior--additional-rules).
   Drag-down reports nothing; it snaps back. A modal raised over an
   open bottom Sheet passes `portalHost={ABOVE_SHEETS_PORTAL_HOST}`:
