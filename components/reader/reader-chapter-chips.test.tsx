@@ -80,6 +80,8 @@ function entry(position: number, worldTime: number): StoryEntry {
 
 const jump = vi.fn()
 
+const openChange = vi.fn<(open: boolean) => void>()
+
 function chips(overrides: { isFocused?: boolean; frame?: CalendarFrame | null } = {}) {
   return (
     <ReaderChapterChips
@@ -89,6 +91,7 @@ function chips(overrides: { isFocused?: boolean; frame?: CalendarFrame | null } 
       progress={PROGRESS}
       isFocused={overrides.isFocused ?? true}
       onJumpToEntry={jump}
+      onOpenChange={openChange}
     />
   )
 }
@@ -176,6 +179,14 @@ describe('ReaderChapterChips', () => {
 
     act(() => stubs.popover?.onOpenChange?.(true))
     expect(stubs.refetch).toHaveBeenCalledTimes(2)
+  })
+
+  it('reports the popover opening and closing to the host', () => {
+    openChange.mockClear()
+    render(chips())
+    act(() => stubs.popover?.onOpenChange?.(true))
+    act(() => stubs.popover?.onOpenChange?.(false))
+    expect(openChange.mock.calls).toEqual([[true], [false]])
   })
 
   it('routes a row press to the jump', () => {

@@ -32,6 +32,8 @@ export type ReaderChapterChipsProps = {
   progress: ChapterProgress
   isFocused: boolean
   onJumpToEntry: (entryId: string) => void
+  /** The popover opening or closing, for the other trigger the host gives it (the progress strip). */
+  onOpenChange?: (open: boolean) => void
   ref?: Ref<ReaderChapterChipsHandle>
 }
 
@@ -42,6 +44,7 @@ export function ReaderChapterChips({
   progress,
   isFocused,
   onJumpToEntry,
+  onOpenChange,
   ref,
 }: ReaderChapterChipsProps): ReactElement {
   const chapterRows = chaptersStore.useChapters((m) => m)
@@ -58,6 +61,7 @@ export function ReaderChapterChips({
   // A world-time edit moves no key part and the client never goes stale: only a refetch sees it.
   const handleOpenChange = (next: boolean) => {
     setOpen(next)
+    onOpenChange?.(next)
     if (next) void refetch()
   }
 
