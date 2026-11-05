@@ -559,18 +559,166 @@ that ran)
 
 ## Implementation notes
 
-_Populated at finish: notable deviations from the plan and resolved developer decisions._
-
+- **The dataset is _Treasure Island_, chapters I to IX (developer
+  decision, 2026-11-05).** It is public domain and rich in characters
+  for Identity: Project Gutenberg ebook #120, its header, footer,
+  licence, front matter and headings stripped, committed as
+  `scripts/dataset-chapter/treasure-island.txt`. It runs past the
+  brief's "about chapter 7", since chapters I to VII hold about 18k
+  tokens: through chapter IX the text is 22.9k tokens, cut at paragraphs
+  into an opening and 66 replies near 350. Each reply's `user_action`
+  was written once by the dev model under one rule, that an action
+  states only what Jim does or says next, as the following reply shows,
+  and adds no facts, then read against its reply and committed as
+  `actions.json`. The model broke the rule in about half its actions
+  (voicing others, giving away the reply), so half were rewritten by
+  hand. With the actions the dataset is 23,907 tokens over 133 entries.
+- **The dataset is built by driving the desktop app (developer
+  decision, 2026-11-05).** `pnpm dataset:chapter` runs an opt-in
+  Playwright spec on the E2E harness: a story made through the wizard,
+  piggyback off so every turn runs the per-turn classifier as its own
+  call, `lore-mgmt` assigned, the real embedder. The harness mock
+  narrates and serves the wizard, and a second provider at the dev
+  model serves the classifier and `lore-mgmt` profiles, in place of
+  `pnpm mock`'s passthrough lanes. The built database lives outside git,
+  and a rebuild writes different classifier rows. Nothing here opens a
+  story under `tsx`, so that question stays
+  [Slice 5.5a](./05a-task-runner.md#open-questions)'s. Default story
+  settings still auto-close at 24k, which nothing acts on yet: a rebuild
+  after [Slice 5.6](./06-close-owed.md) lands has to turn auto-close off
+  first. The one build took 1.5 h on `Gemma4-26B-A4B-QAT-MTP`, every one
+  of the 66 turns landing on its first Send, and the classifier wrote 55
+  entities, 37 happenings and 8 threads.
+- **The built database is kept as a shared baseline (developer
+  decision, 2026-11-05):** "Yeah keep the database and i guess
+  incrementally enrich the seed as slices come in and add in their part.
+  Just so we keep the data as a shared baseline and checked in." The
+  pristine build is `~/.cache/aventuras-measure/dataset-chapter.db`
+  (sha256 `44f0c1d6ad1bc3cb146f7b0d8d2140036890d08751140420009897c9760cd78d`,
+  built at `af593629a` on `Gemma4-26B-A4B-QAT-MTP`); a copy after its
+  first close on the same model is
+  `~/.cache/aventuras-measure/dataset-chapter.closed.db` (sha256
+  `34f4bdbf81eb4a8e5b414c0c6149663a3187d68549692ef7c90a8673e335a840`,
+  closed at `2f27ae8c7`). Checking a seed export in is later work.
+- **The dataset's close.** Branch
+  `br_aa6101af-d3dd-4964-9869-81e76cc35f97` of the built database,
+  closed at its last reply (entry 133, 23,907 tokens) from the dev route
+  on `Gemma4-26B-A4B-QAT-MTP`, returned the title "The Captain and the
+  Map" in about 31 s; a second first close, on the production bundle,
+  returned "The captain and the map". The production close told its
+  summary in the first person, as the narration does; the first used
+  "you", against the prompt's rule, a data point for the prompt's later
+  tuning.
+- **The stamp burst has a bar (developer decision, 2026-11-05).**
+  Measured on a release Android build on the Fold and on desktop, with a
+  50-row reader: the forward burst, first stamp to last, within 3 s on
+  Android and 1 s on desktop, with no JS-thread stall over 500 ms, and a
+  CTRL-Z of the close, press to the `settleCount` tick, within 2 s on
+  Android and 1 s on desktop. CTRL-Z is the wait a user feels; the stall
+  bar matches 5.3's gap between paints. The numbers are in
+  `### Close measure`.
+- **Android also times the reader document's paints (developer: "Q1:
+  A").** The host never waits for the WebView, so a host-side time can
+  pass on a frozen reader: the measure adds the longest gap between the
+  `'use dom'` reader's `requestAnimationFrame` marks over the burst, on
+  the same 500 ms bar, as 5.3 measured.
+- **The plan's deep link can't observe the reader on Android.**
+  `react-native-screens` detaches the screens under an opaque pushed
+  screen, and the dev route is one, so a close started there runs with
+  the reader's WebView detached: no paints to time. Android was also
+  measured from a temporary in-reader button, the reader on screen, and
+  the document gap is judged on those runs only. Both were folded, on
+  the cover screen, as 5.3 measured.
+- **The plan's stall probe could pass a stalled thread.** It took the
+  longest gap between 16 ms ticks touching the burst, and a thread that
+  never yielded to the timer left no tick inside it, reading 0. The
+  stop moment counts as a tick now; every Android number below was taken
+  with that fix.
+- **The close's create and stamps move to one group in Slice 5.5a
+  (developer decision, 2026-11-05):** "So what i'm thinking is we should
+  take the results as they are right now and move it to the batch writer
+  no matter what just because it's the more correct way to do it in my
+  opinion." The numbers below are the before-baseline;
+  [5.5a](./05a-task-runner.md#scope-in) carries the move, and
+  [C1](../milestone.md#c1--a-closes-delta-shape) says so.
+- **The grown reader isn't measured here (developer decision,
+  2026-11-05).** The reader held its trailing 50 rows. The fix for a
+  grown window is planned, so measuring the known-bad case would change
+  no decision; the followup "Native reader rows rerender per emission"
+  ([followups](../../../../followups.md#ux)) makes a close's burst on a
+  grown window an acceptance case for the sliding-window slice.
+- **The metadata call takes the profile's max output only (developer
+  decision, 2026-11-05).** `buildCallSettings` sends the profile's
+  `maxOutput`, and no code default is added; `generateStructured` and
+  `StructuredCallOptions` don't change. This answers
+  [Slice 5.4](./04-tool-step.md#open-questions)'s "Max output for
+  boundary and metadata" for metadata; boundary's stays
+  [Slice 5.10](./10-two-starts.md)'s. The gap a story override leaves is
+  filed under
+  [M7.1](../../../roadmap.md#m7--app-settings--diagnostics--onboarding).
+  One of fifteen dataset closes on the dev model (force-on aside) failed
+  `reply-cut-off`
+  with 39,689 output tokens and no max output set, and wrote nothing;
+  its retry closed. The developer keeps the profile without a max
+  output: "39.6k tokens sounds like a reasoning loop or something, that
+  most likely hit the context limit of the model and errored out..
+  Anyway, probably fine to keep, the inference is free and better an
+  occasional loop than often cutouts on token limit."
+- **The rollback preview counts only a close's `chapters` create
+  (developer decision, 2026-11-05).** `rollbackCountsOf` drops every
+  other `chapters` delta from the world-state bucket, so a close's
+  `close_report` update no longer reads as a phantom world-state change;
+  [`rollback-confirm.md → Counts`](../../../../ui/screens/reader-composer/rollback-confirm/rollback-confirm.md#counts)
+  lists only entities, lore, threads, happenings and entry assets there.
+  A user's own chapter edit swept by a rollback now counts nowhere
+  either: [5.7](./07-chapter-timeline.md#open-questions) and
+  [5.11](./11-review-window.md#open-questions) carry the question.
+- **`CHAPTER_CLOSE_KIND` lives in `lib/chapters`, and `lib/pipeline`
+  re-exports it.** The brief's "as `PERIODIC_CLASSIFIER_KIND` lives" was
+  inexact, since `lib/pipeline` doesn't re-export that one; the
+  re-export is what C2 pins, and the replaced sites import from
+  `@/lib/chapters`.
+- **The manual start writes `pendingClose` from `onReserved`.** It fires
+  synchronously once the run is in `txState`, so a start the
+  orchestrator rejects never writes the record and needs no restore,
+  and no await slips between the busy check and the write.
+  [Slice 5.6](./06-close-owed.md) inherits this when it settles the
+  record's lifecycle.
+- **One delta group can't both create and update a chapter.**
+  `updateChapter` reads committed rows, so the `close_report` update
+  stays a write of its own after 5.5a's group of the create and stamps.
+- **The dev route takes `branchId` as a query parameter,**
+  `/dev/chapter-close?branchId=…`, since a flat route file can't serve a
+  path segment. With none it uses the open story's branch, so the dev
+  index's plain link works.
+- **A surface mounted mid-close reads a partial range, and settles.**
+  The strip, Plot's chip and the reader's breaks can see the row before
+  the stamps finish and converge at the run's settle. Canon is silent
+  and the banner says a close runs, so this is accepted until 5.5a's
+  group makes the create and stamps land together.
+- **The seed's chapters end on replies, at 29 and 57,** each with a
+  stamp delta per entry anchored on its end, and their `token_count`s
+  are sums of the ranges' `content_tokens`, computed while seeding.
+- **The metadata schema is plain Zod.** A pattern keeps the schema
+  plain JSON Schema and fails a blank field as a parse, which retries;
+  the trim, the keyword dedupe and the cap of 8 run after the parse. The
+  plan's force-on check couldn't reach the pattern: force-on on an
+  openai-compatible provider sends no schema
+  ([`testing.md → Mock LLM`](../../../../testing.md#mock-llm)), so a
+  close on such a profile fails as a parse failure and writes nothing.
 - **A report undone to null (criterion 11).** CTRL-Z of a close reverses
   its create along with its report, so no step of the store walk on a
   real close leaves a row whose report went back to null.
-  `projectChapterPatch`'s update arm with `closeReport: null` pins that
-  reading (`chapter-store-projection.test.ts`), and the walk in
-  `close-report-store.test.ts` pins every step a close reaches.
+  `register.test.ts`'s report update and its reversal pin the flag
+  clearing end to end, `projectChapterPatch`'s update arm with
+  `closeReport: null` pins the function, and `load-open-story.test.ts`
+  pins a null column reading false at hydrate. The walk in
+  `close-report-store.test.ts` covers every step criterion 11 names.
 - **`fullRow` and the walk.** A close's create carries no report, which
   lands by the update, so the walk can't see `fullRow` drop
   `closeReport`. `close-report-store.test.ts` adds a create carrying one,
-  which that mutation turns red.
+  which that mutation turns red, as do `register.test.ts`'s create
+  cases.
 - **The metadata prompt reads the story's mode (developer: "Q2: A").**
   The plan's system half read every user turn as "the narration decides
   what happened" and kept `mode` out of the `chapter` group. Canon reads
@@ -588,3 +736,41 @@ _Populated at finish: notable deviations from the plan and resolved developer de
   [C2](../milestone.md#c2--pipeline-shape) has phases read the range.
   Sound while entries are only appended at the tail: a feature that
   inserts mid-story should also require the stamp once it has landed.
+
+### Close measure
+
+Bar, set at planning: the forward burst within 3 s on Android and 1 s
+on desktop with no JS-thread stall over 500 ms, and CTRL-Z of the close
+within 2 s on Android and 1 s on desktop. A miss reopens
+[C1](../milestone.md#c1--a-closes-delta-shape): a move to one group
+after 5.5a's seam, which the developer has since decided on regardless.
+
+Fixture: the dataset branch, 133 stamps over 23,907 tokens, with the
+reader mounted on its trailing 50 rows. Timed inside the app's JS by a
+temporary probe, not committed: the burst from the stamp deltas'
+`created_at`, a stall as the longest gap between 16 ms ticks, the
+document gap as the longest gap between the reader document's paints,
+CTRL-Z from the press to the `settleCount` tick. Desktop started its
+measured closes from DevTools with the reader on screen, since nothing
+in-app leads from the reader to the dev route there.
+
+| Platform, start                                                                     | Forward burst         | Longest stall in it   | Document gap                           | CTRL-Z       |
+| ----------------------------------------------------------------------------------- | --------------------- | --------------------- | -------------------------------------- | ------------ |
+| Desktop, `pnpm desktop` dev build (Linux 7.2)                                       | 1468 / 1265 ms (miss) | 61 / 41 ms            | 60 / 45 ms                             | 379 / 370 ms |
+| Desktop, production bundle (Linux 7.2)                                              | 792 / 788 ms          | 21 / 29 ms            | 34 / 32 ms                             | 211 / 174 ms |
+| Android 17, Galaxy Z Fold (SM-F966B), folded, release `arm64-v8a`, in-reader button | 967 / 986 ms          | 1091 / 1094 ms (miss) | 18 / 17 ms                             | 209 / 213 ms |
+| Same, the dev route deep-linked over the reader                                     | 1097 / 1013 ms        | 1212 / 1121 ms (miss) | not measurable: the reader is detached | 210 / 218 ms |
+
+On desktop the document shares the renderer's thread, so its gap is
+information only. The dev-route close on desktop, with no reader
+mounted, took 675 ms on the dev build and 453 ms on the production
+bundle. The dev route closed a chapter on an Android dev client
+against `pnpm mock`, served from the `chapter-metadata` lane.
+
+Verdict (developer: "Q11: A"): desktop is judged on the production
+bundle and holds the bar; the dev build's burst misses it under React's
+development mode. On Android the burst and CTRL-Z hold and the reader
+keeps painting, but the JS thread stalls about 1.1 s in the burst, a
+miss that stands as the before-baseline for the move to one group.
+[Slice 5.5a](./05a-task-runner.md#scope-in) carries a hard bar for it,
+with no code change here.
