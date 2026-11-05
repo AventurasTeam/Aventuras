@@ -3248,6 +3248,31 @@ tap; `null` or `''` fall back to a template that reads "Tap to none
 the Bottom Sheet" there, so only a non-empty string replaces it. That matters once the scrim joins the
 accessibility tree as part of the dialog fix.
 
+#### The native chapter list's pin doesn't follow a TalkBack scroll
+
+In `components/reader/chapter-popover.tsx`, native unpins the list
+only in `onScrollBeginDrag`. An accessibility scroll (TalkBack's
+scroll actions start no drag) leaves the list pinned, so a later
+`onContentSizeChange` or `onLayout` pulls it back to the last row: a
+chapter closing while the list is open, range labels arriving after a
+refetch, a Sheet height drag, or an unfold. Raised 2026-11-03 by
+PR #698's review.
+
+Web's upward-offset rule may carry over to both native arms. The phone
+Sheet holds a pinned list at its end until gorhom unlocks it, so the
+list no longer snaps to the top before the unlock, and the tablet
+Popover scrolls in gesture-handler's `ScrollView` with no Sheet lock.
+Not tried. A fix must show on a device that a TalkBack scroll unpins
+the list, that the phone Sheet still rises on its last rows, and that
+a later content-size or layout change doesn't pull a TalkBack-scrolled
+list back. Read from the code, not reproduced.
+
+Parked 2026-11-05 as degraded rather than broken: the list stays
+scrollable, and only a content or layout change while it is open pulls
+it back. Revisit with
+[Android bottom sheets are not dialogs for TalkBack](#android-bottom-sheets-are-not-dialogs-for-talkback),
+on a deliberate a11y pass, or on any report from real TalkBack use.
+
 #### Unset affordance for optional story-settings keys
 
 **Story settings has no unset affordance for optional keys.**

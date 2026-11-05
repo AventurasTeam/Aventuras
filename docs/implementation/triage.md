@@ -150,54 +150,6 @@ slice-planning gate forces its resolution before that slice is planned.
     height part of the settle rule. Pin both in unit tests once the
     loop is a function. Raised 2026-11-03 by 5.3's slice review.
 
-- **The native chapter list's pin doesn't follow the reader's own
-  scrolls.** In `components/reader/chapter-popover.tsx`, native unpins
-  the list only in `onScrollBeginDrag`, which gorhom calls with no lock
-  check. Two gaps follow:
-  - An accessibility scroll (TalkBack's scroll actions start no drag)
-    leaves the list pinned, so a later `onContentSizeChange` or
-    `onLayout` pulls it back to the last row: a chapter closing while
-    the list is open, range labels arriving after a refetch, a Sheet
-    height drag, or an unfold. Raised 2026-11-03 by PR #698's review.
-  - On the phone Sheet, a drag on the list while the Sheet is still
-    rising unpins it, though gorhom holds the list at the top until the
-    Sheet unlocks, so at the unlock `showLastRow` does nothing and the
-    list opens on chapter 1. Read from gorhom 5.2.14's source
-    (`useScrollHandler`, `useScrollable`); added 2026-11-03 by 5.3's
-    slice review. Not run on the Fold; see "The phone chapter Sheet
-    rises on chapter 1, then jumps to its last rows" in the
-    [Inbox](#inbox).
-
-  Web's upward-offset rule can't move over as is to the phone Sheet,
-  where gorhom's snap to the top before the unlock would read as a
-  scroll up. The tablet Popover scrolls in gesture-handler's
-  `ScrollView` with no Sheet lock, so the web rule may carry over there.
-  A fix must show on a device that a TalkBack scroll unpins the list,
-  that the snap before the unlock and a drag during the rise don't
-  leave it off its last row, and that a later content-size or layout
-  change doesn't pull a TalkBack-scrolled list back. Read from the
-  code, not reproduced.
-
-- **The phone chapter Sheet rises on chapter 1, then jumps to its last
-  rows.** On the phone, the chapter Sheet shows chapter 1 while it rises
-  and snaps to its last rows only once it is fully open, a visible jump
-  on every open. gorhom holds the list at the top until the Sheet
-  unlocks, and `SheetUnlockWatcher`
-  (`components/reader/chapter-popover.tsx`) repeats the scroll to the
-  last row only then. Repro: on the folded Fold, open the story "Long
-  branch, 20 chapters" from `pnpm db:seed:long` and tap the chapter
-  chip. In one recording the Sheet showed chapters 1–6 at 2.95 s and
-  3.05 s, and 16–21 at 3.15 s. The developer saw it on the phone. The
-  recordings are git-ignored, so the evidence is
-  [#698's device comment](https://github.com/AventurasTeam/Aventuras/pull/698#issuecomment-6611307585).
-  "The native chapter list's pin doesn't follow the reader's own
-  scrolls" in the [Inbox](#inbox) names this snap to the top before the
-  unlock only as a constraint on its fix. That entry's rise-drag case
-  couldn't be run on the device: adb's input lag, about 0.1 s, can't
-  place a drag inside a rise of about 0.2 s, and by hand the list sits
-  at chapter 1 with nothing above it to scroll to. Raised 2026-11-03 by
-  5.3's device session (developer decision R3).
-
 - **The reader's bottom geometry is still read only at a few moments.**
   `syncJumpButton` (`components/reader/reader-surface.tsx`) raises the
   jump-to-bottom button as a stream grows below the reader and through

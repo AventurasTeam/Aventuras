@@ -17,8 +17,8 @@ import {
   type ViewStyle,
 } from 'react-native'
 import { ScrollView as GestureScrollView } from 'react-native-gesture-handler'
-import { useAnimatedReaction } from 'react-native-reanimated'
-import { scheduleOnRN } from 'react-native-worklets'
+import { useAnimatedReaction, useSharedValue } from 'react-native-reanimated'
+import { runOnUISync, scheduleOnRN } from 'react-native-worklets'
 
 import { ChapterProgressBar } from '@/components/compounds/chapter-progress-bar'
 import { chapterProgressLabel } from '@/components/compounds/chapter-progress-label'
@@ -38,6 +38,7 @@ import { t } from '@/lib/i18n'
 import { cn } from '@/lib/utils'
 
 import { ChapterChip } from './chapter-chip'
+import { PinnedEndContext, useEndLockedScrollHandlers } from './sheet-list-lock'
 
 export type ChapterPopoverRow = {
   id: string
@@ -84,6 +85,8 @@ const POPOVER_ARM: Arm = {
 // Android; gesture-handler's doesn't use the responder system.
 const POPOVER_SCROLL = GestureScrollView as ScrollComponent
 const SHEET_ARM: Arm = { root: 'flex-1 gap-3', row: 'min-h-control-lg', list: { flex: 1 } }
+// gorhom takes its handler hook as a prop; at module scope it stays out of the compiler's way.
+const END_HELD_LIST = { scrollEventsHandlersHook: useEndLockedScrollHandlers }
 
 type ArmProps = ChapterPopoverProps & { number: number }
 
@@ -221,8 +224,8 @@ function SheetArm({ onOpenChange, ref, ...content }: ArmProps) {
   )
 }
 
-// gorhom snaps its scrollable back to the top on any scroll until the sheet is fully up, so the
-// open-on-last-row scroll has to be repeated when it unlocks.
+// The hold comes from measured heights, so the open-on-last-row scroll repeats once gorhom
+// unlocks, landing on the scroll view's own end.
 function SheetUnlockWatcher({ onUnlocked }: { onUnlocked: () => void }) {
   const { animatedScrollableStatus } = useBottomSheetInternal()
   useAnimatedReaction(
@@ -254,8 +257,25 @@ function OverlayBody({
 }: OverlayBodyProps) {
   const list = useRef<ScrollComponentHandle>(null)
   const contentHeight = useRef(0)
+  const viewportHeight = useRef(0)
   // Both overlays mount this body on each open, so a new open pins again.
   const pinned = useRef(true)
+  // Native Sheet only: gorhom holds the list while the Sheet moves, at the end while it's pinned.
+  const sheetHeld = arm === SHEET_ARM && Platform.OS !== 'web'
+  const pinnedEnd = useSharedValue(-1)
+  const holdAtEnd = () => {
+    if (!sheetHeld) return
+    const end = pinned.current ? Math.max(0, contentHeight.current - viewportHeight.current) : -1
+    // Synchronous, so the scroll that follows is held where this says.
+    runOnUISync(() => {
+      'worklet'
+      pinnedEnd.value = end
+    })
+  }
+  const unpin = () => {
+    pinned.current = false
+    holdAtEnd()
+  }
   // ScrollComponentHandle exposes only scrollTo, so the end is the measured content height.
   const scrollToEnd = () => {
     if (pinned.current) list.current?.scrollTo({ y: contentHeight.current, animated: false })
@@ -267,7 +287,7 @@ function OverlayBody({
   const unpinOnScrollUp = (event: NativeSyntheticEvent<NativeScrollEvent>) => {
     const { contentOffset, contentSize, layoutMeasurement } = event.nativeEvent
     const atEnd = contentOffset.y >= contentSize.height - layoutMeasurement.height - 1
-    if (contentOffset.y < lastOffset.current - 1 && !atEnd) pinned.current = false
+    if (contentOffset.y < lastOffset.current - 1 && !atEnd) unpin()
     lastOffset.current = contentOffset.y
   }
   // Android runs a frame's view commands before its mount, so a scroll for rows that just grew
@@ -280,51 +300,57 @@ function OverlayBody({
   return (
     <View className={arm.root}>
       {arm === SHEET_ARM ? <SheetUnlockWatcher onUnlocked={showLastRow} /> : null}
-      <ContextScrollView
-        ref={list}
-        testID="chapter-popover-list"
-        keyboardShouldPersistTaps="handled"
-        // A touch drag keeps the reader's place: no later trigger pulls it back.
-        onScrollBeginDrag={() => {
-          pinned.current = false
-        }}
-        onScroll={Platform.OS === 'web' ? unpinOnScrollUp : undefined}
-        // RN-Web's default reports only a scroll's start and its end, 100 ms after it stops.
-        scrollEventThrottle={16}
-        style={arm.list}
-        onContentSizeChange={(_width, height) => {
-          contentHeight.current = height
-          showLastRow()
-        }}
-        // gorhom takes its handle's height off the list after the content has laid out.
-        onLayout={showLastRow}
-      >
-        {closed.map((row, index) => (
-          <ClosedRow
-            key={row.id}
-            ref={index === closed.length - 1 ? lastClosedRow : undefined}
-            row={row}
-            className={arm.row}
-            onPress={() => {
-              close()
-              onJumpToChapter(row.startEntryId)
-            }}
-          />
-        ))}
-        <View
-          testID="chapter-popover-open"
-          className={cn(ROW_CLASS, arm.row, 'rounded-sm bg-tint-press')}
+      <PinnedEndContext.Provider value={sheetHeld ? pinnedEnd : null}>
+        <ContextScrollView
+          ref={list}
+          testID="chapter-popover-list"
+          keyboardShouldPersistTaps="handled"
+          {...(sheetHeld ? END_HELD_LIST : {})}
+          // A touch drag keeps the reader's place: no later trigger pulls it back.
+          onScrollBeginDrag={unpin}
+          onScroll={Platform.OS === 'web' ? unpinOnScrollUp : undefined}
+          // RN-Web's default reports only a scroll's start and its end, 100 ms after it stops.
+          scrollEventThrottle={16}
+          style={arm.list}
+          onContentSizeChange={(_width, height) => {
+            contentHeight.current = height
+            holdAtEnd()
+            showLastRow()
+          }}
+          // gorhom takes its handle's height off the list after the content has laid out.
+          onLayout={(event) => {
+            viewportHeight.current = event.nativeEvent.layout.height
+            holdAtEnd()
+            showLastRow()
+          }}
         >
-          <Text size="sm" className="font-medium">
-            {t('chapters:popover.inProgress', { number })}
-          </Text>
-          {sinceLabel != null ? (
-            <Text size="xs" variant="muted" numberOfLines={1}>
-              {t('chapters:popover.since', { time: sinceLabel })}
+          {closed.map((row, index) => (
+            <ClosedRow
+              key={row.id}
+              ref={index === closed.length - 1 ? lastClosedRow : undefined}
+              row={row}
+              className={arm.row}
+              onPress={() => {
+                close()
+                onJumpToChapter(row.startEntryId)
+              }}
+            />
+          ))}
+          <View
+            testID="chapter-popover-open"
+            className={cn(ROW_CLASS, arm.row, 'rounded-sm bg-tint-press')}
+          >
+            <Text size="sm" className="font-medium">
+              {t('chapters:popover.inProgress', { number })}
             </Text>
-          ) : null}
-        </View>
-      </ContextScrollView>
+            {sinceLabel != null ? (
+              <Text size="xs" variant="muted" numberOfLines={1}>
+                {t('chapters:popover.since', { time: sinceLabel })}
+              </Text>
+            ) : null}
+          </View>
+        </ContextScrollView>
+      </PinnedEndContext.Provider>
 
       <View className="gap-1">
         <ChapterProgressBar percent={progress.percent} className="h-1.5 rounded-full" />
