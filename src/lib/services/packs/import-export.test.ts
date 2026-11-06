@@ -97,3 +97,25 @@ describe('updatePackFromFile', () => {
     expect(replacePackContents).not.toHaveBeenCalled()
   })
 })
+
+describe('uniqueName', () => {
+  it('keeps a free name, and a name the pack already holds', async () => {
+    const holder = vi.spyOn(importExportService, 'checkNameConflict')
+    holder.mockResolvedValueOnce(null)
+    expect(await importExportService.uniqueName('Noir')).toBe('Noir')
+
+    holder.mockResolvedValueOnce(presetPack({ id: 'mine', name: 'Noir' }))
+    expect(await importExportService.uniqueName('Noir', 'mine')).toBe('Noir')
+    holder.mockRestore()
+  })
+
+  it('walks the same suffixes a file import uses', async () => {
+    const holder = vi.spyOn(importExportService, 'checkNameConflict')
+    holder
+      .mockResolvedValueOnce(presetPack({ id: 'a' }))
+      .mockResolvedValueOnce(presetPack({ id: 'b' }))
+      .mockResolvedValueOnce(null)
+    expect(await importExportService.uniqueName('Noir')).toBe('Noir (Imported 2)')
+    holder.mockRestore()
+  })
+})

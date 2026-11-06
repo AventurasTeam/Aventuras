@@ -71,6 +71,8 @@ export interface PackRuntimeVariableExport {
  */
 export interface PackBindingExport {
   pack: { name: string; author: string | null }
+  /** Written by sync only. */
+  packSyncId?: string
   customVariableValues?: Record<string, string>
   variables?: PackVariableExport[]
   runtimeVariables?: PackRuntimeVariableExport[]

@@ -50,13 +50,14 @@ import type {
   RuntimeEntityType,
   EnumOption,
 } from '#lib/services/packs/types.ts'
-import { hashContent } from '#lib/services/packs/hash.ts'
+import { hashContent, packTemplateHashes } from '#lib/services/packs/hash.ts'
 import { timeAnchorUpsert } from '#lib/services/storyTime/index.ts'
 import {
   packReplacementStatements,
   shippedTemplateStatements,
 } from '#lib/services/packs/replace-statements.ts'
 import type { PackExport } from '#lib/services/packs/validation.ts'
+import type { SyncEntityType, SyncPeer, SyncSection, SyncVector } from '#lib/types/sync.ts'
 import { readStorySettings } from '#lib/utils/storySettings.ts'
 import { uniqueTerms } from '#lib/utils/text.ts'
 import { stringToDescriptors } from '#lib/utils/visualDescriptors.ts'
@@ -224,6 +225,72 @@ function parseVaultEntries(raw: string | null): VaultLorebookEntry[] {
   const stored: unknown = raw ? JSON.parse(raw) : []
   if (!Array.isArray(stored)) return []
   return stored.filter((e) => e && typeof e === 'object').map(withUniqueVaultEntryTerms)
+}
+
+export interface SyncRecord {
+  syncId: string
+  vector: SyncVector
+  lastSynced: Record<string, number>
+}
+
+interface SyncRecordRow {
+  local_id: string
+  sync_id: string
+  device_id: string | null
+  counter: number | null
+  last_synced_at: number | null
+}
+
+interface SqlBatchStatement {
+  sql: string
+  params?: unknown[]
+}
+
+export interface SyncListingRow {
+  localId: string
+  name: string
+  author: string | null
+  updatedAt: number
+}
+
+const SYNC_LISTINGS: Record<
+  SyncSection,
+  { table: string; name: string; author: string; where?: string }
+> = {
+  stories: { table: 'stories', name: 'title', author: 'NULL' },
+  characters: { table: 'character_vault', name: 'name', author: 'NULL' },
+  lorebooks: { table: 'lorebook_vault', name: 'name', author: 'NULL' },
+  scenarios: { table: 'scenario_vault', name: 'name', author: 'NULL' },
+  packs: { table: 'preset_packs', name: 'name', author: 'author', where: 'is_default = 0' },
+}
+
+function packContentStatements(
+  packId: string,
+  packData: PackExport,
+  hashes: Map<string, string>,
+): SqlBatchStatement[] {
+  return packReplacementStatements({
+    packId,
+    packData,
+    hashes,
+    ids: {
+      templates: packData.templates.map(() => crypto.randomUUID()),
+      variables: packData.variables.map(() => crypto.randomUUID()),
+    },
+    now: Date.now(),
+  })
+}
+
+function mapSyncRecords(rows: SyncRecordRow[]): Map<string, SyncRecord> {
+  const records = new Map<string, SyncRecord>()
+  for (const row of rows) {
+    const record = records.get(row.local_id) ?? { syncId: row.sync_id, vector: {}, lastSynced: {} }
+    records.set(row.local_id, record)
+    if (row.device_id === null) continue
+    record.vector[row.device_id] = row.counter ?? 0
+    if (row.last_synced_at !== null) record.lastSynced[row.device_id] = row.last_synced_at
+  }
+  return records
 }
 
 class DatabaseService {
@@ -2074,11 +2141,7 @@ class DatabaseService {
 
   async setStoryCurrentBranch(storyId: string, branchId: string | null): Promise<void> {
     const db = await this.getDb()
-    await db.execute('UPDATE stories SET current_branch_id = ?, updated_at = ? WHERE id = ?', [
-      branchId,
-      Date.now(),
-      storyId,
-    ])
+    await db.execute('UPDATE stories SET current_branch_id = ? WHERE id = ?', [branchId, storyId])
   }
 
   private mapBranch(row: any): Branch {
@@ -4036,18 +4099,7 @@ class DatabaseService {
     packData: PackExport,
     hashes: Map<string, string>,
   ): Promise<void> {
-    await this.transaction(
-      packReplacementStatements({
-        packId,
-        packData,
-        hashes,
-        ids: {
-          templates: packData.templates.map(() => crypto.randomUUID()),
-          variables: packData.variables.map(() => crypto.randomUUID()),
-        },
-        now: Date.now(),
-      }),
-    )
+    await this.transaction(packContentStatements(packId, packData, hashes))
   }
 
   /**
@@ -4075,6 +4127,168 @@ class DatabaseService {
       [packId],
     )
     return results[0].count === 0
+  }
+
+  /** A pack's contents and metadata as one batch of statements, keeping its id. */
+  async packSyncStatements(packId: string, packData: PackExport): Promise<SqlBatchStatement[]> {
+    return [
+      ...packContentStatements(packId, packData, await packTemplateHashes(packData)),
+      {
+        sql: 'UPDATE preset_packs SET name = ?, description = ?, author = ? WHERE id = ?',
+        params: [packData.name, packData.description ?? null, packData.author ?? null, packId],
+      },
+    ]
+  }
+
+  /** Names and times only: a section's rows can hold every portrait in the vault. */
+  async getSyncListing(section: SyncSection, id?: string): Promise<SyncListingRow[]> {
+    const db = await this.getDb()
+    const { table, name, author, where } = SYNC_LISTINGS[section]
+    const conditions = [...(where ? [where] : []), ...(id ? ['id = ?'] : [])]
+    const rows = await db.select<
+      { id: string; name: string; author: string | null; updated_at: number }[]
+    >(
+      `SELECT id, ${name} AS name, ${author} AS author, updated_at FROM ${table}
+       ${conditions.length ? `WHERE ${conditions.join(' AND ')}` : ''}`,
+      id ? [id] : [],
+    )
+    return rows.map((r) => ({
+      localId: r.id,
+      name: r.name,
+      author: r.author,
+      updatedAt: r.updated_at,
+    }))
+  }
+
+  async getSyncSelf(): Promise<SyncPeer> {
+    const db = await this.getDb()
+    const rows = await db.select<{ device_id: string; name: string }[]>(
+      'SELECT device_id, name FROM sync_device WHERE is_self = 1',
+    )
+    return { deviceId: rows[0].device_id, name: rows[0].name }
+  }
+
+  async setSyncDeviceName(name: string): Promise<void> {
+    const db = await this.getDb()
+    await db.execute('UPDATE sync_device SET name = ? WHERE is_self = 1', [name])
+  }
+
+  async getSyncRecords(entityType: SyncEntityType): Promise<Map<string, SyncRecord>> {
+    const db = await this.getDb()
+    const rows = await db.select<SyncRecordRow[]>(
+      `SELECT i.local_id, i.sync_id, v.device_id, v.counter, v.last_synced_at
+       FROM sync_identity i LEFT JOIN sync_vector v ON v.sync_id = i.sync_id
+       WHERE i.entity_type = ?`,
+      [entityType],
+    )
+    return mapSyncRecords(rows)
+  }
+
+  async getSyncRecord(entityType: SyncEntityType, localId: string): Promise<SyncRecord | null> {
+    const db = await this.getDb()
+    const rows = await db.select<SyncRecordRow[]>(
+      `SELECT i.local_id, i.sync_id, v.device_id, v.counter, v.last_synced_at
+       FROM sync_identity i LEFT JOIN sync_vector v ON v.sync_id = i.sync_id
+       WHERE i.entity_type = ? AND i.local_id = ?`,
+      [entityType, localId],
+    )
+    return mapSyncRecords(rows).get(localId) ?? null
+  }
+
+  async findSyncedLocalId(entityType: SyncEntityType, syncId: string): Promise<string | null> {
+    const db = await this.getDb()
+    const rows = await db.select<{ local_id: string }[]>(
+      'SELECT local_id FROM sync_identity WHERE entity_type = ? AND sync_id = ?',
+      [entityType, syncId],
+    )
+    return rows[0]?.local_id ?? null
+  }
+
+  async getSyncVector(syncId: string): Promise<SyncVector> {
+    const db = await this.getDb()
+    const rows = await db.select<{ device_id: string; counter: number }[]>(
+      'SELECT device_id, counter FROM sync_vector WHERE sync_id = ?',
+      [syncId],
+    )
+    return Object.fromEntries(rows.map((r) => [r.device_id, r.counter]))
+  }
+
+  /**
+   * Favourite state stays out: it belongs to the device. `metadataPatch` is merged into the stored
+   * metadata, so keys only this device holds stay, and a null removes a key.
+   */
+  vaultCharacterReplaceStatement(
+    c: VaultCharacter,
+    metadataPatch: Record<string, unknown>,
+  ): SqlBatchStatement {
+    return {
+      sql: `UPDATE character_vault SET name = ?, description = ?, traits = ?,
+              visual_descriptors = ?, portrait = ?, tags = ?,
+              metadata = json_patch(COALESCE(metadata, '{}'), ?)
+            WHERE id = ?`,
+      params: [
+        c.name,
+        c.description,
+        JSON.stringify(uniqueTerms(c.traits)),
+        JSON.stringify(c.visualDescriptors),
+        c.portrait,
+        JSON.stringify(c.tags),
+        JSON.stringify(metadataPatch),
+        c.id,
+      ],
+    }
+  }
+
+  vaultLorebookReplaceStatement(
+    l: VaultLorebook,
+    metadataPatch: Record<string, unknown>,
+  ): SqlBatchStatement {
+    return {
+      sql: `UPDATE lorebook_vault SET name = ?, description = ?, entries = ?, tags = ?,
+              metadata = json_patch(COALESCE(metadata, '{}'), ?)
+            WHERE id = ?`,
+      params: [
+        l.name,
+        l.description,
+        JSON.stringify(l.entries.map(withUniqueVaultEntryTerms)),
+        JSON.stringify(l.tags),
+        JSON.stringify(metadataPatch),
+        l.id,
+      ],
+    }
+  }
+
+  vaultScenarioReplaceStatement(
+    s: VaultScenario,
+    metadataPatch: Record<string, unknown>,
+  ): SqlBatchStatement {
+    return {
+      sql: `UPDATE scenario_vault SET name = ?, description = ?, setting_seed = ?, npcs = ?,
+              primary_character_name = ?, first_message = ?, alternate_greetings = ?,
+              starting_time = ?, tags = ?, metadata = json_patch(COALESCE(metadata, '{}'), ?)
+            WHERE id = ?`,
+      params: [
+        s.name,
+        s.description,
+        s.settingSeed,
+        JSON.stringify(s.npcs),
+        s.primaryCharacterName,
+        s.firstMessage,
+        JSON.stringify(s.alternateGreetings),
+        s.startingTime ? JSON.stringify(s.startingTime) : null,
+        JSON.stringify(s.tags),
+        JSON.stringify(metadataPatch),
+        s.id,
+      ],
+    }
+  }
+
+  /** The time an item changed on the device it came from. */
+  syncedTimeStatement(section: SyncSection, id: string, updatedAt: number): SqlBatchStatement {
+    return {
+      sql: `UPDATE ${SYNC_LISTINGS[section].table} SET updated_at = ? WHERE id = ?`,
+      params: [updatedAt, id],
+    }
   }
 
   async getPackUsageCount(packId: string): Promise<number> {

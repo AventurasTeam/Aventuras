@@ -2,21 +2,42 @@
   import { ui } from '#lib/stores/ui.svelte.ts'
   import { story } from '#lib/stores/story.svelte.ts'
   import { settings } from '#lib/stores/settings.svelte.ts'
-  import { syncService } from '#lib/services/sync.ts'
-  import { importSyncedStory, pushSyncedStory } from '#lib/services/syncActions.ts'
-  import { getVersion } from '@tauri-apps/api/app'
+  import { characterVault } from '#lib/stores/characterVault.svelte.ts'
+  import { lorebookVault } from '#lib/stores/lorebookVault.svelte.ts'
+  import { scenarioVault } from '#lib/stores/scenarioVault.svelte.ts'
   import {
-    QrCode,
-    Camera,
-    Upload,
-    Download,
-    Loader2,
-    AlertTriangle,
-    RefreshCw,
-    Check,
-  } from '@lucide/svelte'
+    answerSyncRequest,
+    applyItem,
+    applyStory,
+    decodeEnvelope,
+    encodeConnectionCode,
+    findReceiveTarget,
+    loadSelf,
+    renameSelf,
+    storiesUsingPack,
+    storySyncRecord,
+    syncService,
+    type ReceiveTarget,
+  } from '#lib/services/sync/index.ts'
+  import { getVersion } from '@tauri-apps/api/app'
+  import { listen, type UnlistenFn } from '@tauri-apps/api/event'
+  import { QrCode, Camera, Loader2, AlertTriangle, Check } from '@lucide/svelte'
   import { Html5Qrcode } from 'html5-qrcode'
-  import type { SyncServerInfo, SyncStoryPreview, SyncConnectionData } from '#lib/types/sync.ts'
+  import { SYNC_PROTOCOL_VERSION } from '#lib/types/sync.ts'
+  import type {
+    SyncConnectionData,
+    SyncEnvelope,
+    SyncPeer,
+    SyncPushOutcome,
+    SyncReceivedItem,
+    SyncSection,
+    SyncServerInfo,
+    SyncWebviewRequest,
+  } from '#lib/types/sync.ts'
+  import SyncBrowser from './SyncBrowser.svelte'
+  import SyncCodeDisplay from './SyncCodeDisplay.svelte'
+  import SyncCodeEntry from './SyncCodeEntry.svelte'
+  import SyncDeviceName from './SyncDeviceName.svelte'
   import { onDestroy, untrack } from 'svelte'
   import PackMappingDialog from '#lib/components/story/PackMappingDialog.svelte'
   import type { PresetPack } from '#lib/services/packs/index.ts'
@@ -24,9 +45,10 @@
   import type { PackBindingContext, PackBindingResolution } from '#lib/services/import/index.ts'
   import * as ResponsiveModal from '#lib/components/ui/responsive-modal/index.ts'
   import { Button } from '#lib/components/ui/button/index.ts'
+  import { cn } from '#lib/utils/cn.ts'
+  import { PAIR_BUTTON, PAIR_ROW } from '#lib/components/shared/buttonPair.ts'
+  import ModalHeader from '#lib/components/shared/ModalHeader.svelte'
   import { Card, CardHeader, CardTitle, CardDescription } from '#lib/components/ui/card/index.ts'
-  import { ScrollArea } from '#lib/components/ui/scroll-area/index.ts'
-  import { Badge } from '#lib/components/ui/badge/index.ts'
 
   /** Non-null only while a transfer is waiting on the user's pack choice. */
   let packMapping = $state<{
@@ -39,12 +61,11 @@
   /**
    * Settle which pack the incoming story binds to, before the transfer writes or deletes anything.
    *
-   * This runs ahead of `deleteStory` on purpose. Both receive paths remove the story they are
-   * replacing *before* importing, so a question asked any later would let a cancel destroy the
-   * copy being replaced and put nothing in its place.
+   * This runs before the transfer writes anything, so a cancel leaves this device as it was.
    *
-   * Sync can ask at all because it is user-driven: the payload is already downloaded and no
-   * remote party is waiting. A background sync would need a different answer here.
+   * Sync can ask at all because it is user-driven: the payload is already downloaded, and a
+   * sender waiting on a push hears `waiting` once its timeout passes. A background sync would
+   * need a different answer here.
    *
    * Returns the resolution, or `null` if the user backed out — in which case the caller must
    * return without touching anything.
@@ -74,28 +95,34 @@
 
   // State
   let serverInfo = $state<SyncServerInfo | null>(null)
+  let connectionCode = $state<string | null>(null)
+  /** Which of the two pairing screens this side is on. */
+  let pairingView = $state<'visual' | 'code'>('visual')
+  let cameraNote = $state<string | null>(null)
   let connection = $state<SyncConnectionData | null>(null)
-  let remoteStories = $state<SyncStoryPreview[]>([])
-  let localStories = $state<SyncStoryPreview[]>([])
-  let selectedRemoteStory = $state<SyncStoryPreview | null>(null)
-  let selectedLocalStory = $state<SyncStoryPreview | null>(null)
+  let self = $state<SyncPeer | null>(null)
   let loading = $state(false)
   let error = $state<string | null>(null)
-  let showConflictWarning = $state(false)
-  let conflictStoryTitle = $state<string | null>(null)
-  let syncSuccess = $state(false)
+  /** The device using this server. Requests are stateless, so it stays until the server stops. */
+  let connectedPeer = $state<SyncPeer | null>(null)
   let syncMessage = $state<string | null>(null)
 
-  // State for receiving pushed stories (when in generate mode)
-  let receivedStoryJson = $state<string | null>(null)
-  let receivedStoryPreview = $state<SyncStoryPreview | null>(null)
-  let receivedStoryQueue = $state<string[]>([])
+  // State for receiving pushed items (when in generate mode)
+  let received = $state<{ envelope: SyncEnvelope; peer: SyncPeer; requestId: string } | null>(null)
+  /** Null until worked out, so a failed lookup cannot leave the previous item's target behind. */
+  let receivedTarget = $state<ReceiveTarget | null>(null)
+  /** The replaced story's sync state, read before a successful import deletes the story. */
+  let receivedPrevious: Awaited<ReturnType<typeof storySyncRecord>> = null
+  /** Stories on this device bound to the pack being replaced. */
+  let receivedPackUsers = $state(0)
+  let receivedQueue = $state<SyncReceivedItem[]>([])
   let showReceivedConflict = $state(false)
   let pollingInterval: ReturnType<typeof setInterval> | null = null
+  let unlistenRequests: UnlistenFn | null = null
   let receivingStory = $state(false)
   let receivedStoryNeedsPack = $state(false)
   /**
-   * Bumped whenever the pending received story changes hands: a new claim, a discard, or a modal
+   * Bumped whenever the pending received item changes hands: a new claim, a discard, or a modal
    * reset. An import that started under an older token must not write to the session that replaced
    * it, and comparing payloads is not enough — the same story can be pushed twice, byte for byte.
    */
@@ -125,20 +152,19 @@
     // dialog would leave resolveIncomingPack suspended forever.
     cancelPendingPackMapping()
     serverInfo = null
+    connectionCode = null
+    pairingView = 'visual'
+    cameraNote = null
     connection = null
-    remoteStories = []
-    localStories = []
-    selectedRemoteStory = null
-    selectedLocalStory = null
     loading = false
     error = null
-    showConflictWarning = false
-    conflictStoryTitle = null
-    syncSuccess = false
+    connectedPeer = null
     syncMessage = null
-    receivedStoryJson = null
-    receivedStoryPreview = null
-    receivedStoryQueue = []
+    received = null
+    receivedTarget = null
+    receivedPrevious = null
+    receivedPackUsers = 0
+    receivedQueue = []
     showReceivedConflict = false
     receivingStory = false
     receivedStoryNeedsPack = false
@@ -148,6 +174,15 @@
     showVersionWarning = false
     pendingConnection = null
     stopPolling()
+    void loadDevice()
+  }
+
+  async function loadDevice() {
+    try {
+      self = await loadSelf()
+    } catch (e) {
+      error = e instanceof Error ? e.message : String(e)
+    }
   }
 
   function cancelPendingPackMapping() {
@@ -163,71 +198,112 @@
 
   function startPolling() {
     stopPolling()
-    pollingInterval = setInterval(checkForReceivedStories, 1000)
+    pollingInterval = setInterval(checkForReceivedItems, 1000)
   }
 
-  async function checkForReceivedStories() {
+  async function checkForReceivedItems() {
     try {
-      const received = await syncService.getReceivedStories()
-      if (received.length > 0) {
-        if (receivedStoryJson || receivingStory) return
-        // The native API clears its whole queue at once. Keep every payload after the claimed
-        // one locally, then process them in order after the active transfer finishes.
-        const [storyJson, ...queuedStories] = received
-        receivedStoryQueue = queuedStories
-        stopPolling()
-        await syncService.clearReceivedStories()
-        await claimReceivedStory(storyJson)
+      // Taking empties the native queue, so whatever is not claimed now waits here, in order.
+      const items = await syncService.takeReceivedItems()
+      if (items.length === 0) return
+      if (!ui.syncModalOpen) {
+        // Taken while the screen was closing, after it declined what it could see.
+        for (const { requestId } of items) answerPush(requestId, { data: 'declined' })
+        return
       }
+      if (received || receivingStory) {
+        receivedQueue = [...receivedQueue, ...items]
+        return
+      }
+      const [item, ...queued] = items
+      receivedQueue = [...receivedQueue, ...queued]
+      stopPolling()
+      await claimReceivedItem(item)
     } catch {
       // Ignore polling errors
     }
   }
 
-  async function claimReceivedStory(storyJson: string) {
-    const preview = syncService.getStoryPreview(storyJson)
-    if (!preview) {
-      error = 'Received an invalid story payload'
-      resumeReceivedStories()
+  async function claimReceivedItem(item: SyncReceivedItem) {
+    let envelope: SyncEnvelope
+    try {
+      envelope = decodeEnvelope(item.payload)
+    } catch {
+      error = 'Received an invalid payload'
+      answerPush(item.requestId, { error: 'The other device could not read the item' })
+      resumeReceivedItems()
       return
     }
 
-    receivedStoryJson = storyJson
-    receivedStoryPreview = preview
+    received = { envelope, peer: item.peer, requestId: item.requestId }
+    connectedPeer = item.peer
+    receivedTarget = null
+    receivedPrevious = null
     receivedStoryNeedsPack = false
-    receivingStory = true
     receivedSession++
+    await prepareReceived(envelope)
+  }
+
+  /** Works out what the item replaces, then applies it or asks. */
+  async function prepareReceived(envelope: SyncEnvelope) {
+    const session = receivedSession
+    receivingStory = true
+    error = null
 
     try {
-      const exists = await syncService.checkStoryExists(preview.title)
-      if (exists) {
-        receivingStory = false
-        showReceivedConflict = true
-      } else {
-        receivingStory = false
-        await importReceivedStory()
-      }
+      const target = await findReceiveTarget(envelope)
+      const packUsers =
+        target.kind !== 'new' && envelope.section === 'packs'
+          ? await storiesUsingPack(target.localId)
+          : 0
+      if (session !== receivedSession) return
+
+      receivedTarget = target
+      receivedPackUsers = packUsers
+      receivingStory = false
+      if (target.kind === 'new') await importReceived(null)
+      else showReceivedConflict = true
     } catch (e) {
-      error = e instanceof Error ? e.message : 'Could not prepare the received story'
+      if (session !== receivedSession) return
+      error = e instanceof Error ? e.message : 'Could not prepare the received item'
       receivingStory = false
     }
   }
 
-  function resumeReceivedStories() {
-    const [next, ...remaining] = receivedStoryQueue
+  /** A sender that stopped waiting has nothing to hear, so a failed answer changes nothing. */
+  function answerPush(requestId: string, answer: { data: SyncPushOutcome } | { error: string }) {
+    syncService.respond(requestId, answer).catch(() => {})
+  }
+
+  function resumeReceivedItems() {
+    const [next, ...remaining] = receivedQueue
     if (next) {
-      receivedStoryQueue = remaining
-      void claimReceivedStory(next)
-    } else {
+      receivedQueue = remaining
+      void claimReceivedItem(next)
+    } else if (ui.syncModalOpen) {
       startPolling()
     }
   }
 
-  async function importReceivedStory() {
-    if (!receivedStoryJson || !receivedStoryPreview || receivingStory) return
-    const pendingStoryJson = receivedStoryJson
-    const pendingStoryPreview = receivedStoryPreview
+  async function reloadSection(section: SyncSection) {
+    switch (section) {
+      case 'stories':
+        return story.loadAllStories()
+      case 'characters':
+        return characterVault.load()
+      case 'lorebooks':
+        return lorebookVault.load()
+      case 'scenarios':
+        return scenarioVault.load()
+    }
+  }
+
+  /** Applies the pending item, over `existingId` when the user agreed to replace it. */
+  async function importReceived(existingId: string | null) {
+    if (!received || receivingStory) return
+    const pending = received
     const pendingSession = receivedSession
+    const isStory = pending.envelope.section === 'stories'
     receivingStory = true
     receivedStoryNeedsPack = false
     error = null
@@ -236,25 +312,27 @@
     // received payload. The poller has already cleared the server's copy, so a cancel that fell
     // through to it would lose the story outright; backing out must leave it pending so the user
     // can go install the pack and click again.
-    let packBinding: PackBindingResolution | null | { error: string }
-    try {
-      packBinding = await resolveIncomingPack(pendingStoryJson)
-    } catch (e) {
-      error = e instanceof Error ? e.message : 'Could not prepare the received story'
-      receivingStory = false
-      return
-    }
-    if (packBinding && 'error' in packBinding) {
-      error = packBinding.error
-      receivingStory = false
-      return
-    }
-    if (!packBinding) {
-      // A lifecycle reset settles the dialog after it has already dropped the pending payload.
-      // Only mark a user-cancelled choice as retryable when this session is still the live one.
-      if (receivedSession === pendingSession) receivedStoryNeedsPack = true
-      receivingStory = false
-      return
+    let packBinding: PackBindingResolution | null | { error: string } = null
+    if (isStory) {
+      try {
+        packBinding = await resolveIncomingPack(pending.envelope.document)
+      } catch (e) {
+        error = e instanceof Error ? e.message : 'Could not prepare the received story'
+        receivingStory = false
+        return
+      }
+      if (packBinding && 'error' in packBinding) {
+        error = packBinding.error
+        receivingStory = false
+        return
+      }
+      if (!packBinding) {
+        // A lifecycle reset settles the dialog after it has already dropped the pending payload.
+        // Only mark a user-cancelled choice as retryable when this session is still the live one.
+        if (receivedSession === pendingSession) receivedStoryNeedsPack = true
+        receivingStory = false
+        return
+      }
     }
 
     // Everything below writes to the database, so a resolution that arrives after the modal was
@@ -268,17 +346,31 @@
 
     let importError: string | null = null
     let imported = false
+    let renamedTo: string | undefined
     try {
-      const existingId = await syncService.findStoryIdByTitle(pendingStoryPreview.title)
-      const result = await importSyncedStory(pendingStoryJson, existingId, packBinding)
-      imported = result.success
-      if (!result.success) importError = result.error ?? 'Import failed'
+      if (isStory) {
+        if (existingId && !receivedPrevious) {
+          receivedPrevious = await storySyncRecord(existingId)
+        }
+        const result = await applyStory(
+          pending.envelope,
+          pending.peer,
+          existingId,
+          packBinding as PackBindingResolution,
+          receivedPrevious,
+        )
+        imported = result.success
+        if (!result.success) importError = result.error ?? 'Import failed'
+      } else {
+        renamedTo = (await applyItem(pending.envelope, pending.peer, existingId)).renamedTo
+        imported = true
+      }
       // Inside the block on purpose: a reload that fails must still fall through to the teardown
-      // below, or the modal is left loading with the queue paused. The story is already imported
+      // below, or the modal is left loading with the queue paused. The item is already applied
       // either way, so this cannot turn a success into a reported failure.
       if (imported) {
         try {
-          await story.loadAllStories()
+          await reloadSection(pending.envelope.section)
         } catch {
           // The list refreshes on the next load.
         }
@@ -296,28 +388,35 @@
     receivingStory = false
 
     if (importError) {
-      // Keep the payload pending rather than dropping it. The poller already cleared the server's
-      // copy, so this is the only remaining chance to retry, and a replacement import that failed
-      // after deleting the local story makes that retry the user's only way back.
+      // Keep the payload pending rather than dropping it. The poller already took the server's
+      // copy, so this is the only remaining chance to retry.
       error = importError
       return
     }
 
-    receivedStoryJson = null
-    receivedStoryPreview = null
-    syncSuccess = true
-    syncMessage = `Successfully received "${pendingStoryPreview.title}"`
-    resumeReceivedStories()
+    received = null
+    answerPush(pending.requestId, { data: 'applied' })
+    syncMessage = renamedTo
+      ? `Received "${pending.envelope.name}" as "${renamedTo}": that name was taken.`
+      : `Successfully received "${pending.envelope.name}"`
+    resumeReceivedItems()
   }
 
-  function discardReceivedStory() {
+  function retryReceived() {
+    if (!received) return
+    const target = receivedTarget
+    if (!target) return prepareReceived(received.envelope)
+    return importReceived(target.kind === 'new' ? null : target.localId)
+  }
+
+  function discardReceived() {
     showReceivedConflict = false
     receivingStory = false
     receivedStoryNeedsPack = false
     receivedSession++
-    receivedStoryJson = null
-    receivedStoryPreview = null
-    resumeReceivedStories()
+    if (received) answerPush(received.requestId, { data: 'declined' })
+    received = null
+    resumeReceivedItems()
   }
 
   // Cleanup on destroy
@@ -326,16 +425,20 @@
     cleanup()
   })
 
+  async function stopScanner() {
+    const running = scanner
+    scanner = null
+    try {
+      await running?.stop()
+    } catch {
+      // Ignore errors when stopping
+    }
+  }
+
   async function cleanup() {
     stopPolling()
-    if (scanner) {
-      try {
-        await scanner.stop()
-      } catch {
-        // Ignore errors when stopping
-      }
-      scanner = null
-    }
+    stopServing()
+    await stopScanner()
     if (serverInfo) {
       try {
         await syncService.stopServer()
@@ -352,18 +455,46 @@
     }
   }
 
+  function stopServing() {
+    unlistenRequests?.()
+    unlistenRequests = null
+  }
+
+  async function serveRequest(request: SyncWebviewRequest) {
+    connectedPeer = request.peer
+    try {
+      const data = await answerSyncRequest(request, trackingForExport())
+      await syncService.respond(request.requestId, { data })
+    } catch (e) {
+      const message = e instanceof Error ? e.message : 'The request failed'
+      await syncService.respond(request.requestId, { error: message })
+    }
+  }
+
   async function startGenerateMode() {
     ui.setSyncMode('generate')
+    pairingView = 'visual'
     loading = true
     error = null
 
     try {
-      // Export all stories for the server
-      const storiesJson = await syncService.exportAllStoriesToJson(trackingForExport())
-      serverInfo = await syncService.startServer(storiesJson)
-      // Start polling for pushed stories
+      stopServing()
+      unlistenRequests = await listen<SyncWebviewRequest>('sync://request', ({ payload }) => {
+        void serveRequest(payload)
+      })
+      const info = await syncService.startServer()
+      serverInfo = info
+      connectionCode = encodeConnectionCode({
+        ip: info.ip,
+        port: info.port,
+        token: info.token,
+        version: await getVersion(),
+        protocol: SYNC_PROTOCOL_VERSION,
+      })
+      // Start polling for pushed items
       startPolling()
     } catch (e) {
+      stopServing()
       error = e instanceof Error ? e.message : 'Failed to start server'
       ui.setSyncMode('select')
     } finally {
@@ -371,20 +502,54 @@
     }
   }
 
+  // The server keeps running, so the code on screen still pairs. A peer still connected returns
+  // here with its next request.
+  function showPairing() {
+    connectedPeer = null
+    syncMessage = null
+  }
+
+  const TRIO_ROW = 'flex w-full flex-col gap-2 sm:grid sm:w-fit sm:auto-cols-fr sm:grid-flow-col'
+  const TRIO_BUTTON = 'sm:min-w-34'
+  const three = $derived(receivedTarget?.kind === 'sameName')
+
+  const title = $derived.by(() => {
+    switch (ui.syncMode) {
+      case 'select':
+        return 'Local network sync'
+      case 'generate':
+        if (receivingStory) return loading ? 'Importing' : 'Preparing import'
+        if (received) return 'Item received'
+        return connectedPeer ? 'Connected' : 'Waiting for connection'
+      case 'scan':
+        return pairingView === 'code' ? 'Enter a connection code' : 'Scan a QR code'
+      case 'connected':
+        return 'Sync'
+    }
+  })
+
+  function renameDevice(name: string) {
+    if (self) self = { ...self, name }
+    void renameSelf(name)
+  }
+
   async function startScanMode() {
     ui.setSyncMode('scan')
+    pairingView = 'visual'
+    cameraNote = null
     error = null
 
     // Wait for DOM to update
     await new Promise((resolve) => setTimeout(resolve, 100))
-    await initScanner()
+    if (ui.syncMode === 'scan' && pairingView === 'visual') await initScanner()
   }
 
   async function initScanner() {
     try {
-      scanner = new Html5Qrcode(scannerElementId)
+      const instance = new Html5Qrcode(scannerElementId)
+      scanner = instance
 
-      await scanner.start(
+      await instance.start(
         {
           facingMode: 'environment',
         },
@@ -400,6 +565,12 @@
           // Ignore scan failures during continuous scanning
         },
       )
+
+      // The user can leave this screen while the camera is starting.
+      if (scanner !== instance) {
+        await instance.stop()
+        return
+      }
 
       // Apply zoom after camera starts (more reliable on mobile)
       try {
@@ -423,40 +594,58 @@
         // Zoom not supported on this device, continue without it
       }
     } catch {
-      error = 'Camera access denied or not available'
-      ui.setSyncMode('select')
+      await stopScanner()
+      if (ui.syncMode !== 'scan' || pairingView !== 'visual') return
+      pairingView = 'code'
+      cameraNote = 'No camera available. Paste the code from the other device.'
     }
   }
 
+  async function enterCodeInstead() {
+    await stopScanner()
+    pairingView = 'code'
+  }
+
   async function handleQrScanned(data: string) {
-    if (scanner) {
-      try {
-        await scanner.stop()
-      } catch {
-        // Ignore
-      }
-      scanner = null
+    let parsed: SyncConnectionData
+    try {
+      parsed = syncService.parseQrCode(data)
+    } catch (e) {
+      // Another QR code in view: keep scanning for the right one.
+      error = e instanceof Error ? e.message : 'Not a connection code'
+      return
     }
+    await stopScanner()
 
     try {
-      const parsed = syncService.parseQrCode(data)
-      const appVersion = await getVersion()
-
-      // Check for version mismatch or unknown remote version
-      if (!parsed.version || parsed.version !== appVersion) {
-        pendingConnection = parsed
-        remoteVersion = parsed.version ?? null
-        localVersion = appVersion
-        showVersionWarning = true
-        return
-      }
-
-      // No mismatch, proceed normally
-      await proceedWithConnection(parsed)
+      await pair(parsed)
     } catch (e) {
       error = e instanceof Error ? e.message : 'Connection failed'
       ui.setSyncMode('select')
     }
+  }
+
+  async function pair(parsed: SyncConnectionData) {
+    if (parsed.protocol !== SYNC_PROTOCOL_VERSION) {
+      error = 'The other device is on a different sync version. Update both devices.'
+      if (pairingView === 'visual') ui.setSyncMode('select')
+      return
+    }
+    error = null
+
+    const appVersion = await getVersion()
+
+    // Check for version mismatch or unknown remote version
+    if (!parsed.version || parsed.version !== appVersion) {
+      pendingConnection = parsed
+      remoteVersion = parsed.version ?? null
+      localVersion = appVersion
+      showVersionWarning = true
+      return
+    }
+
+    // No mismatch, proceed normally
+    await proceedWithConnection(parsed)
   }
 
   function cancelVersionMismatch() {
@@ -464,7 +653,7 @@
     pendingConnection = null
     remoteVersion = null
     localVersion = null
-    ui.setSyncMode('select')
+    if (pairingView === 'visual') ui.setSyncMode('select')
   }
 
   async function proceedWithVersionMismatch() {
@@ -477,106 +666,14 @@
   }
 
   async function proceedWithConnection(conn: SyncConnectionData) {
-    try {
-      connection = conn
-      ui.setSyncMode('connected')
-
-      // Fetch available stories from remote
-      loading = true
-      remoteStories = await syncService.connect(connection)
-
-      // Also load local stories for push option
-      const allLocalStories = story.allStories
-      localStories = allLocalStories.map((s) => ({
-        id: s.id,
-        title: s.title,
-        genre: s.genre ?? null,
-        updatedAt: s.updatedAt,
-        entryCount: 0, // We don't track this in the store
-      }))
-    } catch (e) {
-      error = e instanceof Error ? e.message : 'Connection failed'
-      ui.setSyncMode('select')
-    } finally {
-      loading = false
-    }
+    connection = conn
+    ui.setSyncMode('connected')
   }
 
-  async function pullStory() {
-    if (!connection || !selectedRemoteStory) return
-    const pullConnection = connection
-
-    // Check for conflict
-    const exists = await syncService.checkStoryExists(selectedRemoteStory.title)
-    if (exists && !showConflictWarning) {
-      conflictStoryTitle = selectedRemoteStory.title
-      showConflictWarning = true
-      return
-    }
-
-    ui.setSyncMode('syncing')
-    loading = true
-    error = null
-    showConflictWarning = false
-
-    try {
-      // Download first, then settle the pack, and only then delete what we are replacing. The
-      // pull used to sit between the delete and the import, which meant both a failed download
-      // and a cancelled pack choice left the user with neither copy.
-      const storyJson = await syncService.pullStory(pullConnection, selectedRemoteStory.id)
-
-      const packBinding = await resolveIncomingPack(storyJson)
-      if (packBinding && 'error' in packBinding) {
-        error = packBinding.error
-        if (ui.syncModalOpen && connection === pullConnection) ui.setSyncMode('connected')
-        return
-      }
-      if (!packBinding) {
-        // A user cancellation keeps the established connection usable. A lifecycle cancellation
-        // from close/reset must not resurrect an old session over freshly reset state.
-        if (ui.syncModalOpen && connection === pullConnection) ui.setSyncMode('connected')
-        return
-      }
-
-      const existingId = await syncService.findStoryIdByTitle(selectedRemoteStory.title)
-      const result = await importSyncedStory(storyJson, existingId, packBinding)
-
-      if (result.success) {
-        await story.loadAllStories()
-        syncSuccess = true
-        syncMessage = `Successfully pulled "${selectedRemoteStory.title}"`
-      } else {
-        error = result.error ?? 'Import failed'
-      }
-    } catch (e) {
-      error = e instanceof Error ? e.message : 'Pull failed'
-    } finally {
-      loading = false
-    }
-  }
-
-  async function pushStory() {
-    if (!connection || !selectedLocalStory) return
-
-    ui.setSyncMode('syncing')
-    loading = true
-    error = null
-
-    try {
-      await pushSyncedStory(connection, selectedLocalStory.id, trackingForExport())
-
-      syncSuccess = true
-      syncMessage = `Successfully pushed "${selectedLocalStory.title}"`
-    } catch (e) {
-      error = e instanceof Error ? e.message : 'Push failed'
-    } finally {
-      loading = false
-    }
-  }
-
-  function cancelConflict() {
-    showConflictWarning = false
-    conflictStoryTitle = null
+  function disconnected(message: string) {
+    error = message
+    connection = null
+    ui.setSyncMode('select')
   }
 
   async function close() {
@@ -584,15 +681,24 @@
     // hidden modal back to its connected state while cleanup is running.
     ui.closeSyncModal()
     cancelPendingPackMapping()
+    await declineWaitingPushes()
     await cleanup()
   }
 
-  function formatDate(timestamp: number): string {
-    return new Date(timestamp).toLocaleDateString('en-US', {
-      year: 'numeric',
-      month: 'short',
-      day: 'numeric',
-    })
+  /** Answers every push still waiting, so its sender hears now rather than after its timeout. */
+  async function declineWaitingPushes() {
+    const waiting = receivedQueue.map((item) => item.requestId)
+    receivedQueue = []
+    if (received && !loading) {
+      waiting.push(received.requestId)
+      // Stops a preparation still running from applying what the sender was told was declined.
+      receivedSession++
+    }
+    if (serverInfo) {
+      const queued = await syncService.takeReceivedItems().catch(() => [])
+      waiting.push(...queued.map((item) => item.requestId))
+    }
+    for (const requestId of waiting) answerPush(requestId, { data: 'declined' })
   }
 
   function onOpenChange(open: boolean) {
@@ -603,72 +709,47 @@
 </script>
 
 <ResponsiveModal.Root open={ui.syncModalOpen} {onOpenChange}>
-  <ResponsiveModal.Content class="sm:max-w-lg">
-    <ResponsiveModal.Header>
-      <ResponsiveModal.Title class="flex items-center gap-2">
-        <RefreshCw class="text-primary h-5 w-5" />
+  <ResponsiveModal.Content
+    handle={false}
+    class="flex max-h-(--modal-max-height) flex-col gap-0 p-0 sm:max-w-lg"
+  >
+    <ModalHeader {title} closeButton />
+
+    <div class="min-h-0 min-w-0 flex-1 overflow-y-auto px-6 py-4">
+      <ResponsiveModal.Description class="mb-4">
         {#if ui.syncMode === 'select'}
-          Local Network Sync
+          Sync stories, vault items and prompt packs between devices on the same network.
         {:else if ui.syncMode === 'generate'}
-          {syncSuccess
-            ? 'Story Received'
-            : receivingStory
-              ? loading
-                ? 'Importing Story'
-                : 'Preparing Import'
-              : receivedStoryPreview
-                ? 'Story Received'
-                : 'Waiting for Connection'}
+          {receivingStory
+            ? loading
+              ? 'Importing the received item.'
+              : 'Preparing the received item for import.'
+            : received
+              ? 'Review the item received from the connected device.'
+              : connectedPeer
+                ? 'Keep this screen open while syncing.'
+                : pairingView === 'code'
+                  ? 'Enter this code on the other device.'
+                  : 'Show this QR code to another device to connect.'}
         {:else if ui.syncMode === 'scan'}
-          Scan QR Code
+          {pairingView === 'code'
+            ? 'Paste the code shown on the other device.'
+            : 'Scan the QR code shown on the other device.'}
         {:else if ui.syncMode === 'connected'}
-          Select Story to Sync
-        {:else if ui.syncMode === 'syncing'}
-          Syncing...
-        {/if}
-      </ResponsiveModal.Title>
-      <ResponsiveModal.Description>
-        {#if ui.syncMode === 'select'}
-          Sync stories between devices on the same network.
-        {:else if ui.syncMode === 'generate'}
-          {syncSuccess
-            ? 'The received story was imported successfully.'
-            : receivingStory
-              ? loading
-                ? 'Importing the received story.'
-                : 'Preparing the received story for import.'
-              : receivedStoryPreview
-                ? 'Review the story received from the connected device.'
-                : 'Show this QR code to another device to connect.'}
-        {:else if ui.syncMode === 'scan'}
-          Scan the QR code shown on the other device.
-        {:else if ui.syncMode === 'connected'}
-          Choose a story to transfer between devices.
+          Choose what to transfer between devices.
         {/if}
       </ResponsiveModal.Description>
-    </ResponsiveModal.Header>
 
-    <div class="py-4">
       {#if error}
         <div
           class="bg-destructive/15 text-destructive mb-4 flex items-center gap-2 rounded-lg p-3 text-sm"
         >
-          <AlertTriangle class="h-4 w-4 shrink-0" />
+          <AlertTriangle class="size-4 shrink-0" />
           {error}
         </div>
       {/if}
 
-      {#if syncSuccess}
-        <!-- Success State -->
-        <div class="flex flex-col items-center justify-center py-8 text-center">
-          <div class="mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-green-500/20">
-            <Check class="h-8 w-8 text-green-500" />
-          </div>
-          <h3 class="mb-2 text-lg font-semibold">Sync Complete!</h3>
-          <p class="text-muted-foreground">{syncMessage}</p>
-          <Button class="mt-6" onclick={close}>Done</Button>
-        </div>
-      {:else if ui.syncMode === 'select'}
+      {#if ui.syncMode === 'select'}
         <!-- Mode Selection -->
         <div class="grid grid-cols-1 gap-4">
           <Card
@@ -677,11 +758,11 @@
           >
             <CardHeader class="flex flex-row items-center gap-4 space-y-0 p-4">
               <div class="bg-primary/10 rounded-lg p-3">
-                <QrCode class="text-primary h-6 w-6" />
+                <QrCode class="text-primary size-6" />
               </div>
               <div>
-                <CardTitle class="text-base">Generate QR Code</CardTitle>
-                <CardDescription>Show a QR code for another device to scan</CardDescription>
+                <CardTitle class="text-base">Show connection code</CardTitle>
+                <CardDescription>Another device connects to this one</CardDescription>
               </div>
             </CardHeader>
           </Card>
@@ -689,11 +770,11 @@
           <Card class="hover:bg-muted/50 cursor-pointer transition-colors" onclick={startScanMode}>
             <CardHeader class="flex flex-row items-center gap-4 space-y-0 p-4">
               <div class="bg-primary/10 rounded-lg p-3">
-                <Camera class="text-primary h-6 w-6" />
+                <Camera class="text-primary size-6" />
               </div>
               <div>
-                <CardTitle class="text-base">Scan QR Code</CardTitle>
-                <CardDescription>Scan a QR code from another device</CardDescription>
+                <CardTitle class="text-base">Connect to a device</CardTitle>
+                <CardDescription>Scan or enter its code</CardDescription>
               </div>
             </CardHeader>
           </Card>
@@ -702,80 +783,133 @@
         <!-- QR Code Display -->
         {#if receivingStory || loading}
           <div class="flex flex-col items-center justify-center py-12">
-            <Loader2 class="text-primary h-8 w-8 animate-spin" />
+            <Loader2 class="text-primary size-8 animate-spin" />
             <p class="text-muted-foreground mt-4">
               {receivingStory
                 ? loading
-                  ? 'Importing story...'
+                  ? 'Importing...'
                   : 'Preparing import...'
                 : 'Starting server...'}
             </p>
           </div>
-        {:else if showReceivedConflict && receivedStoryPreview}
+        {:else if showReceivedConflict && received}
           <!-- Conflict warning for received push -->
           <div class="flex flex-col items-center py-4 text-center">
-            <div
-              class="mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-amber-500/20"
-            >
-              <AlertTriangle class="h-8 w-8 text-amber-500" />
+            <div class="mb-4 flex size-16 items-center justify-center rounded-full bg-amber-500/20">
+              <AlertTriangle class="size-8 text-amber-500" />
             </div>
-            <h3 class="mb-2 text-lg font-semibold">Story Already Exists</h3>
-            <p class="text-muted-foreground mb-4">
-              A story named "{receivedStoryPreview.title}" already exists on this device. Replace it
-              with the received story?
+            <h3 class="mb-2 text-lg font-semibold">Already on this device</h3>
+            <p class="text-muted-foreground mb-4 break-words">
+              {#if receivedTarget?.kind === 'sameName'}
+                An item named "{received.envelope.name}" is already on this device, and the two have
+                never synced. Replace it with the received one, or add the received one separately?
+              {:else}
+                Replace this device's copy with the received "{received.envelope.name}"?
+              {/if}
             </p>
+            {#if receivedPackUsers > 0}
+              <p class="text-muted-foreground mb-4 text-sm">
+                {receivedPackUsers}
+                {receivedPackUsers === 1 ? 'story uses' : 'stories use'} this pack and will narrate through
+                the received version.
+              </p>
+            {/if}
             {#if receivedStoryNeedsPack}
               <p class="text-muted-foreground mb-4 text-sm">
                 A prompt pack must still be selected before the received story can be imported.
               </p>
             {/if}
-            <div class="flex gap-3">
-              <Button variant="outline" onclick={discardReceivedStory}>Cancel</Button>
-              <Button onclick={importReceivedStory}>Replace</Button>
+            <!-- Three choices stack on a phone; the pair layout fits only two. -->
+            <div class={three ? TRIO_ROW : PAIR_ROW}>
+              <Button
+                variant="outline"
+                class={three ? TRIO_BUTTON : PAIR_BUTTON}
+                onclick={discardReceived}
+              >
+                Cancel
+              </Button>
+              {#if three}
+                <Button variant="outline" class={TRIO_BUTTON} onclick={() => importReceived(null)}>
+                  Add as new
+                </Button>
+              {/if}
+              <Button class={three ? TRIO_BUTTON : PAIR_BUTTON} onclick={retryReceived}>
+                Replace
+              </Button>
             </div>
           </div>
-        {:else if receivedStoryPreview}
+        {:else if received}
           <div class="flex flex-col items-center py-4 text-center">
-            <p class="text-muted-foreground mb-4">
+            <p class="text-muted-foreground mb-4 break-words">
               {#if receivedStoryNeedsPack}
-                Received "{receivedStoryPreview.title}". A prompt pack must be selected before
+                Received "{received.envelope.name}". A prompt pack must be selected before
                 importing. Import again to choose one, or discard the story.
               {:else}
-                Received "{receivedStoryPreview.title}". Try importing again, or discard the story.
+                Received "{received.envelope.name}". Try importing again, or discard it.
               {/if}
             </p>
-            <div class="flex gap-3">
-              <Button variant="outline" onclick={discardReceivedStory}>Discard</Button>
-              <Button onclick={importReceivedStory}>Import</Button>
+            <div class={PAIR_ROW}>
+              <Button variant="outline" class={PAIR_BUTTON} onclick={discardReceived}
+                >Discard</Button
+              >
+              <Button class={PAIR_BUTTON} onclick={retryReceived}>Import</Button>
+            </div>
+          </div>
+        {:else if connectedPeer}
+          <div class="flex flex-col items-center py-4 text-center">
+            <div class="mb-4 flex size-16 items-center justify-center rounded-full bg-green-500/20">
+              <Check class="size-8 text-green-500" />
+            </div>
+            <h3 class="mb-2 text-lg font-semibold break-words">
+              Connected to {connectedPeer.name}
+            </h3>
+            {#if syncMessage}
+              <p class="text-muted-foreground break-words">{syncMessage}</p>
+            {/if}
+            <div class={cn(PAIR_ROW, 'mt-6')}>
+              <Button variant="outline" class={PAIR_BUTTON} onclick={showPairing}>Back</Button>
+              <Button class={PAIR_BUTTON} onclick={close}>Finish</Button>
             </div>
           </div>
         {:else if serverInfo}
+          {#if self}
+            <SyncDeviceName name={self.name} onRename={renameDevice} />
+          {/if}
           <div class="flex flex-col items-center text-center">
-            <div class="mb-4 inline-block rounded-lg bg-white p-4">
-              <img
-                src="data:image/png;base64,{serverInfo.qrCodeBase64}"
-                alt="QR Code"
-                class="h-64 w-64"
-              />
-            </div>
-            <p class="text-muted-foreground text-sm">
-              Scan this QR code with another device running Aventuras
-            </p>
+            {#if pairingView === 'code' && connectionCode}
+              <SyncCodeDisplay code={connectionCode} />
+            {:else}
+              <div class="mb-4 inline-block rounded-lg bg-white p-4">
+                <img
+                  src="data:image/png;base64,{serverInfo.qrCodeBase64}"
+                  alt="QR Code"
+                  class="size-64"
+                />
+              </div>
+              <p class="text-muted-foreground text-sm">
+                Scan this QR code with another device running Aventuras
+              </p>
+            {/if}
             <p class="text-muted-foreground/60 mt-2 text-xs">
               Server: {serverInfo.ip}:{serverInfo.port}
             </p>
+            <Button
+              variant="outline"
+              class="mt-4"
+              onclick={() => (pairingView = pairingView === 'code' ? 'visual' : 'code')}
+            >
+              {pairingView === 'code' ? 'Show QR code instead' : 'Show a code instead'}
+            </Button>
           </div>
         {/if}
       {:else if ui.syncMode === 'scan'}
         <!-- Version Mismatch Warning -->
         {#if showVersionWarning}
           <div class="flex flex-col items-center py-4 text-center">
-            <div
-              class="mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-amber-500/20"
-            >
-              <AlertTriangle class="h-8 w-8 text-amber-500" />
+            <div class="mb-4 flex size-16 items-center justify-center rounded-full bg-amber-500/20">
+              <AlertTriangle class="size-8 text-amber-500" />
             </div>
-            <h3 class="mb-2 text-lg font-semibold">Version Mismatch</h3>
+            <h3 class="mb-2 text-lg font-semibold">Version mismatch</h3>
             <p class="text-muted-foreground mb-2">
               The remote device is running a different version of Aventuras.
             </p>
@@ -786,163 +920,49 @@
             <p class="text-muted-foreground mb-4 text-sm">
               Syncing between different versions may cause issues. Continue anyway?
             </p>
-            <div class="flex gap-3">
-              <Button variant="outline" onclick={cancelVersionMismatch}>Cancel</Button>
-              <Button onclick={proceedWithVersionMismatch}>Continue Anyway</Button>
+            <div class={PAIR_ROW}>
+              <Button variant="outline" class={PAIR_BUTTON} onclick={cancelVersionMismatch}>
+                Cancel
+              </Button>
+              <Button class={PAIR_BUTTON} onclick={proceedWithVersionMismatch}>Continue</Button>
             </div>
           </div>
         {:else}
           <!-- QR Scanner -->
-          <div class="flex flex-col items-center text-center">
-            <div
-              id={scannerElementId}
-              class="mb-4 overflow-hidden rounded-lg bg-black"
-              style="width: 300px; height: 300px;"
-            ></div>
-            <p class="text-muted-foreground text-sm">Point your camera at the QR code</p>
-          </div>
-        {/if}
-      {:else if ui.syncMode === 'connected'}
-        <!-- Story Selection -->
-        {#if loading}
-          <div class="flex flex-col items-center justify-center py-8">
-            <Loader2 class="text-primary h-8 w-8 animate-spin" />
-            <p class="text-muted-foreground mt-4">Connecting...</p>
-          </div>
-        {:else}
-          <!-- Conflict Warning -->
-          {#if showConflictWarning}
-            <div class="mb-4 rounded-lg bg-amber-500/15 p-4 text-amber-600 dark:text-amber-500">
-              <div class="mb-2 flex items-center gap-2">
-                <AlertTriangle class="h-5 w-5" />
-                <span class="font-semibold">Story Already Exists</span>
-              </div>
-              <p class="text-sm">
-                A story named "{conflictStoryTitle}" already exists on this device. Pulling will
-                replace it with the remote story.
-              </p>
-              <div class="mt-3 flex gap-2">
-                <Button variant="secondary" size="sm" onclick={cancelConflict}>Cancel</Button>
-                <Button size="sm" onclick={pullStory}>Continue Anyway</Button>
-              </div>
+          {#if self}
+            <SyncDeviceName name={self.name} onRename={renameDevice} />
+          {/if}
+          {#if pairingView === 'visual'}
+            <div class="flex flex-col items-center text-center">
+              <div
+                id={scannerElementId}
+                class="mb-4 overflow-hidden rounded-lg bg-black"
+                style="width: 300px; height: 300px;"
+              ></div>
+              <p class="text-muted-foreground text-sm">Point your camera at the QR code</p>
+              <Button variant="outline" class="mt-4" onclick={enterCodeInstead}>
+                Enter a code instead
+              </Button>
             </div>
           {/if}
-
-          <div class="space-y-6">
-            <!-- Pull Stories (from remote) -->
-            <div>
-              <h3 class="text-muted-foreground mb-2 flex items-center gap-2 text-sm font-medium">
-                <Download class="h-4 w-4" />
-                Pull from Remote Device
-              </h3>
-              {#if remoteStories.length > 0}
-                <ScrollArea class="h-40 rounded-md border p-1">
-                  {#each remoteStories as remoteStory (remoteStory.id)}
-                    <button
-                      class="hover:bg-accent hover:text-accent-foreground flex w-full flex-col items-start gap-1 rounded-sm px-3 py-2 text-left {selectedRemoteStory?.id ===
-                      remoteStory.id
-                        ? 'bg-accent text-accent-foreground ring-primary ring-1'
-                        : ''}"
-                      onclick={() => {
-                        selectedRemoteStory = remoteStory
-                        selectedLocalStory = null
-                      }}
-                    >
-                      <div class="flex w-full items-center justify-between">
-                        <span class="truncate font-medium">{remoteStory.title}</span>
-                        {#if remoteStory.genre}
-                          <Badge variant="secondary" class="h-5 text-[10px]"
-                            >{remoteStory.genre}</Badge
-                          >
-                        {/if}
-                      </div>
-                      <div class="text-muted-foreground text-xs">
-                        {remoteStory.entryCount} entries • Updated {formatDate(
-                          remoteStory.updatedAt,
-                        )}
-                      </div>
-                    </button>
-                  {/each}
-                </ScrollArea>
-              {:else}
-                <div class="text-muted-foreground py-4 text-center text-sm">
-                  No stories available on remote device
-                </div>
-              {/if}
-            </div>
-
-            <!-- Push Stories (to remote) -->
-            <div>
-              <h3 class="text-muted-foreground mb-2 flex items-center gap-2 text-sm font-medium">
-                <Upload class="h-4 w-4" />
-                Push to Remote Device
-              </h3>
-              {#if localStories.length > 0}
-                <ScrollArea class="h-40 rounded-md border p-1">
-                  {#each localStories as localStory (localStory.id)}
-                    <button
-                      class="hover:bg-accent hover:text-accent-foreground flex w-full flex-col items-start gap-1 rounded-sm px-3 py-2 text-left {selectedLocalStory?.id ===
-                      localStory.id
-                        ? 'bg-accent text-accent-foreground ring-primary ring-1'
-                        : ''}"
-                      onclick={() => {
-                        selectedLocalStory = localStory
-                        selectedRemoteStory = null
-                      }}
-                    >
-                      <div class="flex w-full items-center justify-between">
-                        <span class="truncate font-medium">{localStory.title}</span>
-                        {#if localStory.genre}
-                          <Badge variant="secondary" class="h-5 text-[10px]"
-                            >{localStory.genre}</Badge
-                          >
-                        {/if}
-                      </div>
-                      <div class="text-muted-foreground text-xs">
-                        Updated {formatDate(localStory.updatedAt)}
-                      </div>
-                    </button>
-                  {/each}
-                </ScrollArea>
-              {:else}
-                <div class="text-muted-foreground py-4 text-center text-sm">
-                  No local stories to push
-                </div>
-              {/if}
-            </div>
+        {/if}
+        {#if pairingView === 'code'}
+          <!-- Stays mounted under the warning, which can hand back to it. -->
+          <div class={cn(showVersionWarning && 'hidden')}>
+            <SyncCodeEntry note={cameraNote} onConnect={pair} onScan={startScanMode} />
           </div>
         {/if}
-      {:else if ui.syncMode === 'syncing'}
-        <!-- Syncing State -->
-        <div class="flex flex-col items-center justify-center py-12">
-          <Loader2 class="text-primary h-8 w-8 animate-spin" />
-          <p class="text-muted-foreground mt-4">
-            {selectedRemoteStory ? 'Pulling' : 'Pushing'} story...
-          </p>
-          <p class="text-muted-foreground/80 mt-1 text-sm">Please wait</p>
-        </div>
+      {:else if ui.syncMode === 'connected' && connection && self}
+        <SyncBrowser
+          {connection}
+          {self}
+          tracking={trackingForExport}
+          resolvePack={resolveIncomingPack}
+          onApplied={reloadSection}
+          onDisconnect={disconnected}
+        />
       {/if}
     </div>
-
-    <!-- Footer -->
-    {#if ui.syncMode === 'connected' && !showConflictWarning && !loading && !syncSuccess}
-      <ResponsiveModal.Footer>
-        <div class="flex w-full justify-end gap-2">
-          <Button variant="outline" onclick={close}>Cancel</Button>
-          {#if selectedRemoteStory}
-            <Button onclick={pullStory}>
-              <Download class="mr-2 h-4 w-4" />
-              Pull Story
-            </Button>
-          {:else if selectedLocalStory}
-            <Button onclick={pushStory}>
-              <Upload class="mr-2 h-4 w-4" />
-              Push Story
-            </Button>
-          {/if}
-        </div>
-      </ResponsiveModal.Footer>
-    {/if}
   </ResponsiveModal.Content>
 </ResponsiveModal.Root>
 

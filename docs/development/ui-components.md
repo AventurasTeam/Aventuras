@@ -20,8 +20,7 @@ rest:
   content. Nothing inside scrolls on its own: an autosizing `Textarea`
   in the body drops its height cap and lets the modal scroll.
 - **Phone.** Below 768px an action modal is a dialog inset from the screen's edges: centred, or
-  held near the top when it has a text field. Only a tool with no text field is a bottom sheet
-  with a handle (see below), where only the handle drags and the content scrolls.
+  held near the top when it has a text field. It is never a sheet (see below).
 - **Buttons.** An outlined Cancel and the action, side by side on a phone and at the trailing edge
   on desktop, where both share one width: the same on every modal, and wider for both only when a
   label needs it. The discard question is only as wide as its pair, which fills its footer. On a
@@ -29,8 +28,7 @@ rest:
   Cancel above the action. The action's icon turns into a spinner while it runs.
 - **Ways out.** Cancel, Escape, Android's back press (claimed by the open modal through
   `utils/backPress.ts`, and decided as Escape) and a click outside all go
-  through one decision, `shared/actionModalClose.ts`, which has its own tests. A sheet's swipe or
-  handle tap closes it without asking, which is why a sheet holds nothing to lose.
+  through one decision, `shared/actionModalClose.ts`, which has its own tests.
 - **The busy lock.** While `busy`, no way out closes the modal or asks anything, unless
   `cancelWhileBusy` says Cancel stops the running action.
 
@@ -49,7 +47,6 @@ rest:
 | `removal`                  | removing the thing the modal edits; see below                                    |
 | `size`                     | `md` (the default), `lg` or `2xl`; see the width scale below                     |
 | `requireChange`            | for a modal that edits existing values: the action waits until something changed |
-| `presentation`             | `sheet` only for a tool with no text field; see below                            |
 
 ### Width
 
@@ -104,9 +101,10 @@ running. Use it only to remove the thing the modal edits, never as a general thi
 
 ### Sheet or dialog
 
-On a phone an action modal is a **dialog**, unless it is a **tool with no text field and nothing to
-lose**, which may be a sheet with `presentation="sheet"`. None is today: Manual chapter, which picks
-from a list, became a dialog once its running summary counted as something to lose.
+On a phone an action modal is always a **dialog**. A **sheet** is for a tool with several actions
+and back-and-forth navigation between its screens, such as the sync sheet, built on the frame (see
+[The frame on its own](#the-frame-on-its-own)) rather than on the shell. Exactly two buttons, Cancel
+and one action, make a dialog.
 
 A bottom sheet reads as more of the page it rises from, so it suits controls tied to that content,
 and it is dismissed casually. But an editor in a sheet moves with the keyboard: the sheet sits on
@@ -117,9 +115,10 @@ keyboard only takes height from its bottom edge, and the question opens where th
 sheet also cannot be guarded: `vaul` closes it on a handle tap or a swipe with no way to veto, so
 anything with something to lose is a dialog.
 
-**Sheets never stack.** A modal opened from inside another modal, such as a confirmation in
-Settings or the pack question during a sync, is a dialog whatever its kind. A sheet on a sheet
-leaves the user unsure which swipe closes what.
+**Sheets stack only within one tool.** A confirmation opened from inside another modal, such as one
+in Settings or the pack question during a sync, is an action modal and so a dialog. A tool's own
+screens may be sheets over its sheet, as the sync sheet's filter, sort and item screens are: each
+continues the sheet's work and holds nothing to lose.
 
 ### Anomaly handlers
 
@@ -193,6 +192,13 @@ be deleted" under "Delete entry 47" says nothing.
 
 The backup and restore confirmations keep their own wording.
 
+### The frame on its own
+
+`shared/ModalHeader` and `shared/ModalFooter` are the shell's tinted bands: the centred title, and
+the panel under the body. A modal that is not Cancel plus one action but should look like one, such
+as the sync sheet and its tools (`sync/SyncDialog`), builds on them rather than copying their
+classes.
+
 ### `ModalActions` on its own
 
 `shared/ModalActions.svelte` is the shell's footer. Reach for it alone only for a modal whose body
@@ -201,7 +207,7 @@ cannot live in the shell's one scroller.
 ### Not migrated yet
 
 These end in Cancel plus an action but are still assembled by hand: `LorebookExportModal`,
-`LorebookImportModal`, `LorebookVaultImportModal`, `ResummarizeModal`, `SyncModal`,
+`LorebookImportModal`, `LorebookVaultImportModal`, `ResummarizeModal`,
 `VaultExportModal`, `STChatImportModal`, and in `vault/prompts/` `CreatePackDialog`,
 `ExportIntoFolderDialog`, `ImportPreviewDialog`, `TestVariablesModal` and the pack deletion in
 `PromptPackList`. Move one onto the shell when you
@@ -209,7 +215,8 @@ are in it anyway.
 
 These are not Cancel plus one action, and stay as they are: `TimelineAnomaliesModal` (a list with
 Close), `TimelineReconciliationModal` (a multi-step wizard), the unsaved-changes question in
-`PromptPackEditor` (three choices) and `RestoreCompleteDialog` (a status screen).
+`PromptPackEditor` (three choices), `RestoreCompleteDialog` (a status screen) and `SyncModal` (a
+tool, a sheet on a phone, built on the frame).
 
 A screen like these that asks before discarding still asks the shell's way: `shared/DiscardConfirm`
 inside its own content, over an `inert` body, never the native `ask()` of

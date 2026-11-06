@@ -261,8 +261,9 @@
     }
   }
 
-  // Load on mount
+  // On mount, and again when the sync screen closes, which can have added or replaced packs.
   $effect(() => {
+    void ui.syncModalOpen
     loadPacks()
   })
 </script>

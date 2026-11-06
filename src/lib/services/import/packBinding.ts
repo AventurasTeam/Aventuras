@@ -33,6 +33,7 @@ export interface PackBindingResolution {
 /** A `packBinding` section with every field checked, so downstream code can trust its shape. */
 export interface SanitizedPackBinding {
   pack: { name: string; author: string | null }
+  packSyncId?: string
   customVariableValues?: Record<string, string>
   variables: PackVariableExport[]
   runtimeVariables: PackRuntimeVariableExport[]
@@ -86,6 +87,7 @@ export function sanitizePackBinding(
 
   return {
     pack: { name: pack.name, author: typeof pack.author === 'string' ? pack.author : null },
+    ...(typeof raw.packSyncId === 'string' ? { packSyncId: raw.packSyncId } : {}),
     ...(values && Object.keys(values).length > 0 ? { customVariableValues: values } : {}),
     variables: Array.isArray(raw.variables) ? raw.variables.filter(isPackVariableExport) : [],
     runtimeVariables: Array.isArray(raw.runtimeVariables)
@@ -102,8 +104,12 @@ export async function buildBindingContext(
   raw: PackBindingExport | undefined,
 ): Promise<PackBindingContext> {
   const binding = sanitizePackBinding(raw)
-  const match = await matchPack(binding?.pack ?? null)
-  return { binding, match }
+  const synced = binding?.packSyncId
+    ? await database.findSyncedLocalId('pack', binding.packSyncId)
+    : null
+  const pack = synced ? await database.getPack(synced) : null
+  if (pack) return { binding, match: { pack, confidence: 'exact' } }
+  return { binding, match: await matchPack(binding?.pack ?? null) }
 }
 
 /** The subset of a pack variable definition the prompt decision needs. */

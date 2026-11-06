@@ -19,6 +19,14 @@ The database, the native layer that moves bytes around it, and the settings blob
 - **Line endings matter**: `sqlx` checksums each migration file to detect drift, so migrations must use LF
   line endings on every platform. This is enforced by `.gitattributes` (forces `eol=lf` for
   `src-tauri/migrations/*.sql`) and by the `check_migrations` pre-commit hook below.
+- **A migration that rewrites rows must hold `sync_suspend`.** Migration 045 put triggers on every
+  story, vault and pack table that count edits for sync and stamp `stories.updated_at`. A rewrite
+  would read as an edit on every device, so every synced item would show as changed on both after
+  the update. SQLite cannot disable a trigger, so each one checks that table: insert a row at the
+  start of the migration, delete it at the end, in the same file. A Rust data migration follows the
+  same rule. A migration that adds a table with a `story_id` or `pack_id` column must give it the
+  triggers or add it to the exclusion list in `sync/device.rs`, whose test fails otherwise. See
+  [sync.md](sync.md).
 - **Never `BEGIN` from the frontend**: `tauri-plugin-sql` runs every `execute()` on an arbitrary
   connection from an `sqlx` pool, and exposes no way to pin one (`Pool::connect` in the plugin's
   `wrapper.rs` takes no options). A `BEGIN` therefore opens a transaction that the following statements
@@ -92,8 +100,9 @@ Rust owns the bytes**: only small parameters (paths, ids) cross the IPC bridge.
 
 `db.rs` (for `avt_import.rs`, `db_tx.rs` and `backup.rs`) and `migration_patch.rs` (via the
 `lib.rs` setup hook) open `sqlite:aventura.db` under Tauri's **app config dir** — see the
-migrations section for why that is not the app data dir. `sync/` never touches the database directly; it moves stories over the
-`tauri-plugin-sql` connection on the JS side.
+migrations section for why that is not the app data dir. `sync/` never touches the database directly: every listing and item is
+answered by the webview over the `tauri-plugin-sql` connection, and only `backup.rs` reaches into
+the sync tables, to give a restored database a new device ID. See [sync.md](sync.md).
 
 ## Settings Migrations
 
