@@ -15,7 +15,7 @@ import { buildChapterContext, type CloseRangeEntry } from './chapter-context'
 import {
   chapterMetadataSchema,
   normalizeChapterMetadata,
-  type ChapterMetadata,
+  type NormalizedChapterMetadata,
 } from './chapter-metadata-schema'
 import { CLOSE_PHASE, type CloseRange } from './intermediates'
 import { storesHoldBranch } from './stores-hold-branch'
@@ -57,7 +57,7 @@ export async function readCloseRangeEntries(
 }
 
 export type MetadataCallOutcome =
-  | { status: 'ok'; metadata: ChapterMetadata }
+  | { status: 'ok'; metadata: NormalizedChapterMetadata }
   | { status: 'aborted' }
   | { status: 'failed'; error: PipelineError }
 

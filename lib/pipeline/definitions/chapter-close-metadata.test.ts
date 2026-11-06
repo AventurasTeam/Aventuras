@@ -6,7 +6,7 @@ import { makeLogger } from '@/lib/diagnostics'
 import { createPhaseDb, type PhaseDb } from './__tests__/phase-db'
 import { closeMetadataPhase, closeSeriesThrough } from './chapter-close-metadata'
 import type { MetadataCallOutcome, requestChapterMetadata } from './chapter-close-metadata-call'
-import type { ChapterMetadata } from './chapter-metadata-schema'
+import { normalizeChapterMetadata } from './chapter-metadata-schema'
 import { CLOSE_RANGE_INTERMEDIATE_KEY, type CloseRange } from './intermediates'
 import type { PhaseContext, PhaseEmittedEvent, PipelineError } from '../types'
 
@@ -22,12 +22,12 @@ vi.mock('./chapter-close-metadata-call', async (importOriginal) => ({
 
 const NOW = 1_767_225_605_000
 
-const METADATA: ChapterMetadata = {
+const METADATA = normalizeChapterMetadata({
   title: 'The Crossing at Harrow',
   summary: 'Wren talks the ferryman into a night crossing and lands under the Syndicate toll.',
   theme: 'a guarded passage',
   keywords: ['harrow', 'ferry', 'syndicate'],
-}
+})
 
 const RANGE: CloseRange = { chapterId: 'chap_new', startEntryId: 'e1', endEntryId: 'e7' }
 
