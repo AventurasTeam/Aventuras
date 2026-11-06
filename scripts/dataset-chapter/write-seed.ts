@@ -8,9 +8,8 @@ import { buildSeedSteps } from '../../lib/db/devtools/seed-dataset'
 import { resolveDevSlot } from '../dev-slot/resolve'
 import { DATASET_SEED_PATH, seedProviderIds } from '../seed/dataset-story'
 
-// Rewrites the checked-in dataset seed from a database holding its story, after a slice's close
-// tasks have run over it:  pnpm dataset:export-seed [db path] [--story <id>]
-// The database defaults as pnpm db:seed's does; the story, to the one the seed already holds.
+// pnpm dataset:export-seed [db path] [--story <id>]: rewrites the checked-in dataset seed from a
+// database holding its story, once a slice's close tasks ran. The path resolves as db:seed's does.
 function parseCli(argv: string[]): { dbPath: string; storyId: string } {
   const { values, positionals } = parseArgs({
     args: argv,

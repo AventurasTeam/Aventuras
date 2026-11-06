@@ -37,9 +37,8 @@ function credentialAt(value: unknown, path: string): string | null {
 }
 
 /**
- * One story's rows as the checked-in seed: every table the seed carries, rows ordered so a refresh
- * diffs cleanly, no vector (every embedded row stale). Refuses a credential anywhere in the rows,
- * and a seed its own loader would refuse.
+ * One story as the checked-in seed: rows ordered so a refresh diffs cleanly, every embedded row
+ * stale (no vector ships). Refuses a credential in any row, and a seed its own loader would refuse.
  */
 export async function exportStorySeed(
   sqlite: DatabaseSync,

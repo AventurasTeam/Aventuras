@@ -163,7 +163,7 @@ describe('the Treasure Island seed', () => {
     expect(await openRegion(ctx)).toBe(59)
   })
 
-  // A migration that adds a column to a seeded table lands here: the file lacks it until re-exported.
+  // A migration adding a column to a seeded table fails here: the file lacks it until re-exported.
   it('exports to the bytes it loaded from', async () => {
     const { sqlite } = await seededWithDataset()
     const exported = await exportStorySeed(sqlite, STORY, seedProviderIds(buildSeedSteps()))
