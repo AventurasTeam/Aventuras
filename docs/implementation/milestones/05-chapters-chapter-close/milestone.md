@@ -122,8 +122,8 @@ Slice 5.5b answers whether the agent holds, not whether it is good.
 - [Slice 5.4](./slices/04-tool-step.md) — tool step: the `lib/ai` step
   call, retry shape, window count, tool steps in both mocks and the stub
 - [Slice 5.5a](./slices/05a-task-runner.md) — task runner: verdict seam,
-  driver, ledger, reads, ids, later-turn reader, `pnpm probe:close` (C9,
-  C11, C12)
+  driver, ledger, reads, ids, later-turn reader, `pnpm probe:close` (C1,
+  C9, C11, C12)
 - [Slice 5.5b](./slices/05b-identity-threads.md) — Identity and Threads
   at size: their tools and tasks, measured on the real chapter
 - [Slice 5.6](./slices/06-close-owed.md) — a close owed: chain, phase 0,
@@ -192,8 +192,9 @@ day-one: 5.1   5.2   5.3   5.4          (5.2 lands after 5.1)
 
 ### C1 — A close's delta shape
 
-Provider: [Slice 5.2](./slices/02-first-chapter.md). Writers: 5.5b, 5.8,
-5.9. Consumers: 5.11, 5.12, and the seed.
+Provider: [Slice 5.2](./slices/02-first-chapter.md), and
+[Slice 5.5a](./slices/05a-task-runner.md) for the move to one group.
+Writers: 5.5b, 5.8, 5.9. Consumers: 5.11, 5.12, and the seed.
 
 Every delta of a close carries the run's `actionId`,
 `source = 'chapter_close'` (a member of `DeltaSource` at
@@ -831,11 +832,17 @@ on a chapter no close wrote, so it ships hidden.
   into turns and run through both the per-turn classifier and the
   periodic pass, since Identity starts from the entities a chapter
   touches and those need scene data. Which dataset, and whether it can
-  sit in the repo, is 5.2's planning question.
+  sit in the repo, is 5.2's planning question. Answered: _Treasure
+  Island_, its text committed and the built database kept outside git
+  ([5.2's Implementation notes](./slices/02-first-chapter.md#implementation-notes)).
 - **Unmeasured costs.** A close's forward stamp burst and its reversal
   over about 132 stamps (Slice 5.2), a full group (5.10), whole-prompt counting per step
   (5.5b), and load-until-present on Android (5.3). Each is measured where
   named. A bad number reopens that slice's approach, not the layout.
+  5.2's are measured
+  ([5.2's Close measure](./slices/02-first-chapter.md#close-measure)):
+  the Android burst stalls the JS thread about 1.1 s, a miss 5.5a's move
+  to one group carries as a hard bar.
 - **Report size.** A guess until a real close runs. 5.5b's run gives the
   first number, which sets `CLOSE_REPORT_VALUE_BOUND`.
 - **Unaudited.** The contract audit ran two rechecks and stopped, as

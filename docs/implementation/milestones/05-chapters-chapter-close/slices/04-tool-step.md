@@ -416,6 +416,14 @@ Unit paths run with `pnpm vitest run --project unit <path>`.
   step would be the third copy and Slice 5.10's boundary call the
   fourth. Suggested: one helper in `lib/pipeline` returning
   `ok | aborted | failed`, landed with the first new caller.
+  `ResolveModelConfig` is built inline at each structured caller too
+  (`lib/pipeline/runtime/preflight.ts:18`, and under
+  `lib/pipeline/definitions/`: `periodic-classifier.ts`,
+  `suggestion-refresh.ts`, `per-turn-piggyback.ts`,
+  `chapter-close-metadata-call.ts`; `per-turn.ts` builds it inline too),
+  and `generateToolStep` takes one (`config`, above). One builder would
+  keep a new field from being missed at one of them. Routed from triage
+  2026-11-06.
 
 ## Implementation notes
 

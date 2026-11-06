@@ -528,6 +528,15 @@ change amends the scope above.
   to K per row nobody sees change, and a turn's bumps count today too. History and
   row signals already hide them. Default: `rollbackCountsOf` skips them, and
   `rollback-confirm.md → Counts` says so.
+- **Which tables count as world state?** `rollbackCountsOf`
+  (`lib/actions/story-entries/operational.ts`) counts `translations`,
+  `branch_era_flips` and `character_relationships` deltas there, while
+  [`rollback-confirm.md → Counts`](../../../../ui/screens/reader-composer/rollback-confirm/rollback-confirm.md#counts)
+  lists only entities, lore, threads, happenings and entry assets. A swept
+  translation of a deleted entry may count twice. Unverified that these deltas
+  land in real rollback windows. This slice rewrites that bucket for
+  regenerate's close arm and edits the same row, so the answer lands here. This
+  doc sets no default. Routed from triage 2026-11-06.
 - **What residue is accepted?** Three narrow cases. Duplicates after CTRL-Z and
   redo over a manual close at the head, which chapter-close dedup never revisits.
   A head edit under a committed close, which keeps writes derived from the

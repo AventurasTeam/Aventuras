@@ -446,6 +446,8 @@ any change amends the scope above.
   the confirm modal now reports nothing for it. Suggested: count a
   non-create `chapters` delta when its chapter's create isn't in the
   swept set, which keeps the close's report silent.
+  [Slice 5.12](./12-chapter-delete-rollback.md#open-questions) reworks
+  the same function and asks which tables count as world state.
 
 ## Implementation notes
 

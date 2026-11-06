@@ -81,9 +81,13 @@ slice-planning gate forces its resolution before that slice is planned.
   `isUserEditBlocked` reads only what it has.
 - **A bundled template's group is declared twice, unchecked.**
   `lib/prompts/bundled/index.ts` sets each template's `group` (read by
-  the include validator) and `TEMPLATE_GROUPS` declares it again;
-  changing one alone leaves every prompt test green. Applies to every
-  template.
+  the include validator) and `TEMPLATE_GROUPS` declares it again, and no
+  test compares the two. Only some one-sided changes fail a test, by
+  another route: `lib/prompts/templateContextMap.test.ts` pins
+  `TEMPLATE_GROUPS` for `chapterMetadata` to `'chapter'`,
+  `bundled-pack.test.ts` counts 13 templates whose `index.ts` group is
+  `wizard`, and the include validator refuses a group the template's
+  macros don't fit.
 - **The story-entry handlers' branch scope is untested on update and
   delete.** `lib/actions/story-entries/register.test.ts`'s `seed`
   creates only branch `b1`, so dropping the branch condition from
@@ -100,14 +104,6 @@ slice-planning gate forces its resolution before that slice is planned.
   `currentStoryStore.getCurrentStory()?.settings` after `beginRun` and
   `settleUserWrites`; a story switch in between checks the wrong
   story's settings. Unverified as reachable.
-- **`ResolveModelConfig` is built inline at each structured caller**
-  (`lib/pipeline/runtime/preflight.ts:18`, and under
-  `lib/pipeline/definitions/`: `periodic-classifier.ts`,
-  `suggestion-refresh.ts`, `per-turn-piggyback.ts`,
-  `chapter-close-metadata-call.ts`; `per-turn.ts` builds it inline
-  too). One builder would keep a new field from being missed at one of
-  them.
-
 - **Seeded entry creates carry no anchor.** The dev seed's
   `createStoryEntry` deltas have `entryId: null`
   (`lib/db/devtools/seed-dataset.ts`), while a real reply's create is
@@ -122,14 +118,6 @@ slice-planning gate forces its resolution before that slice is planned.
   create or close deltas, so a rollback or CTRL-Z on a long branch
   refuses `no-create`. Fine while it stays a read-only performance
   fixture.
-- **The rollback preview counts more tables as world state than canon
-  lists.** `rollbackCountsOf` (`lib/actions/story-entries/operational.ts`)
-  counts `translations`, `branch_era_flips` and `character_relationships`
-  deltas there, while
-  [`rollback-confirm.md → Counts`](../ui/screens/reader-composer/rollback-confirm/rollback-confirm.md#counts)
-  lists only entities, lore, threads, happenings and entry assets. A
-  swept translation of a deleted entry may count twice. Unverified that
-  these deltas land in real rollback windows.
 - **`single()` lives in the World module.** The route-param helper
   (`components/world/world-selection.ts:9`) is imported by Plot, the
   reader, `plot-selection` and the dev chapter-close route.

@@ -498,6 +498,8 @@ stays covered. Ids, titles and positions don't move (C8).
   confirm modal reports nothing for it.
   [Slice 5.7](./07-chapter-timeline.md#open-questions) asks the same for
   the Timeline's edits; one answer should serve both.
+  [Slice 5.12](./12-chapter-delete-rollback.md#open-questions) reworks
+  the same function and asks which tables count as world state.
 
 ## Implementation notes
 
