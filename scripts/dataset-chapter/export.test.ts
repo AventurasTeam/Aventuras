@@ -1,4 +1,5 @@
 import {
+  chmodSync,
   existsSync,
   mkdirSync,
   mkdtempSync,
@@ -162,6 +163,16 @@ describe('assertExportTarget', () => {
     )
     writeFileSync(join(root, 'file'), '')
     expect(() => assertExportTarget(join(root, 'file', 'dataset.db'))).toThrow(/is not a directory/)
+  })
+
+  it('refuses a folder it cannot write the draft into', () => {
+    const dir = outDir()
+    chmodSync(dir, 0o500)
+    try {
+      expect(() => assertExportTarget(join(dir, 'dataset.db'))).toThrow(/is not writable/)
+    } finally {
+      chmodSync(dir, 0o700)
+    }
   })
 
   it.each(['-wal', '-shm', '-journal'])('refuses a %s beside the target', (suffix) => {

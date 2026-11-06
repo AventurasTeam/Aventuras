@@ -1,4 +1,6 @@
 import {
+  accessSync,
+  constants,
   copyFileSync,
   existsSync,
   mkdtempSync,
@@ -27,6 +29,11 @@ export function assertExportTarget(out: string): void {
   if (isDirectory(out)) throw new Error(`export target ${out}: is a directory`)
   const dir = dirname(out)
   if (!isDirectory(dir)) throw new Error(`export target ${out}: ${dir} is not a directory`)
+  try {
+    accessSync(dir, constants.W_OK)
+  } catch {
+    throw new Error(`export target ${out}: ${dir} is not writable`)
+  }
   for (const suffix of ['-wal', '-shm', '-journal'])
     if (existsSync(`${out}${suffix}`))
       throw new Error(`${out}${suffix} would replay over the export`)
