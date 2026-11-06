@@ -272,6 +272,12 @@ describe('countPromptTokens', () => {
       '{"found":true,"name":"Cellar door"}',
     ],
     ['error-json', { type: 'error-json', value: { error: 'not found' } }, '{"error":"not found"}'],
+    ['json with a string value', { type: 'json', value: 'Found the door.' }, '"Found the door."'],
+    [
+      'error-json with a string value',
+      { type: 'error-json', value: 'No such "door".' },
+      '"No such \\"door\\"."',
+    ],
     [
       'content',
       { type: 'content', value: [{ type: 'text', text: 'A door.' }] },

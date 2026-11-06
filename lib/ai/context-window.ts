@@ -109,14 +109,24 @@ function countPartTokens(part: PromptPart): number {
   }
 }
 
-// A tool result's text goes out raw, any other value as JSON.
-function asSentText(value: unknown): string {
-  return typeof value === 'string' ? value : (JSON.stringify(value) ?? '')
-}
-
+// The adapters send text arms raw and every other value as JSON, a string value included.
 // `execution-denied` carries no value, only an optional reason.
 function outputText(output: ToolResultOutput): string {
-  return 'value' in output ? asSentText(output.value) : JSON.stringify(output)
+  switch (output.type) {
+    case 'text':
+    case 'error-text':
+      return output.value
+    case 'json':
+    case 'error-json':
+    case 'content':
+      return JSON.stringify(output.value) ?? ''
+    case 'execution-denied':
+      return JSON.stringify(output)
+    default: {
+      const unreachable: never = output
+      return unreachable
+    }
+  }
 }
 
 /**
