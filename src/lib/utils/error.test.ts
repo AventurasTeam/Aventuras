@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { describeLoadError, errorSummary, HttpStatusError } from './error'
+import { describeLoadError, errorSummary, HttpStatusError, providerMessage } from './error'
 
 describe('describeLoadError', () => {
   it("leads with a provider's JSON error message and keeps the whole error as the detail", () => {
@@ -53,5 +53,42 @@ describe('errorSummary', () => {
 
   it('gives an empty string for blank text', () => {
     expect(errorSummary(' \n ')).toBe('')
+  })
+})
+
+describe('providerMessage', () => {
+  it.each([
+    [
+      'a nested error message',
+      '{"error":{"message":"Invalid API key","code":"x"}}',
+      'Invalid API key',
+    ],
+    [
+      'a string error',
+      '{"error":"Unable to load the image","code":"BAD"}',
+      'Unable to load the image',
+    ],
+    ['a top-level message', '{"message":"Slow down"}', 'Slow down'],
+    ['a detail', '{"detail":"Sampler not found"}', 'Sampler not found'],
+    [
+      'a nested message over a top-level one',
+      '{"error":{"message":"inner"},"message":"outer"}',
+      'inner',
+    ],
+  ])('reads %s', (_, body, expected) => {
+    expect(providerMessage(body)).toBe(expected)
+  })
+
+  it.each([
+    ['an empty nested message', '{"error":{"message":""}}'],
+    ['empty strings', '{"error":"","message":"","detail":""}'],
+    ['a body that is not JSON', '<html>Bad gateway</html>'],
+    ['a JSON array', '[1, 2]'],
+    ['a JSON string', '"boom"'],
+    ['an object with none of the fields', '{"status":"failed"}'],
+    ['an empty body', ''],
+    ['no body', undefined],
+  ])('finds nothing in %s', (_, body) => {
+    expect(providerMessage(body)).toBeNull()
   })
 })

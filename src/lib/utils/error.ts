@@ -64,7 +64,7 @@ export function providerMessage(body: string | undefined): string | null {
   }
   if (!isRecord(parsed)) return null
   const { error, message, detail } = parsed
-  if (isRecord(error) && typeof error.message === 'string') return error.message
+  if (isRecord(error) && typeof error.message === 'string' && error.message) return error.message
   for (const candidate of [error, message, detail]) {
     if (typeof candidate === 'string' && candidate) return candidate
   }
