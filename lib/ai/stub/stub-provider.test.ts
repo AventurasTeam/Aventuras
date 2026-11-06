@@ -19,18 +19,20 @@ const stub = {
 }
 
 // The stub's model caps output at 4096; a larger default would only draw an SDK warning.
-const config: ResolveModelConfig = {
-  providers: [stub as unknown as ProviderInstance],
-  profiles: [
-    {
-      id: 'prof-stub',
-      kind: 'agent',
-      name: 'Stub',
-      modelRef: { providerId: stub.id, modelId: 'tool-step' },
-      maxOutput: 4096,
-    },
-  ],
-  assignments: { 'lore-mgmt': 'prof-stub' },
+function configFor(scenario: 'tool-step' | 'tool-step-cut'): ResolveModelConfig {
+  return {
+    providers: [stub as unknown as ProviderInstance],
+    profiles: [
+      {
+        id: 'prof-stub',
+        kind: 'agent',
+        name: 'Stub',
+        modelRef: { providerId: stub.id, modelId: scenario },
+        maxOutput: 4096,
+      },
+    ],
+    assignments: { 'lore-mgmt': 'prof-stub' },
+  }
 }
 
 const TOOLS = {
@@ -40,16 +42,19 @@ const TOOLS = {
   },
 }
 
-function toolStep(messages: readonly ModelMessage[]): Promise<ToolStepResult> {
+function toolStep(
+  messages: readonly ModelMessage[],
+  scenario: 'tool-step' | 'tool-step-cut' = 'tool-step',
+): Promise<ToolStepResult> {
   return generateToolStep(
     'lore-mgmt',
     {
       prompt: { system: 'You open doors.', user: 'Open the door.' },
       messages,
       tools: TOOLS,
-      firstCall: true,
+      firstCall: messages.length === 0,
     },
-    config,
+    configFor(scenario),
     new AbortController().signal,
     { actionId: null },
   )
@@ -112,6 +117,28 @@ describe('stub provider', () => {
     expect(refused).toMatchObject({
       status: 'failed',
       error: { tier: 'provider', detail: expect.stringContaining('thinking block') },
+    })
+  })
+
+  // A real cut at max_tokens reports the output it was allowed, so the cause reads max-output;
+  // the retry of a cut step is a second request, and a second cut stops the step.
+  it('tool-step-cut stops the step after one retry, as a cut at the max output', async () => {
+    setTestProviders([stub])
+
+    const result = await toolStep([], 'tool-step-cut')
+
+    const cut = {
+      cause: 'max-output',
+      outputTokens: 4096,
+      maxOutput: 4096,
+      providerId: stub.id,
+      modelId: 'tool-step-cut',
+    }
+    expect(result).toMatchObject({
+      status: 'stopped',
+      reason: 'cut-off',
+      failure: cut,
+      recoverable: [{ tier: 'reply-cut-off', ...cut }],
     })
   })
 

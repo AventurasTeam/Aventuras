@@ -9,13 +9,18 @@ export type StubScenario =
 
 export const STUB_TOOL_NAME = 'lookup'
 export const STUB_TOOL_INPUT = { query: 'the door' } as const
+export const STUB_THINKING = 'Look before acting.'
 export const STUB_THINKING_SIGNATURE = 'stub-thinking-signature'
 
 type AnthropicBlock = Record<string, unknown>
 
 const JSON_HEADERS = { 'content-type': 'application/json' }
 
-function anthropicReply(content: readonly AnthropicBlock[], stopReason: string): Response {
+function anthropicReply(
+  content: readonly AnthropicBlock[],
+  stopReason: string,
+  outputTokens = 1,
+): Response {
   return new Response(
     JSON.stringify({
       type: 'message',
@@ -27,7 +32,7 @@ function anthropicReply(content: readonly AnthropicBlock[], stopReason: string):
       stop_sequence: null,
       usage: {
         input_tokens: 1,
-        output_tokens: 1,
+        output_tokens: outputTokens,
         cache_creation_input_tokens: null,
         cache_read_input_tokens: null,
       },
@@ -36,8 +41,8 @@ function anthropicReply(content: readonly AnthropicBlock[], stopReason: string):
   )
 }
 
-function anthropicJson(text: string, stopReason = 'end_turn'): Response {
-  return anthropicReply([{ type: 'text', text }], stopReason)
+function anthropicJson(text: string, stopReason = 'end_turn', outputTokens?: number): Response {
+  return anthropicReply([{ type: 'text', text }], stopReason, outputTokens)
 }
 
 function invalidRequest(message: string): Response {
@@ -60,10 +65,15 @@ function hangUntilAbort(signal: AbortSignal | null): Promise<Response> {
 
 type SentMessage = { role?: unknown; content?: unknown }
 
-function sentMessages(body: string): SentMessage[] {
-  if (body === '') return []
-  const { messages } = JSON.parse(body) as { messages?: unknown }
-  return Array.isArray(messages) ? (messages as SentMessage[]) : []
+type SentRequest = { messages: SentMessage[]; maxTokens: number | undefined }
+
+function sentRequest(body: string): SentRequest {
+  if (body === '') return { messages: [], maxTokens: undefined }
+  const { messages, max_tokens } = JSON.parse(body) as { messages?: unknown; max_tokens?: unknown }
+  return {
+    messages: Array.isArray(messages) ? (messages as SentMessage[]) : [],
+    maxTokens: typeof max_tokens === 'number' ? max_tokens : undefined,
+  }
 }
 
 function blocksOf(message: SentMessage | undefined): AnthropicBlock[] {
@@ -71,9 +81,9 @@ function blocksOf(message: SentMessage | undefined): AnthropicBlock[] {
 }
 
 // Anthropic refuses a tool result unless the assistant turn before it opens with its thinking
-// block, signature intact: the one offline check that a step's response messages replay it.
+// block, text and signature intact: the one offline check that a step's response messages replay it.
 function toolStepReply(body: string): Response {
-  const messages = sentMessages(body)
+  const { messages } = sentRequest(body)
   const resultAt = messages.findIndex(
     (message) =>
       message.role === 'user' && blocksOf(message).some((block) => block.type === 'tool_result'),
@@ -81,14 +91,18 @@ function toolStepReply(body: string): Response {
   if (resultAt === -1) {
     return anthropicReply(
       [
-        { type: 'thinking', thinking: 'Look before acting.', signature: STUB_THINKING_SIGNATURE },
+        { type: 'thinking', thinking: STUB_THINKING, signature: STUB_THINKING_SIGNATURE },
         { type: 'tool_use', id: 'toolu_stub_1', name: STUB_TOOL_NAME, input: STUB_TOOL_INPUT },
       ],
       'tool_use',
     )
   }
   const [opening] = blocksOf(messages[resultAt - 1])
-  if (opening?.type === 'thinking' && opening.signature === STUB_THINKING_SIGNATURE) {
+  if (
+    opening?.type === 'thinking' &&
+    opening.thinking === STUB_THINKING &&
+    opening.signature === STUB_THINKING_SIGNATURE
+  ) {
     return anthropicJson('The door opens.')
   }
   return invalidRequest(
@@ -114,7 +128,8 @@ export function makeScenarioFetch(scenario: StubScenario): typeof fetch {
       case 'tool-step':
         return toolStepReply(await request.text())
       case 'tool-step-cut':
-        return anthropicJson('The door', 'max_tokens')
+        // A real cut at max_tokens reports the output it was allowed, so replyCutOff reads max-output.
+        return anthropicJson('The door', 'max_tokens', sentRequest(await request.text()).maxTokens)
       default:
         throw new Error(`Unknown stub scenario: ${String(scenario)}`)
     }

@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 
 import {
   makeScenarioFetch,
+  STUB_THINKING,
   STUB_THINKING_SIGNATURE,
   STUB_TOOL_INPUT,
   STUB_TOOL_NAME,
@@ -12,7 +13,7 @@ type StubMessage = { content: Record<string, unknown>[]; stop_reason: string }
 const USER_TURN = { role: 'user', content: [{ type: 'text', text: 'Open the door.' }] }
 const SIGNED_THINKING = {
   type: 'thinking',
-  thinking: 'Look before acting.',
+  thinking: STUB_THINKING,
   signature: STUB_THINKING_SIGNATURE,
 }
 const TOOL_USE = {
@@ -97,6 +98,8 @@ describe('makeScenarioFetch', () => {
   it.each([
     ['without the thinking block', [TOOL_USE]],
     ['with another signature', [{ ...SIGNED_THINKING, signature: 'forged' }, TOOL_USE]],
+    ['with other thinking text', [{ ...SIGNED_THINKING, thinking: '' }, TOOL_USE]],
+    ['as another block type', [{ ...SIGNED_THINKING, type: 'redacted_thinking' }, TOOL_USE]],
   ])('tool-step refuses a tool_result whose call came back %s', async (_label, content) => {
     const res = await makeScenarioFetch('tool-step')(
       'https://stub.test',
@@ -117,6 +120,16 @@ describe('makeScenarioFetch', () => {
       content: [{ type: 'text', text: 'The door' }],
       stop_reason: 'max_tokens',
     })
+  })
+
+  it('tool-step-cut reports the output it was allowed, as a real cut does', async () => {
+    const init = sent()
+    const res = await makeScenarioFetch('tool-step-cut')('https://stub.test', {
+      ...init,
+      body: JSON.stringify({ ...JSON.parse(init.body as string), max_tokens: 4096 }),
+    })
+
+    expect(((await res.json()) as { usage: unknown }).usage).toMatchObject({ output_tokens: 4096 })
   })
 
   it('throws on an unknown scenario (bad cast guard)', async () => {
