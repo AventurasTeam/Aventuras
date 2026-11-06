@@ -6,7 +6,7 @@ import {
   type ModelMessage,
   type ToolSet,
 } from 'ai'
-import type { z } from 'zod'
+import { z } from 'zod'
 
 import { boundedSignal } from '@/lib/abort'
 
@@ -88,8 +88,8 @@ type StepReply = Awaited<ReturnType<typeof runProviderCall>>
 
 type Run = { result: CallWithRetryResult<ToolStep>; expired: boolean }
 
-// The schema conversion the SDK runs as it builds the request, run first: a schema with no JSON
-// Schema form would otherwise throw inside the call and be retried as a provider error.
+// The SDK's own conversion, run first, else it throws inside the call as a provider error; the output
+// side refuses a transform, whose value the SDK returns as the call's input for the next step.
 async function sdkTools(
   defs: ToolStepRequest['tools'],
 ): Promise<{ tools: ToolSet } | { detail: string }> {
@@ -97,6 +97,7 @@ async function sdkTools(
   for (const [name, { description, inputSchema }] of Object.entries(defs)) {
     try {
       await asSchema(inputSchema).jsonSchema
+      z.toJSONSchema(inputSchema)
     } catch (error) {
       return { detail: `tool ${name}: ${error instanceof Error ? error.message : String(error)}` }
     }

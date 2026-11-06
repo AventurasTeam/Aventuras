@@ -565,27 +565,68 @@ describe('generateToolStep: before the request', () => {
     expect(bodies).toEqual([])
   })
 
-  // The SDK sends a schema's input side, so a transform has a form: the step must not refuse it.
-  it('sends a tool whose schema transforms its input, and returns the transformed input', async () => {
-    answers = [
-      openaiReply({
-        calls: [{ id: 'call_1', name: 'lookup', arguments: '{"query":"  the door "}' }],
-      }),
-    ]
+  // A pipe's output side converts here, so only the SDK's input-side conversion refuses it.
+  it('fails, sending nothing, on a tool schema whose input side has no JSON Schema form', async () => {
+    const result = await step(useProvider('openai-compatible'), {
+      tools: {
+        ...TOOLS,
+        lookup: {
+          description: 'Find a row by name.',
+          inputSchema: z.object({ query: z.custom<string>(() => true).pipe(z.string()) }),
+        },
+      },
+    })
+
+    expect(result).toEqual({
+      status: 'failed',
+      error: { tier: 'parse', detail: expect.stringMatching(/^tool lookup: /), attempt: 0 },
+      recoverable: [],
+    })
+    expect(bodies).toEqual([])
+  })
+
+  // The SDK returns a transform's output as the call's input, which the next step sends back.
+  it.each([
+    ['a schema', z.object({ query: z.string() }).transform(({ query }) => query.trim())],
+    ['a field', z.object({ query: z.string().transform((query) => query.trim()) })],
+  ] as const)('fails, sending nothing, on a transform on %s', async (_label, inputSchema) => {
+    const result = await step(useProvider('openai-compatible'), {
+      tools: { ...TOOLS, lookup: { description: 'Find a row by name.', inputSchema } },
+    })
+
+    expect(result).toEqual({
+      status: 'failed',
+      error: {
+        tier: 'parse',
+        detail: expect.stringMatching(/^tool lookup: .*Transforms/),
+        attempt: 0,
+      },
+      recoverable: [],
+    })
+    expect(bodies).toEqual([])
+  })
+
+  it('sends a tool whose schema has a default and a preprocess', async () => {
+    answers = [openaiReply({ calls: [LOOKUP_DOOR] })]
 
     const result = okStep(
       await step(useProvider('openai-compatible'), {
         tools: {
           lookup: {
             description: 'Find a row by name.',
-            inputSchema: z.object({ query: z.string() }).transform(({ query }) => query.trim()),
+            inputSchema: z.object({
+              query: z.preprocess((value) => String(value).trim(), z.string()),
+              limit: z.number().default(5),
+            }),
           },
         },
       }),
     )
 
     expect(bodies).toHaveLength(1)
-    expect(result.calls).toEqual([{ toolCallId: 'call_1', toolName: 'lookup', input: 'the door' }])
+    expect(result.calls).toEqual([
+      { toolCallId: 'call_1', toolName: 'lookup', input: { query: 'the door', limit: 5 } },
+    ])
   })
 })
 
