@@ -17,6 +17,17 @@ const CREDENTIAL_FIELD = new RegExp(`^(?:${CREDENTIAL_NAMES})$`, 'i')
 const CREDENTIAL_JSON_FIELD = new RegExp(`\\\\*"(?:${CREDENTIAL_NAMES})\\\\*"\\s*:`, 'i')
 const CREDENTIAL_VALUE = /\bsk-[\w-]{20,}|\bBearer\s+[\w.~+/=-]{20,}/i
 
+// Serialization escapes a key's quotes and backslashes once per level; four levels of JSON nested
+// in a text column is past anything a provider error body carries.
+const KEY_ESCAPE_LEVELS = 4
+
+function escapedForms(key: string): string[] {
+  const forms = [key]
+  for (let level = 1; level < KEY_ESCAPE_LEVELS; level++)
+    forms.push(JSON.stringify(forms.at(-1)).slice(1, -1))
+  return [...new Set(forms)]
+}
+
 function providerKeys(sqlite: DatabaseSync): string[] {
   const row = sqlite.prepare(`SELECT providers FROM app_settings`).get() as
     | { providers: string }
@@ -79,8 +90,9 @@ async function exportInSnapshot(
     throw new Error(
       `run ${unfinished.map((r) => r.run_id).join(', ')} on story ${storyId} is unfinished: export once it ends`,
     )
-  const keys = providerKeys(sqlite)
-  for (const key of keys) assertScannableKey(key)
+  const raw = providerKeys(sqlite)
+  for (const key of raw) assertScannableKey(key)
+  const keys = raw.flatMap(escapedForms)
   const db = drizzle(makeProxy(sqlite))
   const branchIds = (
     await db.select({ id: branches.id }).from(branches).where(eq(branches.storyId, storyId))

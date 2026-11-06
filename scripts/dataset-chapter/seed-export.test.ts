@@ -233,6 +233,20 @@ describe('exportStorySeed', () => {
     await expect(refusal).rejects.not.toThrow('other-provider-secret')
   })
 
+  // Each level of serialization escapes the key's quote and backslash once more.
+  it('refuses a provider key in JSON serialized twice', async () => {
+    const quoted = 'dataset"test\\key-0123456789abcdef'
+    const sqlite = await seeded()
+    setProviderKey(sqlite, quoted)
+    const nested = JSON.stringify({ error: JSON.stringify({ key: quoted }) })
+    sqlite
+      .prepare(
+        `UPDATE branches SET classifier_status = json_set(classifier_status, '$.lastError', ?) WHERE id = ?`,
+      )
+      .run(nested, HERO_MAIN)
+    await expect(exported(sqlite)).rejects.toThrow(/branches\[\d+\][\s\S]*provider key/)
+  })
+
   it('refuses a short provider key it could not scan for', async () => {
     const sqlite = await seeded()
     setProviderKey(sqlite, 'Qz7')
