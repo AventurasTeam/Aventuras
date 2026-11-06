@@ -11,6 +11,7 @@ vi.mock('#lib/services/ai/sdk/providers/sdkFetch.ts', () => ({
 }))
 
 import { createSdkFetch } from '#lib/services/ai/sdk/providers/sdkFetch.ts'
+import { IMAGE_TIMEOUT_DEFAULT } from '#lib/constants/timeout.ts'
 import { createImageSdkFetch, generateSdkImage } from './sdkImage'
 
 const apiError = (statusCode: number) =>
@@ -137,11 +138,11 @@ describe('generateSdkImage', () => {
 })
 
 describe('createImageSdkFetch', () => {
-  it('uses the image timeout and labels errors as image generation', () => {
+  it('uses the image timeout, not the LLM one, and labels errors as image generation', () => {
     expect(createImageSdkFetch('openai-image')).toBe('SDK_FETCH')
     expect(createSdkFetch).toHaveBeenCalledWith({
       serviceId: 'openai-image',
-      timeoutMs: 300000,
+      timeoutMs: IMAGE_TIMEOUT_DEFAULT,
       what: 'Image generation',
     })
   })
