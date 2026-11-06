@@ -1852,7 +1852,8 @@ type ContextWindowFailure = {
 )
 
 type ReplyCutOffFailure = {
-  cause: 'max-output' | 'window' | 'unknown' // see Cut-off replies
+  // see Cut-off replies; the last two are stops of their own, not a limit reached
+  cause: 'max-output' | 'window' | 'unknown' | 'interrupted' | 'content-filter'
   outputTokens: number | null // as the provider reported; null when it reported none
   // 0 can mean unreported (OpenAI-compatible reports a missing count as 0); described as absent
   reasoningTokens: number | null // the part of outputTokens spent thinking, when reported
@@ -1893,7 +1894,11 @@ retry. Same for 4xx client errors, and for a `context-window` failure
 on any error status: the same prompt overflows the same window again
 ([`architecture.md → Model context window`](./architecture.md#model-context-window)).
 A `reply-cut-off` failure isn't retried either: the same prompt and
-limit cut the reply again ([Cut-off replies](#cut-off-replies)).
+limit cut the reply again ([Cut-off replies](#cut-off-replies)). A
+close's tool step is the exception: `generateToolStep` runs a step cut
+off, or stopped by a filter, once more, as a second `callWithRetry`
+under a fresh bound, and `callWithRetry` itself still fails a cut at
+once.
 
 ### Cut-off replies
 
@@ -1921,10 +1926,16 @@ errors, naming the limit as the reader does; a close's metadata call
 fails the close
 ([`memory/chapter-close.md → Failure modes and atomic rollback`](./memory/chapter-close.md#failure-modes-and-atomic-rollback)).
 
-**A close's tool step reads the same `'length'`.** A cut-off reply is
-never a finished task, whatever it holds. The step is retried once, and
-the task stops there if it's cut off again, keeping what landed
+**A close's tool step reads the same `'length'`, and a filter with it.**
+A cut-off reply is never a finished task, whatever it holds, so its
+calls are dropped, never run. The step is retried once, under a bound
+of its own, and the task stops there if it's cut off again, keeping
+what landed
 ([`memory/chapter-close.md → When a task stops`](./memory/chapter-close.md#when-a-task-stops)).
+A `'content-filter'` stop takes the same path, calls or not, with
+`cause: 'content-filter'` on its failure: a filter may not trip twice,
+and one that does stops the task as a cut-off rather than failing the
+close.
 
 **A narrative reply cut off in its prose commits with a mark.** When
 no trailing block had begun, so the cut falls in the story text, the
@@ -2136,7 +2147,8 @@ Reasoning is carried when a thinking setting went out: an Anthropic
 call with a thinking budget, since a disabled setting sends no field.
 Structured output is carried when the JSON response format went out: a
 structured call under `force-on`, since under `auto` the schema rides
-the prompt. So the narrative, which sends neither on an
+the prompt. Tool calling is carried when a non-empty tool list went
+out, which only a close's tool step sends. So the narrative, which sends none of them on an
 OpenAI-compatible provider, gets no hint from a body such as
 `model 'Qwen3-30B-A3B-Thinking-2507' not found`. Matching runs after
 overflow recognition, so a body recognized as an overflow carries no

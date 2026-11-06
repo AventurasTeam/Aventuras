@@ -472,6 +472,8 @@ several calls on the same `…/chat/completions` URL, so the mock routes
 on the request:
 
 - **`stream: true`** → an SSE prose stream (the narrative call).
+- **not streamed, with a non-empty `tools`** → a close's tool step, on
+  a tool lane (below).
 - **otherwise (structured)** → a JSON chat completion whose body is
   chosen by matching the exact TypeScript block the app writes at the
   end of the system message — `schemaToTypeScriptBlock` over each
@@ -513,11 +515,15 @@ partway through that it must refuse rather than repair.
 The harness mock and the dev mock server (`scripts/mock-llm`) report
 token usage as an OpenAI-compatible server does,
 counted with o200k over the request's message text and the reply: on
-every structured reply, and on a stream that asks with
+every structured reply and tool step, and on a stream that asks with
 `stream_options.include_usage`, which the app's provider always does
 ([`architecture.md → Truncation cross-check`](./architecture.md#truncation-cross-check)),
-in a last chunk before `[DONE]`. The counts sit near the app's own
-estimate, so the cross-check stays quiet unless a spec arms
+in a last chunk before `[DONE]`. A tool step's prompt count also takes
+in the tool definitions, each call's name and arguments, and the
+reasoning sent back, as the app's estimate does
+([`architecture.md → The pre-send check`](./architecture.md#the-pre-send-check)),
+and the reply's count takes in the step's reasoning and calls. The counts sit near
+the app's own estimate, so the cross-check stays quiet unless a spec arms
 `underReportNextUsage()`: the next narrative stream then reports a
 tenth of its counted prompt tokens, as a server that dropped most of
 the prompt would.
@@ -529,6 +535,29 @@ reject the next matching call with a 400 in llama.cpp's overflow shape
 recorded in `requests` like any call. The harness serves no `/models`,
 so a spec makes a model's window known through the user's figure,
 `setContextWindowOverride` in `e2e/harness/seed.ts`.
+
+**Tool lanes.** A close's tool steps go to lanes of their own: a
+non-streamed request carrying a non-empty `tools` list is keyed
+`tools:` and its tool names, sorted and joined by `+`, before any
+block match (`scripts/mock-llm/routing.ts`, shared with the dev mock
+server). `setToolSteps(tools, steps)` scripts one: it replaces the
+lane's queue, and each call the lane answers, across conversations,
+takes the next step. A step is a `MockToolStep`
+(`scripts/mock-llm/respond/wire.ts`): `text`, `reasoning`, `toolCalls`
+of `{ name, args }` and `finishReason`, which defaults to `tool_calls`
+with calls and `stop` without. A string `args` goes out verbatim, so a
+spec can send a malformed call. A step can also be a function of the
+call's `MockRequest`, since it can name only the placeholders its
+prompt holds. A function step that throws fails its call with a 400,
+so the step fails at once with no retry, and the error is rethrown to
+the spec; held calls are all still answered and the harness still
+closes (`e2e/harness/mock-llm.ts`). An empty queue answers the empty
+step, `{}`: no calls, empty text and `stop`, which ends a task with no
+writes, so a spec that scripts nothing writes nothing. A tool call's
+`MockRequest.agent` is its lane key, and `holdNextStructured`,
+`cutNextStructured` and `overflowNextStructured` take one: a held call
+takes its step at release, and a cut or an overflow answers without
+taking one, leaving it for the next call.
 
 Block-matching keys on the **auto** (prompt-injection) path the fixture
 uses — the only path E2E relies on. A `force-on` profile takes the
