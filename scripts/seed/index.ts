@@ -9,8 +9,8 @@ import { migrate } from 'drizzle-orm/sqlite-proxy/migrator'
 import { getLoadablePath } from 'sqlite-vec'
 
 import { datasetStorySteps, seedAppRefs } from './dataset-story'
-import { insertSeedSteps } from './insert'
 import { buildLongBranchSteps, entryIdAt, LONG_BRANCH_SCALES, longBranchId } from './long-branch'
+import { replaceSeedRows } from './replace'
 import { makeProxy } from './sqlite-proxy'
 import { buildSeedSteps, type SeedStep } from '../../lib/db/devtools/seed-dataset'
 import { dbSchema } from '../../lib/db/schema'
@@ -104,23 +104,8 @@ async function main() {
     console.log(`[seed] provider endpoint: http://localhost:${mockPort}/v1`)
   }
 
-  // Wipe with FKs off (order-independent), then insert with FKs on so any broken
-  // reference in the dataset surfaces as an error rather than landing silently.
-  console.log('[seed] wiping existing rows…')
-  sqlite.exec('PRAGMA foreign_keys = OFF;')
-  sqlite.exec('BEGIN')
-  for (const table of Object.values(dbSchema)) sqlite.exec(`DELETE FROM "${getTableName(table)}";`)
-  sqlite.exec('COMMIT')
-  sqlite.exec('PRAGMA foreign_keys = ON;')
-
-  sqlite.exec('BEGIN')
-  try {
-    await insertSeedSteps(db, steps)
-    sqlite.exec('COMMIT')
-  } catch (err) {
-    sqlite.exec('ROLLBACK')
-    throw err
-  }
+  console.log('[seed] replacing every row…')
+  await replaceSeedRows(sqlite, db, steps)
 
   const rowsByTable = new Map<string, number>()
   for (const s of steps) rowsByTable.set(s.name, (rowsByTable.get(s.name) ?? 0) + s.rows.length)
