@@ -1,7 +1,13 @@
-import { generateText } from 'ai'
+import { generateText, type ModelMessage } from 'ai'
 import { afterEach, describe, expect, it, vi } from 'vitest'
+import { z } from 'zod'
+
+import type { ProviderInstance } from '@/lib/db'
 
 import { getModel } from '../model'
+import type { ResolveModelConfig } from '../resolve-model'
+import { generateToolStep, type ToolStep, type ToolStepResult } from '../tool-step'
+import { STUB_TOOL_INPUT, STUB_TOOL_NAME } from './scenarios'
 import { resetTestProviders, setTestProviders } from './test-provider-registry'
 
 const stub = {
@@ -10,6 +16,60 @@ const stub = {
   displayName: 'Stub',
   apiKey: 'stub-key',
   favoriteModelIds: [] as string[],
+}
+
+// The stub's model caps output at 4096; a larger default would only draw an SDK warning.
+const config: ResolveModelConfig = {
+  providers: [stub as unknown as ProviderInstance],
+  profiles: [
+    {
+      id: 'prof-stub',
+      kind: 'agent',
+      name: 'Stub',
+      modelRef: { providerId: stub.id, modelId: 'tool-step' },
+      maxOutput: 4096,
+    },
+  ],
+  assignments: { 'lore-mgmt': 'prof-stub' },
+}
+
+const TOOLS = {
+  [STUB_TOOL_NAME]: {
+    description: 'Look something up.',
+    inputSchema: z.object({ query: z.string() }),
+  },
+}
+
+function toolStep(messages: readonly ModelMessage[]): Promise<ToolStepResult> {
+  return generateToolStep(
+    'lore-mgmt',
+    {
+      prompt: { system: 'You open doors.', user: 'Open the door.' },
+      messages,
+      tools: TOOLS,
+      firstCall: true,
+    },
+    config,
+    new AbortController().signal,
+    { actionId: null },
+  )
+}
+
+function okStep(result: ToolStepResult): ToolStep {
+  if (result.status !== 'ok') throw new Error(`expected an ok step: ${JSON.stringify(result)}`)
+  return result.step
+}
+
+function answer(step: ToolStep): ModelMessage {
+  return {
+    role: 'tool',
+    content: step.calls.map((call) => ({
+      type: 'tool-result' as const,
+      toolCallId: call.toolCallId,
+      toolName: call.toolName,
+      output: { type: 'text' as const, value: 'A heavy oak door.' },
+    })),
+  }
 }
 
 describe('stub provider', () => {
@@ -22,6 +82,37 @@ describe('stub provider', () => {
     setTestProviders([stub])
     const { text } = await generateText({ model: getModel('stub-1', 'happy'), prompt: 'go' })
     expect(text).toBe('{"reply":"hi"}')
+  })
+
+  // memory/chapter-close.md → Conversations: the response messages go back as they are, so
+  // @ai-sdk/anthropic replays the thinking block with its signature on the next step.
+  it('tool-step replays the signed thinking block on the step after a call', async () => {
+    setTestProviders([stub])
+
+    const first = okStep(await toolStep([]))
+    expect(first.calls).toEqual([
+      { toolCallId: 'toolu_stub_1', toolName: STUB_TOOL_NAME, input: STUB_TOOL_INPUT },
+    ])
+
+    const second = okStep(await toolStep([...first.responseMessages, answer(first)]))
+    expect(second).toMatchObject({ calls: [], text: 'The door opens.', finishReason: 'stop' })
+  })
+
+  it('tool-step refuses the next step when its thinking block is dropped', async () => {
+    setTestProviders([stub])
+    const first = okStep(await toolStep([]))
+    const withoutReasoning = first.responseMessages.map((message) =>
+      message.role === 'assistant' && Array.isArray(message.content)
+        ? { ...message, content: message.content.filter((part) => part.type !== 'reasoning') }
+        : message,
+    )
+
+    const refused = await toolStep([...withoutReasoning, answer(first)])
+
+    expect(refused).toMatchObject({
+      status: 'failed',
+      error: { tier: 'provider', detail: expect.stringContaining('thinking block') },
+    })
   })
 
   it('rejects stub creation in production builds', () => {
