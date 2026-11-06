@@ -549,9 +549,11 @@ with calls and `stop` without. A string `args` goes out verbatim, so a
 spec can send a malformed call. A step can also be a function of the
 call's `MockRequest`, since it can name only the placeholders its
 prompt holds. A function step that throws fails its call with a 400,
-so the step fails at once with no retry, and the error is rethrown to
-the spec; held calls are all still answered and the harness still
-closes (`e2e/harness/mock-llm.ts`). An empty queue answers the empty
+so the step fails at once with no retry. For a held call the error is
+rethrown from the release or `close()`, after every held call is
+answered; for an unheld call it escapes the server's request handler
+as an unhandled rejection, which fails the run
+(`e2e/harness/mock-llm.ts`). An empty queue answers the empty
 step, `{}`: no calls, empty text and `stop`, which ends a task with no
 writes, so a spec that scripts nothing writes nothing. A tool call's
 `MockRequest.agent` is its lane key, and `holdNextStructured`,

@@ -194,8 +194,9 @@ apart as the pass does at `:287`.
 **Mocks.**
 
 - **Wire.** `FinishReason` gains `tool_calls` and `content_filter`, and
-  `completionBody` learns tool calls and `reasoning_content`
-  (`scripts/mock-llm/respond/wire.ts:102,118-132`), from one reply type:
+  a sibling `toolStepBody` writes tool calls and `reasoning_content` in
+  the completion envelope `completionBody` shares, which stays as it
+  was (`scripts/mock-llm/respond/wire.ts`), from one reply type:
 
   ```ts
   type MockToolStep = {
@@ -229,11 +230,12 @@ apart as the pass does at `:287`.
   `overflowNextStructured` take it, so a tool lane needs no one-shots of
   its own.
 - **Dev mock.** `Route` gains a tool arm
-  (`scripts/mock-llm/routing.ts:145-158`), and a tool lane appears in the
-  panel as `ctx.discovered` lanes do. A canned response's value is a
-  `MockToolStep`, checked by `validateLaneValue`, and sequence cycling
-  scripts a conversation. `malformed` cuts the first call's arguments in
-  half, and `length` keeps the calls whole with `finish_reason: 'length'`.
+  (`scripts/mock-llm/routing.ts:145-158`), and a tool lane lists in the
+  panel under its own **Tools** group, saved `tools:` lanes included
+  across restarts. A canned response's value is a `MockToolStep`, checked
+  by `validateLaneValue`, and sequence cycling scripts a conversation.
+  `malformed` and `stream-cut` cut the first call's arguments in half, and
+  `length` keeps the calls whole with `finish_reason: 'length'`.
   An unconfigured lane answers `{}` and `stop`, as it does now.
 - **Record mode.** On a tool lane `passthrough` returns the reply as a
   `MockToolStep`, the log's `served` holds it, and `recordedValue`
@@ -318,7 +320,8 @@ Unit paths run with `pnpm vitest run --project unit <path>`.
 - **One retry on a cut.** `lib/ai/tool-step.test.ts`: `length` then a
   normal reply is two requests, `ok`, one `reply-cut-off` in `recoverable`;
   `length` twice is two requests and `stopped`, `reason: 'cut-off'`; whole
-  calls on a `length` reply appear nowhere in the result.
+  calls on a `length` reply appear nowhere in the result. A
+  `content-filter` stop takes the same path, with cause `content-filter`.
   `lib/ai/transport/call-with-retry.test.ts`: its existing cut-off tests
   pass unchanged, since `callWithRetry` gains no option.
 - **Window count.** The test at `lib/ai/context-window.test.ts:203-232`
@@ -369,9 +372,10 @@ Unit paths run with `pnpm vitest run --project unit <path>`.
 - **No E2E of its own.** Nothing in the app sends a step until 5.5a, and
   the first scripted E2E is 5.10's Auto close. The existing suite is the
   regression check on `wire.ts`.
-- **Prove the branches can fail.** The cut-off budget, the `firstCall` arm
-  and the output default each read fine with the branch removed, so
-  mutate each once before calling its test done.
+- **Prove the branches can fail.** The step's second run on a
+  `reply-cut-off` failure, the `firstCall` arm and the output default each
+  read fine with the branch removed, so mutate each once before calling
+  its test done.
 
 ## Open questions
 
