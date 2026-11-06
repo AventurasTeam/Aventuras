@@ -500,7 +500,7 @@ the turns by `scripts/classifier-eval/judge-brief.md`, which also says
 how far its counts can be trusted.
 
 `pnpm dataset:chapter` builds a played story to measure a chapter close
-on, and is no test either: it rebuilds `dist` and runs
+on, and is no test either: it rebuilds `dist`, compiles Electron and runs
 `e2e/tests/dataset-chapter.build.spec.ts`, which skips unless
 `DATASET_CHAPTER_OUT` (where the database goes), `SMOKE_LLM_URL` and
 `SMOKE_LLM_MODEL` are set. It makes an adventure story through the
