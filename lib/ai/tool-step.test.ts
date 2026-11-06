@@ -262,9 +262,35 @@ describe('generateToolStep: one request', () => {
       },
       { role: 'tool', tool_call_id: 'call_0', content: 'ent_bell: the tower bell' },
     ])
-    expect(
-      (bodies[0]!.tools as { function: { name: string } }[]).map((t) => t.function.name),
-    ).toEqual(['lookup', 'finish'])
+    const wireTools = bodies[0]!.tools as { function: { name: string; parameters: unknown } }[]
+    expect(wireTools.map((t) => t.function.name)).toEqual(['lookup', 'finish'])
+    expect(wireTools[0]).toEqual({
+      type: 'function',
+      function: {
+        name: 'lookup',
+        description: 'Find a row by name.',
+        parameters: wireTools[0]!.function.parameters,
+      },
+    })
+  })
+
+  // With every call invalid the SDK answers them all itself, so only its one-step default stops it.
+  it('sends once when every call in the reply is invalid', async () => {
+    answers = [
+      openaiReply({
+        calls: [
+          { id: 'call_1', name: 'lookup', arguments: '{"query": "the do' },
+          { id: 'call_2', name: 'teleport', arguments: '{}' },
+        ],
+      }),
+      openaiReply({ content: 'Done.' }),
+    ]
+
+    const result = okStep(await step(useProvider('openai-compatible')))
+
+    expect(bodies).toHaveLength(1)
+    expect(result.calls).toEqual([])
+    expect(result.invalidCalls.map((call) => call.toolCallId)).toEqual(['call_1', 'call_2'])
   })
 
   it('sends anthropic the system half, then the user half and the conversation, and the tools', async () => {
@@ -374,6 +400,7 @@ describe('generateToolStep: the calls', () => {
       { toolCallId: 'toolu_2', toolName: 'finish', input: {} },
     ])
     expect(result.text).toBe('Checking two rows.')
+    expect(result.usage).toMatchObject({ inputTokens: 10, outputTokens: 5, totalTokens: 15 })
   })
 
   // The SDK marks both invalid and answers each itself (ai generate-text.ts, the tool-error parts).
@@ -394,8 +421,16 @@ describe('generateToolStep: the calls', () => {
       { toolCallId: 'call_1', toolName: 'lookup', input: { query: 'the door' } },
     ])
     expect(result.invalidCalls).toEqual([
-      { toolCallId: 'call_2', toolName: 'lookup', detail: expect.stringContaining('lookup') },
-      { toolCallId: 'call_3', toolName: 'teleport', detail: expect.stringContaining('teleport') },
+      {
+        toolCallId: 'call_2',
+        toolName: 'lookup',
+        detail: expect.stringMatching(/^Invalid input for tool lookup: JSON parsing failed/),
+      },
+      {
+        toolCallId: 'call_3',
+        toolName: 'teleport',
+        detail: expect.stringMatching(/^Model tried to call unavailable tool 'teleport'/),
+      },
     ])
     const answered = result.responseMessages.flatMap((message) =>
       message.role === 'tool'
@@ -420,7 +455,11 @@ describe('generateToolStep: the calls', () => {
 
     expect(result.calls).toEqual([{ toolCallId: 'toolu_2', toolName: 'finish', input: {} }])
     expect(result.invalidCalls).toEqual([
-      { toolCallId: 'toolu_1', toolName: 'lookup', detail: expect.stringContaining('lookup') },
+      {
+        toolCallId: 'toolu_1',
+        toolName: 'lookup',
+        detail: expect.stringMatching(/^Invalid input for tool lookup: Type validation failed/),
+      },
     ])
   })
 })
@@ -571,6 +610,7 @@ describe('generateToolStep: the chain', () => {
 
     okStep(await step(useProvider('openai-compatible'), {}, { actionId: 'act_1' }))
 
+    expect(vi.mocked(getModel).mock.lastCall).toEqual(['prov', 'm', 'act_1'])
     expect(warnings('provider.prompt_truncation_suspected')).toEqual([
       [
         'provider.prompt_truncation_suspected',

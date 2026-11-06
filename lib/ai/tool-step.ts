@@ -166,7 +166,7 @@ export async function generateToolStep(
 
   const attemptMs = resolved.timeoutMs
   const callFn = async (sig: AbortSignal): Promise<StepReply> => {
-    // Per attempt, so a provider retry gets the profile's whole timeout again.
+    // Per attempt, as generateStructured does; the run's bound, armed first, ends a retry first.
     const attempt = attemptMs === undefined ? null : boundedSignal(sig, attemptMs)
     try {
       const reply = await runProviderCall({
