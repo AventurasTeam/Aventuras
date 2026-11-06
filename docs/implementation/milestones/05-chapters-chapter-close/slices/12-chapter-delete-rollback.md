@@ -190,7 +190,7 @@ without a database. Copy goes in the `chapters` namespace 5.7 creates.
   land. 5.7's list of guarded transitions leaves it out only because it
   ships disabled.
 - A refused preview toasts and opens nothing, as `openRollback` does at
-  `app/reader-composer/[branchId].tsx:1112-1115`.
+  `app/reader-composer/[branchId].tsx:1110-1113`.
 - A refusal toasts and closes the confirm, since what it showed has moved:
   `not-latest` reads `This is no longer the latest chapter.`, and the
   others a failure. A success toasts nothing: the card goes, and 5.7's
@@ -255,12 +255,12 @@ go from `register.ts` too, since only a delete reads a cascade.
   its two values. `RollbackConfirmModal` reads `classifyRegenerateGate(counts)`
   at render, so a live recount can't leave it stale. `immediate` at render
   uses the cascade copy: the confirm is already open.
-- **The route.** `:1208` stays the branch point. `:1211` passes `counts`, so
+- **The route.** `:1206` stays the branch point. `:1209` passes `counts`, so
   a close committing as the interrupt lands can't be reversed unconfirmed.
   A `counts-changed` there opens the confirm on the fresh counts, through a
   pure helper beside `reopenAfterRefusal`, without the toast `runRegenerate`
-  raises at `:901`: `The counts changed while this was open` has nothing
-  open to refer to. The comments at `:1222-1223` and
+  raises at `:899`: `The counts changed while this was open` has nothing
+  open to refer to. The comments at `:1220-1221` and
   `regenerate-gate.ts:33-34` go.
 - **Copy,** in `reader.json`:
   - `chapter-close-confirm` with `chapters > 0`: body
@@ -535,8 +535,9 @@ change amends the scope above.
   lists only entities, lore, threads, happenings and entry assets. A swept
   translation of a deleted entry may count twice. Unverified that these deltas
   land in real rollback windows. This slice rewrites that bucket for
-  regenerate's close arm and edits the same row, so the answer lands here. This
-  doc sets no default. Routed from triage 2026-11-06.
+  regenerate's close arm and edits the same row, so the answer lands here.
+  Default: today's counting stands and the row names those tables too, leaving
+  open only the translation of a deleted entry. Routed from triage 2026-11-06.
 - **What residue is accepted?** Three narrow cases. Duplicates after CTRL-Z and
   redo over a manual close at the head, which chapter-close dedup never revisits.
   A head edit under a committed close, which keeps writes derived from the
