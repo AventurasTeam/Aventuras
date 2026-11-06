@@ -419,17 +419,19 @@ emission from the LLM is a prompt bug, not a runtime case to handle.
 
 **Via events the orchestrator dispatches:**
 
-- `delta_emitted` — every persisted write but a close's tool calls.
+- `delta_emitted` — every persisted write but a close's grouped ones:
+  its tool calls, and its `chapters` create with the stamps.
   Orchestrator routes
   through the action layer with `source: 'pipeline'` + the current
   `actionId`, and the event's `entryId` (the entry the write belongs
   to, `null` when none) onto the delta row; a `createStoryEntry` with
   one also records the turn capture's target entry. Phase doesn't
   touch delta log / SQLite / undo_payload.
-- `delta_group_emitted` — one tool call of a chapter close: its writes
-  land together, and each action's outcome, with its reason, comes back
-  to the phase as the `yield`'s value, so a refusal goes to the model
-  instead of failing the run
+- `delta_group_emitted` — a chapter close's writes that land together:
+  one tool call's, or the close's `chapters` create and every
+  `stampEntryChapter`. Each action's outcome, with its reason, comes
+  back to the phase as the `yield`'s value, so a tool call's refusal goes
+  to the model instead of failing the run
   ([`memory/chapter-close.md → Tools and writes`](./memory/chapter-close.md#tools-and-writes)).
 - `stream_chunk` — display-token path (`channel` splits narrative
   text from streamed reasoning). Orchestrator dispatches a
