@@ -1,6 +1,9 @@
-import type { DatabaseSync } from 'node:sqlite'
+import { mkdtempSync, rmSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
+import { DatabaseSync } from 'node:sqlite'
 
-import { describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it } from 'vitest'
 
 import { exportStorySeed } from './seed-export'
 import { createTestDb } from '../../lib/db/__tests__/test-db'
@@ -32,6 +35,17 @@ function setProviderKey(sqlite: DatabaseSync, key: string): void {
   const keyed = (JSON.parse(providers) as Row[]).map((p) => ({ ...p, apiKey: key }))
   sqlite.prepare(`UPDATE app_settings SET providers = ?`).run(JSON.stringify(keyed))
 }
+
+let dirs: string[] = []
+const scratch = () => {
+  const dir = mkdtempSync(join(tmpdir(), 'seed-export-'))
+  dirs.push(dir)
+  return dir
+}
+afterEach(() => {
+  for (const dir of dirs) rmSync(dir, { recursive: true, force: true })
+  dirs = []
+})
 
 describe('exportStorySeed', () => {
   it('writes only the story, every seeded table in insert order', async () => {
@@ -86,6 +100,46 @@ describe('exportStorySeed', () => {
       expect(seed[table]!.length, table).toBeGreaterThan(0)
       for (const row of seed[table]!) expect(row.embeddingStale, table).toBe(1)
     }
+  })
+
+  it('refuses while a run on the story is unfinished', async () => {
+    const sqlite = await seeded()
+    sqlite
+      .prepare(
+        `INSERT INTO pipeline_runs (run_id, kind, action_id, story_id, started_at) VALUES (?, ?, ?, ?, ?)`,
+      )
+      .run('run_open', 'chapter-close', 'act_open', HERO, 1)
+    await expect(exported(sqlite)).rejects.toThrow(/run_open[\s\S]*unfinished/)
+  })
+
+  it('reads every table from one snapshot', async () => {
+    const path = join(scratch(), 'aventuras.db')
+    ;(await seeded()).exec(`VACUUM INTO '${path}'`)
+    const reader = new DatabaseSync(path)
+    reader.exec('PRAGMA journal_mode = WAL')
+    const writer = new DatabaseSync(path)
+    let wrote = false
+    // A second connection renames every hero entity once the export has read the story's entries.
+    const midExport = new Proxy(reader, {
+      get(target, prop) {
+        if (prop === 'prepare')
+          return (sql: string) => {
+            if (!wrote && sql.includes('from "story_entries"')) {
+              writer.exec(`UPDATE entities SET name = 'Renamed mid-export'`)
+              wrote = true
+            }
+            return target.prepare(sql)
+          }
+        const value = Reflect.get(target, prop) as unknown
+        return typeof value === 'function' ? (value as () => unknown).bind(target) : value
+      },
+    })
+    const seed = JSON.parse(await exported(midExport)) as Record<string, Row[]>
+    expect(wrote).toBe(true)
+    expect(seed.entities!.length).toBeGreaterThan(0)
+    expect(seed.entities!.filter((r) => r.name === 'Renamed mid-export')).toEqual([])
+    reader.close()
+    writer.close()
   })
 
   it('refuses a story the database lacks', async () => {

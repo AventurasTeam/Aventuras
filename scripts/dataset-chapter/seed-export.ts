@@ -49,6 +49,27 @@ export async function exportStorySeed(
   storyId: string,
   providerIds: ReadonlySet<string>,
 ): Promise<string> {
+  // One read transaction: a write landing between two tables' reads can't split the seed.
+  sqlite.exec('BEGIN')
+  try {
+    return await exportInSnapshot(sqlite, storyId, providerIds)
+  } finally {
+    sqlite.exec('ROLLBACK')
+  }
+}
+
+async function exportInSnapshot(
+  sqlite: DatabaseSync,
+  storyId: string,
+  providerIds: ReadonlySet<string>,
+): Promise<string> {
+  const unfinished = sqlite
+    .prepare(`SELECT run_id FROM pipeline_runs WHERE story_id = ? AND finished_at IS NULL`)
+    .all(storyId) as { run_id: string }[]
+  if (unfinished.length > 0)
+    throw new Error(
+      `run ${unfinished.map((r) => r.run_id).join(', ')} on story ${storyId} is unfinished: export once it ends`,
+    )
   const keys = providerKeys(sqlite)
   for (const key of keys) assertScannableKey(key)
   const db = drizzle(makeProxy(sqlite))

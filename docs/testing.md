@@ -351,7 +351,8 @@ the file already holds. It orders the rows so a refresh diffs cleanly,
 marks every embedded row stale, and refuses the export on a provider key
 from the database's app settings, a field named like a credential or a
 value shaped like a key anywhere in the rows, or a file the loader would
-refuse. A slice whose close tasks add to the chapter refreshes it
+refuse. It reads the story in one transaction, and refuses while a run on
+the story is unfinished, such as a close still writing. A slice whose close tasks add to the chapter refreshes it
 (developer decision, 2026-11-05): it loads the seed, runs its tasks on
 the dev model over the chapter, re-exports and commits the diff, in
 which rows the dev model rewrote churn. Slices
