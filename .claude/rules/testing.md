@@ -34,13 +34,22 @@ DB bridge → "settings corrupted"). See
 
 Invoke the suite as `pnpm test:e2e` / `pnpm test:e2e:packaged` —
 never `playwright test` directly and never with your own `xvfb-run`
-prefix. The scripts route through `scripts/e2e.ts`, which supplies the
-virtual display and the `E2E_VIRTUAL_DISPLAY` flag that makes
-`e2e/harness/launch.ts` pin Electron to X11; calling Playwright raw
-opens real windows and takes the developer's focus for the length of
-the run. Both halves are load-bearing — Xvfb alone does not hide
-anything on a Wayland session. See
+prefix. The scripts route through `scripts/e2e.ts`, which sets the
+`E2E_VIRTUAL_DISPLAY` flag: under it the harness starts an Xvfb per
+app launch and pins Electron to X11. Calling Playwright raw opens real
+windows, takes the developer's focus for the length of the run, and
+drops to one worker. Both halves are load-bearing — Xvfb alone does
+not hide anything on a Wayland session. See
 [testing.md → Virtual display](../../docs/testing.md#virtual-display).
+
+## Specs run in parallel
+
+Spec files run on parallel workers, one file to a worker. A spec keeps
+to its own launch: no fixed port, no path outside its temp dir,
+nothing in the home directory but the embedder cache. Every Electron
+launch goes through `launchApp` or `spawnAppProcess`, which give it
+its own display. See
+[testing.md → Workers](../../docs/testing.md#workers).
 
 ## Fixtures build at test time
 

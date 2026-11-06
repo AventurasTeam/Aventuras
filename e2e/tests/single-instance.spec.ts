@@ -34,7 +34,7 @@ test.describe('single instance', () => {
 
   test('a second launch on the same data directory quits cleanly and adds no window', async () => {
     const before = await windowCount(app)
-    const second = spawnAppProcess(userDataDir)
+    const second = await spawnAppProcess(userDataDir)
     try {
       expect(await exitWithin(second.process, 20_000), second.stderr()).toEqual({
         code: 0,
@@ -50,7 +50,7 @@ test.describe('single instance', () => {
   // dev, an installed build and parallel E2E workers from refusing one another.
   test('a launch on another data directory is not refused', async () => {
     const otherDir = mkdtempSync(join(tmpdir(), 'aventuras-e2e-other-'))
-    const other = spawnAppProcess(otherDir)
+    const other = await spawnAppProcess(otherDir)
     try {
       expect(await exitWithin(other.process, 8_000), other.stderr()).toBeNull()
     } finally {

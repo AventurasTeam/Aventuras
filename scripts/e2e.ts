@@ -6,16 +6,11 @@ import { fileURLToPath } from 'node:url'
 // Playwright launcher that keeps Electron off the developer's screen. Electron
 // has no working headless mode on Linux (`--ozone-platform=headless` segfaults
 // in the GLX stack), so a real X server is the only option; Xvfb makes it a
-// virtual one. Same wrapper in CI and locally so the two run the same command.
+// virtual one, started per launch by e2e/harness/display.ts. Same wrapper in CI
+// and locally so the two run the same command.
 
 const REPO_ROOT = fileURLToPath(new URL('..', import.meta.url).href)
 const PLAYWRIGHT_CLI = join(REPO_ROOT, 'node_modules', '@playwright', 'test', 'cli.js')
-
-// Arch's xvfb-run defaults to `-screen 0 640x480x24`, which clips the 1280x800
-// BrowserWindow and drops the renderer below the 1024px desktop breakpoint —
-// the suite would silently exercise the narrow layout. Pin it explicitly rather
-// than inherit whatever the distro's wrapper chose.
-const XVFB_SERVER_ARGS = '-screen 0 1920x1080x24'
 
 // Both projects launch Electron against build output, never the sources: `dev`
 // serves the static `dist/` bundle, `packaged` the electron-builder binary. A
@@ -160,7 +155,7 @@ const headed =
   forwarded.some((arg) =>
     INTERACTIVE_FLAGS.some((flag) => arg === flag || arg.startsWith(`${flag}=`)),
   )
-const virtualDisplay = process.platform === 'linux' && !headed && onPath('xvfb-run')
+const virtualDisplay = process.platform === 'linux' && !headed && onPath('Xvfb')
 
 if (!existsSync(PLAYWRIGHT_CLI)) {
   console.error(`[e2e] Playwright CLI not found at ${PLAYWRIGHT_CLI}. Run pnpm install.`)
@@ -171,32 +166,29 @@ if (process.env.E2E_SKIP_BUILD_CHECK !== '1') assertFreshBuild()
 
 if (process.platform === 'linux' && !headed && !virtualDisplay) {
   console.warn(
-    '[e2e] xvfb-run not found — Electron will open real windows and take focus.\n' +
+    '[e2e] Xvfb not found — Electron will open real windows and take focus.\n' +
       '[e2e] Install it (Arch: sudo pacman -S xorg-server-xvfb, Debian/Ubuntu: apt install xvfb),\n' +
       '[e2e] or set E2E_HEADED=1 to opt out of the virtual display deliberately.',
   )
 }
 
-const playwright = [process.execPath, PLAYWRIGHT_CLI, 'test', ...forwarded]
-const [command, ...args] = virtualDisplay
-  ? ['xvfb-run', '-a', '-s', XVFB_SERVER_ARGS, ...playwright]
-  : playwright
-
-// Xvfb only sets DISPLAY, which Electron ignores on a Wayland session: it
-// connects to the compositor instead, so the window opens on the real screen
-// while the virtual server sits empty. Pinning the X11 ozone backend is what
-// actually lands the window on Xvfb, and only the command-line switch does it
+// The flag makes the harness start an Xvfb per launch and pin the X11 ozone
+// backend: on a Wayland session Electron ignores DISPLAY and connects to the
+// compositor, so the window would open on the real screen while the virtual
+// server sits empty. Only the command-line switch pins it
 // (ELECTRON_OZONE_PLATFORM_HINT has no effect, and clearing WAYLAND_DISPLAY
 // does not help — Wayland clients fall back to the default wayland-0 socket).
-// e2e/harness/launch.ts owns electron.launch, so it reads this and adds the
-// switch; the wrapper is inert without that half.
 const childEnv = { ...process.env }
 if (virtualDisplay) childEnv.E2E_VIRTUAL_DISPLAY = '1'
 
-const child = spawn(command, args, { cwd: REPO_ROOT, stdio: 'inherit', env: childEnv })
+const child = spawn(process.execPath, [PLAYWRIGHT_CLI, 'test', ...forwarded], {
+  cwd: REPO_ROOT,
+  stdio: 'inherit',
+  env: childEnv,
+})
 
 child.on('error', (err) => {
-  console.error(`[e2e] failed to start ${command}: ${err.message}`)
+  console.error(`[e2e] failed to start Playwright: ${err.message}`)
   process.exit(1)
 })
 

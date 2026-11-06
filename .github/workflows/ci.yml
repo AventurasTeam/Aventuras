@@ -156,9 +156,9 @@ jobs:
           path: ~/.cache/aventuras-e2e
           key: e2e-embedder-${{ hashFiles('lib/embedder/catalog-data.json') }}
 
-      # Electron has no true headless mode on Linux — the script wraps the run
-      # in a virtual display (scripts/e2e.ts). The packaged project launches the
-      # built binary; the harness seeds a throwaway userData per run.
+      # Electron has no true headless mode on Linux — the script has the harness
+      # start a virtual display per launch (scripts/e2e.ts). The packaged project
+      # launches the built binary; the harness seeds a throwaway userData per launch.
       - name: Run E2E (packaged, headless via xvfb)
         run: pnpm test:e2e:packaged
 

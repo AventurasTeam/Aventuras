@@ -29,9 +29,9 @@ The fix is the switch, passed at `electron.launch`:
 const ozoneArgs = process.env.E2E_VIRTUAL_DISPLAY === '1' ? ['--ozone-platform=x11'] : []
 ```
 
-`scripts/e2e.ts` supplies the virtual display and sets the variable;
-`e2e/harness/launch.ts` adds the switch. Both halves are load-bearing
-— neither hides anything on its own.
+`scripts/e2e.ts` sets the variable, `e2e/harness/display.ts` starts an
+Xvfb per launch under it, and `e2e/harness/launch.ts` adds the switch.
+Both halves are load-bearing — neither hides anything on its own.
 
 Note that `--ozone-platform=headless` is not an alternative: it
 segfaults in the GLX stack on Electron 41, with or without
@@ -51,10 +51,12 @@ The checks that actually discriminate:
   is present, and the Xvfb screen size when it is not. Pick a virtual
   screen size that differs from the real monitors so the two can never
   be confused.
-- **Enumerate windows on the virtual display.** During a run,
-  `DISPLAY=:99 xdotool search --name '.*'` should list the 1280x800
-  `Aventuras` window and the 800x600 `Developer Tools` window. Only
-  the 1920x1080 root window means nothing is rendering there.
+- **Enumerate windows on the virtual display.** During a run, each
+  launch's display is a socket in `/tmp/.X11-unix/`, and
+  `DISPLAY=:<n> xdotool search --name '.*'` on one should list the
+  1280x800 `Aventuras` window (and in `dev`, the 800x600
+  `Developer Tools` window). Only the 1920x1080 root window means
+  nothing is rendering there.
 
 Note that `xdotool` on the session's Xwayland display will **not**
 find the leaked window either — it is a native Wayland surface, so it
