@@ -673,6 +673,12 @@ describe('toolStepOfCompletion', () => {
     })
   })
 
+  it('prefers `reasoning_content` over `reasoning`', () => {
+    expect(
+      toolStepOfCompletion(completion({ reasoning_content: 'A', reasoning: 'B' }, 'stop')),
+    ).toEqual({ reasoning: 'A', finishReason: 'stop' })
+  })
+
   it("keeps arguments as sent when they don't parse, or parse to a string", () => {
     expect(
       toolStepOfCompletion(
@@ -734,6 +740,19 @@ describe('recording a tool lane', () => {
     ],
     usage: { prompt_tokens: 40, completion_tokens: 12, total_tokens: 52 },
   }
+  const TEXT_REPLY = {
+    id: 'chatcmpl-upstream-text',
+    object: 'chat.completion',
+    created: 0,
+    model: 'real-model',
+    choices: [
+      {
+        index: 0,
+        message: { role: 'assistant', content: 'The door opens.' },
+        finish_reason: 'stop',
+      },
+    ],
+  }
   const TOOL_REQUEST = {
     model: 'seed/narrative',
     messages: [{ role: 'user', content: 'Open the door.' }],
@@ -775,10 +794,12 @@ describe('recording a tool lane', () => {
   beforeAll(async () => {
     upstream = createServer((req, res) => {
       upstreamCalls += 1
-      req.resume()
+      const chunks: Buffer[] = []
+      req.on('data', (chunk: Buffer) => chunks.push(chunk))
       req.on('end', () => {
+        const sent = JSON.parse(Buffer.concat(chunks).toString()) as { tools?: unknown }
         res.writeHead(200, { 'content-type': 'application/json' })
-        res.end(JSON.stringify(UPSTREAM_REPLY))
+        res.end(JSON.stringify(sent.tools !== undefined ? UPSTREAM_REPLY : TEXT_REPLY))
       })
     })
     await new Promise<void>((resolve) => upstream.listen(0, '127.0.0.1', resolve))
@@ -854,7 +875,7 @@ describe('recording a tool lane', () => {
 
     await post({ model: 'seed/narrative', messages: [{ role: 'user', content: 'Open the door.' }] })
 
-    expect(mock.ctx.log.list()[0]).toMatchObject({ lane: key, served: '' })
+    expect(mock.ctx.log.list()[0]).toMatchObject({ lane: key, served: 'The door opens.' })
     expect(upstreamCalls).toBe(1)
     expect((await putLane(key, { mode: 'mock', upstreamId: null })).status).toBe(200)
   })

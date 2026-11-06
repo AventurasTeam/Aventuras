@@ -4,8 +4,8 @@ import {
   CORS_HEADERS,
   SSE_HEADERS,
   errorBody,
+  isFinishReason,
   write,
-  type FinishReason,
   type MockToolStep,
 } from './respond/wire'
 import { toolLaneOf } from './routing'
@@ -54,19 +54,6 @@ function messageContent(raw: string): string {
   }
 }
 
-// Each FinishReason once. Another (`eos`, `function_call`) is left out, and the step's default,
-// tool_calls with calls and stop without, reads the same to the app.
-const STEP_FINISH: { [K in FinishReason]: true } = {
-  stop: true,
-  length: true,
-  tool_calls: true,
-  content_filter: true,
-}
-
-function isStepFinish(value: unknown): value is FinishReason {
-  return typeof value === 'string' && Object.hasOwn(STEP_FINISH, value)
-}
-
 function nonEmptyText(value: unknown): string | undefined {
   return typeof value === 'string' && value !== '' ? value : undefined
 }
@@ -113,12 +100,13 @@ export function toolStepOfCompletion(raw: string): MockToolStep | null {
         : []
     },
   )
+  // `eos` and `function_call` are left out; the step's default reads the same to the app.
   const finish = choice?.finish_reason
   return {
     ...(text !== undefined ? { text } : {}),
     ...(reasoning !== undefined ? { reasoning } : {}),
     ...(toolCalls.length > 0 ? { toolCalls } : {}),
-    ...(isStepFinish(finish) ? { finishReason: finish } : {}),
+    ...(isFinishReason(finish) ? { finishReason: finish } : {}),
   }
 }
 

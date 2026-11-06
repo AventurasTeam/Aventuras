@@ -2,7 +2,7 @@ import { z } from 'zod'
 
 import { suggestionRefSchema, VISUAL_CHANGE_TYPES } from '@/lib/piggyback'
 
-import type { FinishReason, MockToolStep } from './respond/wire'
+import { FINISH_REASONS, type MockToolStep } from './respond/wire'
 import { NARRATIVE_LANE, TOOL_LANE_PREFIX } from './routing'
 import { findShapeByName } from './shapes'
 
@@ -61,14 +61,6 @@ export const narrativeValueSchema = z.object({
   state: stateBlockSchema.optional(),
   suggestions: z.array(suggestionRefSchema).optional(),
 })
-
-// Each FinishReason once, so one added to the wire fails typecheck here until it validates.
-const FINISH_REASONS = {
-  stop: 'stop',
-  length: 'length',
-  tool_calls: 'tool_calls',
-  content_filter: 'content_filter',
-} as const satisfies { [K in FinishReason]: K }
 
 // Strict: the wire's own spelling (`tool_calls`, `arguments`) is refused, not dropped, since a step
 // that lost its calls that way would end a task with no writes. A string `args` goes out verbatim,
