@@ -6,6 +6,7 @@ import { z } from 'zod'
 
 import {
   actionProblem,
+  cleanedAction,
   DATASET_ACTIONS_FILE,
   DATASET_TEXT_FILE,
   parseActions,
@@ -84,16 +85,6 @@ async function complete(
   return { text: choice.message.content ?? '', finish: choice.finish_reason ?? null }
 }
 
-// A reasoning model can leave its thinking in the content; the turn is what follows it.
-function cleaned(raw: string): string {
-  const thought = raw.lastIndexOf('</think>')
-  const answer = thought === -1 ? raw : raw.slice(thought + '</think>'.length)
-  return answer
-    .trim()
-    .replace(/^(?:action|turn|player|jim)\s*:\s*/i, '')
-    .trim()
-}
-
 async function writeAction(
   url: string,
   model: string,
@@ -104,7 +95,7 @@ async function writeAction(
   let last = ''
   for (let attempt = 1; attempt <= ATTEMPTS; attempt++) {
     const { text, finish } = await complete(url, model, before, after)
-    const action = cleaned(text)
+    const action = cleanedAction(text)
     const problem = finish === 'length' ? 'cut off at the length limit' : actionProblem(action)
     if (problem === null) return action
     last = `${problem}: ${JSON.stringify(text.slice(0, 300))}`

@@ -11,6 +11,7 @@ import { countTokens } from '@/lib/tokens'
 import {
   ACTION_MAX_TOKENS,
   actionProblem,
+  cleanedAction,
   DATASET_TOKEN_BAND,
   datasetTokens,
   loadShapedDataset,
@@ -89,6 +90,26 @@ describe('actionProblem', () => {
     const long = `I ${'walk down the long road to the cove and back again, '.repeat(6)}`.trim()
     expect(countTokens(long)).toBeGreaterThan(ACTION_MAX_TOKENS)
     expect(actionProblem(long)).toMatch(new RegExp(`over ${ACTION_MAX_TOKENS}$`))
+  })
+})
+
+describe('cleanedAction', () => {
+  it('keeps what follows a reasoning model’s last </think>', () => {
+    expect(cleanedAction('<think>Jim hides.</think>\n\nI hide in the barrel.')).toBe(
+      'I hide in the barrel.',
+    )
+    expect(cleanedAction('<think>Not </think> yet.</think> I wait.')).toBe('I wait.')
+  })
+
+  it('strips a leading action, turn, player or Jim label, in any case', () => {
+    expect(cleanedAction('Action: I wait.')).toBe('I wait.')
+    expect(cleanedAction('TURN : I wait.')).toBe('I wait.')
+    expect(cleanedAction('player:I wait.')).toBe('I wait.')
+    expect(cleanedAction('<think>…</think>\n Jim: I wait.')).toBe('I wait.')
+  })
+
+  it('keeps a label word inside the turn', () => {
+    expect(cleanedAction('I say to Jim: “Wait.”')).toBe('I say to Jim: “Wait.”')
   })
 })
 

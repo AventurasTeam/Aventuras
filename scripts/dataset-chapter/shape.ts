@@ -90,6 +90,16 @@ export function actionProblem(action: string): string | null {
   return null
 }
 
+// A reasoning model can leave its thinking in the content; the turn is what follows it.
+export function cleanedAction(raw: string): string {
+  const thought = raw.lastIndexOf('</think>')
+  const answer = thought === -1 ? raw : raw.slice(thought + '</think>'.length)
+  return answer
+    .trim()
+    .replace(/^(?:action|turn|player|jim)\s*:\s*/i, '')
+    .trim()
+}
+
 export function parseActions(json: string): string[] {
   const actions = actionsSchema.parse(JSON.parse(json))
   const problems = actions.flatMap((action, i) => {
