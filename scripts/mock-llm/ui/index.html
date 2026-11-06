@@ -414,8 +414,15 @@
       // A cut reply, an overflow rejection, a hang with no profile timeout and a status the app
       // doesn't retry all fail on the first call, so one failure reaches the app.
       const NOT_RETRIED = ['length', 'overflow-llamacpp', 'overflow-openai', 'hang']
-      // A tool step sends a cut reply once more, and hands a malformed call back as an invalid one.
-      const TOOL_NOT_RETRIED = ['malformed', 'overflow-llamacpp', 'overflow-openai', 'hang']
+      // A tool step sends a cut reply once more, and hands a malformed or stream-cut call back as an
+      // invalid one.
+      const TOOL_NOT_RETRIED = [
+        'malformed',
+        'stream-cut',
+        'overflow-llamacpp',
+        'overflow-openai',
+        'hang',
+      ]
       const isRetried = ({ kind, status }, notRetried) =>
         !notRetried.includes(kind) && (kind !== 'http' || status === 429 || status >= 500)
 
