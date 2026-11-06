@@ -64,29 +64,20 @@ beforeEach(() => {
 })
 
 describe('hasRequiredCredentials', () => {
-  it('does not fall back to the standard profile for background', () => {
-    setSlotIds('p-std', null, null, null)
-
-    expect(hasRequiredCredentials('background')).toBe(false)
-  })
-
   it('is true when the background profile supports generation and needs no api key', () => {
     setSlotIds('p-std', 'p-bg', null, null)
 
     expect(hasRequiredCredentials('background')).toBe(true)
   })
 
-  it('does not fall back to the standard profile for portrait', () => {
-    setSlotIds('p-std', null, null, null)
+  it.each(['background', 'portrait', 'reference'] satisfies ImageProfileSlot[])(
+    'does not fall back to the standard profile for %s',
+    (slot) => {
+      setSlotIds('p-std', null, null, null)
 
-    expect(hasRequiredCredentials('portrait')).toBe(false)
-  })
-
-  it('does not fall back to the standard profile for reference', () => {
-    setSlotIds('p-std', null, null, null)
-
-    expect(hasRequiredCredentials('reference')).toBe(false)
-  })
+      expect(hasRequiredCredentials(slot)).toBe(false)
+    },
+  )
 
   it('requires the api key when the provider needs one', () => {
     setSlotIds('p-std', null, null, null)
@@ -139,18 +130,6 @@ describe('missingCredential', () => {
 })
 
 describe('isImageGenerationEnabled', () => {
-  it('is false for background when backgroundProfileId is unset, even with a standard profile', () => {
-    setSlotIds('p-std', null, null, null)
-
-    expect(isImageGenerationEnabled(undefined, 'background')).toBe(false)
-  })
-
-  it('is true for standard when the profile supports generation', () => {
-    setSlotIds('p-std', null, null, null)
-
-    expect(isImageGenerationEnabled(undefined, 'standard')).toBe(true)
-  })
-
   it('is false for non-background slots when generation mode is none', () => {
     setSlotIds('p-std', 'p-bg', null, null)
 

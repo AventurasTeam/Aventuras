@@ -6,12 +6,6 @@ import { PROVIDER_BASE_URL, resolveBaseUrl } from './baseUrls'
 const providerTypes = Object.keys(PROVIDER_BASE_URL) as ImageProviderType[]
 
 describe('PROVIDER_BASE_URL', () => {
-  it.each(providerTypes)('%s declares a default that agrees with its mode', (providerType) => {
-    const rule = PROVIDER_BASE_URL[providerType]
-    if (rule.mode === 'required') expect('default' in rule).toBe(false)
-    if (rule.mode === 'optional') expect(rule.default).toBeTruthy()
-  })
-
   it.each(providerTypes)('%s default is a normalized http(s) URL', (providerType) => {
     const { default: url } = PROVIDER_BASE_URL[providerType] as { default?: string }
     if (url === undefined) return

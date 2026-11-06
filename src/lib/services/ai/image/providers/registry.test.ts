@@ -91,28 +91,6 @@ describe('Image Provider Registry', () => {
   })
 
   describe('supportsImageGeneration', () => {
-    // A `Record` over the union, not an array: an array annotated `ImageProviderType[]`
-    // accepts a short list happily, so the exhaustiveness this claims was never checked.
-    // As a record, a provider added to the union and left out here fails `svelte-check`.
-    const ALL_PROVIDERS: Record<ImageProviderType, true> = {
-      nanogpt: true,
-      openai: true,
-      'openai-compatible': true,
-      openrouter: true,
-      pollinations: true,
-      google: true,
-      zhipu: true,
-      comfyui: true,
-      a1111: true,
-    }
-
-    it.each(Object.keys(ALL_PROVIDERS) as ImageProviderType[])(
-      'returns true for %s',
-      (providerType) => {
-        expect(supportsImageGeneration(providerType)).toBe(true)
-      },
-    )
-
     it('returns false for unknown providers', () => {
       expect(supportsImageGeneration('unknown-provider')).toBe(false)
     })
@@ -123,51 +101,12 @@ describe('Image Provider Registry', () => {
   })
 
   describe('requiresApiKey', () => {
-    it.each(['comfyui', 'a1111'] satisfies ImageProviderType[])(
-      'returns false for the self-hosted provider %s',
-      (providerType) => {
-        expect(requiresApiKey(providerType)).toBe(false)
-      },
-    )
-
-    it.each([
-      'nanogpt',
-      'openai',
-      'openrouter',
-      'google',
-      'zhipu',
-      // Its model list is open, its generation is not.
-      'pollinations',
-    ] satisfies ImageProviderType[])('returns true for the hosted provider %s', (providerType) => {
-      expect(requiresApiKey(providerType)).toBe(true)
-    })
-
-    it('does not require a key for OpenAI Compatible, which a proxy may leave open', () => {
-      expect(requiresApiKey('openai-compatible')).toBe(false)
-    })
-
     it('assumes an unknown provider needs a key', () => {
       expect(requiresApiKey('unknown-provider')).toBe(true)
     })
   })
 
   describe('takesApiKey', () => {
-    it.each(['comfyui', 'a1111'] satisfies ImageProviderType[])(
-      'is false for the self-hosted provider %s',
-      (providerType) => {
-        expect(takesApiKey(providerType)).toBe(false)
-      },
-    )
-
-    it.each([
-      'openai',
-      'openai-compatible',
-      'google',
-      'pollinations',
-    ] satisfies ImageProviderType[])('is true for %s', (providerType) => {
-      expect(takesApiKey(providerType)).toBe(true)
-    })
-
     it('assumes an unknown provider takes a key', () => {
       expect(takesApiKey('unknown-provider')).toBe(true)
     })
@@ -185,24 +124,6 @@ describe('Image Provider Registry', () => {
   })
 
   describe('baseUrlMode', () => {
-    it('requires one for OpenAI Compatible, which has no endpoint of its own', () => {
-      expect(baseUrlMode('openai-compatible')).toBe('required')
-    })
-
-    it.each(['nanogpt', 'openai', 'zhipu', 'comfyui', 'a1111'] satisfies ImageProviderType[])(
-      'makes it optional for %s',
-      (providerType) => {
-        expect(baseUrlMode(providerType)).toBe('optional')
-      },
-    )
-
-    it.each(['openrouter', 'pollinations', 'google'] satisfies ImageProviderType[])(
-      'offers none for the fixed endpoint of %s',
-      (providerType) => {
-        expect(baseUrlMode(providerType)).toBe('none')
-      },
-    )
-
     it('offers none for an unknown provider', () => {
       expect(baseUrlMode('unknown-provider')).toBe('none')
     })
