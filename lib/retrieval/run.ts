@@ -767,8 +767,8 @@ function assembleCandidates(
     // Stale rows keep their old vector in vec0 and stay reachable by KNN, so
     // each pool below drops them; everything that survives is fresh.
     embeddingStale: false,
-    // Mapping a row to a chapter distance needs the chapter-close pipeline (M5);
-    // until then every row reads as current and recency_factor is 1.
+    // No source maps a row to its chapter distance yet (M5.9), so every row reads as
+    // current and recency_factor is 1.
     chaptersOld: 0,
   })
 

@@ -30,7 +30,7 @@ export const storySettings = {
   classifierCadence: (page: Page): Locator =>
     page.getByRole('textbox', { name: t('storySettings:memory.knobs.cadence'), exact: true }),
 
-  // The Chapters section's SwitchRow, whose aria-label is its label.
+  // The Chapter close section's SwitchRow (ChapterCloseSection), whose aria-label is its label.
   chapterAutoClose: (page: Page): Locator =>
     page.getByRole('switch', { name: t('storySettings:memory.knobs.autoClose') }),
 

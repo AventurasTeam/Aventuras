@@ -210,9 +210,9 @@ describe('chapters CRUD arms', () => {
             id: 'chap_1',
             patch: {
               keywords: ['war'], // whole-array change (shrink)
-              title: 'War Breaks', // scalar change
-              summary: 'War has come.', // scalar change
-              theme: 'open war', // scalar change
+              title: 'War Breaks',
+              summary: 'War has come.',
+              theme: 'open war',
             },
           },
         },
@@ -222,11 +222,9 @@ describe('chapters CRUD arms', () => {
       ctx,
     )
 
-    // forward applied to DB + store
     expect((await rowFor(db, 'chap_1')).title).toBe('War Breaks')
     expect(chaptersStore.getById('chap_1')?.keywords).toEqual(['war'])
 
-    // reverse-replay restores the whole prior array + scalars
     expect(await reverseReplayDeltas('act_u', ctx)).toBe(1)
     const back = await rowFor(db, 'chap_1')
     expect(back.title).toBe('The Gathering Storm')
