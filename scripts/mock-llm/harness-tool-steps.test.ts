@@ -1,3 +1,5 @@
+import { createConnection } from 'node:net'
+
 import type { ModelMessage } from 'ai'
 import { afterEach, beforeEach, describe, expect, it, vi, type MockInstance } from 'vitest'
 import { z } from 'zod'
@@ -14,9 +16,15 @@ import { TRUNCATION_RATIO } from '@/lib/ai/truncation-check'
 import type { ProviderInstance } from '@/lib/db'
 import { logger, type Logger } from '@/lib/diagnostics'
 
-import { harnessPerTest, provider } from './harness-calls'
+import { harnessPerTest, provider, structuredCall } from './harness-calls'
 import { toolLaneKey } from './routing'
-import { mockUsage, promptOf, type MockLlm, type MockRequest } from '../../e2e/harness/mock-llm'
+import {
+  EXAMPLES,
+  mockUsage,
+  promptOf,
+  type MockLlm,
+  type MockRequest,
+} from '../../e2e/harness/mock-llm'
 
 // generateToolStep through the app's own provider to the harness, so what a spec scripts is what
 // @ai-sdk/openai-compatible reads back.
@@ -108,6 +116,26 @@ function answered(previous: ToolStep): ModelMessage[] {
 }
 
 const callsOf = (s: ToolStep) => s.calls.map(({ toolName, input }) => ({ toolName, input }))
+
+const readRow = (id: string) => ({ toolCalls: [{ name: 'read_row', args: { id } }] })
+
+async function structuredReply(response: Promise<Response>): Promise<unknown> {
+  const body = (await (await response).json()) as { choices: { message: { content: string } }[] }
+  return JSON.parse(body.choices[0].message.content)
+}
+
+/** Whether the harness still accepts a fresh connection; a pooled keep-alive socket can't answer. */
+function accepting(llm: MockLlm): Promise<boolean> {
+  const { hostname, port } = new URL(llm.url)
+  return new Promise((resolve) => {
+    const socket = createConnection({ host: hostname, port: Number(port) })
+    socket.once('connect', () => {
+      socket.destroy()
+      resolve(true)
+    })
+    socket.once('error', () => resolve(false))
+  })
+}
 
 describe('startMockLlm — tool lanes', () => {
   it('answers queued steps in order across two conversations', async () => {
@@ -294,5 +322,143 @@ describe('startMockLlm — tool lanes', () => {
     expect(warn.mock.calls.map(([kind]) => kind)).not.toContain(
       'provider.prompt_truncation_suspected',
     )
+  })
+  it('holds one call: the next on the lane answers at once', async () => {
+    const llm = await started()
+    const config = registerHarness(llm)
+    llm.holdNextStructured(LANE)
+    const held = step(config)
+    await vi.waitFor(() => expect(llm.requests).toHaveLength(1))
+
+    expect(okStep(await step(config))).toMatchObject({ calls: [], finishReason: 'stop' })
+
+    llm.setToolSteps(NAMES, [readRow('c3')])
+    llm.releaseStructured()
+    expect(callsOf(okStep(await held))).toEqual([{ toolName: 'read_row', input: { id: 'c3' } }])
+  })
+
+  it('lets a tool call past a hold armed for a shape, which keeps it for its own', async () => {
+    const llm = await started()
+    const config = registerHarness(llm)
+    llm.setToolSteps(NAMES, [{ text: 'Not held.' }])
+    llm.holdNextStructured('periodic-classifier')
+
+    expect(okStep(await step(config)).text).toBe('Not held.')
+
+    const held = structuredCall(llm, 'periodic-classifier')
+    await vi.waitFor(() => expect(llm.requests).toHaveLength(2))
+    llm.setStructured('periodic-classifier', { marker: 'set after arrival' })
+    llm.releaseStructured()
+    expect(await structuredReply(held)).toEqual({ marker: 'set after arrival' })
+  })
+
+  it('lets a structured call past a hold armed for a lane, which keeps it for its own', async () => {
+    const llm = await started()
+    const config = registerHarness(llm)
+    llm.holdNextStructured(LANE)
+
+    expect(await structuredReply(structuredCall(llm, 'periodic-classifier'))).toEqual(
+      EXAMPLES['periodic-classifier'],
+    )
+
+    const held = step(config)
+    await vi.waitFor(() => expect(llm.requests).toHaveLength(2))
+    llm.setToolSteps(NAMES, [readRow('c4')])
+    llm.releaseStructured()
+    expect(callsOf(okStep(await held))).toEqual([{ toolName: 'read_row', input: { id: 'c4' } }])
+  })
+
+  it('answers an armed overflow before a hold, which stays for the next call', async () => {
+    const llm = await started()
+    const config = registerHarness(llm)
+    llm.overflowNextStructured(LANE)
+    llm.holdNextStructured(LANE)
+
+    expect(await step(config, [], { firstCall: false })).toMatchObject({
+      status: 'stopped',
+      reason: 'window',
+    })
+
+    const held = step(config)
+    await vi.waitFor(() => expect(llm.requests).toHaveLength(2))
+    llm.setToolSteps(NAMES, [readRow('c5')])
+    llm.releaseStructured()
+    expect(callsOf(okStep(await held))).toEqual([{ toolName: 'read_row', input: { id: 'c5' } }])
+  })
+
+  // The function step runs at release: answered first, the structured call reads no override.
+  it('releases held structured and tool calls in arrival order', async () => {
+    const llm = await started()
+    const config = registerHarness(llm)
+    llm.holdNextStructured('periodic-classifier')
+    const structured = structuredCall(llm, 'periodic-classifier')
+    await vi.waitFor(() => expect(llm.requests).toHaveLength(1))
+    llm.holdNextStructured(LANE)
+    const firstTool = step(config)
+    await vi.waitFor(() => expect(llm.requests).toHaveLength(2))
+    llm.holdNextStructured(LANE)
+    const secondTool = step(config)
+    await vi.waitFor(() => expect(llm.requests).toHaveLength(3))
+
+    llm.setToolSteps(NAMES, [
+      () => {
+        llm.setStructured('periodic-classifier', { marker: 'set by the first tool step' })
+        return readRow('c1')
+      },
+      readRow('c2'),
+    ])
+    llm.releaseStructured()
+
+    expect(await structuredReply(structured)).toEqual(EXAMPLES['periodic-classifier'])
+    expect(callsOf(okStep(await firstTool))).toEqual([
+      { toolName: 'read_row', input: { id: 'c1' } },
+    ])
+    expect(callsOf(okStep(await secondTool))).toEqual([
+      { toolName: 'read_row', input: { id: 'c2' } },
+    ])
+  })
+
+  // An unanswered request keeps its connection open, and server.close() waits on it.
+  it('answers a tool call still held when the server closes', async () => {
+    const llm = await started()
+    const config = registerHarness(llm)
+    llm.holdNextStructured(LANE)
+    const held = step(config)
+    await vi.waitFor(() => expect(llm.requests).toHaveLength(1))
+    llm.setToolSteps(NAMES, [readRow('c6')])
+
+    await llm.close()
+
+    expect(callsOf(okStep(await held))).toEqual([{ toolName: 'read_row', input: { id: 'c6' } }])
+  })
+
+  it('fails a call whose function step throws, answers the rest, and still closes', async () => {
+    const llm = await started()
+    const config = registerHarness(llm)
+    llm.holdNextStructured(LANE)
+    const throwing = step(config)
+    await vi.waitFor(() => expect(llm.requests).toHaveLength(1))
+    llm.holdNextStructured(LANE)
+    const after = step(config)
+    await vi.waitFor(() => expect(llm.requests).toHaveLength(2))
+    llm.setToolSteps(NAMES, [
+      () => {
+        throw new Error('the spec broke')
+      },
+      { text: 'Answered anyway.' },
+    ])
+
+    await expect(llm.close()).rejects.toThrow('the spec broke')
+
+    expect(await accepting(llm)).toBe(false)
+    const failed = await throwing
+    expect(failed).toMatchObject({
+      status: 'failed',
+      error: { tier: 'provider', reason: 'unknown' },
+    })
+    expect(failed).not.toHaveProperty('error.possibleCapabilityMismatch')
+    expect(JSON.stringify(failed)).toContain('mock harness: a scripted step threw: the spec broke')
+    expect(okStep(await after).text).toBe('Answered anyway.')
+    expect(llm.requests).toHaveLength(2)
   })
 })

@@ -5,6 +5,7 @@ import {
   completionBody,
   contentFrame,
   CORS_HEADERS,
+  errorBody,
   mockUsage,
   overflowBody,
   overflowCounts,
@@ -36,7 +37,7 @@ export { mockUsage }
 // shapes. The mock routes on the request:
 //   - stream: true          → an SSE prose stream (the narrative call).
 //   - carrying tools         → a tool step (MockToolStep) from that tool list's
-//     own queue (setToolSteps); inert `{}` and `stop` when nothing is queued.
+//     own queue (setToolSteps); no calls, empty text, `stop` when nothing is queued.
 //   - otherwise (structured) → a JSON chat completion, whose body is chosen by
 //     matching the exact TypeScript block the app injects into the prompt
 //     (schemaToTypeScriptBlock over the agent's zod schema). Each CALL SITE is
@@ -200,7 +201,10 @@ export type MockLlm = {
    * overflow 400 in `shape`; a tool lane's queued step stays for the next call.
    */
   overflowNextStructured: (agentName: string, shape?: OverflowShape) => void
-  /** Replace the tool lane's queue; each answered call takes the next step. Empty: `{}`, `stop`. */
+  /**
+   * Replace the tool lane's queue; each answered call takes the next step. Empty: no calls, empty
+   * text, `stop`. A function step that throws fails its call with a 400, then rethrows.
+   */
   setToolSteps: (tools: readonly string[], steps: readonly MockToolStepReply[]) => void
   /** Every completion request received, in order. */
   requests: MockRequest[]
@@ -313,7 +317,17 @@ export async function startMockLlm(): Promise<MockLlm> {
   }
 
   const answerTool = (res: ServerResponse, lane: string, request: MockRequest): void => {
-    const step = nextToolStep(lane, request)
+    let step: MockToolStep
+    try {
+      step = nextToolStep(lane, request)
+    } catch (error) {
+      // Answered first so the client fails at once instead of waiting out its bound; the message
+      // prefix names no capability keyword, so it reads as no capability mismatch.
+      const message = error instanceof Error ? error.message : String(error)
+      res.writeHead(400, { ...cors, 'content-type': 'application/json' })
+      res.end(errorBody(`mock harness: a scripted step threw: ${message}`, 'mock_harness_error'))
+      throw error
+    }
     res.writeHead(200, { ...cors, 'content-type': 'application/json' })
     res.end(
       toolStepBody(step, mockUsage(toolPromptText(request.body), toolStepCompletionText(step))),
@@ -325,10 +339,19 @@ export async function startMockLlm(): Promise<MockLlm> {
     res.on('close', () => heldStructured.delete(res))
   }
 
+  // Every held call is answered even if one throws; the first throw surfaces after.
   const releaseHeldStructured = (): void => {
     const held = [...heldStructured.values()]
     heldStructured.clear()
-    for (const answer of held) answer()
+    let thrown: { error: unknown } | undefined
+    for (const answer of held) {
+      try {
+        answer()
+      } catch (error) {
+        thrown ??= { error }
+      }
+    }
+    if (thrown !== undefined) throw thrown.error
   }
 
   const server = createServer((req, res) => {
@@ -464,9 +487,12 @@ export async function startMockLlm(): Promise<MockLlm> {
     close: () =>
       new Promise<void>((resolve) => {
         // Finish held calls first, else an open socket hangs server.close().
-        finishHeldNarratives()
-        releaseHeldStructured()
-        server.close(() => resolve())
+        try {
+          finishHeldNarratives()
+          releaseHeldStructured()
+        } finally {
+          server.close(() => resolve())
+        }
       }),
   }
 }
