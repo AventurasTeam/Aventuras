@@ -21,16 +21,20 @@ function providerKeys(sqlite: DatabaseSync): string[] {
   return providers.map((p) => p.apiKey ?? '').filter((key) => key !== '')
 }
 
-// Names the path, never the value: the refusal must not print the secret it caught.
-function credentialAt(value: unknown, path: string): string | null {
-  if (typeof value === 'string')
+// Names the path, never the value: the refusal must not print the secret it caught. Scans decoded
+// strings, since JSON escapes a key's quote or backslash out of the file's bytes.
+function credentialAt(value: unknown, path: string, keys: readonly string[]): string | null {
+  if (typeof value === 'string') {
+    if (holdsSecret(value, keys))
+      return `${path} holds a provider key from the database's app settings`
     return CREDENTIAL_VALUE.test(value) ? `${path} looks like a credential` : null
+  }
   if (value === null || typeof value !== 'object') return null
   for (const [key, child] of Object.entries(value)) {
     const at = Array.isArray(value) ? `${path}[${key}]` : `${path}.${key}`
-    if (!Array.isArray(value) && CREDENTIAL_FIELD.test(key))
+    if (!Array.isArray(value) && (CREDENTIAL_FIELD.test(key) || holdsSecret(key, keys)))
       return `${at} is named like a credential`
-    const found = credentialAt(child, at)
+    const found = credentialAt(child, at, keys)
     if (found !== null) return found
   }
   return null
@@ -73,12 +77,10 @@ export async function exportStorySeed(
 
   for (const [name, rows] of Object.entries(seed))
     rows.forEach((row, i) => {
-      const found = credentialAt(row, `${name}[${i}]`)
+      const found = credentialAt(row, `${name}[${i}]`, keys)
       if (found !== null) throw new Error(`dataset seed ${found}`)
     })
   const json = `${JSON.stringify(seed, null, 2)}\n`
-  if (holdsSecret(json, keys))
-    throw new Error("dataset seed: the rows hold a provider key from the database's app settings")
   parseStorySeed(json, providerIds)
   return json
 }

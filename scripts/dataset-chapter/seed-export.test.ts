@@ -112,6 +112,19 @@ describe('exportStorySeed', () => {
     await expect(refusal).rejects.not.toThrow(KEY)
   })
 
+  // JSON writes a quote or backslash escaped, so the key's raw bytes never appear in the file.
+  it('refuses a provider key the JSON escapes', async () => {
+    const quoted = 'dataset"test\\key-0123456789abcdef'
+    const sqlite = await seeded()
+    setProviderKey(sqlite, quoted)
+    sqlite
+      .prepare(
+        `UPDATE branches SET classifier_status = json_set(classifier_status, '$.lastError', ?) WHERE id = ?`,
+      )
+      .run(`401 for key ${quoted}`, HERO_MAIN)
+    await expect(exported(sqlite)).rejects.toThrow(/branches\[\d+\][\s\S]*provider key/)
+  })
+
   it('refuses a short provider key it could not scan for', async () => {
     const sqlite = await seeded()
     setProviderKey(sqlite, 'Qz7')
