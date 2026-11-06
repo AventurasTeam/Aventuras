@@ -13,7 +13,7 @@ import { DatabaseSync } from 'node:sqlite'
 
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 
-import { assertExportTarget, exportScrubbed, scrubProviderKeys } from './export'
+import { assertExportTarget, assertScannableKey, exportScrubbed, scrubProviderKeys } from './export'
 
 const KEY = 'sk-dataset-test-0123456789abcdef'
 const MODELS = Array.from({ length: 300 }, (_, i) => ({
@@ -115,6 +115,20 @@ describe('exportScrubbed', () => {
     const out = join(dir, 'dataset.db')
     expect(() => exportScrubbed(src, out, [KEY])).toThrow(/still holds a provider key/)
     expect(readdirSync(dir)).toEqual([])
+  })
+})
+
+describe('assertScannableKey', () => {
+  it('passes no key, or one of 16 characters or more', () => {
+    expect(() => assertScannableKey('')).not.toThrow()
+    expect(() => assertScannableKey('a'.repeat(16))).not.toThrow()
+    expect(() => assertScannableKey(KEY)).not.toThrow()
+  })
+
+  it('refuses a shorter key without echoing it', () => {
+    expect(() => assertScannableKey('a'.repeat(15))).toThrow(/would match unrelated text/)
+    expect(() => assertScannableKey('Qz7')).toThrow(/would match unrelated text/)
+    expect(() => assertScannableKey('Qz7')).not.toThrow(/Qz7/)
   })
 })
 

@@ -6,7 +6,11 @@ import { expect, test, type Page } from '@playwright/test'
 
 import { modelProfileSchema, providerInstanceSchema } from '@/lib/db'
 
-import { assertExportTarget, exportScrubbed } from '../../scripts/dataset-chapter/export'
+import {
+  assertExportTarget,
+  assertScannableKey,
+  exportScrubbed,
+} from '../../scripts/dataset-chapter/export'
 import {
   DATASET_TOKEN_BAND,
   datasetTokens,
@@ -458,6 +462,7 @@ test.describe('dataset chapter — build', () => {
     test.setTimeout(300_000)
     const env = readEnv()
     assertExportTarget(env.out)
+    assertScannableKey(LLM_KEY)
     const seeded = createSeededUserDataDir()
     userDataDir = seeded.userDataDir
     dbPath = seeded.dbPath

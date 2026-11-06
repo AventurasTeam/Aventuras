@@ -12,6 +12,7 @@ import { basename, dirname, isAbsolute, join, sep } from 'node:path'
 import { DatabaseSync } from 'node:sqlite'
 
 const DRAFT_PREFIX = '.dataset-export-'
+const MIN_SCANNED_KEY_LENGTH = 16
 
 const isDirectory = (path: string): boolean => existsSync(path) && statSync(path).isDirectory()
 
@@ -33,6 +34,17 @@ export function assertExportTarget(out: string): void {
   if (drafts.length > 0)
     throw new Error(
       `delete ${drafts.map((name) => join(dir, name)).join(', ')}: a killed export's draft, which can hold a provider key`,
+    )
+}
+
+/**
+ * Throws on a non-empty key under 16 characters: `exportScrubbed` refuses a copy holding a key's
+ * bytes anywhere, and a placeholder that short (`dev`) matches unrelated text after the drive.
+ */
+export function assertScannableKey(key: string): void {
+  if (key !== '' && key.length < MIN_SCANNED_KEY_LENGTH)
+    throw new Error(
+      `the provider key is ${key.length} characters, under ${MIN_SCANNED_KEY_LENGTH}: the export's byte scan for it would match unrelated text and refuse the export after the drive`,
     )
 }
 
