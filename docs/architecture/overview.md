@@ -472,7 +472,9 @@ has settled. Stop does not rewind either. Nothing writes the world before the na
 refused from the moment the narration is complete — the button dims and a tap explains — since nothing
 after it observes the abort. So a Stop on any turn leaves the action as the last entry, and the
 action's card offers **Generate a response** for any action nothing answers, however it got there
-(a Stop, a deleted narration, the app closing mid-turn).
+(a Stop, a deleted narration, the app closing mid-turn). While one does, Send waits and explains:
+a second action would bury the first, which nothing answers once another follows it. The input stays
+editable, so what the reader types is kept as a draft until the action has its answer.
 
 A press on Regenerate claims the branch at once (`ui.regeneratePending`), before the previews that
 precede the lease: the entries lock, and the store refuses a new generation or a branch switch as

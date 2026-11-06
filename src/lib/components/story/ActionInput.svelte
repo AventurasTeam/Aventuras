@@ -48,6 +48,7 @@
     trailingAction,
   } from '#lib/utils/storyEntries.ts'
   import { errMessage } from '#lib/utils/error.ts'
+  import { cn } from '#lib/utils/cn.ts'
   import {
     GenerationPipeline,
     retryService,
@@ -158,6 +159,11 @@
 
   // Block generation when any service is missing a model or has an invalid profile
   const blockGeneration = $derived(settings.hasGenerationConfigIssues)
+
+  // A second action would bury the first: nothing answers an action once another follows it.
+  const awaitingAnswer = $derived(!!trailingAction(story.entries))
+  const SEND_WAITS =
+    'Generate a response to the action above, or delete it, before sending another.'
 
   // ============================================================================
   // Action Type Configuration
@@ -1228,6 +1234,10 @@
 
   async function handleSubmit() {
     if (!inputValue.trim() || ui.isGenerating || ui.regeneratePending || !story.currentStory) return
+    if (awaitingAnswer) {
+      ui.showToast(SEND_WAITS, 'info')
+      return
+    }
     const currentStory = story.currentStory
 
     await withGenerationLease(async (lease) => {
@@ -1562,10 +1572,16 @@
         {:else}<button
             onclick={handleSubmit}
             disabled={!inputValue.trim() || blockGeneration}
-            class="text-accent-400 hover:text-accent-300 hover:bg-accent-500/10 flex h-11 w-11 flex-shrink-0 -translate-y-0.5 items-center justify-center rounded-lg p-0 transition-all active:scale-95 disabled:opacity-50 sm:translate-y-0"
+            aria-disabled={awaitingAnswer}
+            class={cn(
+              'text-accent-400 hover:text-accent-300 hover:bg-accent-500/10 flex size-11 shrink-0 -translate-y-0.5 items-center justify-center rounded-lg p-0 transition-all active:scale-95 disabled:opacity-50 sm:translate-y-0',
+              awaitingAnswer && 'cursor-not-allowed opacity-50',
+            )}
             title={blockGeneration
               ? 'AI configuration incomplete — check Settings'
-              : `Send direction (${sendKeyHint})`}><Send class="h-6 w-6" /></button
+              : awaitingAnswer
+                ? SEND_WAITS
+                : `Send direction (${sendKeyHint})`}><Send class="h-6 w-6" /></button
           >{/if}
       </div>
     </div>
@@ -1632,12 +1648,17 @@
         {:else}<button
             onclick={handleSubmit}
             disabled={!inputValue.trim() || blockGeneration}
-            class="flex h-11 w-11 shrink-0 items-center justify-center rounded-lg p-0 transition-all active:scale-95 disabled:opacity-50 {actionButtonStyles[
-              actionType
-            ]} -translate-y-0.5 sm:translate-y-0"
+            aria-disabled={awaitingAnswer}
+            class={cn(
+              'flex size-11 shrink-0 -translate-y-0.5 items-center justify-center rounded-lg p-0 transition-all active:scale-95 disabled:opacity-50 sm:translate-y-0',
+              actionButtonStyles[actionType],
+              awaitingAnswer && 'cursor-not-allowed opacity-50',
+            )}
             title={blockGeneration
               ? 'AI configuration incomplete — check Settings'
-              : `Send (${sendKeyHint})`}><Send class="h-6 w-6" /></button
+              : awaitingAnswer
+                ? SEND_WAITS
+                : `Send (${sendKeyHint})`}><Send class="h-6 w-6" /></button
           >{/if}
       </div>
     </div>
