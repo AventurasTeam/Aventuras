@@ -6,7 +6,7 @@ import { extname, join, normalize } from 'node:path'
 
 import { _electron as electron, test, type ElectronApplication, type Page } from '@playwright/test'
 
-import { startDisplay, type Display } from './display'
+import { startDisplay, trackClient, type Display } from './display'
 
 const REPO_ROOT = join(__dirname, '..', '..')
 const DIST = join(REPO_ROOT, 'dist')
@@ -113,14 +113,17 @@ async function closeApp(app: ElectronApplication, proc: ChildProcess): Promise<v
   await closing
 }
 
-// After the app: an X server stopped under a live app takes the app down mid-close.
+// After the app, which left without its X server spins and ignores SIGTERM. Never throws, so the
+// cleanup after it runs: an Xvfb that outlives SIGKILL is stuck in the kernel.
 const stopDisplay = async (display: Display) => {
-  if (display.server) await stopAppProcess(display.server)
+  if (display.server) await stopAppProcess(display.server).catch(() => {})
 }
 
 export type LaunchedApp = {
   app: ElectronApplication
   window: Page
+  /** The app's own virtual display, or none on the real screen. */
+  display: Display
   close: () => Promise<void>
 }
 
@@ -155,6 +158,7 @@ export async function launchApp(opts: {
       return {
         app: launched,
         window,
+        display,
         // finally so a failing app.close() still cleans up the temp dir.
         close: async () => {
           try {
@@ -188,6 +192,7 @@ export async function launchApp(opts: {
     return {
       app: launched,
       window,
+      display,
       // Each step runs regardless of an earlier failure — a throwing
       // app.close() must not leave the server holding the worker open.
       close: async () => {
@@ -243,8 +248,9 @@ export async function spawnAppProcess(userDataDir: string): Promise<SpawnedApp> 
   })
   // exitWithin reports a failed spawn; unheard, the 'error' event would crash the worker first.
   proc.on('error', () => {})
-  // The process outlives this call, so its display goes with it; a stuck one falls to the exit hook.
-  const release = () => void stopDisplay(display).catch(() => {})
+  trackClient(proc)
+  // The process outlives this call, so its display goes when it does.
+  const release = () => void stopDisplay(display)
   proc.once('exit', release)
   proc.once('error', release)
   return { process: proc, stderr: () => stderr }

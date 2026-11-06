@@ -155,8 +155,7 @@ test.describe('turn creates — the tagged block', () => {
   let userDataDir: string | undefined
 
   test.beforeAll(async () => {
-    // Retrieval blocks ahead of narrative, so a turn needs an installed embedder. Cold cache
-    // downloads ~24 MB from Hugging Face before launch.
+    // Retrieval blocks ahead of narrative, so a turn needs an installed embedder.
     test.setTimeout(180_000)
     const seeded = createSeededUserDataDir()
     userDataDir = seeded.userDataDir

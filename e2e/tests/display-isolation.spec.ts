@@ -1,3 +1,5 @@
+import type { ChildProcess } from 'node:child_process'
+
 import { expect, test } from '@playwright/test'
 
 import { launchApp, type LaunchedApp } from '../harness/launch'
@@ -41,4 +43,20 @@ test('a second launch leaves the first window focused', async () => {
   } finally {
     await first.close()
   }
+})
+
+const hasExited = (proc: ChildProcess | undefined): boolean =>
+  proc !== undefined && (proc.exitCode !== null || proc.signalCode !== null)
+
+test('closing a launch stops its display', async () => {
+  test.skip(process.env.E2E_VIRTUAL_DISPLAY !== '1', 'real windows share the one screen')
+  const app = await launch()
+  const server = app.display.server
+  try {
+    expect(server?.pid).toBeDefined()
+    expect(hasExited(server)).toBe(false)
+  } finally {
+    await app.close()
+  }
+  expect(hasExited(server)).toBe(true)
 })

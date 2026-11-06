@@ -109,10 +109,10 @@ jobs:
       - name: Run story tests
         run: pnpm exec vitest run --project storybook
 
-  # Sharded across runners: each shard builds its own package, which costs less
-  # than a build job the shards would wait on (docs/testing.md → CI).
+  # Sharded across runners. Each shard builds its own package: a build job would
+  # sit in front of every shard (docs/testing.md → CI).
   e2e:
-    name: E2E shard ${{ matrix.shard }}/3
+    name: E2E shard ${{ matrix.shard }}/${{ strategy.job-total }}
     runs-on: ubuntu-24.04
     timeout-minutes: 20
     strategy:
@@ -182,7 +182,7 @@ jobs:
       # start a virtual display per launch (scripts/e2e.ts). The packaged project
       # launches the built binary; the harness seeds a throwaway userData per launch.
       - name: Run E2E (packaged, headless via xvfb)
-        run: pnpm test:e2e:packaged --shard=${{ matrix.shard }}/3
+        run: pnpm test:e2e:packaged --shard=${{ matrix.shard }}/${{ strategy.job-total }}
 
       - name: Save embedder model cache
         if: matrix.shard == 1 && github.ref == 'refs/heads/main' && steps.embedder-cache.outputs.cache-hit != 'true'

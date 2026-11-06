@@ -18,10 +18,19 @@ export type Display = {
 }
 
 const running = new Set<ChildProcess>()
-// A worker that dies mid-test never reaches its launches' close.
+const clients = new Set<ChildProcess>()
+// A worker that throws mid-test never reaches its launches' close. Clients go first: Electron
+// left without its X server spins and ignores SIGTERM. A SIGKILLed worker runs no hook at all.
 process.on('exit', () => {
+  for (const client of clients) client.kill('SIGKILL')
   for (const server of running) server.kill()
 })
+
+/** An app process outside Playwright, which kills its own launches on exit. */
+export function trackClient(proc: ChildProcess): void {
+  clients.add(proc)
+  proc.once('exit', () => clients.delete(proc))
+}
 
 /** A fresh virtual display when scripts/e2e.ts asked for one, else the inherited screen. */
 export function startDisplay(): Promise<Display> {

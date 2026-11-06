@@ -16,7 +16,7 @@ import { reader } from '../locators/reader'
 // reversing it also takes later turns with it. Both paths asserted through
 // the DB. See docs/testing.md → Coverage.
 //
-// Each test builds on the one before's state, hence 'serial': workers:1 only orders tests, and
+// Each test builds on the one before's state, hence 'serial': a file's one worker only orders tests, and
 // a retry's new worker reseeds the DB, which a later test would then run on instead of skipping.
 const REPLY_1 = 'E2E-REGEN-R1 the courier reads the letter twice.'
 const REPLY_2 = 'E2E-REGEN-R2 the courier burns the letter unread.'
@@ -35,8 +35,7 @@ test.describe('reader — regenerate a reply', () => {
 
   test.beforeAll(async () => {
     // Retrieval blocks ahead of narrative, so a turn without an installed
-    // embedder never reaches the reply. Cold cache downloads ~24 MB from
-    // Hugging Face before launch.
+    // embedder never reaches the reply.
     test.setTimeout(180_000)
     const seeded = createSeededUserDataDir()
     userDataDir = seeded.userDataDir

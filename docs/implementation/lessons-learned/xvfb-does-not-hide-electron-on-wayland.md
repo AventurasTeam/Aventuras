@@ -31,7 +31,8 @@ const ozoneArgs = process.env.E2E_VIRTUAL_DISPLAY === '1' ? ['--ozone-platform=x
 
 `scripts/e2e.ts` sets the variable, `e2e/harness/display.ts` starts an
 Xvfb per launch under it, and `e2e/harness/launch.ts` adds the switch.
-Both halves are load-bearing — neither hides anything on its own.
+The display and the switch are both load-bearing — neither hides
+anything on its own.
 
 Note that `--ozone-platform=headless` is not an alternative: it
 segfaults in the GLX stack on Electron 41, with or without

@@ -30,7 +30,7 @@ test.describe('reader — turn failure then retry', () => {
     // Retrieval blocks ahead of narrative, so without an installed embedder the
     // turn fails there first — and an `embedder`-kind failure is a DIFFERENT
     // system entry (Switch embedder, describeTurnFailure) than the provider one
-    // this spec pins. Cold cache downloads ~24 MB from Hugging Face.
+    // this spec pins.
     test.setTimeout(180_000)
     const seeded = createSeededUserDataDir()
     userDataDir = seeded.userDataDir
@@ -98,7 +98,7 @@ test.describe('reader — a reply cut off at its length limit', () => {
   let userDataDir: string | undefined
 
   test.beforeAll(async () => {
-    // Retrieval blocks narrative: no installed embedder, no reply. Cold cache downloads ~24 MB.
+    // Retrieval blocks narrative: no installed embedder, no reply.
     test.setTimeout(180_000)
     const seeded = createSeededUserDataDir()
     userDataDir = seeded.userDataDir

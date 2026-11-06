@@ -87,7 +87,7 @@ test.describe('next-turn suggestions — narrative (piggyback) fold', () => {
   test.beforeAll(async () => {
     // Retrieval blocks ahead of narrative, so a turn without an installed
     // embedder never reaches the reply (model-management.md → Embed failure is
-    // blocking). Cold cache downloads ~24 MB from Hugging Face before launch.
+    // blocking).
     test.setTimeout(180_000)
     const seeded = createSeededUserDataDir()
     userDataDir = seeded.userDataDir
@@ -241,7 +241,7 @@ test.describe('next-turn suggestions — classifier fold', () => {
   test.beforeAll(async () => {
     // Retrieval blocks ahead of narrative, so a turn without an installed
     // embedder never reaches the reply (model-management.md → Embed failure is
-    // blocking). Cold cache downloads ~24 MB from Hugging Face before launch.
+    // blocking).
     test.setTimeout(180_000)
     const seeded = createSeededUserDataDir()
     userDataDir = seeded.userDataDir

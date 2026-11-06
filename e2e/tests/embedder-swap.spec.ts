@@ -100,7 +100,6 @@ test.describe('embedder — story settings swap flow', () => {
   let dim: number
 
   test.beforeAll(async () => {
-    // Cold cache downloads ~24 MB once; the second install reuses that cache.
     test.setTimeout(180_000)
     const seeded = createSeededUserDataDir()
     userDataDir = seeded.userDataDir

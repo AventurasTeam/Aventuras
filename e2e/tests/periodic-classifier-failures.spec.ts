@@ -37,7 +37,7 @@ test.describe('periodic classifier — failure policy', () => {
   let parked: number
 
   test.beforeAll(async () => {
-    // Retrieval blocks narrative: no installed embedder, no reply. Cold cache downloads ~24 MB.
+    // Retrieval blocks narrative: no installed embedder, no reply.
     test.setTimeout(180_000)
     const seeded = createSeededUserDataDir()
     userDataDir = seeded.userDataDir
@@ -242,7 +242,7 @@ test.describe('periodic classifier — a pass reply cut off at its length limit'
   let parked: number
 
   test.beforeAll(async () => {
-    // Retrieval blocks narrative: no installed embedder, no reply. Cold cache downloads ~24 MB.
+    // Retrieval blocks narrative: no installed embedder, no reply.
     test.setTimeout(180_000)
     const seeded = createSeededUserDataDir()
     userDataDir = seeded.userDataDir
@@ -348,7 +348,7 @@ test.describe('periodic classifier — a pass the provider rejects as over the w
   let parked: number
 
   test.beforeAll(async () => {
-    // Retrieval blocks narrative: no installed embedder, no reply. Cold cache downloads ~24 MB.
+    // Retrieval blocks narrative: no installed embedder, no reply.
     test.setTimeout(180_000)
     const seeded = createSeededUserDataDir()
     userDataDir = seeded.userDataDir
@@ -473,7 +473,7 @@ test.describe('periodic classifier — an owed pass across a restart', () => {
   let parked: number
 
   test.beforeAll(async () => {
-    // Retrieval blocks narrative: no installed embedder, no reply. Cold cache downloads ~24 MB.
+    // Retrieval blocks narrative: no installed embedder, no reply.
     test.setTimeout(180_000)
     const seeded = createSeededUserDataDir()
     userDataDir = seeded.userDataDir

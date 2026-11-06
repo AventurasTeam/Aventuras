@@ -76,7 +76,7 @@ test.describe('context window — a turn over a configured window', () => {
   const WINDOW = 100
 
   test.beforeAll(async () => {
-    // Retrieval blocks narrative: no embedder, no call to refuse. Cold cache downloads ~24 MB.
+    // Retrieval blocks narrative: no embedder, no call to refuse.
     test.setTimeout(180_000)
     const seeded = createSeededUserDataDir()
     userDataDir = seeded.userDataDir
@@ -140,7 +140,7 @@ test.describe('context window — a provider overflow, then the truncation cross
   let fullPrompt = 0
 
   test.beforeAll(async () => {
-    // Retrieval blocks narrative: no installed embedder, no reply. Cold cache downloads ~24 MB.
+    // Retrieval blocks narrative: no installed embedder, no reply.
     test.setTimeout(180_000)
     const seeded = createSeededUserDataDir()
     userDataDir = seeded.userDataDir

@@ -19,7 +19,7 @@ test.describe('reader turn against the mock LLM', () => {
   test.beforeAll(async () => {
     // Retrieval blocks ahead of narrative, so a turn without an installed
     // embedder never reaches the reply (model-management.md → Embed failure is
-    // blocking). Cold cache downloads ~24 MB from Hugging Face before launch.
+    // blocking).
     test.setTimeout(180_000)
     const seeded = createSeededUserDataDir()
     userDataDir = seeded.userDataDir

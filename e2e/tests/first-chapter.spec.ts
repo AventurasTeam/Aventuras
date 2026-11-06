@@ -40,7 +40,6 @@ test.describe('first chapter — a close from the dev route', () => {
   let embedder: { modelId: string; dim: number }
 
   test.beforeAll(async () => {
-    // A cold embedder cache downloads ~24 MB before launch.
     test.setTimeout(180_000)
     const seeded = createSeededUserDataDir()
     userDataDir = seeded.userDataDir

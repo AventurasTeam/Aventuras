@@ -33,7 +33,7 @@ test.describe('periodic classifier — graph population', () => {
 
   test.beforeAll(async () => {
     // Retrieval blocks ahead of narrative, so a turn without an installed
-    // embedder never reaches the reply. Cold cache downloads ~24 MB.
+    // embedder never reaches the reply.
     test.setTimeout(180_000)
     const seeded = createSeededUserDataDir()
     userDataDir = seeded.userDataDir
@@ -400,7 +400,6 @@ test.describe('periodic classifier — disambiguation seam', () => {
   let userDataDir: string | undefined
 
   test.beforeAll(async () => {
-    // Cold cache downloads ~24 MB from Hugging Face before launch.
     test.setTimeout(180_000)
     const seeded = createSeededUserDataDir()
     userDataDir = seeded.userDataDir
@@ -487,7 +486,7 @@ test.describe('periodic classifier — backlog deeper than the reader window', (
 
   test.beforeAll(async () => {
     // Retrieval blocks ahead of narrative, so a turn without an installed
-    // embedder never reaches the reply. Cold cache downloads ~24 MB.
+    // embedder never reaches the reply.
     test.setTimeout(180_000)
     const seeded = createSeededUserDataDir()
     userDataDir = seeded.userDataDir
@@ -563,7 +562,7 @@ test.describe('periodic classifier — unassigned agent', () => {
 
   test.beforeAll(async () => {
     // Retrieval blocks ahead of narrative, so a turn without an installed
-    // embedder never reaches the reply. Cold cache downloads ~24 MB.
+    // embedder never reaches the reply.
     test.setTimeout(180_000)
     const seeded = createSeededUserDataDir()
     userDataDir = seeded.userDataDir

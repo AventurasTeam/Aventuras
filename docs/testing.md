@@ -172,10 +172,10 @@ parallel [workers](#workers) on one shared display, a launch in one
 worker closed a dropdown another worker's spec was about to click.
 `display-isolation.spec.ts` pins the separation.
 
-The screen is pinned at `1920x1080x24`: `xvfb-run` defaults to
-640x480, which clips the 1280x800 `BrowserWindow` and drops the
-renderer below the 1024px desktop breakpoint, and Xvfb's own default
-varies by build.
+The screen is pinned at `1920x1080x24` rather than Xvfb's default,
+which varies by build: a screen smaller than the 1280x800
+`BrowserWindow` drops the renderer below the 1024px desktop
+breakpoint, and the suite would silently exercise the narrow layout.
 
 **Xvfb alone is not sufficient on a Wayland session.** It only sets
 `DISPLAY`, which Electron ignores in favour of the compositor — the
@@ -197,32 +197,38 @@ display shows up as a socket in `/tmp/.X11-unix/`, and
 1280x800 `Aventuras` window (and in `dev`, an 800x600
 `Developer Tools` one).
 
-Two consequences worth knowing:
+Three consequences worth knowing:
 
 - **Install is per-machine.** Arch: `xorg-server-xvfb`;
   Debian/Ubuntu: `xvfb` (also pulled by `playwright install-deps`).
   Missing, the wrapper warns and runs headed rather than failing.
   On macOS/Windows it is a no-op passthrough.
-- **Each window is alone on its display**, so it always holds the
-  focus. Playwright drives input over CDP, and DOM focus is
-  unaffected — but a spec asserting on `win.isFocused()` or a blur
-  from another window would pass here while being effectively
+- **No other launch shares a display**, so the app window keeps the
+  focus; in `dev` only its own detached DevTools window is beside it.
+  Playwright drives input over CDP, and DOM focus is unaffected — but
+  a spec asserting on `win.isFocused()` or a blur from another window
+  would pass here while being effectively
   untested. Set `E2E_HEADED=1` to run on the real display when
   watching a run or debugging one of those. `--ui`, `--debug`,
   `--headed` and `PWDEBUG=1` opt out on their own — hiding the
   inspector a developer just asked for would be the wrapper defeating
   its own user.
+- **A SIGKILLed worker leaves its displays behind.** A launch stops
+  its Xvfb on close, and a worker that throws kills what is left from
+  an exit hook, apps first: Electron whose X server is gone spins and
+  ignores SIGTERM. A worker killed outright (the OOM killer, a
+  `kill -9`) runs no hook, so its Xvfb and apps outlive the run.
 
 ### Workers
 
 Spec files run in parallel, one file to a worker
 (`fullyParallel: false`): a file's tests share the app its `beforeAll`
-launched, and a serial describe builds on the test before. Nothing a
-launch touches is shared: each one seeds its own temp `userData`
-([below](#fixture--seed-contract)), takes its own ports (the mock LLM,
-`dev`'s static server and the DevTools port all bind `0`) and its own
-[display](#virtual-display), and with it its own clipboard, and
-Electron keys its single-instance lock on `userData`. A spec must keep it that way — no fixed port, no
+launched, and a serial describe builds on the test before. Nothing
+one file touches is another's: each seeds its own temp `userData`
+([below](#fixture--seed-contract)), each launch takes its own ports
+(the mock LLM, `dev`'s static server and the DevTools port all bind
+`0`) and its own [display](#virtual-display), and with it its own
+clipboard, and Electron keys its single-instance lock on `userData`. A spec must keep it that way — no fixed port, no
 path outside its temp dir, nothing written to the home directory but
 the embedder cache.
 
@@ -320,8 +326,9 @@ is the one for the renderer writing it.
 
 ## Fixture + seed contract
 
-Fixtures are **built at test time**, not checked in. Per launch, the
-harness creates a fresh temp `userData` dir, runs the
+Fixtures are **built at test time**, not checked in. For each spec's
+setup, usually a describe's `beforeAll`, the harness creates a fresh
+temp `userData` dir, runs the
 seed dataset into `<userData>/aventuras.db`, and copies a fixture
 embedder model into `<userData>/embedders/` (below). `--user-data-dir`
 points Electron at it, giving isolation and seeding for free —
@@ -437,7 +444,9 @@ the machinery under test.
   a dev slot's `userData/embedders`. The download runs in
   `globalSetup`, before any worker starts: workers provisioning a
   cold cache themselves would delete the directory another is copying
-  from. CI keeps the directory in its cache, keyed on the catalog.
+  from. So a run on a cold cache needs Hugging Face, even one filtered
+  to specs that never embed. CI keeps the directory in its cache,
+  keyed on the catalog.
 - **Download flow is not E2E-tested — manual only.**
   `assertAllowedDownloadUrl` (`electron/embedder/paths.ts`) hardcodes a
   single allowed origin, so the download IPC path can't target a local

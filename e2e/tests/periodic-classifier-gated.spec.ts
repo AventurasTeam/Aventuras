@@ -60,7 +60,7 @@ test.describe('periodic classifier — the gated pass', () => {
   let userDataDir: string | undefined
 
   test.beforeAll(async () => {
-    // Retrieval blocks narrative: no installed embedder, no reply. Cold cache downloads ~24 MB.
+    // Retrieval blocks narrative: no installed embedder, no reply.
     test.setTimeout(180_000)
     const seeded = createSeededUserDataDir()
     userDataDir = seeded.userDataDir
