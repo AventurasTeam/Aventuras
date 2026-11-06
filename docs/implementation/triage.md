@@ -203,3 +203,20 @@ slice-planning gate forces its resolution before that slice is planned.
   documents the hand copy for the Android measure only. One candidate,
   undecided: seeding a slot (no explicit path) installs the default
   catalog model from that cache, or the worktree setup does.
+- **The E2E embedder cache is shared across checkouts on any catalog
+  revision.** `ensureEmbedderModel` (`e2e/harness/embedder.ts`) deletes
+  and rebuilds `~/.cache/aventuras-e2e/embedders/<model>` when its
+  marker names another revision. Two suites on branches with different
+  catalog revisions, in two worktrees say, rebuild it under each other,
+  and one can copy a half-written model into a run. `globalSetup`
+  closed the same race between one run's workers; across runs it stays.
+  One candidate: a directory per revision. Surfaced by the review of
+  the parallel E2E change.
+- **`scripts/e2e.ts` doesn't pass a SIGTERM on.** A `timeout`, or a
+  stopped job that signals the wrapper alone, leaves Playwright running
+  the rest of the suite unparented. Forwarding SIGTERM made the runner
+  exit at once and leave its workers to wind down for about 50 s;
+  translating it to SIGINT, Playwright's graceful stop, didn't print the
+  interrupted summary either, and the `tsx` and `pnpm` relay in between
+  wasn't traced. With parallel workers an orphaned run now finishes in
+  under 2 minutes. Surfaced by the same review.

@@ -37,9 +37,8 @@ export default defineConfig({
   fullyParallel: false,
   timeout: 90_000,
   expect: { timeout: 10_000 },
-  // A real app launched per spec has occasional window/IPC timing hiccups; one
-  // retry absorbs a transient without masking a real failure (a bug fails both
-  // attempts).
+  // Absorbs a real app's window/IPC timing hiccup without masking a bug, which
+  // fails both attempts.
   retries: 1,
   // Deterministic: the github reporter is a no-op outside GitHub Actions, so
   // both run everywhere without an env check.

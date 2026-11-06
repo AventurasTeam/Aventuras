@@ -172,12 +172,9 @@ if (process.platform === 'linux' && !headed && !virtualDisplay) {
   )
 }
 
-// The flag makes the harness start an Xvfb per launch and pin the X11 ozone
-// backend: on a Wayland session Electron ignores DISPLAY and connects to the
-// compositor, so the window would open on the real screen while the virtual
-// server sits empty. Only the command-line switch pins it
-// (ELECTRON_OZONE_PLATFORM_HINT has no effect, and clearing WAYLAND_DISPLAY
-// does not help — Wayland clients fall back to the default wayland-0 socket).
+// The flag makes the harness start an Xvfb per launch and pass --ozone-platform=x11: on Wayland,
+// Electron ignores DISPLAY and opens on the real screen. ELECTRON_OZONE_PLATFORM_HINT has no
+// effect, and clearing WAYLAND_DISPLAY falls back to the default wayland-0 socket.
 const childEnv = { ...process.env }
 if (virtualDisplay) childEnv.E2E_VIRTUAL_DISPLAY = '1'
 

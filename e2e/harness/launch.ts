@@ -31,10 +31,8 @@ const DEV_ELECTRON = join(REPO_ROOT, 'node_modules', 'electron', 'dist', 'electr
 
 const APP_SCHEME_ORIGIN = 'app://'
 
-// Each launch gets its own Xvfb (./display), but on a Wayland session Electron
-// ignores DISPLAY and connects to the compositor — the window opens on the
-// developer's real screen and Xvfb stays empty. Only this switch pins the
-// backend; the env-var hint is ignored.
+// On Wayland, Electron ignores DISPLAY and opens on the real screen, leaving its Xvfb (./display)
+// empty. Only this switch pins X11; the env-var hint is ignored.
 const ozoneArgs = process.env.E2E_VIRTUAL_DISPLAY === '1' ? ['--ozone-platform=x11'] : []
 
 const MIME: Record<string, string> = {
