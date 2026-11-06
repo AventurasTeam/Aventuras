@@ -46,7 +46,7 @@ async function main() {
     sqlite.close()
   }
   // Beside the target and renamed, so a stop mid-write leaves the last seed whole.
-  const draft = `${DATASET_SEED_PATH}.tmp`
+  const draft = `${DATASET_SEED_PATH}.${process.pid}.tmp`
   writeFileSync(draft, json)
   renameSync(draft, DATASET_SEED_PATH)
   console.log(`[dataset:export-seed] ${storyId} from ${dbPath} -> ${DATASET_SEED_PATH}`)
