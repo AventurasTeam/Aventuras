@@ -150,7 +150,7 @@ export function completionBody(
   return completionEnvelope({ role: 'assistant', content }, finishReason, usage)
 }
 
-/** One reply to a request carrying tools, as both mocks script it. */
+/** One reply to a request carrying tools. */
 export type MockToolStep = {
   text?: string
   reasoning?: string
@@ -168,7 +168,7 @@ export function toolStepFinish(step: MockToolStep): FinishReason {
 // An absent `args` would drop the `arguments` key, which the client's schema requires.
 export function argumentsOf(args: unknown): string {
   if (typeof args === 'string') return args
-  return args === undefined ? '{}' : JSON.stringify(args)
+  return JSON.stringify(args) ?? '{}'
 }
 
 export function toolStepBody(step: MockToolStep, usage?: MockUsage): string {

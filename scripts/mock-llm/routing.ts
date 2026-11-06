@@ -45,7 +45,6 @@ export function promptText(body: Record<string, unknown>): string {
   return messagesOf(body).map(contentText).join('\n')
 }
 
-// What a message carries besides its content: the calls it made and its reasoning.
 function callsAndReasoningText(message: unknown): string[] {
   const { tool_calls: calls, reasoning_content: reasoning } = message as {
     tool_calls?: unknown
@@ -62,7 +61,8 @@ function callsAndReasoningText(message: unknown): string[] {
 
 /**
  * A tool request's prompt as a server counts it: `promptText`, the tool definitions, and each
- * message's calls and reasoning, as the app's own estimate counts them.
+ * message's calls and reasoning. Close to the app's estimate, not equal: a tool result's name
+ * isn't on the wire.
  */
 export function toolPromptText(body: Record<string, unknown>): string {
   return [

@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 
 import {
+  argumentsOf,
   completionBody,
   toolStepBody,
   toolStepCompletionText,
@@ -106,6 +107,13 @@ describe('toolStepBody', () => {
   it('reports usage when given, and none when not', () => {
     expect(JSON.parse(toolStepBody({}, USAGE))).toMatchObject({ usage: USAGE })
     expect(JSON.parse(toolStepBody({}))).not.toHaveProperty('usage')
+  })
+})
+
+describe('argumentsOf', () => {
+  it('sends an args JSON cannot represent as an empty object', () => {
+    expect(argumentsOf(() => 1)).toBe('{}')
+    expect(argumentsOf(undefined)).toBe('{}')
   })
 })
 

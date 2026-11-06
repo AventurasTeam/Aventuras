@@ -277,6 +277,7 @@ describe('tool lanes', () => {
     expect(counted).toContain('Kael first; the ledger can wait.')
     expect(counted).toContain('{"id":"c1"}')
     expect(counted).toContain('Kael Ashwater, a diver.')
+    expect(counted.endsWith('\nKael first; the ledger can wait.\nread_row\n{"id":"c1"}')).toBe(true)
   })
 })
 
