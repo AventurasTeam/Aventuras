@@ -1,4 +1,4 @@
-import { copyFileSync, existsSync } from 'node:fs'
+import { copyFileSync, existsSync, readFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { DatabaseSync } from 'node:sqlite'
 
@@ -6,6 +6,7 @@ import { expect, test, type Page } from '@playwright/test'
 
 import { modelProfileSchema, providerInstanceSchema } from '@/lib/db'
 
+import { scrubProviderKeys } from '../../scripts/dataset-chapter/export'
 import {
   DATASET_TOKEN_BAND,
   datasetTokens,
@@ -27,7 +28,7 @@ import { wizard } from '../locators/wizard'
 // Builds the dataset chapter (docs/testing.md → Real-provider checks): a played story to measure a
 // close on. The harness mock narrates the committed replies; a real model classifies. Opt-in:
 //   DATASET_CHAPTER_OUT=<file> SMOKE_LLM_URL=http://host:port/v1 SMOKE_LLM_MODEL=<id> pnpm dataset:chapter
-// SMOKE_LLM_KEY sets the real server's API key, for a hosted one; none by default.
+// SMOKE_LLM_KEY sets the real server's API key, for a hosted one; none by default. The export blanks it.
 const OUT = process.env.DATASET_CHAPTER_OUT
 const LLM_URL = process.env.SMOKE_LLM_URL
 const LLM_MODEL = process.env.SMOKE_LLM_MODEL
@@ -443,6 +444,10 @@ function exportDatabase(dbPath: string, out: string): void {
     expect(existsSync(`${dbPath}${suffix}`), `${dbPath}${suffix} after recovery`).toBe(false)
   assertExportTarget(out)
   copyFileSync(dbPath, out)
+  scrubProviderKeys(out)
+  assertExportTarget(out)
+  if (LLM_KEY !== '')
+    expect(readFileSync(out).includes(LLM_KEY), 'the export holds no provider key').toBe(false)
 }
 
 test.describe('dataset chapter — build', () => {

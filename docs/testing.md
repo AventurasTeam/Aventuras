@@ -521,9 +521,9 @@ the opening. It copies the database, with no journal or WAL beside it, to
 `DATASET_CHAPTER_OUT` and prints the branch, for `AVENTURAS_DB_PATH`,
 `pnpm device:push-db` and `PROBE_BRANCH_ID`. The file stays out of git
 ([Fixture + seed contract](#fixture--seed-contract)), and a rebuild
-writes different classifier rows. The copy holds the provider settings
-as the build wrote them, `SMOKE_LLM_KEY` included, so a hosted key
-leaves with the file.
+writes different classifier rows. The copy has every provider's API key
+blanked, `SMOKE_LLM_KEY` included, and is vacuumed, so no key leaves with
+the file.
 
 ## Selector strategy
 
