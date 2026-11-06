@@ -230,11 +230,13 @@
       },
       "capabilityHint": {
         "reasoning": "The provider rejected the request. Its message mentions `{{matched}}`. That can mean this model doesn't support reasoning: check the profile's thinking setting and the model's 🧠 badge. The provider may also have rejected the request for another reason.",
-        "structuredOutput": "The provider rejected the request. Its message mentions `{{matched}}`. That can mean this model doesn't support structured output: check the profile's structured-output setting and the model's badge. The provider may also have rejected the request for another reason."
+        "structuredOutput": "The provider rejected the request. Its message mentions `{{matched}}`. That can mean this model doesn't support structured output: check the profile's structured-output setting and the model's badge. The provider may also have rejected the request for another reason.",
+        "toolCalling": "The provider rejected the request. Its message mentions `{{matched}}`. That can mean this model doesn't support tool calling. The provider may also have rejected the request for another reason."
       },
       "memoryCapabilityHint": {
         "reasoning": "Memory update failed, so your turn didn't start. The provider rejected the update's request. Its message mentions `{{matched}}`. That can mean this model doesn't support reasoning: check the profile's thinking setting and the model's 🧠 badge. The provider may also have rejected the request for another reason.",
-        "structuredOutput": "Memory update failed, so your turn didn't start. The provider rejected the update's request. Its message mentions `{{matched}}`. That can mean this model doesn't support structured output: check the profile's structured-output setting and the model's badge. The provider may also have rejected the request for another reason."
+        "structuredOutput": "Memory update failed, so your turn didn't start. The provider rejected the update's request. Its message mentions `{{matched}}`. That can mean this model doesn't support structured output: check the profile's structured-output setting and the model's badge. The provider may also have rejected the request for another reason.",
+        "toolCalling": "Memory update failed, so your turn didn't start. The provider rejected the update's request. Its message mentions `{{matched}}`. That can mean this model doesn't support tool calling. The provider may also have rejected the request for another reason."
       }
     }
   },

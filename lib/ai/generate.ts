@@ -182,6 +182,7 @@ function carriedCapabilities() {
           'type' in thinking &&
           thinking.type === 'enabled',
         structuredOutput: params.responseFormat?.type === 'json',
+        toolCalling: (params.tools?.length ?? 0) > 0,
       }
       return params
     },

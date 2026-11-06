@@ -287,6 +287,23 @@ describe('the capability hint', () => {
     ).toBeUndefined()
   })
 
+  // carriedCapabilities reads toolCalling from the request's tools, which neither call sends.
+  it.each(['tool_choice is not supported by this model', 'tools are not supported by this model'])(
+    'gives no tool-calling hint for %j on a narrative or a structured call',
+    async (message) => {
+      rejection = rejectionOf(message)
+
+      expect(await narrativeHint(useProvider('openai-compatible'))).toBeUndefined()
+      expect(lastBody()).not.toHaveProperty('tools')
+
+      bodies = []
+      const error = await structuredFailure(useProvider('openai-compatible'))
+      expect(lastBody()).not.toHaveProperty('tools')
+      expect(error).toMatchObject({ tier: 'provider' })
+      expect(error).not.toHaveProperty('possibleCapabilityMismatch')
+    },
+  )
+
   it('gives the narrative no structured hint: it sends no response format', async () => {
     rejection = rejectionOf('response_format is not supported by this model')
 

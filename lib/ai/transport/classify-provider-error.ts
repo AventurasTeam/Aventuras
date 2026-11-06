@@ -94,14 +94,19 @@ const OVERFLOW_KEYWORDS = [
 ] as const
 
 // Parameter names before generic words, so "json_schema not supported for reasoning models"
-// points at structured output.
+// points at structured output; tool_choice, the narrower parameter, before tools.
 const CAPABILITY_HINT_KEYWORDS = [
   { matched: 'response_format', capability: 'structuredOutput' },
   { matched: 'json_schema', capability: 'structuredOutput' },
   { matched: 'budget_tokens', capability: 'reasoning' },
+  { matched: 'tool_choice', capability: 'toolCalling' },
+  { matched: 'tools', capability: 'toolCalling' },
   { matched: 'thinking', capability: 'reasoning' },
   { matched: 'reasoning', capability: 'reasoning' },
-] as const satisfies readonly { matched: string; capability: 'reasoning' | 'structuredOutput' }[]
+] as const satisfies readonly {
+  matched: string
+  capability: 'reasoning' | 'structuredOutput' | 'toolCalling'
+}[]
 
 /**
  * generation-pipeline.md → Fatal error categories: a best-effort hint, never an assertion.
@@ -112,7 +117,11 @@ export type CapabilityHint = (typeof CAPABILITY_HINT_KEYWORDS)[number]
 /** Which capabilities a request as sent carried; a hint names no other. */
 export type CarriedCapabilities = Readonly<Record<CapabilityHint['capability'], boolean>>
 
-export const CARRIED_NOTHING: CarriedCapabilities = { reasoning: false, structuredOutput: false }
+export const CARRIED_NOTHING: CarriedCapabilities = {
+  reasoning: false,
+  structuredOutput: false,
+  toolCalling: false,
+}
 
 // A 2xx APICallError is a successful reply the SDK couldn't read: its body is the model's own text.
 function isRejection(error: unknown): error is APICallError & { statusCode: number } {
