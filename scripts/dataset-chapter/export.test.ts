@@ -1,11 +1,11 @@
-import { mkdtempSync, readFileSync } from 'node:fs'
+import { existsSync, mkdtempSync, readdirSync, readFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { DatabaseSync } from 'node:sqlite'
 
 import { describe, expect, it } from 'vitest'
 
-import { scrubProviderKeys } from './export'
+import { exportScrubbed, scrubProviderKeys } from './export'
 
 const KEY = 'sk-dataset-test-0123456789abcdef'
 const MODELS = Array.from({ length: 300 }, (_, i) => ({
@@ -50,5 +50,40 @@ describe('scrubProviderKeys', () => {
     expect(readFileSync(path).includes(KEY)).toBe(true)
     scrubProviderKeys(path)
     expect(readFileSync(path).includes(KEY)).toBe(false)
+  })
+})
+
+describe('exportScrubbed', () => {
+  it('publishes a scrubbed copy at the target and leaves nothing else beside it', () => {
+    const src = settingsDb()
+    const dir = mkdtempSync(join(tmpdir(), 'dataset-out-'))
+    const out = join(dir, 'dataset.db')
+    exportScrubbed(src, out, [KEY])
+    expect(readFileSync(out).includes(KEY)).toBe(false)
+    expect(readdirSync(dir)).toEqual(['dataset.db'])
+  })
+
+  it('publishes nothing when the scrub fails', () => {
+    const src = join(mkdtempSync(join(tmpdir(), 'dataset-export-')), 'no-settings.db')
+    const db = new DatabaseSync(src)
+    db.exec(`CREATE TABLE app_settings (id TEXT PRIMARY KEY, providers TEXT NOT NULL)`)
+    db.close()
+    const dir = mkdtempSync(join(tmpdir(), 'dataset-out-'))
+    const out = join(dir, 'dataset.db')
+    expect(() => exportScrubbed(src, out, [KEY])).toThrow(/holds no app settings/)
+    expect(existsSync(out)).toBe(false)
+    expect(readdirSync(dir)).toEqual([])
+  })
+
+  it('publishes nothing when a key survives outside the provider settings', () => {
+    const src = settingsDb()
+    const db = new DatabaseSync(src)
+    db.exec(`CREATE TABLE log (line TEXT NOT NULL)`)
+    db.prepare(`INSERT INTO log (line) VALUES (?)`).run(`request failed with key ${KEY}`)
+    db.close()
+    const dir = mkdtempSync(join(tmpdir(), 'dataset-out-'))
+    const out = join(dir, 'dataset.db')
+    expect(() => exportScrubbed(src, out, [KEY])).toThrow(/still holds a provider key/)
+    expect(readdirSync(dir)).toEqual([])
   })
 })

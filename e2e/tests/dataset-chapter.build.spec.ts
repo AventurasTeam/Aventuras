@@ -1,4 +1,4 @@
-import { copyFileSync, existsSync, readFileSync } from 'node:fs'
+import { existsSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { DatabaseSync } from 'node:sqlite'
 
@@ -6,7 +6,7 @@ import { expect, test, type Page } from '@playwright/test'
 
 import { modelProfileSchema, providerInstanceSchema } from '@/lib/db'
 
-import { scrubProviderKeys } from '../../scripts/dataset-chapter/export'
+import { exportScrubbed } from '../../scripts/dataset-chapter/export'
 import {
   DATASET_TOKEN_BAND,
   datasetTokens,
@@ -443,11 +443,7 @@ function exportDatabase(dbPath: string, out: string): void {
   for (const suffix of ['-wal', '-journal'])
     expect(existsSync(`${dbPath}${suffix}`), `${dbPath}${suffix} after recovery`).toBe(false)
   assertExportTarget(out)
-  copyFileSync(dbPath, out)
-  scrubProviderKeys(out)
-  assertExportTarget(out)
-  if (LLM_KEY !== '')
-    expect(readFileSync(out).includes(LLM_KEY), 'the export holds no provider key').toBe(false)
+  exportScrubbed(dbPath, out, [LLM_KEY])
 }
 
 test.describe('dataset chapter — build', () => {

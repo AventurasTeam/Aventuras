@@ -522,8 +522,9 @@ the opening. It copies the database, with no journal or WAL beside it, to
 `pnpm device:push-db` and `PROBE_BRANCH_ID`. The file stays out of git
 ([Fixture + seed contract](#fixture--seed-contract)), and a rebuild
 writes different classifier rows. The copy has every provider's API key
-blanked, `SMOKE_LLM_KEY` included, and is vacuumed, so no key leaves with
-the file.
+blanked, `SMOKE_LLM_KEY` included, and is vacuumed beside the target and
+renamed into place only once no key's bytes remain, so a failed scrub
+publishes nothing.
 
 ## Selector strategy
 
