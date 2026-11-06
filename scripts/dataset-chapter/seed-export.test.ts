@@ -220,6 +220,7 @@ describe('exportStorySeed', () => {
   it.each([
     ['inside a longer text', 'request failed: {"apiKey": "other-provider-secret"}'],
     ['as the whole text', '{"error":{"Authorization":"other-provider-secret"}}'],
+    ['serialized twice', '{"error":"{\\"apiKey\\":\\"other-provider-secret\\"}"}'],
   ])('refuses a credential-named field in JSON %s, without echoing it', async (_, text) => {
     const sqlite = await seeded()
     sqlite

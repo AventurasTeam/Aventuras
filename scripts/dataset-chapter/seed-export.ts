@@ -12,8 +12,9 @@ import { makeProxy } from '../seed/sqlite-proxy'
 const CREDENTIAL_NAMES =
   'api[-_]?key|secret|password|authorization|bearer|access[-_]?token|refresh[-_]?token'
 const CREDENTIAL_FIELD = new RegExp(`^(?:${CREDENTIAL_NAMES})$`, 'i')
-// A text column can carry serialized JSON, such as a provider's error body.
-const CREDENTIAL_JSON_FIELD = new RegExp(`"(?:${CREDENTIAL_NAMES})"\\s*:`, 'i')
+// A text column can carry serialized JSON, such as a provider's error body; each level of
+// serialization adds a backslash before the quotes.
+const CREDENTIAL_JSON_FIELD = new RegExp(`\\\\*"(?:${CREDENTIAL_NAMES})\\\\*"\\s*:`, 'i')
 const CREDENTIAL_VALUE = /\bsk-[\w-]{20,}|\bBearer\s+[\w.~+/=-]{20,}/i
 
 function providerKeys(sqlite: DatabaseSync): string[] {
