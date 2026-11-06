@@ -564,15 +564,16 @@ that ran)
   for Identity: Project Gutenberg ebook #120, its header, footer,
   licence, front matter and headings stripped, committed as
   `scripts/dataset-chapter/treasure-island.txt`. It runs past the
-  brief's "about chapter 7", since chapters I to VII hold about 18k
-  tokens: through chapter IX the text is 22.9k tokens, cut at paragraphs
-  into an opening and 66 replies near 350. Each reply's `user_action`
-  was written once by the dev model under one rule, that an action
-  states only what Jim does or says next, as the following reply shows,
-  and adds no facts, then read against its reply and committed as
-  `actions.json`. The model broke the rule in about half its actions
-  (voicing others, giving away the reply), so half were rewritten by
-  hand. With the actions the dataset is 23,907 tokens over 133 entries.
+  plan's estimate of "about chapter 7", since chapters I to VII hold
+  about 18k tokens: through chapter IX the text is 22.9k tokens, cut at
+  paragraphs into an opening and 66 replies near 350. Each reply's
+  `user_action` was written once by the dev model under one rule, that
+  an action states only what Jim does or says next, as the following
+  reply shows, and adds no facts, then read against its reply and
+  committed as `actions.json`. The model broke the rule in about half
+  its actions (voicing others, giving away the reply), so half were
+  rewritten by hand. With the actions the dataset is 23,907 tokens over
+  133 entries.
 - **The dataset is built by driving the desktop app (developer
   decision, 2026-11-05).** `pnpm dataset:chapter` runs an opt-in
   Playwright spec on the E2E harness: a story made through the wizard,
@@ -584,11 +585,23 @@ that ran)
   and a rebuild writes different classifier rows. Nothing here opens a
   story under `tsx`, so that question stays
   [Slice 5.5a](./05a-task-runner.md#open-questions)'s. Default story
-  settings still auto-close at 24k, which nothing acts on yet: a rebuild
-  after [Slice 5.6](./06-close-owed.md) lands has to turn auto-close off
-  first. The one build took 1.5 h on `Gemma4-26B-A4B-QAT-MTP`, every one
-  of the 66 turns landing on its first Send, and the classifier wrote 55
+  settings auto-close at 24k, which nothing acts on before
+  [Slice 5.6](./06-close-owed.md); the build already turns auto-close off
+  in Story Settings before its first turn (`turnAutoCloseOff`), so a
+  rebuild after 5.6 doesn't close a chapter mid-drive. The first build,
+  at `af593629a`, took 1.5 h on `Gemma4-26B-A4B-QAT-MTP`, every one of
+  the 66 turns landing on its first Send, and the classifier wrote 55
   entities, 37 happenings and 8 threads.
+- **The build ran again at `40e01ebaa`.** The spec changed after the
+  first build: the scene floor counts the scenes the replies report, the
+  export blanks the provider keys and is published only once scrubbed,
+  and among the slice review's fixes, the build refuses a bad export
+  target or a short key before the drive. `pnpm dataset:chapter` at
+  `40e01ebaa` on `Gemma4-26B-A4B-QAT-MTP` passed end to end in 1.5 h:
+  133 entries and 23,907 tokens, the classifier writing 53 entities, 47
+  happenings and 4 threads (the first build: 55, 37 and 8), the export's
+  keys blank and its `integrity_check` ok. That run wrote a scratch
+  file, since deleted; the kept baseline below is still the first build.
 - **The built database is kept as a shared baseline (developer
   decision, 2026-11-05):** "Yeah keep the database and i guess
   incrementally enrich the seed as slices come in and add in their part.
@@ -596,19 +609,20 @@ that ran)
   pristine build is `~/.cache/aventuras-measure/dataset-chapter.db`
   (sha256 `44f0c1d6ad1bc3cb146f7b0d8d2140036890d08751140420009897c9760cd78d`,
   built at `af593629a` on `Gemma4-26B-A4B-QAT-MTP`); a copy after its
-  first close on the same model is
+  production-bundle close on the same model, the second close below, is
   `~/.cache/aventuras-measure/dataset-chapter.closed.db` (sha256
   `34f4bdbf81eb4a8e5b414c0c6149663a3187d68549692ef7c90a8673e335a840`,
   closed at `2f27ae8c7`). Checking a seed export in is later work.
 - **The dataset's close.** Branch
-  `br_aa6101af-d3dd-4964-9869-81e76cc35f97` of the built database,
-  closed at its last reply (entry 133, 23,907 tokens) from the dev route
-  on `Gemma4-26B-A4B-QAT-MTP`, returned the title "The Captain and the
-  Map" in about 31 s; a second first close, on the production bundle,
-  returned "The captain and the map". The production close told its
-  summary in the first person, as the narration does; the first used
-  "you", against the prompt's rule, a data point for the prompt's later
-  tuning.
+  `br_aa6101af-d3dd-4964-9869-81e76cc35f97` of the built database was
+  closed twice from the pristine copy, each time at its last reply
+  (entry 133, 23,907 tokens) from the dev route on
+  `Gemma4-26B-A4B-QAT-MTP`. On the `pnpm desktop` dev build it returned
+  the title "The Captain and the Map" in about 31 s, its summary told
+  with "you", against the prompt's rule, a data point for the prompt's
+  later tuning. On the production bundle it returned "The captain and
+  the map", its summary in the first person as the narration is; that
+  close is the one `dataset-chapter.closed.db` holds.
 - **The stamp burst has a bar (developer decision, 2026-11-05).**
   Measured on a release Android build on the Fold and on desktop, with a
   50-row reader: the forward burst, first stamp to last, within 3 s on
@@ -632,8 +646,10 @@ that ran)
 - **The plan's stall probe could pass a stalled thread.** It took the
   longest gap between 16 ms ticks touching the burst, and a thread that
   never yielded to the timer left no tick inside it, reading 0. The
-  stop moment counts as a tick now; every Android number below was taken
-  with that fix.
+  stop moment counts as a tick now. Every Android number below and the
+  production-bundle desktop row were taken with that fix; the dev-build
+  desktop row predates it, so its stalls (61 / 41 ms) leave out the gap
+  from the last tick to the burst's end.
 - **The close's create and stamps move to one group in Slice 5.5a
   (developer decision, 2026-11-05):** "So what i'm thinking is we should
   take the results as they are right now and move it to the batch writer
