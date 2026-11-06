@@ -1,4 +1,4 @@
-import { readFileSync } from 'node:fs'
+import { readFileSync, renameSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 
 import { z } from 'zod'
@@ -99,6 +99,13 @@ export function parseActions(json: string): string[] {
   if (problems.length > 0)
     throw new Error(`saved actions break the form rule: ${problems.join('; ')}`)
   return actions
+}
+
+/** Writes beside the target and renames, so a stop mid-write keeps the last checkpoint. */
+export function saveActions(path: string, actions: readonly string[]): void {
+  const draft = `${path}.tmp`
+  writeFileSync(draft, `${JSON.stringify(actions, null, 2)}\n`)
+  renameSync(draft, path)
 }
 
 export function loadShapedDataset(dir: string): ShapedDataset {

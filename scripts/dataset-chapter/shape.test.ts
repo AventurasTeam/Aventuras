@@ -1,4 +1,6 @@
-import { readFileSync } from 'node:fs'
+import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 import { beforeAll, describe, expect, it } from 'vitest'
@@ -14,6 +16,7 @@ import {
   paragraphsOf,
   parseActions,
   REPLY_TARGET_TOKENS,
+  saveActions,
   type ShapedDataset,
   shapeDataset,
   splitReplies,
@@ -100,6 +103,22 @@ describe('parseActions', () => {
     expect(() => parseActions(JSON.stringify(['I wait.', 'I wait.\nI listen.']))).toThrow(
       /#2: more than one line/,
     )
+  })
+})
+
+describe('saveActions', () => {
+  it('writes actions parseActions reads back', () => {
+    const path = join(mkdtempSync(join(tmpdir(), 'dataset-actions-')), 'actions.json')
+    saveActions(path, ['I wait.', 'I bar the door.'])
+    expect(parseActions(readFileSync(path, 'utf8'))).toEqual(['I wait.', 'I bar the door.'])
+  })
+
+  it('keeps the saved checkpoint when the write fails', () => {
+    const path = join(mkdtempSync(join(tmpdir(), 'dataset-actions-')), 'actions.json')
+    writeFileSync(path, '["I wait."]\n')
+    mkdirSync(`${path}.tmp`)
+    expect(() => saveActions(path, ['I wait.', 'I bar the door.'])).toThrow()
+    expect(readFileSync(path, 'utf8')).toBe('["I wait."]\n')
   })
 })
 

@@ -1,4 +1,4 @@
-import { existsSync, readFileSync, writeFileSync } from 'node:fs'
+import { existsSync, readFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
@@ -10,6 +10,7 @@ import {
   DATASET_TEXT_FILE,
   parseActions,
   REPLY_TARGET_TOKENS,
+  saveActions,
   splitReplies,
 } from './shape'
 
@@ -132,7 +133,7 @@ async function main(): Promise<void> {
     const before = i === 0 ? opening : replies[i - 1]!
     const action = await writeAction(LLM_URL, LLM_MODEL, before, replies[i]!, i)
     actions.push(action)
-    writeFileSync(ACTIONS_PATH, `${JSON.stringify(actions, null, 2)}\n`)
+    saveActions(ACTIONS_PATH, actions)
     console.log(`#${i + 1}/${replies.length} ${action}\n    ${replies[i]!.slice(0, 160)}`)
   }
   console.log(`${actions.length} actions in ${ACTIONS_PATH}`)
