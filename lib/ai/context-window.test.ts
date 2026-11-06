@@ -213,7 +213,7 @@ describe('countPromptTokens', () => {
         role: 'user',
         content: [
           { type: 'text', text: 'Look.' },
-          { type: 'file', data: 'aGVsbG8gd29ybGQ=', mediaType: 'text/plain' },
+          { type: 'file', data: 'iVBORw0KGgo=', mediaType: 'image/png' },
         ],
       },
       {
@@ -244,10 +244,11 @@ describe('countPromptTokens', () => {
     )
   })
 
-  // The adapters send a string input as it is and serialize any other.
+  // Both adapters serialize the input as JSON, so a string goes out quoted and escaped.
   it.each([
-    ['a string input', '{"query":"the door"', '{"query":"the door"'],
+    ['a string input', '{"query":"the door"', '"{\\"query\\":\\"the door\\""'],
     ['an object input', { query: 'the door', limit: 2 }, '{"query":"the door","limit":2}'],
+    ['an absent input', undefined, ''],
   ] as const)("counts a tool call's name and %s", (_label, input, sent) => {
     const prompt: ModelPrompt = [
       {

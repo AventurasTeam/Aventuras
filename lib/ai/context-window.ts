@@ -96,15 +96,20 @@ function countPartTokens(part: PromptPart): number {
     case 'reasoning':
       return countTokens(part.text)
     case 'tool-call':
-      return countTokens(part.toolName) + countTokens(asSentText(part.input))
+      return countTokens(part.toolName) + countTokens(JSON.stringify(part.input) ?? '')
     case 'tool-result':
       return countTokens(part.toolName) + countTokens(outputText(part.output))
-    default:
+    case 'file':
+    case 'tool-approval-response':
       return 0
+    default: {
+      const unreachable: never = part
+      return unreachable
+    }
   }
 }
 
-// A string goes out as it is, anything else as JSON; JSON.stringify(undefined) is undefined.
+// A tool result's text goes out raw, any other value as JSON; JSON.stringify(undefined) is undefined.
 function asSentText(value: unknown): string {
   return typeof value === 'string' ? value : (JSON.stringify(value) ?? '')
 }
