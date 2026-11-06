@@ -2,6 +2,8 @@ import { DatabaseSync } from 'node:sqlite'
 
 import { expect, test } from '@playwright/test'
 
+import { CALL_TIMEOUT_DEFAULT_MS } from '@/lib/ai'
+
 import { currentBranchId, queryApp } from '../harness/db'
 import { installEmbedderModel } from '../harness/embedder'
 import { launchApp, type LaunchedApp } from '../harness/launch'
@@ -15,9 +17,9 @@ import { reader } from '../locators/reader'
 const LLM_URL = process.env.SMOKE_LLM_URL
 const LLM_MODEL = process.env.SMOKE_LLM_MODEL
 
-// No profile timeout: a pass's call expires at PASS_TIMEOUT_DEFAULT_MS, which a spec can't import
-// (lib/pipeline/definitions/periodic-classifier.ts); +60 s covers reconcile's embeds and writes.
-const PASS_WAIT_MS = 600_000 + 60_000
+// No profile timeout: a pass's call expires at the default bound; +60 s covers reconcile's embeds
+// and writes.
+const PASS_WAIT_MS = CALL_TIMEOUT_DEFAULT_MS + 60_000
 // A settled pass's status leaving `running`.
 const STATUS_SETTLE_MS = 10_000
 const COMPOSER_VISIBLE_MS = 30_000
