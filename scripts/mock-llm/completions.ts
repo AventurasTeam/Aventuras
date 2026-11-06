@@ -237,7 +237,7 @@ export async function handleCompletion(
   if (upstream !== null) {
     const result = await passthrough({ upstream, body, res, signal: controller.signal })
     entry.status = result.status
-    entry.served = result.content
+    entry.served = result.toolStep ?? result.content
     entry.responseName = `${upstream.label} (${upstream.model})`
     if (result.error !== undefined) entry.outcome = 'failed'
     if (streamed) ctx.log.lastNarrativeHadState = result.content.includes('<state>')

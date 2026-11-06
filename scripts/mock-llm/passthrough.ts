@@ -1,12 +1,22 @@
 import type { ServerResponse } from 'node:http'
 
-import { CORS_HEADERS, SSE_HEADERS, errorBody, write } from './respond/wire'
+import {
+  CORS_HEADERS,
+  SSE_HEADERS,
+  errorBody,
+  write,
+  type FinishReason,
+  type MockToolStep,
+} from './respond/wire'
+import { toolLaneOf } from './routing'
 import type { Upstream } from './state'
 
 export type PassthroughResult = {
   status: number
   /** Assembled assistant text — what record mode saves as a canned response. */
   content: string
+  /** On a tool lane, the reply as a step; record mode saves this instead. */
+  toolStep?: MockToolStep
   error?: string
 }
 
@@ -41,6 +51,74 @@ function messageContent(raw: string): string {
     return parsed.choices?.[0]?.message?.content ?? ''
   } catch {
     return ''
+  }
+}
+
+// Each FinishReason once. Another (`eos`, `function_call`) is left out, and the step's default,
+// tool_calls with calls and stop without, reads the same to the app.
+const STEP_FINISH: { [K in FinishReason]: true } = {
+  stop: true,
+  length: true,
+  tool_calls: true,
+  content_filter: true,
+}
+
+function isStepFinish(value: unknown): value is FinishReason {
+  return typeof value === 'string' && Object.hasOwn(STEP_FINISH, value)
+}
+
+function nonEmptyText(value: unknown): string | undefined {
+  return typeof value === 'string' && value !== '' ? value : undefined
+}
+
+// Parsed so the panel edits it as JSON; kept as sent when it doesn't parse, or parses to a string,
+// which would go back out without its quotes.
+function recordedArgs(raw: string): unknown {
+  try {
+    const value: unknown = JSON.parse(raw)
+    return typeof value === 'string' ? raw : value
+  } catch {
+    return raw
+  }
+}
+
+type CompletionChoice = {
+  message?: {
+    content?: unknown
+    reasoning_content?: unknown
+    reasoning?: unknown
+    tool_calls?: unknown
+  }
+  finish_reason?: unknown
+}
+
+/** A non-streamed upstream reply as the step that replays it; null when it holds no message. */
+export function toolStepOfCompletion(raw: string): MockToolStep | null {
+  let choice: CompletionChoice | undefined
+  try {
+    choice = (JSON.parse(raw) as { choices?: CompletionChoice[] } | null)?.choices?.[0]
+  } catch {
+    return null
+  }
+  const message = choice?.message
+  if (typeof message !== 'object' || message === null) return null
+
+  const text = nonEmptyText(message.content)
+  const reasoning = nonEmptyText(message.reasoning_content) ?? nonEmptyText(message.reasoning)
+  const toolCalls = (Array.isArray(message.tool_calls) ? message.tool_calls : []).flatMap(
+    (call: unknown) => {
+      const fn = (call as { function?: { name?: unknown; arguments?: unknown } } | null)?.function
+      return typeof fn?.name === 'string' && typeof fn.arguments === 'string'
+        ? [{ name: fn.name, args: recordedArgs(fn.arguments) }]
+        : []
+    },
+  )
+  const finish = choice?.finish_reason
+  return {
+    ...(text !== undefined ? { text } : {}),
+    ...(reasoning !== undefined ? { reasoning } : {}),
+    ...(toolCalls.length > 0 ? { toolCalls } : {}),
+    ...(isStepFinish(finish) ? { finishReason: finish } : {}),
   }
 }
 
@@ -114,8 +192,10 @@ export async function passthrough(opts: {
   }
   res.end()
 
+  const toolStep = toolLaneOf(body) !== null ? toolStepOfCompletion(raw) : null
   return {
     status: upstreamResponse.status,
     content: streamed ? collectSseContent(raw) : messageContent(raw),
+    ...(toolStep !== null ? { toolStep } : {}),
   }
 }

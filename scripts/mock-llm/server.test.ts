@@ -1,3 +1,6 @@
+import { createServer, type Server } from 'node:http'
+import type { AddressInfo } from 'node:net'
+
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import { z } from 'zod'
 
@@ -8,7 +11,7 @@ import { renderTemplate, TEMPLATE_IDS } from '@/lib/prompts'
 import { labeledPromptOutputSchema } from '@/lib/wizard'
 
 import { firstHalf } from './completions'
-import { collectSseContent } from './passthrough'
+import { collectSseContent, toolStepOfCompletion } from './passthrough'
 import { mockUsage, overflowBody, overflowCounts } from './respond/wire'
 import { promptText } from './routing'
 import { startMockServer, type MockServer } from './server'
@@ -625,5 +628,234 @@ describe('usage', () => {
     }
     expect(last.choices).toEqual([])
     expect(last.usage).toEqual(mockUsage('Continue the scene.', collectSseContent(raw)))
+  })
+})
+
+describe('toolStepOfCompletion', () => {
+  const completion = (message: Record<string, unknown>, finishReason: unknown = 'tool_calls') =>
+    JSON.stringify({
+      id: 'chatcmpl-upstream',
+      object: 'chat.completion',
+      choices: [
+        { index: 0, message: { role: 'assistant', ...message }, finish_reason: finishReason },
+      ],
+    })
+  const call = (name: string, args: string) => ({
+    id: 'call_up',
+    type: 'function',
+    function: { name, arguments: args },
+  })
+
+  it('reads the text, the reasoning, each call and the finish reason', () => {
+    expect(
+      toolStepOfCompletion(
+        completion({
+          content: 'Looking.',
+          reasoning_content: 'The door first.',
+          tool_calls: [call('lookup', '{"query":"the door"}')],
+        }),
+      ),
+    ).toEqual({
+      text: 'Looking.',
+      reasoning: 'The door first.',
+      toolCalls: [{ name: 'lookup', args: { query: 'the door' } }],
+      finishReason: 'tool_calls',
+    })
+  })
+
+  it('reads `reasoning` from a server that sends no `reasoning_content`, and drops a blank text', () => {
+    expect(toolStepOfCompletion(completion({ content: null, reasoning: 'Hmm.' }, 'stop'))).toEqual({
+      reasoning: 'Hmm.',
+      finishReason: 'stop',
+    })
+    expect(toolStepOfCompletion(completion({ content: '' }, 'stop'))).toEqual({
+      finishReason: 'stop',
+    })
+  })
+
+  it("keeps arguments as sent when they don't parse, or parse to a string", () => {
+    expect(
+      toolStepOfCompletion(
+        completion({
+          tool_calls: [call('lookup', '{"query":'), call('note', '"the door"'), call('count', '3')],
+        }),
+      ),
+    ).toEqual({
+      toolCalls: [
+        { name: 'lookup', args: '{"query":' },
+        { name: 'note', args: '"the door"' },
+        { name: 'count', args: 3 },
+      ],
+      finishReason: 'tool_calls',
+    })
+  })
+
+  it("leaves out a finish reason a step can't carry, so the step's default stands", () => {
+    expect(toolStepOfCompletion(completion({ content: 'Done.' }, 'eos'))).toEqual({
+      text: 'Done.',
+    })
+  })
+
+  it('returns null for a body that holds no message', () => {
+    expect(toolStepOfCompletion('not json')).toBeNull()
+    expect(toolStepOfCompletion('{"error":{"message":"busy"}}')).toBeNull()
+  })
+})
+
+describe('recording a tool lane', () => {
+  const LANE = 'tools:lookup'
+  const UPSTREAM_REPLY = {
+    id: 'chatcmpl-upstream',
+    object: 'chat.completion',
+    created: 0,
+    model: 'real-model',
+    choices: [
+      {
+        index: 0,
+        message: {
+          role: 'assistant',
+          content: null,
+          reasoning_content: 'The door first.',
+          tool_calls: [
+            {
+              id: 'call_up1',
+              type: 'function',
+              function: { name: 'lookup', arguments: '{"query":"the door"}' },
+            },
+            {
+              id: 'call_up2',
+              type: 'function',
+              function: { name: 'lookup', arguments: '{"query":' },
+            },
+          ],
+        },
+        finish_reason: 'tool_calls',
+      },
+    ],
+    usage: { prompt_tokens: 40, completion_tokens: 12, total_tokens: 52 },
+  }
+  const TOOL_REQUEST = {
+    model: 'seed/narrative',
+    messages: [{ role: 'user', content: 'Open the door.' }],
+    tools: [
+      {
+        type: 'function',
+        function: {
+          name: 'lookup',
+          description: 'Look something up in the story so far.',
+          parameters: {
+            type: 'object',
+            properties: { query: { type: 'string' } },
+            required: ['query'],
+          },
+        },
+      },
+    ],
+  }
+  const RECORDED_CALLS = [
+    ['lookup', '{"query":"the door"}'],
+    ['lookup', '{"query":'],
+  ]
+
+  type Completion = {
+    choices: {
+      message: {
+        reasoning_content?: string
+        tool_calls?: { function: { name: string; arguments: string } }[]
+      }
+      finish_reason: string
+    }[]
+  }
+  const callsOf = (body: Completion) =>
+    body.choices[0]?.message.tool_calls?.map((c) => [c.function.name, c.function.arguments])
+
+  let upstream: Server
+  let upstreamCalls = 0
+
+  beforeAll(async () => {
+    upstream = createServer((req, res) => {
+      upstreamCalls += 1
+      req.resume()
+      req.on('end', () => {
+        res.writeHead(200, { 'content-type': 'application/json' })
+        res.end(JSON.stringify(UPSTREAM_REPLY))
+      })
+    })
+    await new Promise<void>((resolve) => upstream.listen(0, '127.0.0.1', resolve))
+    const { port } = upstream.address() as AddressInfo
+    mock.ctx.state.upstreams = [
+      {
+        id: 'real',
+        label: 'Real',
+        baseURL: `http://127.0.0.1:${port}/v1`,
+        apiKeyEnv: '',
+        model: 'real-model',
+      },
+    ]
+  })
+
+  afterAll(async () => {
+    mock.ctx.state.upstreams = []
+    upstream.closeAllConnections()
+    await new Promise<void>((resolve) => upstream.close(() => resolve()))
+  })
+
+  const putLane = (key: string, patch: unknown): Promise<Response> =>
+    fetch(`${base()}/api/lanes/${encodeURIComponent(key)}`, {
+      method: 'PUT',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify(patch),
+    })
+
+  it('saves a passthrough tool reply from the log as a step that replays its calls', async () => {
+    upstreamCalls = 0
+    expect((await putLane(LANE, { mode: 'passthrough', upstreamId: 'real' })).status).toBe(200)
+    mock.ctx.log.clear()
+
+    const recorded = (await (await post(TOOL_REQUEST)).json()) as Completion
+    expect(callsOf(recorded)).toEqual(RECORDED_CALLS)
+
+    const [entry] = mock.ctx.log.list()
+    expect(entry).toMatchObject({ lane: LANE, mode: 'passthrough' })
+    expect(entry?.served).toEqual({
+      reasoning: 'The door first.',
+      toolCalls: [
+        { name: 'lookup', args: { query: 'the door' } },
+        { name: 'lookup', args: '{"query":' },
+      ],
+      finishReason: 'tool_calls',
+    })
+
+    const saved = await fetch(`${base()}/api/log/${entry?.id ?? ''}/save`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ name: 'Recorded lookup' }),
+    })
+    expect(saved.status).toBe(200)
+    const lane = mock.ctx.lane(LANE)
+    expect(lane.mode).toBe('passthrough')
+    const response = lane.responses.find((r) => r.name === 'Recorded lookup')
+    expect(response).toBeDefined()
+    expect((await putLane(LANE, { mode: 'mock', activeId: response?.id })).status).toBe(200)
+
+    const replayed = (await (await post(TOOL_REQUEST)).json()) as Completion
+
+    expect(callsOf(replayed)).toEqual(RECORDED_CALLS)
+    expect(replayed.choices[0]?.message.reasoning_content).toBe('The door first.')
+    expect(replayed.choices[0]?.finish_reason).toBe('tool_calls')
+    expect(upstreamCalls).toBe(1)
+  })
+
+  it('logs a passthrough reply to a request with no tools as its text, as before', async () => {
+    upstreamCalls = 0
+    const key = 'unknown:no-schema'
+    expect((await putLane(key, { mode: 'passthrough', upstreamId: 'real' })).status).toBe(200)
+    mock.ctx.log.clear()
+
+    await post({ model: 'seed/narrative', messages: [{ role: 'user', content: 'Open the door.' }] })
+
+    expect(mock.ctx.log.list()[0]).toMatchObject({ lane: key, served: '' })
+    expect(upstreamCalls).toBe(1)
+    expect((await putLane(key, { mode: 'mock', upstreamId: null })).status).toBe(200)
   })
 })
