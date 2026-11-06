@@ -668,34 +668,41 @@ role selectors are safe there.
 
 ## CI
 
-One packaged job (`e2e`) in
-[`.github/workflows/ci.yml`](../.github/workflows/ci.yml), running on
-every PR alongside `check` and `test`:
+[`.github/workflows/ci.yml`](../.github/workflows/ci.yml) runs four
+jobs on every PR: `check` (lint, format, types, docs, migrations),
+`unit` and `test` (the vitest `unit` and `storybook` projects, apart so
+they don't compete for one runner's cores), and the packaged E2E.
 
-1. `pnpm build:web` — export the web bundle (~21 s).
+The E2E job runs in three shards (`--shard=N/3`), each on its own
+runner, and reports under one check,
+`E2E (Playwright + Electron, packaged)`, which passes only when every
+shard does; the shard count can change without the check's name
+changing. Playwright splits shards by file, in name order, balanced on
+test count rather than time. Each shard:
+
+1. `pnpm build:web` — export the web bundle.
 2. `pnpm electron:compile` — compile the Electron main.
 3. `pnpm exec electron-builder --linux --dir` — package unpacked,
-   skipping AppImage/deb compression (~58 s locally vs ~2m38s for a
-   full package). Produces the asar, unpacked native modules, and
-   `extraResources` migrations the tests need. The Electron binary and
-   builder downloads are cached, keyed on the Electron and
-   electron-builder versions.
+   skipping AppImage/deb compression. Produces the asar, unpacked
+   native modules, and `extraResources` migrations the tests need.
+   The Electron binary and builder downloads are cached, keyed on the
+   Electron and electron-builder versions.
 4. `playwright install-deps chromium` — Electron's shared libraries
-   (no browser download).
-5. `pnpm test:e2e:packaged` (the `packaged` Playwright project) — the
-   script asks for [virtual displays](#virtual-display) itself, so
-   CI and local runs invoke the same command. The harness seeds a
-   throwaway `userData` per run and launches the packaged binary
-   against it.
+   and Xvfb (no browser download).
+5. `pnpm test:e2e:packaged --shard=N/3` (the `packaged` Playwright
+   project) — the script asks for
+   [virtual displays](#virtual-display) itself, so CI and local runs
+   invoke the same command, and the runner's four cores give two
+   [workers](#workers).
 
-The embedder model cache (for the retrieval/turn tiers) is added when
-those tests land.
+Each shard builds its own package rather than waiting on a build job:
+that job would sit in front of every shard, and handing its package
+over costs an upload and a download per shard. The embedder model
+cache is restored per shard, keyed on the catalog; shard 1 saves both
+caches on `main`.
 
 ## Known limitations and open questions
 
-- **CI wall-clock is estimated, not measured.** Confirm on the first
-  green run; if the packaging step dominates, consider gating `e2e`
-  behind `check` or caching the unpacked build.
 - **Embedder download flow** is manual-only — the origin-seam setup
   isn't worth the payoff for one flow (see the embedder section).
 - **`force-on` structured output doesn't put the schema on the wire.**

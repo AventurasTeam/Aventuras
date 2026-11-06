@@ -50,6 +50,21 @@ jobs:
       - name: Typecheck Electron main
         run: pnpm electron:compile
 
+  # Apart from the browser project, so the two don't compete for one runner's
+  # cores.
+  unit:
+    name: Unit tests (vitest)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Install dependencies
+        uses: ./.github/actions/pnpm-install
+
+      - name: Run unit tests
+        run: pnpm exec vitest run --project unit
+
   test:
     name: Storybook tests (vitest + playwright)
     runs-on: ubuntu-24.04
@@ -92,12 +107,18 @@ jobs:
         run: pnpm exec playwright install-deps chromium
 
       - name: Run story tests
-        run: pnpm test:run
+        run: pnpm exec vitest run --project storybook
 
+  # Sharded across runners: each shard builds its own package, which costs less
+  # than a build job the shards would wait on (docs/testing.md → CI).
   e2e:
-    name: E2E (Playwright + Electron, packaged)
+    name: E2E shard ${{ matrix.shard }}/3
     runs-on: ubuntu-24.04
-    timeout-minutes: 30
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2, 3]
     steps:
       - uses: actions/checkout@v7
 
@@ -133,8 +154,9 @@ jobs:
       - name: Package desktop (unpacked)
         run: pnpm exec electron-builder --linux --dir
 
+      # One shard saves; the others would race it for the same key.
       - name: Save Electron cache
-        if: github.ref == 'refs/heads/main' && steps.electron-cache.outputs.cache-hit != 'true'
+        if: matrix.shard == 1 && github.ref == 'refs/heads/main' && steps.electron-cache.outputs.cache-hit != 'true'
         uses: actions/cache/save@v6
         with:
           path: |
@@ -160,11 +182,22 @@ jobs:
       # start a virtual display per launch (scripts/e2e.ts). The packaged project
       # launches the built binary; the harness seeds a throwaway userData per launch.
       - name: Run E2E (packaged, headless via xvfb)
-        run: pnpm test:e2e:packaged
+        run: pnpm test:e2e:packaged --shard=${{ matrix.shard }}/3
 
       - name: Save embedder model cache
-        if: github.ref == 'refs/heads/main' && steps.embedder-cache.outputs.cache-hit != 'true'
+        if: matrix.shard == 1 && github.ref == 'refs/heads/main' && steps.embedder-cache.outputs.cache-hit != 'true'
         uses: actions/cache/save@v6
         with:
           path: ~/.cache/aventuras-e2e
           key: ${{ steps.embedder-cache.outputs.cache-primary-key }}
+
+  # The check the shards report under, so its name holds whatever the shard count.
+  e2e-result:
+    name: E2E (Playwright + Electron, packaged)
+    if: always()
+    needs: e2e
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - name: Every shard passed
+        run: test "${{ needs.e2e.result }}" = success

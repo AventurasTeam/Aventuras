@@ -36,8 +36,8 @@ One defect, two failure modes, and the quiet one passes CI. The hook throws
 under `__DEV__` — Storybook's dev server, where `vite-plugin-rnw` defines
 `__DEV__` as `mode === 'development'` — and silently builds
 `dependencies = [undefined]` under `mode: test`, where the animation renders
-but never runs. CI runs `pnpm test:run` alone, so it only ever saw the quiet
-half.
+but never runs. CI runs only the vitest projects of `pnpm test:run`, so it
+only ever saw the quiet half.
 
 **Symptom of the loud half.** A story renders blank with `ReanimatedError:
 useAnimatedStyle was used without a dependency array or Babel plugin` in the
