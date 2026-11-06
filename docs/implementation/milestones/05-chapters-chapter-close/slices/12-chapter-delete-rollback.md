@@ -202,10 +202,10 @@ tool on main runs them, and a tool landing later does by joining the
 table.
 
 **Removing `deleteChapter`.** The action kind and handler
-(`lib/actions/chapters/register.ts:31,150-170,180`), its `LOCK_KEY` entry
-(`lib/actions/delta/apply-delta-action.ts:93`), the arm at
+(`lib/actions/chapters/register.ts:26,136-156,166`), its `LOCK_KEY` entry
+(`lib/actions/delta/apply-delta-action.ts:94`), the arm at
 `lib/actions/delta/delete-arms.test.ts:101` and the case at
-`lib/actions/chapters/register.test.ts:183`. `cascade` and `cascadedDelete`
+`lib/actions/chapters/register.test.ts:250`. `cascade` and `cascadedDelete`
 go from `register.ts` too, since only a delete reads a cascade.
 
 **Regenerate's close arm.**
@@ -237,7 +237,7 @@ go from `register.ts` too, since only a delete reads a cascade.
   default under [Open questions](#open-questions).
 - The preview takes that read inside the shared section. `getRollbackCounts`
   calls `rollbackCountsOf` after releasing `withBranchWriteShared` today
-  (`operational.ts:363-367`), and a CTRL-Z landing between the two would give
+  (`operational.ts:362-366`), and a CTRL-Z landing between the two would give
   `chapters: 1` with neither chapter line. Both calls move inside the hold.
 - `classifyRegenerateGate` (`components/reader/regenerate-gate.ts:35-38`):
 

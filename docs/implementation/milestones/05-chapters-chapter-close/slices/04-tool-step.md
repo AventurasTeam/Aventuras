@@ -56,7 +56,7 @@ mocks, so an E2E close would pass with no writes.
 ## Scope: in
 
 **The step.** `generateToolStep` in a new `lib/ai/tool-step.ts`, exported
-from `lib/ai/index.ts`, whose comment at `:32-34` names it beside
+from `lib/ai/index.ts`, whose comment at `:33-35` names it beside
 `streamText` and `generateStructured`. Slice 5.5a writes against this
 shape, settled by sequencing:
 
@@ -155,10 +155,10 @@ agent id, the profile's `timeout` else ten minutes. `passTimeoutMs`
 delegates with `'classifier'`, and `PASS_TIMEOUT_DEFAULT_MS` stays
 exported for `scripts/classifier-parse-probe.ts:42`. The step holds its
 own bound over the whole call, retries included, as a pass's call has
-(`lib/pipeline/definitions/periodic-classifier.ts:332`), and a profile
+(`lib/pipeline/definitions/periodic-classifier.ts:270`), and a profile
 `timeout` also bounds each attempt. An expiry returns `failed` with a
 provider `timeout` naming the bound, and a cancel returns `aborted`, so
-the caller needn't tell them apart as the pass does at `:349`.
+the caller needn't tell them apart as the pass does at `:287`.
 
 **Window check.**
 

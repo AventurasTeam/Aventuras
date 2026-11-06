@@ -63,7 +63,7 @@ slice-planning gate forces its resolution before that slice is planned.
 
 - **`chaptersStore.patch` takes a raw row from any caller.** The
   working-set store's `patch` casts `p.row` and `p.columns` to the row
-  type (`lib/stores/factory/working-set-store.ts:28,33`), so a direct
+  type (`lib/stores/factory/working-set-store.ts:31,36`), so a direct
   caller would put `closeReport` into the store, skipping the
   projection at the chapters patcher. Today only the patcher and the
   hydrate write the store; the guarantee is convention. Surfaced by

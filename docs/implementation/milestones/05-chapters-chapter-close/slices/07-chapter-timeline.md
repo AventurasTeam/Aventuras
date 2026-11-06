@@ -120,7 +120,7 @@ slices and ship disabled or hidden, per C16.
   and is exported from `lib/actions/index.ts` with `ChapterSaveResult`.
   Its log events, `action_layer.chapter_save_rejected` and
   `action_layer.chapter_save_failed`, follow from `rowKind`.
-- `lib/actions/chapters/register.ts:105-106`: the update handler's
+- `lib/actions/chapters/register.ts:88-89`: the update handler's
   not-found return carries `code: TARGET_NOT_FOUND`, as `updateLore`'s
   does (`lib/actions/lore/register.ts:108-112`). Without it a Save on a
   row that went reads `failed`, not `not-found`.

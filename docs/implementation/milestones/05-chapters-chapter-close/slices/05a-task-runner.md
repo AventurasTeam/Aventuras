@@ -103,7 +103,7 @@ and tools sit under `lib/pipeline/definitions/close-agent/`.
   back as a value and never fails the run. `delta_emitted` keeps its
   behaviour, and its `yield` evaluates to undefined.
 - `DeltaActionPort` gains a group method, in all five constructors:
-  `lib/boot/bootstrap.ts:68`, `lib/pipeline/__tests__/harness.ts:47`,
+  `lib/boot/bootstrap.ts:69`, `lib/pipeline/__tests__/harness.ts:47`,
   `lib/pipeline/__tests__/abort-reversal-hold.test.ts:44`,
   `lib/pipeline/definitions/periodic-classifier.test.ts:2263` and
   `lib/actions/turns/__tests__/stand-in-pass.ts:183`. New types sit in
@@ -111,9 +111,9 @@ and tools sit under `lib/pipeline/definitions/close-agent/`.
   import (`eslint.config.js:119-120`).
 - That method is a new function, `applyDeltaActionGroupWithOutcomes`. It
   returns per-action outcomes, indexed by action and assigned after the
-  rerun (`apply-delta-action.ts:333-345`), so a link that lands on the
+  rerun (`apply-delta-action.ts:334-346`), so a link that lands on the
   rerun doesn't keep its first noop. Each carries the handler's `reason`
-  and mark. An all-noop group returns its outcomes (`:347`). A plain
+  and mark. An all-noop group returns its outcomes (`:348`). A plain
   refusal stays whole-group, with nothing written.
 - `applyDeltaActionGroup` becomes a wrapper over the same runner and
   keeps `DeltaGroupResult` as it is, rather than growing its `ok` arm.
@@ -127,7 +127,7 @@ and tools sit under `lib/pipeline/definitions/close-agent/`.
   name the new function for `delta_group_emitted`.
 - `noopRefusal(reason, 'restated' | 'gone')` (`registry.ts:74`). Rule
   refusals stay unmarked. The single path drops the mark where it
-  returns a refusal (`apply-delta-action.ts:183`), so `MutationResult`
+  returns a refusal (`apply-delta-action.ts:184`), so `MutationResult`
   doesn't change and the exact refusals pinned through it pass unedited
   (`entities/register.test.ts:443`, `state-patch-actions.test.ts:117`).
   Restated values, thirteen sites across twelve
@@ -237,7 +237,7 @@ and tools sit under `lib/pipeline/definitions/close-agent/`.
   included.
 - After each step, whatever its status, the driver yields
   `retriedAttemptEvents(result, 'lore-mgmt')`, as the pass does
-  (`periodic-classifier.ts:347`), so a retried attempt reaches the log.
+  (`periodic-classifier.ts:285`), so a retried attempt reaches the log.
 - `stopped`, for `cut-off` or `window`, stops the task and keeps what
   landed, as the budget does. `failed` returns `{ status: 'failed' }`
   through `toPipelineError(error, 'lore-mgmt')`, `not-configured`
@@ -269,7 +269,7 @@ and tools sit under `lib/pipeline/definitions/close-agent/`.
   listed by title stays unread.
 - Two functions serve a tool writing an entity row, since two `state`
   actions on one row can't share a group
-  (`apply-delta-action.ts:317-324`):
+  (`apply-delta-action.ts:318-325`):
   - `fieldVerdicts` takes the row guard and the fields a call names,
     `state` sub-fields and top-level columns alike, and returns each
     field's verdict: free, or protected with its reason. It changes
@@ -354,7 +354,7 @@ and tools sit under `lib/pipeline/definitions/close-agent/`.
   the prose tasks and holds each turn of the chapter or part under its
   handle, through `promptProse`. Its variables join `VARIABLES`'
   `chapter` group.
-- `system-half-stability.test.ts:312` gets a named list of the close's
+- `system-half-stability.test.ts:346` gets a named list of the close's
   task templates, excluded from the `it.each`. The list starts empty, so
   the criteria on it and on the shared half's bytes sit in
   [Slice 5.5b](./05b-identity-threads.md), whose templates first fill
@@ -362,7 +362,7 @@ and tools sit under `lib/pipeline/definitions/close-agent/`.
 
 **`pnpm probe:close` (`scripts/close-probe.ts`).** Its precedent is
 `scripts/classifier-parse-probe.ts`, `pnpm probe:classifier`
-(`package.json:49`), with the same `SMOKE_LLM_*`, `PROBE_RUNS`,
+(`package.json:51`), with the same `SMOKE_LLM_*`, `PROBE_RUNS`,
 `PROBE_BRANCH_ID`, `PROBE_OUT` and `AVENTURAS_DB_PATH`.
 
 - Each run takes a fresh copy of the source database with `VACUUM INTO`,
