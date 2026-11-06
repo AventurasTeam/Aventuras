@@ -175,4 +175,19 @@ slice-planning gate forces its resolution before that slice is planned.
   (`generation-context.ts`), the close's range and ledger
   (`chapter-close-metadata.ts`, `chapter-close-report.ts`) and the pass's
   pre-run status. Each key's type is convention, and Slice 5.5a adds the
-  close's ledger writer. Surfaced by Slice 5.2's review.
+  close's ledger writer. The close's metadata and report phases also repeat
+  one missing-range read and its failure, which a typed accessor would hold.
+  Surfaced by Slice 5.2's review.
+- **Test and E2E helpers repeat with no shared home.** `scalar` is defined
+  in both `e2e/tests/dataset-chapter.build.spec.ts` and
+  `e2e/tests/first-chapter.spec.ts`, where `e2e/harness/db.ts` could hold
+  it. The dataset spec's `runsAfter`, `classifierStatus` and `systemEntry`
+  mirror `classifier-real-provider.smoke.spec.ts`'s but differ (one story
+  or all, an idle fallback on null, the latest row or any), so sharing them
+  needs those choices made. A whole `StoreChapter` factory is written out in
+  `chapter-breaks.test.ts`, `reader-chapter-chips.test.tsx`,
+  `reader-chapter-chips.stories.tsx`, `use-rail-data.test.tsx` and
+  `chapter-close-metadata-call.test.ts`, and the phase tests' `drain`
+  generator helper repeats across the close's and older pipeline tests
+  (`lib/pipeline/definitions/__tests__/phase-db.ts` is a candidate home).
+  Surfaced by Slice 5.2's review.
