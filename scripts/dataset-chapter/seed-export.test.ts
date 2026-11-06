@@ -217,6 +217,21 @@ describe('exportStorySeed', () => {
     await expect(refusal).rejects.not.toThrow(shaped)
   })
 
+  it.each([
+    ['inside a longer text', 'request failed: {"apiKey": "other-provider-secret"}'],
+    ['as the whole text', '{"error":{"Authorization":"other-provider-secret"}}'],
+  ])('refuses a credential-named field in JSON %s, without echoing it', async (_, text) => {
+    const sqlite = await seeded()
+    sqlite
+      .prepare(
+        `UPDATE branches SET classifier_status = json_set(classifier_status, '$.lastError', ?) WHERE id = ?`,
+      )
+      .run(text, HERO_MAIN)
+    const refusal = exported(sqlite)
+    await expect(refusal).rejects.toThrow(/branches\[\d+\][\s\S]*credential-named/)
+    await expect(refusal).rejects.not.toThrow('other-provider-secret')
+  })
+
   it('refuses a short provider key it could not scan for', async () => {
     const sqlite = await seeded()
     setProviderKey(sqlite, 'Qz7')

@@ -9,8 +9,11 @@ import { branches, stories } from '../../lib/db/schema'
 import { DATASET_SEED_TABLES, parseStorySeed, type SeedAppRefs } from '../seed/dataset-story'
 import { makeProxy } from '../seed/sqlite-proxy'
 
-const CREDENTIAL_FIELD =
-  /^(api[-_]?key|secret|password|authorization|bearer|access[-_]?token|refresh[-_]?token)$/i
+const CREDENTIAL_NAMES =
+  'api[-_]?key|secret|password|authorization|bearer|access[-_]?token|refresh[-_]?token'
+const CREDENTIAL_FIELD = new RegExp(`^(?:${CREDENTIAL_NAMES})$`, 'i')
+// A text column can carry serialized JSON, such as a provider's error body.
+const CREDENTIAL_JSON_FIELD = new RegExp(`"(?:${CREDENTIAL_NAMES})"\\s*:`, 'i')
 const CREDENTIAL_VALUE = /\bsk-[\w-]{20,}|\bBearer\s+[\w.~+/=-]{20,}/i
 
 function providerKeys(sqlite: DatabaseSync): string[] {
@@ -27,6 +30,7 @@ function credentialAt(value: unknown, path: string, keys: readonly string[]): st
   if (typeof value === 'string') {
     if (holdsSecret(value, keys))
       return `${path} holds a provider key from the database's app settings`
+    if (CREDENTIAL_JSON_FIELD.test(value)) return `${path} holds a credential-named JSON field`
     return CREDENTIAL_VALUE.test(value) ? `${path} looks like a credential` : null
   }
   if (value === null || typeof value !== 'object') return null
