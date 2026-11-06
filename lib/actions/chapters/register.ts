@@ -1,6 +1,6 @@
 import { and, eq } from 'drizzle-orm'
 
-import type { Chapter, CloseReport, NewChapter } from '@/lib/db'
+import type { Chapter, NewChapter } from '@/lib/db'
 import { chapterWriteSchema, chapters, KIND_FIELDS } from '@/lib/db'
 import { chaptersStore } from '@/lib/stores'
 
@@ -11,13 +11,10 @@ import type { DeltaSource } from '../types'
 
 const cascade = rowCascade('chapter')
 
-type ChapterUpdatePatch = Partial<{
-  title: string
-  summary: string
-  theme: string
-  keywords: string[]
-  closeReport: CloseReport | null
-}>
+// What a write after the close may change: its number, range and token snapshot are fixed there.
+const UPDATABLE = ['title', 'summary', 'theme', 'keywords', 'closeReport'] as const
+
+type ChapterUpdatePatch = Partial<Pick<Chapter, (typeof UPDATABLE)[number]>>
 
 declare module '@/lib/actions/action-map' {
   interface PipelineActionMap {
@@ -29,9 +26,6 @@ declare module '@/lib/actions/action-map' {
     deleteChapter: { source: DeltaSource; payload: { branchId: string; id: string } }
   }
 }
-
-// What a write after the close may change: its number, range and token snapshot are fixed there.
-const UPDATABLE = ['title', 'summary', 'theme', 'keywords', 'closeReport'] as const
 
 function fullRow(entry: NewChapter): Chapter {
   // Apply SQLite defaults so the inserted row and the store create-patch row are byte-identical.
