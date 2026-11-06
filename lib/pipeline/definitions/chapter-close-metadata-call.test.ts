@@ -290,9 +290,11 @@ describe('requestChapterMetadata', () => {
   })
 
   it('prompts with the range, the latest chapter before it and the open threads', async () => {
+    // Out of sequence order, as an open can hydrate them: its read has no ORDER BY, ids are random.
     chaptersStore.hydrate('b1', [
       chapter(1, 'Kael left the keep at dawn with the stolen sigil.'),
-      chapter(2, 'Kael reached the marsh as the bells began to ring.'),
+      chapter(3, 'Kael reached the marsh as the bells began to ring.'),
+      chapter(2, 'Kael hid from the riders in a flooded chapel.'),
     ])
     threadsStore.hydrate('b1', [
       thread('thr_1', 'Find the heir', 'active'),
@@ -316,6 +318,7 @@ describe('requestChapterMetadata', () => {
       '# The previous chapter\nKael reached the marsh as the bells began to ring.',
     )
     expect(user).not.toContain('Kael left the keep at dawn')
+    expect(user).not.toContain('flooded chapel')
     expect(user).toContain('- Find the heir (active)\n- The ford crossing (pending)')
     expect(user).not.toContain('The lost map')
     expect(user).not.toContain('Warn the abbey')
