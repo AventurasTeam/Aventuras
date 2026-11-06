@@ -104,9 +104,10 @@ production and nowhere else.
 Four launch gotchas — the first and last are yours to handle, the middle
 two the harness absorbs:
 
-- **Neither suite builds anything.** There is no `globalSetup` and no
-  pretest hook in either project, so both run whatever artifact is
-  already on disk: `pnpm test:e2e:packaged` launches the binary sitting
+- **Neither suite builds anything.** The one `globalSetup`
+  (`e2e/global-setup.ts`) only provisions the
+  [embedder cache](#embedder-in-e2e), and there is no pretest hook, so
+  both projects run whatever artifact is already on disk: `pnpm test:e2e:packaged` launches the binary sitting
   in `release/linux-unpacked/`, and `pnpm test:e2e` serves the `dist/`
   export plus the compiled `electron/dist/main.js`. A stale artifact
   fails **silently and selectively** — every spec predating your branch
@@ -151,52 +152,106 @@ two the harness absorbs:
 ### Virtual display
 
 Both `pnpm test:e2e` scripts route through
-[`scripts/e2e.ts`](../scripts/e2e.ts), which wraps the Playwright run
-in `xvfb-run` on Linux. Electron has no working headless mode there —
-`--ozone-platform=headless` segfaults in the GLX stack, with or
+[`scripts/e2e.ts`](../scripts/e2e.ts), which on Linux sets
+`E2E_VIRTUAL_DISPLAY=1`. Under it
+[`e2e/harness/display.ts`](../e2e/harness/display.ts) starts an `Xvfb`
+for every app launch, `launchApp` and `spawnAppProcess` alike, and
+stops it after the app. Electron has no working headless mode on Linux
+— `--ozone-platform=headless` segfaults in the GLX stack, with or
 without `--disable-gpu` — so a virtual X server is the only way to
 keep the app off the developer's screen. Without it every run steals
 focus for its duration, which makes an agent-initiated suite
 unusable alongside other work.
 
-The wrapper pins `-screen 0 1920x1080x24` rather than inheriting the
-distro default: Arch's `xvfb-run` defaults to 640x480, which clips the
-1280x800 `BrowserWindow` and drops the renderer below the 1024px
-desktop breakpoint — the suite would silently exercise the narrow
-layout.
+**One display per launch, because windows on one display take the
+focus from each other.** There is no window manager under Xvfb, but X
+input focus still exists, and each new window takes it: the window that
+had it gets a `blur` and `document.hasFocus()` turns false. An open
+Select closes on that blur (Radix closes it on `window` blur), so with
+parallel [workers](#workers) on one shared display, a launch in one
+worker closed a dropdown another worker's spec was about to click.
+`display-isolation.spec.ts` pins the separation.
+
+The screen is pinned at `1920x1080x24` rather than Xvfb's default,
+which varies by build: a screen smaller than the 1280x800
+`BrowserWindow` drops the renderer below the 1024px desktop
+breakpoint, and the suite would silently exercise the narrow layout.
 
 **Xvfb alone is not sufficient on a Wayland session.** It only sets
 `DISPLAY`, which Electron ignores in favour of the compositor — the
 window opens on the developer's real screen while the virtual server
 sits empty, and every symptom of the problem remains. The fix is
 `--ozone-platform=x11`, applied in
-[`e2e/harness/launch.ts`](../e2e/harness/launch.ts) when the wrapper
-sets `E2E_VIRTUAL_DISPLAY=1`. The two halves are load-bearing
-together: neither works alone. Note that `ELECTRON_OZONE_PLATFORM_HINT`
-does **not** substitute for the switch, and clearing `WAYLAND_DISPLAY`
-does not either — Wayland clients fall back to the default `wayland-0`
+[`e2e/harness/launch.ts`](../e2e/harness/launch.ts) under
+`E2E_VIRTUAL_DISPLAY=1`. The two halves are load-bearing together:
+neither works alone. Note that `ELECTRON_OZONE_PLATFORM_HINT` does
+**not** substitute for the switch, and clearing `WAYLAND_DISPLAY` does
+not either — Wayland clients fall back to the default `wayland-0`
 socket.
 
 Verifying a change here means checking that the app window actually
-landed on the virtual display, not that `Xvfb` is running — those come
-apart exactly in the Wayland case above. During a run,
-`DISPLAY=:99 xdotool search --name '.*'` should list the 1280x800
-`Aventuras` window and the 800x600 `Developer Tools` one.
+landed on a virtual display, not that `Xvfb` is running — those come
+apart exactly in the Wayland case above. During a run each launch's
+display shows up as a socket in `/tmp/.X11-unix/`, and
+`DISPLAY=:<n> xdotool search --name '.*'` on one should list the
+1280x800 `Aventuras` window (and in `dev`, an 800x600
+`Developer Tools` one).
 
-Two consequences worth knowing:
+Three consequences worth knowing:
 
 - **Install is per-machine.** Arch: `xorg-server-xvfb`;
   Debian/Ubuntu: `xvfb` (also pulled by `playwright install-deps`).
   Missing, the wrapper warns and runs headed rather than failing.
   On macOS/Windows it is a no-op passthrough.
-- **There is no window manager under Xvfb**, so no OS-level window
-  focus. Playwright drives input over CDP, and DOM focus is
-  unaffected — but a spec asserting on `win.isFocused()` or
-  WM-mediated blur would pass here while being effectively untested.
-  Set `E2E_HEADED=1` to run on the real display when watching a run
-  or debugging one of those. `--ui`, `--debug`, `--headed` and
-  `PWDEBUG=1` opt out on their own — hiding the inspector a developer
-  just asked for would be the wrapper defeating its own user.
+- **No other launch shares a display**, so the app window keeps the
+  focus; in `dev` only its own detached DevTools window is beside it.
+  Playwright drives input over CDP, and DOM focus is unaffected — but
+  a spec asserting on `win.isFocused()` or a blur from another window
+  would pass here while being effectively
+  untested. Set `E2E_HEADED=1` to run on the real display when
+  watching a run or debugging one of those. `--ui`, `--debug`,
+  `--headed` and `PWDEBUG=1` opt out on their own — hiding the
+  inspector a developer just asked for would be the wrapper defeating
+  its own user.
+- **A SIGKILLed worker leaves its displays behind.** A launch stops
+  its Xvfb on close, and a worker that throws kills what is left from
+  an exit hook, apps first: Electron whose X server is gone spins and
+  ignores SIGTERM. A worker killed outright (the OOM killer, a
+  `kill -9`) runs no hook, so its Xvfb and apps outlive the run.
+
+### Workers
+
+Spec files run in parallel, one file to a worker
+(`fullyParallel: false`): a file's tests share the app its `beforeAll`
+launched, and a serial describe builds on the test before. Nothing
+one file touches is another's: each seeds its own temp `userData`
+([below](#fixture--seed-contract)), each launch takes its own ports
+(the mock LLM, `dev`'s static server and the DevTools port all bind
+`0`) and its own [display](#virtual-display), and with it its own
+clipboard, and Electron keys its single-instance lock on `userData`. A spec must keep it that way — no fixed port, no
+path outside its temp dir, nothing written to the home directory but
+the embedder cache.
+
+The count, from `playwright.config.ts`:
+
+- **Half the cores, capped at 8**, when the run has virtual displays.
+  Past the cap a run waits on its longest file rather than on the
+  cores, and the machine is shared: other dev slots, their emulators
+  and their own suites. **`E2E_WORKERS`** overrides it, as a number or
+  a percentage of the cores.
+- **1** without virtual displays (headed, macOS, Windows), whatever
+  `E2E_WORKERS` says: real windows on one screen would take the focus
+  from each other. Only Playwright's own `--workers` overrides that.
+
+A long file is the run's floor: its describes run one after another in
+one worker while the others finish. A file whose describes each launch
+their own app splits by describe, as the periodic classifier's did
+into `periodic-classifier.spec.ts`, `-gated` and `-failures`, with the
+shared probes in `e2e/flows/classifier-pass.ts`.
+
+`retries: 1` absorbs a transient, so a parallel run can pass while
+hiding a spec that interferes with another: read a `flaky` line in the
+summary as a lead, not noise.
 
 ## Harness structure
 
@@ -207,6 +262,7 @@ and never hand-write a selector string or a launch sequence.
 e2e/
   harness/
     launch.ts     electron.launch, --user-data-dir, window-by-URL, app.evaluate helpers
+    display.ts    an Xvfb per launch under E2E_VIRTUAL_DISPLAY
     seed.ts       build a temp userData: seed → temp DB, copy fixture embedder model
     db.ts         typed DB assertions via app.evaluate (entries, deltas, vec rows)
     i18n.ts       boot i18next once; t(key, vars) → resolved accessible-name strings
@@ -270,8 +326,9 @@ is the one for the renderer writing it.
 
 ## Fixture + seed contract
 
-Fixtures are **built at test time**, not checked in. Per run (per
-worker), the harness creates a fresh temp `userData` dir, runs the
+Fixtures are **built at test time**, not checked in. For each spec's
+setup, usually a describe's `beforeAll`, the harness creates a fresh
+temp `userData` dir, runs the
 seed dataset into `<userData>/aventuras.db`, and copies a fixture
 embedder model into `<userData>/embedders/` (below). `--user-data-dir`
 points Electron at it, giving isolation and seeding for free —
@@ -381,10 +438,15 @@ embedding pass over the seeded content fills them, which is exactly
 the machinery under test.
 
 - **Model:** `Xenova/all-MiniLM-L6-v2` (384-dim), the seed's declared
-  model. At ~23 MB it is too large for git — CI downloads it once
-  into a cached directory (mirroring the Playwright-browser cache in
-  `.github/workflows/ci.yml`); local runs reuse the dev
-  `userData/embedders` when present.
+  model. At ~23 MB it is too large for git, so the harness downloads
+  it once into `~/.cache/aventuras-e2e/embedders` and copies it into
+  each launch's `userData` (`e2e/harness/embedder.ts`). It never reads
+  a dev slot's `userData/embedders`. The download runs in
+  `globalSetup`, before any worker starts: workers provisioning a
+  cold cache themselves would delete the directory another is copying
+  from. So a run on a cold cache needs Hugging Face, even one filtered
+  to specs that never embed. CI keeps the directory in its cache,
+  keyed on the catalog.
 - **Download flow is not E2E-tested — manual only.**
   `assertAllowedDownloadUrl` (`electron/embedder/paths.ts`) hardcodes a
   single allowed origin, so the download IPC path can't target a local
@@ -615,34 +677,46 @@ role selectors are safe there.
 
 ## CI
 
-One packaged job (`e2e`) in
-[`.github/workflows/ci.yml`](../.github/workflows/ci.yml), running on
-every PR alongside `check` and `test`:
+[`.github/workflows/ci.yml`](../.github/workflows/ci.yml) runs four
+jobs on every PR: `check` (lint, format, types, docs, migrations),
+`unit` and `test` (the vitest `unit` and `storybook` projects, apart so
+they don't compete for one runner's cores), and the packaged E2E.
 
-1. `pnpm build:web` — export the web bundle (~21 s).
+`unit` and E2E run in shards (`--shard=N/total`), each on its own
+runner, and each reports under one check, `Unit tests (vitest)` and
+`E2E (Playwright + Electron, packaged)`, which passes only when every
+shard does; the shard count can change without the check's name
+changing. Vitest splits its two shards evenly by file. Playwright
+splits its three by file, in name order, balanced on test count rather
+than time. Each E2E shard:
+
+1. `pnpm build:web` — export the web bundle.
 2. `pnpm electron:compile` — compile the Electron main.
 3. `pnpm exec electron-builder --linux --dir` — package unpacked,
-   skipping AppImage/deb compression (~58 s locally vs ~2m38s for a
-   full package). Produces the asar, unpacked native modules, and
-   `extraResources` migrations the tests need. The Electron binary and
-   builder downloads are cached, keyed on the Electron and
-   electron-builder versions.
-4. `playwright install-deps chromium` — Electron's shared libraries
-   (no browser download).
-5. `pnpm test:e2e:packaged` (the `packaged` Playwright project) — the
-   script supplies the [virtual display](#virtual-display) itself, so
-   CI and local runs invoke the same command. The harness seeds a
-   throwaway `userData` per run and launches the packaged binary
-   against it.
+   skipping AppImage/deb compression. Produces the asar, unpacked
+   native modules, and `extraResources` migrations the tests need.
+   The Electron binary and builder downloads are cached, keyed on the
+   Electron and electron-builder versions.
+4. `pnpm test:e2e:packaged --shard=N/3` (the `packaged` Playwright
+   project) — the script asks for
+   [virtual displays](#virtual-display) itself, so CI and local runs
+   invoke the same command, and the runner's four cores give two
+   [workers](#workers).
 
-The embedder model cache (for the retrieval/turn tiers) is added when
-those tests land.
+Each shard builds its own package rather than waiting on a build job:
+that job would sit in front of every shard, and handing its package
+over costs an upload and a download per shard. The embedder model
+cache is restored per shard, keyed on the catalog; shard 1 saves both
+caches on `main`.
+
+No job runs `playwright install-deps`. The pinned `ubuntu-24.04` image
+already carries every library Chromium and Electron load, and Xvfb, so
+the step only added fonts no test renders, through an apt mirror that
+twice stalled for 7 to 9 minutes. On a new image, check that again: a
+missing library fails the launch loudly rather than the suite quietly.
 
 ## Known limitations and open questions
 
-- **CI wall-clock is estimated, not measured.** Confirm on the first
-  green run; if the packaging step dominates, consider gating `e2e`
-  behind `check` or caching the unpacked build.
 - **Embedder download flow** is manual-only — the origin-seam setup
   isn't worth the payoff for one flow (see the embedder section).
 - **`force-on` structured output doesn't put the schema on the wire.**

@@ -466,7 +466,6 @@ test.describe('dataset chapter — build', () => {
   const problems: string[] = []
 
   test.beforeAll(async () => {
-    // A cold embedder cache downloads ~24 MB before launch.
     test.setTimeout(300_000)
     const env = readEnv()
     assertExportTarget(env.out)

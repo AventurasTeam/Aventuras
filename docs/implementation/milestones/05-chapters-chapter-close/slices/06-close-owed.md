@@ -437,7 +437,9 @@ E2E suite stays green with auto-close now live. The inventory's
 - **E2E,** one file, `e2e/tests/chapter-close-owed.spec.ts`, on 5.2's
   metadata mock shape, with `holdNextStructured` for the interrupts and
   a seed helper lowering `chapterTokenThreshold`. Its groups follow
-  `periodic-classifier.spec.ts`'s gated pass and failure policy.
+  the periodic classifier's gated pass and failure policy
+  (`periodic-classifier-gated.spec.ts`,
+  `periodic-classifier-failures.spec.ts`).
 - **Mutation check** on `closeOwed`'s arms, the moved guard and the
   chain's end: a guard here can stay green while doing nothing.
 

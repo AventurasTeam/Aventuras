@@ -22,8 +22,7 @@ test.describe('reader — cancel a turn mid-flight', () => {
 
   test.beforeAll(async () => {
     // Retrieval blocks ahead of narrative, so without an installed embedder the
-    // turn dies there and no stream is ever opened to cancel. Cold cache
-    // downloads ~24 MB from Hugging Face before launch.
+    // turn dies there and no stream is ever opened to cancel.
     test.setTimeout(180_000)
     const seeded = createSeededUserDataDir()
     userDataDir = seeded.userDataDir

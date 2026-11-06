@@ -19,7 +19,6 @@ test.describe('local embedder', () => {
   let expectedDim: number
 
   test.beforeAll(async () => {
-    // Cold cache downloads ~24 MB from Hugging Face before launch.
     test.setTimeout(180_000)
     ;({ userDataDir } = createSeededUserDataDir())
     ;({ modelId, dim: expectedDim } = await installEmbedderModel(userDataDir))

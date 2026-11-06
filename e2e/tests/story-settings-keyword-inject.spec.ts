@@ -46,7 +46,7 @@ test.describe('story settings — keyword Inject seats a keyworded lore row', ()
 
   test.beforeAll(async () => {
     // Retrieval blocks ahead of narrative, so a turn without an installed
-    // embedder never reaches the reply; a cold cache downloads ~24 MB first.
+    // embedder never reaches the reply.
     test.setTimeout(180_000)
     const seeded = createSeededUserDataDir()
     userDataDir = seeded.userDataDir

@@ -264,7 +264,7 @@ test.describe('story settings — consent on a story with no turns yet', () => {
 
   test.beforeAll(async () => {
     // Retrieval blocks ahead of narrative, so the turn below never reaches a
-    // reply without an installed embedder; a cold cache downloads ~24 MB first.
+    // reply without an installed embedder.
     test.setTimeout(240_000)
     const seeded = createSeededUserDataDir()
     userDataDir = seeded.userDataDir

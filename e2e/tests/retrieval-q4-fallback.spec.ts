@@ -55,8 +55,7 @@ test.describe('retrieval Q4 — fallback classifier across a turn boundary', () 
   let userDataDir: string | undefined
 
   test.beforeAll(async () => {
-    // Embed failure blocks the reply (model-management.md → Embed failure is blocking); cold
-    // cache pulls ~24 MB from Hugging Face before launch, hence the long timeout.
+    // Embed failure blocks the reply (model-management.md → Embed failure is blocking).
     test.setTimeout(180_000)
     const seeded = createSeededUserDataDir()
     userDataDir = seeded.userDataDir

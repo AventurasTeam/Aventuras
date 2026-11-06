@@ -137,7 +137,7 @@ test.describe('embedding upgrade prompt — Upgrade', () => {
     // The only case that needs the default to be a real embedder: the pre-seat matches the app
     // default's exact target, `local:<id>`, so it seats nothing unless that model is installed
     // on this device. `idOverride` relabels a copy of the provisioned default instead of
-    // fetching a second model; a cold cache pays for that one download here.
+    // fetching a second model.
     test.setTimeout(180_000)
     const seeded = createSeededUserDataDir()
     userDataDir = seeded.userDataDir

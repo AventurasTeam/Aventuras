@@ -62,8 +62,7 @@ test.describe.serial('chapter progress strip', () => {
   let branchId: string
 
   test.beforeAll(async () => {
-    // Retrieval blocks ahead of narrative, so the failed turn needs an installed embedder. Cold
-    // cache downloads ~24 MB from Hugging Face.
+    // Retrieval blocks ahead of narrative, so the failed turn needs an installed embedder.
     test.setTimeout(180_000)
     const seeded = createSeededUserDataDir()
     userDataDir = seeded.userDataDir

@@ -11,8 +11,11 @@ concurrency:
   cancel-in-progress: true
 
 # Runners are pinned, not ubuntu-latest: that label moves to Ubuntu 26.04 from
-# 2026-10-19, and Playwright < 1.61 can't install Chromium or its deps there
-# (install-deps just warns and exits 0). Move the pin deliberately.
+# 2026-10-19, and Playwright < 1.61 can't install Chromium there. Move the pin
+# deliberately. The pinned image already carries every library Chromium and
+# Electron load, and Xvfb, so no job runs `playwright install-deps`: it only
+# added fonts no test renders, from an apt mirror that has stalled for 7-9 min.
+# Recheck that on a new image; a missing library fails the launch loudly.
 jobs:
   check:
     name: Lint, format, typecheck, docs
@@ -50,6 +53,36 @@ jobs:
       - name: Typecheck Electron main
         run: pnpm electron:compile
 
+  # Apart from the browser project, so the two don't compete for one runner's
+  # cores.
+  unit:
+    name: Unit shard ${{ matrix.shard }}/${{ strategy.job-total }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2]
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Install dependencies
+        uses: ./.github/actions/pnpm-install
+
+      - name: Run unit tests
+        run: pnpm exec vitest run --project unit --shard=${{ matrix.shard }}/${{ strategy.job-total }}
+
+  # The check the shards report under, so its name holds whatever the shard count.
+  unit-result:
+    name: Unit tests (vitest)
+    if: always()
+    needs: unit
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - name: Every shard passed
+        run: test "${{ needs.unit.result }}" = success
+
   test:
     name: Storybook tests (vitest + playwright)
     runs-on: ubuntu-24.04
@@ -77,7 +110,7 @@ jobs:
 
       - name: Install Playwright browsers
         if: steps.playwright-cache.outputs.cache-hit != 'true'
-        run: pnpm exec playwright install --with-deps chromium
+        run: pnpm exec playwright install chromium
 
       # Cache saves run on main only; see .github/actions/pnpm-install/action.yml.
       - name: Save Playwright cache
@@ -87,17 +120,19 @@ jobs:
           path: ~/.cache/ms-playwright
           key: ${{ steps.playwright-cache.outputs.cache-primary-key }}
 
-      - name: Install Playwright system deps
-        if: steps.playwright-cache.outputs.cache-hit == 'true'
-        run: pnpm exec playwright install-deps chromium
-
       - name: Run story tests
-        run: pnpm test:run
+        run: pnpm exec vitest run --project storybook
 
+  # Sharded across runners. Each shard builds its own package: a build job would
+  # sit in front of every shard (docs/testing.md → CI).
   e2e:
-    name: E2E (Playwright + Electron, packaged)
+    name: E2E shard ${{ matrix.shard }}/${{ strategy.job-total }}
     runs-on: ubuntu-24.04
-    timeout-minutes: 30
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2, 3]
     steps:
       - uses: actions/checkout@v7
 
@@ -133,19 +168,15 @@ jobs:
       - name: Package desktop (unpacked)
         run: pnpm exec electron-builder --linux --dir
 
+      # One shard saves; the others would race it for the same key.
       - name: Save Electron cache
-        if: github.ref == 'refs/heads/main' && steps.electron-cache.outputs.cache-hit != 'true'
+        if: matrix.shard == 1 && github.ref == 'refs/heads/main' && steps.electron-cache.outputs.cache-hit != 'true'
         uses: actions/cache/save@v6
         with:
           path: |
             ~/.cache/electron
             ~/.cache/electron-builder
           key: ${{ steps.electron-cache.outputs.cache-primary-key }}
-
-      # Electron needs Chromium's shared libraries; install-deps provides them
-      # (and xvfb) without downloading a browser.
-      - name: Install system libraries for Electron
-        run: pnpm exec playwright install-deps chromium
 
       # Fixture embedder model (~24 MB from Hugging Face); the harness downloads
       # it on a cache miss. Keyed on the catalog so a model/revision bump busts.
@@ -156,15 +187,26 @@ jobs:
           path: ~/.cache/aventuras-e2e
           key: e2e-embedder-${{ hashFiles('lib/embedder/catalog-data.json') }}
 
-      # Electron has no true headless mode on Linux — the script wraps the run
-      # in a virtual display (scripts/e2e.ts). The packaged project launches the
-      # built binary; the harness seeds a throwaway userData per run.
+      # Electron has no true headless mode on Linux — the script has the harness
+      # start a virtual display per launch (scripts/e2e.ts). The packaged project
+      # launches the built binary; the harness seeds a throwaway userData per launch.
       - name: Run E2E (packaged, headless via xvfb)
-        run: pnpm test:e2e:packaged
+        run: pnpm test:e2e:packaged --shard=${{ matrix.shard }}/${{ strategy.job-total }}
 
       - name: Save embedder model cache
-        if: github.ref == 'refs/heads/main' && steps.embedder-cache.outputs.cache-hit != 'true'
+        if: matrix.shard == 1 && github.ref == 'refs/heads/main' && steps.embedder-cache.outputs.cache-hit != 'true'
         uses: actions/cache/save@v6
         with:
           path: ~/.cache/aventuras-e2e
           key: ${{ steps.embedder-cache.outputs.cache-primary-key }}
+
+  # The check the shards report under, so its name holds whatever the shard count.
+  e2e-result:
+    name: E2E (Playwright + Electron, packaged)
+    if: always()
+    needs: e2e
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - name: Every shard passed
+        run: test "${{ needs.e2e.result }}" = success

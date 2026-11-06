@@ -3858,11 +3858,12 @@ of Japanese, so the phone measure in `followups.md` is what decides this.
 
 #### A setup factory for the periodic classifier spec
 
-`e2e/tests/periodic-classifier.spec.ts` repeats one describe setup in
-each of its twelve `beforeAll` blocks: seed, embedder, mock, endpoint,
-launch and cadence. The overflow describe's `beforeAll` differs from the
-cut-off one's by two lines. A factory would be a change to the whole
-file, and no defect sits behind the repetition.
+The periodic classifier specs (`e2e/tests/periodic-classifier.spec.ts`,
+`-gated` and `-failures`) repeat one describe setup in each of their
+twelve `beforeAll` blocks: seed, embedder, mock, endpoint, launch and
+cadence. The overflow describe's `beforeAll` differs from the cut-off
+one's by two lines. A factory would be a change to all three files,
+and no defect sits behind the repetition.
 
 A spec failure that had to be fixed in several of those blocks is the
 signal to revisit.

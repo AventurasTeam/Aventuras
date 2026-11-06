@@ -32,7 +32,6 @@ test.describe('embedder — drain on story open', () => {
   let modelId: string
 
   test.beforeAll(async () => {
-    // Cold cache downloads ~24 MB from Hugging Face before launch.
     test.setTimeout(180_000)
     const seeded = createSeededUserDataDir()
     userDataDir = seeded.userDataDir

@@ -6,6 +6,8 @@ import { extname, join, normalize } from 'node:path'
 
 import { _electron as electron, test, type ElectronApplication, type Page } from '@playwright/test'
 
+import { startDisplay, trackClient, type Display } from './display'
+
 const REPO_ROOT = join(__dirname, '..', '..')
 const DIST = join(REPO_ROOT, 'dist')
 
@@ -29,10 +31,8 @@ const DEV_ELECTRON = join(REPO_ROOT, 'node_modules', 'electron', 'dist', 'electr
 
 const APP_SCHEME_ORIGIN = 'app://'
 
-// scripts/e2e.ts runs the suite under Xvfb so it never steals focus, but on a
-// Wayland session Electron ignores DISPLAY and connects to the compositor —
-// the window opens on the developer's real screen and Xvfb stays empty. Only
-// this switch pins the backend; the env-var hint is ignored.
+// On Wayland, Electron ignores DISPLAY and opens on the real screen, leaving its Xvfb (./display)
+// empty. Only this switch pins X11; the env-var hint is ignored.
 const ozoneArgs = process.env.E2E_VIRTUAL_DISPLAY === '1' ? ['--ozone-platform=x11'] : []
 
 const MIME: Record<string, string> = {
@@ -111,9 +111,17 @@ async function closeApp(app: ElectronApplication, proc: ChildProcess): Promise<v
   await closing
 }
 
+// After the app, which left without its X server spins and ignores SIGTERM. Never throws, so the
+// cleanup after it runs: an Xvfb that outlives SIGKILL is stuck in the kernel.
+const stopDisplay = async (display: Display) => {
+  if (display.server) await stopAppProcess(display.server).catch(() => {})
+}
+
 export type LaunchedApp = {
   app: ElectronApplication
   window: Page
+  /** The app's own virtual display, or none on the real screen. */
+  display: Display
   close: () => Promise<void>
 }
 
@@ -128,12 +136,18 @@ export async function launchApp(opts: {
   const stopServer = (server: Server) =>
     new Promise<void>((resolve) => server.close(() => resolve()))
 
+  const display = await startDisplay().catch(async (err: unknown) => {
+    await cleanupUserData()
+    throw err
+  })
+
   if (currentMode() === 'packaged') {
     let app: ElectronApplication | undefined
     try {
       app = await electron.launch({
         executablePath: PACKAGED_APP,
         args: [...ozoneArgs, `--user-data-dir=${opts.userDataDir}`],
+        env: { ...process.env, ...display.env },
         timeout: 60_000,
       })
       const window = await selectAppWindow(app, APP_SCHEME_ORIGIN)
@@ -142,17 +156,20 @@ export async function launchApp(opts: {
       return {
         app: launched,
         window,
+        display,
         // finally so a failing app.close() still cleans up the temp dir.
         close: async () => {
           try {
             await closeApp(launched, proc)
           } finally {
+            await stopDisplay(display)
             await cleanupUserData()
           }
         },
       }
     } catch (err) {
       await app?.close().catch(() => {})
+      await stopDisplay(display)
       await cleanupUserData()
       throw err
     }
@@ -164,7 +181,7 @@ export async function launchApp(opts: {
     app = await electron.launch({
       args: ['electron/dist/main.js', ...ozoneArgs, `--user-data-dir=${opts.userDataDir}`],
       cwd: REPO_ROOT,
-      env: { ...process.env, EXPO_WEB_URL: origin },
+      env: { ...process.env, ...display.env, EXPO_WEB_URL: origin },
       timeout: 60_000,
     })
     const window = await selectAppWindow(app, origin)
@@ -173,6 +190,7 @@ export async function launchApp(opts: {
     return {
       app: launched,
       window,
+      display,
       // Each step runs regardless of an earlier failure — a throwing
       // app.close() must not leave the server holding the worker open.
       close: async () => {
@@ -180,6 +198,7 @@ export async function launchApp(opts: {
           await closeApp(launched, proc)
         } finally {
           await stopServer(server)
+          await stopDisplay(display)
           await cleanupUserData()
         }
       },
@@ -187,6 +206,7 @@ export async function launchApp(opts: {
   } catch (err) {
     await app?.close().catch(() => {})
     await stopServer(server)
+    await stopDisplay(display)
     await cleanupUserData()
     throw err
   }
@@ -204,10 +224,11 @@ const STDERR_TAIL_CHARS = 8000
  * Bypasses Playwright: `electron.launch` would await a window a refused instance never opens.
  * Caller owns the process. In dev its renderer URL is dead, so it lives only to be observed.
  */
-export function spawnAppProcess(userDataDir: string): SpawnedApp {
+export async function spawnAppProcess(userDataDir: string): Promise<SpawnedApp> {
   // As electron.launch does: without --no-sandbox a CI runner's sandbox kills it at startup.
   const args = ['--no-sandbox', ...ozoneArgs, `--user-data-dir=${userDataDir}`]
-  const env: NodeJS.ProcessEnv = { ...process.env }
+  const display = await startDisplay()
+  const env: NodeJS.ProcessEnv = { ...process.env, ...display.env }
   delete env.NODE_OPTIONS
   const stdio: StdioOptions = ['ignore', 'ignore', 'pipe']
   const proc =
@@ -225,6 +246,11 @@ export function spawnAppProcess(userDataDir: string): SpawnedApp {
   })
   // exitWithin reports a failed spawn; unheard, the 'error' event would crash the worker first.
   proc.on('error', () => {})
+  trackClient(proc)
+  // The process outlives this call, so its display goes when it does.
+  const release = () => void stopDisplay(display)
+  proc.once('exit', release)
+  proc.once('error', release)
   return { process: proc, stderr: () => stderr }
 }
 
