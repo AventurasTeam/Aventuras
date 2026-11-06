@@ -60,7 +60,7 @@ function row(
   }
 }
 
-// Prose, as a real close reads it (lessons-learned → token fixtures need real prose).
+// Prose, as a real close reads it.
 const ENTRIES: StoryEntry[] = [
   row(
     'e1',
@@ -499,7 +499,8 @@ describe('requestChapterMetadata', () => {
     expect(generateStructuredMock).not.toHaveBeenCalled()
   })
 
-  // classifier.md → Failure policy: a never-answering provider expires as a failure, not an abort.
+  // classifier.md → Failure policy: a never-answering provider expires as a failure, not an abort,
+  // at the lore-mgmt agent's own bound (M5 milestone → C2).
   describe('the bound on the call', () => {
     // Resolves with the fake-clock ms in flight when the call's signal aborts: the bound it armed.
     function callAbortedAfter(): Promise<number> {

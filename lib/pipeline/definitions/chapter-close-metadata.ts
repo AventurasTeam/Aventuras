@@ -24,8 +24,9 @@ async function nextSequenceNumber(db: DbCtx['db'], branchId: string): Promise<nu
 }
 
 /**
- * chapter-close.md → Phase 2: one metadata call for the range, then the row and one stamp per
- * entry through the end, in position order, every write anchored on the end entry (C1).
+ * chapter-close.md → Phase 2: one metadata call for the whole chapter, with no parts yet (Slice
+ * 5.8), then the row and one stamp per entry through the end, in position order, every write
+ * anchored on the end entry (C1).
  */
 export async function* closeMetadataPhase(
   ctx: PhaseContext,

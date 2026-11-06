@@ -2,7 +2,10 @@ import type { ResolveTarget } from './agents'
 import { profileTimeoutMs } from './generate'
 import { resolveModel, type ResolveModelConfig } from './resolve-model'
 
-/** classifier.md → Failure policy: the bound when the agent's profile sets no timeout. */
+/**
+ * classifier.md → Failure policy: the bound when the agent's profile sets no timeout. The same
+ * per-agent bound serves the chapter close's calls (M5 milestone → C2).
+ */
 export const CALL_TIMEOUT_DEFAULT_MS = 600_000
 
 /** The agent's profile `timeout` over a whole structured call, retries included. */
