@@ -83,12 +83,16 @@ export async function* requestChapterMetadata(
       status: 'failed',
       error: { kind: 'orchestrator', detail: 'chapter-close: branch not loaded' },
     }
+  // Read before the first await, while the check above still holds: an open publishing during the
+  // range read replaces the stores with another branch's rows.
+  const previousSummary = previousChapterSummary(ctx.branchId)
+  const threads = [...threadsStore.getThreads().values()].filter((t) => t.branchId === ctx.branchId)
   const prompt = renderTemplate(
     TEMPLATE_IDS.chapterMetadata,
     buildChapterContext({
       entries: await readCloseRangeEntries(ctx.db, ctx.branchId, range),
-      previousChapterSummary: previousChapterSummary(ctx.branchId),
-      threads: [...threadsStore.getThreads().values()].filter((t) => t.branchId === ctx.branchId),
+      previousChapterSummary: previousSummary,
+      threads,
       mode: open.definition.mode,
     }),
   )

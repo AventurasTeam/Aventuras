@@ -325,6 +325,38 @@ describe('requestChapterMetadata', () => {
     expect(system).toContain('Each is what the lead does, says or attempts')
   })
 
+  // An open publishes its branch over the working-set stores (loadAndPublish), so one landing while
+  // the range read is in flight would leave the close to read another branch's rows.
+  it("prompts with its own branch's chapter and threads when another branch is published mid-read", async () => {
+    chaptersStore.hydrate('b1', [chapter(1, 'Kael left the keep at dawn with the stolen sigil.')])
+    threadsStore.hydrate('b1', [thread('thr_1', 'Find the heir', 'active')])
+    generateStructuredMock.mockResolvedValue({ status: 'ok', value: REPLY, recoverable: [] })
+
+    const call = drain(phaseCtx())
+    entitiesStore.hydrate('b2', [])
+    chaptersStore.hydrate('b2', [
+      { ...chapter(1, 'On another branch the keep never fell.'), id: 'chap_b2', branchId: 'b2' },
+    ])
+    threadsStore.hydrate('b2', [
+      { ...thread('thr_b2', 'Rebuild the keep', 'active'), branchId: 'b2' },
+    ])
+    currentStoryStore.set({
+      storyId: 's2',
+      branchId: 'b2',
+      definition: DEFINITION,
+      settings: STORY_SETTINGS_DEFAULTS,
+    })
+    const { outcome } = await call
+
+    // Past the branch check: the publish landed after it, during the read.
+    expect(outcome).toMatchObject({ status: 'ok' })
+    const { user } = generateStructuredMock.mock.calls[0]![1]
+    expect(user).toContain(
+      '# The previous chapter\nKael left the keep at dawn with the stolen sigil.',
+    )
+    expect(user).toContain('# Open threads\n- Find the heir (active)')
+  })
+
   it('yields a recoverable_error per retried attempt before its outcome', async () => {
     generateStructuredMock.mockResolvedValue({
       status: 'ok',
