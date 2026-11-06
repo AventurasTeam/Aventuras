@@ -294,8 +294,11 @@ export async function handleCompletion(
     // Checked as a MockToolStep when it was saved; an unconfigured lane's `{}` is no calls and stop.
     const step = servedToolStep((canned?.value ?? {}) as MockToolStep, failure)
     entry.served = step
+    // Built before the headers go out: a stored value the schema would refuse throws here, to the
+    // server's 500, not after a 200.
+    const replyBody = toolStepBody(step, mockUsage(prompt, toolStepCompletionText(step)))
     res.writeHead(200, { ...CORS_HEADERS, 'content-type': 'application/json' })
-    res.end(toolStepBody(step, mockUsage(prompt, toolStepCompletionText(step))))
+    res.end(replyBody)
     finish()
     return
   }

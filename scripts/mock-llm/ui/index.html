@@ -711,7 +711,7 @@
               lane.failure.remaining === 1
                 ? `<p class="hint" style="color:var(--warn)">${
                     meta.kind === 'tool'
-                      ? 'A tool step retries once (<code>maxProviderAttempts: 2</code>, and once more on a cut reply)'
+                      ? 'A tool step retries a provider error once (<code>maxProviderAttempts: 2</code>) and runs again on a cut reply'
                       : 'Structured calls retry once (<code>maxProviderAttempts: 2</code>)'
                   }, so a single injected failure is swallowed before the app sees it. Use 2 or more.</p>`
                 : ''

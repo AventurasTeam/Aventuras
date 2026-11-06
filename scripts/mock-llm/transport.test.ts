@@ -1,5 +1,5 @@
 import { APICallError, tool, wrapLanguageModel, type ToolSet } from 'ai'
-import { afterAll, beforeAll, describe, expect, it } from 'vitest'
+import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest'
 import { z } from 'zod'
 
 import { fetchModelCatalog, parseStructured, replyStopOf } from '@/lib/ai'
@@ -304,13 +304,15 @@ describe('tool lanes through the app transport', () => {
   it.each(['malformed', 'stream-cut'] as const)(
     "%s cuts the first call's arguments in half, an invalid call, then answers whole",
     async (kind) => {
-      cannedSteps({
+      const canned: MockToolStep = {
         toolCalls: [
           { name: 'lookup', args: { query: 'the door' } },
           { name: 'lookup', args: { query: 'the key' } },
         ],
-      })
+      }
+      cannedSteps(canned)
       mock.ctx.lane(LOOKUP_LANE).failure = { kind, status: 500, remaining: 1 }
+      mock.ctx.log.clear()
 
       const cut = await sendToolStep()
 
@@ -320,6 +322,22 @@ describe('tool lanes through the app transport', () => {
         { toolName: 'lookup', input: { query: 'the key' } },
       ])
       expect(cut.toolCalls[1]).not.toHaveProperty('invalid')
+
+      // The log and the usage hold the step served, not the one configured.
+      const served: MockToolStep = {
+        toolCalls: [
+          { name: 'lookup', args: '{"query":"' },
+          { name: 'lookup', args: { query: 'the key' } },
+        ],
+      }
+      const entry = mock.ctx.log.list()[0]
+      expect(entry?.served).toEqual(served)
+      expect(cut.usage.outputTokens).toBe(
+        mockUsage('', toolStepCompletionText(served)).completion_tokens,
+      )
+      expect(cut.usage.outputTokens).not.toBe(
+        mockUsage('', toolStepCompletionText(canned)).completion_tokens,
+      )
 
       const whole = await sendToolStep()
 
@@ -374,5 +392,26 @@ describe('tool lanes through the app transport', () => {
     expect(result.usage.outputTokens).toBe(
       mockUsage('', toolStepCompletionText(LOOK_AT_THE_DOOR)).completion_tokens,
     )
+  })
+
+  it('answers a 500 for a stored step the schema would refuse, not an empty 200', async () => {
+    cannedSteps({ toolCalls: 'x' } as unknown as MockToolStep)
+    const logged = vi.spyOn(console, 'error').mockImplementation(() => {})
+
+    try {
+      const res = await fetch(`${mock.url}/chat/completions`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          model: 'seed/narrative',
+          messages: [{ role: 'user', content: 'Open the door.' }],
+          tools: [{ type: 'function', function: { name: 'lookup', parameters: {} } }],
+        }),
+      })
+
+      expect(res.status).toBe(500)
+    } finally {
+      logged.mockRestore()
+    }
   })
 })

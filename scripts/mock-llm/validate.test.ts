@@ -71,7 +71,10 @@ describe('validateLaneValue — a tool step', () => {
     ['a call with no args', { toolCalls: [{ name: 'lookup' }] }],
     ['a call with no name', { toolCalls: [{ args: {} }] }],
     ["the wire's own tool_calls key", { tool_calls: [] }],
-    ["a call's wire key arguments", { toolCalls: [{ name: 'lookup', arguments: '{}' }] }],
+    [
+      "a call's wire key arguments beside args",
+      { toolCalls: [{ name: 'lookup', args: {}, arguments: '{}' }] },
+    ],
     ['a finish reason the wire has no name for', { finishReason: 'eos' }],
   ])('refuses %s', (_label, value) => {
     expect(step(value)).toMatchObject({ ok: false })

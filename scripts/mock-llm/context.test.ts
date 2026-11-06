@@ -27,4 +27,16 @@ describe('laneCatalog', () => {
       group: 'unknown',
     })
   })
+
+  it('lists a tool lane that only the saved state holds, once', () => {
+    const ctx = createContext({ persist: false })
+    ctx.lane('tools:note')
+    ctx.lane('tools:lookup')
+    ctx.discovered.set('tools:lookup', { key: 'tools:lookup', block: null, firstSeenAt: 1 })
+
+    const tools = laneCatalog(ctx).filter((meta) => meta.kind === 'tool')
+
+    expect(tools.map((meta) => meta.key).sort()).toEqual(['tools:lookup', 'tools:note'])
+    expect(tools.every((meta) => meta.group === 'tools')).toBe(true)
+  })
 })
