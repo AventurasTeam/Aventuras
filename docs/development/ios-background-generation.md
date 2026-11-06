@@ -105,7 +105,8 @@ ActionInput.svelte ──▶ holdBackgroundKeepAlive()          utils/background
   complete the turn ends like the in-app Stop, leaving the action as the last entry.
   From then on, its save included, only the later phases are cut short: the classifier request is
   cancelled through the same signal, and the post-turn tasks (chapter, lore, style review) are not
-  started.
+  started. A narration kept without its world update says so with a toast once the app is in
+  front, pointing at Regenerate, as a failed world update does.
 - **Settings.** The background-generation section is shown on iOS and Android; the text differs.
 
 ### Configuration

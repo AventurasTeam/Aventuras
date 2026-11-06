@@ -490,6 +490,17 @@
     }
   }
 
+  /** Run once the app is in front, so a toast raised in the background is seen. */
+  function whenVisible(run: () => void) {
+    if (!document.hidden) return run()
+    const onChange = () => {
+      if (document.hidden) return
+      document.removeEventListener('visibilitychange', onChange)
+      run()
+    }
+    document.addEventListener('visibilitychange', onChange)
+  }
+
   /** Send a failure notification if the user was backgrounded during this generation. */
   async function notifyFailureIfBackgrounded(keepAliveEnded = false) {
     // After the OS ended the keep-alive, the native side has already posted its own notice.
@@ -624,6 +635,8 @@
     // Set when the OS ends the keep-alive (the Dynamic Island's Stop, or a system cutoff). The
     // native side has already posted the "interrupted" notice, so no completion notice follows.
     let keepAliveEnded = false
+    // Set when the cutoff lands after the narration: it is kept, but its world update never ran.
+    let worldUpdateCut = false
     // Before the hold's await, which an app switch can land in.
     ui.resetBackgroundedFlag()
     // What the turn ran into, for the outcome its record closes with.
@@ -933,6 +946,10 @@
           }
         }
 
+        if (event.type === 'aborted' && event.phase === 'classification' && narrationEntry) {
+          worldUpdateCut = true
+        }
+
         if (event.type === 'error' && event.fatal) {
           console.error('[ActionInput] Fatal pipeline error:', event.error)
           ending.fatalError = describeActivityError(event.error)
@@ -966,7 +983,18 @@
       }
 
       // The user stopped it from the Island: the story is saved, and no speech or other work is started.
-      if (keepAliveEnded) return
+      if (keepAliveEnded) {
+        if (worldUpdateCut) {
+          whenVisible(() =>
+            ui.showToast(
+              'Background time ran out before the world update for the last response. ' +
+                'Regenerate it to apply its changes.',
+              'warning',
+            ),
+          )
+        }
+        return
+      }
 
       if (
         narrationEntry &&
