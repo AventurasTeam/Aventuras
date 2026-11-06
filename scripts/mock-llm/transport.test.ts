@@ -431,4 +431,38 @@ describe('tool lanes through the app transport', () => {
     expect(retry.toolCalls).toMatchObject([{ toolName: 'lookup', input: { query: 'the door' } }])
     expect(next.text).toBe('Second step.')
   })
+
+  it('moves a sequence on past a malformed tool step, which the app does not resend', async () => {
+    cannedSteps(LOOK_AT_THE_DOOR, { text: 'Second step.' })
+    const lane = mock.ctx.lane(LOOKUP_LANE)
+    lane.sequence.enabled = true
+    lane.failure = { kind: 'malformed', status: 500, remaining: 1 }
+
+    const cut = await sendToolStep()
+    const next = await sendToolStep()
+
+    expect(cut.toolCalls).toMatchObject([{ toolName: 'lookup', invalid: true }])
+    expect(next.text).toBe('Second step.')
+    expect(next.toolCalls).toEqual([])
+  })
+
+  it('moves a structured lane on past a length cut, as the app resends it fresh', async () => {
+    const lane = mock.ctx.lane('per-turn-classifier')
+    lane.mode = 'mock'
+    lane.responses = [1, 2].map((delta) => ({
+      id: `r_delta_${delta}`,
+      name: `Delta ${delta}`,
+      value: { worldTimeDelta: delta },
+    }))
+    lane.activeId = 'r_delta_1'
+    lane.sequence = { enabled: true, ids: ['r_delta_1', 'r_delta_2'], cursor: 0, loop: true }
+    lane.failure = { kind: 'length', status: 500, remaining: 1 }
+
+    const cut = await runProviderCall({ model: classifierModel(), prompt: 'Classify the turn.' })
+    const next = await runProviderCall({ model: classifierModel(), prompt: 'Classify the turn.' })
+
+    expect(cut.finishReason).toBe('length')
+    expect(JSON.parse(next.text)).toMatchObject({ worldTimeDelta: 2 })
+    lane.sequence.enabled = false
+  })
 })
