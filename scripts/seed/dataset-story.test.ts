@@ -136,6 +136,9 @@ describe('parseStorySeed', () => {
     settings.models = {}
     settings.embedding_provider_id = 'prov_mock'
     expect(() => parse(seed)).toThrow(/prov_mock/)
+    settings.embedding_provider_id = 'prov_local'
+    settings.embedding_swap_provider_id = 'prov_swap'
+    expect(() => parse(seed)).toThrow(/prov_swap/)
   })
 
   it('refuses a table it does not seed, and a missing one', () => {

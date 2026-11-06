@@ -3,7 +3,14 @@ import { readFileSync } from 'node:fs'
 import { and, asc, count, desc, eq, isNull } from 'drizzle-orm'
 import { afterEach, describe, expect, it } from 'vitest'
 
-import { openStory, redoLastAction, undoLastAction } from '@/lib/actions'
+import {
+  getRollbackCounts,
+  openStory,
+  redoLastAction,
+  rollbackToEntry,
+  undoLastAction,
+  type RollbackCounts,
+} from '@/lib/actions'
 import { chaptersStore, entitiesStore, resetAllStores } from '@/lib/stores'
 import { selectUndoTarget } from '@/lib/undo'
 
@@ -88,7 +95,11 @@ describe('the Treasure Island seed', () => {
       character_relationships: 6,
       deltas: 1017,
     })
-    expect(await ctx.db.select({ id: stories.id }).from(stories)).toHaveLength(8)
+    const storyIds = (await ctx.db.select({ id: stories.id }).from(stories)).map((r) => r.id)
+    const defaultStories = buildSeedSteps()
+      .filter((s) => s.table === stories)
+      .flatMap((s) => (s.rows as { id: string }[]).map((r) => r.id))
+    expect(storyIds.toSorted()).toEqual([...defaultStories, STORY].toSorted())
     expect(await openRegion(ctx)).toBe(0)
   })
 
@@ -132,9 +143,33 @@ describe('the Treasure Island seed', () => {
     expect(await branchCount(ctx, deltas)).toBe(1017)
   })
 
+  // A rollback reads a close's anchors, which a CTRL-Z of the close never does (C1).
+  it('rolls back into its chapter, taking the close with it', async () => {
+    const ctx = await seededWithDataset()
+    await openStory(STORY, ctx, () => {})
+    const [target] = await ctx.db
+      .select({ id: storyEntries.id })
+      .from(storyEntries)
+      .where(and(eq(storyEntries.branchId, BRANCH), eq(storyEntries.position, 60)))
+    const counts = await getRollbackCounts(BRANCH, target!.id, ctx)
+    expect(counts).toMatchObject({ entries: 74, chapters: 1 })
+
+    const result = await rollbackToEntry(BRANCH, target!.id, ctx, {
+      expectedCounts: counts as RollbackCounts,
+    })
+    expect(result.status).toBe('ok')
+    expect(await chapterRows(ctx)).toEqual([])
+    expect(await branchCount(ctx, storyEntries)).toBe(59)
+    expect(await openRegion(ctx)).toBe(59)
+  })
+
+  // A migration that adds a column to a seeded table lands here: the file lacks it until re-exported.
   it('exports to the bytes it loaded from', async () => {
     const { sqlite } = await seededWithDataset()
     const exported = await exportStorySeed(sqlite, STORY, seedProviderIds(buildSeedSteps()))
-    expect(exported === readFileSync(DATASET_SEED_PATH, 'utf8')).toBe(true)
+    expect(
+      exported === readFileSync(DATASET_SEED_PATH, 'utf8'),
+      'the seed differs from its own export: run pnpm db:seed:dataset, then pnpm dataset:export-seed, and commit the file',
+    ).toBe(true)
   })
 })
