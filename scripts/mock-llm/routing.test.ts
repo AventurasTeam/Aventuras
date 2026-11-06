@@ -11,8 +11,13 @@ import { renderTemplate, TEMPLATE_IDS, type TemplateId } from '@/lib/prompts'
 import {
   classifyRequest,
   extractBlockFromPrompt,
+  laneKeyOf,
   matchShape,
+  promptText,
   systemText,
+  toolLaneKey,
+  toolLaneOf,
+  toolPromptText,
   unknownKey,
 } from './routing'
 import { findShapeByName, STRUCTURED_SHAPES, type StructuredShape } from './shapes'
@@ -182,6 +187,96 @@ describe('classifyRequest', () => {
     const route = classifyRequest(requestFrom('just some prose, no schema'))
     expect(route).toMatchObject({ key: 'unknown:no-schema', shape: null, block: null })
     expect(unknownKey(null)).toBe('unknown:no-schema')
+  })
+})
+
+// A tool definition as @ai-sdk/openai-compatible sends it.
+function functionTool(name: string): Record<string, unknown> {
+  return {
+    type: 'function',
+    function: {
+      name,
+      description: `The ${name} tool.`,
+      parameters: { type: 'object', properties: { id: { type: 'string' } } },
+    },
+  }
+}
+
+describe('tool lanes', () => {
+  it('keys a lane on the tool names sorted, whatever order they were sent in', () => {
+    const forward = requestFrom('Close the chapter.', {
+      tools: [functionTool('search_world'), functionTool('read_row')],
+    })
+    const reversed = requestFrom('Close the chapter.', {
+      tools: [functionTool('read_row'), functionTool('search_world')],
+    })
+
+    expect(toolLaneKey(['search_world', 'read_row'])).toBe('tools:read_row+search_world')
+    expect(toolLaneOf(forward)).toBe('tools:read_row+search_world')
+    expect(toolLaneOf(reversed)).toBe('tools:read_row+search_world')
+  })
+
+  it('routes a request carrying tools to its lane, even past a registered block in its system half', async () => {
+    const structured = await requestAsSent(fallbackClassifierSchema)
+    expect(classifyRequest(structured)).toMatchObject({ key: 'per-turn-classifier' })
+
+    const route = classifyRequest({ ...structured, tools: [functionTool('read_row')] })
+
+    expect(route).toEqual({ lane: 'tool', key: 'tools:read_row' })
+    expect(laneKeyOf(route)).toBe('tools:read_row')
+  })
+
+  it('keeps a streamed request with tools on the narrative lane', () => {
+    const body = requestFrom('Continue the scene.', {
+      stream: true,
+      tools: [functionTool('read_row')],
+    })
+
+    expect(toolLaneOf(body)).toBeNull()
+    expect(classifyRequest(body)).toEqual({ lane: 'narrative' })
+  })
+
+  it('reads an empty or absent tool list as no tool request', () => {
+    expect(toolLaneOf(requestFrom('Classify the turn.', { tools: [] }))).toBeNull()
+    expect(toolLaneOf(requestFrom('Classify the turn.'))).toBeNull()
+    expect(classifyRequest(requestFrom('Classify the turn.', { tools: [] }))).toMatchObject({
+      lane: 'structured',
+      key: 'unknown:no-schema',
+    })
+  })
+
+  it('counts what promptText skips: the tool definitions, each call and its reasoning', () => {
+    const body = {
+      model: 'mock',
+      messages: [
+        { role: 'system', content: 'You close chapters.' },
+        { role: 'user', content: 'Close the chapter.' },
+        {
+          role: 'assistant',
+          content: null,
+          reasoning_content: 'Kael first; the ledger can wait.',
+          tool_calls: [
+            {
+              id: 'call_1',
+              type: 'function',
+              function: { name: 'read_row', arguments: '{"id":"c1"}' },
+            },
+          ],
+        },
+        { role: 'tool', tool_call_id: 'call_1', content: 'Kael Ashwater, a diver.' },
+      ],
+      tools: [functionTool('read_row'), functionTool('write_row')],
+    }
+    const messageText = promptText(body)
+    const counted = toolPromptText(body)
+
+    expect(messageText).not.toContain('Kael first')
+    expect(messageText).not.toContain('{"id":"c1"}')
+    expect(counted.startsWith(messageText)).toBe(true)
+    expect(counted).toContain(JSON.stringify(body.tools))
+    expect(counted).toContain('Kael first; the ledger can wait.')
+    expect(counted).toContain('{"id":"c1"}')
+    expect(counted).toContain('Kael Ashwater, a diver.')
   })
 })
 
