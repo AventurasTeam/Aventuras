@@ -370,6 +370,18 @@ export function pickSize(spec: ImageSpec, listed: readonly string[] = []): strin
   return best ?? firstUnreadable
 }
 
+/** The `WxH` to send: the model's own pick when it is one, else the canonical pixels raised to `minPixels`. */
+export function pickRequestSize(
+  spec: ImageSpec,
+  listed: readonly string[] | undefined,
+  minPixels?: number,
+): `${number}x${number}` {
+  const picked = pickSize(spec, listed)
+  return isSizeString(picked)
+    ? picked
+    : formatImageSize(atLeastMinPixels(specToPixels(spec), minPixels))
+}
+
 /**
  * Read a stored size into a spec.
  *

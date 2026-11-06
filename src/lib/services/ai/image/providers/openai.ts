@@ -9,13 +9,7 @@
 import { createOpenAI } from '@ai-sdk/openai'
 import * as z from 'zod'
 import type { ImageModelCapabilities } from '#lib/types/index.ts'
-import {
-  atLeastMinPixels,
-  formatImageSize,
-  isSizeString,
-  pickSize,
-  specToPixels,
-} from '#lib/utils/image.ts'
+import { pickRequestSize } from '#lib/utils/image.ts'
 import { endpoint } from '#lib/utils/url.ts'
 import { resolveBaseUrl } from './baseUrls'
 import type {
@@ -85,15 +79,11 @@ export function createOpenAIProvider(config: ImageProviderConfig): ImageProvider
 
     async generate(options: ImageGenerateOptions): Promise<ImageGenerateResult> {
       const { model, prompt, spec, modelInfo, referenceImages, signal } = options
-      const listed = pickSize(spec, modelInfo?.supportedResolutions)
-
       return generateSdkImage({
         model: openai.image(model),
         prompt,
         referenceImages,
-        size: isSizeString(listed)
-          ? listed
-          : formatImageSize(atLeastMinPixels(specToPixels(spec), MIN_PIXELS)),
+        size: pickRequestSize(spec, modelInfo?.supportedResolutions, MIN_PIXELS),
         signal,
       })
     },

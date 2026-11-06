@@ -3,6 +3,8 @@ import {
   parseImageSpec,
   pickResolution,
   atLeastMinPixels,
+  isSizeString,
+  pickRequestSize,
   pickSize,
   specFromPixels,
   specToPixels,
@@ -428,3 +430,67 @@ describe('atLeastMinPixels', () => {
     expect(Math.abs(width / height - 512 / 288)).toBeLessThan(0.05)
   })
 })
+
+describe('isSizeString', () => {
+  it('accepts WxH only', () => {
+    expect(isSizeString('1024x1024')).toBe(true)
+    expect(isSizeString('1536x864')).toBe(true)
+    for (const value of ['auto', '1:1', '1024', '1024x', 'x1024', '1024x1024px', '', undefined]) {
+      expect(isSizeString(value)).toBe(false)
+    }
+  })
+})
+
+describe('pickRequestSize', () => {
+  const FLOOR = 655_360
+  const standard = ['1024x1024', '1536x1024', '1024x1536']
+
+  it('sends the model’s own WxH pick', () => {
+    expect(pickRequestSize({ orientation: 'landscape', size: 'medium' }, standard)).toBe(
+      '1536x1024',
+    )
+  })
+
+  it('sends the canonical pixels when the model lists none', () => {
+    expect(pickRequestSize({ orientation: 'landscape', size: 'medium' }, undefined)).toBe(
+      '1536x864',
+    )
+    expect(pickRequestSize({ orientation: 'landscape', size: 'medium' }, [])).toBe('1536x864')
+  })
+
+  it('sends the canonical pixels when the pick is not a WxH', () => {
+    expect(pickRequestSize({ orientation: 'square', size: 'medium' }, ['square_hd', 'auto'])).toBe(
+      '1536x1536',
+    )
+  })
+
+  it('raises the canonical pixels to the floor', () => {
+    expect(pickRequestSize({ orientation: 'square', size: 'tiny' }, undefined, FLOOR)).toBe(
+      '816x816',
+    )
+  })
+
+  it('leaves the model’s own pick alone, even below the floor', () => {
+    expect(pickRequestSize({ orientation: 'square', size: 'tiny' }, ['512x512'], FLOOR)).toBe(
+      '512x512',
+    )
+  })
+
+  it('keeps every tier and orientation at or above the floor, on the grid', () => {
+    for (const orientation of IMAGE_ORIENTATIONS) {
+      for (const size of IMAGE_SIZE_TIERS) {
+        const { width, height } = parseSize(
+          pickRequestSize({ orientation, size }, undefined, FLOOR),
+        )
+        expect(width * height).toBeGreaterThanOrEqual(FLOOR)
+        expect(width % 16).toBe(0)
+        expect(height % 16).toBe(0)
+      }
+    }
+  })
+})
+
+function parseSize(size: string): { width: number; height: number } {
+  const [width, height] = size.split('x').map(Number)
+  return { width, height }
+}

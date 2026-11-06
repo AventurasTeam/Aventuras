@@ -614,7 +614,8 @@ tier where the model has them for Google (its capabilities are a table in the ad
 resolution tiers for OpenRouter (no tier when it lists none, because a tier is only honoured where
 listed), the model's own published resolution list for NanoGPT, for OpenAI one of the three standard
 sizes where a model takes only those and otherwise real dimensions raised to its pixel floor (its
-capabilities are a table in the adapter, because `/models` carries none), real dimensions for
+capabilities are a table in the adapter, because `/models` carries none; OpenAI Compatible shares the
+step, `pickRequestSize`, with the floor from its capability override), real dimensions for
 ComfyUI/A1111, real dimensions plus one of the model's listed resolution tiers for Pollinations (no
 tier when it lists none, because the pixel count follows the tier where there is one), and a
 snapped-to-grid size inside the model's limits for Z.AI (glm-image, and the CogView models on BigModel;

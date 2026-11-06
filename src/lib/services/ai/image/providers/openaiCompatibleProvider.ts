@@ -8,13 +8,7 @@
  */
 
 import * as z from 'zod'
-import {
-  atLeastMinPixels,
-  formatImageSize,
-  isSizeString,
-  pickSize,
-  specToPixels,
-} from '#lib/utils/image.ts'
+import { pickRequestSize } from '#lib/utils/image.ts'
 import { endpoint } from '#lib/utils/url.ts'
 import { resolveBaseUrl } from './baseUrls'
 import type {
@@ -118,17 +112,13 @@ export function createOpenAICompatibleProvider(config: ImageProviderConfig): Ima
       const { model, prompt, spec, modelInfo, referenceImages, signal } = options
       if (!baseUrl) throw new Error('OpenAI-compatible provider requires a custom base URL')
 
-      const listed = pickSize(spec, modelInfo?.supportedResolutions)
-
       return generateOpenAICompatibleImage({
         baseUrl,
         apiKey: config.apiKey,
         serviceId: 'openai-compatible-image',
         model,
         prompt,
-        size: isSizeString(listed)
-          ? listed
-          : formatImageSize(atLeastMinPixels(specToPixels(spec), modelInfo?.minPixels)),
+        size: pickRequestSize(spec, modelInfo?.supportedResolutions, modelInfo?.minPixels),
         referenceImages,
         signal,
       })
