@@ -109,8 +109,8 @@ function countPartTokens(part: PromptPart): number {
   }
 }
 
-// The adapters send text arms raw and every other value as JSON, a string value included.
-// `execution-denied` carries no value, only an optional reason.
+// The adapters send text arms raw, every other value as JSON (a string value included), and a
+// denial as its reason or a default text.
 function outputText(output: ToolResultOutput): string {
   switch (output.type) {
     case 'text':
@@ -121,7 +121,7 @@ function outputText(output: ToolResultOutput): string {
     case 'content':
       return JSON.stringify(output.value) ?? ''
     case 'execution-denied':
-      return JSON.stringify(output)
+      return output.reason ?? 'Tool execution denied.'
     default: {
       const unreachable: never = output
       return unreachable

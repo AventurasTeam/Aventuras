@@ -284,10 +284,11 @@ describe('countPromptTokens', () => {
       '[{"type":"text","text":"A door."}]',
     ],
     [
-      'execution-denied',
+      'execution-denied with a reason',
       { type: 'execution-denied', reason: 'Refused.' },
-      '{"type":"execution-denied","reason":"Refused."}',
+      'Refused.',
     ],
+    ['execution-denied without a reason', { type: 'execution-denied' }, 'Tool execution denied.'],
   ])("counts a %s tool result's name and output", (_label, output, sent) => {
     const prompt: ModelPrompt = [
       {
