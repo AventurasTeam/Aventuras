@@ -1,6 +1,7 @@
 import { sql } from 'drizzle-orm'
 import { index, integer, primaryKey, sqliteTable, text } from 'drizzle-orm/sqlite-core'
 
+import type { CloseReport } from './close-report'
 import type { EntryMetadata } from './entry-metadata'
 import { branches } from '../stories/stories.table'
 
@@ -36,9 +37,8 @@ export const chapters = sqliteTable(
       .notNull()
       .references(() => branches.id),
     sequenceNumber: integer('sequence_number').notNull(),
-    // A row exists only for a closed chapter, and chapter-close populates
-    // every field at close — placeholder content on LLM failure, never NULL
-    // (docs/memory/chapter-close.md) — so none of these are nullable.
+    // A row exists only for a closed chapter, and a close writes all of these with the row: a
+    // failed metadata call fails the close, so none is nullable (docs/memory/chapter-close.md).
     title: text('title').notNull(),
     summary: text('summary').notNull(),
     theme: text('theme').notNull(),
@@ -53,6 +53,8 @@ export const chapters = sqliteTable(
     embeddingStale: integer('embedding_stale').notNull().default(1).$type<0 | 1>(),
     createdAt: integer('created_at').notNull(),
     updatedAt: integer('updated_at').notNull(),
+    // Null until the close's report phase, its last write; kept out of chaptersStore (milestone C4).
+    closeReport: text('close_report', { mode: 'json' }).$type<CloseReport>(),
   },
   (t) => [
     primaryKey({ columns: [t.branchId, t.id] }),

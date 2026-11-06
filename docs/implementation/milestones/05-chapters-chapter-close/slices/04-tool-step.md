@@ -407,6 +407,16 @@ Unit paths run with `pnpm vitest run --project unit <path>`.
   hasn't filled. Unverified on any server; `provider.input_ratio` in
   [Slice 5.5b](./05b-identity-threads.md)'s run shows it.
 
+- **One helper for a bounded structured call?** The sequence
+  `boundedSignal`, `generateStructured`, dispose, `retriedAttemptEvents`,
+  aborted-versus-expired, `structuredCallFailure` is written out twice
+  after [Slice 5.2](./02-first-chapter.md): the periodic classifier pass
+  and the close's metadata call
+  (`lib/pipeline/definitions/chapter-close-metadata-call.ts`). A tool
+  step would be the third copy and Slice 5.10's boundary call the
+  fourth. Suggested: one helper in `lib/pipeline` returning
+  `ok | aborted | failed`, landed with the first new caller.
+
 ## Implementation notes
 
 _Populated at finish: notable deviations from the plan and resolved developer decisions._

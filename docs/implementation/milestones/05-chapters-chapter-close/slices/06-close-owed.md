@@ -528,6 +528,15 @@ confirm at slice planning. Canon follows the answer.
   threshold, owes nothing" case seeded through them passes for the wrong
   reason, so a test of that bound needs a real count on its rows.
 
+- **Should writes to `pendingClose` be restricted?**
+  `setPendingClose` and `clearPendingClose` aren't on the
+  `no-restricted-properties` list (`eslint.config.js`), since
+  [Slice 5.2](./02-first-chapter.md)'s manual start in `lib/actions`
+  writes the record and only `boundary` read it. Once `closeOwed` reads
+  `pendingClose.has(branchId)`, a stray write from a component would
+  make the next Send start a close. Suggested: list both, exempting
+  `lib/actions/chapters/**` and the other writers this slice adds.
+
 ## Implementation notes
 
 _Populated at finish: notable deviations from the plan and resolved developer decisions._

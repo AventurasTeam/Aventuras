@@ -1,0 +1,1 @@
+ALTER TABLE `chapters` ADD `close_report` text;

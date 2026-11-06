@@ -40,6 +40,10 @@ declare module '@/lib/actions/action-map' {
       // pipeline's phase-start `tail` snapshot is exactly that read.
       payload: { branchId: string; id: string; metadata: Partial<EntryMetadata> }
     }
+    stampEntryChapter: {
+      source: DeltaSource
+      payload: { branchId: string; id: string; chapterId: string }
+    }
     deleteStoryEntry: { source: DeltaSource; payload: { branchId: string; id: string } }
   }
 }
@@ -143,6 +147,43 @@ const updateHandler: ActionHandler = async (action, branchId, ctx) => {
   }
 }
 
+// C1: only chapter_id, so the undo never carries `content` (isContentEditDelta keys on it).
+const stampHandler: ActionHandler = async (action, branchId, ctx) => {
+  if (action.kind !== 'stampEntryChapter')
+    throw new Error(`handler/kind mismatch: expected 'stampEntryChapter', got '${action.kind}'`)
+  const { branchId: bid, id, chapterId } = action.payload
+  if (bid !== branchId)
+    return {
+      status: 'rejected',
+      reason: `branch mismatch: delta branch ${branchId} vs target branch ${bid}`,
+    }
+  const [current] = await ctx.db
+    .select({ chapterId: storyEntries.chapterId })
+    .from(storyEntries)
+    .where(and(eq(storyEntries.branchId, bid), eq(storyEntries.id, id)))
+  if (!current)
+    return {
+      status: 'rejected',
+      reason: `stamp target story_entries ${bid}:${id} not found`,
+      code: STORY_ENTRY_REJECTION.notFound,
+    }
+  return {
+    status: 'ok',
+    targetTable: 'story_entries',
+    targetId: id,
+    op: 'update',
+    undoPayload: { chapterId: current.chapterId },
+    ops: [
+      ctx.db
+        .update(storyEntries)
+        .set({ chapterId })
+        .where(and(eq(storyEntries.branchId, bid), eq(storyEntries.id, id)))
+        .toSQL(),
+    ],
+    patch: { op: 'update', id, columns: { chapterId } },
+  }
+}
+
 const deleteHandler: ActionHandler = async (action, branchId, ctx) => {
   if (action.kind !== 'deleteStoryEntry')
     throw new Error(`handler/kind mismatch: expected 'deleteStoryEntry', got '${action.kind}'`)
@@ -193,6 +234,7 @@ export function registerStoryEntries(): void {
     handlers: {
       createStoryEntry: createHandler,
       updateStoryEntryMetadata: updateHandler,
+      stampEntryChapter: stampHandler,
       deleteStoryEntry: deleteHandler,
     },
     patcher: (branchId, p) => entriesStore.patch(branchId, p),

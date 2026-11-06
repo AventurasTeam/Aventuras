@@ -114,6 +114,24 @@ describe('classifyRequest', () => {
     expect(route).toMatchObject({ lane: 'structured', key: 'per-turn-classifier-suggestions' })
   })
 
+  // The real template's halves through the real middleware, so the lane holds as the prompt changes.
+  it('routes a rendered chapter-metadata call to its own lane', async () => {
+    const shape = findShapeByName('chapter-metadata')
+    if (shape === undefined) throw new Error('registry lost chapter-metadata')
+    const { system, user } = renderTemplate(TEMPLATE_IDS.chapterMetadata, {
+      entries: [
+        { position: 3, kind: 'ai_reply', content: 'Mora waited at the ford with a lantern.' },
+      ],
+      previousChapterSummary: 'Kael crossed the marsh and lost the sigil.',
+      threads: [{ title: 'Find the heir', status: 'active' }],
+      mode: 'adventure',
+    })
+    expect(classifyRequest(await requestAsSent(shape.schema, user, system))).toMatchObject({
+      lane: 'structured',
+      key: 'chapter-metadata',
+    })
+  })
+
   it('matches the force-on path, which sends a JSON Schema instead of a prompt block', () => {
     const route = classifyRequest(
       requestFrom('Classify the turn.', {

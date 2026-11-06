@@ -2,13 +2,14 @@ import { describe, expect, it } from 'vitest'
 
 import {
   describeContextWindow,
+  describeReplyCutOff,
   type CallRetryError,
   type CapabilityHint,
   type ContextWindowFailure,
   type ReplyCutOffFailure,
 } from '@/lib/ai'
 
-import { pipelineErrorDetail, toPipelineError } from './call-error'
+import { pipelineErrorDetail, structuredCallFailure, toPipelineError } from './call-error'
 import type { PipelineError } from './types'
 
 const CUT: ReplyCutOffFailure = {
@@ -185,5 +186,84 @@ describe('pipelineErrorDetail', () => {
       'reply cut off (max-output): 512 output tokens, 300 reasoning, max output 512; ' +
         'model model-1 on provider prov-1',
     )
+  })
+})
+
+// The close's metadata call: another agent and phase than the pass, which keeps 'classifier'.
+describe('structuredCallFailure', () => {
+  const CALL = { target: 'lore-mgmt', phaseName: 'metadata', timeoutMs: 45_000 } as const
+
+  it('reads an abort that reached it as the bound expiring, naming the target', () => {
+    expect(structuredCallFailure({ status: 'aborted', recoverable: [] }, CALL)).toEqual({
+      lastError: 'timeout after 45000ms',
+      error: { kind: 'provider', reason: 'timeout', detail: 'lore-mgmt: timeout after 45000ms' },
+    })
+  })
+
+  it('maps an unresolved model to a config-resolver error for the target and phase', () => {
+    expect(
+      structuredCallFailure({ status: 'not-configured', kind: 'no-profile-assigned' }, CALL),
+    ).toEqual({
+      lastError: 'no-profile-assigned',
+      error: {
+        kind: 'config-resolver',
+        failure: 'no-profile-assigned',
+        target: 'lore-mgmt',
+        phaseName: 'metadata',
+      },
+    })
+  })
+
+  it('maps a provider failure', () => {
+    expect(
+      structuredCallFailure(
+        {
+          status: 'failed',
+          error: { tier: 'provider', reason: 'network', detail: '503' },
+          recoverable: [],
+        },
+        CALL,
+      ),
+    ).toEqual({ lastError: '503', error: { kind: 'provider', reason: 'network', detail: '503' } })
+  })
+
+  it('maps a parse failure to phase-logic', () => {
+    expect(
+      structuredCallFailure(
+        {
+          status: 'failed',
+          error: { tier: 'parse', detail: 'title: expected string', attempt: 2 },
+          recoverable: [],
+        },
+        CALL,
+      ),
+    ).toEqual({
+      lastError: 'title: expected string',
+      error: { kind: 'phase-logic', detail: 'title: expected string' },
+    })
+  })
+
+  it('maps a window refusal to context-window, carrying the target', () => {
+    expect(
+      structuredCallFailure(
+        { status: 'failed', error: { tier: 'context-window', ...OVER }, recoverable: [] },
+        CALL,
+      ),
+    ).toEqual({
+      lastError: describeContextWindow(OVER),
+      error: { kind: 'context-window', target: 'lore-mgmt', ...OVER },
+    })
+  })
+
+  it('maps a cut-off reply to reply-cut-off, carrying the target', () => {
+    expect(
+      structuredCallFailure(
+        { status: 'failed', error: { tier: 'reply-cut-off', ...CUT }, recoverable: [] },
+        CALL,
+      ),
+    ).toEqual({
+      lastError: describeReplyCutOff(CUT),
+      error: { kind: 'reply-cut-off', target: 'lore-mgmt', ...CUT },
+    })
   })
 })

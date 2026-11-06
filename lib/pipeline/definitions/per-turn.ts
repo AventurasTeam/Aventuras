@@ -11,6 +11,7 @@ import {
   streamText,
   type ReplyCutOffFailure,
 } from '@/lib/ai'
+import { CHAPTER_CLOSE_KIND } from '@/lib/chapters'
 import { PERIODIC_CLASSIFIER_KIND } from '@/lib/classifier'
 import { inheritedEntryMetadata, storyEntries, type CutOffMark, type EntryMetadata } from '@/lib/db'
 import { redactUrl, type Logger } from '@/lib/diagnostics'
@@ -575,7 +576,9 @@ export function ensurePerTurnPipelineRegistered(): void {
       phases,
       affordance: 'pill-and-banner',
       gateBehavior: 'hard-gate',
-      concurrencyPolicy: { blockedBy: [PER_TURN_KIND, PERIODIC_CLASSIFIER_KIND, 'chapter-close'] },
+      concurrencyPolicy: {
+        blockedBy: [PER_TURN_KIND, PERIODIC_CLASSIFIER_KIND, CHAPTER_CLOSE_KIND],
+      },
       chainsTo: nextMemoryRun,
     })
   }

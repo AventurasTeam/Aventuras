@@ -6,6 +6,7 @@ export {
   PER_TURN_KIND,
   type PerTurnPhaseName,
 } from './definitions/per-turn'
+export { CHAPTER_CLOSE_KIND } from '@/lib/chapters'
 export {
   fallbackClassifierSchema,
   fallbackClassifierWithSuggestionsSchema,
@@ -16,7 +17,17 @@ export {
 } from './definitions/description-embedder'
 export { readSceneSource } from './definitions/entry-reads'
 export { ensurePeriodicClassifierPipelineRegistered } from './definitions/periodic-classifier'
-export { CLASSIFIER_HELD, isClassifierHeld, owedPassAtSend } from './definitions/memory-chain'
+export {
+  CHAPTER_CLOSE_RESOLVES,
+  ensureChapterClosePipelineRegistered,
+} from './definitions/chapter-close'
+export {
+  CLASSIFIER_HELD,
+  isClassifierHeld,
+  owedPassAtSend,
+  readClassifierStatus,
+  unprocessedEntryCount,
+} from './definitions/memory-chain'
 export { runClassifierPass } from './definitions/classifier-pass'
 export {
   ensureSuggestionRefreshPipelineRegistered,
@@ -27,6 +38,7 @@ export {
   SUGGESTIONS_UNUSABLE,
   type SuggestionRefreshInput,
 } from './definitions/suggestion-refresh'
+export { chapterMetadataSchema, type ChapterMetadata } from './definitions/chapter-metadata-schema'
 export { __resetRegistry, getPipeline, registerPipeline } from './authoring/registry'
 export { __resetBus, pipelineEventBus } from './runtime/event-bus'
 export {

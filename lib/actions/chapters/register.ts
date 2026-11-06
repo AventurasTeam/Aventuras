@@ -1,24 +1,22 @@
 import { and, eq } from 'drizzle-orm'
 
-import type { Chapter, NewChapter } from '@/lib/db'
+import type { Chapter, CloseReport, NewChapter } from '@/lib/db'
 import { chapterWriteSchema, chapters, KIND_FIELDS } from '@/lib/db'
 import { chaptersStore } from '@/lib/stores'
 
+import { projectChapterPatch } from './chapter-store-projection'
 import { cascadedDelete, rowCascade } from '../delta/delete-cascade'
-import { register, type ActionHandler } from '../delta/registry'
+import { register, undefinedColumn, type ActionHandler } from '../delta/registry'
 import type { DeltaSource } from '../types'
 
 const cascade = rowCascade('chapter')
 
 type ChapterUpdatePatch = Partial<{
-  sequenceNumber: number
   title: string
   summary: string
   theme: string
   keywords: string[]
-  startEntryId: string
-  endEntryId: string
-  tokenCount: number
+  closeReport: CloseReport | null
 }>
 
 declare module '@/lib/actions/action-map' {
@@ -32,18 +30,8 @@ declare module '@/lib/actions/action-map' {
   }
 }
 
-// Delta-logged columns. Operational (embedding_stale), timestamps (closed_at,
-// created_at, updated_at), and the PK (id, branch_id) are never in this set.
-const UPDATABLE = [
-  'sequenceNumber',
-  'title',
-  'summary',
-  'theme',
-  'keywords',
-  'startEntryId',
-  'endEntryId',
-  'tokenCount',
-] as const
+// What a write after the close may change: its number, range and token snapshot are fixed there.
+const UPDATABLE = ['title', 'summary', 'theme', 'keywords', 'closeReport'] as const
 
 function fullRow(entry: NewChapter): Chapter {
   // Apply SQLite defaults so the inserted row and the store create-patch row are byte-identical.
@@ -62,6 +50,7 @@ function fullRow(entry: NewChapter): Chapter {
     embeddingStale: entry.embeddingStale ?? 1,
     createdAt: entry.createdAt,
     updatedAt: entry.updatedAt,
+    closeReport: entry.closeReport ?? null,
   }
 }
 
@@ -104,16 +93,19 @@ const updateHandler: ActionHandler = async (action, branchId, ctx) => {
     .where(and(eq(chapters.branchId, bid), eq(chapters.id, id)))
   if (!current)
     return { status: 'rejected', reason: `update target chapters ${bid}:${id} not found` }
+  const blank = undefinedColumn(patch, UPDATABLE)
+  if (blank != null)
+    return { status: 'rejected', reason: `invalid chapter patch: ${blank} is undefined` }
 
   const set: Record<string, unknown> = {}
   const undoPayload: Record<string, unknown> = {}
   for (const col of UPDATABLE) {
     if (!(col in patch)) continue
     set[col] = patch[col]
-    // No columnSchemas registered: flat arrays + scalars take the whole prior value as undo.
+    // No columnSchemas: every column, the JSON report included, undoes to its whole prior value.
     undoPayload[col] = current[col as keyof Chapter]
   }
-  // A patch that parsed but touched no updatable column (e.g. closed_at only) would
+  // A patch that parsed but touched no updatable column (fixed columns only) would
   // otherwise reach Drizzle's .set({}) and throw "No values to set" — reject instead.
   if (Object.keys(set).length === 0)
     return {
@@ -179,7 +171,7 @@ export function registerChapters(): void {
       updateChapter: updateHandler,
       deleteChapter: deleteHandler,
     },
-    patcher: (branchId, p) => chaptersStore.patch(branchId, p),
+    patcher: (branchId, p) => chaptersStore.patch(branchId, projectChapterPatch(p)),
     cascade,
   })
 }

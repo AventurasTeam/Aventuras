@@ -29,6 +29,7 @@ function tx(fields: Partial<TxState> = {}, ...runs: RunState[]): TxState {
     reversalInProgress: false,
     pendingTurns: new Set(),
     deferred: new Map(),
+    pendingClose: new Map(),
     ...fields,
   }
 }

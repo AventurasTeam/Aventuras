@@ -55,6 +55,7 @@ function tx(...runs: RunState[]): TxState {
     reversalInProgress: false,
     pendingTurns: new Set(),
     deferred: new Map(),
+    pendingClose: new Map(),
   }
 }
 

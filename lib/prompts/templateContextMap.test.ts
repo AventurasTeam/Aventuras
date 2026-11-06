@@ -41,6 +41,20 @@ describe('templateContextMap', () => {
     }
   })
 
+  // C3: a close's templates read their own group, not generationContext's budgeted entries.
+  it('maps the chapter metadata template to the chapter group', () => {
+    expect(TEMPLATE_GROUPS[TEMPLATE_IDS.chapterMetadata]).toBe('chapter')
+  })
+
+  it("defines the chapter group's variables, the ones its builder emits", () => {
+    expect(VARIABLES.chapter.map((v) => v.name)).toEqual([
+      'entries',
+      'previousChapterSummary',
+      'threads',
+      'mode',
+    ])
+  })
+
   it('passes integrity validation on the shipped registry', () => {
     expect(validateRegistry(Object.values(TEMPLATE_IDS))).toEqual([])
   })

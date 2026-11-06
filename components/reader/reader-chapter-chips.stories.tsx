@@ -6,9 +6,9 @@ import { expect, screen, userEvent, waitFor, within } from 'storybook/test'
 import { ScreenShell } from '@/components/shells/screen-shell'
 import { Text } from '@/components/ui/text'
 import { EARTH_GREGORIAN } from '@/lib/calendar'
-import type { Chapter, StoryEntry } from '@/lib/db'
+import type { StoryEntry } from '@/lib/db'
 import { t } from '@/lib/i18n'
-import { chaptersStore } from '@/lib/stores'
+import { chaptersStore, type StoreChapter } from '@/lib/stores'
 
 import {
   ReaderChapterChips,
@@ -20,14 +20,23 @@ const BRANCH = 'br_chips'
 
 const noop = () => {}
 
-const closedChapter = (sequenceNumber: number) =>
-  ({
-    id: `chap_${sequenceNumber}`,
-    branchId: BRANCH,
-    sequenceNumber,
-    title: `Chapter title ${sequenceNumber}`,
-    startEntryId: `entry_${sequenceNumber}`,
-  }) as Chapter
+const closedChapter = (sequenceNumber: number): StoreChapter => ({
+  id: `chap_${sequenceNumber}`,
+  branchId: BRANCH,
+  sequenceNumber,
+  title: `Chapter title ${sequenceNumber}`,
+  summary: '',
+  theme: '',
+  keywords: [],
+  startEntryId: `entry_${sequenceNumber}`,
+  endEntryId: `entry_${sequenceNumber}_end`,
+  tokenCount: 0,
+  closedAt: 1,
+  embeddingStale: 0,
+  createdAt: 1,
+  updatedAt: 1,
+  hasCloseReport: false,
+})
 
 const ARGS: ReaderChapterChipsProps = {
   branchId: BRANCH,

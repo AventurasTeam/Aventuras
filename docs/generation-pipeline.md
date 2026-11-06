@@ -1915,7 +1915,9 @@ watermark stays
 ([`memory/classifier.md → Failure policy`](./memory/classifier.md#failure-policy));
 the fallback classifier fails and the turn commits with the failure in
 its state report; suggestion refresh and wizard-assist show their own
-errors, naming the limit as the reader does.
+errors, naming the limit as the reader does; a close's metadata call
+fails the close
+([`memory/chapter-close.md → Failure modes and atomic rollback`](./memory/chapter-close.md#failure-modes-and-atomic-rollback)).
 
 **A close's tool step reads the same `'length'`.** A cut-off reply is
 never a finished task, whatever it holds. The step is retried once, and

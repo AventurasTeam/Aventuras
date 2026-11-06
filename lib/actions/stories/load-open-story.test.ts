@@ -1,3 +1,4 @@
+import { eq } from 'drizzle-orm'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 import {
@@ -15,6 +16,7 @@ import {
   stories,
   threads,
   translations,
+  type NewChapter,
   type StoryDefinition,
   type StorySettings,
 } from '@/lib/db'
@@ -270,6 +272,63 @@ describe('loadOpenStory', () => {
     expect([...translationsStore.getTranslations().values()].map((r) => r.id)).toEqual(['tr_1'])
 
     expect(storiesStore.getStories().openFailures.story_1).toBeUndefined()
+  })
+
+  // C4: the report stays out of the store; the flag is a boolean, never SQLite's 0 or 1.
+  it('hydrates each chapter without its report, flagging whether it has one', async () => {
+    const { db, ctx } = await setup()
+    await db.insert(stories).values({
+      id: 'story_1',
+      title: 'Aria',
+      status: 'active',
+      favorite: 0,
+      createdAt: 1,
+      updatedAt: 1,
+      currentBranchId: 'br_1',
+      definition: STORY_DEFINITION,
+      settings: STORY_SETTINGS,
+    })
+    await db.insert(branches).values({ id: 'br_1', storyId: 'story_1', name: 'main', createdAt: 1 })
+    const chapter = (id: string, sequenceNumber: number): NewChapter => ({
+      id,
+      branchId: 'br_1',
+      sequenceNumber,
+      title: `Chapter ${sequenceNumber}`,
+      summary: 'The keep.',
+      theme: 'arrival',
+      startEntryId: `e_${sequenceNumber}`,
+      endEntryId: `e_${sequenceNumber}`,
+      tokenCount: 10,
+      closedAt: 1,
+      createdAt: 1,
+      updatedAt: 1,
+    })
+    await db.insert(chapters).values([
+      {
+        ...chapter('chap_1', 1),
+        closeReport: { version: 1, actionId: 'act_1', calls: [], stopped: [], noToolCalls: true },
+      },
+      chapter('chap_2', 2),
+    ])
+
+    expect(await loadOpenStory('br_1', ctx)).toEqual({
+      status: 'ok',
+      storyId: 'story_1',
+      branchId: 'br_1',
+    })
+
+    for (const [id, hasCloseReport] of [
+      ['chap_1', true],
+      ['chap_2', false],
+    ] as const) {
+      const stored = chaptersStore.getById(id)
+      expect(stored).toBeDefined()
+      const { hasCloseReport: flag, ...storeRest } = stored!
+      const [row] = await db.select().from(chapters).where(eq(chapters.id, id))
+      const { closeReport: _closeReport, ...dbRest } = row!
+      expect(storeRest).toEqual(dbRest)
+      expect(flag).toBe(hasCloseReport)
+    }
   })
 
   it('badges the story and skips population when the definition fails to parse', async () => {

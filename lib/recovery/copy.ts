@@ -1,3 +1,4 @@
+import { CHAPTER_CLOSE_KIND } from '@/lib/chapters'
 import { PERIODIC_CLASSIFIER_KIND } from '@/lib/classifier'
 import { t } from '@/lib/i18n'
 import {
@@ -15,7 +16,7 @@ function formatRun(run: RecoveredRun, storyName: string | undefined): string {
       return storyName
         ? t('crashRecovery.perTurnNamed', { storyName })
         : t('crashRecovery.perTurnUnnamed')
-    case 'chapter-close':
+    case CHAPTER_CLOSE_KIND:
       return storyName
         ? t('crashRecovery.chapterCloseNamed', { storyName })
         : t('crashRecovery.chapterCloseUnnamed')

@@ -93,6 +93,7 @@ export { createWorkingSetStore } from './factory/working-set-store'
 export { openEmbedderSwapDialog } from './ui/embedder-swap'
 
 export type { AppSettingsSnapshot, BootHydrateResult } from './app-settings/app-settings'
+export type { StoreChapter } from './chapters/chapters'
 export type { RelationshipView } from './character-relationships/character-relationships'
 export type { OpenStory } from './current-story/current-story'
 export type { WorkingSetStore } from './factory/working-set-store'
@@ -109,6 +110,7 @@ export {
 export type {
   DeferredWork,
   DeferredWorkKind,
+  PendingClose,
   PendingTurn,
   RunState,
   TxState,

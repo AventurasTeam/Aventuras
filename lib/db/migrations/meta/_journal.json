@@ -134,6 +134,13 @@
       "when": 1793560501917,
       "tag": "0018_story_entry_content_tokens",
       "breakpoints": true
+    },
+    {
+      "idx": 19,
+      "version": "6",
+      "when": 1793890622185,
+      "tag": "0019_chapter_close_report",
+      "breakpoints": true
     }
   ]
 }

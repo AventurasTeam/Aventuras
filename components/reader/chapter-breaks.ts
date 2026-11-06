@@ -1,4 +1,5 @@
-import type { Chapter, StoryEntry } from '@/lib/db'
+import type { StoryEntry } from '@/lib/db'
+import type { StoreChapter } from '@/lib/stores'
 
 import type { WorldTimeDecoration } from './worldtime-decoration'
 
@@ -10,7 +11,7 @@ export type ChapterBreaks = Partial<Record<string, ChapterBreak>>
 const rowKey = (branchId: string, entryId: string) => `${branchId}\n${entryId}`
 
 export function chapterBreaksOf(
-  chapters: readonly Chapter[],
+  chapters: readonly StoreChapter[],
   rows: readonly StoryEntry[],
   decorations: Record<string, WorldTimeDecoration>,
 ): ChapterBreaks {

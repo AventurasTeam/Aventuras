@@ -257,6 +257,30 @@ const PASS_B: Record<string, unknown> = {
   lead: null,
 }
 
+// Two closes of one story: every per-call variable the metadata template reads differs between
+// them; the mode is the story's, so it doesn't.
+const CLOSE_A: Record<string, unknown> = {
+  mode: 'adventure',
+  entries: [
+    { position: 1, kind: 'opening', content: 'The marsh road ended at a wall of black water.' },
+    { position: 2, kind: 'user_action', content: 'I wade in.' },
+    {
+      position: 3,
+      kind: 'ai_reply',
+      content: 'The cold took Kael’s breath, and the sigil with it.',
+    },
+  ],
+  previousChapterSummary: null,
+  threads: [{ title: 'Find the heir', status: 'active' }],
+}
+
+const CLOSE_B: Record<string, unknown> = {
+  mode: 'adventure',
+  entries: [{ position: 31, kind: 'ai_reply', content: 'Mora waited at the ford with a lantern.' }],
+  previousChapterSummary: 'Kael crossed the marsh and lost the sigil to the water.',
+  threads: [],
+}
+
 type RenderCase = {
   templateId: TemplateId
   first: Record<string, unknown>
@@ -303,6 +327,16 @@ const RENDER_CASES: RenderCase[] = [
     first: TURN_A,
     second: TURN_B,
     systemShows: ['A drowned coast of salt marsh and broken keeps.'],
+  },
+  {
+    templateId: TEMPLATE_IDS.chapterMetadata,
+    first: CLOSE_A,
+    second: CLOSE_B,
+    systemShows: [
+      '- Title. A few words naming the chapter',
+      'marked with <user_turn> tags',
+      'Each is what the lead does, says or attempts',
+    ],
   },
 ]
 

@@ -5,8 +5,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { EARTH_GREGORIAN, type CalendarFrame } from '@/lib/calendar'
 import type { ChapterProgress } from '@/lib/chapters'
-import type { Chapter, StoryEntry } from '@/lib/db'
-import { chaptersStore, resetAllStores } from '@/lib/stores'
+import type { StoryEntry } from '@/lib/db'
+import { chaptersStore, resetAllStores, type StoreChapter } from '@/lib/stores'
 
 import type { ChapterPopoverHandle, ChapterPopoverProps } from './chapter-popover'
 import { ReaderChapterChips, type ReaderChapterChipsHandle } from './reader-chapter-chips'
@@ -59,14 +59,24 @@ const PROGRESS: ChapterProgress = {
   startEntryId: 'e_open',
 }
 
-function chapter(sequenceNumber: number, branchId = 'br_1'): Chapter {
+function chapter(sequenceNumber: number, branchId = 'br_1'): StoreChapter {
   return {
     id: `${branchId}_chap_${sequenceNumber}`,
     branchId,
     sequenceNumber,
     title: `Title ${sequenceNumber}`,
+    summary: '',
+    theme: '',
+    keywords: [],
     startEntryId: `${branchId}_start_${sequenceNumber}`,
-  } as Chapter
+    endEntryId: `${branchId}_end_${sequenceNumber}`,
+    tokenCount: 0,
+    closedAt: 1,
+    embeddingStale: 0,
+    createdAt: 1,
+    updatedAt: 1,
+    hasCloseReport: false,
+  }
 }
 
 function entry(position: number, worldTime: number): StoryEntry {

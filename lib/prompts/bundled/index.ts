@@ -1,5 +1,6 @@
 import { MACRO_IDS, TEMPLATE_IDS } from '../ids'
 import type { Pack, TemplateEntry } from '../types'
+import { CHAPTER_METADATA } from './chapter-metadata'
 import { CLASSIFIER_MODE_RULE } from './classifier-mode-rule'
 import { ENTITY_STATE, ITEM_LINE } from './entity-state'
 import { MEMORY_BLOCKS } from './memory-blocks'
@@ -50,6 +51,7 @@ export const bundledPack: Pack = {
     },
     [TEMPLATE_IDS.periodicClassifier]: { group: 'classifierContext', ...PERIODIC_CLASSIFIER },
     [TEMPLATE_IDS.suggestionRefresh]: { group: 'generationContext', ...SUGGESTION_REFRESH },
+    [TEMPLATE_IDS.chapterMetadata]: { group: 'chapter', ...CHAPTER_METADATA },
     [TEMPLATE_IDS.wizardOpening]: wizardTemplate(WIZARD_OPENING),
     [TEMPLATE_IDS.wizardOpeningRefine]: wizardTemplate(WIZARD_OPENING_REFINE),
     [TEMPLATE_IDS.wizardTitleChips]: wizardTemplate(WIZARD_TITLE_CHIPS),

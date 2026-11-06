@@ -572,6 +572,41 @@ export const VARIABLES: Record<ContextGroup, VariableDef[]> = {
       required: false,
     },
   ],
+  // buildChapterContext must emit these exact names; chapter-context.test.ts pins the parity.
+  chapter: [
+    {
+      name: 'entries',
+      type: 'Entry[]',
+      category: 'Story',
+      description:
+        "The chapter being closed, whole: its entries in order from the open region's first through the chosen end, the opening included in a story's first chapter, system entries excluded. Each item carries `position`, `kind` ('user_action', 'ai_reply' or 'opening') and `content`, the prose with no trailing blocks; a `user_action` is the user's turn, which the bundled templates mark (macro_story_entry). Never cut to a budget.",
+      required: true,
+    },
+    {
+      name: 'previousChapterSummary',
+      type: 'string | null',
+      category: 'Story',
+      description:
+        "The summary of the branch's latest closed chapter, for continuity; null when this is the branch's first.",
+      required: true,
+    },
+    {
+      name: 'threads',
+      type: "{ title: string; status: 'pending' | 'active' }[]",
+      category: 'Plot',
+      description:
+        "The branch's open threads, those pending or active, each by title (on one line) and status. No ids, so the call needs no placeholder map.",
+      required: true,
+    },
+    {
+      name: 'mode',
+      type: "'adventure' | 'creative'",
+      category: 'Story Config',
+      description:
+        "The story's mode, which decides what a user's turn establishes: an adventure's is the lead's attempt, a creative story's a direction or prose.",
+      required: true,
+    },
+  ],
   staticContent: [],
 }
 
@@ -582,6 +617,7 @@ export const TEMPLATE_GROUPS: Record<string, ContextGroup> & Record<TemplateId, 
   [TEMPLATE_IDS.piggybackFallbackClassifier]: 'generationContext',
   [TEMPLATE_IDS.periodicClassifier]: 'classifierContext',
   [TEMPLATE_IDS.suggestionRefresh]: 'generationContext',
+  [TEMPLATE_IDS.chapterMetadata]: 'chapter',
   [TEMPLATE_IDS.wizardOpening]: 'wizard',
   [TEMPLATE_IDS.wizardOpeningRefine]: 'wizard',
   [TEMPLATE_IDS.wizardTitleChips]: 'wizard',
@@ -600,7 +636,7 @@ export const TEMPLATE_GROUPS: Record<string, ContextGroup> & Record<TemplateId, 
 // UI-level grouping name -> variable names it surfaces. A name that matches
 // no defined variable is "dangling" and reported by validateRegistry.
 export const DISPLAY_GROUPS: Record<string, string[]> = {
-  Story: ['entries', 'lastTurns', 'turns'],
+  Story: ['entries', 'lastTurns', 'turns', 'previousChapterSummary'],
   Entities: [
     'entities',
     'sceneMetadata',
