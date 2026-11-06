@@ -1,11 +1,11 @@
 import { describe, expect, it } from 'vitest'
 
-import type { StoryEntry, Thread, ThreadStatus } from '@/lib/db'
+import type { Thread, ThreadStatus } from '@/lib/db'
 import { renderTemplate, TEMPLATE_IDS, templateReads, VARIABLES } from '@/lib/prompts'
 
-import { buildChapterContext } from './chapter-context'
+import { buildChapterContext, type CloseRangeEntry } from './chapter-context'
 
-function entry(position: number, kind: StoryEntry['kind'], content: string): StoryEntry {
+function entry(position: number, kind: CloseRangeEntry['kind'], content: string): CloseRangeEntry {
   return {
     id: `entry_close_${position}`,
     branchId: 'b1',

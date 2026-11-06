@@ -2,22 +2,37 @@ import type { StoryEntry, StoryMode, Thread, ThreadStatus } from '@/lib/db'
 import { promptProse } from '@/lib/piggyback'
 import { oneLine } from '@/lib/text'
 
+/** A row of the close's range, which never reads a `system` entry. */
+export type CloseRangeEntry = Readonly<
+  Omit<StoryEntry, 'kind'> & { kind: Exclude<StoryEntry['kind'], 'system'> }
+>
+
+type OpenThreadStatus = Extract<ThreadStatus, 'pending' | 'active'>
+
 /** The `chapter` group's context (VARIABLES.chapter). No ids, so no placeholder map. */
 export type ChapterContext = {
-  entries: { position: number; kind: StoryEntry['kind']; content: string }[]
+  entries: { position: number; kind: CloseRangeEntry['kind']; content: string }[]
   previousChapterSummary: string | null
-  threads: { title: string; status: ThreadStatus }[]
+  threads: { title: string; status: OpenThreadStatus }[]
   mode: StoryMode
 }
 
+type ThreadLine = Pick<Thread, 'title' | 'status'>
+
 // chapter-close.md → Phase 2 reads the active threads; a pending one is as open.
-const OPEN_THREAD_STATUSES: ReadonlySet<ThreadStatus> = new Set(['pending', 'active'])
+const OPEN_THREAD_STATUSES: ReadonlySet<ThreadStatus> = new Set<OpenThreadStatus>([
+  'pending',
+  'active',
+])
+
+const isOpen = (thread: ThreadLine): thread is ThreadLine & { status: OpenThreadStatus } =>
+  OPEN_THREAD_STATUSES.has(thread.status)
 
 /** The metadata call's context: the range as narrated, prior summary, open threads, mode. */
 export function buildChapterContext(input: {
-  entries: readonly StoryEntry[]
+  entries: readonly CloseRangeEntry[]
   previousChapterSummary: string | null
-  threads: readonly Pick<Thread, 'title' | 'status'>[]
+  threads: readonly ThreadLine[]
   mode: StoryMode
 }): ChapterContext {
   return {
@@ -28,7 +43,7 @@ export function buildChapterContext(input: {
     })),
     previousChapterSummary: input.previousChapterSummary,
     threads: input.threads
-      .filter((t) => OPEN_THREAD_STATUSES.has(t.status))
+      .filter(isOpen)
       .map((t) => ({ title: oneLine(t.title), status: t.status })),
     mode: input.mode,
   }

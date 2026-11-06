@@ -7,11 +7,11 @@ import {
   type ResolveModelConfig,
   type ResolveTarget,
 } from '@/lib/ai'
-import { storyEntries, type DbCtx, type StoryEntry } from '@/lib/db'
+import { storyEntries, type DbCtx } from '@/lib/db'
 import { renderTemplate, TEMPLATE_IDS } from '@/lib/prompts'
 import { appSettingsStore, chaptersStore, currentStoryStore, threadsStore } from '@/lib/stores'
 
-import { buildChapterContext } from './chapter-context'
+import { buildChapterContext, type CloseRangeEntry } from './chapter-context'
 import {
   chapterMetadataSchema,
   normalizeChapterMetadata,
@@ -29,7 +29,7 @@ export async function readCloseRangeEntries(
   db: DbCtx['db'],
   branchId: string,
   range: CloseRange,
-): Promise<StoryEntry[]> {
+): Promise<readonly CloseRangeEntry[]> {
   const bounds = await db
     .select({ id: storyEntries.id, position: storyEntries.position })
     .from(storyEntries)
@@ -42,7 +42,7 @@ export async function readCloseRangeEntries(
   const start = bounds.find((b) => b.id === range.startEntryId)
   const end = bounds.find((b) => b.id === range.endEntryId)
   if (!start || !end) return []
-  return (await db
+  const rows = await db
     .select()
     .from(storyEntries)
     .where(
@@ -52,7 +52,8 @@ export async function readCloseRangeEntries(
         between(storyEntries.position, start.position, end.position),
       ),
     )
-    .orderBy(asc(storyEntries.position), asc(storyEntries.createdAt))) as StoryEntry[]
+    .orderBy(asc(storyEntries.position), asc(storyEntries.createdAt))
+  return rows.map((row) => ({ ...row, kind: row.kind as CloseRangeEntry['kind'] }))
 }
 
 export type MetadataCallOutcome =
