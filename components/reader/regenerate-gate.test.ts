@@ -17,7 +17,7 @@ describe('classifyRegenerateGate', () => {
       'cascade-confirm',
     )
   })
-  it('a chapter-close in the window routes to the M5.2 cost-confirm arm', () => {
+  it('a chapter-close in the window routes to the chapter-close arm', () => {
     expect(classifyRegenerateGate({ entries: 1, chapters: 1, worldStateChanges: 9 })).toBe(
       'chapter-close-confirm',
     )
