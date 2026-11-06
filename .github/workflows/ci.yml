@@ -11,8 +11,11 @@ concurrency:
   cancel-in-progress: true
 
 # Runners are pinned, not ubuntu-latest: that label moves to Ubuntu 26.04 from
-# 2026-10-19, and Playwright < 1.61 can't install Chromium or its deps there
-# (install-deps just warns and exits 0). Move the pin deliberately.
+# 2026-10-19, and Playwright < 1.61 can't install Chromium there. Move the pin
+# deliberately. The pinned image already carries every library Chromium and
+# Electron load, and Xvfb, so no job runs `playwright install-deps`: it only
+# added fonts no test renders, from an apt mirror that has stalled for 7-9 min.
+# Recheck that on a new image; a missing library fails the launch loudly.
 jobs:
   check:
     name: Lint, format, typecheck, docs
@@ -53,9 +56,13 @@ jobs:
   # Apart from the browser project, so the two don't compete for one runner's
   # cores.
   unit:
-    name: Unit tests (vitest)
+    name: Unit shard ${{ matrix.shard }}/${{ strategy.job-total }}
     runs-on: ubuntu-24.04
     timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2]
     steps:
       - uses: actions/checkout@v7
 
@@ -63,7 +70,18 @@ jobs:
         uses: ./.github/actions/pnpm-install
 
       - name: Run unit tests
-        run: pnpm exec vitest run --project unit
+        run: pnpm exec vitest run --project unit --shard=${{ matrix.shard }}/${{ strategy.job-total }}
+
+  # The check the shards report under, so its name holds whatever the shard count.
+  unit-result:
+    name: Unit tests (vitest)
+    if: always()
+    needs: unit
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - name: Every shard passed
+        run: test "${{ needs.unit.result }}" = success
 
   test:
     name: Storybook tests (vitest + playwright)
@@ -92,7 +110,7 @@ jobs:
 
       - name: Install Playwright browsers
         if: steps.playwright-cache.outputs.cache-hit != 'true'
-        run: pnpm exec playwright install --with-deps chromium
+        run: pnpm exec playwright install chromium
 
       # Cache saves run on main only; see .github/actions/pnpm-install/action.yml.
       - name: Save Playwright cache
@@ -101,10 +119,6 @@ jobs:
         with:
           path: ~/.cache/ms-playwright
           key: ${{ steps.playwright-cache.outputs.cache-primary-key }}
-
-      - name: Install Playwright system deps
-        if: steps.playwright-cache.outputs.cache-hit == 'true'
-        run: pnpm exec playwright install-deps chromium
 
       - name: Run story tests
         run: pnpm exec vitest run --project storybook
@@ -163,11 +177,6 @@ jobs:
             ~/.cache/electron
             ~/.cache/electron-builder
           key: ${{ steps.electron-cache.outputs.cache-primary-key }}
-
-      # Electron needs Chromium's shared libraries; install-deps provides them
-      # (and xvfb) without downloading a browser.
-      - name: Install system libraries for Electron
-        run: pnpm exec playwright install-deps chromium
 
       # Fixture embedder model (~24 MB from Hugging Face); the harness downloads
       # it on a cache miss. Keyed on the catalog so a model/revision bump busts.

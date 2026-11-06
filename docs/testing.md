@@ -682,12 +682,13 @@ jobs on every PR: `check` (lint, format, types, docs, migrations),
 `unit` and `test` (the vitest `unit` and `storybook` projects, apart so
 they don't compete for one runner's cores), and the packaged E2E.
 
-The E2E job runs in three shards (`--shard=N/3`), each on its own
-runner, and reports under one check,
+`unit` and E2E run in shards (`--shard=N/total`), each on its own
+runner, and each reports under one check, `Unit tests (vitest)` and
 `E2E (Playwright + Electron, packaged)`, which passes only when every
 shard does; the shard count can change without the check's name
-changing. Playwright splits shards by file, in name order, balanced on
-test count rather than time. Each shard:
+changing. Vitest splits its two shards evenly by file. Playwright
+splits its three by file, in name order, balanced on test count rather
+than time. Each E2E shard:
 
 1. `pnpm build:web` — export the web bundle.
 2. `pnpm electron:compile` — compile the Electron main.
@@ -696,9 +697,7 @@ test count rather than time. Each shard:
    native modules, and `extraResources` migrations the tests need.
    The Electron binary and builder downloads are cached, keyed on the
    Electron and electron-builder versions.
-4. `playwright install-deps chromium` — Electron's shared libraries
-   and Xvfb (no browser download).
-5. `pnpm test:e2e:packaged --shard=N/3` (the `packaged` Playwright
+4. `pnpm test:e2e:packaged --shard=N/3` (the `packaged` Playwright
    project) — the script asks for
    [virtual displays](#virtual-display) itself, so CI and local runs
    invoke the same command, and the runner's four cores give two
@@ -709,6 +708,12 @@ that job would sit in front of every shard, and handing its package
 over costs an upload and a download per shard. The embedder model
 cache is restored per shard, keyed on the catalog; shard 1 saves both
 caches on `main`.
+
+No job runs `playwright install-deps`. The pinned `ubuntu-24.04` image
+already carries every library Chromium and Electron load, and Xvfb, so
+the step only added fonts no test renders, through an apt mirror that
+twice stalled for 7 to 9 minutes. On a new image, check that again: a
+missing library fails the launch loudly rather than the suite quietly.
 
 ## Known limitations and open questions
 
