@@ -445,6 +445,21 @@ describe('answerSyncRequest', () => {
     expect(vectorWrites()).toEqual([])
   })
 
+  it('rejects a settled vector with a malformed counter', async () => {
+    db.findSyncedLocalId.mockResolvedValue('c')
+    db.getSyncVector.mockResolvedValue({ pc: 2 })
+    const fractional = request({
+      type: 'settleVector',
+      section: 'characters',
+      syncId: 'sync-1',
+      expected: { pc: 2 },
+      vector: { pc: 2, me: 2.5 },
+    })
+
+    await expect(actions.answerSyncRequest(fractional, tracking)).rejects.toThrow('invalid version')
+    expect(vectorWrites()).toEqual([])
+  })
+
   it('writes no identity for an item that no longer exists', async () => {
     await expect(
       actions.answerSyncRequest(

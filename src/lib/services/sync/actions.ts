@@ -28,7 +28,7 @@ import type {
   SyncWebviewRequest,
 } from '#lib/types/sync.ts'
 import { decodeEnvelope, encodeEnvelope } from './envelope'
-import { isObject, isSyncListing } from './guards'
+import { isObject, isSyncListing, isSyncVector } from './guards'
 import { parseListPrefs } from './rows'
 import { SECTION_ENTITY, exportDocument, listLocalItems } from './sections'
 import { syncService } from './service'
@@ -144,6 +144,9 @@ export async function answerSyncRequest(
     }
 
     case 'settleVector': {
+      if (!isSyncVector(action.expected) || !isSyncVector(action.vector)) {
+        throw new Error('Received an invalid version')
+      }
       const entityType = SECTION_ENTITY[action.section]
       const localId = await database.findSyncedLocalId(entityType, action.syncId)
       const current = await database.getSyncVector(action.syncId)
