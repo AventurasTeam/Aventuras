@@ -285,10 +285,15 @@ The check selects by `actionId`, so it holds across the parts 5.8 adds.
 [Slice 5.2](./02-first-chapter.md#implementation-notes)'s dataset chapter
 is checked in as [the dataset seed](../../../../testing.md#the-dataset-seed),
 and each slice that adds to a close refreshes it (developer decision,
-2026-11-05). Load it with `pnpm db:seed:dataset`, CTRL-Z its close and
-close the chapter again from the dev route, this slice's tasks on the
-dev model, then re-export with `pnpm dataset:export-seed` and commit the
-diff. Rows the dev model rewrites churn; that is expected. This first
+2026-11-05). Load it with `pnpm db:seed:dataset`, CTRL-Z its close, and
+close the chapter again from the dev route with `pnpm mock` passing the
+close's calls through to the dev model
+([Passthrough and recording](../../../../../scripts/mock-llm/README.md#passthrough-and-recording)).
+Re-export with `pnpm dataset:export-seed`, update the counts and title
+`treasure-island.seed.test.ts` pins, and commit the diff. The re-close
+reruns every close task, not this slice's alone, so rows the dev model
+rewrites churn; that is expected. A story-level model override has to
+name a provider the default seed defines, or the export refuses it. This first
 refresh also replaces the chapter's title and summary, written before
 the metadata prompt's rewording
 ([5.2's "R1: A"](./02-first-chapter.md#implementation-notes)).

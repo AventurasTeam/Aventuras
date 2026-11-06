@@ -338,9 +338,10 @@ every row of the story and its branches, the delta log included, so
 CTRL-Z and rollback work on the seeded story. It carries no vector:
 every embedded row is stale and embeds when the story opens. It leaves
 out what isn't the story's: the app settings, calendars and assets the
-default seed supplies, the run log, probe captures and wizard drafts,
-and a table a later migration adds fails the seed's test until it is
-carried or left out. The story's settings may name only a provider the
+default seed supplies, the run log, probe captures and wizard drafts.
+A table a later migration adds fails the seed's test until it is
+carried or left out, and a column one adds until the seed is loaded and
+exported again. The story's settings may name only a provider the
 default seed defines. The loader checks every row against its table's
 Zod schemas, then inserts it as written.
 
