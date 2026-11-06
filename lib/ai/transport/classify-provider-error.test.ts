@@ -163,6 +163,10 @@ describe('classifyProviderError', () => {
     const uncarried = classifyProviderError(error, { ...CARRIED_ALL, reasoning: false })
     expect('possibleCapabilityMismatch' in uncarried.error).toBe(false)
     expect('possibleCapabilityMismatch' in classifyProviderError(error).error).toBe(false)
+    for (const message of ['tools are not supported', 'response_format is not supported']) {
+      const named = classifyProviderError(rejection(400, errorBody(message))).error
+      expect('possibleCapabilityMismatch' in named).toBe(false)
+    }
   })
 })
 
