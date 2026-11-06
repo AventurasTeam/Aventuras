@@ -31,8 +31,9 @@ export default defineConfig({
   // Parallel only when each launch gets its own virtual display: real windows on
   // one screen take the focus from each other (docs/testing.md → Workers).
   workers:
-    workersFromEnv(process.env.E2E_WORKERS) ??
-    (process.env.E2E_VIRTUAL_DISPLAY === '1' ? defaultWorkers : 1),
+    process.env.E2E_VIRTUAL_DISPLAY === '1'
+      ? (workersFromEnv(process.env.E2E_WORKERS) ?? defaultWorkers)
+      : 1,
   // A file's tests share the app its beforeAll launched, so files are the unit.
   fullyParallel: false,
   timeout: 90_000,

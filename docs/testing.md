@@ -237,11 +237,11 @@ The count, from `playwright.config.ts`:
 - **Half the cores, capped at 8**, when the run has virtual displays.
   Past the cap a run waits on its longest file rather than on the
   cores, and the machine is shared: other dev slots, their emulators
-  and their own suites.
-- **1** without virtual displays (headed, macOS, Windows): real
-  windows on one screen would take the focus from each other.
-- **`E2E_WORKERS`** overrides both, as a number or a percentage of the
-  cores, and so does Playwright's `--workers`.
+  and their own suites. **`E2E_WORKERS`** overrides it, as a number or
+  a percentage of the cores.
+- **1** without virtual displays (headed, macOS, Windows), whatever
+  `E2E_WORKERS` says: real windows on one screen would take the focus
+  from each other. Only Playwright's own `--workers` overrides that.
 
 A long file is the run's floor: its describes run one after another in
 one worker while the others finish. A file whose describes each launch

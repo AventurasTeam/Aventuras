@@ -51,12 +51,15 @@ test.describe('dev DevTools port', () => {
 
   test('a spawned dev process does not try to bind the dev port', async () => {
     const dir = mkdtempSync(join(tmpdir(), 'aventuras-e2e-port-'))
-    const spawned = await spawnAppProcess(dir)
     try {
-      expect(await exitWithin(spawned.process, 8_000), spawned.stderr()).toBeNull()
-      expect(spawned.stderr()).not.toContain('Cannot start http server for devtools')
+      const spawned = await spawnAppProcess(dir)
+      try {
+        expect(await exitWithin(spawned.process, 8_000), spawned.stderr()).toBeNull()
+        expect(spawned.stderr()).not.toContain('Cannot start http server for devtools')
+      } finally {
+        await stopAppProcess(spawned.process)
+      }
     } finally {
-      await stopAppProcess(spawned.process)
       removeUserDataDir(dir)
     }
   })

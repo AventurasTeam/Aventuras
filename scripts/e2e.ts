@@ -177,6 +177,7 @@ if (process.platform === 'linux' && !headed && !virtualDisplay) {
 // effect, and clearing WAYLAND_DISPLAY falls back to the default wayland-0 socket.
 const childEnv = { ...process.env }
 if (virtualDisplay) childEnv.E2E_VIRTUAL_DISPLAY = '1'
+else delete childEnv.E2E_VIRTUAL_DISPLAY
 
 const child = spawn(process.execPath, [PLAYWRIGHT_CLI, 'test', ...forwarded], {
   cwd: REPO_ROOT,
