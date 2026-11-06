@@ -53,6 +53,18 @@ describe('exportStorySeed', () => {
     expect(Object.keys(seed)).toEqual(DATASET_SEED_TABLES.map((spec) => spec.name))
     expect(seed.stories!.map((r) => r.id)).toEqual([HERO])
     expect(new Set(seed.branches!.map((r) => r.id))).toEqual(new Set([HERO_MAIN, 'br_hero_fork']))
+    const heroRows = (name: string) =>
+      buildSeedSteps()
+        .filter((s) => s.name === name)
+        .flatMap((s) => s.rows as Row[])
+        .filter((r) =>
+          name === 'branches' ? r.storyId === HERO : String(r.branchId).startsWith('br_hero_'),
+        )
+    const keys = (rows: Row[]) => rows.map((r) => `${String(r.branchId)}:${String(r.id)}`).sort()
+    for (const { name } of DATASET_SEED_TABLES.slice(1)) {
+      expect(heroRows(name).length, name).toBeGreaterThan(0)
+      expect(keys(seed[name]!), name).toEqual(keys(heroRows(name)))
+    }
     const heroDeltas = buildSeedSteps()
       .filter((s) => s.name === 'deltas')
       .flatMap((s) => s.rows as Row[])
