@@ -1,9 +1,9 @@
 import { RequestLog } from './log'
-import { NARRATIVE_LANE } from './routing'
+import { NARRATIVE_LANE, TOOL_LANE_PREFIX } from './routing'
 import { STRUCTURED_SHAPES } from './shapes'
 import { defaultState, emptyLane, loadState, saveState, type Lane, type MockState } from './state'
 
-/** A structured shape seen on the wire that the registry does not name. */
+/** A lane seen on the wire that no registry entry names: an unknown shape or a tool lane. */
 export type DiscoveredShape = { key: string; block: string | null; firstSeenAt: number }
 
 export type MockContext = {
@@ -30,9 +30,9 @@ export function createContext(opts: { persist?: boolean } = {}): MockContext {
 export type LaneMeta = {
   key: string
   title: string
-  kind: 'narrative' | 'registered' | 'unknown'
+  kind: 'narrative' | 'registered' | 'unknown' | 'tool'
   /** Nav section the panel files this lane under. */
-  group: 'narrative' | 'story' | 'wizard' | 'unknown'
+  group: 'narrative' | 'story' | 'wizard' | 'tools' | 'unknown'
 }
 
 /** Lane keys the UI lists: narrative, every registered shape, then discoveries. */
@@ -43,15 +43,16 @@ export function laneCatalog(ctx: MockContext): LaneMeta[] {
     kind: 'registered' as const,
     group: s.group,
   }))
-  const unknown = [...ctx.discovered.values()].map((d) => ({
-    key: d.key,
-    title: d.key,
-    kind: 'unknown' as const,
-    group: 'unknown' as const,
-  }))
+  // By key, not by a null block: an unregistered shape that declared no block has a null one too.
+  const discovered = [...ctx.discovered.values()].map(
+    (d): LaneMeta =>
+      d.key.startsWith(TOOL_LANE_PREFIX)
+        ? { key: d.key, title: d.key, kind: 'tool', group: 'tools' }
+        : { key: d.key, title: d.key, kind: 'unknown', group: 'unknown' },
+  )
   return [
     { key: NARRATIVE_LANE, title: 'narrative', kind: 'narrative' as const, group: 'narrative' },
     ...registered,
-    ...unknown,
+    ...discovered,
   ]
 }

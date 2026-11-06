@@ -414,14 +414,17 @@
       // A cut reply, an overflow rejection, a hang with no profile timeout and a status the app
       // doesn't retry all fail on the first call, so one failure reaches the app.
       const NOT_RETRIED = ['length', 'overflow-llamacpp', 'overflow-openai', 'hang']
-      const isRetried = ({ kind, status }) =>
-        !NOT_RETRIED.includes(kind) && (kind !== 'http' || status === 429 || status >= 500)
+      // A tool step sends a cut reply once more, and hands a malformed call back as an invalid one.
+      const TOOL_NOT_RETRIED = ['malformed', 'overflow-llamacpp', 'overflow-openai', 'hang']
+      const isRetried = ({ kind, status }, notRetried) =>
+        !notRetried.includes(kind) && (kind !== 'http' || status === 429 || status >= 500)
 
       // Nav sections, in display order; `id` matches laneCatalog's group.
       const GROUPS = [
         { id: 'narrative', label: 'Narrative' },
         { id: 'story', label: 'Story' },
         { id: 'wizard', label: 'Wizard' },
+        { id: 'tools', label: 'Tools' },
         { id: 'unknown', label: 'Unregistered' },
       ]
       const COLLAPSED_KEY = 'mock-llm.collapsed-groups'
@@ -607,6 +610,11 @@
                 : ''
             }
             ${
+              meta.kind === 'tool'
+                ? `<p class="hint">A tool step: <code>text</code>, <code>reasoning</code>, <code>toolCalls</code> as <code>[{ "name", "args" }]</code> (a string <code>args</code> goes out verbatim) and <code>finishReason</code>, by default <code>tool_calls</code> with calls, else <code>stop</code>. <code>{}</code> answers no calls.</p>`
+                : ''
+            }
+            ${
               pinned
                 ? `<label>Placeholders from the selected request — click to copy</label>
                    <div class="ph">${pinned
@@ -692,9 +700,13 @@
             ${
               !isNarrative &&
               lane.failure.kind !== 'none' &&
-              isRetried(lane.failure) &&
+              isRetried(lane.failure, meta.kind === 'tool' ? TOOL_NOT_RETRIED : NOT_RETRIED) &&
               lane.failure.remaining === 1
-                ? `<p class="hint" style="color:var(--warn)">Structured calls retry once (<code>maxProviderAttempts: 2</code>), so a single injected failure is swallowed before the app sees it. Use 2 or more.</p>`
+                ? `<p class="hint" style="color:var(--warn)">${
+                    meta.kind === 'tool'
+                      ? 'A tool step retries once (<code>maxProviderAttempts: 2</code>, and once more on a cut reply)'
+                      : 'Structured calls retry once (<code>maxProviderAttempts: 2</code>)'
+                  }, so a single injected failure is swallowed before the app sees it. Use 2 or more.</p>`
                 : ''
             }
 

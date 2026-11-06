@@ -7,6 +7,7 @@ import { passthrough } from './passthrough'
 import { deliveredByCut, streamNarrative } from './respond/narrative'
 import { renderNarrative, type NarrativeValue } from './respond/tagged-block'
 import {
+  argumentsOf,
   readBody,
   CORS_HEADERS,
   SSE_HEADERS,
@@ -16,10 +17,13 @@ import {
   overflowBody,
   overflowCounts,
   roleFrame,
+  toolStepBody,
+  toolStepCompletionText,
   wantsStreamUsage,
+  type MockToolStep,
   type OverflowShape,
 } from './respond/wire'
-import { classifyRequest, laneKeyOf, promptText, NARRATIVE_LANE } from './routing'
+import { classifyRequest, laneKeyOf, promptText, toolPromptText, NARRATIVE_LANE } from './routing'
 import { nextResponse, takeFailure, type FailureKind, type Lane } from './state'
 
 const PER_TURN_CLASSIFIER_LANES = new Set([
@@ -58,6 +62,20 @@ function asNarrativeValue(value: unknown): NarrativeValue {
     ...(record.state !== undefined ? { state: record.state } : {}),
     ...(record.suggestions !== undefined ? { suggestions: record.suggestions } : {}),
   }
+}
+
+// The SDK reads arguments cut short as an invalid call: a tool lane's malformed reply.
+function cutFirstCall(step: MockToolStep): MockToolStep {
+  const [first, ...rest] = step.toolCalls ?? []
+  if (first === undefined) return step
+  const args = argumentsOf(first.args)
+  return { ...step, toolCalls: [{ name: first.name, args: firstHalf(args) }, ...rest] }
+}
+
+function servedToolStep(step: MockToolStep, failure: FailureKind): MockToolStep {
+  if (failure === 'malformed' || failure === 'stream-cut') return cutFirstCall(step)
+  if (failure === 'length') return { ...step, finishReason: 'length' }
+  return step
 }
 
 function sendHttpFailure(res: ServerResponse, status: number): void {
@@ -115,12 +133,21 @@ export async function handleCompletion(
   const key = laneKeyOf(route)
   const streamed = route.lane === NARRATIVE_LANE
 
-  if (route.lane === 'structured' && route.shape === null && !ctx.discovered.has(key)) {
-    ctx.discovered.set(key, { key, block: route.block, firstSeenAt: Date.now() })
+  // A tool lane is never registered: each task's tool list opens its own.
+  if (
+    (route.lane === 'tool' || (route.lane === 'structured' && route.shape === null)) &&
+    !ctx.discovered.has(key)
+  ) {
+    ctx.discovered.set(key, {
+      key,
+      block: route.lane === 'structured' ? route.block : null,
+      firstSeenAt: Date.now(),
+    })
   }
 
   const lane = ctx.lane(key)
-  const prompt = promptText(body)
+  // A tool step's prompt counts its tool definitions and calls, as the app's estimate does.
+  const prompt = route.lane === 'tool' ? toolPromptText(body) : promptText(body)
 
   const controller = new AbortController()
   let clientGone = false
@@ -259,6 +286,16 @@ export async function handleCompletion(
       ...(wantsStreamUsage(body) ? { usage: mockUsage(prompt, content) } : {}),
       aborted: () => clientGone,
     })
+    finish()
+    return
+  }
+
+  if (route.lane === 'tool') {
+    // Checked as a MockToolStep when it was saved; an unconfigured lane's `{}` is no calls and stop.
+    const step = servedToolStep((canned?.value ?? {}) as MockToolStep, failure)
+    entry.served = step
+    res.writeHead(200, { ...CORS_HEADERS, 'content-type': 'application/json' })
+    res.end(toolStepBody(step, mockUsage(prompt, toolStepCompletionText(step))))
     finish()
     return
   }

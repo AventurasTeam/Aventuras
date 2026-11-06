@@ -2,7 +2,8 @@ import { z } from 'zod'
 
 import { suggestionRefSchema, VISUAL_CHANGE_TYPES } from '@/lib/piggyback'
 
-import { NARRATIVE_LANE } from './routing'
+import type { FinishReason, MockToolStep } from './respond/wire'
+import { NARRATIVE_LANE, TOOL_LANE_PREFIX } from './routing'
 import { findShapeByName } from './shapes'
 
 // A create's description may be left out, as the app's parser reads a missing one as ''.
@@ -61,17 +62,39 @@ export const narrativeValueSchema = z.object({
   suggestions: z.array(suggestionRefSchema).optional(),
 })
 
+// Each FinishReason once, so one added to the wire fails typecheck here until it validates.
+const FINISH_REASONS = {
+  stop: 'stop',
+  length: 'length',
+  tool_calls: 'tool_calls',
+  content_filter: 'content_filter',
+} as const satisfies { [K in FinishReason]: K }
+
+// Strict: the wire's own spelling (`tool_calls`, `arguments`) is refused, not dropped, since a step
+// that lost its calls that way would end a task with no writes. A string `args` goes out verbatim,
+// anything else as JSON, so `args` has to be JSON.
+export const mockToolStepSchema: z.ZodType<MockToolStep> = z.strictObject({
+  text: z.string().optional(),
+  reasoning: z.string().optional(),
+  toolCalls: z.array(z.strictObject({ name: z.string(), args: z.json() })).optional(),
+  finishReason: z.enum(FINISH_REASONS).optional(),
+})
+
 export type ValidationResult = { ok: true } | { ok: false; error: string }
 
 /**
- * Validates an authored response against the schema its lane actually answers.
- * A lane the registry does not name has no schema to check against, so anything
- * JSON-shaped is accepted — the point of the unknown-shape lane is that it
- * works before anyone updates the registry.
+ * Validates an authored response against what its lane answers: a narrative value, a tool step, or
+ * the registered shape's schema. A structured lane the registry does not name has no schema to
+ * check against, so anything JSON-shaped is accepted — the point of the unknown-shape lane is
+ * that it works before anyone updates the registry.
  */
 export function validateLaneValue(laneKey: string, value: unknown): ValidationResult {
-  const schema =
-    laneKey === NARRATIVE_LANE ? narrativeValueSchema : findShapeByName(laneKey)?.schema
+  const schema: z.ZodType | undefined =
+    laneKey === NARRATIVE_LANE
+      ? narrativeValueSchema
+      : laneKey.startsWith(TOOL_LANE_PREFIX)
+        ? mockToolStepSchema
+        : findShapeByName(laneKey)?.schema
   if (schema === undefined) return { ok: true }
 
   const parsed = schema.safeParse(value)
