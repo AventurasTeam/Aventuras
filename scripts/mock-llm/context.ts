@@ -35,7 +35,7 @@ export type LaneMeta = {
   group: 'narrative' | 'story' | 'wizard' | 'tools' | 'unknown'
 }
 
-/** Lane keys the UI lists: narrative, every registered shape, then discoveries and saved tool lanes. */
+/** Lane keys the UI lists: narrative, registered shapes, then discoveries and saved tool lanes. */
 export function laneCatalog(ctx: MockContext): LaneMeta[] {
   const registered = STRUCTURED_SHAPES.map((s) => ({
     key: s.name,
@@ -50,7 +50,7 @@ export function laneCatalog(ctx: MockContext): LaneMeta[] {
         ? { key: d.key, title: d.key, kind: 'tool', group: 'tools' }
         : { key: d.key, title: d.key, kind: 'unknown', group: 'unknown' },
   )
-  // A tool lane configured before a restart has state but no discovery yet.
+  // Every tool lane is saved on first sight, so after a restart all ever hit list here.
   const saved = Object.keys(ctx.state.lanes)
     .filter((key) => key.startsWith(TOOL_LANE_PREFIX) && !ctx.discovered.has(key))
     .map((key): LaneMeta => ({ key, title: key, kind: 'tool', group: 'tools' }))

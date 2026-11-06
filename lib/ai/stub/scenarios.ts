@@ -81,7 +81,7 @@ function blocksOf(message: SentMessage | undefined): AnthropicBlock[] {
 }
 
 // Anthropic refuses a tool result unless the assistant turn before it opens with its thinking
-// block, text and signature intact: the one offline check that a step's response messages replay it.
+// block, text and signature intact: the one offline check a step's response messages replay it.
 function toolStepReply(body: string): Response {
   const { messages } = sentRequest(body)
   const resultAt = messages.findIndex(
@@ -128,7 +128,7 @@ export function makeScenarioFetch(scenario: StubScenario): typeof fetch {
       case 'tool-step':
         return toolStepReply(await request.text())
       case 'tool-step-cut':
-        // A real cut at max_tokens reports the output it was allowed, so replyCutOff reads max-output.
+        // A real max_tokens cut reports the output it was allowed, so replyCutOff reads max-output.
         return anthropicJson('The door', 'max_tokens', sentRequest(await request.text()).maxTokens)
       default:
         throw new Error(`Unknown stub scenario: ${String(scenario)}`)

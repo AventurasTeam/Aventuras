@@ -124,7 +124,7 @@ async function structuredReply(response: Promise<Response>): Promise<unknown> {
   return JSON.parse(body.choices[0].message.content)
 }
 
-/** Whether the harness still accepts a fresh connection; a pooled keep-alive socket can't answer. */
+/** Whether the harness accepts a fresh connection; a pooled keep-alive socket can't answer. */
 function accepting(llm: MockLlm): Promise<boolean> {
   const { hostname, port } = new URL(llm.url)
   return new Promise((resolve) => {

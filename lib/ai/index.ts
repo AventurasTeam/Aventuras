@@ -30,9 +30,8 @@ export {
   type StreamTextResult,
   type StructuredCallOptions,
 } from './generate'
-// getModel + the retry/timeout trio are public for cross-module tests
-// (pipeline fault injection) and lib/pipeline's CallRetryError mapping —
-// production call paths go through streamText / generateStructured / generateToolStep.
+// getModel + the retry/timeout trio are public for cross-module tests (pipeline fault injection)
+// and lib/pipeline's CallRetryError mapping; production calls go through the generate* entries.
 export { getModel } from './model'
 export { callWithRetry, type CallRetryError } from './transport/call-with-retry'
 export {

@@ -62,9 +62,8 @@ export const narrativeValueSchema = z.object({
   suggestions: z.array(suggestionRefSchema).optional(),
 })
 
-// Strict: the wire's own spelling (`tool_calls`, `arguments`) is refused, not dropped, since a step
-// that lost its calls that way would end a task with no writes. A string `args` goes out verbatim,
-// anything else as JSON, so `args` has to be JSON.
+// Strict: the wire's spelling (`tool_calls`, `arguments`) is refused, not dropped, or a step would
+// lose its calls and end a task with no writes. A string `args` goes out verbatim, else as JSON.
 export const mockToolStepSchema: z.ZodType<MockToolStep> = z.strictObject({
   text: z.string().optional(),
   reasoning: z.string().optional(),
@@ -75,10 +74,9 @@ export const mockToolStepSchema: z.ZodType<MockToolStep> = z.strictObject({
 export type ValidationResult = { ok: true } | { ok: false; error: string }
 
 /**
- * Validates an authored response against what its lane answers: a narrative value, a tool step, or
- * the registered shape's schema. A structured lane the registry does not name has no schema to
- * check against, so anything JSON-shaped is accepted — the point of the unknown-shape lane is
- * that it works before anyone updates the registry.
+ * Validates an authored response against its lane: narrative value, tool step, or the registered
+ * shape's schema. An unregistered structured lane accepts any JSON, so it works before the
+ * registry is updated.
  */
 export function validateLaneValue(laneKey: string, value: unknown): ValidationResult {
   const schema: z.ZodType | undefined =

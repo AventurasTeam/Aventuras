@@ -37,7 +37,7 @@ export { mockUsage }
 // shapes. The mock routes on the request:
 //   - stream: true          → an SSE prose stream (the narrative call).
 //   - carrying tools         → a tool step (MockToolStep) from that tool list's
-//     own queue (setToolSteps); no calls, empty text, `stop` when nothing is queued.
+//     own queue (setToolSteps); an empty `stop` step when nothing is queued.
 //   - otherwise (structured) → a JSON chat completion, whose body is chosen by
 //     matching the exact TypeScript block the app injects into the prompt
 //     (schemaToTypeScriptBlock over the agent's zod schema). Each CALL SITE is
@@ -178,9 +178,8 @@ export type MockLlm = {
   /** Finish any held narrative streams with the current narrative; a pending cut applies. */
   releaseNarrative: () => void
   /**
-   * One-shot: the next structured call matching the `agentName` shape, or the next call on that
-   * tool lane key, is recorded in `requests`, then held unanswered until releaseStructured() or a
-   * client abort (the in-flight window).
+   * One-shot: the next call matching the `agentName` shape or tool lane key is recorded, then held
+   * unanswered until releaseStructured() or a client abort.
    */
   holdNextStructured: (agentName: string) => void
   /** Answer every held call with its reply as set now; a held tool call takes its step here. */
@@ -188,8 +187,8 @@ export type MockLlm = {
   /** One-shot: the next stream to finish (held: at release) sends the narrative, then 'length'. */
   cutNextNarrative: () => void
   /**
-   * One-shot: the next `agentName` call answered (held: at release) sends `raw`, then 'length'. On a
-   * tool lane key it takes no queued step, so the retry gets it.
+   * One-shot: the next `agentName` call answered (held: at release) sends `raw`, then 'length'.
+   * On a tool lane key it takes no queued step, so the retry gets it.
    */
   cutNextStructured: (agentName: string, raw: string) => void
   /** One-shot: the next narrative stream to report usage claims a tenth of its prompt tokens. */
@@ -202,9 +201,8 @@ export type MockLlm = {
    */
   overflowNextStructured: (agentName: string, shape?: OverflowShape) => void
   /**
-   * Replace the tool lane's queue; each answered call takes the next step. Empty: no calls, empty
-   * text, `stop`. A step that throws or can't be serialized fails its call with a 400, then
-   * rethrows.
+   * Replace the tool lane's queue; each answered call takes the next step, none left: `stop`.
+   * A step that throws or can't be serialized fails its call with a 400, then rethrows.
    */
   setToolSteps: (tools: readonly string[], steps: readonly MockToolStepReply[]) => void
   /** Every completion request received, in order. */

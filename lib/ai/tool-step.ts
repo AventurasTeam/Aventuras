@@ -88,8 +88,8 @@ type StepReply = Awaited<ReturnType<typeof runProviderCall>>
 
 type Run = { result: CallWithRetryResult<ToolStep>; expired: boolean }
 
-// The SDK's own conversion, run first, else it throws inside the call as a provider error; the output
-// side refuses a transform, whose value the SDK returns as the call's input for the next step.
+// The SDK's own conversion, run first, else it throws inside the call as a provider error; the
+// output side refuses a transform, whose value the SDK returns as the call's input.
 async function sdkTools(
   defs: ToolStepRequest['tools'],
 ): Promise<{ tools: ToolSet } | { detail: string }> {
@@ -126,8 +126,7 @@ function stepOf(reply: StepReply): ToolStep {
 }
 
 /**
- * One step of a close's task (memory/chapter-close.md → The agent): the pair, the conversation so
- * far and the tool list go out, and one reply comes back with its calls unrun.
+ * One step of a close's task (memory/chapter-close.md → The agent); calls come back unrun.
  */
 export async function generateToolStep(
   target: ResolveTarget,

@@ -109,7 +109,7 @@ function countPartTokens(part: PromptPart): number {
   }
 }
 
-// A tool result's text goes out raw, any other value as JSON; JSON.stringify(undefined) is undefined.
+// A tool result's text goes out raw, any other value as JSON.
 function asSentText(value: unknown): string {
   return typeof value === 'string' ? value : (JSON.stringify(value) ?? '')
 }
