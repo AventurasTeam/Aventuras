@@ -317,9 +317,14 @@ export async function startMockLlm(): Promise<MockLlm> {
   }
 
   const answerTool = (res: ServerResponse, lane: string, request: MockRequest): void => {
-    let step: MockToolStep
+    // The body is built before any header goes out: args JSON can't hold (a BigInt) throw here too.
+    let replyBody: string
     try {
-      step = nextToolStep(lane, request)
+      const step = nextToolStep(lane, request)
+      replyBody = toolStepBody(
+        step,
+        mockUsage(toolPromptText(request.body), toolStepCompletionText(step)),
+      )
     } catch (error) {
       // Answered first so the client fails at once instead of waiting out its bound; the message
       // prefix names no capability keyword, so it reads as no capability mismatch.
@@ -329,9 +334,7 @@ export async function startMockLlm(): Promise<MockLlm> {
       throw error
     }
     res.writeHead(200, { ...cors, 'content-type': 'application/json' })
-    res.end(
-      toolStepBody(step, mockUsage(toolPromptText(request.body), toolStepCompletionText(step))),
-    )
+    res.end(replyBody)
   }
 
   const holdStructured = (res: ServerResponse, answer: () => void): void => {

@@ -432,6 +432,25 @@ describe('startMockLlm — tool lanes', () => {
     expect(callsOf(okStep(await held))).toEqual([{ toolName: 'read_row', input: { id: 'c6' } }])
   })
 
+  it('fails a call whose step has args JSON cannot hold, and still closes', async () => {
+    const llm = await started()
+    const config = registerHarness(llm)
+    llm.holdNextStructured(LANE)
+    const held = step(config)
+    await vi.waitFor(() => expect(llm.requests).toHaveLength(1))
+    llm.setToolSteps(NAMES, [{ toolCalls: [{ name: 'read_row', args: { id: 7n } }] }])
+
+    await expect(llm.close()).rejects.toThrow('BigInt')
+
+    expect(await accepting(llm)).toBe(false)
+    const failed = await held
+    expect(failed).toMatchObject({
+      status: 'failed',
+      error: { tier: 'provider', reason: 'unknown' },
+    })
+    expect(JSON.stringify(failed)).toContain('mock harness: a scripted step threw:')
+  })
+
   it('fails a call whose function step throws, answers the rest, and still closes', async () => {
     const llm = await started()
     const config = registerHarness(llm)
