@@ -25,6 +25,7 @@ import {
 } from '../../lib/db/schema'
 import type { Delta } from '../../lib/db/types'
 import { DATASET_SEED_PATH, datasetStorySteps, seedProviderIds } from '../seed/dataset-story'
+import { insertSeedSteps } from '../seed/insert'
 
 const STORY = 'story_77a59fe9-7741-4634-b6cd-5633f9e50f5b'
 const BRANCH = 'br_aa6101af-d3dd-4964-9869-81e76cc35f97'
@@ -32,9 +33,7 @@ const BRANCH = 'br_aa6101af-d3dd-4964-9869-81e76cc35f97'
 async function seededWithDataset() {
   const ctx = await createTestDb()
   const defaults = buildSeedSteps()
-  for (const { table, rows } of [...defaults, ...datasetStorySteps(seedProviderIds(defaults))])
-    for (let i = 0; i < rows.length; i += 100)
-      await ctx.db.insert(table).values(rows.slice(i, i + 100) as never)
+  await insertSeedSteps(ctx.db, [...defaults, ...datasetStorySteps(seedProviderIds(defaults))])
   return ctx
 }
 

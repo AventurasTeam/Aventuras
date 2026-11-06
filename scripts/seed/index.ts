@@ -9,6 +9,7 @@ import { migrate } from 'drizzle-orm/sqlite-proxy/migrator'
 import { getLoadablePath } from 'sqlite-vec'
 
 import { datasetStorySteps, seedProviderIds } from './dataset-story'
+import { insertSeedSteps } from './insert'
 import { buildLongBranchSteps, entryIdAt, LONG_BRANCH_SCALES, longBranchId } from './long-branch'
 import { makeProxy } from './sqlite-proxy'
 import { buildSeedSteps, type SeedStep } from '../../lib/db/devtools/seed-dataset'
@@ -114,10 +115,7 @@ async function main() {
 
   sqlite.exec('BEGIN')
   try {
-    for (const s of steps) {
-      if (s.rows.length === 0) continue
-      await db.insert(s.table).values(s.rows as never)
-    }
+    await insertSeedSteps(db, steps)
     sqlite.exec('COMMIT')
   } catch (err) {
     sqlite.exec('ROLLBACK')

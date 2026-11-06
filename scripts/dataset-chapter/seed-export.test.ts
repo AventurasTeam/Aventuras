@@ -6,6 +6,7 @@ import { exportStorySeed } from './seed-export'
 import { createTestDb } from '../../lib/db/__tests__/test-db'
 import { buildSeedSteps, type SeedStep } from '../../lib/db/devtools/seed-dataset'
 import { DATASET_SEED_TABLES, parseStorySeed, seedProviderIds } from '../seed/dataset-story'
+import { insertSeedSteps } from '../seed/insert'
 
 type Row = Record<string, unknown>
 
@@ -17,9 +18,7 @@ const PROVIDERS = seedProviderIds(buildSeedSteps())
 
 async function loaded(steps: readonly SeedStep[]): Promise<DatabaseSync> {
   const { db, sqlite } = await createTestDb()
-  for (const { table, rows } of steps)
-    for (let i = 0; i < rows.length; i += 100)
-      await db.insert(table).values(rows.slice(i, i + 100) as never)
+  await insertSeedSteps(db, steps)
   return sqlite
 }
 
