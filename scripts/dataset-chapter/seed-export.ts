@@ -32,7 +32,11 @@ function credentialAt(value: unknown, path: string, keys: readonly string[]): st
   if (value === null || typeof value !== 'object') return null
   for (const [key, child] of Object.entries(value)) {
     const at = Array.isArray(value) ? `${path}[${key}]` : `${path}.${key}`
-    if (!Array.isArray(value) && (CREDENTIAL_FIELD.test(key) || holdsSecret(key, keys)))
+    if (!Array.isArray(value) && holdsSecret(key, keys))
+      return `${path} has a field named with a provider key from the database's app settings`
+    if (!Array.isArray(value) && CREDENTIAL_VALUE.test(key))
+      return `${path} has a field whose name looks like a credential`
+    if (!Array.isArray(value) && CREDENTIAL_FIELD.test(key))
       return `${at} is named like a credential`
     const found = credentialAt(child, at, keys)
     if (found !== null) return found

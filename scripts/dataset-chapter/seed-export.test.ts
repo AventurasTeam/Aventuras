@@ -191,6 +191,32 @@ describe('exportStorySeed', () => {
     await expect(exported(sqlite)).rejects.toThrow(/branches\[\d+\][\s\S]*provider key/)
   })
 
+  it('refuses a provider key used as a field name, without echoing it', async () => {
+    const sqlite = await seeded()
+    setProviderKey(sqlite, KEY)
+    sqlite
+      .prepare(
+        `UPDATE deltas SET undo_payload = json_set(coalesce(undo_payload, '{}'), ?, 'x') WHERE branch_id = ? AND log_position = 1`,
+      )
+      .run(`$."${KEY}"`, HERO_MAIN)
+    const refusal = exported(sqlite)
+    await expect(refusal).rejects.toThrow(/deltas\[\d+\][\s\S]*provider key/)
+    await expect(refusal).rejects.not.toThrow(KEY)
+  })
+
+  it('refuses a field name shaped like a key, without echoing it', async () => {
+    const shaped = 'sk-proj-4f9aQ2xT7mLw0Rk3Vb8nZ1cY'
+    const sqlite = await seeded()
+    sqlite
+      .prepare(
+        `UPDATE deltas SET undo_payload = json_set(coalesce(undo_payload, '{}'), ?, 'x') WHERE branch_id = ? AND log_position = 1`,
+      )
+      .run(`$."${shaped}"`, HERO_MAIN)
+    const refusal = exported(sqlite)
+    await expect(refusal).rejects.toThrow(/deltas\[\d+\][\s\S]*looks like a credential/)
+    await expect(refusal).rejects.not.toThrow(shaped)
+  })
+
   it('refuses a short provider key it could not scan for', async () => {
     const sqlite = await seeded()
     setProviderKey(sqlite, 'Qz7')
