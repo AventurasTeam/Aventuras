@@ -71,6 +71,7 @@ const BUILD_TIMEOUT_MS = 5 * 60 * 60 * 1000
 
 type Env = { out: string; url: string; model: string }
 type Drive = { page: Page; storyId: string; branchId: string }
+type MemoryKnob = 'classifierCadence' | 'chapterAutoClose'
 type RunRow = { rowid: number; kind: string; outcome: PipelineRun['outcome'] }
 type SystemEntry = {
   id: string
@@ -162,6 +163,12 @@ async function scalar(page: Page, sql: string, params: unknown[] = []): Promise<
   return Number((await queryApp(page, sql, params))[0]?.[0])
 }
 
+function storySetting(d: Drive, knob: MemoryKnob): Promise<number> {
+  return scalar(d.page, `SELECT json_extract(settings, '$.${knob}') FROM stories WHERE id = ?`, [
+    d.storyId,
+  ])
+}
+
 // expect.poll throws at its timeout; here a timeout is an answer.
 async function becomes(check: () => Promise<boolean>, timeoutMs: number): Promise<boolean> {
   const deadline = Date.now() + timeoutMs
@@ -194,11 +201,7 @@ async function classifierStatus(d: Drive): Promise<ClassifierStatus> {
 async function passDue(d: Drive): Promise<boolean> {
   const status = await classifierStatus(d)
   if (status.state === 'running') return false
-  const cadence = await scalar(
-    d.page,
-    `SELECT json_extract(settings, '$.classifierCadence') FROM stories WHERE id = ?`,
-    [d.storyId],
-  )
+  const cadence = await storySetting(d, 'classifierCadence')
   const unprocessed = await scalar(
     d.page,
     `SELECT COUNT(*) FROM story_entries WHERE branch_id = ? AND kind <> 'system' AND position > ?`,
@@ -317,47 +320,42 @@ async function landTurn(
   throw new Error(`${label}: no reply landed in ${SENDS_PER_TURN} Sends`)
 }
 
-async function setClassifierCadenceToOne(d: Drive): Promise<void> {
+async function saveMemoryKnob(
+  d: Drive,
+  knob: MemoryKnob,
+  edit: () => Promise<void>,
+  saved: number,
+): Promise<void> {
   await storySettings.openFromReader(d.page).click()
   await storySettings.memoryTab(d.page).click()
   await expect(storySettings.memoryKnobsPanel(d.page)).toBeVisible()
-  await storySettings.classifierCadence(d.page).fill('1')
+  await edit()
   await storySettings.save(d.page).click()
   await expect(storySettings.save(d.page)).toBeHidden()
-  await expect
-    .poll(() =>
-      scalar(
-        d.page,
-        `SELECT json_extract(settings, '$.classifierCadence') FROM stories WHERE id = ?`,
-        [d.storyId],
-      ),
-    )
-    .toBe(1)
+  await expect.poll(() => storySetting(d, knob)).toBe(saved)
   await chrome.back(d.page).click()
   await expect(reader.composer(d.page)).toBeVisible({ timeout: 20_000 })
+}
+
+function setClassifierCadenceToOne(d: Drive): Promise<void> {
+  return saveMemoryKnob(
+    d,
+    'classifierCadence',
+    () => storySettings.classifierCadence(d.page).fill('1'),
+    1,
+  )
 }
 
 // Auto-close defaults on (`STORY_SETTINGS_DEFAULTS.chapterAutoClose`) and does nothing until Slice
 // 5.6; after that, a rebuild would close a chapter at the 24k crossing, mid-drive. Off before the
 // first turn.
-async function turnAutoCloseOff(d: Drive): Promise<void> {
-  await storySettings.openFromReader(d.page).click()
-  await storySettings.memoryTab(d.page).click()
-  await expect(storySettings.memoryKnobsPanel(d.page)).toBeVisible()
-  await storySettings.chapterAutoClose(d.page).click()
-  await storySettings.save(d.page).click()
-  await expect(storySettings.save(d.page)).toBeHidden()
-  await expect
-    .poll(() =>
-      scalar(
-        d.page,
-        `SELECT json_extract(settings, '$.chapterAutoClose') FROM stories WHERE id = ?`,
-        [d.storyId],
-      ),
-    )
-    .toBe(0)
-  await chrome.back(d.page).click()
-  await expect(reader.composer(d.page)).toBeVisible({ timeout: 20_000 })
+function turnAutoCloseOff(d: Drive): Promise<void> {
+  return saveMemoryKnob(
+    d,
+    'chapterAutoClose',
+    () => storySettings.chapterAutoClose(d.page).click(),
+    0,
+  )
 }
 
 // Criterion 26: what a close at the last reply needs, read once the last pass settled.
