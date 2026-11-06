@@ -32,7 +32,6 @@ import {
   type CallRetryError,
   type CallWithRetryResult,
 } from './transport/call-with-retry'
-import { ProviderTimeoutError } from './transport/classify-provider-error'
 import { runProviderCall } from './transport/provider-call'
 import { checkInputTokens } from './truncation-check'
 
@@ -166,34 +165,24 @@ export async function generateToolStep(
   // The SDK takes `prompt` or `messages`, not both, so the user half opens the messages.
   const messages: ModelMessage[] = [{ role: 'user', content: halves.prompt }, ...request.messages]
 
-  const attemptMs = resolved.timeoutMs
   const callFn = async (sig: AbortSignal): Promise<StepReply> => {
-    // Per attempt, as generateStructured does; the run's bound, armed first, ends a retry first.
-    const attempt = attemptMs === undefined ? null : boundedSignal(sig, attemptMs)
-    try {
-      const reply = await runProviderCall({
-        model,
-        ...(halves.system === undefined ? {} : { system: halves.system }),
-        messages,
-        tools,
-        abortSignal: attempt?.signal ?? sig,
-        ...resolved.callSettings,
-        maxOutputTokens: maxOutput,
-      })
-      checkInputTokens({
-        usage: reply.usage,
-        estimate: check.estimate(),
-        providerId,
-        modelId,
-        ...attribution,
-      })
-      return reply
-    } catch (error) {
-      if (attempt?.expired()) throw new ProviderTimeoutError()
-      throw error
-    } finally {
-      attempt?.dispose()
-    }
+    const reply = await runProviderCall({
+      model,
+      ...(halves.system === undefined ? {} : { system: halves.system }),
+      messages,
+      tools,
+      abortSignal: sig,
+      ...resolved.callSettings,
+      maxOutputTokens: maxOutput,
+    })
+    checkInputTokens({
+      usage: reply.usage,
+      estimate: check.estimate(),
+      providerId,
+      modelId,
+      ...attribution,
+    })
+    return reply
   }
 
   // generation-pipeline.md → Cut-off replies: a cut or filtered reply is never a step, whatever it
