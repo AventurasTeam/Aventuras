@@ -134,14 +134,6 @@ slice-planning gate forces its resolution before that slice is planned.
 - **A harness comment assumes WAL.** `e2e/harness/db.ts:17` justifies
   `queryApp` by "a second file handle can miss a WAL-buffered write", but
   the desktop database runs in rollback-journal mode.
-- **The dataset chapter's seed export has no home.** The developer
-  approved checking in a seed export of Slice 5.2's dataset chapter,
-  enriched as later slices add their part: "Yeah keep the database and i
-  guess incrementally enrich the seed as slices come in and add in their
-  part. Just so we keep the data as a shared baseline and checked in."
-  [5.2's Implementation notes](./milestones/05-chapters-chapter-close/slices/02-first-chapter.md#implementation-notes)
-  call checking it in later work, and no slice, followup or roadmap item
-  carries it. Surfaced by Slice 5.2's review.
 - **Hand-written types beside `z.ZodType<T>` schemas drift one way.**
   The import schemas in `lib/avts/` (`thread.ts`, `lore.ts`,
   `happening.ts`, `entity.ts`) are annotated with a hand-written type,

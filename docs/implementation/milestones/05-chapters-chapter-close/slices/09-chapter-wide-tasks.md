@@ -298,6 +298,16 @@ calls a close's merge "the one machine update of a happening", which
 and `gp` to `gold` as examples the algorithm can't reach. Each flips with
 the work, as does whatever the open questions settle.
 
+**The dataset seed.**
+[Slice 5.2](./02-first-chapter.md#implementation-notes)'s dataset
+chapter is checked in as
+[the dataset seed](../../../../testing.md#the-dataset-seed), and each
+slice that adds to a close refreshes it (developer decision,
+2026-11-05). Load it with `pnpm db:seed:dataset`, CTRL-Z its close and
+close the chapter again from the dev route, this slice's tasks on the
+dev model, then re-export with `pnpm dataset:export-seed` and commit the
+diff. Rows the dev model rewrites churn; that is expected.
+
 ## Scope: out
 
 - **Tuning the defaults,** `λ_type`, thresholds and top-N once chosen:

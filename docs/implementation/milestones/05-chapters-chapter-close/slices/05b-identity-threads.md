@@ -280,6 +280,19 @@ The check selects by `actionId`, so it holds across the parts 5.8 adds.
   diagnostics on. `probe:close` runs under Node, so it can't give either
   number. A bad number reopens this slice's approach, not the layout.
 
+### The dataset seed
+
+[Slice 5.2](./02-first-chapter.md#implementation-notes)'s dataset chapter
+is checked in as [the dataset seed](../../../../testing.md#the-dataset-seed),
+and each slice that adds to a close refreshes it (developer decision,
+2026-11-05). Load it with `pnpm db:seed:dataset`, CTRL-Z its close and
+close the chapter again from the dev route, this slice's tasks on the
+dev model, then re-export with `pnpm dataset:export-seed` and commit the
+diff. Rows the dev model rewrites churn; that is expected. This first
+refresh also replaces the chapter's title and summary, written before
+the metadata prompt's rewording
+([5.2's "R1: A"](./02-first-chapter.md#implementation-notes)).
+
 ## Scope: out
 
 - The runner's parts, Slice 5.5a's: the driver, ledger, common checks,

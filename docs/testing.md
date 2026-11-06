@@ -325,6 +325,41 @@ another hash: `seedUnplacedPlace` (`e2e/harness/seed.ts`) builds a
 mnemonic from the row's name and mints the id as a UUIDv5 of it, so a
 spec's ids stay stable across runs.
 
+### The dataset seed
+
+`pnpm db:seed:dataset [db path]` seeds the default dataset, then one
+played story from a checked-in file: Slice 5.2's _Treasure Island_
+chapter as `pnpm dataset:chapter` built it and its first close left it
+([5.2's Implementation notes](./implementation/milestones/05-chapters-chapter-close/slices/02-first-chapter.md#implementation-notes)).
+It is a shared dev baseline, not an E2E fixture: no spec loads it, and
+`pnpm db:seed`, the on-device reseed and every fixture leave it out.
+The file, `scripts/dataset-chapter/treasure-island.seed.json`, holds
+every row of the story and its branches, the delta log included, so
+CTRL-Z and rollback work on the seeded story. It carries no vector:
+every embedded row is stale and embeds when the story opens. It leaves
+out what isn't the story's: the app settings, calendars and assets the
+default seed supplies, the run log, probe captures and wizard drafts,
+and a table a later migration adds fails the seed's test until it is
+carried or left out. The story's settings may name only a provider the
+default seed defines. The loader checks every row against its table's
+Zod schemas, then inserts it as written.
+
+`pnpm dataset:export-seed [db path] [--story <id>]` rewrites the file
+from a database, by default the one `pnpm db:seed` writes and the story
+the file already holds. It orders the rows so a refresh diffs cleanly,
+marks every embedded row stale, and refuses the export on a provider key
+from the database's app settings, a field named like a credential or a
+value shaped like a key anywhere in the rows, or a file the loader would
+refuse. A slice whose close tasks add to the chapter refreshes it
+(developer decision, 2026-11-05): it loads the seed, runs its tasks on
+the dev model over the chapter, re-exports and commits the diff, in
+which rows the dev model rewrote churn. Slices
+[5.5b](./implementation/milestones/05-chapters-chapter-close/slices/05b-identity-threads.md#the-dataset-seed),
+[5.8](./implementation/milestones/05-chapters-chapter-close/slices/08-prose-tasks.md#the-dataset-seed)
+and
+[5.9](./implementation/milestones/05-chapters-chapter-close/slices/09-chapter-wide-tasks.md#scope-in)
+carry the step.
+
 ## Embedder in E2E
 
 The embedder is central to the story flow, so E2E exercises the real
@@ -521,7 +556,8 @@ the opening. It copies the database, with no journal or WAL beside it, to
 `DATASET_CHAPTER_OUT` and prints the branch, for `AVENTURAS_DB_PATH`,
 `pnpm device:push-db` and `PROBE_BRANCH_ID`. The file stays out of git
 ([Fixture + seed contract](#fixture--seed-contract)), and a rebuild
-writes different classifier rows. The copy has every provider's API key
+writes different classifier rows; its story is checked in as text
+instead, as [the dataset seed](#the-dataset-seed). The copy has every provider's API key
 blanked, `SMOKE_LLM_KEY` included, and is vacuumed beside the target and
 renamed into place only once no key's bytes remain, so a failed scrub
 publishes nothing.
