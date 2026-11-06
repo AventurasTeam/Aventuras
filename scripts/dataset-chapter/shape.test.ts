@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto'
 import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
@@ -196,5 +197,14 @@ describe('the committed dataset', () => {
       return problem === null ? [] : [`#${i + 1}: ${problem}`]
     })
     expect(problems).toEqual([])
+  })
+
+  // Red: the text or chunking moved under actions.json. Rerun `pnpm dataset:actions --fresh`, read
+  // each action against its reply, then update the hash.
+  it('holds the replies the actions were written against', () => {
+    const replies = JSON.stringify(dataset.turns.map((turn) => turn.reply))
+    expect(createHash('sha256').update(replies).digest('hex')).toBe(
+      'ff2fb3b188e28f2ea87cb799b715d734e929ccddf90fa56c65afe9cf18ac36d2',
+    )
   })
 })
