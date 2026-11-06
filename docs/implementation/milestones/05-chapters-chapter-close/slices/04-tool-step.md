@@ -242,15 +242,23 @@ apart as the pass does at `:287`.
 
 **Stub.** `tool-step` in `lib/ai/stub/scenarios.ts`: the first reply holds
 a `thinking` block with a signature and a `tool_use` block, stopping on
-`tool_use`; a request carrying a `tool_result` gets plain text.
-`tool-step-cut` stops on `max_tokens`. This is the one route
-to `@ai-sdk/anthropic`'s tool parsing and signature replay without a
-network, and stays unit-only.
+`tool_use`; a request carrying a `tool_result` gets plain text only when
+the assistant turn before it opens with that thinking block whole (type,
+text and signature), else a 400 naming the thinking block.
+`tool-step-cut` stops on `max_tokens` and reports the request's
+`max_tokens` as its output tokens, so a cut reads as `max-output`. This
+is the one route to `@ai-sdk/anthropic`'s tool parsing and signature
+replay without a network, and stays unit-only.
 
 **Canon, in the same PR.**
 
 - [`generation-pipeline.md → Two retry tiers`](../../../../generation-pipeline.md#two-retry-tiers-both-at-phase-level):
-  `callWithRetry`'s options, and the step's exception to "isn't retried".
+  the step's exception to "isn't retried", and the causes a cut-off
+  failure carries.
+- [`generation-pipeline.md → Cut-off replies`](../../../../generation-pipeline.md#cut-off-replies):
+  a filter stop on a step takes the cut-off path.
+- [`memory/chapter-close.md → When a task stops`](../../../../memory/chapter-close.md#when-a-task-stops):
+  the retry's fresh bound, and a filter stop beside a cut.
 - [`architecture.md → Recognizing an overflow rejection`](../../../../architecture.md#recognizing-an-overflow-rejection):
   its list of calls the check wraps.
 - [`observability.md → Subsystem emission inventory`](../../../../observability.md#subsystem-emission-inventory):
@@ -311,8 +319,8 @@ Unit paths run with `pnpm vitest run --project unit <path>`.
   normal reply is two requests, `ok`, one `reply-cut-off` in `recoverable`;
   `length` twice is two requests and `stopped`, `reason: 'cut-off'`; whole
   calls on a `length` reply appear nowhere in the result.
-  `lib/ai/transport/call-with-retry.test.ts`: with the option omitted, a
-  `ReplyCutOffError` still fails on the first attempt.
+  `lib/ai/transport/call-with-retry.test.ts`: its existing cut-off tests
+  pass unchanged, since `callWithRetry` gains no option.
 - **Window count.** The test at `lib/ai/context-window.test.ts:203-232`
   flips: reasoning and a `tool-result` count, `file` stays 0.
   `lib/ai/window-check.test.ts`: a prompt under the window whose tool
