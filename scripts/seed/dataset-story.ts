@@ -229,6 +229,18 @@ export function parseStorySeed(json: string, refs: SeedAppRefs): SeedStep[] {
       if (!branchIds.has(row.branchId))
         throw new Error(`dataset seed ${name}[${i}]: a branch outside the story`)
     })
+  const chapterKeys = new Set(
+    rowsOf('chapters').map((c) => `${String(c.branchId)}:${String(c.id)}`),
+  )
+  rowsOf('story_entries').forEach((entry, i) => {
+    if (
+      entry.chapterId != null &&
+      !chapterKeys.has(`${String(entry.branchId)}:${String(entry.chapterId)}`)
+    )
+      throw new Error(
+        `dataset seed story_entries[${i}]: chapter ${String(entry.chapterId)} is not on its branch`,
+      )
+  })
   return steps
 }
 

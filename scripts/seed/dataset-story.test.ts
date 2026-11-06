@@ -168,6 +168,21 @@ describe('parseStorySeed', () => {
     expect(() => parse(seed)).not.toThrow()
   })
 
+  // story_entries.chapter_id has no foreign key, and a chapter is branch-scoped.
+  it('refuses an entry naming a chapter its branch lacks', () => {
+    const missing = heroSeed()
+    const stamped = missing.story_entries!.findIndex((r) => r.chapterId != null)
+    missing.story_entries![stamped]!.chapterId = 'chap_missing'
+    expect(() => parse(missing)).toThrow(
+      new RegExp(`story_entries\\[${stamped}\\][\\s\\S]*chap_missing`),
+    )
+    const otherBranch = heroSeed()
+    const fork = otherBranch.story_entries!.findIndex((r) => r.branchId === 'br_hero_fork')
+    const mainChapter = otherBranch.chapters!.find((r) => r.branchId === 'br_hero_main')!.id
+    otherBranch.story_entries![fork]!.chapterId = mainChapter
+    expect(() => parse(otherBranch)).toThrow(new RegExp(`story_entries\\[${fork}\\]`))
+  })
+
   it('refuses a row outside the story', () => {
     const twoStories = heroSeed()
     twoStories.stories!.push({ ...twoStories.stories![0]!, id: 'story_rich' })
