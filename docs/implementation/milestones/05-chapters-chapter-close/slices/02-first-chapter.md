@@ -612,7 +612,8 @@ that ran)
   production-bundle close on the same model, the second close below, is
   `~/.cache/aventuras-measure/dataset-chapter.closed.db` (sha256
   `34f4bdbf81eb4a8e5b414c0c6149663a3187d68549692ef7c90a8673e335a840`,
-  closed at `2f27ae8c7`). Checking a seed export in is later work.
+  closed at `2f27ae8c7`). Its story is checked in, exported from the
+  closed copy, as [the dataset seed](../../../../testing.md#the-dataset-seed).
 - **The dataset's close.** Branch
   `br_aa6101af-d3dd-4964-9869-81e76cc35f97` of the built database was
   closed twice from the pristine copy, each time at its last reply

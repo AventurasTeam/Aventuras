@@ -51,8 +51,12 @@ export function assertExportTarget(out: string): void {
 export function assertScannableKey(key: string): void {
   if (key !== '' && key.length < MIN_SCANNED_KEY_LENGTH)
     throw new Error(
-      `the provider key is ${key.length} characters, under ${MIN_SCANNED_KEY_LENGTH}: the export's byte scan for it would match unrelated text and refuse the export after the drive`,
+      `the provider key is ${key.length} characters, under ${MIN_SCANNED_KEY_LENGTH}: the export's byte scan for it would match unrelated text and refuse the export`,
     )
+}
+
+export function holdsSecret(bytes: Buffer | string, secrets: readonly string[]): boolean {
+  return secrets.some((secret) => secret !== '' && bytes.includes(secret))
 }
 
 /** Blanks every provider's API key in a dataset export; VACUUM drops the pages that held one. */
@@ -88,8 +92,7 @@ export function exportScrubbed(src: string, out: string, secrets: readonly strin
     scrubProviderKeys(draft)
     for (const suffix of SIDECAR_SUFFIXES)
       if (existsSync(`${draft}${suffix}`)) throw new Error(`${draft}${suffix} outlived the scrub`)
-    const bytes = readFileSync(draft)
-    if (secrets.some((secret) => secret !== '' && bytes.includes(secret)))
+    if (holdsSecret(readFileSync(draft), secrets))
       throw new Error('the scrubbed copy still holds a provider key')
     renameSync(draft, out)
   } finally {

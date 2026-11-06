@@ -8,17 +8,27 @@ import { drizzle } from 'drizzle-orm/sqlite-proxy'
 import { migrate } from 'drizzle-orm/sqlite-proxy/migrator'
 import { getLoadablePath } from 'sqlite-vec'
 
+import { datasetStorySteps, seedAppRefs } from './dataset-story'
 import { buildLongBranchSteps, entryIdAt, LONG_BRANCH_SCALES, longBranchId } from './long-branch'
+import { replaceSeedRows } from './replace'
+import { makeProxy } from './sqlite-proxy'
 import { buildSeedSteps, type SeedStep } from '../../lib/db/devtools/seed-dataset'
 import { dbSchema } from '../../lib/db/schema'
 import { resolveDevSlot } from '../dev-slot/resolve'
 import { slotPorts } from '../dev-slot/slot'
 
 // Strict: an ignored typo would seed something other than what was asked for.
-function parseCli(argv: string[]): { path: string | undefined; longBranch: boolean } {
+function parseCli(argv: string[]): {
+  path: string | undefined
+  longBranch: boolean
+  dataset: boolean
+} {
   const { values, positionals } = parseArgs({
     args: argv,
-    options: { 'long-branch': { type: 'boolean', default: false } },
+    options: {
+      'long-branch': { type: 'boolean', default: false },
+      dataset: { type: 'boolean', default: false },
+    },
     allowPositionals: true,
   })
   if (positionals.length > 1) {
@@ -26,7 +36,7 @@ function parseCli(argv: string[]): { path: string | undefined; longBranch: boole
       `one database path at most, got ${positionals.length}: ${positionals.join(' ')}`,
     )
   }
-  return { path: positionals[0], longBranch: values['long-branch'] }
+  return { path: positionals[0], longBranch: values['long-branch'], dataset: values.dataset }
 }
 
 let cli: ReturnType<typeof parseCli>
@@ -34,7 +44,9 @@ try {
   cli = parseCli(process.argv.slice(2))
 } catch (err) {
   console.error(`[seed] ${err instanceof Error ? err.message : String(err)}`)
-  console.error('[seed] usage: pnpm db:seed [db path], or pnpm db:seed:long [db path]')
+  console.error(
+    '[seed] usage: pnpm db:seed [db path], pnpm db:seed:long [db path], or pnpm db:seed:dataset [db path]',
+  )
   process.exit(1)
 }
 
@@ -57,21 +69,6 @@ function repointSeedProvider(steps: SeedStep[], port: number): void {
         if (provider.endpoint === seeded) provider.endpoint = `http://localhost:${port}/v1`
       }
     }
-  }
-}
-
-// node:sqlite returns row objects; sqlite-proxy needs positional arrays. 'get'
-// returns the single row directly. Identical to electron/db/service.ts.
-function makeProxy(sqlite: DatabaseSync) {
-  return async (sql: string, params: unknown[], method: 'run' | 'all' | 'get' | 'values') => {
-    const stmt = sqlite.prepare(sql)
-    if (method === 'run') {
-      stmt.run(...(params as never[]))
-      return { rows: [] }
-    }
-    const raw = stmt.all(...(params as never[])) as Record<string, unknown>[]
-    const asArrays = raw.map((r) => Object.values(r))
-    return { rows: (method === 'get' ? asArrays[0] : asArrays) as unknown[] }
   }
 }
 
@@ -100,31 +97,15 @@ async function main() {
 
   const steps = buildSeedSteps()
   if (cli.longBranch) steps.push(...LONG_BRANCH_SCALES.flatMap(buildLongBranchSteps))
+  const dataset = cli.dataset ? datasetStorySteps(seedAppRefs(steps)) : []
+  steps.push(...dataset)
   if (mockPort !== undefined) {
     repointSeedProvider(steps, mockPort)
     console.log(`[seed] provider endpoint: http://localhost:${mockPort}/v1`)
   }
 
-  // Wipe with FKs off (order-independent), then insert with FKs on so any broken
-  // reference in the dataset surfaces as an error rather than landing silently.
-  console.log('[seed] wiping existing rows…')
-  sqlite.exec('PRAGMA foreign_keys = OFF;')
-  sqlite.exec('BEGIN')
-  for (const table of Object.values(dbSchema)) sqlite.exec(`DELETE FROM "${getTableName(table)}";`)
-  sqlite.exec('COMMIT')
-  sqlite.exec('PRAGMA foreign_keys = ON;')
-
-  sqlite.exec('BEGIN')
-  try {
-    for (const s of steps) {
-      if (s.rows.length === 0) continue
-      await db.insert(s.table).values(s.rows as never)
-    }
-    sqlite.exec('COMMIT')
-  } catch (err) {
-    sqlite.exec('ROLLBACK')
-    throw err
-  }
+  console.log('[seed] replacing every row…')
+  await replaceSeedRows(sqlite, db, steps)
 
   const rowsByTable = new Map<string, number>()
   for (const s of steps) rowsByTable.set(s.name, (rowsByTable.get(s.name) ?? 0) + s.rows.length)
@@ -136,6 +117,8 @@ async function main() {
       console.log(`[seed] ${longBranchId(chapters)}: first entry ${entryIdAt(chapters, 1)}`)
     }
   }
+  for (const branch of dataset.find((s) => s.name === 'branches')?.rows ?? [])
+    console.log(`[seed] dataset branch: ${(branch as { id: string }).id}`)
 }
 
 main().catch((err) => {

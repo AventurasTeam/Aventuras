@@ -111,7 +111,9 @@ environment: the MCP servers in `.mcp.json`, and `adb`.
 - **`pnpm db:seed`** — seeds the slot's DB, and in a worker slot points
   the seeded provider at the slot's mock LLM. An explicit path or
   `AVENTURAS_DB_PATH` bypasses the slot, which is how the E2E harness
-  calls it.
+  calls it. `pnpm db:seed:long` and `pnpm db:seed:dataset` seed the
+  same way, and `pnpm dataset:export-seed` reads that same DB by default
+  ([the dataset seed](./testing.md#the-dataset-seed)).
 
 ### Setting up a worker machine
 
