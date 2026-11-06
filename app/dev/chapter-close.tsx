@@ -24,7 +24,7 @@ function describeResult(result: TxResult | RejectedStart): string {
     case 'rejected':
       return `rejected: ${result.blockedBy}`
     case 'failed':
-      return `failed: ${result.error.kind}: ${pipelineErrorDetail(result.error) ?? ''}`
+      return `failed: ${result.error.kind}: ${pipelineErrorDetail(result.error) ?? JSON.stringify(result.error)}`
   }
 }
 
