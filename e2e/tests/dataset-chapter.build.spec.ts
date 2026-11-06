@@ -4,7 +4,14 @@ import { DatabaseSync } from 'node:sqlite'
 
 import { expect, test, type Page } from '@playwright/test'
 
-import { modelProfileSchema, providerInstanceSchema } from '@/lib/db'
+import { CALL_TIMEOUT_DEFAULT_MS } from '@/lib/ai'
+import {
+  type ClassifierStatus,
+  modelProfileSchema,
+  type PipelineRun,
+  providerInstanceSchema,
+  type SystemFailureMeta,
+} from '@/lib/db'
 
 import {
   assertExportTarget,
@@ -45,9 +52,9 @@ const MOCK_MODEL = 'dataset/mock'
 const PER_TURN = 'per-turn'
 const PERIODIC = 'periodic-classifier'
 
-// A pass's call expires at the classifier's default bound, ten minutes (no profile timeout here),
-// which a spec can't import from lib; the extra minute covers reconcile's embeds and writes.
-const PASS_WAIT_MS = 600_000 + 60_000
+// A pass's call expires at the default call bound (no profile timeout here); the extra minute
+// covers reconcile's embeds and writes.
+const PASS_WAIT_MS = CALL_TIMEOUT_DEFAULT_MS + 60_000
 const TURN_SETTLE_MS = 240_000
 // A Send can run an owed pass before its turn (classifier.md → Failure policy).
 const SEND_SETTLE_MS = PASS_WAIT_MS + TURN_SETTLE_MS
@@ -64,9 +71,12 @@ const BUILD_TIMEOUT_MS = 5 * 60 * 60 * 1000
 
 type Env = { out: string; url: string; model: string }
 type Drive = { page: Page; storyId: string; branchId: string }
-type RunRow = { rowid: number; kind: string; outcome: string | null }
-type ClassifierStatus = { state: string; processedThrough: number | null; lastError: string | null }
-type SystemEntry = { id: string; pass: 'held' | 'failed' | null; content: string }
+type RunRow = { rowid: number; kind: string; outcome: PipelineRun['outcome'] }
+type SystemEntry = {
+  id: string
+  pass: NonNullable<SystemFailureMeta['pass']> | null
+  content: string
+}
 
 const log = (line: string): void => {
   process.stdout.write(`${line}\n`)
@@ -167,7 +177,7 @@ async function runsAfter(d: Drive, rowid: number): Promise<RunRow[]> {
     d.page,
     `SELECT rowid, kind, outcome FROM pipeline_runs WHERE rowid > ? AND story_id = ? ORDER BY rowid`,
     [rowid, d.storyId],
-  )) as [number, string, string | null][]
+  )) as [number, string, RunRow['outcome']][]
   return rows.map(([id, kind, outcome]) => ({ rowid: id, kind, outcome }))
 }
 
@@ -177,7 +187,7 @@ async function classifierStatus(d: Drive): Promise<ClassifierStatus> {
   )[0]?.[0]
   return typeof raw === 'string'
     ? (JSON.parse(raw) as ClassifierStatus)
-    : { state: 'idle', processedThrough: null, lastError: null }
+    : { state: 'idle', lastSuccessAt: null, lastError: null, processedThrough: null }
 }
 
 // memory-chain.ts's cadence rule, read from the database.
@@ -234,7 +244,8 @@ async function settleChainedPass(d: Drive, turnRow: number): Promise<string> {
       message: 'the chained pass did not settle within one call bound',
     })
     .not.toBeNull()
-  // A failed pass commits its failed marker before writing `failed` to the branch status.
+  // A pass that throws, or is cancelled, commits its run's outcome before a hook writes the branch
+  // status; a failed call or pre-flight writes the status first.
   await expect
     .poll(async () => (await classifierStatus(d)).state, { timeout: STATUS_SETTLE_MS })
     .not.toBe('running')
@@ -326,8 +337,9 @@ async function setClassifierCadenceToOne(d: Drive): Promise<void> {
   await expect(reader.composer(d.page)).toBeVisible({ timeout: 20_000 })
 }
 
-// Auto-close defaults on (story-settings-defaults.ts:23) and does nothing until Slice 5.6; after
-// that, a rebuild would close a chapter at the 24k crossing, mid-drive. Off before the first turn.
+// Auto-close defaults on (`STORY_SETTINGS_DEFAULTS.chapterAutoClose`) and does nothing until Slice
+// 5.6; after that, a rebuild would close a chapter at the 24k crossing, mid-drive. Off before the
+// first turn.
 async function turnAutoCloseOff(d: Drive): Promise<void> {
   await storySettings.openFromReader(d.page).click()
   await storySettings.memoryTab(d.page).click()
@@ -480,15 +492,17 @@ test.describe('dataset chapter — build', () => {
   test.afterAll(async () => {
     await app?.close()
     await mock?.close()
+    // Dump unconditionally: the app keeps its diagnostics in memory, so a passing build's
+    // classifier drops leave no other trace.
+    process.stdout.write(
+      `\n### warnings and errors (${problems.length}, last 200)\n${problems.slice(-200).join('\n')}\n`,
+    )
     if (built) {
       removeUserDataDir(userDataDir)
       return
     }
-    // On a failure the log and the kept database are the only record of what the model did.
-    process.stdout.write(
-      `\n### warnings and errors (last 200)\n${problems.slice(-200).join('\n')}\n` +
-        `### userData kept at: ${userDataDir}\n`,
-    )
+    // On a failure the kept database is the only record of what the model wrote.
+    process.stdout.write(`### userData kept at: ${userDataDir}\n`)
   })
 
   test('drives the shaped turns into a branch a close can run on', async () => {
