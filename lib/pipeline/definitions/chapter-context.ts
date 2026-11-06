@@ -19,7 +19,7 @@ export type ChapterContext = {
 
 type ThreadLine = Pick<Thread, 'title' | 'status'>
 
-// chapter-close.md → Phase 2 reads the active threads; a pending one is as open.
+// chapter-close.md → Phase 2: the open threads, those pending or active.
 const OPEN_THREAD_STATUSES: ReadonlySet<ThreadStatus> = new Set<OpenThreadStatus>([
   'pending',
   'active',

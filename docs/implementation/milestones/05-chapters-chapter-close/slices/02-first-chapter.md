@@ -729,6 +729,17 @@ that ran)
   does, worded for a summary, and
   [`chapter-close.md → Phase 2`](../../../../memory/chapter-close.md#phase-2--chapter-metadata)
   lists the mode in the prompt context.
+- **The metadata prompt lists the open threads, pending and active
+  (developer: "R1: A").** Canon's Phase 2 read "Active thread titles +
+  statuses", while the code, the plan's implementer choice, sent pending
+  threads too, and the system half called every listed thread one "the
+  story is following". The code keeps both:
+  [`chapter-close.md → Phase 2`](../../../../memory/chapter-close.md#phase-2--chapter-metadata)
+  now names the open threads, pending or active, and the system half
+  reads an active thread as followed and a pending one as known to the
+  story but not yet pursued, still naming a thread only when the chapter
+  moves it. [Slice 5.8](./08-prose-tasks.md#scope-in)'s merge call reads
+  the same open threads.
 - **A close's range is read by its ids.** The plan's
   `readCloseRangeEntries` read the open region through the end, which
   returns nothing once the stamps land; it now reads the non-system rows

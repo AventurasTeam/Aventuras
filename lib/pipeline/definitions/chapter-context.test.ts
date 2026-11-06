@@ -155,6 +155,21 @@ describe('buildChapterContext', () => {
     expect(system).toContain('<user_turn>')
   })
 
+  it('tells the model a pending thread is known but not yet pursued', () => {
+    const { system } = renderTemplate(
+      TEMPLATE_IDS.chapterMetadata,
+      buildChapterContext({
+        entries: ENTRIES,
+        previousChapterSummary: null,
+        threads: THREADS,
+        mode: 'adventure',
+      }),
+    )
+    expect(system).toContain('an active thread is one the story is following')
+    expect(system).toContain('a pending one is known to the story but not yet pursued')
+    expect(system).toContain('Name a thread in the summary only when this chapter moves it')
+  })
+
   it('leaves out the previous chapter and the threads when there are none', () => {
     const { user } = renderTemplate(
       TEMPLATE_IDS.chapterMetadata,

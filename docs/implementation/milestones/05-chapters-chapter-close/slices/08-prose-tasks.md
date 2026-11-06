@@ -315,12 +315,12 @@ bounds it there, `condition` by `boundStateText` and `description` by
   With more, one call per part returns `{ summary }`, reading as Phase
   2's call does with the part as its range, and a last call takes the
   part summaries in order with the previous chapter's summary and the
-  active threads, and returns `chapterMetadataSchema`. Both are new
-  templates beside `lib/prompts/bundled/chapter-metadata.ts`, in the
-  `chapter` group, following the normal rule with everything per-call in
-  the user half, so neither takes an exemption. Each uses C2's bound. The
-  phase polls `abortSignal` between calls, and a failed call fails the
-  close, as Phase 2's does.
+  open threads (pending or active), and returns `chapterMetadataSchema`.
+  Both are new templates beside `lib/prompts/bundled/chapter-metadata.ts`,
+  in the `chapter` group, following the normal rule with everything
+  per-call in the user half, so neither takes an exemption. Each uses
+  C2's bound. The phase polls `abortSignal` between calls, and a failed
+  call fails the close, as Phase 2's does.
 - **Mock shapes.** `chapter-metadata-part` and `chapter-metadata-merge` in
   `scripts/mock-llm/shapes.ts`, with `EXAMPLES` in
   `e2e/harness/mock-llm.ts` and a lane in `scripts/mock-llm/state.ts` for

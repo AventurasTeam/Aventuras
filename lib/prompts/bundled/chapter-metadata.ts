@@ -15,7 +15,7 @@ The user's turns are marked with <user_turn> tags.
 {%- else %} Each is a direction or prose. One that reads as a direction ("the guards catch them at the gate") states nothing that happened: take the facts from the narration that carries it out. One that reads as prose is part of the story: summarize it like the narration.
 {%- endif %}
 
-The previous chapter's summary, when given, is there for continuity: don't retell it. The open threads, when given, are what the story is following: name one in the summary only when this chapter moves it.`,
+The previous chapter's summary, when given, is there for continuity: don't retell it. The open threads, when given, each carry a status: an active thread is one the story is following, a pending one is known to the story but not yet pursued. Name a thread in the summary only when this chapter moves it.`,
   user: `{%- if previousChapterSummary != blank -%}
 # The previous chapter
 {{ previousChapterSummary }}
