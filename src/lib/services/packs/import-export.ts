@@ -6,21 +6,22 @@ import { packService } from './pack-service'
 import { database } from '#lib/services/database.ts'
 import { validatePackImport, type PackExport } from './validation'
 import { templateEngine } from '#lib/services/templates/engine.ts'
-import { hashContent, packTemplateHashes } from './hash'
+import { packTemplateHashes } from './hash'
 import { packUpdateSummary, type PackUpdateSummary } from './update-summary'
 import type { PresetPack } from './types'
+import { errMessage } from '#lib/utils/error.ts'
 import { PACK_FILE } from './directory/layout'
 import { pickDirectory, readTree, writeTree } from './directory/io'
 import { validateTree, type DirectoryValidationResult } from './directory/parse'
-import { parsePackFile } from './directory/serialize'
 import {
   buildShippedBaselineTree,
   buildTree,
-  planPrune,
-  shippedTemplateRows,
+  folderOrigin,
+  planFolderChanges,
+  type FolderChanges,
+  type FolderOrigin,
   type Tree,
 } from './directory/tree'
-import type { StatusSource } from './directory/reference'
 
 interface TemplateError {
   templateId: string
@@ -44,18 +45,16 @@ export interface ImportValidationResult {
 export type ConflictStrategy = 'rename' | 'cancel'
 
 /** An export worked out but not yet written, so the user can be asked about an unfamiliar folder. */
-export interface DirectoryExportPlan {
+export interface DirectoryExportPlan extends FolderChanges {
   root: string
   tree: Tree
-  /** Template and reference files of a previous export that this one no longer writes. */
-  prunePaths: string[]
-  /** The folder carries a `pack.yaml` this version can parse, so it is a tree we own. */
-  isKnownExport: boolean
+  /** Who wrote the folder; only `current` and `earlier` are trees we own. */
+  origin: Exclude<FolderOrigin, 'newer'>
   /**
    * Ask before writing. True when the folder holds files we did not put there — one sharing a
    * name with a file being written is still overwritten — and whenever anything would be
-   * deleted, because a `.md` a user kept beside the prompts is indistinguishable from a
-   * template this export has dropped.
+   * deleted or renamed, because a `.md` a user kept beside the prompts is indistinguishable
+   * from a template this export has dropped.
    */
   needsConfirmation: boolean
 }
@@ -115,30 +114,39 @@ class ImportExportService {
   /** Where an existing tree's files sit, and which of them this export would leave behind. */
   private async planWrite(root: string, tree: Tree): Promise<DirectoryExportPlan> {
     let existingPaths: string[] = []
+    let directoryPaths: string[] = []
     let packFileText: string | undefined
     try {
       const existing = await readTree(root)
       existingPaths = existing.allPaths
+      directoryPaths = existing.directoryPaths
       packFileText = existing.contents.get(PACK_FILE)
     } catch (e) {
-      // A folder that cannot be read is not one this export owns: nothing is pruned from it,
-      // and the confirmation stands in for the certainty we could not get.
+      // Without its contents nothing can be pruned, moved aside or named before it is overwritten.
       console.error('[ImportExportService] Failed to read the chosen folder:', e)
-      return { root, tree, prunePaths: [], isKnownExport: false, needsConfirmation: true }
+      throw new Error(`Couldn't read this folder: ${errMessage(e)}`)
     }
 
     // Pruning deletes files, so the folder has to prove it is one of ours. The name
     // `pack.yaml` alone does not: other tools use it too, and treating a stranger's folder
     // as a previous export would delete the Markdown nested inside it.
-    const isKnownExport = packFileText !== undefined && parsePackFile(packFileText).ok
-    const prunePaths = isKnownExport ? planPrune(existingPaths, tree) : []
+    const origin = folderOrigin(packFileText)
+    if (origin === 'newer') {
+      throw new Error(
+        'This folder was exported by a newer version of Aventuras. Update the app to export into it.',
+      )
+    }
+    const changes = planFolderChanges(existingPaths, tree, origin, directoryPaths)
 
     return {
       root,
       tree,
-      prunePaths,
-      isKnownExport,
-      needsConfirmation: (!isKnownExport && existingPaths.length > 0) || prunePaths.length > 0,
+      ...changes,
+      origin,
+      needsConfirmation:
+        (origin === 'foreign' && existingPaths.length > 0) ||
+        changes.prunePaths.length > 0 ||
+        changes.renames.length > 0,
     }
   }
 
@@ -150,12 +158,7 @@ class ImportExportService {
     const root = await pickDirectory('Export prompt pack to folder')
     if (!root) return null
 
-    const status: StatusSource = fullPack.pack.isDefault
-      ? { kind: 'default-pack', rows: fullPack.templates, shippedHashes: await shippedHashes() }
-      : { kind: 'custom-pack', rows: fullPack.templates }
-
     const tree = buildTree({
-      source: 'pack',
       appVersion: await getVersion(),
       name: fullPack.pack.name,
       description: fullPack.pack.description ?? undefined,
@@ -171,7 +174,6 @@ class ImportExportService {
         description: v.description,
         sortOrder: v.sortOrder,
       })),
-      status,
     })
 
     return this.planWrite(root, tree)
@@ -186,7 +188,7 @@ class ImportExportService {
   }
 
   async applyDirectoryExport(plan: DirectoryExportPlan): Promise<void> {
-    await writeTree(plan.root, plan.tree, plan.prunePaths)
+    await writeTree(plan.root, plan.tree, plan)
   }
 
   /** Pick a folder and validate it in full. `null` if the user cancelled. */
@@ -346,16 +348,6 @@ class ImportExportService {
 
     return pack.id
   }
-}
-
-/** The hash of the text the app ships, per stored row id, for the status report. */
-async function shippedHashes(): Promise<Map<string, string>> {
-  const entries = await Promise.all(
-    shippedTemplateRows().map(
-      async (row) => [row.templateId, await hashContent(row.content)] as [string, string],
-    ),
-  )
-  return new Map(entries)
 }
 
 export const importExportService = new ImportExportService()

@@ -99,6 +99,22 @@ question when there is something to lose, or by the busy lock while the action r
 scrolls with the content and is read after what it would remove. It asks inside the modal before
 running. Use it only to remove the thing the modal edits, never as a general third action.
 
+### A plain confirmation
+
+A confirmation that is its question alone — a title, a sentence or two, Cancel and the action, with
+no field, list, switch or long text — is a `shared/ConfirmModal.svelte`. It is the action modal in
+the discard question's shape: as wide as its buttons, which sit centred, with the title and
+description wrapping to that width. Its props are the action modal's minus the body: `open`,
+`onCancel`, `onClosed`, `title`, `titleIcon`, a string `description`, `action`, `busy` and
+`cancelLabel`. Everything else about the shell holds, the ways out and the busy lock included. A
+confirmation that grows a body becomes an `ActionModal`.
+
+A deletion is the usual case: the title names the object, the description says what is lost, and
+the action is "Delete" with the trash icon in the `delete` tone. The lorebook's "Delete all entries"
+and the prompt pack's deletion in `PromptPackList` are the models. When something already known
+prevents it, such as stories still using a pack, the action is disabled and the description says
+what to do first, rather than refusing after the click.
+
 ### Sheet or dialog
 
 On a phone an action modal is always a **dialog**. A **sheet** is for a tool with several actions
@@ -209,8 +225,7 @@ cannot live in the shell's one scroller.
 These end in Cancel plus an action but are still assembled by hand: `LorebookExportModal`,
 `LorebookImportModal`, `LorebookVaultImportModal`, `ResummarizeModal`,
 `VaultExportModal`, `STChatImportModal`, and in `vault/prompts/` `CreatePackDialog`,
-`ExportIntoFolderDialog`, `ImportPreviewDialog`, `TestVariablesModal` and the pack deletion in
-`PromptPackList`. Move one onto the shell when you
+`ImportPreviewDialog` and `TestVariablesModal`. Move one onto the shell when you
 are in it anyway.
 
 These are not Cancel plus one action, and stay as they are: `TimelineAnomaliesModal` (a list with

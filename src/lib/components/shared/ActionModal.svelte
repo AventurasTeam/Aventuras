@@ -69,6 +69,8 @@
     requireChange?: boolean
     /** See the catalog's width scale. */
     size?: 'md' | 'lg' | '2xl'
+    /** As wide as its buttons, which sit centred; set by `ConfirmModal`, not by a caller. */
+    compact?: boolean
   }
 
   let {
@@ -92,6 +94,7 @@
     },
     requireChange = false,
     size = 'md',
+    compact = false,
   }: Props = $props()
 
   setTextareaUncapped()
@@ -379,7 +382,7 @@
   <ResponsiveModal.Content
     class={cn(
       'flex max-h-(--modal-max-height) flex-col gap-0 p-0',
-      { md: 'max-w-md', lg: 'max-w-lg', '2xl': 'max-w-2xl' }[size],
+      compact ? 'max-w-md md:w-fit' : { md: 'max-w-md', lg: 'max-w-lg', '2xl': 'max-w-2xl' }[size],
       // Inset from a phone's edges, where the dialog would otherwise run full width.
       'w-[calc(100%-2rem)] rounded-lg',
       // Held near the top on a phone when it has a text field, so the keyboard shortening the
@@ -404,8 +407,13 @@
       class="flex min-h-0 flex-1 flex-col outline-none"
       inert={question.open}
     >
-      <!-- The description opens the body, where wrapping reads well. -->
-      <ModalHeader {title} {titleIcon} />
+      <!-- The description opens the body, where wrapping reads well. A compact modal's text adds
+           no width of its own (`w-0 min-w-full`): it wraps to the buttons'. -->
+      <ModalHeader
+        {title}
+        {titleIcon}
+        class={compact ? 'wrap-anywhere md:w-0 md:min-w-full' : undefined}
+      />
 
       <!--
         On a phone the buttons scroll with the content, which leaves the small screen to it. From
@@ -423,7 +431,7 @@
           onscroll={measureJump}
         >
           {#if children || description}
-            <div class="space-y-3 px-6 py-4">
+            <div class={cn('space-y-3 px-6 py-4', compact && 'wrap-anywhere md:w-0 md:min-w-full')}>
               {#if typeof description === 'string'}
                 <ResponsiveModal.Description>{description}</ResponsiveModal.Description>
               {:else if description}
@@ -469,6 +477,7 @@
           {busy}
           {cancelWhileBusy}
           {cancelLabel}
+          centered={compact}
           alternative={alternative ? leaveVia : undefined}
         />
       </div>

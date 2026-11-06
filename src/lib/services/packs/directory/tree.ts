@@ -11,25 +11,23 @@ import {
   ABOUT_FILE,
   GITATTRIBUTES_FILE,
   PACK_FILE,
+  README_FILE,
   REFERENCE_DIR,
   USER_HALF_SUFFIX,
+  USER_README_STEM,
+  VERSION_FILE,
   classifyPath,
   isWritableTemplateId,
+  templateIdFromPath,
   templatePath,
 } from './layout'
-import {
-  aboutDoc,
-  gitattributesDoc,
-  templateStatusDoc,
-  templateVariablesDoc,
-  variablesDoc,
-  type StatusSource,
-} from './reference'
+import { gitattributesDoc, readmeDoc, variablesDoc, versionDoc } from './reference'
 import {
   DIRECTORY_FORMAT_VERSION,
+  declaredFormatVersion,
+  parsePackFile,
   serializePackFile,
   serializeTemplate,
-  type TreeSource,
 } from './serialize'
 
 export interface StoredTemplate {
@@ -38,14 +36,12 @@ export interface StoredTemplate {
 }
 
 export interface TreeInput {
-  source: TreeSource
   appVersion: string
   name: string
   description?: string
   author?: string
   templates: StoredTemplate[]
   variables: PackExport['variables']
-  status: StatusSource
 }
 
 /** A tree, as relative path to file contents. */
@@ -95,30 +91,25 @@ export function buildTree(input: TreeInput): Tree {
 
   const tree: Tree = new Map()
 
-  const contentById = new Map<string, string>()
   for (const template of input.templates) {
     tree.set(templatePath(template.templateId), serializeTemplate(template.content))
-    contentById.set(template.templateId, template.content)
   }
 
   tree.set(
     PACK_FILE,
     serializePackFile({
       formatVersion: DIRECTORY_FORMAT_VERSION,
-      appVersion: input.appVersion,
-      source: input.source,
       name: input.name,
       description: input.description,
       author: input.author,
       variables: input.variables,
     }),
   )
-  tree.set(ABOUT_FILE, aboutDoc())
+  tree.set(README_FILE, readmeDoc())
   tree.set(GITATTRIBUTES_FILE, gitattributesDoc())
   tree.set(`${REFERENCE_DIR}/system-variables.md`, variablesDoc('system'))
   tree.set(`${REFERENCE_DIR}/runtime-variables.md`, variablesDoc('runtime'))
-  tree.set(`${REFERENCE_DIR}/template-variables.md`, templateVariablesDoc(contentById))
-  tree.set(`${REFERENCE_DIR}/template-status.md`, templateStatusDoc(input.status))
+  tree.set(`${REFERENCE_DIR}/${VERSION_FILE}`, versionDoc(input.appVersion))
 
   return tree
 }
@@ -126,14 +117,16 @@ export function buildTree(input: TreeInput): Tree {
 /** The tree for the prompt text this version of the app ships, which no edit can reach. */
 export function buildShippedBaselineTree(appVersion: string): Tree {
   return buildTree({
-    source: 'shipped-baseline',
     appVersion,
-    name: `Aventuras ${appVersion} shipped prompts`,
+    name: 'Aventuras shipped prompts',
     description: 'The prompt text this version of Aventuras ships. Exported as a merge base.',
     templates: shippedTemplateRows(),
     variables: [],
-    status: { kind: 'shipped-baseline' },
   })
+}
+
+function normalizePath(path: string): string {
+  return path.replace(/\\/g, '/')
 }
 
 /**
@@ -151,10 +144,9 @@ export function planPrune(existingPaths: string[], tree: Tree): string[] {
   // case-sensitive system is the safe failure -- it surfaces as a refused import naming both
   // paths, not as a template silently missing from a successful export.
   const written = new Set([...tree.keys()].map((path) => path.toLowerCase()))
-  const normalized = (path: string) => path.replace(/\\/g, '/')
 
   return existingPaths
-    .map(normalized)
+    .map(normalizePath)
     .filter((path) => !written.has(path.toLowerCase()))
     .filter(
       (path) =>
@@ -162,4 +154,151 @@ export function planPrune(existingPaths: string[], tree: Tree): string[] {
         path.toLowerCase().startsWith(`${REFERENCE_DIR.toLowerCase()}/`),
     )
     .sort()
+}
+
+/** Who wrote the chosen folder, as far as its `pack.yaml` says. */
+export type FolderOrigin = 'current' | 'earlier' | 'newer' | 'foreign'
+
+export function folderOrigin(packFileText: string | undefined): FolderOrigin {
+  if (packFileText === undefined) return 'foreign'
+  if ((declaredFormatVersion(packFileText) ?? 0) > DIRECTORY_FORMAT_VERSION) return 'newer'
+  const parsed = parsePackFile(packFileText)
+  if (!parsed.ok) return 'foreign'
+  return parsed.value.formatVersion < DIRECTORY_FORMAT_VERSION ? 'earlier' : 'current'
+}
+
+export interface FileRename {
+  from: string
+  to: string
+}
+
+/** What an export does to a folder's existing files besides overwriting the ones it writes. */
+export interface FolderChanges {
+  prunePaths: string[]
+  /** The part of `prunePaths` whose template the tree writes again in another folder: moved, not lost. */
+  movedPaths: string[]
+  /** How many prompts `movedPaths` are, a prompt's user-message half not counted apart. */
+  movedPromptCount: number
+  /** The rest of `prunePaths`: files that are really gone. */
+  deletedPaths: string[]
+  /** Some of `deletedPaths` sit where a prompt would, so a note of the user's may be among them. */
+  deletesPrompt: boolean
+  /** Applied before the tree is written, so the export's own file can take the old name. */
+  renames: FileRename[]
+  /** Files of a folder the export does not own that the tree overwrites. */
+  replacedPaths: string[]
+}
+
+/** Existing files the tree writes over, compared without case, minus those moved aside first. */
+function replacedFiles(paths: string[], tree: Tree, renames: FileRename[]): string[] {
+  const written = new Set([...tree.keys()].map((path) => path.toLowerCase()))
+  const movedAside = new Set(renames.map(({ from }) => from))
+  return paths.filter((path) => written.has(path.toLowerCase()) && !movedAside.has(path)).toSorted()
+}
+
+/**
+ * Pruned template files that are a move: the tree writes the same id at a path the folder does not
+ * already hold, and no other pruned file has claimed it. Any other copy of that id is a deletion.
+ */
+function movedTemplatePaths(prunePaths: string[], tree: Tree, existingPaths: string[]): string[] {
+  const existing = new Set(existingPaths.map((path) => path.toLowerCase()))
+  const newPathById = new Map<string, string>()
+  for (const path of tree.keys()) {
+    const templateId = templateIdFromPath(path)
+    if (templateId !== null) newPathById.set(templateId.toLowerCase(), path)
+  }
+
+  const claimed = new Set<string>()
+  return prunePaths.filter((path) => {
+    const key = templateIdFromPath(path)?.toLowerCase()
+    if (key === undefined || claimed.has(key)) return false
+    const newPath = newPathById.get(key)
+    if (newPath === undefined || existing.has(newPath.toLowerCase())) return false
+    claimed.add(key)
+    return true
+  })
+}
+
+/** Prompts among template paths: a user-message half belongs to the prompt it completes. */
+function countPrompts(templatePaths: string[]): number {
+  const ids = templatePaths
+    .map((path) => templateIdFromPath(path)?.toLowerCase())
+    .filter((templateId) => templateId !== undefined)
+    .map((templateId) =>
+      templateId.endsWith(USER_HALF_SUFFIX)
+        ? templateId.slice(0, -USER_HALF_SUFFIX.length)
+        : templateId,
+    )
+  return new Set(ids).size
+}
+
+/** Every root path spelling `name`, compared without case: one file on Windows and macOS, several on Linux. */
+function findRootFiles(paths: string[], name: string): string[] {
+  return paths.filter((path) => path.toLowerCase() === name.toLowerCase())
+}
+
+/** Each `README.md` the export did not write moves to the next name no file or folder has. */
+function planReadmeRenames(paths: string[], directoryPaths: string[]): FileRename[] {
+  const taken = new Set([...paths, ...directoryPaths].map((path) => path.toLowerCase()))
+  return findRootFiles(paths, README_FILE)
+    .toSorted()
+    .map((from) => {
+      let to = `${USER_README_STEM}.md`
+      for (let n = 2; taken.has(to.toLowerCase()); n++) to = `${USER_README_STEM}_${n}.md`
+      taken.add(to.toLowerCase())
+      return { from, to }
+    })
+}
+
+/** Plan the changes to a folder's existing files; the rules are in docs/architecture/prompts.md. */
+export function planFolderChanges(
+  existingPaths: string[],
+  tree: Tree,
+  origin: Exclude<FolderOrigin, 'newer'>,
+  directoryPaths: string[] = [],
+): FolderChanges {
+  const paths = existingPaths.map(normalizePath)
+  const prunePaths = origin === 'foreign' ? [] : planPrune(paths, tree)
+  if (origin === 'earlier') prunePaths.push(...findRootFiles(paths, ABOUT_FILE))
+  const sorted = prunePaths.toSorted()
+  const renames =
+    origin === 'current' ? [] : planReadmeRenames(paths, directoryPaths.map(normalizePath))
+  const movedPaths = movedTemplatePaths(sorted, tree, paths)
+  const moved = new Set(movedPaths)
+  const deletedPaths = sorted.filter((path) => !moved.has(path))
+
+  return {
+    prunePaths: sorted,
+    movedPaths,
+    movedPromptCount: countPrompts(movedPaths),
+    deletedPaths,
+    deletesPrompt: deletedPaths.some((path) => classifyPath(path) === 'template'),
+    renames,
+    replacedPaths: origin === 'foreign' ? replacedFiles(paths, tree, renames) : [],
+  }
+}
+
+/** Files an OS drops into a folder it has shown, which do not make the folder the user's. */
+const OS_CLUTTER = new Set(['.ds_store', 'desktop.ini', 'thumbs.db'])
+
+/** Whether a folder holding these files counts as empty once the prune has run. */
+export function holdsOnlyOsClutter(fileNames: string[]): boolean {
+  return fileNames.every((name) => OS_CLUTTER.has(name.toLowerCase()))
+}
+
+/**
+ * Folders that may be left empty once `prunePaths` are gone, deepest first, so a parent is
+ * checked after its children.
+ */
+export function emptiedFolderCandidates(prunePaths: string[]): string[] {
+  const folders = new Set<string>()
+  for (const path of prunePaths) {
+    const segments = normalizePath(path).split('/').slice(0, -1)
+    for (let depth = 1; depth <= segments.length; depth++) {
+      folders.add(segments.slice(0, depth).join('/'))
+    }
+  }
+  return [...folders].toSorted(
+    (a, b) => b.split('/').length - a.split('/').length || a.localeCompare(b),
+  )
 }

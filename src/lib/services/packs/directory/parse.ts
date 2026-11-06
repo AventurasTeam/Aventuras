@@ -8,7 +8,7 @@
 import { templateEngine } from '#lib/services/templates/engine.ts'
 import { validatePackImport, type PackExport } from '../validation'
 import { PACK_FILE, collectTemplateFiles } from './layout'
-import { parsePackFile, parseTemplateFile, type TreeSource } from './serialize'
+import { parsePackFile, parseTemplateFile } from './serialize'
 
 export interface TemplateFileError {
   templateId: string
@@ -21,7 +21,6 @@ export interface DirectoryValidationResult {
   structuralErrors: string[]
   templateErrors: TemplateFileError[]
   pack?: PackExport
-  source?: TreeSource
 }
 
 /**
@@ -96,6 +95,5 @@ export function validateTree(contents: Map<string, string>): DirectoryValidation
     structuralErrors: [],
     templateErrors: [],
     pack: structural.pack,
-    source: packFile.value.source,
   }
 }

@@ -12,8 +12,9 @@
   import { ui } from '#lib/stores/ui.svelte.ts'
   import { errMessage } from '#lib/utils/error.ts'
   import { Skeleton } from '#lib/components/ui/skeleton/index.ts'
-  import { Button } from '#lib/components/ui/button/index.ts'
-  import * as ResponsiveModal from '#lib/components/ui/responsive-modal/index.ts'
+  import ConfirmModal from '#lib/components/shared/ConfirmModal.svelte'
+  import { packDeletionDescription } from './packDeletion'
+  import { Trash2 } from '@lucide/svelte'
   import { fade } from 'svelte/transition'
   import PromptPackCard from './PromptPackCard.svelte'
   import CreatePackDialog from './CreatePackDialog.svelte'
@@ -36,6 +37,26 @@
   // Delete confirmation state
   let deleteTarget = $state<PresetPack | null>(null)
   let deleting = $state(false)
+  /** What the confirmation shows; kept past closing so the closing modal does not go blank. */
+  let deleteShown = $state<{ name: string; storyTitles: string[] }>({ name: '', storyTitles: [] })
+
+  /** Counts delete clicks, so only the latest one's lookup opens the confirmation. */
+  let deleteRequest = 0
+
+  /** Read when asked, not from the list's counts, which a story removed since loading leaves stale. */
+  async function askToDelete(pack: PresetPack) {
+    const request = ++deleteRequest
+    try {
+      const storyTitles = await database.getPackStoryTitles(pack.id)
+      if (request !== deleteRequest) return
+      deleteShown = { name: pack.name, storyTitles }
+      deleteTarget = pack
+    } catch (e) {
+      if (request !== deleteRequest) return
+      console.error('Failed to read the stories using the pack:', e)
+      ui.showToast(`Could not check the stories using this pack: ${errMessage(e)}`, 'error')
+    }
+  }
 
   // Update-from-file state
   let updateTarget = $state<PresetPack | null>(null)
@@ -290,11 +311,7 @@
         onUpdateFromDirectory={pack.isDefault || !canUseDirectories
           ? undefined
           : () => handleUpdateFromDirectory(pack)}
-        onDelete={pack.isDefault
-          ? undefined
-          : () => {
-              deleteTarget = pack
-            }}
+        onDelete={pack.isDefault ? undefined : () => void askToDelete(pack)}
       />
     {/each}
   </div>
@@ -339,30 +356,17 @@
   onCancel={cancelExportIntoUsedFolder}
 />
 
-<!-- Delete confirmation -->
-<ResponsiveModal.Root
+<ConfirmModal
   open={!!deleteTarget}
-  onOpenChange={(v) => {
-    if (!v) deleteTarget = null
+  onCancel={() => (deleteTarget = null)}
+  title={`Delete the pack “${deleteShown.name}”`}
+  description={packDeletionDescription(deleteShown.storyTitles)}
+  action={{
+    label: 'Delete',
+    icon: Trash2,
+    tone: 'delete',
+    disabled: deleteShown.storyTitles.length > 0,
+    onConfirm: () => void handleConfirmDelete(),
   }}
->
-  <ResponsiveModal.Content class="p-0 sm:max-w-md">
-    <ResponsiveModal.Header class="border-b px-6 py-4">
-      <ResponsiveModal.Title>Delete Pack</ResponsiveModal.Title>
-      <ResponsiveModal.Description>
-        Are you sure you want to delete "{deleteTarget?.name}"? This cannot be undone.
-      </ResponsiveModal.Description>
-    </ResponsiveModal.Header>
-    <ResponsiveModal.Footer class="border-t px-6 py-4">
-      <Button
-        variant="outline"
-        onclick={() => {
-          deleteTarget = null
-        }}>Cancel</Button
-      >
-      <Button variant="destructive" onclick={handleConfirmDelete} disabled={deleting}>
-        {deleting ? 'Deleting...' : 'Delete'}
-      </Button>
-    </ResponsiveModal.Footer>
-  </ResponsiveModal.Content>
-</ResponsiveModal.Root>
+  busy={deleting}
+/>

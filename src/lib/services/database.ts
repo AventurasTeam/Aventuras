@@ -4300,6 +4300,15 @@ class DatabaseService {
     return results[0].count
   }
 
+  async getPackStoryTitles(packId: string): Promise<string[]> {
+    const db = await this.getDb()
+    const rows = await db.select<{ title: string }[]>(
+      'SELECT title FROM stories WHERE pack_id = ? ORDER BY title COLLATE NOCASE',
+      [packId],
+    )
+    return rows.map((row) => row.title)
+  }
+
   // ===== Pack Template Operations =====
 
   async getPackTemplates(packId: string): Promise<PackTemplate[]> {

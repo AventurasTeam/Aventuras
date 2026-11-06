@@ -37,6 +37,8 @@ state — who is present, where you are, what you carry — is tracked turn by t
 
 - [Story time](guides/story-time.md) — why story time drifts, anchors and reference points,
   timeline anomalies, reconciling a stretch, and a new story's starting time.
+- [Prompt packs as folders](guides/prompt-packs-as-folders.md) — keeping a custom prompt pack in
+  step with each release through git, and what an exported folder holds.
 
 ## Install
 

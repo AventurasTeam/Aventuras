@@ -1,8 +1,8 @@
 <script lang="ts">
   import type { DirectoryExportPlan } from '#lib/services/packs/import-export.ts'
-  import * as ResponsiveModal from '#lib/components/ui/responsive-modal/index.ts'
-  import { ScrollArea } from '#lib/components/ui/scroll-area/index.ts'
-  import { Button } from '#lib/components/ui/button/index.ts'
+  import ActionModal from '#lib/components/shared/ActionModal.svelte'
+  import { FEATURE_COLORS, type ActionTone } from '#lib/components/shared/featureColors.ts'
+  import { cn } from '#lib/utils/cn.ts'
 
   interface Props {
     /** The planned export awaiting an answer, or null when nothing is pending. */
@@ -13,55 +13,82 @@
 
   let { plan, onConfirm, onCancel }: Props = $props()
 
-  let removals = $derived(plan?.prunePaths ?? [])
+  /** The last plan, kept while the modal fades out after `plan` is cleared. */
+  let shown = $state<DirectoryExportPlan | null>(null)
+  $effect.pre(() => {
+    if (plan) shown = plan
+  })
+
+  let movedPrompts = $derived(shown?.movedPromptCount ?? 0)
+  let deletions = $derived(shown?.deletedPaths ?? [])
+  let renames = $derived(shown?.renames ?? [])
+  let replaced = $derived(shown?.replacedPaths ?? [])
+  let foreign = $derived(shown?.origin === 'foreign')
+  let deletesPrompt = $derived(shown?.deletesPrompt ?? false)
+
+  let tone = $derived<ActionTone>(
+    deletions.length > 0 ? 'delete' : replaced.length > 0 ? 'overwrite' : 'default',
+  )
 </script>
 
-<ResponsiveModal.Root
+{#snippet description()}
+  {#if shown?.origin === 'earlier'}
+    <span class="block">
+      It was exported by an older version of Aventuras and is brought up to the current layout.
+    </span>
+  {:else if shown?.origin === 'current' && movedPrompts > 0}
+    <span class="block">This version of Aventuras groups some prompts differently.</span>
+  {/if}
+  {#if deletesPrompt}
+    <span class="block">Prompts this pack no longer has are deleted.</span>
+    <span class="block">
+      A note of your own in a prompt folder counts as a prompt, so check the list.
+    </span>
+  {/if}
+  {#if foreign}
+    <span class="block">
+      This folder already holds files, but it wasn't made by an export, so nothing in it is deleted.
+    </span>
+  {/if}
+{/snippet}
+
+{#snippet fileList(heading: string, paths: string[], danger: boolean)}
+  <div class="flex flex-col gap-1">
+    <p class="text-sm font-medium">{heading}</p>
+    <ul class={cn('list-disc pl-5 text-sm', danger && FEATURE_COLORS.delete.text)}>
+      {#each paths as path, i (i)}
+        <li class="font-mono text-xs">{path}</li>
+      {/each}
+    </ul>
+  </div>
+{/snippet}
+
+<ActionModal
   open={!!plan}
-  onOpenChange={(v) => {
-    if (!v) onCancel()
-  }}
+  {onCancel}
+  title={foreign ? 'Export into this folder?' : 'Update this folder?'}
+  {description}
+  action={{ label: 'Export', tone, onConfirm }}
 >
-  <ResponsiveModal.Content class="p-0 sm:max-w-md">
-    <ResponsiveModal.Header class="border-b px-6 py-4">
-      <ResponsiveModal.Title>
-        {removals.length > 0 ? 'Delete files no longer in this pack?' : 'Export into this folder?'}
-      </ResponsiveModal.Title>
-      <ResponsiveModal.Description>
-        {#if plan && !plan.isKnownExport}
-          This folder already holds files and was not written by a previous export. Nothing in it
-          will be deleted, but any file sharing a name with one of the exported files — including
-          ABOUT.md, .gitattributes and any prompt of the same name — will be overwritten.
-        {:else}
-          Exporting keeps the folder matching the pack, so files it no longer contains are removed.
-          A Markdown file you kept beside the prompts looks the same as a prompt this pack has
-          dropped, so check the list before continuing.
-        {/if}
-      </ResponsiveModal.Description>
-    </ResponsiveModal.Header>
-
-    {#if removals.length > 0}
-      <div class="flex flex-col gap-1 px-6 py-4">
-        <p class="text-sm font-medium">
-          {removals.length === 1
-            ? '1 file will be deleted:'
-            : `${removals.length} files will be deleted:`}
-        </p>
-        <ScrollArea class="max-h-48">
-          <ul class="text-destructive list-disc pl-5 text-sm">
-            {#each removals as path, i (i)}
-              <li class="font-mono text-xs">{path}</li>
-            {/each}
-          </ul>
-        </ScrollArea>
-      </div>
+  <div class="flex flex-col gap-4">
+    {#if movedPrompts > 0}
+      <p class="text-sm">
+        <span class="font-medium">Moved into new folders:</span>
+        {movedPrompts === 1 ? '1 prompt' : `${movedPrompts} prompts`}
+      </p>
     {/if}
-
-    <ResponsiveModal.Footer class="border-t px-6 py-4">
-      <Button variant="outline" onclick={onCancel}>Cancel</Button>
-      <Button variant={removals.length > 0 ? 'destructive' : 'default'} onclick={onConfirm}>
-        {removals.length > 0 ? 'Delete and export' : 'Export here'}
-      </Button>
-    </ResponsiveModal.Footer>
-  </ResponsiveModal.Content>
-</ResponsiveModal.Root>
+    {#if renames.length > 0}
+      {@render fileList(
+        'Kept under a new name:',
+        renames.map(({ from, to }) => `${from} → ${to}`),
+        false,
+      )}
+    {/if}
+    {#if replaced.length > 0}
+      {@render fileList('Replaced:', replaced, true)}
+    {/if}
+    {#if deletions.length > 0}
+      {@render fileList('Deleted:', deletions, true)}
+    {/if}
+  </div>
+</ActionModal>

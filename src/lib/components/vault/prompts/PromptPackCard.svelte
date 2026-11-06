@@ -7,6 +7,8 @@
   import { Upload, RefreshCw, Trash2, Lock, FileJson, FolderOpen } from '@lucide/svelte'
   import { stripToPlainText } from '#lib/utils/markdown.ts'
   import { supportsDirectoryTransfer } from '#lib/services/packs/directory/support.ts'
+  import { FEATURE_COLORS } from '#lib/components/shared/featureColors.ts'
+  import { cn } from '#lib/utils/cn.ts'
 
   interface Props {
     pack: PresetPack
@@ -164,7 +166,11 @@
             <Button
               variant="ghost"
               size="icon"
-              class="text-destructive can-hover:opacity-0 h-8 w-8 transition-opacity group-hover:opacity-100"
+              class={cn(
+                'can-hover:opacity-0 h-8 w-8 transition-opacity group-hover:opacity-100',
+                FEATURE_COLORS.delete.text,
+                FEATURE_COLORS.delete.hoverText,
+              )}
               onclick={(e: MouseEvent) => {
                 e.stopPropagation()
                 onDelete?.()

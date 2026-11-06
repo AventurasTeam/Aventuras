@@ -14,9 +14,10 @@
     titleIcon?: Snippet
     /** Desktop only, for a modal with no Cancel to leave by. */
     closeButton?: boolean
+    class?: string
   }
 
-  let { title, titleIcon, closeButton = false }: Props = $props()
+  let { title, titleIcon, closeButton = false, class: className }: Props = $props()
   const { isMobile: sheet } = ResponsiveModal.getResponsiveModalContext()
 </script>
 
@@ -26,6 +27,7 @@
   class={cn(
     'bg-muted/40 border-b px-6 py-4 text-center sm:text-center',
     sheet.current && 'rounded-t-[10px]',
+    className,
   )}
   {closeButton}
 >
