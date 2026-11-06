@@ -9,6 +9,7 @@ import { migrate } from 'drizzle-orm/sqlite-proxy/migrator'
 import { getLoadablePath } from 'sqlite-vec'
 
 import { buildLongBranchSteps, entryIdAt, LONG_BRANCH_SCALES, longBranchId } from './long-branch'
+import { makeProxy } from './sqlite-proxy'
 import { buildSeedSteps, type SeedStep } from '../../lib/db/devtools/seed-dataset'
 import { dbSchema } from '../../lib/db/schema'
 import { resolveDevSlot } from '../dev-slot/resolve'
@@ -57,21 +58,6 @@ function repointSeedProvider(steps: SeedStep[], port: number): void {
         if (provider.endpoint === seeded) provider.endpoint = `http://localhost:${port}/v1`
       }
     }
-  }
-}
-
-// node:sqlite returns row objects; sqlite-proxy needs positional arrays. 'get'
-// returns the single row directly. Identical to electron/db/service.ts.
-function makeProxy(sqlite: DatabaseSync) {
-  return async (sql: string, params: unknown[], method: 'run' | 'all' | 'get' | 'values') => {
-    const stmt = sqlite.prepare(sql)
-    if (method === 'run') {
-      stmt.run(...(params as never[]))
-      return { rows: [] }
-    }
-    const raw = stmt.all(...(params as never[])) as Record<string, unknown>[]
-    const asArrays = raw.map((r) => Object.values(r))
-    return { rows: (method === 'get' ? asArrays[0] : asArrays) as unknown[] }
   }
 }
 
