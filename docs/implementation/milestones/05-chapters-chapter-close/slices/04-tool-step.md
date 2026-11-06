@@ -230,7 +230,7 @@ apart as the pass does at `:287`.
   `overflowNextStructured` take it, so a tool lane needs no one-shots of
   its own.
 - **Dev mock.** `Route` gains a tool arm
-  (`scripts/mock-llm/routing.ts:145-158`), and a tool lane lists in the
+  (`scripts/mock-llm/routing.ts`), and a tool lane lists in the
   panel under its own **Tools** group, saved `tools:` lanes included
   across restarts. A canned response's value is a `MockToolStep`, checked
   by `validateLaneValue`, and sequence cycling scripts a conversation.
@@ -261,6 +261,9 @@ replay without a network, and stays unit-only.
   a filter stop on a step takes the cut-off path.
 - [`memory/chapter-close.md → When a task stops`](../../../../memory/chapter-close.md#when-a-task-stops):
   the retry's fresh bound, and a filter stop beside a cut.
+- [`generation-pipeline.md → Fatal error categories`](../../../../generation-pipeline.md#fatal-error-categories):
+  `provider.possibleCapabilityMismatch`: tool calling is carried when a
+  non-empty tool list went out.
 - [`architecture.md → Recognizing an overflow rejection`](../../../../architecture.md#recognizing-an-overflow-rejection):
   its list of calls the check wraps.
 - [`observability.md → Subsystem emission inventory`](../../../../observability.md#subsystem-emission-inventory):
@@ -333,7 +336,8 @@ Unit paths run with `pnpm vitest run --project unit <path>`.
   with tier `context-window`, `false` returns `stopped` with reason
   `window`, and neither is retried.
 - **Bound.** `lib/ai/tool-step.test.ts`: an expiry returns `failed` with a
-  provider `timeout`, an abort of `signal` returns `aborted`, and
+  provider `timeout`, an abort of `signal` returns `aborted`, a cut-off
+  retry runs under a fresh bound ("gives the retry a whole bound…"), and
   `'lore-mgmt'`'s profile sets the bound. The `passTimeoutMs` tests at
   `lib/pipeline/definitions/periodic-classifier.test.ts:3635` pass
   unchanged.

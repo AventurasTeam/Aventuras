@@ -50,9 +50,8 @@ adding it to `shapes.ts` only upgrades it to a friendly name and validation.
 A **tool** lane carries a close's tool steps. Its key is `tools:` and the
 request's tool names, sorted and joined by `+`, so each task's tool list
 gets a lane of its own, and the panel files it under **Tools** once the
-app has sent one. A tool lane is saved on first sight, so the panel keeps
-listing it, and any `tools:` lane in `state.json`, across mock restarts. A
-response there is a step: `text`, `reasoning` (sent as
+app has sent one. The lane is saved on first sight, so the panel still
+lists it after the mock restarts. A response there is a step: `text`, `reasoning` (sent as
 `reasoning_content`), `toolCalls` as a list of `{ "name", "args" }`, and
 `finishReason`, which defaults to `tool_calls` with calls and `stop`
 without. A string `args` goes out verbatim, so a malformed call can be
@@ -202,8 +201,8 @@ replays with the same meaning, not byte for byte, since parsed arguments
 go back out through `JSON.stringify`; a malformed one replays as sent. A
 call whose `name` or `arguments` isn't a string is dropped from the step.
 A finish reason a step has no name for, such as `eos`, is left out, and
-the step's default stands. Saving leaves the lane in passthrough: switch
-it to **mock** to replay.
+the step's default stands. As with any saved reply, the lane stays in
+passthrough: switch it to **mock** to replay.
 
 ## Entity placeholders
 

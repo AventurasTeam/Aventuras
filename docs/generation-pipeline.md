@@ -1907,7 +1907,8 @@ providers report a reply the server stopped at its output limit or at
 the model's window as `'length'`: Anthropic's `max_tokens` and
 `model_context_window_exceeded`, OpenAI-compatible `length`. Any other
 value, or none, is treated as finished, but for the two ways a
-narrative reply can end early, below.
+narrative reply can end early and a filter stop on a close's tool step,
+below.
 
 **A structured reply cut off is refused, not repaired.** On `'length'`
 the reply is accepted only if it parses strictly, with no repair: a
@@ -1928,9 +1929,8 @@ fails the close
 
 **A close's tool step reads the same `'length'`, and a filter with it.**
 A cut-off reply is never a finished task, whatever it holds, so its
-calls are dropped, never run. The step is retried once, under a bound
-of its own, and the task stops there if it's cut off again, keeping
-what landed
+calls are dropped, never run. The step is retried once, and the task
+stops there if it's cut off again, keeping what landed
 ([`memory/chapter-close.md → When a task stops`](./memory/chapter-close.md#when-a-task-stops)).
 A `'content-filter'` stop takes the same path, calls or not, with
 `cause: 'content-filter'` on its failure: a filter may not trip twice,
@@ -2148,8 +2148,9 @@ call with a thinking budget, since a disabled setting sends no field.
 Structured output is carried when the JSON response format went out: a
 structured call under `force-on`, since under `auto` the schema rides
 the prompt. Tool calling is carried when a non-empty tool list went
-out, which only a close's tool step sends. So the narrative, which sends none of them on an
-OpenAI-compatible provider, gets no hint from a body such as
+out, which only a close's tool step sends. So the narrative, which
+sends none of them on an OpenAI-compatible provider, gets no hint from
+a body such as
 `model 'Qwen3-30B-A3B-Thinking-2507' not found`. Matching runs after
 overflow recognition, so a body recognized as an overflow carries no
 hint. A 401 or a 429 carries none either: a status that names its own

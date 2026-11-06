@@ -522,8 +522,9 @@ in a last chunk before `[DONE]`. A tool step's prompt count also takes
 in the tool definitions, each call's name and arguments, and the
 reasoning sent back, as the app's estimate does
 ([`architecture.md → The pre-send check`](./architecture.md#the-pre-send-check)),
-and the reply's count takes in the step's reasoning and calls. The counts sit near
-the app's own estimate, so the cross-check stays quiet unless a spec arms
+and the reply's count takes in the step's reasoning and calls. The counts
+sit near the app's own estimate, so the cross-check stays quiet unless a
+spec arms
 `underReportNextUsage()`: the next narrative stream then reports a
 tenth of its counted prompt tokens, as a server that dropped most of
 the prompt would.
