@@ -414,4 +414,21 @@ describe('tool lanes through the app transport', () => {
       logged.mockRestore()
     }
   })
+
+  it('gives the retry of a length-cut step the same step, then moves on', async () => {
+    cannedSteps(LOOK_AT_THE_DOOR, { text: 'Second step.' }, { text: 'Third step.' })
+    const lane = mock.ctx.lane(LOOKUP_LANE)
+    lane.sequence.enabled = true
+    lane.failure = { kind: 'length', status: 500, remaining: 1 }
+
+    const cut = await sendToolStep()
+    const retry = await sendToolStep()
+    const next = await sendToolStep()
+
+    expect(cut.finishReason).toBe('length')
+    expect(cut.toolCalls).toMatchObject([{ toolName: 'lookup', input: { query: 'the door' } }])
+    expect(retry.finishReason).toBe('tool-calls')
+    expect(retry.toolCalls).toMatchObject([{ toolName: 'lookup', input: { query: 'the door' } }])
+    expect(next.text).toBe('Second step.')
+  })
 })

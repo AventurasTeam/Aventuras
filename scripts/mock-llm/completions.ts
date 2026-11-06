@@ -260,7 +260,10 @@ export async function handleCompletion(
     return
   }
 
+  const cursorBefore = lane.sequence.cursor
   const canned = nextResponse(lane)
+  // The app drops a cut tool step and sends it again, so the retry gets this step, not the next.
+  if (route.lane === 'tool' && failure === 'length') lane.sequence.cursor = cursorBefore
   if (canned !== null) entry.responseName = canned.name
 
   if (streamed) {
