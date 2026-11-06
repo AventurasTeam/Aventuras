@@ -1,10 +1,10 @@
 import { createHash } from 'node:crypto'
-import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs'
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
-import { beforeAll, describe, expect, it } from 'vitest'
+import { afterEach, beforeAll, beforeEach, describe, expect, it } from 'vitest'
 
 import { countTokens } from '@/lib/tokens'
 
@@ -108,14 +108,22 @@ describe('parseActions', () => {
 })
 
 describe('saveActions', () => {
+  let dir: string
+  beforeEach(() => {
+    dir = mkdtempSync(join(tmpdir(), 'dataset-actions-'))
+  })
+  afterEach(() => {
+    rmSync(dir, { recursive: true, force: true })
+  })
+
   it('writes actions parseActions reads back', () => {
-    const path = join(mkdtempSync(join(tmpdir(), 'dataset-actions-')), 'actions.json')
+    const path = join(dir, 'actions.json')
     saveActions(path, ['I wait.', 'I bar the door.'])
     expect(parseActions(readFileSync(path, 'utf8'))).toEqual(['I wait.', 'I bar the door.'])
   })
 
   it('keeps the saved checkpoint when the write fails', () => {
-    const path = join(mkdtempSync(join(tmpdir(), 'dataset-actions-')), 'actions.json')
+    const path = join(dir, 'actions.json')
     writeFileSync(path, '["I wait."]\n')
     mkdirSync(`${path}.tmp`)
     expect(() => saveActions(path, ['I wait.', 'I bar the door.'])).toThrow()
@@ -199,8 +207,9 @@ describe('the committed dataset', () => {
     expect(problems).toEqual([])
   })
 
-  // Red: the text or chunking moved under actions.json. Rerun `pnpm dataset:actions --fresh`, read
-  // each action against its reply, then update the hash.
+  // Red: the text or chunking moved under actions.json. Its actions are hand-edited, so a
+  // regeneration (`pnpm dataset:actions --fresh`) carries those rewrites over from git, then each
+  // action is read against its reply before the hash moves.
   it('holds the replies the actions were written against', () => {
     const replies = JSON.stringify(dataset.turns.map((turn) => turn.reply))
     expect(createHash('sha256').update(replies).digest('hex')).toBe(

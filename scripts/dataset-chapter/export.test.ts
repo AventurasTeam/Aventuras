@@ -1,9 +1,9 @@
-import { existsSync, mkdtempSync, readdirSync, readFileSync } from 'node:fs'
+import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { DatabaseSync } from 'node:sqlite'
 
-import { describe, expect, it } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 
 import { exportScrubbed, scrubProviderKeys } from './export'
 
@@ -13,8 +13,16 @@ const MODELS = Array.from({ length: 300 }, (_, i) => ({
   capabilities: {},
 }))
 
+let root: string
+beforeEach(() => {
+  root = mkdtempSync(join(tmpdir(), 'dataset-export-'))
+})
+afterEach(() => {
+  rmSync(root, { recursive: true, force: true })
+})
+
 function settingsDb(): string {
-  const path = join(mkdtempSync(join(tmpdir(), 'dataset-export-')), 'aventuras.db')
+  const path = join(root, 'aventuras.db')
   const db = new DatabaseSync(path)
   db.exec(`CREATE TABLE app_settings (id TEXT PRIMARY KEY, providers TEXT NOT NULL)`)
   // A hosted provider's model list runs past a page: the key lands on an overflow page, which an
@@ -28,6 +36,12 @@ function settingsDb(): string {
   )
   db.close()
   return path
+}
+
+function outDir(): string {
+  const dir = join(root, 'out')
+  mkdirSync(dir)
+  return dir
 }
 
 describe('scrubProviderKeys', () => {
@@ -56,19 +70,27 @@ describe('scrubProviderKeys', () => {
 describe('exportScrubbed', () => {
   it('publishes a scrubbed copy at the target and leaves nothing else beside it', () => {
     const src = settingsDb()
-    const dir = mkdtempSync(join(tmpdir(), 'dataset-out-'))
+    const dir = outDir()
     const out = join(dir, 'dataset.db')
     exportScrubbed(src, out, [KEY])
     expect(readFileSync(out).includes(KEY)).toBe(false)
     expect(readdirSync(dir)).toEqual(['dataset.db'])
   })
 
+  // A keyless build passes its empty key, and every file holds the empty string.
+  it('passes over an empty secret', () => {
+    const src = settingsDb()
+    const out = join(outDir(), 'dataset.db')
+    exportScrubbed(src, out, ['', KEY])
+    expect(readFileSync(out).includes(KEY)).toBe(false)
+  })
+
   it('publishes nothing when the scrub fails', () => {
-    const src = join(mkdtempSync(join(tmpdir(), 'dataset-export-')), 'no-settings.db')
+    const src = join(root, 'no-settings.db')
     const db = new DatabaseSync(src)
     db.exec(`CREATE TABLE app_settings (id TEXT PRIMARY KEY, providers TEXT NOT NULL)`)
     db.close()
-    const dir = mkdtempSync(join(tmpdir(), 'dataset-out-'))
+    const dir = outDir()
     const out = join(dir, 'dataset.db')
     expect(() => exportScrubbed(src, out, [KEY])).toThrow(/holds no app settings/)
     expect(existsSync(out)).toBe(false)
@@ -81,7 +103,7 @@ describe('exportScrubbed', () => {
     db.exec(`CREATE TABLE log (line TEXT NOT NULL)`)
     db.prepare(`INSERT INTO log (line) VALUES (?)`).run(`request failed with key ${KEY}`)
     db.close()
-    const dir = mkdtempSync(join(tmpdir(), 'dataset-out-'))
+    const dir = outDir()
     const out = join(dir, 'dataset.db')
     expect(() => exportScrubbed(src, out, [KEY])).toThrow(/still holds a provider key/)
     expect(readdirSync(dir)).toEqual([])
