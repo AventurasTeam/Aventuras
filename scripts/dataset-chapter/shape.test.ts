@@ -228,9 +228,8 @@ describe('the committed dataset', () => {
     expect(problems).toEqual([])
   })
 
-  // Red: the text or chunking moved under actions.json. Its actions are hand-edited, so a
-  // regeneration (`pnpm dataset:actions --fresh`) carries those rewrites over from git, then each
-  // action is read against its reply before the hash moves.
+  // Red: the text or chunking moved under actions.json. `pnpm dataset:actions --fresh` overwrites
+  // the hand edits: restore them from git, read each action against its reply, then move the hash.
   it('holds the replies the actions were written against', () => {
     const replies = JSON.stringify(dataset.turns.map((turn) => turn.reply))
     expect(createHash('sha256').update(replies).digest('hex')).toBe(

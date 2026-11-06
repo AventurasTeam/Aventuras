@@ -324,9 +324,8 @@ export async function resolveSweep(
   return { set, clampOps: classifierWatermarkClampOps(branchId, win.earliestRemovedPosition) }
 }
 
-// Buckets per rollback-confirm.md. The entries line covers a removed entry and its amends, the
-// chapters line a re-opened chapter and its stamps; other chapter deltas (a report) count nowhere.
-// A cleared parent logs no delta but still moves a place, so it counts as a change.
+// Buckets per rollback-confirm.md → Counts. A non-create entry or chapter delta counts nowhere;
+// a cleared parent logs no delta but still moves a place, so it counts as a change.
 export function rollbackCountsOf({ rows, refClears }: ReversalSet): RollbackCounts {
   let entries = 0
   let chapters = 0

@@ -20,9 +20,8 @@ const SIDECAR_SUFFIXES = ['-wal', '-shm', '-journal'] as const
 const isDirectory = (path: string): boolean => existsSync(path) && statSync(path).isDirectory()
 
 /**
- * Throws on a target the export's rename would fail on, a sidecar that would replay over the copy
- * on its next open, or a draft a killed export left: the unscrubbed database, key included. Run
- * before a build's drive too, so a bad target fails in seconds rather than after it.
+ * Throws on a target the export can't publish to as named, a sidecar that would replay over the
+ * copy, or a killed export's draft (unscrubbed, key included). Run before a build's drive too.
  */
 export function assertExportTarget(out: string): void {
   if (!isAbsolute(out)) throw new Error(`export target ${out}: not an absolute path`)

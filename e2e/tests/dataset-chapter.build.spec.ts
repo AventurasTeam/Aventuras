@@ -52,8 +52,7 @@ const MOCK_MODEL = 'dataset/mock'
 const PER_TURN = 'per-turn'
 const PERIODIC = 'periodic-classifier'
 
-// A pass's call expires at the default call bound (no profile timeout here); the extra minute
-// covers reconcile's embeds and writes.
+// No profile timeout here, so the default call bound; +60 s covers reconcile's embeds and writes.
 const PASS_WAIT_MS = CALL_TIMEOUT_DEFAULT_MS + 60_000
 const TURN_SETTLE_MS = 240_000
 // A Send can run an owed pass before its turn (classifier.md → Failure policy).
@@ -346,9 +345,8 @@ function setClassifierCadenceToOne(d: Drive): Promise<void> {
   )
 }
 
-// Auto-close defaults on (`STORY_SETTINGS_DEFAULTS.chapterAutoClose`) and does nothing until Slice
-// 5.6; after that, a rebuild would close a chapter at the 24k crossing, mid-drive. Off before the
-// first turn.
+// Auto-close defaults on, inert until Slice 5.6; past it a rebuild would close a chapter at the
+// 24k crossing, mid-drive. Off before the first turn.
 function turnAutoCloseOff(d: Drive): Promise<void> {
   return saveMemoryKnob(
     d,
@@ -490,8 +488,7 @@ test.describe('dataset chapter — build', () => {
   test.afterAll(async () => {
     await app?.close()
     await mock?.close()
-    // Dump unconditionally: the app keeps its diagnostics in memory, so a passing build's
-    // classifier drops leave no other trace.
+    // Even when built: diagnostics live only in memory, so classifier drops leave no other trace.
     process.stdout.write(
       `\n### warnings and errors (${problems.length}, last 200)\n${problems.slice(-200).join('\n')}\n`,
     )

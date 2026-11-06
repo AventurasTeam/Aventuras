@@ -17,8 +17,7 @@ import { reader } from '../locators/reader'
 const LLM_URL = process.env.SMOKE_LLM_URL
 const LLM_MODEL = process.env.SMOKE_LLM_MODEL
 
-// No profile timeout: a pass's call expires at the default bound; +60 s covers reconcile's embeds
-// and writes.
+// No profile timeout, so the default call bound; +60 s covers reconcile's embeds and writes.
 const PASS_WAIT_MS = CALL_TIMEOUT_DEFAULT_MS + 60_000
 // A settled pass's status leaving `running`.
 const STATUS_SETTLE_MS = 10_000

@@ -328,8 +328,7 @@ describe('requestChapterMetadata', () => {
     expect(system).toContain('Each is what the lead does, says or attempts')
   })
 
-  // An open publishes its branch over the working-set stores (loadAndPublish), so one landing while
-  // the range read is in flight would leave the close to read another branch's rows.
+  // An open publishes its branch over the working-set stores (loadAndPublish).
   it("prompts with its own branch's chapter and threads when another branch is published mid-read", async () => {
     chaptersStore.hydrate('b1', [chapter(1, 'Kael left the keep at dawn with the stolen sigil.')])
     threadsStore.hydrate('b1', [thread('thr_1', 'Find the heir', 'active')])

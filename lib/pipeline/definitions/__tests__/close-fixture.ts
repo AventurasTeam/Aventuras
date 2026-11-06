@@ -77,7 +77,6 @@ export const METADATA_REPLY: ChapterMetadata = {
   keywords: ['harrow', 'ferry', 'tobin', 'syndicate', 'letter'],
 }
 
-/** METADATA_REPLY as `generateStructured`'s ok result. */
 export function metadataReplyResult(): GenerateStructuredResult<ChapterMetadata> {
   return { status: 'ok', value: METADATA_REPLY, recoverable: [] }
 }

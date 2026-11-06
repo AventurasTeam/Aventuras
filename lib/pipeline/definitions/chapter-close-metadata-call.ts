@@ -71,9 +71,8 @@ function previousChapterSummary(branchId: string): string | null {
 }
 
 /**
- * chapter-close.md → Phase 2's metadata as one structured call for the whole chapter, with no
- * parts yet (Slice 5.8), under the lore-mgmt agent's bound. A cancel returns `aborted`; an expiry
- * fails, as every other failure does.
+ * chapter-close.md → Phase 2's metadata: one call for the whole chapter, no parts yet (Slice 5.8),
+ * under the lore-mgmt agent's bound. A cancel returns `aborted`; an expiry fails, as others do.
  */
 export async function* requestChapterMetadata(
   ctx: PhaseContext,

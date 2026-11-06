@@ -16,10 +16,9 @@ import {
 } from './shape'
 
 // Opt-in, run once: one first-person action per reply of the dataset text, written by a real model
-// and committed as actions.json. Resumes a shorter actions.json; --fresh starts over, and its first
-// save overwrites the committed, hand-edited actions.
+// and committed as actions.json. Resumes a shorter one; --fresh's first save overwrites hand edits.
 //   SMOKE_LLM_URL=http://host:port/v1 SMOKE_LLM_MODEL=<id> pnpm dataset:actions [--fresh]
-// SMOKE_LLM_KEY sets the server's API key, for a hosted one; none by default.
+// SMOKE_LLM_KEY: a hosted server's API key; none by default.
 const LLM_URL = process.env.SMOKE_LLM_URL
 const LLM_MODEL = process.env.SMOKE_LLM_MODEL
 const LLM_KEY = process.env.SMOKE_LLM_KEY ?? ''
@@ -73,8 +72,7 @@ async function complete(
       ],
       temperature: 0.4,
       max_tokens: 2048,
-      // A keyless server is taken for a local llama.cpp or vLLM one, where this stops a thinking
-      // model spending the budget on reasoning.
+      // Keyless = local llama.cpp/vLLM: stops a thinking model spending the budget on reasoning.
       ...(LLM_KEY ? {} : { chat_template_kwargs: { enable_thinking: false } }),
       stream: false,
     }),
