@@ -78,7 +78,7 @@ export function replyCutOff(input: ReplyCutOffInput): ReplyCutOffFailure {
   }
 }
 
-/** Thrown by a structured parse step so callWithRetry returns the cut-off at once. */
+/** Thrown by a parse step so callWithRetry returns the cut-off at once. */
 export class ReplyCutOffError extends Error {
   readonly failure: ReplyCutOffFailure
   constructor(failure: ReplyCutOffFailure) {

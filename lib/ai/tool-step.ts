@@ -243,6 +243,7 @@ export async function generateToolStep(
         ? { status: 'failed', error, recoverable }
         : { status: 'stopped', reason: 'window', failure, recoverable }
     }
+    // Only the retry's cut reaches here; the first run's is retried before outcome().
     if (error.tier === 'reply-cut-off') {
       const { tier: _tier, ...failure } = error
       logger.warn('provider.reply_cut_off', { outcome: 'stopped', target, ...failure }, attribution)
@@ -281,7 +282,7 @@ export async function generateToolStep(
   if (first.result.status !== 'failed' || first.result.error.tier !== 'reply-cut-off') {
     return outcome(first, first.result.recoverable)
   }
-  // Once more, under a bound of its own: the run it follows likely spent most of the first
+  // Once more, under a bound of its own: a cut attempt likely spent most of its run's bound
   // (memory/chapter-close.md → When a task stops).
   const cut = first.result.error
   const { tier: _tier, ...cutFailure } = cut

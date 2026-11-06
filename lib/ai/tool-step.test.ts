@@ -774,6 +774,68 @@ describe('generateToolStep: a reply cut off', () => {
       ],
     ])
   })
+
+  it("lists the first run's retries, the cut, then the retry's", async () => {
+    answers = [
+      rejection(500, { error: { message: 'first' } }),
+      cutReply(),
+      rejection(500, { error: { message: 'second' } }),
+      DONE,
+    ]
+
+    const result = await step(useProvider('openai-compatible'))
+
+    expect(result).toMatchObject({ status: 'ok' })
+    expect(result).toHaveProperty('recoverable', [
+      expect.objectContaining({ tier: 'provider', detail: expect.stringContaining('first') }),
+      { tier: 'reply-cut-off', ...CUT_AT_DEFAULT },
+      expect.objectContaining({ tier: 'provider', detail: expect.stringContaining('second') }),
+    ])
+  })
+
+  it('fails a provider failure at once, with no cut-off retry', async () => {
+    answers = [rejection(401, { error: { message: 'bad key' } })]
+
+    const result = await step(useProvider('openai-compatible'))
+
+    expect(result).toMatchObject({ status: 'failed', error: { tier: 'provider' }, recoverable: [] })
+    expect(bodies).toHaveLength(1)
+    expect(cutLogs()).toEqual([])
+  })
+
+  it('names the window from the estimate when the server reports no input', async () => {
+    answers = [
+      cutReply({ prompt_tokens: 0, completion_tokens: 7_999 }),
+      cutReply({ prompt_tokens: 0, completion_tokens: 7_999 }),
+    ]
+
+    const result = await step(useProvider('openai-compatible', { window: 8_000 }))
+
+    expect(result).toMatchObject({
+      status: 'stopped',
+      reason: 'cut-off',
+      failure: { cause: 'window', window: 8_000, outputTokens: 7_999 },
+    })
+  })
+
+  // generation-pipeline.md → Cut-off replies: a non-streamed body that omits it arrives whole.
+  it("reads an 'other' finish with no raw reason as a step", async () => {
+    answers = [
+      () =>
+        json({
+          id: 'chatcmpl-test',
+          object: 'chat.completion',
+          created: 0,
+          model: 'local-model',
+          choices: [{ index: 0, message: { role: 'assistant', content: 'Done.' } }],
+        }),
+    ]
+
+    const result = okStep(await step(useProvider('openai-compatible')))
+
+    expect(result.finishReason).toBe('other')
+    expect(bodies).toHaveLength(1)
+  })
 })
 
 // A filter's stop takes the cut-off path: a filter may not trip twice, and one that does stops the
@@ -818,25 +880,6 @@ describe('generateToolStep: a reply a filter stopped', () => {
       step: { text: 'Done.' },
       recoverable: [{ tier: 'reply-cut-off', cause: 'content-filter' }],
     })
-  })
-
-  // generation-pipeline.md → Cut-off replies: a non-streamed body that omits it arrives whole.
-  it("reads an 'other' finish with no raw reason as a step", async () => {
-    answers = [
-      () =>
-        json({
-          id: 'chatcmpl-test',
-          object: 'chat.completion',
-          created: 0,
-          model: 'local-model',
-          choices: [{ index: 0, message: { role: 'assistant', content: 'Done.' } }],
-        }),
-    ]
-
-    const result = okStep(await step(useProvider('openai-compatible')))
-
-    expect(result.finishReason).toBe('other')
-    expect(bodies).toHaveLength(1)
   })
 })
 
