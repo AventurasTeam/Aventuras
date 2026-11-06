@@ -8,15 +8,15 @@ vi.mock('#lib/stores/settings.svelte.ts', () => ({
 vi.mock('#lib/services/ai/sdk/providers/sdkFetch.ts', () => ({
   createSdkFetch: vi.fn(),
 }))
+vi.mock('./fetchAdapter', () => ({ fetchPublicImageBase64: vi.fn() }))
 
+import { fetchPublicImageBase64 } from './fetchAdapter'
 import { generateSdkImage } from './sdkImage'
 import { createNanoGPTImage } from './nanogptImage'
 
 const BASE_URL = 'https://api.nano-gpt.com/api/v1'
 const PNG = 'iVBORw0KGgo='
 const JPEG = '/9j/4AAQSkZJRg=='
-const PNG_BYTES = Uint8Array.from([137, 80, 78, 71])
-const PNG_BYTES_BASE64 = 'iVBORw=='
 
 // Requests and replies as captured from the live API.
 const PROMPT = 'A small red fox sitting in a snowy pine forest at dusk, soft watercolor style'
@@ -29,10 +29,10 @@ const OK_BODY = {
   requestId: 'media-image:abc',
 }
 
-const json = (body: unknown, status = 200, headers: Record<string, string> = {}) =>
+const json = (body: unknown, status = 200) =>
   new Response(JSON.stringify(body), {
     status,
-    headers: { 'Content-Type': 'application/json', ...headers },
+    headers: { 'Content-Type': 'application/json' },
   })
 
 const fetchMock = vi.fn<(input: RequestInfo | URL, init?: RequestInit) => Promise<Response>>()
@@ -72,6 +72,7 @@ const callOptions = (over: Partial<ImageModelV4CallOptions> = {}): ImageModelV4C
 beforeEach(() => {
   vi.clearAllMocks()
   fetchMock.mockImplementation(async () => json(OK_BODY))
+  vi.mocked(fetchPublicImageBase64).mockResolvedValue('DOWNLOADED')
 })
 
 describe('request', () => {
@@ -173,75 +174,31 @@ describe('response', () => {
     expect(result.response.modelId).toBe('minimax-image-01')
   })
 
-  it('downloads a url item through the injected fetch without sending the key', async () => {
-    fetchMock.mockImplementation(async (input) =>
-      String(input).endsWith('/images')
-        ? json({ data: [{ url: 'https://cdn.test/a.png' }] })
-        : new Response(PNG_BYTES, { headers: { 'content-type': 'image/png' } }),
+  it('downloads a url item, and prefers b64_json when an item has both', async () => {
+    fetchMock.mockImplementation(async () =>
+      json({
+        data: [{ b64_json: 'A', url: 'https://cdn.test/a.png' }, { url: 'https://cdn.test/b.png' }],
+      }),
     )
 
     const signal = new AbortController().signal
-    const result = await model().doGenerate(callOptions({ abortSignal: signal }))
+    const result = await model().doGenerate(callOptions({ n: 2, abortSignal: signal }))
 
-    expect(result.images).toEqual([PNG_BYTES_BASE64])
-    const [url, init] = fetchMock.mock.calls[1]
-    expect(url).toBe('https://cdn.test/a.png')
-    expect(init?.signal).toBe(signal)
-    expect(init?.redirect).toBe('manual')
-    expect(new Headers(init?.headers).has('authorization')).toBe(false)
+    expect(result.images).toEqual(['A', 'DOWNLOADED'])
+    expect(fetchPublicImageBase64).toHaveBeenCalledTimes(1)
+    expect(fetchPublicImageBase64).toHaveBeenCalledWith(
+      'https://cdn.test/b.png',
+      expect.objectContaining({ signal }),
+    )
   })
 
-  it('refuses to download a url that is not a public host', async () => {
-    fetchMock.mockImplementation(async () => json({ data: [{ url: 'http://127.0.0.1/a.png' }] }))
+  it('lets a failed download through as a plain Error, not an APICallError the 429 retry would act on', async () => {
+    fetchMock.mockImplementation(async () => json({ data: [{ url: 'https://cdn.test/a.png' }] }))
+    vi.mocked(fetchPublicImageBase64).mockRejectedValue(new Error('Image API error 429: slow down'))
 
     const error = await rejection(model().doGenerate(callOptions()))
     expect(error).toBeInstanceOf(Error)
     expect(APICallError.isInstance(error)).toBe(false)
-    expect((error as Error).message).toContain('public host')
-    expect(fetchMock).toHaveBeenCalledTimes(1)
-  })
-
-  it('does not follow a redirect from the download url', async () => {
-    fetchMock.mockImplementation(async (input) =>
-      String(input).endsWith('/images')
-        ? json({ data: [{ url: 'https://cdn.test/a.png' }] })
-        : new Response(null, { status: 302, headers: { location: 'http://127.0.0.1/a.png' } }),
-    )
-
-    const error = await rejection(model().doGenerate(callOptions()))
-    expect(error).toBeInstanceOf(Error)
-    expect(APICallError.isInstance(error)).toBe(false)
-    expect((error as Error).message).toContain('302')
-  })
-
-  it('prefers b64_json when an item has both, and handles a mix', async () => {
-    fetchMock.mockImplementation(async (input) =>
-      String(input).endsWith('/images')
-        ? json({
-            data: [
-              { b64_json: 'A', url: 'https://cdn.test/a.png' },
-              { url: 'https://cdn.test/b.png' },
-            ],
-          })
-        : new Response(PNG_BYTES),
-    )
-
-    const result = await model().doGenerate(callOptions({ n: 2 }))
-    expect(result.images).toEqual(['A', PNG_BYTES_BASE64])
-    expect(fetchMock).toHaveBeenCalledTimes(2)
-  })
-
-  it('fails on a download that is not 2xx, without an APICallError the 429 retry would act on', async () => {
-    fetchMock.mockImplementation(async (input) =>
-      String(input).endsWith('/images')
-        ? json({ data: [{ url: 'https://cdn.test/a.png' }] })
-        : new Response('slow down', { status: 429 }),
-    )
-
-    const error = await rejection(model().doGenerate(callOptions()))
-    expect(error).toBeInstanceOf(Error)
-    expect(APICallError.isInstance(error)).toBe(false)
-    expect((error as Error).message).toContain('429')
   })
 
   it.each([
@@ -289,45 +246,9 @@ describe('errors', () => {
     expect(error.statusCode).toBe(401)
   })
 
-  it('reads the message of a nested error object that repeats its code', async () => {
-    const error = await failure(
-      json(
-        {
-          error: {
-            message: 'Invalid image model specified.',
-            type: 'invalid_request_error',
-            code: 'invalid_model',
-          },
-          code: 'invalid_model',
-        },
-        400,
-      ),
-    )
-    expect(error.message).toBe('Invalid image model specified.')
-  })
-
-  it('reads the message of a string error', async () => {
-    const message =
-      'Unable to safely load the image. Upload a supported image or check the image URL.'
-    const error = await failure(
-      json({ error: message, code: 'INVALID_IMAGE_INPUT', type: 'INVALID_IMAGE_INPUT' }, 400),
-    )
-    expect(error.message).toBe(message)
-  })
-
-  it('falls back to a top-level message, then to the body text', async () => {
-    expect((await failure(json({ message: 'Slow down' }, 429))).message).toBe('Slow down')
-    expect((await failure(new Response('Bad gateway', { status: 502 }))).message).toBe(
-      'Bad gateway',
-    )
-    expect((await failure(new Response('', { status: 503 }))).message).toBe('HTTP 503')
-  })
-
-  it('keeps the response headers and body, and is not retryable by itself', async () => {
-    const error = await failure(json({ error: 'busy' }, 429, { 'Retry-After': '7' }))
-    expect(error.responseHeaders).toMatchObject({ 'retry-after': '7' })
-    expect(error.responseBody).toBe('{"error":"busy"}')
-    expect(error.isRetryable).toBe(false)
+  it('falls back to the body text when the body has no message', async () => {
+    const error = await failure(new Response('Bad gateway', { status: 502 }))
+    expect(error.message).toBe('Bad gateway')
   })
 
   it('does not put reference data in the recorded request', async () => {

@@ -597,8 +597,9 @@ the form says that schedulers need the newer version.
 
 **Parsing replies from these servers.** The parsing of a response follows what the response is for:
 
-1. An error body is parsed with `safeParse` and falls back to the raw excerpt, so the original failure is
-   never masked.
+1. An error body is read for its message, with the shared `providerMessage` for the common JSON shapes or an
+   adapter's own `safeParse` schema for a stranger one, and falls back to the raw excerpt, so the original
+   failure is never masked.
 2. A reply the operation depends on is parsed with `safeParse`, and a failure throws a readable error whose
    first line names the endpoint, followed by `z.prettifyError` or a body excerpt. It is never a raw
    `ZodError` (its message is multi-line JSON and shows as `[`), and never an empty result in its place: a
@@ -652,8 +653,8 @@ otherwise cuts the references to the smaller of that limit and the model's `maxR
 before fetching `http(s)` ones to base64, so every adapter receives raw base64. A reference URL can
 come from a discovery card, so it is fetched only from a public host and each redirect is checked
 the same way (`fetchPublicImageBase64`); a name that merely resolves to a private address is not
-caught. A NanoGPT reply that carries a URL instead of base64 gets the same public-host check, and
-that download is not redirected. A reference that cannot be fetched is dropped and the image is
+caught. A NanoGPT reply that carries a URL instead of base64 is downloaded the same way, and a failed
+download is a plain error, so the 429 retry cannot re-run, and re-bill, the generation. A reference that cannot be fetched is dropped and the image is
 generated without it. Google takes them on every image model it lists.
 
 Two local backends take them differently. A1111 sends them as `extra_images` on the `txt2img`

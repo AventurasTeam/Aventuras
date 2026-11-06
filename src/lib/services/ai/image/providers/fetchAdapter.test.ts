@@ -7,6 +7,7 @@ vi.mock('#lib/stores/debug.svelte.ts', () => ({
   debug: { isActive: false, addDebugRequest: vi.fn(), addDebugResponse: vi.fn() },
 }))
 
+import { APICallError } from 'ai'
 import { fetch as tauriHttpFetch } from '@tauri-apps/plugin-http'
 import { isAbortError } from '#lib/services/activity/describeError.ts'
 import { debug } from '#lib/stores/debug.svelte.ts'
@@ -106,6 +107,16 @@ describe('fetchPublicImageBase64', () => {
     await expect(fetchPublicImageBase64('https://img.test/a.png')).rejects.toThrow(
       'Image API error 404',
     )
+  })
+
+  it('fails a 429 with a plain Error, which the 429 middleware leaves alone', async () => {
+    mockFetch.mockResolvedValueOnce(new Response('slow down', { status: 429 }))
+
+    const error = await fetchPublicImageBase64('https://img.test/a.png').catch((e: unknown) => e)
+
+    expect(error).toBeInstanceOf(Error)
+    expect(APICallError.isInstance(error)).toBe(false)
+    expect(error).not.toHaveProperty('statusCode')
   })
 })
 
