@@ -6,7 +6,7 @@ import { chapters, type CloseReport } from '@/lib/db'
 import { generateId } from '@/lib/ids'
 import { expectRan, resetSingletons } from '@/lib/pipeline/__tests__/harness'
 import {
-  METADATA_REPLY,
+  metadataReplyResult,
   openCloseFixture,
   type CloseFixture,
 } from '@/lib/pipeline/definitions/__tests__/close-fixture'
@@ -29,11 +29,7 @@ vi.mock('@/lib/ai', async (importOriginal) => ({
 beforeEach(() => {
   resetSingletons()
   generateStructuredMock.mockReset()
-  generateStructuredMock.mockResolvedValue({
-    status: 'ok',
-    value: METADATA_REPLY,
-    recoverable: [],
-  })
+  generateStructuredMock.mockResolvedValue(metadataReplyResult())
 })
 
 afterEach(() => {

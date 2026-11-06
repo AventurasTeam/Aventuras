@@ -15,7 +15,7 @@ import {
   type TxResult,
 } from '@/lib/pipeline'
 import {
-  METADATA_REPLY,
+  metadataReplyResult,
   openCloseFixture,
   type CloseFixture,
 } from '@/lib/pipeline/definitions/__tests__/close-fixture'
@@ -36,11 +36,7 @@ beforeEach(async () => {
   vi.resetAllMocks()
   __resetRegistry()
   __resetBus()
-  vi.mocked(generateStructured).mockResolvedValue({
-    status: 'ok',
-    value: METADATA_REPLY,
-    recoverable: [],
-  })
+  vi.mocked(generateStructured).mockResolvedValue(metadataReplyResult())
   f = await openCloseFixture()
 })
 
