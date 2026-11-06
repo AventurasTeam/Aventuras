@@ -8,6 +8,7 @@ import { drizzle } from 'drizzle-orm/sqlite-proxy'
 import { migrate } from 'drizzle-orm/sqlite-proxy/migrator'
 import { getLoadablePath } from 'sqlite-vec'
 
+import { datasetStorySteps, seedProviderIds } from './dataset-story'
 import { buildLongBranchSteps, entryIdAt, LONG_BRANCH_SCALES, longBranchId } from './long-branch'
 import { makeProxy } from './sqlite-proxy'
 import { buildSeedSteps, type SeedStep } from '../../lib/db/devtools/seed-dataset'
@@ -16,10 +17,17 @@ import { resolveDevSlot } from '../dev-slot/resolve'
 import { slotPorts } from '../dev-slot/slot'
 
 // Strict: an ignored typo would seed something other than what was asked for.
-function parseCli(argv: string[]): { path: string | undefined; longBranch: boolean } {
+function parseCli(argv: string[]): {
+  path: string | undefined
+  longBranch: boolean
+  dataset: boolean
+} {
   const { values, positionals } = parseArgs({
     args: argv,
-    options: { 'long-branch': { type: 'boolean', default: false } },
+    options: {
+      'long-branch': { type: 'boolean', default: false },
+      dataset: { type: 'boolean', default: false },
+    },
     allowPositionals: true,
   })
   if (positionals.length > 1) {
@@ -27,7 +35,7 @@ function parseCli(argv: string[]): { path: string | undefined; longBranch: boole
       `one database path at most, got ${positionals.length}: ${positionals.join(' ')}`,
     )
   }
-  return { path: positionals[0], longBranch: values['long-branch'] }
+  return { path: positionals[0], longBranch: values['long-branch'], dataset: values.dataset }
 }
 
 let cli: ReturnType<typeof parseCli>
@@ -35,7 +43,9 @@ try {
   cli = parseCli(process.argv.slice(2))
 } catch (err) {
   console.error(`[seed] ${err instanceof Error ? err.message : String(err)}`)
-  console.error('[seed] usage: pnpm db:seed [db path], or pnpm db:seed:long [db path]')
+  console.error(
+    '[seed] usage: pnpm db:seed [db path], pnpm db:seed:long [db path], or pnpm db:seed:dataset [db path]',
+  )
   process.exit(1)
 }
 
@@ -86,6 +96,8 @@ async function main() {
 
   const steps = buildSeedSteps()
   if (cli.longBranch) steps.push(...LONG_BRANCH_SCALES.flatMap(buildLongBranchSteps))
+  const dataset = cli.dataset ? datasetStorySteps(seedProviderIds(steps)) : []
+  steps.push(...dataset)
   if (mockPort !== undefined) {
     repointSeedProvider(steps, mockPort)
     console.log(`[seed] provider endpoint: http://localhost:${mockPort}/v1`)
@@ -122,6 +134,8 @@ async function main() {
       console.log(`[seed] ${longBranchId(chapters)}: first entry ${entryIdAt(chapters, 1)}`)
     }
   }
+  for (const branch of dataset.find((s) => s.name === 'branches')?.rows ?? [])
+    console.log(`[seed] dataset branch: ${(branch as { id: string }).id}`)
 }
 
 main().catch((err) => {
