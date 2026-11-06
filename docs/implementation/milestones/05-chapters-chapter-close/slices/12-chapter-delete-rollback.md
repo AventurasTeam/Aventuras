@@ -190,7 +190,7 @@ without a database. Copy goes in the `chapters` namespace 5.7 creates.
   land. 5.7's list of guarded transitions leaves it out only because it
   ships disabled.
 - A refused preview toasts and opens nothing, as `openRollback` does at
-  `app/reader-composer/[branchId].tsx:1112-1115`.
+  `app/reader-composer/[branchId].tsx:1110-1113`.
 - A refusal toasts and closes the confirm, since what it showed has moved:
   `not-latest` reads `This is no longer the latest chapter.`, and the
   others a failure. A success toasts nothing: the card goes, and 5.7's
@@ -202,10 +202,10 @@ tool on main runs them, and a tool landing later does by joining the
 table.
 
 **Removing `deleteChapter`.** The action kind and handler
-(`lib/actions/chapters/register.ts:31,150-170,180`), its `LOCK_KEY` entry
-(`lib/actions/delta/apply-delta-action.ts:93`), the arm at
+(`lib/actions/chapters/register.ts:26,136-156,166`), its `LOCK_KEY` entry
+(`lib/actions/delta/apply-delta-action.ts:94`), the arm at
 `lib/actions/delta/delete-arms.test.ts:101` and the case at
-`lib/actions/chapters/register.test.ts:183`. `cascade` and `cascadedDelete`
+`lib/actions/chapters/register.test.ts:250`. `cascade` and `cascadedDelete`
 go from `register.ts` too, since only a delete reads a cascade.
 
 **Regenerate's close arm.**
@@ -237,7 +237,7 @@ go from `register.ts` too, since only a delete reads a cascade.
   default under [Open questions](#open-questions).
 - The preview takes that read inside the shared section. `getRollbackCounts`
   calls `rollbackCountsOf` after releasing `withBranchWriteShared` today
-  (`operational.ts:363-367`), and a CTRL-Z landing between the two would give
+  (`operational.ts:362-366`), and a CTRL-Z landing between the two would give
   `chapters: 1` with neither chapter line. Both calls move inside the hold.
 - `classifyRegenerateGate` (`components/reader/regenerate-gate.ts:35-38`):
 
@@ -255,12 +255,12 @@ go from `register.ts` too, since only a delete reads a cascade.
   its two values. `RollbackConfirmModal` reads `classifyRegenerateGate(counts)`
   at render, so a live recount can't leave it stale. `immediate` at render
   uses the cascade copy: the confirm is already open.
-- **The route.** `:1208` stays the branch point. `:1211` passes `counts`, so
+- **The route.** `:1206` stays the branch point. `:1209` passes `counts`, so
   a close committing as the interrupt lands can't be reversed unconfirmed.
   A `counts-changed` there opens the confirm on the fresh counts, through a
   pure helper beside `reopenAfterRefusal`, without the toast `runRegenerate`
-  raises at `:901`: `The counts changed while this was open` has nothing
-  open to refer to. The comments at `:1222-1223` and
+  raises at `:899`: `The counts changed while this was open` has nothing
+  open to refer to. The comments at `:1220-1221` and
   `regenerate-gate.ts:33-34` go.
 - **Copy,** in `reader.json`:
   - `chapter-close-confirm` with `chapters > 0`: body
@@ -528,14 +528,33 @@ change amends the scope above.
   to K per row nobody sees change, and a turn's bumps count today too. History and
   row signals already hide them. Default: `rollbackCountsOf` skips them, and
   `rollback-confirm.md → Counts` says so.
+- **Which tables count as world state?** `rollbackCountsOf`
+  (`lib/actions/story-entries/operational.ts`) counts `translations`,
+  `branch_era_flips` and `character_relationships` deltas there, while
+  [`rollback-confirm.md → Counts`](../../../../ui/screens/reader-composer/rollback-confirm/rollback-confirm.md#counts)
+  lists only entities, lore, threads, happenings and entry assets. A swept
+  translation of a deleted entry may count twice. Unverified that these deltas
+  land in real rollback windows. This slice rewrites that bucket for
+  regenerate's close arm and edits the same row, so the answer lands here.
+  Default: today's counting stands and the row names those tables too, leaving
+  open only the translation of a deleted entry. Routed from triage 2026-11-06.
 - **What residue is accepted?** Three narrow cases. Duplicates after CTRL-Z and
   redo over a manual close at the head, which chapter-close dedup never revisits.
   A head edit under a committed close, which keeps writes derived from the
   replaced prose. A failed reversal under a later close, which a later boot
-  reverses, leaving a gap before a closed chapter. All need a manual close or a
-  failed transaction. Default: accept all three with no code, and narrow
-  `chapter-close.md`'s "a partial close, not broken state" to what it covers,
-  since a later boot breaks it.
+  reverses, leaving a gap before a closed chapter. Slice 5.2's review found the
+  gap reaches the next close. Boundary starts the range at the open region's
+  first row (`lib/pipeline/definitions/chapter-close-boundary.ts:36`), inside
+  the gap, so the new chapter's range spans the closed chapter after it. Its
+  prompt carries that chapter's prose, since the range read takes every
+  non-system row between the start and end positions
+  (`chapter-close-metadata-call.ts:45-55`), while its token count and stamps
+  take only the open region's rows. A scratch probe closed A (entries 1–5) and
+  B (6–9), reversed A's actions, then closed to 13, and got chapters 2 (6–9) and
+  3 (1–13). All need a manual close or a failed transaction. Default: accept
+  all three with no code, and narrow `chapter-close.md`'s "a partial close, not
+  broken state" to what it covers, since a later boot breaks it. Accepting the
+  residue with no code now accepts overlapping chapters too.
 - **Does 5.9's guard meet C13's stackable rule, if 5.9 lands first?** It reads the
   edits the walk holds, so `undoUpdate`'s widened map should fill it. Default: yes,
   an arm and no code. The later of the two to land confirms it.

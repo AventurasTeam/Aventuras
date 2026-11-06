@@ -73,9 +73,10 @@ slice needs from the action layer crosses the port.
 - Contracts provided:
   [C9](../milestone.md#c9--the-round-trip-rule),
   [C11](../milestone.md#c11--tool-results),
-  [C12](../milestone.md#c12--what-a-later-turn-wrote-means), and the
+  [C12](../milestone.md#c12--what-a-later-turn-wrote-means), the
   event half of
-  [C6](../milestone.md#c6--what-the-banners-n-of-m-counts).
+  [C6](../milestone.md#c6--what-the-banners-n-of-m-counts), and
+  [C1](../milestone.md#c1--a-closes-delta-shape)'s move to one group.
 - Contracts consumed:
   [C1](../milestone.md#c1--a-closes-delta-shape),
   [C2](../milestone.md#c2--pipeline-shape),
@@ -102,7 +103,7 @@ and tools sit under `lib/pipeline/definitions/close-agent/`.
   back as a value and never fails the run. `delta_emitted` keeps its
   behaviour, and its `yield` evaluates to undefined.
 - `DeltaActionPort` gains a group method, in all five constructors:
-  `lib/boot/bootstrap.ts:68`, `lib/pipeline/__tests__/harness.ts:47`,
+  `lib/boot/bootstrap.ts:69`, `lib/pipeline/__tests__/harness.ts:47`,
   `lib/pipeline/__tests__/abort-reversal-hold.test.ts:44`,
   `lib/pipeline/definitions/periodic-classifier.test.ts:2263` and
   `lib/actions/turns/__tests__/stand-in-pass.ts:183`. New types sit in
@@ -110,9 +111,9 @@ and tools sit under `lib/pipeline/definitions/close-agent/`.
   import (`eslint.config.js:119-120`).
 - That method is a new function, `applyDeltaActionGroupWithOutcomes`. It
   returns per-action outcomes, indexed by action and assigned after the
-  rerun (`apply-delta-action.ts:333-345`), so a link that lands on the
+  rerun (`apply-delta-action.ts:334-346`), so a link that lands on the
   rerun doesn't keep its first noop. Each carries the handler's `reason`
-  and mark. An all-noop group returns its outcomes (`:347`). A plain
+  and mark. An all-noop group returns its outcomes (`:348`). A plain
   refusal stays whole-group, with nothing written.
 - `applyDeltaActionGroup` becomes a wrapper over the same runner and
   keeps `DeltaGroupResult` as it is, rather than growing its `ok` arm.
@@ -126,7 +127,7 @@ and tools sit under `lib/pipeline/definitions/close-agent/`.
   name the new function for `delta_group_emitted`.
 - `noopRefusal(reason, 'restated' | 'gone')` (`registry.ts:74`). Rule
   refusals stay unmarked. The single path drops the mark where it
-  returns a refusal (`apply-delta-action.ts:183`), so `MutationResult`
+  returns a refusal (`apply-delta-action.ts:184`), so `MutationResult`
   doesn't change and the exact refusals pinned through it pass unedited
   (`entities/register.test.ts:443`, `state-patch-actions.test.ts:117`).
   Restated values, thirteen sites across twelve
@@ -151,6 +152,43 @@ and tools sit under `lib/pipeline/definitions/close-agent/`.
   - A whole-group refusal, the hard `not-found` of `updateEntity`,
     `updateLore`, `updateThread` and `updateHappening` included:
     `rejected`, with nothing written.
+
+**The close's create and stamps as one group (developer decision,
+2026-11-05).**
+
+- Once `delta_group_emitted` lands, the metadata phase emits
+  `createChapter` and every `stampEntryChapter` as one group, in C1's
+  order. Each stamp stays its own delta anchored on the end entry, so
+  reversal and the survival anchor read it as they do now. The
+  developer moved it here whatever the measure said: "So what i'm
+  thinking is we should take the results as they are right now and move
+  it to the batch writer no matter what just because it's the more
+  correct way to do it in my opinion."
+- The `close_report` update stays a write of its own after the group:
+  one group can't create and update a chapter row, since
+  `updateChapter` reads committed rows.
+- [Slice 5.2](./02-first-chapter.md)'s mid-burst cases are re-pointed or
+  dropped here, since a group lands whole: criterion 5's abort between
+  stamps, criterion 22's Cancel and head reversal mid-burst, criterion
+  23's boot recovery mid-burst, and its accepted mid-close display, a
+  surface reading a partial range.
+- A hard bar (developer: "Q11: A"): on a release Android build with the
+  reader holding 50 rows, a close on 5.2's dataset branch (133 stamps
+  over 23,907 tokens) has no JS-thread stall over 500 ms in its write
+  burst, timed as the longest gap between 16 ms ticks with the stop
+  moment counted as a tick. A short chapter, such as one of the seed's at
+  about 30 stamps, would pass trivially. The probe that timed it was
+  temporary and isn't in the repo: 5.2's
+  [Close measure](./02-first-chapter.md#close-measure) gives its method,
+  and its [Implementation notes](./02-first-chapter.md#implementation-notes)
+  say where the built database lives, outside git. 5.2 measured about 1.1 s
+  with a delta per stamp. One group is one uninterruptible chunk, so if
+  the group alone doesn't bring the stall under 500 ms, its store patches
+  go out in chunks with a yield between them, or an equivalent this
+  slice picks.
+- [`generation-pipeline.md → Writes`](../../../../generation-pipeline.md#writes)
+  already describes the group: `delta_emitted` leaves out the close's
+  create and stamps, and `delta_group_emitted` carries them.
 
 **The later-turn reader (C12).**
 
@@ -199,7 +237,7 @@ and tools sit under `lib/pipeline/definitions/close-agent/`.
   included.
 - After each step, whatever its status, the driver yields
   `retriedAttemptEvents(result, 'lore-mgmt')`, as the pass does
-  (`periodic-classifier.ts:347`), so a retried attempt reaches the log.
+  (`periodic-classifier.ts:285`), so a retried attempt reaches the log.
 - `stopped`, for `cut-off` or `window`, stops the task and keeps what
   landed, as the budget does. `failed` returns `{ status: 'failed' }`
   through `toPipelineError(error, 'lore-mgmt')`, `not-configured`
@@ -231,7 +269,7 @@ and tools sit under `lib/pipeline/definitions/close-agent/`.
   listed by title stays unread.
 - Two functions serve a tool writing an entity row, since two `state`
   actions on one row can't share a group
-  (`apply-delta-action.ts:317-324`):
+  (`apply-delta-action.ts:318-325`):
   - `fieldVerdicts` takes the row guard and the fields a call names,
     `state` sub-fields and top-level columns alike, and returns each
     field's verdict: free, or protected with its reason. It changes
@@ -316,7 +354,7 @@ and tools sit under `lib/pipeline/definitions/close-agent/`.
   the prose tasks and holds each turn of the chapter or part under its
   handle, through `promptProse`. Its variables join `VARIABLES`'
   `chapter` group.
-- `system-half-stability.test.ts:312` gets a named list of the close's
+- `system-half-stability.test.ts:346` gets a named list of the close's
   task templates, excluded from the `it.each`. The list starts empty, so
   the criteria on it and on the shared half's bytes sit in
   [Slice 5.5b](./05b-identity-threads.md), whose templates first fill
@@ -324,7 +362,7 @@ and tools sit under `lib/pipeline/definitions/close-agent/`.
 
 **`pnpm probe:close` (`scripts/close-probe.ts`).** Its precedent is
 `scripts/classifier-parse-probe.ts`, `pnpm probe:classifier`
-(`package.json:49`), with the same `SMOKE_LLM_*`, `PROBE_RUNS`,
+(`package.json:51`), with the same `SMOKE_LLM_*`, `PROBE_RUNS`,
 `PROBE_BRANCH_ID`, `PROBE_OUT` and `AVENTURAS_DB_PATH`.
 
 - Each run takes a fresh copy of the source database with `VACUUM INTO`,
@@ -455,9 +493,24 @@ vitest and the probe share. It never reaches a production slot.
 - The stand-in case passes all five arms with no `held-in-redo`, and the
   table takes a new case or arm in one entry
   (`lib/pipeline/__tests__/close-round-trip.test.ts`).
+- The metadata phase emits `createChapter` and every `stampEntryChapter`
+  as one `delta_group_emitted`, in C1's order, each stamp its own delta
+  anchored on the end entry, and the `close_report` update lands after
+  the group as a write of its own
+  (`lib/pipeline/definitions/chapter-close.test.ts`).
+- On a release Android build with the reader holding 50 rows, a close on
+  5.2's dataset branch (133 stamps over 23,907 tokens; the build lives
+  outside git, see 5.2's [Close measure](./02-first-chapter.md#close-measure)
+  and [Implementation notes](./02-first-chapter.md#implementation-notes))
+  has no JS-thread stall over 500 ms in its write burst, timed as the
+  longest gap between 16 ms ticks with the stop moment counted as a tick.
+  A miss takes the fallback the one-group item in
+  [Scope: in](#scope-in) names. The numbers go in this doc's
+  Implementation notes.
 - With the production slots, 5.2's dev-route close still ends with the
-  chapter row, its stamps and a report with `noToolCalls: true` (5.2's
-  suite passes unchanged).
+  chapter row, its stamps and a report with `noToolCalls: true`. 5.2's
+  suite passes, with its mid-burst cases re-pointed or dropped as the
+  one-group item in [Scope: in](#scope-in) says.
 - `pnpm probe:close` with `PROBE_STAND_IN=1` and `PROBE_OUT` set, with
   `SMOKE_LLM_URL` at `pnpm mock` scripted for one tool step, finishes
   with a file for every step holding its messages and a saved report,
@@ -478,7 +531,8 @@ vitest and the probe share. It never reaches a production slot.
   one later tools join.
 - No Storybook: nothing here renders. No E2E: Slice 5.10 owns the full
   close through the UI.
-- Manual: `pnpm probe:close` against the mock.
+- Manual: `pnpm probe:close` against the mock, and the close's write
+  burst on a release Android build against the hard bar.
 - **Warning sign, kept.** A real model first meets the runner in 5.5b.
   Here it's reviewed on a stand-in tool and the mock, so a tool
   contract that reads well can still fail at size. 5.8 and 5.9 wait for
@@ -540,6 +594,18 @@ vitest and the probe share. It never reaches a production slot.
   Starting answer: the script sets the same no-op before its first open.
   The alternative is an optional call at the site, which would also let
   the setup's no-op go.
+- **How does a refused action in the close's group fail the close?**
+  Today a refused `createChapter` or stamp goes through `delta_emitted`
+  and throws (`orchestrator.ts:202`), which fails the close and reverses
+  it. A group's plain refusal comes back as a value with nothing written
+  and leaves the run going, and a noop comes back per action while the
+  rest lands (this slice's first two criteria). So once the metadata
+  phase emits the create and stamps as one group, a refusal there fails
+  nothing by itself: the agent phase runs with no chapter row until the
+  report's `updateChapter` refuses, and a stamp that noops would leave a
+  row over a partial range, though neither handler returns a noop today.
+  Which outcomes fail the close, and with what error, is open. Surfaced
+  by Slice 5.2's review.
 
 ## Implementation notes
 

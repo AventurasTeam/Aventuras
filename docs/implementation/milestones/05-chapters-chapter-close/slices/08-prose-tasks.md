@@ -139,7 +139,7 @@ bounds it there, `condition` by `boundStateText` and `description` by
   parent, or the top-level mark for an unplaced place. A row that isn't a
   location is `rejected`. `condition` and placement are both `state`, and
   two `state` actions on one row refuse the group
-  (`lib/actions/delta/apply-delta-action.ts:317-324`), so both go through
+  (`lib/actions/delta/apply-delta-action.ts:318-325`), so both go through
   5.5a's helper into one `updateEntity`, with `description` in that
   action's patch, as 5.5b's tools do. The sub-fields come from
   `withPlacement`, which clears `unplaced` in the same write, and the
@@ -255,7 +255,7 @@ bounds it there, `condition` by `boundStateText` and `description` by
   `TEMPLATE_IDS` and `TEMPLATE_GROUPS`, on 5.5a's shared macro, with the
   task's instructions, starting rows and the writes so far in the user
   half. Each joins the named list at
-  `lib/prompts/bundled/system-half-stability.test.ts:312`. Canon's bars
+  `lib/prompts/bundled/system-half-stability.test.ts:346`. Canon's bars
   go in the prompt: 3a's establishes-not-mentions test, 3b's bar on a
   place's or item's `description`, a material change and never detail the
   state slots already carry, explicit spread for `common_knowledge`, hard
@@ -315,20 +315,20 @@ bounds it there, `condition` by `boundStateText` and `description` by
   With more, one call per part returns `{ summary }`, reading as Phase
   2's call does with the part as its range, and a last call takes the
   part summaries in order with the previous chapter's summary and the
-  active threads, and returns `chapterMetadataSchema`. Both are new
-  templates beside `lib/prompts/bundled/chapter-metadata.ts`, in the
-  `chapter` group, following the normal rule with everything per-call in
-  the user half, so neither takes an exemption. Each uses C2's bound. The
-  phase polls `abortSignal` between calls, and a failed call fails the
-  close, as Phase 2's does.
+  open threads (pending or active), and returns `chapterMetadataSchema`.
+  Both are new templates beside `lib/prompts/bundled/chapter-metadata.ts`,
+  in the `chapter` group, following the normal rule with everything
+  per-call in the user half, so neither takes an exemption. Each uses
+  C2's bound. The phase polls `abortSignal` between calls, and a failed
+  call fails the close, as Phase 2's does.
 - **Mock shapes.** `chapter-metadata-part` and `chapter-metadata-merge` in
   `scripts/mock-llm/shapes.ts`, with `EXAMPLES` in
   `e2e/harness/mock-llm.ts` and a lane in `scripts/mock-llm/state.ts` for
   each. The merge shares `chapterMetadataSchema` with 5.2's
   `chapter-metadata`, so they share a block, and
-  `scripts/mock-llm/routing.test.ts:256-268` requires shapes sharing a
+  `scripts/mock-llm/routing.test.ts:274-286` requires shapes sharing a
   block to carry distinct, non-empty markers. `storyShape`
-  (`scripts/mock-llm/shapes.ts:61`) takes no marker, so it gains one
+  (`scripts/mock-llm/shapes.ts:62`) takes no marker, so it gains one
   through `markerOf`, on 5.2's entry too, and both templates' user halves
   open with literal text for `markerOf` to slice. The loop at
   `routing.test.ts:94-105` routes every story shape from a prompt with no

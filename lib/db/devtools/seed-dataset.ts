@@ -206,8 +206,8 @@ function settings(overrides: Partial<StorySettings> = {}): StorySettings {
 // ---- Hero entries + chapters --------------------------------------------------
 
 const N_HERO = 72
-const CHAP1_END = 30
-const CHAP2_END = 58
+const CHAP1_END = 29
+const CHAP2_END = 57
 
 const REPLY_LINES = [
   'The lantern gutters as you press deeper into the Hollow, stone sweating cold beneath your palm.',
@@ -313,7 +313,7 @@ function forkEntries(): NewStoryEntry[] {
   return rows
 }
 
-const heroChapters: NewChapter[] = [
+const heroChapters: Omit<NewChapter, 'tokenCount'>[] = [
   {
     id: 'chap_hero_1',
     branchId: MAIN,
@@ -325,7 +325,6 @@ const heroChapters: NewChapter[] = [
     keywords: ['hollow', 'amulet', 'syndicate', 'mira'],
     startEntryId: entryId('hero', 1),
     endEntryId: entryId('hero', CHAP1_END),
-    tokenCount: 12400,
     closedAt: BASE + 6 * DAY,
     embeddingStale: 1,
     createdAt: BASE + 6 * DAY,
@@ -340,9 +339,8 @@ const heroChapters: NewChapter[] = [
       'The market fire pulls the Watch into the open while Vorne presses a pact Kael cannot afford to refuse.',
     theme: 'pressure and pacts',
     keywords: ['watch', 'fire', 'vorne', 'keep'],
-    startEntryId: entryId('hero', 31),
+    startEntryId: entryId('hero', CHAP1_END + 1),
     endEntryId: entryId('hero', CHAP2_END),
-    tokenCount: 13850,
     closedAt: BASE + 12 * DAY,
     embeddingStale: 1,
     createdAt: BASE + 12 * DAY,
@@ -1094,6 +1092,51 @@ const heroEntryAssets: NewEntryAsset[] = [
 // really have landed: the rollback window and CTRL-Z both read log positions.
 type SlottedDelta = Omit<NewDelta, 'logPosition'> & { after: number }
 
+// C1: a close's create, then one stamp per entry of its range in position order, all under its
+// action and anchored on the chapter's end entry.
+function seededClose(close: {
+  deltaId: string
+  actionId: string
+  chapterId: string
+  sequence: number
+  start: number
+  end: number
+  createdAt: number
+}): SlottedDelta[] {
+  const shared = {
+    branchId: MAIN,
+    entryId: entryId('hero', close.end),
+    actionId: close.actionId,
+    after: close.end + 1,
+    source: 'chapter_close' as const,
+    encodingVersion: 1,
+    createdAt: close.createdAt,
+  }
+  const stamps: SlottedDelta[] = []
+  for (let i = close.start; i <= close.end; i++) {
+    if (heroKind(i) === 'system') continue
+    stamps.push({
+      ...shared,
+      id: `delta_hero_stamp_${close.sequence}_${i}`,
+      targetTable: 'story_entries',
+      targetId: entryId('hero', i),
+      op: 'update',
+      undoPayload: { chapterId: null },
+    })
+  }
+  return [
+    {
+      ...shared,
+      id: close.deltaId,
+      targetTable: 'chapters',
+      targetId: close.chapterId,
+      op: 'create',
+      undoPayload: null,
+    },
+    ...stamps,
+  ]
+}
+
 const heroDeltas: SlottedDelta[] = [
   {
     id: 'delta_hero_1',
@@ -1185,34 +1228,24 @@ const heroDeltas: SlottedDelta[] = [
     createdAt: BASE + 25 * MIN,
   },
   // A close commits with the head at or past its chapter's end entry; the seed puts it one past.
-  {
-    id: 'delta_hero_3',
-    branchId: MAIN,
-    entryId: null,
+  ...seededClose({
+    deltaId: 'delta_hero_3',
     actionId: 'act_chapter_1',
-    after: CHAP1_END + 1,
-    source: 'chapter_close',
-    targetTable: 'chapters',
-    targetId: 'chap_hero_1',
-    op: 'create',
-    undoPayload: null,
-    encodingVersion: 1,
+    chapterId: 'chap_hero_1',
+    sequence: 1,
+    start: 1,
+    end: CHAP1_END,
     createdAt: BASE + 6 * DAY,
-  },
-  {
-    id: 'delta_hero_9',
-    branchId: MAIN,
-    entryId: null,
+  }),
+  ...seededClose({
+    deltaId: 'delta_hero_9',
     actionId: 'act_chapter_2',
-    after: CHAP2_END + 1,
-    source: 'chapter_close',
-    targetTable: 'chapters',
-    targetId: 'chap_hero_2',
-    op: 'create',
-    undoPayload: null,
-    encodingVersion: 1,
+    chapterId: 'chap_hero_2',
+    sequence: 2,
+    start: CHAP1_END + 1,
+    end: CHAP2_END,
     createdAt: BASE + 12 * DAY,
-  },
+  }),
   // Flagged row's create (periodic classifier): slotted past every entry create, so it lands
   // after the last reply's boundary and renders `fresh` at boot.
   {
@@ -1757,17 +1790,15 @@ const appSettingsRow: NewAppSettings = {
       modelRef: { providerId: 'prov_local', modelId: 'seed/narrative' },
     }),
   ],
-  // 'suggestion' and 'wizard-assist' reuse the classifier profile rather than
-  // seeding dedicated ones: resolveModel keys purely on assignments[target] ->
-  // profile id (no kind/target coupling), and no fixture scenario needs a
-  // model/temperature for either distinct from the classifier's. Every agent
-  // target the app actually calls is listed — an unassigned one resolves to
-  // 'no-profile-assigned' and never reaches the provider at all.
+  // 'suggestion', 'wizard-assist' and 'lore-mgmt' reuse the classifier profile: no fixture needs a
+  // distinct model/temperature for any of them. List every agent target the app calls — an
+  // unassigned one resolves to 'no-profile-assigned' and never reaches the provider.
   assignments: {
     narrative: 'prof_narrative',
     classifier: 'prof_classifier',
     suggestion: 'prof_classifier',
     'wizard-assist': 'prof_classifier',
+    'lore-mgmt': 'prof_classifier',
   },
   defaultProviderId: 'prov_local',
   embeddingModelId: 'Xenova/all-MiniLM-L6-v2',
@@ -1819,6 +1850,13 @@ export function buildSeedSteps(): SeedStep[] {
     withContentTokens,
   )
   const deltaRows = interleaveHeroDeltas(entryCreateDeltas(allEntries))
+  // Summed here, after withContentTokens: at import, a count would build the encoder on every launch.
+  const chapterRows: NewChapter[] = heroChapters.map((chapter) => ({
+    ...chapter,
+    tokenCount: allEntries
+      .filter((e) => e.branchId === chapter.branchId && e.chapterId === chapter.id)
+      .reduce((sum, e) => sum + (e.contentTokens ?? 0), 0),
+  }))
 
   const heroStory: NewStory = {
     id: HERO,
@@ -1881,7 +1919,7 @@ export function buildSeedSteps(): SeedStep[] {
       })),
     ),
     step('story_entries', storyEntries, allEntries),
-    step('chapters', chapters, heroChapters),
+    step('chapters', chapters, chapterRows),
     step('entities', entities, [...heroEntities, ...filler.entities]),
     step('character_relationships', characterRelationships, heroRelationships),
     step('lore', lore, heroLore),

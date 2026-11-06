@@ -17,7 +17,12 @@ import {
   type RunState,
 } from '@/lib/stores'
 
-import { METADATA_REPLY, openCloseFixture, type CloseFixture } from './__tests__/close-fixture'
+import {
+  METADATA_REPLY,
+  metadataReplyResult,
+  openCloseFixture,
+  type CloseFixture,
+} from './__tests__/close-fixture'
 import { CHAPTER_CLOSE_RESOLVES, ensureChapterClosePipelineRegistered } from './chapter-close'
 import { closeAgentPhase } from './chapter-close-agent'
 import { closeBoundaryPhase } from './chapter-close-boundary'
@@ -43,11 +48,7 @@ beforeEach(async () => {
   __resetRegistry()
   __resetBus()
   ensureChapterClosePipelineRegistered()
-  vi.mocked(generateStructured).mockResolvedValue({
-    status: 'ok',
-    value: METADATA_REPLY,
-    recoverable: [],
-  })
+  vi.mocked(generateStructured).mockResolvedValue(metadataReplyResult())
   f = await openCloseFixture()
 })
 

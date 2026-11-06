@@ -339,7 +339,9 @@ them.
 
 - All entries in the closed range (the chapter's content).
 - The previous chapter's summary, if any, for narrative continuity.
-- Active thread titles + statuses.
+- The open threads: titles and statuses of threads that are pending or
+  active. The status tells the model which one the story follows and
+  which it knows of but doesn't pursue yet.
 - The story's mode, since the user's turns are read by it
   ([`ui/principles.md → Mode`](../ui/principles.md#1-mode--users-relationship-to-the-story)).
 

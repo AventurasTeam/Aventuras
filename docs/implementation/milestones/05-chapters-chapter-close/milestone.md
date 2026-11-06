@@ -122,8 +122,8 @@ Slice 5.5b answers whether the agent holds, not whether it is good.
 - [Slice 5.4](./slices/04-tool-step.md) — tool step: the `lib/ai` step
   call, retry shape, window count, tool steps in both mocks and the stub
 - [Slice 5.5a](./slices/05a-task-runner.md) — task runner: verdict seam,
-  driver, ledger, reads, ids, later-turn reader, `pnpm probe:close` (C9,
-  C11, C12)
+  driver, ledger, reads, ids, later-turn reader, `pnpm probe:close` (C1,
+  C9, C11, C12)
 - [Slice 5.5b](./slices/05b-identity-threads.md) — Identity and Threads
   at size: their tools and tasks, measured on the real chapter
 - [Slice 5.6](./slices/06-close-owed.md) — a close owed: chain, phase 0,
@@ -192,8 +192,9 @@ day-one: 5.1   5.2   5.3   5.4          (5.2 lands after 5.1)
 
 ### C1 — A close's delta shape
 
-Provider: [Slice 5.2](./slices/02-first-chapter.md). Writers: 5.5b, 5.8,
-5.9. Consumers: 5.11, 5.12, and the seed.
+Provider: [Slice 5.2](./slices/02-first-chapter.md), and
+[Slice 5.5a](./slices/05a-task-runner.md) for the move to one group.
+Writers: 5.5b, 5.8, 5.9. Consumers: 5.11, 5.12, and the seed.
 
 Every delta of a close carries the run's `actionId`,
 `source = 'chapter_close'` (a member of `DeltaSource` at
@@ -208,21 +209,24 @@ anchor reverses positionally, which is the seed's bug.
 - The `chapters` create comes first, then the stamps, then agent writes,
   then the `close_report` update.
 - A stamp is a new action kind, `stampEntryChapter`, registered beside
-  `updateStoryEntryMetadata` (`lib/actions/story-entries/register.ts:193-199`)
+  `updateStoryEntryMetadata` (`lib/actions/story-entries/register.ts:234-241`)
   with a `LOCK_KEY` entry (`lib/actions/delta/apply-delta-action.ts:51`).
   One delta per entry, payload `{ chapterId: <prior> }`, since a delta
   reverses one row (`reverse-replay.ts`, `undoTargetOf`).
 - No stamp carries a `content` key: `isContentEditDelta` keys on it
-  (`lib/actions/story-entries/classifier-facts.ts:58-67`).
+  (`lib/actions/story-entries/classifier-facts.ts:56-65`).
 - `story_entries.chapter_id` stays FK-less
-  (`lib/db/story-entries/story-entries.table.ts:19`), because redo runs
+  (`lib/db/story-entries/story-entries.table.ts:20`), because redo runs
   newest-first and stamps land before their chapter row.
-- Stamps go through the shipped `delta_emitted` path, a burst under one
-  `actionId`. The metadata phase checks `abortSignal` between stamps,
-  since the orchestrator reads an abort only between phases and each
-  stamp is its own transaction and store patch. The group seam is 5.5a's,
-  so a move to one group, if measurement asks for it, comes after that
-  lands.
+- Slice 5.2 sends the stamps through the shipped `delta_emitted` path, a
+  burst under one `actionId`, and its metadata phase checks
+  `abortSignal` between stamps, since the orchestrator reads an abort
+  only between phases and each stamp is its own transaction and store
+  patch. The move to one group is decided (developer, 2026-11-05) and
+  lands in [Slice 5.5a](./slices/05a-task-runner.md) once
+  `delta_group_emitted` does: the create and every stamp as one group,
+  each stamp still its own delta anchored on the end entry, and the
+  `close_report` update a write of its own after it.
 
 ### C2 — Pipeline shape
 
@@ -288,7 +292,7 @@ M7.3.
 Provider: [Slice 5.2](./slices/02-first-chapter.md). Consumers: 5.5a,
 5.5b, 5.8, 5.9, 5.10.
 
-A new `chapter` group in `CONTEXT_GROUPS` (`lib/prompts/types.ts:4-9`)
+A new `chapter` group in `CONTEXT_GROUPS` (`lib/prompts/types.ts:4-10`)
 serves every close template, replacing canon's unbuilt `lore` group and
 its listing of chapter templates under `generationContext`, whose
 budget-governed `entries` can't hold a whole chapter.
@@ -299,7 +303,7 @@ Prose tasks hold the chapter or part in the system half; the design
 measured 6,088 of 6,181 tokens reused across different tool lists that
 way, and 0 of 6,176 with it in the user turn. Their system half is
 stable across a part's tasks, not across the story.
-`lib/prompts/bundled/system-half-stability.test.ts:312` gets a named
+`lib/prompts/bundled/system-half-stability.test.ts:346` gets a named
 exemption for the close's task templates only, added by 5.5a, and it
 grows with each task template in 5.5b and 5.8. Happenings and Awareness
 don't read the prose. Boundary and metadata follow the normal rule, with
@@ -312,8 +316,8 @@ writer, store projection). Writers: 5.5a's ledger, used by 5.5b, 5.8 and
 5.9. Consumers: 5.7, 5.11.
 
 A nullable JSON column on `chapters`
-(`lib/db/story-entries/story-entries.table.ts:31-56`), added to
-`fullRow` and `UPDATABLE` (`lib/actions/chapters/register.ts:37-46`),
+(`lib/db/story-entries/story-entries.table.ts:32-58`), added to
+`fullRow` and `UPDATABLE` (`lib/actions/chapters/register.ts:15,47`),
 with its Zod schema in `lib/db/story-entries/close-report.ts`. It may
 grow; a field's meaning doesn't change.
 
@@ -380,12 +384,12 @@ type CloseReportCall = {
   out of the review.** Normalization is code with no `why` or `turns`,
   and its keys are a spelling cleanup.
 - **The report stays out of `chaptersStore`.** Story open hydrates chapter
-  rows whole (`lib/actions/stories/operational.ts:167`), and the create
+  rows whole (`lib/actions/stories/operational.ts:168`), and the create
   handler, the update handler and redo all patch the row
-  (`lib/actions/chapters/register.ts:88,146`,
-  `lib/actions/delta/redo.ts:325-330`), while the store casts past its
-  row type (`lib/stores/factory/working-set-store.ts:28,33`). So one
-  projection sits at the `patcher` (`register.ts:182`), which all three
+  (`lib/actions/chapters/register.ts:71,132`,
+  `lib/actions/delta/redo.ts:329`), while the store casts past its
+  row type (`lib/stores/factory/working-set-store.ts:31,36`). So one
+  projection sits at the `patcher` (`register.ts:168`), which all three
   share. On create it drops `closeReport` and derives `hasCloseReport`.
   On update it does so only when `closeReport` is a key of `columns`,
   since an update patch carries only what was written: a title save must
@@ -403,7 +407,7 @@ Provider: [Slice 5.1](./slices/01-token-measure.md). Consumers: 5.2, 5.3,
 - **`story_entries.content_tokens`,** a nullable integer. It counts
   stored `content`, which is the source language, so a translated story
   needs no separate rule. Written at the create handler
-  (`lib/actions/story-entries/register.ts:61-88`), at `create-story`
+  (`lib/actions/story-entries/register.ts:65-92`), at `create-story`
   (`lib/actions/stories/create-story.ts:154-168`), and on a content edit
   (`lib/actions/story-entries/operational.ts:133-136`), with the old
   value in the edit's undo payload. No backfill: dev DBs reseed, and a
@@ -411,7 +415,7 @@ Provider: [Slice 5.1](./slices/01-token-measure.md). Consumers: 5.2, 5.3,
   read real numbers.
 - **`countTokens` moves to a leaf `lib/tokens` module,** importing only
   `js-tiktoken`, with `TOKENIZER_IDENTITY`, and `lib/retrieval` re-exports
-  both. The seed can't import `@/lib/retrieval`: on native, `lib/db/index.ts:123`
+  both. The seed can't import `@/lib/retrieval`: on native, `lib/db/index.ts:125`
   reaches `reseed.native.ts` and so the dataset, which would close a value
   cycle through `lib/retrieval`'s imports of `@/lib/db`, against a
   half-initialised module, failing only on Android at boot. `lib/actions`
@@ -447,7 +451,7 @@ Provider: [Slice 5.1](./slices/01-token-measure.md). Consumers: 5.2, 5.3,
   route. Tone comes from `chapterProgressTone` in `lib/chapters`,
   returning `'success'`, `'warning'` or `'danger'` at canon's 80 and 90.
 - **`lib/chapters` takes no value import of `@/lib/db`.** The seed sits
-  below `lib/db/index.ts:123`, and `'use dom'` reader code can't reach the
+  below `lib/db/index.ts:125`, and `'use dom'` reader code can't reach the
   DB. It holds pure rules and constants, and 5.1's boundaries rule holds
   it there beside `lib/tokens`, so no later slice can reopen this past a
   one-time check. Stores, actions, retrieval and the hooks bring `lib/db`
@@ -472,7 +476,7 @@ Happenings, five prose tasks per part, and Awareness, so a one-part
 chapter is `of 7`. It's fixed when the agent phase starts, and a task
 with nothing to start from still counts. A bus event isn't replayed, so
 the latest progress lives on `RunState`
-(`lib/stores/generation/generation.ts:7-32`), where a banner mounted
+(`lib/stores/generation/generation.ts:7-31`), where a banner mounted
 mid-close reads it. Emitted events carry no `runId`, and the store holds
 a copy of the run, so `handleEvent` (`orchestrator.ts:207-221`) calls a
 new `generationStore` mutator by `run.runId`, added to the restricted
@@ -604,7 +608,7 @@ under Changes and its skipped fields under Not applied.
 
 Shipped shape this replaces: `applyDeltaActionGroup` returns only
 `ok` or `rejected`, and a noop vanishes inside a group
-(`lib/actions/delta/apply-delta-action.ts:224-226,299,333-347`).
+(`lib/actions/delta/apply-delta-action.ts:225-227,300,334-348`).
 `consumePhase` calls `gen.next()` with no argument
 (`orchestrator.ts:224-234`) and a rejection throws (`:202`), so
 `delta_group_emitted` and a per-action outcome back through the `yield`
@@ -690,7 +694,7 @@ chapter would strand its entries before a closed one. They use
 `keepRedoExact: false`, through `commitNewAction`
 (`lib/actions/story-entries/operational.ts:46-58`), exported, which clears
 redo even when the store sync fails after the commit. Neither is undoable. `deleteChapter`
-(`lib/actions/chapters/register.ts:150`) has no production caller and
+(`lib/actions/chapters/register.ts:136`) has no production caller and
 dangles stamps; 5.12 removes it.
 
 **A later undo can bring a deleted value back.** A later write's own
@@ -828,11 +832,17 @@ on a chapter no close wrote, so it ships hidden.
   into turns and run through both the per-turn classifier and the
   periodic pass, since Identity starts from the entities a chapter
   touches and those need scene data. Which dataset, and whether it can
-  sit in the repo, is 5.2's planning question.
+  sit in the repo, is 5.2's planning question. Answered: _Treasure
+  Island_, its text committed and the built database kept outside git
+  ([5.2's Implementation notes](./slices/02-first-chapter.md#implementation-notes)).
 - **Unmeasured costs.** A close's forward stamp burst and its reversal
   over about 132 stamps (Slice 5.2), a full group (5.10), whole-prompt counting per step
   (5.5b), and load-until-present on Android (5.3). Each is measured where
   named. A bad number reopens that slice's approach, not the layout.
+  5.2's are measured
+  ([5.2's Close measure](./slices/02-first-chapter.md#close-measure)):
+  the Android burst stalls the JS thread about 1.1 s, a miss 5.5a's move
+  to one group carries as a hard bar.
 - **Report size.** A guess until a real close runs. 5.5b's run gives the
   first number, which sets `CLOSE_REPORT_VALUE_BOUND`.
 - **Unaudited.** The contract audit ran two rechecks and stopped, as

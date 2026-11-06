@@ -87,7 +87,7 @@ canon leaves open.
   [Phase 0](../../../../memory/chapter-close.md#phase-0--catch-up-passes)
   forbids.
 - The `deferred` guard moves off `nextMemoryRun` onto per-turn's
-  `chainsTo` (`per-turn.ts:579`), the one chain its reason applies to: a
+  `chainsTo` (`per-turn.ts:582`), the one chain its reason applies to: a
   regenerated reply doesn't bring interrupted work straight back.
 - The pass declares `chainsTo`: `nextMemoryRun` while a close is owed,
   nothing otherwise, and nothing when it was started alone.
@@ -95,7 +95,7 @@ canon leaves open.
   alone, with `inputs: { alone: true }` read off `run.inputs`.
 
 A chain can't spin. A pass over a non-empty window always advances the
-watermark (`periodic-classifier.ts:462`), and `unprocessedEntryCount`
+watermark (`periodic-classifier.ts:404`), and `unprocessedEntryCount`
 counts only rows a window holds, so no progress guard is needed.
 
 **The end entry.**
@@ -258,7 +258,7 @@ threshold leaves nothing stale.
   and patches `entriesStore`, where `writeSystemEntry` leaves the store
   to its route's `reload`. A listener mounted beside `useMemoryRunToasts`
   calls it, since `lib/pipeline` can't import `lib/actions`
-  (`lib/boot/bootstrap.ts:65`). 5.10's click pre-flight calls it too.
+  (`lib/boot/bootstrap.ts:66`). 5.10's click pre-flight calls it too.
 
 **Docs,** in the slice's PR.
 
@@ -270,7 +270,7 @@ threshold leaves nothing stale.
   `generation-status-pill.md`'s pre-flight sentence; a **Chapter closed**
   on-Retry row in `reader-composer.md`; and `principles.md`'s exceptions
   to head reversals passing through, which name only a Retry's pass
-  though the mark at `generation.ts:58` also refuses them during a Send's
+  though the mark at `generation.ts:62` also refuses them during a Send's
   owed work, minutes long for a close.
 
 ## Scope: out
@@ -536,6 +536,22 @@ confirm at slice planning. Canon follows the answer.
   `pendingClose.has(branchId)`, a stray write from a component would
   make the next Send start a close. Suggested: list both, exempting
   `lib/actions/chapters/**` and the other writers this slice adds.
+
+- **Does the manual start re-check held and a turn in flight in its
+  tail?** [Slice 5.2](./02-first-chapter.md)'s `startManualClose`
+  (`lib/actions/chapters/start-manual-close.ts`) reads held and the
+  unprocessed count with awaits, then runs its sync tail: the swap and
+  busy checks, the record and the start. This slice's Manual start
+  ([Scope: in](#scope-in)) keeps that order and drops the unprocessed
+  refusal, which today is what catches a pass that turned held between
+  the read and the tail: a held pass leaves its window unprocessed. Also,
+  a start while a turn is in flight is refused as `unprocessed-entries`,
+  not `story-busy`, because the unprocessed check runs first and the
+  turn's `user_action` commits before its run. Without the refusal, the
+  tail's busy check would answer `story-busy`.
+  [Slice 5.10](./10-two-starts.md)'s toast names the code, though its
+  button is disabled while `isUserEditBlocked` holds. Surfaced by Slice
+  5.2's review.
 
 ## Implementation notes
 

@@ -183,7 +183,7 @@ safe, read and not run: per-turn stackable keys are bounded at parse
 - **`update_character` and `update_faction`** refuse a row of the wrong
   kind as `rejected`. Neither reaches `setFactionStanding`: a second
   `state` write on one row refuses the group
-  (`lib/actions/delta/apply-delta-action.ts:317-324`).
+  (`lib/actions/delta/apply-delta-action.ts:318-325`).
 - **`update_thread`** sends a status only through `setThreadStatus`,
   with `proseEntryId` and `resolvedAtEntryId` both the latest cited turn,
   because `updateThread` keeps the old ref on a machine status change
@@ -240,7 +240,7 @@ safe, read and not run: per-turn stackable keys are bounded at parse
   Identity's carries 3b's operations and "don't churn stable identity",
   and "replace, don't append" at a cap. Threads' carries 3f's bullet and
   what an active thread costs. Both ids join the named list at
-  `lib/prompts/bundled/system-half-stability.test.ts:312`, which 5.5a
+  `lib/prompts/bundled/system-half-stability.test.ts:346`, which 5.5a
   ships empty (C3). Two checks come here from 5.5a, since the list first
   holds a template in this slice: a function over a list and a group map
   refuses a template outside the `chapter` group, and the shared half

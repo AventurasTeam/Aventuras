@@ -295,8 +295,12 @@ and the catalog bullet below drops out.
   `ChapterInProgressCard`'s progress line. See
   [Open questions](#open-questions).
 - `app/dev/chapter-close.tsx` and its `app/dev/index.tsx` line go, as
-  [Slice 5.2](./02-first-chapter.md) hands over, and
-  `e2e/tests/first-chapter.spec.ts` moves onto a real start.
+  [Slice 5.2](./02-first-chapter.md) hands over, with what came with
+  them: `useColdOpenStory`'s `'dev_chapter_close'` surface and its test
+  case, `e2e/locators/dev-chapter-close.ts`, and the two
+  `dev_chapter_close_*` kinds in `docs/observability.md`; an unused union
+  member draws no compiler error. `e2e/tests/first-chapter.spec.ts` moves
+  onto a real start.
 
 **The proofs.**
 

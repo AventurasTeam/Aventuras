@@ -282,10 +282,11 @@ convention, and the expectation that subsystems route through
   `history_load_failed` / `history_load_more_failed`
   (`components/history/use-history-chunks.ts` — a chunk load or a
   load-more rejected; a failed load-more keeps the rows already
-  shown and toasts), `world_story_load_failed` / `plot_story_load_failed` (a cold
-  mount's `loadOpenStory` rejection, `hooks/use-cold-open-story.ts`),
-  `world_story_not_found` / `plot_story_not_found` (warn: the same
-  cold mount on a branch with no story, which leaves for the story
+  shown and toasts), `world_story_load_failed` / `plot_story_load_failed` /
+  `dev_chapter_close_story_load_failed` (a cold mount's `loadOpenStory`
+  rejection, `hooks/use-cold-open-story.ts`), `world_story_not_found` /
+  `plot_story_not_found` / `dev_chapter_close_story_not_found` (warn: the
+  same cold mount on a branch with no story, which leaves for the story
   list), `row_save_failed` (`hooks/use-row-save-session.ts` — a Save
   whose validation or commit threw; the user sees only the generic
   failure), `row_save_validate_failed` (the whole-draft `trigger()`

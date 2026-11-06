@@ -1,11 +1,11 @@
 import { describe, expect, it } from 'vitest'
 
-import type { StoryEntry, Thread, ThreadStatus } from '@/lib/db'
+import type { Thread, ThreadStatus } from '@/lib/db'
 import { renderTemplate, TEMPLATE_IDS, templateReads, VARIABLES } from '@/lib/prompts'
 
-import { buildChapterContext } from './chapter-context'
+import { buildChapterContext, type CloseRangeEntry } from './chapter-context'
 
-function entry(position: number, kind: StoryEntry['kind'], content: string): StoryEntry {
+function entry(position: number, kind: CloseRangeEntry['kind'], content: string): CloseRangeEntry {
   return {
     id: `entry_close_${position}`,
     branchId: 'b1',
@@ -153,6 +153,21 @@ describe('buildChapterContext', () => {
     expect(system).not.toContain(SUMMARY)
     expect(system).not.toContain('Find the heir')
     expect(system).toContain('<user_turn>')
+  })
+
+  it('tells the model a pending thread is known but not yet pursued', () => {
+    const { system } = renderTemplate(
+      TEMPLATE_IDS.chapterMetadata,
+      buildChapterContext({
+        entries: ENTRIES,
+        previousChapterSummary: null,
+        threads: THREADS,
+        mode: 'adventure',
+      }),
+    )
+    expect(system).toContain('an active thread is one the story is following')
+    expect(system).toContain('a pending one is known to the story but not yet pursued')
+    expect(system).toContain('Name a thread in the summary only when this chapter moves it')
   })
 
   it('leaves out the previous chapter and the threads when there are none', () => {

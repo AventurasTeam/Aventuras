@@ -489,6 +489,18 @@ stays covered. Ids, titles and positions don't move (C8).
   doesn't. Default: the host chooses, through a prop on the extension
   above.
 
+- **How does a rollback count a review edit it sweeps?**
+  [Slice 5.2](./02-first-chapter.md) made `rollbackCountsOf` count a
+  `chapters` delta only as a create (developer decision), so a close's
+  `close_report` update no longer reads as world state. A review edit to
+  a chapter's title, summary or theme, anchored on no entry, on a chapter
+  the rollback spares is still reverted by its log position, and the
+  confirm modal reports nothing for it.
+  [Slice 5.7](./07-chapter-timeline.md#open-questions) asks the same for
+  the Timeline's edits; one answer should serve both.
+  [Slice 5.12](./12-chapter-delete-rollback.md#open-questions) reworks
+  the same function and asks which tables count as world state.
+
 ## Implementation notes
 
 _Populated at finish: notable deviations from the plan and resolved developer decisions._

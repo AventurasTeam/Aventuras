@@ -25,6 +25,15 @@ export const storySettings = {
   // Classifier and Retrieval-budgets groups — the two are nested, not siblings.
   memoryKnobsPanel: (page: Page): Locator => page.getByTestId('memory-knobs-panel'),
 
+  // The Classifier section's NumberInput (memory-knob-sections.tsx), named by its aria-label. Exact:
+  // other knob labels start with `Classifier` too.
+  classifierCadence: (page: Page): Locator =>
+    page.getByRole('textbox', { name: t('storySettings:memory.knobs.cadence'), exact: true }),
+
+  // The Chapter close section's SwitchRow (ChapterCloseSection), whose aria-label is its label.
+  chapterAutoClose: (page: Page): Locator =>
+    page.getByRole('switch', { name: t('storySettings:memory.knobs.autoClose') }),
+
   // A radio Select (memory-knob-sections.tsx): the row carries the press handler, not its label
   // Text, so this queries the radio. Its name is the label plus the mode hint and matches as a
   // substring — the sibling Boost row's hint carries no "Inject", which keeps this to one match.

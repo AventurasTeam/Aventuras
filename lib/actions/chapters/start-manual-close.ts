@@ -28,7 +28,12 @@ export const MANUAL_CLOSE_REFUSAL = {
   busy: 'story-busy',
 } as const
 
-const refused = (blockedBy: string): RejectedStart => ({ outcome: 'rejected', blockedBy })
+export type ManualCloseRefusal = (typeof MANUAL_CLOSE_REFUSAL)[keyof typeof MANUAL_CLOSE_REFUSAL]
+
+const refused = (blockedBy: ManualCloseRefusal | typeof CLASSIFIER_HELD): RejectedStart => ({
+  outcome: 'rejected',
+  blockedBy,
+})
 
 /**
  * chapter-close.md → Manual user-triggered close, ending on `endEntryId`. C14: it starts only where

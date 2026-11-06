@@ -1,0 +1,239 @@
+import { createHash } from 'node:crypto'
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
+import { fileURLToPath } from 'node:url'
+
+import { afterEach, beforeAll, beforeEach, describe, expect, it } from 'vitest'
+
+import { countTokens } from '@/lib/tokens'
+
+import {
+  ACTION_MAX_TOKENS,
+  actionProblem,
+  cleanedAction,
+  DATASET_TOKEN_BAND,
+  datasetTokens,
+  loadShapedDataset,
+  paragraphsOf,
+  parseActions,
+  REPLY_TARGET_TOKENS,
+  saveActions,
+  type ShapedDataset,
+  shapeDataset,
+  splitReplies,
+} from './shape'
+
+const TEXT = readFileSync(
+  fileURLToPath(new URL('./treasure-island.txt', import.meta.url).href),
+  'utf8',
+)
+
+// Prose, not a repeated character: these reach the real counter.
+const harbour = (word: string): string =>
+  `Paragraph ${word} keeps the harbour quiet while the gulls wheel over the bare mud.`
+
+describe('paragraphsOf', () => {
+  it('joins hard-wrapped lines and splits on blank lines, ones holding spaces included', () => {
+    expect(
+      paragraphsOf('The tide went out\n  and did not come back.\n   \n\nThe gulls stayed.\n'),
+    ).toEqual(['The tide went out and did not come back.', 'The gulls stayed.'])
+  })
+
+  it('splits on a spaces-only line standing alone', () => {
+    expect(paragraphsOf('A\n  \nB')).toEqual(['A', 'B'])
+  })
+})
+
+describe('splitReplies', () => {
+  it('closes a chunk when stopping lands nearer the target than taking the next paragraph', () => {
+    const [one, two, three, four, five] = ['one', 'two', 'three', 'four', 'five'].map(harbour)
+    const target = countTokens(one!) + countTokens(two!)
+    const { opening, replies } = splitReplies([one, two, three, four, five].join('\n\n'), target)
+    expect(opening).toBe(`${one}\n\n${two}`)
+    expect(replies).toEqual([`${three}\n\n${four}`, five])
+  })
+
+  it('keeps a paragraph longer than the target whole, in a chunk of its own', () => {
+    const short = harbour('short')
+    const long = ['a', 'b', 'c', 'd', 'e', 'f'].map(harbour).join(' ')
+    const after = harbour('after')
+    const { opening, replies } = splitReplies([short, long, after].join('\n\n'), countTokens(short))
+    expect(opening).toBe(short)
+    expect(replies).toEqual([long, after])
+  })
+
+  it('keeps a first paragraph longer than the target whole as the opening', () => {
+    const long = ['a', 'b', 'c', 'd', 'e', 'f'].map(harbour).join(' ')
+    const after = harbour('after')
+    const { opening, replies } = splitReplies([long, after].join('\n\n'), countTokens(harbour('a')))
+    expect(opening).toBe(long)
+    expect(replies).toEqual([after])
+  })
+
+  it('refuses a text with nothing after the opening', () => {
+    expect(() => splitReplies(harbour('alone'), 1_000)).toThrow(/no reply after the opening/)
+  })
+})
+
+describe('actionProblem', () => {
+  it('passes one first-person line within the cap', () => {
+    expect(actionProblem('I bar the door and listen at the shutter.')).toBeNull()
+    expect(actionProblem('“Who are you?” I ask.')).toBeNull()
+  })
+
+  it('names the broken rule', () => {
+    expect(actionProblem('')).toMatch(/empty/)
+    expect(actionProblem(' I wait.')).toMatch(/space around it/)
+    expect(actionProblem('I wait.\nI listen.')).toMatch(/more than one line/)
+    expect(actionProblem('The captain drinks his rum.')).toMatch(/first person/)
+    const long = `I ${'walk down the long road to the cove and back again, '.repeat(6)}`.trim()
+    expect(countTokens(long)).toBeGreaterThan(ACTION_MAX_TOKENS)
+    expect(actionProblem(long)).toMatch(new RegExp(`over ${ACTION_MAX_TOKENS}$`))
+  })
+})
+
+describe('cleanedAction', () => {
+  it('keeps what follows a reasoning model’s last </think>', () => {
+    expect(cleanedAction('<think>Jim hides.</think>\n\nI hide in the barrel.')).toBe(
+      'I hide in the barrel.',
+    )
+    expect(cleanedAction('<think>Not </think> yet.</think> I wait.')).toBe('I wait.')
+  })
+
+  it('strips a leading action, turn, player or Jim label, in any case', () => {
+    expect(cleanedAction('Action: I wait.')).toBe('I wait.')
+    expect(cleanedAction('TURN : I wait.')).toBe('I wait.')
+    expect(cleanedAction('player:I wait.')).toBe('I wait.')
+    expect(cleanedAction('<think>…</think>\n Jim: I wait.')).toBe('I wait.')
+  })
+
+  it('keeps a label word inside the turn', () => {
+    expect(cleanedAction('I say to Jim: “Wait.”')).toBe('I say to Jim: “Wait.”')
+  })
+})
+
+describe('parseActions', () => {
+  it('returns saved actions that keep the form rule', () => {
+    expect(parseActions(JSON.stringify(['I wait.', 'I bar the door.']))).toEqual([
+      'I wait.',
+      'I bar the door.',
+    ])
+  })
+
+  it('refuses a saved action that breaks it, naming its number and the rule', () => {
+    expect(() => parseActions(JSON.stringify(['I wait.', 'I wait.\nI listen.']))).toThrow(
+      /#2: more than one line/,
+    )
+  })
+})
+
+describe('saveActions', () => {
+  let dir: string
+  beforeEach(() => {
+    dir = mkdtempSync(join(tmpdir(), 'dataset-actions-'))
+  })
+  afterEach(() => {
+    rmSync(dir, { recursive: true, force: true })
+  })
+
+  it('writes actions parseActions reads back', () => {
+    const path = join(dir, 'actions.json')
+    saveActions(path, ['I wait.', 'I bar the door.'])
+    expect(parseActions(readFileSync(path, 'utf8'))).toEqual(['I wait.', 'I bar the door.'])
+  })
+
+  it('keeps the saved checkpoint when the write fails', () => {
+    const path = join(dir, 'actions.json')
+    writeFileSync(path, '["I wait."]\n')
+    mkdirSync(`${path}.tmp`)
+    expect(() => saveActions(path, ['I wait.', 'I bar the door.'])).toThrow()
+    expect(readFileSync(path, 'utf8')).toBe('["I wait."]\n')
+  })
+})
+
+describe('the Treasure Island text', () => {
+  it('starts at chapter I and holds no Gutenberg matter, part line or chapter heading', () => {
+    expect(TEXT.startsWith('Squire Trelawney, Dr. Livesey')).toBe(true)
+    expect(TEXT).not.toMatch(/Gutenberg|\*\*\*/i)
+    expect(TEXT).not.toMatch(/^(?:PART |[IVX]+$)/m)
+  })
+
+  it('cuts into an opening and about 65 replies, every paragraph once and in order', () => {
+    const { opening, replies } = splitReplies(TEXT, REPLY_TARGET_TOKENS)
+    expect([opening, ...replies].flatMap((chunk) => chunk.split('\n\n'))).toEqual(
+      paragraphsOf(TEXT),
+    )
+    expect(replies.length).toBeGreaterThanOrEqual(60)
+    expect(replies.length).toBeLessThanOrEqual(70)
+  })
+})
+
+describe('shapeDataset', () => {
+  let replies: string[]
+  let actions: string[]
+  beforeAll(() => {
+    replies = splitReplies(TEXT, REPLY_TARGET_TOKENS).replies
+    actions = replies.map((_, i) => `I take turn ${i + 1}.`)
+  })
+
+  it('pairs each action with its reply, in order', () => {
+    const dataset = shapeDataset(TEXT, actions)
+    expect(dataset.turns.map((turn) => turn.action)).toEqual(actions)
+    expect(dataset.turns.map((turn) => turn.reply)).toEqual(replies)
+  })
+
+  it('refuses an action count that differs from the replies, fewer or more', () => {
+    expect(() => shapeDataset(TEXT, actions.slice(1))).toThrow(/actions for \d+ replies/)
+    expect(() => shapeDataset(TEXT, [...actions, 'I wait.'])).toThrow(/actions for \d+ replies/)
+  })
+})
+
+describe('datasetTokens', () => {
+  it('sums the opening, every action and every reply', () => {
+    const dataset: ShapedDataset = {
+      opening: harbour('opening'),
+      turns: [
+        { action: 'I wait.', reply: harbour('first') },
+        {
+          action: 'I knock twice at the door.',
+          reply: `${harbour('second')}\n\n${harbour('third')}`,
+        },
+      ],
+    }
+    const strings = [dataset.opening, ...dataset.turns.flatMap((turn) => [turn.action, turn.reply])]
+    expect(datasetTokens(dataset)).toBe(strings.reduce((sum, text) => sum + countTokens(text), 0))
+  })
+})
+
+describe('the committed dataset', () => {
+  let dataset: ShapedDataset
+  beforeAll(() => {
+    dataset = loadShapedDataset(fileURLToPath(new URL('.', import.meta.url).href))
+  })
+
+  it('sums, opening and actions and replies, inside the band over about 130 entries', () => {
+    const tokens = datasetTokens(dataset)
+    expect(tokens).toBeGreaterThanOrEqual(DATASET_TOKEN_BAND.min)
+    expect(tokens).toBeLessThanOrEqual(DATASET_TOKEN_BAND.max)
+    expect(1 + 2 * dataset.turns.length).toBeGreaterThanOrEqual(120)
+    expect(1 + 2 * dataset.turns.length).toBeLessThanOrEqual(140)
+  })
+
+  it('holds one action per reply, each keeping the form rule', () => {
+    const problems = dataset.turns.flatMap((turn, i) => {
+      const problem = actionProblem(turn.action)
+      return problem === null ? [] : [`#${i + 1}: ${problem}`]
+    })
+    expect(problems).toEqual([])
+  })
+
+  // Red: the text or chunking moved under actions.json. `pnpm dataset:actions --fresh` overwrites
+  // the hand edits: restore them from git, read each action against its reply, then move the hash.
+  it('holds the replies the actions were written against', () => {
+    const replies = JSON.stringify(dataset.turns.map((turn) => turn.reply))
+    expect(createHash('sha256').update(replies).digest('hex')).toBe(
+      'ff2fb3b188e28f2ea87cb799b715d734e929ccddf90fa56c65afe9cf18ac36d2',
+    )
+  })
+})

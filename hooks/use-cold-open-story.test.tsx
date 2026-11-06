@@ -28,6 +28,11 @@ function Probe({ branchId }: { branchId: string }) {
   return null
 }
 
+function DevProbe({ branchId }: { branchId: string }) {
+  useColdOpenStory(branchId, 'dev_chapter_close')
+  return null
+}
+
 describe('useColdOpenStory', () => {
   beforeEach(() => {
     resetAllStores()
@@ -72,6 +77,16 @@ describe('useColdOpenStory', () => {
     expect(mocks.leave).toHaveBeenCalledOnce()
     expect(mocks.load).not.toHaveBeenCalled()
     expect(warn).toHaveBeenCalledWith('app.plot_story_not_found', { branchId: '' })
+  })
+
+  it('logs the dev route under its snake_case surface', async () => {
+    const warn = vi.spyOn(logger, 'warn')
+    mocks.load.mockResolvedValue({ status: 'no-story' })
+    render(<DevProbe branchId="br_gone" />)
+    await waitFor(() => expect(mocks.leave).toHaveBeenCalledOnce())
+    expect(warn).toHaveBeenCalledWith('app.dev_chapter_close_story_not_found', {
+      branchId: 'br_gone',
+    })
   })
 
   it('does not leave once the load is cancelled by an unmount', async () => {

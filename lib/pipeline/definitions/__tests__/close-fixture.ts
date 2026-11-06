@@ -3,6 +3,7 @@ import { eq } from 'drizzle-orm'
 import { applyDeltaAction } from '@/lib/actions/delta/apply-delta-action'
 import { __resetRegistrationGuard, registerAllDomains } from '@/lib/actions/delta/registrations'
 import { loadOpenStory } from '@/lib/actions/stories/operational'
+import type { GenerateStructuredResult } from '@/lib/ai'
 import {
   branches,
   STORY_SETTINGS_DEFAULTS,
@@ -74,6 +75,10 @@ export const METADATA_REPLY: ChapterMetadata = {
     'Wren reaches the ferry town of Harrow and talks the ferryman Tobin into a night crossing. On the far bank she learns the Syndicate holds the road, and a toll guard lets her pass with the sealed letter still unread.',
   theme: 'a guarded passage',
   keywords: ['harrow', 'ferry', 'tobin', 'syndicate', 'letter'],
+}
+
+export function metadataReplyResult(): GenerateStructuredResult<ChapterMetadata> {
+  return { status: 'ok', value: METADATA_REPLY, recoverable: [] }
 }
 
 // lore-mgmt and the classifier on separate profiles, so a test can tell whose timeout bounds a call.

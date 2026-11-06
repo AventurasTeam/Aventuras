@@ -445,10 +445,74 @@ describe('rollbackToEntry', () => {
 
     await updateStoryEntryContent('b1', 't3', 'edited prose', ctx)
 
-    // t3 is inside the window, so its delta is swept — but the entries line already
-    // reports that loss (rollback-confirm.md).
+    // t3's delta is swept, but the entries line already reports that loss (rollback-confirm.md).
     const counts = await getRollbackCounts('b1', 't2', ctx)
     expect(counts).toEqual({ entries: 2, chapters: 0, worldStateChanges: 2 })
+  })
+
+  // rollback-confirm.md → Counts: the create is the re-open; no chapter delta is world state.
+  it('counts a chapter by its create alone, and none of its other deltas as world state', async () => {
+    const { db, runInTransaction } = await createTestDb()
+    const ctx = { db, runInTransaction }
+    await seedBranchWithTurns(db, ctx)
+    const created = await applyDeltaAction(
+      {
+        action: {
+          kind: 'createChapter',
+          source: 'chapter_close',
+          payload: {
+            entry: {
+              id: 'chap_1',
+              branchId: 'b1',
+              sequenceNumber: 1,
+              title: 'The road out',
+              summary: 'Aria leaves the keep before dawn.',
+              theme: 'Departure',
+              startEntryId: 'op',
+              endEntryId: 't2',
+              tokenCount: 3,
+              closedAt: 1,
+              createdAt: 1,
+              updatedAt: 1,
+            },
+          },
+        },
+        actionId: 'close1',
+        branchId: 'b1',
+        entryId: 't2',
+      },
+      ctx,
+    )
+    const reported = await applyDeltaAction(
+      {
+        action: {
+          kind: 'updateChapter',
+          source: 'chapter_close',
+          payload: {
+            branchId: 'b1',
+            id: 'chap_1',
+            patch: {
+              closeReport: {
+                version: 1,
+                actionId: 'close1',
+                calls: [],
+                stopped: [],
+                noToolCalls: true,
+              },
+            },
+          },
+        },
+        actionId: 'close1',
+        branchId: 'b1',
+        entryId: 't2',
+      },
+      ctx,
+    )
+    expect([created.status, reported.status]).toEqual(['ok', 'ok'])
+
+    // Only ent_a's create and update count as world state.
+    const counts = await getRollbackCounts('b1', 't2', ctx)
+    expect(counts).toEqual({ entries: 2, chapters: 1, worldStateChanges: 2 })
   })
 
   it('brackets the sweep with reversalInProgress (set then cleared)', async () => {

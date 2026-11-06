@@ -6,7 +6,11 @@ export {
   type ImportRejectionCode,
   type ImportRowResult,
 } from './avts/import-rows'
-export { MANUAL_CLOSE_REFUSAL, startManualClose } from './chapters/start-manual-close'
+export {
+  MANUAL_CLOSE_REFUSAL,
+  startManualClose,
+  type ManualCloseRefusal,
+} from './chapters/start-manual-close'
 export { readHeldClassifierStoryIds, resetStuckClassifierRunState } from './classifier/deps'
 export { runClassifierNow } from './classifier/run-now'
 export {

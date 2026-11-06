@@ -78,7 +78,11 @@ No open items.
   reader holds a grown window re-sends it for each update, about 72 s at
   20 chapters if no update merged, counting commit and stringify only.
   That is arithmetic, not measured, and the reply's lag is the closer
-  proxy.
+  proxy. The sliding-window slice below takes a close's stamp burst on
+  a grown window as an acceptance case, since
+  [Slice 5.2](./implementation/milestones/05-chapters-chapter-close/slices/02-first-chapter.md#implementation-notes)
+  measured the burst on a 50-row reader only (developer decision,
+  2026-11-05).
 
   On a long story a jump to an early chapter can outlast the jump veil's
   30 s bound (`JUMP_VEIL_TIMEOUT_MS` in
@@ -403,6 +407,14 @@ breakdown under [UX](#ux).
     single conversation does better anywhere;
   - part size, half the window, and how a chapter cut in parts reads;
   - servers that take the tool list and ignore it.
+
+  Play tunes the metadata prompt too, outside the agent. It has two data
+  points in
+  [Slice 5.2's Implementation notes](./implementation/milestones/05-chapters-chapter-close/slices/02-first-chapter.md#implementation-notes):
+  one dev-model close told its summary in the second person against
+  first-person narration, and one of fifteen ran away to 39,689 output
+  tokens with no max output set and failed (the developer keeps the
+  profile without one).
 
   Raised 2026-10-31 by the chapter-close agent design.
 

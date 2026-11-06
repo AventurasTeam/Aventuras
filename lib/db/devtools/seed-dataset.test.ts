@@ -5,11 +5,17 @@ import { getRollbackCounts, undoLastAction } from '@/lib/actions'
 import { REF_COLUMNS, rowRefs } from '@/lib/actions/delta/live-refs'
 import { isContentEditDelta } from '@/lib/actions/story-entries/classifier-facts'
 import { ENTRIES_WINDOW_SIZE } from '@/lib/actions/story-entries/recent-window'
-import { deltas, storyEntries, type Delta, type NewStoryEntry } from '@/lib/db'
+import { deltas, storyEntries, type Delta, type NewStoryEntry, type StorySettings } from '@/lib/db'
 import { createTestDb } from '@/lib/db/__tests__/test-db'
 import { ID_PATTERN, IdBiMap, SUBSTITUTABLE_PREFIXES } from '@/lib/ids'
 import { detectRichEntryHtml, parseMarkdownToHtml } from '@/lib/markdown'
-import { entriesStore, resetAllStores } from '@/lib/stores'
+import {
+  CHAPTER_CLOSE_KIND,
+  ensureChapterClosePipelineRegistered,
+  getPipeline,
+} from '@/lib/pipeline'
+import { runPreflight } from '@/lib/pipeline/runtime/preflight'
+import { entriesStore, resetAllStores, type AppSettingsSnapshot } from '@/lib/stores'
 import { countTokens } from '@/lib/tokens'
 import {
   countEncoderBuilds,
@@ -127,7 +133,7 @@ describe('buildSeedSteps', () => {
 // incomplete". Named explicitly rather than swept from AGENT_IDS: the registry
 // carries targets nothing calls yet, and seeding those would assert nothing.
 describe('seeded agent assignments', () => {
-  const CALLED_TARGETS = ['classifier', 'suggestion', 'wizard-assist'] as const
+  const CALLED_TARGETS = ['classifier', 'suggestion', 'wizard-assist', 'lore-mgmt'] as const
 
   function seededSettings(): { assignments: Record<string, string>; profiles: { id: string }[] } {
     const [row] = rowsOf('app_settings') as unknown as {
@@ -210,23 +216,23 @@ describe('seed id substitution contract', () => {
   })
 })
 
-// A link row with no create delta of its own makes any rollback that removes its parent refuse
-// `no-create` (generation-pipeline.md → Reverse-replay), so the seeded stories could not roll back.
-describe('seeded rollback', () => {
-  const BATCH = 100
-  const HERO_MAIN = 'br_hero_main'
+const BATCH = 100
+const HERO_MAIN = 'br_hero_main'
 
+async function seededDb() {
+  const handle = await createTestDb()
+  for (const { table, rows } of buildSeedSteps())
+    for (let i = 0; i < rows.length; i += BATCH)
+      await handle.db.insert(table).values(rows.slice(i, i + BATCH) as never)
+  return handle
+}
+
+// A link row with no create delta makes any rollback removing its parent refuse `no-create`
+// (generation-pipeline.md → Reverse-replay): seeded stories must roll back.
+describe('seeded rollback', () => {
   afterEach(() => {
     resetAllStores()
   })
-
-  async function seededDb() {
-    const handle = await createTestDb()
-    for (const { table, rows } of buildSeedSteps())
-      for (let i = 0; i < rows.length; i += BATCH)
-        await handle.db.insert(table).values(rows.slice(i, i + BATCH) as never)
-    return handle
-  }
 
   // A writer outside the log names only rows it made itself, so a reversal removing a logged row
   // never meets a referrer it cannot reverse (generation-pipeline.md → Reverse-replay).
@@ -329,15 +335,19 @@ describe('seeded rollback', () => {
     }
   })
 
-  // A close has no entry anchor, so it reverses by its own log position: chapter 1's commits after
-  // entry 31 and chapter 2's after entry 59.
-  it('takes back only the chapter closes logged at or past the rollback target', async () => {
+  // A close anchors on its chapter's end entry: a rollback to that entry or into the chapter takes
+  // the close, and one past the end spares it (data-model.md → Survival anchor).
+  it('takes back a close only when the rollback reaches its end entry', async () => {
     const ctx = await seededDb()
     const expected: Record<string, number> = {
       entry_hero_0002: 2,
-      entry_hero_0031: 2,
+      entry_hero_0029: 2,
+      entry_hero_0030: 1,
+      entry_hero_0031: 1,
       entry_hero_0032: 1,
-      entry_hero_0059: 1,
+      entry_hero_0057: 1,
+      entry_hero_0058: 0,
+      entry_hero_0059: 0,
       entry_hero_0060: 0,
       entry_hero_0070: 0,
     }
@@ -378,6 +388,127 @@ describe('seeded rollback', () => {
     expect(target).toBeNull()
     expect(selected).toContain('act_create_br_hero_main_entry_hero_0022')
     expect(selected).not.toContain('act_class_1')
+  })
+})
+
+// C8: a seeded close takes the shape a real one writes (C1), so reversal reads it as it reads a close.
+describe('seeded chapter closes', () => {
+  type ChapterRow = {
+    id: string
+    branchId: string
+    sequenceNumber: number
+    startEntryId: string
+    endEntryId: string
+  }
+  type EntryRow = {
+    id: string
+    branchId: string
+    kind: string
+    position: number
+    chapterId: string | null
+  }
+  type DeltaRow = Pick<
+    Delta,
+    | 'branchId'
+    | 'entryId'
+    | 'actionId'
+    | 'logPosition'
+    | 'source'
+    | 'targetTable'
+    | 'targetId'
+    | 'op'
+    | 'undoPayload'
+  >
+
+  const heroChapters = (): ChapterRow[] =>
+    (rowsOf('chapters') as unknown as ChapterRow[])
+      .filter((c) => c.branchId === HERO_MAIN)
+      .sort((a, b) => a.sequenceNumber - b.sequenceNumber)
+  const heroEntries = (): EntryRow[] =>
+    (rowsOf('story_entries') as unknown as EntryRow[])
+      .filter((e) => e.branchId === HERO_MAIN)
+      .sort((a, b) => a.position - b.position)
+
+  afterEach(() => {
+    resetAllStores()
+  })
+
+  it('ends every seeded chapter on a reply and starts the next right after it', () => {
+    const byId = new Map(heroEntries().map((e) => [e.id, e]))
+    const closes = heroChapters()
+    expect(closes).toHaveLength(2)
+    let previousEnd = 0
+    for (const chapter of closes) {
+      const end = byId.get(chapter.endEntryId)
+      expect(end?.kind, chapter.id).toBe('ai_reply')
+      expect(byId.get(chapter.startEntryId)?.position, chapter.id).toBe(previousEnd + 1)
+      previousEnd = end!.position
+    }
+  })
+
+  it('logs each close as its create, then a stamp per entry, anchored on its end', () => {
+    const log = (rowsOf('deltas') as unknown as DeltaRow[])
+      .filter((d) => d.branchId === HERO_MAIN)
+      .sort((a, b) => a.logPosition - b.logPosition)
+    const entries = heroEntries()
+    for (const chapter of heroChapters()) {
+      const create = log.find(
+        (d) => d.targetTable === 'chapters' && d.op === 'create' && d.targetId === chapter.id,
+      )
+      expect(create, `${chapter.id} create`).toBeDefined()
+      const group = log.filter((d) => d.actionId === create!.actionId)
+      const stamped = entries.filter((e) => e.chapterId === chapter.id)
+      expect(stamped.length, chapter.id).toBeGreaterThan(0)
+      expect(group.map((d) => [d.targetTable, d.op, d.targetId])).toEqual([
+        ['chapters', 'create', chapter.id],
+        ...stamped.map((e) => ['story_entries', 'update', e.id]),
+      ])
+      for (const delta of group) {
+        expect(delta.entryId, delta.targetId).toBe(chapter.endEntryId)
+        expect(delta.source, delta.targetId).toBe('chapter_close')
+      }
+      for (const delta of group.slice(1))
+        expect(delta.undoPayload, delta.targetId).toEqual({ chapterId: null })
+      expect(group.at(-1)!.logPosition - group[0]!.logPosition, chapter.id).toBe(group.length - 1)
+    }
+  })
+
+  // C5: token_count is the closed range's content_tokens, summed at close.
+  it("counts each chapter's tokens over its range", async () => {
+    const { sqlite } = await seededDb()
+    const rows = sqlite
+      .prepare(
+        `SELECT c.id AS id, c.token_count AS tokenCount,
+           (SELECT SUM(e.content_tokens) FROM story_entries e
+             WHERE e.branch_id = c.branch_id AND e.kind != 'system'
+               AND e.position BETWEEN s.position AND x.position) AS summed
+         FROM chapters c
+         JOIN story_entries s ON s.branch_id = c.branch_id AND s.id = c.start_entry_id
+         JOIN story_entries x ON x.branch_id = c.branch_id AND x.id = c.end_entry_id`,
+      )
+      .all() as { id: string; tokenCount: number; summed: number }[]
+    expect(rows).toHaveLength(2)
+    for (const row of rows) {
+      expect(row.tokenCount, row.id).toBeGreaterThan(0)
+      expect(row.tokenCount, row.id).toBe(row.summed)
+    }
+  })
+
+  // C2 declares lore-mgmt on three phases, so an unassigned seed fails every close at pre-flight.
+  it('passes the chapter-close pre-flight on the seeded settings', () => {
+    ensureChapterClosePipelineRegistered()
+    const [appSettingsRow] = rowsOf('app_settings') as unknown as AppSettingsSnapshot[]
+    const hero = rowsOf('stories').find((s) => s.id === 'story_hero') as
+      | { settings: StorySettings }
+      | undefined
+    expect(hero).toBeDefined()
+
+    expect(
+      runPreflight(getPipeline(CHAPTER_CLOSE_KIND), {
+        appSettings: appSettingsRow!,
+        storySettings: hero!.settings,
+      }),
+    ).toBeNull()
   })
 })
 

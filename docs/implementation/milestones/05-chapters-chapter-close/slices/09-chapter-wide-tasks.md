@@ -84,7 +84,7 @@ entry (C1).
 **`read_turns`,** on the Happenings and Awareness tool lists only,
 beside 5.5a's read tools. It reads `story_entries` through `ctx.db`,
 since `entriesStore` holds a window
-(`lib/pipeline/definitions/periodic-classifier.ts:80-82`), and returns
+(`lib/pipeline/definitions/periodic-classifier.ts:73-75`), and returns
 each turn's `promptProse` in position order, with no `system` row. A
 call returns at most ten turns (`READ_TURNS_MAX`) and names the rest as
 unread. An unknown handle, or one outside the range the open question

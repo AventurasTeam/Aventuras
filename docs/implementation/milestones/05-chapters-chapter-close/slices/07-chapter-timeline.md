@@ -120,7 +120,7 @@ slices and ship disabled or hidden, per C16.
   and is exported from `lib/actions/index.ts` with `ChapterSaveResult`.
   Its log events, `action_layer.chapter_save_rejected` and
   `action_layer.chapter_save_failed`, follow from `rowKind`.
-- `lib/actions/chapters/register.ts:105-106`: the update handler's
+- `lib/actions/chapters/register.ts:88-89`: the update handler's
   not-found return carries `code: TARGET_NOT_FOUND`, as `updateLore`'s
   does (`lib/actions/lore/register.ts:108-112`). Without it a Save on a
   row that went reads `failed`, not `not-found`.
@@ -436,6 +436,18 @@ any change amends the scope above.
 - **May a theme be blank?** Canon calls it a free-form tag and the column
   is `NOT NULL`. Default: yes, stored as an empty string, which also drops
   it from the collapsed line.
+
+- **How does a rollback count a user's chapter edit it sweeps?**
+  [Slice 5.2](./02-first-chapter.md) made `rollbackCountsOf` count a
+  `chapters` delta only as a create (developer decision), so a close's
+  `close_report` update no longer reads as world state. A user's own
+  `updateChapter` (a title or summary save, anchored on no entry) on a
+  chapter the rollback spares is still reverted by its log position, and
+  the confirm modal now reports nothing for it. Suggested: count a
+  non-create `chapters` delta when its chapter's create isn't in the
+  swept set, which keeps the close's report silent.
+  [Slice 5.12](./12-chapter-delete-rollback.md#open-questions) reworks
+  the same function and asks which tables count as world state.
 
 ## Implementation notes
 

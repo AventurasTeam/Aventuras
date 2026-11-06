@@ -14,7 +14,10 @@ const ctx = { db, runInTransaction }
  * reader does, and leaves for the story list when the branch can't open. Returns the open story
  * once it is this branch's.
  */
-export function useColdOpenStory(branchId: string, surface: 'world' | 'plot'): OpenStory | null {
+export function useColdOpenStory(
+  branchId: string,
+  surface: 'world' | 'plot' | 'dev_chapter_close',
+): OpenStory | null {
   const leaveFailedOpen = useLeaveFailedStoryOpen()
   useEffect(() => {
     if (branchId === '') {
