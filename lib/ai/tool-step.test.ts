@@ -661,3 +661,317 @@ describe('generateToolStep: the chain', () => {
     ])
   })
 })
+
+const after =
+  (ms: number, answer: Answer): Answer =>
+  (signal) =>
+    new Promise((resolve, reject) => {
+      const timer = setTimeout(() => resolve(answer(signal)), ms)
+      signal?.addEventListener(
+        'abort',
+        () => {
+          clearTimeout(timer)
+          reject(new DOMException('aborted', 'AbortError'))
+        },
+        { once: true },
+      )
+    })
+
+// Whole calls the server stopped at its limit: never run, never returned.
+const CUT_CALLS: WireCall[] = [{ id: 'call_cut', name: 'lookup', arguments: '{"query":"the cut"}' }]
+const AT_DEFAULT = { prompt_tokens: 120, completion_tokens: 8000 }
+const cutReply = (usage = AT_DEFAULT) => openaiReply({ calls: CUT_CALLS, finish: 'length', usage })
+const DONE = openaiReply({ content: 'Done.' })
+
+const CUT_AT_DEFAULT = {
+  cause: 'max-output',
+  outputTokens: 8000,
+  reasoningTokens: 0,
+  maxOutput: 8000,
+  window: null,
+  providerId: 'prov',
+  modelId: 'm',
+} as const
+
+const cutLogs = () => warnings('provider.reply_cut_off')
+
+// generation-pipeline.md → Cut-off replies: a step's cut is retried once, then stops its task.
+describe('generateToolStep: a reply cut off', () => {
+  it('retries a cut once, and returns the next reply with the cut in recoverable', async () => {
+    answers = [cutReply(), DONE]
+
+    const result = await step(useProvider('openai-compatible'))
+
+    expect(bodies).toHaveLength(2)
+    expect(bodies[1]).toEqual(bodies[0])
+    expect(result).toMatchObject({
+      status: 'ok',
+      step: { text: 'Done.', calls: [] },
+      recoverable: [{ tier: 'reply-cut-off', ...CUT_AT_DEFAULT }],
+    })
+    expect(JSON.stringify(result)).not.toContain('call_cut')
+  })
+
+  it('stops the task on a second cut, returning neither reply', async () => {
+    answers = [cutReply(), cutReply()]
+
+    const result = await step(useProvider('openai-compatible'))
+
+    expect(bodies).toHaveLength(2)
+    expect(result).toEqual({
+      status: 'stopped',
+      reason: 'cut-off',
+      failure: CUT_AT_DEFAULT,
+      recoverable: [{ tier: 'reply-cut-off', ...CUT_AT_DEFAULT }],
+    })
+    expect(JSON.stringify(result)).not.toContain('call_cut')
+  })
+
+  it("reports the profile's max output on a cut at it", async () => {
+    answers = [
+      cutReply({ prompt_tokens: 120, completion_tokens: 2048 }),
+      cutReply({ prompt_tokens: 120, completion_tokens: 2048 }),
+    ]
+
+    const result = await step(useProvider('openai-compatible', { profile: { maxOutput: 2048 } }))
+
+    expect(result).toMatchObject({
+      status: 'stopped',
+      reason: 'cut-off',
+      failure: { cause: 'max-output', outputTokens: 2048, maxOutput: 2048 },
+    })
+  })
+
+  it('logs the retried cut, then the stopping one, with the target and the numbers', async () => {
+    answers = [cutReply(), cutReply()]
+
+    await step(useProvider('openai-compatible'), {}, { actionId: 'act_1' })
+
+    expect(cutLogs()).toEqual([
+      [
+        'provider.reply_cut_off',
+        { outcome: 'retried', target: 'lore-mgmt', ...CUT_AT_DEFAULT },
+        { actionId: 'act_1' },
+      ],
+      [
+        'provider.reply_cut_off',
+        { outcome: 'stopped', target: 'lore-mgmt', ...CUT_AT_DEFAULT },
+        { actionId: 'act_1' },
+      ],
+    ])
+  })
+
+  it('logs one retried cut when the retry finishes', async () => {
+    answers = [cutReply(), DONE]
+
+    await step(useProvider('openai-compatible'))
+
+    expect(cutLogs()).toEqual([
+      [
+        'provider.reply_cut_off',
+        { outcome: 'retried', target: 'lore-mgmt', ...CUT_AT_DEFAULT },
+        undefined,
+      ],
+    ])
+  })
+})
+
+// A filter's stop takes the cut-off path: a filter may not trip twice, and one that does stops the
+// task instead of failing the close.
+describe('generateToolStep: a reply a filter stopped', () => {
+  const FILTERED = { cause: 'content-filter', providerId: 'prov', modelId: 'm' } as const
+
+  it.each([
+    ['openai-compatible', () => openaiReply({ calls: CUT_CALLS, finish: 'content_filter' })],
+    [
+      'anthropic',
+      () =>
+        anthropicReply(
+          [{ type: 'tool_use', id: 'call_cut', name: 'lookup', input: { query: 'the cut' } }],
+          'refusal',
+        ),
+    ],
+  ] as const)('retries a %s filter once, then stops', async (type, filtered) => {
+    answers = [filtered(), filtered()]
+
+    const result = await step(useProvider(type))
+
+    expect(bodies).toHaveLength(2)
+    expect(result).toMatchObject({
+      status: 'stopped',
+      reason: 'cut-off',
+      failure: FILTERED,
+      recoverable: [{ tier: 'reply-cut-off', ...FILTERED }],
+    })
+    expect(JSON.stringify(result)).not.toContain('call_cut')
+    expect(cutLogs().map(([, fields]) => fields)).toEqual([
+      expect.objectContaining({ outcome: 'retried', cause: 'content-filter' }),
+      expect.objectContaining({ outcome: 'stopped', cause: 'content-filter' }),
+    ])
+  })
+
+  it('returns the retry when the filter does not trip again', async () => {
+    answers = [openaiReply({ content: 'No.', finish: 'content_filter' }), DONE]
+
+    expect(await step(useProvider('openai-compatible'))).toMatchObject({
+      status: 'ok',
+      step: { text: 'Done.' },
+      recoverable: [{ tier: 'reply-cut-off', cause: 'content-filter' }],
+    })
+  })
+
+  // generation-pipeline.md → Cut-off replies: a non-streamed body that omits it arrives whole.
+  it("reads an 'other' finish with no raw reason as a step", async () => {
+    answers = [
+      () =>
+        json({
+          id: 'chatcmpl-test',
+          object: 'chat.completion',
+          created: 0,
+          model: 'local-model',
+          choices: [{ index: 0, message: { role: 'assistant', content: 'Done.' } }],
+        }),
+    ]
+
+    const result = okStep(await step(useProvider('openai-compatible')))
+
+    expect(result.finishReason).toBe('other')
+    expect(bodies).toHaveLength(1)
+  })
+})
+
+// memory/chapter-close.md → When a task stops: the retry gets a bound of its own.
+describe('generateToolStep: the bound across a cut-off retry', () => {
+  it('gives the retry a whole bound after a cut that took most of the first', async () => {
+    vi.useFakeTimers()
+    answers = [after(25_000, cutReply()), after(25_000, cutReply())]
+
+    const pending = step(useProvider('openai-compatible', { profile: { timeout: 30 } }))
+    await vi.advanceTimersByTimeAsync(50_000)
+
+    expect(await pending).toMatchObject({ status: 'stopped', reason: 'cut-off' })
+    expect(bodies).toHaveLength(2)
+  })
+
+  it('fails as a timeout when the retry outlasts its own bound, keeping the first cut', async () => {
+    vi.useFakeTimers()
+    answers = [after(25_000, cutReply()), hang]
+
+    const pending = step(useProvider('openai-compatible', { profile: { timeout: 30 } }))
+    await vi.advanceTimersByTimeAsync(55_000)
+
+    expect(await pending).toEqual({
+      status: 'failed',
+      error: { tier: 'provider', reason: 'timeout', detail: 'lore-mgmt: timeout after 30000ms' },
+      recoverable: [{ tier: 'reply-cut-off', ...CUT_AT_DEFAULT }],
+    })
+  })
+
+  it('returns aborted, keeping the first cut, when the caller cancels the retry', async () => {
+    const controller = new AbortController()
+    answers = [cutReply(), hang]
+
+    const pending = step(useProvider('openai-compatible'), {}, { signal: controller.signal })
+    await vi.waitFor(() => expect(bodies).toHaveLength(2))
+    controller.abort()
+
+    expect(await pending).toEqual({
+      status: 'aborted',
+      recoverable: [{ tier: 'reply-cut-off', ...CUT_AT_DEFAULT }],
+    })
+  })
+})
+
+const LLAMA_MESSAGE =
+  'request (71834 tokens) exceeds the available context size (65536 tokens), try increasing it'
+const LLAMA_OVERFLOW = {
+  error: { code: 400, message: LLAMA_MESSAGE, type: 'exceed_context_size_error' },
+}
+
+// architecture.md → The pre-send check: a task's first call failing fails the close; a later step
+// outgrowing the window only stops its task.
+describe('generateToolStep: the window', () => {
+  const windowLogs = () => warnings('provider.context_window')
+
+  it.each([
+    [true, 'failed'],
+    [false, 'stopped'],
+  ] as const)(
+    'refuses unsent a call over a known window; firstCall %s is %s',
+    async (firstCall, _status) => {
+      const result = await step(useProvider('openai-compatible', { window: 10 }), { firstCall })
+
+      const failure = {
+        detectedBy: 'check',
+        estimate: expect.any(Number),
+        window: 10,
+        windowSource: 'configured',
+        providerId: 'prov',
+        modelId: 'm',
+      }
+      expect(result).toEqual(
+        firstCall
+          ? { status: 'failed', error: { tier: 'context-window', ...failure }, recoverable: [] }
+          : { status: 'stopped', reason: 'window', failure, recoverable: [] },
+      )
+      expect(bodies).toEqual([])
+    },
+  )
+
+  it.each([
+    [true, 'failed'],
+    [false, 'stopped'],
+  ] as const)(
+    'reads a provider overflow after one request; firstCall %s is %s',
+    async (firstCall, _status) => {
+      answers = [rejection(400, LLAMA_OVERFLOW), rejection(400, LLAMA_OVERFLOW)]
+
+      const result = await step(useProvider('openai-compatible'), { firstCall })
+
+      const failure = {
+        detectedBy: 'provider',
+        estimate: expect.any(Number),
+        window: null,
+        windowSource: 'unknown',
+        providerId: 'prov',
+        modelId: 'm',
+        detail: LLAMA_MESSAGE,
+      }
+      expect(result).toEqual(
+        firstCall
+          ? { status: 'failed', error: { tier: 'context-window', ...failure }, recoverable: [] }
+          : { status: 'stopped', reason: 'window', failure, recoverable: [] },
+      )
+      expect(bodies).toHaveLength(1)
+    },
+  )
+
+  it.each([
+    ['check', { window: 10 }, []],
+    ['provider', {}, [rejection(400, LLAMA_OVERFLOW)]],
+  ] as const)(
+    'logs a %s window failure once, with no cut-off',
+    async (detectedBy, opts, queued) => {
+      answers = [...queued]
+
+      await step(
+        useProvider('openai-compatible', opts),
+        { firstCall: false },
+        { actionId: 'act_1' },
+      )
+
+      expect(windowLogs()).toEqual([
+        [
+          'provider.context_window',
+          expect.objectContaining({
+            target: 'lore-mgmt',
+            detectedBy,
+            estimate: expect.any(Number),
+          }),
+          { actionId: 'act_1' },
+        ],
+      ])
+      expect(cutLogs()).toEqual([])
+    },
+  )
+})

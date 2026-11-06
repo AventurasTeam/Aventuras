@@ -9,6 +9,7 @@ import {
 import { z } from 'zod'
 
 import { boundedSignal } from '@/lib/abort'
+import { logger } from '@/lib/diagnostics'
 
 import type { ResolveTarget } from './agents'
 import { anthropicCacheMarkerMiddleware } from './cache-marker'
@@ -24,7 +25,7 @@ import {
   type PromptHalves,
   type StructuredCallOptions,
 } from './generate'
-import type { ReplyCutOffFailure } from './reply-cut-off'
+import { ReplyCutOffError, replyCutOff, type ReplyCutOffFailure } from './reply-cut-off'
 import type { ResolveFailureKind, ResolveModelConfig } from './resolve-model'
 import {
   callWithRetry,
@@ -195,11 +196,30 @@ export async function generateToolStep(
     }
   }
 
+  // generation-pipeline.md → Cut-off replies: a cut or filtered reply is never a step, whatever it
+  // holds, so its calls and messages never reach the caller.
+  const parse = (reply: StepReply): ToolStep => {
+    if (reply.finishReason === 'length' || reply.finishReason === 'content-filter') {
+      throw new ReplyCutOffError(
+        replyCutOff({
+          stop: reply.finishReason,
+          usage: reply.usage,
+          maxOutput,
+          window: check.window.tokens,
+          promptEstimate: check.estimate(),
+          providerId,
+          modelId,
+        }),
+      )
+    }
+    return stepOf(reply)
+  }
+
   const boundMs = callTimeoutMs(target, config)
   const run = async (): Promise<Run> => {
     const bounded = boundedSignal(signal, boundMs)
     try {
-      const result = await callWithRetry(callFn, stepOf, {
+      const result = await callWithRetry(callFn, parse, {
         maxProviderAttempts: 2,
         maxParseAttempts: 1,
         signal: bounded.signal,
@@ -211,6 +231,26 @@ export async function generateToolStep(
     }
   }
 
+  const failedOutcome = (
+    error: CallRetryError,
+    recoverable: readonly CallRetryError[],
+  ): ToolStepResult => {
+    if (error.tier === 'context-window') {
+      const { tier: _tier, ...failure } = error
+      logger.warn('provider.context_window', { target, ...failure }, attribution)
+      // architecture.md → The pre-send check: only a task's first call not fitting fails the close.
+      return request.firstCall
+        ? { status: 'failed', error, recoverable }
+        : { status: 'stopped', reason: 'window', failure, recoverable }
+    }
+    if (error.tier === 'reply-cut-off') {
+      const { tier: _tier, ...failure } = error
+      logger.warn('provider.reply_cut_off', { outcome: 'stopped', target, ...failure }, attribution)
+      return { status: 'stopped', reason: 'cut-off', failure, recoverable }
+    }
+    return { status: 'failed', error, recoverable }
+  }
+
   const outcome = (
     { result, expired }: Run,
     recoverable: readonly CallRetryError[],
@@ -219,7 +259,7 @@ export async function generateToolStep(
       case 'ok':
         return { status: 'ok', step: result.result, recoverable }
       case 'failed':
-        return { status: 'failed', error: result.error, recoverable }
+        return failedOutcome(result.error, recoverable)
       case 'aborted':
         // An expiry aborts the run as a cancel does, but fails the step (classifier.md → Failure
         // policy), with the detail lib/pipeline gives a pass's.
@@ -238,5 +278,14 @@ export async function generateToolStep(
   }
 
   const first = await run()
-  return outcome(first, first.result.recoverable)
+  if (first.result.status !== 'failed' || first.result.error.tier !== 'reply-cut-off') {
+    return outcome(first, first.result.recoverable)
+  }
+  // Once more, under a bound of its own: the run it follows likely spent most of the first
+  // (memory/chapter-close.md → When a task stops).
+  const cut = first.result.error
+  const { tier: _tier, ...cutFailure } = cut
+  logger.warn('provider.reply_cut_off', { outcome: 'retried', target, ...cutFailure }, attribution)
+  const retry = await run()
+  return outcome(retry, [...first.result.recoverable, cut, ...retry.result.recoverable])
 }
