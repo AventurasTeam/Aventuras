@@ -1,12 +1,12 @@
 import { existsSync } from 'node:fs'
-import { dirname, join } from 'node:path'
+import { join } from 'node:path'
 import { DatabaseSync } from 'node:sqlite'
 
 import { expect, test, type Page } from '@playwright/test'
 
 import { modelProfileSchema, providerInstanceSchema } from '@/lib/db'
 
-import { exportScrubbed } from '../../scripts/dataset-chapter/export'
+import { assertExportTarget, exportScrubbed } from '../../scripts/dataset-chapter/export'
 import {
   DATASET_TOKEN_BAND,
   datasetTokens,
@@ -419,14 +419,6 @@ async function assertDatasetBranch(d: Drive, dataset: ShapedDataset): Promise<st
     written.push(`${table} ${count}`)
   }
   return `entries: ${entries}\ntokens: ${tokens}\nreplies with a reported scene: ${scened}\nclassifier-written: ${written.join(', ')}`
-}
-
-// A stale sidecar beside the copy would replay over it on its next open. Checked before the drive
-// too, so a bad path fails in seconds rather than after it.
-function assertExportTarget(out: string): void {
-  expect(existsSync(dirname(out)), `${dirname(out)} exists`).toBe(true)
-  for (const suffix of ['-wal', '-shm', '-journal'])
-    expect(existsSync(`${out}${suffix}`), `${out}${suffix} would replay over the copy`).toBe(false)
 }
 
 // device:push-db refuses a database with a WAL or journal beside it. The desktop DB runs a

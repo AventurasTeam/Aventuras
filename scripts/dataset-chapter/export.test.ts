@@ -1,11 +1,19 @@
-import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync } from 'node:fs'
+import {
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readdirSync,
+  readFileSync,
+  rmSync,
+  writeFileSync,
+} from 'node:fs'
 import { tmpdir } from 'node:os'
-import { join } from 'node:path'
+import { join, sep } from 'node:path'
 import { DatabaseSync } from 'node:sqlite'
 
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 
-import { exportScrubbed, scrubProviderKeys } from './export'
+import { assertExportTarget, exportScrubbed, scrubProviderKeys } from './export'
 
 const KEY = 'sk-dataset-test-0123456789abcdef'
 const MODELS = Array.from({ length: 300 }, (_, i) => ({
@@ -107,5 +115,51 @@ describe('exportScrubbed', () => {
     const out = join(dir, 'dataset.db')
     expect(() => exportScrubbed(src, out, [KEY])).toThrow(/still holds a provider key/)
     expect(readdirSync(dir)).toEqual([])
+  })
+})
+
+describe('assertExportTarget', () => {
+  it('passes a new file in an existing folder, and an earlier export to replace', () => {
+    const out = join(outDir(), 'dataset.db')
+    expect(() => assertExportTarget(out)).not.toThrow()
+    writeFileSync(out, '')
+    expect(() => assertExportTarget(out)).not.toThrow()
+  })
+
+  it('refuses a relative path', () => {
+    expect(() => assertExportTarget(join('datasets', 'dataset.db'))).toThrow(/not an absolute path/)
+  })
+
+  it('refuses a path ending in a separator', () => {
+    expect(() => assertExportTarget(`${join(outDir(), 'dataset')}${sep}`)).toThrow(
+      /ends in a path separator/,
+    )
+  })
+
+  it('refuses a directory at the target', () => {
+    const out = join(outDir(), 'dataset.db')
+    mkdirSync(out)
+    expect(() => assertExportTarget(out)).toThrow(/is a directory/)
+  })
+
+  it('refuses a folder that is missing, or a file', () => {
+    expect(() => assertExportTarget(join(root, 'missing', 'dataset.db'))).toThrow(
+      /is not a directory/,
+    )
+    writeFileSync(join(root, 'file'), '')
+    expect(() => assertExportTarget(join(root, 'file', 'dataset.db'))).toThrow(/is not a directory/)
+  })
+
+  it.each(['-wal', '-shm', '-journal'])('refuses a %s beside the target', (suffix) => {
+    const out = join(outDir(), 'dataset.db')
+    writeFileSync(`${out}${suffix}`, '')
+    expect(() => assertExportTarget(out)).toThrow(`${out}${suffix} would replay over the export`)
+  })
+
+  it('refuses a draft an interrupted export left beside the target, naming it', () => {
+    const dir = outDir()
+    const draft = join(dir, '.dataset-export-x1Yz2W')
+    mkdirSync(draft)
+    expect(() => assertExportTarget(join(dir, 'dataset.db'))).toThrow(draft)
   })
 })
