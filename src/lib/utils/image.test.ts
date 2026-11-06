@@ -212,6 +212,13 @@ describe('pickResolution', () => {
     expect(pick('small', ['auto'])).toBeUndefined()
   })
 
+  it('places every tier spelling the listings use', () => {
+    const listed = ['512', '768', '1K', '1.5K', '2K', '4K']
+    expect(pick('tiny', ['768', '1K'])).toBe('768')
+    expect(pick('medium', listed.slice(0, 5))).toBe('1.5K')
+    expect(pick('large', listed)).toBe('2K')
+  })
+
   it('sends nothing when the model lists no tiers', () => {
     expect(pick('medium')).toBeUndefined()
     expect(pick('medium', [])).toBeUndefined()

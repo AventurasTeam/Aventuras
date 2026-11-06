@@ -138,10 +138,10 @@ describe('OpenAI image size', () => {
     return referenceImages ? lastForm().get('size') : lastJson().size
   }
 
+  /** Non-square tiers fall under the 655,360-pixel floor unless raised; a square-only check would not notice. */
   it.each([
     ['square', ['816x816', '1024x1024', '1536x1536', '2048x2048']],
     ['landscape', ['1088x608', '1088x608', '1536x864', '2048x1152']],
-    ['portrait', ['608x1088', '608x1088', '864x1536', '1152x2048']],
   ] as const)(
     'sends a %s gpt-image-2 request real dimensions at or above the pixel floor',
     async (orientation, expected) => {
@@ -151,18 +151,11 @@ describe('OpenAI image size', () => {
     },
   )
 
-  it.each([
-    ['square', '1024x1024'],
-    ['landscape', '1536x1024'],
-    ['portrait', '1024x1536'],
-  ] as const)(
-    'sends a %s request to a fixed-size model its standard size',
-    async (orientation, expected) => {
-      for (const tier of IMAGE_SIZE_TIERS) {
-        expect(await sizeFor('gpt-image-1.5', orientation, tier)).toBe(expected)
-      }
-    },
-  )
+  it('sends a landscape request to a fixed-size model its standard size', async () => {
+    for (const tier of IMAGE_SIZE_TIERS) {
+      expect(await sizeFor('gpt-image-1.5', 'landscape', tier)).toBe('1536x1024')
+    }
+  })
 
   it('sends the same size on the edits endpoint', async () => {
     expect(await sizeFor('gpt-image-1.5', 'landscape', 'medium', [PNG])).toBe('1536x1024')

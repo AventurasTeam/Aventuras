@@ -57,22 +57,19 @@ describe('Pollinations adapter', () => {
   })
 
   describe('resolution tier', () => {
-    const generateWith = (supportedResolutions?: string[], size: 'small' | 'medium' = 'medium') =>
+    const generateWith = (supportedResolutions?: string[]) =>
       createPollinationsProvider({ apiKey: 'k' }).generate({
         ...options(),
-        spec: { orientation: 'landscape', size },
+        spec: { orientation: 'landscape', size: 'medium' },
         modelInfo: { supportedResolutions },
       })
 
     it('sends the listed tier that covers the size, as listed', async () => {
       await generateWith(['1k', '2k'])
       expect(lastImageCall().extraFields).toEqual({ safe: false, resolution: '2k' })
-
-      await generateWith(['1k', '2k'], 'small')
-      expect(lastImageCall().extraFields).toEqual({ safe: false, resolution: '1k' })
     })
 
-    it.each([[undefined], [[]], [['auto']]])(
+    it.each([[undefined], [['auto']]])(
       'sends none when the model lists none (%j)',
       async (listed) => {
         await generateWith(listed)

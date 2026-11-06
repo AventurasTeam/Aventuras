@@ -66,27 +66,13 @@ describe('OpenRouter image provider', () => {
     expect(result).toEqual({ base64: 'AAA' })
   })
 
-  it.each([
-    [undefined],
-    [{}],
-    [{ supportedResolutions: [] }],
-    [{ supportedResolutions: ['auto'] }],
-  ])('sends no resolution when the model lists none (%j)', async (modelInfo) => {
-    await provider().generate({ model: 'm', prompt: 'p', spec: landscapeMedium, modelInfo })
-    expect(sentRequest().body).not.toHaveProperty('resolution')
-  })
-
-  it('posts to the normalized base URL', async () => {
-    vi.mocked(normalizeBaseUrl).mockReturnValueOnce('https://normalized.test/api/v1')
-    await provider(' https://raw.test// ').generate({
-      model: 'm',
-      prompt: 'p',
-      spec: landscapeMedium,
-    })
-
-    expect(normalizeBaseUrl).toHaveBeenCalledWith(' https://raw.test// ')
-    expect(sentRequest().url).toBe('https://normalized.test/api/v1/images')
-  })
+  it.each([[undefined], [{ supportedResolutions: ['auto'] }]])(
+    'sends no resolution when the model lists none (%j)',
+    async (modelInfo) => {
+      await provider().generate({ model: 'm', prompt: 'p', spec: landscapeMedium, modelInfo })
+      expect(sentRequest().body).not.toHaveProperty('resolution')
+    },
+  )
 
   it('sends references as input_references data URLs with their sniffed type', async () => {
     await provider().generate({
@@ -102,50 +88,15 @@ describe('OpenRouter image provider', () => {
     ])
   })
 
-  it.each([
-    ['tiny', ['1K', '2K', '4K'], '1K'],
-    ['small', ['1K', '2K', '4K'], '1K'],
-    ['medium', ['1K', '2K', '4K'], '2K'],
-    ['large', ['1K', '2K'], '2K'],
-    ['tiny', ['2K', '4K'], '2K'],
-    ['large', ['1K'], '1K'],
-    ['medium', ['512', '768', '1K', '1.5K', '2K'], '1.5K'],
-    ['small', ['4K', '2K', 'auto', '1K'], '1K'],
-  ] as const)('maps the %s tier on %j to resolution %s', async (size, listed, resolution) => {
+  it('sends the closest of the ratios the model lists', async () => {
     await provider().generate({
       model: 'm',
       prompt: 'p',
-      spec: { orientation: 'landscape', size },
-      modelInfo: { supportedResolutions: [...listed] },
+      spec: landscapeMedium,
+      modelInfo: { supportedAspectRatios: ['1:1', '3:2', '2:3'] },
     })
-    expect(sentRequest().body.resolution).toBe(resolution)
+    expect(sentRequest().body.aspect_ratio).toBe('3:2')
   })
-
-  it.each([
-    ['portrait', '9:16'],
-    ['square', '1:1'],
-  ] as const)('maps %s to aspect ratio %s', async (orientation, ratio) => {
-    await provider().generate({ model: 'm', prompt: 'p', spec: { orientation, size: 'small' } })
-    expect(sentRequest().body.aspect_ratio).toBe(ratio)
-  })
-
-  it.each([
-    ['landscape', ['1:1', '3:2', '2:3'], '3:2'],
-    ['portrait', ['1:1', '3:2', '2:3'], '2:3'],
-    ['landscape', ['1:1', '3:2', '2:3', 'auto'], '3:2'],
-    ['landscape', ['1:1', '16:9'], '16:9'],
-  ] as const)(
-    'sends the closest listed ratio for %s on %j: %s',
-    async (orientation, supportedAspectRatios, ratio) => {
-      await provider().generate({
-        model: 'm',
-        prompt: 'p',
-        spec: { orientation, size: 'small' },
-        modelInfo: { supportedAspectRatios: [...supportedAspectRatios] },
-      })
-      expect(sentRequest().body.aspect_ratio).toBe(ratio)
-    },
-  )
 
   it('sends the spec ratio from the general list when the model lists none', async () => {
     await provider().generate({

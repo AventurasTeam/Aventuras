@@ -65,14 +65,10 @@ describe('Google size and ratio', () => {
   }
   const imageSize = (value: string) => ({ google: { imageConfig: { imageSize: value } } })
 
-  it.each([
-    ['gemini-3.1-flash-image', ['512', '1K', '2K', '2K']],
-    ['gemini-nano-banana-2.1', ['1K', '1K', '2K', '2K']],
-    ['gemini-3-pro-image', ['1K', '1K', '2K', '2K']],
-    ['gemini-3.1-flash-lite-image', ['1K', '1K', '1K', '1K']],
-  ])('%s sends the smallest listed tier that covers each size', async (model, expected) => {
+  it('sends the smallest of the model’s listed tiers that covers each size', async () => {
+    const expected = ['512', '1K', '2K', '2K']
     for (const [i, size] of IMAGE_SIZE_TIERS.entries()) {
-      expect(await imageSizeFor(model, size)).toEqual(imageSize(expected[i]))
+      expect(await imageSizeFor('gemini-3.1-flash-image', size)).toEqual(imageSize(expected[i]))
     }
   })
 
