@@ -424,16 +424,17 @@ None open: each was answered here or moved to the slice that owns it
   takes the step's 8k by default, an open question of
   [Slice 5.10](./10-two-starts.md#open-questions)'s.
 - **A tool schema with a `.transform` is refused before any request.**
-  The plan accepted one; [Slice 5.5a](./05a-task-runner.md)'s tools
-  are "a Zod schema with no `.transform()`", and the SDK writes the
-  transformed value into `responseMessages` as the call's input, which
-  the next step sends back (a string there is a non-object Anthropic
-  `tool_use.input`). The step converts both sides, the SDK's input side
-  and `z.toJSONSchema`'s output side, and returns `failed`, tier
-  `parse`, attempt 0. Schemas that change a value's type with no
-  transform node pass both: `.transform().pipe(z.object(…))`, a
-  reshaping `z.preprocess`, `z.stringbool()`, `z.codec()`. 5.5a's
-  schemas keep to plain shapes.
+  The plan accepted one; the SDK writes the parsed value into
+  `responseMessages` as the call's input, which the next step sends back
+  (a string there is a non-object Anthropic `tool_use.input`). The step
+  converts both sides, the SDK's input side and `z.toJSONSchema`'s
+  output side, and returns `failed`, tier `parse`, attempt 0. No
+  schema-level guard sees every form that changes the value (a default,
+  a coercion, a `.trim()`, a `.transform().pipe(…)`), so the step keeps
+  this one and the rest is
+  [Slice 5.5a](./05a-task-runner.md#scope-in)'s tool contract: a schema
+  parses to what the model wrote (developer decision, 2026-11-07: "Q2:
+  A").
 - **The window check counts a tool call's input as its JSON,** a string
   input included, since both adapters serialize it.
 - **The E2E harness fails a scripted tool step that throws or can't be

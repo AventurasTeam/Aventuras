@@ -253,10 +253,20 @@ and tools sit under `lib/pipeline/definitions/close-agent/`.
 
 **Tools and the write path.**
 
-- A tool is a name, a description, a Zod schema with no `.transform()`,
-  which arguments hold ids, and a plan that reads ahead and returns a
-  refusal or actions, each tagged with the fields it writes (C11's
-  starting design).
+- A tool is a name, a description, a Zod schema of a plain shape, which
+  arguments hold ids, and a plan that reads ahead and returns a refusal
+  or actions, each tagged with the fields it writes (C11's starting
+  design).
+- **A tool schema parses to what the model wrote (developer decision,
+  2026-11-07).** The SDK replays the parsed value as the model's own
+  call on the next step, beside a signed thinking block on Anthropic, so
+  a schema that changes the value puts words in the model's mouth. No
+  `.transform`, `.pipe`, `z.codec` or `z.stringbool`; no `.default`,
+  `.prefault` or `.catch`; no `z.preprocess` or `z.coerce`; no string
+  overwrites such as `.trim()`, `.toLowerCase()` or `.toUpperCase()`.
+  [Slice 5.4](./04-tool-step.md#implementation-notes)'s step refuses
+  only the forms it can see (a transform, and a schema with no JSON
+  Schema form), so the rest is the tool author's contract.
 - Every write passes the common checks first: `turns` cites a turn and
   each handle resolves to an entry in the chapter's range, `why` is
   present, and each row was read. A failed check returns `rejected`
@@ -487,6 +497,8 @@ vitest and the probe share. It never reaches a production slot.
   of a keyword, and adds nothing to the read set. `read_row` returns
   only the task's fields and answers a missing row without a refusal
   (`lib/pipeline/definitions/close-agent/read-tools.test.ts`).
+- Each tool's schema parses its sample inputs to deep-equal values, so
+  the call the SDK replays is the one the model wrote.
 - The instructions macro's source reads no per-call variable, and the
   prose macro's reads the turns
   (`lib/prompts/bundled/bundled-pack.test.ts`).
