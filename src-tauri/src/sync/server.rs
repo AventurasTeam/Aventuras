@@ -3,36 +3,122 @@ use axum::{
     extract::{DefaultBodyLimit, State},
     routing::post,
 };
+use std::collections::HashMap;
 use std::sync::Arc;
+use std::time::Duration;
 use tokio::net::TcpListener;
-use tokio::sync::Mutex;
+use tokio::sync::{Mutex, oneshot};
+use uuid::Uuid;
 
-use super::types::{SyncAction, SyncRequest, SyncResponse, SyncStoryPreview};
+use super::types::{
+    PROTOCOL_VERSION, ReceivedItem, SyncAction, SyncPeer, SyncRequest, SyncResponse, WebviewRequest,
+};
+
+/// How long a request waits on the webview. Clients must allow longer.
+pub const WEBVIEW_TIMEOUT: Duration = Duration::from_secs(60);
+
+/// A push's reply when its receiver has not answered in time. The item stays queued.
+const PUSH_UNANSWERED: &str = "waiting";
+/// Pushes queued while the receiver decides; past this a push is refused rather than held.
+const MAX_QUEUED_PUSHES: usize = 8;
+
+const UPDATE_NEEDED: &str = "This device is on a different sync version. Update both devices.";
+
+type Pending = Arc<Mutex<HashMap<String, oneshot::Sender<Result<String, String>>>>>;
 
 /// Shared state for the sync server
 #[derive(Clone)]
 pub struct ServerState {
     /// Authentication token
     pub token: String,
-    /// Stories available on this server (JSON strings in Aventura format)
-    pub stories: Arc<Mutex<Vec<StoriesData>>>,
-    /// Stories received from clients (pushed stories)
-    pub received_stories: Arc<Mutex<Vec<String>>>,
-}
-
-/// Data about a story available on the server
-#[derive(Clone)]
-pub struct StoriesData {
-    pub preview: SyncStoryPreview,
-    pub full_data: String,
+    /// Items pushed by clients, waiting for the webview
+    pub received: Arc<Mutex<Vec<ReceivedItem>>>,
+    /// Requests the webview has yet to answer
+    pending: Pending,
+    /// Delivers a request to the webview
+    emit: Arc<dyn Fn(WebviewRequest) -> Result<(), String> + Send + Sync>,
+    timeout: Duration,
 }
 
 impl ServerState {
-    pub fn new(token: String) -> Self {
+    pub fn new(
+        token: String,
+        emit: impl Fn(WebviewRequest) -> Result<(), String> + Send + Sync + 'static,
+    ) -> Self {
         Self {
             token,
-            stories: Arc::new(Mutex::new(Vec::new())),
-            received_stories: Arc::new(Mutex::new(Vec::new())),
+            received: Arc::new(Mutex::new(Vec::new())),
+            pending: Arc::new(Mutex::new(HashMap::new())),
+            emit: Arc::new(emit),
+            timeout: WEBVIEW_TIMEOUT,
+        }
+    }
+
+    async fn register(&self) -> (String, oneshot::Receiver<Result<String, String>>) {
+        let request_id = Uuid::new_v4().to_string();
+        let (tx, rx) = oneshot::channel();
+        self.pending.lock().await.insert(request_id.clone(), tx);
+        (request_id, rx)
+    }
+
+    /// The webview's answer, or None once the timeout passes.
+    async fn wait(
+        &self,
+        request_id: &str,
+        rx: oneshot::Receiver<Result<String, String>>,
+    ) -> Option<Result<String, String>> {
+        let answer = tokio::time::timeout(self.timeout, rx).await;
+        self.pending.lock().await.remove(request_id);
+        match answer {
+            Ok(Ok(result)) => Some(result),
+            Ok(Err(_)) => Some(Err("The other device dropped the request".to_string())),
+            Err(_) => None,
+        }
+    }
+
+    /// Ask the webview, waiting up to the timeout.
+    async fn ask_webview(&self, peer: SyncPeer, action: SyncAction) -> Result<String, String> {
+        let (request_id, rx) = self.register().await;
+
+        let sent = (self.emit)(WebviewRequest {
+            request_id: request_id.clone(),
+            peer,
+            action,
+        });
+        if let Err(e) = sent {
+            self.pending.lock().await.remove(&request_id);
+            return Err(e);
+        }
+
+        self.wait(&request_id, rx)
+            .await
+            .unwrap_or_else(|| Err("The other device did not answer in time".to_string()))
+    }
+
+    /// Queue a pushed item and wait for its receiver's answer.
+    async fn receive(&self, peer: SyncPeer, payload: String) -> Result<String, String> {
+        let (request_id, rx) = {
+            let mut received = self.received.lock().await;
+            if received.len() >= MAX_QUEUED_PUSHES {
+                return Err("The other device has too many items waiting. Try again later.".into());
+            }
+            let (request_id, rx) = self.register().await;
+            received.push(ReceivedItem {
+                request_id: request_id.clone(),
+                peer,
+                payload,
+            });
+            (request_id, rx)
+        };
+        self.wait(&request_id, rx)
+            .await
+            .unwrap_or_else(|| Ok(PUSH_UNANSWERED.to_string()))
+    }
+
+    /// Hand the webview's answer to the waiting request. A late answer has no one to reach.
+    pub async fn answer(&self, request_id: &str, result: Result<String, String>) {
+        if let Some(tx) = self.pending.lock().await.remove(request_id) {
+            let _ = tx.send(result);
         }
     }
 }
@@ -62,43 +148,196 @@ pub fn spawn_server(listener: TcpListener, app: Router) -> tokio::task::JoinHand
     })
 }
 
-/// Handle sync requests
+/// Handle sync requests.
+///
+/// The body is taken as loose JSON so a peer on another protocol gets a readable error rather
+/// than a rejected request.
 async fn handle_sync(
     State(state): State<ServerState>,
-    Json(request): Json<SyncRequest>,
+    Json(body): Json<serde_json::Value>,
 ) -> Json<SyncResponse> {
-    // Validate token
-    if request.token != state.token {
-        return Json(SyncResponse::Error {
+    Json(respond(&state, body).await)
+}
+
+async fn respond(state: &ServerState, body: serde_json::Value) -> SyncResponse {
+    if body.get("token").and_then(|t| t.as_str()) != Some(state.token.as_str()) {
+        return SyncResponse::Error {
             message: "Invalid authentication token".to_string(),
-        });
+        };
     }
 
-    match request.action {
-        SyncAction::ListStories => {
-            let stories = state.stories.lock().await;
-            let previews: Vec<SyncStoryPreview> =
-                stories.iter().map(|s| s.preview.clone()).collect();
-            Json(SyncResponse::StoriesList { stories: previews })
+    let Ok(request) = serde_json::from_value::<SyncRequest>(body) else {
+        return SyncResponse::Error {
+            message: UPDATE_NEEDED.to_string(),
+        };
+    };
+    if request.protocol != PROTOCOL_VERSION {
+        return SyncResponse::Error {
+            message: UPDATE_NEEDED.to_string(),
+        };
+    }
+
+    let answer = match request.action {
+        SyncAction::Push { payload } => state.receive(request.peer, payload).await,
+        action => state.ask_webview(request.peer, action).await,
+    };
+    match answer {
+        Ok(data) => SyncResponse::Reply { data },
+        Err(message) => SyncResponse::Error { message },
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use serde_json::json;
+    use std::sync::Mutex as StdMutex;
+
+    fn request(action: serde_json::Value) -> serde_json::Value {
+        json!({
+            "token": "t",
+            "protocol": PROTOCOL_VERSION,
+            "peer": { "deviceId": "d", "name": "Phone" },
+            "action": action,
+        })
+    }
+
+    fn list() -> serde_json::Value {
+        request(json!({ "type": "list", "section": "stories" }))
+    }
+
+    /// A server whose webview never answers, and the requests it was sent.
+    fn silent_server() -> (ServerState, Arc<StdMutex<Vec<WebviewRequest>>>) {
+        let seen = Arc::new(StdMutex::new(Vec::new()));
+        let log = seen.clone();
+        let state = ServerState::new("t".to_string(), move |r| {
+            log.lock().unwrap().push(r);
+            Ok(())
+        });
+        (state, seen)
+    }
+
+    fn message(response: SyncResponse) -> String {
+        match response {
+            SyncResponse::Error { message } => message,
+            other => panic!("expected an error, got {other:?}"),
         }
-        SyncAction::PullStory { story_id } => {
-            let stories = state.stories.lock().await;
-            if let Some(story) = stories.iter().find(|s| s.preview.id == story_id) {
-                Json(SyncResponse::StoryData {
-                    data: story.full_data.clone(),
-                })
-            } else {
-                Json(SyncResponse::Error {
-                    message: format!("Story not found: {}", story_id),
-                })
+    }
+
+    #[tokio::test]
+    async fn the_webview_answer_reaches_the_client() {
+        let (state, seen) = silent_server();
+        let asking = state.clone();
+        let request = tokio::spawn(async move { respond(&asking, list()).await });
+
+        let id = loop {
+            if let Some(r) = seen.lock().unwrap().first() {
+                break r.request_id.clone();
             }
+            tokio::task::yield_now().await;
+        };
+        state.answer(&id, Ok("[]".to_string())).await;
+
+        match request.await.unwrap() {
+            SyncResponse::Reply { data } => assert_eq!(data, "[]"),
+            other => panic!("expected a reply, got {other:?}"),
         }
-        SyncAction::PushStory { story_data } => {
-            let mut received = state.received_stories.lock().await;
-            received.push(story_data);
-            Json(SyncResponse::Success {
-                message: "Story received successfully".to_string(),
-            })
+    }
+
+    #[tokio::test]
+    async fn an_unanswered_request_times_out_and_leaves_nothing_behind() {
+        let (mut state, _) = silent_server();
+        state.timeout = Duration::from_millis(10);
+        assert!(message(respond(&state, list()).await).contains("did not answer"));
+        assert!(state.pending.lock().await.is_empty());
+    }
+
+    #[tokio::test]
+    async fn a_late_answer_is_ignored() {
+        let (state, _) = silent_server();
+        state.answer("gone", Ok(String::new())).await;
+    }
+
+    #[tokio::test]
+    async fn a_failed_emit_is_reported() {
+        let state = ServerState::new("t".to_string(), |_| Err("no webview".to_string()));
+        assert_eq!(message(respond(&state, list()).await), "no webview");
+        assert!(state.pending.lock().await.is_empty());
+    }
+
+    #[tokio::test]
+    async fn the_previous_protocol_is_told_to_update() {
+        let (state, seen) = silent_server();
+        let old = json!({ "token": "t", "action": { "type": "listStories" } });
+        assert_eq!(message(respond(&state, old).await), UPDATE_NEEDED);
+        assert!(seen.lock().unwrap().is_empty());
+    }
+
+    #[tokio::test]
+    async fn a_different_protocol_number_is_told_to_update() {
+        let (state, _) = silent_server();
+        let mut body = list();
+        body["protocol"] = json!(PROTOCOL_VERSION + 1);
+        assert_eq!(message(respond(&state, body).await), UPDATE_NEEDED);
+    }
+
+    #[tokio::test]
+    async fn a_wrong_token_is_rejected_before_anything_else() {
+        let (state, _) = silent_server();
+        let mut body = list();
+        body["token"] = json!("nope");
+        assert_eq!(
+            message(respond(&state, body).await),
+            "Invalid authentication token"
+        );
+    }
+
+    fn push() -> serde_json::Value {
+        request(json!({ "type": "push", "payload": "{}" }))
+    }
+
+    #[tokio::test]
+    async fn a_push_is_queued_and_answered_by_its_receiver() {
+        let (state, seen) = silent_server();
+        let pushing = state.clone();
+        let request = tokio::spawn(async move { respond(&pushing, push()).await });
+
+        let id = loop {
+            if let Some(item) = state.received.lock().await.first() {
+                assert_eq!(item.peer.name, "Phone");
+                break item.request_id.clone();
+            }
+            tokio::task::yield_now().await;
+        };
+        state.answer(&id, Ok("applied".to_string())).await;
+
+        match request.await.unwrap() {
+            SyncResponse::Reply { data } => assert_eq!(data, "applied"),
+            other => panic!("expected a reply, got {other:?}"),
         }
+        assert!(seen.lock().unwrap().is_empty());
+    }
+
+    #[tokio::test]
+    async fn an_unanswered_push_stays_queued() {
+        let (mut state, _) = silent_server();
+        state.timeout = Duration::from_millis(10);
+        match respond(&state, push()).await {
+            SyncResponse::Reply { data } => assert_eq!(data, PUSH_UNANSWERED),
+            other => panic!("expected a reply, got {other:?}"),
+        }
+        assert_eq!(state.received.lock().await.len(), 1);
+        assert!(state.pending.lock().await.is_empty());
+    }
+
+    #[tokio::test]
+    async fn a_push_past_the_queue_limit_is_refused() {
+        let (mut state, _) = silent_server();
+        state.timeout = Duration::from_millis(1);
+        for _ in 0..MAX_QUEUED_PUSHES {
+            respond(&state, push()).await;
+        }
+        assert!(message(respond(&state, push()).await).contains("too many items"));
+        assert_eq!(state.received.lock().await.len(), MAX_QUEUED_PUSHES);
     }
 }

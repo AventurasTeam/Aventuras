@@ -13,13 +13,14 @@ use std::sync::Mutex;
 
 use base64::{Engine as _, engine::general_purpose};
 use futures_util::TryStreamExt;
-use sqlx::sqlite::SqliteConnectOptions;
+use sqlx::sqlite::{SqliteConnectOptions, SqlitePoolOptions};
 use sqlx::{Row, SqlitePool};
 use tauri::{AppHandle, Manager};
 use zip::write::SimpleFileOptions;
 use zip::{CompressionMethod, ZipArchive, ZipWriter};
 
 use crate::db::db_path;
+use crate::sync::device::assign_new_device_id;
 
 /// Open the export destination for writing, returning a real `std::fs::File`.
 ///
@@ -122,6 +123,32 @@ pub async fn restore_database(app: AppHandle, zip_path: String) -> Result<(), St
     .map_err(|e| format!("restore task failed: {e}"))?
 }
 
+/// Runs on the blocking restore thread, against a staged file nothing else has open. A file that
+/// passes the header check but that SQLite cannot read has no identity to protect, so only a
+/// readable one can fail the restore here.
+fn rekey_device(staged: &Path) -> Result<(), String> {
+    tauri::async_runtime::block_on(async {
+        let Ok(pool) = SqlitePoolOptions::new()
+            .max_connections(1)
+            .connect_with(SqliteConnectOptions::new().filename(staged))
+            .await
+        else {
+            return Ok(());
+        };
+        let readable = sqlx::query("SELECT 1 FROM sqlite_master LIMIT 1")
+            .fetch_optional(&pool)
+            .await
+            .is_ok();
+        let result = if readable {
+            assign_new_device_id(&pool).await
+        } else {
+            Ok(())
+        };
+        pool.close().await;
+        result
+    })
+}
+
 /// The restore itself, on an already-open archive so it can be exercised without an `AppHandle`.
 fn restore_db_from_file(file: File, target: &Path) -> Result<(), String> {
     let app_dir = target
@@ -158,6 +185,13 @@ fn restore_db_from_file(file: File, target: &Path) -> Result<(), String> {
     if let Err(e) = validate_sqlite_file(&staged) {
         let _ = std::fs::remove_file(&staged);
         return Err(e);
+    }
+
+    if let Err(e) = rekey_device(&staged) {
+        let _ = std::fs::remove_file(&staged);
+        return Err(format!(
+            "failed to give the restored database a device ID: {e}"
+        ));
     }
 
     // 3. Swap. Renaming (rather than copying) the live DB aside costs no extra disk space, which

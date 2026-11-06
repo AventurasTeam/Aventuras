@@ -37,10 +37,11 @@ const db = {
   getRuntimeVariables: vi.fn(),
   getStoryCustomVariables: vi.fn(),
   getBackgroundForBranch: vi.fn(),
+  getSyncRecord: vi.fn(),
 }
-vi.mock('./database', () => ({ database: db }))
+vi.mock('../database', () => ({ database: db }))
 
-const { syncService } = await import('./sync')
+const { syncService } = await import('./service')
 
 /** A story with no pack and nothing optional set — the baseline each test varies from. */
 function baseline() {
@@ -168,6 +169,22 @@ describe('exportStoryToJson — pack binding', () => {
     db.getPack.mockResolvedValue(null)
 
     expect('packBinding' in (await payload())).toBe(false)
+  })
+})
+
+describe('exportStoryToJson — pack sync identity', () => {
+  it('names the pack by its identity when it has one', async () => {
+    withPack()
+    db.getSyncRecord.mockResolvedValue({ syncId: 'sync-1', vector: {}, lastSynced: {} })
+
+    expect((await payload()).packBinding.packSyncId).toBe('sync-1')
+  })
+
+  it('leaves it out for a pack that never synced', async () => {
+    withPack()
+    db.getSyncRecord.mockResolvedValue(null)
+
+    expect((await payload()).packBinding).not.toHaveProperty('packSyncId')
   })
 })
 

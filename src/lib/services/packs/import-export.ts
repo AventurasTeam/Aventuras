@@ -6,7 +6,7 @@ import { packService } from './pack-service'
 import { database } from '#lib/services/database.ts'
 import { validatePackImport, type PackExport } from './validation'
 import { templateEngine } from '#lib/services/templates/engine.ts'
-import { hashContent } from './hash'
+import { packTemplateHashes } from './hash'
 import { packUpdateSummary, type PackUpdateSummary } from './update-summary'
 import type { PresetPack } from './types'
 import { errMessage } from '#lib/utils/error.ts'
@@ -66,11 +66,11 @@ export interface DirectoryImportCandidate {
 }
 
 class ImportExportService {
-  async exportPack(packId: string): Promise<boolean> {
+  async packExportData(packId: string): Promise<PackExport | null> {
     const fullPack = await packService.getFullPack(packId)
-    if (!fullPack) return false
+    if (!fullPack) return null
 
-    const exportData: PackExport = {
+    return {
       version: 1,
       name: fullPack.pack.name,
       description: fullPack.pack.description ?? undefined,
@@ -90,9 +90,14 @@ class ImportExportService {
         sortOrder: v.sortOrder,
       })),
     }
+  }
+
+  async exportPack(packId: string): Promise<boolean> {
+    const exportData = await this.packExportData(packId)
+    if (!exportData) return false
 
     const suggestedName =
-      fullPack.pack.name
+      exportData.name
         .toLowerCase()
         .replace(/[^a-z0-9]+/g, '-')
         .replace(/^-|-$/g, '') + '.prompt.json'
@@ -265,6 +270,16 @@ class ImportExportService {
     return allPacks.find((p) => p.name.toLowerCase() === lowerName) ?? null
   }
 
+  /** `name`, or the first free variant of it. A pack may keep the name it already holds. */
+  async uniqueName(name: string, ownId: string | null = null): Promise<string> {
+    let candidate = name
+    for (let attempt = 1; ; attempt++) {
+      const holder = await this.checkNameConflict(candidate)
+      if (!holder || holder.id === ownId) return candidate
+      candidate = attempt === 1 ? `${name} (Imported)` : `${name} (Imported ${attempt})`
+    }
+  }
+
   /** What updating `packId` from this file would discard, for the confirmation. */
   async summarizeUpdate(packId: string, packData: PackExport): Promise<PackUpdateSummary> {
     const [currentTemplates, currentVariables, storyCount] = await Promise.all([
@@ -292,13 +307,7 @@ class ImportExportService {
       )
     }
 
-    const hashes = new Map(
-      await Promise.all(
-        packData.templates.map(
-          async (t) => [t.templateId, await hashContent(t.content)] as [string, string],
-        ),
-      ),
-    )
+    const hashes = await packTemplateHashes(packData)
 
     await database.replacePackContents(packId, packData, hashes)
   }
@@ -306,16 +315,7 @@ class ImportExportService {
   async applyImport(packData: PackExport, strategy: ConflictStrategy): Promise<string | null> {
     if (strategy === 'cancel') return null
 
-    let finalName = packData.name
-    if (strategy === 'rename') {
-      let suffix = ''
-      let attempt = 0
-      while (await this.checkNameConflict(finalName + suffix)) {
-        attempt++
-        suffix = attempt === 1 ? ' (Imported)' : ` (Imported ${attempt})`
-      }
-      finalName = finalName + suffix
-    }
+    const finalName = strategy === 'rename' ? await this.uniqueName(packData.name) : packData.name
 
     const packId = crypto.randomUUID()
     const pack = await database.createPack({

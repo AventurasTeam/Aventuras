@@ -4,7 +4,7 @@
   import { getResponsiveModalContext } from './context'
   import { cn } from '#lib/utils/cn.ts'
 
-  let { children, class: className, ...props } = $props()
+  let { children, class: className, handle = true, ...props } = $props()
   const { isMobile } = getResponsiveModalContext()
 
   // A sheet spans the screen, so the width a caller sets for the dialog never reaches it.
@@ -20,7 +20,11 @@
 </script>
 
 {#if isMobile.current}
-  <Drawer.Content class={cn('safe-area-bottom h-auto max-h-[85vh] p-0', sheetClass)} {...props}>
+  <Drawer.Content
+    class={cn('safe-area-bottom h-auto max-h-[85vh] p-0', sheetClass)}
+    {handle}
+    {...props}
+  >
     {@render children?.()}
   </Drawer.Content>
 {:else}
