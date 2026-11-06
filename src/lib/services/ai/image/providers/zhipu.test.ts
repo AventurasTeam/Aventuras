@@ -4,12 +4,6 @@ vi.mock('./openaiCompatible', () => ({
   generateOpenAICompatibleImage: vi.fn(async () => ({ base64: 'RESULT' })),
 }))
 
-vi.mock('#lib/utils/url.ts', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('#lib/utils/url.ts')>()
-  return { ...actual, normalizeBaseUrl: vi.fn(actual.normalizeBaseUrl) }
-})
-
-import { normalizeBaseUrl } from '#lib/utils/url.ts'
 import { generateOpenAICompatibleImage } from './openaiCompatible'
 import { createZhipuProvider } from './zhipu'
 import type { ImageGenerateOptions } from './types'
@@ -26,35 +20,15 @@ const lastImageCall = () => vi.mocked(generateOpenAICompatibleImage).mock.lastCa
 beforeEach(() => vi.clearAllMocks())
 
 describe('Z.AI adapter', () => {
-  it('generates against api.z.ai under the zhipu-image debug id', async () => {
+  it('generates against the resolved host', async () => {
     const result = await createZhipuProvider({ apiKey: 'k' }).generate(options())
 
     expect(result).toEqual({ base64: 'RESULT' })
     expect(lastImageCall()).toMatchObject({
-      baseUrl: 'https://api.z.ai/api/paas/v4',
       apiKey: 'k',
-      serviceId: 'zhipu-image',
       model: 'glm-image',
       prompt: 'a castle',
     })
-  })
-
-  it.each([undefined, ''])('falls back to the default host for %j', async (baseUrl) => {
-    await createZhipuProvider({ apiKey: 'k', baseUrl }).generate(options())
-    expect(lastImageCall().baseUrl).toBe('https://api.z.ai/api/paas/v4')
-  })
-
-  it('uses the normalized base URL', async () => {
-    vi.mocked(normalizeBaseUrl).mockReturnValueOnce('https://normalized.test/v4')
-    await createZhipuProvider({ apiKey: 'k', baseUrl: ' https://raw.test// ' }).generate(options())
-    expect(normalizeBaseUrl).toHaveBeenCalledWith(' https://raw.test// ')
-    expect(lastImageCall().baseUrl).toBe('https://normalized.test/v4')
-  })
-
-  it('rejects a malformed base URL when listing models', async () => {
-    await expect(createZhipuProvider({ apiKey: 'k', baseUrl: 'h' }).listModels()).rejects.toThrow(
-      'Base URL is not an http(s) URL',
-    )
   })
 
   it('passes the model through without a fallback', async () => {

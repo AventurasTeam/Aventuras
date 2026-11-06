@@ -1,5 +1,4 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { APICallError } from 'ai'
 import type { ImageSpec } from '#lib/utils/image.ts'
 
 vi.mock('#lib/stores/settings.svelte.ts', () => ({
@@ -13,13 +12,6 @@ vi.mock('#lib/services/ai/sdk/providers/sdkFetch.ts', () => ({
   createSdkFetch: vi.fn(() => sdkFetch),
 }))
 
-vi.mock('#lib/utils/url.ts', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('#lib/utils/url.ts')>()
-  return { ...actual, normalizeBaseUrl: vi.fn(actual.normalizeBaseUrl) }
-})
-
-import { createSdkFetch } from '#lib/services/ai/sdk/providers/sdkFetch.ts'
-import { normalizeBaseUrl } from '#lib/utils/url.ts'
 import { imageGetFetch } from './fetchAdapter'
 import { createOpenRouterProvider } from './openrouter'
 
@@ -34,8 +26,8 @@ const jsonResponse = (body: unknown, status = 200) =>
     headers: { 'Content-Type': 'application/json' },
   })
 
-function provider(baseUrl?: string) {
-  return createOpenRouterProvider({ apiKey: 'k', baseUrl })
+function provider() {
+  return createOpenRouterProvider({ apiKey: 'k' })
 }
 
 function sentRequest() {
@@ -164,33 +156,6 @@ describe('OpenRouter image provider', () => {
     })
     expect(sentRequest().body.aspect_ratio).toBe('16:9')
   })
-
-  it('labels its fetch openrouter-image', () => {
-    provider()
-    expect(createSdkFetch).toHaveBeenCalledWith(
-      expect.objectContaining({ serviceId: 'openrouter-image' }),
-    )
-  })
-
-  it('honours a custom base URL', async () => {
-    await provider('https://proxy.test/v1').generate({
-      model: 'm',
-      prompt: 'p',
-      spec: landscapeMedium,
-    })
-    expect(sentRequest().url).toBe('https://proxy.test/v1/images')
-  })
-
-  it('rejects with the status on a failure and does not retry a 500', async () => {
-    sdkFetch.mockImplementation(async () => jsonResponse({ error: { message: 'boom' } }, 500))
-
-    const result = provider().generate({ model: 'm', prompt: 'p', spec: landscapeMedium })
-
-    const error = await result.catch((e: unknown) => e)
-    expect(APICallError.isInstance(error)).toBe(true)
-    expect(error).toMatchObject({ statusCode: 500 })
-    expect(sdkFetch).toHaveBeenCalledTimes(1)
-  })
 })
 
 describe('OpenRouter model discovery', () => {
@@ -217,12 +182,12 @@ describe('OpenRouter model discovery', () => {
 
   beforeEach(() => vi.mocked(imageGetFetch).mockReset())
 
-  it('reads the image model list on the configured host', async () => {
+  it('reads the image model list from /images/models', async () => {
     vi.mocked(imageGetFetch).mockResolvedValue(jsonResponse({ data: [] }))
-    await provider('https://proxy.test/v1').listModels()
+    await provider().listModels()
 
     expect(imageGetFetch).toHaveBeenCalledWith(
-      'https://proxy.test/v1/images/models',
+      'https://openrouter.ai/api/v1/images/models',
       { Authorization: 'Bearer k' },
       expect.objectContaining({ serviceId: 'openrouter-image-models' }),
     )

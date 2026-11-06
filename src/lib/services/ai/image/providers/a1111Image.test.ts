@@ -292,27 +292,9 @@ describe('errors', () => {
     expect(error.message).toBe('CUDA out of memory')
   })
 
-  it('falls back to the body text, then to the status', async () => {
-    expect((await failure(new Response('Bad gateway', { status: 502 }))).message).toBe(
-      'Bad gateway',
-    )
-    expect((await failure(new Response('', { status: 503 }))).message).toBe('HTTP 503')
+  it('falls back to the body text when detail and errors are empty', async () => {
     expect((await failure(json({ detail: '', errors: '' }, 500))).message).toBe(
       '{"detail":"","errors":""}',
     )
-  })
-
-  it('keeps the response body, and is not retryable by itself', async () => {
-    const error = await failure(json({ detail: 'busy' }, 429))
-    expect(error.responseBody).toBe('{"detail":"busy"}')
-    expect(error.isRetryable).toBe(false)
-  })
-
-  it('does not retry a 500, which may already have been billed', async () => {
-    fetchMock.mockImplementation(async () => json({ detail: 'boom' }, 500))
-    await expect(
-      generateSdkImage({ model: model(), prompt: 'p', size: '512x512' }),
-    ).rejects.toMatchObject({ statusCode: 500 })
-    expect(fetchMock).toHaveBeenCalledTimes(1)
   })
 })

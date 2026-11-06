@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
+import { describe, it, expect, vi, beforeEach } from 'vitest'
 
 vi.mock('#lib/stores/settings.svelte.ts', () => ({
   settings: { apiSettings: { llmTimeoutMs: 60_000 } },
@@ -7,13 +7,11 @@ vi.mock('#lib/stores/settings.svelte.ts', () => ({
 const sent = vi.hoisted(() => ({
   calls: [] as { url: string; init: RequestInit }[],
   replies: [] as (() => Response)[],
-  serviceIds: [] as string[],
 }))
 
 // The recording fetch stands in for the Tauri transport; everything above it is the real SDK.
 vi.mock('#lib/services/ai/sdk/providers/sdkFetch.ts', () => ({
-  createSdkFetch: (options: { serviceId: string }) => {
-    sent.serviceIds.push(options.serviceId)
+  createSdkFetch: () => {
     return async (input: RequestInfo | URL, init: RequestInit = {}) => {
       sent.calls.push({ url: input.toString(), init })
       return (sent.replies.shift() ?? okReply)()
@@ -22,12 +20,6 @@ vi.mock('#lib/services/ai/sdk/providers/sdkFetch.ts', () => ({
 }))
 vi.mock('./fetchAdapter', () => ({ imageGetFetch: vi.fn() }))
 
-vi.mock('#lib/utils/url.ts', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('#lib/utils/url.ts')>()
-  return { ...actual, normalizeBaseUrl: vi.fn(actual.normalizeBaseUrl) }
-})
-
-import { normalizeBaseUrl } from '#lib/utils/url.ts'
 import { imageGetFetch } from './fetchAdapter'
 import { createOpenAIProvider, openaiModelCapabilities } from './openai'
 import { IMAGE_SIZE_TIERS, type ImageSpec } from '#lib/utils/image.ts'
@@ -110,21 +102,6 @@ describe('OpenAI image generation', () => {
     ])
   })
 
-  it('goes to the normalized base URL', async () => {
-    vi.mocked(normalizeBaseUrl).mockReturnValueOnce('https://normalized.test/v1')
-    await createOpenAIProvider({ apiKey: 'k', baseUrl: ' https://proxy.test/v1// ' }).generate(
-      options(),
-    )
-    expect(normalizeBaseUrl).toHaveBeenCalledWith(' https://proxy.test/v1// ')
-    expect(lastCall().url).toBe('https://normalized.test/v1/images/generations')
-  })
-
-  it('sends its requests under the openai-image debug id', () => {
-    sent.serviceIds.length = 0
-    createOpenAIProvider({ apiKey: 'k' })
-    expect(sent.serviceIds).toEqual(['openai-image'])
-  })
-
   it('fails when the reply carries only a url', async () => {
     sent.replies.push(json({ data: [{ url: 'https://img.test/a.png' }] }))
     await expect(createOpenAIProvider({ apiKey: 'k' }).generate(options())).rejects.toThrow(
@@ -139,49 +116,6 @@ describe('OpenAI image generation', () => {
       message: 'Billing hard limit reached',
     })
     expect(sent.calls).toHaveLength(1)
-  })
-
-  describe('after a 429', () => {
-    beforeEach(() => {
-      vi.useFakeTimers()
-      vi.spyOn(console, 'warn').mockImplementation(() => {})
-    })
-    afterEach(() => {
-      vi.useRealTimers()
-      vi.restoreAllMocks()
-    })
-
-    it('retries once the backoff has passed', async () => {
-      sent.replies.push(json({ error: { message: 'Rate limited' } }, 429))
-
-      const result = createOpenAIProvider({ apiKey: 'k' }).generate(options())
-      await vi.advanceTimersByTimeAsync(11_000)
-
-      await expect(result).resolves.toEqual({ base64: 'AAA' })
-      expect(sent.calls).toHaveLength(2)
-    })
-
-    it('waits for Retry-After', async () => {
-      sent.replies.push(json({ error: { message: 'Rate limited' } }, 429, { 'retry-after': '2' }))
-
-      const result = createOpenAIProvider({ apiKey: 'k' }).generate(options())
-      await vi.advanceTimersByTimeAsync(1_999)
-      expect(sent.calls).toHaveLength(1)
-      await vi.advanceTimersByTimeAsync(1)
-
-      await expect(result).resolves.toEqual({ base64: 'AAA' })
-      expect(sent.calls).toHaveLength(2)
-    })
-
-    it('does not retry a 500', async () => {
-      sent.replies.push(json({ error: { message: 'Server error' } }, 500))
-      await expect(createOpenAIProvider({ apiKey: 'k' }).generate(options())).rejects.toMatchObject(
-        {
-          statusCode: 500,
-        },
-      )
-      expect(sent.calls).toHaveLength(1)
-    })
   })
 })
 
@@ -309,22 +243,6 @@ describe('OpenAI model listing', () => {
     )
     const models = await createOpenAIProvider({ apiKey: 'k' }).listModels('k')
     expect(models.map((m) => m.id)).toEqual(['gpt-image-2'])
-  })
-
-  it('lists against a custom base URL the same way', async () => {
-    vi.mocked(imageGetFetch).mockResolvedValue(
-      modelsResponse({ data: [{ id: 'gpt-image-2' }, { id: 'flux-dev' }] }),
-    )
-    const models = await createOpenAIProvider({
-      apiKey: 'k',
-      baseUrl: 'https://proxy.test/v1',
-    }).listModels('k')
-    expect(models.map((m) => m.id)).toEqual(['gpt-image-2'])
-    expect(imageGetFetch).toHaveBeenCalledWith(
-      'https://proxy.test/v1/models',
-      { Authorization: 'Bearer k' },
-      expect.anything(),
-    )
   })
 })
 

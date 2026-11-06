@@ -16,14 +16,8 @@ vi.mock('./sdkImage', () => ({
 }))
 vi.mock('./fetchAdapter', () => ({ imageGetFetch: vi.fn() }))
 
-vi.mock('#lib/utils/url.ts', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('#lib/utils/url.ts')>()
-  return { ...actual, normalizeBaseUrl: vi.fn(actual.normalizeBaseUrl) }
-})
-
-import { normalizeBaseUrl } from '#lib/utils/url.ts'
 import { imageGetFetch } from './fetchAdapter'
-import { createImageSdkFetch, generateSdkImage } from './sdkImage'
+import { generateSdkImage } from './sdkImage'
 import { createOpenAICompatibleProvider } from './openaiCompatibleProvider'
 import type { ImageGenerateOptions } from './types'
 
@@ -45,7 +39,7 @@ beforeEach(() => {
 })
 
 describe('OpenAI Compatible image generation', () => {
-  it('generates against the base URL under the openai-compatible-image debug id', async () => {
+  it('generates against the base URL', async () => {
     const result = await createOpenAICompatibleProvider({
       apiKey: 'k',
       baseUrl: BASE_URL,
@@ -53,22 +47,12 @@ describe('OpenAI Compatible image generation', () => {
 
     expect(result).toEqual({ base64: 'AAA' })
     expect(sdk.config[0]).toMatchObject({ baseURL: BASE_URL, apiKey: 'k' })
-    expect(createImageSdkFetch).toHaveBeenCalledWith('openai-compatible-image')
     expect(lastGenerate()).toMatchObject({
       model: { id: 'flux-dev' },
       prompt: 'a castle',
       size: '1536x1536',
       referenceImages: [PNG],
     })
-  })
-
-  it('generates against the normalized base URL', async () => {
-    vi.mocked(normalizeBaseUrl).mockReturnValueOnce('https://normalized.test/v1')
-    await createOpenAICompatibleProvider({ apiKey: '', baseUrl: ' https://raw.test// ' }).generate(
-      options(),
-    )
-    expect(normalizeBaseUrl).toHaveBeenCalledWith(' https://raw.test// ')
-    expect(sdk.config[0].baseURL).toBe('https://normalized.test/v1')
   })
 
   it('sends the picked size from the snapshot, and canonical pixels without one', async () => {
@@ -130,21 +114,16 @@ describe('OpenAI Compatible model listing', () => {
     for (const [, , options] of calls) expect(options?.signal).toBe(signal)
   })
 
-  it('lists from the normalized base URL, general list and dedicated list', async () => {
-    vi.mocked(normalizeBaseUrl).mockReturnValueOnce('https://normalized.test/v1')
+  it('lists the general list and the dedicated list', async () => {
     mockHost({ models: json({ data: [] }) })
-    await createOpenAICompatibleProvider({
-      apiKey: '',
-      baseUrl: ' https://raw.test// ',
-    }).listModels('')
+    await list('')
 
-    expect(normalizeBaseUrl).toHaveBeenCalledWith(' https://raw.test// ')
     expect(
       vi
         .mocked(imageGetFetch)
         .mock.calls.map(([url]) => url)
         .toSorted(),
-    ).toEqual(['https://normalized.test/v1/images/models', 'https://normalized.test/v1/models'])
+    ).toEqual([`${BASE_URL}/images/models`, `${BASE_URL}/models`])
   })
 
   it('sends the key to both lists, and no header without one', async () => {

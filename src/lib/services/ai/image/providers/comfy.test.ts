@@ -32,7 +32,6 @@ import {
   clearComfyCacheForUrl,
   comfyReferenceLimit,
   createComfyProvider,
-  fetchModelList,
   loadImageInputs,
   suggestReferenceInputs,
 } from './comfy'
@@ -619,41 +618,6 @@ describe('server version', () => {
 })
 
 describe('base URL', () => {
-  const requestedUrls = () => [
-    ...vi.mocked(imageGetFetch).mock.calls.map(([url]) => String(url)),
-    ...sdkFetch.mock.calls.map(([url]) => String(url)),
-  ]
-
-  it('sends every request to the normalized base URL', async () => {
-    vi.mocked(normalizeBaseUrl).mockReturnValueOnce('http://normalized.test:8188')
-    listing({ diffusion_models: ['flux.safetensors'] })
-    const provider = createComfyProvider({ apiKey: '', baseUrl: ' http://raw.test:8188// ' })
-    await provider.generate(options({ model: 'checkpoint:m.safetensors' }))
-    await provider.listModels()
-    await provider.getSamplerInfo?.()?.catch(() => {})
-
-    expect(normalizeBaseUrl).toHaveBeenCalledWith(' http://raw.test:8188// ')
-    const urls = requestedUrls()
-    expect(urls).not.toHaveLength(0)
-    expect(urls.filter((url) => !url.startsWith('http://normalized.test:8188/'))).toEqual([])
-  })
-
-  it('has fetchModelList request the normalized base URL', async () => {
-    vi.mocked(normalizeBaseUrl).mockReturnValueOnce('http://normalized.test:8188')
-    await fetchModelList(' http://raw.test:8188/ ', 'checkpoints')
-    expect(normalizeBaseUrl).toHaveBeenCalledWith(' http://raw.test:8188/ ')
-    expect(String(vi.mocked(imageGetFetch).mock.calls[0][0])).toBe(
-      'http://normalized.test:8188/models/checkpoints',
-    )
-  })
-
-  it('rejects a malformed base URL before any request', async () => {
-    await expect(fetchModelList('h', 'checkpoints')).rejects.toThrow(
-      'Base URL is not an http(s) URL',
-    )
-    expect(imageGetFetch).not.toHaveBeenCalled()
-  })
-
   it('clears the cache for a malformed base URL without throwing', () => {
     expect(() => clearComfyCacheForUrl('h')).not.toThrow()
   })

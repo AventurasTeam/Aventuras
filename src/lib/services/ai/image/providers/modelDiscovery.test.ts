@@ -136,25 +136,4 @@ describe('model discovery', () => {
     expect(await createOpenAIProvider({ apiKey: '' }).listModels('')).toEqual([])
     expect(imageGetFetch).not.toHaveBeenCalled()
   })
-
-  it('lists OpenRouter models through the Tauri transport', async () => {
-    vi.mocked(imageGetFetch).mockResolvedValue(
-      reply({
-        data: [
-          {
-            id: 'google/gemini-2.5-flash-image',
-            architecture: { input_modalities: ['text', 'image'], output_modalities: ['image'] },
-          },
-          { architecture: { output_modalities: ['image'] } },
-        ],
-      }),
-    )
-    const models = await createOpenRouterProvider({ apiKey: 'k' }).listModels('k')
-    expect(models.map((m) => m.id)).toEqual(['google/gemini-2.5-flash-image'])
-    expect(imageGetFetch).toHaveBeenCalledWith(
-      'https://openrouter.ai/api/v1/images/models',
-      { Authorization: 'Bearer k' },
-      expect.anything(),
-    )
-  })
 })

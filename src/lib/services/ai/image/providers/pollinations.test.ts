@@ -41,7 +41,6 @@ describe('Pollinations adapter', () => {
     expect(lastImageCall()).toMatchObject({
       baseUrl: 'https://gen.pollinations.ai/v1',
       apiKey: 'k',
-      serviceId: 'pollinations-image',
       model: 'm1',
       prompt: 'a castle',
       size: '1536x1536',

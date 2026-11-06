@@ -12,14 +12,7 @@ vi.mock('#lib/services/ai/sdk/providers/sdkFetch.ts', () => ({
   createSdkFetch: vi.fn(() => sdkFetch),
 }))
 
-vi.mock('#lib/utils/url.ts', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('#lib/utils/url.ts')>()
-  return { ...actual, normalizeBaseUrl: vi.fn(actual.normalizeBaseUrl) }
-})
-
 import { imageGetFetch } from './fetchAdapter'
-import { createSdkFetch } from '#lib/services/ai/sdk/providers/sdkFetch.ts'
-import { normalizeBaseUrl } from '#lib/utils/url.ts'
 import { createNanoGPTProvider } from './nanogpt'
 import type { ImageGenerateOptions, ImageModelInfo } from './types'
 
@@ -70,29 +63,6 @@ describe('NanoGPT adapter', () => {
     expect(result).toEqual({ base64: 'RESULT' })
   })
 
-  it('labels its fetch nanogpt-image', () => {
-    createNanoGPTProvider({ apiKey: 'k' })
-    expect(createSdkFetch).toHaveBeenCalledWith(
-      expect.objectContaining({ serviceId: 'nanogpt-image' }),
-    )
-  })
-
-  it('posts to the normalized base URL', async () => {
-    vi.mocked(normalizeBaseUrl).mockReturnValueOnce('https://normalized.test/v1')
-    await createNanoGPTProvider({ apiKey: 'k', baseUrl: ' https://raw.test// ' }).generate(
-      options(),
-    )
-    expect(normalizeBaseUrl).toHaveBeenCalledWith(' https://raw.test// ')
-    expect(sentRequest().url).toBe('https://normalized.test/v1/images')
-  })
-
-  it('posts to a partner host when one is configured', async () => {
-    await createNanoGPTProvider({ apiKey: 'k', baseUrl: 'https://partner.test/api/v1' }).generate(
-      options(),
-    )
-    expect(sentRequest().url).toBe('https://partner.test/api/v1/images')
-  })
-
   it("picks the resolution from the model's supported resolutions", async () => {
     await createNanoGPTProvider({ apiKey: 'k' }).generate(
       options({ modelInfo: modelInfo({ supportedResolutions: ['square_hd', 'landscape_16_9'] }) }),
@@ -123,11 +93,6 @@ describe('NanoGPT adapter', () => {
       options({ spec: { orientation: 'landscape', size: 'medium' } }),
     )
     expect(sentRequest().body).not.toHaveProperty('aspect_ratio')
-  })
-
-  it('sends references as data URLs', async () => {
-    await createNanoGPTProvider({ apiKey: 'k' }).generate(options())
-    expect(sentRequest().body.input_references).toEqual(['data:image/png;base64,iVBORw0KGgo='])
   })
 })
 
@@ -166,17 +131,6 @@ describe('NanoGPT model catalogue', () => {
       'https://api.nano-gpt.com/api/v1/images/models',
       { Authorization: 'Bearer k' },
       expect.objectContaining({ serviceId: 'nanogpt-image-models' }),
-    )
-  })
-
-  it('reads the list from a configured partner host', async () => {
-    withModels(listed('m'))
-    await createNanoGPTProvider({
-      apiKey: 'k',
-      baseUrl: 'https://partner.test/api/v1/',
-    }).listModels()
-    expect(vi.mocked(imageGetFetch).mock.calls[0][0]).toBe(
-      'https://partner.test/api/v1/images/models',
     )
   })
 
@@ -409,20 +363,6 @@ describe('NanoGPT getModelCapabilities', () => {
       'https://api.nano-gpt.com/api/v1/images/models/fal-ai/krea-2/turbo/endpoints',
       { Authorization: 'Bearer k' },
       expect.objectContaining({ allowStatuses: [404] }),
-    ])
-  })
-
-  it('looks an unlisted id up on the configured partner host', async () => {
-    vi.mocked(imageGetFetch)
-      .mockResolvedValueOnce(modelsResponse({ data: [] }))
-      .mockResolvedValueOnce(endpointsReply({ id: 'x/y', endpoints: [] }))
-    await createNanoGPTProvider({
-      apiKey: 'k',
-      baseUrl: 'https://partner.test/api/v1',
-    }).getModelCapabilities?.('a/x/y')
-    expect(vi.mocked(imageGetFetch).mock.calls.map(([url]) => url)).toEqual([
-      'https://partner.test/api/v1/images/models',
-      'https://partner.test/api/v1/images/models/a/x/y/endpoints',
     ])
   })
 

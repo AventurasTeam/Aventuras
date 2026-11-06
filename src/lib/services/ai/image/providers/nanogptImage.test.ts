@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
+import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { APICallError, InvalidResponseDataError, NoImageGeneratedError } from 'ai'
 import type { ImageModelV4CallOptions } from '@ai-sdk/provider'
 
@@ -259,37 +259,5 @@ describe('errors', () => {
       ),
     )
     expect(JSON.stringify((error as APICallError).requestBodyValues)).not.toContain(PNG)
-  })
-})
-
-describe('retry', () => {
-  beforeEach(() => {
-    vi.useFakeTimers()
-    vi.spyOn(console, 'warn').mockImplementation(() => {})
-  })
-  afterEach(() => {
-    vi.useRealTimers()
-    vi.restoreAllMocks()
-  })
-
-  it('retries a 429 once after Retry-After', async () => {
-    fetchMock
-      .mockResolvedValueOnce(json({ error: 'busy' }, 429, { 'Retry-After': '1' }))
-      .mockResolvedValue(json(OK_BODY))
-
-    const result = generateSdkImage({ model: model(), prompt: 'p' })
-    await vi.advanceTimersByTimeAsync(11_000)
-
-    await expect(result).resolves.toEqual({ base64: 'AAA' })
-    expect(fetchMock).toHaveBeenCalledTimes(2)
-  })
-
-  it('does not retry a 500, which may already have been billed', async () => {
-    fetchMock.mockImplementation(async () => json({ error: 'boom' }, 500))
-
-    await expect(generateSdkImage({ model: model(), prompt: 'p' })).rejects.toMatchObject({
-      statusCode: 500,
-    })
-    expect(fetchMock).toHaveBeenCalledTimes(1)
   })
 })

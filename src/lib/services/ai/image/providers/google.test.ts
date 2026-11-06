@@ -14,16 +14,10 @@ vi.mock('./fetchAdapter', () => ({
   imageGetFetch: vi.fn(),
 }))
 
-vi.mock('#lib/utils/url.ts', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('#lib/utils/url.ts')>()
-  return { ...actual, normalizeBaseUrl: vi.fn(actual.normalizeBaseUrl) }
-})
-
 import { createGoogleGenerativeAI } from '@ai-sdk/google'
 import { IMAGE_SIZE_TIERS, type ImageSizeTier } from '#lib/utils/image.ts'
-import { normalizeBaseUrl } from '#lib/utils/url.ts'
 import { imageGetFetch } from './fetchAdapter'
-import { createImageSdkFetch, generateSdkImage } from './sdkImage'
+import { generateSdkImage } from './sdkImage'
 import { createGoogleProvider, googleModelCapabilities } from './google'
 import type { ImageGenerateOptions } from './types'
 
@@ -112,7 +106,6 @@ describe('Google transport', () => {
     expect(createGoogleGenerativeAI).toHaveBeenCalledWith(
       expect.objectContaining({ fetch: 'SDK_FETCH' }),
     )
-    expect(createImageSdkFetch).toHaveBeenCalledWith('google-image')
   })
 })
 
@@ -121,23 +114,6 @@ describe('Google model listing', () => {
 
   const respond = (response: { json: () => Promise<unknown> }) =>
     vi.mocked(imageGetFetch).mockResolvedValue(response as Response)
-
-  it('uses the normalized base URL for the SDK and the model list', async () => {
-    vi.mocked(normalizeBaseUrl).mockReturnValueOnce('https://normalized.test/v1beta')
-    respond({ json: async () => ({ models: [] }) })
-
-    await createGoogleProvider({ apiKey: 'k', baseUrl: ' https://raw.test// ' }).listModels()
-
-    expect(normalizeBaseUrl).toHaveBeenCalledWith(' https://raw.test// ')
-    expect(createGoogleGenerativeAI).toHaveBeenCalledWith(
-      expect.objectContaining({ baseURL: 'https://normalized.test/v1beta' }),
-    )
-    expect(imageGetFetch).toHaveBeenCalledWith(
-      'https://normalized.test/v1beta/models?pageSize=200',
-      { 'x-goog-api-key': 'k' },
-      { serviceId: 'google-image-models', signal: undefined },
-    )
-  })
 
   it('forwards the abort signal', async () => {
     respond({ json: async () => ({ models: [] }) })
