@@ -528,6 +528,7 @@ describe('Image Provider Registry', () => {
       expect(send).toHaveBeenCalledWith(expect.objectContaining({ modelInfo: capabilities }))
     })
 
+    /** Round trip: what the first generation saves is read as current by the next, so the list is asked once. The list lookup is the registry's own (lookupCapabilities, unexported). */
     it('looks a legacy profile up once and saves the result', async () => {
       const { profile, listModels } = setup(
         {},
