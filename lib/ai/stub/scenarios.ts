@@ -80,15 +80,26 @@ function blocksOf(message: SentMessage | undefined): AnthropicBlock[] {
   return Array.isArray(message?.content) ? (message.content as AnthropicBlock[]) : []
 }
 
+function opensWithSignedThinking(message: SentMessage | undefined): boolean {
+  const [opening] = blocksOf(message)
+  return (
+    opening?.type === 'thinking' &&
+    opening.thinking === STUB_THINKING &&
+    opening.signature === STUB_THINKING_SIGNATURE
+  )
+}
+
 // Anthropic refuses a tool result unless the assistant turn before it opens with its thinking
 // block, text and signature intact: the one offline check a step's response messages replay it.
+// It holds for every exchange of an accumulated history, not only the latest.
 function toolStepReply(body: string): Response {
   const { messages } = sentRequest(body)
-  const resultAt = messages.findIndex(
-    (message) =>
-      message.role === 'user' && blocksOf(message).some((block) => block.type === 'tool_result'),
+  const resultTurns = messages.flatMap((message, at) =>
+    message.role === 'user' && blocksOf(message).some((block) => block.type === 'tool_result')
+      ? [at]
+      : [],
   )
-  if (resultAt === -1) {
+  if (resultTurns.length === 0) {
     return anthropicReply(
       [
         { type: 'thinking', thinking: STUB_THINKING, signature: STUB_THINKING_SIGNATURE },
@@ -97,12 +108,7 @@ function toolStepReply(body: string): Response {
       'tool_use',
     )
   }
-  const [opening] = blocksOf(messages[resultAt - 1])
-  if (
-    opening?.type === 'thinking' &&
-    opening.thinking === STUB_THINKING &&
-    opening.signature === STUB_THINKING_SIGNATURE
-  ) {
+  if (resultTurns.every((at) => opensWithSignedThinking(messages[at - 1]))) {
     return anthropicJson('The door opens.')
   }
   return invalidRequest(

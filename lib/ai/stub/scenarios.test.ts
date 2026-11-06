@@ -113,6 +113,37 @@ describe('makeScenarioFetch', () => {
     })
   })
 
+  describe('tool-step over an accumulated history of two exchanges', () => {
+    const exchange = (content: unknown[]) => [{ role: 'assistant', content }, TOOL_RESULT]
+    const intact = [SIGNED_THINKING, TOOL_USE]
+    const forged = [{ ...SIGNED_THINKING, signature: 'forged' }, TOOL_USE]
+
+    it('answers text when every assistant turn kept its thinking block', async () => {
+      const res = await makeScenarioFetch('tool-step')(
+        'https://stub.test',
+        sent(...exchange(intact), ...exchange(intact)),
+      )
+
+      expect(res.status).toBe(200)
+      expect((await res.json()) as StubMessage).toMatchObject({
+        content: [{ type: 'text', text: 'The door opens.' }],
+        stop_reason: 'end_turn',
+      })
+    })
+
+    it.each([
+      ['the latest', [...exchange(intact), ...exchange(forged)]],
+      ['an earlier', [...exchange(forged), ...exchange(intact)]],
+    ])('refuses when %s assistant turn lost its signature', async (_which, after) => {
+      const res = await makeScenarioFetch('tool-step')('https://stub.test', sent(...after))
+
+      expect(res.status).toBe(400)
+      expect(await res.json()).toMatchObject({
+        error: { message: expect.stringContaining('thinking block') },
+      })
+    })
+  })
+
   it('tool-step-cut stops on max_tokens partway through its text', async () => {
     const res = await makeScenarioFetch('tool-step-cut')('https://stub.test', sent())
 
