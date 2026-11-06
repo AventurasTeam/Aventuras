@@ -541,16 +541,14 @@ vitest and the probe share. It never reaches a production slot.
 ## Open questions
 
 - **What does a step with `content-filter`, or `other` with no tool
-  call, mean for a task?** Canon ends a task on a reply that finishes
-  normally. A structured call retries a filter, and `other` with no raw
-  reason reads as finished there. Starting answer: retry a filter once
-  and stop as `cut-off` if it repeats; treat `other` as finished. The
-  retry is one branch in 5.4's `parseFn`, and `stopped` may need a
-  reason of its own, which C4 lets it grow.
+  call, mean for a task?** Answered in
+  [Slice 5.4](./04-tool-step.md) (developer, 2026-11-06): a filter takes
+  the cut-off path, calls or not, retried once under a fresh bound and
+  returned as `stopped`, `reason: 'cut-off'`, cause `content-filter`, so
+  C4 needs no reason of its own; `other` with no raw reason is finished.
 - **Does a `length` reply holding whole tool calls get discarded?**
-  Canon's "never a finished task, whatever it holds" and "retried once"
-  read that way, and 5.4 drops them on that reading. Confirm, since it
-  throws away calls that parsed.
+  Answered in [Slice 5.4](./04-tool-step.md) (developer, 2026-11-06):
+  yes. Its calls never reach the runner, and the step is sent again.
 - **Do retried attempts count against the 24?** Starting answer: no. 5.4
   retries inside one step call and the budget counts steps. It's a
   tuning constant either way.

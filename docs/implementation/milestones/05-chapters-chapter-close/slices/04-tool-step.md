@@ -133,15 +133,16 @@ so the caller copies them into `CloseReport.stopped`. Every arm but `not-configu
   caller answers `calls` only, and a step whose calls were all invalid
   still isn't a finished task.
 
-**Cut-off retry.** `callWithRetry` gains `maxCutOffAttempts`, default 1,
-so every shipped caller keeps failing at once. Under the budget a
-`ReplyCutOffError` from `parseFn` goes in `recoverable` and the call
-repeats; at it, the call fails with `reply-cut-off`. The step passes 2,
-with `maxProviderAttempts: 2`, as a structured call does.
-Its `parseFn` reads `'length'` with `isCutOff` before anything else, so a
-cut reply's calls and messages go with it and never reach the caller. A
-second cut returns `stopped`, `reason: 'cut-off'`. `provider.reply_cut_off`
-logs each cut with an `outcome` of `retried` or `stopped`.
+**Cut-off retry.** `callWithRetry` doesn't change: a `ReplyCutOffError`
+from `parseFn` still fails a call at once. The step runs it with
+`maxProviderAttempts: 2` and `maxParseAttempts: 1`, and on a
+`reply-cut-off` failure runs it once more, under a fresh bound.
+Its `parseFn` reads `'length'` and `'content-filter'` before anything
+else, so a cut or filtered reply's calls and messages go with it and
+never reach the caller. A second cut or filter returns `stopped`,
+`reason: 'cut-off'`, with the first one in `recoverable`.
+`provider.reply_cut_off` logs each with an `outcome` of `retried` or
+`stopped`.
 
 **Output default.** `TOOL_STEP_MAX_OUTPUT_DEFAULT = 8_000` goes out as
 `maxOutputTokens` when the profile sets none, a story override's
@@ -149,16 +150,15 @@ logs each cut with an `outcome` of `retried` or `stopped`.
 reaches `replyCutOff` as `maxOutput`: `generate.ts:488` passes only the
 profile's, and a reasoning spiral would read as `unknown`.
 
-**Call bound (C2).** If [Slice 5.2](./02-first-chapter.md) hasn't landed
-it: `callTimeoutMs` and `CALL_TIMEOUT_DEFAULT_MS` in `lib/ai`, keyed by
-agent id, the profile's `timeout` else ten minutes. `passTimeoutMs`
-delegates with `'classifier'`, and `PASS_TIMEOUT_DEFAULT_MS` stays
-exported for `scripts/classifier-parse-probe.ts:42`. The step holds its
-own bound over the whole call, retries included, as a pass's call has
+**Call bound (C2).** The step bounds its call with
+[Slice 5.2](./02-first-chapter.md)'s `callTimeoutMs` for its target: the
+profile's `timeout`, else ten minutes. The bound holds over the whole
+call, provider retries included, as a pass's call has
 (`lib/pipeline/definitions/periodic-classifier.ts:270`), and a profile
-`timeout` also bounds each attempt. An expiry returns `failed` with a
-provider `timeout` naming the bound, and a cancel returns `aborted`, so
-the caller needn't tell them apart as the pass does at `:287`.
+`timeout` also bounds each attempt. A cut-off retry runs under a fresh
+bound. An expiry returns `failed` with a provider `timeout` naming the
+bound, and a cancel returns `aborted`, so the caller needn't tell them
+apart as the pass does at `:287`.
 
 **Window check.**
 
@@ -406,24 +406,6 @@ Unit paths run with `pnpm vitest run --project unit <path>`.
   under 0.5, raise the truncation toast, and stop early on a window it
   hasn't filled. Unverified on any server; `provider.input_ratio` in
   [Slice 5.5b](./05b-identity-threads.md)'s run shows it.
-
-- **One helper for a bounded structured call?** The sequence
-  `boundedSignal`, `generateStructured`, dispose, `retriedAttemptEvents`,
-  aborted-versus-expired, `structuredCallFailure` is written out twice
-  after [Slice 5.2](./02-first-chapter.md): the periodic classifier pass
-  and the close's metadata call
-  (`lib/pipeline/definitions/chapter-close-metadata-call.ts`). A tool
-  step would be the third copy and Slice 5.10's boundary call the
-  fourth. Suggested: one helper in `lib/pipeline` returning
-  `ok | aborted | failed`, landed with the first new caller.
-  `ResolveModelConfig` is built inline at each structured caller too
-  (`lib/pipeline/runtime/preflight.ts:18`, and under
-  `lib/pipeline/definitions/`: `periodic-classifier.ts`,
-  `suggestion-refresh.ts`, `per-turn-piggyback.ts`,
-  `chapter-close-metadata-call.ts`; `per-turn.ts` builds it inline too),
-  and `generateToolStep` takes one (`config`, above). One builder would
-  keep a new field from being missed at one of them. Routed from triage
-  2026-11-06.
 
 ## Implementation notes
 
