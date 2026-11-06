@@ -549,7 +549,8 @@ of `{ name, args }` and `finishReason`, which defaults to `tool_calls`
 with calls and `stop` without. A string `args` goes out verbatim, so a
 spec can send a malformed call. A step can also be a function of the
 call's `MockRequest`, since it can name only the placeholders its
-prompt holds. A function step that throws fails its call with a 400,
+prompt holds. A step that throws, or whose reply can't be serialized,
+fails its call with a 400,
 so the step fails at once with no retry. For a held call the error is
 rethrown from the release or `close()`, after every held call is
 answered; for an unheld call it escapes the server's request handler

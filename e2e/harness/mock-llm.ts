@@ -203,7 +203,8 @@ export type MockLlm = {
   overflowNextStructured: (agentName: string, shape?: OverflowShape) => void
   /**
    * Replace the tool lane's queue; each answered call takes the next step. Empty: no calls, empty
-   * text, `stop`. A function step that throws fails its call with a 400, then rethrows.
+   * text, `stop`. A step that throws or can't be serialized fails its call with a 400, then
+   * rethrows.
    */
   setToolSteps: (tools: readonly string[], steps: readonly MockToolStepReply[]) => void
   /** Every completion request received, in order. */

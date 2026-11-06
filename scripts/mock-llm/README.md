@@ -51,8 +51,9 @@ A **tool** lane carries a close's tool steps. Its key is `tools:` and the
 request's tool names, sorted and joined by `+`, so each task's tool list
 gets a lane of its own, and the panel files it under **Tools** once the
 app has sent one. The lane is saved on first sight, so the panel still
-lists it after the mock restarts. A response there is a step: `text`, `reasoning` (sent as
-`reasoning_content`), `toolCalls` as a list of `{ "name", "args" }`, and
+lists it after the mock restarts. A response there is a step: `text`,
+`reasoning` (sent as `reasoning_content`), `toolCalls` as a list of
+`{ "name", "args" }`, and
 `finishReason`, which defaults to `tool_calls` with calls and `stop`
 without. A string `args` goes out verbatim, so a malformed call can be
 scripted; anything else goes out as JSON. Sequence cycling scripts a
@@ -125,8 +126,10 @@ invalid call and hands it back to the task, retrying nothing; a step with
 no calls goes out as it is and the failure is spent. `length` keeps the
 calls whole and ends with `finish_reason: 'length'`: the app drops the
 reply and sends the step once more, so a budget of 1 there is swallowed
-too, and 2 stops the task as cut off. `http`, `hang` and the two overflow kinds act as on a structured lane,
-an overflow stopping the task, or failing the close on a task's first call.
+too, and 2 stops the task as cut off. The cut call doesn't move a
+sequence on, so the retry gets the same step. `http`, `hang` and the two
+overflow kinds act as on a structured lane, an overflow stopping the
+task, or failing the close on a task's first call.
 The panel's retry warning follows these rules on a tool lane.
 
 Narrative has no such wrapper, so one `http` failure fails the run, as does a

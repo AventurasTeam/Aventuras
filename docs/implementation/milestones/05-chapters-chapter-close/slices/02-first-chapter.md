@@ -668,7 +668,7 @@ that ran)
   decision, 2026-11-05).** `buildCallSettings` sends the profile's
   `maxOutput`, and no code default is added; `generateStructured` and
   `StructuredCallOptions` don't change. This answers
-  [Slice 5.4](./04-tool-step.md#open-questions)'s "Max output for
+  [Slice 5.4](./04-tool-step.md#implementation-notes)'s "Max output for
   boundary and metadata" for metadata; boundary's stays
   [Slice 5.10](./10-two-starts.md)'s. The gap a story override leaves is
   filed under

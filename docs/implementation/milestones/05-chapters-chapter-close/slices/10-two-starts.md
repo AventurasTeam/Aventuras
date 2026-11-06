@@ -603,8 +603,9 @@ amends the scope above.
   [Slice 5.4](./04-tool-step.md)'s tool step keeps its bound and expiry
   branch inside `lib/ai`, so 5.10's boundary call would be the third copy
   of the pipeline-side sequence, and a helper would have to decide whether
-  it also covers the step's in-`lib/ai` expiry branch. Suggested: one helper in `lib/pipeline` returning
-  `ok | aborted | failed`, landed with the first new caller.
+  it also covers the step's in-`lib/ai` expiry branch. Suggested: one
+  helper in `lib/pipeline` returning `ok | aborted | failed`, landed with
+  the first new caller.
   `ResolveModelConfig` is built inline at each structured caller too
   (`lib/pipeline/runtime/preflight.ts:18`, and under
   `lib/pipeline/definitions/`: `periodic-classifier.ts`,

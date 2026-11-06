@@ -223,3 +223,42 @@ slice-planning gate forces its resolution before that slice is planned.
   interrupted summary either, and the `tsx` and `pnpm` relay in between
   wasn't traced. With parallel workers an orphaned run now finishes in
   under 2 minutes. Surfaced by the same review.
+- **`generateStructured`'s per-attempt timer can't fire under its
+  callers' bound.** Its `callFn` (`lib/ai/generate.ts`) arms the
+  profile's `timeout` per attempt, while the periodic pass and the
+  close's metadata call bound the whole call with `callTimeoutMs`: the
+  same profile `timeout`, armed first. So the per-attempt timer and its
+  `ProviderTimeoutError` arm never fire, no test covers them, and the
+  comment there says a provider retry gets the profile's whole timeout
+  again, which the caller's bound prevents. Slice 5.4's tool step
+  dropped its copy for this reason. Decide whether a caller with a
+  different bound justifies keeping it, or drop it and fix the comment.
+- **A client-side SDK error is retried as a provider failure.**
+  `classifyProviderError` (`lib/ai/transport/classify-provider-error.ts`)
+  reads anything that isn't an `APICallError` as a retryable `unknown`,
+  so an `InvalidPromptError` (a malformed `messages` array, thrown before
+  any request) or a `TypeValidationError` backs off, throws again and
+  fails as `provider`. A close's tool step is the first call built from
+  caller messages, so a task-runner bug there reads as "LLM call failed".
+  Surfaced by Slice 5.4's final review.
+- **The mock panel's failure menu can't show `stream-cut` on a
+  structured or tool lane.** `FAILURES.structured`
+  (`scripts/mock-llm/ui/index.html`) leaves it out, so a lane armed
+  with it through the API shows the menu as none beside a `stream-cut`
+  badge. On a tool lane it acts as `malformed`. Surfaced by Slice 5.4's
+  review.
+- **The dev mock doesn't re-check stored lane values on load.**
+  `scripts/mock-llm/state.ts` reads `value` as `unknown`, so a
+  hand-edited `state.json` reaches the reply builders unvalidated: a
+  tool lane's answers 500, other kinds may go out as stored. Surfaced by
+  Slice 5.4's review.
+- **Canon routes no remedy for an `interrupted` or `content-filter`
+  cut-off.** `generation-pipeline.md`'s `reply-cut-off` remedy paragraph
+  names `window`, `max-output` and `unknown`; the code gives the other
+  two causes no profile fix (`components/reader/cut-off-copy.ts`) and
+  canon doesn't say so. The narrative failed with them before Slice 5.4;
+  a close's tool step can now carry `content-filter` too.
+- **Canon's `callWithRetry` signature omits `carried`.** The block in
+  `generation-pipeline.md → Two retry tiers` lacks the
+  `carried?: () => CarriedCapabilities` option
+  (`lib/ai/transport/call-with-retry.ts`).
