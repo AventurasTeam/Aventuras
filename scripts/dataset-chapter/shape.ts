@@ -91,7 +91,14 @@ export function actionProblem(action: string): string | null {
 }
 
 export function parseActions(json: string): string[] {
-  return actionsSchema.parse(JSON.parse(json))
+  const actions = actionsSchema.parse(JSON.parse(json))
+  const problems = actions.flatMap((action, i) => {
+    const problem = actionProblem(action)
+    return problem === null ? [] : [`#${i + 1}: ${problem}`]
+  })
+  if (problems.length > 0)
+    throw new Error(`saved actions break the form rule: ${problems.join('; ')}`)
+  return actions
 }
 
 export function loadShapedDataset(dir: string): ShapedDataset {

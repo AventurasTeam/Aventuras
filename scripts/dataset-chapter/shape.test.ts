@@ -12,6 +12,7 @@ import {
   datasetTokens,
   loadShapedDataset,
   paragraphsOf,
+  parseActions,
   REPLY_TARGET_TOKENS,
   type ShapedDataset,
   shapeDataset,
@@ -84,6 +85,21 @@ describe('actionProblem', () => {
     const long = `I ${'walk down the long road to the cove and back again, '.repeat(6)}`.trim()
     expect(countTokens(long)).toBeGreaterThan(ACTION_MAX_TOKENS)
     expect(actionProblem(long)).toMatch(new RegExp(`over ${ACTION_MAX_TOKENS}$`))
+  })
+})
+
+describe('parseActions', () => {
+  it('returns saved actions that keep the form rule', () => {
+    expect(parseActions(JSON.stringify(['I wait.', 'I bar the door.']))).toEqual([
+      'I wait.',
+      'I bar the door.',
+    ])
+  })
+
+  it('refuses a saved action that breaks it, naming its number and the rule', () => {
+    expect(() => parseActions(JSON.stringify(['I wait.', 'I wait.\nI listen.']))).toThrow(
+      /#2: more than one line/,
+    )
   })
 })
 
