@@ -36,6 +36,7 @@ import { insertSeedSteps } from '../seed/insert'
 
 const STORY = 'story_77a59fe9-7741-4634-b6cd-5633f9e50f5b'
 const BRANCH = 'br_aa6101af-d3dd-4964-9869-81e76cc35f97'
+const JIM = 'char_25b8a728-1ab9-4ee6-994d-0a44dd2ea897'
 
 async function seededWithDataset() {
   const ctx = await createTestDb()
@@ -58,6 +59,14 @@ const openRegion = async (ctx: Ctx) =>
       .from(storyEntries)
       .where(and(eq(storyEntries.branchId, BRANCH), isNull(storyEntries.chapterId)))
   )[0]!.n
+
+const locationOf = async (ctx: Ctx, id: string) => {
+  const [row] = await ctx.db
+    .select({ state: entities.state })
+    .from(entities)
+    .where(and(eq(entities.branchId, BRANCH), eq(entities.id, id)))
+  return (row?.state as { current_location_id?: string | null } | undefined)?.current_location_id
+}
 
 const chapterRows = (ctx: Ctx) =>
   ctx.db.select().from(chapters).where(eq(chapters.branchId, BRANCH))
@@ -153,6 +162,7 @@ describe('the Treasure Island seed', () => {
       .where(and(eq(storyEntries.branchId, BRANCH), eq(storyEntries.position, 60)))
     const counts = await getRollbackCounts(BRANCH, target!.id, ctx)
     expect(counts).toMatchObject({ entries: 74, chapters: 1 })
+    expect(await locationOf(ctx, JIM)).toBe('loc_106c83c1-2c15-4bba-901f-16953816f627')
 
     const result = await rollbackToEntry(BRANCH, target!.id, ctx, {
       expectedCounts: counts as RollbackCounts,
@@ -161,6 +171,8 @@ describe('the Treasure Island seed', () => {
     expect(await chapterRows(ctx)).toEqual([])
     expect(await branchCount(ctx, storyEntries)).toBe(59)
     expect(await openRegion(ctx)).toBe(59)
+    // Turn 60's pass moved Jim first after entry 59; its undo payload holds where he stood.
+    expect(await locationOf(ctx, JIM)).toBe('loc_5d52592d-0a05-4dda-979b-eaafa1d86247')
   })
 
   // A migration adding a column to a seeded table fails here: the file lacks it until re-exported.
