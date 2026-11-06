@@ -39,9 +39,11 @@ Three things make that work:
 
 You need git and an empty folder.
 
-1. Create the folder and turn it into a repository:
+1. Create the folder, go into it, and turn it into a repository:
 
    ```bash
+   mkdir aventuras-prompts
+   cd aventuras-prompts
    git init
    git switch -c shipped
    ```
@@ -66,6 +68,11 @@ You need git and an empty folder.
 5. Put your pack on that branch. Either export an existing custom pack into the same folder (the
    pack's export button, then **Folder of Markdown**), or edit the files in the folder directly and
    import them as a new pack with **Import Folder**. Commit.
+
+   A pack made before this setup still holds the shipped text from the day it was made. Before
+   that first commit, read `git diff` against `shipped`: besides your own edits, it shows every
+   shipped improvement your pack is missing, and later merges will not bring those back. Take the
+   shipped side wherever the difference is not yours.
 
 From here on, `shipped` only ever receives Aventuras's own prompts, and `my-pack` holds yours.
 
@@ -160,7 +167,8 @@ then `git add pack.yaml`). Later releases leave `pack.yaml` alone.
   prompt. The number is the group's position in the pack editor, so the folders sort in that order.
   The folder is presentation only: it names the group Aventuras lists that prompt under, and it
   changes when Aventuras regroups a prompt or adds a group. It is **not** part of the prompt's
-  identity, so moving a file between folders changes nothing. Within a folder, files sort by name.
+  identity, so moving a file between folders changes nothing, unless the folder is one an import
+  skips (see section 9). Within a folder, files sort by name.
 - **A file's name is its identity.** `adventure.md` is the prompt `adventure`. A file ending
   `-user.md` is that prompt's user-message half, stored separately from its system half.
 - **`08 Other/`** holds prompts whose id this version of Aventuras no longer ships. Its number is
@@ -223,7 +231,11 @@ Only `pack.yaml` and the `.md` files inside folders. Ignored, silently:
 
 - Markdown files at the root, such as `README.md` and `README_user.md`
 - Any folder whose name starts with `_`, including `_reference/`
+- Any folder whose name starts with `.`, such as `.git/`, and `node_modules/`
 - Anything that is not a `.md` file
+
+A prompt moved into one of these folders is no longer read, so importing the folder over a pack
+removes that prompt from it.
 
 Two files anywhere in the folder with the same name are refused, since the folder they sit in does
 not tell them apart. Names are compared without case, because two spellings are one file on Windows
@@ -231,9 +243,11 @@ and macOS.
 
 **Do not keep your own notes inside a group folder, or in any folder whose name does not start with
 `_`.** Any `.md` there is a prompt as far as this format is concerned: it imports as one, and if the
-pack has no such prompt it is deleted on the next export. Keep your own files at the root, under any
-name but `README.md`, or in a folder of your own whose name starts with `_`, such as `_notes/`. The
-export never reads or deletes anything there.
+pack has no such prompt it is deleted on the next export. Keep your own files at the root, or in a
+folder of your own whose name starts with `_`, such as `_notes/`. The export never reads or deletes
+anything there, apart from the names it owns: `pack.yaml`, `README.md` and `.gitattributes` at the
+root are overwritten, `_reference/` is its own and anything else in it is deleted, and migrating an
+older export deletes its `ABOUT.md`.
 
 ## 10. An import replaces
 
