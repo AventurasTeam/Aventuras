@@ -22,10 +22,16 @@ import {
   promptSchemaMiddleware,
   type JsonSchema,
   type ModelPrompt,
+  type ModelTools,
 } from './prompt-schema'
 
 type GenerateResult = Awaited<ReturnType<MockLanguageModelV3['doGenerate']>>
 type StreamResult = Awaited<ReturnType<MockLanguageModelV3['doStream']>>
+
+type ToolResultOutput = Extract<
+  Extract<ModelPrompt[number], { role: 'tool' }>['content'][number],
+  { type: 'tool-result' }
+>['output']
 
 const base = {
   type: 'openai-compatible' as const,
@@ -200,7 +206,8 @@ describe('countPromptTokens', () => {
     )
   })
 
-  it('counts every other part type as 0', () => {
+  // architecture.md → The pre-send check: a tool step counts its reasoning and tool results.
+  it('counts reasoning and tool results; a file part stays 0', () => {
     const prompt: ModelPrompt = [
       {
         role: 'user',
@@ -223,12 +230,105 @@ describe('countPromptTokens', () => {
             type: 'tool-result',
             toolCallId: 'call-1',
             toolName: 'lookup',
-            output: { type: 'text', value: 'A tool result the count skips.' },
+            output: { type: 'text', value: 'The cellar door is locked.' },
           },
         ],
       },
     ]
-    expect(countPromptTokens(prompt)).toBe(countTokens('Look.') + countTokens('Fine.'))
+    expect(countPromptTokens(prompt)).toBe(
+      countTokens('Look.') +
+        countTokens('A long chain of private thought about the door.') +
+        countTokens('Fine.') +
+        countTokens('lookup') +
+        countTokens('The cellar door is locked.'),
+    )
+  })
+
+  // The adapters send a string input as it is and serialize any other.
+  it.each([
+    ['a string input', '{"query":"the door"', '{"query":"the door"'],
+    ['an object input', { query: 'the door', limit: 2 }, '{"query":"the door","limit":2}'],
+  ] as const)("counts a tool call's name and %s", (_label, input, sent) => {
+    const prompt: ModelPrompt = [
+      {
+        role: 'assistant',
+        content: [{ type: 'tool-call', toolCallId: 'call-1', toolName: 'lookup', input }],
+      },
+    ]
+    expect(countPromptTokens(prompt)).toBe(countTokens('lookup') + countTokens(sent))
+  })
+
+  it.each<[string, ToolResultOutput, string]>([
+    ['text', { type: 'text', value: 'Found the cellar door.' }, 'Found the cellar door.'],
+    [
+      'error-text',
+      { type: 'error-text', value: "Model tried to call unavailable tool 'teleport'." },
+      "Model tried to call unavailable tool 'teleport'.",
+    ],
+    [
+      'json',
+      { type: 'json', value: { found: true, name: 'Cellar door' } },
+      '{"found":true,"name":"Cellar door"}',
+    ],
+    ['error-json', { type: 'error-json', value: { error: 'not found' } }, '{"error":"not found"}'],
+    [
+      'content',
+      { type: 'content', value: [{ type: 'text', text: 'A door.' }] },
+      '[{"type":"text","text":"A door."}]',
+    ],
+    [
+      'execution-denied',
+      { type: 'execution-denied', reason: 'Refused.' },
+      '{"type":"execution-denied","reason":"Refused."}',
+    ],
+  ])("counts a %s tool result's name and output", (_label, output, sent) => {
+    const prompt: ModelPrompt = [
+      {
+        role: 'tool',
+        content: [{ type: 'tool-result', toolCallId: 'call-1', toolName: 'lookup', output }],
+      },
+    ]
+    expect(countPromptTokens(prompt)).toBe(countTokens('lookup') + countTokens(sent))
+  })
+
+  // A provider-executed tool's result rides in the assistant message.
+  it('counts a tool result in an assistant message too', () => {
+    const prompt: ModelPrompt = [
+      {
+        role: 'assistant',
+        content: [
+          {
+            type: 'tool-result',
+            toolCallId: 'call-1',
+            toolName: 'search',
+            output: { type: 'text', value: 'Three results.' },
+          },
+        ],
+      },
+    ]
+    expect(countPromptTokens(prompt)).toBe(countTokens('search') + countTokens('Three results.'))
+  })
+
+  it('counts each tool definition as its JSON', () => {
+    const prompt: ModelPrompt = [{ role: 'system', content: 'Rules of the house.' }]
+    expect(
+      countPromptTokens(prompt, [
+        {
+          type: 'function',
+          name: 'lookup',
+          description: 'Find a row by name.',
+          inputSchema: { type: 'object', properties: { query: { type: 'string' } } },
+        },
+        { type: 'function', name: 'finish', inputSchema: { type: 'object' } },
+      ]),
+    ).toBe(
+      countTokens('Rules of the house.') +
+        countTokens(
+          '{"type":"function","name":"lookup","description":"Find a row by name.",' +
+            '"inputSchema":{"type":"object","properties":{"query":{"type":"string"}}}}',
+        ) +
+        countTokens('{"type":"function","name":"finish","inputSchema":{"type":"object"}}'),
+    )
   })
 
   it('is 0 for an empty prompt', () => {
@@ -353,6 +453,33 @@ describe('windowCheckMiddleware', () => {
     })
     expect(send).not.toHaveBeenCalled()
   })
+
+  // architecture.md → The pre-send check: on a tool step the tool definitions count too.
+  it.each(HOOKS)(
+    'refuses, unsent, a prompt the window holds once its tool definitions are counted, on %s',
+    async (hook) => {
+      const tools: ModelTools = [
+        {
+          type: 'function',
+          name: 'lookup',
+          description: 'Find a row by name.',
+          inputSchema: { type: 'object', properties: { query: { type: 'string' } } },
+        },
+      ]
+      const withTools = ESTIMATE + countTokens(JSON.stringify(tools[0]))
+      const { middleware, onEstimate } = checkMiddleware({ tokens: ESTIMATE, source: 'configured' })
+      const send = vi.fn()
+      const options = { params: { prompt: PROMPT, tools }, model: {} as never }
+      const pending =
+        hook === 'generate'
+          ? middleware.wrapGenerate!({ ...options, doGenerate: send, doStream: unsent })
+          : middleware.wrapStream!({ ...options, doGenerate: unsent, doStream: send })
+      const error = await refusalOf(pending)
+      expect(error.failure).toMatchObject({ detectedBy: 'check', estimate: withTools })
+      expect(onEstimate).toHaveBeenCalledExactlyOnceWith(withTools)
+      expect(send).not.toHaveBeenCalled()
+    },
+  )
 
   it.each(HOOKS)('sends a prompt exactly at the window on %s', async (hook) => {
     const { middleware } = checkMiddleware({ tokens: ESTIMATE, source: 'detected' })

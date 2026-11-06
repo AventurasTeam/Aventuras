@@ -4,6 +4,7 @@ import type { LanguageModelMiddleware } from 'ai'
 // '@ai-sdk/provider' directly — the provider package is a transitive dep.
 type CallOptions = Awaited<ReturnType<NonNullable<LanguageModelMiddleware['transformParams']>>>
 export type ModelPrompt = CallOptions['prompt']
+export type ModelTools = CallOptions['tools']
 type JsonResponseFormat = Extract<NonNullable<CallOptions['responseFormat']>, { type: 'json' }>
 export type JsonSchema = NonNullable<JsonResponseFormat['schema']>
 
