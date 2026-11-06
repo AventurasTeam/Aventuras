@@ -73,9 +73,10 @@ slice needs from the action layer crosses the port.
 - Contracts provided:
   [C9](../milestone.md#c9--the-round-trip-rule),
   [C11](../milestone.md#c11--tool-results),
-  [C12](../milestone.md#c12--what-a-later-turn-wrote-means), and the
+  [C12](../milestone.md#c12--what-a-later-turn-wrote-means), the
   event half of
-  [C6](../milestone.md#c6--what-the-banners-n-of-m-counts).
+  [C6](../milestone.md#c6--what-the-banners-n-of-m-counts), and
+  [C1](../milestone.md#c1--a-closes-delta-shape)'s move to one group.
 - Contracts consumed:
   [C1](../milestone.md#c1--a-closes-delta-shape),
   [C2](../milestone.md#c2--pipeline-shape),
@@ -171,14 +172,23 @@ and tools sit under `lib/pipeline/definitions/close-agent/`.
   stamps, criterion 22's Cancel and head reversal mid-burst, criterion
   23's boot recovery mid-burst, and its accepted mid-close display, a
   surface reading a partial range.
-- A hard bar (developer: "Q11: A"): on a release Android build with a
-  50-row reader, the close's write burst has no JS-thread stall over
-  500 ms, timed as the longest gap between 16 ms ticks with the stop
-  moment counted as a tick. 5.2 measured about 1.1 s with a delta per
-  stamp, its [Close measure](./02-first-chapter.md#close-measure). One
-  group is one uninterruptible chunk, so if the group alone doesn't
-  bring the stall under 500 ms, its store patches go out in chunks with
-  a yield between them, or an equivalent this slice picks.
+- A hard bar (developer: "Q11: A"): on a release Android build with the
+  reader holding 50 rows, a close on 5.2's dataset branch (133 stamps
+  over 23,907 tokens) has no JS-thread stall over 500 ms in its write
+  burst, timed as the longest gap between 16 ms ticks with the stop
+  moment counted as a tick. A short chapter, such as one of the seed's at
+  about 30 stamps, would pass trivially. The probe that timed it was
+  temporary and isn't in the repo: 5.2's
+  [Close measure](./02-first-chapter.md#close-measure) gives its method,
+  and its [Implementation notes](./02-first-chapter.md#implementation-notes)
+  say where the built database lives, outside git. 5.2 measured about 1.1 s
+  with a delta per stamp. One group is one uninterruptible chunk, so if
+  the group alone doesn't bring the stall under 500 ms, its store patches
+  go out in chunks with a yield between them, or an equivalent this
+  slice picks.
+- [`generation-pipeline.md → Writes`](../../../../generation-pipeline.md#writes)
+  already describes the group: `delta_emitted` leaves out the close's
+  create and stamps, and `delta_group_emitted` carries them.
 
 **The later-turn reader (C12).**
 
@@ -483,9 +493,24 @@ vitest and the probe share. It never reaches a production slot.
 - The stand-in case passes all five arms with no `held-in-redo`, and the
   table takes a new case or arm in one entry
   (`lib/pipeline/__tests__/close-round-trip.test.ts`).
+- The metadata phase emits `createChapter` and every `stampEntryChapter`
+  as one `delta_group_emitted`, in C1's order, each stamp its own delta
+  anchored on the end entry, and the `close_report` update lands after
+  the group as a write of its own
+  (`lib/pipeline/definitions/chapter-close.test.ts`).
+- On a release Android build with the reader holding 50 rows, a close on
+  5.2's dataset branch (133 stamps over 23,907 tokens; the build lives
+  outside git, see 5.2's [Close measure](./02-first-chapter.md#close-measure)
+  and [Implementation notes](./02-first-chapter.md#implementation-notes))
+  has no JS-thread stall over 500 ms in its write burst, timed as the
+  longest gap between 16 ms ticks with the stop moment counted as a tick.
+  A miss takes the fallback the one-group item in
+  [Scope: in](#scope-in) names. The numbers go in this doc's
+  Implementation notes.
 - With the production slots, 5.2's dev-route close still ends with the
-  chapter row, its stamps and a report with `noToolCalls: true` (5.2's
-  suite passes unchanged).
+  chapter row, its stamps and a report with `noToolCalls: true`. 5.2's
+  suite passes, with its mid-burst cases re-pointed or dropped as the
+  one-group item in [Scope: in](#scope-in) says.
 - `pnpm probe:close` with `PROBE_STAND_IN=1` and `PROBE_OUT` set, with
   `SMOKE_LLM_URL` at `pnpm mock` scripted for one tool step, finishes
   with a file for every step holding its messages and a saved report,
@@ -506,7 +531,8 @@ vitest and the probe share. It never reaches a production slot.
   one later tools join.
 - No Storybook: nothing here renders. No E2E: Slice 5.10 owns the full
   close through the UI.
-- Manual: `pnpm probe:close` against the mock.
+- Manual: `pnpm probe:close` against the mock, and the close's write
+  burst on a release Android build against the hard bar.
 - **Warning sign, kept.** A real model first meets the runner in 5.5b.
   Here it's reviewed on a stand-in tool and the mock, so a tool
   contract that reads well can still fail at size. 5.8 and 5.9 wait for
