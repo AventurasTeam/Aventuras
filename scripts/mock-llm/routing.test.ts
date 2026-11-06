@@ -245,6 +245,35 @@ describe('tool lanes', () => {
     })
   })
 
+  it('skips a malformed tool entry instead of throwing', () => {
+    const nullOnly = requestFrom('Classify the turn.', { tools: [null] })
+    expect(toolLaneOf(nullOnly)).toBeNull()
+    expect(classifyRequest(nullOnly)).toMatchObject({ lane: 'structured' })
+
+    const mixed = requestFrom('Look it up.', {
+      tools: [
+        null,
+        'lookup',
+        { type: 'function' },
+        { function: { name: 7 } },
+        functionTool('lookup'),
+      ],
+    })
+    expect(toolLaneOf(mixed)).toBe('tools:lookup')
+    expect(classifyRequest(mixed)).toEqual({ lane: 'tool', key: 'tools:lookup' })
+  })
+
+  it('counts a request with a null tool entry or call without throwing', () => {
+    const body = requestFrom('Look it up.', { tools: [null, functionTool('lookup')] })
+    body.messages = [
+      ...(body.messages as unknown[]),
+      { role: 'assistant', content: null, tool_calls: [null, { id: 'call_1' }] },
+    ]
+
+    expect(() => toolPromptText(body)).not.toThrow()
+    expect(toolPromptText(body)).toContain('lookup')
+  })
+
   it('counts what promptText skips: the tool definitions, each call and its reasoning', () => {
     const body = {
       model: 'mock',

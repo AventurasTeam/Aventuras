@@ -52,7 +52,7 @@ function callsAndReasoningText(message: unknown): string[] {
   }
   const callParts = Array.isArray(calls)
     ? calls.flatMap((call) => {
-        const fn = (call as { function?: { name?: unknown; arguments?: unknown } }).function
+        const fn = (call as { function?: { name?: unknown; arguments?: unknown } } | null)?.function
         return [fn?.name, fn?.arguments].filter((part): part is string => typeof part === 'string')
       })
     : []
@@ -77,14 +77,17 @@ export function toolLaneKey(names: readonly string[]): string {
   return `${TOOL_LANE_PREFIX}${[...names].sort().join('+')}`
 }
 
-/** A non-streamed request carrying a non-empty `tools` array → its lane key; else null. */
+/**
+ * A non-streamed request carrying a `tools` array → its lane key; else null. An entry without a
+ * string `function.name` is skipped, and a request with no valid name routes as one without tools.
+ */
 export function toolLaneOf(body: Record<string, unknown>): string | null {
   if (body.stream === true || !Array.isArray(body.tools) || body.tools.length === 0) return null
   const names = body.tools.flatMap((entry) => {
-    const name = (entry as { function?: { name?: unknown } }).function?.name
+    const name = (entry as { function?: { name?: unknown } } | null)?.function?.name
     return typeof name === 'string' ? [name] : []
   })
-  return toolLaneKey(names)
+  return names.length === 0 ? null : toolLaneKey(names)
 }
 
 /** The text of the request's system messages, where the contract's block sits. */
