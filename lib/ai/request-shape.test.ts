@@ -8,6 +8,7 @@ import { generateStructured, streamText, type PromptHalves } from './generate'
 import { getModel } from './model'
 import { schemaToTypeScriptBlock, type JsonSchema } from './prompt-schema'
 import { resolveModel, type ResolvedParams, type ResolveModelConfig } from './resolve-model'
+import { generateToolStep } from './tool-step'
 import type { CallRetryError } from './transport/call-with-retry'
 import type { CapabilityHint } from './transport/classify-provider-error'
 
@@ -313,5 +314,41 @@ describe('the capability hint', () => {
 
     expect(lastBody()).not.toHaveProperty('response_format')
     expect(hint).toBeUndefined()
+  })
+})
+
+// A step sends `tools` and `tool_choice`, so a rejection naming either hints at tool calling.
+describe('the capability hint on a tool step', () => {
+  async function stepFailure(config: ResolveModelConfig): Promise<CallRetryError> {
+    const res = await generateToolStep(
+      'lore-mgmt',
+      {
+        prompt: HALVES,
+        messages: [],
+        tools: { lookup: { description: 'Find a row by name.', inputSchema: schema } },
+        firstCall: true,
+      },
+      config,
+      new AbortController().signal,
+      { actionId: null },
+    )
+    if (res.status !== 'failed') throw new Error(`expected a failed step, got ${res.status}`)
+    return res.error
+  }
+
+  it.each([
+    ['tool_choice is not supported by this model', 'tool_choice'],
+    ['tools are not supported by this model', 'tools'],
+  ] as const)('reads %j on a step as a tool-calling hint', async (message, matched) => {
+    rejection = rejectionOf(message)
+
+    const error = await stepFailure(useProvider('openai-compatible'))
+
+    expect(lastBody()).toHaveProperty('tools')
+    expect(lastBody()).toHaveProperty('tool_choice', 'auto')
+    expect(error).toMatchObject({
+      tier: 'provider',
+      possibleCapabilityMismatch: { capability: 'toolCalling', matched },
+    })
   })
 })

@@ -32,7 +32,7 @@ export {
 } from './generate'
 // getModel + the retry/timeout trio are public for cross-module tests
 // (pipeline fault injection) and lib/pipeline's CallRetryError mapping —
-// production call paths go through streamText / generateStructured.
+// production call paths go through streamText / generateStructured / generateToolStep.
 export { getModel } from './model'
 export { callWithRetry, type CallRetryError } from './transport/call-with-retry'
 export {
@@ -61,3 +61,13 @@ export {
   type ReplyCutOffFailure,
 } from './reply-cut-off'
 export { schemaToTypeScriptBlock, type JsonSchema } from './prompt-schema'
+export {
+  generateToolStep,
+  TOOL_STEP_MAX_OUTPUT_DEFAULT,
+  type ToolStep,
+  type ToolStepCall,
+  type ToolStepInvalidCall,
+  type ToolStepRequest,
+  type ToolStepResult,
+  type ToolStepTool,
+} from './tool-step'
