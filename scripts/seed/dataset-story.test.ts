@@ -150,6 +150,14 @@ describe('parseStorySeed', () => {
     expect(() => parse(missing)).toThrow(/lore/)
   })
 
+  it('refuses a current branch outside the story, and takes none', () => {
+    const seed = heroSeed()
+    seed.stories![0]!.currentBranchId = 'br_rich_main'
+    expect(() => parse(seed)).toThrow(/stories\[0\][\s\S]*br_rich_main/)
+    seed.stories![0]!.currentBranchId = null
+    expect(() => parse(seed)).not.toThrow()
+  })
+
   it('refuses a row outside the story', () => {
     const twoStories = heroSeed()
     twoStories.stories!.push({ ...twoStories.stories![0]!, id: 'story_rich' })

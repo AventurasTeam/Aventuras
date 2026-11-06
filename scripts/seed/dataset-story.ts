@@ -199,6 +199,10 @@ export function parseStorySeed(json: string, providerIds: ReadonlySet<string>): 
     if (branch.storyId !== story.id) throw new Error(`dataset seed branches[${i}]: another story`)
     branchIds.add(branch.id)
   })
+  if (story.currentBranchId != null && !branchIds.has(story.currentBranchId))
+    throw new Error(
+      `dataset seed stories[0]: current branch ${String(story.currentBranchId)} is not one of its branches`,
+    )
   for (const { name } of DATASET_SEED_TABLES.slice(2))
     rowsOf(name).forEach((row, i) => {
       if (!branchIds.has(row.branchId))
