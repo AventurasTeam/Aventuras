@@ -202,7 +202,8 @@ export type MockLlm = {
   overflowNextStructured: (agentName: string, shape?: OverflowShape) => void
   /**
    * Replace the tool lane's queue; each answered call takes the next step, none left: `stop`.
-   * A step that throws or can't be serialized fails its call with a 400, then rethrows.
+   * A step that throws or can't be serialized fails its call with a 400; the error rethrows from
+   * the release, or from close() for an unheld call.
    */
   setToolSteps: (tools: readonly string[], steps: readonly MockToolStepReply[]) => void
   /** Every completion request received, in order. */
@@ -248,6 +249,8 @@ export async function startMockLlm(): Promise<MockLlm> {
   const overflowStructured = new Map<string, OverflowShape>()
   // Tool lane key → the steps its next answered calls take, in order.
   const toolSteps = new Map<string, MockToolStepReply[]>()
+  // An unheld call's throw has no caller to reach, so close() rethrows the first one.
+  let unheldThrow: { error: unknown } | undefined
 
   // Spent by the next stream to finish, so a held stream released later takes it.
   const narrativeFinish = (): FinishReason => {
@@ -423,7 +426,11 @@ export async function startMockLlm(): Promise<MockLlm> {
           holdStructured(res, () => answerTool(res, lane, request))
           return
         }
-        answerTool(res, lane, request)
+        try {
+          answerTool(res, lane, request)
+        } catch (error) {
+          unheldThrow ??= { error }
+        }
         return
       }
 
@@ -487,14 +494,18 @@ export async function startMockLlm(): Promise<MockLlm> {
     },
     requests,
     close: () =>
-      new Promise<void>((resolve) => {
+      new Promise<void>((resolve, reject) => {
+        // An unheld throw kept earlier came before any held throw here; surfaced once.
+        let thrown = unheldThrow
+        unheldThrow = undefined
         // Finish held calls first, else an open socket hangs server.close().
         try {
           finishHeldNarratives()
           releaseHeldStructured()
-        } finally {
-          server.close(() => resolve())
+        } catch (error) {
+          thrown ??= { error }
         }
+        server.close(() => (thrown === undefined ? resolve() : reject(thrown.error)))
       }),
   }
 }

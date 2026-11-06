@@ -451,6 +451,44 @@ describe('startMockLlm — tool lanes', () => {
     expect(JSON.stringify(failed)).toContain('mock harness: a scripted step threw:')
   })
 
+  it("keeps an unheld step's throw for close(), after failing its call at once", async () => {
+    const llm = await started()
+    const config = registerHarness(llm)
+    llm.setToolSteps(NAMES, [
+      () => {
+        throw new Error('the spec broke unheld')
+      },
+    ])
+
+    const failed = await step(config)
+
+    expect(failed).toMatchObject({
+      status: 'failed',
+      error: { tier: 'provider', reason: 'unknown' },
+    })
+    expect(JSON.stringify(failed)).toContain('a scripted step threw: the spec broke unheld')
+    expect(llm.requests).toHaveLength(1)
+    await expect(llm.close()).rejects.toThrow('the spec broke unheld')
+    expect(await accepting(llm)).toBe(false)
+  })
+
+  it('rethrows from close() the unheld throw that came before a held one', async () => {
+    const llm = await started()
+    const config = registerHarness(llm)
+    const thrower = (message: string) => () => {
+      throw new Error(message)
+    }
+    llm.setToolSteps(NAMES, [thrower('unheld first'), thrower('held second')])
+    expect(await step(config)).toMatchObject({ status: 'failed' })
+    llm.holdNextStructured(LANE)
+    const held = step(config)
+    await vi.waitFor(() => expect(llm.requests).toHaveLength(2))
+
+    await expect(llm.close()).rejects.toThrow('unheld first')
+
+    expect(await held).toMatchObject({ status: 'failed' })
+  })
+
   it('fails a call whose function step throws, answers the rest, and still closes', async () => {
     const llm = await started()
     const config = registerHarness(llm)

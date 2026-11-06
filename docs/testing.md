@@ -553,8 +553,8 @@ prompt holds. A step that throws, or whose reply can't be serialized,
 fails its call with a 400,
 so the step fails at once with no retry. For a held call the error is
 rethrown from the release or `close()`, after every held call is
-answered; for an unheld call it escapes the server's request handler
-as an unhandled rejection, which fails the run
+answered. An unheld call's error is kept and rethrown from `close()`
+too; with both pending, the one that came first is rethrown
 (`e2e/harness/mock-llm.ts`). An empty queue answers the empty
 step, `{}`: no calls, empty text and `stop`, which ends a task with no
 writes, so a spec that scripts nothing writes nothing. A tool call's
