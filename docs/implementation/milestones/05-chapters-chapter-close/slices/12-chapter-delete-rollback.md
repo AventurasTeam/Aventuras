@@ -541,10 +541,19 @@ change amends the scope above.
   redo over a manual close at the head, which chapter-close dedup never revisits.
   A head edit under a committed close, which keeps writes derived from the
   replaced prose. A failed reversal under a later close, which a later boot
-  reverses, leaving a gap before a closed chapter. All need a manual close or a
-  failed transaction. Default: accept all three with no code, and narrow
-  `chapter-close.md`'s "a partial close, not broken state" to what it covers,
-  since a later boot breaks it.
+  reverses, leaving a gap before a closed chapter. Slice 5.2's review found the
+  gap reaches the next close. Boundary starts the range at the open region's
+  first row (`lib/pipeline/definitions/chapter-close-boundary.ts:36`), inside
+  the gap, so the new chapter's range spans the closed chapter after it. Its
+  prompt carries that chapter's prose, since the range read takes every
+  non-system row between the start and end positions
+  (`chapter-close-metadata-call.ts:45-55`), while its token count and stamps
+  take only the open region's rows. A scratch probe closed A (entries 1–5) and
+  B (6–9), reversed A's actions, then closed to 13, and got chapters 2 (6–9) and
+  3 (1–13). All need a manual close or a failed transaction. Default: accept
+  all three with no code, and narrow `chapter-close.md`'s "a partial close, not
+  broken state" to what it covers, since a later boot breaks it. Accepting the
+  residue with no code now accepts overlapping chapters too.
 - **Does 5.9's guard meet C13's stackable rule, if 5.9 lands first?** It reads the
   edits the walk holds, so `undoUpdate`'s widened map should fill it. Default: yes,
   an arm and no code. The later of the two to land confirms it.

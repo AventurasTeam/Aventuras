@@ -134,3 +134,45 @@ slice-planning gate forces its resolution before that slice is planned.
 - **A harness comment assumes WAL.** `e2e/harness/db.ts:17` justifies
   `queryApp` by "a second file handle can miss a WAL-buffered write", but
   the desktop database runs in rollback-journal mode.
+- **The dataset chapter's seed export has no home.** The developer
+  approved checking in a seed export of Slice 5.2's dataset chapter,
+  enriched as later slices add their part: "Yeah keep the database and i
+  guess incrementally enrich the seed as slices come in and add in their
+  part. Just so we keep the data as a shared baseline and checked in."
+  [5.2's Implementation notes](./milestones/05-chapters-chapter-close/slices/02-first-chapter.md#implementation-notes)
+  call checking it in later work, and no slice, followup or roadmap item
+  carries it. Surfaced by Slice 5.2's review.
+- **Hand-written types beside `z.ZodType<T>` schemas drift one way.**
+  The import schemas in `lib/avts/` (`thread.ts`, `lore.ts`,
+  `happening.ts`, `entity.ts`) are annotated with a hand-written type,
+  which checks only that the schema's output fits the type. A schema
+  that narrows a field (a nullable one made required) or adds one the
+  type lacks still compiles; a dropped or widened field fails (a scratch
+  `tsc` check on zod 4.4.3). Slice 5.2's close report derives its types
+  with `z.infer` instead. Surfaced by Slice 5.2's review.
+- **Update handlers type their patch apart from their column list.** The
+  entities, lore, threads, translations, era-flips and entry-assets
+  registers declare the update patch type separately from the
+  `UPDATABLE` list the handler loops over, so a key added to the type
+  alone compiles and the handler skips it: silently beside another key,
+  and as a `no updatable fields` refusal alone. Slice 5.2's chapters
+  register derives its patch type from the list. Surfaced by Slice 5.2's
+  review.
+- **The periodic pass reads the stores after its awaits.**
+  `periodicClassifierPhase`
+  (`lib/pipeline/definitions/periodic-classifier.ts:189`) checks
+  `storesHoldBranch` (`:193`), then awaits `readStatus` (`:199`) and
+  `readWindowEntries` (`:201-205`), then reads the entity, relationship,
+  thread and happening rosters from the stores (`:222-232`), and the
+  awareness rows after one more await (`:237-239`). A story open
+  publishing in between gives it another branch's rows, filtered to
+  empty. Unverified what the pass then writes. Slice 5.2's close metadata
+  call reads its stores before its first await. Surfaced by Slice 5.2's
+  review.
+- **Phase intermediates are an untyped bag.** `PhaseContext.intermediates`
+  is `Record<string, unknown>` (`lib/pipeline/types.ts:101`), and each
+  reader casts its key: the retrieval outcome behind a shape check
+  (`generation-context.ts`), the close's range and ledger
+  (`chapter-close-metadata.ts`, `chapter-close-report.ts`) and the pass's
+  pre-run status. Each key's type is convention, and Slice 5.5a adds the
+  close's ledger writer. Surfaced by Slice 5.2's review.

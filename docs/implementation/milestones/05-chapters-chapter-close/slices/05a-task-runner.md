@@ -594,6 +594,18 @@ vitest and the probe share. It never reaches a production slot.
   Starting answer: the script sets the same no-op before its first open.
   The alternative is an optional call at the site, which would also let
   the setup's no-op go.
+- **How does a refused action in the close's group fail the close?**
+  Today a refused `createChapter` or stamp goes through `delta_emitted`
+  and throws (`orchestrator.ts:202`), which fails the close and reverses
+  it. A group's plain refusal comes back as a value with nothing written
+  and leaves the run going, and a noop comes back per action while the
+  rest lands (this slice's first two criteria). So once the metadata
+  phase emits the create and stamps as one group, a refusal there fails
+  nothing by itself: the agent phase runs with no chapter row until the
+  report's `updateChapter` refuses, and a stamp that noops would leave a
+  row over a partial range, though neither handler returns a noop today.
+  Which outcomes fail the close, and with what error, is open. Surfaced
+  by Slice 5.2's review.
 
 ## Implementation notes
 

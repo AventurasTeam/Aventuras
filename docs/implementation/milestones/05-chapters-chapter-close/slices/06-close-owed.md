@@ -537,6 +537,22 @@ confirm at slice planning. Canon follows the answer.
   make the next Send start a close. Suggested: list both, exempting
   `lib/actions/chapters/**` and the other writers this slice adds.
 
+- **Does the manual start re-check held and a turn in flight in its
+  tail?** [Slice 5.2](./02-first-chapter.md)'s `startManualClose`
+  (`lib/actions/chapters/start-manual-close.ts`) reads held and the
+  unprocessed count with awaits, then runs its sync tail: the swap and
+  busy checks, the record and the start. This slice's Manual start
+  ([Scope: in](#scope-in)) keeps that order and drops the unprocessed
+  refusal, which today is what catches a pass that turned held between
+  the read and the tail: a held pass leaves its window unprocessed. Also,
+  a start while a turn is in flight is refused as `unprocessed-entries`,
+  not `story-busy`, because the unprocessed check runs first and the
+  turn's `user_action` commits before its run. Without the refusal, the
+  tail's busy check would answer `story-busy`.
+  [Slice 5.10](./10-two-starts.md)'s toast names the code, though its
+  button is disabled while `isUserEditBlocked` holds. Surfaced by Slice
+  5.2's review.
+
 ## Implementation notes
 
 _Populated at finish: notable deviations from the plan and resolved developer decisions._

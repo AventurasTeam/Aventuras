@@ -408,6 +408,14 @@ breakdown under [UX](#ux).
   - part size, half the window, and how a chapter cut in parts reads;
   - servers that take the tool list and ignore it.
 
+  Play tunes the metadata prompt too, outside the agent. It has two data
+  points in
+  [Slice 5.2's Implementation notes](./implementation/milestones/05-chapters-chapter-close/slices/02-first-chapter.md#implementation-notes):
+  one dev-model close told its summary in the second person against
+  first-person narration, and one of fifteen ran away to 39,689 output
+  tokens with no max output set and failed (the developer keeps the
+  profile without one).
+
   Raised 2026-10-31 by the chapter-close agent design.
 
 - **World's "stale active" surface.**
