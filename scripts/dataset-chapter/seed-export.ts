@@ -17,27 +17,27 @@ const CREDENTIAL_FIELD = new RegExp(`^(?:${CREDENTIAL_NAMES})$`, 'i')
 const CREDENTIAL_JSON_FIELD = new RegExp(`\\\\*"(?:${CREDENTIAL_NAMES})\\\\*"\\s*:`, 'i')
 const CREDENTIAL_VALUE = /\bsk-[\w-]{20,}|\bBearer\s+[\w.~+/=-]{20,}/i
 
-// Serialization escapes a key's quotes and backslashes once per level; four levels of JSON nested
-// in a text column is past anything a provider error body carries.
-const KEY_ESCAPE_LEVELS = 4
-
-function escapedForms(key: string): string[] {
-  const forms = [key]
-  for (let level = 1; level < KEY_ESCAPE_LEVELS; level++)
-    forms.push(JSON.stringify(forms.at(-1)).slice(1, -1))
-  return [...new Set(forms)]
-}
-
-function providerKeys(sqlite: DatabaseSync): string[] {
+/**
+ * The database's provider keys, each scannable at any depth of JSON a text holds: refuses a key
+ * too short to scan for, or one JSON escaping changes (a quote, backslash or control character).
+ */
+function scannableProviderKeys(sqlite: DatabaseSync): string[] {
   const row = sqlite.prepare(`SELECT providers FROM app_settings`).get() as
     | { providers: string }
     | undefined
-  const providers = row ? (JSON.parse(row.providers) as { apiKey?: string }[]) : []
-  return providers.map((p) => p.apiKey ?? '').filter((key) => key !== '')
+  const providers = row ? (JSON.parse(row.providers) as { id: string; apiKey?: string }[]) : []
+  const keyed = providers.filter((p) => (p.apiKey ?? '') !== '')
+  for (const { id, apiKey } of keyed) {
+    assertScannableKey(apiKey!)
+    if (JSON.stringify(apiKey).slice(1, -1) !== apiKey)
+      throw new Error(
+        `provider ${id}'s key holds a character JSON escaping changes, which the export's scan can't follow through nested JSON`,
+      )
+  }
+  return keyed.map((p) => p.apiKey!)
 }
 
-// Names the path, never the value: the refusal must not print the secret it caught. Scans decoded
-// strings, since JSON escapes a key's quote or backslash out of the file's bytes.
+// Names the path, never the value: the refusal must not print the secret it caught.
 function credentialAt(value: unknown, path: string, keys: readonly string[]): string | null {
   if (typeof value === 'string') {
     if (holdsSecret(value, keys))
@@ -90,9 +90,7 @@ async function exportInSnapshot(
     throw new Error(
       `run ${unfinished.map((r) => r.run_id).join(', ')} on story ${storyId} is unfinished: export once it ends`,
     )
-  const raw = providerKeys(sqlite)
-  for (const key of raw) assertScannableKey(key)
-  const keys = raw.flatMap(escapedForms)
+  const keys = scannableProviderKeys(sqlite)
   const db = drizzle(makeProxy(sqlite))
   const branchIds = (
     await db.select({ id: branches.id }).from(branches).where(eq(branches.storyId, storyId))
