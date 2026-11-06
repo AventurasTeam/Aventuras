@@ -15,6 +15,7 @@ import { DatabaseSync } from 'node:sqlite'
 
 const DRAFT_PREFIX = '.dataset-export-'
 const MIN_SCANNED_KEY_LENGTH = 16
+const SIDECAR_SUFFIXES = ['-wal', '-shm', '-journal'] as const
 
 const isDirectory = (path: string): boolean => existsSync(path) && statSync(path).isDirectory()
 
@@ -34,7 +35,7 @@ export function assertExportTarget(out: string): void {
   } catch {
     throw new Error(`export target ${out}: ${dir} is not writable`)
   }
-  for (const suffix of ['-wal', '-shm', '-journal'])
+  for (const suffix of SIDECAR_SUFFIXES)
     if (existsSync(`${out}${suffix}`))
       throw new Error(`${out}${suffix} would replay over the export`)
   const drafts = readdirSync(dir).filter((name) => name.startsWith(DRAFT_PREFIX))
@@ -86,7 +87,7 @@ export function exportScrubbed(src: string, out: string, secrets: readonly strin
     const draft = join(dir, basename(out))
     copyFileSync(src, draft)
     scrubProviderKeys(draft)
-    for (const suffix of ['-wal', '-shm', '-journal'])
+    for (const suffix of SIDECAR_SUFFIXES)
       if (existsSync(`${draft}${suffix}`)) throw new Error(`${draft}${suffix} outlived the scrub`)
     const bytes = readFileSync(draft)
     if (secrets.some((secret) => secret !== '' && bytes.includes(secret)))
