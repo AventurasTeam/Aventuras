@@ -105,6 +105,12 @@ const listing = (lists: Record<string, string[]>) =>
 const statsRequests = () =>
   vi.mocked(imageGetFetch).mock.calls.filter(([url]) => String(url).endsWith('/system_stats'))
 
+const modelRequests = () =>
+  vi
+    .mocked(imageGetFetch)
+    .mock.calls.map(([url]) => String(url))
+    .filter((url) => url.includes('/models/'))
+
 beforeEach(() => {
   vi.clearAllMocks()
   clearComfyCacheForUrl('http://localhost:8188')
@@ -231,13 +237,32 @@ describe('UNet graph', () => {
     expect(graph['10']).toEqual((UnetWorkflow as Graph)['10'])
   })
 
-  const modelRequests = () =>
-    vi
-      .mocked(imageGetFetch)
-      .mock.calls.map(([url]) => String(url))
-      .filter((url) => url.includes('/models/'))
+  it('reads no model list when the profile names the text encoder and VAE', async () => {
+    await generate(opts, { model: 'unet:flux.safetensors' })
+    expect(modelRequests()).toEqual([])
+  })
 
+  it('takes the first text encoder and VAE the server lists when the profile names none', async () => {
+    listing({
+      text_encoders: ['clip.safetensors', 'other.safetensors'],
+      vae: ['ae.safetensors', 'other.safetensors'],
+    })
+    await generate({ mode: ComfyMode.UnetTxt2Img }, { model: 'unet:flux.safetensors' })
+    const graph = postedGraph()
+    expect(graph['3'].inputs.clip_name).toBe('clip.safetensors')
+    expect(graph['4'].inputs.vae_name).toBe('ae.safetensors')
+  })
+
+  it('fails when the server has no text encoder', async () => {
+    await expect(
+      generate({ mode: ComfyMode.UnetTxt2Img }, { model: 'unet:flux.safetensors' }),
+    ).rejects.toThrow('No CLIP/text encoder model found')
+  })
+})
+
+describe('workflow selection', () => {
   it('picks the UNet workflow from the id prefix when no mode is set', async () => {
+    serve('10')
     listing({ text_encoders: ['clip.safetensors'], vae: ['ae.safetensors'] })
     await generate({}, { model: 'unet:flux.safetensors' })
     const graph = postedGraph()
@@ -259,28 +284,6 @@ describe('UNet graph', () => {
     await generate({}, { model: 'checkpoint:m.safetensors' })
     expect(postedGraph()['4'].inputs.ckpt_name).toBe('m.safetensors')
     expect(modelRequests()).toEqual([])
-  })
-
-  it('reads no model list when the profile names the text encoder and VAE', async () => {
-    await generate(opts, { model: 'unet:flux.safetensors' })
-    expect(modelRequests()).toEqual([])
-  })
-
-  it('takes the first text encoder and VAE the server lists when the profile names none', async () => {
-    listing({
-      text_encoders: ['clip.safetensors', 'other.safetensors'],
-      vae: ['ae.safetensors', 'other.safetensors'],
-    })
-    await generate({ mode: ComfyMode.UnetTxt2Img }, { model: 'unet:flux.safetensors' })
-    const graph = postedGraph()
-    expect(graph['3'].inputs.clip_name).toBe('clip.safetensors')
-    expect(graph['4'].inputs.vae_name).toBe('ae.safetensors')
-  })
-
-  it('fails when the server has no text encoder', async () => {
-    await expect(
-      generate({ mode: ComfyMode.UnetTxt2Img }, { model: 'unet:flux.safetensors' }),
-    ).rejects.toThrow('No CLIP/text encoder model found')
   })
 })
 
