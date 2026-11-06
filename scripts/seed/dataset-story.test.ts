@@ -5,7 +5,7 @@ import {
   DATASET_SEED_LEFT_OUT,
   DATASET_SEED_TABLES,
   parseStorySeed,
-  seedProviderIds,
+  seedAppRefs,
 } from './dataset-story'
 import { buildSeedSteps } from '../../lib/db/devtools/seed-dataset'
 import { dbSchema } from '../../lib/db/schema'
@@ -15,7 +15,7 @@ type Seed = Record<string, Row[]>
 
 const HERO = 'story_hero'
 const HERO_BRANCHES = new Set(['br_hero_main', 'br_hero_fork'])
-const PROVIDERS = seedProviderIds(buildSeedSteps())
+const REFS = seedAppRefs(buildSeedSteps())
 
 // The default seed's hero story: every table the seed carries has a row, two branches among them.
 function heroSeed(): Seed {
@@ -36,7 +36,7 @@ function heroSeed(): Seed {
   return seed
 }
 
-const parse = (seed: Seed) => parseStorySeed(JSON.stringify(seed), PROVIDERS)
+const parse = (seed: Seed) => parseStorySeed(JSON.stringify(seed), REFS)
 
 // A table a later migration adds fails here until someone decides whether a story seed carries it.
 it('decides every table: seeded, or left out with a reason', () => {
@@ -148,6 +148,16 @@ describe('parseStorySeed', () => {
     const missing = heroSeed()
     delete missing.lore
     expect(() => parse(missing)).toThrow(/lore/)
+  })
+
+  // An asset is app-level: the seed names only the default seed's, whose files it ships.
+  it('refuses an asset the default seed lacks', () => {
+    const entryAsset = heroSeed()
+    entryAsset.entry_assets![0]!.assetId = 'asset_missing'
+    expect(() => parse(entryAsset)).toThrow(/entry_assets\[0\][\s\S]*asset_missing/)
+    const cover = heroSeed()
+    cover.stories![0]!.coverAssetId = 'asset_gone'
+    expect(() => parse(cover)).toThrow(/stories\[0\][\s\S]*asset_gone/)
   })
 
   it('refuses a current branch outside the story, and takes none', () => {

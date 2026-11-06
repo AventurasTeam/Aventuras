@@ -8,7 +8,7 @@ import { drizzle } from 'drizzle-orm/sqlite-proxy'
 import { migrate } from 'drizzle-orm/sqlite-proxy/migrator'
 import { getLoadablePath } from 'sqlite-vec'
 
-import { datasetStorySteps, seedProviderIds } from './dataset-story'
+import { datasetStorySteps, seedAppRefs } from './dataset-story'
 import { insertSeedSteps } from './insert'
 import { buildLongBranchSteps, entryIdAt, LONG_BRANCH_SCALES, longBranchId } from './long-branch'
 import { makeProxy } from './sqlite-proxy'
@@ -97,7 +97,7 @@ async function main() {
 
   const steps = buildSeedSteps()
   if (cli.longBranch) steps.push(...LONG_BRANCH_SCALES.flatMap(buildLongBranchSteps))
-  const dataset = cli.dataset ? datasetStorySteps(seedProviderIds(steps)) : []
+  const dataset = cli.dataset ? datasetStorySteps(seedAppRefs(steps)) : []
   steps.push(...dataset)
   if (mockPort !== undefined) {
     repointSeedProvider(steps, mockPort)

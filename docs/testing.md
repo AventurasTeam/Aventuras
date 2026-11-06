@@ -342,7 +342,7 @@ default seed supplies, the run log, probe captures and wizard drafts.
 A table a later migration adds fails the seed's test until it is
 carried or left out, and a column one adds until the seed is loaded and
 exported again. The story's settings may name only a provider the
-default seed defines. The loader checks every row against its table's
+default seed defines, and its rows only an asset it defines. The loader checks every row against its table's
 Zod schemas, then inserts it as written.
 
 `pnpm dataset:export-seed [db path] [--story <id>]` rewrites the file

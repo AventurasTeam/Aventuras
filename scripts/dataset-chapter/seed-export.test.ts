@@ -8,7 +8,7 @@ import { afterEach, describe, expect, it } from 'vitest'
 import { exportStorySeed } from './seed-export'
 import { createTestDb } from '../../lib/db/__tests__/test-db'
 import { buildSeedSteps, type SeedStep } from '../../lib/db/devtools/seed-dataset'
-import { DATASET_SEED_TABLES, parseStorySeed, seedProviderIds } from '../seed/dataset-story'
+import { DATASET_SEED_TABLES, parseStorySeed, seedAppRefs } from '../seed/dataset-story'
 import { insertSeedSteps } from '../seed/insert'
 
 type Row = Record<string, unknown>
@@ -17,7 +17,7 @@ const HERO = 'story_hero'
 const HERO_MAIN = 'br_hero_main'
 // Not shaped like a known key format, so only the scan for the database's own keys can catch it.
 const KEY = 'dataset-test-key-0123456789abcdef'
-const PROVIDERS = seedProviderIds(buildSeedSteps())
+const REFS = seedAppRefs(buildSeedSteps())
 
 async function loaded(steps: readonly SeedStep[]): Promise<DatabaseSync> {
   const { db, sqlite } = await createTestDb()
@@ -26,7 +26,7 @@ async function loaded(steps: readonly SeedStep[]): Promise<DatabaseSync> {
 }
 
 const seeded = () => loaded(buildSeedSteps())
-const exported = (sqlite: DatabaseSync, story = HERO) => exportStorySeed(sqlite, story, PROVIDERS)
+const exported = (sqlite: DatabaseSync, story = HERO) => exportStorySeed(sqlite, story, REFS)
 
 function setProviderKey(sqlite: DatabaseSync, key: string): void {
   const { providers } = sqlite.prepare(`SELECT providers FROM app_settings`).get() as {
@@ -87,7 +87,7 @@ describe('exportStorySeed', () => {
         (r) => r.id !== HERO && r.storyId !== HERO && !String(r.branchId).startsWith('br_hero_'),
       ),
     }))
-    const reloaded = await loaded([...others, ...parseStorySeed(first, PROVIDERS)])
+    const reloaded = await loaded([...others, ...parseStorySeed(first, REFS)])
     expect(await exported(reloaded)).toBe(first)
   })
 

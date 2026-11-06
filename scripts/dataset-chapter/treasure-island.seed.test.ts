@@ -31,7 +31,7 @@ import {
   threads,
 } from '../../lib/db/schema'
 import type { Delta } from '../../lib/db/types'
-import { DATASET_SEED_PATH, datasetStorySteps, seedProviderIds } from '../seed/dataset-story'
+import { DATASET_SEED_PATH, datasetStorySteps, seedAppRefs } from '../seed/dataset-story'
 import { insertSeedSteps } from '../seed/insert'
 
 const STORY = 'story_77a59fe9-7741-4634-b6cd-5633f9e50f5b'
@@ -40,7 +40,7 @@ const BRANCH = 'br_aa6101af-d3dd-4964-9869-81e76cc35f97'
 async function seededWithDataset() {
   const ctx = await createTestDb()
   const defaults = buildSeedSteps()
-  await insertSeedSteps(ctx.db, [...defaults, ...datasetStorySteps(seedProviderIds(defaults))])
+  await insertSeedSteps(ctx.db, [...defaults, ...datasetStorySteps(seedAppRefs(defaults))])
   return ctx
 }
 
@@ -166,7 +166,7 @@ describe('the Treasure Island seed', () => {
   // A migration adding a column to a seeded table fails here: the file lacks it until re-exported.
   it('exports to the bytes it loaded from', async () => {
     const { sqlite } = await seededWithDataset()
-    const exported = await exportStorySeed(sqlite, STORY, seedProviderIds(buildSeedSteps()))
+    const exported = await exportStorySeed(sqlite, STORY, seedAppRefs(buildSeedSteps()))
     expect(
       exported === readFileSync(DATASET_SEED_PATH, 'utf8'),
       'the seed differs from its own export: run pnpm db:seed:dataset, then pnpm dataset:export-seed, and commit the file',

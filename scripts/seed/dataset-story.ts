@@ -21,6 +21,7 @@ import { happeningWriteSchema } from '../../lib/db/happenings/happening-schema'
 import { loreWriteSchema } from '../../lib/db/lore/lore-schema'
 import {
   appSettings,
+  assets,
   branchEraFlips,
   branches,
   chapters,
@@ -157,19 +158,27 @@ function namedProviders(settings: StorySettings): string[] {
   ].filter((id): id is string => id !== undefined)
 }
 
-/** The provider ids the default seed's app settings define. */
-export function seedProviderIds(steps: readonly SeedStep[]): ReadonlySet<string> {
-  const rows = steps.find((s) => s.table === appSettings)?.rows as
-    | (typeof appSettings.$inferInsert)[]
-    | undefined
-  return new Set(rows?.flatMap((row) => row.providers?.map((p) => p.id) ?? []))
+/** The app-level rows a story seed may name: the default seed's providers and assets. */
+export type SeedAppRefs = { providerIds: ReadonlySet<string>; assetIds: ReadonlySet<string> }
+
+export function seedAppRefs(steps: readonly SeedStep[]): SeedAppRefs {
+  const rowsOf = <T>(table: SQLiteTable) =>
+    steps.filter((s) => s.table === table).flatMap((s) => s.rows as T[])
+  return {
+    providerIds: new Set(
+      rowsOf<typeof appSettings.$inferInsert>(appSettings).flatMap(
+        (row) => row.providers?.map((p) => p.id) ?? [],
+      ),
+    ),
+    assetIds: new Set(rowsOf<typeof assets.$inferInsert>(assets).map((row) => row.id)),
+  }
 }
 
 /**
  * Validates a story seed and returns its insert steps, rows as written: no Zod default or strip
  * reaches the database, so an export of the loaded story reproduces the file.
  */
-export function parseStorySeed(json: string, providerIds: ReadonlySet<string>): SeedStep[] {
+export function parseStorySeed(json: string, refs: SeedAppRefs): SeedStep[] {
   const seed = z.record(z.string(), z.array(z.unknown())).parse(JSON.parse(json))
   const names = DATASET_SEED_TABLES.map((spec) => spec.name)
   const unknown = Object.keys(seed).filter((name) => !names.includes(name))
@@ -190,7 +199,7 @@ export function parseStorySeed(json: string, providerIds: ReadonlySet<string>): 
   if (story === undefined || others.length > 0)
     throw new Error(`dataset seed stories: one story, got ${rowsOf('stories').length}`)
   for (const id of namedProviders(story.settings as StorySettings))
-    if (!providerIds.has(id))
+    if (!refs.providerIds.has(id))
       throw new Error(
         `dataset seed stories[0]: its settings name provider ${id}, which the default seed's app settings lack`,
       )
@@ -199,6 +208,18 @@ export function parseStorySeed(json: string, providerIds: ReadonlySet<string>): 
     if (branch.storyId !== story.id) throw new Error(`dataset seed branches[${i}]: another story`)
     branchIds.add(branch.id)
   })
+  const namedAssets: [string, unknown][] = [
+    ['stories[0]', story.coverAssetId],
+    ...rowsOf('entry_assets').map((row, i): [string, unknown] => [
+      `entry_assets[${i}]`,
+      row.assetId,
+    ]),
+  ]
+  for (const [where, assetId] of namedAssets)
+    if (assetId != null && !refs.assetIds.has(assetId as string))
+      throw new Error(
+        `dataset seed ${where}: names asset ${String(assetId)}, which the default seed lacks`,
+      )
   if (story.currentBranchId != null && !branchIds.has(story.currentBranchId))
     throw new Error(
       `dataset seed stories[0]: current branch ${String(story.currentBranchId)} is not one of its branches`,
@@ -211,6 +232,6 @@ export function parseStorySeed(json: string, providerIds: ReadonlySet<string>): 
   return steps
 }
 
-export function datasetStorySteps(providerIds: ReadonlySet<string>): SeedStep[] {
-  return parseStorySeed(readFileSync(DATASET_SEED_PATH, 'utf8'), providerIds)
+export function datasetStorySteps(refs: SeedAppRefs): SeedStep[] {
+  return parseStorySeed(readFileSync(DATASET_SEED_PATH, 'utf8'), refs)
 }

@@ -6,7 +6,7 @@ import { parseArgs } from 'node:util'
 import { exportStorySeed } from './seed-export'
 import { buildSeedSteps } from '../../lib/db/devtools/seed-dataset'
 import { resolveDevSlot } from '../dev-slot/resolve'
-import { DATASET_SEED_PATH, seedProviderIds } from '../seed/dataset-story'
+import { DATASET_SEED_PATH, seedAppRefs } from '../seed/dataset-story'
 
 // pnpm dataset:export-seed [db path] [--story <id>]: rewrites the checked-in dataset seed from a
 // database holding its story, once a slice's close tasks ran. The path resolves as db:seed's does.
@@ -41,7 +41,7 @@ async function main() {
   const sqlite = new DatabaseSync(dbPath, { readOnly: true })
   let json: string
   try {
-    json = await exportStorySeed(sqlite, storyId, seedProviderIds(buildSeedSteps()))
+    json = await exportStorySeed(sqlite, storyId, seedAppRefs(buildSeedSteps()))
   } finally {
     sqlite.close()
   }

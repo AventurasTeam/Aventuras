@@ -6,7 +6,7 @@ import { drizzle } from 'drizzle-orm/sqlite-proxy'
 
 import { assertScannableKey, holdsSecret } from './export'
 import { branches, stories } from '../../lib/db/schema'
-import { DATASET_SEED_TABLES, parseStorySeed } from '../seed/dataset-story'
+import { DATASET_SEED_TABLES, parseStorySeed, type SeedAppRefs } from '../seed/dataset-story'
 import { makeProxy } from '../seed/sqlite-proxy'
 
 const CREDENTIAL_FIELD =
@@ -47,12 +47,12 @@ function credentialAt(value: unknown, path: string, keys: readonly string[]): st
 export async function exportStorySeed(
   sqlite: DatabaseSync,
   storyId: string,
-  providerIds: ReadonlySet<string>,
+  refs: SeedAppRefs,
 ): Promise<string> {
   // One read transaction: a write landing between two tables' reads can't split the seed.
   sqlite.exec('BEGIN')
   try {
-    return await exportInSnapshot(sqlite, storyId, providerIds)
+    return await exportInSnapshot(sqlite, storyId, refs)
   } finally {
     sqlite.exec('ROLLBACK')
   }
@@ -61,7 +61,7 @@ export async function exportStorySeed(
 async function exportInSnapshot(
   sqlite: DatabaseSync,
   storyId: string,
-  providerIds: ReadonlySet<string>,
+  refs: SeedAppRefs,
 ): Promise<string> {
   const unfinished = sqlite
     .prepare(`SELECT run_id FROM pipeline_runs WHERE story_id = ? AND finished_at IS NULL`)
@@ -102,6 +102,6 @@ async function exportInSnapshot(
       if (found !== null) throw new Error(`dataset seed ${found}`)
     })
   const json = `${JSON.stringify(seed, null, 2)}\n`
-  parseStorySeed(json, providerIds)
+  parseStorySeed(json, refs)
   return json
 }
