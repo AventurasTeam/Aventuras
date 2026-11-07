@@ -3736,6 +3736,18 @@ already (`use-history-chunks.ts`, `save-session.tsx`,
 Parked 2026-11-04; the signal is a slice that already touches most of
 those sites, since a sweep of about 90 files nears the review cap.
 
+#### A fresh dev slot could install its embedder itself
+
+Every seeded story (`pnpm db:seed`, `db:seed:long`, `db:seed:dataset`)
+declares the local embedder `Xenova/all-MiniLM-L6-v2`, and nothing puts
+the model into a slot's `userData/embedders/`, so a fresh slot fails
+its first turn until it is installed from Settings or copied by hand
+([`dev-environment.md → Slot-aware commands`](./dev-environment.md#slot-aware-commands)).
+Candidate: seeding a slot, with no explicit path, copies the default
+catalog model from `~/.cache/aventuras-e2e/embedders` when an E2E run
+has filled it, or the worktree setup does. **Revisit signal:** the hand
+step costing a worker a run. Routed from triage 2026-11-07.
+
 #### The mock LLM's token count has no run guard
 
 `scripts/mock-llm/respond/wire.ts:49-53` keeps its own `countO200k`,

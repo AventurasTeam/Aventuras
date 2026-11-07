@@ -129,26 +129,6 @@ slice-planning gate forces its resolution before that slice is planned.
   spell out a `RunState` for `startRun` by hand, with no shared fixture,
   so a `RunState` change edits all of them. Surfaced by Slice 5.7's
   save-path review.
-- **A fresh dev slot has no local embedder model.** Every seeded story
-  (`pnpm db:seed`, `db:seed:long`, `db:seed:dataset`) declares the local
-  embedder `Xenova/all-MiniLM-L6-v2`. The app counts a model installed
-  only when `<userData>/embedders/<id>/` holds it, and loads it with
-  `local_files_only` (`electron/embedder/service.ts`,
-  [Embedder in E2E](../testing.md#embedder-in-e2e)). Nothing under
-  `scripts/`, neither the dev-slot setup nor the seed, puts it into a
-  slot's userData. Only the E2E harness provisions it, for its own runs:
-  `ensureEmbedderModel` (`e2e/harness/embedder.ts`) fills
-  `~/.cache/aventuras-e2e/embedders`, and each spec that needs it copies
-  it into its run's userData. So in a fresh worker slot
-  (`~/.config/aventuras-dev-slotN`) or on a new machine, a seeded story
-  can't embed and a turn fails before its narrative call, until someone
-  downloads the model in the app or copies it in by hand. PR #709's
-  desktop smoke copied it from that cache into slot 2's
-  `userData/embedders`;
-  [Measuring on a release build](../dev-environment.md#measuring-on-a-release-build)
-  documents the hand copy for the Android measure only. One candidate,
-  undecided: seeding a slot (no explicit path) installs the default
-  catalog model from that cache, or the worktree setup does.
 - **The E2E embedder cache is shared across checkouts on any catalog
   revision.** `ensureEmbedderModel` (`e2e/harness/embedder.ts`) deletes
   and rebuilds `~/.cache/aventuras-e2e/embedders/<model>` when its
