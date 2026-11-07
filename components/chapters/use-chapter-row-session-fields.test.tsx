@@ -36,7 +36,7 @@ const RAIN: ChapterDraftRow = {
   summary: 'The rain holds the road shut.',
   keywords: ['Rain'],
 }
-const ROWS = new Map([KEEP, RAIN].map((row) => [row.id, chapterDraftFrom(row)]))
+const ROWS = new Map([KEEP, RAIN].map((row) => [row.id, row]))
 const NONE_VALUES = chapterDraftFrom(null)
 
 function TitleField({ control }: { control: Control<ChapterDraft> }) {
@@ -51,10 +51,8 @@ type TimelineProps = { expandedId: string | null; gated: boolean }
 
 /** The route's shape: one session, and each card mounting its own fields as it expands. */
 function Timeline({ expandedId, gated }: TimelineProps) {
-  const values = (expandedId == null ? null : ROWS.get(expandedId)) ?? NONE_VALUES
   const session = useChapterRowSession({
-    rowId: expandedId,
-    values,
+    row: (expandedId == null ? null : ROWS.get(expandedId)) ?? null,
     onSave,
     onSaved: noop,
     onSession: noop,

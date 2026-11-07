@@ -25,20 +25,17 @@ const RAIN: ChapterDraftRow = {
   summary: 'The rain holds the road shut.',
   keywords: ['Rain'],
 }
-// Module-level, so each row's values keep one identity across renders, as the route's memo does.
 const KEEP_VALUES = chapterDraftFrom(KEEP)
 const RAIN_VALUES = chapterDraftFrom(RAIN)
-const NONE_VALUES = chapterDraftFrom(null)
 
 const OK: ChapterSaveResult = { status: 'ok', id: KEEP.id }
 
-type Props = Pick<ChapterRowSessionOptions, 'rowId' | 'values'>
+type Props = Pick<ChapterRowSessionOptions, 'row'>
 
-function setup(
-  result: ChapterSaveResult,
-  initialProps: Props = { rowId: KEEP.id, values: KEEP_VALUES },
-) {
-  const onSave = vi.fn(async (_draft: ChapterDraft): Promise<ChapterSaveResult> => result)
+function setup(result: ChapterSaveResult, initialProps: Props = { row: KEEP }) {
+  const onSave = vi.fn(
+    async (_row: ChapterDraftRow, _draft: ChapterDraft): Promise<ChapterSaveResult> => result,
+  )
   const onSaved = vi.fn<(id: string) => void>()
   const onRejected = vi.fn<(reason: string) => void>()
   const onSession = vi.fn<(handle: RowSessionHandle | null) => void>()
@@ -113,7 +110,7 @@ describe('useChapterRowSession', () => {
       outcome = await hook.result.current.save()
     })
     expect(outcome).toEqual({ status: 'committed' })
-    expect(onSave).toHaveBeenCalledWith({ ...KEEP_VALUES, title: 'The Keep Falls' })
+    expect(onSave).toHaveBeenCalledWith(KEEP, { ...KEEP_VALUES, title: 'The Keep Falls' })
     expect(onSaved).toHaveBeenCalledWith(KEEP.id)
     expect(onRejected).not.toHaveBeenCalled()
     expect(error).toHaveBeenCalledWith('app.chapter_saved_handler_failed', {
@@ -141,7 +138,7 @@ describe('useChapterRowSession', () => {
   })
 
   it('runs clean under the reserved key while no card is open, and lets a leave through at once', () => {
-    const { hook, onSession } = setup(OK, { rowId: null, values: NONE_VALUES })
+    const { hook, onSession } = setup(OK, { row: null })
     expect(hook.result.current.dirty).toBe(false)
     expect(hook.result.current.form.getValues()).toEqual({
       title: '',
@@ -159,23 +156,37 @@ describe('useChapterRowSession', () => {
     expect(hook.result.current.pendingLeave).toBe(false)
   })
 
+  it("refuses a Save with no card open and never calls the route's save", async () => {
+    const { hook, onSave, onSaved, onRejected } = setup(OK, { row: null })
+    editTitle(hook, 'The Keep Falls')
+    act(() => hook.result.current.form.setValue('summary', 'It falls.', { shouldDirty: true }))
+    let outcome
+    await act(async () => {
+      outcome = await hook.result.current.save()
+    })
+    expect(outcome).toEqual({ status: 'rejected', reason: "Couldn't save the chapter" })
+    expect(onSave).not.toHaveBeenCalled()
+    expect(onSaved).not.toHaveBeenCalled()
+    expect(onRejected).toHaveBeenCalledWith("Couldn't save the chapter")
+  })
+
   it("loads a card's row when it opens, and resets to the next card's row when that opens", async () => {
-    const { hook } = setup(OK, { rowId: null, values: NONE_VALUES })
-    hook.rerender({ rowId: KEEP.id, values: KEEP_VALUES })
+    const { hook } = setup(OK, { row: null })
+    hook.rerender({ row: KEEP })
     expect(hook.result.current.form.getValues()).toEqual(KEEP_VALUES)
     expect(hook.result.current.dirty).toBe(false)
 
     editTitle(hook, 'The Keep Falls')
     await waitFor(() => expect(hook.result.current.dirty).toBe(true))
 
-    hook.rerender({ rowId: RAIN.id, values: RAIN_VALUES })
+    hook.rerender({ row: RAIN })
     expect(hook.result.current.form.getValues()).toEqual(RAIN_VALUES)
     await waitFor(() => expect(hook.result.current.dirty).toBe(false))
   })
 
   it('drops a field issue once an edit is undone and the draft is clean again', async () => {
     // Blank committed values are the one place a clean draft can hold an invalid field.
-    const { hook } = setup(OK, { rowId: null, values: NONE_VALUES })
+    const { hook } = setup(OK, { row: null })
     const { onChange } = hook.result.current.form.register('title')
     const typeTitle = (value: string) =>
       act(async () => {

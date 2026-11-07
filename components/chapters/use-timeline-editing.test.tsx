@@ -3,6 +3,7 @@ import { act, cleanup, renderHook, waitFor } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
 import type { ChapterSaveResult } from '@/lib/actions'
+import type { ChapterDraftRow } from '@/lib/chapters'
 import type { StoreChapter } from '@/lib/stores'
 
 import { useTimelineEditing, type TimelineEditingOptions } from './use-timeline-editing'
@@ -41,7 +42,7 @@ type Props = Pick<TimelineEditingOptions, 'ready' | 'rows' | 'runInFlight'>
 
 function setup(initialProps: Props = { ready: true, rows: BEFORE, runInFlight: false }) {
   const save = vi.fn(
-    async (row: StoreChapter): Promise<ChapterSaveResult> => ({ status: 'ok', id: row.id }),
+    async (row: ChapterDraftRow): Promise<ChapterSaveResult> => ({ status: 'ok', id: row.id }),
   )
   const hook = renderHook(
     (props: Props) => useTimelineEditing({ ...props, save, onSaved: vi.fn(), onRejected: vi.fn() }),

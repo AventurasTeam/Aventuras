@@ -1,5 +1,5 @@
 import { zodResolver } from '@hookform/resolvers/zod'
-import { useCallback, useEffect, useLayoutEffect, useState } from 'react'
+import { useCallback, useEffect, useLayoutEffect, useMemo, useState } from 'react'
 
 import {
   useRowSaveSession,
@@ -8,7 +8,12 @@ import {
   type RowSessionHandle,
 } from '@/hooks/use-row-save-session'
 import type { ChapterSaveResult } from '@/lib/actions'
-import { chapterDraftSchema, type ChapterDraft } from '@/lib/chapters'
+import {
+  chapterDraftFrom,
+  chapterDraftSchema,
+  type ChapterDraft,
+  type ChapterDraftRow,
+} from '@/lib/chapters'
 import { logger } from '@/lib/diagnostics'
 
 import {
@@ -21,6 +26,13 @@ import {
 /** The rowKey while no card is open; chapter ids are `chap_…`, so it never names a row. */
 const CHAPTER_SESSION_NONE = 'none'
 
+// No field renders while no card is open, so no Save can reach this; it writes nothing.
+const NO_CHAPTER_OPEN: ChapterSaveResult = {
+  status: 'rejected',
+  reason: 'no chapter open',
+  code: 'failed',
+}
+
 const resolver = zodResolver(chapterDraftSchema)
 
 export type ChapterRowSession = RowSaveSession<ChapterDraft> & {
@@ -29,11 +41,9 @@ export type ChapterRowSession = RowSaveSession<ChapterDraft> & {
 }
 
 export type ChapterRowSessionOptions = {
-  /** The expanded chapter's id; null while no card is open. */
-  rowId: string | null
-  /** Committed values; memoize by row identity. EMPTY_CHAPTER_DRAFT's copy for a null rowId. */
-  values: ChapterDraft
-  onSave: (draft: ChapterDraft) => Promise<ChapterSaveResult>
+  /** The expanded chapter, whose identity keys its committed values; null while no card is open. */
+  row: ChapterDraftRow | null
+  onSave: (row: ChapterDraftRow, draft: ChapterDraft) => Promise<ChapterSaveResult>
   onSaved: (id: string) => void
   onRejected?: (reason: string) => void
   onSession: (handle: RowSessionHandle | null) => void
@@ -41,16 +51,17 @@ export type ChapterRowSessionOptions = {
 
 /** The Timeline's one row save session: translated refusals, and its handle to the route. */
 export function useChapterRowSession({
-  rowId,
-  values,
+  row,
   onSave,
   onSaved,
   onRejected,
   onSession,
 }: ChapterRowSessionOptions): ChapterRowSession {
+  const rowId = row?.id ?? null
+  const values = useMemo(() => chapterDraftFrom(row), [row])
   const commit = useCallback(
     async (draft: ChapterDraft): Promise<RowCommitResult> => {
-      const result = await onSave(draft)
+      const result = row == null ? NO_CHAPTER_OPEN : await onSave(row, draft)
       if (result.status === 'rejected') {
         return { status: 'rejected', reason: chapterSaveRejectionText(result.code) }
       }
@@ -65,7 +76,7 @@ export function useChapterRowSession({
       }
       return { status: 'ok' }
     },
-    [onSave, onSaved],
+    [row, onSave, onSaved],
   )
   const session = useRowSaveSession<ChapterDraft>({
     rowKey: rowId ?? CHAPTER_SESSION_NONE,

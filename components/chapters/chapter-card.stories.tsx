@@ -1,5 +1,5 @@
 import type { Meta, StoryObj } from '@storybook/react-native-web-vite'
-import { useCallback, useMemo, useState, useSyncExternalStore } from 'react'
+import { useCallback, useState, useSyncExternalStore } from 'react'
 import { View } from 'react-native'
 import { expect, fn, screen, userEvent, waitFor, within } from 'storybook/test'
 
@@ -9,7 +9,7 @@ import { Button } from '@/components/ui/button'
 import { Text } from '@/components/ui/text'
 import { useTier } from '@/hooks/use-tier'
 import type { ChapterSaveResult } from '@/lib/actions'
-import { chapterDraftFrom, type ChapterDraft } from '@/lib/chapters'
+import type { ChapterDraft, ChapterDraftRow } from '@/lib/chapters'
 import { t } from '@/lib/i18n'
 import type { StoreChapter } from '@/lib/stores'
 
@@ -108,9 +108,8 @@ function CardHarness({ data, initiallyExpanded, onSave, onJump, hotkeysEnabled }
   const row = useSyncExternalStore(cell.subscribe, cell.get)
   const [expanded, setExpanded] = useState(initiallyExpanded)
   const [blocked, setBlocked] = useState(false)
-  const values = useMemo(() => chapterDraftFrom(expanded ? row : null), [expanded, row])
   const save = useCallback(
-    async (draft: ChapterDraft): Promise<ChapterSaveResult> => {
+    async (_row: ChapterDraftRow, draft: ChapterDraft): Promise<ChapterSaveResult> => {
       const result = await onSave(draft)
       if (result.status === 'ok') {
         cell.set({
@@ -126,8 +125,7 @@ function CardHarness({ data, initiallyExpanded, onSave, onJump, hotkeysEnabled }
     [cell, onSave],
   )
   const session = useChapterRowSession({
-    rowId: expanded ? row.id : null,
-    values,
+    row: expanded ? row : null,
     onSave: save,
     onSaved: NOOP,
     onSession: NOOP,
@@ -319,10 +317,8 @@ export const HeadToggles: Story = {
 
 /** Native's one-pass lag on a switch: the session's form still holds another chapter. */
 function LaggingFormHarness() {
-  const values = useMemo(() => chapterDraftFrom(TAVERN), [])
   const session = useChapterRowSession({
-    rowId: TAVERN.id,
-    values,
+    row: TAVERN,
     onSave: async () => ({ status: 'ok', id: TAVERN.id }),
     onSaved: NOOP,
     onSession: NOOP,
