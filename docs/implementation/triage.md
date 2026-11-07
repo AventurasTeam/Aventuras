@@ -218,12 +218,6 @@ slice-planning gate forces its resolution before that slice is planned.
   interrupted summary either, and the `tsx` and `pnpm` relay in between
   wasn't traced. With parallel workers an orphaned run now finishes in
   under 2 minutes. Surfaced by the same review.
-- **The mock panel's failure menu can't show `stream-cut` on a
-  structured or tool lane.** `FAILURES.structured`
-  (`scripts/mock-llm/ui/index.html`) leaves it out, so a lane armed
-  with it through the API shows the menu as none beside a `stream-cut`
-  badge. On a tool lane it acts as `malformed`. Surfaced by Slice 5.4's
-  review.
 - **The dev mock doesn't re-check stored lane values on load.**
   `scripts/mock-llm/state.ts` reads `value` as `unknown`, so a
   hand-edited `state.json` reaches the reply builders unvalidated: a

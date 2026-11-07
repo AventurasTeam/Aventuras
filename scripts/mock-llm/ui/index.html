@@ -597,7 +597,12 @@
         }
         const lane = meta.lane
         const isNarrative = selected === 'narrative'
-        const kinds = FAILURES[isNarrative ? 'narrative' : 'structured']
+        const offered = FAILURES[isNarrative ? 'narrative' : 'structured']
+        // The API arms any kind on any lane (stream-cut on a structured one acts as malformed); the
+        // menu lists it rather than read none beside the lane's badge.
+        const kinds = offered.includes(lane.failure.kind)
+          ? offered
+          : [...offered, lane.failure.kind]
         const upstreamOptions = snap.upstreams
           .map(
             (u) =>
