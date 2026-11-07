@@ -299,7 +299,7 @@ function ActionRow({
           // The wireframe's `.danger` sits at the row's far end; this View is the flex item.
           <View
             key={entry.key}
-            className={cn('items-start gap-0.5', entry.destructive && 'ml-auto')}
+            className={cn('gap-0.5', entry.destructive ? 'ml-auto items-end' : 'items-start')}
           >
             <Button
               variant={entry.destructive ? 'destructive' : 'secondary'}
