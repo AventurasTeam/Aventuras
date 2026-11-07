@@ -37,9 +37,8 @@ function newestUnjudged(
 }
 
 /**
- * The expanded card after `input`. The first ready rows are judged and expand nothing; an unjudged
- * row is judged once its run has ended, the newest expanding only with no card dirty. Returns
- * `state` itself when nothing changes.
+ * The expanded card after `input`: the first ready rows are judged, expanding nothing; an unjudged
+ * row is judged once its run ends, the newest expanding if no card is dirty. `state` if unchanged.
  */
 export function nextExpandedChapter(
   state: ChapterExpansionState,
