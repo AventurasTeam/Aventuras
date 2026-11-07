@@ -1064,6 +1064,22 @@ export const SystemCloseResolved: StoryT = {
     onDismiss: fn(),
   },
   play: async () => {
+    expect(await screen.findByText(/^Chapter closed\./)).toBeVisible()
+    expect(await screen.findByText(HELD_SHORT)).toBeVisible()
+    expect(screen.getByRole('button', { name: /Dismiss/ })).toBeVisible()
+    expect(screen.queryByRole('button', { name: /Retry/ })).not.toBeInTheDocument()
+  },
+}
+
+/** A close Retry that found nothing owed, its text kept the same way. */
+export const SystemCloseNothingOwed: StoryT = {
+  ...SystemCloseResolved,
+  args: {
+    ...SystemCloseResolved.args,
+    content: t('reader:systemEntry.closeNothingOwedTextKept'),
+  },
+  play: async () => {
+    expect(await screen.findByText(/^Nothing left to close\./)).toBeVisible()
     expect(await screen.findByText(HELD_SHORT)).toBeVisible()
     expect(screen.getByRole('button', { name: /Dismiss/ })).toBeVisible()
     expect(screen.queryByRole('button', { name: /Retry/ })).not.toBeInTheDocument()

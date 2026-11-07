@@ -344,23 +344,34 @@ export function toCloseFailureMeta(
   return { ...failureMetaOf(error, detail, submission), close: 'failed' }
 }
 
+/** How a close Retry settled: its own close committed, or none was owed any more. */
+export type CloseResolvedArm = 'closed' | 'nothing-owed'
+
 /**
- * What a Retry that left nothing owed settles on when the composer can't take the entry's text
- * back, as `passResolvedEntry`: a notice holding the text, Dismiss alone. Else the entry clears.
+ * What a Retry that settled the close leaves when the composer can't take the entry's text back,
+ * as `passResolvedEntry`: a notice holding the text, Dismiss alone, saying which way the Retry
+ * settled. Else the entry clears.
  */
-export function closeResolvedEntry(submission: NonNullable<SystemFailureMeta['submission']>): {
+export function closeResolvedEntry(
+  submission: NonNullable<SystemFailureMeta['submission']>,
+  arm: CloseResolvedArm,
+): {
   content: string
   failure: SystemFailureMeta
 } {
   return {
-    content: t('reader:systemEntry.closeResolvedTextKept'),
+    content: t(
+      arm === 'closed'
+        ? 'reader:systemEntry.closeResolvedTextKept'
+        : 'reader:systemEntry.closeNothingOwedTextKept',
+    ),
     failure: { kind: 'orchestrator', submission, close: 'resolved' },
   }
 }
 
 /**
  * A close-failure entry's Retry: runs what the close owes, catch-up passes first. Committed or
- * nothing owed settles via `committed`; a failed close rewrites the entry, a failed catch-up pass
+ * nothing owed settles via `committed`, told which; a failed close rewrites the entry, a failed catch-up pass
  * or a held branch as a memory entry; a cancel, or a chain ending before the close, leaves it.
  * A `runClose` throw rewrites the entry as an `orchestrator` close failure; throws from `held`,
  * `committed` and the rewrites propagate.
@@ -369,7 +380,7 @@ export async function retryCloseEntry(deps: {
   runClose: () => Promise<OwedCloseRun>
   /** Read once the run ended: whether the branch is held `running`. */
   held: () => Promise<boolean>
-  committed: () => Promise<void>
+  committed: (arm: CloseResolvedArm) => Promise<void>
   rewriteClose: (error: PipelineError) => Promise<void>
   rewritePass: (refusal: PassRefusal) => Promise<void>
   notify: (message: string) => void
@@ -381,7 +392,7 @@ export async function retryCloseEntry(deps: {
     const detail = err instanceof Error ? err.message : String(err)
     return deps.rewriteClose({ kind: 'orchestrator', detail })
   }
-  if (run.outcome === 'nothing-owed') return deps.committed()
+  if (run.outcome === 'nothing-owed') return deps.committed('nothing-owed')
   if (run.outcome === 'rejected') {
     if (run.blockedBy === CLASSIFIER_HELD) return deps.rewritePass({ held: true })
     deps.notify(t('reader:systemEntry.closeRetryBlocked', { reason: run.blockedBy }))
@@ -390,7 +401,7 @@ export async function retryCloseEntry(deps: {
   const { kind, result } = run.end
   if (kind === CHAPTER_CLOSE_KIND) {
     // A Cancel that landed after the close's last phase still left its chapter committed.
-    if (result.outcome === 'completed') return deps.committed()
+    if (result.outcome === 'completed') return deps.committed('closed')
     if (result.outcome === 'failed') return deps.rewriteClose(result.error)
     return
   }

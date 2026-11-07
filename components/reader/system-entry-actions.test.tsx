@@ -23,6 +23,7 @@ import { toast } from '@/lib/toast'
 import type { PassRefusal } from './send-run'
 import {
   closeResolvedEntry,
+  type CloseResolvedArm,
   describeCloseFailure,
   describePassFailure,
   describeTurnFailure,
@@ -601,7 +602,7 @@ describe('closeResolvedEntry', () => {
   const SUBMISSION = { content: 'I wait.', composerMode: 'free' }
 
   it('keeps the text under the resolved close marker, through the persisted schema', () => {
-    const { failure } = closeResolvedEntry(SUBMISSION)
+    const { failure } = closeResolvedEntry(SUBMISSION, 'closed')
     const parsed = entryMetadataSchema.parse({
       sceneEntities: [],
       currentLocationId: null,
@@ -615,11 +616,26 @@ describe('closeResolvedEntry', () => {
     })
   })
 
-  it('says why the text is kept here', () => {
+  it('says the chapter closed, and why the text is kept here', () => {
     expect(hasCopy('reader:systemEntry.closeResolvedTextKept')).toBe(true)
-    expect(closeResolvedEntry(SUBMISSION).content).toBe(
-      "Nothing is left to close before your turn. The composer couldn't take your text back, so it's kept here.",
+    expect(closeResolvedEntry(SUBMISSION, 'closed').content).toBe(
+      "Chapter closed. The composer couldn't take your text back, so it's kept here.",
     )
+  })
+
+  it('says nothing is left to close, and why the text is kept here', () => {
+    expect(hasCopy('reader:systemEntry.closeNothingOwedTextKept')).toBe(true)
+    expect(closeResolvedEntry(SUBMISSION, 'nothing-owed').content).toBe(
+      "Nothing left to close. The composer couldn't take your text back, so it's kept here.",
+    )
+  })
+
+  it('marks either arm resolved, with no Retry', () => {
+    expect(closeResolvedEntry(SUBMISSION, 'nothing-owed').failure).toEqual({
+      kind: 'orchestrator',
+      submission: SUBMISSION,
+      close: 'resolved',
+    })
   })
 })
 
@@ -728,7 +744,7 @@ describe('retryCloseEntry', () => {
     const rewritePass = vi.fn(async (_refusal: PassRefusal) => {
       calls.push('rewritePass')
     })
-    const committed = vi.fn(async () => {
+    const committed = vi.fn(async (_arm: CloseResolvedArm) => {
       calls.push('committed')
     })
     const notify = vi.fn((_message: string) => {
@@ -745,6 +761,7 @@ describe('retryCloseEntry', () => {
       notify,
       runClose,
       held,
+      committed,
       deps: { runClose, held, committed, rewriteClose, rewritePass, notify },
     }
   }
@@ -754,6 +771,7 @@ describe('retryCloseEntry', () => {
     await retryCloseEntry(h.deps)
     expect(h.runClose).toHaveBeenCalledTimes(1)
     expect(h.calls).toEqual(['committed'])
+    expect(h.committed).toHaveBeenCalledWith('closed')
   })
 
   // The close committed before the Cancel landed, so its chapter stands.
@@ -761,12 +779,14 @@ describe('retryCloseEntry', () => {
     const h = harness(ended(CHAPTER_CLOSE_KIND, { ...closeRan, outcome: 'completed' }, true))
     await retryCloseEntry(h.deps)
     expect(h.calls).toEqual(['committed'])
+    expect(h.committed).toHaveBeenCalledWith('closed')
   })
 
   it('settles the entry when no close is owed any more', async () => {
     const h = harness({ outcome: 'nothing-owed' })
     await retryCloseEntry(h.deps)
     expect(h.calls).toEqual(['committed'])
+    expect(h.committed).toHaveBeenCalledWith('nothing-owed')
   })
 
   it("rewrites the close entry with the close's new cause", async () => {
@@ -1188,7 +1208,7 @@ describe('useSystemEntryActions', () => {
   // Retry left nothing owed; the entry only holds a text the composer couldn't take back.
   it('offers Dismiss alone on a resolved close entry', () => {
     const actions = actionsFor(
-      closeResolvedEntry({ content: 'I wade in.', composerMode: 'free' }).failure,
+      closeResolvedEntry({ content: 'I wade in.', composerMode: 'free' }, 'nothing-owed').failure,
     )
     expect(actions.onRetry).toBeUndefined()
     expect(actions.fixAction).toBeUndefined()

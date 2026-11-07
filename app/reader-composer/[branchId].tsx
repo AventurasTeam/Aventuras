@@ -1140,7 +1140,8 @@ export default function ReaderComposerRoute() {
       await retryCloseEntry({
         runClose: () => runOwedClose(branchId, ctx),
         held: () => isClassifierHeld(branchId, ctx),
-        committed: () => settleCommittedRetry(stored, closeResolvedEntry),
+        committed: (arm) =>
+          settleCommittedRetry(stored, (submission) => closeResolvedEntry(submission, arm)),
         // A close never holds its branch; a failed catch-up pass may.
         rewriteClose: (error) =>
           settleRetryRewrite(false, stored, (submission) => showCloseFailure(error, submission)),
