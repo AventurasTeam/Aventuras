@@ -7,16 +7,7 @@ import { avtsEnvelope, type AvtsFile } from './envelope'
 import { optionalText, requiredText } from './fields'
 import { avtsFileName } from './file-name'
 
-export type ThreadImport = {
-  title: string
-  description: string | null
-  category: string | null
-  icon: string | null
-  status: Thread['status']
-  injectionMode: Thread['injectionMode']
-}
-
-export const ThreadImportSchema: z.ZodType<ThreadImport> = z.object({
+export const ThreadImportSchema = z.object({
   title: requiredText(() => t('common:avts.issue.titleRequired')),
   description: optionalText,
   category: optionalText,
@@ -24,6 +15,8 @@ export const ThreadImportSchema: z.ZodType<ThreadImport> = z.object({
   status: z.enum(THREAD_STATUSES),
   injectionMode: z.enum(INJECTION_MODES),
 })
+
+export type ThreadImport = z.output<typeof ThreadImportSchema>
 
 export function threadExport(row: Thread, exportedAt: Date): AvtsFile {
   const payload: ThreadImport = {

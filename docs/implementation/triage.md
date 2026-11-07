@@ -111,14 +111,6 @@ slice-planning gate forces its resolution before that slice is planned.
 - **A harness comment assumes WAL.** `e2e/harness/db.ts:17` justifies
   `queryApp` by "a second file handle can miss a WAL-buffered write", but
   the desktop database runs in rollback-journal mode.
-- **Hand-written types beside `z.ZodType<T>` schemas drift one way.**
-  The import schemas in `lib/avts/` (`thread.ts`, `lore.ts`,
-  `happening.ts`, `entity.ts`) are annotated with a hand-written type,
-  which checks only that the schema's output fits the type. A schema
-  that narrows a field (a nullable one made required) or adds one the
-  type lacks still compiles; a dropped or widened field fails (a scratch
-  `tsc` check on zod 4.4.3). Slice 5.2's close report derives its types
-  with `z.infer` instead. Surfaced by Slice 5.2's review.
 - **Update handlers type their patch apart from their column list.** The
   entities, lore, threads, translations, era-flips and entry-assets
   registers declare the update patch type separately from the

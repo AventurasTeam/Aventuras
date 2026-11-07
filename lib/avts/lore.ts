@@ -7,18 +7,8 @@ import { avtsEnvelope, type AvtsFile } from './envelope'
 import { optionalText, priorityField, requiredText, termList } from './fields'
 import { avtsFileName } from './file-name'
 
-export type LoreImport = {
-  title: string
-  body: string
-  category: string | null
-  tags: string[]
-  keywords: string[]
-  injectionMode: Lore['injectionMode']
-  priority: number
-}
-
 // world.md → Required body: whitespace-only is empty, on the JSON path as in the pane.
-export const LoreImportSchema: z.ZodType<LoreImport> = z.object({
+export const LoreImportSchema = z.object({
   title: requiredText(() => t('common:avts.issue.titleRequired')),
   body: requiredText(() => t('common:avts.issue.bodyRequired')),
   category: optionalText,
@@ -27,6 +17,8 @@ export const LoreImportSchema: z.ZodType<LoreImport> = z.object({
   injectionMode: z.enum(INJECTION_MODES),
   priority: priorityField,
 })
+
+export type LoreImport = z.output<typeof LoreImportSchema>
 
 export function loreExport(row: Lore, exportedAt: Date): AvtsFile {
   const payload: LoreImport = {

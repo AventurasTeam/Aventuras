@@ -123,7 +123,7 @@ const baseShape = {
   priority: priorityField,
 }
 
-export const EntityImportSchema: z.ZodType<EntityImport> = z.discriminatedUnion('kind', [
+const entityImportSchema = z.discriminatedUnion('kind', [
   z.object({
     kind: z.literal('character'),
     ...baseShape,
@@ -145,6 +145,13 @@ export const EntityImportSchema: z.ZodType<EntityImport> = z.discriminatedUnion(
     state: stateField(factionState, () => ({})),
   }),
 ])
+
+type Agree<A, B> = [A] extends [B] ? ([B] extends [A] ? true : false) : false
+// The annotation below checks only that the schema's output fits the type; this checks the other
+// way, so a field the schema narrows (a nullable one made required) or adds fails here.
+void (true satisfies Agree<z.output<typeof entityImportSchema>, EntityImport>)
+
+export const EntityImportSchema: z.ZodType<EntityImport> = entityImportSchema
 
 const expectedKind: Record<EntityKind, () => string> = {
   character: () => t('common:avts.issue.expectedKind.character'),
