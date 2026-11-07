@@ -269,6 +269,25 @@ describe('startManualClose refusals', () => {
     )
   })
 
+  // The held check's read is stale too: the turn ends as it reads, so isStoryBusy passes after it.
+  it('refuses as busy when a run settles during the held check’s read', async () => {
+    ensurePerTurnPipelineRegistered()
+    holdStoryWithTurn()
+    let selects = 0
+    const db = new Proxy(f.ctx.db, {
+      get(target, prop, receiver) {
+        if (prop === 'select' && selects++ === 0) generationStore.finishRun('run_same_story')
+        return Reflect.get(target, prop, receiver) as unknown
+      },
+    })
+
+    await expectRefused(
+      await startManualClose(f.branchId, lastReply(), { ...f.ctx, db }),
+      MANUAL_CLOSE_REFUSAL.busy,
+    )
+    expect(generationStore.getTxState().runs.has('run_same_story')).toBe(false)
+  })
+
   // isStoryBusy passes: the run is another story's. The orchestrator refuses, as per-turn blocks a
   // close anywhere, and the record stays what stood before.
   it('keeps the record a start the orchestrator rejects', async () => {
