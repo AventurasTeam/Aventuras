@@ -932,6 +932,17 @@ describe('generateToolStep: a reply a filter stopped', () => {
     ])
   })
 
+  it("stops on the second stop's cause when it differs from the first", async () => {
+    answers = [cutReply(), openaiReply({ calls: CUT_CALLS, finish: 'content_filter' })]
+
+    expect(await step(useProvider('openai-compatible'))).toMatchObject({
+      status: 'stopped',
+      reason: 'cut-off',
+      failure: FILTERED,
+      recoverable: [{ tier: 'reply-cut-off', ...CUT_AT_DEFAULT }],
+    })
+  })
+
   it('returns the retry when the filter does not trip again', async () => {
     answers = [openaiReply({ content: 'No.', finish: 'content_filter' }), DONE]
 
