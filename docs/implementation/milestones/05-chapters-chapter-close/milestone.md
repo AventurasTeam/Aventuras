@@ -487,8 +487,10 @@ have their own label and no count, as does the `agent` phase until its
 first task starts and `report`, and the last task's label stands until
 `report`, since a start-only event can't show the reset.
 `Closing chapter before your turn…` before a turn. Phase 0's passes keep
-`Updating memory…`. Until 5.5a lands, a close shows only the phase
-labels.
+the pass's labels: `Updating memory before your turn…` under Send, whose
+`beforeTurn` the orchestrator copies to each successor, and
+`Updating memory…` outside one. Until 5.5a lands, a close shows only the
+phase labels.
 
 ### C7 — Chapter overlays
 
