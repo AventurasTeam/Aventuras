@@ -2019,6 +2019,21 @@ Parked at M5's promotion, 2026-11-01.
 
 ### UX (parked)
 
+#### The memory banner may announce a close too often
+
+The banner's label sits in a `role="status"` `aria-live="polite"`
+region (`components/compounds/memory-run-banner.tsx`; on native,
+Android only). A close changes it about `6 + 5 × parts` times, once per
+step and task start (11 for a one-part chapter, unbounded in general),
+seconds to minutes apart, as a sighted user sees it. Since the
+2026-11-08 ruling that a before-turn close shows its progress, the
+before-turn path announces each task too, where it used to change once.
+Once Slice 5.5a emits task starts, a task with nothing to start from may
+change the label twice in quick succession (inferred). Canon's a11y notes
+don't say whether that rate is wanted. **Revisit signal:** a deliberate
+a11y pass, or a report from real assistive-technology use. Routed from
+triage 2026-11-07.
+
 #### A Save of whitespace alone keeps the padding as the clean form
 
 The chapter, lore and Plot drafts compare trimmed values, so a

@@ -60,8 +60,3 @@ slice-planning gate forces its resolution before that slice is planned.
   to get. Held rather than routed in the 2026-09-09 triage pass, which
   did not re-run the suite serially — the evidence above is still as of
   `edce17b8`.
-
-- **The memory banner's live region may announce too often.** Its label
-  sits in a `role="status"` `aria-live="polite"` region and now changes up
-  to about 21 times per close run; canon's a11y notes don't say whether
-  that announcement rate is wanted. Surfaced by Slice 5.6's review.
