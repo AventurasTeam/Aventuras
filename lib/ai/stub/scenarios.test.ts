@@ -97,6 +97,7 @@ describe('makeScenarioFetch', () => {
 
   it.each([
     ['without the thinking block', [TOOL_USE]],
+    ['with the thinking block after it', [TOOL_USE, SIGNED_THINKING]],
     ['with another signature', [{ ...SIGNED_THINKING, signature: 'forged' }, TOOL_USE]],
     ['with other thinking text', [{ ...SIGNED_THINKING, thinking: '' }, TOOL_USE]],
     ['as another block type', [{ ...SIGNED_THINKING, type: 'redacted_thinking' }, TOOL_USE]],
