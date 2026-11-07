@@ -3,7 +3,9 @@
 **Wireframe:** [`chapter-timeline.html`](./chapter-timeline.html) — interactive
 
 The dedicated chapter management surface. Reached from the reader's
-top-bar chapter popover via the `Manage chapters →` link.
+top-bar chapter popover via the `Manage chapters →` link, and from
+the Actions menu's `Open Chapter Timeline` (`GO TO`) anywhere in the
+story.
 
 The reader's chapter popover handles **glance + jump + simple
 close**. This screen handles everything richer: viewing the
@@ -20,60 +22,63 @@ Cross-cutting principles that govern this screen are in
 - [Icon-actions pattern](../../patterns/icon-actions.md) — for
   per-row edit affordances.
 - [Edit restrictions during in-flight generation](../../principles.md#edit-restrictions-during-in-flight-generation) —
-  card edits and the `Close chapter…` action disable while a
-  generation pipeline is in flight; the chapter-close pipeline
+  while a generation pipeline is in flight, an expanded card's fields
+  and Save, `Delete…` and `Close chapter…` disable with the
+  principle's tooltip. `Discard`, `Jump to chapter →` and expanding or
+  collapsing a card stay live: a draft can always be thrown away, and
+  navigation and reads aren't gated. The chapter-close pipeline
   itself surfaces the banner affordance specified in the principle.
 - [Actions menu (contextual zone)](../../patterns/actions-menu.md#contextual-zone) —
-  Chapter Timeline contributes close / re-open / chapter-jump
-  commands to the universal `⚲` directory.
+  the zone is empty here. `Close chapter…` is a `STORY TOOLS` entry
+  on every in-story surface, and a card's `Jump to chapter →` is the
+  chapter jump.
 
 ## Layout
 
-```
+```text
 ┌────────────────────────────────────────────────────────────┐
-│ [logo] Aria's Descent / Chapters    [status]  [⚲][⛭][←]    │ ← top bar
-│ ▓▓▓▓▓▓▓▓▓░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░ │ ← chapter token-progress strip
+│ [←] Aria's Descent / Chapters             [status]  [⛭][⚲] │ ← top bar
+│ ▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓░░░░░░░░░░░░░░░░░░░░░░░░ │ ← chapter token-progress strip
 ├────────────────────────────────────────────────────────────┤
-│ Chapters · 4 closed + 1 in progress                          │
-│                                                              │
-│  ┌──────────────────────────────────────────────────────┐   │
-│  │ Chapter 1 — The Tavern Encounter           ▸           │   │ ← collapsed card
-│  │ Day 1 · 8.4k tok · arrival, mystery                    │   │
-│  └──────────────────────────────────────────────────────┘   │
-│                                                              │
-│  ┌──────────────────────────────────────────────────────┐   │
-│  │ Chapter 2 — The Trail North               ▾           │   │ ← expanded card
-│  │ Day 2–3 · 12.1k tok · travel, conflict                 │   │
-│  │ ────                                                    │   │
-│  │ Title:   [The Trail North           ]                  │   │
-│  │ Theme:   [travel, conflict          ]                  │   │
-│  │ Summary: [textarea, ~3 lines visible]                  │   │
-│  │ Keywords: [chip] [chip] [chip] +                       │   │
-│  │                                                         │   │
-│  │ [Jump to chapter →]  [Regenerate summary]              │   │
-│  │ ┌─ save bar (when dirty) ──────────────────────────┐   │   │
-│  │ │ 2 unsaved changes      [Discard]  [Save ⌘S]      │   │   │
-│  │ └──────────────────────────────────────────────────┘   │   │
-│  └──────────────────────────────────────────────────────┘   │
-│                                                              │
-│  ┌──────────────────────────────────────────────────────┐   │
-│  │ Chapter 3 — The Warden's Bargain            ▸          │   │
-│  │ Day 4–6 · 16.0k tok · betrayal, oath                   │   │
-│  └──────────────────────────────────────────────────────┘   │
-│                                                              │
-│  ┌──────────────────────────────────────────────────────┐   │
-│  │ Chapter 4 — Across the Pass                ▸          │   │
-│  │ Day 7–8 · 11.2k tok · escape, refuge                   │   │
-│  └──────────────────────────────────────────────────────┘   │
-│                                                              │
-│  ┌──────────────────────────────────────────────────────┐   │
-│  │ ── In progress · since Day 9 ──                        │   │ ← specialized card
-│  │ <title generates on close>                             │   │
-│  │ 14.2k / 24k tok  ▓▓▓▓▓▓▓▓░░░░  59%                     │   │
-│  │ <summary generates on close>                           │   │
-│  │                                                         │   │
-│  │ [Close chapter…]                                        │   │
-│  └──────────────────────────────────────────────────────┘   │
+│ Chapters · 4 closed + 1 in progress                        │
+│                                                            │
+│  ┌──────────────────────────────────────────────────────┐  │
+│  │ Chapter 1 — The Tavern Encounter                   ▸ │  │ ← collapsed card
+│  │ Day 1 · 8.4k tok · arrival, mystery                  │  │
+│  └──────────────────────────────────────────────────────┘  │
+│                                                            │
+│  ┌──────────────────────────────────────────────────────┐  │
+│  │ Chapter 2 — The Trail North                        ▾ │  │ ← expanded card
+│  │ Day 2 → Day 3 · 12.1k tok · travel, conflict         │  │
+│  │ ────                                                 │  │
+│  │ Title:    [The Trail North           ]               │  │
+│  │ Theme:    [travel, conflict          ]               │  │
+│  │ Summary:  [textarea, 4–6 rows        ]               │  │
+│  │ Keywords: [chip] [chip] [chip] +                     │  │
+│  │                                                      │  │
+│  │ [Jump to chapter →]  [Regenerate summary]            │  │
+│  │ ┌─ save bar (when dirty; tablet and desktop) ──────┐ │  │
+│  │ │ 2 unsaved changes      [Discard]  [Save ⌘S]      │ │  │
+│  │ └──────────────────────────────────────────────────┘ │  │
+│  └──────────────────────────────────────────────────────┘  │
+│                                                            │
+│  ┌──────────────────────────────────────────────────────┐  │
+│  │ Chapter 3 — The Warden's Bargain                   ▸ │  │
+│  │ Day 4 → Day 6 · 16k tok · betrayal, oath             │  │
+│  └──────────────────────────────────────────────────────┘  │
+│                                                            │
+│  ┌──────────────────────────────────────────────────────┐  │
+│  │ Chapter 4 — Across the Pass                        ▸ │  │
+│  │ Day 7 → Day 8 · 11.2k tok · escape, refuge           │  │
+│  └──────────────────────────────────────────────────────┘  │
+│                                                            │
+│  ┌──────────────────────────────────────────────────────┐  │
+│  │ In progress · since Day 9                            │  │ ← specialized card
+│  │ 14,200 / 24,000 tok  ▓▓▓▓▓▓▓▓▓▓▓▓▓▓░░░░░░░░░░        │  │
+│  │ Summary, theme, and keywords generate on close.      │  │
+│  │                                                      │  │
+│  │ [Close chapter…]                                     │  │
+│  └──────────────────────────────────────────────────────┘  │
 └────────────────────────────────────────────────────────────┘
 ```
 
@@ -90,8 +95,10 @@ Default state for non-active cards. Single row showing:
 
 - **Number + title** — `Chapter <N> — <title>` with a `▸`
   expand-disclosure on the right.
-- **Compact metadata line** — `<time range> · <token count> ·
-<theme>`. Theme renders as plain text, comma-separated; not chips.
+- **Compact metadata line** — `<time range> · <token count> · <theme>`,
+  with the token count compact (`12.4k tok`). Theme renders as plain
+  text, comma-separated; not chips. A part with nothing to show drops
+  with its separator: no time range, or a blank theme.
 
 Click anywhere on the card body → expand. Same row click on an
 already-expanded card → collapse.
@@ -101,38 +108,46 @@ already-expanded card → collapse.
 The full editor. **One card expanded at a time** — expanding
 another card with the current one dirty fires the
 [navigate-away guard](../../patterns/save-sessions.md#navigate-away-guard--global-intercept)
-(Save / Discard / Cancel).
+(Save / Discard / Cancel), and so does collapsing the dirty card.
 
 Editable fields (zod-validated; types per
 [data-model → chapters](../../../data-model.md)):
 
-- **Title** (`title`) — single-line text input.
+- **Title** (`title`) — single-line text input. Can't be blank.
 - **Theme** (`theme`) — single-line text input. Free-form short
-  thematic tag.
+  thematic tag. May be blank, which drops it from the collapsed line.
 - **Summary** (`summary`) — multi-line textarea, 4–6 visible rows.
-  This is the load-bearing field; gets the most space.
+  This is the load-bearing field; gets the most space. Can't be
+  blank.
 - **Keywords** (`keywords`) — chip editor. Add new chip via inline
   input; remove via per-chip `×`. Keywords drive retrieval / LLM
-  injection per the data-model.
+  injection per the data-model. Each saves trimmed, a blank one
+  drops, and one that repeats another in any casing saves once, its
+  first spelling kept.
 
 Read-only context shown alongside (not part of the form):
 
-- **Time range** — `<start time> – <end time>` formatted via the
-  active calendar formatter.
-- **Token count** — `token_count`, the chapter's size when it closed.
-  A later edit in the chapter leaves it.
-- **Closed at** — wall-clock `closed_at` timestamp, muted small.
+- **Time range** — `<first> → <last>`, each formatted via the active
+  calendar formatter. One label when the two read the same; none when
+  the chapter has no world time or the format misses.
+- **Token count** — `token_count` in full (`12,140 tok`), the
+  chapter's size when it closed. A later edit in the chapter leaves
+  it.
+- **Closed at** — wall-clock `closed_at` with its date and year
+  (`closed 22 Apr 2026, 14:18`), muted small.
 - **Entry range** — `start_entry_id` → `end_entry_id`, displayed as
-  entry numbers (e.g. `entries 12–34`).
+  entry numbers (e.g. `entries 12–34`; a single-entry chapter reads
+  `entry 12`). Absent while entry positions can't be read; nothing
+  else waits on them.
 
 ### Per-card actions
 
-Buttons in a row beneath the form, before the save bar, four on the
-latest chapter's card and three on the others:
+Buttons in a row beneath the form, before the card's save bar on
+tablet and desktop, four on the latest chapter's card and three on
+the others:
 
 - **Jump to chapter →** — routes back to the reader scrolled to the
-  chapter's start entry. The reader's chapter chip would highlight
-  the same chapter on arrival. No state mutation.
+  chapter's start entry. No state mutation.
 - **Regenerate summary** — re-runs only the LLM metadata-generation
   step (title / summary / theme / keywords) on the chapter's
   existing range. Idempotent for the metadata layer; does NOT
@@ -152,16 +167,18 @@ latest chapter's card and three on the others:
 
 Each card is its own
 [save session](../../patterns/save-sessions.md). First field edit
-opens the session; the in-card save bar appears at the card's
-bottom edge (`Discard` / `Save` per the pattern). Save commits all
-session changes under one `action_id`; CTRL-Z reverses the entire
-edit.
+opens the session and the save bar appears (`Discard` / `Save` per
+the pattern). Save commits all session changes under one
+`action_id`; CTRL-Z in the reader reverses the entire edit.
 
-In-card save bar (vs screen-bottom): each chapter is a self-
-contained edit surface, so the save bar belongs with the card it
-applies to. If a user scrolls away from a dirty card, scrolling
-back is the way to commit — there's no global "save dirty card"
-chrome at the screen edge.
+Where the bar sits depends on the tier. On tablet and desktop it's at
+the expanded card's bottom edge: each chapter is a self-contained
+edit surface, so the bar belongs with the card it applies to, and a
+user who scrolls away from a dirty card scrolls back to commit. On
+phone it sits at the surface's bottom edge, below the card list and
+outside its scroller, and rides above the soft keyboard per
+[`touch.md → Save bar on phone`](../../foundations/mobile/touch.md#save-bar-on-phone):
+a bar inside the scrolling list can't ride the keyboard.
 
 ### Delete a chapter
 
@@ -214,23 +231,33 @@ close), so most fields are placeholders.
 
 Rendered:
 
-- **Title row** — `── In progress · since <start time> ──` (no
-  chapter number; the next number lands at close).
-- **Token progress** — `<current> / <threshold> tok` plus a thin
+- **Title row** — `In progress · since <start time>`, the open
+  region's first world time, or `In progress` alone when it has none.
+  No chapter number (the next number lands at close) and no title
+  placeholder.
+- **Token progress** — `<current> / <threshold> tok` in full numbers
+  (`14,200 / 24,000 tok`, as the popover's label reads) plus a thin
   progress bar. Color-graded per the same thresholds the reader's
   top-strip uses (per
   [reader-composer → Top-bar chapter navigation](../reader-composer/reader-composer.md#top-bar--chapter-navigation)):
   green < 80%, yellow 80–90%, red ≥ 90%.
-- **Summary placeholder** — italic muted "summary generates on
-  close."
+- **Summary placeholder** — italic muted
+  `Summary, theme, and keywords generate on close.`
 - **Action: Close chapter…** — primary button. Opens the
-  [chapter-close modal](#chapter-close-modal) below.
+  [chapter-close modal](#chapter-close-modal) below. Disabled while a
+  generation pipeline is in flight, with the principle's tooltip,
+  the same rule as
+  [branch-navigator → during generation](../reader-composer/branch-navigator/branch-navigator.md#during-generation--switch--delete--create-blocked).
 
 The card is not expandable / editable — there's nothing to edit
-yet. Once the user closes the chapter, the in-progress card is
-replaced by a new closed-chapter card at the bottom of the
-timeline, expanded by default so the user can review (and edit, if
-they want to override) the LLM-generated metadata.
+yet. A close adds the new chapter's card above it, and that card
+expands by itself so the user can review (and edit, if they want to
+override) the LLM-generated metadata. It expands once no run is in
+flight, so not while the close that wrote it can still reverse, and
+only while no card is dirty, so it never raises the navigate-away
+guard: over a dirty card it stays collapsed, and doesn't open later
+when that card is saved. A story's first chapter, landing under an
+empty Timeline, expands the same way.
 
 ## Chapter-close modal
 
@@ -478,12 +505,12 @@ end-entry picker in-flow inside it.
   both destructive actions retain their existing confirmation flows
   inside the Sheet. Desktop and tablet keep every button inline (the
   row fits naturally).
-- **In-card save bar** appears at the card's bottom edge when
-  dirty per
-  [`patterns/save-sessions.md`](../../patterns/save-sessions.md).
-  Hides while the keyboard is open per
-  [`mobile/touch.md → Save bar on phone`](../../foundations/mobile/touch.md#save-bar-on-phone),
-  reappears on field blur. Navigate-away guard stays active.
+- **Save bar** leaves the card on phone and sits at the surface's
+  bottom edge when a card is dirty, below the card list, per
+  [`patterns/save-sessions.md`](../../patterns/save-sessions.md) and
+  [`mobile/touch.md → Save bar on phone`](../../foundations/mobile/touch.md#save-bar-on-phone):
+  it stays up while the keyboard is open, riding above it, so Save is
+  reachable while typing. Navigate-away guard stays active.
 - **In-progress chapter card** (specialized last card; no DB row
   yet). `[Close chapter…]` button full-width on phone for
   tap-target clarity. Token-progress bar reflows naturally.
@@ -528,13 +555,6 @@ end-entry picker in-flow inside it.
   4" or "split chapter 5 at entry N" — both are user-visible
   structural ops the data model could support but the UX hasn't
   been thought through. Defer until a real demand surfaces.
-- **In-progress card while generation is active.** During the
-  reader's pipeline phases (reasoning / generating / classifying /
-  chapter-close), the `Close chapter…` button on this screen
-  should disable. Same rule as
-  [branch-navigator → during generation](../reader-composer/branch-navigator/branch-navigator.md#during-generation--switch--delete--create-blocked).
-  Visual treatment chosen at integration time against the shipped
-  [`foundations`](../../foundations/README.md).
 - **Animation when the in-progress card transitions to closed.**
   After successful chapter close, the in-progress card morphs
   into a new closed card at the bottom of the timeline, plus a
