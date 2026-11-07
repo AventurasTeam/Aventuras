@@ -40,7 +40,7 @@ export type ReplyCutOffInput = {
   /** A cause of its own beats anything the limits say; a `length` stop reads them. */
   stop?: ReplyStop
   usage: LanguageModelUsage | undefined
-  /** ResolvedParams.maxOutput; undefined when the profile sets none. */
+  /** The max output the call sent; undefined when it sent none. */
   maxOutput: number | undefined
   /** The model's known window; null when unknown. */
   window: number | null

@@ -133,6 +133,18 @@ function stepOf(reply: StepReply, finishReason: ToolStep['finishReason']): ToolS
   }
 }
 
+// Anthropic's adapter adds the thinking budget and clamps to the model's cap; openai-compatible's
+// body is a string, and its max_tokens is maxOutput unchanged.
+function sentMaxOutput(reply: StepReply, maxOutput: number): number {
+  const { body } = reply.request
+  return typeof body === 'object' &&
+    body !== null &&
+    'max_tokens' in body &&
+    typeof body.max_tokens === 'number'
+    ? body.max_tokens
+    : maxOutput
+}
+
 /**
  * One step of a close's task (memory/chapter-close.md → The agent); calls come back unrun.
  */
@@ -201,7 +213,7 @@ export async function generateToolStep(
         replyCutOff({
           stop: finishReason,
           usage: reply.usage,
-          maxOutput,
+          maxOutput: sentMaxOutput(reply, maxOutput),
           window: check.window.tokens,
           promptEstimate: check.estimate(),
           providerId,

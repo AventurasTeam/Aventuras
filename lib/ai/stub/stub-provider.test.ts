@@ -18,7 +18,6 @@ const stub = {
   favoriteModelIds: [] as string[],
 }
 
-// The stub's model caps output at 4096; a larger default would only draw an SDK warning.
 function configFor(scenario: 'tool-step' | 'tool-step-cut'): ResolveModelConfig {
   return {
     providers: [stub as unknown as ProviderInstance],
@@ -28,7 +27,6 @@ function configFor(scenario: 'tool-step' | 'tool-step-cut'): ResolveModelConfig 
         kind: 'agent',
         name: 'Stub',
         modelRef: { providerId: stub.id, modelId: scenario },
-        maxOutput: 4096,
       },
     ],
     assignments: { 'lore-mgmt': 'prof-stub' },
@@ -120,8 +118,8 @@ describe('stub provider', () => {
     })
   })
 
-  // A real cut at max_tokens reports the output it was allowed, so the cause reads max-output;
-  // the retry of a cut step is a second request, and a second cut stops the step.
+  // The adapter clamps the step's 8k default to the stub model's 4096, and a real cut reports the
+  // output it was allowed, so the cause reads max-output only against what the request sent.
   it('tool-step-cut stops the step after one retry, as a cut at the max output', async () => {
     setTestProviders([stub])
 

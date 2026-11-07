@@ -101,7 +101,11 @@ function openaiReply(
     })
 }
 
-function anthropicReply(content: unknown[], stopReason: string): Answer {
+function anthropicReply(
+  content: unknown[],
+  stopReason: string,
+  usage = { input_tokens: 10, output_tokens: 5 },
+): Answer {
   return () =>
     json({
       type: 'message',
@@ -111,7 +115,7 @@ function anthropicReply(content: unknown[], stopReason: string): Answer {
       content,
       stop_reason: stopReason,
       stop_sequence: null,
-      usage: { input_tokens: 10, output_tokens: 5 },
+      usage,
     })
 }
 
@@ -774,6 +778,26 @@ describe('generateToolStep: a reply cut off', () => {
       status: 'stopped',
       reason: 'cut-off',
       failure: { cause: 'max-output', outputTokens: 2048, maxOutput: 2048 },
+    })
+  })
+
+  // The anthropic adapter adds the thinking budget to max_tokens, so 12k out is under what it sent.
+  it('reads a cut against the max output the request sent, thinking budget included', async () => {
+    const windowCut = anthropicReply([{ type: 'text', text: 'The door' }], 'max_tokens', {
+      input_tokens: 188_000,
+      output_tokens: 12_000,
+    })
+    answers = [windowCut, windowCut]
+
+    const result = await step(
+      useProvider('anthropic', { profile: { thinking: 16_000 }, window: 200_000 }),
+    )
+
+    expect(bodies[0]!.max_tokens).toBe(24_000)
+    expect(result).toMatchObject({
+      status: 'stopped',
+      reason: 'cut-off',
+      failure: { cause: 'window', outputTokens: 12_000, maxOutput: 24_000, window: 200_000 },
     })
   })
 
