@@ -29,6 +29,8 @@ function judge(
   return inputs.reduce(nextExpandedChapter, from)
 }
 
+const judged = (...ids: string[]): ReadonlySet<string> => new Set(ids)
+
 afterEach(() => {
   cleanup()
 })
@@ -39,32 +41,31 @@ describe('nextExpandedChapter', () => {
     expect(nextExpandedChapter(INITIAL_CHAPTER_EXPANSION, notReady)).toBe(INITIAL_CHAPTER_EXPANSION)
 
     // Before hydration the rows are empty: an open card must not be pruned against them.
-    const open: ChapterExpansionState = { expandedId: 'chap_1', baseline: 1 }
+    const open: ChapterExpansionState = { expandedId: 'chap_1', judged: judged('chap_1') }
     expect(nextExpandedChapter(open, input({ ready: false }))).toBe(open)
   })
 
   it('expands none of the rows the ready route first sees', () => {
     const first = input({ rows: [row(2), row(1)] })
     const state = judge([first])
-    expect(state).toEqual({ expandedId: null, baseline: 2 })
+    expect(state).toEqual({ expandedId: null, judged: judged('chap_2', 'chap_1') })
     expect(nextExpandedChapter(state, first)).toBe(state)
   })
 
-  it('takes the baseline from the highest sequence number, not position, id or count', () => {
-    // Highest is in the middle, its id sorts lowest, and 12 sorts below 9 as a string.
+  it('judges the first ready rows by id, so a later row below them is still new', () => {
     const rows = [row(9, 'chap_z'), row(12, 'chap_a'), row(3, 'chap_m')]
     const state = judge([input({ rows })])
-    expect(state).toEqual({ expandedId: null, baseline: 12 })
+    expect(state).toEqual({ expandedId: null, judged: judged('chap_z', 'chap_a', 'chap_m') })
 
-    // A row at 10 or 11 sits under the baseline, so it is no newcomer.
     const below = nextExpandedChapter(state, input({ rows: [...rows, row(11, 'chap_y')] }))
-    expect(below).toBe(state)
+    expect(below.expandedId).toBe('chap_y')
+    expect(below.judged).toEqual(judged('chap_z', 'chap_a', 'chap_m', 'chap_y'))
   })
 
-  it('takes the baseline from the first ready rows even under a run', () => {
+  it('judges the first ready rows even under a run', () => {
     const rows = [row(1), row(2), row(3)]
     const state = judge([input({ rows, runInFlight: true }), input({ rows })])
-    expect(state).toEqual({ expandedId: null, baseline: 3 })
+    expect(state).toEqual({ expandedId: null, judged: judged('chap_1', 'chap_2', 'chap_3') })
   })
 
   it('expands the close of a run the route became ready during', () => {
@@ -73,12 +74,12 @@ describe('nextExpandedChapter', () => {
       input({ rows, runInFlight: true }),
       input({ rows: [row(13, 'chap_b'), ...rows] }),
     ])
-    expect(state).toEqual({ expandedId: 'chap_b', baseline: 13 })
+    expect(state.expandedId).toBe('chap_b')
   })
 
   it("expands a story's first chapter, landing on an empty branch", () => {
     const state = judge([input({ rows: [] }), input({ rows: [row(1)] })])
-    expect(state).toEqual({ expandedId: 'chap_1', baseline: 1 })
+    expect(state).toEqual({ expandedId: 'chap_1', judged: judged('chap_1') })
   })
 
   it('judges a newcomer only once its run has ended', () => {
@@ -87,7 +88,7 @@ describe('nextExpandedChapter', () => {
     expect(nextExpandedChapter(before, during)).toBe(before)
 
     const after = nextExpandedChapter(before, { ...during, runInFlight: false })
-    expect(after).toEqual({ expandedId: 'chap_3', baseline: 3 })
+    expect(after).toEqual({ expandedId: 'chap_3', judged: judged('chap_1', 'chap_2', 'chap_3') })
   })
 
   it('never expands a newcomer that left before its run ended', () => {
@@ -97,26 +98,27 @@ describe('nextExpandedChapter', () => {
       input({ rows: [row(1), row(2)], runInFlight: true }),
       input({ rows: [row(1), row(2)] }),
     ])
-    expect(state).toEqual({ expandedId: null, baseline: 2 })
+    expect(state).toEqual({ expandedId: null, judged: judged('chap_1', 'chap_2') })
 
-    // Never judged, so the next chapter at that number is still new.
     const next = nextExpandedChapter(state, input({ rows: [row(1), row(2), row(3, 'chap_3b')] }))
-    expect(next).toEqual({ expandedId: 'chap_3b', baseline: 3 })
+    expect(next.expandedId).toBe('chap_3b')
   })
 
   it('expands a newcomer once: a collapse keeps it collapsed', () => {
     const rows = [row(1), row(2)]
     const landed = judge([input({ rows: [row(1)] }), input({ rows })])
-    expect(landed).toEqual({ expandedId: 'chap_2', baseline: 2 })
+    expect(landed.expandedId).toBe('chap_2')
     expect(nextExpandedChapter(landed, input({ rows }))).toBe(landed)
 
     const collapsed: ChapterExpansionState = { ...landed, expandedId: null }
     expect(nextExpandedChapter(collapsed, input({ rows }))).toBe(collapsed)
   })
 
-  it('expands only the newest of several newcomers', () => {
-    const state = judge([input({ rows: [row(1)] }), input({ rows: [row(1), row(2), row(3)] })])
-    expect(state).toEqual({ expandedId: 'chap_3', baseline: 3 })
+  it('expands only the newest of several newcomers, judging them all', () => {
+    const landing = input({ rows: [row(1), row(2), row(3)] })
+    const state = judge([input({ rows: [row(1)] }), landing])
+    expect(state).toEqual({ expandedId: 'chap_3', judged: judged('chap_1', 'chap_2', 'chap_3') })
+    expect(nextExpandedChapter(state, landing)).toBe(state)
   })
 
   it('picks the newest newcomer by sequence number, not position or id', () => {
@@ -124,25 +126,22 @@ describe('nextExpandedChapter', () => {
     // First and lowest newcomer is chap_z (also the highest id and 9 > 12 as a string), the last
     // is chap_a; the newest, at 12, is chap_m in between.
     const rows = [row(9, 'chap_z'), row(8, 'chap_h'), row(12, 'chap_m'), row(10, 'chap_a')]
-    expect(nextExpandedChapter(ready, input({ rows }))).toEqual({
-      expandedId: 'chap_m',
-      baseline: 12,
-    })
+    expect(nextExpandedChapter(ready, input({ rows })).expandedId).toBe('chap_m')
   })
 
   it('drops an expanded id whose row went, and keeps it dropped when the row returns', () => {
     const ready = judge([input({ rows: [row(1), row(2)] })])
     const open: ChapterExpansionState = { ...ready, expandedId: 'chap_1' }
     const gone = nextExpandedChapter(open, input({ rows: [row(2)] }))
-    expect(gone).toEqual({ expandedId: null, baseline: 2 })
+    expect(gone).toEqual({ expandedId: null, judged: judged('chap_1', 'chap_2') })
     expect(nextExpandedChapter(gone, input({ rows: [row(1), row(2)] }))).toBe(gone)
   })
 
   it('drops an expanded id when the last chapter goes', () => {
-    const open: ChapterExpansionState = { expandedId: 'chap_1', baseline: 1 }
+    const open: ChapterExpansionState = { expandedId: 'chap_1', judged: judged('chap_1') }
     expect(nextExpandedChapter(open, input({ rows: [] }))).toEqual({
       expandedId: null,
-      baseline: 1,
+      judged: judged('chap_1'),
     })
   })
 
@@ -164,7 +163,7 @@ describe('nextExpandedChapter', () => {
       opened,
       input({ rows: [row(1), row(2)], runInFlight: true }),
     )
-    expect(reversed).toEqual({ expandedId: null, baseline: 2 })
+    expect(reversed).toEqual({ expandedId: null, judged: judged('chap_1', 'chap_2') })
   })
 
   it("spends a newcomer's chance on a dirty card", () => {
@@ -172,13 +171,13 @@ describe('nextExpandedChapter', () => {
     const editing: ChapterExpansionState = { ...ready, expandedId: 'chap_1' }
     const rows = [row(1), row(2), row(3)]
     const landed = nextExpandedChapter(editing, input({ rows, dirty: true }))
-    expect(landed).toEqual({ expandedId: 'chap_1', baseline: 3 })
+    expect(landed).toEqual({ expandedId: 'chap_1', judged: judged('chap_1', 'chap_2', 'chap_3') })
 
     // Saved or discarded later: the newcomer doesn't pull itself open.
     expect(nextExpandedChapter(landed, input({ rows }))).toBe(landed)
   })
 
-  it('leaves a re-close at a judged sequence number collapsed', () => {
+  it('expands a re-close at the number an undone close held', () => {
     const closed = judge([
       input({ rows: [row(1), row(2)] }),
       input({ rows: [row(1), row(2), row(3)] }),
@@ -190,7 +189,47 @@ describe('nextExpandedChapter', () => {
       undone,
       input({ rows: [row(1), row(2), row(3, 'chap_3b')] }),
     )
-    expect(reclosed).toEqual({ expandedId: null, baseline: 3 })
+    expect(reclosed.expandedId).toBe('chap_3b')
+  })
+
+  it('expands a re-close below the numbers a rollback swept', () => {
+    const rows = [row(1), row(2), row(3), row(4), row(5)]
+    const ready = judge([input({ rows })])
+    const rolledBack = nextExpandedChapter(ready, input({ rows: [row(1), row(2)] }))
+    const reclosed = nextExpandedChapter(
+      rolledBack,
+      input({ rows: [row(1), row(2), row(3, 'chap_3x')] }),
+    )
+    expect(reclosed.expandedId).toBe('chap_3x')
+  })
+
+  it('leaves a redone close collapsed: the same id is already judged', () => {
+    const closed = judge([
+      input({ rows: [row(1), row(2)] }),
+      input({ rows: [row(1), row(2), row(3)] }),
+    ])
+    const undone = nextExpandedChapter(closed, input({ rows: [row(1), row(2)] }))
+    const redone = nextExpandedChapter(undone, input({ rows: [row(1), row(2), row(3)] }))
+    expect(redone).toBe(undone)
+    expect(redone.expandedId).toBeNull()
+  })
+
+  it('leaves an undone delete collapsed: the returning id was judged on arrival', () => {
+    const rows = [row(4, 'chap_d'), row(11, 'chap_k'), row(7, 'chap_g')]
+    const ready = judge([input({ rows })])
+    const deleted = nextExpandedChapter(ready, input({ rows: [rows[0], rows[2]] }))
+    expect(deleted).toBe(ready)
+    expect(nextExpandedChapter(deleted, input({ rows })).expandedId).toBeNull()
+  })
+  it('keeps a deleted id judged while another close lands, so undoing both leaves it collapsed', () => {
+    const rows = [row(1), row(2), row(3)]
+    const state = judge([
+      input({ rows }),
+      input({ rows: [row(1), row(2)] }),
+      input({ rows: [row(1), row(2), row(3, 'chap_3n')] }),
+      input({ rows: [row(1), row(2)] }),
+    ])
+    expect(nextExpandedChapter(state, input({ rows })).expandedId).toBeNull()
   })
 })
 

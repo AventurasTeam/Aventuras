@@ -2,8 +2,8 @@ import { useCallback, useState } from 'react'
 
 export type ChapterExpansionState = Readonly<{
   expandedId: string | null
-  /** Highest sequenceNumber judged so far; null until the route is ready. */
-  baseline: number | null
+  /** Ids already judged, so never expanded again; null until the route is ready. */
+  judged: ReadonlySet<string> | null
 }>
 
 export type ChapterExpansionInput = Readonly<{
@@ -21,47 +21,45 @@ type ExpansionRow = ChapterExpansionInput['rows'][number]
 
 export const INITIAL_CHAPTER_EXPANSION: ChapterExpansionState = {
   expandedId: null,
-  baseline: null,
+  judged: null,
 }
 
-function highestSequence(rows: readonly ExpansionRow[]): number {
-  let highest = 0
-  for (const row of rows) highest = Math.max(highest, row.sequenceNumber)
-  return highest
-}
-
-function newestAbove(rows: readonly ExpansionRow[], floor: number): ExpansionRow | null {
+function newestUnjudged(
+  rows: readonly ExpansionRow[],
+  judged: ReadonlySet<string>,
+): ExpansionRow | null {
   let newest: ExpansionRow | null = null
   for (const row of rows) {
-    if (row.sequenceNumber <= floor) continue
+    if (judged.has(row.id)) continue
     if (newest == null || row.sequenceNumber > newest.sequenceNumber) newest = row
   }
   return newest
 }
 
 /**
- * The expanded card after `input`. The first ready rows set the baseline and expand nothing; a row
- * above it is judged once its run has ended, expanding only with no card dirty, and the baseline
- * rises past it either way. Returns `state` itself when nothing changes.
+ * The expanded card after `input`. The first ready rows are judged and expand nothing; an unjudged
+ * row is judged once its run has ended, the newest expanding only with no card dirty. Returns
+ * `state` itself when nothing changes.
  */
 export function nextExpandedChapter(
   state: ChapterExpansionState,
   input: ChapterExpansionInput,
 ): ChapterExpansionState {
   if (!input.ready) return state
-  const baseline = state.baseline ?? highestSequence(input.rows)
+  const judged = state.judged ?? new Set(input.rows.map((row) => row.id))
   const kept = state.expandedId != null && input.rows.some((row) => row.id === state.expandedId)
   let expandedId = kept ? state.expandedId : null
-  let nextBaseline = baseline
+  let nextJudged = judged
   if (!input.runInFlight) {
-    const newest = newestAbove(input.rows, baseline)
+    const newest = newestUnjudged(input.rows, judged)
     if (newest != null) {
-      nextBaseline = newest.sequenceNumber
+      // Ids that leave stay judged: a redo or an undone delete brings one back collapsed.
+      nextJudged = new Set([...judged, ...input.rows.map((row) => row.id)])
       if (!input.dirty) expandedId = newest.id
     }
   }
-  if (expandedId === state.expandedId && nextBaseline === state.baseline) return state
-  return { expandedId, baseline: nextBaseline }
+  if (expandedId === state.expandedId && nextJudged === state.judged) return state
+  return { expandedId, judged: nextJudged }
 }
 
 export function useChapterExpansion(input: ChapterExpansionInput): {
