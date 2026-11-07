@@ -330,3 +330,13 @@ slice-planning gate forces its resolution before that slice is planned.
   `passRetryBlocked` was already there; `closeRetryBlocked` is this
   slice's own copy, repeating its pattern. Surfaced by Slice 5.6's
   review.
+- **Send can start a turn on a branch that turns held after its check.**
+  `submitTurn` reads `owedWorkAtSend` (held first) and, with nothing
+  owed, goes straight to the turn. A live pass reads as not held and
+  blocks the turn's start through per-turn's `blockedBy`, but a pass that
+  ends held (its cancel reversal failed) between that read and the turn's
+  start lets the turn run over its unreversed writes. Owed work re-checks
+  the hold right before it starts; the no-owed path never did (same flow
+  before Slice 5.6). The reader blocks Send while a hard-gate run is live,
+  so only a caller past the UI reaches it. Surfaced by CodeRabbit on
+  Slice 5.6's PR.
