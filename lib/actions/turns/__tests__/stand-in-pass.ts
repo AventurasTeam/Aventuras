@@ -1,8 +1,10 @@
 import { and, asc, desc, eq, gt, ne } from 'drizzle-orm'
+import { expect } from 'vitest'
 
 import { idleStatus, PERIODIC_CLASSIFIER_KIND } from '@/lib/classifier'
 import { branches, storyEntries, type ClassifierStatus } from '@/lib/db'
 import {
+  CHAPTER_CLOSE_KIND,
   configureDeltaActionPort,
   PER_TURN_KIND,
   pipelineEventBus,
@@ -13,7 +15,7 @@ import {
   type PipelineEvent,
 } from '@/lib/pipeline'
 import { passChainsTo } from '@/lib/pipeline/definitions/memory-chain'
-import { generationStore, type RunState } from '@/lib/stores'
+import { generationStore, type DeferredWorkKind, type RunState } from '@/lib/stores'
 
 import { applyDeltaAction, settleUserWrites } from '../../delta/apply-delta-action'
 import {
@@ -255,6 +257,30 @@ export function registerStoreOnlyRun(kind: string, branchId: string): RunState {
   }
   generationStore.startRun(run)
   return run
+}
+
+/** What an interrupted run's abort leaves: `slot` recorded deferred on the branch. */
+export function recordDeferred(
+  slot: DeferredWorkKind,
+  ids: { storyId: string; branchId: string },
+): void {
+  const runId = `run_interrupted_${slot}`
+  generationStore.startRun({
+    runId,
+    kind: slot === 'pass' ? PERIODIC_CLASSIFIER_KIND : CHAPTER_CLOSE_KIND,
+    gateBehavior: 'hard-gate',
+    interruptible: slot,
+    beforeTurn: false,
+    actionId: `act_interrupted_${slot}`,
+    storyId: ids.storyId,
+    branchId: ids.branchId,
+    abortController: new AbortController(),
+    currentPhase: '',
+    intermediates: {},
+    terminal: Promise.resolve(),
+    resolveTerminal: () => {},
+  })
+  expect(generationStore.abortRun(runId, 'aborted')).toBe(slot)
 }
 
 export function recordDeferrals(): RunDeferredEvent[] {

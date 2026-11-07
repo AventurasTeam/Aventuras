@@ -3,7 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { generateStructured } from '@/lib/ai'
 import { PERIODIC_CLASSIFIER_KIND } from '@/lib/classifier'
-import { branches, chapters, pipelineRuns, storyEntries } from '@/lib/db'
+import { chapters, pipelineRuns, storyEntries } from '@/lib/db'
 import {
   __resetBus,
   __resetRegistry,
@@ -18,10 +18,11 @@ import {
   type RejectedStart,
   type TxResult,
 } from '@/lib/pipeline'
-import { resetSingletons } from '@/lib/pipeline/__tests__/harness'
+import { resetSingletons, within } from '@/lib/pipeline/__tests__/harness'
 import {
   metadataReplyResult,
   openCloseFixture,
+  setClassifierStatus,
   type CloseFixture,
 } from '@/lib/pipeline/definitions/__tests__/close-fixture'
 import {
@@ -82,16 +83,6 @@ async function expectRefused(
   expect(generationStore.getTxState().pendingClose.get(f.branchId)).toEqual(record)
 }
 
-async function setClassifierStatus(status: {
-  state: 'idle' | 'running'
-  processedThrough: number
-}): Promise<void> {
-  await f.ctx.db
-    .update(branches)
-    .set({ classifierStatus: { lastSuccessAt: null, lastError: null, ...status } })
-    .where(eq(branches.id, f.branchId))
-}
-
 // A turn on the close's own story; ended by resetAllStores.
 function holdStoryWithTurn(): void {
   generationStore.startRun({
@@ -122,18 +113,9 @@ function recordCompletes(): RunComplete[] {
 const pickOn = (): PendingClose | undefined =>
   generationStore.getTxState().pendingClose.get(f.branchId)
 
-// Fails in 2 s instead of at the test timeout: a chain that never reaches its hold would hang.
-function within<T>(work: Promise<T>, what: string): Promise<T> {
-  let timer: ReturnType<typeof setTimeout> | undefined
-  const late = new Promise<never>((_, reject) => {
-    timer = setTimeout(() => reject(new Error(`${what} did not settle within 2 s`)), 2_000)
-  })
-  return Promise.race([work, late]).finally(() => clearTimeout(timer))
-}
-
 // The open region's last entry is left past the watermark, so the start owes a pass first.
 async function leaveTheTailUnprocessed(): Promise<void> {
-  await setClassifierStatus({ state: 'idle', processedThrough: tailPosition() - 1 })
+  await setClassifierStatus(f, { state: 'idle', processedThrough: tailPosition() - 1 })
 }
 
 describe('startManualClose refusals', () => {
@@ -175,7 +157,7 @@ describe('startManualClose refusals', () => {
   })
 
   it('refuses a branch held by a pass left running', async () => {
-    await setClassifierStatus({ state: 'running', processedThrough: tailPosition() })
+    await setClassifierStatus(f, { state: 'running', processedThrough: tailPosition() })
 
     await expectRefused(await startManualClose(f.branchId, lastReply(), f.ctx), CLASSIFIER_HELD)
   })
@@ -221,7 +203,7 @@ describe('startManualClose refusals', () => {
   })
 
   it('refuses a held branch before reading the end', async () => {
-    await setClassifierStatus({ state: 'running', processedThrough: tailPosition() })
+    await setClassifierStatus(f, { state: 'running', processedThrough: tailPosition() })
     const opening = f.entries.find((e) => e.kind === 'opening')!
 
     await expectRefused(await startManualClose(f.branchId, opening.id, f.ctx), CLASSIFIER_HELD)

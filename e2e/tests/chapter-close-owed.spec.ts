@@ -90,16 +90,7 @@ function launchesHero(): () => Hero {
 function closeProbe(hero: () => Hero) {
   const page = (): Page => hero().app.window
   const mock = (): MockLlm => hero().mock
-  const {
-    branchId,
-    entryIdByContent,
-    pollEntryId,
-    createDelta,
-    passOutcomes,
-    runOutcome,
-    passDeltas,
-    send,
-  } = passProbe(page, mock)
+  const { passDeltas, ...pass } = passProbe(page, mock)
 
   const scalar = async (sql: string, params: unknown[]): Promise<number> =>
     Number((await queryApp(page(), sql, params))[0]?.[0])
@@ -192,14 +183,8 @@ function closeProbe(hero: () => Hero) {
   const closeDeferralToast = () => toast.withText(page(), t('chrome.deferredWork.close'))
 
   return {
-    branchId,
-    entryIdByContent,
-    pollEntryId,
-    createDelta,
-    passOutcomes,
-    runOutcome,
+    ...pass,
     actionDeltas: passDeltas,
-    send,
     closeOutcomes,
     chapterCount,
     openRegionTokens,

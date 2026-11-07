@@ -176,6 +176,17 @@ async function writeTurnEntry(
  * under one action id. Every entry is counted from prose and the watermark sits at the tail.
  * Leaves the pipeline registry and the event bus alone, and fakes no model.
  */
+/** Writes the fixture branch's classifier status; `running` with no pass live holds the branch. */
+export async function setClassifierStatus(
+  f: Pick<CloseFixture, 'ctx' | 'branchId'>,
+  status: { state: 'idle' | 'running'; processedThrough: number },
+): Promise<void> {
+  await f.ctx.db
+    .update(branches)
+    .set({ classifierStatus: { lastSuccessAt: null, lastError: null, ...status } })
+    .where(eq(branches.id, f.branchId))
+}
+
 export async function openCloseFixture(opts?: { turns?: number }): Promise<CloseFixture> {
   const turns = opts?.turns ?? 6
   resetAllStores()

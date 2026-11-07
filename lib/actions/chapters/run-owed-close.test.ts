@@ -1,23 +1,23 @@
-import { eq } from 'drizzle-orm'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 
 import { PERIODIC_CLASSIFIER_KIND } from '@/lib/classifier'
-import { branches, type StorySettings } from '@/lib/db'
+import type { StorySettings } from '@/lib/db'
 import { __resetBus, __resetRegistry, CHAPTER_CLOSE_KIND } from '@/lib/pipeline'
+import { within } from '@/lib/pipeline/__tests__/harness'
 import {
   openCloseFixture,
+  setClassifierStatus,
   type CloseFixture,
 } from '@/lib/pipeline/definitions/__tests__/close-fixture'
-import {
-  currentStoryStore,
-  generationStore,
-  resetAllStores,
-  type DeferredWorkKind,
-} from '@/lib/stores'
+import { currentStoryStore, generationStore, resetAllStores } from '@/lib/stores'
 
 import { runOwedClose } from './run-owed-close'
 import { registerStandInClose, type StandInClose } from '../turns/__tests__/stand-in-close'
-import { registerStandInPass, type StandInPass } from '../turns/__tests__/stand-in-pass'
+import {
+  recordDeferred,
+  registerStandInPass,
+  type StandInPass,
+} from '../turns/__tests__/stand-in-pass'
 
 let f: CloseFixture
 let pass: StandInPass
@@ -48,49 +48,9 @@ function oweByThreshold(): void {
   patchSettings({ chapterAutoClose: true, chapterTokenThreshold: 1 })
 }
 
-async function setClassifierStatus(status: {
-  state: 'idle' | 'running'
-  processedThrough: number
-}): Promise<void> {
-  await f.ctx.db
-    .update(branches)
-    .set({ classifierStatus: { lastSuccessAt: null, lastError: null, ...status } })
-    .where(eq(branches.id, f.branchId))
-}
-
 // The last turn's action and reply sit past the watermark.
 const leaveLastTurnUnprocessed = () =>
-  setClassifierStatus({ state: 'idle', processedThrough: tailPosition() - 2 })
-
-// Records interrupted work deferred on the branch, as the pill's Cancel does.
-function deferWork(slot: DeferredWorkKind): void {
-  const runId = `run_deferred_${slot}`
-  generationStore.startRun({
-    runId,
-    kind: slot === 'close' ? CHAPTER_CLOSE_KIND : PERIODIC_CLASSIFIER_KIND,
-    gateBehavior: 'hard-gate',
-    interruptible: slot,
-    beforeTurn: false,
-    actionId: `act_${slot}`,
-    storyId: f.storyId,
-    branchId: f.branchId,
-    abortController: new AbortController(),
-    currentPhase: '',
-    intermediates: {},
-    terminal: Promise.resolve(),
-    resolveTerminal: () => {},
-  })
-  expect(generationStore.abortRun(runId, 'aborted')).toBe(slot)
-}
-
-// Fails in 2 s instead of at the test timeout: a run that never holds leaves the Retry pending.
-function within<T>(work: Promise<T>, what: string): Promise<T> {
-  let timer: ReturnType<typeof setTimeout> | undefined
-  const late = new Promise<never>((_, reject) => {
-    timer = setTimeout(() => reject(new Error(`${what} did not settle within 2 s`)), 2_000)
-  })
-  return Promise.race([work, late]).finally(() => clearTimeout(timer))
-}
+  setClassifierStatus(f, { state: 'idle', processedThrough: tailPosition() - 2 })
 
 describe('runOwedClose refusals', () => {
   it('refuses a branch that is not the open story’s', async () => {
@@ -111,7 +71,7 @@ describe('runOwedClose refusals', () => {
   // The next Send fails as held first, so a Retry here must not settle as nothing to close.
   it('refuses a held branch as held when no close is owed', async () => {
     patchSettings({ chapterAutoClose: false })
-    await setClassifierStatus({ state: 'running', processedThrough: tailPosition() })
+    await setClassifierStatus(f, { state: 'running', processedThrough: tailPosition() })
 
     expect(await within(runOwedClose(f.branchId, f.ctx), 'the Retry')).toEqual({
       outcome: 'rejected',
@@ -123,7 +83,7 @@ describe('runOwedClose refusals', () => {
 
   it('refuses a held branch as held, starting nothing', async () => {
     oweByThreshold()
-    await setClassifierStatus({ state: 'running', processedThrough: tailPosition() })
+    await setClassifierStatus(f, { state: 'running', processedThrough: tailPosition() })
 
     expect(await within(runOwedClose(f.branchId, f.ctx), 'the Retry')).toEqual({
       outcome: 'rejected',
@@ -148,8 +108,8 @@ describe('runOwedClose runs', () => {
   // As Send's own check does: a rollback below the threshold took back the interrupted close.
   it('clears a stale deferred close when no close is owed, keeping a deferred pass', async () => {
     patchSettings({ chapterAutoClose: false })
-    deferWork('close')
-    deferWork('pass')
+    recordDeferred('close', f)
+    recordDeferred('pass', f)
 
     expect(await within(runOwedClose(f.branchId, f.ctx), 'the Retry')).toEqual({
       outcome: 'nothing-owed',

@@ -29,7 +29,6 @@ import {
   generationStore,
   hydrateAppSettings,
   interruptMemoryRuns,
-  type DeferredWorkKind,
 } from '@/lib/stores'
 
 import { branchEntries, openStory, sseFetch, WORKING_CONFIG } from './fixtures'
@@ -37,6 +36,7 @@ import { registerStandInClose, type HeldClose, type StandInClose } from './stand
 import {
   failReversalsOf,
   recordDeferrals,
+  recordDeferred,
   registerStandInPass,
   registerStoreOnlyRun,
   runningPass,
@@ -45,7 +45,12 @@ import {
   type StandInPass,
   type StandInPassOptions,
 } from './stand-in-pass'
-import { expectRan, makeHarness, resetSingletons } from '../../../pipeline/__tests__/harness'
+import {
+  expectRan,
+  makeHarness,
+  resetSingletons,
+  within,
+} from '../../../pipeline/__tests__/harness'
 import { undoLastAction } from '../../story-entries/undo'
 import { regenerateTurn } from '../regenerate-turn'
 import { submitTurn } from '../submit-turn'
@@ -101,16 +106,6 @@ const OWED_AT = 300
 
 type Db = Awaited<ReturnType<typeof makeHarness>>['db']
 
-// Fails in 2 s instead of at the test timeout: an awaited chain would hold the caller, and the
-// branch queue, until the pass the turn chained ends.
-function within<T>(work: Promise<T>, what: string): Promise<T> {
-  let timer: ReturnType<typeof setTimeout> | undefined
-  const late = new Promise<never>((_, reject) => {
-    timer = setTimeout(() => reject(new Error(`${what} did not settle within 2 s`)), 2_000)
-  })
-  return Promise.race([work, late]).finally(() => clearTimeout(timer))
-}
-
 function setCadence(cadence: number): void {
   const open = currentStoryStore.getCurrentStory()
   if (open == null) throw new Error('story not open')
@@ -146,27 +141,6 @@ async function setWatermark(db: Db, processedThrough: number | null): Promise<vo
     .update(branches)
     .set({ classifierStatus: { ...idleStatus(), processedThrough } })
     .where(eq(branches.id, 'b1'))
-}
-
-// What an interrupted run's abort leaves: the slot recorded on b1.
-function recordDeferred(slot: DeferredWorkKind): void {
-  const runId = `run_interrupted_${slot}`
-  generationStore.startRun({
-    runId,
-    kind: slot === 'pass' ? PERIODIC_CLASSIFIER_KIND : CHAPTER_CLOSE_KIND,
-    gateBehavior: 'hard-gate',
-    interruptible: slot,
-    beforeTurn: false,
-    actionId: `act_interrupted_${slot}`,
-    storyId: 's1',
-    branchId: 'b1',
-    abortController: new AbortController(),
-    currentPhase: '',
-    intermediates: {},
-    terminal: Promise.resolve(),
-    resolveTerminal: () => {},
-  })
-  expect(generationStore.abortRun(runId, 'aborted')).toBe(slot)
 }
 
 const send = (ctx: RunCtx, content: string) =>
@@ -616,7 +590,7 @@ describe('Send with deferred work', () => {
   it('refuses a Send as held when the branch turns held after its check, starting nothing', async () => {
     const { ctx, db, pass } = await setUp(50, BACKLOG)
     await holdTheBranch(db)
-    recordDeferred('pass')
+    recordDeferred('pass', IDS)
     const live = registerStoreOnlyRun(PERIODIC_CLASSIFIER_KIND, 'b1')
     let ended = false
     const endsOnFirstRead = new Proxy(db, {
@@ -691,7 +665,7 @@ describe('Send with a close owed', () => {
     const { ctx, db, pass, close } = await setUp(50, COUNTED_BACKLOG)
     setThreshold(OWED_AT)
     await setWatermark(db, 3)
-    recordDeferred('close')
+    recordDeferred('close', IDS)
 
     const { result, ran } = await sendThrough(ctx, db, { pass, close }, ['close'])
 
@@ -705,8 +679,8 @@ describe('Send with a close owed', () => {
   it('runs a deferred pass, then the close it chains, before the user action', async () => {
     const { ctx, db, pass, close } = await setUp(50, COUNTED_BACKLOG)
     setThreshold(OWED_AT)
-    recordDeferred('pass')
-    recordDeferred('close')
+    recordDeferred('pass', IDS)
+    recordDeferred('close', IDS)
 
     const { result, ran } = await sendThrough(ctx, db, { pass, close }, ['pass', 'close'])
 
@@ -733,7 +707,7 @@ describe('Send with a close owed', () => {
   it('clears a close record with no close owed, runs nothing, and lands the turn', async () => {
     const { ctx, db, pass, close } = await setUp(50, COUNTED_BACKLOG)
     await setWatermark(db, 3)
-    recordDeferred('close')
+    recordDeferred('close', IDS)
 
     const result = expectRan(await within(send(ctx, 'I wait.'), 'the turn'))
 
