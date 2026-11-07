@@ -18,9 +18,8 @@ export type OwedCloseRun =
 
 /**
  * A close-failure entry's Retry (reader-composer.md → During a memory update): the catch-up pass
- * while entries are unprocessed, which chains the close, else the close. Resolves once the chain
- * ends; rejects when the origin throws. The owed check comes before `startCloseChain`, which
- * starts a pass over any backlog.
+ * (chains the close) while entries are unprocessed, else the close. Rejects when the origin throws.
+ * The owed check precedes `startCloseChain`, which starts a pass over any backlog.
  */
 export async function runOwedClose(branchId: string, ctx: DbCtx): Promise<OwedCloseRun> {
   const open = currentStoryStore.getCurrentStory()

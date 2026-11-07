@@ -41,9 +41,8 @@ function row(
   }
 }
 
-// A first chapter still open: the opening, two turns, a system row and a turn after it. The system
-// row is no part of the open region. With no pick the fallback ends it on e5, the latest reply
-// before the head e8.
+// A first chapter still open; the system row is outside the open region. With no pick the fallback
+// ends on e5, the latest reply before the head e8.
 const FIRST_CHAPTER_OPEN = [
   row('e1', 1, 'opening'),
   row('e2', 2, 'user_action'),

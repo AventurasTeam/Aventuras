@@ -12,9 +12,9 @@ import type { DbCtx } from '../types'
 const PROSE_REVERSAL_LOCK_ID = 'prose-reversal'
 
 /**
- * generation-pipeline.md -> Prose reversals and the interrupt. Not re-entrant: a nested bracket's
- * `finally` would drop the barrier while the outer sweep still runs. Once the body settles, thrown
- * or not, a manual close pick whose end entry the body removed is dropped.
+ * generation-pipeline.md -> Prose reversals and the interrupt. Not re-entrant: a nested `finally`
+ * drops the barrier mid-sweep. After the body settles (thrown or not), a close pick whose end entry
+ * it removed is dropped.
  */
 export async function bracketProseReversal<T>(
   branchId: string,

@@ -76,8 +76,7 @@ export type PipelineStart = {
    */
   origin: Promise<TxResult | RejectedStart>
   /**
-   * The chain's last run, origin included; null when the origin was refused or threw. Never
-   * rejects.
+   * The chain's last run, origin included; null if the origin was refused or threw. Never rejects.
    */
   chain: Promise<ChainEnd | null>
 }

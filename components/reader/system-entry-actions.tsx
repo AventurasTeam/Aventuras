@@ -216,8 +216,7 @@ export function toSystemFailureMeta(
   return failureMetaOf(error, describeTurnFailure(error).detail, submission)
 }
 
-// The words a failure entry for a Send's owed work speaks in; the arms are shared, so one added for
-// the pass reaches the close.
+// The words a failure entry for a Send's owed work speaks in; one arm serves pass and close.
 type WorkerVocabulary = {
   generic: 'reader:systemEntry.failure.memory' | 'reader:systemEntry.failure.close'
   resolver: typeof PASS_RESOLVER_COPY | typeof CLOSE_RESOLVER_COPY
@@ -347,7 +346,7 @@ export function toCloseFailureMeta(
 
 /**
  * What a Retry that left nothing owed settles on when the composer can't take the entry's text
- * back, as `passResolvedEntry`: a notice holding the text, Dismiss alone. Otherwise the entry clears.
+ * back, as `passResolvedEntry`: a notice holding the text, Dismiss alone. Else the entry clears.
  */
 export function closeResolvedEntry(submission: NonNullable<SystemFailureMeta['submission']>): {
   content: string
@@ -360,11 +359,10 @@ export function closeResolvedEntry(submission: NonNullable<SystemFailureMeta['su
 }
 
 /**
- * A close-failure entry's Retry: runs what the close owes, its catch-up passes first. A committed
- * close, or no close owed any more, settles the entry through `committed`; a failed close rewrites
- * it; a failed catch-up pass or a held branch rewrites it as a memory entry; a cancel, or a chain
- * that ended before the close ran, leaves it. A throw from `held`, `committed` or a rewrite
- * propagates.
+ * A close-failure entry's Retry: runs what the close owes, catch-up passes first. Committed or
+ * nothing owed settles via `committed`; a failed close rewrites the entry, a failed catch-up pass
+ * or a held branch as a memory entry; a cancel, or a chain ending before the close, leaves it.
+ * Throws from deps propagate.
  */
 export async function retryCloseEntry(deps: {
   runClose: () => Promise<OwedCloseRun>
@@ -402,11 +400,8 @@ export async function retryCloseEntry(deps: {
   )
 }
 
-// Shared by the system-entry bubble and the suggestion strip: a config-resolver failure routes to
-// settings. The bubble keeps Retry beside the fix, one click once the config is fixed; the strip
-// shows the fix alone. Widened past ResolveFailureKind because the bubble's caller reads a
-// persisted `z.string()`; an unrecognised value lands on the generic "Fix default" rather than
-// dropping the affordance.
+// Shared by the bubble (Retry beside the fix) and the suggestion strip (fix alone). Widened past
+// ResolveFailureKind: the bubble reads a persisted `z.string()`; unknown values get "Fix default".
 export function useConfigFixAction(
   failure: ResolveFailureKind | (string & {}) | undefined,
   storyId: string | null,

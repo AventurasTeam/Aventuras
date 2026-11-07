@@ -217,9 +217,8 @@ function closeProbe(hero: () => Hero) {
   }
 }
 
-// memory/chapter-close.md → Failure modes, at the seams only a running app reaches: the chained
-// close's toast, Send's owed close failing it through the entry, a Send cancelled during that
-// close, and the entry's Retry. Serial: each test builds on the last.
+// memory/chapter-close.md → Failure modes, at the seams only a running app reaches: toast, entry,
+// Cancel, Retry. Serial: each test builds on the last.
 test.describe('chapter close owed — a close that fails', () => {
   test.describe.configure({ mode: 'serial' })
 

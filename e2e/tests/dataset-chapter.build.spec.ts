@@ -345,8 +345,7 @@ function setClassifierCadenceToOne(d: Drive): Promise<void> {
   )
 }
 
-// Auto-close defaults on, so a rebuild would close a chapter at the 24k crossing, mid-drive. Off
-// before the first turn.
+// Auto-close defaults on and would close a chapter at the 24k crossing mid-drive; off first.
 function turnAutoCloseOff(d: Drive): Promise<void> {
   return saveMemoryKnob(
     d,

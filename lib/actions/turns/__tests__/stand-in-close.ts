@@ -17,8 +17,8 @@ export type HeldClose = {
   readonly actionId: string
   readonly beforeTurn: boolean
   /**
-   * `completed` stamps the region through the end, as the real metadata phase does, unless the
-   * close was registered `leaveOpen`; `failed` fails the phase, which reverses the row.
+   * `completed` stamps the region through the end like the real metadata phase, unless `leaveOpen`;
+   * `failed` fails the phase, reversing the row.
    */
   finish: (outcome: 'completed' | 'failed') => void
 }
@@ -31,9 +31,8 @@ export type StandInClose = {
 }
 
 /**
- * Interruptible hard-gate pipeline under the close's kind, ending on the branch's pick, else on
- * `fallbackChapterEnd`, every write anchored on that end (C1). A pick the open region doesn't hold
- * fails the run before it writes or holds.
+ * Interruptible hard-gate close pipeline ending on the branch's pick, else `fallbackChapterEnd`,
+ * writes anchored on that end (C1); a pick outside the open region fails the run first.
  * Register before `ensureChapterClosePipelineRegistered`, which only fills a missing kind.
  */
 export function registerStandInClose(options?: { leaveOpen?: true }): StandInClose {

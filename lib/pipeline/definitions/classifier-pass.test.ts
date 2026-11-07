@@ -93,7 +93,7 @@ describe('runClassifierPass', () => {
     ])
   })
 
-  // classifier.md → Failure policy: Retry and Run now run the pass alone, chaining no close.
+  // classifier.md → Failure policy: Retry and Run run the pass alone, chaining no close.
   it('starts the run alone only when asked', async () => {
     const { ctx } = await makeHarness()
     const seen: unknown[] = []

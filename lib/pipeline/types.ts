@@ -76,10 +76,7 @@ export type PipelineEvent =
       runId: string
       kind: string
       actionId: string
-      /**
-       * Send's work before the turn (RunState.beforeTurn), the successors its chain runs
-       * included.
-       */
+      /** Send's work before the turn (RunState.beforeTurn), chained successors included. */
       beforeTurn: boolean
       outcome: 'completed' | 'aborted' | 'failed'
       error?: PipelineError

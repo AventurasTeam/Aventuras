@@ -26,10 +26,7 @@ import { withBranchQueue, withPendingTurn } from './branch-queue'
 
 export type SubmitTurnMeta = { content: string; composerMode: string }
 
-/**
- * Send's owed work was cancelled, so the whole Send was, before its turn. Without `committed` the
- * Send's owed work wrote nothing that stands.
- */
+/** Send's owed work was cancelled, so the Send was. No `committed`: nothing it wrote stands. */
 export type OwedWorkAborted = TxResult & {
   outcome: 'aborted'
   beforeTurn: true
@@ -58,11 +55,8 @@ const SWAP_REJECTION = { outcome: 'rejected', blockedBy: 'embedder-swap', conver
 
 const HELD_REJECTION = { outcome: 'rejected', blockedBy: CLASSIFIER_HELD, converged: true } as const
 
-/**
- * Runs Send's owed work as one chain: a pass chains its catch-up passes and the close
- * (chapter-close.md → Phase 0). Null once the chain committed, so the turn may start; else the
- * Send's result.
- */
+// Send's owed work as one chain: a pass, its catch-ups, the close (chapter-close.md → Phase 0).
+// Null once it committed so the turn may start; else the Send's result.
 async function runOwedWork(
   work: 'pass' | 'close',
   ids: { storyId: string; branchId: string },

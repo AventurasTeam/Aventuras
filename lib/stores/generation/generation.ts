@@ -23,10 +23,7 @@ export type RunState = {
    * run in; null for a run never deferred.
    */
   interruptible: DeferredWorkKind | null
-  /**
-   * Send's owed work before the turn: every run of a chain Send started (classifier.md → Failure
-   * policy).
-   */
+  /** Owed work before a Send's turn, every run of its chain (classifier.md → Failure policy). */
   beforeTurn: boolean
   actionId: string
   storyId: string | null

@@ -211,9 +211,8 @@ async function windowEnd(ctx: PhaseContext, size: number): Promise<number | null
 }
 
 /**
- * The orchestrator's reversal of any run of `stand` (a stand-in pass or close) fails before it
- * commits, so a pass that was `running` leaves its branch held. `resetSingletons` restores the
- * real port.
+ * Fails the orchestrator's reversal of any run of `stand` before it commits, so a `running` pass
+ * leaves its branch held. `resetSingletons` restores the real port.
  */
 export function failReversalsOf(stand: {
   readonly runs: readonly { readonly actionId: string }[]

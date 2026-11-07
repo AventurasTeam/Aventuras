@@ -73,9 +73,8 @@ export async function isClassifierHeld(branchId: string, ctx: Pick<DbCtx, 'db'>)
 export type OwedWork = 'held' | 'pass' | 'close' | null
 
 /**
- * Send's check, in order: a held branch; on the open story's branch, whether a close is owed,
- * clearing a close record when none is; then a deferred pass, a close's catch-up or the cadence
- * owes a pass, and an owed close with nothing to catch up owes the close.
+ * Send's check: held first; a stale close record clears; a deferred pass, a close's catch-up or the
+ * cadence owes a pass; an owed close with nothing to catch up owes the close.
  */
 export async function owedWorkAtSend(branchId: string, ctx: DbCtx): Promise<OwedWork> {
   if (await isClassifierHeld(branchId, ctx)) return 'held'
@@ -121,9 +120,8 @@ function openStoryOf(run: Pick<RunState, 'storyId' | 'branchId'>): OpenStory | n
 }
 
 /**
- * The memory run a commit chains (generation-pipeline.md → chainsTo on predecessor). Awaited at
- * commit under the committing run's gate, so no writer moves the count, the status or the region
- * between these reads and the successor's start.
+ * The memory run a commit chains (generation-pipeline.md → chainsTo on predecessor). Awaited under
+ * the committing run's gate, so no writer moves the count, status or region before the successor.
  */
 export async function nextMemoryRun(
   run: RunState,
