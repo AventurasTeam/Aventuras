@@ -111,6 +111,17 @@ describe('chapterActions', () => {
     ])
   })
 
+  it('writes a reordered keyword list: the stored order is part of the value', () => {
+    const row: ChapterDraftRow = { ...ROW, keywords: ['Keep', 'Amulet'] }
+    expect(actionsFor({ ...chapterDraftFrom(row), keywords: ['Amulet', 'Keep'] }, row)).toEqual([
+      {
+        kind: 'updateChapter',
+        source: 'user_edit',
+        payload: { branchId: 'br_1', id: 'chap_keep', patch: { keywords: ['Amulet', 'Keep'] } },
+      },
+    ])
+  })
+
   it('writes a re-cased keyword: its stored spelling changes though matching ignores case', () => {
     const [action] = actionsFor({ ...chapterDraftFrom(ROW), keywords: ['keep'] })
     expect(action).toMatchObject({ payload: { patch: { keywords: ['keep'] } } })
