@@ -819,8 +819,8 @@ export default function ReaderComposerRoute() {
             submission,
           )
         else if (result.outcome === 'aborted') {
-          // A Cancel during owed work that wrote nothing puts the entry the Send cleared back with
-          // its own Retry; once that work committed, the Send superseded its text and it stays gone.
+          // A Cancel before any owed work committed puts the entry the Send cleared back with its
+          // own Retry; once any of it committed, the Send superseded its text and it stays dropped.
           const putBack = abortedBeforeTurn(result) ? dropped : null
           await restoreSystemTail(putBack)
           if (branchUnchanged(branchId)) {
