@@ -88,6 +88,21 @@ describe('runClassifierNow', () => {
     expect(runClassifierPass).not.toHaveBeenCalled()
   })
 
+  it('refuses while an embedder swap is pending, as a close does', async () => {
+    currentStoryStore.set({
+      storyId: 's1',
+      branchId: 'b1',
+      definition: DEFINITION,
+      settings: { ...SETTINGS, embedding_swap_target: 'next-model' },
+    })
+    const { db, runInTransaction } = await createTestDb()
+
+    const result = await runClassifierNow('b1', { db, runInTransaction })
+
+    expect(result).toEqual({ outcome: 'rejected', blockedBy: 'embedder-swap' })
+    expect(runClassifierPass).not.toHaveBeenCalled()
+  })
+
   // Exact arguments: a `beforeTurn` anywhere would show Run now's pass as Send's, and without
   // `alone` its pass would chain an owed close under Retry's hold.
   it('starts the pass alone on the open story’s branch, never as Send’s', async () => {

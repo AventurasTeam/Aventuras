@@ -1004,7 +1004,8 @@ no user_action is written, the text goes back to an empty composer
 ([`reader-composer.md → Transient pipeline failures`](../ui/screens/reader-composer/reader-composer.md#transient-pipeline-failures--system-entries-in-chat)).
 Its `Retry` runs the pass alone, holding the reader's actions, head
 reversals included, until the pass ends; the pill's `Cancel` ends it.
-Send runs it first again. There is no
+A pending embedder swap refuses it, as it refuses Send and a close:
+reconcile would get no vectors to compare. Send runs it first again. There is no
 attempt counter and no suspension: every Send is a fresh attempt,
 whatever the cause. A cause that isn't transient (an invalid key, a
 model removed from the catalog) stops the branch's turns until the user
