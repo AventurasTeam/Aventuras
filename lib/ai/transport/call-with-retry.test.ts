@@ -1,4 +1,4 @@
-import { APICallError } from 'ai'
+import { APICallError, InvalidPromptError } from 'ai'
 import { describe, expect, it, vi } from 'vitest'
 
 import { ContextWindowError, type ContextWindowFailure } from '../context-window'
@@ -55,6 +55,20 @@ describe('callWithRetry', () => {
     expect(res.recoverable).toHaveLength(0)
     if (res.status === 'failed')
       expect(res.error).toMatchObject({ tier: 'provider', reason: 'auth' })
+  })
+
+  it('calls once when the SDK refuses to build the request', async () => {
+    const callFn = vi.fn(async (): Promise<string> => {
+      throw new InvalidPromptError({ prompt: {}, message: 'messages must not be empty' })
+    })
+    const res = await callWithRetry(
+      callFn,
+      (raw) => JSON.parse(raw),
+      opts(new AbortController().signal),
+    )
+    expect(callFn).toHaveBeenCalledTimes(1)
+    expect(res.status).toBe('failed')
+    expect(res.recoverable).toHaveLength(0)
   })
 
   it('exhausts provider attempts then fails', async () => {

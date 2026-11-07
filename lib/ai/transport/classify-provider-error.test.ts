@@ -1,4 +1,11 @@
-import { APICallError } from 'ai'
+import {
+  APICallError,
+  InvalidArgumentError,
+  InvalidMessageRoleError,
+  InvalidPromptError,
+  MessageConversionError,
+  UnsupportedFunctionalityError,
+} from 'ai'
 import { describe, expect, it } from 'vitest'
 
 import {
@@ -97,10 +104,38 @@ describe('classifyProviderError', () => {
     expect(classifyProviderError(apiError(undefined)).retryable).toBe(true)
   })
 
-  it('treats an unknown thrown value as a retryable network error', () => {
+  it('treats an unknown thrown value as a retryable unknown error', () => {
     expect(classifyProviderError(new Error('boom'))).toMatchObject({
       error: { tier: 'provider', reason: 'unknown', detail: 'boom' },
       retryable: true,
+    })
+  })
+
+  // A raw fetch failure reaches the classifier unwrapped: Chromium's has no cause, React Native's
+  // is its own class.
+  it.each([
+    ['Chromium', new TypeError('Failed to fetch')],
+    ['React Native', Object.assign(new Error('Network request failed'), { name: 'FetchError' })],
+  ])('keeps a raw %s fetch failure retryable', (_runtime, error) => {
+    expect(classifyProviderError(error).retryable).toBe(true)
+  })
+
+  it.each([
+    ['InvalidPromptError', new InvalidPromptError({ prompt: {}, message: 'no messages' })],
+    [
+      'InvalidArgumentError',
+      new InvalidArgumentError({ parameter: 'temperature', value: -1, message: 'below 0' }),
+    ],
+    ['InvalidMessageRoleError', new InvalidMessageRoleError({ role: 'robot' })],
+    [
+      'MessageConversionError',
+      new MessageConversionError({ originalMessage: {} as never, message: 'cannot convert' }),
+    ],
+    ['UnsupportedFunctionalityError', new UnsupportedFunctionalityError({ functionality: 'x' })],
+  ])('fails a request the SDK refused to build (%s) without a retry', (_name, error) => {
+    expect(classifyProviderError(error)).toMatchObject({
+      error: { tier: 'provider', reason: 'unknown' },
+      retryable: false,
     })
   })
 

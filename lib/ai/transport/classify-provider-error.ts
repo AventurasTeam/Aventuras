@@ -1,4 +1,11 @@
-import { APICallError } from 'ai'
+import {
+  APICallError,
+  InvalidArgumentError,
+  InvalidMessageRoleError,
+  InvalidPromptError,
+  MessageConversionError,
+  UnsupportedFunctionalityError,
+} from 'ai'
 
 import type { ContextWindowFailure } from '../context-window'
 import type { ReplyCutOffFailure } from '../reply-cut-off'
@@ -27,6 +34,15 @@ export class ProviderTimeoutError extends Error {
 }
 
 const MAX_CAUSE_DEPTH = 5
+
+// Raised while the SDK builds the request, before anything is sent: every attempt fails alike.
+const REQUEST_BUILD_ERRORS = [
+  InvalidPromptError,
+  InvalidArgumentError,
+  InvalidMessageRoleError,
+  MessageConversionError,
+  UnsupportedFunctionalityError,
+] as const
 
 // A thrown value need not be coercible: `String()` on a null-prototype object
 // throws, which would replace the provider failure with a TypeError.
@@ -278,6 +294,7 @@ export function classifyProviderError(
       reason: 'unknown',
       detail: describeProviderError(error),
     },
-    retryable: true,
+    // A raw fetch failure has no SDK class, so anything not built-request is retried as transport.
+    retryable: !REQUEST_BUILD_ERRORS.some((sdkError) => sdkError.isInstance(error)),
   }
 }

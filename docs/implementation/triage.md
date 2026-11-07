@@ -218,14 +218,6 @@ slice-planning gate forces its resolution before that slice is planned.
   interrupted summary either, and the `tsx` and `pnpm` relay in between
   wasn't traced. With parallel workers an orphaned run now finishes in
   under 2 minutes. Surfaced by the same review.
-- **A client-side SDK error is retried as a provider failure.**
-  `classifyProviderError` (`lib/ai/transport/classify-provider-error.ts`)
-  reads anything that isn't an `APICallError` as a retryable `unknown`,
-  so an `InvalidPromptError` (a malformed `messages` array, thrown before
-  any request) or a `TypeValidationError` backs off, throws again and
-  fails as `provider`. A close's tool step is the first call built from
-  caller messages, so a task-runner bug there reads as "LLM call failed".
-  Surfaced by Slice 5.4's final review.
 - **The mock panel's failure menu can't show `stream-cut` on a
   structured or tool lane.** `FAILURES.structured`
   (`scripts/mock-llm/ui/index.html`) leaves it out, so a lane armed
