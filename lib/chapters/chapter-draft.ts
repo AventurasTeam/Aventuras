@@ -27,7 +27,9 @@ export const chapterDraftSchema = z.object({
 })
 export type ChapterDraft = z.infer<typeof chapterDraftSchema>
 
-export const EMPTY_CHAPTER_DRAFT: Readonly<ChapterDraft> = Object.freeze({
+export const EMPTY_CHAPTER_DRAFT: Readonly<
+  Omit<ChapterDraft, 'keywords'> & { keywords: readonly string[] }
+> = Object.freeze({
   title: '',
   theme: '',
   summary: '',

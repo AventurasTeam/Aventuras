@@ -55,6 +55,15 @@ describe('chapterDraftFrom', () => {
     expect(EMPTY_CHAPTER_DRAFT.keywords).toEqual([])
   })
 
+  it("types the blank draft's shared keyword list read-only", () => {
+    // Never called: the freeze is shallow, so this push would reach the shared list.
+    const push = () => {
+      // @ts-expect-error -- the shared list is readonly.
+      EMPTY_CHAPTER_DRAFT.keywords.push('Keep')
+    }
+    expect(push).toBeTypeOf('function')
+  })
+
   it("copies a row's columns into a draft whose keyword list is its own", () => {
     const draft = chapterDraftFrom(ROW)
     expect(draft).toEqual({
