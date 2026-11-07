@@ -276,7 +276,7 @@ export default function ReaderComposerRoute() {
   )
   // Set around this route's submitTurn, whose pending mark alone holds the gaps around its runs.
   const [sendPending, setSendPending] = useState(false)
-  // Send in flight (its owed pass, its turn and the gap between) swaps Send for Cancel; a pass
+  // Send in flight (its owed work, its turn and the gap between) swaps Send for Cancel; a pass
   // chained after a turn leaves Send refused, the composer live. Booleans: no re-render per phase.
   const isGenerating = generationStore.useGeneration((s) =>
     composerShowsCancel(s.txState, branchId, sendPending),

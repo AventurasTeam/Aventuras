@@ -26,7 +26,7 @@ import { withBranchQueue, withPendingTurn } from './branch-queue'
 
 export type SubmitTurnMeta = { content: string; composerMode: string }
 
-/** Send's owed work was cancelled, so the Send was. No `committed`: nothing it wrote stands. */
+/** Send's owed work was cancelled, so the Send was. Without `committed`, nothing it wrote stands. */
 export type OwedWorkAborted = TxResult & {
   outcome: 'aborted'
   beforeTurn: true
