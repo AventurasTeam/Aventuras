@@ -705,7 +705,10 @@ supersedes the notice's text as it does a failure entry's, and the
 custody line under its quote says so, since emptying the composer by
 sending is the step the notice would otherwise invite. A close entry's
 `Retry` whose catch-up pass fails rewrites the entry as **Memory update
-failed**, with that pass's cause.
+failed**, with that pass's cause. It becomes the held entry instead
+(**Memory update failed**, branch held), with no cause and no `Retry`,
+when the `Retry` is refused because the branch is held or the failed
+pass leaves the branch held.
 
 A **Memory update failed** entry carries the submission only where
 the composer can't hold the text. A Send refused on a held branch
