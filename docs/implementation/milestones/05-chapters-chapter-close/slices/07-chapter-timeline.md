@@ -184,14 +184,15 @@ so stories run without a database.
   rows, rising as later chapters land, so each expands at most once. The
   first rows a mounted route sees expand nothing, or a reload would pop an
   editor open unasked, the trap `expandable-row.tsx:13-16` names. A new
-  chapter then expands by the default under
-  [Open questions](#open-questions).
+  chapter then expands as
+  [Implementation notes](#implementation-notes) record.
 - Every transition goes through `useRowSessionGuard`'s `guard`:
   expanding another card, collapsing the open one, `Jump to chapter →`,
   `←`, the breadcrumb, GO TO and the Story Settings icon.
 - `RowSaveBar` sits at the card's bottom edge on tablet and desktop, and
-  by the default under [Open questions](#open-questions) below the
-  scroller on phone, with `enabled` from route focus for Cmd/Ctrl-S.
+  below the scroller on phone
+  ([Implementation notes](#implementation-notes)), with `enabled` from
+  route focus for Cmd/Ctrl-S.
   `RowLeaveDialog` answers the guard. A Save asks no question, so
   `RowConfirmDialog` isn't mounted.
 
@@ -223,7 +224,7 @@ is a line or two.
   and the phone save-bar line (`:480-485`) stop contradicting `touch.md`;
   and, if 5.3's chip stays static, `Jump to chapter →` loses
   its chip-highlight sentence. Each follows
-  [Open questions](#open-questions).
+  [Implementation notes](#implementation-notes).
 - `chapter-timeline.html`, in the same commit: `←` on the left, the head
   without its number column, the in-progress card, the strip's tones,
   ranges, and the fields in the in-flight state.
@@ -400,55 +401,108 @@ and `goToChapterTimelineRow` in `e2e/locators/chrome.ts`.
 
 ## Open questions
 
-Each has a default this doc builds on. Slice planning confirms it, and
-any change amends the scope above.
+None open: slice planning answered six (Implementation notes, below),
+and the seventh moved to the slice that owns it.
 
-- **What expands after a close?** Canon expands the new card "by
-  default", which for a close started elsewhere, or over a dirty card,
-  would raise the guard unprompted. Default: a new latest chapter expands
-  once no run is in flight, only with no card dirty, and it never raises
-  the guard. A close's row appears before its run ends and can reverse,
-  so the row's arrival alone can't be the trigger. New is measured from
-  the rows the route first has, so a story's first chapter, landing under
-  an empty Timeline, stays collapsed.
-- **Where does the save bar sit on phone?** `chapter-timeline.md` says it
-  hides under the keyboard. `touch.md` reversed that in M4.4, and a bar
-  inside the scroller can't ride the keyboard. Default: on phone the bar
-  is a sibling of the scroller inside `KeyboardInsetColumn`, where
-  `save-sessions.md` puts every other bar, and tablet and desktop keep it
-  in the card. The session already sits above the card, so nothing else
-  moves. Does the developer accept the bar moving by tier?
-- **What does a run disable?** The `.md` says card edits; the wireframe
-  says Save, `Delete…` and `Close chapter…`. Default: the fields and Save,
-  as World and Plot do, plus those two actions. `Jump to chapter →` and
-  expand or collapse stay live, since navigation and reads aren't gated.
-- **How does a time range read?** The sketches show `Day 2–3`, but the
-  formatter's output is opaque, so only identical strings can collapse.
-  The `.md` writes `<start time> – <end time>`, and 5.3's
-  `chapterTimeRangeLabel`, the one function both surfaces share, writes
-  `<first> → <last>`. Default: the function's form, one label when they
-  match and nothing with no world time, with the `.md` corrected to it.
-- **Which wins where the `.md` and wireframe differ?** Default: the `.md`
-  for the head, `Chapter <N> — <title>`; the `.md`'s in-progress row
-  without a title placeholder; the wireframe's fuller placeholder,
-  `Summary, theme, and keywords generate on close.`; and full numbers on
-  the in-progress card, matching the popover's label.
-- **May a theme be blank?** Canon calls it a free-form tag and the column
-  is `NOT NULL`. Default: yes, stored as an empty string, which also drops
-  it from the collapsed line.
-
-- **How does a rollback count a user's chapter edit it sweeps?**
-  [Slice 5.2](./02-first-chapter.md) made `rollbackCountsOf` count a
-  `chapters` delta only as a create (developer decision), so a close's
-  `close_report` update no longer reads as world state. A user's own
-  `updateChapter` (a title or summary save, anchored on no entry) on a
-  chapter the rollback spares is still reverted by its log position, and
-  the confirm modal now reports nothing for it. Suggested: count a
-  non-create `chapters` delta when its chapter's create isn't in the
-  swept set, which keeps the close's report silent.
-  [Slice 5.12](./12-chapter-delete-rollback.md#open-questions) reworks
-  the same function and asks which tables count as world state.
+- **How does a rollback count a user's chapter edit it sweeps?** Routed
+  to [Slice 5.12](./12-chapter-delete-rollback.md#open-questions), which
+  rewrites `rollbackCountsOf` and owns
+  [`rollback-confirm.md → Counts`](../../../../ui/screens/reader-composer/rollback-confirm/rollback-confirm.md#counts),
+  with the rule suggested here as its default: count a non-create
+  `chapters` delta when its chapter's create isn't in the swept set.
 
 ## Implementation notes
 
-_Populated at finish: notable deviations from the plan and resolved developer decisions._
+- **A new chapter expands once its run ends, a story's first chapter
+  included (developer decision at slice planning).** A deviation from
+  the brief, whose default left a first chapter collapsed under an empty
+  Timeline. The baseline is taken when the route is ready, as soon as
+  `useColdOpenStory` returns the open story: the branch's highest
+  `sequenceNumber` then, or 0 with none. `loadOpenStory` hydrates
+  `chaptersStore` before it publishes the open story, so readiness
+  already separates hydrated rows from new ones, and a reload can't pop
+  an editor open. A chapter above the baseline expands once no run is in
+  flight and no card is dirty, and never raises the guard. The baseline
+  rises past every chapter it judges, so each expands at most once, and
+  one that lands over a dirty card has spent its chance. An expanded id
+  whose row leaves the store is dropped and doesn't come back with the
+  row.
+- **On phone the save bar sits at the surface's bottom edge (developer
+  decision at slice planning).** `RowSaveBar` is a sibling of the card
+  list's scroller inside `KeyboardInsetColumn`, riding the keyboard per
+  [`touch.md → Save bar on phone`](../../../../ui/foundations/mobile/touch.md#save-bar-on-phone),
+  which M4.4 turned from hide-under-keyboard; tablet and desktop keep it
+  at the expanded card's bottom edge. One `useChapterRowSession`, hosted
+  by the route for its whole life and keyed `none` until a card opens,
+  lets the bar sit outside the scroller with no portal.
+- **A rollback's count of a swept chapter edit moved to
+  [Slice 5.12](./12-chapter-delete-rollback.md#open-questions)
+  (developer decision at slice planning).** `resolveRollbackWindow`
+  (`lib/actions/story-entries/operational.ts`) sweeps deltas with no
+  `entry_id` at or past the target's create, so a rollback reverts a
+  Timeline save and, until 5.12, counts it nowhere. This slice leaves
+  `rollbackCountsOf` alone; 5.12 rewrites it, owns
+  [`rollback-confirm.md → Counts`](../../../../ui/screens/reader-composer/rollback-confirm/rollback-confirm.md#counts),
+  and carries the rule this doc suggested as its default.
+- **A run disables the fields, Save, `Delete…` and `Close chapter…`
+  (developer decision at slice planning).** `Discard`,
+  `Jump to chapter →` and expand or collapse stay live. During a run the
+  fields and Save show the gate's reason; `Delete…` and `Close chapter…`
+  keep their lands-later reasons until 5.12 and 5.10 flip them.
+- **Where the `.md` and the wireframe differed (developer decision at
+  slice planning).** A time range reads as `chapterTimeRangeLabel` writes
+  it, `<first> → <last>`, one label when the two match and none with no
+  world time. The `.md` won the head (`Chapter <N> — <title>`) and the
+  in-progress row (no title placeholder), the wireframe the placeholder
+  (`Summary, theme, and keywords generate on close.`), and the
+  in-progress card shows full numbers (`14,200 / 24,000 tok`), as the
+  popover's label does. A theme may be blank, stored as `''`, and drops
+  from the collapsed line; title and summary are required after
+  trimming.
+- **Disabled reasons for the flips to come.** `Close chapter…` reuses
+  `chapters:popover.closeLandsLater`; `Delete…` and `Regenerate summary`
+  have `chapters:actions.deleteLandsLater` and
+  `chapters:actions.regenerateLandsLater`. The slice that flips a control
+  drops its key once nothing reads it:
+  [Slice 5.10](./10-two-starts.md) for `Close chapter…`,
+  [Slice 5.12](./12-chapter-delete-rollback.md) for `Delete…`.
+- **`Manage chapters →` is always live.** `onManageChapters` became a
+  required prop of `ChapterPopover` and `ReaderChapterChips`, and
+  `OverlayAction`'s `reason` optional, so
+  `chrome.goTo.chapterTimelineLandsLater` went with GO TO's `landsLater`
+  arm: no surface is unbuilt.
+- **`useRowSessionGuard` also returns `dirty`,** from the handle it holds,
+  so a host can read the session's state before its session hook runs,
+  as the Timeline's expansion does. The handle's `dirty` trails the form
+  by one commit, which is harmless there: a chapter is judged when a run
+  ends, not on a keystroke.
+- **5.3's helpers stayed where they were.** The cards import
+  `chapterTimeRangeLabel` and `worldTimeLabel` from
+  `components/reader/chapter-time-range.ts`, and `ChapterProgressBar` and
+  `chapterProgressCounts` from `components/compounds/`.
+- **The desktop smoke checked the banner on a periodic pass only.** A
+  deviation from the brief's smoke line: `useMemoryRunBanner` returns
+  null for any run but a pass, and a close's banner is
+  [Slice 5.6](./06-close-owed.md)'s. The smoke checked the pill's phase
+  and Cancel on a turn and on a close started from `/dev/chapter-close`.
+- **A card's fields wait for the row the form holds (an Android defect,
+  fixed at the Android check).** react-hook-form 7.81 subscribes field
+  watchers passively off web, so a card's fields mounting in the same
+  commit as the session's `form.reset` showed the previous row on native
+  ([the lesson](../../../lessons-learned/rhf-native-passive-subscription.md)).
+  `useChapterRowSession` returns `ChapterRowSession`, which adds
+  `formRowId`, the row the form holds, set in a layout effect after the
+  reset, instead of the plan's `RowSaveSession<ChapterDraft>`, and
+  `ChapterCard` mounts its expanded body only when `session.formRowId` is
+  its row.
+- **The collapsed token count is compact, and a whole thousand drops its
+  `.0` (provisional).** `16k tok` and `12.4k tok`, not `16.0k tok`; the
+  Timeline doc's sketch and wireframe follow it. Always showing one
+  decimal is the alternative, pending the developer.
+- **A single-entry chapter's range reads `entry 12`,** from
+  `chapters:card.entry`, not `entries 12–12`.
+- **The E2E pins one-click Discard on `←` and `Jump to chapter →`.**
+  `requestLeave` reads the last render's dirty state, and only
+  expo-router's deferred dispatch keeps a replayed pop from prompting
+  twice, so the spec's two cases are the end-to-end pin; the root cause
+  is filed to triage.
