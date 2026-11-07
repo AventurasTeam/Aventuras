@@ -70,7 +70,8 @@ export default function ChapterTimelineRoute(): ReactElement {
         branchId,
         rows: chapterRows.values(),
         ranges,
-        // Empty while the index reads or after it failed: entry ranges drop, nothing waits on it.
+        // Empty until the first read lands or if it fails (a re-read keeps the last good index):
+        // entry ranges drop meanwhile, nothing waits on it.
         entryIndex: entryIndex.index,
         frame,
       }),
@@ -87,7 +88,7 @@ export default function ChapterTimelineRoute(): ReactElement {
     runInFlight: editBlocked,
     save,
     onSaved,
-    // The save bar's notice has no visible text on phone, so a refused save also toasts.
+    // The save bar's notice is an icon with no visible text, so a refused save also toasts.
     onRejected: toast.error,
   })
 

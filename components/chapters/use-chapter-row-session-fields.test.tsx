@@ -8,7 +8,7 @@ import { chapterDraftFrom, type ChapterDraft, type ChapterDraftRow } from '@/lib
 import { useChapterRowSession } from './use-chapter-row-session'
 
 // react-hook-form picks its native path (field subscriptions in passive effects) at module load,
-// by window.HTMLElement; hidden until the imports below have evaluated.
+// by window.HTMLElement; vi.hoisted runs before the imports above, so they load with it hidden.
 const htmlElement = vi.hoisted(() => {
   const saved = window.HTMLElement
   Reflect.deleteProperty(window, 'HTMLElement')

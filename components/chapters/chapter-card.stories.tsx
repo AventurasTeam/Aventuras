@@ -233,7 +233,7 @@ export const Latest: Story = {
     expect(within(card).getByText('entries 12–34')).toBeVisible()
     expect(within(card).getByText(/^closed .*2026/)).toBeVisible()
 
-    // Tablet and desktop: the bar sits at the card's bottom edge.
+    // Tablet and desktop: the bar sits inside the card.
     await userEvent.type(within(card).getByRole('textbox', { name: COPY.title }), ', revised')
     expect(await within(card).findByTestId('save-bar', undefined, WAIT)).toBeVisible()
   },
@@ -308,7 +308,10 @@ export const HeadToggles: Story = {
   },
 }
 
-/** Native's one-pass lag on a switch: the session's form still holds another chapter. */
+/**
+ * The one-pass lag after a switch, on every platform: the form still holds another chapter. Native
+ * is where a field mounted in it would show that row.
+ */
 function LaggingFormHarness() {
   const session = useChapterRowSession({
     row: TAVERN,

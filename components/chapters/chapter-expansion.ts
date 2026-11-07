@@ -2,7 +2,10 @@ import { useCallback, useState } from 'react'
 
 export type ChapterExpansionState = Readonly<{
   expandedId: string | null
-  /** Ids already judged, so never expanded again; null until the route is ready. */
+  /**
+   * Ids already judged, never auto-expanded again (a user's toggle still opens one); null until
+   * the route is ready.
+   */
   judged: ReadonlySet<string> | null
 }>
 
