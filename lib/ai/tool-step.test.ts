@@ -862,6 +862,23 @@ describe('generateToolStep: a reply cut off', () => {
     expect(cutLogs()).toEqual([])
   })
 
+  it('sends a retryable provider failure twice, then fails', async () => {
+    answers = [
+      rejection(500, { error: { message: 'first' } }),
+      rejection(500, { error: { message: 'second' } }),
+      DONE,
+    ]
+
+    const result = await step(useProvider('openai-compatible'))
+
+    expect(bodies).toHaveLength(2)
+    expect(result).toMatchObject({
+      status: 'failed',
+      error: { tier: 'provider', detail: expect.stringContaining('second') },
+      recoverable: [{ tier: 'provider', detail: expect.stringContaining('first') }],
+    })
+  })
+
   it('names the window from the estimate when the server reports no input', async () => {
     answers = [
       cutReply({ prompt_tokens: 0, completion_tokens: 7_999 }),
