@@ -216,10 +216,10 @@ describe('startManualClose refusals', () => {
   it('keeps the record a start the orchestrator rejects', async () => {
     ensurePerTurnPipelineRegistered()
     registerStoreOnlyRun(PER_TURN_KIND, 'br_elsewhere')
-    generationStore.setPendingClose(f.branchId, { endEntryId: null })
+    generationStore.setPendingClose(f.branchId, { endEntryId: f.replyIds[0]! })
 
     await expectRefused(await startManualClose(f.branchId, lastReply(), f.ctx), 'per-turn', {
-      endEntryId: null,
+      endEntryId: f.replyIds[0]!,
     })
   })
 })

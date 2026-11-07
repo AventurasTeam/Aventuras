@@ -22,9 +22,6 @@ export async function* closeBoundaryPhase(
 ): AsyncGenerator<PhaseEmittedEvent, PhaseResult> {
   const pending = generationStore.getTxState().pendingClose.get(ctx.branchId)
   if (!pending) return refuse(`chapter-close: no close is pending on branch ${ctx.branchId}`)
-  // A null end asks for boundary selection, which has no fallback or model call yet (M5).
-  if (pending.endEntryId === null)
-    return refuse('chapter-close: the pending close names no end entry')
   const { endEntryId } = pending
   const series = await openRegionSeries(ctx.branchId, ctx)
   const end = series.find((row) => row.id === endEntryId)

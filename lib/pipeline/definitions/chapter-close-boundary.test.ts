@@ -115,13 +115,6 @@ describe('closeBoundaryPhase', () => {
     await expectRefused()
   })
 
-  // A null end asks for boundary selection, which this phase can't do yet.
-  it('refuses a record that names no end entry', async () => {
-    hydrateEntries(phaseDb, 'b1', FIRST_CHAPTER_OPEN)
-    generationStore.setPendingClose('b1', { endEntryId: null })
-    await expectRefused()
-  })
-
   // C10: a system entry hard-deletes with no delta, and a held entry is another chapter's.
   it.each([
     { name: 'a system entry', rows: FIRST_CHAPTER_OPEN, endEntryId: 's6' },
