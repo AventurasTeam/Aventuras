@@ -15,7 +15,7 @@ import {
   type TxState,
 } from '@/lib/stores'
 
-/** The run Send's Cancel and composer describe: a turn, or Send's owed pass, on `branchId`. */
+/** The run Send's Cancel and composer describe: a turn, or Send's owed work (its chain), on `branchId`. */
 export function findSendRun(txState: TxState, branchId: string): RunState | undefined {
   for (const run of txState.runs.values()) {
     if (run.branchId === branchId && (run.kind === PER_TURN_KIND || run.beforeTurn)) return run
@@ -28,7 +28,7 @@ export function pillRunOf(txState: TxState, branchId: string): RunState | undefi
   return findSendRun(txState, branchId) ?? selectMemoryRun(txState, { branchId })
 }
 
-/** Only a turn streams a card; Send's owed pass is a structured call. */
+/** Only a turn streams a card; Send's owed work is structured calls. */
 export function sendRunStreams(txState: TxState, branchId: string): boolean {
   return findSendRun(txState, branchId)?.kind === PER_TURN_KIND
 }
@@ -92,7 +92,7 @@ export function cancelPillRun(branchId: string): Promise<void> {
 }
 
 /**
- * A Send cancelled during its owed pass wrote nothing, so a failure entry cleared before it
+ * A Send cancelled during its owed work wrote nothing, so a failure entry cleared before it
  * can go back where it was (reader-composer.md → Custody of the turn's text).
  */
 export function abortedBeforeTurn(result: SubmitTurnResult): boolean {
@@ -102,11 +102,20 @@ export function abortedBeforeTurn(result: SubmitTurnResult): boolean {
 /** A pass that refused a Send (classifier.md → Failure policy): the hold, or why it failed. */
 export type PassRefusal = { held: true } | { held: false; error: PipelineError | undefined }
 
-/** Send's result only: a `failed` without `beforeTurn` is the turn's own, not a pass refusal. */
+/** Send's result only: a `failed` without `beforeTurn` is the turn's own, a close's closeRefusalOf's. */
 export function passRefusalOf(result: SubmitTurnResult): PassRefusal | null {
-  if (result.outcome === 'failed' && result.beforeTurn === true)
+  if (result.outcome === 'failed' && result.beforeTurn === true && result.work === 'pass')
     return { held: false, error: result.error }
   if (result.outcome === 'rejected' && result.blockedBy === CLASSIFIER_HELD) return { held: true }
+  return null
+}
+
+/** A close that failed Send's owed work (chapter-close.md → Failure modes); a hold is a pass's. */
+export function closeRefusalOf(
+  result: SubmitTurnResult,
+): { error: PipelineError | undefined } | null {
+  if (result.outcome === 'failed' && result.beforeTurn === true && result.work === 'close')
+    return { error: result.error }
   return null
 }
 

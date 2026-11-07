@@ -33,7 +33,7 @@ import {
   closeOwed,
   isClassifierHeld,
   nextMemoryRun,
-  owedPassAtSend,
+  owedWorkAtSend,
   passChainsTo,
   passStartedAlone,
   perTurnChainsTo,
@@ -606,16 +606,18 @@ describe('isClassifierHeld', () => {
   })
 })
 
-// classifier.md → Failure policy: owed when deferred or the cadence is due; a held branch first.
-describe('owedPassAtSend', () => {
-  it('names a held branch held, ahead of a deferred pass and a due cadence', async () => {
+// classifier.md → Failure policy and chapter-close.md → Phase 0: what Send runs before its turn.
+describe('owedWorkAtSend', () => {
+  it('names a held branch held, ahead of deferred work, an owed close and a due cadence', async () => {
     const { db, ctx } = await makeHarness()
     await seedEntries(db, 4)
     await setStatus(db, { state: 'running' })
     openStory(1)
     deferOnB1(PERIODIC_CLASSIFIER_KIND, 'pass')
+    deferOnB1(CHAPTER_CLOSE_KIND, 'close')
+    generationStore.setPendingClose('b1', { endEntryId: 'e2' })
 
-    expect(await owedPassAtSend('b1', ctx)).toBe('held')
+    expect(await owedWorkAtSend('b1', ctx)).toBe('held')
   })
 
   it("owes nothing while the branch's own pass is live, though it persisted running", async () => {
@@ -625,7 +627,7 @@ describe('owedPassAtSend', () => {
     openStory(1)
     generationStore.startRun(passRun())
 
-    expect(await owedPassAtSend('b1', ctx)).toBeNull()
+    expect(await owedWorkAtSend('b1', ctx)).toBeNull()
   })
 
   it('owes a deferred pass whatever the cadence', async () => {
@@ -634,16 +636,56 @@ describe('owedPassAtSend', () => {
     openStory(8)
     deferOnB1(PERIODIC_CLASSIFIER_KIND, 'pass')
 
-    expect(await owedPassAtSend('b1', ctx)).toBe('owed')
+    expect(await owedWorkAtSend('b1', ctx)).toBe('pass')
   })
 
-  it('owes no pass for a deferred close alone', async () => {
+  it('owes a catch-up pass first for a close owed over unprocessed entries', async () => {
+    const { db, ctx } = await makeHarness()
+    await owedRegion(db)
+
+    expect(await owedWorkAtSend('b1', ctx)).toBe('pass')
+  })
+
+  it('owes the close the threshold owes once no entry is unprocessed, with no record', async () => {
+    const { db, ctx } = await makeHarness()
+    await owedRegion(db, { processedThrough: 3 })
+    expect(generationStore.getTxState().deferred.size).toBe(0)
+
+    expect(await owedWorkAtSend('b1', ctx)).toBe('close')
+  })
+
+  it('owes a deferred close a close is still owed on, keeping its record', async () => {
+    const { db, ctx } = await makeHarness()
+    await seedEntries(db, 2)
+    await setStatus(db, { processedThrough: 2 })
+    openStory(50)
+    deferOnB1(CHAPTER_CLOSE_KIND, 'close')
+    generationStore.setPendingClose('b1', { endEntryId: 'e2' })
+
+    expect(await owedWorkAtSend('b1', ctx)).toBe('close')
+    expect(generationStore.getTxState().deferred.get('b1')).toEqual({ close: true })
+  })
+
+  // As a rollback below the threshold leaves it.
+  it('clears a close record no close is owed on any more, and owes nothing', async () => {
     const { db, ctx } = await makeHarness()
     await seedEntries(db, 1)
     openStory(8)
-    deferOnB1('chapter-close', 'close')
+    deferOnB1(CHAPTER_CLOSE_KIND, 'close')
 
-    expect(await owedPassAtSend('b1', ctx)).toBeNull()
+    expect(await owedWorkAtSend('b1', ctx)).toBeNull()
+    expect(generationStore.getTxState().deferred.get('b1')).toBeUndefined()
+  })
+
+  it('clears only the close beside a deferred pass, and owes the pass', async () => {
+    const { db, ctx } = await makeHarness()
+    await seedEntries(db, 1)
+    openStory(8)
+    deferOnB1(PERIODIC_CLASSIFIER_KIND, 'pass')
+    deferOnB1(CHAPTER_CLOSE_KIND, 'close')
+
+    expect(await owedWorkAtSend('b1', ctx)).toBe('pass')
+    expect(generationStore.getTxState().deferred.get('b1')).toEqual({ pass: true })
   })
 
   // The restart case: no mark survives one, so the persisted watermark alone must find the pass.
@@ -654,9 +696,9 @@ describe('owedPassAtSend', () => {
     expect(generationStore.getTxState().deferred.size).toBe(0)
 
     openStory(4)
-    expect(await owedPassAtSend('b1', ctx)).toBe('owed')
+    expect(await owedWorkAtSend('b1', ctx)).toBe('pass')
     openStory(5)
-    expect(await owedPassAtSend('b1', ctx)).toBeNull()
+    expect(await owedWorkAtSend('b1', ctx)).toBeNull()
     expect(generationStore.getTxState().runs.size).toBe(0)
   })
 
@@ -666,7 +708,7 @@ describe('owedPassAtSend', () => {
     await setStatus(db, { state: 'failed', lastError: 'invalid key' })
     openStory(2)
 
-    expect(await owedPassAtSend('b1', ctx)).toBe('owed')
+    expect(await owedWorkAtSend('b1', ctx)).toBe('pass')
   })
 
   it.each([
@@ -677,7 +719,7 @@ describe('owedPassAtSend', () => {
     await seedEntries(db, 4)
     setOpen()
 
-    expect(await owedPassAtSend('b1', ctx)).toBeNull()
+    expect(await owedWorkAtSend('b1', ctx)).toBeNull()
   })
 
   it('owes a deferred pass on a branch the open story is not on', async () => {
@@ -686,7 +728,18 @@ describe('owedPassAtSend', () => {
     openStory(1, { storyId: 's1', branchId: 'b2' })
     deferOnB1(PERIODIC_CLASSIFIER_KIND, 'pass')
 
-    expect(await owedPassAtSend('b1', ctx)).toBe('owed')
+    expect(await owedWorkAtSend('b1', ctx)).toBe('pass')
+  })
+
+  it("neither owes nor clears a close off the open story's branch", async () => {
+    const { db, ctx } = await makeHarness()
+    await seedEntries(db, 2)
+    openStory(1, { storyId: 's1', branchId: 'b2' })
+    deferOnB1(CHAPTER_CLOSE_KIND, 'close')
+    generationStore.setPendingClose('b1', { endEntryId: 'e2' })
+
+    expect(await owedWorkAtSend('b1', ctx)).toBeNull()
+    expect(generationStore.getTxState().deferred.get('b1')).toEqual({ close: true })
   })
 })
 

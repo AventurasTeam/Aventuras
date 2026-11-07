@@ -1,18 +1,23 @@
 import { and, desc, eq, ne } from 'drizzle-orm'
 
+import { PERIODIC_CLASSIFIER_KIND } from '@/lib/classifier'
 import { inheritedEntryMetadata, storyEntries, type EntryMetadata } from '@/lib/db'
 import { logger } from '@/lib/diagnostics'
 import { isStorySwapPending, withTurnAdmission } from '@/lib/embedder-swap'
 import { generateId } from '@/lib/ids'
 import {
+  CHAPTER_CLOSE_KIND,
   CLASSIFIER_HELD,
+  ensureChapterClosePipelineRegistered,
   ensurePerTurnPipelineRegistered,
+  ensurePeriodicClassifierPipelineRegistered,
   isClassifierHeld,
-  owedPassAtSend,
-  runClassifierPass,
+  owedWorkAtSend,
+  startPipeline,
   type RejectedStart,
   type TxResult,
 } from '@/lib/pipeline'
+import type { DeferredWorkKind } from '@/lib/stores'
 
 import { applyDeltaAction } from '../delta/apply-delta-action'
 import { DeltaReplayError, reverseReplayDeltas } from '../delta/reverse-replay'
@@ -21,23 +26,72 @@ import { withBranchQueue, withPendingTurn } from './branch-queue'
 
 export type SubmitTurnMeta = { content: string; composerMode: string }
 
-/** Send's owed pass was cancelled, so the whole Send was, before it wrote anything. */
-export type OwedPassAborted = TxResult & { outcome: 'aborted'; beforeTurn: true }
+/** Send's owed work was cancelled, so the whole Send was, before it wrote anything. */
+export type OwedWorkAborted = TxResult & {
+  outcome: 'aborted'
+  beforeTurn: true
+  /** The slot of the run that ended Send's chain. */
+  work: DeferredWorkKind
+}
 
-/** Send's owed pass failed, so the Send did: no user_action (classifier.md → Failure policy). */
-export type OwedPassFailed = TxResult & { outcome: 'failed'; beforeTurn: true }
+/** Send's owed work failed, so the Send did: no user_action (classifier.md → Failure policy). */
+export type OwedWorkFailed = TxResult & {
+  outcome: 'failed'
+  beforeTurn: true
+  work: DeferredWorkKind
+}
 
 /** `converged: false`: the refused user_action is still in the branch; never re-offer its text. */
 export type SubmitTurnResult =
-  // The turn's own result: only Send's pass carries `beforeTurn`.
+  // The turn's own result: only Send's owed work carries `beforeTurn`.
   | (TxResult & { beforeTurn?: never })
-  | OwedPassAborted
-  | OwedPassFailed
+  | OwedWorkAborted
+  | OwedWorkFailed
   | (RejectedStart & { converged: boolean })
 
 const SWAP_REJECTION = { outcome: 'rejected', blockedBy: 'embedder-swap', converged: true } as const
 
 const HELD_REJECTION = { outcome: 'rejected', blockedBy: CLASSIFIER_HELD, converged: true } as const
+
+/**
+ * Runs Send's owed work as one chain: a pass chains its catch-up passes and the close
+ * (chapter-close.md → Phase 0). Null once the chain committed, so the turn may start; else the
+ * Send's result.
+ */
+async function runOwedWork(
+  work: 'pass' | 'close',
+  ids: { storyId: string; branchId: string },
+  ctx: DbCtx,
+): Promise<SubmitTurnResult | null> {
+  ensurePeriodicClassifierPipelineRegistered()
+  ensureChapterClosePipelineRegistered()
+  const { origin, chain } = startPipeline(
+    work === 'pass' ? PERIODIC_CLASSIFIER_KIND : CHAPTER_CLOSE_KIND,
+    {
+      storyId: ids.storyId,
+      branchId: ids.branchId,
+      beforeTurn: true,
+      db: ctx.db,
+      runInTransaction: ctx.runInTransaction,
+    },
+  )
+  const started = await origin
+  if (started.outcome === 'rejected') return { ...started, converged: true }
+  const end = await chain
+  // PipelineStart.chain is null only for an origin refused or thrown; reaching here broke that.
+  if (end == null) throw new Error('submitTurn: owed work ran, but its chain resolved no end')
+  const ended: DeferredWorkKind = end.kind === CHAPTER_CLOSE_KIND ? 'close' : 'pass'
+  const { result } = end
+  // A Cancel landing after a run's last phase still commits it, but the Send is cancelled.
+  if (result.outcome === 'aborted' || (result.outcome === 'completed' && end.cancelled))
+    return { ...result, outcome: 'aborted', beforeTurn: true, work: ended }
+  if (result.outcome === 'failed') {
+    // A cancel or failure whose reversal didn't commit: the branch is held, not retryable.
+    if (await isClassifierHeld(ids.branchId, ctx)) return HELD_REJECTION
+    return { ...result, outcome: 'failed', beforeTurn: true, work: ended }
+  }
+  return null
+}
 
 export async function submitTurn(
   ids: { storyId: string; branchId: string },
@@ -53,19 +107,13 @@ export async function submitTurn(
       if (isStorySwapPending(ids.storyId)) return SWAP_REJECTION
 
       return withPendingTurn(ids.branchId, async (startTurn): Promise<SubmitTurnResult> => {
-        // Under the turn's mark, so no reversal interrupts Send's own pass. Only a committed pass
-        // lets the turn start: a cancel cancels the Send, and a failure or a refusal fails it.
-        const owed = await owedPassAtSend(ids.branchId, ctx)
+        // Under the turn's mark, so no reversal interrupts Send's own work. Only a chain that
+        // committed lets the turn start: a cancel cancels the Send, a failure or refusal fails it.
+        const owed = await owedWorkAtSend(ids.branchId, ctx)
         if (owed === 'held') return HELD_REJECTION
-        if (owed === 'owed') {
-          const pass = await runClassifierPass(ids, ctx, { beforeTurn: true })
-          if (pass.outcome === 'rejected') return { ...pass, converged: true }
-          if (pass.outcome === 'aborted') return { ...pass, outcome: 'aborted', beforeTurn: true }
-          if (pass.outcome === 'failed') {
-            // A cancel or failure whose reversal didn't commit: the branch is held, not retryable.
-            if (await isClassifierHeld(ids.branchId, ctx)) return HELD_REJECTION
-            return { ...pass, outcome: 'failed', beforeTurn: true }
-          }
+        if (owed !== null) {
+          const refused = await runOwedWork(owed, ids, ctx)
+          if (refused !== null) return refused
         }
 
         // Shared across the user_action's delta and the pipeline run it kicks off,

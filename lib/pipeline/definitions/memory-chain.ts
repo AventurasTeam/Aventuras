@@ -55,17 +55,6 @@ export async function readClassifierStatus(
   return row?.classifierStatus ?? idleStatus()
 }
 
-// One read of "due" so Send's check and the chain never disagree.
-async function cadenceDue(
-  branchId: string,
-  status: ClassifierStatus,
-  cadence: number,
-  ctx: DbCtx,
-): Promise<boolean> {
-  const unprocessed = await unprocessedEntryCount(branchId, status.processedThrough, ctx)
-  return shouldCadenceFire({ status, unprocessedEntries: unprocessed, cadence })
-}
-
 function passLive(branchId: string): boolean {
   for (const run of generationStore.getTxState().runs.values())
     if (run.kind === PERIODIC_CLASSIFIER_KIND && run.branchId === branchId) return true
@@ -80,18 +69,29 @@ export async function isClassifierHeld(branchId: string, ctx: Pick<DbCtx, 'db'>)
   return status.state === 'running' && !passLive(branchId)
 }
 
-/** Send's check, in order: held branch, deferral mark, then cadence over the watermark. */
-export async function owedPassAtSend(
-  branchId: string,
-  ctx: DbCtx,
-): Promise<'held' | 'owed' | null> {
+/** What Send runs before its turn: `'pass'` starts a chain that may end in the close. */
+export type OwedWork = 'held' | 'pass' | 'close' | null
+
+/**
+ * Send's check, in order: a held branch; on the open story's branch, whether a close is owed,
+ * clearing a close record when none is; then a deferred pass, a close's catch-up or the cadence
+ * owes a pass, and an owed close with nothing to catch up owes the close.
+ */
+export async function owedWorkAtSend(branchId: string, ctx: DbCtx): Promise<OwedWork> {
   if (await isClassifierHeld(branchId, ctx)) return 'held'
-  if (generationStore.getTxState().deferred.get(branchId)?.pass) return 'owed'
-  // The cadence is the open story's setting: a branch it isn't on owes nothing by cadence.
+  const passDeferred = generationStore.getTxState().deferred.get(branchId)?.pass === true
+  // The cadence and the close read the open story's settings: off its branch only a deferral owes.
   const open = currentStoryStore.getCurrentStory()
-  if (open?.branchId !== branchId) return null
+  if (open?.branchId !== branchId) return passDeferred ? 'pass' : null
+  const owesClose = await closeOwed(branchId, open, ctx)
+  // An interrupted close a rollback below the threshold took back leaves nothing to run.
+  if (!owesClose) generationStore.clearDeferredClose(branchId)
   const status = await readClassifierStatus(branchId, ctx)
-  return (await cadenceDue(branchId, status, open.settings.classifierCadence, ctx)) ? 'owed' : null
+  const unprocessed = await unprocessedEntryCount(branchId, status.processedThrough, ctx)
+  if (passDeferred || (owesClose && unprocessed > 0)) return 'pass'
+  if (owesClose) return 'close'
+  const cadence = open.settings.classifierCadence
+  return shouldCadenceFire({ status, unprocessedEntries: unprocessed, cadence }) ? 'pass' : null
 }
 
 /**
