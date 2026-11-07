@@ -385,6 +385,10 @@ and `goToChapterTimelineRow` in `e2e/locators/chrome.ts`.
   `go-to-group`, and `commit-row-save` for the new kind.
 - **Hook.** `use-chapter-row-session`, new, on
   `components/world/use-lore-row-session.test.tsx`'s shape;
+  `use-chapter-row-session-fields`, new, on react-hook-form's native
+  path forced under jsdom, with a canary; `use-timeline-editing`, new,
+  the route's guard, expansion and session together;
+  `use-row-session-guard`, new, the guard's `dirty`;
   `use-timeline-time-ranges`, new, on the app's query client; and
   `use-story-leave-guard` and `use-cold-open-story`, extended.
 - **Storybook, browser project.** Both cards at desktop and at 390 px
@@ -486,6 +490,10 @@ and the seventh moved to the slice that owns it.
   as the Timeline's expansion does. The handle's `dirty` trails the form
   by one commit, which is harmless there: a chapter is judged when a run
   ends, not on a keystroke.
+- **The route's guard, expansion and session live in
+  `useTimelineEditing`** (`components/chapters/use-timeline-editing.ts`),
+  in that order, so a test covers the route's real wiring of `dirty` and
+  the run gate into the expansion.
 - **5.3's helpers stayed where they were.** The cards import
   `chapterTimeRangeLabel` and `worldTimeLabel` from
   `components/reader/chapter-time-range.ts`, and `ChapterProgressBar` and
@@ -504,7 +512,8 @@ and the seventh moved to the slice that owns it.
   `formRowId`, the row the form holds, set in a layout effect after the
   reset, instead of the plan's `RowSaveSession<ChapterDraft>`, and
   `ChapterCard` mounts its expanded body only when `session.formRowId` is
-  its row.
+  its row. The native-path unit test pins `formRowId`, and the
+  `FieldsWaitForTheirRow` story pins the card's gate.
 - **The collapsed token count is compact, and a whole thousand drops its
   `.0` (provisional).** `16k tok` and `12.4k tok`, not `16.0k tok`; the
   Timeline doc's sketch and wireframe follow it. Always showing one
