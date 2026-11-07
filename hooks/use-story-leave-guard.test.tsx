@@ -146,6 +146,7 @@ describe('useStoryLeaveGuard', () => {
     'reader-composer/[branchId]',
     'world/[branchId]',
     'plot/[branchId]',
+    'chapter-timeline/[branchId]',
     'story-settings/[storyId]',
   ])('lets a back that lands on %s through', (below) => {
     nav.routes = [HOME, { key: 'below', name: below }, WORLD]
