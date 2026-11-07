@@ -190,7 +190,7 @@ without a database. Copy goes in the `chapters` namespace 5.7 creates.
   land. 5.7's list of guarded transitions leaves it out only because it
   ships disabled.
 - A refused preview toasts and opens nothing, as `openRollback` does at
-  `app/reader-composer/[branchId].tsx:1210-1213`.
+  `app/reader-composer/[branchId].tsx:1209-1212`.
 - A refusal toasts and closes the confirm, since what it showed has moved:
   `not-latest` reads `This is no longer the latest chapter.`, and the
   others a failure. A success toasts nothing: the card goes, and 5.7's
