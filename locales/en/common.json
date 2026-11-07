@@ -144,8 +144,7 @@
       "openWorld": "Open World",
       "openPlot": "Open Plot",
       "openChapterTimeline": "Open Chapter Timeline",
-      "openStorySettings": "Open Story Settings",
-      "chapterTimelineLandsLater": "Chapter Timeline lands in a later milestone"
+      "openStorySettings": "Open Story Settings"
     },
     "generationStatusPill": {
       "phase": {

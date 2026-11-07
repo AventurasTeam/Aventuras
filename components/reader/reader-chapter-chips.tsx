@@ -32,6 +32,8 @@ export type ReaderChapterChipsProps = {
   progress: ChapterProgress
   isFocused: boolean
   onJumpToEntry: (entryId: string) => void
+  /** The popover's `Manage chapters →`. */
+  onManageChapters: () => void
   /** The popover opening or closing, for the other trigger the host gives it (the progress strip). */
   onOpenChange?: (open: boolean) => void
   ref?: Ref<ReaderChapterChipsHandle>
@@ -44,6 +46,7 @@ export function ReaderChapterChips({
   progress,
   isFocused,
   onJumpToEntry,
+  onManageChapters,
   onOpenChange,
   ref,
 }: ReaderChapterChipsProps): ReactElement {
@@ -95,6 +98,7 @@ export function ReaderChapterChips({
         progress={progress}
         onOpenChange={handleOpenChange}
         onJumpToChapter={onJumpToEntry}
+        onManageChapters={onManageChapters}
       />
       <TimeChip seconds={branchWorldTime(entries)} frame={frame} />
     </>

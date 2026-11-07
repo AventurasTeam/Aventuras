@@ -1585,6 +1585,7 @@ export default function ReaderComposerRoute() {
             progress={chapterProgress}
             isFocused={isFocused}
             onJumpToEntry={followEntry}
+            onManageChapters={() => surfaceNavigate(`/chapter-timeline/${branchId}`)}
             onOpenChange={setChapterPopoverOpen}
           />
         ) : undefined

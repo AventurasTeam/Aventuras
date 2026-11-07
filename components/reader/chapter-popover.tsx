@@ -69,8 +69,7 @@ export type ChapterPopoverProps = {
   onJumpToChapter: (startEntryId: string) => void
   /** Absent: disabled with a reason. */
   onCloseChapter?: () => void
-  /** Absent: disabled with a reason. */
-  onManageChapters?: () => void
+  onManageChapters: () => void
   ref?: Ref<ChapterPopoverHandle>
 }
 
@@ -391,7 +390,6 @@ function OverlayBody({
         />
         <OverlayAction
           label={t('chapters:popover.manage')}
-          reason={t('chrome.goTo.chapterTimelineLandsLater')}
           variant="ghost"
           onPress={onManageChapters}
           close={close}
@@ -452,7 +450,8 @@ function OverlayAction({
   close,
 }: {
   label: string
-  reason: string
+  /** Why it's disabled; an action that is always live has none. */
+  reason?: string
   variant: 'primary' | 'ghost'
   onPress: (() => void) | undefined
   close: () => void
@@ -471,7 +470,7 @@ function OverlayAction({
       >
         <Text>{label}</Text>
       </Button>
-      {onPress == null && Platform.OS !== 'web' ? (
+      {onPress == null && reason != null && Platform.OS !== 'web' ? (
         <Text size="xs" variant="muted">
           {reason}
         </Text>
