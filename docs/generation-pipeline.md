@@ -528,7 +528,7 @@ map of `RunState`s is enough.
 
 ```ts
 // src/ai/pipeline/orchestrator.ts
-export async function runPipeline(kind: string): Promise<TxResult> // resolves once the whole chain has ended
+export async function runPipeline(kind: string): Promise<TxResult | RejectedStart> // resolves once the whole chain has ended
 export function startPipeline(kind: string): {
   origin: Promise<TxResult | RejectedStart>
   chain: Promise<ChainEnd | null>
