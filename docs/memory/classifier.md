@@ -873,11 +873,12 @@ resets it, which boot skips while the branch still holds the pass's
 own unreversed orphans
 ([`generation-pipeline.md → chainsTo on predecessor`](../generation-pipeline.md#chainsto-on-predecessor)).
 The pass runs while the user reads the reply. A pass's own `chainsTo`
-returns another pass while a chapter close is pending and entries
+returns another pass while a chapter close is owed and entries
 remain unprocessed, then the close
 ([`chapter-close.md → Phase 0`](./chapter-close.md#phase-0--catch-up-passes)).
-`[Run classifier now]` starts one directly, and Send runs one first when
-a pass is owed ([Failure policy](#failure-policy)).
+`[Run classifier now]` starts one directly, as a failure entry's
+`Retry` does, and a pass started either way chains nothing. Send runs
+one first when a pass is owed ([Failure policy](#failure-policy)).
 
 **Interrupted, then deferred.** A head reversal — regenerate, swipe, an
 edit of the head turn, CTRL-Z of the turn, rollback — and the pill's
@@ -990,9 +991,12 @@ work does ([Pipeline framing](#pipeline-framing)): its own run,
 committing before the turn's first write. A pass is owed when one is
 deferred for the branch or the cadence is due. The cadence is read from
 the persisted watermark, so a failure, an interrupt, a crash and a
-restart all end the same way. One pass is owed per Send: a settings
-change (a lowered cadence or window max) can leave a backlog that drains
-over the next Sends, so a turn may run while a pass is still due. If the
+restart all end the same way. One pass is owed per Send, unless a close is
+owed, when Send's chain runs a catch-up pass per window before the
+close ([`chapter-close.md → Phase 0`](./chapter-close.md#phase-0--catch-up-passes)):
+a settings change (a lowered cadence or window max) can leave a backlog
+that drains over the next Sends, so a turn may run while a pass is
+still due. If the
 owed pass fails, the Send fails:
 no user_action is written, the text goes back to an empty composer
 (else onto the entry), and the reader shows the failure as a system entry with its cause

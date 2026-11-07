@@ -270,7 +270,8 @@ leaves nothing stale.
   rules and `held: false`: the text goes back to an empty composer, else
   onto the entry.
 - **Retry on a `close: 'failed'` entry** holds the dispatch until the
-  chain ends. With no close owed any more it settles as a commit.
+  chain ends. A held branch refuses first, as a Send does, so it never
+  settles as nothing owed. With no close owed any more it settles as a commit.
   Otherwise it starts a pass or the close, as the manual start does, and
   it isn't alone. A commit clears the entry as a pass's Retry does, its
   notice `closeResolvedEntry` with `close: 'resolved'` and no Retry. A
@@ -297,7 +298,7 @@ leaves nothing stale.
   `PendingClose`'s type, and Config pre-flight validation's Surfacing
   line, which with `chapter-close.md → Tool calling` raises a close's
   entry when it fails a Send or a click; C14's record line in
-  `milestone.md`; a **Chapter closed** on-Retry row in
+  `milestone.md`; a **Nothing left to close** on-Retry row in
   `reader-composer.md`, whose five broken-reference rows gain `Retry`
   after their fix; and `principles.md`'s exceptions to head reversals
   passing through, which name only a Retry's pass though the mark at
@@ -307,7 +308,7 @@ leaves nothing stale.
 - `useConfigFixAction`'s comment: a config failure routes to settings
   and keeps Retry beside the fix.
 - A `parked.md` entry under
-  [UX (parked)](../../../../parked.md#ux-parked): the deferral toast can
+  [UX (parked)](../../../../parked.md#the-deferral-toast-can-promise-a-close-that-never-runs): the deferral toast can
   promise a close that never runs, once the interrupting reversal
   removes a manual end entry or drops the region below the threshold.
 
@@ -534,7 +535,7 @@ answer in this slice's PR.
   one-tick tail, with the `settleCount` guard.
 - **Do the toasts promise too much?**
   **Resolved (2026-11-07):** canon's copy ships. The gap is parked under
-  [`parked.md → UX (parked)`](../../../../parked.md#ux-parked) until a
+  [`parked.md → The deferral toast can promise a close that never runs`](../../../../parked.md#the-deferral-toast-can-promise-a-close-that-never-runs) until a
   tester expects that close.
 - **Should an undone close come back?**
   **Resolved (2026-11-07):** yes, at the next Send, pinned in

@@ -468,19 +468,19 @@ Provider of the store field and the label:
 A `close_task_start { task, part, index, total }` event joins
 `PhaseEmittedEvent` (`lib/pipeline/types.ts:65-68`) in whichever lands
 first, and `handleEvent`
-forwards it unchanged (`orchestrator.ts:221`). It fires as each task
+forwards it unchanged. It fires as each task
 starts, since a completion event leaves the banner blank through
 Happenings and names a finished task where the label names a running
 one. `N of M` counts agent tasks only. `total` is `2 + 5 × parts`:
 Happenings, five prose tasks per part, and Awareness, so a one-part
 chapter is `of 7`. It's fixed when the agent phase starts, and a task
 with nothing to start from still counts. A bus event isn't replayed, so
-the latest progress lives on `RunState`
-(`lib/stores/generation/generation.ts:7-31`), where a banner mounted
+the latest progress lives on `RunState.closeProgress`
+(`lib/stores/generation/generation.ts`), where a banner mounted
 mid-close reads it. Emitted events carry no `runId`, and the store holds
-a copy of the run, so `handleEvent` (`orchestrator.ts:207-221`) calls a
-new `generationStore` mutator by `run.runId`, added to the restricted
-list in `eslint.config.js:82-97`. 5.6 owns the mutator and the call.
+a copy of the run, so `handleEvent` calls a new `generationStore`
+mutator by `run.runId`, `setCloseProgress`, added to the restricted
+list in `eslint.config.js`. 5.6 owns the mutator and the call.
 
 Labels: `Closing chapter: 3 of 7 — Identity…`. Boundary and metadata each
 have their own label and no count, as does the `agent` phase until its
@@ -723,7 +723,10 @@ Provider: [Slice 5.2](./slices/02-first-chapter.md). Consumers: 5.6, 5.10.
 `TxState` gains `pendingClose` as
 [`generation-pipeline.md → Multi-run txState`](../../../generation-pipeline.md#multi-run-txstate)
 specs it, and `startManualClose(branchId, endEntryId)` in
-`lib/actions/chapters/` writes it and starts the run. Until 5.6 it refuses
+`lib/actions/chapters/` writes it and starts the run. The record holds a
+pick only, `{ endEntryId: string }`: a close the threshold owes keeps
+none, since `closeOwed` derives it each time, and no record means
+boundary selection. Until 5.6 it refuses
 unprocessed entries, a held branch, a pending swap and a busy story, so
 it starts a close only where a close can run at once. 5.6 replaces the
 unprocessed refusal with phase 0 and settles the record's lifecycle, and

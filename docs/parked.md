@@ -1974,6 +1974,21 @@ Parked at M5's promotion, 2026-11-01.
 
 ### UX (parked)
 
+#### The deferral toast can promise a close that never runs
+
+An interrupt's toast, `Chapter close moved to your next turn.`, fires
+as the close aborts, before the interrupting reversal's sweep. When
+that reversal removes a manual close's end entry, the sweep drops the
+pick; when it takes the open region back under the threshold, as CTRL-Z
+of the turn that crossed it does, the next Send finds no close owed and
+clears the record. Either way no close runs, though the toast said one
+would
+([`generation-pipeline.md → Prose reversals and the interrupt`](./generation-pipeline.md#prose-reversals-and-the-interrupt)).
+The copy ships as canon has it. The options are a follow-up toast when
+the record drops, or holding the deferral toast until the reversal's
+bracket ends. Raised 2026-11-07 by Slice 5.6's planning. Parked
+2026-11-07; the signal is a tester expecting that close.
+
 #### A route mounted during a read starts the strip at 0
 
 `useChapterProgress` holds its last read per hook, so World, Plot or

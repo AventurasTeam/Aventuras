@@ -127,7 +127,7 @@ type PipelineEvent =
       runId: string
       kind: string
       actionId: string
-      beforeTurn: boolean // Send's work before the turn (RunState.beforeTurn); false for a chained successor
+      beforeTurn: boolean // Send's work before the turn (RunState.beforeTurn), its chained successors included
       outcome: 'completed' | 'aborted' | 'failed'
       error?: PipelineError
     }
@@ -520,14 +520,20 @@ phase.** If it's bookkeeping, keep it in the body.
 
 One orchestrator module. No instance state of its own; all run
 state lives in `useGenerationStore.txState`. The orchestrator is a
-stateless dispatcher operating on the store. JS event loop
+stateless dispatcher operating on the store; its one module-level
+`WeakMap` only carries the error `unwindRun` reported for a run to
+that run's chain end. JS event loop
 naturally interleaves concurrent async runs; one module managing a
 map of `RunState`s is enough.
 
 ```ts
 // src/ai/pipeline/orchestrator.ts
 export async function runPipeline(kind: string): Promise<TxResult> // resolves once the whole chain has ended
-export function startPipeline(kind: string): { origin: Promise<TxResult>; chain: Promise<void> }
+export function startPipeline(kind: string): {
+  origin: Promise<TxResult>
+  chain: Promise<ChainEnd | null>
+}
+export type ChainEnd = { kind: string; result: TxResult; cancelled: boolean } // the chain's last run; see Chained transition
 export const pipelineEventBus: PipelineEventBus
 ```
 
@@ -538,8 +544,8 @@ type TxState = {
   runs: ReadonlyMap<string /* runId */, RunState>
   reversalInProgress: boolean // set across a prose reversal's wait→sweep; gates memory-run starts + user edits + user-originated delta dispatch
   pendingTurns: ReadonlySet<PendingTurn> // turns admitted in their branch queue whose run isn't registered yet; see Gate derivation as a selector
-  deferred: ReadonlyMap<string /* branchId */, { pass?: true; close?: true }> // interrupted runs, run before that branch's next turn; in memory only; the orchestrator writes it
-  pendingClose: ReadonlyMap<string /* branchId */, { endEntryId: string | null }> // a close owed once phase 0's passes catch up; null end = boundary selection
+  deferred: ReadonlyMap<string /* branchId */, { pass?: true; close?: true }> // interrupted runs, run before that branch's next turn; in memory only; the orchestrator records it, and Send clears a close no longer owed
+  pendingClose: ReadonlyMap<string /* branchId */, { endEntryId: string }> // a manual close's pick, owed once phase 0's passes catch up; a close the threshold owes keeps none
 }
 
 type PendingTurn = { readonly branchId: string } // identity is the token, so a stale end can't free another turn's mark
@@ -551,9 +557,10 @@ type RunState = {
   storyId: string | null // read by chainsTo + config resolution
   branchId: string
   interruptible: 'pass' | 'close' | null // copied from the pipeline at reserve; a head reversal or Cancel ends the run and defers it in this slot
-  beforeTurn: boolean // started by Send to run its owed pass before the turn
+  beforeTurn: boolean // Send's owed work before the turn: the run Send started and every run it chains
   abortController: AbortController
   currentPhase: string // name of declared phase or parallel group
+  closeProgress?: { task: CloseTask; part: number; index: number; total: number } // a close's latest close_task_start, which a banner mounted mid-close reads
   intermediates: Record<string, unknown> // phase outputs threaded through the run
   lastResult?: { status: 'completed' | 'aborted' | 'failed' }
   terminal: Promise<void> // resolves at commit/abort; awaited by chainsTo / the interrupt
@@ -561,15 +568,31 @@ type RunState = {
 }
 ```
 
-Only the orchestrator writes `deferred`, through the generation store
-and in the same update that removes the run: an `interruptible` run
-that ends `aborted` records, for its branch, the slot its declaration
-names (the pass declares `pass`, the close `close`), and only a commit
-of a run declaring that slot clears it. So every way a pass or a close
-is cancelled — the interrupt, the pill's or the banner's Cancel,
-Cancel & leave — defers it, and a failed one stays owed: Send runs it
-first again. A newly recorded deferral emits `run_deferred` on the bus
-naming the slot it recorded, which raises that slot's toast.
+The orchestrator records `deferred` through the generation store, in
+the same update that removes the run: an `interruptible` run that ends
+`aborted` records, for its branch, the slot its declaration names (the
+pass declares `pass`, the close `close`), and a commit of a run
+declaring that slot clears it. A failure leaves the record as it
+stands. So every way a pass or a close is cancelled — the interrupt,
+the pill's or the banner's Cancel, Cancel & leave — defers it, and a
+failed one stays owed: Send runs it first again. Two other writers
+only clear: Send clears its branch's `close` slot when `closeOwed`
+reads false, as after a rollback below the threshold
+([chainsTo on predecessor](#chainsto-on-predecessor)), and deleting a
+story drops both records for each of its branches. A newly recorded
+deferral emits `run_deferred` on the bus naming the slot it recorded,
+which raises that slot's toast.
+
+`pendingClose` holds a manual close's pick and nothing else: a close
+the threshold owes is derived fresh by `closeOwed` each time, so a
+rollback below the threshold leaves nothing stale, and no record means
+boundary selection. The manual start writes the pick as its run
+reserves, so a refused start leaves the pick before it standing, and a
+second pick overwrites the first. A close's commit clears it; a
+cancelled or failed close leaves it owed. `boundary` drops a pick whose
+entry is no longer an open-region reply, failing the close, and a
+reversal that removes the entry drops it once its sweep has ended. A
+restart drops everything.
 
 ### Gate derivation as a selector
 
@@ -661,13 +684,16 @@ order (retrieval before narrative before classifier — avoids
 piling up multiple system entries when the user has multiple
 broken references).
 
-**Surfacing.** Pre-flight failure on **turn-blocking pipelines**
-(per-turn, chapter-close) emits a system-kind entry
-into the affected story per
+**Surfacing.** Pre-flight failure on **the per-turn pipeline** emits a
+system-kind entry into the affected story per
 [`reader-composer.md → Error surface`](./ui/screens/reader-composer/reader-composer.md#error-surface--system-entries-vs-persistent-state-pill).
-Pre-flight failure on **the periodic classifier** is a failed pass:
-a toast, and the system entry when it fails a Send
-([`memory/classifier.md → Failure policy`](./memory/classifier.md#failure-policy)).
+Pre-flight failure on **the periodic classifier** or **a chapter
+close** is a failed run like any other: a toast, and the system entry
+when it fails a Send
+([`memory/classifier.md → Failure policy`](./memory/classifier.md#failure-policy)),
+or, for a close, the manual close's click, which pre-flights before it
+starts anything
+([`memory/chapter-close.md → Manual user-triggered close`](./memory/chapter-close.md#manual-user-triggered-close)).
 
 **Runtime resolver failure is the safety net.** A race between
 pre-flight pass and the actual LLM call (config changed mid-turn)
@@ -712,6 +738,9 @@ async function consumePhase(gen: AsyncGenerator<PhaseEmittedEvent, PhaseResult>,
 - `delta_group_emitted` → the same dispatch through
   `applyDeltaActionGroup`, its per-action outcome returned to the phase.
 - `stream_chunk` → side-channel append action.
+- `close_task_start` → the run's `closeProgress` in the generation
+  store: a bus event isn't replayed, and a banner mounted mid-close
+  reads the store.
 - everything else → no internal handling.
 
 Then forwards every event to the bus (see [Event fan-out](#event-fan-out)).
@@ -1052,8 +1081,8 @@ in-progress (currentPhase iterates)
                                                       │    pipeline.onInterrupt(ctx) — a pass
                                                       │    restores its pre-run status here
                                                       │  remove run from txState; an interruptible pass
-                                                      │    or close records ('aborted') or clears
-                                                      │    ('failed') its deferral in the same update
+                                                      │    or close records its deferral ('aborted') in
+                                                      │    the same update; a failure leaves it as it is
                                                       │  emit run_complete (outcome: 'aborted' | 'failed')
                                                       │  emit run_deferred (work: the slot) if the
                                                       │    deferral is newly recorded
@@ -1300,20 +1329,18 @@ async function nextMemoryRun(
   run: RunState,
   ctx,
 ): Promise<'periodic-classifier' | 'chapter-close' | null> {
-  if (deferred.has(run.branchId)) return null // interrupted work waits for the next Send
   const story = openStory(run) // the run's story, while it is open on the run's branch
   if (!story) return null
   const status = await readClassifierStatus(run.branchId, ctx)
+  // a persisted 'running' (a pass left unfinished) waits for boot, and nothing builds on its writes
+  if (status.state === 'running') return null
   const unprocessed = await unprocessedEntryCount(run.branchId, status.processedThrough, ctx)
-  // a persisted 'running' (a pass left unfinished) waits for boot
-  const held = status.state === 'running'
-  const passable = unprocessed > 0 && !held
   if (await closeOwed(run.branchId, story, ctx))
-    return passable ? 'periodic-classifier' : 'chapter-close'
-  return passable && unprocessed >= story.settings.classifierCadence ? 'periodic-classifier' : null
+    return unprocessed > 0 ? 'periodic-classifier' : 'chapter-close'
+  return unprocessed >= Math.max(1, story.settings.classifierCadence) ? 'periodic-classifier' : null
 }
 
-// A close the user asked for, or the open region past the threshold with
+// A close the user picked, or the open region past the threshold with
 // auto-close on and a reply to end the chapter on.
 const closeOwed = async (branchId: string, story: Story, ctx): Promise<boolean> => {
   if (pendingClose.has(branchId)) return true
@@ -1323,20 +1350,27 @@ const closeOwed = async (branchId: string, story: Story, ctx): Promise<boolean> 
   return openRegionTokens >= story.settings.chapterTokenThreshold && region.some(canEndChapter)
 }
 
+// Interrupted work waits for the next Send, so a regenerated reply doesn't
+// bring it straight back. Only a turn checks: phase 0's passes run on under a record.
+const perTurnChainsTo = (run: RunState, ctx) =>
+  deferred.has(run.branchId) ? null : nextMemoryRun(run, ctx)
+
 const perTurnPipeline: Pipeline = {
   kind: 'per-turn',
   phases: [...],
   gateBehavior: 'hard-gate',
   affordance: 'pill-and-banner',
   concurrencyPolicy: { blockedBy: ['per-turn', 'periodic-classifier', 'chapter-close'] },
-  chainsTo: nextMemoryRun,
+  chainsTo: perTurnChainsTo,
 }
 
 const periodicClassifierPipeline: Pipeline = {
   kind: 'periodic-classifier',
   // ...
-  // Passes chain one another only to catch up for a close (phase 0).
+  // Passes chain one another only to catch up for a close (phase 0). A pass
+  // started alone (a failure entry's Retry, Run now) chains nothing.
   chainsTo: async (run, ctx) => {
+    if (passStartedAlone(run)) return null // inputs: { alone: true }
     const story = openStory(run)
     return story && (await closeOwed(run.branchId, story, ctx)) ? nextMemoryRun(run, ctx) : null
   },
@@ -1360,11 +1394,13 @@ unprocessed, and a pass first when a close is owed and something is
 is surfaced as a manual affordance instead), and neither does a region
 with no reply: a chapter ends only on an `ai_reply`, so an opening alone
 over a low threshold would otherwise fail every Send, and no turn could
-land to supply one. A manual close records
+land to supply one. A held branch chains nothing: a close must not
+build on a held pass's unreversed writes. A manual close records
 `pendingClose` with the user's end entry and starts the same way: a
 pass first when entries are unprocessed, the close otherwise. The
 record is in memory: a restart drops it, and so does a reversal that
-removes that entry.
+removes that entry. A pass started alone, by a failure entry's `Retry`
+or Run now, chains nothing and leaves an owed close to the next Send.
 
 Every chained run generates its **own fresh `actionId`**; the
 orchestrator never carries the predecessor's into the successor. A
@@ -1375,26 +1411,36 @@ close, its second the turn. No intermediates inherit.
 **Work deferred to the next Send.** A pass or a close a head reversal
 interrupted is recorded in `txState.deferred` for its branch
 ([Prose reversals and the interrupt](#prose-reversals-and-the-interrupt)).
-Until then no commit chains memory work on that branch, so a
-regenerated reply doesn't bring the interrupted pass straight back.
-The next Send on that branch runs it before the turn: submit, inside
-the branch queue, starts the deferred pass through `runPipeline` and
-awaits its terminal, then the deferred close (which chains its own
-catch-up passes as above), then writes the user_action and starts the
-turn. Each is its own run with its own `actionId`, committing before
-the turn's first write. Cancel during them cancels the whole Send; the
-work stays deferred and the composer keeps the user's text. A deferred
-run that fails there fails the Send: the turn doesn't start, the text
-goes back to an empty composer (else onto the entry), and the reader
-shows the failure
-([`memory/classifier.md → Failure policy`](./memory/classifier.md#failure-policy)). A pass or a close that commits
-some other way, Run now or a manual close, clears its record. Send also runs a pass first
-when none is deferred but the cadence is due, as a failed chained pass
-leaves it, and a close first when `closeOwed` reads true, as a failed
-close leaves it. A close record clears at Send when no close is owed
-any more, as after a rollback below the threshold. The record is in
-memory only: after a restart, those checks find the interrupted pass
-and the owed close.
+Until then a turn's commit chains no memory work on that branch, so a
+regenerated reply doesn't bring the interrupted pass straight back; a
+pass's own `chainsTo` doesn't read the record, so phase 0's passes run
+on under it. The next Send on that branch runs the owed work before
+the turn as one chain: submit, inside the branch queue, starts a pass
+when one is deferred, a close is owed with entries unprocessed, or the
+cadence is due, and otherwise the close when one is owed, through
+`startPipeline`, and awaits the chain's end. The pass chains the close
+behind it while one is owed, so a Send runs at most one close before
+its turn. Then submit writes the user_action and starts the turn. Each
+run has its own `actionId` and commits before the turn's first write,
+and every run of the chain is Send's (`beforeTurn`), so the composer's
+Cancel, the pill and the banner treat it as the Send's. Cancel during
+any of them cancels the whole Send, the turn included, even when it
+lands after a run's last phase and the run commits; work it
+interrupted stays deferred, and the composer keeps the user's text,
+unless owed work had already committed, when the text goes back into
+an empty composer
+([`reader-composer.md → Custody of the turn's text`](./ui/screens/reader-composer/reader-composer.md#custody-of-the-turns-text)).
+A run of that chain that fails fails the Send: the turn doesn't start,
+the text goes back to an empty composer (else onto the entry), and the
+reader shows the failure as the pass's or the close's, by the run that
+ended the chain
+([`memory/classifier.md → Failure policy`](./memory/classifier.md#failure-policy)).
+A pass or a close that commits some other way, Run now or a manual
+close, clears its record. Send reads `closeOwed` fresh, so it runs a
+close a failed close left owed, and clears a close record when no
+close is owed any more, as after a rollback below the threshold. The
+record is in memory only: after a restart, those checks find the
+interrupted pass and the owed close.
 
 ### Chained transition — "no user-edit window"
 
@@ -1435,11 +1481,19 @@ observed on the event bus, not the return value.
 
 `startPipeline` splits the two: its `origin` settles with the
 starting run's result at that run's commit or abort, its `chain` when
-the chain's last run ends. Submit and regenerate await only `origin`,
-so they release the branch queue at the turn's commit while a
-chained pass runs on, and a head reversal reaches the pass to
-interrupt it rather than queueing behind it. A successor whose marker
-insert fails is unwound, and the chain ends there. So is any run whose
+the chain's last run ends, with that run's end: its kind, its result,
+and `cancelled`, whether its abort had fired by its end. The end is the
+origin's own when nothing chained, and null only when the origin never
+ran, refused or thrown; `chain` never rejects. `cancelled` lets a
+reader honour a Cancel that landed after a run's last phase, which the
+run commits over and chains nothing behind. A turn's start awaits only
+`origin`, so submit and regenerate release the branch queue at the
+turn's commit while a chained pass runs on, and a head reversal reaches
+the pass to interrupt it rather than queueing behind it. Send's owed
+work, the manual close and a close entry's `Retry` read `chain`
+instead, since the work they wait on may end on a successor. A
+successor whose marker insert fails is unwound, and the chain ends
+there, its end failed with an `orchestrator` error. So is any run whose
 drive throws before it ends, which would otherwise hold the gate until
 a restart; an origin's `origin` still rejects with the throw.
 
