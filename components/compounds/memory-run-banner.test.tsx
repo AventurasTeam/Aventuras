@@ -127,7 +127,7 @@ describe('useMemoryRunBanner', () => {
     await vi.waitFor(() => expect(closing.abortController.signal.aborted).toBe(true))
   })
 
-  // A start-only event can't show the reset, so the last task's label stands until report.
+  // C6: a start-only event can't show the reset, so the last task's label stands until report.
   it("keeps the last task's label through the agent phase until report", () => {
     openStory()
     const closing = close({ currentPhase: 'agent' })

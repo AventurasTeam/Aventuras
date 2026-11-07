@@ -23,7 +23,7 @@ const CLOSE_TASK_COPY = {
 } as const satisfies Record<CloseTask, string>
 
 /**
- * A close's banner label. Before a turn it says so in any phase; else it names the phase, and in
+ * C6: a close's banner label. Before a turn it says so in any phase; else it names the phase, and in
  * `agent` the task last started, which `closeProgress` keeps until `report`.
  */
 export function closeBannerLabel(
