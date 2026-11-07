@@ -121,9 +121,11 @@ lane they do nothing and stay armed; `http`, `hang` and the overflow kinds still
 fire there.
 
 **A tool lane reads them differently.** `malformed` and `stream-cut` cut
-the first call's `arguments` in half, by characters, so the app reads an
-invalid call and hands it back to the task, retrying nothing; a step with
-no calls goes out as it is and the failure is spent. `length` keeps the
+the first call's `arguments` in half, by characters (`{` when the half
+would be blank, which the SDK reads as `{}`), so the app reads an invalid
+call and hands it back to the task, retrying nothing; a step with no
+calls goes out as it is, the failure is spent, and the log reads `ok`
+with a note that there was no call to cut. `length` keeps the
 calls whole and ends with `finish_reason: 'length'`: the app drops the
 reply and sends the step once more, so a budget of 1 there is swallowed
 too, and 2 stops the task as cut off. A `length` reply doesn't move a
@@ -198,8 +200,9 @@ response** — the raw text is split back into prose, `<state>` and
 `<suggestions>` using the app's own parsers and stored as a canned response.
 Record once against a real model, replay forever.
 
-A reply on a tool lane is saved as a step instead: its text, reasoning,
-calls and finish reason. Each call's `arguments` is parsed as JSON, or
+A reply on a tool lane is saved as a step instead: its text, reasoning
+(`reasoning_content`, else `reasoning`, kept only when non-empty, as the
+app's provider reads it), calls and finish reason. Each call's `arguments` is parsed as JSON, or
 kept as sent when it doesn't parse or parses to a string. A recorded call
 replays with the same meaning, not byte for byte, since parsed arguments
 go back out through `JSON.stringify`; a malformed one replays as sent. A
