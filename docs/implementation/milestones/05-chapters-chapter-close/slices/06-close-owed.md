@@ -100,7 +100,7 @@ canon leaves open.
   every pass start pass `inputs`.
 
 A chain can't spin. A pass over a non-empty window always advances the
-watermark (`periodic-classifier.ts:404`), and `unprocessedEntryCount`
+watermark (`advanceWatermark` in `periodic-classifier.ts`), and `unprocessedEntryCount`
 counts only rows a window holds, so no progress guard is needed.
 
 **The end entry.**
@@ -173,7 +173,7 @@ leaves nothing stale.
   `onReserved`.
 - The tail calls `startPipeline` directly, after ensuring registration,
   never `runClassifierPass`. That starter awaits `isClassifierHeld`
-  inside the tick (`classifier-pass.ts:19-21`), so a queued Send could
+  inside the tick (`classifier-pass.ts:21`), so a queued Send could
   read the record and start its pass, and this start's rejection would
   then remove the record under Send's chain and lose the pick.
 - A second pick overwrites the first. A rejected start writes nothing,
@@ -205,7 +205,7 @@ leaves nothing stale.
   spares about 85 call sites. `submitTurn`, `startManualClose` and a
   close entry's Retry call `startPipeline` and read `.chain` beside
   `origin`, which still carries a refusal and rejects on a throw.
-- `orchestrator.ts:329` stops clearing `beforeTurn`, so a successor under
+- `commitRun` in `orchestrator.ts` stops clearing `beforeTurn`, so a successor under
   Send is Send's: `findSendRun`, the composer's Cancel, the pill, the
   banner and `run_complete` all read it so.
 - `SubmitTurnResult`'s owed arms carry `work: DeferredWorkKind`, from the
@@ -213,14 +213,14 @@ leaves nothing stale.
   chain, not only its origin. A Cancel landing after a run's last phase
   still ends the Send: the orchestrator commits that run, and Send reads
   a `completed` end with `cancelled` as aborted. `passRefusalOf` and the
-  route's arms at `app/reader-composer/[branchId].tsx:749-763` read
+  route's arms in `app/reader-composer/[branchId].tsx` read
   `work`.
 
 **Interrupt and undo.**
 
-- `undoLastAction`'s pre-check at `undo.ts:66` reads its target past the
+- `undoLastAction`'s pre-check in `undo.ts` reads its target past the
   running close's rows, by the `actionId` of `selectMemoryRun`. The
-  re-read at `:92-95` needs no change: the close has reversed by then,
+  re-read in `undoBracketed` needs no change: the close has reversed by then,
   and a close whose reversal failed is still the head and refuses.
 - One test pins the second interrupt order. No code changes: the race
   note is stale, since the abort and the swap each land in one tick.
@@ -230,7 +230,7 @@ leaves nothing stale.
 - `RunState.closeProgress`, `{ task, part, index, total }`, set by a new
   `generationStore.setCloseProgress(runId, progress)`, which `handleEvent`
   calls by `run.runId` before forwarding `close_task_start`. It joins the
-  restricted list at `eslint.config.js:82-97` and
+  restricted list in `eslint.config.js` (`CLOSE_PROGRESS_MUTATORS`) and
   `lib/stores/__tests__/generation-mutators-lint.test.ts`. The event joins
   `PhaseEmittedEvent` here if this slice lands before 5.5a.
 - `useMemoryRunBanner` returns a banner for a close, from the run's
@@ -251,9 +251,9 @@ leaves nothing stale.
   name for each of the seven tasks. Phase 0's passes keep the pass's
   labels, `Updating memory before your turn…` under Send.
 - `phaseCopy` gains the before-turn arm at
-  `generation-status-pill.tsx:66-69`, reading
+  `generation-status-pill.tsx:66-73`, reading
   `closing chapter before your turn…`.
-- The test at `memory-run-banner.test.tsx:94-101` flips.
+- The test at `memory-run-banner.test.tsx:112-123` flips.
 
 **Failure.**
 
@@ -302,7 +302,7 @@ leaves nothing stale.
   `reader-composer.md`, whose five broken-reference rows gain `Retry`
   after their fix; and `principles.md`'s exceptions to head reversals
   passing through, which name only a Retry's pass though the mark at
-  `generation.ts:62` also refuses them during a Send's owed work,
+  `isHeadReversalBlocked` in `generation.ts` also refuses them during a Send's owed work,
   minutes long for a close. `generation-status-pill.md` already says a
   toast, and stays.
 - `useConfigFixAction`'s comment: a config failure routes to settings
@@ -423,7 +423,7 @@ named.
 - `components/reader/send-run.test.ts`: `findSendRun` finds a successor
   under Send, and `cancelComposerRun` cancels it on the first press.
 - `lib/pipeline/__tests__/chained-and-parallel.test.ts`: the three tests
-  at `:246`, `:311` and `:334` flip. A chain that commits resolves to its
+  at `:256`, `:321` and `:346` flip. A chain that commits resolves to its
   last run, an origin alone to the origin, a refused origin to null, an
   unwound successor to a failed end, and a run committed after its abort
   fired reports `cancelled`. `runPipeline` still returns the origin's

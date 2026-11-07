@@ -3719,7 +3719,7 @@ those sites, since a sweep of about 90 files nears the review cap.
 
 #### The mock LLM's token count has no run guard
 
-`scripts/mock-llm/respond/wire.ts:48-52` keeps its own `countO200k`,
+`scripts/mock-llm/respond/wire.ts:49-53` keeps its own `countO200k`,
 though its comment says it mirrors `countTokens`. On a fixture with a
 run over 512 code points the two differ by a few tokens per cut, and the
 mock pays the quadratic cost. No `e2e/` or mock fixture repeats 100

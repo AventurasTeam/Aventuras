@@ -117,7 +117,7 @@ and the catalog bullet below drops out.
   over that call's candidates, so the rendered block stays static and the
   mock's block match holds. On zod 4.4.3, `z.toJSONSchema` gave identical
   output for both and the parse enforced the refinement (run 2026-11-01).
-  The comment at `lib/ai/generate.ts:436` naming refinements as a throw
+  The comment at `lib/ai/generate.ts:445` naming refinements as a throw
   goes.
 - Candidates reach the model as turn handles, `t1…tN` in position order, the
   spelling `lib/classifier/window.ts:57` and
@@ -177,7 +177,7 @@ and the catalog bullet below drops out.
   `normalizeModelCatalog` layers it under the stored capability, so a stored
   value wins, as every user-overridable flag does (`lib/ai/catalog.ts:53-57`).
 - `ResolverInput` gains `requires?: 'toolCalling'`
-  (`lib/pipeline/types.ts:129-132`), and the `agent` phase's `lore-mgmt`
+  (`ResolverInput` in `lib/pipeline/types.ts`), and the `agent` phase's `lore-mgmt`
   input sets it. C2's three `resolves` stay as pinned.
 - `runPreflight` passes such an input's resolved model through
   `resolveModelCapabilities` and returns a `config-resolver` failure,
@@ -289,7 +289,7 @@ and the catalog bullet below drops out.
   `ReaderSurfaceProps`: the rows with no `chapterId` passing `canEndChapter`,
   built in `components/reader/close-here-entries.ts` and memoized as
   `worldTimeDecorations` is. `ReaderRow` takes a flat boolean, which keeps its
-  memo compare holding (`components/reader/reader-surface.tsx:76-77`), and
+  memo compare holding (`ReaderRow` in `components/reader/reader-surface.tsx`), and
   passes the handler only when it's true. The rule stays with the host, across
   the `'use dom'` boundary (`components/reader/reader-document.tsx:1`), where
   every prop is plain data and every function async. The host's
