@@ -220,6 +220,24 @@ describe('closeBoundaryPhase with a pick', () => {
     expect(generationStore.getTxState().deferred.get('b1')).toEqual({ pass: true })
   })
 
+  it('checks the pick standing after its read, so a pick replaced during it is kept', async () => {
+    hydrateEntries(phaseDb, 'b1', FIRST_CHAPTER_OPEN)
+    generationStore.setPendingClose('b1', { endEntryId: 'e99' })
+    let replaced = false
+    const db = new Proxy(phaseDb.db, {
+      get(target, prop, receiver) {
+        if (prop === 'select' && !replaced) {
+          replaced = true
+          generationStore.setPendingClose('b1', { endEntryId: 'e5' })
+        }
+        return Reflect.get(target, prop, receiver)
+      },
+    })
+    await expectEndsOn(phaseCtx({ db }), { startEntryId: 'e1', endEntryId: 'e5' })
+    expect(replaced).toBe(true)
+    expect(pickOn('b1')).toEqual({ endEntryId: 'e5' })
+  })
+
   it("drops only its own branch's stale pick", async () => {
     hydrateEntries(phaseDb, 'b1', FIRST_CHAPTER_OPEN)
     generationStore.setPendingClose('b1', { endEntryId: 'e99' })
