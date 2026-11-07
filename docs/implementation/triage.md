@@ -201,16 +201,6 @@ slice-planning gate forces its resolution before that slice is planned.
   holds a keyword. Both texts are from memory, not a live server. Check
   them, and widen `CapabilityHint`'s `matched` if they hold. Surfaced by
   Slice 5.4's slice review.
-- **Duplication the tool step's simplifier pass left for a shared
-  home.** The expiry detail `` `${target}: timeout after ${boundMs}ms` ``
-  is written in `lib/ai/tool-step.ts` and `lib/pipeline/call-error.ts`,
-  and `lib/ai` can't import `lib/pipeline`; tests pin both strings. The
-  `lib/ai` tests repeat their fixtures: `okStep` in `tool-step.test.ts`,
-  `stub/stub-provider.test.ts` and `scripts/mock-llm/harness-tool-steps.test.ts`,
-  and `useProvider`, `MODELS` and `rejection` across `tool-step.test.ts`,
-  `window-check.test.ts` and `request-shape.test.ts`. The older
-  `narrativeValueSchema` in `scripts/mock-llm/validate.ts` is exported
-  with no importer. Surfaced by Slice 5.4's slice review.
 - **The gated field wiring exists in three copies.** The `Controller`
   plus `FormRow` plus input with the run gate (`editable={!blocked}`
   and a hint, or `disabled` and a reason) is written in World's

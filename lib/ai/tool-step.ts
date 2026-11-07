@@ -15,7 +15,7 @@ import { logger } from '@/lib/diagnostics'
 
 import type { ResolveTarget } from './agents'
 import { anthropicCacheMarkerMiddleware } from './cache-marker'
-import { callTimeoutMs } from './call-timeout'
+import { callTimeoutMs, providerTimeoutDetail } from './call-timeout'
 import type { ContextWindowFailure } from './context-window'
 import {
   carriedCapabilities,
@@ -279,7 +279,7 @@ export async function generateToolStep(
               error: {
                 tier: 'provider',
                 reason: 'timeout',
-                detail: `${target}: timeout after ${boundMs}ms`,
+                detail: providerTimeoutDetail(target, boundMs),
               },
               recoverable,
             }

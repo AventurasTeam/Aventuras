@@ -56,7 +56,7 @@ const stateBlockSchema = z.object({
   retrievalQueries: z.array(z.string()).optional(),
 })
 
-export const narrativeValueSchema = z.object({
+const narrativeValueSchema = z.object({
   prose: z.string(),
   state: stateBlockSchema.optional(),
   suggestions: z.array(suggestionRefSchema).optional(),
