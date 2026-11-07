@@ -299,10 +299,10 @@ convention, and the expectation that subsystems route through
   same cold mount on a branch with no story, which leaves for the story
   list), `row_save_failed` (`hooks/use-row-save-session.ts` — a Save
   whose validation or commit threw; the user sees only the generic
-  failure), `row_save_validate_failed` (the whole-draft `trigger()`
-  promise itself threw: the same hook's re-validation after a store
-  refresh of an invalid draft, or the lore session's first-edit
-  whole-draft check),
+  failure), `row_save_validate_failed` (the same hook's whole-draft
+  validation threw: the resolver it runs on every draft change, which
+  keeps Save disabled for an untouched invalid field, or its `trigger()`
+  re-validation after a store refresh of an invalid draft),
   `row_save_rejected_handler_failed` (an `onRejected` that threw),
   `row_save_leave_failed` (a queued leave that threw once released),
   `plot_saved_handler_failed` (`components/plot/use-plot-row-session.ts`

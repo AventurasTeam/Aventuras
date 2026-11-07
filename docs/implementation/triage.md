@@ -211,11 +211,6 @@ slice-planning gate forces its resolution before that slice is planned.
   shared compound, or a `Button` option, would end the copies; the
   latter changes native layout for every `disabledReason` caller, so it
   wants a design call. Surfaced by Slice 5.7's slice review.
-- **`observability.md` credits `row_save_validate_failed` to a check
-  that isn't there.** The bullet names "the lore session's first-edit
-  whole-draft check"; `use-lore-row-session.ts` runs no `trigger()`,
-  and the substrate's values-subscription catch, which does log it, is
-  unnamed. Surfaced by Slice 5.7's session-hook review.
 - **A Save whose only change is whitespace leaves the untrimmed draft
   as the clean form.** The chapter and lore drafts compare trimmed
   values (`chapterPatch` in `lib/chapters/chapter-draft.ts`, `lorePatch`
