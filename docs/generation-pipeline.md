@@ -1929,7 +1929,7 @@ type ReplyCutOffFailure = {
   outputTokens: number | null // as the provider reported; null when it reported none
   // 0 can mean unreported (OpenAI-compatible reports a missing count as 0); described as absent
   reasoningTokens: number | null // the part of outputTokens spent thinking, when reported
-  maxOutput: number | null // the max output the call sent; null when it sent none
+  maxOutput: number | null // the profile's, or a tool step's as sent; null when none (see the cause)
   window: number | null // the model's known window; null when unknown
   providerId: string
   modelId: string
@@ -2058,15 +2058,19 @@ call: there's no stream to end early, and a body that omits its
 `finish_reason` still arrives whole.
 
 **The cause** comes from what the call knows: `max-output` when the
-call sent a max output (the profile's `maxOutput`, or a tool step's
-default) and the output tokens reached it, or the provider reported
-none; `window` when the model's window is known and
-the prompt plus the output tokens reach it, reading the prompt from the
-provider's input count and from the estimate only when it reported
-none, since o200k can miss a server's own count by a quarter either
-way; `unknown`
-otherwise, on hosted servers usually their own default `max_tokens`,
-which a profile max output overrides. Output tokens include reasoning
+call sent a max output and the output tokens reached it, or the
+provider reported none. The figure it reads differs by path. A tool
+step reads back the `max_tokens` its request carried, where the
+adapter's body shows it (Anthropic's adds the thinking budget), else
+what it asked for, the profile's or its own default; only the log reads
+it. A structured or narrative call keeps the profile's `maxOutput`,
+since its copy names that figure, so with thinking on a cut at the
+window can read as `max-output`. Then `window` when the model's window
+is known and the prompt plus the output tokens reach it, reading the
+prompt from the provider's input count and from the estimate only when
+it reported none, since o200k can miss a server's own count by a
+quarter either way; `unknown` otherwise, on hosted servers usually
+their own default `max_tokens`, which a profile max output overrides. Output tokens include reasoning
 on both providers, so a model that spends its allowance thinking reads
 as `max-output`, with `reasoningTokens` saying how much went there.
 An `unknown` cut-off on a call that sent a max output stopped short of

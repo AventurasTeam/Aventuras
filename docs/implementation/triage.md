@@ -169,16 +169,6 @@ slice-planning gate forces its resolution before that slice is planned.
   interrupted summary either, and the `tsx` and `pnpm` relay in between
   wasn't traced. With parallel workers an orphaned run now finishes in
   under 2 minutes. Surfaced by the same review.
-- **A cut-off's `maxOutput` isn't always what the request sent.**
-  `replyCutOff` gets the max output the caller set: the profile's on a
-  structured call (`lib/ai/generate.ts`), the profile's or 8,000 on a
-  tool step (`lib/ai/tool-step.ts`). The Anthropic adapter changes it
-  on the way out: it adds the thinking budget, and clamps to a known
-  model's cap (`claude-3-haiku`, 4,096). So a window cut with thinking
-  on reads `max-output`, and a cap cut under an 8,000 default reads
-  `unknown`, against a figure the request didn't carry. Slice 5.4's
-  slice review reads the sent `max_tokens` back for the tool step;
-  `generateStructured` still passes the profile's.
 - **The `toolCalling` hint may miss some servers' wording.** Canon's
   keywords are `tools` and `tool_choice`
   ([`generation-pipeline.md → Fatal error categories`](../generation-pipeline.md#fatal-error-categories)).

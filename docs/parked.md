@@ -1974,6 +1974,21 @@ Parked at M5's promotion, 2026-11-01.
 
 ### UX (parked)
 
+#### A window cut with thinking on can read as max output
+
+On an Anthropic profile with a thinking budget, `@ai-sdk/anthropic`
+sends `max_tokens` as the profile's max output plus the budget. A
+structured or narrative reply cut at a full window between those two
+figures reads as `max-output` against the profile's figure, so its
+surface tells the user to raise the max output when the window is what
+filled
+([`generation-pipeline.md → Cut-off replies`](./generation-pipeline.md#cut-off-replies)).
+Rare: the window has to be nearly full first. Reading the sent figure
+back, as a tool step does, needs copy that names a figure the user
+never set. **Revisit signal:** a report of the max-output remedy on a
+window-bound cut, or the cut-off copy gaining a variant for the sent
+figure. Routed from triage 2026-11-07.
+
 #### The deferral toast can promise a close that never runs
 
 An interrupt's toast, `Chapter close moved to your next turn.`, fires
