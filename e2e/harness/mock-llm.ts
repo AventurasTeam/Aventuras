@@ -211,6 +211,9 @@ export type MockLlm = {
   close: () => Promise<void>
 }
 
+// No thrown message: the app's classifier reads overflow and capability keywords anywhere in a body.
+const SCRIPT_THREW = 'mock harness: a scripted reply threw'
+
 const DEFAULT_NARRATIVE =
   'The blade rasps free of its sheath. Somewhere in the drowned city, a bell answers, and the rain leans closer to listen.'
 
@@ -328,11 +331,9 @@ export async function startMockLlm(): Promise<MockLlm> {
         mockUsage(toolPromptText(request.body), toolStepCompletionText(step)),
       )
     } catch (error) {
-      // Answered first so the client fails at once instead of waiting out its bound; the message
-      // prefix names no capability keyword, so it reads as no capability mismatch.
-      const message = error instanceof Error ? error.message : String(error)
+      // Answered first so the client fails at once instead of waiting out its bound.
       res.writeHead(400, { ...cors, 'content-type': 'application/json' })
-      res.end(errorBody(`mock harness: a scripted step threw: ${message}`, 'mock_harness_error'))
+      res.end(errorBody(SCRIPT_THREW, 'mock_harness_error'))
       throw error
     }
     res.writeHead(200, { ...cors, 'content-type': 'application/json' })

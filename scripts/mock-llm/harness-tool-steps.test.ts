@@ -17,6 +17,7 @@ import type { ProviderInstance } from '@/lib/db'
 import { logger, type Logger } from '@/lib/diagnostics'
 
 import { harnessPerTest, provider, structuredCall } from './harness-calls'
+import type { MockToolStep } from './respond/wire'
 import { toolLaneKey } from './routing'
 import {
   EXAMPLES,
@@ -448,17 +449,15 @@ describe('startMockLlm — tool lanes', () => {
       status: 'failed',
       error: { tier: 'provider', reason: 'unknown' },
     })
-    expect(JSON.stringify(failed)).toContain('mock harness: a scripted step threw:')
+    expect(failed).not.toHaveProperty('error.possibleCapabilityMismatch')
+    expect(JSON.stringify(failed)).not.toContain('BigInt')
   })
 
+  // The TypeError names `tools`, a keyword the app's classifier reads as a capability hint.
   it("keeps an unheld step's throw for close(), after failing its call at once", async () => {
     const llm = await started()
     const config = registerHarness(llm)
-    llm.setToolSteps(NAMES, [
-      () => {
-        throw new Error('the spec broke unheld')
-      },
-    ])
+    llm.setToolSteps(NAMES, [(request) => (request.body.nope as { tools: MockToolStep }).tools])
 
     const failed = await step(config)
 
@@ -466,10 +465,28 @@ describe('startMockLlm — tool lanes', () => {
       status: 'failed',
       error: { tier: 'provider', reason: 'unknown' },
     })
-    expect(JSON.stringify(failed)).toContain('a scripted step threw: the spec broke unheld')
+    expect(failed).not.toHaveProperty('error.possibleCapabilityMismatch')
     expect(llm.requests).toHaveLength(1)
-    await expect(llm.close()).rejects.toThrow('the spec broke unheld')
+    await expect(llm.close()).rejects.toThrow(/reading 'tools'/)
     expect(await accepting(llm)).toBe(false)
+  })
+
+  it('fails a later call whose step throws an overflow phrase, rather than stopping it', async () => {
+    const llm = await started()
+    const config = registerHarness(llm)
+    llm.setToolSteps(NAMES, [
+      () => {
+        throw new Error('no row fits the context size')
+      },
+    ])
+
+    const failed = await step(config, [], { firstCall: false })
+
+    expect(failed).toMatchObject({
+      status: 'failed',
+      error: { tier: 'provider', reason: 'unknown' },
+    })
+    await expect(llm.close()).rejects.toThrow('no row fits the context size')
   })
 
   it('rethrows from close() the unheld throw that came before a held one', async () => {
@@ -514,7 +531,7 @@ describe('startMockLlm — tool lanes', () => {
       error: { tier: 'provider', reason: 'unknown' },
     })
     expect(failed).not.toHaveProperty('error.possibleCapabilityMismatch')
-    expect(JSON.stringify(failed)).toContain('mock harness: a scripted step threw: the spec broke')
+    expect(JSON.stringify(failed)).not.toContain('the spec broke')
     expect(okStep(await after).text).toBe('Answered anyway.')
     expect(llm.requests).toHaveLength(2)
   })
