@@ -67,12 +67,6 @@ slice-planning gate forces its resolution before that slice is planned.
   changed (`lib/actions/chapters/register.ts`, the update handler).
   Matters once a chapter edit shows in History. Surfaced by Slice 5.2's
   review.
-- **Seeded entry creates carry no anchor.** The dev seed's
-  `createStoryEntry` deltas have `entryId: null`
-  (`lib/db/devtools/seed-dataset.ts`), while a real reply's create is
-  anchored on itself. Rollback treats both alike, but
-  `lib/actions/story-entries/pre-entry-locations.ts` keys on that anchor
-  and falls back on the seed. Surfaced by Slice 5.2's review.
 - **The embedder drain drops a run's idle note while a pass runs.**
   `noteIdle` (`lib/embedder/drain.ts:198-204`) does nothing mid-pass, and
   the pass's row list predates the run's writes, so a row made stale by a
