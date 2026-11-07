@@ -5,7 +5,7 @@ import type { StoryEntry } from '@/lib/db'
 import { canEndChapter } from './can-end-chapter'
 import { fallbackChapterEnd } from './fallback-chapter-end'
 
-// Passes through to the real rule; one case swaps it, to prove the fallback asks it (C10).
+// Passes through to the real rule; the C10 cases swap it, to prove the fallback asks it.
 vi.mock('./can-end-chapter', async (importOriginal) => {
   const actual = await importOriginal<{ canEndChapter: typeof canEndChapter }>()
   return { canEndChapter: vi.fn(actual.canEndChapter) }
@@ -44,7 +44,7 @@ describe('fallbackChapterEnd', () => {
   // Swapped so the rule, not the kind, decides: the head case needs a row before it that fails.
   it.each([
     {
-      name: 'a user_action before a reply head',
+      name: 'the latest user_action before the head',
       series: [r(1), u(2), u(3)],
       end: 'u2',
     },
