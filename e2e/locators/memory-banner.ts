@@ -15,8 +15,9 @@ export const memoryBanner = {
     banner(page).getByText(t('chrome.memoryBanner.updatingBeforeTurn'), { exact: true }),
   closingMetadata: (page: Page): Locator =>
     banner(page).getByText(t('chrome.memoryBanner.closingMetadata'), { exact: true }),
-  closingBeforeTurn: (page: Page): Locator =>
-    banner(page).getByText(t('chrome.memoryBanner.closingBeforeTurn'), { exact: true }),
+  // A close Send runs, at its metadata step: before a turn each step's label says so.
+  beforeTurnMetadata: (page: Page): Locator =>
+    banner(page).getByText(t('chrome.memoryBanner.beforeTurnMetadata'), { exact: true }),
   cancel: (page: Page): Locator =>
     banner(page).getByRole('button', { name: t('cancel'), exact: true }),
 }

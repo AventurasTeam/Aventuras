@@ -308,7 +308,7 @@ test.describe('chapter close owed — a close that fails', () => {
     // The composer holds U2, handed back by the failed Send; this Send's text replaces it.
     await send(U3, 'E2E-OWED-R3 the bar lifts.')
     const owed = await heldClose(calls)
-    await expect(memoryBanner.closingBeforeTurn(page)).toBeVisible()
+    await expect(memoryBanner.beforeTurnMetadata(page)).toBeVisible()
     // The Send dropped the entry before its close started.
     expect(await systemEntries(branch)).toEqual([])
     await expect(reader.cancel(page)).toBeVisible()
@@ -449,7 +449,7 @@ test.describe('chapter close owed — a close cancelled from the banner', () => 
       'E2E-DEFER-R2 the gatekeeper points north.',
     )
     const owed = await heldClose(calls)
-    await expect(memoryBanner.closingBeforeTurn(page)).toBeVisible()
+    await expect(memoryBanner.beforeTurnMetadata(page)).toBeVisible()
     // Send's own run now: the composer offers Cancel, and the user_action waits for the close.
     await expect(reader.cancel(page)).toBeVisible()
     expect(await entryIdByContent(branch, 'E2E-DEFER-U2')).toBeUndefined()
