@@ -92,11 +92,12 @@ export function cancelPillRun(branchId: string): Promise<void> {
 }
 
 /**
- * A Send cancelled during its owed work wrote nothing, so a failure entry cleared before it
- * can go back where it was (reader-composer.md → Custody of the turn's text).
+ * A Send cancelled during owed work that wrote nothing, so a failure entry cleared before it can go
+ * back where it was (reader-composer.md → Custody of the turn's text). Once that work committed,
+ * the Send superseded the entry's text, which stays dropped.
  */
 export function abortedBeforeTurn(result: SubmitTurnResult): boolean {
-  return result.outcome === 'aborted' && result.beforeTurn === true
+  return result.outcome === 'aborted' && result.beforeTurn === true && result.committed !== true
 }
 
 /** A pass that refused a Send (classifier.md → Failure policy): the hold, or why it failed. */

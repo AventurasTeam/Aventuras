@@ -484,6 +484,7 @@ describe('Send with deferred work', () => {
       actionId: held.actionId,
       beforeTurn: true,
       work: 'pass',
+      committed: true,
     })
     expect((await markerOf(db, held.actionId))?.outcome).toBe('completed')
     expect(await userActionsReading(db, 'I wait.')).toEqual([])
@@ -820,12 +821,40 @@ describe('Send with a close owed', () => {
       beforeTurn: true,
       work: 'close',
     })
+    expect(result).not.toHaveProperty('committed')
     expect(await userActionsReading(db, 'I wait.')).toEqual([])
     expect(await db.select().from(chapters)).toEqual([])
     expect(generationStore.getTxState().deferred.get('b1')).toEqual({ close: true })
     expect(deferrals).toEqual([
       expect.objectContaining({ kind: CHAPTER_CLOSE_KIND, work: 'close' }),
     ])
+  })
+
+  // The close ignored a Cancel landing after its last phase and committed; the Send is still cancelled.
+  it('cancels the Send when Cancel lands after its owed close ended its last phase', async () => {
+    const { ctx, db, pass, close } = await setUp(50, COUNTED_BACKLOG, {}, { leaveOpen: true })
+    setThreshold(OWED_AT)
+    await setWatermark(db, 3)
+
+    const sent = send(ctx, 'I wait.')
+    const held = await within(close.nextHeld(), "Send's owed close")
+    held.finish('completed')
+    const interrupted = interruptMemoryRuns('b1')
+    const result = await within(sent, 'the cancelled Send')
+    await interrupted
+
+    expect(result).toMatchObject({
+      outcome: 'aborted',
+      actionId: held.actionId,
+      beforeTurn: true,
+      work: 'close',
+      committed: true,
+    })
+    expect((await markerOf(db, held.actionId))?.outcome).toBe('completed')
+    expect(await db.select().from(chapters)).toHaveLength(1)
+    expect(pass.runs).toEqual([])
+    expect(await userActionsReading(db, 'I wait.')).toEqual([])
+    expect(await turnMarkers(db)).toEqual([])
   })
 
   it('runs a close CTRL-Z reopened again before the next turn', async () => {

@@ -379,6 +379,16 @@ describe('abortedBeforeTurn', () => {
     },
   )
 
+  // The owed work committed before the Cancel took effect: the Send supersedes the entry's text.
+  it.each(['pass', 'close'] as const)(
+    'holds for no Send whose owed %s committed before its Cancel',
+    (work) => {
+      expect(
+        abortedBeforeTurn({ ...ran, outcome: 'aborted', beforeTurn: true, work, committed: true }),
+      ).toBe(false)
+    },
+  )
+
   // The turn wrote its user action before the cancel reversed it.
   it('holds for no cancel of the turn itself', () => {
     expect(abortedBeforeTurn({ ...ran, outcome: 'aborted' })).toBe(false)
