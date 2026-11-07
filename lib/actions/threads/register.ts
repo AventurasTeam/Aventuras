@@ -12,6 +12,7 @@ import {
   TARGET_NOT_FOUND,
   undefinedColumn,
   type ActionHandler,
+  type PatchMatchesColumns,
 } from '../delta/registry'
 import { USER_EDITED_SINCE_PROSE, userEditsSinceProse, wroteField } from '../delta/user-precedence'
 import { isUserOriginatedSource, type DeltaSource, type ProseEntryId } from '../types'
@@ -63,6 +64,7 @@ export const UPDATABLE = [
   'triggeredAtEntryId',
   'resolvedAtEntryId',
 ] as const
+void (true satisfies PatchMatchesColumns<ThreadUpdatePatch, typeof UPDATABLE>)
 
 const REF_COLS = new Set(['triggeredAtEntryId', 'resolvedAtEntryId'])
 

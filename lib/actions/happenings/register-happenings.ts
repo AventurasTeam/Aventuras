@@ -13,7 +13,13 @@ import { happeningsStore } from '@/lib/stores'
 
 import { nullifyRef } from '../coerce'
 import { cascadedDelete, defineCascade, rowCascade } from '../delta/delete-cascade'
-import { register, TARGET_NOT_FOUND, undefinedColumn, type ActionHandler } from '../delta/registry'
+import {
+  register,
+  TARGET_NOT_FOUND,
+  undefinedColumn,
+  type ActionHandler,
+  type PatchMatchesColumns,
+} from '../delta/registry'
 import type { DeltaSource } from '../types'
 
 const ownCascade = rowCascade('happening')
@@ -49,6 +55,7 @@ export const UPDATABLE = [
   'occurredAtEntryId',
   'commonKnowledge',
 ] as const
+void (true satisfies PatchMatchesColumns<HappeningUpdatePatch, typeof UPDATABLE>)
 
 function fullRow(entry: NewHappening): Happening {
   // Apply SQLite defaults so the inserted row and the store create-patch row are byte-identical.

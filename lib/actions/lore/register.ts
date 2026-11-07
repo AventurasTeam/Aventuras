@@ -12,6 +12,7 @@ import {
   TARGET_NOT_FOUND,
   undefinedColumn,
   type ActionHandler,
+  type PatchMatchesColumns,
 } from '../delta/registry'
 import type { DeltaSource } from '../types'
 
@@ -48,6 +49,7 @@ export const UPDATABLE = [
   'injectionMode',
   'priority',
 ] as const
+void (true satisfies PatchMatchesColumns<LoreUpdatePatch, typeof UPDATABLE>)
 
 function fullRow(entry: NewLore): Lore {
   // Apply SQLite defaults so the inserted row and the store create-patch row are byte-identical.

@@ -111,14 +111,6 @@ slice-planning gate forces its resolution before that slice is planned.
 - **A harness comment assumes WAL.** `e2e/harness/db.ts:17` justifies
   `queryApp` by "a second file handle can miss a WAL-buffered write", but
   the desktop database runs in rollback-journal mode.
-- **Update handlers type their patch apart from their column list.** The
-  entities, lore, threads, translations, era-flips and entry-assets
-  registers declare the update patch type separately from the
-  `UPDATABLE` list the handler loops over, so a key added to the type
-  alone compiles and the handler skips it: silently beside another key,
-  and as a `no updatable fields` refusal alone. Slice 5.2's chapters
-  register derives its patch type from the list. Surfaced by Slice 5.2's
-  review.
 - **Phase intermediates are an untyped bag.** `PhaseContext.intermediates`
   is `Record<string, unknown>` (`lib/pipeline/types.ts:103`), and each
   reader casts its key: the retrieval outcome behind a shape check
