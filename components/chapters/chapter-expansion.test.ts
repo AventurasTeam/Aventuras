@@ -138,6 +138,14 @@ describe('nextExpandedChapter', () => {
     expect(nextExpandedChapter(gone, input({ rows: [row(1), row(2)] }))).toBe(gone)
   })
 
+  it('drops an expanded id when the last chapter goes', () => {
+    const open: ChapterExpansionState = { expandedId: 'chap_1', baseline: 1 }
+    expect(nextExpandedChapter(open, input({ rows: [] }))).toEqual({
+      expandedId: null,
+      baseline: 1,
+    })
+  })
+
   it('keeps an expanded id by its row id, whatever its position', () => {
     const rows = [row(4, 'chap_d'), row(11, 'chap_k'), row(7, 'chap_g')]
     const ready = judge([input({ rows })])
