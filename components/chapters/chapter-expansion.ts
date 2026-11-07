@@ -2,10 +2,7 @@ import { useCallback, useState } from 'react'
 
 export type ChapterExpansionState = Readonly<{
   expandedId: string | null
-  /**
-   * Ids already judged, never auto-expanded again (a user's toggle still opens one); null until
-   * the route is ready.
-   */
+  /** Judged ids, never auto-expanded again (a toggle still opens one); null until `ready`. */
   judged: ReadonlySet<string> | null
 }>
 
@@ -42,9 +39,8 @@ function newestUnjudged(
 }
 
 /**
- * The expanded card after `input`: the first ready rows are judged, expanding nothing, all but the
- * chapter a running close is writing; an unjudged row is judged once its run ends, the newest
- * expanding if no card is dirty. `state` if unchanged.
+ * The first ready rows, bar a running close's chapter, are judged with none expanded; an unjudged
+ * row is judged once its run ends, the newest expanding if no card is dirty. `state` if unchanged.
  */
 export function nextExpandedChapter(
   state: ChapterExpansionState,

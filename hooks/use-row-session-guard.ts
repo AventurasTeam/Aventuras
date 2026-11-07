@@ -10,10 +10,7 @@ type RowSessionGuard = {
   onSession: (handle: RowSessionHandle | null) => void
   guard: LeaveRequest
   navigateGuarded: (path: string) => void
-  /**
-   * The registered handle's `dirty`, one commit behind the session's (the handle is published from
-   * its effect); false with none registered.
-   */
+  /** The handle's `dirty`, one commit late (published from an effect); false with no handle. */
   dirty: boolean
 }
 

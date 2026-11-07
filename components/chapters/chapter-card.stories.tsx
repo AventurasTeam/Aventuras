@@ -254,10 +254,7 @@ export const Earlier: Story = {
   },
 }
 
-/**
- * The meta line joins only what a chapter has: no time label or theme drops its segment. It
- * describes the head, whose name stays the heading.
- */
+/** The meta line skips a missing time label or theme; it describes the head, never names it. */
 export const Collapsed: Story = {
   render: () => (
     <View className="gap-3">
@@ -308,10 +305,7 @@ export const HeadToggles: Story = {
   },
 }
 
-/**
- * The one-pass lag after a switch, on every platform: the form still holds another chapter. Native
- * is where a field mounted in it would show that row.
- */
+/** A switch's lag, on any platform: the form holds another row, which native fields would show. */
 function LaggingFormHarness() {
   const session = useChapterRowSession({
     row: TAVERN,

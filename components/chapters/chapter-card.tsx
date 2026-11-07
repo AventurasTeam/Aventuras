@@ -38,10 +38,7 @@ export type ChapterCardProps = {
   data: ChapterCardData
   /** The head's press, on both states; the route guards it. */
   onToggle: () => void
-  /**
-   * The route's session while this card is open, else null; the expanded body waits until its
-   * form holds this card's row.
-   */
+  /** The route's session while open, else null; the body waits for its form to hold this row. */
   session: ChapterRowSession | null
   /** Set while a run blocks edits (`generationGateReason`): fields and Save disable with it. */
   blockedReason?: string
