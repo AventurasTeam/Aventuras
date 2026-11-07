@@ -39,7 +39,7 @@ import { checkInputTokens } from './truncation-check'
 export const TOOL_STEP_MAX_OUTPUT_DEFAULT = 8_000
 
 /** No `execute`: the SDK would run the calls itself, in parallel, where a phase can't yield. */
-export type ToolStepTool = { description: string; inputSchema: z.ZodType; execute?: never }
+export type ToolStepTool = { description: string; inputSchema: z.ZodObject; execute?: never }
 
 export type ToolStepRequest = {
   /** The pair, sent first (architecture.md → System and user halves). */
@@ -51,7 +51,7 @@ export type ToolStepRequest = {
   firstCall: boolean
 }
 
-export type ToolStepCall = { toolCallId: string; toolName: string; input: unknown }
+export type ToolStepCall = { toolCallId: string; toolName: string; input: Record<string, unknown> }
 export type ToolStepInvalidCall = { toolCallId: string; toolName: string; detail: string }
 
 export type ToolStep = {

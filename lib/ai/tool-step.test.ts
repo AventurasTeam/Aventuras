@@ -349,6 +349,28 @@ describe('generateToolStep: one request', () => {
     }
     expect(runsItself.description).toBe('Runs itself.')
   })
+
+  // The adapters send a schema's root as it is, and a provider takes only an object as tool input.
+  it('takes only an object schema', () => {
+    const notObjects: ToolStepTool[] = [
+      // @ts-expect-error a string root
+      { description: 'A name.', inputSchema: z.string() },
+      {
+        description: 'A row by kind.',
+        // @ts-expect-error a union root
+        inputSchema: z.discriminatedUnion('kind', [
+          z.object({ kind: z.literal('entity'), id: z.string() }),
+          z.object({ kind: z.literal('lore'), id: z.string() }),
+        ]),
+      },
+      {
+        description: 'Find a row by name.',
+        // @ts-expect-error a transform on the schema, whose output the SDK replays as the input
+        inputSchema: z.object({ query: z.string() }).transform(({ query }) => query.trim()),
+      },
+    ]
+    expect(notObjects).toHaveLength(3)
+  })
 })
 
 // memory/chapter-close.md → Conversations: the reply's calls go back unrun, in the model's order.
@@ -586,12 +608,15 @@ describe('generateToolStep: before the request', () => {
   })
 
   // The SDK returns a transform's output as the call's input, which the next step sends back.
-  it.each([
-    ['a schema', z.object({ query: z.string() }).transform(({ query }) => query.trim())],
-    ['a field', z.object({ query: z.string().transform((query) => query.trim()) })],
-  ] as const)('fails, sending nothing, on a transform on %s', async (_label, inputSchema) => {
+  it('fails, sending nothing, on a transform on a field', async () => {
     const result = await step(useProvider('openai-compatible'), {
-      tools: { ...TOOLS, lookup: { description: 'Find a row by name.', inputSchema } },
+      tools: {
+        ...TOOLS,
+        lookup: {
+          description: 'Find a row by name.',
+          inputSchema: z.object({ query: z.string().transform((query) => query.trim()) }),
+        },
+      },
     })
 
     expect(result).toEqual({
