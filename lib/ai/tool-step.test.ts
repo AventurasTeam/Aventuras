@@ -877,7 +877,8 @@ describe('generateToolStep: a reply cut off', () => {
     })
   })
 
-  // generation-pipeline.md → Cut-off replies: a non-streamed body that omits it arrives whole.
+  // generation-pipeline.md → Cut-off replies: a non-streamed body that omits its finish_reason
+  // arrives whole.
   it("reads an 'other' finish with no raw reason as a step", async () => {
     answers = [
       () =>

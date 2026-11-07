@@ -109,8 +109,8 @@ function countPartTokens(part: PromptPart): number {
   }
 }
 
-// The adapters send text arms raw, every other value as JSON (a string value included), and a
-// denial as its reason or a default text.
+// As the adapters send each arm: text raw, json stringified (a string value too), a denial as its
+// reason or a default; `content` is JSON on openai-compatible, an estimate of Anthropic's blocks.
 function outputText(output: ToolResultOutput): string {
   switch (output.type) {
     case 'text':

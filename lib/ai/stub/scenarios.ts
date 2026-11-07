@@ -90,8 +90,8 @@ function opensWithSignedThinking(message: SentMessage | undefined): boolean {
 }
 
 // Anthropic refuses a tool result unless the assistant turn before it opens with its thinking
-// block, text and signature intact: the one offline check a step's response messages replay it.
-// It holds for every exchange of an accumulated history, not only the latest.
+// block, text and signature intact; this is the one offline check that a step's response messages
+// replay that block. Checking every exchange, not only the latest, is the stub's own strictness.
 function toolStepReply(body: string): Response {
   const { messages } = sentRequest(body)
   const resultTurns = messages.flatMap((message, at) =>
