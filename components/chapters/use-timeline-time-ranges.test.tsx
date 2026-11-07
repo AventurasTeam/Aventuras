@@ -11,7 +11,7 @@ import { useTimelineTimeRanges } from './use-timeline-time-ranges'
 
 const reads = vi.hoisted(() => ({ ranges: vi.fn() }))
 
-// The runtime `db` is a bridge client; this hook composes `useChapterTimeRanges`, so its read is mocked.
+// The runtime `db` is a bridge client, so the read `useChapterTimeRanges` makes is mocked.
 vi.mock('@/lib/db', async (importOriginal) => ({
   ...(await importOriginal<Record<string, unknown>>()),
   db: {},

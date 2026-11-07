@@ -31,7 +31,7 @@ export type ChapterRowSession = RowSaveSession<ChapterDraft> & {
 export type ChapterRowSessionOptions = {
   /** The expanded chapter's id; null while no card is open. */
   rowId: string | null
-  /** The committed values; memoize by row identity. EMPTY_CHAPTER_DRAFT's copy while rowId is null. */
+  /** Committed values; memoize by row identity. EMPTY_CHAPTER_DRAFT's copy for a null rowId. */
   values: ChapterDraft
   onSave: (draft: ChapterDraft) => Promise<ChapterSaveResult>
   onSaved: (id: string) => void

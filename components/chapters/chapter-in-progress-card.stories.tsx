@@ -11,7 +11,7 @@ import { ChapterInProgressCard } from './chapter-in-progress-card'
 import { ChapterTimelineHeader } from './chapter-timeline-header'
 
 const SINCE = 'Day 9, dusk'
-// chapterProgressCounts prints both numbers, so every tone keeps them; the bar's tone follows percent.
+// chapterProgressCounts prints both numbers at every tone; the bar's tone follows percent.
 const COUNTS = '14,200 / 24,000 tok'
 const PHONE_390 = { viewport: { value: 'phone390' } }
 

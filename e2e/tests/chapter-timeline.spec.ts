@@ -88,8 +88,7 @@ test.describe.serial('Chapter Timeline', () => {
     return { targetId, op }
   }
 
-  // Answers the open Unsaved changes dialog with Discard and requires the reader in that one
-  // click: a second prompt or a stuck guard keeps the page on the Timeline.
+  // One Discard click must reach the reader: no second prompt, no stuck guard.
   async function discardLandsOnReader(page: Page): Promise<void> {
     await saveSession.unsavedDiscard(page).click()
     await expect(page, 'a second prompt or a stuck guard keeps us off the reader').toHaveURL(

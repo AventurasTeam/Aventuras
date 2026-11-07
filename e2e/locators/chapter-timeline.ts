@@ -2,9 +2,8 @@ import type { Locator, Page } from '@playwright/test'
 
 import { copyPattern, t } from '../harness/i18n'
 
-// Chapter Timeline (app/chapter-timeline/[branchId].tsx). Every card holds the same buttons and
-// fields, so each card's testID scopes them (testing.md → Tier 3); specs read chapter ids from
-// the DB by title.
+// Every card repeats the same controls, so its testID scopes them (testing.md → Tier 3); specs
+// read chapter ids from the DB by title.
 const CARD_HEADING = copyPattern('chapters:card.heading', { texts: ['number', 'title'] })
 
 export const chapterTimeline = {
