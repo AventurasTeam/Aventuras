@@ -1980,8 +1980,9 @@ call: there's no stream to end early, and a body that omits its
 `finish_reason` still arrives whole.
 
 **The cause** comes from what the call knows: `max-output` when the
-profile sets `maxOutput` and the output tokens reached it, or the
-provider reported none; `window` when the model's window is known and
+call sent a max output (the profile's `maxOutput`, or a tool step's
+default) and the output tokens reached it, or the provider reported
+none; `window` when the model's window is known and
 the prompt plus the output tokens reach it, reading the prompt from the
 provider's input count and from the estimate only when it reported
 none, since o200k can miss a server's own count by a quarter either

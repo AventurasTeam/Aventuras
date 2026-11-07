@@ -615,6 +615,13 @@ amends the scope above.
   [Slice 5.4](./04-tool-step.md)). One builder would
   keep a new field from being missed at one of them. Routed from triage
   2026-11-06.
+- **Should the E2E harness fail a spec that leaves scripted tool steps unspent?**
+  `setToolSteps` keys a queue by the task's tool names, and a lane no request
+  reaches answers nothing, so a spec scripted under a stale tool list closes with no
+  writes and `close()` resolves. Starting answer: `close()` rejects while a lane
+  still holds steps, unless the spec opts out for a task that may end early. The
+  first scripted spec, this slice's Auto close, decides. Surfaced by
+  [Slice 5.4](./04-tool-step.md)'s slice review.
 
 ## Implementation notes
 

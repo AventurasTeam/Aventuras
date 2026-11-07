@@ -804,8 +804,8 @@ code before it moved; resolve with the slice it names.
   for the capability hint
   ([`generation-pipeline.md → Fatal error categories`](../generation-pipeline.md#fatal-error-categories)),
   so `carriedCapabilities` in `lib/ai/generate.ts`, which reads only the
-  Anthropic thinking setting and the JSON response format today, must
-  read them too. Per-story `customJson` stays parked
+  Anthropic thinking setting, the JSON response format and the tool
+  list today, must read them too. Per-story `customJson` stays parked
   ([`parked.md → Granular per-story model controls`](../parked.md#granular-per-story-model-controls)).
   Raised by the coordinator from the cut-off replies Task 15 smoke.
 - **M7.1 — The blocking embed path has no per-request token budget.**
@@ -1154,7 +1154,13 @@ code before it moved; resolve with the slice it names.
   2026-10-24 triage pass, which routed it here and lost it; filed by
   its slice review. Options: a pass bound longer than one attempt's,
   or a per-attempt share of the pass bound. A chapter close's calls
-  have the same shape, so the fix covers them too.
+  have the same shape, so the fix covers them too. The per-attempt
+  timer still bounds the callers that arm no bound of their own
+  (`suggestion-refresh.ts`, the piggyback's fallback classifier, the
+  wizard's assist), so it can't simply go; its comment's "a retry gets
+  the whole bound again" holds only for them. A close's tool step keeps
+  no per-attempt timer
+  ([Slice 5.4](./milestones/05-chapters-chapter-close/slices/04-tool-step.md#implementation-notes)).
 - **M7.1 — A close's two profile switches.** `closeConversation` and
   `closeTools`
   ([`chapter-close.md → Conversations`](../memory/chapter-close.md#conversations)),

@@ -620,6 +620,14 @@ vitest and the probe share. It never reaches a production slot.
   row over a partial range, though neither handler returns a noop today.
   Which outcomes fail the close, and with what error, is open. Surfaced
   by Slice 5.2's review.
+- **What does a tool schema do with a key the model added?** A plain
+  `z.object` drops unknown keys, and the SDK replays the parsed value
+  (`ai`, `parse-tool-call.ts`), so a key the model wrote vanishes from
+  its own call on the next step: the change the schema contract above
+  forbids. `z.strictObject` refuses the call, so the model hears it and
+  writes it again; `z.looseObject` keeps the key and replays the call
+  as written. The deep-equal criterion catches neither unless a sample
+  carries an extra key. Surfaced by Slice 5.4's slice review.
 
 ## Implementation notes
 
