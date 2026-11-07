@@ -277,14 +277,20 @@ describe('generateToolStep: one request', () => {
       },
       { role: 'tool', tool_call_id: 'call_0', content: 'ent_bell: the tower bell' },
     ])
-    const wireTools = bodies[0]!.tools as { function: { name: string; parameters: unknown } }[]
+    const wireTools = bodies[0]!.tools as { function: { name: string } }[]
     expect(wireTools.map((t) => t.function.name)).toEqual(['lookup', 'finish'])
     expect(wireTools[0]).toEqual({
       type: 'function',
       function: {
         name: 'lookup',
         description: 'Find a row by name.',
-        parameters: wireTools[0]!.function.parameters,
+        parameters: {
+          $schema: 'http://json-schema.org/draft-07/schema#',
+          type: 'object',
+          properties: { query: { type: 'string' } },
+          required: ['query'],
+          additionalProperties: false,
+        },
       },
     })
   })
