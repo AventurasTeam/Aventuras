@@ -42,15 +42,14 @@ export type ChapterCardProps = {
    * form holds this card's row.
    */
   session: ChapterRowSession | null
-  /** `isUserEditBlocked`: fields and Save disable with `blockedReason`. */
-  blocked: boolean
+  /** Set while a run blocks edits (`generationGateReason`): fields and Save disable with it. */
   blockedReason?: string
   /** Route focus, for Cmd/Ctrl-S on the in-card bar. */
   hotkeysEnabled: boolean
   onJump: () => void
 }
 
-type Gate = { blocked: boolean; blockedReason?: string }
+type Gate = { blockedReason?: string }
 
 type TextFieldName = 'title' | 'theme' | 'summary'
 
@@ -84,7 +83,6 @@ export function ChapterCard({
   data,
   onToggle,
   session,
-  blocked,
   blockedReason,
   hotkeysEnabled,
   onJump,
@@ -108,27 +106,20 @@ export function ChapterCard({
               <TextField
                 control={editing.form.control}
                 name="title"
-                blocked={blocked}
                 blockedReason={blockedReason}
               />
               <TextField
                 control={editing.form.control}
                 name="theme"
-                blocked={blocked}
                 blockedReason={blockedReason}
               />
               <TextField
                 control={editing.form.control}
                 name="summary"
                 multiline
-                blocked={blocked}
                 blockedReason={blockedReason}
               />
-              <KeywordsField
-                control={editing.form.control}
-                blocked={blocked}
-                blockedReason={blockedReason}
-              />
+              <KeywordsField control={editing.form.control} blockedReason={blockedReason} />
             </View>
             <ActionRow latest={data.latest} isPhone={isPhone} onJump={onJump} />
           </View>
@@ -137,7 +128,7 @@ export function ChapterCard({
             <RowSaveBar
               session={editing}
               enabled={hotkeysEnabled}
-              blocked={blocked}
+              blocked={blockedReason != null}
               blockedReason={blockedReason}
             />
           )}
@@ -216,7 +207,6 @@ function TextField({
   control,
   name,
   multiline = false,
-  blocked,
   blockedReason,
 }: Gate & { control: Control<ChapterDraft>; name: TextFieldName; multiline?: boolean }) {
   const label = chapterFieldLabel(name)
@@ -229,8 +219,8 @@ function TextField({
           value: field.value,
           onChangeText: field.onChange,
           onBlur: field.onBlur,
-          editable: !blocked,
-          accessibilityHint: blocked ? blockedReason : undefined,
+          editable: blockedReason == null,
+          accessibilityHint: blockedReason,
           'aria-label': label,
           'aria-invalid': fieldState.error != null,
         }
@@ -248,11 +238,7 @@ function TextField({
   )
 }
 
-function KeywordsField({
-  control,
-  blocked,
-  blockedReason,
-}: Gate & { control: Control<ChapterDraft> }) {
+function KeywordsField({ control, blockedReason }: Gate & { control: Control<ChapterDraft> }) {
   const label = chapterFieldLabel('keywords')
   return (
     <Controller
@@ -265,7 +251,7 @@ function KeywordsField({
             onChange={field.onChange}
             label={label}
             placeholder={t('chapters:fields.keywordsPlaceholder')}
-            disabled={blocked}
+            disabled={blockedReason != null}
             disabledReason={blockedReason}
             aria-invalid={fieldState.error != null}
           />

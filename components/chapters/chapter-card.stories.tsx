@@ -145,8 +145,7 @@ function CardHarness({ data, initiallyExpanded, onSave, onJump, hotkeysEnabled }
         data={{ ...data, row }}
         onToggle={() => setExpanded((prev) => !prev)}
         session={expanded ? session : null}
-        blocked={blocked}
-        blockedReason={BLOCKED_REASON}
+        blockedReason={blocked ? BLOCKED_REASON : undefined}
         hotkeysEnabled={hotkeysEnabled}
         onJump={onJump}
       />
@@ -258,22 +257,8 @@ export const Earlier: Story = {
 export const Collapsed: Story = {
   render: () => (
     <View className="gap-3">
-      <ChapterCard
-        data={LATEST}
-        onToggle={NOOP}
-        session={null}
-        blocked={false}
-        hotkeysEnabled
-        onJump={NOOP}
-      />
-      <ChapterCard
-        data={EARLIER}
-        onToggle={NOOP}
-        session={null}
-        blocked={false}
-        hotkeysEnabled
-        onJump={NOOP}
-      />
+      <ChapterCard data={LATEST} onToggle={NOOP} session={null} hotkeysEnabled onJump={NOOP} />
+      <ChapterCard data={EARLIER} onToggle={NOOP} session={null} hotkeysEnabled onJump={NOOP} />
     </View>
   ),
   play: async () => {
@@ -321,14 +306,7 @@ function LaggingFormHarness() {
     onSession: NOOP,
   })
   return (
-    <ChapterCard
-      data={LATEST}
-      onToggle={NOOP}
-      session={session}
-      blocked={false}
-      hotkeysEnabled
-      onJump={NOOP}
-    />
+    <ChapterCard data={LATEST} onToggle={NOOP} session={session} hotkeysEnabled onJump={NOOP} />
   )
 }
 

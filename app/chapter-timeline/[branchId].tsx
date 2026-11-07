@@ -158,7 +158,6 @@ export default function ChapterTimelineRoute(): ReactElement {
                   data={card}
                   onToggle={() => toggle(card.row.id)}
                   session={card.row.id === expandedId ? session : null}
-                  blocked={editBlocked}
                   blockedReason={gateReason}
                   hotkeysEnabled={focused}
                   onJump={() => jump(card.row.startEntryId)}
