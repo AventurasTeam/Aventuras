@@ -100,7 +100,7 @@ slice-planning gate forces its resolution before that slice is planned.
   `MANUAL_CLOSE_REFUSAL.branchNotOpen` and `.swapPending`
   (`lib/actions/chapters/close-chain.ts`).
 - **Pre-flight reads the open story's settings after two awaits.**
-  `lib/pipeline/runtime/orchestrator.ts:558-560` reads
+  `lib/pipeline/runtime/orchestrator.ts:553-555` reads
   `currentStoryStore.getCurrentStory()?.settings` after `beginRun` and
   `settleUserWrites`; a story switch in between checks the wrong
   story's settings. Unverified as reachable.
@@ -182,7 +182,15 @@ slice-planning gate forces its resolution before that slice is planned.
   `chapter-close-metadata-call.test.ts`, and the phase tests' `drain`
   generator helper repeats across the close's and older pipeline tests
   (`lib/pipeline/definitions/__tests__/phase-db.ts` is a candidate home).
-  Surfaced by Slice 5.2's review.
+  Surfaced by Slice 5.2's review. Slice 5.6 adds two more:
+  `chapter-close-owed.spec.ts`'s `closeOutcomes` and `heldClose` copy
+  `passOutcomes` and `heldPass` from `e2e/flows/classifier-pass.ts`, with
+  only the kind and the agent name changed, so sharing them needs
+  `passProbe` to take both; and the open region's SQL predicate is written
+  out in four specs (`chapter-close-owed`, `chapter-progress`,
+  `first-chapter`, `dataset-chapter.build`) beside the app's
+  `openRegionWhere`. A drift there fails by timeout, not silently.
+  Surfaced by Slice 5.6's slice review.
 - **A fresh dev slot has no local embedder model.** Every seeded story
   (`pnpm db:seed`, `db:seed:long`, `db:seed:dataset`) declares the local
   embedder `Xenova/all-MiniLM-L6-v2`. The app counts a model installed
