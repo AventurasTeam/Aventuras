@@ -1,9 +1,11 @@
 import {
   asSchema,
   tool,
+  type AssistantModelMessage,
   type FinishReason,
   type LanguageModelUsage,
   type ModelMessage,
+  type ToolModelMessage,
   type ToolSet,
 } from 'ai'
 import { z } from 'zod'
@@ -60,9 +62,10 @@ export type ToolStep = {
   /** A malformed call or an unknown tool; the SDK already answered each in `responseMessages`. */
   invalidCalls: readonly ToolStepInvalidCall[]
   /** As the SDK returned them, reasoning included, for the next step to send back. */
-  responseMessages: readonly ModelMessage[]
+  responseMessages: readonly (AssistantModelMessage | ToolModelMessage)[]
   text: string
-  finishReason: FinishReason
+  /** A cut or filtered reply is never a step. */
+  finishReason: Exclude<FinishReason, 'length' | 'content-filter'>
   usage: LanguageModelUsage
 }
 
@@ -80,7 +83,12 @@ export type ToolStepResult =
       failure: ContextWindowFailure
       recoverable: readonly CallRetryError[]
     }
-  | { status: 'failed'; error: CallRetryError; recoverable: readonly CallRetryError[] }
+  | {
+      status: 'failed'
+      /** A second cut stops the task instead. */
+      error: Exclude<CallRetryError, { tier: 'reply-cut-off' }>
+      recoverable: readonly CallRetryError[]
+    }
   | { status: 'not-configured'; kind: ResolveFailureKind }
   | { status: 'aborted'; recoverable: readonly CallRetryError[] }
 
@@ -106,7 +114,7 @@ async function sdkTools(
   return { tools }
 }
 
-function stepOf(reply: StepReply): ToolStep {
+function stepOf(reply: StepReply, finishReason: ToolStep['finishReason']): ToolStep {
   return {
     calls: reply.toolCalls
       .filter((call) => call.invalid !== true)
@@ -120,7 +128,7 @@ function stepOf(reply: StepReply): ToolStep {
       })),
     responseMessages: reply.response.messages,
     text: reply.text,
-    finishReason: reply.finishReason,
+    finishReason,
     usage: reply.usage,
   }
 }
@@ -187,10 +195,11 @@ export async function generateToolStep(
   // generation-pipeline.md → Cut-off replies: a cut or filtered reply is never a step, whatever it
   // holds, so its calls and messages never reach the caller.
   const parse = (reply: StepReply): ToolStep => {
-    if (reply.finishReason === 'length' || reply.finishReason === 'content-filter') {
+    const { finishReason } = reply
+    if (finishReason === 'length' || finishReason === 'content-filter') {
       throw new ReplyCutOffError(
         replyCutOff({
-          stop: reply.finishReason,
+          stop: finishReason,
           usage: reply.usage,
           maxOutput,
           window: check.window.tokens,
@@ -200,7 +209,7 @@ export async function generateToolStep(
         }),
       )
     }
-    return stepOf(reply)
+    return stepOf(reply, finishReason)
   }
 
   const boundMs = callTimeoutMs(target, config)
