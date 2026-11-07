@@ -73,18 +73,19 @@ export const mockToolStepSchema: z.ZodType<MockToolStep> = z.strictObject({
 
 export type ValidationResult = { ok: true } | { ok: false; error: string }
 
+function laneSchema(laneKey: string): z.ZodType | undefined {
+  if (laneKey === NARRATIVE_LANE) return narrativeValueSchema
+  if (laneKey.startsWith(TOOL_LANE_PREFIX)) return mockToolStepSchema
+  return findShapeByName(laneKey)?.schema
+}
+
 /**
  * Validates an authored response against its lane: narrative value, tool step, or the registered
  * shape's schema. An unregistered structured lane accepts any JSON, so it works before the
  * registry is updated.
  */
 export function validateLaneValue(laneKey: string, value: unknown): ValidationResult {
-  const schema: z.ZodType | undefined =
-    laneKey === NARRATIVE_LANE
-      ? narrativeValueSchema
-      : laneKey.startsWith(TOOL_LANE_PREFIX)
-        ? mockToolStepSchema
-        : findShapeByName(laneKey)?.schema
+  const schema = laneSchema(laneKey)
   if (schema === undefined) return { ok: true }
 
   const parsed = schema.safeParse(value)
