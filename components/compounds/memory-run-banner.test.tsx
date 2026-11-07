@@ -109,6 +109,19 @@ describe('useMemoryRunBanner', () => {
     expect(result.current?.label).toBe('Closing chapter…')
   })
 
+  it('labels the close Send runs before the turn, whatever it is doing', () => {
+    openStory()
+    generationStore.startRun(
+      close({
+        beforeTurn: true,
+        currentPhase: 'agent',
+        closeProgress: { task: 'identity', part: 0, index: 3, total: 7 },
+      }),
+    )
+    const { result } = renderHook(() => useMemoryRunBanner())
+    expect(result.current?.label).toBe('Closing chapter before your turn…')
+  })
+
   it('shows nothing for an interruptible run of a kind with no banner', () => {
     openStory()
     generationStore.startRun(run('other-memory-run', { interruptible: 'pass' }))
