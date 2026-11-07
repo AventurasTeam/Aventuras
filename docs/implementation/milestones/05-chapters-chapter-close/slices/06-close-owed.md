@@ -558,4 +558,56 @@ answer in this slice's PR.
 
 ## Implementation notes
 
-_Populated at finish: notable deviations from the plan and resolved developer decisions._
+- **A Cancel during a Send's owed work (developer decision,
+  2026-11-07).** Once any of the Send's owed work has committed, a
+  Cancel leaves the failure entry the Send cleared dropped; only a
+  Cancel before anything committed puts it back. Both end the Send
+  before its turn and hand its text back (an empty composer, else the
+  draft-kept toast). That covers a Cancel landing after a run's last
+  phase, which commits the run and chains nothing, and a Cancel of a
+  chained close after its catch-up pass committed. The code is
+  `committed` on `OwedWorkAborted`, set when the Send's first owed run
+  completed (a chain continues only past a commit), read by
+  `abortedBeforeTurn`. The planning default had put the entry back on
+  every owed-work Cancel.
+- **The resolved close notice reads "Nothing is left to close before
+  your turn." (provisional, 2026-11-07).** One notice serves both a
+  Retry whose close committed and one that found nothing owed, since
+  "Chapter closed." is false in the second; a committed close is still
+  announced by its `Chapter closed: <title>` toast. **Provisional:**
+  the alternative left open is two notices, "Chapter closed." when the
+  Retry's own close committed and "Nothing left to close." when none
+  was owed.
+- **The manual start resolves the chain end's `TxResult` (C14), a
+  completed catch-up pass included (2026-11-07).** A late Cancel after
+  the pass's last phase, or the open story leaving the branch, ends
+  the chain on the pass with no close run and the pick still owed.
+  5.10's host reads no run result, so nothing reads it today; it is
+  carried to [Slice 5.10](./10-two-starts.md)'s Open questions as a
+  fact for its planner.
+- **A close entry's Retry refuses as held before it asks whether a
+  close is owed (2026-11-07).** `runOwedClose` checks the hold first,
+  as Send does, so a held branch with nothing owed reads as held, not
+  as "nothing to close".
+- **The close's task names are `lib/db`'s `CLOSE_TASKS` and `CloseTask`
+  (C4, 2026-11-07).** The plan's separate `lib/chapters` list was a
+  duplicate and was dropped.
+- **Send re-checks the hold right before it starts its owed work
+  (2026-11-07),** the check `runClassifierPass` used to make before its
+  reserve, so a pass that turns held during Send's reads refuses the
+  Send instead of building over unreversed writes.
+- **The orchestrator keeps one piece of module state (2026-11-07):** a
+  `WeakMap` of the errors `unwindRun` reported, so a successor that
+  fails its start ends the chain with the same error its `run_complete`
+  carried.
+- **E2E (2026-11-07).** `chapter-close-owed.spec.ts` adds a Retry
+  whose close fails again, the route's close rewrite. Its CTRL-Z and
+  banner-Cancel cases hold the close at its metadata call, before any
+  write, so they can't show a written close rolling back; the rollback
+  is unit-tested in `undo-classifier.test.ts`, and the question of a
+  post-write hold point is carried to 5.10's Open questions.
+- **Seven review deferrals went to the triage inbox (2026-11-07),**
+  in [`triage.md`](../../../triage.md): the run marker after a failed
+  close reversal, an unbounded undo read, a pick stamped by redo, a late
+  Cancel announcing nothing, the flat before-turn label, the banner's
+  announcement rate, and raw refusal codes in Retry toasts.
