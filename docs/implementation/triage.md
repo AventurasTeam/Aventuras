@@ -61,59 +61,6 @@ slice-planning gate forces its resolution before that slice is planned.
   did not re-run the suite serially — the evidence above is still as of
   `edce17b8`.
 
-- **The chapters update keeps unchanged columns in its undo payload.**
-  Unlike lore (`lib/actions/lore/register.ts:125-130`), which drops
-  them because History reads an undo payload's keys as the fields that
-  changed (`lib/actions/chapters/register.ts`, the update handler).
-  Matters once a chapter edit shows in History. Surfaced by Slice 5.2's
-  review.
-- **The embedder drain drops a run's idle note while a pass runs.**
-  `noteIdle` (`lib/embedder/drain.ts:198-204`) does nothing mid-pass, and
-  the pass's row list predates the run's writes, so a row made stale by a
-  run inside one batch stays stale until the next `run_complete` or turn.
-  Retrieval stays correct (the drain is warm-cache only); quiescence can
-  be put off. `kick` already records a pending re-run.
-- **The E2E embedder cache is shared across checkouts on any catalog
-  revision.** `ensureEmbedderModel` (`e2e/harness/embedder.ts`) deletes
-  and rebuilds `~/.cache/aventuras-e2e/embedders/<model>` when its
-  marker is missing or names another revision. Two suites that start
-  together on a cold cache, or on branches with different catalog
-  revisions (two worktrees, say), rebuild it under each other, and one
-  can copy a half-written model into a run. `globalSetup` closed the
-  same race between one run's workers; across runs it stays.
-  Candidates: a directory per revision, with a download into a temp
-  directory renamed into place, or a lock file around the rebuild.
-  Surfaced by the review of the parallel E2E change, and by CodeRabbit
-  on its PR.
-- **`scripts/e2e.ts` doesn't pass a SIGTERM on.** A `timeout`, or a
-  stopped job that signals the wrapper alone, leaves Playwright running
-  the rest of the suite unparented. Forwarding SIGTERM made the runner
-  exit at once and leave its workers to wind down for about 50 s;
-  translating it to SIGINT, Playwright's graceful stop, didn't print the
-  interrupted summary either, and the `tsx` and `pnpm` relay in between
-  wasn't traced. With parallel workers an orphaned run now finishes in
-  under 2 minutes. Surfaced by the same review.
-- **The gated field wiring exists in three copies.** The `Controller`
-  plus `FormRow` plus input with the run gate (`editable={!blocked}`
-  and a hint, or `disabled` and a reason) is written in World's
-  `components/world/detail/fields.tsx`, Plot's inline Controllers, and
-  `ChapterCard`; they differ only in the issue-text function. A gated
-  field in `components/compounds/` that takes it would remove the
-  copies. Surfaced by Slice 5.7's card review.
-- **A Save whose only change is whitespace leaves the untrimmed draft
-  as the clean form.** The chapter and lore drafts compare trimmed
-  values (`chapterPatch` in `lib/chapters/chapter-draft.ts`, `lorePatch`
-  in `lib/world/lore-draft.ts`), so a padding-only edit builds no
-  action, and `commitRowSave` returns ok without writing. The Timeline
-  then toasts the save, and `rebase` in `hooks/use-row-save-session.ts`
-  takes the sent draft as the clean baseline: the field keeps the
-  padding, and Discard restores it, while the store and the card head
-  hold the trimmed value, until the next store patch or reopening.
-  Nothing stored changes. The fix is a substrate contract change, a
-  no-write `ok` reaching `rebase` so it rebases onto the stored values,
-  and it spans every row kind (Plot's thread and happening drafts trim
-  too). The Timeline is a new route to lore's existing behaviour.
-  Surfaced by Slice 5.7's slice review.
 - **A before-turn close shows one flat label.** The banner keeps its
   before-your-turn label for the whole run (C6, `principles.md`, the
   slice's label table), which hides `N of M` exactly when the user waits longest,
@@ -123,13 +70,3 @@ slice-planning gate forces its resolution before that slice is planned.
   sits in a `role="status"` `aria-live="polite"` region and now changes up
   to about 21 times per close run; canon's a11y notes don't say whether
   that announcement rate is wanted. Surfaced by Slice 5.6's review.
-- **Send can start a turn on a branch that turns held after its check.**
-  `submitTurn` reads `owedWorkAtSend` (held first) and, with nothing
-  owed, goes straight to the turn. A live pass reads as not held and
-  blocks the turn's start through per-turn's `blockedBy`, but a pass that
-  ends held (its cancel reversal failed) between that read and the turn's
-  start lets the turn run over its unreversed writes. Owed work re-checks
-  the hold right before it starts; the no-owed path never did (same flow
-  before Slice 5.6). The reader blocks Send while a hard-gate run is live,
-  so only a caller past the UI reaches it. Surfaced by CodeRabbit on
-  Slice 5.6's PR.
