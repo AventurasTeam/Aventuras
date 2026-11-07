@@ -312,11 +312,16 @@ except a pass or a close a failure entry's `Retry` started and a Send's owed
 work (below).
 In the reader the banner shows `Updating memory… [Cancel]` or the
 close's progress, and the composer stays live while Send waits. An
-interrupt or the pill's Cancel shows an info
+interrupt, or the pill's or the banner's Cancel, shows an info
 [toast](../../patterns/toast.md):
 
 - `Memory update moved to your next turn.`
 - `Chapter close moved to your next turn.`
+
+A Cancel that lands after the run's last phase moves nothing, since
+the run commits
+([`generation-pipeline.md → User cancel = abort`](../../../generation-pipeline.md#user-cancel--abort-no-error-path)),
+and shows no toast. A close it leaves owed still runs at the next Send.
 
 A pass that fails shows a warning toast,
 `Memory update failed. It runs again before your next turn.` A close

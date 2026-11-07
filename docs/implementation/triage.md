@@ -242,12 +242,6 @@ slice-planning gate forces its resolution before that slice is planned.
   that entry" and needs the developer's call. It shares a root with
   [the deferral toast entry in parked.md](../parked.md#the-deferral-toast-can-promise-a-close-that-never-runs).
   Surfaced by Slice 5.6's review.
-- **A late Cancel announces nothing.** One that lands after a run's last
-  phase commits the run and chains nothing through `commitRun`, which
-  records no deferral and emits no `run_deferred`, so a cancelled chain
-  gets no "moved to your next turn" toast, though the close still runs at
-  the next Send (owed by its pick or the threshold). A turn's late Cancel
-  is the same today. Surfaced by Slice 5.6's review.
 - **A before-turn close shows one flat label.** The banner keeps its
   before-your-turn label for the whole run (C6, `principles.md`, the
   slice's label table), which hides `N of M` exactly when the user waits longest,
