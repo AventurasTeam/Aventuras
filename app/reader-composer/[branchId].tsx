@@ -59,6 +59,7 @@ import {
   abortedBeforeTurn,
   cancelComposerRun,
   cancelPillRun,
+  closeRefusalOf,
   composerShowsCancel,
   passRefusalOf,
   pillRunOf,
@@ -71,11 +72,15 @@ import { describeSuggestionFailure } from '@/components/reader/suggestion-failur
 import { suggestionRefreshBlocked } from '@/components/reader/suggestion-refresh-gate'
 import { SuggestionStrip, type SuggestionStripPhase } from '@/components/reader/suggestion-strip'
 import {
+  closeResolvedEntry,
+  describeCloseFailure,
   describePassFailure,
   describeTurnFailure,
   dismissSystemEntry,
   passResolvedEntry,
+  retryCloseEntry,
   retryPassEntry,
+  toCloseFailureMeta,
   toPassFailureMeta,
   toSystemFailureMeta,
   useConfigFixAction,
@@ -116,6 +121,7 @@ import {
   regenerateTurn,
   rollbackToEntry,
   runClassifierNow,
+  runOwedClose,
   sameRollbackCounts,
   submitTurn,
   undoLastAction,
@@ -270,7 +276,7 @@ export default function ReaderComposerRoute() {
   )
   // Set around this route's submitTurn, whose pending mark alone holds the gaps around its runs.
   const [sendPending, setSendPending] = useState(false)
-  // Send in flight (its owed pass, its turn and the gap between) swaps Send for Cancel; a pass
+  // Send in flight (its owed work, its turn and the gap between) swaps Send for Cancel; a pass
   // chained after a turn leaves Send refused, the composer live. Booleans: no re-render per phase.
   const isGenerating = generationStore.useGeneration((s) =>
     composerShowsCancel(s.txState, branchId, sendPending),
@@ -614,6 +620,21 @@ export default function ReaderComposerRoute() {
     [branchId, reload],
   )
 
+  const showCloseFailure = useCallback(
+    async (error: PipelineError | undefined, submission: SystemFailureMeta['submission']) => {
+      await writeSystemEntry(
+        {
+          branchId,
+          content: describeCloseFailure(error).content,
+          failure: toCloseFailureMeta(error, submission),
+        },
+        ctx,
+      )
+      await reload()
+    },
+    [branchId, reload],
+  )
+
   type DroppedSystemEntry = { content: string; failure: SystemFailureMeta | undefined }
 
   // Read before the drop (composer-draft.ts → SubmissionHandback), so a caller whose drop or
@@ -745,20 +766,33 @@ export default function ReaderComposerRoute() {
           ctx,
         ).finally(() => setSendPending(false))
         const refusal = passRefusalOf(result)
+        const closeRefusal = closeRefusalOf(result)
+        // The Send wrote no turn, so its text goes back to the composer or onto the entry.
+        const custodyNow = () =>
+          readPassFailureCustody({
+            stillOnBranch: branchUnchanged(branchId),
+            composer: composerRef.current,
+          })
+        const restoreSent = () =>
+          composerRef.current?.restoreDraft(raw?.text ?? content, raw?.mode ?? 'free')
         if (refusal != null) {
-          // The Send wrote nothing, so its text goes back to the composer or onto the entry.
           setLastSubmission(null)
           await settlePassFailureCustody({
             held: refusal.held,
-            custodyNow: () =>
-              readPassFailureCustody({
-                stillOnBranch: branchUnchanged(branchId),
-                composer: composerRef.current,
-              }),
+            custodyNow,
             write: (withSubmission) =>
               showPassFailure(refusal, withSubmission ? submission : undefined),
-            restoreDraft: () =>
-              composerRef.current?.restoreDraft(raw?.text ?? content, raw?.mode ?? 'free'),
+            restoreDraft: restoreSent,
+          })
+        } else if (closeRefusal != null) {
+          // A close never holds its branch, so its text takes a failed pass's custody.
+          setLastSubmission(null)
+          await settlePassFailureCustody({
+            held: false,
+            custodyNow,
+            write: (withSubmission) =>
+              showCloseFailure(closeRefusal.error, withSubmission ? submission : undefined),
+            restoreDraft: restoreSent,
           })
         } else if (result.outcome === 'failed') await showTurnFailure(result.error, submission)
         else if (result.outcome === 'rejected' && !result.converged) {
@@ -785,11 +819,12 @@ export default function ReaderComposerRoute() {
             submission,
           )
         else if (result.outcome === 'aborted') {
-          // Cancelled during its owed pass, the Send wrote nothing, so the entry it cleared
-          // goes back with its own Retry: a turn entry resends its own text, not this Send's.
+          // A Cancel before any owed work committed puts the entry the Send cleared back with its
+          // own Retry; once any of it committed, the Send superseded its text and it stays dropped.
           const putBack = abortedBeforeTurn(result) ? dropped : null
           await restoreSystemTail(putBack)
           if (branchUnchanged(branchId)) {
+            // A put-back turn entry's Retry resends its own text, not this Send's.
             if (putBack != null) setLastSubmission(putBack.failure?.submission ?? null)
             // Cancel reverses the whole turn (user_action too, C6): hand the text back. A retry
             // lacks raw pre-wrap text, so wrapped content returns under 'free' (no re-wrap). Only
@@ -822,6 +857,7 @@ export default function ReaderComposerRoute() {
       restoreSystemTail,
       showTurnFailure,
       showPassFailure,
+      showCloseFailure,
       handBackSubmission,
       beginDispatch,
       endDispatch,
@@ -1006,6 +1042,61 @@ export default function ReaderComposerRoute() {
     [branchId, beginDispatch, endDispatch, handBackSubmission, systemFailure, branchUnchanged],
   )
 
+  // A failure entry's committed Retry: the entry goes and its text returns to the composer, else
+  // it stays as the notice `resolved` builds (reader-composer.md → Custody of the turn's text).
+  const settleCommittedRetry = useCallback(
+    (
+      stored: SystemFailureMeta['submission'],
+      resolved: (submission: NonNullable<SystemFailureMeta['submission']>) => {
+        content: string
+        failure: SystemFailureMeta
+      },
+    ) =>
+      settleCommittedPassRetry({
+        stored,
+        custodyNow: () =>
+          readPassFailureCustody({
+            stillOnBranch: branchUnchanged(branchId),
+            composer: composerRef.current,
+          }),
+        clear: () => clearSystemEntry(branchId, ctx),
+        reload,
+        handBack: handBackSubmission,
+        keepNotice: async (submission) => {
+          await writeSystemEntry({ branchId, ...resolved(submission) }, ctx)
+          await reload()
+        },
+      }),
+    [branchId, branchUnchanged, reload, handBackSubmission],
+  )
+
+  // A failure entry's Retry rewriting it: a held entry with no text takes the composer's draft.
+  const settleRetryRewrite = useCallback(
+    (
+      held: boolean,
+      stored: SystemFailureMeta['submission'],
+      write: (submission: SystemFailureMeta['submission']) => Promise<void>,
+    ) =>
+      settlePassRetryCustody({
+        held,
+        stored,
+        stillOnBranch: () => branchUnchanged(branchId),
+        draft: () => composerRef.current?.getDraft(),
+        toSubmission: (draft) =>
+          draftSubmission(draft, {
+            modesUsable: modesEnabled && modesUnavailableReason == null,
+            pov: wrapPov,
+            leadName,
+          }),
+        write,
+        clearDraft: () => {
+          const composer = composerRef.current
+          composer?.restoreDraft('', composer.getDraft().mode)
+        },
+      }),
+    [branchId, branchUnchanged, modesEnabled, modesUnavailableReason, wrapPov, leadName],
+  )
+
   // Held until the pass ends: no double tap or Send slips in, head reversals wait;
   // the pill's Cancel still ends the pass.
   const retryPass = useCallback(async () => {
@@ -1018,40 +1109,11 @@ export default function ReaderComposerRoute() {
       await retryPassEntry({
         runPass: () => runClassifierNow(branchId, ctx),
         held: () => isClassifierHeld(branchId, ctx),
-        committed: () =>
-          settleCommittedPassRetry({
-            stored,
-            custodyNow: () =>
-              readPassFailureCustody({
-                stillOnBranch: branchUnchanged(branchId),
-                composer: composerRef.current,
-              }),
-            clear: () => clearSystemEntry(branchId, ctx),
-            reload,
-            handBack: handBackSubmission,
-            keepNotice: async (submission) => {
-              await writeSystemEntry({ branchId, ...passResolvedEntry(submission) }, ctx)
-              await reload()
-            },
-          }),
+        committed: () => settleCommittedRetry(stored, passResolvedEntry),
         rewrite: (refusal) =>
-          settlePassRetryCustody({
-            held: refusal.held,
-            stored,
-            stillOnBranch: () => branchUnchanged(branchId),
-            draft: () => composerRef.current?.getDraft(),
-            toSubmission: (draft) =>
-              draftSubmission(draft, {
-                modesUsable: modesEnabled && modesUnavailableReason == null,
-                pov: wrapPov,
-                leadName,
-              }),
-            write: (submission) => showPassFailure(refusal, submission),
-            clearDraft: () => {
-              const composer = composerRef.current
-              composer?.restoreDraft('', composer.getDraft().mode)
-            },
-          }),
+          settleRetryRewrite(refusal.held, stored, (submission) =>
+            showPassFailure(refusal, submission),
+          ),
         notify: (message) => toast.info(message),
       })
     } finally {
@@ -1061,15 +1123,45 @@ export default function ReaderComposerRoute() {
     branchId,
     systemFailure,
     showPassFailure,
-    handBackSubmission,
-    reload,
+    settleCommittedRetry,
+    settleRetryRewrite,
     beginDispatch,
     endDispatch,
-    branchUnchanged,
-    modesEnabled,
-    modesUnavailableReason,
-    wrapPov,
-    leadName,
+  ])
+
+  // Held until the chain ends, its catch-up passes included; the pill's Cancel still ends it.
+  const retryClose = useCallback(async () => {
+    if (!beginDispatch()) {
+      logger.warn('pipeline.close_retry_dispatch_suppressed', { branchId })
+      return
+    }
+    const stored = systemFailure?.submission
+    try {
+      await retryCloseEntry({
+        runClose: () => runOwedClose(branchId, ctx),
+        held: () => isClassifierHeld(branchId, ctx),
+        committed: () => settleCommittedRetry(stored, closeResolvedEntry),
+        // A close never holds its branch; a failed catch-up pass may.
+        rewriteClose: (error) =>
+          settleRetryRewrite(false, stored, (submission) => showCloseFailure(error, submission)),
+        rewritePass: (refusal) =>
+          settleRetryRewrite(refusal.held, stored, (submission) =>
+            showPassFailure(refusal, submission),
+          ),
+        notify: (message) => toast.info(message),
+      })
+    } finally {
+      endDispatch()
+    }
+  }, [
+    branchId,
+    systemFailure,
+    showCloseFailure,
+    showPassFailure,
+    settleCommittedRetry,
+    settleRetryRewrite,
+    beginDispatch,
+    endDispatch,
   ])
 
   const { onRetry: retrySystemEntry, fixAction } = useSystemEntryActions(
@@ -1080,6 +1172,14 @@ export default function ReaderComposerRoute() {
         runAction(retryPass(), {
           event: 'reader.pass_retry_failed',
           toastMessage: t('reader:passRetryFinishFailed'),
+        })
+        return
+      }
+      // A close-failure entry's Retry runs the close it owes, catch-up passes first.
+      if (systemFailure?.close === 'failed') {
+        runAction(retryClose(), {
+          event: 'reader.close_retry_failed',
+          toastMessage: t('reader:closeRetryFinishFailed'),
         })
         return
       }

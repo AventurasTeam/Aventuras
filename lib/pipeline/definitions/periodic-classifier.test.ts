@@ -20,7 +20,9 @@ import {
   releaseBranchWriteExclusive,
 } from '@/lib/actions/delta/branch-write-lock'
 import { describeDeltaReplayError, reverseReplayDeltas } from '@/lib/actions/delta/reverse-replay'
+import { registerStandInClose } from '@/lib/actions/turns/__tests__/stand-in-close'
 import { generateStructured, type ResolveModelConfig } from '@/lib/ai'
+import { CHAPTER_CLOSE_KIND } from '@/lib/chapters'
 import {
   classifierExtractionSchema,
   classifierExtractionWithPlacesSchema,
@@ -66,7 +68,7 @@ import {
 } from '@/lib/stores'
 
 import { __resetClassifierEmbedder, configureClassifierEmbedder } from './description-embedder'
-import { unprocessedEntryCount } from './memory-chain'
+import { passChainsTo, unprocessedEntryCount } from './memory-chain'
 import { PER_TURN_KIND } from './per-turn'
 import {
   ensurePeriodicClassifierPipelineRegistered,
@@ -78,7 +80,8 @@ import {
 import { definePipeline } from '../authoring/define'
 import { __resetRegistry, getPipeline } from '../authoring/registry'
 import { configureDeltaActionPort, type DeltaActionPort } from '../runtime/action-port'
-import { runPipeline, type RunCtx } from '../runtime/orchestrator'
+import { pipelineEventBus } from '../runtime/event-bus'
+import { runPipeline, startPipeline, type RunCtx } from '../runtime/orchestrator'
 import type { PhaseContext, PhaseResult, Pipeline, TxResult } from '../types'
 
 vi.mock('@/lib/ai', async (importOriginal) => ({
@@ -1990,8 +1993,8 @@ describe('periodicClassifierPhase', () => {
         blockedBy: [PER_TURN_KIND, PERIODIC_CLASSIFIER_KIND, 'chapter-close', 'translation-retry'],
       },
     })
-    // Passes chain one another only for a pending close (M5.2); none chains here.
-    expect(pipeline.chainsTo).toBeUndefined()
+    // chapter-close.md → Phase 0: catch-up passes and the close, only while a close is owed.
+    expect(pipeline.chainsTo).toBe(passChainsTo)
     // Idempotent: bootstrap and tests both call it.
     expect(() => ensurePeriodicClassifierPipelineRegistered()).not.toThrow()
   })
@@ -3104,7 +3107,9 @@ describe('periodicClassifierPhase via runPipeline', () => {
 
     const pass = runOutcome({ storyId: 's1', branchId: 'b1', db, runInTransaction })
     await inCall
-    await bracketProseReversal('b1', () => runInTransaction(classifierWatermarkClampOps('b1', 3)))
+    await bracketProseReversal('b1', { db }, () =>
+      runInTransaction(classifierWatermarkClampOps('b1', 3)),
+    )
 
     expect(await pass).toBe('aborted')
     expect(generationStore.getTxState().runs.size).toBe(0)
@@ -3439,6 +3444,60 @@ describe('periodicClassifierPhase via runPipeline', () => {
       await rewriteE3(seeded)
       expect((await rowOf(seeded.db)).keywords).toEqual(['the broker', 'the fence'])
     })
+  })
+
+  // chapter-close.md → Phase 0: each pass writes its status before it commits, so the chain reads
+  // no `running` and goes on through the backlog to the close.
+  it('chains catch-up passes over a backlog, window by window, into an owed close', async () => {
+    const { db, runInTransaction } = await seedStory()
+    await hydrateAppSettings(async () => ({
+      ...CLASSIFIER_WIRED_CONFIG,
+      classifierWindowMaxEntries: 2,
+    }))
+    const kinds = ['opening', 'user_action', 'ai_reply', 'user_action', 'ai_reply'] as const
+    await db.insert(storyEntries).values(
+      kinds.map((kind, i) => ({
+        id: `e${i + 1}`,
+        branchId: 'b1',
+        position: i + 1,
+        kind,
+        content: `entry ${i + 1}`,
+        contentTokens: 100,
+        createdAt: i + 1,
+      })),
+    )
+    vi.mocked(generateStructured).mockResolvedValue({
+      status: 'ok',
+      recoverable: [],
+      value: extraction(),
+    })
+    const close = registerStandInClose()
+    ensurePeriodicClassifierPipelineRegistered()
+    generationStore.setPendingClose('b1', { endEntryId: 'e5' })
+    const starts: string[] = []
+    const unsubscribe = pipelineEventBus.subscribe('run_start', (e) => {
+      starts.push(e.kind)
+    })
+
+    const { chain } = startPipeline(PERIODIC_CLASSIFIER_KIND, {
+      storyId: 's1',
+      branchId: 'b1',
+      db,
+      runInTransaction,
+    })
+    const closing = await close.nextHeld()
+    closing.finish('completed')
+    const end = await chain
+    unsubscribe()
+
+    expect(starts).toEqual([
+      PERIODIC_CLASSIFIER_KIND,
+      PERIODIC_CLASSIFIER_KIND,
+      PERIODIC_CLASSIFIER_KIND,
+      CHAPTER_CLOSE_KIND,
+    ])
+    expect(end).toMatchObject({ kind: CHAPTER_CLOSE_KIND, result: { outcome: 'completed' } })
+    expect(await storedStatus(db)).toMatchObject({ state: 'idle', processedThrough: 5 })
   })
 })
 

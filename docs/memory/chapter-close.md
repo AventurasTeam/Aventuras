@@ -217,11 +217,14 @@ A close writes no story entries.
 it and user-overridable
 ([`data-model.md → App settings storage`](../data-model.md#app-settings-storage)).
 A close runs unless the flag is off, since many servers publish nothing
-about tools. Off stops the close at pre-flight, with the system entry
-any close's pre-flight failure raises, and App Settings warns on the
-`lore-mgmt` assignment long before that. A close on a model that takes
-the tool list and answers in plain text finishes every task with no
-writes; the review says no task called a tool.
+about tools. Off stops the close at pre-flight, which surfaces as any
+close's pre-flight failure does: the system entry when it fails a Send
+or the manual close's click, a toast otherwise
+([`generation-pipeline.md → Config pre-flight validation`](../generation-pipeline.md#config-pre-flight-validation)).
+App Settings warns on the `lore-mgmt` assignment long before that. A
+close on a model that takes the tool list and answers in plain text
+finishes every task with no writes; the review says no task called a
+tool.
 
 ## What chapter-close no longer owns
 
@@ -253,12 +256,14 @@ on a partial happening graph (recent turns un-classified) and dedup
 can't find rows the classifier hasn't written yet.
 
 **Phase 0 is a chain of ordinary passes.** Whatever starts a close —
-a turn crossing the threshold, the user's manual close, a deferred
-close at the next Send — starts a pass first when entries are
-unprocessed, whether or not the cadence is due, with the close marked
-pending. A pass's `chainsTo` returns another pass while a close is
-pending and entries remain unprocessed, and the close once none do
-([`classifier.md → Pipeline framing`](./classifier.md#pipeline-framing)).
+a turn crossing the threshold, the user's manual close, a close owed
+at the next Send, a close entry's `Retry` — starts a pass first when
+entries are unprocessed, whether or not the cadence is due, with the
+close still owed. A pass's `chainsTo` returns another pass while a
+close is owed and entries remain unprocessed, and the close once none
+do ([`classifier.md → Pipeline framing`](./classifier.md#pipeline-framing)).
+A close the threshold owes keeps no record; only a manual close
+records its end entry.
 Each pass covers one window, up to
 `classifierWindowMaxEntries` entries, so a backlog takes several, each
 holding the gate. Nothing is ever in flight to drain: the passes and

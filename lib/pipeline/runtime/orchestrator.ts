@@ -54,7 +54,7 @@ export type RunCtx = {
   // Kind-specific run parameters the starting action hands to the phases
   // (generation-pipeline.md → Run-scoped state: inputs, not intermediates).
   inputs?: unknown
-  /** Send's owed pass: shown as "before your turn", cancelled with the Send. */
+  /** Send's owed work, its chain included: shown as "before your turn", cancelled with the Send. */
   beforeTurn?: boolean
   /** Called once the run is in txState, before any await; not for a chain's successor. */
   onReserved?: () => void
@@ -66,14 +66,19 @@ export type RunCtx = {
 export type RunCtxFor<K extends string> = RunCtx &
   (K extends keyof PipelineInputMap ? { inputs: PipelineInputMap[K] } : { inputs?: unknown })
 
+/** The chain's last run: its kind, its result, and whether its abort had fired by its end. */
+export type ChainEnd = Readonly<{ kind: string; result: TxResult; cancelled: boolean }>
+
 export type PipelineStart = {
   /**
    * The starting run's result, or the refusal; settles at its commit or abort. Rejects on the
    * origin's own throws, so a caller that keeps only `chain` must still handle it.
    */
   origin: Promise<TxResult | RejectedStart>
-  /** Settles when the chain's last run ends; never rejects. */
-  chain: Promise<void>
+  /**
+   * The chain's last run, origin included; null if the origin was refused or threw. Never rejects.
+   */
+  chain: Promise<ChainEnd | null>
 }
 
 function newRunState(kind: string, ctx: RunCtx): RunState {
@@ -126,13 +131,19 @@ function emitRunComplete(
   })
 }
 
+// What unwindRun reported, read back for the chain's end: beginRun unwinds its own marker failure
+// before its caller sees the throw.
+const unwoundErrors = new WeakMap<RunState, PipelineError>()
+
 // Ends a run abortRun/commitRun can't, so it stops gating edits or a retry; run_complete reports
 // idle and failure, as a successor's predecessor sent its own while this one was registered.
 function unwindRun(run: RunState, detail: string): void {
+  const error: PipelineError = { kind: 'orchestrator', detail }
+  unwoundErrors.set(run, error)
   generationStore.abortRun(run.runId, 'unwound')
   // A capture left open is never evicted. Before beginTurn (a failed marker insert) there is none.
   turnCaptureSink.endTurn(run.actionId, 'failed', 'unwound')
-  emitRunComplete(run, 'failed', { kind: 'orchestrator', detail })
+  emitRunComplete(run, 'failed', error)
   run.resolveTerminal()
 }
 
@@ -204,6 +215,10 @@ async function handleEvent(event: PhaseEmittedEvent, run: RunState, ctx: RunCtx)
     if (event.action.kind === 'createStoryEntry' && event.entryId) {
       turnCaptureSink.recordTargetEntry(run.actionId, event.entryId)
     }
+  } else if (event.type === 'close_task_start') {
+    // C6: an emitted event names no run, and a banner mounted mid-close reads the stored one.
+    const { task, part, index, total } = event
+    generationStore.setCloseProgress(run.runId, { task, part, index, total })
   } else if (event.type === 'recoverable_error') {
     const { error } = event
     const detail = pipelineErrorDetail(error)
@@ -319,14 +334,14 @@ async function commitRun(
       { runId: run.runId, kind: run.kind, nextKind },
       { actionId: run.actionId },
     )
-  // A chained run's state takes no inputs, its own actionId, never Send's owed pass
-  // (generation-pipeline.md → chainsTo on predecessor); it still runs on the origin's ctx.
+  // A chained run's state takes no inputs and its own actionId (generation-pipeline.md → chainsTo
+  // on predecessor); under a Send it stays Send's work. It still runs on the origin's ctx.
   const successor = nextPipeline
     ? newRunState(nextPipeline.kind, {
         ...ctx,
         inputs: undefined,
         actionId: undefined,
-        beforeTurn: undefined,
+        beforeTurn: run.beforeTurn,
       })
     : undefined
   generationStore.finishRun(run.runId, successor)
@@ -528,7 +543,7 @@ async function driveRun(
   run: RunState,
   ctx: RunCtx,
 ): Promise<{ tx: TxResult; successor?: RunState }> {
-  // A cancel that landed before pre-flight (at a chain's swap, or as Send's owed pass reserved)
+  // A cancel that landed before pre-flight (at a chain's swap, or as Send's owed work reserved)
   // is an interrupt: a pre-flight failure would record a failed pass instead of a deferred one.
   if (run.abortController.signal.aborted)
     return { tx: await abortRun(run, ctx, { reason: 'user-cancel' }) }
@@ -567,10 +582,17 @@ async function driveRun(
   return commitRun(run, ctx)
 }
 
-async function driveOrigin(
-  kind: string,
-  ctx: RunCtx,
-): Promise<{ result: TxResult | RejectedStart; successor?: RunState }> {
+// abortRun fires the signal itself, so `cancelled` tells something only on a completed end: a
+// cancel that landed after the run's last phase, which commits it and chains nothing.
+function endOf(run: RunState, result: TxResult): ChainEnd {
+  return { kind: run.kind, result, cancelled: run.abortController.signal.aborted }
+}
+
+type OriginDriven =
+  | { result: RejectedStart; end?: never; successor?: never }
+  | { result: TxResult; end: ChainEnd; successor?: RunState }
+
+async function driveOrigin(kind: string, ctx: RunCtx): Promise<OriginDriven> {
   // Loop so a yield-wait can't act on a stale decision: after aborting + awaiting the
   // yielding runs, re-check; a blocking run may have started during the wait.
   for (;;) {
@@ -598,7 +620,7 @@ async function driveOrigin(
     // commit under this run's reads. A successor needs no settle: the gate held across the handoff.
     if (run.gateBehavior === 'hard-gate') await settleUserWrites()
     const { tx, successor } = await driveRun(run, ctx)
-    return { result: tx, successor }
+    return { result: tx, end: endOf(run, tx), successor }
   } catch (e) {
     // Unwound as a successor is; the caller still gets the throw.
     unwindIfRegistered(run, e)
@@ -606,9 +628,24 @@ async function driveOrigin(
   }
 }
 
+// A successor that threw ends the chain failed, with the error its unwind reported.
+function unwindToEnd(run: RunState, e: unknown): ChainEnd {
+  unwindIfRegistered(run, e)
+  const error: PipelineError = unwoundErrors.get(run) ?? {
+    kind: 'orchestrator',
+    detail: `run threw: ${messageOf(e)}`,
+  }
+  return endOf(run, { runId: run.runId, actionId: run.actionId, outcome: 'failed', error })
+}
+
 // Each successor is already in txState, swapped in at its predecessor's commit. Nothing here
-// rejects: the origin's caller has its result, and a successor's failure is its own.
-async function driveSuccessors(first: RunState | undefined, ctx: RunCtx): Promise<void> {
+// rejects: the origin's caller has its result, and a successor's failure is the chain's end.
+async function driveSuccessors(
+  originEnd: ChainEnd,
+  first: RunState | undefined,
+  ctx: RunCtx,
+): Promise<ChainEnd> {
+  let end = originEnd
   let run = first
   while (run) {
     const current = run
@@ -620,21 +657,22 @@ async function driveSuccessors(first: RunState | undefined, ctx: RunCtx): Promis
         { runId: current.runId, kind: current.kind, error: messageOf(e) },
         { actionId: current.actionId },
       )
-      unwindIfRegistered(current, e)
-      return
+      return unwindToEnd(current, e)
     }
     try {
-      run = (await driveRun(current, ctx)).successor
+      const driven = await driveRun(current, ctx)
+      end = endOf(current, driven.tx)
+      run = driven.successor
     } catch (e) {
       logger.error(
         'pipeline.chain_run_failed',
         { runId: current.runId, kind: current.kind, error: messageOf(e) },
         { actionId: current.actionId },
       )
-      unwindIfRegistered(current, e)
-      return
+      return unwindToEnd(current, e)
     }
   }
+  return end
 }
 
 /** Starts `kind` and drives its chain; see `PipelineStart` for `origin` and `chain`. */
@@ -643,8 +681,8 @@ export function startPipeline<K extends string>(kind: K, ctx: RunCtxFor<K>): Pip
   return {
     origin: started.then((s) => s.result),
     chain: started.then(
-      (s) => driveSuccessors(s.successor, ctx),
-      () => undefined,
+      (s) => (s.end ? driveSuccessors(s.end, s.successor, ctx) : null),
+      () => null,
     ),
   }
 }

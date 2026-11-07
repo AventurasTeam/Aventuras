@@ -13,6 +13,10 @@ export const memoryBanner = {
     banner(page).getByText(t('chrome.memoryBanner.updating'), { exact: true }),
   updatingBeforeTurn: (page: Page): Locator =>
     banner(page).getByText(t('chrome.memoryBanner.updatingBeforeTurn'), { exact: true }),
+  closingMetadata: (page: Page): Locator =>
+    banner(page).getByText(t('chrome.memoryBanner.closingMetadata'), { exact: true }),
+  closingBeforeTurn: (page: Page): Locator =>
+    banner(page).getByText(t('chrome.memoryBanner.closingBeforeTurn'), { exact: true }),
   cancel: (page: Page): Locator =>
     banner(page).getByRole('button', { name: t('cancel'), exact: true }),
 }

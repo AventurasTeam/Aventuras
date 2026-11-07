@@ -1974,6 +1974,25 @@ Parked at M5's promotion, 2026-11-01.
 
 ### UX (parked)
 
+#### The deferral toast can promise a close that never runs
+
+An interrupt's toast, `Chapter close moved to your next turn.`, fires
+as the close aborts, before the interrupting reversal's sweep. When
+that reversal removes a manual close's end entry, the bracket drops the
+pick once its sweep has ended; when it takes the open region back under the threshold, as CTRL-Z
+of the turn that crossed it does, the next Send finds no close owed and
+clears the record. Either way the close the toast named may not run, though the toast said
+it would: a pick that is gone, or a region under the threshold, owes
+nothing, while a threshold that still owes one, with auto-close on, runs
+a close all the same
+([`generation-pipeline.md → Prose reversals and the interrupt`](./generation-pipeline.md#prose-reversals-and-the-interrupt)).
+The copy ships as canon has it. The options are a follow-up toast when
+the record drops, or holding the deferral toast until the reversal's
+bracket ends. The close-failure toast, `It runs again before your next
+turn`, has the same gap when the boundary phase drops a stale pick and the
+region is under the threshold. Raised 2026-11-07 by Slice 5.6's planning. Parked
+2026-11-07; the signal is a tester expecting that close.
+
 #### A route mounted during a read starts the strip at 0
 
 `useChapterProgress` holds its last read per hook, so World, Plot or
@@ -3704,7 +3723,7 @@ those sites, since a sweep of about 90 files nears the review cap.
 
 #### The mock LLM's token count has no run guard
 
-`scripts/mock-llm/respond/wire.ts:48-52` keeps its own `countO200k`,
+`scripts/mock-llm/respond/wire.ts:49-53` keeps its own `countO200k`,
 though its comment says it mirrors `countTokens`. On a fixture with a
 run over 512 code points the two differ by a few tokens per cut, and the
 mock pays the quadratic cost. No `e2e/` or mock fixture repeats 100

@@ -21,12 +21,17 @@ export {
   CHAPTER_CLOSE_RESOLVES,
   ensureChapterClosePipelineRegistered,
 } from './definitions/chapter-close'
+export { CLOSE_PHASE } from './definitions/intermediates'
 export {
   CLASSIFIER_HELD,
+  closeOwed,
   isClassifierHeld,
-  owedPassAtSend,
+  owedWorkAtSend,
+  passStartedAlone,
   readClassifierStatus,
   unprocessedEntryCount,
+  type OwedWork,
+  type PassInputs,
 } from './definitions/memory-chain'
 export { runClassifierPass } from './definitions/classifier-pass'
 export {
@@ -51,6 +56,7 @@ export {
 export {
   runPipeline,
   startPipeline,
+  type ChainEnd,
   type PipelineStart,
   type RunCtx,
   type RunCtxFor,

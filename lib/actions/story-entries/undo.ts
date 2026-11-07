@@ -2,7 +2,7 @@ import { desc, eq } from 'drizzle-orm'
 
 import type { Delta, SqlOp } from '@/lib/db'
 import { deltas } from '@/lib/db'
-import { entriesStore, generationStore, undoRedoStore } from '@/lib/stores'
+import { entriesStore, generationStore, selectMemoryRun, undoRedoStore } from '@/lib/stores'
 import { selectUndoTarget } from '@/lib/undo'
 
 import { resolveInvalidationForDeltas, type InvalidationOutcome } from './classifier-facts'
@@ -58,12 +58,15 @@ async function recentDeltaRows(branchId: string, ctx: DbCtx): Promise<Delta[]> {
 }
 
 export async function undoLastAction(branchId: string, ctx: DbCtx): Promise<UndoResult> {
-  // Only CTRL-Z of the turn passes a pass, by interrupting it, so the target is read
+  // Only CTRL-Z of the turn passes a pass or a close, by interrupting it, so the target is read
   // before the gate decides (principles.md → Edit restrictions during in-flight generation).
   let throughInterrupt = false
   if (generationStore.isUserEditBlocked()) {
     if (generationStore.isHeadReversalBlocked(branchId)) return GATED
-    const target = selectUndoTarget(await recentDeltaRows(branchId, ctx))
+    const rows = await recentDeltaRows(branchId, ctx)
+    // A running close's rows head the log above the turn; the interrupt reverses them first.
+    const running = selectMemoryRun(generationStore.getTxState(), { branchId })?.actionId
+    const target = selectUndoTarget(rows.filter((row) => row.actionId !== running))
     if (generationStore.isUserEditBlocked()) {
       if (target?.kind !== 'turn' || generationStore.isHeadReversalBlocked(branchId)) return GATED
       throughInterrupt = true
@@ -78,7 +81,7 @@ export async function undoLastAction(branchId: string, ctx: DbCtx): Promise<Undo
   // Brackets the whole target-selection + reversal sweep, matching
   // rollbackToEntry — a concurrent edit/submit/generation mid-sweep must not
   // race the rows this undo is about to read and reverse.
-  return bracketProseReversal(branchId, () =>
+  return bracketProseReversal(branchId, ctx, () =>
     refusingIntegrity(branchId, () => undoBracketed(branchId, ctx, throughInterrupt)),
   )
 }
@@ -143,7 +146,7 @@ export async function redoLastAction(branchId: string, ctx: DbCtx): Promise<Undo
     }
 
   // Bracketed like every reversal, so no pass starts mid-sweep.
-  return bracketProseReversal(branchId, () =>
+  return bracketProseReversal(branchId, ctx, () =>
     refusingIntegrity(branchId, async () => {
       // A write committing during the settle clears the stack; its snapshot would restore over it.
       if (undoRedoStore.peekRedoGroup() !== group)

@@ -95,12 +95,12 @@ slice-planning gate forces its resolution before that slice is planned.
   the PK is `(branch_id, id)`). The stamp handler's case shows the
   shape.
 - **Refusal codes repeated as literals.** `'branch-not-open'`
-  (`lib/actions/classifier/run-now.ts:11`) and `'embedder-swap'`
-  (`lib/actions/turns/submit-turn.ts:38`) restate
+  (`lib/actions/classifier/run-now.ts:14`) and `'embedder-swap'`
+  (`lib/actions/turns/submit-turn.ts:57`) restate
   `MANUAL_CLOSE_REFUSAL.branchNotOpen` and `.swapPending`
   (`lib/actions/chapters/start-manual-close.ts`).
 - **Pre-flight reads the open story's settings after two awaits.**
-  `lib/pipeline/runtime/orchestrator.ts:537-540` reads
+  `lib/pipeline/runtime/orchestrator.ts:553-555` reads
   `currentStoryStore.getCurrentStory()?.settings` after `beginRun` and
   `settleUserWrites`; a story switch in between checks the wrong
   story's settings. Unverified as reachable.
@@ -162,7 +162,7 @@ slice-planning gate forces its resolution before that slice is planned.
   call reads its stores before its first await. Surfaced by Slice 5.2's
   review.
 - **Phase intermediates are an untyped bag.** `PhaseContext.intermediates`
-  is `Record<string, unknown>` (`lib/pipeline/types.ts:101`), and each
+  is `Record<string, unknown>` (`lib/pipeline/types.ts:106`), and each
   reader casts its key: the retrieval outcome behind a shape check
   (`generation-context.ts`), the close's range and ledger
   (`chapter-close-metadata.ts`, `chapter-close-report.ts`) and the pass's
@@ -292,3 +292,41 @@ slice-planning gate forces its resolution before that slice is planned.
   `window-check.test.ts` and `request-shape.test.ts`. The older
   `narrativeValueSchema` in `scripts/mock-llm/validate.ts` is exported
   with no importer. Surfaced by Slice 5.4's slice review.
+- **A second CTRL-Z after a close whose reversal failed leaves its marker
+  open.** It undoes the close's delta rows and chapter row but leaves the
+  close's `pipeline_runs` marker with `finished_at` null. How boot
+  recovery (`recoverInFlightRuns`, `lib/pipeline/runtime/recovery.ts`)
+  treats an `action_id` a user undo already reversed is unverified. Surfaced by Slice 5.6's review.
+- **`undoLastAction` reads the branch's whole delta log, twice per
+  CTRL-Z.** `lib/actions/story-entries/undo.ts` reads it with no LIMIT
+  under the gate, and only the head group is needed. The cost is
+  unmeasured. Surfaced by Slice 5.6's review.
+- **A manual pick a reversal stamps into a chapter survives the
+  prose-reversal bracket's existence check.** Redo of an undone close
+  does it; the next Send then fails once at `boundary` (stale pick)
+  before the pick drops. The fix would add `isNull(storyEntries.chapterId)`
+  to the check's read, which goes past canon's "a reversal that removes
+  that entry" and needs the developer's call. It shares a root with
+  [the deferral toast entry in parked.md](../parked.md#the-deferral-toast-can-promise-a-close-that-never-runs).
+  Surfaced by Slice 5.6's review.
+- **A late Cancel announces nothing.** One that lands after a run's last
+  phase commits the run and chains nothing through `commitRun`, which
+  records no deferral and emits no `run_deferred`, so a cancelled chain
+  gets no "moved to your next turn" toast, though the close still runs at
+  the next Send (owed by its pick or the threshold). A turn's late Cancel
+  is the same today. Surfaced by Slice 5.6's review.
+- **A before-turn close shows one flat label.** The banner keeps its
+  before-your-turn label for the whole run (C6, `principles.md`, the
+  slice's label table), which hides `N of M` exactly when the user waits longest,
+  7 to 17 agent tasks. Needs a developer question before 5.8 and 5.9
+  consume C6. Surfaced by Slice 5.6's review.
+- **The memory banner's live region may announce too often.** Its label
+  sits in a `role="status"` `aria-live="polite"` region and now changes up
+  to about 21 times per close run; canon's a11y notes don't say whether
+  that announcement rate is wanted. Surfaced by Slice 5.6's review.
+- **A retry-blocked toast prints a raw refusal code.** `reader.json`'s
+  `passRetryBlocked` and `closeRetryBlocked` interpolate the run's
+  `blockedBy` (`story-busy`, for one) into user-facing copy.
+  `passRetryBlocked` was already there; `closeRetryBlocked` is this
+  slice's own copy, repeating its pattern. Surfaced by Slice 5.6's
+  review.

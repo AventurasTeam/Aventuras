@@ -1,8 +1,18 @@
 import { useStore } from 'zustand'
 import { createStore } from 'zustand/vanilla'
 
+import type { CloseTask } from '@/lib/db'
+
 export type DeferredWork = { readonly pass?: true; readonly close?: true }
 export type DeferredWorkKind = keyof DeferredWork
+
+/** C6: the agent task a close last started; `index` is 1-based, `part` 0-based. */
+export type CloseProgress = Readonly<{
+  task: CloseTask
+  part: number
+  index: number
+  total: number
+}>
 
 export type RunState = {
   runId: string
@@ -13,7 +23,7 @@ export type RunState = {
    * run in; null for a run never deferred.
    */
   interruptible: DeferredWorkKind | null
-  /** Send's owed pass, before the turn (classifier.md → Failure policy). */
+  /** Owed work before a Send's turn, every run of its chain (classifier.md → Failure policy). */
   beforeTurn: boolean
   actionId: string
   storyId: string | null
@@ -24,6 +34,8 @@ export type RunState = {
   inputs?: unknown
   intermediates: Record<string, unknown>
   lastResult?: { status: 'completed' | 'aborted' | 'failed' }
+  /** C6: set as each agent task starts and kept to the run's end. */
+  closeProgress?: CloseProgress
   // Resolves at commit or abort: lets a context that didn't start the run (interrupt, Cancel &
   // leave, yieldsTo abort) await its end without the runPipeline promise.
   terminal: Promise<void>
@@ -33,8 +45,8 @@ export type RunState = {
 /** A turn admitted on its branch but not yet registered as a run; identity is the token. */
 export type PendingTurn = { readonly branchId: string }
 
-/** A close owed on a branch: the end the user picked, or null for boundary selection. */
-export type PendingClose = { readonly endEntryId: string | null }
+/** A manual close's pick (C14). A close owed by the threshold keeps no record. */
+export type PendingClose = { readonly endEntryId: string }
 
 // reversalInProgress: a prose reversal's interrupt->sweep window; blocks interruptible starts and
 // user dispatch. pendingTurns: generation-pipeline.md → Gate derivation as a selector.
@@ -95,12 +107,10 @@ function withDeferral(
   return next
 }
 
-function withoutPendingClose(
-  pendingClose: ReadonlyMap<string, PendingClose>,
-  branchId: string,
-): ReadonlyMap<string, PendingClose> {
-  if (!pendingClose.has(branchId)) return pendingClose
-  const next = new Map(pendingClose)
+// The same map when the branch has no entry, so a no-op write keeps the state object.
+function withoutBranch<V>(map: ReadonlyMap<string, V>, branchId: string): ReadonlyMap<string, V> {
+  if (!map.has(branchId)) return map
+  const next = new Map(map)
   next.delete(branchId)
   return next
 }
@@ -134,6 +144,12 @@ type GenerationState = {
   /** Writes the branch's owed close, replacing any. */
   setPendingClose: (branchId: string, record: PendingClose) => void
   clearPendingClose: (branchId: string) => void
+  /** Removes only `deferred.close`; a deferred pass stays. */
+  clearDeferredClose: (branchId: string) => void
+  /** Drops both records in one update, so no subscriber sees one without the other. */
+  dropBranchRecords: (branchId: string) => void
+  /** C6: replaces the stored run with a copy carrying `progress`; no-op for an unknown run. */
+  setCloseProgress: (runId: string, progress: CloseProgress) => void
   setReversalInProgress: (value: boolean) => void
   /** Marks a turn pending on `branchId` until `body` settles; `body` may end the mark sooner. */
   bracketPendingTurn: <T>(
@@ -186,7 +202,7 @@ const store = createStore<GenerationState>()((set) => ({
         : s.txState.deferred
       const pendingClose =
         run?.interruptible === 'close'
-          ? withoutPendingClose(s.txState.pendingClose, run.branchId)
+          ? withoutBranch(s.txState.pendingClose, run.branchId)
           : s.txState.pendingClose
       return {
         txState: { ...s.txState, runs, deferred, pendingClose },
@@ -217,10 +233,30 @@ const store = createStore<GenerationState>()((set) => ({
     }),
   clearPendingClose: (branchId) =>
     set((s) => {
-      const pendingClose = withoutPendingClose(s.txState.pendingClose, branchId)
+      const pendingClose = withoutBranch(s.txState.pendingClose, branchId)
       return pendingClose === s.txState.pendingClose
         ? s
         : { txState: { ...s.txState, pendingClose } }
+    }),
+  clearDeferredClose: (branchId) =>
+    set((s) => {
+      const deferred = withDeferral(s.txState.deferred, branchId, 'close', false)
+      return deferred === s.txState.deferred ? s : { txState: { ...s.txState, deferred } }
+    }),
+  dropBranchRecords: (branchId) =>
+    set((s) => {
+      const deferred = withoutBranch(s.txState.deferred, branchId)
+      const pendingClose = withoutBranch(s.txState.pendingClose, branchId)
+      if (deferred === s.txState.deferred && pendingClose === s.txState.pendingClose) return s
+      return { txState: { ...s.txState, deferred, pendingClose } }
+    }),
+  setCloseProgress: (runId, progress) =>
+    set((s) => {
+      const run = s.txState.runs.get(runId)
+      if (!run) return s
+      const runs = new Map(s.txState.runs)
+      runs.set(runId, { ...run, closeProgress: progress })
+      return { txState: { ...s.txState, runs } }
     }),
   setReversalInProgress: (value) =>
     set((s) => ({
@@ -296,6 +332,9 @@ export const generationStore = {
   abortRun: api.abortRun,
   setPendingClose: api.setPendingClose,
   clearPendingClose: api.clearPendingClose,
+  clearDeferredClose: api.clearDeferredClose,
+  dropBranchRecords: api.dropBranchRecords,
+  setCloseProgress: api.setCloseProgress,
   setReversalInProgress: api.setReversalInProgress,
   bracketPendingTurn: api.bracketPendingTurn,
   /** Fires after every state change; returns the unsubscribe. */

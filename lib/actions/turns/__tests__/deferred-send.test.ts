@@ -2,14 +2,25 @@ import { and, eq } from 'drizzle-orm'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { idleStatus, PERIODIC_CLASSIFIER_KIND } from '@/lib/classifier'
-import { branches, deltas, happenings, pipelineRuns, storyEntries, type StoryEntry } from '@/lib/db'
 import {
+  branches,
+  chapters,
+  deltas,
+  happenings,
+  pipelineRuns,
+  storyEntries,
+  type StoryEntry,
+} from '@/lib/db'
+import {
+  CHAPTER_CLOSE_KIND,
   CLASSIFIER_HELD,
   isClassifierHeld,
   PER_TURN_KIND,
   registerPipeline,
+  startPipeline,
   type PhaseResult,
   type RunCtx,
+  type TxResult,
 } from '@/lib/pipeline'
 import {
   cancelStoryRuns,
@@ -18,9 +29,11 @@ import {
   generationStore,
   hydrateAppSettings,
   interruptMemoryRuns,
+  type DeferredWorkKind,
 } from '@/lib/stores'
 
 import { branchEntries, openStory, sseFetch, WORKING_CONFIG } from './fixtures'
+import { registerStandInClose, type HeldClose, type StandInClose } from './stand-in-close'
 import {
   failReversalsOf,
   recordDeferrals,
@@ -28,6 +41,7 @@ import {
   registerStoreOnlyRun,
   runningPass,
   standInHappeningId,
+  type HeldPass,
   type StandInPass,
   type StandInPassOptions,
 } from './stand-in-pass'
@@ -78,6 +92,13 @@ const BACKLOG: readonly StoryEntry[] = [
   },
 ]
 
+// A row written with no count reads 0 tokens, which no threshold reaches: 300 across the backlog.
+const COUNTED_BACKLOG: readonly StoryEntry[] = BACKLOG.map((row) => ({
+  ...row,
+  contentTokens: 100,
+}))
+const OWED_AT = 300
+
 type Db = Awaited<ReturnType<typeof makeHarness>>['db']
 
 // Fails in 2 s instead of at the test timeout: an awaited chain would hold the caller, and the
@@ -101,6 +122,7 @@ async function setUp(
   cadence: number,
   rows: readonly StoryEntry[] = [OPENING],
   passOptions: Omit<StandInPassOptions, 'anchorEntryId'> = {},
+  closeOptions: { leaveOpen?: true } = {},
 ) {
   const { ctx, db } = await makeHarness()
   await db.insert(storyEntries).values([...rows])
@@ -109,7 +131,42 @@ async function setUp(
   entriesStore.hydrate('b1', [...rows])
   await hydrateAppSettings(async () => WORKING_CONFIG)
   const pass = registerStandInPass({ anchorEntryId: null, ...passOptions })
-  return { ctx, db, pass, deferrals: recordDeferrals() }
+  const close = registerStandInClose(closeOptions)
+  return { ctx, db, pass, close, deferrals: recordDeferrals() }
+}
+
+function setThreshold(tokens: number): void {
+  const open = currentStoryStore.getCurrentStory()
+  if (open == null) throw new Error('story not open')
+  currentStoryStore.set({ ...open, settings: { ...open.settings, chapterTokenThreshold: tokens } })
+}
+
+async function setWatermark(db: Db, processedThrough: number | null): Promise<void> {
+  await db
+    .update(branches)
+    .set({ classifierStatus: { ...idleStatus(), processedThrough } })
+    .where(eq(branches.id, 'b1'))
+}
+
+// What an interrupted run's abort leaves: the slot recorded on b1.
+function recordDeferred(slot: DeferredWorkKind): void {
+  const runId = `run_interrupted_${slot}`
+  generationStore.startRun({
+    runId,
+    kind: slot === 'pass' ? PERIODIC_CLASSIFIER_KIND : CHAPTER_CLOSE_KIND,
+    gateBehavior: 'hard-gate',
+    interruptible: slot,
+    beforeTurn: false,
+    actionId: `act_interrupted_${slot}`,
+    storyId: 's1',
+    branchId: 'b1',
+    abortController: new AbortController(),
+    currentPhase: '',
+    intermediates: {},
+    terminal: Promise.resolve(),
+    resolveTerminal: () => {},
+  })
+  expect(generationStore.abortRun(runId, 'aborted')).toBe(slot)
 }
 
 const send = (ctx: RunCtx, content: string) =>
@@ -174,6 +231,52 @@ async function passHappening(db: Db, actionId: string) {
     .select()
     .from(happenings)
     .where(eq(happenings.id, standInHappeningId(actionId)))
+}
+
+async function closeMarkers(db: Db) {
+  return db.select().from(pipelineRuns).where(eq(pipelineRuns.kind, CHAPTER_CLOSE_KIND))
+}
+
+// Sends, finishing each of Send's owed runs in order while no user action exists yet.
+async function sendThrough(
+  ctx: RunCtx,
+  db: Db,
+  stands: { pass: StandInPass; close: StandInClose },
+  owed: readonly ('pass' | 'close')[],
+): Promise<{ result: TxResult; ran: (HeldPass | HeldClose)[] }> {
+  const turn = send(ctx, 'I wait.')
+  const ran: (HeldPass | HeldClose)[] = []
+  for (const work of owed) {
+    const held = await within(
+      work === 'pass' ? stands.pass.nextHeld() : stands.close.nextHeld(),
+      `Send's owed ${work}`,
+    )
+    expect(held.beforeTurn).toBe(true)
+    expect(await userActionsReading(db, 'I wait.')).toEqual([])
+    ran.push(held)
+    held.finish('completed')
+  }
+  return { result: expectRan(await within(turn, 'the turn')), ran }
+}
+
+// Each owed run wrote its own group, all of it before the user action.
+async function expectWritesBeforeTurn(
+  db: Db,
+  ran: readonly { actionId: string }[],
+  turn: TxResult,
+): Promise<void> {
+  const [userAction] = await userActionsReading(db, 'I wait.')
+  const [create] = await db
+    .select()
+    .from(deltas)
+    .where(and(eq(deltas.targetId, userAction.id), eq(deltas.op, 'create')))
+  expect(create.actionId).toBe(turn.actionId)
+  expect(new Set([...ran.map((r) => r.actionId), turn.actionId]).size).toBe(ran.length + 1)
+  for (const run of ran) {
+    const written = await db.select().from(deltas).where(eq(deltas.actionId, run.actionId))
+    expect(written.length).toBeGreaterThan(0)
+    expect(written.every((d) => d.logPosition < create.logPosition)).toBe(true)
+  }
 }
 
 describe('Send with deferred work', () => {
@@ -311,6 +414,7 @@ describe('Send with deferred work', () => {
       outcome: 'aborted',
       actionId: deferred.actionId,
       beforeTurn: true,
+      work: 'pass',
     })
     expect(await userActionsReading(db, 'I wait.')).toEqual([])
     expect(branchEntries('b1').some((e) => e.content === 'I wait.')).toBe(false)
@@ -330,7 +434,13 @@ describe('Send with deferred work', () => {
     await interruptMemoryRuns('b1')
     const result = await within(turn, 'the cancelled Send')
 
-    expect(result).toMatchObject({ outcome: 'aborted', actionId: owed.actionId, beforeTurn: true })
+    expect(result).toMatchObject({
+      outcome: 'aborted',
+      actionId: owed.actionId,
+      beforeTurn: true,
+      work: 'pass',
+    })
+    expect(result).not.toHaveProperty('committed')
     expect(await userActionsReading(db, 'I wait.')).toEqual([])
     expect(await passHappening(db, owed.actionId)).toEqual([])
     expect(generationStore.getTxState().deferred.get('b1')).toEqual({ pass: true })
@@ -352,10 +462,34 @@ describe('Send with deferred work', () => {
       outcome: 'aborted',
       actionId: deferred.actionId,
       beforeTurn: true,
+      work: 'pass',
     })
     expect(await userActionsReading(db, 'I wait.')).toEqual([])
     expect(generationStore.getTxState().runs.size).toBe(0)
     expect(generationStore.getTxState().deferred.get('b1')).toEqual({ pass: true })
+  })
+
+  // The pass ignored a Cancel landing in its last phase and committed; the Send is still cancelled.
+  it('cancels the Send when Cancel lands after its owed pass ended its last phase', async () => {
+    const { ctx, db, pass } = await setUp(3, BACKLOG)
+
+    const sent = send(ctx, 'I wait.')
+    const held = await within(pass.nextHeld(), 'the owed pass')
+    held.finish('completed')
+    const interrupted = interruptMemoryRuns('b1')
+    const result = await within(sent, 'the cancelled Send')
+    await interrupted
+
+    expect(result).toMatchObject({
+      outcome: 'aborted',
+      actionId: held.actionId,
+      beforeTurn: true,
+      work: 'pass',
+      committed: true,
+    })
+    expect((await markerOf(db, held.actionId))?.outcome).toBe('completed')
+    expect(await userActionsReading(db, 'I wait.')).toEqual([])
+    expect(await turnMarkers(db)).toEqual([])
   })
 
   it('marks no cancel of the turn itself as before the turn', async () => {
@@ -384,6 +518,7 @@ describe('Send with deferred work', () => {
       outcome: 'failed',
       actionId: deferred.actionId,
       beforeTurn: true,
+      work: 'pass',
     })
     expect(result).toHaveProperty('error', { kind: 'phase-logic', detail: 'stand-in pass failed' })
     expect((await markerOf(db, deferred.actionId))?.outcome).toBe('failed')
@@ -412,7 +547,12 @@ describe('Send with deferred work', () => {
     owed.finish('failed')
     const result = await within(failed, 'the failed Send')
 
-    expect(result).toMatchObject({ outcome: 'failed', actionId: owed.actionId, beforeTurn: true })
+    expect(result).toMatchObject({
+      outcome: 'failed',
+      actionId: owed.actionId,
+      beforeTurn: true,
+      work: 'pass',
+    })
     expect(await userActionsReading(db, 'I wait.')).toEqual([])
     expect(await turnMarkers(db)).toEqual([])
     // A failure records no deferral: the watermark, still behind, owes the next Send the pass.
@@ -472,6 +612,33 @@ describe('Send with deferred work', () => {
     expect(generationStore.getTxState().pendingTurns.size).toBe(0)
   })
 
+  // A pass of this process ending with its `running` left on disk while Send reads what it owes.
+  it('refuses a Send as held when the branch turns held after its check, starting nothing', async () => {
+    const { ctx, db, pass } = await setUp(50, BACKLOG)
+    await holdTheBranch(db)
+    recordDeferred('pass')
+    const live = registerStoreOnlyRun(PERIODIC_CLASSIFIER_KIND, 'b1')
+    let ended = false
+    const endsOnFirstRead = new Proxy(db, {
+      get(target, prop, receiver) {
+        if (prop === 'select' && !ended) {
+          ended = true
+          generationStore.abortRun(live.runId, 'aborted')
+        }
+        return Reflect.get(target, prop, receiver) as unknown
+      },
+    })
+
+    const result = await within(send({ ...ctx, db: endsOnFirstRead }, 'I wait.'), 'the Send')
+
+    expect(ended).toBe(true)
+    expect(result).toEqual({ outcome: 'rejected', blockedBy: CLASSIFIER_HELD, converged: true })
+    expect(pass.runs).toEqual([])
+    expect(await db.select().from(pipelineRuns)).toEqual([])
+    expect(await userActionsReading(db, 'I wait.')).toEqual([])
+    expect(generationStore.getTxState().deferred.get('b1')).toEqual({ pass: true })
+  })
+
   // The reader shows the held entry, not a retryable failure: a Retry would only be refused.
   it.each(['fails', 'is cancelled'] as const)(
     'refuses a Send as held when its owed pass %s and its reversal does not commit',
@@ -506,5 +673,209 @@ describe('Send with deferred work', () => {
     expect(
       await db.select().from(pipelineRuns).where(eq(pipelineRuns.kind, PERIODIC_CLASSIFIER_KIND)),
     ).toEqual([])
+  })
+})
+
+// generation-pipeline.md → chainsTo on predecessor: Send runs an owed close before the turn.
+describe('Send with a close owed', () => {
+  beforeEach(() => {
+    resetSingletons()
+    vi.stubGlobal('fetch', sseFetch(['A reply.']))
+  })
+  afterEach(() => {
+    vi.unstubAllGlobals()
+    resetSingletons()
+  })
+
+  it('runs a deferred close before the user action, clearing its record', async () => {
+    const { ctx, db, pass, close } = await setUp(50, COUNTED_BACKLOG)
+    setThreshold(OWED_AT)
+    await setWatermark(db, 3)
+    recordDeferred('close')
+
+    const { result, ran } = await sendThrough(ctx, db, { pass, close }, ['close'])
+
+    expect(result.outcome).toBe('completed')
+    await expectWritesBeforeTurn(db, ran, result)
+    expect(pass.runs).toEqual([])
+    expect(generationStore.getTxState().deferred.get('b1')).toBeUndefined()
+    expect(await db.select().from(chapters)).toHaveLength(1)
+  })
+
+  it('runs a deferred pass, then the close it chains, before the user action', async () => {
+    const { ctx, db, pass, close } = await setUp(50, COUNTED_BACKLOG)
+    setThreshold(OWED_AT)
+    recordDeferred('pass')
+    recordDeferred('close')
+
+    const { result, ran } = await sendThrough(ctx, db, { pass, close }, ['pass', 'close'])
+
+    expect(result.outcome).toBe('completed')
+    await expectWritesBeforeTurn(db, ran, result)
+    expect(generationStore.getTxState().deferred.get('b1')).toBeUndefined()
+    expect(await db.select().from(chapters)).toHaveLength(1)
+  })
+
+  // As a failed close leaves it: nothing recorded, the region still over the threshold.
+  it('runs a close owed with no record before the user action', async () => {
+    const { ctx, db, pass, close } = await setUp(50, COUNTED_BACKLOG)
+    setThreshold(OWED_AT)
+    await setWatermark(db, 3)
+    expect(generationStore.getTxState().deferred.size).toBe(0)
+
+    const { result, ran } = await sendThrough(ctx, db, { pass, close }, ['close'])
+
+    expect(result.outcome).toBe('completed')
+    await expectWritesBeforeTurn(db, ran, result)
+    expect(await db.select().from(chapters)).toHaveLength(1)
+  })
+
+  it('clears a close record with no close owed, runs nothing, and lands the turn', async () => {
+    const { ctx, db, pass, close } = await setUp(50, COUNTED_BACKLOG)
+    await setWatermark(db, 3)
+    recordDeferred('close')
+
+    const result = expectRan(await within(send(ctx, 'I wait.'), 'the turn'))
+
+    expect(result.outcome).toBe('completed')
+    expect(generationStore.getTxState().deferred.get('b1')).toBeUndefined()
+    expect(close.runs).toEqual([])
+    expect(pass.runs).toEqual([])
+    expect(await closeMarkers(db)).toEqual([])
+    expect(await userActionsReading(db, 'I wait.')).toHaveLength(1)
+  })
+
+  it('runs one close before the user action, though the region stays over the threshold', async () => {
+    const { ctx, db, pass, close } = await setUp(50, COUNTED_BACKLOG, {}, { leaveOpen: true })
+    setThreshold(OWED_AT)
+    await setWatermark(db, 3)
+
+    const { result, ran } = await sendThrough(ctx, db, { pass, close }, ['close'])
+
+    // Send's owed work ran one close; the turn's own chain may close again after it.
+    expect(close.runs).toHaveLength(1)
+    await expectWritesBeforeTurn(db, ran, result)
+    await within(cancelStoryRuns('s1', 'b1'), 'ending the chain the turn started')
+  })
+
+  it('fails the Send when the close its pass chained fails, writing no user action', async () => {
+    const { ctx, db, pass, close, deferrals } = await setUp(50, COUNTED_BACKLOG)
+    setThreshold(OWED_AT)
+
+    const sent = send(ctx, 'I wait.')
+    const caughtUp = await within(pass.nextHeld(), 'the catch-up pass')
+    caughtUp.finish('completed')
+    const held = await within(close.nextHeld(), 'the close')
+    expect(held.beforeTurn).toBe(true)
+    held.finish('failed')
+    const result = await within(sent, 'the failed Send')
+
+    expect(result).toEqual({
+      runId: expect.any(String),
+      actionId: held.actionId,
+      outcome: 'failed',
+      error: { kind: 'phase-logic', detail: 'stand-in close failed' },
+      beforeTurn: true,
+      work: 'close',
+    })
+    expect(await userActionsReading(db, 'I wait.')).toEqual([])
+    expect(await turnMarkers(db)).toEqual([])
+    expect(await db.select().from(chapters)).toEqual([])
+    expect(generationStore.getTxState().deferred.size).toBe(0)
+    expect(deferrals).toEqual([])
+  })
+
+  it('fails the Send on a failed catch-up pass, starting no close', async () => {
+    const { ctx, db, pass, close } = await setUp(50, COUNTED_BACKLOG)
+    setThreshold(OWED_AT)
+
+    const sent = send(ctx, 'I wait.')
+    const held = await within(pass.nextHeld(), 'the catch-up pass')
+    held.finish('failed')
+    const result = await within(sent, 'the failed Send')
+
+    expect(result).toMatchObject({
+      outcome: 'failed',
+      actionId: held.actionId,
+      beforeTurn: true,
+      work: 'pass',
+    })
+    expect(close.runs).toEqual([])
+    expect(await closeMarkers(db)).toEqual([])
+    expect(await userActionsReading(db, 'I wait.')).toEqual([])
+  })
+
+  it('cancels the whole Send when the close its pass chained is cancelled, deferring it', async () => {
+    const { ctx, db, pass, close, deferrals } = await setUp(50, COUNTED_BACKLOG)
+    setThreshold(OWED_AT)
+
+    const sent = send(ctx, 'I wait.')
+    const caughtUp = await within(pass.nextHeld(), 'the catch-up pass')
+    caughtUp.finish('completed')
+    const held = await within(close.nextHeld(), 'the close')
+    await interruptMemoryRuns('b1')
+    const result = await within(sent, 'the cancelled Send')
+
+    expect(result).toMatchObject({
+      outcome: 'aborted',
+      actionId: held.actionId,
+      beforeTurn: true,
+      work: 'close',
+      // The catch-up pass committed before the close it chained was cancelled.
+      committed: true,
+    })
+    expect(await userActionsReading(db, 'I wait.')).toEqual([])
+    expect(await db.select().from(chapters)).toEqual([])
+    expect(generationStore.getTxState().deferred.get('b1')).toEqual({ close: true })
+    expect(deferrals).toEqual([
+      expect.objectContaining({ kind: CHAPTER_CLOSE_KIND, work: 'close' }),
+    ])
+  })
+
+  // The close ignored a Cancel landing after its last phase and committed; the Send is still cancelled.
+  it('cancels the Send when Cancel lands after its owed close ended its last phase', async () => {
+    const { ctx, db, pass, close } = await setUp(50, COUNTED_BACKLOG, {}, { leaveOpen: true })
+    setThreshold(OWED_AT)
+    await setWatermark(db, 3)
+
+    const sent = send(ctx, 'I wait.')
+    const held = await within(close.nextHeld(), "Send's owed close")
+    held.finish('completed')
+    const interrupted = interruptMemoryRuns('b1')
+    const result = await within(sent, 'the cancelled Send')
+    await interrupted
+
+    expect(result).toMatchObject({
+      outcome: 'aborted',
+      actionId: held.actionId,
+      beforeTurn: true,
+      work: 'close',
+      committed: true,
+    })
+    expect((await markerOf(db, held.actionId))?.outcome).toBe('completed')
+    expect(await db.select().from(chapters)).toHaveLength(1)
+    expect(pass.runs).toEqual([])
+    expect(await userActionsReading(db, 'I wait.')).toEqual([])
+    expect(await turnMarkers(db)).toEqual([])
+  })
+
+  it('runs a close CTRL-Z reopened again before the next turn', async () => {
+    const { ctx, db, pass, close } = await setUp(50, COUNTED_BACKLOG)
+    setThreshold(OWED_AT)
+    await setWatermark(db, 3)
+    const closing = startPipeline(CHAPTER_CLOSE_KIND, ctx)
+    const auto = await within(close.nextHeld(), 'the auto close')
+    auto.finish('completed')
+    expect(expectRan(await closing.origin).outcome).toBe('completed')
+    expect(await db.select().from(chapters)).toHaveLength(1)
+
+    expect(await undoLastAction('b1', ctx)).toEqual({ status: 'ok' })
+    expect(await db.select().from(chapters)).toEqual([])
+
+    const { result, ran } = await sendThrough(ctx, db, { pass, close }, ['close'])
+
+    expect(close.runs).toHaveLength(2)
+    await expectWritesBeforeTurn(db, ran, result)
+    expect(await db.select().from(chapters)).toHaveLength(1)
   })
 })

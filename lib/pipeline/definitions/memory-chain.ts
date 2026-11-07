@@ -1,11 +1,26 @@
 import { and, eq, gt, ne, sql } from 'drizzle-orm'
 
+import { CHAPTER_CLOSE_KIND, chapterProgressOf } from '@/lib/chapters'
 import { idleStatus, PERIODIC_CLASSIFIER_KIND, shouldCadenceFire } from '@/lib/classifier'
-import { branches, storyEntries, type ClassifierStatus, type DbCtx } from '@/lib/db'
-import { currentStoryStore, generationStore, type RunState } from '@/lib/stores'
+import {
+  branches,
+  openRegionSeries,
+  storyEntries,
+  type ClassifierStatus,
+  type DbCtx,
+} from '@/lib/db'
+import { currentStoryStore, generationStore, type OpenStory, type RunState } from '@/lib/stores'
 
 /** RejectedStart.blockedBy for a branch held `running` (classifier.md → Failure policy). */
 export const CLASSIFIER_HELD = 'classifier-held'
+
+/** A pass's `RunCtx.inputs`; `alone` (Retry, Run now) chains no close after it. */
+export type PassInputs = { alone?: true }
+
+export function passStartedAlone(run: Pick<RunState, 'inputs'>): boolean {
+  const { inputs } = run
+  return typeof inputs === 'object' && inputs !== null && (inputs as PassInputs).alone === true
+}
 
 /**
  * Classifiable entries past the watermark — the cadence's input. Counts rows, not position deltas:
@@ -40,17 +55,6 @@ export async function readClassifierStatus(
   return row?.classifierStatus ?? idleStatus()
 }
 
-// One read of "due" so Send's check and the chain never disagree.
-async function cadenceDue(
-  branchId: string,
-  status: ClassifierStatus,
-  cadence: number,
-  ctx: DbCtx,
-): Promise<boolean> {
-  const unprocessed = await unprocessedEntryCount(branchId, status.processedThrough, ctx)
-  return shouldCadenceFire({ status, unprocessedEntries: unprocessed, cadence })
-}
-
 function passLive(branchId: string): boolean {
   for (const run of generationStore.getTxState().runs.values())
     if (run.kind === PERIODIC_CLASSIFIER_KIND && run.branchId === branchId) return true
@@ -65,33 +69,92 @@ export async function isClassifierHeld(branchId: string, ctx: Pick<DbCtx, 'db'>)
   return status.state === 'running' && !passLive(branchId)
 }
 
-/** Send's check, in order: held branch, deferral mark, then cadence over the watermark. */
-export async function owedPassAtSend(
-  branchId: string,
-  ctx: DbCtx,
-): Promise<'held' | 'owed' | null> {
+/** What Send runs before its turn: `'pass'` starts a chain that may end in the close. */
+export type OwedWork = 'held' | 'pass' | 'close' | null
+
+/**
+ * Send's check: held first; a stale close record clears; a deferred pass, a close's catch-up or the
+ * cadence owes a pass; an owed close with nothing to catch up owes the close.
+ */
+export async function owedWorkAtSend(branchId: string, ctx: DbCtx): Promise<OwedWork> {
   if (await isClassifierHeld(branchId, ctx)) return 'held'
-  if (generationStore.getTxState().deferred.get(branchId)?.pass) return 'owed'
-  // The cadence is the open story's setting: a branch it isn't on owes nothing by cadence.
+  const passDeferred = generationStore.getTxState().deferred.get(branchId)?.pass === true
+  // The cadence and the close read the open story's settings: off its branch only a deferral owes.
   const open = currentStoryStore.getCurrentStory()
-  if (open?.branchId !== branchId) return null
+  if (open?.branchId !== branchId) return passDeferred ? 'pass' : null
+  const owesClose = await closeOwed(branchId, open, ctx)
+  // An interrupted close a rollback below the threshold took back leaves nothing to run.
+  if (!owesClose) generationStore.clearDeferredClose(branchId)
   const status = await readClassifierStatus(branchId, ctx)
-  return (await cadenceDue(branchId, status, open.settings.classifierCadence, ctx)) ? 'owed' : null
+  const unprocessed = await unprocessedEntryCount(branchId, status.processedThrough, ctx)
+  if (passDeferred || (owesClose && unprocessed > 0)) return 'pass'
+  if (owesClose) return 'close'
+  const cadence = open.settings.classifierCadence
+  return shouldCadenceFire({ status, unprocessedEntries: unprocessed, cadence }) ? 'pass' : null
 }
 
 /**
- * per-turn's `chainsTo` (generation-pipeline.md → chainsTo on predecessor). Awaited at commit under
- * the turn's gate, so no writer moves the count or status between these reads and the pass's start.
+ * A manual pick, else the open region at the threshold with auto-close on and a reply to end on
+ * (C5, C10). Read fresh each time, so a rollback below the threshold owes nothing.
+ */
+export async function closeOwed(
+  branchId: string,
+  story: Pick<OpenStory, 'settings'>,
+  ctx: Pick<DbCtx, 'db'>,
+): Promise<boolean> {
+  if (generationStore.getTxState().pendingClose.has(branchId)) return true
+  if (!story.settings.chapterAutoClose) return false
+  const progress = chapterProgressOf(
+    await openRegionSeries(branchId, ctx),
+    story.settings.chapterTokenThreshold,
+  )
+  return progress.tokens >= progress.threshold && progress.canClose
+}
+
+// The run's story while it is open on the run's branch: whose settings every chain read uses.
+function openStoryOf(run: Pick<RunState, 'storyId' | 'branchId'>): OpenStory | null {
+  const open = currentStoryStore.getCurrentStory()
+  return open != null && open.storyId === run.storyId && open.branchId === run.branchId
+    ? open
+    : null
+}
+
+/**
+ * The memory run a commit chains (generation-pipeline.md → chainsTo on predecessor). Awaited under
+ * the committing run's gate, so no writer moves the count, status or region before the successor.
  */
 export async function nextMemoryRun(
   run: RunState,
   ctx: DbCtx,
-): Promise<typeof PERIODIC_CLASSIFIER_KIND | null> {
-  const work = generationStore.getTxState().deferred.get(run.branchId)
-  if (work?.pass || work?.close) return null
-  const open = currentStoryStore.getCurrentStory()
-  if (open == null || open.storyId !== run.storyId || open.branchId !== run.branchId) return null
+): Promise<typeof PERIODIC_CLASSIFIER_KIND | typeof CHAPTER_CLOSE_KIND | null> {
+  const open = openStoryOf(run)
+  if (open == null) return null
   const status = await readClassifierStatus(run.branchId, ctx)
-  const due = await cadenceDue(run.branchId, status, open.settings.classifierCadence, ctx)
-  return due ? PERIODIC_CLASSIFIER_KIND : null
+  // A pass left `running` holds the branch: nothing builds on its writes until boot resets it.
+  // A committing pass wrote its status in its phase, so its own chain never reads `running` here.
+  if (status.state === 'running') return null
+  const unprocessed = await unprocessedEntryCount(run.branchId, status.processedThrough, ctx)
+  if (await closeOwed(run.branchId, open, ctx))
+    return unprocessed > 0 ? PERIODIC_CLASSIFIER_KIND : CHAPTER_CLOSE_KIND
+  const cadence = open.settings.classifierCadence
+  return shouldCadenceFire({ status, unprocessedEntries: unprocessed, cadence })
+    ? PERIODIC_CLASSIFIER_KIND
+    : null
+}
+
+/**
+ * per-turn's `chainsTo`. Interrupted work waits for the next Send, so a regenerated reply doesn't
+ * bring it straight back; a Send's own chain reads past the record.
+ */
+export async function perTurnChainsTo(run: RunState, ctx: DbCtx): Promise<string | null> {
+  if (generationStore.getTxState().deferred.has(run.branchId)) return null
+  return nextMemoryRun(run, ctx)
+}
+
+/** The pass's `chainsTo`: passes chain catch-up passes and the close only while a close is owed. */
+export async function passChainsTo(run: RunState, ctx: DbCtx): Promise<string | null> {
+  if (passStartedAlone(run)) return null
+  const open = openStoryOf(run)
+  if (open == null) return null
+  return (await closeOwed(run.branchId, open, ctx)) ? nextMemoryRun(run, ctx) : null
 }

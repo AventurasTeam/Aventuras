@@ -239,14 +239,14 @@ Provider: [Slice 5.2](./slices/02-first-chapter.md). Consumers: 5.5a,
 `blockedBy` per-turn, pass, itself and translation-retry. A
 `CHAPTER_CLOSE_KIND` constant in `lib/chapters`, re-exported by
 `lib/pipeline`, replaces the bare string at
-`per-turn.ts:578`, `periodic-classifier.ts:525`,
-`components/reader/generation-phase.ts:17`,
-`components/story-settings/generation-run.ts:83,128` and
-`lib/recovery/copy.ts:18`, and boot registers it
-(`lib/boot/bootstrap.ts:110-111`), since a chain to an unregistered kind
-chains nothing (`orchestrator.ts:315-321`).
+`per-turn.ts:580`, `periodic-classifier.ts:471`,
+`components/reader/generation-phase.ts:18`,
+`components/story-settings/generation-run.ts:84,129` and
+`lib/recovery/copy.ts:19`, and boot registers it
+(`lib/boot/bootstrap.ts:112-113`), since a chain to an unregistered kind
+chains nothing (`getPipelineSafe` in `commitRun`, `orchestrator.ts`).
 
-Phases are static (`lib/pipeline/types.ts:179`), so the list is pinned,
+Phases are static (`Pipeline.phases` in `lib/pipeline/types.ts`), so the list is pinned,
 in order: `boundary`, `metadata`, `agent`, `report`, each in its own
 file beside the declaration (`chapter-close-boundary.ts` and so on), as
 per-turn's are, since 5.5a, 5.5b, 5.6, 5.8, 5.9 and 5.10 all touch them
@@ -281,8 +281,8 @@ pre-flight, not in a phase.
 - One per-call bound keyed by agent id, `callTimeoutMs` and
   `CALL_TIMEOUT_DEFAULT_MS` in `lib/ai`, serves metadata, boundary and
   tool steps, in whichever of 5.2 and 5.4 lands first:
-  `passTimeoutMs` hard-codes `resolveModel('classifier', …)`
-  (`periodic-classifier.ts:107-114`).
+  `passTimeoutMs` hard-coded `resolveModel('classifier', …)`; it now
+  calls `callTimeoutMs('classifier', …)` (`periodic-classifier.ts`).
 
 The HTTP capture cap stays as it is (`http-call-sink.ts:9`); it moves to
 M7.3.
@@ -409,7 +409,7 @@ Provider: [Slice 5.1](./slices/01-token-measure.md). Consumers: 5.2, 5.3,
   needs no separate rule. Written at the create handler
   (`lib/actions/story-entries/register.ts:65-92`), at `create-story`
   (`lib/actions/stories/create-story.ts:154-168`), and on a content edit
-  (`lib/actions/story-entries/operational.ts:133-136`), with the old
+  (`updateStoryEntryContent` in `lib/actions/story-entries/operational.ts`), with the old
   value in the edit's undo payload. No backfill: dev DBs reseed, and a
   null reads as 0. 5.1 fills the column in the seed, so seeded stories
   read real numbers.
@@ -446,7 +446,7 @@ Provider: [Slice 5.1](./slices/01-token-measure.md). Consumers: 5.2, 5.3,
   refetches on `settleCount` and the tail, as `useEntryIndex` does
   (`hooks/use-entry-index.ts`); a content edit runs in the reversal
   bracket, so it ticks `settleCount`.
-- **`ScreenShell.chapterProgress`** (`components/shells/screen-shell.tsx:49`)
+- **`ScreenShell.chapterProgress`** (`components/shells/screen-shell.tsx:52`)
   takes the hook's return, plus `onChapterProgressPress` from the
   route. Tone comes from `chapterProgressTone` in `lib/chapters`,
   returning `'success'`, `'warning'` or `'danger'` at canon's 80 and 90.
@@ -466,21 +466,21 @@ Provider of the store field and the label:
 5.9.
 
 A `close_task_start { task, part, index, total }` event joins
-`PhaseEmittedEvent` (`lib/pipeline/types.ts:65-68`) in whichever lands
+`PhaseEmittedEvent` (`lib/pipeline/types.ts`) in whichever lands
 first, and `handleEvent`
-forwards it unchanged (`orchestrator.ts:221`). It fires as each task
+forwards it unchanged. It fires as each task
 starts, since a completion event leaves the banner blank through
 Happenings and names a finished task where the label names a running
 one. `N of M` counts agent tasks only. `total` is `2 + 5 × parts`:
 Happenings, five prose tasks per part, and Awareness, so a one-part
 chapter is `of 7`. It's fixed when the agent phase starts, and a task
 with nothing to start from still counts. A bus event isn't replayed, so
-the latest progress lives on `RunState`
-(`lib/stores/generation/generation.ts:7-31`), where a banner mounted
+the latest progress lives on `RunState.closeProgress`
+(`lib/stores/generation/generation.ts`), where a banner mounted
 mid-close reads it. Emitted events carry no `runId`, and the store holds
-a copy of the run, so `handleEvent` (`orchestrator.ts:207-221`) calls a
-new `generationStore` mutator by `run.runId`, added to the restricted
-list in `eslint.config.js:82-97`. 5.6 owns the mutator and the call.
+a copy of the run, so `handleEvent` calls a new `generationStore`
+mutator by `run.runId`, `setCloseProgress`, added to the restricted
+list in `eslint.config.js`. 5.6 owns the mutator and the call.
 
 Labels: `Closing chapter: 3 of 7 — Identity…`. Boundary and metadata each
 have their own label and no count, as does the `agent` phase until its
@@ -525,10 +525,10 @@ Provider: [Slice 5.2](./slices/02-first-chapter.md). Consumers: 5.1, 5.3,
 and chapters ending on a reply. `CHAP1_END` and `CHAP2_END`
 (`lib/db/devtools/seed-dataset.ts:209-210`) are even positions, which are
 `user_action` rows, so they become 29 and 57. Chapter 2 starts at
-`CHAP1_END + 1`, replacing the literal at `:343`, and entry 59 stays
-open: it's Plot's only live open-region anchor (`:884-887`), and two
-E2Es need it there. `delta_hero_3` and `delta_hero_9` (`:1191`, `:1205`)
-gain `entryId`, and `seed-dataset.test.ts:332-350` flips to canon.
+`CHAP1_END + 1`, replacing the literal at `:342`, and entry 59 stays
+open: it's Plot's only live open-region anchor (`:885`), and two
+E2Es need it there. `delta_hero_3` and `delta_hero_9` (`:1232`, `:1241`)
+gain `entryId`, and `seed-dataset.test.ts:449-474` flips to canon.
 Seeded chapter ids and titles don't change. Consumers assert by chapter
 title or number, never by entry position.
 
@@ -610,7 +610,7 @@ Shipped shape this replaces: `applyDeltaActionGroup` returns only
 `ok` or `rejected`, and a noop vanishes inside a group
 (`lib/actions/delta/apply-delta-action.ts:225-227,300,334-348`).
 `consumePhase` calls `gen.next()` with no argument
-(`orchestrator.ts:224-234`) and a rejection throws (`:202`), so
+(`consumePhase` in `orchestrator.ts`) and a rejection throws (`:214`), so
 `delta_group_emitted` and a per-action outcome back through the `yield`
 are 5.5a's. One `code: 'noop'` covers four things: a restated value, a
 user-won write, a gone row and a broken rule such as `not-active` or a
@@ -723,13 +723,16 @@ Provider: [Slice 5.2](./slices/02-first-chapter.md). Consumers: 5.6, 5.10.
 `TxState` gains `pendingClose` as
 [`generation-pipeline.md → Multi-run txState`](../../../generation-pipeline.md#multi-run-txstate)
 specs it, and `startManualClose(branchId, endEntryId)` in
-`lib/actions/chapters/` writes it and starts the run. Until 5.6 it refuses
+`lib/actions/chapters/` writes it and starts the run. The record holds a
+pick only, `{ endEntryId: string }`: a close the threshold owes keeps
+none, since `closeOwed` derives it each time, and no record means
+boundary selection. Until 5.6 it refuses
 unprocessed entries, a held branch, a pending swap and a busy story, so
 it starts a close only where a close can run at once. 5.6 replaces the
 unprocessed refusal with phase 0 and settles the record's lifecycle, and
 the action resolves with the chain's end, not the first pass's: `TxResult`,
 `RejectedStart`, or from 5.10 `{ outcome: 'preflight-failed', error }`. A
-successor takes no inputs (`orchestrator.ts:327`), so the end entry
+successor takes no inputs (`commitRun` in `orchestrator.ts`), so the end entry
 reaches a chained close only through this record.
 
 ### C15 — Entry jump and chapter time ranges
@@ -739,9 +742,9 @@ Provider: [Slice 5.3](./slices/03-reader-chapters.md). Consumers: 5.7,
 
 An `entry=<entryId>` param on the reader route, mirroring M4's C6, and a
 `jumpToEntry` beside `jumpToBottom`
-(`components/reader/reader-document-types.ts:13`). Load older until the
+(`components/reader/reader-document-types.ts:16`). Load older until the
 entry is present: the reader holds no disconnected window, as
-`holdsLiveEdge` states (`app/reader-composer/[branchId].tsx:334-335`).
+`holdsLiveEdge` states (`app/reader-composer/[branchId].tsx:355`).
 `History`'s entry link is its first consumer, moved in from M7.3, whose
 entry keeps wiring the Diagnostics delta log.
 

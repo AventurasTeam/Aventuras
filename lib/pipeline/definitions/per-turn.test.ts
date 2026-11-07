@@ -38,7 +38,7 @@ import { emptyEntityView } from '@/lib/world'
 import { createPhaseDb, hydrateEntries, resetPhaseDb, type PhaseDb } from './__tests__/phase-db'
 import { __resetClassifierEmbedder, configureClassifierEmbedder } from './description-embedder'
 import { RETRIEVAL_INTERMEDIATE_KEY } from './intermediates'
-import { nextMemoryRun } from './memory-chain'
+import { perTurnChainsTo } from './memory-chain'
 import { ensurePerTurnPipelineRegistered, PER_TURN_KIND } from './per-turn'
 import { fallbackClassifierSchema } from './per-turn-piggyback'
 import { getPipeline } from '../authoring/registry'
@@ -190,7 +190,7 @@ describe('per-turn pipeline declaration', () => {
       'periodic-classifier',
       'chapter-close',
     ])
-    expect(p.chainsTo).toBe(nextMemoryRun)
+    expect(p.chainsTo).toBe(perTurnChainsTo)
     // phase 0 declares no resolver: the en short-circuit makes no LLM call
     expect(p.phases[0]).not.toHaveProperty('resolves')
   })

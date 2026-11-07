@@ -308,7 +308,8 @@ after the turn that crosses the threshold. Both hold the gate while
 the user reads the reply, and the head reversals, regenerate among
 them, interrupt them
 ([`principles.md → Edit restrictions during in-flight generation`](../../principles.md#edit-restrictions-during-in-flight-generation)),
-except a pass a failure entry's `Retry` started (below).
+except a pass or a close a failure entry's `Retry` started and a Send's owed
+work (below).
 In the reader the banner shows `Updating memory… [Cancel]` or the
 close's progress, and the composer stays live while Send waits. An
 interrupt or the pill's Cancel shows an info
@@ -329,14 +330,16 @@ A close that commits shows `Chapter closed: <title>`, or
 At the next Send the deferred or failed work runs first, the banner
 reading `Updating memory before your turn…`, or
 `Closing chapter before your turn…` for a close, and the turn follows;
-Cancel then cancels the whole Send and keeps the text in the composer
+Cancel then cancels the whole Send, and the text goes back into an empty
+composer (else a toast says the draft was kept)
 ([`memory/classifier.md → Pipeline framing`](../../../memory/classifier.md#pipeline-framing)).
 If that work fails there, the Send fails too: the turn doesn't start,
 the text goes back to an empty composer (else onto the entry), and the
 failure shows as a
 [system entry](#transient-pipeline-failures--system-entries-in-chat)
 ([`memory/classifier.md → Failure policy`](../../../memory/classifier.md#failure-policy)).
-Its `Retry` runs that work alone, and it holds the reader's actions,
+Its `Retry` runs that work without the turn, a pass alone and a close
+behind any catch-up pass it needs, and it holds the reader's actions,
 head reversals included, until it ends; the pill's Cancel ends it.
 
 ### Save and regenerate on a content edit
@@ -533,22 +536,23 @@ and action buttons. Rationale: these errors need to be visible,
 actionable, and part of the narrative log as context, not a silent
 chrome blip.
 
-| Failure                                                                                                                                                                                                                | Action buttons                          |
-| ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------- |
-| **LLM call failed**                                                                                                                                                                                                    | `Retry` · `Dismiss`                     |
-| **Prompt too large for the model's window** ([`architecture.md → Model context window`](../../../architecture.md#model-context-window))                                                                                | `Set window` · `Retry` · `Dismiss`      |
-| **Reply cut off before any text** ([`generation-pipeline.md → Cut-off replies`](../../../generation-pipeline.md#cut-off-replies))                                                                                      | `Fix profile` · `Retry` · `Dismiss`     |
-| **Memory update failed** before the turn, failing the Send ([`memory/classifier.md → Failure policy`](../../../memory/classifier.md#failure-policy))                                                                   | `Retry` · `Dismiss`                     |
-| **Memory update failed**, branch held (an earlier update couldn't be undone, so Send is refused)                                                                                                                       | `Dismiss`                               |
-| **Memory updated** on `Retry`, its text kept on the entry ([Custody of the turn's text](#custody-of-the-turns-text))                                                                                                   | `Dismiss`                               |
-| **Embed call failed** mid-turn (blocking per [`memory/retrieval.md → Compute lifecycle`](../../../memory/retrieval.md#compute-lifecycle); the composer is not gated — a resubmit re-runs the same blocking sync stage) | `Switch embedder` · `Retry` · `Dismiss` |
-| **Narrative profile's provider missing** (pre-flight or resolver-time)                                                                                                                                                 | `Fix profile` · `Dismiss`               |
-| **Chapter close failed** before the turn, failing the Send ([`memory/chapter-close.md → Failure modes`](../../../memory/chapter-close.md#failure-modes-and-atomic-rollback))                                           | `Retry` · `Dismiss`                     |
-| **Chapter close's model can't call tools** (pre-flight; [`memory/chapter-close.md → Tool calling`](../../../memory/chapter-close.md#tool-calling))                                                                     | `Fix profile` · `Dismiss`               |
-| **Assigned agent profile's provider missing** (pre-flight or resolver-time)                                                                                                                                            | `Fix profile` · `Dismiss`               |
-| **Agent has no profile assigned** (`assignments[agentId]` unset)                                                                                                                                                       | `Assign profile` · `Dismiss`            |
-| **Agent default model's provider missing**                                                                                                                                                                             | `Fix default` · `Dismiss`               |
-| **Story override's provider missing** (pre-flight or resolver-time)                                                                                                                                                    | `Fix story override` · `Dismiss`        |
+| Failure                                                                                                                                                                                                                | Action buttons                             |
+| ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------ |
+| **LLM call failed**                                                                                                                                                                                                    | `Retry` · `Dismiss`                        |
+| **Prompt too large for the model's window** ([`architecture.md → Model context window`](../../../architecture.md#model-context-window))                                                                                | `Set window` · `Retry` · `Dismiss`         |
+| **Reply cut off before any text** ([`generation-pipeline.md → Cut-off replies`](../../../generation-pipeline.md#cut-off-replies))                                                                                      | `Fix profile` · `Retry` · `Dismiss`        |
+| **Memory update failed** before the turn, failing the Send ([`memory/classifier.md → Failure policy`](../../../memory/classifier.md#failure-policy))                                                                   | `Retry` · `Dismiss`                        |
+| **Memory update failed**, branch held (an earlier update couldn't be undone, so Send is refused)                                                                                                                       | `Dismiss`                                  |
+| **Memory updated** on `Retry`, its text kept on the entry ([Custody of the turn's text](#custody-of-the-turns-text))                                                                                                   | `Dismiss`                                  |
+| **Embed call failed** mid-turn (blocking per [`memory/retrieval.md → Compute lifecycle`](../../../memory/retrieval.md#compute-lifecycle); the composer is not gated — a resubmit re-runs the same blocking sync stage) | `Switch embedder` · `Retry` · `Dismiss`    |
+| **Narrative profile's provider missing** (pre-flight or resolver-time)                                                                                                                                                 | `Fix profile` · `Retry` · `Dismiss`        |
+| **Chapter close failed** before the turn, failing the Send ([`memory/chapter-close.md → Failure modes`](../../../memory/chapter-close.md#failure-modes-and-atomic-rollback))                                           | `Retry` · `Dismiss`                        |
+| **Nothing left to close** on `Retry`, its text kept on the entry ([Custody of the turn's text](#custody-of-the-turns-text))                                                                                            | `Dismiss`                                  |
+| **Chapter close's model can't call tools** (pre-flight; [`memory/chapter-close.md → Tool calling`](../../../memory/chapter-close.md#tool-calling))                                                                     | `Fix profile` · `Retry` · `Dismiss`        |
+| **Assigned agent profile's provider missing** (pre-flight or resolver-time)                                                                                                                                            | `Fix profile` · `Retry` · `Dismiss`        |
+| **Agent has no profile assigned** (`assignments[agentId]` unset)                                                                                                                                                       | `Assign profile` · `Retry` · `Dismiss`     |
+| **Agent default model's provider missing**                                                                                                                                                                             | `Fix default` · `Retry` · `Dismiss`        |
+| **Story override's provider missing** (pre-flight or resolver-time)                                                                                                                                                    | `Fix story override` · `Retry` · `Dismiss` |
 
 An entry keeping the turn's text shows it above its buttons, and an
 entry with a failure detail carries a collapsed `Details` disclosure
@@ -630,7 +634,10 @@ Models tab. An override whose provider is gone fails pre-flight as
 because App Settings has nothing to repair in that state;
 [`story-settings.md → Models tab`](../story-settings/story-settings.md#models-tab--overrides-only)
 is where the broken row and its `×` live. Broken-model-catalog cases
-surface via the existing global broken-config banner instead.
+surface via the existing global broken-config banner instead. Each
+broken-reference row keeps `Retry` after its fix, on a turn's, a
+pass's or a close's entry alike: pressed after the fix it runs at once,
+and pressed before it only fails again.
 
 #### Custody of the turn's text
 
@@ -647,11 +654,15 @@ Its custody line reads "Dismiss puts it back in the composer if it's
 empty. Sending a new turn discards it." That holds on every entry
 carrying text: a Send drops the entry before it runs, and one refused
 on a held branch writes its own text. A Send cancelled during its owed
-pass puts the entry back, which only leaves the line cautious. The
-quote shows whether text is kept, so a held entry's copy no longer
-mentions it and reads the same either way. The notice a committed pass
-`Retry` leaves still says why it stands: "Memory updated. The composer
-couldn't take your text back, so it's kept here."
+pass or close puts the entry back, which only leaves the line
+cautious; a Cancel that lands once any owed work has committed leaves
+it dropped instead, since the Send's own text supersedes the entry's.
+The quote shows whether text is kept, so a held entry's copy
+no longer mentions it and reads the same either way. The notice a
+committed pass `Retry` leaves still says why it stands: "Memory
+updated. The composer couldn't take your text back, so it's kept
+here." A close's reads "Nothing is left to close before your turn. The
+composer couldn't take your text back, so it's kept here."
 
 **A Send supersedes the entry's text.** The user wrote the Send's
 text while the entry and its `Retry` stood, so the entry's text is
@@ -681,15 +692,17 @@ too, since one composer serves every branch and its draft is now the
 other branch's; no toast tells the user, and a warning in the log
 records the drop.
 
-A pass entry's `Retry` whose pass commits clears the entry through
-`Dismiss` only when the composer can take its text back, and asks
+A pass or close entry's `Retry` whose work commits, or a close's that
+finds no close owed, clears the entry through `Dismiss` only when the composer can take its text back, and asks
 again once the clear has landed, since the composer stays editable
 through it. Over an occupied draft, or once the user has left the
 branch, the entry stays as a notice holding the text, with no `Retry`
 and copy that says so, and its `Dismiss` hands the text back. A Send
 supersedes the notice's text as it does a failure entry's, and the
 custody line under its quote says so, since emptying the composer by
-sending is the step the notice would otherwise invite.
+sending is the step the notice would otherwise invite. A close entry's
+`Retry` whose catch-up pass fails rewrites the entry as **Memory update
+failed**, with that pass's cause.
 
 A **Memory update failed** entry carries the submission only where
 the composer can't hold the text. A Send refused on a held branch
@@ -711,8 +724,9 @@ sweep already moved the tail it would park a stale notice over a
 branch it no longer describes — which is why the regenerate rejection
 arm may put the entry back and the throw arm may not. A draft has no
 position, so it is safe on both. A Send cancelled during its owed
-pass has written nothing either, so it puts the entry back too, and
-hands its own text to the draft.
+pass or close has written no turn either, so it puts the entry back
+too, and hands its own text to the draft. Once any owed work has
+committed, the text goes back alone and the entry stays dropped.
 
 This leaves a failed turn's text under the same custody as any unsent
 draft, including the same limit: composer input is pre-submit state

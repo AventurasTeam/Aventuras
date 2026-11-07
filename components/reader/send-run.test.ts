@@ -2,7 +2,12 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { PERIODIC_CLASSIFIER_KIND } from '@/lib/classifier'
 import { logger } from '@/lib/diagnostics'
-import { CLASSIFIER_HELD, PER_TURN_KIND, SUGGESTION_REFRESH_KIND } from '@/lib/pipeline'
+import {
+  CHAPTER_CLOSE_KIND,
+  CLASSIFIER_HELD,
+  PER_TURN_KIND,
+  SUGGESTION_REFRESH_KIND,
+} from '@/lib/pipeline'
 import {
   awaitRunTerminal,
   generationStore,
@@ -16,6 +21,7 @@ import {
   cancelComposerRun,
   cancelPillRun,
   cancelSendRun,
+  closeRefusalOf,
   composerShowsCancel,
   findSendRun,
   passRefusalOf,
@@ -101,6 +107,13 @@ const DEFERRED_PASS = run({
   interruptible: 'pass',
   beforeTurn: true,
 })
+// The close a Send's owed pass chained: Send's work too.
+const SEND_CLOSE = run({
+  runId: 'run_send_close',
+  kind: CHAPTER_CLOSE_KIND,
+  interruptible: 'close',
+  beforeTurn: true,
+})
 const REFRESH = run({ runId: 'run_refresh', kind: SUGGESTION_REFRESH_KIND })
 
 function pendingOn(branchId: string, ...runs: RunState[]): TxState {
@@ -145,6 +158,10 @@ describe('findSendRun', () => {
 
   it('finds the pass Send runs before the turn', () => {
     expect(findSendRun(txOf(DEFERRED_PASS), 'br_1')).toBe(DEFERRED_PASS)
+  })
+
+  it("finds the close chained under Send's owed pass", () => {
+    expect(findSendRun(txOf(SEND_CLOSE), 'br_1')).toBe(SEND_CLOSE)
   })
 
   // A chained pass leaves Send in place and refused, so the composer stays live; its
@@ -266,6 +283,16 @@ describe('cancelComposerRun', () => {
 
     expect(pass.abortController.signal.aborted).toBe(false)
   })
+
+  it('interrupts a close chained under Send on the first press, deferring it', async () => {
+    const close = startLive(SEND_CLOSE)
+
+    await cancelComposerRun('br_1', true)
+
+    expect(close.abortController.signal.aborted).toBe(true)
+    expect(interruptMemoryRuns).toHaveBeenCalledOnce()
+    expect(generationStore.getTxState().deferred.get('br_1')).toEqual({ close: true })
+  })
 })
 
 describe('composerShowsCancel', () => {
@@ -345,9 +372,22 @@ describe('cancelComposerRun in the handoff gap', () => {
 describe('abortedBeforeTurn', () => {
   const ran = { runId: 'run_1', actionId: 'act_1' }
 
-  it('holds for a Send cancelled during its owed pass, which wrote nothing', () => {
-    expect(abortedBeforeTurn({ ...ran, outcome: 'aborted', beforeTurn: true })).toBe(true)
-  })
+  it.each(['pass', 'close'] as const)(
+    'holds for a Send cancelled during its owed %s, which wrote nothing',
+    (work) => {
+      expect(abortedBeforeTurn({ ...ran, outcome: 'aborted', beforeTurn: true, work })).toBe(true)
+    },
+  )
+
+  // The owed work committed before the Cancel took effect: the Send supersedes the entry's text.
+  it.each(['pass', 'close'] as const)(
+    'holds for no Send whose owed %s committed before its Cancel',
+    (work) => {
+      expect(
+        abortedBeforeTurn({ ...ran, outcome: 'aborted', beforeTurn: true, work, committed: true }),
+      ).toBe(false)
+    },
+  )
 
   // The turn wrote its user action before the cancel reversed it.
   it('holds for no cancel of the turn itself', () => {
@@ -400,7 +440,9 @@ describe('passRefusalOf', () => {
   } as const
 
   it("reads a failed owed pass as the Send's refusal, with its cause", () => {
-    expect(passRefusalOf({ ...ran, outcome: 'failed', beforeTurn: true, error })).toEqual({
+    expect(
+      passRefusalOf({ ...ran, outcome: 'failed', beforeTurn: true, work: 'pass', error }),
+    ).toEqual({
       held: false,
       error,
     })
@@ -422,8 +464,38 @@ describe('passRefusalOf', () => {
     expect(
       passRefusalOf({ outcome: 'rejected', blockedBy: 'translation-retry', converged: true }),
     ).toBeNull()
-    expect(passRefusalOf({ ...ran, outcome: 'aborted', beforeTurn: true })).toBeNull()
+    expect(passRefusalOf({ ...ran, outcome: 'aborted', beforeTurn: true, work: 'pass' })).toBeNull()
     expect(passRefusalOf({ ...ran, outcome: 'completed' })).toBeNull()
+  })
+
+  it('leaves a failed close to closeRefusalOf', () => {
+    expect(
+      passRefusalOf({ ...ran, outcome: 'failed', beforeTurn: true, work: 'close', error }),
+    ).toBeNull()
+  })
+})
+
+describe('closeRefusalOf', () => {
+  const ran = { runId: 'run_1', actionId: 'act_1' }
+  const error = { kind: 'phase-logic', detail: 'chapter-close: no end entry' } as const
+
+  it("reads a failed owed close as the Send's refusal, with its cause", () => {
+    expect(
+      closeRefusalOf({ ...ran, outcome: 'failed', beforeTurn: true, work: 'close', error }),
+    ).toEqual({ error })
+  })
+
+  it("leaves a failed pass, the hold, a turn's failure and a cancel alone", () => {
+    expect(
+      closeRefusalOf({ ...ran, outcome: 'failed', beforeTurn: true, work: 'pass', error }),
+    ).toBeNull()
+    expect(
+      closeRefusalOf({ outcome: 'rejected', blockedBy: CLASSIFIER_HELD, converged: true }),
+    ).toBeNull()
+    expect(closeRefusalOf({ ...ran, outcome: 'failed', error })).toBeNull()
+    expect(
+      closeRefusalOf({ ...ran, outcome: 'aborted', beforeTurn: true, work: 'close' }),
+    ).toBeNull()
   })
 })
 

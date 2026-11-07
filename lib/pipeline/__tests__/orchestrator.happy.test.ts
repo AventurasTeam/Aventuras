@@ -9,6 +9,7 @@ import {
   pipelineEventBus,
   runPipeline,
   type PhaseContext,
+  type PhaseEmittedEvent,
   type PhaseResult,
 } from '@/lib/pipeline'
 import { generationStore } from '@/lib/stores'
@@ -141,5 +142,36 @@ describe('run_complete names beforeTurn', () => {
       { kind: 'send-work', outcome, beforeTurn: true },
       { kind: 'send-work', outcome, beforeTurn: false },
     ])
+  })
+})
+
+// C6: a banner mounted mid-close reads the task from the stored run, not the bus.
+describe('close_task_start', () => {
+  beforeEach(() => resetSingletons())
+  afterEach(() => resetSingletons())
+
+  it('stores the task on the run, then forwards the event unchanged', async () => {
+    const { ctx } = await makeHarness()
+    const event = {
+      type: 'close_task_start',
+      task: 'identity',
+      part: 0,
+      index: 3,
+      total: 7,
+    } as const
+    async function* startsTask(): AsyncGenerator<PhaseEmittedEvent, PhaseResult> {
+      yield event
+      return { status: 'completed' }
+    }
+    definePipeline({ kind: 'closes', phases: [{ name: 'agent', run: startsTask }], ...base })
+    const seen: { event: unknown; stored: unknown }[] = []
+    pipelineEventBus.subscribe('close_task_start', (e) => {
+      const [run] = generationStore.getTxState().runs.values()
+      seen.push({ event: e, stored: run?.closeProgress })
+    })
+
+    expectRan(await runPipeline('closes', ctx))
+
+    expect(seen).toEqual([{ event, stored: { task: 'identity', part: 0, index: 3, total: 7 } }])
   })
 })
