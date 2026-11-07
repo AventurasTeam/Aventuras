@@ -11,7 +11,7 @@ import { useTimelineTimeRanges } from './use-timeline-time-ranges'
 
 const reads = vi.hoisted(() => ({ ranges: vi.fn() }))
 
-// The runtime `db` is a bridge client; the read is what the hook composes.
+// The runtime `db` is a bridge client; this hook composes `useChapterTimeRanges`, so its read is mocked.
 vi.mock('@/lib/db', async (importOriginal) => ({
   ...(await importOriginal<Record<string, unknown>>()),
   db: {},
@@ -57,15 +57,17 @@ describe('useTimelineTimeRanges', () => {
     const { setFocused } = renderProbe(true)
     await waitFor(() => expect(shown()).toEqual({ first: 120, last: 300 }))
 
+    const readsBeforeReturn = reads.ranges.mock.calls.length
     setFocused(false)
     reads.ranges.mockResolvedValue(ranges(120, 900))
-    const readsBeforeReturn = reads.ranges.mock.calls.length
     await act(async () => {})
     expect(reads.ranges).toHaveBeenCalledTimes(readsBeforeReturn)
     expect(shown()).toEqual({ first: 120, last: 300 })
 
     setFocused(true)
     await waitFor(() => expect(shown()).toEqual({ first: 120, last: 900 }))
+    await act(async () => {})
+    expect(reads.ranges).toHaveBeenCalledTimes(readsBeforeReturn + 1)
   })
 
   it('reads nothing while unfocused', async () => {
@@ -86,5 +88,25 @@ describe('useTimelineTimeRanges', () => {
     setFocused(true)
     await act(async () => {})
     expect(reads.ranges).toHaveBeenCalledTimes(readsBefore)
+  })
+
+  it('rereads on a mount over a warm key', async () => {
+    const client = createQueryClient()
+    reads.ranges.mockResolvedValue(ranges(120, 300))
+    const first = render(
+      <QueryClientProvider client={client}>
+        <Probe focused />
+      </QueryClientProvider>,
+    )
+    await waitFor(() => expect(shown()).toEqual({ first: 120, last: 300 }))
+    first.unmount()
+
+    reads.ranges.mockResolvedValue(ranges(120, 900))
+    render(
+      <QueryClientProvider client={client}>
+        <Probe focused />
+      </QueryClientProvider>,
+    )
+    await waitFor(() => expect(shown()).toEqual({ first: 120, last: 900 }))
   })
 })
