@@ -373,3 +373,35 @@ slice-planning gate forces its resolution before that slice is planned.
 - **Test files spell out `RunState` for `startRun`.** More than a dozen
   test files build one by hand, with no shared fixture, so a `RunState`
   change edits all of them. Surfaced by Slice 5.7's save-path review.
+- **`EMPTY_LORE_DRAFT`'s freeze is shallow.** `lib/world/lore-draft.ts`
+  types it `Readonly<LoreDraft>`, which leaves `keywords` and `tags`
+  mutable `string[]` in the type, and `Object.freeze` leaves them
+  mutable at runtime too, so nothing stops a write into the arrays every
+  spread of the constant shares. `loreDraftFrom` copies in new lists by
+  convention. The chapter twin, `EMPTY_CHAPTER_DRAFT`, is tightened in
+  Slice 5.7's review; lore's is older code, which
+  [`code-conventions.md → Type design`](../code-conventions.md#type-design)
+  files as a deferral. Surfaced by Slice 5.7's slice review.
+- **`commitRowSave`'s `idPrefix` is required even for an update.**
+  `CommitRowSaveArgs` (`lib/actions/row-save/commit-row-save.ts`) pairs
+  `rowId: string | null` with a required `idPrefix: string`, read only
+  when `rowId` is null, to generate a create's id. `saveChapter`, its
+  first update-only caller, passes a dead `idPrefix: 'chap'`. Tighter:
+  `{ rowId: string }` or `{ rowId: null; idPrefix }`, the prefix typed
+  from the closed set in `lib/ids/prefixes.ts` (`SubstitutablePrefix`).
+  Older API; the slice adds a caller. Surfaced by Slice 5.7's slice
+  review.
+- **A Save whose only change is whitespace leaves the untrimmed draft
+  as the clean form.** The chapter and lore drafts compare trimmed
+  values (`chapterPatch` in `lib/chapters/chapter-draft.ts`, `lorePatch`
+  in `lib/world/lore-draft.ts`), so a padding-only edit builds no
+  action, and `commitRowSave` returns ok without writing. The Timeline
+  then toasts the save, and `rebase` in `hooks/use-row-save-session.ts`
+  takes the sent draft as the clean baseline: the field keeps the
+  padding, and Discard restores it, while the store and the card head
+  hold the trimmed value, until the next store patch or reopening.
+  Nothing stored changes. The fix is a substrate contract change, a
+  no-write `ok` reaching `rebase` so it rebases onto the stored values,
+  and it spans every row kind (Plot's thread and happening drafts trim
+  too). The Timeline is a new route to lore's existing behaviour.
+  Surfaced by Slice 5.7's slice review.
