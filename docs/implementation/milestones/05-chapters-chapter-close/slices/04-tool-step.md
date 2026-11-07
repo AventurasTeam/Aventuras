@@ -150,9 +150,13 @@ never reach the caller. A second cut or filter returns `stopped`,
 
 **Output default.** `TOOL_STEP_MAX_OUTPUT_DEFAULT = 8_000` goes out as
 `maxOutputTokens` when the profile sets none, a story override's
-`params: {}` included (`lib/ai/resolve-model.ts:83`). The same number
-reaches `replyCutOff` as `maxOutput`: `generateStructured` passes only the
-profile's, and a reasoning spiral would read as `unknown`.
+`params: {}` included (`lib/ai/resolve-model.ts:83`). `replyCutOff`
+gets as `maxOutput` the `max_tokens` the request sent: Anthropic's
+adapter adds the thinking budget to the step's number and caps the sum
+at a known model's maximum, and where the request body shows none
+(openai-compatible's is a string), it gets the step's number.
+`generateStructured` passes only the profile's, and a reasoning spiral
+would read as `unknown`.
 
 **Call bound (C2).** The step bounds its call with
 [Slice 5.2](./02-first-chapter.md)'s `callTimeoutMs` for its target: the
@@ -431,7 +435,9 @@ None open: each was answered here or moved to the slice that owns it
 - **A tool schema with a `.transform` is refused before any request.**
   The plan accepted one; the SDK writes the parsed value into
   `responseMessages` as the call's input, which the next step sends back
-  (a string there is a non-object Anthropic `tool_use.input`). The step
+  (a string there is a non-object Anthropic `tool_use.input`). A tool's
+  `inputSchema` is a `z.ZodObject`, so a transform on the schema itself
+  is a type error, and the step refuses one on a field at run time: it
   converts both sides, the SDK's input side and `z.toJSONSchema`'s
   output side, and returns `failed`, tier `parse`, attempt 0. No
   schema-level guard sees every form that changes the value (a default,
@@ -443,8 +449,10 @@ None open: each was answered here or moved to the slice that owns it
 - **The window check counts a tool call's input as its JSON,** a string
   input included, since both adapters serialize it.
 - **The E2E harness fails a scripted tool step that throws or can't be
-  serialized at once,** with a 400 that names it, so the step fails with
-  no retry, then rethrows to the spec. Left to hang, a mistake in a
+  serialized at once,** with a 400 of a fixed text, so the step fails
+  with no retry, then rethrows to the spec. The body leaves out the
+  thrown message, since the app's classifier reads overflow and
+  capability keywords anywhere in a rejection. Left to hang, a mistake in a
   [Slice 5.10](./10-two-starts.md) function step would cost a whole
   bound.
 - **The answered questions went to their owners.** 5.2's "One helper for
