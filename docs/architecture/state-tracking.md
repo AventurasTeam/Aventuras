@@ -135,9 +135,9 @@ Tracking is on, whatever Revert on Delete says: `rewindForRetry` for a retry wit
 `undoNarrationForRegenerate` without one. A revert that fails stops the regenerate before any entry
 is removed. When the range holds chapter, manual or Tidy records, or a chapter goes with it, the
 deletion modal asks first, titled for the regenerate, and the reader's and Tidy's changes are
-undone as in a delete; otherwise it does not ask. Dismissing an error entry and stopping a
-generation keep the reader's and Tidy's changes without asking (`KEEP_ALL`): neither is a revert
-the reader chose.
+undone as in a delete; otherwise it does not ask. Dismissing an error entry keeps the reader's and
+Tidy's changes without asking (`KEEP_ALL`), as it is not a revert the reader chose. Stopping a
+generation reverts nothing.
 
 Deleting a chapter can take its lore with it (`DeleteChapterModal`, on by default).
 `planChapterLoreRevert` (`chapterLore.ts`) takes the `chapter` records on its last entry written

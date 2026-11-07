@@ -20,19 +20,34 @@
   } | null>(null)
 
   $effect(() => {
-    const request = ui.regenerateRequest
-    if (!request) return
-    ui.requestRegenerate(null)
-    void start(request.entryId, request.retry)
+    const request = ui.takeRegenerateRequest()
+    if (request) void start(request.entryId, request.retry)
+  })
+
+  // Set on teardown: a preparation still awaiting its previews must not act or settle again.
+  let disposed = false
+  $effect(() => () => {
+    disposed = true
+    ui.settleRegenerate()
   })
 
   // A regenerate the reader confirms keeps none of their or Tidy's changes in its range.
+  // Settled first: the handler takes the lease in the same tick, and the claim would refuse it.
   function regenerate(entryId: string, retry: boolean) {
+    ui.settleRegenerate()
     if (retry) void ui.triggerRetryLastMessage(KEEP_NONE)
     else void ui.triggerRegenerateNarration(entryId, KEEP_NONE)
   }
 
   async function start(entryId: string, retry: boolean) {
+    try {
+      await prepare(entryId, retry)
+    } finally {
+      if (!pending && !disposed) ui.settleRegenerate()
+    }
+  }
+
+  async function prepare(entryId: string, retry: boolean) {
     const entry = story.entries.find((e) => e.id === entryId)
     if (!entry) return
     const position = retry ? ui.retryBackup?.entryCountBeforeAction : entry.position
@@ -53,6 +68,7 @@
       ui.showToast(`Could not check what regenerating undoes: ${errMessage(error)}`, 'error')
       return
     }
+    if (disposed) return
     // A chapter starting or ending on a removed entry goes with it, recorded or not.
     const chapters = position !== undefined ? story.chaptersRemovedFrom(position) : []
     const toDecide =
@@ -70,11 +86,16 @@
     pending = null
     regenerate(entry.id, retry)
   }
+
+  function cancel() {
+    pending = null
+    ui.settleRegenerate()
+  }
 </script>
 
 <ActionModal
   open={pending !== null}
-  onCancel={() => (pending = null)}
+  onCancel={cancel}
   action={{ label: 'Regenerate', icon: RotateCcw, tone: 'regenerate', onConfirm: confirm }}
   title={pending ? `Regenerate entry ${entryNumber(pending.entry)}` : 'Regenerate entry'}
 >

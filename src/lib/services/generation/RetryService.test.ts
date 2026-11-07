@@ -218,30 +218,6 @@ describe('RetryService branch enforcement', () => {
     })
   })
 
-  describe('handleStopGeneration', () => {
-    it('refuses a snapshot from another branch and leaves the active branch alone', async () => {
-      const cleanup = uiCleanup()
-
-      const result = await service.handleStopGeneration(makeBackup(), callbacks, cleanup, {
-        storyId: 'story-1',
-        branchId: 'branch-b',
-      })
-
-      expect(result.success).toBe(false)
-      expect(cleanup.clearGenerationError).not.toHaveBeenCalled()
-      for (const call of mutatingCalls(callbacks)) expect(call).not.toHaveBeenCalled()
-    })
-
-    it('proceeds on a matching branch', async () => {
-      const result = await service.handleStopGeneration(makeBackup(), callbacks, uiCleanup(), {
-        storyId: 'story-1',
-        branchId: 'branch-a',
-      })
-
-      expect(result.success).toBe(true)
-    })
-  })
-
   it('still refuses on a branch mismatch when the entries are otherwise removable', async () => {
     callbacks.assertEntriesRemovable = vi.fn(() => {
       throw new Error('should not be consulted')

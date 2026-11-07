@@ -4,6 +4,7 @@ import {
   findPrecedingUserAction,
   GENERATION_ERROR_SOURCE,
   isGenerationErrorEntry,
+  trailingAction,
 } from './storyEntries'
 
 function entry(id: string, type: StoryEntry['type'], position: number): StoryEntry {
@@ -91,5 +92,20 @@ describe('isGenerationErrorEntry', () => {
       metadata: { source: GENERATION_ERROR_SOURCE },
     }
     expect(isGenerationErrorEntry(narration)).toBe(false)
+  })
+})
+
+describe('trailingAction', () => {
+  it('returns an action that ends the story', () => {
+    const action = entry('a', 'user_action', 1)
+    expect(trailingAction([entry('n', 'narration', 0), action])).toBe(action)
+  })
+
+  it('returns nothing when an entry follows the action', () => {
+    expect(trailingAction([entry('a', 'user_action', 0), entry('n', 'narration', 1)])).toBeNull()
+  })
+
+  it('returns nothing for an empty story', () => {
+    expect(trailingAction([])).toBeNull()
   })
 })

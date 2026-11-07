@@ -1028,6 +1028,9 @@ class StoryStore {
 
     // Reload entries into the store
     await this.reloadEntriesForCurrentBranch()
+    // Both describe entries the import replaced.
+    ui.clearRetryBackup(true)
+    this.invalidateRetrievalCache()
 
     // The chat is the story's new start. What follows before the next turn — the world-state
     // choice, batch chapterization — belongs to the last imported entry's state.
@@ -4955,7 +4958,7 @@ class StoryStore {
     // Creating a branch ends by switching to it, so it is a branch switch with a write in
     // front. Refused before that write: the alternative leaves the branch created and the
     // story still on the old one.
-    if (this.generationLease) {
+    if (this.isGenerationClaimed) {
       throw new Error(
         'Cannot create a branch while a generation is in progress: creating one switches to it.',
       )
@@ -5283,6 +5286,11 @@ class StoryStore {
     return this.pendingBranchSwitches > 0
   }
 
+  /** A pressed Regenerate claims the branch before its lease, while it previews the revert. */
+  private get isGenerationClaimed(): boolean {
+    return this.generationLease !== null || ui.regeneratePending
+  }
+
   /** True while a generation holds the branch. Drives the switch affordances. */
   get isGenerationLeaseHeld(): boolean {
     return this.generationLease !== null
@@ -5321,7 +5329,7 @@ class StoryStore {
    * otherwise have begun.
    */
   acquireGenerationLease(): GenerationLease {
-    if (this.generationLease) {
+    if (this.isGenerationClaimed) {
       throw new Error(this.generationBusyMessage('start a generation'))
     }
     if (this.pendingBranchSwitches > 0) {
@@ -5339,11 +5347,6 @@ class StoryStore {
     this.generationLease = lease
     log('Generation lease acquired', { storyId: lease.storyId, branchId: lease.branchId })
     return lease
-  }
-
-  /** The lease a stop or a late write must check itself against, if one is held. */
-  get currentGenerationLease(): GenerationLease | null {
-    return this.generationLease
   }
 
   /**
@@ -5402,7 +5405,7 @@ class StoryStore {
     // reaches this point after a generation has begun. Stands in for world-state application
     // being unable to target a branch other than the one loaded — see "The generation lease"
     // in docs/architecture/overview.md for why, and for when this can be lifted.
-    if (this.generationLease) {
+    if (this.isGenerationClaimed) {
       throw new Error(this.generationBusyMessage('switch branches'))
     }
 
@@ -5812,7 +5815,7 @@ class StoryStore {
    * A retry's rewind while State Tracking is on: the delete path, through the records, from the
    * position before the retried action. A failed revert throws before any entry is removed.
    */
-  async rewindForRetry(position: number, keep: RevertKeep = KEEP_ALL): Promise<void> {
+  async rewindForRetry(position: number, keep: RevertKeep): Promise<void> {
     if (!this.currentStory) throw new Error('No story loaded')
     this.assertNoBranchForkAtOrAfter(position)
     const summary = await this.rollbackFrom(position, keep)
@@ -5845,8 +5848,7 @@ class StoryStore {
 
     // Backstop for a caller that bypasses RetryService: this deletes the active branch's
     // world state and re-inserts the snapshot's rows. The story is checked as well as the
-    // branch — a deferred rewind runs after Stop, by which time another story may be open,
-    // and two stories' main branches are both null.
+    // branch: two stories' main branches are both null.
     const scope = { storyId: backup.storyId, branchId: backup.branchId ?? null }
     if (!this.isOpen(scope)) {
       throw new Error('Cannot restore a retry backup taken in another story or branch')

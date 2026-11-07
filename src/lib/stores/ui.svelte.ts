@@ -150,6 +150,11 @@ export function isExplanationFoldId(id: string): id is ExplanationFoldId {
   return (EXPLANATION_FOLD_IDS as readonly string[]).includes(id)
 }
 
+/** `retry` restores the backup taken before the last action; otherwise the narration alone. */
+export interface RegenerateRequest {
+  entryId: string
+  retry: boolean
+}
 class UIStore {
   activePanel = $state<ActivePanel>('story')
   sidebarTab = $state<SidebarTab>('characters')
@@ -160,7 +165,9 @@ class UIStore {
   checkpointFormEntryId = $state<string | null>(null)
   deleteEntryId = $state<string | null>(null)
   deleteChapterId = $state<string | null>(null)
-  regenerateRequest = $state<{ entryId: string; retry: boolean } | null>(null)
+  regenerateRequest = $state<RegenerateRequest | null>(null)
+  // From the press until its generation holds the lease or the reader cancels.
+  regeneratePending = $state(false)
   branchCheckpointId = $state<string | null>(null)
   sidebarOpen = $state(typeof window !== 'undefined' ? window.innerWidth >= 640 : false)
   // Persisted like `sidebarOpen`, but defaults closed at every width: it is a place the
@@ -171,7 +178,6 @@ class UIStore {
   restoreComplete = $state(false)
   restoreCloseHint = $state<string | null>(null)
   isGenerating = $state(false)
-  isRetryingLastMessage = $state(false) // Hide stop button during completed-message retries
   vaultTab = $state<VaultTab>('characters')
 
   // Image generation state. Both are counts, because the narration analysis and the
@@ -382,13 +388,16 @@ class UIStore {
   private retryCallback: (() => Promise<void>) | null = null
 
   // Retry last message callback - set by ActionInput for edit-and-retry feature
-  private retryLastMessageCallback: ((keep?: RevertKeep) => Promise<void>) | null = null
+  private retryLastMessageCallback: ((keep: RevertKeep) => Promise<void>) | null = null
 
   // Regenerate narration callback - set by ActionInput. Lighter-weight fallback used when
   // no full retry backup is available (e.g. the latest narration survived a manual delete
   // of the entries that came after it).
   private regenerateNarrationCallback:
     ((entryId: string, keep?: RevertKeep) => Promise<void>) | null = null
+
+  // Generate from action callback - set by ActionInput, for an action nothing answers.
+  private generateFromActionCallback: ((entryId: string) => Promise<void>) | null = null
 
   // Reasoning block state persistence
   streamingReasoningExpanded = $state(false)
@@ -462,9 +471,20 @@ class UIStore {
     this.deleteChapterId = chapterId
   }
 
-  /** `retry` restores the backup taken before the last action; otherwise the narration alone. */
-  requestRegenerate(request: { entryId: string; retry: boolean } | null) {
+  requestRegenerate(request: RegenerateRequest) {
+    if (this.regeneratePending) return
+    this.regeneratePending = true
     this.regenerateRequest = request
+  }
+
+  takeRegenerateRequest(): RegenerateRequest | null {
+    const request = this.regenerateRequest
+    this.regenerateRequest = null
+    return request
+  }
+
+  settleRegenerate() {
+    this.regeneratePending = false
   }
 
   requestBranchFrom(checkpointId: string | null) {
@@ -645,10 +665,6 @@ class UIStore {
 
   setGenerationStatus(status: string) {
     this.generationStatus = status
-  }
-
-  setRetryingLastMessage(value: boolean) {
-    this.isRetryingLastMessage = value
   }
 
   /**
@@ -1486,11 +1502,11 @@ class UIStore {
   }
 
   // Retry last message callback management (for edit-and-retry feature)
-  setRetryLastMessageCallback(callback: ((keep?: RevertKeep) => Promise<void>) | null) {
+  setRetryLastMessageCallback(callback: ((keep: RevertKeep) => Promise<void>) | null) {
     this.retryLastMessageCallback = callback
   }
 
-  async triggerRetryLastMessage(keep?: RevertKeep) {
+  async triggerRetryLastMessage(keep: RevertKeep) {
     console.log('[UI] triggerRetryLastMessage called', {
       hasCallback: !!this.retryLastMessageCallback,
     })
@@ -1515,6 +1531,14 @@ class UIStore {
     } else {
       console.log('[UI] No regenerate narration callback registered!')
     }
+  }
+
+  setGenerateFromActionCallback(callback: ((entryId: string) => Promise<void>) | null) {
+    this.generateFromActionCallback = callback
+  }
+
+  async triggerGenerateFromAction(entryId: string) {
+    await this.generateFromActionCallback?.(entryId)
   }
 
   // Style reviewer methods

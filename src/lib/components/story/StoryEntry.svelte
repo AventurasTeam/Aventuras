@@ -29,6 +29,7 @@
     X,
     RefreshCw,
     RotateCcw,
+    Send,
     Loader2,
     GitBranch,
     Anchor,
@@ -50,7 +51,11 @@
     resolveTTSSanitizeOptions,
   } from '#lib/services/ai/utils/ttsText.ts'
   import { parseMarkdown, parseStoryMarkdown } from '#lib/utils/markdown.ts'
-  import { findPrecedingUserAction, isGenerationErrorEntry } from '#lib/utils/storyEntries.ts'
+  import {
+    findPrecedingUserAction,
+    isGenerationErrorEntry,
+    trailingAction,
+  } from '#lib/utils/storyEntries.ts'
   import { canCreateCheckpointAt, entryNumber } from '#lib/utils/storyNavigation.ts'
   import { sanitizeTextForTTS } from '#lib/utils/htmlSanitize.ts'
   import {
@@ -213,7 +218,10 @@
   // preparation before a turn and for the drain after Stop, and the store refuses across
   // both. A retry restore rewrites the same entries a generation does, so it counts too.
   const entriesLocked = $derived(
-    ui.isGenerating || story.isRetryInProgress || story.isGenerationLeaseHeld,
+    ui.isGenerating ||
+      ui.regeneratePending ||
+      story.isRetryInProgress ||
+      story.isGenerationLeaseHeld,
   )
 
   // The tracked failure counts only while its error entry ends this story and branch: it is held in
@@ -224,9 +232,11 @@
   )
 
   // Branch as well as story: a snapshot taken elsewhere would be refused on restore, and
-  // offering it here hides the regenerate that does work on this branch.
+  // offering it here hides the regenerate that does work on this branch. A trailing action holds
+  // the backup after a Stop, so a retry would answer it, not this narration.
   const canRetry = $derived(
     isLatestNarration &&
+      !trailingAction(story.entries) &&
       ui.retryBackup &&
       story.currentScope &&
       sameBranchScope(ui.retryBackup, story.currentScope) &&
@@ -255,6 +265,8 @@
       !errorPending &&
       !!findPrecedingUserAction(story.entries, entry.id),
   )
+
+  const canGenerate = $derived(trailingAction(story.entries)?.id === entry.id && !entriesLocked)
 
   /**
    * Dismiss/delete this error entry from the story.
@@ -1615,6 +1627,23 @@
           >
             <RotateCcw class="h-4 w-4" />
           </Button>
+        {:else if canGenerate}
+          <Button
+            variant="text"
+            size="icon"
+            onclick={() => void ui.triggerGenerateFromAction(entry.id)}
+            disabled={settings.hasGenerationConfigIssues}
+            class={cn(
+              'size-7',
+              FEATURE_COLORS.regenerate.text,
+              FEATURE_COLORS.regenerate.hoverText,
+            )}
+            title={settings.hasGenerationConfigIssues
+              ? 'AI configuration incomplete — check Settings'
+              : 'Generate a response'}
+          >
+            <Send class="h-4 w-4" />
+          </Button>
         {/if}
         {#if canBranch}
           <Button
@@ -1927,7 +1956,7 @@
         <p class="text-muted-foreground hidden text-xs sm:block">
           Ctrl+Enter to save, Esc to cancel
         </p>
-        {#if canSaveAndRegenerate}
+        {#if canSaveAndRegenerate && !isLastEntry}
           <p class="hidden items-center gap-1 text-xs text-amber-500/80 sm:flex">
             Regenerate narration after significant changes
             <RotateCcw class="h-3 w-3" />

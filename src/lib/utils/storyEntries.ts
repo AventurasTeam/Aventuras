@@ -8,6 +8,12 @@ export function isGenerationErrorEntry(entry: StoryEntry): boolean {
   return entry.type === 'system' && entry.metadata?.source === GENERATION_ERROR_SOURCE
 }
 
+/** The action ending the story with nothing answering it, if there is one. */
+export function trailingAction(entries: StoryEntry[]): StoryEntry | null {
+  const last = entries.at(-1)
+  return last?.type === 'user_action' ? last : null
+}
+
 /**
  * Walks backward from the entry with the given ID and returns the nearest
  * preceding `user_action` entry, or null if none is found (or the entry

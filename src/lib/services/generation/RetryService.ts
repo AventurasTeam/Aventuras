@@ -3,7 +3,7 @@
  *
  * Extracted from ActionInput.svelte to provide a focused service for:
  * - Backup state preparation before user actions
- * - State restoration after stopping generation
+ * - State restoration before regenerating
  * - Full state and persistent (ID-based) restore paths
  */
 
@@ -104,9 +104,6 @@ export type RestoreScope = BranchScope
 export interface RestoreResult {
   success: boolean
   error?: string
-  restoredActionType?: ActionInputType
-  restoredWasRawActionChoice?: boolean
-  restoredRawInput?: string
 }
 
 /**
@@ -118,7 +115,7 @@ export interface RestoreResult {
  */
 export class RetryService {
   /**
-   * Restore state from a backup (for stop generation).
+   * Restore state from a backup.
    * Determines restore path based on backup.hasFullState.
    */
   async restoreFromBackup(
@@ -149,12 +146,7 @@ export class RetryService {
         await this.restorePersistentState(backup, callbacks)
       }
 
-      return {
-        success: true,
-        restoredActionType: backup.actionType,
-        restoredWasRawActionChoice: backup.wasRawActionChoice,
-        restoredRawInput: backup.rawInput,
-      }
+      return { success: true }
     } catch (error) {
       log('Restore failed', error)
       return {
@@ -304,36 +296,6 @@ export class RetryService {
     } finally {
       callbacks.unlockRetryInProgress()
     }
-  }
-
-  /**
-   * Prepare for stop generation - performs full restore including UI cleanup.
-   */
-  async handleStopGeneration(
-    backup: RetryBackupData,
-    callbacks: RetryStoreCallbacks,
-    uiCleanup: {
-      clearGenerationError: () => void
-      clearSuggestions: () => void
-      clearActionChoices: () => void
-    },
-    active: RestoreScope,
-  ): Promise<RestoreResult> {
-    log('handleStopGeneration called')
-
-    const refused = this.preflight(backup, callbacks, active)
-    if (refused) return refused
-
-    // Clear UI state first
-    uiCleanup.clearGenerationError()
-    uiCleanup.clearSuggestions()
-    uiCleanup.clearActionChoices()
-
-    // Clear lorebook retrieval debug state
-    callbacks.setLastLorebookRetrieval(null)
-
-    // Perform restore
-    return this.restoreFromBackup(backup, callbacks, active)
   }
 
   /**

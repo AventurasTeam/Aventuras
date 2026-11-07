@@ -102,11 +102,11 @@ ActionInput.svelte ──▶ holdBackgroundKeepAlive()          utils/background
   `pause` listener restarts it, which is what survives another app (YouTube) taking the audio.
   The loop starts before the native call, so it is playing before the app can be hidden.
 - **Expiry.** The page aborts through the existing `AbortController`. Before the narration is
-  saved the turn is rewound like the in-app Stop, so the action returns to the input; if Stop is
-  unavailable (a retry) or there is no backup to rewind to (a plain regenerate) the turn fails with an error entry and Retry.
-  Once the narration is saved only the later phases are cut short: the classifier request is
+  complete the turn ends like the in-app Stop, leaving the action as the last entry.
+  From then on, its save included, only the later phases are cut short: the classifier request is
   cancelled through the same signal, and the post-turn tasks (chapter, lore, style review) are not
-  started.
+  started. A narration kept without its world update says so with a toast once the app is in
+  front, pointing at Regenerate, as a failed world update does.
 - **Settings.** The background-generation section is shown on iOS and Android; the text differs.
 
 ### Configuration
