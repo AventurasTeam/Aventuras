@@ -1978,11 +1978,13 @@ Parked at M5's promotion, 2026-11-01.
 
 An interrupt's toast, `Chapter close moved to your next turn.`, fires
 as the close aborts, before the interrupting reversal's sweep. When
-that reversal removes a manual close's end entry, the sweep drops the
-pick; when it takes the open region back under the threshold, as CTRL-Z
+that reversal removes a manual close's end entry, the bracket drops the
+pick once its sweep has ended; when it takes the open region back under the threshold, as CTRL-Z
 of the turn that crossed it does, the next Send finds no close owed and
-clears the record. Either way no close runs, though the toast said one
-would
+clears the record. Either way the close the toast named may not run, though the toast said
+it would: a pick that is gone, or a region under the threshold, owes
+nothing, while a threshold that still owes one, with auto-close on, runs
+a close all the same
 ([`generation-pipeline.md → Prose reversals and the interrupt`](./generation-pipeline.md#prose-reversals-and-the-interrupt)).
 The copy ships as canon has it. The options are a follow-up toast when
 the record drops, or holding the deferral toast until the reversal's

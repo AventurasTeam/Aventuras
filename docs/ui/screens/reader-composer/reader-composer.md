@@ -308,7 +308,8 @@ after the turn that crosses the threshold. Both hold the gate while
 the user reads the reply, and the head reversals, regenerate among
 them, interrupt them
 ([`principles.md → Edit restrictions during in-flight generation`](../../principles.md#edit-restrictions-during-in-flight-generation)),
-except a pass a failure entry's `Retry` started (below).
+except a pass or a close a failure entry's `Retry` started and a Send's owed
+work (below).
 In the reader the banner shows `Updating memory… [Cancel]` or the
 close's progress, and the composer stays live while Send waits. An
 interrupt or the pill's Cancel shows an info
@@ -329,7 +330,8 @@ A close that commits shows `Chapter closed: <title>`, or
 At the next Send the deferred or failed work runs first, the banner
 reading `Updating memory before your turn…`, or
 `Closing chapter before your turn…` for a close, and the turn follows;
-Cancel then cancels the whole Send and keeps the text in the composer
+Cancel then cancels the whole Send, and the text goes back into an empty
+composer (else a toast says the draft was kept)
 ([`memory/classifier.md → Pipeline framing`](../../../memory/classifier.md#pipeline-framing)).
 If that work fails there, the Send fails too: the turn doesn't start,
 the text goes back to an empty composer (else onto the entry), and the
@@ -690,15 +692,17 @@ too, since one composer serves every branch and its draft is now the
 other branch's; no toast tells the user, and a warning in the log
 records the drop.
 
-A pass or close entry's `Retry` whose work commits clears the entry through
-`Dismiss` only when the composer can take its text back, and asks
+A pass or close entry's `Retry` whose work commits, or a close's that
+finds no close owed, clears the entry through `Dismiss` only when the composer can take its text back, and asks
 again once the clear has landed, since the composer stays editable
 through it. Over an occupied draft, or once the user has left the
 branch, the entry stays as a notice holding the text, with no `Retry`
 and copy that says so, and its `Dismiss` hands the text back. A Send
 supersedes the notice's text as it does a failure entry's, and the
 custody line under its quote says so, since emptying the composer by
-sending is the step the notice would otherwise invite.
+sending is the step the notice would otherwise invite. A close entry's
+`Retry` whose catch-up pass fails rewrites the entry as **Memory update
+failed**, with that pass's cause.
 
 A **Memory update failed** entry carries the submission only where
 the composer can't hold the text. A Send refused on a held branch

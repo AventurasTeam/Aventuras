@@ -295,8 +295,8 @@ slice-planning gate forces its resolution before that slice is planned.
 - **A second CTRL-Z after a close whose reversal failed leaves its marker
   open.** It undoes the close's delta rows and chapter row but leaves the
   close's `pipeline_runs` marker with `finished_at` null. How boot
-  recovery treats an `action_id` a user undo already reversed is
-  unverified. Surfaced by Slice 5.6's review.
+  recovery (`recoverInFlightRuns`, `lib/pipeline/runtime/recovery.ts`)
+  treats an `action_id` a user undo already reversed is unverified. Surfaced by Slice 5.6's review.
 - **`undoLastAction` reads the branch's whole delta log, twice per
   CTRL-Z.** `lib/actions/story-entries/undo.ts` reads it with no LIMIT
   under the gate, and only the head group is needed. The cost is
@@ -326,5 +326,7 @@ slice-planning gate forces its resolution before that slice is planned.
   that announcement rate is wanted. Surfaced by Slice 5.6's review.
 - **A retry-blocked toast prints a raw refusal code.** `reader.json`'s
   `passRetryBlocked` and `closeRetryBlocked` interpolate the run's
-  `blockedBy` (`story-busy`, for one) into user-facing copy. Surfaced by
-  Slice 5.6's review.
+  `blockedBy` (`story-busy`, for one) into user-facing copy.
+  `passRetryBlocked` was already there; `closeRetryBlocked` is this
+  slice's own copy, repeating its pattern. Surfaced by Slice 5.6's
+  review.

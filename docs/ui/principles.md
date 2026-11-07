@@ -312,8 +312,9 @@ the run ends. One is a pass or a close a system entry's `Retry`
 started, which the pill's `Cancel` ends
 ([`memory/classifier.md → Failure policy`](../memory/classifier.md#failure-policy)).
 The other is a Send's owed work, the pass or close it runs before its
-turn: the Send's pending turn refuses head reversals until the turn
-starts, minutes long for a close, and the composer's or the banner's
+turn: it runs under the Send's pending mark, which refuses head
+reversals until the turn starts, so a reversal can't interrupt it,
+minutes long for a close, and the pill's, the composer's or the banner's
 `Cancel` ends the whole Send
 ([`generation-pipeline.md → Gate derivation as a selector`](../generation-pipeline.md#gate-derivation-as-a-selector)).
 
@@ -423,8 +424,8 @@ is the suggestion strip's ✕.
 A disabled control's tooltip names the run it waits on, which is not
 always the pill's. A head reversal passes through a pass or a close, so
 beside one it waits on whatever else holds the gate (a refresh, a
-turn) and names that run. With no such run, as during a pass a failure
-entry's `Retry` started, it names the pill's.
+turn) and names that run. With no such run, as during a failure
+entry's `Retry` or a Send's owed work, it names the pill's.
 
 Tooltip copy is principle-owned. Per-screen docs cite, don't
 reinvent.

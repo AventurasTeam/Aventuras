@@ -647,11 +647,12 @@ amends the scope above.
   close's first tool step through `setToolSteps`: once the close has a tool step
   after its chapter write, should that spec hold that step instead, so it proves a
   written close rolls back? Unit coverage of the rollback is
-  `lib/actions/story-entries/undo-classifier.test.ts`.
-
+  `lib/actions/story-entries/undo-classifier.test.ts`. Surfaced by Slice 5.6's
+  review.
 - **A fact for the planner, not a question.** If the host ever reads a run's result:
   `completed` can be the catch-up pass alone (a late Cancel after its last phase, or
   the open story leaving the branch), with no close run and the pick still owed.
+  Surfaced by Slice 5.6's review.
 
 ## Implementation notes
 

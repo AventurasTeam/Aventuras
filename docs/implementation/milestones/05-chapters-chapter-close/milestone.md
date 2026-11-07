@@ -281,8 +281,8 @@ pre-flight, not in a phase.
 - One per-call bound keyed by agent id, `callTimeoutMs` and
   `CALL_TIMEOUT_DEFAULT_MS` in `lib/ai`, serves metadata, boundary and
   tool steps, in whichever of 5.2 and 5.4 lands first:
-  `passTimeoutMs` hard-codes `resolveModel('classifier', …)`
-  (`periodic-classifier.ts:101-103`).
+  `passTimeoutMs` hard-coded `resolveModel('classifier', …)`; it now
+  calls `callTimeoutMs('classifier', …)` (`periodic-classifier.ts`).
 
 The HTTP capture cap stays as it is (`http-call-sink.ts:9`); it moves to
 M7.3.

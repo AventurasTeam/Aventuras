@@ -141,7 +141,7 @@ type PipelineEvent =
   | { type: 'delta_group_emitted'; actions: readonly PipelineAction[]; entryId: string }
   | { type: 'recoverable_error'; error: PipelineError }
   // phase-emitted specific — grows additively
-  | { type: 'close_task_start'; task: string; part: number; index: number; total: number }
+  | { type: 'close_task_start'; task: CloseTask; part: number; index: number; total: number }
   | { type: 'retrieval_stage'; stage: 'embedding' | 'ranking' | 'budget-fill' }
 ```
 
@@ -560,6 +560,7 @@ type RunState = {
   beforeTurn: boolean // Send's owed work before the turn: the run Send started and every run it chains
   abortController: AbortController
   currentPhase: string // name of declared phase or parallel group
+  inputs?: unknown // the run's caller-supplied parameters; the origin's only, a chained successor takes none
   closeProgress?: { task: CloseTask; part: number; index: number; total: number } // a close's latest close_task_start, which a banner mounted mid-close reads
   intermediates: Record<string, unknown> // phase outputs threaded through the run
   lastResult?: { status: 'completed' | 'aborted' | 'failed' }
@@ -688,7 +689,7 @@ broken references).
 system-kind entry into the affected story per
 [`reader-composer.md → Error surface`](./ui/screens/reader-composer/reader-composer.md#error-surface--system-entries-vs-persistent-state-pill).
 Pre-flight failure on **the periodic classifier** or **a chapter
-close** is a failed run like any other: a toast, and the system entry
+close** is a failed run like any other: a toast, or the system entry
 when it fails a Send
 ([`memory/classifier.md → Failure policy`](./memory/classifier.md#failure-policy)),
 or, for a close, the manual close's click, which pre-flights before it
@@ -1484,8 +1485,8 @@ observed on the event bus, not the return value.
 starting run's result at that run's commit or abort, its `chain` when
 the chain's last run ends, with that run's end: its kind, its result,
 and `cancelled`, whether its abort had fired by its end. The end is the
-origin's own when nothing chained, and null only when the origin never
-ran, refused or thrown; `chain` never rejects. `cancelled` lets a
+origin's own when nothing chained, and null only when the origin was
+refused or threw; `chain` never rejects. `cancelled` lets a
 reader honour a Cancel that landed after a run's last phase, which the
 run commits over and chains nothing behind. A turn's start awaits only
 `origin`, so submit and regenerate release the branch queue at the

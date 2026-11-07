@@ -891,7 +891,8 @@ A toast says the memory
 update moved to the next turn, and the pass is marked deferred for its
 branch. At the next Send it runs before the turn, as its own run,
 committing before the turn's first write; Cancel then cancels the
-whole Send and keeps the user's text in the composer. The mark lives
+whole Send, and the user's text goes back into an empty composer (else a
+toast says the draft was kept). The mark lives
 in memory: after a restart, the next Send finds the pass due and runs
 it first anyway ([Failure policy](#failure-policy)). A pass cancelled before its writes commits nothing; one
 cancelled during them reverses its own group, as any aborted run does.
