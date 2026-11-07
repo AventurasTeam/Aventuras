@@ -23,6 +23,8 @@ export const chrome = {
     page.getByRole('option', { name: t('chrome.goTo.openWorld'), exact: true }),
   goToPlotRow: (page: Page): Locator =>
     page.getByRole('option', { name: t('chrome.goTo.openPlot'), exact: true }),
+  goToChapterTimelineRow: (page: Page): Locator =>
+    page.getByRole('option', { name: t('chrome.goTo.openChapterTimeline'), exact: true }),
   goToStorySettingsRow: (page: Page): Locator =>
     page.getByRole('option', { name: t('chrome.goTo.openStorySettings'), exact: true }),
 

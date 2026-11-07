@@ -243,5 +243,8 @@ export const reader = {
   // A button only on the reader at tablet/desktop; the progressbar shares the name, not the role.
   chapterProgressHit: (page: Page): Locator =>
     page.getByRole('button', { name: t('chapters:popover.title'), exact: true }),
+  // The chapter popover's link to the Chapter Timeline (chapter-popover.tsx).
+  popoverManage: (page: Page): Locator =>
+    page.getByRole('button', { name: t('chapters:popover.manage'), exact: true }),
   jumpVeil: (page: Page): Locator => page.getByText(t('reader:jumpLoading'), { exact: true }),
 }
