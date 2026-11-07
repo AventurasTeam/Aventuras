@@ -132,6 +132,21 @@ const hang: Answer = (signal) =>
     })
   })
 
+const after =
+  (ms: number, answer: Answer): Answer =>
+  (signal) =>
+    new Promise((resolve, reject) => {
+      const timer = setTimeout(() => resolve(answer(signal)), ms)
+      signal?.addEventListener(
+        'abort',
+        () => {
+          clearTimeout(timer)
+          reject(new DOMException('aborted', 'AbortError'))
+        },
+        { once: true },
+      )
+    })
+
 const LORE_PROFILE: ModelProfile = {
   id: 'prof-lore',
   kind: 'agent',
@@ -525,17 +540,21 @@ describe('generateToolStep: the bound', () => {
 
   it('shares the bound between a provider retry and the attempt before it', async () => {
     vi.useFakeTimers()
-    answers = [rejection(500, { error: { message: 'upstream exploded' } }), hang]
+    answers = [after(30_000, rejection(500, { error: { message: 'upstream exploded' } })), hang]
+    const settled = vi.fn<(result: ToolStepResult) => void>()
 
-    const pending = step(useProvider('openai-compatible', { profile: { timeout: 45 } }))
-    await vi.advanceTimersByTimeAsync(45_000)
+    void step(useProvider('openai-compatible', { profile: { timeout: 45 } })).then(settled)
+    await vi.advanceTimersByTimeAsync(44_999)
+    expect(bodies).toHaveLength(2)
+    expect(settled).not.toHaveBeenCalled()
+    await vi.advanceTimersByTimeAsync(1)
 
-    expect(await pending).toMatchObject({
+    expect(settled).toHaveBeenCalledOnce()
+    expect(settled.mock.lastCall![0]).toMatchObject({
       status: 'failed',
       error: { tier: 'provider', reason: 'timeout', detail: 'lore-mgmt: timeout after 45000ms' },
       recoverable: [{ tier: 'provider', reason: 'network' }],
     })
-    expect(bodies).toHaveLength(2)
   })
 
   it('is ten minutes under a story override, which sets no timeout', async () => {
@@ -686,21 +705,6 @@ describe('generateToolStep: the chain', () => {
     ])
   })
 })
-
-const after =
-  (ms: number, answer: Answer): Answer =>
-  (signal) =>
-    new Promise((resolve, reject) => {
-      const timer = setTimeout(() => resolve(answer(signal)), ms)
-      signal?.addEventListener(
-        'abort',
-        () => {
-          clearTimeout(timer)
-          reject(new DOMException('aborted', 'AbortError'))
-        },
-        { once: true },
-      )
-    })
 
 // Whole calls the server stopped at its limit: never run, never returned.
 const CUT_CALLS: WireCall[] = [{ id: 'call_cut', name: 'lookup', arguments: '{"query":"the cut"}' }]
