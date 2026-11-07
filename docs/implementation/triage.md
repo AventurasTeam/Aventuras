@@ -76,12 +76,6 @@ slice-planning gate forces its resolution before that slice is planned.
   `bundled-pack.test.ts` counts 13 templates whose `index.ts` group is
   `wizard`, and the include validator refuses a group the template's
   macros don't fit.
-- **The story-entry handlers' branch scope is untested on update and
-  delete.** `lib/actions/story-entries/register.test.ts`'s `seed`
-  creates only branch `b1`, so dropping the branch condition from
-  those handlers' writes stays green (entry ids repeat across branches:
-  the PK is `(branch_id, id)`). The stamp handler's case shows the
-  shape.
 - **Refusal codes repeated as literals.** `'branch-not-open'`
   (`lib/actions/classifier/run-now.ts:14`) and `'embedder-swap'`
   (`lib/actions/turns/submit-turn.ts:54`) restate
