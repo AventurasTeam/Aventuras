@@ -582,6 +582,15 @@ answer in this slice's PR.
   **Provisional:** the alternative left open is one neutral
   notice, "The chapter close has nothing left to retry.", which holds in
   both arms.
+- **A close stopped before its stamps whose own reversal fails is
+  re-run at once, and 5.6 adds no hold for it (developer decision,
+  2026-11-07).** Its chapter row stays until a boot reverses it while
+  `closeOwed` still reads true, so the next Send, a close entry's Retry
+  or the turn's chain closes the same entries again, and two chapters
+  cover them until a restart. It is the failed-reversal class canon
+  accepts until boot, and a close-held state would be new design, so it
+  is a fourth case in [Slice 5.12](./12-chapter-delete-rollback.md)'s
+  residue question.
 - **The manual start resolves the chain end's `TxResult` (C14), a
   completed catch-up pass included (2026-11-07).** A late Cancel after
   the pass's last phase, or the open story leaving the branch, ends
