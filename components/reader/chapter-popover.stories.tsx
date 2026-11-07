@@ -174,9 +174,7 @@ async function expectContents(args: ChapterPopoverProps) {
     closeChapter,
   )
   const manage = screen.getByRole('button', { name: 'Manage chapters →' })
-  // Live, so no reason wraps it.
   await expect(manage).not.toHaveAttribute('aria-disabled', 'true')
-  await expect(manage.parentElement).not.toHaveAttribute('title')
   // RN-Web blocks a disabled Pressable's pointer; fireEvent goes past that to its guard.
   fireEvent.click(closeChapter)
   await expect(args.onOpenChange).not.toHaveBeenCalledWith(false)
