@@ -324,6 +324,16 @@ describe('bracketProseReversal — a manual pick', () => {
         createdAt: 2,
       },
     ])
+    // A fork copies rows under the same ids: its copy must not keep this branch's pick alive.
+    await db.insert(branches).values({ id: 'b2', storyId: 's1', name: 'fork', createdAt: 1 })
+    await db.insert(storyEntries).values({
+      id: 'e_r1',
+      branchId: 'b2',
+      position: 2,
+      kind: 'ai_reply',
+      content: 'The door opens.',
+      createdAt: 2,
+    })
     generationStore.setPendingClose('b1', { endEntryId: 'e_r1' })
     const remove = (id: string) =>
       db.delete(storyEntries).where(and(eq(storyEntries.branchId, 'b1'), eq(storyEntries.id, id)))

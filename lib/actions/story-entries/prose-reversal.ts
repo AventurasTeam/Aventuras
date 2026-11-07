@@ -33,7 +33,7 @@ export async function bracketProseReversal<T>(
       return await body()
     } finally {
       releaseBranchWriteExclusive(branchId, PROSE_REVERSAL_LOCK_ID)
-      // Under the barrier, so no Send or manual start reads the pick between the sweep and this.
+      // Under the barrier, so no Send or manual start acts on the pick between the sweep and this.
       await dropRemovedPick(branchId, ctx)
     }
   } finally {
@@ -49,7 +49,9 @@ async function dropRemovedPick(branchId: string, ctx: Pick<DbCtx, 'db'>): Promis
       .select({ id: storyEntries.id })
       .from(storyEntries)
       .where(and(eq(storyEntries.branchId, branchId), eq(storyEntries.id, pick.endEntryId)))
-    if (row == null) generationStore.clearPendingClose(branchId)
+    // Only the pick checked: a different one standing after the await is not this reversal's.
+    if (row == null && generationStore.getTxState().pendingClose.get(branchId) === pick)
+      generationStore.clearPendingClose(branchId)
   } catch (e) {
     // Kept: boundary refuses a pick off the open region and drops it there.
     logger.warn('action_layer.pending_close_check_failed', {
