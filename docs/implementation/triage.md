@@ -96,9 +96,6 @@ slice-planning gate forces its resolution before that slice is planned.
   run inside one batch stays stale until the next `run_complete` or turn.
   Retrieval stays correct (the drain is warm-cache only); quiescence can
   be put off. `kick` already records a pending re-run.
-- **A harness comment assumes WAL.** `e2e/harness/db.ts:17` justifies
-  `queryApp` by "a second file handle can miss a WAL-buffered write", but
-  the desktop database runs in rollback-journal mode.
 - **Phase intermediates are an untyped bag.** `PhaseContext.intermediates`
   is `Record<string, unknown>` (`lib/pipeline/types.ts:103`), and each
   reader casts its key: the retrieval outcome behind a shape check
