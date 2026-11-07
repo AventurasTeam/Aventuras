@@ -37,16 +37,15 @@ const THREE = chapter(3)
 const BEFORE = [ONE, TWO]
 const AFTER = [ONE, TWO, THREE]
 
-type Props = Pick<TimelineEditingOptions, 'rows' | 'runInFlight'>
+type Props = Pick<TimelineEditingOptions, 'ready' | 'rows' | 'runInFlight'>
 
-function setup() {
+function setup(initialProps: Props = { ready: true, rows: BEFORE, runInFlight: false }) {
   const save = vi.fn(
     async (row: StoreChapter): Promise<ChapterSaveResult> => ({ status: 'ok', id: row.id }),
   )
   const hook = renderHook(
-    (props: Props) =>
-      useTimelineEditing({ ...props, ready: true, save, onSaved: vi.fn(), onRejected: vi.fn() }),
-    { initialProps: { rows: BEFORE, runInFlight: false } },
+    (props: Props) => useTimelineEditing({ ...props, save, onSaved: vi.fn(), onRejected: vi.fn() }),
+    { initialProps },
   )
   return hook
 }
@@ -60,9 +59,9 @@ function open(hook: Hook, id: string) {
 
 /** A close lands mid-run, then the run ends. */
 function closeLands(hook: Hook) {
-  hook.rerender({ rows: BEFORE, runInFlight: true })
-  hook.rerender({ rows: AFTER, runInFlight: true })
-  hook.rerender({ rows: AFTER, runInFlight: false })
+  hook.rerender({ ready: true, rows: BEFORE, runInFlight: true })
+  hook.rerender({ ready: true, rows: AFTER, runInFlight: true })
+  hook.rerender({ ready: true, rows: AFTER, runInFlight: false })
 }
 
 afterEach(cleanup)
@@ -95,9 +94,15 @@ describe('useTimelineEditing', () => {
   it('holds a close that lands mid-run until the run ends', () => {
     const hook = setup()
     open(hook, ONE.id)
-    hook.rerender({ rows: AFTER, runInFlight: true })
+    hook.rerender({ ready: true, rows: AFTER, runInFlight: true })
     expect(hook.result.current.expandedId).toBe(ONE.id)
-    hook.rerender({ rows: AFTER, runInFlight: false })
+    hook.rerender({ ready: true, rows: AFTER, runInFlight: false })
     expect(hook.result.current.expandedId).toBe(THREE.id)
+  })
+
+  it('opens nothing for the chapters a cold open hydrates', () => {
+    const hook = setup({ ready: false, rows: [], runInFlight: false })
+    hook.rerender({ ready: true, rows: AFTER, runInFlight: false })
+    expect(hook.result.current.expandedId).toBeNull()
   })
 })
