@@ -68,6 +68,11 @@ function open(hook: Hook, id: string) {
   expect(hook.result.current.expandedId).toBe(id)
 }
 
+async function editTitle(hook: Hook, title: string) {
+  act(() => hook.result.current.session.form.setValue('title', title, { shouldDirty: true }))
+  await waitFor(() => expect(hook.result.current.session.dirty).toBe(true))
+}
+
 /** A close lands mid-run, then the run ends. */
 function closeLands(hook: Hook) {
   hook.rerender({ ready: true, rows: BEFORE, runInFlight: true })
@@ -130,12 +135,7 @@ describe('useTimelineEditing', () => {
   it('keeps a dirty card open, with its draft, when a close lands and its run ends', async () => {
     const hook = setup()
     open(hook, ONE.id)
-    act(() =>
-      hook.result.current.session.form.setValue('title', 'Chapter 1, revised', {
-        shouldDirty: true,
-      }),
-    )
-    await waitFor(() => expect(hook.result.current.session.dirty).toBe(true))
+    await editTitle(hook, 'Chapter 1, revised')
 
     closeLands(hook)
     expect(hook.result.current.expandedId).toBe(ONE.id)
@@ -176,12 +176,7 @@ describe('useTimelineEditing', () => {
   it('holds a switch away from a dirty card behind the leave guard', async () => {
     const hook = setup()
     open(hook, ONE.id)
-    act(() =>
-      hook.result.current.session.form.setValue('title', 'Chapter 1, revised', {
-        shouldDirty: true,
-      }),
-    )
-    await waitFor(() => expect(hook.result.current.session.dirty).toBe(true))
+    await editTitle(hook, 'Chapter 1, revised')
 
     act(() => hook.result.current.toggle(TWO.id))
     expect(hook.result.current.expandedId).toBe(ONE.id)
@@ -195,12 +190,7 @@ describe('useTimelineEditing', () => {
     expect(hook.result.current.expandedId).toBe(TWO.id)
     await waitFor(() => expect(hook.result.current.session.formRowId).toBe(TWO.id))
 
-    act(() =>
-      hook.result.current.session.form.setValue('title', 'Chapter 2, revised', {
-        shouldDirty: true,
-      }),
-    )
-    await waitFor(() => expect(hook.result.current.session.dirty).toBe(true))
+    await editTitle(hook, 'Chapter 2, revised')
     await act(async () => {
       await hook.result.current.session.save()
     })
@@ -271,12 +261,7 @@ describe('useTimelineEditing, opened while a run is going', () => {
     parkRange(close, THREE.id)
     const hook = openDuringRun(AFTER)
     open(hook, ONE.id)
-    act(() =>
-      hook.result.current.session.form.setValue('title', 'Chapter 1, revised', {
-        shouldDirty: true,
-      }),
-    )
-    await waitFor(() => expect(hook.result.current.session.dirty).toBe(true))
+    await editTitle(hook, 'Chapter 1, revised')
 
     runEnds(hook, close, AFTER)
     expect(hook.result.current.expandedId).toBe(ONE.id)

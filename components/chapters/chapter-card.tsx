@@ -90,8 +90,8 @@ export function ChapterCard({
 }: ChapterCardProps): ReactElement {
   const isPhone = useTier() === 'phone'
   const padding = isPhone ? 'px-3' : 'px-5'
-  // Fields mounted before the form holds this row show the previous row on native.
   const expanded = session != null
+  // Fields mounted before the form holds this row show the previous row on native.
   const editing = session?.formRowId === data.row.id ? session : null
   return (
     <View
