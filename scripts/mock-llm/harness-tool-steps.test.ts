@@ -58,7 +58,6 @@ afterEach(() => {
   debug.mockRestore()
 })
 
-/** Registers the harness as the app's provider and assigns `lore-mgmt` a profile on it. */
 function registerHarness(llm: MockLlm): ResolveModelConfig {
   const harness = provider(llm)
   setTestProviders([harness])
