@@ -211,17 +211,6 @@ slice-planning gate forces its resolution before that slice is planned.
   shared compound, or a `Button` option, would end the copies; the
   latter changes native layout for every `disabledReason` caller, so it
   wants a design call. Surfaced by Slice 5.7's slice review.
-- **C15 and Slice 5.3 say time ranges exclude 0; the read keeps it.**
-  [Milestone 5 → C15](milestones/05-chapters-chapter-close/milestone.md#c15--entry-jump-and-chapter-time-ranges)
-  gives each chapter's `min` and `max` world time "excluding 0", and
-  [Slice 5.3 → Scope: in](milestones/05-chapters-chapter-close/slices/03-reader-chapters.md#scope-in)
-  says the same, as does its acceptance criterion 12.
-  `readChapterTimeRanges` (`lib/db/story-entries/chapter-time-ranges.ts:27-28`)
-  excludes `kind = 'system'` and a null world time only, and its test
-  pins 0 on purpose (`chapter-time-ranges.test.ts`, "starts a range
-  at the opening, at 0"): the 2026-11-04 triage pass (PR #704) took a
-  world time of 0 as the origin, not a flashback. The docs are the side
-  to fix. Surfaced by Slice 5.7's card-data task.
 - **`observability.md` credits `row_save_validate_failed` to a check
   that isn't there.** The bullet names "the lore session's first-edit
   whole-draft check"; `use-lore-row-session.ts` runs no `trigger()`,

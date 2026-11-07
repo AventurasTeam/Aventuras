@@ -752,11 +752,13 @@ entry keeps wiring the Diagnostics delta log.
 
 One read, `readChapterTimeRanges` in `lib/db/story-entries/` beside
 `open-region.ts`, gives each chapter's `{ first, last }` world time, by
-`min` and `max` excluding 0, for the popover and the Timeline, and covers
-the open region as a null chapter for their `since <time>`. The app's
-query client never goes stale (`lib/cache/query-client.ts`), and a
-world-time edit moves neither `settleCount` nor the tail, so a surface
-calls `refetch()` when it opens.
+`min` and `max`, for the popover and the Timeline. A 0 counts: it is the
+story's origin, not a flashback
+([data-model.md → In-world time tracking](../../../data-model.md#in-world-time-tracking)).
+It covers the open region as a null chapter for their `since <time>`.
+The app's query client never goes stale (`lib/cache/query-client.ts`),
+and a world-time edit moves neither `settleCount` nor the tail, so a
+surface calls `refetch()` when it opens.
 
 ### C16 — Flip rule
 

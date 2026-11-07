@@ -191,7 +191,8 @@ and tablet, Sheet (medium) on phone, dispatched as `OverflowMenu` does:
   `lib/db/story-entries/chapter-time-ranges.ts`, beside `open-region.ts`,
   exported from `@/lib/db`. `lib/chapters` takes no value import of
   `@/lib/db` (C5). One query grouped by `chapter_id`: `min` and `max` of
-  `metadata.worldTime`, excluding 0 and `system` rows. With `system` out,
+  `metadata.worldTime`, excluding `system` rows and a null time; a 0 is the
+  story's origin and counts. With `system` out,
   the `null` group is exactly C5's open region.
 - `useChapterTimeRanges(branchId, { enabled })` keys on `settleCount` and
   the tail, as `useEntryIndex` does, and returns `refetch`. A world-time
@@ -342,8 +343,9 @@ and tablet, Sheet (medium) on phone, dispatched as `OverflowMenu` does:
     label: `chapter progress · 8,420 / 24,000 tok`
     (`components/reader/chapter-popover.stories.tsx`).
 12. `lib/db/story-entries/chapter-time-ranges.test.ts`:
-    `readChapterTimeRanges` groups by chapter, excludes 0, null and `system`
-    rows, keys the open region as `null`, and omits a chapter with no time.
+    `readChapterTimeRanges` groups by chapter, excludes null and `system`
+    rows, keeps a 0, keys the open region as `null`, and omits a chapter
+    with no time.
 13. `hooks/use-chapter-time-ranges.test.tsx`, under `createQueryClient()`,
     since a bare `new QueryClient()` has a `staleTime` of 0 and would hide
     a missing refetch: after a world-time edit, with the key unchanged,
