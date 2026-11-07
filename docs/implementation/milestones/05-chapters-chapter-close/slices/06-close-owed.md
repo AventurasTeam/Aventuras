@@ -80,9 +80,11 @@ canon leaves open.
   `chapterAutoClose` and one `openRegionSeries` read, taking the sum
   against `chapterTokenThreshold` and `.some(canEndChapter)`.
 - `nextMemoryRun`'s close branch, returning the pass or the close kind.
-  With a close owed: the pass while entries are unprocessed, null if the
-  branch is also held, the close once none are. With none owed, today's
-  cadence rule. Canon's sample returns the close on a held branch, over
+  A held branch, its classifier status `running`, chains nothing in any
+  arm, since a pass or a close would build on the held pass's unreversed
+  writes. Otherwise, with a close owed: the pass while entries are
+  unprocessed, the close once none are. With none owed, today's cadence
+  rule. Canon's sample returns the close on a held branch, over
   unclassified prose, which
   [Phase 0](../../../../memory/chapter-close.md#phase-0--catch-up-passes)
   forbids.
@@ -92,7 +94,10 @@ canon leaves open.
 - The pass declares `chainsTo`: `nextMemoryRun` while a close is owed,
   nothing otherwise, and nothing when it was started alone.
 - `runClassifierNow`, which serves Retry and Run now, starts the pass
-  alone, with `inputs: { alone: true }` read off `run.inputs`.
+  alone, with `inputs: { alone: true }`. `memory-chain.ts` exports the
+  shape as `PassInputs` and reads it with `passStartedAlone(run)`.
+  `alone` stays out of `PipelineInputMap`, whose entries would make
+  every pass start pass `inputs`.
 
 A chain can't spin. A pass over a non-empty window always advances the
 watermark (`periodic-classifier.ts:404`), and `unprocessedEntryCount`
@@ -105,13 +110,15 @@ counts only rows a window holds, so no progress guard is needed.
   if it's an `ai_reply`, else null. 5.10's Phase 1 falls back to this
   same function.
 - `boundary` takes the record's end when a record stands and the
-  fallback otherwise, where 5.2 fails the phase. A null end reads as no
-  record. A record whose entry isn't an open-region reply still fails as
-  `phase-logic`, and now drops, so the next Send owes nothing on it.
+  fallback otherwise, where 5.2 fails the phase. A record whose entry
+  isn't an open-region reply still fails as `phase-logic`, and now
+  drops, so the next Send owes nothing on it.
 
-**Records.** `pendingClose` holds a manual pick only. An auto close stays
-derived, read fresh by `closeOwed` each time, so a rollback below the
-threshold leaves nothing stale.
+**Records.** `pendingClose` holds a manual pick only, typed
+`{ endEntryId: string }`. Canon's `null` end goes, since no record
+already means boundary selection. An auto close stays derived, read
+fresh by `closeOwed` each time, so a rollback below the threshold
+leaves nothing stale.
 
 | Event                            | `pendingClose` | `deferred.close` |
 | -------------------------------- | -------------- | ---------------- |
@@ -133,9 +140,16 @@ threshold leaves nothing stale.
   when it doesn't. A failed read logs and keeps the record, and
   `boundary` catches what's left. Undo, redo, rollback, a head edit and
   regenerate all pass through it.
-- Two store methods, neither driving a run: one clears a branch's
-  `deferred.close` for Send, one drops a branch's `deferred` and
-  `pendingClose` for a delete.
+- Two store methods, neither driving a run:
+  `clearDeferredClose(branchId)` clears a branch's `deferred.close` for
+  Send, and `dropBranchRecords(branchId)` drops a branch's `deferred`
+  and `pendingClose` for a delete.
+- `setPendingClose`, `clearPendingClose`, `clearDeferredClose`,
+  `dropBranchRecords` and `setCloseProgress` join the
+  `no-restricted-properties` list in `eslint.config.js`. A block for the
+  record writers (`lib/actions/chapters/**`, `boundary`,
+  `memory-chain.ts` and `delete-story.ts`) lets them write records, but
+  neither drive a run nor set a close's progress.
 - `deleteStory` drops both records for each of the story's branches
   (`lib/actions/stories/delete-story.ts`). No branch-delete action exists
   yet, so that half lands with the action, on the same store method.
@@ -143,17 +157,28 @@ threshold leaves nothing stale.
 **Manual start,** in `lib/actions/chapters/`.
 
 - `startManualClose` drops its unprocessed refusal and keeps the others.
-  It reads `held` and the unprocessed count first, then runs 5.2's tail:
-  the swap and busy checks, the record's write and the start, with no
+  It reads `settleCount` first, then `held`, its end and the unprocessed
+  count, then runs 5.2's tail: the swap and busy checks, a check that
+  `settleCount` hasn't moved, the record's write and the start, with no
   await between them. The start is a pass when entries are unprocessed,
-  the close otherwise.
+  the close otherwise. A start while a turn is in flight refuses
+  `story-busy`, and so does one whose reads a run's settle overtook: a
+  pass that turned held between the held read and the tail, its
+  reversal not yet committed, would otherwise get a pass or a close
+  started over its writes.
+- The reads, the tail and the start live in `startCloseChain`
+  (`lib/actions/chapters/close-chain.ts`), which a close entry's Retry
+  shares. The manual start passes its end check as `validate`, run after
+  the held check so the refusal order stands, and the record's write as
+  `onReserved`.
 - The tail calls `startPipeline` directly, after ensuring registration,
   never `runClassifierPass`. That starter awaits `isClassifierHeld`
   inside the tick (`classifier-pass.ts:19-21`), so a queued Send could
   read the record and start its pass, and this start's rejection would
   then remove the record under Send's chain and lose the pick.
-- A second pick overwrites the first, and a rejected start puts back what
-  stood before.
+- A second pick overwrites the first. A rejected start writes nothing,
+  since the record is written only as the run reserves, so what stood
+  before stays.
 - The action resolves with the chain's end, per C14: the last run's
   `TxResult`, not the first pass's, or `RejectedStart`. 5.10 adds
   `{ outcome: 'preflight-failed', error }`.
@@ -167,11 +192,15 @@ threshold leaves nothing stale.
   for a close owed with none unprocessed. Off the open branch only a
   deferred pass counts, as today.
 - `submitTurn` starts one chain, which reaches an owed close by itself,
-  so a Send runs at most one close.
+  so Send's owed work runs at most one close before the turn. The
+  turn's own chain may close again after it (see
+  [Open questions](#open-questions)).
 - `PipelineStart.chain` resolves to the chain's end and still never
-  rejects: `{ kind, result }` for the last successor that ran, null when
-  none did, an unwound successor reading as failed with an `orchestrator`
-  error. `driveSuccessors` returns it.
+  rejects: `ChainEnd`, `{ kind, result, cancelled }` for the last run
+  that ran, the origin included, and null only when the origin was
+  refused or threw. An unwound successor reads as failed with an
+  `orchestrator` error. `cancelled` reports a run whose abort had fired
+  by its end. `driveSuccessors` returns it.
 - `runPipeline` stays as it is, returning the origin's result, which
   spares about 85 call sites. `submitTurn`, `startManualClose` and a
   close entry's Retry call `startPipeline` and read `.chain` beside
@@ -179,11 +208,13 @@ threshold leaves nothing stale.
 - `orchestrator.ts:329` stops clearing `beforeTurn`, so a successor under
   Send is Send's: `findSendRun`, the composer's Cancel, the pill, the
   banner and `run_complete` all read it so.
-- `run_complete` gains `branchId`.
 - `SubmitTurnResult`'s owed arms carry `work: DeferredWorkKind`, from the
   run that ended the chain, and Send cancels or fails on any run of the
-  chain, not only its origin. `passRefusalOf` and the route's arms at
-  `app/reader-composer/[branchId].tsx:749-763` read `work`.
+  chain, not only its origin. A Cancel landing after a run's last phase
+  still ends the Send: the orchestrator commits that run, and Send reads
+  a `completed` end with `cancelled` as aborted. `passRefusalOf` and the
+  route's arms at `app/reader-composer/[branchId].tsx:749-763` read
+  `work`.
 
 **Interrupt and undo.**
 
@@ -245,33 +276,40 @@ threshold leaves nothing stale.
   notice `closeResolvedEntry` with `close: 'resolved'` and no Retry. A
   failure rewrites the entry, a failed catch-up pass as a memory entry. A
   cancel leaves it, and a refused start tells the user why.
-- A close entry of kind `config-resolver` offers no Retry, per
-  [the rows](../../../../ui/screens/reader-composer/reader-composer.md#transient-pipeline-failures--system-entries-in-chat)
-  for a provider or profile gone.
+- A close entry of kind `config-resolver` offers its fix, `Retry` and
+  `Dismiss`, as a turn's and a pass's do. Canon's five broken-reference
+  [rows](../../../../ui/screens/reader-composer/reader-composer.md#transient-pipeline-failures--system-entries-in-chat)
+  gain `Retry` after their fix: Retry after the fix is one click, and
+  one before it fails again harmlessly.
 - **Outside a Send,** a failed close shows `chrome.chapterCloseFailed` as
   a warning toast in `hooks/use-memory-run-toasts.ts`, reading
-  `Chapter close failed. It runs again before your next turn.` A
-  `config-resolver` failure also writes its system entry.
-- **The writer.** `raiseSystemEntry` in
-  `lib/actions/story-entries/system-entry.ts`, exported from
-  `lib/actions`, carries a standing entry's `submission` across, writes,
-  and patches `entriesStore`, where `writeSystemEntry` leaves the store
-  to its route's `reload`. A listener mounted beside `useMemoryRunToasts`
-  calls it, since `lib/pipeline` can't import `lib/actions`
-  (`lib/boot/bootstrap.ts:66`). 5.10's click pre-flight calls it too.
+  `Chapter close failed. It runs again before your next turn.` It writes
+  no entry, as a pass's failure doesn't: the next Send fails on the same
+  cause and writes the entry, with its fix and the turn's text.
 
 **Docs,** in the slice's PR.
 
-- Flip `MemoryRunBanner`'s row at `docs/ui/component-inventory.md:141`.
+- Flip `MemoryRunBanner`'s row in `docs/ui/component-inventory.md`.
 - Canon, as [Open questions](#open-questions) settles:
   `generation-pipeline.md`'s guard, sample, `run_complete` and
   `beforeTurn` comments, the stale `records … or clears` line in Run
-  state transitions, `startPipeline`'s `chain`, and who clears `deferred`;
-  `generation-status-pill.md`'s pre-flight sentence; a **Chapter closed**
-  on-Retry row in `reader-composer.md`; and `principles.md`'s exceptions
-  to head reversals passing through, which name only a Retry's pass
-  though the mark at `generation.ts:62` also refuses them during a Send's
-  owed work, minutes long for a close.
+  state transitions, `startPipeline`'s `chain`, who clears `deferred`,
+  `PendingClose`'s type, and Config pre-flight validation's Surfacing
+  line, which with `chapter-close.md → Tool calling` raises a close's
+  entry when it fails a Send or a click; C14's record line in
+  `milestone.md`; a **Chapter closed** on-Retry row in
+  `reader-composer.md`, whose five broken-reference rows gain `Retry`
+  after their fix; and `principles.md`'s exceptions to head reversals
+  passing through, which name only a Retry's pass though the mark at
+  `generation.ts:62` also refuses them during a Send's owed work,
+  minutes long for a close. `generation-status-pill.md` already says a
+  toast, and stays.
+- `useConfigFixAction`'s comment: a config failure routes to settings
+  and keeps Retry beside the fix.
+- A `parked.md` entry under
+  [UX (parked)](../../../../parked.md#ux-parked): the deferral toast can
+  promise a close that never runs, once the interrupting reversal
+  removes a manual end entry or drops the region below the threshold.
 
 ## Scope: out
 
@@ -298,6 +336,13 @@ threshold leaves nothing stale.
   warning (M7.1). A close's turn capture anchor (M7.3).
 - A branch-delete action, with its prune call, which nothing has
   scheduled yet.
+- `raiseSystemEntry`, a writer that patches `entriesStore`, with its
+  first caller, the click pre-flight
+  ([Slice 5.10](./10-two-starts.md)). No entry is written outside a
+  Send here, so `run_complete` gains no `branchId`.
+- Withdrawing a manual close, and the turn's chain skipping a close its
+  Send ran: both open in
+  [Slice 5.10's Open questions](./10-two-starts.md#open-questions).
 
 ## Acceptance criteria
 
@@ -308,8 +353,9 @@ named.
   over the threshold with auto-close off, false over the threshold on
   `[opening]` and `[opening, user_action]`, and true at exactly the
   threshold with a reply in the region.
-- `nextMemoryRun` returns the pass, the close, null on a held branch with
-  entries unprocessed, and today's cadence result with no close owed.
+- `nextMemoryRun` returns the pass, the close, null on a held branch
+  with entries unprocessed and with none, and today's cadence result
+  with no close owed.
 - A pass holding its own `deferred.pass` chains on with a close owed, a
   `{ close: true }` record doesn't stop a catch-up pass, and per-turn
   chains nothing while either record stands.
@@ -332,11 +378,15 @@ named.
 **Records.**
 
 - `lib/stores/generation/generation.test.ts` covers the rows the store
-  owns: a close's commit, abort and failure. It also tests the two store
-  methods alone, and proves `setCloseProgress` publishes to a
-  `useGeneration` reader. The other rows are tested where they happen,
-  below and under `boundary` above. A restart has nothing to observe,
-  since both records are in memory.
+  owns: a close's commit, abort, failure and unwind. It also tests the
+  two store methods alone, and proves `setCloseProgress` publishes a new
+  copy of the run to a store subscriber, as a `useGeneration` reader
+  needs. The other rows are tested where they happen, below and under
+  `boundary` above. A restart has nothing to observe, since both
+  records are in memory.
+- `lib/stores/__tests__/generation-mutators-lint.test.ts` flags the five
+  record and progress mutators from a component, and lets a record
+  writer write records but not drive a run.
 - `lib/actions/story-entries/prose-reversal.test.ts`: a body removing the
   end entry drops the record, a body sparing it keeps the record, a body
   that throws after removing it still drops it, and a failed read keeps
@@ -348,7 +398,9 @@ named.
   overwrites, and a rejected start leaves what stood before. A Send
   racing the start leaves the pick in place. When a pass commits and the
   close behind it fails, the action resolves `failed`, with the close's
-  `TxResult`.
+  `TxResult`. A start during an in-flight turn refuses `story-busy`, and
+  a pass that turns held between the start's held read and its tail is
+  refused `story-busy`, not started.
 
 **Send,** in `lib/actions/turns/__tests__/deferred-send.test.ts`.
 
@@ -356,23 +408,25 @@ named.
   record, as after a failed close, each run before the `user_action`.
 - A close record with no close owed clears, runs nothing, and the turn
   lands.
-- A Send runs at most one close with the region still over the threshold
-  after it commits.
+- With the region still over the threshold after Send's close commits,
+  exactly one close runs before the `user_action`. The turn's own chain
+  may close again after it.
 - A successor close that fails returns `outcome: 'failed'`,
   `beforeTurn: true`, `work: 'close'`, with no `user_action` written. A
   failed catch-up pass returns `work: 'pass'` and starts no close.
 - A cancel of a successor returns `outcome: 'aborted'`, `beforeTurn: true`,
-  and its record stands.
+  and its record stands. A Cancel landing after a pass's last phase
+  returns `aborted` too, with no `user_action`.
 - After CTRL-Z of a committed auto close, the next Send runs the close
   again before the turn.
 - `components/reader/send-run.test.ts`: `findSendRun` finds a successor
   under Send, and `cancelComposerRun` cancels it on the first press.
 - `lib/pipeline/__tests__/chained-and-parallel.test.ts`: the three tests
   at `:246`, `:311` and `:334` flip. A chain that commits resolves to its
-  last run, an unwound successor to a failed end, and `runPipeline` still
-  returns the origin's result.
-- `lib/pipeline/__tests__/orchestrator.happy.test.ts`: `run_complete`
-  names the run's `branchId`.
+  last run, an origin alone to the origin, a refused origin to null, an
+  unwound successor to a failed end, and a run committed after its abort
+  fired reports `cancelled`. `runPipeline` still returns the origin's
+  result.
 
 **Interrupt and undo.**
 
@@ -392,28 +446,27 @@ named.
   the label table, and the last task's label standing until `report`.
 - `lib/pipeline/__tests__/orchestrator.happy.test.ts`: a phase yielding
   `close_task_start` sets `closeProgress` on the stored run and forwards
-  the event. `lib/stores/__tests__/generation-mutators-lint.test.ts`
-  flags `setCloseProgress` from a component.
+  the event.
 - `generation-status-pill.stories.tsx` and `memory-run-banner.stories.tsx`
   show the close's before-turn labels.
 - `hooks/use-memory-run-toasts.test.tsx`: a failed close toasts once
-  outside a Send and stays quiet under one, a chained one included. A
-  `config-resolver` failure outside a Send writes its entry on the
-  event's branch, and one under a Send doesn't.
+  outside a Send and stays quiet under one, a chained one included.
 - `components/reader/system-entry-actions.test.tsx`: a close's copy for
   each cause; Retry's commit, failure, cancel, refusal and nothing-owed
-  arms; no Retry on a `config-resolver` entry or a resolved one.
+  arms; Retry on a `config-resolver` close entry, none on a resolved
+  one.
 - `resolver-failure-copy.test.tsx`, `cut-off-copy.test.ts` and
   `context-window-copy.test.ts` cover the close's arms, the capability
   hint's `close` surface included.
-- `lib/actions/story-entries/system-entry.test.ts`: the writer keeps a
-  standing entry's `submission` and patches a loaded branch's store.
 
 **End to end,** `pnpm test:e2e -- chapter-close-owed`, asserting the DB:
 
 - A turn over a lowered threshold chains a close whose failed metadata
   call shows the toast and leaves no `chapters` row. The next Send fails
-  with its text kept, `Retry` writes the row, and the entry clears.
+  with its text back in an empty composer, `Retry` writes the row, and
+  the entry clears.
+- A Send cancelled during its owed close writes no `user_action` and
+  puts back the entry it cleared.
 - The banner's Cancel moves a held close to the next turn with its toast,
   and the next Send runs it first under the before-turn label.
 - CTRL-Z of the turn during a held close leaves no `chapter_close` delta
@@ -440,120 +493,67 @@ E2E suite stays green with auto-close now live. The inventory's
   the periodic classifier's gated pass and failure policy
   (`periodic-classifier-gated.spec.ts`,
   `periodic-classifier-failures.spec.ts`).
-- **Mutation check** on `closeOwed`'s arms, the moved guard and the
-  chain's end: a guard here can stay green while doing nothing.
+- **Mutation check** on `closeOwed`'s arms, the moved guard,
+  `passStartedAlone`, the chain's end and the manual start's
+  `settleCount` guard: a guard here can stay green while doing nothing.
 
 ## Open questions
 
-Each states the route this doc's scope takes, for the developer to
-confirm at slice planning. Canon follows the answer.
+Resolved at slice planning on 2026-11-07, except the two routed to
+[Slice 5.10](./10-two-starts.md#open-questions). Canon follows each
+answer in this slice's PR.
 
-- **Can the chain guard stay in `nextMemoryRun`?** Canon opens it with
-  `deferred.has`, and the pass's `chainsTo` calls it, but `chainsTo` runs
-  before a run's own record clears (`orchestrator.ts:311` against `:332`).
-  So a deferred pass chains nothing, a `close` record stops every
-  catch-up pass, and phase 0 ends after one pass. Canon also says a
-  deferred close "chains its own catch-up passes", and a close has no
-  `chainsTo`. The scope moves the guard to per-turn and has Send start a
-  pass first. The alternative is Send looping by itself.
+- **Can the chain guard stay in `nextMemoryRun`?**
+  **Resolved (2026-11-07):** no. It moves to per-turn's `chainsTo`;
+  Send starts a pass first, and the pass chains to the close.
 - **Who clears a close record?**
-  [Multi-run txState](../../../../generation-pipeline.md#multi-run-txstate)
-  says only a commit;
-  [chainsTo on predecessor](../../../../generation-pipeline.md#chainsto-on-predecessor)
-  says Send, when no close is owed. The scope follows the second, with a
-  store method Send calls.
-- **What is a manual pick's lifecycle?** Canon doesn't say who writes a
-  null end, what clears the record at a commit, whether a second pick
-  overwrites, or what a rollback below the threshold does. The scope
-  writes no null, since an auto close stays derived, clears at commit,
-  and overwrites. Canon's type keeps `null` per C14.
-- **Can the user withdraw a manual close?** As scoped, no. Cancel defers
-  it, as canon says, and during phase 0 the toast names only the memory
-  update. So a close the user cancelled still runs at the next Send, and
-  one whose cause isn't transient stops the branch's turns until a
-  restart or a new pick. Should Cancel of a manual close drop it?
-- **Do Retry and Run now chain a close?** Canon says Retry runs the pass
-  alone, but the pass's `chainsTo` would chain the close under Retry's
-  hold, and `retryPassEntry` reads only the origin. The scope runs both
-  alone and leaves the close owed for Send. Run now has no caller but
-  Retry yet.
-- **Is a Send's chain all Send's?** Canon pins `beforeTurn` false for a
-  chained successor, yet says Cancel cancels the whole Send and the
-  banner reads before-your-turn for that work. The scope carries it. That
-  flips three tests and a canon comment.
+  **Resolved (2026-11-07):** a commit, and Send through
+  `clearDeferredClose` when `closeOwed` reads false.
+- **What is a manual pick's lifecycle?**
+  **Resolved (2026-11-07):** the [Records](#scope-in) table.
+  `PendingClose` drops `null`, and canon's type and C14 follow.
+- **Can the user withdraw a manual close?**
+  **Routed (2026-11-07)** to Slice 5.10's Open questions. Cancel defers
+  it, as canon says.
+- **Do Retry and Run now chain a close?**
+  **Resolved (2026-11-07):** no. Both start the pass alone, and the
+  close stays owed for Send.
+- **Is a Send's chain all Send's?**
+  **Resolved (2026-11-07):** yes. `beforeTurn` carries to successors,
+  which flips three tests and canon's comments.
 - **Where does a close's failure show outside a Send?**
-  `generation-pipeline.md` and `chapter-close.md` want a system entry for
-  a close's pre-flight failure, `generation-status-pill.md` says a toast,
-  and nothing outside the reader writes an entry. The scope shows both
-  for a `config-resolver` failure and a toast alone for the rest. Such
-  an entry offers `Fix` and `Dismiss` by canon's rows, though a pass's
-  keeps `Retry` beside its fix (`system-entry-actions.test.tsx:838`). The
-  listener writes after the gate lifts, so a Send in that gap leaves the
-  entry standing until the next Send's tail drop.
+  **Resolved (2026-11-07):** a toast only, as for the pass.
+  `raiseSystemEntry` moves to Slice 5.10, whose click pre-flight is its
+  first caller, and canon raises a close's entry when it fails a Send
+  or a click.
 - **A turn's `config-resolver` entry offers Retry.**
-  `useSystemEntryActions` (`components/reader/system-entry-actions.tsx`)
-  returns `onRetry` unless the pass is `held` or `resolved`, where
-  [`reader-composer.md`](../../../../ui/screens/reader-composer/reader-composer.md#transient-pipeline-failures--system-entries-in-chat)
-  lists `Fix profile · Dismiss` for a missing provider. Existing drift
-  beside the gate this slice edits. Raised 2026-11-01 by the M5
-  promotion. Routed from triage 2026-11-04.
-- **What does a manual start hold?** Branch queue, pending mark,
-  `withTurnAdmission`, `isStorySwapPending`. The scope keeps 5.2's shape:
-  the swap and busy refusals, the record's write and the start land in
-  one tick, with no queue, mark or admission. A queue held past the
-  reservation would make a head reversal wait, and a mark would refuse
-  the head reversals canon lets through. A chained close holds no
-  admission past its turn either, so whether 3e's embed needs more is
-  [Slice 5.9](./09-chapter-wide-tasks.md)'s to surface.
-- **Do the toasts promise too much?** The deferral toast's "moved to
-  your next turn" is false when the interrupting reversal removes a
-  manual end entry or drops the region below the threshold, and it fires
-  before the sweep. The scope ships canon's copy unchanged. The options
-  are a follow-up toast when the record drops, or holding the deferral
-  toast until the bracket ends.
-- **Should an undone close come back?** After CTRL-Z of an auto close,
-  `closeOwed` still reads true, so one redo window later the next Send
-  runs it again at full cost. The scope leaves that, matching chapter
-  delete's [What follows](../../../../memory/chapter-close.md#deleting-a-chapter),
-  and pins it in `deferred-send.test.ts`.
-- **How often can a close run?** Canon says one close per turn when
-  auto-close turns on late. Send plus the turn's chain gives one before
-  the turn and one after. It can't show until 5.10's candidates cap a
-  chapter's size, since the fallback closes nearly the whole region. The
-  scope leaves the chain alone; the alternative is the turn's chain
-  skipping a close when its Send ran one.
+  **Resolved (2026-11-07):** turn, pass and close entries keep `Retry`
+  beside their fix, and canon's five broken-reference rows gain it.
+- **What does a manual start hold?**
+  **Resolved (2026-11-07):** no queue, mark or admission: 5.2's
+  one-tick tail, with the `settleCount` guard.
+- **Do the toasts promise too much?**
+  **Resolved (2026-11-07):** canon's copy ships. The gap is parked under
+  [`parked.md → UX (parked)`](../../../../parked.md#ux-parked) until a
+  tester expects that close.
+- **Should an undone close come back?**
+  **Resolved (2026-11-07):** yes, at the next Send, pinned in
+  `deferred-send.test.ts`.
+- **How often can a close run?**
+  **Routed (2026-11-07)** to Slice 5.10's Open questions. Send's owed
+  work runs one close, and the turn's chain may run another.
 - **Do `closeOwed`'s fixtures hold real counts?**
-  `lib/pipeline/definitions/__tests__/phase-db.ts`,
-  `e2e/harness/seed.ts` and `bench/fixture.ts` insert entries with no
-  `content_tokens`, so those rows read 0, which
-  [Slice 5.1](./01-token-measure.md) leaves on purpose. A "below the
-  threshold, owes nothing" case seeded through them passes for the wrong
-  reason, so a test of that bound needs a real count on its rows.
-
+  **Resolved (2026-11-07):** a threshold-bound test seeds real counts
+  through `openCloseFixture` or sets `contentTokens`. The three
+  fixtures stay as Slice 5.1 left them.
 - **Should writes to `pendingClose` be restricted?**
-  `setPendingClose` and `clearPendingClose` aren't on the
-  `no-restricted-properties` list (`eslint.config.js`), since
-  [Slice 5.2](./02-first-chapter.md)'s manual start in `lib/actions`
-  writes the record and only `boundary` read it. Once `closeOwed` reads
-  `pendingClose.has(branchId)`, a stray write from a component would
-  make the next Send start a close. Suggested: list both, exempting
-  `lib/actions/chapters/**` and the other writers this slice adds.
-
+  **Resolved (2026-11-07):** yes. The five record and progress mutators
+  join `no-restricted-properties`, exempt only in their writer files.
 - **Does the manual start re-check held and a turn in flight in its
-  tail?** [Slice 5.2](./02-first-chapter.md)'s `startManualClose`
-  (`lib/actions/chapters/start-manual-close.ts`) reads held and the
-  unprocessed count with awaits, then runs its sync tail: the swap and
-  busy checks, the record and the start. This slice's Manual start
-  ([Scope: in](#scope-in)) keeps that order and drops the unprocessed
-  refusal, which today is what catches a pass that turned held between
-  the read and the tail: a held pass leaves its window unprocessed. Also,
-  a start while a turn is in flight is refused as `unprocessed-entries`,
-  not `story-busy`, because the unprocessed check runs first and the
-  turn's `user_action` commits before its run. Without the refusal, the
-  tail's busy check would answer `story-busy`.
-  [Slice 5.10](./10-two-starts.md)'s toast names the code, though its
-  button is disabled while `isUserEditBlocked` holds. Surfaced by Slice
-  5.2's review.
+  tail?**
+  **Resolved (2026-11-07):** a turn in flight refuses `story-busy`, and
+  a `settleCount` read before the held read refuses `story-busy` in the
+  tail when a run settled in between.
 
 ## Implementation notes
 

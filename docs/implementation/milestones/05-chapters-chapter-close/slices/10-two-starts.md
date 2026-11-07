@@ -198,15 +198,21 @@ and the catalog bullet below drops out.
   Providers tab until M7.1.
 - The can't-call-tools entry: canon's **Chapter close's model can't call
   tools**, as `CLOSE_RESOLVER_COPY`'s line through 5.6's
-  `describeCloseFailure`, with `Fix profile` and `Dismiss`. 5.6 already drops
-  `Retry` on a `config-resolver` entry. The copy names the model and can't
-  cite a tool badge, which is M7.1's.
+  `describeCloseFailure`, with `Fix profile`, `Retry` and `Dismiss`, since 5.6
+  keeps `Retry` beside the fix on every `config-resolver` entry. The copy names
+  the model and can't cite a tool badge, which is M7.1's.
 - The click's pre-flight. `runPreflight` is exported from `lib/pipeline`, and
   `startManualClose` runs it among its refusals, over the same snapshot
   `driveRun` builds, so a failure writes no `pendingClose` and starts no pass.
   It catches every resolver failure, not only this one. The result gains
   `{ outcome: 'preflight-failed', error }`, since no run exists for a
   `TxResult`. See [Open questions](#open-questions).
+- The system-entry writer. `raiseSystemEntry` in
+  `lib/actions/story-entries/system-entry.ts`, exported from `lib/actions`,
+  carries a standing entry's `submission` across, writes, and patches
+  `entriesStore`, where `writeSystemEntry` leaves the store to its route's
+  `reload`. The host's `preflight-failed` arm is its first caller, so a loaded
+  branch shows the entry without a reload.
 - The hint's arm. [Slice 5.4](./04-tool-step.md) lands the keywords, the
   carried arm, `HINT_FIX_TAGS` and the turn and pass keys, and
   [Slice 5.6](./06-close-owed.md) the `close` surface and its key, so this
@@ -253,10 +259,10 @@ and the catalog bullet below drops out.
   banner, and hands `startManualClose(branchId, endEntryId, ctx)`'s promise to
   the host, which outlives the body and may wait minutes for it. `rejected`
   raises a warning toast naming why. `preflight-failed` writes the entry
-  through 5.6's system-entry action with `toCloseFailureMeta`, which lives in
-  `components/`, and raises a warning toast. A run's result needs nothing,
-  since the run's own surfaces speak. The button is disabled with the gate's
-  reason while `isUserEditBlocked` holds, reactively.
+  through `raiseSystemEntry` (above) with 5.6's `toCloseFailureMeta`, which
+  lives in `components/`, and raises a warning toast. A run's result needs
+  nothing, since the run's own surfaces speak. The button is disabled with the
+  gate's reason while `isUserEditBlocked` holds, reactively.
 
 **Entry points.**
 
@@ -343,8 +349,8 @@ and the catalog bullet below drops out.
 ## Scope: out
 
 - `closeOwed`, `pendingClose`'s lifecycle, `startManualClose`'s other
-  refusals, phase 0, the no-model fallback, the system-entry writer, the close
-  hint's keys and the banner: [Slice 5.6](./06-close-owed.md).
+  refusals, phase 0, the no-model fallback, the close hint's keys and the
+  banner: [Slice 5.6](./06-close-owed.md).
 - The overlay store, the host's mount, `registerSurface`, the review window
   and the commit toasts: [Slice 5.11](./11-review-window.md).
 - The popover and the chips, and whether the phone chip hides with no closed
@@ -417,10 +423,11 @@ Unit paths run with `pnpm vitest run --project unit <path>`.
    returns `preflight-failed`, writes no `pendingClose` and starts no run, a pass
    included. `components/chapters/chapter-overlays-host.test.tsx`: that result
    writes the entry and toasts, `rejected` only toasts, and a run's result does
-   neither.
+   neither. `lib/actions/story-entries/system-entry.test.ts`: `raiseSystemEntry`
+   keeps a standing entry's `submission` and patches a loaded branch's store.
 10. `components/reader/system-entry-actions.test.tsx`: the can't-call-tools entry
-    offers `Fix profile` and `Dismiss` and no `Retry`, and a close's `toolCalling`
-    hint offers `Fix profile`.
+    offers `Fix profile`, `Retry` and `Dismiss`, and a close's `toolCalling` hint
+    offers `Fix profile`.
 
 **Modal**
 
@@ -505,9 +512,9 @@ Unit paths run with `pnpm vitest run --project unit <path>`.
 
 - **Vitest, unit:** `closeCandidates`, `tokensThrough`, `isReadyToClose`,
   `firstLastSentences`, the phase, pre-flight, the catalog, the store's guard, the
-  story-tools group, the side table, `readOpenRegionTimes` on a real SQLite
-  fixture. Expectations are literal: a bound derived from the constant under test
-  can't fail.
+  story-tools group, the side table, `raiseSystemEntry`, and
+  `readOpenRegionTimes` on a real SQLite fixture. Expectations are literal: a
+  bound derived from the constant under test can't fail.
 - **Mutation check:** make `closeCandidates` keep the newest reply, make the phase
   always take the fallback, and make `runPreflight` treat an absent flag as off.
   Each must turn a test red. The Auto close spec's candidate has to differ from the
@@ -575,12 +582,23 @@ amends the scope above.
 - **Does boundary take the 8k output default?** Canon states it for a step, and a
   story override otherwise sends no limit. Default: yes, as Scope has it. If 5.2
   answered no for metadata, keep the two calls alike or say why they differ.
+- **Can the user withdraw a manual close?** [Slice 5.6](./06-close-owed.md)
+  ships Cancel deferring it, as canon says, and during phase 0 the toast names
+  only the memory update. So a close the user cancelled still runs at the next
+  Send, and one whose cause isn't transient stops the branch's turns until a
+  restart or a new pick. Options: Cancel of a manual close drops its pick,
+  leaving only a threshold close owed; or the modal offers a way to withdraw a
+  pick. Default: as 5.6 ships it, unless a run of the modal shows a user
+  expecting Cancel to drop the close.
 - **Can a close run on each side of one turn?** Canon says one close per turn when
   auto-close turns on late, and Send plus the turn's chain gives two.
   [Slice 5.6](./06-close-owed.md) left the chain alone, because this slice's
-  candidates are what make it reachable, by capping a chapter's size. Run a story
-  with auto-close turned on late and decide whether the turn's chain skips a close
-  when its Send ran one.
+  candidates are what make it reachable, by capping a chapter's size. Its
+  `deferred-send.test.ts` pins one close before the turn and lets the turn's
+  chain run another. Run a story with auto-close turned on late and decide.
+  Options: per-turn's `chainsTo` skips the close when its Send ran one, or the
+  chain stands. Default: the chain stands until that run shows two closes in a
+  turn.
 - **May detection write `false`?** A stored flag beats detection, so a detected
   value is never refreshed and can't be told from the user's. A catalog's `false`
   stops the close on that model, with no switch in the app until M7.1, and with
