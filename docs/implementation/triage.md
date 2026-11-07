@@ -267,15 +267,6 @@ slice-planning gate forces its resolution before that slice is planned.
   apart. It needs scoping outside the dialog, to the bar's `save-bar`
   testID say. No current caller uses it with the dialog open. Surfaced
   by Slice 5.7's E2E review.
-- **`commitRowSave`'s `idPrefix` is required even for an update.**
-  `CommitRowSaveArgs` (`lib/actions/row-save/commit-row-save.ts`) pairs
-  `rowId: string | null` with a required `idPrefix: string`, read only
-  when `rowId` is null, to generate a create's id. `saveChapter`, its
-  first update-only caller, passes a dead `idPrefix: 'chap'`. Tighter:
-  `{ rowId: string }` or `{ rowId: null; idPrefix }`, the prefix typed
-  from the closed set in `lib/ids/prefixes.ts` (`SubstitutablePrefix`).
-  Older API; the slice adds a caller. Surfaced by Slice 5.7's slice
-  review.
 - **A Save whose only change is whitespace leaves the untrimmed draft
   as the clean form.** The chapter and lore drafts compare trimmed
   values (`chapterPatch` in `lib/chapters/chapter-draft.ts`, `lorePatch`

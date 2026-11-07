@@ -1,5 +1,5 @@
 import { logger } from '@/lib/diagnostics'
-import { generateId } from '@/lib/ids'
+import { generateId, type SubstitutablePrefix } from '@/lib/ids'
 import { generationStore } from '@/lib/stores'
 import {
   PARENT_CHAIN_BROKEN,
@@ -95,23 +95,25 @@ export type RowSaveKind = 'thread' | 'happening' | 'entity' | 'lore' | 'chapter'
 
 type CommitRowSaveArgs = {
   branchId: string
-  /** Null for a create; the id is generated before the actions are built. */
-  rowId: string | null
-  idPrefix: string
   /**
    * A World Save's place rules, judged after the gate. Synchronous: nothing may await between the
    * gate and the dispatch, which a hard-gate run waits on once it is tracked.
    */
   refuse?: () => PlaceSaveRefusal | null
   build: (id: string) => PipelineAction[]
-}
+} & (
+  | { rowId: string; idPrefix?: SubstitutablePrefix }
+  /** A create: its id is generated from the prefix before the actions are built. */
+  | { rowId: null; idPrefix: SubstitutablePrefix }
+)
 
 /** One Save = one `action_id`; refusals and failures log as `action_layer.<rowKind>_save_*`. */
 export async function commitRowSave(
   rowKind: RowSaveKind,
-  { branchId, rowId, idPrefix, refuse, build }: CommitRowSaveArgs,
+  args: CommitRowSaveArgs,
   ctx: DbCtx,
 ): Promise<RowSaveResult> {
+  const { branchId, rowId, refuse, build } = args
   // generation-pipeline.md → Action rejection — defense in depth: the UI disables first, so
   // this firing means a gating bug or a render race.
   if (generationStore.isUserEditBlocked()) {
@@ -122,7 +124,7 @@ export async function commitRowSave(
     })
     return { status: 'rejected', reason: 'generation in flight', code: ROW_SAVE_REJECTION.inFlight }
   }
-  const id = rowId ?? generateId(idPrefix)
+  const id = args.rowId ?? generateId(args.idPrefix)
   const context: Record<string, unknown> = { branchId, id, create: rowId == null }
   let result
   try {
