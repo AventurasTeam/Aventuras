@@ -189,10 +189,6 @@ slice-planning gate forces its resolution before that slice is planned.
   and it spans every row kind (Plot's thread and happening drafts trim
   too). The Timeline is a new route to lore's existing behaviour.
   Surfaced by Slice 5.7's slice review.
-- **`undoLastAction` reads the branch's whole delta log, twice per
-  CTRL-Z.** `lib/actions/story-entries/undo.ts` reads it with no LIMIT
-  under the gate, and only the head group is needed. The cost is
-  unmeasured. Surfaced by Slice 5.6's review.
 - **A manual pick a reversal stamps into a chapter survives the
   prose-reversal bracket's existence check.** Redo of an undone close
   does it; the next Send then fails once at `boundary` (stale pick)
