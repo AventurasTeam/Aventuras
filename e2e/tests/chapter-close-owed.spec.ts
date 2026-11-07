@@ -350,7 +350,7 @@ test.describe('chapter close owed — a close that fails', () => {
     expect(await entryIdByContent(branch, 'E2E-OWED-U3')).toBeUndefined()
     await expect(reader.retrySystemEntry(page)).toBeVisible()
     expect(await chapterCount(branch)).toBe(chaptersBefore)
-    // The failed Send had caught up, so no pass ran first and the Cancel found nothing written.
+    // The first turn's pass left nothing unprocessed: no pass ran first, so nothing was written.
     expect(await passOutcomes()).toEqual(['completed'])
   })
 
@@ -365,6 +365,8 @@ test.describe('chapter close owed — a close that fails', () => {
     await expect
       .poll(closeOutcomes, { timeout: 20_000 })
       .toEqual(['failed', 'failed', 'aborted', 'failed'])
+    // Not a Send, so the failure toasts as well as rewriting the entry.
+    await expect(closeFailureToast()).toBeVisible()
     // A new entry in the old one's place, so the failure was written again, not left standing.
     await expect.poll(() => systemEntryIds(branch), { timeout: 15_000 }).not.toEqual([failedId])
     const rewritten = await systemEntries(branch)
