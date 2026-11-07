@@ -126,10 +126,11 @@ invalid call and hands it back to the task, retrying nothing; a step with
 no calls goes out as it is and the failure is spent. `length` keeps the
 calls whole and ends with `finish_reason: 'length'`: the app drops the
 reply and sends the step once more, so a budget of 1 there is swallowed
-too, and 2 stops the task as cut off. The cut call doesn't move a
-sequence on, so the retry gets the same step. `http`, `hang` and the two
-overflow kinds act as on a structured lane, an overflow stopping the
-task, or failing the close on a task's first call.
+too, and 2 stops the task as cut off. A `length` reply doesn't move a
+sequence on, so the retry gets the same step. `http` acts as on a
+structured lane. A `hang` is never retried: the step has one bound over
+the whole call, so it fails the step when it expires. An overflow kind
+stops the task, or fails the close on a task's first call.
 The panel's retry warning follows these rules on a tool lane.
 
 Narrative has no such wrapper, so one `http` failure fails the run, as does a
