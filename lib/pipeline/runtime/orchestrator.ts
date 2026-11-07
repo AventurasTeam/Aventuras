@@ -341,14 +341,9 @@ async function commitRun(
       { actionId: run.actionId },
     )
   // A chained run's state takes no inputs and its own actionId (generation-pipeline.md → chainsTo
-  // on predecessor); under a Send it stays Send's work. It still runs on the origin's ctx.
+  // on predecessor). It runs on the origin's ctx, so under a Send it stays Send's work.
   const successor = nextPipeline
-    ? newRunState(nextPipeline.kind, {
-        ...ctx,
-        inputs: undefined,
-        actionId: undefined,
-        beforeTurn: run.beforeTurn,
-      })
+    ? newRunState(nextPipeline.kind, { ...ctx, inputs: undefined, actionId: undefined })
     : undefined
   generationStore.finishRun(run.runId, successor)
   try {

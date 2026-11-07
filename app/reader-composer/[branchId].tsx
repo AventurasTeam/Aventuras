@@ -829,8 +829,7 @@ export default function ReaderComposerRoute() {
             // Cancel reverses the whole turn (user_action too, C6): hand the text back. A retry
             // lacks raw pre-wrap text, so wrapped content returns under 'free' (no re-wrap). Only
             // into an empty composer: Retry re-enters uncleared and would overwrite mid-turn text.
-            if (isDraftEmpty(composerRef.current?.getDraft()))
-              composerRef.current?.restoreDraft(raw?.text ?? content, raw?.mode ?? 'free')
+            if (isDraftEmpty(composerRef.current?.getDraft())) restoreSent()
             else toast.info(t('reader:turnCancelledDraftKept'))
           }
         } else if (result.outcome === 'completed') notifyUnappliedState(branchId)

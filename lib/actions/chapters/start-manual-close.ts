@@ -3,7 +3,7 @@ import { openRegionSeries } from '@/lib/db'
 import type { RejectedStart, TxResult } from '@/lib/pipeline'
 import { generationStore } from '@/lib/stores'
 
-import { MANUAL_CLOSE_REFUSAL, startCloseChain } from './close-chain'
+import { MANUAL_CLOSE_REFUSAL, refused, startCloseChain } from './close-chain'
 import type { DbCtx } from '../types'
 
 export { MANUAL_CLOSE_REFUSAL, type ManualCloseRefusal } from './close-chain'
@@ -22,9 +22,7 @@ export async function startManualClose(
     // C10: the series holds no system or stamped row, and canEndChapter is the only kind rule.
     validate: async (): Promise<RejectedStart | null> => {
       const row = (await openRegionSeries(branchId, ctx)).find((r) => r.id === endEntryId)
-      return row && canEndChapter(row)
-        ? null
-        : { outcome: 'rejected', blockedBy: MANUAL_CLOSE_REFUSAL.invalidEnd }
+      return row && canEndChapter(row) ? null : refused(MANUAL_CLOSE_REFUSAL.invalidEnd)
     },
     // Fires only on reserve: a start the orchestrator rejects leaves the record as it stood.
     onReserved: () => generationStore.setPendingClose(branchId, { endEntryId }),

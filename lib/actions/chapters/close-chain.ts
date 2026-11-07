@@ -29,7 +29,7 @@ export const MANUAL_CLOSE_REFUSAL = {
 
 export type ManualCloseRefusal = (typeof MANUAL_CLOSE_REFUSAL)[keyof typeof MANUAL_CLOSE_REFUSAL]
 
-const refused = (blockedBy: ManualCloseRefusal | typeof CLASSIFIER_HELD): RejectedStart => ({
+export const refused = (blockedBy: ManualCloseRefusal | typeof CLASSIFIER_HELD): RejectedStart => ({
   outcome: 'rejected',
   blockedBy,
 })
