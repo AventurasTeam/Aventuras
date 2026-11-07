@@ -91,12 +91,11 @@ test.describe.serial('Chapter Timeline', () => {
   // Answers the open Unsaved changes dialog with Discard and requires the reader in that one
   // click: a second prompt or a stuck guard keeps the page on the Timeline.
   async function discardLandsOnReader(page: Page): Promise<void> {
-    const navigated = expect(
-      page,
-      'a second prompt or a stuck guard keeps us off the reader',
-    ).toHaveURL(/\/reader-composer\//, { timeout: 15_000 })
     await saveSession.unsavedDiscard(page).click()
-    await navigated
+    await expect(page, 'a second prompt or a stuck guard keeps us off the reader').toHaveURL(
+      /\/reader-composer\//,
+      { timeout: 15_000 },
+    )
     await expect(saveSession.unsavedDialog(page)).toHaveCount(0)
     await expect(reader.composer(page)).toBeVisible({ timeout: 20_000 })
   }
@@ -142,7 +141,7 @@ test.describe.serial('Chapter Timeline', () => {
     await reader.chapterChip(page, closed + 1).click()
     const manage = reader.popoverManage(page)
     await expect(manage).toBeVisible()
-    await expect(manage).not.toHaveAttribute('aria-disabled', 'true')
+    await expect(manage).toBeEnabled()
     await manage.click()
 
     await page.waitForURL(/\/chapter-timeline\//)
@@ -227,7 +226,8 @@ test.describe.serial('Chapter Timeline', () => {
     await expect(saveSession.saveBarSave(page)).toHaveCount(0)
   })
 
-  // The chrome back pops through usePreventRemove: Discard must replay that pop, in one click.
+  // The first prompt comes from handleBack's guard; the replayed pop then crosses usePreventRemove
+  // and must not prompt again.
   test('a dirty card’s back to the reader discards in one click', async () => {
     const page = app.window
     await expect(chapterTimeline.cardHead(page, nine.id)).toHaveAttribute('aria-expanded', 'true')
@@ -257,6 +257,8 @@ test.describe.serial('Chapter Timeline', () => {
   // replay the jump, in one click.
   test('a dirty card’s jump discards in one click', async () => {
     const page = app.window
+    // Case 6 left the reader at the first chapter, so the second chapter's start is off screen.
+    await expect(reader.row(page, keep.startEntryId)).not.toBeInViewport()
     await goToChapterTimeline(page)
     await chapterTimeline.cardHead(page, keep.id).click()
     await chapterTimeline.field(page, keep.id, 'title').fill(DRAFT)
@@ -264,6 +266,8 @@ test.describe.serial('Chapter Timeline', () => {
     await chapterTimeline.jump(page, keep.id).click()
     await expect(saveSession.unsavedDialog(page)).toBeVisible()
     await discardLandsOnReader(page)
+    // The replayed leave was the jump: a plain dismiss would leave the reader where it was.
+    await expect(reader.row(page, keep.startEntryId)).toBeInViewport({ timeout: 20_000 })
     expect(await columnsOf(page, keep.id)).toEqual(keepSeeded)
   })
 })
