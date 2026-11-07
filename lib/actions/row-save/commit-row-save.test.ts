@@ -93,6 +93,31 @@ describe('commitRowSave — every refusal carries a code from the closed set', (
   })
 })
 
+describe('commitRowSave — chapter rows', () => {
+  it("logs a chapter Save's refusal under its own kind, building nothing", async () => {
+    const { ctx } = await setup()
+    vi.spyOn(generationStore, 'isUserEditBlocked').mockReturnValue(true)
+    const warn = vi.spyOn(logger, 'warn').mockImplementation(() => {})
+    const build = vi.fn(() => [] as PipelineAction[])
+    const result = await commitRowSave(
+      'chapter',
+      { branchId: 'b1', rowId: 'chap_1', idPrefix: 'chap', build },
+      ctx,
+    )
+    expect(result).toEqual({
+      status: 'rejected',
+      reason: 'generation in flight',
+      code: 'in-flight',
+    })
+    expect(warn).toHaveBeenCalledWith('action_layer.chapter_save_rejected', {
+      branchId: 'b1',
+      id: 'chap_1',
+      code: 'in-flight',
+    })
+    expect(build).not.toHaveBeenCalled()
+  })
+})
+
 describe('commitRowSave — place rules', () => {
   const REFUSAL: PlaceSaveRefusal = {
     code: 'retired-place',

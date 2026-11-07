@@ -91,7 +91,7 @@ function rejectionCode(code: string | undefined): RowSaveRejectionCode {
   }
 }
 
-export type RowSaveKind = 'thread' | 'happening' | 'entity' | 'lore'
+export type RowSaveKind = 'thread' | 'happening' | 'entity' | 'lore' | 'chapter'
 
 type CommitRowSaveArgs = {
   branchId: string
