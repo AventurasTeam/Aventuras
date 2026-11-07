@@ -174,7 +174,7 @@ async function expectContents(args: ChapterPopoverProps) {
     closeChapter,
   )
   const manage = screen.getByRole('button', { name: 'Manage chapters →' })
-  // Live now, so no reason wraps it.
+  // Live, so no reason wraps it.
   await expect(manage).not.toHaveAttribute('aria-disabled', 'true')
   await expect(manage.parentElement).not.toHaveAttribute('title')
   // RN-Web blocks a disabled Pressable's pointer; fireEvent goes past that to its guard.
@@ -320,7 +320,7 @@ export const JumpClosesFirstPhone: Story = {
 }
 
 export const ActionsClose: Story = {
-  args: { onCloseChapter: fn(), onManageChapters: fn() },
+  args: { onCloseChapter: fn() },
   play: async ({ args }) => {
     await waitForTier('desktop')
     await openOverlay()
