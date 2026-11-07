@@ -184,7 +184,10 @@ without a database. Copy goes in the `chapters` namespace 5.7 creates.
 
 - `Delete…` flips from disabled with its reason to opening the confirm, in
   the action row and in the phone's `OverflowMenu` entry alike. The route
-  holds the confirm's state, so `ChapterCard` stays props-only.
+  holds the confirm's state, so `ChapterCard` stays props-only. It stays
+  disabled with the gate's reason while a run holds the gate, and its
+  "lands later" reason goes, with `chapters:actions.deleteLandsLater`:
+  the card is the key's only reader.
 - It goes through the route's `guard`, so a dirty card raises
   `Unsaved changes` first: a draft on a row about to go has nowhere to
   land. 5.7's list of guarded transitions leaves it out only because it
