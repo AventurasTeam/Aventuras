@@ -3,7 +3,7 @@ import { and, desc, eq, ne } from 'drizzle-orm'
 import { PERIODIC_CLASSIFIER_KIND } from '@/lib/classifier'
 import { inheritedEntryMetadata, storyEntries, type EntryMetadata } from '@/lib/db'
 import { logger } from '@/lib/diagnostics'
-import { isStorySwapPending, withTurnAdmission } from '@/lib/embedder-swap'
+import { isStorySwapPending, withTurnAdmission, EMBEDDER_SWAP_REFUSAL } from '@/lib/embedder-swap'
 import { generateId } from '@/lib/ids'
 import {
   CHAPTER_CLOSE_KIND,
@@ -51,7 +51,11 @@ export type SubmitTurnResult =
   | OwedWorkFailed
   | (RejectedStart & { converged: boolean })
 
-const SWAP_REJECTION = { outcome: 'rejected', blockedBy: 'embedder-swap', converged: true } as const
+const SWAP_REJECTION = {
+  outcome: 'rejected',
+  blockedBy: EMBEDDER_SWAP_REFUSAL,
+  converged: true,
+} as const
 
 const HELD_REJECTION = { outcome: 'rejected', blockedBy: CLASSIFIER_HELD, converged: true } as const
 

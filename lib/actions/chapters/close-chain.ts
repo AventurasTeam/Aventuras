@@ -1,5 +1,5 @@
 import { PERIODIC_CLASSIFIER_KIND } from '@/lib/classifier'
-import { isStorySwapPending } from '@/lib/embedder-swap'
+import { isStorySwapPending, EMBEDDER_SWAP_REFUSAL } from '@/lib/embedder-swap'
 import {
   CHAPTER_CLOSE_KIND,
   CLASSIFIER_HELD,
@@ -14,6 +14,7 @@ import {
 } from '@/lib/pipeline'
 import { currentStoryStore, generationStore, isStoryBusy } from '@/lib/stores'
 
+import { BRANCH_NOT_OPEN } from '../refusal-codes'
 import type { DbCtx } from '../types'
 
 /**
@@ -21,9 +22,9 @@ import type { DbCtx } from '../types'
  * `CLASSIFIER_HELD`; a start the orchestrator rejects reads the kind that blocked it.
  */
 export const MANUAL_CLOSE_REFUSAL = {
-  branchNotOpen: 'branch-not-open',
+  branchNotOpen: BRANCH_NOT_OPEN,
   invalidEnd: 'invalid-end',
-  swapPending: 'embedder-swap',
+  swapPending: EMBEDDER_SWAP_REFUSAL,
   busy: 'story-busy',
 } as const
 

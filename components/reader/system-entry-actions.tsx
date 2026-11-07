@@ -11,6 +11,7 @@ import type {
 import { PERIODIC_CLASSIFIER_KIND } from '@/lib/classifier'
 import type { SystemFailureMeta } from '@/lib/db'
 import { logger } from '@/lib/diagnostics'
+import { EMBEDDER_SWAP_REFUSAL } from '@/lib/embedder-swap'
 import { t } from '@/lib/i18n'
 import {
   CHAPTER_CLOSE_KIND,
@@ -314,8 +315,7 @@ function retryRefusalText(
   blockedBy: string,
   ownLine: 'reader:systemEntry.passRetryBlocked' | 'reader:systemEntry.closeRetryBlocked',
 ): string {
-  if (blockedBy === MANUAL_CLOSE_REFUSAL.swapPending)
-    return t('reader:actions.blockedWhileSwapping')
+  if (blockedBy === EMBEDDER_SWAP_REFUSAL) return t('reader:actions.blockedWhileSwapping')
   if (RUN_BLOCKERS.has(blockedBy)) return t('reader:actions.blockedWhileGenerating')
   return t(ownLine)
 }

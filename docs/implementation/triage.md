@@ -67,11 +67,6 @@ slice-planning gate forces its resolution before that slice is planned.
   changed (`lib/actions/chapters/register.ts`, the update handler).
   Matters once a chapter edit shows in History. Surfaced by Slice 5.2's
   review.
-- **Refusal codes repeated as literals.** `'branch-not-open'`
-  (`lib/actions/classifier/run-now.ts:14`) and `'embedder-swap'`
-  (`lib/actions/turns/submit-turn.ts:54`) restate
-  `MANUAL_CLOSE_REFUSAL.branchNotOpen` and `.swapPending`
-  (`lib/actions/chapters/close-chain.ts`).
 - **Seeded entry creates carry no anchor.** The dev seed's
   `createStoryEntry` deltas have `entryId: null`
   (`lib/db/devtools/seed-dataset.ts`), while a real reply's create is
