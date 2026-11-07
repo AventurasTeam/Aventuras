@@ -544,7 +544,7 @@ type TxState = {
   runs: ReadonlyMap<string /* runId */, RunState>
   reversalInProgress: boolean // set across a prose reversal's wait→sweep; gates memory-run starts + user edits + user-originated delta dispatch
   pendingTurns: ReadonlySet<PendingTurn> // turns admitted in their branch queue whose run isn't registered yet; see Gate derivation as a selector
-  deferred: ReadonlyMap<string /* branchId */, { pass?: true; close?: true }> // interrupted runs, run before that branch's next turn; in memory only; the orchestrator records it, and Send clears a close no longer owed
+  deferred: ReadonlyMap<string /* branchId */, { pass?: true; close?: true }> // interrupted runs, run before that branch's next turn; in memory only; the orchestrator records it, and Send or a close entry's Retry clears a close no longer owed
   pendingClose: ReadonlyMap<string /* branchId */, { endEntryId: string }> // a manual close's pick, owed once phase 0's passes catch up; a close the threshold owes keeps none
 }
 
@@ -576,11 +576,11 @@ pass declares `pass`, the close `close`), and a commit of a run
 declaring that slot clears it. A failure leaves the record as it
 stands. So every way a pass or a close is cancelled — the interrupt,
 the pill's or the banner's Cancel, Cancel & leave — defers it, and a
-failed one stays owed: Send runs it first again. Two other writers
-only clear: Send clears its branch's `close` slot when `closeOwed`
-reads false, as after a rollback below the threshold
-([chainsTo on predecessor](#chainsto-on-predecessor)), and deleting a
-story drops both records for each of its branches. A newly recorded
+failed one stays owed: Send runs it first again. Other writers only
+clear: Send, or a close entry's `Retry`, clears its branch's `close`
+slot when `closeOwed` reads false, as after a rollback below the
+threshold ([chainsTo on predecessor](#chainsto-on-predecessor)), and
+deleting a story drops both records for each of its branches. A newly recorded
 deferral emits `run_deferred` on the bus naming the slot it recorded,
 which raises that slot's toast.
 

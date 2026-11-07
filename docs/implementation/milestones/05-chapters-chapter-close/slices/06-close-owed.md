@@ -127,7 +127,7 @@ leaves nothing stale.
 | Close cancelled or interrupted   | stays          | recorded         |
 | Close or catch-up pass fails     | stays          | unchanged        |
 | `boundary` meets a stale record  | dropped        | unchanged        |
-| Send reads no close owed         | none to clear  | cleared          |
+| Send or Retry reads none owed    | none to clear  | cleared          |
 | A reversal removes the end entry | dropped        | unchanged        |
 | Restart                          | gone           | gone             |
 | Story delete                     | dropped        | dropped          |
@@ -142,7 +142,7 @@ leaves nothing stale.
   regenerate all pass through it.
 - Two store methods, neither driving a run:
   `clearDeferredClose(branchId)` clears a branch's `deferred.close` for
-  Send, and `dropBranchRecords(branchId)` drops a branch's `deferred`
+  Send and a close entry's `Retry`, and `dropBranchRecords(branchId)` drops a branch's `deferred`
   and `pendingClose` for a delete.
 - `setPendingClose`, `clearPendingClose`, `clearDeferredClose`,
   `dropBranchRecords` and `setCloseProgress` join the
@@ -588,7 +588,9 @@ answer in this slice's PR.
 - **A close entry's Retry refuses as held before it asks whether a
   close is owed (2026-11-07).** `runOwedClose` checks the hold first,
   as Send does, so a held branch with nothing owed reads as held, not
-  as "nothing to close".
+  as "nothing to close". With nothing owed it also clears a stale
+  `deferred.close`, as Send does, a row the planned Records table
+  gave Send alone.
 - **The close's task names are `lib/db`'s `CLOSE_TASKS` and `CloseTask`
   (C4, 2026-11-07).** The plan's separate `lib/chapters` list was a
   duplicate and was dropped.
