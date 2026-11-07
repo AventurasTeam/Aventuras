@@ -67,7 +67,10 @@ export function closeContextWindowContent(failure: ContextWindowFailure): string
     : t(`reader:systemEntry.failure.closeContextWindow.${copy.key}`, copy.values)
 }
 
-/** The hedged hint: a turn's replaces **LLM call failed**; a pass's or a close's follows its lead. */
+/**
+ * The hedged hint, in place of its surface's own copy: a turn's **LLM call failed**, a pass's
+ * **Memory update failed**, a close's **Chapter close failed**.
+ */
 export function capabilityHintContent(
   hint: CapabilityHint,
   surface: 'turn' | 'pass' | 'close',

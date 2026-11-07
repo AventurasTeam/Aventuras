@@ -137,8 +137,9 @@ type GenerationState = {
   finishRun: (runId: string, successor?: RunState) => void
   /**
    * Removes the run. For an interruptible pass or close, `'aborted'` records it deferred on its
-   * branch; `'failed'` and `'unwound'` leave the record as it was: only a commit clears it. A
-   * pending close stays on every outcome. Returns the slot this call newly recorded, or null.
+   * branch; `'failed'` and `'unwound'` leave the record as it was: of a run's own ends, only a
+   * commit clears it. A pending close stays on every outcome. Returns the slot this call newly
+   * recorded, or null.
    */
   abortRun: (runId: string, outcome: 'aborted' | 'failed' | 'unwound') => DeferredWorkKind | null
   /** Writes the branch's owed close, replacing any. */
