@@ -1,5 +1,5 @@
 import { eq, sql } from 'drizzle-orm'
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, onTestFinished, vi } from 'vitest'
 
 import {
   bracketProseReversal,
@@ -3498,6 +3498,58 @@ describe('periodicClassifierPhase via runPipeline', () => {
     ])
     expect(end).toMatchObject({ kind: CHAPTER_CLOSE_KIND, result: { outcome: 'completed' } })
     expect(await storedStatus(db)).toMatchObject({ state: 'idle', processedThrough: 5 })
+  })
+
+  // A window of system rows is filtered to nothing, so its pass makes no model call; it must still
+  // step the watermark past them, or the chain would never reach the prose or the close.
+  it('steps a system-only window to the next pass, then chains into the owed close', async () => {
+    const { db, runInTransaction } = await seedStory()
+    await hydrateAppSettings(async () => ({
+      ...CLASSIFIER_WIRED_CONFIG,
+      classifierWindowMaxEntries: 1,
+    }))
+    const kinds = ['system', 'ai_reply'] as const
+    await db.insert(storyEntries).values(
+      kinds.map((kind, i) => ({
+        id: `e${i + 1}`,
+        branchId: 'b1',
+        position: i + 1,
+        kind,
+        content: kind === 'system' ? 'system row' : 'the prose row',
+        contentTokens: 100,
+        createdAt: i + 1,
+      })),
+    )
+    vi.mocked(generateStructured).mockResolvedValue({
+      status: 'ok',
+      recoverable: [],
+      value: extraction(),
+    })
+    const close = registerStandInClose()
+    ensurePeriodicClassifierPipelineRegistered()
+    generationStore.setPendingClose('b1', { endEntryId: 'e2' })
+    const starts: string[] = []
+    const unsubscribe = pipelineEventBus.subscribe('run_start', (e) => {
+      starts.push(e.kind)
+    })
+    onTestFinished(unsubscribe)
+
+    const { chain } = startPipeline(PERIODIC_CLASSIFIER_KIND, {
+      storyId: 's1',
+      branchId: 'b1',
+      db,
+      runInTransaction,
+    })
+    const closing = await close.nextHeld()
+    // The close starts only after the second pass has read the prose.
+    expect(vi.mocked(generateStructured)).toHaveBeenCalledTimes(1)
+    expect(vi.mocked(generateStructured).mock.calls[0][1].user).toContain('the prose row')
+    closing.finish('completed')
+    const end = await chain
+
+    expect(starts).toEqual([PERIODIC_CLASSIFIER_KIND, PERIODIC_CLASSIFIER_KIND, CHAPTER_CLOSE_KIND])
+    expect(end).toMatchObject({ kind: CHAPTER_CLOSE_KIND, result: { outcome: 'completed' } })
+    expect(await storedStatus(db)).toMatchObject({ state: 'idle', processedThrough: 2 })
   })
 })
 
