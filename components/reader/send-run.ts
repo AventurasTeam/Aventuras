@@ -114,9 +114,7 @@ export function passRefusalOf(result: SubmitTurnResult): PassRefusal | null {
 }
 
 /** A close that failed Send's owed work (chapter-close.md → Failure modes); a hold is a pass's. */
-export function closeRefusalOf(
-  result: SubmitTurnResult,
-): { error: PipelineError | undefined } | null {
+export function closeRefusalOf(result: SubmitTurnResult): { error: PipelineError } | null {
   if (result.outcome === 'failed' && result.beforeTurn === true && result.work === 'close')
     return { error: result.error }
   return null

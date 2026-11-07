@@ -537,10 +537,6 @@ describe('describeCloseFailure', () => {
     ).toEqual({ content: CLOSE_GENERIC, detail: 'chapter-close: no close range' })
   })
 
-  it('still names the failure when the run carried no error', () => {
-    expect(describeCloseFailure(undefined)).toEqual({ content: CLOSE_GENERIC })
-  })
-
   // The pass's copy names the classifier; a close's failure must not send the user there.
   it('never borrows the pass copy', () => {
     expect(describeCloseFailure(CLOSE_UNASSIGNED).content).not.toBe(
@@ -568,13 +564,6 @@ describe('toCloseFailureMeta', () => {
       kind: 'provider',
       failure: 'toolCalling',
       detail: "unknown: 400: 'tool_choice' is not supported",
-      close: 'failed',
-    })
-  })
-
-  it('records a failure with no error as an orchestrator one', () => {
-    expect(toCloseFailureMeta(undefined, undefined)).toEqual({
-      kind: 'orchestrator',
       close: 'failed',
     })
   })

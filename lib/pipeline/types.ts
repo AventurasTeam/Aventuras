@@ -7,10 +7,10 @@ import type {
   ResolveFailureKind,
   ResolveTarget,
 } from '@/lib/ai'
-import type { CloseTask, DbCtx, StorySettings } from '@/lib/db'
+import type { DbCtx, StorySettings } from '@/lib/db'
 import type { Logger } from '@/lib/diagnostics'
 import type { EmbedderErrorKind } from '@/lib/embedder'
-import type { AppSettingsSnapshot, DeferredWorkKind, RunState } from '@/lib/stores'
+import type { AppSettingsSnapshot, CloseProgress, DeferredWorkKind, RunState } from '@/lib/stores'
 
 export type PipelineError =
   | {
@@ -66,8 +66,8 @@ export type PhaseEmittedEvent =
   | { type: 'stream_chunk'; targetEntryId: string; text: string; channel: 'text' | 'reasoning' }
   | { type: 'delta_emitted'; action: PipelineAction; entryId?: string | null }
   | { type: 'recoverable_error'; error: PipelineError }
-  // C6: an agent task of a close starting; `index` is 1-based, `part` 0-based.
-  | { type: 'close_task_start'; task: CloseTask; part: number; index: number; total: number }
+  // C6: an agent task of a close starting.
+  | ({ type: 'close_task_start' } & CloseProgress)
 
 export type PipelineEvent =
   | { type: 'run_start'; runId: string; kind: string; actionId: string }

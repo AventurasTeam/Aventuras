@@ -350,14 +350,17 @@ describe('nextMemoryRun', () => {
 
 // generation-pipeline.md → chainsTo on predecessor: a pick, or the open region at the threshold.
 describe('closeOwed', () => {
-  const story = (over: Partial<Settings>) => ({ settings: { ...STORY_SETTINGS, ...over } })
+  const story = (over: Partial<Settings>) => ({
+    branchId: 'b1',
+    settings: { ...STORY_SETTINGS, ...over },
+  })
 
   it('owes a picked close with auto-close off', async () => {
     const { db, ctx } = await makeHarness()
     await seedRegion(db, ['opening'])
     generationStore.setPendingClose('b1', { endEntryId: 'e1' })
 
-    expect(await closeOwed('b1', story({ chapterAutoClose: false }), ctx)).toBe(true)
+    expect(await closeOwed(story({ chapterAutoClose: false }), ctx)).toBe(true)
   })
 
   it("owes nothing for another branch's pick", async () => {
@@ -365,7 +368,7 @@ describe('closeOwed', () => {
     await seedRegion(db, ['opening'])
     generationStore.setPendingClose('b2', { endEntryId: 'e1' })
 
-    expect(await closeOwed('b1', story({ chapterAutoClose: false }), ctx)).toBe(false)
+    expect(await closeOwed(story({ chapterAutoClose: false }), ctx)).toBe(false)
   })
 
   it('owes nothing over the threshold with auto-close off', async () => {
@@ -373,7 +376,7 @@ describe('closeOwed', () => {
     await seedRegion(db, ['opening', 'user_action', 'ai_reply'])
 
     expect(
-      await closeOwed('b1', story({ chapterAutoClose: false, chapterTokenThreshold: 100 }), ctx),
+      await closeOwed(story({ chapterAutoClose: false, chapterTokenThreshold: 100 }), ctx),
     ).toBe(false)
   })
 
@@ -385,15 +388,15 @@ describe('closeOwed', () => {
     const { db, ctx } = await makeHarness()
     await seedRegion(db, kinds)
 
-    expect(await closeOwed('b1', story({ chapterTokenThreshold: 1 }), ctx)).toBe(false)
+    expect(await closeOwed(story({ chapterTokenThreshold: 1 }), ctx)).toBe(false)
   })
 
   it('owes a close at exactly the threshold with a reply, and none a token short of it', async () => {
     const { db, ctx } = await makeHarness()
     await seedRegion(db, ['opening', 'user_action', 'ai_reply'])
 
-    expect(await closeOwed('b1', story({ chapterTokenThreshold: 300 }), ctx)).toBe(true)
-    expect(await closeOwed('b1', story({ chapterTokenThreshold: 301 }), ctx)).toBe(false)
+    expect(await closeOwed(story({ chapterTokenThreshold: 300 }), ctx)).toBe(true)
+    expect(await closeOwed(story({ chapterTokenThreshold: 301 }), ctx)).toBe(false)
   })
 })
 

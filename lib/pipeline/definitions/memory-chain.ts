@@ -82,7 +82,7 @@ export async function owedWorkAtSend(branchId: string, ctx: DbCtx): Promise<Owed
   // The cadence and the close read the open story's settings: off its branch only a deferral owes.
   const open = currentStoryStore.getCurrentStory()
   if (open?.branchId !== branchId) return passDeferred ? 'pass' : null
-  const owesClose = await closeOwed(branchId, open, ctx)
+  const owesClose = await closeOwed(open, ctx)
   // An interrupted close a rollback below the threshold took back leaves nothing to run.
   if (!owesClose) generationStore.clearDeferredClose(branchId)
   const status = await readClassifierStatus(branchId, ctx)
@@ -98,14 +98,13 @@ export async function owedWorkAtSend(branchId: string, ctx: DbCtx): Promise<Owed
  * (C5, C10). Read fresh each time, so a rollback below the threshold owes nothing.
  */
 export async function closeOwed(
-  branchId: string,
-  story: Pick<OpenStory, 'settings'>,
+  story: Pick<OpenStory, 'branchId' | 'settings'>,
   ctx: Pick<DbCtx, 'db'>,
 ): Promise<boolean> {
-  if (generationStore.getTxState().pendingClose.has(branchId)) return true
+  if (generationStore.getTxState().pendingClose.has(story.branchId)) return true
   if (!story.settings.chapterAutoClose) return false
   const progress = chapterProgressOf(
-    await openRegionSeries(branchId, ctx),
+    await openRegionSeries(story.branchId, ctx),
     story.settings.chapterTokenThreshold,
   )
   return progress.tokens >= progress.threshold && progress.canClose
@@ -119,23 +118,20 @@ function openStoryOf(run: Pick<RunState, 'storyId' | 'branchId'>): OpenStory | n
     : null
 }
 
-/**
- * The memory run a commit chains (generation-pipeline.md → chainsTo on predecessor). Awaited under
- * the committing run's gate, so no writer moves the count, status or region before the successor.
- */
-export async function nextMemoryRun(
-  run: RunState,
+type MemoryRunKind = typeof PERIODIC_CLASSIFIER_KIND | typeof CHAPTER_CLOSE_KIND
+
+// `owesClose` is read after the held check, so a held branch never scans its region.
+async function memoryRunOn(
+  open: OpenStory,
   ctx: DbCtx,
-): Promise<typeof PERIODIC_CLASSIFIER_KIND | typeof CHAPTER_CLOSE_KIND | null> {
-  const open = openStoryOf(run)
-  if (open == null) return null
-  const status = await readClassifierStatus(run.branchId, ctx)
+  owesClose: () => Promise<boolean>,
+): Promise<MemoryRunKind | null> {
+  const status = await readClassifierStatus(open.branchId, ctx)
   // A pass left `running` holds the branch: nothing builds on its writes until boot resets it.
   // A committing pass wrote its status in its phase, so its own chain never reads `running` here.
   if (status.state === 'running') return null
-  const unprocessed = await unprocessedEntryCount(run.branchId, status.processedThrough, ctx)
-  if (await closeOwed(run.branchId, open, ctx))
-    return unprocessed > 0 ? PERIODIC_CLASSIFIER_KIND : CHAPTER_CLOSE_KIND
+  const unprocessed = await unprocessedEntryCount(open.branchId, status.processedThrough, ctx)
+  if (await owesClose()) return unprocessed > 0 ? PERIODIC_CLASSIFIER_KIND : CHAPTER_CLOSE_KIND
   const cadence = open.settings.classifierCadence
   return shouldCadenceFire({ status, unprocessedEntries: unprocessed, cadence })
     ? PERIODIC_CLASSIFIER_KIND
@@ -143,18 +139,28 @@ export async function nextMemoryRun(
 }
 
 /**
+ * The memory run a commit chains (generation-pipeline.md → chainsTo on predecessor). Awaited under
+ * the committing run's gate, so no writer moves the count, status or region before the successor.
+ */
+export async function nextMemoryRun(run: RunState, ctx: DbCtx): Promise<MemoryRunKind | null> {
+  const open = openStoryOf(run)
+  if (open == null) return null
+  return memoryRunOn(open, ctx, () => closeOwed(open, ctx))
+}
+
+/**
  * per-turn's `chainsTo`. Interrupted work waits for the next Send, so a regenerated reply doesn't
  * bring it straight back; a Send's own chain reads past the record.
  */
-export async function perTurnChainsTo(run: RunState, ctx: DbCtx): Promise<string | null> {
+export async function perTurnChainsTo(run: RunState, ctx: DbCtx): Promise<MemoryRunKind | null> {
   if (generationStore.getTxState().deferred.has(run.branchId)) return null
   return nextMemoryRun(run, ctx)
 }
 
 /** The pass's `chainsTo`: passes chain catch-up passes and the close only while a close is owed. */
-export async function passChainsTo(run: RunState, ctx: DbCtx): Promise<string | null> {
+export async function passChainsTo(run: RunState, ctx: DbCtx): Promise<MemoryRunKind | null> {
   if (passStartedAlone(run)) return null
   const open = openStoryOf(run)
-  if (open == null) return null
-  return (await closeOwed(run.branchId, open, ctx)) ? nextMemoryRun(run, ctx) : null
+  if (open == null || !(await closeOwed(open, ctx))) return null
+  return memoryRunOn(open, ctx, async () => true)
 }

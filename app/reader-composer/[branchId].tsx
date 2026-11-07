@@ -621,7 +621,7 @@ export default function ReaderComposerRoute() {
   )
 
   const showCloseFailure = useCallback(
-    async (error: PipelineError | undefined, submission: SystemFailureMeta['submission']) => {
+    async (error: PipelineError, submission: SystemFailureMeta['submission']) => {
       await writeSystemEntry(
         {
           branchId,

@@ -223,8 +223,8 @@ async function handleEvent(event: PhaseEmittedEvent, run: RunState, ctx: RunCtx)
     }
   } else if (event.type === 'close_task_start') {
     // C6: an emitted event names no run, and a banner mounted mid-close reads the stored one.
-    const { task, part, index, total } = event
-    generationStore.setCloseProgress(run.runId, { task, part, index, total })
+    const { type, ...progress } = event
+    generationStore.setCloseProgress(run.runId, progress)
   } else if (event.type === 'recoverable_error') {
     const { error } = event
     const detail = pipelineErrorDetail(error)

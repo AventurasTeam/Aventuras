@@ -329,7 +329,7 @@ export async function retryPassEntry(deps: {
 }
 
 // A close has no held state, so there is no held arm.
-export function describeCloseFailure(error: PipelineError | undefined): {
+export function describeCloseFailure(error: PipelineError): {
   content: string
   detail?: string
 } {
@@ -337,7 +337,7 @@ export function describeCloseFailure(error: PipelineError | undefined): {
 }
 
 export function toCloseFailureMeta(
-  error: PipelineError | undefined,
+  error: PipelineError,
   submission: SystemFailureMeta['submission'],
 ): SystemFailureMeta {
   const { detail } = describeCloseFailure(error)

@@ -27,11 +27,8 @@ export {
   closeOwed,
   isClassifierHeld,
   owedWorkAtSend,
-  passStartedAlone,
   readClassifierStatus,
   unprocessedEntryCount,
-  type OwedWork,
-  type PassInputs,
 } from './definitions/memory-chain'
 export { runClassifierPass } from './definitions/classifier-pass'
 export {
