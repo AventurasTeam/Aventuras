@@ -100,10 +100,12 @@ type HarnessProps = {
   initiallyExpanded: boolean
   onSave: (draft: ChapterDraft) => Promise<ChapterSaveResult>
   onJump: () => void
+  /** The route's focus, forwarded to the in-card bar's Ctrl-S. */
+  hotkeysEnabled: boolean
 }
 
 /** The route's wiring for one card: expansion keys the session, a save rewrites the row. */
-function CardHarness({ data, initiallyExpanded, onSave, onJump }: HarnessProps) {
+function CardHarness({ data, initiallyExpanded, onSave, onJump, hotkeysEnabled }: HarnessProps) {
   const [cell] = useState(() => externalCell(data.row))
   const row = useSyncExternalStore(cell.subscribe, cell.get)
   const [expanded, setExpanded] = useState(initiallyExpanded)
@@ -150,7 +152,7 @@ function CardHarness({ data, initiallyExpanded, onSave, onJump }: HarnessProps) 
         session={session}
         blocked={blocked}
         blockedReason={BLOCKED_REASON}
-        hotkeysEnabled
+        hotkeysEnabled={hotkeysEnabled}
         onJump={onJump}
       />
       {/* The route's phone bar: a sibling of the scroller, outside every card. */}
@@ -182,6 +184,7 @@ const meta: Meta<typeof CardHarness> = {
     initiallyExpanded: true,
     onSave: fn(async (): Promise<ChapterSaveResult> => ({ status: 'ok', id: TRAIL.id })),
     onJump: fn(),
+    hotkeysEnabled: true,
   },
   decorators: [
     (Story) => (
@@ -335,6 +338,39 @@ export const SaveClosesTheBar: Story = {
   },
 }
 
+/** With the route focused, Ctrl-S in a field saves the card's draft. */
+export const SaveShortcut: Story = {
+  play: async ({ args }) => {
+    const card = await findCard()
+    await userEvent.type(within(card).getByRole('textbox', { name: COPY.title }), ', revised')
+    await within(card).findByTestId('save-bar', undefined, WAIT)
+
+    await userEvent.keyboard('{Control>}s{/Control}')
+    await waitFor(() => expect(within(card).queryByTestId('save-bar')).toBeNull(), WAIT)
+    expect(args.onSave).toHaveBeenCalledTimes(1)
+    expect(args.onSave).toHaveBeenCalledWith(
+      expect.objectContaining({ title: 'The Trail North, revised' }),
+    )
+  },
+}
+
+/** Unfocused (another screen on top), Ctrl-S leaves the draft; the bar's Save still writes it. */
+export const SaveShortcutUnfocused: Story = {
+  args: { hotkeysEnabled: false },
+  play: async ({ args }) => {
+    const card = await findCard()
+    await userEvent.type(within(card).getByRole('textbox', { name: COPY.title }), ', revised')
+    const bar = await within(card).findByTestId('save-bar', undefined, WAIT)
+
+    await userEvent.keyboard('{Control>}s{/Control}')
+    expect(args.onSave).not.toHaveBeenCalled()
+    // The bar's own Save proves the draft was still savable, so the key above had its chance.
+    await userEvent.click(within(bar).getByRole('button', { name: /^Save/ }))
+    await waitFor(() => expect(within(card).queryByTestId('save-bar')).toBeNull(), WAIT)
+    expect(args.onSave).toHaveBeenCalledTimes(1)
+  },
+}
+
 /** A cleared title disables Save with its reason; Discard stays live and restores it. */
 export const InvalidDraft: Story = {
   play: async () => {
@@ -396,6 +432,13 @@ export const Blocked: Story = {
     await waitFor(() => expect(within(card).queryByTestId('save-bar')).toBeNull(), WAIT)
     expect(within(card).getByRole('textbox', { name: COPY.title })).toHaveValue(TRAIL.title)
     expect(args.onSave).not.toHaveBeenCalled()
+
+    // The run is still on: expand and collapse stay live.
+    const head = within(card).getByRole('button', { name: HEADING })
+    await userEvent.click(head)
+    await waitFor(() => expect(head).toHaveAttribute('aria-expanded', 'false'), WAIT)
+    await userEvent.click(head)
+    await waitFor(() => expect(head).toHaveAttribute('aria-expanded', 'true'), WAIT)
   },
 }
 

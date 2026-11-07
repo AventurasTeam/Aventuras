@@ -296,7 +296,8 @@ function ActionRow({
       ) : (
         more.map((entry) => (
           // Native has no tooltip, so a disabled action's reason shows under it, as the popover's.
-          <View key={entry.key} className="gap-0.5">
+          // The wireframe's `.danger` sits at the row's far end; this View is the flex item.
+          <View key={entry.key} className={cn('gap-0.5', entry.destructive && 'ml-auto')}>
             <Button
               variant={entry.destructive ? 'destructive' : 'secondary'}
               size="sm"
