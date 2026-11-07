@@ -68,7 +68,7 @@ describe('useChapterRowSession', () => {
     ['not-found', 'This chapter no longer exists'],
     ['failed', "Couldn't save the chapter"],
   ] as const)(
-    'reads a %s refusal as its translated text, on the bar and to the route',
+    'reads the %s refusal as its translated text, on the bar and to the route',
     async (code, text) => {
       const { hook, onRejected, onSaved } = setup({
         status: 'rejected',
@@ -86,6 +86,22 @@ describe('useChapterRowSession', () => {
       expect(onSaved).not.toHaveBeenCalled()
     },
   )
+
+  it('reads a thrown save as the failure text, logs the raw error, and tells the route', async () => {
+    const error = vi.spyOn(logger, 'error').mockImplementation(() => {})
+    const { hook, onSave, onSaved, onRejected } = setup(OK)
+    onSave.mockRejectedValue(new Error('SQLITE_BUSY'))
+    editTitle(hook, 'The Keep Falls')
+    let outcome
+    await act(async () => {
+      outcome = await hook.result.current.save()
+    })
+    expect(outcome).toEqual({ status: 'rejected', reason: "Couldn't save the chapter" })
+    expect(onRejected).toHaveBeenCalledWith("Couldn't save the chapter")
+    expect(hook.result.current.saveError).toBe("Couldn't save the chapter")
+    expect(onSaved).not.toHaveBeenCalled()
+    expect(error).toHaveBeenCalledWith('app.row_save_failed', { error: 'SQLITE_BUSY' })
+  })
 
   it('reports a landed Save as committed even when the saved handler throws, and logs it', async () => {
     const error = vi.spyOn(logger, 'error').mockImplementation(() => {})
@@ -174,5 +190,17 @@ describe('useChapterRowSession', () => {
     await waitFor(() => expect(hook.result.current.dirty).toBe(false))
     expect(hook.result.current.form.formState.errors).toEqual({})
     expect(hook.result.current.invalidReason).toBeNull()
+  })
+
+  it("keeps the first edit's field issue when it makes a valid row invalid", async () => {
+    const { hook } = setup(OK)
+    const { onChange } = hook.result.current.form.register('title')
+    await act(async () => {
+      await onChange({ target: { name: 'title', value: '' }, type: 'change' })
+    })
+    await waitFor(() => expect(hook.result.current.dirty).toBe(true))
+    await waitFor(() =>
+      expect(hook.result.current.form.formState.errors.title?.message).toBe('titleRequired'),
+    )
   })
 })
