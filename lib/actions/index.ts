@@ -6,6 +6,7 @@ export {
   type ImportRejectionCode,
   type ImportRowResult,
 } from './avts/import-rows'
+export { runOwedClose, type OwedCloseRun } from './chapters/run-owed-close'
 export {
   MANUAL_CLOSE_REFUSAL,
   startManualClose,

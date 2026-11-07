@@ -2,12 +2,15 @@
 import { act, cleanup, renderHook } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
+import type { OwedCloseRun } from '@/lib/actions'
 import { describeContextWindow, describeReplyCutOff } from '@/lib/ai'
+import { PERIODIC_CLASSIFIER_KIND } from '@/lib/classifier'
 import { entryMetadataSchema, type SystemFailureMeta } from '@/lib/db'
 import { logger } from '@/lib/diagnostics'
 import { t } from '@/lib/i18n'
 import { hasCopy } from '@/lib/i18n/__tests__/locale-keys'
 import {
+  CHAPTER_CLOSE_KIND,
   CLASSIFIER_HELD,
   EMPTY_REPLY,
   type PipelineError,
@@ -25,6 +28,7 @@ import {
   describeTurnFailure,
   dismissSystemEntry,
   passResolvedEntry,
+  retryCloseEntry,
   retryPassEntry,
   toCloseFailureMeta,
   toPassFailureMeta,
@@ -704,6 +708,147 @@ describe('retryPassEntry', () => {
     const committed = vi.fn(() => Promise.reject(new Error('reload failed')))
     await expect(retryPassEntry({ ...h.deps, committed })).rejects.toThrow('reload failed')
     expect(h.rewrite).not.toHaveBeenCalled()
+  })
+})
+
+describe('retryCloseEntry', () => {
+  const closeRan = { runId: 'run_close', actionId: 'act_close' }
+  const passRan = { runId: 'run_pass', actionId: 'act_pass' }
+
+  const ended = (kind: string, result: TxResult, cancelled = false): OwedCloseRun => ({
+    outcome: 'ran',
+    end: { kind, result, cancelled },
+  })
+
+  function harness(run: OwedCloseRun | Error, heldAfter = false) {
+    const calls: string[] = []
+    const rewriteClose = vi.fn(async (_error: PipelineError) => {
+      calls.push('rewriteClose')
+    })
+    const rewritePass = vi.fn(async (_refusal: PassRefusal) => {
+      calls.push('rewritePass')
+    })
+    const committed = vi.fn(async () => {
+      calls.push('committed')
+    })
+    const notify = vi.fn((_message: string) => {
+      calls.push('notify')
+    })
+    const runClose = vi.fn(() =>
+      run instanceof Error ? Promise.reject(run) : Promise.resolve(run),
+    )
+    const held = vi.fn(async () => heldAfter)
+    return {
+      calls,
+      rewriteClose,
+      rewritePass,
+      notify,
+      runClose,
+      held,
+      deps: { runClose, held, committed, rewriteClose, rewritePass, notify },
+    }
+  }
+
+  it('settles the entry once the close commits', async () => {
+    const h = harness(ended(CHAPTER_CLOSE_KIND, { ...closeRan, outcome: 'completed' }))
+    await retryCloseEntry(h.deps)
+    expect(h.runClose).toHaveBeenCalledTimes(1)
+    expect(h.calls).toEqual(['committed'])
+  })
+
+  // The close committed before the Cancel landed, so its chapter stands.
+  it('settles the entry when a late Cancel found the close committed', async () => {
+    const h = harness(ended(CHAPTER_CLOSE_KIND, { ...closeRan, outcome: 'completed' }, true))
+    await retryCloseEntry(h.deps)
+    expect(h.calls).toEqual(['committed'])
+  })
+
+  it('settles the entry when no close is owed any more', async () => {
+    const h = harness({ outcome: 'nothing-owed' })
+    await retryCloseEntry(h.deps)
+    expect(h.calls).toEqual(['committed'])
+  })
+
+  it("rewrites the close entry with the close's new cause", async () => {
+    const error: PipelineError = {
+      kind: 'provider',
+      reason: 'network',
+      detail: 'lore-mgmt: ECONNREFUSED',
+    }
+    const h = harness(ended(CHAPTER_CLOSE_KIND, { ...closeRan, outcome: 'failed', error }))
+    await retryCloseEntry(h.deps)
+    expect(h.calls).toEqual(['rewriteClose'])
+    expect(h.rewriteClose).toHaveBeenCalledWith(error)
+    expect(h.held).not.toHaveBeenCalled()
+  })
+
+  // The failed pass is what runs next (chapter-close.md → Failure modes), so the entry names it.
+  it('rewrites a failed catch-up pass as a memory entry', async () => {
+    const error: PipelineError = { kind: 'phase-logic', detail: 'window read' }
+    const h = harness(ended(PERIODIC_CLASSIFIER_KIND, { ...passRan, outcome: 'failed', error }))
+    await retryCloseEntry(h.deps)
+    expect(h.calls).toEqual(['rewritePass'])
+    expect(h.rewritePass).toHaveBeenCalledWith({ held: false, error })
+  })
+
+  it('rewrites a failed catch-up pass as held when it left its branch held', async () => {
+    const error: PipelineError = { kind: 'orchestrator', detail: 'reverse-replay failed: locked' }
+    const h = harness(
+      ended(PERIODIC_CLASSIFIER_KIND, { ...passRan, outcome: 'failed', error }),
+      true,
+    )
+    await retryCloseEntry(h.deps)
+    expect(h.calls).toEqual(['rewritePass'])
+    expect(h.rewritePass).toHaveBeenCalledWith({ held: true })
+  })
+
+  it.each([
+    ['the close', CHAPTER_CLOSE_KIND, closeRan],
+    ['a catch-up pass', PERIODIC_CLASSIFIER_KIND, passRan],
+  ] as const)('leaves the entry alone when %s is cancelled', async (_label, kind, ran) => {
+    const h = harness(ended(kind, { ...ran, outcome: 'aborted' }))
+    await retryCloseEntry(h.deps)
+    expect(h.calls).toEqual([])
+  })
+
+  // A Cancel after the pass's last phase commits it and chains nothing: the close never ran.
+  it('leaves the entry when the chain ended on a committed pass', async () => {
+    const h = harness(ended(PERIODIC_CLASSIFIER_KIND, { ...passRan, outcome: 'completed' }, true))
+    await retryCloseEntry(h.deps)
+    expect(h.calls).toEqual([])
+  })
+
+  it('rewrites the entry as a held memory entry when the branch is held running', async () => {
+    const h = harness({ outcome: 'rejected', blockedBy: CLASSIFIER_HELD })
+    await retryCloseEntry(h.deps)
+    expect(h.calls).toEqual(['rewritePass'])
+    expect(h.rewritePass).toHaveBeenCalledWith({ held: true })
+  })
+
+  it('leaves the entry and says why when the close could not start', async () => {
+    const h = harness({ outcome: 'rejected', blockedBy: 'story-busy' })
+    await retryCloseEntry(h.deps)
+    expect(h.calls).toEqual(['notify'])
+    expect(h.notify).toHaveBeenCalledWith("Chapter close can't start yet: story-busy.")
+  })
+
+  it('rewrites the close entry when the run throws', async () => {
+    const h = harness(new Error('marker insert failed'))
+    await retryCloseEntry(h.deps)
+    expect(h.calls).toEqual(['rewriteClose'])
+    expect(h.rewriteClose).toHaveBeenCalledWith({
+      kind: 'orchestrator',
+      detail: 'marker insert failed',
+    })
+  })
+
+  // The close committed, so its failure copy would be wrong: the throw goes to the caller.
+  it('lets a throw from the settle through without rewriting the entry', async () => {
+    const h = harness(ended(CHAPTER_CLOSE_KIND, { ...closeRan, outcome: 'completed' }))
+    const committed = vi.fn(() => Promise.reject(new Error('reload failed')))
+    await expect(retryCloseEntry({ ...h.deps, committed })).rejects.toThrow('reload failed')
+    expect(h.rewriteClose).not.toHaveBeenCalled()
+    expect(h.rewritePass).not.toHaveBeenCalled()
   })
 })
 

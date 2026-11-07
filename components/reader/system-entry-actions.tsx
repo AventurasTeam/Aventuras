@@ -1,6 +1,7 @@
 import { useRouter } from 'expo-router'
 import { useMemo } from 'react'
 
+import type { OwedCloseRun } from '@/lib/actions'
 import type {
   CapabilityHint,
   ContextWindowFailure,
@@ -11,6 +12,7 @@ import type { SystemFailureMeta } from '@/lib/db'
 import { logger } from '@/lib/diagnostics'
 import { t } from '@/lib/i18n'
 import {
+  CHAPTER_CLOSE_KIND,
   CLASSIFIER_HELD,
   EMPTY_REPLY,
   pipelineErrorDetail,
@@ -355,6 +357,49 @@ export function closeResolvedEntry(submission: NonNullable<SystemFailureMeta['su
     content: t('reader:systemEntry.closeResolvedTextKept'),
     failure: { kind: 'orchestrator', submission, close: 'resolved' },
   }
+}
+
+/**
+ * A close-failure entry's Retry: runs what the close owes, its catch-up passes first. A committed
+ * close, or no close owed any more, settles the entry through `committed`; a failed close rewrites
+ * it; a failed catch-up pass or a held branch rewrites it as a memory entry; a cancel, or a chain
+ * that ended before the close ran, leaves it. A throw from `held`, `committed` or a rewrite
+ * propagates.
+ */
+export async function retryCloseEntry(deps: {
+  runClose: () => Promise<OwedCloseRun>
+  /** Read once the run ended: whether the branch is held `running`. */
+  held: () => Promise<boolean>
+  committed: () => Promise<void>
+  rewriteClose: (error: PipelineError) => Promise<void>
+  rewritePass: (refusal: PassRefusal) => Promise<void>
+  notify: (message: string) => void
+}): Promise<void> {
+  let run: OwedCloseRun
+  try {
+    run = await deps.runClose()
+  } catch (err) {
+    const detail = err instanceof Error ? err.message : String(err)
+    return deps.rewriteClose({ kind: 'orchestrator', detail })
+  }
+  if (run.outcome === 'nothing-owed') return deps.committed()
+  if (run.outcome === 'rejected') {
+    if (run.blockedBy === CLASSIFIER_HELD) return deps.rewritePass({ held: true })
+    deps.notify(t('reader:systemEntry.closeRetryBlocked', { reason: run.blockedBy }))
+    return
+  }
+  const { kind, result } = run.end
+  if (kind === CHAPTER_CLOSE_KIND) {
+    // A Cancel that landed after the close's last phase still left its chapter committed.
+    if (result.outcome === 'completed') return deps.committed()
+    if (result.outcome === 'failed') return deps.rewriteClose(result.error)
+    return
+  }
+  // The chain ended on a catch-up pass, so the close never ran and stays owed.
+  if (result.outcome !== 'failed') return
+  return deps.rewritePass(
+    (await deps.held()) ? { held: true } : { held: false, error: result.error },
+  )
 }
 
 // Shared by the system-entry bubble and the suggestion strip: a config-resolver failure routes to
