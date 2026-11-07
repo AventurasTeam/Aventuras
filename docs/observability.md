@@ -185,11 +185,13 @@ convention, and the expectation that subsystems route through
   which a sound log never produces),
   `story_settings_repaired` (the corrupt-blob repair: carries the failing
   key paths, since the blob it describes is overwritten in the same call),
-  `thread_save_rejected` / `happening_save_rejected` / `entity_save_rejected`
+  `thread_save_rejected` / `happening_save_rejected` / `entity_save_rejected` /
+  `lore_save_rejected` / `chapter_save_rejected`
   (warn: the in-flight refusal, which the disabled UI should make
   unreachable, a location Save whose tail moved while it waited, or a
-  rejected write), `thread_save_failed` /
-  `happening_save_failed` / `entity_save_failed` (error: a Save whose
+  rejected write, such as a Timeline Save on a chapter that went),
+  `thread_save_failed` / `happening_save_failed` / `entity_save_failed` /
+  `lore_save_failed` / `chapter_save_failed` (error: a Save whose
   actions threw while building or writing, logged with its action kinds
   once built, then rethrown; a location Save's story read and place
   rules log the same way, without action kinds), `parent_chain_cap_hit`
@@ -284,9 +286,11 @@ convention, and the expectation that subsystems route through
   (`components/history/use-history-chunks.ts` — a chunk load or a
   load-more rejected; a failed load-more keeps the rows already
   shown and toasts), `world_story_load_failed` / `plot_story_load_failed` /
+  `chapter_timeline_story_load_failed` /
   `dev_chapter_close_story_load_failed` (a cold mount's `loadOpenStory`
   rejection, `hooks/use-cold-open-story.ts`), `world_story_not_found` /
-  `plot_story_not_found` / `dev_chapter_close_story_not_found` (warn: the
+  `plot_story_not_found` / `chapter_timeline_story_not_found` /
+  `dev_chapter_close_story_not_found` (warn: the
   same cold mount on a branch with no story, which leaves for the story
   list), `row_save_failed` (`hooks/use-row-save-session.ts` — a Save
   whose validation or commit threw; the user sees only the generic
@@ -303,7 +307,9 @@ convention, and the expectation that subsystems route through
   an `EntityRowSessionOptions.onSaved` that throws after the write
   already landed), `lore_saved_handler_failed`
   (`components/world/use-lore-row-session.ts` — the lore pane's
-  twin), `world_set_lead_failed` (`app/world/[branchId].tsx`
+  twin), `chapter_saved_handler_failed`
+  (`components/chapters/use-chapter-row-session.ts` — the Timeline
+  card's twin), `world_set_lead_failed` (`app/world/[branchId].tsx`
   — a `⋯ → Set as lead` whose `setStoryLead` threw rather than
   refused), `world_collision_resolve_failed`
   (`components/world/use-collision-resolve.ts` — a resolve dialog's

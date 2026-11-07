@@ -244,8 +244,8 @@ props on every render.
   phase-name union, so a phase added to that pipeline fails the
   build until it is labelled, and with a generic-label fallback so an
   unmapped name never blanks the pill mid-run; a pass maps by its
-  kind. Story Settings, World and Plot derive their phase from the
-  run's _kind_; Chapter Timeline is unwired.
+  kind. Story Settings, World, Plot and Chapter Timeline derive
+  their phase from the run's _kind_.
 - **Memory error observation.** `memory-incomplete` from staleness
   detection per
   [`memory/model-management.md → Staleness UI`](../../memory/model-management.md#staleness-ui)
@@ -256,8 +256,3 @@ props on every render.
   pill; the reader reads the hook's swap half again for its composer
   gate. Consumer collapses simultaneous errors to one
   (`swap-paused` > `memory-incomplete`).
-- **Top-bar consumer wiring.** Render the pill on Reader, World,
-  Plot, Story Settings, Chapter Timeline per
-  [`principles.md → Universal in-story chrome`](../principles.md#universal-in-story-chrome).
-  Done for Reader, World, Plot and Story Settings, each tapping its
-  error through to Story Settings · Memory.
