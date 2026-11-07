@@ -440,6 +440,7 @@ describe('Send with deferred work', () => {
       beforeTurn: true,
       work: 'pass',
     })
+    expect(result).not.toHaveProperty('committed')
     expect(await userActionsReading(db, 'I wait.')).toEqual([])
     expect(await passHappening(db, owed.actionId)).toEqual([])
     expect(generationStore.getTxState().deferred.get('b1')).toEqual({ pass: true })
