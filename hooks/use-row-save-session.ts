@@ -90,7 +90,7 @@ export type RowSaveSession<Draft extends FieldValues> = {
   resolveConfirm: (outcome: 'save' | 'cancel') => void
 }
 
-/** What a surface needs from a pane's session to route its transitions (row switch, `←`, GO TO). */
+/** What a surface needs from a row session to route its transitions (row switch, `←`, GO TO). */
 export type RowSessionHandle = { dirty: boolean; requestLeave: (proceed: () => void) => void }
 
 type Attempt = { outcome: RowSaveOutcome; clean: boolean }

@@ -29,7 +29,7 @@ type RowSaveBarProps<Draft extends FieldValues> = Gate & {
   enabled?: boolean
 }
 
-/** The pane's save bar, mounted only while the session is dirty (DetailPane's `saveBar` slot). */
+/** A row session's save bar, mounted only while the session is dirty. */
 export function RowSaveBar<Draft extends FieldValues>({
   session,
   enabled = true,
