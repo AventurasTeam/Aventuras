@@ -17,5 +17,50 @@
   "time": {
     "label": "In-world time: {{time}}",
     "range": "{{first}} → {{last}}"
+  },
+  "timeline": {
+    "title": "Chapters",
+    "header": "Chapters · {{closed}} closed + 1 in progress"
+  },
+  "card": {
+    "heading": "Chapter {{number}} — {{title}}",
+    "entries": "entries {{first}}–{{last}}",
+    "closedAt": "closed {{date}}",
+    "moreActions": "More chapter actions"
+  },
+  "tokens": {
+    "compact": "{{value}} tok",
+    "compactThousands": "{{value}}k tok",
+    "full": "{{count, number}} tok"
+  },
+  "fields": {
+    "title": "Title",
+    "theme": "Theme",
+    "summary": "Summary",
+    "keywords": "Keywords",
+    "keywordsPlaceholder": "Add keyword"
+  },
+  "validation": {
+    "titleRequired": "Title can't be empty",
+    "summaryRequired": "Summary can't be empty"
+  },
+  "save": {
+    "saved": "Chapter saved",
+    "inFlight": "Can't save while generation is running",
+    "notFound": "This chapter no longer exists",
+    "failed": "Couldn't save the chapter"
+  },
+  "actions": {
+    "jump": "Jump to chapter →",
+    "regenerate": "Regenerate summary",
+    "regenerateLandsLater": "Regenerating a summary lands in a later milestone",
+    "delete": "Delete…",
+    "deleteLandsLater": "Deleting a chapter lands in a later milestone"
+  },
+  "inProgress": {
+    "title": "In progress",
+    "since": "In progress · since {{time}}",
+    "placeholder": "Summary, theme, and keywords generate on close.",
+    "close": "Close chapter…"
   }
 }
