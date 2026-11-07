@@ -7,7 +7,7 @@ import type { StoreChapter } from '@/lib/stores'
 export type ChapterCardData = {
   /** The store row, by identity. */
   row: StoreChapter
-  /** row.sequenceNumber. */
+  /** The stored sequence number, not a display index. */
   number: number
   latest: boolean
   timeLabel: string | null
@@ -17,7 +17,7 @@ export type ChapterCardData = {
 export type ChapterTimelineData = {
   cards: readonly ChapterCardData[]
   closedCount: number
-  /** The open region's first world time, for `In progress · since <time>`. */
+  /** The open region's first world time, as a label; null without one. */
   sinceLabel: string | null
 }
 

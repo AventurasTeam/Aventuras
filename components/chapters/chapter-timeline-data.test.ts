@@ -66,8 +66,9 @@ function data(rows: Iterable<StoreChapter>, overrides: Overrides = {}) {
 
 describe('chapterTimelineData', () => {
   it('orders the cards by sequence number whatever the input order', () => {
-    const { cards } = data([chapter(3), chapter(1), chapter(2)])
-    expect(cards.map((card) => card.number)).toEqual([1, 2, 3])
+    const { cards } = data([chapter(10), chapter(2), chapter(9)])
+    expect(cards.map((card) => card.row.id)).toEqual(['br_1_chap_2', 'br_1_chap_9', 'br_1_chap_10'])
+    expect(cards.map((card) => card.number)).toEqual([2, 9, 10])
   })
 
   it("keeps only the branch's rows and counts them", () => {
@@ -77,8 +78,8 @@ describe('chapterTimelineData', () => {
   })
 
   it('flags only the highest sequence on the branch as latest', () => {
-    const { cards } = data([chapter(2), chapter(3), chapter(1), chapter(9, 'br_2')])
-    expect(cards.map((card) => card.latest)).toEqual([false, false, true])
+    const { cards } = data([chapter(10), chapter(2), chapter(9), chapter(11, 'br_2')])
+    expect(cards.filter((card) => card.latest).map((card) => card.row.id)).toEqual(['br_1_chap_10'])
   })
 
   it('gives no cards for a branch with no closed chapter', () => {
@@ -108,6 +109,7 @@ describe('chapterTimelineData', () => {
     const absent = chapter(2)
     const pastTheEnd: ChapterTimeRanges = new Map([
       [missed.id, { first: 3_600, last: MAX_WORLD_TIME_SECONDS + 1 }],
+      [null, { first: 3_600, last: 7_200 }],
     ])
     expect(data([missed, absent], { ranges: pastTheEnd }).cards.map((c) => c.timeLabel)).toEqual([
       null,
