@@ -828,6 +828,13 @@ describe("the chain's end", () => {
     return seen
   }
 
+  // Cancels its own run once its last phase has done its work.
+  async function* cancelledLate({ actionId }: PhaseContext): AsyncGenerator<never, PhaseResult> {
+    const own = [...generationStore.getTxState().runs.values()].find((r) => r.actionId === actionId)
+    own?.abortController.abort()
+    return { status: 'completed' }
+  }
+
   it('resolves to the last run of a committed chain, while runPipeline returns the origin', async () => {
     const { ctx } = await makeHarness()
     definePipeline({ kind: 'last', phases: [{ name: 'p', run: noop }], ...base })
@@ -894,13 +901,6 @@ describe("the chain's end", () => {
   // A cancel after the last phase commits the run and chains nothing; the end still says so.
   it('reports cancelled for a successor that committed after its abort fired', async () => {
     const { ctx } = await makeHarness()
-    async function* cancelledLate({ actionId }: PhaseContext): AsyncGenerator<never, PhaseResult> {
-      const own = [...generationStore.getTxState().runs.values()].find(
-        (r) => r.actionId === actionId,
-      )
-      own?.abortController.abort()
-      return { status: 'completed' }
-    }
     definePipeline({ kind: 'succ', phases: [{ name: 'p', run: cancelledLate }], ...base })
     definePipeline({
       kind: 'pred',
@@ -914,6 +914,26 @@ describe("the chain's end", () => {
     expect(await origin).toMatchObject({ outcome: 'completed' })
     expect(await chain).toMatchObject({
       kind: 'succ',
+      result: { outcome: 'completed' },
+      cancelled: true,
+    })
+  })
+
+  it('reports cancelled for an origin that committed after its abort fired, chaining nothing', async () => {
+    const { ctx } = await makeHarness()
+    definePipeline({ kind: 'succ', phases: [{ name: 'p', run: noop }], ...base })
+    definePipeline({
+      kind: 'pred',
+      phases: [{ name: 'p', run: cancelledLate }],
+      chainsTo: () => 'succ',
+      ...base,
+    })
+
+    const { origin, chain } = startPipeline('pred', ctx)
+
+    expect(await origin).toMatchObject({ outcome: 'completed' })
+    expect(await chain).toMatchObject({
+      kind: 'pred',
       result: { outcome: 'completed' },
       cancelled: true,
     })

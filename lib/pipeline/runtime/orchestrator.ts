@@ -630,7 +630,7 @@ async function driveOrigin(kind: string, ctx: RunCtx): Promise<OriginDriven> {
 }
 
 // A successor that threw ends the chain failed, with the error its unwind reported.
-function unwoundEnd(run: RunState, e: unknown): ChainEnd {
+function unwindToEnd(run: RunState, e: unknown): ChainEnd {
   unwindIfRegistered(run, e)
   const error: PipelineError = unwoundErrors.get(run) ?? {
     kind: 'orchestrator',
@@ -658,7 +658,7 @@ async function driveSuccessors(
         { runId: current.runId, kind: current.kind, error: messageOf(e) },
         { actionId: current.actionId },
       )
-      return unwoundEnd(current, e)
+      return unwindToEnd(current, e)
     }
     try {
       const driven = await driveRun(current, ctx)
@@ -670,7 +670,7 @@ async function driveSuccessors(
         { runId: current.runId, kind: current.kind, error: messageOf(e) },
         { actionId: current.actionId },
       )
-      return unwoundEnd(current, e)
+      return unwindToEnd(current, e)
     }
   }
   return end
