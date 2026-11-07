@@ -144,9 +144,9 @@ type GenerationState = {
   /** Writes the branch's owed close, replacing any. */
   setPendingClose: (branchId: string, record: PendingClose) => void
   clearPendingClose: (branchId: string) => void
-  /** Send's clear when no close is owed any more; a deferred pass stays. */
+  /** Removes only `deferred.close`; a deferred pass stays. */
   clearDeferredClose: (branchId: string) => void
-  /** Drops the branch's `deferred` and `pendingClose` in one update, for a story delete. */
+  /** Drops both records in one update, so no subscriber sees one without the other. */
   dropBranchRecords: (branchId: string) => void
   /** C6: replaces the stored run with a copy carrying `progress`; no-op for an unknown run. */
   setCloseProgress: (runId: string, progress: CloseProgress) => void

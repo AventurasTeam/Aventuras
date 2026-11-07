@@ -318,10 +318,6 @@ describe('pendingClose', () => {
 
   const pendingOn = (branchId: string) => generationStore.getTxState().pendingClose.get(branchId)
 
-  // A close on b1, as the orchestrator reserves it.
-  const close = (id: string, over: Partial<RunState> = {}): RunState =>
-    pass(id, { kind: 'chapter-close', interruptible: 'close', ...over })
-
   it('starts empty, and __reset empties it', () => {
     expect(generationStore.getTxState().pendingClose.size).toBe(0)
     generationStore.setPendingClose('b1', { endEntryId: 'e9' })
@@ -350,7 +346,7 @@ describe('pendingClose', () => {
 
   it("drops the branch's record when a close commits, in the update that removes the run", () => {
     generationStore.setPendingClose('b1', { endEntryId: 'e9' })
-    generationStore.startRun(close('run_close'))
+    generationStore.startRun(closeRun('run_close'))
     const seen: { registered: boolean; pending: boolean }[] = []
     const off = generationStore.subscribe(() => {
       const state = generationStore.getTxState()
@@ -369,7 +365,7 @@ describe('pendingClose', () => {
     "keeps the record through a close's %s end",
     (outcome) => {
       generationStore.setPendingClose('b1', { endEntryId: 'e9' })
-      generationStore.startRun(close('run_close'))
+      generationStore.startRun(closeRun('run_close'))
       generationStore.abortRun('run_close', outcome)
       expect(pendingOn('b1')).toEqual({ endEntryId: 'e9' })
     },
@@ -388,7 +384,7 @@ describe('pendingClose', () => {
   it('keeps the record when a pass commits into a chained close', () => {
     generationStore.setPendingClose('b1', { endEntryId: 'e9' })
     generationStore.startRun(pass('run_pass'))
-    generationStore.finishRun('run_pass', close('run_close'))
+    generationStore.finishRun('run_pass', closeRun('run_close'))
     expect(pendingOn('b1')).toEqual({ endEntryId: 'e9' })
     expect(generationStore.getTxState().runs.has('run_close')).toBe(true)
   })
@@ -396,7 +392,7 @@ describe('pendingClose', () => {
   it("drops only the finishing close's branch on a successor swap", () => {
     generationStore.setPendingClose('b1', { endEntryId: 'e9' })
     generationStore.setPendingClose('b2', { endEntryId: 'e4' })
-    generationStore.startRun(close('run_close'))
+    generationStore.startRun(closeRun('run_close'))
     generationStore.finishRun('run_close', run('run_next'))
     expect(generationStore.getTxState().pendingClose.has('b1')).toBe(false)
     expect(pendingOn('b2')).toEqual({ endEntryId: 'e4' })
