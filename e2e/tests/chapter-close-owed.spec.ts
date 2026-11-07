@@ -447,6 +447,9 @@ test.describe('chapter close owed — a close cancelled from the banner', () => 
     await openStory(page, HERO_TITLE)
     const branch = await branchId()
     const chaptersBefore = await chapterCount(branch)
+    expect(await openRegionTokens(branch), 'one token short, so nothing is owed yet').toBe(
+      (await threshold()) - 1,
+    )
 
     let calls = metadataCalls()
     hero().mock.holdNextStructured(METADATA)
@@ -510,6 +513,8 @@ test.describe('chapter close owed — CTRL-Z of the turn during a close', () => 
     actionDeltas,
     send,
     chapterCount,
+    openRegionTokens,
+    threshold,
     logHead,
     closeDeltasAfter,
     metadataCalls,
@@ -523,6 +528,9 @@ test.describe('chapter close owed — CTRL-Z of the turn during a close', () => 
     const branch = await branchId()
     const chaptersBefore = await chapterCount(branch)
     const head = await logHead(branch)
+    expect(await openRegionTokens(branch), 'one token short, so nothing is owed yet').toBe(
+      (await threshold()) - 1,
+    )
     const calls = metadataCalls()
 
     hero().mock.holdNextStructured(METADATA)
