@@ -1250,8 +1250,10 @@ modals — the case is vanishingly rare (concurrent same-kind runs
 can't happen; chained runs don't run simultaneously), so pretty UI
 for it isn't worth designing.
 
-Zero-reverse orphans (the pre-first-delta case) don't mount the
-modal — nothing reached disk, so there is nothing to report.
+Zero-reverse orphans don't mount the modal: the pre-first-delta case,
+where nothing reached disk, and a close whose reversal failed and whose
+deltas a second CTRL-Z then reversed. Nothing is left to reverse, so
+there is nothing to report, and recovery deletes the marker.
 Recovery failures do mount it, under a different title; see
 [Recovery-failure policy](#recovery-failure-policy).
 
