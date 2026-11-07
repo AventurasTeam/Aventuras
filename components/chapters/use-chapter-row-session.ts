@@ -1,5 +1,5 @@
 import { zodResolver } from '@hookform/resolvers/zod'
-import { useCallback, useEffect } from 'react'
+import { useCallback, useEffect, useLayoutEffect, useState } from 'react'
 
 import {
   useRowSaveSession,
@@ -23,6 +23,11 @@ export const CHAPTER_SESSION_NONE = 'none'
 
 const resolver = zodResolver(chapterDraftSchema)
 
+export type ChapterRowSession = RowSaveSession<ChapterDraft> & {
+  /** The row whose values the form holds; a switch reaches it one layout pass after `rowId`. */
+  formRowId: string | null
+}
+
 export type ChapterRowSessionOptions = {
   /** The expanded chapter's id; null while no card is open. */
   rowId: string | null
@@ -42,7 +47,7 @@ export function useChapterRowSession({
   onSaved,
   onRejected,
   onSession,
-}: ChapterRowSessionOptions): RowSaveSession<ChapterDraft> {
+}: ChapterRowSessionOptions): ChapterRowSession {
   const commit = useCallback(
     async (draft: ChapterDraft): Promise<RowCommitResult> => {
       const result = await onSave(draft)
@@ -81,5 +86,10 @@ export function useChapterRowSession({
     onSession({ dirty, requestLeave })
     return () => onSession(null)
   }, [onSession, dirty, requestLeave])
-  return session
+  // On native, react-hook-form subscribes a field in a passive effect: one mounted with the switch
+  // reads the previous row and misses the session's layout-effect reset. Declared after the session,
+  // so this runs after that reset.
+  const [formRowId, setFormRowId] = useState(rowId)
+  useLayoutEffect(() => setFormRowId(rowId), [rowId])
+  return { ...session, formRowId }
 }

@@ -187,7 +187,8 @@ export default function ChapterTimelineRoute(): ReactElement {
                     data={card}
                     expanded={expanded}
                     onToggle={() => toggle(card.row.id)}
-                    session={expanded ? session : null}
+                    // Its fields mount once the form holds this row, or native shows the last row.
+                    session={expanded && session.formRowId === card.row.id ? session : null}
                     blocked={editBlocked}
                     blockedReason={gateReason}
                     hotkeysEnabled={focused}
