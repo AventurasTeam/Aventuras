@@ -173,12 +173,14 @@ the pattern). Save commits all session changes under one
 
 Where the bar sits depends on the tier. On tablet and desktop it's at
 the expanded card's bottom edge: each chapter is a self-contained
-edit surface, so the bar belongs with the card it applies to, and a
-user who scrolls away from a dirty card scrolls back to commit. On
+edit surface, so the bar belongs with the card it applies to. On
 phone it sits at the surface's bottom edge, below the card list and
 outside its scroller, and rides above the soft keyboard per
 [`touch.md → Save bar on phone`](../../foundations/mobile/touch.md#save-bar-on-phone):
-a bar inside the scrolling list can't ride the keyboard.
+a bar inside the scrolling list can't ride the keyboard. At either
+placement Cmd/Ctrl-S saves the dirty card while the Timeline is
+focused, so a user who scrolls away from it needn't scroll back to
+commit.
 
 ### Delete a chapter
 
@@ -253,7 +255,7 @@ The card is not expandable / editable — there's nothing to edit
 yet. A close adds the new chapter's card above it, and that card
 expands by itself so the user can review (and edit, if they want to
 override) the LLM-generated metadata. It expands once no run is in
-flight, so not while the close that wrote it can still reverse, and
+flight, so not while the run that wrote it can still be cancelled, and
 only while no card is dirty, so it never raises the navigate-away
 guard: over a dirty card it stays collapsed, and doesn't open later
 when that card is saved. A story's first chapter, landing under an

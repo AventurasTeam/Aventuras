@@ -132,7 +132,7 @@
   .chapter-card.in-progress { border-style: dashed; background: #fafbfc; }
   .chapter-card.in-progress .card-head { cursor: default; }
   .chapter-card.in-progress .card-head:hover { background: transparent; }
-  .chapter-card.in-progress .title { color: var(--ink-muted); font-weight: 500; }
+  .chapter-card.in-progress .title { color: var(--ink-muted); font-style: italic; font-weight: 500; }
   .chapter-card.in-progress .disclosure { display: none; }
   .progress-row { padding: 0 16px 12px; }
   .progress-bar-track { height: 4px; background: var(--line-soft); border-radius: 2px; overflow: hidden; margin: 6px 0 4px; }
@@ -278,7 +278,7 @@
     /* save bar — out of the card, at the surface's bottom edge, riding the keyboard
        (touch.md → Save bar on phone) */
     .chapter-card.dirty .card-save-bar { display: none; }
-    body[data-card-state="dirty"] .surface-save-bar { display: flex; flex-wrap: wrap; gap: 6px; }
+    body[data-empty="no"][data-card-state="dirty"] .surface-save-bar { display: flex; flex-wrap: wrap; gap: 6px; }
 
     /* in-progress card — Close chapter… full-width */
     .close-chapter-btn { width: 100%; }
@@ -505,8 +505,8 @@
         </div>
       </div>
       <div class="progress-row">
-        <div class="progress-meta" id="progress-tok">14,200 / 24,000 tok</div>
         <div class="progress-bar-track"><div class="progress-bar-fill"></div></div>
+        <div class="progress-meta" id="progress-tok">14,200 / 24,000 tok</div>
       </div>
       <div class="progress-summary-placeholder">Summary, theme, and keywords generate on close.</div>
       <div class="in-progress-actions">
