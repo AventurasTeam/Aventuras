@@ -104,6 +104,19 @@ describe('startMockLlm — a structured reply JSON cannot hold', () => {
   })
 })
 
+describe('startMockLlm — a structured call no shape matches', () => {
+  it('answers it at once with an empty object, with no hold armed', async () => {
+    const llm = await started()
+    const response = fetch(`${llm.url}/chat/completions`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ model: 'mock', messages: [{ role: 'user', content: 'No block.' }] }),
+    })
+    expect(await within(replyOf(response))).toEqual({})
+    expect(llm.requests.map((r) => r.agent)).toEqual([null])
+  })
+})
+
 describe('startMockLlm — an unreadable request', () => {
   it('answers a body that is not JSON instead of leaving the client hanging', async () => {
     const llm = await started()
