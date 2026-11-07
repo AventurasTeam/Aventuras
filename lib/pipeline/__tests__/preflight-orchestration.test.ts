@@ -2,7 +2,13 @@ import { eq } from 'drizzle-orm'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { PERIODIC_CLASSIFIER_KIND } from '@/lib/classifier'
-import { branches, deltas, pipelineRuns } from '@/lib/db'
+import {
+  branches,
+  deltas,
+  pipelineRuns,
+  STORY_SETTINGS_DEFAULTS,
+  storyDefinitionSchema,
+} from '@/lib/db'
 import {
   definePipeline,
   ensurePeriodicClassifierPipelineRegistered,
@@ -11,7 +17,12 @@ import {
   type PhaseFn,
   type PipelineEvent,
 } from '@/lib/pipeline'
-import { appSettingsStore, generationStore, hydrateAppSettings } from '@/lib/stores'
+import {
+  appSettingsStore,
+  currentStoryStore,
+  generationStore,
+  hydrateAppSettings,
+} from '@/lib/stores'
 
 import { expectRan, makeHarness, resetSingletons } from './harness'
 
@@ -43,6 +54,30 @@ const WIRED_CONFIG = {
   assignments: {},
   defaultProviderId: 'prov-1',
   diagnostics: { enabled: false, debug_level_enabled: false },
+}
+
+const DEFINITION = storyDefinitionSchema.parse({
+  mode: 'creative',
+  leadEntityId: null,
+  narration: 'third',
+  genre: { label: 'Fantasy', promptBody: '' },
+  tone: { label: 'Wry', promptBody: '' },
+  setting: '',
+  calendarSystemId: 'gregorian',
+  worldTimeOrigin: { year: 0 },
+})
+
+/** A story whose own narrative override resolves where App Settings' profile chain has none. */
+function openStoryWithNarrativeOverride(storyId: string, branchId: string): void {
+  currentStoryStore.set({
+    storyId,
+    branchId,
+    definition: DEFINITION,
+    settings: {
+      ...STORY_SETTINGS_DEFAULTS,
+      models: { narrative: { providerId: 'prov-1', modelId: 'm' } },
+    },
+  })
 }
 
 describe('runPipeline config pre-flight', () => {
@@ -106,6 +141,40 @@ describe('runPipeline config pre-flight', () => {
     const result = expectRan(await runPipeline('pf-turn-ok', ctx))
     expect(phaseStarted).toBe(true)
     expect(result.outcome).toBe('completed')
+  })
+
+  it("resolves through the run's own story's overrides while that story is open", async () => {
+    const { ctx } = await makeHarness()
+    await hydrateAppSettings(async () => ({ ...WIRED_CONFIG, profiles: [] }))
+    openStoryWithNarrativeOverride('s1', 'b1')
+    definePipeline({
+      kind: 'pf-own-story',
+      phases: [{ name: 'narrative', run: noopPhase, resolves: [{ target: 'narrative' }] }],
+      ...base,
+    })
+
+    expect(expectRan(await runPipeline('pf-own-story', ctx)).outcome).toBe('completed')
+  })
+
+  it("reads no other story's overrides when another story is open", async () => {
+    const { ctx } = await makeHarness()
+    await hydrateAppSettings(async () => ({ ...WIRED_CONFIG, profiles: [] }))
+    openStoryWithNarrativeOverride('s_other', 'b_other')
+    let phaseStarted = false
+    const phase: PhaseFn = async function* () {
+      phaseStarted = true
+      return { status: 'completed' }
+    }
+    definePipeline({
+      kind: 'pf-other-story',
+      phases: [{ name: 'narrative', run: phase, resolves: [{ target: 'narrative' }] }],
+      ...base,
+    })
+
+    const result = expectRan(await runPipeline('pf-other-story', ctx))
+    expect(phaseStarted).toBe(false)
+    expect(result.outcome).toBe('failed')
+    expect(result.error).toMatchObject({ kind: 'config-resolver', failure: 'no-profile-assigned' })
   })
 
   it('winds the run down through abort when a resolver predicate throws', async () => {

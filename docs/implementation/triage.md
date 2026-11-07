@@ -99,11 +99,6 @@ slice-planning gate forces its resolution before that slice is planned.
   (`lib/actions/turns/submit-turn.ts:54`) restate
   `MANUAL_CLOSE_REFUSAL.branchNotOpen` and `.swapPending`
   (`lib/actions/chapters/close-chain.ts`).
-- **Pre-flight reads the open story's settings after two awaits.**
-  `lib/pipeline/runtime/orchestrator.ts:553-555` reads
-  `currentStoryStore.getCurrentStory()?.settings` after `beginRun` and
-  `settleUserWrites`; a story switch in between checks the wrong
-  story's settings. Unverified as reachable.
 - **Seeded entry creates carry no anchor.** The dev seed's
   `createStoryEntry` deltas have `entryId: null`
   (`lib/db/devtools/seed-dataset.ts`), while a real reply's create is
