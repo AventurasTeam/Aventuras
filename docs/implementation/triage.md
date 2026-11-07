@@ -223,3 +223,72 @@ slice-planning gate forces its resolution before that slice is planned.
   interrupted summary either, and the `tsx` and `pnpm` relay in between
   wasn't traced. With parallel workers an orphaned run now finishes in
   under 2 minutes. Surfaced by the same review.
+- **A client-side SDK error is retried as a provider failure.**
+  `classifyProviderError` (`lib/ai/transport/classify-provider-error.ts`)
+  reads anything that isn't an `APICallError` as a retryable `unknown`,
+  so an `InvalidPromptError` (a malformed `messages` array, thrown before
+  any request) or a `TypeValidationError` backs off, throws again and
+  fails as `provider`. A close's tool step is the first call built from
+  caller messages, so a task-runner bug there reads as "LLM call failed".
+  Surfaced by Slice 5.4's final review.
+- **The mock panel's failure menu can't show `stream-cut` on a
+  structured or tool lane.** `FAILURES.structured`
+  (`scripts/mock-llm/ui/index.html`) leaves it out, so a lane armed
+  with it through the API shows the menu as none beside a `stream-cut`
+  badge. On a tool lane it acts as `malformed`. Surfaced by Slice 5.4's
+  review.
+- **The dev mock doesn't re-check stored lane values on load.**
+  `scripts/mock-llm/state.ts` reads `value` as `unknown`, so a
+  hand-edited `state.json` reaches the reply builders unvalidated: a
+  tool lane's answers 500, other kinds may go out as stored. Surfaced by
+  Slice 5.4's review. On a tool lane the 500 hides the bad step: the
+  app retries a 500, the sequence cursor already moved past the step,
+  so the retry is served the next one, and the failed request leaves no
+  log line (`scripts/mock-llm/completions.ts`, the tool branch). Found
+  by Slice 5.4's slice review with a probe through `callWithRetry`.
+- **Canon routes no remedy for an `interrupted` or `content-filter`
+  cut-off.** `generation-pipeline.md`'s `reply-cut-off` remedy paragraph
+  names `window`, `max-output` and `unknown`; the code gives the other
+  two causes no profile fix (`components/reader/cut-off-copy.ts`) and
+  canon doesn't say so. The narrative failed with them before Slice 5.4;
+  a close's tool step can now carry `content-filter` too.
+- **Canon's `callWithRetry` signature omits `carried`.** The block in
+  `generation-pipeline.md → Two retry tiers` lacks the
+  `carried?: () => CarriedCapabilities` option
+  (`lib/ai/transport/call-with-retry.ts`).
+- **A cut-off's `maxOutput` isn't always what the request sent.**
+  `replyCutOff` gets the max output the caller set: the profile's on a
+  structured call (`lib/ai/generate.ts`), the profile's or 8,000 on a
+  tool step (`lib/ai/tool-step.ts`). The Anthropic adapter changes it
+  on the way out: it adds the thinking budget, and clamps to a known
+  model's cap (`claude-3-haiku`, 4,096). So a window cut with thinking
+  on reads `max-output`, and a cap cut under an 8,000 default reads
+  `unknown`, against a figure the request didn't carry. Slice 5.4's
+  slice review reads the sent `max_tokens` back for the tool step;
+  `generateStructured` still passes the profile's.
+- **The `toolCalling` hint may miss some servers' wording.** Canon's
+  keywords are `tools` and `tool_choice`
+  ([`generation-pipeline.md → Fatal error categories`](../generation-pipeline.md#fatal-error-categories)).
+  vLLM's refusal of the step's `tool_choice: 'auto'` is recalled as
+  `"auto" tool choice requires --enable-auto-tool-choice`, and
+  OpenRouter's as `No endpoints found that support tool use`; neither
+  holds a keyword. Both texts are from memory, not a live server. Check
+  them, and widen `CapabilityHint`'s `matched` if they hold. Surfaced by
+  Slice 5.4's slice review.
+- **The dev mock can't forget a tool lane.** A saved `tools:` lane lists
+  under Tools across restarts, so a task whose tools were renamed
+  leaves its old lane there for good; only Reset or a hand edit of
+  `state.json` clears it. A control call naming an unknown key creates
+  the lane before its route matches (`scripts/mock-llm/control.ts`, the
+  `lanes` branch), so even a 404 on a mistyped `tools:` key leaves one
+  listed. Surfaced by Slice 5.4's slice review.
+- **Duplication the tool step's simplifier pass left for a shared
+  home.** The expiry detail `` `${target}: timeout after ${boundMs}ms` ``
+  is written in `lib/ai/tool-step.ts` and `lib/pipeline/call-error.ts`,
+  and `lib/ai` can't import `lib/pipeline`; tests pin both strings. The
+  `lib/ai` tests repeat their fixtures: `okStep` in `tool-step.test.ts`,
+  `stub/stub-provider.test.ts` and `scripts/mock-llm/harness-tool-steps.test.ts`,
+  and `useProvider`, `MODELS` and `rejection` across `tool-step.test.ts`,
+  `window-check.test.ts` and `request-shape.test.ts`. The older
+  `narrativeValueSchema` in `scripts/mock-llm/validate.ts` is exported
+  with no importer. Surfaced by Slice 5.4's slice review.

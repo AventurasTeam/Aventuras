@@ -1,6 +1,7 @@
 // OpenAI-compatible frames, shared with e2e/harness/mock-llm.ts: a change here
 // reaches the E2E suite; the real transport (lib/ai/transport) consumes them.
 
+import { randomBytes } from 'node:crypto'
 import type { IncomingMessage, ServerResponse } from 'node:http'
 
 import { Tiktoken } from 'js-tiktoken/lite'
@@ -99,7 +100,13 @@ export function contentFrame(content: string): string {
   return sse({ ...CHUNK_BASE, choices: [{ index: 0, delta: { content }, finish_reason: null }] })
 }
 
-export type FinishReason = 'stop' | 'length'
+export const FINISH_REASONS = ['stop', 'length', 'tool_calls', 'content_filter'] as const
+
+export type FinishReason = (typeof FINISH_REASONS)[number]
+
+export function isFinishReason(value: unknown): value is FinishReason {
+  return (FINISH_REASONS as readonly unknown[]).includes(value)
+}
 
 /** The terminal frame, the usage frame when given, then [DONE]. */
 export function stopFrames(finishReason: FinishReason = 'stop', usage?: MockUsage): string {
@@ -115,19 +122,92 @@ export function usageFrame(usage: MockUsage): string {
   return sse({ ...CHUNK_BASE, choices: [], usage })
 }
 
-export function completionBody(
-  content: string,
-  finishReason: FinishReason = 'stop',
-  usage?: MockUsage,
+type CompletionMessage = {
+  role: 'assistant'
+  content: string
+  reasoning_content?: string
+  tool_calls?: {
+    id: string
+    type: 'function'
+    function: { name: string; arguments: string }
+  }[]
+}
+
+function completionEnvelope(
+  message: CompletionMessage,
+  finishReason: FinishReason,
+  usage: MockUsage | undefined,
 ): string {
   return JSON.stringify({
     id: 'chatcmpl-mock',
     object: 'chat.completion',
     created: 0,
     model: 'mock',
-    choices: [{ index: 0, message: { role: 'assistant', content }, finish_reason: finishReason }],
+    choices: [{ index: 0, message, finish_reason: finishReason }],
     ...(usage !== undefined ? { usage } : {}),
   })
+}
+
+export function completionBody(
+  content: string,
+  finishReason: FinishReason = 'stop',
+  usage?: MockUsage,
+): string {
+  return completionEnvelope({ role: 'assistant', content }, finishReason, usage)
+}
+
+/** One reply to a request carrying tools. */
+export type MockToolStep = {
+  text?: string
+  reasoning?: string
+  /** A string `args` goes out verbatim, so a spec can send a malformed call. */
+  toolCalls?: { name: string; args: unknown }[]
+  /** Default `tool_calls` with calls, else `stop`; set it to send `stop` or `length` beside calls. */
+  finishReason?: FinishReason
+}
+
+export function toolStepFinish(step: MockToolStep): FinishReason {
+  if (step.finishReason !== undefined) return step.finishReason
+  return (step.toolCalls?.length ?? 0) > 0 ? 'tool_calls' : 'stop'
+}
+
+// An absent `args` would drop the `arguments` key, which the client's schema requires.
+export function argumentsOf(args: unknown): string {
+  if (typeof args === 'string') return args
+  return JSON.stringify(args) ?? '{}'
+}
+
+export function toolStepBody(step: MockToolStep, usage?: MockUsage): string {
+  const calls = step.toolCalls ?? []
+  return completionEnvelope(
+    {
+      role: 'assistant',
+      content: step.text ?? '',
+      ...(step.reasoning !== undefined ? { reasoning_content: step.reasoning } : {}),
+      ...(calls.length > 0
+        ? {
+            tool_calls: calls.map(({ name, args }) => ({
+              id: `call_${randomBytes(12).toString('hex')}`,
+              type: 'function' as const,
+              function: { name, arguments: argumentsOf(args) },
+            })),
+          }
+        : {}),
+    },
+    toolStepFinish(step),
+    usage,
+  )
+}
+
+/** The completion text a tool step's usage counts: text, reasoning, each call's name and args. */
+export function toolStepCompletionText(step: MockToolStep): string {
+  return [
+    step.text ?? '',
+    step.reasoning ?? '',
+    ...(step.toolCalls ?? []).flatMap(({ name, args }) => [name, argumentsOf(args)]),
+  ]
+    .filter((part) => part !== '')
+    .join('\n')
 }
 
 // Non-injected callers pass their own type: a provider outage must not read as

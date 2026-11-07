@@ -594,6 +594,34 @@ amends the scope above.
 - **Does the size hold?** The estimate is 20 tasks, at the ceiling. Check the plan
   skeleton. If it passes, the modal and entry points can split from Phase 1 and the
   flag, while the proofs need both and stay last.
+- **One helper for a bounded structured call?** The sequence
+  `boundedSignal`, `generateStructured`, dispose, `retriedAttemptEvents`,
+  aborted-versus-expired, `structuredCallFailure` is written out twice
+  after [Slice 5.2](./02-first-chapter.md): the periodic classifier pass
+  and the close's metadata call
+  (`lib/pipeline/definitions/chapter-close-metadata-call.ts`).
+  [Slice 5.4](./04-tool-step.md)'s tool step keeps its bound and expiry
+  branch inside `lib/ai`, so 5.10's boundary call would be the third copy
+  of the pipeline-side sequence, and a helper would have to decide whether
+  it also covers the step's in-`lib/ai` expiry branch. Suggested: one
+  helper in `lib/pipeline` returning `ok | aborted | failed`, landed with
+  the first new caller.
+  `ResolveModelConfig` is built inline at each structured caller too
+  (`lib/pipeline/runtime/preflight.ts:18`, and under
+  `lib/pipeline/definitions/`: `periodic-classifier.ts`,
+  `suggestion-refresh.ts`, `per-turn-piggyback.ts`,
+  `chapter-close-metadata-call.ts`; `per-turn.ts` builds it inline too),
+  and `generateToolStep` takes one (`config`, in
+  [Slice 5.4](./04-tool-step.md)). One builder would
+  keep a new field from being missed at one of them. Routed from triage
+  2026-11-06.
+- **Should the E2E harness fail a spec that leaves scripted tool steps unspent?**
+  `setToolSteps` keys a queue by the task's tool names, and a lane no request
+  reaches answers nothing, so a spec scripted under a stale tool list closes with no
+  writes and `close()` resolves. Starting answer: `close()` rejects while a lane
+  still holds steps, unless the spec opts out for a task that may end early. The
+  first scripted spec, this slice's Auto close, decides. Surfaced by
+  [Slice 5.4](./04-tool-step.md)'s slice review.
 
 ## Implementation notes
 

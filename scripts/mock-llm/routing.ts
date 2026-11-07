@@ -5,6 +5,7 @@ import { schemaToTypeScriptBlock, type JsonSchema } from '@/lib/ai'
 import { STRUCTURED_SHAPES, type StructuredShape } from './shapes'
 
 export const NARRATIVE_LANE = 'narrative'
+export const TOOL_LANE_PREFIX = 'tools:'
 
 // Opener of SCHEMA_CONTRACT_TEMPLATE (lib/ai/prompt-schema.ts), appended last so the block runs
 // to its end. Unexported: routing.test.ts drives the real middleware, so an edit fails there.
@@ -22,6 +23,11 @@ export type Route =
       /** The TypeScript block this request declared, when one could be recovered. */
       block: string | null
     }
+  | {
+      lane: 'tool'
+      /** `toolLaneKey` of the request's tool names. */
+      key: string
+    }
 
 function messagesOf(body: Record<string, unknown>): unknown[] {
   return Array.isArray(body.messages) ? body.messages : []
@@ -37,6 +43,51 @@ function contentText(message: unknown): string {
 
 export function promptText(body: Record<string, unknown>): string {
   return messagesOf(body).map(contentText).join('\n')
+}
+
+function callsAndReasoningText(message: unknown): string[] {
+  const { tool_calls: calls, reasoning_content: reasoning } = message as {
+    tool_calls?: unknown
+    reasoning_content?: unknown
+  }
+  const callParts = Array.isArray(calls)
+    ? calls.flatMap((call) => {
+        const fn = (call as { function?: { name?: unknown; arguments?: unknown } } | null)?.function
+        return [fn?.name, fn?.arguments].filter((part): part is string => typeof part === 'string')
+      })
+    : []
+  return [...(typeof reasoning === 'string' ? [reasoning] : []), ...callParts]
+}
+
+/**
+ * A tool request's prompt as a server counts it: `promptText`, the tool definitions, and each
+ * message's calls and reasoning. Close to the app's estimate, not equal: the app counts the SDK's
+ * shapes part by part, a tool result's name among them; this counts the wire's as one string.
+ */
+export function toolPromptText(body: Record<string, unknown>): string {
+  return [
+    promptText(body),
+    JSON.stringify(body.tools ?? []),
+    ...messagesOf(body).flatMap(callsAndReasoningText),
+  ].join('\n')
+}
+
+/** The lane of a request carrying these tools: their names sorted, so the order sent is moot. */
+export function toolLaneKey(names: readonly string[]): string {
+  return `${TOOL_LANE_PREFIX}${[...names].sort().join('+')}`
+}
+
+/**
+ * A non-streamed request carrying a `tools` array → its lane key; else null. An entry without a
+ * string `function.name` is skipped, and a request with no valid name routes as one without tools.
+ */
+export function toolLaneOf(body: Record<string, unknown>): string | null {
+  if (body.stream === true || !Array.isArray(body.tools) || body.tools.length === 0) return null
+  const names = body.tools.flatMap((entry) => {
+    const name = (entry as { function?: { name?: unknown } } | null)?.function?.name
+    return typeof name === 'string' ? [name] : []
+  })
+  return names.length === 0 ? null : toolLaneKey(names)
 }
 
 /** The text of the request's system messages, where the contract's block sits. */
@@ -144,6 +195,8 @@ export function unknownKey(block: string | null): string {
 
 export function classifyRequest(body: Record<string, unknown>): Route {
   if (body.stream === true) return { lane: NARRATIVE_LANE }
+  const toolLane = toolLaneOf(body)
+  if (toolLane !== null) return { lane: 'tool', key: toolLane }
 
   const text = promptText(body)
   const block = extractBlockFromPrompt(systemText(body)) ?? blockFromResponseFormat(body)

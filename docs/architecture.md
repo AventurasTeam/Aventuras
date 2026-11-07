@@ -1013,10 +1013,11 @@ the model's own reply. By code first: `context_length_exceeded` or
 or a top-level `code`. Then by a short keyword list on the body:
 maximum context length, context size, context window, prompt is too
 long, input token count, and `max_new_tokens` must be. The pre-send
-check, which wraps every call made through `streamText` and
-`generateStructured`, turns a match into the `context-window` failure
-with `detectedBy: 'provider'`, the provider's message verbatim, the
-estimate it counted for that request, and the window when known.
+check, which wraps every call made through `streamText`,
+`generateStructured` and a close's tool steps, turns a match into the
+`context-window` failure with `detectedBy: 'provider'`, the provider's
+message verbatim, the estimate it counted for that request, and the
+window when known.
 Behind a router that wraps the upstream error, as OpenRouter does in
 `error.metadata.raw`, the upstream provider's message is quoted rather
 than the router's own. `classifyProviderError` reads the same match to

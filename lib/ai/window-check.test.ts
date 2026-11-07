@@ -1,14 +1,21 @@
 import { createAnthropic } from '@ai-sdk/anthropic'
 import { createOpenAICompatible } from '@ai-sdk/openai-compatible'
+import { generateText, tool, wrapLanguageModel, type LanguageModelMiddleware } from 'ai'
 import { afterEach, beforeEach, describe, expect, it, vi, type MockInstance } from 'vitest'
 import { z } from 'zod'
 
 import { logger, type Logger } from '@/lib/diagnostics'
+import { countTokens } from '@/lib/retrieval'
 
-import { ContextWindowError, countPromptTokens } from './context-window'
+import { ContextWindowError, countPromptTokens, windowCheckMiddleware } from './context-window'
 import { generateStructured, streamText, type PromptHalves } from './generate'
 import { getModel } from './model'
-import { schemaToTypeScriptBlock, type JsonSchema, type ModelPrompt } from './prompt-schema'
+import {
+  schemaToTypeScriptBlock,
+  type JsonSchema,
+  type ModelPrompt,
+  type ModelTools,
+} from './prompt-schema'
 import { resolveModel, type ResolvedParams, type ResolveModelConfig } from './resolve-model'
 import {
   __resetTruncationCheck,
@@ -408,6 +415,63 @@ describe('generateStructured: after the reply', () => {
       debug.mock.calls.filter(([logged]) => logged === kind).map((c) => c[2])
     expect(runOf('provider.input_ratio')).toEqual([undefined])
     expect(runOf('provider.prompt_estimate')).toEqual([undefined])
+  })
+})
+
+// architecture.md → The pre-send check: a request's tool definitions count with its prompt.
+describe('the window check on a request carrying tools', () => {
+  const PROMPT_ONLY = countTokens(HALVES.system) + countTokens(HALVES.user)
+
+  it('refuses, unsent, a call whose prompt fits the window but whose tool definitions do not', async () => {
+    const sentTools: NonNullable<ModelTools> = []
+    // Before the check, so it records the definitions exactly as the check receives them.
+    const recordTools: LanguageModelMiddleware = {
+      specificationVersion: 'v3',
+      transformParams: async ({ params }) => {
+        sentTools.push(...(params.tools ?? []))
+        return params
+      },
+    }
+    const model = wrapLanguageModel({
+      model: MODELS['openai-compatible'](),
+      middleware: [
+        recordTools,
+        windowCheckMiddleware({
+          window: { tokens: PROMPT_ONLY, source: 'configured' },
+          providerId: 'prov',
+          modelId: 'm',
+          onEstimate: () => {},
+        }),
+      ],
+    })
+
+    const error = await generateText({
+      model,
+      system: HALVES.system,
+      prompt: HALVES.user,
+      tools: {
+        lookup: tool({
+          description: 'Find a story row by name; returns its id, kind and description.',
+          inputSchema: z.object({ query: z.string() }),
+        }),
+      },
+      maxRetries: 0,
+    }).then(
+      () => null,
+      (thrown: unknown) => thrown,
+    )
+
+    expect(error).toBeInstanceOf(ContextWindowError)
+    expect(sentTools).toHaveLength(1)
+    expect((error as ContextWindowError).failure).toStrictEqual({
+      detectedBy: 'check',
+      estimate: PROMPT_ONLY + countTokens(JSON.stringify(sentTools[0])),
+      window: PROMPT_ONLY,
+      windowSource: 'configured',
+      providerId: 'prov',
+      modelId: 'm',
+    })
+    expect(bodies).toEqual([])
   })
 })
 

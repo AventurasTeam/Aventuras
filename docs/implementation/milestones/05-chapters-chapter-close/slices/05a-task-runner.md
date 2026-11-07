@@ -253,10 +253,20 @@ and tools sit under `lib/pipeline/definitions/close-agent/`.
 
 **Tools and the write path.**
 
-- A tool is a name, a description, a Zod schema with no `.transform()`,
-  which arguments hold ids, and a plan that reads ahead and returns a
-  refusal or actions, each tagged with the fields it writes (C11's
-  starting design).
+- A tool is a name, a description, a Zod schema of a plain shape, which
+  arguments hold ids, and a plan that reads ahead and returns a refusal
+  or actions, each tagged with the fields it writes (C11's starting
+  design).
+- **A tool schema parses to what the model wrote (developer decision,
+  2026-11-07).** The SDK replays the parsed value as the model's own
+  call on the next step, beside a signed thinking block on Anthropic, so
+  a schema that changes the value puts words in the model's mouth. No
+  `.transform`, `.pipe`, `z.codec` or `z.stringbool`; no `.default`,
+  `.prefault` or `.catch`; no `z.preprocess` or `z.coerce`; no string
+  overwrites such as `.trim()`, `.toLowerCase()` or `.toUpperCase()`.
+  [Slice 5.4](./04-tool-step.md#implementation-notes)'s step refuses
+  only the forms it can see (a transform, and a schema with no JSON
+  Schema form), so the rest is the tool author's contract.
 - Every write passes the common checks first: `turns` cites a turn and
   each handle resolves to an entry in the chapter's range, `why` is
   present, and each row was read. A failed check returns `rejected`
@@ -487,6 +497,8 @@ vitest and the probe share. It never reaches a production slot.
   of a keyword, and adds nothing to the read set. `read_row` returns
   only the task's fields and answers a missing row without a refusal
   (`lib/pipeline/definitions/close-agent/read-tools.test.ts`).
+- Each tool's schema parses its sample inputs to deep-equal values, so
+  the call the SDK replays is the one the model wrote.
 - The instructions macro's source reads no per-call variable, and the
   prose macro's reads the turns
   (`lib/prompts/bundled/bundled-pack.test.ts`).
@@ -541,16 +553,18 @@ vitest and the probe share. It never reaches a production slot.
 ## Open questions
 
 - **What does a step with `content-filter`, or `other` with no tool
-  call, mean for a task?** Canon ends a task on a reply that finishes
-  normally. A structured call retries a filter, and `other` with no raw
-  reason reads as finished there. Starting answer: retry a filter once
-  and stop as `cut-off` if it repeats; treat `other` as finished. The
-  retry is one branch in 5.4's `parseFn`, and `stopped` may need a
-  reason of its own, which C4 lets it grow.
+  call, mean for a task?** Answered in
+  [canon](../../../../generation-pipeline.md#cut-off-replies) (developer,
+  2026-11-06): a filter takes the cut-off path, calls or not, retried once
+  under a fresh bound
+  ([`chapter-close.md`](../../../../memory/chapter-close.md#when-a-task-stops))
+  and returned as `stopped`, `reason: 'cut-off'`, with the second stop's
+  cause, so C4 needs no reason of its own; `other` with no raw reason is
+  finished.
 - **Does a `length` reply holding whole tool calls get discarded?**
-  Canon's "never a finished task, whatever it holds" and "retried once"
-  read that way, and 5.4 drops them on that reading. Confirm, since it
-  throws away calls that parsed.
+  Answered in [canon](../../../../generation-pipeline.md#cut-off-replies)
+  (developer, 2026-11-06): yes. Its calls never reach the runner, and the
+  step is sent again.
 - **Do retried attempts count against the 24?** Starting answer: no. 5.4
   retries inside one step call and the budget counts steps. It's a
   tuning constant either way.
@@ -606,6 +620,14 @@ vitest and the probe share. It never reaches a production slot.
   row over a partial range, though neither handler returns a noop today.
   Which outcomes fail the close, and with what error, is open. Surfaced
   by Slice 5.2's review.
+- **What does a tool schema do with a key the model added?** A plain
+  `z.object` drops unknown keys, and the SDK replays the parsed value
+  (`ai`, `parse-tool-call.ts`), so a key the model wrote vanishes from
+  its own call on the next step: the change the schema contract above
+  forbids. `z.strictObject` refuses the call, so the model hears it and
+  writes it again; `z.looseObject` keeps the key and replays the call
+  as written. The deep-equal criterion catches neither unless a sample
+  carries an extra key. Surfaced by Slice 5.4's slice review.
 
 ## Implementation notes
 

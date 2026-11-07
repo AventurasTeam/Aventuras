@@ -47,6 +47,7 @@ import {
   CARRIED_NOTHING,
   ProviderTimeoutError,
   type CapabilityHint,
+  type CarriedCapabilities,
 } from './transport/classify-provider-error'
 import { runProviderCall, streamProviderCall } from './transport/provider-call'
 import { checkInputTokens } from './truncation-check'
@@ -128,7 +129,7 @@ export function prepareGeneration(
 
 // Anthropic caches only at an explicit breakpoint; OpenAI-compatible servers generally reuse
 // the longest matching token prefix on their own. `stub` gets none, as it gets no thinking.
-function marksSystemPrefix(
+export function marksSystemPrefix(
   cacheSystemPrefix: boolean | undefined,
   providerType: ProviderInstance['type'],
 ): boolean {
@@ -136,7 +137,7 @@ function marksSystemPrefix(
 }
 
 // The cast is safe: getModel returns provider instances, never LanguageModel's string arm.
-function withMiddleware(
+export function withMiddleware(
   model: LanguageModel,
   middleware: LanguageModelMiddleware[],
 ): LanguageModel {
@@ -147,12 +148,16 @@ function withMiddleware(
 }
 
 // Must go last in a chain. `estimate()` is the latest count, null until the SDK built a request.
-function windowCheck(
+export function windowCheck(
   providers: readonly ProviderInstance[],
   providerId: string,
   modelId: string,
   attribution: { actionId: string } | undefined,
-) {
+): {
+  window: GenerationWindow
+  estimate: () => number | null
+  middleware: LanguageModelMiddleware
+} {
   const window = generationWindow(providers, providerId, modelId)
   let estimate: number | null = null
   const middleware = windowCheckMiddleware({
@@ -169,7 +174,10 @@ function windowCheck(
 
 // After every middleware that changes the request, so it reads the request as sent; `carried()` is
 // the latest request's. The anthropic adapter sends no `thinking` field for a disabled setting.
-function carriedCapabilities() {
+export function carriedCapabilities(): {
+  carried: () => CarriedCapabilities
+  middleware: LanguageModelMiddleware
+} {
   let carried = CARRIED_NOTHING
   const middleware: LanguageModelMiddleware = {
     specificationVersion: 'v3',
@@ -182,6 +190,7 @@ function carriedCapabilities() {
           'type' in thinking &&
           thinking.type === 'enabled',
         structuredOutput: params.responseFormat?.type === 'json',
+        toolCalling: (params.tools?.length ?? 0) > 0,
       }
       return params
     },
@@ -196,7 +205,7 @@ function carriedCapabilities() {
 export type PromptHalves = { readonly system: string; readonly user: string }
 
 // Providers reject an empty system message.
-function promptParams(prompt: PromptHalves): { system?: string; prompt: string } {
+export function promptParams(prompt: PromptHalves): { system?: string; prompt: string } {
   return {
     ...(prompt.system.trim() !== '' ? { system: prompt.system } : {}),
     prompt: prompt.user,

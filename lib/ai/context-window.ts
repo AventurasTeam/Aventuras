@@ -5,7 +5,7 @@ import { countTokens } from '@/lib/retrieval'
 
 import type { ProviderInstance } from '../db'
 import { resolveModelCapabilities } from './model-capabilities'
-import type { ModelPrompt } from './prompt-schema'
+import type { ModelPrompt, ModelTools } from './prompt-schema'
 import { recognizeOverflow } from './transport/classify-provider-error'
 
 export type GenerationWindow =
@@ -75,19 +75,58 @@ export function describeContextWindow(failure: ContextWindowFailure): string {
   )
 }
 
-/** countTokens over the system content and the text parts of user and assistant messages. */
-export function countPromptTokens(prompt: ModelPrompt): number {
+/** countTokens over the request as sent: system content; text and reasoning parts; each tool
+ *  call's name and input; each tool result's name and output; each tool definition as JSON. */
+export function countPromptTokens(prompt: ModelPrompt, tools?: ModelTools): number {
   let total = 0
   for (const message of prompt) {
-    if (message.role === 'system') {
-      total += countTokens(message.content)
-    } else if (message.role === 'user' || message.role === 'assistant') {
-      for (const part of message.content) {
-        if (part.type === 'text') total += countTokens(part.text)
-      }
+    if (message.role === 'system') total += countTokens(message.content)
+    else for (const part of message.content) total += countPartTokens(part)
+  }
+  for (const tool of tools ?? []) total += countTokens(JSON.stringify(tool))
+  return total
+}
+
+type PromptPart = Exclude<ModelPrompt[number], { role: 'system' }>['content'][number]
+type ToolResultOutput = Extract<PromptPart, { type: 'tool-result' }>['output']
+
+function countPartTokens(part: PromptPart): number {
+  switch (part.type) {
+    case 'text':
+    case 'reasoning':
+      return countTokens(part.text)
+    case 'tool-call':
+      return countTokens(part.toolName) + countTokens(JSON.stringify(part.input) ?? '')
+    case 'tool-result':
+      return countTokens(part.toolName) + countTokens(outputText(part.output))
+    case 'file':
+    case 'tool-approval-response':
+      return 0
+    default: {
+      const unreachable: never = part
+      return unreachable
     }
   }
-  return total
+}
+
+// As the adapters send each arm: text raw, json stringified (a string value too), a denial as its
+// reason or a default; `content` is JSON on openai-compatible, an estimate of Anthropic's blocks.
+function outputText(output: ToolResultOutput): string {
+  switch (output.type) {
+    case 'text':
+    case 'error-text':
+      return output.value
+    case 'json':
+    case 'error-json':
+    case 'content':
+      return JSON.stringify(output.value) ?? ''
+    case 'execution-denied':
+      return output.reason ?? 'Tool execution denied.'
+    default: {
+      const unreachable: never = output
+      return unreachable
+    }
+  }
 }
 
 /**
@@ -105,9 +144,13 @@ export function windowCheckMiddleware(opts: {
   actionId?: string
 }): LanguageModelMiddleware {
   const { window, providerId, modelId, onEstimate, actionId } = opts
-  const checked = async <R>(prompt: ModelPrompt, send: () => PromiseLike<R>): Promise<R> => {
+  const checked = async <R>(
+    prompt: ModelPrompt,
+    tools: ModelTools,
+    send: () => PromiseLike<R>,
+  ): Promise<R> => {
     const startedAt = performance.now()
-    const estimate = countPromptTokens(prompt)
+    const estimate = countPromptTokens(prompt, tools)
     const ms = Math.round(performance.now() - startedAt)
     onEstimate(estimate)
     logger.debug(
@@ -150,8 +193,8 @@ export function windowCheckMiddleware(opts: {
   }
   return {
     specificationVersion: 'v3',
-    wrapGenerate: ({ params, doGenerate }) => checked(params.prompt, doGenerate),
-    wrapStream: ({ params, doStream }) => checked(params.prompt, doStream),
+    wrapGenerate: ({ params, doGenerate }) => checked(params.prompt, params.tools, doGenerate),
+    wrapStream: ({ params, doStream }) => checked(params.prompt, params.tools, doStream),
   }
 }
 

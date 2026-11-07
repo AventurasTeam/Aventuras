@@ -1,5 +1,5 @@
-import { APICallError, wrapLanguageModel } from 'ai'
-import { afterAll, beforeAll, describe, expect, it } from 'vitest'
+import { APICallError, tool, wrapLanguageModel, type ToolSet } from 'ai'
+import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest'
 import { z } from 'zod'
 
 import { fetchModelCatalog, parseStructured, replyStopOf } from '@/lib/ai'
@@ -11,7 +11,7 @@ import { runProviderCall, streamProviderCall } from '@/lib/ai/transport/provider
 import { parseStateBlock, parseSuggestionsBlock, stripTrailingBlocks } from '@/lib/piggyback'
 import { fallbackClassifierSchema } from '@/lib/pipeline'
 
-import { mockUsage } from './respond/wire'
+import { mockUsage, toolStepCompletionText, type MockToolStep } from './respond/wire'
 import { startMockServer, type MockServer } from './server'
 
 // The seam the other suites stop short of: the app's own provider construction
@@ -218,4 +218,282 @@ describe('the app transport against the mock', () => {
       expect(recognizeOverflow(streamed)?.detail).toContain(OVERFLOW_PHRASE[kind])
     },
   )
+})
+
+const LOOKUP_LANE = 'tools:lookup'
+
+const lookup = tool({
+  description: 'Look something up in the story so far.',
+  inputSchema: z.object({ query: z.string() }),
+})
+const note = tool({
+  description: 'Write a note for later.',
+  inputSchema: z.object({ text: z.string() }),
+})
+
+const LOOK_AT_THE_DOOR: MockToolStep = {
+  reasoning: 'The door first.',
+  toolCalls: [{ name: 'lookup', args: { query: 'the door' } }],
+}
+
+/** One step through the app's provider as generateToolStep sends it: tools with no execute. */
+function sendToolStep(tools: ToolSet = { lookup }) {
+  return runProviderCall({
+    model: createProviderModel(provider(), 'seed/narrative'),
+    prompt: 'Open the door.',
+    tools,
+  })
+}
+
+/** `steps` as the lookup lane's responses, the first active, no sequence and no failure. */
+function cannedSteps(...steps: MockToolStep[]): void {
+  const lane = mock.ctx.lane(LOOKUP_LANE)
+  lane.mode = 'mock'
+  lane.responses = steps.map((value, i) => ({ id: `r_step_${i}`, name: `Step ${i}`, value }))
+  lane.activeId = lane.responses[0]?.id ?? null
+  lane.sequence = { enabled: false, ids: lane.responses.map((r) => r.id), cursor: 0, loop: true }
+  lane.failure = { kind: 'none', status: 500, remaining: 0 }
+}
+
+describe('tool lanes through the app transport', () => {
+  it("answers a canned step's calls and reasoning, and logs the step it served", async () => {
+    cannedSteps(LOOK_AT_THE_DOOR)
+    mock.ctx.log.clear()
+
+    const result = await sendToolStep()
+
+    expect(result.finishReason).toBe('tool-calls')
+    expect(result.toolCalls).toMatchObject([{ toolName: 'lookup', input: { query: 'the door' } }])
+    expect(result.toolCalls[0]).not.toHaveProperty('invalid')
+    expect(result.reasoningText).toBe('The door first.')
+    expect(mock.ctx.log.list()[0]?.lane).toBe(LOOKUP_LANE)
+    expect(mock.ctx.log.list()[0]?.served).toEqual(LOOK_AT_THE_DOOR)
+    expect(mock.ctx.discovered.get(LOOKUP_LANE)).toMatchObject({ key: LOOKUP_LANE, block: null })
+  })
+
+  it('cycles a sequence, one step a call, back to the first', async () => {
+    cannedSteps(LOOK_AT_THE_DOOR, { text: 'The door is locked.' })
+    mock.ctx.lane(LOOKUP_LANE).sequence.enabled = true
+
+    const replies: { finish: string; calls: string[]; text: string }[] = []
+    for (let call = 0; call < 3; call += 1) {
+      const result = await sendToolStep()
+      replies.push({
+        finish: result.finishReason,
+        calls: result.toolCalls.map((c) => c.toolName),
+        text: result.text,
+      })
+    }
+
+    expect(replies).toEqual([
+      { finish: 'tool-calls', calls: ['lookup'], text: '' },
+      { finish: 'stop', calls: [], text: 'The door is locked.' },
+      { finish: 'tool-calls', calls: ['lookup'], text: '' },
+    ])
+  })
+
+  it('answers a tool lane nobody configured with no calls and stop, and lists it', async () => {
+    const result = await sendToolStep({ lookup, note })
+
+    expect(result.finishReason).toBe('stop')
+    expect(result.toolCalls).toEqual([])
+    expect(result.text).toBe('')
+    expect(mock.ctx.discovered.get('tools:lookup+note')).toMatchObject({ block: null })
+  })
+
+  it.each(['malformed', 'stream-cut'] as const)(
+    "%s cuts the first call's arguments in half, an invalid call, then answers whole",
+    async (kind) => {
+      const canned: MockToolStep = {
+        toolCalls: [
+          { name: 'lookup', args: { query: 'the door' } },
+          { name: 'lookup', args: { query: 'the key' } },
+        ],
+      }
+      cannedSteps(canned)
+      mock.ctx.lane(LOOKUP_LANE).failure = { kind, status: 500, remaining: 1 }
+      mock.ctx.log.clear()
+
+      const cut = await sendToolStep()
+
+      // '{"query":"the door"}' is 20 characters; its first 10 don't parse.
+      expect(cut.toolCalls).toMatchObject([
+        { toolName: 'lookup', invalid: true, input: '{"query":"' },
+        { toolName: 'lookup', input: { query: 'the key' } },
+      ])
+      expect(cut.toolCalls[1]).not.toHaveProperty('invalid')
+
+      // The log and the usage hold the step served, not the one configured.
+      const served: MockToolStep = {
+        toolCalls: [
+          { name: 'lookup', args: '{"query":"' },
+          { name: 'lookup', args: { query: 'the key' } },
+        ],
+      }
+      const entry = mock.ctx.log.list()[0]
+      expect(entry?.served).toEqual(served)
+      expect(entry).toMatchObject({ outcome: 'failed', failureKind: kind, status: 200 })
+      expect(cut.usage.outputTokens).toBe(
+        mockUsage('', toolStepCompletionText(served)).completion_tokens,
+      )
+      expect(cut.usage.outputTokens).not.toBe(
+        mockUsage('', toolStepCompletionText(canned)).completion_tokens,
+      )
+
+      const whole = await sendToolStep()
+
+      expect(whole.toolCalls).toMatchObject([
+        { input: { query: 'the door' } },
+        { input: { query: 'the key' } },
+      ])
+    },
+  )
+
+  it.each(['', '  {}'])(
+    'cuts a call whose arguments %j halve to blank into one that fails a schema taking {}',
+    async (args) => {
+      const finish = tool({ description: 'End the task.', inputSchema: z.object({}) })
+      const lane = mock.ctx.lane('tools:finish')
+      lane.mode = 'mock'
+      lane.responses = [
+        { id: 'r_finish', name: 'Finish', value: { toolCalls: [{ name: 'finish', args }] } },
+      ]
+      lane.activeId = 'r_finish'
+      lane.failure = { kind: 'malformed', status: 500, remaining: 1 }
+
+      const cut = await sendToolStep({ finish })
+
+      expect(cut.toolCalls).toMatchObject([{ toolName: 'finish', invalid: true }])
+    },
+  )
+
+  it.each(['malformed', 'stream-cut'] as const)(
+    'serves a step with no calls as it is under %s, and logs it ok with the failure spent',
+    async (kind) => {
+      cannedSteps({ text: 'Nothing to look up.' })
+      const lane = mock.ctx.lane(LOOKUP_LANE)
+      lane.failure = { kind, status: 500, remaining: 1 }
+      mock.ctx.log.clear()
+
+      const result = await sendToolStep()
+
+      expect(result.text).toBe('Nothing to look up.')
+      expect(result.finishReason).toBe('stop')
+      expect(result.toolCalls).toEqual([])
+      expect(lane.failure.remaining).toBe(0)
+      expect(mock.ctx.log.list()[0]).toMatchObject({
+        outcome: 'ok',
+        failureKind: kind,
+        status: 200,
+        note: expect.stringContaining('no call to cut') as unknown,
+      })
+    },
+  )
+
+  it('ends a length reply with its calls whole', async () => {
+    cannedSteps(LOOK_AT_THE_DOOR)
+    mock.ctx.lane(LOOKUP_LANE).failure = { kind: 'length', status: 500, remaining: 1 }
+
+    const result = await sendToolStep()
+
+    expect(result.finishReason).toBe('length')
+    expect(result.toolCalls).toMatchObject([{ toolName: 'lookup', input: { query: 'the door' } }])
+    expect(result.toolCalls[0]).not.toHaveProperty('invalid')
+    expect(result.response.body).toMatchObject({
+      choices: [
+        {
+          finish_reason: 'length',
+          message: {
+            tool_calls: [{ function: { name: 'lookup', arguments: '{"query":"the door"}' } }],
+          },
+        },
+      ],
+    })
+  })
+
+  it("counts a tool lane's tool definitions in its prompt tokens, and the step in its reply", async () => {
+    cannedSteps(LOOK_AT_THE_DOOR)
+    mock.ctx.log.clear()
+
+    const result = await sendToolStep()
+    const prompt = mock.ctx.log.list()[0]?.prompt ?? ''
+
+    expect(prompt).toContain('Look something up in the story so far.')
+    expect(result.usage.inputTokens).toBe(mockUsage(prompt, '').prompt_tokens)
+    expect(result.usage.outputTokens).toBe(
+      mockUsage('', toolStepCompletionText(LOOK_AT_THE_DOOR)).completion_tokens,
+    )
+  })
+
+  it('answers a 500 for a stored step the schema would refuse, not an empty 200', async () => {
+    cannedSteps({ toolCalls: 'x' } as unknown as MockToolStep)
+    const logged = vi.spyOn(console, 'error').mockImplementation(() => {})
+
+    try {
+      const res = await fetch(`${mock.url}/chat/completions`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          model: 'seed/narrative',
+          messages: [{ role: 'user', content: 'Open the door.' }],
+          tools: [{ type: 'function', function: { name: 'lookup', parameters: {} } }],
+        }),
+      })
+
+      expect(res.status).toBe(500)
+    } finally {
+      logged.mockRestore()
+    }
+  })
+
+  it('gives the retry of a length-cut step the same step, then moves on', async () => {
+    cannedSteps(LOOK_AT_THE_DOOR, { text: 'Second step.' }, { text: 'Third step.' })
+    const lane = mock.ctx.lane(LOOKUP_LANE)
+    lane.sequence.enabled = true
+    lane.failure = { kind: 'length', status: 500, remaining: 1 }
+
+    const cut = await sendToolStep()
+    const retry = await sendToolStep()
+    const next = await sendToolStep()
+
+    expect(cut.finishReason).toBe('length')
+    expect(cut.toolCalls).toMatchObject([{ toolName: 'lookup', input: { query: 'the door' } }])
+    expect(retry.finishReason).toBe('tool-calls')
+    expect(retry.toolCalls).toMatchObject([{ toolName: 'lookup', input: { query: 'the door' } }])
+    expect(next.text).toBe('Second step.')
+  })
+
+  it('moves a sequence on past a malformed tool step, which the app does not resend', async () => {
+    cannedSteps(LOOK_AT_THE_DOOR, { text: 'Second step.' })
+    const lane = mock.ctx.lane(LOOKUP_LANE)
+    lane.sequence.enabled = true
+    lane.failure = { kind: 'malformed', status: 500, remaining: 1 }
+
+    const cut = await sendToolStep()
+    const next = await sendToolStep()
+
+    expect(cut.toolCalls).toMatchObject([{ toolName: 'lookup', invalid: true }])
+    expect(next.text).toBe('Second step.')
+    expect(next.toolCalls).toEqual([])
+  })
+
+  it('moves a structured lane on past a length cut, as the app resends it fresh', async () => {
+    const lane = mock.ctx.lane('per-turn-classifier')
+    lane.mode = 'mock'
+    lane.responses = [1, 2].map((delta) => ({
+      id: `r_delta_${delta}`,
+      name: `Delta ${delta}`,
+      value: { worldTimeDelta: delta },
+    }))
+    lane.activeId = 'r_delta_1'
+    lane.sequence = { enabled: true, ids: ['r_delta_1', 'r_delta_2'], cursor: 0, loop: true }
+    lane.failure = { kind: 'length', status: 500, remaining: 1 }
+
+    const cut = await runProviderCall({ model: classifierModel(), prompt: 'Classify the turn.' })
+    const next = await runProviderCall({ model: classifierModel(), prompt: 'Classify the turn.' })
+
+    expect(cut.finishReason).toBe('length')
+    expect(JSON.parse(next.text)).toMatchObject({ worldTimeDelta: 2 })
+    lane.sequence.enabled = false
+  })
 })

@@ -35,6 +35,8 @@ The app talks to one URL, and a turn fans out into several calls. The mock
 separates them by inspecting the request:
 
 - `stream: true` → the **narrative** lane.
+- not streamed, with a non-empty `tools` list → a **tool** lane, before
+  any block match (below).
 - anything else → a **structured** lane, identified by the TypeScript block
   the app writes at the end of the system message (or, on the `force-on`
   path, by the JSON Schema in `response_format`).
@@ -44,6 +46,20 @@ validation; the panel files them under **Story** or **Wizard**. A shape that
 is _not_ listed still gets a lane, keyed by a hash of its block and flagged
 `unregistered` in the UI — a new agent is addressable straight away, and
 adding it to `shapes.ts` only upgrades it to a friendly name and validation.
+
+A **tool** lane carries a close's tool steps. Its key is `tools:` and the
+request's tool names, sorted and joined by `+`, so each task's tool list
+gets a lane of its own, and the panel files it under **Tools** once the
+app has sent one. The lane is saved on first sight, so the panel still
+lists it after the mock restarts. A response there is a step: `text`,
+`reasoning` (sent as `reasoning_content`), `toolCalls` as a list of
+`{ "name", "args" }`, and
+`finishReason`, which defaults to `tool_calls` with calls and `stop`
+without. A string `args` goes out verbatim, so a malformed call can be
+scripted; anything else goes out as JSON. Sequence cycling scripts a
+conversation, one step a call. An unconfigured tool lane answers the empty
+step, `{}`: no calls, empty text and `stop`, which ends a task with no
+writes.
 
 Per lane you get: a library of named responses, sequence cycling, a
 mock/passthrough switch, response delay and jitter, failure injection, and
@@ -104,6 +120,21 @@ overflow rejection are never retried, so a budget of 1 reaches the app.
 lane they do nothing and stay armed; `http`, `hang` and the overflow kinds still
 fire there.
 
+**A tool lane reads them differently.** `malformed` and `stream-cut` cut
+the first call's `arguments` in half, by characters (`{` when the half
+would be blank, which the SDK reads as `{}`), so the app reads an invalid
+call and hands it back to the task, retrying nothing; a step with no
+calls goes out as it is, the failure is spent, and the log reads `ok`
+with a note that there was no call to cut. `length` keeps the
+calls whole and ends with `finish_reason: 'length'`: the app drops the
+reply and sends the step once more, so a budget of 1 there is swallowed
+too, and 2 stops the task as cut off. A `length` reply doesn't move a
+sequence on, so the retry gets the same step. `http` acts as on a
+structured lane. A `hang` is never retried: the step has one bound over
+the whole call, so it fails the step when it expires. An overflow kind
+stops the task, or fails the close on a task's first call.
+The panel's retry warning follows these rules on a tool lane.
+
 Narrative has no such wrapper, so one `http` failure fails the run, as does a
 `hang` once the client times out, and an overflow kind fails it with the
 **Prompt too large for the model's window** entry quoting the body's message.
@@ -130,6 +161,13 @@ the app's truncation cross-check reads a ratio near 1
 A structured reply always carries it. A stream carries it as OpenAI's do:
 only when the request asks with `stream_options.include_usage`, in a last
 chunk with no choices before `[DONE]`. The app's provider always asks.
+
+A tool lane counts more on both sides, as the app's estimate does on a
+tool step: the prompt count takes in the tool definitions, each earlier
+call's name and arguments, and the reasoning sent back, and the reply's
+count the step's reasoning and calls. Counting the message text alone, a
+short prompt carrying several tools would read under half the estimate
+and raise the truncation toast.
 
 `/v1/models` publishes `meta.n_ctx: 131072` on every model, the field the
 catalog fetch reads as the model's window
@@ -161,6 +199,17 @@ Every passthrough reply lands in the request log with **Save reply as a
 response** — the raw text is split back into prose, `<state>` and
 `<suggestions>` using the app's own parsers and stored as a canned response.
 Record once against a real model, replay forever.
+
+A reply on a tool lane is saved as a step instead: its text, reasoning
+(`reasoning_content`, else `reasoning`, kept only when non-empty, as the
+app's provider reads it), calls and finish reason. Each call's `arguments` is parsed as JSON, or
+kept as sent when it doesn't parse or parses to a string. A recorded call
+replays with the same meaning, not byte for byte, since parsed arguments
+go back out through `JSON.stringify`; a malformed one replays as sent. A
+call whose `name` or `arguments` isn't a string is dropped from the step.
+A finish reason a step has no name for, such as `eos`, is left out, and
+the step's default stands. As with any saved reply, the lane stays in
+passthrough: switch it to **mock** to replay.
 
 ## Entity placeholders
 

@@ -69,7 +69,7 @@ function generateToolStep(
   options: StructuredCallOptions, // cacheSystemPrefix, actionId
 ): Promise<ToolStepResult>
 
-type ToolStepTool = { description: string; inputSchema: z.ZodType; execute?: never }
+type ToolStepTool = { description: string; inputSchema: z.ZodObject; execute?: never }
 
 type ToolStepRequest = {
   prompt: PromptHalves // the pair, sent first
@@ -79,11 +79,11 @@ type ToolStepRequest = {
 }
 
 type ToolStep = {
-  calls: readonly { toolCallId: string; toolName: string; input: unknown }[]
+  calls: readonly { toolCallId: string; toolName: string; input: Record<string, unknown> }[]
   invalidCalls: readonly { toolCallId: string; toolName: string; detail: string }[]
-  responseMessages: readonly ModelMessage[] // as the SDK returned them
+  responseMessages: readonly (AssistantModelMessage | ToolModelMessage)[] // as the SDK returned them
   text: string
-  finishReason: FinishReason
+  finishReason: Exclude<FinishReason, 'length' | 'content-filter'> // a cut or filtered reply is never a step
   usage: LanguageModelUsage
 }
 
@@ -101,7 +101,11 @@ type ToolStepResult =
       failure: ContextWindowFailure
       recoverable: readonly CallRetryError[]
     }
-  | { status: 'failed'; error: CallRetryError; recoverable: readonly CallRetryError[] }
+  | {
+      status: 'failed'
+      error: Exclude<CallRetryError, { tier: 'reply-cut-off' }> // a second cut stops instead
+      recoverable: readonly CallRetryError[]
+    }
   | { status: 'not-configured'; kind: ResolveFailureKind }
   | { status: 'aborted'; recoverable: readonly CallRetryError[] }
 ```
@@ -111,7 +115,7 @@ so the caller copies them into `CloseReport.stopped`. Every arm but `not-configu
 `recoverable`, so `retriedAttemptEvents` works unchanged.
 
 - **One request.** The pair goes first, a blank system half left out as
-  `promptParams` does (`lib/ai/generate.ts:199-204`), then
+  `promptParams` does (`lib/ai/generate.ts`), then
   `request.messages`, then `tools`. No `stopWhen`, so `generateText`
   stops after one step (`ai/src/generate-text/generate-text.ts:261`). No
   streaming. `runProviderCall` keeps `maxRetries: 0`, so retries stay in
@@ -121,7 +125,7 @@ so the caller copies them into `CloseReport.stopped`. Every arm but `not-configu
   inside one.
 - **The chain.** The cache marker when `cacheSystemPrefix` is set on an
   `anthropic` provider, `carriedCapabilities`, then the window check
-  last, as `streamText` orders them (`generate.ts:257-263`), with no JSON
+  last, as `streamText` orders them (`lib/ai/generate.ts`), with no JSON
   contract. `checkInputTokens` runs on every attempt. `withMiddleware`,
   `windowCheck`, `carriedCapabilities` and `marksSystemPrefix` are
   private to `generate.ts` today: export them inside the module, not from
@@ -133,32 +137,36 @@ so the caller copies them into `CloseReport.stopped`. Every arm but `not-configu
   caller answers `calls` only, and a step whose calls were all invalid
   still isn't a finished task.
 
-**Cut-off retry.** `callWithRetry` gains `maxCutOffAttempts`, default 1,
-so every shipped caller keeps failing at once. Under the budget a
-`ReplyCutOffError` from `parseFn` goes in `recoverable` and the call
-repeats; at it, the call fails with `reply-cut-off`. The step passes 2,
-with `maxProviderAttempts: 2`, as a structured call does.
-Its `parseFn` reads `'length'` with `isCutOff` before anything else, so a
-cut reply's calls and messages go with it and never reach the caller. A
-second cut returns `stopped`, `reason: 'cut-off'`. `provider.reply_cut_off`
-logs each cut with an `outcome` of `retried` or `stopped`.
+**Cut-off retry.** `callWithRetry` doesn't change: a `ReplyCutOffError`
+from `parseFn` still fails a call at once. The step runs it with
+`maxProviderAttempts: 2` and `maxParseAttempts: 1`, and on a
+`reply-cut-off` failure runs it once more, under a fresh bound.
+Its `parseFn` reads `'length'` and `'content-filter'` before anything
+else, so a cut or filtered reply's calls and messages go with it and
+never reach the caller. A second cut or filter returns `stopped`,
+`reason: 'cut-off'`, with the first one in `recoverable`.
+`provider.reply_cut_off` logs each with an `outcome` of `retried` or
+`stopped`.
 
 **Output default.** `TOOL_STEP_MAX_OUTPUT_DEFAULT = 8_000` goes out as
 `maxOutputTokens` when the profile sets none, a story override's
-`params: {}` included (`lib/ai/resolve-model.ts:83`). The same number
-reaches `replyCutOff` as `maxOutput`: `generate.ts:488` passes only the
-profile's, and a reasoning spiral would read as `unknown`.
+`params: {}` included (`lib/ai/resolve-model.ts:83`). `replyCutOff`
+gets as `maxOutput` the `max_tokens` the request sent: Anthropic's
+adapter adds the thinking budget to the step's number and caps the sum
+at a known model's maximum, and where the request body shows none
+(openai-compatible's is a string), it gets the step's number.
+`generateStructured` passes only the profile's, and a reasoning spiral
+would read as `unknown`.
 
-**Call bound (C2).** If [Slice 5.2](./02-first-chapter.md) hasn't landed
-it: `callTimeoutMs` and `CALL_TIMEOUT_DEFAULT_MS` in `lib/ai`, keyed by
-agent id, the profile's `timeout` else ten minutes. `passTimeoutMs`
-delegates with `'classifier'`, and `PASS_TIMEOUT_DEFAULT_MS` stays
-exported for `scripts/classifier-parse-probe.ts:42`. The step holds its
-own bound over the whole call, retries included, as a pass's call has
-(`lib/pipeline/definitions/periodic-classifier.ts:270`), and a profile
-`timeout` also bounds each attempt. An expiry returns `failed` with a
-provider `timeout` naming the bound, and a cancel returns `aborted`, so
-the caller needn't tell them apart as the pass does at `:287`.
+**Call bound (C2).** The step bounds its call with
+[Slice 5.2](./02-first-chapter.md)'s `callTimeoutMs` for its target: the
+profile's `timeout`, else ten minutes. The bound holds over the whole
+call, provider retries included, as a pass's call has
+(`lib/pipeline/definitions/periodic-classifier.ts:270`); being the
+profile's `timeout`, it bounds each attempt too. A cut-off retry runs
+under a fresh bound. An expiry returns `failed` with a provider `timeout` naming the
+bound, and a cancel returns `aborted`, so the caller needn't tell them
+apart as the pass does at `:287`.
 
 **Window check.**
 
@@ -166,7 +174,8 @@ the caller needn't tell them apart as the pass does at `:287`.
   reasoning text, each tool call's name and input, each tool result's
   name and output, and each tool definition, serialized as JSON. `file`
   parts stay at 0.
-- `checked` takes `params.tools` (`lib/ai/context-window.ts:153-154`), and
+- `checked` takes `params.tools` (`windowCheckMiddleware` in
+  `lib/ai/context-window.ts`), and
   a `ModelTools` type derives beside `ModelPrompt`
   (`lib/ai/prompt-schema.ts:5-6`).
 - **A first call against a later step.** A `context-window` failure,
@@ -181,7 +190,7 @@ the caller needn't tell them apart as the pass does at `:287`.
   `toolCalling`, as canon's `CapabilityHint` has it.
 - `toolCalling: false` in `CARRIED_NOTHING`, and an arm in
   `carriedCapabilities` reading a non-empty `params.tools`
-  (`generate.ts:172-190`).
+  (`lib/ai/generate.ts`).
 - The union's growth reaches two consumers, and both have to move here:
   `HINT_FIX_TAGS` gets `toolCalling: true`
   (`components/reader/system-entry-actions.tsx:106-109`), and
@@ -194,8 +203,9 @@ the caller needn't tell them apart as the pass does at `:287`.
 **Mocks.**
 
 - **Wire.** `FinishReason` gains `tool_calls` and `content_filter`, and
-  `completionBody` learns tool calls and `reasoning_content`
-  (`scripts/mock-llm/respond/wire.ts:102,118-132`), from one reply type:
+  a sibling `toolStepBody` writes tool calls and `reasoning_content` in
+  the completion envelope `completionBody` shares, which stays as it
+  was (`scripts/mock-llm/respond/wire.ts`), from one reply type:
 
   ```ts
   type MockToolStep = {
@@ -229,28 +239,40 @@ the caller needn't tell them apart as the pass does at `:287`.
   `overflowNextStructured` take it, so a tool lane needs no one-shots of
   its own.
 - **Dev mock.** `Route` gains a tool arm
-  (`scripts/mock-llm/routing.ts:145-158`), and a tool lane appears in the
-  panel as `ctx.discovered` lanes do. A canned response's value is a
-  `MockToolStep`, checked by `validateLaneValue`, and sequence cycling
-  scripts a conversation. `malformed` cuts the first call's arguments in
-  half, and `length` keeps the calls whole with `finish_reason: 'length'`.
+  (`scripts/mock-llm/routing.ts`), and a tool lane lists in the
+  panel under its own **Tools** group, saved `tools:` lanes included
+  across restarts. A canned response's value is a `MockToolStep`, checked
+  by `validateLaneValue`, and sequence cycling scripts a conversation.
+  `malformed` and `stream-cut` cut the first call's arguments in half, and
+  `length` keeps the calls whole with `finish_reason: 'length'`.
   An unconfigured lane answers `{}` and `stop`, as it does now.
 - **Record mode.** On a tool lane `passthrough` returns the reply as a
   `MockToolStep`, the log's `served` holds it, and `recordedValue`
   (`scripts/mock-llm/control.ts:38`) saves it, so a real model's calls
-  replay (`scripts/mock-llm/passthrough.ts:38-45`).
+  replay (`toolStepOfCompletion` in `scripts/mock-llm/passthrough.ts`).
 
 **Stub.** `tool-step` in `lib/ai/stub/scenarios.ts`: the first reply holds
 a `thinking` block with a signature and a `tool_use` block, stopping on
-`tool_use`; a request carrying a `tool_result` gets plain text.
-`tool-step-cut` stops on `max_tokens`. This is the one route
-to `@ai-sdk/anthropic`'s tool parsing and signature replay without a
-network, and stays unit-only.
+`tool_use`; a request carrying `tool_result`s gets plain text only when
+the assistant turn before each of them opens with its thinking block
+whole (type, text and signature), else a 400 naming the thinking block.
+`tool-step-cut` stops on `max_tokens` and reports the request's
+`max_tokens` as its output tokens, so a cut reads as `max-output`. This
+is the one route to `@ai-sdk/anthropic`'s tool parsing and signature
+replay without a network, and stays unit-only.
 
 **Canon, in the same PR.**
 
 - [`generation-pipeline.md → Two retry tiers`](../../../../generation-pipeline.md#two-retry-tiers-both-at-phase-level):
-  `callWithRetry`'s options, and the step's exception to "isn't retried".
+  the step's exception to "isn't retried", and the causes a cut-off
+  failure carries.
+- [`generation-pipeline.md → Cut-off replies`](../../../../generation-pipeline.md#cut-off-replies):
+  a filter stop on a step takes the cut-off path.
+- [`memory/chapter-close.md → When a task stops`](../../../../memory/chapter-close.md#when-a-task-stops):
+  the retry's fresh bound, and a filter stop beside a cut.
+- [`generation-pipeline.md → Fatal error categories`](../../../../generation-pipeline.md#fatal-error-categories):
+  `provider.possibleCapabilityMismatch`: tool calling is carried when a
+  non-empty tool list went out.
 - [`architecture.md → Recognizing an overflow rejection`](../../../../architecture.md#recognizing-an-overflow-rejection):
   its list of calls the check wraps.
 - [`observability.md → Subsystem emission inventory`](../../../../observability.md#subsystem-emission-inventory):
@@ -310,10 +332,11 @@ Unit paths run with `pnpm vitest run --project unit <path>`.
 - **One retry on a cut.** `lib/ai/tool-step.test.ts`: `length` then a
   normal reply is two requests, `ok`, one `reply-cut-off` in `recoverable`;
   `length` twice is two requests and `stopped`, `reason: 'cut-off'`; whole
-  calls on a `length` reply appear nowhere in the result.
-  `lib/ai/transport/call-with-retry.test.ts`: with the option omitted, a
-  `ReplyCutOffError` still fails on the first attempt.
-- **Window count.** The test at `lib/ai/context-window.test.ts:203-232`
+  calls on a `length` reply appear nowhere in the result. A
+  `content-filter` stop takes the same path, with cause `content-filter`.
+  `lib/ai/transport/call-with-retry.test.ts`: its existing cut-off tests
+  pass unchanged, since `callWithRetry` gains no option.
+- **Window count.** The part-type test in `lib/ai/context-window.test.ts`
   flips: reasoning and a `tool-result` count, `file` stays 0.
   `lib/ai/window-check.test.ts`: a prompt under the window whose tool
   definitions take it over is refused unsent.
@@ -322,7 +345,8 @@ Unit paths run with `pnpm vitest run --project unit <path>`.
   with tier `context-window`, `false` returns `stopped` with reason
   `window`, and neither is retried.
 - **Bound.** `lib/ai/tool-step.test.ts`: an expiry returns `failed` with a
-  provider `timeout`, an abort of `signal` returns `aborted`, and
+  provider `timeout`, an abort of `signal` returns `aborted`, a cut-off
+  retry runs under a fresh bound ("gives the retry a whole bound…"), and
   `'lore-mgmt'`'s profile sets the bound. The `passTimeoutMs` tests at
   `lib/pipeline/definitions/periodic-classifier.test.ts:3635` pass
   unchanged.
@@ -361,70 +385,80 @@ Unit paths run with `pnpm vitest run --project unit <path>`.
 - **No E2E of its own.** Nothing in the app sends a step until 5.5a, and
   the first scripted E2E is 5.10's Auto close. The existing suite is the
   regression check on `wire.ts`.
-- **Prove the branches can fail.** The cut-off budget, the `firstCall` arm
-  and the output default each read fine with the branch removed, so
-  mutate each once before calling its test done.
+- **Prove the branches can fail.** The step's second run on a
+  `reply-cut-off` failure, the `firstCall` arm and the output default each
+  read fine with the branch removed, so mutate each once before calling
+  its test done.
 
 ## Open questions
 
-- **A step with no call that stops on `content-filter` or `other`.**
-  Canon's general rule reads both as finished, so a filtered step ends its
-  task with no sign of it, while a structured call retries a filter once.
-  Does a step retry it? `finishReason` reaches the caller either way, and
-  the answer is one branch in the step's `parseFn`.
-- **A `length` reply holding whole calls.** This slice reads "never a
-  finished task, whatever it holds" and "retried once" as dropping them
-  and sending the same prompt again. Confirm that reading: the other one
-  runs whole calls from a reply the server stopped.
-- **Do tool steps stream?** Canon doesn't say. They don't here: the loop
-  needs the whole reply, a close has no streaming surface, and a streamed
-  request lands on both mocks' narrative path. The cost is that a stalled
-  step shows nothing until its bound expires.
-- **Max output for boundary and metadata.** The 8k default is stated for a
-  step, and a story override sends these calls no limit. Do they take it
-  too? `generateStructured` doesn't change here; the answer lands in
-  [Slice 5.2](./02-first-chapter.md) for metadata and
-  [Slice 5.10](./10-two-starts.md) for boundary.
-- **A cut-off boundary reply.** Is it unusable, so it takes the fallback,
-  or a failed call? Canon names only a provider failure as failed. The
-  answer lands in [Slice 5.10](./10-two-starts.md).
-- **The bound across a cut-off retry.** Bounded "as a pass's is", the
-  retry shares the first attempt's time, so an expiry on it fails the
-  close where the same reply cut again would only stop the task. Does the
-  retry get a fresh bound? This slice keeps the pass's rule.
-- **Does a close's step carry the cache marker?** The step takes
-  `cacheSystemPrefix`, so neither answer changes it. Anthropic's
-  prompt-caching docs put the prefix in the order tools, system, messages,
-  and a change to tool definitions invalidates all of it (read 2026-11-01,
-  not tested by a request). So under `closeTools: separate` the chapter's
-  cache holds across a task's own steps and not across tasks, and a marker
-  writes it again for each tool list. [Slice 5.5a](./05a-task-runner.md)
-  decides.
-- **The cross-check on a server that drops past reasoning.** The estimate
-  counts reasoning sent back. A chat template that renders only the latest
-  reasoning reports fewer input tokens, so a long conversation could read
-  under 0.5, raise the truncation toast, and stop early on a window it
-  hasn't filled. Unverified on any server; `provider.input_ratio` in
-  [Slice 5.5b](./05b-identity-threads.md)'s run shows it.
-
-- **One helper for a bounded structured call?** The sequence
-  `boundedSignal`, `generateStructured`, dispose, `retriedAttemptEvents`,
-  aborted-versus-expired, `structuredCallFailure` is written out twice
-  after [Slice 5.2](./02-first-chapter.md): the periodic classifier pass
-  and the close's metadata call
-  (`lib/pipeline/definitions/chapter-close-metadata-call.ts`). A tool
-  step would be the third copy and Slice 5.10's boundary call the
-  fourth. Suggested: one helper in `lib/pipeline` returning
-  `ok | aborted | failed`, landed with the first new caller.
-  `ResolveModelConfig` is built inline at each structured caller too
-  (`lib/pipeline/runtime/preflight.ts:18`, and under
-  `lib/pipeline/definitions/`: `periodic-classifier.ts`,
-  `suggestion-refresh.ts`, `per-turn-piggyback.ts`,
-  `chapter-close-metadata-call.ts`; `per-turn.ts` builds it inline too),
-  and `generateToolStep` takes one (`config`, above). One builder would
-  keep a new field from being missed at one of them. Routed from triage
-  2026-11-06.
+None open: each was answered here or moved to the slice that owns it
+(Implementation notes, below).
 
 ## Implementation notes
 
-_Populated at finish: notable deviations from the plan and resolved developer decisions._
+- **A filtered step takes the cut-off path (developer decision at slice
+  planning).** A `content-filter` stop, calls or not, is dropped and the
+  step runs once more; a second filter or cut returns `stopped`,
+  `reason: 'cut-off'`, with the second stop's cause. C4 is unchanged, so
+  the review reads it as a cut-off. `chapter-close.md` ends a task only
+  on a reply that finishes normally, canon already retries a filtered
+  structured call once since a filter may not trip twice, and stopping
+  rather than failing keeps a persistent filter (Anthropic's `refusal`)
+  from blocking a story's turns. An `'other'` finish with no raw reason
+  counts as finished, as on a structured call: the body still arrived
+  whole.
+- **A cut-off retry runs under a fresh bound (developer decision at
+  slice planning).** The cut attempt is the one most likely to have
+  spent most of a shared bound, so a second slow loop would fail the
+  close where a second cut only stops the task. The step runs
+  `callWithRetry` twice and `callWithRetry` doesn't change: the brief's
+  `maxCutOffAttempts` would have needed a re-armed bound crossing its
+  loop. The step keeps no per-attempt timer, since its run's bound is
+  the same profile `timeout`, armed first.
+- **A `length` reply's whole calls are dropped and the request sent
+  again (developer decision at slice planning):** "never a finished
+  task, whatever it holds", and canon won't repair a cut reply into a
+  valid but wrong one.
+- **Tool steps don't stream (developer decision at slice planning).**
+  The loop needs the whole reply, a close has no streaming surface, and
+  both mocks route a streamed request to the narrative lane. A stalled
+  step shows nothing until its bound expires.
+- **The output limit is the profile's `maxOutput`, else 8,000, a story
+  override included (developer decision at slice planning).** For a
+  step a cap turns a reasoning loop into a task stop, where no cap runs
+  it to the server's limit or the bound, and an expiry fails the close.
+  Metadata takes the profile's only
+  ([Slice 5.2](./02-first-chapter.md#implementation-notes)); boundary
+  takes the step's 8k by default, an open question of
+  [Slice 5.10](./10-two-starts.md#open-questions)'s.
+- **A tool schema with a `.transform` is refused before any request.**
+  The plan accepted one; the SDK writes the parsed value into
+  `responseMessages` as the call's input, which the next step sends back
+  (a string there is a non-object Anthropic `tool_use.input`). A tool's
+  `inputSchema` is a `z.ZodObject`, so a transform on the schema itself
+  is a type error, and the step refuses one on a field at run time: it
+  converts both sides, the SDK's input side and `z.toJSONSchema`'s
+  output side, and returns `failed`, tier `parse`, attempt 0. No
+  schema-level guard sees every form that changes the value (a default,
+  a coercion, a `.trim()`, a `.transform().pipe(…)`), so the step keeps
+  this one and the rest is
+  [Slice 5.5a](./05a-task-runner.md#scope-in)'s tool contract: a schema
+  parses to what the model wrote (developer decision, 2026-11-07: "Q2:
+  A").
+- **The window check counts a tool call's input as its JSON,** a string
+  input included, since both adapters serialize it.
+- **The E2E harness fails a scripted tool step that throws or can't be
+  serialized at once,** with a 400 of a fixed text, so the step fails
+  with no retry, then rethrows to the spec. The body leaves out the
+  thrown message, since the app's classifier reads overflow and
+  capability keywords anywhere in a rejection. Left to hang, a mistake in a
+  [Slice 5.10](./10-two-starts.md) function step would cost a whole
+  bound.
+- **The answered questions went to their owners.** 5.2's "One helper for
+  a bounded structured call?" moved to
+  [Slice 5.10](./10-two-starts.md#open-questions), which already holds
+  the cut-off boundary reply; the cache marker on a close's steps stays
+  [Slice 5.5a](./05a-task-runner.md#open-questions)'s; the cross-check
+  on a server that drops past reasoning, and a cut attempt's dropped
+  usage, went to [Slice 5.5b](./05b-identity-threads.md#open-questions).

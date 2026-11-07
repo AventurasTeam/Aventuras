@@ -5,6 +5,7 @@ import {
   completionBody,
   contentFrame,
   CORS_HEADERS,
+  errorBody,
   mockUsage,
   overflowBody,
   overflowCounts,
@@ -12,12 +13,21 @@ import {
   roleFrame,
   SSE_HEADERS,
   stopFrames,
+  toolStepBody,
+  toolStepCompletionText,
   wantsStreamUsage,
   type FinishReason,
+  type MockToolStep,
   type MockUsage,
   type OverflowShape,
 } from '../../scripts/mock-llm/respond/wire'
-import { matchShape, promptText } from '../../scripts/mock-llm/routing'
+import {
+  matchShape,
+  promptText,
+  toolLaneKey,
+  toolLaneOf,
+  toolPromptText,
+} from '../../scripts/mock-llm/routing'
 
 /** The counter behind every usage the harness reports, for specs that assert a count. */
 export { mockUsage }
@@ -26,6 +36,8 @@ export { mockUsage }
 // (POST …/chat/completions) but a turn fans out into calls with different
 // shapes. The mock routes on the request:
 //   - stream: true          → an SSE prose stream (the narrative call).
+//   - carrying tools         → a tool step (MockToolStep) from that tool list's
+//     own queue (setToolSteps); an empty `stop` step when nothing is queued.
 //   - otherwise (structured) → a JSON chat completion, whose body is chosen by
 //     matching the exact TypeScript block the app injects into the prompt
 //     (schemaToTypeScriptBlock over the agent's zod schema). Each CALL SITE is
@@ -46,9 +58,12 @@ export { mockUsage }
 export type MockRequest = {
   body: Record<string, unknown>
   streamed: boolean
-  /** For structured calls, which agent's schema the prompt matched (or null). */
+  /** A structured call's matched shape, a tool call's lane key (`tools:a+b`), else null. */
   agent: string | null
 }
+
+/** A function step reads the call it answers, so it can name placeholders that prompt holds. */
+export type MockToolStepReply = MockToolStep | ((request: MockRequest) => MockToolStep)
 
 // Exported so scripts/mock-llm/shapes.test.ts can assert every registered shape
 // still has one and that each is schema-valid — a shape added to the shared
@@ -150,7 +165,10 @@ export type MockLlm = {
   url: string
   /** Set the prose the next streaming (narrative) call returns. */
   setNarrative: (content: string) => void
-  /** Override a structured agent's reply (defaults to its schema-valid example). */
+  /**
+   * Override a structured agent's reply (defaults to its schema-valid example). A value JSON can't
+   * hold fails its call with a 400; the error rethrows from the release, or from close() unheld.
+   */
   setStructured: (agentName: string, value: unknown) => void
   /** One-shot: the next narrative (streaming) call fails with HTTP 500. */
   failNextNarrative: () => void
@@ -163,26 +181,41 @@ export type MockLlm = {
   /** Finish any held narrative streams with the current narrative; a pending cut applies. */
   releaseNarrative: () => void
   /**
-   * One-shot: the next structured call matching the `agentName` shape is recorded in `requests`,
-   * then held unanswered until releaseStructured() or a client abort (the in-flight window).
+   * One-shot: the next call matching the `agentName` shape or tool lane key is recorded, then held
+   * unanswered until releaseStructured() or a client abort.
    */
   holdNextStructured: (agentName: string) => void
-  /** Answer every held structured call with its shape's reply as set now. */
+  /** Answer every held call with its reply as set now; a held tool call takes its step here. */
   releaseStructured: () => void
   /** One-shot: the next stream to finish (held: at release) sends the narrative, then 'length'. */
   cutNextNarrative: () => void
-  /** One-shot: the next `agentName` call answered (held: at release) sends `raw`, then 'length'. */
+  /**
+   * One-shot: the next `agentName` call answered (held: at release) sends `raw`, then 'length'.
+   * On a tool lane key it takes no queued step, so the retry gets it.
+   */
   cutNextStructured: (agentName: string, raw: string) => void
   /** One-shot: the next narrative stream to report usage claims a tenth of its prompt tokens. */
   underReportNextUsage: () => void
   /** One-shot: the next narrative call is rejected with an overflow 400 in `shape`. */
   overflowNextNarrative: (shape?: OverflowShape) => void
-  /** One-shot: the next call matching the `agentName` shape gets an overflow 400 in `shape`. */
+  /**
+   * One-shot: the next call matching the `agentName` shape, or on that tool lane key, gets an
+   * overflow 400 in `shape`; a tool lane's queued step stays for the next call.
+   */
   overflowNextStructured: (agentName: string, shape?: OverflowShape) => void
+  /**
+   * Replace the tool lane's queue; each answered call takes the next step, none left: `stop`.
+   * A step that throws or can't be serialized fails its call with a 400; the error rethrows from
+   * the release, or from close() for an unheld call.
+   */
+  setToolSteps: (tools: readonly string[], steps: readonly MockToolStepReply[]) => void
   /** Every completion request received, in order. */
   requests: MockRequest[]
   close: () => Promise<void>
 }
+
+// No thrown message: the app's classifier reads overflow and capability keywords anywhere in a body.
+const SCRIPT_THREW = 'mock harness: a scripted reply threw'
 
 const DEFAULT_NARRATIVE =
   'The blade rasps free of its sheath. Somewhere in the drowned city, a bell answers, and the rain leans closer to listen.'
@@ -211,8 +244,8 @@ export async function startMockLlm(): Promise<MockLlm> {
   // finish them and a client abort can drop them — an unfinished socket would hang server.close().
   const heldResponses = new Map<ServerResponse, Record<string, unknown>>()
   let holdStructuredNext: string | null = null
-  // res → the shape to answer with and the prompt its usage counts; a client abort drops it.
-  const heldStructured = new Map<ServerResponse, { agentName: string; prompt: string }>()
+  // res → its answer, run at release so it reads the replies set by then; a client abort drops it.
+  const heldStructured = new Map<ServerResponse, () => void>()
   let cutNarrativeNext = false
   // Shape name → the raw reply its next answered call sends.
   const cutStructured = new Map<string, string>()
@@ -220,6 +253,10 @@ export async function startMockLlm(): Promise<MockLlm> {
   let overflowNarrativeNext: OverflowShape | null = null
   // Shape name → the overflow shape its next call is rejected with.
   const overflowStructured = new Map<string, OverflowShape>()
+  // Tool lane key → the steps its next answered calls take, in order.
+  const toolSteps = new Map<string, MockToolStepReply[]>()
+  // An unheld call's throw has no caller to reach, so close() rethrows the first one.
+  let unheldThrow: { error: unknown } | undefined
 
   // Spent by the next stream to finish, so a held stream released later takes it.
   const narrativeFinish = (): FinishReason => {
@@ -257,28 +294,97 @@ export async function startMockLlm(): Promise<MockLlm> {
     res.end(overflowBody(shape, overflowCounts(prompt)))
   }
 
-  const answerStructured = (
-    res: ServerResponse,
-    agentName: string | null,
-    prompt: string,
-  ): void => {
-    res.writeHead(200, { ...cors, 'content-type': 'application/json' })
-    if (agentName === null) {
-      res.end(completionBody('{}', 'stop', mockUsage(prompt, '{}')))
-      return
-    }
+  const structuredBody = (agentName: string | null, prompt: string): string => {
+    if (agentName === null) return completionBody('{}', 'stop', mockUsage(prompt, '{}'))
     const cut = cutStructured.get(agentName)
     cutStructured.delete(agentName)
     const content = cut ?? JSON.stringify(overrides.get(agentName) ?? EXAMPLES[agentName])
-    res.end(
-      completionBody(content, cut !== undefined ? 'length' : 'stop', mockUsage(prompt, content)),
+    return completionBody(
+      content,
+      cut !== undefined ? 'length' : 'stop',
+      mockUsage(prompt, content),
     )
   }
 
+  // A cut takes no queued step, so the retry after it gets that step.
+  const nextToolStep = (lane: string, request: MockRequest): MockToolStep => {
+    const cut = cutStructured.get(lane)
+    if (cut !== undefined) {
+      cutStructured.delete(lane)
+      return { text: cut, finishReason: 'length' }
+    }
+    const reply = toolSteps.get(lane)?.shift()
+    if (reply === undefined) return {}
+    return typeof reply === 'function' ? reply(request) : reply
+  }
+
+  const toolBody = (lane: string, request: MockRequest, prompt: string): string => {
+    const step = nextToolStep(lane, request)
+    return toolStepBody(step, mockUsage(prompt, toolStepCompletionText(step)))
+  }
+
+  // Built before any header goes out, so a throw (a value JSON can't hold) still ends the response.
+  const respond = (res: ServerResponse, build: () => string): void => {
+    let replyBody: string
+    try {
+      replyBody = build()
+    } catch (error) {
+      // Answered first so the client fails at once instead of waiting out its bound.
+      res.writeHead(400, { ...cors, 'content-type': 'application/json' })
+      res.end(errorBody(SCRIPT_THREW, 'mock_harness_error'))
+      throw error
+    }
+    res.writeHead(200, { ...cors, 'content-type': 'application/json' })
+    res.end(replyBody)
+  }
+
+  const respondUnheld = (res: ServerResponse, build: () => string): void => {
+    try {
+      respond(res, build)
+    } catch (error) {
+      unheldThrow ??= { error }
+    }
+  }
+
+  // `key` is the call's shape or tool lane; null for a structured call no shape matched.
+  const answerCall = (
+    res: ServerResponse,
+    key: string | null,
+    prompt: string,
+    build: () => string,
+  ): void => {
+    if (key === null) {
+      respondUnheld(res, build)
+      return
+    }
+    const overflow = overflowStructured.get(key)
+    if (overflow !== undefined) {
+      overflowStructured.delete(key)
+      rejectOverflow(res, overflow, prompt)
+      return
+    }
+    if (key === holdStructuredNext) {
+      holdStructuredNext = null
+      heldStructured.set(res, () => respond(res, build))
+      res.on('close', () => heldStructured.delete(res))
+      return
+    }
+    respondUnheld(res, build)
+  }
+
+  // Every held call is answered even if one throws; the first throw surfaces after.
   const releaseHeldStructured = (): void => {
-    const held = [...heldStructured]
+    const held = [...heldStructured.values()]
     heldStructured.clear()
-    for (const [res, { agentName, prompt }] of held) answerStructured(res, agentName, prompt)
+    let thrown: { error: unknown } | undefined
+    for (const answer of held) {
+      try {
+        answer()
+      } catch (error) {
+        thrown ??= { error }
+      }
+    }
+    if (thrown !== undefined) throw thrown.error
   }
 
   const server = createServer((req, res) => {
@@ -333,22 +439,19 @@ export async function startMockLlm(): Promise<MockLlm> {
         return
       }
 
+      const lane = toolLaneOf(body)
+      if (lane !== null) {
+        const request: MockRequest = { body, streamed, agent: lane }
+        requests.push(request)
+        const prompt = toolPromptText(body)
+        answerCall(res, lane, prompt, () => toolBody(lane, request, prompt))
+        return
+      }
+
       const text = promptText(body)
-      const agent = matchShape(null, text)
-      requests.push({ body, streamed, agent: agent?.name ?? null })
-      const overflow = agent !== null ? overflowStructured.get(agent.name) : undefined
-      if (agent !== null && overflow !== undefined) {
-        overflowStructured.delete(agent.name)
-        rejectOverflow(res, overflow, text)
-        return
-      }
-      if (agent !== null && agent.name === holdStructuredNext) {
-        holdStructuredNext = null
-        heldStructured.set(res, { agentName: agent.name, prompt: text })
-        res.on('close', () => heldStructured.delete(res))
-        return
-      }
-      answerStructured(res, agent?.name ?? null, text)
+      const agent = matchShape(null, text)?.name ?? null
+      requests.push({ body, streamed, agent })
+      answerCall(res, agent, text, () => structuredBody(agent, text))
     })()
   })
 
@@ -389,13 +492,23 @@ export async function startMockLlm(): Promise<MockLlm> {
     overflowNextStructured: (agentName, shape = 'llamacpp') => {
       overflowStructured.set(agentName, shape)
     },
+    setToolSteps: (tools, steps) => {
+      toolSteps.set(toolLaneKey(tools), [...steps])
+    },
     requests,
     close: () =>
-      new Promise<void>((resolve) => {
+      new Promise<void>((resolve, reject) => {
+        // An unheld throw kept earlier came before any held throw here; surfaced once.
+        let thrown = unheldThrow
+        unheldThrow = undefined
         // Finish held calls first, else an open socket hangs server.close().
-        finishHeldNarratives()
-        releaseHeldStructured()
-        server.close(() => resolve())
+        try {
+          finishHeldNarratives()
+          releaseHeldStructured()
+        } catch (error) {
+          thrown ??= { error }
+        }
+        server.close(() => (thrown === undefined ? resolve() : reject(thrown.error)))
       }),
   }
 }

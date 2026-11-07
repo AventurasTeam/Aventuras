@@ -1,6 +1,40 @@
 import { describe, expect, it } from 'vitest'
 
-import { makeScenarioFetch } from './scenarios'
+import {
+  makeScenarioFetch,
+  STUB_THINKING,
+  STUB_THINKING_SIGNATURE,
+  STUB_TOOL_INPUT,
+  STUB_TOOL_NAME,
+} from './scenarios'
+
+type StubMessage = { content: Record<string, unknown>[]; stop_reason: string }
+
+const USER_TURN = { role: 'user', content: [{ type: 'text', text: 'Open the door.' }] }
+const SIGNED_THINKING = {
+  type: 'thinking',
+  thinking: STUB_THINKING,
+  signature: STUB_THINKING_SIGNATURE,
+}
+const TOOL_USE = {
+  type: 'tool_use',
+  id: 'toolu_stub_1',
+  name: STUB_TOOL_NAME,
+  input: STUB_TOOL_INPUT,
+}
+const TOOL_RESULT = {
+  role: 'user',
+  content: [{ type: 'tool_result', tool_use_id: 'toolu_stub_1', content: 'A heavy oak door.' }],
+}
+
+/** An Anthropic request body: the user turn, then whatever follows it. */
+function sent(...after: unknown[]): RequestInit {
+  return {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ model: 'claude-3-haiku-20240307', messages: [USER_TURN, ...after] }),
+  }
+}
 
 async function payloadText(res: Response): Promise<string> {
   const body = (await res.json()) as { content: { text: string }[] }
@@ -36,6 +70,98 @@ describe('makeScenarioFetch', () => {
 
   it('mid-stream-timeout rejects immediately with a timeout error', async () => {
     await expect(makeScenarioFetch('mid-stream-timeout')('https://stub.test')).rejects.toThrow()
+  })
+
+  it('tool-step opens a conversation with a signed thinking block and a tool_use', async () => {
+    const res = await makeScenarioFetch('tool-step')('https://stub.test', sent())
+
+    expect(res.status).toBe(200)
+    expect((await res.json()) as StubMessage).toMatchObject({
+      content: [SIGNED_THINKING, TOOL_USE],
+      stop_reason: 'tool_use',
+    })
+  })
+
+  it('tool-step answers text once a tool_result follows the signed thinking block', async () => {
+    const res = await makeScenarioFetch('tool-step')(
+      'https://stub.test',
+      sent({ role: 'assistant', content: [SIGNED_THINKING, TOOL_USE] }, TOOL_RESULT),
+    )
+
+    expect(res.status).toBe(200)
+    expect((await res.json()) as StubMessage).toMatchObject({
+      content: [{ type: 'text', text: 'The door opens.' }],
+      stop_reason: 'end_turn',
+    })
+  })
+
+  it.each([
+    ['without the thinking block', [TOOL_USE]],
+    ['with the thinking block after it', [TOOL_USE, SIGNED_THINKING]],
+    ['with another signature', [{ ...SIGNED_THINKING, signature: 'forged' }, TOOL_USE]],
+    ['with other thinking text', [{ ...SIGNED_THINKING, thinking: '' }, TOOL_USE]],
+    ['as another block type', [{ ...SIGNED_THINKING, type: 'redacted_thinking' }, TOOL_USE]],
+  ])('tool-step refuses a tool_result whose call came back %s', async (_label, content) => {
+    const res = await makeScenarioFetch('tool-step')(
+      'https://stub.test',
+      sent({ role: 'assistant', content }, TOOL_RESULT),
+    )
+
+    expect(res.status).toBe(400)
+    expect(await res.json()).toMatchObject({
+      type: 'error',
+      error: { type: 'invalid_request_error', message: expect.stringContaining('thinking block') },
+    })
+  })
+
+  describe('tool-step over an accumulated history of two exchanges', () => {
+    const exchange = (content: unknown[]) => [{ role: 'assistant', content }, TOOL_RESULT]
+    const intact = [SIGNED_THINKING, TOOL_USE]
+    const forged = [{ ...SIGNED_THINKING, signature: 'forged' }, TOOL_USE]
+
+    it('answers text when every assistant turn kept its thinking block', async () => {
+      const res = await makeScenarioFetch('tool-step')(
+        'https://stub.test',
+        sent(...exchange(intact), ...exchange(intact)),
+      )
+
+      expect(res.status).toBe(200)
+      expect((await res.json()) as StubMessage).toMatchObject({
+        content: [{ type: 'text', text: 'The door opens.' }],
+        stop_reason: 'end_turn',
+      })
+    })
+
+    it.each([
+      ['the latest', [...exchange(intact), ...exchange(forged)]],
+      ['an earlier', [...exchange(forged), ...exchange(intact)]],
+    ])('refuses when %s assistant turn lost its signature', async (_which, after) => {
+      const res = await makeScenarioFetch('tool-step')('https://stub.test', sent(...after))
+
+      expect(res.status).toBe(400)
+      expect(await res.json()).toMatchObject({
+        error: { message: expect.stringContaining('thinking block') },
+      })
+    })
+  })
+
+  it('tool-step-cut stops on max_tokens partway through its text', async () => {
+    const res = await makeScenarioFetch('tool-step-cut')('https://stub.test', sent())
+
+    expect((await res.json()) as StubMessage).toMatchObject({
+      content: [{ type: 'text', text: 'The door' }],
+      stop_reason: 'max_tokens',
+    })
+  })
+
+  it('tool-step-cut reports the output it was allowed, as a real cut does', async () => {
+    const init = sent()
+    const res = await makeScenarioFetch('tool-step-cut')('https://stub.test', {
+      ...init,
+      body: JSON.stringify({ ...JSON.parse(init.body as string), max_tokens: 4096 }),
+    })
+
+    expect(((await res.json()) as { usage: unknown }).usage).toMatchObject({ output_tokens: 4096 })
   })
 
   it('throws on an unknown scenario (bad cast guard)', async () => {

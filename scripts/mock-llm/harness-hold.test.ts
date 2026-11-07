@@ -70,6 +70,53 @@ describe('startMockLlm — a held structured call', () => {
   })
 })
 
+// Bounded, so a response left open fails its assertion instead of hanging the test.
+function within<T>(promise: Promise<T>, ms = 2000): Promise<T | 'pending'> {
+  let timer: ReturnType<typeof setTimeout> | undefined
+  const late = new Promise<'pending'>((resolve) => {
+    timer = setTimeout(() => resolve('pending'), ms)
+  })
+  return Promise.race([promise, late]).finally(() => clearTimeout(timer))
+}
+
+const statusOf = (response: Promise<Response>) => within(response.then((r) => r.status))
+
+describe('startMockLlm — a structured reply JSON cannot hold', () => {
+  it('fails a held call with a 400 and rethrows from close() while its client waits', async () => {
+    const llm = await started()
+    llm.setStructured('periodic-classifier', { n: 1n })
+    llm.holdNextStructured('periodic-classifier')
+    const held = structuredCall(llm, 'periodic-classifier')
+    await vi.waitFor(() => expect(llm.requests).toHaveLength(1))
+
+    await expect(within(llm.close())).rejects.toThrow('BigInt')
+
+    expect(await statusOf(held)).toBe(400)
+  })
+
+  it('fails an unheld call with a 400 and keeps the throw for close()', async () => {
+    const llm = await started()
+    llm.setStructured('periodic-classifier', { n: 1n })
+
+    expect(await statusOf(structuredCall(llm, 'periodic-classifier'))).toBe(400)
+
+    await expect(within(llm.close())).rejects.toThrow('BigInt')
+  })
+})
+
+describe('startMockLlm — a structured call no shape matches', () => {
+  it('answers it at once with an empty object, with no hold armed', async () => {
+    const llm = await started()
+    const response = fetch(`${llm.url}/chat/completions`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ model: 'mock', messages: [{ role: 'user', content: 'No block.' }] }),
+    })
+    expect(await within(replyOf(response))).toEqual({})
+    expect(llm.requests.map((r) => r.agent)).toEqual([null])
+  })
+})
+
 describe('startMockLlm — an unreadable request', () => {
   it('answers a body that is not JSON instead of leaving the client hanging', async () => {
     const llm = await started()

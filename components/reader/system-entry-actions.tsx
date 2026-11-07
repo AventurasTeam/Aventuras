@@ -106,6 +106,7 @@ function isResolveFailureKind(failure: string): failure is ResolveFailureKind {
 const HINT_FIX_TAGS = {
   reasoning: true,
   structuredOutput: true,
+  toolCalling: true,
 } as const satisfies Record<CapabilityHint['capability'], true>
 
 function isCapabilityHintTag(failure: string | undefined): boolean {

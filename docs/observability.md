@@ -230,8 +230,9 @@ convention, and the expectation that subsystems route through
   a reply stopped short, at a length limit, by a filter or with no
   finish signal; logged with the
   cause, the numbers and an `outcome`, `refused` or `accepted` for a
-  structured call and `failed`, `marked` or `in-block` for the
-  narrative; a refused structured call also carries `parseError`,
+  structured call, `retried` or `stopped` for a close's tool step,
+  and `failed`, `marked` or `in-block` for the narrative; a refused
+  structured call also carries `parseError`,
   the strict parse's error message, which tells a truncated reply
   from a complete one of the wrong shape), `context_window` (warn: a
   call refused by the pre-send check or rejected by the provider as

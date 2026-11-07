@@ -46,8 +46,8 @@ type CallWithRetryOpts = {
 
 // Two-tier retry: provider (network/5xx/timeout) and parse/data-shape. Retried failures
 // go in recoverable[]; the one exhausting a budget (or non-retryable) is the terminal
-// `error`. Aborts short-circuit, as do a callFn ContextWindowError and a parseFn
-// ReplyCutOffError (each would recur).
+// `error`. Aborts, a callFn ContextWindowError (would recur) and a parseFn ReplyCutOffError end
+// the run at once; any retry of a cut is the caller's.
 export async function callWithRetry<T, R = string>(
   callFn: (signal: AbortSignal) => Promise<R>,
   parseFn: (raw: R) => T,

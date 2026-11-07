@@ -405,10 +405,10 @@ describe('callWithRetry and the capability hint', () => {
 
   // The window check's chain learns what a request carried only as the request goes out.
   it('reads what the request carried after it failed', async () => {
-    let carried = { reasoning: false, structuredOutput: false }
+    let carried = { reasoning: false, structuredOutput: false, toolCalling: false }
     const res = await callWithRetry(
       async (): Promise<string> => {
-        carried = { reasoning: true, structuredOutput: false }
+        carried = { reasoning: true, structuredOutput: false, toolCalling: false }
         throw rejected()
       },
       (raw) => JSON.parse(raw),

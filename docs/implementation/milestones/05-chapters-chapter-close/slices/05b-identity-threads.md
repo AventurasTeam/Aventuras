@@ -476,6 +476,19 @@ literals so a test can't derive its expectation from the constant.
   that writes `current_location_id` for a character the end turn didn't
   move would read as that turn's first move. Unverified; check before the
   first task that writes a location lands.
+- **Does the cross-check hold on a server that drops past reasoning?** A
+  close's step estimate counts the reasoning sent back. A chat template
+  that renders only the latest reasoning reports fewer input tokens, so
+  a long conversation could read under half the estimate, raise the
+  truncation toast and stop early on a window it hasn't filled. The dev
+  model renders it: [Slice 5.4](./04-tool-step.md)'s two steps on
+  `Gemma4-26B-A4B-QAT-MTP` reported the second's input as the first's
+  input and output plus the tool result. Other servers are unverified;
+  `provider.input_ratio` in this slice's run shows it.
+- **Does a cut attempt's spend count?** A step whose first reply was cut
+  returns the retry's usage; the cut attempt's survives only as
+  `outputTokens` in its `recoverable` failure. Does the cost measure
+  need it?
 
 ## Implementation notes
 

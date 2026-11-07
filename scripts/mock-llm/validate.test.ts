@@ -44,3 +44,43 @@ describe('validateLaneValue — a narrative state block', () => {
     expect(narrative(block)).toEqual({ ok: true })
   })
 })
+
+describe('validateLaneValue — a tool step', () => {
+  const step = (value: unknown) => validateLaneValue('tools:lookup', value)
+
+  it('accepts a step with text, reasoning, whole and malformed calls and a finish reason', () => {
+    expect(
+      step({
+        text: 'Looking.',
+        reasoning: 'The door first.',
+        toolCalls: [
+          { name: 'lookup', args: { query: 'the door' } },
+          { name: 'lookup', args: '{"query":' },
+        ],
+        finishReason: 'length',
+      }),
+    ).toEqual({ ok: true })
+  })
+
+  it('accepts the empty step', () => {
+    expect(step({})).toEqual({ ok: true })
+  })
+
+  it.each([
+    ['toolCalls that is no array', { toolCalls: { name: 'lookup', args: {} } }],
+    ['a call with no args', { toolCalls: [{ name: 'lookup' }] }],
+    ['a call with no name', { toolCalls: [{ args: {} }] }],
+    ["the wire's own tool_calls key", { tool_calls: [] }],
+    [
+      "a call's wire key arguments beside args",
+      { toolCalls: [{ name: 'lookup', args: {}, arguments: '{}' }] },
+    ],
+    ['a finish reason the wire has no name for', { finishReason: 'eos' }],
+  ])('refuses %s', (_label, value) => {
+    expect(step(value)).toMatchObject({ ok: false })
+  })
+
+  it('checks a lane of several tools the same way', () => {
+    expect(validateLaneValue('tools:lookup+note', { toolCalls: 5 })).toMatchObject({ ok: false })
+  })
+})

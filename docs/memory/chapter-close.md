@@ -187,7 +187,11 @@ A task's budget is 24 steps per part, tuned in play. Each step's output
 is bounded by the profile's max output, else 8k tokens, since a model
 can reason through its whole limit and never reply. Each call is bounded
 as a pass's is
-([`classifier.md → Failure policy`](./classifier.md#failure-policy)).
+([`classifier.md → Failure policy`](./classifier.md#failure-policy)),
+and a step's one retry after a cut-off or a filter stop is bounded
+afresh: the cut attempt is the one most likely to have spent the first
+bound, and a second cut only stops the task where an expiry would fail
+the close.
 
 Three things stop a task early. It keeps what landed and the review says
 so:
@@ -195,8 +199,8 @@ so:
 - It reaches its budget.
 - Its conversation outgrows the window partway through. A task's first
   call not fitting is a failed call instead.
-- A reply is cut off, and cut off again on its one retry. A cut-off reply
-  never counts as a finished task.
+- A reply is cut off or stopped by a filter, and again on its one
+  retry. Neither counts as a finished task, whatever it holds.
 
 ### Logs and anchors
 
