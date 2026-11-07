@@ -23,9 +23,8 @@ const CLOSE_TASK_COPY = {
 } as const satisfies Record<CloseTask, string>
 
 /**
- * C6: a close's banner label. Before a turn it says so in any phase; else it names the phase, and in
- * `agent` the task last started. The run keeps `closeProgress` to its end; the label stops reading
- * it at `report`.
+ * C6: a close's banner label; in `agent` it names the task last started. The run keeps
+ * `closeProgress` to its end; the label stops reading it at `report`.
  */
 export function closeBannerLabel(
   run: Pick<RunState, 'beforeTurn' | 'currentPhase' | 'closeProgress'>,

@@ -689,10 +689,7 @@ export function startPipeline<K extends string>(kind: K, ctx: RunCtxFor<K>): Pip
   }
 }
 
-/**
- * Starts `kind` and resolves once its chain has ended: the origin's result and the chain's end, or
- * the refusal. Rejects when the origin throws.
- */
+/** Starts `kind` and resolves once its chain has ended; rejects when the origin throws. */
 export async function startChain<K extends string>(
   kind: K,
   ctx: RunCtxFor<K>,

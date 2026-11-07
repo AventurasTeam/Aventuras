@@ -260,9 +260,8 @@ module.exports = defineConfig([
     },
   },
 
-  // A close's record writers: they write pendingClose and deferred, never a run or its progress.
-  // The one other record write is prose reversal's clearPendingClose, below. The owner blocks sit
-  // before the off-block, so their files' tests stay exempt.
+  // A close's record writers. The one other record write is prose reversal's clearPendingClose.
+  // Owner blocks sit before the off-block, so their files' tests stay exempt.
   {
     files: [
       'lib/actions/chapters/**',
@@ -283,7 +282,7 @@ module.exports = defineConfig([
     },
   },
 
-  // The prose-reversal bracket drives its run and drops a pick whose end entry the reversal removed.
+  // Prose reversal's bracket drives its run and drops a pick whose end entry the reversal removed.
   {
     files: ['lib/actions/story-entries/prose-reversal.ts'],
     rules: {

@@ -120,7 +120,7 @@ function openStoryOf(run: Pick<RunState, 'storyId' | 'branchId'>): OpenStory | n
 
 type MemoryRunKind = typeof PERIODIC_CLASSIFIER_KIND | typeof CHAPTER_CLOSE_KIND
 
-// `owesClose` is read after the held check, so a held branch never scans its region.
+// `owesClose` is read after the held check, so `nextMemoryRun` never scans a held branch's region.
 async function memoryRunOn(
   open: OpenStory,
   ctx: DbCtx,
