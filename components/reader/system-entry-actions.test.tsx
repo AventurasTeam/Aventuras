@@ -630,13 +630,16 @@ describe('closeResolvedEntry', () => {
     )
   })
 
-  it('marks either arm resolved, with no Retry', () => {
-    expect(closeResolvedEntry(SUBMISSION, 'nothing-owed').failure).toEqual({
-      kind: 'orchestrator',
-      submission: SUBMISSION,
-      close: 'resolved',
-    })
-  })
+  it.each(['closed', 'nothing-owed'] as const)(
+    'marks the %s arm resolved, with no Retry',
+    (arm) => {
+      expect(closeResolvedEntry(SUBMISSION, arm).failure).toEqual({
+        kind: 'orchestrator',
+        submission: SUBMISSION,
+        close: 'resolved',
+      })
+    },
+  )
 })
 
 describe('retryPassEntry', () => {

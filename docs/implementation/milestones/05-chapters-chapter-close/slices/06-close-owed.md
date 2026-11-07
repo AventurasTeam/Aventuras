@@ -300,12 +300,13 @@ leaves nothing stale.
   `PendingClose`'s type, and Config pre-flight validation's Surfacing
   line, which with `chapter-close.md → Tool calling` raises a close's
   entry when it fails a Send or a click; C14's record line in
-  `milestone.md`; two on-Retry rows in
-  `reader-composer.md`, **Chapter closed** and **Nothing left to close**, whose five broken-reference rows gain `Retry`
-  after their fix; and `principles.md`'s exceptions to head reversals
-  passing through, which name only a Retry's pass though the mark at
-  `isHeadReversalBlocked` in `generation.ts` also refuses them during a Send's owed work,
-  minutes long for a close. `generation-status-pill.md` already says a
+  `milestone.md`; in `reader-composer.md`, two on-Retry rows,
+  **Chapter closed** and **Nothing left to close**, and `Retry` after
+  the fix on its five broken-reference rows; and `principles.md`'s
+  exceptions to head reversals passing through, which name only a
+  Retry's pass though the mark at `isHeadReversalBlocked` in
+  `generation.ts` also refuses them during a Send's owed work, minutes
+  long for a close. `generation-status-pill.md` already says a
   toast, and stays.
 - `useConfigFixAction`'s comment: a config failure routes to settings
   and keeps Retry beside the fix.
@@ -575,10 +576,10 @@ answer in this slice's PR.
 - **A close Retry's resolved notice names which way it settled
   (provisional, 2026-11-07).** Two notices, "Chapter closed." when the
   Retry's own close committed and "Nothing left to close." when none was
-  owed, from one builder that takes the arm. One neutral copy would
-  mislead either way: after a committed close with a far-back pick the
-  open region can still sit over the threshold, so "nothing is left" is
-  false there. **Provisional:** the alternative left open is one neutral
+  owed, from one builder that takes the arm. The one shared copy,
+  "Nothing is left to close", was false after a committed close: with a
+  far-back pick the open region can still sit over the threshold.
+  **Provisional:** the alternative left open is one neutral
   notice, "The chapter close has nothing left to retry.", which holds in
   both arms.
 - **The manual start resolves the chain end's `TxResult` (C14), a

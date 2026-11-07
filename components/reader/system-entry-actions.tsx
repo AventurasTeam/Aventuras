@@ -371,10 +371,10 @@ export function closeResolvedEntry(
 
 /**
  * A close-failure entry's Retry: runs what the close owes, catch-up passes first. Committed or
- * nothing owed settles via `committed`, told which; a failed close rewrites the entry, a failed catch-up pass
- * or a held branch as a memory entry; a cancel, or a chain ending before the close, leaves it.
- * A `runClose` throw rewrites the entry as an `orchestrator` close failure; throws from `held`,
- * `committed` and the rewrites propagate.
+ * nothing owed settles via `committed`, told which; a failed close rewrites the entry, a failed
+ * catch-up pass or a held branch as a memory entry; a cancel, or a chain ending before the close,
+ * leaves it. A `runClose` throw rewrites the entry as an `orchestrator` close failure; throws from
+ * `held`, `committed` and the rewrites propagate.
  */
 export async function retryCloseEntry(deps: {
   runClose: () => Promise<OwedCloseRun>
