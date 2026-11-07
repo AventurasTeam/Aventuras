@@ -243,7 +243,7 @@ describe('chained transition', () => {
     expect(seen).toEqual([succComplete?.actionId])
   })
 
-  it('reports a failed successor of a beforeTurn start as not beforeTurn', async () => {
+  it("reports a failed successor of a beforeTurn start as beforeTurn: the Send's work too", async () => {
     const { ctx } = await makeHarness()
     definePipeline({
       kind: 'succ',
@@ -274,7 +274,7 @@ describe('chained transition', () => {
 
     expect(seen).toEqual([
       { kind: 'pred', outcome: 'completed', beforeTurn: true },
-      { kind: 'succ', outcome: 'failed', beforeTurn: false },
+      { kind: 'succ', outcome: 'failed', beforeTurn: true },
     ])
   })
 
@@ -308,7 +308,7 @@ describe('chained transition', () => {
     expect(entries.map((e) => e.id)).toEqual(['entry_pred'])
   })
 
-  it('marks only the started run as Send work, never its successor', async () => {
+  it("marks a beforeTurn start's successor as Send work too, and no other start's", async () => {
     const { ctx } = await makeHarness()
     const seen: Record<string, boolean | undefined> = {}
     async function* record({ actionId }: PhaseContext): AsyncGenerator<never, PhaseResult> {
@@ -327,11 +327,13 @@ describe('chained transition', () => {
     })
 
     await runPipeline('pred', { ...ctx, beforeTurn: true })
+    expect(seen).toEqual({ pred: true, succ: true })
 
-    expect(seen).toEqual({ pred: true, succ: false })
+    await runPipeline('pred', ctx)
+    expect(seen).toEqual({ pred: false, succ: false })
   })
 
-  it("names beforeTurn on the started run's run_complete, never on its successor's", async () => {
+  it("names beforeTurn on the run_complete of a beforeTurn start and of its successor's", async () => {
     const { ctx } = await makeHarness()
     defineChain()
     const seen: { kind: string; beforeTurn: boolean }[] = []
@@ -343,7 +345,7 @@ describe('chained transition', () => {
 
     expect(seen).toEqual([
       { kind: 'pred', beforeTurn: true },
-      { kind: 'succ', beforeTurn: false },
+      { kind: 'succ', beforeTurn: true },
     ])
   })
 
@@ -576,7 +578,7 @@ describe('split start', () => {
     const { origin, chain } = startPipeline('pred', { ...ctx, db })
 
     await expect(origin).rejects.toThrow('marker insert failed')
-    await expect(chain).resolves.toBeUndefined()
+    await expect(chain).resolves.toBeNull()
     expect(generationStore.getTxState().runs.size).toBe(0)
     expect(completes).toEqual([markerUnwound('pred')])
     await expect(runPipeline('pred', { ...ctx, db })).rejects.toThrow('marker insert failed')
@@ -617,8 +619,19 @@ describe('split start', () => {
     const { origin, chain } = startPipeline('pred', { ...ctx, db })
 
     expect(expectRan(await origin).outcome).toBe('completed')
-    await expect(chain).resolves.toBeUndefined()
+    const end = await chain
     expect(successor?.kind).toBe('succ')
+    // The chain ends on the unwound successor, failed as its run_complete reported it.
+    expect(end).toEqual({
+      kind: 'succ',
+      result: {
+        runId: successor!.runId,
+        actionId: successor!.actionId,
+        outcome: 'failed',
+        error: { kind: 'orchestrator', detail: expect.stringMatching(/^marker insert failed: /) },
+      },
+      cancelled: false,
+    })
     // Pred's run_complete fires with succ still registered, so only succ's reports idle.
     expect(completes).toEqual([
       { kind: 'pred', outcome: 'completed', idle: false },
@@ -659,7 +672,16 @@ describe('split start', () => {
     const { origin, chain } = startPipeline('pred', ctx)
 
     expect(expectRan(await origin).outcome).toBe('completed')
-    await expect(chain).resolves.toBeUndefined()
+    expect(await chain).toEqual({
+      kind: 'succ',
+      result: {
+        runId: successor!.runId,
+        actionId: successor!.actionId,
+        outcome: 'failed',
+        error: { kind: 'orchestrator', detail: expect.stringMatching(/^run threw: /) },
+      },
+      cancelled: false,
+    })
     expect(logged('pipeline.chain_run_failed')).toBe(true)
     // Unwound like a failed marker insert: otherwise it holds the gate until a restart.
     expect(completes).toEqual([
@@ -761,7 +783,16 @@ describe('split start', () => {
     const { origin, chain } = startPipeline('pred', ctx)
 
     expect(expectRan(await origin).outcome).toBe('completed')
-    await expect(chain).resolves.toBeUndefined()
+    expect(await chain).toEqual({
+      kind: 'succ',
+      result: {
+        runId: successor!.runId,
+        actionId: successor!.actionId,
+        outcome: 'failed',
+        error: { kind: 'orchestrator', detail: 'run threw: capture failed' },
+      },
+      cancelled: false,
+    })
     expect(completes).toEqual([
       { kind: 'pred', outcome: 'completed', idle: false },
       {
@@ -779,6 +810,113 @@ describe('split start', () => {
     expect(generationStore.getTxState().runs.size).toBe(0)
     expect(generationStore.isUserEditBlocked()).toBe(false)
     expect(logged('pipeline.chain_start_failed')).toBe(true)
+  })
+})
+
+// generation-pipeline.md → Chained transition: `chain` resolves to the run that ended the chain.
+describe("the chain's end", () => {
+  beforeEach(() => resetSingletons())
+  afterEach(() => resetSingletons())
+
+  type Start = { kind: string; runId: string; actionId: string }
+
+  function recordStarts(): Start[] {
+    const seen: Start[] = []
+    pipelineEventBus.subscribe('run_start', (e) => {
+      seen.push({ kind: e.kind, runId: e.runId, actionId: e.actionId })
+    })
+    return seen
+  }
+
+  it('resolves to the last run of a committed chain, while runPipeline returns the origin', async () => {
+    const { ctx } = await makeHarness()
+    definePipeline({ kind: 'last', phases: [{ name: 'p', run: noop }], ...base })
+    definePipeline({
+      kind: 'middle',
+      phases: [{ name: 'p', run: noop }],
+      chainsTo: () => 'last',
+      ...base,
+    })
+    definePipeline({
+      kind: 'first',
+      phases: [{ name: 'p', run: noop }],
+      chainsTo: () => 'middle',
+      ...base,
+    })
+    const starts = recordStarts()
+
+    const { origin, chain } = startPipeline('first', ctx)
+    const first = expectRan(await origin)
+    const end = await chain
+
+    expect(starts.map((s) => s.kind)).toEqual(['first', 'middle', 'last'])
+    expect(first.runId).toBe(starts[0].runId)
+    expect(end).toEqual({
+      kind: 'last',
+      result: { runId: starts[2].runId, actionId: starts[2].actionId, outcome: 'completed' },
+      cancelled: false,
+    })
+
+    const ran = expectRan(await runPipeline('first', ctx))
+    expect(ran.runId).toBe(starts[3].runId)
+  })
+
+  it('resolves to the origin when nothing chains', async () => {
+    const { ctx } = await makeHarness()
+    definePipeline({ kind: 'solo', phases: [{ name: 'p', run: noop }], ...base })
+
+    const { origin, chain } = startPipeline('solo', ctx)
+    const result = expectRan(await origin)
+
+    expect(await chain).toEqual({ kind: 'solo', result, cancelled: false })
+  })
+
+  it('resolves to null when the origin is refused', async () => {
+    const { ctx } = await makeHarness()
+    const held = heldPhase()
+    definePipeline({ kind: 'holder', phases: [{ name: 'p', run: held.run }], ...base })
+    definePipeline({
+      kind: 'blocked',
+      phases: [{ name: 'p', run: noop }],
+      ...base,
+      concurrencyPolicy: { blockedBy: ['holder'] },
+    })
+    const holding = startPipeline('holder', ctx)
+
+    const { origin, chain } = startPipeline('blocked', ctx)
+
+    expect(await origin).toEqual({ outcome: 'rejected', blockedBy: 'holder' })
+    expect(await chain).toBeNull()
+    held.release()
+    expect(await holding.chain).toMatchObject({ kind: 'holder', result: { outcome: 'completed' } })
+  })
+
+  // A cancel after the last phase commits the run and chains nothing; the end still says so.
+  it('reports cancelled for a successor that committed after its abort fired', async () => {
+    const { ctx } = await makeHarness()
+    async function* cancelledLate({ actionId }: PhaseContext): AsyncGenerator<never, PhaseResult> {
+      const own = [...generationStore.getTxState().runs.values()].find(
+        (r) => r.actionId === actionId,
+      )
+      own?.abortController.abort()
+      return { status: 'completed' }
+    }
+    definePipeline({ kind: 'succ', phases: [{ name: 'p', run: cancelledLate }], ...base })
+    definePipeline({
+      kind: 'pred',
+      phases: [{ name: 'p', run: noop }],
+      chainsTo: () => 'succ',
+      ...base,
+    })
+
+    const { origin, chain } = startPipeline('pred', ctx)
+
+    expect(await origin).toMatchObject({ outcome: 'completed' })
+    expect(await chain).toMatchObject({
+      kind: 'succ',
+      result: { outcome: 'completed' },
+      cancelled: true,
+    })
   })
 })
 

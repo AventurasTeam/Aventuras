@@ -51,6 +51,7 @@ export {
 export {
   runPipeline,
   startPipeline,
+  type ChainEnd,
   type PipelineStart,
   type RunCtx,
   type RunCtxFor,
