@@ -4,7 +4,6 @@ import type { Chapter, NewChapter } from '@/lib/db'
 import { chapterWriteSchema, chapters, KIND_FIELDS } from '@/lib/db'
 import { chaptersStore } from '@/lib/stores'
 
-import { projectChapterPatch } from './chapter-store-projection'
 import { cascadedDelete, rowCascade } from '../delta/delete-cascade'
 import { register, TARGET_NOT_FOUND, undefinedColumn, type ActionHandler } from '../delta/registry'
 import type { DeltaSource } from '../types'
@@ -169,7 +168,7 @@ export function registerChapters(): void {
       updateChapter: updateHandler,
       deleteChapter: deleteHandler,
     },
-    patcher: (branchId, p) => chaptersStore.patch(branchId, projectChapterPatch(p)),
+    patcher: chaptersStore.patch,
     cascade,
   })
 }

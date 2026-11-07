@@ -32,6 +32,21 @@ describe('chaptersStore', () => {
     expect(chaptersStore.getChapters().size).toBe(2)
   })
 
+  // A direct caller, not only the register's patcher, gets the report projected out.
+  it('keeps a row-shaped create to its report flag, never the report', () => {
+    chaptersStore.__reset()
+    chaptersStore.hydrate('br_1', [])
+    const { hasCloseReport: _flag, ...row } = chapterRow('chap_3', 3, 'Three')
+    chaptersStore.patch('br_1', {
+      op: 'create',
+      id: 'chap_3',
+      row: { ...row, closeReport: { version: 1, actionId: 'act_1', calls: [], stopped: [] } },
+    })
+    const stored = chaptersStore.getById('chap_3')
+    expect(stored?.hasCloseReport).toBe(true)
+    expect(stored).not.toHaveProperty('closeReport')
+  })
+
   it('no-ops a patch for a non-held branch', () => {
     chaptersStore.__reset()
     chaptersStore.hydrate('br_1', [])

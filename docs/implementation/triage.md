@@ -61,13 +61,6 @@ slice-planning gate forces its resolution before that slice is planned.
   did not re-run the suite serially — the evidence above is still as of
   `edce17b8`.
 
-- **`chaptersStore.patch` takes a raw row from any caller.** The
-  working-set store's `patch` casts `p.row` and `p.columns` to the row
-  type (`lib/stores/factory/working-set-store.ts:31,36`), so a direct
-  caller would put `closeReport` into the store, skipping the
-  projection at the chapters patcher. Today only the patcher and the
-  hydrate write the store; the guarantee is convention. Surfaced by
-  Slice 5.2's review.
 - **The chapters update keeps unchanged columns in its undo payload.**
   Unlike lore (`lib/actions/lore/register.ts:125-130`), which drops
   them because History reads an undo payload's keys as the fields that

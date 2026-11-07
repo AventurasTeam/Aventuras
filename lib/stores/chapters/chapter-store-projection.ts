@@ -1,4 +1,4 @@
-import type { StorePatch } from '../delta/registry'
+import type { StorePatch } from '@/lib/actions'
 
 /**
  * C4: the report stays out of chaptersStore, which keeps only whether a row has one.
