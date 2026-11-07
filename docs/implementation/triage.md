@@ -227,17 +227,6 @@ slice-planning gate forces its resolution before that slice is planned.
   whole-draft check"; `use-lore-row-session.ts` runs no `trigger()`,
   and the substrate's values-subscription catch, which does log it, is
   unnamed. Surfaced by Slice 5.7's session-hook review.
-- **`saveBarDiscard` matches the unsaved dialog's Discard too.** It
-  queries the page for a button named `Discard`
-  (`e2e/locators/save-session.ts`), and the dialog's
-  `unsavedChanges.discard` reads the same as the bar's
-  `saveBar.discard` (`locales/en/common.json`). The save bar stays in
-  the accessibility tree while the dialog is open, as the file notes at
-  `unsavedDiscard`, so the query would resolve both and hit a
-  strict-mode error; `exact: true` can't tell two buttons of one name
-  apart. It needs scoping outside the dialog, to the bar's `save-bar`
-  testID say. No current caller uses it with the dialog open. Surfaced
-  by Slice 5.7's E2E review.
 - **A Save whose only change is whitespace leaves the untrimmed draft
   as the clean form.** The chapter and lore drafts compare trimmed
   values (`chapterPatch` in `lib/chapters/chapter-draft.ts`, `lorePatch`
