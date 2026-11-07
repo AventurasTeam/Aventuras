@@ -73,9 +73,6 @@ slice-planning gate forces its resolution before that slice is planned.
   anchored on itself. Rollback treats both alike, but
   `lib/actions/story-entries/pre-entry-locations.ts` keys on that anchor
   and falls back on the seed. Surfaced by Slice 5.2's review.
-- **The seed's fork at `entry_hero_0040` has no chapters.** A real fork
-  there would copy `chap_hero_1`, whose anchor (29) survives, per the
-  data-model branch-copy manifest.
 - **The embedder drain drops a run's idle note while a pass runs.**
   `noteIdle` (`lib/embedder/drain.ts:198-204`) does nothing mid-pass, and
   the pass's row list predates the run's writes, so a row made stale by a
