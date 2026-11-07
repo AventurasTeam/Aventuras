@@ -259,7 +259,9 @@ flight, so not while the run that wrote it can still be cancelled, and
 only while no card is dirty, so it never raises the navigate-away
 guard: over a dirty card it stays collapsed, and doesn't open later
 when that card is saved. A story's first chapter, landing under an
-empty Timeline, expands the same way.
+empty Timeline, expands the same way. Chapters already there when the
+Timeline opens never expand; every fresh close expands, a re-close at
+an old number included.
 
 ## Chapter-close modal
 
