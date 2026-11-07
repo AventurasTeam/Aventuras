@@ -434,6 +434,54 @@ describe('startManualClose starts', () => {
     expect(pickOn()).toEqual({ endEntryId: f.replyIds[2] })
     expect(await f.ctx.db.select().from(chapters)).toEqual([])
   })
+
+  it('stops on a failed pass: no close starts, and the pick stays for the next one', async () => {
+    const pass = registerStandInPass({ anchorEntryId: null })
+    await leaveTheTailUnprocessed()
+    const end = f.replyIds[2]!
+    const completes = recordCompletes()
+
+    const started = startManualClose(f.branchId, end, f.ctx)
+    const held = await within(pass.nextHeld(), 'the catch-up pass')
+    held.finish('failed')
+    const result = await within(started, 'the start')
+
+    expect(completes.map((e) => [e.kind, e.outcome])).toEqual([
+      [PERIODIC_CLASSIFIER_KIND, 'failed'],
+    ])
+    expect(result).toEqual({
+      runId: completes[0]!.runId,
+      actionId: held.actionId,
+      outcome: 'failed',
+      error: completes[0]!.error,
+    })
+    expect(closeRuns()).toBe(0)
+    expect(generateStructured).not.toHaveBeenCalled()
+    expect(await f.ctx.db.select().from(chapters)).toEqual([])
+    expect(pickOn()).toEqual({ endEntryId: end })
+  })
+
+  it('stops on an interrupted pass: no close starts, and the pick and the pass stay owed', async () => {
+    const pass = registerStandInPass({ anchorEntryId: null })
+    await leaveTheTailUnprocessed()
+    const end = f.replyIds[2]!
+    const completes = recordCompletes()
+
+    const started = startManualClose(f.branchId, end, f.ctx)
+    await within(pass.nextHeld(), 'the catch-up pass')
+    await interruptMemoryRuns(f.branchId)
+    const result = await within(started, 'the start')
+
+    expect(completes.map((e) => [e.kind, e.outcome])).toEqual([
+      [PERIODIC_CLASSIFIER_KIND, 'aborted'],
+    ])
+    expect(result.outcome).toBe('aborted')
+    expect(closeRuns()).toBe(0)
+    expect(generateStructured).not.toHaveBeenCalled()
+    expect(await f.ctx.db.select().from(chapters)).toEqual([])
+    expect(pickOn()).toEqual({ endEntryId: end })
+    expect(generationStore.getTxState().deferred.get(f.branchId)?.pass).toBe(true)
+  })
 })
 
 describe('startCloseChain', () => {

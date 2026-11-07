@@ -34,7 +34,10 @@ const refused = (blockedBy: ManualCloseRefusal | typeof CLASSIFIER_HELD): Reject
   blockedBy,
 })
 
-/** Starts the pass (entries unprocessed) or the close; resolves with the chain's end or the refusal. */
+/**
+ * Starts the pass (entries unprocessed) or the close; resolves with the chain's end or the refusal.
+ * Rejects when the origin throws, as `PipelineStart.origin` does: a caller must handle it.
+ */
 export async function startCloseChain(
   branchId: string,
   ctx: DbCtx,
