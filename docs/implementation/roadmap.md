@@ -1711,8 +1711,10 @@ own.
   and category are text `Tag`s the label hides, and a happening's ⊙
   common-knowledge glyph is text-less, so it joins in-scene and
   recently-classified in needing the hidden-text primitive. The row's
-  `description` line (a happening's category, a lore excerpt) is hidden
-  too. Widened 2026-09-22 by Slice 4.3. A selected row says nothing either:
+  `description` line (a happening's category, a lore excerpt) is not
+  hidden: it rides beside the name as the row's description, through
+  `describedBy` (`components/ui/accessible-description.ts`). Widened
+  2026-09-22 by Slice 4.3. A selected row says nothing either:
   `aria-selected` on the row's `role="button"` is invalid ARIA on web
   (`components/compounds/list-row.tsx`, and the phone rail's categories
   in `components/reader/rail/rail-sheet-categories.tsx`), while native maps
@@ -1720,21 +1722,6 @@ own.
   `aria-pressed`; `Chip` already uses the latter. The ⊙ glyph has had a
   label since 4.5b (`plot:commonKnowledgeMarker`, used by the peek), ready
   for the hidden-text primitive. Widened from triage 2026-10-09.
-- **M9.2 — A collapsed chapter card's meta line is never announced.**
-  The Chapter Timeline card's head (`CardHead` in
-  `components/chapters/chapter-card.tsx`) carries an `aria-label` of
-  exactly the heading, `Chapter <N> — <title>`, which replaces the
-  button's children for a screen reader, so the meta line under it
-  (time range, token count, theme) is never read; the theme appears
-  nowhere else until the card expands. `cardHead` in
-  `e2e/locators/chapter-timeline.ts` finds the head by that heading.
-  Describing the head by the meta line keeps the name: `describedBy`
-  (`components/ui/accessible-description.ts`), which `ListRow` and
-  `DeltaLogRow` already use, gives `aria-describedby` on web, which RN
-  Web forwards (verified, see the `disabledReason` entry above), and
-  `accessibilityHint` on native. The meta line is visible text, so it
-  needs no hidden-text primitive. Raised 2026-11-07 by Slice 5.7's card
-  review. Routed from triage 2026-11-07.
 - **M9.4 — A failed desktop save of an `.avts` file goes unreported.**
   On desktop and web, `saveAvtsFile` (`lib/avts/save-file.ts`) hands
   the file over as an anchor download and resolves at the hand-off.
