@@ -19,11 +19,14 @@ import { toast } from '@/lib/toast'
 
 import type { PassRefusal } from './send-run'
 import {
+  closeResolvedEntry,
+  describeCloseFailure,
   describePassFailure,
   describeTurnFailure,
   dismissSystemEntry,
   passResolvedEntry,
   retryPassEntry,
+  toCloseFailureMeta,
   toPassFailureMeta,
   toSystemFailureMeta,
   useConfigFixAction,
@@ -88,6 +91,44 @@ const EMPTY_REPLY_FILTERED = {
   subsystem: EMPTY_REPLY,
   detail: 'the model returned no text (finish reason: content-filter)',
 } satisfies PipelineError
+
+// A close's metadata call cut at the lore management profile's max output.
+const CLOSE_CUT = {
+  kind: 'reply-cut-off',
+  target: 'lore-mgmt',
+  ...CUT_FIELDS,
+} satisfies PipelineError
+
+const CLOSE_UNASSIGNED = {
+  kind: 'config-resolver',
+  failure: 'no-profile-assigned',
+  target: 'lore-mgmt',
+  phaseName: 'metadata',
+} satisfies PipelineError
+
+const CLOSE_HINTED = {
+  kind: 'provider',
+  reason: 'unknown',
+  detail: "400: 'tool_choice' is not supported",
+  possibleCapabilityMismatch: { capability: 'toolCalling', matched: 'tool_choice' },
+} satisfies PipelineError
+
+const OVERFLOW_MESSAGE =
+  'request (71834 tokens) exceeds the available context size (65536 tokens), try increasing it'
+
+const CLOSE_OVERFLOW = {
+  kind: 'context-window',
+  target: 'lore-mgmt',
+  detectedBy: 'provider',
+  estimate: 71_234,
+  window: null,
+  windowSource: 'unknown',
+  providerId: 'prov_local',
+  modelId: 'llama3.1:70b',
+  detail: OVERFLOW_MESSAGE,
+} satisfies PipelineError
+
+const CLOSE_GENERIC = "Chapter close failed, so your turn didn't start. Retry it, or send again."
 
 describe('describeTurnFailure', () => {
   it('renders embedder-specific copy with the stale row count', () => {
@@ -437,6 +478,141 @@ describe('passResolvedEntry', () => {
     const key = 'reader:systemEntry.passResolvedTextKept'
     expect(hasCopy(key)).toBe(true)
     expect(passResolvedEntry(SUBMISSION).content).toBe(t(key))
+  })
+})
+
+// reader-composer.md → Transient pipeline failures: the **Chapter close failed** row.
+describe('describeCloseFailure', () => {
+  it('gives a provider failure the close copy with its reason and detail', () => {
+    expect(hasCopy('reader:systemEntry.failure.close')).toBe(true)
+    expect(
+      describeCloseFailure({
+        kind: 'provider',
+        reason: 'network',
+        detail: 'lore-mgmt: connect ECONNREFUSED',
+      }),
+    ).toEqual({ content: CLOSE_GENERIC, detail: 'network: lore-mgmt: connect ECONNREFUSED' })
+  })
+
+  it("gives a rejection naming tool calling the close's hedged hint", () => {
+    expect(describeCloseFailure(CLOSE_HINTED)).toEqual({
+      content:
+        "Chapter close failed, so your turn didn't start. The provider rejected the close's request. Its message mentions `tool_choice`. That can mean this model doesn't support tool calling. The provider may also have rejected the request for another reason.",
+      detail: "unknown: 400: 'tool_choice' is not supported",
+    })
+  })
+
+  it('names the lore management agent for a resolver failure', () => {
+    expect(describeCloseFailure(CLOSE_UNASSIGNED)).toEqual({
+      content: 'Chapter close failed: the lore management agent has no profile assigned.',
+    })
+  })
+
+  it("names the limit a cut close reply hit, in the close's own words", () => {
+    expect(describeCloseFailure(CLOSE_CUT)).toEqual({
+      content:
+        "Chapter close failed, so your turn didn't start. The close's reply was cut off at the lore management profile's 4,096-token max output. Raise it, then Retry.",
+      detail: describeReplyCutOff(CLOSE_CUT),
+    })
+  })
+
+  it("gives a close prompt the provider rejected the close's window copy", () => {
+    expect(describeCloseFailure(CLOSE_OVERFLOW)).toEqual({
+      content: `Chapter close failed, so your turn didn't start. The provider rejected the close's prompt; its message suggests it exceeded the model's context window: “${OVERFLOW_MESSAGE}”. Our estimate: about 71,300 tokens. Raise the window if the model allows more, or switch the lore management agent to a model with a larger one.`,
+      detail: describeContextWindow(CLOSE_OVERFLOW),
+    })
+  })
+
+  it('carries any other cause in the detail line', () => {
+    expect(
+      describeCloseFailure({ kind: 'phase-logic', detail: 'chapter-close: no close range' }),
+    ).toEqual({ content: CLOSE_GENERIC, detail: 'chapter-close: no close range' })
+  })
+
+  it('still names the failure when the run carried no error', () => {
+    expect(describeCloseFailure(undefined)).toEqual({ content: CLOSE_GENERIC })
+  })
+
+  // The pass's copy names the classifier; a close's failure must not send the user there.
+  it('never borrows the pass copy', () => {
+    expect(describeCloseFailure(CLOSE_UNASSIGNED).content).not.toBe(
+      describePassFailure({ held: false, error: CLOSE_UNASSIGNED }).content,
+    )
+    expect(describeCloseFailure({ kind: 'provider', reason: 'auth' }).content).not.toBe(
+      t('reader:systemEntry.failure.memory'),
+    )
+  })
+})
+
+describe('toCloseFailureMeta', () => {
+  const SUBMISSION = { content: 'I wait.', composerMode: 'free' }
+
+  it("keeps a resolver failure's kind and failure beside the failed marker", () => {
+    expect(toCloseFailureMeta(CLOSE_UNASSIGNED, undefined)).toEqual({
+      kind: 'config-resolver',
+      failure: 'no-profile-assigned',
+      close: 'failed',
+    })
+  })
+
+  it("persists a hinted provider failure's capability and its detail line", () => {
+    expect(toCloseFailureMeta(CLOSE_HINTED, undefined)).toEqual({
+      kind: 'provider',
+      failure: 'toolCalling',
+      detail: "unknown: 400: 'tool_choice' is not supported",
+      close: 'failed',
+    })
+  })
+
+  it('records a failure with no error as an orchestrator one', () => {
+    expect(toCloseFailureMeta(undefined, undefined)).toEqual({
+      kind: 'orchestrator',
+      close: 'failed',
+    })
+  })
+
+  it('round-trips through the persisted metadata schema, submission and marker included', () => {
+    const meta = toCloseFailureMeta(CLOSE_CUT, SUBMISSION)
+    expect(meta).toEqual({
+      kind: 'reply-cut-off',
+      failure: 'max-output',
+      detail: describeReplyCutOff(CLOSE_CUT),
+      submission: SUBMISSION,
+      close: 'failed',
+    })
+    const parsed = entryMetadataSchema.parse({
+      sceneEntities: [],
+      currentLocationId: null,
+      worldTime: 0,
+      systemFailure: meta,
+    })
+    expect(parsed.systemFailure).toEqual(meta)
+  })
+})
+
+describe('closeResolvedEntry', () => {
+  const SUBMISSION = { content: 'I wait.', composerMode: 'free' }
+
+  it('keeps the text under the resolved close marker, through the persisted schema', () => {
+    const { failure } = closeResolvedEntry(SUBMISSION)
+    const parsed = entryMetadataSchema.parse({
+      sceneEntities: [],
+      currentLocationId: null,
+      worldTime: 0,
+      systemFailure: failure,
+    })
+    expect(parsed.systemFailure).toEqual({
+      kind: 'orchestrator',
+      submission: SUBMISSION,
+      close: 'resolved',
+    })
+  })
+
+  it('says why the text is kept here', () => {
+    expect(hasCopy('reader:systemEntry.closeResolvedTextKept')).toBe(true)
+    expect(closeResolvedEntry(SUBMISSION).content).toBe(
+      "Nothing is left to close before your turn. The composer couldn't take your text back, so it's kept here.",
+    )
   })
 })
 
@@ -842,6 +1018,47 @@ describe('useSystemEntryActions', () => {
       pass: 'failed',
     })
     expect(actions.fixAction?.label).toBe(t('reader:systemEntry.assignProfile'))
+    expect(actions.onRetry).toBe(onRetry)
+  })
+
+  // A fix precedes Retry on every row (reader-composer.md → Transient pipeline failures).
+  it("keeps a failed close's config fix beside its Retry", () => {
+    const actions = actionsFor(toCloseFailureMeta(CLOSE_UNASSIGNED, undefined))
+    expect(actions.fixAction?.label).toBe('Assign profile')
+    expect(actions.onRetry).toBe(onRetry)
+  })
+
+  // Its close has run; the entry only holds a text the composer couldn't take back.
+  it('offers Dismiss alone on a resolved close entry', () => {
+    const actions = actionsFor(
+      closeResolvedEntry({ content: 'I wade in.', composerMode: 'free' }).failure,
+    )
+    expect(actions.onRetry).toBeUndefined()
+    expect(actions.fixAction).toBeUndefined()
+  })
+
+  it('keeps Retry on a failed close entry', () => {
+    expect(
+      actionsFor(toCloseFailureMeta({ kind: 'provider', reason: 'network' }, undefined)).onRetry,
+    ).toBe(onRetry)
+  })
+
+  it("keeps a cut close's Fix profile beside its Retry", () => {
+    const actions = actionsFor(toCloseFailureMeta(CLOSE_CUT, undefined))
+    expect(actions.fixAction?.label).toBe('Fix profile')
+    expect(actions.onRetry).toBe(onRetry)
+  })
+
+  it('offers Fix profile beside Retry on a close entry whose rejection hinted at tool calling', () => {
+    const actions = actionsFor(toCloseFailureMeta(CLOSE_HINTED, undefined))
+    expect(actions.fixAction?.label).toBe('Fix profile')
+    expect(actions.onRetry).toBe(onRetry)
+  })
+
+  // `Set window` is the window's remedy, hidden until App Settings has its editor (M7.1).
+  it('offers Retry and no fix action on a close window entry', () => {
+    const actions = actionsFor(toCloseFailureMeta(CLOSE_OVERFLOW, undefined))
+    expect(actions.fixAction).toBeUndefined()
     expect(actions.onRetry).toBe(onRetry)
   })
 

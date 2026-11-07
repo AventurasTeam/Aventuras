@@ -19,10 +19,16 @@ import { toast } from '@/lib/toast'
 import { keptSubmissionText } from './composer-draft'
 import {
   capabilityHintContent,
+  closeContextWindowContent,
   passContextWindowContent,
   turnContextWindowContent,
 } from './context-window-copy'
-import { offersProfileFix, passCutOffContent, turnCutOffContent } from './cut-off-copy'
+import {
+  closeCutOffContent,
+  offersProfileFix,
+  passCutOffContent,
+  turnCutOffContent,
+} from './cut-off-copy'
 import type { PassRefusal } from './send-run'
 
 export type SystemEntryFixAction = { label: string; onPress: () => void } | undefined
@@ -87,6 +93,13 @@ const PASS_RESOLVER_COPY = {
   'profile-missing': 'reader:systemEntry.failure.memoryProfileMissing',
   'provider-missing': 'reader:systemEntry.failure.memoryProviderMissing',
   'override-provider-missing': 'reader:systemEntry.failure.memoryOverrideProviderMissing',
+} as const satisfies Record<ResolveFailureKind, string>
+
+const CLOSE_RESOLVER_COPY = {
+  'no-profile-assigned': 'reader:systemEntry.failure.closeNoProfileAssigned',
+  'profile-missing': 'reader:systemEntry.failure.closeProfileMissing',
+  'provider-missing': 'reader:systemEntry.failure.closeProviderMissing',
+  'override-provider-missing': 'reader:systemEntry.failure.closeOverrideProviderMissing',
 } as const satisfies Record<ResolveFailureKind, string>
 
 const FIX_LABEL = {
@@ -278,11 +291,61 @@ export async function retryPassEntry(deps: {
   deps.notify(t('reader:systemEntry.passRetryBlocked', { reason: result.blockedBy }))
 }
 
-// Shared by the system-entry bubble and the suggestion strip: a config-resolver
-// failure is deterministic, so both surfaces route to settings instead of
-// offering a retry that cannot succeed. Widened past ResolveFailureKind because
-// the bubble's caller reads a persisted `z.string()`; an unrecognised value
-// lands on the generic "Fix default" rather than dropping the affordance.
+// The close's own vocabulary: the pass's names the classifier, and a close runs on lore-mgmt.
+// A close has no held state, so there is no held arm.
+export function describeCloseFailure(error: PipelineError | undefined): {
+  content: string
+  detail?: string
+} {
+  if (error?.kind === 'provider') {
+    const hint = error.possibleCapabilityMismatch
+    return {
+      content:
+        hint !== undefined
+          ? capabilityHintContent(hint, 'close')
+          : t('reader:systemEntry.failure.close'),
+      detail: providerDetail(error),
+    }
+  }
+  if (error?.kind === 'config-resolver') {
+    return { content: t(CLOSE_RESOLVER_COPY[error.failure]), detail: error.detail }
+  }
+  if (error?.kind === 'reply-cut-off') {
+    return { content: closeCutOffContent(error), detail: pipelineErrorDetail(error) }
+  }
+  if (error?.kind === 'context-window') {
+    return { content: closeContextWindowContent(error), detail: pipelineErrorDetail(error) }
+  }
+  return {
+    content: t('reader:systemEntry.failure.close'),
+    detail: error !== undefined ? pipelineErrorDetail(error) : undefined,
+  }
+}
+
+export function toCloseFailureMeta(
+  error: PipelineError | undefined,
+  submission: SystemFailureMeta['submission'],
+): SystemFailureMeta {
+  const { detail } = describeCloseFailure(error)
+  return { ...failureMetaOf(error, detail, submission), close: 'failed' }
+}
+
+/** A committed close Retry's notice, as `passResolvedEntry`: the text held, `Dismiss` alone. */
+export function closeResolvedEntry(submission: NonNullable<SystemFailureMeta['submission']>): {
+  content: string
+  failure: SystemFailureMeta
+} {
+  return {
+    content: t('reader:systemEntry.closeResolvedTextKept'),
+    failure: { kind: 'orchestrator', submission, close: 'resolved' },
+  }
+}
+
+// Shared by the system-entry bubble and the suggestion strip: a config-resolver failure routes to
+// settings. The bubble keeps Retry beside the fix, one click once the config is fixed; the strip
+// shows the fix alone. Widened past ResolveFailureKind because the bubble's caller reads a
+// persisted `z.string()`; an unrecognised value lands on the generic "Fix default" rather than
+// dropping the affordance.
 export function useConfigFixAction(
   failure: ResolveFailureKind | (string & {}) | undefined,
   storyId: string | null,
@@ -360,10 +423,12 @@ export function useSystemEntryActions(
       (failure?.kind === 'provider' && isCapabilityHintTag(failure.failure)),
     leaveStory,
   )
-  // A held branch can't run a pass, and a resolved entry's pass has run, so either offers Dismiss
+  // A held branch can't run a pass, and a resolved entry's work has run, so either offers Dismiss
   // alone. The fix gates are kind-exclusive, so the `??` order carries no meaning.
+  const retryWithheld =
+    failure?.pass === 'held' || failure?.pass === 'resolved' || failure?.close === 'resolved'
   return {
-    onRetry: failure?.pass === 'held' || failure?.pass === 'resolved' ? undefined : onRetry,
+    onRetry: retryWithheld ? undefined : onRetry,
     fixAction: embedderFix ?? configFix ?? profileFix,
   }
 }
