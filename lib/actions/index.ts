@@ -6,6 +6,7 @@ export {
   type ImportRejectionCode,
   type ImportRowResult,
 } from './avts/import-rows'
+export { runOwedClose, type OwedCloseRun } from './chapters/run-owed-close'
 export {
   saveChapter,
   type ChapterSaveRejectionCode,
@@ -152,7 +153,13 @@ export {
   type RegenerateRejectionCode,
   type RegenerateTurnResult,
 } from './turns/regenerate-turn'
-export { submitTurn, type SubmitTurnMeta, type SubmitTurnResult } from './turns/submit-turn'
+export {
+  submitTurn,
+  type OwedWorkAborted,
+  type OwedWorkFailed,
+  type SubmitTurnMeta,
+  type SubmitTurnResult,
+} from './turns/submit-turn'
 export type { DbCtx, DeltaSource, MutationResult, PipelineAction } from './types'
 export {
   clearLiveSession,

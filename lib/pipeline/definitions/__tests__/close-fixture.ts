@@ -170,6 +170,17 @@ async function writeTurnEntry(
   return id
 }
 
+/** Writes the fixture branch's classifier status; `running` with no pass live holds the branch. */
+export async function setClassifierStatus(
+  f: Pick<CloseFixture, 'ctx' | 'branchId'>,
+  status: { state: 'idle' | 'running'; processedThrough: number },
+): Promise<void> {
+  await f.ctx.db
+    .update(branches)
+    .set({ classifierStatus: { lastSuccessAt: null, lastError: null, ...status } })
+    .where(eq(branches.id, f.branchId))
+}
+
 /**
  * Resets every store, then opens a story whose branch holds an opening written as create-story
  * writes it (no delta) and `turns` action/reply pairs created through the action layer, each pair

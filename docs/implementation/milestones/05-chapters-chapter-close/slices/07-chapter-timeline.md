@@ -508,10 +508,12 @@ and the seventh moved to the slice that owns it.
   `components/reader/chapter-time-range.ts`, and `ChapterProgressBar` and
   `chapterProgressCounts` from `components/compounds/`.
 - **The desktop smoke checked the banner on a periodic pass only.** A
-  deviation from the brief's smoke line: `useMemoryRunBanner` returns
-  null for any run but a pass, and a close's banner is
-  [Slice 5.6](./06-close-owed.md)'s. The smoke checked the pill's phase
-  and Cancel on a turn and on a close started from `/dev/chapter-close`.
+  deviation from the brief's smoke line: when it ran,
+  `useMemoryRunBanner` returned null for any run but a pass, since a
+  close's banner is [Slice 5.6](./06-close-owed.md)'s. The smoke checked
+  the pill's phase and Cancel on a turn and on a close started from
+  `/dev/chapter-close`. With 5.6 merged, the shell shows a close's
+  banner on the Timeline too, as on every in-story screen.
 - **A card's fields wait for the row the form holds (an Android defect,
   fixed at the Android check).** react-hook-form 7.81 subscribes field
   watchers passively off web, so a card's fields mounting in the same

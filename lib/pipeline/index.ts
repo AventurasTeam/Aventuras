@@ -22,10 +22,12 @@ export {
   ensureChapterClosePipelineRegistered,
 } from './definitions/chapter-close'
 export { closingChapterId } from './definitions/closing-chapter'
+export { CLOSE_PHASE } from './definitions/intermediates'
 export {
   CLASSIFIER_HELD,
+  closeOwed,
   isClassifierHeld,
-  owedPassAtSend,
+  owedWorkAtSend,
   readClassifierStatus,
   unprocessedEntryCount,
 } from './definitions/memory-chain'
@@ -51,7 +53,9 @@ export {
 // interruptMemoryRuns, so callers can await a terminal without importing the orchestrator.
 export {
   runPipeline,
+  startChain,
   startPipeline,
+  type ChainEnd,
   type PipelineStart,
   type RunCtx,
   type RunCtxFor,

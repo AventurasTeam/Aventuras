@@ -44,6 +44,14 @@ export function passCutOffContent(failure: ReplyCutOffFailure): string {
     : t(`reader:systemEntry.failure.memoryCutOff.${copy.key}`, { limit: copy.limit })
 }
 
+/** A **Chapter close failed** entry whose close reply was cut off. */
+export function closeCutOffContent(failure: ReplyCutOffFailure): string {
+  const copy = cutOffCopyOf(failure)
+  return copy.key === 'unknown'
+    ? t('reader:systemEntry.failure.closeCutOff.unknown')
+    : t(`reader:systemEntry.failure.closeCutOff.${copy.key}`, { limit: copy.limit })
+}
+
 /** The notice on an `ai_reply` card whose prose ended early. */
 export function cutOffNoticeText(mark: CutOffMark): string {
   switch (mark.cause) {

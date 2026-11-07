@@ -154,7 +154,18 @@ invisible to the boundaries rule, which sees imports, not property
 access, so it is restricted with `no-restricted-properties` in
 `eslint.config.js` instead: `generationStore`'s run mutators belong to
 the orchestrator and the prose-reversal bracket, since a stray caller
-can leave the hard gate or the reversal barrier stuck.
+can leave the hard gate or the reversal barrier stuck. The close's
+record mutators (`setPendingClose`, `clearPendingClose`,
+`clearDeferredClose`, `dropBranchRecords`) belong to the files that
+write those records (`lib/actions/chapters/**`, `delete-story.ts`,
+`chapter-close-boundary.ts` and `memory-chain.ts`), and
+`clearPendingClose` also to the prose-reversal bracket, since a stray
+write makes the next Send start a close nobody owes or skip one that is
+owed. `setCloseProgress` is the orchestrator's. The lint holds each
+owner to its own mutators: the record writers call neither the run
+mutators nor `setCloseProgress`, the orchestrator calls no record
+mutator, and the bracket calls only the run mutators and
+`clearPendingClose`.
 
 Failure handling is **not** part of this mechanism — it is a
 per-store, per-context policy, and the mechanism itself carries no

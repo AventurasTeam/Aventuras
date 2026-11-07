@@ -35,7 +35,7 @@ import { appSettingsStore, currentStoryStore } from '@/lib/stores'
 import { classifierEmbedder } from './description-embedder'
 import { readStoryPlace } from './entry-reads'
 import { buildGenerationContext } from './generation-context'
-import { nextMemoryRun } from './memory-chain'
+import { perTurnChainsTo } from './memory-chain'
 import { planTurnCreates, skipTurnCreates, type TurnCreatePlan } from './per-turn-creates'
 import {
   PIGGYBACK_FALLBACK_PHASE_NAME,
@@ -579,7 +579,7 @@ export function ensurePerTurnPipelineRegistered(): void {
       concurrencyPolicy: {
         blockedBy: [PER_TURN_KIND, PERIODIC_CLASSIFIER_KIND, CHAPTER_CLOSE_KIND],
       },
-      chainsTo: nextMemoryRun,
+      chainsTo: perTurnChainsTo,
     })
   }
 }

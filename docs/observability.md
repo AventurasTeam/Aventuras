@@ -183,6 +183,9 @@ convention, and the expectation that subsystems route through
   regenerate refused as an integrity error, logged with its refusal
   kind), `row_held_twice` (error: two deletes in the log hold one row,
   which a sound log never produces),
+  `pending_close_check_failed` (warn: a prose reversal could not read
+  whether a manual close pick's end entry survived, so the pick is kept
+  for the boundary to refuse),
   `story_settings_repaired` (the corrupt-blob repair: carries the failing
   key paths, since the blob it describes is overwritten in the same call),
   `thread_save_rejected` / `happening_save_rejected` / `entity_save_rejected` /
@@ -349,7 +352,9 @@ convention, and the expectation that subsystems route through
 - `reader.*` — reader-composer dispatches routed through `runAction`
   (`lib/utils.ts`) instead of a bare `void`: `undo_failed`, `redo_failed`,
   `rollback_failed`, `regenerate_failed`, `pass_retry_failed`
-  (a pass-failure entry's Retry, which runs the pass alone)
+  (a pass-failure entry's Retry, which runs the pass alone),
+  `close_retry_failed` (a close-failure entry's Retry, which runs
+  the close's catch-up passes and the close)
   — plus `undo_rejected` / `redo_rejected` at debug for the refusals
   that are routine (gated, nothing to apply, branch mid-switch), where
   `undo_failed` / `redo_failed` carry the ones that mean the delta log

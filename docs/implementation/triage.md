@@ -95,12 +95,12 @@ slice-planning gate forces its resolution before that slice is planned.
   the PK is `(branch_id, id)`). The stamp handler's case shows the
   shape.
 - **Refusal codes repeated as literals.** `'branch-not-open'`
-  (`lib/actions/classifier/run-now.ts:11`) and `'embedder-swap'`
-  (`lib/actions/turns/submit-turn.ts:38`) restate
+  (`lib/actions/classifier/run-now.ts:14`) and `'embedder-swap'`
+  (`lib/actions/turns/submit-turn.ts:54`) restate
   `MANUAL_CLOSE_REFUSAL.branchNotOpen` and `.swapPending`
-  (`lib/actions/chapters/start-manual-close.ts`).
+  (`lib/actions/chapters/close-chain.ts`).
 - **Pre-flight reads the open story's settings after two awaits.**
-  `lib/pipeline/runtime/orchestrator.ts:537-540` reads
+  `lib/pipeline/runtime/orchestrator.ts:553-555` reads
   `currentStoryStore.getCurrentStory()?.settings` after `beginRun` and
   `settleUserWrites`; a story switch in between checks the wrong
   story's settings. Unverified as reachable.
@@ -162,7 +162,7 @@ slice-planning gate forces its resolution before that slice is planned.
   call reads its stores before its first await. Surfaced by Slice 5.2's
   review.
 - **Phase intermediates are an untyped bag.** `PhaseContext.intermediates`
-  is `Record<string, unknown>` (`lib/pipeline/types.ts:101`), and each
+  is `Record<string, unknown>` (`lib/pipeline/types.ts:103`), and each
   reader casts its key: the retrieval outcome behind a shape check
   (`generation-context.ts`), the close's range and ledger
   (`chapter-close-metadata.ts`, `chapter-close-report.ts`) and the pass's
@@ -182,7 +182,18 @@ slice-planning gate forces its resolution before that slice is planned.
   `chapter-close-metadata-call.test.ts`, and the phase tests' `drain`
   generator helper repeats across the close's and older pipeline tests
   (`lib/pipeline/definitions/__tests__/phase-db.ts` is a candidate home).
-  Surfaced by Slice 5.2's review.
+  Surfaced by Slice 5.2's review. Slice 5.6 adds two more:
+  `chapter-close-owed.spec.ts`'s `closeOutcomes` and `heldClose` copy
+  `passOutcomes` and `heldPass` from `e2e/flows/classifier-pass.ts`, with
+  only the kind and the agent name changed, so sharing them needs
+  `passProbe` to take both; and the open region's SQL predicate is written
+  out in four specs (`chapter-close-owed`, `chapter-progress`,
+  `first-chapter`, `dataset-chapter.build`) beside the app's
+  `openRegionWhere`. A drift there fails by timeout, not silently.
+  Surfaced by Slice 5.6's slice review. More than a dozen test files
+  spell out a `RunState` for `startRun` by hand, with no shared fixture,
+  so a `RunState` change edits all of them. Surfaced by Slice 5.7's
+  save-path review.
 - **A fresh dev slot has no local embedder model.** Every seeded story
   (`pnpm db:seed`, `db:seed:long`, `db:seed:dataset`) declares the local
   embedder `Xenova/all-MiniLM-L6-v2`. The app counts a model installed
@@ -380,9 +391,6 @@ slice-planning gate forces its resolution before that slice is planned.
   apart. It needs scoping outside the dialog, to the bar's `save-bar`
   testID say. No current caller uses it with the dialog open. Surfaced
   by Slice 5.7's E2E review.
-- **Test files spell out `RunState` for `startRun`.** More than a dozen
-  test files build one by hand, with no shared fixture, so a `RunState`
-  change edits all of them. Surfaced by Slice 5.7's save-path review.
 - **`EMPTY_LORE_DRAFT`'s freeze is shallow.** `lib/world/lore-draft.ts`
   types it `Readonly<LoreDraft>`, which leaves `keywords` and `tags`
   mutable `string[]` in the type, and `Object.freeze` leaves them
@@ -415,3 +423,62 @@ slice-planning gate forces its resolution before that slice is planned.
   and it spans every row kind (Plot's thread and happening drafts trim
   too). The Timeline is a new route to lore's existing behaviour.
   Surfaced by Slice 5.7's slice review.
+- **A second CTRL-Z after a close whose reversal failed leaves its marker
+  open.** It undoes the close's delta rows and chapter row but leaves the
+  close's `pipeline_runs` marker with `finished_at` null. How boot
+  recovery (`recoverInFlightRuns`, `lib/pipeline/runtime/recovery.ts`)
+  treats an `action_id` a user undo already reversed is unverified. Surfaced by Slice 5.6's review.
+- **`undoLastAction` reads the branch's whole delta log, twice per
+  CTRL-Z.** `lib/actions/story-entries/undo.ts` reads it with no LIMIT
+  under the gate, and only the head group is needed. The cost is
+  unmeasured. Surfaced by Slice 5.6's review.
+- **A manual pick a reversal stamps into a chapter survives the
+  prose-reversal bracket's existence check.** Redo of an undone close
+  does it; the next Send then fails once at `boundary` (stale pick)
+  before the pick drops. The fix would add `isNull(storyEntries.chapterId)`
+  to the check's read, which goes past canon's "a reversal that removes
+  that entry" and needs the developer's call. It shares a root with
+  [the deferral toast entry in parked.md](../parked.md#the-deferral-toast-can-promise-a-close-that-never-runs).
+  Surfaced by Slice 5.6's review.
+- **A late Cancel announces nothing.** One that lands after a run's last
+  phase commits the run and chains nothing through `commitRun`, which
+  records no deferral and emits no `run_deferred`, so a cancelled chain
+  gets no "moved to your next turn" toast, though the close still runs at
+  the next Send (owed by its pick or the threshold). A turn's late Cancel
+  is the same today. Surfaced by Slice 5.6's review.
+- **A before-turn close shows one flat label.** The banner keeps its
+  before-your-turn label for the whole run (C6, `principles.md`, the
+  slice's label table), which hides `N of M` exactly when the user waits longest,
+  7 to 17 agent tasks. Needs a developer question before 5.8 and 5.9
+  consume C6. Surfaced by Slice 5.6's review.
+- **The memory banner's live region may announce too often.** Its label
+  sits in a `role="status"` `aria-live="polite"` region and now changes up
+  to about 21 times per close run; canon's a11y notes don't say whether
+  that announcement rate is wanted. Surfaced by Slice 5.6's review.
+- **A retry-blocked toast prints a raw refusal code.** `reader.json`'s
+  `passRetryBlocked` and `closeRetryBlocked` interpolate the run's
+  `blockedBy` (`story-busy`, for one) into user-facing copy.
+  `passRetryBlocked` was already there; `closeRetryBlocked` is this
+  slice's own copy, repeating its pattern. Surfaced by Slice 5.6's
+  review.
+- **Send can start a turn on a branch that turns held after its check.**
+  `submitTurn` reads `owedWorkAtSend` (held first) and, with nothing
+  owed, goes straight to the turn. A live pass reads as not held and
+  blocks the turn's start through per-turn's `blockedBy`, but a pass that
+  ends held (its cancel reversal failed) between that read and the turn's
+  start lets the turn run over its unreversed writes. Owed work re-checks
+  the hold right before it starts; the no-owed path never did (same flow
+  before Slice 5.6). The reader blocks Send while a hard-gate run is live,
+  so only a caller past the UI reaches it. Surfaced by CodeRabbit on
+  Slice 5.6's PR.
+- **The pass-failure Retry path is looser than its close twin.**
+  `PassRefusal` (`components/reader/send-run.ts:104`) types its non-held
+  `error` as `PipelineError | undefined`, though a failed `TxResult`
+  always carries one; the close's twin, `closeRefusalOf` (`:117`), now
+  requires it. `retryPassEntry`'s docblock
+  (`components/reader/system-entry-actions.tsx:302-307`) omits the
+  non-held refusal, which toasts and leaves the entry (`:328`). Both
+  predate Slice 5.6, and
+  [code-conventions → Type design](../code-conventions.md#type-design)
+  files older looseness as a deferral. Surfaced by Slice 5.6's slice
+  review.

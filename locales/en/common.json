@@ -155,6 +155,7 @@
         "updatingMemory": "updating memory…",
         "updatingMemoryBeforeTurn": "updating memory before your turn…",
         "closingChapter": "closing chapter…",
+        "closingChapterBeforeTurn": "closing chapter before your turn…",
         "refreshingSuggestions": "refreshing suggestions…"
       },
       "error": {
@@ -169,13 +170,30 @@
     },
     "memoryBanner": {
       "updating": "Updating memory…",
-      "updatingBeforeTurn": "Updating memory before your turn…"
+      "updatingBeforeTurn": "Updating memory before your turn…",
+      "closing": "Closing chapter…",
+      "closingBeforeTurn": "Closing chapter before your turn…",
+      "closingBoundary": "Closing chapter: choosing where it ends…",
+      "closingMetadata": "Closing chapter: writing its summary…",
+      "closingAgent": "Closing chapter: reviewing the chapter…",
+      "closingTask": "Closing chapter: {{index}} of {{total}} — {{task}}…",
+      "closingReport": "Closing chapter: finishing up…",
+      "closeTask": {
+        "happenings": "Happenings",
+        "lore": "Lore",
+        "identity": "Identity",
+        "threads": "Threads",
+        "upkeep": "Upkeep",
+        "lifecycle": "Lifecycle",
+        "awareness": "Awareness"
+      }
     },
     "deferredWork": {
       "pass": "Memory update moved to your next turn.",
       "close": "Chapter close moved to your next turn."
     },
-    "memoryUpdateFailed": "Memory update failed. It runs again before your next turn."
+    "memoryUpdateFailed": "Memory update failed. It runs again before your next turn.",
+    "chapterCloseFailed": "Chapter close failed. It runs again before your next turn."
   },
   "collisionRow": {
     "collidesWith": "⚠ Collides with {{name}}",

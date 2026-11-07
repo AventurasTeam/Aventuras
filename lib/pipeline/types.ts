@@ -10,7 +10,7 @@ import type {
 import type { DbCtx, StorySettings } from '@/lib/db'
 import type { Logger } from '@/lib/diagnostics'
 import type { EmbedderErrorKind } from '@/lib/embedder'
-import type { AppSettingsSnapshot, DeferredWorkKind, RunState } from '@/lib/stores'
+import type { AppSettingsSnapshot, CloseProgress, DeferredWorkKind, RunState } from '@/lib/stores'
 
 export type PipelineError =
   | {
@@ -66,6 +66,8 @@ export type PhaseEmittedEvent =
   | { type: 'stream_chunk'; targetEntryId: string; text: string; channel: 'text' | 'reasoning' }
   | { type: 'delta_emitted'; action: PipelineAction; entryId?: string | null }
   | { type: 'recoverable_error'; error: PipelineError }
+  // C6: an agent task of a close starting.
+  | ({ type: 'close_task_start' } & CloseProgress)
 
 export type PipelineEvent =
   | { type: 'run_start'; runId: string; kind: string; actionId: string }
@@ -74,7 +76,7 @@ export type PipelineEvent =
       runId: string
       kind: string
       actionId: string
-      /** Send's work before the turn (RunState.beforeTurn); false for a chained successor. */
+      /** Send's work before the turn (RunState.beforeTurn), chained successors included. */
       beforeTurn: boolean
       outcome: 'completed' | 'aborted' | 'failed'
       error?: PipelineError
@@ -193,7 +195,8 @@ type TxRun = { runId: string; actionId: string }
 
 /** A run's end: a failed run always says why, and a completed or cancelled one never does. */
 export type TxResult =
-  | (TxRun & { outcome: 'completed' | 'aborted'; error?: never })
+  | (TxRun & { outcome: 'completed'; error?: never })
+  | (TxRun & { outcome: 'aborted'; error?: never })
   | (TxRun & { outcome: 'failed'; error: PipelineError })
 
 // A start blocked by the concurrency contract produces no run (no runId/actionId).

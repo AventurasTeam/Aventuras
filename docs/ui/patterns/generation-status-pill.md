@@ -60,8 +60,8 @@ type ErrorState = { code: 'memory-incomplete'; pendingRows: number } | { code: '
 
 type GenerationStatusPillProps = {
   activePhase?: GenerationPhase
-  // `updating-memory` running before the user's turn (Send's owed pass);
-  // ignored for every other phase.
+  // `updating-memory` or `closing-chapter` running as Send's owed work,
+  // before the user's turn; ignored for every other phase.
   beforeTurn?: boolean
   error?: ErrorState
   // Absent, the tag renders bare with no popover: the caller omits it

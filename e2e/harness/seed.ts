@@ -282,6 +282,11 @@ export function setClassifierCadence(dbPath: string, storyId: string, cadence: n
   setStorySetting(dbPath, storyId, 'classifierCadence', cadence)
 }
 
+// Lower the story's chapter threshold so a short E2E turn crosses it. Runs before launch.
+export function setChapterTokenThreshold(dbPath: string, storyId: string, tokens: number): void {
+  setStorySetting(dbPath, storyId, 'chapterTokenThreshold', tokens)
+}
+
 // Story Settings → Classifier's "Create mentioned places" switch. Runs before launch.
 export function setClassifierMentionedPlaces(dbPath: string, storyId: string, on: boolean): void {
   setStorySetting(dbPath, storyId, 'classifierMentionedPlaces', on)

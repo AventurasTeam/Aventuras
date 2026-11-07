@@ -306,11 +306,17 @@ Implementation contract is in
 the gate, regenerate, swipe, an edit of the head turn, CTRL-Z of the
 turn and rollback stay enabled: each interrupts it, and the pass or
 close runs before the next turn instead, with a toast saying so. The
-user never waits minutes to redo the reply they just read. The
-exception is a pass a system entry's `Retry` started: it holds the
-reader's actions, head reversals included, until it ends, and the
-pill's `Cancel` ends it
+user never waits minutes to redo the reply they just read. Two
+exceptions hold the reader's actions, head reversals included, until
+the run ends. One is a pass or a close a system entry's `Retry`
+started, which the pill's `Cancel` ends
 ([`memory/classifier.md → Failure policy`](../memory/classifier.md#failure-policy)).
+The other is a Send's owed work, the pass or close it runs before its
+turn: it runs under the Send's pending mark, which refuses head
+reversals until the turn starts, so a reversal can't interrupt it,
+minutes long for a close, and the pill's, the composer's or the banner's
+`Cancel` ends the whole Send
+([`generation-pipeline.md → Gate derivation as a selector`](../generation-pipeline.md#gate-derivation-as-a-selector)).
 
 The turn and the close are atomic per their `action_id` (see
 [`data-model.md → Entry mutability & rollback`](../data-model.md#entry-mutability--rollback))
@@ -357,7 +363,7 @@ menu, Story Settings; see
   reverse-replay of the `action_id`'s deltas. Universal escape
   hatch. A cancelled pass or close runs before the next turn instead.
 - **Head reversals during a pass or a close** — see above, except
-  during a pass a system entry's `Retry` started.
+  during a system entry's `Retry` and a Send's owed work.
 - **In-story navigation** — moving between reader, World, Plot,
   Story Settings, Chapter Timeline, Branch Navigator inside the
   active story. The transaction continues; affordances follow the
@@ -419,8 +425,8 @@ is the suggestion strip's ✕.
 A disabled control's tooltip names the run it waits on, which is not
 always the pill's. A head reversal passes through a pass or a close, so
 beside one it waits on whatever else holds the gate (a refresh, a
-turn) and names that run. With no such run, as during a pass a failure
-entry's `Retry` started, it names the pill's.
+turn) and names that run. With no such run, as during a failure
+entry's `Retry` or a Send's owed work, it names the pill's.
 
 Tooltip copy is principle-owned. Per-screen docs cite, don't
 reinvent.

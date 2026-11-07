@@ -9,6 +9,7 @@ import type { PipelineError } from '@/lib/pipeline'
 
 import { describeSuggestionFailure } from './suggestion-failure'
 import {
+  describeCloseFailure,
   describePassFailure,
   describeTurnFailure,
   useConfigFixAction,
@@ -18,7 +19,7 @@ vi.mock('expo-router', () => ({ useRouter: () => ({ navigate: vi.fn(), push: vi.
 
 afterEach(cleanup)
 
-type WordingSet = 'turn' | 'pass' | 'suggestion' | 'fix'
+type WordingSet = 'turn' | 'pass' | 'close' | 'suggestion' | 'fix'
 
 // Spelled out here rather than read off the resolvers, so a swapped pair there fails here; the
 // Record makes a new kind a type error in this file too.
@@ -26,31 +27,35 @@ const EXPECTED: Record<ResolveFailureKind, Record<WordingSet, string>> = {
   'no-profile-assigned': {
     turn: 'reader:systemEntry.failure.noProfileAssigned',
     pass: 'reader:systemEntry.failure.memoryNoProfileAssigned',
+    close: 'reader:systemEntry.failure.closeNoProfileAssigned',
     suggestion: 'reader:suggestions.failure.noProfileAssigned',
     fix: 'reader:systemEntry.assignProfile',
   },
   'profile-missing': {
     turn: 'reader:systemEntry.failure.profileMissing',
     pass: 'reader:systemEntry.failure.memoryProfileMissing',
+    close: 'reader:systemEntry.failure.closeProfileMissing',
     suggestion: 'reader:suggestions.failure.profileMissing',
     fix: 'reader:systemEntry.fixProfile',
   },
   'provider-missing': {
     turn: 'reader:systemEntry.failure.providerMissing',
     pass: 'reader:systemEntry.failure.memoryProviderMissing',
+    close: 'reader:systemEntry.failure.closeProviderMissing',
     suggestion: 'reader:suggestions.failure.providerMissing',
     fix: 'reader:systemEntry.fixDefault',
   },
   'override-provider-missing': {
     turn: 'reader:systemEntry.failure.overrideProviderMissing',
     pass: 'reader:systemEntry.failure.memoryOverrideProviderMissing',
+    close: 'reader:systemEntry.failure.closeOverrideProviderMissing',
     suggestion: 'reader:suggestions.failure.overrideProviderMissing',
     fix: 'reader:systemEntry.fixOverride',
   },
 }
 
 const KINDS = Object.keys(EXPECTED) as ResolveFailureKind[]
-const SETS: WordingSet[] = ['turn', 'pass', 'suggestion', 'fix']
+const SETS: WordingSet[] = ['turn', 'pass', 'close', 'suggestion', 'fix']
 
 const copyOf = (key: string) => (t as unknown as (k: string) => string)(key)
 
@@ -62,6 +67,7 @@ function resolve(kind: ResolveFailureKind, set: WordingSet): string | undefined 
   const error = resolverError(kind)
   if (set === 'turn') return describeTurnFailure(error).content
   if (set === 'pass') return describePassFailure({ held: false, error }).content
+  if (set === 'close') return describeCloseFailure(error).content
   if (set === 'suggestion') return describeSuggestionFailure(error)
   return renderHook(() => useConfigFixAction(kind, 'story_1', (proceed) => proceed())).result
     .current?.label

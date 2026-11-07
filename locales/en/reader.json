@@ -62,6 +62,7 @@
   "stateUnappliedNarrative": "Part of this turn's world state couldn't be applied. A more capable narrative model may help.",
   "stateUnappliedClassifier": "Part of this turn's world state couldn't be applied. A more capable classifier model may help.",
   "passRetryFinishFailed": "Couldn't update the memory entry. Please try again.",
+  "closeRetryFinishFailed": "Couldn't update the chapter close entry. Please try again.",
   "regenerateUnavailable": "This reply can't be regenerated.",
   "regenerateHeld": "An earlier memory update on this branch couldn't be undone, so it can't take turns yet.",
   "regenerateCancelledDraftKept": "Regeneration cancelled. Your draft was kept, so the discarded action wasn't restored.",
@@ -193,6 +194,9 @@
     "blockedDetail": "blocked by another operation ({{reason}})",
     "passRetryBlocked": "Memory update couldn't start ({{reason}}).",
     "passResolvedTextKept": "Memory updated. The composer couldn't take your text back, so it's kept here.",
+    "closeRetryBlocked": "Chapter close can't start yet: {{reason}}.",
+    "closeResolvedTextKept": "Chapter closed. The composer couldn't take your text back, so it's kept here.",
+    "closeNothingOwedTextKept": "Nothing left to close. The composer couldn't take your text back, so it's kept here.",
     "failure": {
       "llmCall": "LLM call failed.",
       "embed": "The embedder failed, so memory retrieval couldn't run.",
@@ -206,6 +210,11 @@
       "memoryProviderMissing": "Memory update failed: the classifier model's provider is missing.",
       "memoryOverrideProviderMissing": "Memory update failed: this story's classifier model override names a provider that no longer exists.",
       "memoryHeld": "An earlier memory update on this branch couldn't be undone, so it can't take turns yet. Restarting the app retries the undo.",
+      "close": "Chapter close failed, so your turn didn't start. Retry it, or send again.",
+      "closeNoProfileAssigned": "Chapter close failed: the lore management agent has no profile assigned.",
+      "closeProfileMissing": "Chapter close failed: the lore management agent's assigned profile is missing.",
+      "closeProviderMissing": "Chapter close failed: the lore management model's provider is missing.",
+      "closeOverrideProviderMissing": "Chapter close failed: this story's lore management model override names a provider that no longer exists.",
       "emptyReply": "The model returned no text. Nothing was committed; Retry resends your turn.",
       "replyCutOff": {
         "maxOutput": "The reply was cut off at the narrative profile's {{limit, number}}-token max output before any story text. Raise the max output, then Retry.",
@@ -220,6 +229,12 @@
         "unknown": "Memory update failed, so your turn didn't start. The server stopped the update's reply at its own limit. Setting a max output on the classifier profile overrides it.",
         "unknownWithMaxOutput": "Memory update failed, so your turn didn't start. The server stopped the update's reply at its own limit, short of the classifier profile's {{limit, number}}-token max output."
       },
+      "closeCutOff": {
+        "maxOutput": "Chapter close failed, so your turn didn't start. The close's reply was cut off at the lore management profile's {{limit, number}}-token max output. Raise it, then Retry.",
+        "window": "Chapter close failed, so your turn didn't start. The close's reply was cut off where the prompt and reply filled the model's {{limit, number}}-token window.",
+        "unknown": "Chapter close failed, so your turn didn't start. The server stopped the close's reply at its own limit. Setting a max output on the lore management profile overrides it.",
+        "unknownWithMaxOutput": "Chapter close failed, so your turn didn't start. The server stopped the close's reply at its own limit, short of the lore management profile's {{limit, number}}-token max output."
+      },
       "contextWindow": {
         "check": "This prompt is about {{estimate, number}} tokens; {{model}}'s context window is {{window, number}} ({{source}}). Nothing was sent. Shorten the prompt in Story Settings (memory budgets, history buffer), raise the window if the model allows more, or switch to a model with a larger one.",
         "provider": "The provider rejected the prompt. Its message suggests it exceeded the model's context window: “{{message}}”. Our estimate: about {{estimate, number}} tokens. Shorten the prompt in Story Settings (memory budgets, history buffer), raise the window if the model allows more, or switch to a model with a larger one."
@@ -227,6 +242,10 @@
       "memoryContextWindow": {
         "check": "Memory update failed, so your turn didn't start. The update's prompt is about {{estimate, number}} tokens; {{model}}'s context window is {{window, number}} ({{source}}). Raise the window if the model allows more, or switch the classifier to a model with a larger one.",
         "provider": "Memory update failed, so your turn didn't start. The provider rejected the update's prompt; its message suggests it exceeded the model's context window: “{{message}}”. Our estimate: about {{estimate, number}} tokens. Raise the window if the model allows more, or switch the classifier to a model with a larger one."
+      },
+      "closeContextWindow": {
+        "check": "Chapter close failed, so your turn didn't start. The close's prompt is about {{estimate, number}} tokens; {{model}}'s context window is {{window, number}} ({{source}}). Raise the window if the model allows more, or switch the lore management agent to a model with a larger one.",
+        "provider": "Chapter close failed, so your turn didn't start. The provider rejected the close's prompt; its message suggests it exceeded the model's context window: “{{message}}”. Our estimate: about {{estimate, number}} tokens. Raise the window if the model allows more, or switch the lore management agent to a model with a larger one."
       },
       "capabilityHint": {
         "reasoning": "The provider rejected the request. Its message mentions `{{matched}}`. That can mean this model doesn't support reasoning: check the profile's thinking setting and the model's 🧠 badge. The provider may also have rejected the request for another reason.",
@@ -237,6 +256,11 @@
         "reasoning": "Memory update failed, so your turn didn't start. The provider rejected the update's request. Its message mentions `{{matched}}`. That can mean this model doesn't support reasoning: check the profile's thinking setting and the model's 🧠 badge. The provider may also have rejected the request for another reason.",
         "structuredOutput": "Memory update failed, so your turn didn't start. The provider rejected the update's request. Its message mentions `{{matched}}`. That can mean this model doesn't support structured output: check the profile's structured-output setting and the model's badge. The provider may also have rejected the request for another reason.",
         "toolCalling": "Memory update failed, so your turn didn't start. The provider rejected the update's request. Its message mentions `{{matched}}`. That can mean this model doesn't support tool calling. The provider may also have rejected the request for another reason."
+      },
+      "closeCapabilityHint": {
+        "reasoning": "Chapter close failed, so your turn didn't start. The provider rejected the close's request. Its message mentions `{{matched}}`. That can mean this model doesn't support reasoning: check the profile's thinking setting and the model's 🧠 badge. The provider may also have rejected the request for another reason.",
+        "structuredOutput": "Chapter close failed, so your turn didn't start. The provider rejected the close's request. Its message mentions `{{matched}}`. That can mean this model doesn't support structured output: check the profile's structured-output setting and the model's badge. The provider may also have rejected the request for another reason.",
+        "toolCalling": "Chapter close failed, so your turn didn't start. The provider rejected the close's request. Its message mentions `{{matched}}`. That can mean this model doesn't support tool calling. The provider may also have rejected the request for another reason."
       }
     }
   },

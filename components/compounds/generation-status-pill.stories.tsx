@@ -126,6 +126,31 @@ export const ActiveClosingChapter: Story = {
       onErrorTap={onErrorTap}
     />
   ),
+  play: async () => {
+    expect(
+      await screen.findByRole('button', {
+        name: t('chrome.generationStatusPill.phase.closingChapter'),
+      }),
+    ).toBeInTheDocument()
+    expect(
+      screen.queryByText(t('chrome.generationStatusPill.phase.closingChapterBeforeTurn')),
+    ).toBeNull()
+  },
+}
+
+// Send's owed close: the close runs first and the turn waits behind it.
+export const ActiveClosingChapterBeforeTurn: Story = {
+  args: { activePhase: 'closing-chapter', beforeTurn: true, onCancel: fn(), onErrorTap: fn() },
+  play: async ({ args }) => {
+    const label = t('chrome.generationStatusPill.phase.closingChapterBeforeTurn')
+    await userEvent.click(await screen.findByRole('button', { name: label }))
+    await userEvent.click(
+      await screen.findByRole('button', {
+        name: t('chrome.generationStatusPill.cancelChapterClose'),
+      }),
+    )
+    await waitFor(() => expect(args.onCancel).toHaveBeenCalledTimes(1))
+  },
 }
 
 export const ActiveRefreshingSuggestions: Story = {

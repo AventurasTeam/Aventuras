@@ -78,7 +78,7 @@ export async function updateStoryEntryContent(
   const inHeadTurn =
     onlyInterruptibleRunsHold(branchId) && (await isHeadTurnEntry(branchId, id, ctx))
   if (contentEditBlocked(branchId, inHeadTurn)) return inFlightRejection()
-  return bracketProseReversal(branchId, () =>
+  return bracketProseReversal(branchId, ctx, () =>
     updateStoryEntryContentBracketed(branchId, id, content, ctx),
   )
 }
@@ -376,7 +376,7 @@ export async function rollbackToEntry(
   // A head reversal: a pass or a close holding the gate is interrupted, not waited for.
   if (generationStore.isHeadReversalBlocked(branchId)) return inFlightRejection()
 
-  return bracketProseReversal(branchId, async () => {
+  return bracketProseReversal(branchId, ctx, async () => {
     const swept = await resolveSweep(branchId, targetId, ctx)
     if ('status' in swept) return swept
     const counts = rollbackCountsOf(swept.set)
