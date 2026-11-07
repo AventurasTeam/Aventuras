@@ -610,7 +610,7 @@ Shipped shape this replaces: `applyDeltaActionGroup` returns only
 `ok` or `rejected`, and a noop vanishes inside a group
 (`lib/actions/delta/apply-delta-action.ts:225-227,300,334-348`).
 `consumePhase` calls `gen.next()` with no argument
-(`consumePhase` in `orchestrator.ts`) and a rejection throws (`:214`), so
+(`consumePhase` in `orchestrator.ts`) and a rejection throws (`:219`), so
 `delta_group_emitted` and a per-action outcome back through the `yield`
 are 5.5a's. One `code: 'noop'` covers four things: a restated value, a
 user-won write, a gone row and a broken rule such as `not-active` or a

@@ -96,11 +96,11 @@ slice-planning gate forces its resolution before that slice is planned.
   shape.
 - **Refusal codes repeated as literals.** `'branch-not-open'`
   (`lib/actions/classifier/run-now.ts:14`) and `'embedder-swap'`
-  (`lib/actions/turns/submit-turn.ts:57`) restate
+  (`lib/actions/turns/submit-turn.ts:54`) restate
   `MANUAL_CLOSE_REFUSAL.branchNotOpen` and `.swapPending`
-  (`lib/actions/chapters/start-manual-close.ts`).
+  (`lib/actions/chapters/close-chain.ts`).
 - **Pre-flight reads the open story's settings after two awaits.**
-  `lib/pipeline/runtime/orchestrator.ts:553-555` reads
+  `lib/pipeline/runtime/orchestrator.ts:558-560` reads
   `currentStoryStore.getCurrentStory()?.settings` after `beginRun` and
   `settleUserWrites`; a story switch in between checks the wrong
   story's settings. Unverified as reachable.
@@ -162,7 +162,7 @@ slice-planning gate forces its resolution before that slice is planned.
   call reads its stores before its first await. Surfaced by Slice 5.2's
   review.
 - **Phase intermediates are an untyped bag.** `PhaseContext.intermediates`
-  is `Record<string, unknown>` (`lib/pipeline/types.ts:106`), and each
+  is `Record<string, unknown>` (`lib/pipeline/types.ts:103`), and each
   reader casts its key: the retrieval outcome behind a shape check
   (`generation-context.ts`), the close's range and ledger
   (`chapter-close-metadata.ts`, `chapter-close-report.ts`) and the pass's
