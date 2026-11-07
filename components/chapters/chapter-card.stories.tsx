@@ -81,14 +81,12 @@ const TAVERN = chapter({
 
 const LATEST: ChapterCardData = {
   row: TRAIL,
-  number: 2,
   latest: true,
   timeLabel: 'Day 2 → Day 3',
   entryRange: { first: 12, last: 34 },
 }
 const EARLIER: ChapterCardData = {
   row: TAVERN,
-  number: 1,
   latest: false,
   timeLabel: null,
   entryRange: null,

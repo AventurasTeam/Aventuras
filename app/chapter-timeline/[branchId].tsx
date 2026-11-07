@@ -150,7 +150,7 @@ export default function ChapterTimelineRoute(): ReactElement {
           >
             {/* The wireframe's .timeline-col: one centered column, capped at 760 px. */}
             <View className="w-full max-w-[760px] gap-2.5 self-center">
-              <ChapterTimelineHeader closedCount={timeline.closedCount} />
+              <ChapterTimelineHeader closedCount={timeline.cards.length} />
               {timeline.cards.map((card) => {
                 const expanded = card.row.id === expandedId
                 return (

@@ -68,13 +68,11 @@ describe('chapterTimelineData', () => {
   it('orders the cards by sequence number whatever the input order', () => {
     const { cards } = data([chapter(10), chapter(2), chapter(9)])
     expect(cards.map((card) => card.row.id)).toEqual(['br_1_chap_2', 'br_1_chap_9', 'br_1_chap_10'])
-    expect(cards.map((card) => card.number)).toEqual([2, 9, 10])
   })
 
-  it("keeps only the branch's rows and counts them", () => {
-    const { cards, closedCount } = data([chapter(1), chapter(4, 'br_2'), chapter(2)])
+  it("keeps only the branch's rows", () => {
+    const { cards } = data([chapter(1), chapter(4, 'br_2'), chapter(2)])
     expect(cards.map((card) => card.row.id)).toEqual(['br_1_chap_1', 'br_1_chap_2'])
-    expect(closedCount).toBe(2)
   })
 
   it('flags only the highest sequence on the branch as latest', () => {
@@ -83,7 +81,7 @@ describe('chapterTimelineData', () => {
   })
 
   it('gives no cards for a branch with no closed chapter', () => {
-    expect(data([chapter(1, 'br_2')])).toEqual({ cards: [], closedCount: 0, sinceLabel: null })
+    expect(data([chapter(1, 'br_2')])).toEqual({ cards: [], sinceLabel: null })
   })
 
   it('carries the store row itself', () => {
@@ -93,7 +91,7 @@ describe('chapterTimelineData', () => {
 
   it("takes the store map's values iterator", () => {
     const row = chapter(1)
-    expect(data(new Map([[row.id, row]]).values()).closedCount).toBe(1)
+    expect(data(new Map([[row.id, row]]).values()).cards.map((card) => card.row)).toEqual([row])
   })
 
   it("labels a chapter's time range through the calendar", () => {

@@ -156,7 +156,7 @@ function CardHead({
   padding: string
   onToggle: () => void
 }) {
-  const heading = chapterHeading(data.number, data.row.title)
+  const heading = chapterHeading(data.row.sequenceNumber, data.row.title)
   const meta = [data.timeLabel, compactTokenLabel(data.row.tokenCount), data.row.theme]
     .filter((part): part is string => part != null && part.trim() !== '')
     .join(' · ')

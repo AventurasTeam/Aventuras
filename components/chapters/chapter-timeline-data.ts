@@ -7,8 +7,6 @@ import type { StoreChapter } from '@/lib/stores'
 export type ChapterCardData = {
   /** The store row, by identity. */
   row: StoreChapter
-  /** The stored sequence number, not a display index. */
-  number: number
   latest: boolean
   timeLabel: string | null
   entryRange: { first: number; last: number } | null
@@ -16,7 +14,6 @@ export type ChapterCardData = {
 
 export type ChapterTimelineData = {
   cards: readonly ChapterCardData[]
-  closedCount: number
   /** The open region's first world time, as a label; null without one. */
   sinceLabel: string | null
 }
@@ -47,7 +44,6 @@ export function chapterTimelineData({
   const cards = kept.map(
     (row, index): ChapterCardData => ({
       row,
-      number: row.sequenceNumber,
       latest: index === kept.length - 1,
       timeLabel: chapterTimeRangeLabel(ranges.get(row.id), frame),
       entryRange: entryRangeOf(row, entryIndex),
@@ -56,7 +52,6 @@ export function chapterTimelineData({
   const open = ranges.get(null)
   return {
     cards,
-    closedCount: kept.length,
     sinceLabel: open == null ? null : worldTimeLabel(open.first, frame),
   }
 }
