@@ -538,7 +538,7 @@ change amends the scope above.
   regenerate's close arm and edits the same row, so the answer lands here.
   Default: today's counting stands and the row names those tables too, leaving
   open only the translation of a deleted entry. Routed from triage 2026-11-06.
-- **What residue is accepted?** Three narrow cases. Duplicates after CTRL-Z and
+- **What residue is accepted?** Four narrow cases. Duplicates after CTRL-Z and
   redo over a manual close at the head, which chapter-close dedup never revisits.
   A head edit under a committed close, which keeps writes derived from the
   replaced prose. A failed reversal under a later close, which a later boot
@@ -551,10 +551,15 @@ change amends the scope above.
   (`chapter-close-metadata-call.ts:45-55`), while its token count and stamps
   take only the open region's rows. A scratch probe closed A (entries 1–5) and
   B (6–9), reversed A's actions, then closed to 13, and got chapters 2 (6–9) and
-  3 (1–13). All need a manual close or a failed transaction. Default: accept
-  all three with no code, and narrow `chapter-close.md`'s "a partial close, not
-  broken state" to what it covers, since a later boot breaks it. Accepting the
-  residue with no code now accepts overlapping chapters too.
+  3 (1–13). A close stopped before its stamps whose own reversal fails, which
+  keeps its chapter row until a boot reverses it while `closeOwed` still reads
+  true. Since Slice 5.6 the next Send, a close-failure entry's Retry or the
+  turn's chain runs the close again at once, so two chapters cover the same
+  entries until a restart, then a gap in the numbering. All need a manual close
+  or a failed transaction, the fourth only the failed transaction. Default:
+  accept all four with no code, and narrow `chapter-close.md`'s "a partial
+  close, not broken state" to what it covers, since a later boot breaks it.
+  Accepting the residue with no code now accepts overlapping chapters too.
 - **Does 5.9's guard meet C13's stackable rule, if 5.9 lands first?** It reads the
   edits the walk holds, so `undoUpdate`'s widened map should fill it. Default: yes,
   an arm and no code. The later of the two to land confirms it.
