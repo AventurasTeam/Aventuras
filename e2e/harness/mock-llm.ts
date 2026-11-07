@@ -324,7 +324,7 @@ export async function startMockLlm(): Promise<MockLlm> {
   }
 
   // Built before any header goes out, so a throw (a value JSON can't hold) still ends the response.
-  const answer = (res: ServerResponse, build: () => string): void => {
+  const respond = (res: ServerResponse, build: () => string): void => {
     let replyBody: string
     try {
       replyBody = build()
@@ -338,16 +338,16 @@ export async function startMockLlm(): Promise<MockLlm> {
     res.end(replyBody)
   }
 
-  const answerUnheld = (res: ServerResponse, build: () => string): void => {
+  const respondUnheld = (res: ServerResponse, build: () => string): void => {
     try {
-      answer(res, build)
+      respond(res, build)
     } catch (error) {
       unheldThrow ??= { error }
     }
   }
 
   const holdStructured = (res: ServerResponse, build: () => string): void => {
-    heldStructured.set(res, () => answer(res, build))
+    heldStructured.set(res, () => respond(res, build))
     res.on('close', () => heldStructured.delete(res))
   }
 
@@ -433,7 +433,7 @@ export async function startMockLlm(): Promise<MockLlm> {
           holdStructured(res, () => toolBody(lane, request))
           return
         }
-        answerUnheld(res, () => toolBody(lane, request))
+        respondUnheld(res, () => toolBody(lane, request))
         return
       }
 
@@ -451,7 +451,7 @@ export async function startMockLlm(): Promise<MockLlm> {
         holdStructured(res, () => structuredBody(agent.name, text))
         return
       }
-      answerUnheld(res, () => structuredBody(agent?.name ?? null, text))
+      respondUnheld(res, () => structuredBody(agent?.name ?? null, text))
     })()
   })
 
