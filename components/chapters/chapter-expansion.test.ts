@@ -67,6 +67,15 @@ describe('nextExpandedChapter', () => {
     expect(state).toEqual({ expandedId: null, baseline: 3 })
   })
 
+  it('expands the close of a run the route became ready during', () => {
+    const rows = [row(9, 'chap_c'), row(3, 'chap_q'), row(12, 'chap_a')]
+    const state = judge([
+      input({ rows, runInFlight: true }),
+      input({ rows: [row(13, 'chap_b'), ...rows] }),
+    ])
+    expect(state).toEqual({ expandedId: 'chap_b', baseline: 13 })
+  })
+
   it("expands a story's first chapter, landing on an empty branch", () => {
     const state = judge([input({ rows: [] }), input({ rows: [row(1)] })])
     expect(state).toEqual({ expandedId: 'chap_1', baseline: 1 })
