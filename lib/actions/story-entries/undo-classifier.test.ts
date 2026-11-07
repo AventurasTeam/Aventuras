@@ -1,8 +1,9 @@
-import { eq } from 'drizzle-orm'
-import { afterEach, describe, expect, it } from 'vitest'
+import { desc, eq } from 'drizzle-orm'
+import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 
 import {
   branches,
+  chapters,
   deltas,
   happeningAwareness,
   happenings,
@@ -16,6 +17,8 @@ import {
   type StoryEntry,
 } from '@/lib/db'
 import { createTestDb } from '@/lib/db/__tests__/test-db'
+import { CHAPTER_CLOSE_KIND, startPipeline } from '@/lib/pipeline'
+import { resetSingletons } from '@/lib/pipeline/__tests__/harness'
 import {
   entriesStore,
   generationStore,
@@ -26,6 +29,8 @@ import {
 
 import { redoLastAction, undoLastAction } from './undo'
 import { applyDeltaAction } from '../delta/apply-delta-action'
+import { registerStandInClose } from '../turns/__tests__/stand-in-close'
+import { failReversalsOf, recordDeferrals } from '../turns/__tests__/stand-in-pass'
 
 afterEach(() => {
   entriesStore.__reset()
@@ -523,5 +528,64 @@ describe('AC5 — redo of a classifier-processed turn tolerates re-derivation', 
     // Two happening rows for the fact — the tolerated duplicate.
     const hapRows = await db.select().from(happenings).where(eq(happenings.branchId, 'b1'))
     expect(hapRows.map((h) => h.id).sort()).toEqual(['hap_b1', 'hap_b1_dup'])
+  })
+})
+
+// generation-pipeline.md → Prose reversals and the interrupt: CTRL-Z of the turn passes a close.
+describe('CTRL-Z of the turn under a running close', () => {
+  beforeEach(() => resetSingletons())
+  afterEach(() => resetSingletons())
+
+  const GATED = { status: 'rejected', code: 'gated', reason: 'generation in flight' }
+
+  // A turn, then a close holding after its chapter row: the close's row heads the log.
+  async function seedTurnUnderClose() {
+    const { db, ctx } = await seedBranch([
+      entry('e_opening', 1, 'opening'),
+      entry('e_t1', 2, 'ai_reply'),
+    ])
+    await db
+      .insert(deltas)
+      .values(delta('d_t1', 1, 'act_t1', 'ai_classifier', 'story_entries', 'e_t1', 'create'))
+    const close = registerStandInClose()
+    const deferrals = recordDeferrals()
+    const start = startPipeline(CHAPTER_CLOSE_KIND, { storyId: 's1', branchId: 'b1', ...ctx })
+    const held = await close.nextHeld()
+    const [head] = await db.select().from(deltas).orderBy(desc(deltas.logPosition)).limit(1)
+    expect(head).toMatchObject({ actionId: held.actionId, source: 'chapter_close' })
+    return { db, ctx, close, start, held, deferrals }
+  }
+
+  it('interrupts and reverses the close, defers it, then reverses the turn', async () => {
+    const { db, ctx, start, held, deferrals } = await seedTurnUnderClose()
+
+    expect(await undoLastAction('b1', ctx)).toEqual({ status: 'ok' })
+
+    expect(await start.origin).toMatchObject({ outcome: 'aborted', actionId: held.actionId })
+    expect(await db.select().from(chapters)).toEqual([])
+    expect(await db.select().from(deltas)).toEqual([])
+    expect(generationStore.getTxState().deferred.get('b1')).toEqual({ close: true })
+    expect(deferrals).toEqual([
+      expect.objectContaining({ kind: CHAPTER_CLOSE_KIND, work: 'close' }),
+    ])
+    expect(entriesStore.getById('e_t1')).toBeUndefined()
+    expect(await db.select().from(storyEntries).where(eq(storyEntries.id, 'e_t1'))).toEqual([])
+  })
+
+  it('refuses as gated when the close cannot be reversed, leaving the turn', async () => {
+    const { db, ctx, close, start, held } = await seedTurnUnderClose()
+    failReversalsOf(close)
+
+    expect(await undoLastAction('b1', ctx)).toEqual(GATED)
+
+    // Uncommitted: the close's row stays for boot recovery, still the head, so the turn is not.
+    expect(await start.origin).toMatchObject({
+      outcome: 'failed',
+      actionId: held.actionId,
+      error: { kind: 'orchestrator' },
+    })
+    expect(await db.select().from(chapters)).toHaveLength(1)
+    expect(generationStore.getTxState().deferred.size).toBe(0)
+    expect(entriesStore.getById('e_t1')).toBeDefined()
   })
 })

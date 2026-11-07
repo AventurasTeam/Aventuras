@@ -1091,3 +1091,65 @@ describe('a close owed over a backlog', () => {
     },
   )
 })
+
+// The second interrupt order: the abort lands after the swap into the close, before it starts.
+describe('an interrupt at the swap into a close', () => {
+  beforeEach(() => resetSingletons())
+  afterEach(() => resetSingletons())
+
+  // No lore-mgmt profile is assigned, so the close's pre-flight fails unless something cancels it.
+  function defineCloseAfterPred(): void {
+    definePipeline({
+      kind: CHAPTER_CLOSE_KIND,
+      phases: [{ name: 'boundary', run: noop, resolves: [{ target: 'lore-mgmt' }] }],
+      affordance: 'pill-and-banner',
+      gateBehavior: 'hard-gate',
+      interruptible: 'close',
+      concurrencyPolicy: {},
+    })
+    definePipeline({
+      kind: 'pred',
+      phases: [{ name: 'p', run: noop }],
+      chainsTo: () => CHAPTER_CLOSE_KIND,
+      ...base,
+    })
+  }
+
+  it('fails the close at pre-flight when nothing interrupts it', async () => {
+    const { ctx } = await makeHarness()
+    defineCloseAfterPred()
+
+    const { chain } = startPipeline('pred', ctx)
+
+    expect(await chain).toMatchObject({
+      kind: CHAPTER_CLOSE_KIND,
+      result: { outcome: 'failed', error: { kind: 'config-resolver', target: 'lore-mgmt' } },
+    })
+    expect(logged('pipeline.preflight_failed')).toBe(true)
+  })
+
+  it('aborts the close at the top of its drive, skipping pre-flight, and defers it', async () => {
+    const { ctx } = await makeHarness()
+    defineCloseAfterPred()
+    const deferred: unknown[] = []
+    pipelineEventBus.subscribe('run_deferred', (e) => {
+      deferred.push(e)
+    })
+    let interrupted: Promise<void> | undefined
+    // The close is swapped in at pred's commit, before pred's run_complete goes out.
+    pipelineEventBus.subscribe('run_complete', (e) => {
+      if (e.kind === 'pred') interrupted = interruptMemoryRuns('b1')
+    })
+
+    const { origin, chain } = startPipeline('pred', ctx)
+    expect(expectRan(await origin).outcome).toBe('completed')
+    const end = await chain
+    await interrupted
+
+    expect(interrupted).toBeDefined()
+    expect(end).toMatchObject({ kind: CHAPTER_CLOSE_KIND, result: { outcome: 'aborted' } })
+    expect(logged('pipeline.preflight_failed')).toBe(false)
+    expect(generationStore.getTxState().deferred.get('b1')).toEqual({ close: true })
+    expect(deferred).toEqual([expect.objectContaining({ kind: CHAPTER_CLOSE_KIND, work: 'close' })])
+  })
+})
