@@ -90,7 +90,6 @@ describe('saveChapter', () => {
     const row = await keepRow(db)
     const result = await saveChapter(
       {
-        branchId: 'br_1',
         row,
         draft: {
           ...chapterDraftFrom(row),
@@ -124,9 +123,10 @@ describe('saveChapter', () => {
   it('writes nothing for an unchanged draft and reports ok', async () => {
     const { db, ctx } = await setup()
     const row = await keepRow(db)
-    expect(await saveChapter({ branchId: 'br_1', row, draft: chapterDraftFrom(row) }, ctx)).toEqual(
-      { status: 'ok', id: 'chap_keep' },
-    )
+    expect(await saveChapter({ row, draft: chapterDraftFrom(row) }, ctx)).toEqual({
+      status: 'ok',
+      id: 'chap_keep',
+    })
     expect(await deltaRows(db)).toHaveLength(0)
   })
 
@@ -136,7 +136,7 @@ describe('saveChapter', () => {
     blockGeneration()
     const warn = vi.spyOn(logger, 'warn').mockImplementation(() => {})
     const result = await saveChapter(
-      { branchId: 'br_1', row, draft: { ...chapterDraftFrom(row), title: 'The Keep Falls' } },
+      { row, draft: { ...chapterDraftFrom(row), title: 'The Keep Falls' } },
       ctx,
     )
     expect(result).toEqual({
@@ -159,7 +159,7 @@ describe('saveChapter', () => {
     await db.delete(chapters).where(eq(chapters.id, 'chap_keep'))
     const warn = vi.spyOn(logger, 'warn').mockImplementation(() => {})
     const result = await saveChapter(
-      { branchId: 'br_1', row, draft: { ...chapterDraftFrom(row), title: 'The Keep Falls' } },
+      { row, draft: { ...chapterDraftFrom(row), title: 'The Keep Falls' } },
       ctx,
     )
     expect(result).toMatchObject({ status: 'rejected', code: 'not-found' })
@@ -178,10 +178,7 @@ describe('saveChapter', () => {
     const { db, ctx } = await setup()
     const row = await keepRow(db)
     expect(
-      await saveChapter(
-        { branchId: 'br_1', row, draft: { ...chapterDraftFrom(row), title: 'The Keep Falls' } },
-        ctx,
-      ),
+      await saveChapter({ row, draft: { ...chapterDraftFrom(row), title: 'The Keep Falls' } }, ctx),
     ).toMatchObject({ status: 'ok' })
     expect((await keepRow(db)).embeddingStale).toBe(0)
 
@@ -189,7 +186,6 @@ describe('saveChapter', () => {
     expect(
       await saveChapter(
         {
-          branchId: 'br_1',
           row: titled,
           draft: { ...chapterDraftFrom(titled), summary: 'The keep gives way.' },
         },

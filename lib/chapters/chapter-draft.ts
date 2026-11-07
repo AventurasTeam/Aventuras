@@ -37,7 +37,10 @@ export const EMPTY_CHAPTER_DRAFT: Readonly<
 })
 
 /** Pick, not Chapter or StoreChapter: both carry these columns. */
-export type ChapterDraftRow = Pick<Chapter, 'id' | 'title' | 'theme' | 'summary' | 'keywords'>
+export type ChapterDraftRow = Pick<
+  Chapter,
+  'id' | 'branchId' | 'title' | 'theme' | 'summary' | 'keywords'
+>
 
 /** New arrays every call; null gives a copy of EMPTY_CHAPTER_DRAFT. */
 export function chapterDraftFrom(row: ChapterDraftRow | null): ChapterDraft {
@@ -70,15 +73,19 @@ function chapterPatch(row: ChapterDraftRow, draft: ChapterDraft): ChapterPatch {
 
 /** One `updateChapter` (source `user_edit`) with the changed columns, or nothing. */
 export function chapterActions({
-  branchId,
   row,
   draft,
 }: {
-  branchId: string
   row: ChapterDraftRow
   draft: ChapterDraft
 }): PipelineAction[] {
   const patch = chapterPatch(row, draft)
   if (Object.keys(patch).length === 0) return []
-  return [{ kind: 'updateChapter', source: 'user_edit', payload: { branchId, id: row.id, patch } }]
+  return [
+    {
+      kind: 'updateChapter',
+      source: 'user_edit',
+      payload: { branchId: row.branchId, id: row.id, patch },
+    },
+  ]
 }

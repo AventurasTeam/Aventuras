@@ -12,6 +12,7 @@ import {
 
 const ROW: ChapterDraftRow = {
   id: 'chap_keep',
+  branchId: 'br_1',
   title: 'The Keep Leans Closer',
   theme: 'dread',
   summary: 'The courier reaches the keep at dusk.',
@@ -19,7 +20,7 @@ const ROW: ChapterDraftRow = {
 }
 
 const actionsFor = (draft: ChapterDraft, row: ChapterDraftRow = ROW) =>
-  chapterActions({ branchId: 'br_1', row, draft })
+  chapterActions({ row, draft })
 
 describe('chapterDraftSchema', () => {
   it('refuses a blank title and a blank summary, each with its own issue', () => {

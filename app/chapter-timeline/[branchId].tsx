@@ -27,13 +27,15 @@ import { useStoryLeaveGuard } from '@/hooks/use-story-leave-guard'
 import { useTier } from '@/hooks/use-tier'
 import { saveChapter } from '@/lib/actions'
 import { resolveCalendar, type CalendarFrame } from '@/lib/calendar'
-import type { ChapterDraft } from '@/lib/chapters'
+import type { ChapterDraft, ChapterDraftRow } from '@/lib/chapters'
 import { db, runInTransaction } from '@/lib/db'
 import { t } from '@/lib/i18n'
-import { chaptersStore, storiesStore, type StoreChapter } from '@/lib/stores'
+import { chaptersStore, storiesStore } from '@/lib/stores'
 import { toast } from '@/lib/toast'
 
 const ctx = { db, runInTransaction }
+
+const save = (row: ChapterDraftRow, draft: ChapterDraft) => saveChapter({ row, draft }, ctx)
 
 export default function ChapterTimelineRoute(): ReactElement {
   const router = useRouter()
@@ -76,10 +78,6 @@ export default function ChapterTimelineRoute(): ReactElement {
   )
   const expansionRows = useMemo(() => timeline.cards.map((card) => card.row), [timeline.cards])
 
-  const save = useCallback(
-    (row: StoreChapter, draft: ChapterDraft) => saveChapter({ branchId, row, draft }, ctx),
-    [branchId],
-  )
   const onSaved = useCallback(() => toast.success(t('chapters:save.saved')), [])
   // Hosted above every card for the route's life, so the phone bar can sit outside the scroller.
   const { expandedId, session, toggle, guard, navigateGuarded } = useTimelineEditing({

@@ -22,6 +22,7 @@ Object.defineProperty(window, 'HTMLElement', {
 
 const KEEP: ChapterDraftRow = {
   id: 'chap_keep',
+  branchId: 'br_1',
   title: 'The Keep Leans Closer',
   theme: 'pressure and pacts',
   summary: 'The courier reaches the keep at dusk.',
@@ -29,6 +30,7 @@ const KEEP: ChapterDraftRow = {
 }
 const RAIN: ChapterDraftRow = {
   id: 'chap_rain',
+  branchId: 'br_1',
   title: 'Nine Days of Rain',
   theme: 'patience',
   summary: 'The rain holds the road shut.',
