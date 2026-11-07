@@ -74,8 +74,10 @@ function cutFirstCall(step: MockToolStep): MockToolStep {
   return { ...step, toolCalls: [{ name: first.name, args }, ...rest] }
 }
 
+const CUTS_A_CALL: ReadonlySet<FailureKind> = new Set(['malformed', 'stream-cut'])
+
 function servedToolStep(step: MockToolStep, failure: FailureKind): MockToolStep {
-  if (failure === 'malformed' || failure === 'stream-cut') return cutFirstCall(step)
+  if (CUTS_A_CALL.has(failure)) return cutFirstCall(step)
   if (failure === 'length') return { ...step, finishReason: 'length' }
   return step
 }
@@ -297,7 +299,12 @@ export async function handleCompletion(
 
   if (route.lane === 'tool') {
     // Served as stored; an unconfigured lane's `{}` is no calls and stop.
-    const step = servedToolStep((canned?.value ?? {}) as MockToolStep, failure)
+    const stored = (canned?.value ?? {}) as MockToolStep
+    if (CUTS_A_CALL.has(failure) && stored.toolCalls?.[0] === undefined) {
+      entry.outcome = 'ok'
+      entry.note = 'no call to cut, so the step went out unchanged'
+    }
+    const step = servedToolStep(stored, failure)
     entry.served = step
     // Built before the headers go out: a value the builder can't serialize throws here, to the
     // server's 500, not after a 200.

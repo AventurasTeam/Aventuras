@@ -332,6 +332,7 @@ describe('tool lanes through the app transport', () => {
       }
       const entry = mock.ctx.log.list()[0]
       expect(entry?.served).toEqual(served)
+      expect(entry).toMatchObject({ outcome: 'failed', failureKind: kind, status: 200 })
       expect(cut.usage.outputTokens).toBe(
         mockUsage('', toolStepCompletionText(served)).completion_tokens,
       )
@@ -366,16 +367,28 @@ describe('tool lanes through the app transport', () => {
     },
   )
 
-  it('serves a step with no calls as it is under malformed', async () => {
-    cannedSteps({ text: 'Nothing to look up.' })
-    mock.ctx.lane(LOOKUP_LANE).failure = { kind: 'malformed', status: 500, remaining: 1 }
+  it.each(['malformed', 'stream-cut'] as const)(
+    'serves a step with no calls as it is under %s, and logs it ok with the failure spent',
+    async (kind) => {
+      cannedSteps({ text: 'Nothing to look up.' })
+      const lane = mock.ctx.lane(LOOKUP_LANE)
+      lane.failure = { kind, status: 500, remaining: 1 }
+      mock.ctx.log.clear()
 
-    const result = await sendToolStep()
+      const result = await sendToolStep()
 
-    expect(result.text).toBe('Nothing to look up.')
-    expect(result.finishReason).toBe('stop')
-    expect(result.toolCalls).toEqual([])
-  })
+      expect(result.text).toBe('Nothing to look up.')
+      expect(result.finishReason).toBe('stop')
+      expect(result.toolCalls).toEqual([])
+      expect(lane.failure.remaining).toBe(0)
+      expect(mock.ctx.log.list()[0]).toMatchObject({
+        outcome: 'ok',
+        failureKind: kind,
+        status: 200,
+        note: expect.stringContaining('no call to cut') as unknown,
+      })
+    },
+  )
 
   it('ends a length reply with its calls whole', async () => {
     cannedSteps(LOOK_AT_THE_DOOR)
