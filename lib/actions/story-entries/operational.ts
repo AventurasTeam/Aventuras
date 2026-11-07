@@ -283,8 +283,8 @@ async function resolveRollbackWindow(
 
   // Survival-anchor predicate (data-model.md -> Survival anchor). A delta that AMENDS an
   // existing entry stamps it -- metadata, scene fields, content -- so the
-  // position-correlated branch spares it when a later turn is swept. The create that
-  // introduces an entry deliberately does not, leaving the suffix rule to sweep it.
+  // position-correlated branch spares it when a later turn is swept. A create sits at or
+  // after its own turn's first position, so the suffix sweeps it however it is anchored.
   return {
     where: and(
       eq(deltas.branchId, branchId),
