@@ -1,8 +1,9 @@
 import { beforeAll, beforeEach, describe, expect, it } from 'vitest'
 
+import { PERIODIC_CLASSIFIER_KIND } from '@/lib/classifier'
 import type { StoryEntry } from '@/lib/db'
 import { makeLogger } from '@/lib/diagnostics'
-import { generationStore, resetAllStores } from '@/lib/stores'
+import { generationStore, resetAllStores, type RunState } from '@/lib/stores'
 
 import { openCloseFixture } from './__tests__/close-fixture'
 import { createPhaseDb, hydrateEntries, resetPhaseDb, type PhaseDb } from './__tests__/phase-db'
@@ -40,8 +41,9 @@ function row(
   }
 }
 
-// A first chapter still open: the opening, two turns, a system row and a turn after it. With no
-// pick the fallback ends it on e5, the latest reply before the head e8.
+// A first chapter still open: the opening, two turns, a system row and a turn after it. The system
+// row is no part of the open region. With no pick the fallback ends it on e5, the latest reply
+// before the head e8.
 const FIRST_CHAPTER_OPEN = [
   row('e1', 1, 'opening'),
   row('e2', 2, 'user_action'),
@@ -100,6 +102,27 @@ const refused = {
 
 const chapterRows = (): number =>
   (phaseDb.sqlite.prepare('SELECT COUNT(*) AS n FROM chapters').get() as { n: number }).n
+
+// Records a pass deferred on b1, as a head reversal or the pill's Cancel does.
+function deferPassOnB1(): void {
+  const interrupted: RunState = {
+    runId: 'run_pass',
+    kind: PERIODIC_CLASSIFIER_KIND,
+    gateBehavior: 'hard-gate',
+    interruptible: 'pass',
+    beforeTurn: false,
+    actionId: 'act_pass',
+    storyId: 's1',
+    branchId: 'b1',
+    abortController: new AbortController(),
+    currentPhase: '',
+    intermediates: {},
+    terminal: Promise.resolve(),
+    resolveTerminal: () => {},
+  }
+  generationStore.startRun(interrupted)
+  expect(generationStore.abortRun(interrupted.runId, 'aborted')).toBe('pass')
+}
 
 const pickOn = (branchId: string) => generationStore.getTxState().pendingClose.get(branchId)
 
@@ -188,6 +211,16 @@ describe('closeBoundaryPhase with a pick', () => {
     },
   )
 
+  it('leaves a deferred pass alone when it drops a stale pick', async () => {
+    hydrateEntries(phaseDb, 'b1', FIRST_CHAPTER_OPEN)
+    deferPassOnB1()
+    expect(generationStore.getTxState().deferred.get('b1')).toEqual({ pass: true })
+    generationStore.setPendingClose('b1', { endEntryId: 'e99' })
+    await expectRefused()
+    expect(pickOn('b1')).toBeUndefined()
+    expect(generationStore.getTxState().deferred.get('b1')).toEqual({ pass: true })
+  })
+
   it("drops only its own branch's stale pick", async () => {
     hydrateEntries(phaseDb, 'b1', FIRST_CHAPTER_OPEN)
     generationStore.setPendingClose('b1', { endEntryId: 'e99' })
@@ -199,10 +232,16 @@ describe('closeBoundaryPhase with a pick', () => {
 })
 
 describe('closeBoundaryPhase with no pick', () => {
-  it('ends on the latest reply before the head, past a system row', async () => {
+  it('ends on the latest reply before the head', async () => {
     hydrateEntries(phaseDb, 'b1', FIRST_CHAPTER_OPEN)
     await expectEndsOn(phaseCtx(), { startEntryId: 'e1', endEntryId: 'e5' })
     expect(chapterRows()).toBe(0)
+  })
+
+  // A failed Send's system entry sits at the tail when the next Send runs the owed close.
+  it("takes the open region's head, not a system row after it", async () => {
+    hydrateEntries(phaseDb, 'b1', [...FIRST_CHAPTER_OPEN.slice(0, 5), row('s6', 6, 'system')])
+    await expectEndsOn(phaseCtx(), { startEntryId: 'e1', endEntryId: 'e3' })
   })
 
   it('ends on the head when no reply comes before it', async () => {
@@ -226,7 +265,7 @@ describe('closeBoundaryPhase with no pick', () => {
     await expectRefused()
   })
 
-  // A region written through the action layer, with real counts, as a chained close meets it.
+  // A region written through the action layer, not hydrated as rows, as a chained close meets it.
   it('ends a written region on the reply before the newest', async () => {
     const f = await openCloseFixture()
     const ctx = phaseCtx({ db: f.ctx.db, storyId: f.storyId, branchId: f.branchId })
