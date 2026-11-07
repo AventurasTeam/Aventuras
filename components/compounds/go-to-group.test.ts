@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest'
 
-import { buildGoToGroup } from './go-to-group'
+import { buildGoToGroup, IN_STORY_SURFACES } from './go-to-group'
 
 const STORY = { storyId: 'story_1', branchId: 'br_1' }
 
@@ -37,10 +37,26 @@ describe('buildGoToGroup', () => {
     expect(plot?.disabled).toBeUndefined()
   })
 
-  it('renders unbuilt surfaces present-but-disabled with their lands-later reason', () => {
+  it('routes the Chapter Timeline by branch', () => {
     const navigate = vi.fn()
     const group = buildGoToGroup({ ...STORY, surface: 'reader' }, navigate)
-    expect(group.entries.map((e) => e.id)).not.toContain('open-reader')
-    expect(group.entries.find((e) => e.id === 'open-chapter-timeline')?.disabled).toBe(true)
+    group.entries.find((e) => e.id === 'open-chapter-timeline')?.onActivate()
+    expect(navigate).toHaveBeenCalledExactlyOnceWith('/chapter-timeline/br_1')
+  })
+
+  it('omits the Chapter Timeline on the Timeline itself', () => {
+    const group = buildGoToGroup({ ...STORY, surface: 'chapter-timeline' }, vi.fn())
+    expect(group.entries.map((e) => e.id)).toEqual([
+      'open-reader',
+      'open-world',
+      'open-plot',
+      'open-story-settings',
+    ])
+  })
+
+  it.each([...IN_STORY_SURFACES])('disables no entry on %s', (surface) => {
+    const group = buildGoToGroup({ ...STORY, surface }, vi.fn())
+    expect(group.entries).toHaveLength(IN_STORY_SURFACES.length - 1)
+    expect(group.entries.filter((e) => e.disabled === true).map((e) => e.id)).toEqual([])
   })
 })

@@ -189,6 +189,28 @@ describe('chapters CRUD arms', () => {
     expect((await db.select().from(deltas)).length).toBe(1) // only the create delta
   })
 
+  it('refuses an update of a row that is gone as not-found (no delta)', async () => {
+    const { db, ctx } = await setup()
+    const result = await applyDeltaAction(
+      {
+        action: {
+          kind: 'updateChapter',
+          source: 'user_edit',
+          payload: { branchId: 'br_1', id: 'chap_1', patch: { title: 'War Breaks' } },
+        },
+        actionId: 'act_gone',
+        branchId: 'br_1',
+      },
+      ctx,
+    )
+    expect(result).toEqual({
+      status: 'rejected',
+      reason: 'update target chapters br_1:chap_1 not found',
+      code: 'not-found',
+    })
+    expect((await db.select().from(deltas)).length).toBe(0)
+  })
+
   it('update on keywords (whole-array) + scalar fields; reverse-replay restores row + store', async () => {
     const { db, ctx } = await setup()
     await applyDeltaAction(

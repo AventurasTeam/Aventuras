@@ -47,4 +47,8 @@ append-only data) AND the data can't be restored — then leaks are
 truly inert. But never assume "unique-forever" for ids the user
 controls or that can be set from a constant seed.
 
+Also exempt: a set whose job is to remember ids that left, like the
+Chapter Timeline's judged chapters. Prune the state that would come
+back with the id (the expanded id), not the memory of having seen it.
+
 Related: [Reanimated 4 async SV write](./reanimated4-async-sv-write.md).

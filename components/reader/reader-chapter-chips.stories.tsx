@@ -63,6 +63,7 @@ const ARGS: ReaderChapterChipsProps = {
   },
   isFocused: true,
   onJumpToEntry: noop,
+  onManageChapters: noop,
 }
 
 const meta = {

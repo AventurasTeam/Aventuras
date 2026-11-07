@@ -19,6 +19,13 @@ export async function goToPlot(page: Page): Promise<void> {
   await page.waitForURL(/\/plot\//)
 }
 
+// Any in-story screen → the Chapter Timeline over GO TO.
+export async function goToChapterTimeline(page: Page): Promise<void> {
+  await chrome.actionsTrigger(page).click()
+  await chrome.goToChapterTimelineRow(page).click()
+  await page.waitForURL(/\/chapter-timeline\//)
+}
+
 // Any in-story screen → Story Settings over GO TO.
 export async function goToStorySettings(page: Page): Promise<void> {
   await chrome.actionsTrigger(page).click()

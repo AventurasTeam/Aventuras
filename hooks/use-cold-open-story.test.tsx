@@ -3,6 +3,7 @@ import { cleanup, render, waitFor } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { logger } from '@/lib/diagnostics'
+import { EVENT_NAME_REGEX, eventNameOf } from '@/lib/diagnostics/kinds'
 import { resetAllStores } from '@/lib/stores'
 
 import { useColdOpenStory } from './use-cold-open-story'
@@ -30,6 +31,11 @@ function Probe({ branchId }: { branchId: string }) {
 
 function DevProbe({ branchId }: { branchId: string }) {
   useColdOpenStory(branchId, 'dev_chapter_close')
+  return null
+}
+
+function TimelineProbe({ branchId }: { branchId: string }) {
+  useColdOpenStory(branchId, 'chapter_timeline')
   return null
 }
 
@@ -86,6 +92,31 @@ describe('useColdOpenStory', () => {
     await waitFor(() => expect(mocks.leave).toHaveBeenCalledOnce())
     expect(warn).toHaveBeenCalledWith('app.dev_chapter_close_story_not_found', {
       branchId: 'br_gone',
+    })
+  })
+
+  it('logs the Chapter Timeline under a surface the event-name check accepts', async () => {
+    const warn = vi.spyOn(logger, 'warn')
+    mocks.load.mockResolvedValue({ status: 'no-story' })
+    render(<TimelineProbe branchId="br_gone" />)
+    await waitFor(() => expect(mocks.leave).toHaveBeenCalledOnce())
+    expect(warn).toHaveBeenCalledWith('app.chapter_timeline_story_not_found', {
+      branchId: 'br_gone',
+    })
+    // Exactly one warn, and its event name passes the logger's drift check.
+    expect(warn.mock.calls.map(([kind]) => EVENT_NAME_REGEX.test(eventNameOf(kind)))).toEqual([
+      true,
+    ])
+  })
+
+  it('logs a rejected Chapter Timeline load under its own event', async () => {
+    const error = vi.spyOn(logger, 'error')
+    mocks.load.mockRejectedValue(new Error('bridge down'))
+    render(<TimelineProbe branchId="br_1" />)
+    await waitFor(() => expect(mocks.leave).toHaveBeenCalledOnce())
+    expect(error).toHaveBeenCalledWith('app.chapter_timeline_story_load_failed', {
+      branchId: 'br_1',
+      error: 'bridge down',
     })
   })
 

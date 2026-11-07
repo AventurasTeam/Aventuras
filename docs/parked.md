@@ -3736,24 +3736,6 @@ long-run counts would change and that wants an E2E run. Raised
 points, and `scripts/seed/long-branch.ts` already imports `countTokens`.
 Parked 2026-11-04; the signal is a fixture with such a run.
 
-#### Unsaved-changes guard folder placement
-
-**The unsaved-changes guard lives in a single-domain folder.**
-[`save-sessions.md → Navigate-away guard`](./ui/patterns/save-sessions.md#navigate-away-guard--global-intercept)
-specifies the intercept as **global** — "same modal, same copy, same
-actions across every surface that uses the save-session pattern" —
-but M3.11 shipped `UnsavedChangesDialog` under
-`components/story-settings/`, a single-domain folder, with its copy
-in the `storySettings` i18n namespace. World, Plot, App Settings,
-the Vault calendar editor, and the chapter-timeline cards all
-inherit the same pattern and would have to reach across domains or
-duplicate it. Taxonomy-correct home is `components/compounds/`, with
-the four `save.unsaved*` keys moving to `common`. Deliberately
-deferred in M3.11 rather than churning the route's import path for a
-surface with no second consumer yet; the move is a `git mv` plus a
-key relocation whenever the second guard lands. Surfaced by M3.11
-Task 6 (2026-07-22).
-
 #### Typed PipelineInputMap via declaration merging
 
 **A typed `PipelineInputMap` via declaration merging is the shape to

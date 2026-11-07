@@ -16,7 +16,7 @@ const ctx = { db, runInTransaction }
  */
 export function useColdOpenStory(
   branchId: string,
-  surface: 'world' | 'plot' | 'dev_chapter_close',
+  surface: 'world' | 'plot' | 'chapter_timeline' | 'dev_chapter_close',
 ): OpenStory | null {
   const leaveFailedOpen = useLeaveFailedStoryOpen()
   useEffect(() => {

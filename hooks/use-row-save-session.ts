@@ -90,7 +90,7 @@ export type RowSaveSession<Draft extends FieldValues> = {
   resolveConfirm: (outcome: 'save' | 'cancel') => void
 }
 
-/** What a surface needs from a pane's session to route its transitions (row switch, `←`, GO TO). */
+/** What a surface needs from a row session to route its transitions (row switch, `←`, GO TO). */
 export type RowSessionHandle = { dirty: boolean; requestLeave: (proceed: () => void) => void }
 
 type Attempt = { outcome: RowSaveOutcome; clean: boolean }
@@ -244,6 +244,9 @@ export function useRowSaveSession<Draft extends FieldValues>({
   }, [form, resolver])
 
   // Layout, not passive: the new row must never paint with the previous row's draft.
+  // Native react-hook-form subscribes fields passively, so one mounting with the rowKey change
+  // misses this reset: mount it only once the form holds the new row
+  // (docs/implementation/lessons-learned/rhf-native-passive-subscription.md).
   useLayoutEffect(() => {
     const applied = appliedRef.current
     appliedRef.current = { rowKey, values }

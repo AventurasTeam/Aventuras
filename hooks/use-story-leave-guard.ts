@@ -16,6 +16,7 @@ const IN_STORY_ROUTES: ReadonlySet<string> = new Set([
   'reader-composer/[branchId]',
   'world/[branchId]',
   'plot/[branchId]',
+  'chapter-timeline/[branchId]',
   'story-settings/[storyId]',
 ])
 

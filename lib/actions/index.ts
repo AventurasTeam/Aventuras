@@ -8,6 +8,11 @@ export {
 } from './avts/import-rows'
 export { runOwedClose, type OwedCloseRun } from './chapters/run-owed-close'
 export {
+  saveChapter,
+  type ChapterSaveRejectionCode,
+  type ChapterSaveResult,
+} from './chapters/save-chapter'
+export {
   MANUAL_CLOSE_REFUSAL,
   startManualClose,
   type ManualCloseRefusal,

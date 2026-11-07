@@ -10,6 +10,8 @@ type RowSessionGuard = {
   onSession: (handle: RowSessionHandle | null) => void
   guard: LeaveRequest
   navigateGuarded: (path: string) => void
+  /** The handle's `dirty`, one commit late (published from an effect); false with no handle. */
+  dirty: boolean
 }
 
 /** save-sessions.md → Navigate-away guard: every in-surface transition routes through `guard`. */
@@ -23,10 +25,11 @@ export function useRowSessionGuard(): RowSessionGuard {
     },
     [session],
   )
-  useUnsavedChangesGuard(session?.dirty ?? false, guard)
+  const dirty = session?.dirty ?? false
+  useUnsavedChangesGuard(dirty, guard)
   const navigateGuarded = useCallback(
     (path: string) => guard(() => surfaceNavigate(path)),
     [guard, surfaceNavigate],
   )
-  return { onSession: setSession, guard, navigateGuarded }
+  return { onSession: setSession, guard, navigateGuarded, dirty }
 }

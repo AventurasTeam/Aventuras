@@ -103,6 +103,10 @@ slice plans when relevant.
   — react-native-webview injects the host OS and first props from
   `onPageStarted`, so a fast bundle finds them missing and the document
   never mounts; `patches/expo.patch` makes the entry wait for the script.
+- [A react-hook-form field mounted with a `form.reset` misses it on native](./rhf-native-passive-subscription.md)
+  — react-hook-form subscribes in a passive effect off the web, so a field
+  mounting with a row switch shows the row before it; mount fields once the
+  form holds the row, and test with the native path forced under jsdom.
 
 ### rn-primitives substrate
 

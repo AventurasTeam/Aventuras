@@ -150,17 +150,19 @@ describe('commitRowSave — place rules', () => {
     expect([mismatched.status, backstop.status]).toEqual(['rejected', 'rejected'])
   })
 
-  it('checks the gate before the place rules', async () => {
+  it('checks the gate before the place rules and the build', async () => {
     const { ctx } = await setup()
     vi.spyOn(generationStore, 'isUserEditBlocked').mockReturnValue(true)
     const refuse = vi.fn(() => REFUSAL)
+    const build = vi.fn(() => [] as PipelineAction[])
     const result = await commitRowSave(
       'entity',
-      { branchId: 'b1', rowId: 'char_1', idPrefix: 'char', refuse, build: () => [] },
+      { branchId: 'b1', rowId: 'char_1', idPrefix: 'char', refuse, build },
       ctx,
     )
     expect(result).toMatchObject({ code: 'in-flight' })
     expect(refuse).not.toHaveBeenCalled()
+    expect(build).not.toHaveBeenCalled()
   })
 
   it("passes the create handler's retired-parent refusal through with its own code", async () => {

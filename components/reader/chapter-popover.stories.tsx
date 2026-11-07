@@ -125,6 +125,7 @@ const meta: Meta<typeof ChapterPopover> = {
     progress: PROGRESS,
     onOpenChange: fn(),
     onJumpToChapter: fn(),
+    onManageChapters: fn(),
   },
   decorators: [
     (Story) => (
@@ -173,13 +174,9 @@ async function expectContents(args: ChapterPopoverProps) {
     closeChapter,
   )
   const manage = screen.getByRole('button', { name: 'Manage chapters →' })
-  await expect(manage).toHaveAttribute('aria-disabled', 'true')
-  await expect(screen.getByTitle('Chapter Timeline lands in a later milestone')).toContainElement(
-    manage,
-  )
+  await expect(manage).not.toHaveAttribute('aria-disabled', 'true')
   // RN-Web blocks a disabled Pressable's pointer; fireEvent goes past that to its guard.
   fireEvent.click(closeChapter)
-  fireEvent.click(manage)
   await expect(args.onOpenChange).not.toHaveBeenCalledWith(false)
 }
 
@@ -321,7 +318,7 @@ export const JumpClosesFirstPhone: Story = {
 }
 
 export const ActionsClose: Story = {
-  args: { onCloseChapter: fn(), onManageChapters: fn() },
+  args: { onCloseChapter: fn() },
   play: async ({ args }) => {
     await waitForTier('desktop')
     await openOverlay()
@@ -406,10 +403,9 @@ export const NoRowToFocus: Story = {
   play: async () => {
     await waitForTier('desktop')
     await openOverlay(1)
-    // Without a row to focus, Radix's own focus stays on its content.
-    await waitFor(() =>
-      expect(document.activeElement?.closest('[data-radix-popper-content-wrapper]')).not.toBeNull(),
-    )
+    // No row takes focus, so Radix focuses the first tabbable; the disabled Close isn't one.
+    const manage = screen.getByRole('button', { name: 'Manage chapters →' })
+    await waitFor(() => expect(manage).toHaveFocus(), ANIMATION)
   },
 }
 

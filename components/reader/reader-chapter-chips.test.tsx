@@ -90,6 +90,7 @@ function entry(position: number, worldTime: number): StoryEntry {
 }
 
 const jump = vi.fn()
+const manage = vi.fn()
 
 const openChange = vi.fn<(open: boolean) => void>()
 
@@ -102,6 +103,7 @@ function chips(overrides: { isFocused?: boolean; frame?: CalendarFrame | null } 
       progress={PROGRESS}
       isFocused={overrides.isFocused ?? true}
       onJumpToEntry={jump}
+      onManageChapters={manage}
       onOpenChange={openChange}
     />
   )
@@ -118,6 +120,7 @@ describe('ReaderChapterChips', () => {
     stubs.handle.open.mockClear()
     stubs.handle.close.mockClear()
     jump.mockClear()
+    manage.mockClear()
   })
   afterEach(() => {
     cleanup()
@@ -206,10 +209,16 @@ describe('ReaderChapterChips', () => {
     expect(jump).toHaveBeenCalledWith('e1')
   })
 
-  it('leaves both actions absent, so the popover disables them with a reason', () => {
+  it('leaves Close chapter absent, so the popover disables it with a reason', () => {
     render(chips())
     expect(stubs.popover?.onCloseChapter).toBeUndefined()
-    expect(stubs.popover?.onManageChapters).toBeUndefined()
+  })
+
+  it('hands Manage chapters the host callback', () => {
+    render(chips())
+    expect(manage).not.toHaveBeenCalled()
+    stubs.popover?.onManageChapters()
+    expect(manage).toHaveBeenCalledOnce()
   })
 
   it('closes the popover when focus leaves, and not before', () => {
@@ -230,6 +239,7 @@ describe('ReaderChapterChips', () => {
         progress={PROGRESS}
         isFocused
         onJumpToEntry={jump}
+        onManageChapters={manage}
       />,
     )
     ref.current?.openPopover()

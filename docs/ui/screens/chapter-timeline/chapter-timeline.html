@@ -18,9 +18,10 @@
     --warn: #c94;
     --warn-bg: #fdf3e3;
     --ok: #4a8;
-    --progress-safe: #6c8;
-    --progress-warn: #ddb060;
-    --progress-danger: #c66;
+    /* the token-progress strip's tones (reader-composer.html), shared with the in-progress card's bar */
+    --tone-success: #4a8;
+    --tone-warning: #d9a617;
+    --tone-danger: #c94;
   }
   html, body { margin: 0; padding: 0; font: 13px/1.5 system-ui, -apple-system, Segoe UI, sans-serif; color: var(--ink); background: var(--bg); }
   body { min-height: 100vh; display: flex; flex-direction: column; }
@@ -48,7 +49,6 @@
 
   /* top-bar — universal essentials + universal in-story chrome (pill, progress strip) */
   .topbar { display: flex; align-items: center; gap: 14px; padding: 12px 20px; border-bottom: 1px solid var(--line); background: var(--bg-region); }
-  .logo { width: 28px; height: 28px; border: 1px dashed var(--line); border-radius: 4px; display: flex; align-items: center; justify-content: center; font-size: 11px; color: var(--ink-faint); flex-shrink: 0; }
   .crumbs { font-size: 13px; color: var(--ink); display: flex; gap: 8px; align-items: center; }
   .crumbs .crumb-primary { font-weight: 500; }
   .crumbs .crumb-sep { color: var(--ink-faint); }
@@ -63,7 +63,7 @@
 
   /* universal in-story chrome — chapter token-progress strip */
   .topbar-progress { height: 3px; background: var(--line-soft); position: relative; }
-  .topbar-progress .fill { position: absolute; top: 0; left: 0; height: 100%; background: var(--ok); }
+  .topbar-progress .fill { position: absolute; top: 0; left: 0; height: 100%; }
   .topbar-progress:hover::after { content: attr(data-label); position: absolute; top: 100%; left: 16px; background: var(--ink); color: #fff; font-size: 10px; padding: 3px 8px; border-radius: 3px; white-space: nowrap; z-index: 5; }
 
   /* timeline stage */
@@ -81,7 +81,6 @@
   .card-head { display: flex; align-items: flex-start; gap: 12px; padding: 12px 16px; cursor: pointer; }
   .card-head:hover { background: var(--bg-highlight); }
   .chapter-card.expanded .card-head:hover { background: var(--bg-region); }
-  .card-head .num { font-family: ui-monospace, monospace; font-size: 11px; color: var(--ink-faint); width: 60px; flex-shrink: 0; padding-top: 1px; text-transform: uppercase; letter-spacing: 0.06em; }
   .card-head .head-body { flex: 1; min-width: 0; }
   .card-head .title-row { display: flex; align-items: center; gap: 8px; }
   .card-head .title { font-size: 14px; font-weight: 600; color: var(--ink); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -94,9 +93,6 @@
   .chapter-card.expanded .card-body { display: block; }
 
   .card-readonly { display: grid; grid-template-columns: 1fr 1fr; gap: 6px 16px; padding: 12px 0 14px; font-size: 11px; color: var(--ink-muted); border-bottom: 1px dashed var(--line-soft); margin-bottom: 14px; }
-  .card-readonly .ro-row { display: flex; gap: 6px; }
-  .card-readonly .ro-label { color: var(--ink-faint); text-transform: uppercase; letter-spacing: 0.06em; font-size: 10px; }
-  .card-readonly .ro-value { color: var(--ink); }
 
   .field { margin-bottom: 12px; }
   .field-label { font-size: 10px; color: var(--ink-muted); text-transform: uppercase; letter-spacing: 0.08em; margin-bottom: 4px; }
@@ -119,36 +115,44 @@
   .card-action.danger { color: var(--warn); border-color: var(--line-soft); margin-left: auto; }
   .card-action.danger:hover { background: var(--warn-bg); border-color: var(--warn); }
 
-  /* in-card save bar */
-  .card-save-bar { display: none; margin-top: 12px; padding: 10px 12px; background: #fff7dc; border: 1px solid #e3d29a; border-radius: 4px; align-items: center; justify-content: space-between; gap: 12px; }
+  /* save bar — at the expanded card's bottom edge on tablet and desktop, at the surface's
+     bottom edge on phone (chapter-timeline.md → Save session — per card) */
+  .card-save-bar, .surface-save-bar { display: none; padding: 10px 12px; background: #fff7dc; align-items: center; justify-content: space-between; gap: 12px; }
+  .card-save-bar { margin-top: 12px; border: 1px solid #e3d29a; border-radius: 4px; }
+  .surface-save-bar { flex-shrink: 0; border-top: 1px solid #e3d29a; }
   .chapter-card.dirty .card-save-bar { display: flex; }
-  .card-save-bar .dirty-note { font-size: 12px; color: #765; display: flex; align-items: center; gap: 8px; }
-  .card-save-bar .dirty-dot { width: 8px; height: 8px; border-radius: 50%; background: #c94; }
-  .card-save-bar .actions { display: flex; gap: 8px; align-items: center; }
-  .card-save-bar .discard-btn { padding: 5px 14px; border: 1px solid var(--line); border-radius: 3px; background: var(--bg-region); font-size: 12px; color: var(--ink); cursor: pointer; }
-  .card-save-bar .save-btn { padding: 5px 16px; border: 1px solid var(--ink); border-radius: 3px; background: var(--ink); color: #fff; font-size: 12px; font-weight: 600; cursor: pointer; display: flex; align-items: center; gap: 8px; }
-  .card-save-bar .save-btn .kbd { font-size: 10px; opacity: 0.7; font-family: ui-monospace, monospace; }
+  .dirty-note { font-size: 12px; color: #765; display: flex; align-items: center; gap: 8px; }
+  .dirty-dot { width: 8px; height: 8px; border-radius: 50%; background: #c94; }
+  .save-bar-actions { display: flex; gap: 8px; align-items: center; }
+  .discard-btn { padding: 5px 14px; border: 1px solid var(--line); border-radius: 3px; background: var(--bg-region); font-size: 12px; color: var(--ink); cursor: pointer; }
+  .save-btn { padding: 5px 16px; border: 1px solid var(--ink); border-radius: 3px; background: var(--ink); color: #fff; font-size: 12px; font-weight: 600; cursor: pointer; display: flex; align-items: center; gap: 8px; }
+  .save-btn .kbd { font-size: 10px; opacity: 0.7; font-family: ui-monospace, monospace; }
 
-  /* in-progress card variant */
+  /* in-progress card variant — no number, no title placeholder, nothing to expand */
   .chapter-card.in-progress { border-style: dashed; background: #fafbfc; }
   .chapter-card.in-progress .card-head { cursor: default; }
   .chapter-card.in-progress .card-head:hover { background: transparent; }
-  .chapter-card.in-progress .num { color: var(--ink-muted); font-style: italic; }
   .chapter-card.in-progress .title { color: var(--ink-muted); font-style: italic; font-weight: 500; }
   .chapter-card.in-progress .disclosure { display: none; }
-  .progress-row { padding: 4px 16px 14px 76px; }
+  .progress-row { padding: 0 16px 12px; }
   .progress-bar-track { height: 4px; background: var(--line-soft); border-radius: 2px; overflow: hidden; margin: 6px 0 4px; }
-  .progress-bar-fill { height: 100%; width: 59%; background: var(--progress-safe); border-radius: 2px; transition: background 0.12s; }
-  body[data-progress="warn"] .progress-bar-fill { background: var(--progress-warn); width: 84%; }
-  body[data-progress="danger"] .progress-bar-fill { background: var(--progress-danger); width: 95%; }
-  .progress-meta { font-size: 11px; color: var(--ink-muted); display: flex; justify-content: space-between; }
-  .progress-summary-placeholder { padding: 0 16px 12px 76px; font-size: 12px; color: var(--ink-faint); font-style: italic; }
-  .in-progress-actions { padding: 4px 16px 14px 76px; }
+  .progress-bar-fill { height: 100%; border-radius: 2px; }
+  /* one state drives the strip and the card's bar: the strip's thresholds and tones */
+  .topbar-progress .fill, .progress-bar-fill { width: 59%; background: var(--tone-success); }
+  body[data-progress="warn"] .topbar-progress .fill, body[data-progress="warn"] .progress-bar-fill { width: 84%; background: var(--tone-warning); }
+  body[data-progress="danger"] .topbar-progress .fill, body[data-progress="danger"] .progress-bar-fill { width: 95%; background: var(--tone-danger); }
+  .progress-meta { font-size: 11px; color: var(--ink-muted); }
+  .progress-summary-placeholder { padding: 0 16px 12px; font-size: 12px; color: var(--ink-faint); font-style: italic; }
+  .in-progress-actions { padding: 4px 16px 14px; }
   .close-chapter-btn { padding: 7px 18px; border: 1px solid var(--ink); border-radius: 4px; background: var(--ink); color: #fff; font-size: 13px; font-weight: 600; cursor: pointer; font-family: inherit; }
-  /* gen-in-flight: disable Close-chapter, Delete and per-card save buttons (per principles → Edit restrictions) */
-  body[data-gen-state="in-flight"] .close-chapter-btn { opacity: 0.4; pointer-events: none; cursor: not-allowed; }
-  body[data-gen-state="in-flight"] .save-btn { opacity: 0.4; pointer-events: none; cursor: not-allowed; }
+  /* gen-in-flight (principles.md → Edit restrictions): the fields, Save, Delete… and Close chapter…
+     disable; Discard, Jump to chapter → and expand / collapse stay live. The script disables the inputs. */
+  body[data-gen-state="in-flight"] .close-chapter-btn,
+  body[data-gen-state="in-flight"] .save-btn,
   body[data-gen-state="in-flight"] .card-action-delete { opacity: 0.4; pointer-events: none; cursor: not-allowed; }
+  body[data-gen-state="in-flight"] .field-input,
+  body[data-gen-state="in-flight"] .chip-editor { background: var(--bg); color: var(--ink-muted); border-color: var(--line-soft); }
+  body[data-gen-state="in-flight"] .chip-x { display: none; }
   /* gen-status pill is visible only during in-flight phases (per generation-status-pill pattern) */
   body[data-gen-state="idle"] .gen-status { display: none; }
 
@@ -248,8 +252,8 @@
     .gen-status > span:not(.dot) { display: none; }
     .gen-status { padding: 3px 6px; }
 
-    .timeline { padding: 12px 12px 24px; }
-    .header-row { padding: 0 4px; }
+    .timeline-stage { padding: 12px 0 24px; }
+    .timeline-col { padding: 0 12px; }
 
     .card-head { padding: 10px 12px; }
     .card-body { padding: 12px; }
@@ -271,11 +275,13 @@
       letter-spacing: 0.1em;
     }
 
-    /* in-card save bar tightens horizontally */
-    .save-bar { padding: 10px 12px; flex-wrap: wrap; gap: 6px; }
+    /* save bar — out of the card, at the surface's bottom edge, riding the keyboard
+       (touch.md → Save bar on phone) */
+    .chapter-card.dirty .card-save-bar { display: none; }
+    body[data-empty="no"][data-card-state="dirty"] .surface-save-bar { display: flex; flex-wrap: wrap; gap: 6px; }
 
-    /* in-progress card */
-    .ip-actions .btn { width: 100%; }
+    /* in-progress card — Close chapter… full-width */
+    .close-chapter-btn { width: 100%; }
 
     /* chapter-close modal — Modal at every tier; reflow narrow */
     .modal { width: 100%; max-width: calc(100% - 24px); margin: 0 12px; max-height: 85vh; overflow-y: auto; }
@@ -356,7 +362,9 @@
     <div class="viewport" id="viewport">
 
 <header class="topbar">
-  <div class="logo">A</div>
+  <!-- left slot: ← Return on every surface but the root, which alone shows the logo
+       (principles.md → Universal essentials) -->
+  <div class="icon-btn" title="Back">&larr;</div>
   <div class="crumbs">
     <span class="crumb-primary">Aria's Descent</span>
     <span class="crumb-sep">/</span>
@@ -367,14 +375,13 @@
       <span class="dot"></span>
       <span>generating narrative&hellip;</span>
     </div>
-    <div class="icon-btn" title="Actions">&#9906;</div>
     <div class="icon-btn" title="Story settings">&#9965;</div>
-    <div class="icon-btn" title="Back to reader">&larr;</div>
+    <div class="icon-btn" title="Actions">&#9906;</div>
   </div>
 </header>
 
-<div class="topbar-progress" data-label="Chapter 3 &middot; 8,420 / 24,000 tok">
-  <div class="fill" style="width: 35%"></div>
+<div class="topbar-progress" id="topbar-progress" data-label="Chapter 5 &middot; 14,200 / 24,000 tok">
+  <div class="fill"></div>
 </div>
 
 <div class="timeline-stage">
@@ -385,10 +392,9 @@
     <!-- Chapter 1 -->
     <div class="chapter-card" data-card="1">
       <div class="card-head">
-        <span class="num">Ch 1</span>
         <div class="head-body">
           <div class="title-row">
-            <span class="title">The Tavern Encounter</span>
+            <span class="title">Chapter 1 &mdash; The Tavern Encounter</span>
           </div>
           <div class="meta">Day 1 &middot; 8.4k tok &middot; arrival, mystery</div>
         </div>
@@ -399,22 +405,21 @@
     <!-- Chapter 2 — the demo target for expanded / dirty states -->
     <div class="chapter-card expanded" data-card="2" id="card-2">
       <div class="card-head">
-        <span class="num">Ch 2</span>
         <div class="head-body">
           <div class="title-row">
-            <span class="title">The Trail North</span>
+            <span class="title">Chapter 2 &mdash; The Trail North</span>
           </div>
-          <div class="meta">Day 2&ndash;3 &middot; 12.1k tok &middot; travel, conflict</div>
+          <div class="meta">Day 2 &rarr; Day 3 &middot; 12.1k tok &middot; travel, conflict</div>
         </div>
         <span class="disclosure">&#9656;</span>
       </div>
       <div class="card-body">
 
         <div class="card-readonly">
-          <div class="ro-row"><span class="ro-label">Time range</span> <span class="ro-value">Day 2 &mdash; Day 3</span></div>
-          <div class="ro-row"><span class="ro-label">Tokens</span> <span class="ro-value">12,140</span></div>
-          <div class="ro-row"><span class="ro-label">Entries</span> <span class="ro-value">23&ndash;58</span></div>
-          <div class="ro-row"><span class="ro-label">Closed</span> <span class="ro-value">2026-04-22 14:18</span></div>
+          <span>Day 2 &rarr; Day 3</span>
+          <span>12,140 tok</span>
+          <span>closed 22 Apr 2026, 14:18</span>
+          <span>entries 23&ndash;58</span>
         </div>
 
         <div class="field">
@@ -436,7 +441,7 @@
             <span class="chip">scouts <span class="chip-x">&times;</span></span>
             <span class="chip">warden <span class="chip-x">&times;</span></span>
             <span class="chip">tolfden <span class="chip-x">&times;</span></span>
-            <input class="chip-input" placeholder="add keyword&hellip;">
+            <input class="chip-input" placeholder="Add a keyword">
           </div>
         </div>
 
@@ -455,7 +460,7 @@
 
         <div class="card-save-bar">
           <span class="dirty-note"><span class="dirty-dot"></span>2 unsaved changes</span>
-          <span class="actions">
+          <span class="save-bar-actions">
             <button class="discard-btn">Discard</button>
             <button class="save-btn">Save <span class="kbd">⌘S</span></button>
           </span>
@@ -467,12 +472,11 @@
     <!-- Chapter 3 -->
     <div class="chapter-card" data-card="3">
       <div class="card-head">
-        <span class="num">Ch 3</span>
         <div class="head-body">
           <div class="title-row">
-            <span class="title">The Warden's Bargain</span>
+            <span class="title">Chapter 3 &mdash; The Warden's Bargain</span>
           </div>
-          <div class="meta">Day 4&ndash;6 &middot; 16.0k tok &middot; betrayal, oath</div>
+          <div class="meta">Day 4 &rarr; Day 6 &middot; 16k tok &middot; betrayal, oath</div>
         </div>
         <span class="disclosure">&#9656;</span>
       </div>
@@ -481,12 +485,11 @@
     <!-- Chapter 4 -->
     <div class="chapter-card" data-card="4">
       <div class="card-head">
-        <span class="num">Ch 4</span>
         <div class="head-body">
           <div class="title-row">
-            <span class="title">Across the Pass</span>
+            <span class="title">Chapter 4 &mdash; Across the Pass</span>
           </div>
-          <div class="meta">Day 7&ndash;8 &middot; 11.2k tok &middot; escape, refuge</div>
+          <div class="meta">Day 7 &rarr; Day 8 &middot; 11.2k tok &middot; escape, refuge</div>
         </div>
         <span class="disclosure">&#9656;</span>
       </div>
@@ -495,20 +498,15 @@
     <!-- In-progress card -->
     <div class="chapter-card in-progress">
       <div class="card-head">
-        <span class="num">In progress</span>
         <div class="head-body">
           <div class="title-row">
-            <span class="title">&lt;title generates on close&gt;</span>
+            <span class="title">In progress &middot; since Day 9</span>
           </div>
-          <div class="meta">since Day 9</div>
         </div>
       </div>
       <div class="progress-row">
-        <div class="progress-bar-track"><div class="progress-bar-fill" id="progress-fill"></div></div>
-        <div class="progress-meta">
-          <span id="progress-tok">14,200 / 24,000 tok</span>
-          <span id="progress-pct">59%</span>
-        </div>
+        <div class="progress-bar-track"><div class="progress-bar-fill"></div></div>
+        <div class="progress-meta" id="progress-tok">14,200 / 24,000 tok</div>
       </div>
       <div class="progress-summary-placeholder">Summary, theme, and keywords generate on close.</div>
       <div class="in-progress-actions">
@@ -517,6 +515,15 @@
     </div>
 
   </div>
+</div>
+
+<!-- phone save bar: a sibling of the scroller, so it rides the keyboard -->
+<div class="surface-save-bar">
+  <span class="dirty-note"><span class="dirty-dot"></span>2 unsaved changes</span>
+  <span class="save-bar-actions">
+    <button class="discard-btn">Discard</button>
+    <button class="save-btn">Save <span class="kbd">⌘S</span></button>
+  </span>
 </div>
 
 <!-- chapter-close modal -->
@@ -727,9 +734,8 @@
   const body = document.body;
   const card2 = document.getElementById('card-2');
   const summaryText = document.getElementById('summary-text');
-  const progressFill = document.getElementById('progress-fill');
   const progressTok = document.getElementById('progress-tok');
-  const progressPct = document.getElementById('progress-pct');
+  const topbarProgress = document.getElementById('topbar-progress');
 
   // card 2 state — collapsed / expanded / dirty
   function setCardState(state) {
@@ -783,12 +789,12 @@
     b.addEventListener('click', () => setModal(b.dataset.modal));
   });
 
-  // in-progress chapter token progress (color thresholds)
+  // the open region's progress — one state for the strip and the in-progress card
+  const PROGRESS_COUNTS = { safe: '14,200 / 24,000 tok', warn: '20,200 / 24,000 tok', danger: '22,800 / 24,000 tok' };
   function setProgress(state) {
     body.dataset.progress = state;
-    if (state === 'warn') { progressTok.textContent = '20,200 / 24,000 tok'; progressPct.textContent = '84%'; }
-    else if (state === 'danger') { progressTok.textContent = '22,800 / 24,000 tok'; progressPct.textContent = '95%'; }
-    else { progressTok.textContent = '14,200 / 24,000 tok'; progressPct.textContent = '59%'; }
+    progressTok.textContent = PROGRESS_COUNTS[state];
+    topbarProgress.dataset.label = 'Chapter 5 · ' + PROGRESS_COUNTS[state];
     document.querySelectorAll('.rb-btn[data-progress]').forEach(b => {
       b.classList.toggle('active', b.dataset.progress === state);
     });
@@ -797,9 +803,15 @@
     b.addEventListener('click', () => setProgress(b.dataset.progress));
   });
 
-  // gen-state — disable Close-chapter + per-card save bars during in-flight
+  // gen-state — in flight the card's inputs disable, and every gated control carries the gate's tooltip
+  const GATE_REASON = 'Generation is in flight. Cancel to edit.';
   function setGenState(state) {
     body.dataset.genState = state;
+    const blocked = state === 'in-flight';
+    document.querySelectorAll('.field-input, .chip-input, .save-btn, .card-action-delete, .close-chapter-btn').forEach(el => {
+      if (el.matches('.field-input, .chip-input')) el.disabled = blocked;
+      el.title = blocked ? GATE_REASON : '';
+    });
     document.querySelectorAll('.rb-btn[data-gen-state]').forEach(b => {
       b.classList.toggle('active', b.dataset.genState === state);
     });

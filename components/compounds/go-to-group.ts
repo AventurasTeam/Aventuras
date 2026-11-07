@@ -16,10 +16,7 @@ export type InStoryContext = { storyId: string; branchId: string; surface: InSto
 
 type StoryIds = Pick<InStoryContext, 'storyId' | 'branchId'>
 
-type SurfaceEntry = { id: string; label: () => string } & (
-  | { route: (story: StoryIds) => string }
-  | { landsLater: () => string }
-)
+type SurfaceEntry = { id: string; label: () => string; route: (story: StoryIds) => string }
 
 const ENTRY: Record<InStorySurface, SurfaceEntry> = {
   reader: {
@@ -40,7 +37,7 @@ const ENTRY: Record<InStorySurface, SurfaceEntry> = {
   'chapter-timeline': {
     id: 'open-chapter-timeline',
     label: () => t('chrome.goTo.openChapterTimeline'),
-    landsLater: () => t('chrome.goTo.chapterTimelineLandsLater'),
+    route: (story) => `/chapter-timeline/${story.branchId}`,
   },
   'story-settings': {
     id: 'open-story-settings',
@@ -49,7 +46,7 @@ const ENTRY: Record<InStorySurface, SurfaceEntry> = {
   },
 }
 
-// actions-menu.md → Curated core: self-omits current surface, unbuilt disables (not hides).
+// actions-menu.md → Curated core: the current surface omits itself.
 export function buildGoToGroup(
   story: InStoryContext,
   navigate: (path: string) => void,
@@ -57,17 +54,8 @@ export function buildGoToGroup(
   const entries = IN_STORY_SURFACES.filter((surface) => surface !== story.surface).map(
     (surface) => {
       const entry = ENTRY[surface]
-      if ('route' in entry) {
-        const route = entry.route(story)
-        return { id: entry.id, label: entry.label(), onActivate: () => navigate(route) }
-      }
-      return {
-        id: entry.id,
-        label: entry.label(),
-        disabled: true,
-        disabledReason: entry.landsLater(),
-        onActivate: () => {},
-      }
+      const route = entry.route(story)
+      return { id: entry.id, label: entry.label(), onActivate: () => navigate(route) }
     },
   )
   return { id: 'go-to', header: t('chrome.goTo.header'), entries }

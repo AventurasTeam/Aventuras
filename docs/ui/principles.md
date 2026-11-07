@@ -329,7 +329,8 @@ mid-flight. A pass is never an undo target; CTRL-Z steps over it.
 User-origin mutations to: story entries, entities (fields, status,
 state, `injection_mode`), happenings, awareness links, lore,
 threads, branch operations (rollback, switch, branch creation),
-chapter delete, translations, story settings, app settings that feed
+chapter metadata edits (title, theme, summary, keywords), chapter
+delete, translations, story settings, app settings that feed
 `generationContext`, calendar swap, lead switch, mode switch,
 narration switch, manual `worldTime` correction, story-level
 backup / export when reachable from inside the story (the Actions

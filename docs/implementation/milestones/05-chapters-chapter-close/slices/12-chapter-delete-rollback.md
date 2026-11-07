@@ -184,7 +184,10 @@ without a database. Copy goes in the `chapters` namespace 5.7 creates.
 
 - `Delete…` flips from disabled with its reason to opening the confirm, in
   the action row and in the phone's `OverflowMenu` entry alike. The route
-  holds the confirm's state, so `ChapterCard` stays props-only.
+  holds the confirm's state, so `ChapterCard` stays props-only. It stays
+  disabled with the gate's reason while a run holds the gate, and its
+  "lands later" reason goes, with `chapters:actions.deleteLandsLater`:
+  the card is the key's only reader.
 - It goes through the route's `guard`, so a dirty card raises
   `Unsaved changes` first: a draft on a row about to go has nowhere to
   land. 5.7's list of guarded transitions leaves it out only because it
@@ -538,6 +541,27 @@ change amends the scope above.
   regenerate's close arm and edits the same row, so the answer lands here.
   Default: today's counting stands and the row names those tables too, leaving
   open only the translation of a deleted entry. Routed from triage 2026-11-06.
+- **How does a rollback count a user's chapter edit it sweeps?** Routed here
+  from [Slice 5.7](./07-chapter-timeline.md#open-questions) and
+  [Slice 5.11](./11-review-window.md#open-questions), since this slice
+  rewrites `rollbackCountsOf`. [Slice 5.2](./02-first-chapter.md) made it
+  count a `chapters` delta only as a create, so a close's `close_report`
+  update doesn't read as world state. A user's own `updateChapter` (a
+  Timeline save or a review edit, anchored on no entry) on a chapter the
+  rollback spares is still reverted: `resolveRollbackWindow` sweeps deltas
+  with no `entry_id` at or past the target's create. The confirm reports
+  nothing for it. Default: count a non-create `chapters` delta when its
+  chapter's create isn't in the swept set, which keeps a swept close's
+  report silent and counts the user's edit, and
+  `rollback-confirm.md → Counts` names it beside the tables the entry
+  above settles.
+- **Does the chapters delete handler's not-found refusal need a code?**
+  `lib/actions/chapters/register.ts`'s delete handler (`:151`) returns its
+  not-found refusal with no `code`, while [Slice 5.7](./07-chapter-timeline.md)
+  gave the update handler `TARGET_NOT_FOUND` (`:92`). Once `Delete…` lands,
+  deleting a chapter that already went reads as `failed`, not `not-found`.
+  Default: give it `TARGET_NOT_FOUND` as the update handler has. Surfaced by
+  Slice 5.7.
 - **What residue is accepted?** Four narrow cases. Duplicates after CTRL-Z and
   redo over a manual close at the head, which chapter-close dedup never revisits.
   A head edit under a committed close, which keeps writes derived from the

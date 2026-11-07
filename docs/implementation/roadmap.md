@@ -1183,6 +1183,14 @@ code before it moved; resolve with the slice it names.
   [`chapter-timeline.md → Per-card actions`](../ui/screens/chapter-timeline/chapter-timeline.md#per-card-actions)
   names it, but the run has no kind, gate, cancel, toast, delta source
   or undo story, and no answer for a chapter closed in parts. Moved here at M5's promotion (2026-11-01).
+  On the gate, the in-flight list (the Edit restrictions bullet atop
+  [`chapter-timeline.md`](../ui/screens/chapter-timeline/chapter-timeline.md))
+  splits the card's actions into disabled and live and names neither
+  for it, and the wireframe draws it live mid-run. It starts a
+  metadata write, and
+  [`principles.md → What's gated`](../ui/principles.md#whats-gated)
+  gates chapter metadata edits. Raised 2026-11-07 by Slice 5.7's doc
+  review. Routed from triage 2026-11-07.
 - **M7.2 — `Set lead character…` in the Actions menu.**
   [`actions-menu.md → Curated core`](../ui/patterns/actions-menu.md#curated-core)
   lists it and only the lead picker names it, so it lands with the
@@ -1534,7 +1542,13 @@ own.
   keep focus and carry the reason, but contradicts
   [`color.md → Disabled`](../ui/foundations/color.md#disabled)
   ("disabled controls aren't focusable"), so it's a developer call.
-  Widened from triage 2026-10-09.
+  Widened from triage 2026-10-09. Run-locked text fields fare worse:
+  World's and Plot's `Input` and `Textarea` fields
+  (`components/world/detail/fields.tsx`, `awareness-editor.tsx:148`)
+  and the Chapter Timeline card's take the gate reason only as a bare
+  `accessibilityHint`, with no `ReasonTooltip`, so on web it reaches
+  neither a tooltip nor the accessibility tree. Widened from triage
+  2026-11-07, raised by Slice 5.7's doc review.
 - **M9.2 — Emoji stand in for icons across the app; sweep and replace.**
   User-facing chrome carries literal emoji and glyphs where the
   design system has an icon primitive — `✨` prefixes every AI-assist
@@ -1697,8 +1711,10 @@ own.
   and category are text `Tag`s the label hides, and a happening's ⊙
   common-knowledge glyph is text-less, so it joins in-scene and
   recently-classified in needing the hidden-text primitive. The row's
-  `description` line (a happening's category, a lore excerpt) is hidden
-  too. Widened 2026-09-22 by Slice 4.3. A selected row says nothing either:
+  `description` line (a happening's category, a lore excerpt) is not
+  hidden: it rides beside the name as the row's description, through
+  `describedBy` (`components/ui/accessible-description.ts`). Widened
+  2026-09-22 by Slice 4.3. A selected row says nothing either:
   `aria-selected` on the row's `role="button"` is invalid ARIA on web
   (`components/compounds/list-row.tsx`, and the phone rail's categories
   in `components/reader/rail/rail-sheet-categories.tsx`), while native maps

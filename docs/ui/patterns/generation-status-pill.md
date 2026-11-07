@@ -78,6 +78,21 @@ toward zero and would otherwise be hidden by the very signal it
 suppresses — and hands the result in. The compound imports no router;
 tap-handling is a consumer concern, surfaced via `onErrorTap`.
 
+The reader derives the phase from its run
+(`components/reader/generation-phase.ts`): a close or a pass by its
+kind, a turn by its phase name, exhaustively over the per-turn phase
+names, so a phase added to that pipeline fails the build until it is
+labelled. A turn phase that is unmapped or not yet named keeps a
+generic label, so the pill never blanks mid-run. Story Settings,
+World, Plot and Chapter Timeline derive it from the run's kind alone.
+Every in-story top bar renders the pill through `StoryStatusPill`,
+which reads the error from one shared hook,
+`hooks/use-memory-health.ts`, in a leaf of its own, so the stale
+count's per-batch ticks re-render only the pill. The hook observes
+`memory-incomplete` from staleness detection per
+[`memory/model-management.md → Staleness UI`](../../memory/model-management.md#staleness-ui)
+and `swap-paused` from the swap marker.
+
 ## Priority resolution
 
 ```
@@ -233,31 +248,4 @@ props on every render.
 
 ## Open items
 
-- **Pipeline orchestrator wiring.** Real `activePhase` source from
-  the per-turn / chapter-close pipelines per
-  [`generation-pipeline.md → Orchestrator topology`](../../generation-pipeline.md#orchestrator-topology).
-  The compound takes `activePhase` as a prop; consumers wire it from
-  the orchestrator state via a derived selector on `txState`
-  (foreground-first heuristic). **Done for the reader**, whose
-  `components/reader/generation-phase.ts` maps the running phase's
-  node name to a `GenerationPhase` — exhaustively over the per-turn
-  phase-name union, so a phase added to that pipeline fails the
-  build until it is labelled, and with a generic-label fallback so an
-  unmapped name never blanks the pill mid-run; a pass maps by its
-  kind. Story Settings, World and Plot derive their phase from the
-  run's _kind_; Chapter Timeline is unwired.
-- **Memory error observation.** `memory-incomplete` from staleness
-  detection per
-  [`memory/model-management.md → Staleness UI`](../../memory/model-management.md#staleness-ui)
-  and `swap-paused` from the swap marker are observed by one shared
-  hook, `hooks/use-memory-health.ts`. Every wired consumer renders
-  the pill through `StoryStatusPill`, which reads that hook in a leaf
-  of its own, so the stale count's per-batch ticks re-render only the
-  pill; the reader reads the hook's swap half again for its composer
-  gate. Consumer collapses simultaneous errors to one
-  (`swap-paused` > `memory-incomplete`).
-- **Top-bar consumer wiring.** Render the pill on Reader, World,
-  Plot, Story Settings, Chapter Timeline per
-  [`principles.md → Universal in-story chrome`](../principles.md#universal-in-story-chrome).
-  Done for Reader, World, Plot and Story Settings, each tapping its
-  error through to Story Settings · Memory.
+None open.

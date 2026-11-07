@@ -190,7 +190,10 @@ slice-planning gate forces its resolution before that slice is planned.
   out in four specs (`chapter-close-owed`, `chapter-progress`,
   `first-chapter`, `dataset-chapter.build`) beside the app's
   `openRegionWhere`. A drift there fails by timeout, not silently.
-  Surfaced by Slice 5.6's slice review.
+  Surfaced by Slice 5.6's slice review. More than a dozen test files
+  spell out a `RunState` for `startRun` by hand, with no shared fixture,
+  so a `RunState` change edits all of them. Surfaced by Slice 5.7's
+  save-path review.
 - **A fresh dev slot has no local embedder model.** Every seeded story
   (`pnpm db:seed`, `db:seed:long`, `db:seed:dataset`) declares the local
   embedder `Xenova/all-MiniLM-L6-v2`. The app counts a model installed
@@ -300,6 +303,126 @@ slice-planning gate forces its resolution before that slice is planned.
   `window-check.test.ts` and `request-shape.test.ts`. The older
   `narrativeValueSchema` in `scripts/mock-llm/validate.ts` is exported
   with no importer. Surfaced by Slice 5.4's slice review.
+- **World's and Plot's create tab shows the previous row on native.**
+  `useCreateResetTab` (`hooks/use-create-reset-tab.ts:12-15`) switches
+  the detail pane's tab during render, in the commit whose `create:…`
+  `rowKey` resets the form. On native `@rn-primitives/tabs` renders
+  nothing for an inactive tab, so the create tab's fields mount in that
+  commit and miss the reset (react-hook-form subscribes passively off
+  web: [the lesson](lessons-learned/rhf-native-passive-subscription.md)).
+  The fields show the previous row, or a previous draft's text, while
+  the form holds blanks, and Save writes blanks for every field the
+  user didn't touch. Reached by `[+] Blank` while the pane is on a tab
+  other than the one a create opens on, at tablet tier (the Fold
+  unfolded). Confirmed on react-hook-form's native path in jsdom, not on
+  a device. Fixes: switch the tab in a layout effect, or lift the
+  Timeline's `formRowId` into the substrate as a `formRowKey` hosts gate
+  on; or patch react-hook-form to use `useLayoutEffect` whenever
+  `window` exists, which removes the class (errors and field arrays
+  included). Surfaced by Slice 5.7's Android check.
+- **A leave re-raised after Discard or Save reads stale dirty state.**
+  `requestLeave` and `runSave` in `hooks/use-row-save-session.ts` read
+  the last render's `form.formState.dirtyFields`, so a leave requested again in the same
+  tick as a Discard or Save is queued, and the leave dialog opens over a
+  clean session. It stays latent only because expo-router 55 queues
+  `back`, `dismiss` and `push` until after the next commit; a
+  synchronous dispatch brings the double prompt back on World, Plot and
+  the Timeline. Reading dirtiness live, as the Story Settings session
+  does through its `stateRef`, would close it. The Timeline's E2E pins
+  one-click Discard for `←` and Jump. Surfaced by Slice 5.7's route
+  review.
+- **The row-session wrapper exists in four copies.** The lore, entity,
+  plot and chapter row sessions each repeat the `commit` wrapper (a
+  try/catch and a `*_saved_handler_failed` log), the `onSession`
+  effect, and, in two of the four (lore, chapter), an effect
+  that calls `clearErrors` once the form is clean and the other two lack.
+  Whether plot and entity miss that effect on purpose is unverified. Lifting the shared parts into
+  the substrate or a helper would end the drift. Surfaced by Slice
+  5.7's session-hook review.
+- **The gated field wiring exists in three copies.** The `Controller`
+  plus `FormRow` plus input with the run gate (`editable={!blocked}`
+  and a hint, or `disabled` and a reason) is written in World's
+  `components/world/detail/fields.tsx`, Plot's inline Controllers, and
+  `ChapterCard`; they differ only in the issue-text function. A gated
+  field in `components/compounds/` that takes it would remove the
+  copies. Surfaced by Slice 5.7's card review.
+- **A disabled button's reason under it on native is hand-written three
+  times.** `ReasonTooltip` does nothing on native, so `ChapterCard`'s
+  action row, `ChapterInProgressCard`'s `Close chapter…` and the reader
+  popover's `OverlayAction` each wrap the `Button` in a `View` and render
+  the reason as muted `xs` text when `Platform.OS !== 'web'`, with
+  different alignment and disabled conditions. A button that needs its
+  reason on native shows none unless its author copies the block. A
+  shared compound, or a `Button` option, would end the copies; the
+  latter changes native layout for every `disabledReason` caller, so it
+  wants a design call. Surfaced by Slice 5.7's slice review.
+- **`TagInput` remounts when a run starts.** On web it wraps itself in a
+  `div title` only while disabled with a reason
+  (`components/compounds/tag-input.tsx:211-213`), so a run starting
+  mid-keyword flips the root element and remounts the tree: focus and
+  the half-typed keyword (local state) are lost. Hits World's
+  `ListField` and the Timeline's Keywords. Same class as the
+  input-adornment DOM-identity lesson. Surfaced by Slice 5.7's card
+  review.
+- **C15 and Slice 5.3 say time ranges exclude 0; the read keeps it.**
+  [Milestone 5 → C15](milestones/05-chapters-chapter-close/milestone.md#c15--entry-jump-and-chapter-time-ranges)
+  gives each chapter's `min` and `max` world time "excluding 0", and
+  [Slice 5.3 → Scope: in](milestones/05-chapters-chapter-close/slices/03-reader-chapters.md#scope-in)
+  says the same, as does its acceptance criterion 12.
+  `readChapterTimeRanges` (`lib/db/story-entries/chapter-time-ranges.ts:27-28`)
+  excludes `kind = 'system'` and a null world time only, and its test
+  pins 0 on purpose (`chapter-time-ranges.test.ts`, "starts a range
+  at the opening, at 0"): the 2026-11-04 triage pass (PR #704) took a
+  world time of 0 as the origin, not a flashback. The docs are the side
+  to fix. Surfaced by Slice 5.7's card-data task.
+- **`observability.md` credits `row_save_validate_failed` to a check
+  that isn't there.** The bullet names "the lore session's first-edit
+  whole-draft check"; `use-lore-row-session.ts` runs no `trigger()`,
+  and the substrate's values-subscription catch, which does log it, is
+  unnamed. Surfaced by Slice 5.7's session-hook review.
+- **`saveBarDiscard` matches the unsaved dialog's Discard too.** It
+  queries the page for a button named `Discard`
+  (`e2e/locators/save-session.ts`), and the dialog's
+  `unsavedChanges.discard` reads the same as the bar's
+  `saveBar.discard` (`locales/en/common.json`). The save bar stays in
+  the accessibility tree while the dialog is open, as the file notes at
+  `unsavedDiscard`, so the query would resolve both and hit a
+  strict-mode error; `exact: true` can't tell two buttons of one name
+  apart. It needs scoping outside the dialog, to the bar's `save-bar`
+  testID say. No current caller uses it with the dialog open. Surfaced
+  by Slice 5.7's E2E review.
+- **`EMPTY_LORE_DRAFT`'s freeze is shallow.** `lib/world/lore-draft.ts`
+  types it `Readonly<LoreDraft>`, which leaves `keywords` and `tags`
+  mutable `string[]` in the type, and `Object.freeze` leaves them
+  mutable at runtime too, so nothing stops a write into the arrays every
+  spread of the constant shares. `loreDraftFrom` copies in new lists by
+  convention. The chapter twin, `EMPTY_CHAPTER_DRAFT`, is tightened in
+  Slice 5.7's review; lore's is older code, which
+  [`code-conventions.md → Type design`](../code-conventions.md#type-design)
+  files as a deferral. Surfaced by Slice 5.7's slice review.
+- **`commitRowSave`'s `idPrefix` is required even for an update.**
+  `CommitRowSaveArgs` (`lib/actions/row-save/commit-row-save.ts`) pairs
+  `rowId: string | null` with a required `idPrefix: string`, read only
+  when `rowId` is null, to generate a create's id. `saveChapter`, its
+  first update-only caller, passes a dead `idPrefix: 'chap'`. Tighter:
+  `{ rowId: string }` or `{ rowId: null; idPrefix }`, the prefix typed
+  from the closed set in `lib/ids/prefixes.ts` (`SubstitutablePrefix`).
+  Older API; the slice adds a caller. Surfaced by Slice 5.7's slice
+  review.
+- **A Save whose only change is whitespace leaves the untrimmed draft
+  as the clean form.** The chapter and lore drafts compare trimmed
+  values (`chapterPatch` in `lib/chapters/chapter-draft.ts`, `lorePatch`
+  in `lib/world/lore-draft.ts`), so a padding-only edit builds no
+  action, and `commitRowSave` returns ok without writing. The Timeline
+  then toasts the save, and `rebase` in `hooks/use-row-save-session.ts`
+  takes the sent draft as the clean baseline: the field keeps the
+  padding, and Discard restores it, while the store and the card head
+  hold the trimmed value, until the next store patch or reopening.
+  Nothing stored changes. The fix is a substrate contract change, a
+  no-write `ok` reaching `rebase` so it rebases onto the stored values,
+  and it spans every row kind (Plot's thread and happening drafts trim
+  too). The Timeline is a new route to lore's existing behaviour.
+  Surfaced by Slice 5.7's slice review.
 - **A second CTRL-Z after a close whose reversal failed leaves its marker
   open.** It undoes the close's delta rows and chapter row but leaves the
   close's `pipeline_runs` marker with `finished_at` null. How boot
