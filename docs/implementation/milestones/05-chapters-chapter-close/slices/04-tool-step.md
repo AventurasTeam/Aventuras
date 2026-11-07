@@ -111,7 +111,7 @@ so the caller copies them into `CloseReport.stopped`. Every arm but `not-configu
 `recoverable`, so `retriedAttemptEvents` works unchanged.
 
 - **One request.** The pair goes first, a blank system half left out as
-  `promptParams` does (`lib/ai/generate.ts:199-204`), then
+  `promptParams` does (`lib/ai/generate.ts`), then
   `request.messages`, then `tools`. No `stopWhen`, so `generateText`
   stops after one step (`ai/src/generate-text/generate-text.ts:261`). No
   streaming. `runProviderCall` keeps `maxRetries: 0`, so retries stay in
@@ -121,7 +121,7 @@ so the caller copies them into `CloseReport.stopped`. Every arm but `not-configu
   inside one.
 - **The chain.** The cache marker when `cacheSystemPrefix` is set on an
   `anthropic` provider, `carriedCapabilities`, then the window check
-  last, as `streamText` orders them (`generate.ts:257-263`), with no JSON
+  last, as `streamText` orders them (`lib/ai/generate.ts`), with no JSON
   contract. `checkInputTokens` runs on every attempt. `withMiddleware`,
   `windowCheck`, `carriedCapabilities` and `marksSystemPrefix` are
   private to `generate.ts` today: export them inside the module, not from
@@ -147,7 +147,7 @@ never reach the caller. A second cut or filter returns `stopped`,
 **Output default.** `TOOL_STEP_MAX_OUTPUT_DEFAULT = 8_000` goes out as
 `maxOutputTokens` when the profile sets none, a story override's
 `params: {}` included (`lib/ai/resolve-model.ts:83`). The same number
-reaches `replyCutOff` as `maxOutput`: `generate.ts:488` passes only the
+reaches `replyCutOff` as `maxOutput`: `generateStructured` passes only the
 profile's, and a reasoning spiral would read as `unknown`.
 
 **Call bound (C2).** The step bounds its call with
@@ -166,7 +166,8 @@ apart as the pass does at `:287`.
   reasoning text, each tool call's name and input, each tool result's
   name and output, and each tool definition, serialized as JSON. `file`
   parts stay at 0.
-- `checked` takes `params.tools` (`lib/ai/context-window.ts:153-154`), and
+- `checked` takes `params.tools` (`windowCheckMiddleware` in
+  `lib/ai/context-window.ts`), and
   a `ModelTools` type derives beside `ModelPrompt`
   (`lib/ai/prompt-schema.ts:5-6`).
 - **A first call against a later step.** A `context-window` failure,
@@ -240,13 +241,13 @@ apart as the pass does at `:287`.
 - **Record mode.** On a tool lane `passthrough` returns the reply as a
   `MockToolStep`, the log's `served` holds it, and `recordedValue`
   (`scripts/mock-llm/control.ts:38`) saves it, so a real model's calls
-  replay (`scripts/mock-llm/passthrough.ts:38-45`).
+  replay (`toolStepOfCompletion` in `scripts/mock-llm/passthrough.ts`).
 
 **Stub.** `tool-step` in `lib/ai/stub/scenarios.ts`: the first reply holds
 a `thinking` block with a signature and a `tool_use` block, stopping on
-`tool_use`; a request carrying a `tool_result` gets plain text only when
-the assistant turn before it opens with that thinking block whole (type,
-text and signature), else a 400 naming the thinking block.
+`tool_use`; a request carrying `tool_result`s gets plain text only when
+the assistant turn before each of them opens with its thinking block
+whole (type, text and signature), else a 400 naming the thinking block.
 `tool-step-cut` stops on `max_tokens` and reports the request's
 `max_tokens` as its output tokens, so a cut reads as `max-output`. This
 is the one route to `@ai-sdk/anthropic`'s tool parsing and signature
@@ -327,7 +328,7 @@ Unit paths run with `pnpm vitest run --project unit <path>`.
   `content-filter` stop takes the same path, with cause `content-filter`.
   `lib/ai/transport/call-with-retry.test.ts`: its existing cut-off tests
   pass unchanged, since `callWithRetry` gains no option.
-- **Window count.** The test at `lib/ai/context-window.test.ts:203-232`
+- **Window count.** The part-type test in `lib/ai/context-window.test.ts`
   flips: reasoning and a `tool-result` count, `file` stays 0.
   `lib/ai/window-check.test.ts`: a prompt under the window whose tool
   definitions take it over is refused unsent.
