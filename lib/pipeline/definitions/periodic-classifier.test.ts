@@ -3478,6 +3478,7 @@ describe('periodicClassifierPhase via runPipeline', () => {
     const unsubscribe = pipelineEventBus.subscribe('run_start', (e) => {
       starts.push(e.kind)
     })
+    onTestFinished(unsubscribe)
 
     const { chain } = startPipeline(PERIODIC_CLASSIFIER_KIND, {
       storyId: 's1',
@@ -3485,17 +3486,17 @@ describe('periodicClassifierPhase via runPipeline', () => {
       db,
       runInTransaction,
     })
-    const closing = await close.nextHeld()
-    closing.finish('completed')
-    const end = await chain
-    unsubscribe()
-
+    const closing = await Promise.race([close.nextHeld(), chain.then(() => null)])
     expect(starts).toEqual([
       PERIODIC_CLASSIFIER_KIND,
       PERIODIC_CLASSIFIER_KIND,
       PERIODIC_CLASSIFIER_KIND,
       CHAPTER_CLOSE_KIND,
     ])
+    if (closing == null) throw new Error('the chain ended without reaching the close')
+    closing.finish('completed')
+    const end = await chain
+
     expect(end).toMatchObject({ kind: CHAPTER_CLOSE_KIND, result: { outcome: 'completed' } })
     expect(await storedStatus(db)).toMatchObject({ state: 'idle', processedThrough: 5 })
   })
