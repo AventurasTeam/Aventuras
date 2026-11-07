@@ -69,7 +69,7 @@ function generateToolStep(
   options: StructuredCallOptions, // cacheSystemPrefix, actionId
 ): Promise<ToolStepResult>
 
-type ToolStepTool = { description: string; inputSchema: z.ZodType; execute?: never }
+type ToolStepTool = { description: string; inputSchema: z.ZodObject; execute?: never }
 
 type ToolStepRequest = {
   prompt: PromptHalves // the pair, sent first
@@ -79,11 +79,11 @@ type ToolStepRequest = {
 }
 
 type ToolStep = {
-  calls: readonly { toolCallId: string; toolName: string; input: unknown }[]
+  calls: readonly { toolCallId: string; toolName: string; input: Record<string, unknown> }[]
   invalidCalls: readonly { toolCallId: string; toolName: string; detail: string }[]
-  responseMessages: readonly ModelMessage[] // as the SDK returned them
+  responseMessages: readonly (AssistantModelMessage | ToolModelMessage)[] // as the SDK returned them
   text: string
-  finishReason: FinishReason
+  finishReason: Exclude<FinishReason, 'length' | 'content-filter'> // a cut or filtered reply is never a step
   usage: LanguageModelUsage
 }
 
@@ -101,7 +101,11 @@ type ToolStepResult =
       failure: ContextWindowFailure
       recoverable: readonly CallRetryError[]
     }
-  | { status: 'failed'; error: CallRetryError; recoverable: readonly CallRetryError[] }
+  | {
+      status: 'failed'
+      error: Exclude<CallRetryError, { tier: 'reply-cut-off' }> // a second cut stops instead
+      recoverable: readonly CallRetryError[]
+    }
   | { status: 'not-configured'; kind: ResolveFailureKind }
   | { status: 'aborted'; recoverable: readonly CallRetryError[] }
 ```
