@@ -4,7 +4,12 @@ import type { generateStructured } from '@/lib/ai'
 import { APP_SETTINGS_DEFAULTS, STORY_SETTINGS_DEFAULTS, type StorySettings } from '@/lib/db'
 import { makeLogger } from '@/lib/diagnostics'
 import { runPreflight } from '@/lib/pipeline/runtime/preflight'
-import type { PhaseContext, PhaseEmittedEvent, PhaseResult } from '@/lib/pipeline/types'
+import type {
+  PhaseContext,
+  PhaseEmittedEvent,
+  PhaseResult,
+  PreflightSnapshot,
+} from '@/lib/pipeline/types'
 import {
   appSettingsStore,
   currentStoryStore,
@@ -12,6 +17,8 @@ import {
   entriesStore,
   isUserEditBlocked,
   resetAllStores,
+  type RunState,
+  type TxState,
 } from '@/lib/stores'
 
 import { createPhaseDb, hydrateEntries, resetPhaseDb, type PhaseDb } from './__tests__/phase-db'
@@ -55,6 +62,23 @@ const SUGGESTION_CATEGORIES = [
     order: 1,
   },
 ]
+
+function run(fields: Partial<RunState> & Pick<RunState, 'runId' | 'kind'>): RunState {
+  return {
+    gateBehavior: 'hard-gate',
+    actionId: `act_${fields.runId}`,
+    storyId: 'story_1',
+    branchId: 'br_1',
+    abortController: new AbortController(),
+    currentPhase: '',
+    intermediates: {},
+    terminal: Promise.resolve(),
+    resolveTerminal: () => {},
+    interruptible: null,
+    beforeTurn: false,
+    ...fields,
+  }
+}
 
 const provider = {
   id: 'prov-1',
@@ -204,12 +228,16 @@ describe('suggestion-refresh declaration', () => {
     // so this fails alongside the declaration if the kind is ever relaxed —
     // the point is the consequence, not the literal.
     const { gateBehavior } = getPipeline(SUGGESTION_REFRESH_KIND)
-    const running = {
-      runs: new Map([['run-1', { runId: 'run-1', kind: SUGGESTION_REFRESH_KIND, gateBehavior }]]),
+    const running: TxState = {
+      runs: new Map([
+        ['run-1', run({ runId: 'run-1', kind: SUGGESTION_REFRESH_KIND, gateBehavior })],
+      ]),
       reversalInProgress: false,
       pendingTurns: new Set(),
+      deferred: new Map(),
+      pendingClose: new Map(),
     }
-    expect(isUserEditBlocked(running as never)).toBe(true)
+    expect(isUserEditBlocked(running)).toBe(true)
   })
 
   it('yields to per-turn so a turn never waits on a refresh whose chips it orphans', () => {
@@ -229,7 +257,7 @@ describe('suggestion-refresh declaration', () => {
   it('resolves a collision by aborting the refresh, not by rejecting the turn', () => {
     ensureSuggestionRefreshPipelineRegistered()
     ensurePerTurnPipelineRegistered()
-    const running = new Map([['run-1', { runId: 'run-1', kind: SUGGESTION_REFRESH_KIND } as never]])
+    const running = new Map([['run-1', run({ runId: 'run-1', kind: SUGGESTION_REFRESH_KIND })]])
 
     expect(checkConcurrencyContract(PER_TURN_KIND, running, false)).toEqual({
       kind: 'start-after-yields',
@@ -255,7 +283,7 @@ describe('suggestion-refresh declaration', () => {
 
   it('pre-flight halts the pipeline when the suggestion agent has no assignment', () => {
     ensureSuggestionRefreshPipelineRegistered()
-    const snapshot = {
+    const snapshot: PreflightSnapshot = {
       appSettings: {
         ...APP_SETTINGS_DEFAULTS,
         providers: [provider],
@@ -265,7 +293,7 @@ describe('suggestion-refresh declaration', () => {
       },
       storySettings: baseSettings(),
     }
-    expect(runPreflight(getPipeline(SUGGESTION_REFRESH_KIND), snapshot as never)).toEqual({
+    expect(runPreflight(getPipeline(SUGGESTION_REFRESH_KIND), snapshot)).toEqual({
       kind: 'config-resolver',
       failure: 'no-profile-assigned',
       target: 'suggestion',
@@ -275,7 +303,7 @@ describe('suggestion-refresh declaration', () => {
 
   it('pre-flight passes once the suggestion agent resolves', () => {
     ensureSuggestionRefreshPipelineRegistered()
-    const snapshot = {
+    const snapshot: PreflightSnapshot = {
       appSettings: {
         ...APP_SETTINGS_DEFAULTS,
         providers: [provider],
@@ -292,7 +320,7 @@ describe('suggestion-refresh declaration', () => {
       },
       storySettings: baseSettings(),
     }
-    expect(runPreflight(getPipeline(SUGGESTION_REFRESH_KIND), snapshot as never)).toBeNull()
+    expect(runPreflight(getPipeline(SUGGESTION_REFRESH_KIND), snapshot)).toBeNull()
   })
 })
 

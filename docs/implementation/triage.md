@@ -67,11 +67,6 @@ slice-planning gate forces its resolution before that slice is planned.
   changed (`lib/actions/chapters/register.ts`, the update handler).
   Matters once a chapter edit shows in History. Surfaced by Slice 5.2's
   review.
-- **Partial `TxState` fixtures escape the type checker.**
-  `lib/pipeline/definitions/suggestion-refresh.test.ts:207-212` builds
-  one cast `as never`, already without `deferred` and `pendingClose`,
-  so a new `TxState` field never flags it. Harmless while
-  `isUserEditBlocked` reads only what it has.
 - **A bundled template's group is declared twice, unchecked.**
   `lib/prompts/bundled/index.ts` sets each template's `group` (read by
   the include validator) and `TEMPLATE_GROUPS` declares it again, and no
