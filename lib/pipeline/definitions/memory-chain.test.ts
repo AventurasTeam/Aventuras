@@ -9,8 +9,16 @@ import {
   WORKING_CONFIG,
 } from '@/lib/actions/turns/__tests__/fixtures'
 import { generateStructured } from '@/lib/ai'
+import { CHAPTER_CLOSE_KIND } from '@/lib/chapters'
 import { idleStatus, PERIODIC_CLASSIFIER_KIND } from '@/lib/classifier'
-import { branches, pipelineRuns, stories, storyEntries, type ClassifierStatus } from '@/lib/db'
+import {
+  branches,
+  pipelineRuns,
+  stories,
+  storyEntries,
+  type ClassifierStatus,
+  type StoryEntry,
+} from '@/lib/db'
 import { createTestDb } from '@/lib/db/__tests__/test-db'
 import {
   currentStoryStore,
@@ -22,9 +30,13 @@ import {
 
 import { __resetClassifierEmbedder } from './description-embedder'
 import {
+  closeOwed,
   isClassifierHeld,
   nextMemoryRun,
   owedPassAtSend,
+  passChainsTo,
+  passStartedAlone,
+  perTurnChainsTo,
   readClassifierStatus,
   unprocessedEntryCount,
 } from './memory-chain'
@@ -139,6 +151,39 @@ async function setStatus(db: Db, status: Partial<ClassifierStatus>): Promise<voi
     .where(eq(branches.id, 'b1'))
 }
 
+// Counted rows: one written with no count reads 0 tokens, which no threshold reaches.
+async function seedRegion(db: Db, kinds: readonly StoryEntry['kind'][]): Promise<void> {
+  for (const [i, kind] of kinds.entries())
+    await db.insert(storyEntries).values({
+      id: `e${i + 1}`,
+      branchId: 'b1',
+      position: i + 1,
+      kind,
+      content: `entry ${i + 1}`,
+      contentTokens: 100,
+      createdAt: i + 1,
+    })
+}
+
+type Settings = typeof STORY_SETTINGS
+
+function openWith(over: Partial<Settings>): void {
+  currentStoryStore.set({
+    storyId: 's1',
+    branchId: 'b1',
+    definition: STORY_DEFINITION,
+    settings: { ...STORY_SETTINGS, ...over },
+  })
+  entitiesStore.hydrate('b1', [])
+}
+
+// Opening, action and reply: 300 counted tokens at a threshold of 300, under a cadence never due.
+async function owedRegion(db: Db, status: Partial<ClassifierStatus> = {}): Promise<void> {
+  await seedRegion(db, ['opening', 'user_action', 'ai_reply'])
+  await setStatus(db, status)
+  openWith({ classifierCadence: 50, chapterTokenThreshold: 300 })
+}
+
 let nextPosition = 1
 
 function entry(kind: 'user_action' | 'ai_reply'): PhaseEmittedEvent {
@@ -173,7 +218,7 @@ function defineTurn(end: PhaseResult = { status: 'completed' }): void {
     affordance: 'pill-and-banner',
     gateBehavior: 'hard-gate',
     concurrencyPolicy: { blockedBy: [PER_TURN_KIND, PERIODIC_CLASSIFIER_KIND] },
-    chainsTo: nextMemoryRun,
+    chainsTo: perTurnChainsTo,
   })
 }
 
@@ -265,40 +310,6 @@ describe('nextMemoryRun', () => {
     expect(await nextMemoryRun(turnRun(), ctx)).toBe(PERIODIC_CLASSIFIER_KIND)
   })
 
-  it.each([
-    [PERIODIC_CLASSIFIER_KIND, 'pass', { pass: true }],
-    ['chapter-close', 'close', { close: true }],
-  ] as const)(
-    'names nothing while the branch holds deferred work (%s)',
-    async (kind, slot, recorded) => {
-      const { db, ctx } = await makeHarness()
-      await seedEntries(db, 2)
-      openStory(2)
-      const interrupted = turnRun({ runId: `run_${kind}`, kind, interruptible: slot })
-      generationStore.startRun(interrupted)
-      expect(generationStore.abortRun(interrupted.runId, 'aborted')).toBe(slot)
-      expect(generationStore.getTxState().deferred.get('b1')).toEqual(recorded)
-
-      expect(await nextMemoryRun(turnRun(), ctx)).toBeNull()
-    },
-  )
-
-  it('ignores work deferred on another branch', async () => {
-    const { db, ctx } = await makeHarness()
-    await seedEntries(db, 2)
-    openStory(2)
-    const elsewhere = turnRun({
-      runId: 'run_elsewhere',
-      kind: PERIODIC_CLASSIFIER_KIND,
-      interruptible: 'pass',
-      branchId: 'b2',
-    })
-    generationStore.startRun(elsewhere)
-    expect(generationStore.abortRun(elsewhere.runId, 'aborted')).toBe('pass')
-
-    expect(await nextMemoryRun(turnRun(), ctx)).toBe(PERIODIC_CLASSIFIER_KIND)
-  })
-
   it('names nothing while the status is running, as a crash left it', async () => {
     const { db, ctx } = await makeHarness()
     await seedEntries(db, 4)
@@ -334,6 +345,208 @@ describe('nextMemoryRun', () => {
     await seedEntries(db, 2)
 
     expect(await nextMemoryRun(turnRun(), ctx)).toBeNull()
+  })
+})
+
+// generation-pipeline.md → chainsTo on predecessor: a pick, or the open region at the threshold.
+describe('closeOwed', () => {
+  const story = (over: Partial<Settings>) => ({ settings: { ...STORY_SETTINGS, ...over } })
+
+  it('owes a picked close with auto-close off', async () => {
+    const { db, ctx } = await makeHarness()
+    await seedRegion(db, ['opening'])
+    generationStore.setPendingClose('b1', { endEntryId: 'e1' })
+
+    expect(await closeOwed('b1', story({ chapterAutoClose: false }), ctx)).toBe(true)
+  })
+
+  it("owes nothing for another branch's pick", async () => {
+    const { db, ctx } = await makeHarness()
+    await seedRegion(db, ['opening'])
+    generationStore.setPendingClose('b2', { endEntryId: 'e1' })
+
+    expect(await closeOwed('b1', story({ chapterAutoClose: false }), ctx)).toBe(false)
+  })
+
+  it('owes nothing over the threshold with auto-close off', async () => {
+    const { db, ctx } = await makeHarness()
+    await seedRegion(db, ['opening', 'user_action', 'ai_reply'])
+
+    expect(
+      await closeOwed('b1', story({ chapterAutoClose: false, chapterTokenThreshold: 100 }), ctx),
+    ).toBe(false)
+  })
+
+  // C10: a chapter ends only on a reply, so an opening alone would fail every Send.
+  it.each([
+    ['[opening]', ['opening']],
+    ['[opening, user_action]', ['opening', 'user_action']],
+  ] as const)('owes nothing over the threshold on %s', async (_label, kinds) => {
+    const { db, ctx } = await makeHarness()
+    await seedRegion(db, kinds)
+
+    expect(await closeOwed('b1', story({ chapterTokenThreshold: 1 }), ctx)).toBe(false)
+  })
+
+  it('owes a close at exactly the threshold with a reply, and none a token short of it', async () => {
+    const { db, ctx } = await makeHarness()
+    await seedRegion(db, ['opening', 'user_action', 'ai_reply'])
+
+    expect(await closeOwed('b1', story({ chapterTokenThreshold: 300 }), ctx)).toBe(true)
+    expect(await closeOwed('b1', story({ chapterTokenThreshold: 301 }), ctx)).toBe(false)
+  })
+})
+
+// chapter-close.md → Phase 0: the passes catch up first, then the close.
+describe('nextMemoryRun with a close owed', () => {
+  it('names a catch-up pass while entries are unprocessed, though the cadence is not due', async () => {
+    const { db, ctx } = await makeHarness()
+    await owedRegion(db)
+
+    expect(await nextMemoryRun(turnRun(), ctx)).toBe(PERIODIC_CLASSIFIER_KIND)
+  })
+
+  it('names the close once no entry is unprocessed', async () => {
+    const { db, ctx } = await makeHarness()
+    await owedRegion(db, { processedThrough: 3 })
+
+    expect(await nextMemoryRun(turnRun(), ctx)).toBe(CHAPTER_CLOSE_KIND)
+  })
+
+  it('names the close a pick owes', async () => {
+    const { db, ctx } = await makeHarness()
+    await seedEntries(db, 2)
+    await setStatus(db, { processedThrough: 2 })
+    openStory(50)
+    generationStore.setPendingClose('b1', { endEntryId: 'e2' })
+
+    expect(await nextMemoryRun(turnRun(), ctx)).toBe(CHAPTER_CLOSE_KIND)
+  })
+
+  // A close must not build on a held pass's unreversed writes, whatever is left to process.
+  it.each([
+    ['entries unprocessed', null],
+    ['none unprocessed', 3],
+  ] as const)('names nothing on a held branch with %s', async (_label, processedThrough) => {
+    const { db, ctx } = await makeHarness()
+    await owedRegion(db, { state: 'running', processedThrough })
+
+    expect(await nextMemoryRun(turnRun(), ctx)).toBeNull()
+  })
+
+  it('reads past the records a Send runs: a deferred pass and a deferred close', async () => {
+    const { db, ctx } = await makeHarness()
+    await owedRegion(db)
+    deferOnB1(PERIODIC_CLASSIFIER_KIND, 'pass')
+    deferOnB1(CHAPTER_CLOSE_KIND, 'close')
+
+    expect(await nextMemoryRun(passRun(), ctx)).toBe(PERIODIC_CLASSIFIER_KIND)
+  })
+})
+
+// generation-pipeline.md → chainsTo on predecessor: interrupted work waits for the next Send.
+describe('perTurnChainsTo', () => {
+  it.each([
+    [PERIODIC_CLASSIFIER_KIND, 'pass', { pass: true }],
+    [CHAPTER_CLOSE_KIND, 'close', { close: true }],
+  ] as const)(
+    'chains nothing while the branch holds deferred work (%s)',
+    async (kind, slot, recorded) => {
+      const { db, ctx } = await makeHarness()
+      await seedEntries(db, 2)
+      openStory(2)
+      deferOnB1(kind, slot)
+      expect(generationStore.getTxState().deferred.get('b1')).toEqual(recorded)
+
+      expect(await perTurnChainsTo(turnRun(), ctx)).toBeNull()
+      // The guard is per-turn's alone: a Send's chain reads past the record.
+      expect(await nextMemoryRun(turnRun(), ctx)).toBe(PERIODIC_CLASSIFIER_KIND)
+    },
+  )
+
+  it('ignores work deferred on another branch', async () => {
+    const { db, ctx } = await makeHarness()
+    await seedEntries(db, 2)
+    openStory(2)
+    const elsewhere = turnRun({
+      runId: 'run_elsewhere',
+      kind: PERIODIC_CLASSIFIER_KIND,
+      interruptible: 'pass',
+      branchId: 'b2',
+    })
+    generationStore.startRun(elsewhere)
+    expect(generationStore.abortRun(elsewhere.runId, 'aborted')).toBe('pass')
+
+    expect(await perTurnChainsTo(turnRun(), ctx)).toBe(PERIODIC_CLASSIFIER_KIND)
+  })
+
+  it('chains the catch-up pass, then the close, as nextMemoryRun names them', async () => {
+    const { db, ctx } = await makeHarness()
+    await owedRegion(db)
+
+    expect(await perTurnChainsTo(turnRun(), ctx)).toBe(PERIODIC_CLASSIFIER_KIND)
+    await setStatus(db, { processedThrough: 3 })
+    expect(await perTurnChainsTo(turnRun(), ctx)).toBe(CHAPTER_CLOSE_KIND)
+  })
+})
+
+// memory/classifier.md → Pipeline framing: passes chain one another only to catch up for a close.
+describe('passChainsTo', () => {
+  it('chains nothing with no close owed, though the cadence is due', async () => {
+    const { db, ctx } = await makeHarness()
+    await seedEntries(db, 4)
+    openStory(1)
+
+    expect(await passChainsTo(passRun(), ctx)).toBeNull()
+  })
+
+  it('chains a pass holding its own deferred pass on to the next catch-up pass', async () => {
+    const { db, ctx } = await makeHarness()
+    await owedRegion(db)
+    deferOnB1(PERIODIC_CLASSIFIER_KIND, 'pass')
+
+    expect(await passChainsTo(passRun(), ctx)).toBe(PERIODIC_CLASSIFIER_KIND)
+  })
+
+  it('chains past a deferred close: the catch-up pass, then the close', async () => {
+    const { db, ctx } = await makeHarness()
+    await owedRegion(db)
+    deferOnB1(CHAPTER_CLOSE_KIND, 'close')
+
+    expect(await passChainsTo(passRun(), ctx)).toBe(PERIODIC_CLASSIFIER_KIND)
+    await setStatus(db, { processedThrough: 3 })
+    expect(await passChainsTo(passRun(), ctx)).toBe(CHAPTER_CLOSE_KIND)
+  })
+
+  it('chains nothing after a pass started alone', async () => {
+    const { db, ctx } = await makeHarness()
+    await owedRegion(db, { processedThrough: 3 })
+
+    expect(await passChainsTo(passRun({ inputs: { alone: true } }), ctx)).toBeNull()
+    expect(await passChainsTo(passRun(), ctx)).toBe(CHAPTER_CLOSE_KIND)
+  })
+
+  it.each([
+    ['open on another branch', () => openStory(50, { storyId: 's1', branchId: 'b2' })],
+    ['closed', () => currentStoryStore.clear()],
+  ])("chains nothing while the run's story is %s", async (_label, setOpen) => {
+    const { db, ctx } = await makeHarness()
+    await seedEntries(db, 2)
+    generationStore.setPendingClose('b1', { endEntryId: 'e2' })
+    setOpen()
+
+    expect(await passChainsTo(passRun(), ctx)).toBeNull()
+  })
+})
+
+describe('passStartedAlone', () => {
+  it.each([
+    ['alone', { alone: true }, true],
+    ['no inputs', undefined, false],
+    ['inputs without the flag', {}, false],
+    ["another kind's inputs", { refreshGuidance: 'shorter' }, false],
+  ] as const)('reads %s', (_label, inputs, alone) => {
+    expect(passStartedAlone({ inputs })).toBe(alone)
   })
 })
 

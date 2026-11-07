@@ -23,10 +23,13 @@ export {
 } from './definitions/chapter-close'
 export {
   CLASSIFIER_HELD,
+  closeOwed,
   isClassifierHeld,
   owedPassAtSend,
+  passStartedAlone,
   readClassifierStatus,
   unprocessedEntryCount,
+  type PassInputs,
 } from './definitions/memory-chain'
 export { runClassifierPass } from './definitions/classifier-pass'
 export {

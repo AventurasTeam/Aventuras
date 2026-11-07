@@ -58,7 +58,7 @@ import { resolveLead } from '@/lib/world'
 import { buildClassifierContext } from './classifier-context'
 import { classifierEmbedder } from './description-embedder'
 import { readHappeningsMadeFrom, readRecentEntryIds, readStoryPlace } from './entry-reads'
-import { readClassifierStatus } from './memory-chain'
+import { passChainsTo, readClassifierStatus } from './memory-chain'
 import { PER_TURN_KIND } from './per-turn'
 import { storesHoldBranch } from './stores-hold-branch'
 import { definePipeline } from '../authoring/define'
@@ -463,6 +463,7 @@ export function ensurePeriodicClassifierPipelineRegistered(): void {
       },
       gateBehavior: 'hard-gate',
       interruptible: 'pass',
+      chainsTo: passChainsTo,
       concurrencyPolicy: {
         blockedBy: [
           PER_TURN_KIND,

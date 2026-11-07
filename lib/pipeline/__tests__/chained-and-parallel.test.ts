@@ -2,10 +2,15 @@ import { eq } from 'drizzle-orm'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { type PipelineAction } from '@/lib/actions'
-import { deltas, pipelineRuns, storyEntries } from '@/lib/db'
+import { STORY_DEFINITION, STORY_SETTINGS } from '@/lib/actions/turns/__tests__/fixtures'
+import { registerStandInClose } from '@/lib/actions/turns/__tests__/stand-in-close'
+import { registerStandInPass } from '@/lib/actions/turns/__tests__/stand-in-pass'
+import { PERIODIC_CLASSIFIER_KIND } from '@/lib/classifier'
+import { chapters, deltas, pipelineRuns, storyEntries } from '@/lib/db'
 import { getDiagnosticsSnapshot, turnCaptureSink } from '@/lib/diagnostics'
 import {
   __resetRegistry,
+  CHAPTER_CLOSE_KIND,
   definePipeline,
   pipelineEventBus,
   runPipeline,
@@ -15,7 +20,12 @@ import {
   type Pipeline,
   type RunCtx,
 } from '@/lib/pipeline'
-import { generationStore, type RunState } from '@/lib/stores'
+import {
+  currentStoryStore,
+  generationStore,
+  interruptMemoryRuns,
+  type RunState,
+} from '@/lib/stores'
 
 import { expectRan, makeHarness, resetSingletons } from './harness'
 
@@ -973,4 +983,107 @@ describe('parallel group', () => {
     expect((await db.select().from(storyEntries)).length).toBe(0) // both branch deltas reversed
     expect((await db.select().from(deltas)).length).toBe(0) // and pruned with the reversal
   })
+})
+
+// chapter-close.md → Phase 0: a close owed over a backlog runs one pass per window, then the close.
+describe('a close owed over a backlog', () => {
+  beforeEach(() => resetSingletons())
+  afterEach(() => resetSingletons())
+
+  // Seven counted rows past no watermark, over a threshold of 500: three windows of three.
+  async function setUpBacklog() {
+    const { db, ctx } = await makeHarness()
+    const kinds = [
+      'opening',
+      'user_action',
+      'ai_reply',
+      'user_action',
+      'ai_reply',
+      'user_action',
+      'ai_reply',
+    ] as const
+    await db.insert(storyEntries).values(
+      kinds.map((kind, i) => ({
+        id: `e${i + 1}`,
+        branchId: 'b1',
+        position: i + 1,
+        kind,
+        content: `entry ${i + 1}`,
+        contentTokens: 100,
+        createdAt: i + 1,
+      })),
+    )
+    currentStoryStore.set({
+      storyId: 's1',
+      branchId: 'b1',
+      definition: STORY_DEFINITION,
+      settings: { ...STORY_SETTINGS, chapterTokenThreshold: 500 },
+    })
+    const pass = registerStandInPass({ anchorEntryId: null, windowEntries: 3 })
+    const close = registerStandInClose()
+    const starts: { kind: string; actionId: string }[] = []
+    pipelineEventBus.subscribe('run_start', (e) => {
+      starts.push({ kind: e.kind, actionId: e.actionId })
+    })
+    return { db, ctx, pass, close, starts }
+  }
+
+  it('runs pass, pass, pass, then the close, each its own group', async () => {
+    const { db, ctx, pass, close, starts } = await setUpBacklog()
+
+    const { chain } = startPipeline(PERIODIC_CLASSIFIER_KIND, ctx)
+    for (let window = 0; window < 3; window++) {
+      const held = await pass.nextHeld()
+      held.finish('completed')
+    }
+    const closing = await close.nextHeld()
+    closing.finish('completed')
+    const end = await chain
+
+    expect(starts.map((s) => s.kind)).toEqual([
+      PERIODIC_CLASSIFIER_KIND,
+      PERIODIC_CLASSIFIER_KIND,
+      PERIODIC_CLASSIFIER_KIND,
+      CHAPTER_CLOSE_KIND,
+    ])
+    const actionIds = starts.map((s) => s.actionId)
+    expect(new Set(actionIds).size).toBe(4)
+    const groups = new Set((await db.select().from(deltas)).map((d) => d.actionId))
+    expect([...groups].sort()).toEqual([...actionIds].sort())
+    expect(end).toMatchObject({
+      kind: CHAPTER_CLOSE_KIND,
+      result: { outcome: 'completed', actionId: closing.actionId },
+      cancelled: false,
+    })
+    expect(await db.select({ id: chapters.id }).from(chapters)).toHaveLength(1)
+    expect(generationStore.getTxState().runs.size).toBe(0)
+  })
+
+  it.each(['fails', 'is cancelled'] as const)(
+    'starts no close when a catch-up pass %s',
+    async (how) => {
+      const { db, ctx, pass, close, starts } = await setUpBacklog()
+
+      const { chain } = startPipeline(PERIODIC_CLASSIFIER_KIND, ctx)
+      const first = await pass.nextHeld()
+      first.finish('completed')
+      const second = await pass.nextHeld()
+      if (how === 'fails') second.finish('failed')
+      else await interruptMemoryRuns('b1')
+      const end = await chain
+
+      expect(end).toMatchObject({
+        kind: PERIODIC_CLASSIFIER_KIND,
+        result: { actionId: second.actionId, outcome: how === 'fails' ? 'failed' : 'aborted' },
+      })
+      expect(starts.map((s) => s.kind)).toEqual([
+        PERIODIC_CLASSIFIER_KIND,
+        PERIODIC_CLASSIFIER_KIND,
+      ])
+      expect(close.runs).toEqual([])
+      expect(
+        await db.select().from(pipelineRuns).where(eq(pipelineRuns.kind, CHAPTER_CLOSE_KIND)),
+      ).toEqual([])
+    },
+  )
 })

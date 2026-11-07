@@ -102,6 +102,29 @@ describe('runClassifierPass', () => {
     expect(runs).toEqual([{ actionId: expect.any(String), beforeTurn: true }])
   })
 
+  // classifier.md → Failure policy: Retry and Run now run the pass alone, chaining no close.
+  it('starts the run alone only when asked', async () => {
+    const { ctx } = await makeHarness()
+    const seen: unknown[] = []
+    async function* classify({ inputs }: PhaseContext): AsyncGenerator<never, PhaseResult> {
+      seen.push(inputs)
+      return { status: 'completed' }
+    }
+    definePipeline({
+      kind: PERIODIC_CLASSIFIER_KIND,
+      phases: [{ name: 'classify', run: classify }],
+      affordance: 'pill-and-banner',
+      gateBehavior: 'hard-gate',
+      interruptible: 'pass',
+      concurrencyPolicy: {},
+    })
+
+    await runClassifierPass(IDS, ctx, { alone: true })
+    await runClassifierPass(IDS, ctx)
+
+    expect(seen).toEqual([{ alone: true }, undefined])
+  })
+
   it('hands a running branch whose pass is live to the orchestrator, whose own rule refuses it', async () => {
     const { db, ctx } = await makeHarness()
     const runs = defineRecordingPass()

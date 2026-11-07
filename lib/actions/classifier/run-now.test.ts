@@ -1,11 +1,16 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
-import { storyDefinitionSchema, storySettingsSchema } from '@/lib/db'
+import { PERIODIC_CLASSIFIER_KIND } from '@/lib/classifier'
+import { pipelineRuns, storyDefinitionSchema, storySettingsSchema } from '@/lib/db'
 import { createTestDb } from '@/lib/db/__tests__/test-db'
 import { CLASSIFIER_HELD } from '@/lib/pipeline'
-import { currentStoryStore } from '@/lib/stores'
+import { makeHarness, resetSingletons } from '@/lib/pipeline/__tests__/harness'
+import { runClassifierPass as startPass } from '@/lib/pipeline/definitions/classifier-pass'
+import { currentStoryStore, generationStore } from '@/lib/stores'
 
 import { runClassifierNow } from './run-now'
+import { registerStandInClose } from '../turns/__tests__/stand-in-close'
+import { registerStandInPass } from '../turns/__tests__/stand-in-pass'
 
 const runClassifierPass = vi.fn()
 
@@ -83,8 +88,9 @@ describe('runClassifierNow', () => {
     expect(runClassifierPass).not.toHaveBeenCalled()
   })
 
-  // Exact arguments: a `beforeTurn` anywhere would show Run now's pass as Send's.
-  it('starts the pass on the open story’s branch, never as Send’s', async () => {
+  // Exact arguments: a `beforeTurn` anywhere would show Run now's pass as Send's, and without
+  // `alone` its pass would chain an owed close under Retry's hold.
+  it('starts the pass alone on the open story’s branch, never as Send’s', async () => {
     open('b1')
     const { db, runInTransaction } = await createTestDb()
     runClassifierPass.mockResolvedValue({ outcome: 'completed' })
@@ -92,10 +98,7 @@ describe('runClassifierNow', () => {
     const result = await runClassifierNow('b1', { db, runInTransaction })
 
     expect(runClassifierPass.mock.calls).toStrictEqual([
-      [
-        { storyId: 's1', branchId: 'b1' },
-        { db, runInTransaction },
-      ],
+      [{ storyId: 's1', branchId: 'b1' }, { db, runInTransaction }, { alone: true }],
     ])
     expect(result).toEqual({ outcome: 'completed' })
   })
@@ -108,5 +111,36 @@ describe('runClassifierNow', () => {
     const result = await runClassifierNow('b1', { db, runInTransaction })
 
     expect(result).toEqual({ outcome: 'rejected', blockedBy: CLASSIFIER_HELD })
+  })
+})
+
+// classifier.md → Failure policy: Retry and Run now run the pass alone; an owed close waits for Send.
+describe('runClassifierNow with a close owed', () => {
+  beforeEach(() => {
+    resetSingletons()
+    runClassifierPass.mockImplementation(startPass)
+  })
+  afterEach(() => {
+    runClassifierPass.mockReset()
+    resetSingletons()
+  })
+
+  it('commits the pass and chains no close', async () => {
+    const { db, ctx } = await makeHarness()
+    open('b1')
+    const pass = registerStandInPass({ anchorEntryId: null })
+    const close = registerStandInClose()
+    // A pick owes the close. It names no entry, so a close chained here fails at once, not holds.
+    generationStore.setPendingClose('b1', { endEntryId: 'entry_gone' })
+
+    const running = runClassifierNow('b1', { db, runInTransaction: ctx.runInTransaction })
+    const held = await pass.nextHeld()
+    held.finish('completed')
+
+    expect(await running).toMatchObject({ outcome: 'completed' })
+    expect(close.runs).toEqual([])
+    expect(await db.select({ kind: pipelineRuns.kind }).from(pipelineRuns)).toEqual([
+      { kind: PERIODIC_CLASSIFIER_KIND },
+    ])
   })
 })

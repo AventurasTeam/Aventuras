@@ -1,4 +1,4 @@
-import { desc, eq } from 'drizzle-orm'
+import { and, asc, desc, eq, gt, ne } from 'drizzle-orm'
 
 import { idleStatus, PERIODIC_CLASSIFIER_KIND } from '@/lib/classifier'
 import { branches, storyEntries, type ClassifierStatus } from '@/lib/db'
@@ -12,6 +12,7 @@ import {
   type PhaseResult,
   type PipelineEvent,
 } from '@/lib/pipeline'
+import { passChainsTo } from '@/lib/pipeline/definitions/memory-chain'
 import { generationStore, type RunState } from '@/lib/stores'
 
 import { applyDeltaAction, settleUserWrites } from '../../delta/apply-delta-action'
@@ -53,6 +54,11 @@ export type StandInPassOptions = {
    * interrupt restores the status it found, both skipped when the reversal can't commit.
    */
   statusLifecycle?: true
+  /**
+   * As `classifierWindowMaxEntries`: a commit moves the watermark past this many non-`system` rows
+   * instead of to the tail, so a backlog takes several passes.
+   */
+  windowEntries?: number
 }
 
 const PRE_RUN_STATUS = 'standInPass.preRunStatus'
@@ -111,17 +117,18 @@ export function registerStandInPass(options: StandInPassOptions): StandInPass {
     if (outcome === 'failed')
       return { status: 'failed', error: { kind: 'phase-logic', detail: 'stand-in pass failed' } }
     if (outcome === 'threw') throw new Error('stand-in pass threw')
-    await advanceWatermark(ctx)
+    await advanceWatermark(ctx, options.windowEntries)
     return { status: 'completed' }
   }
 
-  // Mirrors the real pass's gate, deferral slot and blockedBy (periodic-classifier.ts).
+  // Mirrors the real pass's gate, deferral slot, blockedBy and chain (periodic-classifier.ts).
   registerPipeline({
     kind: PERIODIC_CLASSIFIER_KIND,
     phases: [{ name: 'classify', run: phase }],
     affordance: 'pill-and-banner',
     gateBehavior: 'hard-gate',
     interruptible: 'pass',
+    chainsTo: passChainsTo,
     concurrencyPolicy: {
       blockedBy: [PER_TURN_KIND, PERIODIC_CLASSIFIER_KIND, 'chapter-close', 'translation-retry'],
     },
@@ -162,28 +169,58 @@ async function writeStatus(ctx: StatusCtx, status: ClassifierStatus): Promise<vo
     .where(eq(branches.id, ctx.branchId))
 }
 
-async function advanceWatermark(ctx: PhaseContext): Promise<void> {
+async function advanceWatermark(
+  ctx: PhaseContext,
+  windowEntries: number | undefined,
+): Promise<void> {
+  const processedThrough =
+    windowEntries === undefined ? await tailPosition(ctx) : await windowEnd(ctx, windowEntries)
+  await ctx.db
+    .update(branches)
+    .set({ classifierStatus: { ...idleStatus(), processedThrough } })
+    .where(eq(branches.id, ctx.branchId))
+}
+
+async function tailPosition(ctx: PhaseContext): Promise<number> {
   const [tail] = await ctx.db
     .select({ position: storyEntries.position })
     .from(storyEntries)
     .where(eq(storyEntries.branchId, ctx.branchId))
     .orderBy(desc(storyEntries.position))
     .limit(1)
-  await ctx.db
-    .update(branches)
-    .set({ classifierStatus: { ...idleStatus(), processedThrough: tail?.position ?? 0 } })
-    .where(eq(branches.id, ctx.branchId))
+  return tail?.position ?? 0
+}
+
+// As a real window: the next `size` non-`system` rows past the watermark, ending on the last.
+async function windowEnd(ctx: PhaseContext, size: number): Promise<number | null> {
+  const { processedThrough } = await readStatus(ctx)
+  const rows = await ctx.db
+    .select({ position: storyEntries.position })
+    .from(storyEntries)
+    .where(
+      and(
+        eq(storyEntries.branchId, ctx.branchId),
+        gt(storyEntries.position, processedThrough ?? 0),
+        ne(storyEntries.kind, 'system'),
+      ),
+    )
+    .orderBy(asc(storyEntries.position))
+    .limit(size)
+  return rows.at(-1)?.position ?? processedThrough
 }
 
 /**
- * The orchestrator's reversal of any run of `pass` fails before it commits, so a pass that was
- * `running` leaves its branch held. `resetSingletons` restores the real port.
+ * The orchestrator's reversal of any run of `stand` (a stand-in pass or close) fails before it
+ * commits, so a pass that was `running` leaves its branch held. `resetSingletons` restores the
+ * real port.
  */
-export function failReversalsOf(pass: StandInPass): void {
+export function failReversalsOf(stand: {
+  readonly runs: readonly { readonly actionId: string }[]
+}): void {
   configureDeltaActionPort({
     applyDeltaAction,
     reverseReplayDeltas: (actionId, ...rest) =>
-      pass.runs.some((run) => run.actionId === actionId)
+      stand.runs.some((run) => run.actionId === actionId)
         ? Promise.reject(
             new DeltaReplayError('Reverse-replay failed', {
               cause: new Error('database is locked'),

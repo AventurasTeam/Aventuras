@@ -66,7 +66,7 @@ import {
 } from '@/lib/stores'
 
 import { __resetClassifierEmbedder, configureClassifierEmbedder } from './description-embedder'
-import { unprocessedEntryCount } from './memory-chain'
+import { passChainsTo, unprocessedEntryCount } from './memory-chain'
 import { PER_TURN_KIND } from './per-turn'
 import {
   ensurePeriodicClassifierPipelineRegistered,
@@ -1990,8 +1990,8 @@ describe('periodicClassifierPhase', () => {
         blockedBy: [PER_TURN_KIND, PERIODIC_CLASSIFIER_KIND, 'chapter-close', 'translation-retry'],
       },
     })
-    // Passes chain one another only for a pending close (M5.2); none chains here.
-    expect(pipeline.chainsTo).toBeUndefined()
+    // chapter-close.md → Phase 0: catch-up passes and the close, only while a close is owed.
+    expect(pipeline.chainsTo).toBe(passChainsTo)
     // Idempotent: bootstrap and tests both call it.
     expect(() => ensurePeriodicClassifierPipelineRegistered()).not.toThrow()
   })
