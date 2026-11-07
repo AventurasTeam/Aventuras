@@ -14,7 +14,7 @@ import { currentStoryStore, generationStore, type OpenStory, type RunState } fro
 /** RejectedStart.blockedBy for a branch held `running` (classifier.md → Failure policy). */
 export const CLASSIFIER_HELD = 'classifier-held'
 
-/** A pass's `RunCtx.inputs`; `alone` (Retry, Run now) chains no close after it. */
+/** A pass's `RunCtx.inputs`; `alone` (Retry, Run now) chains nothing after it. */
 export type PassInputs = { alone?: true }
 
 export function passStartedAlone(run: Pick<RunState, 'inputs'>): boolean {
@@ -79,11 +79,11 @@ export type OwedWork = 'held' | 'pass' | 'close' | null
 export async function owedWorkAtSend(branchId: string, ctx: DbCtx): Promise<OwedWork> {
   if (await isClassifierHeld(branchId, ctx)) return 'held'
   const passDeferred = generationStore.getTxState().deferred.get(branchId)?.pass === true
-  // The cadence and the close read the open story's settings: off its branch only a deferral owes.
+  // Cadence and close read the open story's settings: off its branch only a deferred pass owes.
   const open = currentStoryStore.getCurrentStory()
   if (open?.branchId !== branchId) return passDeferred ? 'pass' : null
   const owesClose = await closeOwed(open, ctx)
-  // An interrupted close a rollback below the threshold took back leaves nothing to run.
+  // No close is owed any more, so an interrupted close's record has nothing left to run.
   if (!owesClose) generationStore.clearDeferredClose(branchId)
   const status = await readClassifierStatus(branchId, ctx)
   const unprocessed = await unprocessedEntryCount(branchId, status.processedThrough, ctx)

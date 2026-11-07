@@ -328,7 +328,7 @@ async function commitRun(
   ctx: RunCtx,
 ): Promise<{ tx: TxResult; successor?: RunState }> {
   const aborted = () => run.abortController.signal.aborted
-  // An abort before or during the awaited read still commits the turn but chains no pass.
+  // An abort before or during the awaited read still commits the run but chains nothing.
   const chained = aborted() ? null : await nextKindOf(run, ctx)
   const nextKind = aborted() ? null : chained
   // chainsTo may name an unregistered kind (authoring bug); resolve it without
@@ -550,7 +550,7 @@ async function driveRun(
   ctx: RunCtx,
 ): Promise<{ tx: TxResult; successor?: RunState }> {
   // A cancel that landed before pre-flight (at a chain's swap, or as Send's owed work reserved)
-  // is an interrupt: a pre-flight failure would record a failed pass instead of a deferred one.
+  // is an interrupt: a pre-flight failure would record a failed run instead of a deferred one.
   if (run.abortController.signal.aborted)
     return { tx: await abortRun(run, ctx, { reason: 'user-cancel' }) }
   let preflightError: PipelineError | null

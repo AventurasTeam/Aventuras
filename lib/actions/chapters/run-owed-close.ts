@@ -29,7 +29,7 @@ export async function runOwedClose(branchId: string, ctx: DbCtx): Promise<OwedCl
   if (await isClassifierHeld(branchId, ctx))
     return { outcome: 'rejected', blockedBy: CLASSIFIER_HELD }
   if (!(await closeOwed(open, ctx))) {
-    // A rollback below the threshold took back the cancelled close; its record would gate the cadence pass.
+    // No close is owed any more, and its deferral would hold back the cadence pass.
     generationStore.clearDeferredClose(branchId)
     return { outcome: 'nothing-owed' }
   }

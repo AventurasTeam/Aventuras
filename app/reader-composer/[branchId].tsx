@@ -276,7 +276,7 @@ export default function ReaderComposerRoute() {
   )
   // Set around this route's submitTurn, whose pending mark alone holds the gaps around its runs.
   const [sendPending, setSendPending] = useState(false)
-  // Send in flight (its owed work, its turn and the gap between) swaps Send for Cancel; a pass
+  // Send in flight (owed work, turn, the gap between) swaps Send for Cancel; a pass or a close
   // chained after a turn leaves Send refused, the composer live. Booleans: no re-render per phase.
   const isGenerating = generationStore.useGeneration((s) =>
     composerShowsCancel(s.txState, branchId, sendPending),
@@ -1176,7 +1176,6 @@ export default function ReaderComposerRoute() {
         })
         return
       }
-      // A close-failure entry's Retry runs the close it owes, catch-up passes first.
       if (systemFailure?.close === 'failed') {
         runAction(retryClose(), {
           event: 'reader.close_retry_failed',
