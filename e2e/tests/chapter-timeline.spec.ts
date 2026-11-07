@@ -67,25 +67,22 @@ test.describe.serial('Chapter Timeline', () => {
     return { title: title as string, keywords: JSON.parse(keywords as string) as string[] }
   }
 
-  async function chapterUserEdits(page: Page): Promise<number> {
-    const [[count]] = await queryApp(
-      page,
-      `SELECT count(*) FROM deltas
-       WHERE branch_id = ? AND target_table = 'chapters' AND source = 'user_edit'`,
-      [branchId],
-    )
+  // Every table: a Save's stray delta on another table must show in the count.
+  async function branchDeltas(page: Page): Promise<number> {
+    const [[count]] = await queryApp(page, `SELECT count(*) FROM deltas WHERE branch_id = ?`, [
+      branchId,
+    ])
     return count as number
   }
 
-  async function latestChapterUserEdit(page: Page): Promise<{ targetId: unknown; op: unknown }> {
-    const [[targetId, op]] = await queryApp(
+  async function latestDelta(page: Page): Promise<Record<string, unknown>> {
+    const [[targetTable, source, targetId, op]] = await queryApp(
       page,
-      `SELECT target_id, op FROM deltas
-       WHERE branch_id = ? AND target_table = 'chapters' AND source = 'user_edit'
-       ORDER BY log_position DESC LIMIT 1`,
+      `SELECT target_table, source, target_id, op FROM deltas
+       WHERE branch_id = ? ORDER BY log_position DESC LIMIT 1`,
       [branchId],
     )
-    return { targetId, op }
+    return { targetTable, source, targetId, op }
   }
 
   // One Discard click must reach the reader: no second prompt, no stuck guard.
@@ -151,7 +148,7 @@ test.describe.serial('Chapter Timeline', () => {
     const page = app.window
     keepSeeded = await columnsOf(page, keep.id)
     nineSeeded = await columnsOf(page, nine.id)
-    const before = await chapterUserEdits(page)
+    const before = await branchDeltas(page)
 
     await chapterTimeline.cardHead(page, keep.id).click()
     await expect(chapterTimeline.cardHead(page, keep.id)).toHaveAttribute('aria-expanded', 'true')
@@ -164,8 +161,13 @@ test.describe.serial('Chapter Timeline', () => {
       .poll(() => columnsOf(page, keep.id), { timeout: 15_000 })
       .toEqual({ title: EDITED_TITLE, keywords: [...keepSeeded.keywords, ADDED_KEYWORD] })
     await expect(saveSession.saveBarSave(page)).toHaveCount(0)
-    expect(await chapterUserEdits(page)).toBe(before + 1)
-    expect(await latestChapterUserEdit(page)).toEqual({ targetId: keep.id, op: 'update' })
+    expect(await branchDeltas(page)).toBe(before + 1)
+    expect(await latestDelta(page)).toEqual({
+      targetTable: 'chapters',
+      source: 'user_edit',
+      targetId: keep.id,
+      op: 'update',
+    })
 
     await chrome.actionsTrigger(page).click()
     await chrome.goToReaderRow(page).click()
