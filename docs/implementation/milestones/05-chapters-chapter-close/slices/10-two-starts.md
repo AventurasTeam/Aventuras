@@ -590,6 +590,20 @@ amends the scope above.
   leaving only a threshold close owed; or the modal offers a way to withdraw a
   pick. Default: as 5.6 ships it, unless a run of the modal shows a user
   expecting Cancel to drop the close.
+- **Does redo bring back a pick its undo dropped?** Take a manual pick ending on
+  the head reply. CTRL-Z of that turn during the close interrupts and defers the
+  close, and the prose-reversal bracket drops the pick, since its end entry is
+  gone (`dropRemovedPick`, `lib/actions/story-entries/prose-reversal.ts`). Redo
+  restores the entry exactly but not the pick, while `deferred.close` stays. At
+  the next Send, under the threshold, `closeOwed` reads false and Send clears
+  `deferred.close`, so the close the user picked never runs, though the prose is
+  back as it was. Probed through `undoLastAction` and `redoLastAction`. Today
+  only the dev route sets a pick; this slice's `Close chapter here` is the first
+  user path. Options: redo restores a pick its undo dropped, the undo group
+  carrying it; or accept it and fold the case into
+  [parked.md → The deferral toast can promise a close that never runs](../../../../parked.md#the-deferral-toast-can-promise-a-close-that-never-runs).
+  Default: accept as 5.6 ships it, unless a run of the modal shows a user
+  expecting the close back. Surfaced by Slice 5.6's slice review.
 - **Can a close run on each side of one turn?** Canon says one close per turn when
   auto-close turns on late, and Send plus the turn's chain gives two.
   [Slice 5.6](./06-close-owed.md) left the chain alone, because this slice's
