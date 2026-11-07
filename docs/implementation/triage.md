@@ -438,12 +438,6 @@ slice-planning gate forces its resolution before that slice is planned.
   sits in a `role="status"` `aria-live="polite"` region and now changes up
   to about 21 times per close run; canon's a11y notes don't say whether
   that announcement rate is wanted. Surfaced by Slice 5.6's review.
-- **A retry-blocked toast prints a raw refusal code.** `reader.json`'s
-  `passRetryBlocked` and `closeRetryBlocked` interpolate the run's
-  `blockedBy` (`story-busy`, for one) into user-facing copy.
-  `passRetryBlocked` was already there; `closeRetryBlocked` is this
-  slice's own copy, repeating its pattern. Surfaced by Slice 5.6's
-  review.
 - **Send can start a turn on a branch that turns held after its check.**
   `submitTurn` reads `owedWorkAtSend` (held first) and, with nothing
   owed, goes straight to the turn. A live pass reads as not held and

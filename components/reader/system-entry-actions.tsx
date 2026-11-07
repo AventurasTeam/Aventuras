@@ -1,13 +1,14 @@
 import { useRouter } from 'expo-router'
 import { useMemo } from 'react'
 
-import type { OwedCloseRun } from '@/lib/actions'
+import { MANUAL_CLOSE_REFUSAL, type OwedCloseRun } from '@/lib/actions'
 import type {
   CapabilityHint,
   ContextWindowFailure,
   ReplyCutOffFailure,
   ResolveFailureKind,
 } from '@/lib/ai'
+import { PERIODIC_CLASSIFIER_KIND } from '@/lib/classifier'
 import type { SystemFailureMeta } from '@/lib/db'
 import { logger } from '@/lib/diagnostics'
 import { t } from '@/lib/i18n'
@@ -15,7 +16,9 @@ import {
   CHAPTER_CLOSE_KIND,
   CLASSIFIER_HELD,
   EMPTY_REPLY,
+  PER_TURN_KIND,
   pipelineErrorDetail,
+  REVERSAL_BLOCKER,
   type PipelineError,
   type RejectedStart,
   type TxResult,
@@ -299,6 +302,27 @@ export function passResolvedEntry(submission: NonNullable<SystemFailureMeta['sub
   }
 }
 
+// What refuses a pass or a close while something else runs: the orchestrator's blockers, and the
+// close's own busy check.
+const RUN_BLOCKERS: ReadonlySet<string> = new Set([
+  MANUAL_CLOSE_REFUSAL.busy,
+  REVERSAL_BLOCKER,
+  PER_TURN_KIND,
+  PERIODIC_CLASSIFIER_KIND,
+  CHAPTER_CLOSE_KIND,
+])
+
+/** A refused Retry's toast names the user's remedy, as a refused regenerate's does; never the code. */
+function retryRefusalText(
+  blockedBy: string,
+  ownLine: 'reader:systemEntry.passRetryBlocked' | 'reader:systemEntry.closeRetryBlocked',
+): string {
+  if (blockedBy === MANUAL_CLOSE_REFUSAL.swapPending)
+    return t('reader:actions.blockedWhileSwapping')
+  if (RUN_BLOCKERS.has(blockedBy)) return t('reader:actions.blockedWhileGenerating')
+  return t(ownLine)
+}
+
 /**
  * A pass-failure entry's Retry: runs the pass alone. A commit settles the entry through
  * `committed`; a failure, a throw or a hold rewrites it, a failure as held when its reversal didn't
@@ -325,7 +349,7 @@ export async function retryPassEntry(deps: {
     return deps.rewrite((await deps.held()) ? { held: true } : { held: false, error: result.error })
   if (result.outcome !== 'rejected') return
   if (result.blockedBy === CLASSIFIER_HELD) return deps.rewrite({ held: true })
-  deps.notify(t('reader:systemEntry.passRetryBlocked', { reason: result.blockedBy }))
+  deps.notify(retryRefusalText(result.blockedBy, 'reader:systemEntry.passRetryBlocked'))
 }
 
 // A close has no held state, so there is no held arm.
@@ -396,7 +420,7 @@ export async function retryCloseEntry(deps: {
   if (run.outcome === 'nothing-owed') return deps.committed('nothing-owed')
   if (run.outcome === 'rejected') {
     if (run.blockedBy === CLASSIFIER_HELD) return deps.rewritePass({ held: true })
-    deps.notify(t('reader:systemEntry.closeRetryBlocked', { reason: run.blockedBy }))
+    deps.notify(retryRefusalText(run.blockedBy, 'reader:systemEntry.closeRetryBlocked'))
     return
   }
   const { kind, result } = run.end

@@ -192,9 +192,9 @@
     "switchEmbedder": "Switch embedder",
     "failureMessage": "Generation failed. Retry to try again.",
     "blockedDetail": "blocked by another operation ({{reason}})",
-    "passRetryBlocked": "Memory update couldn't start ({{reason}}).",
+    "passRetryBlocked": "Memory update couldn't start.",
     "passResolvedTextKept": "Memory updated. The composer couldn't take your text back, so it's kept here.",
-    "closeRetryBlocked": "Chapter close can't start yet: {{reason}}.",
+    "closeRetryBlocked": "Chapter close can't start yet.",
     "closeResolvedTextKept": "Chapter closed. The composer couldn't take your text back, so it's kept here.",
     "closeNothingOwedTextKept": "Nothing left to close. The composer couldn't take your text back, so it's kept here.",
     "failure": {

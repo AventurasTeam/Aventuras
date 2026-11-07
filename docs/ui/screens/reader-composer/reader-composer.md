@@ -708,7 +708,10 @@ sending is the step the notice would otherwise invite. A close entry's
 failed**, with that pass's cause. It becomes the held entry instead
 (**Memory update failed**, branch held), with no cause and no `Retry`,
 when the `Retry` is refused because the branch is held or the failed
-pass leaves the branch held.
+pass leaves the branch held. A `Retry` refused for any other reason
+leaves the entry as it is, and an info toast names the remedy rather
+than the refusal: wait for the run in progress, or for the embedder
+switch to finish.
 
 A **Memory update failed** entry carries the submission only where
 the composer can't hold the text. A Send refused on a held branch
