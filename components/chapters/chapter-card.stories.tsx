@@ -143,9 +143,8 @@ function CardHarness({ data, initiallyExpanded, onSave, onJump, hotkeysEnabled }
       </Button>
       <ChapterCard
         data={{ ...data, row }}
-        expanded={expanded}
         onToggle={() => setExpanded((prev) => !prev)}
-        session={session}
+        session={expanded ? session : null}
         blocked={blocked}
         blockedReason={BLOCKED_REASON}
         hotkeysEnabled={hotkeysEnabled}
@@ -261,7 +260,6 @@ export const Collapsed: Story = {
     <View className="gap-3">
       <ChapterCard
         data={LATEST}
-        expanded={false}
         onToggle={NOOP}
         session={null}
         blocked={false}
@@ -270,7 +268,6 @@ export const Collapsed: Story = {
       />
       <ChapterCard
         data={EARLIER}
-        expanded={false}
         onToggle={NOOP}
         session={null}
         blocked={false}
@@ -326,7 +323,6 @@ function LaggingFormHarness() {
   return (
     <ChapterCard
       data={LATEST}
-      expanded
       onToggle={NOOP}
       session={session}
       blocked={false}

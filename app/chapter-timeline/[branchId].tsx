@@ -152,22 +152,18 @@ export default function ChapterTimelineRoute(): ReactElement {
             {/* The wireframe's .timeline-col: one centered column, capped at 760 px. */}
             <View className="w-full max-w-[760px] gap-2.5 self-center">
               <ChapterTimelineHeader closedCount={timeline.cards.length} />
-              {timeline.cards.map((card) => {
-                const expanded = card.row.id === expandedId
-                return (
-                  <ChapterCard
-                    key={card.row.id}
-                    data={card}
-                    expanded={expanded}
-                    onToggle={() => toggle(card.row.id)}
-                    session={expanded ? session : null}
-                    blocked={editBlocked}
-                    blockedReason={gateReason}
-                    hotkeysEnabled={focused}
-                    onJump={() => jump(card.row.startEntryId)}
-                  />
-                )
-              })}
+              {timeline.cards.map((card) => (
+                <ChapterCard
+                  key={card.row.id}
+                  data={card}
+                  onToggle={() => toggle(card.row.id)}
+                  session={card.row.id === expandedId ? session : null}
+                  blocked={editBlocked}
+                  blockedReason={gateReason}
+                  hotkeysEnabled={focused}
+                  onJump={() => jump(card.row.startEntryId)}
+                />
+              ))}
               <ChapterInProgressCard progress={chapterProgress} sinceLabel={timeline.sinceLabel} />
             </View>
           </ScrollView>

@@ -35,10 +35,12 @@ import type { ChapterRowSession } from './use-chapter-row-session'
 
 export type ChapterCardProps = {
   data: ChapterCardData
-  expanded: boolean
   /** The head's press, on both states; the route guards it. */
   onToggle: () => void
-  /** The route's session; the expanded body waits until its form holds this card's row. */
+  /**
+   * The route's session while this card is open, else null; the expanded body waits until its
+   * form holds this card's row.
+   */
   session: ChapterRowSession | null
   /** `isUserEditBlocked`: fields and Save disable with `blockedReason`. */
   blocked: boolean
@@ -80,7 +82,6 @@ function moreActions(latest: boolean): OverflowMenuEntry[] {
 /** A closed chapter's card: the head toggles the editor; the session and its guard are the route's. */
 export function ChapterCard({
   data,
-  expanded,
   onToggle,
   session,
   blocked,
@@ -91,7 +92,8 @@ export function ChapterCard({
   const isPhone = useTier() === 'phone'
   const padding = isPhone ? 'px-3' : 'px-5'
   // Fields mounted before the form holds this row show the previous row on native.
-  const editing = expanded && session?.formRowId === data.row.id ? session : null
+  const expanded = session != null
+  const editing = session?.formRowId === data.row.id ? session : null
   return (
     <View
       testID={`chapter-card-${data.row.id}`}
