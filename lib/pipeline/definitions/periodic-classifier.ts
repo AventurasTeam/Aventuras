@@ -195,6 +195,23 @@ export async function* periodicClassifierPhase(
       status: 'failed',
       error: { kind: 'orchestrator', detail: 'periodic-classifier: branch not loaded' },
     }
+  // Read before the first await: a story opening under the pass publishes its own branch's rows,
+  // which filter to nothing here. Prompt, reconcile and plan share these; under the gate nothing
+  // else changes them mid-call.
+  const entities = branchEntities(ctx.branchId)
+  const relationships = [...characterRelationshipsStore.getRelationshipRows().values()].filter(
+    (r) => r.branchId === ctx.branchId,
+  )
+  const threads = [...threadsStore.getThreads().values()].filter((t) => t.branchId === ctx.branchId)
+  const storedHappenings = [...happeningsStore.getHappenings().values()].filter(
+    (h) => h.branchId === ctx.branchId,
+  )
+  // The stored pairs a listed happening's awareness skips (plan.ts → knownAwareness).
+  const awareness = [...happeningAwarenessStore.getAwareness().values()].filter(
+    (a) => a.branchId === ctx.branchId,
+  )
+  const leadId =
+    resolveLead(open.definition.leadEntityId, entitiesStore.getEntities(), ctx.branchId)?.id ?? null
   const cfg = appSettingsStore.getAppSettings()
   const status = await readStatus(ctx)
   ctx.intermediates[PRE_RUN_STATUS] = status
@@ -218,24 +235,14 @@ export async function* periodicClassifierPhase(
     return { status: 'completed' }
   }
 
-  // Prompt, reconcile and plan share this roster: under the gate nothing changes it mid-call.
-  const entities = branchEntities(ctx.branchId)
-  const relationships = [...characterRelationshipsStore.getRelationshipRows().values()].filter(
-    (r) => r.branchId === ctx.branchId,
-  )
-  const threads = [...threadsStore.getThreads().values()].filter((t) => t.branchId === ctx.branchId)
   // classifier.md → Mentioned places: read once, so prompt and reply schema agree.
   const mentionedPlaces = open.settings.classifierMentionedPlaces
   const happenings = await readKnownHappenings(
     ctx.db,
     ctx.branchId,
-    [...happeningsStore.getHappenings().values()].filter((h) => h.branchId === ctx.branchId),
+    storedHappenings,
     window,
     open.settings.protectedBuffer,
-  )
-  // The stored pairs a listed happening's awareness skips (plan.ts → knownAwareness).
-  const awareness = [...happeningAwarenessStore.getAwareness().values()].filter(
-    (a) => a.branchId === ctx.branchId,
   )
   const story = await readStoryPlace(ctx.db, ctx.branchId)
   const idMap = new IdBiMap()
@@ -248,9 +255,7 @@ export async function* periodicClassifierPhase(
       relationships,
       threads,
       mentionedPlaces,
-      leadId:
-        resolveLead(open.definition.leadEntityId, entitiesStore.getEntities(), ctx.branchId)?.id ??
-        null,
+      leadId,
       mode: open.definition.mode,
       idMap,
     }),

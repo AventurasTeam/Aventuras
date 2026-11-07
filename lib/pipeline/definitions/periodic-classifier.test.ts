@@ -442,6 +442,84 @@ describe('periodicClassifierPhase', () => {
     expect(system).not.toContain('Recover the relic')
   })
 
+  it("keeps its own branch's roster when a story opening publishes under its first read", async () => {
+    const kael = {
+      id: CHAR_KAEL,
+      branchId: 'b1',
+      kind: 'character',
+      name: 'Kael',
+      status: 'active',
+      description: 'A courier.',
+      keywords: [],
+    } as unknown as Entity
+    const aria = { ...kael, id: CHAR_ARIA, name: 'Aria', description: 'His sister.' }
+    const h = await ctxWith({
+      processedThrough: 0,
+      headPosition: 2,
+      entities: [kael, aria],
+      relationships: [
+        {
+          id: 'rel_1',
+          branchId: 'b1',
+          aId: CHAR_KAEL,
+          bId: CHAR_ARIA,
+          kind: 'ally',
+          inverseKind: null,
+          createdAt: 1,
+          updatedAt: 1,
+        },
+      ] as CharacterRelationship[],
+    })
+    threadsStore.hydrate('b1', [
+      {
+        id: 'thr_11111111-1111-1111-1111-111111111111',
+        branchId: 'b1',
+        title: 'Recover the relic',
+        description: null,
+        category: null,
+        icon: null,
+        status: 'active',
+        injectionMode: 'auto',
+        triggeredAtEntryId: null,
+        resolvedAtEntryId: null,
+        embeddingStale: 0,
+        createdAt: 1,
+        updatedAt: 1,
+      },
+    ])
+    // Another story's open publishes its branch's rows the moment the pass first awaits the db.
+    let published = false
+    const db = new Proxy(h.ctx.db, {
+      get(target, prop) {
+        const value = Reflect.get(target, prop) as unknown
+        if (typeof value !== 'function') return value
+        return (...args: unknown[]) => {
+          if (!published) {
+            published = true
+            entitiesStore.hydrate('b2', [])
+            characterRelationshipsStore.hydrate('b2', [])
+            threadsStore.hydrate('b2', [])
+            happeningsStore.hydrate('b2', [])
+          }
+          return (value as (...a: unknown[]) => unknown).apply(target, args)
+        }
+      },
+    })
+    vi.mocked(generateStructured).mockResolvedValue({
+      status: 'ok',
+      recoverable: [],
+      value: extraction(),
+    } as never)
+
+    await drain({ ...h.ctx, db })
+
+    expect(published).toBe(true)
+    const { user } = vi.mocked(generateStructured).mock.calls[0][1]
+    expect(user).toContain('Kael sees')
+    expect(user).toContain('as: ally')
+    expect(user).toContain('- [th1] Recover the relic (active)')
+  })
+
   // Fails if the phase stops filtering a saved scene to the branch's live entities:
   // a deleted id would reach the prompt raw or take a placeholder that names nothing.
   it("shows each turn's saved scene, leaving out ids the branch no longer has", async () => {

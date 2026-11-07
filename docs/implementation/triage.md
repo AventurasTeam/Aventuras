@@ -145,17 +145,6 @@ slice-planning gate forces its resolution before that slice is planned.
   and as a `no updatable fields` refusal alone. Slice 5.2's chapters
   register derives its patch type from the list. Surfaced by Slice 5.2's
   review.
-- **The periodic pass reads the stores after its awaits.**
-  `periodicClassifierPhase`
-  (`lib/pipeline/definitions/periodic-classifier.ts:189`) checks
-  `storesHoldBranch` (`:193`), then awaits `readStatus` (`:199`) and
-  `readWindowEntries` (`:201-205`), then reads the entity, relationship,
-  thread and happening rosters from the stores (`:222-232`), and the
-  awareness rows after one more await (`:237-239`). A story open
-  publishing in between gives it another branch's rows, filtered to
-  empty. Unverified what the pass then writes. Slice 5.2's close metadata
-  call reads its stores before its first await. Surfaced by Slice 5.2's
-  review.
 - **Phase intermediates are an untyped bag.** `PhaseContext.intermediates`
   is `Record<string, unknown>` (`lib/pipeline/types.ts:103`), and each
   reader casts its key: the retrieval outcome behind a shape check
