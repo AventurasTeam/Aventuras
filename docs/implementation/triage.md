@@ -105,30 +105,6 @@ slice-planning gate forces its resolution before that slice is planned.
   close's ledger writer. The close's metadata and report phases also repeat
   one missing-range read and its failure, which a typed accessor would hold.
   Surfaced by Slice 5.2's review.
-- **Test and E2E helpers repeat with no shared home.** `scalar` is defined
-  in both `e2e/tests/dataset-chapter.build.spec.ts` and
-  `e2e/tests/first-chapter.spec.ts`, where `e2e/harness/db.ts` could hold
-  it. The dataset spec's `runsAfter`, `classifierStatus` and `systemEntry`
-  mirror `classifier-real-provider.smoke.spec.ts`'s but differ (one story
-  or all, an idle fallback on null, the latest row or any), so sharing them
-  needs those choices made. A whole `StoreChapter` factory is written out in
-  `chapter-breaks.test.ts`, `reader-chapter-chips.test.tsx`,
-  `reader-chapter-chips.stories.tsx`, `use-rail-data.test.tsx` and
-  `chapter-close-metadata-call.test.ts`, and the phase tests' `drain`
-  generator helper repeats across the close's and older pipeline tests
-  (`lib/pipeline/definitions/__tests__/phase-db.ts` is a candidate home).
-  Surfaced by Slice 5.2's review. Slice 5.6 adds two more:
-  `chapter-close-owed.spec.ts`'s `closeOutcomes` and `heldClose` copy
-  `passOutcomes` and `heldPass` from `e2e/flows/classifier-pass.ts`, with
-  only the kind and the agent name changed, so sharing them needs
-  `passProbe` to take both; and the open region's SQL predicate is written
-  out in four specs (`chapter-close-owed`, `chapter-progress`,
-  `first-chapter`, `dataset-chapter.build`) beside the app's
-  `openRegionWhere`. A drift there fails by timeout, not silently.
-  Surfaced by Slice 5.6's slice review. More than a dozen test files
-  spell out a `RunState` for `startRun` by hand, with no shared fixture,
-  so a `RunState` change edits all of them. Surfaced by Slice 5.7's
-  save-path review.
 - **The E2E embedder cache is shared across checkouts on any catalog
   revision.** `ensureEmbedderModel` (`e2e/harness/embedder.ts`) deletes
   and rebuilds `~/.cache/aventuras-e2e/embedders/<model>` when its

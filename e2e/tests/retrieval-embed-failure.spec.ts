@@ -1,6 +1,6 @@
 import { expect, test } from '@playwright/test'
 
-import { branchStaleTotal, queryApp } from '../harness/db'
+import { branchStaleTotal, queryApp, queryScalar } from '../harness/db'
 import { installEmbedderModel } from '../harness/embedder'
 import { t } from '../harness/i18n'
 import { launchApp, type LaunchedApp } from '../harness/launch'
@@ -72,11 +72,6 @@ test.describe.serial('retrieval — a failed embed blocks the turn', () => {
     return app.app.evaluate(({ clipboard }) => clipboard.readText())
   }
 
-  async function scalar(sql: string, params: unknown[] = []): Promise<number> {
-    const [[value]] = await queryApp(app.window, sql, params)
-    return Number(value)
-  }
-
   async function systemFailureMeta(): Promise<{
     kind: string
     detail?: string
@@ -112,7 +107,10 @@ test.describe.serial('retrieval — a failed embed blocks the turn', () => {
     // Without dirty rows runSyncStage short-circuits before the embedder and the
     // magnitude below has nothing to report.
     expect(staleBefore, 'the seed leaves the branch with rows to embed').toBeGreaterThan(0)
-    expect(await scalar(MARKER_ENTRY_SQL, [HERO_BRANCH]), 'the marker is ours alone').toBe(0)
+    expect(
+      await queryScalar(app.window, MARKER_ENTRY_SQL, [HERO_BRANCH]),
+      'the marker is ours alone',
+    ).toBe(0)
 
     await reader.composer(app.window).fill(ACTION)
     await reader.send(app.window).click()
@@ -133,7 +131,7 @@ test.describe.serial('retrieval — a failed embed blocks the turn', () => {
     // abortRun's reverse-replay takes it with the rest. Nothing narrative-side
     // reached the mock either — retrieval blocks ahead of it.
     expect(
-      await scalar(MARKER_ENTRY_SQL, [HERO_BRANCH]),
+      await queryScalar(app.window, MARKER_ENTRY_SQL, [HERO_BRANCH]),
       'the user action left no row on the branch',
     ).toBe(0)
     expect(
@@ -223,9 +221,13 @@ test.describe.serial('retrieval — a failed embed blocks the turn', () => {
 
     // The reversed action is back on the branch, so Retry resubmitted the whole
     // turn rather than resuming a half-committed one.
-    expect(await scalar(MARKER_ENTRY_SQL, [HERO_BRANCH]), 'the action recommitted').toBe(1)
     expect(
-      await scalar(
+      await queryScalar(app.window, MARKER_ENTRY_SQL, [HERO_BRANCH]),
+      'the action recommitted',
+    ).toBe(1)
+    expect(
+      await queryScalar(
+        app.window,
         `SELECT count(*) FROM story_entries WHERE branch_id = ? AND content LIKE '%${REPLY_MARKER}%'`,
         [HERO_BRANCH],
       ),
@@ -242,9 +244,11 @@ test.describe.serial('retrieval — a failed embed blocks the turn', () => {
     await expect
       .poll(
         async () =>
-          scalar(`SELECT count(*) FROM story_entries WHERE branch_id = ? AND kind = 'system'`, [
-            HERO_BRANCH,
-          ]),
+          queryScalar(
+            app.window,
+            `SELECT count(*) FROM story_entries WHERE branch_id = ? AND kind = 'system'`,
+            [HERO_BRANCH],
+          ),
         { timeout: 15_000 },
       )
       .toBe(0)

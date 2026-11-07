@@ -3,7 +3,7 @@ import { expect, test, type Page } from '@playwright/test'
 import { ENTRIES_WINDOW_SIZE } from '@/lib/actions'
 
 import { goToPlot, goToStorySettings, goToWorld, openStory } from '../flows/navigation'
-import { currentBranchId, queryApp } from '../harness/db'
+import { currentBranchId, queryApp, OPEN_REGION_FROM } from '../harness/db'
 import { installEmbedderModel } from '../harness/embedder'
 import { launchApp, type LaunchedApp } from '../harness/launch'
 import { startMockLlm, type MockLlm } from '../harness/mock-llm'
@@ -22,10 +22,8 @@ const STORY_TITLE = 'The Gallery of Impossible Rooms'
 // Several times the seeded reply's count, so the percent has to rise.
 const EDITED_REPLY = 'E2E-STRIP-EDIT the curator rewrites the catalogue card by hand. '.repeat(30)
 
-const OPEN_REGION = `FROM story_entries WHERE branch_id = ? AND kind != 'system' AND chapter_id IS NULL`
-
 async function openRegionRows(page: Page, branchId: string): Promise<number> {
-  const [[rows]] = await queryApp(page, `SELECT count(*) ${OPEN_REGION}`, [branchId])
+  const [[rows]] = await queryApp(page, `SELECT count(*) ${OPEN_REGION_FROM}`, [branchId])
   return Number(rows)
 }
 
@@ -34,7 +32,7 @@ async function sqlPercent(page: Page, branchId: string): Promise<number> {
     page,
     `SELECT MIN(100.0, 100.0 * COALESCE(SUM(content_tokens), 0) /
        (SELECT json_extract(settings, '$.chapterTokenThreshold') FROM stories WHERE id = ?))
-     ${OPEN_REGION}`,
+     ${OPEN_REGION_FROM}`,
     [STORY_ID, branchId],
   )
   return Number(percent)

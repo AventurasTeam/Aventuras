@@ -1,6 +1,6 @@
 import { expect, test } from '@playwright/test'
 
-import { queryApp } from '../harness/db'
+import { queryApp, queryScalar } from '../harness/db'
 import { installEmbedderModel } from '../harness/embedder'
 import { launchApp, type LaunchedApp } from '../harness/launch'
 import { startMockLlm, type MockLlm, type MockRequest } from '../harness/mock-llm'
@@ -59,11 +59,6 @@ test.describe('retrieval — a turn injects a retrieved bundle', () => {
     removeUserDataDir(userDataDir)
   })
 
-  async function scalar(sql: string, params: unknown[] = []): Promise<number> {
-    const [[value]] = await queryApp(app.window, sql, params)
-    return Number(value)
-  }
-
   // The mock records the request body verbatim; the prompt never renders, so
   // this is the only place to observe it. Stringified rather than re-flattened
   // per message: the headers below are distinctive enough that the surrounding
@@ -81,10 +76,13 @@ test.describe('retrieval — a turn injects a retrieved bundle', () => {
     await home.openStory(app.window, HERO_TITLE).click()
     await expect(reader.composer(app.window)).toBeVisible({ timeout: 20_000 })
 
-    const awarenessBefore = await scalar(AWARENESS_SUM_SQL, [HERO_BRANCH])
+    const awarenessBefore = await queryScalar(app.window, AWARENESS_SUM_SQL, [HERO_BRANCH])
     // Nothing has retrieved on this branch yet, so a bump is the only writer
     // that can move either number.
-    expect(await scalar(AWARENESS_DELTA_SQL, [HERO_BRANCH]), 'no seeded awareness updates').toBe(0)
+    expect(
+      await queryScalar(app.window, AWARENESS_DELTA_SQL, [HERO_BRANCH]),
+      'no seeded awareness updates',
+    ).toBe(0)
 
     // Submitted without waiting for the background drain on purpose: the sync
     // stage is blocking, so the bundle below is complete whatever the drain has
@@ -99,12 +97,16 @@ test.describe('retrieval — a turn injects a retrieved bundle', () => {
     // Every happening on the branch is embedded and KNN-readable. Compared
     // against the source count, not `> 0`: a sync that embedded one table's
     // first batch and stopped would still pass a bare non-zero check.
-    const happenings = await scalar(`SELECT count(*) FROM happenings WHERE branch_id = ?`, [
-      HERO_BRANCH,
-    ])
+    const happenings = await queryScalar(
+      app.window,
+      `SELECT count(*) FROM happenings WHERE branch_id = ?`,
+      [HERO_BRANCH],
+    )
     expect(happenings, 'the seed has happenings to embed').toBeGreaterThan(0)
     expect(
-      await scalar(`SELECT count(*) FROM happenings_vec_384 WHERE branch_id = ?`, [HERO_BRANCH]),
+      await queryScalar(app.window, `SELECT count(*) FROM happenings_vec_384 WHERE branch_id = ?`, [
+        HERO_BRANCH,
+      ]),
       'a vector per happening on the branch',
     ).toBe(happenings)
 
@@ -141,14 +143,14 @@ test.describe('retrieval — a turn injects a retrieved bundle', () => {
     // Injecting a happening bumps the awareness rows behind it. Only rows whose
     // character is in scene are loaded, so this can only move if the POV scope,
     // the ranker and the delta writer all agreed.
-    const awarenessAfter = await scalar(AWARENESS_SUM_SQL, [HERO_BRANCH])
+    const awarenessAfter = await queryScalar(app.window, AWARENESS_SUM_SQL, [HERO_BRANCH])
     expect(awarenessAfter, 'retrieval_count advanced').toBeGreaterThan(awarenessBefore)
     // Each bump is +1 and carries exactly one delta, so the log and the counters
     // have to agree — a bump written outside the delta layer, or a delta that
     // moved a counter by more than one, breaks the equality and not the
     // inequality above.
     expect(
-      await scalar(AWARENESS_DELTA_SQL, [HERO_BRANCH]),
+      await queryScalar(app.window, AWARENESS_DELTA_SQL, [HERO_BRANCH]),
       'one logged delta per counted bump',
     ).toBe(awarenessAfter - awarenessBefore)
 
@@ -158,7 +160,9 @@ test.describe('retrieval — a turn injects a retrieved bundle', () => {
     await chrome.actionsTrigger(app.window).click()
     await reader.undoRow(app.window).click()
     await expect
-      .poll(async () => scalar(AWARENESS_SUM_SQL, [HERO_BRANCH]), { timeout: 15_000 })
+      .poll(async () => queryScalar(app.window, AWARENESS_SUM_SQL, [HERO_BRANCH]), {
+        timeout: 15_000,
+      })
       .toBe(awarenessBefore)
   })
 })

@@ -3748,6 +3748,18 @@ catalog model from `~/.cache/aventuras-e2e/embedders` when an E2E run
 has filled it, or the worktree setup does. **Revisit signal:** the hand
 step costing a worker a run. Routed from triage 2026-11-07.
 
+#### Unit test fixtures repeat with no shared home
+
+A `StoreChapter` factory is written out in nine files (seven tests and
+two stories), the phase tests' `drain` generator loop in seven named
+helpers and about 21 inline loops, and a `RunState` for `startRun` by
+hand in 37 files (33 tests and four stories), so a shape change edits
+every copy. `lib/pipeline/definitions/__tests__/phase-db.ts` could hold
+`drain`; the two factories need a home stories can import too, which no
+`__tests__` file is today. **Revisit signal:** the next `RunState` or
+`StoreChapter` change that edits the copies, when consolidating costs
+what the edit does. Routed from triage 2026-11-07.
+
 #### The mock LLM's token count has no run guard
 
 `scripts/mock-llm/respond/wire.ts:49-53` keeps its own `countO200k`,

@@ -5,7 +5,7 @@ import { expect, test, type Page } from '@playwright/test'
 import type { EntryMetadata } from '@/lib/db'
 
 import { undoFromReader } from '../flows/navigation'
-import { currentBranchId, queryApp, seedVectors, tailMetadata } from '../harness/db'
+import { currentBranchId, queryApp, seedVectors, tailMetadata, queryScalar } from '../harness/db'
 import { launchApp, type LaunchedApp } from '../harness/launch'
 import { suppressNativeUnloadDialogRace } from '../harness/reload'
 import { createSeededUserDataDir, removeUserDataDir } from '../harness/seed'
@@ -45,52 +45,49 @@ function putInTailScene(dbPath: string, name: string): void {
   }
 }
 
-async function scalar(page: Page, sql: string, params: unknown[]): Promise<number> {
-  const [[value]] = await queryApp(page, sql, params)
-  return Number(value)
-}
-
 async function footprint(page: Page, branchId: string, id: string) {
   return {
-    entity: await scalar(page, `SELECT count(*) FROM entities WHERE branch_id = ? AND id = ?`, [
-      branchId,
-      id,
-    ]),
+    entity: await queryScalar(
+      page,
+      `SELECT count(*) FROM entities WHERE branch_id = ? AND id = ?`,
+      [branchId, id],
+    ),
     // -1 once the row is gone, so an absent entity can't be confused with a real stale=0.
-    stale: await scalar(
+    stale: await queryScalar(
       page,
       `SELECT COALESCE((SELECT embedding_stale FROM entities WHERE branch_id = ? AND id = ?), -1)`,
       [branchId, id],
     ),
-    awareness: await scalar(
+    awareness: await queryScalar(
       page,
       `SELECT count(*) FROM happening_awareness WHERE branch_id = ? AND character_id = ?`,
       [branchId, id],
     ),
-    involvements: await scalar(
+    involvements: await queryScalar(
       page,
       `SELECT count(*) FROM happening_involvements WHERE branch_id = ? AND entity_id = ?`,
       [branchId, id],
     ),
-    relationships: await scalar(
+    relationships: await queryScalar(
       page,
       `SELECT count(*) FROM character_relationships WHERE branch_id = ? AND (a_id = ? OR b_id = ?)`,
       [branchId, id, id],
     ),
-    translations: await scalar(
+    translations: await queryScalar(
       page,
       `SELECT count(*) FROM translations WHERE branch_id = ? AND target_kind = 'entity' AND target_id = ?`,
       [branchId, id],
     ),
-    vec384: await scalar(
+    vec384: await queryScalar(
       page,
       `SELECT count(*) FROM entities_vec_384 WHERE branch_id = ? AND id = ?`,
       [branchId, id],
     ),
-    vec8: await scalar(page, `SELECT count(*) FROM entities_vec_8 WHERE branch_id = ? AND id = ?`, [
-      branchId,
-      id,
-    ]),
+    vec8: await queryScalar(
+      page,
+      `SELECT count(*) FROM entities_vec_8 WHERE branch_id = ? AND id = ?`,
+      [branchId, id],
+    ),
   }
 }
 
@@ -174,7 +171,7 @@ test.describe.serial('World delete', () => {
       vec8: 1,
     })
     expect(metaBefore.sceneEntities).toContain(id)
-    const headBefore = await scalar(
+    const headBefore = await queryScalar(
       page,
       `SELECT COALESCE(MAX(log_position), 0) FROM deltas WHERE branch_id = ?`,
       [branchId],
@@ -199,7 +196,7 @@ test.describe.serial('World delete', () => {
         meta: metaAfterDelete,
       })
     expect(
-      await scalar(
+      await queryScalar(
         page,
         `SELECT count(DISTINCT action_id) FROM deltas WHERE branch_id = ? AND log_position > ?`,
         [branchId, headBefore],
