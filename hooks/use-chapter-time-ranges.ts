@@ -24,11 +24,12 @@ async function readRanges(branchId: string): Promise<ChapterTimeRanges> {
 /**
  * World-time ranges by chapter. The key (settleCount, tail) covers new rows, not world-time edits,
  * and the query client never goes stale: a surface calls `refetch()` each open, even if disabled.
+ * `tailId` is the key's tail, for a surface that also rereads when it moves.
  */
 export function useChapterTimeRanges(
   branchId: string,
   options: { enabled: boolean },
-): { ranges: ChapterTimeRanges; refetch: () => Promise<unknown> } {
+): { ranges: ChapterTimeRanges; refetch: () => Promise<unknown>; tailId: string | null } {
   const settleCount = generationStore.useGeneration((s) => s.settleCount)
   const tailId = useBranchTailId(branchId)
 
@@ -42,5 +43,5 @@ export function useChapterTimeRanges(
       previousQuery?.queryKey[1] === branchId ? previous : undefined,
   })
 
-  return { ranges: data ?? NO_RANGES, refetch }
+  return { ranges: data ?? NO_RANGES, refetch, tailId }
 }
