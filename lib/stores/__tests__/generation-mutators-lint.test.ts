@@ -30,7 +30,7 @@ const RECORD_MUTATORS = [
   'dropBranchRecords',
 ]
 
-// eslint.config.js's record-writer block.
+// eslint.config.js's record-writer block; prose reversal's clearPendingClose is its own block.
 const RECORD_WRITERS = [
   'lib/actions/chapters/__mutator-fixture.ts',
   'lib/actions/stories/delete-story.ts',
@@ -74,10 +74,48 @@ describe('generationStore mutator lint', () => {
     ).toBe(false)
   })
 
-  it("lets the orchestrator set a close's progress", async () => {
+  it('lets the orchestrator drive a run and set progress, but write no close record', async () => {
     expect(
-      await flagged(call('setCloseProgress'), 'lib/pipeline/runtime/__mutator-fixture.ts'),
-    ).toBe(false)
+      await verdicts('lib/pipeline/runtime/__mutator-fixture.ts', [
+        ...RUN_MUTATORS,
+        'setCloseProgress',
+        ...RECORD_MUTATORS,
+      ]),
+    ).toEqual({
+      startRun: false,
+      finishRun: false,
+      abortRun: false,
+      setReversalInProgress: false,
+      setCurrentPhase: false,
+      recordPhaseResult: false,
+      setCloseProgress: false,
+      setPendingClose: true,
+      clearPendingClose: true,
+      clearDeferredClose: true,
+      dropBranchRecords: true,
+    })
+  })
+
+  it('lets prose reversal drive a run and clear a pick, and nothing else', async () => {
+    expect(
+      await verdicts('lib/actions/story-entries/prose-reversal.ts', [
+        ...RUN_MUTATORS,
+        'setCloseProgress',
+        ...RECORD_MUTATORS,
+      ]),
+    ).toEqual({
+      startRun: false,
+      finishRun: false,
+      abortRun: false,
+      setReversalInProgress: false,
+      setCurrentPhase: false,
+      recordPhaseResult: false,
+      setCloseProgress: true,
+      setPendingClose: true,
+      clearPendingClose: false,
+      clearDeferredClose: true,
+      dropBranchRecords: true,
+    })
   })
 
   it.each(RECORD_WRITERS)(
@@ -96,10 +134,16 @@ describe('generationStore mutator lint', () => {
     },
   )
 
-  // The writer block sits before the tests' off-block, so a writer's own tests stay exempt.
+  // The owner blocks sit before the tests' off-block, so an owner's own tests stay exempt.
   it("leaves a record writer's tests alone", async () => {
     expect(await flagged(call('startRun'), 'lib/actions/chapters/__mutator-fixture.test.ts')).toBe(
       false,
     )
+  })
+
+  it("leaves the orchestrator's tests alone", async () => {
+    expect(
+      await flagged(call('setPendingClose'), 'lib/pipeline/runtime/__mutator-fixture.test.ts'),
+    ).toBe(false)
   })
 })

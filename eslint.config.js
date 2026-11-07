@@ -37,7 +37,7 @@ const RUN_MUTATORS = generationStoreMutators(
 // A stray write makes the next Send start a close nobody owes, or skip one that is owed.
 const CLOSE_RECORD_MUTATORS = generationStoreMutators(
   ['setPendingClose', 'clearPendingClose', 'clearDeferredClose', 'dropBranchRecords'],
-  "Only a close's record writers write pendingClose or deferred. See docs/generation-pipeline.md → Multi-run txState.",
+  "Only a close's record writers write pendingClose or deferred, and prose reversal may clearPendingClose. See docs/generation-pipeline.md → Multi-run txState.",
 )
 
 const CLOSE_PROGRESS_MUTATORS = generationStoreMutators(
@@ -261,7 +261,8 @@ module.exports = defineConfig([
   },
 
   // A close's record writers: they write pendingClose and deferred, never a run or its progress.
-  // Before the off-block below, so these files' tests stay exempt.
+  // The one other record write is prose reversal's clearPendingClose, below. The owner blocks sit
+  // before the off-block, so their files' tests stay exempt.
   {
     files: [
       'lib/actions/chapters/**',
@@ -274,15 +275,29 @@ module.exports = defineConfig([
     },
   },
 
-  // The run's owners, plus tests and story fixtures that stage a run in progress.
+  // The orchestrator drives a run and sets a close's progress, but writes no close record.
   {
-    files: [
-      'lib/pipeline/runtime/**',
-      'lib/actions/story-entries/prose-reversal.ts',
-      '**/*.test.{ts,tsx}',
-      '**/__tests__/**',
-      '**/*.stories.tsx',
-    ],
+    files: ['lib/pipeline/runtime/**'],
+    rules: {
+      'no-restricted-properties': ['error', ...CLOSE_RECORD_MUTATORS],
+    },
+  },
+
+  // The prose-reversal bracket drives its run and drops a pick whose end entry the reversal removed.
+  {
+    files: ['lib/actions/story-entries/prose-reversal.ts'],
+    rules: {
+      'no-restricted-properties': [
+        'error',
+        ...CLOSE_RECORD_MUTATORS.filter(({ property }) => property !== 'clearPendingClose'),
+        ...CLOSE_PROGRESS_MUTATORS,
+      ],
+    },
+  },
+
+  // Tests and story fixtures stage a run in progress.
+  {
+    files: ['**/*.test.{ts,tsx}', '**/__tests__/**', '**/*.stories.tsx'],
     rules: {
       'no-restricted-properties': 'off',
     },
