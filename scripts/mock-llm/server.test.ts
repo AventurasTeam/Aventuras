@@ -705,6 +705,23 @@ describe('toolStepOfCompletion', () => {
     })
   })
 
+  it("drops a call whose name or arguments isn't a string, keeping the valid one", () => {
+    expect(
+      toolStepOfCompletion(
+        completion({
+          tool_calls: [
+            { id: 'call_obj', type: 'function', function: { name: 'lookup', arguments: {} } },
+            { id: 'call_anon', type: 'function', function: { arguments: '{"query":"x"}' } },
+            call('lookup', '{"query":"the door"}'),
+          ],
+        }),
+      ),
+    ).toEqual({
+      toolCalls: [{ name: 'lookup', args: { query: 'the door' } }],
+      finishReason: 'tool_calls',
+    })
+  })
+
   it("leaves out a finish reason a step can't carry, so the step's default stands", () => {
     expect(toolStepOfCompletion(completion({ content: 'Done.' }, 'eos'))).toEqual({
       text: 'Done.',
