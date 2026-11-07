@@ -82,6 +82,19 @@ describe('runOwedClose refusals', () => {
     expect(close.runs).toHaveLength(0)
   })
 
+  // The next Send fails as held first, so a Retry here must not settle as nothing to close.
+  it('refuses a held branch as held when no close is owed', async () => {
+    patchSettings({ chapterAutoClose: false })
+    await setClassifierStatus({ state: 'running', processedThrough: tailPosition() })
+
+    expect(await within(runOwedClose(f.branchId, f.ctx), 'the Retry')).toEqual({
+      outcome: 'rejected',
+      blockedBy: 'classifier-held',
+    })
+    expect(pass.runs).toHaveLength(0)
+    expect(close.runs).toHaveLength(0)
+  })
+
   it('refuses a held branch as held, starting nothing', async () => {
     oweByThreshold()
     await setClassifierStatus({ state: 'running', processedThrough: tailPosition() })

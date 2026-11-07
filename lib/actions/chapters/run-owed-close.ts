@@ -1,4 +1,10 @@
-import { closeOwed, type ChainEnd, type RejectedStart } from '@/lib/pipeline'
+import {
+  CLASSIFIER_HELD,
+  closeOwed,
+  isClassifierHeld,
+  type ChainEnd,
+  type RejectedStart,
+} from '@/lib/pipeline'
 import { currentStoryStore } from '@/lib/stores'
 
 import { MANUAL_CLOSE_REFUSAL, startCloseChain } from './close-chain'
@@ -20,6 +26,9 @@ export async function runOwedClose(branchId: string, ctx: DbCtx): Promise<OwedCl
   const open = currentStoryStore.getCurrentStory()
   if (open?.branchId !== branchId)
     return { outcome: 'rejected', blockedBy: MANUAL_CLOSE_REFUSAL.branchNotOpen }
+  // A held branch fails the next Send as held, so it can't settle as nothing owed.
+  if (await isClassifierHeld(branchId, ctx))
+    return { outcome: 'rejected', blockedBy: CLASSIFIER_HELD }
   if (!(await closeOwed(branchId, open, ctx))) return { outcome: 'nothing-owed' }
   const started = await startCloseChain(branchId, ctx)
   return 'outcome' in started ? started : { outcome: 'ran', end: started }

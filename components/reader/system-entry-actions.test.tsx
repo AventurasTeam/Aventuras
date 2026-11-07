@@ -811,12 +811,21 @@ describe('retryCloseEntry', () => {
     expect(h.calls).toEqual([])
   })
 
-  // A Cancel after the pass's last phase commits it and chains nothing: the close never ran.
-  it('leaves the entry when the chain ended on a committed pass', async () => {
-    const h = harness(ended(PERIODIC_CLASSIFIER_KIND, { ...passRan, outcome: 'completed' }, true))
-    await retryCloseEntry(h.deps)
-    expect(h.calls).toEqual([])
-  })
+  // The pass committed and chained nothing, so the close never ran: a Cancel after its last phase,
+  // or an open story that left the branch.
+  it.each([
+    ['a late Cancel', true],
+    ['the story left the branch', false],
+  ] as const)(
+    'leaves the entry when the chain ended on a committed pass after %s',
+    async (_label, cancelled) => {
+      const h = harness(
+        ended(PERIODIC_CLASSIFIER_KIND, { ...passRan, outcome: 'completed' }, cancelled),
+      )
+      await retryCloseEntry(h.deps)
+      expect(h.calls).toEqual([])
+    },
+  )
 
   it('rewrites the entry as a held memory entry when the branch is held running', async () => {
     const h = harness({ outcome: 'rejected', blockedBy: CLASSIFIER_HELD })
