@@ -119,6 +119,10 @@ const callsOf = (s: ToolStep) => s.calls.map(({ toolName, input }) => ({ toolNam
 
 const readRow = (id: string) => ({ toolCalls: [{ name: 'read_row', args: { id } }] })
 
+const thrower = (message: string) => (): MockToolStep => {
+  throw new Error(message)
+}
+
 async function structuredReply(response: Promise<Response>): Promise<unknown> {
   const body = (await (await response).json()) as { choices: { message: { content: string } }[] }
   return JSON.parse(body.choices[0].message.content)
@@ -491,9 +495,6 @@ describe('startMockLlm — tool lanes', () => {
   it('rethrows from close() the unheld throw that came before a held one', async () => {
     const llm = await started()
     const config = registerHarness(llm)
-    const thrower = (message: string) => () => {
-      throw new Error(message)
-    }
     llm.setToolSteps(NAMES, [thrower('unheld first'), thrower('held second')])
     expect(await step(config)).toMatchObject({ status: 'failed' })
     llm.holdNextStructured(LANE)
@@ -503,6 +504,30 @@ describe('startMockLlm — tool lanes', () => {
     await expect(llm.close()).rejects.toThrow('unheld first')
 
     expect(await held).toMatchObject({ status: 'failed' })
+  })
+
+  it('rethrows from close() the first of two unheld throws', async () => {
+    const llm = await started()
+    const config = registerHarness(llm)
+    llm.setToolSteps(NAMES, [thrower('unheld first'), thrower('unheld second')])
+    expect(await step(config)).toMatchObject({ status: 'failed' })
+    expect(await step(config)).toMatchObject({ status: 'failed' })
+
+    await expect(llm.close()).rejects.toThrow('unheld first')
+  })
+
+  it("rethrows a held step's throw from the release, and not again from close()", async () => {
+    const llm = await started()
+    const config = registerHarness(llm)
+    llm.holdNextStructured(LANE)
+    const held = step(config)
+    await vi.waitFor(() => expect(llm.requests).toHaveLength(1))
+    llm.setToolSteps(NAMES, [thrower('the spec broke at release')])
+
+    expect(() => llm.releaseStructured()).toThrow('the spec broke at release')
+
+    expect(await held).toMatchObject({ status: 'failed' })
+    await expect(llm.close()).resolves.toBeUndefined()
   })
 
   it('fails a call whose function step throws, answers the rest, and still closes', async () => {
