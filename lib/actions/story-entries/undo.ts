@@ -81,7 +81,7 @@ export async function undoLastAction(branchId: string, ctx: DbCtx): Promise<Undo
   // Brackets the whole target-selection + reversal sweep, matching
   // rollbackToEntry — a concurrent edit/submit/generation mid-sweep must not
   // race the rows this undo is about to read and reverse.
-  return bracketProseReversal(branchId, () =>
+  return bracketProseReversal(branchId, ctx, () =>
     refusingIntegrity(branchId, () => undoBracketed(branchId, ctx, throughInterrupt)),
   )
 }
@@ -146,7 +146,7 @@ export async function redoLastAction(branchId: string, ctx: DbCtx): Promise<Undo
     }
 
   // Bracketed like every reversal, so no pass starts mid-sweep.
-  return bracketProseReversal(branchId, () =>
+  return bracketProseReversal(branchId, ctx, () =>
     refusingIntegrity(branchId, async () => {
       // A write committing during the settle clears the stack; its snapshot would restore over it.
       if (undoRedoStore.peekRedoGroup() !== group)

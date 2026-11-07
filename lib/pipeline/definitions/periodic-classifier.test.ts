@@ -3107,7 +3107,9 @@ describe('periodicClassifierPhase via runPipeline', () => {
 
     const pass = runOutcome({ storyId: 's1', branchId: 'b1', db, runInTransaction })
     await inCall
-    await bracketProseReversal('b1', () => runInTransaction(classifierWatermarkClampOps('b1', 3)))
+    await bracketProseReversal('b1', { db }, () =>
+      runInTransaction(classifierWatermarkClampOps('b1', 3)),
+    )
 
     expect(await pass).toBe('aborted')
     expect(generationStore.getTxState().runs.size).toBe(0)

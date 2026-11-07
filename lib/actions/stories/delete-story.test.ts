@@ -2,6 +2,8 @@ import { getTableColumns, getTableName } from 'drizzle-orm'
 import type { SQLiteTable } from 'drizzle-orm/sqlite-core'
 import { describe, expect, it } from 'vitest'
 
+import { CHAPTER_CLOSE_KIND } from '@/lib/chapters'
+import { PERIODIC_CLASSIFIER_KIND } from '@/lib/classifier'
 import {
   branchEraFlips,
   branches,
@@ -29,7 +31,13 @@ import {
 } from '@/lib/db'
 import { createTestDb } from '@/lib/db/__tests__/test-db'
 import { plantVec } from '@/lib/db/__tests__/vec-fixtures'
-import { embedderSwapStore, rehydrateStories, storiesStore } from '@/lib/stores'
+import {
+  embedderSwapStore,
+  generationStore,
+  rehydrateStories,
+  storiesStore,
+  type DeferredWorkKind,
+} from '@/lib/stores'
 
 import { BRANCH_SCOPED, deleteStory } from './delete-story'
 
@@ -79,6 +87,7 @@ async function setup() {
     .values({ id: 'cal_1', name: 'Earth', favorite: 0, createdAt: 1, updatedAt: 1 })
   storiesStore.__reset() // deleteStory re-hydrates at the end; this clears cross-test state
   embedderSwapStore.__reset()
+  generationStore.__reset()
   const listTables = async (): Promise<string[]> =>
     (
       sqlite.prepare("SELECT name FROM sqlite_master WHERE type = 'table'").all() as {
@@ -86,6 +95,27 @@ async function setup() {
       }[]
     ).map((row) => row.name)
   return { db, sqlite, listTables, ctx: { db, runInTransaction } }
+}
+
+// Records `slot` deferred on `branchId` as an interrupt does: a run reserved, then aborted.
+function deferOn(branchId: string, slot: DeferredWorkKind): void {
+  const runId = `run_${slot}_${branchId}`
+  generationStore.startRun({
+    runId,
+    kind: slot === 'pass' ? PERIODIC_CLASSIFIER_KIND : CHAPTER_CLOSE_KIND,
+    gateBehavior: 'hard-gate',
+    interruptible: slot,
+    beforeTurn: false,
+    actionId: `act_${runId}`,
+    storyId: null,
+    branchId,
+    abortController: new AbortController(),
+    currentPhase: '',
+    intermediates: {},
+    terminal: Promise.resolve(),
+    resolveTerminal: () => {},
+  })
+  generationStore.abortRun(runId, 'aborted')
 }
 
 describe('deleteStory', () => {
@@ -148,6 +178,40 @@ describe('deleteStory', () => {
     await expect(deleteStory('victim', failingCtx, listTables)).rejects.toThrow('write failed')
 
     expect(embedderSwapStore.getState().upgradeDeferred).toEqual(new Set(['victim']))
+  })
+
+  it('drops the records of every deleted branch and keeps another story’s', async () => {
+    const { db, listTables, ctx } = await setup()
+    await db
+      .insert(branches)
+      .values({ id: 'br_victim_alt', storyId: 'victim', name: 'alt', createdAt: 1 })
+    for (const branchId of ['br_victim', 'br_victim_alt', 'br_survivor']) {
+      deferOn(branchId, 'pass')
+      deferOn(branchId, 'close')
+      generationStore.setPendingClose(branchId, { endEntryId: `e_${branchId}` })
+    }
+
+    await deleteStory('victim', ctx, listTables)
+
+    const { deferred, pendingClose } = generationStore.getTxState()
+    expect([...deferred.keys()]).toEqual(['br_survivor'])
+    expect([...pendingClose.keys()]).toEqual(['br_survivor'])
+    expect(deferred.get('br_survivor')).toEqual({ pass: true, close: true })
+    expect(pendingClose.get('br_survivor')).toEqual({ endEntryId: 'e_br_survivor' })
+  })
+
+  it('keeps the records when the delete does not commit', async () => {
+    const { listTables, ctx } = await setup()
+    deferOn('br_victim', 'close')
+    generationStore.setPendingClose('br_victim', { endEntryId: 'e_victim' })
+    const failingCtx = { ...ctx, runInTransaction: () => Promise.reject(new Error('write failed')) }
+
+    await expect(deleteStory('victim', failingCtx, listTables)).rejects.toThrow('write failed')
+
+    expect(generationStore.getTxState().deferred.get('br_victim')).toEqual({ close: true })
+    expect(generationStore.getTxState().pendingClose.get('br_victim')).toEqual({
+      endEntryId: 'e_victim',
+    })
   })
 
   it('is a no-op-safe full sweep across every owned table (empty tables included)', async () => {

@@ -1,9 +1,17 @@
-import { eq } from 'drizzle-orm'
-import { afterEach, beforeEach, describe, expect, it } from 'vitest'
+import { and, eq } from 'drizzle-orm'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { PERIODIC_CLASSIFIER_KIND } from '@/lib/classifier'
-import { branches, happenings, stories, type ClassifierStatus } from '@/lib/db'
+import {
+  branches,
+  happenings,
+  stories,
+  storyEntries,
+  type ClassifierStatus,
+  type DbCtx,
+} from '@/lib/db'
 import { createTestDb } from '@/lib/db/__tests__/test-db'
+import { logger } from '@/lib/diagnostics'
 import {
   definePipeline,
   pipelineEventBus,
@@ -19,7 +27,24 @@ import { generationStore, interruptMemoryRuns, type DeferredWorkKind } from '@/l
 import { bracketProseReversal, classifierWatermarkClampOps } from './prose-reversal'
 import { __resetBranchWriteLocks, withBranchWriteShared } from '../delta/branch-write-lock'
 
+// Records each property the bracket reads off its db: with no pick standing it reads none.
+function recordingDb(): { ctx: Pick<DbCtx, 'db'>; reads: PropertyKey[] } {
+  const reads: PropertyKey[] = []
+  const db = new Proxy(
+    {},
+    {
+      get: (_target, key) => {
+        reads.push(key)
+        return undefined
+      },
+    },
+  )
+  return { ctx: { db: db as unknown as DbCtx['db'] }, reads }
+}
+
 describe('bracketProseReversal', () => {
+  const noPick = recordingDb().ctx
+
   beforeEach(() => {
     generationStore.__reset()
     __resetBranchWriteLocks()
@@ -27,7 +52,7 @@ describe('bracketProseReversal', () => {
 
   it('sets reversalInProgress across the body and clears it after', async () => {
     const seen: boolean[] = []
-    await bracketProseReversal('branch_1', async () => {
+    await bracketProseReversal('branch_1', noPick, async () => {
       seen.push(generationStore.getTxState().reversalInProgress)
     })
     expect(seen).toEqual([true])
@@ -36,7 +61,7 @@ describe('bracketProseReversal', () => {
 
   it('clears reversalInProgress even when the body throws', async () => {
     await expect(
-      bracketProseReversal('branch_1', async () => {
+      bracketProseReversal('branch_1', noPick, async () => {
         throw new Error('sweep failed')
       }),
     ).rejects.toThrow('sweep failed')
@@ -59,7 +84,7 @@ describe('bracketProseReversal', () => {
           }
         }),
     )
-    const done = bracketProseReversal('branch_1', async () => {
+    const done = bracketProseReversal('branch_1', noPick, async () => {
       order.push('swept')
     })
     await new Promise((resolve) => setTimeout(resolve, 20))
@@ -73,7 +98,7 @@ describe('bracketProseReversal', () => {
   it('keeps a preview starting mid-reversal out until the body settles', async () => {
     const order: string[] = []
     let preview: Promise<void> | undefined
-    await bracketProseReversal('branch_1', async () => {
+    await bracketProseReversal('branch_1', noPick, async () => {
       preview = withBranchWriteShared('branch_1', 'rollback-preview', async () => {
         order.push('preview')
       })
@@ -86,7 +111,7 @@ describe('bracketProseReversal', () => {
 
   it('releases the hold when the body throws', async () => {
     await expect(
-      bracketProseReversal('branch_1', async () => {
+      bracketProseReversal('branch_1', noPick, async () => {
         throw new Error('sweep failed')
       }),
     ).rejects.toThrow('sweep failed')
@@ -100,8 +125,8 @@ describe('bracketProseReversal', () => {
 
   it('rejects a nested bracket rather than silently dropping the barrier', async () => {
     await expect(
-      bracketProseReversal('branch_1', async () => {
-        await bracketProseReversal('branch_1', async () => {})
+      bracketProseReversal('branch_1', noPick, async () => {
+        await bracketProseReversal('branch_1', noPick, async () => {})
       }),
     ).rejects.toThrow('not re-entrant')
     expect(generationStore.getTxState().reversalInProgress).toBe(false)
@@ -188,7 +213,7 @@ describe('bracketProseReversal — the interrupt', () => {
 
     const [run] = [...generationStore.getTxState().runs.values()]
     const seen: unknown[] = []
-    const bracket = bracketProseReversal('b1', async () => {
+    const bracket = bracketProseReversal('b1', ctx, async () => {
       const txState = generationStore.getTxState()
       seen.push({
         runs: txState.runs.size,
@@ -223,7 +248,7 @@ describe('bracketProseReversal — the interrupt', () => {
     await landed
 
     let deferredInBody: unknown
-    await bracketProseReversal('b1', async () => {
+    await bracketProseReversal('b1', ctx, async () => {
       deferredInBody = generationStore.getTxState().deferred.get('b1')
     })
 
@@ -232,12 +257,12 @@ describe('bracketProseReversal — the interrupt', () => {
   })
 
   it('runs the body at once and records nothing when no pass is in flight', async () => {
-    await makeHarness()
+    const { ctx } = await makeHarness()
     const deferrals: PipelineEvent[] = []
     const off = pipelineEventBus.subscribe('run_deferred', (e) => deferrals.push(e))
     let ran = false
 
-    await bracketProseReversal('b1', async () => {
+    await bracketProseReversal('b1', ctx, async () => {
       ran = true
     })
     off()
@@ -255,7 +280,7 @@ describe('bracketProseReversal — the interrupt', () => {
     await landed
     const [run] = [...generationStore.getTxState().runs.values()]
 
-    await bracketProseReversal('b1', async () => {})
+    await bracketProseReversal('b1', ctx, async () => {})
 
     expect(run.abortController.signal.aborted).toBe(false)
     expect(generationStore.getTxState().runs.has(run.runId)).toBe(true)
@@ -264,6 +289,116 @@ describe('bracketProseReversal — the interrupt', () => {
     await interruptMemoryRuns('b2')
     expect(await other.origin).toMatchObject({ outcome: 'aborted' })
     await other.chain
+  })
+})
+
+// generation-pipeline.md → chainsTo on predecessor: a reversal that removes the picked end drops it.
+describe('bracketProseReversal — a manual pick', () => {
+  beforeEach(() => {
+    resetSingletons()
+  })
+  afterEach(() => {
+    vi.restoreAllMocks()
+    resetSingletons()
+  })
+
+  const pick = () => generationStore.getTxState().pendingClose.get('b1')
+
+  async function withPick() {
+    const { db, ctx } = await makeHarness()
+    await db.insert(storyEntries).values([
+      {
+        id: 'e_u1',
+        branchId: 'b1',
+        position: 1,
+        kind: 'user_action',
+        content: 'I knock.',
+        createdAt: 1,
+      },
+      {
+        id: 'e_r1',
+        branchId: 'b1',
+        position: 2,
+        kind: 'ai_reply',
+        content: 'The door opens.',
+        createdAt: 2,
+      },
+    ])
+    generationStore.setPendingClose('b1', { endEntryId: 'e_r1' })
+    const remove = (id: string) =>
+      db.delete(storyEntries).where(and(eq(storyEntries.branchId, 'b1'), eq(storyEntries.id, id)))
+    return { ctx, remove }
+  }
+
+  it('drops a pick whose end entry the body removed, before the barrier lowers', async () => {
+    const { ctx, remove } = await withPick()
+    const barrierAtDrop: boolean[] = []
+    const off = generationStore.subscribe(() => {
+      const txState = generationStore.getTxState()
+      if (barrierAtDrop.length === 0 && !txState.pendingClose.has('b1'))
+        barrierAtDrop.push(txState.reversalInProgress)
+    })
+
+    await bracketProseReversal('b1', ctx, async () => {
+      await remove('e_r1')
+    })
+    off()
+
+    expect(pick()).toBeUndefined()
+    expect(barrierAtDrop).toEqual([true])
+  })
+
+  it('keeps a pick whose end entry the body spared', async () => {
+    const { ctx, remove } = await withPick()
+
+    await bracketProseReversal('b1', ctx, async () => {
+      await remove('e_u1')
+    })
+
+    expect(pick()).toEqual({ endEntryId: 'e_r1' })
+  })
+
+  it('drops the pick when the body throws after removing its entry, and rethrows', async () => {
+    const { ctx, remove } = await withPick()
+
+    await expect(
+      bracketProseReversal('b1', ctx, async () => {
+        await remove('e_r1')
+        throw new Error('store sync failed')
+      }),
+    ).rejects.toThrow('store sync failed')
+
+    expect(pick()).toBeUndefined()
+    expect(generationStore.getTxState().reversalInProgress).toBe(false)
+  })
+
+  it('keeps the pick and warns when the check cannot read', async () => {
+    await withPick()
+    const warn = vi.spyOn(logger, 'warn')
+    const unreadable = {
+      db: {
+        select: () => {
+          throw new Error('database is locked')
+        },
+      },
+    } as unknown as Pick<DbCtx, 'db'>
+
+    await bracketProseReversal('b1', unreadable, async () => {})
+
+    expect(pick()).toEqual({ endEntryId: 'e_r1' })
+    expect(warn).toHaveBeenCalledWith('action_layer.pending_close_check_failed', {
+      branchId: 'b1',
+      endEntryId: 'e_r1',
+      error: 'Error: database is locked',
+    })
+  })
+
+  it('reads nothing while no pick stands', async () => {
+    const { ctx, reads } = recordingDb()
+
+    await bracketProseReversal('b1', ctx, async () => {})
+
+    expect(reads).toEqual([])
   })
 })
 
