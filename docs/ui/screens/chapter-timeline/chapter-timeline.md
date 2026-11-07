@@ -177,10 +177,10 @@ edit surface, so the bar belongs with the card it applies to. On
 phone it sits at the surface's bottom edge, below the card list and
 outside its scroller, and rides above the soft keyboard per
 [`touch.md → Save bar on phone`](../../foundations/mobile/touch.md#save-bar-on-phone):
-a bar inside the scrolling list can't ride the keyboard. At either
-placement Cmd/Ctrl-S saves the dirty card while the Timeline is
-focused, so a user who scrolls away from it needn't scroll back to
-commit.
+a bar inside the scrolling list can't ride the keyboard. On desktop,
+at either placement, Cmd/Ctrl-S saves the dirty card while the
+Timeline is focused, so a user who scrolls away from it needn't
+scroll back to commit.
 
 ### Delete a chapter
 
