@@ -133,6 +133,7 @@ export async function nextMemoryRun(
   if (open == null) return null
   const status = await readClassifierStatus(run.branchId, ctx)
   // A pass left `running` holds the branch: nothing builds on its writes until boot resets it.
+  // A committing pass wrote its status in its phase, so its own chain never reads `running` here.
   if (status.state === 'running') return null
   const unprocessed = await unprocessedEntryCount(run.branchId, status.processedThrough, ctx)
   if (await closeOwed(run.branchId, open, ctx))

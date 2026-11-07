@@ -1019,7 +1019,11 @@ describe('a close owed over a backlog', () => {
       definition: STORY_DEFINITION,
       settings: { ...STORY_SETTINGS, chapterTokenThreshold: 500 },
     })
-    const pass = registerStandInPass({ anchorEntryId: null, windowEntries: 3 })
+    const pass = registerStandInPass({
+      anchorEntryId: null,
+      windowEntries: 3,
+      statusLifecycle: true,
+    })
     const close = registerStandInClose()
     const starts: { kind: string; actionId: string }[] = []
     pipelineEventBus.subscribe('run_start', (e) => {

@@ -191,7 +191,8 @@ async function tailPosition(ctx: PhaseContext): Promise<number> {
   return tail?.position ?? 0
 }
 
-// As a real window: the next `size` non-`system` rows past the watermark, ending on the last.
+// The next `size` non-`system` rows past the watermark. The real window caps all rows, then drops
+// `system` ones, so the two differ only where a `system` row falls inside the window.
 async function windowEnd(ctx: PhaseContext, size: number): Promise<number | null> {
   const { processedThrough } = await readStatus(ctx)
   const rows = await ctx.db
