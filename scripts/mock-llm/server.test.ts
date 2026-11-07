@@ -590,6 +590,55 @@ describe('lane PUT', () => {
   })
 })
 
+describe('lane lifecycle', () => {
+  const lanes = (): string[] => Object.keys(mock.ctx.state.lanes)
+  const call = (path: string, method: string, payload?: unknown): Promise<Response> =>
+    fetch(`${base()}/api/lanes/${path}`, {
+      method,
+      headers: { 'content-type': 'application/json' },
+      ...(payload !== undefined ? { body: JSON.stringify(payload) } : {}),
+    })
+
+  it('leaves no lane behind for a call on a key it has never seen', async () => {
+    const key = encodeURIComponent('tools:mistyped')
+    expect((await call(`${key}/sequence/reset`, 'POST')).status).toBe(404)
+    expect((await call(`${key}/responses/r_missing`, 'DELETE')).status).toBe(404)
+    expect(lanes()).not.toContain('tools:mistyped')
+  })
+
+  it('adds no lane for a configuring write that fails validation', async () => {
+    const key = encodeURIComponent('tools:refused')
+    expect((await call(key, 'PUT', { stream: 5 })).status).toBe(400)
+    expect(lanes()).not.toContain('tools:refused')
+  })
+
+  it('adds a tool lane a valid write configures, and forgets it on DELETE', async () => {
+    const key = encodeURIComponent('tools:forget_me')
+    expect((await call(key, 'PUT', { failure: { kind: 'malformed', remaining: 1 } })).status).toBe(
+      200,
+    )
+    expect(lanes()).toContain('tools:forget_me')
+
+    expect((await call(key, 'DELETE')).status).toBe(200)
+    expect(lanes()).not.toContain('tools:forget_me')
+    const snapshot = (await (await fetch(`${base()}/api/state`)).json()) as {
+      lanes: { key: string }[]
+    }
+    expect(snapshot.lanes.map((l) => l.key)).not.toContain('tools:forget_me')
+    expect((await call(key, 'DELETE')).status).toBe(404)
+  })
+
+  it('still resets the sequence of a registered lane with no saved entry yet', async () => {
+    const saved = mock.ctx.state.lanes['per-turn-classifier']
+    Reflect.deleteProperty(mock.ctx.state.lanes, 'per-turn-classifier')
+    try {
+      expect((await call('per-turn-classifier/sequence/reset', 'POST')).status).toBe(200)
+    } finally {
+      if (saved !== undefined) mock.ctx.state.lanes['per-turn-classifier'] = saved
+    }
+  })
+})
+
 describe('usage', () => {
   it('reports usage on a structured reply, counted over its prompt and its reply', async () => {
     const request = structuredRequest(fallbackClassifierSchema)

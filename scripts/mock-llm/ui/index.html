@@ -618,7 +618,8 @@
             }
             ${
               meta.kind === 'tool'
-                ? `<p class="hint">A tool step: <code>text</code>, <code>reasoning</code>, <code>toolCalls</code> as <code>[{ "name", "args" }]</code> (a string <code>args</code> goes out verbatim) and <code>finishReason</code>, by default <code>tool_calls</code> with calls, else <code>stop</code>. <code>{}</code> answers no calls.</p>`
+                ? `<p class="hint">A tool step: <code>text</code>, <code>reasoning</code>, <code>toolCalls</code> as <code>[{ "name", "args" }]</code> (a string <code>args</code> goes out verbatim) and <code>finishReason</code>, by default <code>tool_calls</code> with calls, else <code>stop</code>. <code>{}</code> answers no calls.</p>
+                   <p class="hint">A renamed tool leaves its old lane listed: <button id="forgetLane">Forget this lane</button></p>`
                 : ''
             }
             ${
@@ -788,7 +789,7 @@
 
       document.addEventListener('click', async (event) => {
         const t = event.target.closest(
-          '[data-lane],[data-group],[data-bulk],[data-cps],[data-activate],[data-delete],[data-entry],[data-save-entry],[data-goto],[data-copy],#reset,#addResponse,#save,#rename,#seqReset',
+          '[data-lane],[data-group],[data-bulk],[data-cps],[data-activate],[data-delete],[data-entry],[data-save-entry],[data-goto],[data-copy],#reset,#addResponse,#save,#rename,#seqReset,#forgetLane',
         )
         if (!t) return
 
@@ -822,6 +823,15 @@
               `/api/lanes/${encodeURIComponent(selected)}/responses/${t.dataset.delete}`,
               { method: 'DELETE' },
             )
+            return render()
+          }
+          if (t.id === 'forgetLane') {
+            if (
+              !confirm(`Forget ${selected}? Its responses and settings go; a call names it again.`)
+            )
+              return
+            snap = await api(`/api/lanes/${encodeURIComponent(selected)}`, { method: 'DELETE' })
+            selected = 'narrative'
             return render()
           }
           if (t.id === 'seqReset') {

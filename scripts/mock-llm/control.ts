@@ -10,7 +10,15 @@ import { laneCatalog, type MockContext } from './context'
 import { readBody } from './respond/wire'
 import { NARRATIVE_LANE } from './routing'
 import { STRUCTURED_SHAPES } from './shapes'
-import { defaultState, flushState, laneSchema, upstreamSchema, type CannedResponse } from './state'
+import {
+  defaultState,
+  emptyLane,
+  flushState,
+  laneSchema,
+  upstreamSchema,
+  type CannedResponse,
+  type Lane,
+} from './state'
 import { validateLaneValue } from './validate'
 
 // No CORS headers anywhere in this file: the panel is served from this same
@@ -133,7 +141,27 @@ export async function handleControl(
 
   if (segments[0] === 'lanes' && segments[1] !== undefined) {
     const key = decodeURIComponent(segments[1])
-    const lane = ctx.lane(key)
+
+    if (segments[2] === undefined && method === 'DELETE') {
+      if (!(key in ctx.state.lanes) && !ctx.discovered.has(key)) {
+        return json(res, 404, { error: `no lane ${key}` })
+      }
+      delete ctx.state.lanes[key]
+      ctx.discovered.delete(key)
+      return commit()
+    }
+
+    // Only a write that configures a lane may add one, once it validates: a mistyped key would
+    // otherwise stay listed for good, a saved tool lane surviving restarts.
+    const existing: Lane | undefined =
+      ctx.state.lanes[key] ??
+      (laneCatalog(ctx).some((meta) => meta.key === key) ? ctx.lane(key) : undefined)
+    const configures =
+      method === 'PUT'
+        ? segments[2] === undefined
+        : method === 'POST' && segments[2] === 'responses' && segments[3] === undefined
+    if (existing === undefined && !configures) return json(res, 404, { error: `no lane ${key}` })
+    const lane = existing ?? emptyLane()
 
     if (segments[2] === undefined && method === 'PUT') {
       const payload = await body()
@@ -151,7 +179,7 @@ export async function handleControl(
       }
       const parsed = laneSchema.safeParse(candidate)
       if (!parsed.success) return json(res, 400, { error: parsed.error.message })
-      Object.assign(lane, parsed.data)
+      Object.assign(ctx.lane(key), parsed.data)
       return commit()
     }
 
@@ -171,9 +199,10 @@ export async function handleControl(
           name: typeof payload.name === 'string' ? payload.name : 'Untitled',
           value: payload.value,
         }
-        lane.responses.push(canned)
-        lane.sequence.ids.push(canned.id)
-        lane.activeId ??= canned.id
+        const target = ctx.lane(key)
+        target.responses.push(canned)
+        target.sequence.ids.push(canned.id)
+        target.activeId ??= canned.id
         return commit()
       }
 

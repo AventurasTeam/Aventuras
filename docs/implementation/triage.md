@@ -262,13 +262,6 @@ slice-planning gate forces its resolution before that slice is planned.
   holds a keyword. Both texts are from memory, not a live server. Check
   them, and widen `CapabilityHint`'s `matched` if they hold. Surfaced by
   Slice 5.4's slice review.
-- **The dev mock can't forget a tool lane.** A saved `tools:` lane lists
-  under Tools across restarts, so a task whose tools were renamed
-  leaves its old lane there for good; only Reset or a hand edit of
-  `state.json` clears it. A control call naming an unknown key creates
-  the lane before its route matches (`scripts/mock-llm/control.ts`, the
-  `lanes` branch), so even a 404 on a mistyped `tools:` key leaves one
-  listed. Surfaced by Slice 5.4's slice review.
 - **Duplication the tool step's simplifier pass left for a shared
   home.** The expiry detail `` `${target}: timeout after ${boundMs}ms` ``
   is written in `lib/ai/tool-step.ts` and `lib/pipeline/call-error.ts`,
