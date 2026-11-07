@@ -26,7 +26,7 @@ export const EMPTY_THREAD_DRAFT: ThreadDraft = {
 }
 
 export function threadDraftFrom(row: Thread | null): ThreadDraft {
-  if (row == null) return EMPTY_THREAD_DRAFT
+  if (row == null) return { ...EMPTY_THREAD_DRAFT }
   return {
     title: row.title,
     description: row.description ?? '',

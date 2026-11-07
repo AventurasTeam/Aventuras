@@ -267,15 +267,6 @@ slice-planning gate forces its resolution before that slice is planned.
   apart. It needs scoping outside the dialog, to the bar's `save-bar`
   testID say. No current caller uses it with the dialog open. Surfaced
   by Slice 5.7's E2E review.
-- **`EMPTY_LORE_DRAFT`'s freeze is shallow.** `lib/world/lore-draft.ts`
-  types it `Readonly<LoreDraft>`, which leaves `keywords` and `tags`
-  mutable `string[]` in the type, and `Object.freeze` leaves them
-  mutable at runtime too, so nothing stops a write into the arrays every
-  spread of the constant shares. `loreDraftFrom` copies in new lists by
-  convention. The chapter twin, `EMPTY_CHAPTER_DRAFT`, is tightened in
-  Slice 5.7's review; lore's is older code, which
-  [`code-conventions.md → Type design`](../code-conventions.md#type-design)
-  files as a deferral. Surfaced by Slice 5.7's slice review.
 - **`commitRowSave`'s `idPrefix` is required even for an update.**
   `CommitRowSaveArgs` (`lib/actions/row-save/commit-row-save.ts`) pairs
   `rowId: string | null` with a required `idPrefix: string`, read only

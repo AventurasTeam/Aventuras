@@ -21,18 +21,20 @@ export const loreDraftSchema = z.object({
 })
 export type LoreDraft = z.infer<typeof loreDraftSchema>
 
-export const EMPTY_LORE_DRAFT: Readonly<LoreDraft> = Object.freeze({
+// Every spread shares the constant's lists, so they are frozen too and typed read-only.
+export const EMPTY_LORE_DRAFT: Readonly<
+  Omit<LoreDraft, 'keywords' | 'tags'> & { keywords: readonly string[]; tags: readonly string[] }
+> = Object.freeze({
   title: '',
   body: '',
   category: '',
   injectionMode: 'auto',
   priority: 0,
-  keywords: [],
-  tags: [],
+  keywords: Object.freeze([]),
+  tags: Object.freeze([]),
 })
 
 export function loreDraftFrom(row: Lore | null): LoreDraft {
-  // New lists: the freeze is shallow, so a spread alone would share the constant's arrays.
   if (row == null) return { ...EMPTY_LORE_DRAFT, keywords: [], tags: [] }
   return {
     title: row.title,

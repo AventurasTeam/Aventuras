@@ -20,6 +20,13 @@ const ROW: Thread = {
   updatedAt: 1,
 }
 
+describe('threadDraftFrom', () => {
+  it('hands each blank draft a draft of its own', () => {
+    threadDraftFrom(null).title = 'Edited'
+    expect(threadDraftFrom(null).title).toBe('')
+  })
+})
+
 describe('threadDraftSchema', () => {
   it('requires a non-blank title', () => {
     const result = threadDraftSchema.safeParse({ ...threadDraftFrom(ROW), title: '   ' })

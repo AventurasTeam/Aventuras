@@ -37,6 +37,11 @@ describe('loreDraftFrom', () => {
     loreDraftFrom(null).tags.push('myth')
     expect(loreDraftFrom(null)).toMatchObject({ keywords: [], tags: [] })
   })
+
+  it("freezes the constant's own lists, which every spread of it shares", () => {
+    expect(Object.isFrozen(EMPTY_LORE_DRAFT.keywords)).toBe(true)
+    expect(Object.isFrozen(EMPTY_LORE_DRAFT.tags)).toBe(true)
+  })
 })
 
 describe('loreActions', () => {

@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest'
 import type { Happening, HappeningAwareness, HappeningInvolvement } from '@/lib/db'
 
 import {
+  EMPTY_HAPPENING_DRAFT,
   happeningActions,
   happeningDraftFrom,
   happeningDraftSchema,
@@ -60,6 +61,19 @@ function build(
     newId,
   })
 }
+
+describe('happeningDraftFrom', () => {
+  const NO_LINKS: HappeningLinks = { involvements: [], awareness: [] }
+
+  it('hands each blank draft a draft and lists of its own', () => {
+    const first = happeningDraftFrom(null, NO_LINKS)
+    first.title = 'Edited'
+    first.involvements.push({ id: 'inv_1', entityId: 'char_1', role: '' })
+    expect(happeningDraftFrom(null, NO_LINKS)).toMatchObject({ title: '', involvements: [] })
+    expect(Object.isFrozen(EMPTY_HAPPENING_DRAFT.involvements)).toBe(true)
+    expect(Object.isFrozen(EMPTY_HAPPENING_DRAFT.awareness)).toBe(true)
+  })
+})
 
 describe('happeningDraftSchema', () => {
   it('refuses both time fields at once, on temporal', () => {

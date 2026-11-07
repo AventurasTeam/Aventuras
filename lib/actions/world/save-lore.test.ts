@@ -6,7 +6,7 @@ import { branches, deltas, lore, stories } from '@/lib/db'
 import { createTestDb } from '@/lib/db/__tests__/test-db'
 import { ID_PATTERN } from '@/lib/ids'
 import { resetAllStores } from '@/lib/stores'
-import { EMPTY_LORE_DRAFT, loreDraftFrom } from '@/lib/world'
+import { loreDraftFrom } from '@/lib/world'
 
 import { saveLore } from './save-lore'
 import { __resetRegistry } from '../delta/registry'
@@ -33,7 +33,7 @@ describe('saveLore', () => {
       {
         branchId: 'br_1',
         row: null,
-        draft: { ...EMPTY_LORE_DRAFT, title: 'The Aetherium', body: 'A sea of light.' },
+        draft: { ...loreDraftFrom(null), title: 'The Aetherium', body: 'A sea of light.' },
       },
       ctx,
     )
@@ -58,7 +58,7 @@ describe('saveLore', () => {
       {
         branchId: 'br_1',
         row: null,
-        draft: { ...EMPTY_LORE_DRAFT, title: 'The Aetherium', body: 'A sea of light.' },
+        draft: { ...loreDraftFrom(null), title: 'The Aetherium', body: 'A sea of light.' },
       },
       ctx,
     )
