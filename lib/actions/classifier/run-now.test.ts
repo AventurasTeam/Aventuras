@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { PERIODIC_CLASSIFIER_KIND } from '@/lib/classifier'
-import { pipelineRuns, storyDefinitionSchema, storySettingsSchema } from '@/lib/db'
+import { pipelineRuns, storyDefinitionSchema, storyEntries, storySettingsSchema } from '@/lib/db'
 import { createTestDb } from '@/lib/db/__tests__/test-db'
 import { CLASSIFIER_HELD } from '@/lib/pipeline'
 import { makeHarness, resetSingletons } from '@/lib/pipeline/__tests__/harness'
@@ -127,11 +127,24 @@ describe('runClassifierNow with a close owed', () => {
 
   it('commits the pass and chains no close', async () => {
     const { db, ctx } = await makeHarness()
+    const kinds = ['opening', 'user_action', 'ai_reply'] as const
+    await db.insert(storyEntries).values(
+      kinds.map((kind, i) => ({
+        id: `e${i + 1}`,
+        branchId: 'b1',
+        position: i + 1,
+        kind,
+        content: `entry ${i + 1}`,
+        createdAt: i + 1,
+      })),
+    )
     open('b1')
     const pass = registerStandInPass({ anchorEntryId: null })
     const close = registerStandInClose()
-    // A pick owes the close. It names no entry, so a close chained here fails at once, not holds.
-    generationStore.setPendingClose('b1', { endEntryId: 'entry_gone' })
+    // A pick on the reply owes the close. A close chained here would hold on it, so it is let go
+    // to end the chain on the assertions below rather than the timeout.
+    generationStore.setPendingClose('b1', { endEntryId: 'e3' })
+    void close.nextHeld().then((chained) => chained.finish('failed'))
 
     const running = runClassifierNow('b1', { db, runInTransaction: ctx.runInTransaction })
     const held = await pass.nextHeld()
