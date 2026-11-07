@@ -46,7 +46,7 @@ export function chapterDraftFrom(row: ChapterDraftRow | null): ChapterDraft {
 
 type ChapterPatch = Partial<Pick<Chapter, 'title' | 'theme' | 'summary' | 'keywords'>>
 
-// Not lib/world's: lib/chapters takes no value import of a lib module (milestone C5).
+// Not lib/world's: lib/chapters takes no value import of a lib module (M5 C5).
 function sameList(a: readonly string[], b: readonly string[]): boolean {
   return a.length === b.length && a.every((value, i) => value === b[i])
 }

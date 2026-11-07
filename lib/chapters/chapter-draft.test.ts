@@ -131,4 +131,26 @@ describe('chapterActions', () => {
       },
     ])
   })
+
+  it('writes a removed keyword', () => {
+    const row: ChapterDraftRow = { ...ROW, keywords: ['Keep', 'Amulet'] }
+    expect(actionsFor({ ...chapterDraftFrom(row), keywords: ['Keep'] }, row)).toEqual([
+      {
+        kind: 'updateChapter',
+        source: 'user_edit',
+        payload: { branchId: 'br_1', id: 'chap_keep', patch: { keywords: ['Keep'] } },
+      },
+    ])
+  })
+
+  it('writes a cleared keyword list', () => {
+    const row: ChapterDraftRow = { ...ROW, keywords: ['Keep', 'Amulet'] }
+    expect(actionsFor({ ...chapterDraftFrom(row), keywords: [] }, row)).toEqual([
+      {
+        kind: 'updateChapter',
+        source: 'user_edit',
+        payload: { branchId: 'br_1', id: 'chap_keep', patch: { keywords: [] } },
+      },
+    ])
+  })
 })
