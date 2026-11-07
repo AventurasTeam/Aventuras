@@ -28,14 +28,14 @@ export type SubmitTurnMeta = { content: string; composerMode: string }
 
 /**
  * Send's owed work was cancelled, so the whole Send was, before its turn. Without `committed` the
- * cancelled run wrote nothing that stands.
+ * Send's owed work wrote nothing that stands.
  */
 export type OwedWorkAborted = TxResult & {
   outcome: 'aborted'
   beforeTurn: true
   /** The slot of the run that ended Send's chain. */
   work: DeferredWorkKind
-  /** The run committed before the Cancel took effect: a late Cancel, which still ends the Send. */
+  /** Some of the owed work committed: a run before the cancelled one, or a Cancel landing late. */
   committed?: true
 }
 
@@ -89,11 +89,12 @@ async function runOwedWork(
   if (end == null) throw new Error('submitTurn: owed work ran, but its chain resolved no end')
   const ended: DeferredWorkKind = end.kind === CHAPTER_CLOSE_KIND ? 'close' : 'pass'
   const { result } = end
-  if (result.outcome === 'aborted')
-    return { ...result, outcome: 'aborted', beforeTurn: true, work: ended }
   // A Cancel landing after a run's last phase still commits it, but the Send is cancelled.
-  if (result.outcome === 'completed' && end.cancelled)
-    return { ...result, outcome: 'aborted', beforeTurn: true, work: ended, committed: true }
+  if (result.outcome === 'aborted' || (result.outcome === 'completed' && end.cancelled)) {
+    // A chain only continues past a commit, so a completed origin means some owed work stands.
+    const committed = started.outcome === 'completed' ? { committed: true as const } : {}
+    return { ...result, outcome: 'aborted', beforeTurn: true, work: ended, ...committed }
+  }
   if (result.outcome === 'failed') {
     // A cancel or failure whose reversal didn't commit: the branch is held, not retryable.
     if (await isClassifierHeld(ids.branchId, ctx)) return HELD_REJECTION

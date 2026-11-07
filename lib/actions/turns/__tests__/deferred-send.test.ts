@@ -821,8 +821,9 @@ describe('Send with a close owed', () => {
       actionId: held.actionId,
       beforeTurn: true,
       work: 'close',
+      // The catch-up pass committed before the close it chained was cancelled.
+      committed: true,
     })
-    expect(result).not.toHaveProperty('committed')
     expect(await userActionsReading(db, 'I wait.')).toEqual([])
     expect(await db.select().from(chapters)).toEqual([])
     expect(generationStore.getTxState().deferred.get('b1')).toEqual({ close: true })
