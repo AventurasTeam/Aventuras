@@ -1,6 +1,7 @@
 import { useCallback, useRef, useState } from 'react'
 import { Platform, TextInput, View, type TextInputKeyPressEvent } from 'react-native'
 
+import { ReasonTooltip } from '@/components/ui/reason-tooltip'
 import { Tag } from '@/components/ui/tag'
 import { cn } from '@/lib/utils'
 
@@ -208,10 +209,7 @@ export function TagInput({
     </View>
   )
 
-  if (disabled && disabledReason && Platform.OS === 'web') {
-    return <div title={disabledReason}>{wrapper}</div>
-  }
-  return wrapper
+  return <ReasonTooltip reason={disabled ? disabledReason : undefined}>{wrapper}</ReasonTooltip>
 }
 
 export type { TagInputProps }

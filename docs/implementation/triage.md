@@ -339,14 +339,6 @@ slice-planning gate forces its resolution before that slice is planned.
   shared compound, or a `Button` option, would end the copies; the
   latter changes native layout for every `disabledReason` caller, so it
   wants a design call. Surfaced by Slice 5.7's slice review.
-- **`TagInput` remounts when a run starts.** On web it wraps itself in a
-  `div title` only while disabled with a reason
-  (`components/compounds/tag-input.tsx:211-213`), so a run starting
-  mid-keyword flips the root element and remounts the tree: focus and
-  the half-typed keyword (local state) are lost. Hits World's
-  `ListField` and the Timeline's Keywords. Same class as the
-  input-adornment DOM-identity lesson. Surfaced by Slice 5.7's card
-  review.
 - **C15 and Slice 5.3 say time ranges exclude 0; the read keeps it.**
   [Milestone 5 → C15](milestones/05-chapters-chapter-close/milestone.md#c15--entry-jump-and-chapter-time-ranges)
   gives each chapter's `min` and `max` world time "excluding 0", and

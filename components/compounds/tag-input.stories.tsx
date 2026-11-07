@@ -3,6 +3,7 @@ import { useState, type ComponentProps } from 'react'
 import { View } from 'react-native'
 import { expect, fn, screen, userEvent, waitFor } from 'storybook/test'
 
+import { Button } from '@/components/ui/button'
 import { expectThemeSelection } from '@/components/ui/selection-probe'
 import { Text } from '@/components/ui/text'
 import { themes } from '@/lib/themes'
@@ -60,6 +61,41 @@ export const Disabled: Story = {
       disabledReason="Generation is in flight. Cancel to edit."
     />
   ),
+}
+
+const RUN_REASON = 'Generation is in flight. Cancel to edit.'
+
+// A run disables every field at once; the reason's tooltip must not remount the input under it.
+function DisablingHarness() {
+  const [disabled, setDisabled] = useState(false)
+  const [value, setValue] = useState<string[]>([])
+  return (
+    <View className="gap-3">
+      <TagInput
+        value={value}
+        onChange={setValue}
+        placeholder="Add tags…"
+        disabled={disabled}
+        disabledReason={RUN_REASON}
+      />
+      <Button onPress={() => setDisabled(true)}>
+        <Text>Start a run</Text>
+      </Button>
+    </View>
+  )
+}
+
+export const KeepsItsInputAsARunStarts: Story = {
+  render: () => <DisablingHarness />,
+  play: async ({ canvas }) => {
+    const before = canvas.getByRole('textbox')
+    expect(before.closest('[title]')).toBeNull()
+    await userEvent.click(canvas.getByRole('button', { name: 'Start a run' }))
+    await waitFor(() => expect(canvas.getByRole('textbox')).toHaveAttribute('readonly'))
+    const after = canvas.getByRole('textbox')
+    expect(after).toBe(before)
+    expect(after.closest('[title]')).toHaveAttribute('title', RUN_REASON)
+  },
 }
 
 export const Invalid: Story = {

@@ -6,6 +6,7 @@ import { expect, fireEvent, fn, screen, userEvent, waitFor } from 'storybook/tes
 import { themes } from '@/lib/themes'
 
 import { Autocomplete } from './autocomplete'
+import { Button } from './button'
 import { Text } from './text'
 
 const ERA_NAMES = ['Reiwa', 'Heisei', 'Showa', 'Taisho', 'Meiji'] as const
@@ -167,6 +168,42 @@ export const DisabledWithReason: Story = {
       disabledReason="Generation in progress — fields lock until complete"
     />
   ),
+}
+
+const RUN_REASON = 'Generation in progress — fields lock until complete'
+
+// A run disables every field at once; the reason's tooltip must not remount the input under it.
+function DisablingAutocomplete() {
+  const [disabled, setDisabled] = useState(false)
+  return (
+    <View className="gap-3">
+      <ControlledAutocomplete
+        sourceList={ERA_NAMES}
+        placeholder="Era name…"
+        disabled={disabled}
+        disabledReason={RUN_REASON}
+      />
+      <Button onPress={() => setDisabled(true)}>
+        <Text>Start a run</Text>
+      </Button>
+    </View>
+  )
+}
+
+export const KeepsItsInputAsARunStarts: Story = {
+  render: () => <DisablingAutocomplete />,
+  play: async ({ canvas }) => {
+    const before = await canvas.findByPlaceholderText('Era name…')
+    expect(before.closest('[title]')).toBeNull()
+    await userEvent.click(canvas.getByRole('button', { name: 'Start a run' }))
+    await waitFor(() =>
+      expect(canvas.getByPlaceholderText('Era name…').closest('[title]')).toHaveAttribute(
+        'title',
+        RUN_REASON,
+      ),
+    )
+    expect(canvas.getByPlaceholderText('Era name…')).toBe(before)
+  },
 }
 
 export const FocusOpensDropdown: Story = {

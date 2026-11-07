@@ -41,6 +41,7 @@ import { scheduleOnRN } from 'react-native-worklets'
 
 import { Icon } from '@/components/ui/icon'
 import { Input } from '@/components/ui/input'
+import { ReasonTooltip } from '@/components/ui/reason-tooltip'
 import { Sheet, SheetContent } from '@/components/ui/sheet'
 import { Text } from '@/components/ui/text'
 import { POINTER_EVENTS_NONE } from '@/constants/styles'
@@ -1643,12 +1644,8 @@ function Shape1Inline<T>(props: SearchableOverlayListProps<T>) {
     </View>
   )
 
-  // RN-Web's TextInput allowlist drops `title`; wrap in a raw div for the disabled-tooltip on web.
-  if (disabled && disabledReason && Platform.OS === 'web') {
-    return <div title={disabledReason}>{wrapper}</div>
-  }
-
-  return wrapper
+  // RN-Web's TextInput allowlist drops `title`, so the reason's tooltip wraps it.
+  return <ReasonTooltip reason={disabled ? disabledReason : undefined}>{wrapper}</ReasonTooltip>
 }
 
 function SearchableOverlayList<T>(props: SearchableOverlayListProps<T>) {
