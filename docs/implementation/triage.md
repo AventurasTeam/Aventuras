@@ -323,14 +323,3 @@ slice-planning gate forces its resolution before that slice is planned.
   before Slice 5.6). The reader blocks Send while a hard-gate run is live,
   so only a caller past the UI reaches it. Surfaced by CodeRabbit on
   Slice 5.6's PR.
-- **The pass-failure Retry path is looser than its close twin.**
-  `PassRefusal` (`components/reader/send-run.ts:104`) types its non-held
-  `error` as `PipelineError | undefined`, though a failed `TxResult`
-  always carries one; the close's twin, `closeRefusalOf` (`:117`), now
-  requires it. `retryPassEntry`'s docblock
-  (`components/reader/system-entry-actions.tsx:302-307`) omits the
-  non-held refusal, which toasts and leaves the entry (`:328`). Both
-  predate Slice 5.6, and
-  [code-conventions → Type design](../code-conventions.md#type-design)
-  files older looseness as a deferral. Surfaced by Slice 5.6's slice
-  review.

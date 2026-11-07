@@ -248,10 +248,10 @@ const CLOSE_VOCABULARY: WorkerVocabulary = {
 }
 
 function describeWorkerFailure(
-  error: PipelineError | undefined,
+  error: PipelineError,
   vocabulary: WorkerVocabulary,
 ): { content: string; detail?: string } {
-  if (error?.kind === 'provider') {
+  if (error.kind === 'provider') {
     const hint = error.possibleCapabilityMismatch
     return {
       content:
@@ -259,19 +259,16 @@ function describeWorkerFailure(
       detail: providerDetail(error),
     }
   }
-  if (error?.kind === 'config-resolver') {
+  if (error.kind === 'config-resolver') {
     return { content: t(vocabulary.resolver[error.failure]), detail: error.detail }
   }
-  if (error?.kind === 'reply-cut-off') {
+  if (error.kind === 'reply-cut-off') {
     return { content: vocabulary.cutOff(error), detail: pipelineErrorDetail(error) }
   }
-  if (error?.kind === 'context-window') {
+  if (error.kind === 'context-window') {
     return { content: vocabulary.window(error), detail: pipelineErrorDetail(error) }
   }
-  return {
-    content: t(vocabulary.generic),
-    detail: error !== undefined ? pipelineErrorDetail(error) : undefined,
-  }
+  return { content: t(vocabulary.generic), detail: pipelineErrorDetail(error) }
 }
 
 export function describePassFailure(refusal: PassRefusal): { content: string; detail?: string } {
@@ -326,8 +323,8 @@ function retryRefusalText(
 /**
  * A pass-failure entry's Retry: runs the pass alone. A commit settles the entry through
  * `committed`; a failure, a throw or a hold rewrites it, a failure as held when its reversal didn't
- * commit; a cancel leaves the entry as it was. A throw from `held`, `committed` or `rewrite`
- * propagates.
+ * commit; a cancel leaves the entry as it was, and any other refusal leaves it too, told through
+ * `notify`. A throw from `held`, `committed` or `rewrite` propagates.
  */
 export async function retryPassEntry(deps: {
   runPass: () => Promise<TxResult | RejectedStart>

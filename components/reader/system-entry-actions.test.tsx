@@ -342,10 +342,10 @@ describe('describePassFailure', () => {
     ).toEqual({ content: t('reader:systemEntry.failure.memory'), detail: 'window read' })
   })
 
-  it('still names the failure when the run carried no error', () => {
-    expect(describePassFailure({ held: false, error: undefined })).toEqual({
-      content: t('reader:systemEntry.failure.memory'),
-    })
+  it('takes a failed pass only with its error (checked by tsc)', () => {
+    // @ts-expect-error a failed run always carries its PipelineError
+    const loose: PassRefusal = { held: false, error: undefined }
+    expect(loose.held).toBe(false)
   })
 
   // The turn copy names the narrative agent; a pass's failure must not send the user there.
@@ -417,13 +417,6 @@ describe('toPassFailureMeta', () => {
     ).toEqual({
       kind: 'provider',
       detail: 'timeout: classifier: timeout after 600000ms',
-      pass: 'failed',
-    })
-  })
-
-  it('records a failure with no error as an orchestrator one', () => {
-    expect(toPassFailureMeta({ held: false, error: undefined }, undefined)).toEqual({
-      kind: 'orchestrator',
       pass: 'failed',
     })
   })
