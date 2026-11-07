@@ -1,7 +1,12 @@
 import { useRouter } from 'expo-router'
 import { useMemo } from 'react'
 
-import type { CapabilityHint, ResolveFailureKind } from '@/lib/ai'
+import type {
+  CapabilityHint,
+  ContextWindowFailure,
+  ReplyCutOffFailure,
+  ResolveFailureKind,
+} from '@/lib/ai'
 import type { SystemFailureMeta } from '@/lib/db'
 import { logger } from '@/lib/diagnostics'
 import { t } from '@/lib/i18n'
@@ -209,34 +214,65 @@ export function toSystemFailureMeta(
   return failureMetaOf(error, describeTurnFailure(error).detail, submission)
 }
 
-// The pass's own vocabulary (classifier.md → Failure policy): a turn's copy names the narrative
-// agent, which would send the user to fix the wrong profile.
-export function describePassFailure(refusal: PassRefusal): { content: string; detail?: string } {
-  if (refusal.held) return { content: t('reader:systemEntry.failure.memoryHeld') }
-  const { error } = refusal
+// The words a background worker's failure entry speaks in; the arms are shared, so one added for
+// the pass reaches the close.
+type WorkerVocabulary = {
+  generic: 'reader:systemEntry.failure.memory' | 'reader:systemEntry.failure.close'
+  resolver: typeof PASS_RESOLVER_COPY | typeof CLOSE_RESOLVER_COPY
+  hint: 'pass' | 'close'
+  cutOff: (failure: ReplyCutOffFailure) => string
+  window: (failure: ContextWindowFailure) => string
+}
+
+const PASS_VOCABULARY: WorkerVocabulary = {
+  generic: 'reader:systemEntry.failure.memory',
+  resolver: PASS_RESOLVER_COPY,
+  hint: 'pass',
+  cutOff: passCutOffContent,
+  window: passContextWindowContent,
+}
+
+// The close's own vocabulary: it runs on lore-mgmt, which the pass's copy doesn't name.
+const CLOSE_VOCABULARY: WorkerVocabulary = {
+  generic: 'reader:systemEntry.failure.close',
+  resolver: CLOSE_RESOLVER_COPY,
+  hint: 'close',
+  cutOff: closeCutOffContent,
+  window: closeContextWindowContent,
+}
+
+function describeWorkerFailure(
+  error: PipelineError | undefined,
+  vocabulary: WorkerVocabulary,
+): { content: string; detail?: string } {
   if (error?.kind === 'provider') {
     const hint = error.possibleCapabilityMismatch
     return {
       content:
-        hint !== undefined
-          ? capabilityHintContent(hint, 'pass')
-          : t('reader:systemEntry.failure.memory'),
+        hint !== undefined ? capabilityHintContent(hint, vocabulary.hint) : t(vocabulary.generic),
       detail: providerDetail(error),
     }
   }
   if (error?.kind === 'config-resolver') {
-    return { content: t(PASS_RESOLVER_COPY[error.failure]), detail: error.detail }
+    return { content: t(vocabulary.resolver[error.failure]), detail: error.detail }
   }
   if (error?.kind === 'reply-cut-off') {
-    return { content: passCutOffContent(error), detail: pipelineErrorDetail(error) }
+    return { content: vocabulary.cutOff(error), detail: pipelineErrorDetail(error) }
   }
   if (error?.kind === 'context-window') {
-    return { content: passContextWindowContent(error), detail: pipelineErrorDetail(error) }
+    return { content: vocabulary.window(error), detail: pipelineErrorDetail(error) }
   }
   return {
-    content: t('reader:systemEntry.failure.memory'),
+    content: t(vocabulary.generic),
     detail: error !== undefined ? pipelineErrorDetail(error) : undefined,
   }
+}
+
+// The pass's own vocabulary (classifier.md → Failure policy): a turn's copy names the narrative
+// agent, which would send the user to fix the wrong profile.
+export function describePassFailure(refusal: PassRefusal): { content: string; detail?: string } {
+  if (refusal.held) return { content: t('reader:systemEntry.failure.memoryHeld') }
+  return describeWorkerFailure(refusal.error, PASS_VOCABULARY)
 }
 
 export function toPassFailureMeta(
@@ -291,35 +327,12 @@ export async function retryPassEntry(deps: {
   deps.notify(t('reader:systemEntry.passRetryBlocked', { reason: result.blockedBy }))
 }
 
-// The close's own vocabulary: the pass's names the classifier, and a close runs on lore-mgmt.
 // A close has no held state, so there is no held arm.
 export function describeCloseFailure(error: PipelineError | undefined): {
   content: string
   detail?: string
 } {
-  if (error?.kind === 'provider') {
-    const hint = error.possibleCapabilityMismatch
-    return {
-      content:
-        hint !== undefined
-          ? capabilityHintContent(hint, 'close')
-          : t('reader:systemEntry.failure.close'),
-      detail: providerDetail(error),
-    }
-  }
-  if (error?.kind === 'config-resolver') {
-    return { content: t(CLOSE_RESOLVER_COPY[error.failure]), detail: error.detail }
-  }
-  if (error?.kind === 'reply-cut-off') {
-    return { content: closeCutOffContent(error), detail: pipelineErrorDetail(error) }
-  }
-  if (error?.kind === 'context-window') {
-    return { content: closeContextWindowContent(error), detail: pipelineErrorDetail(error) }
-  }
-  return {
-    content: t('reader:systemEntry.failure.close'),
-    detail: error !== undefined ? pipelineErrorDetail(error) : undefined,
-  }
+  return describeWorkerFailure(error, CLOSE_VOCABULARY)
 }
 
 export function toCloseFailureMeta(
@@ -330,7 +343,7 @@ export function toCloseFailureMeta(
   return { ...failureMetaOf(error, detail, submission), close: 'failed' }
 }
 
-/** A committed close Retry's notice, as `passResolvedEntry`: the text held, `Dismiss` alone. */
+/** What a Retry that left nothing owed settles on, as `passResolvedEntry`: the text held. */
 export function closeResolvedEntry(submission: NonNullable<SystemFailureMeta['submission']>): {
   content: string
   failure: SystemFailureMeta
@@ -423,8 +436,8 @@ export function useSystemEntryActions(
       (failure?.kind === 'provider' && isCapabilityHintTag(failure.failure)),
     leaveStory,
   )
-  // A held branch can't run a pass, and a resolved entry's work has run, so either offers Dismiss
-  // alone. The fix gates are kind-exclusive, so the `??` order carries no meaning.
+  // A held branch can't run a pass, and a resolved entry has nothing left to retry, so either
+  // offers Dismiss alone. The fix gates are kind-exclusive, so the `??` order carries no meaning.
   const retryWithheld =
     failure?.pass === 'held' || failure?.pass === 'resolved' || failure?.close === 'resolved'
   return {

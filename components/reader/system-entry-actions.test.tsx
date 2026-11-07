@@ -502,9 +502,12 @@ describe('describeCloseFailure', () => {
     })
   })
 
-  it('names the lore management agent for a resolver failure', () => {
-    expect(describeCloseFailure(CLOSE_UNASSIGNED)).toEqual({
+  it('names the lore management agent for a resolver failure, with its detail', () => {
+    expect(
+      describeCloseFailure({ ...CLOSE_UNASSIGNED, detail: 'lore-mgmt: no assignment' }),
+    ).toEqual({
       content: 'Chapter close failed: the lore management agent has no profile assigned.',
+      detail: 'lore-mgmt: no assignment',
     })
   })
 
@@ -1028,7 +1031,7 @@ describe('useSystemEntryActions', () => {
     expect(actions.onRetry).toBe(onRetry)
   })
 
-  // Its close has run; the entry only holds a text the composer couldn't take back.
+  // Retry left nothing owed; the entry only holds a text the composer couldn't take back.
   it('offers Dismiss alone on a resolved close entry', () => {
     const actions = actionsFor(
       closeResolvedEntry({ content: 'I wade in.', composerMode: 'free' }).failure,
