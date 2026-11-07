@@ -287,17 +287,6 @@ slice-planning gate forces its resolution before that slice is planned.
   `window-check.test.ts` and `request-shape.test.ts`. The older
   `narrativeValueSchema` in `scripts/mock-llm/validate.ts` is exported
   with no importer. Surfaced by Slice 5.4's slice review.
-- **A leave re-raised after Discard or Save reads stale dirty state.**
-  `requestLeave` and `runSave` in `hooks/use-row-save-session.ts` read
-  the last render's `form.formState.dirtyFields`, so a leave requested again in the same
-  tick as a Discard or Save is queued, and the leave dialog opens over a
-  clean session. It stays latent only because expo-router 55 queues
-  `back`, `dismiss` and `push` until after the next commit; a
-  synchronous dispatch brings the double prompt back on World, Plot and
-  the Timeline. Reading dirtiness live, as the Story Settings session
-  does through its `stateRef`, would close it. The Timeline's E2E pins
-  one-click Discard for `←` and Jump. Surfaced by Slice 5.7's route
-  review.
 - **The row-session wrapper exists in four copies.** The lore, entity,
   plot and chapter row sessions each repeat the `commit` wrapper (a
   try/catch and a `*_saved_handler_failed` log), the `onSession`

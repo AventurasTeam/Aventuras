@@ -208,8 +208,10 @@ export function useRowSaveSession<Draft extends FieldValues>({
   // Oldest first: a window close and a back can both be outstanding.
   const intentsRef = useRef<(() => void)[]>([])
   const appliedRef = useRef({ rowKey, values })
-  // The render snapshot trails a trigger() by a render; the subscription sees every emission.
+  // The render snapshot trails a trigger(), an edit or a reset by a render; the subscription sees
+  // every emission, so a Save or leave raised in the same tick reads the form as it is.
   const errorsRef = useRef<object>(errors)
+  const dirtyRef = useRef<object>(dirtyMap)
   // react-hook-form stores errors only for the fields an edit validated, so the whole draft is
   // checked apart from them: Save disables for an untouched invalid field without flagging it.
   const [draftIssue, setDraftIssue] = useState<string | null>(null)
@@ -218,9 +220,10 @@ export function useRowSaveSession<Draft extends FieldValues>({
   useEffect(
     () =>
       form.subscribe({
-        formState: { errors: true },
+        formState: { errors: true, dirtyFields: true },
         callback: (state) => {
           if (state.errors != null) errorsRef.current = state.errors
+          if (state.dirtyFields != null) dirtyRef.current = state.dirtyFields
         },
       }),
     [form],
@@ -383,7 +386,7 @@ export function useRowSaveSession<Draft extends FieldValues>({
       // The form moved to another row mid-write: nothing here is that row's to carry, and a queued
       // leave waits only on an edit of its own (a clean session satisfies it, as a noop save does).
       if (appliedRef.current.rowKey !== key) {
-        return { outcome, clean: !hasDirty(form.formState.dirtyFields) }
+        return { outcome, clean: !hasDirty(dirtyRef.current) }
       }
       if (written.status === 'rejected') {
         setSaveError(written.reason)
@@ -391,7 +394,7 @@ export function useRowSaveSession<Draft extends FieldValues>({
       }
       return { outcome, clean: rebase(written.draft, valuesAtStart) }
     },
-    [form, write, rebase, reportRejection, setPendingConfirm],
+    [write, rebase, reportRejection, setPendingConfirm],
   )
 
   // `confirmed` is the user's consent; only resolveConfirm passes true.
@@ -400,7 +403,7 @@ export function useRowSaveSession<Draft extends FieldValues>({
       if (busyRef.current) return { status: 'busy' }
       // A parked Save moves only through resolveConfirm or a discard.
       if (!confirmed && pendingConfirmRef.current != null) return { status: 'confirm' }
-      if (!hasDirty(form.formState.dirtyFields)) {
+      if (!hasDirty(dirtyRef.current)) {
         // Nothing to write, so a leave waiting on this save is already satisfied.
         settleIntents()
         return { status: 'noop' }
@@ -418,7 +421,7 @@ export function useRowSaveSession<Draft extends FieldValues>({
       if (result.clean) settleIntents()
       return result.outcome
     },
-    [form, attempt, settleIntents],
+    [attempt, settleIntents],
   )
 
   const save = useCallback(() => runSave(false), [runSave])
@@ -448,17 +451,14 @@ export function useRowSaveSession<Draft extends FieldValues>({
     [runSave, setPendingConfirm],
   )
 
-  const requestLeave = useCallback(
-    (proceed: () => void) => {
-      if (!hasDirty(form.formState.dirtyFields)) {
-        proceed()
-        return
-      }
-      intentsRef.current = [...intentsRef.current, proceed]
-      setPendingLeave(true)
-    },
-    [form],
-  )
+  const requestLeave = useCallback((proceed: () => void) => {
+    if (!hasDirty(dirtyRef.current)) {
+      proceed()
+      return
+    }
+    intentsRef.current = [...intentsRef.current, proceed]
+    setPendingLeave(true)
+  }, [])
 
   const resolveLeave = useCallback(
     (outcome: 'save' | 'discard' | 'cancel') => {

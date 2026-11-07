@@ -183,6 +183,43 @@ describe('useRowSaveSession', () => {
     expect(hook.result.current.form.getValues()).toEqual(VALUES)
   })
 
+  // A router that dispatches synchronously raises the next leave before the Discard re-renders.
+  it('runs a leave raised in the same tick as a Discard, with no dialog', () => {
+    const hook = setup()
+    act(() => hook.result.current.form.setValue('note', 'x', { shouldDirty: true }))
+    const proceed = vi.fn()
+    act(() => {
+      hook.result.current.discard()
+      hook.result.current.requestLeave(proceed)
+    })
+    expect(proceed).toHaveBeenCalledTimes(1)
+    expect(hook.result.current.pendingLeave).toBe(false)
+  })
+
+  it('queues a leave raised in the same tick as the first edit', () => {
+    const hook = setup()
+    const proceed = vi.fn()
+    act(() => {
+      hook.result.current.form.setValue('note', 'x', { shouldDirty: true })
+      hook.result.current.requestLeave(proceed)
+    })
+    expect(proceed).not.toHaveBeenCalled()
+    expect(hook.result.current.pendingLeave).toBe(true)
+  })
+
+  it('writes nothing for a Save raised in the same tick as a Discard', async () => {
+    const commit = okCommit()
+    const hook = setup(commit)
+    act(() => hook.result.current.form.setValue('note', 'x', { shouldDirty: true }))
+    let outcome: RowSaveOutcome | undefined
+    await act(async () => {
+      hook.result.current.discard()
+      outcome = await hook.result.current.save()
+    })
+    expect(outcome).toEqual({ status: 'noop' })
+    expect(commit).not.toHaveBeenCalled()
+  })
+
   it('runs every queued leave oldest first once the save lands', async () => {
     const hook = setup()
     const order: string[] = []
