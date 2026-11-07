@@ -1092,7 +1092,7 @@ describe('a close owed over a backlog', () => {
   )
 })
 
-// The second interrupt order: the abort lands after the swap into the close, before it starts.
+// An interrupt landing after the swap into the close, before its drive starts.
 describe('an interrupt at the swap into a close', () => {
   beforeEach(() => resetSingletons())
   afterEach(() => resetSingletons())
@@ -1144,9 +1144,9 @@ describe('an interrupt at the swap into a close', () => {
     const { origin, chain } = startPipeline('pred', ctx)
     expect(expectRan(await origin).outcome).toBe('completed')
     const end = await chain
+    expect(interrupted).toBeDefined()
     await interrupted
 
-    expect(interrupted).toBeDefined()
     expect(end).toMatchObject({ kind: CHAPTER_CLOSE_KIND, result: { outcome: 'aborted' } })
     expect(logged('pipeline.preflight_failed')).toBe(false)
     expect(generationStore.getTxState().deferred.get('b1')).toEqual({ close: true })

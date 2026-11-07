@@ -577,6 +577,7 @@ describe('CTRL-Z of the turn under a running close', () => {
     failReversalsOf(close)
 
     expect(await undoLastAction('b1', ctx)).toEqual(GATED)
+    expect(generationStore.getTxState().runs.size).toBe(0)
 
     // Uncommitted: the close's row stays for boot recovery, still the head, so the turn is not.
     expect(await start.origin).toMatchObject({
