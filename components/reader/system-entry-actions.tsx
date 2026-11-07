@@ -214,7 +214,7 @@ export function toSystemFailureMeta(
   return failureMetaOf(error, describeTurnFailure(error).detail, submission)
 }
 
-// The words a background worker's failure entry speaks in; the arms are shared, so one added for
+// The words a failure entry for a Send's owed work speaks in; the arms are shared, so one added for
 // the pass reaches the close.
 type WorkerVocabulary = {
   generic: 'reader:systemEntry.failure.memory' | 'reader:systemEntry.failure.close'
@@ -224,6 +224,8 @@ type WorkerVocabulary = {
   window: (failure: ContextWindowFailure) => string
 }
 
+// The pass's own vocabulary (classifier.md → Failure policy): a turn's copy names the narrative
+// agent, which would send the user to fix the wrong profile.
 const PASS_VOCABULARY: WorkerVocabulary = {
   generic: 'reader:systemEntry.failure.memory',
   resolver: PASS_RESOLVER_COPY,
@@ -268,8 +270,6 @@ function describeWorkerFailure(
   }
 }
 
-// The pass's own vocabulary (classifier.md → Failure policy): a turn's copy names the narrative
-// agent, which would send the user to fix the wrong profile.
 export function describePassFailure(refusal: PassRefusal): { content: string; detail?: string } {
   if (refusal.held) return { content: t('reader:systemEntry.failure.memoryHeld') }
   return describeWorkerFailure(refusal.error, PASS_VOCABULARY)
@@ -343,7 +343,10 @@ export function toCloseFailureMeta(
   return { ...failureMetaOf(error, detail, submission), close: 'failed' }
 }
 
-/** What a Retry that left nothing owed settles on, as `passResolvedEntry`: the text held. */
+/**
+ * What a Retry that left nothing owed settles on when the composer can't take the entry's text
+ * back, as `passResolvedEntry`: a notice holding the text, Dismiss alone. Otherwise the entry clears.
+ */
 export function closeResolvedEntry(submission: NonNullable<SystemFailureMeta['submission']>): {
   content: string
   failure: SystemFailureMeta
