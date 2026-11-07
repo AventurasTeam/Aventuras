@@ -42,7 +42,7 @@ export function MemoryRunBannerView({ label, onCancel }: MemoryRunBannerViewProp
   )
 }
 
-/** The open branch's pass, as a banner; nothing while none runs. */
+/** The open branch's pass or close, as a banner; nothing while neither runs. */
 export function MemoryRunBanner() {
   const banner = useMemoryRunBanner()
   if (banner == null) return null
