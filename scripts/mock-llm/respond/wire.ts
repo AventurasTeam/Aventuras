@@ -100,18 +100,12 @@ export function contentFrame(content: string): string {
   return sse({ ...CHUNK_BASE, choices: [{ index: 0, delta: { content }, finish_reason: null }] })
 }
 
-export type FinishReason = 'stop' | 'length' | 'tool_calls' | 'content_filter'
+export const FINISH_REASONS = ['stop', 'length', 'tool_calls', 'content_filter'] as const
 
-// Each FinishReason once, so one added above fails typecheck here until it is listed.
-export const FINISH_REASONS = {
-  stop: 'stop',
-  length: 'length',
-  tool_calls: 'tool_calls',
-  content_filter: 'content_filter',
-} as const satisfies { [K in FinishReason]: K }
+export type FinishReason = (typeof FINISH_REASONS)[number]
 
 export function isFinishReason(value: unknown): value is FinishReason {
-  return typeof value === 'string' && Object.hasOwn(FINISH_REASONS, value)
+  return (FINISH_REASONS as readonly unknown[]).includes(value)
 }
 
 /** The terminal frame, the usage frame when given, then [DONE]. */
