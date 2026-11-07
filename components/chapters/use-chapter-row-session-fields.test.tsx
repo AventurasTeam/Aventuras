@@ -45,8 +45,10 @@ function TitleField({ control }: { control: Control<ChapterDraft> }) {
 const noop = () => {}
 const onSave = async () => ({ status: 'ok' as const, id: KEEP.id })
 
+type TimelineProps = { expandedId: string | null; gated: boolean }
+
 /** The route's shape: one session, and each card mounting its own fields as it expands. */
-function Timeline({ expandedId }: { expandedId: string | null }) {
+function Timeline({ expandedId, gated }: TimelineProps) {
   const values = (expandedId == null ? null : ROWS.get(expandedId)) ?? NONE_VALUES
   const session = useChapterRowSession({
     rowId: expandedId,
@@ -58,7 +60,7 @@ function Timeline({ expandedId }: { expandedId: string | null }) {
   return (
     <>
       {[KEEP.id, RAIN.id].map((id) =>
-        id === expandedId && session.formRowId === id ? (
+        id === expandedId && (!gated || session.formRowId === id) ? (
           <TitleField key={id} control={session.form.control} />
         ) : null,
       )}
@@ -66,16 +68,28 @@ function Timeline({ expandedId }: { expandedId: string | null }) {
   )
 }
 
+const titleShown = () => screen.getByRole('status', { name: 'Title' }).textContent
+
 afterEach(cleanup)
 
 describe('useChapterRowSession formRowId, on react-hook-form native path', () => {
+  // The canary: were react-hook-form on its web path, these fields would read fresh and the test
+  // below would pass without the gate.
+  it('shows the previous row in a field mounted with the switch, without the gate', () => {
+    const view = render(<Timeline expandedId={null} gated={false} />)
+    act(() => view.rerender(<Timeline expandedId={KEEP.id} gated={false} />))
+    expect(titleShown()).toBe(NONE_VALUES.title)
+    act(() => view.rerender(<Timeline expandedId={RAIN.id} gated={false} />))
+    expect(titleShown()).toBe(KEEP.title)
+  })
+
   it("shows each opened card's own row, on the first open and on a switch", () => {
-    const view = render(<Timeline expandedId={null} />)
-    act(() => view.rerender(<Timeline expandedId={KEEP.id} />))
-    expect(screen.getByRole('status', { name: 'Title' }).textContent).toBe(KEEP.title)
-    act(() => view.rerender(<Timeline expandedId={RAIN.id} />))
-    expect(screen.getByRole('status', { name: 'Title' }).textContent).toBe(RAIN.title)
-    act(() => view.rerender(<Timeline expandedId={KEEP.id} />))
-    expect(screen.getByRole('status', { name: 'Title' }).textContent).toBe(KEEP.title)
+    const view = render(<Timeline expandedId={null} gated />)
+    act(() => view.rerender(<Timeline expandedId={KEEP.id} gated />))
+    expect(titleShown()).toBe(KEEP.title)
+    act(() => view.rerender(<Timeline expandedId={RAIN.id} gated />))
+    expect(titleShown()).toBe(RAIN.title)
+    act(() => view.rerender(<Timeline expandedId={KEEP.id} gated />))
+    expect(titleShown()).toBe(KEEP.title)
   })
 })

@@ -319,6 +319,43 @@ export const HeadToggles: Story = {
   },
 }
 
+/** Native's one-pass lag on a switch: the session's form still holds another chapter. */
+function LaggingFormHarness() {
+  const values = useMemo(() => chapterDraftFrom(TAVERN), [])
+  const session = useChapterRowSession({
+    rowId: TAVERN.id,
+    values,
+    onSave: async () => ({ status: 'ok', id: TAVERN.id }),
+    onSaved: NOOP,
+    onSession: NOOP,
+  })
+  return (
+    <ChapterCard
+      data={LATEST}
+      expanded
+      onToggle={NOOP}
+      session={session}
+      blocked={false}
+      hotkeysEnabled
+      onJump={NOOP}
+    />
+  )
+}
+
+/** An expanded card mounts no field while the form holds another row: none shows that row. */
+export const FieldsWaitForTheirRow: Story = {
+  render: () => <LaggingFormHarness />,
+  play: async () => {
+    const card = await findCard()
+    expect(within(card).getByRole('button', { name: HEADING })).toHaveAttribute(
+      'aria-expanded',
+      'true',
+    )
+    expect(within(card).queryAllByDisplayValue(TAVERN.title)).toEqual([])
+    expect(within(card).queryAllByRole('textbox')).toEqual([])
+  },
+}
+
 /** The in-card bar's Save writes the draft; the refreshed row closes the bar. */
 export const SaveClosesTheBar: Story = {
   play: async ({ args }) => {

@@ -16,7 +16,6 @@ import { Icon } from '@/components/ui/icon'
 import { Input } from '@/components/ui/input'
 import { Text } from '@/components/ui/text'
 import { Textarea } from '@/components/ui/textarea'
-import type { RowSaveSession } from '@/hooks/use-row-save-session'
 import { useTier } from '@/hooks/use-tier'
 import type { ChapterDraft } from '@/lib/chapters'
 import { t } from '@/lib/i18n'
@@ -32,14 +31,15 @@ import {
   fullTokenLabel,
 } from './chapter-copy'
 import type { ChapterCardData } from './chapter-timeline-data'
+import type { ChapterRowSession } from './use-chapter-row-session'
 
 export type ChapterCardProps = {
   data: ChapterCardData
   expanded: boolean
   /** The head's press, on both states; the route guards it. */
   onToggle: () => void
-  /** The route's session; read only while expanded. */
-  session: RowSaveSession<ChapterDraft> | null
+  /** The route's session; the expanded body waits until its form holds this card's row. */
+  session: ChapterRowSession | null
   /** `isUserEditBlocked`: fields and Save disable with `blockedReason`. */
   blocked: boolean
   blockedReason?: string
@@ -90,38 +90,40 @@ export function ChapterCard({
 }: ChapterCardProps): ReactElement {
   const isPhone = useTier() === 'phone'
   const padding = isPhone ? 'px-3' : 'px-5'
+  // Fields mounted before the form holds this row show the previous row on native.
+  const editing = expanded && session?.formRowId === data.row.id ? session : null
   return (
     <View
       testID={`chapter-card-${data.row.id}`}
       className="overflow-hidden rounded-md border border-border bg-bg-base"
     >
       <CardHead data={data} expanded={expanded} padding={padding} onToggle={onToggle} />
-      {expanded && session != null ? (
+      {editing != null ? (
         <>
           <View className={cn('gap-4 border-t border-border pb-4 pt-3', padding)}>
             <ReadOnlyFacts data={data} />
             <View className="gap-3">
               <TextField
-                control={session.form.control}
+                control={editing.form.control}
                 name="title"
                 blocked={blocked}
                 blockedReason={blockedReason}
               />
               <TextField
-                control={session.form.control}
+                control={editing.form.control}
                 name="theme"
                 blocked={blocked}
                 blockedReason={blockedReason}
               />
               <TextField
-                control={session.form.control}
+                control={editing.form.control}
                 name="summary"
                 multiline
                 blocked={blocked}
                 blockedReason={blockedReason}
               />
               <KeywordsField
-                control={session.form.control}
+                control={editing.form.control}
                 blocked={blocked}
                 blockedReason={blockedReason}
               />
@@ -131,7 +133,7 @@ export function ChapterCard({
           {/* touch.md → Save bar on phone: there the route holds it at the surface's bottom edge. */}
           {isPhone ? null : (
             <RowSaveBar
-              session={session}
+              session={editing}
               enabled={hotkeysEnabled}
               blocked={blocked}
               blockedReason={blockedReason}

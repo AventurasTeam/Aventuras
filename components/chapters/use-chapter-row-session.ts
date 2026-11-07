@@ -86,9 +86,8 @@ export function useChapterRowSession({
     onSession({ dirty, requestLeave })
     return () => onSession(null)
   }, [onSession, dirty, requestLeave])
-  // On native, react-hook-form subscribes a field in a passive effect: one mounted with the switch
-  // reads the previous row and misses the session's layout-effect reset. Declared after the session,
-  // so this runs after that reset.
+  // react-hook-form subscribes a native field passively, so one mounted with the switch misses the
+  // session's reset. A layout effect: its re-render follows that reset and lands before paint.
   const [formRowId, setFormRowId] = useState(rowId)
   useLayoutEffect(() => setFormRowId(rowId), [rowId])
   return { ...session, formRowId }
