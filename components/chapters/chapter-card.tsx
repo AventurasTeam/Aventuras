@@ -1,5 +1,5 @@
 import { ChevronDown, ChevronRight } from 'lucide-react-native'
-import type { ReactElement } from 'react'
+import { useId, type ReactElement } from 'react'
 import { Controller, type Control } from 'react-hook-form'
 import { Platform, Pressable, View } from 'react-native'
 
@@ -11,6 +11,7 @@ import {
 } from '@/components/compounds/overflow-menu-entry'
 import { RowSaveBar } from '@/components/compounds/row-save-session-chrome'
 import { TagInput } from '@/components/compounds/tag-input'
+import { describedBy } from '@/components/ui/accessible-description'
 import { Button } from '@/components/ui/button'
 import { Icon } from '@/components/ui/icon'
 import { Input } from '@/components/ui/input'
@@ -153,11 +154,14 @@ function CardHead({
   const meta = [data.timeLabel, compactTokenLabel(data.row.tokenCount), data.row.theme]
     .filter((part): part is string => part != null && part.trim() !== '')
     .join(' · ')
+  const metaId = useId()
   return (
     <Pressable
       accessibilityRole="button"
       aria-expanded={expanded}
       aria-label={heading}
+      // The label replaces the head's text, so the meta line rides as its description.
+      {...describedBy([metaId], meta)}
       onPress={onToggle}
       className={cn(
         'flex-row items-start gap-3 py-3 active:bg-tint-press',
@@ -171,7 +175,7 @@ function CardHead({
         <Text size="sm" numberOfLines={1} className="font-semibold">
           {heading}
         </Text>
-        <Text size="xs" variant="muted">
+        <Text nativeID={metaId} size="xs" variant="muted">
           {meta}
         </Text>
       </View>

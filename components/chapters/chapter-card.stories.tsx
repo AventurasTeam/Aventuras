@@ -92,6 +92,7 @@ const EARLIER: ChapterCardData = {
   entryRange: null,
 }
 const HEADING = 'Chapter 2 — The Trail North'
+const EARLIER_HEADING = 'Chapter 1 — The Tavern Encounter'
 
 type HarnessProps = {
   data: ChapterCardData
@@ -253,7 +254,10 @@ export const Earlier: Story = {
   },
 }
 
-/** The meta line joins only what a chapter has: no time label or theme drops its segment. */
+/**
+ * The meta line joins only what a chapter has: no time label or theme drops its segment. It
+ * describes the head, whose name stays the heading.
+ */
 export const Collapsed: Story = {
   render: () => (
     <View className="gap-3">
@@ -273,6 +277,13 @@ export const Collapsed: Story = {
       expect(within(card).queryByRole('textbox')).toBeNull()
       expect(within(card).queryByRole('button', { name: COPY.jump })).toBeNull()
     }
+
+    const latestHead = within(latest).getByRole('button', { name: HEADING })
+    expect(latestHead).toHaveAccessibleName(HEADING)
+    expect(latestHead).toHaveAccessibleDescription('Day 2 → Day 3 · 12.4k tok · travel, conflict')
+    const earlierHead = within(earlier).getByRole('button', { name: EARLIER_HEADING })
+    expect(earlierHead).toHaveAccessibleName(EARLIER_HEADING)
+    expect(earlierHead).toHaveAccessibleDescription('8.4k tok')
   },
 }
 
