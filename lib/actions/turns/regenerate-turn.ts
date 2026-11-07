@@ -174,7 +174,7 @@ export async function regenerateTurn(
             | CountsChangedRejection
             | typeof HELD_REJECTION
           try {
-            swept = await bracketProseReversal(ids.branchId, async () =>
+            swept = await bracketProseReversal(ids.branchId, ctx, async () =>
               // This interrupt can leave the branch held: a pass whose reversal didn't commit.
               (await isClassifierHeld(ids.branchId, ctx))
                 ? HELD_REJECTION
@@ -210,7 +210,7 @@ export async function regenerateTurn(
           let converged = true
           if (result.outcome !== 'completed') {
             try {
-              const followUp = await bracketProseReversal(ids.branchId, () =>
+              const followUp = await bracketProseReversal(ids.branchId, ctx, () =>
                 sweepFrom(ids.branchId, origin.id, ctx),
               )
               if (followUp.status === 'rejected') {

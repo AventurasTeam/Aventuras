@@ -24,7 +24,7 @@ import {
   wizardSessions,
   type SqlOp,
 } from '@/lib/db'
-import { embedderSwapStore, rehydrateStories } from '@/lib/stores'
+import { embedderSwapStore, generationStore, rehydrateStories } from '@/lib/stores'
 
 import type { DbCtx } from '../types'
 
@@ -80,5 +80,7 @@ export async function deleteStory(
   await ctx.runInTransaction(ops)
   // A future importer that keeps source ids would otherwise inherit this story's stale Later.
   embedderSwapStore.clearDeferredUpgradeFor(storyId)
+  // In memory and keyed by branch: a deleted branch's records would otherwise outlive it.
+  for (const branchId of branchIds) generationStore.dropBranchRecords(branchId)
   await rehydrateStories(ctx.db)
 }

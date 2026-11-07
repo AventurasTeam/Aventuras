@@ -16,6 +16,35 @@ const unusedImports = require('eslint-plugin-unused-imports')
 const tseslint = require('@typescript-eslint/eslint-plugin')
 const boundaries = require('eslint-plugin-boundaries')
 
+// generationStore's mutators live on an exported object, which the boundaries rule can't see (it
+// reads imports, not property access). See docs/code-conventions.md → Syncing a store after a write.
+const generationStoreMutators = (properties, message) =>
+  properties.map((property) => ({ object: 'generationStore', property, message }))
+
+// A stray caller can leave the hard gate or the reversal barrier stuck.
+const RUN_MUTATORS = generationStoreMutators(
+  [
+    'startRun',
+    'finishRun',
+    'abortRun',
+    'setReversalInProgress',
+    'setCurrentPhase',
+    'recordPhaseResult',
+  ],
+  'Only the orchestrator and the prose-reversal bracket drive a run. See docs/code-conventions.md → Syncing a store after a write.',
+)
+
+// A stray write makes the next Send start a close nobody owes, or skip one that is owed.
+const CLOSE_RECORD_MUTATORS = generationStoreMutators(
+  ['setPendingClose', 'clearPendingClose', 'clearDeferredClose', 'dropBranchRecords'],
+  "Only a close's record writers write pendingClose or deferred, and prose reversal may clearPendingClose. See docs/generation-pipeline.md → Multi-run txState.",
+)
+
+const CLOSE_PROGRESS_MUTATORS = generationStoreMutators(
+  ['setCloseProgress'],
+  "Only the orchestrator sets a close's progress. See docs/implementation/milestones/05-chapters-chapter-close/milestone.md#c6--what-the-banners-n-of-m-counts.",
+)
+
 module.exports = defineConfig([
   expoConfig,
   ...storybook.configs['flat/recommended'],
@@ -76,24 +105,12 @@ module.exports = defineConfig([
         },
       ],
 
-      // A mutator on an exported store object, which the boundaries rule can't see: only the
-      // orchestrator and the prose-reversal bracket drive a run, since a stray caller can leave
-      // the hard gate or the reversal barrier stuck. See docs/code-conventions.md.
+      // generationStore's mutators, by owner: see the constants at the top of this file.
       'no-restricted-properties': [
         'error',
-        ...[
-          'startRun',
-          'finishRun',
-          'abortRun',
-          'setReversalInProgress',
-          'setCurrentPhase',
-          'recordPhaseResult',
-        ].map((property) => ({
-          object: 'generationStore',
-          property,
-          message:
-            'Only the orchestrator and the prose-reversal bracket drive a run. See docs/code-conventions.md → Syncing a store after a write.',
-        })),
+        ...RUN_MUTATORS,
+        ...CLOSE_RECORD_MUTATORS,
+        ...CLOSE_PROGRESS_MUTATORS,
       ],
 
       // lib/* modules expose a public API via index.ts; any importer
@@ -243,15 +260,43 @@ module.exports = defineConfig([
     },
   },
 
-  // The run's owners, plus tests and story fixtures that stage a run in progress.
+  // A close's record writers. The one other record write is prose reversal's clearPendingClose.
+  // Owner blocks sit before the off-block, so their files' tests stay exempt.
   {
     files: [
-      'lib/pipeline/runtime/**',
-      'lib/actions/story-entries/prose-reversal.ts',
-      '**/*.test.{ts,tsx}',
-      '**/__tests__/**',
-      '**/*.stories.tsx',
+      'lib/actions/chapters/**',
+      'lib/actions/stories/delete-story.ts',
+      'lib/pipeline/definitions/chapter-close-boundary.ts',
+      'lib/pipeline/definitions/memory-chain.ts',
     ],
+    rules: {
+      'no-restricted-properties': ['error', ...RUN_MUTATORS, ...CLOSE_PROGRESS_MUTATORS],
+    },
+  },
+
+  // The orchestrator drives a run and sets a close's progress, but writes no close record.
+  {
+    files: ['lib/pipeline/runtime/**'],
+    rules: {
+      'no-restricted-properties': ['error', ...CLOSE_RECORD_MUTATORS],
+    },
+  },
+
+  // Prose reversal's bracket drives its run and drops a pick whose end entry the reversal removed.
+  {
+    files: ['lib/actions/story-entries/prose-reversal.ts'],
+    rules: {
+      'no-restricted-properties': [
+        'error',
+        ...CLOSE_RECORD_MUTATORS.filter(({ property }) => property !== 'clearPendingClose'),
+        ...CLOSE_PROGRESS_MUTATORS,
+      ],
+    },
+  },
+
+  // Tests and story fixtures stage a run in progress.
+  {
+    files: ['**/*.test.{ts,tsx}', '**/__tests__/**', '**/*.stories.tsx'],
     rules: {
       'no-restricted-properties': 'off',
     },

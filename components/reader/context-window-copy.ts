@@ -59,11 +59,29 @@ export function passContextWindowContent(failure: ContextWindowFailure): string 
     : t(`reader:systemEntry.failure.memoryContextWindow.${copy.key}`, copy.values)
 }
 
-/** The hedged hint that replaces **LLM call failed** or **Memory update failed**. */
-export function capabilityHintContent(hint: CapabilityHint, surface: 'turn' | 'pass'): string {
-  return surface === 'turn'
-    ? t(`reader:systemEntry.failure.capabilityHint.${hint.capability}`, { matched: hint.matched })
-    : t(`reader:systemEntry.failure.memoryCapabilityHint.${hint.capability}`, {
-        matched: hint.matched,
-      })
+/** A **Chapter close failed** entry whose close prompt was over the window. */
+export function closeContextWindowContent(failure: ContextWindowFailure): string {
+  const copy = windowCopyOf(failure)
+  return copy === null
+    ? t('reader:systemEntry.failure.close')
+    : t(`reader:systemEntry.failure.closeContextWindow.${copy.key}`, copy.values)
+}
+
+/**
+ * The hedged hint, in place of its surface's own copy: a turn's **LLM call failed**, a pass's
+ * **Memory update failed**, a close's **Chapter close failed**.
+ */
+export function capabilityHintContent(
+  hint: CapabilityHint,
+  surface: 'turn' | 'pass' | 'close',
+): string {
+  const values = { matched: hint.matched }
+  switch (surface) {
+    case 'turn':
+      return t(`reader:systemEntry.failure.capabilityHint.${hint.capability}`, values)
+    case 'pass':
+      return t(`reader:systemEntry.failure.memoryCapabilityHint.${hint.capability}`, values)
+    case 'close':
+      return t(`reader:systemEntry.failure.closeCapabilityHint.${hint.capability}`, values)
+  }
 }

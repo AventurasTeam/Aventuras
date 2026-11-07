@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest'
 import type { ReplyCutOffFailure } from '@/lib/ai'
 
 import {
+  closeCutOffContent,
   cutOffNoticeText,
   offersProfileFix,
   passCutOffContent,
@@ -119,6 +120,44 @@ describe('passCutOffContent', () => {
     expect(passCutOffContent({ ...SHORT_OF_MAX_OUTPUT, maxOutput: 1024 })).toBe(
       "Memory update failed, so your turn didn't start. The server stopped the update's reply at its own limit, short of the classifier profile's 1,024-token max output.",
     )
+  })
+})
+
+describe('closeCutOffContent', () => {
+  const CLOSE_MAX_OUTPUT =
+    "Chapter close failed, so your turn didn't start. The close's reply was cut off at the lore management profile's 2,048-token max output. Raise it, then Retry."
+  const atCloseLimit = { ...AT_MAX_OUTPUT, outputTokens: 2050, maxOutput: 2048 }
+
+  it("names the lore management profile's max output", () => {
+    expect(closeCutOffContent(atCloseLimit)).toBe(CLOSE_MAX_OUTPUT)
+  })
+
+  it('has no reasoning clause', () => {
+    expect(closeCutOffContent({ ...atCloseLimit, reasoningTokens: 900 })).toBe(CLOSE_MAX_OUTPUT)
+  })
+
+  it("names the model's window when the window was the limit", () => {
+    expect(closeCutOffContent(AT_WINDOW)).toBe(
+      "Chapter close failed, so your turn didn't start. The close's reply was cut off where the prompt and reply filled the model's 65,536-token window.",
+    )
+  })
+
+  it("points at the server's own limit otherwise", () => {
+    const unknown =
+      "Chapter close failed, so your turn didn't start. The server stopped the close's reply at its own limit. Setting a max output on the lore management profile overrides it."
+    expect(closeCutOffContent(AT_SERVER_DEFAULT)).toBe(unknown)
+    expect(closeCutOffContent({ ...AT_WINDOW, window: null })).toBe(unknown)
+  })
+
+  it('names the max output the server stopped short of', () => {
+    expect(closeCutOffContent({ ...SHORT_OF_MAX_OUTPUT, maxOutput: 2048 })).toBe(
+      "Chapter close failed, so your turn didn't start. The server stopped the close's reply at its own limit, short of the lore management profile's 2,048-token max output.",
+    )
+  })
+
+  // The pass's words name the classifier profile, which would send the user to the wrong one.
+  it('never borrows the pass copy', () => {
+    expect(closeCutOffContent(atCloseLimit)).not.toBe(passCutOffContent(atCloseLimit))
   })
 })
 

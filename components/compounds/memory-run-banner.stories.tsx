@@ -4,6 +4,7 @@ import { expect, fn, screen, userEvent, waitFor, within } from 'storybook/test'
 import { t } from '@/lib/i18n'
 
 import { MemoryRunBannerView } from './memory-run-banner'
+import { closeBannerLabel } from './use-memory-run-banner'
 
 const meta: Meta<typeof MemoryRunBannerView> = {
   title: 'Compounds/MemoryRunBanner',
@@ -58,5 +59,62 @@ export const LiveRegionCoversOnlyTheLabel: Story = {
     const banner = screen.getByTestId('memory-run-banner')
     expect(region).not.toBe(banner)
     expect(region.contains(within(banner).getByRole('button', { name: t('cancel') }))).toBe(false)
+  },
+}
+
+// A close Send owes: the label says before your turn, whatever step the close is on.
+export const ClosingBeforeTurn: Story = {
+  args: {
+    label: closeBannerLabel({ beforeTurn: true, currentPhase: 'metadata' }),
+    onCancel: fn(),
+  },
+  play: async ({ args }) => {
+    expect(screen.getByText(t('chrome.memoryBanner.closingBeforeTurn'))).toBeInTheDocument()
+    await userEvent.click(screen.getByRole('button', { name: t('cancel') }))
+    await waitFor(() => expect(args.onCancel).toHaveBeenCalledTimes(1))
+  },
+}
+
+export const ClosingTask: Story = {
+  args: {
+    label: closeBannerLabel({
+      beforeTurn: false,
+      currentPhase: 'agent',
+      closeProgress: { task: 'identity', part: 0, index: 3, total: 7 },
+    }),
+    onCancel: fn(),
+  },
+  play: async () => {
+    expect(
+      screen.getByText(
+        t('chrome.memoryBanner.closingTask', {
+          index: 3,
+          total: 7,
+          task: t('chrome.memoryBanner.closeTask.identity'),
+        }),
+      ),
+    ).toBeInTheDocument()
+  },
+}
+
+// A three-part chapter's count label wraps at 320 px instead of pushing Cancel off the bar.
+export const PhoneClosingTask: Story = {
+  args: {
+    label: closeBannerLabel({
+      beforeTurn: false,
+      currentPhase: 'agent',
+      closeProgress: { task: 'lifecycle', part: 2, index: 16, total: 17 },
+    }),
+    onCancel: fn(),
+  },
+  globals: { viewport: { value: 'mobile1' } },
+  play: async ({ args }) => {
+    const cancel = screen.getByRole('button', { name: t('cancel') })
+    await waitFor(() =>
+      expect(cancel.getBoundingClientRect().right).toBeLessThanOrEqual(
+        document.documentElement.clientWidth,
+      ),
+    )
+    expect(screen.getByText(args.label)).toBeVisible()
   },
 }

@@ -2,28 +2,45 @@ import { eq } from 'drizzle-orm'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { generateStructured } from '@/lib/ai'
-import { branches, chapters, pipelineRuns, storyEntries } from '@/lib/db'
+import { PERIODIC_CLASSIFIER_KIND } from '@/lib/classifier'
+import { chapters, pipelineRuns, storyEntries } from '@/lib/db'
 import {
   __resetBus,
   __resetRegistry,
   CHAPTER_CLOSE_KIND,
   CLASSIFIER_HELD,
   ensurePerTurnPipelineRegistered,
+  isClassifierHeld,
   PER_TURN_KIND,
   pipelineEventBus,
+  startPipeline,
+  type PipelineEvent,
   type RejectedStart,
   type TxResult,
 } from '@/lib/pipeline'
+import { resetSingletons, within } from '@/lib/pipeline/__tests__/harness'
 import {
   metadataReplyResult,
   openCloseFixture,
+  setClassifierStatus,
   type CloseFixture,
 } from '@/lib/pipeline/definitions/__tests__/close-fixture'
-import { currentStoryStore, generationStore, resetAllStores, type PendingClose } from '@/lib/stores'
+import {
+  currentStoryStore,
+  generationStore,
+  interruptMemoryRuns,
+  type PendingClose,
+} from '@/lib/stores'
 
+import { startCloseChain } from './close-chain'
 import { MANUAL_CLOSE_REFUSAL, startManualClose } from './start-manual-close'
 import { writeSystemEntry } from '../story-entries/system-entry'
-import { registerStoreOnlyRun } from '../turns/__tests__/stand-in-pass'
+import {
+  failReversalsOf,
+  registerStandInPass,
+  registerStoreOnlyRun,
+} from '../turns/__tests__/stand-in-pass'
+import { submitTurn } from '../turns/submit-turn'
 
 vi.mock('@/lib/ai', async (importOriginal) => ({
   ...(await importOriginal<Record<string, unknown>>()),
@@ -41,7 +58,7 @@ beforeEach(async () => {
 })
 
 afterEach(() => {
-  resetAllStores()
+  resetSingletons()
 })
 
 const lastReply = (): string => f.replyIds.at(-1)!
@@ -66,16 +83,6 @@ async function expectRefused(
   expect(generationStore.getTxState().pendingClose.get(f.branchId)).toEqual(record)
 }
 
-async function setClassifierStatus(status: {
-  state: 'idle' | 'running'
-  processedThrough: number
-}): Promise<void> {
-  await f.ctx.db
-    .update(branches)
-    .set({ classifierStatus: { lastSuccessAt: null, lastError: null, ...status } })
-    .where(eq(branches.id, f.branchId))
-}
-
 // A turn on the close's own story; ended by resetAllStores.
 function holdStoryWithTurn(): void {
   generationStore.startRun({
@@ -93,6 +100,22 @@ function holdStoryWithTurn(): void {
     terminal: Promise.resolve(),
     resolveTerminal: () => {},
   })
+}
+
+type RunComplete = Extract<PipelineEvent, { type: 'run_complete' }>
+
+function recordCompletes(): RunComplete[] {
+  const seen: RunComplete[] = []
+  pipelineEventBus.subscribe('run_complete', (event) => seen.push(event))
+  return seen
+}
+
+const pickOn = (): PendingClose | undefined =>
+  generationStore.getTxState().pendingClose.get(f.branchId)
+
+// The open region's last entry is left past the watermark, so the start owes a pass first.
+async function leaveTheTailUnprocessed(): Promise<void> {
+  await setClassifierStatus(f, { state: 'idle', processedThrough: tailPosition() - 1 })
 }
 
 describe('startManualClose refusals', () => {
@@ -134,7 +157,7 @@ describe('startManualClose refusals', () => {
   })
 
   it('refuses a branch held by a pass left running', async () => {
-    await setClassifierStatus({ state: 'running', processedThrough: tailPosition() })
+    await setClassifierStatus(f, { state: 'running', processedThrough: tailPosition() })
 
     await expectRefused(await startManualClose(f.branchId, lastReply(), f.ctx), CLASSIFIER_HELD)
   })
@@ -179,12 +202,29 @@ describe('startManualClose refusals', () => {
     )
   })
 
-  it('refuses while an entry past the watermark is unprocessed', async () => {
-    await setClassifierStatus({ state: 'idle', processedThrough: tailPosition() - 1 })
+  it('refuses a held branch before reading the end', async () => {
+    await setClassifierStatus(f, { state: 'running', processedThrough: tailPosition() })
+    const opening = f.entries.find((e) => e.kind === 'opening')!
+
+    await expectRefused(await startManualClose(f.branchId, opening.id, f.ctx), CLASSIFIER_HELD)
+  })
+
+  // The turn's user_action commits before its run, so it reads as unprocessed: busy, not a pass.
+  it('refuses a start while a turn is in flight, its user_action unprocessed', async () => {
+    ensurePerTurnPipelineRegistered()
+    await f.ctx.db.insert(storyEntries).values({
+      id: 'entry_close_in_flight',
+      branchId: f.branchId,
+      position: tailPosition() + 1,
+      kind: 'user_action',
+      content: 'I ask the guard his name.',
+      createdAt: 1,
+    })
+    holdStoryWithTurn()
 
     await expectRefused(
       await startManualClose(f.branchId, lastReply(), f.ctx),
-      MANUAL_CLOSE_REFUSAL.unprocessed,
+      MANUAL_CLOSE_REFUSAL.busy,
     )
   })
 
@@ -211,15 +251,34 @@ describe('startManualClose refusals', () => {
     )
   })
 
+  // The held check's read is stale too: the turn ends as it reads, so isStoryBusy passes after it.
+  it('refuses as busy when a run settles during the held check’s read', async () => {
+    ensurePerTurnPipelineRegistered()
+    holdStoryWithTurn()
+    let selects = 0
+    const db = new Proxy(f.ctx.db, {
+      get(target, prop, receiver) {
+        if (prop === 'select' && selects++ === 0) generationStore.finishRun('run_same_story')
+        return Reflect.get(target, prop, receiver) as unknown
+      },
+    })
+
+    await expectRefused(
+      await startManualClose(f.branchId, lastReply(), { ...f.ctx, db }),
+      MANUAL_CLOSE_REFUSAL.busy,
+    )
+    expect(generationStore.getTxState().runs.has('run_same_story')).toBe(false)
+  })
+
   // isStoryBusy passes: the run is another story's. The orchestrator refuses, as per-turn blocks a
   // close anywhere, and the record stays what stood before.
   it('keeps the record a start the orchestrator rejects', async () => {
     ensurePerTurnPipelineRegistered()
     registerStoreOnlyRun(PER_TURN_KIND, 'br_elsewhere')
-    generationStore.setPendingClose(f.branchId, { endEntryId: null })
+    generationStore.setPendingClose(f.branchId, { endEntryId: f.replyIds[0]! })
 
     await expectRefused(await startManualClose(f.branchId, lastReply(), f.ctx), 'per-turn', {
-      endEntryId: null,
+      endEntryId: f.replyIds[0]!,
     })
   })
 })
@@ -277,5 +336,197 @@ describe('startManualClose starts', () => {
     )
     expect(generateStructured).toHaveBeenCalledTimes(1)
     expect(await f.ctx.db.select().from(chapters)).toHaveLength(1)
+  })
+
+  it('runs a pass first while entries are unprocessed, then closes at the pick', async () => {
+    const pass = registerStandInPass({ anchorEntryId: null })
+    await leaveTheTailUnprocessed()
+    const end = f.replyIds[2]!
+    const completes = recordCompletes()
+
+    const started = startManualClose(f.branchId, end, f.ctx)
+    const held = await within(pass.nextHeld(), 'the catch-up pass')
+    expect(pickOn()).toEqual({ endEntryId: end })
+    expect(closeRuns()).toBe(0)
+    held.finish('completed')
+    const result = await within(started, 'the close chain')
+
+    expect(completes.map((e) => e.kind)).toEqual([PERIODIC_CLASSIFIER_KIND, CHAPTER_CLOSE_KIND])
+    const close = completes[1]!
+    expect(close.actionId).not.toBe(held.actionId)
+    expect(result).toEqual({ runId: close.runId, actionId: close.actionId, outcome: 'completed' })
+    expect((await f.ctx.db.select().from(chapters)).map((r) => r.endEntryId)).toEqual([end])
+    expect(pickOn()).toBeUndefined()
+    expect(generateStructured).toHaveBeenCalledTimes(1)
+  })
+
+  it('overwrites the pick a failed close left with the next one', async () => {
+    vi.mocked(generateStructured).mockResolvedValueOnce({
+      status: 'failed',
+      error: { tier: 'provider', reason: 'network', detail: 'connect ECONNREFUSED' },
+      recoverable: [],
+    })
+    expect((await startManualClose(f.branchId, f.replyIds[1]!, f.ctx)).outcome).toBe('failed')
+    expect(pickOn()).toEqual({ endEntryId: f.replyIds[1] })
+
+    const result = await startManualClose(f.branchId, f.replyIds[3]!, f.ctx)
+
+    expect(result.outcome).toBe('completed')
+    expect((await f.ctx.db.select().from(chapters)).map((r) => r.endEntryId)).toEqual([
+      f.replyIds[3],
+    ])
+  })
+
+  it('keeps the pick for its close when a Send arrives while the start’s pass runs', async () => {
+    const pass = registerStandInPass({ anchorEntryId: null })
+    await leaveTheTailUnprocessed()
+    const end = f.replyIds[2]!
+    const started = startManualClose(f.branchId, end, f.ctx)
+    const held = await within(pass.nextHeld(), 'the catch-up pass')
+
+    const sent = await within(
+      submitTurn(
+        { storyId: f.storyId, branchId: f.branchId },
+        { content: 'I wait at the milestone.', composerMode: 'free' },
+        f.ctx,
+      ),
+      'the Send',
+    )
+
+    expect(sent).toMatchObject({ outcome: 'rejected' })
+    expect(
+      await f.ctx.db
+        .select()
+        .from(storyEntries)
+        .where(eq(storyEntries.content, 'I wait at the milestone.')),
+    ).toEqual([])
+    expect(pickOn()).toEqual({ endEntryId: end })
+    held.finish('completed')
+    expect((await within(started, 'the close chain')).outcome).toBe('completed')
+    expect((await f.ctx.db.select().from(chapters)).map((r) => r.endEntryId)).toEqual([end])
+  })
+
+  it('resolves failed with the close’s result when the pass commits and the close fails', async () => {
+    vi.mocked(generateStructured).mockResolvedValue({
+      status: 'failed',
+      error: { tier: 'provider', reason: 'network', detail: 'connect ECONNREFUSED' },
+      recoverable: [],
+    })
+    const pass = registerStandInPass({ anchorEntryId: null })
+    await leaveTheTailUnprocessed()
+    const completes = recordCompletes()
+
+    const started = startManualClose(f.branchId, f.replyIds[2]!, f.ctx)
+    const held = await within(pass.nextHeld(), 'the catch-up pass')
+    held.finish('completed')
+    const result = await within(started, 'the close chain')
+
+    expect(completes.map((e) => [e.kind, e.outcome])).toEqual([
+      [PERIODIC_CLASSIFIER_KIND, 'completed'],
+      [CHAPTER_CLOSE_KIND, 'failed'],
+    ])
+    const close = completes[1]!
+    expect(result).toEqual({
+      runId: close.runId,
+      actionId: close.actionId,
+      outcome: 'failed',
+      error: close.error,
+    })
+    expect(pickOn()).toEqual({ endEntryId: f.replyIds[2] })
+    expect(await f.ctx.db.select().from(chapters)).toEqual([])
+  })
+
+  it('stops on a failed pass: no close starts, and the pick stays for the next one', async () => {
+    const pass = registerStandInPass({ anchorEntryId: null })
+    await leaveTheTailUnprocessed()
+    const end = f.replyIds[2]!
+    const completes = recordCompletes()
+
+    const started = startManualClose(f.branchId, end, f.ctx)
+    const held = await within(pass.nextHeld(), 'the catch-up pass')
+    held.finish('failed')
+    const result = await within(started, 'the start')
+
+    expect(completes.map((e) => [e.kind, e.outcome])).toEqual([
+      [PERIODIC_CLASSIFIER_KIND, 'failed'],
+    ])
+    expect(result).toEqual({
+      runId: completes[0]!.runId,
+      actionId: held.actionId,
+      outcome: 'failed',
+      error: completes[0]!.error,
+    })
+    expect(closeRuns()).toBe(0)
+    expect(generateStructured).not.toHaveBeenCalled()
+    expect(await f.ctx.db.select().from(chapters)).toEqual([])
+    expect(pickOn()).toEqual({ endEntryId: end })
+  })
+
+  it('stops on an interrupted pass: no close starts, and the pick and the pass stay owed', async () => {
+    const pass = registerStandInPass({ anchorEntryId: null })
+    await leaveTheTailUnprocessed()
+    const end = f.replyIds[2]!
+    const completes = recordCompletes()
+
+    const started = startManualClose(f.branchId, end, f.ctx)
+    await within(pass.nextHeld(), 'the catch-up pass')
+    await interruptMemoryRuns(f.branchId)
+    const result = await within(started, 'the start')
+
+    expect(completes.map((e) => [e.kind, e.outcome])).toEqual([
+      [PERIODIC_CLASSIFIER_KIND, 'aborted'],
+    ])
+    expect(result.outcome).toBe('aborted')
+    expect(closeRuns()).toBe(0)
+    expect(generateStructured).not.toHaveBeenCalled()
+    expect(await f.ctx.db.select().from(chapters)).toEqual([])
+    expect(pickOn()).toEqual({ endEntryId: end })
+    expect(generationStore.getTxState().deferred.get(f.branchId)?.pass).toBe(true)
+  })
+})
+
+describe('startCloseChain', () => {
+  // The held read saw the pass live; it ends held (its reversal never commits) before the tail.
+  it('refuses as busy when a pass ends held while the start reads', async () => {
+    const pass = registerStandInPass({ anchorEntryId: null, statusLifecycle: true })
+    failReversalsOf(pass)
+    const running = startPipeline(PERIODIC_CLASSIFIER_KIND, {
+      storyId: f.storyId,
+      branchId: f.branchId,
+      db: f.ctx.db,
+      runInTransaction: f.ctx.runInTransaction,
+    })
+    await within(pass.nextHeld(), 'the pass')
+    let entered!: () => void
+    const reading = new Promise<void>((resolve) => {
+      entered = resolve
+    })
+    let release!: () => void
+    const released = new Promise<void>((resolve) => {
+      release = resolve
+    })
+
+    const start = startCloseChain(f.branchId, f.ctx, {
+      validate: async () => {
+        entered()
+        await released
+        return null
+      },
+    })
+    await within(reading, 'the start’s read')
+    await interruptMemoryRuns(f.branchId)
+    // Nothing else can refuse: no run is left, and the branch is held only on disk.
+    expect(generationStore.getTxState().runs.size).toBe(0)
+    expect(await isClassifierHeld(f.branchId, f.ctx)).toBe(true)
+    release()
+
+    expect(await within(start, 'the start')).toEqual({
+      outcome: 'rejected',
+      blockedBy: MANUAL_CLOSE_REFUSAL.busy,
+    })
+    expect(closeRuns()).toBe(0)
+    expect(await f.ctx.db.select().from(chapters)).toEqual([])
+    expect(generateStructured).not.toHaveBeenCalled()
+    expect(await running.origin).toMatchObject({ outcome: 'failed' })
   })
 })

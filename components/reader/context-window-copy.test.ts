@@ -4,6 +4,7 @@ import { describeContextWindow, type ContextWindowFailure } from '@/lib/ai'
 
 import {
   capabilityHintContent,
+  closeContextWindowContent,
   passContextWindowContent,
   turnContextWindowContent,
   windowSourceLabel,
@@ -45,6 +46,9 @@ const TURN_REMEDIES =
 const PASS_REMEDIES =
   'Raise the window if the model allows more, or switch the classifier to a model with a larger one.'
 const PASS_PREFIX = "Memory update failed, so your turn didn't start."
+const CLOSE_PREFIX = "Chapter close failed, so your turn didn't start."
+const CLOSE_REMEDIES =
+  'Raise the window if the model allows more, or switch the lore management agent to a model with a larger one.'
 
 const turnProviderCopy = (message: string) =>
   `The provider rejected the prompt. Its message suggests it exceeded the model's context window: “${message}”. Our estimate: about 71,300 tokens. ${TURN_REMEDIES}`
@@ -146,6 +150,34 @@ describe('passContextWindowContent', () => {
   })
 })
 
+describe('closeContextWindowContent', () => {
+  it("names the close's prompt and the model's window, with the close's remedies", () => {
+    expect(
+      closeContextWindowContent({
+        ...CHECKED,
+        estimate: 41_812,
+        window: 32_768,
+        windowSource: 'detected',
+        modelId: 'qwen2.5:14b',
+      }),
+    ).toBe(
+      `${CLOSE_PREFIX} The close's prompt is about 41,900 tokens; qwen2.5:14b's context window is 32,768 (detected). ${CLOSE_REMEDIES}`,
+    )
+  })
+
+  it("quotes the provider's message for a rejected close prompt", () => {
+    expect(closeContextWindowContent(REJECTED)).toBe(
+      `${CLOSE_PREFIX} The provider rejected the close's prompt; its message suggests it exceeded the model's context window: “${LLAMACPP_MESSAGE}”. Our estimate: about 71,300 tokens. ${CLOSE_REMEDIES}`,
+    )
+  })
+
+  it('falls back to the generic close copy for a check failure with no window to print', () => {
+    expect(closeContextWindowContent(CHECKED_WINDOWLESS)).toBe(
+      `${CLOSE_PREFIX} Retry it, or send again.`,
+    )
+  })
+})
+
 describe('capabilityHintContent', () => {
   it.each([
     [
@@ -171,6 +203,24 @@ describe('capabilityHintContent', () => {
     ],
   ] as const)("hedges a pass hint in the pass's own words for %o", (hint, expected) => {
     expect(capabilityHintContent(hint, 'pass')).toBe(expected)
+  })
+
+  it.each([
+    [
+      { capability: 'reasoning', matched: 'thinking' },
+      "Chapter close failed, so your turn didn't start. The provider rejected the close's request. Its message mentions `thinking`. That can mean this model doesn't support reasoning: check the profile's thinking setting and the model's 🧠 badge. The provider may also have rejected the request for another reason.",
+    ],
+    [
+      { capability: 'structuredOutput', matched: 'response_format' },
+      "Chapter close failed, so your turn didn't start. The provider rejected the close's request. Its message mentions `response_format`. That can mean this model doesn't support structured output: check the profile's structured-output setting and the model's badge. The provider may also have rejected the request for another reason.",
+    ],
+    // No tool badge until App Settings shows one (M7.1).
+    [
+      { capability: 'toolCalling', matched: 'tools' },
+      "Chapter close failed, so your turn didn't start. The provider rejected the close's request. Its message mentions `tools`. That can mean this model doesn't support tool calling. The provider may also have rejected the request for another reason.",
+    ],
+  ] as const)("hedges a close hint in the close's own words for %o", (hint, expected) => {
+    expect(capabilityHintContent(hint, 'close')).toBe(expected)
   })
 })
 

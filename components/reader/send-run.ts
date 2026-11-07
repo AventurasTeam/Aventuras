@@ -15,7 +15,7 @@ import {
   type TxState,
 } from '@/lib/stores'
 
-/** The run Send's Cancel and composer describe: a turn, or Send's owed pass, on `branchId`. */
+/** The run Send's Cancel and composer describe: a turn, or Send's owed work (its chain). */
 export function findSendRun(txState: TxState, branchId: string): RunState | undefined {
   for (const run of txState.runs.values()) {
     if (run.branchId === branchId && (run.kind === PER_TURN_KIND || run.beforeTurn)) return run
@@ -23,17 +23,17 @@ export function findSendRun(txState: TxState, branchId: string): RunState | unde
   return undefined
 }
 
-/** The pill's run: Send's run first, then the branch's pass or close, which owns it over a refresh. */
+/** The pill's run: Send's run, else the branch's pass or close, which owns it over a refresh. */
 export function pillRunOf(txState: TxState, branchId: string): RunState | undefined {
   return findSendRun(txState, branchId) ?? selectMemoryRun(txState, { branchId })
 }
 
-/** Only a turn streams a card; Send's owed pass is a structured call. */
+/** Only a turn streams a card; Send's owed work is structured calls. */
 export function sendRunStreams(txState: TxState, branchId: string): boolean {
   return findSendRun(txState, branchId)?.kind === PER_TURN_KIND
 }
 
-/** Cancels the Send run: a pass through the interrupt, anything else through awaitRunTerminal. */
+/** Cancels the Send run: a pass or close via the interrupt, a turn via awaitRunTerminal. */
 export function cancelSendRun(run: RunState): Promise<void> {
   return run.interruptible
     ? interruptMemoryRuns(run.branchId)
@@ -46,8 +46,8 @@ function turnPendingOn(txState: TxState, branchId: string): boolean {
 }
 
 /**
- * The host's Send holds a pending turn with no run registered: before its owed pass registers,
- * and between that pass and the turn.
+ * Send holds a pending turn with no run registered: before its owed work registers, and between
+ * that work's chain and the turn.
  */
 export function sendGapOpen(txState: TxState, branchId: string, sendPending: boolean): boolean {
   return sendPending && turnPendingOn(txState, branchId) && findSendRun(txState, branchId) == null
@@ -92,21 +92,31 @@ export function cancelPillRun(branchId: string): Promise<void> {
 }
 
 /**
- * A Send cancelled during its owed pass wrote nothing, so a failure entry cleared before it
- * can go back where it was (reader-composer.md → Custody of the turn's text).
+ * A Send cancelled during owed work that wrote nothing: its cleared failure entry can go back
+ * (reader-composer.md → Custody of the turn's text). Once any of it committed, the entry stays
+ * dropped.
  */
 export function abortedBeforeTurn(result: SubmitTurnResult): boolean {
-  return result.outcome === 'aborted' && result.beforeTurn === true
+  return result.outcome === 'aborted' && result.beforeTurn === true && result.committed !== true
 }
 
 /** A pass that refused a Send (classifier.md → Failure policy): the hold, or why it failed. */
 export type PassRefusal = { held: true } | { held: false; error: PipelineError | undefined }
 
-/** Send's result only: a `failed` without `beforeTurn` is the turn's own, not a pass refusal. */
+/**
+ * Send's result only: a `failed` without `beforeTurn` is the turn's; a close's is closeRefusalOf's.
+ */
 export function passRefusalOf(result: SubmitTurnResult): PassRefusal | null {
-  if (result.outcome === 'failed' && result.beforeTurn === true)
+  if (result.outcome === 'failed' && result.beforeTurn === true && result.work === 'pass')
     return { held: false, error: result.error }
   if (result.outcome === 'rejected' && result.blockedBy === CLASSIFIER_HELD) return { held: true }
+  return null
+}
+
+/** A close that failed Send's owed work (chapter-close.md → Failure modes); a hold is a pass's. */
+export function closeRefusalOf(result: SubmitTurnResult): { error: PipelineError } | null {
+  if (result.outcome === 'failed' && result.beforeTurn === true && result.work === 'close')
+    return { error: result.error }
   return null
 }
 

@@ -26,6 +26,16 @@ export function expectRan(result: TxResult | RejectedStart): TxResult {
   return result
 }
 
+// Fails in 2 s instead of at the test timeout: a run that never reaches its hold leaves `work`
+// pending, and with it the caller (and any branch queue it holds).
+export function within<T>(work: Promise<T>, what: string): Promise<T> {
+  let timer: ReturnType<typeof setTimeout> | undefined
+  const late = new Promise<never>((_, reject) => {
+    timer = setTimeout(() => reject(new Error(`${what} did not settle within 2 s`)), 2_000)
+  })
+  return Promise.race([work, late]).finally(() => clearTimeout(timer))
+}
+
 export async function makeHarness(): Promise<{
   db: Awaited<ReturnType<typeof createTestDb>>['db']
   ctx: RunCtx

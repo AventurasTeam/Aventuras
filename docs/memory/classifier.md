@@ -873,11 +873,12 @@ resets it, which boot skips while the branch still holds the pass's
 own unreversed orphans
 ([`generation-pipeline.md → chainsTo on predecessor`](../generation-pipeline.md#chainsto-on-predecessor)).
 The pass runs while the user reads the reply. A pass's own `chainsTo`
-returns another pass while a chapter close is pending and entries
+returns another pass while a chapter close is owed and entries
 remain unprocessed, then the close
 ([`chapter-close.md → Phase 0`](./chapter-close.md#phase-0--catch-up-passes)).
-`[Run classifier now]` starts one directly, and Send runs one first when
-a pass is owed ([Failure policy](#failure-policy)).
+`[Run classifier now]` starts one directly, as a pass-failure
+entry's `Retry` does, and a pass started either way chains nothing. Send runs
+one first when a pass is owed ([Failure policy](#failure-policy)).
 
 **Interrupted, then deferred.** A head reversal — regenerate, swipe, an
 edit of the head turn, CTRL-Z of the turn, rollback — and the pill's
@@ -890,7 +891,8 @@ A toast says the memory
 update moved to the next turn, and the pass is marked deferred for its
 branch. At the next Send it runs before the turn, as its own run,
 committing before the turn's first write; Cancel then cancels the
-whole Send and keeps the user's text in the composer. The mark lives
+whole Send, and the user's text goes back into an empty composer (else a
+toast says the draft was kept). The mark lives
 in memory: after a restart, the next Send finds the pass due and runs
 it first anyway ([Failure policy](#failure-policy)). A pass cancelled before its writes commits nothing; one
 cancelled during them reverses its own group, as any aborted run does.
@@ -992,7 +994,10 @@ deferred for the branch or the cadence is due. The cadence is read from
 the persisted watermark, so a failure, an interrupt, a crash and a
 restart all end the same way. One pass is owed per Send: a settings
 change (a lowered cadence or window max) can leave a backlog that drains
-over the next Sends, so a turn may run while a pass is still due. If the
+over the next Sends, so a turn may run while a pass is still due. The
+exception is a close owed: Send's chain then runs a catch-up pass per
+window before the close
+([`chapter-close.md → Phase 0`](./chapter-close.md#phase-0--catch-up-passes)). If the
 owed pass fails, the Send fails:
 no user_action is written, the text goes back to an empty composer
 (else onto the entry), and the reader shows the failure as a system entry with its cause

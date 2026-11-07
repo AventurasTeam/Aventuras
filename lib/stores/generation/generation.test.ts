@@ -11,6 +11,7 @@ import {
   isStoryBusy,
   isUserEditBlocked,
   selectMemoryRun,
+  type CloseProgress,
   type DeferredWorkKind,
   type RunState,
   type TxState,
@@ -51,6 +52,36 @@ function tx(runs: RunState[], over: Partial<TxState> = {}): TxState {
 }
 
 const deferredOn = (branchId: string) => generationStore.getTxState().deferred.get(branchId)
+
+// A close on b1, as the orchestrator reserves it.
+function closeRun(id: string, over: Partial<RunState> = {}): RunState {
+  return pass(id, { kind: 'chapter-close', interruptible: 'close', ...over })
+}
+
+// Records `slot` deferred on `branchId`, as an interrupted run leaves it.
+function deferOn(branchId: string, slot: DeferredWorkKind): void {
+  const id = `run_deferred_${slot}_${branchId}`
+  generationStore.startRun(slot === 'close' ? closeRun(id, { branchId }) : pass(id, { branchId }))
+  generationStore.abortRun(id, 'aborted')
+}
+
+function recordsOn(branchId: string) {
+  const { pendingClose, deferred } = generationStore.getTxState()
+  return { pick: pendingClose.get(branchId), deferred: deferred.get(branchId) }
+}
+
+function notificationsDuring(act: () => void): number {
+  let calls = 0
+  const off = generationStore.subscribe(() => {
+    calls++
+  })
+  try {
+    act()
+  } finally {
+    off()
+  }
+  return calls
+}
 
 describe('isUserEditBlocked', () => {
   it('blocks only when a hard-gate run is in flight', () => {
@@ -287,10 +318,6 @@ describe('pendingClose', () => {
 
   const pendingOn = (branchId: string) => generationStore.getTxState().pendingClose.get(branchId)
 
-  // A close on b1, as the orchestrator reserves it.
-  const close = (id: string, over: Partial<RunState> = {}): RunState =>
-    pass(id, { kind: 'chapter-close', interruptible: 'close', ...over })
-
   it('starts empty, and __reset empties it', () => {
     expect(generationStore.getTxState().pendingClose.size).toBe(0)
     generationStore.setPendingClose('b1', { endEntryId: 'e9' })
@@ -300,14 +327,14 @@ describe('pendingClose', () => {
 
   it('writes a record per branch, replacing any, and clears one', () => {
     generationStore.setPendingClose('b1', { endEntryId: 'e9' })
-    generationStore.setPendingClose('b2', { endEntryId: null })
+    generationStore.setPendingClose('b2', { endEntryId: 'e4' })
     generationStore.setPendingClose('b1', { endEntryId: 'e12' })
     expect(pendingOn('b1')).toEqual({ endEntryId: 'e12' })
-    expect(pendingOn('b2')).toEqual({ endEntryId: null })
+    expect(pendingOn('b2')).toEqual({ endEntryId: 'e4' })
 
     generationStore.clearPendingClose('b1')
     expect(generationStore.getTxState().pendingClose.has('b1')).toBe(false)
-    expect(pendingOn('b2')).toEqual({ endEntryId: null })
+    expect(pendingOn('b2')).toEqual({ endEntryId: 'e4' })
   })
 
   it('leaves the state as it was when clearing a branch with no record', () => {
@@ -319,7 +346,7 @@ describe('pendingClose', () => {
 
   it("drops the branch's record when a close commits, in the update that removes the run", () => {
     generationStore.setPendingClose('b1', { endEntryId: 'e9' })
-    generationStore.startRun(close('run_close'))
+    generationStore.startRun(closeRun('run_close'))
     const seen: { registered: boolean; pending: boolean }[] = []
     const off = generationStore.subscribe(() => {
       const state = generationStore.getTxState()
@@ -338,7 +365,7 @@ describe('pendingClose', () => {
     "keeps the record through a close's %s end",
     (outcome) => {
       generationStore.setPendingClose('b1', { endEntryId: 'e9' })
-      generationStore.startRun(close('run_close'))
+      generationStore.startRun(closeRun('run_close'))
       generationStore.abortRun('run_close', outcome)
       expect(pendingOn('b1')).toEqual({ endEntryId: 'e9' })
     },
@@ -357,7 +384,7 @@ describe('pendingClose', () => {
   it('keeps the record when a pass commits into a chained close', () => {
     generationStore.setPendingClose('b1', { endEntryId: 'e9' })
     generationStore.startRun(pass('run_pass'))
-    generationStore.finishRun('run_pass', close('run_close'))
+    generationStore.finishRun('run_pass', closeRun('run_close'))
     expect(pendingOn('b1')).toEqual({ endEntryId: 'e9' })
     expect(generationStore.getTxState().runs.has('run_close')).toBe(true)
   })
@@ -365,11 +392,167 @@ describe('pendingClose', () => {
   it("drops only the finishing close's branch on a successor swap", () => {
     generationStore.setPendingClose('b1', { endEntryId: 'e9' })
     generationStore.setPendingClose('b2', { endEntryId: 'e4' })
-    generationStore.startRun(close('run_close'))
+    generationStore.startRun(closeRun('run_close'))
     generationStore.finishRun('run_close', run('run_next'))
     expect(generationStore.getTxState().pendingClose.has('b1')).toBe(false)
     expect(pendingOn('b2')).toEqual({ endEntryId: 'e4' })
     expect(generationStore.getTxState().runs.has('run_next')).toBe(true)
+  })
+})
+
+describe("a close's records", () => {
+  beforeEach(() => {
+    generationStore.__reset()
+  })
+
+  it('clears the pick and the deferral when a close commits', () => {
+    generationStore.setPendingClose('b1', { endEntryId: 'e9' })
+    deferOn('b1', 'close')
+    generationStore.startRun(closeRun('run_close'))
+    generationStore.finishRun('run_close')
+    expect(recordsOn('b1')).toEqual({ pick: undefined, deferred: undefined })
+  })
+
+  it('records deferred.close and keeps the pick when a close is cancelled', () => {
+    generationStore.setPendingClose('b1', { endEntryId: 'e9' })
+    generationStore.startRun(closeRun('run_close'))
+    expect(generationStore.abortRun('run_close', 'aborted')).toBe('close')
+    expect(recordsOn('b1')).toEqual({ pick: { endEntryId: 'e9' }, deferred: { close: true } })
+  })
+
+  it.each(['failed', 'unwound'] as const)('changes neither when a close ends %s', (outcome) => {
+    generationStore.setPendingClose('b1', { endEntryId: 'e9' })
+    deferOn('b1', 'close')
+    generationStore.startRun(closeRun('run_close'))
+    expect(generationStore.abortRun('run_close', outcome)).toBeNull()
+    expect(recordsOn('b1')).toEqual({ pick: { endEntryId: 'e9' }, deferred: { close: true } })
+
+    generationStore.startRun(closeRun('run_fresh', { branchId: 'b2' }))
+    generationStore.abortRun('run_fresh', outcome)
+    expect(recordsOn('b2')).toEqual({ pick: undefined, deferred: undefined })
+  })
+})
+
+describe('clearDeferredClose', () => {
+  beforeEach(() => {
+    generationStore.__reset()
+  })
+
+  it('clears the close and keeps a deferred pass beside it', () => {
+    deferOn('b1', 'pass')
+    deferOn('b1', 'close')
+    generationStore.clearDeferredClose('b1')
+    expect(deferredOn('b1')).toEqual({ pass: true })
+  })
+
+  it('deletes a record it empties, leaving the pick and other branches alone', () => {
+    generationStore.setPendingClose('b1', { endEntryId: 'e9' })
+    deferOn('b1', 'close')
+    deferOn('b2', 'close')
+    generationStore.clearDeferredClose('b1')
+    expect(generationStore.getTxState().deferred.has('b1')).toBe(false)
+    expect(recordsOn('b1').pick).toEqual({ endEntryId: 'e9' })
+    expect(deferredOn('b2')).toEqual({ close: true })
+  })
+
+  it('leaves the state as it was with no close deferred on the branch', () => {
+    deferOn('b1', 'pass')
+    const before = generationStore.getTxState()
+    expect(
+      notificationsDuring(() => {
+        generationStore.clearDeferredClose('b1')
+        generationStore.clearDeferredClose('b2')
+      }),
+    ).toBe(0)
+    expect(generationStore.getTxState()).toBe(before)
+  })
+})
+
+describe('dropBranchRecords', () => {
+  beforeEach(() => {
+    generationStore.__reset()
+  })
+
+  it("drops the branch's deferral and pick in one update", () => {
+    generationStore.setPendingClose('b1', { endEntryId: 'e9' })
+    deferOn('b1', 'pass')
+    deferOn('b1', 'close')
+    const seen: ReturnType<typeof recordsOn>[] = []
+    const off = generationStore.subscribe(() => {
+      seen.push(recordsOn('b1'))
+    })
+    try {
+      generationStore.dropBranchRecords('b1')
+    } finally {
+      off()
+    }
+    expect(seen).toEqual([{ pick: undefined, deferred: undefined }])
+  })
+
+  it("leaves another branch's records", () => {
+    generationStore.setPendingClose('b1', { endEntryId: 'e9' })
+    generationStore.setPendingClose('b2', { endEntryId: 'e4' })
+    deferOn('b1', 'close')
+    deferOn('b2', 'close')
+    generationStore.dropBranchRecords('b1')
+    expect(recordsOn('b2')).toEqual({ pick: { endEntryId: 'e4' }, deferred: { close: true } })
+  })
+
+  it('drops a branch holding only one of the two', () => {
+    generationStore.setPendingClose('b1', { endEntryId: 'e9' })
+    deferOn('b2', 'pass')
+    generationStore.dropBranchRecords('b1')
+    generationStore.dropBranchRecords('b2')
+    expect(recordsOn('b1')).toEqual({ pick: undefined, deferred: undefined })
+    expect(recordsOn('b2')).toEqual({ pick: undefined, deferred: undefined })
+  })
+
+  it('leaves the state as it was for a branch with no record', () => {
+    generationStore.setPendingClose('b2', { endEntryId: 'e4' })
+    const before = generationStore.getTxState()
+    expect(notificationsDuring(() => generationStore.dropBranchRecords('b1'))).toBe(0)
+    expect(generationStore.getTxState()).toBe(before)
+  })
+})
+
+describe('setCloseProgress', () => {
+  beforeEach(() => {
+    generationStore.__reset()
+  })
+
+  const identity: CloseProgress = { task: 'identity', part: 0, index: 3, total: 7 }
+
+  it('publishes a new copy of the run carrying the progress', () => {
+    generationStore.startRun(closeRun('run_close'))
+    const before = generationStore.getTxState().runs.get('run_close')!
+    expect(notificationsDuring(() => generationStore.setCloseProgress('run_close', identity))).toBe(
+      1,
+    )
+    const after = generationStore.getTxState().runs.get('run_close')!
+    expect(after).not.toBe(before)
+    expect(after.closeProgress).toEqual(identity)
+    expect(after.abortController).toBe(before.abortController)
+  })
+
+  it('replaces the progress as the next task starts', () => {
+    generationStore.startRun(closeRun('run_close'))
+    generationStore.setCloseProgress('run_close', identity)
+    generationStore.setCloseProgress('run_close', { task: 'threads', part: 0, index: 4, total: 7 })
+    expect(generationStore.getTxState().runs.get('run_close')!.closeProgress).toEqual({
+      task: 'threads',
+      part: 0,
+      index: 4,
+      total: 7,
+    })
+  })
+
+  it('ignores an unknown run', () => {
+    generationStore.startRun(closeRun('run_close'))
+    const before = generationStore.getTxState()
+    expect(
+      notificationsDuring(() => generationStore.setCloseProgress('run_missing', identity)),
+    ).toBe(0)
+    expect(generationStore.getTxState()).toBe(before)
   })
 })
 
@@ -518,6 +701,22 @@ describe('settleCount', () => {
     expect(generationStore.getSettleCount()).toBe(0)
     generationStore.setReversalInProgress(true)
     expect(generationStore.getSettleCount()).toBe(0)
+  })
+
+  it('does not bump on a record or progress write', () => {
+    generationStore.startRun(closeRun('run_close'))
+    deferOn('b1', 'close')
+    generationStore.setPendingClose('b1', { endEntryId: 'e9' })
+    const before = generationStore.getSettleCount()
+    generationStore.setCloseProgress('run_close', {
+      task: 'happenings',
+      part: 0,
+      index: 1,
+      total: 7,
+    })
+    generationStore.clearDeferredClose('b1')
+    generationStore.dropBranchRecords('b1')
+    expect(generationStore.getSettleCount()).toBe(before)
   })
 
   it('__reset returns settleCount to 0', () => {

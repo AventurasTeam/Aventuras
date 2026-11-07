@@ -1011,6 +1011,81 @@ export const SystemHeldNoDetail: StoryT = {
   },
 }
 
+/** A close that failed a Send: its own copy, `Retry` and `Dismiss`, no fix. */
+export const SystemCloseFailed: StoryT = {
+  ...wrap,
+  args: {
+    kind: 'system',
+    tier: 'desktop',
+    content: t('reader:systemEntry.failure.close'),
+    detail: 'network: lore-mgmt: connect ECONNREFUSED',
+    onRetry: fn(),
+    onDismiss: fn(),
+  },
+  play: async ({ args }) => {
+    expect(await screen.findByText(/Chapter close failed/)).toBeVisible()
+    expect(screen.getByRole('button', { name: /Dismiss/ })).toBeVisible()
+    await userEvent.click(screen.getByRole('button', { name: /Retry/ }))
+    await waitFor(() => expect(args.onRetry).toHaveBeenCalledTimes(1))
+  },
+}
+
+/** A close whose agent has no profile: the fix, then `Retry`, then `Dismiss`. */
+export const SystemCloseConfigFix: StoryT = {
+  ...wrap,
+  args: {
+    kind: 'system',
+    tier: 'desktop',
+    content: t('reader:systemEntry.failure.closeNoProfileAssigned'),
+    fixAction: { label: t('reader:systemEntry.assignProfile'), onPress: fn() },
+    onRetry: fn(),
+    onDismiss: fn(),
+  },
+  play: async ({ args }) => {
+    const fix = await screen.findByRole('button', { name: 'Assign profile' })
+    const retry = screen.getByRole('button', { name: /Retry/ })
+    const dismiss = screen.getByRole('button', { name: /Dismiss/ })
+    expect(fix.compareDocumentPosition(retry) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+    expect(retry.compareDocumentPosition(dismiss) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+    await userEvent.click(fix)
+    await waitFor(() => expect(args.fixAction?.onPress).toHaveBeenCalledTimes(1))
+  },
+}
+
+/** A committed close Retry whose text the composer couldn't take: the notice holds it. */
+export const SystemCloseResolved: StoryT = {
+  ...wrap,
+  args: {
+    kind: 'system',
+    tier: 'desktop',
+    content: t('reader:systemEntry.closeResolvedTextKept'),
+    heldText: HELD_SHORT,
+    onCopy: fn(),
+    onDismiss: fn(),
+  },
+  play: async () => {
+    expect(await screen.findByText(/^Chapter closed\./)).toBeVisible()
+    expect(await screen.findByText(HELD_SHORT)).toBeVisible()
+    expect(screen.getByRole('button', { name: /Dismiss/ })).toBeVisible()
+    expect(screen.queryByRole('button', { name: /Retry/ })).not.toBeInTheDocument()
+  },
+}
+
+/** A close Retry that found nothing owed, its text kept the same way. */
+export const SystemCloseNothingOwed: StoryT = {
+  ...SystemCloseResolved,
+  args: {
+    ...SystemCloseResolved.args,
+    content: t('reader:systemEntry.closeNothingOwedTextKept'),
+  },
+  play: async () => {
+    expect(await screen.findByText(/^Nothing left to close\./)).toBeVisible()
+    expect(await screen.findByText(HELD_SHORT)).toBeVisible()
+    expect(screen.getByRole('button', { name: /Dismiss/ })).toBeVisible()
+    expect(screen.queryByRole('button', { name: /Retry/ })).not.toBeInTheDocument()
+  },
+}
+
 /** An empty detail has nothing to disclose: no `Details` toggle opening onto nothing. */
 export const SystemEmptyDetail: StoryT = {
   ...wrap,

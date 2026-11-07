@@ -1,11 +1,18 @@
 import { useRouter } from 'expo-router'
 import { useMemo } from 'react'
 
-import type { CapabilityHint, ResolveFailureKind } from '@/lib/ai'
+import type { OwedCloseRun } from '@/lib/actions'
+import type {
+  CapabilityHint,
+  ContextWindowFailure,
+  ReplyCutOffFailure,
+  ResolveFailureKind,
+} from '@/lib/ai'
 import type { SystemFailureMeta } from '@/lib/db'
 import { logger } from '@/lib/diagnostics'
 import { t } from '@/lib/i18n'
 import {
+  CHAPTER_CLOSE_KIND,
   CLASSIFIER_HELD,
   EMPTY_REPLY,
   pipelineErrorDetail,
@@ -19,10 +26,16 @@ import { toast } from '@/lib/toast'
 import { keptSubmissionText } from './composer-draft'
 import {
   capabilityHintContent,
+  closeContextWindowContent,
   passContextWindowContent,
   turnContextWindowContent,
 } from './context-window-copy'
-import { offersProfileFix, passCutOffContent, turnCutOffContent } from './cut-off-copy'
+import {
+  closeCutOffContent,
+  offersProfileFix,
+  passCutOffContent,
+  turnCutOffContent,
+} from './cut-off-copy'
 import type { PassRefusal } from './send-run'
 
 export type SystemEntryFixAction = { label: string; onPress: () => void } | undefined
@@ -87,6 +100,13 @@ const PASS_RESOLVER_COPY = {
   'profile-missing': 'reader:systemEntry.failure.memoryProfileMissing',
   'provider-missing': 'reader:systemEntry.failure.memoryProviderMissing',
   'override-provider-missing': 'reader:systemEntry.failure.memoryOverrideProviderMissing',
+} as const satisfies Record<ResolveFailureKind, string>
+
+const CLOSE_RESOLVER_COPY = {
+  'no-profile-assigned': 'reader:systemEntry.failure.closeNoProfileAssigned',
+  'profile-missing': 'reader:systemEntry.failure.closeProfileMissing',
+  'provider-missing': 'reader:systemEntry.failure.closeProviderMissing',
+  'override-provider-missing': 'reader:systemEntry.failure.closeOverrideProviderMissing',
 } as const satisfies Record<ResolveFailureKind, string>
 
 const FIX_LABEL = {
@@ -196,34 +216,64 @@ export function toSystemFailureMeta(
   return failureMetaOf(error, describeTurnFailure(error).detail, submission)
 }
 
+// The words a failure entry for a Send's owed work speaks in; one arm serves pass and close.
+type WorkerVocabulary = {
+  generic: 'reader:systemEntry.failure.memory' | 'reader:systemEntry.failure.close'
+  resolver: typeof PASS_RESOLVER_COPY | typeof CLOSE_RESOLVER_COPY
+  hint: 'pass' | 'close'
+  cutOff: (failure: ReplyCutOffFailure) => string
+  window: (failure: ContextWindowFailure) => string
+}
+
 // The pass's own vocabulary (classifier.md → Failure policy): a turn's copy names the narrative
 // agent, which would send the user to fix the wrong profile.
-export function describePassFailure(refusal: PassRefusal): { content: string; detail?: string } {
-  if (refusal.held) return { content: t('reader:systemEntry.failure.memoryHeld') }
-  const { error } = refusal
+const PASS_VOCABULARY: WorkerVocabulary = {
+  generic: 'reader:systemEntry.failure.memory',
+  resolver: PASS_RESOLVER_COPY,
+  hint: 'pass',
+  cutOff: passCutOffContent,
+  window: passContextWindowContent,
+}
+
+// The close's own vocabulary: it runs on lore-mgmt, which the pass's copy doesn't name.
+const CLOSE_VOCABULARY: WorkerVocabulary = {
+  generic: 'reader:systemEntry.failure.close',
+  resolver: CLOSE_RESOLVER_COPY,
+  hint: 'close',
+  cutOff: closeCutOffContent,
+  window: closeContextWindowContent,
+}
+
+function describeWorkerFailure(
+  error: PipelineError | undefined,
+  vocabulary: WorkerVocabulary,
+): { content: string; detail?: string } {
   if (error?.kind === 'provider') {
     const hint = error.possibleCapabilityMismatch
     return {
       content:
-        hint !== undefined
-          ? capabilityHintContent(hint, 'pass')
-          : t('reader:systemEntry.failure.memory'),
+        hint !== undefined ? capabilityHintContent(hint, vocabulary.hint) : t(vocabulary.generic),
       detail: providerDetail(error),
     }
   }
   if (error?.kind === 'config-resolver') {
-    return { content: t(PASS_RESOLVER_COPY[error.failure]), detail: error.detail }
+    return { content: t(vocabulary.resolver[error.failure]), detail: error.detail }
   }
   if (error?.kind === 'reply-cut-off') {
-    return { content: passCutOffContent(error), detail: pipelineErrorDetail(error) }
+    return { content: vocabulary.cutOff(error), detail: pipelineErrorDetail(error) }
   }
   if (error?.kind === 'context-window') {
-    return { content: passContextWindowContent(error), detail: pipelineErrorDetail(error) }
+    return { content: vocabulary.window(error), detail: pipelineErrorDetail(error) }
   }
   return {
-    content: t('reader:systemEntry.failure.memory'),
+    content: t(vocabulary.generic),
     detail: error !== undefined ? pipelineErrorDetail(error) : undefined,
   }
+}
+
+export function describePassFailure(refusal: PassRefusal): { content: string; detail?: string } {
+  if (refusal.held) return { content: t('reader:systemEntry.failure.memoryHeld') }
+  return describeWorkerFailure(refusal.error, PASS_VOCABULARY)
 }
 
 export function toPassFailureMeta(
@@ -278,11 +328,93 @@ export async function retryPassEntry(deps: {
   deps.notify(t('reader:systemEntry.passRetryBlocked', { reason: result.blockedBy }))
 }
 
-// Shared by the system-entry bubble and the suggestion strip: a config-resolver
-// failure is deterministic, so both surfaces route to settings instead of
-// offering a retry that cannot succeed. Widened past ResolveFailureKind because
-// the bubble's caller reads a persisted `z.string()`; an unrecognised value
-// lands on the generic "Fix default" rather than dropping the affordance.
+// A close has no held state, so there is no held arm.
+export function describeCloseFailure(error: PipelineError): {
+  content: string
+  detail?: string
+} {
+  return describeWorkerFailure(error, CLOSE_VOCABULARY)
+}
+
+export function toCloseFailureMeta(
+  error: PipelineError,
+  submission: SystemFailureMeta['submission'],
+): SystemFailureMeta {
+  const { detail } = describeCloseFailure(error)
+  return { ...failureMetaOf(error, detail, submission), close: 'failed' }
+}
+
+/** How a close Retry settled: its own close committed, or none was owed any more. */
+export type CloseResolvedArm = 'closed' | 'nothing-owed'
+
+/**
+ * What a Retry that settled the close leaves when the composer can't take the entry's text back,
+ * as `passResolvedEntry`: a notice holding the text, Dismiss alone, saying which way the Retry
+ * settled. Else the entry clears.
+ */
+export function closeResolvedEntry(
+  submission: NonNullable<SystemFailureMeta['submission']>,
+  arm: CloseResolvedArm,
+): {
+  content: string
+  failure: SystemFailureMeta
+} {
+  return {
+    content: t(
+      arm === 'closed'
+        ? 'reader:systemEntry.closeResolvedTextKept'
+        : 'reader:systemEntry.closeNothingOwedTextKept',
+    ),
+    failure: { kind: 'orchestrator', submission, close: 'resolved' },
+  }
+}
+
+/**
+ * A close-failure entry's Retry: runs what the close owes, catch-up passes first. Committed or
+ * nothing owed settles via `committed`, told which; a failed close rewrites the entry, a failed
+ * catch-up pass or a held branch as a memory entry; a cancel, a chain ending before the close, or
+ * any other refusal leaves it, the refusal told through `notify`. A `runClose` throw rewrites the
+ * entry as an `orchestrator` close failure; throws from `held`, `committed` and the rewrites
+ * propagate.
+ */
+export async function retryCloseEntry(deps: {
+  runClose: () => Promise<OwedCloseRun>
+  /** Read once the run ended: whether the branch is held `running`. */
+  held: () => Promise<boolean>
+  committed: (arm: CloseResolvedArm) => Promise<void>
+  rewriteClose: (error: PipelineError) => Promise<void>
+  rewritePass: (refusal: PassRefusal) => Promise<void>
+  notify: (message: string) => void
+}): Promise<void> {
+  let run: OwedCloseRun
+  try {
+    run = await deps.runClose()
+  } catch (err) {
+    const detail = err instanceof Error ? err.message : String(err)
+    return deps.rewriteClose({ kind: 'orchestrator', detail })
+  }
+  if (run.outcome === 'nothing-owed') return deps.committed('nothing-owed')
+  if (run.outcome === 'rejected') {
+    if (run.blockedBy === CLASSIFIER_HELD) return deps.rewritePass({ held: true })
+    deps.notify(t('reader:systemEntry.closeRetryBlocked', { reason: run.blockedBy }))
+    return
+  }
+  const { kind, result } = run.end
+  if (kind === CHAPTER_CLOSE_KIND) {
+    // A Cancel that landed after the close's last phase still left its chapter committed.
+    if (result.outcome === 'completed') return deps.committed('closed')
+    if (result.outcome === 'failed') return deps.rewriteClose(result.error)
+    return
+  }
+  // The chain ended on a catch-up pass, so the close never ran and stays owed.
+  if (result.outcome !== 'failed') return
+  return deps.rewritePass(
+    (await deps.held()) ? { held: true } : { held: false, error: result.error },
+  )
+}
+
+// Shared by the bubble (Retry beside the fix) and the suggestion strip (fix alone). Widened past
+// ResolveFailureKind: the bubble reads a persisted `z.string()`; unknown values get "Fix default".
 export function useConfigFixAction(
   failure: ResolveFailureKind | (string & {}) | undefined,
   storyId: string | null,
@@ -360,10 +492,12 @@ export function useSystemEntryActions(
       (failure?.kind === 'provider' && isCapabilityHintTag(failure.failure)),
     leaveStory,
   )
-  // A held branch can't run a pass, and a resolved entry's pass has run, so either offers Dismiss
-  // alone. The fix gates are kind-exclusive, so the `??` order carries no meaning.
+  // A held branch can't run a pass, and a resolved entry has nothing left to retry, so either
+  // offers Dismiss alone. The fix gates are kind-exclusive, so the `??` order carries no meaning.
+  const retryWithheld =
+    failure?.pass === 'held' || failure?.pass === 'resolved' || failure?.close === 'resolved'
   return {
-    onRetry: failure?.pass === 'held' || failure?.pass === 'resolved' ? undefined : onRetry,
+    onRetry: retryWithheld ? undefined : onRetry,
     fixAction: embedderFix ?? configFix ?? profileFix,
   }
 }

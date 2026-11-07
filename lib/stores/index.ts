@@ -108,6 +108,7 @@ export {
   selectMemoryRun,
 } from './generation/generation'
 export type {
+  CloseProgress,
   DeferredWork,
   DeferredWorkKind,
   PendingClose,

@@ -2,12 +2,15 @@
 import { act, cleanup, renderHook } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
+import type { OwedCloseRun } from '@/lib/actions'
 import { describeContextWindow, describeReplyCutOff } from '@/lib/ai'
+import { PERIODIC_CLASSIFIER_KIND } from '@/lib/classifier'
 import { entryMetadataSchema, type SystemFailureMeta } from '@/lib/db'
 import { logger } from '@/lib/diagnostics'
 import { t } from '@/lib/i18n'
 import { hasCopy } from '@/lib/i18n/__tests__/locale-keys'
 import {
+  CHAPTER_CLOSE_KIND,
   CLASSIFIER_HELD,
   EMPTY_REPLY,
   type PipelineError,
@@ -19,11 +22,16 @@ import { toast } from '@/lib/toast'
 
 import type { PassRefusal } from './send-run'
 import {
+  closeResolvedEntry,
+  type CloseResolvedArm,
+  describeCloseFailure,
   describePassFailure,
   describeTurnFailure,
   dismissSystemEntry,
   passResolvedEntry,
+  retryCloseEntry,
   retryPassEntry,
+  toCloseFailureMeta,
   toPassFailureMeta,
   toSystemFailureMeta,
   useConfigFixAction,
@@ -88,6 +96,44 @@ const EMPTY_REPLY_FILTERED = {
   subsystem: EMPTY_REPLY,
   detail: 'the model returned no text (finish reason: content-filter)',
 } satisfies PipelineError
+
+// A close's metadata call cut at the lore management profile's max output.
+const CLOSE_CUT = {
+  kind: 'reply-cut-off',
+  target: 'lore-mgmt',
+  ...CUT_FIELDS,
+} satisfies PipelineError
+
+const CLOSE_UNASSIGNED = {
+  kind: 'config-resolver',
+  failure: 'no-profile-assigned',
+  target: 'lore-mgmt',
+  phaseName: 'metadata',
+} satisfies PipelineError
+
+const CLOSE_HINTED = {
+  kind: 'provider',
+  reason: 'unknown',
+  detail: "400: 'tool_choice' is not supported",
+  possibleCapabilityMismatch: { capability: 'toolCalling', matched: 'tool_choice' },
+} satisfies PipelineError
+
+const OVERFLOW_MESSAGE =
+  'request (71834 tokens) exceeds the available context size (65536 tokens), try increasing it'
+
+const CLOSE_OVERFLOW = {
+  kind: 'context-window',
+  target: 'lore-mgmt',
+  detectedBy: 'provider',
+  estimate: 71_234,
+  window: null,
+  windowSource: 'unknown',
+  providerId: 'prov_local',
+  modelId: 'llama3.1:70b',
+  detail: OVERFLOW_MESSAGE,
+} satisfies PipelineError
+
+const CLOSE_GENERIC = "Chapter close failed, so your turn didn't start. Retry it, or send again."
 
 describe('describeTurnFailure', () => {
   it('renders embedder-specific copy with the stale row count', () => {
@@ -440,6 +486,151 @@ describe('passResolvedEntry', () => {
   })
 })
 
+// reader-composer.md → Transient pipeline failures: the **Chapter close failed** row.
+describe('describeCloseFailure', () => {
+  it('gives a provider failure the close copy with its reason and detail', () => {
+    expect(hasCopy('reader:systemEntry.failure.close')).toBe(true)
+    expect(
+      describeCloseFailure({
+        kind: 'provider',
+        reason: 'network',
+        detail: 'lore-mgmt: connect ECONNREFUSED',
+      }),
+    ).toEqual({ content: CLOSE_GENERIC, detail: 'network: lore-mgmt: connect ECONNREFUSED' })
+  })
+
+  it("gives a rejection naming tool calling the close's hedged hint", () => {
+    expect(describeCloseFailure(CLOSE_HINTED)).toEqual({
+      content:
+        "Chapter close failed, so your turn didn't start. The provider rejected the close's request. Its message mentions `tool_choice`. That can mean this model doesn't support tool calling. The provider may also have rejected the request for another reason.",
+      detail: "unknown: 400: 'tool_choice' is not supported",
+    })
+  })
+
+  it('names the lore management agent for a resolver failure, with its detail', () => {
+    expect(
+      describeCloseFailure({ ...CLOSE_UNASSIGNED, detail: 'lore-mgmt: no assignment' }),
+    ).toEqual({
+      content: 'Chapter close failed: the lore management agent has no profile assigned.',
+      detail: 'lore-mgmt: no assignment',
+    })
+  })
+
+  it("names the limit a cut close reply hit, in the close's own words", () => {
+    expect(describeCloseFailure(CLOSE_CUT)).toEqual({
+      content:
+        "Chapter close failed, so your turn didn't start. The close's reply was cut off at the lore management profile's 4,096-token max output. Raise it, then Retry.",
+      detail: describeReplyCutOff(CLOSE_CUT),
+    })
+  })
+
+  it("gives a close prompt the provider rejected the close's window copy", () => {
+    expect(describeCloseFailure(CLOSE_OVERFLOW)).toEqual({
+      content: `Chapter close failed, so your turn didn't start. The provider rejected the close's prompt; its message suggests it exceeded the model's context window: “${OVERFLOW_MESSAGE}”. Our estimate: about 71,300 tokens. Raise the window if the model allows more, or switch the lore management agent to a model with a larger one.`,
+      detail: describeContextWindow(CLOSE_OVERFLOW),
+    })
+  })
+
+  it('carries any other cause in the detail line', () => {
+    expect(
+      describeCloseFailure({ kind: 'phase-logic', detail: 'chapter-close: no close range' }),
+    ).toEqual({ content: CLOSE_GENERIC, detail: 'chapter-close: no close range' })
+  })
+
+  // The pass's copy names the classifier; a close's failure must not send the user there.
+  it('never borrows the pass copy', () => {
+    expect(describeCloseFailure(CLOSE_UNASSIGNED).content).not.toBe(
+      describePassFailure({ held: false, error: CLOSE_UNASSIGNED }).content,
+    )
+    expect(describeCloseFailure({ kind: 'provider', reason: 'auth' }).content).not.toBe(
+      t('reader:systemEntry.failure.memory'),
+    )
+  })
+})
+
+describe('toCloseFailureMeta', () => {
+  const SUBMISSION = { content: 'I wait.', composerMode: 'free' }
+
+  it("keeps a resolver failure's kind and failure beside the failed marker", () => {
+    expect(toCloseFailureMeta(CLOSE_UNASSIGNED, undefined)).toEqual({
+      kind: 'config-resolver',
+      failure: 'no-profile-assigned',
+      close: 'failed',
+    })
+  })
+
+  it("persists a hinted provider failure's capability and its detail line", () => {
+    expect(toCloseFailureMeta(CLOSE_HINTED, undefined)).toEqual({
+      kind: 'provider',
+      failure: 'toolCalling',
+      detail: "unknown: 400: 'tool_choice' is not supported",
+      close: 'failed',
+    })
+  })
+
+  it('round-trips through the persisted metadata schema, submission and marker included', () => {
+    const meta = toCloseFailureMeta(CLOSE_CUT, SUBMISSION)
+    expect(meta).toEqual({
+      kind: 'reply-cut-off',
+      failure: 'max-output',
+      detail: describeReplyCutOff(CLOSE_CUT),
+      submission: SUBMISSION,
+      close: 'failed',
+    })
+    const parsed = entryMetadataSchema.parse({
+      sceneEntities: [],
+      currentLocationId: null,
+      worldTime: 0,
+      systemFailure: meta,
+    })
+    expect(parsed.systemFailure).toEqual(meta)
+  })
+})
+
+describe('closeResolvedEntry', () => {
+  const SUBMISSION = { content: 'I wait.', composerMode: 'free' }
+
+  it('keeps the text under the resolved close marker, through the persisted schema', () => {
+    const { failure } = closeResolvedEntry(SUBMISSION, 'closed')
+    const parsed = entryMetadataSchema.parse({
+      sceneEntities: [],
+      currentLocationId: null,
+      worldTime: 0,
+      systemFailure: failure,
+    })
+    expect(parsed.systemFailure).toEqual({
+      kind: 'orchestrator',
+      submission: SUBMISSION,
+      close: 'resolved',
+    })
+  })
+
+  it('says the chapter closed, and why the text is kept here', () => {
+    expect(hasCopy('reader:systemEntry.closeResolvedTextKept')).toBe(true)
+    expect(closeResolvedEntry(SUBMISSION, 'closed').content).toBe(
+      "Chapter closed. The composer couldn't take your text back, so it's kept here.",
+    )
+  })
+
+  it('says nothing is left to close, and why the text is kept here', () => {
+    expect(hasCopy('reader:systemEntry.closeNothingOwedTextKept')).toBe(true)
+    expect(closeResolvedEntry(SUBMISSION, 'nothing-owed').content).toBe(
+      "Nothing left to close. The composer couldn't take your text back, so it's kept here.",
+    )
+  })
+
+  it.each(['closed', 'nothing-owed'] as const)(
+    'marks the %s arm resolved, with no Retry',
+    (arm) => {
+      expect(closeResolvedEntry(SUBMISSION, arm).failure).toEqual({
+        kind: 'orchestrator',
+        submission: SUBMISSION,
+        close: 'resolved',
+      })
+    },
+  )
+})
+
 describe('retryPassEntry', () => {
   const ran = { runId: 'run_pass', actionId: 'act_pass' }
 
@@ -525,6 +716,160 @@ describe('retryPassEntry', () => {
     const committed = vi.fn(() => Promise.reject(new Error('reload failed')))
     await expect(retryPassEntry({ ...h.deps, committed })).rejects.toThrow('reload failed')
     expect(h.rewrite).not.toHaveBeenCalled()
+  })
+})
+
+describe('retryCloseEntry', () => {
+  const closeRan = { runId: 'run_close', actionId: 'act_close' }
+  const passRan = { runId: 'run_pass', actionId: 'act_pass' }
+
+  const ended = (kind: string, result: TxResult, cancelled = false): OwedCloseRun => ({
+    outcome: 'ran',
+    end: result.outcome === 'completed' ? { kind, result, cancelled } : { kind, result },
+  })
+
+  function harness(run: OwedCloseRun | Error, heldAfter = false) {
+    const calls: string[] = []
+    const rewriteClose = vi.fn(async (_error: PipelineError) => {
+      calls.push('rewriteClose')
+    })
+    const rewritePass = vi.fn(async (_refusal: PassRefusal) => {
+      calls.push('rewritePass')
+    })
+    const committed = vi.fn(async (_arm: CloseResolvedArm) => {
+      calls.push('committed')
+    })
+    const notify = vi.fn((_message: string) => {
+      calls.push('notify')
+    })
+    const runClose = vi.fn(() =>
+      run instanceof Error ? Promise.reject(run) : Promise.resolve(run),
+    )
+    const held = vi.fn(async () => heldAfter)
+    return {
+      calls,
+      rewriteClose,
+      rewritePass,
+      notify,
+      runClose,
+      held,
+      committed,
+      deps: { runClose, held, committed, rewriteClose, rewritePass, notify },
+    }
+  }
+
+  it('settles the entry once the close commits', async () => {
+    const h = harness(ended(CHAPTER_CLOSE_KIND, { ...closeRan, outcome: 'completed' }))
+    await retryCloseEntry(h.deps)
+    expect(h.runClose).toHaveBeenCalledTimes(1)
+    expect(h.calls).toEqual(['committed'])
+    expect(h.committed).toHaveBeenCalledWith('closed')
+  })
+
+  // The close committed before the Cancel landed, so its chapter stands.
+  it('settles the entry when a late Cancel found the close committed', async () => {
+    const h = harness(ended(CHAPTER_CLOSE_KIND, { ...closeRan, outcome: 'completed' }, true))
+    await retryCloseEntry(h.deps)
+    expect(h.calls).toEqual(['committed'])
+    expect(h.committed).toHaveBeenCalledWith('closed')
+  })
+
+  it('settles the entry when no close is owed any more', async () => {
+    const h = harness({ outcome: 'nothing-owed' })
+    await retryCloseEntry(h.deps)
+    expect(h.calls).toEqual(['committed'])
+    expect(h.committed).toHaveBeenCalledWith('nothing-owed')
+  })
+
+  it("rewrites the close entry with the close's new cause", async () => {
+    const error: PipelineError = {
+      kind: 'provider',
+      reason: 'network',
+      detail: 'lore-mgmt: ECONNREFUSED',
+    }
+    const h = harness(ended(CHAPTER_CLOSE_KIND, { ...closeRan, outcome: 'failed', error }))
+    await retryCloseEntry(h.deps)
+    expect(h.calls).toEqual(['rewriteClose'])
+    expect(h.rewriteClose).toHaveBeenCalledWith(error)
+    expect(h.held).not.toHaveBeenCalled()
+  })
+
+  // The failed pass is what runs next (chapter-close.md → Failure modes), so the entry names it.
+  it('rewrites a failed catch-up pass as a memory entry', async () => {
+    const error: PipelineError = { kind: 'phase-logic', detail: 'window read' }
+    const h = harness(ended(PERIODIC_CLASSIFIER_KIND, { ...passRan, outcome: 'failed', error }))
+    await retryCloseEntry(h.deps)
+    expect(h.calls).toEqual(['rewritePass'])
+    expect(h.rewritePass).toHaveBeenCalledWith({ held: false, error })
+  })
+
+  it('rewrites a failed catch-up pass as held when it left its branch held', async () => {
+    const error: PipelineError = { kind: 'orchestrator', detail: 'reverse-replay failed: locked' }
+    const h = harness(
+      ended(PERIODIC_CLASSIFIER_KIND, { ...passRan, outcome: 'failed', error }),
+      true,
+    )
+    await retryCloseEntry(h.deps)
+    expect(h.calls).toEqual(['rewritePass'])
+    expect(h.rewritePass).toHaveBeenCalledWith({ held: true })
+  })
+
+  it.each([
+    ['the close', CHAPTER_CLOSE_KIND, closeRan],
+    ['a catch-up pass', PERIODIC_CLASSIFIER_KIND, passRan],
+  ] as const)('leaves the entry alone when %s is cancelled', async (_label, kind, ran) => {
+    const h = harness(ended(kind, { ...ran, outcome: 'aborted' }))
+    await retryCloseEntry(h.deps)
+    expect(h.calls).toEqual([])
+  })
+
+  // The pass committed and chained nothing, so the close never ran: a Cancel after its last phase,
+  // or an open story that left the branch.
+  it.each([
+    ['a late Cancel', true],
+    ['the story left the branch', false],
+  ] as const)(
+    'leaves the entry when the chain ended on a committed pass after %s',
+    async (_label, cancelled) => {
+      const h = harness(
+        ended(PERIODIC_CLASSIFIER_KIND, { ...passRan, outcome: 'completed' }, cancelled),
+      )
+      await retryCloseEntry(h.deps)
+      expect(h.calls).toEqual([])
+    },
+  )
+
+  it('rewrites the entry as a held memory entry when the branch is held running', async () => {
+    const h = harness({ outcome: 'rejected', blockedBy: CLASSIFIER_HELD })
+    await retryCloseEntry(h.deps)
+    expect(h.calls).toEqual(['rewritePass'])
+    expect(h.rewritePass).toHaveBeenCalledWith({ held: true })
+  })
+
+  it('leaves the entry and says why when the close could not start', async () => {
+    const h = harness({ outcome: 'rejected', blockedBy: 'story-busy' })
+    await retryCloseEntry(h.deps)
+    expect(h.calls).toEqual(['notify'])
+    expect(h.notify).toHaveBeenCalledWith("Chapter close can't start yet: story-busy.")
+  })
+
+  it('rewrites the close entry when the run throws', async () => {
+    const h = harness(new Error('marker insert failed'))
+    await retryCloseEntry(h.deps)
+    expect(h.calls).toEqual(['rewriteClose'])
+    expect(h.rewriteClose).toHaveBeenCalledWith({
+      kind: 'orchestrator',
+      detail: 'marker insert failed',
+    })
+  })
+
+  // The close committed, so its failure copy would be wrong: the throw goes to the caller.
+  it('lets a throw from the settle through without rewriting the entry', async () => {
+    const h = harness(ended(CHAPTER_CLOSE_KIND, { ...closeRan, outcome: 'completed' }))
+    const committed = vi.fn(() => Promise.reject(new Error('reload failed')))
+    await expect(retryCloseEntry({ ...h.deps, committed })).rejects.toThrow('reload failed')
+    expect(h.rewriteClose).not.toHaveBeenCalled()
+    expect(h.rewritePass).not.toHaveBeenCalled()
   })
 })
 
@@ -842,6 +1187,47 @@ describe('useSystemEntryActions', () => {
       pass: 'failed',
     })
     expect(actions.fixAction?.label).toBe(t('reader:systemEntry.assignProfile'))
+    expect(actions.onRetry).toBe(onRetry)
+  })
+
+  // A fix precedes Retry on every row (reader-composer.md → Transient pipeline failures).
+  it("keeps a failed close's config fix beside its Retry", () => {
+    const actions = actionsFor(toCloseFailureMeta(CLOSE_UNASSIGNED, undefined))
+    expect(actions.fixAction?.label).toBe('Assign profile')
+    expect(actions.onRetry).toBe(onRetry)
+  })
+
+  // Retry left nothing owed; the entry only holds a text the composer couldn't take back.
+  it('offers Dismiss alone on a resolved close entry', () => {
+    const actions = actionsFor(
+      closeResolvedEntry({ content: 'I wade in.', composerMode: 'free' }, 'nothing-owed').failure,
+    )
+    expect(actions.onRetry).toBeUndefined()
+    expect(actions.fixAction).toBeUndefined()
+  })
+
+  it('keeps Retry on a failed close entry', () => {
+    expect(
+      actionsFor(toCloseFailureMeta({ kind: 'provider', reason: 'network' }, undefined)).onRetry,
+    ).toBe(onRetry)
+  })
+
+  it("keeps a cut close's Fix profile beside its Retry", () => {
+    const actions = actionsFor(toCloseFailureMeta(CLOSE_CUT, undefined))
+    expect(actions.fixAction?.label).toBe('Fix profile')
+    expect(actions.onRetry).toBe(onRetry)
+  })
+
+  it('offers Fix profile beside Retry on a close entry whose rejection hinted at tool calling', () => {
+    const actions = actionsFor(toCloseFailureMeta(CLOSE_HINTED, undefined))
+    expect(actions.fixAction?.label).toBe('Fix profile')
+    expect(actions.onRetry).toBe(onRetry)
+  })
+
+  // `Set window` is the window's remedy, hidden until App Settings has its editor (M7.1).
+  it('offers Retry and no fix action on a close window entry', () => {
+    const actions = actionsFor(toCloseFailureMeta(CLOSE_OVERFLOW, undefined))
+    expect(actions.fixAction).toBeUndefined()
     expect(actions.onRetry).toBe(onRetry)
   })
 

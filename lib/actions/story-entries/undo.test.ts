@@ -4,6 +4,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import { PERIODIC_CLASSIFIER_KIND } from '@/lib/classifier'
 import {
   branches,
+  chapters,
   characterRelationships,
   deltas,
   entities,
@@ -20,6 +21,7 @@ import { logger } from '@/lib/diagnostics'
 import {
   __resetBus,
   __resetRegistry as resetPipelineRegistry,
+  CHAPTER_CLOSE_KIND,
   startPipeline,
   SUGGESTION_REFRESH_KIND,
   type PhaseContext,
@@ -36,6 +38,7 @@ import {
   reverseReplayDeltas,
 } from '../delta/reverse-replay'
 import { selectReversalSet } from '../delta/row-closure'
+import { registerStandInClose } from '../turns/__tests__/stand-in-close'
 import {
   recordDeferrals,
   registerStandInPass,
@@ -1237,5 +1240,48 @@ describe('undo and redo during a pass', () => {
     // The interrupt itself went ahead before the re-selection refused.
     expect(await start.origin).toMatchObject({ outcome: 'aborted' })
     expect(generationStore.getTxState().deferred.get('b1')).toEqual({ pass: true })
+  })
+})
+
+// generation-pipeline.md → chainsTo on predecessor: CTRL-Z's first press reverses the close.
+describe('undo past a committed close', () => {
+  const GATED = { status: 'rejected', code: 'gated', reason: 'generation in flight' }
+  const ids = { storyId: 's1', branchId: 'b1' }
+
+  async function chapterOf(db: Awaited<ReturnType<typeof createTestDb>>['db'], id: string) {
+    const [row] = await db
+      .select({ chapterId: storyEntries.chapterId })
+      .from(storyEntries)
+      .where(eq(storyEntries.id, id))
+    return row?.chapterId
+  }
+
+  it('takes the close first and the turn second; a pass running after it gates CTRL-Z', async () => {
+    const { db, runInTransaction } = await createTestDb()
+    const ctx = { db, runInTransaction }
+    await seed(db)
+    hydrateOpeningAndTurn()
+    const close = registerStandInClose()
+    const pass = registerStandInPass({ anchorEntryId: 'e_opening' })
+    const closing = startPipeline(CHAPTER_CLOSE_KIND, { ...ids, ...ctx })
+    const committed = await close.nextHeld()
+    committed.finish('completed')
+    expect(await closing.origin).toMatchObject({ outcome: 'completed' })
+    expect(await chapterOf(db, 'e_turn')).toBe(`chap_${committed.actionId}`)
+
+    // The committed close heads the log, so CTRL-Z can't reach the turn through the pass.
+    const passing = startPipeline(PERIODIC_CLASSIFIER_KIND, { ...ids, ...ctx })
+    const held = await pass.nextHeld()
+    expect(await undoLastAction('b1', ctx)).toEqual(GATED)
+    expect(runningPass('b1')?.actionId).toBe(held.actionId)
+    held.finish('completed')
+    expect(await passing.origin).toMatchObject({ outcome: 'completed' })
+
+    expect(await undoLastAction('b1', ctx)).toEqual({ status: 'ok' })
+    expect(await db.select().from(chapters)).toEqual([])
+    expect(await chapterOf(db, 'e_turn')).toBeNull()
+
+    expect(await undoLastAction('b1', ctx)).toEqual({ status: 'ok' })
+    expect(entriesStore.getById('e_turn')).toBeUndefined()
   })
 })

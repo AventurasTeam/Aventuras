@@ -372,7 +372,7 @@ describe('deleteEntityRow — races closed by the in-lock re-read', () => {
       const held = new Promise<void>((resolve) => {
         holding = resolve
       })
-      reversal = bracketProseReversal('b1', async () => {
+      reversal = bracketProseReversal('b1', ctx, async () => {
         holding()
         await bodyGate
         await ctx.db

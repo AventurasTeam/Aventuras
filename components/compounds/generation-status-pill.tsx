@@ -45,7 +45,7 @@ type ErrorState = { code: 'memory-incomplete'; pendingRows: number } | { code: '
 
 type GenerationStatusPillProps = {
   activePhase?: GenerationPhase
-  /** `updating-memory` running before the user's turn (Send's owed pass); else ignored. */
+  /** `updating-memory` or `closing-chapter` as Send's owed work, before the turn; else ignored. */
   beforeTurn?: boolean
   error?: ErrorState
   // Absent, the tag renders bare with no popover: omit it while the run can't be cancelled.
@@ -68,7 +68,9 @@ function phaseCopy(phase: GenerationPhase, beforeTurn: boolean): string {
         ? t('chrome.generationStatusPill.phase.updatingMemoryBeforeTurn')
         : t('chrome.generationStatusPill.phase.updatingMemory')
     case 'closing-chapter':
-      return t('chrome.generationStatusPill.phase.closingChapter')
+      return beforeTurn
+        ? t('chrome.generationStatusPill.phase.closingChapterBeforeTurn')
+        : t('chrome.generationStatusPill.phase.closingChapter')
     case 'refreshing-suggestions':
       return t('chrome.generationStatusPill.phase.refreshingSuggestions')
   }
