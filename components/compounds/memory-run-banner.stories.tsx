@@ -65,11 +65,15 @@ export const LiveRegionCoversOnlyTheLabel: Story = {
 // A close Send owes: the label says before your turn, whatever step the close is on.
 export const ClosingBeforeTurn: Story = {
   args: {
-    label: closeBannerLabel({ beforeTurn: true, currentPhase: 'metadata' }),
+    label: closeBannerLabel({
+      beforeTurn: true,
+      currentPhase: 'agent',
+      closeProgress: { task: 'identity', part: 0, index: 3, total: 7 },
+    }),
     onCancel: fn(),
   },
   play: async ({ args }) => {
-    expect(screen.getByText(t('chrome.memoryBanner.closingBeforeTurn'))).toBeInTheDocument()
+    expect(screen.getByText('Before your turn: 3 of 7 — Identity…')).toBeInTheDocument()
     await userEvent.click(screen.getByRole('button', { name: t('cancel') }))
     await waitFor(() => expect(args.onCancel).toHaveBeenCalledTimes(1))
   },

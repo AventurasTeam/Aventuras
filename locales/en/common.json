@@ -178,6 +178,11 @@
       "closingAgent": "Closing chapter: reviewing the chapter…",
       "closingTask": "Closing chapter: {{index}} of {{total}} — {{task}}…",
       "closingReport": "Closing chapter: finishing up…",
+      "beforeTurnBoundary": "Before your turn: choosing where the chapter ends…",
+      "beforeTurnMetadata": "Before your turn: writing the chapter's summary…",
+      "beforeTurnAgent": "Before your turn: reviewing the chapter…",
+      "beforeTurnTask": "Before your turn: {{index}} of {{total}} — {{task}}…",
+      "beforeTurnReport": "Before your turn: finishing the chapter…",
       "closeTask": {
         "happenings": "Happenings",
         "lore": "Lore",

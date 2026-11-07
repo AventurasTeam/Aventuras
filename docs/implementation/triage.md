@@ -61,11 +61,6 @@ slice-planning gate forces its resolution before that slice is planned.
   did not re-run the suite serially — the evidence above is still as of
   `edce17b8`.
 
-- **A before-turn close shows one flat label.** The banner keeps its
-  before-your-turn label for the whole run (C6, `principles.md`, the
-  slice's label table), which hides `N of M` exactly when the user waits longest,
-  7 to 17 agent tasks. Needs a developer question before 5.8 and 5.9
-  consume C6. Surfaced by Slice 5.6's review.
 - **The memory banner's live region may announce too often.** Its label
   sits in a `role="status"` `aria-live="polite"` region and now changes up
   to about 21 times per close run; canon's a11y notes don't say whether
