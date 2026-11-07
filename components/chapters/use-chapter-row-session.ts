@@ -19,7 +19,7 @@ import {
 } from './chapter-copy'
 
 /** The rowKey while no card is open; chapter ids are `chap_…`, so it never names a row. */
-export const CHAPTER_SESSION_NONE = 'none'
+const CHAPTER_SESSION_NONE = 'none'
 
 const resolver = zodResolver(chapterDraftSchema)
 

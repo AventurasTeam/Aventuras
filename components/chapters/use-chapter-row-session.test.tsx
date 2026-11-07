@@ -7,11 +7,7 @@ import type { ChapterSaveResult } from '@/lib/actions'
 import { chapterDraftFrom, type ChapterDraft, type ChapterDraftRow } from '@/lib/chapters'
 import { logger } from '@/lib/diagnostics'
 
-import {
-  CHAPTER_SESSION_NONE,
-  useChapterRowSession,
-  type ChapterRowSessionOptions,
-} from './use-chapter-row-session'
+import { useChapterRowSession, type ChapterRowSessionOptions } from './use-chapter-row-session'
 
 const KEEP: ChapterDraftRow = {
   id: 'chap_keep',
@@ -144,7 +140,6 @@ describe('useChapterRowSession', () => {
 
   it('runs clean under the reserved key while no card is open, and lets a leave through at once', () => {
     const { hook, onSession } = setup(OK, { rowId: null, values: NONE_VALUES })
-    expect(CHAPTER_SESSION_NONE).toBe('none')
     expect(hook.result.current.dirty).toBe(false)
     expect(hook.result.current.form.getValues()).toEqual({
       title: '',

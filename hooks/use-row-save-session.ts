@@ -245,7 +245,8 @@ export function useRowSaveSession<Draft extends FieldValues>({
 
   // Layout, not passive: the new row must never paint with the previous row's draft.
   // Native react-hook-form subscribes fields passively, so one mounting with the rowKey change
-  // misses this reset: mount it only once the form holds the new row (chapters: `formRowId`).
+  // misses this reset: mount it only once the form holds the new row
+  // (docs/implementation/lessons-learned/rhf-native-passive-subscription.md).
   useLayoutEffect(() => {
     const applied = appliedRef.current
     appliedRef.current = { rowKey, values }
