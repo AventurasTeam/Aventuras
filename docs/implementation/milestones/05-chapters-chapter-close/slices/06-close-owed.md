@@ -596,6 +596,24 @@ answer in this slice's PR.
   accepts until boot, and a close-held state would be new design, so it
   is a fourth case in [Slice 5.12](./12-chapter-delete-rollback.md)'s
   residue question.
+- **A failed successor read after Send's catch-up pass lets the Send go
+  on (developer decision, 2026-11-07).** `nextKindOf` logs
+  `pipeline.chain_eval_failed` and chains nothing, so the turn starts
+  with the close still owed. Nothing is lost, and a read error has no
+  copy a user could act on. The close doesn't always run right after
+  the turn, though. With an earlier close still recorded as deferred,
+  the turn's chain chains nothing, and the close runs at the next Send.
+  On a close entry's Retry, the chain ends on the committed pass and
+  the entry stays as it was, with no message, until a second Retry. The
+  rejected alternative was a "selection failed" flag on the chain's end,
+  failing the Send as an owed-close failure.
+- **A held branch chains no close (developer decision, 2026-11-07).**
+  `nextMemoryRun` chains nothing on a held branch, the close included,
+  even with nothing unprocessed, since a close would build on the held
+  pass's unreversed writes. The planned text chained the close on a
+  held branch once nothing was unprocessed. A turn commits on a held branch only through the race filed in
+  [`triage.md`](../../../triage.md), "Send can start a turn on a branch
+  that turns held after its check".
 - **The manual start resolves the chain end's `TxResult` (C14), a
   completed catch-up pass included (2026-11-07).** A late Cancel after
   the pass's last phase, or the open story leaving the branch, ends
