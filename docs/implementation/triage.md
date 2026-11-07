@@ -335,6 +335,16 @@ slice-planning gate forces its resolution before that slice is planned.
   `ChapterCard`; they differ only in the issue-text function. A gated
   field in `components/compounds/` that takes it would remove the
   copies. Surfaced by Slice 5.7's card review.
+- **A disabled button's reason under it on native is hand-written three
+  times.** `ReasonTooltip` does nothing on native, so `ChapterCard`'s
+  action row, `ChapterInProgressCard`'s `Close chapter…` and the reader
+  popover's `OverlayAction` each wrap the `Button` in a `View` and render
+  the reason as muted `xs` text when `Platform.OS !== 'web'`, with
+  different alignment and disabled conditions. A button that needs its
+  reason on native shows none unless its author copies the block. A
+  shared compound, or a `Button` option, would end the copies; the
+  latter changes native layout for every `disabledReason` caller, so it
+  wants a design call. Surfaced by Slice 5.7's slice review.
 - **`TagInput` remounts when a run starts.** On web it wraps itself in a
   `div title` only while disabled with a reason
   (`components/compounds/tag-input.tsx:211-213`), so a run starting
