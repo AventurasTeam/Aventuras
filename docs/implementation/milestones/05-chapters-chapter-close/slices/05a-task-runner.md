@@ -628,6 +628,19 @@ vitest and the probe share. It never reaches a production slot.
   writes it again; `z.looseObject` keeps the key and replays the call
   as written. The deep-equal criterion catches neither unless a sample
   carries an extra key. Surfaced by Slice 5.4's slice review.
+- **Should the close's intermediates be typed before more keys land?**
+  `PhaseContext.intermediates` is `Record<string, unknown>`
+  (`lib/pipeline/types.ts`), and each reader casts its key: the retrieval
+  outcome behind a shape check (`generation-context.ts`), the close's range
+  and ledger (`chapter-close-metadata.ts`, `chapter-close-report.ts`, and
+  `closing-chapter.ts` outside the run) and the pass's pre-run status. This
+  slice adds the ledger's writer and an id-map key, and 5.8 and 5.9 add parts
+  and clusters keys. The metadata and report phases repeat one missing-range
+  read and its failure. Canon specifies typed per-kind intermediates
+  ([`generation-pipeline.md → Run-scoped state`](../../../../generation-pipeline.md#run-scoped-state--intermediates-and-per-kind-contexts)),
+  and its "What shipped" note covers only inputs. Suggested: a typed close map
+  with accessors, landed with the ledger writer. Surfaced by Slice 5.2's
+  review; routed from triage 2026-11-07.
 
 ## Implementation notes
 

@@ -76,26 +76,12 @@ slice-planning gate forces its resolution before that slice is planned.
 - **The seed's fork at `entry_hero_0040` has no chapters.** A real fork
   there would copy `chap_hero_1`, whose anchor (29) survives, per the
   data-model branch-copy manifest.
-- **The long-branch fixture's chapters have no deltas.**
-  `scripts/seed/long-branch.ts` writes chapters and entries with no
-  create or close deltas, so a rollback or CTRL-Z on a long branch
-  refuses `no-create`. Fine while it stays a read-only performance
-  fixture.
 - **The embedder drain drops a run's idle note while a pass runs.**
   `noteIdle` (`lib/embedder/drain.ts:198-204`) does nothing mid-pass, and
   the pass's row list predates the run's writes, so a row made stale by a
   run inside one batch stays stale until the next `run_complete` or turn.
   Retrieval stays correct (the drain is warm-cache only); quiescence can
   be put off. `kick` already records a pending re-run.
-- **Phase intermediates are an untyped bag.** `PhaseContext.intermediates`
-  is `Record<string, unknown>` (`lib/pipeline/types.ts:103`), and each
-  reader casts its key: the retrieval outcome behind a shape check
-  (`generation-context.ts`), the close's range and ledger
-  (`chapter-close-metadata.ts`, `chapter-close-report.ts`) and the pass's
-  pre-run status. Each key's type is convention, and Slice 5.5a adds the
-  close's ledger writer. The close's metadata and report phases also repeat
-  one missing-range read and its failure, which a typed accessor would hold.
-  Surfaced by Slice 5.2's review.
 - **The E2E embedder cache is shared across checkouts on any catalog
   revision.** `ensureEmbedderModel` (`e2e/harness/embedder.ts`) deletes
   and rebuilds `~/.cache/aventuras-e2e/embedders/<model>` when its
