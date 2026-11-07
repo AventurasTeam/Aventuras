@@ -165,6 +165,51 @@ describe('useTimelineEditing', () => {
     hook.rerender({ ready: true, rows: AFTER, runInFlight: false })
     expect(hook.result.current.expandedId).toBeNull()
   })
+
+  it('collapses the open card when its own head is pressed', () => {
+    const hook = setup()
+    open(hook, ONE.id)
+    act(() => hook.result.current.toggle(ONE.id))
+    expect(hook.result.current.expandedId).toBeNull()
+  })
+
+  it('holds a switch away from a dirty card behind the leave guard', async () => {
+    const hook = setup()
+    open(hook, ONE.id)
+    act(() =>
+      hook.result.current.session.form.setValue('title', 'Chapter 1, revised', {
+        shouldDirty: true,
+      }),
+    )
+    await waitFor(() => expect(hook.result.current.session.dirty).toBe(true))
+
+    act(() => hook.result.current.toggle(TWO.id))
+    expect(hook.result.current.expandedId).toBe(ONE.id)
+    expect(hook.result.current.session.pendingLeave).toBe(true)
+  })
+
+  it('keys the session to the card a switch opens, and saves that row', async () => {
+    const hook = setup()
+    open(hook, ONE.id)
+    act(() => hook.result.current.toggle(TWO.id))
+    expect(hook.result.current.expandedId).toBe(TWO.id)
+    await waitFor(() => expect(hook.result.current.session.formRowId).toBe(TWO.id))
+
+    act(() =>
+      hook.result.current.session.form.setValue('title', 'Chapter 2, revised', {
+        shouldDirty: true,
+      }),
+    )
+    await waitFor(() => expect(hook.result.current.session.dirty).toBe(true))
+    await act(async () => {
+      await hook.result.current.session.save()
+    })
+    expect(hook.save).toHaveBeenCalledTimes(1)
+    expect(hook.save).toHaveBeenCalledWith(
+      TWO,
+      expect.objectContaining({ title: 'Chapter 2, revised' }),
+    )
+  })
 })
 
 describe('useTimelineEditing, opened while a run is going', () => {
