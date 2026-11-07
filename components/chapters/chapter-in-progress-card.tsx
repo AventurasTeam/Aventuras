@@ -46,8 +46,8 @@ export function ChapterInProgressCard({
       <Text size="sm" variant="muted" className="italic">
         {t('chapters:inProgress.placeholder')}
       </Text>
-      {/* Stretched on phone, the button stretches with it (full width); sized to its label else. */}
-      <View className={cn('gap-0.5', isPhone ? 'self-stretch' : 'self-start')}>
+      {/* Phone stretches the button full width; else items-start keeps it label-sized when native's reason text is wider. */}
+      <View className={cn('gap-0.5', isPhone ? 'self-stretch' : 'items-start self-start')}>
         <Button variant="primary" disabled disabledReason={closeReason}>
           <Text>{t('chapters:inProgress.close')}</Text>
         </Button>

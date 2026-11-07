@@ -71,9 +71,14 @@ async function expectProgress(tone: ChapterProgressTone, percent: number) {
   await expect(await screen.findByText(COUNTS)).toBeVisible()
   const fill = screen.getByTestId('chapter-progress-fill')
   await expect(fill).toHaveClass(`bg-${tone}`)
+  // The bar has no default height; a dropped className collapses it to 0 px.
+  expect(fill.getBoundingClientRect().height).toBeGreaterThan(0)
+  // The track is bg-bg-sunken; a card of the same colour would hide it.
+  const track = fill.parentElement as HTMLElement
+  expect(getComputedStyle(card()).backgroundColor).not.toBe(getComputedStyle(track).backgroundColor)
   await waitFor(() => {
-    const track = fill.parentElement?.getBoundingClientRect().width ?? Number.NaN
-    expect(fill.getBoundingClientRect().width / track).toBeCloseTo(percent / 100, 1)
+    const trackWidth = track.getBoundingClientRect().width
+    expect(fill.getBoundingClientRect().width / trackWidth).toBeCloseTo(percent / 100, 1)
   })
 }
 
