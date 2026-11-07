@@ -218,15 +218,6 @@ slice-planning gate forces its resolution before that slice is planned.
   interrupted summary either, and the `tsx` and `pnpm` relay in between
   wasn't traced. With parallel workers an orphaned run now finishes in
   under 2 minutes. Surfaced by the same review.
-- **The dev mock doesn't re-check stored lane values on load.**
-  `scripts/mock-llm/state.ts` reads `value` as `unknown`, so a
-  hand-edited `state.json` reaches the reply builders unvalidated: a
-  tool lane's answers 500, other kinds may go out as stored. Surfaced by
-  Slice 5.4's review. On a tool lane the 500 hides the bad step: the
-  app retries a 500, the sequence cursor already moved past the step,
-  so the retry is served the next one, and the failed request leaves no
-  log line (`scripts/mock-llm/completions.ts`, the tool branch). Found
-  by Slice 5.4's slice review with a probe through `callWithRetry`.
 - **Canon routes no remedy for an `interrupted` or `content-filter`
   cut-off.** `generation-pipeline.md`'s `reply-cut-off` remedy paragraph
   names `window`, `max-output` and `unknown`; the code gives the other

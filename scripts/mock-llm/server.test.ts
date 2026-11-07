@@ -639,6 +639,46 @@ describe('lane lifecycle', () => {
   })
 })
 
+describe('a hand-edited tool step', () => {
+  const KEY = 'tools:inspect'
+  const request = {
+    model: 'seed/narrative',
+    messages: [{ role: 'user', content: 'Inspect the door.' }],
+    tools: [
+      {
+        type: 'function',
+        function: {
+          name: 'inspect',
+          description: 'Inspect a thing.',
+          parameters: { type: 'object', properties: {} },
+        },
+      },
+    ],
+  }
+
+  it('refuses a step in the wire spelling, logs it and keeps the cursor for the retry', async () => {
+    const lane = mock.ctx.lane(KEY)
+    // The API refuses `tool_calls`; a hand edit of state.json puts it there anyway.
+    lane.responses = [
+      { id: 'r_wire', name: 'Wire spelling', value: { tool_calls: [{ name: 'inspect' }] } },
+      { id: 'r_next', name: 'Next', value: { text: 'done' } },
+    ]
+    lane.sequence = { enabled: true, loop: false, ids: ['r_wire', 'r_next'], cursor: 0 }
+    mock.ctx.log.clear()
+    try {
+      const response = await post(request)
+      expect(response.status).toBe(500)
+      expect(((await response.json()) as { error: { message: string } }).error.message).toMatch(
+        /no valid tool step/,
+      )
+      expect(lane.sequence.cursor).toBe(0)
+      expect(mock.ctx.log.list()[0]).toMatchObject({ lane: KEY, outcome: 'failed', status: 500 })
+    } finally {
+      Reflect.deleteProperty(mock.ctx.state.lanes, KEY)
+    }
+  })
+})
+
 describe('usage', () => {
   it('reports usage on a structured reply, counted over its prompt and its reply', async () => {
     const request = structuredRequest(fallbackClassifierSchema)
