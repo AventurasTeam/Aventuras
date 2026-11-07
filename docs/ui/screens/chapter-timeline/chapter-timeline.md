@@ -35,7 +35,7 @@ Cross-cutting principles that govern this screen are in
 
 ## Layout
 
-```text
+```
 ┌────────────────────────────────────────────────────────────┐
 │ [←] Aria's Descent / Chapters             [status]  [⛭][⚲] │ ← top bar
 │ ▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓░░░░░░░░░░░░░░░░░░░░░░░░ │ ← chapter token-progress strip
