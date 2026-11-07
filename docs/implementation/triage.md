@@ -310,9 +310,8 @@ slice-planning gate forces its resolution before that slice is planned.
   `window` exists, which removes the class (errors and field arrays
   included). Surfaced by Slice 5.7's Android check.
 - **A leave re-raised after Discard or Save reads stale dirty state.**
-  `requestLeave` and `runSave` in `hooks/use-row-save-session.ts`
-  (`:443-453`, `:390-395`) read the last render's
-  `form.formState.dirtyFields`, so a leave requested again in the same
+  `requestLeave` and `runSave` in `hooks/use-row-save-session.ts` read
+  the last render's `form.formState.dirtyFields`, so a leave requested again in the same
   tick as a Discard or Save is queued, and the leave dialog opens over a
   clean session. It stays latent only because expo-router 55 queues
   `back`, `dismiss` and `push` until after the next commit; a
@@ -344,47 +343,33 @@ slice-planning gate forces its resolution before that slice is planned.
   `ListField` and the Timeline's Keywords. Same class as the
   input-adornment DOM-identity lesson. Surfaced by Slice 5.7's card
   review.
-- **A collapsed chapter card's meta line is never announced.** The
-  head's `aria-label` is exactly the heading (Task 12's locator matches
-  it), which replaces the button's children for a screen reader, so
-  the time range, token count and theme are never read; the theme
-  appears nowhere else until the card expands. Describing the head by
-  the meta line (`aria-describedby` on web, `accessibilityHint` on
-  native) keeps the name; whether RN-Web forwards `aria-describedby` is
-  unchecked. Surfaced by Slice 5.7's card review.
-- **Text fields carry the gate reason only as `accessibilityHint`.** On
-  web there is no hover tooltip on a run-locked `Input` or `Textarea`,
-  short of `principles.md → Disabled controls + tooltips`. The World
-  and Plot fields share it (`awareness-editor.tsx:148`); `ChapterCard`
-  follows them. Surfaced by Slice 5.7's doc review.
-- **C15 says time ranges exclude 0; the read excludes system entries.**
+- **C15 and Slice 5.3 say time ranges exclude 0; the read keeps it.**
   [Milestone 5 → C15](milestones/05-chapters-chapter-close/milestone.md#c15--entry-jump-and-chapter-time-ranges)
-  gives each chapter's `min` and `max` world time "excluding 0";
+  gives each chapter's `min` and `max` world time "excluding 0", and
+  [Slice 5.3 → Scope: in](milestones/05-chapters-chapter-close/slices/03-reader-chapters.md#scope-in)
+  says the same, as does its acceptance criterion 12.
   `readChapterTimeRanges` (`lib/db/story-entries/chapter-time-ranges.ts:27-28`)
-  excludes `kind = 'system'` and a null world time instead. One of the
-  two should change. Surfaced by Slice 5.7's card-data task.
+  excludes `kind = 'system'` and a null world time only, and its test
+  pins 0 on purpose (`chapter-time-ranges.test.ts`, "starts a range
+  at the opening, at 0"): the 2026-11-04 triage pass (PR #704) took a
+  world time of 0 as the origin, not a flashback. The docs are the side
+  to fix. Surfaced by Slice 5.7's card-data task.
 - **`observability.md` credits `row_save_validate_failed` to a check
   that isn't there.** The bullet names "the lore session's first-edit
   whole-draft check"; `use-lore-row-session.ts` runs no `trigger()`,
   and the substrate's values-subscription catch, which does log it, is
   unnamed. Surfaced by Slice 5.7's session-hook review.
-- **Two pill open items have nothing open.** In
-  `docs/ui/patterns/generation-status-pill.md → Open items`,
-  `Pipeline orchestrator wiring` (every consumer now derives its phase)
-  and `Memory error observation` (one shared hook, `StoryStatusPill`,
-  the error collapse) describe shipped states. Left in place because
-  Slice 5.6 edits the same file. Surfaced by Slice 5.7's doc review.
-- **Run gating for `Regenerate summary` is unspecified.**
-  `chapter-timeline.md`'s in-flight list splits the card's actions into
-  disabled and live but names neither for `Regenerate summary`, and the
-  wireframe draws it live mid-run. It starts a metadata write, which
-  `principles.md → Edit restrictions` points to gating. Moot until the
-  slice that enables it; settle it there. Surfaced by Slice 5.7's doc
-  review.
-- **`saveBarDiscard` matches the unsaved dialog's Discard too.**
-  `e2e/locators/save-session.ts:13` has no `exact: true`, so while the
-  dialog is open it would hit a strict-mode error. No current caller
-  uses it with the dialog open. Surfaced by Slice 5.7's E2E review.
-- **Thirteen test files spell out `RunState` for `startRun`.** No shared
-  fixture, so a `RunState` change edits all of them. Surfaced by Slice
-  5.7's save-path review.
+- **`saveBarDiscard` matches the unsaved dialog's Discard too.** It
+  queries the page for a button named `Discard`
+  (`e2e/locators/save-session.ts`), and the dialog's
+  `unsavedChanges.discard` reads the same as the bar's
+  `saveBar.discard` (`locales/en/common.json`). The save bar stays in
+  the accessibility tree while the dialog is open, as the file notes at
+  `unsavedDiscard`, so the query would resolve both and hit a
+  strict-mode error; `exact: true` can't tell two buttons of one name
+  apart. It needs scoping outside the dialog, to the bar's `save-bar`
+  testID say. No current caller uses it with the dialog open. Surfaced
+  by Slice 5.7's E2E review.
+- **Test files spell out `RunState` for `startRun`.** More than a dozen
+  test files build one by hand, with no shared fixture, so a `RunState`
+  change edits all of them. Surfaced by Slice 5.7's save-path review.

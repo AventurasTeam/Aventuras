@@ -1183,6 +1183,14 @@ code before it moved; resolve with the slice it names.
   [`chapter-timeline.md → Per-card actions`](../ui/screens/chapter-timeline/chapter-timeline.md#per-card-actions)
   names it, but the run has no kind, gate, cancel, toast, delta source
   or undo story, and no answer for a chapter closed in parts. Moved here at M5's promotion (2026-11-01).
+  On the gate, the in-flight list (the Edit restrictions bullet atop
+  [`chapter-timeline.md`](../ui/screens/chapter-timeline/chapter-timeline.md))
+  splits the card's actions into disabled and live and names neither
+  for it, and the wireframe draws it live mid-run. It starts a
+  metadata write, and
+  [`principles.md → What's gated`](../ui/principles.md#whats-gated)
+  gates chapter metadata edits. Raised 2026-11-07 by Slice 5.7's doc
+  review. Routed from triage 2026-11-07.
 - **M7.2 — `Set lead character…` in the Actions menu.**
   [`actions-menu.md → Curated core`](../ui/patterns/actions-menu.md#curated-core)
   lists it and only the lead picker names it, so it lands with the
@@ -1534,7 +1542,13 @@ own.
   keep focus and carry the reason, but contradicts
   [`color.md → Disabled`](../ui/foundations/color.md#disabled)
   ("disabled controls aren't focusable"), so it's a developer call.
-  Widened from triage 2026-10-09.
+  Widened from triage 2026-10-09. Run-locked text fields fare worse:
+  World's and Plot's `Input` and `Textarea` fields
+  (`components/world/detail/fields.tsx`, `awareness-editor.tsx:148`)
+  and the Chapter Timeline card's take the gate reason only as a bare
+  `accessibilityHint`, with no `ReasonTooltip`, so on web it reaches
+  neither a tooltip nor the accessibility tree. Widened from triage
+  2026-11-07, raised by Slice 5.7's doc review.
 - **M9.2 — Emoji stand in for icons across the app; sweep and replace.**
   User-facing chrome carries literal emoji and glyphs where the
   design system has an icon primitive — `✨` prefixes every AI-assist
@@ -1706,6 +1720,21 @@ own.
   `aria-pressed`; `Chip` already uses the latter. The ⊙ glyph has had a
   label since 4.5b (`plot:commonKnowledgeMarker`, used by the peek), ready
   for the hidden-text primitive. Widened from triage 2026-10-09.
+- **M9.2 — A collapsed chapter card's meta line is never announced.**
+  The Chapter Timeline card's head (`CardHead` in
+  `components/chapters/chapter-card.tsx`) carries an `aria-label` of
+  exactly the heading, `Chapter <N> — <title>`, which replaces the
+  button's children for a screen reader, so the meta line under it
+  (time range, token count, theme) is never read; the theme appears
+  nowhere else until the card expands. `cardHead` in
+  `e2e/locators/chapter-timeline.ts` finds the head by that heading.
+  Describing the head by the meta line keeps the name: `describedBy`
+  (`components/ui/accessible-description.ts`), which `ListRow` and
+  `DeltaLogRow` already use, gives `aria-describedby` on web, which RN
+  Web forwards (verified, see the `disabledReason` entry above), and
+  `accessibilityHint` on native. The meta line is visible text, so it
+  needs no hidden-text primitive. Raised 2026-11-07 by Slice 5.7's card
+  review. Routed from triage 2026-11-07.
 - **M9.4 — A failed desktop save of an `.avts` file goes unreported.**
   On desktop and web, `saveAvtsFile` (`lib/avts/save-file.ts`) hands
   the file over as an anchor download and resolves at the hand-off.
