@@ -3,11 +3,10 @@ import { useCallback, useMemo, type ReactElement } from 'react'
 import { ScrollView, View } from 'react-native'
 
 import { ChapterCard } from '@/components/chapters/chapter-card'
-import { useChapterExpansion } from '@/components/chapters/chapter-expansion'
 import { ChapterInProgressCard } from '@/components/chapters/chapter-in-progress-card'
 import { chapterTimelineData } from '@/components/chapters/chapter-timeline-data'
 import { ChapterTimelineHeader } from '@/components/chapters/chapter-timeline-header'
-import { useChapterRowSession } from '@/components/chapters/use-chapter-row-session'
+import { useTimelineEditing } from '@/components/chapters/use-timeline-editing'
 import { useTimelineTimeRanges } from '@/components/chapters/use-timeline-time-ranges'
 import { AppActionsMenu } from '@/components/compounds/app-actions-menu'
 import { Breadcrumb, type BreadcrumbSegment } from '@/components/compounds/breadcrumb'
@@ -24,25 +23,17 @@ import { useColdOpenStory } from '@/hooks/use-cold-open-story'
 import { useEntryIndex } from '@/hooks/use-entry-index'
 import { useIsRouteFocused } from '@/hooks/use-is-route-focused'
 import { useMasterDetailBack } from '@/hooks/use-master-detail-back'
-import { useRowSessionGuard } from '@/hooks/use-row-session-guard'
 import { useStoryLeaveGuard } from '@/hooks/use-story-leave-guard'
 import { useTier } from '@/hooks/use-tier'
-import { saveChapter, type ChapterSaveResult } from '@/lib/actions'
+import { saveChapter } from '@/lib/actions'
 import { resolveCalendar, type CalendarFrame } from '@/lib/calendar'
-import { chapterDraftFrom, type ChapterDraft } from '@/lib/chapters'
+import type { ChapterDraft } from '@/lib/chapters'
 import { db, runInTransaction } from '@/lib/db'
 import { t } from '@/lib/i18n'
-import { chaptersStore, storiesStore } from '@/lib/stores'
+import { chaptersStore, storiesStore, type StoreChapter } from '@/lib/stores'
 import { toast } from '@/lib/toast'
 
 const ctx = { db, runInTransaction }
-
-// No field renders while no card is open, so no Save can reach this; it writes nothing.
-const NO_CHAPTER_OPEN: ChapterSaveResult = {
-  status: 'rejected',
-  reason: 'no chapter open',
-  code: 'failed',
-}
 
 export default function ChapterTimelineRoute(): ReactElement {
   const router = useRouter()
@@ -85,39 +76,22 @@ export default function ChapterTimelineRoute(): ReactElement {
   )
   const expansionRows = useMemo(() => timeline.cards.map((card) => card.row), [timeline.cards])
 
-  const { onSession, guard, navigateGuarded, dirty } = useRowSessionGuard()
-  // Ahead of the session: its key is the expanded id, which must change in the same render.
-  const { expandedId, setExpanded } = useChapterExpansion({
-    ready: open != null,
-    rows: expansionRows,
-    runInFlight: editBlocked,
-    dirty,
-  })
-  const expandedRow = timeline.cards.find((card) => card.row.id === expandedId)?.row ?? null
-  const values = useMemo(() => chapterDraftFrom(expandedRow), [expandedRow])
-  const onSave = useCallback(
-    (draft: ChapterDraft): Promise<ChapterSaveResult> =>
-      expandedRow == null
-        ? Promise.resolve(NO_CHAPTER_OPEN)
-        : saveChapter({ branchId, row: expandedRow, draft }, ctx),
-    [branchId, expandedRow],
+  const save = useCallback(
+    (row: StoreChapter, draft: ChapterDraft) => saveChapter({ branchId, row, draft }, ctx),
+    [branchId],
   )
   const onSaved = useCallback(() => toast.success(t('chapters:save.saved')), [])
   // Hosted above every card for the route's life, so the phone bar can sit outside the scroller.
-  const session = useChapterRowSession({
-    rowId: expandedId,
-    values,
-    onSave,
+  const { expandedId, session, toggle, guard, navigateGuarded } = useTimelineEditing({
+    ready: open != null,
+    rows: expansionRows,
+    runInFlight: editBlocked,
+    save,
     onSaved,
     // The save bar's notice has no visible text on phone, so a refused save also toasts.
     onRejected: toast.error,
-    onSession,
   })
 
-  const toggle = useCallback(
-    (id: string) => guard(() => setExpanded(id === expandedId ? null : id)),
-    [guard, setExpanded, expandedId],
-  )
   const jump = useCallback(
     (startEntryId: string) => navigateGuarded(readerHref(branchId, startEntryId)),
     [navigateGuarded, branchId],
