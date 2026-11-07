@@ -767,7 +767,7 @@ export default function ReaderComposerRoute() {
         ).finally(() => setSendPending(false))
         const refusal = passRefusalOf(result)
         const closeRefusal = closeRefusalOf(result)
-        // The Send wrote nothing, so its text goes back to the composer or onto the entry.
+        // The Send wrote no turn, so its text goes back to the composer or onto the entry.
         const custodyNow = () =>
           readPassFailureCustody({
             stillOnBranch: branchUnchanged(branchId),
@@ -824,6 +824,7 @@ export default function ReaderComposerRoute() {
           const putBack = abortedBeforeTurn(result) ? dropped : null
           await restoreSystemTail(putBack)
           if (branchUnchanged(branchId)) {
+            // A put-back turn entry's Retry resends its own text, not this Send's.
             if (putBack != null) setLastSubmission(putBack.failure?.submission ?? null)
             // Cancel reverses the whole turn (user_action too, C6): hand the text back. A retry
             // lacks raw pre-wrap text, so wrapped content returns under 'free' (no re-wrap). Only
