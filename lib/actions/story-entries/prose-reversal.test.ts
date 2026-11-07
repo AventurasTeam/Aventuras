@@ -382,6 +382,27 @@ describe('bracketProseReversal — a manual pick', () => {
     expect(generationStore.getTxState().reversalInProgress).toBe(false)
   })
 
+  it('keeps a different pick that lands while the check reads', async () => {
+    const { ctx, remove } = await withPick()
+    let fired = false
+    const racing = new Proxy(ctx.db, {
+      get(target, prop, receiver) {
+        if (prop === 'select' && !fired) {
+          fired = true
+          generationStore.setPendingClose('b1', { endEntryId: 'e_u1' })
+        }
+        return Reflect.get(target, prop, receiver) as unknown
+      },
+    })
+
+    await bracketProseReversal('b1', { db: racing }, async () => {
+      await remove('e_r1')
+    })
+
+    expect(fired).toBe(true)
+    expect(pick()).toEqual({ endEntryId: 'e_u1' })
+  })
+
   it('keeps the pick and warns when the check cannot read', async () => {
     await withPick()
     const warn = vi.spyOn(logger, 'warn')
