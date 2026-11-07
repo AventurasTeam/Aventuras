@@ -257,8 +257,8 @@ where the explicit-save pattern applies.
   tabs share one session.
 - [Chapter Timeline](../screens/chapter-timeline/chapter-timeline.md#save-session--per-card)
   — per-card variant: one session per chapter card, the expanded
-  one's. Expanding another card, or collapsing the open one, while it
-  is dirty fires the
+  one's. Expanding another card, or collapsing the open one, while the
+  open one is dirty fires the
   [navigate-away guard](#navigate-away-guard--global-intercept)
   (Save / Discard / Cancel). The bar sits in the card on tablet and
   desktop, and at the surface's bottom edge on phone.

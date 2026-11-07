@@ -189,7 +189,7 @@ convention, and the expectation that subsystems route through
   `lore_save_rejected` / `chapter_save_rejected`
   (warn: the in-flight refusal, which the disabled UI should make
   unreachable, a location Save whose tail moved while it waited, or a
-  rejected write, such as a Timeline Save on a chapter that went),
+  rejected write, such as a Timeline Save on a chapter since removed),
   `thread_save_failed` / `happening_save_failed` / `entity_save_failed` /
   `lore_save_failed` / `chapter_save_failed` (error: a Save whose
   actions threw while building or writing, logged with its action kinds
