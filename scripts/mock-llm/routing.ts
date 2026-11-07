@@ -61,8 +61,8 @@ function callsAndReasoningText(message: unknown): string[] {
 
 /**
  * A tool request's prompt as a server counts it: `promptText`, the tool definitions, and each
- * message's calls and reasoning. Close to the app's estimate, not equal: a tool result's name
- * isn't on the wire.
+ * message's calls and reasoning. Close to the app's estimate, not equal: the app counts the SDK's
+ * shapes part by part, a tool result's name among them; this counts the wire's as one string.
  */
 export function toolPromptText(body: Record<string, unknown>): string {
   return [

@@ -64,7 +64,7 @@ function asNarrativeValue(value: unknown): NarrativeValue {
   }
 }
 
-// The SDK reads arguments cut short as an invalid call: a tool lane's malformed reply.
+// Malformed and stream-cut on a tool lane: arguments cut short, which the SDK reads as invalid.
 function cutFirstCall(step: MockToolStep): MockToolStep {
   const [first, ...rest] = step.toolCalls ?? []
   if (first === undefined) return step
@@ -298,7 +298,7 @@ export async function handleCompletion(
   }
 
   if (route.lane === 'tool') {
-    // Served as stored; an unconfigured lane's `{}` is no calls and stop.
+    // An unconfigured lane's `{}` is no calls and stop.
     const stored = (canned?.value ?? {}) as MockToolStep
     if (CUTS_A_CALL.has(failure) && stored.toolCalls?.[0] === undefined) {
       entry.outcome = 'ok'
