@@ -348,6 +348,24 @@ describe('tool lanes through the app transport', () => {
     },
   )
 
+  it.each(['', '  {}'])(
+    'cuts a call whose arguments %j halve to blank into one that fails a schema taking {}',
+    async (args) => {
+      const finish = tool({ description: 'End the task.', inputSchema: z.object({}) })
+      const lane = mock.ctx.lane('tools:finish')
+      lane.mode = 'mock'
+      lane.responses = [
+        { id: 'r_finish', name: 'Finish', value: { toolCalls: [{ name: 'finish', args }] } },
+      ]
+      lane.activeId = 'r_finish'
+      lane.failure = { kind: 'malformed', status: 500, remaining: 1 }
+
+      const cut = await sendToolStep({ finish })
+
+      expect(cut.toolCalls).toMatchObject([{ toolName: 'finish', invalid: true }])
+    },
+  )
+
   it('serves a step with no calls as it is under malformed', async () => {
     cannedSteps({ text: 'Nothing to look up.' })
     mock.ctx.lane(LOOKUP_LANE).failure = { kind: 'malformed', status: 500, remaining: 1 }

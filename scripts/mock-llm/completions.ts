@@ -68,8 +68,10 @@ function asNarrativeValue(value: unknown): NarrativeValue {
 function cutFirstCall(step: MockToolStep): MockToolStep {
   const [first, ...rest] = step.toolCalls ?? []
   if (first === undefined) return step
-  const args = argumentsOf(first.args)
-  return { ...step, toolCalls: [{ name: first.name, args: firstHalf(args) }, ...rest] }
+  const half = firstHalf(argumentsOf(first.args))
+  // The SDK reads blank arguments as `{}`, a valid call to a schema that takes it.
+  const args = half.trim() === '' ? '{' : half
+  return { ...step, toolCalls: [{ name: first.name, args }, ...rest] }
 }
 
 function servedToolStep(step: MockToolStep, failure: FailureKind): MockToolStep {
