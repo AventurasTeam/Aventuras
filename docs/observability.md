@@ -278,7 +278,8 @@ convention, and the expectation that subsystems route through
   shape; the strip keeps its last number),
   `chapter_time_ranges_read_failed` (`hooks/use-chapter-time-ranges.ts`,
   same shape; after a settle the chapter rows show no time line, and a
-  failed refetch on reopening keeps the lines from before),
+  failed refetch on reopening, or on the Timeline's focus, keeps the lines
+  from before),
   `story_chapter_numbers_read_failed`
   (`hooks/use-story-chapter-numbers.ts`, a failed read; the cards keep
   their last label, or none before the first read),

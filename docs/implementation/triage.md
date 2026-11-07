@@ -292,3 +292,99 @@ slice-planning gate forces its resolution before that slice is planned.
   `window-check.test.ts` and `request-shape.test.ts`. The older
   `narrativeValueSchema` in `scripts/mock-llm/validate.ts` is exported
   with no importer. Surfaced by Slice 5.4's slice review.
+- **World's and Plot's create tab shows the previous row on native.**
+  `useCreateResetTab` (`hooks/use-create-reset-tab.ts:12-15`) switches
+  the detail pane's tab during render, in the commit whose `create:…`
+  `rowKey` resets the form. On native `@rn-primitives/tabs` renders
+  nothing for an inactive tab, so the create tab's fields mount in that
+  commit and miss the reset (react-hook-form subscribes passively off
+  web: [the lesson](lessons-learned/rhf-native-passive-subscription.md)).
+  The fields show the previous row, or a previous draft's text, while
+  the form holds blanks, and Save writes blanks for every field the
+  user didn't touch. Reached by `[+] Blank` while the pane is on a tab
+  other than the one a create opens on, at tablet tier (the Fold
+  unfolded). Confirmed on react-hook-form's native path in jsdom, not on
+  a device. Fixes: switch the tab in a layout effect, or lift the
+  Timeline's `formRowId` into the substrate as a `formRowKey` hosts gate
+  on; or patch react-hook-form to use `useLayoutEffect` whenever
+  `window` exists, which removes the class (errors and field arrays
+  included). Surfaced by Slice 5.7's Android check.
+- **A leave re-raised after Discard or Save reads stale dirty state.**
+  `requestLeave` and `runSave` in `hooks/use-row-save-session.ts`
+  (`:443-453`, `:390-395`) read the last render's
+  `form.formState.dirtyFields`, so a leave requested again in the same
+  tick as a Discard or Save is queued, and the leave dialog opens over a
+  clean session. It stays latent only because expo-router 55 queues
+  `back`, `dismiss` and `push` until after the next commit; a
+  synchronous dispatch brings the double prompt back on World, Plot and
+  the Timeline. Reading dirtiness live, as the Story Settings session
+  does through its `stateRef`, would close it. The Timeline's E2E pins
+  one-click Discard for `←` and Jump. Surfaced by Slice 5.7's route
+  review.
+- **The row-session wrapper exists in four copies.** The lore, entity,
+  plot and chapter row sessions each repeat the `commit` wrapper (a
+  try/catch and a `*_saved_handler_failed` log), the `onSession`
+  effect, and, in two of the four (lore, chapter), an effect
+  that calls `clearErrors` once the form is clean and the other two lack.
+  Whether plot and entity miss that effect on purpose is unverified. Lifting the shared parts into
+  the substrate or a helper would end the drift. Surfaced by Slice
+  5.7's session-hook review.
+- **The gated field wiring exists in three copies.** The `Controller`
+  plus `FormRow` plus input with the run gate (`editable={!blocked}`
+  and a hint, or `disabled` and a reason) is written in World's
+  `components/world/detail/fields.tsx`, Plot's inline Controllers, and
+  `ChapterCard`; they differ only in the issue-text function. A gated
+  field in `components/compounds/` that takes it would remove the
+  copies. Surfaced by Slice 5.7's card review.
+- **`TagInput` remounts when a run starts.** On web it wraps itself in a
+  `div title` only while disabled with a reason
+  (`components/compounds/tag-input.tsx:211-213`), so a run starting
+  mid-keyword flips the root element and remounts the tree: focus and
+  the half-typed keyword (local state) are lost. Hits World's
+  `ListField` and the Timeline's Keywords. Same class as the
+  input-adornment DOM-identity lesson. Surfaced by Slice 5.7's card
+  review.
+- **A collapsed chapter card's meta line is never announced.** The
+  head's `aria-label` is exactly the heading (Task 12's locator matches
+  it), which replaces the button's children for a screen reader, so
+  the time range, token count and theme are never read; the theme
+  appears nowhere else until the card expands. Describing the head by
+  the meta line (`aria-describedby` on web, `accessibilityHint` on
+  native) keeps the name; whether RN-Web forwards `aria-describedby` is
+  unchecked. Surfaced by Slice 5.7's card review.
+- **Text fields carry the gate reason only as `accessibilityHint`.** On
+  web there is no hover tooltip on a run-locked `Input` or `Textarea`,
+  short of `principles.md → Disabled controls + tooltips`. The World
+  and Plot fields share it (`awareness-editor.tsx:148`); `ChapterCard`
+  follows them. Surfaced by Slice 5.7's doc review.
+- **C15 says time ranges exclude 0; the read excludes system entries.**
+  [Milestone 5 → C15](milestones/05-chapters-chapter-close/milestone.md#c15--entry-jump-and-chapter-time-ranges)
+  gives each chapter's `min` and `max` world time "excluding 0";
+  `readChapterTimeRanges` (`lib/db/story-entries/chapter-time-ranges.ts:27-28`)
+  excludes `kind = 'system'` and a null world time instead. One of the
+  two should change. Surfaced by Slice 5.7's card-data task.
+- **`observability.md` credits `row_save_validate_failed` to a check
+  that isn't there.** The bullet names "the lore session's first-edit
+  whole-draft check"; `use-lore-row-session.ts` runs no `trigger()`,
+  and the substrate's values-subscription catch, which does log it, is
+  unnamed. Surfaced by Slice 5.7's session-hook review.
+- **Two pill open items have nothing open.** In
+  `docs/ui/patterns/generation-status-pill.md → Open items`,
+  `Pipeline orchestrator wiring` (every consumer now derives its phase)
+  and `Memory error observation` (one shared hook, `StoryStatusPill`,
+  the error collapse) describe shipped states. Left in place because
+  Slice 5.6 edits the same file. Surfaced by Slice 5.7's doc review.
+- **Run gating for `Regenerate summary` is unspecified.**
+  `chapter-timeline.md`'s in-flight list splits the card's actions into
+  disabled and live but names neither for `Regenerate summary`, and the
+  wireframe draws it live mid-run. It starts a metadata write, which
+  `principles.md → Edit restrictions` points to gating. Moot until the
+  slice that enables it; settle it there. Surfaced by Slice 5.7's doc
+  review.
+- **`saveBarDiscard` matches the unsaved dialog's Discard too.**
+  `e2e/locators/save-session.ts:13` has no `exact: true`, so while the
+  dialog is open it would hit a strict-mode error. No current caller
+  uses it with the dialog open. Surfaced by Slice 5.7's E2E review.
+- **Thirteen test files spell out `RunState` for `startRun`.** No shared
+  fixture, so a `RunState` change edits all of them. Surfaced by Slice
+  5.7's save-path review.
