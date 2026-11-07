@@ -158,8 +158,9 @@ can leave the hard gate or the reversal barrier stuck. The close's
 record mutators (`setPendingClose`, `clearPendingClose`,
 `clearDeferredClose`, `dropBranchRecords`) belong to the files that
 write those records, `lib/actions/chapters/**`, `delete-story.ts`,
-`chapter-close-boundary.ts` and `memory-chain.ts`, which may not drive
-a run in turn, since a stray write makes the next Send start a close
+`chapter-close-boundary.ts` and `memory-chain.ts`, and the
+prose-reversal bracket, which clears a pick; the first four may not
+drive a run in turn, since a stray write makes the next Send start a close
 nobody owes or skip one that is owed. `setCloseProgress` is the
 orchestrator's, as the run mutators are.
 

@@ -530,7 +530,7 @@ map of `RunState`s is enough.
 // src/ai/pipeline/orchestrator.ts
 export async function runPipeline(kind: string): Promise<TxResult> // resolves once the whole chain has ended
 export function startPipeline(kind: string): {
-  origin: Promise<TxResult>
+  origin: Promise<TxResult | RejectedStart>
   chain: Promise<ChainEnd | null>
 }
 export type ChainEnd = { kind: string; result: TxResult; cancelled: boolean } // the chain's last run; see Chained transition
@@ -1426,9 +1426,10 @@ and every run of the chain is Send's (`beforeTurn`), so the composer's
 Cancel, the pill and the banner treat it as the Send's. Cancel during
 any of them cancels the whole Send, the turn included, even when it
 lands after a run's last phase and the run commits; work it
-interrupted stays deferred, and the composer keeps the user's text,
-unless owed work had already committed, when the text goes back into
-an empty composer
+interrupted stays deferred, and the user's text goes back into an
+empty composer (else a toast says the draft was kept). The failure
+entry the Send cleared goes back too, unless owed work had already
+committed
 ([`reader-composer.md → Custody of the turn's text`](./ui/screens/reader-composer/reader-composer.md#custody-of-the-turns-text)).
 A run of that chain that fails fails the Send: the turn doesn't start,
 the text goes back to an empty composer (else onto the entry), and the
