@@ -178,13 +178,12 @@ so stories run without a database.
 **One card expanded at a time.**
 
 - A pure `nextExpandedChapter` in `components/chapters/` decides the
-  expanded id, so its rules are unit-tested. An id whose row left the
-  store is dropped, not kept for a redo to revive. New means an id not
-  yet judged, and every chapter is judged once, so each expands at most
-  once. The first rows a mounted route sees expand nothing, or a reload
-  would pop an editor open unasked, the trap `expandable-row.tsx:13-16`
-  names. A new
-  chapter then expands as
+  expanded id, so its rules are unit-tested. An expanded id whose row
+  left the store is dropped, not kept for a redo to revive. New means an
+  id not yet judged, and every chapter is judged once, so each expands
+  at most once. The first rows a mounted route sees expand nothing, or a
+  reload would pop an editor open unasked, the trap
+  `expandable-row.tsx:13-16` names. A new chapter then expands as
   [Implementation notes](#implementation-notes) record.
 - Every transition goes through `useRowSessionGuard`'s `guard`:
   expanding another card, collapsing the open one, `Jump to chapter →`,
@@ -322,8 +321,8 @@ and `goToChapterTimelineRow` in `e2e/locators/chrome.ts`.
   mounted route sees expand nothing; an expanded id is dropped when its
   row goes and doesn't come back with the row; a chapter not yet judged
   expands once, only with no run and no dirty card, a re-close at an old
-  number included, while a redo's returning id stays collapsed; a dirty
-  card never loses expansion to it.
+  number included, while a redo restoring an already-judged id stays
+  collapsed; a dirty card never loses expansion to it.
 - `chapter-card.stories.tsx`, play: a `Blocked` story shows the fields
   and Save disabled with the reason, and Discard and
   `Jump to chapter →` live. An invalid draft disables Save with its
@@ -415,8 +414,8 @@ and the seventh moved to the slice that owns it.
 ## Implementation notes
 
 - **A new chapter expands once its run ends, a story's first chapter
-  included (developer decisions at slice planning and during the run:
-  Q9 B).** A deviation from the brief, whose default left a first
+  included (developer decision at slice planning, revised during the
+  run).** A deviation from the brief, whose default left a first
   chapter collapsed under an empty Timeline. When the route is ready, as
   soon as `useColdOpenStory` returns the open story, every chapter id on
   the branch is judged. `loadOpenStory` hydrates `chaptersStore` before
@@ -426,13 +425,15 @@ and the seventh moved to the slice that owns it.
   the newest expands if no card is dirty, so it never raises the guard;
   one that lands over a dirty card has spent its chance. An expanded id
   whose row leaves the store is dropped and doesn't come back with the
-  row. Ids that leave stay judged, so a redo or an undone delete brings
-  a chapter back collapsed, while a re-close after CTRL-Z, a rollback
-  or `Delete…` gets a new id. This overturns the planned numeric
-  baseline, the highest `sequenceNumber` judged, and its residue: a
-  re-close at an already-judged number stayed collapsed. Chapters
-  already there when the Timeline opens never expand; every fresh close
-  expands.
+  row. Ids that leave stay judged, so a redo or an undone delete that
+  restores an id this Timeline already judged brings its chapter back
+  collapsed, while a re-close after CTRL-Z, a rollback or `Delete…` gets
+  a new id. This overturns the planned numeric baseline, the highest
+  `sequenceNumber` judged, and its residue: a re-close at an
+  already-judged number stayed collapsed. Chapters already there when
+  the Timeline opens never expand, a close still running then included;
+  every close that lands while it is open expands, a re-close at an old
+  number included.
 - **The expansion state isn't keyed by branch.** Another `branchId` is
   a new screen, since `useSurfaceNavigate` matches the full pathname, so
   a branch change never reuses the Timeline's instance.

@@ -252,16 +252,16 @@ Rendered:
   [branch-navigator → during generation](../reader-composer/branch-navigator/branch-navigator.md#during-generation--switch--delete--create-blocked).
 
 The card is not expandable / editable — there's nothing to edit
-yet. A close adds the new chapter's card above it, and that card
-expands by itself so the user can review (and edit, if they want to
-override) the LLM-generated metadata. It expands once no run is in
-flight, so not while the run that wrote it can still be cancelled, and
-only while no card is dirty, so it never raises the navigate-away
-guard: over a dirty card it stays collapsed, and doesn't open later
-when that card is saved. A story's first chapter, landing under an
-empty Timeline, expands the same way. Chapters already there when the
-Timeline opens never expand; every fresh close expands, a re-close at
-an old number included.
+yet. A close that lands while the Timeline is open adds the new
+chapter's card above it, and that card expands by itself so the user
+can review (and edit, if they want to override) the LLM-generated
+metadata. It expands once no run is in flight, so not while the run
+that wrote it can still be cancelled, and only while no card is dirty,
+so it never raises the navigate-away guard: over a dirty card it stays
+collapsed, and doesn't open later when that card is saved. A story's
+first chapter, landing under an empty Timeline, expands the same way,
+and so does a re-close at an old number. Chapters already there when
+the Timeline opens never expand, a close still running then included.
 
 ## Chapter-close modal
 

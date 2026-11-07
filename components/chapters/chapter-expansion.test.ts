@@ -221,6 +221,7 @@ describe('nextExpandedChapter', () => {
     expect(deleted).toBe(ready)
     expect(nextExpandedChapter(deleted, input({ rows })).expandedId).toBeNull()
   })
+
   it('keeps a deleted id judged while another close lands, so undoing both leaves it collapsed', () => {
     const rows = [row(1), row(2), row(3)]
     const state = judge([
