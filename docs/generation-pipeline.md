@@ -533,7 +533,12 @@ export function startPipeline(kind: string): {
   origin: Promise<TxResult | RejectedStart>
   chain: Promise<ChainEnd | null>
 }
-export type ChainEnd = { kind: string; result: TxResult; cancelled: boolean } // the chain's last run; see Chained transition
+export async function startChain(
+  kind: string,
+): Promise<RejectedStart | { origin: TxResult; end: ChainEnd }> // once the chain has ended; rejects on the origin's throw
+export type ChainEnd = // the chain's last run; see Chained transition
+  | { kind: string; result: TxResult & { outcome: 'completed' }; cancelled: boolean }
+  | { kind: string; result: TxResult & { outcome: 'aborted' | 'failed' } }
 export const pipelineEventBus: PipelineEventBus
 ```
 
@@ -1336,17 +1341,17 @@ async function nextMemoryRun(
   // a persisted 'running' (a pass left unfinished) waits for boot, and nothing builds on its writes
   if (status.state === 'running') return null
   const unprocessed = await unprocessedEntryCount(run.branchId, status.processedThrough, ctx)
-  if (await closeOwed(run.branchId, story, ctx))
+  if (await closeOwed(story, ctx))
     return unprocessed > 0 ? 'periodic-classifier' : 'chapter-close'
   return unprocessed >= Math.max(1, story.settings.classifierCadence) ? 'periodic-classifier' : null
 }
 
 // A close the user picked, or the open region past the threshold with
 // auto-close on and a reply to end the chapter on.
-const closeOwed = async (branchId: string, story: Story, ctx): Promise<boolean> => {
-  if (pendingClose.has(branchId)) return true
+const closeOwed = async (story: OpenStory, ctx): Promise<boolean> => {
+  if (pendingClose.has(story.branchId)) return true
   if (!story.settings.chapterAutoClose) return false
-  const region = await openRegionSeries(branchId, ctx)
+  const region = await openRegionSeries(story.branchId, ctx)
   const openRegionTokens = sum(region.map((e) => e.tokens))
   return openRegionTokens >= story.settings.chapterTokenThreshold && region.some(canEndChapter)
 }
@@ -1373,7 +1378,7 @@ const periodicClassifierPipeline: Pipeline = {
   chainsTo: async (run, ctx) => {
     if (passStartedAlone(run)) return null // inputs: { alone: true }
     const story = openStory(run)
-    return story && (await closeOwed(run.branchId, story, ctx)) ? nextMemoryRun(run, ctx) : null
+    return story && (await closeOwed(story, ctx)) ? nextMemoryRun(run, ctx) : null
   },
 }
 ```
@@ -1419,7 +1424,7 @@ on under it. The next Send on that branch runs the owed work before
 the turn as one chain: submit, inside the branch queue, starts a pass
 when one is deferred, a close is owed with entries unprocessed, or the
 cadence is due, and otherwise the close when one is owed, through
-`startPipeline`, and awaits the chain's end. The pass chains the close
+`startChain`, and awaits the chain's end. The pass chains the close
 behind it while one is owed, so a Send runs at most one close before
 its turn. Then submit writes the user_action and starts the turn. Each
 run has its own `actionId` and commits before the turn's first write,
@@ -1483,17 +1488,21 @@ observed on the event bus, not the return value.
 
 `startPipeline` splits the two: its `origin` settles with the
 starting run's result at that run's commit or abort, its `chain` when
-the chain's last run ends, with that run's end: its kind, its result,
-and `cancelled`, whether its abort had fired by its end. The end is the
-origin's own when nothing chained, and null only when the origin was
-refused or threw; `chain` never rejects. `cancelled` lets a
-reader honour a Cancel that landed after a run's last phase, which the
-run commits over and chains nothing behind. A turn's start awaits only
-`origin`, so submit and regenerate release the branch queue at the
-turn's commit while a chained pass runs on, and a head reversal reaches
-the pass to interrupt it rather than queueing behind it. Send's owed
-work, the manual close and a close entry's `Retry` read `chain`
-instead, since the work they wait on may end on a successor. A
+the chain's last run ends, with that run's end: its kind, its result
+and, on a completed end alone, `cancelled`, whether its abort had fired
+by its end. An aborted or failed end carries none, where it would say
+nothing. The end is the origin's own when nothing chained, and null
+only when the origin was refused or threw; `chain` never rejects.
+`cancelled` lets a reader honour a Cancel that landed after a run's
+last phase, which the run commits over and chains nothing behind. A
+turn's start awaits only `origin`, so submit and regenerate release the
+branch queue at the turn's commit while a chained pass runs on, and a
+head reversal reaches the pass to interrupt it rather than queueing
+behind it. Send's owed work, the manual close and a close entry's
+`Retry` wait on the whole chain instead, since the work they wait on
+may end on a successor. They call `startChain`, which resolves once the
+chain has ended, with the refusal or with the origin's result beside
+the chain's end, and rejects on the origin's throw. A
 successor whose marker insert fails is unwound, and the chain ends
 there, its end failed with an `orchestrator` error. So is any run whose
 drive throws before it ends, which would otherwise hold the gate until
@@ -2301,7 +2310,8 @@ const periodicClassifierPipeline: Pipeline = {
   concurrencyPolicy: {
     blockedBy: ['per-turn', 'periodic-classifier', 'chapter-close', 'translation-retry'],
   },
-  // started by a chain, by Send as its owed pass, or by Run now
+  // started by a chain, by Send as its owed pass, by Run now, by a pass-failure entry's Retry,
+  // or as the first run of a manual close or of a close entry's Retry
 }
 
 const chapterClosePipeline: Pipeline = {

@@ -46,7 +46,8 @@ canon leaves open.
 - [`generation-pipeline.md → Multi-run txState`](../../../../generation-pipeline.md#multi-run-txstate):
   `deferred`, `pendingClose`, and who writes them.
 - [`generation-pipeline.md → Chained transition`](../../../../generation-pipeline.md#chained-transition--no-user-edit-window):
-  `startPipeline`'s `origin` and `chain`, and the one-tick swap.
+  `startPipeline`'s `origin` and `chain`, `startChain`, and the one-tick
+  swap.
 - [`generation-pipeline.md → Config pre-flight validation`](../../../../generation-pipeline.md#config-pre-flight-validation):
   the surfacing rule for a close.
 - [`generation-pipeline.md → Prose reversals and the interrupt`](../../../../generation-pipeline.md#prose-reversals-and-the-interrupt).
@@ -76,9 +77,10 @@ canon leaves open.
 
 **Chain,** in `lib/pipeline/definitions/memory-chain.ts`.
 
-- `closeOwed(branchId, story, ctx)`, exported: a pending record, else
-  `chapterAutoClose` and one `openRegionSeries` read, taking the sum
-  against `chapterTokenThreshold` and `.some(canEndChapter)`.
+- `closeOwed(story, ctx)`, exported, reading the open story's branch
+  and settings: a pending record, else `chapterAutoClose` and one
+  `openRegionSeries` read, taking the sum against
+  `chapterTokenThreshold` and `.some(canEndChapter)`.
 - `nextMemoryRun`'s close branch, returning the pass or the close kind.
   A held branch, its classifier status `running`, chains nothing in any
   arm, since a pass or a close would build on the held pass's unreversed
@@ -171,7 +173,7 @@ leaves nothing stale.
   shares. The manual start passes its end check as `validate`, run after
   the held check so the refusal order stands, and the record's write as
   `onReserved`.
-- The tail calls `startPipeline` directly, after ensuring registration,
+- The tail calls `startChain` directly, after ensuring registration,
   never `runClassifierPass`. That starter awaits `isClassifierHeld`
   inside the tick (`classifier-pass.ts:21`), so a queued Send could
   read the record and start its pass, and this start's rejection would
@@ -196,15 +198,18 @@ leaves nothing stale.
   turn's own chain may close again after it (see
   [Open questions](#open-questions)).
 - `PipelineStart.chain` resolves to the chain's end and still never
-  rejects: `ChainEnd`, `{ kind, result, cancelled }` for the last run
-  that ran, the origin included, and null only when the origin was
-  refused or threw. An unwound successor reads as failed with an
-  `orchestrator` error. `cancelled` reports a run whose abort had fired
-  by its end. `driveSuccessors` returns it.
+  rejects: `ChainEnd` for the last run that ran, the origin included,
+  and null only when the origin was refused or threw. An unwound
+  successor reads as failed with an `orchestrator` error. The end is a
+  union by outcome: a completed end carries `cancelled`, whether its
+  abort had fired by its end, and an aborted or failed one carries
+  none, where it would say nothing. `driveSuccessors` returns it.
 - `runPipeline` stays as it is, returning the origin's result, which
   spares about 85 call sites. `submitTurn`, `startManualClose` and a
-  close entry's Retry call `startPipeline` and read `.chain` beside
-  `origin`, which still carries a refusal and rejects on a throw.
+  close entry's Retry call `startChain`, built on the same drive. It
+  resolves once the chain has ended, with the refusal or with the
+  origin's result beside the chain's end, and rejects on the origin's
+  throw, so no caller meets an origin that ran with no end.
 - `commitRun` in `orchestrator.ts` stops clearing `beforeTurn`, so a successor under
   Send is Send's: `findSendRun`, the composer's Cancel, the pill, the
   banner and `run_complete` all read it so.
