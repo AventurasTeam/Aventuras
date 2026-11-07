@@ -2079,14 +2079,14 @@
     },
     // An owed close that fails at Send fails the Send, as an owed pass does (memory/chapter-close.md -> Failure modes).
     close: {
-      kind: '⚠ System · memory update error',
+      kind: '⚠ System · chapter close error',
       content: "<b>Chapter close failed, so your turn didn't start.</b> Retry it, or send again.",
       detail: 'network: APICallError: fetch failed',
       actions: '<span class="err-btn primary">Retry</span><span class="err-btn" id="err-dismiss">Dismiss</span>',
     },
     // A close Retry that finds no close owed any more, whose text the composer couldn't take back: a notice holding it.
     closeResolved: {
-      kind: '⚠ System · memory update error',
+      kind: '⚠ System · nothing left to close',
       content: "Nothing is left to close before your turn. The composer couldn't take your text back, so it's kept here.",
       actions: '<span class="err-btn" id="err-dismiss">Dismiss</span>',
       alwaysHeld: true,
