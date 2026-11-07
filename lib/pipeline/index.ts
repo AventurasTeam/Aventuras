@@ -21,6 +21,7 @@ export {
   CHAPTER_CLOSE_RESOLVES,
   ensureChapterClosePipelineRegistered,
 } from './definitions/chapter-close'
+export { closingChapterId } from './definitions/closing-chapter'
 export {
   CLASSIFIER_HELD,
   isClassifierHeld,
