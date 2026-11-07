@@ -41,13 +41,25 @@ describe('fallbackChapterEnd', () => {
     expect(fallbackChapterEnd(series)).toBe(series[1])
   })
 
-  it('asks canEndChapter, the one copy of the rule (C10)', async () => {
+  // Swapped so the rule, not the kind, decides: the head case needs a row before it that fails.
+  it.each([
+    {
+      name: 'a user_action before a reply head',
+      series: [r(1), u(2), u(3)],
+      end: 'u2',
+    },
+    {
+      name: 'the user_action head when nothing before it qualifies',
+      series: [r(1), u(2)],
+      end: 'u2',
+    },
+  ])('asks canEndChapter, the one copy of the rule (C10), for $name', async ({ series, end }) => {
     const actual = await vi.importActual<{ canEndChapter: typeof canEndChapter }>(
       './can-end-chapter',
     )
     vi.mocked(canEndChapter).mockImplementation((row) => row.kind === 'user_action')
     try {
-      expect(fallbackChapterEnd([r(1), u(2), u(3)])?.id).toBe('u2')
+      expect(fallbackChapterEnd(series)?.id ?? null).toBe(end)
     } finally {
       vi.mocked(canEndChapter).mockImplementation(actual.canEndChapter)
     }
