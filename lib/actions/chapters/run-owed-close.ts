@@ -5,7 +5,7 @@ import {
   type ChainEnd,
   type RejectedStart,
 } from '@/lib/pipeline'
-import { currentStoryStore } from '@/lib/stores'
+import { currentStoryStore, generationStore } from '@/lib/stores'
 
 import { MANUAL_CLOSE_REFUSAL, startCloseChain } from './close-chain'
 import type { DbCtx } from '../types'
@@ -28,7 +28,11 @@ export async function runOwedClose(branchId: string, ctx: DbCtx): Promise<OwedCl
   // A held branch fails the next Send as held, so it can't settle as nothing owed.
   if (await isClassifierHeld(branchId, ctx))
     return { outcome: 'rejected', blockedBy: CLASSIFIER_HELD }
-  if (!(await closeOwed(branchId, open, ctx))) return { outcome: 'nothing-owed' }
+  if (!(await closeOwed(branchId, open, ctx))) {
+    // A rollback below the threshold took back the cancelled close; its record would gate the cadence pass.
+    generationStore.clearDeferredClose(branchId)
+    return { outcome: 'nothing-owed' }
+  }
   const started = await startCloseChain(branchId, ctx)
   return 'outcome' in started ? started : { outcome: 'ran', end: started }
 }

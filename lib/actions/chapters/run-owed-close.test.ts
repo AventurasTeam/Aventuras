@@ -8,7 +8,12 @@ import {
   openCloseFixture,
   type CloseFixture,
 } from '@/lib/pipeline/definitions/__tests__/close-fixture'
-import { currentStoryStore, generationStore, resetAllStores } from '@/lib/stores'
+import {
+  currentStoryStore,
+  generationStore,
+  resetAllStores,
+  type DeferredWorkKind,
+} from '@/lib/stores'
 
 import { runOwedClose } from './run-owed-close'
 import { registerStandInClose, type StandInClose } from '../turns/__tests__/stand-in-close'
@@ -56,6 +61,27 @@ async function setClassifierStatus(status: {
 // The last turn's action and reply sit past the watermark.
 const leaveLastTurnUnprocessed = () =>
   setClassifierStatus({ state: 'idle', processedThrough: tailPosition() - 2 })
+
+// Records interrupted work deferred on the branch, as the pill's Cancel does.
+function deferWork(slot: DeferredWorkKind): void {
+  const runId = `run_deferred_${slot}`
+  generationStore.startRun({
+    runId,
+    kind: slot === 'close' ? CHAPTER_CLOSE_KIND : PERIODIC_CLASSIFIER_KIND,
+    gateBehavior: 'hard-gate',
+    interruptible: slot,
+    beforeTurn: false,
+    actionId: `act_${slot}`,
+    storyId: f.storyId,
+    branchId: f.branchId,
+    abortController: new AbortController(),
+    currentPhase: '',
+    intermediates: {},
+    terminal: Promise.resolve(),
+    resolveTerminal: () => {},
+  })
+  expect(generationStore.abortRun(runId, 'aborted')).toBe(slot)
+}
 
 // Fails in 2 s instead of at the test timeout: a run that never holds leaves the Retry pending.
 function within<T>(work: Promise<T>, what: string): Promise<T> {
@@ -117,6 +143,18 @@ describe('runOwedClose runs', () => {
     })
     expect(generationStore.getTxState().runs.size).toBe(0)
     expect(close.runs).toHaveLength(0)
+  })
+
+  // As Send's own check does: a rollback below the threshold took back the interrupted close.
+  it('clears a stale deferred close when no close is owed, keeping a deferred pass', async () => {
+    patchSettings({ chapterAutoClose: false })
+    deferWork('close')
+    deferWork('pass')
+
+    expect(await within(runOwedClose(f.branchId, f.ctx), 'the Retry')).toEqual({
+      outcome: 'nothing-owed',
+    })
+    expect(generationStore.getTxState().deferred.get(f.branchId)).toEqual({ pass: true })
   })
 
   // startCloseChain would start a pass here: the owed check must come first.
