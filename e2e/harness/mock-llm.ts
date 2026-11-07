@@ -318,9 +318,9 @@ export async function startMockLlm(): Promise<MockLlm> {
     return typeof reply === 'function' ? reply(request) : reply
   }
 
-  const toolBody = (lane: string, request: MockRequest): string => {
+  const toolBody = (lane: string, request: MockRequest, prompt: string): string => {
     const step = nextToolStep(lane, request)
-    return toolStepBody(step, mockUsage(toolPromptText(request.body), toolStepCompletionText(step)))
+    return toolStepBody(step, mockUsage(prompt, toolStepCompletionText(step)))
   }
 
   // Built before any header goes out, so a throw (a value JSON can't hold) still ends the response.
@@ -346,9 +346,30 @@ export async function startMockLlm(): Promise<MockLlm> {
     }
   }
 
-  const holdStructured = (res: ServerResponse, build: () => string): void => {
-    heldStructured.set(res, () => respond(res, build))
-    res.on('close', () => heldStructured.delete(res))
+  // `key` is the call's shape or tool lane; null for a structured call no shape matched.
+  const answerCall = (
+    res: ServerResponse,
+    key: string | null,
+    prompt: string,
+    build: () => string,
+  ): void => {
+    if (key === null) {
+      respondUnheld(res, build)
+      return
+    }
+    const overflow = overflowStructured.get(key)
+    if (overflow !== undefined) {
+      overflowStructured.delete(key)
+      rejectOverflow(res, overflow, prompt)
+      return
+    }
+    if (key === holdStructuredNext) {
+      holdStructuredNext = null
+      heldStructured.set(res, () => respond(res, build))
+      res.on('close', () => heldStructured.delete(res))
+      return
+    }
+    respondUnheld(res, build)
   }
 
   // Every held call is answered even if one throws; the first throw surfaces after.
@@ -422,36 +443,15 @@ export async function startMockLlm(): Promise<MockLlm> {
       if (lane !== null) {
         const request: MockRequest = { body, streamed, agent: lane }
         requests.push(request)
-        const overflow = overflowStructured.get(lane)
-        if (overflow !== undefined) {
-          overflowStructured.delete(lane)
-          rejectOverflow(res, overflow, toolPromptText(body))
-          return
-        }
-        if (lane === holdStructuredNext) {
-          holdStructuredNext = null
-          holdStructured(res, () => toolBody(lane, request))
-          return
-        }
-        respondUnheld(res, () => toolBody(lane, request))
+        const prompt = toolPromptText(body)
+        answerCall(res, lane, prompt, () => toolBody(lane, request, prompt))
         return
       }
 
       const text = promptText(body)
-      const agent = matchShape(null, text)
-      requests.push({ body, streamed, agent: agent?.name ?? null })
-      const overflow = agent !== null ? overflowStructured.get(agent.name) : undefined
-      if (agent !== null && overflow !== undefined) {
-        overflowStructured.delete(agent.name)
-        rejectOverflow(res, overflow, text)
-        return
-      }
-      if (agent !== null && agent.name === holdStructuredNext) {
-        holdStructuredNext = null
-        holdStructured(res, () => structuredBody(agent.name, text))
-        return
-      }
-      respondUnheld(res, () => structuredBody(agent?.name ?? null, text))
+      const agent = matchShape(null, text)?.name ?? null
+      requests.push({ body, streamed, agent })
+      answerCall(res, agent, text, () => structuredBody(agent, text))
     })()
   })
 
