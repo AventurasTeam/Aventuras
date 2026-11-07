@@ -91,7 +91,8 @@ export function toolStepOfCompletion(raw: string): MockToolStep | null {
   if (typeof message !== 'object' || message === null) return null
 
   const text = nonEmptyText(message.content)
-  const reasoning = nonEmptyText(message.reasoning_content) ?? nonEmptyText(message.reasoning)
+  // As the SDK picks it, so a replay carries the reasoning the app got live.
+  const reasoning = nonEmptyText(message.reasoning_content ?? message.reasoning)
   const toolCalls = (Array.isArray(message.tool_calls) ? message.tool_calls : []).flatMap(
     (call: unknown) => {
       const fn = (call as { function?: { name?: unknown; arguments?: unknown } } | null)?.function

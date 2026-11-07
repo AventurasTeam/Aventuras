@@ -679,6 +679,15 @@ describe('toolStepOfCompletion', () => {
     ).toEqual({ reasoning: 'A', finishReason: 'stop' })
   })
 
+  it('picks the reasoning field as the SDK does: a null falls through, a blank one keeps none', () => {
+    expect(
+      toolStepOfCompletion(completion({ reasoning_content: null, reasoning: 'B' }, 'stop')),
+    ).toEqual({ reasoning: 'B', finishReason: 'stop' })
+    expect(
+      toolStepOfCompletion(completion({ reasoning_content: '', reasoning: 'B' }, 'stop')),
+    ).toEqual({ finishReason: 'stop' })
+  })
+
   it("keeps arguments as sent when they don't parse, or parse to a string", () => {
     expect(
       toolStepOfCompletion(
