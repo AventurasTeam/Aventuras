@@ -14,6 +14,7 @@ import {
   definePipeline,
   pipelineEventBus,
   runPipeline,
+  startChain,
   startPipeline,
   type PhaseContext,
   type PhaseResult,
@@ -640,7 +641,6 @@ describe('split start', () => {
         outcome: 'failed',
         error: { kind: 'orchestrator', detail: expect.stringMatching(/^marker insert failed: /) },
       },
-      cancelled: false,
     })
     // Pred's run_complete fires with succ still registered, so only succ's reports idle.
     expect(completes).toEqual([
@@ -690,7 +690,6 @@ describe('split start', () => {
         outcome: 'failed',
         error: { kind: 'orchestrator', detail: expect.stringMatching(/^run threw: /) },
       },
-      cancelled: false,
     })
     expect(logged('pipeline.chain_run_failed')).toBe(true)
     // Unwound like a failed marker insert: otherwise it holds the gate until a restart.
@@ -801,7 +800,6 @@ describe('split start', () => {
         outcome: 'failed',
         error: { kind: 'orchestrator', detail: 'run threw: capture failed' },
       },
-      cancelled: false,
     })
     expect(completes).toEqual([
       { kind: 'pred', outcome: 'completed', idle: false },
@@ -947,6 +945,61 @@ describe("the chain's end", () => {
       result: { outcome: 'completed' },
       cancelled: true,
     })
+  })
+})
+
+// generation-pipeline.md → Chained transition: a caller that waits on the whole chain.
+describe('startChain', () => {
+  beforeEach(() => resetSingletons())
+  afterEach(() => resetSingletons())
+
+  it('resolves to the refusal when the origin is refused', async () => {
+    const { ctx } = await makeHarness()
+    const held = heldPhase()
+    definePipeline({ kind: 'holder', phases: [{ name: 'p', run: held.run }], ...base })
+    definePipeline({
+      kind: 'blocked',
+      phases: [{ name: 'p', run: noop }],
+      ...base,
+      concurrencyPolicy: { blockedBy: ['holder'] },
+    })
+    const holding = startPipeline('holder', ctx)
+
+    expect(await startChain('blocked', ctx)).toEqual({ outcome: 'rejected', blockedBy: 'holder' })
+    held.release()
+    await holding.chain
+  })
+
+  it("resolves to the origin's result and the end of the successor it chained", async () => {
+    const { ctx } = await makeHarness()
+    definePipeline({ kind: 'succ', phases: [{ name: 'p', run: noop }], ...base })
+    definePipeline({
+      kind: 'pred',
+      phases: [{ name: 'p', run: noop }],
+      chainsTo: () => 'succ',
+      ...base,
+    })
+    const starts: { runId: string; actionId: string }[] = []
+    pipelineEventBus.subscribe('run_start', (e) => {
+      starts.push({ runId: e.runId, actionId: e.actionId })
+    })
+
+    const ran = await startChain('pred', ctx)
+
+    expect(starts).toHaveLength(2)
+    expect(ran).toEqual({
+      origin: { ...starts[0], outcome: 'completed' },
+      end: { kind: 'succ', result: { ...starts[1], outcome: 'completed' }, cancelled: false },
+    })
+  })
+
+  it('rejects when the origin throws', async () => {
+    const { ctx } = await makeHarness()
+    definePipeline({ kind: 'pred', phases: [{ name: 'p', run: noop }], ...base })
+    const db = failingMarkerInsert(ctx.db, 'pred')
+
+    await expect(startChain('pred', { ...ctx, db })).rejects.toThrow('marker insert failed')
+    expect(generationStore.getTxState().runs.size).toBe(0)
   })
 })
 
@@ -1147,7 +1200,11 @@ describe('an interrupt at the swap into a close', () => {
     expect(interrupted).toBeDefined()
     await interrupted
 
-    expect(end).toMatchObject({ kind: CHAPTER_CLOSE_KIND, result: { outcome: 'aborted' } })
+    // Only a completed end carries `cancelled`: abortRun fired this one's signal itself.
+    expect(end).toEqual({
+      kind: CHAPTER_CLOSE_KIND,
+      result: expect.objectContaining({ outcome: 'aborted' }),
+    })
     expect(logged('pipeline.preflight_failed')).toBe(false)
     expect(generationStore.getTxState().deferred.get('b1')).toEqual({ close: true })
     expect(deferred).toEqual([expect.objectContaining({ kind: CHAPTER_CLOSE_KIND, work: 'close' })])

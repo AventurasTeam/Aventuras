@@ -13,7 +13,7 @@ import {
   ensurePeriodicClassifierPipelineRegistered,
   isClassifierHeld,
   owedWorkAtSend,
-  startPipeline,
+  startChain,
   type RejectedStart,
   type TxResult,
 } from '@/lib/pipeline'
@@ -66,27 +66,21 @@ async function runOwedWork(
   ensureChapterClosePipelineRegistered()
   // Again just before the start: a live pass can end `running` on disk after Send's check.
   if (await isClassifierHeld(ids.branchId, ctx)) return HELD_REJECTION
-  const { origin, chain } = startPipeline(
-    work === 'pass' ? PERIODIC_CLASSIFIER_KIND : CHAPTER_CLOSE_KIND,
-    {
-      storyId: ids.storyId,
-      branchId: ids.branchId,
-      beforeTurn: true,
-      db: ctx.db,
-      runInTransaction: ctx.runInTransaction,
-    },
-  )
-  const started = await origin
-  if (started.outcome === 'rejected') return { ...started, converged: true }
-  const end = await chain
-  // PipelineStart.chain is null only for an origin refused or thrown; reaching here broke that.
-  if (end == null) throw new Error('submitTurn: owed work ran, but its chain resolved no end')
+  const ran = await startChain(work === 'pass' ? PERIODIC_CLASSIFIER_KIND : CHAPTER_CLOSE_KIND, {
+    storyId: ids.storyId,
+    branchId: ids.branchId,
+    beforeTurn: true,
+    db: ctx.db,
+    runInTransaction: ctx.runInTransaction,
+  })
+  if ('outcome' in ran) return { ...ran, converged: true }
+  const { origin, end } = ran
   const ended: DeferredWorkKind = end.kind === CHAPTER_CLOSE_KIND ? 'close' : 'pass'
   const { result } = end
   // A Cancel landing after a run's last phase still commits it, but the Send is cancelled.
   if (result.outcome === 'aborted' || (result.outcome === 'completed' && end.cancelled)) {
     // A chain only continues past a commit, so a completed origin means some owed work stands.
-    const committed = started.outcome === 'completed' ? { committed: true as const } : {}
+    const committed = origin.outcome === 'completed' ? { committed: true as const } : {}
     return { ...result, outcome: 'aborted', beforeTurn: true, work: ended, ...committed }
   }
   if (result.outcome === 'failed') {

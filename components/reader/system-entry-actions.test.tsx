@@ -736,7 +736,7 @@ describe('retryCloseEntry', () => {
 
   const ended = (kind: string, result: TxResult, cancelled = false): OwedCloseRun => ({
     outcome: 'ran',
-    end: { kind, result, cancelled },
+    end: result.outcome === 'completed' ? { kind, result, cancelled } : { kind, result },
   })
 
   function harness(run: OwedCloseRun | Error, heldAfter = false) {

@@ -66,8 +66,14 @@ export type RunCtx = {
 export type RunCtxFor<K extends string> = RunCtx &
   (K extends keyof PipelineInputMap ? { inputs: PipelineInputMap[K] } : { inputs?: unknown })
 
-/** The chain's last run: its kind, its result, and whether its abort had fired by its end. */
-export type ChainEnd = Readonly<{ kind: string; result: TxResult; cancelled: boolean }>
+/**
+ * The chain's last run: its kind and result. A completed end carries `cancelled`: its abort fired
+ * after its last phase, so it committed and chained nothing.
+ */
+export type ChainEnd = Readonly<
+  | { kind: string; result: Extract<TxResult, { outcome: 'completed' }>; cancelled: boolean }
+  | { kind: string; result: Exclude<TxResult, { outcome: 'completed' }>; cancelled?: never }
+>
 
 export type PipelineStart = {
   /**
@@ -582,10 +588,11 @@ async function driveRun(
   return commitRun(run, ctx)
 }
 
-// abortRun fires the signal itself, so `cancelled` tells something only on a completed end: a
-// cancel that landed after the run's last phase, which commits it and chains nothing.
+// abortRun fires the signal itself, so on any other end `cancelled` would always read true.
 function endOf(run: RunState, result: TxResult): ChainEnd {
-  return { kind: run.kind, result, cancelled: run.abortController.signal.aborted }
+  return result.outcome === 'completed'
+    ? { kind: run.kind, result, cancelled: run.abortController.signal.aborted }
+    : { kind: run.kind, result }
 }
 
 type OriginDriven =
@@ -685,6 +692,19 @@ export function startPipeline<K extends string>(kind: K, ctx: RunCtxFor<K>): Pip
       () => null,
     ),
   }
+}
+
+/**
+ * Starts `kind` and resolves once its chain has ended: the origin's result and the chain's end, or
+ * the refusal. Rejects when the origin throws.
+ */
+export async function startChain<K extends string>(
+  kind: K,
+  ctx: RunCtxFor<K>,
+): Promise<RejectedStart | Readonly<{ origin: TxResult; end: ChainEnd }>> {
+  const driven = await driveOrigin(kind, ctx)
+  if (!driven.end) return driven.result
+  return { origin: driven.result, end: await driveSuccessors(driven.end, driven.successor, ctx) }
 }
 
 /** Starts `kind` and resolves with the origin run's result once the whole chain has ended. */

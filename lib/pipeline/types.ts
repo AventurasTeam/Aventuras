@@ -195,7 +195,8 @@ type TxRun = { runId: string; actionId: string }
 
 /** A run's end: a failed run always says why, and a completed or cancelled one never does. */
 export type TxResult =
-  | (TxRun & { outcome: 'completed' | 'aborted'; error?: never })
+  | (TxRun & { outcome: 'completed'; error?: never })
+  | (TxRun & { outcome: 'aborted'; error?: never })
   | (TxRun & { outcome: 'failed'; error: PipelineError })
 
 // A start blocked by the concurrency contract produces no run (no runId/actionId).

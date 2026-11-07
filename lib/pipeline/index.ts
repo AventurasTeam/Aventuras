@@ -55,6 +55,7 @@ export {
 // interruptMemoryRuns, so callers can await a terminal without importing the orchestrator.
 export {
   runPipeline,
+  startChain,
   startPipeline,
   type ChainEnd,
   type PipelineStart,

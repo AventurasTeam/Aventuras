@@ -7,7 +7,7 @@ import {
   ensurePeriodicClassifierPipelineRegistered,
   isClassifierHeld,
   readClassifierStatus,
-  startPipeline,
+  startChain,
   unprocessedEntryCount,
   type ChainEnd,
   type RejectedStart,
@@ -36,7 +36,7 @@ const refused = (blockedBy: ManualCloseRefusal | typeof CLASSIFIER_HELD): Reject
 
 /**
  * Starts the pass (entries unprocessed) or the close; resolves with the chain's end or the refusal.
- * Rejects when the origin throws, as `PipelineStart.origin` does: a caller must handle it.
+ * Rejects when the origin throws, as `startChain` does: a caller must handle it.
  */
 export async function startCloseChain(
   branchId: string,
@@ -67,17 +67,12 @@ export async function startCloseChain(
     return refused(MANUAL_CLOSE_REFUSAL.busy)
   if (generationStore.getSettleCount() !== settled) return refused(MANUAL_CLOSE_REFUSAL.busy)
   const kind = unprocessed ? PERIODIC_CLASSIFIER_KIND : CHAPTER_CLOSE_KIND
-  const { origin, chain } = startPipeline(kind, {
+  const ran = await startChain(kind, {
     storyId: open.storyId,
     branchId,
     db: ctx.db,
     runInTransaction: ctx.runInTransaction,
     onReserved: opts?.onReserved,
   })
-  const first = await origin
-  if (first.outcome === 'rejected') return first
-  const end = await chain
-  // `chain` is null only for a refused or thrown origin, both handled above.
-  if (end == null) throw new Error('startCloseChain: a chain whose origin ran resolved no end')
-  return end
+  return 'outcome' in ran ? ran : ran.end
 }
