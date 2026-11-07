@@ -54,6 +54,7 @@ import {
 import { db, runInTransaction } from '@/lib/db'
 import { logger } from '@/lib/diagnostics'
 import { t } from '@/lib/i18n'
+import { singleParam } from '@/lib/route-param'
 import { currentStoryStore, rehydrateStories, storiesStore } from '@/lib/stores'
 import { toast } from '@/lib/toast'
 
@@ -61,10 +62,6 @@ const ctx = { db, runInTransaction }
 
 // expo-router types params as strings but hands back `string[]` for a repeated
 // query param.
-function singleParam(value: string | string[] | undefined): string | undefined {
-  return typeof value === 'string' ? value : undefined
-}
-
 export default function StorySettingsRoute() {
   const params = useLocalSearchParams<{ storyId?: string | string[] }>()
   const storyId = singleParam(params.storyId)

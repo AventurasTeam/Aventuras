@@ -86,9 +86,6 @@ slice-planning gate forces its resolution before that slice is planned.
   create or close deltas, so a rollback or CTRL-Z on a long branch
   refuses `no-create`. Fine while it stays a read-only performance
   fixture.
-- **`single()` lives in the World module.** The route-param helper
-  (`components/world/world-selection.ts:9`) is imported by Plot, the
-  reader, `plot-selection` and the dev chapter-close route.
 - **`/dev/*` routes are reachable by deep link in a release build.**
   `app/dev/_layout.tsx` has no `__DEV__` gate; only the Settings button
   to the dev index does. For the chapter-close route this is Slice 5.2's

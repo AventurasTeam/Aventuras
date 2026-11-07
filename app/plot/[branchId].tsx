@@ -33,7 +33,7 @@ import { MasterDetailLayout } from '@/components/shells/master-detail-layout'
 import { ScreenShell } from '@/components/shells/screen-shell'
 import { storyPillPhase, useStoryGenerationGate } from '@/components/story-settings/generation-run'
 import { KeyboardInsetColumn } from '@/components/ui/keyboard-inset-column'
-import { single as singleParam, worldHref } from '@/components/world/world-selection'
+import { worldHref } from '@/components/world/world-selection'
 import { useChapterProgress } from '@/hooks/use-chapter-progress'
 import { useColdOpenStory } from '@/hooks/use-cold-open-story'
 import { useEntryIndex } from '@/hooks/use-entry-index'
@@ -57,6 +57,7 @@ import { db, runInTransaction, type Entity } from '@/lib/db'
 import { logger } from '@/lib/diagnostics'
 import { t } from '@/lib/i18n'
 import type { HappeningFilter, PlotKind, PlotListSignals, ThreadFilter } from '@/lib/list-modules'
+import { singleParam } from '@/lib/route-param'
 import {
   chaptersStore,
   entitiesStore,

@@ -1,8 +1,6 @@
-import { single } from '@/components/world/world-selection'
 import { t } from '@/lib/i18n'
 import { isPlotKind, type PlotKind } from '@/lib/list-modules'
-
-type RawParam = string | string[] | undefined
+import { singleParam, type RouteParam } from '@/lib/route-param'
 
 export const THREAD_TABS = ['overview', 'history'] as const
 export const HAPPENING_TABS = ['overview', 'involvements', 'awareness', 'history'] as const
@@ -22,14 +20,14 @@ function tabOf<Tab extends string>(tabs: readonly Tab[], value: string | undefin
  * kind doesn't have is dropped, so the pane opens on Overview.
  */
 export function parsePlotSelection(params: {
-  kind?: RawParam
-  id?: RawParam
-  tab?: RawParam
+  kind?: RouteParam
+  id?: RouteParam
+  tab?: RouteParam
 }): PlotSelection | null {
-  const kind = single(params.kind)
-  const id = single(params.id)
+  const kind = singleParam(params.kind)
+  const id = singleParam(params.id)
   if (!isPlotKind(kind) || id == null) return null
-  const raw = single(params.tab)
+  const raw = singleParam(params.tab)
   if (kind === 'thread') {
     const tab = tabOf(THREAD_TABS, raw)
     return tab == null ? { kind, id } : { kind, id, tab }
