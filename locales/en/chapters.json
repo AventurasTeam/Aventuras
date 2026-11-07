@@ -24,13 +24,14 @@
   },
   "card": {
     "heading": "Chapter {{number}} — {{title}}",
+    "entry": "entry {{first}}",
     "entries": "entries {{first}}–{{last}}",
     "closedAt": "closed {{date}}",
     "moreActions": "More chapter actions"
   },
   "tokens": {
     "compact": "{{value}} tok",
-    "compactThousands": "{{value}}k tok",
+    "compactThousands": "{{value, number}}k tok",
     "full": "{{count, number}} tok"
   },
   "fields": {
@@ -38,7 +39,7 @@
     "theme": "Theme",
     "summary": "Summary",
     "keywords": "Keywords",
-    "keywordsPlaceholder": "Add keyword"
+    "keywordsPlaceholder": "Add a keyword"
   },
   "validation": {
     "titleRequired": "Title can't be empty",

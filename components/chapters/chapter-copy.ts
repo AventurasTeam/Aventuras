@@ -36,7 +36,7 @@ export function chapterSaveFailureText(): string {
   return t('chapters:save.failed')
 }
 
-/** chapter-timeline.md → Collapsed state: `840 tok` under a thousand, else `12.4k tok`. */
+/** `840 tok` under a thousand, else `12.4k tok`, as on the wireframe's collapsed cards. */
 export function compactTokenLabel(count: number): string {
   if (count < 1000) return t('chapters:tokens.compact', { value: count })
   // Math.round, not toFixed: toFixed keeps a trailing `.0` and rounds 12.45 down.
@@ -56,6 +56,7 @@ export function timelineHeader(closedCount: number): string {
 }
 
 export function entryRangeLabel({ first, last }: { first: number; last: number }): string {
+  if (first === last) return t('chapters:card.entry', { first })
   return t('chapters:card.entries', { first, last })
 }
 

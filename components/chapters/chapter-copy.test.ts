@@ -83,6 +83,10 @@ describe('card and header copy', () => {
     expect(entryRangeLabel({ first: 12, last: 34 })).toBe('entries 12–34')
   })
 
+  it('reads a single-entry chapter as one entry', () => {
+    expect(entryRangeLabel({ first: 12, last: 12 })).toBe('entry 12')
+  })
+
   it('reads closed_at as a date with its year and time', () => {
     // Local time, so the expectation holds in any timezone.
     expect(closedAtLabel(new Date(2026, 2, 14, 9, 5).getTime())).toBe('closed 14 Mar 2026, 09:05')
