@@ -124,19 +124,24 @@ slices and ship disabled or hidden, per C16.
   not-found return carries `code: TARGET_NOT_FOUND`, as `updateLore`'s
   does (`lib/actions/lore/register.ts:108-112`). Without it a Save on a
   row that went reads `failed`, not `not-found`.
-- `useChapterRowSession` in `components/chapters/`, shaped as
-  `useLoreRowSession`: `onSession` hands the route its handle, a landed
-  save toasts, and a refused one toasts too, since the bar's notice has no
-  visible text on phone.
+- `useChapterRowSession` in `components/chapters/` takes the open
+  chapter's row, or null, and `onSave(row, draft)`. It derives the
+  session's `rowKey` and committed values from that row, so the key, the
+  values and the Save can't name different rows. `onSession` hands the
+  route its handle. The route's `onSaved` toasts a landed save and its
+  `onRejected` a refused one, since the save bar's notice is an icon with
+  no visible text at every tier.
 - That session is hosted at the card list, above every card, for the
   route's whole life, so the phone bar can sit outside the scroller. With
-  no card open, the empty state included, it holds the reserved `rowKey`
-  `none` and `EMPTY_CHAPTER_DRAFT`, as lore's `create:` keys and
-  `EMPTY_LORE_DRAFT` do. No field renders, so nothing can dirty it,
-  `RowSaveBar` renders nothing and no write can start. Opening a card
-  sets `rowKey` to the chapter id, which resets the form. A host mounted
-  only while a card is open would have to wrap the scroller, remounting it
-  on every toggle, or feed the phone bar across a portal.
+  no card open, the empty state included, its row is null, so it holds
+  the reserved `rowKey` `none` and a copy of `EMPTY_CHAPTER_DRAFT`, as
+  lore's `create:` keys and `EMPTY_LORE_DRAFT` do. No field renders, so
+  nothing can dirty it and `RowSaveBar` renders nothing; the hook refuses
+  a Save with no row without writing. Opening a card hands the session
+  that chapter's row, whose id becomes the `rowKey`, which resets the
+  form. A host mounted only while a card is open would have to wrap the
+  scroller, remounting it on every toggle, or feed the phone bar across a
+  portal.
 - `components/chapters/chapter-copy.ts` holds the field labels, issue
   text, refusal text and token labels.
 
@@ -435,9 +440,13 @@ and the seventh moved to the slice that owns it.
   a new id. This overturns the planned numeric baseline, the highest
   `sequenceNumber` judged, and its residue: a re-close at an
   already-judged number stayed collapsed. Chapters already there when
-  the Timeline opens never expand, a close still running then included;
-  every close that lands while it is open expands, a re-close at an old
-  number included.
+  the Timeline opens never expand, except the chapter a running close is
+  writing, which expands when the run ends like any fresh close (developer
+  decision during the slice review). `closingChapterId` from
+  `lib/pipeline` names it from the range the close's boundary phase
+  parks, so only that close's chapter is left out of the first judging;
+  any other run then changes nothing. Every close that lands while the
+  Timeline is open expands, a re-close at an old number included.
 - **The expansion state isn't keyed by branch.** Another `branchId` is
   a new screen, since `useSurfaceNavigate` matches the full pathname, so
   a branch change never reuses the Timeline's instance.

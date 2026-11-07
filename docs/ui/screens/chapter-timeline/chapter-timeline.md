@@ -261,7 +261,8 @@ so it never raises the navigate-away guard: over a dirty card it stays
 collapsed, and doesn't open later when that card is saved. A story's
 first chapter, landing under an empty Timeline, expands the same way,
 and so does a re-close at an old number. Chapters already there when
-the Timeline opens never expand, a close still running then included.
+the Timeline opens never expand, except the chapter a running close is
+writing, which expands when the run ends like any fresh close.
 
 ## Chapter-close modal
 

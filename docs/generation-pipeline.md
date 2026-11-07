@@ -194,6 +194,8 @@ Properties:
   - delta log is for persisted writes; intermediates are scratchpad.
 - Not persisted to SQLite. Cleared at run boundary.
 - Shape is kind-specific.
+- Outside the run, read only through a selector `lib/pipeline` exports:
+  the Chapter Timeline reads a running close's chapter id from its range.
 
 Per-kind contexts:
 
