@@ -1,5 +1,3 @@
-import { useCallback } from 'react'
-
 import { useRowSessionGuard } from '@/hooks/use-row-session-guard'
 import type { ChapterSaveResult } from '@/lib/actions'
 import type { ChapterDraft, ChapterDraftRow } from '@/lib/chapters'
@@ -41,7 +39,7 @@ export function useTimelineEditing({
 }: TimelineEditingOptions): TimelineEditing {
   const { onSession, guard, navigateGuarded, dirty } = useRowSessionGuard()
   // Ahead of the session: its key is the expanded id, which must change in the same render.
-  const { expandedId, setExpanded } = useChapterExpansion({ ready, rows, runInFlight, dirty })
+  const { expandedId, toggle } = useChapterExpansion({ ready, rows, runInFlight, dirty, guard })
   const session = useChapterRowSession({
     row: rows.find((row) => row.id === expandedId) ?? null,
     onSave: save,
@@ -49,9 +47,5 @@ export function useTimelineEditing({
     onRejected,
     onSession,
   })
-  const toggle = useCallback(
-    (id: string) => guard(() => setExpanded(id === expandedId ? null : id)),
-    [guard, setExpanded, expandedId],
-  )
   return { expandedId, session, toggle, guard, navigateGuarded }
 }

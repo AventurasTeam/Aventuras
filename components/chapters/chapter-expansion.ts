@@ -61,17 +61,28 @@ export function nextExpandedChapter(
   return { expandedId, judged: nextJudged }
 }
 
-export function useChapterExpansion(input: ChapterExpansionInput): {
+export function useChapterExpansion({
+  guard,
+  ...input
+}: ChapterExpansionInput & {
+  /** The leave guard: runs `proceed` once the open card's session lets it go. */
+  guard: (proceed: () => void) => void
+}): {
   expandedId: string | null
-  /** A user's expand (an id) or collapse (null); the caller guards it. */
-  setExpanded: (id: string | null) => void
+  /** A card head's press: opens it, or collapses it when open, once `guard` proceeds. */
+  toggle: (id: string) => void
 } {
   const [state, setState] = useState(INITIAL_CHAPTER_EXPANSION)
   // In render, not an effect: the expanded card and its session key change in one commit.
   const next = nextExpandedChapter(state, input)
   if (next !== state) setState(next)
-  const setExpanded = useCallback((id: string | null) => {
-    setState((prev) => (prev.expandedId === id ? prev : { ...prev, expandedId: id }))
-  }, [])
-  return { expandedId: next.expandedId, setExpanded }
+  const toggle = useCallback(
+    (id: string) =>
+      // Decided on `prev`: a guarded leave may proceed renders after the press.
+      guard(() =>
+        setState((prev) => ({ ...prev, expandedId: prev.expandedId === id ? null : id })),
+      ),
+    [guard],
+  )
+  return { expandedId: next.expandedId, toggle }
 }

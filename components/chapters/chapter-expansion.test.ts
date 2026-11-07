@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { act, cleanup, renderHook } from '@testing-library/react'
-import { afterEach, describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 
 import {
   INITIAL_CHAPTER_EXPANSION,
@@ -30,6 +30,16 @@ function judge(
 }
 
 const judged = (...ids: string[]): ReadonlySet<string> => new Set(ids)
+
+const passThrough = (proceed: () => void) => proceed()
+
+type HookProps = ChapterExpansionInput & { guard: (proceed: () => void) => void }
+
+const hookProps = (overrides: Partial<HookProps> = {}): HookProps => ({
+  ...input(),
+  guard: passThrough,
+  ...overrides,
+})
 
 afterEach(() => {
   cleanup()
@@ -238,42 +248,73 @@ describe('useChapterExpansion', () => {
   it('expands a newcomer in the render its row arrives', () => {
     const seen: (string | null)[] = []
     const { rerender } = renderHook(
-      (props: ChapterExpansionInput) => {
+      (props: HookProps) => {
         const expansion = useChapterExpansion(props)
         seen.push(expansion.expandedId)
         return expansion
       },
-      { initialProps: input({ rows: [row(1)] }) },
+      { initialProps: hookProps({ rows: [row(1)] }) },
     )
     expect(seen.at(-1)).toBeNull()
 
     const before = seen.length
-    rerender(input({ rows: [row(1), row(2)] }))
+    rerender(hookProps({ rows: [row(1), row(2)] }))
     expect(seen.slice(before)).not.toHaveLength(0)
     expect(seen.slice(before).every((id) => id === 'chap_2')).toBe(true)
   })
 
-  it("takes a user's expand and collapse", () => {
+  it("takes a user's expand, a switch, and a collapse of the open card", () => {
     const rows = [row(1), row(2)]
-    const { result } = renderHook(() => useChapterExpansion(input({ rows })))
+    const { result } = renderHook(() => useChapterExpansion(hookProps({ rows })))
     expect(result.current.expandedId).toBeNull()
 
-    act(() => result.current.setExpanded('chap_1'))
+    act(() => result.current.toggle('chap_1'))
     expect(result.current.expandedId).toBe('chap_1')
 
-    act(() => result.current.setExpanded(null))
+    act(() => result.current.toggle('chap_2'))
+    expect(result.current.expandedId).toBe('chap_2')
+
+    act(() => result.current.toggle('chap_2'))
+    expect(result.current.expandedId).toBeNull()
+  })
+
+  it('changes nothing while the guard holds the press', () => {
+    const guard = vi.fn()
+    const { result } = renderHook(() =>
+      useChapterExpansion(hookProps({ rows: [row(1), row(2)], guard })),
+    )
+    act(() => result.current.toggle('chap_1'))
+    expect(guard).toHaveBeenCalledTimes(1)
+    expect(result.current.expandedId).toBeNull()
+  })
+
+  it('decides each held press as it proceeds, not as it was made', () => {
+    const held: (() => void)[] = []
+    const guard = (proceed: () => void) => {
+      held.push(proceed)
+    }
+    const { result } = renderHook(() =>
+      useChapterExpansion(hookProps({ rows: [row(1), row(2)], guard })),
+    )
+    act(() => result.current.toggle('chap_1'))
+    act(() => result.current.toggle('chap_1'))
+    expect(result.current.expandedId).toBeNull()
+
+    act(() => held[0]())
+    expect(result.current.expandedId).toBe('chap_1')
+    // Made while the card was closed, it proceeds on the open card: a collapse.
+    act(() => held[1]())
     expect(result.current.expandedId).toBeNull()
   })
 
   it("keeps a newcomer judgeable across a user's expand during its run", () => {
-    const { result, rerender } = renderHook(
-      (props: ChapterExpansionInput) => useChapterExpansion(props),
-      { initialProps: input({ rows: [row(1), row(2)] }) },
-    )
-    const during = input({ rows: [row(1), row(2), row(3)], runInFlight: true })
+    const { result, rerender } = renderHook((props: HookProps) => useChapterExpansion(props), {
+      initialProps: hookProps({ rows: [row(1), row(2)] }),
+    })
+    const during = hookProps({ rows: [row(1), row(2), row(3)], runInFlight: true })
     rerender(during)
 
-    act(() => result.current.setExpanded('chap_1'))
+    act(() => result.current.toggle('chap_1'))
     expect(result.current.expandedId).toBe('chap_1')
 
     rerender({ ...during, runInFlight: false })
