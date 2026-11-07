@@ -4,8 +4,8 @@ import { act, cleanup, render, waitFor } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { createQueryClient } from '@/lib/cache'
-import type { ChapterTimeRanges } from '@/lib/db'
-import { resetAllStores } from '@/lib/stores'
+import type { ChapterTimeRanges, StoryEntry } from '@/lib/db'
+import { entriesStore, resetAllStores } from '@/lib/stores'
 
 import { useTimelineTimeRanges } from './use-timeline-time-ranges'
 
@@ -22,10 +22,24 @@ function ranges(first: number, last: number): ChapterTimeRanges {
   return new Map([['chap_1', { first, last }]])
 }
 
+function entry(id: string, position: number, branchId = 'br_1'): StoryEntry {
+  return {
+    id,
+    branchId,
+    position,
+    kind: 'user_action',
+    content: '',
+    contentTokens: null,
+    chapterId: null,
+    metadata: null,
+    createdAt: position,
+  }
+}
+
 let latest: ChapterTimeRanges | null = null
 
-function Probe({ focused }: { focused: boolean }) {
-  latest = useTimelineTimeRanges('br_1', focused)
+function Probe({ focused, branchId = 'br_1' }: { focused: boolean; branchId?: string }) {
+  latest = useTimelineTimeRanges(branchId, focused)
   return null
 }
 
@@ -107,6 +121,47 @@ describe('useTimelineTimeRanges', () => {
         <Probe focused />
       </QueryClientProvider>,
     )
+    await waitFor(() => expect(shown()).toEqual({ first: 120, last: 900 }))
+  })
+
+  it('rereads when the tail moves onto a warm key while focused', async () => {
+    const client = createQueryClient()
+    const view = (
+      <QueryClientProvider client={client}>
+        <Probe focused />
+      </QueryClientProvider>
+    )
+    entriesStore.hydrate('br_1', [entry('e1', 1)])
+    reads.ranges.mockResolvedValue(ranges(120, 300))
+    const first = render(view)
+    await waitFor(() => expect(shown()).toEqual({ first: 120, last: 300 }))
+    first.unmount()
+
+    entriesStore.hydrate('br_1', [])
+    reads.ranges.mockResolvedValue(ranges(120, 900))
+    render(view)
+    await waitFor(() => expect(shown()).toEqual({ first: 120, last: 900 }))
+    act(() => entriesStore.hydrate('br_1', [entry('e1', 1)]))
+
+    await waitFor(() => expect(shown()).toEqual({ first: 120, last: 900 }))
+  })
+
+  it('rereads when the branch changes onto a warm key while focused', async () => {
+    const client = createQueryClient()
+    const view = (branchId: string) => (
+      <QueryClientProvider client={client}>
+        <Probe focused branchId={branchId} />
+      </QueryClientProvider>
+    )
+    reads.ranges.mockResolvedValue(ranges(120, 300))
+    const { rerender } = render(view('br_2'))
+    await waitFor(() => expect(shown()).toEqual({ first: 120, last: 300 }))
+    rerender(view('br_1'))
+    await waitFor(() => expect(reads.ranges).toHaveBeenCalledTimes(2))
+
+    reads.ranges.mockResolvedValue(ranges(120, 900))
+    rerender(view('br_2'))
+
     await waitFor(() => expect(shown()).toEqual({ first: 120, last: 900 }))
   })
 })
