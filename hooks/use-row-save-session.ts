@@ -69,6 +69,12 @@ export type RowSaveSessionOptions<Draft extends FieldValues> = {
 
 export type RowSaveSession<Draft extends FieldValues> = {
   form: UseFormReturn<Draft>
+  /**
+   * False for the render a `rowKey` switch takes to reach the form. Mount fields only while true:
+   * on native one mounted with the switch shows the previous row
+   * (docs/implementation/lessons-learned/rhf-native-passive-subscription.md).
+   */
+  formHoldsRow: boolean
   dirty: boolean
   /** Labels of the dirty top-level fields, in draft order. */
   dirtyFields: readonly string[]
@@ -244,9 +250,6 @@ export function useRowSaveSession<Draft extends FieldValues>({
   }, [form, resolver])
 
   // Layout, not passive: the new row must never paint with the previous row's draft.
-  // Native react-hook-form subscribes fields passively, so one mounting with the rowKey change
-  // misses this reset: mount it only once the form holds the new row
-  // (docs/implementation/lessons-learned/rhf-native-passive-subscription.md).
   useLayoutEffect(() => {
     const applied = appliedRef.current
     appliedRef.current = { rowKey, values }
@@ -279,6 +282,10 @@ export function useRowSaveSession<Draft extends FieldValues>({
       })
     }
   }, [rowKey, values, form, setPendingConfirm])
+
+  // Set in a layout effect, so the re-render it causes follows the reset above and lands before paint.
+  const [formRowKey, setFormRowKey] = useState(rowKey)
+  useLayoutEffect(() => setFormRowKey(rowKey), [rowKey])
 
   const settleIntents = useCallback(() => {
     const queued = intentsRef.current
@@ -482,6 +489,7 @@ export function useRowSaveSession<Draft extends FieldValues>({
 
   return {
     form,
+    formHoldsRow: formRowKey === rowKey,
     dirty,
     dirtyFields,
     invalidReason: issue == null ? null : issueText(issue),

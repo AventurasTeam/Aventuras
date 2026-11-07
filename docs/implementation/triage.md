@@ -303,23 +303,6 @@ slice-planning gate forces its resolution before that slice is planned.
   `window-check.test.ts` and `request-shape.test.ts`. The older
   `narrativeValueSchema` in `scripts/mock-llm/validate.ts` is exported
   with no importer. Surfaced by Slice 5.4's slice review.
-- **World's and Plot's create tab shows the previous row on native.**
-  `useCreateResetTab` (`hooks/use-create-reset-tab.ts:12-15`) switches
-  the detail pane's tab during render, in the commit whose `create:…`
-  `rowKey` resets the form. On native `@rn-primitives/tabs` renders
-  nothing for an inactive tab, so the create tab's fields mount in that
-  commit and miss the reset (react-hook-form subscribes passively off
-  web: [the lesson](lessons-learned/rhf-native-passive-subscription.md)).
-  The fields show the previous row, or a previous draft's text, while
-  the form holds blanks, and Save writes blanks for every field the
-  user didn't touch. Reached by `[+] Blank` while the pane is on a tab
-  other than the one a create opens on, at tablet tier (the Fold
-  unfolded). Confirmed on react-hook-form's native path in jsdom, not on
-  a device. Fixes: switch the tab in a layout effect, or lift the
-  Timeline's `formRowId` into the substrate as a `formRowKey` hosts gate
-  on; or patch react-hook-form to use `useLayoutEffect` whenever
-  `window` exists, which removes the class (errors and field arrays
-  included). Surfaced by Slice 5.7's Android check.
 - **A leave re-raised after Discard or Save reads stale dirty state.**
   `requestLeave` and `runSave` in `hooks/use-row-save-session.ts` read
   the last render's `form.formState.dirtyFields`, so a leave requested again in the same
