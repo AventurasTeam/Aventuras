@@ -18,7 +18,14 @@ const row = (sequenceNumber: number, id = `chap_${sequenceNumber}`): Row => ({
 })
 
 function input(overrides: Partial<ChapterExpansionInput> = {}): ChapterExpansionInput {
-  return { ready: true, rows: [], runInFlight: false, dirty: false, ...overrides }
+  return {
+    ready: true,
+    rows: [],
+    runInFlight: false,
+    closingId: null,
+    dirty: false,
+    ...overrides,
+  }
 }
 
 /** Feeds the inputs in order, as the route's renders would. */
@@ -76,6 +83,21 @@ describe('nextExpandedChapter', () => {
     const rows = [row(1), row(2), row(3)]
     const state = judge([input({ rows, runInFlight: true }), input({ rows })])
     expect(state).toEqual({ expandedId: null, judged: judged('chap_1', 'chap_2', 'chap_3') })
+  })
+
+  it("leaves a running close's chapter out of the first judging, so it expands at the run's end", () => {
+    const rows = [row(1), row(2), row(3)]
+    const during = judge([input({ rows, runInFlight: true, closingId: 'chap_3' })])
+    expect(during).toEqual({ expandedId: null, judged: judged('chap_1', 'chap_2') })
+
+    const after = nextExpandedChapter(during, input({ rows }))
+    expect(after).toEqual({ expandedId: 'chap_3', judged: judged('chap_1', 'chap_2', 'chap_3') })
+  })
+
+  it('reads the closing id at the first judging only', () => {
+    const rows = [row(1), row(2), row(3)]
+    const ready = judge([input({ rows, runInFlight: true })])
+    expect(nextExpandedChapter(ready, input({ rows, closingId: 'chap_3' }))).toBe(ready)
   })
 
   it('expands the close of a run the route became ready during', () => {

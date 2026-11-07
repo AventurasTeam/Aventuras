@@ -13,6 +13,8 @@ export type ChapterExpansionInput = Readonly<{
   rows: readonly { id: string; sequenceNumber: number }[]
   /** `useStoryGenerationGate().editBlocked`. */
   runInFlight: boolean
+  /** `closingChapterId`: the row a running close is writing. Read at the first judging only. */
+  closingId: string | null
   /** The route's session is dirty: `useRowSessionGuard().dirty`. */
   dirty: boolean
 }>
@@ -37,15 +39,18 @@ function newestUnjudged(
 }
 
 /**
- * The expanded card after `input`: the first ready rows are judged, expanding nothing; an unjudged
- * row is judged once its run ends, the newest expanding if no card is dirty. `state` if unchanged.
+ * The expanded card after `input`: the first ready rows are judged, expanding nothing, all but the
+ * chapter a running close is writing; an unjudged row is judged once its run ends, the newest
+ * expanding if no card is dirty. `state` if unchanged.
  */
 export function nextExpandedChapter(
   state: ChapterExpansionState,
   input: ChapterExpansionInput,
 ): ChapterExpansionState {
   if (!input.ready) return state
-  const judged = state.judged ?? new Set(input.rows.map((row) => row.id))
+  const judged =
+    state.judged ??
+    new Set(input.rows.filter((row) => row.id !== input.closingId).map((row) => row.id))
   const kept = state.expandedId != null && input.rows.some((row) => row.id === state.expandedId)
   let expandedId = kept ? state.expandedId : null
   let nextJudged = judged

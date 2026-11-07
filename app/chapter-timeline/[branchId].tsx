@@ -82,6 +82,7 @@ export default function ChapterTimelineRoute(): ReactElement {
   // Hosted above every card for the route's life, so the phone bar can sit outside the scroller.
   const { expandedId, session, toggle, guard, navigateGuarded } = useTimelineEditing({
     ready: open != null,
+    branchId,
     rows: expansionRows,
     runInFlight: editBlocked,
     save,
