@@ -5,7 +5,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { createQueryClient } from '@/lib/cache'
 import type { ChapterTimeRanges, StoryEntry } from '@/lib/db'
-import { entriesStore, resetAllStores } from '@/lib/stores'
+import { entriesStore, generationStore, resetAllStores, type RunState } from '@/lib/stores'
 
 import { useTimelineTimeRanges } from './use-timeline-time-ranges'
 
@@ -33,6 +33,24 @@ function entry(id: string, position: number, branchId = 'br_1'): StoryEntry {
     chapterId: null,
     metadata: null,
     createdAt: position,
+  }
+}
+
+function closeRun(id: string): RunState {
+  return {
+    runId: id,
+    kind: 'chapter-close',
+    gateBehavior: 'hard-gate',
+    interruptible: 'close',
+    beforeTurn: false,
+    actionId: `act_${id}`,
+    storyId: 's1',
+    branchId: 'br_1',
+    abortController: new AbortController(),
+    currentPhase: '',
+    intermediates: {},
+    terminal: Promise.resolve(),
+    resolveTerminal: () => {},
   }
 }
 
@@ -90,6 +108,19 @@ describe('useTimelineTimeRanges', () => {
 
     expect(reads.ranges).not.toHaveBeenCalled()
     expect(latest?.size).toBe(0)
+  })
+
+  // A settle moves the key but none of the reread effect's deps: only the enabled query reads it.
+  it('reads the new key when a run ends while focused', async () => {
+    reads.ranges.mockResolvedValue(ranges(120, 300))
+    renderProbe(true)
+    await waitFor(() => expect(shown()).toEqual({ first: 120, last: 300 }))
+
+    reads.ranges.mockResolvedValue(ranges(120, 900))
+    act(() => generationStore.startRun(closeRun('r1')))
+    act(() => generationStore.finishRun('r1'))
+
+    await waitFor(() => expect(shown()).toEqual({ first: 120, last: 900 }))
   })
 
   it('rereads once per return, not on each render', async () => {
