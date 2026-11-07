@@ -621,8 +621,9 @@ answer in this slice's PR.
   write, so they can't show a written close rolling back; the rollback
   is unit-tested in `undo-classifier.test.ts`, and the question of a
   post-write hold point is carried to 5.10's Open questions.
-- **Seven review deferrals went to the triage inbox (2026-11-07),**
+- **Eight review deferrals went to the triage inbox (2026-11-07),**
   in [`triage.md`](../../../triage.md): the run marker after a failed
   close reversal, an unbounded undo read, a pick stamped by redo, a late
   Cancel announcing nothing, the flat before-turn label, the banner's
-  announcement rate, and raw refusal codes in Retry toasts.
+  announcement rate, raw refusal codes in Retry toasts, and Send's
+  no-owed path skipping the hold re-check.
