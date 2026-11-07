@@ -27,6 +27,11 @@ describe('bundled pack', () => {
     },
   )
 
+  // The include validator reads the pack's group, the editor the registry's: they must agree.
+  it.each(Object.values(TEMPLATE_IDS))("files %s under the registry's group", (templateId) => {
+    expect(bundledPack.templates[templateId]?.group).toBe(TEMPLATE_GROUPS[templateId])
+  })
+
   it('loads without throwing (engine builds)', () => {
     expect(() => loadPack(bundledPack)).not.toThrow()
   })

@@ -67,15 +67,6 @@ slice-planning gate forces its resolution before that slice is planned.
   changed (`lib/actions/chapters/register.ts`, the update handler).
   Matters once a chapter edit shows in History. Surfaced by Slice 5.2's
   review.
-- **A bundled template's group is declared twice, unchecked.**
-  `lib/prompts/bundled/index.ts` sets each template's `group` (read by
-  the include validator) and `TEMPLATE_GROUPS` declares it again, and no
-  test compares the two. Only some one-sided changes fail a test, by
-  another route: `lib/prompts/templateContextMap.test.ts` pins
-  `TEMPLATE_GROUPS` for `chapterMetadata` to `'chapter'`,
-  `bundled-pack.test.ts` counts 13 templates whose `index.ts` group is
-  `wizard`, and the include validator refuses a group the template's
-  macros don't fit.
 - **Refusal codes repeated as literals.** `'branch-not-open'`
   (`lib/actions/classifier/run-now.ts:14`) and `'embedder-swap'`
   (`lib/actions/turns/submit-turn.ts:54`) restate
