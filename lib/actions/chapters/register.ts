@@ -6,7 +6,7 @@ import { chaptersStore } from '@/lib/stores'
 
 import { projectChapterPatch } from './chapter-store-projection'
 import { cascadedDelete, rowCascade } from '../delta/delete-cascade'
-import { register, undefinedColumn, type ActionHandler } from '../delta/registry'
+import { register, TARGET_NOT_FOUND, undefinedColumn, type ActionHandler } from '../delta/registry'
 import type { DeltaSource } from '../types'
 
 const cascade = rowCascade('chapter')
@@ -86,7 +86,11 @@ const updateHandler: ActionHandler = async (action, branchId, ctx) => {
     .from(chapters)
     .where(and(eq(chapters.branchId, bid), eq(chapters.id, id)))
   if (!current)
-    return { status: 'rejected', reason: `update target chapters ${bid}:${id} not found` }
+    return {
+      status: 'rejected',
+      reason: `update target chapters ${bid}:${id} not found`,
+      code: TARGET_NOT_FOUND,
+    }
   const blank = undefinedColumn(patch, UPDATABLE)
   if (blank != null)
     return { status: 'rejected', reason: `invalid chapter patch: ${blank} is undefined` }
