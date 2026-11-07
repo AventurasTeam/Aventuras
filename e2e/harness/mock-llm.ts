@@ -165,7 +165,10 @@ export type MockLlm = {
   url: string
   /** Set the prose the next streaming (narrative) call returns. */
   setNarrative: (content: string) => void
-  /** Override a structured agent's reply (defaults to its schema-valid example). */
+  /**
+   * Override a structured agent's reply (defaults to its schema-valid example). A value JSON can't
+   * hold fails its call with a 400; the error rethrows from the release, or from close() unheld.
+   */
   setStructured: (agentName: string, value: unknown) => void
   /** One-shot: the next narrative (streaming) call fails with HTTP 500. */
   failNextNarrative: () => void
@@ -291,21 +294,15 @@ export async function startMockLlm(): Promise<MockLlm> {
     res.end(overflowBody(shape, overflowCounts(prompt)))
   }
 
-  const answerStructured = (
-    res: ServerResponse,
-    agentName: string | null,
-    prompt: string,
-  ): void => {
-    res.writeHead(200, { ...cors, 'content-type': 'application/json' })
-    if (agentName === null) {
-      res.end(completionBody('{}', 'stop', mockUsage(prompt, '{}')))
-      return
-    }
+  const structuredBody = (agentName: string | null, prompt: string): string => {
+    if (agentName === null) return completionBody('{}', 'stop', mockUsage(prompt, '{}'))
     const cut = cutStructured.get(agentName)
     cutStructured.delete(agentName)
     const content = cut ?? JSON.stringify(overrides.get(agentName) ?? EXAMPLES[agentName])
-    res.end(
-      completionBody(content, cut !== undefined ? 'length' : 'stop', mockUsage(prompt, content)),
+    return completionBody(
+      content,
+      cut !== undefined ? 'length' : 'stop',
+      mockUsage(prompt, content),
     )
   }
 
@@ -321,15 +318,16 @@ export async function startMockLlm(): Promise<MockLlm> {
     return typeof reply === 'function' ? reply(request) : reply
   }
 
-  const answerTool = (res: ServerResponse, lane: string, request: MockRequest): void => {
-    // The body is built before any header goes out: args JSON can't hold (a BigInt) throw here too.
+  const toolBody = (lane: string, request: MockRequest): string => {
+    const step = nextToolStep(lane, request)
+    return toolStepBody(step, mockUsage(toolPromptText(request.body), toolStepCompletionText(step)))
+  }
+
+  // Built before any header goes out, so a throw (a value JSON can't hold) still ends the response.
+  const answer = (res: ServerResponse, build: () => string): void => {
     let replyBody: string
     try {
-      const step = nextToolStep(lane, request)
-      replyBody = toolStepBody(
-        step,
-        mockUsage(toolPromptText(request.body), toolStepCompletionText(step)),
-      )
+      replyBody = build()
     } catch (error) {
       // Answered first so the client fails at once instead of waiting out its bound.
       res.writeHead(400, { ...cors, 'content-type': 'application/json' })
@@ -340,8 +338,16 @@ export async function startMockLlm(): Promise<MockLlm> {
     res.end(replyBody)
   }
 
-  const holdStructured = (res: ServerResponse, answer: () => void): void => {
-    heldStructured.set(res, answer)
+  const answerUnheld = (res: ServerResponse, build: () => string): void => {
+    try {
+      answer(res, build)
+    } catch (error) {
+      unheldThrow ??= { error }
+    }
+  }
+
+  const holdStructured = (res: ServerResponse, build: () => string): void => {
+    heldStructured.set(res, () => answer(res, build))
     res.on('close', () => heldStructured.delete(res))
   }
 
@@ -424,14 +430,10 @@ export async function startMockLlm(): Promise<MockLlm> {
         }
         if (lane === holdStructuredNext) {
           holdStructuredNext = null
-          holdStructured(res, () => answerTool(res, lane, request))
+          holdStructured(res, () => toolBody(lane, request))
           return
         }
-        try {
-          answerTool(res, lane, request)
-        } catch (error) {
-          unheldThrow ??= { error }
-        }
+        answerUnheld(res, () => toolBody(lane, request))
         return
       }
 
@@ -446,10 +448,10 @@ export async function startMockLlm(): Promise<MockLlm> {
       }
       if (agent !== null && agent.name === holdStructuredNext) {
         holdStructuredNext = null
-        holdStructured(res, () => answerStructured(res, agent.name, text))
+        holdStructured(res, () => structuredBody(agent.name, text))
         return
       }
-      answerStructured(res, agent?.name ?? null, text)
+      answerUnheld(res, () => structuredBody(agent?.name ?? null, text))
     })()
   })
 
