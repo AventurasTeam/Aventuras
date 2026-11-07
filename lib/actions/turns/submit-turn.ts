@@ -65,6 +65,8 @@ async function runOwedWork(
 ): Promise<SubmitTurnResult | null> {
   ensurePeriodicClassifierPipelineRegistered()
   ensureChapterClosePipelineRegistered()
+  // Again just before the start: a live pass can end `running` on disk after Send's check.
+  if (await isClassifierHeld(ids.branchId, ctx)) return HELD_REJECTION
   const { origin, chain } = startPipeline(
     work === 'pass' ? PERIODIC_CLASSIFIER_KIND : CHAPTER_CLOSE_KIND,
     {

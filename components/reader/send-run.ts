@@ -33,7 +33,7 @@ export function sendRunStreams(txState: TxState, branchId: string): boolean {
   return findSendRun(txState, branchId)?.kind === PER_TURN_KIND
 }
 
-/** Cancels the Send run: a pass through the interrupt, anything else through awaitRunTerminal. */
+/** Cancels the Send run: a pass or a close through the interrupt, a turn through awaitRunTerminal. */
 export function cancelSendRun(run: RunState): Promise<void> {
   return run.interruptible
     ? interruptMemoryRuns(run.branchId)
@@ -46,8 +46,8 @@ function turnPendingOn(txState: TxState, branchId: string): boolean {
 }
 
 /**
- * The host's Send holds a pending turn with no run registered: before its owed pass registers,
- * and between that pass and the turn.
+ * The host's Send holds a pending turn with no run registered: before its owed work registers,
+ * and between that work's chain and the turn.
  */
 export function sendGapOpen(txState: TxState, branchId: string, sendPending: boolean): boolean {
   return sendPending && turnPendingOn(txState, branchId) && findSendRun(txState, branchId) == null

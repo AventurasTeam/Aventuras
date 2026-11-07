@@ -93,15 +93,6 @@ describe('runClassifierPass', () => {
     ])
   })
 
-  it('marks the run as Send’s only when asked', async () => {
-    const { ctx } = await makeHarness()
-    const runs = defineRecordingPass()
-
-    await runClassifierPass(IDS, ctx, { beforeTurn: true })
-
-    expect(runs).toEqual([{ actionId: expect.any(String), beforeTurn: true }])
-  })
-
   // classifier.md → Failure policy: Retry and Run now run the pass alone, chaining no close.
   it('starts the run alone only when asked', async () => {
     const { ctx } = await makeHarness()

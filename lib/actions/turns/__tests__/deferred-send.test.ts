@@ -610,6 +610,33 @@ describe('Send with deferred work', () => {
     expect(generationStore.getTxState().pendingTurns.size).toBe(0)
   })
 
+  // A pass of this process ending with its `running` left on disk while Send reads what it owes.
+  it('refuses a Send as held when the branch turns held after its check, starting nothing', async () => {
+    const { ctx, db, pass } = await setUp(50, BACKLOG)
+    await holdTheBranch(db)
+    recordDeferred('pass')
+    const live = registerStoreOnlyRun(PERIODIC_CLASSIFIER_KIND, 'b1')
+    let ended = false
+    const endsOnFirstRead = new Proxy(db, {
+      get(target, prop, receiver) {
+        if (prop === 'select' && !ended) {
+          ended = true
+          generationStore.abortRun(live.runId, 'aborted')
+        }
+        return Reflect.get(target, prop, receiver) as unknown
+      },
+    })
+
+    const result = await within(send({ ...ctx, db: endsOnFirstRead }, 'I wait.'), 'the Send')
+
+    expect(ended).toBe(true)
+    expect(result).toEqual({ outcome: 'rejected', blockedBy: CLASSIFIER_HELD, converged: true })
+    expect(pass.runs).toEqual([])
+    expect(await db.select().from(pipelineRuns)).toEqual([])
+    expect(await userActionsReading(db, 'I wait.')).toEqual([])
+    expect(generationStore.getTxState().deferred.get('b1')).toEqual({ pass: true })
+  })
+
   // The reader shows the held entry, not a retryable failure: a Retry would only be refused.
   it.each(['fails', 'is cancelled'] as const)(
     'refuses a Send as held when its owed pass %s and its reversal does not commit',

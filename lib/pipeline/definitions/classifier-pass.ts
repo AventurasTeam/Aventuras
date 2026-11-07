@@ -10,12 +10,12 @@ const ALONE: PassInputs = { alone: true }
 
 /**
  * Starts a pass unless its branch is held: the pass would re-read writes still on disk
- * (classifier.md → Failure policy). `beforeTurn` marks Send's owed pass; `alone` chains nothing.
+ * (classifier.md → Failure policy). `alone` chains nothing.
  */
 export async function runClassifierPass(
   ids: { storyId: string; branchId: string },
   ctx: DbCtx,
-  opts?: { beforeTurn?: true; alone?: true },
+  opts?: { alone?: true },
 ): Promise<TxResult | RejectedStart> {
   ensurePeriodicClassifierPipelineRegistered()
   if (await isClassifierHeld(ids.branchId, ctx))
@@ -23,7 +23,6 @@ export async function runClassifierPass(
   return runPipeline(PERIODIC_CLASSIFIER_KIND, {
     storyId: ids.storyId,
     branchId: ids.branchId,
-    ...(opts?.beforeTurn ? { beforeTurn: true } : {}),
     ...(opts?.alone ? { inputs: ALONE } : {}),
     db: ctx.db,
     runInTransaction: ctx.runInTransaction,
