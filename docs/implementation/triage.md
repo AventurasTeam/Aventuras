@@ -282,3 +282,13 @@ slice-planning gate forces its resolution before that slice is planned.
   the lane before its route matches (`scripts/mock-llm/control.ts`, the
   `lanes` branch), so even a 404 on a mistyped `tools:` key leaves one
   listed. Surfaced by Slice 5.4's slice review.
+- **Duplication the tool step's simplifier pass left for a shared
+  home.** The expiry detail `` `${target}: timeout after ${boundMs}ms` ``
+  is written in `lib/ai/tool-step.ts` and `lib/pipeline/call-error.ts`,
+  and `lib/ai` can't import `lib/pipeline`; tests pin both strings. The
+  `lib/ai` tests repeat their fixtures: `okStep` in `tool-step.test.ts`,
+  `stub/stub-provider.test.ts` and `scripts/mock-llm/harness-tool-steps.test.ts`,
+  and `useProvider`, `MODELS` and `rejection` across `tool-step.test.ts`,
+  `window-check.test.ts` and `request-shape.test.ts`. The older
+  `narrativeValueSchema` in `scripts/mock-llm/validate.ts` is exported
+  with no importer. Surfaced by Slice 5.4's slice review.
