@@ -674,7 +674,7 @@ pre-flight.
 
 A run cancelled before its pre-flight skips it and takes the
 user-cancel abort: a pass the interrupt reached as its predecessor's
-commit swapped it in, or Send's owed pass cancelled as it reserved, is
+commit swapped it in, or Send's owed work cancelled as it reserved, is
 interrupted, not failed, so it is deferred.
 
 **On failure**, the run halts before phase 0 fires — no LLM call
@@ -1369,7 +1369,7 @@ const periodicClassifierPipeline: Pipeline = {
   kind: 'periodic-classifier',
   // ...
   // Passes chain one another only to catch up for a close (phase 0). A pass
-  // started alone (a failure entry's Retry, Run now) chains nothing.
+  // started alone (a pass-failure entry's Retry, Run now) chains nothing.
   chainsTo: async (run, ctx) => {
     if (passStartedAlone(run)) return null // inputs: { alone: true }
     const story = openStory(run)
@@ -1400,8 +1400,8 @@ build on a held pass's unreversed writes. A manual close records
 `pendingClose` with the user's end entry and starts the same way: a
 pass first when entries are unprocessed, the close otherwise. The
 record is in memory: a restart drops it, and so does a reversal that
-removes that entry. A pass started alone, by a failure entry's `Retry`
-or Run now, chains nothing and leaves an owed close to the next Send.
+removes that entry. A pass started alone, by a pass-failure entry's
+`Retry` or Run now, chains nothing and leaves an owed close to the next Send.
 
 Every chained run generates its **own fresh `actionId`**; the
 orchestrator never carries the predecessor's into the successor. A
@@ -2546,7 +2546,8 @@ A `chainsTo` returning a kind (per-turn's pass or close, a pass's next
 pass or close) triggers a chained transition (in `commitRun`) that
 directly creates the next `RunState` without going through
 `runPipeline`'s entry check. `blockedBy` reflects external start
-requests (UI, Run now, Send's owed pass); chains aren't external.
+requests (UI, Run now, Send's owed pass or close, a manual close's
+first run, a close entry's `Retry`); chains aren't external.
 
 ### Cadence chain
 

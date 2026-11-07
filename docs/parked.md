@@ -1988,7 +1988,9 @@ a close all the same
 ([`generation-pipeline.md → Prose reversals and the interrupt`](./generation-pipeline.md#prose-reversals-and-the-interrupt)).
 The copy ships as canon has it. The options are a follow-up toast when
 the record drops, or holding the deferral toast until the reversal's
-bracket ends. Raised 2026-11-07 by Slice 5.6's planning. Parked
+bracket ends. The close-failure toast, `It runs again before your next
+turn`, has the same gap when the boundary phase drops a stale pick and the
+region is under the threshold. Raised 2026-11-07 by Slice 5.6's planning. Parked
 2026-11-07; the signal is a tester expecting that close.
 
 #### A route mounted during a read starts the strip at 0

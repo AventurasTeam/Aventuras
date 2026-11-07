@@ -876,8 +876,8 @@ The pass runs while the user reads the reply. A pass's own `chainsTo`
 returns another pass while a chapter close is owed and entries
 remain unprocessed, then the close
 ([`chapter-close.md → Phase 0`](./chapter-close.md#phase-0--catch-up-passes)).
-`[Run classifier now]` starts one directly, as a failure entry's
-`Retry` does, and a pass started either way chains nothing. Send runs
+`[Run classifier now]` starts one directly, as a pass-failure
+entry's `Retry` does, and a pass started either way chains nothing. Send runs
 one first when a pass is owed ([Failure policy](#failure-policy)).
 
 **Interrupted, then deferred.** A head reversal — regenerate, swipe, an
