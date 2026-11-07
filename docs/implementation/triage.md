@@ -175,10 +175,6 @@ slice-planning gate forces its resolution before that slice is planned.
   two causes no profile fix (`components/reader/cut-off-copy.ts`) and
   canon doesn't say so. The narrative failed with them before Slice 5.4;
   a close's tool step can now carry `content-filter` too.
-- **Canon's `callWithRetry` signature omits `carried`.** The block in
-  `generation-pipeline.md → Two retry tiers` lacks the
-  `carried?: () => CarriedCapabilities` option
-  (`lib/ai/transport/call-with-retry.ts`).
 - **A cut-off's `maxOutput` isn't always what the request sent.**
   `replyCutOff` gets the max output the caller set: the profile's on a
   structured call (`lib/ai/generate.ts`), the profile's or 8,000 on a

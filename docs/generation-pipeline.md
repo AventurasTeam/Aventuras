@@ -1902,6 +1902,9 @@ type CallRetryError =
   | ({ tier: 'context-window' } & ContextWindowFailure)
   | ({ tier: 'reply-cut-off' } & ReplyCutOffFailure)
 
+// Read after each provider failure: a hint names only a capability the request used.
+type CarriedCapabilities = Readonly<Record<CapabilityHint['capability'], boolean>>
+
 type CapabilityHint = // matched: the keyword that matched, for the copy
   | { capability: 'structuredOutput'; matched: 'response_format' | 'json_schema' }
   | { capability: 'reasoning'; matched: 'budget_tokens' | 'thinking' | 'reasoning' }
@@ -1942,6 +1945,7 @@ async function callWithRetry<T, R = string>(
     maxProviderAttempts: number
     maxParseAttempts: number
     signal: AbortSignal
+    carried?: () => CarriedCapabilities // what the failed request carried; omitted, no hint
   },
 ): Promise<CallWithRetryResult<T>>
 ```
