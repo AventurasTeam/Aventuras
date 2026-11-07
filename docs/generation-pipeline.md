@@ -2210,7 +2210,10 @@ limit, so its surfaces route to the model's window (`Set window`) for
 `window`, and to the profile (`Fix profile`) for `max-output` and
 `unknown`, where a profile max output overrides the server's default.
 An `unknown` cut short of a max output the call sent keeps
-`Fix profile` too.
+`Fix profile` too. The failure never carries `interrupted` or
+`content-filter`, so no remedy routes them: a narrative reply marks
+those, a structured reply's filter fails its parse, and a tool step's
+ends the task as `stopped`.
 
 Categories drive how UI surfaces them — toast for transient,
 banner / dialog for persistent.

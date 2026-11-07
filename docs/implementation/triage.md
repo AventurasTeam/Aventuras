@@ -169,12 +169,6 @@ slice-planning gate forces its resolution before that slice is planned.
   interrupted summary either, and the `tsx` and `pnpm` relay in between
   wasn't traced. With parallel workers an orphaned run now finishes in
   under 2 minutes. Surfaced by the same review.
-- **Canon routes no remedy for an `interrupted` or `content-filter`
-  cut-off.** `generation-pipeline.md`'s `reply-cut-off` remedy paragraph
-  names `window`, `max-output` and `unknown`; the code gives the other
-  two causes no profile fix (`components/reader/cut-off-copy.ts`) and
-  canon doesn't say so. The narrative failed with them before Slice 5.4;
-  a close's tool step can now carry `content-filter` too.
 - **A cut-off's `maxOutput` isn't always what the request sent.**
   `replyCutOff` gets the max output the caller set: the profile's on a
   structured call (`lib/ai/generate.ts`), the profile's or 8,000 on a
