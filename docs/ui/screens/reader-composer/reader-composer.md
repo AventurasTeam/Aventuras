@@ -547,7 +547,8 @@ chrome blip.
 | **Embed call failed** mid-turn (blocking per [`memory/retrieval.md → Compute lifecycle`](../../../memory/retrieval.md#compute-lifecycle); the composer is not gated — a resubmit re-runs the same blocking sync stage) | `Switch embedder` · `Retry` · `Dismiss`    |
 | **Narrative profile's provider missing** (pre-flight or resolver-time)                                                                                                                                                 | `Fix profile` · `Retry` · `Dismiss`        |
 | **Chapter close failed** before the turn, failing the Send ([`memory/chapter-close.md → Failure modes`](../../../memory/chapter-close.md#failure-modes-and-atomic-rollback))                                           | `Retry` · `Dismiss`                        |
-| **Nothing left to close** on `Retry`, its text kept on the entry ([Custody of the turn's text](#custody-of-the-turns-text))                                                                                            | `Dismiss`                                  |
+| **Chapter closed** on a `Retry` whose close committed, its text kept on the entry ([Custody of the turn's text](#custody-of-the-turns-text))                                                                           | `Dismiss`                                  |
+| **Nothing left to close** on a `Retry` that found none owed, its text kept on the entry ([Custody of the turn's text](#custody-of-the-turns-text))                                                                     | `Dismiss`                                  |
 | **Chapter close's model can't call tools** (pre-flight; [`memory/chapter-close.md → Tool calling`](../../../memory/chapter-close.md#tool-calling))                                                                     | `Fix profile` · `Retry` · `Dismiss`        |
 | **Assigned agent profile's provider missing** (pre-flight or resolver-time)                                                                                                                                            | `Fix profile` · `Retry` · `Dismiss`        |
 | **Agent has no profile assigned** (`assignments[agentId]` unset)                                                                                                                                                       | `Assign profile` · `Retry` · `Dismiss`     |
@@ -661,8 +662,10 @@ The quote shows whether text is kept, so a held entry's copy
 no longer mentions it and reads the same either way. The notice a
 committed pass `Retry` leaves still says why it stands: "Memory
 updated. The composer couldn't take your text back, so it's kept
-here." A close's reads "Nothing is left to close before your turn. The
-composer couldn't take your text back, so it's kept here."
+here." A close's reads "Chapter closed. The composer couldn't take your
+text back, so it's kept here." when its own close committed, and "Nothing
+left to close. The composer couldn't take your text back, so it's kept
+here." when the `Retry` found none owed.
 
 **A Send supersedes the entry's text.** The user wrote the Send's
 text while the entry and its `Retry` stood, so the entry's text is

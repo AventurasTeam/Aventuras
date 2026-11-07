@@ -274,7 +274,9 @@ leaves nothing stale.
   settles as nothing owed. With no close owed any more it settles as a commit.
   Otherwise it starts a pass or the close, as the manual start does, and
   it isn't alone. A commit clears the entry as a pass's Retry does, its
-  notice `closeResolvedEntry` with `close: 'resolved'` and no Retry. A
+  notice `closeResolvedEntry` with `close: 'resolved'` and no Retry,
+  reading "Chapter closed." when the Retry's own close committed and
+  "Nothing left to close." when none was owed. A
   failure rewrites the entry, a failed catch-up pass as a memory entry. A
   cancel leaves it, and a refused start tells the user why.
 - A close entry of kind `config-resolver` offers its fix, `Retry` and
@@ -298,8 +300,8 @@ leaves nothing stale.
   `PendingClose`'s type, and Config pre-flight validation's Surfacing
   line, which with `chapter-close.md → Tool calling` raises a close's
   entry when it fails a Send or a click; C14's record line in
-  `milestone.md`; a **Nothing left to close** on-Retry row in
-  `reader-composer.md`, whose five broken-reference rows gain `Retry`
+  `milestone.md`; two on-Retry rows in
+  `reader-composer.md`, **Chapter closed** and **Nothing left to close**, whose five broken-reference rows gain `Retry`
   after their fix; and `principles.md`'s exceptions to head reversals
   passing through, which name only a Retry's pass though the mark at
   `isHeadReversalBlocked` in `generation.ts` also refuses them during a Send's owed work,
@@ -570,14 +572,15 @@ answer in this slice's PR.
   completed (a chain continues only past a commit), read by
   `abortedBeforeTurn`. The planning default had put the entry back on
   every owed-work Cancel.
-- **The resolved close notice reads "Nothing is left to close before
-  your turn." (provisional, 2026-11-07).** One notice serves both a
-  Retry whose close committed and one that found nothing owed, since
-  "Chapter closed." is false in the second; a committed close is still
-  announced by its `Chapter closed: <title>` toast. **Provisional:**
-  the alternative left open is two notices, "Chapter closed." when the
-  Retry's own close committed and "Nothing left to close." when none
-  was owed.
+- **A close Retry's resolved notice names which way it settled
+  (provisional, 2026-11-07).** Two notices, "Chapter closed." when the
+  Retry's own close committed and "Nothing left to close." when none was
+  owed, from one builder that takes the arm. One neutral copy would
+  mislead either way: after a committed close with a far-back pick the
+  open region can still sit over the threshold, so "nothing is left" is
+  false there. **Provisional:** the alternative left open is one neutral
+  notice, "The chapter close has nothing left to retry.", which holds in
+  both arms.
 - **The manual start resolves the chain end's `TxResult` (C14), a
   completed catch-up pass included (2026-11-07).** A late Cancel after
   the pass's last phase, or the open story leaving the branch, ends
