@@ -403,10 +403,9 @@ export const NoRowToFocus: Story = {
   play: async () => {
     await waitForTier('desktop')
     await openOverlay(1)
-    // Without a row to focus, Radix's own focus stays on its content.
-    await waitFor(() =>
-      expect(document.activeElement?.closest('[data-radix-popper-content-wrapper]')).not.toBeNull(),
-    )
+    // No row takes focus, so Radix focuses the first tabbable; the disabled Close isn't one.
+    const manage = screen.getByRole('button', { name: 'Manage chapters →' })
+    await waitFor(() => expect(manage).toHaveFocus(), ANIMATION)
   },
 }
 
