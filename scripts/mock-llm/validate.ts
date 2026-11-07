@@ -64,7 +64,7 @@ export const narrativeValueSchema = z.object({
 
 // Strict: the wire's spelling (`tool_calls`, `arguments`) is refused, not dropped, or a step would
 // lose its calls and end a task with no writes. A string `args` goes out verbatim, else as JSON.
-export const mockToolStepSchema: z.ZodType<MockToolStep> = z.strictObject({
+const mockToolStepSchema: z.ZodType<MockToolStep> = z.strictObject({
   text: z.string().optional(),
   reasoning: z.string().optional(),
   toolCalls: z.array(z.strictObject({ name: z.string(), args: z.json() })).optional(),
