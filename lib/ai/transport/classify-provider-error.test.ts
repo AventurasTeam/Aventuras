@@ -111,13 +111,22 @@ describe('classifyProviderError', () => {
     })
   })
 
-  // A raw fetch failure reaches the classifier unwrapped: Chromium's has no cause, React Native's
-  // is its own class.
-  it.each([
-    ['Chromium', new TypeError('Failed to fetch')],
-    ['React Native', Object.assign(new Error('Network request failed'), { name: 'FetchError' })],
-  ])('keeps a raw %s fetch failure retryable', (_runtime, error) => {
-    expect(classifyProviderError(error).retryable).toBe(true)
+  // Chromium's fetch failure carries no cause, so the SDK hands it on unwrapped.
+  it.each([['Failed to fetch'], ['fetch failed']])(
+    'reads a raw "%s" as a retryable network failure',
+    (message) => {
+      expect(classifyProviderError(new TypeError(message))).toMatchObject({
+        error: { tier: 'provider', reason: 'network' },
+        retryable: true,
+      })
+    },
+  )
+
+  it('keeps a TypeError that is no fetch failure an unknown one, still retried', () => {
+    expect(classifyProviderError(new TypeError('x is not a function'))).toMatchObject({
+      error: { tier: 'provider', reason: 'unknown' },
+      retryable: true,
+    })
   })
 
   it.each([

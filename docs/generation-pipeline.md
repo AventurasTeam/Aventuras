@@ -1962,8 +1962,9 @@ on any error status: the same prompt overflows the same window again
 ([`architecture.md → Model context window`](./architecture.md#model-context-window)).
 A request the SDK refuses to build (an `InvalidPromptError` and its
 kin, raised before anything is sent) fails at once as an `unknown`
-provider failure too; a fetch that failed in transport reaches the
-helper unwrapped and stays retryable.
+provider failure too. A fetch that failed in transport reaches the
+helper unwrapped when it carries no cause, as Chromium's does: it
+reads as `network`, retried.
 A `reply-cut-off` failure isn't retried either: the same prompt and
 limit cut the reply again ([Cut-off replies](#cut-off-replies)). A
 close's tool step is the exception: `generateToolStep` runs a step cut

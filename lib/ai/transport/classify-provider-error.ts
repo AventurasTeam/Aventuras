@@ -35,6 +35,14 @@ export class ProviderTimeoutError extends Error {
 
 const MAX_CAUSE_DEPTH = 5
 
+// provider-utils' own test for a fetch that failed in transport. It wraps one only when it carries a
+// cause, and Chromium's carries none, so the renderer's reaches the classifier raw.
+const FETCH_FAILED_MESSAGES = ['fetch failed', 'failed to fetch']
+
+function isRawFetchFailure(error: unknown): boolean {
+  return error instanceof TypeError && FETCH_FAILED_MESSAGES.includes(error.message.toLowerCase())
+}
+
 // Raised while the SDK builds the request, before anything is sent: every attempt fails alike.
 const REQUEST_BUILD_ERRORS = [
   InvalidPromptError,
@@ -291,7 +299,7 @@ export function classifyProviderError(
   return {
     error: {
       tier: 'provider',
-      reason: 'unknown',
+      reason: isRawFetchFailure(error) ? 'network' : 'unknown',
       detail: describeProviderError(error),
     },
     // A raw fetch failure has no SDK class, so anything not built-request is retried as transport.
