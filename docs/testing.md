@@ -550,12 +550,14 @@ with calls and `stop` without. A string `args` goes out verbatim, so a
 spec can send a malformed call. A step can also be a function of the
 call's `MockRequest`, since it can name only the placeholders its
 prompt holds. A step that throws, or whose reply can't be serialized,
-fails its call with a 400,
-so the step fails at once with no retry. For a held call the error is
+fails its call with a 400, so the step fails at once with no retry. The
+400 carries a fixed text, not the error, since the app reads overflow
+and capability keywords anywhere in a body. For a held call the error is
 rethrown from the release or `close()`, after every held call is
 answered. An unheld call's error is kept and rethrown from `close()`
 too; with both pending, the one that came first is rethrown
-(`e2e/harness/mock-llm.ts`). An empty queue answers the empty
+(`e2e/harness/mock-llm.ts`). A `setStructured` value JSON can't hold
+fails its call the same way. An empty queue answers the empty
 step, `{}`: no calls, empty text and `stop`, which ends a task with no
 writes, so a spec that scripts nothing writes nothing. A tool call's
 `MockRequest.agent` is its lane key, and `holdNextStructured`,
