@@ -157,12 +157,20 @@ describe('saveChapter', () => {
     const { db, ctx } = await setup()
     const row = await keepRow(db)
     await db.delete(chapters).where(eq(chapters.id, 'chap_keep'))
-    vi.spyOn(logger, 'warn').mockImplementation(() => {})
+    const warn = vi.spyOn(logger, 'warn').mockImplementation(() => {})
     const result = await saveChapter(
       { branchId: 'br_1', row, draft: { ...chapterDraftFrom(row), title: 'The Keep Falls' } },
       ctx,
     )
     expect(result).toMatchObject({ status: 'rejected', code: 'not-found' })
+    expect(warn).toHaveBeenCalledWith('action_layer.chapter_save_rejected', {
+      branchId: 'br_1',
+      id: 'chap_keep',
+      create: false,
+      actions: ['updateChapter'],
+      reason: 'update target chapters br_1:chap_keep not found',
+      code: 'not-found',
+    })
     expect(await deltaRows(db)).toHaveLength(0)
   })
 

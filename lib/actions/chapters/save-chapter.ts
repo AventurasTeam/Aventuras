@@ -3,14 +3,14 @@ import { chapterActions, type ChapterDraft, type ChapterDraftRow } from '@/lib/c
 import {
   commitRowSave,
   flatRowSaveResult,
+  type FlatRowSaveRejectionCode,
   type FlatRowSaveResult,
 } from '../row-save/commit-row-save'
 import type { DbCtx } from '../types'
 
 export type ChapterSaveResult = FlatRowSaveResult
 
-/** 'in-flight' | 'not-found' | 'failed' */
-export type ChapterSaveRejectionCode = Extract<ChapterSaveResult, { status: 'rejected' }>['code']
+export type ChapterSaveRejectionCode = FlatRowSaveRejectionCode
 
 type SaveChapterArgs = { branchId: string; row: ChapterDraftRow; draft: ChapterDraft }
 

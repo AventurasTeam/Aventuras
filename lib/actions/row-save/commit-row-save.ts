@@ -50,7 +50,7 @@ const ENTITY_ONLY_CODES = [
   PLACE_REFUSAL.retiredPlace,
 ] as const
 
-/** What a save of a row with no parent chain (thread, happening, lore) can report. */
+/** What a save of a row with no parent chain can report. */
 export type FlatRowSaveRejectionCode = Exclude<
   RowSaveRejectionCode,
   (typeof ENTITY_ONLY_CODES)[number]
