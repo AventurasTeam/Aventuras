@@ -3529,8 +3529,14 @@ describe('periodicClassifierPhase via runPipeline', () => {
     ensurePeriodicClassifierPipelineRegistered()
     generationStore.setPendingClose('b1', { endEntryId: 'e2' })
     const starts: string[] = []
+    // A watermark that fails to step makes the chain spin on microtasks, which starves the test
+    // timeout; the cap aborts it so the failure is an assertion.
+    let spun = false
     const unsubscribe = pipelineEventBus.subscribe('run_start', (e) => {
       starts.push(e.kind)
+      if (starts.length <= 3) return
+      spun = true
+      for (const run of generationStore.getTxState().runs.values()) run.abortController.abort()
     })
     onTestFinished(unsubscribe)
 
@@ -3540,7 +3546,9 @@ describe('periodicClassifierPhase via runPipeline', () => {
       db,
       runInTransaction,
     })
-    const closing = await close.nextHeld()
+    const closing = await Promise.race([close.nextHeld(), chain.then(() => null)])
+    expect(spun, 'phase 0 spun without reaching the close: the watermark did not step').toBe(false)
+    if (closing == null) throw new Error('the chain ended without reaching the close')
     // The close starts only after the second pass has read the prose.
     expect(vi.mocked(generateStructured)).toHaveBeenCalledTimes(1)
     expect(vi.mocked(generateStructured).mock.calls[0][1].user).toContain('the prose row')
