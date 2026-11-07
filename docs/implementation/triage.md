@@ -81,10 +81,6 @@ slice-planning gate forces its resolution before that slice is planned.
   create or close deltas, so a rollback or CTRL-Z on a long branch
   refuses `no-create`. Fine while it stays a read-only performance
   fixture.
-- **`/dev/*` routes are reachable by deep link in a release build.**
-  `app/dev/_layout.tsx` has no `__DEV__` gate; only the Settings button
-  to the dev index does. For the chapter-close route this is Slice 5.2's
-  decision; for `/dev/reseed` and the rest it is unexamined.
 - **The embedder drain drops a run's idle note while a pass runs.**
   `noteIdle` (`lib/embedder/drain.ts:198-204`) does nothing mid-pass, and
   the pass's row list predates the run's writes, so a row made stale by a
@@ -120,15 +116,6 @@ slice-planning gate forces its resolution before that slice is planned.
   interrupted summary either, and the `tsx` and `pnpm` relay in between
   wasn't traced. With parallel workers an orphaned run now finishes in
   under 2 minutes. Surfaced by the same review.
-- **The `toolCalling` hint may miss some servers' wording.** Canon's
-  keywords are `tools` and `tool_choice`
-  ([`generation-pipeline.md → Fatal error categories`](../generation-pipeline.md#fatal-error-categories)).
-  vLLM's refusal of the step's `tool_choice: 'auto'` is recalled as
-  `"auto" tool choice requires --enable-auto-tool-choice`, and
-  OpenRouter's as `No endpoints found that support tool use`; neither
-  holds a keyword. Both texts are from memory, not a live server. Check
-  them, and widen `CapabilityHint`'s `matched` if they hold. Surfaced by
-  Slice 5.4's slice review.
 - **The gated field wiring exists in three copies.** The `Controller`
   plus `FormRow` plus input with the run gate (`editable={!blocked}`
   and a hint, or `disabled` and a reason) is written in World's
@@ -136,16 +123,6 @@ slice-planning gate forces its resolution before that slice is planned.
   `ChapterCard`; they differ only in the issue-text function. A gated
   field in `components/compounds/` that takes it would remove the
   copies. Surfaced by Slice 5.7's card review.
-- **A disabled button's reason under it on native is hand-written three
-  times.** `ReasonTooltip` does nothing on native, so `ChapterCard`'s
-  action row, `ChapterInProgressCard`'s `Close chapter…` and the reader
-  popover's `OverlayAction` each wrap the `Button` in a `View` and render
-  the reason as muted `xs` text when `Platform.OS !== 'web'`, with
-  different alignment and disabled conditions. A button that needs its
-  reason on native shows none unless its author copies the block. A
-  shared compound, or a `Button` option, would end the copies; the
-  latter changes native layout for every `disabledReason` caller, so it
-  wants a design call. Surfaced by Slice 5.7's slice review.
 - **A Save whose only change is whitespace leaves the untrimmed draft
   as the clean form.** The chapter and lore drafts compare trimmed
   values (`chapterPatch` in `lib/chapters/chapter-draft.ts`, `lorePatch`
@@ -160,14 +137,6 @@ slice-planning gate forces its resolution before that slice is planned.
   and it spans every row kind (Plot's thread and happening drafts trim
   too). The Timeline is a new route to lore's existing behaviour.
   Surfaced by Slice 5.7's slice review.
-- **A manual pick a reversal stamps into a chapter survives the
-  prose-reversal bracket's existence check.** Redo of an undone close
-  does it; the next Send then fails once at `boundary` (stale pick)
-  before the pick drops. The fix would add `isNull(storyEntries.chapterId)`
-  to the check's read, which goes past canon's "a reversal that removes
-  that entry" and needs the developer's call. It shares a root with
-  [the deferral toast entry in parked.md](../parked.md#the-deferral-toast-can-promise-a-close-that-never-runs).
-  Surfaced by Slice 5.6's review.
 - **A before-turn close shows one flat label.** The banner keeps its
   before-your-turn label for the whole run (C6, `principles.md`, the
   slice's label table), which hides `N of M` exactly when the user waits longest,

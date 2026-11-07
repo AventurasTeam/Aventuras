@@ -604,6 +604,20 @@ amends the scope above.
   [parked.md → The deferral toast can promise a close that never runs](../../../../parked.md#the-deferral-toast-can-promise-a-close-that-never-runs).
   Default: accept as 5.6 ships it, unless a run of the modal shows a user
   expecting the close back. Surfaced by Slice 5.6's slice review.
+- **Does a pick a reversal stamped into a chapter stay owed?** Redo of an undone
+  close stamps a manual pick's end entry into the chapter again, and the
+  prose-reversal bracket's existence check keeps the pick, since the entry is
+  still there (`dropRemovedPick`, `lib/actions/story-entries/prose-reversal.ts`).
+  The next Send then fails once at `boundary` (stale pick) before the pick drops.
+  Canon prescribes that: a pick drops when "a reversal ... removes the entry"
+  ([`generation-pipeline.md`](../../../../generation-pipeline.md), and
+  [`chapter-close.md`](../../../../memory/chapter-close.md)). Reached today only
+  through the dev route. Options: accept the one failed Send; widen the check to
+  boundary's own criterion (`isNull(storyEntries.chapterId)` and `canEndChapter`)
+  and edit those canon sentences; or carry the pick in the undo group, which also
+  answers the question above. It shares a root with
+  [parked.md → The deferral toast can promise a close that never runs](../../../../parked.md#the-deferral-toast-can-promise-a-close-that-never-runs).
+  Surfaced by Slice 5.6's review; routed from triage 2026-11-07.
 - **Can a close run on each side of one turn?** Canon says one close per turn when
   auto-close turns on late, and Send plus the turn's chain gives two.
   [Slice 5.6](./06-close-owed.md) left the chain alone, because this slice's
@@ -663,6 +677,42 @@ amends the scope above.
   written close rolls back? Unit coverage of the rollback is
   `lib/actions/story-entries/undo-classifier.test.ts`. Surfaced by Slice 5.6's
   review.
+- **Does the `toolCalling` hint catch vLLM's and OpenRouter's wording?** Canon's
+  keywords are `tools` and `tool_choice`
+  ([`generation-pipeline.md → Fatal error categories`](../../../../generation-pipeline.md#fatal-error-categories)),
+  matched on the lowercased body as written, so `tool choice` and `tool use` miss.
+  vLLM refuses the step's `tool_choice: 'auto'` with a 400 saying "auto" tool choice
+  requires `--enable-auto-tool-choice` and `--tool-call-parser` (in its source), and
+  OpenRouter, per a third-party report, with a 404 saying no endpoints support tool
+  use. llama.cpp's `tool_choice param requires --jinja flag`
+  holds a keyword but answers 500, outside the hint's 4xx range, and only under
+  `--no-jinja`. Suggested: `tool choice` and `tool use` join the matched words, with
+  canon's `CapabilityHint` union, when this slice's hint test runs. Surfaced by
+  Slice 5.4's slice review; routed from triage 2026-11-07.
+- **Gate `/dev` once the chapter-close route goes?** `app/dev/_layout.tsx` has no
+  `__DEV__` gate, only the Settings button to the dev index does, so every
+  `/dev/*` route ships in a release bundle. On Android `aventuras://dev/<route>`
+  reaches them (by the `app.json` scheme; not run on a device); Electron registers
+  no protocol. Each destructive action needs a press: `reseed` throws in release,
+  `probe-captures` deletes on a button, and `chapter-close` starts a real close.
+  Slice 5.2 left that route ungated because E2E runs with `__DEV__` false, and this
+  slice deletes it. Suggested: then gate the layout with a redirect home, pinned by
+  an E2E that opens `/dev/reseed`. A deep link is also a push, which the
+  story-leave guard doesn't see, so one into another story skips the guard that
+  cancels runs (reasoned, not run on a device). Routed from triage 2026-11-07.
+- **One button that shows its disabled reason on native?** `ReasonTooltip` does
+  nothing on native, so `ChapterCard`'s action row (off phone),
+  `ChapterInProgressCard`'s `Close chapter…` (always, since it is always disabled
+  today) and the reader popover's `OverlayAction` each render the reason as muted
+  text under the `Button`, with different alignment and conditions. This slice
+  re-gates the last two and adds the close modal's `Close chapter`, "disabled with
+  the gate's reason", a fourth copy; once `Close chapter…` can be enabled, the
+  in-progress card's block would show a reason under an enabled button. Canon
+  doesn't say what a disabled reason does on native. Suggested: one shared compound
+  landed with the modal, its line shown only while disabled. Whether every disabled
+  button does the same belongs to
+  [M9's `disabledReason` pass](../../../roadmap.md#m9--storybook--per-surface-visual-polish--ship-gate).
+  Surfaced by Slice 5.7's slice review; routed from triage 2026-11-07.
 - **A fact for the planner, not a question.** If the host ever reads a run's result:
   `completed` can be the catch-up pass alone (a late Cancel after its last phase, or
   the open story leaving the branch), with no close run and the pick still owed.

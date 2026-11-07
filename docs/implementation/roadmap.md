@@ -1544,6 +1544,10 @@ own.
   changes a shared UI contract, so it wants a design pass rather than a
   drive-by. Cross-cutting: every `disabledReason` consumer, present and
   future. Predates M3.7b; surfaced by the M3.7b review (2026-08-01).
+  On native the reason shows nowhere, `ReasonTooltip` being a no-op there,
+  unless a host writes a visible line under the button, as three M5 hosts
+  do; the same pass decides whether every disabled button shows one
+  ([Slice 5.10 → Open questions](./milestones/05-chapters-chapter-close/slices/10-two-starts.md#open-questions)).
   The same pass owns focus: RN Web maps `disabled` to the native
   attribute, so a control that disables under focus drops it to
   `<body>` (`Button`'s `loading`, History's `Load more`;
