@@ -53,7 +53,10 @@ function heldCommit() {
 }
 
 type Extras = Partial<
-  Pick<RowSaveSessionOptions<Draft>, 'resolver' | 'onRejected' | 'confirmBeforeCommit'>
+  Pick<
+    RowSaveSessionOptions<Draft>,
+    'resolver' | 'onRejected' | 'confirmBeforeCommit' | 'onSession'
+  >
 > & {
   onRender?: (session: RowSaveSession<Draft>) => void
 }
@@ -61,7 +64,13 @@ type Extras = Partial<
 function setup(
   commit: Commit = okCommit(),
   initial: Props = { rowKey: 'row_1', values: VALUES },
-  { onRender, resolver = zodResolver(schema), onRejected, confirmBeforeCommit }: Extras = {},
+  {
+    onRender,
+    resolver = zodResolver(schema),
+    onRejected,
+    confirmBeforeCommit,
+    onSession,
+  }: Extras = {},
 ) {
   const hook = renderHook(
     ({ rowKey, values }: Props) => {
@@ -75,6 +84,7 @@ function setup(
         commit,
         confirmBeforeCommit,
         onRejected,
+        onSession,
       })
       onRender?.(session)
       return session
@@ -159,6 +169,35 @@ describe('useRowSaveSession', () => {
     })
     expect(outcomes).toEqual([{ status: 'committed' }, { status: 'busy' }])
     expect(commit).toHaveBeenCalledTimes(1)
+  })
+
+  it('drops a field issue once an edit is undone and the draft is clean again', async () => {
+    // Blank committed values are where a clean draft can hold an invalid field.
+    const hook = setup(okCommit(), { rowKey: 'create:1', values: { title: '', note: '' } })
+    act(() => hook.result.current.form.setValue('title', 'A', { shouldDirty: true }))
+    await act(async () => {
+      hook.result.current.form.setValue('title', '', { shouldDirty: true })
+      await hook.result.current.form.trigger('title')
+    })
+    await vi.waitFor(() => expect(hook.result.current.dirty).toBe(false))
+    await vi.waitFor(() => expect(hook.result.current.form.formState.errors).toEqual({}))
+    expect(hook.result.current.invalidReason).toBeNull()
+  })
+
+  it('hands its leave routing to onSession as dirtiness changes, and null on unmount', () => {
+    const onSession = vi.fn()
+    const hook = setup(okCommit(), undefined, { onSession })
+    expect(onSession).toHaveBeenLastCalledWith({
+      dirty: false,
+      requestLeave: hook.result.current.requestLeave,
+    })
+    act(() => hook.result.current.form.setValue('note', 'x', { shouldDirty: true }))
+    expect(onSession).toHaveBeenLastCalledWith({
+      dirty: true,
+      requestLeave: hook.result.current.requestLeave,
+    })
+    hook.unmount()
+    expect(onSession).toHaveBeenLastCalledWith(null)
   })
 
   it('runs a leave immediately while clean, queues it while dirty, drains on discard', () => {

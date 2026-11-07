@@ -287,14 +287,6 @@ slice-planning gate forces its resolution before that slice is planned.
   `window-check.test.ts` and `request-shape.test.ts`. The older
   `narrativeValueSchema` in `scripts/mock-llm/validate.ts` is exported
   with no importer. Surfaced by Slice 5.4's slice review.
-- **The row-session wrapper exists in four copies.** The lore, entity,
-  plot and chapter row sessions each repeat the `commit` wrapper (a
-  try/catch and a `*_saved_handler_failed` log), the `onSession`
-  effect, and, in two of the four (lore, chapter), an effect
-  that calls `clearErrors` once the form is clean and the other two lack.
-  Whether plot and entity miss that effect on purpose is unverified. Lifting the shared parts into
-  the substrate or a helper would end the drift. Surfaced by Slice
-  5.7's session-hook review.
 - **The gated field wiring exists in three copies.** The `Controller`
   plus `FormRow` plus input with the run gate (`editable={!blocked}`
   and a hint, or `disabled` and a reason) is written in World's

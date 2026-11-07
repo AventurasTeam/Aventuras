@@ -1,5 +1,5 @@
 import { zodResolver } from '@hookform/resolvers/zod'
-import { useCallback, useEffect, useMemo } from 'react'
+import { useCallback, useMemo } from 'react'
 
 import {
   useRowSaveSession,
@@ -87,15 +87,7 @@ export function useChapterRowSession({
     failureText: chapterSaveFailureText,
     commit,
     onRejected,
+    onSession,
   })
-  const { form, dirty, requestLeave } = session
-  // Undoing every edit leaves the edited fields' issues behind; a clean draft shows none.
-  useEffect(() => {
-    if (!dirty) form.clearErrors()
-  }, [dirty, form])
-  useEffect(() => {
-    onSession({ dirty, requestLeave })
-    return () => onSession(null)
-  }, [onSession, dirty, requestLeave])
   return { ...session, formRowId: session.formHoldsRow ? rowId : null }
 }

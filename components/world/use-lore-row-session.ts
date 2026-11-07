@@ -1,4 +1,4 @@
-import { useCallback, useEffect } from 'react'
+import { useCallback } from 'react'
 import type { Resolver } from 'react-hook-form'
 
 import {
@@ -60,7 +60,7 @@ export function useLoreRowSession({
     },
     [onSave, onSaved],
   )
-  const session = useRowSaveSession<LoreDraft>({
+  return useRowSaveSession<LoreDraft>({
     rowKey: rowId ?? `create:lore:${createSeq}`,
     values,
     resolver,
@@ -69,15 +69,6 @@ export function useLoreRowSession({
     failureText: saveFailureText,
     commit,
     onRejected,
+    onSession,
   })
-  const { form, dirty, requestLeave } = session
-  // Undoing every edit leaves the edited fields' issues behind; a clean draft shows none.
-  useEffect(() => {
-    if (!dirty) form.clearErrors()
-  }, [dirty, form])
-  useEffect(() => {
-    onSession({ dirty, requestLeave })
-    return () => onSession(null)
-  }, [onSession, dirty, requestLeave])
-  return session
 }

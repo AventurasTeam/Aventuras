@@ -65,6 +65,8 @@ export type RowSaveSessionOptions<Draft extends FieldValues> = {
    * row, which keeps no `saveError` for it. The bar's notice is tooltip-only on phone; toast this.
    */
   onRejected?: (reason: string) => void
+  /** Handed the session's leave routing while mounted, and null on unmount. */
+  onSession?: (handle: RowSessionHandle | null) => void
 }
 
 export type RowSaveSession<Draft extends FieldValues> = {
@@ -180,6 +182,7 @@ export function useRowSaveSession<Draft extends FieldValues>({
   commit,
   confirmBeforeCommit,
   onRejected,
+  onSession,
 }: RowSaveSessionOptions<Draft>): RowSaveSession<Draft> {
   // react-hook-form mutates formState in place; compiled memos keyed on it would go stale.
   'use no memo'
@@ -486,6 +489,17 @@ export function useRowSaveSession<Draft extends FieldValues>({
     .map((field) => fieldLabel(field))
   const dirty = dirtyFields.length > 0
   const issue = firstIssue(errors) ?? (dirty ? draftIssue : null)
+
+  // Undoing every edit leaves the edited fields' issues behind; a clean draft shows none.
+  useEffect(() => {
+    if (!dirty) form.clearErrors()
+  }, [dirty, form])
+
+  useEffect(() => {
+    if (onSession == null) return
+    onSession({ dirty, requestLeave })
+    return () => onSession(null)
+  }, [onSession, dirty, requestLeave])
 
   return {
     form,
