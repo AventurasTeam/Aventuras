@@ -12,7 +12,7 @@ import {
 } from '@/lib/db'
 import { createTestDb } from '@/lib/db/__tests__/test-db'
 
-import { CloseIds } from './ids'
+import { CloseIds, nameCloseProse } from './ids'
 import { readRowTool, searchWorldTool } from './read-tools'
 import { assertReplaySafe, type ReadAnswer, type ReadFields, type ToolContext } from './tool'
 
@@ -225,6 +225,26 @@ describe('search_world', () => {
     expect(out.matches[0]!.line).toBe(
       `happening: The night crossing — The ferryman ${ids.handleOf(TOBIN)} took her over at night.`,
     )
+  })
+
+  it('shows a row whose full id sits in a line by its name, so prose citing it is named', async () => {
+    const sela = rowId('char', 4)
+    await db
+      .insert(entities)
+      .values([
+        entity(sela, 'character', 'Sela', { description: `Spoke with ${MIRA} at the ferry.` }),
+        entity(rowId('loc', 5), 'location', `Gate of ${FERRYHOUSE}`),
+      ])
+    expect(ids.handleOf(MIRA)).toBeUndefined()
+
+    const { out } = await search('sela')
+    await search('gate of')
+
+    const mira = ids.handleOf(MIRA)!
+    expect(out.matches[0]!.line).toBe(`character: Sela — Spoke with ${mira} at the ferry.`)
+    expect(ids.nameOf(mira)).toBe('Mira')
+    expect(nameCloseProse({ why: `Sela met ${mira}.` }, ids).why).toBe('Sela met Mira.')
+    expect(ids.nameOfId(FERRYHOUSE)).toBe('Ferryhouse')
   })
 
   it('keeps word boundaries: a name inside a longer word is no match', async () => {

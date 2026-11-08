@@ -96,7 +96,7 @@ const UUID = '[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}'
 // Entry and awareness ids stay out: they are turns and links, not rows read_row shows.
 const ROW_ID_IN_TEXT = new RegExp(`\\b(?:${SUBSTITUTABLE_PREFIXES.join('|')})_${UUID}\\b`, 'g')
 
-// Embedded ids count too, or withHandlesDeep gives a prose id a handle with no name.
+// Embedded ids count too, or the swap to handles gives a prose id a handle with no name.
 function refIdsIn(value: unknown): string[] {
   if (typeof value === 'string') return [...value.matchAll(ROW_ID_IN_TEXT)].map(([id]) => id)
   if (Array.isArray(value)) return value.flatMap(refIdsIn)
@@ -201,10 +201,16 @@ async function searchWorld(
   }
 
   found.sort((a, b) => Number(b.byName) - Number(a.byName) || a.name.localeCompare(b.name))
-  const matches = found.slice(0, SEARCH_WORLD_LIMIT).map((match) => ({
-    id: ctx.ids.show(match.id, match.name),
-    line: lineOf(ctx.ids, match.kind, match.name, match.status, match.description),
-  }))
+  const matches: { id: string; line: string }[] = []
+  for (const match of found.slice(0, SEARCH_WORLD_LIMIT)) {
+    const id = ctx.ids.show(match.id, match.name)
+    for (const refId of new Set(refIdsIn([match.name, match.description])))
+      await showRef(ctx, refId)
+    matches.push({
+      id,
+      line: lineOf(ctx.ids, match.kind, match.name, match.status, match.description),
+    })
+  }
   const omitted = found.length - matches.length
   return { output: omitted > 0 ? { matches, omitted } : { matches }, rows: [], read: [] }
 }
