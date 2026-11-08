@@ -41,11 +41,14 @@ const imageModel = (supportedResolutions?: readonly string[]): ImageModelCapabil
 })
 
 // From the image generation guide. `gpt-image-2` and `gpt-image-2.5-*` take any `WxH` within the
-// pixel bounds, so they list no sizes; the other models take the standard three.
+// pixel bounds, so they list no sizes; the other models take the standard three. `gpt-image-2.6-*`
+// is free-form per the image prompting guide, though the API reference's `size` text omits it.
 const OPENAI_IMAGE_MODELS = new Map<string, ImageModelCapabilities>([
   ['gpt-image-2', imageModel()],
   ['gpt-image-2.5-sunburst', imageModel()],
   ['gpt-image-2.5-flare', imageModel()],
+  ['gpt-image-2.6-sunburst', imageModel()],
+  ['gpt-image-2.6-flare', imageModel()],
   ['gpt-image-1.5', imageModel(STANDARD_SIZES)],
   ['gpt-image-1-mini', imageModel(STANDARD_SIZES)],
   ['chatgpt-image-latest', imageModel(STANDARD_SIZES)],

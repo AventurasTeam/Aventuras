@@ -157,6 +157,11 @@ describe('OpenAI image size', () => {
     }
   })
 
+  it('sends a gpt-image-2.6 landscape request real dimensions at or above the pixel floor', async () => {
+    expect(await sizeFor('gpt-image-2.6-flare', 'landscape', 'tiny')).toBe('1088x608')
+    expect(await sizeFor('gpt-image-2.6-sunburst', 'landscape', 'medium')).toBe('1536x864')
+  })
+
   it('sends the same size on the edits endpoint', async () => {
     expect(await sizeFor('gpt-image-1.5', 'landscape', 'medium', [PNG])).toBe('1536x1024')
     expect(await sizeFor('gpt-image-2', 'landscape', 'tiny', [PNG])).toBe('1088x608')
@@ -221,6 +226,16 @@ describe('OpenAI model listing', () => {
     expect(snapshot).toMatchObject({ id: 'gpt-image-2.5-flare-2026-09-08' })
     expect(snapshot.maxReferenceImages).toBe(model.maxReferenceImages)
   })
+
+  it.each(['gpt-image-2.6-sunburst', 'gpt-image-2.6-flare'])(
+    'lists %s as a free-form model taking 16 references',
+    async (id) => {
+      vi.mocked(imageGetFetch).mockResolvedValue(modelsResponse({ data: [{ id }] }))
+      const [model] = await createOpenAIProvider({ apiKey: 'k' }).listModels()
+      expect(model).toMatchObject({ id, supportsImg2Img: true, maxReferenceImages: 16 })
+      expect(model.supportedResolutions).toBeUndefined()
+    },
+  )
 
   it('knows only that an unlisted image model takes references', async () => {
     vi.mocked(imageGetFetch).mockResolvedValue(modelsResponse({ data: [{ id: 'gpt-image-9' }] }))
