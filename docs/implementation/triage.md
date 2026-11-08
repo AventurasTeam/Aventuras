@@ -122,5 +122,25 @@ slice-planning gate forces its resolution before that slice is planned.
   redundant: `promoteStagedEntity` takes the row's lock key, so two
   promotes through the action layer serialise and the second reads the
   DB already active. The lock did not come later: `ae48d4513` (M3.2)
-  added both, `a6d81c572` (M4.2a) only widened the key. Raised in 5.5a's
-  review.
+  added both, `a6d81c572` (M4.2a) only widened the key. The stale store
+  itself is the next entry. Raised in 5.5a's review.
+- **A write that commits while a story opens is lost from its stores.**
+  `loadOpenStory` (`lib/actions/stories/operational.ts`) reads every
+  working-set table one after another, then hydrates them all together,
+  so a write committing in between is lost from the store, either way:
+  if the store already holds that branch, the write's patch applies and
+  the hydrate overwrites it; if not, the patch is dropped
+  (`lib/stores/factory/working-set-store.ts`, a branch the store doesn't
+  hold) and the hydrate brings the older rows. World and the other store
+  readers show the old row until the next open. The writers that can
+  land in that window are background runs on that branch: a pass, or a
+  close. Raised in 5.5a's review.
+- **`teardown.spec.ts`'s rejected-close case can hang its first attempt,
+  and the hang fails the shard though the retry passes.** "a rejected
+  close still ends the app before its userData goes" timed out at its
+  120 s on the packaged project in CI, then the worker's teardown passed
+  Playwright's 90 s, an error outside any test; the retry passed in 4 s.
+  Seen once (PR 717, E2E shard 3/3, run `42462233487`, 2026-11-08) on a
+  docs-only push whose code had passed E2E one push before. Not yet
+  traced: whether the hang is in the harness ending the app after the
+  rejected close, or in the app itself. Raised in 5.5a's review.
