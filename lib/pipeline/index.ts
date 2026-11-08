@@ -23,6 +23,7 @@ export {
 } from './definitions/chapter-close'
 export { closingChapterId } from './definitions/closing-chapter'
 export { CLOSE_PHASE } from './definitions/intermediates'
+export { __setCloseAgentSlots, type CloseAgentSlots } from './definitions/close-agent/slots'
 export {
   CLASSIFIER_HELD,
   closeOwed,

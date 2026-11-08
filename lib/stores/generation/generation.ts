@@ -6,7 +6,7 @@ import type { CloseTask } from '@/lib/db'
 export type DeferredWork = { readonly pass?: true; readonly close?: true }
 export type DeferredWorkKind = keyof DeferredWork
 
-/** C6: the agent task a close last started; `index` is 1-based, `part` 0-based. */
+/** C6: the agent task a close last started; `index` from 1, `part` as C4's (0 chapter-wide). */
 export type CloseProgress = Readonly<{
   task: CloseTask
   part: number

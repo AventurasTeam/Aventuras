@@ -26,26 +26,51 @@ import {
   type ToolStepInvalidCall,
   type ToolStepResult,
 } from '@/lib/ai'
-import { entities } from '@/lib/db'
+import { entities, type CloseTask } from '@/lib/db'
 import { makeLogger } from '@/lib/diagnostics'
-import { resetAllStores } from '@/lib/stores'
+import { appSettingsStore, currentStoryStore, resetAllStores } from '@/lib/stores'
 
 import { entityWriteAction } from './entity-write'
 import { CloseIds } from './ids'
 import { CloseLedgerWriter } from './ledger'
+import { closeParts } from './parts'
 import { CLOSE_TASK_STEP_BUDGET, runCloseTask, type TaskEnd } from './run-task'
+import {
+  __setCloseAgentSlots,
+  closeAgentSlots,
+  PRODUCTION_CLOSE_SLOTS,
+  type CodeStepContext,
+  type SlotEntry,
+} from './slots'
 import type { CloseTaskDef, TaskRunContext } from './task'
-import { readToolSchema, writeToolSchema, type ReadTool, type WriteTool } from './tool'
+import {
+  readToolSchema,
+  writeToolSchema,
+  type ReadFields,
+  type ReadTool,
+  type WriteTool,
+} from './tool'
 import { CLOSE_REASON } from './verdict'
-import type { PhaseContext, PhaseEmittedEvent } from '../../types'
+import type { PhaseContext, PhaseEmittedEvent, PhaseResult, PipelineError } from '../../types'
 import { openCloseFixture, type CloseFixture } from '../__tests__/close-fixture'
-import { seedCloseLedger } from '../close-intermediates'
+import { closeAgentPhase } from '../chapter-close-agent'
+import { closeIdsOf, closeLedgerOf, seedCloseLedger, setCloseRange } from '../close-intermediates'
 import type { CloseLedger } from '../intermediates'
 
 vi.mock('@/lib/ai', async (importOriginal) => ({
   ...(await importOriginal<Record<string, unknown>>()),
   generateToolStep: vi.fn(),
 }))
+
+// Pass-throughs: a slot case scripts a part cut or a task's end, every other case runs the real one.
+vi.mock('./parts', async (importOriginal) => {
+  const actual = await importOriginal<{ closeParts: typeof closeParts }>()
+  return { ...actual, closeParts: vi.fn(actual.closeParts) }
+})
+vi.mock('./run-task', async (importOriginal) => {
+  const actual = await importOriginal<{ runCloseTask: typeof runCloseTask }>()
+  return { ...actual, runCloseTask: vi.fn(actual.runCloseTask) }
+})
 
 const WREN = 'char_00000000-0000-4000-8000-000000000001'
 const ACTION_ID = 'act_close_driver'
@@ -866,6 +891,400 @@ describe('runCloseTask', () => {
     expect(sentMessages(1).at(-1)).toStrictEqual({
       role: 'tool',
       content: [{ type: 'tool-result', toolCallId: 'k1', toolName: 'echo', output: sent }],
+    })
+  })
+})
+
+describe('closeAgentPhase', () => {
+  const SCRIPTED_ERROR: PipelineError = { kind: 'orchestrator', detail: 'scripted task failure' }
+  let fixture: CloseFixture
+  let abort: AbortController
+
+  beforeEach(async () => {
+    vi.mocked(closeParts).mockReset()
+    vi.mocked(runCloseTask).mockReset()
+    vi.mocked(generateToolStep).mockClear()
+    fixture = await openCloseFixture()
+    abort = new AbortController()
+  })
+
+  afterEach(() => {
+    __setCloseAgentSlots(undefined)
+    vi.mocked(closeParts).mockReset()
+    vi.mocked(runCloseTask).mockReset()
+    resetAllStores()
+  })
+
+  // The range below ends on the third reply: the opening and three turns, positions 1 to 7.
+  const chapterIds = (): string[] => fixture.entries.slice(0, 7).map((entry) => entry.id)
+
+  function phaseCtx(): PhaseContext {
+    const intermediates: Record<string, unknown> = {}
+    setCloseRange(intermediates, {
+      chapterId: 'chap_slots',
+      startEntryId: fixture.entries[0]!.id,
+      endEntryId: fixture.replyIds[2]!,
+    })
+    return {
+      actionId: 'act_slots',
+      abortSignal: abort.signal,
+      intermediates,
+      log: makeLogger('act_slots'),
+      db: fixture.ctx.db,
+      runInTransaction: fixture.ctx.runInTransaction,
+      storyId: fixture.storyId,
+      branchId: fixture.branchId,
+    }
+  }
+
+  async function drain(
+    ctx: PhaseContext,
+  ): Promise<{ events: PhaseEmittedEvent[]; result: PhaseResult }> {
+    const gen = closeAgentPhase(ctx)
+    const events: PhaseEmittedEvent[] = []
+    for (;;) {
+      const next = await gen.next(undefined)
+      if (next.done) return { events, result: next.value }
+      events.push(next.value)
+    }
+  }
+
+  const taskStarts = (events: readonly PhaseEmittedEvent[]) =>
+    events.filter(
+      (event): event is Extract<PhaseEmittedEvent, { type: 'close_task_start' }> =>
+        event.type === 'close_task_start',
+    )
+
+  // Nothing to show: runCloseTask ends it with no step, so it must never render.
+  function quietTask(
+    task: CloseTask,
+    log: string[],
+    opts: { readFields?: ReadFields; seen?: (ctx: TaskRunContext) => void } = {},
+  ): SlotEntry {
+    return {
+      kind: 'task',
+      def: {
+        task,
+        tools: [],
+        readFields: opts.readFields ?? {},
+        start: async (ctx) => {
+          log.push(`${task}@${ctx.part}`)
+          opts.seen?.(ctx)
+          return null
+        },
+        render: () => {
+          throw new Error(`${task} rendered with nothing to show`)
+        },
+      },
+    }
+  }
+
+  function codeStep(
+    name: string,
+    log: string[],
+    end: (ctx: CodeStepContext) => PhaseResult = () => ({ status: 'completed' }),
+  ): SlotEntry {
+    return {
+      kind: 'code',
+      step: {
+        name,
+        run: async function* (
+          ctx,
+        ): AsyncGenerator<PhaseEmittedEvent, PhaseResult, GroupOutcome | undefined> {
+          log.push(`${name}@${ctx.part}`)
+          return end(ctx)
+        },
+      },
+    }
+  }
+
+  // The next runCloseTask call ends as given without running its task's start.
+  function nextTaskEnds(end: TaskEnd): void {
+    vi.mocked(runCloseTask).mockImplementationOnce(async function* (): AsyncGenerator<
+      PhaseEmittedEvent,
+      TaskEnd,
+      GroupOutcome | undefined
+    > {
+      return end
+    })
+  }
+
+  it('runs before once, perPart once per part and after once, in that order', async () => {
+    const log: string[] = []
+    const turnIds = chapterIds()
+    vi.mocked(closeParts).mockReturnValueOnce([
+      { index: 1, entryIds: turnIds.slice(0, 4) },
+      { index: 2, entryIds: turnIds.slice(4) },
+    ])
+    __setCloseAgentSlots({
+      before: [codeStep('normalize', log), quietTask('happenings', log)],
+      perPart: [quietTask('lore', log), codeStep('between', log), quietTask('identity', log)],
+      after: [quietTask('awareness', log), codeStep('reset', log)],
+    })
+
+    const { events, result } = await drain(phaseCtx())
+
+    expect(result).toEqual({ status: 'completed' })
+    expect(log).toEqual([
+      'normalize@0',
+      'happenings@0',
+      'lore@1',
+      'between@1',
+      'identity@1',
+      'lore@2',
+      'between@2',
+      'identity@2',
+      'awareness@0',
+      'reset@0',
+    ])
+    expect(taskStarts(events)).toEqual([
+      { type: 'close_task_start', task: 'happenings', part: 0, index: 1, total: 12 },
+      { type: 'close_task_start', task: 'lore', part: 1, index: 2, total: 12 },
+      { type: 'close_task_start', task: 'identity', part: 1, index: 3, total: 12 },
+      { type: 'close_task_start', task: 'lore', part: 2, index: 7, total: 12 },
+      { type: 'close_task_start', task: 'identity', part: 2, index: 8, total: 12 },
+      { type: 'close_task_start', task: 'awareness', part: 0, index: 12, total: 12 },
+    ])
+    expect(
+      vi.mocked(closeParts).mock.calls.map(([entries]) => entries.map((entry) => entry.id)),
+    ).toEqual([turnIds])
+  })
+
+  it('reads the chapter as one part numbered 1, so Identity starts 3 of 7', async () => {
+    const log: string[] = []
+    __setCloseAgentSlots({ before: [], perPart: [quietTask('identity', log)], after: [] })
+
+    const { events, result } = await drain(phaseCtx())
+
+    expect(result).toEqual({ status: 'completed' })
+    expect(log).toEqual(['identity@1'])
+    expect(taskStarts(events)).toEqual([
+      { type: 'close_task_start', task: 'identity', part: 1, index: 3, total: 7 },
+    ])
+    const [entries] = vi.mocked(closeParts).mock.calls[0]!
+    expect(closeParts(entries)).toEqual([{ index: 1, entryIds: chapterIds() }])
+  })
+
+  it('starts a task with nothing to show and makes no step for it', async () => {
+    const log: string[] = []
+    __setCloseAgentSlots({ before: [quietTask('happenings', log)], perPart: [], after: [] })
+
+    const { events } = await drain(phaseCtx())
+
+    expect(log).toEqual(['happenings@0'])
+    expect(taskStarts(events)).toEqual([
+      { type: 'close_task_start', task: 'happenings', part: 0, index: 1, total: 7 },
+    ])
+    expect(generateToolStep).not.toHaveBeenCalled()
+  })
+
+  it("hands every entry the run's one id map and ledger, the chapter's turns shown first", async () => {
+    const log: string[] = []
+    const seen: CodeStepContext[] = []
+    let handlesAtFirstStart: (string | undefined)[] = []
+    __setCloseAgentSlots({
+      before: [
+        quietTask('happenings', log, {
+          seen: (c) => {
+            handlesAtFirstStart = chapterIds().map((id) => c.ids.handleOf(id))
+            seen.push(c)
+          },
+        }),
+      ],
+      perPart: [
+        codeStep('between', log, (c) => {
+          seen.push(c)
+          return { status: 'completed' }
+        }),
+      ],
+      after: [quietTask('awareness', log, { seen: (c) => seen.push(c) })],
+    })
+    const ctx = phaseCtx()
+
+    await drain(ctx)
+
+    expect(handlesAtFirstStart).toEqual(['t1', 't2', 't3', 't4', 't5', 't6', 't7'])
+    expect(seen).toHaveLength(3)
+    const runIds = closeIdsOf(ctx.intermediates)
+    for (const c of seen) {
+      expect(c.ids).toBe(runIds)
+      expect(c.ledger).toBe(seen[0]!.ledger)
+      expect(c.phase).toBe(ctx)
+      expect(c.db).toBe(fixture.ctx.db)
+      expect(c.branchId).toBe(fixture.branchId)
+      expect(c.endEntryId).toBe(fixture.replyIds[2])
+      expect(c.chapterEntryIds).toEqual(chapterIds())
+    }
+    // The writer wraps the run's own ledger, and every entry's survivorOf reads it.
+    seen[0]!.ledger.noteToolCall()
+    expect(closeLedgerOf(ctx.intermediates)?.noToolCalls).toBe(false)
+    seen[0]!.ledger.record({
+      task: 'happenings',
+      part: 0,
+      tool: 'merge_happenings',
+      rows: [
+        { table: 'happenings', id: 'hap_absorbed', name: 'The crossing' },
+        { table: 'happenings', id: 'hap_kept', name: 'The night crossing' },
+      ],
+      why: 'One crossing, told twice.',
+      turns: [],
+      result: 'ok',
+      survivor: { table: 'happenings', id: 'hap_kept' },
+    })
+    expect(seen[2]!.survivorOf('happenings', 'hap_absorbed')).toEqual({
+      table: 'happenings',
+      id: 'hap_kept',
+    })
+  })
+
+  it('passes each task its own name, part and read fields, and the lore-mgmt model config', async () => {
+    let captured: TaskRunContext | undefined
+    const readFields: ReadFields = { character: ['description', 'state.voice'] }
+    __setCloseAgentSlots({
+      before: [],
+      perPart: [
+        quietTask('identity', [], {
+          readFields,
+          seen: (c) => {
+            captured = c
+          },
+        }),
+      ],
+      after: [],
+    })
+
+    await drain(phaseCtx())
+
+    const settings = appSettingsStore.getAppSettings()
+    expect(captured).toMatchObject({ task: 'identity', part: 1, readFields })
+    expect(captured!.config).toEqual({
+      providers: settings.providers,
+      profiles: settings.profiles,
+      assignments: settings.assignments,
+      storyModels: currentStoryStore.getCurrentStory()!.settings.models,
+    })
+  })
+
+  it.each<TaskEnd>([
+    { status: 'finished' },
+    { status: 'stopped', reason: 'budget' },
+    { status: 'stopped', reason: 'window' },
+    { status: 'stopped', reason: 'cut-off' },
+  ])('goes on past a task that ends %o', async (end) => {
+    const log: string[] = []
+    nextTaskEnds(end)
+    __setCloseAgentSlots({
+      before: [quietTask('happenings', log)],
+      perPart: [quietTask('identity', log)],
+      after: [],
+    })
+
+    const { events, result } = await drain(phaseCtx())
+
+    expect(result).toEqual({ status: 'completed' })
+    expect(log).toEqual(['identity@1'])
+    expect(taskStarts(events).map((start) => start.task)).toEqual(['happenings', 'identity'])
+  })
+
+  it.each<[TaskEnd, PhaseResult]>([
+    [
+      { status: 'failed', error: SCRIPTED_ERROR },
+      { status: 'failed', error: SCRIPTED_ERROR },
+    ],
+    [{ status: 'aborted' }, { status: 'aborted' }],
+  ])('ends the phase on a task that ends %o, starting nothing after it', async (end, expected) => {
+    const log: string[] = []
+    nextTaskEnds(end)
+    __setCloseAgentSlots({
+      before: [quietTask('happenings', log)],
+      perPart: [quietTask('identity', log)],
+      after: [],
+    })
+
+    const { events, result } = await drain(phaseCtx())
+
+    expect(result).toEqual(expected)
+    expect(log).toEqual([])
+    expect(taskStarts(events).map((start) => start.task)).toEqual(['happenings'])
+  })
+
+  it.each<PhaseResult>([{ status: 'failed', error: SCRIPTED_ERROR }, { status: 'aborted' }])(
+    'ends the phase on a code step that ends %o',
+    async (stop) => {
+      const log: string[] = []
+      __setCloseAgentSlots({
+        before: [codeStep('normalize', log, () => stop), quietTask('happenings', log)],
+        perPart: [],
+        after: [],
+      })
+
+      const { events, result } = await drain(phaseCtx())
+
+      expect(result).toEqual(stop)
+      expect(log).toEqual(['normalize@0'])
+      expect(taskStarts(events)).toEqual([])
+    },
+  )
+
+  it('polls the abort before each entry', async () => {
+    const log: string[] = []
+    __setCloseAgentSlots({
+      before: [
+        codeStep('normalize', log, () => {
+          abort.abort()
+          return { status: 'completed' }
+        }),
+      ],
+      perPart: [quietTask('identity', log)],
+      after: [],
+    })
+
+    const { events, result } = await drain(phaseCtx())
+
+    expect(result).toEqual({ status: 'aborted' })
+    expect(log).toEqual(['normalize@0'])
+    expect(taskStarts(events)).toEqual([])
+  })
+
+  it('with the production slots, starts nothing and reads no store, the ledger seeded', async () => {
+    __setCloseAgentSlots({ before: [], perPart: [quietTask('identity', [])], after: [] })
+    __setCloseAgentSlots(undefined)
+    expect(closeAgentSlots()).toBe(PRODUCTION_CLOSE_SLOTS)
+    expect(PRODUCTION_CLOSE_SLOTS).toEqual({ before: [], perPart: [], after: [] })
+    // A phase that read the stores here would fail: nothing holds the branch.
+    resetAllStores()
+    const ctx = phaseCtx()
+
+    const { events, result } = await drain(ctx)
+
+    expect(result).toEqual({ status: 'completed' })
+    expect(events).toEqual([])
+    expect(closeLedgerOf(ctx.intermediates)).toEqual({ calls: [], stopped: [], noToolCalls: true })
+  })
+
+  it("fails as the metadata call does when the stores don't hold the branch, before any entry", async () => {
+    const log: string[] = []
+    __setCloseAgentSlots({ before: [quietTask('happenings', log)], perPart: [], after: [] })
+    resetAllStores()
+
+    const { events, result } = await drain(phaseCtx())
+
+    expect(result).toEqual({
+      status: 'failed',
+      error: { kind: 'orchestrator', detail: 'chapter-close: branch not loaded' },
+    })
+    expect(log).toEqual([])
+    expect(events).toEqual([])
+  })
+
+  it('fails as the other close phases do without a range', async () => {
+    __setCloseAgentSlots({ before: [quietTask('happenings', [])], perPart: [], after: [] })
+
+    const { result } = await drain({ ...phaseCtx(), intermediates: {} })
+
+    expect(result).toEqual({
+      status: 'failed',
+      error: { kind: 'orchestrator', detail: 'chapter-close: no close range' },
     })
   })
 })
