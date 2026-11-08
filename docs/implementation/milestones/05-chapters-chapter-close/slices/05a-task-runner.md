@@ -227,8 +227,10 @@ and tools sit under `lib/pipeline/definitions/close-agent/`.
 - `lib/actions/delta/later-turn.ts` selects a row's later deltas by
   C12's rule. A turn's action comes from its entry's `story_entries`
   `create` delta, found by `target_id` as `resolveRollbackWindow` finds
-  it, whatever that delta's own anchor. Entries past E with no `create`
-  delta, which only raw inserts leave, read as not later.
+  it, whatever that delta's own anchor. An entry past E with no
+  `create` delta, which only raw inserts leave, names no action, so a
+  null-anchored delta can't be its turn's, though a delta anchored on
+  it still counts (C12's first clause).
 - The retrieval-only test is private at `link-owners.ts:71-77`. It's
   exported from `lib/row-signals`, and 5.12 uses the same export for
   C13.

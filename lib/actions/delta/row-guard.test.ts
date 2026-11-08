@@ -132,15 +132,24 @@ describe('readRowGuard', () => {
     await turns(ctx)
     await land(
       ctx,
-      updateEntity('per_turn_classifier', 'char_1', { description: 'scarred' }),
+      updateEntity('per_turn_classifier', 'char_1', {
+        description: 'scarred',
+        state: { ...CHAR_STATE, traits: ['brave', 'scarred'] },
+      }),
       'act_t3',
     )
 
-    const row = (await guard(ctx)).row('entities', 'char_1')
+    const rowGuard = await guard(ctx)
+    const row = rowGuard.row('entities', 'char_1')
     expect(row.laterTurnWrote('description')).toBe(true)
+    expect(row.laterTurnWrote('state', ['traits'])).toBe(true)
     expect(row.laterTurnWrote('state', ['voice'])).toBe(false)
     expect(row.laterTurnTouched()).toBe(true)
     expect(row.userWrote('description')).toBe(false)
+    expect(row.userTouched()).toBe(false)
+    const untouched = rowGuard.row('entities', 'loc_1')
+    expect(untouched.laterTurnWrote('description')).toBe(false)
+    expect(untouched.laterTurnTouched()).toBe(false)
   })
 
   it('reads a row a later turn created as written whole', async () => {

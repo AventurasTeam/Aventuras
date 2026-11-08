@@ -12,6 +12,7 @@ import type { DeltaOp } from './registry'
 const BRANCH = 'br_1'
 
 type Logged = {
+  branchId?: string
   actionId: string
   table: string
   id: string
@@ -27,7 +28,7 @@ async function log(ctx: DbCtx, delta: Logged): Promise<string> {
   await ctx.runInTransaction([
     deltaRowOp(ctx, {
       deltaId,
-      branchId: BRANCH,
+      branchId: delta.branchId ?? BRANCH,
       entryId: delta.entryId ?? null,
       actionId: delta.actionId,
       source: delta.source ?? 'per_turn_classifier',
@@ -43,12 +44,25 @@ async function log(ctx: DbCtx, delta: Logged): Promise<string> {
 }
 
 /** An entry at `position`; its `story_entries` create runs under `actionId`, or none (a raw insert). */
-async function entry(ctx: DbCtx, id: string, position: number, actionId: string | null) {
+async function entry(
+  ctx: DbCtx,
+  id: string,
+  position: number,
+  actionId: string | null,
+  branchId = BRANCH,
+) {
   await ctx.db
     .insert(storyEntries)
-    .values({ id, branchId: BRANCH, position, kind: 'ai_reply', content: 'prose', createdAt: 1 })
+    .values({ id, branchId, position, kind: 'ai_reply', content: 'prose', createdAt: 1 })
   if (actionId !== null)
-    await log(ctx, { actionId, table: 'story_entries', id, op: 'create', undoPayload: null })
+    await log(ctx, {
+      branchId,
+      actionId,
+      table: 'story_entries',
+      id,
+      op: 'create',
+      undoPayload: null,
+    })
 }
 
 /** e_1 and e_2 are the chapter (E = e_2); e_3 and e_4 are later turns, e_5 a raw insert past E. */
@@ -182,10 +196,28 @@ describe('laterTurnDeltas (C12)', () => {
 
   it('reads lore rows, and only the rows it is given, oldest first', async () => {
     const ctx = await setup()
-    const lore = await log(ctx, { actionId: 'act_t3', table: 'lore', id: 'lore_1' })
-    await log(ctx, { actionId: 'act_t3', table: 'entities', id: 'char_2' })
     const char = await log(ctx, { actionId: 'act_t4', table: 'entities', id: 'char_1' })
-    expect(await laterIds(ctx, [{ table: 'lore', id: 'lore_1' }, CHAR])).toEqual([lore, char])
+    await log(ctx, { actionId: 'act_t3', table: 'entities', id: 'char_2' })
+    const lore = await log(ctx, { actionId: 'act_t3', table: 'lore', id: 'lore_1' })
+    expect(await laterIds(ctx, [{ table: 'lore', id: 'lore_1' }, CHAR])).toEqual([char, lore])
+  })
+
+  it("reads only the branch's own deltas and turns, though a fork shares its ids", async () => {
+    const ctx = await setup()
+    await ctx.db
+      .insert(branches)
+      .values({ id: 'br_2', storyId: 'story_1', name: 'fork', createdAt: 1 })
+    await entry(ctx, 'e_3', 3, 'act_fork_t3', 'br_2')
+    await log(ctx, {
+      branchId: 'br_2',
+      actionId: 'act_fork_pass',
+      source: 'periodic_classifier',
+      table: 'entities',
+      id: 'char_1',
+      entryId: 'e_3',
+    })
+    await log(ctx, { actionId: 'act_fork_t3', table: 'entities', id: 'char_1' })
+    expect(await laterIds(ctx)).toEqual([])
   })
 
   it('throws when E is not an entry of the branch', async () => {

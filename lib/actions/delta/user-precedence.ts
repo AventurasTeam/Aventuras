@@ -180,7 +180,7 @@ export const PLACEMENT_PATHS: readonly string[] = [
 ] satisfies readonly (keyof LocationState)[]
 
 /**
- * A user edit wrote a place's parent or unplaced flag, which only sits beside a null parent
+ * A delta wrote a place's parent or unplaced flag, which only sits beside a null parent
  * (data-model.md → LocationState shape).
  */
 export function wrotePlacement(edits: readonly Delta[]): boolean {
@@ -193,7 +193,7 @@ const COLLISION_FLAG_COLUMNS: readonly string[] = [
   'nameCollisionReason',
 ] satisfies readonly (keyof Entity)[]
 
-/** A user edit wrote an entity's collision flag, partner or reason, which the table's CHECK holds
+/** A delta wrote an entity's collision flag, partner or reason, which the table's CHECK holds
  *  together (edge-cases.md → Schema). */
 function wroteCollisionFlag(edits: readonly Delta[]): boolean {
   return COLLISION_FLAG_COLUMNS.some((column) => wroteColumn(edits, column))
@@ -204,7 +204,7 @@ const RETIREMENT_COLUMNS: readonly string[] = [
   'retiredReason',
 ] satisfies readonly (keyof Entity)[]
 
-/** A user edit wrote an entity's status or retired reason (data-model.md → Authorship contract). */
+/** A delta wrote an entity's status or retired reason (data-model.md → Authorship contract). */
 function wroteRetirement(edits: readonly Delta[]): boolean {
   return RETIREMENT_COLUMNS.some((column) => wroteColumn(edits, column))
 }
@@ -214,7 +214,7 @@ const THREAD_STATUS_COLUMNS: readonly string[] = [
   'resolvedAtEntryId',
 ] satisfies readonly (keyof Thread)[]
 
-/** A user edit wrote a thread's status or resolved-at entry (classifier.md → Threads → The row). */
+/** A delta wrote a thread's status or resolved-at entry (classifier.md → Threads → The row). */
 function wroteThreadStatus(edits: readonly Delta[]): boolean {
   return THREAD_STATUS_COLUMNS.some((column) => wroteColumn(edits, column))
 }
