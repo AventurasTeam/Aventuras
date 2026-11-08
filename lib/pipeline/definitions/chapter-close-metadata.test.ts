@@ -311,7 +311,7 @@ describe('closeMetadataPhase', () => {
     expect(events.map((e) => e.type)).toEqual(['delta_group_emitted'])
   })
 
-  it('fails as action-layer, naming the group, when the group is refused whole', async () => {
+  it("fails as action-layer, naming the group's actions, when the group is refused whole", async () => {
     insertEntries(ROWS)
     callReturns({ status: 'ok', metadata: METADATA })
 
@@ -326,7 +326,7 @@ describe('closeMetadataPhase', () => {
       error: {
         kind: 'action-layer',
         detail:
-          'chapter-close: group not applied: group writes story_entries:e3 twice on one column',
+          'chapter-close: createChapter and 7 stampEntryChapter not applied: group writes story_entries:e3 twice on one column',
       },
     })
   })

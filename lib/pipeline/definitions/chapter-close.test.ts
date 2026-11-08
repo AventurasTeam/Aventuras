@@ -518,7 +518,7 @@ describe('a close whose group does not land whole', () => {
     expect(run.outcome).toBe('failed')
     expect(run.error).toEqual({
       kind: 'action-layer',
-      detail: 'chapter-close: group not applied: forced refusal',
+      detail: 'chapter-close: createChapter and 7 stampEntryChapter not applied: forced refusal',
     })
     expect(await branchState()).toEqual(before)
   })
