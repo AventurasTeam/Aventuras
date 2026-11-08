@@ -46,6 +46,8 @@ describe('closeTaskProgress', () => {
     ['a part past the count', 'identity', 'perPart', 2, 1],
     ['a chapter-wide task inside a part', 'happenings', 'perPart', 1, 1],
     ['a close of no parts', 'lore', 'perPart', 1, 0],
+    // A chapter-wide task reads no part, so only the part count can refuse it.
+    ['a close of no parts at Happenings', 'happenings', 'before', 0, 0],
     ['Happenings after the parts', 'happenings', 'after', 0, 1],
     ['Awareness before the parts', 'awareness', 'before', 0, 1],
     ['Awareness inside a part', 'awareness', 'perPart', 1, 1],
