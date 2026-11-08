@@ -9,6 +9,7 @@ import type {
 } from '@/lib/actions/types'
 import type { ToolStepTool } from '@/lib/ai'
 import type { CloseReportCall, CloseTask, DbCtx } from '@/lib/db'
+import type { SubstitutablePrefix } from '@/lib/ids'
 
 import type { CloseIds } from './ids'
 import type { CLOSE_REASON } from './verdict'
@@ -23,8 +24,11 @@ export type RowKind =
   | 'happening'
 /** Delta paths a task's read_row returns per row kind ('description', 'state.voice'). */
 export type ReadFields = Readonly<Partial<Record<RowKind, readonly string[]>>>
-/** An argument holding row handles; `prefixes` are the id kinds it takes, spelled `char_`. */
-export type IdArg = { shape: 'single' | 'array'; prefixes: readonly string[] }
+type IdKind = SubstitutablePrefix | 'entry' | 'haw'
+/** An id kind CloseIds hands a handle for, spelled with or without its underscore. */
+export type IdPrefix = IdKind | `${IdKind}_`
+/** An argument holding row handles; `prefixes` are the id kinds it takes (`char` or `char_`). */
+export type IdArg = { shape: 'single' | 'array'; prefixes: readonly IdPrefix[] }
 export type ReportRow = CloseReportCall['rows'][number]
 
 export type ToolContext = {
@@ -199,7 +203,7 @@ export const FULL_ID_SHAPE =
   /[a-z][a-z0-9]*_[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/
 
 const prefixOf = (id: string): string => id.slice(0, id.indexOf('_') + 1)
-const asPrefix = (prefix: string): string => (prefix.endsWith('_') ? prefix : `${prefix}_`)
+const asPrefix = (prefix: IdPrefix): string => (prefix.endsWith('_') ? prefix : `${prefix}_`)
 const kindOf = (prefix: string): string => KIND_BY_PREFIX.get(prefix) ?? 'another kind of row'
 
 export function tableOfId(id: string): PrecedenceTable | null {

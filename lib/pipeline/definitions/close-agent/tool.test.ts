@@ -250,6 +250,17 @@ describe('WriteTool and ReadTool (checked by tsc)', () => {
     expect(tools).toBeTypeOf('function')
   })
 
+  it('takes the id kinds CloseIds hands handles for, either spelling', () => {
+    const tools = () => [
+      write({ id: { shape: 'single', prefixes: ['char', 'fact_', 'entry', 'haw_', 'chap'] } }),
+      // @ts-expect-error no id kind
+      write({ id: { shape: 'single', prefixes: ['character'] } }),
+      // @ts-expect-error a kind spelled with a handle's prefix
+      write({ id: { shape: 'single', prefixes: ['c'] } }),
+    ]
+    expect(tools).toBeTypeOf('function')
+  })
+
   it('takes only a schema writeToolSchema built, and plans from its output', () => {
     const strict = z.strictObject(SHAPE)
     const tool = (): WriteTool<typeof SHAPE> => ({
