@@ -1,4 +1,11 @@
-import type { AssistantModelMessage, LanguageModelUsage, ModelMessage, ToolModelMessage } from 'ai'
+import {
+  generateText,
+  type AssistantModelMessage,
+  type LanguageModelUsage,
+  type ModelMessage,
+  type ToolModelMessage,
+} from 'ai'
+import { MockLanguageModelV3 } from 'ai/test'
 import { and, eq } from 'drizzle-orm'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { z } from 'zod'
@@ -261,6 +268,8 @@ function okStep(
     invalid?: readonly ToolStepInvalidCall[]
     finishReason?: ToolStep['finishReason']
     recoverable?: readonly CallRetryError[]
+    /** The assistant message's call order, by id; else the valid calls, then the invalid. */
+    order?: readonly string[]
   } = {},
 ): ToolStepResult {
   const invalid = opts.invalid ?? []
@@ -268,6 +277,9 @@ function okStep(
     ...calls.map(({ toolCallId, toolName, input }) => ({ toolCallId, toolName, input })),
     ...invalid.map(({ toolCallId, toolName }) => ({ toolCallId, toolName, input: {} })),
   ]
+  const { order } = opts
+  if (order !== undefined)
+    asked.sort((a, b) => order.indexOf(a.toolCallId) - order.indexOf(b.toolCallId))
   const assistant: AssistantModelMessage = {
     role: 'assistant',
     content:
@@ -310,6 +322,37 @@ function stepOf(result: ToolStepResult): ToolStep {
 
 const sentMessages = (call: number): readonly ModelMessage[] =>
   vi.mocked(generateToolStep).mock.calls[call]![1].messages
+
+// The answers' call ids, across every tool message, in the order they go out.
+const callIdsOf = (messages: readonly { role: string; content: unknown }[]): string[] =>
+  messages.flatMap((message) =>
+    message.role === 'tool' && Array.isArray(message.content)
+      ? message.content.map((part: { toolCallId?: string }) => part.toolCallId ?? '')
+      : [],
+  )
+
+type SentPrompt = Parameters<MockLanguageModelV3['doGenerate']>[0]['prompt']
+
+// What a provider receives for `messages` after the pair: the SDK's own prompt conversion.
+async function requestPrompt(messages: readonly ModelMessage[]): Promise<SentPrompt> {
+  let prompt: SentPrompt = []
+  const model = new MockLanguageModelV3({
+    doGenerate: async (options) => {
+      prompt = options.prompt
+      return {
+        content: [{ type: 'text', text: 'done' }],
+        finishReason: { unified: 'stop', raw: 'stop' },
+        usage: {
+          inputTokens: { total: 1, noCache: 1, cacheRead: undefined, cacheWrite: undefined },
+          outputTokens: { total: 1, text: 1, reasoning: undefined },
+        },
+        warnings: [],
+      }
+    },
+  })
+  await generateText({ model, messages: [{ role: 'user', content: 'Identity.' }, ...messages] })
+  return prompt
+}
 
 beforeEach(async () => {
   vi.resetAllMocks()
@@ -359,8 +402,9 @@ describe('runCloseTask', () => {
 
     expect(end).toEqual({ status: 'finished' })
     expect(sentMessages(0)).toEqual([])
+    const [assistant, sdkAnswers] = stepOf(first).responseMessages
     expect(sentMessages(1)).toEqual([
-      ...stepOf(first).responseMessages,
+      assistant,
       {
         role: 'tool',
         content: [
@@ -370,10 +414,78 @@ describe('runCloseTask', () => {
             toolName: 'peek_row',
             output: { type: 'json', value: { id: 'c1' } },
           },
+          ...(sdkAnswers as ToolModelMessage).content,
         ],
       },
     ])
     expect(ledger.calls.map((call) => call.tool)).toEqual(['peek_row'])
+  })
+
+  // Valid, invalid, outside the task, valid: the SDK's answer to k2 comes back first.
+  async function driveMixedStep(): Promise<{
+    model: ModelMessage
+    stored: readonly ModelMessage[]
+  }> {
+    const first = okStep(
+      [
+        appendCall('k1', 'first'),
+        { toolCallId: 'k3', toolName: 'merge_threads', input: {} },
+        peekCall('k4'),
+      ],
+      {
+        invalid: [{ toolCallId: 'k2', toolName: 'append_note', detail: 'Invalid input' }],
+        order: ['k1', 'k2', 'k3', 'k4'],
+      },
+    )
+    vi.mocked(generateToolStep).mockResolvedValueOnce(first)
+    await drive(taskDef(), runContext(phaseContext()))
+    return { model: stepOf(first).responseMessages[0]!, stored: sentMessages(1) }
+  }
+
+  it("keeps a mixed step's model message as returned, then one tool message in call order", async () => {
+    const { model, stored } = await driveMixedStep()
+
+    expect(stored).toHaveLength(2)
+    expect(stored[0]).toEqual(model)
+    expect(stored[1]!.role).toBe('tool')
+    expect(callIdsOf(stored)).toEqual(['k1', 'k2', 'k3', 'k4'])
+  })
+
+  it("sends a mixed step's answers to the provider in call order", async () => {
+    const { stored } = await driveMixedStep()
+
+    // The SDK's own conversion merges consecutive tool messages, keeping their parts' order.
+    const sent = await requestPrompt(stored)
+    expect(sent.filter((message) => message.role === 'tool')).toHaveLength(1)
+    expect(callIdsOf(sent)).toEqual(['k1', 'k2', 'k3', 'k4'])
+  })
+
+  it('puts answers to no call after the calls, as they came, keeping the provider options', async () => {
+    const first = okStep([peekCall('k1')], {
+      invalid: [{ toolCallId: 'k2', toolName: 'peek_row', detail: 'Invalid input' }],
+    })
+    const [assistant, sdkAnswers] = stepOf(first).responseMessages
+    const orphan = (toolCallId: string) => ({
+      type: 'tool-result' as const,
+      toolCallId,
+      toolName: 'peek_row',
+      output: { type: 'text' as const, value: 'no call' },
+    })
+    const withOrphans: ToolModelMessage = {
+      role: 'tool',
+      content: [orphan('kx'), ...(sdkAnswers as ToolModelMessage).content, orphan('ky')],
+      providerOptions: { mock: { kept: true } },
+    }
+    vi.mocked(generateToolStep).mockResolvedValueOnce({
+      ...first,
+      step: { ...stepOf(first), responseMessages: [assistant!, withOrphans] },
+    } as ToolStepResult)
+
+    await drive(taskDef(), runContext(phaseContext()))
+
+    const stored = sentMessages(1)
+    expect(callIdsOf(stored)).toEqual(['k1', 'k2', 'kx', 'ky'])
+    expect(stored[1]).toMatchObject({ providerOptions: { mock: { kept: true } } })
   })
 
   it('goes on after a stop reply with calls, and ends on a reply with none, whatever its finish', async () => {

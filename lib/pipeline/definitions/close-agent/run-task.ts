@@ -1,7 +1,7 @@
 import type { JSONValue, ModelMessage, ToolModelMessage } from 'ai'
 
 import type { GroupOutcome } from '@/lib/actions/types'
-import { generateToolStep, type ResolveTarget, type ToolStepCall } from '@/lib/ai'
+import { generateToolStep, type ResolveTarget, type ToolStep, type ToolStepCall } from '@/lib/ai'
 
 import { createReadSet } from './common-checks'
 import { dispatchToolCall, type DispatchContext, type ToolAnswer } from './dispatch'
@@ -57,6 +57,45 @@ function toolMessage(answers: readonly ToolAnswer[]): ToolModelMessage {
       output: resultOutput(toolName, output),
     })),
   }
+}
+
+function callOrder(messages: readonly ModelMessage[]): Map<string, number> {
+  const order = new Map<string, number>()
+  for (const message of messages) {
+    if (message.role !== 'assistant' || typeof message.content === 'string') continue
+    for (const part of message.content)
+      if (part.type === 'tool-call') order.set(part.toolCallId, order.size)
+  }
+  return order
+}
+
+// chapter-close.md → Conversations: the model's message goes back as returned, then one tool
+// message in call order, since a template may label results by tool name alone, not call id.
+function stepMessages(
+  responseMessages: ToolStep['responseMessages'],
+  answers: readonly ToolAnswer[],
+): ModelMessage[] {
+  const kept: ModelMessage[] = responseMessages.filter((message) => message.role !== 'tool')
+  const sdkAnswers = responseMessages.filter((message) => message.role === 'tool')
+  const parts = [
+    ...sdkAnswers.flatMap((message) => message.content),
+    ...(answers.length === 0 ? [] : toolMessage(answers).content),
+  ]
+  if (parts.length === 0) return kept
+  const order = callOrder(kept)
+  const rank = (part: ToolModelMessage['content'][number]): number =>
+    (part.type === 'tool-result' ? order.get(part.toolCallId) : undefined) ?? order.size
+  // Array sort is stable: an id outside the calls keeps its place after them.
+  const content = [...parts].sort((a, b) => rank(a) - rank(b))
+  // As the SDK's own merge does: the first tool message's provider options carry over.
+  const providerOptions = sdkAnswers[0]?.providerOptions
+  const tool: ToolModelMessage = {
+    role: 'tool',
+    content,
+    ...(providerOptions === undefined ? {} : { providerOptions }),
+  }
+  const at = kept.findLastIndex((message) => message.role === 'assistant')
+  return [...kept.slice(0, at + 1), tool, ...kept.slice(at + 1)]
 }
 
 // chapter-close.md → Conversations (closeTools): code refuses a tool outside the task and says so.
@@ -134,7 +173,6 @@ export async function* runCloseTask(
     const { calls, invalidCalls, responseMessages } = result.step
     if (calls.length === 0 && invalidCalls.length === 0) return { status: 'finished' }
     ctx.ledger.noteToolCall()
-    messages.push(...responseMessages)
     const answers: ToolAnswer[] = []
     for (const call of calls) {
       if (ctx.phase.abortSignal.aborted) return { status: 'aborted' }
@@ -142,8 +180,7 @@ export async function* runCloseTask(
       if (tool === undefined) answers.push(outsideTask(call, ctx.ids))
       else answers.push(yield* dispatchToolCall(call, tool, dispatch))
     }
-    // The SDK merges this with its own answers to invalid calls into one tool message.
-    if (answers.length > 0) messages.push(toolMessage(answers))
+    messages.push(...stepMessages(responseMessages, answers))
   }
   // An abort raised inside the last step's calls is a cancel, not a spent budget.
   if (ctx.phase.abortSignal.aborted) return { status: 'aborted' }
