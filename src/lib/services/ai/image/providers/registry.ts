@@ -25,7 +25,7 @@ import type {
 } from './types'
 import { createLogger } from '#lib/log.ts'
 import { fetchPublicImageBase64 } from './fetchAdapter'
-import { imageConnectionFor, isImageProviderType, modelListKey } from './connection'
+import { isImageProviderType, modelListKey } from './connection'
 import { applyCapabilityOverride, findListedModel, pickCapabilities } from './modelCapabilities'
 import { cachedCapabilities, evictCapabilities, primeCapabilities } from './capabilityCache'
 
@@ -389,30 +389,29 @@ export type LocalServer = Extract<ImageProviderType, 'comfyui' | 'a1111'>
 export const isLocalServer = (providerType: ImageProviderType): providerType is LocalServer =>
   providerType === 'comfyui' || providerType === 'a1111'
 
-const localServer = (providerType: LocalServer, baseUrl?: string): ImageProvider =>
-  createProvider(imageConnectionFor(providerType, '', baseUrl))
-
 /** Sampler and scheduler names for a ComfyUI or A1111 server. Rejects when the server cannot be read. */
 export async function getProviderSamplerInfo(
-  baseUrl: string | undefined,
-  providerType: LocalServer,
+  connection: ImageProviderConnection,
   signal?: AbortSignal,
 ): Promise<ComfySamplerInfo> {
-  const provider = localServer(providerType, baseUrl)
+  const provider = createProvider(connection)
   return (await provider.getSamplerInfo?.(signal)) ?? { samplers: [], schedulers: [] }
 }
 
 /** LoRA names for a ComfyUI server. Rejects when the server cannot be read. */
-export async function listLoras(baseUrl?: string, signal?: AbortSignal): Promise<string[]> {
-  return (await localServer('comfyui', baseUrl).listLoras?.(signal)) ?? []
+export async function listLoras(
+  connection: ImageProviderConnection,
+  signal?: AbortSignal,
+): Promise<string[]> {
+  return (await createProvider(connection).listLoras?.(signal)) ?? []
 }
 
 /** CLIP types a ComfyUI server accepts. Rejects when the server cannot be read. */
 export async function getProviderClipTypes(
-  baseUrl?: string,
+  connection: ImageProviderConnection,
   signal?: AbortSignal,
 ): Promise<string[]> {
-  return (await localServer('comfyui', baseUrl).listClipTypes?.(signal)) ?? []
+  return (await createProvider(connection).listClipTypes?.(signal)) ?? []
 }
 
 // Re-export types for convenience

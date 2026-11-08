@@ -343,7 +343,7 @@
       reads.push(
         read(
           'samplers',
-          () => getProviderSamplerInfo(baseUrl, providerType, request.signal),
+          () => getProviderSamplerInfo(inputs, request.signal),
           (info) => {
             profileSamplers = info.samplers.map((s) => ({ value: s, label: s }))
             profileSchedulers = info.schedulers.map((s) => ({ value: s, label: s }))
@@ -368,7 +368,7 @@
       reads.push(
         read(
           'loras',
-          () => listLoras(baseUrl, request.signal),
+          () => listLoras(inputs, request.signal),
           (loras) => (availableLoras = loras),
         ),
       )
@@ -399,7 +399,7 @@
         ),
         read(
           'clipTypes',
-          () => getProviderClipTypes(baseUrl, request.signal),
+          () => getProviderClipTypes(inputs, request.signal),
           (types) => (availableClipTypes = types),
         ),
       )
