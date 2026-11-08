@@ -123,8 +123,8 @@ export class CloseIds {
     return this.map.allocate(id)
   }
 
-  // A clash with the turns shown sits before the list's first new handle (they run t1…tN), so
-  // register throws before changing anything; a repeat or a non-entry id late in the list wouldn't.
+  // Checked up front: a repeat or a non-entry id would make register throw mid-list, after earlier
+  // handles were set.
   private requireTurnList(entryIds: readonly string[]): void {
     entryIds.forEach((id) => requirePrefix(id, TURN_PREFIX))
     if (new Set(entryIds).size !== entryIds.length) throw new Error('Turn ids repeat in one list')

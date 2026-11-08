@@ -3,7 +3,10 @@ import type { GuardRow } from '@/lib/actions/types'
 import type { CloseIds } from './ids'
 import { FULL_ID_SHAPE } from './tool'
 
-/** The rows a task and part has read: seeded by its start, added to by read_row (C11). */
+/**
+ * The rows a task and part has read: seeded by its start, added to by read_row or by a create that
+ * landed (C11).
+ */
 export type ReadSet = {
   has: (row: GuardRow) => boolean
   add: (rows: readonly GuardRow[]) => void

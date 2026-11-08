@@ -57,8 +57,8 @@ export type PlannedAction = {
    * The row as the model's answer names it; a full id is allowed, the answer swaps it for its
    * handle.
    * - An entity, lore, thread or happening row: its id, shown first with its name
-   *   (`ctx.ids.show(id, name)`) if the close hasn't, or the handle is nameless and prose naming
-   *   it can't be resolved.
+   *   (`ctx.ids.show(id, name)`) if the close hasn't; otherwise its handle is nameless and prose
+   *   naming it can't be resolved.
    * - A create's action and its LostFields: the table name, since a minted id has no handle unless
    *   the create lands.
    * - A link row (involvement, awareness): the character it links, as
@@ -68,7 +68,7 @@ export type PlannedAction = {
    */
   readonly row: string
 }
-/** Why precedence keeps a field (C4's stable keys): the user's edit after the prose, a later turn. */
+/** Why precedence keeps a field (C4's keys): the user's edit after the prose, or a later turn. */
 export type ProtectionReason = typeof USER_EDITED_SINCE_PROSE | (typeof CLOSE_REASON)['laterTurn']
 export type LostField = {
   readonly field: string
@@ -93,7 +93,10 @@ export type WritePlan =
       actions: readonly PlannedAction[]
       lost: readonly LostField[]
       rows: readonly ReportRow[]
-      /** Delta path → the raw value landed or proposed; restated fields absent. */
+      /**
+       * Delta path → the raw value landed or proposed; a path restated on every row it names is
+       * absent.
+       */
       values: Readonly<Record<string, unknown>>
       /** A create's new row id, answered to the model as its handle. */
       createdId?: string
@@ -129,7 +132,7 @@ export type ReadAnswer = {
   /** What the model reads, handles only. */
   output: unknown
   rows: readonly ReportRow[]
-  /** Rows the answer counts as read (read_row: its row; search_world: none). */
+  /** Rows the answer counts as read: read_row's when it returned fields, search_world's none. */
   read: readonly GuardRow[]
 }
 export type ReadTool<S extends z.ZodObject = z.ZodObject> = {
