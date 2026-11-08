@@ -149,6 +149,9 @@ const KIND_BY_PREFIX = new Map<string, string>([
   ['chap_', 'a chapter'],
 ])
 
+// An id the model was never shown as a handle; echoing it back would let withHandles mint one.
+const FULL_ID_SHAPE = /[a-z][a-z0-9]*_[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/
+
 const prefixOf = (id: string): string => id.slice(0, id.indexOf('_') + 1)
 const asPrefix = (prefix: string): string => (prefix.endsWith('_') ? prefix : `${prefix}_`)
 const kindOf = (prefix: string): string => KIND_BY_PREFIX.get(prefix) ?? 'another kind of row'
@@ -182,6 +185,8 @@ export function resolveIdArgs(
     const resolved: string[] = []
     for (const handle of handles) {
       const id = typeof handle === 'string' ? ids.idOf(handle) : undefined
+      if (id === undefined && typeof handle === 'string' && FULL_ID_SHAPE.test(handle))
+        return { ok: false, reason: `${key} takes a short id as shown (c1, lo2…), not a full id` }
       if (id === undefined)
         return {
           ok: false,
@@ -209,30 +214,32 @@ type SchemaNode = Readonly<Record<string, unknown>>
 const isNode = (value: unknown): value is SchemaNode =>
   value !== null && typeof value === 'object' && !Array.isArray(value)
 
-// A record carries propertyNames: its keys are the model's to choose, so it has no strictness.
-const isStrictObject = (node: SchemaNode): boolean =>
-  node.additionalProperties === false || Object.hasOwn(node, 'propertyNames')
+const SUBSCHEMA_LISTS = ['anyOf', 'oneOf', 'allOf'] as const
 
-const SUBSCHEMA_LISTS = ['anyOf', 'oneOf', 'allOf', 'prefixItems'] as const
-
+// A record's additionalProperties is its value schema, which the SDK overwrites with false.
 // Walks schema positions only, so a property named `default` or `type` is never read as a keyword.
 function schemaFaults(node: unknown, path: string, faults: string[]): void {
   if (!isNode(node)) return
   if (Object.hasOwn(node, 'default')) faults.push(`${path} has a default`)
-  if (node.type === 'object' && !isStrictObject(node)) faults.push(`${path} is not strict`)
+  if (node.type === 'object') {
+    if (Object.hasOwn(node, 'propertyNames'))
+      faults.push(`${path} is a record, which the SDK sends with no keys`)
+    else if (node.additionalProperties !== false) faults.push(`${path} is not strict`)
+  }
   if (isNode(node.properties))
     for (const [key, child] of Object.entries(node.properties))
       schemaFaults(child, `${path}.${key}`, faults)
-  if (node.items !== undefined)
-    for (const child of [node.items].flat()) schemaFaults(child, `${path}[]`, faults)
-  if (isNode(node.additionalProperties))
-    schemaFaults(node.additionalProperties, `${path}{}`, faults)
+  schemaFaults(node.items, `${path}[]`, faults)
+  if (Array.isArray(node.prefixItems))
+    node.prefixItems.forEach((child, i) => schemaFaults(child, `${path}[${i}]`, faults))
+  schemaFaults(node.additionalProperties, `${path}{}`, faults)
   for (const list of SUBSCHEMA_LISTS) {
     const children = node[list]
     if (Array.isArray(children)) for (const child of children) schemaFaults(child, path, faults)
   }
   if (isNode(node.$defs))
-    for (const child of Object.values(node.$defs)) schemaFaults(child, path, faults)
+    for (const [name, child] of Object.entries(node.$defs))
+      schemaFaults(child, `${path}$defs.${name}`, faults)
 }
 
 function sameValue(a: unknown, b: unknown): boolean {

@@ -124,6 +124,68 @@ describe('assertReplaySafe', () => {
     )
   })
 
+  it('refuses a record, which the SDK sends to the model with no keys', () => {
+    const schema = z.strictObject({ tags: z.record(z.string(), z.string()) })
+    expect(() => assertReplaySafe(schema, [{ tags: { mood: 'wary' } }])).toThrow(
+      '(root).tags is a record, which the SDK sends with no keys',
+    )
+  })
+
+  it('refuses a plain object in a record value', () => {
+    const schema = z.strictObject({ byName: z.record(z.string(), z.object({ voice: z.string() })) })
+    expect(() => assertReplaySafe(schema, [{ byName: { Wren: { voice: 'low' } } }])).toThrow(
+      '(root).byName{} is not strict',
+    )
+  })
+
+  it('refuses a plain object in array items', () => {
+    const schema = z.strictObject({ rows: z.array(z.object({ id: z.string() })) })
+    expect(() => assertReplaySafe(schema, [{ rows: [{ id: 'c1' }] }])).toThrow(
+      '(root).rows[] is not strict',
+    )
+  })
+
+  it('refuses a plain object in a tuple, naming its position', () => {
+    const schema = z.strictObject({ pair: z.tuple([z.string(), z.object({ id: z.string() })]) })
+    expect(() => assertReplaySafe(schema, [{ pair: ['a', { id: 'c1' }] }])).toThrow(
+      '(root).pair[1] is not strict',
+    )
+  })
+
+  it('refuses a plain object in a union member', () => {
+    const schema = z.strictObject({ ref: z.union([z.string(), z.object({ id: z.string() })]) })
+    expect(() => assertReplaySafe(schema, [{ ref: { id: 'c1' } }])).toThrow(
+      '(root).ref is not strict',
+    )
+  })
+
+  it('refuses a plain object in an intersection', () => {
+    const schema = z.strictObject({
+      ref: z.intersection(z.object({ id: z.string() }), z.object({ name: z.string() })),
+    })
+    expect(() => assertReplaySafe(schema, [{ ref: { id: 'c1', name: 'Wren' } }])).toThrow(
+      '(root).ref is not strict',
+    )
+  })
+
+  it('refuses a plain object in an exclusive union', () => {
+    const schema = z.strictObject({
+      ref: z.xor([z.string(), z.object({ id: z.string() })]),
+    })
+    expect(() => assertReplaySafe(schema, [{ ref: { id: 'c1' } }])).toThrow(
+      '(root).ref is not strict',
+    )
+  })
+
+  it('refuses a plain object in a recursive schema, naming its definition', () => {
+    type Tree = { name: string; kids: Tree[] }
+    const tree: z.ZodType<Tree> = z.lazy(() => z.object({ name: z.string(), kids: z.array(tree) }))
+    const schema = z.strictObject({ tree })
+    expect(() => assertReplaySafe(schema, [{ tree: { name: 'a', kids: [] } }])).toThrow(
+      /\(root\)\$defs\.\w+ is not strict/,
+    )
+  })
+
   it('refuses a default, even when every sample sets the key', () => {
     const schema = z.strictObject({ status: z.string().default('active') })
     expect(() => assertReplaySafe(schema, [{ status: 'retired' }])).toThrow(/status has a default/)
@@ -231,6 +293,16 @@ describe('resolveIdArgs', () => {
       ok: false,
       reason: 'lo1 in keep is a lore row; keep takes a character or a faction',
     })
+  })
+
+  it('refuses a full id without echoing it back', () => {
+    const full = 'char_99999999-9999-4999-8999-999999999999'
+    const ids = shownIds()
+    const single = resolveIdArgs({ ...MERGE_SAMPLE, keep: full }, mergeRows, ids)
+    const inList = resolveIdArgs({ ...MERGE_SAMPLE, absorb: ['c2', `[${full}]`] }, mergeRows, ids)
+    const reason = 'keep takes a short id as shown (c1, lo2…), not a full id'
+    expect(single).toEqual({ ok: false, reason })
+    expect(inList).toEqual({ ok: false, reason: reason.replace('keep', 'absorb') })
   })
 
   it('resolves a turn handle without naming a row', () => {
