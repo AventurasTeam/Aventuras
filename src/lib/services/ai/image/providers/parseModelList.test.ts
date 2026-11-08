@@ -15,6 +15,15 @@ describe('parseModelList', () => {
     expect(parseModelList({ data: [] }, entry, 'X /models')).toEqual([])
   })
 
+  it('names the endpoint when the reply is no list', () => {
+    expect(() => parseModelList('<html></html>', entry, 'X /models')).toThrow(
+      'X /models did not return a list',
+    )
+    expect(() => parseModelList({ error: 'nope' }, entry, 'X /models')).toThrow(
+      'did not return a list',
+    )
+  })
+
   it('rejects entries that are all unreadable, rather than reading an empty catalogue', () => {
     expect(() => parseModelList([{ nope: 1 }, 'x'], entry, 'X /models')).toThrow(
       'X /models returned no readable entries',

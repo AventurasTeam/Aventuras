@@ -15,7 +15,7 @@ export function parseModelList<T extends z.ZodType>(
   what: string,
 ): z.output<T>[] {
   const list = modelList.safeParse(body)
-  if (!list.success) throw new Error(`${what} did not return a model list`)
+  if (!list.success) throw new Error(`${what} did not return a list`)
 
   const entries = list.data.flatMap((item) => {
     const parsed = entry.safeParse(item)

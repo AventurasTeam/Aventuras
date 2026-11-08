@@ -72,6 +72,13 @@ describe('model discovery', () => {
     )
   })
 
+  it('rejects A1111 entries that name no model, rather than listing blank ones', async () => {
+    vi.mocked(imageGetFetch).mockResolvedValue(reply([{ filename: 'x' }]))
+    await expect(createA1111Provider({ apiKey: '' }).listModels('')).rejects.toThrow(
+      'no readable entries',
+    )
+  })
+
   it('forwards the abort signal to both A1111 sampler requests', async () => {
     vi.mocked(imageGetFetch).mockResolvedValue(reply([]))
     const { signal } = new AbortController()

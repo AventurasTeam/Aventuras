@@ -6,6 +6,7 @@
  * - Models:  GET  /sdapi/v1/sd-models
  */
 
+import * as z from 'zod'
 import { formatImageSize, specToPixels } from '#lib/utils/image.ts'
 import { endpoint } from '#lib/utils/url.ts'
 import { resolveBaseUrl } from './baseUrls'
@@ -18,9 +19,19 @@ import type {
   ComfySamplerInfo,
 } from './types'
 import { imageGetFetch } from './fetchAdapter'
-import { expectList } from './imageModelUtils'
+import { optionalString } from './modelCatalogue'
+import { parseModelList } from './parseModelList'
 import { createA1111Image } from './a1111Image'
 import { createImageSdkFetch, generateSdkImage } from './sdkImage'
+
+const SdModel = z
+  .object({
+    title: optionalString,
+    model_name: optionalString,
+    name: optionalString,
+  })
+  .refine((m) => !!(m.title || m.model_name || m.name))
+const NamedEntry = z.object({ name: z.string() })
 
 /** The first release with `/sdapi/v1/schedulers`. */
 export const MIN_A1111_SCHEDULERS_VERSION = '1.9.1'
@@ -76,16 +87,12 @@ export function createA1111Provider(config: ImageProviderConfig): ImageProvider 
         serviceId: 'a1111-models',
         signal,
       })
-      const data = expectList(await response.json(), 'A1111 /sdapi/v1/sd-models') as {
-        title?: string
-        model_name?: string
-        name?: string
-      }[]
+      const entries = parseModelList(await response.json(), SdModel, 'A1111 /sdapi/v1/sd-models')
 
-      return data.map((m) => ({
-        id: m.title || m.model_name || m.name || '',
-        name: m.title || m.model_name || m.name || '',
-      }))
+      return entries.map((m) => {
+        const id = m.title || m.model_name || m.name || ''
+        return { id, name: id }
+      })
     },
 
     async getSamplerInfo(signal?: AbortSignal): Promise<ComfySamplerInfo> {
@@ -107,8 +114,8 @@ export function createA1111Provider(config: ImageProviderConfig): ImageProvider 
           await response.body?.cancel()
           return undefined
         }
-        return (expectList(await response.json(), `A1111 /sdapi/v1/${path}`) as { name?: string }[])
-          .map((s) => s.name ?? '')
+        return parseModelList(await response.json(), NamedEntry, `A1111 /sdapi/v1/${path}`)
+          .map((s) => s.name)
           .filter(Boolean)
       }
 
