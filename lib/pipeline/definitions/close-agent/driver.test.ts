@@ -1020,6 +1020,11 @@ describe('runCloseTask', () => {
       { name: 'Wren', state: { voice: undefined, face: 'scarred' } },
       { type: 'json', value: { name: 'Wren', state: { face: 'scarred' } } },
     ],
+    [
+      'an own __proto__ key as a key, as JSON.parse made it',
+      JSON.parse('{"__proto__":{"x":1},"b":2}'),
+      { type: 'json', value: JSON.parse('{"__proto__":{"x":1},"b":2}') },
+    ],
   ])('sends a read answering %s', async (_, output, sent) => {
     echoOutput = output
     vi.mocked(generateToolStep).mockResolvedValueOnce(okStep([echoCall]))

@@ -41,14 +41,15 @@ function plainJson(value: unknown): JSONValue | typeof NOT_JSON {
   if (typeof value !== 'object') return NOT_JSON
   const proto: unknown = Object.getPrototypeOf(value)
   if (proto !== Object.prototype && proto !== null) return NOT_JSON
-  const out: Record<string, JSONValue> = {}
+  const entries: [string, JSONValue][] = []
   for (const [key, item] of Object.entries(value)) {
     if (item === undefined) continue
     const json = plainJson(item)
     if (json === NOT_JSON) return NOT_JSON
-    out[key] = json
+    entries.push([key, json])
   }
-  return out
+  // fromEntries defines own keys, so a `__proto__` key stays a key and sets no prototype.
+  return Object.fromEntries(entries)
 }
 
 // The SDK refuses a non-JSON tool result only when the next step builds its prompt, as a
