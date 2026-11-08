@@ -189,9 +189,10 @@ from events:
 
 Properties:
 
-- Written by phases directly to the generation store via setter
-  actions, **not** through `delta_emitted` events. The action layer
-  - delta log is for persisted writes; intermediates are scratchpad.
+- Written by phases directly onto `ctx.intermediates`, the run's own
+  object in the generation store, **not** through `delta_emitted`
+  events. The action layer and the delta log are for persisted writes;
+  intermediates are scratchpad.
 - Not persisted to SQLite. Cleared at run boundary.
 - Shape is kind-specific.
 - Outside the run, read only through a selector `lib/pipeline` exports:
@@ -244,6 +245,12 @@ a typed `PerTurnContext`/`ClassifierContext`-shaped field; neither of
 those types exists in the codebase yet. Adequate for one consumer; a
 second pipeline kind needing caller inputs is the trigger to revisit
 a generic seam.
+
+**What shipped for intermediates.** The chapter close's run-scoped
+state (its range, the shared missing-range failure and its ledger) goes
+through typed accessors in `lib/pipeline/definitions/close-intermediates.ts`,
+whose keys stay private. The retrieval key and the pass's pre-run status
+are still plain keys, and the per-kind contexts above aren't built.
 
 **Chained transactions (per-turn → chapter-close) do not inherit
 intermediates** — each chained pipeline has its own context and
@@ -422,19 +429,24 @@ emission from the LLM is a prompt bug, not a runtime case to handle.
 **Via events the orchestrator dispatches:**
 
 - `delta_emitted` — every persisted write but a close's grouped ones:
-  its tool calls, and its `chapters` create with the stamps.
-  Orchestrator routes
-  through the action layer with `source: 'pipeline'` + the current
-  `actionId`, and the event's `entryId` (the entry the write belongs
-  to, `null` when none) onto the delta row; a `createStoryEntry` with
-  one also records the turn capture's target entry. Phase doesn't
-  touch delta log / SQLite / undo_payload.
+  its tool calls, and its `chapters` create with the stamps. The
+  orchestrator routes it through the action layer under the run's
+  `actionId`, with the event's `entryId` (the entry the write belongs
+  to, `null` when none) onto the delta row. The delta takes the
+  action's own `source`, and every phase's source is of the `pipeline`
+  origin, never `user_edit`. A `createStoryEntry` with an `entryId` also
+  records the turn capture's target entry. Phase doesn't touch delta
+  log / SQLite / undo_payload.
 - `delta_group_emitted` — a chapter close's writes that land together:
   one tool call's, or the close's `chapters` create and every
-  `stampEntryChapter`. Each action's outcome, with its reason, comes
-  back to the phase as the `yield`'s value, so a tool call's refusal goes
-  to the model instead of failing the run
+  `stampEntryChapter`. The orchestrator runs them through
+  `applyDeltaActionGroupWithOutcomes`, one transaction under the run's
+  `actionId` and the event's `entryId`. Each action's outcome, with its
+  reason, comes back to the phase as the `yield`'s value, and so does a
+  refusal of the whole group, so a tool call's refusal goes to the model
+  instead of failing the run
   ([`memory/chapter-close.md → Tools and writes`](./memory/chapter-close.md#tools-and-writes)).
+  A throw from the action layer fails the run, as on `delta_emitted`.
 - `stream_chunk` — display-token path (`channel` splits narrative
   text from streamed reasoning). Orchestrator dispatches a
   side-channel append action; **no delta** until stream completion
@@ -729,7 +741,10 @@ async function runNode(node: PhaseNode, run: RunState): Promise<PhaseResult> {
   return result
 }
 
-async function consumePhase(gen: AsyncGenerator<PhaseEmittedEvent, PhaseResult>, run: RunState) {
+async function consumePhase(
+  gen: AsyncGenerator<PhaseEmittedEvent, PhaseResult, GroupOutcome | undefined>,
+  run: RunState,
+) {
   let outcome: GroupOutcome | undefined // what a delta_group_emitted's yield evaluates to
   while (true) {
     const next = await gen.next(outcome)
@@ -741,10 +756,15 @@ async function consumePhase(gen: AsyncGenerator<PhaseEmittedEvent, PhaseResult>,
 
 `handleEvent` routes:
 
-- `delta_emitted` → action-layer dispatch with `source: 'pipeline'` +
-  `run.actionId` (see [Action-layer integration](#action-layer-integration)).
-- `delta_group_emitted` → the same dispatch through
-  `applyDeltaActionGroup`, its per-action outcome returned to the phase.
+- `delta_emitted` → action-layer dispatch under `run.actionId`, the
+  delta taking the action's own `source` (see
+  [Action-layer integration](#action-layer-integration)). Its `yield`
+  evaluates to `undefined`, and a refusal other than a noop fails the
+  run.
+- `delta_group_emitted` → `applyDeltaActionGroupWithOutcomes` under
+  `run.actionId`, its `GroupOutcome` returned to the phase as the
+  `yield`'s value. The event reaches the bus once the group has been
+  applied or refused.
 - `stream_chunk` → side-channel append action.
 - `close_task_start` → the run's `closeProgress` in the generation
   store: a bus event isn't replayed, and a banner mounted mid-close
@@ -889,9 +909,15 @@ arises (scoped-gate), `writeSet` can land then.
 #### Path A — `delta_emitted` → action layer
 
 `delta_group_emitted` takes this path too, through
-`applyDeltaActionGroup`, one transaction per event. It reports each
-action's outcome, a skipped one included, where a rejected
-`delta_emitted` fails the run.
+`applyDeltaActionGroupWithOutcomes`, one transaction per event. It
+reports each action's outcome, a skipped one included, where a rejected
+`delta_emitted` fails the run. Its `GroupOutcome` is `ok` with one
+outcome per action at the action's index, `landed` or a `noop` carrying
+the handler's reason and, where the handler set one, a `restated` or
+`gone` mark; or `rejected` with a reason when the group was refused
+whole and nothing was written. `applyDeltaActionGroup`, which user
+writes call, wraps the same runner and reports only `ok` or that
+refusal.
 
 ```ts
 function dispatchAction(action: PipelineAction, actionId: string) {
