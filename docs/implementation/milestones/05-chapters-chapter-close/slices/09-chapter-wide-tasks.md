@@ -172,7 +172,11 @@ The group, anchored on E under the run's `actionId`:
 Check 5 doesn't cover the kept row's own link rows. There the group's
 per-field precedence keeps a value the user wrote, as 3e says, and the
 merge lands. A call the group's precedence stops in part returns `ok`,
-naming what didn't land (C11).
+naming what didn't land (C11). Each per-character involvement and
+awareness action carries its character as its `row`
+([5.5a → Implementation notes](./05a-task-runner.md#implementation-notes)),
+so the model's list names the character, and the merge tests below
+assert it.
 
 The ledger entry lists every row. A landed merge sets `survivor` to
 `keep` and holds the landed text in `values`, which is what
@@ -453,13 +457,6 @@ Each test file runs under `pnpm vitest run --project unit <file>`.
 
 ## Open questions
 
-- **A `merge_happenings` call that lands a path on one link row and
-  loses it on another.** Its per-character involvement and awareness
-  actions share delta paths, and user precedence on the kept row can
-  stop one while a sibling lands; 5.5a's `verdictOf` throws on that
-  today, which fails the close. The rule is pending a developer
-  decision ([5.5a → Open questions](./05a-task-runner.md#open-questions));
-  this slice is the first to reach it. Surfaced by 5.5a.
 - **Where does `chaptersOld` read from?** This needs the developer at
   planning, with the `aventuras-design` route offered: landing it shifts
   every chaptered story's ranking, and canon and

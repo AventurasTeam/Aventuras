@@ -363,7 +363,8 @@ type CloseReportCall = {
   `skippedFields` entry's `field` are delta paths, as `changedPaths` reads
   them (`description`, `state.voice`). A list joins with `, `, and a ref's
   value is the row's name, not its id. A restated field is absent (C11),
-  and the review omits an `ok` call with no field and no `survivor`. A
+  and `skippedFields` omit a path that also landed on another row. The
+  review omits an `ok` call with no field and no `survivor`. A
   tool writing a single field, such as `retire_entity`, records it here.
 - **A `reason` is a stable key** for the three shared classes,
   `USER_EDITED_SINCE_PROSE`, `later-turn` and `row-gone`, and the
@@ -610,7 +611,9 @@ narrows to that in 5.8's PR.
 
 "Lands whole" means all-or-nothing on failure, not on precedence. A
 partly protected call appears in the review twice: its landed fields
-under Changes and its skipped fields under Not applied.
+under Changes and its skipped fields under Not applied. The model's
+answer names each loss with its row, so a path lost on one row and
+landed on another appears in the review once, as a change.
 
 Shipped shape this replaces: `applyDeltaActionGroup` returns only
 `ok` or `rejected`, and a noop vanishes inside a group

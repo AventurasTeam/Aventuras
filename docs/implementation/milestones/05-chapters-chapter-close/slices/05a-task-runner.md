@@ -157,16 +157,15 @@ and tools sit under `lib/pipeline/definitions/close-agent/`.
   to nothing written, and `gone` to `rejected`, saying where the row
   went: a row this close merged names its survivor from the ledger.
   Across a call's actions and the fields its plan left out:
-  - Any action landed: `ok`, naming every lost field and its reason,
-    restated ones aside.
+  - Any action landed: `ok`, naming every lost field with its row and
+    reason, restated ones aside.
   - None landed: `rejected` if any was refused by a rule or gone, else
     `skipped` if any was protected, else `ok` with nothing written.
   - A whole-group refusal, the hard `not-found` an update or delete
     handler returns for a missing row included: `rejected`, with
     nothing written.
   - Every `PlannedAction` names at least one delta path, a delete
-    included, no path both lands and is lost in one call, and
-    `verdictOf` throws on either.
+    included, and `verdictOf` throws on one that names none.
 
 **The close's create and stamps as one group (developer decision,
 2026-11-05).**
@@ -619,17 +618,7 @@ vitest and the probe share. It never reaches a production slot.
 
 ## Open questions
 
-- **A path both landed and lost in one call.** `verdictOf` throws on
-  it today, since C4 reads `landed` as values less `skippedFields` and
-  the path would hide one or the other. 5.9's `merge_happenings`
-  fan-out under user precedence is what reaches it: one call's actions
-  over several link rows can land a path on one row and lose it on
-  another. The throw comes after the group has landed, so today the
-  close fails and is reversed whole. Pending a developer decision,
-  among: keep the throw and give
-  each action distinct paths for link-row fan-out; a per-action
-  link-row flag; or a split where the model's answer names every loss
-  while the ledger's `skippedFields` omit a path that also landed.
+None open: Implementation notes, below, record each answer.
 
 ## Implementation notes
 
@@ -732,10 +721,17 @@ vitest and the probe share. It never reaches a production slot.
   anchor, so its deltas log after that create, which the survival
   anchor's ordering assumption already rests on; the read is cheaper.
 - **`verdictOf` throws on a planned action that names no delta path
-  (provisional) and on a path both landed and lost in one call
-  (pending a developer decision).** A pathless action would read as
-  nothing written, and C4 reads `landed` as values less
-  `skippedFields`, so a path in both would hide one or the other.
+  (provisional).** A pathless action would read as nothing written.
+- **A path one call landed on one row and lost on another counts as
+  landed (developer decision, 2026-11-08).** The ledger's
+  `skippedFields` leave it out, since C4 reads landed as values less
+  `skippedFields`, and the model's own list, `ToolVerdict.notWritten`,
+  names every loss, one entry per row and field. Each `PlannedAction`
+  and `LostField` carries a required `row`, the label the answer names:
+  an entity row's id, which the answer swaps for its handle; a link
+  row's character, plus the happening only when the call spans several;
+  else the table. The label goes through `withHandles` with the reason,
+  so a link row's own `hinv_` or `haw_` id never reaches the model.
 - **Dispatch checks every planned action before emitting a group.** A
   plan with a pathless action, or one whose source isn't
   `chapter_close`, fails before any write (C1), so a tool-author bug
