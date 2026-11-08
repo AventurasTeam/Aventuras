@@ -24,7 +24,7 @@ import type {
 } from './types'
 import { createLogger } from '#lib/log.ts'
 import { fetchPublicImageBase64 } from './fetchAdapter'
-import { isImageProviderType, modelListKey } from './connection'
+import { imageConnectionFor, isImageProviderType, modelListKey } from './connection'
 import { applyCapabilityOverride, findListedModel } from './modelSnapshot'
 import { snapshotCapabilities } from './snapshotBackfill'
 
@@ -341,30 +341,28 @@ async function lookupCapabilities(
   return found
 }
 
+export type LocalServer = Extract<ImageProviderType, 'comfyui' | 'a1111'>
+
+/** Whether a provider type is a server the user runs, with sampler lists to read. */
+export const isLocalServer = (providerType: ImageProviderType): providerType is LocalServer =>
+  providerType === 'comfyui' || providerType === 'a1111'
+
+const localServer = (providerType: LocalServer, baseUrl?: string): ImageProvider =>
+  createProvider(imageConnectionFor(providerType, '', baseUrl))
+
 /** Sampler and scheduler names for a ComfyUI or A1111 server. Rejects when the server cannot be read. */
 export async function getProviderSamplerInfo(
-  baseUrl?: string,
-  providerType: Extract<ImageProviderType, 'comfyui' | 'a1111'> = 'comfyui',
+  baseUrl: string | undefined,
+  providerType: LocalServer,
   signal?: AbortSignal,
 ): Promise<ComfySamplerInfo> {
-  const config: ImageProviderConfig = {
-    apiKey: '',
-    baseUrl,
-    timeoutMs: settings.apiSettings.llmTimeoutMs,
-  }
-  const provider =
-    providerType === 'a1111' ? createA1111Provider(config) : createComfyProvider(config)
+  const provider = localServer(providerType, baseUrl)
   return (await provider.getSamplerInfo?.(signal)) ?? { samplers: [], schedulers: [] }
 }
 
 /** LoRA names for a ComfyUI server. Rejects when the server cannot be read. */
 export async function listLoras(baseUrl?: string, signal?: AbortSignal): Promise<string[]> {
-  const provider = createComfyProvider({
-    apiKey: '',
-    baseUrl,
-    timeoutMs: settings.apiSettings.llmTimeoutMs,
-  })
-  return (await provider.listLoras?.(signal)) ?? []
+  return (await localServer('comfyui', baseUrl).listLoras?.(signal)) ?? []
 }
 
 /** CLIP types a ComfyUI server accepts. Rejects when the server cannot be read. */
@@ -372,12 +370,7 @@ export async function getProviderClipTypes(
   baseUrl?: string,
   signal?: AbortSignal,
 ): Promise<string[]> {
-  const provider = createComfyProvider({
-    apiKey: '',
-    baseUrl,
-    timeoutMs: settings.apiSettings.llmTimeoutMs,
-  })
-  return (await provider.listClipTypes?.(signal)) ?? []
+  return (await localServer('comfyui', baseUrl).listClipTypes?.(signal)) ?? []
 }
 
 // Re-export types for convenience
