@@ -39,10 +39,23 @@ export type WriteContext = ToolContext & {
   readonly guard: (rows: readonly GuardRow[]) => Promise<RowGuard>
 }
 
-export type PlannedAction = { readonly action: PipelineAction; readonly fields: readonly string[] }
+export type PlannedAction = {
+  readonly action: PipelineAction
+  readonly fields: readonly string[]
+  /**
+   * The row as the model's answer names it; full ids are allowed, the answer swaps them for
+   * handles. An entity, lore, thread or happening row: its id. A link row (involvement,
+   * awareness): the character it links, as `${characterId} on ${happeningId}` only when the call
+   * spans several happenings. Else the row's table name. Never the link row's own id, which has
+   * no handle a model can use.
+   */
+  readonly row: string
+}
 export type LostField = {
   readonly field: string
   readonly reason: string
+  /** As PlannedAction.row. */
+  readonly row: string
   readonly kind: 'protected' | 'refused'
 }
 export type WritePlan =

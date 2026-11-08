@@ -1,7 +1,7 @@
 import { USER_EDITED_SINCE_PROSE, type ActionOutcome, type GroupOutcome } from '@/lib/actions/types'
 
 import type { CloseIds } from './ids'
-import type { ReportRow, ToolContext, WritePlan } from './tool'
+import type { PlannedAction, ReportRow, ToolContext, WritePlan } from './tool'
 
 /** C4's stable reasons a close adds beside USER_EDITED_SINCE_PROSE. */
 export const CLOSE_REASON = { laterTurn: 'later-turn', rowGone: 'row-gone' } as const
@@ -16,32 +16,50 @@ export type ToolVerdict = {
   reason?: string
   /** Delta paths that landed. */
   landed: readonly string[]
-  /** Fields lost beside a landed one, each with its reason (C4 skippedFields). */
+  /** Paths lost on every row they were planned for, with the first reason (C4 skippedFields). */
   skippedFields: readonly { field: string; reason: string }[]
+  /**
+   * The model's own list (C11): every loss beside a landed action, one entry per row and field,
+   * a path that landed on another row included. Absent when empty; never in the ledger.
+   */
+  notWritten?: readonly { field: string; row: string; reason: string }[]
   survivor?: { table: string; id: string }
 }
 
 type WritingPlan = Extract<WritePlan, { kind: 'write' }>
 type Survivors = { survivorOf: ToolContext['survivorOf'] }
-type Loss = { fields: readonly string[]; reason: string; refused: boolean }
+type Loss = { fields: readonly string[]; row: string; reason: string; refused: boolean }
 
 // C11: a noop neither marked nor kept by precedence is a refusal, so nothing unlanded reads as ok.
 function noopLoss(
   outcome: Extract<ActionOutcome, { status: 'noop' }>,
-  fields: readonly string[],
+  { fields, row }: PlannedAction,
 ): Loss | null {
   if (outcome.mark === 'restated') return null
-  if (outcome.mark === 'gone') return { fields, reason: CLOSE_REASON.rowGone, refused: true }
+  if (outcome.mark === 'gone') return { fields, row, reason: CLOSE_REASON.rowGone, refused: true }
   if (outcome.reason === USER_EDITED_SINCE_PROSE)
-    return { fields, reason: outcome.reason, refused: false }
-  return { fields, reason: outcome.reason, refused: true }
+    return { fields, row, reason: outcome.reason, refused: false }
+  return { fields, row, reason: outcome.reason, refused: true }
 }
 
-// C4 reads landed as values less skippedFields, so a path in both would hide one or the other.
-function settleOverlap(landed: ReadonlySet<string>, losses: readonly Loss[]): void {
-  for (const { fields } of losses)
-    for (const field of fields)
-      if (landed.has(field)) throw new Error(`verdictOf: ${field} both landed and was lost`)
+// C4 reads landed as values less skippedFields, so a path that landed anywhere stays out of
+// skippedFields; the model's list still names each of its losses by row.
+function settleLosses(
+  landed: ReadonlySet<string>,
+  losses: readonly Loss[],
+): Pick<ToolVerdict, 'skippedFields' | 'notWritten'> {
+  const skipped = new Map<string, string>()
+  const notWritten = new Map<string, { field: string; row: string; reason: string }>()
+  for (const { fields, row, reason } of losses)
+    for (const field of fields) {
+      if (!landed.has(field) && !skipped.has(field)) skipped.set(field, reason)
+      const key = JSON.stringify([row, field])
+      if (!notWritten.has(key)) notWritten.set(key, { field, row, reason })
+    }
+  return {
+    skippedFields: [...skipped].map(([field, reason]) => ({ field, reason })),
+    ...(notWritten.size === 0 ? {} : { notWritten: [...notWritten.values()] }),
+  }
 }
 
 function survivorAmong(rows: readonly ReportRow[], { survivorOf }: Survivors) {
@@ -97,28 +115,24 @@ export function verdictOf(
   let anyLanded = false
   const landed = new Set<string>()
   const losses: Loss[] = []
-  for (const [i, { fields }] of plan.actions.entries()) {
+  for (const [i, planned] of plan.actions.entries()) {
     const actionOutcome = outcomes[i]
     if (actionOutcome.status === 'landed') {
       anyLanded = true
-      for (const field of fields) landed.add(field)
+      for (const field of planned.fields) landed.add(field)
       continue
     }
-    const loss = noopLoss(actionOutcome, fields)
+    const loss = noopLoss(actionOutcome, planned)
     if (loss !== null) losses.push(loss)
   }
-  for (const { field, reason, kind } of plan.lost)
-    losses.push({ fields: [field], reason, refused: kind === 'refused' })
-  settleOverlap(landed, losses)
+  for (const { field, reason, row, kind } of plan.lost)
+    losses.push({ fields: [field], row, reason, refused: kind === 'refused' })
 
   if (anyLanded) {
-    const skipped = new Map<string, string>()
-    for (const { fields, reason } of losses)
-      for (const field of fields) if (!skipped.has(field)) skipped.set(field, reason)
     return {
       result: 'ok',
       landed: [...landed],
-      skippedFields: [...skipped].map(([field, reason]) => ({ field, reason })),
+      ...settleLosses(landed, losses),
       ...(plan.survivor === undefined ? {} : { survivor: plan.survivor }),
     }
   }
@@ -147,7 +161,7 @@ type ModelAnswer = {
   /** What to do, for a stable reason. */
   note?: string
   survivor?: string
-  notWritten?: { field: string; reason: string; note?: string }[]
+  notWritten?: { field: string; row: string; reason: string; note?: string }[]
 }
 
 /** The tool result the model reads: handles only, and what to do about a stable reason. */
@@ -169,10 +183,15 @@ export function modelAnswer(
     if (note !== undefined) answer.note = note
   }
   if (survivor !== undefined) answer.survivor = survivor
-  if (verdict.skippedFields.length > 0)
-    answer.notWritten = verdict.skippedFields.map(({ field, reason }) => {
+  if (verdict.notWritten !== undefined && verdict.notWritten.length > 0)
+    answer.notWritten = verdict.notWritten.map(({ field, row, reason }) => {
       const note = NOTES.get(reason)
-      return { field, reason: ids.withHandles(reason), ...(note === undefined ? {} : { note }) }
+      return {
+        field,
+        row: ids.withHandles(row),
+        reason: ids.withHandles(reason),
+        ...(note === undefined ? {} : { note }),
+      }
     })
   return answer
 }

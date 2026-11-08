@@ -255,9 +255,9 @@ async function planSetFields(args: Record<string, unknown>, ctx: WriteContext): 
   const pending = Object.keys(wanted).filter((field) => !restated.includes(field))
   for (const verdict of fieldVerdicts(guard.row('entities', id), pending)) {
     if (!verdict.free)
-      lost.push({ field: verdict.field, reason: verdict.reason, kind: 'protected' })
+      lost.push({ field: verdict.field, reason: verdict.reason, row: id, kind: 'protected' })
     else if (refused.has(verdict.field))
-      lost.push({ field: verdict.field, reason: TEST_CAP, kind: 'refused' })
+      lost.push({ field: verdict.field, reason: TEST_CAP, row: id, kind: 'refused' })
     else free[verdict.field] = wanted[verdict.field]
   }
   const planned = Object.keys(free).length > 0 ? entityWriteAction(current, free) : undefined
@@ -410,6 +410,7 @@ describe('entityWriteAction', () => {
         },
       },
       fields: ['description', 'state.voice', 'state.traits'],
+      row: WREN,
     })
   })
 
@@ -500,7 +501,7 @@ describe('the entity write path', () => {
       await planSetFields(input({ voice: 'low', traits: ['wary'] }), writeContext()),
     )
     expect(plan.lost).toEqual([
-      { field: 'state.voice', reason: USER_EDITED_SINCE_PROSE, kind: 'protected' },
+      { field: 'state.voice', reason: USER_EDITED_SINCE_PROSE, row: WREN, kind: 'protected' },
     ])
     expect(plan.actions.map(({ fields }) => fields)).toEqual([['state.traits']])
 
@@ -532,6 +533,7 @@ describe('the entity write path', () => {
           payload: { branchId: f.branchId, id: WREN, patch: { description: 'A courier, soaked.' } },
         },
         fields: ['description'],
+        row: WREN,
       },
     ])
 
@@ -665,6 +667,7 @@ const blindSetTool: WriteTool = {
             payload: { branchId: ctx.branchId, id, patch: { description } },
           },
           fields: ['description'],
+          row: id,
         },
       ],
       lost: [],
@@ -704,6 +707,7 @@ const createNoteTool: WriteTool = {
             },
           },
           fields: ['title', 'body'],
+          row: id,
         },
       ],
       lost: [],
@@ -785,6 +789,7 @@ const describeAs = (ctx: WriteContext, id: string, description: string): Planned
     payload: { branchId: ctx.branchId, id, patch: { description } },
   },
   fields: ['description'],
+  row: id,
 })
 
 const entityRows = (...ids: string[]): ReportRow[] =>
@@ -814,6 +819,7 @@ const keepRowTool: WriteTool = {
             payload: { branchId: ctx.branchId, id, patch: { description } },
           },
           fields: ['description'],
+          row: id,
         },
       ],
       lost: [],
@@ -1362,6 +1368,7 @@ describe('dispatchToolCall in a close phase', () => {
             payload: { branchId: ctx.branchId, id: WREN, condition: 'wet' },
           },
           fields: ['state.condition'],
+          row: WREN,
         },
       ],
       lost: [],
@@ -1376,6 +1383,43 @@ describe('dispatchToolCall in a close phase', () => {
       values: { description: 'Soaked.', 'state.condition': 'wet' },
       skippedFields: [{ field: 'state.condition', reason: 'not-a-place-or-item' }],
     })
+    expect(answers[0]!.output).toMatchObject({
+      notWritten: [{ field: 'state.condition', row: 'c1', reason: 'not-a-place-or-item' }],
+    })
+  })
+
+  it("counts a path lost on one row and landed on another as landed, naming the row to the model, not the ledger's skippedFields", async () => {
+    seeds = [
+      { table: 'entities', id: WREN },
+      { table: 'entities', id: BRAM },
+    ]
+    scriptedPlan = (ctx) => ({
+      kind: 'write',
+      actions: [describeAs(ctx, WREN, 'Soaked.')],
+      lost: [
+        { field: 'description', reason: USER_EDITED_SINCE_PROSE, row: BRAM, kind: 'protected' },
+      ],
+      rows: entityRows(WREN, BRAM),
+      values: { description: 'Soaked.' },
+    })
+
+    await runDispatch([{ toolName: 'scripted', input: { rows: ['c1', 'c2'], ...cite(['t7']) } }])
+
+    expect(recorded()[0]).toMatchObject({ result: 'ok', values: { description: 'Soaked.' } })
+    expect(recorded()[0]).not.toHaveProperty('skippedFields')
+    expect(recorded()[0]).not.toHaveProperty('notWritten')
+    expect(answers[0]!.output).toEqual({
+      result: 'ok',
+      notWritten: [
+        {
+          field: 'description',
+          row: 'c2',
+          reason: USER_EDITED_SINCE_PROSE,
+          note: expect.stringMatching(/user.*stands/i),
+        },
+      ],
+    })
+    expect(JSON.stringify(answers[0]!.output)).not.toContain(BRAM)
   })
 
   it("answers no handle for a create whose plan names a row its actions don't create", async () => {
@@ -1424,6 +1468,7 @@ describe('dispatchToolCall in a close phase', () => {
           {
             action: { ...planned.action, ...('source' in bad ? { source: bad.source } : {}) },
             fields: 'fields' in bad ? bad.fields : planned.fields,
+            row: planned.row,
           } as PlannedAction,
         ],
         lost: [],

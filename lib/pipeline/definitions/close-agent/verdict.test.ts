@@ -32,6 +32,7 @@ const loreUpdate = (
     payload: { branchId: BRANCH, id, patch },
   },
   fields,
+  row: id,
 })
 const BODY = loreUpdate({ body: 'Tolls double after dark.' }, ['body'])
 const TITLE = loreUpdate({ title: 'The night toll' }, ['title'])
@@ -93,12 +94,13 @@ describe("verdictOf, by C11's table", () => {
   it('a call with some fields protected lands the free ones and is ok naming the rest', () => {
     const plan = writePlan({
       actions: [BODY],
-      lost: [{ field: 'title', reason: USER_EDITED_SINCE_PROSE, kind: 'protected' }],
+      lost: [{ field: 'title', reason: USER_EDITED_SINCE_PROSE, row: LORE_A, kind: 'protected' }],
     })
     expect(verdictOf(plan, group(landed), noMerges)).toEqual({
       result: 'ok',
       landed: ['body'],
       skippedFields: [{ field: 'title', reason: USER_EDITED_SINCE_PROSE }],
+      notWritten: [{ field: 'title', row: LORE_A, reason: USER_EDITED_SINCE_PROSE }],
     })
   })
 
@@ -113,13 +115,14 @@ describe("verdictOf, by C11's table", () => {
       result: 'ok',
       landed: ['body'],
       skippedFields: [{ field: 'title', reason: USER_EDITED_SINCE_PROSE }],
+      notWritten: [{ field: 'title', row: LORE_A, reason: USER_EDITED_SINCE_PROSE }],
     })
   })
 
   it('a merge with a row a later turn touched is skipped whole', () => {
     const plan = writePlan({
       // 'merge' stands in for whichever path a merge tool names.
-      lost: [{ field: 'merge', reason: CLOSE_REASON.laterTurn, kind: 'protected' }],
+      lost: [{ field: 'merge', reason: CLOSE_REASON.laterTurn, row: LORE_A, kind: 'protected' }],
     })
     expect(verdictOf(plan, null, noMerges)).toEqual({
       result: 'skipped',
@@ -131,7 +134,7 @@ describe("verdictOf, by C11's table", () => {
 
   it('one protected row in a merge skips it whole', () => {
     const plan = writePlan({
-      lost: [{ field: 'merge', reason: USER_EDITED_SINCE_PROSE, kind: 'protected' }],
+      lost: [{ field: 'merge', reason: USER_EDITED_SINCE_PROSE, row: LORE_A, kind: 'protected' }],
     })
     expect(verdictOf(plan, null, noMerges)).toEqual({
       result: 'skipped',
@@ -145,6 +148,7 @@ describe("verdictOf, by C11's table", () => {
     const refused = {
       field: 'keywords',
       reason: 'over the soft cap of 8',
+      row: LORE_A,
       kind: 'refused',
     } as const
     expect(
@@ -153,6 +157,7 @@ describe("verdictOf, by C11's table", () => {
       result: 'ok',
       landed: ['body'],
       skippedFields: [{ field: 'keywords', reason: refused.reason }],
+      notWritten: [{ field: 'keywords', row: LORE_A, reason: refused.reason }],
     })
     expect(verdictOf(writePlan({ lost: [refused] }), null, noMerges)).toEqual({
       result: 'rejected',
@@ -206,7 +211,7 @@ describe('verdictOf, failing safe', () => {
   it('a refusal outranks a protection when nothing landed', () => {
     const plan = writePlan({
       actions: [BODY],
-      lost: [{ field: 'title', reason: CLOSE_REASON.laterTurn, kind: 'protected' }],
+      lost: [{ field: 'title', reason: CLOSE_REASON.laterTurn, row: LORE_A, kind: 'protected' }],
     })
     expect(verdictOf(plan, group(noop('not-active')), noMerges)).toMatchObject({
       result: 'rejected',
@@ -253,25 +258,47 @@ describe('verdictOf, failing safe', () => {
 describe('verdictOf, naming what did not land', () => {
   const BODY_ON_KEPT = loreUpdate({ body: 'Tolls are waived at dawn.' }, ['body'], LORE_KEPT)
 
-  it('throws on a path refused on one row and landed on another', () => {
-    expect(() =>
+  it('counts a path lost on one row and landed on another as landed, naming the loss', () => {
+    expect(
       verdictOf(
         writePlan({ actions: [BODY, BODY_ON_KEPT] }),
-        group(landed, noop('not-active')),
+        group(landed, noop(USER_EDITED_SINCE_PROSE)),
         noMerges,
       ),
-    ).toThrow('verdictOf: body both landed and was lost')
+    ).toEqual({
+      result: 'ok',
+      landed: ['body'],
+      skippedFields: [],
+      notWritten: [{ field: 'body', row: LORE_KEPT, reason: USER_EDITED_SINCE_PROSE }],
+    })
   })
 
-  it('throws on a capped list path that landed in part', () => {
+  it('counts a capped list path that landed in part as landed, naming the loss', () => {
     const keywords = loreUpdate({ keywords: ['toll', 'bridge'] }, ['keywords'])
     const plan = writePlan({
       actions: [keywords],
-      lost: [{ field: 'keywords', reason: 'over the soft cap of 8', kind: 'refused' }],
+      lost: [{ field: 'keywords', reason: 'over the soft cap of 8', row: LORE_A, kind: 'refused' }],
     })
-    expect(() => verdictOf(plan, group(landed), noMerges)).toThrow(
-      'verdictOf: keywords both landed and was lost',
+    expect(verdictOf(plan, group(landed), noMerges)).toEqual({
+      result: 'ok',
+      landed: ['keywords'],
+      skippedFields: [],
+      notWritten: [{ field: 'keywords', row: LORE_A, reason: 'over the soft cap of 8' }],
+    })
+  })
+
+  it('names a path lost on every row in the ledger once and in the answer once per row', () => {
+    const titleOnKept = loreUpdate({ title: 'Tolls' }, ['title'], LORE_KEPT)
+    const verdict = verdictOf(
+      writePlan({ actions: [BODY, TITLE, titleOnKept] }),
+      group(landed, noop(USER_EDITED_SINCE_PROSE), noop('not-active')),
+      noMerges,
     )
+    expect(verdict.skippedFields).toEqual([{ field: 'title', reason: USER_EDITED_SINCE_PROSE }])
+    expect(verdict.notWritten).toEqual([
+      { field: 'title', row: LORE_A, reason: USER_EDITED_SINCE_PROSE },
+      { field: 'title', row: LORE_KEPT, reason: 'not-active' },
+    ])
   })
 
   it('lets a path land on one row and be restated on another', () => {
@@ -295,16 +322,18 @@ describe('verdictOf, naming what did not land', () => {
     })
   })
 
-  it('keeps the first reason for a field lost twice', () => {
+  it('keeps the first reason for a field lost twice on one row', () => {
     const plan = writePlan({
       actions: [BODY],
       lost: [
-        { field: 'title', reason: CLOSE_REASON.laterTurn, kind: 'protected' },
-        { field: 'title', reason: 'too long', kind: 'refused' },
+        { field: 'title', reason: CLOSE_REASON.laterTurn, row: LORE_A, kind: 'protected' },
+        { field: 'title', reason: 'too long', row: LORE_A, kind: 'refused' },
       ],
     })
-    expect(verdictOf(plan, group(landed), noMerges).skippedFields).toEqual([
-      { field: 'title', reason: CLOSE_REASON.laterTurn },
+    const verdict = verdictOf(plan, group(landed), noMerges)
+    expect(verdict.skippedFields).toEqual([{ field: 'title', reason: CLOSE_REASON.laterTurn }])
+    expect(verdict.notWritten).toEqual([
+      { field: 'title', row: LORE_A, reason: CLOSE_REASON.laterTurn },
     ])
   })
 
@@ -455,13 +484,14 @@ describe('modelAnswer', () => {
         result: 'ok',
         landed: ['body'],
         skippedFields: [{ field: 'title', reason: `title clashes with ${LORE_KEPT}` }],
+        notWritten: [{ field: 'title', row: LORE_A, reason: `title clashes with ${LORE_KEPT}` }],
       },
       {},
       shownIds(),
     )
     expect(answer).toEqual({
       result: 'ok',
-      notWritten: [{ field: 'title', reason: 'title clashes with lo2' }],
+      notWritten: [{ field: 'title', row: 'lo1', reason: 'title clashes with lo2' }],
     })
     expect(JSON.stringify(answer)).not.toContain(LORE_KEPT)
   })
@@ -476,6 +506,10 @@ describe('modelAnswer', () => {
             { field: 'title', reason: CLOSE_REASON.laterTurn },
             { field: 'keywords', reason: 'over the soft cap' },
           ],
+          notWritten: [
+            { field: 'title', row: LORE_A, reason: CLOSE_REASON.laterTurn },
+            { field: 'keywords', row: LORE_A, reason: 'over the soft cap' },
+          ],
         },
         {},
         shownIds(),
@@ -483,9 +517,72 @@ describe('modelAnswer', () => {
     ).toEqual({
       result: 'ok',
       notWritten: [
-        { field: 'title', reason: CLOSE_REASON.laterTurn, note: expect.any(String) },
-        { field: 'keywords', reason: 'over the soft cap' },
+        { field: 'title', row: 'lo1', reason: CLOSE_REASON.laterTurn, note: expect.any(String) },
+        { field: 'keywords', row: 'lo1', reason: 'over the soft cap' },
       ],
     })
+  })
+
+  it("answers from the model's own list, not the ledger's", () => {
+    expect(
+      modelAnswer(
+        {
+          result: 'ok',
+          landed: ['body'],
+          skippedFields: [],
+          notWritten: [{ field: 'body', row: LORE_KEPT, reason: USER_EDITED_SINCE_PROSE }],
+        },
+        {},
+        shownIds(),
+      ),
+    ).toEqual({
+      result: 'ok',
+      notWritten: [
+        { field: 'body', row: 'lo2', reason: USER_EDITED_SINCE_PROSE, note: expect.any(String) },
+      ],
+    })
+    expect(
+      modelAnswer(
+        { result: 'ok', landed: ['body'], skippedFields: [{ field: 'title', reason: 'x' }] },
+        {},
+        shownIds(),
+      ),
+    ).toEqual({ result: 'ok' })
+  })
+
+  it('names a link row by its character, never by the link row own id', () => {
+    const hinv = 'hinv_66666666-6666-4666-8666-666666666666'
+    const ids = shownIds()
+    ids.show(CHAR_A, 'Tobin')
+    const involvement: PlannedAction = {
+      action: {
+        kind: 'createHappeningInvolvement',
+        source: 'chapter_close',
+        payload: {
+          entry: {
+            id: hinv,
+            branchId: BRANCH,
+            happeningId: 'hap_77777777-7777-4777-8777-777777777777',
+            entityId: CHAR_A,
+            role: null,
+          },
+        },
+      },
+      fields: ['role'],
+      row: CHAR_A,
+    }
+    const verdict = verdictOf(
+      writePlan({ actions: [BODY, involvement] }),
+      group(landed, noop(USER_EDITED_SINCE_PROSE)),
+      noMerges,
+    )
+    const answer = modelAnswer(verdict, {}, ids)
+    expect(answer).toEqual({
+      result: 'ok',
+      notWritten: [
+        { field: 'role', row: 'c1', reason: USER_EDITED_SINCE_PROSE, note: expect.any(String) },
+      ],
+    })
+    expect(JSON.stringify(answer)).not.toMatch(/hinv_|haw_/)
   })
 })

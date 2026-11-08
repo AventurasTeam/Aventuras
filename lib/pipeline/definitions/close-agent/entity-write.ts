@@ -115,5 +115,6 @@ export function entityWriteAction(
       payload: { branchId: row.branchId, id: row.id, patch: patch as EntityPatch },
     },
     fields,
+    row: row.id,
   }
 }

@@ -75,6 +75,7 @@ async function planStandIn(args: Record<string, unknown>, ctx: WriteContext): Pr
       },
     },
     fields: ['title', 'body'],
+    row: created.id,
   }
   const values: Record<string, unknown> = { title: input.title, body: input.body }
   const wanted: Record<string, unknown> = {}
@@ -85,7 +86,8 @@ async function planStandIn(args: Record<string, unknown>, ctx: WriteContext): Pr
     const guard = await ctx.guard([{ table: 'entities', id: row.id }])
     for (const verdict of fieldVerdicts(guard.row('entities', row.id), ['description'])) {
       if (verdict.free) wanted[verdict.field] = input.description
-      else lost.push({ field: verdict.field, reason: verdict.reason, kind: 'protected' })
+      else
+        lost.push({ field: verdict.field, reason: verdict.reason, row: row.id, kind: 'protected' })
     }
   }
   const update = Object.keys(wanted).length > 0 ? [entityWriteAction(row, wanted)] : []
