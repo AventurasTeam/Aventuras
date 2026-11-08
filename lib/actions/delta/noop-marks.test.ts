@@ -376,6 +376,23 @@ describe('noopRefusal marks: sample handlers (C11)', () => {
     })
   })
 
+  describe('promoteStagedEntity on a staged row another branch holds active', () => {
+    afterEach(() => entitiesStore.__reset())
+
+    it('lands, since the store copy is not its branch', async () => {
+      const ctx = await setup()
+      entitiesStore.hydrate('br_other', [
+        { ...entity('char_staged', 'character'), branchId: 'br_other', status: 'active' } as Entity,
+      ])
+      expect(await outcomeOf(ctx, promote('char_staged'))).toMatchObject({
+        status: 'ok',
+        targetTable: 'entities',
+        targetId: 'char_staged',
+        op: 'update',
+      })
+    })
+  })
+
   describe('promoteStagedEntity on a retired row the store holds active', () => {
     afterEach(() => entitiesStore.__reset())
 

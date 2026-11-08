@@ -379,7 +379,8 @@ export const promoteStagedEntityHandler: ActionHandler = async (action, branchId
     return { status: 'rejected', reason: `branch mismatch: delta ${branchId} vs target ${bid}` }
   const current = await loadCurrent(bid, id, ctx)
   if (!current) return noopRefusal(`promote target entities ${bid}:${id} not found`, 'gone')
-  const storeEntity = entitiesStore.getById(id)
+  const held = entitiesStore.getById(id)
+  const storeEntity = held?.branchId === bid ? held : undefined
   if (current.status !== 'staged' || (storeEntity !== undefined && storeEntity.status !== 'staged'))
     return noopRefusal(
       'not-staged',
