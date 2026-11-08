@@ -1,5 +1,7 @@
 import { describe, expect, it } from 'vitest'
 
+import { generateId } from '@/lib/ids'
+
 import { closeIdsOf } from '../close-intermediates'
 import { CloseIds, nameCloseProse } from './ids'
 
@@ -14,6 +16,7 @@ const ENTRY_OUT = 'entry_66666666-6666-4666-8666-666666666666'
 const ENTRY_OUT_2 = 'entry_66666666-6666-4666-8666-666666666667'
 const HAW_A = 'haw_77777777-7777-4777-8777-777777777777'
 const HAW_B = 'haw_88888888-8888-4888-8888-888888888888'
+const ANY_ID = /[a-z]+_[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/
 const FULL_ID = /(char|loc|item|fact|lore|thr|hap|chap|entry|haw)_[0-9a-f]{8}-/
 
 describe('CloseIds', () => {
@@ -160,6 +163,32 @@ describe('CloseIds', () => {
     )
     expect(out).not.toMatch(FULL_ID)
     expect([ids.idOf('aw1'), ids.idOf('lo1'), ids.idOf('t3')]).toEqual([HAW_A, LORE_A, ENTRY_OUT])
+  })
+
+  it('drops the branch qualifier and names any other full id a row', () => {
+    const ids = new CloseIds()
+    const bid = generateId('br')
+    const charId = generateId('char')
+    const hinvId = generateId('hinv')
+    ids.show(charId, 'Wren')
+    expect(ids.withHandles(`update target entities ${bid}:${charId} not found`)).toBe(
+      'update target entities c1 not found',
+    )
+    expect(ids.withHandles(`delete target involvement ${bid}:${hinvId} not found`)).toBe(
+      'delete target involvement a row not found',
+    )
+    const mixed = ids.withHandles(
+      `edge ${generateId('rel')} refused by ${generateId('act')} on ${bid} for ${charId}`,
+    )
+    expect(mixed).toBe('edge a row refused by a row on a row for c1')
+    expect(mixed).not.toMatch(ANY_ID)
+  })
+
+  it('leaves text that is not a generated id as written', () => {
+    const ids = new CloseIds()
+    ids.showTurns(['entry_close_002'])
+    const text = 'snake_case, rel_mnemonic, br_close:t9, rel_11111111-1111-1111-1111-111111111111'
+    expect(ids.withHandles(`${text} and entry_close_002`)).toBe(`${text} and t1`)
   })
 
   it('swaps a non-uuid id registered after an earlier swap', () => {

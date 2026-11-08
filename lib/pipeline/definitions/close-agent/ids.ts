@@ -7,6 +7,10 @@ const UUID = '[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}'
 const SHOWN_KINDS = [...SUBSTITUTABLE_PREFIXES, 'entry', 'haw'].join('|')
 const FULL_ID_IN_TEXT = new RegExp(`\\b(?:${SHOWN_KINDS})_${UUID}\\b`, 'g')
 const FULL_ID = new RegExp(`^(?:${SHOWN_KINDS})_${UUID}$`)
+// generateId's exact shape: any id the model has no handle for.
+const GENERATED_ID =
+  /\b[a-z][a-z0-9]*_[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}\b/g
+const BRANCH_QUALIFIER = new RegExp(`\\bbr_${UUID}:`, 'g')
 const BRACKETED = /^\[([^[\]]+)\]$/
 
 const escapeRegExp = (text: string): string => text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
@@ -84,10 +88,21 @@ export class CloseIds {
     return name?.trim() || undefined
   }
 
-  /** Every full id in `text` swapped for its handle. */
+  /** Full ids in `text` as handles; a `br_` qualifier is dropped, any other id becomes "a row". */
   withHandles(text: string): string {
-    const swapped = text.replace(FULL_ID_IN_TEXT, (id) => this.handleInText(id))
-    if (this.unpatterned.size === 0) return swapped
+    return this.withUnpatterned(text.replace(FULL_ID_IN_TEXT, (id) => this.handleInText(id)))
+      .replace(BRANCH_QUALIFIER, '')
+      .replace(GENERATED_ID, 'a row')
+  }
+
+  /** A full id's name, through its handle; undefined when never shown. */
+  nameOfId(id: string): string | undefined {
+    const handle = this.handleOf(id)
+    return handle === undefined ? undefined : this.nameOf(handle)
+  }
+
+  private withUnpatterned(text: string): string {
+    if (this.unpatterned.size === 0) return text
     this.unpatternedInText ??= new RegExp(
       `(^|[^\\w-])(${[...this.unpatterned.keys()]
         .sort((a, b) => b.length - a.length)
@@ -95,16 +110,10 @@ export class CloseIds {
         .join('|')})(?![\\w-])`,
       'g',
     )
-    return swapped.replace(
+    return text.replace(
       this.unpatternedInText,
       (_match, lead: string, id: string) => `${lead}${this.unpatterned.get(id) ?? id}`,
     )
-  }
-
-  /** A full id's name, through its handle; undefined when never shown. */
-  nameOfId(id: string): string | undefined {
-    const handle = this.handleOf(id)
-    return handle === undefined ? undefined : this.nameOf(handle)
   }
 
   private handleInText(id: string): string {
