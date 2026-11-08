@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import type { ImageModelConnection, ImageProviderType } from '#lib/types/index.ts'
+import type { ImageProviderConnection, ImageProviderType } from '#lib/types/index.ts'
 import { imageConnectionFor, isImageProviderType, modelListKey } from './connection'
 
 describe('imageConnectionFor', () => {
@@ -18,7 +18,7 @@ describe('imageConnectionFor', () => {
     ImageProviderType,
     string,
     string,
-    Pick<ImageModelConnection, 'apiKey' | 'baseUrl'>,
+    Pick<ImageProviderConnection, 'apiKey' | 'baseUrl'>,
   ][])(
     '%s keeps only the fields the provider has an input for',
     (providerType, apiKey, baseUrl, expected) => {

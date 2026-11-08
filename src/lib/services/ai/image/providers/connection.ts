@@ -1,4 +1,4 @@
-import type { ImageModelConnection, ImageProviderType } from '#lib/types/index.ts'
+import type { ImageProviderConnection, ImageProviderType } from '#lib/types/index.ts'
 import { normalizeBaseUrl } from '#lib/utils/url.ts'
 import { PROVIDER_BASE_URL, type BaseUrlRule } from './baseUrls'
 
@@ -51,15 +51,15 @@ export function imageConnectionFor(
   providerType: ImageProviderType,
   apiKey: string,
   baseUrl: string | undefined,
-): ImageModelConnection {
+): ImageProviderConnection {
   return {
     providerType,
     apiKey: takesApiKey(providerType) ? apiKey : '',
     baseUrl: baseUrlMode(providerType) === 'none' ? undefined : baseUrl,
-  } as ImageModelConnection
+  } as ImageProviderConnection
 }
 
 /** Identifies the connection a model list was loaded for. */
-export function modelListKey({ providerType, apiKey, baseUrl }: ImageModelConnection): string {
+export function modelListKey({ providerType, apiKey, baseUrl }: ImageProviderConnection): string {
   return JSON.stringify([providerType, apiKey, normalizeBaseUrl(baseUrl)])
 }

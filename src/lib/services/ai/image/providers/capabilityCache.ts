@@ -1,4 +1,4 @@
-import type { ImageModelCapabilities, ImageModelConnection } from '#lib/types/index.ts'
+import type { ImageModelCapabilities, ImageProviderConnection } from '#lib/types/index.ts'
 import { createLogger } from '#lib/log.ts'
 import { abortable } from '#lib/utils/async.ts'
 import { modelListKey } from './connection'
@@ -8,7 +8,7 @@ const log = createLogger('ImageRegistry')
 
 /** Looks one model's capabilities up from its provider; rejects when the provider cannot be read. */
 export type CapabilityLookup = (
-  connection: ImageModelConnection,
+  connection: ImageProviderConnection,
   model: string,
   signal?: AbortSignal,
 ) => Promise<ImageModelCapabilities | undefined>
@@ -77,7 +77,7 @@ function settle(key: string, model: string): void {
  * retried for five minutes.
  */
 export async function cachedCapabilities(
-  connection: ImageModelConnection,
+  connection: ImageProviderConnection,
   model: string,
   lookup: CapabilityLookup,
 ): Promise<ImageModelCapabilities | undefined> {

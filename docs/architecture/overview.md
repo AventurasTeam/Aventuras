@@ -638,7 +638,7 @@ extra whose failure never fails the listing. Whether a provider takes an API key
 provider (`PROVIDER_API_KEY` in `providers/connection.ts`, `PROVIDER_BASE_URL` in `providers/baseUrls.ts`, which also holds each default), and the settings form and
 `hasRequiredCredentials` read those tables. The form keeps a value typed for another provider, so a
 connection is cut down to the fields its provider has an input for (`imageConnectionFor`) where it
-enters: in the form, and when settings load. The result is an `ImageModelConnection`, branded so only that
+enters: in the form, and when settings load. The result is an `ImageProviderConnection`, branded so only that
 function makes one; `ImageProfile` extends it and the store takes one to save, so the registry and the
 model-list cache use a connection as given. A leftover base URL is never saved for OpenRouter, nor a
 leftover API key for A1111. A stored profile whose provider this build does not know is skipped on load.

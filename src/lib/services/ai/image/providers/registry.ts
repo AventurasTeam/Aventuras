@@ -10,7 +10,7 @@ import { isAbortError } from '#lib/services/activity/index.ts'
 import { settings } from '#lib/stores/settings.svelte.ts'
 import type {
   ImageModelCapabilities,
-  ImageModelConnection,
+  ImageProviderConnection,
   ImageProfile,
   ImageProviderType,
 } from '#lib/types/index.ts'
@@ -61,7 +61,7 @@ const PROVIDER_FACTORIES: Record<ImageProviderType, ProviderFactory> = {
 }
 
 function createProvider(
-  { providerType, apiKey, baseUrl }: ImageModelConnection,
+  { providerType, apiKey, baseUrl }: ImageProviderConnection,
   providerOptions?: ImageProviderConfig['providerOptions'],
 ): ImageProvider {
   return PROVIDER_FACTORIES[providerType]({
@@ -155,8 +155,8 @@ function freshModelList(listKey: string): ImageModelInfo[] | undefined {
 
 /** Drops the cached list for `previous`'s connection when `next` uses a different one. */
 export function evictReplacedModelList(
-  previous: ImageModelConnection,
-  next: ImageModelConnection,
+  previous: ImageProviderConnection,
+  next: ImageProviderConnection,
 ): void {
   const previousKey = modelListKey(previous)
   if (previousKey === modelListKey(next)) return
@@ -305,7 +305,7 @@ export async function generateImage(options: {
  * rejects and caches nothing, even when the adapter answered with a partial list.
  */
 export async function listImageModels(
-  connection: ImageModelConnection,
+  connection: ImageProviderConnection,
   forceReload: boolean,
   signal?: AbortSignal,
 ): Promise<ImageModelInfo[]> {
@@ -338,7 +338,7 @@ export async function listImageModels(
  * means an unknown model.
  */
 async function lookupCapabilities(
-  connection: ImageModelConnection,
+  connection: ImageProviderConnection,
   model: string,
   signal?: AbortSignal,
 ): Promise<ImageModelCapabilities | undefined> {

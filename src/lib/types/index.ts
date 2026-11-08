@@ -894,7 +894,7 @@ export interface ImageCapabilityOverride {
 declare const imageConnectionBrand: unique symbol
 
 /** The provider, key and URL a provider is built from. Only `imageConnectionFor` makes one. */
-export interface ImageModelConnection {
+export interface ImageProviderConnection {
   readonly [imageConnectionBrand]: true
   providerType: ImageProviderType
   apiKey: string
@@ -902,13 +902,13 @@ export interface ImageModelConnection {
 }
 
 /** An `ImageProfile` as stored: its provider may be one this build does not know. */
-export type StoredImageProfile = Omit<ImageProfile, keyof ImageModelConnection> & {
+export type StoredImageProfile = Omit<ImageProfile, keyof ImageProviderConnection> & {
   providerType: string
   apiKey: string
   baseUrl?: string
 }
 
-export interface ImageProfile extends ImageModelConnection {
+export interface ImageProfile extends ImageProviderConnection {
   id: string
   name: string
   model: string

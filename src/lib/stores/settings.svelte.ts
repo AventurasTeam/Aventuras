@@ -5,7 +5,7 @@ import type {
   FontSource,
   FontSizeOption,
   GenerationPreset,
-  ImageModelConnection,
+  ImageProviderConnection,
   ImageProfile,
   ProviderType,
   ReasoningEffort,
@@ -2886,8 +2886,8 @@ class SettingsStore {
   }
 
   async addImageProfile(
-    profile: Omit<ImageProfile, 'id' | 'createdAt' | keyof ImageModelConnection>,
-    connection: ImageModelConnection,
+    profile: Omit<ImageProfile, 'id' | 'createdAt' | keyof ImageProviderConnection>,
+    connection: ImageProviderConnection,
   ): Promise<ImageProfile> {
     const newProfile: ImageProfile = {
       ...profile,
@@ -2902,8 +2902,8 @@ class SettingsStore {
 
   async updateImageProfile(
     id: string,
-    updates: Partial<Omit<ImageProfile, 'id' | 'createdAt' | keyof ImageModelConnection>>,
-    connection?: ImageModelConnection,
+    updates: Partial<Omit<ImageProfile, 'id' | 'createdAt' | keyof ImageProviderConnection>>,
+    connection?: ImageProviderConnection,
   ) {
     const index = this.imageProfiles.findIndex((p) => p.id === id)
     if (index === -1) return
