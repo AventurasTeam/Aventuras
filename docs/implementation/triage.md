@@ -76,7 +76,7 @@ slice-planning gate forces its resolution before that slice is planned.
   group reads as missing.** `placeLocationHandler` takes no `GroupScope`
   (`lib/actions/entities/state-patch-actions.ts`), and the
   `partner-not-found` and each target's `... not found` refusals read the
-  same way. This branch marks all of them `gone`, so once the close's
+  same way. 5.5a marks all of them `gone`, so once the close's
   verdict mapping reads marks the model would hear that a row it just
   created is gone. The fix is reading the group's created rows through
   `GroupScope`, not a mark special case. Nothing groups a create with
