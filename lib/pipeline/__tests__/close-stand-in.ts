@@ -12,7 +12,7 @@ import {
 } from '../definitions/close-agent/entity-write'
 import { readRowTool } from '../definitions/close-agent/read-tools'
 import type { CloseAgentSlots } from '../definitions/close-agent/slots'
-import type { CloseTaskDef, TaskRunContext, TaskStart } from '../definitions/close-agent/task'
+import type { CloseTaskDef, TaskPromptContext, TaskStart } from '../definitions/close-agent/task'
 import {
   writeToolSchema,
   type LostField,
@@ -111,14 +111,10 @@ export const standInTool: WriteTool = {
   plan: planStandIn,
 }
 
-const standInShow = z.strictObject({
-  handle: z.string(),
-  name: z.string(),
-  description: z.string(),
-})
+type StandInShow = { handle: string; name: string; description: string }
 
 // One character, so it is always c1 (the dev mock's scripted call names it so).
-async function startStandIn(ctx: TaskRunContext): Promise<TaskStart | null> {
+async function startStandIn(ctx: TaskPromptContext): Promise<TaskStart<StandInShow> | null> {
   const [row] = await ctx.db
     .select({ id: entities.id, name: entities.name, description: entities.description })
     .from(entities)
@@ -149,10 +145,9 @@ const STAND_IN_SYSTEM = [
 ].join('\n\n')
 
 function renderStandIn(
-  start: TaskStart,
-  ctx: TaskRunContext & { writesSoFar: string },
+  { show: shown }: TaskStart<StandInShow>,
+  ctx: TaskPromptContext & { writesSoFar: string },
 ): PromptHalves {
-  const shown = standInShow.parse(start.show)
   const turns = ctx.chapterEntryIds.flatMap((id) => ctx.ids.handleOf(id) ?? [])
   return {
     system: STAND_IN_SYSTEM,
@@ -164,7 +159,7 @@ function renderStandIn(
   }
 }
 
-export const standInTask: CloseTaskDef = {
+export const standInTask: CloseTaskDef<StandInShow> = {
   task: 'identity',
   tools: [standInTool, readRowTool],
   readFields: { character: ['description'] },

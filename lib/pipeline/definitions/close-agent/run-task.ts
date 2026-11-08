@@ -150,18 +150,19 @@ export async function* runCloseTask(
     task: def.task,
     readFields: def.readFields,
   }
-  const start = await def.start(ctx)
+  const { ledger, ...promptCtx } = ctx
+  const start = await def.start(promptCtx)
   if (start === null) return { status: 'finished' }
   // Per task and part: a row read in one task is unread in the next.
   const readSet = createReadSet()
   readSet.add(start.seeds)
   const dispatch: DispatchContext = { ...ctx, readSet }
-  const prompt = def.render(start, { ...ctx, writesSoFar: ctx.ledger.writesSoFar(ctx.ids) })
+  const prompt = def.render(start, { ...promptCtx, writesSoFar: ledger.writesSoFar(ctx.ids) })
   const tools = toolStepTools(def.tools)
   const byName = new Map(def.tools.map((tool) => [tool.name, tool]))
   const messages: ModelMessage[] = []
   const stop = (reason: StopReason): TaskEnd => {
-    ctx.ledger.stop({ task: def.task, part: ctx.part, reason })
+    ledger.stop({ task: def.task, part: ctx.part, reason })
     return { status: 'stopped', reason }
   }
 
@@ -192,7 +193,7 @@ export async function* runCloseTask(
 
     const { calls, invalidCalls, responseMessages } = result.step
     if (calls.length === 0 && invalidCalls.length === 0) return { status: 'finished' }
-    ctx.ledger.noteToolCall()
+    ledger.noteToolCall()
     const answers: ToolAnswer[] = []
     for (const call of calls) {
       if (ctx.phase.abortSignal.aborted) return { status: 'aborted' }

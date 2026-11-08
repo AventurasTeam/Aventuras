@@ -43,7 +43,7 @@ import {
   type CodeStepContext,
   type SlotEntry,
 } from './slots'
-import type { CloseTaskDef, TaskRunContext } from './task'
+import type { CloseTaskDef, TaskPromptContext } from './task'
 import {
   readToolSchema,
   writeToolSchema,
@@ -841,6 +841,7 @@ describe('runCloseTask', () => {
     await drive({ ...taskDef({ render }), task: 'upkeep' }, runContext(phase))
 
     expect(render).toHaveBeenCalledTimes(1)
+    expect(render.mock.calls[0]![1]).not.toHaveProperty('ledger')
     expect(render.mock.calls[0]![1].writesSoFar).toBe(writer.writesSoFar(ids))
     expect(render.mock.calls[0]![1].writesSoFar).toContain('append_note Wren (c1): description')
   })
@@ -1007,7 +1008,7 @@ describe('closeAgentPhase', () => {
   function quietTask(
     task: CloseTask,
     log: string[],
-    opts: { readFields?: ReadFields; seen?: (ctx: TaskRunContext) => void } = {},
+    opts: { readFields?: ReadFields; seen?: (ctx: TaskPromptContext) => void } = {},
   ): SlotEntry {
     return {
       kind: 'task',
@@ -1134,7 +1135,7 @@ describe('closeAgentPhase', () => {
 
   it("hands every entry the run's one id map and ledger, the chapter's turns shown first", async () => {
     const log: string[] = []
-    const seen: TaskRunContext[] = []
+    const seen: TaskPromptContext[] = []
     const stepSeen: CodeStepContext[] = []
     let handlesAtFirstStart: (string | undefined)[] = []
     __setCloseAgentSlots({
@@ -1162,9 +1163,13 @@ describe('closeAgentPhase', () => {
     expect(seen).toHaveLength(2)
     expect(stepSeen).toHaveLength(1)
     const runIds = closeIdsOf(ctx.intermediates)
-    // A code step is no task and records nothing: its context carries no ledger.
+    // A code step records nothing, and a task's start makes no call: neither gets the writer.
     expect(stepSeen[0]).not.toHaveProperty('ledger')
-    expect(seen[1]!.ledger).toBe(seen[0]!.ledger)
+    expect(seen[0]).not.toHaveProperty('ledger')
+    const writers = vi.mocked(runCloseTask).mock.calls.map(([, args]) => args.ledger)
+    expect(writers).toHaveLength(2)
+    expect(writers[1]).toBe(writers[0])
+    const runWriter = writers[0]!
     for (const c of [...seen, ...stepSeen]) {
       expect(c.ids).toBe(runIds)
       expect(c.phase).toBe(ctx)
@@ -1174,9 +1179,9 @@ describe('closeAgentPhase', () => {
       expect(c.chapterEntryIds).toEqual(chapterIds())
     }
     // The writer wraps the run's own ledger, and every entry's survivorOf reads it.
-    seen[0]!.ledger.noteToolCall()
+    runWriter.noteToolCall()
     expect(closeLedgerOf(ctx.intermediates)?.noToolCalls).toBe(false)
-    seen[0]!.ledger.record({
+    runWriter.record({
       task: 'happenings',
       part: 0,
       tool: 'merge_happenings',
@@ -1191,7 +1196,7 @@ describe('closeAgentPhase', () => {
     })
     // It names a ref by the run's id map: a value holding a shown row's id is stored as its name.
     runIds.show(WREN, 'Wren')
-    seen[0]!.ledger.record({
+    runWriter.record({
       task: 'happenings',
       part: 0,
       tool: 'update_happening',
@@ -1211,7 +1216,7 @@ describe('closeAgentPhase', () => {
   })
 
   it("gives a task's start its part and the lore-mgmt model config", async () => {
-    let captured: TaskRunContext | undefined
+    let captured: TaskPromptContext | undefined
     __setCloseAgentSlots({
       before: [],
       perPart: [
