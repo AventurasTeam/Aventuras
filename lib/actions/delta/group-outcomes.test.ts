@@ -159,18 +159,20 @@ describe('applyDeltaActionGroupWithOutcomes (C11)', () => {
   it('reads landed for a link naming a row created later in the group', async () => {
     const { db, ctx } = await setup()
 
+    // The link sits at index 1 but first in the rerun list, so its outcome must land by index.
     const result = await group(ctx, [
+      describeChar1,
       relateTo('char_new'),
       create(entity('char_new', 'character', { name: 'Bram' })),
     ])
 
     expect(result).toStrictEqual({
       status: 'ok',
-      outcomes: [{ status: 'landed' }, { status: 'landed' }],
+      outcomes: [{ status: 'landed' }, { status: 'landed' }, { status: 'landed' }],
     })
     const pairs = await db.select().from(characterRelationships)
     expect(pairs.map((p) => [p.aId, p.bId, p.kind])).toEqual([['char_1', 'char_new', 'ally']])
-    expect(await deltasOf(db, 'act_g')).toHaveLength(2)
+    expect(await deltasOf(db, 'act_g')).toHaveLength(3)
   })
 
   it("keeps the rerun's reason for an action that still no-ops on it", async () => {

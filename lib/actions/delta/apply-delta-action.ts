@@ -236,7 +236,7 @@ type GroupArgs = { actionId: string; branchId: string; entryId?: string | null }
 
 type NoopOutcome = Extract<ActionOutcome, { status: 'noop' }>
 
-const LANDED: ActionOutcome = { status: 'landed' }
+const LANDED: ActionOutcome = Object.freeze({ status: 'landed' })
 
 function noopOutcome({ reason, mark }: Pick<NoopOutcome, 'reason' | 'mark'>): NoopOutcome {
   return mark === undefined ? { status: 'noop', reason } : { status: 'noop', reason, mark }
@@ -322,7 +322,7 @@ async function applyDeltaActionGroupUnlocked(
   const pendingColumns = new Map<string, Set<string>>()
   const created = new Set<string>()
 
-  // A refusal aborts the group; a noop writes nothing for its own action alone.
+  // A refusal aborts the group.
   const prepare = async (action: PipelineAction): Promise<Refusal | NoopOutcome | null> => {
     if (isUserOriginatedSource(action.source) && generationStore.getTxState().reversalInProgress)
       return {
