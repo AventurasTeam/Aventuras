@@ -71,7 +71,10 @@ slice-planning gate forces its resolution before that slice is planned.
   (`lib/actions/entities/state-patch-actions.ts`) and `updateInvolvement`
   (`lib/actions/happenings/register-involvements.ts`) do too, so a close
   tool over one of them gets a whole-group refusal where C11's table
-  reads as a per-action verdict. Raised in 5.5a's review.
+  reads as a per-action verdict. Those carry no code; the delete
+  handlers of entities, lore, threads and happenings, and the chapters
+  update, return the coded `not-found` C11 names but doesn't list them.
+  Raised in 5.5a's review.
 - **Handlers read committed rows, so a row created earlier in the same
   group reads as missing.** `placeLocationHandler` takes no `GroupScope`
   (`lib/actions/entities/state-patch-actions.ts`), and the
