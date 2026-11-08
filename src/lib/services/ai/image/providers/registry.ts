@@ -26,8 +26,8 @@ import type {
 import { createLogger } from '#lib/log.ts'
 import { fetchPublicImageBase64 } from './fetchAdapter'
 import { imageConnectionFor, isImageProviderType, modelListKey } from './connection'
-import { applyCapabilityOverride, findListedModel } from './modelCapabilities'
-import { snapshotCapabilities } from './capabilityCache'
+import { applyCapabilityOverride, findListedModel, pickCapabilities } from './modelCapabilities'
+import { cachedCapabilities, evictCapabilities } from './capabilityCache'
 
 // Provider factory imports (lazy)
 import { createNanoGPTProvider } from './nanogpt'
@@ -109,21 +109,22 @@ export const referenceLimit = (
 ): number => PROVIDER_REFERENCE_LIMIT[providerType](providerOptions)
 
 type CapabilitySource =
-  | { kind: 'snapshot' }
+  | { kind: 'listed' }
   | { kind: 'table'; lookup: (model: string) => ImageModelCapabilities | undefined }
   | { kind: 'none' }
 
 /**
- * Where a provider's per-model capabilities come from at generation: `snapshot` for an API that
- * can change under a saved profile, `table` for a map in the adapter, `none` for nothing that
- * generation reads. Exhaustive by type, so a new provider has to declare which it is.
+ * Where a provider's per-model capabilities come from at generation: `listed` for an API that
+ * can change under a saved profile, read through an in-memory cache, `table` for a map in the
+ * adapter, `none` for nothing that generation reads. Exhaustive by type, so a new provider has to
+ * declare which it is.
  */
 const PROVIDER_CAPABILITIES: Record<ImageProviderType, CapabilitySource> = {
-  nanogpt: { kind: 'snapshot' },
+  nanogpt: { kind: 'listed' },
   openai: { kind: 'table', lookup: openaiModelCapabilities },
-  'openai-compatible': { kind: 'snapshot' },
-  openrouter: { kind: 'snapshot' },
-  pollinations: { kind: 'snapshot' },
+  'openai-compatible': { kind: 'listed' },
+  openrouter: { kind: 'listed' },
+  pollinations: { kind: 'listed' },
   google: { kind: 'table', lookup: googleModelCapabilities },
   zhipu: { kind: 'none' },
   comfyui: { kind: 'none' },
@@ -136,7 +137,7 @@ export const takesCapabilityOverride = (providerType: ImageProviderType): boolea
 
 /** Whether a profile of this provider type saves a snapshot of its model's capabilities. */
 export const capturesModelSnapshot = (providerType: ImageProviderType): boolean =>
-  PROVIDER_CAPABILITIES[providerType].kind === 'snapshot'
+  PROVIDER_CAPABILITIES[providerType].kind === 'listed'
 
 // ============================================================================
 // Model Cache
@@ -162,7 +163,9 @@ export function evictReplacedModelList(
   next: ImageModelConnection,
 ): void {
   const previousKey = modelListKey(previous)
-  if (previousKey !== modelListKey(next)) modelCaches.delete(previousKey)
+  if (previousKey === modelListKey(next)) return
+  modelCaches.delete(previousKey)
+  evictCapabilities(previousKey)
 }
 
 // ============================================================================
@@ -190,8 +193,13 @@ async function providedCapabilities(
       return source.lookup(model)
     case 'none':
       return undefined
-    case 'snapshot':
-      return snapshotCapabilities(profile, model, lookupCapabilities)
+    case 'listed': {
+      const list = freshModelList(modelListKey(profile))
+      const listed = list && findListedModel(list, model)
+      return listed
+        ? pickCapabilities(listed)
+        : cachedCapabilities(profile, model, lookupCapabilities)
+    }
     default: {
       const unreachable: never = source
       return unreachable
@@ -320,6 +328,7 @@ export async function listImageModels(
       if (now - cached.timestamp >= CACHE_TTL) modelCaches.delete(key)
     }
     modelCaches.set(cacheKey, { models, timestamp: now })
+    evictCapabilities(cacheKey)
     return models
   } catch (error) {
     if (!isAbortError(error)) log('Error listing models by provider', { providerType, error })

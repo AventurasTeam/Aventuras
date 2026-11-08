@@ -1,32 +1,14 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
+import type { ImageModelCapabilities } from '#lib/types/index.ts'
+import { cachedCapabilities, evictCapabilities, type CapabilityLookup } from './capabilityCache'
+import { imageConnectionFor, modelListKey } from './connection'
 
-vi.mock('#lib/stores/settings.svelte.ts', () => ({
-  settings: {
-    getImageProfile: vi.fn(),
-    updateImageProfile: vi.fn(),
-  },
-}))
+const HOUR = 60 * 60 * 1000
+const MINUTE = 60 * 1000
 
-import { settings } from '#lib/stores/settings.svelte.ts'
-import type { ImageModelCapabilities, ImageProfile } from '#lib/types/index.ts'
-import { IMAGE_MODEL_SNAPSHOT_VERSION } from './modelCapabilities'
-import { snapshotCapabilities, type CapabilityLookup } from './capabilityCache'
-
-// The failure set outlives a test, so each case gets its own profile id.
+// Cached answers outlive a test, so each case gets its own connection.
 let counter = 0
-
-function setup(over: Partial<ImageProfile> = {}) {
-  const profile = {
-    id: `backfill-${counter++}`,
-    providerType: 'openrouter',
-    apiKey: 'sk-backfill',
-    model: 'm',
-    providerOptions: {},
-    ...over,
-  } as ImageProfile
-  vi.mocked(settings.getImageProfile).mockReturnValue(profile)
-  return profile
-}
+const connect = () => imageConnectionFor('openrouter', `sk-cache-${counter++}`, undefined)
 
 const lookupOf = (found?: ImageModelCapabilities) => vi.fn<CapabilityLookup>(async () => found)
 
@@ -35,125 +17,164 @@ const failingLookup = () =>
     throw new Error('503')
   })
 
-const snapshot = (
-  capabilities: ImageModelCapabilities,
-  over: { model?: string; version?: number } = {},
-) => ({
-  model: 'm',
-  version: IMAGE_MODEL_SNAPSHOT_VERSION,
-  capturedAt: 1,
-  capabilities,
-  ...over,
-})
-
-describe('snapshotCapabilities', () => {
+describe('cachedCapabilities', () => {
   beforeEach(() => {
-    vi.clearAllMocks()
-    vi.mocked(settings.updateImageProfile).mockResolvedValue(undefined)
+    vi.useFakeTimers()
+  })
+  afterEach(() => {
+    vi.useRealTimers()
   })
 
-  it('returns a current snapshot without a lookup', async () => {
-    const capabilities = { maxReferenceImages: 1, supportedResolutions: ['1k'] }
-    const profile = setup({ modelSnapshot: snapshot(capabilities) })
-    const lookup = lookupOf()
+  it('looks a model up once within the cache lifetime', async () => {
+    const connection = connect()
+    const lookup = lookupOf({ maxReferenceImages: 2 })
 
-    expect(await snapshotCapabilities(profile, 'm', lookup)).toEqual(capabilities)
-    expect(lookup).not.toHaveBeenCalled()
-  })
-
-  it('returns nothing and saves nothing, looking up once, when the lookup fails', async () => {
-    const profile = setup()
-    const lookup = failingLookup()
-
-    expect(await snapshotCapabilities(profile, 'm', lookup)).toBeUndefined()
-    expect(await snapshotCapabilities(profile, 'm', lookup)).toBeUndefined()
+    expect(await cachedCapabilities(connection, 'm', lookup)).toMatchObject({
+      maxReferenceImages: 2,
+    })
+    await vi.advanceTimersByTimeAsync(11 * HOUR)
+    expect(await cachedCapabilities(connection, 'm', lookup)).toMatchObject({
+      maxReferenceImages: 2,
+    })
 
     expect(lookup).toHaveBeenCalledTimes(1)
-    expect(settings.updateImageProfile).not.toHaveBeenCalled()
+  })
+
+  it('looks up again after twelve hours, and returns what changed', async () => {
+    const connection = connect()
+    const lookup = vi
+      .fn<CapabilityLookup>()
+      .mockResolvedValueOnce({ supportedResolutions: ['1k'] })
+      .mockResolvedValueOnce({ supportedResolutions: ['4k'] })
+
+    await cachedCapabilities(connection, 'm-latest', lookup)
+    await vi.advanceTimersByTimeAsync(12 * HOUR)
+
+    expect(await cachedCapabilities(connection, 'm-latest', lookup)).toMatchObject({
+      supportedResolutions: ['4k'],
+    })
+  })
+
+  it('caches a model the provider does not know', async () => {
+    const connection = connect()
+    const lookup = lookupOf()
+
+    expect(await cachedCapabilities(connection, 'm', lookup)).toBeUndefined()
+    expect(await cachedCapabilities(connection, 'm', lookup)).toBeUndefined()
+
+    expect(lookup).toHaveBeenCalledTimes(1)
+  })
+
+  it('keeps no reference to what the lookup returned', async () => {
+    const connection = connect()
+    const found: ImageModelCapabilities = { supportedResolutions: ['1k'] }
+
+    await cachedCapabilities(connection, 'm', lookupOf(found))
+    found.supportedResolutions?.push('4k')
+
+    expect(await cachedCapabilities(connection, 'm', lookupOf())).toMatchObject({
+      supportedResolutions: ['1k'],
+    })
   })
 
   it('shares one lookup between concurrent calls', async () => {
-    const profile = setup()
+    const connection = connect()
     const lookup = lookupOf()
 
     await Promise.all([
-      snapshotCapabilities(profile, 'm', lookup),
-      snapshotCapabilities(profile, 'm', lookup),
-      snapshotCapabilities(profile, 'm', lookup),
+      cachedCapabilities(connection, 'm', lookup),
+      cachedCapabilities(connection, 'm', lookup),
+      cachedCapabilities(connection, 'm', lookup),
     ])
 
     expect(lookup).toHaveBeenCalledTimes(1)
   })
 
-  it('does not wait past the lookup bound', async () => {
-    vi.useFakeTimers()
-    try {
-      const profile = setup()
-      const lookup = vi.fn<CapabilityLookup>(() => new Promise(() => {}))
-
-      const done = snapshotCapabilities(profile, 'm', lookup)
-      await vi.advanceTimersByTimeAsync(10_000)
-
-      expect(await done).toBeUndefined()
-      expect(settings.updateImageProfile).not.toHaveBeenCalled()
-    } finally {
-      vi.useRealTimers()
-    }
-  })
-
-  it('falls back to a stale snapshot of the same model when the lookup fails', async () => {
-    const stale = { supportedResolutions: ['2k'] }
-    const profile = setup({
-      modelSnapshot: snapshot(stale, { version: IMAGE_MODEL_SNAPSHOT_VERSION - 1 }),
-    })
-
-    expect(await snapshotCapabilities(profile, 'm', failingLookup())).toEqual(stale)
-  })
-
-  it('ignores a snapshot of another model', async () => {
-    const profile = setup({
-      modelSnapshot: snapshot({ supportedResolutions: ['2k'] }, { model: 'other' }),
-    })
-    const lookup = failingLookup()
-
-    expect(await snapshotCapabilities(profile, 'm', lookup)).toBeUndefined()
-    expect(lookup).toHaveBeenCalledTimes(1)
-  })
-
-  it('saves what the lookup found', async () => {
-    const profile = setup()
-
-    const found = await snapshotCapabilities(profile, 'm', lookupOf({ maxReferenceImages: 2 }))
-
-    expect(found).toMatchObject({ maxReferenceImages: 2 })
-    expect(settings.updateImageProfile).toHaveBeenCalledWith(profile.id, {
-      modelSnapshot: expect.objectContaining({
-        model: 'm',
-        version: IMAGE_MODEL_SNAPSHOT_VERSION,
-        capabilities: expect.objectContaining({ maxReferenceImages: 2 }),
-      }),
-    })
-  })
-
-  it('saves no snapshot for a model other than the profile’s', async () => {
-    const profile = setup({ model: 'current' })
+  it('keeps each model and connection apart', async () => {
+    const connection = connect()
     const lookup = lookupOf()
 
-    await snapshotCapabilities(profile, 'queued', lookup)
+    await cachedCapabilities(connection, 'a', lookup)
+    await cachedCapabilities(connection, 'b', lookup)
+    await cachedCapabilities(connect(), 'a', lookup)
 
-    expect(lookup).toHaveBeenCalledTimes(1)
-    expect(settings.updateImageProfile).not.toHaveBeenCalled()
+    expect(lookup).toHaveBeenCalledTimes(3)
   })
 
-  it.each([
-    ['key', { apiKey: 'sk-edited' }],
-    ['base URL', { baseUrl: 'https://edited.test/v1' }],
-  ])('saves nothing when the %s changed during the lookup', async (_name, edit) => {
-    const profile = setup()
-    vi.mocked(settings.getImageProfile).mockReturnValue({ ...profile, ...edit })
+  it('resolves to nothing and waits five minutes before trying again after a failure', async () => {
+    const connection = connect()
+    const lookup = failingLookup()
 
-    await snapshotCapabilities(profile, 'm', lookupOf({ maxReferenceImages: 2 }))
+    expect(await cachedCapabilities(connection, 'm', lookup)).toBeUndefined()
+    await vi.advanceTimersByTimeAsync(4 * MINUTE)
+    expect(await cachedCapabilities(connection, 'm', lookup)).toBeUndefined()
+    expect(lookup).toHaveBeenCalledTimes(1)
 
-    expect(settings.updateImageProfile).not.toHaveBeenCalled()
+    await vi.advanceTimersByTimeAsync(MINUTE)
+    await cachedCapabilities(connection, 'm', lookup)
+    expect(lookup).toHaveBeenCalledTimes(2)
+  })
+
+  it('recovers when a retry after a failure succeeds', async () => {
+    const connection = connect()
+    const lookup = vi
+      .fn<CapabilityLookup>()
+      .mockRejectedValueOnce(new Error('503'))
+      .mockResolvedValueOnce({ maxReferenceImages: 1 })
+
+    await cachedCapabilities(connection, 'm', lookup)
+    await vi.advanceTimersByTimeAsync(5 * MINUTE)
+
+    expect(await cachedCapabilities(connection, 'm', lookup)).toMatchObject({
+      maxReferenceImages: 1,
+    })
+  })
+
+  it('does not wait past the lookup bound, and aborts the lookup', async () => {
+    const connection = connect()
+    let signal: AbortSignal | undefined
+    const lookup = vi.fn<CapabilityLookup>((_connection, _model, s) => {
+      signal = s
+      return new Promise(() => {})
+    })
+
+    const done = cachedCapabilities(connection, 'm', lookup)
+    await vi.advanceTimersByTimeAsync(10_000)
+
+    expect(await done).toBeUndefined()
+    expect(signal?.aborted).toBe(true)
+  })
+
+  it('looks up again after the connection is evicted, leaving others alone', async () => {
+    const connection = connect()
+    const other = connect()
+    const lookup = lookupOf()
+    await cachedCapabilities(connection, 'm', lookup)
+    await cachedCapabilities(other, 'm', lookup)
+
+    evictCapabilities(modelListKey(connection))
+    await cachedCapabilities(connection, 'm', lookup)
+    await cachedCapabilities(other, 'm', lookup)
+
+    expect(lookup).toHaveBeenCalledTimes(3)
+  })
+
+  it('stores the answer of a lookup that was running when its connection was evicted', async () => {
+    const connection = connect()
+    let finish: (value: ImageModelCapabilities) => void = () => {}
+    const slow = vi.fn<CapabilityLookup>(
+      () => new Promise<ImageModelCapabilities>((resolve) => (finish = resolve)),
+    )
+
+    const running = cachedCapabilities(connection, 'm', slow)
+    evictCapabilities(modelListKey(connection))
+    finish({ maxReferenceImages: 4 })
+    await running
+
+    const lookup = lookupOf()
+    expect(await cachedCapabilities(connection, 'm', lookup)).toMatchObject({
+      maxReferenceImages: 4,
+    })
+    expect(lookup).not.toHaveBeenCalled()
   })
 })

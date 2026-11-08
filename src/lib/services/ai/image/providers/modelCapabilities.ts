@@ -10,7 +10,7 @@ import type { ImageModelInfo } from './types'
 
 export const IMAGE_MODEL_SNAPSHOT_VERSION = 1
 
-function pickCapabilities(info?: ImageModelCapabilities): ImageModelCapabilities {
+export function pickCapabilities(info?: ImageModelCapabilities): ImageModelCapabilities {
   if (!info) return {}
   const { referenceConstraints, supportedResolutions, supportedAspectRatios } = info
   return {

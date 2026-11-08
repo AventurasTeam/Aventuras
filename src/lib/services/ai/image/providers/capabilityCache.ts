@@ -1,13 +1,8 @@
-import { settings } from '#lib/stores/settings.svelte.ts'
-import type {
-  ImageModelCapabilities,
-  ImageModelConnection,
-  ImageProfile,
-} from '#lib/types/index.ts'
+import type { ImageModelCapabilities, ImageModelConnection } from '#lib/types/index.ts'
 import { createLogger } from '#lib/log.ts'
 import { abortable } from '#lib/utils/async.ts'
 import { modelListKey } from './connection'
-import { IMAGE_MODEL_SNAPSHOT_VERSION, snapshotModel } from './modelCapabilities'
+import { pickCapabilities } from './modelCapabilities'
 
 const log = createLogger('ImageRegistry')
 
@@ -18,9 +13,21 @@ export type CapabilityLookup = (
   signal?: AbortSignal,
 ) => Promise<ImageModelCapabilities | undefined>
 
-const BACKFILL_TIMEOUT_MS = 10_000
-const failedBackfills = new Set<string>()
-const pendingBackfills = new Map<string, Promise<ImageModelCapabilities | undefined>>()
+// A model the list omits is answered by the provider, so its answer is kept as long as a list is.
+const CAPABILITY_TTL_MS = 12 * 60 * 60 * 1000
+const FAILURE_TTL_MS = 5 * 60 * 1000
+const LOOKUP_TIMEOUT_MS = 10_000
+
+interface Entry {
+  capabilities: ImageModelCapabilities | undefined
+  expiresAt: number
+}
+
+type Lookup = Promise<ImageModelCapabilities | undefined>
+
+// Keyed by connection, then model, so a connection's answers drop together.
+const entries = new Map<string, Map<string, Entry>>()
+const pending = new Map<string, Map<string, Lookup>>()
 
 /** Runs `lookup` for at most `ms`: the signal cancels its requests, and `abortable` stops waiting on one that ignores it. */
 async function lookupWithin<T>(
@@ -39,44 +46,75 @@ async function lookupWithin<T>(
   }
 }
 
-/** From the profile's snapshot; a legacy or outdated one is looked up once. */
-export async function snapshotCapabilities(
-  profile: ImageProfile,
+function inner<T>(outer: Map<string, Map<string, T>>, key: string): Map<string, T> {
+  let map = outer.get(key)
+  if (!map) {
+    map = new Map()
+    outer.set(key, map)
+  }
+  return map
+}
+
+function store(key: string, model: string, entry: Entry): void {
+  const now = Date.now()
+  for (const [connectionKey, models] of entries) {
+    for (const [name, cached] of models) if (now >= cached.expiresAt) models.delete(name)
+    if (!models.size) entries.delete(connectionKey)
+  }
+  inner(entries, key).set(model, entry)
+}
+
+function settle(key: string, model: string): void {
+  const models = pending.get(key)
+  models?.delete(model)
+  if (!models?.size) pending.delete(key)
+}
+
+/**
+ * What the provider says about a model, looked up once per connection and model for 12 hours.
+ * Callers read a model the list contains from the list; this holds the rest. A model the provider
+ * does not know is cached as `undefined`; a failed lookup resolves to `undefined` and is not
+ * retried for five minutes.
+ */
+export async function cachedCapabilities(
+  connection: ImageModelConnection,
   model: string,
   lookup: CapabilityLookup,
 ): Promise<ImageModelCapabilities | undefined> {
-  const snapshot = profile.modelSnapshot?.model === model ? profile.modelSnapshot : undefined
-  if (snapshot?.version === IMAGE_MODEL_SNAPSHOT_VERSION) return snapshot.capabilities
+  const key = modelListKey(connection)
+  const cached = entries.get(key)?.get(model)
+  if (cached && Date.now() < cached.expiresAt) return cached.capabilities
 
-  const key = `${profile.id}:${model}`
-  if (failedBackfills.has(key)) return snapshot?.capabilities
+  const inFlight = pending.get(key)?.get(model)
+  if (inFlight) return inFlight
 
-  const pending = pendingBackfills.get(key)
-  if (pending) return pending
-
-  const backfill = (async () => {
+  const request: Lookup = (async () => {
+    let entry: Entry
     try {
-      const found = await lookupWithin(BACKFILL_TIMEOUT_MS, (signal) =>
-        lookup(profile, model, signal),
+      const found = await lookupWithin(LOOKUP_TIMEOUT_MS, (signal) =>
+        lookup(connection, model, signal),
       )
-      const next = snapshotModel(model, found)
-      const current = settings.getImageProfile(profile.id)
-      if (current?.model === model && modelListKey(current) === modelListKey(profile)) {
-        try {
-          await settings.updateImageProfile(profile.id, { modelSnapshot: next })
-        } catch (error) {
-          log('Error saving model snapshot', { profileId: profile.id, error })
-        }
+      entry = {
+        capabilities: found && pickCapabilities(found),
+        expiresAt: Date.now() + CAPABILITY_TTL_MS,
       }
-      return next.capabilities
     } catch (error) {
-      log('Error looking up model capabilities', { profileId: profile.id, model, error })
-      failedBackfills.add(key)
-      return snapshot?.capabilities
-    } finally {
-      pendingBackfills.delete(key)
+      log('Error looking up model capabilities', {
+        providerType: connection.providerType,
+        model,
+        error,
+      })
+      entry = { capabilities: undefined, expiresAt: Date.now() + FAILURE_TTL_MS }
     }
+    store(key, model, entry)
+    settle(key, model)
+    return entry.capabilities
   })()
-  pendingBackfills.set(key, backfill)
-  return backfill
+  inner(pending, key).set(model, request)
+  return request
+}
+
+/** Drops the cached answers for a `modelListKey`; a lookup still running keeps its place and stores its own. */
+export function evictCapabilities(listKey: string): void {
+  entries.delete(listKey)
 }
