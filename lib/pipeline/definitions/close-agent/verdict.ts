@@ -16,7 +16,7 @@ export type ToolVerdict = {
   reason?: string
   /** Delta paths that landed. */
   landed: readonly string[]
-  /** Fields lost beside a landed one, with reasons (C4 skippedFields); a path may also land. */
+  /** Fields lost beside a landed one, each with its reason (C4 skippedFields). */
   skippedFields: readonly { field: string; reason: string }[]
   survivor?: { table: string; id: string }
 }
@@ -93,6 +93,10 @@ export function verdictOf(
   }
   for (const { field, reason, kind } of plan.lost)
     losses.push({ fields: [field], reason, refused: kind === 'refused' })
+  // C4 reads landed as values less skippedFields, so a path in both would hide one or the other.
+  for (const { fields } of losses)
+    for (const field of fields)
+      if (landed.has(field)) throw new Error(`verdictOf: ${field} both landed and was lost`)
 
   if (anyLanded) {
     const skipped = new Map<string, string>()

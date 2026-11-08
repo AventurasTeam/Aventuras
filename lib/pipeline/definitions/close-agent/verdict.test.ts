@@ -118,6 +118,7 @@ describe("verdictOf, by C11's table", () => {
 
   it('a merge with a row a later turn touched is skipped whole', () => {
     const plan = writePlan({
+      // 'merge' stands in for whichever path a merge tool names.
       lost: [{ field: 'merge', reason: CLOSE_REASON.laterTurn, kind: 'protected' }],
     })
     expect(verdictOf(plan, null, noMerges)).toEqual({
@@ -252,31 +253,35 @@ describe('verdictOf, failing safe', () => {
 describe('verdictOf, naming what did not land', () => {
   const BODY_ON_KEPT = loreUpdate({ body: 'Tolls are waived at dawn.' }, ['body'], LORE_KEPT)
 
-  it('names a field refused on one row beside the same field landing on another', () => {
-    expect(
+  it('throws on a path refused on one row and landed on another', () => {
+    expect(() =>
       verdictOf(
         writePlan({ actions: [BODY, BODY_ON_KEPT] }),
         group(landed, noop('not-active')),
         noMerges,
       ),
-    ).toEqual({
-      result: 'ok',
-      landed: ['body'],
-      skippedFields: [{ field: 'body', reason: 'not-active' }],
-    })
+    ).toThrow('verdictOf: body both landed and was lost')
   })
 
-  it('names the refused part of a capped list beside the part that landed', () => {
+  it('throws on a capped list path that landed in part', () => {
     const keywords = loreUpdate({ keywords: ['toll', 'bridge'] }, ['keywords'])
     const plan = writePlan({
       actions: [keywords],
       lost: [{ field: 'keywords', reason: 'over the soft cap of 8', kind: 'refused' }],
     })
-    expect(verdictOf(plan, group(landed), noMerges)).toEqual({
-      result: 'ok',
-      landed: ['keywords'],
-      skippedFields: [{ field: 'keywords', reason: 'over the soft cap of 8' }],
-    })
+    expect(() => verdictOf(plan, group(landed), noMerges)).toThrow(
+      'verdictOf: keywords both landed and was lost',
+    )
+  })
+
+  it('lets a path land on one row and be restated on another', () => {
+    expect(
+      verdictOf(
+        writePlan({ actions: [BODY, BODY_ON_KEPT] }),
+        group(landed, noop('body unchanged', 'restated')),
+        noMerges,
+      ),
+    ).toEqual({ result: 'ok', landed: ['body'], skippedFields: [] })
   })
 
   it('skips a call whose one field the handler finds the user wrote', () => {
@@ -336,6 +341,10 @@ describe('verdictOf, naming what did not land', () => {
   it('throws on a planned action that names no delta path', () => {
     const unnamed = loreUpdate({ body: 'Tolls double after dark.' }, [])
     expect(() => verdictOf(writePlan({ actions: [unnamed] }), group(landed), noMerges)).toThrow(
+      /updateLore/,
+    )
+    const notFound: GroupOutcome = { status: 'rejected', reason: 'gone', code: TARGET_NOT_FOUND }
+    expect(() => verdictOf(writePlan({ actions: [unnamed] }), notFound, noMerges)).toThrow(
       /updateLore/,
     )
   })
