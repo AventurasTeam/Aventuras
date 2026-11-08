@@ -9,7 +9,7 @@ import { normalizeTerm } from '@/lib/keyword-terms'
 import { matchTerms } from '@/lib/retrieval'
 import { excerpt, oneLine } from '@/lib/text'
 
-import type { CloseIds } from './ids'
+import { withHandlesDeep, type CloseIds } from './ids'
 import {
   readToolSchema,
   tableOfId,
@@ -19,7 +19,7 @@ import {
   type ToolContext,
 } from './tool'
 
-/** memory/chapter-close.md → Tools and writes: search_world's matches, at most. */
+/** The most matches search_world answers; a longer list is cut and counted in `omitted`. */
 export const SEARCH_WORLD_LIMIT = 20
 
 const LINE_DESCRIPTION_CHARS = 100
@@ -98,16 +98,6 @@ function refIdsIn(value: unknown): string[] {
   return []
 }
 
-function withHandlesDeep(value: unknown, ids: CloseIds): unknown {
-  if (typeof value === 'string') return ids.withHandles(value)
-  if (Array.isArray(value)) return value.map((item) => withHandlesDeep(item, ids))
-  if (isJsonObject(value))
-    return Object.fromEntries(
-      Object.entries(value).map(([key, item]) => [key, withHandlesDeep(item, ids)]),
-    )
-  return value
-}
-
 /** A row the answer names: its handle, shown with its name so later prose can name it. */
 async function showRef(
   ctx: ToolContext,
@@ -118,16 +108,28 @@ async function showRef(
   return row && { handle: ctx.ids.show(id, row.name), name: row.name }
 }
 
+// Ids go to handles before the cut: excerpt can cut where there's no space, inside an id.
 function lineOf(
+  ids: CloseIds,
   kind: string,
   name: string,
   status: string | null,
   description: string | null,
 ): string {
-  const label =
-    status === null || status === 'active' ? oneLine(name) : `${oneLine(name)} (${status})`
-  const about = excerpt(description, LINE_DESCRIPTION_CHARS)
+  const shown = oneLine(ids.withHandles(name))
+  const label = status === null || status === 'active' ? shown : `${shown} (${status})`
+  const about = excerpt(
+    description === null ? null : ids.withHandles(description),
+    LINE_DESCRIPTION_CHARS,
+  )
   return about === undefined ? `${kind}: ${label}` : `${kind}: ${label} — ${about}`
+}
+
+// A hand-edited row may hold anything in its keywords; only strings are terms.
+function keywordTerms(keywords: unknown): string[] {
+  return Array.isArray(keywords)
+    ? keywords.filter((k): k is string => typeof k === 'string').map(normalizeTerm)
+    : []
 }
 
 async function searchWorld(
@@ -163,12 +165,12 @@ async function searchWorld(
     .where(eq(entities.branchId, ctx.branchId))
   for (const row of entityRows) {
     const byName = hits([normalizeTerm(row.name)])
-    if (!byName && !hits(row.keywords.map((keyword) => normalizeTerm(keyword)))) continue
+    if (!byName && !hits(keywordTerms(row.keywords))) continue
     found.push({
       id: row.id,
       name: row.name,
       byName,
-      line: lineOf(row.kind, row.name, row.status, row.description),
+      line: lineOf(ctx.ids, row.kind, row.name, row.status, row.description),
     })
   }
   const happeningRows = await ctx.db
@@ -181,14 +183,14 @@ async function searchWorld(
       id: row.id,
       name: row.title,
       byName: true,
-      line: lineOf('happening', row.title, null, row.description),
+      line: lineOf(ctx.ids, 'happening', row.title, null, row.description),
     })
   }
 
   found.sort((a, b) => Number(b.byName) - Number(a.byName) || a.name.localeCompare(b.name))
   const matches = found.slice(0, SEARCH_WORLD_LIMIT).map((match) => ({
     id: ctx.ids.show(match.id, match.name),
-    line: ctx.ids.withHandles(match.line),
+    line: match.line,
   }))
   const omitted = found.length - matches.length
   return { output: omitted > 0 ? { matches, omitted } : { matches }, rows: [], read: [] }
@@ -255,8 +257,7 @@ async function readRowAnswer(
 export const searchWorldTool: ReadTool = {
   kind: 'read',
   name: 'search_world',
-  description:
-    "Find rows of the story's world by name, alias or keyword: characters, places, items, factions and happenings. Use it for a row your task's start doesn't show, such as one the prose calls \"the capital\". Answers up to 20 matches, each an id and one line. A match isn't read: call read_row before writing to it.",
+  description: `Find rows of the story's world by name, alias or keyword: characters, places, items, factions and happenings. Use it for a row your task's start doesn't show, such as one the prose calls "the capital". Answers up to ${SEARCH_WORLD_LIMIT} matches, each an id and one line. A match isn't read: call read_row before writing to it.`,
   schema: readToolSchema({
     query: z.string().describe('A name, an alias or a keyword, or part of one.'),
   }),

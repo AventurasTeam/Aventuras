@@ -7,6 +7,7 @@ import {
   happenings,
   lore,
   stories,
+  threads,
   type NewEntity,
 } from '@/lib/db'
 import { createTestDb } from '@/lib/db/__tests__/test-db'
@@ -16,7 +17,8 @@ import { readRowTool, searchWorldTool } from './read-tools'
 import { assertReplaySafe, type ReadAnswer, type ReadFields, type ToolContext } from './tool'
 
 const BRANCH = 'br_read'
-const OTHER_BRANCH = 'br_read_other'
+// Sorts before BRANCH: an unfiltered read finds the other branch's copy first.
+const OTHER_BRANCH = 'br_other_read'
 
 // Real uuid shapes: ids.show refuses an id it can't substitute.
 const rowId = (prefix: string, n: number): string =>
@@ -31,6 +33,7 @@ const LETTER = rowId('item', 1)
 const SYNDICATE = rowId('fact', 1)
 const CROSSING = rowId('hap', 1)
 const TOLL_LAW = rowId('lore', 1)
+const MISSING_TOLL = rowId('thr', 1)
 
 const FULL_ID = /\b(?:char|loc|item|fact|lore|thr|hap|chap)_[0-9a-f]{8}-/
 
@@ -38,6 +41,7 @@ const READ_FIELDS: ReadFields = {
   character: ['description', 'state.voice', 'state.current_location_id'],
   lore: ['body'],
   happening: ['description'],
+  thread: ['description'],
 }
 
 type SearchOutput = { matches: { id: string; line: string }[]; omitted?: number; note?: string }
@@ -95,6 +99,36 @@ beforeEach(async () => {
     { id: BRANCH, storyId: 's_read', name: 'main', createdAt: 1 },
     { id: OTHER_BRANCH, storyId: 's_read', name: 'other', createdAt: 1 },
   ])
+  // A fork keeps every row id. The other branch's copies go in first: an unfiltered read finds them first.
+  await db
+    .insert(entities)
+    .values([
+      entity(
+        TOBIN,
+        'character',
+        'Other Tobin',
+        { description: 'OTHER: a different ferryman.' },
+        OTHER_BRANCH,
+      ),
+      entity(HARROW, 'location', 'Other Harrow', {}, OTHER_BRANCH),
+    ])
+  await db.insert(happenings).values({
+    id: CROSSING,
+    branchId: OTHER_BRANCH,
+    title: 'The night crossing',
+    description: 'OTHER: a day crossing.',
+    createdAt: 1,
+    updatedAt: 1,
+  })
+  await db.insert(lore).values({
+    id: TOLL_LAW,
+    branchId: OTHER_BRANCH,
+    title: 'The other toll law',
+    body: 'OTHER: no toll.',
+    injectionMode: 'auto',
+    createdAt: 1,
+    updatedAt: 1,
+  })
   await db.insert(entities).values([
     entity(TOBIN, 'character', 'Tobin', {
       description: 'An old ferryman who poles the night crossing.',
@@ -118,7 +152,7 @@ beforeEach(async () => {
     entity(FERRYHOUSE, 'location', 'Ferryhouse', { description: 'A shed at the landing.' }),
     entity(LETTER, 'item', "Courier's letter", {
       description: 'Black wax over a cramped hand.',
-      keywords: ['sealed letter'],
+      keywords: ['Sealed Letter'],
     }),
     entity(SYNDICATE, 'faction', 'The Syndicate', {
       description: 'They tax the ferry and the road.',
@@ -142,6 +176,28 @@ beforeEach(async () => {
     createdAt: 1,
     updatedAt: 1,
   })
+  await db.insert(threads).values([
+    {
+      id: MISSING_TOLL,
+      branchId: OTHER_BRANCH,
+      title: 'The other missing toll',
+      description: 'OTHER: the toll is paid.',
+      status: 'active',
+      injectionMode: 'auto',
+      createdAt: 1,
+      updatedAt: 1,
+    },
+    {
+      id: MISSING_TOLL,
+      branchId: BRANCH,
+      title: 'The missing toll',
+      description: 'Someone keeps the toll back.',
+      status: 'active',
+      injectionMode: 'auto',
+      createdAt: 1,
+      updatedAt: 1,
+    },
+  ])
   ids = new CloseIds()
 })
 
@@ -229,6 +285,77 @@ describe('search_world', () => {
       'Tobin',
     ])
     expect(JSON.stringify(answer.output)).not.toMatch(FULL_ID)
+  })
+
+  it('leaves omitted off when nothing was cut', async () => {
+    const { out } = await search('ferry')
+
+    expect(out).not.toHaveProperty('omitted')
+  })
+
+  it('finds a happening on its own branch only, though the other branch holds its id', async () => {
+    const { out } = await search('crossing')
+
+    expect(matchedIds(out)).toEqual([CROSSING])
+    expect(out.matches[0]!.line).not.toContain('OTHER')
+  })
+
+  it('finds a mixed-case stored keyword from a lowercase query, whole or in part', async () => {
+    const part = await search('sealed')
+    const whole = await search('where is the sealed letter now')
+
+    expect(matchedIds(part.out)).toEqual([LETTER])
+    expect(matchedIds(whole.out)).toEqual([LETTER])
+  })
+
+  it('skips a keyword that is no string, and a keyword list that is no list', async () => {
+    const beacon = rowId('item', 60)
+    const lamp = rowId('item', 61)
+    await db.insert(entities).values([
+      entity(beacon, 'item', 'Beacon', {
+        keywords: [7, null, 'Signal Fire'] as unknown as string[],
+      }),
+      entity(lamp, 'item', 'Lamp', { keywords: 'oops' as unknown as string[] }),
+    ])
+
+    const { out } = await search('signal fire')
+
+    expect(matchedIds(out)).toEqual([beacon])
+    expect((await search('lamp')).out.matches).toHaveLength(1)
+  })
+
+  it('swaps full ids for handles before it cuts the line, in text with no space to cut at', async () => {
+    const cjk = rowId('hap', 70)
+    const roll = rowId('hap', 71)
+    await db.insert(happenings).values([
+      {
+        id: cjk,
+        branchId: BRANCH,
+        title: 'Lantern',
+        description: `${'あ'.repeat(85)}${TOBIN}${'い'.repeat(40)}`,
+        createdAt: 1,
+        updatedAt: 1,
+      },
+      {
+        id: roll,
+        branchId: BRANCH,
+        title: 'Roll call',
+        description: [TOBIN, MIRA, HARROW, LETTER, SYNDICATE].join(','),
+        createdAt: 1,
+        updatedAt: 1,
+      },
+    ])
+    await db.insert(entities).values(entity(rowId('loc', 72), 'location', `Gate of ${TOBIN}`))
+    const fragment = /_[0-9a-f]{8}-/
+
+    const lantern = (await search('lantern')).out.matches[0]!.line
+    const call = (await search('roll call')).out.matches[0]!.line
+
+    expect(lantern).toContain(ids.handleOf(TOBIN))
+    expect(lantern).not.toMatch(fragment)
+    expect(call).not.toMatch(fragment)
+    expect(call).toContain(ids.handleOf(SYNDICATE))
+    expect((await search('gate of')).out.matches[0]!.line).not.toMatch(FULL_ID)
   })
 })
 
@@ -321,6 +448,65 @@ describe('read_row', () => {
     })
     expect(crossing.read).toEqual([{ table: 'happenings', id: CROSSING }])
     expect(JSON.stringify([law.output, crossing.output])).not.toMatch(FULL_ID)
+  })
+})
+
+describe('read_row on a forked story', () => {
+  it("reads this branch's copy of a row whose id the other branch keeps", async () => {
+    const tobin = await readRowTool.read({ id: TOBIN }, toolCtx())
+    const law = await readRowTool.read({ id: TOLL_LAW }, toolCtx())
+    const crossing = await readRowTool.read({ id: CROSSING }, toolCtx())
+    const toll = await readRowTool.read({ id: MISSING_TOLL }, toolCtx())
+
+    expect(tobin.output).toMatchObject({
+      name: 'Tobin',
+      fields: { description: 'An old ferryman who poles the night crossing.' },
+    })
+    expect(law.output).toMatchObject({ name: 'The toll law' })
+    expect(crossing.output).toMatchObject({
+      fields: { description: expect.not.stringContaining('OTHER') },
+    })
+    expect(toll.output).toMatchObject({
+      kind: 'thread',
+      name: 'The missing toll',
+      fields: { description: 'Someone keeps the toll back.' },
+    })
+    expect(toll.read).toEqual([{ table: 'threads', id: MISSING_TOLL }])
+  })
+
+  it("names a ref by this branch's copy of its row", async () => {
+    const answer = await readRowTool.read({ id: TOBIN }, toolCtx())
+
+    expect((answer.output as { refs: Record<string, string> }).refs).toEqual({
+      [ids.handleOf(HARROW)!]: 'Harrow',
+    })
+  })
+
+  it('answers gone for a row only the other branch holds', async () => {
+    const answer = await readRowTool.read({ id: ELDER }, toolCtx())
+
+    expect(answer.output).toMatchObject({ gone: true })
+    expect(answer.read).toEqual([])
+  })
+
+  it('reads a field the row lacks as null', async () => {
+    const answer = await readRowTool.read(
+      { id: TOBIN },
+      toolCtx({
+        readFields: { character: ['description', 'state.no_such_field', 'state.voice.x'] },
+      }),
+    )
+    const bare = await readRowTool.read({ id: MIRA }, toolCtx())
+
+    expect((answer.output as { fields: unknown }).fields).toEqual({
+      description: 'An old ferryman who poles the night crossing.',
+      'state.no_such_field': null,
+      'state.voice.x': null,
+    })
+    expect((bare.output as { fields: unknown }).fields).toMatchObject({
+      'state.voice': null,
+      'state.current_location_id': null,
+    })
   })
 })
 
