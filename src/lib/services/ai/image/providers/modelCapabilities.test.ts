@@ -1,16 +1,11 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import type { ImageProfile } from '#lib/types/index.ts'
+import { describe, expect, it } from 'vitest'
 import {
-  IMAGE_MODEL_SNAPSHOT_VERSION,
   applyCapabilityOverride,
   canonicalModelId,
-  chooseModelSnapshot,
   overriddenFields,
   overrideConflicts,
-  sameSnapshot,
-  snapshotModel,
+  pickCapabilities,
 } from './modelCapabilities'
-import { imageConnectionFor } from './connection'
 import type { ImageModelInfo } from './types'
 
 const info = (over: Partial<ImageModelInfo> = {}): ImageModelInfo => ({
@@ -24,157 +19,27 @@ const info = (over: Partial<ImageModelInfo> = {}): ImageModelInfo => ({
   ...over,
 })
 
-const stored = (over: Partial<ImageProfile> = {}): ImageProfile => ({
-  ...imageConnectionFor('nanogpt', 'k', undefined),
-  id: 'p1',
-  name: 'p',
-  model: 'm1',
-  providerOptions: {},
-  createdAt: 1,
-  modelSnapshot: snapshotModel('m1', info()),
-  ...over,
-})
-
-describe('snapshotModel', () => {
-  beforeEach(() => {
-    vi.useFakeTimers()
-    vi.setSystemTime(1_700_000_000_000)
-  })
-  afterEach(() => vi.useRealTimers())
-
+describe('pickCapabilities', () => {
   it('keeps capabilities and drops catalogue fields', () => {
-    const snap = snapshotModel('m1', info())
-    expect(snap).toEqual({
-      model: 'm1',
-      version: IMAGE_MODEL_SNAPSHOT_VERSION,
-      capturedAt: 1_700_000_000_000,
-      capabilities: {
-        supportsImg2Img: true,
-        maxReferenceImages: 3,
-        supportedResolutions: ['1k', '2k'],
-        supportedAspectRatios: ['1:1', '16:9'],
-      },
+    const picked = pickCapabilities(info())
+    expect(picked).toMatchObject({
+      supportsImg2Img: true,
+      maxReferenceImages: 3,
+      supportedResolutions: ['1k', '2k'],
+      supportedAspectRatios: ['1:1', '16:9'],
     })
-    expect(snap.capabilities).not.toHaveProperty('name')
+    expect(picked).not.toHaveProperty('name')
   })
 
   it('shares no arrays with the source', () => {
     const source = info({
       referenceConstraints: { maxBytes: 10, mimeTypes: ['image/png'] },
     })
-    const snap = snapshotModel('m1', source)
+    const picked = pickCapabilities(source)
     source.supportedResolutions?.push('4k')
     source.referenceConstraints?.mimeTypes?.push('image/webp')
-    expect(snap.capabilities.supportedResolutions).toEqual(['1k', '2k'])
-    expect(snap.capabilities.referenceConstraints?.mimeTypes).toEqual(['image/png'])
-  })
-
-  it('is empty for a model the list does not know', () => {
-    expect(snapshotModel('gone').capabilities).toEqual({})
-  })
-})
-
-describe('chooseModelSnapshot', () => {
-  const base = {
-    model: 'm1',
-    connection: imageConnectionFor('nanogpt', 'k', undefined),
-    models: [info()],
-    settled: true,
-    stored: stored(),
-  }
-
-  it('captures a listed model from a settled list', () => {
-    const snap = chooseModelSnapshot({ ...base, stored: undefined })
-    expect(snap?.capabilities.maxReferenceImages).toBe(3)
-  })
-
-  it('leaves a model the settled list lacks to the lookup when nothing is stored for it', () => {
-    expect(chooseModelSnapshot({ ...base, model: 'other' })).toBeUndefined()
-  })
-
-  it('keeps the stored snapshot when a settled list lacks the model', () => {
-    const profile = stored({ model: 'alias', modelSnapshot: snapshotModel('alias', info()) })
-    const snap = chooseModelSnapshot({ ...base, model: 'alias', stored: profile })
-    expect(snap).toBe(profile.modelSnapshot)
-  })
-
-  it('keeps the stored snapshot while the list is unsettled', () => {
-    const snap = chooseModelSnapshot({ ...base, settled: false, models: [] })
-    expect(snap).toBe(base.stored.modelSnapshot)
-  })
-
-  it('keeps it when the list settled empty', () => {
-    expect(chooseModelSnapshot({ ...base, models: [] })).toBe(base.stored.modelSnapshot)
-  })
-
-  it('drops it when the provider changes', () => {
-    const snap = chooseModelSnapshot({
-      ...base,
-      settled: false,
-      connection: imageConnectionFor('openai-compatible', 'k', undefined),
-    })
-    expect(snap).toBeUndefined()
-  })
-
-  it('drops it when the base URL changes', () => {
-    const snap = chooseModelSnapshot({
-      ...base,
-      settled: false,
-      connection: imageConnectionFor('nanogpt', 'k', 'https://other.example/v1'),
-    })
-    expect(snap).toBeUndefined()
-  })
-
-  it('drops it when the model changes while the list is unsettled', () => {
-    const snap = chooseModelSnapshot({ ...base, settled: false, models: [], model: 'other' })
-    expect(snap).toBeUndefined()
-  })
-
-  it('keeps it across a trailing-slash edit', () => {
-    const profile = stored({ baseUrl: 'https://x.example/v1' })
-    const snap = chooseModelSnapshot({
-      ...base,
-      settled: false,
-      stored: profile,
-      connection: imageConnectionFor('nanogpt', 'k', 'https://x.example/v1/'),
-    })
-    expect(snap).toBe(profile.modelSnapshot)
-  })
-
-  it('is undefined without a model', () => {
-    expect(chooseModelSnapshot({ ...base, model: '' })).toBeUndefined()
-  })
-
-  it('returns the stored snapshot when the list says the same thing, as loaded from JSON', () => {
-    const reloaded: ImageProfile = JSON.parse(JSON.stringify(base.stored))
-    const snap = chooseModelSnapshot({ ...base, stored: reloaded })
-    expect(snap).toBe(reloaded.modelSnapshot)
-  })
-
-  it('captures anew when the listed capabilities changed', () => {
-    const reloaded: ImageProfile = JSON.parse(JSON.stringify(base.stored))
-    const snap = chooseModelSnapshot({
-      ...base,
-      stored: reloaded,
-      models: [info({ maxReferenceImages: 5 })],
-    })
-    expect(snap).not.toBe(reloaded.modelSnapshot)
-    expect(snap?.capabilities.maxReferenceImages).toBe(5)
-  })
-})
-
-describe('sameSnapshot', () => {
-  it('ignores when it was captured and keys left undefined', () => {
-    const a = snapshotModel('m1', info())
-    const b = { ...JSON.parse(JSON.stringify(a)), capturedAt: a.capturedAt + 1 }
-    expect(sameSnapshot(a, b)).toBe(true)
-  })
-
-  it('differs by model, version or capabilities', () => {
-    const a = snapshotModel('m1', info())
-    expect(sameSnapshot(a, snapshotModel('m2', info()))).toBe(false)
-    expect(sameSnapshot(a, { ...a, version: a.version + 1 })).toBe(false)
-    expect(sameSnapshot(a, snapshotModel('m1', info({ supportedResolutions: ['1k'] })))).toBe(false)
+    expect(picked.supportedResolutions).toEqual(['1k', '2k'])
+    expect(picked.referenceConstraints?.mimeTypes).toEqual(['image/png'])
   })
 })
 

@@ -30,15 +30,12 @@
     referenceInputsOf,
     referenceLimit,
     suggestReferenceInputs,
-    chooseModelSnapshot,
-    storedSnapshotFor,
     applyCapabilityOverride,
     canonicalModelId,
+    findListedModel,
     modelListKey,
-    sameEndpoint,
     overriddenFields,
     overrideConflicts,
-    capturesModelSnapshot,
     takesCapabilityOverride,
     type ComfyCustomWorkflow,
     type ImageModelInfo,
@@ -536,23 +533,8 @@
     return opts
   }
 
-  const storedProfile = $derived(
-    editingProfileId ? settings.getImageProfile(editingProfileId) : undefined,
-  )
-
   // Whether the loaded model list is for the form's current provider, key and URL.
   const modelsSettled = $derived(profileModelsKey === modelListKey(connection))
-
-  function buildModelSnapshot() {
-    if (!capturesModelSnapshot(profileProviderType)) return undefined
-    return chooseModelSnapshot({
-      model: profileModel,
-      connection,
-      models: profileModels,
-      settled: modelsSettled,
-      stored: storedProfile,
-    })
-  }
 
   // Undefined when every field is blank or the provider takes no override; the form keeps what was typed.
   const capabilityOverride = $derived.by((): ImageCapabilityOverride | undefined => {
@@ -572,12 +554,10 @@
     capabilitiesOpen = !!override
   }
 
-  // What the provider published for the current model: the loaded list once it is for these
-  // inputs, otherwise the stored snapshot.
-  const publishedCapabilities = $derived.by(() => {
-    if (modelsSettled) return profileModels.find((m) => m.id === profileModel)
-    return storedSnapshotFor(storedProfile, connection, profileModel)?.capabilities
-  })
+  // What the provider published for the current model, once the loaded list is for these inputs.
+  const publishedCapabilities = $derived(
+    modelsSettled ? findListedModel(profileModels, profileModel) : undefined,
+  )
   const overridden = $derived(overriddenFields(capabilityOverride, publishedCapabilities))
   const conflicts = $derived(overrideConflicts(capabilityOverride, publishedCapabilities))
 
@@ -585,13 +565,12 @@
   async function autoSaveProfile() {
     if (isNewProfile || !editingProfileId || !canSaveProfile) return
 
-    const previous = storedProfile
+    const previous = settings.getImageProfile(editingProfileId)
     await settings.updateImageProfile(
       editingProfileId,
       {
         name: profileName.trim(),
         model: profileModel,
-        modelSnapshot: buildModelSnapshot(),
         capabilityOverride,
         providerOptions: buildProviderOptions(),
       },
@@ -638,22 +617,6 @@
       }
       triggerAutoSave()
     }
-  })
-
-  // A list load saves only the snapshot, and only when it changed; a user's edit saves the form.
-  $effect(() => {
-    void profileModels
-    void profileModelsKey
-    untrack(() => {
-      if (isNewProfile || !editingProfileId || suppressAutoSave) return
-      if (!capturesModelSnapshot(profileProviderType)) return
-      const stored = storedProfile
-      if (!stored || stored.model !== profileModel || !sameEndpoint(stored, connection)) return
-      const modelSnapshot = buildModelSnapshot()
-      if (modelSnapshot && modelSnapshot !== stored.modelSnapshot) {
-        void settings.updateImageProfile(editingProfileId, { modelSnapshot })
-      }
-    })
   })
 
   // Aliased for clarity in UI but uses the same logic
@@ -783,7 +746,6 @@
       {
         name: profileName.trim(),
         model: profileModel,
-        modelSnapshot: buildModelSnapshot(),
         capabilityOverride,
         providerOptions: buildProviderOptions(),
       },

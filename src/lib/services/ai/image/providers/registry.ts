@@ -135,10 +135,6 @@ const PROVIDER_CAPABILITIES: Record<ImageProviderType, CapabilitySource> = {
 export const takesCapabilityOverride = (providerType: ImageProviderType): boolean =>
   providerType === 'openai-compatible'
 
-/** Whether a profile of this provider type saves a snapshot of its model's capabilities. */
-export const capturesModelSnapshot = (providerType: ImageProviderType): boolean =>
-  PROVIDER_CAPABILITIES[providerType].kind === 'listed'
-
 // ============================================================================
 // Model Cache
 // ============================================================================

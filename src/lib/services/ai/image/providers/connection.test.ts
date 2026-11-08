@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { ImageModelConnection, ImageProviderType } from '#lib/types/index.ts'
-import { imageConnectionFor, isImageProviderType, modelListKey, sameEndpoint } from './connection'
+import { imageConnectionFor, isImageProviderType, modelListKey } from './connection'
 
 describe('imageConnectionFor', () => {
   it.each([
@@ -51,23 +51,6 @@ describe('modelListKey', () => {
     ['base URL', imageConnectionFor('openai-compatible', 'k', 'https://y.example/v1')],
   ])('differs when the %s differs', (_, other) => {
     expect(modelListKey(other)).not.toBe(key)
-  })
-})
-
-describe('sameEndpoint', () => {
-  const a = imageConnectionFor('openai-compatible', 'k', 'https://x.example/v1')
-
-  it('ignores the API key and the spelling of the base URL', () => {
-    expect(
-      sameEndpoint(a, imageConnectionFor('openai-compatible', 'k2', 'https://x.example/v1/')),
-    ).toBe(true)
-  })
-
-  it.each([
-    ['provider', imageConnectionFor('openai', 'k', 'https://x.example/v1')],
-    ['base URL', imageConnectionFor('openai-compatible', 'k', 'https://y.example/v1')],
-  ])('differs when the %s differs', (_, b) => {
-    expect(sameEndpoint(a, b)).toBe(false)
   })
 })
 

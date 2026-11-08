@@ -28,7 +28,6 @@ export {
   getProviderClipTypes,
   isLocalServer,
   referenceLimit,
-  capturesModelSnapshot,
   takesCapabilityOverride,
   IMAGE_PROVIDER_LABELS,
   IMAGE_PROVIDER_OPTIONS,
@@ -37,23 +36,14 @@ export {
 
 export { resolveBaseUrl } from './providers/baseUrls'
 
-export {
-  baseUrlMode,
-  imageConnectionFor,
-  modelListKey,
-  sameEndpoint,
-  takesApiKey,
-} from './providers/connection'
+export { baseUrlMode, imageConnectionFor, modelListKey, takesApiKey } from './providers/connection'
 
 export {
-  IMAGE_MODEL_SNAPSHOT_VERSION,
   applyCapabilityOverride,
   canonicalModelId,
-  chooseModelSnapshot,
+  findListedModel,
   overriddenFields,
   overrideConflicts,
-  snapshotModel,
-  storedSnapshotFor,
 } from './providers/modelCapabilities'
 
 export {

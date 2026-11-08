@@ -59,15 +59,6 @@ export function imageConnectionFor(
   } as ImageModelConnection
 }
 
-type Endpoint = Pick<ImageModelConnection, 'providerType' | 'baseUrl'>
-
-/** Whether both name the same provider at the same base URL, whatever their API keys. */
-export function sameEndpoint(a: Endpoint, b: Endpoint): boolean {
-  return (
-    a.providerType === b.providerType && normalizeBaseUrl(a.baseUrl) === normalizeBaseUrl(b.baseUrl)
-  )
-}
-
 /** Identifies the connection a model list was loaded for. */
 export function modelListKey({ providerType, apiKey, baseUrl }: ImageModelConnection): string {
   return JSON.stringify([providerType, apiKey, normalizeBaseUrl(baseUrl)])

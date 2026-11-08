@@ -1,17 +1,8 @@
-import type {
-  ImageCapabilityOverride,
-  ImageModelCapabilities,
-  ImageModelConnection,
-  ImageModelSnapshot,
-  ImageProfile,
-} from '#lib/types/index.ts'
-import { sameEndpoint } from './connection'
+import type { ImageCapabilityOverride, ImageModelCapabilities } from '#lib/types/index.ts'
 import type { ImageModelInfo } from './types'
 
-export const IMAGE_MODEL_SNAPSHOT_VERSION = 1
-
-export function pickCapabilities(info?: ImageModelCapabilities): ImageModelCapabilities {
-  if (!info) return {}
+/** The generation-relevant fields, copied so nothing is shared with the model list cache. */
+export function pickCapabilities(info: ImageModelCapabilities): ImageModelCapabilities {
   const { referenceConstraints, supportedResolutions, supportedAspectRatios } = info
   return {
     supportsImg2Img: info.supportsImg2Img,
@@ -23,16 +14,6 @@ export function pickCapabilities(info?: ImageModelCapabilities): ImageModelCapab
     },
     supportedResolutions: supportedResolutions?.slice(),
     supportedAspectRatios: supportedAspectRatios?.slice(),
-  }
-}
-
-/** The model's generation-relevant fields; a model the list does not know snapshots as `{}`. */
-export function snapshotModel(model: string, info?: ImageModelCapabilities): ImageModelSnapshot {
-  return {
-    model,
-    version: IMAGE_MODEL_SNAPSHOT_VERSION,
-    capturedAt: Date.now(),
-    capabilities: pickCapabilities(info),
   }
 }
 
@@ -89,18 +70,6 @@ export function overrideConflicts(
   return conflicts
 }
 
-/**
- * Whether two snapshots say the same thing, whatever time each was captured. A key set to
- * `undefined` counts as missing: a stored snapshot has lost those keys to JSON.
- */
-export function sameSnapshot(a: ImageModelSnapshot, b: ImageModelSnapshot): boolean {
-  return (
-    a.model === b.model &&
-    a.version === b.version &&
-    JSON.stringify(a.capabilities) === JSON.stringify(b.capabilities)
-  )
-}
-
 /** The listed model with this id, else the one the provider also serves under it as an alias. */
 export function findListedModel(models: ImageModelInfo[], id: string): ImageModelInfo | undefined {
   return models.find((m) => m.id === id) ?? models.find((m) => m.aliases?.includes(id))
@@ -109,39 +78,4 @@ export function findListedModel(models: ImageModelInfo[], id: string): ImageMode
 /** The listed model's own id for `id`, which may be one of its aliases; any other id is returned as it is. */
 export function canonicalModelId(id: string, models: ImageModelInfo[]): string {
   return findListedModel(models, id)?.id ?? id
-}
-
-/** The profile's saved snapshot, when it is for this model at this endpoint. */
-export function storedSnapshotFor(
-  stored: ImageProfile | undefined,
-  connection: ImageModelConnection,
-  model: string,
-): ImageModelSnapshot | undefined {
-  return stored && sameEndpoint(stored, connection) && stored.modelSnapshot?.model === model
-    ? stored.modelSnapshot
-    : undefined
-}
-
-/**
- * The snapshot a profile should save. A list loaded for other inputs may belong to the previous
- * provider, so only a settled one is read; otherwise the stored snapshot survives while the
- * provider, base URL and model are unchanged. A model a settled list lacks may still be served
- * (an alias), so it is left to the generation-time lookup rather than captured as empty.
- */
-export function chooseModelSnapshot(args: {
-  model: string
-  connection: ImageModelConnection
-  models: ImageModelInfo[]
-  settled: boolean
-  stored?: ImageProfile
-}): ImageModelSnapshot | undefined {
-  const { model, connection, models, settled, stored } = args
-  if (!model) return undefined
-  const keep = storedSnapshotFor(stored, connection, model)
-
-  const listed = settled ? models.find((m) => m.id === model) : undefined
-  if (!listed) return keep
-
-  const captured = snapshotModel(model, listed)
-  return keep && sameSnapshot(keep, captured) ? keep : captured
 }

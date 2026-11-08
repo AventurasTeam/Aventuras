@@ -891,15 +891,6 @@ export interface ImageCapabilityOverride {
   references?: boolean
 }
 
-/** What generation needs from the profile's model, captured when the model is picked. */
-export interface ImageModelSnapshot {
-  model: string
-  version: number
-  capturedAt: number
-  /** `{}` means captured with nothing known. */
-  capabilities: ImageModelCapabilities
-}
-
 declare const imageConnectionBrand: unique symbol
 
 /** The provider, key and URL a provider is built from. Only `imageConnectionFor` makes one. */
@@ -921,8 +912,6 @@ export interface ImageProfile extends ImageModelConnection {
   id: string
   name: string
   model: string
-  /** Saved only for providers whose capabilities come from an API; absent means never captured. */
-  modelSnapshot?: ImageModelSnapshot
   /** Saved only for providers that take one. */
   capabilityOverride?: ImageCapabilityOverride
   providerOptions: Record<string, unknown>

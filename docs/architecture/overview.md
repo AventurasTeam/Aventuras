@@ -647,7 +647,7 @@ Discovery (`listModels`, `getSamplerInfo`,
 a newer one or Stop replaces, and writes only what the current request returns. A cancelled model list is
 never cached, even when an adapter answers with a partial one. Model lists are cached for 12 hours per
 connection (`modelListKey`: provider, API key, base URL); a save that changes a profile's connection
-drops the entry it replaced (`evictReplacedModelList`), and the form's Refresh bypasses the cache. A legacy profile's snapshot backfill reads the same cache by id or alias and asks the provider (`getModelCapabilities`) only for a model the list omits; the lookup is cancelled after 10 seconds. Migration `042` moved image settings that still named an
+drops the entry it replaced (`evictReplacedModelList`), and the form's Refresh bypasses the cache. For NanoGPT, OpenRouter, Pollinations and OpenAI Compatible, generation reads a model's capabilities from the connection's cached list by id or alias, so they are no older than the list. A model the list omits is looked up through the provider (`getModelCapabilities`) and kept in a second in-memory cache, 12 hours per connection and model; the lookup is cancelled after 10 seconds. A failed lookup is not retried for 5 minutes and generation proceeds with unknown capabilities. Loading a connection's list clears that second cache for it, and Stop cancels the wait. Nothing is saved on the profile. Migration `042` moved image settings that still named an
 API profile into image profiles, moved proxy-style `openai` profiles and every `chutes` profile
 (that provider is gone) to OpenAI Compatible, and pinned `zhipu` profiles with an empty base URL to
 `open.bigmodel.cn`, which they used before the default became `api.z.ai`.
