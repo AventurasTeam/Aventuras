@@ -12,6 +12,7 @@ import {
   type MacroId,
   type TemplateId,
 } from '../index'
+import { CLOSE_ONLY_CHAPTER_VARIABLES } from '../templateContextMap'
 
 // architecture.md → System and user halves: a system half must render byte-identically from call
 // to call unless the user changes what it reads, so it may read only what the story or the
@@ -28,8 +29,21 @@ const STABLE_SYSTEM_VARIABLES: readonly string[] = [
 ]
 
 // C3: a close's task templates hold the chapter or part in the system half, stable across a
-// part's tasks rather than the story. None ships yet (5.5b, 5.8).
+// part's tasks rather than the story. None ships yet (5.5b, 5.8). They are held to the same check
+// as any template, less the one read C3 allows them: the close-only variables, nothing else.
 const CLOSE_TASK_TEMPLATES: readonly TemplateId[] = []
+const CLOSE_ONLY: readonly string[] = CLOSE_ONLY_CHAPTER_VARIABLES
+const allowedPerCall = (templateId: string): readonly string[] =>
+  CLOSE_TASK_TEMPLATES.some((id) => id === templateId) ? CLOSE_ONLY : []
+
+const unallowedSystemReads = (
+  eng: Parameters<typeof templateGlobals>[0],
+  templateId: string,
+  allowed: readonly string[],
+): string[] =>
+  [...templateGlobals(eng, templateId, 'system')]
+    .filter((name) => !STABLE_SYSTEM_VARIABLES.includes(name) && !allowed.includes(name))
+    .toSorted()
 
 const { engine } = loadPack(bundledPack)
 
@@ -355,12 +369,28 @@ const RENDER_CASES: RenderCase[] = [
 // Stands in, on the bundled pack, for the deferred pack validator's system-half warning
 // (parked.md → Pack validation contract).
 describe('bundled system halves read only what the story fixes', () => {
-  it.each(Object.values(TEMPLATE_IDS).filter((id) => !CLOSE_TASK_TEMPLATES.includes(id)))(
-    '%s',
-    (templateId) => {
-      expect(perCallReads(templateId, 'system')).toEqual([])
-    },
-  )
+  it.each(Object.values(TEMPLATE_IDS))('%s', (templateId) => {
+    expect(unallowedSystemReads(engine, templateId, allowedPerCall(templateId))).toEqual([])
+  })
+
+  // Positive control: with no close template shipped, the rule that holds one to the close-only
+  // reads is shown on a probe, which may read closeTurns and nothing else per call.
+  it('lets a close task template read the close-only variables and no other per-call one', () => {
+    const probe = 'tmpl_close_task_probe'
+    const { engine: probed } = loadPack({
+      ...bundledPack,
+      templates: {
+        ...bundledPack.templates,
+        [probe]: {
+          group: 'chapter',
+          system: '{{ mode }}{% for t in closeTurns %}{{ t.handle }}{% endfor %}{{ entries.size }}',
+          user: 'Begin.',
+        },
+      },
+    })
+    expect(unallowedSystemReads(probed, probe, CLOSE_ONLY)).toEqual(['entries'])
+    expect(unallowedSystemReads(probed, probe, [])).toEqual(['closeTurns', 'entries'])
+  })
 
   // Every close task's system half opens with them, Happenings and Awareness too, which hold no
   // prose and take no exemption.
