@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest'
 import { generateId } from '@/lib/ids'
 
 import { closeIdsOf } from '../close-intermediates'
-import { CloseIds, nameCloseProse } from './ids'
+import { CloseIds, nameCloseProse, withHandlesDeep } from './ids'
 
 const CHAR_A = 'char_11111111-1111-4111-8111-111111111111'
 const CHAR_B = 'char_22222222-2222-4222-8222-222222222222'
@@ -228,6 +228,30 @@ describe('nameCloseProse', () => {
       turns: ['t1'],
       why: 'Wren pays the toll in t1',
       body: 'Under The toll law, Wren pays; c9 stays',
+    })
+  })
+})
+
+describe('withHandlesDeep', () => {
+  it('swaps ids in strings, nested arrays, object keys and toJSON values', () => {
+    const ids = new CloseIds()
+    const handle = ids.show(CHAR_A, 'Ana')
+
+    const out = withHandlesDeep(
+      {
+        [CHAR_A]: [`met ${CHAR_A}`, { deep: CHAR_A }],
+        stamp: { toJSON: () => ({ who: CHAR_A }) },
+        count: 3,
+        none: null,
+      },
+      ids,
+    )
+
+    expect(out).toEqual({
+      [handle]: [`met ${handle}`, { deep: handle }],
+      stamp: { who: handle },
+      count: 3,
+      none: null,
     })
   })
 })

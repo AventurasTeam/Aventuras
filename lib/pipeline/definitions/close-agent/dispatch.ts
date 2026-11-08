@@ -4,7 +4,7 @@ import { logger } from '@/lib/diagnostics'
 import { isJsonObject } from '@/lib/json-object'
 
 import { commonChecks, type ReadSet } from './common-checks'
-import { nameCloseProse, type CloseIds } from './ids'
+import { nameCloseProse, withHandlesDeep, type CloseIds } from './ids'
 import type { CloseLedgerWriter } from './ledger'
 import {
   resolveIdArgs,
@@ -53,24 +53,12 @@ function toolContextOf(ctx: DispatchContext): ToolContext {
   }
 }
 
-const hasToJson = (value: object): value is { toJSON: () => unknown } =>
-  typeof (value as { toJSON?: unknown }).toJSON === 'function'
-
-// Walks the answer as JSON.stringify would see it, keys included, so no full id survives anywhere.
-function handlesIn(value: unknown, ids: CloseIds): unknown {
-  if (typeof value === 'string') return ids.withHandles(value)
-  if (Array.isArray(value)) return value.map((item) => handlesIn(item, ids))
-  if (isJsonObject(value)) {
-    if (hasToJson(value)) return handlesIn(value.toJSON(), ids)
-    return Object.fromEntries(
-      Object.entries(value).map(([key, item]) => [ids.withHandles(key), handlesIn(item, ids)]),
-    )
-  }
-  return value
-}
-
 function answerTo(call: ToolStepCall, output: unknown, ids: CloseIds): ToolAnswer {
-  return { toolCallId: call.toolCallId, toolName: call.toolName, output: handlesIn(output, ids) }
+  return {
+    toolCallId: call.toolCallId,
+    toolName: call.toolName,
+    output: withHandlesDeep(output, ids),
+  }
 }
 
 function namedWhy(args: Readonly<Record<string, unknown>>, ids: CloseIds): string {

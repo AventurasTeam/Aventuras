@@ -1,5 +1,6 @@
 import { nameIdsInProse } from '@/lib/classifier'
 import { IdBiMap, SUBSTITUTABLE_PREFIXES } from '@/lib/ids'
+import { isJsonObject } from '@/lib/json-object'
 
 const TURN_PREFIX = 'entry_'
 const AWARENESS_PREFIX = 'haw_'
@@ -143,4 +144,23 @@ export class CloseIds {
 /** nameIdsInProse with this run's names: a handle in `why` or a text field is stored as its name. */
 export function nameCloseProse<T>(value: T, ids: CloseIds): T {
   return nameIdsInProse(value, (token) => ids.nameOf(token))
+}
+
+const hasToJson = (value: object): value is { toJSON: () => unknown } =>
+  typeof (value as { toJSON?: unknown }).toJSON === 'function'
+
+/** Walks a value as JSON.stringify would see it, keys included, so no full id survives anywhere. */
+export function withHandlesDeep(value: unknown, ids: CloseIds): unknown {
+  if (typeof value === 'string') return ids.withHandles(value)
+  if (Array.isArray(value)) return value.map((item) => withHandlesDeep(item, ids))
+  if (isJsonObject(value)) {
+    if (hasToJson(value)) return withHandlesDeep(value.toJSON(), ids)
+    return Object.fromEntries(
+      Object.entries(value).map(([key, item]) => [
+        ids.withHandles(key),
+        withHandlesDeep(item, ids),
+      ]),
+    )
+  }
+  return value
 }
