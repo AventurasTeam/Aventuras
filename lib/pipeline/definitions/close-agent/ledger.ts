@@ -1,5 +1,6 @@
 import type { CloseReportCall } from '@/lib/db'
 import { ID_PATTERN } from '@/lib/ids'
+import { oneLine } from '@/lib/text'
 
 import type { CloseIds } from './ids'
 import type { CloseLedger } from '../intermediates'
@@ -87,10 +88,12 @@ export class CloseLedgerWriter {
         const skipped = new Set((call.skippedFields ?? []).map(({ field }) => field))
         const fields = Object.keys(call.values ?? {}).filter((field) => !skipped.has(field))
         if (fields.length === 0 && call.survivor === undefined) return []
+        // A name goes into the next task's prompt; a line break in it would forge a line.
         const rows = call.rows
-          .map((row) =>
-            row.name.trim() === '' ? handle(row.id) : `${row.name} (${handle(row.id)})`,
-          )
+          .map(({ id, name }) => {
+            const shown = oneLine(name)
+            return shown === '' ? handle(id) : `${shown} (${handle(id)})`
+          })
           .join(', ')
         const parts = [
           ...(fields.length === 0 ? [] : [fields.join(', ')]),
