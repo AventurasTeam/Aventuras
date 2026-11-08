@@ -75,7 +75,6 @@ import {
   IMAGE_PROVIDER_OPTIONS,
   generateImage,
   supportsReferenceImages,
-  listImageModels,
   listImageModelsByProvider,
 } from './registry'
 import { settings } from '#lib/stores/settings.svelte.ts'
@@ -708,25 +707,6 @@ describe('Image Provider Registry', () => {
       await expect(listImageModelsByProvider('openai', 'sk-fail-a', true)).rejects.toThrow(
         'bad key',
       )
-    })
-
-    it('swallows in listImageModels and does not cache the failure', async () => {
-      failingProvider()
-      vi.mocked(settings.getImageProfile).mockReturnValue({
-        providerType: 'openai',
-        apiKey: 'sk-fail-b',
-      } as ReturnType<typeof settings.getImageProfile>)
-      expect(await listImageModels('p')).toEqual([])
-
-      const listModels = vi.fn(async () => [{ id: 'm', name: 'm', supportsImg2Img: true }])
-      vi.mocked(createOpenAIProvider).mockReturnValue({
-        id: 'openai',
-        name: 'openai',
-        generate: vi.fn(),
-        listModels,
-      })
-      expect(await listImageModels('p')).toHaveLength(1)
-      expect(listModels).toHaveBeenCalledTimes(1)
     })
   })
 

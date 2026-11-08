@@ -346,35 +346,6 @@ export async function generateImage(options: {
 }
 
 /**
- * List available image models for an Image Profile.
- */
-export async function listImageModels(profileId: string): Promise<ImageModelInfo[]> {
-  const profile = settings.getImageProfile(profileId)
-  if (!profile) return []
-
-  const connection = connectionFor(profile.providerType, profile.apiKey, profile.baseUrl)
-  const cacheKey = getCacheKey(profile.providerType, connection.apiKey, connection.baseUrl)
-  const cached = modelCaches.get(cacheKey)
-  if (cached && Date.now() - cached.timestamp < CACHE_TTL) {
-    return cached.models
-  }
-
-  try {
-    const config: ImageProviderConfig = {
-      ...connection,
-      timeoutMs: settings.apiSettings.llmTimeoutMs,
-    }
-    const provider = PROVIDER_FACTORIES[profile.providerType](config)
-    const models = await provider.listModels(connection.apiKey)
-    modelCaches.set(cacheKey, { models, timestamp: Date.now() })
-    return models
-  } catch (error) {
-    log('Error listing models', { providerType: profile.providerType, error })
-    return []
-  }
-}
-
-/**
  * List image models by provider type directly (without needing a profile).
  * Used during profile creation to preview available models. A failed fetch rethrows so the
  * form can show it. An aborted `signal` rejects and caches nothing, even when the adapter
