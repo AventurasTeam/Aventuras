@@ -74,14 +74,22 @@ function toolMessage(answers: readonly ToolAnswer[]): ToolModelMessage {
   }
 }
 
-function callOrder(messages: readonly ModelMessage[]): Map<string, number> {
-  const order = new Map<string, number>()
+// Each call's place among the calls; an id the model repeated has one place per call.
+function callPlaces(messages: readonly ModelMessage[]): {
+  of: Map<string, number[]>
+  count: number
+} {
+  const of = new Map<string, number[]>()
+  let count = 0
   for (const message of messages) {
     if (message.role !== 'assistant' || typeof message.content === 'string') continue
-    for (const part of message.content)
-      if (part.type === 'tool-call') order.set(part.toolCallId, order.size)
+    for (const part of message.content) {
+      if (part.type !== 'tool-call') continue
+      of.set(part.toolCallId, [...(of.get(part.toolCallId) ?? []), count])
+      count++
+    }
   }
-  return order
+  return { of, count }
 }
 
 // chapter-close.md → Conversations: the model's message goes back as returned, then one tool
@@ -97,11 +105,17 @@ function stepMessages(
     ...(answers.length === 0 ? [] : toolMessage(answers).content),
   ]
   if (parts.length === 0) return kept
-  const order = callOrder(kept)
-  const rank = (part: ToolModelMessage['content'][number]): number =>
-    (part.type === 'tool-result' ? order.get(part.toolCallId) : undefined) ?? order.size
+  const places = callPlaces(kept)
+  const answered = new Map<string, number>()
+  // The nth answer to an id takes that id's nth place.
+  const ranked = parts.map((part) => {
+    if (part.type !== 'tool-result') return { part, rank: places.count }
+    const nth = answered.get(part.toolCallId) ?? 0
+    answered.set(part.toolCallId, nth + 1)
+    return { part, rank: places.of.get(part.toolCallId)?.[nth] ?? places.count }
+  })
   // Array sort is stable: an id outside the calls keeps its place after them.
-  const content = [...parts].sort((a, b) => rank(a) - rank(b))
+  const content = ranked.sort((a, b) => a.rank - b.rank).map(({ part }) => part)
   // As the SDK's own merge does: the first tool message's provider options carry over.
   const providerOptions = sdkAnswers[0]?.providerOptions
   const tool: ToolModelMessage = {

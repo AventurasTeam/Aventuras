@@ -553,6 +553,28 @@ describe('runCloseTask', () => {
     expect(callIdsOf(sent)).toEqual(['k1', 'k2', 'k3', 'k4'])
   })
 
+  it("gives each answer to a repeated call id that call's place, in call order", async () => {
+    const first = okStep([peekCall('k1'), peekCall('k2'), appendCall('k1', 'again')], {
+      invalid: [{ toolCallId: 'k3', toolName: 'append_note', detail: 'Invalid input' }],
+    })
+    vi.mocked(generateToolStep).mockResolvedValueOnce(first)
+
+    await drive(taskDef(), runContext(phaseContext()))
+
+    const sent = sentMessages(1)
+    expect(sent).toHaveLength(2)
+    expect(
+      (sent[1] as ToolModelMessage).content.flatMap((part) =>
+        part.type === 'tool-result' ? [[part.toolCallId, part.toolName]] : [],
+      ),
+    ).toEqual([
+      ['k1', 'peek_row'],
+      ['k2', 'peek_row'],
+      ['k1', 'append_note'],
+      ['k3', 'append_note'],
+    ])
+  })
+
   it('puts answers to no call after the calls, as they came, keeping the provider options', async () => {
     const first = okStep([peekCall('k1')], {
       invalid: [{ toolCallId: 'k2', toolName: 'peek_row', detail: 'Invalid input' }],
