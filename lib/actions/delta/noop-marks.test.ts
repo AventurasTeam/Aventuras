@@ -9,8 +9,12 @@ import {
   characterRelationships,
   emptyEntityState,
   entities,
+  happeningAwareness,
+  happeningInvolvements,
+  happenings,
   lore,
   stories,
+  threads,
   type CollisionReason,
   type Entity,
   type NewEntity,
@@ -208,7 +212,9 @@ async function setup(): Promise<DbCtx> {
   await db.insert(stories).values({ id: 'story_1', title: 'T', createdAt: 1, updatedAt: 1 })
   await db.insert(branches).values({ id: BRANCH, storyId: 'story_1', name: 'main', createdAt: 1 })
   await db.insert(entities).values([
-    entity('char_1', 'character'),
+    entity('char_1', 'character', {
+      state: { ...emptyEntityState('character'), faction_id: 'fac_1' },
+    }),
     entity('char_2', 'character', { name: 'Mira' }),
     entity('char_3', 'character', { name: 'Mira' }),
     entity('char_staged', 'character', { status: 'staged' }),
@@ -223,12 +229,40 @@ async function setup(): Promise<DbCtx> {
       nameCollisionReason: 'alike',
     }),
     entity('loc_1', 'location'),
-    entity('item_1', 'item'),
+    entity('loc_inner', 'location', { state: { parent_location_id: 'loc_1' } }),
+    entity('item_1', 'item', { state: { at_location_id: null, condition: 'rusted' } }),
+    entity('fac_1', 'faction', { state: { standing: 'wary of strangers' } }),
   ])
   await db.insert(lore).values({
     id: 'lore_1',
     branchId: BRANCH,
     title: 'The old road',
+    injectionMode: 'auto',
+    createdAt: 1,
+    updatedAt: 1,
+  })
+  await db
+    .insert(happenings)
+    .values({ id: 'hap_1', branchId: BRANCH, title: 'The fire', createdAt: 1, updatedAt: 1 })
+  await db.insert(happeningInvolvements).values({
+    id: 'inv_1',
+    branchId: BRANCH,
+    happeningId: 'hap_1',
+    entityId: 'char_1',
+    role: 'witness',
+  })
+  await db.insert(happeningAwareness).values({
+    id: 'aw_1',
+    branchId: BRANCH,
+    happeningId: 'hap_1',
+    characterId: 'char_1',
+    source: 'witnessed',
+  })
+  await db.insert(threads).values({
+    id: 'thr_1',
+    branchId: BRANCH,
+    title: 'Recover the relic',
+    status: 'active',
     injectionMode: 'auto',
     createdAt: 1,
     updatedAt: 1,
@@ -259,12 +293,12 @@ const join = (factionId: string): PipelineAction => ({
   payload: { branchId: BRANCH, id: 'char_1', factionId, proseEntryId: null },
 })
 
-const placeUnder = (parentId: string): PipelineAction => ({
+const placeUnder = (parentId: string, id = 'loc_1'): PipelineAction => ({
   kind: 'placeLocation',
   source: 'periodic_classifier',
   payload: {
     branchId: BRANCH,
-    id: 'loc_1',
+    id,
     placement: { kind: 'under', parentId },
     proseEntryId: null,
   },
@@ -296,6 +330,54 @@ const restateLore: PipelineAction = {
   kind: 'updateLore',
   source: 'periodic_classifier',
   payload: { branchId: BRANCH, id: 'lore_1', patch: { title: 'The old road' } },
+}
+
+const restateCondition: PipelineAction = {
+  kind: 'updateEntityCondition',
+  source: 'periodic_classifier',
+  payload: { branchId: BRANCH, id: 'item_1', condition: 'rusted' },
+}
+
+const restateKeyword: PipelineAction = {
+  kind: 'appendEntityKeywords',
+  source: 'periodic_classifier',
+  payload: { branchId: BRANCH, id: 'char_flagged', keywords: ['Mira'], proseEntryId: null },
+}
+
+const restateName: PipelineAction = {
+  kind: 'renameEntity',
+  source: 'periodic_classifier',
+  payload: { branchId: BRANCH, id: 'char_bram', name: 'Bram', proseEntryId: null },
+}
+
+const restateStanding: PipelineAction = {
+  kind: 'setFactionStanding',
+  source: 'periodic_classifier',
+  payload: { branchId: BRANCH, id: 'fac_1', standing: 'wary of strangers', proseEntryId: null },
+}
+
+const restateAwareness: PipelineAction = {
+  kind: 'upsertHappeningAwareness',
+  source: 'periodic_classifier',
+  payload: {
+    branchId: BRANCH,
+    characterId: 'char_1',
+    happeningId: 'hap_1',
+    source: 'witnessed',
+    proseEntryId: null,
+  },
+}
+
+const restateRole: PipelineAction = {
+  kind: 'updateHappeningInvolvement',
+  source: 'periodic_classifier',
+  payload: { branchId: BRANCH, id: 'inv_1', patch: { role: 'witness' } },
+}
+
+const restateThreadStatus: PipelineAction = {
+  kind: 'setThreadStatus',
+  source: 'periodic_classifier',
+  payload: { branchId: BRANCH, id: 'thr_1', status: 'active', proseEntryId: null },
 }
 
 const linkToGone: PipelineAction = {
@@ -357,6 +439,47 @@ describe('noopRefusal marks: sample handlers (C11)', () => {
       noop('already-flagged'),
     ],
     ['raiseCollisionFlag on no namesake', raiseOn('char_bram'), noop('not-namesakes')],
+    [
+      'updateEntityCondition restating the stored condition',
+      restateCondition,
+      noop('no-op state patch for entities br_1:item_1', 'restated'),
+    ],
+    [
+      'appendEntityKeywords restating a held keyword',
+      restateKeyword,
+      noop('no-new-keywords', 'restated'),
+    ],
+    [
+      'setCharacterFaction to the faction it holds',
+      join('fac_1'),
+      noop('faction-unchanged', 'restated'),
+    ],
+    [
+      'placeLocation under the parent it has',
+      placeUnder('loc_1', 'loc_inner'),
+      noop('placement-unchanged', 'restated'),
+    ],
+    ['renameEntity to the name it has', restateName, noop('name-unchanged', 'restated')],
+    [
+      'setFactionStanding restating the stored standing',
+      restateStanding,
+      noop('standing-unchanged', 'restated'),
+    ],
+    [
+      'upsertHappeningAwareness restating the stored source',
+      restateAwareness,
+      noop('awareness unchanged', 'restated'),
+    ],
+    [
+      'updateHappeningInvolvement restating the stored role',
+      restateRole,
+      noop('involvement unchanged', 'restated'),
+    ],
+    [
+      'setThreadStatus to the status it has',
+      restateThreadStatus,
+      noop('status-unchanged', 'restated'),
+    ],
   ])('%s', async (_label, action, expected) => {
     const ctx = await setup()
     expect(await outcomeOf(ctx, action)).toStrictEqual(expected)
