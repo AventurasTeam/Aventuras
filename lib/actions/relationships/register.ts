@@ -149,7 +149,7 @@ async function bothPovOutcome(
     set.inverseKind = columns.inverseKind
     undoPayload.inverseKind = current.inverseKind
   }
-  if (Object.keys(set).length === 0) return noopRefusal('relationship unchanged')
+  if (Object.keys(set).length === 0) return noopRefusal('relationship unchanged', 'restated')
   return {
     status: 'ok',
     targetTable: 'character_relationships',
@@ -206,7 +206,7 @@ const upsertHandler: ActionHandler = async (action, branchId, ctx, group) => {
 
   // Only the classifier reaches this path; a case/whitespace-only repeat is the same view.
   if (current && current[povCol]?.trim().toLowerCase() === kind?.trim().toLowerCase())
-    return noopRefusal('relationship unchanged')
+    return noopRefusal('relationship unchanged', 'restated')
 
   if (
     proseEntryId != null &&
@@ -286,7 +286,7 @@ const deleteHandler: ActionHandler = async (action, branchId, ctx) => {
     .where(and(eq(characterRelationships.branchId, bid), eq(characterRelationships.id, id)))
   // Only the user deletes a pair, and a pair already gone is the state they asked for; a
   // refusal would fail the rest of their Save with it.
-  if (!current) return noopRefusal(`delete target relationship ${bid}:${id} not found`)
+  if (!current) return noopRefusal(`delete target relationship ${bid}:${id} not found`, 'restated')
   return {
     status: 'ok',
     targetTable: 'character_relationships',

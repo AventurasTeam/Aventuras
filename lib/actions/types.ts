@@ -48,3 +48,9 @@ export type MutationResult =
   // (see HandlerOutcome). It must always let a consumer tell a transient, self-clearing
   // refusal from a failed write.
   | { status: 'rejected'; reason: string; code?: string }
+
+/**
+ * C11: what a noop found, where its reason can't say it stably. `restated`: the value it would
+ * write already stands. `gone`: a row it needs no longer exists. A broken rule carries neither.
+ */
+export type NoopMark = 'restated' | 'gone'

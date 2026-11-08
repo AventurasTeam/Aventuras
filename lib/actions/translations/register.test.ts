@@ -244,7 +244,7 @@ describe('translations CRUD arms', () => {
       ctx,
     )
 
-    expect(result).toEqual(MISSING_REF)
+    expect(result).toEqual({ status: 'rejected', reason: MISSING_REF.reason, code: 'noop' })
     expect(await rowFor(db, 'tr_1')).toBeUndefined()
     expect(await db.select().from(deltas)).toEqual([])
   })

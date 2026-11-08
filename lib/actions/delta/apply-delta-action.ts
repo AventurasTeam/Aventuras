@@ -181,7 +181,11 @@ async function applyDeltaActionUnlocked(args: Args, ctx: DbCtx): Promise<Mutatio
   if (!resolved) return { status: 'rejected', reason: `no handler registered for ${action.kind}` }
 
   const outcome = await resolved.handler(action, branchId, { ...ctx, actionId })
-  if (outcome.status === 'rejected') return outcome
+  if (outcome.status === 'rejected') {
+    // MutationResult carries no mark: only a group reports one (C11).
+    const { mark, ...refusal } = outcome
+    return refusal
+  }
 
   const deltaId = generateId('delta')
   const ops: SqlOp[] = [

@@ -133,7 +133,7 @@ const updateHandler: ActionHandler = async (action, branchId, ctx) => {
     set[col] = patch[col]
     undoPayload[col] = prior
   }
-  if (Object.keys(set).length === 0) return noopRefusal('no-op lore patch')
+  if (Object.keys(set).length === 0) return noopRefusal('no-op lore patch', 'restated')
 
   // Embedded-column change flips the flag; see entities/register.ts for the reasoning.
   const [firstField, secondField] = KIND_FIELDS.lore
