@@ -19,17 +19,11 @@ vi.mock('#lib/utils/async.ts', async (importOriginal) => ({
   sleep: vi.fn(async () => {}),
 }))
 
-vi.mock('#lib/utils/url.ts', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('#lib/utils/url.ts')>()
-  return { ...actual, normalizeBaseUrl: vi.fn(actual.normalizeBaseUrl) }
-})
-
 import { specToPixels } from '#lib/utils/image.ts'
-import { normalizeBaseUrl } from '#lib/utils/url.ts'
 import { imageGetFetch } from './fetchAdapter'
 import {
   ComfyMode,
-  clearComfyCacheForUrl,
+  clearComfyCache,
   comfyReferenceLimit,
   createComfyProvider,
   loadImageInputs,
@@ -40,6 +34,7 @@ import LoraWorkflow from './comfyWorkflows/lora-txt2img-workflow.json'
 import UnetWorkflow from './comfyWorkflows/unet-txt2img-workflow.json'
 import type { Json } from './comfyImage'
 import type { ImageGenerateOptions } from './types'
+import { imageConnectionFor, modelListKey } from './connection'
 
 type Graph = Record<string, { inputs: Record<string, unknown> }>
 
@@ -62,6 +57,9 @@ function postedGraph(): Graph {
   )!
   return JSON.parse(call[1].body as string).prompt as Graph
 }
+
+const listKeyOf = (apiKey: string, baseUrl?: string) =>
+  modelListKey(imageConnectionFor('comfyui', apiKey, baseUrl))
 
 const generate = (
   providerOptions: Record<string, unknown>,
@@ -113,7 +111,7 @@ const modelRequests = () =>
 
 beforeEach(() => {
   vi.clearAllMocks()
-  clearComfyCacheForUrl('http://localhost:8188')
+  clearComfyCache(listKeyOf(''))
   system = { ...SERVER }
   listing({})
   serve('9')
@@ -648,19 +646,40 @@ describe('server version', () => {
   })
 })
 
-describe('base URL', () => {
-  it('clears the cache for a malformed base URL without throwing', () => {
-    expect(() => clearComfyCacheForUrl('h')).not.toThrow()
+describe('connection cache', () => {
+  const unet = { mode: ComfyMode.UnetTxt2Img }
+  const generateAs = (apiKey: string, baseUrl = 'http://localhost:8188') =>
+    createComfyProvider({ apiKey, baseUrl }).generate(
+      options({ model: 'unet:flux.safetensors', providerOptions: unet }),
+    )
+
+  beforeEach(() => {
+    for (const key of ['k1', 'k2']) clearComfyCache(listKeyOf(key, 'http://localhost:8188'))
+    listing({ text_encoders: ['clip.safetensors'], vae: ['ae.safetensors'] })
+    serve('10')
   })
 
-  it('keys clearComfyCacheForUrl by the normalized base URL', async () => {
-    const provider = createComfyProvider({ apiKey: '', baseUrl: 'http://localhost:8188' })
-    await provider.generate(options({ providerOptions: { mode: ComfyMode.BasicTxt2Img } }))
-    vi.mocked(normalizeBaseUrl).mockReturnValueOnce('http://localhost:8188')
-    clearComfyCacheForUrl('http://raw.test:8188/')
-    expect(normalizeBaseUrl).toHaveBeenCalledWith('http://raw.test:8188/')
-    await provider.generate(options({ providerOptions: { mode: ComfyMode.BasicTxt2Img } }))
-    expect(statsRequests()).toHaveLength(2)
+  it('clears what is cached for a connection, and only that one', async () => {
+    const baseUrl = 'http://localhost:8188/'
+    await generateAs('k1', baseUrl)
+    await generateAs('k2', baseUrl)
+    clearComfyCache(listKeyOf('k1', baseUrl))
+    await generateAs('k1', baseUrl)
+    await generateAs('k2', baseUrl)
+    expect(statsRequests()).toHaveLength(3)
+  })
+
+  it('keeps a text encoder and VAE picked for one API key from another key at the same URL', async () => {
+    listing({ text_encoders: ['one.safetensors'], vae: ['one-ae.safetensors'] })
+    await generateAs('k1')
+    expect(postedGraph()['3'].inputs.clip_name).toBe('one.safetensors')
+
+    listing({ text_encoders: ['two.safetensors'], vae: ['two-ae.safetensors'] })
+    sdkFetch.mockClear()
+    await generateAs('k2')
+    const graph = postedGraph()
+    expect(graph['3'].inputs.clip_name).toBe('two.safetensors')
+    expect(graph['4'].inputs.vae_name).toBe('two-ae.safetensors')
   })
 })
 

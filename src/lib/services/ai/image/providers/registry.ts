@@ -36,7 +36,7 @@ import { createOpenAICompatibleProvider } from './openaiCompatibleProvider'
 import { createPollinationsProvider } from './pollinations'
 import { createGoogleProvider, googleModelCapabilities } from './google'
 import { createZhipuProvider } from './zhipu'
-import { comfyReferenceLimit, createComfyProvider } from './comfy'
+import { clearComfyCache, comfyReferenceLimit, createComfyProvider } from './comfy'
 import { createOpenRouterProvider } from './openrouter'
 import { a1111ReferenceLimit, createA1111Provider } from './a1111'
 
@@ -171,6 +171,7 @@ export function evictReplacedModelList(
   if (previousKey === modelListKey(next)) return
   modelCaches.delete(previousKey)
   evictCapabilities(previousKey)
+  clearComfyCache(previousKey)
 }
 
 // ============================================================================

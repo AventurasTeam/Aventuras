@@ -22,6 +22,7 @@ import { formatImageSize, specToPixels } from '#lib/utils/image.ts'
 import { endpoint } from '#lib/utils/url.ts'
 import { HttpStatusError } from '#lib/utils/error.ts'
 import { resolveBaseUrl } from './baseUrls'
+import { imageConnectionFor, modelListKey } from './connection'
 import { isNewerVersion } from '#lib/utils/version.ts'
 import { imageGetFetch } from './fetchAdapter'
 import { bearerHeaders, withBearerKey } from './discoveryFetch'
@@ -40,7 +41,8 @@ export enum ComfyMode {
   UnetTxt2Img = 'unet-txt2img',
 }
 
-// The first text encoder and VAE the server lists, for a UNet profile that names none.
+// The first text encoder and VAE the server lists, for a UNet profile that names none. Keyed by
+// `modelListKey`, like the model lists and capabilities, so a connection's entries drop together.
 const autoClipCache = new Map<string, string>()
 const autoVaeCache = new Map<string, string>()
 
@@ -53,8 +55,8 @@ const SystemStats = z.object({
 
 type ServerSystem = z.infer<typeof SystemStats>['system']
 
-// Per baseUrl, as a Promise so parallel generations share one request. A server that could not be
-// asked is not cached, and its own error comes from the generation request.
+// Per connection, as a Promise so parallel generations share one request. A server that could not
+// be asked is not cached, and its own error comes from the generation request.
 const serverSystems = new Map<string, Promise<ServerSystem | undefined>>()
 
 export async function fetchModelList(
@@ -77,11 +79,11 @@ export async function fetchModelList(
   return parseModelList(await resp.json(), z.string(), `ComfyUI /models/${type}`)
 }
 
-export function clearComfyCacheForUrl(baseUrl: string | undefined): void {
-  const key = resolveBaseUrl('comfyui', baseUrl)
-  autoClipCache.delete(key)
-  autoVaeCache.delete(key)
-  serverSystems.delete(key)
+/** Drops what is cached for a `modelListKey`. */
+export function clearComfyCache(listKey: string): void {
+  autoClipCache.delete(listKey)
+  autoVaeCache.delete(listKey)
+  serverSystems.delete(listKey)
 }
 
 async function readServerSystem(
@@ -102,23 +104,24 @@ async function readServerSystem(
 
 /** Throws for a server below the supported version; returns what it reports about itself. */
 async function checkServer(
+  listKey: string,
   baseUrl: string,
   apiKey: string,
   timeoutMs?: number,
 ): Promise<ServerSystem | undefined> {
-  let pending = serverSystems.get(baseUrl)
+  let pending = serverSystems.get(listKey)
   if (!pending) {
     pending = readServerSystem(baseUrl, apiKey, timeoutMs)
-    serverSystems.set(baseUrl, pending)
+    serverSystems.set(listKey, pending)
   }
   const system = await pending
   if (!system) {
-    serverSystems.delete(baseUrl)
+    serverSystems.delete(listKey)
     return undefined
   }
   const version = system.comfyui_version
   if (version && isNewerVersion(MIN_COMFYUI_VERSION, version)) {
-    serverSystems.delete(baseUrl)
+    serverSystems.delete(listKey)
     throw new Error(
       `ComfyUI ${version} is older than ${MIN_COMFYUI_VERSION}, the oldest version Aventuras supports. Update ComfyUI.`,
     )
@@ -506,6 +509,7 @@ const numberOr = (value: unknown, fallback: number): number =>
 
 export function createComfyProvider(config: ImageProviderConfig): ImageProvider {
   const baseUrl = resolveBaseUrl('comfyui', config.baseUrl)
+  const listKey = modelListKey(imageConnectionFor('comfyui', config.apiKey, config.baseUrl))
 
   // One per generation, so concurrent generations keep separate poll traces in the debug log.
   const comfyModel = (model: string) =>
@@ -564,7 +568,7 @@ export function createComfyProvider(config: ImageProviderConfig): ImageProvider 
 
       const explicitMode = providerOptions?.mode as ComfyMode | undefined
 
-      const server = await checkServer(baseUrl, config.apiKey, config.timeoutMs)
+      const server = await checkServer(listKey, baseUrl, config.apiKey, config.timeoutMs)
 
       // -----------------------------------------------------------------------
       // Custom workflow path — only when mode is explicitly CustomWorkflow.
@@ -628,19 +632,19 @@ export function createComfyProvider(config: ImageProviderConfig): ImageProvider 
         const clipType = (providerOptions?.clipType as string) || 'lumina2'
         const weightDtype = (providerOptions?.weightDtype as string) || 'default'
 
-        let clipName = (providerOptions?.clipName as string) || autoClipCache.get(baseUrl) || ''
-        let vaeName = (providerOptions?.vaeName as string) || autoVaeCache.get(baseUrl) || ''
+        let clipName = (providerOptions?.clipName as string) || autoClipCache.get(listKey) || ''
+        let vaeName = (providerOptions?.vaeName as string) || autoVaeCache.get(listKey) || ''
         const [clips, vaes] = await Promise.all([
           clipName ? [] : fetchModels('text_encoders', signal),
           vaeName ? [] : fetchModels('vae', signal),
         ])
         if (!clipName) {
           clipName = clips[0] || ''
-          if (clipName) autoClipCache.set(baseUrl, clipName)
+          if (clipName) autoClipCache.set(listKey, clipName)
         }
         if (!vaeName) {
           vaeName = vaes[0] || ''
-          if (vaeName) autoVaeCache.set(baseUrl, vaeName)
+          if (vaeName) autoVaeCache.set(listKey, vaeName)
         }
 
         if (!clipName) throw new Error('No CLIP/text encoder model found in ComfyUI.')

@@ -39,9 +39,11 @@ vi.mock('./zhipu', () => ({
   createZhipuProvider: vi.fn(),
 }))
 
+const clearComfyCache = vi.hoisted(() => vi.fn())
 vi.mock('./comfy', () => ({
   createComfyProvider: vi.fn(),
   comfyReferenceLimit: vi.fn(),
+  clearComfyCache,
 }))
 
 vi.mock('./a1111', () => ({
@@ -70,7 +72,7 @@ import { comfyReferenceLimit, createComfyProvider } from './comfy'
 import { createA1111Provider } from './a1111'
 import { createGoogleProvider, googleModelCapabilities } from './google'
 import type { ImageModelInfo, ImageProvider } from './types'
-import { imageConnectionFor } from './connection'
+import { imageConnectionFor, modelListKey } from './connection'
 import {
   IMAGE_PROVIDER_LABELS,
   IMAGE_PROVIDER_OPTIONS,
@@ -1245,11 +1247,25 @@ describe('Image Provider Registry', () => {
       it('keeps the entry when the connection is unchanged', async () => {
         await listImageModels(conn('openai', 'sk-evict-same'), false)
         listModels.mockClear()
+        clearComfyCache.mockClear()
 
         evictReplacedModelList(conn('openai', 'sk-evict-same'), conn('openai', 'sk-evict-same'))
 
         await listImageModels(conn('openai', 'sk-evict-same'), false)
         expect(listModels).not.toHaveBeenCalled()
+        expect(clearComfyCache).not.toHaveBeenCalled()
+      })
+
+      it('drops the Comfy picks for the old connection when its key changes', () => {
+        const previous = conn('comfyui', 'sk-evict-comfy', 'http://comfy.test:8188')
+        clearComfyCache.mockClear()
+
+        evictReplacedModelList(
+          previous,
+          conn('comfyui', 'sk-evict-comfy-new', 'http://comfy.test:8188'),
+        )
+
+        expect(clearComfyCache).toHaveBeenCalledExactlyOnceWith(modelListKey(previous))
       })
     })
   })

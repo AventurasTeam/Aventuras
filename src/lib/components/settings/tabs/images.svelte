@@ -22,7 +22,6 @@
     requiresApiKey,
     baseUrlMode,
     imageConnectionFor,
-    resolveBaseUrl,
     IMAGE_PROVIDER_LABELS,
     IMAGE_PROVIDER_OPTIONS,
     ComfyMode,
@@ -47,7 +46,6 @@
     validateApiWorkflow,
     detectWorkflowFields,
     fetchModelList,
-    clearComfyCacheForUrl,
   } from '#lib/services/ai/image/providers/comfy.ts'
   import ImageModelSelect from '#lib/components/settings/ImageModelSelect.svelte'
   import type {
@@ -218,10 +216,6 @@
   let workflowPickerSelection = $state<string>('')
   let workflowError = $state<string | null>(null)
   let workflowFileName = $state<string | null>(null)
-
-  // Tracks the baseUrl active when the last cache population happened; used to
-  // detect URL changes and evict stale cache entries in comfy.ts.
-  let prevComfyBaseUrl: string | null = null
 
   // UNet mode specific state
   let profileClipName = $state('')
@@ -444,6 +438,10 @@
         availableVaes = []
         availableClipTypes = []
         profileLoadFailures = []
+        if (autoFilled.clip) profileClipName = ''
+        if (autoFilled.vae) profileVaeName = ''
+        autoFilled.clip = false
+        autoFilled.vae = false
       }
       if (invalid) {
         stopProfileModels()
@@ -650,7 +648,6 @@
     profileSteps = 20
     profilePositivePrompt = ''
     profileNegativePrompt = ''
-    prevComfyBaseUrl = null
     profileCustomWorkflow = null
     profileInputReferences = false
     profileTakesReferences = false
@@ -681,7 +678,6 @@
     profileName = profile.name
     profileProviderType = profile.providerType
     profileApiKey = profile.apiKey
-    prevComfyBaseUrl = null
     profileBaseUrl = profile.baseUrl || ''
     profileModel = profile.model || ''
     profileModels = []
@@ -897,33 +893,12 @@
     })
   })
 
-  // Evict comfy.ts caches when the user changes the ComfyUI base URL so that
-  // the next generate/listModels call fetches fresh model lists.
-  // Also clear availableClips/Vaes so the auto-load effect can trigger a fresh fetch, and drop
-  // auto-filled names so that fetch refills them from the new server.
+  // The profile-models effect above clears the lists and auto-filled names when the connection
+  // changes; switching to a provider without UNet lists clears them too.
   $effect(() => {
-    if (profileProviderType === 'comfyui') {
-      const currentUrl = resolveBaseUrl('comfyui', profileBaseUrl)
-      if (prevComfyBaseUrl !== null && prevComfyBaseUrl !== currentUrl) {
-        clearComfyCacheForUrl(prevComfyBaseUrl)
-        availableClips = []
-        availableVaes = []
-        untrack(() => {
-          if (autoFilled.clip) profileClipName = ''
-          if (autoFilled.vae) profileVaeName = ''
-          autoFilled.clip = false
-          autoFilled.vae = false
-        })
-      }
-      prevComfyBaseUrl = currentUrl
-    } else {
-      if (prevComfyBaseUrl !== null) {
-        clearComfyCacheForUrl(prevComfyBaseUrl)
-      }
-      prevComfyBaseUrl = null
-      availableClips = []
-      availableVaes = []
-    }
+    if (profileProviderType === 'comfyui') return
+    availableClips = []
+    availableVaes = []
   })
 </script>
 
