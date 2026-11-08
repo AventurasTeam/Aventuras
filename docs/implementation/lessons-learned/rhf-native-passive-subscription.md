@@ -44,22 +44,24 @@ mounted across a row switch looks fine.
 ## How to apply
 
 Mount the fields after the reset, gated on the row the form holds
-rather than the row that is selected. Track it in state set from a
-`useLayoutEffect` keyed on the row: the re-render it causes waits for
-the whole layout phase, so it follows the reset, and lands before
-paint. The Chapter Timeline's
-[`use-chapter-row-session.ts`](../../../components/chapters/use-chapter-row-session.ts)
-exposes it as `formRowId`, and
-[`chapter-card.tsx`](../../../components/chapters/chapter-card.tsx)
-renders its editor only when `formRowId` names its own row. Watch for
-the same shape anywhere a field mounts in the commit that changes
-`rowKey` of
-[`use-row-save-session.ts`](../../../hooks/use-row-save-session.ts),
-such as a tab that switches during render as a create starts.
+rather than the row that is selected.
+[`use-row-save-session.ts`](../../../hooks/use-row-save-session.ts)
+tracks it in state set from a `useLayoutEffect` keyed on `rowKey`: the
+re-render it causes waits for the whole layout phase, so it follows
+the reset, and lands before paint. It exposes the result as
+`formHoldsRow`, and its hosts gate on it:
 
-`formRowId` has one consumer. The second one, World's or Plot's
-create tab, is the point to lift it into the substrate as a
-`formRowKey` instead of copying it.
+- [`row-detail-frame.tsx`](../../../components/compounds/row-detail-frame.tsx)
+  mounts World's and Plot's tab content only while it is true, which
+  covers a create's tab switching during render as the create starts.
+- The Chapter Timeline's
+  [`use-chapter-row-session.ts`](../../../components/chapters/use-chapter-row-session.ts)
+  derives `formRowId` from it, and
+  [`chapter-card.tsx`](../../../components/chapters/chapter-card.tsx)
+  renders its editor only when `formRowId` names its own row.
+
+A host that mounts fields outside the frame gates on `formHoldsRow`
+too.
 
 Test it in two halves. Storybook runs react-hook-form's web path, so
 no story can show the bug, and the `unit` project cannot render the
@@ -67,10 +69,12 @@ host's chrome
 ([unit project and RN-Web chrome](./unit-project-no-rn-web-chrome.md)):
 
 - A story pins the host's gate from both sides: with the form still
-  holding another row, the expanded host mounts no field
-  (`FieldsWaitForTheirRow` in
+  holding another row, the host mounts no field
+  (`TabContentWaitsForItsRow` in
+  [`row-detail-frame.stories.tsx`](../../../components/compounds/row-detail-frame.stories.tsx),
+  `FieldsWaitForTheirRow` in
   [`chapter-card.stories.tsx`](../../../components/chapters/chapter-card.stories.tsx));
-  once it holds this row, the fields show it (`HeadToggles`).
+  once it holds this row, the fields show.
 - A unit test with its own small host pins the "form holds the row"
   signal on react-hook-form's native path. Force that path under
   jsdom: hide `window.HTMLElement` in `vi.hoisted`, before the imports
@@ -78,6 +82,6 @@ host's chrome
   with a canary that mounts the fields without the gate and expects
   the stale value, so the test fails loudly if react-hook-form ever
   stops taking the native path there. Shipped shape in
-  [`use-chapter-row-session-fields.test.tsx`](../../../components/chapters/use-chapter-row-session-fields.test.tsx).
+  [`use-row-save-session-fields.test.tsx`](../../../hooks/use-row-save-session-fields.test.tsx).
 
 Surfaced in Slice 5.7.

@@ -65,10 +65,18 @@ export type RowSaveSessionOptions<Draft extends FieldValues> = {
    * row, which keeps no `saveError` for it. The bar's notice is tooltip-only on phone; toast this.
    */
   onRejected?: (reason: string) => void
+  /** Handed the session's leave routing while mounted, and null on unmount. */
+  onSession?: (handle: RowSessionHandle | null) => void
 }
 
 export type RowSaveSession<Draft extends FieldValues> = {
   form: UseFormReturn<Draft>
+  /**
+   * False for the render a `rowKey` switch takes to reach the form. Mount fields only while true:
+   * on native one mounted with the switch shows the previous row
+   * (docs/implementation/lessons-learned/rhf-native-passive-subscription.md).
+   */
+  formHoldsRow: boolean
   dirty: boolean
   /** Labels of the dirty top-level fields, in draft order. */
   dirtyFields: readonly string[]
@@ -174,6 +182,7 @@ export function useRowSaveSession<Draft extends FieldValues>({
   commit,
   confirmBeforeCommit,
   onRejected,
+  onSession,
 }: RowSaveSessionOptions<Draft>): RowSaveSession<Draft> {
   // react-hook-form mutates formState in place; compiled memos keyed on it would go stale.
   'use no memo'
@@ -202,8 +211,10 @@ export function useRowSaveSession<Draft extends FieldValues>({
   // Oldest first: a window close and a back can both be outstanding.
   const intentsRef = useRef<(() => void)[]>([])
   const appliedRef = useRef({ rowKey, values })
-  // The render snapshot trails a trigger() by a render; the subscription sees every emission.
+  // The render snapshot trails a trigger(), an edit or a reset by a render; the subscription sees
+  // every emission, so a Save or leave raised in the same tick reads the form as it is.
   const errorsRef = useRef<object>(errors)
+  const dirtyRef = useRef<object>(dirtyMap)
   // react-hook-form stores errors only for the fields an edit validated, so the whole draft is
   // checked apart from them: Save disables for an untouched invalid field without flagging it.
   const [draftIssue, setDraftIssue] = useState<string | null>(null)
@@ -212,9 +223,10 @@ export function useRowSaveSession<Draft extends FieldValues>({
   useEffect(
     () =>
       form.subscribe({
-        formState: { errors: true },
+        formState: { errors: true, dirtyFields: true },
         callback: (state) => {
           if (state.errors != null) errorsRef.current = state.errors
+          if (state.dirtyFields != null) dirtyRef.current = state.dirtyFields
         },
       }),
     [form],
@@ -244,9 +256,6 @@ export function useRowSaveSession<Draft extends FieldValues>({
   }, [form, resolver])
 
   // Layout, not passive: the new row must never paint with the previous row's draft.
-  // Native react-hook-form subscribes fields passively, so one mounting with the rowKey change
-  // misses this reset: mount it only once the form holds the new row
-  // (docs/implementation/lessons-learned/rhf-native-passive-subscription.md).
   useLayoutEffect(() => {
     const applied = appliedRef.current
     appliedRef.current = { rowKey, values }
@@ -279,6 +288,10 @@ export function useRowSaveSession<Draft extends FieldValues>({
       })
     }
   }, [rowKey, values, form, setPendingConfirm])
+
+  // Set in a layout effect, so the re-render it causes follows the reset above and lands before paint.
+  const [formRowKey, setFormRowKey] = useState(rowKey)
+  useLayoutEffect(() => setFormRowKey(rowKey), [rowKey])
 
   const settleIntents = useCallback(() => {
     const queued = intentsRef.current
@@ -376,7 +389,7 @@ export function useRowSaveSession<Draft extends FieldValues>({
       // The form moved to another row mid-write: nothing here is that row's to carry, and a queued
       // leave waits only on an edit of its own (a clean session satisfies it, as a noop save does).
       if (appliedRef.current.rowKey !== key) {
-        return { outcome, clean: !hasDirty(form.formState.dirtyFields) }
+        return { outcome, clean: !hasDirty(dirtyRef.current) }
       }
       if (written.status === 'rejected') {
         setSaveError(written.reason)
@@ -384,7 +397,7 @@ export function useRowSaveSession<Draft extends FieldValues>({
       }
       return { outcome, clean: rebase(written.draft, valuesAtStart) }
     },
-    [form, write, rebase, reportRejection, setPendingConfirm],
+    [write, rebase, reportRejection, setPendingConfirm],
   )
 
   // `confirmed` is the user's consent; only resolveConfirm passes true.
@@ -393,7 +406,7 @@ export function useRowSaveSession<Draft extends FieldValues>({
       if (busyRef.current) return { status: 'busy' }
       // A parked Save moves only through resolveConfirm or a discard.
       if (!confirmed && pendingConfirmRef.current != null) return { status: 'confirm' }
-      if (!hasDirty(form.formState.dirtyFields)) {
+      if (!hasDirty(dirtyRef.current)) {
         // Nothing to write, so a leave waiting on this save is already satisfied.
         settleIntents()
         return { status: 'noop' }
@@ -411,7 +424,7 @@ export function useRowSaveSession<Draft extends FieldValues>({
       if (result.clean) settleIntents()
       return result.outcome
     },
-    [form, attempt, settleIntents],
+    [attempt, settleIntents],
   )
 
   const save = useCallback(() => runSave(false), [runSave])
@@ -441,17 +454,14 @@ export function useRowSaveSession<Draft extends FieldValues>({
     [runSave, setPendingConfirm],
   )
 
-  const requestLeave = useCallback(
-    (proceed: () => void) => {
-      if (!hasDirty(form.formState.dirtyFields)) {
-        proceed()
-        return
-      }
-      intentsRef.current = [...intentsRef.current, proceed]
-      setPendingLeave(true)
-    },
-    [form],
-  )
+  const requestLeave = useCallback((proceed: () => void) => {
+    if (!hasDirty(dirtyRef.current)) {
+      proceed()
+      return
+    }
+    intentsRef.current = [...intentsRef.current, proceed]
+    setPendingLeave(true)
+  }, [])
 
   const resolveLeave = useCallback(
     (outcome: 'save' | 'discard' | 'cancel') => {
@@ -480,8 +490,20 @@ export function useRowSaveSession<Draft extends FieldValues>({
   const dirty = dirtyFields.length > 0
   const issue = firstIssue(errors) ?? (dirty ? draftIssue : null)
 
+  // Undoing every edit leaves the edited fields' issues behind; a clean draft shows none.
+  useEffect(() => {
+    if (!dirty) form.clearErrors()
+  }, [dirty, form])
+
+  useEffect(() => {
+    if (onSession == null) return
+    onSession({ dirty, requestLeave })
+    return () => onSession(null)
+  }, [onSession, dirty, requestLeave])
+
   return {
     form,
+    formHoldsRow: formRowKey === rowKey,
     dirty,
     dirtyFields,
     invalidReason: issue == null ? null : issueText(issue),

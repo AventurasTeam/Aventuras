@@ -1250,8 +1250,10 @@ modals — the case is vanishingly rare (concurrent same-kind runs
 can't happen; chained runs don't run simultaneously), so pretty UI
 for it isn't worth designing.
 
-Zero-reverse orphans (the pre-first-delta case) don't mount the
-modal — nothing reached disk, so there is nothing to report.
+Zero-reverse orphans don't mount the modal: the pre-first-delta case,
+where nothing reached disk, and a close whose reversal failed and whose
+deltas a second CTRL-Z then reversed. Nothing is left to reverse, so
+there is nothing to report, and recovery deletes the marker.
 Recovery failures do mount it, under a different title; see
 [Recovery-failure policy](#recovery-failure-policy).
 
@@ -1902,6 +1904,9 @@ type CallRetryError =
   | ({ tier: 'context-window' } & ContextWindowFailure)
   | ({ tier: 'reply-cut-off' } & ReplyCutOffFailure)
 
+// Read after each provider failure: a hint names only a capability the request used.
+type CarriedCapabilities = Readonly<Record<CapabilityHint['capability'], boolean>>
+
 type CapabilityHint = // matched: the keyword that matched, for the copy
   | { capability: 'structuredOutput'; matched: 'response_format' | 'json_schema' }
   | { capability: 'reasoning'; matched: 'budget_tokens' | 'thinking' | 'reasoning' }
@@ -1924,7 +1929,7 @@ type ReplyCutOffFailure = {
   outputTokens: number | null // as the provider reported; null when it reported none
   // 0 can mean unreported (OpenAI-compatible reports a missing count as 0); described as absent
   reasoningTokens: number | null // the part of outputTokens spent thinking, when reported
-  maxOutput: number | null // the max output the call sent; null when it sent none
+  maxOutput: number | null // the profile's, or a tool step's as sent; null when none (see the cause)
   window: number | null // the model's known window; null when unknown
   providerId: string
   modelId: string
@@ -1942,6 +1947,7 @@ async function callWithRetry<T, R = string>(
     maxProviderAttempts: number
     maxParseAttempts: number
     signal: AbortSignal
+    carried?: () => CarriedCapabilities // what the failed request carried; omitted, no hint
   },
 ): Promise<CallWithRetryResult<T>>
 ```
@@ -1960,6 +1966,11 @@ Non-retryable errors short-circuit: auth failures (401 / 403) skip
 retry. Same for 4xx client errors, and for a `context-window` failure
 on any error status: the same prompt overflows the same window again
 ([`architecture.md → Model context window`](./architecture.md#model-context-window)).
+A request the SDK refuses to build (an `InvalidPromptError` and its
+kin, raised before anything is sent) fails at once as an `unknown`
+provider failure too. A fetch that failed in transport reaches the
+helper unwrapped when it carries no cause, as Chromium's does: it
+reads as `network`, retried.
 A `reply-cut-off` failure isn't retried either: the same prompt and
 limit cut the reply again ([Cut-off replies](#cut-off-replies)). A
 close's tool step is the exception: `generateToolStep` runs a step cut
@@ -2047,15 +2058,19 @@ call: there's no stream to end early, and a body that omits its
 `finish_reason` still arrives whole.
 
 **The cause** comes from what the call knows: `max-output` when the
-call sent a max output (the profile's `maxOutput`, or a tool step's
-default) and the output tokens reached it, or the provider reported
-none; `window` when the model's window is known and
-the prompt plus the output tokens reach it, reading the prompt from the
-provider's input count and from the estimate only when it reported
-none, since o200k can miss a server's own count by a quarter either
-way; `unknown`
-otherwise, on hosted servers usually their own default `max_tokens`,
-which a profile max output overrides. Output tokens include reasoning
+call sent a max output and the output tokens reached it, or the
+provider reported none. The figure it reads differs by path. A tool
+step reads back the `max_tokens` its request carried, where the
+adapter's body shows it (Anthropic's adds the thinking budget), else
+what it asked for, the profile's or its own default; only the log reads
+it. A structured or narrative call keeps the profile's `maxOutput`,
+since its copy names that figure, so with thinking on a cut at the
+window can read as `max-output`. Then `window` when the model's window
+is known and the prompt plus the output tokens reach it, reading the
+prompt from the provider's input count and from the estimate only when
+it reported none, since o200k can miss a server's own count by a
+quarter either way; `unknown` otherwise, on hosted servers usually
+their own default `max_tokens`, which a profile max output overrides. Output tokens include reasoning
 on both providers, so a model that spends its allowance thinking reads
 as `max-output`, with `reasoningTokens` saying how much went there.
 An `unknown` cut-off on a call that sent a max output stopped short of
@@ -2199,7 +2214,10 @@ limit, so its surfaces route to the model's window (`Set window`) for
 `window`, and to the profile (`Fix profile`) for `max-output` and
 `unknown`, where a profile max output overrides the server's default.
 An `unknown` cut short of a max output the call sent keeps
-`Fix profile` too.
+`Fix profile` too. The failure never carries `interrupted` or
+`content-filter`, so no remedy routes them: a narrative reply marks
+those, a structured reply's filter fails its parse, and a tool step's
+ends the task as `stopped`.
 
 Categories drive how UI surfaces them — toast for transient,
 banner / dialog for persistent.

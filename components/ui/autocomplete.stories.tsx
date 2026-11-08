@@ -169,6 +169,57 @@ export const DisabledWithReason: Story = {
   ),
 }
 
+const RUN_REASON = 'Generation in progress — fields lock until complete'
+const START_RUN = 'story:start-run'
+
+// A run starts elsewhere, so the field keeps focus; the play function fires it.
+function DisablingAutocomplete({ onCommit }: { onCommit?: (value: string) => void }) {
+  const [disabled, setDisabled] = useState(false)
+  useEffect(() => {
+    const start = () => setDisabled(true)
+    window.addEventListener(START_RUN, start)
+    return () => window.removeEventListener(START_RUN, start)
+  }, [])
+  return (
+    <ControlledAutocomplete
+      sourceList={ERA_NAMES}
+      placeholder="Era name…"
+      disabled={disabled}
+      disabledReason={RUN_REASON}
+      onCommit={onCommit}
+    />
+  )
+}
+
+// A run disables every field at once; the reason's tooltip must not remount the input under it,
+// and the focused input it keeps must not pick the row highlighted before the run.
+export const KeepsItsInputAsARunStarts: Story = {
+  args: { onCommit: fn() },
+  render: ({ onCommit }) => <DisablingAutocomplete onCommit={onCommit} />,
+  play: async ({ canvas, args }) => {
+    const before = await canvas.findByPlaceholderText('Era name…')
+    expect(before.closest('[title]')).toBeNull()
+    await userEvent.click(before)
+    await userEvent.type(before, 'reiw')
+    await screen.findByRole('option', { name: 'Reiwa' })
+    window.dispatchEvent(new Event(START_RUN))
+    await waitFor(() =>
+      expect(canvas.getByPlaceholderText('Era name…').closest('[title]')).toHaveAttribute(
+        'title',
+        RUN_REASON,
+      ),
+    )
+    expect(canvas.getByPlaceholderText('Era name…')).toBe(before)
+    expect(before).toHaveAttribute('readonly')
+    expect(before).toHaveFocus()
+    await waitFor(() => expect(screen.queryByRole('option')).toBeNull())
+    await userEvent.keyboard('{Enter}')
+    await userEvent.keyboard('{ArrowDown}')
+    expect(args.onCommit).not.toHaveBeenCalled()
+    expect(screen.queryByRole('option')).toBeNull()
+  },
+}
+
 export const FocusOpensDropdown: Story = {
   render: () => <ControlledAutocomplete sourceList={ERA_NAMES} placeholder="Era name…" />,
   play: async ({ canvas }) => {

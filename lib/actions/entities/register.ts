@@ -24,6 +24,7 @@ import {
   undefinedColumn,
   type ActionHandler,
   type HandlerOutcome,
+  type PatchMatchesColumns,
 } from '../delta/registry'
 import type { DbCtx, DeltaSource } from '../types'
 import { entityCascade } from './entity-cascade'
@@ -111,6 +112,7 @@ export const UPDATABLE = [
   'nameCollisionPartnerId',
   'nameCollisionReason',
 ] as const
+void (true satisfies PatchMatchesColumns<EntityUpdatePatch, typeof UPDATABLE>)
 
 const FLAG_COLUMNS = ['nameCollisionFlag', 'nameCollisionPartnerId', 'nameCollisionReason'] as const
 

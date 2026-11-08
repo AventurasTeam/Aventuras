@@ -105,6 +105,25 @@ async function expectOnlyTheConfirm() {
   }, WAIT)
 }
 
+/**
+ * The modal leave dialog hides the rest of the page from the accessibility tree, the bar's buttons
+ * included, so a role query outside the bar's own scope finds only the dialog's Discard.
+ */
+export const LeaveDialogHidesTheBarsButtons: Story = {
+  args: { commit: fn(async () => ({ status: 'ok' as const })), onProceed: fn(), onAnswer: fn() },
+  play: async () => {
+    await userEvent.click(await screen.findByRole('button', { name: 'Make dirty' }, WAIT))
+    const bar = await screen.findByTestId('save-bar', undefined, WAIT)
+    expect(within(bar).getByRole('button', { name: t('saveBar.discard') })).toBeVisible()
+    await userEvent.click(screen.getByRole('button', { name: 'Request leave' }))
+    const leave = await screen.findByRole('alertdialog', undefined, WAIT)
+    const discards = screen.getAllByRole('button', { name: t('saveBar.discard') })
+    expect(discards).toHaveLength(1)
+    expect(leave).toContainElement(discards[0] ?? null)
+    expect(within(bar).queryByRole('button', { name: t('saveBar.discard') })).toBeNull()
+  },
+}
+
 /** save-sessions.md → Navigate-away guard: the leave dialog yields to the Save's question. */
 export const LeaveDialogYieldsToTheConfirm: Story = {
   args: {

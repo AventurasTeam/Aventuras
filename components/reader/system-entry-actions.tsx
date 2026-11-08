@@ -1,13 +1,14 @@
 import { useRouter } from 'expo-router'
 import { useMemo } from 'react'
 
-import type { OwedCloseRun } from '@/lib/actions'
+import { MANUAL_CLOSE_REFUSAL, type OwedCloseRun } from '@/lib/actions'
 import type {
   CapabilityHint,
   ContextWindowFailure,
   ReplyCutOffFailure,
   ResolveFailureKind,
 } from '@/lib/ai'
+import { PERIODIC_CLASSIFIER_KIND } from '@/lib/classifier'
 import type { SystemFailureMeta } from '@/lib/db'
 import { logger } from '@/lib/diagnostics'
 import { t } from '@/lib/i18n'
@@ -15,6 +16,7 @@ import {
   CHAPTER_CLOSE_KIND,
   CLASSIFIER_HELD,
   EMPTY_REPLY,
+  PER_TURN_KIND,
   pipelineErrorDetail,
   type PipelineError,
   type RejectedStart,
@@ -245,10 +247,10 @@ const CLOSE_VOCABULARY: WorkerVocabulary = {
 }
 
 function describeWorkerFailure(
-  error: PipelineError | undefined,
+  error: PipelineError,
   vocabulary: WorkerVocabulary,
 ): { content: string; detail?: string } {
-  if (error?.kind === 'provider') {
+  if (error.kind === 'provider') {
     const hint = error.possibleCapabilityMismatch
     return {
       content:
@@ -256,19 +258,16 @@ function describeWorkerFailure(
       detail: providerDetail(error),
     }
   }
-  if (error?.kind === 'config-resolver') {
+  if (error.kind === 'config-resolver') {
     return { content: t(vocabulary.resolver[error.failure]), detail: error.detail }
   }
-  if (error?.kind === 'reply-cut-off') {
+  if (error.kind === 'reply-cut-off') {
     return { content: vocabulary.cutOff(error), detail: pipelineErrorDetail(error) }
   }
-  if (error?.kind === 'context-window') {
+  if (error.kind === 'context-window') {
     return { content: vocabulary.window(error), detail: pipelineErrorDetail(error) }
   }
-  return {
-    content: t(vocabulary.generic),
-    detail: error !== undefined ? pipelineErrorDetail(error) : undefined,
-  }
+  return { content: t(vocabulary.generic), detail: pipelineErrorDetail(error) }
 }
 
 export function describePassFailure(refusal: PassRefusal): { content: string; detail?: string } {
@@ -299,11 +298,31 @@ export function passResolvedEntry(submission: NonNullable<SystemFailureMeta['sub
   }
 }
 
+// What refuses a pass or a close while another run holds the story: a running kind, and the
+// close's own busy check. A prose reversal is no run, so it takes the entry's own line.
+const RUN_BLOCKERS: ReadonlySet<string> = new Set([
+  MANUAL_CLOSE_REFUSAL.busy,
+  PER_TURN_KIND,
+  PERIODIC_CLASSIFIER_KIND,
+  CHAPTER_CLOSE_KIND,
+])
+
+/** A refused Retry's toast names the user's remedy, as a refused regenerate's does; never the code. */
+function retryRefusalText(
+  blockedBy: string,
+  ownLine: 'reader:systemEntry.passRetryBlocked' | 'reader:systemEntry.closeRetryBlocked',
+): string {
+  if (blockedBy === MANUAL_CLOSE_REFUSAL.swapPending)
+    return t('reader:actions.blockedWhileSwapping')
+  if (RUN_BLOCKERS.has(blockedBy)) return t('reader:actions.blockedWhileGenerating')
+  return t(ownLine)
+}
+
 /**
  * A pass-failure entry's Retry: runs the pass alone. A commit settles the entry through
  * `committed`; a failure, a throw or a hold rewrites it, a failure as held when its reversal didn't
- * commit; a cancel leaves the entry as it was. A throw from `held`, `committed` or `rewrite`
- * propagates.
+ * commit; a cancel leaves the entry as it was, and any other refusal leaves it too, told through
+ * `notify`. A throw from `held`, `committed` or `rewrite` propagates.
  */
 export async function retryPassEntry(deps: {
   runPass: () => Promise<TxResult | RejectedStart>
@@ -324,8 +343,10 @@ export async function retryPassEntry(deps: {
   if (result.outcome === 'failed')
     return deps.rewrite((await deps.held()) ? { held: true } : { held: false, error: result.error })
   if (result.outcome !== 'rejected') return
+  // The toast names a remedy, never the code, so the code is kept here.
+  logger.debug('reader.pass_retry_rejected', { blockedBy: result.blockedBy })
   if (result.blockedBy === CLASSIFIER_HELD) return deps.rewrite({ held: true })
-  deps.notify(t('reader:systemEntry.passRetryBlocked', { reason: result.blockedBy }))
+  deps.notify(retryRefusalText(result.blockedBy, 'reader:systemEntry.passRetryBlocked'))
 }
 
 // A close has no held state, so there is no held arm.
@@ -395,8 +416,9 @@ export async function retryCloseEntry(deps: {
   }
   if (run.outcome === 'nothing-owed') return deps.committed('nothing-owed')
   if (run.outcome === 'rejected') {
+    logger.debug('reader.close_retry_rejected', { blockedBy: run.blockedBy })
     if (run.blockedBy === CLASSIFIER_HELD) return deps.rewritePass({ held: true })
-    deps.notify(t('reader:systemEntry.closeRetryBlocked', { reason: run.blockedBy }))
+    deps.notify(retryRefusalText(run.blockedBy, 'reader:systemEntry.closeRetryBlocked'))
     return
   }
   const { kind, result } = run.end

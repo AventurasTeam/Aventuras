@@ -38,7 +38,7 @@ Accordion, AlertDialog, Autocomplete, Avatar, Button, Checkbox,
 Chip, ColorPicker, Dialog, EmptyState, Heading, Icon, IconAction, InlineEditableName,
 Input, JSONBlock, MultiSelect, Popover, SearchableOverlayList, Select, Sheet,
 Skeleton, Spinner, Stepper, Switch, SwitchVisual, Tabs, Tag, Textarea, Text,
-Toast. Plus the `NativeOnlyAnimatedView` and `DisabledReasonTooltip` utility
+Toast. Plus the `NativeOnlyAnimatedView` and `ReasonTooltip` utility
 wrappers.
 
 The bottom `Sheet` renders gorhom's `BottomSheetBackdrop`, the scrim,

@@ -53,6 +53,19 @@ export function undefinedColumn(patch: object, columns: readonly string[]): stri
   return columns.find((col) => col in values && values[col] === undefined)
 }
 
+type KeysOf<T> = T extends unknown ? keyof T : never
+
+/**
+ * True when an update patch's type and the column list its handler loops over name the same keys
+ * (every member of a union patch counted). A key in the type alone compiles and is never written.
+ */
+export type PatchMatchesColumns<Patch, Columns extends readonly string[]> = [
+  Exclude<KeysOf<Patch>, Columns[number]>,
+  Exclude<Columns[number], KeysOf<Patch>>,
+] extends [never, never]
+  ? true
+  : false
+
 export type HandlerOutcome =
   // Deliberately a bare string: each action family funnels its OWN rejection vocabulary
   // through here, so a single union would couple taxonomies with no reason to agree.

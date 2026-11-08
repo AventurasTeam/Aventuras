@@ -1,4 +1,12 @@
-import { APICallError } from 'ai'
+import {
+  APICallError,
+  InvalidArgumentError,
+  InvalidMessageRoleError,
+  InvalidPromptError,
+  MessageConversionError,
+  UnsupportedFunctionalityError,
+} from 'ai'
+import { FetchError } from 'expo/src/winter/fetch/FetchErrors'
 import { describe, expect, it } from 'vitest'
 
 import {
@@ -97,10 +105,60 @@ describe('classifyProviderError', () => {
     expect(classifyProviderError(apiError(undefined)).retryable).toBe(true)
   })
 
-  it('treats an unknown thrown value as a retryable network error', () => {
+  it('treats an unknown thrown value as a retryable unknown error', () => {
     expect(classifyProviderError(new Error('boom'))).toMatchObject({
       error: { tier: 'provider', reason: 'unknown', detail: 'boom' },
       retryable: true,
+    })
+  })
+
+  // Chromium's fetch failure carries no cause, so the SDK hands it on unwrapped.
+  it.each([['Failed to fetch'], ['fetch failed']])(
+    'reads a raw "%s" as a retryable network failure',
+    (message) => {
+      expect(classifyProviderError(new TypeError(message))).toMatchObject({
+        error: { tier: 'provider', reason: 'network' },
+        retryable: true,
+      })
+    },
+  )
+
+  // expo/fetch, the native transport, rejects with its own Error subclass, never a TypeError.
+  it('reads a failure expo/fetch raised as a retryable network failure', () => {
+    const error = FetchError.createFromError(new Error('Unable to resolve host "10.0.2.2"'))
+    expect(classifyProviderError(error)).toMatchObject({
+      error: {
+        tier: 'provider',
+        reason: 'network',
+        detail: 'fetch failed: Unable to resolve host "10.0.2.2"',
+      },
+      retryable: true,
+    })
+  })
+
+  it('keeps a TypeError that is no fetch failure an unknown one, still retried', () => {
+    expect(classifyProviderError(new TypeError('x is not a function'))).toMatchObject({
+      error: { tier: 'provider', reason: 'unknown' },
+      retryable: true,
+    })
+  })
+
+  it.each([
+    ['InvalidPromptError', new InvalidPromptError({ prompt: {}, message: 'no messages' })],
+    [
+      'InvalidArgumentError',
+      new InvalidArgumentError({ parameter: 'temperature', value: -1, message: 'below 0' }),
+    ],
+    ['InvalidMessageRoleError', new InvalidMessageRoleError({ role: 'robot' })],
+    [
+      'MessageConversionError',
+      new MessageConversionError({ originalMessage: {} as never, message: 'cannot convert' }),
+    ],
+    ['UnsupportedFunctionalityError', new UnsupportedFunctionalityError({ functionality: 'x' })],
+  ])('fails a request the SDK refused to build (%s) without a retry', (_name, error) => {
+    expect(classifyProviderError(error)).toMatchObject({
+      error: { tier: 'provider', reason: 'unknown' },
+      retryable: false,
     })
   })
 

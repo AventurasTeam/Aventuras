@@ -5,6 +5,7 @@ import {
   type CallRetryError,
   type GenerateStructuredResult,
   type ResolveTarget,
+  providerTimeoutDetail,
 } from '@/lib/ai'
 
 import type { PhaseEmittedEvent, PipelineError } from './types'
@@ -54,7 +55,7 @@ export function structuredCallFailure(
         error: {
           kind: 'provider',
           reason: 'timeout',
-          detail: `${call.target}: timeout after ${call.timeoutMs}ms`,
+          detail: providerTimeoutDetail(call.target, call.timeoutMs),
         },
       }
     // A config fault, so the reader's entry can offer its fix.

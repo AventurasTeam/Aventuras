@@ -342,10 +342,10 @@ describe('describePassFailure', () => {
     ).toEqual({ content: t('reader:systemEntry.failure.memory'), detail: 'window read' })
   })
 
-  it('still names the failure when the run carried no error', () => {
-    expect(describePassFailure({ held: false, error: undefined })).toEqual({
-      content: t('reader:systemEntry.failure.memory'),
-    })
+  it('takes a failed pass only with its error (checked by tsc)', () => {
+    // @ts-expect-error a failed run always carries its PipelineError
+    const loose: PassRefusal = { held: false, error: undefined }
+    expect(loose.held).toBe(false)
   })
 
   // The turn copy names the narrative agent; a pass's failure must not send the user there.
@@ -417,13 +417,6 @@ describe('toPassFailureMeta', () => {
     ).toEqual({
       kind: 'provider',
       detail: 'timeout: classifier: timeout after 600000ms',
-      pass: 'failed',
-    })
-  })
-
-  it('records a failure with no error as an orchestrator one', () => {
-    expect(toPassFailureMeta({ held: false, error: undefined }, undefined)).toEqual({
-      kind: 'orchestrator',
       pass: 'failed',
     })
   })
@@ -687,11 +680,23 @@ describe('retryPassEntry', () => {
     expect(h.rewrite).toHaveBeenCalledWith({ held: true })
   })
 
-  it('leaves the entry and says why when the pass could not start', async () => {
+  it('leaves the entry and says to wait when another run refused the pass', async () => {
     const h = harness({ outcome: 'rejected', blockedBy: 'periodic-classifier' })
     await retryPassEntry(h.deps)
     expect(h.calls).toEqual(['notify'])
-    expect(h.notify).toHaveBeenCalledWith("Memory update couldn't start (periodic-classifier).")
+    expect(h.notify).toHaveBeenCalledWith('Unavailable while generating.')
+  })
+
+  it('names no refusal code when the pass could not start for another reason, but logs it', async () => {
+    const debug = vi.spyOn(logger, 'debug').mockImplementation(() => {})
+    const h = harness({ outcome: 'rejected', blockedBy: 'branch-not-open' })
+    await retryPassEntry(h.deps)
+    expect(h.calls).toEqual(['notify'])
+    expect(h.notify).toHaveBeenCalledWith("Memory update couldn't start.")
+    expect(debug).toHaveBeenCalledWith('reader.pass_retry_rejected', {
+      blockedBy: 'branch-not-open',
+    })
+    debug.mockRestore()
   })
 
   it('leaves the entry alone when the pass is cancelled', async () => {
@@ -846,12 +851,35 @@ describe('retryCloseEntry', () => {
     expect(h.rewritePass).toHaveBeenCalledWith({ held: true })
   })
 
-  it('leaves the entry and says why when the close could not start', async () => {
-    const h = harness({ outcome: 'rejected', blockedBy: 'story-busy' })
+  it.each([['story-busy'], ['per-turn'], ['chapter-close']])(
+    'leaves the entry and says to wait when %s refused the close',
+    async (blockedBy) => {
+      const h = harness({ outcome: 'rejected', blockedBy })
+      await retryCloseEntry(h.deps)
+      expect(h.calls).toEqual(['notify'])
+      expect(h.notify).toHaveBeenCalledWith('Unavailable while generating.')
+    },
+  )
+
+  it('says to wait for the embedder switch when a pending swap refused the close', async () => {
+    const h = harness({ outcome: 'rejected', blockedBy: 'embedder-swap' })
     await retryCloseEntry(h.deps)
     expect(h.calls).toEqual(['notify'])
-    expect(h.notify).toHaveBeenCalledWith("Chapter close can't start yet: story-busy.")
+    expect(h.notify).toHaveBeenCalledWith('Unavailable while the embedder switch finishes.')
   })
+
+  it.each([['branch-not-open'], ['reversal']])(
+    'names no refusal code, nor generation, when %s refused the close, but logs it',
+    async (blockedBy) => {
+      const debug = vi.spyOn(logger, 'debug').mockImplementation(() => {})
+      const h = harness({ outcome: 'rejected', blockedBy })
+      await retryCloseEntry(h.deps)
+      expect(h.calls).toEqual(['notify'])
+      expect(h.notify).toHaveBeenCalledWith("Chapter close can't start yet.")
+      expect(debug).toHaveBeenCalledWith('reader.close_retry_rejected', { blockedBy })
+      debug.mockRestore()
+    },
+  )
 
   it('rewrites the close entry when the run throws', async () => {
     const h = harness(new Error('marker insert failed'))

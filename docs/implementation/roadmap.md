@@ -255,6 +255,16 @@ verified against the code first. Resolve with the slice each names.
   widening to any delta anchored to a kept entry, since step 3's
   exclusion is already source-blind. Surfaced reviewing the content-edit
   invalidation scope (2026-09-05).
+- **M6.1 — The register tests seed one branch, so a lost branch
+  condition stays green.** Rows key on branch and id, so a fork's copies
+  repeat every id. Each `lib/actions/*/register.test.ts` seeds a single
+  branch, and its `b2` cases are branch-mismatch refusals: a handler
+  whose read or write dropped its `branchId` condition would still pass.
+  Story entries alone carry the two-branch shape now, for update,
+  delete and stamp (`lib/actions/story-entries/register.test.ts`,
+  `branch scope`). **When M6.1 lands fork, give each register the same
+  pair of tests.** Unverified beyond story entries: the mutation run
+  covered only their handlers. Routed from triage 2026-11-07.
 - **M6.3 — The composer draft will carry across an in-reader branch
   switch.** `Composer` (`app/reader-composer/[branchId].tsx`) takes no
   `key={branchId}`, and the branch-change effect in the same file clears

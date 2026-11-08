@@ -32,6 +32,31 @@ describe('chaptersStore', () => {
     expect(chaptersStore.getChapters().size).toBe(2)
   })
 
+  it("projects a direct caller's row-shaped create to its report flag, never the report", () => {
+    chaptersStore.__reset()
+    chaptersStore.hydrate('br_1', [])
+    const { hasCloseReport: _flag, ...row } = chapterRow('chap_3', 3, 'Three')
+    chaptersStore.patch('br_1', {
+      op: 'create',
+      id: 'chap_3',
+      row: { ...row, closeReport: { version: 1, actionId: 'act_1', calls: [], stopped: [] } },
+    })
+    const stored = chaptersStore.getById('chap_3')
+    expect(stored?.hasCloseReport).toBe(true)
+    expect(stored).not.toHaveProperty('closeReport')
+  })
+
+  it("keeps a store-shaped create's own report flag", () => {
+    chaptersStore.__reset()
+    chaptersStore.hydrate('br_1', [])
+    chaptersStore.patch('br_1', {
+      op: 'create',
+      id: 'chap_4',
+      row: { ...chapterRow('chap_4', 4, 'Four'), hasCloseReport: true },
+    })
+    expect(chaptersStore.getById('chap_4')?.hasCloseReport).toBe(true)
+  })
+
   it('no-ops a patch for a non-held branch', () => {
     chaptersStore.__reset()
     chaptersStore.hydrate('br_1', [])

@@ -82,7 +82,13 @@ export type HappeningLinks = {
   awareness: readonly HappeningAwareness[]
 }
 
-export const EMPTY_HAPPENING_DRAFT: HappeningDraft = {
+// Every spread shares the constant's lists, so they are frozen too and typed read-only.
+export const EMPTY_HAPPENING_DRAFT: Readonly<
+  Omit<HappeningDraft, 'involvements' | 'awareness'> & {
+    involvements: readonly InvolvementDraft[]
+    awareness: readonly AwarenessDraft[]
+  }
+> = Object.freeze({
   title: '',
   description: '',
   category: '',
@@ -90,12 +96,12 @@ export const EMPTY_HAPPENING_DRAFT: HappeningDraft = {
   commonKnowledge: false,
   occurredAtEntryId: null,
   temporal: '',
-  involvements: [],
-  awareness: [],
-}
+  involvements: Object.freeze([]),
+  awareness: Object.freeze([]),
+})
 
 export function happeningDraftFrom(row: Happening | null, links: HappeningLinks): HappeningDraft {
-  if (row == null) return EMPTY_HAPPENING_DRAFT
+  if (row == null) return { ...EMPTY_HAPPENING_DRAFT, involvements: [], awareness: [] }
   return {
     title: row.title,
     description: row.description ?? '',

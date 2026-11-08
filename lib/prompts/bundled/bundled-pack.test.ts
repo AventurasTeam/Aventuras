@@ -27,6 +27,36 @@ describe('bundled pack', () => {
     },
   )
 
+  // Stated, not derived: the pack reads its groups from the registry, so only these pin them.
+  const EXPECTED_GROUPS: Record<keyof typeof TEMPLATE_IDS, string> = {
+    perTurnNarrative: 'generationContext',
+    piggybackFallbackClassifier: 'generationContext',
+    periodicClassifier: 'classifierContext',
+    suggestionRefresh: 'generationContext',
+    chapterMetadata: 'chapter',
+    wizardOpening: 'wizard',
+    wizardOpeningRefine: 'wizard',
+    wizardTitleChips: 'wizard',
+    wizardDescription: 'wizard',
+    wizardDescriptionRefine: 'wizard',
+    wizardLore: 'wizard',
+    wizardGenre: 'wizard',
+    wizardGenreRefine: 'wizard',
+    wizardTone: 'wizard',
+    wizardToneRefine: 'wizard',
+    wizardSetting: 'wizard',
+    wizardSettingRefine: 'wizard',
+    wizardCast: 'wizard',
+  }
+  it.each(Object.entries(EXPECTED_GROUPS))('groups %s as %s', (key, group) => {
+    expect(TEMPLATE_GROUPS[TEMPLATE_IDS[key as keyof typeof TEMPLATE_IDS]]).toBe(group)
+  })
+
+  // The include validator reads the pack's group, the editor the registry's: they must agree.
+  it.each(Object.values(TEMPLATE_IDS))("files %s under the registry's group", (templateId) => {
+    expect(bundledPack.templates[templateId]?.group).toBe(TEMPLATE_GROUPS[templateId])
+  })
+
   it('loads without throwing (engine builds)', () => {
     expect(() => loadPack(bundledPack)).not.toThrow()
   })

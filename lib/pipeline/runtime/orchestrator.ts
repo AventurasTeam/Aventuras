@@ -548,11 +548,14 @@ async function driveRun(
   // is an interrupt: a pre-flight failure would record a failed run instead of a deferred one.
   if (run.abortController.signal.aborted)
     return { tx: await abortRun(run, ctx, { reason: 'user-cancel' }) }
+  // Read past the begin and a predecessor's whole run: a story opened since has its own overrides.
+  const open = currentStoryStore.getCurrentStory()
+  const ownStory = open?.storyId === run.storyId && open.branchId === run.branchId
   let preflightError: PipelineError | null
   try {
     preflightError = runPreflight(getPipeline(run.kind), {
       appSettings: appSettingsStore.getAppSettings(),
-      storySettings: currentStoryStore.getCurrentStory()?.settings,
+      storySettings: ownStory ? open.settings : undefined,
     })
   } catch (e) {
     preflightError = { kind: 'orchestrator', detail: messageOf(e) }

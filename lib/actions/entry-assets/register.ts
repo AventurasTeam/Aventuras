@@ -4,7 +4,7 @@ import type { EntryAsset, NewEntryAsset } from '@/lib/db'
 import { entryAssetWriteSchema, entryAssets } from '@/lib/db'
 import { entryAssetsStore } from '@/lib/stores'
 
-import { register, type ActionHandler } from '../delta/registry'
+import { register, type ActionHandler, type PatchMatchesColumns } from '../delta/registry'
 import type { DeltaSource } from '../types'
 
 type EntryAssetUpdatePatch = Partial<{ role: string | null; position: number | null }>
@@ -21,6 +21,7 @@ declare module '@/lib/actions/action-map' {
 }
 
 const UPDATABLE = ['role', 'position'] as const
+void (true satisfies PatchMatchesColumns<EntryAssetUpdatePatch, typeof UPDATABLE>)
 
 function fullRow(entry: NewEntryAsset): EntryAsset {
   return {

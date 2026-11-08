@@ -6,12 +6,12 @@ import { ScrollView, View } from 'react-native'
 import { readerHref } from '@/components/reader/reader-href'
 import { Button } from '@/components/ui/button'
 import { Text } from '@/components/ui/text'
-import { single } from '@/components/world/world-selection'
 import { useColdOpenStory } from '@/hooks/use-cold-open-story'
 import { startManualClose } from '@/lib/actions'
 import { canEndChapter } from '@/lib/chapters'
 import { db, openRegionSeries, runInTransaction } from '@/lib/db'
 import { pipelineErrorDetail, type RejectedStart, type TxResult } from '@/lib/pipeline'
+import { singleParam } from '@/lib/route-param'
 import { currentStoryStore, generationStore } from '@/lib/stores'
 
 const ctx = { db, runInTransaction }
@@ -32,7 +32,7 @@ function describeResult(result: TxResult | RejectedStart): string {
 export default function ChapterCloseDevRoute() {
   const params = useLocalSearchParams<{ branchId?: string | string[] }>()
   const openBranchId = currentStoryStore.useCurrentStory((open) => open?.branchId ?? null)
-  const branchId = single(params.branchId) ?? openBranchId
+  const branchId = singleParam(params.branchId) ?? openBranchId
   if (branchId == null)
     return (
       <View className="flex-1 bg-bg-base p-4">

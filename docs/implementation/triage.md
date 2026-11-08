@@ -61,49 +61,17 @@ slice-planning gate forces its resolution before that slice is planned.
   did not re-run the suite serially — the evidence above is still as of
   `edce17b8`.
 
-- **`chaptersStore.patch` takes a raw row from any caller.** The
-  working-set store's `patch` casts `p.row` and `p.columns` to the row
-  type (`lib/stores/factory/working-set-store.ts:31,36`), so a direct
-  caller would put `closeReport` into the store, skipping the
-  projection at the chapters patcher. Today only the patcher and the
-  hydrate write the store; the guarantee is convention. Surfaced by
-  Slice 5.2's review.
 - **The chapters update keeps unchanged columns in its undo payload.**
   Unlike lore (`lib/actions/lore/register.ts:125-130`), which drops
   them because History reads an undo payload's keys as the fields that
   changed (`lib/actions/chapters/register.ts`, the update handler).
   Matters once a chapter edit shows in History. Surfaced by Slice 5.2's
   review.
-- **Partial `TxState` fixtures escape the type checker.**
-  `lib/pipeline/definitions/suggestion-refresh.test.ts:207-212` builds
-  one cast `as never`, already without `deferred` and `pendingClose`,
-  so a new `TxState` field never flags it. Harmless while
-  `isUserEditBlocked` reads only what it has.
-- **A bundled template's group is declared twice, unchecked.**
-  `lib/prompts/bundled/index.ts` sets each template's `group` (read by
-  the include validator) and `TEMPLATE_GROUPS` declares it again, and no
-  test compares the two. Only some one-sided changes fail a test, by
-  another route: `lib/prompts/templateContextMap.test.ts` pins
-  `TEMPLATE_GROUPS` for `chapterMetadata` to `'chapter'`,
-  `bundled-pack.test.ts` counts 13 templates whose `index.ts` group is
-  `wizard`, and the include validator refuses a group the template's
-  macros don't fit.
-- **The story-entry handlers' branch scope is untested on update and
-  delete.** `lib/actions/story-entries/register.test.ts`'s `seed`
-  creates only branch `b1`, so dropping the branch condition from
-  those handlers' writes stays green (entry ids repeat across branches:
-  the PK is `(branch_id, id)`). The stamp handler's case shows the
-  shape.
 - **Refusal codes repeated as literals.** `'branch-not-open'`
   (`lib/actions/classifier/run-now.ts:14`) and `'embedder-swap'`
   (`lib/actions/turns/submit-turn.ts:54`) restate
   `MANUAL_CLOSE_REFUSAL.branchNotOpen` and `.swapPending`
   (`lib/actions/chapters/close-chain.ts`).
-- **Pre-flight reads the open story's settings after two awaits.**
-  `lib/pipeline/runtime/orchestrator.ts:553-555` reads
-  `currentStoryStore.getCurrentStory()?.settings` after `beginRun` and
-  `settleUserWrites`; a story switch in between checks the wrong
-  story's settings. Unverified as reachable.
 - **Seeded entry creates carry no anchor.** The dev seed's
   `createStoryEntry` deltas have `entryId: null`
   (`lib/db/devtools/seed-dataset.ts`), while a real reply's create is
@@ -118,9 +86,6 @@ slice-planning gate forces its resolution before that slice is planned.
   create or close deltas, so a rollback or CTRL-Z on a long branch
   refuses `no-create`. Fine while it stays a read-only performance
   fixture.
-- **`single()` lives in the World module.** The route-param helper
-  (`components/world/world-selection.ts:9`) is imported by Plot, the
-  reader, `plot-selection` and the dev chapter-close route.
 - **`/dev/*` routes are reachable by deep link in a release build.**
   `app/dev/_layout.tsx` has no `__DEV__` gate; only the Settings button
   to the dev index does. For the chapter-close route this is Slice 5.2's
@@ -131,36 +96,6 @@ slice-planning gate forces its resolution before that slice is planned.
   run inside one batch stays stale until the next `run_complete` or turn.
   Retrieval stays correct (the drain is warm-cache only); quiescence can
   be put off. `kick` already records a pending re-run.
-- **A harness comment assumes WAL.** `e2e/harness/db.ts:17` justifies
-  `queryApp` by "a second file handle can miss a WAL-buffered write", but
-  the desktop database runs in rollback-journal mode.
-- **Hand-written types beside `z.ZodType<T>` schemas drift one way.**
-  The import schemas in `lib/avts/` (`thread.ts`, `lore.ts`,
-  `happening.ts`, `entity.ts`) are annotated with a hand-written type,
-  which checks only that the schema's output fits the type. A schema
-  that narrows a field (a nullable one made required) or adds one the
-  type lacks still compiles; a dropped or widened field fails (a scratch
-  `tsc` check on zod 4.4.3). Slice 5.2's close report derives its types
-  with `z.infer` instead. Surfaced by Slice 5.2's review.
-- **Update handlers type their patch apart from their column list.** The
-  entities, lore, threads, translations, era-flips and entry-assets
-  registers declare the update patch type separately from the
-  `UPDATABLE` list the handler loops over, so a key added to the type
-  alone compiles and the handler skips it: silently beside another key,
-  and as a `no updatable fields` refusal alone. Slice 5.2's chapters
-  register derives its patch type from the list. Surfaced by Slice 5.2's
-  review.
-- **The periodic pass reads the stores after its awaits.**
-  `periodicClassifierPhase`
-  (`lib/pipeline/definitions/periodic-classifier.ts:189`) checks
-  `storesHoldBranch` (`:193`), then awaits `readStatus` (`:199`) and
-  `readWindowEntries` (`:201-205`), then reads the entity, relationship,
-  thread and happening rosters from the stores (`:222-232`), and the
-  awareness rows after one more await (`:237-239`). A story open
-  publishing in between gives it another branch's rows, filtered to
-  empty. Unverified what the pass then writes. Slice 5.2's close metadata
-  call reads its stores before its first await. Surfaced by Slice 5.2's
-  review.
 - **Phase intermediates are an untyped bag.** `PhaseContext.intermediates`
   is `Record<string, unknown>` (`lib/pipeline/types.ts:103`), and each
   reader casts its key: the retrieval outcome behind a shape check
@@ -194,26 +129,6 @@ slice-planning gate forces its resolution before that slice is planned.
   spell out a `RunState` for `startRun` by hand, with no shared fixture,
   so a `RunState` change edits all of them. Surfaced by Slice 5.7's
   save-path review.
-- **A fresh dev slot has no local embedder model.** Every seeded story
-  (`pnpm db:seed`, `db:seed:long`, `db:seed:dataset`) declares the local
-  embedder `Xenova/all-MiniLM-L6-v2`. The app counts a model installed
-  only when `<userData>/embedders/<id>/` holds it, and loads it with
-  `local_files_only` (`electron/embedder/service.ts`,
-  [Embedder in E2E](../testing.md#embedder-in-e2e)). Nothing under
-  `scripts/`, neither the dev-slot setup nor the seed, puts it into a
-  slot's userData. Only the E2E harness provisions it, for its own runs:
-  `ensureEmbedderModel` (`e2e/harness/embedder.ts`) fills
-  `~/.cache/aventuras-e2e/embedders`, and each spec that needs it copies
-  it into its run's userData. So in a fresh worker slot
-  (`~/.config/aventuras-dev-slotN`) or on a new machine, a seeded story
-  can't embed and a turn fails before its narrative call, until someone
-  downloads the model in the app or copies it in by hand. PR #709's
-  desktop smoke copied it from that cache into slot 2's
-  `userData/embedders`;
-  [Measuring on a release build](../dev-environment.md#measuring-on-a-release-build)
-  documents the hand copy for the Android measure only. One candidate,
-  undecided: seeding a slot (no explicit path) installs the default
-  catalog model from that cache, or the worktree setup does.
 - **The E2E embedder cache is shared across checkouts on any catalog
   revision.** `ensureEmbedderModel` (`e2e/harness/embedder.ts`) deletes
   and rebuilds `~/.cache/aventuras-e2e/embedders/<model>` when its
@@ -234,49 +149,6 @@ slice-planning gate forces its resolution before that slice is planned.
   interrupted summary either, and the `tsx` and `pnpm` relay in between
   wasn't traced. With parallel workers an orphaned run now finishes in
   under 2 minutes. Surfaced by the same review.
-- **A client-side SDK error is retried as a provider failure.**
-  `classifyProviderError` (`lib/ai/transport/classify-provider-error.ts`)
-  reads anything that isn't an `APICallError` as a retryable `unknown`,
-  so an `InvalidPromptError` (a malformed `messages` array, thrown before
-  any request) or a `TypeValidationError` backs off, throws again and
-  fails as `provider`. A close's tool step is the first call built from
-  caller messages, so a task-runner bug there reads as "LLM call failed".
-  Surfaced by Slice 5.4's final review.
-- **The mock panel's failure menu can't show `stream-cut` on a
-  structured or tool lane.** `FAILURES.structured`
-  (`scripts/mock-llm/ui/index.html`) leaves it out, so a lane armed
-  with it through the API shows the menu as none beside a `stream-cut`
-  badge. On a tool lane it acts as `malformed`. Surfaced by Slice 5.4's
-  review.
-- **The dev mock doesn't re-check stored lane values on load.**
-  `scripts/mock-llm/state.ts` reads `value` as `unknown`, so a
-  hand-edited `state.json` reaches the reply builders unvalidated: a
-  tool lane's answers 500, other kinds may go out as stored. Surfaced by
-  Slice 5.4's review. On a tool lane the 500 hides the bad step: the
-  app retries a 500, the sequence cursor already moved past the step,
-  so the retry is served the next one, and the failed request leaves no
-  log line (`scripts/mock-llm/completions.ts`, the tool branch). Found
-  by Slice 5.4's slice review with a probe through `callWithRetry`.
-- **Canon routes no remedy for an `interrupted` or `content-filter`
-  cut-off.** `generation-pipeline.md`'s `reply-cut-off` remedy paragraph
-  names `window`, `max-output` and `unknown`; the code gives the other
-  two causes no profile fix (`components/reader/cut-off-copy.ts`) and
-  canon doesn't say so. The narrative failed with them before Slice 5.4;
-  a close's tool step can now carry `content-filter` too.
-- **Canon's `callWithRetry` signature omits `carried`.** The block in
-  `generation-pipeline.md → Two retry tiers` lacks the
-  `carried?: () => CarriedCapabilities` option
-  (`lib/ai/transport/call-with-retry.ts`).
-- **A cut-off's `maxOutput` isn't always what the request sent.**
-  `replyCutOff` gets the max output the caller set: the profile's on a
-  structured call (`lib/ai/generate.ts`), the profile's or 8,000 on a
-  tool step (`lib/ai/tool-step.ts`). The Anthropic adapter changes it
-  on the way out: it adds the thinking budget, and clamps to a known
-  model's cap (`claude-3-haiku`, 4,096). So a window cut with thinking
-  on reads `max-output`, and a cap cut under an 8,000 default reads
-  `unknown`, against a figure the request didn't carry. Slice 5.4's
-  slice review reads the sent `max_tokens` back for the tool step;
-  `generateStructured` still passes the profile's.
 - **The `toolCalling` hint may miss some servers' wording.** Canon's
   keywords are `tools` and `tool_choice`
   ([`generation-pipeline.md → Fatal error categories`](../generation-pipeline.md#fatal-error-categories)).
@@ -286,59 +158,6 @@ slice-planning gate forces its resolution before that slice is planned.
   holds a keyword. Both texts are from memory, not a live server. Check
   them, and widen `CapabilityHint`'s `matched` if they hold. Surfaced by
   Slice 5.4's slice review.
-- **The dev mock can't forget a tool lane.** A saved `tools:` lane lists
-  under Tools across restarts, so a task whose tools were renamed
-  leaves its old lane there for good; only Reset or a hand edit of
-  `state.json` clears it. A control call naming an unknown key creates
-  the lane before its route matches (`scripts/mock-llm/control.ts`, the
-  `lanes` branch), so even a 404 on a mistyped `tools:` key leaves one
-  listed. Surfaced by Slice 5.4's slice review.
-- **Duplication the tool step's simplifier pass left for a shared
-  home.** The expiry detail `` `${target}: timeout after ${boundMs}ms` ``
-  is written in `lib/ai/tool-step.ts` and `lib/pipeline/call-error.ts`,
-  and `lib/ai` can't import `lib/pipeline`; tests pin both strings. The
-  `lib/ai` tests repeat their fixtures: `okStep` in `tool-step.test.ts`,
-  `stub/stub-provider.test.ts` and `scripts/mock-llm/harness-tool-steps.test.ts`,
-  and `useProvider`, `MODELS` and `rejection` across `tool-step.test.ts`,
-  `window-check.test.ts` and `request-shape.test.ts`. The older
-  `narrativeValueSchema` in `scripts/mock-llm/validate.ts` is exported
-  with no importer. Surfaced by Slice 5.4's slice review.
-- **World's and Plot's create tab shows the previous row on native.**
-  `useCreateResetTab` (`hooks/use-create-reset-tab.ts:12-15`) switches
-  the detail pane's tab during render, in the commit whose `create:…`
-  `rowKey` resets the form. On native `@rn-primitives/tabs` renders
-  nothing for an inactive tab, so the create tab's fields mount in that
-  commit and miss the reset (react-hook-form subscribes passively off
-  web: [the lesson](lessons-learned/rhf-native-passive-subscription.md)).
-  The fields show the previous row, or a previous draft's text, while
-  the form holds blanks, and Save writes blanks for every field the
-  user didn't touch. Reached by `[+] Blank` while the pane is on a tab
-  other than the one a create opens on, at tablet tier (the Fold
-  unfolded). Confirmed on react-hook-form's native path in jsdom, not on
-  a device. Fixes: switch the tab in a layout effect, or lift the
-  Timeline's `formRowId` into the substrate as a `formRowKey` hosts gate
-  on; or patch react-hook-form to use `useLayoutEffect` whenever
-  `window` exists, which removes the class (errors and field arrays
-  included). Surfaced by Slice 5.7's Android check.
-- **A leave re-raised after Discard or Save reads stale dirty state.**
-  `requestLeave` and `runSave` in `hooks/use-row-save-session.ts` read
-  the last render's `form.formState.dirtyFields`, so a leave requested again in the same
-  tick as a Discard or Save is queued, and the leave dialog opens over a
-  clean session. It stays latent only because expo-router 55 queues
-  `back`, `dismiss` and `push` until after the next commit; a
-  synchronous dispatch brings the double prompt back on World, Plot and
-  the Timeline. Reading dirtiness live, as the Story Settings session
-  does through its `stateRef`, would close it. The Timeline's E2E pins
-  one-click Discard for `←` and Jump. Surfaced by Slice 5.7's route
-  review.
-- **The row-session wrapper exists in four copies.** The lore, entity,
-  plot and chapter row sessions each repeat the `commit` wrapper (a
-  try/catch and a `*_saved_handler_failed` log), the `onSession`
-  effect, and, in two of the four (lore, chapter), an effect
-  that calls `clearErrors` once the form is clean and the other two lack.
-  Whether plot and entity miss that effect on purpose is unverified. Lifting the shared parts into
-  the substrate or a helper would end the drift. Surfaced by Slice
-  5.7's session-hook review.
 - **The gated field wiring exists in three copies.** The `Controller`
   plus `FormRow` plus input with the run gate (`editable={!blocked}`
   and a hint, or `disabled` and a reason) is written in World's
@@ -356,59 +175,6 @@ slice-planning gate forces its resolution before that slice is planned.
   shared compound, or a `Button` option, would end the copies; the
   latter changes native layout for every `disabledReason` caller, so it
   wants a design call. Surfaced by Slice 5.7's slice review.
-- **`TagInput` remounts when a run starts.** On web it wraps itself in a
-  `div title` only while disabled with a reason
-  (`components/compounds/tag-input.tsx:211-213`), so a run starting
-  mid-keyword flips the root element and remounts the tree: focus and
-  the half-typed keyword (local state) are lost. Hits World's
-  `ListField` and the Timeline's Keywords. Same class as the
-  input-adornment DOM-identity lesson. Surfaced by Slice 5.7's card
-  review.
-- **C15 and Slice 5.3 say time ranges exclude 0; the read keeps it.**
-  [Milestone 5 → C15](milestones/05-chapters-chapter-close/milestone.md#c15--entry-jump-and-chapter-time-ranges)
-  gives each chapter's `min` and `max` world time "excluding 0", and
-  [Slice 5.3 → Scope: in](milestones/05-chapters-chapter-close/slices/03-reader-chapters.md#scope-in)
-  says the same, as does its acceptance criterion 12.
-  `readChapterTimeRanges` (`lib/db/story-entries/chapter-time-ranges.ts:27-28`)
-  excludes `kind = 'system'` and a null world time only, and its test
-  pins 0 on purpose (`chapter-time-ranges.test.ts`, "starts a range
-  at the opening, at 0"): the 2026-11-04 triage pass (PR #704) took a
-  world time of 0 as the origin, not a flashback. The docs are the side
-  to fix. Surfaced by Slice 5.7's card-data task.
-- **`observability.md` credits `row_save_validate_failed` to a check
-  that isn't there.** The bullet names "the lore session's first-edit
-  whole-draft check"; `use-lore-row-session.ts` runs no `trigger()`,
-  and the substrate's values-subscription catch, which does log it, is
-  unnamed. Surfaced by Slice 5.7's session-hook review.
-- **`saveBarDiscard` matches the unsaved dialog's Discard too.** It
-  queries the page for a button named `Discard`
-  (`e2e/locators/save-session.ts`), and the dialog's
-  `unsavedChanges.discard` reads the same as the bar's
-  `saveBar.discard` (`locales/en/common.json`). The save bar stays in
-  the accessibility tree while the dialog is open, as the file notes at
-  `unsavedDiscard`, so the query would resolve both and hit a
-  strict-mode error; `exact: true` can't tell two buttons of one name
-  apart. It needs scoping outside the dialog, to the bar's `save-bar`
-  testID say. No current caller uses it with the dialog open. Surfaced
-  by Slice 5.7's E2E review.
-- **`EMPTY_LORE_DRAFT`'s freeze is shallow.** `lib/world/lore-draft.ts`
-  types it `Readonly<LoreDraft>`, which leaves `keywords` and `tags`
-  mutable `string[]` in the type, and `Object.freeze` leaves them
-  mutable at runtime too, so nothing stops a write into the arrays every
-  spread of the constant shares. `loreDraftFrom` copies in new lists by
-  convention. The chapter twin, `EMPTY_CHAPTER_DRAFT`, is tightened in
-  Slice 5.7's review; lore's is older code, which
-  [`code-conventions.md → Type design`](../code-conventions.md#type-design)
-  files as a deferral. Surfaced by Slice 5.7's slice review.
-- **`commitRowSave`'s `idPrefix` is required even for an update.**
-  `CommitRowSaveArgs` (`lib/actions/row-save/commit-row-save.ts`) pairs
-  `rowId: string | null` with a required `idPrefix: string`, read only
-  when `rowId` is null, to generate a create's id. `saveChapter`, its
-  first update-only caller, passes a dead `idPrefix: 'chap'`. Tighter:
-  `{ rowId: string }` or `{ rowId: null; idPrefix }`, the prefix typed
-  from the closed set in `lib/ids/prefixes.ts` (`SubstitutablePrefix`).
-  Older API; the slice adds a caller. Surfaced by Slice 5.7's slice
-  review.
 - **A Save whose only change is whitespace leaves the untrimmed draft
   as the clean form.** The chapter and lore drafts compare trimmed
   values (`chapterPatch` in `lib/chapters/chapter-draft.ts`, `lorePatch`
@@ -423,11 +189,6 @@ slice-planning gate forces its resolution before that slice is planned.
   and it spans every row kind (Plot's thread and happening drafts trim
   too). The Timeline is a new route to lore's existing behaviour.
   Surfaced by Slice 5.7's slice review.
-- **A second CTRL-Z after a close whose reversal failed leaves its marker
-  open.** It undoes the close's delta rows and chapter row but leaves the
-  close's `pipeline_runs` marker with `finished_at` null. How boot
-  recovery (`recoverInFlightRuns`, `lib/pipeline/runtime/recovery.ts`)
-  treats an `action_id` a user undo already reversed is unverified. Surfaced by Slice 5.6's review.
 - **`undoLastAction` reads the branch's whole delta log, twice per
   CTRL-Z.** `lib/actions/story-entries/undo.ts` reads it with no LIMIT
   under the gate, and only the head group is needed. The cost is
@@ -440,12 +201,6 @@ slice-planning gate forces its resolution before that slice is planned.
   that entry" and needs the developer's call. It shares a root with
   [the deferral toast entry in parked.md](../parked.md#the-deferral-toast-can-promise-a-close-that-never-runs).
   Surfaced by Slice 5.6's review.
-- **A late Cancel announces nothing.** One that lands after a run's last
-  phase commits the run and chains nothing through `commitRun`, which
-  records no deferral and emits no `run_deferred`, so a cancelled chain
-  gets no "moved to your next turn" toast, though the close still runs at
-  the next Send (owed by its pick or the threshold). A turn's late Cancel
-  is the same today. Surfaced by Slice 5.6's review.
 - **A before-turn close shows one flat label.** The banner keeps its
   before-your-turn label for the whole run (C6, `principles.md`, the
   slice's label table), which hides `N of M` exactly when the user waits longest,
@@ -455,12 +210,6 @@ slice-planning gate forces its resolution before that slice is planned.
   sits in a `role="status"` `aria-live="polite"` region and now changes up
   to about 21 times per close run; canon's a11y notes don't say whether
   that announcement rate is wanted. Surfaced by Slice 5.6's review.
-- **A retry-blocked toast prints a raw refusal code.** `reader.json`'s
-  `passRetryBlocked` and `closeRetryBlocked` interpolate the run's
-  `blockedBy` (`story-busy`, for one) into user-facing copy.
-  `passRetryBlocked` was already there; `closeRetryBlocked` is this
-  slice's own copy, repeating its pattern. Surfaced by Slice 5.6's
-  review.
 - **Send can start a turn on a branch that turns held after its check.**
   `submitTurn` reads `owedWorkAtSend` (held first) and, with nothing
   owed, goes straight to the turn. A live pass reads as not held and
@@ -471,14 +220,3 @@ slice-planning gate forces its resolution before that slice is planned.
   before Slice 5.6). The reader blocks Send while a hard-gate run is live,
   so only a caller past the UI reaches it. Surfaced by CodeRabbit on
   Slice 5.6's PR.
-- **The pass-failure Retry path is looser than its close twin.**
-  `PassRefusal` (`components/reader/send-run.ts:104`) types its non-held
-  `error` as `PipelineError | undefined`, though a failed `TxResult`
-  always carries one; the close's twin, `closeRefusalOf` (`:117`), now
-  requires it. `retryPassEntry`'s docblock
-  (`components/reader/system-entry-actions.tsx:302-307`) omits the
-  non-held refusal, which toasts and leaves the entry (`:328`). Both
-  predate Slice 5.6, and
-  [code-conventions → Type design](../code-conventions.md#type-design)
-  files older looseness as a deferral. Surfaced by Slice 5.6's slice
-  review.

@@ -12,10 +12,11 @@ import {
 } from '@/lib/db'
 
 // Query the running app's own DB connection through the preload bridge
-// (window.aventurasDb). The faithful way to assert an in-app write: it reads
-// through the same main-process connection that just committed, whereas a
-// second file handle can miss a WAL-buffered write. sqlite-proxy hands rows
-// back as arrays-of-values. See docs/testing.md → Selector strategy, Tier 1.
+// (window.aventurasDb): the one connection with sqlite-vec loaded, the only one a
+// spec may write through, and one that never waits on the app's writer for the
+// database lock, which a second handle meets as `database is locked`.
+// sqlite-proxy hands rows back as arrays-of-values. See docs/testing.md →
+// Selector strategy, Tier 1.
 export async function queryApp(
   page: Page,
   sql: string,

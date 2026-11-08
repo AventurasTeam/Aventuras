@@ -53,7 +53,10 @@ function heldCommit() {
 }
 
 type Extras = Partial<
-  Pick<RowSaveSessionOptions<Draft>, 'resolver' | 'onRejected' | 'confirmBeforeCommit'>
+  Pick<
+    RowSaveSessionOptions<Draft>,
+    'resolver' | 'onRejected' | 'confirmBeforeCommit' | 'onSession'
+  >
 > & {
   onRender?: (session: RowSaveSession<Draft>) => void
 }
@@ -61,7 +64,13 @@ type Extras = Partial<
 function setup(
   commit: Commit = okCommit(),
   initial: Props = { rowKey: 'row_1', values: VALUES },
-  { onRender, resolver = zodResolver(schema), onRejected, confirmBeforeCommit }: Extras = {},
+  {
+    onRender,
+    resolver = zodResolver(schema),
+    onRejected,
+    confirmBeforeCommit,
+    onSession,
+  }: Extras = {},
 ) {
   const hook = renderHook(
     ({ rowKey, values }: Props) => {
@@ -75,6 +84,7 @@ function setup(
         commit,
         confirmBeforeCommit,
         onRejected,
+        onSession,
       })
       onRender?.(session)
       return session
@@ -161,6 +171,35 @@ describe('useRowSaveSession', () => {
     expect(commit).toHaveBeenCalledTimes(1)
   })
 
+  it('drops a field issue once an edit is undone and the draft is clean again', async () => {
+    // Blank committed values are where a clean draft can hold an invalid field.
+    const hook = setup(okCommit(), { rowKey: 'create:1', values: { title: '', note: '' } })
+    act(() => hook.result.current.form.setValue('title', 'A', { shouldDirty: true }))
+    await act(async () => {
+      hook.result.current.form.setValue('title', '', { shouldDirty: true })
+      await hook.result.current.form.trigger('title')
+    })
+    await vi.waitFor(() => expect(hook.result.current.dirty).toBe(false))
+    await vi.waitFor(() => expect(hook.result.current.form.formState.errors).toEqual({}))
+    expect(hook.result.current.invalidReason).toBeNull()
+  })
+
+  it('hands its leave routing to onSession as dirtiness changes, and null on unmount', () => {
+    const onSession = vi.fn()
+    const hook = setup(okCommit(), undefined, { onSession })
+    expect(onSession).toHaveBeenLastCalledWith({
+      dirty: false,
+      requestLeave: hook.result.current.requestLeave,
+    })
+    act(() => hook.result.current.form.setValue('note', 'x', { shouldDirty: true }))
+    expect(onSession).toHaveBeenLastCalledWith({
+      dirty: true,
+      requestLeave: hook.result.current.requestLeave,
+    })
+    hook.unmount()
+    expect(onSession).toHaveBeenLastCalledWith(null)
+  })
+
   it('runs a leave immediately while clean, queues it while dirty, drains on discard', () => {
     const hook = setup()
     const proceed = vi.fn()
@@ -181,6 +220,43 @@ describe('useRowSaveSession', () => {
     expect(proceed).toHaveBeenCalledTimes(2)
     expect(hook.result.current.dirty).toBe(false)
     expect(hook.result.current.form.getValues()).toEqual(VALUES)
+  })
+
+  // A router that dispatches synchronously raises the next leave before the Discard re-renders.
+  it('runs a leave raised in the same tick as a Discard, with no dialog', () => {
+    const hook = setup()
+    act(() => hook.result.current.form.setValue('note', 'x', { shouldDirty: true }))
+    const proceed = vi.fn()
+    act(() => {
+      hook.result.current.discard()
+      hook.result.current.requestLeave(proceed)
+    })
+    expect(proceed).toHaveBeenCalledTimes(1)
+    expect(hook.result.current.pendingLeave).toBe(false)
+  })
+
+  it('queues a leave raised in the same tick as the first edit', () => {
+    const hook = setup()
+    const proceed = vi.fn()
+    act(() => {
+      hook.result.current.form.setValue('note', 'x', { shouldDirty: true })
+      hook.result.current.requestLeave(proceed)
+    })
+    expect(proceed).not.toHaveBeenCalled()
+    expect(hook.result.current.pendingLeave).toBe(true)
+  })
+
+  it('writes nothing for a Save raised in the same tick as a Discard', async () => {
+    const commit = okCommit()
+    const hook = setup(commit)
+    act(() => hook.result.current.form.setValue('note', 'x', { shouldDirty: true }))
+    let outcome: RowSaveOutcome | undefined
+    await act(async () => {
+      hook.result.current.discard()
+      outcome = await hook.result.current.save()
+    })
+    expect(outcome).toEqual({ status: 'noop' })
+    expect(commit).not.toHaveBeenCalled()
   })
 
   it('runs every queued leave oldest first once the save lands', async () => {

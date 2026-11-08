@@ -6,7 +6,7 @@ export {
   type ResolveTarget,
   type StoryOverrideTarget,
 } from './agents'
-export { CALL_TIMEOUT_DEFAULT_MS, callTimeoutMs } from './call-timeout'
+export { CALL_TIMEOUT_DEFAULT_MS, callTimeoutMs, providerTimeoutDetail } from './call-timeout'
 export { fetchModelCatalog, normalizeModelCatalog, type CatalogEntry } from './catalog'
 export {
   ContextWindowError,

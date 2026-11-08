@@ -5,7 +5,7 @@ import { translationWriteSchema, translations } from '@/lib/db'
 import { translationsStore } from '@/lib/stores'
 
 import { missingRef, MISSING_REF, rowRefs } from '../delta/live-refs'
-import { register, type ActionHandler } from '../delta/registry'
+import { register, type ActionHandler, type PatchMatchesColumns } from '../delta/registry'
 import type { DeltaSource } from '../types'
 
 type TranslationUpdatePatch = Partial<{ translatedText: string }>
@@ -22,6 +22,7 @@ declare module '@/lib/actions/action-map' {
 }
 
 const UPDATABLE = ['translatedText'] as const
+void (true satisfies PatchMatchesColumns<TranslationUpdatePatch, typeof UPDATABLE>)
 
 function fullRow(entry: NewTranslation): Translation {
   return {

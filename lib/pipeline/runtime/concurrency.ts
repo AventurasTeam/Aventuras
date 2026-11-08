@@ -7,6 +7,9 @@ export type StartDecision =
   | { kind: 'start-after-yields'; targets: readonly string[] }
   | { kind: 'blocked'; by: string }
 
+/** `blockedBy` for an interruptible run refused inside a prose reversal's window. */
+const REVERSAL_BLOCKER = 'reversal'
+
 // Consulted synchronously on runPipeline(kind) entry. No pass or close may start inside a prose
 // reversal's interrupt->sweep window: it would read prose the sweep is about to remove.
 export function checkConcurrencyContract(
@@ -15,7 +18,7 @@ export function checkConcurrencyContract(
   reversalInProgress: boolean,
 ): StartDecision {
   const pipeline = getPipeline(kind)
-  if (pipeline.interruptible && reversalInProgress) return { kind: 'blocked', by: 'reversal' }
+  if (pipeline.interruptible && reversalInProgress) return { kind: 'blocked', by: REVERSAL_BLOCKER }
 
   const blockedBy = pipeline.concurrencyPolicy.blockedBy ?? []
   for (const run of currentRuns.values()) {

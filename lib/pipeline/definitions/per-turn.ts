@@ -10,6 +10,7 @@ import {
   resolveModelCapabilities,
   streamText,
   type ReplyCutOffFailure,
+  providerTimeoutDetail,
 } from '@/lib/ai'
 import { CHAPTER_CLOSE_KIND } from '@/lib/chapters'
 import { PERIODIC_CLASSIFIER_KIND } from '@/lib/classifier'
@@ -98,7 +99,7 @@ function skipFailedFold(
 
 // A provider can send an error part and then stall: the stall fails the reply, the error says why.
 function narrativeTimeoutDetail(timeoutMs: number | undefined, earlierError: unknown): string {
-  const timeout = `narrative: timeout after ${timeoutMs}ms`
+  const timeout = providerTimeoutDetail('narrative', timeoutMs)
   return earlierError === undefined
     ? timeout
     : `${timeout}; earlier stream error: ${describeProviderError(earlierError)}`

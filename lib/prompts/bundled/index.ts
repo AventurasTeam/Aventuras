@@ -1,5 +1,6 @@
-import { MACRO_IDS, TEMPLATE_IDS } from '../ids'
-import type { Pack, TemplateEntry } from '../types'
+import { MACRO_IDS, TEMPLATE_IDS, type TemplateId } from '../ids'
+import { TEMPLATE_GROUPS } from '../templateContextMap'
+import type { Pack, TemplateEntry, TemplateSources } from '../types'
 import { CHAPTER_METADATA } from './chapter-metadata'
 import { CLASSIFIER_MODE_RULE } from './classifier-mode-rule'
 import { ENTITY_STATE, ITEM_LINE } from './entity-state'
@@ -37,34 +38,63 @@ import {
   WIZARD_TONE_REFINE,
 } from './wizard'
 
+// The group is the registry's (architecture.md → Context groups); the include validator reads it.
+function template(id: TemplateId, sources: TemplateSources): TemplateEntry {
+  return { group: TEMPLATE_GROUPS[id], ...sources }
+}
+
 // A wizard template's system half is empty (architecture.md → System and user halves).
-function wizardTemplate(user: string): TemplateEntry {
-  return { group: 'wizard', system: '', user }
+function wizardTemplate(id: TemplateId, user: string): TemplateEntry {
+  return template(id, { system: '', user })
 }
 
 export const bundledPack: Pack = {
   templates: {
-    [TEMPLATE_IDS.perTurnNarrative]: { group: 'generationContext', ...PER_TURN_NARRATIVE },
-    [TEMPLATE_IDS.piggybackFallbackClassifier]: {
-      group: 'generationContext',
-      ...PIGGYBACK_FALLBACK_CLASSIFIER,
-    },
-    [TEMPLATE_IDS.periodicClassifier]: { group: 'classifierContext', ...PERIODIC_CLASSIFIER },
-    [TEMPLATE_IDS.suggestionRefresh]: { group: 'generationContext', ...SUGGESTION_REFRESH },
-    [TEMPLATE_IDS.chapterMetadata]: { group: 'chapter', ...CHAPTER_METADATA },
-    [TEMPLATE_IDS.wizardOpening]: wizardTemplate(WIZARD_OPENING),
-    [TEMPLATE_IDS.wizardOpeningRefine]: wizardTemplate(WIZARD_OPENING_REFINE),
-    [TEMPLATE_IDS.wizardTitleChips]: wizardTemplate(WIZARD_TITLE_CHIPS),
-    [TEMPLATE_IDS.wizardDescription]: wizardTemplate(WIZARD_DESCRIPTION),
-    [TEMPLATE_IDS.wizardDescriptionRefine]: wizardTemplate(WIZARD_DESCRIPTION_REFINE),
-    [TEMPLATE_IDS.wizardLore]: wizardTemplate(WIZARD_LORE),
-    [TEMPLATE_IDS.wizardCast]: wizardTemplate(WIZARD_CAST),
-    [TEMPLATE_IDS.wizardGenre]: wizardTemplate(WIZARD_GENRE),
-    [TEMPLATE_IDS.wizardGenreRefine]: wizardTemplate(WIZARD_GENRE_REFINE),
-    [TEMPLATE_IDS.wizardTone]: wizardTemplate(WIZARD_TONE),
-    [TEMPLATE_IDS.wizardToneRefine]: wizardTemplate(WIZARD_TONE_REFINE),
-    [TEMPLATE_IDS.wizardSetting]: wizardTemplate(WIZARD_SETTING),
-    [TEMPLATE_IDS.wizardSettingRefine]: wizardTemplate(WIZARD_SETTING_REFINE),
+    [TEMPLATE_IDS.perTurnNarrative]: template(TEMPLATE_IDS.perTurnNarrative, PER_TURN_NARRATIVE),
+    [TEMPLATE_IDS.piggybackFallbackClassifier]: template(
+      TEMPLATE_IDS.piggybackFallbackClassifier,
+      PIGGYBACK_FALLBACK_CLASSIFIER,
+    ),
+    [TEMPLATE_IDS.periodicClassifier]: template(
+      TEMPLATE_IDS.periodicClassifier,
+      PERIODIC_CLASSIFIER,
+    ),
+    [TEMPLATE_IDS.suggestionRefresh]: template(TEMPLATE_IDS.suggestionRefresh, SUGGESTION_REFRESH),
+    [TEMPLATE_IDS.chapterMetadata]: template(TEMPLATE_IDS.chapterMetadata, CHAPTER_METADATA),
+    [TEMPLATE_IDS.wizardOpening]: wizardTemplate(TEMPLATE_IDS.wizardOpening, WIZARD_OPENING),
+    [TEMPLATE_IDS.wizardOpeningRefine]: wizardTemplate(
+      TEMPLATE_IDS.wizardOpeningRefine,
+      WIZARD_OPENING_REFINE,
+    ),
+    [TEMPLATE_IDS.wizardTitleChips]: wizardTemplate(
+      TEMPLATE_IDS.wizardTitleChips,
+      WIZARD_TITLE_CHIPS,
+    ),
+    [TEMPLATE_IDS.wizardDescription]: wizardTemplate(
+      TEMPLATE_IDS.wizardDescription,
+      WIZARD_DESCRIPTION,
+    ),
+    [TEMPLATE_IDS.wizardDescriptionRefine]: wizardTemplate(
+      TEMPLATE_IDS.wizardDescriptionRefine,
+      WIZARD_DESCRIPTION_REFINE,
+    ),
+    [TEMPLATE_IDS.wizardLore]: wizardTemplate(TEMPLATE_IDS.wizardLore, WIZARD_LORE),
+    [TEMPLATE_IDS.wizardCast]: wizardTemplate(TEMPLATE_IDS.wizardCast, WIZARD_CAST),
+    [TEMPLATE_IDS.wizardGenre]: wizardTemplate(TEMPLATE_IDS.wizardGenre, WIZARD_GENRE),
+    [TEMPLATE_IDS.wizardGenreRefine]: wizardTemplate(
+      TEMPLATE_IDS.wizardGenreRefine,
+      WIZARD_GENRE_REFINE,
+    ),
+    [TEMPLATE_IDS.wizardTone]: wizardTemplate(TEMPLATE_IDS.wizardTone, WIZARD_TONE),
+    [TEMPLATE_IDS.wizardToneRefine]: wizardTemplate(
+      TEMPLATE_IDS.wizardToneRefine,
+      WIZARD_TONE_REFINE,
+    ),
+    [TEMPLATE_IDS.wizardSetting]: wizardTemplate(TEMPLATE_IDS.wizardSetting, WIZARD_SETTING),
+    [TEMPLATE_IDS.wizardSettingRefine]: wizardTemplate(
+      TEMPLATE_IDS.wizardSettingRefine,
+      WIZARD_SETTING_REFINE,
+    ),
   },
   macros: {
     // Wizard-grouped, not staticContent: these read wizard working-state

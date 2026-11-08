@@ -9,7 +9,7 @@ import type { PlaceSaveRefusal } from '@/lib/world'
 import { commitRowSave, flatRowSaveResult, type RowSaveResult } from './commit-row-save'
 import { withKeyLock } from '../delta/key-lock'
 import { rowLock } from '../delta/row-locks'
-import type { PipelineAction } from '../types'
+import type { DbCtx, PipelineAction } from '../types'
 
 async function setup() {
   const { db, runInTransaction } = await createTestDb()
@@ -90,6 +90,18 @@ describe('commitRowSave — every refusal carries a code from the closed set', (
       status: 'rejected',
       code: 'failed',
     })
+  })
+
+  it('takes an id prefix only for a create, from the closed set (checked by tsc)', () => {
+    const build = (): PipelineAction[] => []
+    const calls = (ctx: DbCtx) => [
+      // @ts-expect-error a create needs its id's prefix
+      commitRowSave('lore', { branchId: 'b1', rowId: null, build }, ctx),
+      // @ts-expect-error a prefix outside SubstitutablePrefix
+      commitRowSave('lore', { branchId: 'b1', rowId: null, idPrefix: 'nope', build }, ctx),
+      commitRowSave('chapter', { branchId: 'b1', rowId: 'chap_1', build }, ctx),
+    ]
+    expect(calls).toBeTypeOf('function')
   })
 })
 

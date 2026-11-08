@@ -44,7 +44,6 @@ import { WorldListPane, type WorldListPaneHandle } from '@/components/world/worl
 import { involvementsFor, relationshipLinksFor } from '@/components/world/world-route-data'
 import {
   parseWorldSelection,
-  single as singleParam,
   worldAddLabel,
   worldCategoryLabel,
   type WorldSelection,
@@ -76,6 +75,7 @@ import { db, runInTransaction } from '@/lib/db'
 import { logger } from '@/lib/diagnostics'
 import { t } from '@/lib/i18n'
 import { isEntityCategory, type EntityFilter, type WorldCategory } from '@/lib/list-modules'
+import { singleParam } from '@/lib/route-param'
 import {
   characterRelationshipsStore,
   entitiesStore,

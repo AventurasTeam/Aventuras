@@ -590,6 +590,103 @@ describe('lane PUT', () => {
   })
 })
 
+describe('lane lifecycle', () => {
+  const lanes = (): string[] => Object.keys(mock.ctx.state.lanes)
+  const call = (path: string, method: string, payload?: unknown): Promise<Response> =>
+    fetch(`${base()}/api/lanes/${path}`, {
+      method,
+      headers: { 'content-type': 'application/json' },
+      ...(payload !== undefined ? { body: JSON.stringify(payload) } : {}),
+    })
+
+  it('leaves no lane behind for a call on a key it has never seen', async () => {
+    const key = encodeURIComponent('tools:mistyped')
+    expect((await call(`${key}/sequence/reset`, 'POST')).status).toBe(404)
+    expect((await call(`${key}/responses/r_missing`, 'DELETE')).status).toBe(404)
+    expect(lanes()).not.toContain('tools:mistyped')
+  })
+
+  // The panel lists only catalog lanes and tool lanes, so any other key would be saved unseen.
+  it('adds no lane a configuring write names outside the catalog, unless a tool lane', async () => {
+    const key = encodeURIComponent('mistyped-shape')
+    expect((await call(`${key}/responses`, 'POST', { value: 'hi' })).status).toBe(404)
+    expect((await call(key, 'PUT', { mode: 'mock' })).status).toBe(404)
+    expect(lanes()).not.toContain('mistyped-shape')
+  })
+
+  it('adds no lane for a configuring write that fails validation', async () => {
+    const key = encodeURIComponent('tools:refused')
+    expect((await call(key, 'PUT', { stream: 5 })).status).toBe(400)
+    expect(lanes()).not.toContain('tools:refused')
+  })
+
+  it('adds a tool lane a valid write configures, and forgets it on DELETE', async () => {
+    const key = encodeURIComponent('tools:forget_me')
+    expect((await call(key, 'PUT', { failure: { kind: 'malformed', remaining: 1 } })).status).toBe(
+      200,
+    )
+    expect(lanes()).toContain('tools:forget_me')
+
+    expect((await call(key, 'DELETE')).status).toBe(200)
+    expect(lanes()).not.toContain('tools:forget_me')
+    const snapshot = (await (await fetch(`${base()}/api/state`)).json()) as {
+      lanes: { key: string }[]
+    }
+    expect(snapshot.lanes.map((l) => l.key)).not.toContain('tools:forget_me')
+    expect((await call(key, 'DELETE')).status).toBe(404)
+  })
+
+  it('still resets the sequence of a registered lane with no saved entry yet', async () => {
+    const saved = mock.ctx.state.lanes['per-turn-classifier']
+    Reflect.deleteProperty(mock.ctx.state.lanes, 'per-turn-classifier')
+    try {
+      expect((await call('per-turn-classifier/sequence/reset', 'POST')).status).toBe(200)
+    } finally {
+      if (saved !== undefined) mock.ctx.state.lanes['per-turn-classifier'] = saved
+    }
+  })
+})
+
+describe('a hand-edited tool step', () => {
+  const KEY = 'tools:inspect'
+  const request = {
+    model: 'seed/narrative',
+    messages: [{ role: 'user', content: 'Inspect the door.' }],
+    tools: [
+      {
+        type: 'function',
+        function: {
+          name: 'inspect',
+          description: 'Inspect a thing.',
+          parameters: { type: 'object', properties: {} },
+        },
+      },
+    ],
+  }
+
+  it('refuses a step in the wire spelling, logs it and keeps the cursor for the retry', async () => {
+    const lane = mock.ctx.lane(KEY)
+    // The API refuses `tool_calls`; a hand edit of state.json puts it there anyway.
+    lane.responses = [
+      { id: 'r_wire', name: 'Wire spelling', value: { tool_calls: [{ name: 'inspect' }] } },
+      { id: 'r_next', name: 'Next', value: { text: 'done' } },
+    ]
+    lane.sequence = { enabled: true, loop: false, ids: ['r_wire', 'r_next'], cursor: 0 }
+    mock.ctx.log.clear()
+    try {
+      const response = await post(request)
+      expect(response.status).toBe(500)
+      expect(((await response.json()) as { error: { message: string } }).error.message).toMatch(
+        /no valid tool step/,
+      )
+      expect(lane.sequence.cursor).toBe(0)
+      expect(mock.ctx.log.list()[0]).toMatchObject({ lane: KEY, outcome: 'failed', status: 500 })
+    } finally {
+      Reflect.deleteProperty(mock.ctx.state.lanes, KEY)
+    }
+  })
+})
+
 describe('usage', () => {
   it('reports usage on a structured reply, counted over its prompt and its reply', async () => {
     const request = structuredRequest(fallbackClassifierSchema)

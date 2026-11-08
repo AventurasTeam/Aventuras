@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react'
+import { useCallback, useLayoutEffect, useRef, useState } from 'react'
 import type { FieldValues, Path, Resolver, UseFormReturn } from 'react-hook-form'
 
 import {
@@ -122,15 +122,12 @@ export function useEntityRowSession<Draft extends EntityDraft>({
     commit,
     confirmBeforeCommit,
     onRejected,
+    onSession,
   })
-  const { form, dirty, requestLeave } = session
+  const { form } = session
   useLayoutEffect(() => {
     formRef.current = form
     rowKeyRef.current = rowKey
   })
-  useEffect(() => {
-    onSession({ dirty, requestLeave })
-    return () => onSession(null)
-  }, [onSession, dirty, requestLeave])
   return session
 }

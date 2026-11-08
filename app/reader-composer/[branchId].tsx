@@ -101,7 +101,6 @@ import {
 } from '@/components/story-settings/generation-run'
 import { EmptyState } from '@/components/ui/empty-state'
 import { KeyboardInsetColumn } from '@/components/ui/keyboard-inset-column'
-import { single as singleParam } from '@/components/world/world-selection'
 import { useChapterProgress } from '@/hooks/use-chapter-progress'
 import { useGlobalHotkey } from '@/hooks/use-global-hotkey'
 import { useLeaveFailedStoryOpen } from '@/hooks/use-leave-failed-story-open'
@@ -150,6 +149,7 @@ import {
   SUGGESTION_REFRESH_KIND,
   type PipelineError,
 } from '@/lib/pipeline'
+import { singleParam } from '@/lib/route-param'
 import {
   appSettingsStore,
   awaitRunTerminal,

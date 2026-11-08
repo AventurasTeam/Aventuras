@@ -1,5 +1,5 @@
 import type { Meta, StoryObj } from '@storybook/react-native-web-vite'
-import { useState, type ComponentProps } from 'react'
+import { useEffect, useState, type ComponentProps } from 'react'
 import { View } from 'react-native'
 import { expect, fn, screen, userEvent, waitFor } from 'storybook/test'
 
@@ -60,6 +60,66 @@ export const Disabled: Story = {
       disabledReason="Generation is in flight. Cancel to edit."
     />
   ),
+}
+
+const RUN_REASON = 'Generation is in flight. Cancel to edit.'
+const START_RUN = 'story:start-run'
+
+// A run starts elsewhere, so the field keeps focus; the play function fires it.
+function DisablingHarness({ initial }: { initial: string[] }) {
+  const [disabled, setDisabled] = useState(false)
+  const [value, setValue] = useState<string[]>(initial)
+  useEffect(() => {
+    const start = () => setDisabled(true)
+    window.addEventListener(START_RUN, start)
+    return () => window.removeEventListener(START_RUN, start)
+  }, [])
+  return (
+    <TagInput
+      value={value}
+      onChange={setValue}
+      placeholder="Add tags…"
+      disabled={disabled}
+      disabledReason={RUN_REASON}
+    />
+  )
+}
+
+async function startRun(input: HTMLElement): Promise<void> {
+  window.dispatchEvent(new Event(START_RUN))
+  await waitFor(() => expect(input).toHaveAttribute('readonly'))
+}
+
+// A run disables every field at once; the reason's tooltip must not remount the input under it.
+export const KeepsItsInputAsARunStarts: Story = {
+  render: () => <DisablingHarness initial={['sci-fi']} />,
+  play: async ({ canvas }) => {
+    const before = canvas.getByRole('textbox')
+    expect(before.closest('[title]')).toBeNull()
+    await userEvent.click(before)
+    await startRun(before)
+    const after = canvas.getByRole('textbox')
+    expect(after).toBe(before)
+    expect(after).toHaveFocus()
+    expect(after.closest('[title]')).toHaveAttribute('title', RUN_REASON)
+    await userEvent.keyboard('{Backspace}')
+    expect(canvas.getByText('sci-fi')).toBeInTheDocument()
+  },
+}
+
+// Enter on a single-line input also blurs it, so this covers the blur's commit too.
+export const CommitsNoTypedTagOnceARunStarts: Story = {
+  render: () => <DisablingHarness initial={[]} />,
+  play: async ({ canvas }) => {
+    const input = canvas.getByRole('textbox')
+    await userEvent.click(input)
+    await userEvent.type(input, 'noir')
+    await startRun(input)
+    await userEvent.keyboard('{Enter}')
+    await waitFor(() => expect(input).not.toHaveFocus())
+    expect(canvas.queryByText('noir')).toBeNull()
+    expect(input).toHaveValue('noir')
+  },
 }
 
 export const Invalid: Story = {

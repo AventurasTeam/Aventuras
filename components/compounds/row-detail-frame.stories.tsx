@@ -35,10 +35,18 @@ type HarnessProps = {
   exportFile: () => AvtsFile
   blocked?: boolean
   blockedReason?: string
+  /** False holds the frame in the render a row switch takes to reach the form. */
+  formHoldsRow?: boolean
 }
 
 /** Capture-phase F2 (the open JSON sheet holds focus) switches to SECOND, as a list-row pick. */
-function Harness({ row: initialRow, exportFile, blocked = false, blockedReason }: HarnessProps) {
+function Harness({
+  row: initialRow,
+  exportFile,
+  blocked = false,
+  blockedReason,
+  formHoldsRow = true,
+}: HarnessProps) {
   const [row, setRow] = useState(initialRow)
   const [tab, setTab] = useState<Tab>('overview')
 
@@ -64,7 +72,7 @@ function Harness({ row: initialRow, exportFile, blocked = false, blockedReason }
   return (
     <View style={{ width: 860, maxWidth: '100%', height: 480 }} className="border border-border">
       <RowDetailFrame
-        session={session}
+        session={formHoldsRow ? session : { ...session, formHoldsRow }}
         nameField="title"
         savedName={values.title}
         namePlaceholder="Untitled"
@@ -83,7 +91,7 @@ function Harness({ row: initialRow, exportFile, blocked = false, blockedReason }
         hotkeysEnabled
       >
         <TabsContent value="overview">
-          <Text>{row?.title ?? 'New row'}</Text>
+          <Text>Overview tab content</Text>
         </TabsContent>
       </RowDetailFrame>
     </View>
@@ -108,6 +116,21 @@ async function openMenuEntry(name: string) {
   // The popover fades in; the role query can outrace opacity settling.
   await waitFor(() => expect(entry).toBeVisible(), WAIT)
   await userEvent.click(entry)
+}
+
+/** Tab content mounts once the form holds the row: on native, a field mounted earlier shows the last. */
+export const TabContentWaitsForItsRow: Story = {
+  args: { formHoldsRow: false },
+  play: async () => {
+    await expect(await screen.findByRole('button', { name: 'Edit First row' }, WAIT)).toBeVisible()
+    expect(screen.queryByText('Overview tab content')).not.toBeInTheDocument()
+  },
+}
+
+export const TabContentShowsOnceTheFormHoldsTheRow: Story = {
+  play: async () => {
+    await expect(await screen.findByText('Overview tab content', {}, WAIT)).toBeVisible()
+  },
 }
 
 /** data.md → Raw JSON viewer: switching rows closes the viewer instead of showing the next row. */

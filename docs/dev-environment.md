@@ -113,7 +113,12 @@ environment: the MCP servers in `.mcp.json`, and `adb`.
   `AVENTURAS_DB_PATH` bypasses the slot, which is how the E2E harness
   calls it. `pnpm db:seed:long` and `pnpm db:seed:dataset` seed the
   same way, and `pnpm dataset:export-seed` reads that same DB by default
-  ([the dataset seed](./testing.md#the-dataset-seed)).
+  ([the dataset seed](./testing.md#the-dataset-seed)). Every seeded
+  story declares the local embedder, and a fresh slot's userData holds
+  no model, so a turn fails before its narrative call until one is
+  there: install it from Settings → Embedding models, or copy
+  `~/.cache/aventuras-e2e/embedders/<model>` (filled by an E2E run) into
+  the slot's `userData/embedders/`.
 
 ### Setting up a worker machine
 

@@ -25,7 +25,6 @@ export function saveChapter(
     {
       branchId: row.branchId,
       rowId: row.id,
-      idPrefix: 'chap',
       build: () => chapterActions({ row, draft }),
     },
     ctx,

@@ -1,6 +1,7 @@
 import { useCallback, useRef, useState } from 'react'
 import { Platform, TextInput, View, type TextInputKeyPressEvent } from 'react-native'
 
+import { ReasonTooltip } from '@/components/ui/reason-tooltip'
 import { Tag } from '@/components/ui/tag'
 import { cn } from '@/lib/utils'
 
@@ -94,7 +95,10 @@ export function TagInput({
 
   // Commit the currently-typed value if non-empty + non-dupe.
   // Always clears `typed` afterward — even on dedupe-rejection.
+  // A disabled input keeps focus and still gets keys (RN-Web's readOnly doesn't stop
+  // keydown), so it changes nothing here and in handleKeyPress; the typed text waits.
   const commitTyped = useCallback(() => {
+    if (disabled) return
     const trimmed = typed.trim()
     if (!trimmed) {
       if (typed !== '') setTyped('')
@@ -103,7 +107,7 @@ export function TagInput({
     const next = commitOne(value, trimmed, maxCount, maxTagLength)
     if (next !== value) onChange(next as string[])
     setTyped('')
-  }, [typed, value, onChange, maxCount, maxTagLength])
+  }, [disabled, typed, value, onChange, maxCount, maxTagLength])
 
   const handleChangeText = useCallback(
     (raw: string) => {
@@ -128,12 +132,12 @@ export function TagInput({
   const handleKeyPress = useCallback(
     (e: TextInputKeyPressEvent) => {
       const key = e.nativeEvent.key
-      if (key === 'Backspace' && typed === '' && value.length > 0) {
+      if (key === 'Backspace' && !disabled && typed === '' && value.length > 0) {
         e.preventDefault?.()
         onChange(value.slice(0, -1))
       }
     },
-    [typed, value, onChange],
+    [disabled, typed, value, onChange],
   )
 
   const handleSubmitEditing = useCallback(() => {
@@ -208,10 +212,7 @@ export function TagInput({
     </View>
   )
 
-  if (disabled && disabledReason && Platform.OS === 'web') {
-    return <div title={disabledReason}>{wrapper}</div>
-  }
-  return wrapper
+  return <ReasonTooltip reason={disabled ? disabledReason : undefined}>{wrapper}</ReasonTooltip>
 }
 
 export type { TagInputProps }

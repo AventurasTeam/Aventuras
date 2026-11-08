@@ -1,4 +1,4 @@
-import { useCallback, useEffect } from 'react'
+import { useCallback } from 'react'
 import type { FieldValues, Resolver } from 'react-hook-form'
 
 import {
@@ -68,7 +68,7 @@ export function usePlotRowSession<Draft extends FieldValues>({
     },
     [kind, onSave, onSaved],
   )
-  const session = useRowSaveSession<Draft>({
+  return useRowSaveSession<Draft>({
     rowKey: rowId ?? `create:${kind}:${createSeq}`,
     values,
     resolver,
@@ -77,11 +77,6 @@ export function usePlotRowSession<Draft extends FieldValues>({
     failureText: saveFailureText,
     commit,
     onRejected,
+    onSession,
   })
-  const { dirty, requestLeave } = session
-  useEffect(() => {
-    onSession({ dirty, requestLeave })
-    return () => onSession(null)
-  }, [onSession, dirty, requestLeave])
-  return session
 }

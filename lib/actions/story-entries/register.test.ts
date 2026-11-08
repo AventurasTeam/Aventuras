@@ -220,6 +220,84 @@ describe('opening invariants', () => {
   })
 })
 
+// Entry ids repeat across branches (the key is branch and id), so every read and write is scoped.
+describe('branch scope', () => {
+  async function twoBranches() {
+    const { db, runInTransaction } = await createTestDb()
+    await seed(db)
+    await db.insert(branches).values({ id: 'b2', storyId: 's1', name: 'fork', createdAt: 1 })
+    const row = (branchId: string, content: string, locationId: string) => ({
+      id: 'e1',
+      branchId,
+      position: 1,
+      kind: 'ai_reply' as const,
+      content,
+      contentTokens: countTokens(content),
+      chapterId: null,
+      metadata: { sceneEntities: [], currentLocationId: locationId, worldTime: 10 },
+      createdAt: 1,
+    })
+    const main = row('b1', 'On main.', 'loc_main')
+    const fork = row('b2', 'On the fork.', 'loc_fork')
+    await db.insert(storyEntries).values([main, fork])
+    const read = async (branchId: string) =>
+      (
+        await db
+          .select()
+          .from(storyEntries)
+          .where(and(eq(storyEntries.branchId, branchId), eq(storyEntries.id, 'e1')))
+      )[0]
+    return { ctx: { db, runInTransaction }, main, fork, read }
+  }
+
+  it("updates only its own branch's row, merging over that row", async () => {
+    const { ctx, main, read } = await twoBranches()
+    const result = await applyDeltaAction(
+      {
+        action: {
+          kind: 'updateStoryEntryMetadata',
+          source: 'user_edit',
+          payload: { branchId: 'b2', id: 'e1', metadata: { worldTime: 99 } },
+        },
+        actionId: 'act_u',
+        branchId: 'b2',
+        entryId: null,
+      },
+      ctx,
+    )
+    expect(result).toMatchObject({ status: 'ok' })
+    expect((await read('b2'))?.metadata).toEqual({
+      sceneEntities: [],
+      currentLocationId: 'loc_fork',
+      worldTime: 99,
+    })
+    expect(await read('b1')).toEqual(main)
+  })
+
+  it("deletes only its own branch's row, and its reversal restores that row", async () => {
+    const { ctx, main, fork, read } = await twoBranches()
+    await applyDeltaAction(
+      {
+        action: {
+          kind: 'deleteStoryEntry',
+          source: 'user_edit',
+          payload: { branchId: 'b2', id: 'e1' },
+        },
+        actionId: 'act_d',
+        branchId: 'b2',
+        entryId: null,
+      },
+      ctx,
+    )
+    expect(await read('b2')).toBeUndefined()
+    expect(await read('b1')).toEqual(main)
+
+    await reverseReplayDeltas('act_d', ctx)
+    expect(await read('b2')).toEqual(fork)
+    expect(await read('b1')).toEqual(main)
+  })
+})
+
 describe('deleteStoryEntry arm', () => {
   it('round-trips create -> delete -> reverse byte-identical and reappears in the store', async () => {
     const { db, runInTransaction } = await createTestDb()

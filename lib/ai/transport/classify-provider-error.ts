@@ -1,4 +1,11 @@
-import { APICallError } from 'ai'
+import {
+  APICallError,
+  InvalidArgumentError,
+  InvalidMessageRoleError,
+  InvalidPromptError,
+  MessageConversionError,
+  UnsupportedFunctionalityError,
+} from 'ai'
 
 import type { ContextWindowFailure } from '../context-window'
 import type { ReplyCutOffFailure } from '../reply-cut-off'
@@ -27,6 +34,26 @@ export class ProviderTimeoutError extends Error {
 }
 
 const MAX_CAUSE_DEPTH = 5
+
+// provider-utils' own test for a fetch that failed in transport. It wraps one only when it carries a
+// cause, and Chromium's carries none, so the renderer's reaches the classifier raw.
+const FETCH_FAILED_MESSAGES = ['fetch failed', 'failed to fetch']
+// expo/fetch, the native transport, rejects with its own FetchError, an Error so prefixed.
+const EXPO_FETCH_FAILED_PREFIX = 'fetch failed: '
+
+function isRawFetchFailure(error: unknown): boolean {
+  if (error instanceof TypeError) return FETCH_FAILED_MESSAGES.includes(error.message.toLowerCase())
+  return error instanceof Error && error.message.startsWith(EXPO_FETCH_FAILED_PREFIX)
+}
+
+// Raised while the SDK builds the request, before anything is sent: every attempt fails alike.
+const REQUEST_BUILD_ERRORS = [
+  InvalidPromptError,
+  InvalidArgumentError,
+  InvalidMessageRoleError,
+  MessageConversionError,
+  UnsupportedFunctionalityError,
+] as const
 
 // A thrown value need not be coercible: `String()` on a null-prototype object
 // throws, which would replace the provider failure with a TypeError.
@@ -275,9 +302,10 @@ export function classifyProviderError(
   return {
     error: {
       tier: 'provider',
-      reason: 'unknown',
+      reason: isRawFetchFailure(error) ? 'network' : 'unknown',
       detail: describeProviderError(error),
     },
-    retryable: true,
+    // A raw fetch failure has no SDK class, so anything not built-request is retried as transport.
+    retryable: !REQUEST_BUILD_ERRORS.some((sdkError) => sdkError.isInstance(error)),
   }
 }

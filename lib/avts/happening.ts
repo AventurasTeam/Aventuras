@@ -7,16 +7,7 @@ import { avtsEnvelope, type AvtsFile } from './envelope'
 import { optionalText, requiredText } from './fields'
 import { avtsFileName } from './file-name'
 
-export type HappeningImport = {
-  title: string
-  description: string | null
-  category: string | null
-  icon: string | null
-  temporal: string | null
-  commonKnowledge: 0 | 1
-}
-
-export const HappeningImportSchema: z.ZodType<HappeningImport> = z
+export const HappeningImportSchema = z
   .object({
     title: requiredText(() => t('common:avts.issue.titleRequired')),
     description: optionalText,
@@ -35,6 +26,8 @@ export const HappeningImportSchema: z.ZodType<HappeningImport> = z
     error: () => t('common:avts.issue.timeAnchorExclusive'),
   })
   .transform(({ occurredAtEntryId, ...happening }) => happening)
+
+export type HappeningImport = z.output<typeof HappeningImportSchema>
 
 export function happeningExport(row: Happening, exportedAt: Date): AvtsFile {
   const payload: HappeningImport = {

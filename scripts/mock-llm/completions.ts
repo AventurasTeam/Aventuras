@@ -25,6 +25,7 @@ import {
 } from './respond/wire'
 import { classifyRequest, laneKeyOf, promptText, toolPromptText, NARRATIVE_LANE } from './routing'
 import { nextResponse, takeFailure, type FailureKind, type Lane } from './state'
+import { validateLaneValue } from './validate'
 
 const PER_TURN_CLASSIFIER_LANES = new Set([
   'per-turn-classifier',
@@ -298,6 +299,19 @@ export async function handleCompletion(
   }
 
   if (route.lane === 'tool') {
+    // A hand-edited state.json reaches here unchecked. Refused as the API would refuse it, and
+    // logged, with the cursor kept: the app retries a 500, and the retry must meet the same step.
+    const check = canned === null ? null : validateLaneValue(key, canned.value)
+    if (check !== null && !check.ok) {
+      lane.sequence.cursor = cursorBefore
+      entry.outcome = 'failed'
+      entry.status = 500
+      entry.note = `stored response is no valid tool step: ${check.error}`
+      res.writeHead(500, { ...CORS_HEADERS, 'content-type': 'application/json' })
+      res.end(errorBody(entry.note, 'mock_invalid_response'))
+      finish()
+      return
+    }
     // An unconfigured lane's `{}` is no calls and stop.
     const stored = (canned?.value ?? {}) as MockToolStep
     if (CUTS_A_CALL.has(failure) && stored.toolCalls?.[0] === undefined) {

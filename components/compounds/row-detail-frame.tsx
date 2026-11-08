@@ -175,7 +175,8 @@ export function RowDetailFrame<Draft extends FieldValues, Tab extends string>({
             />
           }
         >
-          {children}
+          {/* A create's tab switches in the render that resets the form; see formHoldsRow. */}
+          {session.formHoldsRow ? children : null}
         </DetailPane>
       </Tabs>
       <RowLeaveDialog session={session} blocked={blocked} blockedReason={blockedReason} />

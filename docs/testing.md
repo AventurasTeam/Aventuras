@@ -670,8 +670,9 @@ only when the one above genuinely can't express the target.
 
 ### Tier 1 — assert in the database
 
-The strongest assertion is not in the DOM. With `app.evaluate()` into
-main and a real SQLite file, verify outcomes by query: did the turn
+The strongest assertion is not in the DOM. With `queryApp`
+(`e2e/harness/db.ts`), which queries the running app's own connection
+through the preload bridge, verify outcomes by query: did the turn
 write an entry, did the delta log record the reverse, did the
 classifier tag the entity, did the embedding pass populate `vec0`.
 Far more stable than any selector, and it matches the taxonomy —
