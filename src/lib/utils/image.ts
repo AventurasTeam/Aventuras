@@ -244,18 +244,23 @@ export function specToRatioString(spec: ImageSpec): AspectRatio {
  * Falls back to the closest by shape rather than to `1:1`, so a landscape request that the
  * provider cannot serve exactly still comes back landscape. Compared in log space: on a
  * linear scale portrait ratios crowd into (0, 1] while landscape ones spread over [1, ∞),
- * which biases every near-miss towards square.
+ * which biases every near-miss towards square. `fallback` stands in for an empty `supported`.
  */
-export function specToAspectRatio(spec: ImageSpec, supported: readonly string[]): string {
+export function specToAspectRatio(
+  spec: ImageSpec,
+  supported: readonly string[],
+  fallback: readonly string[] = [],
+): AspectRatio {
+  const candidates = (supported.length ? supported : fallback).filter(isAspectRatio)
   const preferred = specToRatioString(spec)
-  if (supported.includes(preferred)) return preferred
+  if (candidates.includes(preferred)) return preferred
 
   const target = ratioValue(preferred)
   // Seeded with `preferred` so a wholly unparseable list yields a well-formed ratio.
   let best = preferred
   let bestDistance = Infinity
 
-  for (const candidate of supported) {
+  for (const candidate of candidates) {
     const value = ratioValue(candidate)
     if (!Number.isFinite(value) || value <= 0) continue
     const distance = Math.abs(Math.log(value / target))
