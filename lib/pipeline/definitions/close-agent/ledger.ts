@@ -45,13 +45,17 @@ export class CloseLedgerWriter {
     call: Omit<CloseReportCall, 'values'> & { values?: Readonly<Record<string, unknown>> },
   ): void {
     const { values, ...rest } = call
-    const shown = Object.entries(values ?? {}).map(
-      ([path, value]) => [path, reportValue(value, this.nameOfId)] as const,
-    )
+    const shown = Object.entries(values ?? {})
+      .filter(([, value]) => value !== undefined)
+      .map(([path, value]) => [path, reportValue(value, this.nameOfId)] as const)
     this.ledger.calls.push({
       ...rest,
       rows: rest.rows.map((row) => ({ ...row })),
       turns: [...rest.turns],
+      ...(rest.skippedFields === undefined
+        ? {}
+        : { skippedFields: rest.skippedFields.map((skipped) => ({ ...skipped })) }),
+      ...(rest.survivor === undefined ? {} : { survivor: { ...rest.survivor } }),
       ...(shown.length === 0 ? {} : { values: Object.fromEntries(shown) }),
     })
   }
@@ -84,7 +88,9 @@ export class CloseLedgerWriter {
         const fields = Object.keys(call.values ?? {}).filter((field) => !skipped.has(field))
         if (fields.length === 0 && call.survivor === undefined) return []
         const rows = call.rows
-          .map((row) => (row.name === '' ? handle(row.id) : `${row.name} (${handle(row.id)})`))
+          .map((row) =>
+            row.name.trim() === '' ? handle(row.id) : `${row.name} (${handle(row.id)})`,
+          )
           .join(', ')
         const parts = [
           ...(fields.length === 0 ? [] : [fields.join(', ')]),
@@ -100,6 +106,7 @@ export class CloseLedgerWriter {
       (call) =>
         call.result === 'ok' &&
         call.survivor !== undefined &&
+        call.survivor.table === row.table &&
         !(call.survivor.table === row.table && call.survivor.id === row.id) &&
         call.rows.some((named) => named.table === row.table && named.id === row.id),
     )?.survivor

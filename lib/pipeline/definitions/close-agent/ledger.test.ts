@@ -67,6 +67,60 @@ describe('CloseLedgerWriter', () => {
     expect(ledger.noToolCalls).toBe(false)
   })
 
+  it('leaves noToolCalls to the driver: only noteToolCall clears it', () => {
+    const { ledger, writer } = setup()
+
+    writer.record(call())
+    expect(ledger.noToolCalls).toBe(true)
+
+    writer.noteToolCall()
+    expect(ledger.noToolCalls).toBe(false)
+  })
+
+  it('drops an absent value, keeps a cleared one, and leaves values off when nothing is left', () => {
+    const { ids, ledger, writer } = setup()
+
+    writer.record(call({ values: { description: 'Soaked.', 'state.voice': undefined } }))
+    writer.record(call({ values: { 'state.faction_id': null } }))
+    writer.record(call({ values: { 'state.voice': undefined } }))
+
+    expect(ledger.calls[0]!.values).toEqual({ description: 'Soaked.' })
+    expect(ledger.calls[1]!.values).toEqual({ 'state.faction_id': '' })
+    expect('values' in ledger.calls[2]!).toBe(false)
+    expect(writer.writesSoFar(ids)).toBe(
+      [
+        '- update_character Wren (c1): description',
+        '- update_character Wren (c1): state.faction_id',
+      ].join('\n'),
+    )
+  })
+
+  it("copies the caller's rows, turns, skipped fields and survivor", () => {
+    const { ledger, writer } = setup()
+    const input = call({
+      tool: 'merge_lore',
+      rows: [{ table: 'lore', id: TOLL, name: 'The Toll' }],
+      turns: [ENTRY],
+      values: { body: 'One toll.' },
+      skippedFields: [{ field: 'title', reason: 'user-edited-since-prose' }],
+      survivor: { table: 'lore', id: TOLL },
+    })
+
+    writer.record(input)
+    input.rows[0]!.name = 'Changed'
+    input.turns.push('entry_close_999')
+    input.skippedFields![0]!.reason = 'changed'
+    input.skippedFields!.push({ field: 'body', reason: 'changed' })
+    input.survivor!.id = OLD_TOLL
+
+    expect(ledger.calls[0]).toMatchObject({
+      rows: [{ table: 'lore', id: TOLL, name: 'The Toll' }],
+      turns: [ENTRY],
+      skippedFields: [{ field: 'title', reason: 'user-edited-since-prose' }],
+      survivor: { table: 'lore', id: TOLL },
+    })
+  })
+
   it('keys values by delta path, joins a list and gives a ref by its name', () => {
     const { ledger, writer } = setup()
 
@@ -237,6 +291,32 @@ describe('CloseLedgerWriter', () => {
     )
   })
 
+  it("does not take a merge's kept row of another table for the row's survivor", () => {
+    const { writer } = setup()
+    writer.record(
+      call({
+        tool: 'merge_happenings',
+        rows: [
+          { table: 'happenings', id: 'hap_00000000-0000-4000-8000-000000000009', name: 'The Fire' },
+          { table: 'entities', id: WREN, name: 'Wren' },
+        ],
+        values: { description: 'The fire.' },
+        survivor: { table: 'happenings', id: 'hap_00000000-0000-4000-8000-000000000009' },
+      }),
+    )
+
+    expect(writer.survivorOf('entities', WREN)).toBeUndefined()
+  })
+
+  it('prints a row with a blank name by its handle alone', () => {
+    const { ids, writer } = setup()
+    writer.record(
+      call({ rows: [{ table: 'entities', id: WREN, name: '  ' }], values: { description: 'x' } }),
+    )
+
+    expect(writer.writesSoFar(ids)).toBe('- update_character c1: description')
+  })
+
   it('lists nothing before a write lands', () => {
     const { ids, writer } = setup()
     writer.record(call({ tool: 'read_row', why: '', turns: [] }))
@@ -257,5 +337,9 @@ describe('reportValue', () => {
     expect(reportValue(WREN, nameOfId)).toBe('Wren')
     expect(reportValue(TOBIN, nameOfId)).toBe(TOBIN)
     expect(reportValue(`Ask ${WREN} first`, nameOfId)).toBe(`Ask ${WREN} first`)
+  })
+
+  it('cuts by code point, never through a surrogate pair', () => {
+    expect(reportValue('a' + '😀'.repeat(2_500), () => undefined)).toBe('a' + '😀'.repeat(1_999))
   })
 })
