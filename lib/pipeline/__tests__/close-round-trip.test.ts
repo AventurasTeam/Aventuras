@@ -73,8 +73,7 @@ const END_REPLY = 2
 
 const CHARACTER_ID = 'char_5b0d2c1e-7f3a-4e8b-9c6d-2a1f0e9b8c7d'
 
-// t3 is position 3: a group anchored on the cited turn instead of E would survive a rollback to
-// position 5, which the rollback-into-the-chapter arm catches.
+// t3 is position 3, before E: a group anchored on the cited turn would survive the rollback to E.
 const STAND_IN_INPUT = {
   id: 'c1',
   description: 'The Harrow ferryman, who poled Wren across the river at night for a courier price.',
@@ -381,7 +380,7 @@ const STAND_IN_CASE: RoundTripCase = {
 /** C9: every tool's landed group joins this table. */
 const CASES: readonly RoundTripCase[] = [STAND_IN_CASE]
 
-/** C9's arms; 5.12 adds chapter delete's two modes here. */
+/** C9's arms; chapter delete's two modes join here (5.12). */
 const ARMS: readonly RoundTripArm[] = [
   {
     name: 'CTRL-Z',
@@ -422,11 +421,11 @@ const ARMS: readonly RoundTripArm[] = [
     },
   },
   {
-    name: 'a rollback into the chapter',
+    name: 'a rollback to E',
     expect: 'before-close',
     run: async (h) => {
       await h.close()
-      await rollBack(h, h.fx.replyIds[END_REPLY - 1])
+      await rollBack(h, h.endEntryId)
     },
   },
 ]
