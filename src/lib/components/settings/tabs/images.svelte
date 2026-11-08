@@ -16,6 +16,7 @@
     evictReplacedModelList,
     getProviderSamplerInfo,
     getProviderClipTypes,
+    isLocalServer,
     listLoras,
     generateImage,
     takesApiKey,
@@ -345,7 +346,7 @@
         },
       ),
     ]
-    if (providerType === 'comfyui' || providerType === 'a1111') {
+    if (isLocalServer(providerType)) {
       reads.push(
         read(
           'samplers',
@@ -1461,7 +1462,7 @@
         showDescription={profileProviderType === 'comfyui'}
         isLoading={isLoadingProfileModels}
         failures={profileLoadFailures}
-        labelLists={profileProviderType === 'comfyui' || profileProviderType === 'a1111'}
+        labelLists={isLocalServer(profileProviderType)}
         showRefreshButton={true}
         onRefresh={() => loadProfileForm(true)}
         onStop={stopProfileModels}
@@ -1477,7 +1478,7 @@
       {/if}
     {/snippet}
 
-    {#if profileProviderType !== 'comfyui' && profileProviderType !== 'a1111'}
+    {#if !isLocalServer(profileProviderType)}
       <div class="space-y-2">
         {@render modelSelectContent()}
       </div>

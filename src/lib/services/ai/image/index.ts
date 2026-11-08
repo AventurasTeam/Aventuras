@@ -26,6 +26,7 @@ export {
   getProviderSamplerInfo,
   listLoras,
   getProviderClipTypes,
+  isLocalServer,
   referenceLimit,
   capturesModelSnapshot,
   takesCapabilityOverride,
