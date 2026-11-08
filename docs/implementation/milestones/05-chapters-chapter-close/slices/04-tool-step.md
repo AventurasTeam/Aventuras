@@ -458,7 +458,8 @@ None open: each was answered here or moved to the slice that owns it
 - **The answered questions went to their owners.** 5.2's "One helper for
   a bounded structured call?" moved to
   [Slice 5.10](./10-two-starts.md#open-questions), which already holds
-  the cut-off boundary reply; the cache marker on a close's steps stays
-  [Slice 5.5a](./05a-task-runner.md#open-questions)'s; the cross-check
+  the cut-off boundary reply; the cache marker on a close's steps went to
+  [Slice 5.5a](./05a-task-runner.md#implementation-notes), which puts it
+  on every step; the cross-check
   on a server that drops past reasoning, and a cut attempt's dropped
   usage, went to [Slice 5.5b](./05b-identity-threads.md#open-questions).

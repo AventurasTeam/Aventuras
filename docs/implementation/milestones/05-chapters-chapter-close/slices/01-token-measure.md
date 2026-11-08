@@ -434,9 +434,9 @@ and numbers corrected.
   (940 on the first open). Other long-run shapes weren't measured on
   Hermes, and on Node a run of emoji costs about 15 times a run of `x`.
   Plain Node has no `requestIdleCallback` either, so `loadOpenStory`
-  throws under `tsx`;
-  [Slice 5.5a's probe](./05a-task-runner.md#open-questions) carries that
-  question.
+  threw under `tsx` until
+  [Slice 5.5a](./05a-task-runner.md#implementation-notes) made the call
+  optional at its site for `pnpm probe:close`.
 - **The warm doesn't cover story creation (developer decision,
   2026-11-01).** `components/wizard/finish.ts:339` reaches
   `create-story.ts`' count before any open, so the first story created

@@ -116,7 +116,8 @@ the log.
   `lib/boot/bootstrap.ts:110-111`, and the manual start ensures it, as
   `runClassifierPass` does.
 - `CLOSE_RANGE_INTERMEDIATE_KEY` and `CLOSE_LEDGER_INTERMEDIATE_KEY` in
-  `lib/pipeline/definitions/intermediates.ts`.
+  `lib/pipeline/definitions/intermediates.ts`. Slice 5.5a made both keys
+  private behind the accessors in `close-intermediates.ts`.
 - `boundary` reads the branch's `pendingClose`, finds the end in
   `openRegionSeries`, checks `canEndChapter`, mints the chapter id with
   `generateId('chap')`, takes `startEntryId` from the series' first row
@@ -552,8 +553,9 @@ that ran)
   above stops short of an open: `loadAndPublish` calls
   `requestIdleCallback` for the encoder warm with no fallback, and plain
   Node has no such global, so `loadOpenStory` throws after `publish`. This
-  slice lands before [Slice 5.5a](./05a-task-runner.md#open-questions),
-  which asks the same for `pnpm probe:close`, so a `pnpm dataset:chapter`
+  slice lands before [Slice 5.5a](./05a-task-runner.md#implementation-notes),
+  which answers it for `pnpm probe:close` by making the call optional at
+  its site, so a `pnpm dataset:chapter`
   that opens a story meets it first. Starting answer: the script sets a
   no-op before its first open, as `vitest.setup.ts` does.
 
@@ -583,8 +585,9 @@ that ran)
   model serves the classifier and `lore-mgmt` profiles, in place of
   `pnpm mock`'s passthrough lanes. The built database lives outside git,
   and a rebuild writes different classifier rows. Nothing here opens a
-  story under `tsx`, so that question stays
-  [Slice 5.5a](./05a-task-runner.md#open-questions)'s. Default story
+  story under `tsx`, so that question went to
+  [Slice 5.5a](./05a-task-runner.md#implementation-notes), which made the
+  call optional. Default story
   settings auto-close at 24k, which nothing acts on before
   [Slice 5.6](./06-close-owed.md); the build already turns auto-close off
   in Story Settings before its first turn (`turnAutoCloseOff`), so a
