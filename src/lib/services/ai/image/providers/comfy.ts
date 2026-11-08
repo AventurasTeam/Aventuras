@@ -20,6 +20,7 @@ import LoraTxt2ImgWorkflow from './comfyWorkflows/lora-txt2img-workflow.json'
 import UnetTxt2ImgWorkflow from './comfyWorkflows/unet-txt2img-workflow.json'
 import { formatImageSize, specToPixels } from '#lib/utils/image.ts'
 import { endpoint } from '#lib/utils/url.ts'
+import { HttpStatusError } from '#lib/utils/error.ts'
 import { resolveBaseUrl } from './baseUrls'
 import { isNewerVersion } from '#lib/utils/version.ts'
 import { imageGetFetch } from './fetchAdapter'
@@ -718,7 +719,11 @@ export function createComfyProvider(config: ImageProviderConfig): ImageProvider 
     async listModels(signal?: AbortSignal): Promise<ImageModelInfo[]> {
       const [checkpoints, diffusionModels] = await Promise.all([
         fetchModels('checkpoints', signal),
-        fetchModels('diffusion_models', signal).catch(() => []),
+        // A server older than the folder answers 404; any other failure is the picker's to report.
+        fetchModels('diffusion_models', signal).catch((error: unknown) => {
+          if (error instanceof HttpStatusError && error.status === 404) return []
+          throw error
+        }),
       ])
 
       const toInfo =

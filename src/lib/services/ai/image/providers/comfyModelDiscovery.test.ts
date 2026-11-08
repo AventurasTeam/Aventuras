@@ -12,6 +12,7 @@ vi.mock('#lib/services/ai/sdk/providers/sdkFetch.ts', () => ({
 
 import { imageGetFetch } from './fetchAdapter'
 import { createComfyProvider } from './comfy'
+import { HttpStatusError } from '#lib/utils/error.ts'
 
 const reply = (body: unknown) => ({ ok: true, json: async () => body }) as unknown as Response
 
@@ -19,7 +20,7 @@ const reply = (body: unknown) => ({ ok: true, json: async () => body }) as unkno
 function serveModels(lists: Record<string, string[]>) {
   vi.mocked(imageGetFetch).mockImplementation(async (url) => {
     const type = String(url).split('/models/')[1]
-    if (!(type in lists)) throw new Error('Image API error 404')
+    if (!(type in lists)) throw new HttpStatusError(404, '', 'Image API')
     return reply(lists[type])
   })
 }
@@ -44,10 +45,18 @@ describe('ComfyUI model discovery', () => {
     for (const [, sent] of calls) expect(sent).toEqual(headers)
   })
 
-  it('treats the optional lists as empty when they fail', async () => {
+  it('lists checkpoints alone from a server without the diffusion model folder', async () => {
     serveModels({ checkpoints: ['sd15.safetensors'] })
     const models = await createComfyProvider({ apiKey: '' }).listModels()
     expect(models.map((m) => m.id)).toEqual(['checkpoint:sd15.safetensors'])
+  })
+
+  it('rejects when the diffusion model list fails for any other reason', async () => {
+    vi.mocked(imageGetFetch).mockImplementation(async (url) => {
+      if (String(url).endsWith('/models/checkpoints')) return reply(['sd15.safetensors'])
+      throw new HttpStatusError(500, 'boom', 'Image API')
+    })
+    await expect(createComfyProvider({ apiKey: '' }).listModels()).rejects.toThrow('500')
   })
 
   it('returns an empty list when the server has no models', async () => {
