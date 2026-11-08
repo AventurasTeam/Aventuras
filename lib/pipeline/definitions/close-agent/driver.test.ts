@@ -28,7 +28,7 @@ import {
 } from '@/lib/ai'
 import { entities, type CloseTask } from '@/lib/db'
 import { makeLogger } from '@/lib/diagnostics'
-import { appSettingsStore, currentStoryStore, resetAllStores } from '@/lib/stores'
+import { appSettingsStore, currentStoryStore, entitiesStore, resetAllStores } from '@/lib/stores'
 
 import { entityWriteAction } from './entity-write'
 import { CloseIds } from './ids'
@@ -937,14 +937,17 @@ describe('closeAgentPhase', () => {
     }
   }
 
+  // With a log, each close_task_start lands in it as it is yielded, among the tasks' own entries.
   async function drain(
     ctx: PhaseContext,
+    log?: string[],
   ): Promise<{ events: PhaseEmittedEvent[]; result: PhaseResult }> {
     const gen = closeAgentPhase(ctx)
     const events: PhaseEmittedEvent[] = []
     for (;;) {
       const next = await gen.next(undefined)
       if (next.done) return { events, result: next.value }
+      if (next.value.type === 'close_task_start') log?.push(`start:${next.value.task}`)
       events.push(next.value)
     }
   }
@@ -1022,18 +1025,24 @@ describe('closeAgentPhase', () => {
       after: [quietTask('awareness', log), codeStep('reset', log)],
     })
 
-    const { events, result } = await drain(phaseCtx())
+    const { events, result } = await drain(phaseCtx(), log)
 
     expect(result).toEqual({ status: 'completed' })
     expect(log).toEqual([
       'normalize@0',
+      'start:happenings',
       'happenings@0',
+      'start:lore',
       'lore@1',
       'between@1',
+      'start:identity',
       'identity@1',
+      'start:lore',
       'lore@2',
       'between@2',
+      'start:identity',
       'identity@2',
+      'start:awareness',
       'awareness@0',
       'reset@0',
     ])
@@ -1246,6 +1255,26 @@ describe('closeAgentPhase', () => {
     expect(taskStarts(events)).toEqual([])
   })
 
+  it('polls the abort before a code step', async () => {
+    const log: string[] = []
+    __setCloseAgentSlots({
+      before: [
+        codeStep('normalize', log, () => {
+          abort.abort()
+          return { status: 'completed' }
+        }),
+        codeStep('reset', log),
+      ],
+      perPart: [],
+      after: [],
+    })
+
+    const { result } = await drain(phaseCtx())
+
+    expect(result).toEqual({ status: 'aborted' })
+    expect(log).toEqual(['normalize@0'])
+  })
+
   it('with the production slots, starts nothing and reads no store, the ledger seeded', async () => {
     __setCloseAgentSlots({ before: [], perPart: [quietTask('identity', [])], after: [] })
     __setCloseAgentSlots(undefined)
@@ -1262,10 +1291,13 @@ describe('closeAgentPhase', () => {
     expect(closeLedgerOf(ctx.intermediates)).toEqual({ calls: [], stopped: [], noToolCalls: true })
   })
 
-  it("fails as the metadata call does when the stores don't hold the branch, before any entry", async () => {
+  it.each([
+    { name: 'no story is open', unload: () => resetAllStores() },
+    { name: 'the stores hold another branch', unload: () => entitiesStore.hydrate('b2', []) },
+  ])('fails as the metadata call does when $name, before any entry', async ({ unload }) => {
     const log: string[] = []
     __setCloseAgentSlots({ before: [quietTask('happenings', log)], perPart: [], after: [] })
-    resetAllStores()
+    unload()
 
     const { events, result } = await drain(phaseCtx())
 
