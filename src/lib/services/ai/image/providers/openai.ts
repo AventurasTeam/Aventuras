@@ -20,6 +20,7 @@ import type {
   ImageModelInfo,
 } from './types'
 import { imageGetFetch } from './fetchAdapter'
+import { bearerHeaders } from './discoveryFetch'
 import { parseModelList } from './parseModelList'
 import { createImageSdkFetch, generateSdkImage } from './sdkImage'
 
@@ -101,11 +102,10 @@ async function fetchOpenAIImageModels(
 ): Promise<ImageModelInfo[]> {
   if (!apiKey) return []
 
-  const response = await imageGetFetch(
-    endpoint(baseUrl, 'models'),
-    { Authorization: `Bearer ${apiKey}` },
-    { serviceId: 'openai-image-models', signal },
-  )
+  const response = await imageGetFetch(endpoint(baseUrl, 'models'), bearerHeaders(apiKey), {
+    serviceId: 'openai-image-models',
+    signal,
+  })
   return parseModelList(await response.json(), ModelEntry, 'OpenAI /models')
     .filter(({ id }) => isOpenAIImageModel(id))
     .map(({ id }) => ({ id, name: id, ...openaiImageCapabilities(id) }))

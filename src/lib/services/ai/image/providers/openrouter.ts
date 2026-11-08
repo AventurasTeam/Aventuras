@@ -19,6 +19,7 @@ import type {
   ImageModelInfo,
 } from './types'
 import { imageGetFetch } from './fetchAdapter'
+import { bearerHeaders } from './discoveryFetch'
 import {
   architectureSchema,
   catalogueModelInfo,
@@ -29,7 +30,6 @@ import {
 } from './modelCatalogue'
 import { parseModelList } from './parseModelList'
 import { createImageSdkFetch, generateSdkImage } from './sdkImage'
-
 
 const OpenRouterModel = z.object({
   id: z.string(),
@@ -136,11 +136,10 @@ export function createOpenRouterProvider(config: ImageProviderConfig): ImageProv
     // Discovery works without a key; it is sent when set.
     async listModels(apiKey?: string, signal?: AbortSignal): Promise<ImageModelInfo[]> {
       const key = apiKey || config.apiKey
-      const response = await imageGetFetch(
-        endpoint(baseUrl, 'images/models'),
-        key ? { Authorization: `Bearer ${key}` } : undefined,
-        { serviceId: 'openrouter-image-models', signal },
-      )
+      const response = await imageGetFetch(endpoint(baseUrl, 'images/models'), bearerHeaders(key), {
+        serviceId: 'openrouter-image-models',
+        signal,
+      })
       return parseModelList(
         await response.json(),
         OpenRouterModel,

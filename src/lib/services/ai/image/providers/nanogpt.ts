@@ -8,6 +8,7 @@ import type {
   ImageModelInfo,
 } from './types'
 import { imageGetFetch } from './fetchAdapter'
+import { bearerHeaders } from './discoveryFetch'
 import {
   architectureSchema,
   catalogueModelInfo,
@@ -174,8 +175,7 @@ export function createNanoGPTProvider(config: ImageProviderConfig): ImageProvide
 
   // Discovery works without a key; it is sent when set in case NanoGPT starts to vary the list by account.
   const discoveryHeaders = (apiKey?: string) => {
-    const key = apiKey || config.apiKey
-    return key ? { Authorization: `Bearer ${key}` } : undefined
+    return bearerHeaders(apiKey || config.apiKey)
   }
 
   async function fetchModels(apiKey?: string, signal?: AbortSignal): Promise<NanoGptModel[]> {

@@ -16,6 +16,7 @@ import type {
   ImageModelInfo,
 } from './types'
 import { imageGetFetch } from './fetchAdapter'
+import { bearerHeaders } from './discoveryFetch'
 import { findListedModel } from './modelSnapshot'
 import {
   editsOnly,
@@ -82,8 +83,7 @@ export function createPollinationsProvider(config: ImageProviderConfig): ImagePr
   // Discovery works without a key; it is sent when set.
   async function listModels(apiKey?: string, signal?: AbortSignal): Promise<ImageModelInfo[]> {
     const key = apiKey || config.apiKey
-    const headers: Record<string, string> = { Accept: 'application/json' }
-    if (key) headers['Authorization'] = `Bearer ${key}`
+    const headers = { Accept: 'application/json', ...bearerHeaders(key) }
 
     const response = await imageGetFetch(MODELS_ENDPOINT, headers, {
       serviceId: 'pollinations-image-models',

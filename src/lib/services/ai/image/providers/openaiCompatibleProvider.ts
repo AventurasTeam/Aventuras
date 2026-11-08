@@ -19,6 +19,7 @@ import type {
   ImageModelInfo,
 } from './types'
 import { imageGetFetch } from './fetchAdapter'
+import { bearerHeaders } from './discoveryFetch'
 import { architectureSchema, nonEmpty, optionalString, optionalStrings } from './modelCatalogue'
 import { parseModelList } from './parseModelList'
 import { generateOpenAICompatibleImage } from './openaiCompatible'
@@ -150,7 +151,7 @@ async function fetchImageModels(
   apiKey?: string,
   signal?: AbortSignal,
 ): Promise<ImageModelInfo[]> {
-  const headers = apiKey ? { Authorization: `Bearer ${apiKey}` } : undefined
+  const headers = bearerHeaders(apiKey)
 
   const [general, dedicated] = await Promise.allSettled([
     fetchEntries(endpoint(baseUrl, 'models'), headers, {
