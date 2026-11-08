@@ -127,8 +127,8 @@ and tools sit under `lib/pipeline/definitions/close-agent/`.
   and
   [`Two write paths`](../../../../generation-pipeline.md#two-write-paths-from-the-orchestrator)
   name the new function for `delta_group_emitted`.
-- `noopRefusal(reason, 'restated' | 'gone')` (`registry.ts:74`). Rule
-  refusals stay unmarked. The single path drops the mark where it
+- `noopRefusal(reason, 'restated' | 'gone' | null)` (`registry.ts:88`).
+  A rule refusal passes `null`, so every call site states its mark. The single path drops the mark where it
   returns a refusal (`apply-delta-action.ts:184`), so `MutationResult`
   doesn't change and the exact refusals pinned through it pass unedited
   (`entities/register.test.ts:443`, `state-patch-actions.test.ts:117`).
@@ -497,8 +497,8 @@ vitest and the probe share. It never reaches a production slot.
   (`lib/actions/delta/group-outcomes.test.ts`). `DeltaGroupResult` and
   `MutationResult` keep their shapes, so the existing tests pinning them
   pass unedited.
-- A scan of `lib/actions` fails on an unmarked restated or gone
-  `noopRefusal`, and sample handlers report their mark
+- A scan of `lib/actions` fails on a restated or gone `noopRefusal`
+  passing `null`, and sample handlers report their mark
   (`lib/actions/delta/noop-marks.test.ts`).
 - Each row of C11's table gives its result, an unknown noop gives
   `rejected`, a hard `not-found` gives `rejected` with nothing written,

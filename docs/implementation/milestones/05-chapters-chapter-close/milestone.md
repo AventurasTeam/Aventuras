@@ -629,8 +629,8 @@ matches `USER_EDITED_SINCE_PROSE` to `skipped` and restated values to
 that didn't land can never read as `ok`. Restated values go by more than
 a dozen spellings, some restated only by row state, and gone rows
 interpolate ids, so both carry a stable marker,
-`noopRefusal(reason, 'restated' | 'gone')`
-(`lib/actions/delta/registry.ts:74`), and rule refusals stay unmarked.
+`noopRefusal(reason, 'restated' | 'gone' | null)`
+(`lib/actions/delta/registry.ts:88`), and rule refusals pass `null`.
 `updateEntity`, `updateLore`, `updateThread` and `updateHappening` return
 a hard `not-found` that aborts a group
 (`lib/actions/lore/register.ts:108-112`), which gives the whole call

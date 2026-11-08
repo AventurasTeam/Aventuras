@@ -103,7 +103,7 @@ Slice 5.5a's runner.
   no user caller sends, so no shipped caller changes. With it, a column
   the user wrote after that prose is dropped from `set`, by
   `userEditsSinceProse` and `wroteField`, and a `set` left empty by that
-  ends in `noopRefusal(USER_EDITED_SINCE_PROSE)`, which C11 maps to
+  ends in `noopRefusal(USER_EDITED_SINCE_PROSE, null)`, which C11 maps to
   `skipped`. An `ok` outcome can't name a dropped column, so a caller
   sending two columns reads ahead through the row guard first, as both
   merges do. `updateHappening` has no caller here: 5.8's
