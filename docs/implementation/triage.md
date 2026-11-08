@@ -113,3 +113,14 @@ slice-planning gate forces its resolution before that slice is planned.
   orchestrator forwards every event. No production code subscribes to
   delta events yet; one rule for both paths is wanted before one does.
   Raised in 5.5a's review.
+- **`promoteStagedEntity`'s store-only guard can still refuse a
+  legitimate promotion while a story opens.** `loadOpenStory` reads
+  `entities`, then hydrates after eight more reads, so a write or
+  reversal landing in between leaves the store copy active over a
+  DB-staged row, and `promoteStagedEntityHandler` refuses `not-staged`;
+  since 5.5a that reads `rejected`, not `ok`. The row lock may make the guard
+  redundant: `promoteStagedEntity` takes the row's lock key, so two
+  promotes through the action layer serialise and the second reads the
+  DB already active. The lock did not come later: `ae48d4513` (M3.2)
+  added both, `a6d81c572` (M4.2a) only widened the key. Raised in 5.5a's
+  review.
