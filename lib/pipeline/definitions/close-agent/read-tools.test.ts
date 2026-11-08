@@ -360,6 +360,7 @@ describe('search_world', () => {
 
     expect(matchedIds(out)).toEqual([beacon])
     expect((await search('lamp')).out.matches).toHaveLength(1)
+    expect(matchedIds((await search('7')).out)).not.toContain(beacon)
   })
 
   it('swaps full ids for handles before it cuts the line, in text with no space to cut at', async () => {
