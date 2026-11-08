@@ -806,11 +806,11 @@ None open: Implementation notes, below, record each answer.
   `globalThis.requestIdleCallback?.()`, so a story opens under plain
   Node, where `pnpm probe:close` opens one; `vitest.setup.ts` keeps its
   no-op, which also keeps tests from building the encoder.
-- **`pnpm probe:close` refuses a branch that owes a pass**, naming its
-  unprocessed entries, since the close would run a classifier pass
-  first. It numbers a saved step from its request, one past the replies
-  the request sends back, so an attempt the step call retried saves
-  beside its step instead of over it.
+- **`pnpm probe:close` refuses a branch that owes a pass**, giving the
+  count of its unprocessed entries, since the close would run a
+  classifier pass first. It numbers a saved step from its request, one
+  past the replies the request sends back, so an attempt the step call
+  retried saves beside its step instead of over it.
 
 ### Write-burst measure
 
