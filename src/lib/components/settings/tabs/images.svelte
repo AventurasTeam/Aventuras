@@ -32,6 +32,7 @@
     suggestReferenceInputs,
     chooseModelSnapshot,
     storedSnapshotFor,
+    applyCapabilityOverride,
     canonicalModelId,
     modelListKey,
     sameEndpoint,
@@ -198,12 +199,11 @@
     if (referenceLimit(profileProviderType, buildProviderOptions()) === 0) {
       return NO_REFERENCES_REASON[profileProviderType] ?? 'it cannot send reference images.'
     }
-    const references = capabilityOverride?.references
-    if (references !== undefined) {
-      return references ? null : 'reference images are switched off under Model capabilities.'
+    if (capabilityOverride?.references === false) {
+      return 'reference images are switched off under Model capabilities.'
     }
-    return !!profileModel &&
-      profileModels.find((m) => m.id === profileModel)?.supportsImg2Img === false
+    const capabilities = applyCapabilityOverride(publishedCapabilities, capabilityOverride)
+    return !!profileModel && capabilities?.supportsImg2Img === false
       ? 'the selected model does not support img2img.'
       : null
   })

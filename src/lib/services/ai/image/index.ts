@@ -47,6 +47,7 @@ export {
 
 export {
   IMAGE_MODEL_SNAPSHOT_VERSION,
+  applyCapabilityOverride,
   canonicalModelId,
   chooseModelSnapshot,
   overriddenFields,
