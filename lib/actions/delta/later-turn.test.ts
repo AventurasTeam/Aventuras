@@ -226,15 +226,17 @@ describe('laterTurnDeltas (C12)', () => {
   })
 
   it("reads only deltas logged after E's create", async () => {
-    const ctx = await setup((c) =>
-      log(c, {
+    // A filler delta puts the early one past E's position (2) yet before E's create.
+    const ctx = await setup(async (c) => {
+      await log(c, { actionId: 'act_t1', table: 'entities', id: 'char_other' })
+      await log(c, {
         actionId: 'act_pass',
         source: 'periodic_classifier',
         table: 'entities',
         id: 'char_1',
         entryId: 'e_3',
-      }),
-    )
+      })
+    })
     expect(await laterIds(ctx)).toEqual([])
   })
 
