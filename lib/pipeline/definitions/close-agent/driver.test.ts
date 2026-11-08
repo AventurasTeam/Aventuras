@@ -618,7 +618,10 @@ describe('runCloseTask', () => {
           type: 'tool-result',
           toolCallId: 'k1',
           toolName: 'merge_threads',
-          output: { type: 'json', value: { result: 'rejected' } },
+          output: {
+            type: 'json',
+            value: { result: 'rejected', reason: expect.stringContaining('merge_threads') },
+          },
         },
       ],
     })
@@ -671,14 +674,21 @@ describe('runCloseTask', () => {
     const seen: unknown[] = []
     const def = taskDef({
       start: async (ctx) => {
-        seen.push([ctx.task, ctx.readFields])
+        seen.push(['start', ctx.task, ctx.readFields])
         return { show: ['c1'], seeds: [{ table: 'entities', id: WREN }] }
+      },
+      render: (_start, ctx) => {
+        seen.push(['render', ctx.task, ctx.readFields])
+        return { system: 'The chapter.', user: 'Identity.' }
       },
     })
 
     await drive(def, runContext(phaseContext(), { task: 'upkeep', readFields: {} }))
 
-    expect(seen).toEqual([['identity', { character: ['description'] }]])
+    expect(seen).toEqual([
+      ['start', 'identity', { character: ['description'] }],
+      ['render', 'identity', { character: ['description'] }],
+    ])
     expect(ledger.calls.map((call) => call.task)).toEqual(['identity'])
     expect(ledger.stopped).toEqual([{ task: 'identity', part: 1, reason: 'window' }])
   })
