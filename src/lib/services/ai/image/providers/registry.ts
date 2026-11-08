@@ -8,9 +8,13 @@
 
 import { isAbortError } from '#lib/services/activity/index.ts'
 import { settings } from '#lib/stores/settings.svelte.ts'
-import type { ImageModelCapabilities, ImageProfile, ImageProviderType } from '#lib/types/index.ts'
+import type {
+  ImageModelCapabilities,
+  ImageModelConnection,
+  ImageProfile,
+  ImageProviderType,
+} from '#lib/types/index.ts'
 import { parseImageSpec, describeImageSpec, type ImageSpec } from '#lib/utils/image.ts'
-import { normalizeBaseUrl } from '#lib/utils/url.ts'
 import type {
   ComfySamplerInfo,
   ImageProvider,
@@ -20,7 +24,7 @@ import type {
 } from './types'
 import { createLogger } from '#lib/log.ts'
 import { fetchPublicImageBase64 } from './fetchAdapter'
-import { PROVIDER_BASE_URL } from './baseUrls'
+import { isImageProviderType, modelListKey } from './connection'
 import { applyCapabilityOverride } from './modelSnapshot'
 import { snapshotCapabilities } from './snapshotBackfill'
 
@@ -55,6 +59,18 @@ const PROVIDER_FACTORIES: Record<ImageProviderType, ProviderFactory> = {
   a1111: createA1111Provider,
 }
 
+function createProvider(
+  { providerType, apiKey, baseUrl }: ImageModelConnection,
+  providerOptions?: ImageProviderConfig['providerOptions'],
+): ImageProvider {
+  return PROVIDER_FACTORIES[providerType]({
+    apiKey,
+    baseUrl,
+    providerOptions,
+    timeoutMs: settings.apiSettings.llmTimeoutMs,
+  })
+}
+
 export const IMAGE_PROVIDER_LABELS: Record<ImageProviderType, string> = {
   nanogpt: 'NanoGPT',
   openai: 'OpenAI',
@@ -65,29 +81,6 @@ export const IMAGE_PROVIDER_LABELS: Record<ImageProviderType, string> = {
   zhipu: 'Z.AI',
   comfyui: 'ComfyUI',
   a1111: 'A1111 / SD.cpp / Kobold',
-}
-
-type FieldMode = 'required' | 'optional' | 'none'
-
-/**
- * How a provider uses an API key: `required` for the hosted ones, `optional` for an endpoint
- * the user runs or fronts themselves, `none` for the ones that run on the user's own machine.
- * Exhaustive by type, so a new provider has to declare which it is.
- *
- * Pollinations counts as requiring one: the model list is served without it, but
- * generation is not, and a profile that can list and cannot draw is the worse failure —
- * it looks configured.
- */
-const PROVIDER_API_KEY: Record<ImageProviderType, FieldMode> = {
-  nanogpt: 'required',
-  openai: 'required',
-  'openai-compatible': 'optional',
-  openrouter: 'required',
-  google: 'required',
-  zhipu: 'required',
-  pollinations: 'required',
-  comfyui: 'none',
-  a1111: 'none',
 }
 
 const unlimited = () => Infinity
@@ -156,10 +149,13 @@ interface ModelCache {
 const CACHE_TTL = 12 * 60 * 60 * 1000
 const modelCaches = new Map<string, ModelCache>()
 
-function getCacheKey(providerType: ImageProviderType, apiKey?: string, baseUrl?: string): string {
-  const keyHash = apiKey ? apiKey.slice(-8) : 'nokey'
-  const urlKey = normalizeBaseUrl(baseUrl) || 'nourl'
-  return `${providerType}:${keyHash}:${urlKey}`
+/** Drops the cached list for `previous`'s connection when `next` uses a different one. */
+export function evictReplacedModelList(
+  previous: ImageModelConnection,
+  next: ImageModelConnection,
+): void {
+  const previousKey = modelListKey(previous)
+  if (previousKey !== modelListKey(next)) modelCaches.delete(previousKey)
 }
 
 // ============================================================================
@@ -200,51 +196,9 @@ async function providedCapabilities(
 // Public API
 // ============================================================================
 
-/**
- * Check if a provider type supports image generation.
- */
-export function supportsImageGeneration(providerType: string): providerType is ImageProviderType {
-  return Object.hasOwn(PROVIDER_FACTORIES, providerType)
-}
-
 export const IMAGE_PROVIDER_OPTIONS = Object.entries(IMAGE_PROVIDER_LABELS).flatMap(
-  ([value, label]) => (supportsImageGeneration(value) ? [{ value, label }] : []),
+  ([value, label]) => (isImageProviderType(value) ? [{ value, label }] : []),
 )
-
-// An unknown provider is assumed to need a key and to take no base URL.
-function apiKeyMode(providerType: string): FieldMode {
-  return supportsImageGeneration(providerType) ? PROVIDER_API_KEY[providerType] : 'required'
-}
-
-/** Whether a profile of this provider needs an API key to be usable. */
-export function requiresApiKey(providerType: string): boolean {
-  return apiKeyMode(providerType) === 'required'
-}
-
-/** Whether a profile of this provider has an API key field at all. */
-export function takesApiKey(providerType: string): boolean {
-  return apiKeyMode(providerType) !== 'none'
-}
-
-/** Whether a profile of this provider needs, may take, or has no base URL. */
-export function baseUrlMode(providerType: string): FieldMode {
-  return supportsImageGeneration(providerType) ? PROVIDER_BASE_URL[providerType].mode : 'none'
-}
-
-/**
- * The API key and base URL a provider uses. The form keeps a value typed for another provider, so
- * a field this one has no input for is dropped rather than sent.
- */
-export function connectionFor(
-  providerType: string,
-  apiKey: string,
-  baseUrl: string | undefined,
-): { apiKey: string; baseUrl: string | undefined } {
-  return {
-    apiKey: takesApiKey(providerType) ? apiKey : '',
-    baseUrl: baseUrlMode(providerType) === 'none' ? undefined : baseUrl,
-  }
-}
 
 /**
  * Whether edits through this profile and model can carry a reference image. A model the list
@@ -286,10 +240,6 @@ export async function generateImage(options: {
     throw new Error(`Image profile not found: ${profileId}`)
   }
 
-  if (!PROVIDER_FACTORIES[profile.providerType]) {
-    throw new Error(`Unknown image provider type: ${profile.providerType}`)
-  }
-
   log('generateImage', {
     profileId,
     model,
@@ -298,13 +248,7 @@ export async function generateImage(options: {
     size: describeImageSpec(spec),
   })
 
-  const config: ImageProviderConfig = {
-    ...connectionFor(profile.providerType, profile.apiKey, profile.baseUrl),
-    providerOptions: profile.providerOptions,
-    timeoutMs: settings.apiSettings.llmTimeoutMs,
-  }
-
-  const provider = PROVIDER_FACTORIES[profile.providerType](config)
+  const provider = createProvider(profile, profile.providerOptions)
 
   // The model's sizes and reference limit, from the source its provider declares.
   const capabilities = await modelCapabilities(profile, model)
@@ -346,20 +290,16 @@ export async function generateImage(options: {
 }
 
 /**
- * List image models by provider type directly (without needing a profile).
- * Used during profile creation to preview available models. A failed fetch rethrows so the
- * form can show it. An aborted `signal` rejects and caches nothing, even when the adapter
- * answered with a partial list.
+ * A connection's models. A failed fetch rethrows so the form can show it; an aborted `signal`
+ * rejects and caches nothing, even when the adapter answered with a partial list.
  */
-export async function listImageModelsByProvider(
-  providerType: ImageProviderType,
-  apiKey: string,
+export async function listImageModels(
+  connection: ImageModelConnection,
   forceReload: boolean,
-  baseUrl?: string,
   signal?: AbortSignal,
 ): Promise<ImageModelInfo[]> {
-  const connection = connectionFor(providerType, apiKey ?? '', baseUrl)
-  const cacheKey = getCacheKey(providerType, connection.apiKey, connection.baseUrl)
+  const { providerType, apiKey } = connection
+  const cacheKey = modelListKey(connection)
   if (!forceReload) {
     const cached = modelCaches.get(cacheKey)
     if (cached && Date.now() - cached.timestamp < CACHE_TTL) {
@@ -368,12 +308,7 @@ export async function listImageModelsByProvider(
   }
 
   try {
-    const config: ImageProviderConfig = {
-      ...connection,
-      timeoutMs: settings.apiSettings.llmTimeoutMs,
-    }
-    const provider = PROVIDER_FACTORIES[providerType](config)
-    const models = await provider.listModels(connection.apiKey, signal)
+    const models = await createProvider(connection).listModels(apiKey, signal)
     signal?.throwIfAborted()
     modelCaches.set(cacheKey, { models, timestamp: Date.now() })
     return models
@@ -388,16 +323,12 @@ export async function listImageModelsByProvider(
  * the model's entry in its list. A failed request rethrows; `undefined` means an unknown model.
  */
 async function lookupCapabilities(
-  profile: ImageProfile,
+  connection: ImageModelConnection,
   model: string,
 ): Promise<ImageModelCapabilities | undefined> {
-  const { providerType, apiKey, baseUrl } = profile
-  const provider = PROVIDER_FACTORIES[providerType]({
-    ...connectionFor(providerType, apiKey, baseUrl),
-    timeoutMs: settings.apiSettings.llmTimeoutMs,
-  })
+  const provider = createProvider(connection)
   if (provider.getModelCapabilities) return provider.getModelCapabilities(model)
-  const models = await listImageModelsByProvider(providerType, apiKey, false, baseUrl)
+  const models = await listImageModels(connection, false)
   return models.find((m) => m.id === model)
 }
 

@@ -12,14 +12,15 @@
   import { RotateCcw, Info, Plus, Copy, Eye, EyeOff, ChevronRight, Check } from '@lucide/svelte'
   import { Textarea } from '#lib/components/ui/textarea/index.ts'
   import {
-    listImageModelsByProvider,
+    listImageModels,
+    evictReplacedModelList,
     getProviderSamplerInfo,
     getProviderClipTypes,
     listLoras,
     generateImage,
     takesApiKey,
     baseUrlMode,
-    connectionFor,
+    imageConnectionFor,
     resolveBaseUrl,
     IMAGE_PROVIDER_LABELS,
     IMAGE_PROVIDER_OPTIONS,
@@ -31,6 +32,7 @@
     chooseModelSnapshot,
     canonicalModelId,
     modelListKey,
+    sameEndpoint,
     overriddenFields,
     overrideConflicts,
     capturesModelSnapshot,
@@ -68,7 +70,7 @@
   } from '#lib/utils/image.ts'
   import { cn } from '#lib/utils/cn.ts'
   import { describeLoadError } from '#lib/utils/error.ts'
-  import { normalizeBaseUrl, parseHttpUrl } from '#lib/utils/url.ts'
+  import { parseHttpUrl } from '#lib/utils/url.ts'
 
   const imageStyles = [
     { value: 'image-style-soft-anime', label: 'Soft Anime' },
@@ -248,7 +250,7 @@
   )
   // A field the provider has no input for is neither saved nor sent; the form keeps what was typed.
   const connection = $derived(
-    connectionFor(profileProviderType, profileApiKey, profileBaseUrl || undefined),
+    imageConnectionFor(profileProviderType, profileApiKey, profileBaseUrl || undefined),
   )
   const baseUrlInvalid = $derived(
     baseUrlMode(profileProviderType) !== 'none' &&
@@ -316,8 +318,8 @@
     isLoadingProfileModels = true
     profileLoadFailures = []
 
-    const providerType = profileProviderType
-    const { apiKey, baseUrl } = connection
+    const inputs = connection
+    const { providerType, baseUrl } = inputs
     const timeoutMs = settings.apiSettings.llmTimeoutMs
     const unet = providerType === 'comfyui' && profileMode === ComfyMode.UnetTxt2Img
     requestHasUnetLists = unet
@@ -336,10 +338,10 @@
     const reads = [
       read(
         'models',
-        () => listImageModelsByProvider(providerType, apiKey, force, baseUrl, request.signal),
+        () => listImageModels(inputs, force, request.signal),
         (models) => {
           profileModels = models
-          profileModelsKey = modelListKey(providerType, apiKey, baseUrl)
+          profileModelsKey = modelListKey(inputs)
         },
       ),
     ]
@@ -423,8 +425,8 @@
 
   $effect(() => {
     const profileId = editingProfileId
-    const providerType = profileProviderType
-    const { apiKey, baseUrl } = connection
+    const inputs = connection
+    const { providerType } = inputs
     const invalid = baseUrlInvalid
 
     untrack(() => {
@@ -438,7 +440,7 @@
       loadedProfileId = profileId
       loadedProviderType = providerType
 
-      if (invalid || profileModelsKey !== modelListKey(providerType, apiKey, baseUrl)) {
+      if (invalid || profileModelsKey !== modelListKey(inputs)) {
         profileModels = []
         profileModelsKey = null
         availableClipTypes = []
@@ -538,16 +540,13 @@
   }
 
   // Whether the loaded model list is for the form's current provider, key and URL.
-  const modelsSettled = $derived(
-    profileModelsKey === modelListKey(profileProviderType, connection.apiKey, connection.baseUrl),
-  )
+  const modelsSettled = $derived(profileModelsKey === modelListKey(connection))
 
   function buildModelSnapshot() {
     if (!capturesModelSnapshot(profileProviderType)) return undefined
     return chooseModelSnapshot({
       model: profileModel,
-      providerType: profileProviderType,
-      baseUrl: connection.baseUrl,
+      connection,
       models: profileModels,
       settled: modelsSettled,
       stored: editingProfileId ? settings.getImageProfile(editingProfileId) : undefined,
@@ -588,16 +587,19 @@
   async function autoSaveProfile() {
     if (isNewProfile || !editingProfileId || !canSaveProfile) return
 
-    await settings.updateImageProfile(editingProfileId, {
-      name: profileName.trim(),
-      providerType: profileProviderType,
-      apiKey: connection.apiKey,
-      baseUrl: connection.baseUrl,
-      model: profileModel,
-      modelSnapshot: buildModelSnapshot(),
-      capabilityOverride,
-      providerOptions: buildProviderOptions(),
-    })
+    const previous = settings.getImageProfile(editingProfileId)
+    await settings.updateImageProfile(
+      editingProfileId,
+      {
+        name: profileName.trim(),
+        model: profileModel,
+        modelSnapshot: buildModelSnapshot(),
+        capabilityOverride,
+        providerOptions: buildProviderOptions(),
+      },
+      connection,
+    )
+    if (previous) evictReplacedModelList(previous, connection)
   }
 
   $effect(() => {
@@ -648,14 +650,7 @@
       if (isNewProfile || !editingProfileId || suppressAutoSave) return
       if (!capturesModelSnapshot(profileProviderType)) return
       const stored = settings.getImageProfile(editingProfileId)
-      if (
-        !stored ||
-        stored.providerType !== profileProviderType ||
-        stored.model !== profileModel ||
-        normalizeBaseUrl(stored.baseUrl) !== normalizeBaseUrl(connection.baseUrl)
-      ) {
-        return
-      }
+      if (!stored || stored.model !== profileModel || !sameEndpoint(stored, connection)) return
       const modelSnapshot = buildModelSnapshot()
       if (modelSnapshot && modelSnapshot !== stored.modelSnapshot) {
         void settings.updateImageProfile(editingProfileId, { modelSnapshot })
@@ -786,16 +781,16 @@
   async function handleSaveProfile() {
     if (!canSaveProfile) return
 
-    await settings.addImageProfile({
-      name: profileName.trim(),
-      providerType: profileProviderType,
-      apiKey: connection.apiKey,
-      baseUrl: connection.baseUrl,
-      model: profileModel,
-      modelSnapshot: buildModelSnapshot(),
-      capabilityOverride,
-      providerOptions: buildProviderOptions(),
-    })
+    await settings.addImageProfile(
+      {
+        name: profileName.trim(),
+        model: profileModel,
+        modelSnapshot: buildModelSnapshot(),
+        capabilityOverride,
+        providerOptions: buildProviderOptions(),
+      },
+      connection,
+    )
 
     resetEditState()
   }

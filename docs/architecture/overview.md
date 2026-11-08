@@ -635,13 +635,19 @@ id's `checkpoint:` or `unet:` prefix does, and a UNet text encoder or VAE left b
 the first file the server lists. OpenAI Compatible has no standard model list: its filtering and
 capability reading were assembled from a handful of hosts' replies, and `/images/models` is an optional
 extra whose failure never fails the listing. Whether a provider takes an API key or a base URL is declared per
-provider (`PROVIDER_API_KEY` in the registry, `PROVIDER_BASE_URL` in `providers/baseUrls.ts`, which also holds each default), and the settings form and
-`hasRequiredCredentials` read those tables. The form keeps a value typed for another provider, so the
-registry builds a provider only from the fields it has an input for (`connectionFor`): a leftover base URL
-is not sent to OpenRouter, nor a leftover API key to A1111. Discovery (`listModels`, `getSamplerInfo`,
+provider (`PROVIDER_API_KEY` in `providers/connection.ts`, `PROVIDER_BASE_URL` in `providers/baseUrls.ts`, which also holds each default), and the settings form and
+`hasRequiredCredentials` read those tables. The form keeps a value typed for another provider, so a
+connection is cut down to the fields its provider has an input for (`imageConnectionFor`) where it
+enters: in the form, and when settings load. The result is an `ImageModelConnection`, branded so only that
+function makes one; `ImageProfile` extends it and the store takes one to save, so the registry and the
+model-list cache use a connection as given. A leftover base URL is never saved for OpenRouter, nor a
+leftover API key for A1111. A stored profile whose provider this build does not know is skipped on load.
+Discovery (`listModels`, `getSamplerInfo`,
 `listLoras`) takes an `AbortSignal`. The profile form debounces key and base URL edits, aborts the request
 a newer one or Stop replaces, and writes only what the current request returns. A cancelled model list is
-never cached, even when an adapter answers with a partial one. Migration `042` moved image settings that still named an
+never cached, even when an adapter answers with a partial one. Model lists are cached for 12 hours per
+connection (`modelListKey`: provider, API key, base URL); a save that changes a profile's connection
+drops the entry it replaced (`evictReplacedModelList`), and the form's Refresh bypasses the cache. Migration `042` moved image settings that still named an
 API profile into image profiles, moved proxy-style `openai` profiles and every `chutes` profile
 (that provider is gone) to OpenAI Compatible, and pinned `zhipu` profiles with an empty base URL to
 `open.bigmodel.cn`, which they used before the default became `api.z.ai`.

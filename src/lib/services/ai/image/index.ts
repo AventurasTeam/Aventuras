@@ -21,14 +21,11 @@ export {
   generateImage,
   supportsReferenceImages,
   toRawBase64,
-  listImageModelsByProvider,
+  listImageModels,
+  evictReplacedModelList,
   getProviderSamplerInfo,
   listLoras,
   getProviderClipTypes,
-  requiresApiKey,
-  takesApiKey,
-  baseUrlMode,
-  connectionFor,
   referenceLimit,
   capturesModelSnapshot,
   takesCapabilityOverride,
@@ -40,10 +37,17 @@ export {
 export { resolveBaseUrl } from './providers/baseUrls'
 
 export {
+  baseUrlMode,
+  imageConnectionFor,
+  modelListKey,
+  sameEndpoint,
+  takesApiKey,
+} from './providers/connection'
+
+export {
   IMAGE_MODEL_SNAPSHOT_VERSION,
   canonicalModelId,
   chooseModelSnapshot,
-  modelListKey,
   overriddenFields,
   overrideConflicts,
   snapshotModel,

@@ -5,12 +5,12 @@ import {
   applyCapabilityOverride,
   canonicalModelId,
   chooseModelSnapshot,
-  modelListKey,
   overriddenFields,
   overrideConflicts,
   sameSnapshot,
   snapshotModel,
 } from './modelSnapshot'
+import { imageConnectionFor } from './connection'
 import type { ImageModelInfo } from './types'
 
 const info = (over: Partial<ImageModelInfo> = {}): ImageModelInfo => ({
@@ -25,10 +25,9 @@ const info = (over: Partial<ImageModelInfo> = {}): ImageModelInfo => ({
 })
 
 const stored = (over: Partial<ImageProfile> = {}): ImageProfile => ({
+  ...imageConnectionFor('nanogpt', 'k', undefined),
   id: 'p1',
   name: 'p',
-  providerType: 'nanogpt',
-  apiKey: 'k',
   model: 'm1',
   providerOptions: {},
   createdAt: 1,
@@ -75,27 +74,10 @@ describe('snapshotModel', () => {
   })
 })
 
-describe('modelListKey', () => {
-  const key = modelListKey('openai-compatible', 'k', 'https://x.example/v1')
-
-  it('is the same for another spelling of the base URL', () => {
-    expect(modelListKey('openai-compatible', 'k', 'https://x.example/v1/')).toBe(key)
-  })
-
-  it.each([
-    ['provider', modelListKey('nanogpt', 'k', 'https://x.example/v1')],
-    ['API key', modelListKey('openai-compatible', 'k2', 'https://x.example/v1')],
-    ['base URL', modelListKey('openai-compatible', 'k', 'https://y.example/v1')],
-  ])('differs when the %s differs', (_, other) => {
-    expect(other).not.toBe(key)
-  })
-})
-
 describe('chooseModelSnapshot', () => {
   const base = {
     model: 'm1',
-    providerType: 'nanogpt' as const,
-    baseUrl: undefined,
+    connection: imageConnectionFor('nanogpt', 'k', undefined),
     models: [info()],
     settled: true,
     stored: stored(),
@@ -129,7 +111,7 @@ describe('chooseModelSnapshot', () => {
     const snap = chooseModelSnapshot({
       ...base,
       settled: false,
-      providerType: 'openai-compatible',
+      connection: imageConnectionFor('openai-compatible', 'k', undefined),
     })
     expect(snap).toBeUndefined()
   })
@@ -138,7 +120,7 @@ describe('chooseModelSnapshot', () => {
     const snap = chooseModelSnapshot({
       ...base,
       settled: false,
-      baseUrl: 'https://other.example/v1',
+      connection: imageConnectionFor('nanogpt', 'k', 'https://other.example/v1'),
     })
     expect(snap).toBeUndefined()
   })
@@ -154,7 +136,7 @@ describe('chooseModelSnapshot', () => {
       ...base,
       settled: false,
       stored: profile,
-      baseUrl: 'https://x.example/v1/',
+      connection: imageConnectionFor('nanogpt', 'k', 'https://x.example/v1/'),
     })
     expect(snap).toBe(profile.modelSnapshot)
   })

@@ -900,12 +900,26 @@ export interface ImageModelSnapshot {
   capabilities: ImageModelCapabilities
 }
 
-export interface ImageProfile {
-  id: string
-  name: string
+declare const imageConnectionBrand: unique symbol
+
+/** The provider, key and URL a provider is built from. Only `imageConnectionFor` makes one. */
+export interface ImageModelConnection {
+  readonly [imageConnectionBrand]: true
   providerType: ImageProviderType
   apiKey: string
+  baseUrl: string | undefined
+}
+
+/** An `ImageProfile` as stored: its provider may be one this build does not know. */
+export type StoredImageProfile = Omit<ImageProfile, keyof ImageModelConnection> & {
+  providerType: string
+  apiKey: string
   baseUrl?: string
+}
+
+export interface ImageProfile extends ImageModelConnection {
+  id: string
+  name: string
   model: string
   /** Saved only for providers whose capabilities come from an API; absent means never captured. */
   modelSnapshot?: ImageModelSnapshot

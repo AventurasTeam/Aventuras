@@ -1,11 +1,11 @@
 import type {
   ImageCapabilityOverride,
   ImageModelCapabilities,
+  ImageModelConnection,
   ImageModelSnapshot,
   ImageProfile,
-  ImageProviderType,
 } from '#lib/types/index.ts'
-import { normalizeBaseUrl } from '#lib/utils/url.ts'
+import { sameEndpoint } from './connection'
 import type { ImageModelInfo } from './types'
 
 export const IMAGE_MODEL_SNAPSHOT_VERSION = 1
@@ -111,15 +111,6 @@ export function canonicalModelId(id: string, models: ImageModelInfo[]): string {
   return findListedModel(models, id)?.id ?? id
 }
 
-/** Identifies the inputs a model list was loaded for. */
-export function modelListKey(
-  providerType: ImageProviderType,
-  apiKey: string,
-  baseUrl?: string,
-): string {
-  return JSON.stringify([providerType, apiKey, normalizeBaseUrl(baseUrl)])
-}
-
 /**
  * The snapshot a profile should save. A list loaded for other inputs may belong to the previous
  * provider, so only a settled one is read; otherwise the stored snapshot survives while the
@@ -128,19 +119,17 @@ export function modelListKey(
  */
 export function chooseModelSnapshot(args: {
   model: string
-  providerType: ImageProviderType
-  baseUrl?: string
+  connection: ImageModelConnection
   models: ImageModelInfo[]
   settled: boolean
   stored?: ImageProfile
 }): ImageModelSnapshot | undefined {
-  const { model, providerType, baseUrl, models, settled, stored } = args
+  const { model, connection, models, settled, stored } = args
   if (!model) return undefined
-  const sameEndpoint =
-    stored?.providerType === providerType &&
-    normalizeBaseUrl(stored.baseUrl) === normalizeBaseUrl(baseUrl)
   const keep =
-    sameEndpoint && stored.modelSnapshot?.model === model ? stored.modelSnapshot : undefined
+    stored && sameEndpoint(stored, connection) && stored.modelSnapshot?.model === model
+      ? stored.modelSnapshot
+      : undefined
 
   const listed = settled ? models.find((m) => m.id === model) : undefined
   if (!listed) return keep

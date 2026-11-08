@@ -1,14 +1,18 @@
 import { settings } from '#lib/stores/settings.svelte.ts'
-import type { ImageModelCapabilities, ImageProfile } from '#lib/types/index.ts'
-import { normalizeBaseUrl } from '#lib/utils/url.ts'
+import type {
+  ImageModelCapabilities,
+  ImageModelConnection,
+  ImageProfile,
+} from '#lib/types/index.ts'
 import { createLogger } from '#lib/log.ts'
+import { modelListKey } from './connection'
 import { IMAGE_MODEL_SNAPSHOT_VERSION, snapshotModel } from './modelSnapshot'
 
 const log = createLogger('ImageRegistry')
 
 /** Looks one model's capabilities up from its provider; rejects when the provider cannot be read. */
 export type CapabilityLookup = (
-  profile: ImageProfile,
+  connection: ImageModelConnection,
   model: string,
 ) => Promise<ImageModelCapabilities | undefined>
 
@@ -44,12 +48,7 @@ export async function snapshotCapabilities(
       const found = await withTimeout(lookup(profile, model), BACKFILL_TIMEOUT_MS)
       const next = snapshotModel(model, found)
       const current = settings.getImageProfile(profile.id)
-      if (
-        current?.model === model &&
-        current.providerType === profile.providerType &&
-        current.apiKey === profile.apiKey &&
-        normalizeBaseUrl(current.baseUrl) === normalizeBaseUrl(profile.baseUrl)
-      ) {
+      if (current?.model === model && modelListKey(current) === modelListKey(profile)) {
         try {
           await settings.updateImageProfile(profile.id, { modelSnapshot: next })
         } catch (error) {

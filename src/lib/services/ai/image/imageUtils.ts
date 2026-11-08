@@ -4,13 +4,8 @@
  * Helper functions for image generation using the standalone provider registry.
  */
 
-import {
-  generateImage,
-  supportsImageGeneration,
-  requiresApiKey,
-  baseUrlMode,
-  IMAGE_PROVIDER_LABELS,
-} from './providers/registry'
+import { generateImage, IMAGE_PROVIDER_LABELS } from './providers/registry'
+import { baseUrlMode, requiresApiKey } from './providers/connection'
 import { database } from '#lib/services/database.ts'
 import { settings } from '#lib/stores/settings.svelte.ts'
 import type { EmbeddedImage, StorySettings } from '#lib/types/index.ts'
@@ -63,10 +58,7 @@ export function isImageGenerationEnabled(
   const profileId = slotProfileId(type)
   if (!profileId) return false
 
-  const profile = settings.getImageProfile(profileId)
-  if (!profile) return false
-
-  return supportsImageGeneration(profile.providerType)
+  return !!settings.getImageProfile(profileId)
 }
 
 export type MissingCredential = 'profile' | 'apiKey' | 'baseUrl'
@@ -79,7 +71,7 @@ export function missingCredential(
   if (!profileId) return 'profile'
 
   const profile = settings.getImageProfile(profileId)
-  if (!profile || !supportsImageGeneration(profile.providerType)) return 'profile'
+  if (!profile) return 'profile'
 
   if (requiresApiKey(profile.providerType) && !profile.apiKey) return 'apiKey'
   if (baseUrlMode(profile.providerType) === 'required' && !normalizeBaseUrl(profile.baseUrl))

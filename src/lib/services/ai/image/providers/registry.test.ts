@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 
 vi.mock('#lib/stores/settings.svelte.ts', () => ({
   settings: {
@@ -65,21 +65,28 @@ import { comfyReferenceLimit, createComfyProvider } from './comfy'
 import { createA1111Provider } from './a1111'
 import { createGoogleProvider, googleModelCapabilities } from './google'
 import type { ImageModelInfo, ImageProvider } from './types'
+import { imageConnectionFor } from './connection'
 import {
-  supportsImageGeneration,
-  requiresApiKey,
-  takesApiKey,
-  baseUrlMode,
-  connectionFor,
   IMAGE_PROVIDER_LABELS,
   IMAGE_PROVIDER_OPTIONS,
   generateImage,
   supportsReferenceImages,
-  listImageModelsByProvider,
+  listImageModels,
+  evictReplacedModelList,
 } from './registry'
 import { settings } from '#lib/stores/settings.svelte.ts'
 import type { ImageModelCapabilities, ImageProfile, ImageProviderType } from '#lib/types/index.ts'
 import { IMAGE_MODEL_SNAPSHOT_VERSION } from './modelSnapshot'
+
+const conn = (providerType: ImageProviderType, apiKey: string, baseUrl?: string) =>
+  imageConnectionFor(providerType, apiKey, baseUrl)
+
+const adapter = (listModels: ImageProvider['listModels']): ImageProvider => ({
+  id: 'openai',
+  name: 'openai',
+  generate: vi.fn(),
+  listModels,
+})
 
 describe('Image Provider Registry', () => {
   beforeEach(() => {
@@ -87,28 +94,6 @@ describe('Image Provider Registry', () => {
     vi.mocked(comfyReferenceLimit).mockReturnValue(0)
     vi.mocked(openaiModelCapabilities).mockReturnValue(undefined)
     vi.mocked(googleModelCapabilities).mockReturnValue(undefined)
-  })
-
-  describe('supportsImageGeneration', () => {
-    it('returns false for unknown providers', () => {
-      expect(supportsImageGeneration('unknown-provider')).toBe(false)
-    })
-
-    it('does not mistake an inherited object key for a provider', () => {
-      expect(supportsImageGeneration('constructor')).toBe(false)
-    })
-  })
-
-  describe('requiresApiKey', () => {
-    it('assumes an unknown provider needs a key', () => {
-      expect(requiresApiKey('unknown-provider')).toBe(true)
-    })
-  })
-
-  describe('takesApiKey', () => {
-    it('assumes an unknown provider takes a key', () => {
-      expect(takesApiKey('unknown-provider')).toBe(true)
-    })
   })
 
   describe('IMAGE_PROVIDER_OPTIONS', () => {
@@ -119,12 +104,6 @@ describe('Image Provider Registry', () => {
       for (const { value, label } of IMAGE_PROVIDER_OPTIONS) {
         expect(label).toBe(IMAGE_PROVIDER_LABELS[value])
       }
-    })
-  })
-
-  describe('baseUrlMode', () => {
-    it('offers none for an unknown provider', () => {
-      expect(baseUrlMode('unknown-provider')).toBe('none')
     })
   })
 
@@ -692,38 +671,36 @@ describe('Image Provider Registry', () => {
 
   describe('model listing failures', () => {
     function failingProvider() {
-      vi.mocked(createOpenAIProvider).mockReturnValue({
-        id: 'openai',
-        name: 'openai',
-        generate: vi.fn(),
-        listModels: vi.fn(async () => {
+      vi.mocked(createOpenAIProvider).mockReturnValue(
+        adapter(async () => {
           throw new Error('Image API error 401: bad key')
         }),
-      })
+      )
     }
 
-    it('rethrows from listImageModelsByProvider so the profile form can show it', async () => {
+    it('rethrows from listImageModels so the profile form can show it', async () => {
       failingProvider()
-      await expect(listImageModelsByProvider('openai', 'sk-fail-a', true)).rejects.toThrow(
-        'bad key',
-      )
+      await expect(listImageModels(conn('openai', 'sk-fail-a'), true)).rejects.toThrow('bad key')
+    })
+
+    it('does not cache a failure', async () => {
+      failingProvider()
+      await expect(listImageModels(conn('openai', 'sk-fail-b'), false)).rejects.toThrow()
+
+      const listModels = vi.fn(async () => [{ id: 'm', name: 'm', supportsImg2Img: true }])
+      vi.mocked(createOpenAIProvider).mockReturnValue(adapter(listModels))
+      expect(await listImageModels(conn('openai', 'sk-fail-b'), false)).toHaveLength(1)
+      expect(listModels).toHaveBeenCalledTimes(1)
     })
   })
 
   describe('cancelled model listing', () => {
-    const adapter = (listModels: ImageProvider['listModels']): ImageProvider => ({
-      id: 'openai',
-      name: 'openai',
-      generate: vi.fn(),
-      listModels,
-    })
-
     it('hands the signal to the adapter', async () => {
       const listModels = vi.fn(async (_apiKey?: string, _signal?: AbortSignal) => [])
       vi.mocked(createOpenAIProvider).mockReturnValue(adapter(listModels))
       const { signal } = new AbortController()
 
-      await listImageModelsByProvider('openai', 'sk-abort-pass', true, undefined, signal)
+      await listImageModels(conn('openai', 'sk-abort-pass'), true, signal)
 
       expect(listModels.mock.calls[0][1]).toBe(signal)
     })
@@ -737,93 +714,109 @@ describe('Image Provider Registry', () => {
       vi.mocked(createOpenAIProvider).mockReturnValue(adapter(listModels))
 
       await expect(
-        listImageModelsByProvider('openai', 'sk-abort-cache', false, undefined, controller.signal),
+        listImageModels(conn('openai', 'sk-abort-cache'), false, controller.signal),
       ).rejects.toMatchObject({ name: 'AbortError' })
 
       listModels.mockImplementationOnce(async () => [{ id: 'full', name: 'full' }])
-      const models = await listImageModelsByProvider('openai', 'sk-abort-cache', false)
+      const models = await listImageModels(conn('openai', 'sk-abort-cache'), false)
       expect(models.map((m) => m.id)).toEqual(['full'])
       expect(listModels).toHaveBeenCalledTimes(2)
     })
   })
 
-  describe('hidden connection fields', () => {
-    it.each([
-      [
-        'nanogpt',
-        'key',
-        'https://partner.test',
-        { apiKey: 'key', baseUrl: 'https://partner.test' },
-      ],
-      ['openrouter', 'key', 'https://stale.test', { apiKey: 'key', baseUrl: undefined }],
-      ['a1111', 'stale-key', 'http://sd.test', { apiKey: '', baseUrl: 'http://sd.test' }],
-      ['comfyui', 'stale-key', 'http://comfy.test', { apiKey: '', baseUrl: 'http://comfy.test' }],
-      [
-        'openai-compatible',
-        'key',
-        'https://proxy.test',
-        { apiKey: 'key', baseUrl: 'https://proxy.test' },
-      ],
-    ] satisfies [ImageProviderType, string, string, ReturnType<typeof connectionFor>][])(
-      'connectionFor(%s) keeps only the fields the provider has an input for',
-      (providerType, apiKey, baseUrl, expected) => {
-        expect(connectionFor(providerType, apiKey, baseUrl)).toEqual(expected)
-      },
-    )
-
-    it('builds a provider without a leftover base URL', async () => {
-      const listModels = vi.fn(async () => [])
-      vi.mocked(createOpenRouterProvider).mockReturnValue({
-        id: 'openrouter',
-        name: 'openrouter',
-        generate: vi.fn(),
-        listModels,
-      })
-
-      await listImageModelsByProvider('openrouter', 'sk-hidden-url', true, 'https://stale.test')
-
-      expect(createOpenRouterProvider).toHaveBeenCalledWith(
-        expect.objectContaining({ apiKey: 'sk-hidden-url', baseUrl: undefined }),
-      )
-    })
-
-    it('builds a provider without a leftover API key', async () => {
-      const listModels = vi.fn(async () => [])
-      vi.mocked(createA1111Provider).mockReturnValue({
-        id: 'a1111',
-        name: 'a1111',
-        generate: vi.fn(),
-        listModels,
-      })
-
-      await listImageModelsByProvider('a1111', 'stale-key', true, 'http://sd.test')
-
-      expect(createA1111Provider).toHaveBeenCalledWith(
-        expect.objectContaining({ apiKey: '', baseUrl: 'http://sd.test' }),
-      )
-      expect(listModels).toHaveBeenCalledWith('', undefined)
-    })
-  })
-
   describe('model cache key', () => {
+    let listModels: ReturnType<typeof vi.fn<NonNullable<ImageProvider['listModels']>>>
+
+    beforeEach(() => {
+      listModels = vi.fn(async () => [{ id: 'm', name: 'm', supportsImg2Img: true }])
+      vi.mocked(createOpenAIProvider).mockReturnValue(adapter(listModels))
+    })
+
     it('shares one entry across base URLs that normalize alike', async () => {
-      const listModels = vi.fn(async () => [{ id: 'm', name: 'm', supportsImg2Img: true }])
-      vi.mocked(createOpenAIProvider).mockReturnValue({
-        id: 'openai',
-        name: 'openai',
-        generate: vi.fn(),
-        listModels,
-      })
       vi.mocked(normalizeBaseUrl)
         .mockReturnValueOnce('https://normalized.test/v1')
         .mockReturnValueOnce('https://normalized.test/v1')
 
-      await listImageModelsByProvider('openai', 'sk-key-norm', false, 'https://one.test/')
-      await listImageModelsByProvider('openai', 'sk-key-norm', false, 'https://two.test//')
+      await listImageModels(conn('openai', 'sk-key-norm', 'https://one.test/'), false)
+      await listImageModels(conn('openai', 'sk-key-norm', 'https://two.test//'), false)
 
       expect(normalizeBaseUrl).toHaveBeenCalledWith('https://one.test/')
       expect(normalizeBaseUrl).toHaveBeenCalledWith('https://two.test//')
       expect(listModels).toHaveBeenCalledTimes(1)
+    })
+
+    describe('lifetime', () => {
+      const HOUR = 60 * 60 * 1000
+
+      beforeEach(() => {
+        vi.useFakeTimers()
+      })
+
+      afterEach(() => {
+        vi.useRealTimers()
+      })
+
+      it('serves an entry for 12 hours, then refetches', async () => {
+        await listImageModels(conn('openai', 'sk-ttl-0000'), false)
+        vi.advanceTimersByTime(12 * HOUR - 1)
+        await listImageModels(conn('openai', 'sk-ttl-0000'), false)
+        expect(listModels).toHaveBeenCalledTimes(1)
+
+        vi.advanceTimersByTime(1)
+        await listImageModels(conn('openai', 'sk-ttl-0000'), false)
+        expect(listModels).toHaveBeenCalledTimes(2)
+      })
+
+      it('keeps distinct API keys with a shared tail apart', async () => {
+        await listImageModels(conn('openai', 'sk-aaa-shared-tail'), false)
+        await listImageModels(conn('openai', 'sk-bbb-shared-tail'), false)
+        expect(listModels).toHaveBeenCalledTimes(2)
+      })
+
+      it('refetches on forceReload and replaces the entry', async () => {
+        await listImageModels(conn('openai', 'sk-force-0000'), false)
+        await listImageModels(conn('openai', 'sk-force-0000'), true)
+        await listImageModels(conn('openai', 'sk-force-0000'), false)
+        expect(listModels).toHaveBeenCalledTimes(2)
+      })
+    })
+
+    describe('evictReplacedModelList', () => {
+      it('drops the old connection when the key changes and keeps the new one', async () => {
+        await listImageModels(conn('openai', 'sk-evict-old'), false)
+        await listImageModels(conn('openai', 'sk-evict-new'), false)
+        listModels.mockClear()
+
+        evictReplacedModelList(conn('openai', 'sk-evict-old'), conn('openai', 'sk-evict-new'))
+
+        await listImageModels(conn('openai', 'sk-evict-new'), false)
+        expect(listModels).not.toHaveBeenCalled()
+        await listImageModels(conn('openai', 'sk-evict-old'), false)
+        expect(listModels).toHaveBeenCalledTimes(1)
+      })
+
+      it('drops the old connection when the base URL changes', async () => {
+        await listImageModels(conn('openai', 'sk-evict-url', 'https://one.test'), false)
+        listModels.mockClear()
+
+        evictReplacedModelList(
+          conn('openai', 'sk-evict-url', 'https://one.test'),
+          conn('openai', 'sk-evict-url', 'https://two.test'),
+        )
+
+        await listImageModels(conn('openai', 'sk-evict-url', 'https://one.test'), false)
+        expect(listModels).toHaveBeenCalledTimes(1)
+      })
+
+      it('keeps the entry when the connection is unchanged', async () => {
+        await listImageModels(conn('openai', 'sk-evict-same'), false)
+        listModels.mockClear()
+
+        evictReplacedModelList(conn('openai', 'sk-evict-same'), conn('openai', 'sk-evict-same'))
+
+        await listImageModels(conn('openai', 'sk-evict-same'), false)
+        expect(listModels).not.toHaveBeenCalled()
+      })
     })
   })
 })
