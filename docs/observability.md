@@ -258,8 +258,12 @@ convention, and the expectation that subsystems route through
   reported is unaffected)
 - `embedder.*` — `offline`, `compute_failed`, `staleness_detected`
 - `translation.*` — `soft_failed` (when that followup lands)
-- `memory.*` — periodic-classifier + chapter-close phase
-  emissions
+- `memory.*` — periodic-classifier and chapter-close phase
+  emissions, among them the close's debug kinds
+  `close_tool_group_rejected` (a tool's whole group refused, with the
+  tool, its action kinds, the reason and the code) and
+  `close_tool_action_noop` (one action's noop, with its reason and
+  mark)
 - `bootstrap.*` — boot-time hydration failures (e.g.
   `app_settings_hydrate_failed`)
 - `calendar.*` — `format_miss` (a `displayFormat` that fails or

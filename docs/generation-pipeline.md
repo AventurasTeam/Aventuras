@@ -247,8 +247,8 @@ second pipeline kind needing caller inputs is the trigger to revisit
 a generic seam.
 
 **What shipped for intermediates.** The chapter close's run-scoped
-state (its range, the shared missing-range failure and its ledger) goes
-through typed accessors in `lib/pipeline/definitions/close-intermediates.ts`,
+state (its range, the shared missing-range failure, its ledger and its
+one id map, `closeIdsOf`) goes through typed accessors in `lib/pipeline/definitions/close-intermediates.ts`,
 whose keys stay private. Every other kind's keys are still plain:
 retrieval's, the per-turn piggyback outcome and suggestions flag, the
 turn's id map, and the periodic pass's pre-run status. The per-kind
@@ -373,6 +373,16 @@ Placeholders look like `c1`, `c2`, `l1`, `lo1`, `ck1`, etc. — one
 character (for entities) or two characters (for the rest) plus a
 per-kind counter. Counter is scoped to the idMap, which is scoped
 to a single LLM call.
+
+A chapter close keeps one map for its whole run instead (`CloseIds`
+in `lib/pipeline/definitions/close-agent/ids.ts`), so a row keeps its
+handle across the close's steps, tasks and parts, and the list of
+writes so far names it as the model first saw it. The chapter's turns
+take `t1…tN` by position and `happening_awareness` rows `aw1…`, through
+`registerHandle`, which maps a handle both ways; `entry_` and `haw_`
+ids still don't match the walker's pattern, so only the close's own
+code shows them. An unknown handle is refused, never read as the newest
+turn.
 
 #### Lifecycle
 
