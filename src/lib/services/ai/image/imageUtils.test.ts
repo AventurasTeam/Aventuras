@@ -29,12 +29,19 @@ vi.mock('#lib/stores/settings.svelte.ts', () => ({
   },
 }))
 
+const warmImageCapabilities = vi.fn(async (_profiles: unknown[]) => {})
+
 vi.mock('./providers/registry', () => ({
   IMAGE_PROVIDER_LABELS: { openai: 'OpenAI' },
+  warmImageCapabilities: (profiles: unknown[]) => warmImageCapabilities(profiles),
 }))
 
-const { isImageGenerationEnabled, hasRequiredCredentials, missingCredential } =
-  await import('./imageUtils')
+const {
+  isImageGenerationEnabled,
+  hasRequiredCredentials,
+  missingCredential,
+  warmSlotCapabilities,
+} = await import('./imageUtils')
 
 const SLOTS: ImageProfileSlot[] = ['standard', 'background', 'portrait', 'reference']
 
@@ -181,4 +188,32 @@ describe('agreement between isImageGenerationEnabled and hasRequiredCredentials'
       })
     }
   }
+})
+
+describe('warmSlotCapabilities', () => {
+  beforeEach(() => {
+    warmImageCapabilities.mockClear()
+  })
+
+  it('passes the profile of every slot that is ready, in slot order', async () => {
+    state.profiles['p-std'].apiKey = 'sk-test'
+    setSlotIds('p-std', 'p-bg', 'p-port', 'p-ref')
+
+    await warmSlotCapabilities()
+
+    expect(warmImageCapabilities).toHaveBeenCalledWith([
+      state.profiles['p-std'],
+      state.profiles['p-bg'],
+      state.profiles['p-port'],
+      state.profiles['p-ref'],
+    ])
+  })
+
+  it('leaves out a slot with no profile, a missing profile, or missing credentials', async () => {
+    setSlotIds('p-std', 'p-gone', null, 'p-ref')
+
+    await warmSlotCapabilities()
+
+    expect(warmImageCapabilities).toHaveBeenCalledWith([state.profiles['p-ref']])
+  })
 })

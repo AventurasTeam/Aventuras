@@ -59,6 +59,7 @@ export {
   isImageGenerationEnabled,
   hasRequiredCredentials,
   missingCredential,
+  warmSlotCapabilities,
   portraitCredentialError,
   type MissingCredential,
   type ImageProfileSlot,

@@ -4,7 +4,7 @@
  * Helper functions for image generation using the standalone provider registry.
  */
 
-import { generateImage, IMAGE_PROVIDER_LABELS } from './providers/registry'
+import { generateImage, IMAGE_PROVIDER_LABELS, warmImageCapabilities } from './providers/registry'
 import { baseUrlMode, requiresApiKey } from './providers/connection'
 import { database } from '#lib/services/database.ts'
 import { settings } from '#lib/stores/settings.svelte.ts'
@@ -21,7 +21,9 @@ import {
 
 const log = createLogger('ImageUtils')
 
-export type ImageProfileSlot = 'standard' | 'background' | 'portrait' | 'reference'
+const IMAGE_PROFILE_SLOTS = ['standard', 'background', 'portrait', 'reference'] as const
+
+export type ImageProfileSlot = (typeof IMAGE_PROFILE_SLOTS)[number]
 
 const SLOT_PROFILE_KEYS = {
   standard: 'profileId',
@@ -84,6 +86,18 @@ export function missingCredential(
  */
 export function hasRequiredCredentials(slot: ImageProfileSlot = 'standard'): boolean {
   return missingCredential(slot) === undefined
+}
+
+/** Loads the capabilities of every profile an image slot selects, so the first generation does not wait on them. */
+export async function warmSlotCapabilities(): Promise<void> {
+  const profiles = IMAGE_PROFILE_SLOTS.filter((slot) => hasRequiredCredentials(slot)).flatMap(
+    (slot) => {
+      const id = slotProfileId(slot)
+      const profile = id ? settings.getImageProfile(id) : undefined
+      return profile ? [profile] : []
+    },
+  )
+  await warmImageCapabilities(profiles)
 }
 
 const PORTRAIT_CREDENTIAL_ERRORS: Record<MissingCredential, (providerName: string) => string> = {
