@@ -2,7 +2,7 @@ import { readFileSync } from 'node:fs'
 
 import fg from 'fast-glob'
 import ts from 'typescript'
-import { describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it } from 'vitest'
 
 import {
   branches,
@@ -11,9 +11,11 @@ import {
   lore,
   stories,
   type CollisionReason,
+  type Entity,
   type NewEntity,
 } from '@/lib/db'
 import { createTestDb } from '@/lib/db/__tests__/test-db'
+import { entitiesStore } from '@/lib/stores'
 
 import type { DbCtx, NoopMark, PipelineAction } from '../types'
 import { applyDeltaAction } from './apply-delta-action'
@@ -350,6 +352,20 @@ describe('noopRefusal marks: sample handlers (C11)', () => {
   ])('%s', async (_label, action, expected) => {
     const ctx = await setup()
     expect(await outcomeOf(ctx, action)).toStrictEqual(expected)
+  })
+
+  describe('promoteStagedEntity on a staged row the store holds active', () => {
+    afterEach(() => entitiesStore.__reset())
+
+    it('reads as restated', async () => {
+      const ctx = await setup()
+      entitiesStore.hydrate(BRANCH, [
+        { ...entity('char_staged', 'character'), status: 'active' } as Entity,
+      ])
+      expect(await outcomeOf(ctx, promote('char_staged'))).toStrictEqual(
+        noop('not-staged', 'restated'),
+      )
+    })
   })
 
   it('leaves the mark off a refusal the single path returns', async () => {

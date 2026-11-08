@@ -30,6 +30,9 @@ async function nextSequenceNumber(db: DbCtx['db'], branchId: string): Promise<nu
 // so any action that didn't land fails the close.
 function notApplied(actions: readonly PipelineAction[], outcome: GroupOutcome): string | null {
   if (outcome.status === 'rejected') return `chapter-close: group not applied: ${outcome.reason}`
+  // A short answer would let the missing actions read as landed.
+  if (outcome.outcomes.length !== actions.length)
+    return `chapter-close: group not applied: ${outcome.outcomes.length} outcomes for ${actions.length} actions`
   for (const [index, result] of outcome.outcomes.entries())
     if (result.status !== 'landed')
       return `chapter-close: ${actions[index].kind} not applied: ${result.reason}`

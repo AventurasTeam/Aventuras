@@ -61,8 +61,8 @@ export type NoopMark = 'restated' | 'gone'
 
 /** One action of a group, at its index in the group (C11). */
 export type ActionOutcome =
-  | { status: 'landed' }
-  | { status: 'noop'; reason: string; mark?: NoopMark }
+  | { readonly status: 'landed' }
+  | { readonly status: 'noop'; readonly reason: string; readonly mark?: NoopMark }
 
 /** What a `delta_group_emitted` yield evaluates to. `rejected`: the whole group, nothing written. */
 export type GroupOutcome =

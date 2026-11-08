@@ -358,6 +358,24 @@ describe('closeMetadataPhase', () => {
     })
   })
 
+  it('fails as action-layer when the group answers fewer outcomes than actions', async () => {
+    insertEntries(ROWS)
+    callReturns({ status: 'ok', metadata: METADATA })
+
+    const { result } = await drain(phaseCtx(), (event) => ({
+      status: 'ok',
+      outcomes: event.actions.slice(0, -1).map((): ActionOutcome => ({ status: 'landed' })),
+    }))
+
+    expect(result).toEqual({
+      status: 'failed',
+      error: {
+        kind: 'action-layer',
+        detail: 'chapter-close: group not applied: 7 outcomes for 8 actions',
+      },
+    })
+  })
+
   it('fails without a range and makes no call', async () => {
     insertEntries(ROWS)
 
