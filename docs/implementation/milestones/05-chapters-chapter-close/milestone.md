@@ -611,9 +611,10 @@ narrows to that in 5.8's PR.
 
 "Lands whole" means all-or-nothing on failure, not on precedence. A
 partly protected call appears in the review twice: its landed fields
-under Changes and its skipped fields under Not applied. The model's
-answer names each loss with its row, so a path lost on one row and
-landed on another appears in the review once, as a change.
+under Changes and its skipped fields under Not applied. A path lost on
+one row and landed on another appears in the review once, as a change,
+since `skippedFields` omit it (C4); only the model's answer names that
+loss, with its row.
 
 Shipped shape this replaces: `applyDeltaActionGroup` returns only
 `ok` or `rejected`, and a noop vanishes inside a group

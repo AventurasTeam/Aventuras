@@ -728,10 +728,13 @@ None open: Implementation notes, below, record each answer.
   `skippedFields`, and the model's own list, `ToolVerdict.notWritten`,
   names every loss, one entry per row and field. Each `PlannedAction`
   and `LostField` carries a required `row`, the label the answer names:
-  an entity row's id, which the answer swaps for its handle; a link
-  row's character, plus the happening only when the call spans several;
-  else the table. The label goes through `withHandles` with the reason,
-  so a link row's own `hinv_` or `haw_` id never reaches the model.
+  an existing row's id, which the answer swaps for its handle, shown
+  first with its name if the close hasn't shown it, so prose naming the
+  handle resolves; a create's table, since a minted id has no handle
+  unless the create lands; a link row's character, plus the happening
+  only when the call spans several; else the table. The label goes
+  through `withHandles` with the reason, and never a link row's own
+  `hinv_` id, which has no handle.
 - **Dispatch checks every planned action before emitting a group.** A
   plan with a pathless action, or one whose source isn't
   `chapter_close`, fails before any write (C1), so a tool-author bug

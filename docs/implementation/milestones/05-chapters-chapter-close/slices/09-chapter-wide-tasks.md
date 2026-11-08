@@ -175,8 +175,9 @@ merge lands. A call the group's precedence stops in part returns `ok`,
 naming what didn't land (C11). Each per-character involvement and
 awareness action carries its character as its `row`
 ([5.5a → Implementation notes](./05a-task-runner.md#implementation-notes)),
-so the model's list names the character, and the merge tests below
-assert it.
+shown first with its name (`ctx.ids.show`) when the cluster didn't show
+it, so its handle has a name. The model's list then names the
+character, and the merge tests below assert it.
 
 The ledger entry lists every row. A landed merge sets `survivor` to
 `keep` and holds the landed text in `values`, which is what
