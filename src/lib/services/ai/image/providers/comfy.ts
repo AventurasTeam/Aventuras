@@ -23,7 +23,7 @@ import { endpoint } from '#lib/utils/url.ts'
 import { resolveBaseUrl } from './baseUrls'
 import { isNewerVersion } from '#lib/utils/version.ts'
 import { imageGetFetch } from './fetchAdapter'
-import { expectList } from './imageModelUtils'
+import { parseModelList } from './parseModelList'
 import { MIN_COMFYUI_VERSION, createComfyImage, type ComfyImageOptions } from './comfyImage'
 import { createImageSdkFetch, createPollImageSdkFetch, generateSdkImage } from './sdkImage'
 
@@ -71,7 +71,7 @@ export async function fetchModelList(
       signal,
     },
   )
-  return expectList(await resp.json(), `ComfyUI /models/${type}`).filter(isString)
+  return parseModelList(await resp.json(), z.string(), `ComfyUI /models/${type}`)
 }
 
 export function clearComfyCacheForUrl(baseUrl: string | undefined): void {
