@@ -1384,6 +1384,22 @@ describe('closeAgentPhase', () => {
     expect(generateToolStep).not.toHaveBeenCalled()
   })
 
+  // A slot's types hold no order, so the banner's N of M could go backwards or repeat.
+  it.each([
+    ['a part task ahead of one canon runs first', ['threads', 'identity']],
+    ['a part task twice', ['lore', 'lore']],
+  ] as const)('refuses %s, before any entry has run or been announced', async (_, tasks) => {
+    const log: string[] = []
+    __setCloseAgentSlots({
+      before: [quietTask('happenings', log)],
+      perPart: tasks.map((task) => quietTask(task, log)),
+      after: [],
+    })
+
+    await expect(drain(phaseCtx(), log)).rejects.toThrow(RangeError)
+    expect(log).toEqual([])
+  })
+
   it('with the production slots, starts nothing and reads no store, the ledger seeded', async () => {
     __setCloseAgentSlots({ before: [], perPart: [quietTask('identity', [])], after: [] })
     __setCloseAgentSlots(undefined)

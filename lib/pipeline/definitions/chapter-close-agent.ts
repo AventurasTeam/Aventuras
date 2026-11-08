@@ -38,16 +38,27 @@ function plannedEntry(
   return { kind: 'task', def, part, progress: closeTaskProgress(def.task, slot, part, partCount) }
 }
 
-/** Canon's run order over the slots; throws on a task its order has no place for. */
+/** Canon's run order over the slots; throws on a task its order has no place for, or a repeat. */
 function planRun(slots: CloseAgentSlots, parts: readonly ClosePart[]): PlannedEntry[] {
   const partCount = parts.length
-  return [
+  const plan = [
     ...slots.before.map((entry) => plannedEntry(entry, 'before', 0, partCount)),
     ...parts.flatMap(({ index }) =>
       slots.perPart.map((entry) => plannedEntry(entry, 'perPart', index, partCount)),
     ),
     ...slots.after.map((entry) => plannedEntry(entry, 'after', 0, partCount)),
   ]
+  // C6: the banner's N of M only climbs, so a slot's tasks keep canon's order, each once.
+  let last: Extract<PlannedEntry, { kind: 'task' }> | undefined
+  for (const planned of plan) {
+    if (planned.kind !== 'task') continue
+    if (last !== undefined && planned.progress.index <= last.progress.index)
+      throw new RangeError(
+        `close run order: ${planned.def.task} in part ${planned.part} after ${last.def.task}`,
+      )
+    last = planned
+  }
+  return plan
 }
 
 /** One planned entry: null goes on to the next, a stop ends the phase. */
