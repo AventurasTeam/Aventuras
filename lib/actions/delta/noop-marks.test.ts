@@ -6,6 +6,7 @@ import { afterEach, describe, expect, it } from 'vitest'
 
 import {
   branches,
+  characterRelationships,
   emptyEntityState,
   entities,
   lore,
@@ -384,6 +385,60 @@ describe('noopRefusal marks: sample handlers (C11)', () => {
         { ...entity('char_retired', 'character'), status: 'active' } as Entity,
       ])
       expect(await outcomeOf(ctx, promote('char_retired'))).toStrictEqual(noop('not-staged'))
+    })
+  })
+
+  describe('upsertCharacterRelationship on a pair already stored', () => {
+    const restateOne: PipelineAction = {
+      kind: 'upsertCharacterRelationship',
+      source: 'periodic_classifier',
+      payload: {
+        branchId: BRANCH,
+        subjectId: 'char_1',
+        objectId: 'char_2',
+        kind: ' Ally ',
+        proseEntryId: null,
+      },
+    }
+    const restateBoth: PipelineAction = {
+      kind: 'upsertCharacterRelationship',
+      source: 'periodic_classifier',
+      payload: {
+        branchId: BRANCH,
+        subjectId: 'char_1',
+        objectId: 'char_2',
+        kind: 'ally',
+        inverseKind: 'rival',
+      },
+    }
+
+    async function seeded(): Promise<DbCtx> {
+      const ctx = await setup()
+      await ctx.db.insert(characterRelationships).values({
+        id: 'rel_1',
+        branchId: BRANCH,
+        aId: 'char_1',
+        bId: 'char_2',
+        kind: 'ally',
+        inverseKind: 'rival',
+        createdAt: 1,
+        updatedAt: 1,
+      })
+      return ctx
+    }
+
+    it('reads a single-view repeat as restated', async () => {
+      const ctx = await seeded()
+      expect(await outcomeOf(ctx, restateOne)).toStrictEqual(
+        noop('relationship unchanged', 'restated'),
+      )
+    })
+
+    it('reads a both-views repeat as restated', async () => {
+      const ctx = await seeded()
+      expect(await outcomeOf(ctx, restateBoth)).toStrictEqual(
+        noop('relationship unchanged', 'restated'),
+      )
     })
   })
 
