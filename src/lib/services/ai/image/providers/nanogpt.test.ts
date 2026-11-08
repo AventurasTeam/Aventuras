@@ -401,7 +401,7 @@ describe('NanoGPT getModelCapabilities', () => {
     await expect(provider().getModelCapabilities?.('nope', [])).rejects.toThrow('boom')
   })
 
-  it('rejects on an endpoint reply it cannot read, so no empty snapshot is saved', async () => {
+  it('rejects on an endpoint reply it cannot read, rather than reporting no capabilities', async () => {
     vi.mocked(imageGetFetch).mockResolvedValueOnce(endpointsReply({ unexpected: true }))
     await expect(provider().getModelCapabilities?.('nope', [])).rejects.toThrow(
       'unreadable endpoint reply',

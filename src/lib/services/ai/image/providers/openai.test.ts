@@ -162,7 +162,7 @@ describe('OpenAI image size', () => {
     expect(await sizeFor('gpt-image-2', 'landscape', 'tiny', [PNG])).toBe('1088x608')
   })
 
-  it('sends real dimensions to a model with no snapshot or an unlisted id', async () => {
+  it('sends real dimensions to a model with unknown capabilities or an unlisted id', async () => {
     const provider = createOpenAIProvider({ apiKey: 'k' })
     await provider.generate(
       options({ spec: { orientation: 'landscape', size: 'tiny' }, modelInfo: undefined }),

@@ -72,14 +72,14 @@ describe('Google size and ratio', () => {
     }
   })
 
-  it('sends no size to a model that lists none, or when the profile has no snapshot', async () => {
+  it('sends no size to a model that lists none, or when its capabilities are unknown', async () => {
     expect(await imageSizeFor('gemini-2.5-flash-image', 'large')).toBeUndefined()
 
     await createGoogleProvider({ apiKey: 'k' }).generate(options({ modelInfo: undefined }))
     expect(sent().providerOptions).toBeUndefined()
   })
 
-  it('picks the closest of the model ratios, and the fixed list without a snapshot', async () => {
+  it('picks the closest of the model ratios, and the fixed list without them', async () => {
     const landscape = { orientation: 'landscape', size: 'medium' } as const
     const provider = createGoogleProvider({ apiKey: 'k' })
 

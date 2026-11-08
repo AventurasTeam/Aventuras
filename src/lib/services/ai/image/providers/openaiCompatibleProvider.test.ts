@@ -55,7 +55,7 @@ describe('OpenAI Compatible image generation', () => {
     })
   })
 
-  it('sends the picked size from the snapshot, and canonical pixels without one', async () => {
+  it('sends the size picked from the listed sizes, and canonical pixels without them', async () => {
     const provider = createOpenAICompatibleProvider({ apiKey: 'k', baseUrl: BASE_URL })
     const spec = { orientation: 'landscape', size: 'medium' } as const
 

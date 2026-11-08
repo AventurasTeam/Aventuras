@@ -44,7 +44,7 @@ export interface ImageGenerateOptions {
   prompt: string
   /** What the user asked for. Each adapter turns it into whatever its backend takes. */
   spec: ImageSpec
-  /** The selected model's capabilities, from the profile's snapshot or the provider's table. */
+  /** The selected model's capabilities, from the provider's model list or its table. */
   modelInfo?: ImageModelCapabilities
   referenceImages?: string[] // raw base64 (no data: prefix)
   signal?: AbortSignal
@@ -72,9 +72,8 @@ export interface ImageProvider {
   generate(options: ImageGenerateOptions): Promise<ImageGenerateResult>
   listModels(signal?: AbortSignal): Promise<ImageModelInfo[]>
   /**
-   * One model's capabilities, for a snapshot provider that can describe a model its `listed`
-   * models lack: the lookup that backfills a profile's snapshot. Rejects on failure; `undefined`
-   * means the provider does not know the model.
+   * One model's capabilities, for a provider that can describe a model its `listed` models lack.
+   * Rejects on failure; `undefined` means the provider does not know the model.
    */
   getModelCapabilities?(
     model: string,

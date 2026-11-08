@@ -23,7 +23,7 @@ import { architectureSchema, nonEmpty, optionalString, optionalStrings } from '.
 import { parseModelList } from './parseModelList'
 import { generateOpenAICompatibleImage } from './openaiCompatible'
 
-// `allSettled` waits for the dedicated list, and the backfill gives `listModels` 10 s.
+// `allSettled` waits for the dedicated list, and a capability lookup gives `listModels` 10 s.
 const DEDICATED_LIST_TIMEOUT_MS = 5_000
 // A host without the route answers one of these, not a list.
 const ABSENT_STATUSES = [403, 404, 405]
