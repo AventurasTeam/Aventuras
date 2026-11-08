@@ -66,12 +66,15 @@ async function entry(
 }
 
 /** e_1 and e_2 are the chapter (E = e_2); e_3 and e_4 are later turns, e_5 a raw insert past E. */
-async function setup(): Promise<DbCtx> {
+async function setup(
+  beforeEndCreated: (ctx: DbCtx) => Promise<unknown> = async () => {},
+): Promise<DbCtx> {
   const { db, runInTransaction } = await createTestDb()
   await db.insert(stories).values({ id: 'story_1', title: 'T', createdAt: 1, updatedAt: 1 })
   await db.insert(branches).values({ id: BRANCH, storyId: 'story_1', name: 'main', createdAt: 1 })
   const ctx: DbCtx = { db, runInTransaction }
   await entry(ctx, 'e_1', 1, 'act_t1')
+  await beforeEndCreated(ctx)
   await entry(ctx, 'e_2', 2, 'act_t2')
   await entry(ctx, 'e_3', 3, 'act_t3')
   await entry(ctx, 'e_4', 4, 'act_t4')
@@ -207,6 +210,8 @@ describe('laterTurnDeltas (C12)', () => {
     await ctx.db
       .insert(branches)
       .values({ id: 'br_2', storyId: 'story_1', name: 'fork', createdAt: 1 })
+    await entry(ctx, 'e_1', 1, 'act_fork_t1', 'br_2')
+    await entry(ctx, 'e_2', 2, 'act_fork_t2', 'br_2')
     await entry(ctx, 'e_3', 3, 'act_fork_t3', 'br_2')
     await log(ctx, {
       branchId: 'br_2',
@@ -218,6 +223,26 @@ describe('laterTurnDeltas (C12)', () => {
     })
     await log(ctx, { actionId: 'act_fork_t3', table: 'entities', id: 'char_1' })
     expect(await laterIds(ctx)).toEqual([])
+  })
+
+  it("reads only deltas logged after E's create", async () => {
+    const ctx = await setup((c) =>
+      log(c, {
+        actionId: 'act_pass',
+        source: 'periodic_classifier',
+        table: 'entities',
+        id: 'char_1',
+        entryId: 'e_3',
+      }),
+    )
+    expect(await laterIds(ctx)).toEqual([])
+  })
+
+  it('reads the whole log when E has no create delta', async () => {
+    const ctx = await setup()
+    await entry(ctx, 'e_6', 6, 'act_t6')
+    const folded = await log(ctx, { actionId: 'act_t6', table: 'entities', id: 'char_1' })
+    expect((await laterTurnDeltas(ctx, BRANCH, 'e_5', [CHAR])).map((d) => d.id)).toEqual([folded])
   })
 
   it('throws when E is not an entry of the branch', async () => {

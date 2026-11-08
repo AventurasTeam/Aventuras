@@ -5,38 +5,47 @@ import { isRetrievalBumpOnly } from '@/lib/row-signals'
 
 import type { DbCtx, GuardRow, PrecedenceTable } from '../types'
 
-/** The entries past E, and the actions their `story_entries` creates ran under: their turns. */
+// By target_id, as resolveRollbackWindow finds a turn's create, whatever that delta's anchor.
+const entryCreateJoin = and(
+  eq(deltas.branchId, storyEntries.branchId),
+  eq(deltas.targetTable, 'story_entries'),
+  eq(deltas.targetId, storyEntries.id),
+  eq(deltas.op, 'create'),
+)
+
+/**
+ * The entries past E, the actions their `story_entries` creates ran under (their turns), and
+ * E's create's log position, 0 when it has none.
+ */
 async function laterTurns(
   ctx: DbCtx,
   branchId: string,
   endEntryId: string,
-): Promise<{ entryIds: ReadonlySet<string>; actionIds: ReadonlySet<string> }> {
-  const [end] = await ctx.db
-    .select({ position: storyEntries.position })
+): Promise<{
+  entryIds: ReadonlySet<string>
+  actionIds: ReadonlySet<string>
+  endCreateLogPosition: number
+}> {
+  const ends = await ctx.db
+    .select({ position: storyEntries.position, logPosition: deltas.logPosition })
     .from(storyEntries)
+    .leftJoin(deltas, entryCreateJoin)
     .where(and(eq(storyEntries.branchId, branchId), eq(storyEntries.id, endEntryId)))
-  if (!end) throw new Error(`laterTurnDeltas: end entry ${branchId}:${endEntryId} not found`)
-  // By target_id, as resolveRollbackWindow finds a turn's create, whatever that delta's anchor.
+  if (ends.length === 0)
+    throw new Error(`laterTurnDeltas: end entry ${branchId}:${endEntryId} not found`)
+  const endCreateLogPosition = Math.min(...ends.map((e) => e.logPosition ?? 0))
   const rows = await ctx.db
     .select({ entryId: storyEntries.id, actionId: deltas.actionId })
     .from(storyEntries)
-    .leftJoin(
-      deltas,
-      and(
-        eq(deltas.branchId, storyEntries.branchId),
-        eq(deltas.targetTable, 'story_entries'),
-        eq(deltas.targetId, storyEntries.id),
-        eq(deltas.op, 'create'),
-      ),
-    )
-    .where(and(eq(storyEntries.branchId, branchId), gt(storyEntries.position, end.position)))
+    .leftJoin(deltas, entryCreateJoin)
+    .where(and(eq(storyEntries.branchId, branchId), gt(storyEntries.position, ends[0].position)))
   const entryIds = new Set<string>()
   const actionIds = new Set<string>()
   for (const row of rows) {
     entryIds.add(row.entryId)
     if (row.actionId !== null) actionIds.add(row.actionId)
   }
-  return { entryIds, actionIds }
+  return { entryIds, actionIds, endCreateLogPosition }
 }
 
 function idsByTable(rows: readonly GuardRow[]): Map<PrecedenceTable, string[]> {
@@ -52,7 +61,8 @@ function idsByTable(rows: readonly GuardRow[]): Map<PrecedenceTable, string[]> {
 /**
  * C12: the deltas on `rows` a turn past E wrote, oldest first. Anchored on an entry positioned past
  * E, or null-anchored in the action that created one; never a `chapter_close` delta or a
- * `retrievalCount`-only update. An entry with no create delta names no action.
+ * `retrievalCount`-only update. An entry with no create delta names no action. Only deltas logged
+ * after E's create are read.
  */
 export async function laterTurnDeltas(
   ctx: DbCtx,
@@ -71,6 +81,8 @@ export async function laterTurnDeltas(
         .where(
           and(
             eq(deltas.branchId, branchId),
+            // Later turns log after E's create: the survival anchor's commit-order assumption.
+            gt(deltas.logPosition, later.endCreateLogPosition),
             eq(deltas.targetTable, table),
             inArray(deltas.targetId, chunk),
             ne(deltas.source, 'chapter_close'),

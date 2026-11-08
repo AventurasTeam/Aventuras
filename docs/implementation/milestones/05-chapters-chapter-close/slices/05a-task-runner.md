@@ -230,7 +230,10 @@ and tools sit under `lib/pipeline/definitions/close-agent/`.
   it, whatever that delta's own anchor. An entry past E with no
   `create` delta, which only raw inserts leave, names no action, so a
   null-anchored delta can't be its turn's, though a delta anchored on
-  it still counts (C12's first clause).
+  it still counts (C12's first clause). It reads only deltas logged
+  after E's create, which the commit-order assumption of
+  [`data-model.md → Survival anchor`](../../../../data-model.md#survival-anchor)
+  makes safe.
 - The retrieval-only test is private at `link-owners.ts:71-77`. It's
   exported from `lib/row-signals`, and 5.12 uses the same export for
   C13.
