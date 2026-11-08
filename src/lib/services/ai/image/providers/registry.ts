@@ -25,8 +25,8 @@ import type {
 import { createLogger } from '#lib/log.ts'
 import { fetchPublicImageBase64 } from './fetchAdapter'
 import { imageConnectionFor, isImageProviderType, modelListKey } from './connection'
-import { applyCapabilityOverride, findListedModel } from './modelSnapshot'
-import { snapshotCapabilities } from './snapshotBackfill'
+import { applyCapabilityOverride, findListedModel } from './modelCapabilities'
+import { snapshotCapabilities } from './capabilityCache'
 
 // Provider factory imports (lazy)
 import { createNanoGPTProvider } from './nanogpt'

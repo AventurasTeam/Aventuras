@@ -9,8 +9,8 @@ vi.mock('#lib/stores/settings.svelte.ts', () => ({
 
 import { settings } from '#lib/stores/settings.svelte.ts'
 import type { ImageModelCapabilities, ImageProfile } from '#lib/types/index.ts'
-import { IMAGE_MODEL_SNAPSHOT_VERSION } from './modelSnapshot'
-import { snapshotCapabilities, type CapabilityLookup } from './snapshotBackfill'
+import { IMAGE_MODEL_SNAPSHOT_VERSION } from './modelCapabilities'
+import { snapshotCapabilities, type CapabilityLookup } from './capabilityCache'
 
 // The failure set outlives a test, so each case gets its own profile id.
 let counter = 0

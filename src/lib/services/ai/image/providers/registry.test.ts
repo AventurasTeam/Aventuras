@@ -76,7 +76,7 @@ import {
 } from './registry'
 import { settings } from '#lib/stores/settings.svelte.ts'
 import type { ImageModelCapabilities, ImageProfile, ImageProviderType } from '#lib/types/index.ts'
-import { IMAGE_MODEL_SNAPSHOT_VERSION } from './modelSnapshot'
+import { IMAGE_MODEL_SNAPSHOT_VERSION } from './modelCapabilities'
 
 const conn = (providerType: ImageProviderType, apiKey: string, baseUrl?: string) =>
   imageConnectionFor(providerType, apiKey, baseUrl)

@@ -29,7 +29,7 @@ import {
 } from '#lib/utils/image.ts'
 import { endpoint } from '#lib/utils/url.ts'
 import { resolveBaseUrl } from './baseUrls'
-import { findListedModel } from './modelSnapshot'
+import { findListedModel } from './modelCapabilities'
 
 const DISCOVERY_SERVICE_ID = 'nanogpt-image-models'
 

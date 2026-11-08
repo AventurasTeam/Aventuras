@@ -9,7 +9,7 @@ import {
   overrideConflicts,
   sameSnapshot,
   snapshotModel,
-} from './modelSnapshot'
+} from './modelCapabilities'
 import { imageConnectionFor } from './connection'
 import type { ImageModelInfo } from './types'
 

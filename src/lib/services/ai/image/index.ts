@@ -54,7 +54,7 @@ export {
   overrideConflicts,
   snapshotModel,
   storedSnapshotFor,
-} from './providers/modelSnapshot'
+} from './providers/modelCapabilities'
 
 export {
   LOADED_LIST_LABELS,

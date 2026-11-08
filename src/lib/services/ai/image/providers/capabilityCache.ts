@@ -7,7 +7,7 @@ import type {
 import { createLogger } from '#lib/log.ts'
 import { abortable } from '#lib/utils/async.ts'
 import { modelListKey } from './connection'
-import { IMAGE_MODEL_SNAPSHOT_VERSION, snapshotModel } from './modelSnapshot'
+import { IMAGE_MODEL_SNAPSHOT_VERSION, snapshotModel } from './modelCapabilities'
 
 const log = createLogger('ImageRegistry')
 
