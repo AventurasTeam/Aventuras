@@ -328,8 +328,29 @@ async function recoverAsBootDoes(ctx: DbCtx): Promise<void> {
   await resetStuckClassifierRunState(ctx, recovery.failures)
 }
 
+// A signal skips `finally`, which would leave the scratch copy in the temp folder.
+let removeScratch: (() => void) | null = null
+
+function stopOn(signal: NodeJS.Signals, exitCode: number): void {
+  process.once(signal, () => {
+    removeScratch?.()
+    console.error(`[probe:close] ${signal}: stopped, scratch copy removed`)
+    process.exit(exitCode)
+  })
+}
+
 async function probeRun(k: number, source: string, server: Server): Promise<boolean> {
   const scratch = mkdtempSync(join(tmpdir(), 'aventuras-close-probe-'))
+  let sqlite: DatabaseSync | null = null
+  const cleanUp = (): void => {
+    try {
+      sqlite?.close()
+    } finally {
+      sqlite = null
+      rmSync(scratch, { recursive: true, force: true })
+    }
+  }
+  removeScratch = cleanUp
   capture.dir = OUT === undefined ? null : join(resolve(OUT), `run${k}`)
   capture.phase = null
   capture.task = null
@@ -349,7 +370,6 @@ async function probeRun(k: number, source: string, server: Server): Promise<bool
       capture.retries.push(`${at}: ${errorLine(event.error)}`)
     }),
   ]
-  let sqlite: DatabaseSync | null = null
   try {
     const copy = join(scratch, 'copy.db')
     copyDatabase(source, copy)
@@ -383,9 +403,9 @@ async function probeRun(k: number, source: string, server: Server): Promise<bool
     printRun(k, result, ms, report)
     return completed
   } finally {
+    removeScratch = null
     for (const stop of unsubscribe) stop()
-    sqlite?.close()
-    rmSync(scratch, { recursive: true, force: true })
+    cleanUp()
   }
 }
 
@@ -405,6 +425,8 @@ async function main(): Promise<void> {
   const source = resolveDbPath()
   if (!existsSync(source)) throw new Error(`[probe:close] no database at ${source}`)
   refuseUsedOutput()
+  stopOn('SIGINT', 130)
+  stopOn('SIGTERM', 143)
   const before = sha256(source)
   console.log(`[probe:close] source ${source}, sha256 ${before}`)
 
