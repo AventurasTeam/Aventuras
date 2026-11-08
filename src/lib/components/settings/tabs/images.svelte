@@ -260,12 +260,7 @@
       !parseHttpUrl(profileBaseUrl.trim()),
   )
   const takesOverride = $derived(takesCapabilityOverride(profileProviderType))
-  const parsedSizes = $derived(
-    profileSizesText
-      .split(/[\s,]+/)
-      .map((s) => s.trim())
-      .filter(Boolean),
-  )
+  const parsedSizes = $derived(profileSizesText.split(/[\s,]+/).filter(Boolean))
   const invalidSizes = $derived(parsedSizes.filter((s) => !isSizeString(s)))
   const sizesInvalid = $derived(takesOverride && invalidSizes.length > 0)
   const canSaveProfile = $derived(
