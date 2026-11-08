@@ -9,7 +9,7 @@ export type CloseRangeEntry = Readonly<
 
 type OpenThreadStatus = Extract<ThreadStatus, 'pending' | 'active'>
 
-/** The `chapter` group's context (VARIABLES.chapter). No ids, so no placeholder map. */
+/** The metadata call's `chapter` context: VARIABLES.chapter less the close-only ones. No ids. */
 export type ChapterContext = {
   entries: { position: number; kind: CloseRangeEntry['kind']; content: string }[]
   previousChapterSummary: string | null
