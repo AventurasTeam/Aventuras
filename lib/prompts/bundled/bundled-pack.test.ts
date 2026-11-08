@@ -203,9 +203,25 @@ describe("the close's system-half macros", () => {
     expect(system).toContain(
       '- ok: it landed. A value already stored is ok too, with nothing written.',
     )
-    expect(system).toContain("- rejected: it didn't land, and the reason says what to do.")
+    expect(system).toContain(
+      "- rejected: it didn't land, and the reason or its note says what to do.",
+    )
     expect(system).toContain('- skipped: the field stands as it is')
     expect(system).toContain('When the task is done, reply without a tool call.')
+  })
+
+  // Each is a rule the tools and gates enforce; the wording is theirs (close-agent/tool.ts,
+  // common-checks.ts), so a drift in either shows here.
+  it.each([
+    'Use the ids you are shown, exactly as written; never invent one.',
+    'and "why", one sentence on what in the cited turns makes the write true.',
+    'Write only to a row you have read in this task',
+    'Creating a row names a new one, so it needs no read.',
+    "A create's answer gives the new row's id.",
+    "Don't write it again.",
+    'A reply without one ends the task',
+  ])('states: %s', (line) => {
+    expect(render({ mode: 'adventure', closeTurns: TURNS })).toContain(line)
   })
 
   it("reads a user's turn by the story's mode", () => {
