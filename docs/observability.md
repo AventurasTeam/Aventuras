@@ -354,7 +354,9 @@ convention, and the expectation that subsystems route through
   `rollback_failed`, `regenerate_failed`, `pass_retry_failed`
   (a pass-failure entry's Retry, which runs the pass alone),
   `close_retry_failed` (a close-failure entry's Retry, which runs
-  the close's catch-up passes and the close)
+  the close's catch-up passes and the close), and their refusals
+  `pass_retry_rejected` / `close_retry_rejected` at debug, logged with
+  their `blockedBy` because the toast names only the remedy
   — plus `undo_rejected` / `redo_rejected` at debug for the refusals
   that are routine (gated, nothing to apply, branch mid-switch), where
   `undo_failed` / `redo_failed` carry the ones that mean the delta log

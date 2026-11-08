@@ -343,6 +343,8 @@ export async function retryPassEntry(deps: {
   if (result.outcome === 'failed')
     return deps.rewrite((await deps.held()) ? { held: true } : { held: false, error: result.error })
   if (result.outcome !== 'rejected') return
+  // The toast names a remedy, never the code, so the code is kept here.
+  logger.debug('reader.pass_retry_rejected', { blockedBy: result.blockedBy })
   if (result.blockedBy === CLASSIFIER_HELD) return deps.rewrite({ held: true })
   deps.notify(retryRefusalText(result.blockedBy, 'reader:systemEntry.passRetryBlocked'))
 }
@@ -414,6 +416,7 @@ export async function retryCloseEntry(deps: {
   }
   if (run.outcome === 'nothing-owed') return deps.committed('nothing-owed')
   if (run.outcome === 'rejected') {
+    logger.debug('reader.close_retry_rejected', { blockedBy: run.blockedBy })
     if (run.blockedBy === CLASSIFIER_HELD) return deps.rewritePass({ held: true })
     deps.notify(retryRefusalText(run.blockedBy, 'reader:systemEntry.closeRetryBlocked'))
     return
