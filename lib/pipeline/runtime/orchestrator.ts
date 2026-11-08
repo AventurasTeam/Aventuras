@@ -1,6 +1,6 @@
 import { eq } from 'drizzle-orm'
 
-import type { MutationResult } from '@/lib/actions/types'
+import type { GroupOutcome, MutationResult } from '@/lib/actions/types'
 import { pipelineRuns, type DbCtx } from '@/lib/db'
 import { logger, makeLogger, turnCaptureSink, type LogKind } from '@/lib/diagnostics'
 import { generateId } from '@/lib/ids'
@@ -21,6 +21,7 @@ import type {
 } from '../types'
 import {
   applyDeltaAction,
+  applyDeltaActionGroupWithOutcomes,
   describeReplayError,
   holdBranchWriteExclusive,
   releaseBranchWriteExclusive,
@@ -183,7 +184,28 @@ async function beginRun(run: RunState, ctx: RunCtx): Promise<void> {
   })
 }
 
-async function handleEvent(event: PhaseEmittedEvent, run: RunState, ctx: RunCtx): Promise<void> {
+async function dispatchGroup(
+  event: Extract<PhaseEmittedEvent, { type: 'delta_group_emitted' }>,
+  run: RunState,
+  ctx: RunCtx,
+): Promise<GroupOutcome> {
+  try {
+    return await applyDeltaActionGroupWithOutcomes(
+      event.actions,
+      { actionId: run.actionId, branchId: run.branchId, entryId: event.entryId },
+      ctx,
+    )
+  } catch (e) {
+    throw new ActionLayerError(messageOf(e))
+  }
+}
+
+async function handleEvent(
+  event: PhaseEmittedEvent,
+  run: RunState,
+  ctx: RunCtx,
+): Promise<GroupOutcome | undefined> {
+  let outcome: GroupOutcome | undefined
   if (event.type === 'delta_emitted') {
     let result: MutationResult
     try {
@@ -221,6 +243,9 @@ async function handleEvent(event: PhaseEmittedEvent, run: RunState, ctx: RunCtx)
     if (event.action.kind === 'createStoryEntry' && event.entryId) {
       turnCaptureSink.recordTargetEntry(run.actionId, event.entryId)
     }
+  } else if (event.type === 'delta_group_emitted') {
+    // C11: a refusal is the yield's value for the phase to read; only a throw fails the run.
+    outcome = await dispatchGroup(event, run, ctx)
   } else if (event.type === 'close_task_start') {
     // C6: an emitted event names no run, and a banner mounted mid-close reads the stored one.
     const { type, ...progress } = event
@@ -240,17 +265,19 @@ async function handleEvent(event: PhaseEmittedEvent, run: RunState, ctx: RunCtx)
   }
   // stream_chunk: forwarded verbatim; the reader renders it live per channel.
   pipelineEventBus.emit(event)
+  return outcome
 }
 
 async function consumePhase(
-  gen: AsyncGenerator<PhaseEmittedEvent, PhaseResult>,
+  gen: ReturnType<PhaseFn>,
   run: RunState,
   ctx: RunCtx,
 ): Promise<PhaseResult> {
+  let outcome: GroupOutcome | undefined
   for (;;) {
-    const next = await gen.next()
+    const next = await gen.next(outcome)
     if (next.done) return next.value
-    await handleEvent(next.value, run, ctx)
+    outcome = await handleEvent(next.value, run, ctx)
   }
 }
 

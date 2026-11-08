@@ -1,10 +1,15 @@
-import { applyDeltaAction, settleUserWrites } from '@/lib/actions/delta/apply-delta-action'
+import {
+  applyDeltaAction,
+  applyDeltaActionGroupWithOutcomes,
+  settleUserWrites,
+} from '@/lib/actions/delta/apply-delta-action'
 import {
   __resetBranchWriteLocks,
   holdBranchWriteExclusive,
   releaseBranchWriteExclusive,
 } from '@/lib/actions/delta/branch-write-lock'
 import { describeDeltaReplayError, reverseReplayDeltas } from '@/lib/actions/delta/reverse-replay'
+import { readRowGuard } from '@/lib/actions/delta/row-guard'
 import { __resetBranchQueues } from '@/lib/actions/turns/branch-queue'
 import { branches, stories } from '@/lib/db'
 import { createTestDb } from '@/lib/db/__tests__/test-db'
@@ -12,6 +17,7 @@ import { clearBuffers, configureDiagnosticsGate } from '@/lib/diagnostics'
 import {
   __resetBus,
   __resetRegistry,
+  type DeltaActionPort,
   type RejectedStart,
   type RunCtx,
   type TxResult,
@@ -46,6 +52,20 @@ export async function makeHarness(): Promise<{
   return { db, ctx: { storyId: 's1', branchId: 'b1', db, runInTransaction } }
 }
 
+/** The port boot wires, from the action layer's own functions; a test spreads its override over it. */
+export function realDeltaActionPort(): DeltaActionPort {
+  return {
+    applyDeltaAction,
+    applyDeltaActionGroupWithOutcomes,
+    readRowGuard,
+    reverseReplayDeltas,
+    describeReplayError: describeDeltaReplayError,
+    settleUserWrites,
+    holdBranchWriteExclusive,
+    releaseBranchWriteExclusive,
+  }
+}
+
 export function resetSingletons(): void {
   __resetRegistry()
   __resetBus()
@@ -54,12 +74,5 @@ export function resetSingletons(): void {
   resetAllStores()
   clearBuffers()
   configureDiagnosticsGate({ isEnabled: () => true, isDebugEnabled: () => true })
-  configureDeltaActionPort({
-    applyDeltaAction,
-    reverseReplayDeltas,
-    describeReplayError: describeDeltaReplayError,
-    settleUserWrites,
-    holdBranchWriteExclusive,
-    releaseBranchWriteExclusive,
-  })
+  configureDeltaActionPort(realDeltaActionPort())
 }

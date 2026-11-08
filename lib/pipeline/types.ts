@@ -1,4 +1,4 @@
-import type { PipelineAction } from '@/lib/actions/types'
+import type { GroupOutcome, PipelineAction } from '@/lib/actions/types'
 import type {
   CapabilityHint,
   ContextWindowFailure,
@@ -65,6 +65,8 @@ export type GenerationPhaseName =
 export type PhaseEmittedEvent =
   | { type: 'stream_chunk'; targetEntryId: string; text: string; channel: 'text' | 'reasoning' }
   | { type: 'delta_emitted'; action: PipelineAction; entryId?: string | null }
+  // C11: writes that land together in one transaction; the yield evaluates to its GroupOutcome.
+  | { type: 'delta_group_emitted'; actions: readonly PipelineAction[]; entryId: string }
   | { type: 'recoverable_error'; error: PipelineError }
   // C6: an agent task of a close starting.
   | ({ type: 'close_task_start' } & CloseProgress)
@@ -121,7 +123,10 @@ export type PhaseContext = {
   branchId: string
 }
 
-export type PhaseFn = (ctx: PhaseContext) => AsyncGenerator<PhaseEmittedEvent, PhaseResult>
+/** What a phase's `yield` evaluates to: a `delta_group_emitted`'s outcome, else undefined. */
+export type PhaseFn = (
+  ctx: PhaseContext,
+) => AsyncGenerator<PhaseEmittedEvent, PhaseResult, GroupOutcome | undefined>
 
 export type PreflightSnapshot = {
   appSettings: AppSettingsSnapshot

@@ -11,6 +11,7 @@ import {
   type PipelineAction,
 } from '@/lib/actions'
 import {
+  applyDeltaActionGroupWithOutcomes,
   applyDeltaAction as realApplyDeltaAction,
   settleUserWrites,
 } from '@/lib/actions/delta/apply-delta-action'
@@ -20,6 +21,7 @@ import {
   releaseBranchWriteExclusive,
 } from '@/lib/actions/delta/branch-write-lock'
 import { describeDeltaReplayError, reverseReplayDeltas } from '@/lib/actions/delta/reverse-replay'
+import { readRowGuard } from '@/lib/actions/delta/row-guard'
 import { registerStandInClose } from '@/lib/actions/turns/__tests__/stand-in-close'
 import { generateStructured, type ResolveModelConfig } from '@/lib/ai'
 import { CHAPTER_CLOSE_KIND } from '@/lib/chapters'
@@ -2381,6 +2383,8 @@ describe('periodicClassifierPhase via runPipeline', () => {
   ): void {
     configureDeltaActionPort({
       applyDeltaAction,
+      applyDeltaActionGroupWithOutcomes,
+      readRowGuard,
       reverseReplayDeltas,
       describeReplayError: describeDeltaReplayError,
       settleUserWrites,

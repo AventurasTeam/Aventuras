@@ -1,4 +1,11 @@
-import type { IntegrityRefusal, MutationResult, PipelineAction } from '@/lib/actions/types'
+import type {
+  GroupOutcome,
+  IntegrityRefusal,
+  MutationResult,
+  PipelineAction,
+  RowGuard,
+  RowGuardArgs,
+} from '@/lib/actions/types'
 import type { DbCtx, SqlOp } from '@/lib/db'
 
 export type DeltaActionPort = {
@@ -6,6 +13,14 @@ export type DeltaActionPort = {
     args: { action: PipelineAction; actionId: string; branchId: string; entryId?: string | null },
     ctx: DbCtx,
   ) => Promise<MutationResult>
+  /** One transaction for the group; each action's outcome at its index, a refusal as a value (C11). */
+  applyDeltaActionGroupWithOutcomes: (
+    actions: readonly PipelineAction[],
+    args: { actionId: string; branchId: string; entryId: string },
+    ctx: DbCtx,
+  ) => Promise<GroupOutcome>
+  /** C12 and user precedence for the listed rows, read once. */
+  readRowGuard: (args: RowGuardArgs, ctx: DbCtx) => Promise<RowGuard>
   reverseReplayDeltas: (
     actionId: string,
     ctx: DbCtx,
@@ -47,6 +62,18 @@ export function applyDeltaAction(
   ...args: Parameters<DeltaActionPort['applyDeltaAction']>
 ): ReturnType<DeltaActionPort['applyDeltaAction']> {
   return requirePort().applyDeltaAction(...args)
+}
+
+export function applyDeltaActionGroupWithOutcomes(
+  ...args: Parameters<DeltaActionPort['applyDeltaActionGroupWithOutcomes']>
+): ReturnType<DeltaActionPort['applyDeltaActionGroupWithOutcomes']> {
+  return requirePort().applyDeltaActionGroupWithOutcomes(...args)
+}
+
+export function readRowGuard(
+  ...args: Parameters<DeltaActionPort['readRowGuard']>
+): ReturnType<DeltaActionPort['readRowGuard']> {
+  return requirePort().readRowGuard(...args)
 }
 
 export function reverseReplayDeltas(

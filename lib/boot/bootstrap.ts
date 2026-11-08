@@ -1,9 +1,11 @@
 import {
   applyDeltaAction,
+  applyDeltaActionGroupWithOutcomes,
   describeDeltaReplayError,
   holdBranchWriteExclusive,
   normalizeAppSettingsRow,
   readHeldClassifierStoryIds,
+  readRowGuard,
   registerAllDomains,
   releaseBranchWriteExclusive,
   resetStuckClassifierRunState,
@@ -68,6 +70,8 @@ export function ensureTruncationNotice(): void {
 export function ensureDeltaActionPort(): void {
   configureDeltaActionPort({
     applyDeltaAction,
+    applyDeltaActionGroupWithOutcomes,
+    readRowGuard,
     reverseReplayDeltas,
     describeReplayError: describeDeltaReplayError,
     settleUserWrites,

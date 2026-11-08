@@ -25,9 +25,14 @@ import { generationStore, interruptMemoryRuns } from '@/lib/stores'
 import { selectUndoTarget } from '@/lib/undo'
 
 import { startManualClose } from './start-manual-close'
-import { applyDeltaAction, settleUserWrites } from '../delta/apply-delta-action'
+import {
+  applyDeltaAction,
+  applyDeltaActionGroupWithOutcomes,
+  settleUserWrites,
+} from '../delta/apply-delta-action'
 import { holdBranchWriteExclusive, releaseBranchWriteExclusive } from '../delta/branch-write-lock'
 import { describeDeltaReplayError, reverseReplayDeltas } from '../delta/reverse-replay'
+import { readRowGuard } from '../delta/row-guard'
 import { shownCounts } from '../story-entries/__tests__/shown-counts'
 import { rollbackToEntry } from '../story-entries/operational'
 import { redoLastAction, undoLastAction } from '../story-entries/undo'
@@ -271,6 +276,8 @@ describe('reversing a close that ran', () => {
         }
         return applyDeltaAction(args, ctx)
       },
+      applyDeltaActionGroupWithOutcomes,
+      readRowGuard,
       reverseReplayDeltas,
       describeReplayError: describeDeltaReplayError,
       settleUserWrites,

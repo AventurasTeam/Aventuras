@@ -17,7 +17,11 @@ import {
 import { passChainsTo } from '@/lib/pipeline/definitions/memory-chain'
 import { generationStore, type DeferredWorkKind, type RunState } from '@/lib/stores'
 
-import { applyDeltaAction, settleUserWrites } from '../../delta/apply-delta-action'
+import {
+  applyDeltaAction,
+  applyDeltaActionGroupWithOutcomes,
+  settleUserWrites,
+} from '../../delta/apply-delta-action'
 import {
   holdBranchWriteExclusive,
   releaseBranchWriteExclusive,
@@ -27,6 +31,7 @@ import {
   describeDeltaReplayError,
   reverseReplayDeltas,
 } from '../../delta/reverse-replay'
+import { readRowGuard } from '../../delta/row-guard'
 
 /** One run of the stand-in pass, holding after its write. */
 export type HeldPass = {
@@ -221,6 +226,8 @@ export function failReversalsOf(stand: {
 }): void {
   configureDeltaActionPort({
     applyDeltaAction,
+    applyDeltaActionGroupWithOutcomes,
+    readRowGuard,
     reverseReplayDeltas: (actionId, ...rest) =>
       stand.runs.some((run) => run.actionId === actionId)
         ? Promise.reject(
