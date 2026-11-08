@@ -13,6 +13,7 @@ import {
   writeToolSchema,
   type IdArgs,
   type LostField,
+  type PlannedAction,
   type ReadTool,
   type WritePlan,
   type WriteTool,
@@ -268,6 +269,22 @@ describe('WriteTool and ReadTool (checked by tsc)', () => {
       turns: string[]
       why: string
     }>()
+  })
+})
+
+describe('PlannedAction (checked by tsc)', () => {
+  it("is a close's own write", () => {
+    const update = <S extends 'chapter_close' | 'user_edit'>(source: S) => ({
+      kind: 'updateLore' as const,
+      source,
+      payload: { branchId: 'br_close', id: LORE_A, patch: { body: 'Paid.' } },
+    })
+    const planned = (): PlannedAction[] => [
+      { action: update('chapter_close'), fields: ['body'], row: LORE_A },
+      // @ts-expect-error another writer's action
+      { action: update('user_edit'), fields: ['body'], row: LORE_A },
+    ]
+    expect(planned).toBeTypeOf('function')
   })
 })
 

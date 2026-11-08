@@ -47,7 +47,7 @@ export type WriteContext = ToolContext & {
 }
 
 export type PlannedAction = {
-  readonly action: PipelineAction
+  readonly action: PipelineAction & { readonly source: 'chapter_close' }
   readonly fields: readonly string[]
   /**
    * The row as the model's answer names it; a full id is allowed, the answer swaps it for its
