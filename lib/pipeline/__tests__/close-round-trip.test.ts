@@ -201,6 +201,14 @@ async function worldState(fx: CloseFixture): Promise<WorldState> {
   }
 }
 
+async function branchLog(fx: CloseFixture): Promise<Delta[]> {
+  return (await fx.ctx.db
+    .select()
+    .from(deltas)
+    .where(eq(deltas.branchId, fx.branchId))
+    .orderBy(asc(deltas.logPosition))) as Delta[]
+}
+
 async function deltasOf(fx: CloseFixture, actionId: string): Promise<Delta[]> {
   return (await fx.ctx.db
     .select()
@@ -246,6 +254,8 @@ type CloseHarness = {
   readonly merge: boolean
   /** The state before the close ran. */
   readonly before: WorldState
+  /** The branch's whole delta log before the close ran: other actions' deltas only. */
+  readonly beforeLog: readonly Delta[]
   /** Runs the close to completion; a case must land at least one tool group. */
   close: () => Promise<void>
   /** Starts the close and calls `act` once its first tool group has landed; resolves with the run. */
@@ -256,6 +266,10 @@ type CloseHarness = {
   actionId: () => string
   /** The state and the close's own log as the close completed. */
   closed: () => { state: WorldState; log: Delta[] }
+  /** Rolls the branch back to `targetId`, which goes with every entry after it. */
+  rollBack: (targetId: string) => Promise<void>
+  /** The entry a rollback took the branch back to, if one ran. */
+  rolledBackTo: () => string | undefined
 }
 
 type ToolGroup = { kinds: readonly PipelineAction['kind'][]; landed: boolean }
@@ -301,8 +315,10 @@ async function openHarness(c: RoundTripCase): Promise<CloseHarness> {
   })
   const endEntryId = fx.replyIds[END_REPLY]
   const before = await worldState(fx)
+  const beforeLog = await branchLog(fx)
   let actionId: string | undefined
   let closed: { state: WorldState; log: Delta[] } | undefined
+  let rolledBackTo: string | undefined
   const start = async (): Promise<TxResult> => {
     const tx = expectRan(await startManualClose(fx.branchId, endEntryId, fx.ctx))
     actionId = tx.actionId
@@ -313,6 +329,7 @@ async function openHarness(c: RoundTripCase): Promise<CloseHarness> {
     endEntryId,
     merge: c.merge,
     before,
+    beforeLog,
     close: async () => {
       const tx = await start()
       expect(tx).toMatchObject({ outcome: 'completed' })
@@ -335,6 +352,14 @@ async function openHarness(c: RoundTripCase): Promise<CloseHarness> {
     actedOn: () => actedOn,
     actionId: () => defined(actionId, 'the close has not started'),
     closed: () => defined(closed, 'the close has not completed'),
+    rollBack: async (targetId) => {
+      const counts = await shownCounts(fx.branchId, targetId, fx.ctx)
+      expect(
+        await rollbackToEntry(fx.branchId, targetId, fx.ctx, { expectedCounts: counts }),
+      ).toEqual({ status: 'ok', counts })
+      rolledBackTo = targetId
+    },
+    rolledBackTo: () => rolledBackTo,
   }
 }
 
@@ -350,11 +375,16 @@ async function undoClose(h: CloseHarness): Promise<void> {
   expect(await worldState(h.fx), 'the world after CTRL-Z').toEqual(h.before)
 }
 
-async function rollBack(h: CloseHarness, targetId: string): Promise<void> {
-  const counts = await shownCounts(h.fx.branchId, targetId, h.fx.ctx)
-  expect(
-    await rollbackToEntry(h.fx.branchId, targetId, h.fx.ctx, { expectedCounts: counts }),
-  ).toEqual({ status: 'ok', counts })
+// A rollback takes the entries from its target on and every delta written for them. A turn's create
+// names its entry; the pass's create is anchored on one.
+function keptByRollback(h: CloseHarness, targetId: string): Delta[] {
+  const positions = new Map(h.fx.entries.map((e) => [e.id, e.position]))
+  const positionOf = (id: string | null): number =>
+    defined(id === null ? undefined : positions.get(id), `no fixture entry ${id}`)
+  const cut = positionOf(targetId)
+  return h.beforeLog.filter(
+    (d) => positionOf(d.targetTable === 'story_entries' ? d.targetId : d.entryId) < cut,
+  )
 }
 
 type RoundTripCase = {
@@ -417,7 +447,7 @@ const ARMS: readonly RoundTripArm[] = [
     run: async (h) => {
       await h.close()
       const pastEnd = h.fx.entries[h.fx.entries.findIndex((e) => e.id === h.endEntryId) + 1]
-      await rollBack(h, pastEnd.id)
+      await h.rollBack(pastEnd.id)
     },
   },
   {
@@ -425,7 +455,7 @@ const ARMS: readonly RoundTripArm[] = [
     expect: 'before-close',
     run: async (h) => {
       await h.close()
-      await rollBack(h, h.endEntryId)
+      await h.rollBack(h.endEntryId)
     },
   },
 ]
@@ -439,6 +469,11 @@ describe.each(CASES)('the round trip of $name', (c) => {
     const expected = arm.expect === 'before-close' ? { state: h.before, log: [] } : h.closed()
     expect(await worldState(h.fx)).toEqual(expected.state)
     expect(await deltasOf(h.fx, h.actionId())).toEqual(expected.log)
+    const target = h.rolledBackTo()
+    const others = (await branchLog(h.fx)).filter((d) => d.actionId !== h.actionId())
+    expect(others, "other actions' deltas").toEqual(
+      target === undefined ? h.beforeLog : keptByRollback(h, target),
+    )
   })
 })
 
