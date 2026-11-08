@@ -40,10 +40,13 @@ describe('CloseIds', () => {
     expect(ids.nameOfId(CHAR_A)).toBe('Wren the Grey')
   })
 
-  it('names a row without the whitespace around its name', () => {
+  it('names a row without the whitespace around its name, by handle or by id', () => {
     const ids = new CloseIds()
     ids.show(CHAR_A, ' Wren ')
+    ids.show(CHAR_B, '  ')
     expect(ids.nameOf('c1')).toBe('Wren')
+    expect(ids.nameOfId(CHAR_A)).toBe('Wren')
+    expect(ids.nameOfId(CHAR_B)).toBeUndefined()
   })
 
   it('refuses to show a turn or an awareness row as a row', () => {
@@ -197,6 +200,14 @@ describe('CloseIds', () => {
     expect(ids.withHandles('see entry_close_002')).toBe('see t1')
     expect(ids.showAwareness('haw_seeded_x')).toBe('aw1')
     expect(ids.withHandles('pin haw_seeded_x')).toBe('pin aw1')
+  })
+
+  it('swaps a registered non-uuid id only where a word starts', () => {
+    const ids = new CloseIds()
+    ids.showTurns(['entry_close_002'])
+    expect(ids.withHandles('xentry_close_002, a-entry_close_002, (entry_close_002)')).toBe(
+      'xentry_close_002, a-entry_close_002, (t1)',
+    )
   })
 
   it("swaps a registered turn whose id isn't uuid-shaped, and nothing longer", () => {
