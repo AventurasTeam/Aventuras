@@ -494,9 +494,12 @@ literals so a test can't derive its expectation from the constant.
   merge's absorbed rows, as in `merge_threads`, are deletes. The path
   must never appear in `values`, or
   [Slice 5.11](./11-review-window.md)'s review would render a Changes
-  `update` row for it. When a delete is refused, 5.11 names the path
-  under Not applied, and `fieldPathLabel` has no entry for it, so it
-  reads raw. Slice 5.9 needs the same spelling. Surfaced by 5.5a.
+  `update` row for it. Inside a close a delete either lands or rejects
+  the whole group, as a missing row returns `rejected`
+  (`lib/actions/threads/register.ts`,
+  `lib/actions/happenings/register-happenings.ts`), so its path never
+  reaches `skippedFields`. Slice 5.9 needs the same spelling. Surfaced
+  by 5.5a.
 
 ## Implementation notes
 
