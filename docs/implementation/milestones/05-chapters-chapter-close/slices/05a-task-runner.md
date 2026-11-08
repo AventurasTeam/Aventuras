@@ -325,8 +325,8 @@ and tools sit under `lib/pipeline/definitions/close-agent/`.
   `chapter_close` (C1).
 - The read gate is a set per task and part. A row joins it when the
   start seeds it, which it does only if it showed the fields the tool
-  writes (C11), or when `read_row` returns it. A row the start only
-  listed by title stays unread.
+  writes (C11), when `read_row` returns it, or when the task's own
+  create lands it. A row the start only listed by title stays unread.
 - Two functions serve a tool writing an entity row, since two `state`
   actions on one row can't share a group
   (`apply-delta-action.ts:318-325`):
@@ -624,7 +624,9 @@ vitest and the probe share. It never reaches a production slot.
   the path would hide one or the other. 5.9's `merge_happenings`
   fan-out under user precedence is what reaches it: one call's actions
   over several link rows can land a path on one row and lose it on
-  another. Pending a developer decision, among: keep the throw and give
+  another. The throw comes after the group has landed, so today the
+  close fails and is reversed whole. Pending a developer decision,
+  among: keep the throw and give
   each action distinct paths for link-row fan-out; a per-action
   link-row flag; or a split where the model's answer names every loss
   while the ledger's `skippedFields` omit a path that also landed.

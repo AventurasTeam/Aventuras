@@ -139,7 +139,7 @@ the review shows. Only chapters too big to send whole pay this.
 - **`search_world`** matches names and keywords and returns ids with a
   line each, for what code can't pick out, such as "the capital".
 - **`read_row`** returns the fields the task may write. Rows a task
-  starts with count as read.
+  starts with count as read, and so do rows it creates.
 - **`read_turns`** is for the two tasks without the prose.
 
 Every write carries `turns`, the cited turn ids, and `why`, one sentence

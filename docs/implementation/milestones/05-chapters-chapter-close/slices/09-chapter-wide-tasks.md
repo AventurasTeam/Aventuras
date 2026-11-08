@@ -453,6 +453,13 @@ Each test file runs under `pnpm vitest run --project unit <file>`.
 
 ## Open questions
 
+- **A `merge_happenings` call that lands a path on one link row and
+  loses it on another.** Its per-character involvement and awareness
+  actions share delta paths, and user precedence on the kept row can
+  stop one while a sibling lands; 5.5a's `verdictOf` throws on that
+  today, which fails the close. The rule is pending a developer
+  decision ([5.5a → Open questions](./05a-task-runner.md#open-questions));
+  this slice is the first to reach it. Surfaced by 5.5a.
 - **Where does `chaptersOld` read from?** This needs the developer at
   planning, with the `aventuras-design` route offered: landing it shifts
   every chaptered story's ranking, and canon and
