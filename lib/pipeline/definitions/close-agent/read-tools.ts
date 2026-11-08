@@ -114,6 +114,26 @@ async function showRef(
   return row && { handle: ctx.ids.show(id, row.name), name: row.name }
 }
 
+/** Every row a value names, and every row their names name in turn, each by handle and name. */
+async function refsIn(ctx: ToolContext, value: unknown): Promise<Record<string, string>> {
+  const refs: Record<string, string> = {}
+  const seen = new Set<string>()
+  let pending = refIdsIn(value)
+  while (pending.length > 0) {
+    const next: string[] = []
+    for (const refId of pending) {
+      if (seen.has(refId)) continue
+      seen.add(refId)
+      const ref = await showRef(ctx, refId)
+      if (ref === undefined) continue
+      refs[ref.handle] = ref.name
+      next.push(...refIdsIn(ref.name))
+    }
+    pending = next
+  }
+  return refs
+}
+
 // Ids go to handles before the cut: excerpt can cut where there's no space, inside an id. It can
 // cut inside a handle too, and c12 cut to c1 names another row, so a split handle is dropped.
 function aboutOf(ids: CloseIds, description: string): string | undefined {
@@ -257,24 +277,20 @@ async function readRowAnswer(
   const handle = ctx.ids.show(id, row.name)
   const rows = [{ table, id, name: row.name }]
   const paths = ctx.readFields[row.kind] ?? []
-  if (paths.length === 0)
-    return {
-      output: {
-        id: handle,
-        kind: row.kind,
-        name: row.name,
-        note: `This task can't read ${row.kind} rows.`,
-      },
-      rows,
-      read: [],
+  if (paths.length === 0) {
+    const named = await refsIn(ctx, row.name)
+    const output = {
+      id: handle,
+      kind: row.kind,
+      name: row.name,
+      note: `This task can't read ${row.kind} rows.`,
+      ...(Object.keys(named).length > 0 ? { refs: named } : {}),
     }
+    return { output: withHandlesDeep(output, ctx.ids), rows, read: [] }
+  }
 
   const fields = Object.fromEntries(paths.map((path) => [path, valueAt(row.columns, path)]))
-  const refs: Record<string, string> = {}
-  for (const refId of new Set(refIdsIn(fields))) {
-    const ref = await showRef(ctx, refId)
-    if (ref) refs[ref.handle] = ref.name
-  }
+  const refs = await refsIn(ctx, [row.name, fields])
   const output = {
     id: handle,
     kind: row.kind,

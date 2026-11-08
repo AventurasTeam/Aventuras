@@ -467,6 +467,40 @@ describe('read_row', () => {
     expect(JSON.stringify(answer.output)).not.toMatch(FULL_ID)
   })
 
+  it("names a row whose full id sits in the row's name or a ref's name", async () => {
+    const sela = rowId('char', 4)
+    const mara = rowId('char', 6)
+    await db
+      .insert(entities)
+      .values([
+        entity(mara, 'character', `Ward of ${HARROW}`),
+        entity(sela, 'character', `Heir of ${MIRA}`, { description: `Spoke with ${mara}.` }),
+      ])
+
+    const answer = await readRowTool.read({ id: sela }, toolCtx())
+
+    const [mira, harrow, ward] = [MIRA, HARROW, mara].map((id) => ids.handleOf(id)!)
+    expect(ids.nameOf(mira)).toBe('Mira')
+    expect(ids.nameOf(harrow)).toBe('Harrow')
+    expect(answer.output).toMatchObject({
+      name: `Heir of ${mira}`,
+      refs: { [mira]: 'Mira', [ward]: `Ward of ${harrow}`, [harrow]: 'Harrow' },
+    })
+    expect(JSON.stringify(answer.output)).not.toMatch(FULL_ID)
+  })
+
+  it("names a row whose full id sits in the name of a kind the task can't read", async () => {
+    const gate = rowId('loc', 6)
+    await db.insert(entities).values(entity(gate, 'location', `Gate of ${MIRA}`))
+
+    const answer = await readRowTool.read({ id: gate }, toolCtx())
+
+    const mira = ids.handleOf(MIRA)!
+    expect(ids.nameOf(mira)).toBe('Mira')
+    expect(answer.output).toMatchObject({ name: `Gate of ${mira}`, refs: { [mira]: 'Mira' } })
+    expect(JSON.stringify(answer.output)).not.toMatch(FULL_ID)
+  })
+
   it('answers a row that is gone, with no refusal and nothing read', async () => {
     const wren = ids.show(WREN, 'Wren')
 
