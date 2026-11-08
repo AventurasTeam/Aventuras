@@ -203,7 +203,7 @@ async function loadAndPublish(
   // Off the open's own task, so the encoder's build doesn't land on the first Send. React Native
   // has no real idle signal, so on Android it runs during the open, ahead of the reader's first
   // paint.
-  requestIdleCallback(warmTokenEncoder, { timeout: TOKEN_WARM_TIMEOUT_MS })
+  globalThis.requestIdleCallback?.(warmTokenEncoder, { timeout: TOKEN_WARM_TIMEOUT_MS })
   return { status: 'ok', storyId: row.storyId, branchId }
 }
 

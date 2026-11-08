@@ -68,7 +68,7 @@ export const ClosingBeforeTurn: Story = {
     label: closeBannerLabel({
       beforeTurn: true,
       currentPhase: 'agent',
-      closeProgress: { task: 'identity', part: 0, index: 3, total: 7 },
+      closeProgress: { task: 'identity', part: 1, index: 3, total: 7 },
     }),
     onCancel: fn(),
   },
@@ -84,7 +84,7 @@ export const ClosingTask: Story = {
     label: closeBannerLabel({
       beforeTurn: false,
       currentPhase: 'agent',
-      closeProgress: { task: 'identity', part: 0, index: 3, total: 7 },
+      closeProgress: { task: 'identity', part: 1, index: 3, total: 7 },
     }),
     onCancel: fn(),
   },
@@ -107,7 +107,7 @@ export const PhoneClosingTask: Story = {
     label: closeBannerLabel({
       beforeTurn: false,
       currentPhase: 'agent',
-      closeProgress: { task: 'lifecycle', part: 2, index: 16, total: 17 },
+      closeProgress: { task: 'lifecycle', part: 3, index: 16, total: 17 },
     }),
     onCancel: fn(),
   },

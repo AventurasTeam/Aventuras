@@ -47,18 +47,23 @@ function makeCallback(sqlite: DatabaseSync) {
   }
 }
 
-// Returns a fresh in-memory db with the committed migration folder applied.
-// Async because sqlite-proxy/migrator awaits the proxy callback internally.
-// Mirrors the desktop (Electron main) runtime: node:sqlite with FK enforcement.
-export async function createTestDb() {
-  const sqlite = new DatabaseSync(':memory:', { allowExtension: true })
-  sqlite.loadExtension(getLoadablePath())
-  sqlite.exec('PRAGMA foreign_keys = ON;')
-  const callback = makeCallback(sqlite)
-  const db = drizzle(callback, { schema: dbSchema })
-  await migrate(db, (queries) => Promise.resolve(queries.forEach((q) => sqlite.exec(q))), {
-    migrationsFolder: MIGRATIONS_DIR,
-  })
+// Mirrors the desktop (Electron main) runtime: node:sqlite with FK enforcement. Async because
+// sqlite-proxy/migrator awaits the proxy callback internally.
+async function openMigrated(location: string) {
+  const sqlite = new DatabaseSync(location, { allowExtension: true })
+  let db: ReturnType<typeof drizzle<typeof dbSchema>>
+  try {
+    sqlite.loadExtension(getLoadablePath())
+    sqlite.exec('PRAGMA foreign_keys = ON;')
+    db = drizzle(makeCallback(sqlite), { schema: dbSchema })
+    await migrate(db, (queries) => Promise.resolve(queries.forEach((q) => sqlite.exec(q))), {
+      migrationsFolder: MIGRATIONS_DIR,
+    })
+  } catch (err) {
+    // No caller holds the handle yet, and an open file blocks its scratch cleanup on Windows.
+    sqlite.close()
+    throw err
+  }
   const runInTransaction = async (ops: { sql: string; params: unknown[] }[]): Promise<void> => {
     try {
       sqlite.exec('BEGIN')
@@ -74,4 +79,13 @@ export async function createTestDb() {
     }
   }
   return { db, sqlite, runInTransaction }
+}
+
+export async function createTestDb() {
+  return openMigrated(':memory:')
+}
+
+/** A file-backed db with sqlite-vec and FK on, migrated; for scripts. */
+export async function openTestDb(path: string): ReturnType<typeof createTestDb> {
+  return openMigrated(path)
 }

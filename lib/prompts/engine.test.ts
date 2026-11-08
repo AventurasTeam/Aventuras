@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 
-import { createEngine, renderWith, templateGlobals } from './engine'
+import { createEngine, macroGlobals, renderWith, templateGlobals } from './engine'
+import { MACRO_IDS } from './ids'
 import type { Pack } from './types'
 
 const pack: Pack = {
@@ -232,5 +233,22 @@ describe('templateGlobals', () => {
     expect([...templateGlobals(engine, 't', 'user')]).toEqual(['entries'])
     expect([...templateGlobals(engine, 't')].toSorted()).toEqual(['calendarVocabulary', 'entries'])
     expect([...templateGlobals(engine, 't', 'system')]).toEqual(['calendarVocabulary'])
+  })
+})
+
+describe('macroGlobals', () => {
+  // A close macro that includes another is checked through it, as the stability check relies on.
+  it('follows an include into a macro that reads a variable the outer one never names', () => {
+    const engine = createEngine({
+      templates: {},
+      macros: {
+        [MACRO_IDS.closeInstructions]: {
+          group: 'chapter',
+          source: "{{ mode }}{% include 'inner' %}",
+        },
+        inner: { group: 'chapter', source: '{{ x }}' },
+      },
+    })
+    expect([...macroGlobals(engine, MACRO_IDS.closeInstructions)].toSorted()).toEqual(['mode', 'x'])
   })
 })

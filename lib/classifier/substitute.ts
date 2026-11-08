@@ -49,6 +49,7 @@ export function substituteClassifierIds<T>(
  *  is a reference, a handle, a turn or an enum value. */
 export const PROSE_FIELDS = [
   'attire',
+  'body',
   'category',
   'condition',
   'description',
@@ -66,6 +67,7 @@ export const PROSE_FIELDS = [
   'temporal',
   'title',
   'voice',
+  'why',
   'traits',
   'drives',
   'agenda',

@@ -31,6 +31,8 @@ import { closeBoundaryPhase } from './chapter-close-boundary'
 import { closeMetadataPhase } from './chapter-close-metadata'
 import { readCloseRangeEntries } from './chapter-close-metadata-call'
 import { closeReportPhase } from './chapter-close-report'
+import { closeAgentSlots, PRODUCTION_CLOSE_SLOTS } from './close-agent/slots'
+import { closeLedgerOf } from './close-intermediates'
 import { readClassifierStatus } from './memory-chain'
 import { expectRan, realDeltaActionPort } from '../__tests__/harness'
 import { __resetRegistry, getPipeline } from '../authoring/registry'
@@ -516,7 +518,7 @@ describe('a close whose group does not land whole', () => {
     expect(run.outcome).toBe('failed')
     expect(run.error).toEqual({
       kind: 'action-layer',
-      detail: 'chapter-close: group not applied: forced refusal',
+      detail: 'chapter-close: createChapter and 7 stampEntryChapter not applied: forced refusal',
     })
     expect(await branchState()).toEqual(before)
   })
@@ -646,5 +648,46 @@ describe('a failed close', () => {
     expect(generateStructured).not.toHaveBeenCalled()
     expect(events.some((e) => e.type === 'phase_start')).toBe(false)
     expect(await chapterRows()).toEqual([])
+  })
+})
+
+describe('the agent phase with the production slots', () => {
+  it('ships every slot empty', () => {
+    expect(closeAgentSlots()).toBe(PRODUCTION_CLOSE_SLOTS)
+    expect(PRODUCTION_CLOSE_SLOTS).toEqual({ before: [], perPart: [], after: [] })
+  })
+
+  it('freezes the slot table and each slot', () => {
+    expect(Object.isFrozen(PRODUCTION_CLOSE_SLOTS)).toBe(true)
+    for (const slot of Object.values(PRODUCTION_CLOSE_SLOTS))
+      expect(Object.isFrozen(slot)).toBe(true)
+  })
+
+  it('still ends with the row, its stamps and a report of no tool calls, starting no task', async () => {
+    const end = f.replyIds[2]!
+    const events = recordEvents()
+    let ledgerAtAgentEnd: unknown
+    pipelineEventBus.subscribeAll((event) => {
+      if (event.type === 'phase_complete' && event.name === 'agent')
+        ledgerAtAgentEnd = closeLedgerOf(liveClose()!.intermediates)
+    })
+
+    const run = await runClose(end)
+
+    expect(run.outcome).toBe('completed')
+    expect(events.filter((event) => event.type === 'close_task_start')).toEqual([])
+    expect(ledgerAtAgentEnd).toEqual({ calls: [], stopped: [], noToolCalls: true })
+    const [row] = await chapterRows()
+    expect(row!.closeReport).toEqual({
+      version: 1,
+      actionId: run.actionId,
+      calls: [],
+      stopped: [],
+      noToolCalls: true,
+    })
+    for (const entry of await entryRows())
+      expect(entry.chapterId, `entry ${entry.position}`).toBe(
+        entry.position <= positionOf(end) ? row!.id : null,
+      )
   })
 })

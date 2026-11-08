@@ -197,8 +197,8 @@ Provider: [Slice 5.2](./slices/02-first-chapter.md), and
 Writers: 5.5b, 5.8, 5.9. Consumers: 5.11, 5.12, and the seed.
 
 Every delta of a close carries the run's `actionId`,
-`source = 'chapter_close'` (a member of `DeltaSource` at
-`lib/actions/types.ts:12-19`, which nothing writes yet) and
+`source = 'chapter_close'` (a member of `DeltaSource`,
+`lib/actions/types.ts`) and
 `entry_id = E`, the chapter's end entry
 ([`chapter-close.md → Logs and anchors`](../../../memory/chapter-close.md#logs-and-anchors)).
 This is load-bearing: `resolveRollbackWindow` sweeps by anchor position,
@@ -210,7 +210,7 @@ anchor reverses positionally, which is the seed's bug.
   then the `close_report` update.
 - A stamp is a new action kind, `stampEntryChapter`, registered beside
   `updateStoryEntryMetadata` (`lib/actions/story-entries/register.ts:234-241`)
-  with a `LOCK_KEY` entry (`lib/actions/delta/apply-delta-action.ts:51`).
+  with a `LOCK_KEY` entry (`lib/actions/delta/apply-delta-action.ts:53`).
   One delta per entry, payload `{ chapterId: <prior> }`, since a delta
   reverses one row (`reverse-replay.ts`, `undoTargetOf`).
 - No stamp carries a `content` key: `isContentEditDelta` keys on it
@@ -218,15 +218,13 @@ anchor reverses positionally, which is the seed's bug.
 - `story_entries.chapter_id` stays FK-less
   (`lib/db/story-entries/story-entries.table.ts:20`), because redo runs
   newest-first and stamps land before their chapter row.
-- Slice 5.2 sends the stamps through the shipped `delta_emitted` path, a
-  burst under one `actionId`, and its metadata phase checks
-  `abortSignal` between stamps, since the orchestrator reads an abort
-  only between phases and each stamp is its own transaction and store
-  patch. The move to one group is decided (developer, 2026-11-05) and
-  lands in [Slice 5.5a](./slices/05a-task-runner.md) once
-  `delta_group_emitted` does: the create and every stamp as one group,
-  each stamp still its own delta anchored on the end entry, and the
-  `close_report` update a write of its own after it.
+- Slice 5.2 sent the stamps through the `delta_emitted` path, a burst
+  under one `actionId`, its metadata phase checking `abortSignal`
+  between stamps. [Slice 5.5a](./slices/05a-task-runner.md) moved them
+  to one group (developer, 2026-11-05): the create and every stamp land
+  as one `delta_group_emitted`, each stamp still its own delta anchored
+  on the end entry, and the `close_report` update is a write of its own
+  after it.
 
 ### C2 — Pipeline shape
 
@@ -347,9 +345,9 @@ type CloseReportCall = {
   why: string
   turns: string[] // entry ids
   result: 'ok' | 'rejected' | 'skipped'
-  reason?: string // why it didn't land, whole
+  reason?: string // why it didn't land: the first refusal's, else protection's
   values?: Record<string, string> // delta path to new or proposed value, cut to the bound
-  skippedFields?: { field: string; reason: string }[] // a partly landed call (C11)
+  skippedFields?: { field: string; reason: string }[] // lost fields' own reasons (C11)
   survivor?: { table: string; id: string } // a landed merge's kept row
 }
 ```
@@ -360,11 +358,18 @@ type CloseReportCall = {
   `values`, cut to one `CLOSE_REPORT_VALUE_BOUND`, the same bound a Not
   applied value uses.
 - **`values` holds only landed or proposed fields.** Its keys and a
-  `skippedFields` entry's `field` are delta paths, as `changedPaths` reads
-  them (`description`, `state.voice`). A list joins with `, `, and a ref's
-  value is the row's name, not its id. A restated field is absent (C11),
-  and the review omits an `ok` call with no field and no `survivor`. A
-  tool writing a single field, such as `retire_entity`, records it here.
+  `skippedFields` entry's `field` are delta paths, as `changedPaths`
+  reads them (`description`, `state.voice`). A list joins with `, `, and
+  a ref's value is the row's name, not its id. A path restated on every
+  row that carries it is absent (C11), and `skippedFields` omit a path
+  that also landed on another row. `skippedFields` gives each lost field
+  its own reason: on an `ok` call, and on a `skipped` or `rejected` one
+  only when its fields were lost for different reasons, since otherwise
+  the call's `reason` is each field's. A call refused whole, by the
+  common checks, an id that doesn't resolve, its plan or its group,
+  carries only `reason`. The review omits an `ok` call with no field and
+  no `survivor`. A tool writing a single field, such as `retire_entity`,
+  records it here.
 - **A `reason` is a stable key** for the three shared classes,
   `USER_EDITED_SINCE_PROSE`, `later-turn` and `row-gone`, and the
   handler's own string for a rule refusal.
@@ -377,9 +382,14 @@ type CloseReportCall = {
   carries none, and is one Not applied row by tool and rows.
 - **Not applied is derived on read,** by canon's rule: a refused or
   skipped write the same task didn't later land with the same tool on
-  the same row and field. A refused create mints an id no retry shares,
-  so it matches a later landed create by that task with the same title,
-  trimmed and case-folded.
+  the same row and field. A refused call with no `values`, such as one
+  the common checks refused, drops once that task later lands the same
+  tool on a row the two calls share, or that tool at all if it has no
+  `rows`: its `rows` are every id argument, a landed call's the tool's
+  own. A value-less slip never retried then hides behind a landing for
+  something else, but it held nothing to apply. A refused create mints
+  an id no retry shares, so it matches a later landed create by that
+  task with the same title, trimmed and case-folded.
 - **Stamps, `retrieval_count` resets and stackable normalization stay
   out of the review.** Normalization is code with no `why` or `turns`,
   and its keys are a spelling cleanup.
@@ -547,7 +557,8 @@ group joins one suite that runs it through CTRL-Z, redo, abort and a
 rollback on each side of the end entry. A tool isn't done until it's in
 the suite. `merge_happenings` and `merge_threads` also assert that a
 close's CTRL-Z never reaches `held-in-redo`
-(`lib/actions/delta/redo.ts:118-126`), and the check counts link rows and
+(`snapshotForRedo` in `lib/actions/delta/redo.ts`: a held row written,
+or one a ref-clear would restore), and the check counts link rows and
 creates, not only the merged row.
 
 Both chapter delete modes join the suite with 5.12: it adds their arms
@@ -609,7 +620,13 @@ narrows to that in 5.8's PR.
 
 "Lands whole" means all-or-nothing on failure, not on precedence. A
 partly protected call appears in the review twice: its landed fields
-under Changes and its skipped fields under Not applied.
+under Changes and its skipped fields under Not applied. When nothing
+lands, the call is `rejected` with its first refusal's reason, else
+`skipped` with its first protection's, and if its fields were lost for
+different reasons, each keeps its own in `skippedFields` and in the
+model's answer, row by row. A path lost on one row and landed on another
+appears in the review once, as a change, since `skippedFields` omit it
+(C4); only the model's answer names that loss, with its row.
 
 Shipped shape this replaces: `applyDeltaActionGroup` returns only
 `ok` or `rejected`, and a noop vanishes inside a group
@@ -626,8 +643,8 @@ matches `USER_EDITED_SINCE_PROSE` to `skipped` and restated values to
 that didn't land can never read as `ok`. Restated values go by more than
 a dozen spellings, some restated only by row state, and gone rows
 interpolate ids, so both carry a stable marker,
-`noopRefusal(reason, 'restated' | 'gone')`
-(`lib/actions/delta/registry.ts:74`), and rule refusals stay unmarked.
+`noopRefusal(reason, 'restated' | 'gone' | null)`
+(`lib/actions/delta/registry.ts:88`), and rule refusals pass `null`.
 `updateEntity`, `updateLore`, `updateThread` and `updateHappening` return
 a hard `not-found` that aborts a group
 (`lib/actions/lore/register.ts:108-112`), which gives the whole call

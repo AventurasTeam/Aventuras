@@ -1,9 +1,19 @@
 import { describe, expect, it } from 'vitest'
 
 import type { Thread, ThreadStatus } from '@/lib/db'
-import { renderTemplate, TEMPLATE_IDS, templateReads, VARIABLES } from '@/lib/prompts'
+import {
+  bundledPack,
+  loadPack,
+  MACRO_IDS,
+  renderTemplate,
+  TEMPLATE_IDS,
+  templateReads,
+  VARIABLES,
+} from '@/lib/prompts'
+import { renderWith } from '@/lib/prompts/engine'
+import { CLOSE_ONLY_CHAPTER_VARIABLES } from '@/lib/prompts/templateContextMap'
 
-import { buildChapterContext, type CloseRangeEntry } from './chapter-context'
+import { buildChapterContext, buildCloseTurns, type CloseRangeEntry } from './chapter-context'
 
 function entry(position: number, kind: CloseRangeEntry['kind'], content: string): CloseRangeEntry {
   return {
@@ -47,25 +57,30 @@ const THREADS = [
 
 const SUMMARY = 'Kael left the keep at dawn with the stolen sigil.'
 
+// The close-only variables are a close task's to set; the metadata call reads the rest.
+const closeOnly: readonly string[] = CLOSE_ONLY_CHAPTER_VARIABLES
+const metadataVariables = (): string[] =>
+  VARIABLES.chapter.map((v) => v.name).filter((name) => !closeOnly.includes(name))
+
 // Each mode's paragraph on reading a user's turn (ui/principles.md → Mode), as the system says it.
 const ADVENTURE_TURN_RULE = 'Each is what the lead does, says or attempts'
 const CREATIVE_TURN_RULE = 'Each is a direction or prose'
 
 describe('buildChapterContext', () => {
-  it('emits exactly the variables pinned for the chapter group, nothing more', () => {
+  it('emits exactly the variables pinned for the chapter group, the close-only ones aside', () => {
     const context = buildChapterContext({
       entries: ENTRIES,
       previousChapterSummary: null,
       threads: [],
       mode: 'adventure',
     })
-    const declared = VARIABLES.chapter.map((v) => v.name)
-    expect(Object.keys(context).sort()).toEqual([...declared].sort())
+    expect(Object.keys(context).sort()).toEqual(metadataVariables().sort())
   })
 
   it('is what the metadata template reads, and all of it', () => {
-    const declared = VARIABLES.chapter.map((v) => v.name)
-    expect([...templateReads(TEMPLATE_IDS.chapterMetadata)].sort()).toEqual([...declared].sort())
+    expect([...templateReads(TEMPLATE_IDS.chapterMetadata)].sort()).toEqual(
+      metadataVariables().sort(),
+    )
   })
 
   // A row written before the write-path strip still carries its trailing block, and an entry id
@@ -227,5 +242,72 @@ describe('buildChapterContext', () => {
     expect(adventure.system).toContain('outside quoted speech, its "I" is the lead')
     expect(adventure.system).not.toContain(CREATIVE_TURN_RULE)
     expect(adventure.user).toContain('<user_turn>\nI tell Mora the heir is dead.\n</user_turn>')
+  })
+})
+
+const HANDLES: Readonly<Record<string, string>> = {
+  entry_close_1: 't1',
+  entry_close_2: 't2',
+  entry_close_3: 't3',
+}
+const handleOf = (entryId: string): string | undefined => HANDLES[entryId]
+
+describe('buildCloseTurns', () => {
+  it("puts each entry's prose under its turn handle, in order", () => {
+    expect(buildCloseTurns(ENTRIES, handleOf)).toEqual([
+      {
+        handle: 't1',
+        kind: 'opening',
+        content: 'The marsh road ended at a wall of black water, and the keep stood beyond it.',
+      },
+      { handle: 't2', kind: 'user_action', content: 'I wade in, holding the sigil above my head.' },
+      {
+        handle: 't3',
+        kind: 'ai_reply',
+        content: 'The cold takes your breath. On the far bank Mora raises a shuttered lantern.',
+      },
+    ])
+  })
+
+  it('refuses an entry with no turn handle', () => {
+    expect(() =>
+      buildCloseTurns(ENTRIES, (id) => (id === 'entry_close_3' ? undefined : handleOf(id))),
+    ).toThrow('entry_close_3')
+  })
+
+  // A close task's render sets the close-only key; the prose macro must read it in this shape.
+  it('feeds the prose macro under the close-only variable', () => {
+    const probe = 'tmpl_close_prose_probe'
+    const { engine } = loadPack({
+      ...bundledPack,
+      templates: {
+        ...bundledPack.templates,
+        [probe]: {
+          group: 'chapter',
+          system: `{% include '${MACRO_IDS.closeProse}' %}`,
+          user: 'Begin.',
+        },
+      },
+    })
+    const [key] = CLOSE_ONLY_CHAPTER_VARIABLES
+
+    const { system } = renderWith(engine, probe, { [key]: buildCloseTurns(ENTRIES, handleOf) })
+
+    expect(system).toBe(
+      [
+        '# The turns',
+        '',
+        '## t1 (the opening)',
+        'The marsh road ended at a wall of black water, and the keep stood beyond it.',
+        '',
+        "## t2 (the user's turn)",
+        '<user_turn>',
+        'I wade in, holding the sigil above my head.',
+        '</user_turn>',
+        '',
+        '## t3 (narration)',
+        'The cold takes your breath. On the far bank Mora raises a shuttered lantern.',
+      ].join('\n'),
+    )
   })
 })

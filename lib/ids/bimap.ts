@@ -34,6 +34,11 @@ export class IdBiMap {
     if (existing !== undefined && existing !== uuid) {
       throw new Error(`Handle already maps to a different id: ${handle}`)
     }
+    const held = this.uuidToPlaceholder.get(uuid)
+    if (held !== undefined && held !== handle) {
+      throw new Error(`Id already maps to a different handle: ${held}`)
+    }
     this.placeholderToUuid.set(handle, uuid)
+    this.uuidToPlaceholder.set(uuid, handle)
   }
 }

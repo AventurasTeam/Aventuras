@@ -1,13 +1,16 @@
 import { describe, expect, it } from 'vitest'
 
-import { templateGlobals } from '../engine'
+import { macroGlobals, renderWith, templateGlobals } from '../engine'
 import {
   bundledPack,
+  MACRO_IDS,
   renderTemplate,
   TEMPLATE_GROUPS,
   TEMPLATE_IDS,
   templateReads,
   VARIABLES,
+  type ContextGroup,
+  type Pack,
 } from '../index'
 import { loadPack } from '../load-pack'
 import { validatePackIncludes } from '../validate-includes'
@@ -149,5 +152,91 @@ describe('bundled pack', () => {
 
     expect(classifier).toMatch(/up to three/i)
     expect(classifier).toMatch(/next turn/i)
+  })
+})
+
+describe("the close's system-half macros", () => {
+  const PROBE = 'tmpl_close_macros_probe'
+  const probePack = (group: ContextGroup): Pack => ({
+    ...bundledPack,
+    templates: {
+      ...bundledPack.templates,
+      [PROBE]: {
+        group,
+        system: `{% include '${MACRO_IDS.closeInstructions}' %}\n\n{% include '${MACRO_IDS.closeProse}' %}`,
+        user: 'Begin.',
+      },
+    },
+  })
+  const render = (context: Record<string, unknown>): string =>
+    renderWith(loadPack(probePack('chapter')).engine, PROBE, context).system
+  const TURNS = [
+    { handle: 't1', kind: 'opening', content: 'The marsh road ended at a wall of black water.' },
+    { handle: 't2', kind: 'user_action', content: 'I wade in.' },
+    { handle: 't3', kind: 'ai_reply', content: 'The cold takes your breath.' },
+  ]
+
+  it('files both in the chapter group, so only a close template may include them', () => {
+    expect(bundledPack.macros[MACRO_IDS.closeInstructions]?.group).toBe('chapter')
+    expect(bundledPack.macros[MACRO_IDS.closeProse]?.group).toBe('chapter')
+    expect(validatePackIncludes(probePack('chapter'))).toEqual([])
+    expect(
+      validatePackIncludes(probePack('generationContext')).map((v) => [v.macroId, v.reason]),
+    ).toEqual([
+      [MACRO_IDS.closeInstructions, 'group-mismatch'],
+      [MACRO_IDS.closeProse, 'group-mismatch'],
+    ])
+  })
+
+  it('reads only the mode in the instructions, and only the turns in the prose', () => {
+    const { engine } = loadPack(bundledPack)
+    expect([...macroGlobals(engine, MACRO_IDS.closeInstructions)]).toEqual(['mode'])
+    expect([...macroGlobals(engine, MACRO_IDS.closeProse)]).toEqual(['closeTurns'])
+  })
+
+  it('tells every task no one answers it, to act by tool calls, and how a write answers', () => {
+    const system = render({ mode: 'adventure', closeTurns: TURNS })
+    expect(system).toContain(
+      'This is an automated system. No one reads your replies or answers your questions, so act only through tool calls.',
+    )
+    expect(system).toContain('Every write gives "turns"')
+    expect(system).toContain(
+      '- ok: it landed. A value already stored is ok too, with nothing written.',
+    )
+    expect(system).toContain(
+      "- rejected: it didn't land, and the reason or its note says what to do.",
+    )
+    expect(system).toContain('- skipped: the field stands as it is')
+    expect(system).toContain('When the task is done, reply without a tool call.')
+  })
+
+  // The instructions hold the model to the rules the gates enforce, line by line.
+  it.each([
+    'Use the ids you are shown, exactly as written; never invent one.',
+    'and "why", one sentence on what in the cited turns makes the write true.',
+    'Write only to a row you have read in this task',
+    'one read_row returned, or one you created in this task.',
+    'Creating a row names a new one, so it needs no read.',
+    "A create's answer gives the new row's id.",
+    "Don't write it again.",
+    'A reply without a tool call ends the task, so until it is done, every reply calls a tool.',
+  ])('states: %s', (line) => {
+    expect(render({ mode: 'adventure', closeTurns: TURNS })).toContain(line)
+  })
+
+  it("reads a user's turn by the story's mode", () => {
+    const adventure = render({ mode: 'adventure', closeTurns: TURNS })
+    const creative = render({ mode: 'creative', closeTurns: TURNS })
+    expect(adventure).toContain('Each is what the lead does, says or attempts')
+    expect(adventure).not.toContain('Each is a direction or prose')
+    expect(creative).toContain('Each is a direction or prose')
+    expect(creative).not.toContain('Each is what the lead does, says or attempts')
+  })
+
+  it('shows each turn under its handle, the user turn marked as every history marks it', () => {
+    const system = render({ mode: 'adventure', closeTurns: TURNS })
+    expect(system).toContain('## t1 (the opening)\nThe marsh road ended at a wall of black water.')
+    expect(system).toContain("## t2 (the user's turn)\n<user_turn>\nI wade in.\n</user_turn>")
+    expect(system).toContain('## t3 (narration)\nThe cold takes your breath.')
   })
 })

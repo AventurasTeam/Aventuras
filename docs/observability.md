@@ -258,8 +258,15 @@ convention, and the expectation that subsystems route through
   reported is unaffected)
 - `embedder.*` — `offline`, `compute_failed`, `staleness_detected`
 - `translation.*` — `soft_failed` (when that followup lands)
-- `memory.*` — periodic-classifier + chapter-close phase
-  emissions
+- `memory.*` — periodic-classifier and chapter-close phase
+  emissions, among them the close's debug kinds
+  `close_tool_group_rejected` (a tool's whole group refused, with the
+  tool, its action kinds, the reason and the code),
+  `close_tool_action_noop` (one action's noop, with its reason and
+  mark), `close_tool_call_invalid` (a malformed call or an unknown
+  tool, which the SDK answered itself, with the task, part, tool and
+  the SDK's detail) and `close_task_failed` (a task whose step failed
+  the close, with the task, part and error kind)
 - `bootstrap.*` — boot-time hydration failures (e.g.
   `app_settings_hydrate_failed`)
 - `calendar.*` — `format_miss` (a `displayFormat` that fails or

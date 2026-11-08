@@ -127,8 +127,8 @@ and tools sit under `lib/pipeline/definitions/close-agent/`.
   and
   [`Two write paths`](../../../../generation-pipeline.md#two-write-paths-from-the-orchestrator)
   name the new function for `delta_group_emitted`.
-- `noopRefusal(reason, 'restated' | 'gone')` (`registry.ts:74`). Rule
-  refusals stay unmarked. The single path drops the mark where it
+- `noopRefusal(reason, 'restated' | 'gone' | null)` (`registry.ts:88`).
+  A rule refusal passes `null`, so every call site states its mark. The single path drops the mark where it
   returns a refusal (`apply-delta-action.ts:184`), so `MutationResult`
   doesn't change and the exact refusals pinned through it pass unedited
   (`entities/register.test.ts:443`, `state-patch-actions.test.ts:117`).
@@ -157,13 +157,22 @@ and tools sit under `lib/pipeline/definitions/close-agent/`.
   to nothing written, and `gone` to `rejected`, saying where the row
   went: a row this close merged names its survivor from the ledger.
   Across a call's actions and the fields its plan left out:
-  - Any action landed: `ok`, naming every other field and its reason,
-    restated ones aside.
-  - None landed: `rejected` if any was refused by a rule or gone, else
-    `skipped` if any was protected, else `ok` with nothing written.
-  - A whole-group refusal, the hard `not-found` of `updateEntity`,
-    `updateLore`, `updateThread` and `updateHappening` included:
-    `rejected`, with nothing written.
+  - Any action landed: `ok`, naming every lost field with its row and
+    reason, restated ones aside.
+  - None landed: `rejected` with the first refusal's reason if any was
+    refused by a rule or gone, else `skipped` with the first
+    protection's if any was protected, else `ok` with nothing written.
+    When the lost fields' reasons differ, the call also names each with
+    its own, in `skippedFields` (by path, its first loss's reason) and
+    in `notWritten` (by row and field). When they all match the call's
+    reason it names none, so its answer and ledger entry keep their
+    shape.
+  - A whole-group refusal, the hard `not-found` an update or delete
+    handler returns for a missing row included: `rejected`, with
+    nothing written. Like a call the common checks, an unresolved id or
+    its plan refused, it carries its reason alone (`RefusedWhole`).
+  - Every `PlannedAction` names at least one delta path, a delete
+    included, and `verdictOf` throws on one that names none.
 
 **The close's create and stamps as one group (developer decision,
 2026-11-05).**
@@ -265,11 +274,16 @@ and tools sit under `lib/pipeline/definitions/close-agent/`.
   (`CLOSE_TASK_STEP_BUDGET`). Every step passes
   `cacheSystemPrefix: true`: a marker pays from a task's second step,
   and a task's steps follow at an agent's pace, not a turn's.
-- Response messages stay as the SDK returns them. Each of a step's
-  `calls` runs in order inside the generator and gets an answer before
-  the next step. `invalidCalls` are skipped, since the SDK answered them
-  in `responseMessages`; `convertToLanguageModelPrompt` merges the two
-  `tool` messages into one.
+- The model's own message goes back as the SDK returned it, keeping its
+  reasoning and calls. Each of a step's `calls` runs in order inside the
+  generator and gets an answer before the next step, bar a call whose id
+  an earlier call of the step already used: the SDK gives it that call's
+  input, so it's refused unrun and the model asked to send it again.
+  `invalidCalls` are
+  skipped, since the SDK answered them in `responseMessages`. A step's
+  answers, the SDK's and the driver's, go back as one `tool` message in
+  the order of the calls, where `convertToLanguageModelPrompt` would
+  merge the two with the SDK's first.
 - A reply with no tool call at all ends the task, whatever its finish
   reason, and a reply with any call continues it, an invalid one
   included.
@@ -320,8 +334,8 @@ and tools sit under `lib/pipeline/definitions/close-agent/`.
   `chapter_close` (C1).
 - The read gate is a set per task and part. A row joins it when the
   start seeds it, which it does only if it showed the fields the tool
-  writes (C11), or when `read_row` returns it. A row the start only
-  listed by title stays unread.
+  writes (C11), when `read_row` returns it, or when the task's own
+  create lands it. A row the start only listed by title stays unread.
 - Two functions serve a tool writing an entity row, since two `state`
   actions on one row can't share a group
   (`apply-delta-action.ts:318-325`):
@@ -342,7 +356,7 @@ and tools sit under `lib/pipeline/definitions/close-agent/`.
   reverse direction too. A match doesn't count as a read.
 - `read_row` returns the fields a per-task registry names, keyed by task
   and row kind, which the tool slices extend. It reads SQL and swaps ids
-  with `substituteIds`. A read has no refusal: a missing row is an
+  with `withHandlesDeep`. A read has no refusal: a missing row is an
   answer saying so, naming a survivor if the ledger has one.
 
 **The ledger (C4).**
@@ -363,7 +377,7 @@ and tools sit under `lib/pipeline/definitions/close-agent/`.
   records nothing.
 - `rows` and `turns` hold real ids, and a refused create keeps the id
   its plan minted, with its name. `values` holds landed or proposed
-  fields and never a restated one. Its keys and a `skippedFields` entry's
+  fields and never a path restated on every row that carries it. Its keys and a `skippedFields` entry's
   `field` name the delta path a field lands at, as `changedPaths` reads
   it (`description`, `state.voice`), and each skipped field carries its
   own `reason`. A list joins with `, `, and a ref's value is the row's
@@ -493,8 +507,8 @@ vitest and the probe share. It never reaches a production slot.
   (`lib/actions/delta/group-outcomes.test.ts`). `DeltaGroupResult` and
   `MutationResult` keep their shapes, so the existing tests pinning them
   pass unedited.
-- A scan of `lib/actions` fails on an unmarked restated or gone
-  `noopRefusal`, and sample handlers report their mark
+- A scan of `lib/actions` fails on a restated or gone `noopRefusal`
+  passing `null`, and sample handlers report their mark
   (`lib/actions/delta/noop-marks.test.ts`).
 - Each row of C11's table gives its result, an unknown noop gives
   `rejected`, a hard `not-found` gives `rejected` with nothing written,
@@ -533,13 +547,18 @@ vitest and the probe share. It never reaches a production slot.
   free field the tool refuses between the two functions never reaches
   the action. With nothing left to land no group is emitted, and the
   result is `skipped` if every field was protected and `rejected` if the
-  tool refused one (`write-path.test.ts`).
+  tool refused one. Fields lost for different reasons each keep their
+  own in the ledger's `skippedFields` and the model's `notWritten`, with
+  the first's as the call's, and fields sharing one reason add neither
+  (`write-path.test.ts`).
 - The ledger holds every dispatched call in run order and no invalid
-  one, leaves a restated field out of `values`, keys `values` by delta
-  path, gives a ref's value as a name, cuts a value to the bound, keeps
-  a refused create's minted id and records a stop; a landed call shows
-  in the next task's writes so far
-  (`lib/pipeline/definitions/close-agent/ledger.test.ts`).
+  one, keys `values` by delta path, gives a ref's value as a name, cuts
+  a value to the bound, keeps a refused create's minted id and records
+  a stop; a landed call shows in the next task's writes so far
+  (`lib/pipeline/definitions/close-agent/ledger.test.ts`). A restated
+  field stays out of `values`, from the plan or the handler, and a path
+  restated on one row and lost on another keeps its proposed value
+  (`lib/pipeline/definitions/close-agent/write-path.test.ts`).
 - A row keeps its short id across two tasks and two parts; a `haw_` row
   shown in two tasks keeps one handle, which the writes-so-far line
   prints; an array of ids goes back; an unknown id or turn is
@@ -613,99 +632,185 @@ vitest and the probe share. It never reaches a production slot.
 
 ## Open questions
 
-- **What does a step with `content-filter`, or `other` with no tool
-  call, mean for a task?** Answered in
-  [canon](../../../../generation-pipeline.md#cut-off-replies) (developer,
-  2026-11-06): a filter takes the cut-off path, calls or not, retried once
-  under a fresh bound
-  ([`chapter-close.md`](../../../../memory/chapter-close.md#when-a-task-stops))
-  and returned as `stopped`, `reason: 'cut-off'`, with the second stop's
-  cause, so C4 needs no reason of its own; `other` with no raw reason is
-  finished.
-- **Does a `length` reply holding whole tool calls get discarded?**
-  Answered in [canon](../../../../generation-pipeline.md#cut-off-replies)
-  (developer, 2026-11-06): yes. Its calls never reach the runner, and the
-  step is sent again.
-- **Do retried attempts count against the 24?** Starting answer: no. 5.4
-  retries inside one step call and the budget counts steps. It's a
-  tuning constant either way.
-- **Are tool descriptions pack content or code?** Canon keeps a reply's
-  JSON contract out of the pack and is silent on tools. Starting answer:
-  code, beside the schema, since a description that misstates a schema
-  breaks the tool the way a bad contract breaks a reply.
-- **Are `t` and `aw` handles the right way to show `entry_` and `haw_`
-  rows?** `allocate` throws on both (`bimap.ts:8-11`), and
-  `registerHandle` takes any id, so this doc uses it and 5.9's `set_pin`
-  follows. Canon's
-  [never-substituted table](../../../../data-model.md#non-llm-facing-kinds-never-substituted)
-  still holds for the walker, but a close now shows these rows under a
-  handle: does it want a line saying so?
-- **Is `updateEntity` with a merged `state` the right action for a tool
-  writing several sub-fields?** It's the only action that takes several
-  today, and it parses the state, which the narrow path doesn't. The
-  cost is that precedence for `state` runs ahead of the group, through
-  the guard, instead of in a handler. The alternative is a narrow action
-  taking a sub-field map. This slice owns the answer and settles it at
-  planning, since the two functions ship here and 5.5b's tool table
-  rests on them.
-- **Should a close's steps carry the cache marker?**
-  [Slice 5.4](./04-tool-step.md) leaves this here. Anthropic renders
-  `tools`, then `system`, then `messages` (read 2026-11-01 in the Claude
-  API reference, not tested by a request), so under `separate` the
-  chapter's cache holds across a task's own steps and not across tasks,
-  wherever the marker sits. A cache write costs about 1.25 times input
-  and a read about 0.1, so a marker pays from a task's second step and
-  loses a quarter on a task of one. Recommendation: pass it, and add the
-  close to the marker's list in
-  [`architecture.md → System and user halves`](../../../../architecture.md#system-and-user-halves).
-  Until planning says so the driver passes none, as that list has it.
-  Nothing changes shape either way.
-- **How does `pnpm probe:close` open a story under `tsx`?**
-  `loadAndPublish` calls `requestIdleCallback` for the encoder warm with
-  no fallback
-  ([Slice 5.1 → Implementation notes](./01-token-measure.md#implementation-notes)),
-  and plain Node has no such global, so `loadOpenStory` throws there,
-  after `publish`. Only `vitest.setup.ts` supplies it outside the app.
-  Starting answer: the script sets the same no-op before its first open.
-  The alternative is an optional call at the site, which would also let
-  the setup's no-op go.
-- **How does a refused action in the close's group fail the close?**
-  Today a refused `createChapter` or stamp goes through `delta_emitted`
-  and throws (`orchestrator.ts:202`), which fails the close and reverses
-  it. A group's plain refusal comes back as a value with nothing written
-  and leaves the run going, and a noop comes back per action while the
-  rest lands (this slice's first two criteria). So once the metadata
-  phase emits the create and stamps as one group, a refusal there fails
-  nothing by itself: the agent phase runs with no chapter row until the
-  report's `updateChapter` refuses, and a stamp that noops would leave a
-  row over a partial range, though neither handler returns a noop today.
-  Which outcomes fail the close, and with what error, is open. Surfaced
-  by Slice 5.2's review.
-- **What does a tool schema do with a key the model added?** A plain
-  `z.object` drops unknown keys, and the SDK replays the parsed value
-  (`ai`, `parse-tool-call.ts`), so a key the model wrote vanishes from
-  its own call on the next step: the change the schema contract above
-  forbids. `z.strictObject` refuses the call, so the model hears it and
-  writes it again; `z.looseObject` keeps the key and replays the call
-  as written. The deep-equal criterion catches neither unless a sample
-  carries an extra key. Surfaced by Slice 5.4's slice review.
-- **Should the close's intermediates be typed before more keys land?**
-  `PhaseContext.intermediates` is `Record<string, unknown>`
-  (`lib/pipeline/types.ts`), and each reader casts its key: the retrieval
-  outcome behind a shape check (`generation-context.ts`), the close's range
-  and ledger (`chapter-close-metadata.ts`, `chapter-close-report.ts`, and
-  `closing-chapter.ts` outside the run) and the pass's pre-run status. This
-  slice adds the ledger's writer and an id-map key, and 5.8 and 5.9 add parts
-  and clusters keys. The metadata and report phases repeat one missing-range
-  read and its failure. Canon specifies typed per-kind intermediates
-  ([`generation-pipeline.md → Run-scoped state`](../../../../generation-pipeline.md#run-scoped-state--intermediates-and-per-kind-contexts)),
-  and its "What shipped" note covers only inputs. Suggested: a typed close map
-  with accessors, landed with the ledger writer. Surfaced by Slice 5.2's
-  review; routed from triage 2026-11-07.
+None open: Implementation notes, below, record each answer.
 
 ## Implementation notes
 
-_Populated at finish: notable deviations from the plan and resolved developer decisions._
+- **A refused write in the close's group fails the close (developer
+  decision at slice planning).** The metadata phase reads the group's
+  outcome: a whole-group refusal, or any action whose outcome isn't
+  `landed`, returns a failure of kind `action-layer` naming the action
+  and its reason. That is the error a thrown rejection gave before, so
+  reversal, the failed Send and the retry at the next Send are
+  unchanged, and the orchestrator's group path stays uniform, its
+  outcomes values. The close's invariant, a row over a fully stamped
+  range, lives in the close's code and fails closed on any future noop.
+- **A tool writing several `state` sub-fields lands one `updateEntity`
+  whose `state` merges them over the current state (developer decision
+  at slice planning).** Precedence runs ahead of the group through the
+  row guard (`fieldVerdicts`), and `updateEntity`'s handler doesn't
+  change. The close holds the gate and a step's calls run in order, so
+  nothing lands between the read and the write, and the handler already
+  parses the whole state. The cost: a future tool that skips
+  `fieldVerdicts` gets no precedence, which the write-path tests pin.
+- **Tool schemas are `z.strictObject` (developer decision at slice
+  planning, re-confirmed 2026-11-08).** The SDK tells the model that no
+  other keys are allowed, for every schema, but validates with the Zod
+  schema itself, so a key the model adds anyway is stripped by a plain
+  `z.object`, changing its replayed call, kept by `z.looseObject`, and
+  refused by `z.strictObject`. Strict over loose: a misspelt optional
+  field is refused instead of quietly landing nothing. The cost is a
+  step per refusal for a model that ignores the schema.
+  `assertReplaySafe` pins it for every tool.
+- **Every close step carries the cache marker (developer decision at
+  slice planning).** A marker pays from a task's second step, and steps
+  follow at an agent's pace, not a turn's. It stays on the last system
+  block;
+  [`architecture.md → System and user halves`](../../../../architecture.md#system-and-user-halves)
+  lists the close.
+- **Only the close's intermediates have typed accessors (developer
+  decision at slice planning).** `close-intermediates.ts` holds the
+  close's keys privately: the range, the shared missing-range failure,
+  the ledger and the run's ids. The retrieval key and the pass's
+  pre-run status are untouched, and canon's per-kind contexts stay
+  unbuilt. 5.5a, 5.8 and 5.9 each add a close key, and this stops the
+  casts multiplying for about one task.
+- **The Fold measurement gates the first PR's merge, not its opening
+  (developer decision at slice planning).** A worker's device checks
+  never block it, and the Android database is synchronous, so the old
+  burst ran as one block and only a macrotask yield can split it. It
+  passed at 229 / 177 / 181 ms with no fallback taken
+  ([Write-burst measure](#write-burst-measure)).
+- **One slice, two stacked PRs by layer (developer decision at slice
+  planning).** The first holds the action layer, the verdict seam and
+  the one-group close, the second the runner. The slice doesn't split:
+  no slice waits on either half alone, since 5.5b and 5.12 need the
+  runner and the runner needs the seam, and nothing can be shed, since
+  the round-trip suite is C9 and the probe is 5.5b's measuring tool.
+- **A filtered step takes the cut-off path, and a `length` reply's
+  calls are dropped (answered in
+  [canon](../../../../generation-pipeline.md#cut-off-replies),
+  developer, 2026-11-06).** A `content-filter` stop, calls or not, is
+  retried once and then stops the task as cut off; an `other` finish
+  with no raw reason is finished; a `length` reply never reaches the
+  runner and the step is sent again. 5.4's step call does all three,
+  so the driver only reads its statuses.
+- **Retried attempts don't count against the 24-step budget.** The
+  budget counts step calls, and 5.4 retries inside one; it is a tuning
+  constant either way.
+- **Tool descriptions are code, beside their schema.** A description
+  that misstates its schema breaks the tool the way a bad contract
+  breaks a reply;
+  [`architecture.md → Structured output`](../../../../architecture.md#structured-output--the-json-contract-is-not-pack-content)
+  says so.
+- **A close shows `entry_` and `haw_` rows under `t` and `aw` handles.**
+  `registerHandle` puts them on the run's map, which now maps a handle
+  both ways, so a row shown twice keeps one handle; the walker still
+  never substitutes them, and
+  [`data-model.md → Non-LLM-facing kinds`](../../../../data-model.md#non-llm-facing-kinds-never-substituted)
+  says so.
+- **No full id reaches the model.** `withHandles` drops a `br_<uuid>:`
+  qualifier and turns any other generated id still in the text into "a
+  row", so a refusal reason or a text field that quotes one leaks
+  nothing; this keeps canon's
+  [placeholder rule](../../../../data-model.md#placeholder-substitution-llm-facing-handles)
+  for a close's own text.
+- **Where a rule refusal and a noop share a reason, the mark follows the
+  row's state.** Retiring a retired row, returning an active one and
+  promoting an active one are restated, and the same calls on a staged
+  or retired row are rule refusals; a missing faction or parent is
+  gone, and one of the wrong kind a rule refusal. A collision flag is
+  restated only when the row's live flag already names the requested
+  partner for the requested reason, and any other live flag is a rule
+  refusal, since a row holds one flag (C11 outranks the earlier choice
+  to restate any raised flag). No reason string changed, so the refusals the tests pin pass unedited.
+- **A promote's `restated` mark follows the database row only, and its
+  store guard reads the store copy of its own branch only
+  (provisional).** The store copy can be older than the database while
+  a story opens, so it proves no write landed, and the working set
+  holds one branch while deltas can target another, so another
+  branch's copy of the same id proves nothing.
+- **The later-turn reader reads only the deltas logged after the
+  anchor row's create.** A later turn's entry is created after the
+  anchor, so its deltas log after that create, which the survival
+  anchor's ordering assumption already rests on; the read is cheaper.
+- **`verdictOf` throws on a planned action that names no delta path
+  (provisional).** A pathless action would read as nothing written.
+- **A path one call landed on one row and lost on another counts as
+  landed (developer decision, 2026-11-08).** The ledger's
+  `skippedFields` leave it out, since C4 reads landed as values less
+  `skippedFields`, and the model's own list, `ToolVerdict.notWritten`,
+  names every loss, one entry per row and field. Each `PlannedAction`
+  and `LostField` carries a required `row`, the label the answer names:
+  an entity, lore, thread or happening row's id, which the answer swaps
+  for its handle, shown first with its name if the close hasn't shown
+  it, so prose naming the handle resolves; a create's table, since a minted id has no handle
+  unless the create lands; a link row's character, plus the happening
+  only when the call spans several; else the table. The label goes
+  through `withHandles` with the reason, and never a link row's own
+  `hinv_` id, which has no handle.
+- **The slice review's two decisions (developer, 2026-11-08).** R3
+  ("R3: A"): a write the common checks refuse, or whose id doesn't
+  resolve, stays in the ledger with its tool, its named rows and no
+  `values`, and 5.11 drops it once that task lands the same tool on a
+  row the two share, or that tool anywhere if it named none; the
+  shared-row match is provisional. R4 ("R4: A"): a call where nothing
+  lands keeps its first refusal's or protection's reason, and names each
+  lost field with its own in `skippedFields` and `notWritten` only when
+  they differ, since one shared reason already says what each field lost
+  to.
+- **Dispatch checks every planned action before emitting a group.** A
+  plan with a pathless action, or one whose source isn't
+  `chapter_close`, fails before any write (C1), so a tool-author bug
+  can't land half a write or read as another writer's under
+  precedence.
+- **A step's answers go back as one tool message, in the order of the
+  calls (provisional).** The SDK answers an invalid call in its own
+  message, so its merge put those first, and a template that labels
+  results by tool name alone could read a valid write as failed; the
+  model's own message stays as returned.
+- **The ledger drops a value the tool left `undefined`.** C4's `values`
+  hold only landed or proposed fields, so a field the plan left unset
+  has no value to report.
+- **A tool answer's `undefined` property goes out absent.** The task
+  loop checks an answer is JSON before sending it and leaves such a
+  property out, as `JSON.stringify` does, so a read's optional field no
+  longer fails a close.
+- **A row a task created counts as read for that task.** A landed
+  create shows the row under a handle, and the task knows its fields,
+  so a later write naming it in the same task needs no `read_row`. The
+  read set is per task and part, so the next task reads it first.
+- **The agent phase validates its whole slot table before the first
+  entry runs, and only the task loop holds the ledger writer.** Each
+  slot's type takes only the tasks canon's run order puts there, and a
+  misplaced, out-of-order or repeated task fails before any write. A
+  task's start and render, and a code step, make no tool calls, so they
+  have nothing to record.
+- **A field both a later turn and the user wrote reports the user's
+  reason.** Either protects it, and the user's standing value is the
+  more useful thing for the model to hear.
+- **`close_task_start` numbers parts as the report does:** from 1, and
+  0 for the chapter-wide tasks. `CloseProgress`'s comment said 0-based
+  and is corrected; nothing reads the field yet.
+- **A read tool records a ledger call** with an empty `why`, no `turns`
+  and `ok`, which the review's rule for an `ok` call with no field
+  drops. An invalid call records nothing, though it clears
+  `noToolCalls`.
+- **`read_row`'s fields come from the task definition**
+  (`CloseTaskDef.readFields`, keyed by row kind), so a test task's
+  fields never reach a production registry.
+- **The test stand-in close writes its create and stamps as one group
+  before its hold**, a group of one when it leaves the range open. None
+  of its seven users asserts an unstamped range during the hold.
+- **The encoder warm is an optional call.** `loadOpenStory` calls
+  `globalThis.requestIdleCallback?.()`, so a story opens under plain
+  Node, where `pnpm probe:close` opens one; `vitest.setup.ts` keeps its
+  no-op, which also keeps tests from building the encoder.
+- **`pnpm probe:close` refuses a branch that owes a pass**, giving the
+  count of its unprocessed entries, since the close would run a
+  classifier pass first. It numbers a saved step from its request, one
+  past the replies the request sends back, so an attempt the step call
+  retried saves beside its step instead of over it.
 
 ### Write-burst measure
 

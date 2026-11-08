@@ -103,7 +103,7 @@ Slice 5.5a's runner.
   no user caller sends, so no shipped caller changes. With it, a column
   the user wrote after that prose is dropped from `set`, by
   `userEditsSinceProse` and `wroteField`, and a `set` left empty by that
-  ends in `noopRefusal(USER_EDITED_SINCE_PROSE)`, which C11 maps to
+  ends in `noopRefusal(USER_EDITED_SINCE_PROSE, null)`, which C11 maps to
   `skipped`. An `ok` outcome can't name a dropped column, so a caller
   sending two columns reads ahead through the row guard first, as both
   merges do. `updateHappening` has no caller here: 5.8's
@@ -160,8 +160,9 @@ or actions tagged with the fields they write.
    else `skipped`.
 
 The ledger entry fills C4's fields with `part: 1`, keyed by delta path
-(`state.traits`, `description`), and a field lost from a call that landed
-goes in `skippedFields` with its own reason.
+(`state.traits`, `description`), and a field lost from a call that
+landed, or from one where nothing landed for more than one reason, goes
+in `skippedFields` with its own reason.
 
 ### Tools
 
@@ -229,7 +230,8 @@ safe, read and not run: per-turn stackable keys are bounded at parse
   `matchTerms`.
 - **Threads' start.** Every `pending` and `active` thread on the branch,
   the user's included, by `title`, `description` and `status`.
-- **`read_row`'s field registry,** keyed by task and row kind:
+- **`read_row`'s fields,** each task definition's `readFields`, keyed
+  by row kind:
   `description`, `traits`, `drives` and `voice` for a character;
   `description`, `standing` and `agenda` for a faction; `title`,
   `description` and `status` for a thread. Both starts show these fields,
@@ -303,7 +305,7 @@ the metadata prompt's rewording
 - The runner's parts, Slice 5.5a's: the driver, ledger, common checks,
   row guard, `fieldVerdicts`, `entityWriteAction`, id layer,
   `search_world`, and the `probe:close` and suite harnesses. This slice
-  only adds to `read_row`'s registry and the suite's table.
+  only adds its tasks' `readFields` and the suite's table.
 - Lore, Upkeep and Lifecycle ([Slice 5.8](./08-prose-tasks.md)),
   including `update_place`'s and `update_item`'s `description` and
   `mark_common_knowledge`.
@@ -489,6 +491,53 @@ literals so a test can't derive its expectation from the constant.
   returns the retry's usage; the cut attempt's survives only as
   `outputTokens` in its `recoverable` failure. Does the cost measure
   need it?
+- **Which delta path does a delete's `PlannedAction` name?** Slice
+  5.5a's `verdictOf` throws on a planned action that names none, and a
+  merge's absorbed rows, as in `merge_threads`, are deletes. The path
+  must never appear in `values`, or
+  [Slice 5.11](./11-review-window.md)'s review would render a Changes
+  `update` row for it. Inside a close a delete either lands or rejects
+  the whole group, as a missing row returns `rejected`
+  (`lib/actions/threads/register.ts`,
+  `lib/actions/happenings/register-happenings.ts`), so its path never
+  reaches `skippedFields`. Slice 5.9 needs the same spelling. Surfaced
+  by 5.5a.
+- **Does the read gate reach a row a tool only names?** It applies to
+  every id argument, so a location a character moves to or a faction a
+  character joins needs a `read_row` first, though the tool writes
+  neither. Intended, or should a reference need no read? If the gate
+  stays, every kind a tool references must be one its task's
+  `readFields` can read, or the reference can never pass. Surfaced by
+  5.5a.
+- **Does `search_world` rank an exact match first?** It ranks a partial
+  name match with an exact one, and above an exact keyword match, so
+  with a short query and more than 20 hits an exact match can fall past
+  the cap and into `omitted`. Suggested: whole-term matches first.
+  Surfaced by 5.5a.
+- **Do the tools' tests send each id argument as a handle?** They
+  should, through `resolveIdArgs`: a tool whose id argument names a row
+  it writes without reading would store a raw handle if its `ids` key
+  were misspelt. A tool declared with its shape,
+  `WriteTool<typeof SHAPE>`, fails to compile on that typo; one declared
+  as a plain `WriteTool` doesn't, so each tool should name its shape.
+  Surfaced by 5.5a.
+- **How does a merge case reach `held-in-redo` in the round-trip
+  suite?** Only when an earlier call in the same close writes the row
+  the merge absorbs, since one group's update plus cascaded delete is
+  refused by the group-conflict check first. Script the case that way;
+  5.9's merges too. Surfaced by 5.5a.
+- **What must the task render pin?** A non-empty `closeTurns`, since an
+  unset one renders an empty "# The turns". `read_turns` must mark user
+  turns through `macro_story_entry`, the model is told it may send
+  several calls per reply (the 24-step budget rewards it), and when the
+  templates ship, the paragraph "Every history marks the user's turns" in
+  [`architecture.md → System and user halves`](../../../../architecture.md#system-and-user-halves)
+  extends to them. Surfaced by 5.5a.
+- **Where does a task's start get the prose it shows?** A task's
+  `render` is synchronous, so its `start` must read any prose it shows
+  and carry it in `show`, and the task context carries no range: the
+  start gets it from the run's intermediates or by `chapterEntryIds`.
+  Surfaced by 5.5a.
 
 ## Implementation notes
 

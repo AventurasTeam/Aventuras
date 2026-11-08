@@ -71,7 +71,12 @@ slice-planning gate forces its resolution before that slice is planned.
   (`lib/actions/entities/state-patch-actions.ts`) and `updateInvolvement`
   (`lib/actions/happenings/register-involvements.ts`) do too, so a close
   tool over one of them gets a whole-group refusal where C11's table
-  reads as a per-action verdict. Raised in 5.5a's review.
+  reads as a per-action verdict. Those carry no code, and neither do
+  `deleteInvolvement`'s and `deleteAwareness`'s
+  (`register-involvements.ts`, `register-awareness.ts`); the delete
+  handlers of entities, lore, threads and happenings, and the chapters
+  update, return the coded `not-found` C11 names but doesn't list them.
+  Raised in 5.5a's review.
 - **Handlers read committed rows, so a row created earlier in the same
   group reads as missing.** `placeLocationHandler` takes no `GroupScope`
   (`lib/actions/entities/state-patch-actions.ts`), and the
@@ -144,3 +149,36 @@ slice-planning gate forces its resolution before that slice is planned.
   docs-only push whose code had passed E2E one push before. Not yet
   traced: whether the hang is in the harness ending the app after the
   rejected close, or in the app itself. Raised in 5.5a's review.
+- **`set.state` in `updateEntity` stores a patch's keys the schema
+  doesn't know, with no undo record.** `set.state` takes the raw
+  patch while `computeUndoPayload` walks only `entityStateColumnSchema`
+  (`lib/actions/entities/register.ts`), so a `state` key outside the
+  schema lands and a reversal can't remove it. When such a key is the
+  only change, nothing is written and the handler returns `no-op entity
+patch`, which 5.5a marks `restated`, so a close tool's write of it
+  reads `ok` with nothing written and leaves no trace in the review.
+  Raised in 5.5a's review.
+- **`deepEqual` treats `[]` and `{}` as equal.** It compares any two
+  objects by their keys (`lib/actions/delta/delta-encoding.ts`), so an
+  empty array and an empty object read as unchanged. Raised in 5.5a's
+  review.
+- **`IdBiMap.allocate` ignores handles `registerHandle` set.**
+  `lib/ids/bimap.ts` counts per placeholder prefix and never checks the
+  counter against a registered handle, so a registered `c5` could later
+  be handed to another id. Nothing triggers it today: the close
+  registers only `t` and `aw` handles, which aren't placeholder
+  prefixes. Raised in 5.5a's review.
+- **A landed entry ref in a close's `values` is stored raw.**
+  `ID_PATTERN` doesn't cover `entry_` ids, so the ledger keeps one as
+  its id, such as a merge's earliest `occurred_at_entry_id`, and 5.11
+  shows new values as the report holds them. Raised in 5.5a's review.
+- **The real delta action port is assembled in three places.**
+  `lib/boot/bootstrap.ts`, `vitest.setup.ts` and
+  `realDeltaActionPort()` in `lib/pipeline/__tests__/harness.ts` each
+  list every `DeltaActionPort` member, and `scripts/close-probe.ts` now
+  borrows the test harness's. The type makes a missing member a compile
+  error, so nothing drifts silently; the cost is three edits per new
+  port method. One builder in the action layer would serve all of them,
+  but `vitest.setup.ts` must not load the `@/lib/pipeline` barrel before
+  a test's mocks, and `bootstrap.ts` pulls in UI modules a script can't
+  load. Raised in 5.5a's review.

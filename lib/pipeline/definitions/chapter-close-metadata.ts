@@ -26,9 +26,17 @@ async function nextSequenceNumber(db: DbCtx['db'], branchId: string): Promise<nu
   return row?.next ?? 1
 }
 
+// A whole refusal points at no one action, so its detail names each kind the group held, counted.
+function groupKinds(actions: readonly PipelineAction[]): string {
+  const counts = new Map<string, number>()
+  for (const { kind } of actions) counts.set(kind, (counts.get(kind) ?? 0) + 1)
+  return [...counts].map(([kind, count]) => (count === 1 ? kind : `${count} ${kind}`)).join(' and ')
+}
+
 // A chapter row must sit over a fully stamped range: any action that didn't land fails the close.
 function notApplied(actions: readonly PipelineAction[], outcome: GroupOutcome): string | null {
-  if (outcome.status === 'rejected') return `chapter-close: group not applied: ${outcome.reason}`
+  if (outcome.status === 'rejected')
+    return `chapter-close: ${groupKinds(actions)} not applied: ${outcome.reason}`
   // A short answer would let the missing actions read as landed.
   if (outcome.outcomes.length !== actions.length)
     return `chapter-close: group not applied: ${outcome.outcomes.length} outcomes for ${actions.length} actions`

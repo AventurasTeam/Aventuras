@@ -159,7 +159,7 @@ The group, anchored on E under the run's `actionId`:
   built ahead of the group, since `happening_involvements` has no unique
   index. The action takes an optional `proseEntryId`, as the awareness
   upsert does, and `userDeletedRowSince` widens to its table
-  (`lib/actions/delta/user-precedence.ts:244-250`), so a carry doesn't
+  (`lib/actions/delta/user-precedence.ts:240-246`), so a carry doesn't
   bring back an involvement the user removed from the kept row after the
   cited prose.
 - One `upsertHappeningAwareness` per character, folded ahead of the
@@ -172,7 +172,12 @@ The group, anchored on E under the run's `actionId`:
 Check 5 doesn't cover the kept row's own link rows. There the group's
 per-field precedence keeps a value the user wrote, as 3e says, and the
 merge lands. A call the group's precedence stops in part returns `ok`,
-naming what didn't land (C11).
+naming what didn't land (C11). Each per-character involvement and
+awareness action carries its character as its `row`
+([5.5a → Implementation notes](./05a-task-runner.md#implementation-notes)),
+shown first with its name (`ctx.ids.show`) when the cluster didn't show
+it, so its handle has a name. The model's list then names the
+character, and the merge tests below assert it.
 
 The ledger entry lists every row. A landed merge sets `survivor` to
 `keep` and holds the landed text in `values`, which is what
@@ -249,7 +254,7 @@ lands first, 5.12 adds that arm to the suite.
 **The reset,** last in `after`, whether or not the task stopped early. A
 new `resetAwarenessRetrieval` action, registered beside
 `bumpAwarenessRetrieval` with a `LOCK_KEY` entry
-(`lib/actions/delta/apply-delta-action.ts:51`), takes the prior count on
+(`lib/actions/delta/apply-delta-action.ts:53`), takes the prior count on
 its payload and logs `{ retrievalCount: <prior> }` as its only undo key,
 which keeps it hidden from row signals and History
 (`lib/row-signals/link-owners.ts:71-77`). One delta per row with a count
@@ -367,11 +372,13 @@ Each test file runs under `pnpm vitest run --project unit <file>`.
   `skipped`. A row with only a later retrieval bump still merges, a user
   edit of the kept row's `icon` doesn't stop a merge writing only
   `description`, and a user's value on the kept row's own awareness row
-  stands while the merge lands (`close-agent/close-happenings.test.ts`).
+  stands while the merge lands, the model's list naming its character
+  (`close-agent/close-happenings.test.ts`).
 - **Merge shape:** the survivor holds the composite and the earliest
   anchor; two absorbed rows naming one character give one upsert with max,
   earliest and sum; two naming one involvement give one create; a
-  user-removed involvement stays removed; a composite past the bound
+  user-removed involvement stays removed, the model's list naming its
+  character; a composite past the bound
   lands bounded; the ledger entry of a landed merge lists every row and
   has `survivor` (`close-agent/close-happenings.test.ts`).
 - **Awareness arm:** a `chapter_close` upsert moves `learned_at_entry_id`
@@ -525,6 +532,11 @@ Each test file runs under `pnpm vitest run --project unit <file>`.
   every retry included. Recommendation: list rows under their happening,
   and past the prose tasks' read limit keep the highest `decay_resistance`
   and log how many were left out. The dataset chapter's measure tests this.
+- **How does the round-trip suite tell a code step's group from a
+  tool's?** A code step that emits a landed group (normalization, the
+  retrieval reset) is indistinguishable from a tool group to the
+  suite's abort arm. When 5.9 adds one, the case should declare its
+  tool's action kinds. Surfaced by 5.5a.
 
 ## Implementation notes
 

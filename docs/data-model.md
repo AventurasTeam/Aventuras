@@ -358,6 +358,11 @@ in storage but load-bearing for the placeholder substitution layer
 | Happening involvement          | `hinv_`   |
 | Happening awareness            | `haw_`    |
 
+A chapter close shows its model `entry_` and `haw_` rows under `t` and
+`aw` handles, which it registers on its run's map itself; the walker
+still never substitutes them
+([`generation-pipeline.md → IdBiMap`](./generation-pipeline.md#idbimap)).
+
 External IDs (provider responses from OpenAI / Anthropic / etc.)
 keep their native format unchanged — only IDs that originate inside
 the app are prefixed. Every row that is a **delta target or
@@ -417,8 +422,11 @@ layer in the generation pipeline (per
 [`generation-pipeline.md → Run-scoped state`](./generation-pipeline.md#run-scoped-state--intermediates-and-per-kind-contexts))
 walks the assembled context before each LLM call, swapping
 UUIDs for short placeholders (`c1`, `c2`, `l1`, …) drawn from a
-per-kind counter scoped to the current LLM call. The map is
-discarded at run end.
+per-kind counter scoped to the current LLM call. A chapter close is
+the exception: one map serves its whole run, so a row keeps its handle
+across the close's steps, tasks and parts
+([`generation-pipeline.md → IdBiMap`](./generation-pipeline.md#idbimap)).
+The map is discarded at run end.
 
 Vault import implications:
 

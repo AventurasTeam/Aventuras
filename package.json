@@ -51,6 +51,7 @@
     "device:push-db": "tsx scripts/dev-slot/push-db.ts",
     "mock": "tsx scripts/mock-llm/index.ts",
     "probe:classifier": "tsx scripts/classifier-parse-probe.ts",
+    "probe:close": "tsx scripts/close-probe.ts",
     "judge:classifier": "tsx scripts/classifier-judge-dump.ts",
     "dataset:actions": "tsx scripts/dataset-chapter/write-actions.ts",
     "dataset:export-seed": "tsx scripts/dataset-chapter/write-seed.ts",

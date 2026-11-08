@@ -121,7 +121,7 @@ bounds it there, `condition` by `boundStateText` and `description` by
   `updateLore`'s payload (`lib/actions/lore/register.ts:33-36`) gains an
   optional `proseEntryId`, as 5.5b gives `updateThread`: no user caller
   sends it, a column the user wrote after that prose drops from `set`,
-  and a `set` left empty ends in `noopRefusal(USER_EDITED_SINCE_PROSE)`.
+  and a `set` left empty ends in `noopRefusal(USER_EDITED_SINCE_PROSE, null)`.
 - **`update_lore`'s keywords** take `add` and `remove`, as `set_keywords`
   does, so a list the model shortened can't read as a removal. They land
   as a new `setLoreKeywords` action in the same group, `null` in
@@ -148,7 +148,7 @@ bounds it there, `condition` by `boundStateText` and `description` by
   parent chain, as a plain refusal, and leaves a retired parent to its
   builders (`lib/actions/entities/register.ts:277-283`), so this path
   never reaches the checks in `placeLocation`
-  (`lib/actions/entities/state-patch-actions.ts:480-506`). The plan runs
+  (`lib/actions/entities/state-patch-actions.ts:485-514`). The plan runs
   them ahead, from `lib/world` and `ctx.db`: the target is a live place
   and isn't retired, `placementDrop` finds no loop and no move that hides
   the story, and `top` goes only on an unplaced row. The story comes from
@@ -234,7 +234,7 @@ bounds it there, `condition` by `boundStateText` and `description` by
   `raiseRefusal`, the handler reads both rows' whole user history,
   `userEditsSince(…, 0)`, since canon's refusal has no prose bound. Run
   after it, a clear past the cited turn would stop at
-  `USER_EDITED_SINCE_PROSE` (`state-patch-actions.ts:554`), which reads as
+  `USER_EDITED_SINCE_PROSE` (`state-patch-actions.ts:562`), which reads as
   `skipped`. It refuses with an unmarked noop when a
   `user_edit` delta on either row has `nameCollisionFlag: 1` in its undo
   payload and the other row as `nameCollisionPartnerId`. That's a clear,
@@ -260,7 +260,8 @@ bounds it there, `condition` by `boundStateText` and `description` by
   place's or item's `description`, a material change and never detail the
   state slots already carry, explicit spread for `common_knowledge`, hard
   finality for a retirement.
-- **`read_row`'s registry** gains, by task and row kind. Lore: a lore
+- **`read_row`'s fields,** each task definition's `readFields`, keyed
+  by row kind. Lore: a lore
   row's four fields. Upkeep: a place's or item's `condition`,
   `description` and `keywords`, a place's placement, any entity's
   `keywords`, and a happening's `title`, `description` and
@@ -533,7 +534,7 @@ Run on the mock unless a line says otherwise. Each delta named below has
   `mark_common_knowledge`'s holds `commonKnowledge` as `1`, so neither
   landed write drops out of the review. Every other landed call's `values`
   keys are among the `changedPaths` of its delta.
-- `read_row` returns each task's registry fields. A write to an Upkeep or
+- `read_row` returns each task's `readFields`. A write to an Upkeep or
   Lifecycle starting row passes the read gate with no `read_row` call,
   since those starts show the fields the tools write. Lore's title list
   seeds nothing.
@@ -637,6 +638,17 @@ is [Slice 5.10](./10-two-starts.md)'s.
   lets a reversal or a pass's rename do this, and World's own writes clear
   such a flag. Either `brokenFlags` refuses the removal or the dormancy is
   accepted.
+- **What becomes of a turn handle the model writes into a text field?**
+  "As `t3` shows" names a turn but has no name to put in its place, so
+  `nameIdsInProse` keeps it as written, and it lands in a `why`, a body or
+  a description. That is the hazard
+  [`classifier.md → ID handling in classifier output`](../../../../memory/classifier.md#id-handling-in-classifier-output)
+  gives for rewriting the other tokens: a stored `[c1] charged` would
+  otherwise name whoever holds `c1` in a later prompt, and a later window
+  reads a stored `t3` as its own turn. A classifier pass has the same
+  exposure. Surfaced by 5.5a's review. Either the prompts tell the model
+  not to cite turns in text fields, or the token is rewritten when it
+  lands, to the turn's position or dropped.
 - **Does the slice stay under the ceiling?** It's priced at about 19 tasks,
   and the placement rules and `setLoreKeywords` weren't in that estimate.
   If its plan passes 20, parts split cleanly from the tools: the cut,

@@ -1,6 +1,7 @@
 import { Liquid } from 'liquidjs'
 
 import { registerFilters } from './filters'
+import type { MacroId } from './ids'
 import type { Pack, RenderedPrompt } from './types'
 
 export type TemplateHalf = 'system' | 'user'
@@ -66,6 +67,11 @@ export function templateGlobals(
       : new Set(engine.globalVariablesSync(engine.parseFileSync(key)))
   perKey.set(key, globals)
   return globals
+}
+
+/** The context variables a macro reads, following its includes: a macro checked on its own. */
+export function macroGlobals(engine: Liquid, macroId: MacroId): Set<string> {
+  return new Set(engine.globalVariablesSync(engine.parseFileSync(macroId)))
 }
 
 /**

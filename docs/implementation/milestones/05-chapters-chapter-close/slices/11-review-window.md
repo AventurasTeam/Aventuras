@@ -148,18 +148,26 @@ lookup of names and kinds the host passes.
   `skipped` call yields one row per field of its `values`, and an `ok`
   call one per `skippedFields` entry. A field is dropped when the same
   `task`, in any later call of the run, landed the same `tool` on the
-  same row and field. A refused call with no `values` is one row by its
-  `tool` and rows. A refused merge carries no `survivor` and is always
-  one row by its `tool` and rows, with its proposed text as the summary,
-  whatever `values` holds. A later landed merge by that task over the
-  same rows drops it. A refused `create_lore` shows its title. Its
-  minted id is one no retry shares, so it matches a later landed
-  `create_lore` by that task with the same title, trimmed and
-  case-folded (C4), and a corrected create drops out. Each row shows the
-  proposed value and its reason, the entry's own in `skippedFields` or
-  else the call's:
-  `USER_EDITED_SINCE_PROSE`, `later-turn` and `row-gone` through `t()`
-  keys, and a rule refusal's handler string as stored.
+  same row and field. A refused call with no `values`, a merge's
+  included, is one row by its `tool` and rows. It drops once the same
+  `task`, in a later call, lands the same `tool` on a row the two calls
+  share, or that `tool` at all when it has no rows. A call the common
+  checks refused records every id argument as its rows, and a landed
+  call the rows its tool picks, so one shared row is the match. Known
+  cost: a value-less slip the model never retried is hidden once that
+  task lands the same tool for something else, on one of its rows or,
+  with none, anywhere; it held nothing to apply. A refused merge carries
+  no `survivor` and is always one row by its `tool` and rows, with its
+  proposed text as the summary, whatever `values` holds. A later landed
+  merge by that task over the same rows drops it. A refused
+  `create_lore` shows its title. Its minted id is one no retry shares,
+  so it matches a later landed `create_lore` by that task with the same
+  title, trimmed and case-folded (C4), and a corrected create drops out.
+  Each row shows the proposed value and its reason, the field's own in
+  `skippedFields`, which a `rejected` or `skipped` call carries only
+  when its fields were lost for different reasons (C4), or else the
+  call's: `USER_EDITED_SINCE_PROSE`, `later-turn` and `row-gone` through
+  `t()` keys, and a rule refusal's handler string as stored.
 - **Stopped early.** One line per `stopped` entry: the task's label, its
   part unless the part is 0, and the reason, for `budget`, `window` and
   `cut-off`. `noToolCalls` adds canon's note there.
@@ -356,7 +364,15 @@ stays covered. Ids, titles and positions don't move (C8).
 - Not applied holds a refused write, drops one the same task later landed
   on that row and field, keeps one a different task landed, and lists a
   partly landed call under both sections. A known reason reads through its
-  key, and an unknown one as stored (same file).
+  key, and an unknown one as stored. A `skipped` call whose fields were
+  lost for different reasons shows each with its own (same file).
+- A refused call with no `values` drops once its task lands the same
+  tool on a shared row, or anywhere when it has no rows. An
+  `update_lore` refused for an unread row, then landed after `read_row`,
+  leaves no Not applied row. Neither does a `create_lore` refused for an
+  empty `why`, then landed, nor a refusal naming two rows, a written row
+  and a reference, followed by the same tool landing with one of them. A
+  value-less refusal the task never retried stays (same file).
 - A refused `create_lore` drops out when the same task later landed a
   `create_lore` titled `the tithe ` against its `The Tithe`, and stays when
   a different task did or the title differs. A refused merge holding
@@ -497,6 +513,21 @@ stays covered. Ids, titles and positions don't move (C8).
   Until it lands, a review edit to a chapter's title, summary or theme,
   anchored on no entry, on a chapter the rollback spares is reverted by
   its log position and counted nowhere.
+- **Are refusal reasons from the common checks stable keys?** A reason
+  from an unresolved id or a failed common check is an instruction to
+  the model, with handles, stored as the ledger call's `reason`, and C4
+  defines `reason` as a stable key or a handler's own refusal. Give them
+  stable keys (`unread`, `no-cite`, `unknown-id`), or translate them in
+  the review? Surfaced by 5.5a.
+- **Should C4's `values` and `skippedFields` carry their row?** In a
+  multi-row call, Changes' `rows[0]` rule has no row for a `values` key,
+  and Not applied's same-row match has none for a `skippedFields` entry. A path landed
+  on one row and lost on another ([5.5a's rule](./05a-task-runner.md#implementation-notes),
+  developer decision, 2026-11-08) reaches only the model, never Not
+  applied, a rule refusal included, which narrows canon's not-applied
+  rule ([`chapter-close.md → Review`](../../../../memory/chapter-close.md#review)).
+  Where nothing landed, a path lost on two rows for different reasons
+  shows only its first loss's reason. Surfaced by 5.5a.
 
 ## Implementation notes
 

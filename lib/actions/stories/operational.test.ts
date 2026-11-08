@@ -419,4 +419,18 @@ describe('token encoder warm', () => {
     expect(result).toEqual({ status: 'open-failed', kind: 'definition-corrupt' })
     expect(idle).not.toHaveBeenCalled()
   })
+
+  it('opens a story where no idle callback exists, as under plain Node', async () => {
+    const { ctx } = await setup()
+    vi.stubGlobal('requestIdleCallback', undefined)
+
+    const result = await loadOpenStory('br_1', ctx)
+
+    expect(result).toEqual({ status: 'ok', storyId: 'story_1', branchId: 'br_1' })
+    expect(tokens.warm).not.toHaveBeenCalled()
+    expect(currentStoryStore.getCurrentStory()?.storyId).toBe('story_1')
+    expect(entriesStore.getLoadedBranch()).toBe('br_1')
+    expect(entitiesStore.getLoadedBranch()).toBe('br_1')
+    expect(loreStore.getLoadedBranch()).toBe('br_1')
+  })
 })

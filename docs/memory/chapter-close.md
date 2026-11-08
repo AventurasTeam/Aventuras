@@ -96,9 +96,12 @@ MiMo and Kimi among those checked) a task's own tool list already costs
 it, which the switches below trade against.
 
 A task ends when a reply finishes normally with no tool call, and the
-next task arrives as a user message. The loop keeps the provider SDK's
-response messages as they are, so the model's reasoning goes back on
-every step with no per-model logic.
+next task arrives as a user message. The model's own message goes back
+as the provider SDK returned it, keeping its reasoning and calls, so the
+reasoning goes back on every step with no per-model logic. A step's
+answers, the SDK's and the loop's, go back as one tool message in the
+order of the calls, since a provider's chat template may label a result
+by its tool alone.
 
 Two switches on the agent profile, under a "Chapter close" label, choose
 the shape:
@@ -136,7 +139,7 @@ the review shows. Only chapters too big to send whole pay this.
 - **`search_world`** matches names and keywords and returns ids with a
   line each, for what code can't pick out, such as "the capital".
 - **`read_row`** returns the fields the task may write. Rows a task
-  starts with count as read.
+  starts with count as read, and so do rows it creates.
 - **`read_turns`** is for the two tasks without the prose.
 
 Every write carries `turns`, the cited turn ids, and `why`, one sentence
@@ -178,8 +181,10 @@ A step's calls run in order, and each lands all or nothing on failure.
 Precedence doesn't fail a call: when some of its fields are protected,
 or one of its writes is refused and another lands, what can land does,
 and the result is `ok` naming the fields that didn't, each with its
-reason. A merge is the exception and skips whole
-([3e](#3e--happenings-consolidation)).
+reason. When nothing lands, the result is `rejected` with the first
+refusal's reason, else `skipped` with the first protection's, and a
+field lost for another reason is still named with its own. A merge is
+the exception and skips whole ([3e](#3e--happenings-consolidation)).
 
 ### When a task stops
 
@@ -745,12 +750,19 @@ normalization, which is code with no `why`, and a spelling cleanup. The
 surface is
 [`chapter-timeline.md → Review window`](../ui/screens/chapter-timeline/chapter-timeline.md#review-window).
 
-A write counts as not applied when it was refused or skipped and the same
-task didn't later land the same tool on the same row and field, which
-would make it a slip the model corrected. It's judged per field, so a
-partly landed call appears under both changes and not applied. The
+A write counts as not applied when it was refused or skipped and the
+same task didn't later land the same tool on the same row and field,
+which would make it a slip the model corrected. It's judged per field,
+so a partly landed call appears under both changes and not applied. The
 report keeps the proposed value, cut to a bound, and its reason, so the
-user can apply it by hand.
+user can apply it by hand. A refusal that proposed no value, such as a
+write to a row the task hadn't read, counts as corrected once that task
+later lands the same tool on a row the two calls share, or lands that
+tool at all if the refusal named no row. That can hide a slip the model
+never retried behind a landing for something else, but such a slip held
+nothing to apply. A field one call landed on one row and lost on another
+counts as landed: it appears once, as a change, and only the model's
+tool result names the loss.
 
 ## Manual user-triggered close
 

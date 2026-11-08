@@ -273,10 +273,13 @@ caches only at an explicit breakpoint, so on an `anthropic` provider the
 call layer marks the last system block of the request as sent, the
 structured-output contract included. Anthropic ignores a marker whose
 prefix is too short, at no cost, and charges extra to write the cache,
-so the marker goes only on calls that follow each other at a turn's
-pace: the narrative call, and the piggyback fallback classifier when it
-is the turn's regular classifier because piggyback isn't firing. The
-periodic classifier, suggestion refresh and the wizard carry none.
+so the marker goes only on calls that follow each other closely: the
+narrative call, and the piggyback fallback classifier when it is the
+turn's regular classifier because piggyback isn't firing, at a turn's
+pace, and every tool step of a close's task, at an agent's, where the
+marker pays from the task's second step. The periodic classifier,
+suggestion refresh, a close's boundary and metadata calls and the
+wizard carry none.
 Wider caching is
 [parked](./parked.md#prompt-cache-optimization).
 
@@ -338,6 +341,11 @@ stable prefix. Its closing
 "Output ONLY the JSON object" line goes at the end of the user message,
 where the models that need the prompt-injection path follow a format
 instruction best.
+
+A close's tools follow the same rule. Each tool's description and Zod
+schema are code, beside the tool in `lib/pipeline/definitions/close-agent/`,
+and the provider's native tool calling sends them, so a pack edit can't
+misstate a schema the runner parses with.
 
 ### Template and macro id space
 

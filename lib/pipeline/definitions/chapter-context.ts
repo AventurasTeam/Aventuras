@@ -9,7 +9,7 @@ export type CloseRangeEntry = Readonly<
 
 type OpenThreadStatus = Extract<ThreadStatus, 'pending' | 'active'>
 
-/** The `chapter` group's context (VARIABLES.chapter). No ids, so no placeholder map. */
+/** The metadata call's `chapter` context: VARIABLES.chapter less the close-only ones. No ids. */
 export type ChapterContext = {
   entries: { position: number; kind: CloseRangeEntry['kind']; content: string }[]
   previousChapterSummary: string | null
@@ -47,4 +47,20 @@ export function buildChapterContext(input: {
       .map((t) => ({ title: oneLine(t.title), status: t.status })),
     mode: input.mode,
   }
+}
+
+/** A turn as a close task shows it (VARIABLES.chapter → closeTurns). */
+export type CloseTurn = { handle: string; kind: CloseRangeEntry['kind']; content: string }
+
+/** A close task's turns: each entry's prose under the turn handle the run registered for it. */
+export function buildCloseTurns(
+  entries: readonly CloseRangeEntry[],
+  handleOf: (entryId: string) => string | undefined,
+): CloseTurn[] {
+  return entries.map((entry) => {
+    const handle = handleOf(entry.id)
+    // A turn shown without its handle is one no write can cite.
+    if (handle === undefined) throw new Error(`close turns: entry ${entry.id} has no turn handle`)
+    return { handle, kind: entry.kind, content: promptProse(entry) }
+  })
 }

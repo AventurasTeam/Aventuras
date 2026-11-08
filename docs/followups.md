@@ -392,9 +392,9 @@ breakdown under [UX](#ux).
   The design's tests used a chapter of about 100 words, five tools and
   three tasks; a real close has 24k tokens, seven tasks and up to six
   tools a task, and only played stories have such a chapter. Play tunes
-  the task prompts on the dev model, as the classifier's were, and
-  extends the probe to a close, saving each step's messages. It also
-  measures what the design left open:
+  the task prompts on the dev model through `pnpm probe:close`, as the
+  classifier's were through its probe. It also measures what the design
+  left open:
   - whether the agent keeps to the rules at full size, and how many
     steps a task takes against its budget of 24;
   - reasoning spirals: one prompt shape sent the dev model through its

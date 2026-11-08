@@ -298,7 +298,7 @@ export async function applyDeltaActionGroupWithOutcomes(
   return actions.some((a) => isUserOriginatedSource(a.source)) ? trackUserWrite(write) : write
 }
 
-/** The group for a caller that reads only whether it landed. */
+/** The group for a caller that reads only whether the group was refused. */
 export async function applyDeltaActionGroup(
   actions: readonly PipelineAction[],
   args: GroupArgs,
@@ -322,7 +322,6 @@ async function applyDeltaActionGroupUnlocked(
   const pendingColumns = new Map<string, Set<string>>()
   const created = new Set<string>()
 
-  // A refusal aborts the group.
   const prepare = async (action: PipelineAction): Promise<Refusal | NoopOutcome | null> => {
     if (isUserOriginatedSource(action.source) && generationStore.getTxState().reversalInProgress)
       return {
