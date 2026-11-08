@@ -516,7 +516,10 @@ literals so a test can't derive its expectation from the constant.
 - **Do the tools' tests send each id argument as a handle?** They
   should, through `resolveIdArgs`: a tool whose id argument names a row
   it writes without reading would store a raw handle if its `ids` key
-  were misspelt. Surfaced by 5.5a.
+  were misspelt. A tool declared with its shape,
+  `WriteTool<typeof SHAPE>`, fails to compile on that typo; one declared
+  as a plain `WriteTool` doesn't, so each tool should name its shape.
+  Surfaced by 5.5a.
 - **How does a merge case reach `held-in-redo` in the round-trip
   suite?** Only when an earlier call in the same close writes the row
   the merge absorbs, since one group's update plus cascaded delete is

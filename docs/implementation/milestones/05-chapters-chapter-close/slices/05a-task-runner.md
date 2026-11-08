@@ -758,9 +758,11 @@ None open: Implementation notes, below, record each answer.
   so a later write naming it in the same task needs no `read_row`. The
   read set is per task and part, so the next task reads it first.
 - **The agent phase validates its whole slot table before the first
-  entry runs, and a code step's context carries no ledger.** A
-  misplaced task fails before any write; a code step makes no tool
-  calls, so it has nothing to record.
+  entry runs, and only the task loop holds the ledger writer.** Each
+  slot's type takes only the tasks canon's run order puts there, and a
+  misplaced, out-of-order or repeated task fails before any write. A
+  task's start and render, and a code step, make no tool calls, so they
+  have nothing to record.
 - **A field both a later turn and the user wrote reports the user's
   reason.** Either protects it, and the user's standing value is the
   more useful thing for the model to hear.
