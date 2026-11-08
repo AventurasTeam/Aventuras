@@ -547,7 +547,8 @@ group joins one suite that runs it through CTRL-Z, redo, abort and a
 rollback on each side of the end entry. A tool isn't done until it's in
 the suite. `merge_happenings` and `merge_threads` also assert that a
 close's CTRL-Z never reaches `held-in-redo`
-(`lib/actions/delta/redo.ts:118-126`), and the check counts link rows and
+(`snapshotForRedo` in `lib/actions/delta/redo.ts`: a held row written,
+or one a ref-clear would restore), and the check counts link rows and
 creates, not only the merged row.
 
 Both chapter delete modes join the suite with 5.12: it adds their arms
