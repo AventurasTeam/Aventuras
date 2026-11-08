@@ -6,8 +6,8 @@ describe('imageConnectionFor', () => {
   it.each([
     ['nanogpt', 'key', 'https://partner.test', { apiKey: 'key', baseUrl: 'https://partner.test' }],
     ['openrouter', 'key', 'https://stale.test', { apiKey: 'key', baseUrl: undefined }],
-    ['a1111', 'stale-key', 'http://sd.test', { apiKey: '', baseUrl: 'http://sd.test' }],
-    ['comfyui', 'stale-key', 'http://comfy.test', { apiKey: '', baseUrl: 'http://comfy.test' }],
+    ['a1111', 'key', 'http://sd.test', { apiKey: 'key', baseUrl: 'http://sd.test' }],
+    ['comfyui', 'key', 'http://comfy.test', { apiKey: 'key', baseUrl: 'http://comfy.test' }],
     [
       'openai-compatible',
       'key',
@@ -20,7 +20,7 @@ describe('imageConnectionFor', () => {
     string,
     Pick<ImageProviderConnection, 'apiKey' | 'baseUrl'>,
   ][])(
-    '%s keeps only the fields the provider has an input for',
+    '%s keeps the key and only a base URL the provider has an input for',
     (providerType, apiKey, baseUrl, expected) => {
       expect(imageConnectionFor(providerType, apiKey, baseUrl)).toMatchObject({
         providerType,

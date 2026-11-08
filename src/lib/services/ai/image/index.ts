@@ -36,7 +36,12 @@ export {
 
 export { resolveBaseUrl } from './providers/baseUrls'
 
-export { baseUrlMode, imageConnectionFor, modelListKey, takesApiKey } from './providers/connection'
+export {
+  baseUrlMode,
+  imageConnectionFor,
+  modelListKey,
+  requiresApiKey,
+} from './providers/connection'
 
 export {
   applyCapabilityOverride,

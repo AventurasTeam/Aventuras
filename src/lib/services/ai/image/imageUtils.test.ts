@@ -124,6 +124,15 @@ describe('missingCredential', () => {
     expect(missingCredential()).toBe('apiKey')
   })
 
+  it.each(['a1111', 'comfyui'] as const)(
+    'does not ask a %s profile for an api key',
+    (providerType) => {
+      state.profiles['p-local'] = { id: 'p-local', providerType, apiKey: '' }
+      setSlotIds('p-local', null, null, null)
+      expect(missingCredential()).toBeUndefined()
+    },
+  )
+
   it('is undefined once the slot is usable', () => {
     state.profiles['p-std'].apiKey = 'sk-test'
     expect(missingCredential()).toBeUndefined()

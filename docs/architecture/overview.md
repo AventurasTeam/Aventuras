@@ -697,6 +697,11 @@ local-network exception, and it does so silently. Local backends therefore make 
 through Tauri's HTTP plugin (`imageGetFetch` for discovery, `createSdkFetch` for generation), on
 every platform.
 
+Neither A1111 nor ComfyUI has working auth of its own, so a server reachable online sits behind a
+proxy or tunnel. Their profiles take an optional API key, sent as `Authorization: Bearer` on every
+request, discovery and generation alike. Basic auth (A1111's `--api-auth`) and multi-header schemes
+such as Cloudflare Access service tokens are not supported.
+
 ## Network transport
 
 Remote HTTP goes through `@tauri-apps/plugin-http`, not the WebView's `fetch`: the endpoints are
