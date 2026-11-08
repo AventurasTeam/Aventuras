@@ -6,6 +6,7 @@ import {
   MessageConversionError,
   UnsupportedFunctionalityError,
 } from 'ai'
+import { FetchError } from 'expo/src/winter/fetch/FetchErrors'
 import { describe, expect, it } from 'vitest'
 
 import {
@@ -121,6 +122,19 @@ describe('classifyProviderError', () => {
       })
     },
   )
+
+  // expo/fetch, the native transport, rejects with its own Error subclass, never a TypeError.
+  it('reads a failure expo/fetch raised as a retryable network failure', () => {
+    const error = FetchError.createFromError(new Error('Unable to resolve host "10.0.2.2"'))
+    expect(classifyProviderError(error)).toMatchObject({
+      error: {
+        tier: 'provider',
+        reason: 'network',
+        detail: 'fetch failed: Unable to resolve host "10.0.2.2"',
+      },
+      retryable: true,
+    })
+  })
 
   it('keeps a TypeError that is no fetch failure an unknown one, still retried', () => {
     expect(classifyProviderError(new TypeError('x is not a function'))).toMatchObject({

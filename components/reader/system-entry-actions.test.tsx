@@ -687,11 +687,16 @@ describe('retryPassEntry', () => {
     expect(h.notify).toHaveBeenCalledWith('Unavailable while generating.')
   })
 
-  it('names no refusal code when the pass could not start for another reason', async () => {
+  it('names no refusal code when the pass could not start for another reason, but logs it', async () => {
+    const debug = vi.spyOn(logger, 'debug').mockImplementation(() => {})
     const h = harness({ outcome: 'rejected', blockedBy: 'branch-not-open' })
     await retryPassEntry(h.deps)
     expect(h.calls).toEqual(['notify'])
     expect(h.notify).toHaveBeenCalledWith("Memory update couldn't start.")
+    expect(debug).toHaveBeenCalledWith('reader.pass_retry_rejected', {
+      blockedBy: 'branch-not-open',
+    })
+    debug.mockRestore()
   })
 
   it('leaves the entry alone when the pass is cancelled', async () => {
@@ -864,12 +869,15 @@ describe('retryCloseEntry', () => {
   })
 
   it.each([['branch-not-open'], ['reversal']])(
-    'names no refusal code, nor generation, when %s refused the close',
+    'names no refusal code, nor generation, when %s refused the close, but logs it',
     async (blockedBy) => {
+      const debug = vi.spyOn(logger, 'debug').mockImplementation(() => {})
       const h = harness({ outcome: 'rejected', blockedBy })
       await retryCloseEntry(h.deps)
       expect(h.calls).toEqual(['notify'])
       expect(h.notify).toHaveBeenCalledWith("Chapter close can't start yet.")
+      expect(debug).toHaveBeenCalledWith('reader.close_retry_rejected', { blockedBy })
+      debug.mockRestore()
     },
   )
 
