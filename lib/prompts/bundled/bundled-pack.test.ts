@@ -210,8 +210,7 @@ describe("the close's system-half macros", () => {
     expect(system).toContain('When the task is done, reply without a tool call.')
   })
 
-  // Each is a rule the tools and gates enforce; the wording is theirs (close-agent/tool.ts,
-  // common-checks.ts), so a drift in either shows here.
+  // The instructions hold the model to the rules the gates enforce, line by line.
   it.each([
     'Use the ids you are shown, exactly as written; never invent one.',
     'and "why", one sentence on what in the cited turns makes the write true.',
@@ -219,7 +218,7 @@ describe("the close's system-half macros", () => {
     'Creating a row names a new one, so it needs no read.',
     "A create's answer gives the new row's id.",
     "Don't write it again.",
-    'A reply without one ends the task',
+    'A reply without a tool call ends the task, so until it is done, every reply calls a tool.',
   ])('states: %s', (line) => {
     expect(render({ mode: 'adventure', closeTurns: TURNS })).toContain(line)
   })

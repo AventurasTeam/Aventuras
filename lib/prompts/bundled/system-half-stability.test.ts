@@ -373,6 +373,11 @@ describe('bundled system halves read only what the story fixes', () => {
     expect(unallowedSystemReads(engine, templateId, allowedPerCall(templateId))).toEqual([])
   })
 
+  // Control: only a listed close template takes the exemption; no other template does.
+  it('allows no per-call read to a template that is not a close task', () => {
+    expect(allowedPerCall(TEMPLATE_IDS.chapterMetadata)).toEqual([])
+  })
+
   // Positive control: with no close template shipped, the rule that holds one to the close-only
   // reads is shown on a probe, which may read closeTurns and nothing else per call.
   it('lets a close task template read the close-only variables and no other per-call one', () => {
