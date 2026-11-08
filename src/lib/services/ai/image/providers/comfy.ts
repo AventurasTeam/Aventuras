@@ -23,6 +23,7 @@ import { endpoint } from '#lib/utils/url.ts'
 import { resolveBaseUrl } from './baseUrls'
 import { isNewerVersion } from '#lib/utils/version.ts'
 import { imageGetFetch } from './fetchAdapter'
+import { bearerHeaders } from './discoveryFetch'
 import { parseModelList } from './parseModelList'
 import { MIN_COMFYUI_VERSION, createComfyImage, type ComfyImageOptions } from './comfyImage'
 import { createImageSdkFetch, createPollImageSdkFetch, generateSdkImage } from './sdkImage'
@@ -57,6 +58,7 @@ const serverSystems = new Map<string, Promise<ServerSystem | undefined>>()
 
 export async function fetchModelList(
   baseUrl: string | undefined,
+  apiKey: string,
   type: string,
   timeoutMs?: number,
   signal?: AbortSignal,
@@ -64,7 +66,7 @@ export async function fetchModelList(
   // Tauri HTTP, not the WebView's fetch (docs/architecture/overview.md, "Local image servers").
   const resp = await imageGetFetch(
     endpoint(resolveBaseUrl('comfyui', baseUrl), `models/${type}`),
-    undefined,
+    bearerHeaders(apiKey),
     {
       serviceId: 'comfy-models',
       timeoutMs,
@@ -83,10 +85,11 @@ export function clearComfyCacheForUrl(baseUrl: string | undefined): void {
 
 async function readServerSystem(
   baseUrl: string,
+  apiKey: string,
   timeoutMs?: number,
 ): Promise<ServerSystem | undefined> {
   try {
-    const response = await imageGetFetch(endpoint(baseUrl, 'system_stats'), undefined, {
+    const response = await imageGetFetch(endpoint(baseUrl, 'system_stats'), bearerHeaders(apiKey), {
       serviceId: 'comfy-system',
       timeoutMs: Math.min(timeoutMs ?? PROBE_TIMEOUT_MS, PROBE_TIMEOUT_MS),
     })
@@ -97,10 +100,14 @@ async function readServerSystem(
 }
 
 /** Throws for a server below the supported version; returns what it reports about itself. */
-async function checkServer(baseUrl: string, timeoutMs?: number): Promise<ServerSystem | undefined> {
+async function checkServer(
+  baseUrl: string,
+  apiKey: string,
+  timeoutMs?: number,
+): Promise<ServerSystem | undefined> {
   let pending = serverSystems.get(baseUrl)
   if (!pending) {
-    pending = readServerSystem(baseUrl, timeoutMs)
+    pending = readServerSystem(baseUrl, apiKey, timeoutMs)
     serverSystems.set(baseUrl, pending)
   }
   const system = await pending
@@ -509,7 +516,7 @@ export function createComfyProvider(config: ImageProviderConfig): ImageProvider 
 
   // Binds baseUrl + optional timeout so internal callers don't repeat them.
   const fetchModels = (type: string, signal?: AbortSignal) =>
-    fetchModelList(baseUrl, type, config.timeoutMs, signal)
+    fetchModelList(baseUrl, config.apiKey, type, config.timeoutMs, signal)
 
   async function readObjectInfo<T extends z.ZodType>(
     node: string,
@@ -517,11 +524,15 @@ export function createComfyProvider(config: ImageProviderConfig): ImageProvider 
     serviceId: string,
     signal?: AbortSignal,
   ): Promise<z.output<T>> {
-    const response = await imageGetFetch(endpoint(baseUrl, `object_info/${node}`), undefined, {
-      serviceId,
-      timeoutMs: config.timeoutMs,
-      signal,
-    })
+    const response = await imageGetFetch(
+      endpoint(baseUrl, `object_info/${node}`),
+      bearerHeaders(config.apiKey),
+      {
+        serviceId,
+        timeoutMs: config.timeoutMs,
+        signal,
+      },
+    )
     const info = schema.safeParse(await response.json())
     if (!info.success) {
       throw new Error(
@@ -549,7 +560,7 @@ export function createComfyProvider(config: ImageProviderConfig): ImageProvider 
 
       const explicitMode = providerOptions?.mode as ComfyMode | undefined
 
-      const server = await checkServer(baseUrl, config.timeoutMs)
+      const server = await checkServer(baseUrl, config.apiKey, config.timeoutMs)
 
       // -----------------------------------------------------------------------
       // Custom workflow path — only when mode is explicitly CustomWorkflow.

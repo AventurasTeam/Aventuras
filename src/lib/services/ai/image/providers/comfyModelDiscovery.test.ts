@@ -32,6 +32,18 @@ describe('ComfyUI model discovery', () => {
     await expect(createComfyProvider({ apiKey: '' }).listModels()).rejects.toThrow('ECONNREFUSED')
   })
 
+  it.each([
+    ['k', { Authorization: 'Bearer k' }],
+    ['', undefined],
+  ])('sends the key %j to the list requests as %j', async (apiKey, headers) => {
+    serveModels({ checkpoints: [], diffusion_models: [] })
+    await createComfyProvider({ apiKey }).listModels()
+
+    const calls = vi.mocked(imageGetFetch).mock.calls
+    expect(calls.length).toBeGreaterThan(0)
+    for (const [, sent] of calls) expect(sent).toEqual(headers)
+  })
+
   it('treats the optional lists as empty when they fail', async () => {
     serveModels({ checkpoints: ['sd15.safetensors'] })
     const models = await createComfyProvider({ apiKey: '' }).listModels()

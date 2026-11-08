@@ -377,7 +377,7 @@
       reads.push(
         read(
           'textEncoders',
-          () => fetchModelList(baseUrl, 'text_encoders', timeoutMs, request.signal),
+          () => fetchModelList(baseUrl, inputs.apiKey, 'text_encoders', timeoutMs, request.signal),
           (clips) => {
             availableClips = clips
             if (!profileClipName && clips.length === 1) {
@@ -388,7 +388,7 @@
         ),
         read(
           'vaes',
-          () => fetchModelList(baseUrl, 'vae', timeoutMs, request.signal),
+          () => fetchModelList(baseUrl, inputs.apiKey, 'vae', timeoutMs, request.signal),
           (vaes) => {
             availableVaes = vaes
             if (!profileVaeName && vaes.length === 1) {
