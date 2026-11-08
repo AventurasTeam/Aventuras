@@ -706,3 +706,26 @@ vitest and the probe share. It never reaches a production slot.
 ## Implementation notes
 
 _Populated at finish: notable deviations from the plan and resolved developer decisions._
+
+### Write-burst measure
+
+Bar (developer: "Q11: A"): on a release Android build with the reader
+holding its trailing 50 rows, a close on 5.2's dataset branch (133
+stamps over 23,907 tokens) has no JS-thread stall over 500 ms in its
+write burst. Timed inside the app's JS by a temporary probe, not
+committed: 16 ms ticks from the close's reserve to one macrotask after
+its `run_complete`, a stall being the longest gap between ticks, with
+the stop counted as a tick. Each close started from the dev route
+deep-linked over the open reader, its metadata call served by
+`pnpm mock`'s `chapter-metadata` lane, and a CTRL-Z of each reopened the
+chapter for the next run.
+
+| Build, Galaxy Z Fold (SM-F966B), folded, release `arm64-v8a` | Longest stall, three runs | 5.2, a delta per stamp |
+| ------------------------------------------------------------ | ------------------------- | ---------------------- |
+| The create and stamps as one group                           | 229 / 177 / 181 ms        | 1212 / 1121 ms         |
+
+Two more closes started from the reader's chapter popover, with the
+reader painting under it and the popover's close action wired by the
+same probe, stalled 161 / 171 ms, beside 5.2's in-reader 1091 / 1094 ms.
+
+Verdict: holds the bar, with no fallback taken.
