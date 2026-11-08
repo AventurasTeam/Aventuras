@@ -1425,6 +1425,21 @@ truncation it warns about.
 
 ### Memory pipeline (parked)
 
+#### A failed store refresh after a swap hides its marker from the guard
+
+`isStorySwapPending` (`lib/embedder-swap/app-deps.ts`) reads the
+in-process swap and the open story's settings as the store holds them.
+After the engine runs, `syncStoresAfterEngine` refreshes the store and
+only logs `embedder.swap_store_refresh_failed` when that fails, so a swap
+that stopped staged or paused can keep its marker in the database while
+the store's copy shows none. Send, regenerate, a close, a pass's `Retry`
+and the drain's config all read that guard, so each would run as if no
+swap owned the vector tables until the story reopens. Reasoned from the
+code, not reproduced: it needs the settings read to fail right after the
+engine wrote them. **Revisit signal:** `embedder.swap_store_refresh_failed`
+in a diagnostics export. Raised by CodeRabbit on #715; routed from the
+2026-11-07 triage pass.
+
 #### The embedder drain can put off a run's idle note
 
 `noteIdle` (`lib/embedder/drain.ts`) does nothing while a pass runs, and
