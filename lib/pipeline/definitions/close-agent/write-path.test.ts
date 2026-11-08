@@ -24,7 +24,7 @@ import { logger } from '@/lib/diagnostics'
 import { generateId } from '@/lib/ids'
 import { resetAllStores } from '@/lib/stores'
 
-import { createReadSet } from './common-checks'
+import { createReadSet, type ReadSet } from './common-checks'
 import { dispatchToolCall, type DispatchContext, type ToolAnswer } from './dispatch'
 import { entityWriteAction, fieldVerdicts, restatedFields } from './entity-write'
 import { CloseIds } from './ids'
@@ -635,8 +635,10 @@ let seeds: GuardRow[] = []
 let setup: ((ids: CloseIds, ledger: CloseLedgerWriter) => void) | undefined
 let answers: ToolAnswer[] = []
 let seenProse: string[] = []
+let seenTurns: (readonly string[])[] = []
 let ledger: CloseLedger | undefined
 let shown: CloseIds | undefined
+let readRows: ReadSet | undefined
 let scriptedPlan: ((ctx: WriteContext) => WritePlan) | undefined
 
 const setFieldsTool: WriteTool<typeof SET_FIELDS_SHAPE> = {
@@ -647,6 +649,7 @@ const setFieldsTool: WriteTool<typeof SET_FIELDS_SHAPE> = {
   ids: { id: { shape: 'single', prefixes: ['char'] } },
   plan: (args, ctx) => {
     seenProse.push(ctx.proseEntryId)
+    seenTurns.push(ctx.turns)
     return planSetFields(args, ctx)
   },
 }
@@ -853,6 +856,7 @@ async function* dispatchPhase(
   shown = ids
   const readSet = createReadSet()
   readSet.add(seeds)
+  readRows = readSet
   const ctx: DispatchContext = {
     db: phase.db,
     branchId: phase.branchId,
@@ -966,6 +970,8 @@ describe('dispatchToolCall in a close phase', () => {
     setup = undefined
     answers = []
     seenProse = []
+    seenTurns = []
+    readRows = undefined
     ledger = undefined
     shown = undefined
     scriptedPlan = undefined
@@ -1098,7 +1104,7 @@ describe('dispatchToolCall in a close phase', () => {
     expect((await row(BRAM)).description).toBe('Bram, at the toll.')
   })
 
-  it('hands the plan and the guard the latest cited turn by position, not by citation order', async () => {
+  it('hands the plan the cited turns and the guard the latest by position, not by citation order', async () => {
     const guarded: (string | null)[] = []
     configurePort({
       readRowGuard: (args, ctx) => {
@@ -1115,6 +1121,7 @@ describe('dispatchToolCall in a close phase', () => {
     ])
 
     expect(seenProse).toEqual([f.entries[4]!.id])
+    expect(seenTurns).toEqual([[f.entries[2]!.id, f.entries[4]!.id]])
     expect(guarded).toEqual([f.entries[4]!.id])
     expect(recorded()[0]!.turns).toEqual([f.entries[2]!.id, f.entries[4]!.id])
   })
@@ -1292,6 +1299,7 @@ describe('dispatchToolCall in a close phase', () => {
     const { result } = await runDispatch([
       { toolName: 'blind_set', input: { id: 'c1', description: 'A courier.', ...cite(['t7']) } },
       { toolName: 'blind_set', input: { id: 'c3', description: 'Older.', ...cite(['t7']) } },
+      { toolName: 'blind_set', input: { id: 'c1', description: 'Soaked.', ...cite(['t7']) } },
     ])
 
     expect(debug).toHaveBeenCalledWith(
@@ -1304,9 +1312,12 @@ describe('dispatchToolCall in a close phase', () => {
       expect.objectContaining({ tool: 'blind_set', kinds: ['updateEntity'], code: 'not-found' }),
       { actionId: result.actionId },
     )
+    const noops = debug.mock.calls.filter(([event]) => event === 'memory.close_tool_action_noop')
+    expect(noops).toHaveLength(1)
     expect(recorded().map((call) => [call.result, call.reason])).toEqual([
       ['ok', undefined],
       ['rejected', CLOSE_REASON.rowGone],
+      ['ok', undefined],
     ])
   })
 
@@ -1547,6 +1558,67 @@ describe('dispatchToolCall in a close phase', () => {
 
     expect(shown!.handleOf(recorded()[0]!.rows[0]!.id)).toBeUndefined()
     expect(answers[0]!.output).not.toHaveProperty('id')
+  })
+
+  it('answers a create in a group refused whole as rejected, minting nothing, and runs on', async () => {
+    const minted = generateId('lore')
+    scriptedPlan = () => ({
+      kind: 'write',
+      actions: [
+        {
+          action: {
+            kind: 'createLore',
+            source: 'chapter_close',
+            payload: {
+              entry: {
+                id: minted,
+                branchId: 'br_elsewhere',
+                title: 'The Toll',
+                body: 'Paid.',
+                injectionMode: 'auto',
+                createdAt: 1,
+                updatedAt: 1,
+              },
+            },
+          },
+          fields: ['title', 'body'],
+          row: 'lore',
+        },
+      ],
+      lost: [],
+      rows: [{ table: 'lore', id: minted, name: 'The Toll' }],
+      values: { title: 'The Toll', body: 'Paid.' },
+      createdId: minted,
+    })
+
+    await runDispatch([
+      { toolName: 'scripted', input: { rows: [], ...cite(['t7']) } },
+      { toolName: 'set_fields', input: { id: 'c1', description: 'Soaked.', ...cite(['t7']) } },
+    ])
+
+    expect(recorded()[0]).toMatchObject({
+      result: 'rejected',
+      reason: expect.stringContaining('branch mismatch'),
+    })
+    expect(answers[0]!.output).toMatchObject({ result: 'rejected' })
+    expect(answers[0]!.output).not.toHaveProperty('id')
+    expect(shown!.handleOf(minted)).toBeUndefined()
+    expect(readRows!.has({ table: 'lore', id: minted })).toBe(false)
+    expect(await f.ctx.db.select().from(lore).where(eq(lore.id, minted))).toEqual([])
+    expect(recorded()[1]).toMatchObject({ result: 'ok' })
+    expect((await row(WREN)).description).toBe('Soaked.')
+  })
+
+  // Precedence runs in fieldVerdicts, ahead of the group: a tool that skips it overwrites the user.
+  it("lands a blind write over the user's edit, the cost of keeping precedence out of the handler", async () => {
+    await editAs('user', { description: 'Edited by hand.' })
+
+    await runDispatch([
+      { toolName: 'blind_set', input: { id: 'c1', description: 'Soaked.', ...cite(['t7']) } },
+    ])
+
+    expect(recorded()[0]).toMatchObject({ result: 'ok', values: { description: 'Soaked.' } })
+    expect((await row(WREN)).description).toBe('Soaked.')
   })
 
   it.each([
