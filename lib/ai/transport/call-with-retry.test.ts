@@ -69,6 +69,8 @@ describe('callWithRetry', () => {
     expect(callFn).toHaveBeenCalledTimes(1)
     expect(res.status).toBe('failed')
     expect(res.recoverable).toHaveLength(0)
+    if (res.status === 'failed')
+      expect(res.error).toMatchObject({ tier: 'provider', reason: 'unknown' })
   })
 
   it('exhausts provider attempts then fails', async () => {
