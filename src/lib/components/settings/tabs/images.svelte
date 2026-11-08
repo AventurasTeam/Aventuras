@@ -31,6 +31,7 @@
     referenceLimit,
     suggestReferenceInputs,
     chooseModelSnapshot,
+    storedSnapshotFor,
     canonicalModelId,
     modelListKey,
     sameEndpoint,
@@ -580,10 +581,7 @@
   // inputs, otherwise the stored snapshot.
   const publishedCapabilities = $derived.by(() => {
     if (modelsSettled) return profileModels.find((m) => m.id === profileModel)
-    const stored = editingProfileId ? settings.getImageProfile(editingProfileId) : undefined
-    return stored?.modelSnapshot?.model === profileModel
-      ? stored.modelSnapshot.capabilities
-      : undefined
+    return storedSnapshotFor(storedProfile, connection, profileModel)?.capabilities
   })
   const overridden = $derived(overriddenFields(capabilityOverride, publishedCapabilities))
   const conflicts = $derived(overrideConflicts(capabilityOverride, publishedCapabilities))
