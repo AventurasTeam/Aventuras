@@ -57,7 +57,10 @@ function storedValue(row: Entity, field: string): unknown {
   return valueAt(row.state ?? emptyEntityState(row.kind), path)
 }
 
-/** The wanted delta paths whose value the row already holds: a restated field writes nothing. */
+/**
+ * The wanted delta paths whose value the row already holds. Drop them before `fieldVerdicts`: a
+ * restated protected field reads `ok`, nothing written (C11), not skipped.
+ */
 export function restatedFields(row: Entity, wanted: Readonly<Record<string, unknown>>): string[] {
   return Object.keys(wanted).filter((field) => sameValue(storedValue(row, field), wanted[field]))
 }
