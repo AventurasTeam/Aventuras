@@ -540,11 +540,12 @@ vitest and the probe share. It never reaches a production slot.
   result is `skipped` if every field was protected and `rejected` if the
   tool refused one (`write-path.test.ts`).
 - The ledger holds every dispatched call in run order and no invalid
-  one, leaves a restated field out of `values`, keys `values` by delta
-  path, gives a ref's value as a name, cuts a value to the bound, keeps
-  a refused create's minted id and records a stop; a landed call shows
-  in the next task's writes so far
-  (`lib/pipeline/definitions/close-agent/ledger.test.ts`).
+  one, keys `values` by delta path, gives a ref's value as a name, cuts
+  a value to the bound, keeps a refused create's minted id and records
+  a stop; a landed call shows in the next task's writes so far
+  (`lib/pipeline/definitions/close-agent/ledger.test.ts`). A restated
+  field stays out of `values`, from the plan or the handler
+  (`lib/pipeline/definitions/close-agent/write-path.test.ts`).
 - A row keeps its short id across two tasks and two parts; a `haw_` row
   shown in two tasks keeps one handle, which the writes-so-far line
   prints; an array of ids goes back; an unknown id or turn is
@@ -618,96 +619,150 @@ vitest and the probe share. It never reaches a production slot.
 
 ## Open questions
 
-- **What does a step with `content-filter`, or `other` with no tool
-  call, mean for a task?** Answered in
-  [canon](../../../../generation-pipeline.md#cut-off-replies) (developer,
-  2026-11-06): a filter takes the cut-off path, calls or not, retried once
-  under a fresh bound
-  ([`chapter-close.md`](../../../../memory/chapter-close.md#when-a-task-stops))
-  and returned as `stopped`, `reason: 'cut-off'`, with the second stop's
-  cause, so C4 needs no reason of its own; `other` with no raw reason is
-  finished.
-- **Does a `length` reply holding whole tool calls get discarded?**
-  Answered in [canon](../../../../generation-pipeline.md#cut-off-replies)
-  (developer, 2026-11-06): yes. Its calls never reach the runner, and the
-  step is sent again.
-- **Do retried attempts count against the 24?** Starting answer: no. 5.4
-  retries inside one step call and the budget counts steps. It's a
-  tuning constant either way.
-- **Are tool descriptions pack content or code?** Canon keeps a reply's
-  JSON contract out of the pack and is silent on tools. Starting answer:
-  code, beside the schema, since a description that misstates a schema
-  breaks the tool the way a bad contract breaks a reply.
-- **Are `t` and `aw` handles the right way to show `entry_` and `haw_`
-  rows?** `allocate` throws on both (`bimap.ts:8-11`), and
-  `registerHandle` takes any id, so this doc uses it and 5.9's `set_pin`
-  follows. Canon's
-  [never-substituted table](../../../../data-model.md#non-llm-facing-kinds-never-substituted)
-  still holds for the walker, but a close now shows these rows under a
-  handle: does it want a line saying so?
-- **Is `updateEntity` with a merged `state` the right action for a tool
-  writing several sub-fields?** It's the only action that takes several
-  today, and it parses the state, which the narrow path doesn't. The
-  cost is that precedence for `state` runs ahead of the group, through
-  the guard, instead of in a handler. The alternative is a narrow action
-  taking a sub-field map. This slice owns the answer and settles it at
-  planning, since the two functions ship here and 5.5b's tool table
-  rests on them.
-- **Should a close's steps carry the cache marker?**
-  [Slice 5.4](./04-tool-step.md) leaves this here. Anthropic renders
-  `tools`, then `system`, then `messages` (read 2026-11-01 in the Claude
-  API reference, not tested by a request), so under `separate` the
-  chapter's cache holds across a task's own steps and not across tasks,
-  wherever the marker sits. A cache write costs about 1.25 times input
-  and a read about 0.1, so a marker pays from a task's second step and
-  loses a quarter on a task of one. Recommendation: pass it, and add the
-  close to the marker's list in
-  [`architecture.md → System and user halves`](../../../../architecture.md#system-and-user-halves).
-  Until planning says so the driver passes none, as that list has it.
-  Nothing changes shape either way.
-- **How does `pnpm probe:close` open a story under `tsx`?**
-  `loadAndPublish` calls `requestIdleCallback` for the encoder warm with
-  no fallback
-  ([Slice 5.1 → Implementation notes](./01-token-measure.md#implementation-notes)),
-  and plain Node has no such global, so `loadOpenStory` throws there,
-  after `publish`. Only `vitest.setup.ts` supplies it outside the app.
-  Starting answer: the script sets the same no-op before its first open.
-  The alternative is an optional call at the site, which would also let
-  the setup's no-op go.
-- **How does a refused action in the close's group fail the close?**
-  Today a refused `createChapter` or stamp goes through `delta_emitted`
-  and throws (`orchestrator.ts:202`), which fails the close and reverses
-  it. A group's plain refusal comes back as a value with nothing written
-  and leaves the run going, and a noop comes back per action while the
-  rest lands (this slice's first two criteria). So once the metadata
-  phase emits the create and stamps as one group, a refusal there fails
-  nothing by itself: the agent phase runs with no chapter row until the
-  report's `updateChapter` refuses, and a stamp that noops would leave a
-  row over a partial range, though neither handler returns a noop today.
-  Which outcomes fail the close, and with what error, is open. Surfaced
-  by Slice 5.2's review.
-- **What does a tool schema do with a key the model added?** A plain
-  `z.object` drops unknown keys, and the SDK replays the parsed value
-  (`ai`, `parse-tool-call.ts`), so a key the model wrote vanishes from
-  its own call on the next step: the change the schema contract above
-  forbids. `z.strictObject` refuses the call, so the model hears it and
-  writes it again; `z.looseObject` keeps the key and replays the call
-  as written. The deep-equal criterion catches neither unless a sample
-  carries an extra key. Surfaced by Slice 5.4's slice review.
-- **Should the close's intermediates be typed before more keys land?**
-  `PhaseContext.intermediates` is `Record<string, unknown>`
-  (`lib/pipeline/types.ts`), and each reader casts its key: the retrieval
-  outcome behind a shape check (`generation-context.ts`), the close's range
-  and ledger (`chapter-close-metadata.ts`, `chapter-close-report.ts`, and
-  `closing-chapter.ts` outside the run) and the pass's pre-run status. This
-  slice adds the ledger's writer and an id-map key, and 5.8 and 5.9 add parts
-  and clusters keys. The metadata and report phases repeat one missing-range
-  read and its failure. Canon specifies typed per-kind intermediates
-  ([`generation-pipeline.md → Run-scoped state`](../../../../generation-pipeline.md#run-scoped-state--intermediates-and-per-kind-contexts)),
-  and its "What shipped" note covers only inputs. Suggested: a typed close map
-  with accessors, landed with the ledger writer. Surfaced by Slice 5.2's
-  review; routed from triage 2026-11-07.
+None open: slice planning answered each (Implementation notes, below).
 
 ## Implementation notes
 
-_Populated at finish: notable deviations from the plan and resolved developer decisions._
+- **A refused write in the close's group fails the close (developer
+  decision at slice planning).** The metadata phase reads the group's
+  outcome: a whole-group refusal, or any action whose outcome isn't
+  `landed`, returns a failure of kind `action-layer` naming the action
+  and its reason. That is the error a thrown rejection gave before, so
+  reversal, the failed Send and the retry at the next Send are
+  unchanged, and the orchestrator's group path stays uniform, its
+  outcomes values. The close's invariant, a row over a fully stamped
+  range, lives in the close's code and fails closed on any future noop.
+- **A tool writing several `state` sub-fields lands one `updateEntity`
+  whose `state` merges them over the current state (developer decision
+  at slice planning).** Precedence runs ahead of the group through the
+  row guard (`fieldVerdicts`), and `updateEntity`'s handler doesn't
+  change. The close holds the gate and a step's calls run in order, so
+  nothing lands between the read and the write, and the handler already
+  parses the whole state. The cost: a future tool that skips
+  `fieldVerdicts` gets no precedence, which the write-path tests pin.
+- **Tool schemas are `z.strictObject` (developer decision at slice
+  planning, re-confirmed 2026-11-08).** The SDK tells the model that no
+  other keys are allowed, for every schema, but validates with the Zod
+  schema itself, so a key the model adds anyway is stripped by a plain
+  `z.object`, changing its replayed call, kept by `z.looseObject`, and
+  refused by `z.strictObject`. Strict over loose: a misspelt optional
+  field is refused instead of quietly landing nothing. The cost is a
+  step per refusal for a model that ignores the schema.
+  `assertReplaySafe` pins it for every tool.
+- **Every close step carries the cache marker (developer decision at
+  slice planning).** A marker pays from a task's second step, and steps
+  follow at an agent's pace, not a turn's. It stays on the last system
+  block;
+  [`architecture.md → System and user halves`](../../../../architecture.md#system-and-user-halves)
+  lists the close.
+- **Only the close's intermediates have typed accessors (developer
+  decision at slice planning).** `close-intermediates.ts` holds the
+  close's keys privately: the range, the shared missing-range failure,
+  the ledger and the run's ids. The retrieval key and the pass's
+  pre-run status are untouched, and canon's per-kind contexts stay
+  unbuilt. 5.5a, 5.8 and 5.9 each add a close key, and this stops the
+  casts multiplying for about one task.
+- **The Fold measurement gated the first PR's merge, not the PR
+  (developer decision at slice planning).** A worker's device checks
+  never block it, and the Android database is synchronous, so the old
+  burst ran as one block and only a macrotask yield can split it.
+- **One slice, two stacked PRs by layer (developer decision at slice
+  planning).** The first holds the action layer, the verdict seam and
+  the one-group close, the second the runner. The slice doesn't split:
+  no slice waits on either half alone, since 5.5b and 5.12 need the
+  runner and the runner needs the seam, and nothing can be shed, since
+  the round-trip suite is C9 and the probe is 5.5b's measuring tool.
+- **A filtered step takes the cut-off path, and a `length` reply's
+  calls are dropped (answered in
+  [canon](../../../../generation-pipeline.md#cut-off-replies),
+  developer, 2026-11-06).** A `content-filter` stop, calls or not, is
+  retried once and then stops the task as cut off; an `other` finish
+  with no raw reason is finished; a `length` reply never reaches the
+  runner and the step is sent again. 5.4's step call does all three,
+  so the driver only reads its statuses.
+- **Retried attempts don't count against the 24-step budget.** The
+  budget counts step calls, and 5.4 retries inside one; it is a tuning
+  constant either way.
+- **Tool descriptions are code, beside their schema.** A description
+  that misstates its schema breaks the tool the way a bad contract
+  breaks a reply;
+  [`architecture.md → Structured output`](../../../../architecture.md#structured-output--the-json-contract-is-not-pack-content)
+  says so.
+- **A close shows `entry_` and `haw_` rows under `t` and `aw` handles.**
+  `registerHandle` puts them on the run's map, which now maps a handle
+  both ways, so a row shown twice keeps one handle; the walker still
+  never substitutes them, and
+  [`data-model.md → Non-LLM-facing kinds`](../../../../data-model.md#non-llm-facing-kinds-never-substituted)
+  says so.
+- **No full id reaches the model.** `withHandles` drops a `br_<uuid>:`
+  qualifier and turns any other generated id still in the text into "a
+  row", so a refusal reason or a text field that quotes one leaks
+  nothing; this keeps canon's
+  [placeholder rule](../../../../data-model.md#placeholder-substitution-llm-facing-handles)
+  for a close's own text.
+- **Where a rule refusal and a noop share a reason, the mark follows the
+  row's state.** Retiring a retired row, returning an active one and
+  promoting an active one are restated, and the same calls on a staged
+  or retired row are rule refusals; a missing faction or parent is
+  gone, and one of the wrong kind a rule refusal. A collision flag is
+  restated only when the row's live flag already names the requested
+  partner for the requested reason, and any other live flag is a rule
+  refusal, since a row holds one flag (C11 outranks the earlier choice
+  to restate any raised flag). No reason string changed, so the refusals tests pin pass unedited.
+- **A promote's `restated` mark follows the database row only, and its
+  store guard reads the store copy of its own branch only
+  (provisional).** The store copy can be older than the database while
+  a story opens, so it proves no write landed, and the working set
+  holds one branch while deltas can target another, so another
+  branch's copy of the same id proves nothing.
+- **The later-turn reader reads only the deltas logged after the
+  anchor row's create.** A later turn's entry is created after the
+  anchor, so its deltas log after that create, which the survival
+  anchor's ordering assumption already rests on; the read is cheaper.
+- **`verdictOf` throws on a planned action that names no delta path
+  (provisional) and on a path both landed and lost in one call
+  (pending a developer decision).** A pathless action would read as
+  nothing written, and C4 reads `landed` as values less
+  `skippedFields`, so a path in both would hide one or the other.
+- **Dispatch checks every planned action before emitting a group.** A
+  plan with a pathless action, or one whose source isn't
+  `chapter_close`, fails before any write (C1), so a tool-author bug
+  can't land half a write or read as another writer's under
+  precedence.
+- **A step's answers go back as one tool message, in the order of the
+  calls (provisional).** The SDK answers an invalid call in its own
+  message, so its merge put those first, and a template that labels
+  results by tool name alone could read a valid write as failed; the
+  model's own message stays as returned.
+- **The ledger drops a value the tool left `undefined`.** C4's `values`
+  hold only landed or proposed fields, and JSON leaves such a property
+  out, so a read's optional field no longer fails a close.
+- **The agent phase validates its whole slot table before the first
+  entry runs, and a code step's context carries no ledger.** A
+  misplaced task fails before any write; a code step makes no tool
+  calls, so it has nothing to record.
+- **A field both a later turn and the user wrote reports the user's
+  reason.** Either protects it, and the user's standing value is the
+  more useful thing for the model to hear.
+- **`close_task_start` numbers parts as the report does:** from 1, and
+  0 for the chapter-wide tasks. `CloseProgress`'s comment said 0-based
+  and is corrected; nothing reads the field yet.
+- **A read tool records a ledger call** with an empty `why`, no `turns`
+  and `ok`, which the review's rule for an `ok` call with no field
+  drops. An invalid call records nothing, though it clears
+  `noToolCalls`.
+- **`read_row`'s fields come from the task definition**
+  (`CloseTaskDef.readFields`, keyed by row kind), so a test task's
+  fields never reach a production registry.
+- **The test stand-in close writes its create and stamps as one group
+  before its hold**, a group of one when it leaves the range open. None
+  of its seven users asserts an unstamped range during the hold.
+- **The encoder warm is an optional call.** `loadOpenStory` calls
+  `globalThis.requestIdleCallback?.()`, so a story opens under plain
+  Node, where `pnpm probe:close` opens one; `vitest.setup.ts` keeps its
+  no-op, which also keeps tests from building the encoder.
+- **`pnpm probe:close` refuses a branch that owes a pass**, naming its
+  unprocessed entries, since the close would run a classifier pass
+  first. It numbers a saved step from its request, one past the replies
+  the request sends back, so an attempt the step call retried saves
+  beside its step instead of over it.
