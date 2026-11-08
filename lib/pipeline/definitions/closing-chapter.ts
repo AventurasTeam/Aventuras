@@ -1,7 +1,7 @@
 import { CHAPTER_CLOSE_KIND } from '@/lib/chapters'
 import type { TxState } from '@/lib/stores'
 
-import { CLOSE_RANGE_INTERMEDIATE_KEY, type CloseRange } from './intermediates'
+import { closeRangeOf } from './close-intermediates'
 
 /**
  * The id of the chapter a close running on `branchId` is writing, from the range its boundary
@@ -10,8 +10,7 @@ import { CLOSE_RANGE_INTERMEDIATE_KEY, type CloseRange } from './intermediates'
 export function closingChapterId(txState: TxState, branchId: string): string | null {
   for (const run of txState.runs.values()) {
     if (run.kind !== CHAPTER_CLOSE_KIND || run.branchId !== branchId) continue
-    const range = run.intermediates[CLOSE_RANGE_INTERMEDIATE_KEY] as CloseRange | undefined
-    return range?.chapterId ?? null
+    return closeRangeOf(run.intermediates)?.chapterId ?? null
   }
   return null
 }

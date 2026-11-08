@@ -1,11 +1,7 @@
 import type { CloseReport } from '@/lib/db'
 
-import {
-  CLOSE_LEDGER_INTERMEDIATE_KEY,
-  CLOSE_RANGE_INTERMEDIATE_KEY,
-  type CloseLedger,
-  type CloseRange,
-} from './intermediates'
+import { closeLedgerOf, requireCloseRange } from './close-intermediates'
+import type { CloseLedger } from './intermediates'
 import type { PhaseContext, PhaseEmittedEvent, PhaseResult } from '../types'
 
 /** C4: a close with no ledger reads as one whose tasks called no tool. */
@@ -18,17 +14,10 @@ export function closeReportOf(ledger: CloseLedger | undefined, actionId: string)
 export async function* closeReportPhase(
   ctx: PhaseContext,
 ): AsyncGenerator<PhaseEmittedEvent, PhaseResult> {
-  const range = ctx.intermediates[CLOSE_RANGE_INTERMEDIATE_KEY] as CloseRange | undefined
-  if (!range)
-    return {
-      status: 'failed',
-      error: { kind: 'orchestrator', detail: 'chapter-close: no close range' },
-    }
+  const range = requireCloseRange(ctx)
+  if ('status' in range) return range
   if (ctx.abortSignal.aborted) return { status: 'aborted' }
-  const closeReport = closeReportOf(
-    ctx.intermediates[CLOSE_LEDGER_INTERMEDIATE_KEY] as CloseLedger | undefined,
-    ctx.actionId,
-  )
+  const closeReport = closeReportOf(closeLedgerOf(ctx.intermediates), ctx.actionId)
   yield {
     type: 'delta_emitted',
     action: {

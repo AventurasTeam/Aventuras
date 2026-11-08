@@ -6,7 +6,7 @@ import type { ChapterSaveResult } from '@/lib/actions'
 import { CHAPTER_CLOSE_KIND, type ChapterDraftRow } from '@/lib/chapters'
 import { PERIODIC_CLASSIFIER_KIND } from '@/lib/classifier'
 import { PER_TURN_KIND } from '@/lib/pipeline'
-import { CLOSE_RANGE_INTERMEDIATE_KEY } from '@/lib/pipeline/definitions/intermediates'
+import { setCloseRange } from '@/lib/pipeline/definitions/close-intermediates'
 import { generationStore, type RunState, type StoreChapter } from '@/lib/stores'
 
 import { useTimelineEditing, type TimelineEditingOptions } from './use-timeline-editing'
@@ -104,11 +104,11 @@ function runAlready(kind: string, interruptible: RunState['interruptible'] = nul
 /** The close's boundary phase: it parks the new chapter's id, then the next phase starts. */
 function parkRange(close: RunState, chapterId: string) {
   act(() => {
-    close.intermediates[CLOSE_RANGE_INTERMEDIATE_KEY] = {
+    setCloseRange(close.intermediates, {
       chapterId,
       startEntryId: 'entry_3_start',
       endEntryId: 'entry_3_end',
-    }
+    })
     generationStore.setCurrentPhase(close.runId, 'metadata')
   })
 }

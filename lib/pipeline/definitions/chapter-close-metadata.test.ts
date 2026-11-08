@@ -7,7 +7,8 @@ import { createPhaseDb, type PhaseDb } from './__tests__/phase-db'
 import { closeMetadataPhase, closeSeriesThrough } from './chapter-close-metadata'
 import type { MetadataCallOutcome, requestChapterMetadata } from './chapter-close-metadata-call'
 import { normalizeChapterMetadata } from './chapter-metadata-schema'
-import { CLOSE_RANGE_INTERMEDIATE_KEY, type CloseRange } from './intermediates'
+import { setCloseRange } from './close-intermediates'
+import type { CloseRange } from './intermediates'
 import type { PhaseContext, PhaseEmittedEvent, PipelineError } from '../types'
 
 const { requestMock } = vi.hoisted(() => ({
@@ -96,10 +97,12 @@ function insertChapter(id: string, branchId: string, sequenceNumber: number): vo
 
 function phaseCtx(opts: { range?: CloseRange | null; signal?: AbortSignal } = {}): PhaseContext {
   const range = opts.range === undefined ? RANGE : opts.range
+  const intermediates: Record<string, unknown> = {}
+  if (range) setCloseRange(intermediates, range)
   return {
     actionId: 'act_close',
     abortSignal: opts.signal ?? new AbortController().signal,
-    intermediates: range ? { [CLOSE_RANGE_INTERMEDIATE_KEY]: range } : {},
+    intermediates,
     log: makeLogger('act_close'),
     db: phaseDb.db,
     runInTransaction: phaseDb.runInTransaction,

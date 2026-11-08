@@ -3,7 +3,8 @@ import { eq, sql } from 'drizzle-orm'
 import { chapters, openRegionSeries, type DbCtx, type OpenRegionRow } from '@/lib/db'
 
 import { requestChapterMetadata } from './chapter-close-metadata-call'
-import { CLOSE_PHASE, CLOSE_RANGE_INTERMEDIATE_KEY, type CloseRange } from './intermediates'
+import { requireCloseRange } from './close-intermediates'
+import { CLOSE_PHASE } from './intermediates'
 import type { PhaseContext, PhaseEmittedEvent, PhaseResult } from '../types'
 
 /** The open-region rows from the first through `endEntryId`; null when the end isn't among them. */
@@ -30,12 +31,8 @@ async function nextSequenceNumber(db: DbCtx['db'], branchId: string): Promise<nu
 export async function* closeMetadataPhase(
   ctx: PhaseContext,
 ): AsyncGenerator<PhaseEmittedEvent, PhaseResult> {
-  const range = ctx.intermediates[CLOSE_RANGE_INTERMEDIATE_KEY] as CloseRange | undefined
-  if (!range)
-    return {
-      status: 'failed',
-      error: { kind: 'orchestrator', detail: 'chapter-close: no close range' },
-    }
+  const range = requireCloseRange(ctx)
+  if ('status' in range) return range
   const call = yield* requestChapterMetadata(ctx, range)
   if (call.status === 'aborted') return { status: 'aborted' }
   if (call.status === 'failed') return { status: 'failed', error: call.error }
