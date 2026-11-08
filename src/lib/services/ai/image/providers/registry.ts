@@ -153,7 +153,7 @@ interface ModelCache {
   timestamp: number
 }
 
-const CACHE_TTL = 15 * 60 * 1000 // 15 minutes
+const CACHE_TTL = 12 * 60 * 60 * 1000
 const modelCaches = new Map<string, ModelCache>()
 
 function getCacheKey(providerType: ImageProviderType, apiKey?: string, baseUrl?: string): string {
