@@ -525,6 +525,11 @@ Each test file runs under `pnpm vitest run --project unit <file>`.
   every retry included. Recommendation: list rows under their happening,
   and past the prose tasks' read limit keep the highest `decay_resistance`
   and log how many were left out. The dataset chapter's measure tests this.
+- **How does the round-trip suite tell a code step's group from a
+  tool's?** A code step that emits a landed group (normalization, the
+  retrieval reset) is indistinguishable from a tool group to the
+  suite's abort arm. When 5.9 adds one, the case should declare its
+  tool's action kinds. Surfaced by 5.5a.
 
 ## Implementation notes
 

@@ -497,6 +497,12 @@ stays covered. Ids, titles and positions don't move (C8).
   Until it lands, a review edit to a chapter's title, summary or theme,
   anchored on no entry, on a chapter the rollback spares is reverted by
   its log position and counted nowhere.
+- **Are refusal reasons from the common checks stable keys?** A reason
+  from an unresolved id or a failed common check is an instruction to
+  the model, with handles, stored as the ledger call's `reason`, and C4
+  defines `reason` as a stable key or a handler's own refusal. Give them
+  stable keys (`unread`, `no-cite`, `unknown-id`), or translate them in
+  the review? Surfaced by 5.5a.
 
 ## Implementation notes
 

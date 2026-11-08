@@ -500,6 +500,32 @@ literals so a test can't derive its expectation from the constant.
   `lib/actions/happenings/register-happenings.ts`), so its path never
   reaches `skippedFields`. Slice 5.9 needs the same spelling. Surfaced
   by 5.5a.
+- **Does the read gate reach a row a tool only names?** It applies to
+  every id argument, so a location a character moves to or a faction a
+  character joins needs a `read_row` first, though the tool writes
+  neither. Intended, or should a reference need no read? Surfaced by
+  5.5a.
+- **Does `search_world` rank an exact match first?** It ranks a partial
+  name match with an exact one, and above an exact keyword match, so
+  with a short query and more than 20 hits an exact match can fall past
+  the cap and into `omitted`. Suggested: whole-term matches first.
+  Surfaced by 5.5a.
+- **Do the tools' tests send each id argument as a handle?** They
+  should, through `resolveIdArgs`: a tool whose id argument names a row
+  it writes without reading would store a raw handle if its `ids` key
+  were misspelt. Surfaced by 5.5a.
+- **How does a merge case reach `held-in-redo` in the round-trip
+  suite?** Only when an earlier call in the same close writes the row
+  the merge absorbs, since one group's update plus cascaded delete is
+  refused by the group-conflict check first. Script the case that way;
+  5.9's merges too. Surfaced by 5.5a.
+- **What must the task render pin?** A non-empty `closeTurns`, since an
+  unset one renders an empty "# The turns". `read_turns` must mark user
+  turns through `macro_story_entry`, the model is told it may send
+  several calls per reply (the 24-step budget rewards it), and when the
+  templates ship, the paragraph "Every history marks the user's turns" in
+  [`architecture.md → System and user halves`](../../../../architecture.md#system-and-user-halves)
+  extends to them. Surfaced by 5.5a.
 
 ## Implementation notes
 

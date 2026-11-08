@@ -147,3 +147,16 @@ slice-planning gate forces its resolution before that slice is planned.
   docs-only push whose code had passed E2E one push before. Not yet
   traced: whether the hang is in the harness ending the app after the
   rejected close, or in the app itself. Raised in 5.5a's review.
+- **`set.state` in `updateEntity` stores a patch's keys the schema
+  doesn't know, with no undo record.** `set.state` takes the raw
+  patch while `computeUndoPayload` walks only `entityStateColumnSchema`
+  (`lib/actions/entities/register.ts`), so a `state` key outside the
+  schema lands and a reversal can't remove it. Raised in 5.5a's review.
+- **`deepEqual` treats `[]` and `{}` as equal.** It compares any two
+  objects by their keys (`lib/actions/delta/delta-encoding.ts`), so an
+  empty array and an empty object read as unchanged. Raised in 5.5a's
+  review.
+- **A landed entry ref in a close's `values` is stored raw.**
+  `ID_PATTERN` doesn't cover `entry_` ids, so the ledger keeps one as
+  its id, such as a merge's earliest `occurred_at_entry_id`, and 5.11
+  shows new values as the report holds them. Raised in 5.5a's review.
