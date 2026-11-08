@@ -45,6 +45,7 @@ import {
   pipelineEventBus,
   readClassifierStatus,
   unprocessedEntryCount,
+  type PipelineError,
   type RejectedStart,
   type TxResult,
 } from '@/lib/pipeline'
@@ -103,13 +104,23 @@ function copyDatabase(source: string, target: string): void {
 }
 
 type StepCapture = {
+  phase: string | null
+  /** The last task started in `phase`: a code step and a later phase send no start of their own. */
   task: { task: CloseTask; part: number } | null
   dir: string | null
   steps: Map<string, number>
   written: Set<string>
+  retries: string[]
 }
 
-const capture: StepCapture = { task: null, dir: null, steps: new Map(), written: new Set() }
+const capture: StepCapture = {
+  phase: null,
+  task: null,
+  dir: null,
+  steps: new Map(),
+  written: new Set(),
+  retries: [],
+}
 
 function parseJson(text: string): unknown {
   try {
@@ -234,6 +245,18 @@ async function readReport(ctx: DbCtx, endEntryId: string): Promise<CloseReport |
   return row?.report == null ? null : closeReportSchema.parse(row.report)
 }
 
+function errorLine(error: PipelineError): string {
+  const reason = 'reason' in error ? ` (${String(error.reason)})` : ''
+  return `${error.kind}${reason}: ${pipelineErrorDetail(error) ?? JSON.stringify(error)}`
+}
+
+// A task names only what the failure came after: it may have ended, and a code step run since.
+function failedWhere(): string {
+  const phase = capture.phase === null ? '' : ` in the ${capture.phase} phase`
+  const task = capture.task === null ? '' : `, after ${callKey(capture.task)} started`
+  return `${phase}${task}`
+}
+
 function printRun(
   k: number,
   result: TxResult | RejectedStart,
@@ -247,12 +270,9 @@ function printRun(
   console.log(
     `[probe:close] run ${k}: ${result.outcome} in ${(ms / 1000).toFixed(1)} s, action ${result.actionId}`,
   )
-  if (result.outcome === 'failed') {
-    const during = capture.task === null ? '' : ` during ${callKey(capture.task)}`
-    console.log(
-      `[probe:close]   ${result.error.kind}${during}: ${pipelineErrorDetail(result.error) ?? JSON.stringify(result.error)}`,
-    )
-  }
+  if (result.outcome === 'failed')
+    console.log(`[probe:close]   failed${failedWhere()}: ${errorLine(result.error)}`)
+  for (const retry of capture.retries) console.log(`[probe:close]   retried ${retry}`)
   const calls = report?.calls ?? []
   for (const key of new Set([...capture.steps.keys(), ...calls.map(callKey)])) {
     const own = calls.filter((call) => callKey(call) === key)
@@ -289,12 +309,24 @@ function clearLoreMgmtOverride(sqlite: DatabaseSync): void {
 async function probeRun(k: number, source: string, server: Server): Promise<boolean> {
   const scratch = mkdtempSync(join(tmpdir(), 'aventuras-close-probe-'))
   capture.dir = OUT === undefined ? null : join(resolve(OUT), `run${k}`)
+  capture.phase = null
   capture.task = null
   capture.steps.clear()
   capture.written.clear()
-  const unsubscribe = pipelineEventBus.subscribe('close_task_start', (event) => {
-    capture.task = { task: event.task, part: event.part }
-  })
+  capture.retries = []
+  const unsubscribe = [
+    pipelineEventBus.subscribe('phase_start', (event) => {
+      capture.phase = event.name
+      capture.task = null
+    }),
+    pipelineEventBus.subscribe('close_task_start', (event) => {
+      capture.task = { task: event.task, part: event.part }
+    }),
+    pipelineEventBus.subscribe('recoverable_error', (event) => {
+      const at = capture.task === null ? (capture.phase ?? 'start') : callKey(capture.task)
+      capture.retries.push(`${at}: ${errorLine(event.error)}`)
+    }),
+  ]
   let sqlite: DatabaseSync | null = null
   try {
     const copy = join(scratch, 'copy.db')
@@ -328,7 +360,7 @@ async function probeRun(k: number, source: string, server: Server): Promise<bool
     printRun(k, result, ms, report)
     return completed
   } finally {
-    unsubscribe()
+    for (const stop of unsubscribe) stop()
     sqlite?.close()
     rmSync(scratch, { recursive: true, force: true })
   }
