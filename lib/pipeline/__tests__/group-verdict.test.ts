@@ -227,6 +227,24 @@ describe('a delta_emitted yield', () => {
   })
 })
 
+describe('a yield after a group', () => {
+  it('evaluates to undefined, not the group outcome before it', async () => {
+    const seen: (GroupOutcome | undefined)[] = []
+    define('group-then-single', async function* () {
+      yield* emitDeltaGroup([createHappening('hap_a')], 'entry_end')
+      seen.push(
+        yield { type: 'delta_emitted', action: createHappening('hap_b'), entryId: 'entry_end' },
+      )
+      return { status: 'completed' }
+    })
+
+    const run = expectRan(await runPipeline('group-then-single', h.ctx))
+
+    expect(run.outcome).toBe('completed')
+    expect(seen).toEqual([undefined])
+  })
+})
+
 describe('readRowGuard', () => {
   it('reaches a phase through the port', async () => {
     const guard: RowGuard = {
