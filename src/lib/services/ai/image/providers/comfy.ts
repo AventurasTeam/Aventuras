@@ -23,7 +23,7 @@ import { endpoint } from '#lib/utils/url.ts'
 import { resolveBaseUrl } from './baseUrls'
 import { isNewerVersion } from '#lib/utils/version.ts'
 import { imageGetFetch } from './fetchAdapter'
-import { bearerHeaders } from './discoveryFetch'
+import { bearerHeaders, withBearerKey } from './discoveryFetch'
 import { parseModelList } from './parseModelList'
 import { MIN_COMFYUI_VERSION, createComfyImage, type ComfyImageOptions } from './comfyImage'
 import { createImageSdkFetch, createPollImageSdkFetch, generateSdkImage } from './sdkImage'
@@ -510,8 +510,11 @@ export function createComfyProvider(config: ImageProviderConfig): ImageProvider 
   const comfyModel = (model: string) =>
     createComfyImage({
       baseURL: baseUrl,
-      fetch: createImageSdkFetch('comfyui-image'),
-      pollFetch: createPollImageSdkFetch('comfyui-image', POLL_TIMEOUT_MS),
+      fetch: withBearerKey(createImageSdkFetch('comfyui-image'), config.apiKey),
+      pollFetch: withBearerKey(
+        createPollImageSdkFetch('comfyui-image', POLL_TIMEOUT_MS),
+        config.apiKey,
+      ),
     }).imageModel(model)
 
   // Binds baseUrl + optional timeout so internal callers don't repeat them.

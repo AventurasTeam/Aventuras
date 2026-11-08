@@ -381,6 +381,34 @@ describe('custom workflow', () => {
     expect(postedGraph()['61'].inputs.image).toBe('aventuras/uploaded.png')
   })
 
+  describe('API key', () => {
+    const authorizations = () =>
+      sdkFetch.mock.calls.map(([, init]) => new Headers(init?.headers).get('Authorization'))
+
+    it('goes to every generation request, uploads and downloads included', async () => {
+      await createComfyProvider({ apiKey: 'k' }).generate(
+        options({
+          model: '',
+          referenceImages: ['iVBORw0KGgo='],
+          providerOptions: {
+            mode: ComfyMode.CustomWorkflow,
+            customWorkflow: custom({ workflow: withLoad }),
+            inputReferences: true,
+          },
+        }),
+      )
+      const paths = sdkFetch.mock.calls.map(([input]) => new URL(input).pathname)
+      expect(paths).toEqual(expect.arrayContaining(['/upload/image', '/prompt', '/view']))
+      expect(authorizations().every((value) => value === 'Bearer k')).toBe(true)
+    })
+
+    it('is not sent when empty', async () => {
+      await generate({ mode: ComfyMode.CustomWorkflow, customWorkflow: custom() }, { model: '' })
+      expect(sdkFetch).toHaveBeenCalled()
+      expect(authorizations().every((value) => value === null)).toBe(true)
+    })
+  })
+
   it('refuses custom-workflow mode without a workflow instead of drawing another one', async () => {
     await expect(generate({ mode: ComfyMode.CustomWorkflow }, { model: '' })).rejects.toThrow(
       'no custom workflow',
