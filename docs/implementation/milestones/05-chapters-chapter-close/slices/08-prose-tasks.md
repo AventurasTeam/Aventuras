@@ -296,8 +296,9 @@ bounds it there, `condition` by `boundStateText` and `description` by
   story override's model counts. The entries are the series read 5.2
   already takes for `tokenCount` (C5), filtered to the closed range,
   while the range is unstamped: a stamped entry leaves the series.
-- **The part intermediate.** `CLOSE_PARTS_INTERMEDIATE_KEY` in
-  `lib/pipeline/definitions/intermediates.ts` holds
+- **The part intermediate.** An accessor in
+  `lib/pipeline/definitions/close-intermediates.ts`, beside the range's
+  and the ledger's, holds
   `{ part, startEntryId, endEntryId, tokens }[]`, `part` from 1 as C4
   numbers it, always set, one element for a chapter that fits. Later
   reads take a part's entries from SQL by these ids, as C2 has phases do.
@@ -500,7 +501,7 @@ Run on the mock unless a line says otherwise. Each delta named below has
   limit is a part alone with its neighbours kept apart; a chapter under
   the limit is one part; a null-count row reads as 0 through C5's series.
 - The limit follows `lore-mgmt`'s resolved model, a story override
-  included, and `CLOSE_PARTS_INTERMEDIATE_KEY` holds one element for a
+  included, and the part intermediate holds one element for a
   chapter that fits.
 - A chapter of one part makes the same single metadata call as before,
   and no merge.

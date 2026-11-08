@@ -269,12 +269,12 @@ pre-flight, not in a phase.
   `before` (stackables, Happenings) and `after` (Awareness, the reset).
   A chapter-wide task can't land inside the part loop.
 - **`report`** writes `close_report` last, from the ledger.
-- `lib/pipeline/definitions/intermediates.ts` gains
-  `CLOSE_RANGE_INTERMEDIATE_KEY`, holding
-  `{ chapterId, startEntryId, endEntryId }`, and
-  `CLOSE_LEDGER_INTERMEDIATE_KEY`. Phases read the range from SQL by
-  these ids. 5.5a adds a key for the close-wide id map, and 5.9 one for
-  its clusters.
+- The close's run-scoped state sits behind typed accessors in
+  `lib/pipeline/definitions/close-intermediates.ts`, whose keys stay
+  private: the range, `{ chapterId, startEntryId, endEntryId }`, the
+  ledger and, from 5.5a, the close-wide id map. Phases read the range
+  from SQL by these ids. 5.8 adds its parts and 5.9 its clusters there,
+  each as an accessor.
 - A failed phase returns `{ status: 'failed', error }`
   (`lib/pipeline/types.ts:53`). The orchestrator's abort reverses the
   group.
@@ -368,7 +368,7 @@ type CloseReportCall = {
 - **A `reason` is a stable key** for the three shared classes,
   `USER_EDITED_SINCE_PROSE`, `later-turn` and `row-gone`, and the
   handler's own string for a rule refusal.
-- **The ledger** under `CLOSE_LEDGER_INTERMEDIATE_KEY` is
+- **The ledger**, behind an accessor in `close-intermediates.ts`, is
   `Pick<CloseReport, 'calls' | 'stopped' | 'noToolCalls'>`. A close with
   no ledger reads as none, with `noToolCalls: true`. The driver clears the
   flag on any tool call, an invalid one included, which records no row.
@@ -623,8 +623,9 @@ place refusal. So each action's outcome carries the handler's `reason`,
 indexed by action and assigned after the group's rerun, and a mapping
 matches `USER_EDITED_SINCE_PROSE` to `skipped` and restated values to
 `ok`, an already retired row included. Everything else defaults to `rejected` with its reason, so a write
-that didn't land can never read as `ok`. Restated values go by twelve
-spellings and gone rows interpolate ids, so both carry a stable marker,
+that didn't land can never read as `ok`. Restated values go by more than
+a dozen spellings, some restated only by row state, and gone rows
+interpolate ids, so both carry a stable marker,
 `noopRefusal(reason, 'restated' | 'gone')`
 (`lib/actions/delta/registry.ts:74`), and rule refusals stay unmarked.
 `updateEntity`, `updateLore`, `updateThread` and `updateHappening` return
