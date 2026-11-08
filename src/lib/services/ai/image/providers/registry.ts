@@ -27,7 +27,7 @@ import { createLogger } from '#lib/log.ts'
 import { fetchPublicImageBase64 } from './fetchAdapter'
 import { imageConnectionFor, isImageProviderType, modelListKey } from './connection'
 import { applyCapabilityOverride, findListedModel, pickCapabilities } from './modelCapabilities'
-import { cachedCapabilities, evictCapabilities } from './capabilityCache'
+import { cachedCapabilities, evictCapabilities, primeCapabilities } from './capabilityCache'
 
 // Provider factory imports (lazy)
 import { createNanoGPTProvider } from './nanogpt'
@@ -349,6 +349,38 @@ async function lookupCapabilities(
   // An empty list proves nothing about one model.
   if (!found && !models.length) throw new Error(`${connection.providerType} listed no models`)
   return found
+}
+
+/**
+ * Loads the model list, and the capabilities of any model it omits, for the profiles' connections
+ * ahead of the first generation. A connection is fetched once however many profiles share it.
+ * Failures are logged and cache nothing, so generation retries as if this had not run.
+ */
+export async function warmImageCapabilities(profiles: ImageProfile[]): Promise<void> {
+  const groups = new Map<string, { connection: ImageProviderConnection; models: Set<string> }>()
+  for (const profile of profiles) {
+    if (!profile.model || PROVIDER_CAPABILITIES[profile.providerType].kind !== 'listed') continue
+    const key = modelListKey(profile)
+    const group = groups.get(key) ?? { connection: profile, models: new Set<string>() }
+    group.models.add(profile.model)
+    groups.set(key, group)
+  }
+
+  await Promise.all(
+    [...groups.values()].map(async ({ connection, models }) => {
+      let list: ImageModelInfo[]
+      try {
+        list = await listImageModels(connection, false)
+      } catch {
+        return // listImageModels has logged it
+      }
+      await Promise.all(
+        [...models]
+          .filter((model) => !findListedModel(list, model))
+          .map((model) => primeCapabilities(connection, model, lookupCapabilities)),
+      )
+    }),
+  )
 }
 
 export type LocalServer = Extract<ImageProviderType, 'comfyui' | 'a1111'>

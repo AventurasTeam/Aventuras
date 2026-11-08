@@ -78,6 +78,7 @@ import {
   supportsReferenceImages,
   listImageModels,
   evictReplacedModelList,
+  warmImageCapabilities,
 } from './registry'
 import { settings } from '#lib/stores/settings.svelte.ts'
 import type { ImageModelCapabilities, ImageProfile, ImageProviderType } from '#lib/types/index.ts'
@@ -780,6 +781,126 @@ describe('Image Provider Registry', () => {
       await generate()
 
       expect(listModels).toHaveBeenCalledTimes(2)
+    })
+  })
+
+  describe('warmImageCapabilities', () => {
+    let counter = 0
+    function setup({
+      listModels = vi.fn(async (): Promise<ImageModelInfo[]> => []),
+      getModelCapabilities,
+    }: {
+      listModels?: (signal?: AbortSignal) => Promise<ImageModelInfo[]>
+      getModelCapabilities?: (
+        model: string,
+        listed: ImageModelInfo[],
+        signal?: AbortSignal,
+      ) => Promise<ImageModelCapabilities | undefined>
+    } = {}) {
+      const n = counter++
+      vi.mocked(createOpenRouterProvider).mockReturnValue({
+        id: 'openrouter',
+        name: 'openrouter',
+        generate: vi.fn(async (_options: unknown) => ({ base64: 'RESULT' })),
+        listModels,
+        getModelCapabilities,
+      })
+      const profile = (model: string, over: Partial<ImageProfile> = {}) =>
+        ({
+          id: `warm-${n}`,
+          providerType: 'openrouter',
+          apiKey: `sk-warm-${n}`,
+          model,
+          providerOptions: {},
+          ...over,
+        }) as ImageProfile
+      return { listModels, profile }
+    }
+
+    it('lists once for the same profile passed several times', async () => {
+      const { listModels, profile } = setup({
+        listModels: vi.fn(async () => [{ id: 'm', name: 'm' }]),
+      })
+
+      await warmImageCapabilities([profile('m'), profile('m'), profile('m')])
+
+      expect(listModels).toHaveBeenCalledTimes(1)
+    })
+
+    it('lists once for two profiles on one connection', async () => {
+      const { listModels, profile } = setup({
+        listModels: vi.fn(async () => [
+          { id: 'a', name: 'a' },
+          { id: 'b', name: 'b' },
+        ]),
+      })
+
+      await warmImageCapabilities([profile('a', { id: 'p1' }), profile('b', { id: 'p2' })])
+
+      expect(listModels).toHaveBeenCalledTimes(1)
+    })
+
+    it('reads a listed model from the list, and generation does not list again', async () => {
+      const getModelCapabilities = vi.fn(async (): Promise<undefined> => undefined)
+      const { listModels, profile } = setup({
+        listModels: vi.fn(async () => [{ id: 'm', name: 'm' }]),
+        getModelCapabilities,
+      })
+      const warmed = profile('m')
+      vi.mocked(settings.getImageProfile).mockReturnValue(warmed)
+
+      await warmImageCapabilities([warmed])
+      await generateImage({ profileId: warmed.id, model: 'm', prompt: 'x' })
+
+      expect(getModelCapabilities).not.toHaveBeenCalled()
+      expect(listModels).toHaveBeenCalledTimes(1)
+    })
+
+    it('looks up a model the list omits once, and generation does not ask again', async () => {
+      const getModelCapabilities = vi.fn(async () => ({ maxReferenceImages: 2 }))
+      const { profile } = setup({
+        listModels: vi.fn(async () => [{ id: 'other', name: 'other' }]),
+        getModelCapabilities,
+      })
+      const warmed = profile('m')
+      vi.mocked(settings.getImageProfile).mockReturnValue(warmed)
+
+      await warmImageCapabilities([warmed])
+      await generateImage({ profileId: warmed.id, model: 'm', prompt: 'x' })
+
+      expect(getModelCapabilities).toHaveBeenCalledTimes(1)
+    })
+
+    it('resolves when the list fails, and generation lists again', async () => {
+      const listModels = vi
+        .fn<() => Promise<ImageModelInfo[]>>()
+        .mockRejectedValueOnce(new Error('503'))
+        .mockResolvedValue([{ id: 'm', name: 'm' }])
+      const { profile } = setup({ listModels })
+      const warmed = profile('m')
+      vi.mocked(settings.getImageProfile).mockReturnValue(warmed)
+
+      await expect(warmImageCapabilities([warmed])).resolves.toBeUndefined()
+      await generateImage({ profileId: warmed.id, model: 'm', prompt: 'x' })
+
+      expect(listModels).toHaveBeenCalledTimes(2)
+    })
+
+    it('does not list for a provider whose capabilities are a table', async () => {
+      const listModels = vi.fn(async (): Promise<ImageModelInfo[]> => [])
+      vi.mocked(createOpenAIProvider).mockReturnValue(adapter(listModels))
+
+      await warmImageCapabilities([
+        {
+          id: 'warm-openai',
+          providerType: 'openai',
+          apiKey: 'sk-warm-openai',
+          model: 'gpt-image-1',
+          providerOptions: {},
+        } as ImageProfile,
+      ])
+
+      expect(listModels).not.toHaveBeenCalled()
     })
   })
 
