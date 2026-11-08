@@ -310,7 +310,11 @@ export async function listImageModels(
   try {
     const models = await createProvider(connection).listModels(signal)
     signal?.throwIfAborted()
-    modelCaches.set(cacheKey, { models, timestamp: Date.now() })
+    const now = Date.now()
+    for (const [key, cached] of modelCaches) {
+      if (now - cached.timestamp >= CACHE_TTL) modelCaches.delete(key)
+    }
+    modelCaches.set(cacheKey, { models, timestamp: now })
     return models
   } catch (error) {
     if (!isAbortError(error)) log('Error listing models by provider', { providerType, error })
