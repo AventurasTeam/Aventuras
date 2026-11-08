@@ -266,6 +266,24 @@ describe('search_world', () => {
     expect(out.omitted).toBe(5)
   })
 
+  it('mints no handle for an id in a row it cut', async () => {
+    const hidden = rowId('item', 90)
+    await db
+      .insert(entities)
+      .values([
+        ...Array.from({ length: 24 }, (_, i) =>
+          entity(rowId('char', 100 + i), 'character', `Guard ${i + 1}`),
+        ),
+        entity(rowId('char', 200), 'character', 'Guard 9z', { description: `Holds ${hidden}.` }),
+      ])
+
+    const { out } = await search('guard')
+
+    expect(out.omitted).toBe(5)
+    expect(out.matches.map((match) => ids.nameOf(match.id))).not.toContain('Guard 9z')
+    expect(ids.handleOf(hidden)).toBeUndefined()
+  })
+
   it('answers a blank query with no match', async () => {
     const { answer, out } = await search('   ')
 

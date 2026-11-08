@@ -29,7 +29,15 @@ const READ_ROW_PREFIXES = ['char', 'loc', 'item', 'fact', 'lore', 'thr', 'hap'] 
 /** A row as read_row reads it: its kind, its name or title, its columns by name. */
 type ReadRow = { kind: RowKind; name: string; columns: Readonly<Record<string, unknown>> }
 
-type Match = { id: string; name: string; line: string; byName: boolean }
+// Raw, so a row the cap cuts mints no handle: only a shown row's line swaps its ids.
+type Match = {
+  id: string
+  kind: string
+  name: string
+  status: string | null
+  description: string | null
+  byName: boolean
+}
 
 // Dispatch resolved and validated the arguments; a miss here is a dispatch bug.
 function stringArg(args: Readonly<Record<string, unknown>>, key: string): string {
@@ -170,7 +178,9 @@ async function searchWorld(
       id: row.id,
       name: row.name,
       byName,
-      line: lineOf(ctx.ids, row.kind, row.name, row.status, row.description),
+      kind: row.kind,
+      status: row.status,
+      description: row.description,
     })
   }
   const happeningRows = await ctx.db
@@ -183,14 +193,16 @@ async function searchWorld(
       id: row.id,
       name: row.title,
       byName: true,
-      line: lineOf(ctx.ids, 'happening', row.title, null, row.description),
+      kind: 'happening',
+      status: null,
+      description: row.description,
     })
   }
 
   found.sort((a, b) => Number(b.byName) - Number(a.byName) || a.name.localeCompare(b.name))
   const matches = found.slice(0, SEARCH_WORLD_LIMIT).map((match) => ({
     id: ctx.ids.show(match.id, match.name),
-    line: match.line,
+    line: lineOf(ctx.ids, match.kind, match.name, match.status, match.description),
   }))
   const omitted = found.length - matches.length
   return { output: omitted > 0 ? { matches, omitted } : { matches }, rows: [], read: [] }
