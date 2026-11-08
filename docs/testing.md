@@ -670,20 +670,28 @@ runner from `pnpm mock`. Each of its `PROBE_RUNS` runs, one by default,
 copies the database with `VACUUM INTO` and opens the copy, so the source
 is never written, and the probe prints the source's hash before and
 after; `AVENTURAS_DB_PATH` and `PROBE_BRANCH_ID` pick them as for the
-classifier's probe. It refuses a branch that owes a classifier pass,
+classifier's probe. On the copy it clears the story's `lore-mgmt` model
+override, which would outrank the server it was given, and recovers what
+the app's boot recovers: an unfinished run, such as a close cut off
+midway, is reversed and printed, and one that does not recover is
+refused by name. It refuses a branch that owes a classifier pass,
 naming how many entries, since the close would run the pass first, then
 opens the story and closes the chapter at `PROBE_END_ENTRY`, by default
 the open region's latest `ai_reply`. `PROBE_OUT`, a directory that is
 empty or new for each invocation (the probe refuses one holding files),
 saves each run's tool steps, request and response, in a `run<k>/`
 inside it, named by task, part and step (`identity-p1-s2.json`), a
-retried attempt beside its step, and the report the close wrote; the
-probe prints each task's steps, its calls with their results, and its
-stops. `PROBE_STAND_IN=1` runs a stand-in task in place of the
-close's shipped slots, a write
-landing a create and an update in one group, so the mock can drive the
-whole runner: script its `tools:read_row+stand_in_write` lane with one
-step calling `stand_in_write` on `c1`, then the empty step.
+retried attempt beside its step, a failed one with its request and its
+error, every cause and code included, and the report the close wrote.
+The probe prints each task's steps, its calls with their results, and
+its stops, each retried attempt with its task and part (its phase
+outside a task) and the error's kind, and for a failed run the phase it
+failed in and the task it came after. Ctrl-C or SIGTERM removes the
+copy and exits non-zero. `PROBE_STAND_IN=1` runs a stand-in task in
+place of the close's shipped slots, a write landing a create and an
+update in one group, so the mock can drive the whole runner: script its
+`tools:read_row+stand_in_write` lane with one step calling
+`stand_in_write` on `c1`, then the empty step.
 
 ## Selector strategy
 
