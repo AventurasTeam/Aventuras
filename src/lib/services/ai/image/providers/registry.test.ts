@@ -560,6 +560,32 @@ describe('Image Provider Registry', () => {
       expect(settings.updateImageProfile).not.toHaveBeenCalled()
     })
 
+    it('stops waiting for capabilities when generation is cancelled', async () => {
+      vi.useFakeTimers()
+      try {
+        const { generate: send } = setup(
+          {},
+          { listModels: vi.fn(() => new Promise<ImageModelInfo[]>(() => {})) },
+        )
+        const controller = new AbortController()
+        const reason = new DOMException('Stopped', 'AbortError')
+
+        const done = generateImage({
+          profileId: 'p',
+          model: 'm',
+          prompt: 'x',
+          signal: controller.signal,
+        })
+        controller.abort(reason)
+
+        await expect(done).rejects.toBe(reason)
+        expect(send).not.toHaveBeenCalled()
+        await vi.advanceTimersByTimeAsync(10_000)
+      } finally {
+        vi.useRealTimers()
+      }
+    })
+
     it('cancels a list request that outlasts the backfill budget, and still generates', async () => {
       vi.useFakeTimers()
       try {
