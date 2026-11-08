@@ -422,6 +422,7 @@ describe('Image Provider Registry', () => {
           providerOptions: {},
           ...over,
         } as ImageProfile)
+        return provider
       }
       const listed = (over: Partial<ImageModelInfo>): ImageModelInfo => ({
         id: 'm',
@@ -437,6 +438,26 @@ describe('Image Provider Registry', () => {
           listed({}),
         )
         expect(await supportsReferenceImages('p', 'm')).toBe(false)
+      })
+
+      it('sends no reference to a profile whose override turns references off', async () => {
+        const provider = overrideSetup(
+          'openai-compatible',
+          { capabilityOverride: { references: false } },
+          listed({}),
+        )
+
+        await generateImage({
+          profileId: 'p',
+          model: 'm',
+          prompt: 'x',
+          referenceImages: ['https://img.test/a.png'],
+        })
+
+        expect(fetchPublicImageBase64).not.toHaveBeenCalled()
+        expect(provider.generate).toHaveBeenCalledWith(
+          expect.objectContaining({ referenceImages: [] }),
+        )
       })
 
       it('turns references on over a model the list says lacks them', async () => {
@@ -1019,6 +1040,90 @@ describe('Image Provider Registry', () => {
       const models = await listImageModels(conn('openai', 'sk-abort-cache'), false)
       expect(models.map((m) => m.id)).toEqual(['full'])
       expect(listModels).toHaveBeenCalledTimes(2)
+    })
+  })
+
+  describe('overlapping list requests', () => {
+    const deferred = () => {
+      const resolvers: ((models: ImageModelInfo[]) => void)[] = []
+      const listModels = vi.fn(
+        () => new Promise<ImageModelInfo[]>((resolve) => resolvers.push(resolve)),
+      )
+      vi.mocked(createOpenAIProvider).mockReturnValue(adapter(listModels))
+      return { listModels, resolvers }
+    }
+    const ids = (models: ImageModelInfo[]) => models.map((m) => m.id)
+
+    it('keeps the list of the request that started last when an earlier one finishes after it', async () => {
+      const { listModels, resolvers } = deferred()
+      const connection = conn('openai', 'sk-order-forced')
+
+      const warmup = listImageModels(connection, false)
+      const refresh = listImageModels(connection, true)
+      resolvers[1]([{ id: 'new', name: 'new' }])
+      await refresh
+      resolvers[0]([{ id: 'old', name: 'old' }])
+
+      expect(ids(await warmup)).toEqual(['old'])
+      expect(ids(await listImageModels(connection, false))).toEqual(['new'])
+      expect(listModels).toHaveBeenCalledTimes(2)
+    })
+
+    it('stores an earlier request that finishes first, then the later one', async () => {
+      const { resolvers } = deferred()
+      const connection = conn('openai', 'sk-order-natural')
+
+      const first = listImageModels(connection, false)
+      const second = listImageModels(connection, true)
+      resolvers[0]([{ id: 'old', name: 'old' }])
+      await first
+      expect(ids(await listImageModels(connection, false))).toEqual(['old'])
+
+      resolvers[1]([{ id: 'new', name: 'new' }])
+      await second
+      expect(ids(await listImageModels(connection, false))).toEqual(['new'])
+    })
+  })
+
+  describe('empty model lists', () => {
+    const MINUTE = 60 * 1000
+    beforeEach(() => {
+      vi.useFakeTimers()
+    })
+    afterEach(() => {
+      vi.useRealTimers()
+    })
+
+    it('asks a catalogue provider again after five minutes', async () => {
+      const listModels = vi.fn(async (): Promise<ImageModelInfo[]> => [])
+      vi.mocked(createOpenRouterProvider).mockReturnValue({
+        ...adapter(listModels),
+        id: 'openrouter',
+      })
+      const connection = conn('openrouter', 'sk-empty-catalogue')
+
+      await listImageModels(connection, false)
+      await vi.advanceTimersByTimeAsync(5 * MINUTE - 1)
+      await listImageModels(connection, false)
+      expect(listModels).toHaveBeenCalledTimes(1)
+
+      await vi.advanceTimersByTimeAsync(1)
+      await listImageModels(connection, false)
+      expect(listModels).toHaveBeenCalledTimes(2)
+    })
+
+    it('keeps an empty list for a host that has no route for 12 hours', async () => {
+      const listModels = vi.fn(async (): Promise<ImageModelInfo[]> => [])
+      vi.mocked(createOpenAICompatibleProvider).mockReturnValue({
+        ...adapter(listModels),
+        id: 'openai-compatible',
+      })
+      const connection = conn('openai-compatible', 'sk-empty-route', 'https://host.test/v1')
+
+      await listImageModels(connection, false)
+      await vi.advanceTimersByTimeAsync(60 * MINUTE)
+      await listImageModels(connection, false)
+      expect(listModels).toHaveBeenCalledTimes(1)
     })
   })
 

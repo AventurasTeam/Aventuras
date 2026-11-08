@@ -164,23 +164,62 @@ describe('cachedCapabilities', () => {
     expect(lookup).toHaveBeenCalledTimes(3)
   })
 
-  it('stores the answer of a lookup that was running when its connection was evicted', async () => {
-    const connection = connect()
-    let finish: (value: ImageModelCapabilities) => void = () => {}
-    const slow = vi.fn<CapabilityLookup>(
-      () => new Promise<ImageModelCapabilities>((resolve) => (finish = resolve)),
-    )
+  describe('a lookup running when its connection is evicted', () => {
+    const startSlow = (connection: ReturnType<typeof connect>) => {
+      let finish: (value: ImageModelCapabilities) => void = () => {}
+      const slow = vi.fn<CapabilityLookup>(
+        () => new Promise<ImageModelCapabilities>((resolve) => (finish = resolve)),
+      )
+      return {
+        running: cachedCapabilities(connection, 'm', slow),
+        finish: (v: ImageModelCapabilities) => finish(v),
+      }
+    }
 
-    const running = cachedCapabilities(connection, 'm', slow)
-    evictCapabilities(modelListKey(connection))
-    finish({ maxReferenceImages: 4 })
-    await running
+    it('answers its caller but stores nothing', async () => {
+      const connection = connect()
+      const { running, finish } = startSlow(connection)
+      evictCapabilities(modelListKey(connection))
+      finish({ maxReferenceImages: 4 })
+      expect(await running).toMatchObject({ maxReferenceImages: 4 })
 
-    const lookup = lookupOf()
-    expect(await cachedCapabilities(connection, 'm', lookup)).toMatchObject({
-      maxReferenceImages: 4,
+      const lookup = lookupOf({ maxReferenceImages: 1 })
+      expect(await cachedCapabilities(connection, 'm', lookup)).toMatchObject({
+        maxReferenceImages: 1,
+      })
+      expect(lookup).toHaveBeenCalledTimes(1)
     })
-    expect(lookup).not.toHaveBeenCalled()
+
+    it('is not joined by a caller that arrives after the eviction', async () => {
+      const connection = connect()
+      const { running, finish } = startSlow(connection)
+      evictCapabilities(modelListKey(connection))
+
+      const fresh = lookupOf({ maxReferenceImages: 2 })
+      expect(await cachedCapabilities(connection, 'm', fresh)).toMatchObject({
+        maxReferenceImages: 2,
+      })
+      finish({ maxReferenceImages: 9 })
+      await running
+
+      expect(await cachedCapabilities(connection, 'm', lookupOf())).toMatchObject({
+        maxReferenceImages: 2,
+      })
+    })
+
+    it('stores its answer when the eviction leaves running lookups alone', async () => {
+      const connection = connect()
+      const { running, finish } = startSlow(connection)
+      evictCapabilities(modelListKey(connection), false)
+      finish({ maxReferenceImages: 4 })
+      await running
+
+      const lookup = lookupOf()
+      expect(await cachedCapabilities(connection, 'm', lookup)).toMatchObject({
+        maxReferenceImages: 4,
+      })
+      expect(lookup).not.toHaveBeenCalled()
+    })
   })
 })
 

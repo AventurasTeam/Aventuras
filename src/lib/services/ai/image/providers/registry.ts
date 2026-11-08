@@ -142,15 +142,24 @@ export const takesCapabilityOverride = (providerType: ImageProviderType): boolea
 interface ModelCache {
   models: ImageModelInfo[]
   timestamp: number
+  ttl: number
+  /** The order the fetch started in; a response never replaces one from a fetch that started later. */
+  seq: number
 }
 
 const CACHE_TTL = 12 * 60 * 60 * 1000
+// Providers with a catalogue to read: an empty list is a bad answer, not a host without the route.
+const EMPTY_LIST_TTL = 5 * 60 * 1000
+const CATALOGUE_PROVIDERS: readonly ImageProviderType[] = ['nanogpt', 'openrouter', 'pollinations']
 const modelCaches = new Map<string, ModelCache>()
+let listSeq = 0
+
+const isFresh = (cached: ModelCache): boolean => Date.now() - cached.timestamp < cached.ttl
 
 /** The cached list for a `modelListKey` while it is within its lifetime. */
 function freshModelList(listKey: string): ImageModelInfo[] | undefined {
   const cached = modelCaches.get(listKey)
-  return cached && Date.now() - cached.timestamp < CACHE_TTL ? cached.models : undefined
+  return cached && isFresh(cached) ? cached.models : undefined
 }
 
 /** Drops the cached list for `previous`'s connection when `next` uses a different one. */
@@ -316,15 +325,21 @@ export async function listImageModels(
     if (cached) return cached
   }
 
+  const seq = ++listSeq
   try {
     const models = await createProvider(connection).listModels(signal)
     signal?.throwIfAborted()
-    const now = Date.now()
     for (const [key, cached] of modelCaches) {
-      if (now - cached.timestamp >= CACHE_TTL) modelCaches.delete(key)
+      if (!isFresh(cached)) modelCaches.delete(key)
     }
-    modelCaches.set(cacheKey, { models, timestamp: now })
-    evictCapabilities(cacheKey)
+    const previous = modelCaches.get(cacheKey)
+    if ((previous?.seq ?? 0) < seq) {
+      const ttl =
+        models.length || !CATALOGUE_PROVIDERS.includes(providerType) ? CACHE_TTL : EMPTY_LIST_TTL
+      modelCaches.set(cacheKey, { models, timestamp: Date.now(), ttl, seq })
+      // A lookup running against a first list was answered from it; one running across a reload was not.
+      evictCapabilities(cacheKey, previous !== undefined)
+    }
     return models
   } catch (error) {
     if (!isAbortError(error)) log('Error listing models by provider', { providerType, error })

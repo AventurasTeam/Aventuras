@@ -28,6 +28,8 @@ type Lookup = Promise<ImageModelCapabilities | undefined>
 // Keyed by connection, then model, so a connection's answers drop together.
 const entries = new Map<string, Map<string, Entry>>()
 const pending = new Map<string, Map<string, Lookup>>()
+// Bumped on every eviction, so a lookup that started earlier can tell its answer is out of date.
+const epochs = new Map<string, number>()
 
 /** Runs `lookup` for at most `ms`: the signal cancels its requests, and `abortable` stops waiting on one that ignores it. */
 async function lookupWithin<T>(
@@ -64,10 +66,11 @@ function store(key: string, model: string, entry: Entry): void {
   inner(entries, key).set(model, entry)
 }
 
-function settle(key: string, model: string): void {
+function settle(key: string, model: string, lookup: Lookup): void {
   const models = pending.get(key)
-  models?.delete(model)
-  if (!models?.size) pending.delete(key)
+  if (models?.get(model) !== lookup) return
+  models.delete(model)
+  if (!models.size) pending.delete(key)
 }
 
 async function request(
@@ -83,13 +86,18 @@ async function request(
   const inFlight = pending.get(key)?.get(model)
   if (inFlight) return inFlight
 
+  const epoch = epochs.get(key) ?? 0
+  // An answer from before an eviction is returned to its caller but not kept.
+  const current = () => (epochs.get(key) ?? 0) === epoch
   const running: Lookup = (async () => {
     try {
       const found = await lookupWithin(LOOKUP_TIMEOUT_MS, (signal) =>
         lookup(connection, model, signal),
       )
       const capabilities = found && pickCapabilities(found)
-      store(key, model, { capabilities, expiresAt: Date.now() + CAPABILITY_TTL_MS })
+      if (current()) {
+        store(key, model, { capabilities, expiresAt: Date.now() + CAPABILITY_TTL_MS })
+      }
       return capabilities
     } catch (error) {
       log('Error looking up model capabilities', {
@@ -97,14 +105,12 @@ async function request(
         model,
         error,
       })
-      if (cacheFailure) {
+      if (cacheFailure && current()) {
         store(key, model, { capabilities: undefined, expiresAt: Date.now() + FAILURE_TTL_MS })
       }
       return undefined
-    } finally {
-      settle(key, model)
     }
-  })()
+  })().finally(() => settle(key, model, running))
   inner(pending, key).set(model, running)
   return running
 }
@@ -135,7 +141,13 @@ export async function primeCapabilities(
   await request(connection, model, lookup, false)
 }
 
-/** Drops the cached answers for a `modelListKey`; a lookup still running keeps its place and stores its own. */
-export function evictCapabilities(listKey: string): void {
+/**
+ * Drops the cached answers for a `modelListKey`. With `supersedeLookups`, a lookup still running
+ * finishes for its caller but stores nothing, and the next caller starts its own.
+ */
+export function evictCapabilities(listKey: string, supersedeLookups = true): void {
   entries.delete(listKey)
+  if (!supersedeLookups) return
+  pending.delete(listKey)
+  epochs.set(listKey, (epochs.get(listKey) ?? 0) + 1)
 }
