@@ -71,7 +71,9 @@ slice-planning gate forces its resolution before that slice is planned.
   (`lib/actions/entities/state-patch-actions.ts`) and `updateInvolvement`
   (`lib/actions/happenings/register-involvements.ts`) do too, so a close
   tool over one of them gets a whole-group refusal where C11's table
-  reads as a per-action verdict. Those carry no code; the delete
+  reads as a per-action verdict. Those carry no code, and neither do
+  `deleteInvolvement`'s and `deleteAwareness`'s
+  (`register-involvements.ts`, `register-awareness.ts`); the delete
   handlers of entities, lore, threads and happenings, and the chapters
   update, return the coded `not-found` C11 names but doesn't list them.
   Raised in 5.5a's review.
@@ -151,7 +153,11 @@ slice-planning gate forces its resolution before that slice is planned.
   doesn't know, with no undo record.** `set.state` takes the raw
   patch while `computeUndoPayload` walks only `entityStateColumnSchema`
   (`lib/actions/entities/register.ts`), so a `state` key outside the
-  schema lands and a reversal can't remove it. Raised in 5.5a's review.
+  schema lands and a reversal can't remove it. When such a key is the
+  only change, nothing is written and the handler returns `no-op entity
+patch`, which 5.5a marks `restated`, so a close tool's write of it
+  reads `ok` with nothing written and leaves no trace in the review.
+  Raised in 5.5a's review.
 - **`deepEqual` treats `[]` and `{}` as equal.** It compares any two
   objects by their keys (`lib/actions/delta/delta-encoding.ts`), so an
   empty array and an empty object read as unchanged. Raised in 5.5a's

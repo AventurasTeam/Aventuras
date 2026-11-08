@@ -504,7 +504,9 @@ literals so a test can't derive its expectation from the constant.
 - **Does the read gate reach a row a tool only names?** It applies to
   every id argument, so a location a character moves to or a faction a
   character joins needs a `read_row` first, though the tool writes
-  neither. Intended, or should a reference need no read? Surfaced by
+  neither. Intended, or should a reference need no read? If the gate
+  stays, every kind a tool references must be one its task's
+  `readFields` can read, or the reference can never pass. Surfaced by
   5.5a.
 - **Does `search_world` rank an exact match first?** It ranks a partial
   name match with an exact one, and above an exact keyword match, so
