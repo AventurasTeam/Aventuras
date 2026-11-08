@@ -19,7 +19,7 @@ import type {
   ComfySamplerInfo,
 } from './types'
 import { imageGetFetch } from './fetchAdapter'
-import { imageGetFetchOptional } from './discoveryFetch'
+import { bearerHeaders, imageGetFetchOptional } from './discoveryFetch'
 import { optionalString } from './modelCatalogue'
 import { parseModelList } from './parseModelList'
 import { createA1111Image } from './a1111Image'
@@ -81,10 +81,14 @@ export function createA1111Provider(config: ImageProviderConfig): ImageProvider 
     },
 
     async listModels(signal?: AbortSignal): Promise<ImageModelInfo[]> {
-      const response = await imageGetFetch(endpoint(baseUrl, 'sdapi/v1/sd-models'), undefined, {
-        serviceId: 'a1111-models',
-        signal,
-      })
+      const response = await imageGetFetch(
+        endpoint(baseUrl, 'sdapi/v1/sd-models'),
+        bearerHeaders(config.apiKey),
+        {
+          serviceId: 'a1111-models',
+          signal,
+        },
+      )
       const entries = parseModelList(await response.json(), SdModel, 'A1111 /sdapi/v1/sd-models')
 
       return entries.map((m) => {
@@ -101,7 +105,7 @@ export function createA1111Provider(config: ImageProviderConfig): ImageProvider 
       ): Promise<string[] | undefined> => {
         const response = await imageGetFetchOptional(
           endpoint(baseUrl, `sdapi/v1/${path}`),
-          undefined,
+          bearerHeaders(config.apiKey),
           { serviceId, absentStatuses, signal },
         )
         if (!response) return undefined

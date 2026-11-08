@@ -90,6 +90,21 @@ describe('model discovery', () => {
     for (const [, , options] of calls) expect(options?.signal).toBe(signal)
   })
 
+  it.each([
+    ['k', { Authorization: 'Bearer k' }],
+    ['', undefined],
+  ])('sends A1111 key %j to the model and sampler requests as %j', async (apiKey, headers) => {
+    vi.mocked(imageGetFetch).mockResolvedValue(reply([]))
+    const provider = createA1111Provider({ apiKey })
+
+    await provider.listModels()
+    await provider.getSamplerInfo!()
+
+    const calls = vi.mocked(imageGetFetch).mock.calls
+    expect(calls).toHaveLength(3)
+    for (const [, sent] of calls) expect(sent).toEqual(headers)
+  })
+
   describe('A1111 sampler info', () => {
     const missing = { ok: false, status: 404, body: null } as unknown as Response
 
