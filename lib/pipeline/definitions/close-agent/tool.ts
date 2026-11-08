@@ -43,11 +43,17 @@ export type PlannedAction = {
   readonly action: PipelineAction
   readonly fields: readonly string[]
   /**
-   * The row as the model's answer names it; full ids are allowed, the answer swaps them for
-   * handles. An entity, lore, thread or happening row: its id. A link row (involvement,
-   * awareness): the character it links, as `${characterId} on ${happeningId}` only when the call
-   * spans several happenings. Else the row's table name. Never the link row's own id, which has
-   * no handle a model can use.
+   * The row as the model's answer names it; a full id is allowed, the answer swaps it for its
+   * handle.
+   * - An entity, lore, thread or happening row: its id, shown first with its name
+   *   (`ctx.ids.show(id, name)`) if the close hasn't, or the handle is nameless and prose naming
+   *   it can't be resolved.
+   * - A create's action and its LostFields: the table name, since a minted id has no handle unless
+   *   the create lands.
+   * - A link row (involvement, awareness): the character it links, as
+   *   `${characterId} on ${happeningId}` only when the call spans several happenings. Never the
+   *   link row's own id: `hinv_` has no handle, and a character tells the model more than an `aw`.
+   * - Else the row's table name.
    */
   readonly row: string
 }

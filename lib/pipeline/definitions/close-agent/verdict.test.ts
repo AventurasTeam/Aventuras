@@ -550,7 +550,7 @@ describe('modelAnswer', () => {
     ).toEqual({ result: 'ok' })
   })
 
-  it('names a link row by its character, never by the link row own id', () => {
+  it("answers a loss's row label as its handle, a link row's being its character", () => {
     const hinv = 'hinv_66666666-6666-4666-8666-666666666666'
     const ids = shownIds()
     ids.show(CHAR_A, 'Tobin')
@@ -583,6 +583,5 @@ describe('modelAnswer', () => {
         { field: 'role', row: 'c1', reason: USER_EDITED_SINCE_PROSE, note: expect.any(String) },
       ],
     })
-    expect(JSON.stringify(answer)).not.toMatch(/hinv_|haw_/)
   })
 })

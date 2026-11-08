@@ -10,19 +10,21 @@ export const CLOSE_REASON = { laterTurn: 'later-turn', rowGone: 'row-gone' } as 
 // handlers' hard not-found, which refuses the whole group.
 const TARGET_NOT_FOUND = 'not-found'
 
+type NotWritten = { field: string; row: string; reason: string }
+
 export type ToolVerdict = {
   result: 'ok' | 'rejected' | 'skipped'
   /** Why the call as a whole didn't land (rejected / skipped). */
   reason?: string
   /** Delta paths that landed. */
   landed: readonly string[]
-  /** Paths lost on every row they were planned for, with the first reason (C4 skippedFields). */
+  /** Lost paths that landed on no row, each with its first loss's reason (C4 skippedFields). */
   skippedFields: readonly { field: string; reason: string }[]
   /**
    * The model's own list (C11): every loss beside a landed action, one entry per row and field,
    * a path that landed on another row included. Absent when empty; never in the ledger.
    */
-  notWritten?: readonly { field: string; row: string; reason: string }[]
+  notWritten?: readonly NotWritten[]
   survivor?: { table: string; id: string }
 }
 
@@ -49,7 +51,7 @@ function settleLosses(
   losses: readonly Loss[],
 ): Pick<ToolVerdict, 'skippedFields' | 'notWritten'> {
   const skipped = new Map<string, string>()
-  const notWritten = new Map<string, { field: string; row: string; reason: string }>()
+  const notWritten = new Map<string, NotWritten>()
   for (const { fields, row, reason } of losses)
     for (const field of fields) {
       if (!landed.has(field) && !skipped.has(field)) skipped.set(field, reason)

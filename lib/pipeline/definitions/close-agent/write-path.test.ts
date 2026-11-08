@@ -1356,6 +1356,102 @@ describe('dispatchToolCall in a close phase', () => {
     expect((await row(BRAM)).description).toBe('Bram, soaked.')
   })
 
+  it('keeps the proposed value of a path restated on one row and lost on another', async () => {
+    seeds = [
+      { table: 'entities', id: WREN },
+      { table: 'entities', id: BRAM },
+    ]
+    scriptedPlan = (ctx) => ({
+      kind: 'write',
+      actions: [
+        describeAs(ctx, WREN, 'A courier.'),
+        {
+          action: {
+            kind: 'updateEntity',
+            source: 'chapter_close',
+            payload: { branchId: ctx.branchId, id: BRAM, patch: { priority: 3 } },
+          },
+          fields: ['priority'],
+          row: BRAM,
+        },
+      ],
+      lost: [
+        { field: 'description', reason: USER_EDITED_SINCE_PROSE, row: BRAM, kind: 'protected' },
+      ],
+      rows: entityRows(WREN, BRAM),
+      values: { description: 'A courier.', priority: 3 },
+    })
+
+    await runDispatch([{ toolName: 'scripted', input: { rows: ['c1', 'c2'], ...cite(['t7']) } }])
+
+    expect(recorded()[0]).toMatchObject({
+      result: 'ok',
+      values: { description: 'A courier.', priority: '3' },
+      skippedFields: [{ field: 'description', reason: USER_EDITED_SINCE_PROSE }],
+    })
+  })
+
+  it('keeps the proposed value of a path restated on one row and refused by a handler on another', async () => {
+    // The port stands in for outcomes no seeded row produces together.
+    configurePort({
+      applyDeltaActionGroupWithOutcomes: async () => ({
+        status: 'ok',
+        outcomes: [
+          { status: 'noop', reason: 'description unchanged', mark: 'restated' },
+          { status: 'noop', reason: 'not-active' },
+          { status: 'landed' },
+        ],
+      }),
+    })
+    scriptedPlan = (ctx) => ({
+      kind: 'write',
+      actions: [
+        describeAs(ctx, WREN, 'Soaked.'),
+        describeAs(ctx, BRAM, 'Soaked.'),
+        { ...describeAs(ctx, BRAM, 'Soaked.'), fields: ['priority'] },
+      ],
+      lost: [],
+      rows: entityRows(WREN, BRAM),
+      values: { description: 'Soaked.', priority: '3' },
+    })
+    seeds = [
+      { table: 'entities', id: WREN },
+      { table: 'entities', id: BRAM },
+    ]
+
+    await runDispatch([{ toolName: 'scripted', input: { rows: ['c1', 'c2'], ...cite(['t7']) } }])
+
+    expect(recorded()[0]).toMatchObject({
+      result: 'ok',
+      values: { description: 'Soaked.', priority: '3' },
+      skippedFields: [{ field: 'description', reason: 'not-active' }],
+    })
+  })
+
+  it.each([
+    ['skipped', 'protected', USER_EDITED_SINCE_PROSE],
+    ['rejected', 'refused', TEST_CAP],
+  ] as const)(
+    'keeps the proposed value of a restated path another row lost when nothing landed: %s',
+    async (result, kind, reason) => {
+      seeds = [
+        { table: 'entities', id: WREN },
+        { table: 'entities', id: BRAM },
+      ]
+      scriptedPlan = (ctx) => ({
+        kind: 'write',
+        actions: [describeAs(ctx, WREN, 'A courier.')],
+        lost: [{ field: 'description', reason, row: BRAM, kind }],
+        rows: entityRows(WREN, BRAM),
+        values: { description: 'A courier.' },
+      })
+
+      await runDispatch([{ toolName: 'scripted', input: { rows: ['c1', 'c2'], ...cite(['t7']) } }])
+
+      expect(recorded()[0]).toMatchObject({ result, values: { description: 'A courier.' } })
+    },
+  )
+
   it("keeps a refused noop's proposed value beside a landed action", async () => {
     scriptedPlan = (ctx) => ({
       kind: 'write',

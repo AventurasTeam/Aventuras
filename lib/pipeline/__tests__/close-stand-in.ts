@@ -75,7 +75,7 @@ async function planStandIn(args: Record<string, unknown>, ctx: WriteContext): Pr
       },
     },
     fields: ['title', 'body'],
-    row: created.id,
+    row: 'lore',
   }
   const values: Record<string, unknown> = { title: input.title, body: input.body }
   const wanted: Record<string, unknown> = {}

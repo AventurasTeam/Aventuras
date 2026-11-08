@@ -122,25 +122,23 @@ function landedCreate(
   return { id, name: plan.rows.find((row) => row.id === id)?.name ?? '' }
 }
 
-// C4: a restated field wrote nothing, so the report holds no value for it, unless another action
-// in the call landed the same path.
+// C4: a restated path wrote nothing, so the report holds no value for it, unless another action
+// or a lost field carries the same path: that one landed it or leaves it proposed.
 function landedOrProposed(
   plan: Write,
   outcome: GroupOutcome | null,
-  verdict: ToolVerdict,
 ): Readonly<Record<string, unknown>> {
   if (outcome?.status !== 'ok') return plan.values
   const { outcomes } = outcome
-  const restated = new Set(
-    plan.actions.flatMap((planned, index) => {
-      const one = outcomes[index]
-      return one?.status === 'noop' && one.mark === 'restated' ? planned.fields : []
-    }),
-  )
+  const restated = new Set<string>()
+  const carried = new Set(plan.lost.map(({ field }) => field))
+  plan.actions.forEach((planned, index) => {
+    const one = outcomes[index]
+    const into = one?.status === 'noop' && one.mark === 'restated' ? restated : carried
+    for (const field of planned.fields) into.add(field)
+  })
   return Object.fromEntries(
-    Object.entries(plan.values).filter(
-      ([field]) => !restated.has(field) || verdict.landed.includes(field),
-    ),
+    Object.entries(plan.values).filter(([field]) => !restated.has(field) || carried.has(field)),
   )
 }
 
@@ -273,7 +271,7 @@ async function* writeCall(
     rows: plan.rows,
     turns: check.turns,
     verdict,
-    values: landedOrProposed(plan, outcome, verdict),
+    values: landedOrProposed(plan, outcome),
     // A gone row's survivor goes to the model's answer; ok carries one only if something landed.
     ...(verdict.result === 'ok' && verdict.survivor !== undefined
       ? { survivor: verdict.survivor }
