@@ -6,8 +6,8 @@ import type { ReportRow, ToolContext, WritePlan } from './tool'
 /** C4's stable reasons a close adds beside USER_EDITED_SINCE_PROSE. */
 export const CLOSE_REASON = { laterTurn: 'later-turn', rowGone: 'row-gone' } as const
 
-// registry.ts's TARGET_NOT_FOUND, which lib/pipeline can't import: the hard not-found of
-// updateEntity, updateLore, updateThread and updateHappening, which refuses the whole group.
+// registry.ts's TARGET_NOT_FOUND, which lib/pipeline can't import: the update and delete
+// handlers' hard not-found, which refuses the whole group.
 const TARGET_NOT_FOUND = 'not-found'
 
 export type ToolVerdict = {
@@ -16,7 +16,7 @@ export type ToolVerdict = {
   reason?: string
   /** Delta paths that landed. */
   landed: readonly string[]
-  /** Fields that didn't land beside a landed one, each with its reason (C4 skippedFields). */
+  /** Fields lost beside a landed one, with reasons (C4 skippedFields); a path may also land. */
   skippedFields: readonly { field: string; reason: string }[]
   survivor?: { table: string; id: string }
 }
@@ -59,13 +59,16 @@ function rejectedWhole(reason: string, plan: WritingPlan, ctx: Survivors): ToolV
 /**
  * C11: one result for a write from its plan and its group's outcome (null when no group was
  * emitted). Any action landed is `ok` naming what didn't, restated fields aside; else a refusal or
- * a gone row is `rejected`, a protected field `skipped`, and nothing lost `ok` with nothing written.
+ * a gone row is `rejected`, a protected field `skipped`, and nothing lost `ok`, nothing written.
  */
 export function verdictOf(
   plan: WritingPlan,
   outcome: GroupOutcome | null,
   ctx: Survivors,
 ): ToolVerdict {
+  for (const { action, fields } of plan.actions)
+    if (fields.length === 0)
+      throw new Error(`verdictOf: a planned ${action.kind} names no delta path`)
   if (outcome?.status === 'rejected') {
     const reason = outcome.code === TARGET_NOT_FOUND ? CLOSE_REASON.rowGone : outcome.reason
     return rejectedWhole(reason, plan, ctx)
@@ -94,8 +97,7 @@ export function verdictOf(
   if (anyLanded) {
     const skipped = new Map<string, string>()
     for (const { fields, reason } of losses)
-      for (const field of fields)
-        if (!landed.has(field) && !skipped.has(field)) skipped.set(field, reason)
+      for (const field of fields) if (!skipped.has(field)) skipped.set(field, reason)
     return {
       result: 'ok',
       landed: [...landed],
