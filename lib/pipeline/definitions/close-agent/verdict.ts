@@ -37,6 +37,13 @@ function noopLoss(
   return { fields, reason: outcome.reason, refused: true }
 }
 
+// C4 reads landed as values less skippedFields, so a path in both would hide one or the other.
+function settleOverlap(landed: ReadonlySet<string>, losses: readonly Loss[]): void {
+  for (const { fields } of losses)
+    for (const field of fields)
+      if (landed.has(field)) throw new Error(`verdictOf: ${field} both landed and was lost`)
+}
+
 function survivorAmong(rows: readonly ReportRow[], { survivorOf }: Survivors) {
   for (const row of rows) {
     const survivor = survivorOf(row.table, row.id)
@@ -93,10 +100,7 @@ export function verdictOf(
   }
   for (const { field, reason, kind } of plan.lost)
     losses.push({ fields: [field], reason, refused: kind === 'refused' })
-  // C4 reads landed as values less skippedFields, so a path in both would hide one or the other.
-  for (const { fields } of losses)
-    for (const field of fields)
-      if (landed.has(field)) throw new Error(`verdictOf: ${field} both landed and was lost`)
+  settleOverlap(landed, losses)
 
   if (anyLanded) {
     const skipped = new Map<string, string>()
