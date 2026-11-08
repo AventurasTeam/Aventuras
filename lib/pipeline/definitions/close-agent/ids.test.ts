@@ -254,4 +254,16 @@ describe('withHandlesDeep', () => {
       none: null,
     })
   })
+
+  it("leaves an object JSON can't send as it is, for the task loop to refuse", () => {
+    const ids = new CloseIds()
+    const map = new Map([[CHAR_A, 'Ana']])
+    const set = new Set([CHAR_A])
+
+    const out = withHandlesDeep({ map, set, at: new Date(0) }, ids) as Record<string, unknown>
+
+    expect(out.map).toBe(map)
+    expect(out.set).toBe(set)
+    expect(out.at).toBe('1970-01-01T00:00:00.000Z')
+  })
 })

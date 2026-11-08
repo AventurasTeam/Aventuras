@@ -149,12 +149,22 @@ export function nameCloseProse<T>(value: T, ids: CloseIds): T {
 const hasToJson = (value: object): value is { toJSON: () => unknown } =>
   typeof (value as { toJSON?: unknown }).toJSON === 'function'
 
-/** Walks a value as JSON.stringify would see it, keys included, so no full id survives anywhere. */
+const isPlain = (value: object): boolean => {
+  const proto: unknown = Object.getPrototypeOf(value)
+  return proto === Object.prototype || proto === null
+}
+
+/**
+ * Walks a value as JSON.stringify would see it, keys included, so no full id survives anywhere. A
+ * non-plain object without toJSON (a Map) comes back as it is for the task loop's JSON check to
+ * refuse; copied, it would read `{}`.
+ */
 export function withHandlesDeep(value: unknown, ids: CloseIds): unknown {
   if (typeof value === 'string') return ids.withHandles(value)
   if (Array.isArray(value)) return value.map((item) => withHandlesDeep(item, ids))
   if (isJsonObject(value)) {
     if (hasToJson(value)) return withHandlesDeep(value.toJSON(), ids)
+    if (!isPlain(value)) return value
     return Object.fromEntries(
       Object.entries(value).map(([key, item]) => [
         ids.withHandles(key),
