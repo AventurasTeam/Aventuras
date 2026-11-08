@@ -210,7 +210,7 @@ const setStatusHandler: ActionHandler = async (action, branchId, ctx) => {
       [],
     )
   )
-    return noopRefusal(USER_EDITED_SINCE_PROSE)
+    return noopRefusal(USER_EDITED_SINCE_PROSE, null)
   const set: Partial<Pick<Thread, 'status' | 'resolvedAtEntryId'>> = { status }
   const undoPayload: Record<string, unknown> = { status: current.status }
   // Entry refs are AI-only (data-model.md → Authorship contract): a user's thread keeps both null.

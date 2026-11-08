@@ -212,7 +212,7 @@ const upsertHandler: ActionHandler = async (action, branchId, ctx, group) => {
     proseEntryId != null &&
     (await userWroteViewSince(ctx, bid, { aId, bId }, current, povCol, proseEntryId))
   )
-    return noopRefusal(USER_EDITED_SINCE_PROSE)
+    return noopRefusal(USER_EDITED_SINCE_PROSE, null)
 
   // A delete arm cascades the link under this lock, so an existing one skips the ref check;
   // a create's reversal can still orphan it.

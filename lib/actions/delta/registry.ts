@@ -67,9 +67,10 @@ export type PatchMatchesColumns<Patch, Columns extends readonly string[]> = [
   : false
 
 export type HandlerOutcome =
+  | { status: 'rejected'; reason: string; code: 'noop'; mark?: NoopMark }
   // Deliberately a bare string: each action family funnels its OWN rejection vocabulary
   // through here, so a single union would couple taxonomies with no reason to agree.
-  | { status: 'rejected'; reason: string; code?: string; mark?: NoopMark }
+  | { status: 'rejected'; reason: string; code?: string; mark?: never }
   | {
       status: 'ok'
       targetTable: string
@@ -82,10 +83,10 @@ export type HandlerOutcome =
 
 /**
  * A refusal the turn survives (redundant action, or a user edit won); a plain rejection reverses
- * the turn. `mark` (C11): a restated value or a gone row; a broken rule leaves it off.
+ * the turn. `mark` (C11): a restated value or a gone row; null for a broken rule or a user edit.
  */
-export function noopRefusal(reason: string, mark?: NoopMark): HandlerOutcome {
-  return mark === undefined
+export function noopRefusal(reason: string, mark: NoopMark | null): HandlerOutcome {
+  return mark === null
     ? { status: 'rejected', reason, code: 'noop' }
     : { status: 'rejected', reason, code: 'noop', mark }
 }

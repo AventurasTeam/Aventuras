@@ -44,7 +44,7 @@ declare module '@/lib/actions/action-map' {
   }
 }
 
-const USER_WON = noopRefusal(USER_EDITED_SINCE_PROSE)
+const USER_WON = noopRefusal(USER_EDITED_SINCE_PROSE, null)
 
 const upsertHandler: ActionHandler = async (action, branchId, ctx, group) => {
   if (action.kind !== 'upsertHappeningAwareness')

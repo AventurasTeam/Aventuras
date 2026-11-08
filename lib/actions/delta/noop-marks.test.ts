@@ -24,9 +24,9 @@ import { entitiesStore } from '@/lib/stores'
 
 import type { DbCtx, NoopMark, PipelineAction } from '../types'
 import { applyDeltaAction } from './apply-delta-action'
-import { resolveByActionKind, type HandlerOutcome } from './registry'
+import { noopRefusal, resolveByActionKind, type HandlerOutcome } from './registry'
 
-// Unmarked spellings C11 maps to `rejected`: a broken rule, never a stored value or a gone row.
+// Literal reasons a null mark may carry: a broken rule, never a stored value or a gone row.
 // `not-a-faction` is for setFactionStanding only; setCharacterFaction's site is pinned by samples.
 const RULE_REASONS: readonly string[] = [
   'location',
@@ -61,14 +61,9 @@ type NoopCall = {
   reason: string
   /** The first argument's value when it's a plain string literal. */
   literal: string | null
-  marked: boolean
-  /** The mark argument's source text, null when the call has none. */
-  markText: string | null
+  /** The mark argument's source text. */
+  markText: string
 }
-
-const isNoMark = (node: ts.Expression): boolean =>
-  (ts.isIdentifier(node) && node.text === 'undefined') ||
-  (ts.isVoidExpression(node) && ts.isNumericLiteral(node.expression))
 
 function noopCalls(path: string, source: string): NoopCall[] {
   const file = ts.createSourceFile(path, source, ts.ScriptTarget.Latest, true, ts.ScriptKind.TS)
@@ -85,8 +80,7 @@ function noopCalls(path: string, source: string): NoopCall[] {
         at: `${path}:${line + 1}`,
         reason: reason?.getText(file) ?? '',
         literal: reason !== undefined && ts.isStringLiteralLike(reason) ? reason.text : null,
-        marked: mark !== undefined && !isNoMark(mark),
-        markText: mark?.getText(file) ?? null,
+        markText: mark?.getText(file) ?? '',
       })
     }
     ts.forEachChild(node, visit)
@@ -100,8 +94,10 @@ const isRuleRefusal = (call: NoopCall): boolean =>
     ? RULE_EXPRESSIONS.includes(call.reason)
     : RULE_REASONS.includes(call.literal)
 
-const unmarked = (calls: readonly NoopCall[]): string[] =>
-  calls.filter((call) => !call.marked && !isRuleRefusal(call)).map((c) => `${c.at} ${c.reason}`)
+const nullMarked = (calls: readonly NoopCall[]): string[] =>
+  calls
+    .filter((call) => call.markText === 'null' && !isRuleRefusal(call))
+    .map((c) => `${c.at} ${c.reason}`)
 
 // A row that went is `gone`, bar the relationship delete whose missing pair is the state asked for.
 const RESTATED_NOT_FOUND = '`delete target relationship ${bid}:${id} not found`'
@@ -119,20 +115,19 @@ const wrongNotFoundMark = (calls: readonly NoopCall[]): string[] =>
     .map((c) => `${c.at} ${c.reason} marked ${c.markText}`)
 
 const PROBE = [
-  "noopRefusal('no-op lore patch')",
-  'noopRefusal(reasonFor(id))',
-  "noopRefusal('USER_EDITED_SINCE_PROSE')",
-  "noopRefusal('not-a-character')",
-  'noopRefusal(USER_EDITED_SINCE_PROSE)',
-  'noopRefusal(PLACE_REFUSAL.storyInside)',
+  "noopRefusal('no-op lore patch', null)",
+  'noopRefusal(reasonFor(id), null)',
+  "noopRefusal('USER_EDITED_SINCE_PROSE', null)",
+  "noopRefusal('not-a-character', null)",
+  'noopRefusal(USER_EDITED_SINCE_PROSE, null)',
+  'noopRefusal(PLACE_REFUSAL.storyInside, null)',
   "noopRefusal(\n  'relationship unchanged',\n  'restated',\n)",
-  "noopRefusal('not-active', status === 'retired' ? 'restated' : undefined)",
-  "noopRefusal('relationship unchanged', undefined)",
-  "noopRefusal('already-flagged', void 0)",
+  "noopRefusal('not-active', status === 'retired' ? 'restated' : null)",
+  "noopRefusal(\n  'already-flagged',\n  null,\n)",
 ].join('\n')
 
 const NOT_FOUND_PROBE = [
-  'noopRefusal(`rename target entities ${bid}:${id} not found`)',
+  'noopRefusal(`rename target entities ${bid}:${id} not found`, null)',
   "noopRefusal('partner-not-found', 'restated')",
   "noopRefusal(`status target threads ${bid}:${id} not found`, 'gone')",
   "noopRefusal('partner-not-found', 'gone')",
@@ -142,15 +137,14 @@ const NOT_FOUND_PROBE = [
 ].join('\n')
 
 describe('noopRefusal marks: the scan (C11)', () => {
-  it('flags an unmarked value or gone row and passes a mark, a rule or precedence', () => {
+  it('flags a null mark on a value or gone row and passes a mark, a rule or precedence', () => {
     const calls = noopCalls('probe.ts', PROBE)
-    expect(calls).toHaveLength(10)
-    expect(unmarked(calls)).toEqual([
+    expect(calls).toHaveLength(9)
+    expect(nullMarked(calls)).toEqual([
       "probe.ts:1 'no-op lore patch'",
       'probe.ts:2 reasonFor(id)',
       "probe.ts:3 'USER_EDITED_SINCE_PROSE'",
-      "probe.ts:12 'relationship unchanged'",
-      "probe.ts:13 'already-flagged'",
+      "probe.ts:12 'already-flagged'",
     ])
   })
 
@@ -164,14 +158,14 @@ describe('noopRefusal marks: the scan (C11)', () => {
     ])
   })
 
-  it('finds every restated or gone noopRefusal in lib/actions marked', async () => {
+  it('finds no restated or gone noopRefusal in lib/actions passing a null mark', async () => {
     const paths = await fg(['lib/actions/**/*.ts'], {
       cwd: process.cwd(),
       ignore: ['**/*.test.ts', '**/__tests__/**'],
     })
     const calls = paths.flatMap((path) => noopCalls(path, readFileSync(path, 'utf8')))
     expect(calls.length, 'noopRefusal calls the scan read').toBeGreaterThanOrEqual(KNOWN_NOOP_CALLS)
-    expect(unmarked(calls), 'restated or gone refusals with no mark').toEqual([])
+    expect(nullMarked(calls), 'restated or gone refusals with a null mark').toEqual([])
   })
 
   it('marks every row-not-found refusal in lib/actions gone', async () => {
@@ -587,5 +581,21 @@ describe('noopRefusal marks: sample handlers (C11)', () => {
       ctx,
     )
     expect(result).toStrictEqual(noop('not-active'))
+  })
+})
+
+describe('noopRefusal marks: the types (C11)', () => {
+  it('states a mark or null at every noop, and a mark rides only on a noop', () => {
+    // @ts-expect-error a noop that states no mark
+    const unstated = () => noopRefusal('not-a-character')
+    const outcomes: HandlerOutcome[] = [
+      noopRefusal('not-a-character', null),
+      // @ts-expect-error a mark on another code
+      { status: 'rejected', reason: 'gone', code: 'not-found', mark: 'gone' },
+      // @ts-expect-error a mark with no code
+      { status: 'rejected', reason: 'gone', mark: 'gone' },
+    ]
+    expect(unstated).toBeTypeOf('function')
+    expect(outcomes[0]).toStrictEqual(noop('not-a-character'))
   })
 })
