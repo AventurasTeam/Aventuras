@@ -149,6 +149,12 @@ interface ModelCache {
 const CACHE_TTL = 12 * 60 * 60 * 1000
 const modelCaches = new Map<string, ModelCache>()
 
+/** The cached list for a `modelListKey` while it is within its lifetime. */
+function freshModelList(listKey: string): ImageModelInfo[] | undefined {
+  const cached = modelCaches.get(listKey)
+  return cached && Date.now() - cached.timestamp < CACHE_TTL ? cached.models : undefined
+}
+
 /** Drops the cached list for `previous`'s connection when `next` uses a different one. */
 export function evictReplacedModelList(
   previous: ImageModelConnection,
@@ -301,10 +307,8 @@ export async function listImageModels(
   const { providerType } = connection
   const cacheKey = modelListKey(connection)
   if (!forceReload) {
-    const cached = modelCaches.get(cacheKey)
-    if (cached && Date.now() - cached.timestamp < CACHE_TTL) {
-      return cached.models
-    }
+    const cached = freshModelList(cacheKey)
+    if (cached) return cached
   }
 
   try {
