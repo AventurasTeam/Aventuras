@@ -15,7 +15,7 @@ import {
   type WritePlan,
   type WriteTool,
 } from './tool'
-import { CLOSE_REASON, modelAnswer, verdictOf, type ToolVerdict } from './verdict'
+import { assertPlanShape, modelAnswer, rejectedWhole, verdictOf, type ToolVerdict } from './verdict'
 import { readRowGuard } from '../../runtime/action-port'
 import { emitDeltaGroup } from '../../runtime/emit-group'
 import type { PhaseContext, PhaseEmittedEvent } from '../../types'
@@ -39,16 +39,6 @@ type CallRecord = {
   survivor?: Survivor
 }
 
-function rejected(reason: string, survivor?: Survivor): ToolVerdict {
-  return {
-    result: 'rejected',
-    reason,
-    landed: [],
-    skippedFields: [],
-    ...(survivor === undefined ? {} : { survivor }),
-  }
-}
-
 // A tool sees the close, never the ledger or the read set it is judged by.
 function toolContextOf(ctx: DispatchContext): ToolContext {
   return {
@@ -63,13 +53,19 @@ function toolContextOf(ctx: DispatchContext): ToolContext {
   }
 }
 
+const hasToJson = (value: object): value is { toJSON: () => unknown } =>
+  typeof (value as { toJSON?: unknown }).toJSON === 'function'
+
+// Walks the answer as JSON.stringify would see it, keys included, so no full id survives anywhere.
 function handlesIn(value: unknown, ids: CloseIds): unknown {
   if (typeof value === 'string') return ids.withHandles(value)
   if (Array.isArray(value)) return value.map((item) => handlesIn(item, ids))
-  if (isJsonObject(value))
+  if (isJsonObject(value)) {
+    if (hasToJson(value)) return handlesIn(value.toJSON(), ids)
     return Object.fromEntries(
-      Object.entries(value).map(([key, item]) => [key, handlesIn(item, ids)]),
+      Object.entries(value).map(([key, item]) => [ids.withHandles(key), handlesIn(item, ids)]),
     )
+  }
   return value
 }
 
@@ -81,13 +77,13 @@ function namedWhy(args: Readonly<Record<string, unknown>>, ids: CloseIds): strin
   return typeof args.why === 'string' ? nameCloseProse({ why: args.why }, ids).why : ''
 }
 
-// The cited turns that resolve inside the chapter, for a call refused before its checks passed.
-function citedTurns(raw: unknown, ctx: DispatchContext): string[] {
+// For a call refused before its checks passed: the cited turns inside the chapter, as an ok records them.
+function turnsInChapter(raw: unknown, ctx: DispatchContext): string[] {
   if (!Array.isArray(raw)) return []
-  return raw.flatMap((handle) => {
-    const id = typeof handle === 'string' ? ctx.ids.idOf(handle) : undefined
-    return id !== undefined && ctx.chapterEntryIds.includes(id) ? [id] : []
-  })
+  const ids = new Set(
+    raw.map((handle) => (typeof handle === 'string' ? ctx.ids.idOf(handle) : undefined)),
+  )
+  return ctx.chapterEntryIds.filter((id) => ids.has(id))
 }
 
 function rowsNamed(rows: readonly GuardRow[], ids: CloseIds): ReportRow[] {
@@ -118,14 +114,6 @@ function recordWrite(
   })
 }
 
-function survivorFor(rows: readonly ReportRow[], ctx: DispatchContext): Survivor | undefined {
-  for (const row of rows) {
-    const kept = ctx.survivorOf(row.table, row.id)
-    if (kept !== undefined) return kept
-  }
-  return undefined
-}
-
 function createsRow(action: PipelineAction, id: string): boolean {
   const payload: unknown = 'payload' in action ? action.payload : undefined
   return isJsonObject(payload) && isJsonObject(payload.entry) && payload.entry.id === id
@@ -145,10 +133,12 @@ function landedCreate(
   return { id, name: plan.rows.find((row) => row.id === id)?.name ?? '' }
 }
 
-// C4: a restated field wrote nothing, so the report holds no value for it.
+// C4: a restated field wrote nothing, so the report holds no value for it, unless another action
+// in the call landed the same path.
 function landedOrProposed(
   plan: Write,
   outcome: GroupOutcome | null,
+  verdict: ToolVerdict,
 ): Readonly<Record<string, unknown>> {
   if (outcome?.status !== 'ok') return plan.values
   const { outcomes } = outcome
@@ -158,7 +148,11 @@ function landedOrProposed(
       return one?.status === 'noop' && one.mark === 'restated' ? planned.fields : []
     }),
   )
-  return Object.fromEntries(Object.entries(plan.values).filter(([field]) => !restated.has(field)))
+  return Object.fromEntries(
+    Object.entries(plan.values).filter(
+      ([field]) => !restated.has(field) || verdict.landed.includes(field),
+    ),
+  )
 }
 
 // The orchestrator logs a single action's noop; a group's outcome is the phase's to read.
@@ -197,6 +191,15 @@ function logOutcome(
   })
 }
 
+// C1: a close writes as chapter_close; any other source would read as that writer's under precedence.
+function assertCloseSource(tool: WriteTool, plan: Write): void {
+  for (const { action } of plan.actions)
+    if (action.source !== 'chapter_close')
+      throw new Error(
+        `${tool.name} plans a ${action.kind} as ${action.source}; a close writes as chapter_close`,
+      )
+}
+
 async function readCall(
   tool: ReadTool,
   args: Record<string, unknown>,
@@ -228,10 +231,10 @@ async function* writeCall(
     readSet: ctx.readSet,
   })
   if (!check.ok) {
-    const verdict = rejected(check.reason)
+    const verdict = rejectedWhole(check.reason, [], ctx)
     recordWrite(ctx, tool.name, args, {
       rows: rowsNamed(named, ctx.ids),
-      turns: citedTurns(args.turns, ctx),
+      turns: turnsInChapter(args.turns, ctx),
       verdict,
     })
     return modelAnswer(verdict, {}, ctx.ids)
@@ -250,10 +253,7 @@ async function* writeCall(
   })
 
   if (plan.kind === 'refused') {
-    const verdict = rejected(
-      plan.reason,
-      plan.reason === CLOSE_REASON.rowGone ? survivorFor(plan.rows, ctx) : undefined,
-    )
+    const verdict = rejectedWhole(plan.reason, plan.rows, ctx)
     recordWrite(ctx, tool.name, args, {
       rows: plan.rows,
       turns: check.turns,
@@ -263,6 +263,8 @@ async function* writeCall(
     return modelAnswer(verdict, {}, ctx.ids)
   }
 
+  assertPlanShape(plan)
+  assertCloseSource(tool, plan)
   let outcome: GroupOutcome | null = null
   if (plan.actions.length > 0) {
     const actions = plan.actions.map(({ action }) => action)
@@ -277,7 +279,7 @@ async function* writeCall(
     rows: plan.rows,
     turns: check.turns,
     verdict,
-    values: landedOrProposed(plan, outcome),
+    values: landedOrProposed(plan, outcome, verdict),
     // A gone row's survivor goes to the model's answer only; ok carries one only if something landed.
     ...(verdict.result === 'ok' && verdict.survivor !== undefined
       ? { survivor: verdict.survivor }
@@ -297,12 +299,12 @@ export async function* dispatchToolCall(
 ): AsyncGenerator<PhaseEmittedEvent, ToolAnswer, GroupOutcome | undefined> {
   const resolved = resolveIdArgs(call.input, tool, ctx.ids)
   if (!resolved.ok) {
-    const verdict = rejected(resolved.reason)
+    const verdict = rejectedWhole(resolved.reason, [], ctx)
     // A read has nothing for the review to show, so only a write's miss joins the ledger.
     if (tool.kind === 'write')
       recordWrite(ctx, tool.name, call.input, {
         rows: [],
-        turns: citedTurns(call.input.turns, ctx),
+        turns: turnsInChapter(call.input.turns, ctx),
         verdict,
       })
     return answerTo(call, modelAnswer(verdict, {}, ctx.ids), ctx.ids)

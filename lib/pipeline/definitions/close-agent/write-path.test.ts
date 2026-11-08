@@ -5,7 +5,13 @@ import { z } from 'zod'
 import {
   applyDeltaAction,
   applyDeltaActionGroupWithOutcomes,
+  settleUserWrites,
 } from '@/lib/actions/delta/apply-delta-action'
+import {
+  holdBranchWriteExclusive,
+  releaseBranchWriteExclusive,
+} from '@/lib/actions/delta/branch-write-lock'
+import { describeDeltaReplayError, reverseReplayDeltas } from '@/lib/actions/delta/reverse-replay'
 import { readRowGuard } from '@/lib/actions/delta/row-guard'
 import {
   USER_EDITED_SINCE_PROSE,
@@ -28,7 +34,9 @@ import {
   writeToolSchema,
   type CloseTool,
   type LostField,
+  type PlannedAction,
   type ReadTool,
+  type ReportRow,
   type WriteContext,
   type WritePlan,
   type WriteTool,
@@ -37,6 +45,7 @@ import { CLOSE_REASON, verdictOf } from './verdict'
 import { expectRan } from '../../__tests__/harness'
 import { definePipeline } from '../../authoring/define'
 import { __resetRegistry } from '../../authoring/registry'
+import { configureDeltaActionPort, type DeltaActionPort } from '../../runtime/action-port'
 import { __resetBus, pipelineEventBus } from '../../runtime/event-bus'
 import { runPipeline } from '../../runtime/orchestrator'
 import type {
@@ -616,6 +625,7 @@ let answers: ToolAnswer[] = []
 let seenProse: string[] = []
 let ledger: CloseLedger | undefined
 let shown: CloseIds | undefined
+let scriptedPlan: ((ctx: WriteContext) => WritePlan) | undefined
 
 const setFieldsTool: WriteTool = {
   kind: 'write',
@@ -711,12 +721,15 @@ const refuseNoteTool: WriteTool = {
   description: 'Create a lore note unless it clashes with a row.',
   schema: writeToolSchema({ title: z.string(), body: z.string(), other: z.string() }),
   ids: { other: { shape: 'single', prefixes: ['char'] } },
-  plan: async (args) => ({
-    kind: 'refused',
-    reason: `the note clashes with ${args.other as string}`,
-    rows: [],
-    values: { title: args.title, body: args.body },
-  }),
+  plan: async (args, ctx) => {
+    const other = args.other as string
+    return {
+      kind: 'refused',
+      reason: `the note clashes with ${other}`,
+      rows: [{ table: 'entities', id: other, name: ctx.ids.nameOfId(other) ?? '' }],
+      values: { title: args.title, body: args.body },
+    }
+  },
 }
 
 const peekRowTool: ReadTool = {
@@ -742,8 +755,40 @@ const peekRawTool: ReadTool = {
   description: 'Read one character, raw.',
   schema: readToolSchema({ id: z.string() }),
   ids: { id: { shape: 'single', prefixes: ['char'] } },
-  read: async (args) => ({ output: { row: args.id }, rows: [], read: [] }),
+  read: async (args) => {
+    const id = args.id as string
+    return {
+      output: { row: id, [id]: 'line', nested: [{ deep: id }], at: new Date(0) },
+      rows: [],
+      read: [],
+    }
+  },
 }
+
+// Plans whatever the test sets; `rows` only passes the named rows through the read gate.
+const scriptedTool: WriteTool = {
+  kind: 'write',
+  name: 'scripted',
+  description: 'Write what the test planned.',
+  schema: writeToolSchema({ rows: z.array(z.string()) }),
+  ids: { rows: { shape: 'array', prefixes: ['char'] } },
+  plan: async (_args, ctx) => {
+    if (scriptedPlan === undefined) throw new Error('no scripted plan')
+    return scriptedPlan(ctx)
+  },
+}
+
+const describeAs = (ctx: WriteContext, id: string, description: string): PlannedAction => ({
+  action: {
+    kind: 'updateEntity',
+    source: 'chapter_close',
+    payload: { branchId: ctx.branchId, id, patch: { description } },
+  },
+  fields: ['description'],
+})
+
+const entityRows = (...ids: string[]): ReportRow[] =>
+  ids.map((id) => ({ table: 'entities', id, name: id === WREN ? 'Wren' : 'Bram' }))
 
 // A merge's shape: `other` folds into `id`, which keeps the description given, written blind.
 const keepRowTool: WriteTool = {
@@ -786,6 +831,7 @@ const TOOLS: Readonly<Record<string, CloseTool>> = {
   set_fields: setFieldsTool,
   blind_set: blindSetTool,
   keep_row: keepRowTool,
+  scripted: scriptedTool,
   create_note: createNoteTool,
   refuse_note: refuseNoteTool,
   peek_row: peekRowTool,
@@ -833,6 +879,7 @@ async function* dispatchPhase(
 
 async function runDispatch(
   calls: ScriptedCall[],
+  outcome: TxResult['outcome'] = 'completed',
 ): Promise<{ result: TxResult; events: PipelineEvent[] }> {
   script = calls
   const events: PipelineEvent[] = []
@@ -847,7 +894,7 @@ async function runDispatch(
       runInTransaction: f.ctx.runInTransaction,
     }),
   )
-  expect(result.outcome).toBe('completed')
+  expect(result.outcome).toBe(outcome)
   return { result, events }
 }
 
@@ -867,11 +914,45 @@ function runDeltas(actionId: string) {
     .orderBy(asc(deltas.logPosition))
 }
 
+// The port vitest.setup.ts configures, with `over` swapped in.
+function configurePort(over: Partial<DeltaActionPort>): void {
+  configureDeltaActionPort({
+    applyDeltaAction,
+    applyDeltaActionGroupWithOutcomes,
+    readRowGuard,
+    reverseReplayDeltas,
+    describeReplayError: describeDeltaReplayError,
+    settleUserWrites,
+    holdBranchWriteExclusive,
+    releaseBranchWriteExclusive,
+    ...over,
+  })
+}
+
+// An earlier task's landed merge: GONE folded into WREN.
+function mergeGoneIntoWren(_ids: CloseIds, writer: CloseLedgerWriter): void {
+  writer.record({
+    task: 'happenings',
+    part: 0,
+    tool: 'merge_characters',
+    rows: [
+      { table: 'entities', id: WREN, name: 'Wren' },
+      { table: 'entities', id: GONE, name: 'Old Wren' },
+    ],
+    why: 'One courier.',
+    turns: [],
+    result: 'ok',
+    values: { name: 'Wren' },
+    survivor: { table: 'entities', id: WREN },
+  })
+}
+
 const cite = (turns: string[], why = 'She says so at the toll house.') => ({ turns, why })
 
 describe('dispatchToolCall in a close phase', () => {
   afterEach(() => {
     vi.restoreAllMocks()
+    configurePort({})
   })
 
   beforeEach(async () => {
@@ -887,6 +968,7 @@ describe('dispatchToolCall in a close phase', () => {
     seenProse = []
     ledger = undefined
     shown = undefined
+    scriptedPlan = undefined
     definePipeline({
       kind: KIND,
       phases: [{ name: 'agent', run: dispatchPhase }],
@@ -912,6 +994,7 @@ describe('dispatchToolCall in a close phase', () => {
     ])
 
     expect(recorded().map((call) => call.result)).toEqual(['rejected', 'rejected', 'rejected'])
+    expect(recorded()[1]!.turns).toEqual([])
     expect(recorded()[2]).toMatchObject({
       tool: 'set_fields',
       rows: [{ table: 'entities', id: BRAM, name: 'Bram' }],
@@ -925,9 +1008,12 @@ describe('dispatchToolCall in a close phase', () => {
     expect((await row(WREN)).description).toBe('A courier.')
   })
 
-  it('refuses a handle it never showed, naming it', async () => {
+  it('refuses a handle it never showed, naming it, with its cited turns once each by position', async () => {
     await runDispatch([
-      { toolName: 'set_fields', input: { id: 'c9', description: 'Soaked.', ...cite(['t7']) } },
+      {
+        toolName: 'set_fields',
+        input: { id: 'c9', description: 'Soaked.', ...cite(['t5', 't3', 't5']) },
+      },
     ])
 
     expect(recorded()).toEqual([
@@ -935,8 +1021,19 @@ describe('dispatchToolCall in a close phase', () => {
         result: 'rejected',
         rows: [],
         reason: expect.stringContaining('c9'),
+        turns: [f.entries[2]!.id, f.entries[4]!.id],
       }),
     ])
+  })
+
+  it('answers a read naming a handle it never showed, recording nothing', async () => {
+    await runDispatch([{ toolName: 'peek_row', input: { id: 'c9' } }])
+
+    expect(recorded()).toEqual([])
+    expect(answers[0]!.output).toMatchObject({
+      result: 'rejected',
+      reason: expect.stringContaining('c9'),
+    })
   })
 
   it("counts a seeded start row as read, and lands with chapter_close, the run's action and E", async () => {
@@ -1001,7 +1098,15 @@ describe('dispatchToolCall in a close phase', () => {
     expect((await row(BRAM)).description).toBe('Bram, at the toll.')
   })
 
-  it('hands the plan the latest cited turn by position, not by citation order', async () => {
+  it('hands the plan and the guard the latest cited turn by position, not by citation order', async () => {
+    const guarded: (string | null)[] = []
+    configurePort({
+      readRowGuard: (args, ctx) => {
+        guarded.push(args.proseEntryId)
+        return readRowGuard(args, ctx)
+      },
+    })
+
     await runDispatch([
       {
         toolName: 'set_fields',
@@ -1010,9 +1115,8 @@ describe('dispatchToolCall in a close phase', () => {
     ])
 
     expect(seenProse).toEqual([f.entries[4]!.id])
-    const turns = recorded()[0]!.turns
-    expect(turns).toHaveLength(2)
-    expect(turns).toEqual(expect.arrayContaining([f.entries[4]!.id, f.entries[2]!.id]))
+    expect(guarded).toEqual([f.entries[4]!.id])
+    expect(recorded()[0]!.turns).toEqual([f.entries[2]!.id, f.entries[4]!.id])
   })
 
   it('emits no group when nothing is left to land: skipped if protected, rejected if refused', async () => {
@@ -1044,22 +1148,7 @@ describe('dispatchToolCall in a close phase', () => {
       { table: 'entities', id: WREN },
       { table: 'entities', id: GONE },
     ]
-    setup = (_ids, writer) => {
-      writer.record({
-        task: 'happenings',
-        part: 0,
-        tool: 'merge_characters',
-        rows: [
-          { table: 'entities', id: WREN, name: 'Wren' },
-          { table: 'entities', id: GONE, name: 'Old Wren' },
-        ],
-        why: 'One courier.',
-        turns: [],
-        result: 'ok',
-        values: { name: 'Wren' },
-        survivor: { table: 'entities', id: WREN },
-      })
-    }
+    setup = mergeGoneIntoWren
 
     await runDispatch([
       {
@@ -1089,21 +1178,7 @@ describe('dispatchToolCall in a close phase', () => {
       { table: 'entities', id: WREN },
       { table: 'entities', id: GONE },
     ]
-    setup = (_ids, writer) => {
-      writer.record({
-        task: 'happenings',
-        part: 0,
-        tool: 'merge_characters',
-        rows: [
-          { table: 'entities', id: WREN, name: 'Wren' },
-          { table: 'entities', id: GONE, name: 'Old Wren' },
-        ],
-        why: 'One courier.',
-        turns: [],
-        result: 'ok',
-        survivor: { table: 'entities', id: WREN },
-      })
-    }
+    setup = mergeGoneIntoWren
 
     await runDispatch([
       { toolName: 'blind_set', input: { id: 'c3', description: 'Older.', ...cite(['t7']) } },
@@ -1148,6 +1223,7 @@ describe('dispatchToolCall in a close phase', () => {
 
     const created = recorded()[0]!.rows[0]!.id
     expect(shown!.handleOf(created)).toBe('lo1')
+    expect(answers[0]!.output).toMatchObject({ result: 'ok', id: 'lo1' })
     expect(recorded()[1]!.why).toBe('Learned at The Toll.')
     expect((await row(WREN)).description).toBe('Owes the toll (The Toll).')
     const [note] = await f.ctx.db.select().from(lore).where(eq(lore.id, created))
@@ -1171,7 +1247,12 @@ describe('dispatchToolCall in a close phase', () => {
     const told = JSON.stringify(answers[0]!.output)
     expect(told).toContain('clashes with c1')
     expect(told).not.toMatch(FULL_ID)
-    expect(answers[1]!.output).toEqual({ row: 'c1' })
+    expect(answers[1]!.output).toEqual({
+      row: 'c1',
+      c1: 'line',
+      nested: [{ deep: 'c1' }],
+      at: '1970-01-01T00:00:00.000Z',
+    })
   })
 
   it("records a merge's kept row only when something landed", async () => {
@@ -1227,5 +1308,138 @@ describe('dispatchToolCall in a close phase', () => {
       ['ok', undefined],
       ['rejected', CLOSE_REASON.rowGone],
     ])
+  })
+
+  it('names no survivor for a refusal that is not a gone row', async () => {
+    seeds = [
+      { table: 'entities', id: WREN },
+      { table: 'entities', id: GONE },
+    ]
+    setup = mergeGoneIntoWren
+
+    await runDispatch([
+      {
+        toolName: 'refuse_note',
+        input: { title: 'The Toll', body: 'Paid.', other: 'c3', ...cite(['t7']) },
+      },
+    ])
+
+    expect(recorded()[1]).toMatchObject({
+      result: 'rejected',
+      reason: `the note clashes with ${GONE}`,
+    })
+    expect(answers[0]!.output).not.toHaveProperty('survivor')
+  })
+
+  it('keeps a path one action restates when another action lands it', async () => {
+    seeds = [
+      { table: 'entities', id: WREN },
+      { table: 'entities', id: BRAM },
+    ]
+    scriptedPlan = (ctx) => ({
+      kind: 'write',
+      actions: [describeAs(ctx, WREN, 'A courier.'), describeAs(ctx, BRAM, 'Bram, soaked.')],
+      lost: [],
+      rows: entityRows(WREN, BRAM),
+      values: { description: 'Bram, soaked.' },
+    })
+
+    await runDispatch([{ toolName: 'scripted', input: { rows: ['c1', 'c2'], ...cite(['t7']) } }])
+
+    expect(recorded()[0]).toMatchObject({ result: 'ok', values: { description: 'Bram, soaked.' } })
+    expect((await row(BRAM)).description).toBe('Bram, soaked.')
+  })
+
+  it("keeps a refused noop's proposed value beside a landed action", async () => {
+    scriptedPlan = (ctx) => ({
+      kind: 'write',
+      actions: [
+        describeAs(ctx, WREN, 'Soaked.'),
+        {
+          action: {
+            kind: 'updateEntityCondition',
+            source: 'chapter_close',
+            payload: { branchId: ctx.branchId, id: WREN, condition: 'wet' },
+          },
+          fields: ['state.condition'],
+        },
+      ],
+      lost: [],
+      rows: entityRows(WREN),
+      values: { description: 'Soaked.', 'state.condition': 'wet' },
+    })
+
+    await runDispatch([{ toolName: 'scripted', input: { rows: ['c1'], ...cite(['t7']) } }])
+
+    expect(recorded()[0]).toMatchObject({
+      result: 'ok',
+      values: { description: 'Soaked.', 'state.condition': 'wet' },
+      skippedFields: [{ field: 'state.condition', reason: 'not-a-place-or-item' }],
+    })
+  })
+
+  it("answers no handle for a create whose plan names a row its actions don't create", async () => {
+    const named = generateId('lore')
+    scriptedPlan = (ctx) => ({
+      kind: 'write',
+      actions: [describeAs(ctx, WREN, 'Soaked.')],
+      lost: [],
+      rows: [...entityRows(WREN), { table: 'lore', id: named, name: 'The Toll' }],
+      values: { description: 'Soaked.' },
+      createdId: named,
+    })
+
+    await runDispatch([{ toolName: 'scripted', input: { rows: ['c1'], ...cite(['t7']) } }])
+
+    expect(shown!.handleOf(named)).toBeUndefined()
+    expect(answers[0]!.output).toEqual({ result: 'ok' })
+  })
+
+  it("answers no handle for a create whose action didn't land", async () => {
+    // No create handler noops in an ok group, so the port stands in for one that would.
+    configurePort({
+      applyDeltaActionGroupWithOutcomes: async () => ({
+        status: 'ok',
+        outcomes: [{ status: 'noop', reason: 'not-created' }],
+      }),
+    })
+
+    await runDispatch([
+      { toolName: 'create_note', input: { title: 'The Toll', body: 'Paid.', ...cite(['t7']) } },
+    ])
+
+    expect(shown!.handleOf(recorded()[0]!.rows[0]!.id)).toBeUndefined()
+    expect(answers[0]!.output).not.toHaveProperty('id')
+  })
+
+  it.each([
+    ['names no delta path', { fields: [] as string[] }, /names no delta path/],
+    ['writes under another source', { source: 'user_edit' as const }, /chapter_close/],
+  ])('fails the run before any group when a planned action %s', async (_what, bad, message) => {
+    scriptedPlan = (ctx) => {
+      const planned = describeAs(ctx, WREN, 'Soaked.')
+      return {
+        kind: 'write',
+        actions: [
+          {
+            action: { ...planned.action, ...('source' in bad ? { source: bad.source } : {}) },
+            fields: 'fields' in bad ? bad.fields : planned.fields,
+          } as PlannedAction,
+        ],
+        lost: [],
+        rows: entityRows(WREN),
+        values: { description: 'Soaked.' },
+      }
+    }
+
+    const { result, events } = await runDispatch(
+      [{ toolName: 'scripted', input: { rows: ['c1'], ...cite(['t7']) } }],
+      'failed',
+    )
+
+    expect(JSON.stringify(result.error)).toMatch(message)
+    expect(groupEvents(events)).toEqual([])
+    expect(await runDeltas(result.actionId)).toEqual([])
+    expect((await row(WREN)).description).toBe('A courier.')
   })
 })

@@ -52,8 +52,13 @@ function survivorAmong(rows: readonly ReportRow[], { survivorOf }: Survivors) {
   return undefined
 }
 
-function rejectedWhole(reason: string, plan: WritingPlan, ctx: Survivors): ToolVerdict {
-  const survivor = reason === CLOSE_REASON.rowGone ? survivorAmong(plan.rows, ctx) : undefined
+/** A refusal of the whole call; a gone row names where it went, if a landed merge took it. */
+export function rejectedWhole(
+  reason: string,
+  rows: readonly ReportRow[],
+  ctx: Survivors,
+): ToolVerdict {
+  const survivor = reason === CLOSE_REASON.rowGone ? survivorAmong(rows, ctx) : undefined
   return {
     result: 'rejected',
     reason,
@@ -61,6 +66,12 @@ function rejectedWhole(reason: string, plan: WritingPlan, ctx: Survivors): ToolV
     skippedFields: [],
     ...(survivor === undefined ? {} : { survivor }),
   }
+}
+
+/** Every planned action names the delta paths it writes, or its outcome reads as nothing. */
+export function assertPlanShape(plan: WritingPlan): void {
+  for (const { action, fields } of plan.actions)
+    if (fields.length === 0) throw new Error(`a planned ${action.kind} names no delta path`)
 }
 
 /**
@@ -73,12 +84,10 @@ export function verdictOf(
   outcome: GroupOutcome | null,
   ctx: Survivors,
 ): ToolVerdict {
-  for (const { action, fields } of plan.actions)
-    if (fields.length === 0)
-      throw new Error(`verdictOf: a planned ${action.kind} names no delta path`)
+  assertPlanShape(plan)
   if (outcome?.status === 'rejected') {
     const reason = outcome.code === TARGET_NOT_FOUND ? CLOSE_REASON.rowGone : outcome.reason
-    return rejectedWhole(reason, plan, ctx)
+    return rejectedWhole(reason, plan.rows, ctx)
   }
   const outcomes = outcome?.outcomes ?? []
   if (outcomes.length !== plan.actions.length)
@@ -114,7 +123,7 @@ export function verdictOf(
     }
   }
   const refusal = losses.find((loss) => loss.refused)
-  if (refusal !== undefined) return rejectedWhole(refusal.reason, plan, ctx)
+  if (refusal !== undefined) return rejectedWhole(refusal.reason, plan.rows, ctx)
   const protection = losses.find((loss) => !loss.refused)
   if (protection !== undefined)
     return { result: 'skipped', reason: protection.reason, landed: [], skippedFields: [] }
