@@ -540,6 +540,10 @@
     return opts
   }
 
+  const storedProfile = $derived(
+    editingProfileId ? settings.getImageProfile(editingProfileId) : undefined,
+  )
+
   // Whether the loaded model list is for the form's current provider, key and URL.
   const modelsSettled = $derived(profileModelsKey === modelListKey(connection))
 
@@ -550,7 +554,7 @@
       connection,
       models: profileModels,
       settled: modelsSettled,
-      stored: editingProfileId ? settings.getImageProfile(editingProfileId) : undefined,
+      stored: storedProfile,
     })
   }
 
@@ -588,7 +592,7 @@
   async function autoSaveProfile() {
     if (isNewProfile || !editingProfileId || !canSaveProfile) return
 
-    const previous = settings.getImageProfile(editingProfileId)
+    const previous = storedProfile
     await settings.updateImageProfile(
       editingProfileId,
       {
@@ -650,7 +654,7 @@
     untrack(() => {
       if (isNewProfile || !editingProfileId || suppressAutoSave) return
       if (!capturesModelSnapshot(profileProviderType)) return
-      const stored = settings.getImageProfile(editingProfileId)
+      const stored = storedProfile
       if (!stored || stored.model !== profileModel || !sameEndpoint(stored, connection)) return
       const modelSnapshot = buildModelSnapshot()
       if (modelSnapshot && modelSnapshot !== stored.modelSnapshot) {
