@@ -9,6 +9,7 @@ import type {
 } from './types'
 import { imageGetFetch } from './fetchAdapter'
 import { bearerHeaders, imageGetFetchOptional } from './discoveryFetch'
+import { createNanoGPTImage } from './nanogptImage'
 import {
   architectureSchema,
   catalogueModelInfo,
@@ -17,7 +18,6 @@ import {
   optionalNumber,
   optionalString,
 } from './modelCatalogue'
-import { createNanoGPTImage } from './nanogptImage'
 import { parseModelList } from './parseModelList'
 import { createImageSdkFetch, generateSdkImage } from './sdkImage'
 import {
