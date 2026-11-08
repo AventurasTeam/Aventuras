@@ -486,7 +486,10 @@ Labels: `Closing chapter: 3 of 7 — Identity…`. Boundary and metadata each
 have their own label and no count, as does the `agent` phase until its
 first task starts and `report`, and the last task's label stands until
 `report`, since a start-only event can't show the reset.
-`Closing chapter before your turn…` before a turn. Phase 0's passes keep
+Before a turn each leads with `Before your turn:` in its place
+(`Before your turn: 3 of 7 — Identity…`), and a close not yet in a phase
+reads `Closing chapter before your turn…` (developer, 2026-11-08: the
+banner is the only place phone names the wait). Phase 0's passes keep
 the pass's labels: `Updating memory before your turn…` under Send, whose
 `beforeTurn` each successor inherits from the chain's start, and
 `Updating memory…` outside one. Until 5.5a lands, a close shows only the

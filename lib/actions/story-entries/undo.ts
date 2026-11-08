@@ -1,4 +1,4 @@
-import { desc, eq } from 'drizzle-orm'
+import { and, desc, eq, ne } from 'drizzle-orm'
 
 import type { Delta, SqlOp } from '@/lib/db'
 import { deltas } from '@/lib/db'
@@ -49,11 +49,31 @@ async function refusingIntegrity(
   }
 }
 
-async function recentDeltaRows(branchId: string, ctx: DbCtx): Promise<Delta[]> {
+// CTRL-Z reads one group, not the log: the newest row a user would undo (a pass's rows sit above
+// its turn with their own action id), then that action's rows, newest first as selectUndoTarget
+// requires. A long branch's whole log runs to tens of MB.
+async function headGroupRows(
+  branchId: string,
+  ctx: DbCtx,
+  skipActionId?: string,
+): Promise<Delta[]> {
+  const [head] = await ctx.db
+    .select({ actionId: deltas.actionId })
+    .from(deltas)
+    .where(
+      and(
+        eq(deltas.branchId, branchId),
+        ne(deltas.source, 'periodic_classifier'),
+        skipActionId === undefined ? undefined : ne(deltas.actionId, skipActionId),
+      ),
+    )
+    .orderBy(desc(deltas.logPosition))
+    .limit(1)
+  if (head === undefined) return []
   return (await ctx.db
     .select()
     .from(deltas)
-    .where(eq(deltas.branchId, branchId))
+    .where(and(eq(deltas.branchId, branchId), eq(deltas.actionId, head.actionId)))
     .orderBy(desc(deltas.logPosition))) as Delta[]
 }
 
@@ -63,10 +83,9 @@ export async function undoLastAction(branchId: string, ctx: DbCtx): Promise<Undo
   let throughInterrupt = false
   if (generationStore.isUserEditBlocked()) {
     if (generationStore.isHeadReversalBlocked(branchId)) return GATED
-    const rows = await recentDeltaRows(branchId, ctx)
     // A running close's rows head the log above the turn; the interrupt reverses them first.
     const running = selectMemoryRun(generationStore.getTxState(), { branchId })?.actionId
-    const target = selectUndoTarget(rows.filter((row) => row.actionId !== running))
+    const target = selectUndoTarget(await headGroupRows(branchId, ctx, running))
     if (generationStore.isUserEditBlocked()) {
       if (target?.kind !== 'turn' || generationStore.isHeadReversalBlocked(branchId)) return GATED
       throughInterrupt = true
@@ -91,8 +110,8 @@ async function undoBracketed(
   ctx: DbCtx,
   throughInterrupt: boolean,
 ): Promise<UndoResult> {
-  const recent = await recentDeltaRows(branchId, ctx)
-  const target = selectUndoTarget(recent)
+  const group = await headGroupRows(branchId, ctx)
+  const target = selectUndoTarget(group)
   if (!target) return { status: 'rejected', code: 'nothing-to-apply', reason: 'nothing to undo' }
   // Admitted past the gate to undo the turn; a target that moved during the interrupt is gated.
   if (throughInterrupt && target.kind !== 'turn') return GATED
@@ -106,7 +125,6 @@ async function undoBracketed(
     set = swept.set
     clampOps = swept.clampOps
   } else {
-    const group = recent.filter((r) => r.actionId === target.actionId)
     const invalidation = await resolveInvalidationForDeltas(branchId, group, ctx)
     if (invalidation.status === 'unreadable') return unreadableScopeRejection(invalidation.deltaId)
     clampOps = invalidation.clampOps

@@ -3,7 +3,13 @@ import { expect, test } from '@playwright/test'
 import { vecTableName } from '@/lib/db'
 
 import { takeTurn } from '../flows/turn'
-import { branchStaleTotal, currentBranchId, queryApp } from '../harness/db'
+import {
+  branchStaleTotal,
+  currentBranchId,
+  queryApp,
+  queryScalar,
+  OPEN_REGION_FROM,
+} from '../harness/db'
 import { installEmbedderModel } from '../harness/embedder'
 import { t } from '../harness/i18n'
 import { launchApp, type LaunchedApp } from '../harness/launch'
@@ -62,13 +68,9 @@ test.describe('first chapter — a close from the dev route', () => {
     test.setTimeout(300_000)
     const page = app.window
     const branchId = await currentBranchId(page, HERO_STORY)
-    const scalar = async (sql: string, params: unknown[] = []): Promise<number> =>
-      Number((await queryApp(page, sql, params))[0]?.[0])
-
     const openRows = (await queryApp(
       page,
-      `SELECT id, position, kind FROM story_entries
-       WHERE branch_id = ? AND chapter_id IS NULL AND kind <> 'system' ORDER BY position`,
+      `SELECT id, position, kind ${OPEN_REGION_FROM} ORDER BY position`,
       [branchId],
     )) as OpenRow[]
     const range = openRows.filter(([, position]) => position <= END_POSITION)
@@ -76,7 +78,8 @@ test.describe('first chapter — a close from the dev route', () => {
     expect(end?.slice(1), 'the end is an open-region reply').toEqual([END_POSITION, 'ai_reply'])
     const endId = end![0]
     expect(openRows.length, 'entries stay open past the end').toBeGreaterThan(range.length)
-    const pactPosition = await scalar(
+    const pactPosition = await queryScalar(
+      page,
       `SELECT e.position FROM happenings h
        JOIN story_entries e ON e.branch_id = h.branch_id AND e.id = h.occurred_at_entry_id
        WHERE h.branch_id = ? AND h.title = ?`,
@@ -86,10 +89,13 @@ test.describe('first chapter — a close from the dev route', () => {
       range.map(([, position]) => position),
       'the pact’s anchor closes with the chapter',
     ).toContain(pactPosition)
-    const chaptersBefore = await scalar(`SELECT COUNT(*) FROM chapters WHERE branch_id = ?`, [
-      branchId,
-    ])
-    const logHead = await scalar(
+    const chaptersBefore = await queryScalar(
+      page,
+      `SELECT COUNT(*) FROM chapters WHERE branch_id = ?`,
+      [branchId],
+    )
+    const logHead = await queryScalar(
+      page,
       `SELECT COALESCE(MAX(log_position), 0) FROM deltas WHERE branch_id = ?`,
       [branchId],
     )
@@ -164,7 +170,8 @@ test.describe('first chapter — a close from the dev route', () => {
       })
       expect(tokenCount).toBeGreaterThan(0)
       expect(tokenCount, 'token_count sums the stamped range').toBe(
-        await scalar(
+        await queryScalar(
+          page,
           `SELECT SUM(content_tokens) FROM story_entries WHERE branch_id = ? AND chapter_id = ?`,
           [branchId, chapterId],
         ),
@@ -195,7 +202,8 @@ test.describe('first chapter — a close from the dev route', () => {
         ['chapters', 'update', chapterId, endId, 'chapter_close'],
       ])
       expect(
-        await scalar(
+        await queryScalar(
+          page,
           `SELECT COUNT(*) FROM deltas WHERE branch_id = ? AND source = 'chapter_close' AND log_position > ?`,
           [branchId, logHead],
         ),
@@ -228,7 +236,8 @@ test.describe('first chapter — a close from the dev route', () => {
         .toBe(0)
       // Scoped to the model id: knnQuery filters on it, so a vector under another breaks retrieval.
       expect(
-        await scalar(
+        await queryScalar(
+          page,
           `SELECT count(*) FROM ${vecTableName('chapter', embedder.dim)}
            WHERE branch_id = ? AND id = ? AND model_id = ?`,
           [branchId, chapterId, embedder.modelId],

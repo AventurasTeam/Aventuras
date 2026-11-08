@@ -17,6 +17,7 @@ export {
   kickStoryDrain,
   countStoryEmbeddableRows,
   embedClassifierDescriptions,
+  EMBEDDER_SWAP_REFUSAL,
   isStorySwapPending,
   refreshEmbeddingStatus,
   reindexStoryNow,

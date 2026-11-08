@@ -11,6 +11,11 @@ import {
   type VecTargetKind,
 } from '@/lib/db'
 
+// The app's open region (openRegionWhere, lib/db/story-entries/open-region.ts) as raw SQL, for a
+// spec's own reads; its one parameter is the branch id.
+export const OPEN_REGION_FROM = `FROM story_entries
+  WHERE branch_id = ? AND chapter_id IS NULL AND kind <> 'system'`
+
 // Query the running app's own DB connection through the preload bridge
 // (window.aventurasDb): the one connection with sqlite-vec loaded, the only one a
 // spec may write through, and one that never waits on the app's writer for the
@@ -34,6 +39,17 @@ export async function queryApp(
     { sql, params },
   )
   return result.rows
+}
+
+/** The first column of the first row, as a number; no row fails the read rather than reading NaN. */
+export async function queryScalar(
+  page: Page,
+  sql: string,
+  params: unknown[] = [],
+): Promise<number> {
+  const rows = await queryApp(page, sql, params)
+  expect(rows.length, `a row from: ${sql}`).toBeGreaterThan(0)
+  return Number(rows[0]![0])
 }
 
 // A reply streams into the DOM before its row commits, so callers poll. The cardinality assert

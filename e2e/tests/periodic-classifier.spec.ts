@@ -3,7 +3,7 @@ import { expect, test } from '@playwright/test'
 import { passProbe } from '../flows/classifier-pass'
 import { goToWorld, openStory } from '../flows/navigation'
 import { takeTurn } from '../flows/turn'
-import { currentBranchId, queryApp } from '../harness/db'
+import { currentBranchId, queryApp, queryScalar } from '../harness/db'
 import { installEmbedderModel } from '../harness/embedder'
 import { launchApp, type LaunchedApp } from '../harness/launch'
 import { promptOf, startMockLlm, type MockLlm } from '../harness/mock-llm'
@@ -594,9 +594,8 @@ test.describe('periodic classifier — unassigned agent', () => {
     await expect(reader.composer(page)).toBeVisible({ timeout: 20_000 })
     const branchId = await currentBranchId(page, 'story_hero')
     const status = () => classifierStatus(branchId)
-    const scalar = async (sql: string, params: unknown[] = []): Promise<unknown> =>
-      (await queryApp(page, sql, params))[0][0]
-    const turnRuns = () => scalar(`SELECT COUNT(*) FROM pipeline_runs WHERE kind = 'per-turn'`)
+    const turnRuns = () =>
+      queryScalar(page, `SELECT COUNT(*) FROM pipeline_runs WHERE kind = 'per-turn'`)
     const [, , parked] = await status()
 
     // The watermark is parked at the last prose row, so this Send owes nothing and takes its turn.
@@ -619,7 +618,8 @@ test.describe('periodic classifier — unassigned agent', () => {
     await expect(reader.assignProfileFix(page)).toBeVisible()
     await expect(reader.composer(page)).toHaveValue(REFUSED)
     expect(
-      await scalar(
+      await queryScalar(
+        page,
         `SELECT COUNT(*) FROM story_entries WHERE branch_id = ? AND content LIKE '%E2E-NOAGENT I trim%'`,
         [branchId],
       ),

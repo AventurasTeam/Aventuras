@@ -1,8 +1,8 @@
 import { expect, test, type Page } from '@playwright/test'
 
-import { passProbe } from '../flows/classifier-pass'
+import { passProbe, heldRun, runOutcomes } from '../flows/classifier-pass'
 import { openStory } from '../flows/navigation'
-import { FixtureDb, queryApp } from '../harness/db'
+import { FixtureDb, queryApp, queryScalar, OPEN_REGION_FROM } from '../harness/db'
 import { installEmbedderModel } from '../harness/embedder'
 import { copyNumber, copyPattern, t } from '../harness/i18n'
 import { launchApp, type LaunchedApp } from '../harness/launch'
@@ -31,15 +31,13 @@ const CHAPTER = {
   keywords: ['satchel', 'gate', 'north road'],
 }
 
-const OPEN_REGION = `FROM story_entries WHERE branch_id = ? AND chapter_id IS NULL AND kind <> 'system'`
-
 // The seeded open region's count. One token over it, nothing is owed before the first Send and
 // that Send's turn owes a close.
 function seededOpenRegionTokens(dbPath: string): number {
   const db = new FixtureDb(dbPath)
   try {
     const row = db.get<{ tokens: number }>(
-      `SELECT COALESCE(SUM(content_tokens), 0) AS tokens ${OPEN_REGION}`,
+      `SELECT COALESCE(SUM(content_tokens), 0) AS tokens ${OPEN_REGION_FROM}`,
       HERO_BRANCH,
     )
     const tokens = Number(row?.tokens ?? 0)
@@ -92,36 +90,29 @@ function closeProbe(hero: () => Hero) {
   const mock = (): MockLlm => hero().mock
   const { passDeltas, ...pass } = passProbe(page, mock)
 
-  const scalar = async (sql: string, params: unknown[]): Promise<number> =>
-    Number((await queryApp(page(), sql, params))[0]?.[0])
-
-  // pipeline_runs has no branch column; only the hero story's runs happen in this app.
-  async function closeOutcomes(): Promise<(string | null)[]> {
-    const rows = await queryApp(
-      page(),
-      `SELECT outcome FROM pipeline_runs WHERE kind = 'chapter-close' AND story_id = ?
-       ORDER BY started_at, rowid`,
-      [HERO_STORY],
-    )
-    return rows.map((r) => r[0] as string | null)
-  }
+  const closeOutcomes = () => runOutcomes(page(), 'chapter-close', HERO_STORY)
 
   const chapterCount = (branch: string): Promise<number> =>
-    scalar(`SELECT COUNT(*) FROM chapters WHERE branch_id = ?`, [branch])
+    queryScalar(page(), `SELECT COUNT(*) FROM chapters WHERE branch_id = ?`, [branch])
 
   const openRegionTokens = (branch: string): Promise<number> =>
-    scalar(`SELECT COALESCE(SUM(content_tokens), 0) ${OPEN_REGION}`, [branch])
+    queryScalar(page(), `SELECT COALESCE(SUM(content_tokens), 0) ${OPEN_REGION_FROM}`, [branch])
 
   const threshold = (): Promise<number> =>
-    scalar(`SELECT json_extract(settings, '$.chapterTokenThreshold') FROM stories WHERE id = ?`, [
-      HERO_STORY,
-    ])
+    queryScalar(
+      page(),
+      `SELECT json_extract(settings, '$.chapterTokenThreshold') FROM stories WHERE id = ?`,
+      [HERO_STORY],
+    )
 
   const logHead = (branch: string): Promise<number> =>
-    scalar(`SELECT COALESCE(MAX(log_position), 0) FROM deltas WHERE branch_id = ?`, [branch])
+    queryScalar(page(), `SELECT COALESCE(MAX(log_position), 0) FROM deltas WHERE branch_id = ?`, [
+      branch,
+    ])
 
   const closeDeltasAfter = (branch: string, logPosition: number): Promise<number> =>
-    scalar(
+    queryScalar(
+      page(),
       `SELECT COUNT(*) FROM deltas
        WHERE branch_id = ? AND source = 'chapter_close' AND log_position > ?`,
       [branch, logPosition],
@@ -130,7 +121,7 @@ function closeProbe(hero: () => Hero) {
   // The open region's first row and latest reply, read before a turn: a close with no pick after
   // that turn ends on the reply before the head, so here, and the turn stays open.
   async function rangeBeforeTurn(branch: string): Promise<{ start: string; end: string }> {
-    const rows = (await queryApp(page(), `SELECT id, kind ${OPEN_REGION} ORDER BY position`, [
+    const rows = (await queryApp(page(), `SELECT id, kind ${OPEN_REGION_FROM} ORDER BY position`, [
       branch,
     ])) as [string, string][]
     const replies = rows.filter(([, kind]) => kind === 'ai_reply')
@@ -143,17 +134,12 @@ function closeProbe(hero: () => Hero) {
 
   // The held close's action id, once its metadata call reached the mock past `callsBefore`. A
   // release before the call arrives would leave it held for good.
-  async function heldClose(callsBefore: number): Promise<string> {
-    await expect.poll(metadataCalls, { timeout: 30_000 }).toBeGreaterThan(callsBefore)
-    const rows = await queryApp(
+  const heldClose = (callsBefore: number) =>
+    heldRun(
       page(),
-      `SELECT action_id FROM pipeline_runs
-       WHERE kind = 'chapter-close' AND story_id = ? AND finished_at IS NULL`,
-      [HERO_STORY],
+      { kind: 'chapter-close', storyId: HERO_STORY, calls: metadataCalls },
+      callsBefore,
     )
-    expect(rows, 'one close in flight').toHaveLength(1)
-    return rows[0][0] as string
-  }
 
   // The branch's system entries as the reader persisted them: Retry reads `close` back.
   async function systemEntries(branch: string): Promise<unknown[][]> {
@@ -322,7 +308,7 @@ test.describe('chapter close owed — a close that fails', () => {
     // The composer holds U2, handed back by the failed Send; this Send's text replaces it.
     await send(U3, 'E2E-OWED-R3 the bar lifts.')
     const owed = await heldClose(calls)
-    await expect(memoryBanner.closingBeforeTurn(page)).toBeVisible()
+    await expect(memoryBanner.beforeTurnMetadata(page)).toBeVisible()
     // The Send dropped the entry before its close started.
     expect(await systemEntries(branch)).toEqual([])
     await expect(reader.cancel(page)).toBeVisible()
@@ -463,7 +449,7 @@ test.describe('chapter close owed — a close cancelled from the banner', () => 
       'E2E-DEFER-R2 the gatekeeper points north.',
     )
     const owed = await heldClose(calls)
-    await expect(memoryBanner.closingBeforeTurn(page)).toBeVisible()
+    await expect(memoryBanner.beforeTurnMetadata(page)).toBeVisible()
     // Send's own run now: the composer offers Cancel, and the user_action waits for the close.
     await expect(reader.cancel(page)).toBeVisible()
     expect(await entryIdByContent(branch, 'E2E-DEFER-U2')).toBeUndefined()

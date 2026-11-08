@@ -2,7 +2,7 @@ import { and, desc, eq, lt, ne } from 'drizzle-orm'
 
 import { storyEntries } from '@/lib/db'
 import { logger } from '@/lib/diagnostics'
-import { isStorySwapPending, withTurnAdmission } from '@/lib/embedder-swap'
+import { isStorySwapPending, withTurnAdmission, EMBEDDER_SWAP_REFUSAL } from '@/lib/embedder-swap'
 import { generateId } from '@/lib/ids'
 import {
   CLASSIFIER_HELD,
@@ -38,7 +38,7 @@ import { withBranchQueue, withPendingTurn } from './branch-queue'
  * user can do — wait, resume a swap, check the counts again, or nothing at all.
  */
 export type RegenerateRejectionCode =
-  | 'embedder-swap'
+  | typeof EMBEDDER_SWAP_REFUSAL
   | 'generation-in-flight'
   | 'branch-not-loaded'
   | typeof CLASSIFIER_HELD
@@ -71,8 +71,8 @@ export type RegenerateTurnResult =
 
 const SWAP_REJECTION = {
   status: 'rejected',
-  code: 'embedder-swap',
-  reason: 'embedder-swap',
+  code: EMBEDDER_SWAP_REFUSAL,
+  reason: EMBEDDER_SWAP_REFUSAL,
 } as const
 
 const HELD_REJECTION = {

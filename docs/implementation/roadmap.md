@@ -265,6 +265,28 @@ verified against the code first. Resolve with the slice each names.
   `branch scope`). **When M6.1 lands fork, give each register the same
   pair of tests.** Unverified beyond story entries: the mutation run
   covered only their handlers. Routed from triage 2026-11-07.
+- **M6.1 — The dev seed's fork is no branch copy.** `br_hero_fork`
+  (`lib/db/devtools/seed-dataset.ts`, forked at `entry_hero_0040`) holds
+  its own twelve entries, opening at position 1, and no entity, lore,
+  thread, happening, delta or chapter; its scenes name characters it has
+  no rows for. A real fork there would copy the branch's rows and
+  `chap_hero_1`, whose anchor (29) survives, per the
+  [branch-copy manifest](../data-model.md#branch-model). M6.2's lineage
+  reads develop against hand-seeded rows, so **rebuild the seed's fork as
+  a real branch copy once M6.1's copy core exists.** No UI opens it
+  before M6.3. Routed from triage 2026-11-07.
+- **M6.1 — A turn's user-action create carries no anchor.** Canon anchors
+  a foreground turn's entry create to that entry (the `deltas` table's
+  `entry_id`, [`data-model.md → Diagram`](../data-model.md#diagram)),
+  and the reply's create is anchored on itself, but `submitTurn` writes
+  the user action's create with `entryId: null`
+  (`lib/actions/turns/submit-turn.ts`). Both reverse with the turn today,
+  since a turn's creates sit in its own suffix, and
+  `lib/actions/story-entries/pre-entry-locations.ts`, which keys on the
+  anchor, falls back when it is null. The fork partition reads anchors
+  too: **settle the user action's anchor when M6.1 writes the
+  partition**, the code or the canon line. Raised in the 2026-11-07
+  triage pass, verified by reading.
 - **M6.3 — The composer draft will carry across an in-reader branch
   switch.** `Composer` (`app/reader-composer/[branchId].tsx`) takes no
   `key={branchId}`, and the branch-change effect in the same file clears
@@ -1544,6 +1566,10 @@ own.
   changes a shared UI contract, so it wants a design pass rather than a
   drive-by. Cross-cutting: every `disabledReason` consumer, present and
   future. Predates M3.7b; surfaced by the M3.7b review (2026-08-01).
+  On native the reason shows nowhere, `ReasonTooltip` being a no-op there,
+  unless a host writes a visible line under the button, as three M5 hosts
+  do; the same pass decides whether every disabled button shows one
+  ([Slice 5.10 → Open questions](./milestones/05-chapters-chapter-close/slices/10-two-starts.md#open-questions)).
   The same pass owns focus: RN Web maps `disabled` to the native
   attribute, so a control that disables under focus drops it to
   `<body>` (`Button`'s `loading`, History's `Load more`;

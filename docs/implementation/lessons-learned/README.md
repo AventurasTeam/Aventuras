@@ -289,6 +289,10 @@ slice plans when relevant.
 - [Native-module RN libs need a dev-client rebuild](./native-dep-expo-link.md)
   — `pnpm add` alone crashes Android for libs with native
   modules; config-plugin step is per-library, not universal.
+- [A stale typed-routes file fails a local typecheck CI passes](./stale-typed-routes-local-typecheck.md)
+  — `.expo/types/router.d.ts` is written only by the dev server; a checkout
+  that predates a route fails `pnpm typecheck` on links to it. Regenerate or
+  move it aside, never edit the route code.
 - [`pnpm patch-commit` drops files you added](./pnpm-patch-drops-added-files.md)
   — only edits to existing files land in the `.patch`; verify the
   file list and hand-append new-file hunks.

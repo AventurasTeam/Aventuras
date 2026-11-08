@@ -697,6 +697,19 @@ are built.
 
 ### Data-model (parked)
 
+#### A chapter update's undo payload keeps unchanged columns
+
+`updateChapter` (`lib/actions/chapters/register.ts`) records every
+column it names, where lore's handler drops the unchanged ones, because
+History reads an undo payload's keys as the fields that changed.
+Nothing reads a chapter's today: its only user caller, `saveChapter`,
+names only columns that changed (`lib/chapters/chapter-draft.ts`),
+History reads entities, lore, threads and happenings only, and no M5
+slice adds chapters to it. Threads and happenings keep unchanged columns
+too; Slice 5.5b owns those. **Revisit signal:** chapters joining History
+or the delta-log browser, or an `updateChapter` caller that doesn't
+pre-diff. Routed from triage 2026-11-07.
+
 #### Per-field provenance metadata for `entities.state`
 
 The [state-field shape](./data-model.md#world-state-storage) lands
@@ -1412,6 +1425,53 @@ truncation it warns about.
 
 ### Memory pipeline (parked)
 
+#### A failed store refresh after a swap hides its marker from the guard
+
+`isStorySwapPending` (`lib/embedder-swap/app-deps.ts`) reads the
+in-process swap and the open story's settings as the store holds them.
+After the engine runs, `syncStoresAfterEngine` refreshes the store and
+only logs `embedder.swap_store_refresh_failed` when that fails, so a swap
+that stopped staged or paused can keep its marker in the database while
+the store's copy shows none. Send, regenerate, a close, a pass's `Retry`
+and the drain's config all read that guard, so each would run as if no
+swap owned the vector tables until the story reopens. Reasoned from the
+code, not reproduced: it needs the settings read to fail right after the
+engine wrote them. **Revisit signal:** `embedder.swap_store_refresh_failed`
+in a diagnostics export. Raised by CodeRabbit on #715; routed from the
+2026-11-07 triage pass.
+
+#### The embedder drain can put off a run's idle note
+
+`noteIdle` (`lib/embedder/drain.ts`) does nothing while a pass runs, and
+the pass's row list predates the run's writes, so a row a run made stale
+waits for the next `run_complete`, a story-open kick or an
+embedder-recovery kick. It needs a whole run to start and finish inside
+one drain await. Retrieval stays correct: the drain is warm cache only,
+and the next turn's blocking sync stage embeds those rows. A fix would
+keep a pending-idle flag apart from the kick's, so the backoff timer
+stays. A late batch can't overwrite a newer embed: both its vector upsert
+and its flag clear are source-guarded. **Revisit signal:** a measured
+sync-stage cost on Android for the first turn after a quiet stretch.
+Routed from triage 2026-11-07.
+
+#### Send can start a turn on a branch that turns held after its check
+
+`submitTurn` reads `owedWorkAtSend` (held first) and, with nothing owed,
+goes to the turn through three awaits with no second read; owed work
+re-checks the hold right before it starts. A live pass reads as not held
+and per-turn's `blockedBy` refuses the turn, but a pass that ends held
+(its cancel reversal failed) inside that window lets the turn run over
+its unreversed writes, and boot later reverses that orphan under the
+turn. `submitTurn` also writes its `user_action` without checking
+`isUserEditBlocked`, so a Send past the UI during a live pass lands that
+write before per-turn refuses and reverses it. The reader blocks Send
+while a hard-gate run is live and nothing in it starts a pass mid-Send,
+so only a caller past the UI reaches either. A re-check before
+`startTurn` only narrows the window; the race-free point is a held read
+in per-turn's first phase, after it reserves. **Revisit signal:** a
+second Send caller, or a pass kind that can be live while Send is
+enabled. Routed from triage 2026-11-07.
+
 Subsystem-scoped deferrals for the memory pipeline (retrieval,
 classifier cadence, chapter-close, embedding). All parked-until-
 signal — v1 ships without them and they revisit only when real
@@ -1973,6 +2033,36 @@ code, not run. Signal: a story on a buffer of 0 reaches an empty prompt.
 Parked at M5's promotion, 2026-11-01.
 
 ### UX (parked)
+
+#### The memory banner may announce a close too often
+
+The banner's label sits in a `role="status"` `aria-live="polite"`
+region (`components/compounds/memory-run-banner.tsx`; on native,
+Android only). A close changes it about `6 + 5 × parts` times, once per
+step and task start (11 for a one-part chapter, unbounded in general),
+seconds to minutes apart, as a sighted user sees it. Since the
+2026-11-08 ruling that a before-turn close shows its progress, the
+before-turn path announces each task too, where it used to change once.
+Once Slice 5.5a emits task starts, a task with nothing to start from may
+change the label twice in quick succession (inferred). Canon's a11y notes
+don't say whether that rate is wanted. **Revisit signal:** a deliberate
+a11y pass, or a report from real assistive-technology use. Routed from
+triage 2026-11-07.
+
+#### A Save of whitespace alone keeps the padding as the clean form
+
+The chapter, lore and Plot drafts compare trimmed values, so a
+padding-only edit builds no action and `commitRowSave` returns ok without
+writing. The session then rebases onto the sent draft
+(`hooks/use-row-save-session.ts`): the field keeps its padding as the
+clean value, the Timeline toasts the save, and deleting the padding
+marks the session dirty, while the store holds the trimmed value. Discard
+restores the stored value, and a Save that also changes something
+rebases onto the store's patch. Nothing stored is wrong. The fix is a
+result-contract change, a no-write `ok` reaching the rebase, through
+`commitRowSave`, the four save actions and the four sessions. **Revisit
+signal:** a user noticing kept padding, or the next change to that
+result contract. Routed from triage 2026-11-07.
 
 #### A window cut with thinking on can read as max output
 
@@ -3719,6 +3809,49 @@ triage 2026-11-05.
 
 ### Code structure (parked)
 
+#### The E2E embedder cache can rebuild under a parallel run
+
+`ensureEmbedderModel` (`e2e/harness/embedder.ts`) deletes and rebuilds
+`~/.cache/aventuras-e2e/embedders/<model>` when its marker is missing or
+names another revision, and every spec that needs the model calls it. Two
+suites starting together on a cold cache, as two worktrees can, rebuild
+it under each other, and one can copy a half-written model into its run.
+Branches with different catalog revisions would do it on every spec, but
+the revision has never changed. Candidates: a directory per revision,
+downloaded into a temp directory and renamed into place, or a lock around
+the rebuild. **Revisit signal:** a catalog revision bump, or a flake
+traced to the cache. Routed from triage 2026-11-07.
+
+#### A signal sent to `scripts/e2e.ts` alone orphans the suite
+
+The wrapper registers no signal handler, so a SIGTERM sent only to its
+process (node, `tsx` or `pnpm`) leaves Playwright running the rest of the
+suite unparented. GNU `timeout` signals the whole process group, which
+reaches Playwright through all three relays (probed). Sketch: spawn
+Playwright detached and relay SIGTERM, SIGHUP and SIGINT to its group.
+**Revisit signal:** an orphaned run seen colliding with a later one.
+Routed from triage 2026-11-07.
+
+#### Gated row fields are written out per surface
+
+World's `components/world/detail/fields.tsx`, Plot's inline Controllers
+and `ChapterCard` each wire a `Controller`, a `FormRow` and an input with
+the run gate. World's and the card's text and list fields nearly match
+(their gate shapes, row caps and hints differ); Plot's are mostly
+selects, autocompletes and icon pickers, without that error display. No
+remaining M5 slice adds a gated row field. **Revisit signal:** a fourth
+surface with gated row fields. Routed from triage 2026-11-07.
+
+#### An E2E spec reads the database file while the app writes it
+
+`home.spec.ts` reads through `FixtureDb`, a second, read-only handle on
+the running app's database, where `queryApp` would use the app's own
+connection. A second handle meets the app's writer lock as `database is
+locked` (busy timeout 0), so a read landing during a write can fail.
+Inferred from the code; never seen. **Revisit signal:** a `database is
+locked` failure in that spec. Raised in the 2026-11-07 triage pass,
+unverified.
+
 #### Two test and logging helpers have no home yet
 
 The `run()` and `entry()` factories repeat across `hooks` tests: the
@@ -3747,6 +3880,18 @@ Candidate: seeding a slot, with no explicit path, copies the default
 catalog model from `~/.cache/aventuras-e2e/embedders` when an E2E run
 has filled it, or the worktree setup does. **Revisit signal:** the hand
 step costing a worker a run. Routed from triage 2026-11-07.
+
+#### Unit test fixtures repeat with no shared home
+
+A `StoreChapter` factory is written out in nine files (seven tests and
+two stories), the phase tests' `drain` generator loop in seven named
+helpers and about 21 inline loops, and a `RunState` for `startRun` by
+hand in 37 files (33 tests and four stories), so a shape change edits
+every copy. `lib/pipeline/definitions/__tests__/phase-db.ts` could hold
+`drain`; the two factories need a home stories can import too, which no
+`__tests__` file is today. **Revisit signal:** the next `RunState` or
+`StoreChapter` change that edits the copies, when consolidating costs
+what the edit does. Routed from triage 2026-11-07.
 
 #### The mock LLM's token count has no run guard
 

@@ -118,16 +118,19 @@ const storyAdmissions = new Map<string, StoryAdmission>()
 // the live swap promise, while turn admission only needs to know who owns the gate.
 const inFlight = new Map<string, Promise<unknown>>()
 
+/** Why a turn, a regenerate or a close is refused while a swap owns the story's vec tables. */
+export const EMBEDDER_SWAP_REFUSAL = 'embedder-swap'
+
 export type TurnAdmissionResult<T> =
   | { admitted: true; value: T }
-  | { admitted: false; blockedBy: 'embedder-swap' }
+  | { admitted: false; blockedBy: typeof EMBEDDER_SWAP_REFUSAL }
 
 export async function withTurnAdmission<T>(
   storyId: string,
   fn: () => Promise<T>,
 ): Promise<TurnAdmissionResult<T>> {
   const active = storyAdmissions.get(storyId)
-  if (active?.owner === 'embedder') return { admitted: false, blockedBy: 'embedder-swap' }
+  if (active?.owner === 'embedder') return { admitted: false, blockedBy: EMBEDDER_SWAP_REFUSAL }
 
   const admission = active ?? { owner: 'turn' as const, holders: 0 }
   admission.holders += 1

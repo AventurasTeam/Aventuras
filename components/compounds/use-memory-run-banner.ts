@@ -24,30 +24,36 @@ const CLOSE_TASK_COPY = {
 
 /**
  * C6: a close's banner label; in `agent` it names the task last started. The run keeps
- * `closeProgress` to its end; the label stops reading it at `report`.
+ * `closeProgress` to its end; the label stops reading it at `report`. Under Send each label
+ * says the wait is for the user's turn, the only place it says so on phone.
  */
 export function closeBannerLabel(
   run: Pick<RunState, 'beforeTurn' | 'currentPhase' | 'closeProgress'>,
 ): string {
-  if (run.beforeTurn) return t('chrome.memoryBanner.closingBeforeTurn')
+  const turn = run.beforeTurn
   switch (run.currentPhase) {
     case CLOSE_PHASE.boundary:
-      return t('chrome.memoryBanner.closingBoundary')
+      return t(
+        turn ? 'chrome.memoryBanner.beforeTurnBoundary' : 'chrome.memoryBanner.closingBoundary',
+      )
     case CLOSE_PHASE.metadata:
-      return t('chrome.memoryBanner.closingMetadata')
+      return t(
+        turn ? 'chrome.memoryBanner.beforeTurnMetadata' : 'chrome.memoryBanner.closingMetadata',
+      )
     case CLOSE_PHASE.agent: {
       const progress = run.closeProgress
-      if (progress == null) return t('chrome.memoryBanner.closingAgent')
-      return t('chrome.memoryBanner.closingTask', {
+      if (progress == null)
+        return t(turn ? 'chrome.memoryBanner.beforeTurnAgent' : 'chrome.memoryBanner.closingAgent')
+      return t(turn ? 'chrome.memoryBanner.beforeTurnTask' : 'chrome.memoryBanner.closingTask', {
         index: progress.index,
         total: progress.total,
         task: t(CLOSE_TASK_COPY[progress.task]),
       })
     }
     case CLOSE_PHASE.report:
-      return t('chrome.memoryBanner.closingReport')
+      return t(turn ? 'chrome.memoryBanner.beforeTurnReport' : 'chrome.memoryBanner.closingReport')
     default:
-      return t('chrome.memoryBanner.closing')
+      return t(turn ? 'chrome.memoryBanner.closingBeforeTurn' : 'chrome.memoryBanner.closing')
   }
 }
 

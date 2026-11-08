@@ -333,8 +333,9 @@ A close that commits shows `Chapter closed: <title>`, or
 [review window](../chapter-timeline/chapter-timeline.md#review-window).
 
 At the next Send the deferred or failed work runs first, the banner
-reading `Updating memory before your turn…`, or
-`Closing chapter before your turn…` for a close, and the turn follows;
+reading `Updating memory before your turn…`, or for a close its own
+progress led by `Before your turn:` (`Before your turn: 3 of 7 —
+Identity…`), and the turn follows;
 Cancel then cancels the whole Send, and the text goes back into an empty
 composer (else a toast says the draft was kept)
 ([`memory/classifier.md → Pipeline framing`](../../../memory/classifier.md#pipeline-framing)).

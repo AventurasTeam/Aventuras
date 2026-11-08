@@ -591,6 +591,12 @@ change amends the scope above.
   says the confirm states it, and canon's layout doesn't. Default: there, since
   the line is omitted exactly when no later turn exists to undo. Does the developer
   accept the longer line?
+- **A fact for the planner: the long-branch fixture can't exercise delete.**
+  `scripts/seed/long-branch.ts` writes chapters and entries with no deltas, so
+  `removeChapter` refuses `no-close` on every long-branch chapter, rollback to a
+  seeded entry refuses `rollback-floor`, and CTRL-Z finds nothing to undo. Fine
+  while it stays a measure fixture. A scale measure of delete needs it to write
+  close-shaped deltas first. Routed from triage 2026-11-07.
 
 ## Implementation notes
 

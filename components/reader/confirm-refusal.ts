@@ -6,6 +6,7 @@ import {
   type RollbackCounts,
   type StoryEntryRejection,
 } from '@/lib/actions'
+import { EMBEDDER_SWAP_REFUSAL } from '@/lib/embedder-swap'
 
 /** An open rollback or regenerate confirm: the entry it reverses to and the counts it shows. */
 export type ConfirmState = {
@@ -23,7 +24,7 @@ export type RollbackRefusal = StoryEntryRejection | CountsChangedRejection
 // Copy follows the user's remedy (wait, resume the swap, recheck counts); invariant violations get
 // no retry invitation: a retry cannot succeed and would loop.
 const REGENERATE_REJECTION_COPY = {
-  'embedder-swap': 'reader:actions.blockedWhileSwapping',
+  [EMBEDDER_SWAP_REFUSAL]: 'reader:actions.blockedWhileSwapping',
   'generation-in-flight': 'reader:actions.blockedWhileGenerating',
   [STORY_ENTRY_REJECTION.countsChanged]: 'reader:rollbackCountsChanged',
   'branch-not-loaded': 'reader:regenerateUnavailable',

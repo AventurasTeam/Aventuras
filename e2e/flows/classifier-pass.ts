@@ -18,6 +18,37 @@ export function gatedPassReply(title: string) {
   }
 }
 
+// A story's runs of one kind, oldest first, by outcome; pipeline_runs has no branch column.
+export async function runOutcomes(
+  page: Page,
+  kind: string,
+  storyId: string,
+): Promise<(string | null)[]> {
+  const rows = await queryApp(
+    page,
+    `SELECT outcome FROM pipeline_runs WHERE kind = ? AND story_id = ? ORDER BY started_at, rowid`,
+    [kind, storyId],
+  )
+  return rows.map((r) => r[0] as string | null)
+}
+
+// The action id of the one run of `kind` in flight, once its call reached the mock past
+// `callsBefore`.
+export async function heldRun(
+  page: Page,
+  run: { kind: string; storyId: string; calls: () => number },
+  callsBefore: number,
+): Promise<string> {
+  await expect.poll(run.calls, { timeout: 30_000 }).toBeGreaterThan(callsBefore)
+  const rows = await queryApp(
+    page,
+    `SELECT action_id FROM pipeline_runs WHERE kind = ? AND story_id = ? AND finished_at IS NULL`,
+    [run.kind, run.storyId],
+  )
+  expect(rows, `one ${run.kind} in flight`).toHaveLength(1)
+  return rows[0][0] as string
+}
+
 // The run, status and entry reads the pass describes share. Getters, since each describe's
 // beforeAll assigns its app and mock after this runs.
 export function passProbe(page: () => Page, mockLlm: () => MockLlm) {
@@ -42,15 +73,7 @@ export function passProbe(page: () => Page, mockLlm: () => MockLlm) {
     return { actionId: rows[0][0] as string, logPosition: rows[0][1] as number }
   }
 
-  // pipeline_runs has no branch column; only this story's passes run in this app.
-  async function passOutcomes(): Promise<(string | null)[]> {
-    const rows = await queryApp(
-      page(),
-      `SELECT outcome FROM pipeline_runs WHERE kind = 'periodic-classifier' AND story_id = 'story_hero'
-       ORDER BY started_at, rowid`,
-    )
-    return rows.map((r) => r[0] as string | null)
-  }
+  const passOutcomes = () => runOutcomes(page(), 'periodic-classifier', 'story_hero')
 
   async function runOutcome(actionId: string): Promise<string | null> {
     const rows = await queryApp(page(), `SELECT outcome FROM pipeline_runs WHERE action_id = ?`, [
@@ -84,17 +107,12 @@ export function passProbe(page: () => Page, mockLlm: () => MockLlm) {
   const passCalls = (): number =>
     mockLlm().requests.filter((r) => r.agent === 'periodic-classifier').length
 
-  // The held pass's action id, once its call reached the mock past `callsBefore`.
-  async function heldPass(callsBefore: number): Promise<string> {
-    await expect.poll(passCalls, { timeout: 30_000 }).toBeGreaterThan(callsBefore)
-    const rows = await queryApp(
+  const heldPass = (callsBefore: number) =>
+    heldRun(
       page(),
-      `SELECT action_id FROM pipeline_runs
-       WHERE kind = 'periodic-classifier' AND story_id = 'story_hero' AND finished_at IS NULL`,
+      { kind: 'periodic-classifier', storyId: 'story_hero', calls: passCalls },
+      callsBefore,
     )
-    expect(rows, 'one pass in flight').toHaveLength(1)
-    return rows[0][0] as string
-  }
 
   async function send(action: string, reply: string): Promise<void> {
     mockLlm().setNarrative(reply)

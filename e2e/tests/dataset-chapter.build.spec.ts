@@ -25,7 +25,7 @@ import {
   type ShapedDataset,
 } from '../../scripts/dataset-chapter/shape'
 import { createAdventureStory } from '../flows/create-story'
-import { queryApp } from '../harness/db'
+import { queryApp, queryScalar, OPEN_REGION_FROM } from '../harness/db'
 import { installEmbedderModel } from '../harness/embedder'
 import { launchApp, type LaunchedApp } from '../harness/launch'
 import { startMockLlm, type MockLlm } from '../harness/mock-llm'
@@ -158,14 +158,12 @@ function writeProviders(dbPath: string, mockUrl: string, env: Env): void {
   }
 }
 
-async function scalar(page: Page, sql: string, params: unknown[] = []): Promise<number> {
-  return Number((await queryApp(page, sql, params))[0]?.[0])
-}
-
 function storySetting(d: Drive, knob: MemoryKnob): Promise<number> {
-  return scalar(d.page, `SELECT json_extract(settings, '$.${knob}') FROM stories WHERE id = ?`, [
-    d.storyId,
-  ])
+  return queryScalar(
+    d.page,
+    `SELECT json_extract(settings, '$.${knob}') FROM stories WHERE id = ?`,
+    [d.storyId],
+  )
 }
 
 // expect.poll throws at its timeout; here a timeout is an answer.
@@ -201,7 +199,7 @@ async function passDue(d: Drive): Promise<boolean> {
   const status = await classifierStatus(d)
   if (status.state === 'running') return false
   const cadence = await storySetting(d, 'classifierCadence')
-  const unprocessed = await scalar(
+  const unprocessed = await queryScalar(
     d.page,
     `SELECT COUNT(*) FROM story_entries WHERE branch_id = ? AND kind <> 'system' AND position > ?`,
     [d.branchId, status.processedThrough ?? 0],
@@ -222,9 +220,11 @@ async function systemEntry(d: Drive): Promise<SystemEntry | null> {
 }
 
 const replyCount = (d: Drive): Promise<number> =>
-  scalar(d.page, `SELECT COUNT(*) FROM story_entries WHERE branch_id = ? AND kind = 'ai_reply'`, [
-    d.branchId,
-  ])
+  queryScalar(
+    d.page,
+    `SELECT COUNT(*) FROM story_entries WHERE branch_id = ? AND kind = 'ai_reply'`,
+    [d.branchId],
+  )
 
 // A committed turn chains a pass when one is due (memory-chain.ts → nextMemoryRun); one deferred
 // chains nothing and runs before the next Send instead.
@@ -265,7 +265,7 @@ async function landTurn(
   mock.setNarrative(turn.reply)
   for (let send = 1; send <= SENDS_PER_TURN; send++) {
     await expect(reader.composer(d.page)).toBeEditable({ timeout: EDITABLE_WAIT_MS })
-    const since = await scalar(d.page, `SELECT COALESCE(MAX(rowid), 0) FROM pipeline_runs`)
+    const since = await queryScalar(d.page, `SELECT COALESCE(MAX(rowid), 0) FROM pipeline_runs`)
     const repliesBefore = await replyCount(d)
     const priorSystemId = (await systemEntry(d))?.id ?? null
     await reader.composer(d.page).fill(turn.action)
@@ -360,13 +360,12 @@ async function assertDatasetBranch(d: Drive, dataset: ShapedDataset): Promise<st
   const { page, branchId } = d
   const [[entries, tokens]] = (await queryApp(
     page,
-    `SELECT COUNT(*), COALESCE(SUM(content_tokens), 0) FROM story_entries
-     WHERE branch_id = ? AND kind <> 'system' AND chapter_id IS NULL`,
+    `SELECT COUNT(*), COALESCE(SUM(content_tokens), 0) ${OPEN_REGION_FROM}`,
     [branchId],
   )) as [number, number][]
   expect(entries, 'the open region holds every shaped entry').toBe(1 + 2 * dataset.turns.length)
   expect(
-    await scalar(
+    await queryScalar(
       page,
       `SELECT COUNT(*) FROM story_entries WHERE branch_id = ? AND chapter_id IS NOT NULL`,
       [branchId],
@@ -392,7 +391,7 @@ async function assertDatasetBranch(d: Drive, dataset: ShapedDataset): Promise<st
   ).toBe(tail)
 
   expect(
-    await scalar(
+    await queryScalar(
       page,
       `SELECT COUNT(*) FROM story_entries e
        WHERE e.branch_id = ? AND e.kind IN ('user_action', 'ai_reply') AND NOT EXISTS (
@@ -405,7 +404,7 @@ async function assertDatasetBranch(d: Drive, dataset: ShapedDataset): Promise<st
 
   // A floor, not a target: under half means the per-turn classifier mostly failed. Read from the
   // turn's own report; `sceneEntities` is inherited, so a failed call keeps the previous scene.
-  const scened = await scalar(
+  const scened = await queryScalar(
     page,
     `SELECT COUNT(*) FROM story_entries
      WHERE branch_id = ? AND kind = 'ai_reply'
@@ -418,7 +417,7 @@ async function assertDatasetBranch(d: Drive, dataset: ShapedDataset): Promise<st
 
   const written: string[] = []
   for (const table of ['entities', 'happenings', 'threads'] as const) {
-    const count = await scalar(
+    const count = await queryScalar(
       page,
       `SELECT COUNT(*) FROM ${table} t WHERE t.branch_id = ? AND EXISTS (
          SELECT 1 FROM deltas d WHERE d.branch_id = t.branch_id AND d.target_table = '${table}'

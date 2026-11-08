@@ -3,7 +3,7 @@ import { DatabaseSync } from 'node:sqlite'
 import { expect, test, type Page } from '@playwright/test'
 
 import { goToWorld, undoFromReader } from '../flows/navigation'
-import { currentBranchId, queryApp, tailMetadata } from '../harness/db'
+import { currentBranchId, queryApp, tailMetadata, queryScalar } from '../harness/db'
 import { launchApp, type LaunchedApp } from '../harness/launch'
 import { suppressNativeUnloadDialogRace } from '../harness/reload'
 import { createSeededUserDataDir, removeUserDataDir } from '../harness/seed'
@@ -78,11 +78,6 @@ function giveFlaggedBrannocLinks(dbPath: string): void {
 
 type BrannocPair = { branchId: string; older: string; flagged: string; mira: string }
 
-async function scalar(page: Page, sql: string, params: unknown[]): Promise<number> {
-  const [[value]] = await queryApp(page, sql, params)
-  return Number(value)
-}
-
 // Read while the flags are still as seeded: only the newer Brannoc carries one.
 async function brannocPair(page: Page): Promise<BrannocPair> {
   const branchId = await currentBranchId(page, HERO_STORY)
@@ -106,7 +101,7 @@ async function brannocPair(page: Page): Promise<BrannocPair> {
 async function flags(page: Page, pair: BrannocPair) {
   // -1 once the row is gone, so an absent row can't read as a cleared flag.
   const flagOf = (id: string) =>
-    scalar(
+    queryScalar(
       page,
       `SELECT COALESCE((SELECT name_collision_flag FROM entities WHERE branch_id = ? AND id = ?), -1)`,
       [pair.branchId, id],
@@ -132,12 +127,12 @@ async function relationshipViews(page: Page, pair: BrannocPair, id: string) {
 
 async function linksOf(page: Page, pair: BrannocPair, id: string) {
   return {
-    awareness: await scalar(
+    awareness: await queryScalar(
       page,
       `SELECT count(*) FROM happening_awareness WHERE branch_id = ? AND character_id = ?`,
       [pair.branchId, id],
     ),
-    involvements: await scalar(
+    involvements: await queryScalar(
       page,
       `SELECT count(*) FROM happening_involvements WHERE branch_id = ? AND entity_id = ?`,
       [pair.branchId, id],
@@ -159,7 +154,7 @@ async function pairSnapshot(page: Page, pair: BrannocPair) {
   const f = pair.flagged
   return {
     flags: await flags(page, pair),
-    flaggedStale: await scalar(
+    flaggedStale: await queryScalar(
       page,
       `SELECT COALESCE((SELECT embedding_stale FROM entities WHERE branch_id = ? AND id = ?), -1)`,
       [b, f],
@@ -167,7 +162,7 @@ async function pairSnapshot(page: Page, pair: BrannocPair) {
     olderTags: tags == null ? null : (JSON.parse(tags as string) as string[]).sort(),
     olderStatus: status as string | null,
     olderLocation: location as string | null,
-    originals: await scalar(
+    originals: await queryScalar(
       page,
       `SELECT (SELECT count(*) FROM happening_awareness WHERE branch_id = ? AND id = ? AND character_id = ?)
             + (SELECT count(*) FROM happening_involvements WHERE branch_id = ? AND id = ? AND entity_id = ?)
@@ -213,9 +208,11 @@ function merged(tailLocation: string) {
 }
 
 async function logHead(page: Page, branchId: string): Promise<number> {
-  return scalar(page, `SELECT COALESCE(MAX(log_position), 0) FROM deltas WHERE branch_id = ?`, [
-    branchId,
-  ])
+  return queryScalar(
+    page,
+    `SELECT COALESCE(MAX(log_position), 0) FROM deltas WHERE branch_id = ?`,
+    [branchId],
+  )
 }
 
 async function writtenSince(page: Page, branchId: string, head: number) {

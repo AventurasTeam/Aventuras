@@ -109,7 +109,7 @@ describe('useMemoryRunBanner', () => {
     expect(result.current?.label).toBe('Closing chapter…')
   })
 
-  it('labels the close Send runs before the turn, whatever it is doing', () => {
+  it('labels the close Send runs before the turn with its progress', () => {
     openStory()
     generationStore.startRun(
       close({
@@ -119,7 +119,7 @@ describe('useMemoryRunBanner', () => {
       }),
     )
     const { result } = renderHook(() => useMemoryRunBanner())
-    expect(result.current?.label).toBe('Closing chapter before your turn…')
+    expect(result.current?.label).toBe('Before your turn: 3 of 7 — Identity…')
   })
 
   it('shows nothing for an interruptible run of a kind with no banner', () => {
@@ -237,13 +237,16 @@ describe('closeBannerLabel', () => {
   })
 
   it.each([
-    ['', undefined],
-    ['boundary', undefined],
-    ['agent', IDENTITY],
-    ['report', IDENTITY],
-  ] as const)('reads before your turn under Send in phase %j', (currentPhase, closeProgress) => {
-    expect(closeBannerLabel({ beforeTurn: true, currentPhase, closeProgress })).toBe(
-      'Closing chapter before your turn…',
-    )
-  })
+    ['', undefined, 'Closing chapter before your turn…'],
+    ['boundary', undefined, 'Before your turn: choosing where the chapter ends…'],
+    ['metadata', undefined, "Before your turn: writing the chapter's summary…"],
+    ['agent', undefined, 'Before your turn: reviewing the chapter…'],
+    ['agent', IDENTITY, 'Before your turn: 3 of 7 — Identity…'],
+    ['report', IDENTITY, 'Before your turn: finishing the chapter…'],
+  ] as const)(
+    'reads before your turn under Send in phase %j, with its progress',
+    (currentPhase, closeProgress, label) => {
+      expect(closeBannerLabel({ beforeTurn: true, currentPhase, closeProgress })).toBe(label)
+    },
+  )
 })
