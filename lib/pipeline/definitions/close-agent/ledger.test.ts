@@ -293,18 +293,22 @@ describe('CloseLedgerWriter', () => {
 
   it("does not take a merge's kept row of another table for the row's survivor", () => {
     const { writer } = setup()
+    const kept = 'hap_00000000-0000-4000-8000-000000000009'
+    const absorbed = 'hap_00000000-0000-4000-8000-000000000010'
     writer.record(
       call({
         tool: 'merge_happenings',
         rows: [
-          { table: 'happenings', id: 'hap_00000000-0000-4000-8000-000000000009', name: 'The Fire' },
+          { table: 'happenings', id: kept, name: 'The Fire' },
+          { table: 'happenings', id: absorbed, name: 'The Blaze' },
           { table: 'entities', id: WREN, name: 'Wren' },
         ],
         values: { description: 'The fire.' },
-        survivor: { table: 'happenings', id: 'hap_00000000-0000-4000-8000-000000000009' },
+        survivor: { table: 'happenings', id: kept },
       }),
     )
 
+    expect(writer.survivorOf('happenings', absorbed)).toEqual({ table: 'happenings', id: kept })
     expect(writer.survivorOf('entities', WREN)).toBeUndefined()
   })
 

@@ -428,5 +428,9 @@ describe('token encoder warm', () => {
 
     expect(result).toEqual({ status: 'ok', storyId: 'story_1', branchId: 'br_1' })
     expect(tokens.warm).not.toHaveBeenCalled()
+    expect(currentStoryStore.getCurrentStory()?.storyId).toBe('story_1')
+    expect(entriesStore.getLoadedBranch()).toBe('br_1')
+    expect(entitiesStore.getLoadedBranch()).toBe('br_1')
+    expect(loreStore.getLoadedBranch()).toBe('br_1')
   })
 })
