@@ -249,8 +249,10 @@ a generic seam.
 **What shipped for intermediates.** The chapter close's run-scoped
 state (its range, the shared missing-range failure and its ledger) goes
 through typed accessors in `lib/pipeline/definitions/close-intermediates.ts`,
-whose keys stay private. The retrieval key and the pass's pre-run status
-are still plain keys, and the per-kind contexts above aren't built.
+whose keys stay private. Every other kind's keys are still plain:
+retrieval's, the per-turn piggyback outcome and suggestions flag, the
+turn's id map, and the periodic pass's pre-run status. The per-kind
+contexts above aren't built.
 
 **Chained transactions (per-turn → chapter-close) do not inherit
 intermediates** — each chained pipeline has its own context and

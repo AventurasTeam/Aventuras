@@ -372,11 +372,10 @@ signal. They surface in the Chapter Timeline.
 
 **Failure mode:** a call that still fails after its retries, parse
 failures included, fails the close ([Failure modes](#failure-modes-and-atomic-rollback)).
-So does a create or stamp of the row's write that doesn't land: the
+The chapter's summary feeds retrieval, so a placeholder would be a quiet
+loss. A create or stamp that doesn't land fails the close too: the
 create and the stamps land as one group, and a chapter row must sit
 over a fully stamped range.
-The chapter's summary feeds retrieval, so a placeholder would be a quiet
-loss.
 
 ## Phase 3 — lore management
 
