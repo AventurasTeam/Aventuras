@@ -3,11 +3,9 @@ import { and, asc, desc, eq, gt, inArray, or, sql } from 'drizzle-orm'
 import { chunked, deltas, type Delta, type Entity, type LocationState, type Thread } from '@/lib/db'
 import { isJsonObject } from '@/lib/json-object'
 
-import { isUserOriginatedSource, type DbCtx } from '../types'
-import type { LockedTable } from './row-locks'
+import { isUserOriginatedSource, type DbCtx, type PrecedenceTable } from '../types'
 
-/** Noop reason for a classifier write a newer user edit of the same field outranks. */
-export const USER_EDITED_SINCE_PROSE = 'user-edited-since-prose'
+export { USER_EDITED_SINCE_PROSE } from '../types'
 
 /** The source entry's latest create/content-edit delta position, 0 when it has none. */
 export async function proseLogPosition(
@@ -65,7 +63,7 @@ async function rowDeltasAfter(
 export function userEditsSince(
   ctx: DbCtx,
   branchId: string,
-  targetTable: LockedTable,
+  targetTable: PrecedenceTable,
   targetId: string,
   since: number,
 ): Promise<Delta[]> {
@@ -76,7 +74,7 @@ export function userEditsSince(
 export async function userEditsSinceProse(
   ctx: DbCtx,
   branchId: string,
-  targetTable: LockedTable,
+  targetTable: PrecedenceTable,
   targetId: string,
   proseEntryId: string,
 ): Promise<Delta[]> {
@@ -130,7 +128,7 @@ export async function userEditsOutliving(
 export function rowDeltasSince(
   ctx: DbCtx,
   branchId: string,
-  targetTable: LockedTable,
+  targetTable: PrecedenceTable,
   targetId: string,
   since: number,
 ): Promise<Delta[]> {
