@@ -69,7 +69,18 @@ describe('happeningDraftFrom', () => {
     const first = happeningDraftFrom(null, NO_LINKS)
     first.title = 'Edited'
     first.involvements.push({ id: 'inv_1', entityId: 'char_1', role: '' })
-    expect(happeningDraftFrom(null, NO_LINKS)).toMatchObject({ title: '', involvements: [] })
+    first.awareness.push({
+      id: null,
+      characterId: 'char_1',
+      learnedAtEntryId: null,
+      decayResistance: null,
+      source: '',
+    })
+    expect(happeningDraftFrom(null, NO_LINKS)).toMatchObject({
+      title: '',
+      involvements: [],
+      awareness: [],
+    })
     expect(Object.isFrozen(EMPTY_HAPPENING_DRAFT.involvements)).toBe(true)
     expect(Object.isFrozen(EMPTY_HAPPENING_DRAFT.awareness)).toBe(true)
   })
