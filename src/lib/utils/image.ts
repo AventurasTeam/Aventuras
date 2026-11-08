@@ -91,10 +91,14 @@ export function specToPixels(spec: ImageSpec): ImageResolution {
   return rw >= rh ? { width: long, height: short } : { width: short, height: long }
 }
 
-/** The dimensions in a `WIDTHxHEIGHT` string. */
+const isDimension = (value: number): boolean => Number.isFinite(value) && value > 0
+
+/** The dimensions in a `WIDTHxHEIGHT` string, when both are positive. */
 export function parseImageSize(size: string | undefined): ImageResolution | undefined {
   const match = /^(\d+)x(\d+)$/.exec(size ?? '')
-  return match ? { width: Number(match[1]), height: Number(match[2]) } : undefined
+  if (!match) return undefined
+  const [width, height] = [Number(match[1]), Number(match[2])]
+  return isDimension(width) && isDimension(height) ? { width, height } : undefined
 }
 
 export const isSizeString = (value: string | undefined): value is `${number}x${number}` =>
@@ -263,7 +267,7 @@ export function specToAspectRatio(
   for (const candidate of candidates) {
     const value = ratioValue(candidate)
     if (!Number.isFinite(value) || value <= 0) continue
-    const distance = Math.abs(Math.log(value / target))
+    const distance = ratioDistance(value, target)
     if (distance < bestDistance) {
       bestDistance = distance
       best = candidate
@@ -277,6 +281,9 @@ function ratioValue(ratio: string): number {
   const [w, h] = ratio.split(':').map(Number)
   return h > 0 ? w / h : NaN
 }
+
+/** How far apart two width/height ratios are, in log space so 2:3 and 3:2 are equally far from 1:1. */
+const ratioDistance = (a: number, b: number): number => Math.abs(Math.log(a / b))
 
 /** Long edge in pixels of each resolution tier a ratio-plus-tier backend names. */
 const RESOLUTION_LONG_EDGE = new Map([
@@ -321,6 +328,9 @@ const SYMBOLIC_SIZES: Record<string, ImageResolution> = {
 
 const SIZE_TOKENS: Record<string, number> = { '1k': 1024, '2k': 2048, '4k': 4096, '8k': 8192 }
 
+/** Log-ratio gap under which two listed shapes count as the same (1024x576 and 1000x562). */
+const SAME_RATIO_TOLERANCE = 0.02
+
 /** Long edge a bare `w:h` is scored at, since a ratio carries no size of its own. */
 const RATIO_REFERENCE_EDGE = 1024
 
@@ -328,12 +338,16 @@ function listedSizeToPixels(option: string): ImageResolution | null {
   const value = option.trim().toLowerCase()
 
   const pixels = /^(\d+)\s*[x*]\s*(\d+)$/.exec(value)
-  if (pixels) return { width: Number(pixels[1]), height: Number(pixels[2]) }
+  if (pixels) {
+    const [width, height] = [Number(pixels[1]), Number(pixels[2])]
+    return isDimension(width) && isDimension(height) ? { width, height } : null
+  }
 
   const ratio = /^(\d+):(\d+)$/.exec(value)
   if (ratio) {
     const w = Number(ratio[1])
     const h = Number(ratio[2])
+    if (!isDimension(w) || !isDimension(h)) return null
     const edge = RATIO_REFERENCE_EDGE
     return w >= h
       ? { width: edge, height: Math.round((edge * h) / w) }
@@ -350,16 +364,19 @@ function listedSizeToPixels(option: string): ImageResolution | null {
  * The listed size value to send for a spec; `undefined` when the model lists none.
  *
  * Models publish their own list of accepted values and they do not agree — some offer a
- * single value, many use tokens that are not dimensions at all. Scores orientation first and
- * long edge second, so a model that cannot do landscape returns its widest option rather than
- * a same-pixel square.
+ * single value, many use tokens that are not dimensions at all. Takes the closest aspect ratio
+ * first and the closest long edge among ratios that are about equal, so a model that cannot do
+ * landscape returns its widest option rather than a same-pixel portrait.
  */
 export function pickSize(spec: ImageSpec, listed: readonly string[] = []): string | undefined {
   if (listed.length <= 1) return listed[0]
 
   const want = specToPixels(spec)
+  const wantRatio = want.width / want.height
+  const wantEdge = Math.max(want.width, want.height)
   let best: string | undefined
-  let bestScore = Infinity
+  let bestRatioMiss = Infinity
+  let bestEdgeMiss = Infinity
   let firstUnreadable: string | undefined
 
   for (const option of listed) {
@@ -368,12 +385,14 @@ export function pickSize(spec: ImageSpec, listed: readonly string[] = []): strin
       firstUnreadable ??= option
       continue
     }
-    const orientationMiss = specFromPixels(dims.width, dims.height).orientation !== spec.orientation
-    const edgeMiss = Math.abs(Math.max(dims.width, dims.height) - Math.max(want.width, want.height))
-    const score = (orientationMiss ? 1_000_000 : 0) + edgeMiss
-    if (score < bestScore) {
-      bestScore = score
+    const ratioMiss = ratioDistance(dims.width / dims.height, wantRatio)
+    const edgeMiss = Math.abs(Math.max(dims.width, dims.height) - wantEdge)
+    const closerRatio = ratioMiss < bestRatioMiss - SAME_RATIO_TOLERANCE
+    const sameRatio = Math.abs(ratioMiss - bestRatioMiss) <= SAME_RATIO_TOLERANCE
+    if (closerRatio || (sameRatio && edgeMiss < bestEdgeMiss)) {
       best = option
+      bestRatioMiss = ratioMiss
+      bestEdgeMiss = edgeMiss
     }
   }
 

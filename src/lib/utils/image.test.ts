@@ -265,6 +265,22 @@ describe('pickSize', () => {
     expect(pick('landscape', 'small', ['512x512', '1024x1024'])).toBe('1024x1024')
   })
 
+  it('prefers a square to the opposite orientation when the shape is missing', () => {
+    expect(pick('landscape', 'small', ['768x1024', '1024x1024'])).toBe('1024x1024')
+    expect(pick('portrait', 'small', ['1024x768', '1024x1024'])).toBe('1024x1024')
+  })
+
+  it('takes the closest aspect ratio, not just the closest orientation', () => {
+    expect(pick('landscape', 'small', ['2:3', '1:1', '3:2'])).toBe('3:2')
+    expect(pick('portrait', 'small', ['3:2', '1:1', '2:3'])).toBe('2:3')
+    expect(pick('landscape', 'small', ['2:3', '1:1'])).toBe('1:1')
+  })
+
+  it('falls to the long edge among shapes that are about equal', () => {
+    expect(pick('landscape', 'large', ['1024x576', '1920x1080'])).toBe('1920x1080')
+    expect(pick('landscape', 'tiny', ['1024x576', '1920x1080'])).toBe('1024x576')
+  })
+
   it('prefers a readable option to one it cannot place', () => {
     expect(pick('square', 'small', ['auto', '1024x1024'])).toBe('1024x1024')
     expect(pick('square', 'small', ['auto', 'match_input_image'])).toBe('auto')
@@ -455,6 +471,21 @@ describe('isSizeString', () => {
     for (const value of ['auto', '1:1', '1024', '1024x', 'x1024', '1024x1024px', '', undefined]) {
       expect(isSizeString(value)).toBe(false)
     }
+  })
+
+  it('rejects a zero or non-finite dimension', () => {
+    for (const value of ['0x1024', '1024x0', '0x0', `${'9'.repeat(400)}x1`]) {
+      expect(isSizeString(value)).toBe(false)
+    }
+  })
+})
+
+describe('pickSize with unusable dimensions', () => {
+  it('treats a zero-sized option as unreadable', () => {
+    expect(pickSize({ orientation: 'square', size: 'small' }, ['0x0', '1024x1024'])).toBe(
+      '1024x1024',
+    )
+    expect(pickSize({ orientation: 'square', size: 'small' }, ['0:1', '0x512'])).toBe('0:1')
   })
 })
 
