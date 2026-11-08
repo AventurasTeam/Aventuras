@@ -677,9 +677,9 @@ the open region's latest `ai_reply`. `PROBE_OUT`, a directory that is
 empty or new for each invocation (the probe refuses one holding files),
 saves each run's tool steps, request and response, in a `run<k>/`
 inside it, named by task, part and step (`identity-p1-s2.json`), a
-retried attempt beside its step, and the report the close wrote; the probe prints each task's
-steps, its calls with their results, and its stops. `PROBE_STAND_IN=1`
-runs a stand-in task in place of the close's shipped slots, a write
+retried attempt beside its step, and the report the close wrote; the
+probe prints each task's steps, its calls with their results, and its
+stops. `PROBE_STAND_IN=1` runs a stand-in task in place of the close's shipped slots, a write
 landing a create and an update in one group, so the mock can drive the
 whole runner: script its `tools:read_row+stand_in_write` lane with one
 step calling `stand_in_write` on `c1`, then the empty step.

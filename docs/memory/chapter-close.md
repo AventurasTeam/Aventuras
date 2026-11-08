@@ -100,8 +100,8 @@ next task arrives as a user message. The model's own message goes back
 as the provider SDK returned it, keeping its reasoning and calls, so the
 reasoning goes back on every step with no per-model logic. A step's
 answers, the SDK's and the loop's, go back as one tool message in the
-order of the calls, since a provider's chat template may label a result by its
-tool alone.
+order of the calls, since a provider's chat template may label a result
+by its tool alone.
 
 Two switches on the agent profile, under a "Chapter close" label, choose
 the shape:
