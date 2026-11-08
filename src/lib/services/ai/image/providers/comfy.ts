@@ -614,15 +614,16 @@ export function createComfyProvider(config: ImageProviderConfig): ImageProvider 
         const weightDtype = (providerOptions?.weightDtype as string) || 'default'
 
         let clipName = (providerOptions?.clipName as string) || autoClipCache.get(baseUrl) || ''
+        let vaeName = (providerOptions?.vaeName as string) || autoVaeCache.get(baseUrl) || ''
+        const [clips, vaes] = await Promise.all([
+          clipName ? [] : fetchModels('text_encoders', signal),
+          vaeName ? [] : fetchModels('vae', signal),
+        ])
         if (!clipName) {
-          const clips = await fetchModels('text_encoders')
           clipName = clips[0] || ''
           if (clipName) autoClipCache.set(baseUrl, clipName)
         }
-
-        let vaeName = (providerOptions?.vaeName as string) || autoVaeCache.get(baseUrl) || ''
         if (!vaeName) {
-          const vaes = await fetchModels('vae')
           vaeName = vaes[0] || ''
           if (vaeName) autoVaeCache.set(baseUrl, vaeName)
         }
