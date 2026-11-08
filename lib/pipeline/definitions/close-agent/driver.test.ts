@@ -510,6 +510,38 @@ describe('runCloseTask', () => {
     })
   })
 
+  it("drops the SDK's own answer under a repeated call id, so each call place gets one answer", async () => {
+    // A valid and an invalid call under one id: the SDK gives both the valid one's input, and still
+    // answers the invalid one with an error.
+    const first = okStep([appendCall('k1', 'first'), appendCall('k1', 'first')])
+    const [assistant] = stepOf(first).responseMessages
+    const sdkError: ToolModelMessage = {
+      role: 'tool',
+      content: [
+        {
+          type: 'tool-result',
+          toolCallId: 'k1',
+          toolName: 'append_note',
+          output: { type: 'error-text', value: 'Invalid input' },
+        },
+      ],
+    }
+    vi.mocked(generateToolStep).mockResolvedValueOnce({
+      ...first,
+      step: { ...stepOf(first), responseMessages: [assistant!, sdkError] },
+    } as ToolStepResult)
+
+    await drive(taskDef(), runContext(phaseContext()))
+
+    expect(await description()).toBe('A courier. first')
+    const answers = (sentMessages(1)[1] as ToolModelMessage).content
+    expect(answers).toHaveLength(2)
+    expect(answers).toMatchObject([
+      { toolCallId: 'k1', output: { type: 'json', value: { result: 'ok' } } },
+      { toolCallId: 'k1', output: { type: 'json', value: { result: 'rejected' } } },
+    ])
+  })
+
   it("skips an invalid call, answers the rest, and sends the model's message, then one tool message in call order", async () => {
     const first = okStep([peekCall('k1')], {
       invalid: [

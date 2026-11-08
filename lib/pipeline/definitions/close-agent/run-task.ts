@@ -102,12 +102,17 @@ function stepMessages(
 ): ModelMessage[] {
   const kept: ModelMessage[] = responseMessages.filter((message) => message.role !== 'tool')
   const sdkAnswers = responseMessages.filter((message) => message.role === 'tool')
+  const places = callPlaces(kept)
+  // The driver answers every call under a repeated id itself; the SDK's answer there is to a call
+  // it gave another's input, and would take that call's place.
+  const repeated = (id: string): boolean => (places.of.get(id)?.length ?? 0) > 1
   const parts = [
-    ...sdkAnswers.flatMap((message) => message.content),
+    ...sdkAnswers
+      .flatMap((message) => message.content)
+      .filter((part) => part.type !== 'tool-result' || !repeated(part.toolCallId)),
     ...(answers.length === 0 ? [] : toolMessage(answers).content),
   ]
   if (parts.length === 0) return kept
-  const places = callPlaces(kept)
   const answered = new Map<string, number>()
   // The nth answer to an id takes that id's nth place.
   const ranked = parts.map((part) => {
