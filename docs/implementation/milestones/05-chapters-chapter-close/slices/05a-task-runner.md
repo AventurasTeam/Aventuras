@@ -367,7 +367,7 @@ and tools sit under `lib/pipeline/definitions/close-agent/`.
   records nothing.
 - `rows` and `turns` hold real ids, and a refused create keeps the id
   its plan minted, with its name. `values` holds landed or proposed
-  fields and never a restated one. Its keys and a `skippedFields` entry's
+  fields and never a path restated on every row that carries it. Its keys and a `skippedFields` entry's
   `field` name the delta path a field lands at, as `changedPaths` reads
   it (`description`, `state.voice`), and each skipped field carries its
   own `reason`. A list joins with `, `, and a ref's value is the row's
@@ -543,7 +543,8 @@ vitest and the probe share. It never reaches a production slot.
   a value to the bound, keeps a refused create's minted id and records
   a stop; a landed call shows in the next task's writes so far
   (`lib/pipeline/definitions/close-agent/ledger.test.ts`). A restated
-  field stays out of `values`, from the plan or the handler
+  field stays out of `values`, from the plan or the handler, and a path
+  restated on one row and lost on another keeps its proposed value
   (`lib/pipeline/definitions/close-agent/write-path.test.ts`).
 - A row keeps its short id across two tasks and two parts; a `haw_` row
   shown in two tasks keeps one handle, which the writes-so-far line
@@ -728,9 +729,9 @@ None open: Implementation notes, below, record each answer.
   `skippedFields`, and the model's own list, `ToolVerdict.notWritten`,
   names every loss, one entry per row and field. Each `PlannedAction`
   and `LostField` carries a required `row`, the label the answer names:
-  an existing row's id, which the answer swaps for its handle, shown
-  first with its name if the close hasn't shown it, so prose naming the
-  handle resolves; a create's table, since a minted id has no handle
+  an entity, lore, thread or happening row's id, which the answer swaps
+  for its handle, shown first with its name if the close hasn't shown
+  it, so prose naming the handle resolves; a create's table, since a minted id has no handle
   unless the create lands; a link row's character, plus the happening
   only when the call spans several; else the table. The label goes
   through `withHandles` with the reason, and never a link row's own

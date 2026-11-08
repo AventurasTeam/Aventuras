@@ -362,8 +362,8 @@ type CloseReportCall = {
 - **`values` holds only landed or proposed fields.** Its keys and a
   `skippedFields` entry's `field` are delta paths, as `changedPaths` reads
   them (`description`, `state.voice`). A list joins with `, `, and a ref's
-  value is the row's name, not its id. A restated field is absent (C11),
-  and `skippedFields` omit a path that also landed on another row. The
+  value is the row's name, not its id. A path restated on every row that
+  carries it is absent (C11), and `skippedFields` omit a path that also landed on another row. The
   review omits an `ok` call with no field and no `survivor`. A
   tool writing a single field, such as `retire_entity`, records it here.
 - **A `reason` is a stable key** for the three shared classes,

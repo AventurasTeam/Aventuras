@@ -503,9 +503,9 @@ stays covered. Ids, titles and positions don't move (C8).
   defines `reason` as a stable key or a handler's own refusal. Give them
   stable keys (`unread`, `no-cite`, `unknown-id`), or translate them in
   the review? Surfaced by 5.5a.
-- **Should C4's `skippedFields` entries carry their row?** In a multi-row
-  call, Changes' `rows[0]` rule and Not applied's same-row match have no
-  row to read, since a `skippedFields` entry carries none. A path landed
+- **Should C4's `values` and `skippedFields` carry their row?** In a
+  multi-row call, Changes' `rows[0]` rule has no row for a `values` key,
+  and Not applied's same-row match has none for a `skippedFields` entry. A path landed
   on one row and lost on another ([5.5a's rule](./05a-task-runner.md#implementation-notes),
   developer decision, 2026-11-08) reaches only the model, never Not
   applied, a rule refusal included. Surfaced by 5.5a.
