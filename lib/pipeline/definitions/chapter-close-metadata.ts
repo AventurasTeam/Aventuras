@@ -1,10 +1,12 @@
 import { eq, sql } from 'drizzle-orm'
 
+import type { GroupOutcome, PipelineAction } from '@/lib/actions/types'
 import { chapters, openRegionSeries, type DbCtx, type OpenRegionRow } from '@/lib/db'
 
 import { requestChapterMetadata } from './chapter-close-metadata-call'
 import { requireCloseRange } from './close-intermediates'
 import { CLOSE_PHASE } from './intermediates'
+import { emitDeltaGroup } from '../runtime/emit-group'
 import type { PhaseContext, PhaseEmittedEvent, PhaseResult } from '../types'
 
 /** The open-region rows from the first through `endEntryId`; null when the end isn't among them. */
@@ -24,13 +26,22 @@ async function nextSequenceNumber(db: DbCtx['db'], branchId: string): Promise<nu
   return row?.next ?? 1
 }
 
+// A chapter row must sit over a fully stamped range, so any action that didn't land fails the close.
+function notApplied(actions: readonly PipelineAction[], outcome: GroupOutcome): string | null {
+  if (outcome.status === 'rejected') return `chapter-close: group not applied: ${outcome.reason}`
+  for (const [index, result] of outcome.outcomes.entries())
+    if (result.status !== 'landed')
+      return `chapter-close: ${actions[index].kind} not applied: ${result.reason}`
+  return null
+}
+
 /**
  * chapter-close.md → Phase 2: one metadata call (no parts yet, Slice 5.8), then the row and a stamp
- * per entry through the end, in position order, every write anchored on the end entry (C1).
+ * per entry through the end as one group, in C1's order, every delta anchored on the end entry.
  */
 export async function* closeMetadataPhase(
   ctx: PhaseContext,
-): AsyncGenerator<PhaseEmittedEvent, PhaseResult> {
+): AsyncGenerator<PhaseEmittedEvent, PhaseResult, GroupOutcome | undefined> {
   const range = requireCloseRange(ctx)
   if ('status' in range) return range
   const call = yield* requestChapterMetadata(ctx, range)
@@ -53,12 +64,10 @@ export async function* closeMetadataPhase(
   const { title, summary, theme, keywords } = call.metadata
   const now = Date.now()
 
-  // C1: the orchestrator reads an abort only between phases, and each write commits on its own.
+  // The group commits whole: a cancel after this point is reversed by the orchestrator, not stopped short.
   if (ctx.abortSignal.aborted) return { status: 'aborted' }
-  yield {
-    type: 'delta_emitted',
-    entryId: range.endEntryId,
-    action: {
+  const actions: PipelineAction[] = [
+    {
       kind: 'createChapter',
       source: 'chapter_close',
       payload: {
@@ -79,18 +88,17 @@ export async function* closeMetadataPhase(
         },
       },
     },
-  }
-  for (const row of series) {
-    if (ctx.abortSignal.aborted) return { status: 'aborted' }
-    yield {
-      type: 'delta_emitted',
-      entryId: range.endEntryId,
-      action: {
+    ...series.map(
+      (row): PipelineAction => ({
         kind: 'stampEntryChapter',
         source: 'chapter_close',
         payload: { branchId: ctx.branchId, id: row.id, chapterId: range.chapterId },
-      },
-    }
-  }
+      }),
+    ),
+  ]
+  const outcome = yield* emitDeltaGroup(actions, range.endEntryId)
+  const refused = notApplied(actions, outcome)
+  if (refused !== null)
+    return { status: 'failed', error: { kind: 'action-layer', detail: refused } }
   return { status: 'completed' }
 }

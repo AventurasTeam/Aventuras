@@ -14,7 +14,7 @@ import {
   type StoryEntry,
 } from '@/lib/db'
 import { configureDeltaActionPort, pipelineEventBus, recoverInFlightRuns } from '@/lib/pipeline'
-import { expectRan, resetSingletons } from '@/lib/pipeline/__tests__/harness'
+import { expectRan, realDeltaActionPort, resetSingletons } from '@/lib/pipeline/__tests__/harness'
 import {
   metadataReplyResult,
   openCloseFixture,
@@ -25,14 +25,7 @@ import { generationStore, interruptMemoryRuns } from '@/lib/stores'
 import { selectUndoTarget } from '@/lib/undo'
 
 import { startManualClose } from './start-manual-close'
-import {
-  applyDeltaAction,
-  applyDeltaActionGroupWithOutcomes,
-  settleUserWrites,
-} from '../delta/apply-delta-action'
-import { holdBranchWriteExclusive, releaseBranchWriteExclusive } from '../delta/branch-write-lock'
-import { describeDeltaReplayError, reverseReplayDeltas } from '../delta/reverse-replay'
-import { readRowGuard } from '../delta/row-guard'
+import { applyDeltaActionGroupWithOutcomes } from '../delta/apply-delta-action'
 import { shownCounts } from '../story-entries/__tests__/shown-counts'
 import { rollbackToEntry } from '../story-entries/operational'
 import { redoLastAction, undoLastAction } from '../story-entries/undo'
@@ -104,17 +97,29 @@ function idsBefore(fx: CloseFixture, position: number): string[] {
   return fx.entries.filter((e) => e.position < position).map((e) => e.id)
 }
 
-// Acts on the first stamp's delta_emitted: by then the create and one stamp have landed.
-function onFirstStamp(act: () => void): PipelineAction['kind'][] {
-  const emitted: PipelineAction['kind'][] = []
-  let acted = false
-  pipelineEventBus.subscribe('delta_emitted', (event) => {
-    emitted.push(event.action.kind)
-    if (acted || event.action.kind !== 'stampEntryChapter') return
-    acted = true
-    act()
+// Acts once the close's group has committed: the bus hears a group only after it lands.
+function onGroup(act: () => void): PipelineAction['kind'][][] {
+  const groups: PipelineAction['kind'][][] = []
+  pipelineEventBus.subscribe('delta_group_emitted', (event) => {
+    groups.push(event.actions.map((a) => a.kind))
+    if (groups.length === 1) act()
   })
-  return emitted
+  return groups
+}
+
+// Every single write the run sent: the report's, which a write after the group would be.
+function singleWrites(): PipelineAction['kind'][] {
+  const kinds: PipelineAction['kind'][] = []
+  pipelineEventBus.subscribe('delta_emitted', (event) => {
+    kinds.push(event.action.kind)
+  })
+  return kinds
+}
+
+// The close's group: the create, then a stamp per entry through the end reply.
+function closeKinds(fx: CloseFixture): PipelineAction['kind'][] {
+  const stamps = idsBefore(fx, positionOf(fx, fx.replyIds[END_REPLY]) + 1).length
+  return ['createChapter', ...Array.from({ length: stamps }, () => 'stampEntryChapter' as const)]
 }
 
 describe('reversing a close that ran', () => {
@@ -216,17 +221,19 @@ describe('reversing a close that ran', () => {
     expect(await deltasOf(fx, tx.actionId)).toEqual([])
   })
 
-  it('leaves no stamp and no row when Cancel lands mid-burst', async () => {
+  it('leaves no stamp and no row when Cancel lands after the group, before the report', async () => {
     const fx = await openCloseFixture()
     const end = fx.replyIds[END_REPLY]
-    const emitted = onFirstStamp(() => {
+    const groups = onGroup(() => {
       void interruptMemoryRuns(fx.branchId)
     })
+    const singles = singleWrites()
 
     const tx = expectRan(await startManualClose(fx.branchId, end, fx.ctx))
 
     expect(tx.outcome).toBe('aborted')
-    expect(emitted).toEqual(['createChapter', 'stampEntryChapter'])
+    expect(groups).toEqual([closeKinds(fx)])
+    expect(singles).toEqual([])
     expect(await chapterRows(fx)).toEqual([])
     expect((await entryRows(fx)).map((e) => e.chapterId)).toEqual(fx.entries.map(() => null))
     expect(await deltasOf(fx, tx.actionId)).toEqual([])
@@ -236,22 +243,24 @@ describe('reversing a close that ran', () => {
     })
   })
 
-  it('leaves no stamp and no row when a rollback interrupts the burst', async () => {
+  it('leaves no stamp and no row when a rollback interrupts after the group, before the report', async () => {
     const fx = await openCloseFixture()
     // The last turn's action, past the end: alone, this rollback would spare a committed close.
     const target = fx.entries[fx.entries.length - 2]
     expect(target.kind).toBe('user_action')
     const shown = await shownCounts(fx.branchId, target.id, fx.ctx)
     let rollback: ReturnType<typeof rollbackToEntry> | undefined
-    const emitted = onFirstStamp(() => {
+    const groups = onGroup(() => {
       rollback = rollbackToEntry(fx.branchId, target.id, fx.ctx, { expectedCounts: shown })
     })
+    const singles = singleWrites()
 
     const tx = expectRan(await startManualClose(fx.branchId, fx.replyIds[END_REPLY], fx.ctx))
 
     expect(await rollback).toEqual({ status: 'ok', counts: shown })
     expect(tx.outcome).toBe('aborted')
-    expect(emitted).toEqual(['createChapter', 'stampEntryChapter'])
+    expect(groups).toEqual([closeKinds(fx)])
+    expect(singles).toEqual([])
     expect(await chapterRows(fx)).toEqual([])
     const survivors = await entryRows(fx)
     expect(survivors.map((e) => e.id)).toEqual(idsBefore(fx, target.position))
@@ -260,29 +269,21 @@ describe('reversing a close that ran', () => {
     expect(generationStore.getTxState().deferred.get(fx.branchId)).toEqual({ close: true })
   })
 
-  it('reverses at boot a close a crash left mid-burst, with the close’s copy', async () => {
+  it('reverses at boot a close a crash left after its group, with the close’s copy', async () => {
     const fx = await openCloseFixture()
-    let stamps = 0
+    const stamps = idsBefore(fx, positionOf(fx, fx.replyIds[END_REPLY]) + 1).length
     let crash = (): void => {}
     const crashed = new Promise<void>((resolve) => {
       crash = resolve
     })
-    // The process dies writing the second stamp: the marker stays open over the create and one stamp.
+    // The process dies once the group commits: the marker stays open over the create and every stamp.
     configureDeltaActionPort({
-      applyDeltaAction: (args, ctx) => {
-        if (args.action.kind === 'stampEntryChapter' && ++stamps === 2) {
-          crash()
-          return new Promise<never>(() => {})
-        }
-        return applyDeltaAction(args, ctx)
+      ...realDeltaActionPort(),
+      applyDeltaActionGroupWithOutcomes: async (actions, args, ctx) => {
+        await applyDeltaActionGroupWithOutcomes(actions, args, ctx)
+        crash()
+        return new Promise<never>(() => {})
       },
-      applyDeltaActionGroupWithOutcomes,
-      readRowGuard,
-      reverseReplayDeltas,
-      describeReplayError: describeDeltaReplayError,
-      settleUserWrites,
-      holdBranchWriteExclusive,
-      releaseBranchWriteExclusive,
     })
     void startManualClose(fx.branchId, fx.replyIds[END_REPLY], fx.ctx)
     await crashed
@@ -293,7 +294,7 @@ describe('reversing a close that ran', () => {
       .where(isNull(pipelineRuns.finishedAt))
     expect(marker).toMatchObject({ kind: CHAPTER_CLOSE_KIND, storyId: fx.storyId })
     expect(await chapterRows(fx)).toHaveLength(1)
-    expect((await entryRows(fx)).filter((e) => e.chapterId !== null)).toHaveLength(1)
+    expect((await entryRows(fx)).filter((e) => e.chapterId !== null)).toHaveLength(stamps)
 
     // A restart: memory gone, the real port back.
     resetSingletons()
@@ -306,7 +307,7 @@ describe('reversing a close that ran', () => {
           kind: CHAPTER_CLOSE_KIND,
           actionId: marker.actionId,
           storyId: fx.storyId,
-          deltas: 2,
+          deltas: stamps + 1,
         },
       ],
       failures: [],
