@@ -7,7 +7,7 @@ import {
 } from 'ai'
 import { MockLanguageModelV3 } from 'ai/test'
 import { and, eq } from 'drizzle-orm'
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, onTestFinished, vi } from 'vitest'
 import { z } from 'zod'
 
 import {
@@ -27,7 +27,7 @@ import {
   type ToolStepResult,
 } from '@/lib/ai'
 import { entities, type CloseTask } from '@/lib/db'
-import { makeLogger } from '@/lib/diagnostics'
+import { logger, makeLogger } from '@/lib/diagnostics'
 import { generateId } from '@/lib/ids'
 import { appSettingsStore, currentStoryStore, entitiesStore, resetAllStores } from '@/lib/stores'
 
@@ -714,6 +714,71 @@ describe('runCloseTask', () => {
         phaseName: 'agent',
       },
     })
+  })
+
+  it.each<[string, ToolStepResult, PipelineError['kind']]>([
+    [
+      'a failed step',
+      { status: 'failed', error: { tier: 'provider', reason: 'network' }, recoverable: [] },
+      'provider',
+    ],
+    [
+      'no model for lore-mgmt',
+      { status: 'not-configured', kind: 'no-profile-assigned' },
+      'config-resolver',
+    ],
+  ])(
+    'logs the task it fails at debug on %s, with its part and error kind',
+    async (_, step, kind) => {
+      const debug = vi.spyOn(logger, 'debug')
+      onTestFinished(() => debug.mockRestore())
+      vi.mocked(generateToolStep).mockResolvedValueOnce(step)
+
+      const { end } = await drive(
+        { ...taskDef(), task: 'upkeep' },
+        { ...runContext(phaseContext()), part: 2 },
+      )
+
+      expect(end).toMatchObject({ status: 'failed', error: { kind } })
+      expect(debug).toHaveBeenCalledWith(
+        'memory.close_task_failed',
+        { task: 'upkeep', part: 2, kind },
+        { actionId: ACTION_ID },
+      )
+    },
+  )
+
+  it("logs each invalid call at debug, with its task, part, tool and the SDK's detail", async () => {
+    const debug = vi.spyOn(logger, 'debug')
+    onTestFinished(() => debug.mockRestore())
+    vi.mocked(generateToolStep).mockResolvedValueOnce(
+      okStep([peekCall('k1')], {
+        invalid: [
+          { toolCallId: 'k2', toolName: 'append_note', detail: 'Invalid input for append_note' },
+          { toolCallId: 'k3', toolName: 'merge_threads', detail: 'No such tool: merge_threads' },
+        ],
+      }),
+    )
+
+    await drive({ ...taskDef(), task: 'upkeep' }, { ...runContext(phaseContext()), part: 2 })
+
+    expect(debug.mock.calls.filter(([kind]) => kind === 'memory.close_tool_call_invalid')).toEqual([
+      [
+        'memory.close_tool_call_invalid',
+        { task: 'upkeep', part: 2, tool: 'append_note', detail: 'Invalid input for append_note' },
+        { actionId: ACTION_ID },
+      ],
+      [
+        'memory.close_tool_call_invalid',
+        { task: 'upkeep', part: 2, tool: 'merge_threads', detail: 'No such tool: merge_threads' },
+        { actionId: ACTION_ID },
+      ],
+    ])
+    expect(debug).not.toHaveBeenCalledWith(
+      'memory.close_task_failed',
+      expect.anything(),
+      expect.anything(),
+    )
   })
 
   it('returns aborted on an abort between calls, before the next call runs', async () => {

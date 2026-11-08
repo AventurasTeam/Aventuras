@@ -2,6 +2,7 @@ import type { JSONValue, ModelMessage, ToolModelMessage } from 'ai'
 
 import type { GroupOutcome } from '@/lib/actions/types'
 import { generateToolStep, type ResolveTarget, type ToolStep, type ToolStepCall } from '@/lib/ai'
+import { logger } from '@/lib/diagnostics'
 
 import { createReadSet } from './common-checks'
 import { dispatchToolCall, type DispatchContext, type ToolAnswer } from './dispatch'
@@ -175,9 +176,19 @@ export async function* runCloseTask(
   const tools = toolStepTools(def.tools)
   const byName = new Map(def.tools.map((tool) => [tool.name, tool]))
   const messages: ModelMessage[] = []
+  const at = { actionId: ctx.phase.actionId }
   const stop = (reason: StopReason): TaskEnd => {
     ledger.stop({ task: def.task, part: ctx.part, reason })
     return { status: 'stopped', reason }
+  }
+  // The close's failure names no task or part; this line does.
+  const fail = (error: PipelineError): TaskEnd => {
+    logger.debug(
+      'memory.close_task_failed',
+      { task: def.task, part: ctx.part, kind: error.kind },
+      at,
+    )
+    return { status: 'failed', error }
   }
 
   for (let step = 1; step <= CLOSE_TASK_STEP_BUDGET; step++) {
@@ -191,22 +202,25 @@ export async function* runCloseTask(
     )
     yield* retriedAttemptEvents(result, TARGET)
     if (result.status === 'not-configured')
-      return {
-        status: 'failed',
-        error: {
-          kind: 'config-resolver',
-          failure: result.kind,
-          target: TARGET,
-          phaseName: CLOSE_PHASE.agent,
-        },
-      }
-    if (result.status === 'failed')
-      return { status: 'failed', error: toPipelineError(result.error, TARGET) }
+      return fail({
+        kind: 'config-resolver',
+        failure: result.kind,
+        target: TARGET,
+        phaseName: CLOSE_PHASE.agent,
+      })
+    if (result.status === 'failed') return fail(toPipelineError(result.error, TARGET))
     if (result.status === 'aborted') return { status: 'aborted' }
     if (result.status === 'stopped') return stop(result.reason)
 
     const { calls, invalidCalls, responseMessages } = result.step
     if (calls.length === 0 && invalidCalls.length === 0) return { status: 'finished' }
+    // The SDK answers these itself: nothing else says why a slipping task spent its budget.
+    for (const { toolName, detail } of invalidCalls)
+      logger.debug(
+        'memory.close_tool_call_invalid',
+        { task: def.task, part: ctx.part, tool: toolName, detail },
+        at,
+      )
     ledger.noteToolCall()
     const answers: ToolAnswer[] = []
     for (const call of calls) {
