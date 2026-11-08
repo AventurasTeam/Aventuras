@@ -475,8 +475,9 @@ Run on the mock unless a line says otherwise. Each delta named below has
 - `flag_duplicate` lands on two rows with no namesake basis.
   `flagStillHolds` reads it live, so World lists it, and `brokenFlags`
   leaves it through a detail-pane rename of either row. The dialog's
-  Rename, Keep and a merge resolve it as they do any flag. A row with a
-  live flag returns `rejected`.
+  Rename, Keep and a merge resolve it as they do any flag. A live flag
+  naming another row, or the same row for another reason, returns
+  `rejected`; the same flag again returns `ok` with nothing written (C11).
 - After Keep on a pair, in either direction, `flag_duplicate` on that pair
   returns `rejected`, whether the clear came before or after the cited
   turn, and from either row. A re-point doesn't count as resolved.

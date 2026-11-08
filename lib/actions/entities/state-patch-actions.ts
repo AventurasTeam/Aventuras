@@ -670,8 +670,12 @@ export const raiseCollisionFlagHandler: ActionHandler = async (action, branchId,
   const edits =
     proseEntryId === null ? [] : await userEditsSinceProse(ctx, bid, 'entities', id, proseEntryId)
   const refused = await raiseRefusal(ctx, current, partner, reason, edits)
-  if (refused !== null)
-    return noopRefusal(refused, refused === 'already-flagged' ? 'restated' : undefined)
+  if (refused !== null) {
+    // Any other live flag is the one-flag-per-row rule; only the same flag again is a stored value.
+    const sameFlag =
+      current.nameCollisionPartnerId === partner.id && current.nameCollisionReason === reason
+    return noopRefusal(refused, refused === 'already-flagged' && sameFlag ? 'restated' : undefined)
+  }
   return columnsWriteOutcome(bid, id, flagColumns(partnerId, reason), flagUndo(current), ctx)
 }
 

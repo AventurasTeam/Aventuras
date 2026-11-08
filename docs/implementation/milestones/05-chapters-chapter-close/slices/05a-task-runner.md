@@ -148,8 +148,10 @@ and tools sit under `lib/pipeline/definitions/close-agent/`.
   `not-retired` and `not-staged` on an active one; each is a rule on
   any other. `not-a-faction` and `parent-not-a-place` are gone when the
   row they name is missing, and a rule when it's another kind. Of
-  `raiseCollisionFlag`'s refusals only `already-flagged` is restated.
-  The reason strings don't change.
+  `raiseCollisionFlag`'s refusals only `already-flagged` is restated,
+  and only when the row's live flag already names the same partner for
+  the same reason; another live flag is a rule. The reason strings
+  don't change.
 - The mapping from a group's outcome to one tool result, with `rejected`
   as its default. `USER_EDITED_SINCE_PROSE` maps to `skipped`, `restated`
   to nothing written, and `gone` to `rejected`, saying where the row

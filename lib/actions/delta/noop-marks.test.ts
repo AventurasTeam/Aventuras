@@ -4,7 +4,15 @@ import fg from 'fast-glob'
 import ts from 'typescript'
 import { describe, expect, it } from 'vitest'
 
-import { branches, emptyEntityState, entities, lore, stories, type NewEntity } from '@/lib/db'
+import {
+  branches,
+  emptyEntityState,
+  entities,
+  lore,
+  stories,
+  type CollisionReason,
+  type NewEntity,
+} from '@/lib/db'
 import { createTestDb } from '@/lib/db/__tests__/test-db'
 
 import type { DbCtx, NoopMark, PipelineAction } from '../types'
@@ -264,10 +272,14 @@ const promote = (id: string): PipelineAction => ({
   payload: { branchId: BRANCH, id, proseEntryId: null },
 })
 
-const raiseOn = (id: string): PipelineAction => ({
+const raiseOn = (
+  id: string,
+  partnerId = 'char_2',
+  reason: CollisionReason = 'name-taken',
+): PipelineAction => ({
   kind: 'raiseCollisionFlag',
   source: 'periodic_classifier',
-  payload: { branchId: BRANCH, id, partnerId: 'char_2', reason: 'name-taken', proseEntryId: null },
+  payload: { branchId: BRANCH, id, partnerId, reason, proseEntryId: null },
 })
 
 const restateLore: PipelineAction = {
@@ -320,9 +332,19 @@ describe('noopRefusal marks: sample handlers (C11)', () => {
     ],
     ['placeLocation under an item', placeUnder('item_1'), noop('parent-not-a-place')],
     [
-      'raiseCollisionFlag on a row whose flag holds',
-      raiseOn('char_flagged'),
+      'raiseCollisionFlag restating the flag it holds',
+      raiseOn('char_flagged', 'char_3', 'alike'),
       noop('already-flagged', 'restated'),
+    ],
+    [
+      'raiseCollisionFlag on a row flagged against another partner',
+      raiseOn('char_flagged', 'char_2', 'alike'),
+      noop('already-flagged'),
+    ],
+    [
+      'raiseCollisionFlag on the same partner for another reason',
+      raiseOn('char_flagged', 'char_3', 'name-taken'),
+      noop('already-flagged'),
     ],
     ['raiseCollisionFlag on no namesake', raiseOn('char_bram'), noop('not-namesakes')],
   ])('%s', async (_label, action, expected) => {
