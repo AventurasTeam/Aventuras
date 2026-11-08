@@ -15,7 +15,12 @@ import { DatabaseSync } from 'node:sqlite'
 import { and, eq } from 'drizzle-orm'
 import { getLoadablePath } from 'sqlite-vec'
 
-import { loadOpenStory, registerAllDomains, startManualClose } from '@/lib/actions'
+import {
+  loadOpenStory,
+  registerAllDomains,
+  resetStuckClassifierRunState,
+  startManualClose,
+} from '@/lib/actions'
 import {
   applyDeltaAction,
   applyDeltaActionGroupWithOutcomes,
@@ -44,6 +49,7 @@ import {
   pipelineErrorDetail,
   pipelineEventBus,
   readClassifierStatus,
+  recoverInFlightRuns,
   unprocessedEntryCount,
   type PipelineError,
   type RejectedStart,
@@ -306,6 +312,22 @@ function clearLoreMgmtOverride(sqlite: DatabaseSync): void {
   console.log(`[probe:close] cleared the story's lore-mgmt model override on the scratch copy`)
 }
 
+// As the app's boot does (lib/boot/bootstrap.ts): a close cut off mid-run left its writes and an
+// open marker, and the probe's close would read the region they moved, or run over them.
+async function recoverAsBootDoes(ctx: DbCtx): Promise<void> {
+  const recovery = await recoverInFlightRuns(ctx)
+  for (const run of recovery.reversed)
+    console.log(
+      `[probe:close] recovered run ${run.runId} (${run.kind}) on the scratch copy: ${run.deltas} deltas reversed`,
+    )
+  const [failed] = recovery.failures
+  if (failed !== undefined)
+    throw new Error(
+      `[probe:close] run ${failed.runId} (${failed.kind}, action ${failed.actionId}) does not recover: ${String(failed.error)}`,
+    )
+  await resetStuckClassifierRunState(ctx, recovery.failures)
+}
+
 async function probeRun(k: number, source: string, server: Server): Promise<boolean> {
   const scratch = mkdtempSync(join(tmpdir(), 'aventuras-close-probe-'))
   capture.dir = OUT === undefined ? null : join(resolve(OUT), `run${k}`)
@@ -337,10 +359,7 @@ async function probeRun(k: number, source: string, server: Server): Promise<bool
     const ctx: DbCtx = { db: opened.db, runInTransaction: opened.runInTransaction }
     if (capture.dir !== null) mkdirSync(capture.dir, { recursive: true })
     resetAllStores()
-    await hydrateProbeSettings(server)
-    const story = await loadOpenStory(BRANCH_ID, ctx)
-    if (story.status !== 'ok')
-      throw new Error(`[probe:close] branch ${BRANCH_ID} did not open: ${story.status}`)
+    await recoverAsBootDoes(ctx)
     // startCloseChain would run a classifier pass first, which this probe doesn't measure.
     const { processedThrough } = await readClassifierStatus(BRANCH_ID, ctx)
     const unprocessed = await unprocessedEntryCount(BRANCH_ID, processedThrough, ctx)
@@ -348,6 +367,10 @@ async function probeRun(k: number, source: string, server: Server): Promise<bool
       throw new Error(
         `[probe:close] branch ${BRANCH_ID} owes a classifier pass over ${unprocessed} entries; run it in the app first`,
       )
+    await hydrateProbeSettings(server)
+    const story = await loadOpenStory(BRANCH_ID, ctx)
+    if (story.status !== 'ok')
+      throw new Error(`[probe:close] branch ${BRANCH_ID} did not open: ${story.status}`)
     const end = END_ENTRY ?? latestReply(await openRegionSeries(BRANCH_ID, ctx))
     const started = Date.now()
     const result = await startManualClose(BRANCH_ID, end, ctx)
