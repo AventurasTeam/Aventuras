@@ -70,16 +70,11 @@ function settle(key: string, model: string): void {
   if (!models?.size) pending.delete(key)
 }
 
-/**
- * What the provider says about a model, looked up once per connection and model for 12 hours.
- * Callers read a model the list contains from the list; this holds the rest. A model the provider
- * does not know is cached as `undefined`; a failed lookup resolves to `undefined` and is not
- * retried for five minutes.
- */
-export async function cachedCapabilities(
+async function request(
   connection: ImageProviderConnection,
   model: string,
   lookup: CapabilityLookup,
+  cacheFailure: boolean,
 ): Promise<ImageModelCapabilities | undefined> {
   const key = modelListKey(connection)
   const cached = entries.get(key)?.get(model)
@@ -88,30 +83,56 @@ export async function cachedCapabilities(
   const inFlight = pending.get(key)?.get(model)
   if (inFlight) return inFlight
 
-  const request: Lookup = (async () => {
-    let entry: Entry
+  const running: Lookup = (async () => {
     try {
       const found = await lookupWithin(LOOKUP_TIMEOUT_MS, (signal) =>
         lookup(connection, model, signal),
       )
-      entry = {
-        capabilities: found && pickCapabilities(found),
-        expiresAt: Date.now() + CAPABILITY_TTL_MS,
-      }
+      const capabilities = found && pickCapabilities(found)
+      store(key, model, { capabilities, expiresAt: Date.now() + CAPABILITY_TTL_MS })
+      return capabilities
     } catch (error) {
       log('Error looking up model capabilities', {
         providerType: connection.providerType,
         model,
         error,
       })
-      entry = { capabilities: undefined, expiresAt: Date.now() + FAILURE_TTL_MS }
+      if (cacheFailure) {
+        store(key, model, { capabilities: undefined, expiresAt: Date.now() + FAILURE_TTL_MS })
+      }
+      return undefined
+    } finally {
+      settle(key, model)
     }
-    store(key, model, entry)
-    settle(key, model)
-    return entry.capabilities
   })()
-  inner(pending, key).set(model, request)
-  return request
+  inner(pending, key).set(model, running)
+  return running
+}
+
+/**
+ * What the provider says about a model, looked up once per connection and model for 12 hours.
+ * Callers read a model the list contains from the list; this holds the rest. A model the provider
+ * does not know is cached as `undefined`; a failed lookup resolves to `undefined` and is not
+ * retried for five minutes.
+ */
+export function cachedCapabilities(
+  connection: ImageProviderConnection,
+  model: string,
+  lookup: CapabilityLookup,
+): Promise<ImageModelCapabilities | undefined> {
+  return request(connection, model, lookup, true)
+}
+
+/**
+ * Fills the cache ahead of the first caller. A failure is logged and stores nothing, so the
+ * first real caller looks up again instead of waiting out the five minutes. Never rejects.
+ */
+export async function primeCapabilities(
+  connection: ImageProviderConnection,
+  model: string,
+  lookup: CapabilityLookup,
+): Promise<void> {
+  await request(connection, model, lookup, false)
 }
 
 /** Drops the cached answers for a `modelListKey`; a lookup still running keeps its place and stores its own. */

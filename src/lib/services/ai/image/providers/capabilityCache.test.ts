@@ -1,6 +1,11 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import type { ImageModelCapabilities } from '#lib/types/index.ts'
-import { cachedCapabilities, evictCapabilities, type CapabilityLookup } from './capabilityCache'
+import {
+  cachedCapabilities,
+  evictCapabilities,
+  primeCapabilities,
+  type CapabilityLookup,
+} from './capabilityCache'
 import { imageConnectionFor, modelListKey } from './connection'
 
 const HOUR = 60 * 60 * 1000
@@ -176,5 +181,58 @@ describe('cachedCapabilities', () => {
       maxReferenceImages: 4,
     })
     expect(lookup).not.toHaveBeenCalled()
+  })
+})
+
+describe('primeCapabilities', () => {
+  beforeEach(() => {
+    vi.useFakeTimers()
+  })
+  afterEach(() => {
+    vi.useRealTimers()
+  })
+
+  it('stores the answer, so the first caller does not look up', async () => {
+    const connection = connect()
+    await primeCapabilities(connection, 'm', lookupOf({ maxReferenceImages: 3 }))
+
+    const lookup = lookupOf()
+    expect(await cachedCapabilities(connection, 'm', lookup)).toMatchObject({
+      maxReferenceImages: 3,
+    })
+    expect(lookup).not.toHaveBeenCalled()
+  })
+
+  it('resolves after a failure and stores nothing, so the first caller looks up at once', async () => {
+    const connection = connect()
+    await expect(primeCapabilities(connection, 'm', failingLookup())).resolves.toBeUndefined()
+
+    const lookup = lookupOf({ maxReferenceImages: 1 })
+    expect(await cachedCapabilities(connection, 'm', lookup)).toMatchObject({
+      maxReferenceImages: 1,
+    })
+    expect(lookup).toHaveBeenCalledTimes(1)
+  })
+
+  it('shares one lookup with a caller that arrives while it runs', async () => {
+    const connection = connect()
+    const lookup = lookupOf({ maxReferenceImages: 2 })
+
+    await Promise.all([
+      primeCapabilities(connection, 'm', lookup),
+      cachedCapabilities(connection, 'm', lookup),
+    ])
+
+    expect(lookup).toHaveBeenCalledTimes(1)
+  })
+
+  it('leaves a fresh entry alone', async () => {
+    const connection = connect()
+    const lookup = lookupOf()
+    await cachedCapabilities(connection, 'm', lookup)
+
+    await primeCapabilities(connection, 'm', lookup)
+
+    expect(lookup).toHaveBeenCalledTimes(1)
   })
 })
