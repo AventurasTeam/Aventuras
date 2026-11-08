@@ -1089,7 +1089,8 @@ describe('closeAgentPhase', () => {
 
   it("hands every entry the run's one id map and ledger, the chapter's turns shown first", async () => {
     const log: string[] = []
-    const seen: CodeStepContext[] = []
+    const seen: TaskRunContext[] = []
+    const stepSeen: CodeStepContext[] = []
     let handlesAtFirstStart: (string | undefined)[] = []
     __setCloseAgentSlots({
       before: [
@@ -1102,7 +1103,7 @@ describe('closeAgentPhase', () => {
       ],
       perPart: [
         codeStep('between', log, (c) => {
-          seen.push(c)
+          stepSeen.push(c)
           return { status: 'completed' }
         }),
       ],
@@ -1113,11 +1114,14 @@ describe('closeAgentPhase', () => {
     await drain(ctx)
 
     expect(handlesAtFirstStart).toEqual(['t1', 't2', 't3', 't4', 't5', 't6', 't7'])
-    expect(seen).toHaveLength(3)
+    expect(seen).toHaveLength(2)
+    expect(stepSeen).toHaveLength(1)
     const runIds = closeIdsOf(ctx.intermediates)
-    for (const c of seen) {
+    // A code step is no task and records nothing: its context carries no ledger.
+    expect(stepSeen[0]).not.toHaveProperty('ledger')
+    expect(seen[1]!.ledger).toBe(seen[0]!.ledger)
+    for (const c of [...seen, ...stepSeen]) {
       expect(c.ids).toBe(runIds)
-      expect(c.ledger).toBe(seen[0]!.ledger)
       expect(c.phase).toBe(ctx)
       expect(c.db).toBe(fixture.ctx.db)
       expect(c.branchId).toBe(fixture.branchId)
@@ -1140,7 +1144,7 @@ describe('closeAgentPhase', () => {
       result: 'ok',
       survivor: { table: 'happenings', id: 'hap_kept' },
     })
-    expect(seen[2]!.survivorOf('happenings', 'hap_absorbed')).toEqual({
+    expect(seen[1]!.survivorOf('happenings', 'hap_absorbed')).toEqual({
       table: 'happenings',
       id: 'hap_kept',
     })

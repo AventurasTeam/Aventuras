@@ -3,8 +3,8 @@ import type { GroupOutcome } from '@/lib/actions/types'
 import type { CloseTaskDef, TaskRunContext } from './task'
 import type { PhaseEmittedEvent, PhaseResult } from '../../types'
 
-/** A code step's context: a task's, with no task and no read fields. */
-export type CodeStepContext = Omit<TaskRunContext, 'task' | 'readFields'>
+/** A code step's context: a task's, with no task, no read fields and no ledger: it records nothing. */
+export type CodeStepContext = Omit<TaskRunContext, 'task' | 'readFields' | 'ledger'>
 
 /** Code inside the agent phase that is no task, such as stackable normalization or the reset. */
 export type CodeStep = {
@@ -27,9 +27,9 @@ export type SlotName = keyof CloseAgentSlots
 
 /** Empty until the close's tasks land (5.5b, 5.8, 5.9). */
 export const PRODUCTION_CLOSE_SLOTS: CloseAgentSlots = Object.freeze({
-  before: [],
-  perPart: [],
-  after: [],
+  before: Object.freeze([]),
+  perPart: Object.freeze([]),
+  after: Object.freeze([]),
 })
 
 let override: CloseAgentSlots | undefined

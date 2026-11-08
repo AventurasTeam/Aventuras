@@ -58,7 +58,8 @@ async function* runPlannedEntry(
   if (agent.phase.abortSignal.aborted) return { status: 'aborted' }
   const { part } = planned
   if (planned.kind === 'code') {
-    const result = yield* planned.step.run({ ...agent, part })
+    const { ledger: _ledger, ...stepAgent } = agent
+    const result = yield* planned.step.run({ ...stepAgent, part })
     return result.status === 'completed' ? null : result
   }
   const { def, progress } = planned

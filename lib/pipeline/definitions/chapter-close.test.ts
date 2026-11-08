@@ -657,6 +657,12 @@ describe('the agent phase with the production slots', () => {
     expect(PRODUCTION_CLOSE_SLOTS).toEqual({ before: [], perPart: [], after: [] })
   })
 
+  it('freezes the slot table and each slot', () => {
+    expect(Object.isFrozen(PRODUCTION_CLOSE_SLOTS)).toBe(true)
+    for (const slot of Object.values(PRODUCTION_CLOSE_SLOTS))
+      expect(Object.isFrozen(slot)).toBe(true)
+  })
+
   it('still ends with the row, its stamps and a report of no tool calls, starting no task', async () => {
     const end = f.replyIds[2]!
     const events = recordEvents()
