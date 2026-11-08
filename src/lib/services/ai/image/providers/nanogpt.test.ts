@@ -195,6 +195,30 @@ describe('NanoGPT model catalogue', () => {
     expect(model).toMatchObject({ supportsImg2Img: true, maxReferenceImages: 4 })
   })
 
+  it.each([false, undefined])(
+    'reads a reference count of zero as no references when image_to_image is %j',
+    async (image_to_image) => {
+      const model = await capabilitiesOf(
+        listed('m', {
+          capabilities: { image_to_image },
+          supported_parameters: { max_input_images: 0 },
+        }),
+      )
+      expect(model).toMatchObject({ supportsImg2Img: false, maxReferenceImages: 0 })
+    },
+  )
+
+  it('allows references when image_to_image: true contradicts a count of zero', async () => {
+    const model = await capabilitiesOf(
+      listed('m', {
+        capabilities: { image_to_image: true },
+        supported_parameters: { max_input_images: 0 },
+      }),
+    )
+    expect(model?.supportsImg2Img).toBe(true)
+    expect(model?.maxReferenceImages).toBeUndefined()
+  })
+
   it('reports a model with neither signal as not taking references', async () => {
     expect((await capabilitiesOf(listed('m')))?.supportsImg2Img).toBe(false)
   })

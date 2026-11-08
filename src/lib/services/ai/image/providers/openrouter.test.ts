@@ -202,6 +202,17 @@ describe('OpenRouter model discovery', () => {
     expect(model.maxReferenceImages).toBeUndefined()
   })
 
+  it('keeps a reference limit of zero on a model with no image input', async () => {
+    const model = await modelOf(listed('m', ['text'], refs(0, 0)))
+    expect(model).toMatchObject({ supportsImg2Img: false, maxReferenceImages: 0 })
+  })
+
+  it('allows references when an image input contradicts a limit of zero', async () => {
+    const model = await modelOf(listed('m', ['text', 'image'], refs(0, 0)))
+    expect(model.supportsImg2Img).toBe(true)
+    expect(model.maxReferenceImages).toBeUndefined()
+  })
+
   it('refuses references on a text-only model that lists none', async () => {
     const model = await modelOf(listed('recraft/recraft-v4.1-flash', ['text']))
     expect(model.supportsImg2Img).toBe(false)

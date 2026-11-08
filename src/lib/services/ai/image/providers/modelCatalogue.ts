@@ -14,14 +14,17 @@ export const architectureSchema = z
 export const nonEmpty = <T>(list?: T[]): T[] | undefined => (list?.length ? list : undefined)
 
 /**
- * Whether a model takes reference images. One that takes images but lists no reference count
- * still takes references; one whose inputs could not be read stays unknown.
+ * Whether a model takes reference images. A positive count or an image input says yes, and wins
+ * over a listed zero: when the signals conflict, references are allowed. A zero alone says no, as
+ * do readable inputs without an image; unreadable inputs stay unknown.
  */
 export function referenceSupport(
   inputs: string[] | undefined,
   maxReferenceImages: number | undefined,
 ): boolean | undefined {
-  if (maxReferenceImages || inputs?.includes('image')) return true
+  if (maxReferenceImages !== undefined && maxReferenceImages > 0) return true
+  if (inputs?.includes('image')) return true
+  if (maxReferenceImages === 0) return false
   return inputs ? false : undefined
 }
 

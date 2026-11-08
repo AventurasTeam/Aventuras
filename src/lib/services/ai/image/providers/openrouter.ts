@@ -60,10 +60,13 @@ function toCapabilities({
   supported_parameters: params,
 }: OpenRouterModel): ImageModelCapabilities {
   const refs = params.input_references
-  const maxReferenceImages = refs?.max && refs.max > 0 ? refs.max : undefined
+  const listed = refs?.max !== undefined && refs.max >= 0 ? refs.max : undefined
+  const supportsImg2Img = referenceSupport(architecture?.input_modalities, listed)
+  // A zero that an image input contradicts is not a limit.
+  const maxReferenceImages = listed === 0 && supportsImg2Img ? undefined : listed
 
   return {
-    supportsImg2Img: referenceSupport(architecture?.input_modalities, maxReferenceImages),
+    supportsImg2Img,
     maxReferenceImages,
     requiresReferenceImage: (refs?.min ?? 0) >= 1 ? true : undefined,
     supportedResolutions: nonEmpty(params.resolution?.values),

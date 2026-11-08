@@ -15,6 +15,12 @@ describe('catalogue helpers', () => {
     expect(referenceSupport(undefined, undefined)).toBeUndefined()
   })
 
+  it('reads a listed zero as no references unless an image input contradicts it', () => {
+    expect(referenceSupport(['text'], 0)).toBe(false)
+    expect(referenceSupport(undefined, 0)).toBe(false)
+    expect(referenceSupport(['text', 'image'], 0)).toBe(true)
+  })
+
   it('marks only a model that takes images and no text as edit-only', () => {
     expect(editsOnly(['image'])).toBe(true)
     expect(editsOnly(['text', 'image'])).toBe(false)
