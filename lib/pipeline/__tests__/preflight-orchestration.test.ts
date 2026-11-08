@@ -156,22 +156,25 @@ describe('runPipeline config pre-flight', () => {
     expect(expectRan(await runPipeline('pf-own-story', ctx)).outcome).toBe('completed')
   })
 
-  it("reads no other story's overrides when another story is open", async () => {
+  it.each([
+    ['another story', 's_other', 'b_other'],
+    ["another of its own story's branches", 's1', 'b_other'],
+  ])('reads no overrides when %s is open', async (_case, storyId, branchId) => {
     const { ctx } = await makeHarness()
     await hydrateAppSettings(async () => ({ ...WIRED_CONFIG, profiles: [] }))
-    openStoryWithNarrativeOverride('s_other', 'b_other')
+    openStoryWithNarrativeOverride(storyId, branchId)
     let phaseStarted = false
     const phase: PhaseFn = async function* () {
       phaseStarted = true
       return { status: 'completed' }
     }
     definePipeline({
-      kind: 'pf-other-story',
+      kind: `pf-other-${storyId}-${branchId}`,
       phases: [{ name: 'narrative', run: phase, resolves: [{ target: 'narrative' }] }],
       ...base,
     })
 
-    const result = expectRan(await runPipeline('pf-other-story', ctx))
+    const result = expectRan(await runPipeline(`pf-other-${storyId}-${branchId}`, ctx))
     expect(phaseStarted).toBe(false)
     expect(result.outcome).toBe('failed')
     expect(result.error).toMatchObject({ kind: 'config-resolver', failure: 'no-profile-assigned' })

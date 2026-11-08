@@ -846,7 +846,7 @@ describe('retryCloseEntry', () => {
     expect(h.rewritePass).toHaveBeenCalledWith({ held: true })
   })
 
-  it.each([['story-busy'], ['reversal'], ['per-turn'], ['chapter-close']])(
+  it.each([['story-busy'], ['per-turn'], ['chapter-close']])(
     'leaves the entry and says to wait when %s refused the close',
     async (blockedBy) => {
       const h = harness({ outcome: 'rejected', blockedBy })
@@ -863,12 +863,15 @@ describe('retryCloseEntry', () => {
     expect(h.notify).toHaveBeenCalledWith('Unavailable while the embedder switch finishes.')
   })
 
-  it('names no refusal code when the close could not start for another reason', async () => {
-    const h = harness({ outcome: 'rejected', blockedBy: 'branch-not-open' })
-    await retryCloseEntry(h.deps)
-    expect(h.calls).toEqual(['notify'])
-    expect(h.notify).toHaveBeenCalledWith("Chapter close can't start yet.")
-  })
+  it.each([['branch-not-open'], ['reversal']])(
+    'names no refusal code, nor generation, when %s refused the close',
+    async (blockedBy) => {
+      const h = harness({ outcome: 'rejected', blockedBy })
+      await retryCloseEntry(h.deps)
+      expect(h.calls).toEqual(['notify'])
+      expect(h.notify).toHaveBeenCalledWith("Chapter close can't start yet.")
+    },
+  )
 
   it('rewrites the close entry when the run throws', async () => {
     const h = harness(new Error('marker insert failed'))

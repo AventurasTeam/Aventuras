@@ -294,6 +294,7 @@ describe('branch scope', () => {
 
     await reverseReplayDeltas('act_d', ctx)
     expect(await read('b2')).toEqual(fork)
+    expect(await read('b1')).toEqual(main)
   })
 })
 

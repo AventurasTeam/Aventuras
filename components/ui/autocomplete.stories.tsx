@@ -203,6 +203,7 @@ export const KeepsItsInputAsARunStarts: Story = {
       ),
     )
     expect(canvas.getByPlaceholderText('Era name…')).toBe(before)
+    expect(before).toHaveAttribute('readonly')
   },
 }
 
