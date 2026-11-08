@@ -72,12 +72,16 @@ slice-planning gate forces its resolution before that slice is planned.
   (`lib/actions/happenings/register-involvements.ts`) do too, so a close
   tool over one of them gets a whole-group refusal where C11's table
   reads as a per-action verdict. Raised in 5.5a's review.
-- **`placeLocationHandler` ignores the group's created rows.** It takes
-  no `GroupScope`, so a `placeLocation` naming a parent created in the
-  same group refuses on the rerun too, now marked `gone` as a missing
-  parent (`lib/actions/entities/state-patch-actions.ts`). Nothing groups
-  a place's create with a placement yet; a close tool that does needs
-  the scope. Raised in 5.5a's review.
+- **Handlers read committed rows, so a row created earlier in the same
+  group reads as missing.** `placeLocationHandler` takes no `GroupScope`
+  (`lib/actions/entities/state-patch-actions.ts`), and the
+  `partner-not-found` and each target's `... not found` refusals read the
+  same way. This branch marks all of them `gone`, so once the close's
+  verdict mapping reads marks the model would hear that a row it just
+  created is gone. The fix is reading the group's created rows through
+  `GroupScope`, not a mark special case. Nothing groups a create with
+  such a write yet; a close tool that does needs it. Raised in 5.5a's
+  review.
 - **A parallel group's failing branch outlives the reversal.**
   `runParallelGroup` (`lib/pipeline/runtime/orchestrator.ts`) awaits
   `Promise.all`, so one branch's throw reverses and fails the run while
