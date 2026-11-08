@@ -96,9 +96,12 @@ MiMo and Kimi among those checked) a task's own tool list already costs
 it, which the switches below trade against.
 
 A task ends when a reply finishes normally with no tool call, and the
-next task arrives as a user message. The loop keeps the provider SDK's
-response messages as they are, so the model's reasoning goes back on
-every step with no per-model logic.
+next task arrives as a user message. The model's own message goes back
+as the provider SDK returned it, keeping its reasoning and calls, so the
+reasoning goes back on every step with no per-model logic. A step's
+answers, the SDK's and the loop's, go back as one tool message in the
+order of the calls, since a template may label a result by its tool
+alone.
 
 Two switches on the agent profile, under a "Chapter close" label, choose
 the shape:

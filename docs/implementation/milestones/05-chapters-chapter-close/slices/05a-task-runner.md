@@ -268,11 +268,13 @@ and tools sit under `lib/pipeline/definitions/close-agent/`.
   (`CLOSE_TASK_STEP_BUDGET`). Every step passes
   `cacheSystemPrefix: true`: a marker pays from a task's second step,
   and a task's steps follow at an agent's pace, not a turn's.
-- Response messages stay as the SDK returns them. Each of a step's
-  `calls` runs in order inside the generator and gets an answer before
-  the next step. `invalidCalls` are skipped, since the SDK answered them
-  in `responseMessages`; `convertToLanguageModelPrompt` merges the two
-  `tool` messages into one.
+- The model's own message goes back as the SDK returned it, keeping its
+  reasoning and calls. Each of a step's `calls` runs in order inside the
+  generator and gets an answer before the next step. `invalidCalls` are
+  skipped, since the SDK answered them in `responseMessages`. A step's
+  answers, the SDK's and the driver's, go back as one `tool` message in
+  the order of the calls, where `convertToLanguageModelPrompt` would
+  merge the two with the SDK's first.
 - A reply with no tool call at all ends the task, whatever its finish
   reason, and a reply with any call continues it, an invalid one
   included.
