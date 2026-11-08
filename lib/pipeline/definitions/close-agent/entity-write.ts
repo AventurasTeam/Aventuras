@@ -2,12 +2,12 @@ import { USER_EDITED_SINCE_PROSE, type PipelineAction, type RowVerdicts } from '
 import { emptyEntityState, type Entity } from '@/lib/db'
 import { isJsonObject } from '@/lib/json-object'
 
-import type { PlannedAction } from './tool'
+import type { PlannedAction, ProtectionReason } from './tool'
 import { CLOSE_REASON } from './verdict'
 
 export type FieldVerdict =
   | { field: string; free: true }
-  | { field: string; free: false; reason: string }
+  | { field: string; free: false; reason: ProtectionReason }
 
 type EntityPatch = Extract<PipelineAction, { kind: 'updateEntity' }>['payload']['patch']
 

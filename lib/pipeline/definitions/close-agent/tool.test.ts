@@ -1,6 +1,8 @@
 import { describe, expect, expectTypeOf, it } from 'vitest'
 import { z } from 'zod'
 
+import { USER_EDITED_SINCE_PROSE } from '@/lib/actions/types'
+
 import { CloseIds } from './ids'
 import {
   assertReplaySafe,
@@ -10,11 +12,13 @@ import {
   toolStepTools,
   writeToolSchema,
   type IdArgs,
+  type LostField,
   type ReadTool,
   type WritePlan,
   type WriteTool,
   type WriteToolSchema,
 } from './tool'
+import { CLOSE_REASON } from './verdict'
 
 const CHAR_A = 'char_11111111-1111-4111-8111-111111111111'
 const CHAR_B = 'char_22222222-2222-4222-8222-222222222222'
@@ -264,6 +268,20 @@ describe('WriteTool and ReadTool (checked by tsc)', () => {
       turns: string[]
       why: string
     }>()
+  })
+})
+
+describe('LostField (checked by tsc)', () => {
+  it('protects a field only for a precedence reason', () => {
+    const at = { field: 'description', row: CHAR_A }
+    const lost = (): LostField[] => [
+      { ...at, kind: 'protected', reason: USER_EDITED_SINCE_PROSE },
+      { ...at, kind: 'protected', reason: CLOSE_REASON.laterTurn },
+      { ...at, kind: 'refused', reason: 'over the soft cap of 8' },
+      // @ts-expect-error a cap is a refusal, not a protection
+      { ...at, kind: 'protected', reason: 'over the soft cap of 8' },
+    ]
+    expect(lost).toBeTypeOf('function')
   })
 })
 

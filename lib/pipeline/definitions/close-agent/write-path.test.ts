@@ -1422,12 +1422,15 @@ describe('dispatchToolCall in a close phase', () => {
     })
   })
 
-  it.each([
-    ['skipped', 'protected', USER_EDITED_SINCE_PROSE],
-    ['rejected', 'refused', TEST_CAP],
-  ] as const)(
+  it.each<[string, LostField]>([
+    [
+      'skipped',
+      { field: 'description', reason: USER_EDITED_SINCE_PROSE, row: BRAM, kind: 'protected' },
+    ],
+    ['rejected', { field: 'description', reason: TEST_CAP, row: BRAM, kind: 'refused' }],
+  ])(
     'keeps the proposed value of a restated path another row lost when nothing landed: %s',
-    async (result, kind, reason) => {
+    async (result, loss) => {
       seeds = [
         { table: 'entities', id: WREN },
         { table: 'entities', id: BRAM },
@@ -1435,7 +1438,7 @@ describe('dispatchToolCall in a close phase', () => {
       scriptedPlan = (ctx) => ({
         kind: 'write',
         actions: [describeAs(ctx, WREN, 'A courier.')],
-        lost: [{ field: 'description', reason, row: BRAM, kind }],
+        lost: [loss],
         rows: entityRows(WREN, BRAM),
         values: { description: 'A courier.' },
       })

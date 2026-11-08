@@ -1,10 +1,17 @@
 import { z } from 'zod'
 
-import type { GuardRow, PipelineAction, PrecedenceTable, RowGuard } from '@/lib/actions/types'
+import type {
+  GuardRow,
+  PipelineAction,
+  PrecedenceTable,
+  RowGuard,
+  USER_EDITED_SINCE_PROSE,
+} from '@/lib/actions/types'
 import type { ToolStepTool } from '@/lib/ai'
 import type { CloseReportCall, CloseTask, DbCtx } from '@/lib/db'
 
 import type { CloseIds } from './ids'
+import type { CLOSE_REASON } from './verdict'
 
 export type RowKind =
   | 'character'
@@ -57,13 +64,16 @@ export type PlannedAction = {
    */
   readonly row: string
 }
+/** Why precedence keeps a field (C4's stable keys): the user's edit after the prose, a later turn. */
+export type ProtectionReason = typeof USER_EDITED_SINCE_PROSE | (typeof CLOSE_REASON)['laterTurn']
 export type LostField = {
   readonly field: string
-  readonly reason: string
   /** As PlannedAction.row. */
   readonly row: string
-  readonly kind: 'protected' | 'refused'
-}
+} & (
+  | { readonly kind: 'protected'; readonly reason: ProtectionReason }
+  | { readonly kind: 'refused'; readonly reason: string }
+)
 export type WritePlan =
   | {
       kind: 'refused'
