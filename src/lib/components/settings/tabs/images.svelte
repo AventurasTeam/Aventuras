@@ -437,6 +437,11 @@
       if (invalid || profileModelsKey !== modelListKey(inputs)) {
         profileModels = []
         profileModelsKey = null
+        profileSamplers = []
+        profileSchedulers = []
+        availableLoras = []
+        availableClips = []
+        availableVaes = []
         availableClipTypes = []
         profileLoadFailures = []
       }
@@ -1413,7 +1418,9 @@
       <Label>Model</Label>
       <ImageModelSelect
         models={profileModels}
-        selectedModelId={profileModel}
+        selectedModelId={modelsSettled
+          ? canonicalModelId(profileModel, profileModels)
+          : profileModel}
         onModelChange={(id) => {
           profileModel = modelsSettled ? canonicalModelId(id, profileModels) : id
         }}
