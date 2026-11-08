@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 
 import { TEMPLATE_IDS } from './ids'
 import {
+  CLOSE_ONLY_CHAPTER_VARIABLES,
   DISPLAY_GROUPS,
   TEMPLATE_GROUPS,
   VARIABLES,
@@ -46,13 +47,23 @@ describe('templateContextMap', () => {
     expect(TEMPLATE_GROUPS[TEMPLATE_IDS.chapterMetadata]).toBe('chapter')
   })
 
-  it("defines the chapter group's variables, the ones its builder emits", () => {
+  it("defines the chapter group's variables: the metadata builder's and a close task's turns", () => {
     expect(VARIABLES.chapter.map((v) => v.name)).toEqual([
       'entries',
       'previousChapterSummary',
       'threads',
       'mode',
+      'closeTurns',
     ])
+  })
+
+  // Only a close task's render sets them, so the metadata call may leave them unset.
+  it('lists the close-only chapter variables, none of them required', () => {
+    const closeOnly: readonly string[] = CLOSE_ONLY_CHAPTER_VARIABLES
+    expect(CLOSE_ONLY_CHAPTER_VARIABLES).toEqual(['closeTurns'])
+    expect(
+      VARIABLES.chapter.filter((v) => closeOnly.includes(v.name)).map((v) => [v.name, v.required]),
+    ).toEqual([['closeTurns', false]])
   })
 
   it('passes integrity validation on the shipped registry', () => {

@@ -3,6 +3,8 @@ import { TEMPLATE_GROUPS } from '../templateContextMap'
 import type { Pack, TemplateEntry, TemplateSources } from '../types'
 import { CHAPTER_METADATA } from './chapter-metadata'
 import { CLASSIFIER_MODE_RULE } from './classifier-mode-rule'
+import { CLOSE_INSTRUCTIONS } from './close-instructions'
+import { CLOSE_PROSE } from './close-prose'
 import { ENTITY_STATE, ITEM_LINE } from './entity-state'
 import { MEMORY_BLOCKS } from './memory-blocks'
 import { NARRATOR_INSTRUCTIONS } from './narrator-instructions'
@@ -123,5 +125,8 @@ export const bundledPack: Pack = {
       source: SUGGESTION_EMISSION_JSON,
     },
     [MACRO_IDS.suggestionVoice]: { group: 'staticContent', source: SUGGESTION_VOICE },
+    // chapter: only a close's task templates include them (C3).
+    [MACRO_IDS.closeInstructions]: { group: 'chapter', source: CLOSE_INSTRUCTIONS },
+    [MACRO_IDS.closeProse]: { group: 'chapter', source: CLOSE_PROSE },
   },
 }

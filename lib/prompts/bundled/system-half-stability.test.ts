@@ -2,8 +2,16 @@ import { describe, expect, it } from 'vitest'
 
 import { emptyEntityView } from '@/lib/world'
 
-import { templateGlobals, type TemplateHalf } from '../engine'
-import { bundledPack, loadPack, renderTemplate, TEMPLATE_IDS, type TemplateId } from '../index'
+import { macroGlobals, templateGlobals, type TemplateHalf } from '../engine'
+import {
+  bundledPack,
+  loadPack,
+  MACRO_IDS,
+  renderTemplate,
+  TEMPLATE_IDS,
+  type MacroId,
+  type TemplateId,
+} from '../index'
 
 // architecture.md → System and user halves: a system half must render byte-identically from call
 // to call unless the user changes what it reads, so it may read only what the story or the
@@ -18,6 +26,10 @@ const STABLE_SYSTEM_VARIABLES: readonly string[] = [
   'composerWrapPov',
   'lead',
 ]
+
+// C3: a close's task templates hold the chapter or part in the system half, stable across a
+// part's tasks rather than the story. None ships yet (5.5b, 5.8).
+const CLOSE_TASK_TEMPLATES: readonly TemplateId[] = []
 
 const { engine } = loadPack(bundledPack)
 
@@ -343,8 +355,21 @@ const RENDER_CASES: RenderCase[] = [
 // Stands in, on the bundled pack, for the deferred pack validator's system-half warning
 // (parked.md → Pack validation contract).
 describe('bundled system halves read only what the story fixes', () => {
-  it.each(Object.values(TEMPLATE_IDS))('%s', (templateId) => {
-    expect(perCallReads(templateId, 'system')).toEqual([])
+  it.each(Object.values(TEMPLATE_IDS).filter((id) => !CLOSE_TASK_TEMPLATES.includes(id)))(
+    '%s',
+    (templateId) => {
+      expect(perCallReads(templateId, 'system')).toEqual([])
+    },
+  )
+
+  // Every close task's system half opens with them, Happenings and Awareness too, which hold no
+  // prose and take no exemption.
+  it("the close's shared instructions", () => {
+    const perCall = (macroId: MacroId) =>
+      [...macroGlobals(engine, macroId)].filter((name) => !STABLE_SYSTEM_VARIABLES.includes(name))
+    expect(perCall(MACRO_IDS.closeInstructions)).toEqual([])
+    // Positive control: the prose macro's turns are per close, and the filter keeps them.
+    expect(perCall(MACRO_IDS.closeProse)).toEqual(['closeTurns'])
   })
 
   // Positive control: the empty list above isn't the half-scoped read seeing nothing.

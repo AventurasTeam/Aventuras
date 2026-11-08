@@ -48,3 +48,19 @@ export function buildChapterContext(input: {
     mode: input.mode,
   }
 }
+
+/** A turn as a close task shows it (VARIABLES.chapter → closeTurns). */
+export type CloseTurn = { handle: string; kind: CloseRangeEntry['kind']; content: string }
+
+/** A close task's turns: each entry's prose under the turn handle the run registered for it. */
+export function buildCloseTurns(
+  entries: readonly CloseRangeEntry[],
+  handleOf: (entryId: string) => string | undefined,
+): CloseTurn[] {
+  return entries.map((entry) => {
+    const handle = handleOf(entry.id)
+    // A turn shown without its handle is one no write can cite.
+    if (handle === undefined) throw new Error(`close turns: entry ${entry.id} has no turn handle`)
+    return { handle, kind: entry.kind, content: promptProse(entry) }
+  })
+}

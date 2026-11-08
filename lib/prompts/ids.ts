@@ -44,6 +44,9 @@ export const MACRO_IDS = {
   wizardToneContext: 'macro_wizard_tone_context',
   wizardSettingContext: 'macro_wizard_setting_context',
   wizardStory: 'macro_wizard_story',
+  // A close task's system half: the instructions every task shares, then its chapter or part.
+  closeInstructions: 'macro_close_instructions',
+  closeProse: 'macro_close_prose',
 } as const
 
 export type TemplateId = (typeof TEMPLATE_IDS)[keyof typeof TEMPLATE_IDS]

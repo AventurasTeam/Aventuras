@@ -572,7 +572,8 @@ export const VARIABLES: Record<ContextGroup, VariableDef[]> = {
       required: false,
     },
   ],
-  // buildChapterContext must emit these exact names; chapter-context.test.ts pins the parity.
+  // buildChapterContext emits all but CLOSE_ONLY_CHAPTER_VARIABLES, which a close task's render
+  // sets; chapter-context.test.ts pins both.
   chapter: [
     {
       name: 'entries',
@@ -606,9 +607,20 @@ export const VARIABLES: Record<ContextGroup, VariableDef[]> = {
         "The story's mode, which decides what a user's turn establishes: an adventure's is the lead's attempt, a creative story's a direction or prose.",
       required: true,
     },
+    {
+      name: 'closeTurns',
+      type: '{ handle: string; kind: string; content: string }[]',
+      category: 'Story',
+      description:
+        "A close task's turns: the chapter, or the part the task runs over, each entry in order under its turn id (`t1`, `t2`…, the ids its writes cite), with its `kind` ('user_action', 'ai_reply' or 'opening') and `content`, the prose with no trailing blocks. Only a close task's render sets it; the metadata call leaves it unset.",
+      required: false,
+    },
   ],
   staticContent: [],
 }
+
+/** The `chapter` variables only a close task's render sets; the metadata call reads the rest. */
+export const CLOSE_ONLY_CHAPTER_VARIABLES = ['closeTurns'] as const
 
 // Intersection keeps the string index (validateRegistry probes arbitrary ids)
 // while requiring every TemplateId to be mapped — a missing one fails to compile.
@@ -636,7 +648,7 @@ export const TEMPLATE_GROUPS: Record<string, ContextGroup> & Record<TemplateId, 
 // UI-level grouping name -> variable names it surfaces. A name that matches
 // no defined variable is "dangling" and reported by validateRegistry.
 export const DISPLAY_GROUPS: Record<string, string[]> = {
-  Story: ['entries', 'lastTurns', 'turns', 'previousChapterSummary'],
+  Story: ['entries', 'lastTurns', 'turns', 'previousChapterSummary', 'closeTurns'],
   Entities: [
     'entities',
     'sceneMetadata',
