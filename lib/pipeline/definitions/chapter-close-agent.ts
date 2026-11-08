@@ -19,7 +19,10 @@ import { closeIdsOf, requireCloseRange, seedCloseLedger } from './close-intermed
 import { storesHoldBranch } from './stores-hold-branch'
 import type { PhaseContext, PhaseEmittedEvent, PhaseResult } from '../types'
 
-/** What every entry of one run shares; each entry adds its task, part and read fields. */
+/**
+ * What every entry of one run shares: a task adds its task, part and read fields, a code
+ * step its part only, without the ledger.
+ */
 type AgentContext = Omit<TaskRunContext, 'task' | 'part' | 'readFields'>
 type SlotStop = Exclude<PhaseResult, { status: 'completed' }>
 /** One entry in run order; a task's `N of M` is placed (and checked) before the run starts. */
