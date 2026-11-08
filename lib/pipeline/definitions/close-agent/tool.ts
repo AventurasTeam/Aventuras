@@ -87,13 +87,29 @@ export type WritePlan =
       survivor?: { table: string; id: string }
     }
 
-export type WriteTool = {
+// An id argument's shape is its schema's: a string takes one handle, a string array a list.
+type IdArgFor<V> = unknown extends V
+  ? IdArg
+  : NonNullable<V> extends readonly string[]
+    ? IdArg & { shape: 'array' }
+    : NonNullable<V> extends string
+      ? IdArg & { shape: 'single' }
+      : never
+/** A tool's id arguments, keyed by its schema's keys, each shaped as that key's value. */
+export type IdArgs<S extends z.ZodObject> = {
+  readonly [K in keyof z.output<S> & string]?: IdArgFor<z.output<S>[K]>
+}
+/** writeToolSchema's result, so every write's args carry `turns` and `why`. */
+export type WriteToolSchema<S extends z.ZodRawShape = z.ZodRawShape> = ReturnType<
+  typeof writeToolSchema<S>
+>
+export type WriteTool<S extends z.ZodRawShape = z.ZodRawShape> = {
   kind: 'write'
   name: string
   description: string
-  schema: z.ZodObject
-  ids: Readonly<Record<string, IdArg>>
-  plan: (args: Record<string, unknown>, ctx: WriteContext) => Promise<WritePlan>
+  schema: WriteToolSchema<S>
+  ids: IdArgs<WriteToolSchema<S>>
+  plan(args: z.output<WriteToolSchema<S>>, ctx: WriteContext): Promise<WritePlan>
 }
 export type ReadAnswer = {
   /** What the model reads, handles only. */
@@ -102,13 +118,13 @@ export type ReadAnswer = {
   /** Rows the answer counts as read (read_row: its row; search_world: none). */
   read: readonly GuardRow[]
 }
-export type ReadTool = {
+export type ReadTool<S extends z.ZodObject = z.ZodObject> = {
   kind: 'read'
   name: string
   description: string
-  schema: z.ZodObject
-  ids: Readonly<Record<string, IdArg>>
-  read: (args: Record<string, unknown>, ctx: ToolContext) => Promise<ReadAnswer>
+  schema: S
+  ids: IdArgs<S>
+  read(args: z.output<S>, ctx: ToolContext): Promise<ReadAnswer>
 }
 export type CloseTool = WriteTool | ReadTool
 
@@ -120,7 +136,7 @@ const WHY_DESCRIPTION =
  * A write tool's schema: its shape plus `turns` and `why`, strict at the top. The SDK replays the
  * parsed call as the model's own, so no field may change what it wrote (assertReplaySafe).
  */
-export function writeToolSchema<S extends z.ZodRawShape>(shape: S): z.ZodObject {
+export function writeToolSchema<S extends z.ZodRawShape>(shape: S) {
   if (Object.hasOwn(shape, 'turns') || Object.hasOwn(shape, 'why'))
     throw new Error("writeToolSchema: turns and why are every write tool's own; leave them out")
   return z.strictObject({
@@ -131,7 +147,7 @@ export function writeToolSchema<S extends z.ZodRawShape>(shape: S): z.ZodObject 
 }
 
 /** A read tool's schema, strict at the top; the replay contract holds as for a write. */
-export function readToolSchema<S extends z.ZodRawShape>(shape: S): z.ZodObject {
+export function readToolSchema<S extends z.ZodRawShape>(shape: S) {
   return z.strictObject(shape)
 }
 
@@ -194,6 +210,7 @@ export function resolveIdArgs(
   const args: Record<string, unknown> = { ...input }
   const named = new Map<string, GuardRow>()
   for (const [key, arg] of Object.entries(tool.ids)) {
+    if (arg === undefined) continue
     const value = input[key]
     if (value === undefined || value === null) continue
     const handles: unknown[] = arg.shape === 'array' && Array.isArray(value) ? value : [value]

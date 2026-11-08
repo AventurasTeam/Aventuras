@@ -40,6 +40,7 @@ import {
   type WriteContext,
   type WritePlan,
   type WriteTool,
+  type WriteToolSchema,
 } from './tool'
 import { CLOSE_REASON, verdictOf } from './verdict'
 import { expectRan } from '../../__tests__/harness'
@@ -231,10 +232,19 @@ function wantedFields(args: Readonly<Record<string, unknown>>): Record<string, u
   )
 }
 
+const SET_FIELDS_SHAPE = {
+  id: z.string(),
+  description: z.string().optional(),
+  voice: z.string().optional(),
+  traits: z.array(z.string()).optional(),
+  refuse: z.array(z.string()).optional(),
+}
+type SetFieldsArgs = z.output<WriteToolSchema<typeof SET_FIELDS_SHAPE>>
+
 // A character write shaped as update_character will plan it (5.5b); `refuse` stands in for a
 // soft cap on free fields between fieldVerdicts and entityWriteAction.
-async function planSetFields(args: Record<string, unknown>, ctx: WriteContext): Promise<WritePlan> {
-  const id = args.id as string
+async function planSetFields(args: SetFieldsArgs, ctx: WriteContext): Promise<WritePlan> {
+  const { id } = args
   const wanted = wantedFields(args)
   const [current] = await ctx.db
     .select()
@@ -248,7 +258,7 @@ async function planSetFields(args: Record<string, unknown>, ctx: WriteContext): 
       values: wanted,
     }
   const guard = await ctx.guard([{ table: 'entities', id }])
-  const refused = new Set((args.refuse as string[] | undefined) ?? [])
+  const refused = new Set(args.refuse ?? [])
   const lost: LostField[] = []
   const free: Record<string, unknown> = {}
   const restated = restatedFields(current, wanted)
@@ -288,7 +298,7 @@ function groupDeltas() {
   return f.ctx.db.select().from(deltas).where(eq(deltas.actionId, GROUP_ACTION))
 }
 
-const input = (fields: Record<string, unknown>): Record<string, unknown> => ({
+const input = (fields: Partial<SetFieldsArgs>): SetFieldsArgs => ({
   id: WREN,
   turns: ['t7'],
   why: 'She says so at the toll house.',
@@ -629,17 +639,11 @@ let ledger: CloseLedger | undefined
 let shown: CloseIds | undefined
 let scriptedPlan: ((ctx: WriteContext) => WritePlan) | undefined
 
-const setFieldsTool: WriteTool = {
+const setFieldsTool: WriteTool<typeof SET_FIELDS_SHAPE> = {
   kind: 'write',
   name: 'set_fields',
   description: "Set a character's description, voice or traits.",
-  schema: writeToolSchema({
-    id: z.string(),
-    description: z.string().optional(),
-    voice: z.string().optional(),
-    traits: z.array(z.string()).optional(),
-    refuse: z.array(z.string()).optional(),
-  }),
+  schema: writeToolSchema(SET_FIELDS_SHAPE),
   ids: { id: { shape: 'single', prefixes: ['char'] } },
   plan: (args, ctx) => {
     seenProse.push(ctx.proseEntryId)
@@ -648,15 +652,14 @@ const setFieldsTool: WriteTool = {
 }
 
 // Writes the description without comparing it first, so a restated value reaches the handler.
-const blindSetTool: WriteTool = {
+const BLIND_SET_SHAPE = { id: z.string(), description: z.string() }
+const blindSetTool: WriteTool<typeof BLIND_SET_SHAPE> = {
   kind: 'write',
   name: 'blind_set',
   description: "Set a character's description.",
-  schema: writeToolSchema({ id: z.string(), description: z.string() }),
+  schema: writeToolSchema(BLIND_SET_SHAPE),
   ids: { id: { shape: 'single', prefixes: ['char'] } },
-  plan: async (args, ctx) => {
-    const id = args.id as string
-    const description = args.description as string
+  plan: async ({ id, description }, ctx) => {
     return {
       kind: 'write',
       actions: [
@@ -677,16 +680,15 @@ const blindSetTool: WriteTool = {
   },
 }
 
-const createNoteTool: WriteTool = {
+const CREATE_NOTE_SHAPE = { title: z.string(), body: z.string() }
+const createNoteTool: WriteTool<typeof CREATE_NOTE_SHAPE> = {
   kind: 'write',
   name: 'create_note',
   description: 'Create a lore note.',
-  schema: writeToolSchema({ title: z.string(), body: z.string() }),
+  schema: writeToolSchema(CREATE_NOTE_SHAPE),
   ids: {},
-  plan: async (args, ctx) => {
+  plan: async ({ title, body }, ctx) => {
     const id = generateId('lore')
-    const title = args.title as string
-    const body = args.body as string
     return {
       kind: 'write',
       actions: [
@@ -719,62 +721,56 @@ const createNoteTool: WriteTool = {
 }
 
 // Refuses with a reason naming the row it was given by its full id, as a handler's reason can.
-const refuseNoteTool: WriteTool = {
+const REFUSE_NOTE_SHAPE = { title: z.string(), body: z.string(), other: z.string() }
+const refuseNoteTool: WriteTool<typeof REFUSE_NOTE_SHAPE> = {
   kind: 'write',
   name: 'refuse_note',
   description: 'Create a lore note unless it clashes with a row.',
-  schema: writeToolSchema({ title: z.string(), body: z.string(), other: z.string() }),
+  schema: writeToolSchema(REFUSE_NOTE_SHAPE),
   ids: { other: { shape: 'single', prefixes: ['char'] } },
-  plan: async (args, ctx) => {
-    const other = args.other as string
-    return {
-      kind: 'refused',
-      reason: `the note clashes with ${other}`,
-      rows: [{ table: 'entities', id: other, name: ctx.ids.nameOfId(other) ?? '' }],
-      values: { title: args.title, body: args.body },
-    }
-  },
+  plan: async ({ title, body, other }, ctx) => ({
+    kind: 'refused',
+    reason: `the note clashes with ${other}`,
+    rows: [{ table: 'entities', id: other, name: ctx.ids.nameOfId(other) ?? '' }],
+    values: { title, body },
+  }),
 }
 
-const peekRowTool: ReadTool = {
+const ONE_ROW_SCHEMA = readToolSchema({ id: z.string() })
+const peekRowTool: ReadTool<typeof ONE_ROW_SCHEMA> = {
   kind: 'read',
   name: 'peek_row',
   description: 'Read one character.',
-  schema: readToolSchema({ id: z.string() }),
+  schema: ONE_ROW_SCHEMA,
   ids: { id: { shape: 'single', prefixes: ['char'] } },
-  read: async (args, ctx) => {
-    const id = args.id as string
-    return {
-      output: { id: ctx.ids.handleOf(id) },
-      rows: [{ table: 'entities', id, name: ctx.ids.nameOfId(id) ?? '' }],
-      read: [{ table: 'entities', id }],
-    }
-  },
+  read: async ({ id }, ctx) => ({
+    output: { id: ctx.ids.handleOf(id) },
+    rows: [{ table: 'entities', id, name: ctx.ids.nameOfId(id) ?? '' }],
+    read: [{ table: 'entities', id }],
+  }),
 }
 
 // Answers with the row's full id, which dispatch must swap for its handle.
-const peekRawTool: ReadTool = {
+const peekRawTool: ReadTool<typeof ONE_ROW_SCHEMA> = {
   kind: 'read',
   name: 'peek_raw',
   description: 'Read one character, raw.',
-  schema: readToolSchema({ id: z.string() }),
+  schema: ONE_ROW_SCHEMA,
   ids: { id: { shape: 'single', prefixes: ['char'] } },
-  read: async (args) => {
-    const id = args.id as string
-    return {
-      output: { row: id, [id]: 'line', nested: [{ deep: id }], at: new Date(0) },
-      rows: [],
-      read: [],
-    }
-  },
+  read: async ({ id }) => ({
+    output: { row: id, [id]: 'line', nested: [{ deep: id }], at: new Date(0) },
+    rows: [],
+    read: [],
+  }),
 }
 
 // Plans whatever the test sets; `rows` only passes the named rows through the read gate.
-const scriptedTool: WriteTool = {
+const SCRIPTED_SHAPE = { rows: z.array(z.string()) }
+const scriptedTool: WriteTool<typeof SCRIPTED_SHAPE> = {
   kind: 'write',
   name: 'scripted',
   description: 'Write what the test planned.',
-  schema: writeToolSchema({ rows: z.array(z.string()) }),
+  schema: writeToolSchema(SCRIPTED_SHAPE),
   ids: { rows: { shape: 'array', prefixes: ['char'] } },
   plan: async (_args, ctx) => {
     if (scriptedPlan === undefined) throw new Error('no scripted plan')
@@ -796,19 +792,17 @@ const entityRows = (...ids: string[]): ReportRow[] =>
   ids.map((id) => ({ table: 'entities', id, name: id === WREN ? 'Wren' : 'Bram' }))
 
 // A merge's shape: `other` folds into `id`, which keeps the description given, written blind.
-const keepRowTool: WriteTool = {
+const KEEP_ROW_SHAPE = { id: z.string(), other: z.string(), description: z.string() }
+const keepRowTool: WriteTool<typeof KEEP_ROW_SHAPE> = {
   kind: 'write',
   name: 'keep_row',
   description: 'Fold one character into another.',
-  schema: writeToolSchema({ id: z.string(), other: z.string(), description: z.string() }),
+  schema: writeToolSchema(KEEP_ROW_SHAPE),
   ids: {
     id: { shape: 'single', prefixes: ['char'] },
     other: { shape: 'single', prefixes: ['char'] },
   },
-  plan: async (args, ctx) => {
-    const id = args.id as string
-    const other = args.other as string
-    const description = args.description as string
+  plan: async ({ id, other, description }, ctx) => {
     return {
       kind: 'write',
       actions: [

@@ -39,13 +39,6 @@ type Match = {
   byName: boolean
 }
 
-// Dispatch resolved and validated the arguments; a miss here is a dispatch bug.
-function stringArg(args: Readonly<Record<string, unknown>>, key: string): string {
-  const value = args[key]
-  if (typeof value !== 'string') throw new TypeError(`close read tool: ${key} is not a string`)
-  return value
-}
-
 async function readRow(
   ctx: ToolContext,
   table: PrecedenceTable,
@@ -145,11 +138,14 @@ function keywordTerms(keywords: unknown): string[] {
     : []
 }
 
+const searchWorldSchema = readToolSchema({
+  query: z.string().describe('A name, an alias or a keyword, or part of one.'),
+})
+
 async function searchWorld(
-  args: Readonly<Record<string, unknown>>,
+  { query }: z.output<typeof searchWorldSchema>,
   ctx: ToolContext,
 ): Promise<ReadAnswer> {
-  const query = stringArg(args, 'query')
   const needle = normalizeTerm(query)
   if (needle === '')
     return {
@@ -213,11 +209,14 @@ async function searchWorld(
   return { output: omitted > 0 ? { matches, omitted } : { matches }, rows: [], read: [] }
 }
 
+const readRowSchema = readToolSchema({
+  id: z.string().describe('The row id, as you were shown it (c1, lo2, th1).'),
+})
+
 async function readRowAnswer(
-  args: Readonly<Record<string, unknown>>,
+  { id }: z.output<typeof readRowSchema>,
   ctx: ToolContext,
 ): Promise<ReadAnswer> {
-  const id = stringArg(args, 'id')
   const table = tableOfId(id)
   if (table === null) throw new TypeError(`read_row: no table holds ${id}`)
   const row = await readRow(ctx, table, id)
@@ -271,25 +270,21 @@ async function readRowAnswer(
   return { output: withHandlesDeep(output, ctx.ids), rows, read: [{ table, id }] }
 }
 
-export const searchWorldTool: ReadTool = {
+export const searchWorldTool: ReadTool<typeof searchWorldSchema> = {
   kind: 'read',
   name: 'search_world',
   description: `Find rows of the story's world by name, alias or keyword: characters, places, items, factions and happenings. Use it for a row your task's start doesn't show, such as one the prose calls "the capital". Answers up to ${SEARCH_WORLD_LIMIT} matches, each an id and one line. A match isn't read: call read_row before writing to it.`,
-  schema: readToolSchema({
-    query: z.string().describe('A name, an alias or a keyword, or part of one.'),
-  }),
+  schema: searchWorldSchema,
   ids: {},
   read: searchWorld,
 }
 
-export const readRowTool: ReadTool = {
+export const readRowTool: ReadTool<typeof readRowSchema> = {
   kind: 'read',
   name: 'read_row',
   description:
     "Read one row: the fields this task may write. Write only to a row you've read, unless the task's start showed you those fields. A row that no longer exists is answered as gone, naming the row it was merged into when there is one.",
-  schema: readToolSchema({
-    id: z.string().describe('The row id, as you were shown it (c1, lo2, th1).'),
-  }),
+  schema: readRowSchema,
   ids: { id: { shape: 'single', prefixes: READ_ROW_PREFIXES } },
   read: readRowAnswer,
 }

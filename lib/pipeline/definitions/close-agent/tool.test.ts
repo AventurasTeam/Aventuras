@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest'
+import { describe, expect, expectTypeOf, it } from 'vitest'
 import { z } from 'zod'
 
 import { CloseIds } from './ids'
@@ -9,8 +9,11 @@ import {
   tableOfId,
   toolStepTools,
   writeToolSchema,
+  type IdArgs,
   type ReadTool,
+  type WritePlan,
   type WriteTool,
+  type WriteToolSchema,
 } from './tool'
 
 const CHAR_A = 'char_11111111-1111-4111-8111-111111111111'
@@ -32,15 +35,17 @@ function shownIds(): CloseIds {
   return ids
 }
 
-const mergeRows: WriteTool = {
+const MERGE_SHAPE = {
+  keep: z.string(),
+  absorb: z.array(z.string()),
+  place: z.string().nullable().optional(),
+}
+
+const mergeRows: WriteTool<typeof MERGE_SHAPE> = {
   kind: 'write',
   name: 'merge_rows',
   description: 'Merge duplicate characters into one.',
-  schema: writeToolSchema({
-    keep: z.string(),
-    absorb: z.array(z.string()),
-    place: z.string().nullable().optional(),
-  }),
+  schema: writeToolSchema(MERGE_SHAPE),
   ids: {
     keep: { shape: 'single', prefixes: ['char_', 'fact_'] },
     absorb: { shape: 'array', prefixes: ['char_'] },
@@ -49,11 +54,13 @@ const mergeRows: WriteTool = {
   plan: async () => ({ kind: 'refused', reason: 'unused here', rows: [] }),
 }
 
-const readTurn: ReadTool = {
+const READ_TURN_SCHEMA = readToolSchema({ turn: z.string() })
+
+const readTurn: ReadTool<typeof READ_TURN_SCHEMA> = {
   kind: 'read',
   name: 'read_turn',
   description: 'Read one turn.',
-  schema: readToolSchema({ turn: z.string() }),
+  schema: READ_TURN_SCHEMA,
   ids: { turn: { shape: 'single', prefixes: ['entry_'] } },
   read: async () => ({ output: null, rows: [], read: [] }),
 }
@@ -205,6 +212,58 @@ describe('assertReplaySafe', () => {
     const schema = z.strictObject({ id: z.string() })
     expect(() => assertReplaySafe(schema, [{ id: 1 }])).toThrow(/doesn't parse/)
     expect(() => assertReplaySafe(schema, [])).toThrow(/no samples/)
+  })
+})
+
+describe('WriteTool and ReadTool (checked by tsc)', () => {
+  const SHAPE = { id: z.string(), absorb: z.array(z.string()), count: z.number() }
+  const plan = async (): Promise<WritePlan> => ({ kind: 'refused', reason: 'unused', rows: [] })
+  const write = (ids: IdArgs<WriteToolSchema<typeof SHAPE>>): WriteTool<typeof SHAPE> => ({
+    kind: 'write',
+    name: 'w',
+    description: '',
+    schema: writeToolSchema(SHAPE),
+    ids,
+    plan,
+  })
+
+  it('keys id arguments by the schema, each shaped as its value', () => {
+    const tools = () => [
+      write({ id: { shape: 'single', prefixes: ['char'] } }),
+      write({ absorb: { shape: 'array', prefixes: ['char'] } }),
+      // @ts-expect-error a key the schema lacks: its handles would reach plan unresolved
+      write({ idd: { shape: 'single', prefixes: ['char'] } }),
+      // @ts-expect-error a string takes one handle
+      write({ id: { shape: 'array', prefixes: ['char'] } }),
+      // @ts-expect-error a string array takes a list
+      write({ absorb: { shape: 'single', prefixes: ['char'] } }),
+      // @ts-expect-error a number holds no handle
+      write({ count: { shape: 'single', prefixes: ['char'] } }),
+      // @ts-expect-error nor does a read schema's key it lacks
+      ((ids: IdArgs<typeof READ_TURN_SCHEMA>) => ids)({ id: { shape: 'single', prefixes: [] } }),
+    ]
+    expect(tools).toBeTypeOf('function')
+  })
+
+  it('takes only a schema writeToolSchema built, and plans from its output', () => {
+    const strict = z.strictObject(SHAPE)
+    const tool = (): WriteTool<typeof SHAPE> => ({
+      kind: 'write',
+      name: 'w',
+      description: '',
+      // @ts-expect-error a schema without turns and why
+      schema: strict,
+      ids: {},
+      plan,
+    })
+    expect(tool).toBeTypeOf('function')
+    expectTypeOf<Parameters<WriteTool<typeof SHAPE>['plan']>[0]>().toEqualTypeOf<{
+      id: string
+      absorb: string[]
+      count: number
+      turns: string[]
+      why: string
+    }>()
   })
 })
 
