@@ -707,7 +707,7 @@ const createNoteTool: WriteTool = {
             },
           },
           fields: ['title', 'body'],
-          row: id,
+          row: 'lore',
         },
       ],
       lost: [],
