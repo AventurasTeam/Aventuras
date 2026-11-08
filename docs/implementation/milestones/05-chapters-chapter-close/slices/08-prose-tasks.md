@@ -260,7 +260,8 @@ bounds it there, `condition` by `boundStateText` and `description` by
   place's or item's `description`, a material change and never detail the
   state slots already carry, explicit spread for `common_knowledge`, hard
   finality for a retirement.
-- **`read_row`'s registry** gains, by task and row kind. Lore: a lore
+- **`read_row`'s fields,** each task definition's `readFields`, keyed
+  by row kind. Lore: a lore
   row's four fields. Upkeep: a place's or item's `condition`,
   `description` and `keywords`, a place's placement, any entity's
   `keywords`, and a happening's `title`, `description` and
@@ -533,7 +534,7 @@ Run on the mock unless a line says otherwise. Each delta named below has
   `mark_common_knowledge`'s holds `commonKnowledge` as `1`, so neither
   landed write drops out of the review. Every other landed call's `values`
   keys are among the `changedPaths` of its delta.
-- `read_row` returns each task's registry fields. A write to an Upkeep or
+- `read_row` returns each task's `readFields`. A write to an Upkeep or
   Lifecycle starting row passes the read gate with no `read_row` call,
   since those starts show the fields the tools write. Lore's title list
   seeds nothing.

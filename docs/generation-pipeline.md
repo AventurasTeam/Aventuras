@@ -883,10 +883,10 @@ The mutation methods on the persistent Zustand stores
 ```ts
 const createEntity = (args: {
   data: EntityCreate
-  source: MutationSource
-  actionId?: string // required when source === 'pipeline'
+  source: DeltaSource
+  actionId?: string // required when the source is of the pipeline origin
 }): MutationResult => {
-  if (args.source === 'user' && hasInFlightHardGateRun()) {
+  if (isUserOriginatedSource(args.source) && hasInFlightHardGateRun()) {
     return { status: 'rejected', reason: 'pipeline-in-flight' }
   }
   // compute undo_payload from current state
@@ -936,11 +936,11 @@ function dispatchAction(action: PipelineAction, actionId: string) {
   switch (action.kind) {
     case 'createEntity':
       return useStoryStore.getState().createEntity({
-        data: action.payload, source: 'pipeline', actionId
+        data: action.payload, source: action.source, actionId
       })
     case 'updateEntityVisualState':
       return useStoryStore.getState().updateEntityVisualState({
-        ...action.payload, source: 'pipeline', actionId
+        ...action.payload, source: action.source, actionId
       })
     // ... grows
     default:
@@ -1048,7 +1048,8 @@ Either both rows write or neither. SQLite commit before Zustand
 store update — if SQLite fails, store stays consistent with disk.
 The handler reads the rows it decides from before that transaction
 opens. A group of actions under one `action_id`
-(`applyDeltaActionGroup`) commits as one transaction too, and the
+(`applyDeltaActionGroupWithOutcomes`, which `applyDeltaActionGroup`
+wraps) commits as one transaction too, and the
 runner rejects a group up front: writing the same row's column twice
 (the same-column check), or, as `group-conflict`
 (`apply-delta-action.ts`'s `groupConflict`): two deletes whose
@@ -2588,7 +2589,8 @@ anchor for committed positions.
 
 ### Branch write lock
 
-Every `applyDeltaAction` and `applyDeltaActionGroup` takes a per-branch
+Every `applyDeltaAction` and `applyDeltaActionGroupWithOutcomes` (which
+`applyDeltaActionGroup` wraps) takes a per-branch
 write lock in shared mode, inside the entry metadata lock and before
 its row keys. Two reversals take it exclusive: a prose reversal around
 its sweep, once the interrupt has ended any pass or close, and an

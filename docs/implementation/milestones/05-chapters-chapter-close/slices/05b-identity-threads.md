@@ -229,7 +229,8 @@ safe, read and not run: per-turn stackable keys are bounded at parse
   `matchTerms`.
 - **Threads' start.** Every `pending` and `active` thread on the branch,
   the user's included, by `title`, `description` and `status`.
-- **`read_row`'s field registry,** keyed by task and row kind:
+- **`read_row`'s fields,** each task definition's `readFields`, keyed
+  by row kind:
   `description`, `traits`, `drives` and `voice` for a character;
   `description`, `standing` and `agenda` for a faction; `title`,
   `description` and `status` for a thread. Both starts show these fields,
@@ -303,7 +304,7 @@ the metadata prompt's rewording
 - The runner's parts, Slice 5.5a's: the driver, ledger, common checks,
   row guard, `fieldVerdicts`, `entityWriteAction`, id layer,
   `search_world`, and the `probe:close` and suite harnesses. This slice
-  only adds to `read_row`'s registry and the suite's table.
+  only adds its tasks' `readFields` and the suite's table.
 - Lore, Upkeep and Lifecycle ([Slice 5.8](./08-prose-tasks.md)),
   including `update_place`'s and `update_item`'s `description` and
   `mark_common_knowledge`.

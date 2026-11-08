@@ -159,7 +159,7 @@ The group, anchored on E under the run's `actionId`:
   built ahead of the group, since `happening_involvements` has no unique
   index. The action takes an optional `proseEntryId`, as the awareness
   upsert does, and `userDeletedRowSince` widens to its table
-  (`lib/actions/delta/user-precedence.ts:244-250`), so a carry doesn't
+  (`lib/actions/delta/user-precedence.ts:240-246`), so a carry doesn't
   bring back an involvement the user removed from the kept row after the
   cited prose.
 - One `upsertHappeningAwareness` per character, folded ahead of the
@@ -254,7 +254,7 @@ lands first, 5.12 adds that arm to the suite.
 **The reset,** last in `after`, whether or not the task stopped early. A
 new `resetAwarenessRetrieval` action, registered beside
 `bumpAwarenessRetrieval` with a `LOCK_KEY` entry
-(`lib/actions/delta/apply-delta-action.ts:51`), takes the prior count on
+(`lib/actions/delta/apply-delta-action.ts:53`), takes the prior count on
 its payload and logs `{ retrievalCount: <prior> }` as its only undo key,
 which keeps it hidden from row signals and History
 (`lib/row-signals/link-owners.ts:71-77`). One delta per row with a count

@@ -197,8 +197,8 @@ Provider: [Slice 5.2](./slices/02-first-chapter.md), and
 Writers: 5.5b, 5.8, 5.9. Consumers: 5.11, 5.12, and the seed.
 
 Every delta of a close carries the run's `actionId`,
-`source = 'chapter_close'` (a member of `DeltaSource` at
-`lib/actions/types.ts:12-19`, which nothing writes yet) and
+`source = 'chapter_close'` (a member of `DeltaSource`,
+`lib/actions/types.ts`) and
 `entry_id = E`, the chapter's end entry
 ([`chapter-close.md → Logs and anchors`](../../../memory/chapter-close.md#logs-and-anchors)).
 This is load-bearing: `resolveRollbackWindow` sweeps by anchor position,
@@ -210,7 +210,7 @@ anchor reverses positionally, which is the seed's bug.
   then the `close_report` update.
 - A stamp is a new action kind, `stampEntryChapter`, registered beside
   `updateStoryEntryMetadata` (`lib/actions/story-entries/register.ts:234-241`)
-  with a `LOCK_KEY` entry (`lib/actions/delta/apply-delta-action.ts:51`).
+  with a `LOCK_KEY` entry (`lib/actions/delta/apply-delta-action.ts:53`).
   One delta per entry, payload `{ chapterId: <prior> }`, since a delta
   reverses one row (`reverse-replay.ts`, `undoTargetOf`).
 - No stamp carries a `content` key: `isContentEditDelta` keys on it
@@ -218,15 +218,13 @@ anchor reverses positionally, which is the seed's bug.
 - `story_entries.chapter_id` stays FK-less
   (`lib/db/story-entries/story-entries.table.ts:20`), because redo runs
   newest-first and stamps land before their chapter row.
-- Slice 5.2 sends the stamps through the shipped `delta_emitted` path, a
-  burst under one `actionId`, and its metadata phase checks
-  `abortSignal` between stamps, since the orchestrator reads an abort
-  only between phases and each stamp is its own transaction and store
-  patch. The move to one group is decided (developer, 2026-11-05) and
-  lands in [Slice 5.5a](./slices/05a-task-runner.md) once
-  `delta_group_emitted` does: the create and every stamp as one group,
-  each stamp still its own delta anchored on the end entry, and the
-  `close_report` update a write of its own after it.
+- Slice 5.2 sent the stamps through the `delta_emitted` path, a burst
+  under one `actionId`, its metadata phase checking `abortSignal`
+  between stamps. [Slice 5.5a](./slices/05a-task-runner.md) moved them
+  to one group (developer, 2026-11-05): the create and every stamp land
+  as one `delta_group_emitted`, each stamp still its own delta anchored
+  on the end entry, and the `close_report` update is a write of its own
+  after it.
 
 ### C2 — Pipeline shape
 
