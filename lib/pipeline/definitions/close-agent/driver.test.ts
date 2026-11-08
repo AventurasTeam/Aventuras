@@ -984,6 +984,7 @@ describe('runCloseTask', () => {
     ['an array holding undefined', [1, undefined]],
     ['NaN', Number.NaN],
     ['an object holding Infinity', { at: Number.POSITIVE_INFINITY }],
+    ['a Map', new Map([['a', 1]])],
   ]
 
   it.each(NOT_JSON)('fails the step whose read answers %s, naming the tool', async (_, output) => {
