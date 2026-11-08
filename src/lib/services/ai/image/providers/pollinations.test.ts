@@ -154,11 +154,24 @@ describe('Pollinations adapter', () => {
     })
 
     it('leaves out a limit and tiers it was not given', async () => {
-      catalogue(image('a/none', { max_reference_images: 0, resolutions: [] }))
+      catalogue(image('a/none', { resolutions: [] }))
       const [model] = await list()
       expect(model.maxReferenceImages).toBeUndefined()
       expect(model.supportedResolutions).toBeUndefined()
       expect(model.supportedAspectRatios).toBeUndefined()
+    })
+
+    it('keeps a reference limit of zero unless an image input contradicts it', async () => {
+      catalogue(
+        image('a/zero', { max_reference_images: 0 }),
+        image('a/unread', { input_modalities: undefined, max_reference_images: 0 }),
+        image('a/images', { input_modalities: ['text', 'image'], max_reference_images: 0 }),
+      )
+      const [zero, unread, images] = await list()
+      expect(zero).toMatchObject({ supportsImg2Img: false, maxReferenceImages: 0 })
+      expect(unread).toMatchObject({ supportsImg2Img: false, maxReferenceImages: 0 })
+      expect(images.supportsImg2Img).toBe(true)
+      expect(images.maxReferenceImages).toBeUndefined()
     })
 
     it('marks only a model that takes images and no text as needing a reference', async () => {

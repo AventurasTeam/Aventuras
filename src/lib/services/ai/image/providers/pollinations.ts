@@ -48,10 +48,13 @@ function toCapabilities({
   max_reference_images: refs,
   resolutions,
 }: PollinationsModel): ImageModelCapabilities {
-  const maxReferenceImages = refs && refs > 0 ? refs : undefined
+  const listed = refs !== undefined && refs >= 0 ? refs : undefined
+  const supportsImg2Img = referenceSupport(inputs, listed)
+  // A zero that an image input contradicts is not a limit.
+  const maxReferenceImages = listed === 0 && supportsImg2Img ? undefined : listed
 
   return {
-    supportsImg2Img: referenceSupport(inputs, maxReferenceImages),
+    supportsImg2Img,
     maxReferenceImages,
     requiresReferenceImage: editsOnly(inputs) ? true : undefined,
     supportedResolutions: nonEmpty(resolutions),
