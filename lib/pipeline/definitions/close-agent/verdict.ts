@@ -1,14 +1,15 @@
-import { USER_EDITED_SINCE_PROSE, type ActionOutcome, type GroupOutcome } from '@/lib/actions/types'
+import {
+  TARGET_NOT_FOUND,
+  USER_EDITED_SINCE_PROSE,
+  type ActionOutcome,
+  type GroupOutcome,
+} from '@/lib/actions/types'
 
 import type { CloseIds } from './ids'
 import type { PlannedAction, ReportRow, ToolContext, WritePlan } from './tool'
 
 /** C4's stable reasons a close adds beside USER_EDITED_SINCE_PROSE. */
 export const CLOSE_REASON = { laterTurn: 'later-turn', rowGone: 'row-gone' } as const
-
-// registry.ts's TARGET_NOT_FOUND, which lib/pipeline can't import: the update and delete
-// handlers' hard not-found, which refuses the whole group.
-const TARGET_NOT_FOUND = 'not-found'
 
 type NotWritten = { field: string; row: string; reason: string }
 type Skipped = { field: string; reason: string }

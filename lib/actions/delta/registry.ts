@@ -41,8 +41,7 @@ export function createdKey(table: string, id: string): string {
   return `${table}:${id}`
 }
 
-/** A handler's code for a write whose target row is gone, so each family's boundary can name it. */
-export const TARGET_NOT_FOUND = 'not-found'
+export { TARGET_NOT_FOUND } from '../types'
 
 /**
  * The first updatable key a patch carries as `undefined`. Drizzle skips such a key, so the

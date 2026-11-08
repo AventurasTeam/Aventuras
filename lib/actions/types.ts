@@ -13,6 +13,9 @@ export type ProseEntryId = string | null
 /** Noop reason for a classifier write a newer user edit of the same field outranks. */
 export const USER_EDITED_SINCE_PROSE = 'user-edited-since-prose'
 
+/** A handler's code for a write whose target row is gone, so each family's boundary can name it. */
+export const TARGET_NOT_FOUND = 'not-found'
+
 export type DeltaSource =
   | 'ai_classifier'
   | 'piggyback_tagged_block'
