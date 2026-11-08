@@ -662,12 +662,12 @@ None open: Implementation notes, below, record each answer.
   pre-run status are untouched, and canon's per-kind contexts stay
   unbuilt. 5.5a, 5.8 and 5.9 each add a close key, and this stops the
   casts multiplying for about one task.
-- **The Fold measurement gates the first PR's merge, not its opening,
-  and is pending (developer decision at slice planning).** A worker's
-  device checks never block it, and the Android database is
-  synchronous, so the old burst ran as one block and only a macrotask
-  yield can split it. The Fold wasn't attached when the PR was
-  prepared; its numbers land in these notes when the measure runs.
+- **The Fold measurement gates the first PR's merge, not its opening
+  (developer decision at slice planning).** A worker's device checks
+  never block it, and the Android database is synchronous, so the old
+  burst ran as one block and only a macrotask yield can split it. It
+  passed at 229 / 177 / 181 ms with no fallback taken
+  ([Write-burst measure](#write-burst-measure)).
 - **One slice, two stacked PRs by layer (developer decision at slice
   planning).** The first holds the action layer, the verdict seam and
   the one-group close, the second the runner. The slice doesn't split:
@@ -788,3 +788,26 @@ None open: Implementation notes, below, record each answer.
   first. It numbers a saved step from its request, one past the replies
   the request sends back, so an attempt the step call retried saves
   beside its step instead of over it.
+
+### Write-burst measure
+
+Bar (developer: "Q11: A"): on a release Android build with the reader
+holding its trailing 50 rows, a close on 5.2's dataset branch (133
+stamps over 23,907 tokens) has no JS-thread stall over 500 ms in its
+write burst. Timed inside the app's JS by a temporary probe, not
+committed: 16 ms ticks from the close's reserve to one macrotask after
+its `run_complete`, a stall being the longest gap between ticks, with
+the stop counted as a tick. Each close started from the dev route
+deep-linked over the open reader, its metadata call served by
+`pnpm mock`'s `chapter-metadata` lane, and a CTRL-Z of each reopened the
+chapter for the next run.
+
+| Build, Galaxy Z Fold (SM-F966B), folded, release `arm64-v8a` | Longest stall, three runs | 5.2, a delta per stamp |
+| ------------------------------------------------------------ | ------------------------- | ---------------------- |
+| The create and stamps as one group                           | 229 / 177 / 181 ms        | 1212 / 1121 ms         |
+
+Two more closes started from the reader's chapter popover, with the
+reader painting under it and the popover's close action wired by the
+same probe, stalled 161 / 171 ms, beside 5.2's in-reader 1091 / 1094 ms.
+
+Verdict: holds the bar, with no fallback taken.
