@@ -65,6 +65,13 @@ type NoopCall = {
   markText: string
 }
 
+// `null`, or a conditional whose every branch is: a mark no path through it sets.
+function alwaysNull(node: ts.Expression): boolean {
+  if (node.kind === ts.SyntaxKind.NullKeyword) return true
+  if (ts.isParenthesizedExpression(node)) return alwaysNull(node.expression)
+  return ts.isConditionalExpression(node) && alwaysNull(node.whenTrue) && alwaysNull(node.whenFalse)
+}
+
 function noopCalls(path: string, source: string): NoopCall[] {
   const file = ts.createSourceFile(path, source, ts.ScriptTarget.Latest, true, ts.ScriptKind.TS)
   const calls: NoopCall[] = []
@@ -80,7 +87,7 @@ function noopCalls(path: string, source: string): NoopCall[] {
         at: `${path}:${line + 1}`,
         reason: reason?.getText(file) ?? '',
         literal: reason !== undefined && ts.isStringLiteralLike(reason) ? reason.text : null,
-        markText: mark?.getText(file) ?? '',
+        markText: mark === undefined ? '' : alwaysNull(mark) ? 'null' : mark.getText(file),
       })
     }
     ts.forEachChild(node, visit)
@@ -124,6 +131,7 @@ const PROBE = [
   "noopRefusal(\n  'relationship unchanged',\n  'restated',\n)",
   "noopRefusal('not-active', status === 'retired' ? 'restated' : null)",
   "noopRefusal(\n  'already-flagged',\n  null,\n)",
+  "noopRefusal('no-op entity patch', changed ? null : null)",
 ].join('\n')
 
 const NOT_FOUND_PROBE = [
@@ -139,12 +147,13 @@ const NOT_FOUND_PROBE = [
 describe('noopRefusal marks: the scan (C11)', () => {
   it('flags a null mark on a value or gone row and passes a mark, a rule or precedence', () => {
     const calls = noopCalls('probe.ts', PROBE)
-    expect(calls).toHaveLength(9)
+    expect(calls).toHaveLength(10)
     expect(nullMarked(calls)).toEqual([
       "probe.ts:1 'no-op lore patch'",
       'probe.ts:2 reasonFor(id)',
       "probe.ts:3 'USER_EDITED_SINCE_PROSE'",
       "probe.ts:12 'already-flagged'",
+      "probe.ts:16 'no-op entity patch'",
     ])
   })
 
