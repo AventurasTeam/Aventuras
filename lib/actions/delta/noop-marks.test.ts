@@ -367,6 +367,18 @@ describe('noopRefusal marks: sample handlers (C11)', () => {
     })
   })
 
+  describe('promoteStagedEntity on a retired row the store holds active', () => {
+    afterEach(() => entitiesStore.__reset())
+
+    it('stays a rule refusal', async () => {
+      const ctx = await setup()
+      entitiesStore.hydrate(BRANCH, [
+        { ...entity('char_retired', 'character'), status: 'active' } as Entity,
+      ])
+      expect(await outcomeOf(ctx, promote('char_retired'))).toStrictEqual(noop('not-staged'))
+    })
+  })
+
   it('leaves the mark off a refusal the single path returns', async () => {
     const ctx = await setup()
     const result = await applyDeltaAction(

@@ -383,7 +383,10 @@ export const promoteStagedEntityHandler: ActionHandler = async (action, branchId
   if (current.status !== 'staged' || (storeEntity !== undefined && storeEntity.status !== 'staged'))
     return noopRefusal(
       'not-staged',
-      current.status === 'active' || storeEntity?.status === 'active' ? 'restated' : undefined,
+      current.status === 'active' ||
+        (current.status === 'staged' && storeEntity?.status === 'active')
+        ? 'restated'
+        : undefined,
     )
   if (await userWroteSinceProse(ctx, bid, id, proseEntryId, 'status'))
     return noopRefusal(USER_EDITED_SINCE_PROSE)
