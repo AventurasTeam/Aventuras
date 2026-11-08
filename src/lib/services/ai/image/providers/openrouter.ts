@@ -19,21 +19,16 @@ import type {
   ImageModelInfo,
 } from './types'
 import { imageGetFetch } from './fetchAdapter'
+import { architectureSchema, nonEmpty, optionalNumber, optionalString } from './modelCatalogue'
 import { parseModelList } from './parseModelList'
 import { createImageSdkFetch, generateSdkImage } from './sdkImage'
 
-const optionalString = z.string().optional().catch(undefined)
-const optionalNumber = z.number().optional().catch(undefined)
-const modalities = z.array(z.string()).optional().catch(undefined)
 
 const OpenRouterModel = z.object({
   id: z.string(),
   name: optionalString,
   description: optionalString,
-  architecture: z
-    .object({ input_modalities: modalities, output_modalities: modalities })
-    .optional()
-    .catch(undefined),
+  architecture: architectureSchema,
   supported_parameters: z
     .object({
       resolution: z
@@ -59,7 +54,6 @@ function toCapabilities({
   supported_parameters: params,
 }: OpenRouterModel): ImageModelCapabilities {
   const refs = params.input_references
-  const ratios = params.aspect_ratio?.values.filter(isAspectRatio)
   const maxReferenceImages = refs?.max && refs.max > 0 ? refs.max : undefined
 
   // A model that takes images but lists no reference count still takes references; one whose
@@ -73,8 +67,8 @@ function toCapabilities({
     supportsImg2Img,
     maxReferenceImages,
     requiresReferenceImage: (refs?.min ?? 0) >= 1 ? true : undefined,
-    supportedResolutions: params.resolution?.values.length ? params.resolution.values : undefined,
-    supportedAspectRatios: ratios?.length ? ratios : undefined,
+    supportedResolutions: nonEmpty(params.resolution?.values),
+    supportedAspectRatios: nonEmpty(params.aspect_ratio?.values.filter(isAspectRatio)),
   }
 }
 

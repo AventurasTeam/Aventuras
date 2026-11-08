@@ -8,6 +8,7 @@ import type {
   ImageModelInfo,
 } from './types'
 import { imageGetFetch } from './fetchAdapter'
+import { architectureSchema, nonEmpty, optionalNumber, optionalString } from './modelCatalogue'
 import { createNanoGPTImage } from './nanogptImage'
 import { parseModelList } from './parseModelList'
 import { createImageSdkFetch, generateSdkImage } from './sdkImage'
@@ -22,10 +23,6 @@ import { endpoint } from '#lib/utils/url.ts'
 import { resolveBaseUrl } from './baseUrls'
 
 const DISCOVERY_SERVICE_ID = 'nanogpt-image-models'
-
-const optionalString = z.string().optional().catch(undefined)
-const optionalNumber = z.number().optional().catch(undefined)
-const modalities = z.array(z.string()).optional().catch(undefined)
 
 // The catalogue lists these as flat arrays; its docs describe `{ type: 'enum', values }`.
 const stringList = z
@@ -76,10 +73,7 @@ const NanoGptModel = z.object({
   id: z.string(),
   name: optionalString,
   description: optionalString,
-  architecture: z
-    .object({ input_modalities: modalities, output_modalities: modalities })
-    .optional()
-    .catch(undefined),
+  architecture: architectureSchema,
   capabilities: featureFlags,
   supported_parameters: supportedParameters,
 })
@@ -98,8 +92,6 @@ const ModelEndpoints = z.object({
 type NanoGptModel = z.output<typeof NanoGptModel>
 type ModelFacts = Pick<NanoGptModel, 'architecture' | 'capabilities' | 'supported_parameters'>
 type ImageConstraints = z.output<typeof imageConstraints>
-
-const nonEmpty = (list?: string[]) => (list?.length ? list : undefined)
 
 function boundOf(values: (number | undefined)[], pick: (...n: number[]) => number) {
   const present = values.filter((v): v is number => v !== undefined)

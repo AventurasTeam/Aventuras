@@ -17,14 +17,12 @@ import type {
 } from './types'
 import { imageGetFetch } from './fetchAdapter'
 import { findListedModel } from './modelSnapshot'
+import { nonEmpty, optionalString, optionalStrings } from './modelCatalogue'
 import { parseModelList } from './parseModelList'
 import { generateOpenAICompatibleImage } from './openaiCompatible'
 
 const GENERATION_BASE_URL = 'https://gen.pollinations.ai/v1'
 const MODELS_ENDPOINT = 'https://gen.pollinations.ai/image/models'
-
-const optionalString = z.string().optional().catch(undefined)
-const optionalStrings = z.array(z.string()).optional().catch(undefined)
 
 const PollinationsModel = z.object({
   name: z.string(),
@@ -59,7 +57,7 @@ function toCapabilities({
     supportsImg2Img,
     maxReferenceImages,
     requiresReferenceImage: editsOnly ? true : undefined,
-    supportedResolutions: resolutions?.length ? resolutions : undefined,
+    supportedResolutions: nonEmpty(resolutions),
   }
 }
 
@@ -74,7 +72,7 @@ function toModelInfo(m: PollinationsModel): ImageModelInfo {
   return {
     id: m.name,
     name: modelLabel(m),
-    aliases: m.aliases?.length ? m.aliases : undefined,
+    aliases: nonEmpty(m.aliases),
     description: m.description,
     inputModalities: m.input_modalities,
     outputModalities: m.output_modalities,

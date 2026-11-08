@@ -19,6 +19,7 @@ import type {
   ImageModelInfo,
 } from './types'
 import { imageGetFetch } from './fetchAdapter'
+import { architectureSchema, nonEmpty, optionalString, optionalStrings } from './modelCatalogue'
 import { parseModelList } from './parseModelList'
 import { generateOpenAICompatibleImage } from './openaiCompatible'
 
@@ -26,9 +27,6 @@ import { generateOpenAICompatibleImage } from './openaiCompatible'
 const DEDICATED_LIST_TIMEOUT_MS = 5_000
 // A host without the route answers one of these, not a list.
 const ABSENT_STATUSES = [403, 404, 405]
-
-const optionalString = z.string().optional().catch(undefined)
-const optionalStrings = z.array(z.string()).optional().catch(undefined)
 
 // Every field is a guess at what a host calls it, so none may reject an entry.
 const ModelEntry = z
@@ -40,10 +38,7 @@ const ModelEntry = z
     model_name: optionalString,
     input_modalities: optionalStrings,
     output_modalities: optionalStrings,
-    architecture: z
-      .object({ input_modalities: optionalStrings, output_modalities: optionalStrings })
-      .optional()
-      .catch(undefined),
+    architecture: architectureSchema,
     endpoints: optionalStrings,
     supported_endpoints: optionalStrings,
     supported_endpoint_types: optionalStrings,
@@ -97,7 +92,7 @@ function toModelInfo(entry: ModelEntry): ImageModelInfo {
     id,
     name: entry.name || entry.display_name || entry.title || id,
     supportsImg2Img: supportsEditing(entry),
-    supportedResolutions: resolutions?.length ? resolutions : undefined,
+    supportedResolutions: nonEmpty(resolutions),
   }
 }
 
