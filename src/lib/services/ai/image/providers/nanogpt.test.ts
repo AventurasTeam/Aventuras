@@ -319,63 +319,59 @@ describe('NanoGPT getModelCapabilities', () => {
       body: { cancel: vi.fn() },
     }) as unknown as Response
 
+  const provider = () => createNanoGPTProvider({ apiKey: 'k' })
+
+  // The models the registry hands over: the provider's own list, read before the lookup.
+  const catalogue = async (...entries: unknown[]) => {
+    withModels(...entries)
+    const models = await provider().listModels()
+    vi.mocked(imageGetFetch).mockReset()
+    return models
+  }
+
   beforeEach(() => vi.resetAllMocks())
 
-  it('answers from the list in one request', async () => {
-    withModels(listed('m', { supported_parameters: { resolutions: ['2k'] } }))
-    const found = await createNanoGPTProvider({ apiKey: 'k' }).getModelCapabilities?.('m')
-    expect(found?.supportedResolutions).toEqual(['2k'])
-    expect(imageGetFetch).toHaveBeenCalledTimes(1)
-  })
-
   it('resolves an id the list lacks through its endpoints, to the listed entry', async () => {
-    vi.mocked(imageGetFetch)
-      .mockResolvedValueOnce(
-        modelsResponse({
-          data: [
-            listed('krea-2/turbo', {
-              architecture: { input_modalities: ['image'], output_modalities: ['image'] },
-              supported_parameters: { resolutions: ['square_hd', 'landscape_16_9'] },
-            }),
-          ],
-        }),
-      )
-      .mockResolvedValueOnce(
-        endpointsReply({
-          id: 'krea-2/turbo',
-          endpoints: [{ supported_parameters: { resolutions: ['stale'] } }],
-        }),
-      )
-    const found = await createNanoGPTProvider({ apiKey: 'k' }).getModelCapabilities?.(
-      'fal-ai/krea-2/turbo',
+    const models = await catalogue(
+      listed('krea-2/turbo', {
+        architecture: { input_modalities: ['image'], output_modalities: ['image'] },
+        supported_parameters: { resolutions: ['square_hd', 'landscape_16_9'] },
+      }),
     )
+    vi.mocked(imageGetFetch).mockResolvedValueOnce(
+      endpointsReply({
+        id: 'krea-2/turbo',
+        endpoints: [{ supported_parameters: { resolutions: ['stale'] } }],
+      }),
+    )
+    const found = await provider().getModelCapabilities?.('fal-ai/krea-2/turbo', models)
     expect(found).toMatchObject({
       supportedResolutions: ['square_hd', 'landscape_16_9'],
       requiresReferenceImage: true,
     })
-    expect(vi.mocked(imageGetFetch).mock.calls[1]).toEqual([
-      'https://api.nano-gpt.com/api/v1/images/models/fal-ai/krea-2/turbo/endpoints',
-      { Authorization: 'Bearer k' },
-      expect.objectContaining({ allowStatuses: [404] }),
+    expect(vi.mocked(imageGetFetch).mock.calls).toEqual([
+      [
+        'https://api.nano-gpt.com/api/v1/images/models/fal-ai/krea-2/turbo/endpoints',
+        { Authorization: 'Bearer k' },
+        expect.objectContaining({ allowStatuses: [404] }),
+      ],
     ])
   })
 
   it('reads the endpoint alone when its canonical id is not listed', async () => {
-    vi.mocked(imageGetFetch)
-      .mockResolvedValueOnce(modelsResponse({ data: [] }))
-      .mockResolvedValueOnce(
-        endpointsReply({
-          id: 'x/y',
-          endpoints: [
-            {
-              supported_parameters: { resolutions: ['1k'] },
-              input_reference_constraints: { max_items: 2, route: { max_bytes: 9 } },
-              capabilities: { image_to_image: true },
-            },
-          ],
-        }),
-      )
-    const found = await createNanoGPTProvider({ apiKey: 'k' }).getModelCapabilities?.('a/x/y')
+    vi.mocked(imageGetFetch).mockResolvedValueOnce(
+      endpointsReply({
+        id: 'x/y',
+        endpoints: [
+          {
+            supported_parameters: { resolutions: ['1k'] },
+            input_reference_constraints: { max_items: 2, route: { max_bytes: 9 } },
+            capabilities: { image_to_image: true },
+          },
+        ],
+      }),
+    )
+    const found = await provider().getModelCapabilities?.('a/x/y', [])
     expect(found).toMatchObject({
       supportedResolutions: ['1k'],
       supportsImg2Img: true,
@@ -386,30 +382,20 @@ describe('NanoGPT getModelCapabilities', () => {
 
   it('returns undefined for a model NanoGPT does not know', async () => {
     const reply = endpointsReply({ error: { code: 'image_model_not_found' } }, 404)
-    vi.mocked(imageGetFetch)
-      .mockResolvedValueOnce(modelsResponse({ data: [] }))
-      .mockResolvedValueOnce(reply)
-    await expect(
-      createNanoGPTProvider({ apiKey: 'k' }).getModelCapabilities?.('nope'),
-    ).resolves.toBeUndefined()
+    vi.mocked(imageGetFetch).mockResolvedValueOnce(reply)
+    await expect(provider().getModelCapabilities?.('nope', [])).resolves.toBeUndefined()
     expect(reply.body?.cancel).toHaveBeenCalled()
   })
 
   it('rejects when the request fails', async () => {
-    vi.mocked(imageGetFetch)
-      .mockResolvedValueOnce(modelsResponse({ data: [] }))
-      .mockRejectedValueOnce(new Error('Image API error 500: boom'))
-    await expect(
-      createNanoGPTProvider({ apiKey: 'k' }).getModelCapabilities?.('nope'),
-    ).rejects.toThrow('boom')
+    vi.mocked(imageGetFetch).mockRejectedValueOnce(new Error('Image API error 500: boom'))
+    await expect(provider().getModelCapabilities?.('nope', [])).rejects.toThrow('boom')
   })
 
   it('rejects on an endpoint reply it cannot read, so no empty snapshot is saved', async () => {
-    vi.mocked(imageGetFetch)
-      .mockResolvedValueOnce(modelsResponse({ data: [] }))
-      .mockResolvedValueOnce(endpointsReply({ unexpected: true }))
-    await expect(
-      createNanoGPTProvider({ apiKey: 'k' }).getModelCapabilities?.('nope'),
-    ).rejects.toThrow('unreadable endpoint reply')
+    vi.mocked(imageGetFetch).mockResolvedValueOnce(endpointsReply({ unexpected: true }))
+    await expect(provider().getModelCapabilities?.('nope', [])).rejects.toThrow(
+      'unreadable endpoint reply',
+    )
   })
 })

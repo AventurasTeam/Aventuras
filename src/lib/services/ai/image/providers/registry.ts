@@ -25,7 +25,7 @@ import type {
 import { createLogger } from '#lib/log.ts'
 import { fetchPublicImageBase64 } from './fetchAdapter'
 import { isImageProviderType, modelListKey } from './connection'
-import { applyCapabilityOverride } from './modelSnapshot'
+import { applyCapabilityOverride, findListedModel } from './modelSnapshot'
 import { snapshotCapabilities } from './snapshotBackfill'
 
 // Provider factory imports (lazy)
@@ -319,17 +319,21 @@ export async function listImageModels(
 }
 
 /**
- * One model's capabilities: the provider's own per-model lookup when it has one, otherwise
- * the model's entry in its list. A failed request rethrows; `undefined` means an unknown model.
+ * One model's capabilities: its entry in the connection's cached list (by id or alias), otherwise
+ * the provider's own lookup for a model the list omits. A failed request rethrows; `undefined`
+ * means an unknown model.
  */
 async function lookupCapabilities(
   connection: ImageModelConnection,
   model: string,
 ): Promise<ImageModelCapabilities | undefined> {
-  const provider = createProvider(connection)
-  if (provider.getModelCapabilities) return provider.getModelCapabilities(model)
   const models = await listImageModels(connection, false)
-  return models.find((m) => m.id === model)
+  const found =
+    findListedModel(models, model) ??
+    (await createProvider(connection).getModelCapabilities?.(model, models))
+  // An empty list proves nothing about one model.
+  if (!found && !models.length) throw new Error(`${connection.providerType} listed no models`)
+  return found
 }
 
 /** Sampler and scheduler names for a ComfyUI or A1111 server. Rejects when the server cannot be read. */

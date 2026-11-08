@@ -29,6 +29,7 @@ import {
 } from '#lib/utils/image.ts'
 import { endpoint } from '#lib/utils/url.ts'
 import { resolveBaseUrl } from './baseUrls'
+import { findListedModel } from './modelSnapshot'
 
 const DISCOVERY_SERVICE_ID = 'nanogpt-image-models'
 
@@ -176,14 +177,6 @@ export function createNanoGPTProvider(config: ImageProviderConfig): ImageProvide
   // Discovery works without a key; it is sent when set in case NanoGPT starts to vary the list by account.
   const discoveryHeaders = bearerHeaders(config.apiKey)
 
-  async function fetchModels(signal?: AbortSignal): Promise<NanoGptModel[]> {
-    const response = await imageGetFetch(endpoint(baseUrl, 'images/models'), discoveryHeaders, {
-      serviceId: DISCOVERY_SERVICE_ID,
-      signal,
-    })
-    return parseModelList(await response.json(), NanoGptModel, 'NanoGPT /images/models')
-  }
-
   return {
     id: 'nanogpt',
     name: 'NanoGPT',
@@ -210,15 +203,20 @@ export function createNanoGPTProvider(config: ImageProviderConfig): ImageProvide
     },
 
     async listModels(signal?: AbortSignal): Promise<ImageModelInfo[]> {
-      return (await fetchModels(signal)).map(toModelInfo)
+      const response = await imageGetFetch(endpoint(baseUrl, 'images/models'), discoveryHeaders, {
+        serviceId: DISCOVERY_SERVICE_ID,
+        signal,
+      })
+      return parseModelList(await response.json(), NanoGptModel, 'NanoGPT /images/models').map(
+        toModelInfo,
+      )
     },
 
     // The list omits some ids that `/images` still serves, under a shorter name; those resolve here.
-    async getModelCapabilities(model: string): Promise<ImageModelCapabilities | undefined> {
-      const models = await fetchModels()
-      const listed = models.find((m) => m.id === model)
-      if (listed) return toCapabilities(listed)
-
+    async getModelCapabilities(
+      model: string,
+      listed: ImageModelInfo[],
+    ): Promise<ImageModelCapabilities | undefined> {
       const path = model.split('/').map(encodeURIComponent).join('/')
       const response = await imageGetFetchOptional(
         endpoint(baseUrl, `images/models/${path}/endpoints`),
@@ -233,8 +231,8 @@ export function createNanoGPTProvider(config: ImageProviderConfig): ImageProvide
       if (!served) return undefined
 
       // The list entry also knows the model's input modalities, which an endpoint does not.
-      const canonical = models.find((m) => m.id === reply.data.id)
-      if (canonical) return toCapabilities(canonical)
+      const canonical = findListedModel(listed, reply.data.id)
+      if (canonical) return canonical
       return toCapabilities({
         capabilities: served.capabilities,
         supported_parameters: {

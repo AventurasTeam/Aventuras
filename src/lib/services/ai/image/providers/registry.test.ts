@@ -459,7 +459,10 @@ describe('Image Provider Registry', () => {
         getModelCapabilities,
       }: {
         listModels?: (signal?: AbortSignal) => Promise<ImageModelInfo[]>
-        getModelCapabilities?: (model: string) => Promise<ImageModelCapabilities | undefined>
+        getModelCapabilities?: (
+          model: string,
+          listed: ImageModelInfo[],
+        ) => Promise<ImageModelCapabilities | undefined>
       } = {},
     ) {
       const n = counter++
@@ -535,13 +538,25 @@ describe('Image Provider Registry', () => {
     })
 
     it('saves an empty snapshot for a model the list does not know', async () => {
-      const { profile } = setup()
+      const { profile } = setup(
+        {},
+        { listModels: vi.fn(async () => [{ id: 'other', name: 'other' }]) },
+      )
 
       await generate()
 
       expect(settings.updateImageProfile).toHaveBeenCalledWith(profile.id, {
         modelSnapshot: expect.objectContaining({ capabilities: {} }),
       })
+    })
+
+    it('saves nothing when the list is empty, and still generates', async () => {
+      const { generate: send } = setup()
+
+      await generate()
+
+      expect(send).toHaveBeenCalledTimes(1)
+      expect(settings.updateImageProfile).not.toHaveBeenCalled()
     })
 
     it('refuses a model that edits only when no reference could be sent', async () => {
@@ -557,14 +572,14 @@ describe('Image Provider Registry', () => {
       expect(send).not.toHaveBeenCalled()
     })
 
-    it('uses a provider’s own per-model lookup instead of its list', async () => {
+    it('asks a provider for a model its list lacks', async () => {
       const getModelCapabilities = vi.fn(async () => ({ supportedAspectRatios: ['1:1'] }))
       const { profile, listModels } = setup({}, { getModelCapabilities })
 
       await generate()
 
-      expect(getModelCapabilities).toHaveBeenCalledWith('m')
-      expect(listModels).not.toHaveBeenCalled()
+      expect(listModels).toHaveBeenCalledTimes(1)
+      expect(getModelCapabilities).toHaveBeenCalledWith('m', [])
       expect(settings.updateImageProfile).toHaveBeenCalledWith(profile.id, {
         modelSnapshot: expect.objectContaining({
           capabilities: expect.objectContaining({ supportedAspectRatios: ['1:1'] }),
@@ -572,15 +587,53 @@ describe('Image Provider Registry', () => {
       })
     })
 
-    it('does not fall back to the list when the per-model lookup fails', async () => {
-      const getModelCapabilities = vi.fn(async (): Promise<undefined> => {
-        throw new Error('503')
-      })
-      const { listModels, generate: send } = setup({}, { getModelCapabilities })
+    it('prefers the listed entry to the provider’s own lookup', async () => {
+      const getModelCapabilities = vi.fn(async () => ({ supportedAspectRatios: ['1:1'] }))
+      const { profile } = setup(
+        {},
+        {
+          listModels: vi.fn(async () => [{ id: 'm', name: 'm', maxReferenceImages: 2 }]),
+          getModelCapabilities,
+        },
+      )
 
       await generate()
 
-      expect(listModels).not.toHaveBeenCalled()
+      expect(getModelCapabilities).not.toHaveBeenCalled()
+      expect(settings.updateImageProfile).toHaveBeenCalledWith(profile.id, {
+        modelSnapshot: expect.objectContaining({
+          capabilities: expect.objectContaining({ maxReferenceImages: 2 }),
+        }),
+      })
+    })
+
+    it('finds a model listed under an alias', async () => {
+      const { profile } = setup(
+        {},
+        {
+          listModels: vi.fn(async () => [
+            { id: 'canonical', name: 'c', aliases: ['m'], maxReferenceImages: 3 },
+          ]),
+        },
+      )
+
+      await generate()
+
+      expect(settings.updateImageProfile).toHaveBeenCalledWith(profile.id, {
+        modelSnapshot: expect.objectContaining({
+          capabilities: expect.objectContaining({ maxReferenceImages: 3 }),
+        }),
+      })
+    })
+
+    it('saves nothing when the provider’s lookup fails, and still generates', async () => {
+      const getModelCapabilities = vi.fn(async (): Promise<undefined> => {
+        throw new Error('503')
+      })
+      const { generate: send } = setup({}, { getModelCapabilities })
+
+      await generate()
+
       expect(send).toHaveBeenCalledTimes(1)
       expect(settings.updateImageProfile).not.toHaveBeenCalled()
     })
