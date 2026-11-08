@@ -47,12 +47,14 @@ describe('IdBiMap', () => {
     expect(() => m.allocate('char_not-a-uuid')).toThrow(TypeError)
   })
 
-  it('registers a consumer-chosen handle to a uuid', () => {
+  it('registers a consumer-chosen handle to a uuid, both ways', () => {
     const m = new IdBiMap()
+    m.registerHandle('t1', entryA)
+    expect(m.getUuidFor('t1')).toBe(entryA)
+    expect(m.getPlaceholderFor(entryA)).toBe('t1')
     m.registerHandle('newHero', charA)
-    expect(m.getUuidFor('newHero')).toBe(charA)
-    // Reverse-only by design: the forward map carries allocated placeholders, not handles.
-    expect(m.getPlaceholderFor(charA)).toBeUndefined()
+    expect(m.getPlaceholderFor(charA)).toBe('newHero')
+    expect(m.allocate(charA)).toBe('newHero')
   })
 
   it('allows idempotent handle registration but rejects a conflicting one', () => {
@@ -62,5 +64,15 @@ describe('IdBiMap', () => {
     expect(m.getUuidFor('newHero')).toBe(charA)
     expect(() => m.registerHandle('newHero', charB)).toThrow()
     expect(() => m.registerHandle(m.allocate(locA), charB)).toThrow()
+  })
+
+  it('refuses a second handle for an id', () => {
+    const m = new IdBiMap()
+    m.registerHandle('t1', entryA)
+    expect(() => m.registerHandle('t2', entryA)).toThrow(/different handle/)
+    const placeholder = m.allocate(locA)
+    expect(() => m.registerHandle('harbour', locA)).toThrow(/different handle/)
+    expect(m.getPlaceholderFor(locA)).toBe(placeholder)
+    expect(m.getUuidFor('harbour')).toBeUndefined()
   })
 })

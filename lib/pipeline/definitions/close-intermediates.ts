@@ -1,9 +1,11 @@
+import { CloseIds } from './close-agent/ids'
 import type { CloseLedger, CloseRange } from './intermediates'
 import type { PhaseContext, PhaseFailure } from '../types'
 
 // The close's own keys, read and written only through the accessors below.
 const RANGE_KEY = 'closeRange'
 const LEDGER_KEY = 'closeLedger'
+const IDS_KEY = 'closeIds'
 
 export function setCloseRange(intermediates: Record<string, unknown>, range: CloseRange): void {
   intermediates[RANGE_KEY] = range
@@ -41,4 +43,13 @@ export function seedCloseLedger(intermediates: Record<string, unknown>): CloseLe
   const ledger: CloseLedger = { calls: [], stopped: [], noToolCalls: true }
   intermediates[LEDGER_KEY] = ledger
   return ledger
+}
+
+/** The run's one id map, created on first call, so a row keeps its handle across tasks and parts. */
+export function closeIdsOf(intermediates: Record<string, unknown>): CloseIds {
+  const held = intermediates[IDS_KEY]
+  if (held instanceof CloseIds) return held
+  const ids = new CloseIds()
+  intermediates[IDS_KEY] = ids
+  return ids
 }
