@@ -19,6 +19,7 @@ import type {
   ComfySamplerInfo,
 } from './types'
 import { imageGetFetch } from './fetchAdapter'
+import { imageGetFetchOptional } from './discoveryFetch'
 import { optionalString } from './modelCatalogue'
 import { parseModelList } from './parseModelList'
 import { createA1111Image } from './a1111Image'
@@ -103,17 +104,14 @@ export function createA1111Provider(config: ImageProviderConfig): ImageProvider 
       const readNames = async (
         path: string,
         serviceId: string,
-        allowStatuses?: number[],
+        absentStatuses?: number[],
       ): Promise<string[] | undefined> => {
-        const response = await imageGetFetch(endpoint(baseUrl, `sdapi/v1/${path}`), authHeaders, {
-          serviceId,
-          allowStatuses,
-          signal,
-        })
-        if (!response.ok) {
-          await response.body?.cancel()
-          return undefined
-        }
+        const response = await imageGetFetchOptional(
+          endpoint(baseUrl, `sdapi/v1/${path}`),
+          authHeaders,
+          { serviceId, absentStatuses, signal },
+        )
+        if (!response) return undefined
         return parseModelList(await response.json(), NamedEntry, `A1111 /sdapi/v1/${path}`)
           .map((s) => s.name)
           .filter(Boolean)

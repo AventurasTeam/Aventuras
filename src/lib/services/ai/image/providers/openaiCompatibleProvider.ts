@@ -18,8 +18,7 @@ import type {
   ImageGenerateResult,
   ImageModelInfo,
 } from './types'
-import { imageGetFetch } from './fetchAdapter'
-import { bearerHeaders } from './discoveryFetch'
+import { bearerHeaders, imageGetFetchOptional } from './discoveryFetch'
 import { architectureSchema, nonEmpty, optionalString, optionalStrings } from './modelCatalogue'
 import { parseModelList } from './parseModelList'
 import { generateOpenAICompatibleImage } from './openaiCompatible'
@@ -134,16 +133,12 @@ async function fetchEntries(
   options: {
     serviceId: string
     timeoutMs?: number
-    allowStatuses?: number[]
+    absentStatuses?: number[]
     signal?: AbortSignal
   },
 ): Promise<ModelEntry[] | undefined> {
-  const response = await imageGetFetch(url, headers, options)
-  if (!response.ok) {
-    await response.body?.cancel()
-    return undefined
-  }
-  return parseModelList(await response.json(), ModelEntry, url)
+  const response = await imageGetFetchOptional(url, headers, options)
+  return response && parseModelList(await response.json(), ModelEntry, url)
 }
 
 async function fetchImageModels(
@@ -161,7 +156,7 @@ async function fetchImageModels(
     fetchEntries(endpoint(baseUrl, 'images/models'), headers, {
       serviceId: 'openai-compatible-image-models',
       timeoutMs: DEDICATED_LIST_TIMEOUT_MS,
-      allowStatuses: ABSENT_STATUSES,
+      absentStatuses: ABSENT_STATUSES,
       signal,
     }),
   ])

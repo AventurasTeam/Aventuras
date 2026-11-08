@@ -8,7 +8,7 @@ import type {
   ImageModelInfo,
 } from './types'
 import { imageGetFetch } from './fetchAdapter'
-import { bearerHeaders } from './discoveryFetch'
+import { bearerHeaders, imageGetFetchOptional } from './discoveryFetch'
 import {
   architectureSchema,
   catalogueModelInfo,
@@ -226,15 +226,12 @@ export function createNanoGPTProvider(config: ImageProviderConfig): ImageProvide
       if (listed) return toCapabilities(listed)
 
       const path = model.split('/').map(encodeURIComponent).join('/')
-      const response = await imageGetFetch(
+      const response = await imageGetFetchOptional(
         endpoint(baseUrl, `images/models/${path}/endpoints`),
         discoveryHeaders(),
-        { serviceId: DISCOVERY_SERVICE_ID, allowStatuses: [404] },
+        { serviceId: DISCOVERY_SERVICE_ID, absentStatuses: [404] },
       )
-      if (response.status === 404) {
-        await response.body?.cancel()
-        return undefined
-      }
+      if (!response) return undefined
 
       const reply = ModelEndpoints.safeParse(await response.json())
       if (!reply.success) throw new Error(`NanoGPT sent an unreadable endpoint reply for ${model}`)
