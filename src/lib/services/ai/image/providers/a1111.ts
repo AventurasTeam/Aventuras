@@ -81,10 +81,7 @@ export function createA1111Provider(config: ImageProviderConfig): ImageProvider 
     },
 
     async listModels(apiKey: string, signal?: AbortSignal): Promise<ImageModelInfo[]> {
-      const headers: Record<string, string> = {}
-      if (apiKey) headers.Authorization = `Bearer ${apiKey}`
-
-      const response = await imageGetFetch(endpoint(baseUrl, 'sdapi/v1/sd-models'), headers, {
+      const response = await imageGetFetch(endpoint(baseUrl, 'sdapi/v1/sd-models'), undefined, {
         serviceId: 'a1111-models',
         signal,
       })
@@ -97,10 +94,6 @@ export function createA1111Provider(config: ImageProviderConfig): ImageProvider 
     },
 
     async getSamplerInfo(signal?: AbortSignal): Promise<ComfySamplerInfo> {
-      const authHeaders: Record<string, string> | undefined = config.apiKey
-        ? { Authorization: `Bearer ${config.apiKey}` }
-        : undefined
-
       const readNames = async (
         path: string,
         serviceId: string,
@@ -108,7 +101,7 @@ export function createA1111Provider(config: ImageProviderConfig): ImageProvider 
       ): Promise<string[] | undefined> => {
         const response = await imageGetFetchOptional(
           endpoint(baseUrl, `sdapi/v1/${path}`),
-          authHeaders,
+          undefined,
           { serviceId, absentStatuses, signal },
         )
         if (!response) return undefined
