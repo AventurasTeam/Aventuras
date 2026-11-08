@@ -508,7 +508,9 @@ stays covered. Ids, titles and positions don't move (C8).
   and Not applied's same-row match has none for a `skippedFields` entry. A path landed
   on one row and lost on another ([5.5a's rule](./05a-task-runner.md#implementation-notes),
   developer decision, 2026-11-08) reaches only the model, never Not
-  applied, a rule refusal included. Surfaced by 5.5a.
+  applied, a rule refusal included, which narrows canon's not-applied
+  rule ([`chapter-close.md → Review`](../../../../memory/chapter-close.md#review)).
+  Surfaced by 5.5a.
 
 ## Implementation notes
 

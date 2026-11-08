@@ -753,7 +753,9 @@ task didn't later land the same tool on the same row and field, which
 would make it a slip the model corrected. It's judged per field, so a
 partly landed call appears under both changes and not applied. The
 report keeps the proposed value, cut to a bound, and its reason, so the
-user can apply it by hand.
+user can apply it by hand. A field one call landed on one row and lost
+on another counts as landed: it appears once, as a change, and only the
+model's tool result names the loss.
 
 ## Manual user-triggered close
 
