@@ -1512,16 +1512,19 @@ function Shape1Inline<T>(props: SearchableOverlayListProps<T>) {
   highlightedIdRef.current = highlightedId
   sectionsRef.current = sections
 
+  // A run disabling the field leaves it focused, and a readOnly input still takes keys: the
+  // highlight left from before the run must not be picked, nor the list reopened.
   const onSubmit = useCallback(() => {
+    if (disabled) return
     const id = highlightedIdRef.current
     if (id == null) return
     const found = findRowSection(sectionsRef.current, id)
     if (found && !found.row.disabled) activate(found.row)
-  }, [activate])
+  }, [activate, disabled])
 
   const onKeyPress = useCallback(
     (e: TextInputKeyPressEvent) => {
-      if (Platform.OS !== 'web') return
+      if (Platform.OS !== 'web' || disabled) return
       const key = e.nativeEvent.key
       if (key === 'ArrowDown') {
         e.preventDefault?.()
@@ -1542,7 +1545,7 @@ function Shape1Inline<T>(props: SearchableOverlayListProps<T>) {
         else setOpen(false)
       }
     },
-    [moveHighlight, currentQuery, setQuery, escClearsQueryFirst, onSubmit],
+    [disabled, moveHighlight, currentQuery, setQuery, escClearsQueryFirst, onSubmit],
   )
 
   const webPopoverStyle: ViewStyle | undefined =
