@@ -141,10 +141,9 @@ export function createOpenRouterProvider(config: ImageProviderConfig): ImageProv
         referenceImages,
         aspectRatio: specToAspectRatio(
           spec,
-          modelInfo?.supportedAspectRatios?.length
-            ? modelInfo.supportedAspectRatios
-            : OPENROUTER_ASPECT_RATIOS,
-        ) as `${number}:${number}`,
+          modelInfo?.supportedAspectRatios ?? [],
+          OPENROUTER_ASPECT_RATIOS,
+        ),
         providerOptions: { openrouter: resolution ? { resolution } : {} },
         signal,
       })

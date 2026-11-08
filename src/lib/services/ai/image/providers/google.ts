@@ -38,10 +38,9 @@ export function createGoogleProvider(config: ImageProviderConfig): ImageProvider
         referenceImages,
         aspectRatio: specToAspectRatio(
           spec,
-          modelInfo?.supportedAspectRatios?.length
-            ? modelInfo.supportedAspectRatios
-            : GOOGLE_ASPECT_RATIOS,
-        ) as `${number}:${number}`,
+          modelInfo?.supportedAspectRatios ?? [],
+          GOOGLE_ASPECT_RATIOS,
+        ),
         providerOptions: imageSize ? { google: { imageConfig: { imageSize } } } : undefined,
         signal,
       })

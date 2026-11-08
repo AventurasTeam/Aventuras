@@ -213,9 +213,7 @@ export function createNanoGPTProvider(config: ImageProviderConfig): ImageProvide
         model: nanogpt.imageModel(model),
         prompt,
         referenceImages,
-        aspectRatio: ratios?.length
-          ? (specToAspectRatio(spec, ratios) as `${number}:${number}`)
-          : undefined,
+        aspectRatio: ratios?.length ? specToAspectRatio(spec, ratios) : undefined,
         providerOptions: {
           nanogpt: {
             resolution:
