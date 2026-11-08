@@ -489,6 +489,14 @@ literals so a test can't derive its expectation from the constant.
   returns the retry's usage; the cut attempt's survives only as
   `outputTokens` in its `recoverable` failure. Does the cost measure
   need it?
+- **Which delta path does a delete's `PlannedAction` name?** Slice
+  5.5a's `verdictOf` throws on a planned action that names none, and a
+  merge's absorbed rows, as in `merge_threads`, are deletes. The path
+  must never appear in `values`, or
+  [Slice 5.11](./11-review-window.md)'s review would render a Changes
+  `update` row for it. When a delete is refused, 5.11 names the path
+  under Not applied, and `fieldPathLabel` has no entry for it, so it
+  reads raw. Slice 5.9 needs the same spelling. Surfaced by 5.5a.
 
 ## Implementation notes
 

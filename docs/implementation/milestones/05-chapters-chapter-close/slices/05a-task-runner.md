@@ -158,15 +158,15 @@ and tools sit under `lib/pipeline/definitions/close-agent/`.
   went: a row this close merged names its survivor from the ledger.
   Across a call's actions and the fields its plan left out:
   - Any action landed: `ok`, naming every lost field and its reason,
-    restated ones aside. A path can be in both lists: landed on one
-    row and lost on another, or a capped list landed in part.
+    restated ones aside.
   - None landed: `rejected` if any was refused by a rule or gone, else
     `skipped` if any was protected, else `ok` with nothing written.
   - A whole-group refusal, the hard `not-found` an update or delete
     handler returns for a missing row included: `rejected`, with
     nothing written.
   - Every `PlannedAction` names at least one delta path, a delete
-    included, and `verdictOf` throws otherwise.
+    included, no path both lands and is lost in one call, and
+    `verdictOf` throws on either.
 
 **The close's create and stamps as one group (developer decision,
 2026-11-05).**
