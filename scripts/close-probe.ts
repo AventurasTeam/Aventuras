@@ -1,5 +1,13 @@
 import { createHash } from 'node:crypto'
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import {
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readdirSync,
+  readFileSync,
+  rmSync,
+  writeFileSync,
+} from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
 import { DatabaseSync } from 'node:sqlite'
@@ -51,7 +59,9 @@ import { resolveDevSlot } from './dev-slot/resolve'
 // SMOKE_LLM_KEY (none), PROBE_RUNS (1), PROBE_BRANCH_ID (br_hero_main), PROBE_END_ENTRY (the open
 // region's latest ai_reply), PROBE_OUT (a directory a run: each tool step's request and response,
 // and the report), PROBE_STAND_IN=1 (the stand-in task in place of the shipped slots),
-// AVENTURAS_DB_PATH (the dev slot's database; only ever read, through a VACUUM INTO copy).
+// AVENTURAS_DB_PATH (the dev slot's database; only ever read, through a VACUUM INTO copy). Close
+// the app first: a live write moves the source's hash, and a held write lock fails the copy.
+// A PROBE_OUT that already holds files is refused, so each invocation saves to its own directory.
 const LLM_URL = process.env.SMOKE_LLM_URL
 const LLM_MODEL = process.env.SMOKE_LLM_MODEL
 const LLM_KEY = process.env.SMOKE_LLM_KEY ?? ''
@@ -63,6 +73,7 @@ const STAND_IN = process.env.PROBE_STAND_IN === '1'
 
 const PROVIDER_ID = 'prov_probe'
 const PROFILE_ID = 'prof_probe'
+const BUSY_TIMEOUT_MS = 2_000
 
 type Server = { url: string; model: string }
 
@@ -78,7 +89,11 @@ function sha256(path: string): string {
 // A read-only handle: VACUUM INTO writes a consistent snapshot to the target and nothing to the
 // source.
 function copyDatabase(source: string, target: string): void {
-  const sqlite = new DatabaseSync(source, { readOnly: true, allowExtension: true })
+  const sqlite = new DatabaseSync(source, {
+    readOnly: true,
+    allowExtension: true,
+    timeout: BUSY_TIMEOUT_MS,
+  })
   try {
     sqlite.loadExtension(getLoadablePath())
     sqlite.prepare('VACUUM INTO ?').run(target)
@@ -150,7 +165,7 @@ function captureSteps(): void {
   }
 }
 
-// getModel resolves providers through the app-settings store, so the probe's provider goes there.
+// The agent phase builds its model config from appSettingsStore, so the probe's provider goes there.
 async function hydrateProbeSettings(server: Server): Promise<void> {
   const hydrated = await hydrateAppSettings(async () => ({
     providers: [
@@ -207,10 +222,12 @@ function printRun(
   console.log(
     `[probe:close] run ${k}: ${result.outcome} in ${(ms / 1000).toFixed(1)} s, action ${result.actionId}`,
   )
-  if (result.outcome === 'failed')
+  if (result.outcome === 'failed') {
+    const during = capture.task === null ? '' : ` during ${callKey(capture.task)}`
     console.log(
-      `[probe:close]   ${result.error.kind}: ${pipelineErrorDetail(result.error) ?? JSON.stringify(result.error)}`,
+      `[probe:close]   ${result.error.kind}${during}: ${pipelineErrorDetail(result.error) ?? JSON.stringify(result.error)}`,
     )
+  }
   const calls = report?.calls ?? []
   for (const key of new Set([...capture.steps.keys(), ...calls.map(callKey)])) {
     const own = calls.filter((call) => callKey(call) === key)
@@ -228,26 +245,28 @@ function printRun(
   )
 }
 
-async function probeRun(k: number, source: string, server: Server): Promise<void> {
+async function probeRun(k: number, source: string, server: Server): Promise<boolean> {
   const scratch = mkdtempSync(join(tmpdir(), 'aventuras-close-probe-'))
-  const copy = join(scratch, 'copy.db')
-  copyDatabase(source, copy)
-  const { db, sqlite, runInTransaction } = await openTestDb(copy)
-  const ctx: DbCtx = { db, runInTransaction }
   capture.dir = OUT === undefined ? null : join(resolve(OUT), `run${k}`)
-  if (capture.dir !== null) mkdirSync(capture.dir, { recursive: true })
   capture.task = null
   capture.steps.clear()
   capture.written.clear()
   const unsubscribe = pipelineEventBus.subscribe('close_task_start', (event) => {
     capture.task = { task: event.task, part: event.part }
   })
+  let sqlite: DatabaseSync | null = null
   try {
+    const copy = join(scratch, 'copy.db')
+    copyDatabase(source, copy)
+    const opened = await openTestDb(copy)
+    sqlite = opened.sqlite
+    const ctx: DbCtx = { db: opened.db, runInTransaction: opened.runInTransaction }
+    if (capture.dir !== null) mkdirSync(capture.dir, { recursive: true })
     resetAllStores()
     await hydrateProbeSettings(server)
-    const opened = await loadOpenStory(BRANCH_ID, ctx)
-    if (opened.status !== 'ok')
-      throw new Error(`[probe:close] branch ${BRANCH_ID} did not open: ${opened.status}`)
+    const story = await loadOpenStory(BRANCH_ID, ctx)
+    if (story.status !== 'ok')
+      throw new Error(`[probe:close] branch ${BRANCH_ID} did not open: ${story.status}`)
     // startCloseChain would run a classifier pass first, which this probe doesn't measure.
     const { processedThrough } = await readClassifierStatus(BRANCH_ID, ctx)
     const unprocessed = await unprocessedEntryCount(BRANCH_ID, processedThrough, ctx)
@@ -259,15 +278,25 @@ async function probeRun(k: number, source: string, server: Server): Promise<void
     const started = Date.now()
     const result = await startManualClose(BRANCH_ID, end, ctx)
     const ms = Date.now() - started
-    const report = await readReport(ctx, end)
+    const completed = result.outcome === 'completed'
+    // A refused start leaves the chapter at `end` with an earlier close's report.
+    const report = completed ? await readReport(ctx, end) : null
     if (report !== null && capture.dir !== null)
       writeFileSync(join(capture.dir, 'report.json'), `${JSON.stringify(report, null, 2)}\n`)
     printRun(k, result, ms, report)
+    return completed
   } finally {
     unsubscribe()
-    sqlite.close()
+    sqlite?.close()
     rmSync(scratch, { recursive: true, force: true })
   }
+}
+
+function refuseUsedOutput(): void {
+  if (OUT === undefined || !existsSync(OUT) || readdirSync(OUT).length === 0) return
+  throw new Error(
+    `[probe:close] ${OUT} already holds files; save each invocation to its own directory`,
+  )
 }
 
 async function main(): Promise<void> {
@@ -278,6 +307,7 @@ async function main(): Promise<void> {
   if (!Number.isInteger(RUNS) || RUNS < 1) throw new Error('PROBE_RUNS must be a positive integer')
   const source = resolveDbPath()
   if (!existsSync(source)) throw new Error(`[probe:close] no database at ${source}`)
+  refuseUsedOutput()
   const before = sha256(source)
   console.log(`[probe:close] source ${source}, sha256 ${before}`)
 
@@ -296,7 +326,10 @@ async function main(): Promise<void> {
   if (STAND_IN) __setCloseAgentSlots(standInSlots())
   captureSteps()
   try {
-    for (let k = 1; k <= RUNS; k++) await probeRun(k, source, { url: LLM_URL, model: LLM_MODEL })
+    let completed = 0
+    for (let k = 1; k <= RUNS; k++)
+      if (await probeRun(k, source, { url: LLM_URL, model: LLM_MODEL })) completed++
+    if (completed === 0) process.exitCode = 1
   } finally {
     const after = sha256(source)
     console.log(
