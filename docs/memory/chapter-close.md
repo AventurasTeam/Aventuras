@@ -748,14 +748,19 @@ normalization, which is code with no `why`, and a spelling cleanup. The
 surface is
 [`chapter-timeline.md → Review window`](../ui/screens/chapter-timeline/chapter-timeline.md#review-window).
 
-A write counts as not applied when it was refused or skipped and the same
-task didn't later land the same tool on the same row and field, which
-would make it a slip the model corrected. It's judged per field, so a
-partly landed call appears under both changes and not applied. The
+A write counts as not applied when it was refused or skipped and the
+same task didn't later land the same tool on the same row and field,
+which would make it a slip the model corrected. It's judged per field,
+so a partly landed call appears under both changes and not applied. The
 report keeps the proposed value, cut to a bound, and its reason, so the
-user can apply it by hand. A field one call landed on one row and lost
-on another counts as landed: it appears once, as a change, and only the
-model's tool result names the loss.
+user can apply it by hand. A refusal that proposed no value, such as a
+write to a row the task hadn't read, counts as corrected once that task
+later lands the same tool on a row the two calls share, or lands that
+tool at all if the refusal named no row. That can hide a slip the model
+never retried behind a landing for something else, but such a slip held
+nothing to apply. A field one call landed on one row and lost on another
+counts as landed: it appears once, as a change, and only the model's
+tool result names the loss.
 
 ## Manual user-triggered close
 

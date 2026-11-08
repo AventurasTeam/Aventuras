@@ -376,9 +376,14 @@ type CloseReportCall = {
   carries none, and is one Not applied row by tool and rows.
 - **Not applied is derived on read,** by canon's rule: a refused or
   skipped write the same task didn't later land with the same tool on
-  the same row and field. A refused create mints an id no retry shares,
-  so it matches a later landed create by that task with the same title,
-  trimmed and case-folded.
+  the same row and field. A refused call with no `values`, such as one
+  the common checks refused, drops once that task later lands the same
+  tool on a row the two calls share, or that tool at all if it has no
+  `rows`: its `rows` are every id argument, a landed call's the tool's
+  own. A value-less slip never retried then hides behind a landing for
+  something else, but it held nothing to apply. A refused create mints
+  an id no retry shares, so it matches a later landed create by that
+  task with the same title, trimmed and case-folded.
 - **Stamps, `retrieval_count` resets and stackable normalization stay
   out of the review.** Normalization is code with no `why` or `turns`,
   and its keys are a spelling cleanup.
