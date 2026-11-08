@@ -10,6 +10,7 @@ import type {
 import { imageGetFetch } from './fetchAdapter'
 import {
   architectureSchema,
+  catalogueModelInfo,
   editsOnly,
   nonEmpty,
   optionalNumber,
@@ -161,16 +162,7 @@ function toCapabilities({
   }
 }
 
-function toModelInfo(m: NanoGptModel): ImageModelInfo {
-  return {
-    id: m.id,
-    name: m.name || m.id,
-    description: m.description,
-    inputModalities: m.architecture?.input_modalities,
-    outputModalities: m.architecture?.output_modalities,
-    ...toCapabilities(m),
-  }
-}
+const toModelInfo = (m: NanoGptModel): ImageModelInfo => catalogueModelInfo(m, toCapabilities(m))
 
 export function createNanoGPTProvider(config: ImageProviderConfig): ImageProvider {
   const baseUrl = resolveBaseUrl('nanogpt', config.baseUrl)

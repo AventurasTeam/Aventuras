@@ -21,6 +21,7 @@ import type {
 import { imageGetFetch } from './fetchAdapter'
 import {
   architectureSchema,
+  catalogueModelInfo,
   nonEmpty,
   optionalNumber,
   optionalString,
@@ -71,16 +72,7 @@ function toCapabilities({
   }
 }
 
-function toModelInfo(m: OpenRouterModel): ImageModelInfo {
-  return {
-    id: m.id,
-    name: m.name || m.id,
-    description: m.description,
-    inputModalities: m.architecture?.input_modalities,
-    outputModalities: m.architecture?.output_modalities,
-    ...toCapabilities(m),
-  }
-}
+const toModelInfo = (m: OpenRouterModel): ImageModelInfo => catalogueModelInfo(m, toCapabilities(m))
 
 /** The ratios `/images` accepts in general, for a model whose own list is unknown. */
 const OPENROUTER_ASPECT_RATIOS = [
