@@ -226,8 +226,14 @@ export function expectedPixels(size: ImageSpec | string | null | undefined): Ima
   return specToPixels(parseImageSpec(size))
 }
 
+export type AspectRatio = `${number}:${number}`
+
+// Keeps `w:h` ratios; catalogues also list values like `auto` and `match_input_image`.
+const ASPECT_RATIO = /^\d+(\.\d+)?:\d+(\.\d+)?$/
+export const isAspectRatio = (value: string): value is AspectRatio => ASPECT_RATIO.test(value)
+
 /** The canonical `w:h` for an orientation. */
-export function specToRatioString(spec: ImageSpec): string {
+export function specToRatioString(spec: ImageSpec): AspectRatio {
   const [w, h] = ORIENTATION_RATIO[spec.orientation]
   return `${w}:${h}`
 }

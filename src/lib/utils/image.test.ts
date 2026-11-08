@@ -10,6 +10,7 @@ import {
   specToPixels,
   specToAspectRatio,
   specToRatioString,
+  isAspectRatio,
   expectedPixels,
   normalizeImageDataUrl,
   sniffImageMime,
@@ -137,6 +138,15 @@ describe('specFromPixels', () => {
 
   it('classifies by the longest edge, so orientation does not shift the tier', () => {
     expect(specFromPixels(1536, 864).size).toBe(specFromPixels(864, 1536).size)
+  })
+})
+
+describe('isAspectRatio', () => {
+  it('keeps only w:h aspect ratios', () => {
+    expect(['1:1', '2.35:1', 'auto', 'match_input_image', ''].filter(isAspectRatio)).toEqual([
+      '1:1',
+      '2.35:1',
+    ])
   })
 })
 
