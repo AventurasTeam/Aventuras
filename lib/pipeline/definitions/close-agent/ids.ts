@@ -123,8 +123,7 @@ export class CloseIds {
     return this.map.allocate(id)
   }
 
-  // Checked up front: a repeat or a non-entry id would make register throw mid-list, after earlier
-  // handles were set.
+  // Checked up front: register throwing mid-list would leave earlier handles set.
   private requireTurnList(entryIds: readonly string[]): void {
     entryIds.forEach((id) => requirePrefix(id, TURN_PREFIX))
     if (new Set(entryIds).size !== entryIds.length) throw new Error('Turn ids repeat in one list')
@@ -155,9 +154,8 @@ const isPlain = (value: object): boolean => {
 }
 
 /**
- * Walks a value as JSON.stringify would see it, keys included, so no full id survives anywhere. A
- * non-plain object without toJSON (a Map) comes back as it is for the task loop's JSON check to
- * refuse; copied, it would read `{}`.
+ * Walks a value as JSON.stringify sees it, keys included, so no full id survives. A non-plain
+ * object without toJSON (a Map) is left for the task loop's JSON check to refuse (a copy reads {}).
  */
 export function withHandlesDeep(value: unknown, ids: CloseIds): unknown {
   if (typeof value === 'string') return ids.withHandles(value)

@@ -93,10 +93,7 @@ export type WritePlan =
       actions: readonly PlannedAction[]
       lost: readonly LostField[]
       rows: readonly ReportRow[]
-      /**
-       * Delta path → the raw value landed or proposed; a path restated on every row it names is
-       * absent.
-       */
+      /** Delta path → raw value landed or proposed; absent if restated on every row it names. */
       values: Readonly<Record<string, unknown>>
       /** A create's new row id, answered to the model as its handle. */
       createdId?: string
@@ -104,7 +101,6 @@ export type WritePlan =
       survivor?: { table: string; id: string }
     }
 
-// An id argument's shape is its schema's: a string takes one handle, a string array a list.
 type IdArgFor<V> = unknown extends V
   ? IdArg
   : NonNullable<V> extends readonly string[]

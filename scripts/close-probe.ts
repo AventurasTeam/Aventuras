@@ -161,8 +161,7 @@ function noteStep(step: number, saved: () => object): void {
   )
 }
 
-// fetch's own message is "fetch failed": what refused the call, ECONNREFUSED and its addresses,
-// sits in the causes.
+// fetch's own message is just "fetch failed"; ECONNREFUSED and its addresses sit in the causes.
 function savedError(error: unknown, depth = 0): unknown {
   if (!(error instanceof Error) || depth > 8) return String(error)
   const { code } = error as { code?: unknown }

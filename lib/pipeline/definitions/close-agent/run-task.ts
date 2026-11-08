@@ -146,7 +146,7 @@ function outsideTask(call: ToolStepCall, ids: CloseIds): ToolAnswer {
   }
 }
 
-/** A task's context less what its def and phase fix: the db and branch, the task, its fields. */
+/** A task's context less what its def and phase fix. */
 export type TaskRunArgs = Omit<TaskRunContext, 'db' | 'branchId' | 'task' | 'readFields'>
 
 /**
