@@ -52,6 +52,7 @@ export {
   overriddenFields,
   overrideConflicts,
   snapshotModel,
+  storedSnapshotFor,
 } from './providers/modelSnapshot'
 
 export {

@@ -111,6 +111,17 @@ export function canonicalModelId(id: string, models: ImageModelInfo[]): string {
   return findListedModel(models, id)?.id ?? id
 }
 
+/** The profile's saved snapshot, when it is for this model at this endpoint. */
+export function storedSnapshotFor(
+  stored: ImageProfile | undefined,
+  connection: ImageModelConnection,
+  model: string,
+): ImageModelSnapshot | undefined {
+  return stored && sameEndpoint(stored, connection) && stored.modelSnapshot?.model === model
+    ? stored.modelSnapshot
+    : undefined
+}
+
 /**
  * The snapshot a profile should save. A list loaded for other inputs may belong to the previous
  * provider, so only a settled one is read; otherwise the stored snapshot survives while the
@@ -126,10 +137,7 @@ export function chooseModelSnapshot(args: {
 }): ImageModelSnapshot | undefined {
   const { model, connection, models, settled, stored } = args
   if (!model) return undefined
-  const keep =
-    stored && sameEndpoint(stored, connection) && stored.modelSnapshot?.model === model
-      ? stored.modelSnapshot
-      : undefined
+  const keep = storedSnapshotFor(stored, connection, model)
 
   const listed = settled ? models.find((m) => m.id === model) : undefined
   if (!listed) return keep
