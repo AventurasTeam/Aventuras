@@ -1,5 +1,5 @@
 // chapter (C3): every close task's system half opens with it, Happenings and Awareness included.
-// It reads only `mode`, which the story fixes, so that half stays byte-identical across tasks.
+// It reads only `mode`, which the story fixes, so its text stays byte-identical across tasks.
 // The mode paragraph is chapter-metadata.ts's, worded for a writer.
 export const CLOSE_INSTRUCTIONS = `You are closing a chapter of an ongoing story: you keep the story's records true to what the chapter established, one task at a time. This is an automated system. No one reads your replies or answers your questions, so act only through tool calls.
 
