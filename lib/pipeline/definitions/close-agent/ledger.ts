@@ -110,7 +110,7 @@ export class CloseLedgerWriter {
         call.result === 'ok' &&
         call.survivor !== undefined &&
         call.survivor.table === row.table &&
-        !(call.survivor.table === row.table && call.survivor.id === row.id) &&
+        call.survivor.id !== row.id &&
         call.rows.some((named) => named.table === row.table && named.id === row.id),
     )?.survivor
   }

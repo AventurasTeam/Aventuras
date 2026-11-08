@@ -2,7 +2,7 @@ import { USER_EDITED_SINCE_PROSE, type PipelineAction, type RowVerdicts } from '
 import { emptyEntityState, type Entity } from '@/lib/db'
 import { isJsonObject } from '@/lib/json-object'
 
-import type { PlannedAction, ProtectionReason } from './tool'
+import { sameValue, type PlannedAction, type ProtectionReason } from './tool'
 import { CLOSE_REASON } from './verdict'
 
 export type FieldVerdict =
@@ -15,20 +15,6 @@ type EntityPatch = Extract<PipelineAction, { kind: 'updateEntity' }>['payload'][
 function splitPath(field: string): { column: string; path: string[] } {
   const [column = '', ...path] = field.split('.')
   return { column, path }
-}
-
-function sameValue(a: unknown, b: unknown): boolean {
-  if (a === b) return true
-  if (Array.isArray(a) && Array.isArray(b))
-    return a.length === b.length && a.every((item, index) => sameValue(item, b[index]))
-  if (isJsonObject(a) && isJsonObject(b)) {
-    const keys = Object.keys(a)
-    return (
-      keys.length === Object.keys(b).length &&
-      keys.every((key) => Object.hasOwn(b, key) && sameValue(a[key], b[key]))
-    )
-  }
-  return false
 }
 
 function valueAt(node: unknown, path: readonly string[]): unknown {

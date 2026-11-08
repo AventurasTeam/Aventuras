@@ -447,19 +447,10 @@ async function requestPrompt(messages: readonly ModelMessage[]): Promise<SentPro
   return prompt
 }
 
-beforeEach(async () => {
+beforeEach(() => {
   vi.resetAllMocks()
   // An unscripted step calls nothing, which ends the task.
   vi.mocked(generateToolStep).mockResolvedValue(okStep([]))
-  beforePlan = undefined
-  echoOutput = undefined
-  f = await openCloseFixture()
-  await seedWren()
-  ids = new CloseIds()
-  ids.showTurns(chapterEntryIds())
-  ids.show(WREN, 'Wren')
-  ledger = seedCloseLedger({})
-  writer = new CloseLedgerWriter(ledger, (id) => ids.nameOfId(id))
 })
 
 afterEach(() => {
@@ -467,6 +458,18 @@ afterEach(() => {
 })
 
 describe('runCloseTask', () => {
+  beforeEach(async () => {
+    beforePlan = undefined
+    echoOutput = undefined
+    f = await openCloseFixture()
+    await seedWren()
+    ids = new CloseIds()
+    ids.showTurns(chapterEntryIds())
+    ids.show(WREN, 'Wren')
+    ledger = seedCloseLedger({})
+    writer = new CloseLedgerWriter(ledger, (id) => ids.nameOfId(id))
+  })
+
   it("runs a step's calls in order, the second reading the first's write", async () => {
     vi.mocked(generateToolStep).mockResolvedValueOnce(
       okStep([appendCall('k1', 'first'), appendCall('k2', 'second')]),

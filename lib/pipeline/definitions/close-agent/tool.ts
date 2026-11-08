@@ -230,12 +230,12 @@ export function resolveIdArgs(
     if (arg === undefined) continue
     const value = input[key]
     if (value === undefined || value === null) continue
-    const handles: unknown[] = arg.shape === 'array' && Array.isArray(value) ? value : [value]
     if ((arg.shape === 'array') !== Array.isArray(value))
       return {
         ok: false,
         reason: `${key} takes ${arg.shape === 'array' ? 'a list of ids' : 'one id'}`,
       }
+    const handles: unknown[] = Array.isArray(value) ? value : [value]
     const resolved: string[] = []
     for (const handle of handles) {
       const id = typeof handle === 'string' ? ids.idOf(handle) : undefined
@@ -296,8 +296,8 @@ function schemaFaults(node: unknown, path: string, faults: string[]): void {
       schemaFaults(child, `${path}$defs.${name}`, faults)
 }
 
-function sameValue(a: unknown, b: unknown): boolean {
-  if (Object.is(a, b)) return true
+export function sameValue(a: unknown, b: unknown): boolean {
+  if (a === b) return true
   if (Array.isArray(a) || Array.isArray(b))
     return (
       Array.isArray(a) &&

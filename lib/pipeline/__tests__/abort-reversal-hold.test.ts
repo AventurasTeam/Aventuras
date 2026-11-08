@@ -1,18 +1,8 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 
-import {
-  applyDeltaAction,
-  applyDeltaActionGroupWithOutcomes,
-  settleUserWrites,
-} from '@/lib/actions/delta/apply-delta-action'
-import {
-  holdBranchWriteExclusive,
-  releaseBranchWriteExclusive,
-  withBranchWriteShared,
-} from '@/lib/actions/delta/branch-write-lock'
+import { withBranchWriteShared } from '@/lib/actions/delta/branch-write-lock'
 import { DeltaReplayError } from '@/lib/actions/delta/replay-errors'
-import { describeDeltaReplayError, reverseReplayDeltas } from '@/lib/actions/delta/reverse-replay'
-import { readRowGuard } from '@/lib/actions/delta/row-guard'
+import { reverseReplayDeltas } from '@/lib/actions/delta/reverse-replay'
 import { PERIODIC_CLASSIFIER_KIND } from '@/lib/classifier'
 import { happenings } from '@/lib/db'
 import {
@@ -28,7 +18,7 @@ import {
 } from '@/lib/pipeline'
 import { generationStore, type DeferredWorkKind } from '@/lib/stores'
 
-import { makeHarness, resetSingletons } from './harness'
+import { makeHarness, realDeltaActionPort, resetSingletons } from './harness'
 
 const pause = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms))
 
@@ -46,17 +36,7 @@ async function within<T>(promise: Promise<T>, what: string, ms = 1000): Promise<
 }
 
 function configurePort(over: Partial<DeltaActionPort>): void {
-  configureDeltaActionPort({
-    applyDeltaAction,
-    applyDeltaActionGroupWithOutcomes,
-    readRowGuard,
-    reverseReplayDeltas,
-    describeReplayError: describeDeltaReplayError,
-    settleUserWrites,
-    holdBranchWriteExclusive,
-    releaseBranchWriteExclusive,
-    ...over,
-  })
+  configureDeltaActionPort({ ...realDeltaActionPort(), ...over })
 }
 
 const grantedWithin = (what: string) =>

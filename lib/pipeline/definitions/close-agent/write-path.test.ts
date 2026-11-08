@@ -5,13 +5,7 @@ import { z } from 'zod'
 import {
   applyDeltaAction,
   applyDeltaActionGroupWithOutcomes,
-  settleUserWrites,
 } from '@/lib/actions/delta/apply-delta-action'
-import {
-  holdBranchWriteExclusive,
-  releaseBranchWriteExclusive,
-} from '@/lib/actions/delta/branch-write-lock'
-import { describeDeltaReplayError, reverseReplayDeltas } from '@/lib/actions/delta/reverse-replay'
 import { readRowGuard } from '@/lib/actions/delta/row-guard'
 import {
   USER_EDITED_SINCE_PROSE,
@@ -43,7 +37,7 @@ import {
   type WriteToolSchema,
 } from './tool'
 import { CLOSE_REASON, verdictOf } from './verdict'
-import { expectRan } from '../../__tests__/harness'
+import { expectRan, realDeltaActionPort } from '../../__tests__/harness'
 import { definePipeline } from '../../authoring/define'
 import { __resetRegistry } from '../../authoring/registry'
 import { configureDeltaActionPort, type DeltaActionPort } from '../../runtime/action-port'
@@ -918,19 +912,8 @@ function runDeltas(actionId: string) {
     .orderBy(asc(deltas.logPosition))
 }
 
-// The port vitest.setup.ts configures, with `over` swapped in.
 function configurePort(over: Partial<DeltaActionPort>): void {
-  configureDeltaActionPort({
-    applyDeltaAction,
-    applyDeltaActionGroupWithOutcomes,
-    readRowGuard,
-    reverseReplayDeltas,
-    describeReplayError: describeDeltaReplayError,
-    settleUserWrites,
-    holdBranchWriteExclusive,
-    releaseBranchWriteExclusive,
-    ...over,
-  })
+  configureDeltaActionPort({ ...realDeltaActionPort(), ...over })
 }
 
 // An earlier task's landed merge: GONE folded into WREN.

@@ -10,18 +10,8 @@ import {
   updateStoryEntryContent,
   type PipelineAction,
 } from '@/lib/actions'
-import {
-  applyDeltaActionGroupWithOutcomes,
-  applyDeltaAction as realApplyDeltaAction,
-  settleUserWrites,
-} from '@/lib/actions/delta/apply-delta-action'
-import {
-  __resetBranchWriteLocks,
-  holdBranchWriteExclusive,
-  releaseBranchWriteExclusive,
-} from '@/lib/actions/delta/branch-write-lock'
-import { describeDeltaReplayError, reverseReplayDeltas } from '@/lib/actions/delta/reverse-replay'
-import { readRowGuard } from '@/lib/actions/delta/row-guard'
+import { applyDeltaAction as realApplyDeltaAction } from '@/lib/actions/delta/apply-delta-action'
+import { __resetBranchWriteLocks } from '@/lib/actions/delta/branch-write-lock'
 import { registerStandInClose } from '@/lib/actions/turns/__tests__/stand-in-close'
 import { generateStructured, type ResolveModelConfig } from '@/lib/ai'
 import { CHAPTER_CLOSE_KIND } from '@/lib/chapters'
@@ -79,6 +69,7 @@ import {
   PERIODIC_CLASSIFIER_RESOLVES,
   periodicClassifierPhase,
 } from './periodic-classifier'
+import { realDeltaActionPort } from '../__tests__/harness'
 import { definePipeline } from '../authoring/define'
 import { __resetRegistry, getPipeline } from '../authoring/registry'
 import { configureDeltaActionPort, type DeltaActionPort } from '../runtime/action-port'
@@ -2381,16 +2372,7 @@ describe('periodicClassifierPhase via runPipeline', () => {
   function configurePort(
     applyDeltaAction: DeltaActionPort['applyDeltaAction'] = realApplyDeltaAction,
   ): void {
-    configureDeltaActionPort({
-      applyDeltaAction,
-      applyDeltaActionGroupWithOutcomes,
-      readRowGuard,
-      reverseReplayDeltas,
-      describeReplayError: describeDeltaReplayError,
-      settleUserWrites,
-      holdBranchWriteExclusive,
-      releaseBranchWriteExclusive,
-    })
+    configureDeltaActionPort({ ...realDeltaActionPort(), applyDeltaAction })
   }
 
   afterEach(() => configurePort())

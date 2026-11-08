@@ -14,24 +14,11 @@ import {
   type PhaseResult,
   type PipelineEvent,
 } from '@/lib/pipeline'
+import { realDeltaActionPort } from '@/lib/pipeline/__tests__/harness'
 import { passChainsTo } from '@/lib/pipeline/definitions/memory-chain'
 import { generationStore, type DeferredWorkKind, type RunState } from '@/lib/stores'
 
-import {
-  applyDeltaAction,
-  applyDeltaActionGroupWithOutcomes,
-  settleUserWrites,
-} from '../../delta/apply-delta-action'
-import {
-  holdBranchWriteExclusive,
-  releaseBranchWriteExclusive,
-} from '../../delta/branch-write-lock'
-import {
-  DeltaReplayError,
-  describeDeltaReplayError,
-  reverseReplayDeltas,
-} from '../../delta/reverse-replay'
-import { readRowGuard } from '../../delta/row-guard'
+import { DeltaReplayError, reverseReplayDeltas } from '../../delta/reverse-replay'
 
 /** One run of the stand-in pass, holding after its write. */
 export type HeldPass = {
@@ -225,9 +212,7 @@ export function failReversalsOf(stand: {
   readonly runs: readonly { readonly actionId: string }[]
 }): void {
   configureDeltaActionPort({
-    applyDeltaAction,
-    applyDeltaActionGroupWithOutcomes,
-    readRowGuard,
+    ...realDeltaActionPort(),
     reverseReplayDeltas: (actionId, ...rest) =>
       stand.runs.some((run) => run.actionId === actionId)
         ? Promise.reject(
@@ -238,10 +223,6 @@ export function failReversalsOf(stand: {
             }),
           )
         : reverseReplayDeltas(actionId, ...rest),
-    describeReplayError: describeDeltaReplayError,
-    settleUserWrites,
-    holdBranchWriteExclusive,
-    releaseBranchWriteExclusive,
   })
 }
 

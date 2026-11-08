@@ -21,17 +21,6 @@ import {
   resetStuckClassifierRunState,
   startManualClose,
 } from '@/lib/actions'
-import {
-  applyDeltaAction,
-  applyDeltaActionGroupWithOutcomes,
-  settleUserWrites,
-} from '@/lib/actions/delta/apply-delta-action'
-import {
-  holdBranchWriteExclusive,
-  releaseBranchWriteExclusive,
-} from '@/lib/actions/delta/branch-write-lock'
-import { describeDeltaReplayError, reverseReplayDeltas } from '@/lib/actions/delta/reverse-replay'
-import { readRowGuard } from '@/lib/actions/delta/row-guard'
 import { canEndChapter } from '@/lib/chapters'
 import {
   chapters,
@@ -56,6 +45,7 @@ import {
   type TxResult,
 } from '@/lib/pipeline'
 import { standInSlots } from '@/lib/pipeline/__tests__/close-stand-in'
+import { realDeltaActionPort } from '@/lib/pipeline/__tests__/harness'
 import { __setCloseAgentSlots } from '@/lib/pipeline/definitions/close-agent/slots'
 import { hydrateAppSettings, resetAllStores } from '@/lib/stores'
 
@@ -431,16 +421,7 @@ async function main(): Promise<void> {
   console.log(`[probe:close] source ${source}, sha256 ${before}`)
 
   registerAllDomains()
-  configureDeltaActionPort({
-    applyDeltaAction,
-    applyDeltaActionGroupWithOutcomes,
-    readRowGuard,
-    reverseReplayDeltas,
-    describeReplayError: describeDeltaReplayError,
-    settleUserWrites,
-    holdBranchWriteExclusive,
-    releaseBranchWriteExclusive,
-  })
+  configureDeltaActionPort(realDeltaActionPort())
   ensureChapterClosePipelineRegistered()
   if (STAND_IN) __setCloseAgentSlots(standInSlots())
   captureSteps()

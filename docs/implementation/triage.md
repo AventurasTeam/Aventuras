@@ -172,3 +172,12 @@ patch`, which 5.5a marks `restated`, so a close tool's write of it
   `ID_PATTERN` doesn't cover `entry_` ids, so the ledger keeps one as
   its id, such as a merge's earliest `occurred_at_entry_id`, and 5.11
   shows new values as the report holds them. Raised in 5.5a's review.
+- **The real delta action port is assembled in three places.**
+  `lib/boot/bootstrap.ts`, `vitest.setup.ts` and
+  `realDeltaActionPort()` in `lib/pipeline/__tests__/harness.ts` each
+  list every `DeltaActionPort` member, and `scripts/close-probe.ts` now
+  borrows the test harness's. The type makes a missing member a compile
+  error, so nothing drifts silently; the cost is three edits per new port method. One builder in the action layer would serve all of them,
+  but `vitest.setup.ts` must not load the `@/lib/pipeline` barrel before
+  a test's mocks, and `bootstrap.ts` pulls in UI modules a script can't
+  load. Raised in 5.5a's review.
