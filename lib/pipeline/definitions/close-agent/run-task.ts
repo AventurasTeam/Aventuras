@@ -99,19 +99,24 @@ function callPlaces(messages: readonly ModelMessage[]): {
 function stepMessages(
   responseMessages: ToolStep['responseMessages'],
   answers: readonly ToolAnswer[],
+  validIds: ReadonlySet<string>,
 ): ModelMessage[] {
   const kept: ModelMessage[] = responseMessages.filter((message) => message.role !== 'tool')
   const sdkAnswers = responseMessages.filter((message) => message.role === 'tool')
   const places = callPlaces(kept)
-  // The driver answers every call under a repeated id itself; the SDK's answer there is to a call
-  // it gave another's input, and would take that call's place.
+  // Under a repeated id the SDK gives every call the first one's input. A valid first call is the
+  // driver's to answer, so the SDK's answers there go; an invalid one keeps the SDK's first error.
   const repeated = (id: string): boolean => (places.of.get(id)?.length ?? 0) > 1
-  const parts = [
-    ...sdkAnswers
-      .flatMap((message) => message.content)
-      .filter((part) => part.type !== 'tool-result' || !repeated(part.toolCallId)),
-    ...(answers.length === 0 ? [] : toolMessage(answers).content),
-  ]
+  const sdkKept = new Set<string>()
+  const sdkParts = sdkAnswers
+    .flatMap((message) => message.content)
+    .filter((part) => {
+      if (part.type !== 'tool-result' || !repeated(part.toolCallId)) return true
+      if (validIds.has(part.toolCallId) || sdkKept.has(part.toolCallId)) return false
+      sdkKept.add(part.toolCallId)
+      return true
+    })
+  const parts = [...sdkParts, ...(answers.length === 0 ? [] : toolMessage(answers).content)]
   if (parts.length === 0) return kept
   const answered = new Map<string, number>()
   // The nth answer to an id takes that id's nth place.
@@ -134,7 +139,9 @@ function stepMessages(
   return [...kept.slice(0, at + 1), tool, ...kept.slice(at + 1)]
 }
 
-function refused(call: ToolStepCall, reason: string, ids: CloseIds): ToolAnswer {
+type CallRef = Pick<ToolStepCall, 'toolCallId' | 'toolName'>
+
+function refused(call: CallRef, reason: string, ids: CloseIds): ToolAnswer {
   return {
     toolCallId: call.toolCallId,
     toolName: call.toolName,
@@ -143,11 +150,11 @@ function refused(call: ToolStepCall, reason: string, ids: CloseIds): ToolAnswer 
 }
 
 // chapter-close.md → Conversations (closeTools): code refuses a tool outside the task and says so.
-const outsideTask = (call: ToolStepCall, ids: CloseIds): ToolAnswer =>
+const outsideTask = (call: CallRef, ids: CloseIds): ToolAnswer =>
   refused(call, `${call.toolName} is not one of this task's tools`, ids)
 
 // The SDK gives every call under one id the first one's input, so a repeat would run it twice.
-const repeatedId = (call: ToolStepCall, ids: CloseIds): ToolAnswer =>
+const repeatedId = (call: CallRef, ids: CloseIds): ToolAnswer =>
   refused(
     call,
     `call id ${call.toolCallId} repeats an earlier call's in this reply, so this call didn't run: send it again`,
@@ -240,7 +247,14 @@ export async function* runCloseTask(
       else answers.push(yield* dispatchToolCall(call, tool, dispatch))
       answered.add(call.toolCallId)
     }
-    messages.push(...stepMessages(responseMessages, answers))
+    // The SDK answers an invalid call once per id at most; the driver refuses the copies after it.
+    const seenInvalid = new Set<string>()
+    for (const call of invalidCalls) {
+      if (answered.has(call.toolCallId) || seenInvalid.has(call.toolCallId))
+        answers.push(repeatedId(call, ctx.ids))
+      seenInvalid.add(call.toolCallId)
+    }
+    messages.push(...stepMessages(responseMessages, answers, answered))
   }
   // An abort raised inside the last step's calls is a cancel, not a spent budget.
   if (ctx.phase.abortSignal.aborted) return { status: 'aborted' }
