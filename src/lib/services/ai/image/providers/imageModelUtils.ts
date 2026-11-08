@@ -12,12 +12,6 @@ export function parseJson(text: string): unknown {
   }
 }
 
-/** A discovery reply that must be a list; anything else is a server that is not the one configured. */
-export function expectList(body: unknown, what: string): unknown[] {
-  if (!Array.isArray(body)) throw new Error(`${what} did not return a list`)
-  return body
-}
-
 /** The start of a response body, or its status when the body is empty. */
 export const responseExcerpt = (text: string, status: number): string =>
   text.trim().slice(0, 200) || `HTTP ${status}`

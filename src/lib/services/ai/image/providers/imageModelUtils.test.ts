@@ -2,7 +2,6 @@ import { describe, it, expect } from 'vitest'
 import { APICallError } from 'ai'
 import {
   definedHeaders,
-  expectList,
   fileBase64,
   fileBytes,
   httpError,
@@ -20,14 +19,6 @@ describe('parseJson', () => {
     expect(parseJson('{"a":1}')).toEqual({ a: 1 })
     expect(parseJson('<html>gateway</html>')).toBeUndefined()
     expect(parseJson('')).toBeUndefined()
-  })
-})
-
-describe('expectList', () => {
-  it('returns a list and names the endpoint when the body is anything else', () => {
-    expect(expectList([1], 'X /models')).toEqual([1])
-    expect(() => expectList({ data: [] }, 'X /models')).toThrow('X /models did not return a list')
-    expect(() => expectList('<html></html>', 'X /models')).toThrow('did not return a list')
   })
 })
 
