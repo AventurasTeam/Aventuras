@@ -364,6 +364,21 @@ describe('resolveIdArgs', () => {
     expect(inList).toEqual({ ok: false, reason: reason.replace('keep', 'absorb') })
   })
 
+  it('refuses a value of another shape than the argument takes, as a loosely typed tool can declare', () => {
+    const declaring = (ids: WriteTool['ids']): WriteTool => ({ ...mergeRows, ids })
+    const ids = shownIds()
+    const keepAsList = declaring({ keep: { shape: 'array', prefixes: ['char'] } })
+    const absorbAsOne = declaring({ absorb: { shape: 'single', prefixes: ['char'] } })
+    expect(resolveIdArgs(MERGE_SAMPLE, keepAsList, ids)).toEqual({
+      ok: false,
+      reason: 'keep takes a list of ids',
+    })
+    expect(resolveIdArgs(MERGE_SAMPLE, absorbAsOne, ids)).toEqual({
+      ok: false,
+      reason: 'absorb takes one id',
+    })
+  })
+
   it('resolves a turn handle without naming a row', () => {
     expect(resolveIdArgs({ turn: 't1' }, readTurn, shownIds())).toEqual({
       ok: true,
