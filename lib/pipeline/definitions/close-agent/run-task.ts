@@ -26,6 +26,27 @@ export type TaskEnd =
 
 type StopReason = Extract<TaskEnd, { status: 'stopped' }>['reason']
 
+function isJsonValue(value: unknown): value is JSONValue {
+  if (value === null || typeof value === 'string' || typeof value === 'boolean') return true
+  if (typeof value === 'number') return Number.isFinite(value)
+  if (Array.isArray(value)) return value.every(isJsonValue)
+  if (typeof value !== 'object') return false
+  const proto: unknown = Object.getPrototypeOf(value)
+  return (proto === Object.prototype || proto === null) && Object.values(value).every(isJsonValue)
+}
+
+// The SDK refuses a non-JSON tool result only when the next step builds its prompt, as a
+// provider error; the fault is the tool's, so it fails here, naming the tool.
+function resultOutput(
+  toolName: string,
+  output: unknown,
+): { type: 'text'; value: string } | { type: 'json'; value: JSONValue } {
+  if (typeof output === 'string') return { type: 'text', value: output }
+  if (!isJsonValue(output))
+    throw new Error(`close tool ${toolName} answered a value that isn't JSON`)
+  return { type: 'json', value: output }
+}
+
 function toolMessage(answers: readonly ToolAnswer[]): ToolModelMessage {
   return {
     role: 'tool',
@@ -33,10 +54,7 @@ function toolMessage(answers: readonly ToolAnswer[]): ToolModelMessage {
       type: 'tool-result' as const,
       toolCallId,
       toolName,
-      output:
-        typeof output === 'string'
-          ? { type: 'text' as const, value: output }
-          : { type: 'json' as const, value: output as JSONValue },
+      output: resultOutput(toolName, output),
     })),
   }
 }

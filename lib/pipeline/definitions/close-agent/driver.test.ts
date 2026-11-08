@@ -165,6 +165,18 @@ const peekRowTool: ReadTool = {
   },
 }
 
+// Answers whatever the test sets, to pin how an answer goes out.
+let echoOutput: unknown
+const echoTool: ReadTool = {
+  kind: 'read',
+  name: 'echo',
+  description: 'Answer a set value.',
+  schema: readToolSchema({}),
+  ids: {},
+  read: async () => ({ output: echoOutput, rows: [], read: [] }),
+}
+const echoCall: ToolStepCall = { toolCallId: 'k1', toolName: 'echo', input: {} }
+
 function taskDef(over: Partial<CloseTaskDef> = {}): CloseTaskDef {
   return {
     task: 'identity',
@@ -304,6 +316,7 @@ beforeEach(async () => {
   // An unscripted step calls nothing, which ends the task.
   vi.mocked(generateToolStep).mockResolvedValue(okStep([]))
   beforePlan = undefined
+  echoOutput = undefined
   f = await openCloseFixture()
   await seedWren()
   ids = new CloseIds()
@@ -671,5 +684,44 @@ describe('runCloseTask', () => {
     expect(end).toEqual({ status: 'finished' })
     expect(seen).toEqual([f.branchId])
     expect(await description()).toBe('A courier. first')
+  })
+
+  const NOT_JSON: [string, unknown][] = [
+    ['undefined', undefined],
+    ['an array holding undefined', [1, undefined]],
+    ['NaN', Number.NaN],
+    ['an object holding Infinity', { at: Number.POSITIVE_INFINITY }],
+  ]
+
+  it.each(NOT_JSON)('fails the step whose read answers %s, naming the tool', async (_, output) => {
+    echoOutput = output
+    vi.mocked(generateToolStep).mockResolvedValueOnce(okStep([echoCall]))
+
+    await expect(
+      drive(
+        taskDef({ tools: [appendNoteTool, peekRowTool, echoTool] }),
+        runContext(phaseContext()),
+      ),
+    ).rejects.toThrow("close tool echo answered a value that isn't JSON")
+    expect(generateToolStep).toHaveBeenCalledTimes(1)
+  })
+
+  it.each<[string, unknown, unknown]>([
+    ['a string as text', 'Nothing to read.', { type: 'text', value: 'Nothing to read.' }],
+    [
+      'nested JSON as json',
+      { a: [1, 'x', null, true, { b: -2.5 }] },
+      { type: 'json', value: { a: [1, 'x', null, true, { b: -2.5 }] } },
+    ],
+  ])('sends a read answering %s', async (_, output, sent) => {
+    echoOutput = output
+    vi.mocked(generateToolStep).mockResolvedValueOnce(okStep([echoCall]))
+
+    await drive(taskDef({ tools: [echoTool] }), runContext(phaseContext()))
+
+    expect(sentMessages(1).at(-1)).toEqual({
+      role: 'tool',
+      content: [{ type: 'tool-result', toolCallId: 'k1', toolName: 'echo', output: sent }],
+    })
   })
 })
