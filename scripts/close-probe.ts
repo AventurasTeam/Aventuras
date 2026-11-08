@@ -143,24 +143,35 @@ function unusedName(base: string): string {
 
 const callKey = (call: { task: CloseTask; part: number }): string => `${call.task}-p${call.part}`
 
+// Counts the step, and saves it when a capture dir is set; a retried attempt keeps its own file.
+function noteStep(step: number, saved: () => object): void {
+  const key = capture.task === null ? 'unknown-p0' : callKey(capture.task)
+  capture.steps.set(key, Math.max(capture.steps.get(key) ?? 0, step))
+  if (capture.dir === null) return
+  writeFileSync(
+    join(capture.dir, `${unusedName(`${key}-s${step}`)}.json`),
+    `${JSON.stringify(saved(), null, 2)}\n`,
+  )
+}
+
 function captureSteps(): void {
   const sdkFetch = globalThis.fetch
   globalThis.fetch = async (input, init) => {
     // The transport calls fetch(Request), so the body is on the Request, not in init.
     const text = input instanceof Request ? await input.clone().text() : (init?.body ?? undefined)
-    const response = await sdkFetch(input, init)
     const request = typeof text === 'string' ? parseJson(text) : null
     const step = toolStepNumber(request)
-    if (step === null) return response
-    const key = capture.task === null ? 'unknown-p0' : callKey(capture.task)
-    capture.steps.set(key, Math.max(capture.steps.get(key) ?? 0, step))
-    if (capture.dir !== null) {
-      const saved = { request, response: parseJson(await response.clone().text()) }
-      writeFileSync(
-        join(capture.dir, `${unusedName(`${key}-s${step}`)}.json`),
-        `${JSON.stringify(saved, null, 2)}\n`,
-      )
+    let response: Response
+    try {
+      response = await sdkFetch(input, init)
+    } catch (error) {
+      if (step !== null)
+        noteStep(step, () => ({ request, error: error instanceof Error ? error.message : error }))
+      throw error
     }
+    if (step === null) return response
+    const body = capture.dir === null ? null : parseJson(await response.clone().text())
+    noteStep(step, () => ({ request, response: body }))
     return response
   }
 }
@@ -245,6 +256,22 @@ function printRun(
   )
 }
 
+const OVERRIDE_PATH = '$.models."lore-mgmt"'
+
+// The probe measures the server it was given, and a story override outranks App Settings'
+// assignment (lib/ai/resolve-model.ts). Clears it on the scratch copy only.
+function clearLoreMgmtOverride(sqlite: DatabaseSync): void {
+  const storyOf = '(SELECT story_id FROM branches WHERE id = ?)'
+  const held = sqlite
+    .prepare(`SELECT json_extract(settings, ?) AS held FROM stories WHERE id = ${storyOf}`)
+    .get(OVERRIDE_PATH, BRANCH_ID) as { held: string | null } | undefined
+  if (held?.held == null) return
+  sqlite
+    .prepare(`UPDATE stories SET settings = json_remove(settings, ?) WHERE id = ${storyOf}`)
+    .run(OVERRIDE_PATH, BRANCH_ID)
+  console.log(`[probe:close] cleared the story's lore-mgmt model override on the scratch copy`)
+}
+
 async function probeRun(k: number, source: string, server: Server): Promise<boolean> {
   const scratch = mkdtempSync(join(tmpdir(), 'aventuras-close-probe-'))
   capture.dir = OUT === undefined ? null : join(resolve(OUT), `run${k}`)
@@ -260,6 +287,7 @@ async function probeRun(k: number, source: string, server: Server): Promise<bool
     copyDatabase(source, copy)
     const opened = await openTestDb(copy)
     sqlite = opened.sqlite
+    clearLoreMgmtOverride(opened.sqlite)
     const ctx: DbCtx = { db: opened.db, runInTransaction: opened.runInTransaction }
     if (capture.dir !== null) mkdirSync(capture.dir, { recursive: true })
     resetAllStores()
