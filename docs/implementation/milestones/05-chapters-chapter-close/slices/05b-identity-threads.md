@@ -160,8 +160,9 @@ or actions tagged with the fields they write.
    else `skipped`.
 
 The ledger entry fills C4's fields with `part: 1`, keyed by delta path
-(`state.traits`, `description`), and a field lost from a call that landed
-goes in `skippedFields` with its own reason.
+(`state.traits`, `description`), and a field lost from a call that
+landed, or from one where nothing landed for more than one reason, goes
+in `skippedFields` with its own reason.
 
 ### Tools
 

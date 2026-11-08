@@ -345,9 +345,9 @@ type CloseReportCall = {
   why: string
   turns: string[] // entry ids
   result: 'ok' | 'rejected' | 'skipped'
-  reason?: string // why it didn't land, whole
+  reason?: string // why it didn't land: the first refusal's, else protection's
   values?: Record<string, string> // delta path to new or proposed value, cut to the bound
-  skippedFields?: { field: string; reason: string }[] // a partly landed call (C11)
+  skippedFields?: { field: string; reason: string }[] // lost fields' own reasons (C11)
   survivor?: { table: string; id: string } // a landed merge's kept row
 }
 ```
@@ -358,12 +358,18 @@ type CloseReportCall = {
   `values`, cut to one `CLOSE_REPORT_VALUE_BOUND`, the same bound a Not
   applied value uses.
 - **`values` holds only landed or proposed fields.** Its keys and a
-  `skippedFields` entry's `field` are delta paths, as `changedPaths` reads
-  them (`description`, `state.voice`). A list joins with `, `, and a ref's
-  value is the row's name, not its id. A path restated on every row that
-  carries it is absent (C11), and `skippedFields` omit a path that also landed on another row. The
-  review omits an `ok` call with no field and no `survivor`. A
-  tool writing a single field, such as `retire_entity`, records it here.
+  `skippedFields` entry's `field` are delta paths, as `changedPaths`
+  reads them (`description`, `state.voice`). A list joins with `, `, and
+  a ref's value is the row's name, not its id. A path restated on every
+  row that carries it is absent (C11), and `skippedFields` omit a path
+  that also landed on another row. `skippedFields` gives each lost field
+  its own reason: on an `ok` call, and on a `skipped` or `rejected` one
+  only when its fields were lost for different reasons, since otherwise
+  the call's `reason` is each field's. A call refused whole, by the
+  common checks, an id that doesn't resolve, its plan or its group,
+  carries only `reason`. The review omits an `ok` call with no field and
+  no `survivor`. A tool writing a single field, such as `retire_entity`,
+  records it here.
 - **A `reason` is a stable key** for the three shared classes,
   `USER_EDITED_SINCE_PROSE`, `later-turn` and `row-gone`, and the
   handler's own string for a rule refusal.
@@ -614,10 +620,13 @@ narrows to that in 5.8's PR.
 
 "Lands whole" means all-or-nothing on failure, not on precedence. A
 partly protected call appears in the review twice: its landed fields
-under Changes and its skipped fields under Not applied. A path lost on
-one row and landed on another appears in the review once, as a change,
-since `skippedFields` omit it (C4); only the model's answer names that
-loss, with its row.
+under Changes and its skipped fields under Not applied. When nothing
+lands, the call is `rejected` with its first refusal's reason, else
+`skipped` with its first protection's, and if its fields were lost for
+different reasons, each keeps its own in `skippedFields` and in the
+model's answer, row by row. A path lost on one row and landed on another
+appears in the review once, as a change, since `skippedFields` omit it
+(C4); only the model's answer names that loss, with its row.
 
 Shipped shape this replaces: `applyDeltaActionGroup` returns only
 `ok` or `rejected`, and a noop vanishes inside a group

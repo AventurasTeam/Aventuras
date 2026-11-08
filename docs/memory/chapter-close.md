@@ -181,8 +181,10 @@ A step's calls run in order, and each lands all or nothing on failure.
 Precedence doesn't fail a call: when some of its fields are protected,
 or one of its writes is refused and another lands, what can land does,
 and the result is `ok` naming the fields that didn't, each with its
-reason. A merge is the exception and skips whole
-([3e](#3e--happenings-consolidation)).
+reason. When nothing lands, the result is `rejected` with the first
+refusal's reason, else `skipped` with the first protection's, and a
+field lost for another reason is still named with its own. A merge is
+the exception and skips whole ([3e](#3e--happenings-consolidation)).
 
 ### When a task stops
 

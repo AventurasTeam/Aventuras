@@ -163,10 +163,11 @@ lookup of names and kinds the host passes.
   `create_lore` shows its title. Its minted id is one no retry shares,
   so it matches a later landed `create_lore` by that task with the same
   title, trimmed and case-folded (C4), and a corrected create drops out.
-  Each row shows the proposed value and its reason, the entry's own in
-  `skippedFields` or else the call's: `USER_EDITED_SINCE_PROSE`,
-  `later-turn` and `row-gone` through `t()` keys, and a rule refusal's
-  handler string as stored.
+  Each row shows the proposed value and its reason, the field's own in
+  `skippedFields`, which a `rejected` or `skipped` call carries only
+  when its fields were lost for different reasons (C4), or else the
+  call's: `USER_EDITED_SINCE_PROSE`, `later-turn` and `row-gone` through
+  `t()` keys, and a rule refusal's handler string as stored.
 - **Stopped early.** One line per `stopped` entry: the task's label, its
   part unless the part is 0, and the reason, for `budget`, `window` and
   `cut-off`. `noToolCalls` adds canon's note there.
@@ -363,7 +364,8 @@ stays covered. Ids, titles and positions don't move (C8).
 - Not applied holds a refused write, drops one the same task later landed
   on that row and field, keeps one a different task landed, and lists a
   partly landed call under both sections. A known reason reads through its
-  key, and an unknown one as stored (same file).
+  key, and an unknown one as stored. A `skipped` call whose fields were
+  lost for different reasons shows each with its own (same file).
 - A refused call with no `values` drops once its task lands the same
   tool on a shared row, or anywhere when it has no rows. An
   `update_lore` refused for an unread row, then landed after `read_row`,
@@ -524,7 +526,8 @@ stays covered. Ids, titles and positions don't move (C8).
   developer decision, 2026-11-08) reaches only the model, never Not
   applied, a rule refusal included, which narrows canon's not-applied
   rule ([`chapter-close.md → Review`](../../../../memory/chapter-close.md#review)).
-  Surfaced by 5.5a.
+  Where nothing landed, a path lost on two rows for different reasons
+  shows only its first loss's reason. Surfaced by 5.5a.
 
 ## Implementation notes
 

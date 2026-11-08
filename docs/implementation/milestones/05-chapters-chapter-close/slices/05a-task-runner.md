@@ -159,11 +159,18 @@ and tools sit under `lib/pipeline/definitions/close-agent/`.
   Across a call's actions and the fields its plan left out:
   - Any action landed: `ok`, naming every lost field with its row and
     reason, restated ones aside.
-  - None landed: `rejected` if any was refused by a rule or gone, else
-    `skipped` if any was protected, else `ok` with nothing written.
+  - None landed: `rejected` with the first refusal's reason if any was
+    refused by a rule or gone, else `skipped` with the first
+    protection's if any was protected, else `ok` with nothing written.
+    When the lost fields' reasons differ, the call also names each with
+    its own, in `skippedFields` (by path, its first loss's reason) and
+    in `notWritten` (by row and field). When they all match the call's
+    reason it names none, so its answer and ledger entry keep their
+    shape.
   - A whole-group refusal, the hard `not-found` an update or delete
     handler returns for a missing row included: `rejected`, with
-    nothing written.
+    nothing written. Like a call the common checks, an unresolved id or
+    its plan refused, it carries its reason alone (`RefusedWhole`).
   - Every `PlannedAction` names at least one delta path, a delete
     included, and `verdictOf` throws on one that names none.
 
@@ -540,7 +547,10 @@ vitest and the probe share. It never reaches a production slot.
   free field the tool refuses between the two functions never reaches
   the action. With nothing left to land no group is emitted, and the
   result is `skipped` if every field was protected and `rejected` if the
-  tool refused one (`write-path.test.ts`).
+  tool refused one. Fields lost for different reasons each keep their
+  own in the ledger's `skippedFields` and the model's `notWritten`, with
+  the first's as the call's, and fields sharing one reason add neither
+  (`write-path.test.ts`).
 - The ledger holds every dispatched call in run order and no invalid
   one, keys `values` by delta path, gives a ref's value as a name, cuts
   a value to the bound, keeps a refused create's minted id and records
@@ -739,6 +749,16 @@ None open: Implementation notes, below, record each answer.
   only when the call spans several; else the table. The label goes
   through `withHandles` with the reason, and never a link row's own
   `hinv_` id, which has no handle.
+- **The slice review's two decisions (developer, 2026-11-08).** R3
+  ("R3: A"): a write the common checks refuse, or whose id doesn't
+  resolve, stays in the ledger with its tool, its named rows and no
+  `values`, and 5.11 drops it once that task lands the same tool on a
+  row the two share, or that tool anywhere if it named none; the
+  shared-row match is provisional. R4 ("R4: A"): a call where nothing
+  lands keeps its first refusal's or protection's reason, and names each
+  lost field with its own in `skippedFields` and `notWritten` only when
+  they differ, since one shared reason already says what each field lost
+  to.
 - **Dispatch checks every planned action before emitting a group.** A
   plan with a pathless action, or one whose source isn't
   `chapter_close`, fails before any write (C1), so a tool-author bug
