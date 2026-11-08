@@ -51,6 +51,17 @@ function setAt(target: Record<string, unknown>, path: readonly string[], value: 
   node[path[path.length - 1]!] = value
 }
 
+function storedValue(row: Entity, field: string): unknown {
+  const { column, path } = splitPath(field)
+  if (column !== 'state' || path.length === 0) return row[column as keyof Entity]
+  return valueAt(row.state ?? emptyEntityState(row.kind), path)
+}
+
+/** The wanted delta paths whose value the row already holds: a restated field writes nothing. */
+export function restatedFields(row: Entity, wanted: Readonly<Record<string, unknown>>): string[] {
+  return Object.keys(wanted).filter((field) => sameValue(storedValue(row, field), wanted[field]))
+}
+
 /**
  * cadence.md → User edits and classifier writes: each delta path free, or protected with its
  * reason; the user's edit after the prose names the reason over a later turn's write. Reads only.
@@ -78,7 +89,8 @@ export function entityWriteAction(
   const entries = Object.entries(wanted)
   if (entries.length === 0) throw new Error(`entityWriteAction: nothing to write on ${row.id}`)
   const patch: Record<string, unknown> = {}
-  const fields: string[] = []
+  const restated = new Set(restatedFields(row, wanted))
+  const fields = Object.keys(wanted).filter((field) => !restated.has(field))
   let state: Record<string, unknown> | undefined
   for (const [field, value] of entries) {
     const { column, path } = splitPath(field)
@@ -87,10 +99,8 @@ export function entityWriteAction(
         string,
         unknown
       >
-      if (!sameValue(valueAt(state, path), value)) fields.push(field)
       setAt(state, path, value)
     } else {
-      if (!sameValue(row[column as keyof Entity], value)) fields.push(field)
       patch[column] = value
     }
   }

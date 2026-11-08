@@ -10,7 +10,7 @@ import { USER_EDITED_SINCE_PROSE, type GroupOutcome, type RowVerdicts } from '@/
 import { deltas, emptyEntityState, entities, type Entity, type EntityState } from '@/lib/db'
 import { resetAllStores } from '@/lib/stores'
 
-import { entityWriteAction, fieldVerdicts } from './entity-write'
+import { entityWriteAction, fieldVerdicts, restatedFields } from './entity-write'
 import { CloseIds } from './ids'
 import type { LostField, WriteContext, WritePlan } from './tool'
 import { CLOSE_REASON, verdictOf } from './verdict'
@@ -208,7 +208,9 @@ async function planSetFields(args: Record<string, unknown>, ctx: WriteContext): 
   const refused = new Set((args.refuse as string[] | undefined) ?? [])
   const lost: LostField[] = []
   const free: Record<string, unknown> = {}
-  for (const verdict of fieldVerdicts(guard.row('entities', id), Object.keys(wanted))) {
+  const restated = restatedFields(current, wanted)
+  const pending = Object.keys(wanted).filter((field) => !restated.includes(field))
+  for (const verdict of fieldVerdicts(guard.row('entities', id), pending)) {
     if (!verdict.free)
       lost.push({ field: verdict.field, reason: verdict.reason, kind: 'protected' })
     else if (refused.has(verdict.field))
@@ -319,6 +321,27 @@ describe('fieldVerdicts', () => {
     const paths = ['description', 'state|voice', 'state|visual|face']
     expect(asked).toEqual(paths)
     expect(askedLater).toEqual(paths)
+  })
+})
+
+describe('restatedFields', () => {
+  it('lists the wanted paths the row already holds, columns and state sub-fields alike', () => {
+    expect(
+      restatedFields(CHARACTER, {
+        description: 'A courier.',
+        name: 'Wren, again',
+        'state.voice': 'soft',
+        'state.traits': ['patient', 'wary'],
+        'state.visual.hair': 'black',
+        'state.visual': { hair: 'black' },
+      }),
+    ).toEqual(['description', 'state.voice', 'state.visual.hair', 'state.visual'])
+  })
+
+  it("reads a row with no state as the kind's empty state", () => {
+    expect(
+      restatedFields({ ...CHARACTER, state: null }, { 'state.traits': [], 'state.voice': 'soft' }),
+    ).toEqual(['state.traits'])
   })
 })
 
@@ -506,6 +529,20 @@ describe('the entity write path', () => {
     const verdict = verdictOf(plan, outcome, NO_SURVIVOR)
     expect(verdict.result).toBe('ok')
     expect(verdict.skippedFields).toEqual([{ field: 'state.traits', reason: TEST_CAP }])
+  })
+
+  it('reads a protected field the tool only restates as ok, nothing written', async () => {
+    await editAs('user', { state: { voice: 'gravel' } })
+
+    const plan = asWrite(await planSetFields(input({ voice: 'gravel' }), writeContext()))
+
+    expect(plan.lost).toEqual([])
+    expect(plan.actions).toEqual([])
+    expect(verdictOf(plan, null, NO_SURVIVOR)).toEqual({
+      result: 'ok',
+      landed: [],
+      skippedFields: [],
+    })
   })
 
   it('skips a field a later turn wrote, as later-turn, beside one that lands', async () => {
