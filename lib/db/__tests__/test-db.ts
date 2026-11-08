@@ -47,11 +47,10 @@ function makeCallback(sqlite: DatabaseSync) {
   }
 }
 
-// Returns a fresh in-memory db with the committed migration folder applied.
-// Async because sqlite-proxy/migrator awaits the proxy callback internally.
-// Mirrors the desktop (Electron main) runtime: node:sqlite with FK enforcement.
-export async function createTestDb() {
-  const sqlite = new DatabaseSync(':memory:', { allowExtension: true })
+// Mirrors the desktop (Electron main) runtime: node:sqlite with FK enforcement. Async because
+// sqlite-proxy/migrator awaits the proxy callback internally.
+async function openMigrated(location: string) {
+  const sqlite = new DatabaseSync(location, { allowExtension: true })
   sqlite.loadExtension(getLoadablePath())
   sqlite.exec('PRAGMA foreign_keys = ON;')
   const callback = makeCallback(sqlite)
@@ -74,4 +73,14 @@ export async function createTestDb() {
     }
   }
   return { db, sqlite, runInTransaction }
+}
+
+// Returns a fresh in-memory db with the committed migration folder applied.
+export async function createTestDb() {
+  return openMigrated(':memory:')
+}
+
+/** A file-backed db with sqlite-vec and FK on, migrated; for scripts. */
+export async function openTestDb(path: string): ReturnType<typeof createTestDb> {
+  return openMigrated(path)
 }
