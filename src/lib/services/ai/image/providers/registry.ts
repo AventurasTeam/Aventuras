@@ -330,11 +330,12 @@ export async function listImageModels(
 async function lookupCapabilities(
   connection: ImageModelConnection,
   model: string,
+  signal?: AbortSignal,
 ): Promise<ImageModelCapabilities | undefined> {
-  const models = await listImageModels(connection, false)
+  const models = await listImageModels(connection, false, signal)
   const found =
     findListedModel(models, model) ??
-    (await createProvider(connection).getModelCapabilities?.(model, models))
+    (await createProvider(connection).getModelCapabilities?.(model, models, signal))
   // An empty list proves nothing about one model.
   if (!found && !models.length) throw new Error(`${connection.providerType} listed no models`)
   return found

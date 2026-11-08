@@ -216,12 +216,13 @@ export function createNanoGPTProvider(config: ImageProviderConfig): ImageProvide
     async getModelCapabilities(
       model: string,
       listed: ImageModelInfo[],
+      signal?: AbortSignal,
     ): Promise<ImageModelCapabilities | undefined> {
       const path = model.split('/').map(encodeURIComponent).join('/')
       const response = await imageGetFetchOptional(
         endpoint(baseUrl, `images/models/${path}/endpoints`),
         discoveryHeaders,
-        { serviceId: DISCOVERY_SERVICE_ID, absentStatuses: [404] },
+        { serviceId: DISCOVERY_SERVICE_ID, absentStatuses: [404], signal },
       )
       if (!response) return undefined
 

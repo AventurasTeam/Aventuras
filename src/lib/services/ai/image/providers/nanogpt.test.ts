@@ -387,6 +387,15 @@ describe('NanoGPT getModelCapabilities', () => {
     expect(reply.body?.cancel).toHaveBeenCalled()
   })
 
+  it('forwards the abort signal to its request', async () => {
+    vi.mocked(imageGetFetch).mockResolvedValueOnce(endpointsReply({}, 404))
+    const { signal } = new AbortController()
+
+    await provider().getModelCapabilities?.('nope', [], signal)
+
+    expect(vi.mocked(imageGetFetch).mock.calls[0][2]?.signal).toBe(signal)
+  })
+
   it('rejects when the request fails', async () => {
     vi.mocked(imageGetFetch).mockRejectedValueOnce(new Error('Image API error 500: boom'))
     await expect(provider().getModelCapabilities?.('nope', [])).rejects.toThrow('boom')

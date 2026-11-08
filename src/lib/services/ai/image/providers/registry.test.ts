@@ -462,6 +462,7 @@ describe('Image Provider Registry', () => {
         getModelCapabilities?: (
           model: string,
           listed: ImageModelInfo[],
+          signal?: AbortSignal,
         ) => Promise<ImageModelCapabilities | undefined>
       } = {},
     ) {
@@ -559,6 +560,33 @@ describe('Image Provider Registry', () => {
       expect(settings.updateImageProfile).not.toHaveBeenCalled()
     })
 
+    it('cancels a list request that outlasts the backfill budget, and still generates', async () => {
+      vi.useFakeTimers()
+      try {
+        let listSignal: AbortSignal | undefined
+        const { generate: send } = setup(
+          {},
+          {
+            listModels: vi.fn((signal?: AbortSignal) => {
+              listSignal = signal
+              return new Promise<ImageModelInfo[]>(() => {})
+            }),
+          },
+        )
+
+        const done = generate()
+        await vi.advanceTimersByTimeAsync(10_000)
+        await done
+
+        expect(listSignal?.aborted).toBe(true)
+        expect((listSignal?.reason as Error).name).toBe('AbortError')
+        expect(send).toHaveBeenCalledTimes(1)
+        expect(settings.updateImageProfile).not.toHaveBeenCalled()
+      } finally {
+        vi.useRealTimers()
+      }
+    })
+
     it('refuses a model that edits only when no reference could be sent', async () => {
       const { generate: send } = setup({
         modelSnapshot: snapshot({ requiresReferenceImage: true }),
@@ -579,7 +607,7 @@ describe('Image Provider Registry', () => {
       await generate()
 
       expect(listModels).toHaveBeenCalledTimes(1)
-      expect(getModelCapabilities).toHaveBeenCalledWith('m', [])
+      expect(getModelCapabilities).toHaveBeenCalledWith('m', [], expect.any(AbortSignal))
       expect(settings.updateImageProfile).toHaveBeenCalledWith(profile.id, {
         modelSnapshot: expect.objectContaining({
           capabilities: expect.objectContaining({ supportedAspectRatios: ['1:1'] }),

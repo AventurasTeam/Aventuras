@@ -643,11 +643,11 @@ function makes one; `ImageProfile` extends it and the store takes one to save, s
 model-list cache use a connection as given. A leftover base URL is never saved for OpenRouter, nor a
 leftover API key for A1111. A stored profile whose provider this build does not know is skipped on load.
 Discovery (`listModels`, `getSamplerInfo`,
-`listLoras`) takes an `AbortSignal`. The profile form debounces key and base URL edits, aborts the request
+`listLoras`, `listClipTypes`, `getModelCapabilities`) takes an `AbortSignal`. The profile form debounces key and base URL edits, aborts the request
 a newer one or Stop replaces, and writes only what the current request returns. A cancelled model list is
 never cached, even when an adapter answers with a partial one. Model lists are cached for 12 hours per
 connection (`modelListKey`: provider, API key, base URL); a save that changes a profile's connection
-drops the entry it replaced (`evictReplacedModelList`), and the form's Refresh bypasses the cache. A legacy profile's snapshot backfill reads the same cache by id or alias and asks the provider (`getModelCapabilities`) only for a model the list omits. Migration `042` moved image settings that still named an
+drops the entry it replaced (`evictReplacedModelList`), and the form's Refresh bypasses the cache. A legacy profile's snapshot backfill reads the same cache by id or alias and asks the provider (`getModelCapabilities`) only for a model the list omits; the lookup is cancelled after 10 seconds. Migration `042` moved image settings that still named an
 API profile into image profiles, moved proxy-style `openai` profiles and every `chutes` profile
 (that provider is gone) to OpenAI Compatible, and pinned `zhipu` profiles with an empty base URL to
 `open.bigmodel.cn`, which they used before the default became `api.z.ai`.

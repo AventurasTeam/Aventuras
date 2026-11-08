@@ -79,6 +79,7 @@ export interface ImageProvider {
   getModelCapabilities?(
     model: string,
     listed: ImageModelInfo[],
+    signal?: AbortSignal,
   ): Promise<ImageModelCapabilities | undefined>
   // ComfyUI specific
   getSamplerInfo?(signal?: AbortSignal): Promise<ComfySamplerInfo>
