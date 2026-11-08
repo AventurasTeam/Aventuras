@@ -637,6 +637,17 @@ is [Slice 5.10](./10-two-starts.md)'s.
   lets a reversal or a pass's rename do this, and World's own writes clear
   such a flag. Either `brokenFlags` refuses the removal or the dormancy is
   accepted.
+- **What becomes of a turn handle the model writes into a text field?**
+  "As `t3` shows" names a turn but has no name to put in its place, so
+  `nameIdsInProse` keeps it as written, and it lands in a `why`, a body or
+  a description. That is the hazard
+  [`classifier.md → ID handling in classifier output`](../../../../memory/classifier.md#id-handling-in-classifier-output)
+  gives for rewriting the other tokens: a stored `[c1] charged` would
+  otherwise name whoever holds `c1` in a later prompt, and a later window
+  reads a stored `t3` as its own turn. A classifier pass has the same
+  exposure. Surfaced by 5.5a's review. Either the prompts tell the model
+  not to cite turns in text fields, or the token is rewritten when it
+  lands, to the turn's position or dropped.
 - **Does the slice stay under the ceiling?** It's priced at about 19 tasks,
   and the placement rules and `setLoreKeywords` weren't in that estimate.
   If its plan passes 20, parts split cleanly from the tools: the cut,
