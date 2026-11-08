@@ -1146,14 +1146,12 @@ describe('closeAgentPhase', () => {
     })
   })
 
-  it('passes each task its own name, part and read fields, and the lore-mgmt model config', async () => {
+  it("gives a task's start its part and the lore-mgmt model config", async () => {
     let captured: TaskRunContext | undefined
-    const readFields: ReadFields = { character: ['description', 'state.voice'] }
     __setCloseAgentSlots({
       before: [],
       perPart: [
         quietTask('identity', [], {
-          readFields,
           seen: (c) => {
             captured = c
           },
@@ -1165,7 +1163,7 @@ describe('closeAgentPhase', () => {
     await drain(phaseCtx())
 
     const settings = appSettingsStore.getAppSettings()
-    expect(captured).toMatchObject({ task: 'identity', part: 1, readFields })
+    expect(captured).toMatchObject({ part: 1 })
     expect(captured!.config).toEqual({
       providers: settings.providers,
       profiles: settings.profiles,
@@ -1273,6 +1271,38 @@ describe('closeAgentPhase', () => {
 
     expect(result).toEqual({ status: 'aborted' })
     expect(log).toEqual(['normalize@0'])
+  })
+
+  it.each([
+    ['Happenings in after', { before: [], perPart: [], after: [['happenings']] }],
+    ['Awareness in before', { before: [['awareness']], perPart: [], after: [] }],
+    ['a part task in before', { before: [['identity']], perPart: [], after: [] }],
+    ['a chapter-wide task in perPart', { before: [], perPart: [['happenings']], after: [] }],
+  ] as const)('refuses %s', async (_, shape) => {
+    const log: string[] = []
+    const slot = (names: readonly (readonly [CloseTask])[]): SlotEntry[] =>
+      names.map(([task]) => quietTask(task, log))
+    __setCloseAgentSlots({
+      before: slot(shape.before),
+      perPart: slot(shape.perPart),
+      after: slot(shape.after),
+    })
+
+    await expect(drain(phaseCtx(), log)).rejects.toThrow(RangeError)
+    expect(log).toEqual([])
+  })
+
+  it('refuses a misplaced task before any valid one has run or been announced', async () => {
+    const log: string[] = []
+    __setCloseAgentSlots({
+      before: [quietTask('happenings', log)],
+      perPart: [quietTask('identity', log)],
+      after: [quietTask('happenings', log)],
+    })
+
+    await expect(drain(phaseCtx(), log)).rejects.toThrow(RangeError)
+    expect(log).toEqual([])
+    expect(generateToolStep).not.toHaveBeenCalled()
   })
 
   it('with the production slots, starts nothing and reads no store, the ledger seeded', async () => {

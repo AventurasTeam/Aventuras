@@ -4,43 +4,70 @@ import { appSettingsStore, currentStoryStore } from '@/lib/stores'
 
 import { readCloseRangeEntries } from './chapter-close-metadata-call'
 import { CloseLedgerWriter } from './close-agent/ledger'
-import { closeParts } from './close-agent/parts'
+import { closeParts, type ClosePart } from './close-agent/parts'
 import { closeTaskProgress } from './close-agent/progress'
 import { runCloseTask } from './close-agent/run-task'
-import { closeAgentSlots, type CloseAgentSlots, type SlotEntry } from './close-agent/slots'
-import type { TaskRunContext } from './close-agent/task'
+import {
+  closeAgentSlots,
+  type CloseAgentSlots,
+  type CodeStep,
+  type SlotEntry,
+  type SlotName,
+} from './close-agent/slots'
+import type { CloseTaskDef, TaskRunContext } from './close-agent/task'
 import { closeIdsOf, requireCloseRange, seedCloseLedger } from './close-intermediates'
 import { storesHoldBranch } from './stores-hold-branch'
 import type { PhaseContext, PhaseEmittedEvent, PhaseResult } from '../types'
 
-type SlotName = keyof CloseAgentSlots
 /** What every entry of one run shares; each entry adds its task, part and read fields. */
 type AgentContext = Omit<TaskRunContext, 'task' | 'part' | 'readFields'>
 type SlotStop = Exclude<PhaseResult, { status: 'completed' }>
+/** One entry in run order; a task's `N of M` is placed (and checked) before the run starts. */
+type PlannedEntry =
+  | { kind: 'code'; step: CodeStep; part: number }
+  | { kind: 'task'; def: CloseTaskDef; part: number; progress: { index: number; total: number } }
 
-/** One slot entry: null goes on to the next, a stop ends the phase. */
-async function* runSlotEntry(
+function plannedEntry(
   entry: SlotEntry,
+  slot: SlotName,
+  part: number,
+  partCount: number,
+): PlannedEntry {
+  if (entry.kind === 'code') return { kind: 'code', step: entry.step, part }
+  const { def } = entry
+  return { kind: 'task', def, part, progress: closeTaskProgress(def.task, slot, part, partCount) }
+}
+
+/** Canon's run order over the slots; throws on a task its order has no place for. */
+function planRun(slots: CloseAgentSlots, parts: readonly ClosePart[]): PlannedEntry[] {
+  const partCount = parts.length
+  return [
+    ...slots.before.map((entry) => plannedEntry(entry, 'before', 0, partCount)),
+    ...parts.flatMap(({ index }) =>
+      slots.perPart.map((entry) => plannedEntry(entry, 'perPart', index, partCount)),
+    ),
+    ...slots.after.map((entry) => plannedEntry(entry, 'after', 0, partCount)),
+  ]
+}
+
+/** One planned entry: null goes on to the next, a stop ends the phase. */
+async function* runPlannedEntry(
+  planned: PlannedEntry,
   agent: AgentContext,
-  at: { slot: SlotName; part: number; partCount: number },
 ): AsyncGenerator<PhaseEmittedEvent, SlotStop | null, GroupOutcome | undefined> {
   if (agent.phase.abortSignal.aborted) return { status: 'aborted' }
-  if (entry.kind === 'code') {
-    const result = yield* entry.step.run({ ...agent, part: at.part })
+  const { part } = planned
+  if (planned.kind === 'code') {
+    const result = yield* planned.step.run({ ...agent, part })
     return result.status === 'completed' ? null : result
   }
-  const { def } = entry
+  const { def, progress } = planned
   // C6: as the task starts, a task with nothing to show included, so the banner names it.
-  yield {
-    type: 'close_task_start',
-    task: def.task,
-    part: at.part,
-    ...closeTaskProgress(def.task, at.part, at.partCount),
-  }
+  yield { type: 'close_task_start', task: def.task, part, ...progress }
   const end = yield* runCloseTask(def, {
     ...agent,
     task: def.task,
-    part: at.part,
+    part,
     readFields: def.readFields,
   })
   if (end.status === 'aborted') return { status: 'aborted' }
@@ -83,8 +110,7 @@ export async function* closeAgentPhase(
   const entries = await readCloseRangeEntries(ctx.db, ctx.branchId, range)
   const chapterEntryIds = entries.map((entry) => entry.id)
   ids.showTurns(chapterEntryIds)
-  const parts = closeParts(entries)
-  const partCount = parts.length
+  const plan = planRun(slots, closeParts(entries))
   const agent: AgentContext = {
     db: ctx.db,
     branchId: ctx.branchId,
@@ -97,22 +123,8 @@ export async function* closeAgentPhase(
     config,
   }
 
-  for (const entry of slots.before) {
-    const stop = yield* runSlotEntry(entry, agent, { slot: 'before', part: 0, partCount })
-    if (stop) return stop
-  }
-  for (const part of parts) {
-    for (const entry of slots.perPart) {
-      const stop = yield* runSlotEntry(entry, agent, {
-        slot: 'perPart',
-        part: part.index,
-        partCount,
-      })
-      if (stop) return stop
-    }
-  }
-  for (const entry of slots.after) {
-    const stop = yield* runSlotEntry(entry, agent, { slot: 'after', part: 0, partCount })
+  for (const planned of plan) {
+    const stop = yield* runPlannedEntry(planned, agent)
     if (stop) return stop
   }
   return { status: 'completed' }

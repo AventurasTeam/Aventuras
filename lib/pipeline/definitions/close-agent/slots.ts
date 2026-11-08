@@ -23,6 +23,8 @@ export type CloseAgentSlots = {
   after: readonly SlotEntry[]
 }
 
+export type SlotName = keyof CloseAgentSlots
+
 /** Empty until the close's tasks land (5.5b, 5.8, 5.9). */
 export const PRODUCTION_CLOSE_SLOTS: CloseAgentSlots = Object.freeze({
   before: [],
