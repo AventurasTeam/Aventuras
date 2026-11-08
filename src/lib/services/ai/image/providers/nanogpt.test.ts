@@ -177,6 +177,26 @@ describe('NanoGPT model catalogue', () => {
     ).toBe(5)
   })
 
+  it('skips a negative reference count for the next listed one', async () => {
+    const model = await capabilitiesOf(
+      listed('m', {
+        supported_parameters: { max_input_images: -1, input_references: { max: 3 } },
+      }),
+    )
+    expect(model).toMatchObject({ supportsImg2Img: true, maxReferenceImages: 3 })
+  })
+
+  it('treats only negative reference counts as no limit', async () => {
+    const model = await capabilitiesOf(
+      listed('m', {
+        capabilities: { image_to_image: true },
+        supported_parameters: { max_input_images: -1 },
+      }),
+    )
+    expect(model?.supportsImg2Img).toBe(true)
+    expect(model?.maxReferenceImages).toBeUndefined()
+  })
+
   it('reads an image-to-image model with no count as having no known limit', async () => {
     const model = await capabilitiesOf(
       listed('m', { capabilities: { image_to_image: true }, supported_parameters: {} }),

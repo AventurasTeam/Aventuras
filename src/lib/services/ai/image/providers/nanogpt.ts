@@ -142,10 +142,11 @@ function toCapabilities({
   capabilities: flags,
   supported_parameters: params,
 }: ModelFacts): ImageModelCapabilities {
-  const listed =
-    params.max_input_images ??
-    params.input_references?.max ??
-    params.input_image_constraints?.max_items
+  const listed = [
+    params.max_input_images,
+    params.input_references?.max,
+    params.input_image_constraints?.max_items,
+  ].find((limit) => limit !== undefined && limit >= 0)
 
   // A text-to-image model that lists a reference count still takes references. A count of zero
   // takes none, unless `image_to_image` says otherwise: conflicting signals allow references.
