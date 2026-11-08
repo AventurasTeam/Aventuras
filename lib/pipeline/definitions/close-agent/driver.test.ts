@@ -486,6 +486,30 @@ describe('runCloseTask', () => {
     ])
   })
 
+  it('runs one call per call id: a repeat, which the SDK gives the first call input, is refused', async () => {
+    vi.mocked(generateToolStep).mockResolvedValueOnce(
+      okStep([appendCall('k1', 'first'), appendCall('k1', 'first')]),
+    )
+
+    const { end, events } = await drive(taskDef(), runContext(phaseContext()))
+
+    expect(end).toEqual({ status: 'finished' })
+    expect(await description()).toBe('A courier. first')
+    expect(events.filter((event) => event.type === 'delta_group_emitted')).toHaveLength(1)
+    expect(ledger.calls).toHaveLength(1)
+    const answers = (sentMessages(1)[1] as ToolModelMessage).content
+    expect(answers.map((part) => part.type === 'tool-result' && part.toolCallId)).toEqual([
+      'k1',
+      'k1',
+    ])
+    expect(answers[1]).toMatchObject({
+      output: {
+        type: 'json',
+        value: { result: 'rejected', reason: expect.stringContaining('k1') },
+      },
+    })
+  })
+
   it("skips an invalid call, answers the rest, and sends the model's message, then one tool message in call order", async () => {
     const first = okStep([peekCall('k1')], {
       invalid: [

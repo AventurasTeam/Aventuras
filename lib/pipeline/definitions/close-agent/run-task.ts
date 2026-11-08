@@ -129,23 +129,25 @@ function stepMessages(
   return [...kept.slice(0, at + 1), tool, ...kept.slice(at + 1)]
 }
 
-// chapter-close.md → Conversations (closeTools): code refuses a tool outside the task and says so.
-function outsideTask(call: ToolStepCall, ids: CloseIds): ToolAnswer {
+function refused(call: ToolStepCall, reason: string, ids: CloseIds): ToolAnswer {
   return {
     toolCallId: call.toolCallId,
     toolName: call.toolName,
-    output: modelAnswer(
-      {
-        result: 'rejected',
-        reason: `${call.toolName} is not one of this task's tools`,
-        landed: [],
-        skippedFields: [],
-      },
-      {},
-      ids,
-    ),
+    output: modelAnswer({ result: 'rejected', reason, landed: [], skippedFields: [] }, {}, ids),
   }
 }
+
+// chapter-close.md → Conversations (closeTools): code refuses a tool outside the task and says so.
+const outsideTask = (call: ToolStepCall, ids: CloseIds): ToolAnswer =>
+  refused(call, `${call.toolName} is not one of this task's tools`, ids)
+
+// The SDK gives every call under one id the first one's input, so a repeat would run it twice.
+const repeatedId = (call: ToolStepCall, ids: CloseIds): ToolAnswer =>
+  refused(
+    call,
+    `call id ${call.toolCallId} repeats an earlier call's in this reply, so this call didn't run: send it again`,
+    ids,
+  )
 
 /** A task's context less what its def and phase fix. */
 export type TaskRunArgs = Omit<TaskRunContext, 'db' | 'branchId' | 'task' | 'readFields'>
@@ -224,11 +226,14 @@ export async function* runCloseTask(
       )
     ledger.noteToolCall()
     const answers: ToolAnswer[] = []
+    const answered = new Set<string>()
     for (const call of calls) {
       if (ctx.phase.abortSignal.aborted) return { status: 'aborted' }
       const tool = byName.get(call.toolName)
-      if (tool === undefined) answers.push(outsideTask(call, ctx.ids))
+      if (answered.has(call.toolCallId)) answers.push(repeatedId(call, ctx.ids))
+      else if (tool === undefined) answers.push(outsideTask(call, ctx.ids))
       else answers.push(yield* dispatchToolCall(call, tool, dispatch))
+      answered.add(call.toolCallId)
     }
     messages.push(...stepMessages(responseMessages, answers))
   }
