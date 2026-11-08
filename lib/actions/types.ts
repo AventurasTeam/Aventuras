@@ -54,3 +54,13 @@ export type MutationResult =
  * write already stands. `gone`: a row it needs no longer exists. A broken rule carries neither.
  */
 export type NoopMark = 'restated' | 'gone'
+
+/** One action of a group, at its index in the group (C11). */
+export type ActionOutcome =
+  | { status: 'landed' }
+  | { status: 'noop'; reason: string; mark?: NoopMark }
+
+/** What a `delta_group_emitted` yield evaluates to. `rejected`: the whole group, nothing written. */
+export type GroupOutcome =
+  | { status: 'ok'; outcomes: readonly ActionOutcome[] }
+  | { status: 'rejected'; reason: string; code?: string }

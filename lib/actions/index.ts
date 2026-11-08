@@ -22,6 +22,7 @@ export { runClassifierNow } from './classifier/run-now'
 export {
   applyDeltaAction,
   applyDeltaActionGroup,
+  applyDeltaActionGroupWithOutcomes,
   settleUserWrites,
   type DeltaGroupResult,
 } from './delta/apply-delta-action'
@@ -160,7 +161,15 @@ export {
   type SubmitTurnMeta,
   type SubmitTurnResult,
 } from './turns/submit-turn'
-export type { DbCtx, DeltaSource, MutationResult, PipelineAction } from './types'
+export type {
+  ActionOutcome,
+  DbCtx,
+  DeltaSource,
+  GroupOutcome,
+  MutationResult,
+  NoopMark,
+  PipelineAction,
+} from './types'
 export {
   clearLiveSession,
   loadDraft,
