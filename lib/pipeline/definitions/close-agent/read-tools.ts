@@ -3,7 +3,7 @@ import { z } from 'zod'
 
 import type { PrecedenceTable } from '@/lib/actions/types'
 import { entities, happenings, lore, threads } from '@/lib/db'
-import { ID_PATTERN } from '@/lib/ids'
+import { SUBSTITUTABLE_PREFIXES } from '@/lib/ids'
 import { isJsonObject } from '@/lib/json-object'
 import { normalizeTerm } from '@/lib/keyword-terms'
 import { matchTerms } from '@/lib/retrieval'
@@ -99,8 +99,13 @@ function valueAt(columns: Readonly<Record<string, unknown>>, path: string): unkn
   return value ?? null
 }
 
+const UUID = '[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}'
+// Entry and awareness ids stay out: they are turns and links, not rows read_row shows.
+const ROW_ID_IN_TEXT = new RegExp(`\\b(?:${SUBSTITUTABLE_PREFIXES.join('|')})_${UUID}\\b`, 'g')
+
+// Embedded ids count too, or withHandlesDeep gives a prose id a handle with no name.
 function refIdsIn(value: unknown): string[] {
-  if (typeof value === 'string') return ID_PATTERN.test(value) ? [value] : []
+  if (typeof value === 'string') return [...value.matchAll(ROW_ID_IN_TEXT)].map(([id]) => id)
   if (Array.isArray(value)) return value.flatMap(refIdsIn)
   if (isJsonObject(value)) return Object.values(value).flatMap(refIdsIn)
   return []

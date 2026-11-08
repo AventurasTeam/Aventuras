@@ -401,6 +401,27 @@ describe('read_row', () => {
     expect(ids.nameOf(harrow!)).toBe('Harrow')
   })
 
+  it('shows a character whose full id sits inside prose, by its handle and name', async () => {
+    const sela = rowId('char', 4)
+    await db
+      .insert(entities)
+      .values(
+        entity(sela, 'character', 'Sela', { description: `Spoke with ${MIRA} at the ferry.` }),
+      )
+    expect(ids.handleOf(MIRA)).toBeUndefined()
+
+    const answer = await readRowTool.read({ id: sela }, toolCtx())
+
+    const mira = ids.handleOf(MIRA)!
+    expect(mira).toMatch(/^c\d+$/)
+    expect(answer.output).toMatchObject({
+      fields: { description: `Spoke with ${mira} at the ferry.` },
+      refs: { [mira]: 'Mira' },
+    })
+    expect(ids.nameOf(mira)).toBe('Mira')
+    expect(JSON.stringify(answer.output)).not.toMatch(FULL_ID)
+  })
+
   it('answers a row that is gone, with no refusal and nothing read', async () => {
     const wren = ids.show(WREN, 'Wren')
 
@@ -463,6 +484,7 @@ describe('read_row', () => {
       kind: 'happening',
       name: 'The night crossing',
       fields: { description: `The ferryman ${ids.handleOf(TOBIN)} took her over at night.` },
+      refs: { [ids.handleOf(TOBIN)!]: 'Tobin' },
     })
     expect(crossing.read).toEqual([{ table: 'happenings', id: CROSSING }])
     expect(JSON.stringify([law.output, crossing.output])).not.toMatch(FULL_ID)
@@ -531,9 +553,15 @@ describe('read_row on a forked story', () => {
 describe('the read tools', () => {
   it('declare strict schemas that replay what the model wrote', () => {
     expect(() =>
-      assertReplaySafe(searchWorldTool.schema, [{ query: 'old tobin' }, { query: 'the capital' }]),
+      assertReplaySafe(searchWorldTool.schema, [
+        { query: 'old tobin' },
+        { query: 'the capital' },
+        { query: '  old tobin ' },
+      ]),
     ).not.toThrow()
-    expect(() => assertReplaySafe(readRowTool.schema, [{ id: 'c1' }, { id: 'lo2' }])).not.toThrow()
+    expect(() =>
+      assertReplaySafe(readRowTool.schema, [{ id: 'c1' }, { id: 'lo2' }, { id: ' c1 ' }]),
+    ).not.toThrow()
   })
 
   it('declare their names, kinds and id arguments', () => {
