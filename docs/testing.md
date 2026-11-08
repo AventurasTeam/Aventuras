@@ -673,10 +673,11 @@ after; `AVENTURAS_DB_PATH` and `PROBE_BRANCH_ID` pick them as for the
 classifier's probe. It refuses a branch that owes a classifier pass,
 naming how many entries, since the close would run the pass first, then
 opens the story and closes the chapter at `PROBE_END_ENTRY`, by default
-the open region's latest `ai_reply`. `PROBE_OUT`, a directory of its own
-for each run, saves each tool step's request and response, named by
-task, part and step (`identity-p1-s2.json`), a retried attempt beside
-its step, and the report the close wrote; the probe prints each task's
+the open region's latest `ai_reply`. `PROBE_OUT`, a directory that is
+empty or new for each invocation (the probe refuses one holding files),
+saves each run's tool steps, request and response, in a `run<k>/`
+inside it, named by task, part and step (`identity-p1-s2.json`), a
+retried attempt beside its step, and the report the close wrote; the probe prints each task's
 steps, its calls with their results, and its stops. `PROBE_STAND_IN=1`
 runs a stand-in task in place of the close's shipped slots, a write
 landing a create and an update in one group, so the mock can drive the

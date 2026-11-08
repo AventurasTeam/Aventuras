@@ -526,6 +526,11 @@ literals so a test can't derive its expectation from the constant.
   templates ship, the paragraph "Every history marks the user's turns" in
   [`architecture.md → System and user halves`](../../../../architecture.md#system-and-user-halves)
   extends to them. Surfaced by 5.5a.
+- **Where does a task's start get the prose it shows?** A task's
+  `render` is synchronous, so its `start` must read any prose it shows
+  and carry it in `show`, and the task context carries no range: the
+  start gets it from the run's intermediates or by `chapterEntryIds`.
+  Surfaced by 5.5a.
 
 ## Implementation notes
 

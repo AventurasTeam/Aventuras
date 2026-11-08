@@ -347,7 +347,7 @@ and tools sit under `lib/pipeline/definitions/close-agent/`.
   reverse direction too. A match doesn't count as a read.
 - `read_row` returns the fields a per-task registry names, keyed by task
   and row kind, which the tool slices extend. It reads SQL and swaps ids
-  with `substituteIds`. A read has no refusal: a missing row is an
+  with `withHandlesDeep`. A read has no refusal: a missing row is an
   answer saying so, naming a survivor if the ledger has one.
 
 **The ledger (C4).**
@@ -619,7 +619,15 @@ vitest and the probe share. It never reaches a production slot.
 
 ## Open questions
 
-None open: slice planning answered each (Implementation notes, below).
+- **A path both landed and lost in one call.** `verdictOf` throws on
+  it today, since C4 reads `landed` as values less `skippedFields` and
+  the path would hide one or the other. 5.9's `merge_happenings`
+  fan-out under user precedence is what reaches it: one call's actions
+  over several link rows can land a path on one row and lose it on
+  another. Pending a developer decision, among: keep the throw and give
+  each action distinct paths for link-row fan-out; a per-action
+  link-row flag; or a split where the model's answer names every loss
+  while the ledger's `skippedFields` omit a path that also landed.
 
 ## Implementation notes
 
@@ -662,10 +670,12 @@ None open: slice planning answered each (Implementation notes, below).
   pre-run status are untouched, and canon's per-kind contexts stay
   unbuilt. 5.5a, 5.8 and 5.9 each add a close key, and this stops the
   casts multiplying for about one task.
-- **The Fold measurement gated the first PR's merge, not the PR
-  (developer decision at slice planning).** A worker's device checks
-  never block it, and the Android database is synchronous, so the old
-  burst ran as one block and only a macrotask yield can split it.
+- **The Fold measurement gates the first PR's merge, not its opening,
+  and is pending (developer decision at slice planning).** A worker's
+  device checks never block it, and the Android database is
+  synchronous, so the old burst ran as one block and only a macrotask
+  yield can split it. The Fold wasn't attached when the PR was
+  prepared; its numbers land in these notes when the measure runs.
 - **One slice, two stacked PRs by layer (developer decision at slice
   planning).** The first holds the action layer, the verdict seam and
   the one-group close, the second the runner. The slice doesn't split:
@@ -708,7 +718,7 @@ None open: slice planning answered each (Implementation notes, below).
   restated only when the row's live flag already names the requested
   partner for the requested reason, and any other live flag is a rule
   refusal, since a row holds one flag (C11 outranks the earlier choice
-  to restate any raised flag). No reason string changed, so the refusals tests pin pass unedited.
+  to restate any raised flag). No reason string changed, so the refusals the tests pin pass unedited.
 - **A promote's `restated` mark follows the database row only, and its
   store guard reads the store copy of its own branch only
   (provisional).** The store copy can be older than the database while
@@ -735,8 +745,16 @@ None open: slice planning answered each (Implementation notes, below).
   results by tool name alone could read a valid write as failed; the
   model's own message stays as returned.
 - **The ledger drops a value the tool left `undefined`.** C4's `values`
-  hold only landed or proposed fields, and JSON leaves such a property
-  out, so a read's optional field no longer fails a close.
+  hold only landed or proposed fields, so a field the plan left unset
+  has no value to report.
+- **A tool answer's `undefined` property goes out absent.** The task
+  loop checks an answer is JSON before sending it and leaves such a
+  property out, as `JSON.stringify` does, so a read's optional field no
+  longer fails a close.
+- **A row a task created counts as read for that task.** A landed
+  create shows the row under a handle, and the task knows its fields,
+  so a later write naming it in the same task needs no `read_row`. The
+  read set is per task and part, so the next task reads it first.
 - **The agent phase validates its whole slot table before the first
   entry runs, and a code step's context carries no ledger.** A
   misplaced task fails before any write; a code step makes no tool
