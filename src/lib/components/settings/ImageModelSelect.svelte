@@ -51,7 +51,7 @@
 
   const orderedFailures = $derived(sortLoadFailures(failures))
   const failureLines = $derived(
-    groupLoadFailures(orderedFailures).map(({ lists, summary }) =>
+    groupLoadFailures(failures).map(({ lists, summary }) =>
       labelLists ? `${lists.map((l) => LOADED_LIST_LABELS[l]).join(', ')}: ${summary}` : summary,
     ),
   )
