@@ -154,6 +154,21 @@ function noteStep(step: number, saved: () => object): void {
   )
 }
 
+// fetch's own message is "fetch failed": what refused the call, ECONNREFUSED and its addresses,
+// sits in the causes.
+function savedError(error: unknown, depth = 0): unknown {
+  if (!(error instanceof Error) || depth > 8) return String(error)
+  const { code } = error as { code?: unknown }
+  return {
+    message: error.message,
+    ...(code === undefined ? {} : { code }),
+    ...(error instanceof AggregateError
+      ? { errors: (error.errors as unknown[]).map((e) => savedError(e, depth + 1)) }
+      : {}),
+    ...(error.cause === undefined ? {} : { cause: savedError(error.cause, depth + 1) }),
+  }
+}
+
 function captureSteps(): void {
   const sdkFetch = globalThis.fetch
   globalThis.fetch = async (input, init) => {
@@ -162,16 +177,15 @@ function captureSteps(): void {
     const request = typeof text === 'string' ? parseJson(text) : null
     const step = toolStepNumber(request)
     let response: Response
+    let body: unknown = null
     try {
       response = await sdkFetch(input, init)
+      if (step !== null && capture.dir !== null) body = parseJson(await response.clone().text())
     } catch (error) {
-      if (step !== null)
-        noteStep(step, () => ({ request, error: error instanceof Error ? error.message : error }))
+      if (step !== null) noteStep(step, () => ({ request, error: savedError(error) }))
       throw error
     }
-    if (step === null) return response
-    const body = capture.dir === null ? null : parseJson(await response.clone().text())
-    noteStep(step, () => ({ request, response: body }))
+    if (step !== null) noteStep(step, () => ({ request, response: body }))
     return response
   }
 }
