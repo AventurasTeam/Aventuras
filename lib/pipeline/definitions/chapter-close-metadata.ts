@@ -26,7 +26,8 @@ async function nextSequenceNumber(db: DbCtx['db'], branchId: string): Promise<nu
   return row?.next ?? 1
 }
 
-// A chapter row must sit over a fully stamped range, so any action that didn't land fails the close.
+// A chapter row must sit over a fully stamped range,
+// so any action that didn't land fails the close.
 function notApplied(actions: readonly PipelineAction[], outcome: GroupOutcome): string | null {
   if (outcome.status === 'rejected') return `chapter-close: group not applied: ${outcome.reason}`
   for (const [index, result] of outcome.outcomes.entries())
@@ -64,7 +65,8 @@ export async function* closeMetadataPhase(
   const { title, summary, theme, keywords } = call.metadata
   const now = Date.now()
 
-  // The group commits whole: a cancel after this point is reversed by the orchestrator, not stopped short.
+  // The group commits whole: a cancel after this point is reversed by the orchestrator,
+  // not stopped short.
   if (ctx.abortSignal.aborted) return { status: 'aborted' }
   const actions: PipelineAction[] = [
     {

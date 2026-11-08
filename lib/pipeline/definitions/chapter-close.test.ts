@@ -440,12 +440,13 @@ describe('a committed close', () => {
 
 // Criterion 5.
 describe('a cancelled close', () => {
-  // The group lands whole, so a cancel heard as it commits reverses all of it.
-  it('reverses the create and every stamp when cancelled as the group commits', async () => {
+  // The group lands whole; a Cancel after it is heard at the next phase boundary
+  // and reverses all of it.
+  it('reverses the create and every stamp when Cancel lands after the group commits', async () => {
     const before = await branchState()
     const groups: string[][] = []
     const singles: string[] = []
-    // The bus hears the group once it has committed; the reversal that follows emits no event.
+    // The bus hears the group after it is dispatched; the reversal that follows emits no event.
     pipelineEventBus.subscribe('delta_group_emitted', (event) => {
       groups.push(event.actions.map((a) => a.kind))
       liveClose()?.abortController.abort()
@@ -550,6 +551,7 @@ describe('a close whose group does not land whole', () => {
       detail: 'chapter-close: stampEntryChapter not applied: forced noop',
     })
     expect(await branchState()).toEqual(before)
+    expect([...entriesStore.getEntries().values()].every((e) => e.chapterId === null)).toBe(true)
     expect(chaptersStore.getChapters().size).toBe(0)
   })
 })

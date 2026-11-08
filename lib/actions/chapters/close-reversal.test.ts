@@ -97,7 +97,7 @@ function idsBefore(fx: CloseFixture, position: number): string[] {
   return fx.entries.filter((e) => e.position < position).map((e) => e.id)
 }
 
-// Acts once the close's group has committed: the bus hears a group only after it lands.
+// Acts on the close's group: the bus hears it once dispatched, so a landed group has committed.
 function onGroup(act: () => void): PipelineAction['kind'][][] {
   const groups: PipelineAction['kind'][][] = []
   pipelineEventBus.subscribe('delta_group_emitted', (event) => {
@@ -276,7 +276,8 @@ describe('reversing a close that ran', () => {
     const crashed = new Promise<void>((resolve) => {
       crash = resolve
     })
-    // The process dies once the group commits: the marker stays open over the create and every stamp.
+    // The process dies once the group commits:
+    // the marker stays open over the create and every stamp.
     configureDeltaActionPort({
       ...realDeltaActionPort(),
       applyDeltaActionGroupWithOutcomes: async (actions, args, ctx) => {
