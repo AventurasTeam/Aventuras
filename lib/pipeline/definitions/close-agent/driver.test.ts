@@ -400,6 +400,23 @@ describe('runCloseTask', () => {
     expect(ledger.stopped).toEqual([{ task: 'identity', part: 1, reason: 'budget' }])
   })
 
+  it('returns aborted, recording no stop, on an abort inside the last step', async () => {
+    const controller = new AbortController()
+    let plans = 0
+    beforePlan = () => {
+      plans++
+      if (plans === CLOSE_TASK_STEP_BUDGET) controller.abort()
+    }
+    vi.mocked(generateToolStep).mockResolvedValue(okStep([appendCall('k', 'x')]))
+
+    const { end } = await drive(taskDef(), runContext(phaseContext(controller)))
+
+    expect(generateToolStep).toHaveBeenCalledTimes(CLOSE_TASK_STEP_BUDGET)
+    expect(plans).toBe(CLOSE_TASK_STEP_BUDGET)
+    expect(end).toEqual({ status: 'aborted' })
+    expect(ledger.stopped).toEqual([])
+  })
+
   const LATER_STOPS: [string, ToolStepResult][] = [
     ['window', { status: 'stopped', reason: 'window', failure: WINDOW, recoverable: [] }],
     ['cut-off', { status: 'stopped', reason: 'cut-off', failure: CUT, recoverable: [] }],

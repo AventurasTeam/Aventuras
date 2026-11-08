@@ -145,5 +145,7 @@ export async function* runCloseTask(
     // The SDK merges this with its own answers to invalid calls into one tool message.
     if (answers.length > 0) messages.push(toolMessage(answers))
   }
+  // An abort raised inside the last step's calls is a cancel, not a spent budget.
+  if (ctx.phase.abortSignal.aborted) return { status: 'aborted' }
   return stop('budget')
 }
