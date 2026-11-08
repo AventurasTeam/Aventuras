@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 
 import type { GuardRow } from '@/lib/actions/types'
+import { generateId } from '@/lib/ids'
 
 import { commonChecks, createReadSet } from './common-checks'
 import { CloseIds } from './ids'
@@ -78,6 +79,48 @@ describe('commonChecks', () => {
       ok: false,
       reason: expect.stringMatching(/^lo1 .*read_row/),
     })
+  })
+
+  it('names the first unread row, wherever it sits among the named rows', () => {
+    const OTHER_LORE: GuardRow = { table: 'lore', id: 'lore_77777777-7777-4777-8777-777777777777' }
+    const refusal = (named: GuardRow[]) => {
+      const ctx = checkContext()
+      ctx.ids.show(OTHER_LORE.id, 'The ferry rule')
+      return commonChecks({ turns: ['t1'], why: 'w' }, named, ctx)
+    }
+    expect(refusal([TOLL_LAW, WREN])).toEqual({
+      ok: false,
+      reason: expect.stringMatching(/^lo1 /),
+    })
+    expect(refusal([WREN, TOLL_LAW, OTHER_LORE])).toEqual({
+      ok: false,
+      reason: expect.stringMatching(/^lo1 /),
+    })
+    expect(refusal([OTHER_LORE, TOLL_LAW])).toEqual({
+      ok: false,
+      reason: expect.stringMatching(/^lo2 /),
+    })
+  })
+
+  it.each([
+    { name: 'a made-up entry id', cited: generateId('entry') },
+    { name: 'a made-up row id', cited: generateId('char') },
+    { name: 'a real chapter entry id', cited: ENTRY_2 },
+    { name: 'a bracketed full id', cited: `[${generateId('entry')}]` },
+  ])('refuses $name as a turn without echoing it or minting a handle', ({ cited }) => {
+    const ctx = checkContext()
+    const result = commonChecks({ turns: [cited], why: 'w' }, [WREN], ctx)
+    expect(result).toEqual({
+      ok: false,
+      reason: expect.stringMatching(
+        /^turns takes the short handles as shown \(t1, t2…\), not a full id/,
+      ),
+    })
+    const reason = result.ok ? '' : result.reason
+    expect(reason).not.toMatch(/_[0-9a-f]{8}-/)
+    ctx.ids.withHandles(reason)
+    expect(ctx.ids.idOf('t5')).toBeUndefined()
+    expect(ctx.ids.idOf('c2')).toBeUndefined()
   })
 
   it('checks turns, then why, then the read gate', () => {

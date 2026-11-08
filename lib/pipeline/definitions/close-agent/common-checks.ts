@@ -1,6 +1,7 @@
 import type { GuardRow } from '@/lib/actions/types'
 
 import type { CloseIds } from './ids'
+import { FULL_ID_SHAPE } from './tool'
 
 /** The rows a task and part has read: seeded by its start, added to by read_row (C11). */
 export type ReadSet = {
@@ -60,6 +61,11 @@ function citedTurns(value: unknown, { ids, chapterEntryIds }: CheckContext): Com
   const cited = new Set<number>()
   for (const handle of value) {
     const id = typeof handle === 'string' ? ids.idOf(handle) : undefined
+    if (id === undefined && typeof handle === 'string' && FULL_ID_SHAPE.test(handle))
+      return {
+        ok: false,
+        reason: 'turns takes the short handles as shown (t1, t2…), not a full id',
+      }
     if (id === undefined || !id.startsWith('entry_'))
       return { ok: false, reason: `${String(handle)} is not a turn: ${TURN_HINT}` }
     const at = positions.get(id)

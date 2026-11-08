@@ -150,7 +150,8 @@ const KIND_BY_PREFIX = new Map<string, string>([
 ])
 
 // An id the model was never shown as a handle; echoing it back would let withHandles mint one.
-const FULL_ID_SHAPE = /[a-z][a-z0-9]*_[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/
+export const FULL_ID_SHAPE =
+  /[a-z][a-z0-9]*_[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/
 
 const prefixOf = (id: string): string => id.slice(0, id.indexOf('_') + 1)
 const asPrefix = (prefix: string): string => (prefix.endsWith('_') ? prefix : `${prefix}_`)
