@@ -42,6 +42,7 @@ export class CloseIds {
 
   /** The chapter's entries as t1…tN by position; a second call with the same ids is a no-op. */
   showTurns(entryIds: readonly string[]): void {
+    this.requireTurnList(entryIds)
     entryIds.forEach((id, i) => this.register(`t${i + 1}`, id, TURN_PREFIX))
     this.turnCount = Math.max(this.turnCount, entryIds.length)
   }
@@ -80,7 +81,7 @@ export class CloseIds {
   nameOf(token: string): string | undefined {
     const id = this.map.getUuidFor(token)
     const name = id === undefined ? undefined : this.names.get(id)
-    return name?.trim() ? name : undefined
+    return name?.trim() || undefined
   }
 
   /** Every full id in `text` swapped for its handle. */
@@ -110,6 +111,13 @@ export class CloseIds {
     if (id.startsWith(TURN_PREFIX)) return this.showTurn(id)
     if (id.startsWith(AWARENESS_PREFIX)) return this.showAwareness(id)
     return this.map.allocate(id)
+  }
+
+  // A clash with the turns shown sits before the list's first new handle (they run t1…tN), so
+  // register throws before changing anything; a repeat or a non-entry id late in the list wouldn't.
+  private requireTurnList(entryIds: readonly string[]): void {
+    entryIds.forEach((id) => requirePrefix(id, TURN_PREFIX))
+    if (new Set(entryIds).size !== entryIds.length) throw new Error('Turn ids repeat in one list')
   }
 
   private register(handle: string, id: string, prefix: string): string {

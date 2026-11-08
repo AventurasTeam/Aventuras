@@ -11,6 +11,7 @@ const ENTRY_1 = 'entry_55555555-5555-4555-8555-555555555551'
 const ENTRY_2 = 'entry_55555555-5555-4555-8555-555555555552'
 const ENTRY_3 = 'entry_55555555-5555-4555-8555-555555555553'
 const ENTRY_OUT = 'entry_66666666-6666-4666-8666-666666666666'
+const ENTRY_OUT_2 = 'entry_66666666-6666-4666-8666-666666666667'
 const HAW_A = 'haw_77777777-7777-4777-8777-777777777777'
 const HAW_B = 'haw_88888888-8888-4888-8888-888888888888'
 const FULL_ID = /(char|loc|item|fact|lore|thr|hap|chap|entry|haw)_[0-9a-f]{8}-/
@@ -26,6 +27,20 @@ describe('CloseIds', () => {
     expect(ids.handleOf(CHAR_B)).toBe('c2')
     expect(ids.nameOf('c1')).toBe('Wren')
     expect(ids.nameOf('lo1')).toBe('The toll law')
+  })
+
+  it('takes the new name when a row is shown again, keeping its handle', () => {
+    const ids = new CloseIds()
+    expect(ids.show(CHAR_A, 'Wren')).toBe('c1')
+    expect(ids.show(CHAR_A, 'Wren the Grey')).toBe('c1')
+    expect(ids.nameOf('c1')).toBe('Wren the Grey')
+    expect(ids.nameOfId(CHAR_A)).toBe('Wren the Grey')
+  })
+
+  it('names a row without the whitespace around its name', () => {
+    const ids = new CloseIds()
+    ids.show(CHAR_A, ' Wren ')
+    expect(ids.nameOf('c1')).toBe('Wren')
   })
 
   it('refuses to show a turn or an awareness row as a row', () => {
@@ -56,7 +71,27 @@ describe('CloseIds', () => {
     expect(ids.idOf('t2')).toBe(ENTRY_2)
     ids.showTurns([ENTRY_1, ENTRY_2, ENTRY_3])
     expect(ids.showTurn(ENTRY_OUT)).toBe('t4')
+    ids.showTurns([ENTRY_1, ENTRY_2, ENTRY_3])
+    expect(ids.showTurn(ENTRY_OUT_2)).toBe('t5')
     expect(() => ids.showTurns([ENTRY_2, ENTRY_1])).toThrow()
+  })
+
+  it('registers none of a turn list that throws', () => {
+    const ids = new CloseIds()
+    expect(() => ids.showTurns([ENTRY_1, ENTRY_2, ENTRY_1])).toThrow()
+    expect(() => ids.showTurns([ENTRY_1, CHAR_A])).toThrow(TypeError)
+    expect(ids.handleOf(ENTRY_1)).toBeUndefined()
+    expect(ids.idOf('t1')).toBeUndefined()
+    ids.showTurns([ENTRY_1, ENTRY_2])
+    expect(ids.showTurn(ENTRY_OUT)).toBe('t3')
+  })
+
+  it('registers none of a turn list that clashes with the turns already shown', () => {
+    const ids = new CloseIds()
+    ids.showTurns([ENTRY_1, ENTRY_2])
+    expect(() => ids.showTurns([ENTRY_1, ENTRY_3, ENTRY_2])).toThrow()
+    expect(ids.handleOf(ENTRY_3)).toBeUndefined()
+    expect(ids.showTurn(ENTRY_3)).toBe('t3')
   })
 
   it('gives a turn outside the chapter the next handle, the same each time', () => {
@@ -125,6 +160,14 @@ describe('CloseIds', () => {
     )
     expect(out).not.toMatch(FULL_ID)
     expect([ids.idOf('aw1'), ids.idOf('lo1'), ids.idOf('t3')]).toEqual([HAW_A, LORE_A, ENTRY_OUT])
+  })
+
+  it('swaps a non-uuid id registered after an earlier swap', () => {
+    const ids = new CloseIds()
+    ids.showTurns(['entry_close_002'])
+    expect(ids.withHandles('see entry_close_002')).toBe('see t1')
+    expect(ids.showAwareness('haw_seeded_x')).toBe('aw1')
+    expect(ids.withHandles('pin haw_seeded_x')).toBe('pin aw1')
   })
 
   it("swaps a registered turn whose id isn't uuid-shaped, and nothing longer", () => {
