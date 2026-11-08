@@ -1,5 +1,7 @@
 import type { GroupOutcome } from '@/lib/actions/types'
+import type { CloseTask } from '@/lib/db'
 
+import type { PartTask } from './progress'
 import type { CloseTaskDef, TaskRunContext } from './task'
 import type { PhaseEmittedEvent, PhaseResult } from '../../types'
 
@@ -14,13 +16,16 @@ export type CodeStep = {
   ) => AsyncGenerator<PhaseEmittedEvent, PhaseResult, GroupOutcome | undefined>
 }
 
-export type SlotEntry = { kind: 'task'; def: CloseTaskDef } | { kind: 'code'; step: CodeStep }
+/** A slot's entry: a code step, or a task of `T`, the tasks canon's run order puts in that slot. */
+export type SlotEntry<T extends CloseTask = CloseTask> =
+  | { kind: 'task'; def: CloseTaskDef & { task: T } }
+  | { kind: 'code'; step: CodeStep }
 
 /** C2: the agent phase's slots in run order; `perPart` runs once per part. */
 export type CloseAgentSlots = {
-  before: readonly SlotEntry[]
-  perPart: readonly SlotEntry[]
-  after: readonly SlotEntry[]
+  before: readonly SlotEntry<'happenings'>[]
+  perPart: readonly SlotEntry<PartTask>[]
+  after: readonly SlotEntry<'awareness'>[]
 }
 
 export type SlotName = keyof CloseAgentSlots

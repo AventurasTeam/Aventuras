@@ -159,7 +159,7 @@ function renderStandIn(
   }
 }
 
-export const standInTask: CloseTaskDef<StandInShow> = {
+export const standInTask: CloseTaskDef<StandInShow> & { task: 'identity' } = {
   task: 'identity',
   tools: [standInTool, readRowTool],
   readFields: { character: ['description'] },

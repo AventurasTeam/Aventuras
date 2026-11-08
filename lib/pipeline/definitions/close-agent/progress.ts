@@ -3,13 +3,15 @@ import type { CloseTask } from '@/lib/db'
 import type { SlotName } from './slots'
 
 // memory/chapter-close.md → Run order: each part's prose tasks, between Happenings and Awareness.
-const PART_TASKS = [
+export const PART_TASKS = [
   'lore',
   'identity',
   'threads',
   'upkeep',
   'lifecycle',
 ] as const satisfies readonly CloseTask[]
+
+export type PartTask = (typeof PART_TASKS)[number]
 
 /**
  * C6: a task's `N of M`, fixed at agent-phase start: Happenings 1, a part's tasks from

@@ -40,8 +40,10 @@ import {
   __setCloseAgentSlots,
   closeAgentSlots,
   PRODUCTION_CLOSE_SLOTS,
+  type CloseAgentSlots,
   type CodeStepContext,
   type SlotEntry,
+  type SlotName,
 } from './slots'
 import type { CloseTaskDef, TaskPromptContext } from './task'
 import {
@@ -1005,11 +1007,11 @@ describe('closeAgentPhase', () => {
     )
 
   // Nothing to show: runCloseTask ends it with no step, so it must never render.
-  function quietTask(
-    task: CloseTask,
+  function quietTask<T extends CloseTask>(
+    task: T,
     log: string[],
     opts: { readFields?: ReadFields; seen?: (ctx: TaskPromptContext) => void } = {},
-  ): SlotEntry {
+  ): SlotEntry<T> {
     return {
       kind: 'task',
       def: {
@@ -1032,7 +1034,7 @@ describe('closeAgentPhase', () => {
     name: string,
     log: string[],
     end: (ctx: CodeStepContext) => PhaseResult = () => ({ status: 'completed' }),
-  ): SlotEntry {
+  ): Extract<SlotEntry, { kind: 'code' }> {
     return {
       kind: 'code',
       step: {
@@ -1046,6 +1048,10 @@ describe('closeAgentPhase', () => {
       },
     }
   }
+
+  // The types keep a task out of a slot its run order has no place for; this reaches the guard.
+  const misplaced = (slots: Record<SlotName, readonly SlotEntry[]>): CloseAgentSlots =>
+    slots as CloseAgentSlots
 
   // The next runCloseTask call ends as given without running its task's start.
   function nextTaskEnds(end: TaskEnd): void {
@@ -1351,11 +1357,13 @@ describe('closeAgentPhase', () => {
     const log: string[] = []
     const slot = (names: readonly (readonly [CloseTask])[]): SlotEntry[] =>
       names.map(([task]) => quietTask(task, log))
-    __setCloseAgentSlots({
-      before: slot(shape.before),
-      perPart: slot(shape.perPart),
-      after: slot(shape.after),
-    })
+    __setCloseAgentSlots(
+      misplaced({
+        before: slot(shape.before),
+        perPart: slot(shape.perPart),
+        after: slot(shape.after),
+      }),
+    )
 
     await expect(drain(phaseCtx(), log)).rejects.toThrow(RangeError)
     expect(log).toEqual([])
@@ -1363,11 +1371,13 @@ describe('closeAgentPhase', () => {
 
   it('refuses a misplaced task before any valid one has run or been announced', async () => {
     const log: string[] = []
-    __setCloseAgentSlots({
-      before: [quietTask('happenings', log)],
-      perPart: [quietTask('identity', log)],
-      after: [quietTask('happenings', log)],
-    })
+    __setCloseAgentSlots(
+      misplaced({
+        before: [quietTask('happenings', log)],
+        perPart: [quietTask('identity', log)],
+        after: [quietTask('happenings', log)],
+      }),
+    )
 
     await expect(drain(phaseCtx(), log)).rejects.toThrow(RangeError)
     expect(log).toEqual([])
