@@ -27,11 +27,14 @@ export const closeReportCallSchema = z.object({
   /** Entry ids. */
   turns: z.array(z.string()),
   result: z.enum(['ok', 'rejected', 'skipped']),
-  /** Why it didn't land, whole. */
+  /** Why it didn't land: the first refusal's, else the first protection's. */
   reason: z.string().optional(),
   /** Delta path to the new or proposed value. */
   values: z.record(z.string(), z.string()).optional(),
-  /** A partly landed call. */
+  /**
+   * Lost paths with their first loss's reason: an ok call's that landed on no row, and a call's
+   * where nothing landed when they don't all share its reason (C4).
+   */
   skippedFields: z.array(z.object({ field: z.string(), reason: z.string() })).optional(),
   /** A landed merge's kept row. */
   survivor: z.object({ table: z.string(), id: z.string() }).optional(),

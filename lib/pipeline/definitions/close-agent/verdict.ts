@@ -15,7 +15,10 @@ type NotWritten = { field: string; row: string; reason: string }
 type Skipped = { field: string; reason: string }
 type Survivor = { table: string; id: string }
 
-/** C11: what each result carries; a call that didn't land as a whole lands and skips nothing. */
+/**
+ * C11: what each result carries. A call where nothing landed lists its fields, each with its own
+ * reason, only when they don't all share the call's; a call refused whole lists none.
+ */
 export type ToolVerdict =
   | {
       result: 'ok'
@@ -25,8 +28,8 @@ export type ToolVerdict =
       /** Lost paths that landed on no row, each with its first loss's reason (C4 skippedFields). */
       skippedFields: readonly Skipped[]
       /**
-       * The model's own list (C11): every loss beside a landed action, one entry per row and
-       * field, a path that landed on another row included. Absent when empty; never in the ledger.
+       * The model's own list (C11): every loss, one entry per row and field, a path that landed
+       * on another row included. Absent when empty; never in the ledger.
        */
       notWritten?: readonly NotWritten[]
       /** A landed merge's kept row. */
@@ -34,21 +37,28 @@ export type ToolVerdict =
     }
   | {
       result: 'rejected'
+      /** The first refusal's. */
       reason: string
       landed: readonly []
-      skippedFields: readonly []
-      notWritten?: never
+      skippedFields: readonly Skipped[]
+      notWritten?: readonly NotWritten[]
       /** Where a gone row went, when a landed merge took it. */
       survivor?: Survivor
     }
   | {
       result: 'skipped'
+      /** The first protection's. */
       reason: string
       landed: readonly []
-      skippedFields: readonly []
-      notWritten?: never
+      skippedFields: readonly Skipped[]
+      notWritten?: readonly NotWritten[]
       survivor?: never
     }
+/** Refused whole, by the common checks, an unresolved id, its plan or its group: no field named. */
+export type RefusedWhole = Extract<ToolVerdict, { result: 'rejected' }> & {
+  skippedFields: readonly []
+  notWritten?: never
+}
 
 type WritingPlan = Extract<WritePlan, { kind: 'write' }>
 type Survivors = { survivorOf: ToolContext['survivorOf'] }
@@ -86,6 +96,15 @@ function settleLosses(
   }
 }
 
+// Nothing landed: the call's reason says it all unless a field was lost for another.
+function ownReasons(
+  reason: string,
+  losses: readonly Loss[],
+): { skippedFields: readonly Skipped[]; notWritten?: readonly NotWritten[] } {
+  if (losses.every((loss) => loss.reason === reason)) return { skippedFields: [] }
+  return settleLosses(new Set(), losses)
+}
+
 function survivorAmong(rows: readonly ReportRow[], { survivorOf }: Survivors) {
   for (const row of rows) {
     const survivor = survivorOf(row.table, row.id)
@@ -99,7 +118,7 @@ export function rejectedWhole(
   reason: string,
   rows: readonly ReportRow[],
   ctx: Survivors,
-): ToolVerdict {
+): RefusedWhole {
   const survivor = reason === CLOSE_REASON.rowGone ? survivorAmong(rows, ctx) : undefined
   return {
     result: 'rejected',
@@ -119,7 +138,8 @@ export function assertPlanShape(plan: WritingPlan): void {
 /**
  * C11: one result for a write from its plan and its group's outcome (null when no group was
  * emitted). Any action landed is `ok` naming what didn't, restated fields aside; else a refusal or
- * a gone row is `rejected`, a protected field `skipped`, and nothing lost `ok`, nothing written.
+ * a gone row is `rejected`, a protected field `skipped`, each with the first such loss's reason,
+ * and nothing lost `ok`, nothing written.
  */
 export function verdictOf(
   plan: WritingPlan,
@@ -161,10 +181,19 @@ export function verdictOf(
     }
   }
   const refusal = losses.find((loss) => loss.refused)
-  if (refusal !== undefined) return rejectedWhole(refusal.reason, plan.rows, ctx)
+  if (refusal !== undefined)
+    return {
+      ...rejectedWhole(refusal.reason, plan.rows, ctx),
+      ...ownReasons(refusal.reason, losses),
+    }
   const protection = losses.find((loss) => !loss.refused)
   if (protection !== undefined)
-    return { result: 'skipped', reason: protection.reason, landed: [], skippedFields: [] }
+    return {
+      result: 'skipped',
+      reason: protection.reason,
+      landed: [],
+      ...ownReasons(protection.reason, losses),
+    }
   return { result: 'ok', landed: [], skippedFields: [] }
 }
 

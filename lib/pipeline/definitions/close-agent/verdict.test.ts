@@ -10,7 +10,13 @@ import {
 
 import { CloseIds } from './ids'
 import type { PlannedAction, WritePlan } from './tool'
-import { CLOSE_REASON, modelAnswer, verdictOf, type ToolVerdict } from './verdict'
+import {
+  CLOSE_REASON,
+  modelAnswer,
+  verdictOf,
+  type RefusedWhole,
+  type ToolVerdict,
+} from './verdict'
 
 const BRANCH = 'br_close'
 const LORE_A = 'lore_11111111-1111-4111-8111-111111111111'
@@ -311,6 +317,58 @@ describe('verdictOf, naming what did not land', () => {
     ).toEqual({ result: 'ok', landed: ['body'], skippedFields: [] })
   })
 
+  it("names each field's own reason, by row, when nothing landed for more than one reason", () => {
+    const titleOnKept = loreUpdate({ title: 'Tolls' }, ['title'], LORE_KEPT)
+    const plan = writePlan({
+      actions: [TITLE, titleOnKept],
+      lost: [{ field: 'body', reason: 'over the soft cap of 8', row: LORE_A, kind: 'refused' }],
+    })
+    expect(
+      verdictOf(plan, group(noop(USER_EDITED_SINCE_PROSE), noop('not-active')), noMerges),
+    ).toEqual({
+      result: 'rejected',
+      reason: 'not-active',
+      landed: [],
+      skippedFields: [
+        { field: 'title', reason: USER_EDITED_SINCE_PROSE },
+        { field: 'body', reason: 'over the soft cap of 8' },
+      ],
+      notWritten: [
+        { field: 'title', row: LORE_A, reason: USER_EDITED_SINCE_PROSE },
+        { field: 'title', row: LORE_KEPT, reason: 'not-active' },
+        { field: 'body', row: LORE_A, reason: 'over the soft cap of 8' },
+      ],
+    })
+    expect(
+      verdictOf(
+        writePlan({ actions: [TITLE, titleOnKept] }),
+        group(noop(USER_EDITED_SINCE_PROSE), noop(USER_EDITED_SINCE_PROSE)),
+        noMerges,
+      ),
+    ).toEqual({ result: 'skipped', reason: USER_EDITED_SINCE_PROSE, landed: [], skippedFields: [] })
+  })
+
+  it("keeps a gone row's survivor beside each field's own reason", () => {
+    const plan = writePlan({
+      actions: [BODY],
+      lost: [{ field: 'title', reason: USER_EDITED_SINCE_PROSE, row: LORE_A, kind: 'protected' }],
+    })
+    expect(verdictOf(plan, group(noop('gone', 'gone')), mergedIntoKept)).toEqual({
+      result: 'rejected',
+      reason: CLOSE_REASON.rowGone,
+      landed: [],
+      skippedFields: [
+        { field: 'body', reason: CLOSE_REASON.rowGone },
+        { field: 'title', reason: USER_EDITED_SINCE_PROSE },
+      ],
+      notWritten: [
+        { field: 'body', row: LORE_A, reason: CLOSE_REASON.rowGone },
+        { field: 'title', row: LORE_A, reason: USER_EDITED_SINCE_PROSE },
+      ],
+      survivor: { table: 'lore', id: LORE_KEPT },
+    })
+  })
+
   it('skips a call whose one field the handler finds the user wrote', () => {
     expect(
       verdictOf(writePlan({ actions: [BODY] }), group(noop(USER_EDITED_SINCE_PROSE)), noMerges),
@@ -383,10 +441,13 @@ describe('ToolVerdict (checked by tsc)', () => {
   it("carries only what C11's table gives each result", () => {
     const merged = { table: 'lore', id: LORE_KEPT }
     const none = [] as const
+    const own = { skippedFields: [{ field: 'body', reason: 'x' }], notWritten: [] }
     const verdicts = (): ToolVerdict[] => [
       { result: 'ok', landed: ['body'], skippedFields: [], survivor: merged },
       { result: 'rejected', reason: 'row-gone', landed: [], skippedFields: [], survivor: merged },
       { result: 'skipped', reason: USER_EDITED_SINCE_PROSE, landed: none, skippedFields: none },
+      { result: 'rejected', reason: 'x', landed: [], ...own },
+      { result: 'skipped', reason: 'x', landed: [], ...own },
       // @ts-expect-error an ok has no reason
       { result: 'ok', reason: 'x', landed: [], skippedFields: [] },
       // @ts-expect-error a refused call lands nothing
@@ -394,7 +455,15 @@ describe('ToolVerdict (checked by tsc)', () => {
       // @ts-expect-error a skipped call has no survivor
       { result: 'skipped', reason: 'x', landed: [], skippedFields: [], survivor: merged },
     ]
+    const wholes = (): RefusedWhole[] => [
+      { result: 'rejected', reason: 'x', landed: [], skippedFields: [] },
+      // @ts-expect-error a call refused whole names no field of its own
+      { result: 'rejected', reason: 'x', landed: [], skippedFields: own.skippedFields },
+      // @ts-expect-error a call refused whole has no list for the model
+      { result: 'rejected', reason: 'x', landed: [], skippedFields: [], notWritten: [] },
+    ]
     expect(verdicts).toBeTypeOf('function')
+    expect(wholes).toBeTypeOf('function')
   })
 })
 

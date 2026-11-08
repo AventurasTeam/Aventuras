@@ -1133,6 +1133,130 @@ describe('dispatchToolCall in a close phase', () => {
     expect(await runDeltas(result.actionId)).toEqual([])
   })
 
+  it("names each field's own reason when nothing lands for two protections, the first's being the call's", async () => {
+    await editAs('later-turn', { description: 'Wren, at the toll house.' })
+    await editAs('user', { state: { voice: 'gravel' } })
+
+    await runDispatch([
+      {
+        toolName: 'set_fields',
+        input: { id: 'c1', description: 'Soaked.', voice: 'low', ...cite(['t7'], 'The rain.') },
+      },
+    ])
+
+    expect(recorded()).toEqual([
+      {
+        task: 'identity',
+        part: 1,
+        tool: 'set_fields',
+        rows: [{ table: 'entities', id: WREN, name: 'Wren' }],
+        why: 'The rain.',
+        turns: [endEntryId()],
+        result: 'skipped',
+        reason: CLOSE_REASON.laterTurn,
+        values: { description: 'Soaked.', 'state.voice': 'low' },
+        skippedFields: [
+          { field: 'description', reason: CLOSE_REASON.laterTurn },
+          { field: 'state.voice', reason: USER_EDITED_SINCE_PROSE },
+        ],
+      },
+    ])
+    expect(answers[0]!.output).toEqual({
+      result: 'skipped',
+      reason: CLOSE_REASON.laterTurn,
+      note: expect.stringContaining('A later turn wrote this'),
+      notWritten: [
+        {
+          field: 'description',
+          row: 'c1',
+          reason: CLOSE_REASON.laterTurn,
+          note: expect.stringContaining('A later turn wrote this'),
+        },
+        {
+          field: 'state.voice',
+          row: 'c1',
+          reason: USER_EDITED_SINCE_PROSE,
+          note: expect.stringContaining('The user edited this'),
+        },
+      ],
+    })
+  })
+
+  it("names each field's own reason when a rule refuses one beside a user-protected one", async () => {
+    await editAs('user', { state: { voice: 'gravel' } })
+
+    await runDispatch([
+      {
+        toolName: 'set_fields',
+        input: {
+          id: 'c1',
+          voice: 'low',
+          traits: ['wary'],
+          refuse: ['state.traits'],
+          ...cite(['t7']),
+        },
+      },
+    ])
+
+    expect(recorded()[0]).toMatchObject({
+      result: 'rejected',
+      reason: TEST_CAP,
+      values: { 'state.voice': 'low', 'state.traits': 'wary' },
+      skippedFields: [
+        { field: 'state.voice', reason: USER_EDITED_SINCE_PROSE },
+        { field: 'state.traits', reason: TEST_CAP },
+      ],
+    })
+    expect(answers[0]!.output).toEqual({
+      result: 'rejected',
+      reason: TEST_CAP,
+      notWritten: [
+        {
+          field: 'state.voice',
+          row: 'c1',
+          reason: USER_EDITED_SINCE_PROSE,
+          note: expect.stringContaining('The user edited this'),
+        },
+        { field: 'state.traits', row: 'c1', reason: TEST_CAP },
+      ],
+    })
+  })
+
+  it("keeps the call's reason alone when every field that didn't land shares it", async () => {
+    await editAs('user', { state: { voice: 'gravel' } })
+    await editAs('later-turn', {
+      description: 'Wren, at the toll house.',
+      state: { traits: ['tired'] },
+    })
+
+    await runDispatch([
+      { toolName: 'set_fields', input: { id: 'c1', voice: 'low', ...cite(['t7']) } },
+      {
+        toolName: 'set_fields',
+        input: { id: 'c1', description: 'Soaked.', traits: ['wary'], ...cite(['t7']) },
+      },
+    ])
+
+    expect(
+      recorded().map(({ result, reason, skippedFields }) => [result, reason, skippedFields]),
+    ).toEqual([
+      ['skipped', USER_EDITED_SINCE_PROSE, undefined],
+      ['skipped', CLOSE_REASON.laterTurn, undefined],
+    ])
+    expect(answers.map(({ output }) => output)).toEqual([
+      {
+        result: 'skipped',
+        reason: USER_EDITED_SINCE_PROSE,
+        note: expect.stringContaining('The user edited this'),
+      },
+      {
+        result: 'skipped',
+        reason: CLOSE_REASON.laterTurn,
+        note: expect.stringContaining('A later turn wrote this'),
+      },
+    ])
+  })
+
   it('records a write the checks refuse by its tool and the rows it names, with no values', async () => {
     const update: ScriptedCall = {
       toolName: 'set_fields',
