@@ -5,9 +5,8 @@ import { proseLogPosition, userEditsSince, wroteField } from './user-precedence'
 const rowKey = (table: string, id: string) => `${table}:${id}`
 
 /**
- * User precedence and C12 for the rows a close's write names, read once ahead of its group: the
- * user edits after `proseEntryId`'s prose and the deltas a turn past E wrote, judged by
- * `wroteField`'s groups (a create writes every field).
+ * User precedence and C12 for a close write's rows, read once ahead of its group: edits after
+ * `proseEntryId`'s prose and later-turn deltas, by `wroteField` groups (a create writes all).
  */
 export async function readRowGuard(args: RowGuardArgs, ctx: DbCtx): Promise<RowGuard> {
   const { branchId, endEntryId, proseEntryId, rows } = args

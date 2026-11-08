@@ -440,8 +440,7 @@ describe('a committed close', () => {
 
 // Criterion 5.
 describe('a cancelled close', () => {
-  // The group lands whole; a Cancel after it is heard at the next phase boundary
-  // and reverses all of it.
+  // The group lands whole; a Cancel is heard at the next phase boundary and reverses all of it.
   it('reverses the create and every stamp when Cancel lands after the group commits', async () => {
     const before = await branchState()
     const groups: string[][] = []

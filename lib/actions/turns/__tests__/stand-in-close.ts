@@ -31,9 +31,8 @@ export type StandInClose = {
 }
 
 /**
- * Interruptible hard-gate close pipeline ending on the branch's pick, else `fallbackChapterEnd`.
- * Before its hold it writes its row and a stamp per entry through the end as one group anchored on
- * that end (C1), or the row alone under `leaveOpen`; a pick outside the open region fails it first.
+ * Hard-gate close ending on the branch's pick, else `fallbackChapterEnd`; holds after writing its
+ * row and a stamp per entry as one group (C1), or the row alone under `leaveOpen`.
  * Register before `ensureChapterClosePipelineRegistered`, which only fills a missing kind.
  */
 export function registerStandInClose(options?: { leaveOpen?: true }): StandInClose {

@@ -31,7 +31,7 @@ const LEDGER: CloseLedger = {
   noToolCalls: false,
 }
 
-// A run's record after boundary parked the range and, given one, the agent wrote its ledger in place.
+// A run's record once the range is parked and, given a ledger, the agent has written it.
 function parked(ledger?: CloseLedger): Record<string, unknown> {
   const intermediates: Record<string, unknown> = {}
   setCloseRange(intermediates, RANGE)

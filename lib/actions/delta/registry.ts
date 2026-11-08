@@ -81,9 +81,8 @@ export type HandlerOutcome =
     }
 
 /**
- * A refusal the turn survives: the action was well-formed and merely redundant, or a user edit
- * won (orchestrator handleEvent). A plain rejection reverses the whole turn. `mark` (C11): a
- * restated value or a gone row; a broken rule leaves it off.
+ * A refusal the turn survives (redundant action, or a user edit won); a plain rejection reverses
+ * the turn. `mark` (C11): a restated value or a gone row; a broken rule leaves it off.
  */
 export function noopRefusal(reason: string, mark?: NoopMark): HandlerOutcome {
   return mark === undefined

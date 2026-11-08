@@ -67,9 +67,8 @@ const LINK_DESCRIPTORS: Record<LinkTable, LinkDescriptor> = {
 }
 
 /**
- * An update whose undo payload holds only `retrievalCount`: per-turn retrieval bumps it every turn,
- * so counting it would over-tint every aware character, and a close would read it as a later
- * turn's write (C12).
+ * An update whose undo payload holds only `retrievalCount`, which retrieval bumps every turn:
+ * counting it over-tints aware characters, and a close would read it as a later-turn write (C12).
  */
 export function isRetrievalBumpOnly(
   op: 'create' | 'update' | 'delete',

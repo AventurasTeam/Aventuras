@@ -437,10 +437,7 @@ export const retireEntityHandler: ActionHandler = async (action, branchId, ctx) 
   )
 }
 
-/**
- * The kind of the row a membership names, undefined when it's gone. A row the same group creates
- * counts as a faction.
- */
+/** The membership target's kind, undefined if gone; a row this group creates is a faction. */
 async function membershipKind(
   ctx: DbCtx,
   branchId: string,

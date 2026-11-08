@@ -179,10 +179,7 @@ export const PLACEMENT_PATHS: readonly string[] = [
   'unplaced',
 ] satisfies readonly (keyof LocationState)[]
 
-/**
- * A delta wrote a place's parent or unplaced flag, which only sits beside a null parent
- * (data-model.md → LocationState shape).
- */
+/** A delta wrote a place's parent or unplaced flag (data-model.md → LocationState shape). */
 export function wrotePlacement(edits: readonly Delta[]): boolean {
   return PLACEMENT_PATHS.some((key) => wrotePath(edits, 'state', [key]))
 }

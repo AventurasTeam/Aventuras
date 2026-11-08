@@ -26,8 +26,7 @@ async function nextSequenceNumber(db: DbCtx['db'], branchId: string): Promise<nu
   return row?.next ?? 1
 }
 
-// A chapter row must sit over a fully stamped range,
-// so any action that didn't land fails the close.
+// A chapter row must sit over a fully stamped range: any action that didn't land fails the close.
 function notApplied(actions: readonly PipelineAction[], outcome: GroupOutcome): string | null {
   if (outcome.status === 'rejected') return `chapter-close: group not applied: ${outcome.reason}`
   // A short answer would let the missing actions read as landed.
@@ -40,8 +39,8 @@ function notApplied(actions: readonly PipelineAction[], outcome: GroupOutcome): 
 }
 
 /**
- * chapter-close.md → Phase 2: one metadata call (no parts yet, Slice 5.8), then the row and a stamp
- * per entry through the end as one group, in C1's order, every delta anchored on the end entry.
+ * chapter-close.md → Phase 2: one metadata call (no parts yet, 5.8), then the row and a stamp per
+ * entry through the end as one group, in C1's order, every delta anchored on the end entry.
  */
 export async function* closeMetadataPhase(
   ctx: PhaseContext,
@@ -68,8 +67,7 @@ export async function* closeMetadataPhase(
   const { title, summary, theme, keywords } = call.metadata
   const now = Date.now()
 
-  // The group commits whole: a cancel after this point is reversed by the orchestrator,
-  // not stopped short.
+  // The group commits whole: a cancel after this is reversed by the orchestrator, not stopped.
   if (ctx.abortSignal.aborted) return { status: 'aborted' }
   const actions: PipelineAction[] = [
     {

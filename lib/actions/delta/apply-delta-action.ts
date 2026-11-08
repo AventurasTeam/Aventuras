@@ -284,7 +284,7 @@ function groupConflict(outcomes: readonly OkOutcome[]): string | null {
  * One actionId, one transaction: a rejection anywhere leaves nothing behind. Handlers read
  * pre-group state, so a group-created row shows only in `GroupScope`, a same-column double-write
  * on one row is rejected, and so is every `groupConflict` case (code `group-conflict`). `ok` holds
- * each action's outcome at its index in `actions` (C11); a noop writes nothing for its action alone.
+ * each action's outcome at its index in `actions` (C11); a noop writes nothing for its own action.
  */
 export async function applyDeltaActionGroupWithOutcomes(
   actions: readonly PipelineAction[],
@@ -364,9 +364,8 @@ async function applyDeltaActionGroupUnlocked(
     outcomes.push(result ?? LANDED)
     if (result !== null) skipped.push({ index, createdThen: created.size })
   }
-  // A link naming a row created later in the group no-ops on pass one: rerun it after all creates,
-  // and its outcome is the rerun's. One rerun settles it: createOutcome mints relationship ids, so a
-  // group can't name its own.
+  // A link naming a later-created row no-ops on pass one: rerun it after all creates, its outcome
+  // the rerun's. One rerun settles it: createOutcome mints relationship ids a group can't name.
   for (const { index, createdThen } of skipped) {
     if (created.size === createdThen) continue
     const result = await prepare(actions[index])

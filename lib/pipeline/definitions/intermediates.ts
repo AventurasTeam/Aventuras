@@ -1,9 +1,8 @@
 import type { CloseReport } from '@/lib/db'
 
 /**
- * Keys phases park run-scoped results under in `ctx.intermediates`. A leaf on purpose: importing
- * a producing phase for its key alone would drag in its whole dependency graph. The close's keys
- * sit behind the typed accessors in `close-intermediates.ts`.
+ * Keys phases park run-scoped results under in `ctx.intermediates`; a leaf so a key needn't import
+ * its producing phase's dependency graph. The close's keys sit behind `close-intermediates.ts`.
  */
 
 /** Where the retrieval phase parks its outcome; consumers re-narrow to `RetrievalSuccess`. */

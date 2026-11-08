@@ -21,9 +21,8 @@ import type { DbCtx, NoopMark, PipelineAction } from '../types'
 import { applyDeltaAction } from './apply-delta-action'
 import { resolveByActionKind, type HandlerOutcome } from './registry'
 
-// Unmarked spellings C11 maps to `rejected`: a broken rule, never a value already stored or a row
-// that went. `not-a-faction` is listed for setFactionStanding, which uses it as a rule only; the
-// shared site in setCharacterFaction is pinned by its sample cases.
+// Unmarked spellings C11 maps to `rejected`: a broken rule, never a stored value or a gone row.
+// `not-a-faction` is for setFactionStanding only; setCharacterFaction's site is pinned by samples.
 const RULE_REASONS: readonly string[] = [
   'location',
   'name-blank',

@@ -276,8 +276,7 @@ describe('reversing a close that ran', () => {
     const crashed = new Promise<void>((resolve) => {
       crash = resolve
     })
-    // The process dies once the group commits:
-    // the marker stays open over the create and every stamp.
+    // The process dies once the group commits: the marker stays open over the create and stamps.
     configureDeltaActionPort({
       ...realDeltaActionPort(),
       applyDeltaActionGroupWithOutcomes: async (actions, args, ctx) => {

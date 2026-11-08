@@ -40,7 +40,6 @@ function txState(...runs: RunState[]): TxState {
   }
 }
 
-// A run's record once the close's boundary phase has parked its range.
 function parked(): Record<string, unknown> {
   const intermediates: Record<string, unknown> = {}
   setCloseRange(intermediates, RANGE)
