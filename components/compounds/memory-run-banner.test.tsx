@@ -115,7 +115,7 @@ describe('useMemoryRunBanner', () => {
       close({
         beforeTurn: true,
         currentPhase: 'agent',
-        closeProgress: { task: 'identity', part: 0, index: 3, total: 7 },
+        closeProgress: { task: 'identity', part: 1, index: 3, total: 7 },
       }),
     )
     const { result } = renderHook(() => useMemoryRunBanner())
@@ -151,7 +151,7 @@ describe('useMemoryRunBanner', () => {
     act(() => {
       generationStore.setCloseProgress(closing.runId, {
         task: 'identity',
-        part: 0,
+        part: 1,
         index: 3,
         total: 7,
       })
@@ -206,7 +206,7 @@ describe('useMemoryRunBanner', () => {
 })
 
 describe('closeBannerLabel', () => {
-  const IDENTITY: CloseProgress = { task: 'identity', part: 0, index: 3, total: 7 }
+  const IDENTITY: CloseProgress = { task: 'identity', part: 1, index: 3, total: 7 }
 
   it.each([
     ['boundary', 'Closing chapter: choosing where it ends…'],
@@ -219,19 +219,19 @@ describe('closeBannerLabel', () => {
   })
 
   it.each([
-    ['happenings', 1, 'Happenings'],
-    ['lore', 2, 'Lore'],
-    ['identity', 3, 'Identity'],
-    ['threads', 4, 'Threads'],
-    ['upkeep', 5, 'Upkeep'],
-    ['lifecycle', 6, 'Lifecycle'],
-    ['awareness', 7, 'Awareness'],
-  ] as const)('counts task %s by its display name', (task, index, name) => {
+    ['happenings', 0, 1, 'Happenings'],
+    ['lore', 1, 2, 'Lore'],
+    ['identity', 1, 3, 'Identity'],
+    ['threads', 1, 4, 'Threads'],
+    ['upkeep', 1, 5, 'Upkeep'],
+    ['lifecycle', 1, 6, 'Lifecycle'],
+    ['awareness', 0, 7, 'Awareness'],
+  ] as const)('counts task %s by its display name', (task, part, index, name) => {
     expect(
       closeBannerLabel({
         beforeTurn: false,
         currentPhase: 'agent',
-        closeProgress: { task, part: 0, index, total: 7 },
+        closeProgress: { task, part, index, total: 7 },
       }),
     ).toBe(`Closing chapter: ${index} of 7 — ${name}…`)
   })

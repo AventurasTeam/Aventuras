@@ -520,7 +520,7 @@ describe('setCloseProgress', () => {
     generationStore.__reset()
   })
 
-  const identity: CloseProgress = { task: 'identity', part: 0, index: 3, total: 7 }
+  const identity: CloseProgress = { task: 'identity', part: 1, index: 3, total: 7 }
 
   it('publishes a new copy of the run carrying the progress', () => {
     generationStore.startRun(closeRun('run_close'))
@@ -537,10 +537,10 @@ describe('setCloseProgress', () => {
   it('replaces the progress as the next task starts', () => {
     generationStore.startRun(closeRun('run_close'))
     generationStore.setCloseProgress('run_close', identity)
-    generationStore.setCloseProgress('run_close', { task: 'threads', part: 0, index: 4, total: 7 })
+    generationStore.setCloseProgress('run_close', { task: 'threads', part: 1, index: 4, total: 7 })
     expect(generationStore.getTxState().runs.get('run_close')!.closeProgress).toEqual({
       task: 'threads',
-      part: 0,
+      part: 1,
       index: 4,
       total: 7,
     })
