@@ -177,7 +177,8 @@ patch`, which 5.5a marks `restated`, so a close tool's write of it
   `realDeltaActionPort()` in `lib/pipeline/__tests__/harness.ts` each
   list every `DeltaActionPort` member, and `scripts/close-probe.ts` now
   borrows the test harness's. The type makes a missing member a compile
-  error, so nothing drifts silently; the cost is three edits per new port method. One builder in the action layer would serve all of them,
+  error, so nothing drifts silently; the cost is three edits per new
+  port method. One builder in the action layer would serve all of them,
   but `vitest.setup.ts` must not load the `@/lib/pipeline` barrel before
   a test's mocks, and `bootstrap.ts` pulls in UI modules a script can't
   load. Raised in 5.5a's review.
