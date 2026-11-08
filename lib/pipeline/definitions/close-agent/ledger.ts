@@ -88,10 +88,10 @@ export class CloseLedgerWriter {
         const skipped = new Set((call.skippedFields ?? []).map(({ field }) => field))
         const fields = Object.keys(call.values ?? {}).filter((field) => !skipped.has(field))
         if (fields.length === 0 && call.survivor === undefined) return []
-        // A name goes into the next task's prompt; a line break in it would forge a line.
+        // A name goes into the next task's prompt: a line break would forge a line, a full id leak.
         const rows = call.rows
           .map(({ id, name }) => {
-            const shown = oneLine(name)
+            const shown = ids.withHandles(oneLine(name))
             return shown === '' ? handle(id) : `${shown} (${handle(id)})`
           })
           .join(', ')

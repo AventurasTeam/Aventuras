@@ -333,6 +333,20 @@ describe('CloseLedgerWriter', () => {
     )
   })
 
+  it("swaps a full id a row's name holds for a handle", () => {
+    const { ids, writer } = setup()
+    writer.record(
+      call({
+        rows: [{ table: 'entities', id: WREN, name: `Heir of ${TOBIN}` }],
+        values: { description: 'x' },
+      }),
+    )
+
+    const line = writer.writesSoFar(ids)
+    expect(line).not.toContain(TOBIN)
+    expect(line).toBe(`- update_character Heir of ${ids.handleOf(TOBIN)} (c1): description`)
+  })
+
   it('lists nothing before a write lands', () => {
     const { ids, writer } = setup()
     writer.record(call({ tool: 'read_row', why: '', turns: [] }))
