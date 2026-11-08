@@ -11,22 +11,43 @@ export const CLOSE_REASON = { laterTurn: 'later-turn', rowGone: 'row-gone' } as 
 const TARGET_NOT_FOUND = 'not-found'
 
 type NotWritten = { field: string; row: string; reason: string }
+type Skipped = { field: string; reason: string }
+type Survivor = { table: string; id: string }
 
-export type ToolVerdict = {
-  result: 'ok' | 'rejected' | 'skipped'
-  /** Why the call as a whole didn't land (rejected / skipped). */
-  reason?: string
-  /** Delta paths that landed. */
-  landed: readonly string[]
-  /** Lost paths that landed on no row, each with its first loss's reason (C4 skippedFields). */
-  skippedFields: readonly { field: string; reason: string }[]
-  /**
-   * The model's own list (C11): every loss beside a landed action, one entry per row and field,
-   * a path that landed on another row included. Absent when empty; never in the ledger.
-   */
-  notWritten?: readonly NotWritten[]
-  survivor?: { table: string; id: string }
-}
+/** C11: what each result carries; a call that didn't land as a whole lands and skips nothing. */
+export type ToolVerdict =
+  | {
+      result: 'ok'
+      reason?: never
+      /** Delta paths that landed. */
+      landed: readonly string[]
+      /** Lost paths that landed on no row, each with its first loss's reason (C4 skippedFields). */
+      skippedFields: readonly Skipped[]
+      /**
+       * The model's own list (C11): every loss beside a landed action, one entry per row and
+       * field, a path that landed on another row included. Absent when empty; never in the ledger.
+       */
+      notWritten?: readonly NotWritten[]
+      /** A landed merge's kept row. */
+      survivor?: Survivor
+    }
+  | {
+      result: 'rejected'
+      reason: string
+      landed: readonly []
+      skippedFields: readonly []
+      notWritten?: never
+      /** Where a gone row went, when a landed merge took it. */
+      survivor?: Survivor
+    }
+  | {
+      result: 'skipped'
+      reason: string
+      landed: readonly []
+      skippedFields: readonly []
+      notWritten?: never
+      survivor?: never
+    }
 
 type WritingPlan = Extract<WritePlan, { kind: 'write' }>
 type Survivors = { survivorOf: ToolContext['survivorOf'] }
@@ -49,7 +70,7 @@ function noopLoss(
 function settleLosses(
   landed: ReadonlySet<string>,
   losses: readonly Loss[],
-): Pick<ToolVerdict, 'skippedFields' | 'notWritten'> {
+): { skippedFields: readonly Skipped[]; notWritten?: readonly NotWritten[] } {
   const skipped = new Map<string, string>()
   const notWritten = new Map<string, NotWritten>()
   for (const { fields, row, reason } of losses)

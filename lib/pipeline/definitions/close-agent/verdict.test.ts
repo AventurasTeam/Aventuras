@@ -10,7 +10,7 @@ import {
 
 import { CloseIds } from './ids'
 import type { PlannedAction, WritePlan } from './tool'
-import { CLOSE_REASON, modelAnswer, verdictOf } from './verdict'
+import { CLOSE_REASON, modelAnswer, verdictOf, type ToolVerdict } from './verdict'
 
 const BRANCH = 'br_close'
 const LORE_A = 'lore_11111111-1111-4111-8111-111111111111'
@@ -376,6 +376,25 @@ describe('verdictOf, naming what did not land', () => {
     expect(() => verdictOf(writePlan({ actions: [unnamed] }), notFound, noMerges)).toThrow(
       /updateLore/,
     )
+  })
+})
+
+describe('ToolVerdict (checked by tsc)', () => {
+  it("carries only what C11's table gives each result", () => {
+    const merged = { table: 'lore', id: LORE_KEPT }
+    const none = [] as const
+    const verdicts = (): ToolVerdict[] => [
+      { result: 'ok', landed: ['body'], skippedFields: [], survivor: merged },
+      { result: 'rejected', reason: 'row-gone', landed: [], skippedFields: [], survivor: merged },
+      { result: 'skipped', reason: USER_EDITED_SINCE_PROSE, landed: none, skippedFields: none },
+      // @ts-expect-error an ok has no reason
+      { result: 'ok', reason: 'x', landed: [], skippedFields: [] },
+      // @ts-expect-error a refused call lands nothing
+      { result: 'rejected', reason: 'x', landed: ['body'], skippedFields: [] },
+      // @ts-expect-error a skipped call has no survivor
+      { result: 'skipped', reason: 'x', landed: [], skippedFields: [], survivor: merged },
+    ]
+    expect(verdicts).toBeTypeOf('function')
   })
 })
 
