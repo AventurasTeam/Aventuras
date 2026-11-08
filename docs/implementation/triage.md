@@ -60,3 +60,43 @@ slice-planning gate forces its resolution before that slice is planned.
   to get. Held rather than routed in the 2026-09-09 triage pass, which
   did not re-run the suite serially — the evidence above is still as of
   `edce17b8`.
+
+- **C11 names four handlers with a hard `not-found`; more have one.**
+  [C11](./milestones/05-chapters-chapter-close/milestone.md#c11--tool-results)
+  lists `updateEntity`, `updateLore`, `updateThread` and
+  `updateHappening` as returning a hard `not-found` that aborts a group.
+  `updateEntityVisualState`, `updateEntityInventory`,
+  `updateEntityStackables`, `updateItemPosition` and
+  `updateEntityLocationTracking`
+  (`lib/actions/entities/state-patch-actions.ts`) and `updateInvolvement`
+  (`lib/actions/happenings/register-involvements.ts`) do too, so a close
+  tool over one of them gets a whole-group refusal where C11's table
+  reads as a per-action verdict. Raised in 5.5a's review.
+- **`placeLocationHandler` ignores the group's created rows.** It takes
+  no `GroupScope`, so a `placeLocation` naming a parent created in the
+  same group refuses on the rerun too, now marked `gone` as a missing
+  parent (`lib/actions/entities/state-patch-actions.ts`). Nothing groups
+  a place's create with a placement yet; a close tool that does needs
+  the scope. Raised in 5.5a's review.
+- **A parallel group's failing branch outlives the reversal.**
+  `runParallelGroup` (`lib/pipeline/runtime/orchestrator.ts`) awaits
+  `Promise.all`, so one branch's throw reverses and fails the run while
+  its sibling keeps going; the sibling's next write lands under the
+  run's `actionId` after the reversal and is never reversed. Canon says
+  to drain the streams and wait for every branch
+  ([Parallel-group event coordination](../generation-pipeline.md#parallel-group-event-coordination)).
+  Shown by probe on both write paths in 5.5a's review; latent, since no
+  production pipeline declares a parallel group.
+- **`consumePhase` never closes a phase whose event throws.** When
+  `handleEvent` throws, the generator gets no `return()`, so a phase's
+  `finally` around a `yield` never runs. No phase has one today
+  (`chapter-close-metadata-call.ts`, `periodic-classifier.ts` and
+  `per-turn-retrieval.ts` checked). Raised in 5.5a's review.
+- **The two write paths disagree on what a bus event means.** A
+  `delta_emitted` noop or refusal never reaches the bus, while a
+  `delta_group_emitted` reaches it whether the group landed, no-oped or
+  was refused whole (`handleEvent`, `lib/pipeline/runtime/orchestrator.ts`).
+  [Phase iteration](../generation-pipeline.md#phase-iteration) says the
+  orchestrator forwards every event. No production code subscribes to
+  delta events yet; one rule for both paths is wanted before one does.
+  Raised in 5.5a's review.
