@@ -7,6 +7,7 @@ import {
   chapters,
   deltas,
   happenings,
+  openRegionSeries,
   pipelineRuns,
   storyEntries,
   type StoryEntry,
@@ -729,6 +730,8 @@ describe('Send with a close owed', () => {
     // Send's owed work ran one close; the turn's own chain may close again after it.
     expect(close.runs).toHaveLength(1)
     await expectWritesBeforeTurn(db, ran, result)
+    const region = await openRegionSeries('b1', { db })
+    expect(region.reduce((sum, row) => sum + row.tokens, 0)).toBeGreaterThanOrEqual(OWED_AT)
     await within(cancelStoryRuns('s1', 'b1'), 'ending the chain the turn started')
   })
 
@@ -808,7 +811,7 @@ describe('Send with a close owed', () => {
 
   // The close ignored a Cancel landing after its last phase and committed; the Send is still cancelled.
   it('cancels the Send when Cancel lands after its owed close ended its last phase', async () => {
-    const { ctx, db, pass, close } = await setUp(50, COUNTED_BACKLOG, {}, { leaveOpen: true })
+    const { ctx, db, pass, close } = await setUp(50, COUNTED_BACKLOG)
     setThreshold(OWED_AT)
     await setWatermark(db, 3)
 

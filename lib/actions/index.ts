@@ -22,6 +22,7 @@ export { runClassifierNow } from './classifier/run-now'
 export {
   applyDeltaAction,
   applyDeltaActionGroup,
+  applyDeltaActionGroupWithOutcomes,
   settleUserWrites,
   type DeltaGroupResult,
 } from './delta/apply-delta-action'
@@ -40,6 +41,7 @@ export {
   describeDeltaReplayError,
   reverseReplayDeltas,
 } from './delta/reverse-replay'
+export { readRowGuard } from './delta/row-guard'
 export { PLOT_REJECTION, type PlotSaveResult } from './plot/commit-plot-save'
 export type { RowSaveRejectionCode } from './row-save/commit-row-save'
 export { saveHappening } from './plot/save-happening'
@@ -160,7 +162,20 @@ export {
   type SubmitTurnMeta,
   type SubmitTurnResult,
 } from './turns/submit-turn'
-export type { DbCtx, DeltaSource, MutationResult, PipelineAction } from './types'
+export type {
+  ActionOutcome,
+  DbCtx,
+  DeltaSource,
+  GroupOutcome,
+  GuardRow,
+  MutationResult,
+  NoopMark,
+  PipelineAction,
+  PrecedenceTable,
+  RowGuard,
+  RowGuardArgs,
+  RowVerdicts,
+} from './types'
 export {
   clearLiveSession,
   loadDraft,

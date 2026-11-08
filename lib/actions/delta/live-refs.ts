@@ -234,4 +234,5 @@ export const MISSING_REF = {
   status: 'rejected',
   reason: 'the link names a row that no longer exists',
   code: 'noop',
+  mark: 'gone',
 } as const satisfies Extract<HandlerOutcome, { status: 'rejected' }>

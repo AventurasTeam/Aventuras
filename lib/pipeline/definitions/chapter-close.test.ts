@@ -1,7 +1,9 @@
 import { and, asc, eq, gt, gte, lte, ne, sql } from 'drizzle-orm'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
+import { applyDeltaActionGroupWithOutcomes } from '@/lib/actions/delta/apply-delta-action'
 import { isContentEditDelta } from '@/lib/actions/story-entries/classifier-facts'
+import type { ActionOutcome, GroupOutcome, PipelineAction } from '@/lib/actions/types'
 import { generateStructured, type GenerateStructuredResult } from '@/lib/ai'
 import { CHAPTER_CLOSE_KIND } from '@/lib/chapters'
 import { chapters, deltas, storyEntries, type Delta } from '@/lib/db'
@@ -30,8 +32,9 @@ import { closeMetadataPhase } from './chapter-close-metadata'
 import { readCloseRangeEntries } from './chapter-close-metadata-call'
 import { closeReportPhase } from './chapter-close-report'
 import { readClassifierStatus } from './memory-chain'
-import { expectRan } from '../__tests__/harness'
+import { expectRan, realDeltaActionPort } from '../__tests__/harness'
 import { __resetRegistry, getPipeline } from '../authoring/registry'
+import { configureDeltaActionPort } from '../runtime/action-port'
 import { __resetBus, pipelineEventBus } from '../runtime/event-bus'
 import { runPipeline } from '../runtime/orchestrator'
 import type { PipelineEvent, TxResult } from '../types'
@@ -76,6 +79,38 @@ function recordEvents(): PipelineEvent[] {
     events.push(event)
   })
   return events
+}
+
+// The row a close's action targets, so a test can read which rows each write event named.
+function targetOf(action: PipelineAction): string {
+  switch (action.kind) {
+    case 'createChapter':
+      return action.payload.entry.id
+    case 'stampEntryChapter':
+    case 'updateChapter':
+      return action.payload.id
+    default:
+      return action.kind
+  }
+}
+
+type Write = {
+  type: 'delta_group_emitted' | 'delta_emitted'
+  entryId: string | null | undefined
+  actions: [string, string, string][]
+}
+
+// Each write event of the run, in order: its anchor and each action's kind, target and source.
+function recordWrites(): Write[] {
+  const writes: Write[] = []
+  const named = (a: PipelineAction): [string, string, string] => [a.kind, targetOf(a), a.source]
+  pipelineEventBus.subscribeAll((event) => {
+    if (event.type === 'delta_group_emitted')
+      writes.push({ type: event.type, entryId: event.entryId, actions: event.actions.map(named) })
+    else if (event.type === 'delta_emitted')
+      writes.push({ type: event.type, entryId: event.entryId, actions: [named(event.action)] })
+  })
+  return writes
 }
 
 function liveClose(): RunState | undefined {
@@ -287,6 +322,37 @@ describe('a committed close', () => {
     )
   })
 
+  // C1: one group, the create first, then a stamp per entry in position order; the report after it.
+  it('writes the create and every stamp as one group on the end entry, the report alone after it', async () => {
+    const end = f.replyIds[2]!
+    const writes = recordWrites()
+
+    const run = await runClose(end)
+
+    expect(run.outcome).toBe('completed')
+    const [row] = await chapterRows()
+    const through = f.entries.filter((e) => e.position <= positionOf(end))
+    expect(writes).toEqual([
+      {
+        type: 'delta_group_emitted',
+        entryId: end,
+        actions: [
+          ['createChapter', row!.id, 'chapter_close'],
+          ...through.map((e): [string, string, string] => [
+            'stampEntryChapter',
+            e.id,
+            'chapter_close',
+          ]),
+        ],
+      },
+      {
+        type: 'delta_emitted',
+        entryId: end,
+        actions: [['updateChapter', row!.id, 'chapter_close']],
+      },
+    ])
+  })
+
   // Criterion 4.
   it('writes the row over the range and leaves every entry past the end unstamped', async () => {
     const end = f.replyIds[2]!
@@ -374,25 +440,27 @@ describe('a committed close', () => {
 
 // Criterion 5.
 describe('a cancelled close', () => {
-  it('lands no stamp after a cancel that follows the k-th, and leaves the branch as it was', async () => {
-    const K = 3
+  // The group lands whole; a Cancel is heard at the next phase boundary and reverses all of it.
+  it('reverses the create and every stamp when Cancel lands after the group commits', async () => {
     const before = await branchState()
-    const emitted: string[] = []
-    let stamps = 0
-    // Counted as the run writes: the reversal that follows emits no delta event.
+    const groups: string[][] = []
+    const singles: string[] = []
+    // The bus hears the group after it is dispatched; the reversal that follows emits no event.
+    pipelineEventBus.subscribe('delta_group_emitted', (event) => {
+      groups.push(event.actions.map((a) => a.kind))
+      liveClose()?.abortController.abort()
+    })
     pipelineEventBus.subscribe('delta_emitted', (event) => {
-      emitted.push(event.action.kind)
-      if (event.action.kind === 'stampEntryChapter' && ++stamps === K)
-        liveClose()?.abortController.abort()
+      singles.push(event.action.kind)
     })
 
     const run = await runClose(f.replyIds[2]!)
 
     expect(run.outcome).toBe('aborted')
-    expect(emitted).toEqual([
-      'createChapter',
-      ...Array.from({ length: K }, () => 'stampEntryChapter'),
+    expect(groups).toEqual([
+      ['createChapter', ...Array.from({ length: 7 }, () => 'stampEntryChapter')],
     ])
+    expect(singles).toEqual([])
     expect(await branchState()).toEqual(before)
     expect(entriesStore.getEntries().size).toBe(f.entries.length)
     expect([...entriesStore.getEntries().values()].every((e) => e.chapterId === null)).toBe(true)
@@ -412,6 +480,9 @@ describe('a cancelled close', () => {
     pipelineEventBus.subscribe('delta_emitted', (event) => {
       emitted.push(event)
     })
+    pipelineEventBus.subscribe('delta_group_emitted', (event) => {
+      emitted.push(event)
+    })
 
     const run = await runClose(f.replyIds[2]!)
 
@@ -420,6 +491,67 @@ describe('a cancelled close', () => {
     expect(callSawCancel).toBe(true)
     expect(await branchState()).toEqual(before)
     expect(generationStore.getTxState().deferred.get(f.branchId)).toEqual({ close: true })
+  })
+})
+
+// A chapter row must sit over a fully stamped range: a refused group, or an action in it that
+// noops, fails the close, and its abort reverses whatever landed.
+describe('a close whose group does not land whole', () => {
+  afterEach(() => {
+    configureDeltaActionPort(realDeltaActionPort())
+  })
+
+  it('fails as action-layer when the group is refused whole, writing nothing', async () => {
+    configureDeltaActionPort({
+      ...realDeltaActionPort(),
+      applyDeltaActionGroupWithOutcomes: async (): Promise<GroupOutcome> => ({
+        status: 'rejected',
+        reason: 'forced refusal',
+      }),
+    })
+    const before = await branchState()
+
+    const run = await runClose(f.replyIds[2]!)
+
+    expect(run.outcome).toBe('failed')
+    expect(run.error).toEqual({
+      kind: 'action-layer',
+      detail: 'chapter-close: group not applied: forced refusal',
+    })
+    expect(await branchState()).toEqual(before)
+  })
+
+  it('fails as action-layer naming the action a noop left unwritten, and reverses what landed', async () => {
+    let landed = 0
+    configureDeltaActionPort({
+      ...realDeltaActionPort(),
+      applyDeltaActionGroupWithOutcomes: async (actions, args, ctx) => {
+        const real = await applyDeltaActionGroupWithOutcomes(actions, args, ctx)
+        if (real.status !== 'ok') return real
+        landed = real.outcomes.filter((o) => o.status === 'landed').length
+        const last = real.outcomes.length - 1
+        return {
+          status: 'ok',
+          outcomes: real.outcomes.map(
+            (o, i): ActionOutcome => (i === last ? { status: 'noop', reason: 'forced noop' } : o),
+          ),
+        }
+      },
+    })
+    const before = await branchState()
+
+    const run = await runClose(f.replyIds[2]!)
+
+    // The create and seven stamps really landed before the phase failed.
+    expect(landed).toBe(8)
+    expect(run.outcome).toBe('failed')
+    expect(run.error).toEqual({
+      kind: 'action-layer',
+      detail: 'chapter-close: stampEntryChapter not applied: forced noop',
+    })
+    expect(await branchState()).toEqual(before)
+    expect([...entriesStore.getEntries().values()].every((e) => e.chapterId === null)).toBe(true)
+    expect(chaptersStore.getChapters().size).toBe(0)
   })
 })
 

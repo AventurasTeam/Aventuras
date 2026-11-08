@@ -9,7 +9,9 @@ import { generationStore, undoRedoStore } from '@/lib/stores'
 import type { PipelineActionMap } from '../action-map'
 import {
   isUserOriginatedSource,
+  type ActionOutcome,
   type DbCtx,
+  type GroupOutcome,
   type MutationResult,
   type PipelineAction,
 } from '../types'
@@ -181,7 +183,11 @@ async function applyDeltaActionUnlocked(args: Args, ctx: DbCtx): Promise<Mutatio
   if (!resolved) return { status: 'rejected', reason: `no handler registered for ${action.kind}` }
 
   const outcome = await resolved.handler(action, branchId, { ...ctx, actionId })
-  if (outcome.status === 'rejected') return outcome
+  if (outcome.status === 'rejected') {
+    // MutationResult carries no mark: only a group reports one (C11).
+    const { mark, ...refusal } = outcome
+    return refusal
+  }
 
   const deltaId = generateId('delta')
   const ops: SqlOp[] = [
@@ -228,6 +234,14 @@ export type DeltaGroupResult =
 
 type GroupArgs = { actionId: string; branchId: string; entryId?: string | null }
 
+type NoopOutcome = Extract<ActionOutcome, { status: 'noop' }>
+
+const LANDED: ActionOutcome = Object.freeze({ status: 'landed' })
+
+function noopOutcome({ reason, mark }: Pick<NoopOutcome, 'reason' | 'mark'>): NoopOutcome {
+  return mark === undefined ? { status: 'noop', reason } : { status: 'noop', reason, mark }
+}
+
 /**
  * Handlers read pre-group state. A second delete of a row, or a write to a cascaded one, logs it
  * twice (undo hits a unique constraint forever); a write to a deleted row leaves an undo refused as
@@ -269,13 +283,14 @@ function groupConflict(outcomes: readonly OkOutcome[]): string | null {
 /**
  * One actionId, one transaction: a rejection anywhere leaves nothing behind. Handlers read
  * pre-group state, so a group-created row shows only in `GroupScope`, a same-column double-write
- * on one row is rejected, and so is every `groupConflict` case (code `group-conflict`).
+ * on one row is rejected, and so is every `groupConflict` case (code `group-conflict`). `ok` holds
+ * each action's outcome at its index in `actions` (C11); a noop writes nothing for its own action.
  */
-export async function applyDeltaActionGroup(
+export async function applyDeltaActionGroupWithOutcomes(
   actions: readonly PipelineAction[],
   args: GroupArgs,
   ctx: DbCtx,
-): Promise<DeltaGroupResult> {
+): Promise<GroupOutcome> {
   const keys = actions.flatMap(lockKeysFor)
   const write = withBranchWriteShared(args.branchId, args.actionId, () =>
     withKeyLocks(keys, () => applyDeltaActionGroupUnlocked(actions, args, ctx)),
@@ -283,22 +298,32 @@ export async function applyDeltaActionGroup(
   return actions.some((a) => isUserOriginatedSource(a.source)) ? trackUserWrite(write) : write
 }
 
-async function applyDeltaActionGroupUnlocked(
+/** The group for a caller that reads only whether it landed. */
+export async function applyDeltaActionGroup(
   actions: readonly PipelineAction[],
   args: GroupArgs,
   ctx: DbCtx,
 ): Promise<DeltaGroupResult> {
+  const result = await applyDeltaActionGroupWithOutcomes(actions, args, ctx)
+  return result.status === 'ok' ? { status: 'ok' } : result
+}
+
+async function applyDeltaActionGroupUnlocked(
+  actions: readonly PipelineAction[],
+  args: GroupArgs,
+  ctx: DbCtx,
+): Promise<GroupOutcome> {
   const { actionId, branchId } = args
   const entryId = args.entryId ?? null
 
   type Prepared = { deltaId: string; source: PipelineAction['source']; outcome: OkOutcome }
-  type Refusal = Extract<DeltaGroupResult, { status: 'rejected' }>
+  type Refusal = Extract<GroupOutcome, { status: 'rejected' }>
   const prepared: Prepared[] = []
   const pendingColumns = new Map<string, Set<string>>()
   const created = new Set<string>()
 
-  // A refusal aborts the group; a 'noop' just commits nothing — a group can't half-fail on one.
-  const prepare = async (action: PipelineAction): Promise<Refusal | 'noop' | null> => {
+  // A refusal aborts the group.
+  const prepare = async (action: PipelineAction): Promise<Refusal | NoopOutcome | null> => {
     if (isUserOriginatedSource(action.source) && generationStore.getTxState().reversalInProgress)
       return {
         status: 'rejected',
@@ -312,7 +337,7 @@ async function applyDeltaActionGroupUnlocked(
     const outcome = await resolved.handler(action, branchId, { ...ctx, actionId }, { created })
     if (outcome.status === 'rejected')
       return outcome.code === 'noop'
-        ? 'noop'
+        ? noopOutcome(outcome)
         : { status: 'rejected', reason: outcome.reason, code: outcome.code }
 
     const rowKey = createdKey(outcome.targetTable, outcome.targetId)
@@ -331,21 +356,24 @@ async function applyDeltaActionGroupUnlocked(
     return null
   }
 
-  const skipped: { action: PipelineAction; createdThen: number }[] = []
-  for (const action of actions) {
-    const refused = await prepare(action)
-    if (refused === 'noop') skipped.push({ action, createdThen: created.size })
-    else if (refused) return refused
+  const outcomes: ActionOutcome[] = []
+  const skipped: { index: number; createdThen: number }[] = []
+  for (const [index, action] of actions.entries()) {
+    const result = await prepare(action)
+    if (result?.status === 'rejected') return result
+    outcomes.push(result ?? LANDED)
+    if (result !== null) skipped.push({ index, createdThen: created.size })
   }
-  // A link naming a row created later in the group no-ops on pass one: rerun it after all creates.
-  // One rerun settles it: createOutcome mints relationship ids, so a group can't name its own.
-  for (const { action, createdThen } of skipped) {
+  // A link naming a later-created row no-ops on pass one: rerun it after all creates, its outcome
+  // the rerun's. One rerun settles it: createOutcome mints relationship ids a group can't name.
+  for (const { index, createdThen } of skipped) {
     if (created.size === createdThen) continue
-    const refused = await prepare(action)
-    if (refused && refused !== 'noop') return refused
+    const result = await prepare(actions[index])
+    if (result?.status === 'rejected') return result
+    outcomes[index] = result ?? LANDED
   }
 
-  if (prepared.length === 0) return { status: 'ok' }
+  if (prepared.length === 0) return { status: 'ok', outcomes }
   const conflict = groupConflict(prepared.map(({ outcome }) => outcome))
   if (conflict !== null)
     return { status: 'rejected', reason: conflict, code: DELTA_REJECTION.groupConflict }
@@ -358,5 +386,5 @@ async function applyDeltaActionGroupUnlocked(
   await ctx.runInTransaction(ops)
   undoRedoStore.clear()
   for (const { outcome } of prepared) emitOutcomePatches(branchId, outcome)
-  return { status: 'ok' }
+  return { status: 'ok', outcomes }
 }

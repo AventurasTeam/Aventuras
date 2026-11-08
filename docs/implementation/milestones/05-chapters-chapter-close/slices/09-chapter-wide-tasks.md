@@ -120,8 +120,8 @@ overlap thresholds as constants (`0.8`, `0.5`). Only rows with an
 `occurred_at_entry_id` in the range cluster, which keeps
 `happenings_mutual_excl` true through a merge. A cluster has at least two
 rows. It runs in the embed's code step, and the task's start read takes
-the clusters from a new key in `intermediates.ts`. The terms canon leaves
-open are in Open questions.
+the clusters from a new accessor in `close-intermediates.ts`. The terms
+canon leaves open are in Open questions.
 
 **`merge_happenings`** takes `keep`, `absorb` (ids), an optional `title`
 and `description`, `turns` and `why`, so a redundant row merges with the
@@ -212,7 +212,7 @@ ledger entry.
   record `userWrote` or `laterTurnWrote` reports at `state.stackables`,
   with E as the cited turn, and emits one `updateEntityStackables`
   through `delta_emitted` for each record that changes, anchored on E,
-  polling `abortSignal` between characters, as C1's stamps do.
+  polling `abortSignal` between characters.
 
 **The stackable guard,** at `restorablePayload`
 (`lib/actions/delta/reverse-replay.ts:556`). Undoing a

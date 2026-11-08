@@ -4,8 +4,9 @@ import { CHAPTER_CLOSE_KIND } from '@/lib/chapters'
 import { PERIODIC_CLASSIFIER_KIND } from '@/lib/classifier'
 import type { RunState, TxState } from '@/lib/stores'
 
+import { setCloseRange } from './close-intermediates'
 import { closingChapterId } from './closing-chapter'
-import { CLOSE_RANGE_INTERMEDIATE_KEY, type CloseRange } from './intermediates'
+import type { CloseRange } from './intermediates'
 
 const BRANCH = 'br_1'
 const RANGE: CloseRange = { chapterId: 'chap_new', startEntryId: 'se_1', endEntryId: 'se_9' }
@@ -39,17 +40,21 @@ function txState(...runs: RunState[]): TxState {
   }
 }
 
-const parked = { [CLOSE_RANGE_INTERMEDIATE_KEY]: RANGE }
+function parked(): Record<string, unknown> {
+  const intermediates: Record<string, unknown> = {}
+  setCloseRange(intermediates, RANGE)
+  return intermediates
+}
 
 describe('closingChapterId', () => {
   it('names the chapter a close on the branch is writing, from its parked range', () => {
-    const close = run(CHAPTER_CLOSE_KIND, { intermediates: parked })
+    const close = run(CHAPTER_CLOSE_KIND, { intermediates: parked() })
     expect(closingChapterId(txState(close), BRANCH)).toBe('chap_new')
   })
 
   it('finds the close beside another run on the branch', () => {
     const pass = run(PERIODIC_CLASSIFIER_KIND)
-    const close = run(CHAPTER_CLOSE_KIND, { intermediates: parked })
+    const close = run(CHAPTER_CLOSE_KIND, { intermediates: parked() })
     expect(closingChapterId(txState(pass, close), BRANCH)).toBe('chap_new')
   })
 
@@ -58,12 +63,12 @@ describe('closingChapterId', () => {
   })
 
   it('is null for a close on another branch', () => {
-    const close = run(CHAPTER_CLOSE_KIND, { branchId: 'br_2', intermediates: parked })
+    const close = run(CHAPTER_CLOSE_KIND, { branchId: 'br_2', intermediates: parked() })
     expect(closingChapterId(txState(close), BRANCH)).toBeNull()
   })
 
   it('is null for a run of another kind, even one holding a range under the key', () => {
-    const pass = run(PERIODIC_CLASSIFIER_KIND, { intermediates: parked })
+    const pass = run(PERIODIC_CLASSIFIER_KIND, { intermediates: parked() })
     expect(closingChapterId(txState(pass), BRANCH)).toBeNull()
     expect(closingChapterId(txState(), BRANCH)).toBeNull()
   })

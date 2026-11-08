@@ -66,11 +66,13 @@ const LINK_DESCRIPTORS: Record<LinkTable, LinkDescriptor> = {
   },
 }
 
-// per-turn-retrieval.ts bumps retrieval_count every turn; counting it would
-// over-tint every aware character.
-function isRetrievalBumpOnly(
-  op: LinkDeltaRow['op'],
-  payload: LinkDeltaRow['undoPayload'],
+/**
+ * An update whose undo payload holds only `retrievalCount`, which retrieval bumps every turn:
+ * counting it over-tints aware characters, and a close would read it as a later-turn write (C12).
+ */
+export function isRetrievalBumpOnly(
+  op: 'create' | 'update' | 'delete',
+  payload: Record<string, unknown> | null,
 ): boolean {
   if (op !== 'update' || payload == null) return false
   return Object.keys(payload).every((k) => k === 'retrievalCount')

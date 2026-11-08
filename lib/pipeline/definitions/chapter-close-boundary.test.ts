@@ -8,7 +8,8 @@ import { generationStore, resetAllStores, type RunState } from '@/lib/stores'
 import { openCloseFixture } from './__tests__/close-fixture'
 import { createPhaseDb, hydrateEntries, resetPhaseDb, type PhaseDb } from './__tests__/phase-db'
 import { closeBoundaryPhase } from './chapter-close-boundary'
-import { CLOSE_PHASE, CLOSE_RANGE_INTERMEDIATE_KEY } from './intermediates'
+import { closeRangeOf } from './close-intermediates'
+import { CLOSE_PHASE } from './intermediates'
 import type { PhaseContext } from '../types'
 
 let phaseDb: PhaseDb
@@ -140,7 +141,7 @@ async function expectEndsOn(
   const { events, result } = await drain(ctx)
   expect(result).toEqual({ status: 'completed' })
   expect(events).toEqual([])
-  expect(ctx.intermediates[CLOSE_RANGE_INTERMEDIATE_KEY]).toEqual({
+  expect(closeRangeOf(ctx.intermediates)).toEqual({
     chapterId: expect.stringMatching(/^chap_[0-9a-f-]{36}$/),
     ...range,
   })
@@ -176,8 +177,7 @@ describe('closeBoundaryPhase with a pick', () => {
     const second = phaseCtx()
     await drain(first)
     await drain(second)
-    const idOf = (ctx: PhaseContext) =>
-      (ctx.intermediates[CLOSE_RANGE_INTERMEDIATE_KEY] as { chapterId: string }).chapterId
+    const idOf = (ctx: PhaseContext) => closeRangeOf(ctx.intermediates)?.chapterId
     expect(idOf(first)).not.toBe(idOf(second))
   })
 

@@ -5,7 +5,7 @@ import type { ZodType } from 'zod'
 import type { Delta, SqlOp } from '@/lib/db'
 import { isEmbeddedSourceTable } from '@/lib/db'
 
-import type { DbCtx, PipelineAction } from '../types'
+import type { DbCtx, NoopMark, PipelineAction } from '../types'
 
 export type DeltaOp = 'create' | 'update' | 'delete'
 
@@ -69,7 +69,7 @@ export type PatchMatchesColumns<Patch, Columns extends readonly string[]> = [
 export type HandlerOutcome =
   // Deliberately a bare string: each action family funnels its OWN rejection vocabulary
   // through here, so a single union would couple taxonomies with no reason to agree.
-  | { status: 'rejected'; reason: string; code?: string }
+  | { status: 'rejected'; reason: string; code?: string; mark?: NoopMark }
   | {
       status: 'ok'
       targetTable: string
@@ -81,11 +81,13 @@ export type HandlerOutcome =
     }
 
 /**
- * A refusal the turn survives: the action was well-formed and merely redundant, or a user edit
- * won (orchestrator handleEvent). A plain rejection reverses the whole turn.
+ * A refusal the turn survives (redundant action, or a user edit won); a plain rejection reverses
+ * the turn. `mark` (C11): a restated value or a gone row; a broken rule leaves it off.
  */
-export function noopRefusal(reason: string): HandlerOutcome {
-  return { status: 'rejected', reason, code: 'noop' }
+export function noopRefusal(reason: string, mark?: NoopMark): HandlerOutcome {
+  return mark === undefined
+    ? { status: 'rejected', reason, code: 'noop' }
+    : { status: 'rejected', reason, code: 'noop', mark }
 }
 
 /** `actionId`: the write's own, for a handler that reports an outcome against its run. */

@@ -373,7 +373,9 @@ signal. They surface in the Chapter Timeline.
 **Failure mode:** a call that still fails after its retries, parse
 failures included, fails the close ([Failure modes](#failure-modes-and-atomic-rollback)).
 The chapter's summary feeds retrieval, so a placeholder would be a quiet
-loss.
+loss. A create or stamp that doesn't land fails the close too: the
+create and the stamps land as one group, and a chapter row must sit
+over a fully stamped range.
 
 ## Phase 3 — lore management
 
@@ -694,7 +696,7 @@ that removes its end entry.
 | -------------------------- | ---------------------------------------------------------------------------------------------------- |
 | **0** (catch-up passes)    | The failed pass stops the chain; it runs before the next turn, and the close follows it.             |
 | **1** (boundary selection) | `callWithRetry` same-prompt retry; an unusable reply falls back to the latest reply before the head. |
-| **2** (metadata)           | A failed call fails the close.                                                                       |
+| **2** (metadata)           | A failed call fails the close, and so does a create or stamp that doesn't land.                      |
 | **3** (lore-mgmt)          | A refused write goes back to the task; a failed call, an embedder failure included, fails the close. |
 | **4** (lifecycle review)   | As phase 3.                                                                                          |
 

@@ -1,4 +1,5 @@
 import type { PipelineActionMap, TestPipelineActionMap } from './action-map'
+import type { LockedTable } from './delta/row-locks'
 
 export type { DbCtx } from '@/lib/db'
 export type { IntegrityRefusal } from './delta/replay-errors'
@@ -8,6 +9,9 @@ export type { IntegrityRefusal } from './delta/replay-errors'
  * value. Null skips that check, for writers it doesn't cover (the user, the piggyback).
  */
 export type ProseEntryId = string | null
+
+/** Noop reason for a classifier write a newer user edit of the same field outranks. */
+export const USER_EDITED_SINCE_PROSE = 'user-edited-since-prose'
 
 export type DeltaSource =
   | 'ai_classifier'
@@ -48,3 +52,43 @@ export type MutationResult =
   // (see HandlerOutcome). It must always let a consumer tell a transient, self-clearing
   // refusal from a failed write.
   | { status: 'rejected'; reason: string; code?: string }
+
+/**
+ * C11: what a noop found, where its reason can't say it stably. `restated`: the value it would
+ * write already stands. `gone`: a row it needs no longer exists. A broken rule carries neither.
+ */
+export type NoopMark = 'restated' | 'gone'
+
+/** One action of a group, at its index in the group (C11). */
+export type ActionOutcome =
+  | { readonly status: 'landed' }
+  | { readonly status: 'noop'; readonly reason: string; readonly mark?: NoopMark }
+
+/** What a `delta_group_emitted` yield evaluates to. `rejected`: the whole group, nothing written. */
+export type GroupOutcome =
+  | { status: 'ok'; outcomes: readonly ActionOutcome[] }
+  | { status: 'rejected'; reason: string; code?: string }
+
+/** The tables user precedence and C12 read: the row-locked ones and lore. */
+export type PrecedenceTable = LockedTable | 'lore'
+
+export type GuardRow = { table: PrecedenceTable; id: string }
+
+export type RowVerdicts = {
+  /** By wroteField's groups; `path` inside `state`, e.g. ['voice']. */
+  laterTurnWrote: (column: string, path?: readonly string[]) => boolean
+  userWrote: (column: string, path?: readonly string[]) => boolean
+  laterTurnTouched: () => boolean
+  userTouched: () => boolean
+}
+
+export type RowGuard = { row: (table: PrecedenceTable, id: string) => RowVerdicts }
+
+export type RowGuardArgs = {
+  branchId: string
+  /** The chapter's end entry, E. */
+  endEntryId: string
+  /** The latest cited turn: user edits after its prose win. */
+  proseEntryId: string
+  rows: readonly GuardRow[]
+}

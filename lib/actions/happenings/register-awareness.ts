@@ -118,7 +118,7 @@ const upsertHandler: ActionHandler = async (action, branchId, ctx, group) => {
       set.learnedAtEntryId = learnedAt
       undoPayload.learnedAtEntryId = current.learnedAtEntryId
     }
-    if (Object.keys(set).length === 0) return noopRefusal('awareness unchanged')
+    if (Object.keys(set).length === 0) return noopRefusal('awareness unchanged', 'restated')
     // A field the user wrote after the prose keeps its value; a pair the user created since counts
     // as written whole, since wroteColumn counts a create.
     if (proseEntryId != null) {

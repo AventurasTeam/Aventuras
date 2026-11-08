@@ -199,8 +199,8 @@ const setStatusHandler: ActionHandler = async (action, branchId, ctx) => {
     .select()
     .from(threads)
     .where(and(eq(threads.branchId, bid), eq(threads.id, id)))
-  if (!current) return noopRefusal(`status target threads ${bid}:${id} not found`)
-  if (current.status === status) return noopRefusal('status-unchanged')
+  if (!current) return noopRefusal(`status target threads ${bid}:${id} not found`, 'gone')
+  if (current.status === status) return noopRefusal('status-unchanged', 'restated')
   if (
     proseEntryId !== null &&
     wroteField(

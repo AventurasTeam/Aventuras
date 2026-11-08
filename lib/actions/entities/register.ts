@@ -314,7 +314,7 @@ const updateHandler: ActionHandler = async (action, branchId, ctx) => {
       undoPayload[col] = prior
     }
   }
-  if (Object.keys(set).length === 0) return noopRefusal('no-op entity patch')
+  if (Object.keys(set).length === 0) return noopRefusal('no-op entity patch', 'restated')
 
   // Only KIND_FIELDS is embedded — status/tags/state edits deliberately don't flip the flag.
   // The compare errs dirty on null-vs-'' (compositeText treats them alike): never a stale one.

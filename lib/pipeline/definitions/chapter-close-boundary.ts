@@ -3,7 +3,8 @@ import { openRegionSeries } from '@/lib/db'
 import { generateId } from '@/lib/ids'
 import { generationStore } from '@/lib/stores'
 
-import { CLOSE_PHASE, CLOSE_RANGE_INTERMEDIATE_KEY, type CloseRange } from './intermediates'
+import { setCloseRange } from './close-intermediates'
+import { CLOSE_PHASE } from './intermediates'
 import type { PhaseContext, PhaseEmittedEvent, PhaseResult } from '../types'
 
 function refuse(detail: string): PhaseResult {
@@ -20,8 +21,7 @@ function refuseStalePick(branchId: string, detail: string): PhaseResult {
 }
 
 function parkRange(ctx: PhaseContext, startEntryId: string, endEntryId: string): PhaseResult {
-  const range: CloseRange = { chapterId: generateId('chap'), startEntryId, endEntryId }
-  ctx.intermediates[CLOSE_RANGE_INTERMEDIATE_KEY] = range
+  setCloseRange(ctx.intermediates, { chapterId: generateId('chap'), startEntryId, endEntryId })
   return { status: 'completed' }
 }
 

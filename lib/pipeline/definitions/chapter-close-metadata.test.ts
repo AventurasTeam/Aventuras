@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
+import type { ActionOutcome, GroupOutcome, PipelineAction } from '@/lib/actions/types'
 import type { OpenRegionRow, StoryEntry } from '@/lib/db'
 import { makeLogger } from '@/lib/diagnostics'
 
@@ -7,7 +8,8 @@ import { createPhaseDb, type PhaseDb } from './__tests__/phase-db'
 import { closeMetadataPhase, closeSeriesThrough } from './chapter-close-metadata'
 import type { MetadataCallOutcome, requestChapterMetadata } from './chapter-close-metadata-call'
 import { normalizeChapterMetadata } from './chapter-metadata-schema'
-import { CLOSE_RANGE_INTERMEDIATE_KEY, type CloseRange } from './intermediates'
+import { setCloseRange } from './close-intermediates'
+import type { CloseRange } from './intermediates'
 import type { PhaseContext, PhaseEmittedEvent, PipelineError } from '../types'
 
 const { requestMock } = vi.hoisted(() => ({
@@ -96,10 +98,12 @@ function insertChapter(id: string, branchId: string, sequenceNumber: number): vo
 
 function phaseCtx(opts: { range?: CloseRange | null; signal?: AbortSignal } = {}): PhaseContext {
   const range = opts.range === undefined ? RANGE : opts.range
+  const intermediates: Record<string, unknown> = {}
+  if (range) setCloseRange(intermediates, range)
   return {
     actionId: 'act_close',
     abortSignal: opts.signal ?? new AbortController().signal,
-    intermediates: range ? { [CLOSE_RANGE_INTERMEDIATE_KEY]: range } : {},
+    intermediates,
     log: makeLogger('act_close'),
     db: phaseDb.db,
     runInTransaction: phaseDb.runInTransaction,
@@ -119,42 +123,44 @@ function callReturns(
   })
 }
 
-async function drain(ctx: PhaseContext, onEvent?: (event: PhaseEmittedEvent) => void) {
+type GroupEvent = Extract<PhaseEmittedEvent, { type: 'delta_group_emitted' }>
+
+const allLanded = (event: GroupEvent): GroupOutcome => ({
+  status: 'ok',
+  outcomes: event.actions.map((): ActionOutcome => ({ status: 'landed' })),
+})
+
+// Answers each group as the orchestrator would; by default every action lands.
+async function drain(ctx: PhaseContext, answer: (event: GroupEvent) => GroupOutcome = allLanded) {
   const gen = closeMetadataPhase(ctx)
   const events: PhaseEmittedEvent[] = []
+  let reply: GroupOutcome | undefined
   for (;;) {
-    const next = await gen.next()
+    const next = await gen.next(reply)
     if (next.done) return { events, result: next.value }
     events.push(next.value)
-    onEvent?.(next.value)
+    reply = next.value.type === 'delta_group_emitted' ? answer(next.value) : undefined
   }
 }
 
-const kindOf = (event: PhaseEmittedEvent): string =>
-  event.type === 'delta_emitted' ? event.action.kind : event.type
+const groupOf = (events: readonly PhaseEmittedEvent[]): GroupEvent | undefined =>
+  events.find((e): e is GroupEvent => e.type === 'delta_group_emitted')
 
 const stampedIds = (events: readonly PhaseEmittedEvent[]): string[] =>
-  events.flatMap((e) =>
-    e.type === 'delta_emitted' && e.action.kind === 'stampEntryChapter'
-      ? [e.action.payload.id]
-      : [],
+  (groupOf(events)?.actions ?? []).flatMap((a) =>
+    a.kind === 'stampEntryChapter' ? [a.payload.id] : [],
   )
 
 function createdChapter(events: readonly PhaseEmittedEvent[]) {
-  for (const e of events)
-    if (e.type === 'delta_emitted' && e.action.kind === 'createChapter')
-      return e.action.payload.entry
+  for (const a of groupOf(events)?.actions ?? [])
+    if (a.kind === 'createChapter') return a.payload.entry
   return undefined
 }
 
-const stampOf = (id: string): PhaseEmittedEvent => ({
-  type: 'delta_emitted',
-  entryId: 'e7',
-  action: {
-    kind: 'stampEntryChapter',
-    source: 'chapter_close',
-    payload: { branchId: 'b1', id, chapterId: 'chap_new' },
-  },
+const stampOf = (id: string): PipelineAction => ({
+  kind: 'stampEntryChapter',
+  source: 'chapter_close',
+  payload: { branchId: 'b1', id, chapterId: 'chap_new' },
 })
 
 describe('closeSeriesThrough', () => {
@@ -178,7 +184,7 @@ describe('closeSeriesThrough', () => {
 })
 
 describe('closeMetadataPhase', () => {
-  it('writes the row, then a stamp per entry through the end, each anchored on the end', async () => {
+  it('writes the row, then a stamp per entry through the end, as one group on the end', async () => {
     insertEntries(ROWS)
     callReturns({ status: 'ok', metadata: METADATA })
 
@@ -189,31 +195,33 @@ describe('closeMetadataPhase', () => {
     expect(requestMock).toHaveBeenCalledWith(ctx, RANGE)
     expect(events).toEqual([
       {
-        type: 'delta_emitted',
+        type: 'delta_group_emitted',
         entryId: 'e7',
-        action: {
-          kind: 'createChapter',
-          source: 'chapter_close',
-          payload: {
-            entry: {
-              id: 'chap_new',
-              branchId: 'b1',
-              sequenceNumber: 1,
-              title: METADATA.title,
-              summary: METADATA.summary,
-              theme: METADATA.theme,
-              keywords: METADATA.keywords,
-              startEntryId: 'e1',
-              endEntryId: 'e7',
-              tokenCount: RANGE_TOKENS,
-              closedAt: NOW,
-              createdAt: NOW,
-              updatedAt: NOW,
+        actions: [
+          {
+            kind: 'createChapter',
+            source: 'chapter_close',
+            payload: {
+              entry: {
+                id: 'chap_new',
+                branchId: 'b1',
+                sequenceNumber: 1,
+                title: METADATA.title,
+                summary: METADATA.summary,
+                theme: METADATA.theme,
+                keywords: METADATA.keywords,
+                startEntryId: 'e1',
+                endEntryId: 'e7',
+                tokenCount: RANGE_TOKENS,
+                closedAt: NOW,
+                createdAt: NOW,
+                updatedAt: NOW,
+              },
             },
           },
-        },
+          ...['e1', 'e2', 'e3', 'e4', 'e5', 'e6', 'e7'].map(stampOf),
+        ],
       },
-      ...['e1', 'e2', 'e3', 'e4', 'e5', 'e6', 'e7'].map(stampOf),
     ])
   })
 
@@ -240,7 +248,7 @@ describe('closeMetadataPhase', () => {
     expect(createdChapter(events)).toMatchObject({ tokenCount: RANGE_TOKENS - 9 })
   })
 
-  it("hands the call's own events on ahead of the writes", async () => {
+  it("hands the call's own events on ahead of the group", async () => {
     insertEntries(ROWS)
     const retried: PhaseEmittedEvent = {
       type: 'recoverable_error',
@@ -251,7 +259,8 @@ describe('closeMetadataPhase', () => {
     const { events } = await drain(phaseCtx())
 
     expect(events[0]).toEqual(retried)
-    expect(events.slice(1).map(kindOf)).toEqual([
+    expect(events.slice(1).map((e) => e.type)).toEqual(['delta_group_emitted'])
+    expect(groupOf(events)?.actions.map((a) => a.kind)).toEqual([
       'createChapter',
       ...Array.from({ length: 7 }, () => 'stampEntryChapter'),
     ])
@@ -276,7 +285,7 @@ describe('closeMetadataPhase', () => {
     expect(events).toEqual([])
   })
 
-  it('writes nothing when cancelled after the call returns, before the create', async () => {
+  it('writes nothing when cancelled after the call returns, before the group', async () => {
     insertEntries(ROWS)
     const controller = new AbortController()
     callReturns({ status: 'ok', metadata: METADATA }, { beforeReturn: () => controller.abort() })
@@ -287,31 +296,84 @@ describe('closeMetadataPhase', () => {
     expect(events).toEqual([])
   })
 
-  it('checks before the first stamp: a cancel after the create lands no stamp', async () => {
+  // The group commits whole; the orchestrator reverses it at the next phase boundary.
+  it('completes when cancelled once the group is out', async () => {
     insertEntries(ROWS)
     callReturns({ status: 'ok', metadata: METADATA })
     const controller = new AbortController()
 
     const { events, result } = await drain(phaseCtx({ signal: controller.signal }), (event) => {
-      if (kindOf(event) === 'createChapter') controller.abort()
+      controller.abort()
+      return allLanded(event)
     })
 
-    expect(result).toEqual({ status: 'aborted' })
-    expect(events.map(kindOf)).toEqual(['createChapter'])
+    expect(result).toEqual({ status: 'completed' })
+    expect(events.map((e) => e.type)).toEqual(['delta_group_emitted'])
   })
 
-  it('lands no stamp after a cancel that follows the k-th', async () => {
+  it('fails as action-layer, naming the group, when the group is refused whole', async () => {
     insertEntries(ROWS)
     callReturns({ status: 'ok', metadata: METADATA })
-    const controller = new AbortController()
-    let stamps = 0
 
-    const { events, result } = await drain(phaseCtx({ signal: controller.signal }), (event) => {
-      if (kindOf(event) === 'stampEntryChapter' && ++stamps === 2) controller.abort()
+    const { events, result } = await drain(phaseCtx(), () => ({
+      status: 'rejected',
+      reason: 'group writes story_entries:e3 twice on one column',
+    }))
+
+    expect(events.map((e) => e.type)).toEqual(['delta_group_emitted'])
+    expect(result).toEqual({
+      status: 'failed',
+      error: {
+        kind: 'action-layer',
+        detail:
+          'chapter-close: group not applied: group writes story_entries:e3 twice on one column',
+      },
     })
+  })
 
-    expect(result).toEqual({ status: 'aborted' })
-    expect(events.map(kindOf)).toEqual(['createChapter', 'stampEntryChapter', 'stampEntryChapter'])
+  // A row over a partly stamped range is never left standing, whatever the noop.
+  it.each([
+    ['the create', 0, 'createChapter'],
+    ['a stamp', 3, 'stampEntryChapter'],
+  ] as const)('fails as action-layer when %s noops', async (_label, index, kind) => {
+    insertEntries(ROWS)
+    callReturns({ status: 'ok', metadata: METADATA })
+
+    const { result } = await drain(phaseCtx(), (event) => ({
+      status: 'ok',
+      outcomes: event.actions.map(
+        (_action, i): ActionOutcome =>
+          i === index
+            ? { status: 'noop', reason: 'already stamped', mark: 'restated' }
+            : { status: 'landed' },
+      ),
+    }))
+
+    expect(result).toEqual({
+      status: 'failed',
+      error: {
+        kind: 'action-layer',
+        detail: `chapter-close: ${kind} not applied: already stamped`,
+      },
+    })
+  })
+
+  it('fails as action-layer when the group answers fewer outcomes than actions', async () => {
+    insertEntries(ROWS)
+    callReturns({ status: 'ok', metadata: METADATA })
+
+    const { result } = await drain(phaseCtx(), (event) => ({
+      status: 'ok',
+      outcomes: event.actions.slice(0, -1).map((): ActionOutcome => ({ status: 'landed' })),
+    }))
+
+    expect(result).toEqual({
+      status: 'failed',
+      error: {
+        kind: 'action-layer',
+        detail: 'chapter-close: group not applied: 7 outcomes for 8 actions',
+      },
+    })
   })
 
   it('fails without a range and makes no call', async () => {

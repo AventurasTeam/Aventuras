@@ -102,13 +102,15 @@ and tools sit under `lib/pipeline/definitions/close-agent/`.
   single path (`orchestrator.ts:182-186`). A group's plain refusal comes
   back as a value and never fails the run. `delta_emitted` keeps its
   behaviour, and its `yield` evaluates to undefined.
-- `DeltaActionPort` gains a group method, in all five constructors:
-  `lib/boot/bootstrap.ts:69`, `lib/pipeline/__tests__/harness.ts:47`,
+- `DeltaActionPort` gains a group method, and the row guard below, in
+  all seven constructors: `lib/boot/bootstrap.ts:69`,
+  `vitest.setup.ts:18`, `lib/pipeline/__tests__/harness.ts:57`,
   `lib/pipeline/__tests__/abort-reversal-hold.test.ts:44`,
-  `lib/pipeline/definitions/periodic-classifier.test.ts:2263` and
-  `lib/actions/turns/__tests__/stand-in-pass.ts:183`. New types sit in
+  `lib/pipeline/definitions/periodic-classifier.test.ts:2382`,
+  `lib/actions/turns/__tests__/stand-in-pass.ts:222` and
+  `lib/actions/chapters/close-reversal.test.ts:266`. New types sit in
   `lib/actions/types.ts`, the one internal file `lib/pipeline` may
-  import (`eslint.config.js:119-120`).
+  import (`eslint.config.js:136-137`).
 - That method is a new function, `applyDeltaActionGroupWithOutcomes`. It
   returns per-action outcomes, indexed by action and assigned after the
   rerun (`apply-delta-action.ts:334-346`), so a link that lands on the
@@ -130,16 +132,26 @@ and tools sit under `lib/pipeline/definitions/close-agent/`.
   returns a refusal (`apply-delta-action.ts:184`), so `MutationResult`
   doesn't change and the exact refusals pinned through it pass unedited
   (`entities/register.test.ts:443`, `state-patch-actions.test.ts:117`).
-  Restated values, thirteen sites across twelve
-  spellings: `state-patch-actions.ts:221,403,460,482,620,673`,
-  `entities/register.ts:315`, `relationships/register.ts:152,209`,
-  `threads/register.ts:201`, `lore/register.ts:134`,
-  `register-awareness.ts:121`, `register-involvements.ts:81`.
-- Gone rows, fourteen sites:
+  Restated values: `state-patch-actions.ts:221,403,460,482,620,673`,
+  `entities/register.ts:317`, `relationships/register.ts:152,209`,
+  `threads/register.ts:203`, `lore/register.ts:136`,
+  `register-awareness.ts:121`, `register-involvements.ts:81`, and
+  `relationships/register.ts:289`, a delete whose pair is already gone,
+  which is the state the user asked for.
+- Gone rows:
   `state-patch-actions.ts:338,381,401,421,458,479,617,650,653,671,690`,
-  `relationships/register.ts:289`, `threads/register.ts:200`, and
-  `MISSING_REF` at `live-refs.ts:233-237`, a literal rather than a
-  `noopRefusal` call, which takes the mark by hand.
+  `threads/register.ts:202`, and `MISSING_REF` at
+  `live-refs.ts:233-237`, a literal rather than a `noopRefusal` call,
+  which takes the mark by hand.
+- A spelling shared by a restated or gone case and a rule follows the
+  row it reads. `not-active` is restated on a retired row, and
+  `not-retired` and `not-staged` on an active one; each is a rule on
+  any other. `not-a-faction` and `parent-not-a-place` are gone when the
+  row they name is missing, and a rule when it's another kind. Of
+  `raiseCollisionFlag`'s refusals only `already-flagged` is restated,
+  and only when the row's live flag already names the same partner for
+  the same reason; another live flag is a rule. The reason strings
+  don't change.
 - The mapping from a group's outcome to one tool result, with `rejected`
   as its default. `USER_EDITED_SINCE_PROSE` maps to `skipped`, `restated`
   to nothing written, and `gone` to `rejected`, saying where the row
@@ -167,11 +179,25 @@ and tools sit under `lib/pipeline/definitions/close-agent/`.
 - The `close_report` update stays a write of its own after the group:
   one group can't create and update a chapter row, since
   `updateChapter` reads committed rows.
+- A refused group, or an action in it that doesn't land, fails the
+  close. The metadata phase returns `failed` with an `action-layer`
+  error whose detail names the action's kind and its reason, the error
+  a thrown refusal gives today, so reversal, the failed Send and the
+  retry at the next Send don't change. The close keeps its invariant, a
+  chapter row over a fully stamped range, in its own code, so a noop a
+  handler adds later fails it closed. The close declares no
+  `onPhaseException`, so a returned failure reaches the same place a
+  thrown one does.
 - [Slice 5.2](./02-first-chapter.md)'s mid-burst cases are re-pointed or
   dropped here, since a group lands whole: criterion 5's abort between
   stamps, criterion 22's Cancel and head reversal mid-burst, criterion
   23's boot recovery mid-burst, and its accepted mid-close display, a
   surface reading a partial range.
+- The tests' stand-in close
+  (`lib/actions/turns/__tests__/stand-in-close.ts`) writes its create
+  and stamps as one group before it holds; its `leaveOpen` run writes
+  the create alone, a group of one. None of the tests that use it
+  asserts an unstamped range during the hold.
 - A hard bar (developer: "Q11: A"): on a release Android build with the
   reader holding 50 rows, a close on 5.2's dataset branch (133 stamps
   over 23,907 tokens) has no JS-thread stall over 500 ms in its write
@@ -182,10 +208,16 @@ and tools sit under `lib/pipeline/definitions/close-agent/`.
   [Close measure](./02-first-chapter.md#close-measure) gives its method,
   and its [Implementation notes](./02-first-chapter.md#implementation-notes)
   say where the built database lives, outside git. 5.2 measured about 1.1 s
-  with a delta per stamp. One group is one uninterruptible chunk, so if
-  the group alone doesn't bring the stall under 500 ms, its store patches
-  go out in chunks with a yield between them, or an equivalent this
-  slice picks.
+  with a delta per stamp. One group is one uninterruptible chunk, and
+  Android's database is synchronous, so only a macrotask yield can split
+  it. A miss takes, in order: one store patch per table per group, then
+  a timer yield every 25 actions as the group prepares and every 25
+  store patches after it commits, measured again after each.
+- The slice ships as two stacked PRs: the action layer, the seam and
+  the one-group close first, the runner on top of it. The bar is
+  measured on the Galaxy Z Fold while the first PR is open and gates its
+  merge, not its opening, and a fallback lands on that PR before it
+  merges.
 - [`generation-pipeline.md → Writes`](../../../../generation-pipeline.md#writes)
   already describes the group: `delta_emitted` leaves out the close's
   create and stamps, and `delta_group_emitted` carries them.
@@ -195,8 +227,13 @@ and tools sit under `lib/pipeline/definitions/close-agent/`.
 - `lib/actions/delta/later-turn.ts` selects a row's later deltas by
   C12's rule. A turn's action comes from its entry's `story_entries`
   `create` delta, found by `target_id` as `resolveRollbackWindow` finds
-  it, whatever that delta's own anchor. Entries past E with no `create`
-  delta, which only raw inserts leave, read as not later.
+  it, whatever that delta's own anchor. An entry past E with no
+  `create` delta, which only raw inserts leave, names no action, so a
+  null-anchored delta can't be its turn's, though a delta anchored on
+  it still counts (C12's first clause). It reads only deltas logged
+  after E's create, which the commit-order assumption of
+  [`data-model.md → Survival anchor`](../../../../data-model.md#survival-anchor)
+  makes safe.
 - The retrieval-only test is private at `link-owners.ts:71-77`. It's
   exported from `lib/row-signals`, and 5.12 uses the same export for
   C13.
@@ -225,8 +262,9 @@ and tools sit under `lib/pipeline/definitions/close-agent/`.
   to show makes no call. Each task is its own conversation:
   the rendered pair, then `generateToolStep` with that task's tools and
   `firstCall` set on the first, 24 times at most
-  (`CLOSE_TASK_STEP_BUDGET`). No step carries the cache marker yet (see
-  Open questions).
+  (`CLOSE_TASK_STEP_BUDGET`). Every step passes
+  `cacheSystemPrefix: true`: a marker pays from a task's second step,
+  and a task's steps follow at an agent's pace, not a turn's.
 - Response messages stay as the SDK returns them. Each of a step's
   `calls` runs in order inside the generator and gets an answer before
   the next step. `invalidCalls` are skipped, since the SDK answered them
@@ -244,12 +282,13 @@ and tools sit under `lib/pipeline/definitions/close-agent/`.
   returns a `config-resolver` failure, and `aborted` returns
   `{ status: 'aborted' }`.
 - The abort signal is polled before each step and between calls.
-- `close_task_start` joins `PhaseEmittedEvent` if 5.6 hasn't landed it,
-  and fires for each task as it starts, a task with no start rows
-  included. A pure function gives `index` and `total` from the task, the
-  part and the part count, by canon's order, so `3 of 7 — Identity`
-  holds while tasks are still landing. 5.6 owns the store field and the
-  label.
+- 5.6 shipped `close_task_start`; the driver emits it for each task as
+  it starts, a task with no start rows included, with `part` numbered
+  as [C4](../milestone.md#c4--close_report-v1)'s: parts from 1, and 0
+  for Happenings and Awareness. A pure function gives `index` and
+  `total` from the task, the part and the part count, by canon's order,
+  so `3 of 7 — Identity` holds while tasks are still landing. 5.6 owns
+  the store field and the label.
 
 **Tools and the write path.**
 
@@ -266,7 +305,13 @@ and tools sit under `lib/pipeline/definitions/close-agent/`.
   overwrites such as `.trim()`, `.toLowerCase()` or `.toUpperCase()`.
   [Slice 5.4](./04-tool-step.md#implementation-notes)'s step refuses
   only the forms it can see (a transform, and a schema with no JSON
-  Schema form), so the rest is the tool author's contract.
+  Schema form), so the rest is the tool author's contract. Every tool
+  schema is a `z.strictObject`, nested objects included (developer,
+  2026-11-08). The SDK tells the model each object takes no other keys
+  but validates with the Zod schema, where a plain `z.object` strips a
+  key the model added, so its replayed call changes, and a strict one
+  refuses the call: a misspelt optional field is refused instead of
+  quietly landing nothing.
 - Every write passes the common checks first: `turns` cites a turn and
   each handle resolves to an entry in the chapter's range, `why` is
   present, and each row was read. A failed check returns `rejected`
@@ -302,10 +347,16 @@ and tools sit under `lib/pipeline/definitions/close-agent/`.
 
 **The ledger (C4).**
 
-- A run-long object under `CLOSE_LEDGER_INTERMEDIATE_KEY`, seeded as the
-  agent phase starts, in the shape 5.2's `report` phase reads:
+- A run-long object in the run's intermediates, seeded as the agent
+  phase starts, in the shape 5.2's `report` phase reads:
   `Pick<CloseReport, 'calls' | 'stopped' | 'noToolCalls'>`. The driver
   clears `noToolCalls` on any tool call, an invalid one included.
+- The close's intermediates, the range, the ledger and the run's id
+  map, go through typed accessors in
+  `lib/pipeline/definitions/close-intermediates.ts`, which keeps their
+  keys private and holds the one missing-range failure the metadata and
+  report phases share. The retrieval key and the pass's pre-run status
+  stay as they are, and canon's per-kind contexts stay unbuilt.
 - `calls` holds every call the driver dispatched, in run order. A read
   records `why: ''`, `turns: []` and `ok`, so 5.11's rule for an `ok`
   call with no field drops it. An invalid call has no parsed row and
@@ -327,8 +378,8 @@ and tools sit under `lib/pipeline/definitions/close-agent/`.
 
 **Ids across a close.**
 
-- One `IdBiMap` for the run, under a new key in `intermediates.ts`, so a
-  row keeps its short id across steps, tasks and parts. A row's name
+- One `IdBiMap` for the run, under a key `close-intermediates.ts` owns,
+  so a row keeps its short id across steps, tasks and parts. A row's name
   joins the map when its id is allocated. That gives a close-wide
   `nameOf`, covering lore, which `idNames` doesn't
   (`substitute.ts:101-118`).
@@ -463,6 +514,8 @@ vitest and the probe share. It never reaches a production slot.
   and a task with nothing to show makes no call. Each retried attempt
   yields a `recoverable_error`, on a step that lands and on one that
   fails (`lib/pipeline/definitions/close-agent/driver.test.ts`).
+- Every step passes `cacheSystemPrefix: true`
+  (`lib/pipeline/definitions/close-agent/driver.test.ts`).
 - Over a fixture of two parts, `before` and `after` entries run once and
   `perPart` entries twice, in that order, and `close_task_start` gives
   `3 of 7` for Identity at one part and `of 17` at three
@@ -499,6 +552,10 @@ vitest and the probe share. It never reaches a production slot.
   (`lib/pipeline/definitions/close-agent/read-tools.test.ts`).
 - Each tool's schema parses its sample inputs to deep-equal values, so
   the call the SDK replays is the one the model wrote.
+- Each tool's schema is strict, nested objects included, and refuses a
+  sample with an extra key
+  (`lib/pipeline/definitions/close-agent/tool.test.ts`,
+  `lib/pipeline/definitions/close-agent/read-tools.test.ts`).
 - The instructions macro's source reads no per-call variable, and the
   prose macro's reads the turns
   (`lib/prompts/bundled/bundled-pack.test.ts`).
@@ -509,6 +566,10 @@ vitest and the probe share. It never reaches a production slot.
   as one `delta_group_emitted`, in C1's order, each stamp its own delta
   anchored on the end entry, and the `close_report` update lands after
   the group as a write of its own
+  (`lib/pipeline/definitions/chapter-close.test.ts`).
+- A refused group, or one with an action that doesn't land, fails the
+  close with an `action-layer` error naming the action's kind and its
+  reason, and the close is reversed
   (`lib/pipeline/definitions/chapter-close.test.ts`).
 - On a release Android build with the reader holding 50 rows, a close on
   5.2's dataset branch (133 stamps over 23,907 tokens; the build lives
@@ -645,3 +706,26 @@ vitest and the probe share. It never reaches a production slot.
 ## Implementation notes
 
 _Populated at finish: notable deviations from the plan and resolved developer decisions._
+
+### Write-burst measure
+
+Bar (developer: "Q11: A"): on a release Android build with the reader
+holding its trailing 50 rows, a close on 5.2's dataset branch (133
+stamps over 23,907 tokens) has no JS-thread stall over 500 ms in its
+write burst. Timed inside the app's JS by a temporary probe, not
+committed: 16 ms ticks from the close's reserve to one macrotask after
+its `run_complete`, a stall being the longest gap between ticks, with
+the stop counted as a tick. Each close started from the dev route
+deep-linked over the open reader, its metadata call served by
+`pnpm mock`'s `chapter-metadata` lane, and a CTRL-Z of each reopened the
+chapter for the next run.
+
+| Build, Galaxy Z Fold (SM-F966B), folded, release `arm64-v8a` | Longest stall, three runs | 5.2, a delta per stamp |
+| ------------------------------------------------------------ | ------------------------- | ---------------------- |
+| The create and stamps as one group                           | 229 / 177 / 181 ms        | 1212 / 1121 ms         |
+
+Two more closes started from the reader's chapter popover, with the
+reader painting under it and the popover's close action wired by the
+same probe, stalled 161 / 171 ms, beside 5.2's in-reader 1091 / 1094 ms.
+
+Verdict: holds the bar, with no fallback taken.
