@@ -217,8 +217,24 @@ async function deltasOf(fx: CloseFixture, actionId: string): Promise<Delta[]> {
     .orderBy(desc(deltas.logPosition))) as Delta[]
 }
 
+type SeedEntity = {
+  id: string
+  kind: 'character' | 'faction'
+  name: string
+  description: string
+  status: 'active' | 'retired'
+}
+
+const TOBIN: SeedEntity = {
+  id: CHARACTER_ID,
+  kind: 'character',
+  name: 'Tobin',
+  description: 'The ferryman at Harrow.',
+  status: 'active',
+}
+
 // A pass's create anchored on the first reply: both rollbacks below spare it.
-async function seedCharacter(fx: CloseFixture): Promise<void> {
+async function seedEntity(fx: CloseFixture, seed: SeedEntity): Promise<void> {
   const result = await applyDeltaAction(
     {
       action: {
@@ -226,19 +242,15 @@ async function seedCharacter(fx: CloseFixture): Promise<void> {
         source: 'periodic_classifier',
         payload: {
           entry: {
-            id: CHARACTER_ID,
+            ...seed,
             branchId: fx.branchId,
-            kind: 'character',
-            name: 'Tobin',
-            description: 'The ferryman at Harrow.',
-            status: 'active',
             injectionMode: 'auto',
             createdAt: 1_767_225_700_000,
             updatedAt: 1_767_225_700_000,
           },
         },
       },
-      actionId: 'act_close_seed_pass',
+      actionId: `act_close_seed_${seed.name.toLowerCase()}`,
       branchId: fx.branchId,
       entryId: fx.replyIds[0],
     },
@@ -284,7 +296,7 @@ function defined<T>(value: T | undefined, what: string): T {
 
 async function openHarness(c: RoundTripCase): Promise<CloseHarness> {
   const fx = await openCloseFixture()
-  await seedCharacter(fx)
+  await seedEntity(fx, TOBIN)
   __setCloseAgentSlots(c.slots())
   script(c.steps)
   // The bus hears every group the orchestrator dispatched, refused or not; the port has its outcome.
@@ -527,6 +539,48 @@ describe('the stand-in task', () => {
 
   it('parses its sample call to what the model wrote', () => {
     assertReplaySafe(standInTool.schema, [STAND_IN_INPUT])
+  })
+
+  it('shows the active character, past a retired one and a faction that come first', async () => {
+    const fx = await openCloseFixture()
+    const retired: SeedEntity = {
+      id: 'char_9e4a7c21-3b5d-4f68-8a1e-6c2d0b7f3e95',
+      kind: 'character',
+      name: 'Ansel',
+      description: 'The ferryman before Tobin.',
+      status: 'retired',
+    }
+    const faction: SeedEntity = {
+      id: 'fact_2d8f1b6a-4c3e-4a97-b5d0-8e7c6a1f2b43',
+      kind: 'faction',
+      name: 'Brine Guild',
+      description: 'The rivermen of Harrow.',
+      status: 'active',
+    }
+    // Before Tobin by insertion and by name.
+    await seedEntity(fx, retired)
+    await seedEntity(fx, faction)
+    await seedEntity(fx, TOBIN)
+    __setCloseAgentSlots(standInSlots())
+    script(STAND_IN_CASE.steps)
+
+    const tx = expectRan(await startManualClose(fx.branchId, fx.replyIds[END_REPLY], fx.ctx))
+
+    expect(tx).toMatchObject({ outcome: 'completed' })
+    const [, request] = defined(generateToolStepMock.mock.calls[0], 'no step was sent')
+    expect(request.prompt.user).toContain(TOBIN.name)
+    expect(request.prompt.user).not.toContain(retired.name)
+    expect(request.prompt.user).not.toContain(faction.name)
+    const described = await fx.ctx.db
+      .select({ name: entities.name, description: entities.description })
+      .from(entities)
+      .where(eq(entities.branchId, fx.branchId))
+      .orderBy(asc(entities.name))
+    expect(described).toEqual([
+      { name: retired.name, description: retired.description },
+      { name: faction.name, description: faction.description },
+      { name: TOBIN.name, description: STAND_IN_INPUT.description },
+    ])
   })
 
   it('shows nothing and sends no step on a branch with no active character', async () => {
