@@ -1238,6 +1238,21 @@ describe('closeAgentPhase', () => {
       result: 'ok',
       survivor: { table: 'happenings', id: 'hap_kept' },
     })
+    // It names a ref by the run's id map: a value holding a shown row's id is stored as its name.
+    runIds.show(WREN, 'Wren')
+    seen[0]!.ledger.record({
+      task: 'happenings',
+      part: 0,
+      tool: 'update_happening',
+      rows: [],
+      why: 'Wren was there.',
+      turns: [],
+      result: 'ok',
+      values: { 'state.involved': WREN },
+    })
+    expect(closeLedgerOf(ctx.intermediates)?.calls.at(-1)?.values).toEqual({
+      'state.involved': 'Wren',
+    })
     expect(seen[1]!.survivorOf('happenings', 'hap_absorbed')).toEqual({
       table: 'happenings',
       id: 'hap_kept',
