@@ -269,7 +269,10 @@ and tools sit under `lib/pipeline/definitions/close-agent/`.
   and a task's steps follow at an agent's pace, not a turn's.
 - The model's own message goes back as the SDK returned it, keeping its
   reasoning and calls. Each of a step's `calls` runs in order inside the
-  generator and gets an answer before the next step. `invalidCalls` are
+  generator and gets an answer before the next step, bar a call whose id
+  an earlier call of the step already used: the SDK gives it that call's
+  input, so it's refused unrun and the model asked to send it again.
+  `invalidCalls` are
   skipped, since the SDK answered them in `responseMessages`. A step's
   answers, the SDK's and the driver's, go back as one `tool` message in
   the order of the calls, where `convertToLanguageModelPrompt` would
