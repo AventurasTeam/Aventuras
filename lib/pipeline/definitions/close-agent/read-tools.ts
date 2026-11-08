@@ -114,7 +114,19 @@ async function showRef(
   return row && { handle: ctx.ids.show(id, row.name), name: row.name }
 }
 
-// Ids go to handles before the cut: excerpt can cut where there's no space, inside an id.
+// Ids go to handles before the cut: excerpt can cut where there's no space, inside an id. It can
+// cut inside a handle too, and c12 cut to c1 names another row, so a split handle is dropped.
+function aboutOf(ids: CloseIds, description: string): string | undefined {
+  const full = oneLine(ids.withHandles(description))
+  const about = excerpt(full, LINE_DESCRIPTION_CHARS)
+  if (about === undefined || about === full) return about
+  const kept = about.slice(0, -'…'.length)
+  const head = /\w+$/.exec(kept)?.[0]
+  const tail = /^\w+/.exec(full.slice(kept.length))?.[0]
+  if (head === undefined || tail === undefined || ids.idOf(head + tail) === undefined) return about
+  return `${kept.slice(0, -head.length)}…`
+}
+
 function lineOf(
   ids: CloseIds,
   kind: string,
@@ -124,10 +136,7 @@ function lineOf(
 ): string {
   const shown = oneLine(ids.withHandles(name))
   const label = status === null || status === 'active' ? shown : `${shown} (${status})`
-  const about = excerpt(
-    description === null ? null : ids.withHandles(description),
-    LINE_DESCRIPTION_CHARS,
-  )
+  const about = description === null ? undefined : aboutOf(ids, description)
   return about === undefined ? `${kind}: ${label}` : `${kind}: ${label} — ${about}`
 }
 

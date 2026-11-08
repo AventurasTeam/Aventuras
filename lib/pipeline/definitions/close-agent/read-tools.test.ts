@@ -395,6 +395,30 @@ describe('search_world', () => {
     expect(call).toContain(ids.handleOf(SYNDICATE))
     expect((await search('gate of')).out.matches[0]!.line).not.toMatch(FULL_ID)
   })
+
+  it.each([
+    [97, 'c12'],
+    [98, ''],
+    [99, ''],
+  ])(
+    'keeps a whole handle at the cut and drops one it splits, which names another row: %i before it',
+    async (pad, kept) => {
+      for (let n = 1; n <= 11; n++) ids.show(rowId('char', 300 + n), `Guard ${n}`)
+      await db.insert(happenings).values({
+        id: rowId('hap', 73),
+        branchId: BRANCH,
+        title: 'Lantern',
+        description: `${'あ'.repeat(pad)}${TOBIN}${'い'.repeat(20)}`,
+        createdAt: 1,
+        updatedAt: 1,
+      })
+
+      const line = (await search('lantern')).out.matches[0]!.line
+
+      expect(ids.handleOf(TOBIN)).toBe('c12')
+      expect(line).toBe(`happening: Lantern — ${'あ'.repeat(pad)}${kept}…`)
+    },
+  )
 })
 
 describe('read_row', () => {
