@@ -275,7 +275,10 @@ export async function generateImage(options: {
 
   // A reference that cannot be fetched is dropped; the scene is still worth drawing without it.
   const providerLimit = referenceLimit(profile.providerType, profile.providerOptions)
-  const limit = Math.min(capabilities?.maxReferenceImages ?? Infinity, providerLimit)
+  const limit =
+    capabilities?.supportsImg2Img === false
+      ? 0
+      : Math.min(capabilities?.maxReferenceImages ?? Infinity, providerLimit)
   const cleanRefs =
     referenceImages && providerLimit > 0
       ? (

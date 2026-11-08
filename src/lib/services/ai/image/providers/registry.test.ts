@@ -263,6 +263,37 @@ describe('Image Provider Registry', () => {
       expect(generate).toHaveBeenCalledWith(expect.objectContaining({ referenceImages: [] }))
     })
 
+    it('downloads no reference for a model the list marks as not taking them', async () => {
+      const generate = setup('openrouter', [
+        { id: 'flux-dev', name: 'Flux', supportsImg2Img: false },
+      ])
+
+      await generateImage({
+        profileId: 'p',
+        model: 'flux-dev',
+        prompt: 'x',
+        referenceImages: ['https://img.test/a.png'],
+      })
+
+      expect(fetchPublicImageBase64).not.toHaveBeenCalled()
+      expect(generate).toHaveBeenCalledWith(expect.objectContaining({ referenceImages: [] }))
+    })
+
+    it('still sends references when the list does not say either way', async () => {
+      const generate = setup('openrouter', [{ id: 'flux-dev', name: 'Flux' }])
+
+      await generateImage({
+        profileId: 'p',
+        model: 'flux-dev',
+        prompt: 'x',
+        referenceImages: ['https://img.test/a.png'],
+      })
+
+      expect(generate).toHaveBeenCalledWith(
+        expect.objectContaining({ referenceImages: ['DOWNLOADED'] }),
+      )
+    })
+
     it('sends no references, and downloads none, to a ComfyUI workflow that has no LoadImage', async () => {
       const generate = setup('comfyui')
 
