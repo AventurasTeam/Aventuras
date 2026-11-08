@@ -1,0 +1,243 @@
+import { describe, expect, it } from 'vitest'
+import { z } from 'zod'
+
+import { CloseIds } from './ids'
+import {
+  assertReplaySafe,
+  readToolSchema,
+  resolveIdArgs,
+  tableOfId,
+  toolStepTools,
+  writeToolSchema,
+  type ReadTool,
+  type WriteTool,
+} from './tool'
+
+const CHAR_A = 'char_11111111-1111-4111-8111-111111111111'
+const CHAR_B = 'char_22222222-2222-4222-8222-222222222222'
+const CHAR_C = 'char_33333333-3333-4333-8333-333333333333'
+const LOC_A = 'loc_44444444-4444-4444-8444-444444444444'
+const LORE_A = 'lore_55555555-5555-4555-8555-555555555555'
+const ENTRY_1 = 'entry_66666666-6666-4666-8666-666666666661'
+
+// t1; c1 Wren, c2 Tobin, c3 the reeve; l1 Harrow; lo1 the toll law.
+function shownIds(): CloseIds {
+  const ids = new CloseIds()
+  ids.showTurns([ENTRY_1])
+  ids.show(CHAR_A, 'Wren')
+  ids.show(CHAR_B, 'Tobin')
+  ids.show(CHAR_C, 'The reeve')
+  ids.show(LOC_A, 'Harrow')
+  ids.show(LORE_A, 'The toll law')
+  return ids
+}
+
+const mergeRows: WriteTool = {
+  kind: 'write',
+  name: 'merge_rows',
+  description: 'Merge duplicate characters into one.',
+  schema: writeToolSchema({
+    keep: z.string(),
+    absorb: z.array(z.string()),
+    place: z.string().nullable().optional(),
+  }),
+  ids: {
+    keep: { shape: 'single', prefixes: ['char_', 'fact_'] },
+    absorb: { shape: 'array', prefixes: ['char_'] },
+    place: { shape: 'single', prefixes: ['loc'] },
+  },
+  plan: async () => ({ kind: 'refused', reason: 'unused here', rows: [] }),
+}
+
+const readTurn: ReadTool = {
+  kind: 'read',
+  name: 'read_turn',
+  description: 'Read one turn.',
+  schema: readToolSchema({ turn: z.string() }),
+  ids: { turn: { shape: 'single', prefixes: ['entry_'] } },
+  read: async () => ({ output: null, rows: [], read: [] }),
+}
+
+const MERGE_SAMPLE = {
+  keep: 'c1',
+  absorb: ['c2'],
+  place: null,
+  turns: ['t1'],
+  why: 'The same man.',
+}
+
+describe('writeToolSchema', () => {
+  it('adds turns and why to a strict shape', () => {
+    const schema = writeToolSchema({ id: z.string() })
+    expect(Object.keys(schema.shape)).toEqual(['id', 'turns', 'why'])
+    expect(schema.safeParse({ id: 'c1', turns: ['t1'], why: 'w' }).success).toBe(true)
+    expect(schema.safeParse({ id: 'c1', turns: ['t1'], why: 'w', note: 'x' }).success).toBe(false)
+  })
+
+  it('refuses a shape that brings its own turns or why', () => {
+    expect(() => writeToolSchema({ turns: z.string() })).toThrow(/turns and why/)
+    expect(() => writeToolSchema({ why: z.string() })).toThrow(/turns and why/)
+  })
+})
+
+describe('readToolSchema', () => {
+  it('is strict and adds nothing', () => {
+    const schema = readToolSchema({ id: z.string() })
+    expect(Object.keys(schema.shape)).toEqual(['id'])
+    expect(schema.safeParse({ id: 'c1', why: 'w' }).success).toBe(false)
+  })
+})
+
+describe('assertReplaySafe', () => {
+  it('passes a strict schema whose samples parse to themselves, in any key order', () => {
+    const schema = writeToolSchema({
+      id: z.string(),
+      state: z
+        .strictObject({ voice: z.string().optional(), traits: z.array(z.string()) })
+        .optional(),
+      status: z.enum(['active', 'retired']).nullable(),
+    })
+    expect(() =>
+      assertReplaySafe(schema, [
+        { id: 'c1', status: null, turns: ['t1'], why: 'w' },
+        {
+          why: 'w',
+          turns: ['t1', 't2'],
+          status: 'active',
+          state: { traits: ['wary'], voice: 'low' },
+          id: 'c1',
+        },
+      ]),
+    ).not.toThrow()
+  })
+
+  it('refuses a plain top-level object, which strips a key the model added', () => {
+    expect(() => assertReplaySafe(z.object({ id: z.string() }), [{ id: 'c1' }])).toThrow(
+      /extra key/,
+    )
+  })
+
+  it('refuses a plain object nested in a strict one', () => {
+    const schema = z.strictObject({ state: z.object({ voice: z.string() }) })
+    expect(() => assertReplaySafe(schema, [{ state: { voice: 'low' } }])).toThrow(
+      /state is not strict/,
+    )
+  })
+
+  it('refuses a default, even when every sample sets the key', () => {
+    const schema = z.strictObject({ status: z.string().default('active') })
+    expect(() => assertReplaySafe(schema, [{ status: 'retired' }])).toThrow(/status has a default/)
+  })
+
+  it('refuses a string overwrite that changes what the model wrote', () => {
+    const schema = z.strictObject({ name: z.string().trim() })
+    expect(() => assertReplaySafe(schema, [{ name: '  Wren ' }])).toThrow(/doesn't replay/)
+  })
+
+  it('refuses a transform', () => {
+    const schema = z.strictObject({ name: z.string().transform((s) => s.length) })
+    expect(() => assertReplaySafe(schema, [{ name: 'Wren' }])).toThrow(/JSON Schema/)
+  })
+
+  it('refuses a sample that does not parse, and no samples at all', () => {
+    const schema = z.strictObject({ id: z.string() })
+    expect(() => assertReplaySafe(schema, [{ id: 1 }])).toThrow(/doesn't parse/)
+    expect(() => assertReplaySafe(schema, [])).toThrow(/no samples/)
+  })
+})
+
+describe('toolStepTools', () => {
+  it("gives the step each tool's description and schema, by name", () => {
+    const tools = toolStepTools([mergeRows, readTurn])
+    expect(Object.keys(tools)).toEqual(['merge_rows', 'read_turn'])
+    expect(tools.merge_rows).toEqual({
+      description: mergeRows.description,
+      inputSchema: mergeRows.schema,
+    })
+    expect(tools.read_turn.inputSchema).toBe(readTurn.schema)
+  })
+
+  it('refuses a tool listed twice', () => {
+    expect(() => toolStepTools([mergeRows, mergeRows])).toThrow(/merge_rows/)
+  })
+})
+
+describe('tableOfId', () => {
+  it('maps each prefix a close writes to its table, and nothing else', () => {
+    expect(
+      [CHAR_A, LOC_A, 'item_x', 'fact_x', LORE_A, 'thr_x', 'hap_x', 'haw_x'].map(tableOfId),
+    ).toEqual([
+      'entities',
+      'entities',
+      'entities',
+      'entities',
+      'lore',
+      'threads',
+      'happenings',
+      'happening_awareness',
+    ])
+    expect([ENTRY_1, 'chap_x', 'nounderscore'].map(tableOfId)).toEqual([null, null, null])
+  })
+})
+
+describe('resolveIdArgs', () => {
+  it('resolves single and array id arguments and names each row once', () => {
+    const resolved = resolveIdArgs(
+      { ...MERGE_SAMPLE, absorb: ['c2', '[c3]', 'c2'], place: 'l1' },
+      mergeRows,
+      shownIds(),
+    )
+    expect(resolved).toEqual({
+      ok: true,
+      args: {
+        keep: CHAR_A,
+        absorb: [CHAR_B, CHAR_C, CHAR_B],
+        place: LOC_A,
+        turns: ['t1'],
+        why: 'The same man.',
+      },
+      named: [
+        { table: 'entities', id: CHAR_A },
+        { table: 'entities', id: CHAR_B },
+        { table: 'entities', id: CHAR_C },
+        { table: 'entities', id: LOC_A },
+      ],
+    })
+  })
+
+  it('leaves a null or absent id argument as it is', () => {
+    const ids = shownIds()
+    expect(resolveIdArgs(MERGE_SAMPLE, mergeRows, ids)).toMatchObject({
+      ok: true,
+      args: { place: null },
+    })
+    expect(
+      resolveIdArgs({ keep: 'c1', absorb: [], turns: ['t1'], why: 'w' }, mergeRows, ids),
+    ).toEqual({
+      ok: true,
+      args: { keep: CHAR_A, absorb: [], turns: ['t1'], why: 'w' },
+      named: [{ table: 'entities', id: CHAR_A }],
+    })
+  })
+
+  it('rejects a handle the close never showed, naming it', () => {
+    const resolved = resolveIdArgs({ ...MERGE_SAMPLE, absorb: ['c2', 'c9'] }, mergeRows, shownIds())
+    expect(resolved).toEqual({ ok: false, reason: expect.stringContaining('c9 in absorb') })
+  })
+
+  it('rejects an id of a kind the argument does not take', () => {
+    const resolved = resolveIdArgs({ ...MERGE_SAMPLE, keep: 'lo1' }, mergeRows, shownIds())
+    expect(resolved).toEqual({
+      ok: false,
+      reason: 'lo1 in keep is a lore row; keep takes a character or a faction',
+    })
+  })
+
+  it('resolves a turn handle without naming a row', () => {
+    expect(resolveIdArgs({ turn: 't1' }, readTurn, shownIds())).toEqual({
+      ok: true,
+      args: { turn: ENTRY_1 },
+      named: [],
+    })
+  })
+})

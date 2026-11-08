@@ -1,0 +1,283 @@
+import { z } from 'zod'
+
+import type { GuardRow, PipelineAction, PrecedenceTable, RowGuard } from '@/lib/actions/types'
+import type { ToolStepTool } from '@/lib/ai'
+import type { CloseReportCall, CloseTask, DbCtx } from '@/lib/db'
+
+import type { CloseIds } from './ids'
+
+export type RowKind =
+  | 'character'
+  | 'location'
+  | 'item'
+  | 'faction'
+  | 'lore'
+  | 'thread'
+  | 'happening'
+/** Delta paths a task's read_row returns per row kind ('description', 'state.voice'). */
+export type ReadFields = Readonly<Partial<Record<RowKind, readonly string[]>>>
+/** An argument holding row handles; `prefixes` are the id kinds it takes, spelled `char_`. */
+export type IdArg = { shape: 'single' | 'array'; prefixes: readonly string[] }
+export type ReportRow = CloseReportCall['rows'][number]
+
+export type ToolContext = {
+  readonly db: DbCtx['db']
+  readonly branchId: string
+  readonly endEntryId: string
+  readonly task: CloseTask
+  readonly part: number
+  readonly ids: CloseIds
+  readonly readFields: ReadFields
+  /** A landed merge's kept row for a row this close absorbed. */
+  readonly survivorOf: (table: string, id: string) => { table: string; id: string } | undefined
+}
+export type WriteContext = ToolContext & {
+  /** Cited entry ids, resolved. */
+  readonly turns: readonly string[]
+  /** The latest cited turn by position. */
+  readonly proseEntryId: string
+  readonly guard: (rows: readonly GuardRow[]) => Promise<RowGuard>
+}
+
+export type PlannedAction = { readonly action: PipelineAction; readonly fields: readonly string[] }
+export type LostField = {
+  readonly field: string
+  readonly reason: string
+  readonly kind: 'protected' | 'refused'
+}
+export type WritePlan =
+  | {
+      kind: 'refused'
+      /** `row-gone` when a row the call names is missing; dispatch adds its survivor. */
+      reason: string
+      rows: readonly ReportRow[]
+      /** Proposed fields, delta path → raw value, kept as the report's Not applied values. */
+      values?: Readonly<Record<string, unknown>>
+    }
+  | {
+      kind: 'write'
+      /** Empty when nothing is left to land: no group is emitted. */
+      actions: readonly PlannedAction[]
+      lost: readonly LostField[]
+      rows: readonly ReportRow[]
+      /** Delta path → the raw value landed or proposed; restated fields absent. */
+      values: Readonly<Record<string, unknown>>
+      /** A create's new row id, answered to the model as its handle. */
+      createdId?: string
+      /** A merge's kept row. */
+      survivor?: { table: string; id: string }
+    }
+
+export type WriteTool = {
+  kind: 'write'
+  name: string
+  description: string
+  schema: z.ZodObject
+  ids: Readonly<Record<string, IdArg>>
+  plan: (args: Record<string, unknown>, ctx: WriteContext) => Promise<WritePlan>
+}
+export type ReadAnswer = {
+  /** What the model reads, handles only. */
+  output: unknown
+  rows: readonly ReportRow[]
+  /** Rows the answer counts as read (read_row: its row; search_world: none). */
+  read: readonly GuardRow[]
+}
+export type ReadTool = {
+  kind: 'read'
+  name: string
+  description: string
+  schema: z.ZodObject
+  ids: Readonly<Record<string, IdArg>>
+  read: (args: Record<string, unknown>, ctx: ToolContext) => Promise<ReadAnswer>
+}
+export type CloseTool = WriteTool | ReadTool
+
+const TURNS_DESCRIPTION = 'The turns this write rests on, by handle (t1, t2…).'
+const WHY_DESCRIPTION =
+  'One sentence for the review: what in the cited turns makes this write true.'
+
+/**
+ * A write tool's schema: its own shape, `turns` and `why`, strict at the top. The SDK replays the
+ * parsed call as the model's own, so no field may change what the model wrote (assertReplaySafe).
+ */
+export function writeToolSchema<S extends z.ZodRawShape>(shape: S): z.ZodObject {
+  if (Object.hasOwn(shape, 'turns') || Object.hasOwn(shape, 'why'))
+    throw new Error("writeToolSchema: turns and why are every write tool's own; leave them out")
+  return z.strictObject({
+    ...shape,
+    turns: z.array(z.string()).describe(TURNS_DESCRIPTION),
+    why: z.string().describe(WHY_DESCRIPTION),
+  })
+}
+
+/** A read tool's schema, strict at the top; the replay contract holds as for a write. */
+export function readToolSchema<S extends z.ZodRawShape>(shape: S): z.ZodObject {
+  return z.strictObject(shape)
+}
+
+export function toolStepTools(tools: readonly CloseTool[]): Record<string, ToolStepTool> {
+  const out: Record<string, ToolStepTool> = {}
+  for (const { name, description, schema } of tools) {
+    if (Object.hasOwn(out, name)) throw new Error(`toolStepTools: ${name} is listed twice`)
+    out[name] = { description, inputSchema: schema }
+  }
+  return out
+}
+
+const TABLE_BY_PREFIX = new Map<string, PrecedenceTable>([
+  ['char_', 'entities'],
+  ['loc_', 'entities'],
+  ['item_', 'entities'],
+  ['fact_', 'entities'],
+  ['lore_', 'lore'],
+  ['thr_', 'threads'],
+  ['hap_', 'happenings'],
+  ['haw_', 'happening_awareness'],
+])
+
+const KIND_BY_PREFIX = new Map<string, string>([
+  ['char_', 'a character'],
+  ['loc_', 'a place'],
+  ['item_', 'an item'],
+  ['fact_', 'a faction'],
+  ['lore_', 'a lore row'],
+  ['thr_', 'a thread'],
+  ['hap_', 'a happening'],
+  ['haw_', 'an awareness row'],
+  ['entry_', 'a turn'],
+  ['chap_', 'a chapter'],
+])
+
+const prefixOf = (id: string): string => id.slice(0, id.indexOf('_') + 1)
+const asPrefix = (prefix: string): string => (prefix.endsWith('_') ? prefix : `${prefix}_`)
+const kindOf = (prefix: string): string => KIND_BY_PREFIX.get(prefix) ?? 'another kind of row'
+
+export function tableOfId(id: string): PrecedenceTable | null {
+  return TABLE_BY_PREFIX.get(prefixOf(id)) ?? null
+}
+
+/**
+ * Swaps each declared id argument's handles for full ids; a handle never shown, or of a kind the
+ * argument doesn't take, refuses the call. `named` holds each resolved row once.
+ */
+export function resolveIdArgs(
+  input: Readonly<Record<string, unknown>>,
+  tool: CloseTool,
+  ids: CloseIds,
+):
+  | { ok: true; args: Record<string, unknown>; named: readonly GuardRow[] }
+  | { ok: false; reason: string } {
+  const args: Record<string, unknown> = { ...input }
+  const named = new Map<string, GuardRow>()
+  for (const [key, arg] of Object.entries(tool.ids)) {
+    const value = input[key]
+    if (value === undefined || value === null) continue
+    const handles: unknown[] = arg.shape === 'array' && Array.isArray(value) ? value : [value]
+    if ((arg.shape === 'array') !== Array.isArray(value))
+      return {
+        ok: false,
+        reason: `${key} takes ${arg.shape === 'array' ? 'a list of ids' : 'one id'}`,
+      }
+    const resolved: string[] = []
+    for (const handle of handles) {
+      const id = typeof handle === 'string' ? ids.idOf(handle) : undefined
+      if (id === undefined)
+        return {
+          ok: false,
+          reason: `${String(handle)} in ${key} is not a known id; use an id this task showed you`,
+        }
+      const prefix = prefixOf(id)
+      if (!arg.prefixes.some((p) => asPrefix(p) === prefix)) {
+        const takes = arg.prefixes.map((p) => kindOf(asPrefix(p))).join(' or ')
+        return {
+          ok: false,
+          reason: `${String(handle)} in ${key} is ${kindOf(prefix)}; ${key} takes ${takes}`,
+        }
+      }
+      resolved.push(id)
+      const table = tableOfId(id)
+      if (table !== null) named.set(`${table}:${id}`, { table, id })
+    }
+    args[key] = arg.shape === 'array' ? resolved : resolved[0]
+  }
+  return { ok: true, args, named: [...named.values()] }
+}
+
+type SchemaNode = Readonly<Record<string, unknown>>
+
+const isNode = (value: unknown): value is SchemaNode =>
+  value !== null && typeof value === 'object' && !Array.isArray(value)
+
+// A record carries propertyNames: its keys are the model's to choose, so it has no strictness.
+const isStrictObject = (node: SchemaNode): boolean =>
+  node.additionalProperties === false || Object.hasOwn(node, 'propertyNames')
+
+const SUBSCHEMA_LISTS = ['anyOf', 'oneOf', 'allOf', 'prefixItems'] as const
+
+// Walks schema positions only, so a property named `default` or `type` is never read as a keyword.
+function schemaFaults(node: unknown, path: string, faults: string[]): void {
+  if (!isNode(node)) return
+  if (Object.hasOwn(node, 'default')) faults.push(`${path} has a default`)
+  if (node.type === 'object' && !isStrictObject(node)) faults.push(`${path} is not strict`)
+  if (isNode(node.properties))
+    for (const [key, child] of Object.entries(node.properties))
+      schemaFaults(child, `${path}.${key}`, faults)
+  if (node.items !== undefined)
+    for (const child of [node.items].flat()) schemaFaults(child, `${path}[]`, faults)
+  if (isNode(node.additionalProperties))
+    schemaFaults(node.additionalProperties, `${path}{}`, faults)
+  for (const list of SUBSCHEMA_LISTS) {
+    const children = node[list]
+    if (Array.isArray(children)) for (const child of children) schemaFaults(child, path, faults)
+  }
+  if (isNode(node.$defs))
+    for (const child of Object.values(node.$defs)) schemaFaults(child, path, faults)
+}
+
+function sameValue(a: unknown, b: unknown): boolean {
+  if (Object.is(a, b)) return true
+  if (Array.isArray(a) || Array.isArray(b))
+    return (
+      Array.isArray(a) &&
+      Array.isArray(b) &&
+      a.length === b.length &&
+      a.every((item, i) => sameValue(item, b[i]))
+    )
+  if (!isNode(a) || !isNode(b)) return false
+  const keys = Object.keys(a)
+  return (
+    keys.length === Object.keys(b).length &&
+    keys.every((key) => Object.hasOwn(b, key) && sameValue(a[key], b[key]))
+  )
+}
+
+const EXTRA_KEY = '__extra__'
+
+/** Test helper: deep-equal replay, additionalProperties false on every object, extra key refused. */
+export function assertReplaySafe(
+  schema: z.ZodObject,
+  samples: readonly Record<string, unknown>[],
+): void {
+  if (samples.length === 0) throw new Error('assertReplaySafe: no samples to replay')
+  try {
+    z.toJSONSchema(schema)
+  } catch (error) {
+    const detail = error instanceof Error ? error.message : String(error)
+    throw new Error(`assertReplaySafe: no JSON Schema form, as with a transform: ${detail}`)
+  }
+  samples.forEach((sample, i) => {
+    const parsed = schema.safeParse(sample)
+    if (!parsed.success)
+      throw new Error(`assertReplaySafe: sample ${i} doesn't parse: ${parsed.error.message}`)
+    if (!sameValue(parsed.data, sample))
+      throw new Error(
+        `assertReplaySafe: sample ${i} doesn't replay as written: ${JSON.stringify(parsed.data)}`,
+      )
+    if (schema.safeParse({ ...sample, [EXTRA_KEY]: 'x' }).success)
+      throw new Error(`assertReplaySafe: sample ${i} with an extra key is accepted`)
+  })
+  const faults: string[] = []
+  schemaFaults(z.toJSONSchema(schema, { io: 'input' }), '(root)', faults)
+  if (faults.length > 0) throw new Error(`assertReplaySafe: ${faults.join('; ')}`)
+}
