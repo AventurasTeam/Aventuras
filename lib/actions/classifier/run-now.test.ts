@@ -13,6 +13,17 @@ import { registerStandInClose } from '../turns/__tests__/stand-in-close'
 import { registerStandInPass } from '../turns/__tests__/stand-in-pass'
 
 const runClassifierPass = vi.fn()
+// A swap in flight in this process, which a story's stored settings don't show yet.
+const swapInFlight = vi.hoisted(() => ({ storyId: null as string | null }))
+
+vi.mock('@/lib/embedder-swap', async (importOriginal) => {
+  const actual = await importOriginal<{ isStorySwapPending: (storyId: string) => boolean }>()
+  return {
+    ...actual,
+    isStorySwapPending: (storyId: string) =>
+      swapInFlight.storyId === storyId || actual.isStorySwapPending(storyId),
+  }
+})
 
 vi.mock('@/lib/pipeline', async (importOriginal) => ({
   ...(await importOriginal<Record<string, unknown>>()),
@@ -72,6 +83,7 @@ function open(branchId: string): void {
 describe('runClassifierNow', () => {
   beforeEach(() => {
     runClassifierPass.mockReset()
+    swapInFlight.storyId = null
     currentStoryStore.__reset()
   })
   afterEach(() => {
@@ -95,6 +107,17 @@ describe('runClassifierNow', () => {
       definition: DEFINITION,
       settings: { ...SETTINGS, embedding_swap_target: 'next-model' },
     })
+    const { db, runInTransaction } = await createTestDb()
+
+    const result = await runClassifierNow('b1', { db, runInTransaction })
+
+    expect(result).toEqual({ outcome: 'rejected', blockedBy: 'embedder-swap' })
+    expect(runClassifierPass).not.toHaveBeenCalled()
+  })
+
+  it("refuses while a swap is in flight that the stored settings don't show yet", async () => {
+    open('b1')
+    swapInFlight.storyId = 's1'
     const { db, runInTransaction } = await createTestDb()
 
     const result = await runClassifierNow('b1', { db, runInTransaction })
