@@ -12,7 +12,8 @@ import { applyDeltaAction } from './apply-delta-action'
 import { resolveByActionKind, type HandlerOutcome } from './registry'
 
 // Unmarked spellings C11 maps to `rejected`: a broken rule, never a value already stored or a row
-// that went. A spelling one site uses for both carries a mark there, so it isn't listed.
+// that went. `not-a-faction` is listed for setFactionStanding, which uses it as a rule only; the
+// shared site in setCharacterFaction is pinned by its sample cases.
 const RULE_REASONS: readonly string[] = [
   'location',
   'name-blank',
@@ -37,6 +38,9 @@ const RULE_EXPRESSIONS: readonly string[] = [
 // A floor, not a count: fewer means the glob or the parse stopped reading the calls.
 const KNOWN_NOOP_CALLS = 57
 
+// The ten entity targets, partner-not-found, threads' status target, the relationship delete.
+const KNOWN_NOT_FOUND_CALLS = 13
+
 type NoopCall = {
   at: string
   /** The first argument's source text. */
@@ -44,6 +48,8 @@ type NoopCall = {
   /** The first argument's value when it's a plain string literal. */
   literal: string | null
   marked: boolean
+  /** The mark argument's source text, null when the call has none. */
+  markText: string | null
 }
 
 function noopCalls(path: string, source: string): NoopCall[] {
@@ -62,6 +68,7 @@ function noopCalls(path: string, source: string): NoopCall[] {
         reason: reason?.getText(file) ?? '',
         literal: reason !== undefined && ts.isStringLiteralLike(reason) ? reason.text : null,
         marked: mark !== undefined,
+        markText: mark?.getText(file) ?? null,
       })
     }
     ts.forEachChild(node, visit)
@@ -78,6 +85,21 @@ const isRuleRefusal = (call: NoopCall): boolean =>
 const unmarked = (calls: readonly NoopCall[]): string[] =>
   calls.filter((call) => !call.marked && !isRuleRefusal(call)).map((c) => `${c.at} ${c.reason}`)
 
+// A row that went is `gone`, bar the relationship delete whose missing pair is the state asked for.
+const RESTATED_NOT_FOUND = '`delete target relationship ${bid}:${id} not found`'
+
+const isNotFound = (call: NoopCall): boolean =>
+  call.literal === 'partner-not-found' ||
+  (call.reason.startsWith('`') && call.reason.includes('not found'))
+
+const wrongNotFoundMark = (calls: readonly NoopCall[]): string[] =>
+  calls
+    .filter(isNotFound)
+    .filter(
+      (call) => call.markText !== (call.reason === RESTATED_NOT_FOUND ? "'restated'" : "'gone'"),
+    )
+    .map((c) => `${c.at} ${c.reason} marked ${c.markText}`)
+
 const PROBE = [
   "noopRefusal('no-op lore patch')",
   'noopRefusal(reasonFor(id))',
@@ -87,6 +109,16 @@ const PROBE = [
   'noopRefusal(PLACE_REFUSAL.storyInside)',
   "noopRefusal(\n  'relationship unchanged',\n  'restated',\n)",
   "noopRefusal('not-active', status === 'retired' ? 'restated' : undefined)",
+].join('\n')
+
+const NOT_FOUND_PROBE = [
+  'noopRefusal(`rename target entities ${bid}:${id} not found`)',
+  "noopRefusal('partner-not-found', 'restated')",
+  "noopRefusal(`status target threads ${bid}:${id} not found`, 'gone')",
+  "noopRefusal('partner-not-found', 'gone')",
+  "noopRefusal(`delete target relationship ${bid}:${id} not found`, 'gone')",
+  "noopRefusal(`delete target relationship ${bid}:${id} not found`, 'restated')",
+  "noopRefusal('no-op lore patch', 'restated')",
 ].join('\n')
 
 describe('noopRefusal marks: the scan (C11)', () => {
@@ -100,6 +132,16 @@ describe('noopRefusal marks: the scan (C11)', () => {
     ])
   })
 
+  it('flags a row-not-found refusal whose mark is not gone', () => {
+    const calls = noopCalls('probe.ts', NOT_FOUND_PROBE)
+    expect(calls).toHaveLength(7)
+    expect(wrongNotFoundMark(calls)).toEqual([
+      'probe.ts:1 `rename target entities ${bid}:${id} not found` marked null',
+      "probe.ts:2 'partner-not-found' marked 'restated'",
+      "probe.ts:5 `delete target relationship ${bid}:${id} not found` marked 'gone'",
+    ])
+  })
+
   it('finds every restated or gone noopRefusal in lib/actions marked', async () => {
     const paths = await fg(['lib/actions/**/*.ts'], {
       cwd: process.cwd(),
@@ -108,6 +150,19 @@ describe('noopRefusal marks: the scan (C11)', () => {
     const calls = paths.flatMap((path) => noopCalls(path, readFileSync(path, 'utf8')))
     expect(calls.length, 'noopRefusal calls the scan read').toBeGreaterThanOrEqual(KNOWN_NOOP_CALLS)
     expect(unmarked(calls), 'restated or gone refusals with no mark').toEqual([])
+  })
+
+  it('marks every row-not-found refusal in lib/actions gone', async () => {
+    const paths = await fg(['lib/actions/**/*.ts'], {
+      cwd: process.cwd(),
+      ignore: ['**/*.test.ts', '**/__tests__/**'],
+    })
+    const calls = paths.flatMap((path) => noopCalls(path, readFileSync(path, 'utf8')))
+    expect(
+      calls.filter(isNotFound).length,
+      'not-found refusals the scan read',
+    ).toBeGreaterThanOrEqual(KNOWN_NOT_FOUND_CALLS)
+    expect(wrongNotFoundMark(calls), 'not-found refusals with the wrong mark').toEqual([])
   })
 })
 
@@ -197,6 +252,18 @@ const placeUnder = (parentId: string): PipelineAction => ({
   },
 })
 
+const returnFrom = (id: string): PipelineAction => ({
+  kind: 'returnFromRetirement',
+  source: 'periodic_classifier',
+  payload: { branchId: BRANCH, id, proseEntryId: null },
+})
+
+const promote = (id: string): PipelineAction => ({
+  kind: 'promoteStagedEntity',
+  source: 'periodic_classifier',
+  payload: { branchId: BRANCH, id, proseEntryId: null },
+})
+
 const raiseOn = (id: string): PipelineAction => ({
   kind: 'raiseCollisionFlag',
   source: 'periodic_classifier',
@@ -230,6 +297,14 @@ describe('noopRefusal marks: sample handlers (C11)', () => {
       retire('char_gone'),
       noop('retire target entities br_1:char_gone not found', 'gone'),
     ],
+    [
+      'returnFromRetirement on an active row',
+      returnFrom('char_1'),
+      noop('not-retired', 'restated'),
+    ],
+    ['returnFromRetirement on a staged row', returnFrom('char_staged'), noop('not-retired')],
+    ['promoteStagedEntity on an active row', promote('char_1'), noop('not-staged', 'restated')],
+    ['promoteStagedEntity on a retired row', promote('char_retired'), noop('not-staged')],
     ['updateLore restating the stored title', restateLore, noop('no-op lore patch', 'restated')],
     [
       'a link naming a missing row',

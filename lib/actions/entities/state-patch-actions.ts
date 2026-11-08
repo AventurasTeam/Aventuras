@@ -554,7 +554,7 @@ async function raiseRefusal(
   partner: Entity,
   reason: CollisionReason,
   edits: readonly Delta[],
-): Promise<string | null> {
+): Promise<'already-flagged' | 'not-namesakes' | typeof USER_EDITED_SINCE_PROSE | null> {
   if (row.nameCollisionFlag === 1) {
     const flagged =
       row.nameCollisionPartnerId === null
