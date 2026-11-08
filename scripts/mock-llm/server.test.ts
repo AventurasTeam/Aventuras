@@ -606,6 +606,14 @@ describe('lane lifecycle', () => {
     expect(lanes()).not.toContain('tools:mistyped')
   })
 
+  // The panel lists only catalog lanes and tool lanes, so any other key would be saved unseen.
+  it('adds no lane a configuring write names outside the catalog, unless a tool lane', async () => {
+    const key = encodeURIComponent('mistyped-shape')
+    expect((await call(`${key}/responses`, 'POST', { value: 'hi' })).status).toBe(404)
+    expect((await call(key, 'PUT', { mode: 'mock' })).status).toBe(404)
+    expect(lanes()).not.toContain('mistyped-shape')
+  })
+
   it('adds no lane for a configuring write that fails validation', async () => {
     const key = encodeURIComponent('tools:refused')
     expect((await call(key, 'PUT', { stream: 5 })).status).toBe(400)

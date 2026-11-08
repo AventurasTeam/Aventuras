@@ -8,7 +8,7 @@ import { parseStateBlock, parseSuggestionsBlock, stripTrailingBlocks } from '@/l
 
 import { laneCatalog, type MockContext } from './context'
 import { readBody } from './respond/wire'
-import { NARRATIVE_LANE } from './routing'
+import { NARRATIVE_LANE, TOOL_LANE_PREFIX } from './routing'
 import { STRUCTURED_SHAPES } from './shapes'
 import {
   defaultState,
@@ -151,15 +151,17 @@ export async function handleControl(
       return commit()
     }
 
-    // Only a write that configures a lane may add one, once it validates: a mistyped key would
-    // otherwise stay listed for good, a saved tool lane surviving restarts.
+    // Only a write that configures a tool lane may add one, once it validates: a mistyped key
+    // would otherwise stay listed for good, a saved tool lane surviving restarts. The panel lists
+    // no other lane outside the catalog, so any other key is refused.
     const existing: Lane | undefined =
       ctx.state.lanes[key] ??
       (laneCatalog(ctx).some((meta) => meta.key === key) ? ctx.lane(key) : undefined)
     const configures =
-      method === 'PUT'
+      key.startsWith(TOOL_LANE_PREFIX) &&
+      (method === 'PUT'
         ? segments[2] === undefined
-        : method === 'POST' && segments[2] === 'responses' && segments[3] === undefined
+        : method === 'POST' && segments[2] === 'responses' && segments[3] === undefined)
     if (existing === undefined && !configures) return json(res, 404, { error: `no lane ${key}` })
     const lane = existing ?? emptyLane()
 
