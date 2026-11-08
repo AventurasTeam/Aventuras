@@ -164,6 +164,8 @@ and tools sit under `lib/pipeline/definitions/close-agent/`.
   - A whole-group refusal, the hard `not-found` of `updateEntity`,
     `updateLore`, `updateThread` and `updateHappening` included:
     `rejected`, with nothing written.
+  - Every `PlannedAction` names at least one delta path, a delete
+    included, and `verdictOf` throws otherwise.
 
 **The close's create and stamps as one group (developer decision,
 2026-11-05).**
