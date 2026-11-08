@@ -35,7 +35,7 @@ import { entityWriteAction } from './entity-write'
 import { CloseIds } from './ids'
 import { CloseLedgerWriter } from './ledger'
 import { closeParts } from './parts'
-import { CLOSE_TASK_STEP_BUDGET, runCloseTask, type TaskEnd } from './run-task'
+import { CLOSE_TASK_STEP_BUDGET, runCloseTask, type TaskEnd, type TaskRunArgs } from './run-task'
 import {
   __setCloseAgentSlots,
   closeAgentSlots,
@@ -292,28 +292,23 @@ function phaseContext(controller = new AbortController()): PhaseContext {
   }
 }
 
-function runContext(phase: PhaseContext, over: Partial<TaskRunContext> = {}): TaskRunContext {
+function runContext(phase: PhaseContext): TaskRunArgs {
   return {
-    db: phase.db,
-    branchId: f.branchId,
     endEntryId: endEntryId(),
-    task: 'identity',
     part: 1,
     ids,
-    readFields: { character: ['description'] },
     survivorOf: (table, id) => writer.survivorOf(table, id),
     phase,
     chapterEntryIds: chapterEntryIds(),
     ledger: writer,
     config: CONFIG,
-    ...over,
   }
 }
 
 // Stands in for the orchestrator: applies each group and sends its outcome back.
 async function drive(
   def: CloseTaskDef,
-  ctx: TaskRunContext,
+  ctx: TaskRunArgs,
 ): Promise<{ end: TaskEnd; events: PhaseEmittedEvent[] }> {
   const gen = runCloseTask(def, ctx)
   const events: PhaseEmittedEvent[] = []
@@ -843,7 +838,7 @@ describe('runCloseTask', () => {
     const render = vi.fn(taskDef().render)
 
     await drive(taskDef(), runContext(phase))
-    await drive({ ...taskDef({ render }), task: 'upkeep' }, runContext(phase, { task: 'upkeep' }))
+    await drive({ ...taskDef({ render }), task: 'upkeep' }, runContext(phase))
 
     expect(render).toHaveBeenCalledTimes(1)
     expect(render.mock.calls[0]![1].writesSoFar).toBe(writer.writesSoFar(ids))
@@ -859,9 +854,9 @@ describe('runCloseTask', () => {
     const phase = phaseContext()
 
     expect((await drive(unseeded, runContext(phase))).end).toEqual({ status: 'finished' })
-    expect(
-      (await drive({ ...unseeded, task: 'upkeep' }, runContext(phase, { task: 'upkeep' }))).end,
-    ).toEqual({ status: 'finished' })
+    expect((await drive({ ...unseeded, task: 'upkeep' }, runContext(phase))).end).toEqual({
+      status: 'finished',
+    })
 
     expect(ledger.calls.map((call) => [call.task, call.tool, call.result])).toEqual([
       ['identity', 'peek_row', 'ok'],
@@ -882,7 +877,7 @@ describe('runCloseTask', () => {
     const phase = phaseContext()
 
     await drive(noteTools, runContext(phase))
-    await drive({ ...noteTools, task: 'upkeep' }, runContext(phase, { task: 'upkeep' }))
+    await drive({ ...noteTools, task: 'upkeep' }, runContext(phase))
 
     expect(ledger.calls.map((call) => [call.task, call.tool, call.result])).toEqual([
       ['identity', 'create_note', 'ok'],
@@ -892,51 +887,6 @@ describe('runCloseTask', () => {
     expect(ledger.calls[2]!.reason).toBe(
       "lo1 hasn't been read in this task: call read_row on it, then write it",
     )
-  })
-
-  it("runs under the def's task and fields, whatever the context names", async () => {
-    vi.mocked(generateToolStep)
-      .mockResolvedValueOnce(okStep([appendCall('k1', 'first')]))
-      .mockResolvedValueOnce({
-        status: 'stopped',
-        reason: 'window',
-        failure: WINDOW,
-        recoverable: [],
-      })
-    const seen: unknown[] = []
-    const def = taskDef({
-      start: async (ctx) => {
-        seen.push(['start', ctx.task, ctx.readFields])
-        return { show: ['c1'], seeds: [{ table: 'entities', id: WREN }] }
-      },
-      render: (_start, ctx) => {
-        seen.push(['render', ctx.task, ctx.readFields])
-        return { system: 'The chapter.', user: 'Identity.' }
-      },
-    })
-
-    await drive(def, runContext(phaseContext(), { task: 'upkeep', readFields: {} }))
-
-    expect(seen).toEqual([
-      ['start', 'identity', { character: ['description'] }],
-      ['render', 'identity', { character: ['description'] }],
-    ])
-    expect(ledger.calls.map((call) => call.task)).toEqual(['identity'])
-    expect(ledger.stopped).toEqual([{ task: 'identity', part: 1, reason: 'window' }])
-  })
-
-  it.each<[string, (phase: PhaseContext) => Partial<TaskRunContext>]>([
-    ['branch', () => ({ branchId: 'br_00000000-0000-4000-8000-0000000000ff' })],
-    ['db', (phase) => ({ db: Object.create(phase.db) as PhaseContext['db'] })],
-  ])("throws, starting nothing, when the context's %s isn't the phase's", async (field, over) => {
-    const start = vi.fn(taskDef().start)
-    const phase = phaseContext()
-
-    await expect(drive(taskDef({ start }), runContext(phase, over(phase)))).rejects.toThrow(
-      `runCloseTask: the context's ${field} isn't the phase's`,
-    )
-    expect(start).not.toHaveBeenCalled()
-    expect(generateToolStep).not.toHaveBeenCalled()
   })
 
   const NOT_JSON: [string, unknown][] = [

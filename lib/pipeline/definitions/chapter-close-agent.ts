@@ -6,7 +6,7 @@ import { readCloseRangeEntries } from './chapter-close-metadata-call'
 import { CloseLedgerWriter } from './close-agent/ledger'
 import { closeParts, type ClosePart } from './close-agent/parts'
 import { closeTaskProgress } from './close-agent/progress'
-import { runCloseTask } from './close-agent/run-task'
+import { runCloseTask, type TaskRunArgs } from './close-agent/run-task'
 import {
   closeAgentSlots,
   type CloseAgentSlots,
@@ -14,13 +14,13 @@ import {
   type SlotEntry,
   type SlotName,
 } from './close-agent/slots'
-import type { CloseTaskDef, TaskRunContext } from './close-agent/task'
+import type { CloseTaskDef } from './close-agent/task'
 import { closeIdsOf, requireCloseRange, seedCloseLedger } from './close-intermediates'
 import { storesHoldBranch } from './stores-hold-branch'
 import type { PhaseContext, PhaseEmittedEvent, PhaseResult } from '../types'
 
-/** What every entry of one run shares; a task adds task, part, read fields, a code step part. */
-type AgentContext = Omit<TaskRunContext, 'task' | 'part' | 'readFields'>
+/** What every entry of one run shares; each adds its part. */
+type AgentContext = Omit<TaskRunArgs, 'part'>
 type SlotStop = Exclude<PhaseResult, { status: 'completed' }>
 /** One entry in run order; a task's `N of M` is placed (and checked) before the run starts. */
 type PlannedEntry =
@@ -59,18 +59,14 @@ async function* runPlannedEntry(
   const { part } = planned
   if (planned.kind === 'code') {
     const { ledger: _ledger, ...stepAgent } = agent
-    const result = yield* planned.step.run({ ...stepAgent, part })
+    const { db, branchId } = agent.phase
+    const result = yield* planned.step.run({ ...stepAgent, db, branchId, part })
     return result.status === 'completed' ? null : result
   }
   const { def, progress } = planned
   // C6: as the task starts, a task with nothing to show included, so the banner names it.
   yield { type: 'close_task_start', task: def.task, part, ...progress }
-  const end = yield* runCloseTask(def, {
-    ...agent,
-    task: def.task,
-    part,
-    readFields: def.readFields,
-  })
+  const end = yield* runCloseTask(def, { ...agent, part })
   if (end.status === 'aborted') return { status: 'aborted' }
   if (end.status === 'failed') return { status: 'failed', error: end.error }
   return null
@@ -112,8 +108,6 @@ export async function* closeAgentPhase(
   ids.showTurns(chapterEntryIds)
   const plan = planRun(slots, closeParts(entries))
   const agent: AgentContext = {
-    db: ctx.db,
-    branchId: ctx.branchId,
     endEntryId: range.endEntryId,
     ids,
     survivorOf: (table, id) => ledger.survivorOf(table, id),

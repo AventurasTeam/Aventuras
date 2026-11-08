@@ -131,27 +131,32 @@ function outsideTask(call: ToolStepCall, ids: CloseIds): ToolAnswer {
   }
 }
 
+/** A task's context less what its def and phase fix: the db and branch, the task, its fields. */
+export type TaskRunArgs = Omit<TaskRunContext, 'db' | 'branchId' | 'task' | 'readFields'>
+
 /**
  * chapter-close.md → Conversations: one task in its own conversation, until a reply calls no
  * tool, the budget runs out or a step stops it. Every step carries the cache marker.
  */
 export async function* runCloseTask(
   def: CloseTaskDef,
-  ctx: TaskRunContext,
+  args: TaskRunArgs,
 ): AsyncGenerator<PhaseEmittedEvent, TaskEnd, GroupOutcome | undefined> {
-  // The guard reads ctx.branchId with ctx.phase.db, and the orchestrator applies groups on the
-  // phase's branch: a context that names another db or branch would split a write from its guard.
-  if (ctx.db !== ctx.phase.db) throw new Error("runCloseTask: the context's db isn't the phase's")
-  if (ctx.branchId !== ctx.phase.branchId)
-    throw new Error("runCloseTask: the context's branch isn't the phase's")
-  const taskCtx: TaskRunContext = { ...ctx, task: def.task, readFields: def.readFields }
-  const start = await def.start(taskCtx)
+  // The guard reads the branch with the phase's db, and the orchestrator applies groups there.
+  const ctx: TaskRunContext = {
+    ...args,
+    db: args.phase.db,
+    branchId: args.phase.branchId,
+    task: def.task,
+    readFields: def.readFields,
+  }
+  const start = await def.start(ctx)
   if (start === null) return { status: 'finished' }
   // Per task and part: a row read in one task is unread in the next.
   const readSet = createReadSet()
   readSet.add(start.seeds)
-  const dispatch: DispatchContext = { ...taskCtx, readSet }
-  const prompt = def.render(start, { ...taskCtx, writesSoFar: ctx.ledger.writesSoFar(ctx.ids) })
+  const dispatch: DispatchContext = { ...ctx, readSet }
+  const prompt = def.render(start, { ...ctx, writesSoFar: ctx.ledger.writesSoFar(ctx.ids) })
   const tools = toolStepTools(def.tools)
   const byName = new Map(def.tools.map((tool) => [tool.name, tool]))
   const messages: ModelMessage[] = []
