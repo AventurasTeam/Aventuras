@@ -26,17 +26,13 @@ function requirePrefix(id: string, prefix: string): void {
  * only, and throws for any other.
  */
 export class CloseIds {
-  private readonly map: IdBiMap
+  private readonly map = new IdBiMap()
   private readonly names = new Map<string, string>()
   private turnCount = 0
   private awarenessCount = 0
   // Registered ids FULL_ID_IN_TEXT can't see, such as a seeded `entry_long_20_0001`.
   private readonly unpatterned = new Map<string, string>()
   private unpatternedInText: RegExp | null = null
-
-  constructor(map: IdBiMap = new IdBiMap()) {
-    this.map = map
-  }
 
   /** A row the model sees: its handle (c1, lo2, th1…), its name kept for nameOf. */
   show(id: string, name: string): string {
