@@ -442,7 +442,8 @@ describe('periodicClassifierPhase', () => {
     expect(system).not.toContain('Recover the relic')
   })
 
-  it("keeps its own branch's roster when a story opening publishes under its first read", async () => {
+  it("keeps its own branch's roster and story when a story opening publishes under its first read", async () => {
+    const HAP_RAID = 'hap_66666666-6666-6666-6666-666666666666'
     const kael = {
       id: CHAR_KAEL,
       branchId: 'b1',
@@ -469,7 +470,32 @@ describe('periodicClassifierPhase', () => {
           updatedAt: 1,
         },
       ] as CharacterRelationship[],
+      // Turn 1 was given the raid, so the pass lists it from the store.
+      entryMetadata: {
+        1: {
+          sceneEntities: [],
+          currentLocationId: null,
+          worldTime: 0,
+          injectedHappenings: [HAP_RAID],
+        },
+      },
     })
+    happeningsStore.hydrate('b1', [
+      {
+        id: HAP_RAID,
+        branchId: 'b1',
+        title: 'The harbour raid',
+        description: null,
+        category: null,
+        icon: null,
+        temporal: null,
+        occurredAtEntryId: null,
+        commonKnowledge: 0,
+        embeddingStale: 0,
+        createdAt: 1,
+        updatedAt: 1,
+      },
+    ])
     threadsStore.hydrate('b1', [
       {
         id: 'thr_11111111-1111-1111-1111-111111111111',
@@ -496,6 +522,15 @@ describe('periodicClassifierPhase', () => {
         return (...args: unknown[]) => {
           if (!published) {
             published = true
+            currentStoryStore.set({
+              storyId: 's2',
+              branchId: 'b2',
+              definition: { leadEntityId: null } as never,
+              settings: {
+                models: { classifier: { providerId: 'prov-1', modelId: 'other' } },
+                classifierMentionedPlaces: false,
+              } as never,
+            })
             entitiesStore.hydrate('b2', [])
             characterRelationshipsStore.hydrate('b2', [])
             threadsStore.hydrate('b2', [])
@@ -518,6 +553,9 @@ describe('periodicClassifierPhase', () => {
     expect(user).toContain('Kael sees')
     expect(user).toContain('as: ally')
     expect(user).toContain('- [th1] Recover the relic (active)')
+    expect(user).toContain('The harbour raid')
+    // The story's model overrides are the ones it read before the first await, not the newcomer's.
+    expect(vi.mocked(generateStructured).mock.calls[0][3].storyModels).toEqual({})
   })
 
   // Fails if the phase stops filtering a saved scene to the branch's live entities:
