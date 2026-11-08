@@ -117,7 +117,7 @@ const endEntryId = (): string => f.entries[6]!.id
 // The fifth reply (position 11): past E, under the fixture's act_close_turn_5.
 const laterReplyId = (): string => f.replyIds[4]!
 
-// Created unanchored under an action no turn owns, so it reads as neither a later turn's nor the user's.
+// Created unanchored under an action no turn owns: neither a later turn's nor the user's.
 async function seedCharacter(id: string, name: string): Promise<void> {
   const result = await applyDeltaAction(
     {
@@ -231,8 +231,8 @@ function wantedFields(args: Readonly<Record<string, unknown>>): Record<string, u
   )
 }
 
-// A character write as 5.5b's update_character plans it; `refuse` stands in for a soft cap the tool
-// applies to free fields between fieldVerdicts and entityWriteAction.
+// A character write shaped as update_character will plan it (5.5b); `refuse` stands in for a
+// soft cap on free fields between fieldVerdicts and entityWriteAction.
 async function planSetFields(args: Record<string, unknown>, ctx: WriteContext): Promise<WritePlan> {
   const id = args.id as string
   const wanted = wantedFields(args)
@@ -838,7 +838,7 @@ const TOOLS: Readonly<Record<string, CloseTool>> = {
   peek_raw: peekRawTool,
 }
 
-// Stands where the agent phase will: the run's ids and ledger, a fresh read set, the script's calls.
+// Stands where the agent phase will: the run's ids and ledger, a fresh read set, scripted calls.
 async function* dispatchPhase(
   phase: PhaseContext,
 ): AsyncGenerator<PhaseEmittedEvent, PhaseResult, GroupOutcome | undefined> {
@@ -979,7 +979,7 @@ describe('dispatchToolCall in a close phase', () => {
   })
 
   it('refuses a write citing nothing, a turn outside the chapter or an unread row, emitting no group', async () => {
-    // t8: an entry past E, shown as 5.9's read_turns will show one.
+    // t8: an entry past E, as read_turns will show one (5.9).
     setup = (ids) => {
       ids.showTurn(f.entries[9]!.id)
     }

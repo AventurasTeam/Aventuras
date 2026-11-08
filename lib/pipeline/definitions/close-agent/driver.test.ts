@@ -63,7 +63,7 @@ vi.mock('@/lib/ai', async (importOriginal) => ({
   generateToolStep: vi.fn(),
 }))
 
-// Pass-throughs: a slot case scripts a part cut or a task's end, every other case runs the real one.
+// Pass-throughs: a slot case scripts a part cut or a task end, every other case runs the real one.
 vi.mock('./parts', async (importOriginal) => {
   const actual = await importOriginal<{ closeParts: typeof closeParts }>()
   return { ...actual, closeParts: vi.fn(actual.closeParts) }
@@ -156,7 +156,7 @@ async function description(): Promise<string | null> {
   return found?.description ?? null
 }
 
-// Reads the description from SQL and appends to it, so a second call shows whether it saw the first.
+// Reads the description from SQL and appends to it, so a second call shows if it saw the first.
 const appendNoteTool: WriteTool = {
   kind: 'write',
   name: 'append_note',

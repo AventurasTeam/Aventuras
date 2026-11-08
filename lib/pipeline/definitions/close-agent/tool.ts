@@ -98,8 +98,8 @@ const WHY_DESCRIPTION =
   'One sentence for the review: what in the cited turns makes this write true.'
 
 /**
- * A write tool's schema: its own shape, `turns` and `why`, strict at the top. The SDK replays the
- * parsed call as the model's own, so no field may change what the model wrote (assertReplaySafe).
+ * A write tool's schema: its shape plus `turns` and `why`, strict at the top. The SDK replays the
+ * parsed call as the model's own, so no field may change what it wrote (assertReplaySafe).
  */
 export function writeToolSchema<S extends z.ZodRawShape>(shape: S): z.ZodObject {
   if (Object.hasOwn(shape, 'turns') || Object.hasOwn(shape, 'why'))

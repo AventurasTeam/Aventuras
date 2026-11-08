@@ -80,10 +80,10 @@ export function fieldVerdicts(row: RowVerdicts, fields: readonly string[]): Fiel
 }
 
 /**
- * The one `updateEntity` a close writes on an entity row: `state.*` paths merged over its current
- * state beside the top-level columns, since a group refuses two `state` writes on one row. A path
- * whose value is already stored stays out of `fields`; with every one stored `fields` is empty, and
- * the caller emits no action. `state` is replaced whole, so read the row under the close's gate.
+ * The one `updateEntity` a close writes on a row: `state.*` paths merged over current state beside
+ * the top-level columns (a group refuses two `state` writes on one row). Stored paths stay out of
+ * `fields`; all stored → empty, caller emits no action. `state` is replaced whole: read it under
+ * the close's gate.
  */
 export function entityWriteAction(
   row: Entity,

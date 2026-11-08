@@ -66,7 +66,7 @@ function namedWhy(args: Readonly<Record<string, unknown>>, ids: CloseIds): strin
   return typeof args.why === 'string' ? nameCloseProse({ why: args.why }, ids).why : ''
 }
 
-// For a call refused before its checks passed: the cited turns inside the chapter, as an ok records them.
+// A call refused before its checks passed records its in-chapter turns, as an ok does.
 function turnsInChapter(raw: unknown, ctx: DispatchContext): string[] {
   if (!Array.isArray(raw)) return []
   const ids = new Set(
@@ -180,7 +180,7 @@ function logOutcome(
   })
 }
 
-// C1: a close writes as chapter_close; any other source would read as that writer's under precedence.
+// C1: a close writes as chapter_close; another source counts as that writer's under precedence.
 function assertCloseSource(tool: WriteTool, plan: Write): void {
   for (const { action } of plan.actions)
     if (action.source !== 'chapter_close')
@@ -274,7 +274,7 @@ async function* writeCall(
     turns: check.turns,
     verdict,
     values: landedOrProposed(plan, outcome, verdict),
-    // A gone row's survivor goes to the model's answer only; ok carries one only if something landed.
+    // A gone row's survivor goes to the model's answer; ok carries one only if something landed.
     ...(verdict.result === 'ok' && verdict.survivor !== undefined
       ? { survivor: verdict.survivor }
       : {}),
@@ -283,8 +283,8 @@ async function* writeCall(
 }
 
 /**
- * chapter-close.md → Tools and writes: one valid call, answered. A write's ids resolve, its common
- * checks pass and its plan reads ahead before it lands as one group anchored on E (C1).
+ * chapter-close.md → Tools and writes: one valid call, answered; a write lands as one group
+ * anchored on E (C1) once its ids resolve, its checks pass and its plan reads ahead.
  */
 export async function* dispatchToolCall(
   call: ToolStepCall,

@@ -75,7 +75,6 @@ async function openMigrated(location: string) {
   return { db, sqlite, runInTransaction }
 }
 
-// Returns a fresh in-memory db with the committed migration folder applied.
 export async function createTestDb() {
   return openMigrated(':memory:')
 }

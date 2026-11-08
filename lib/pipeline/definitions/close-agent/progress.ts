@@ -12,10 +12,9 @@ const PART_TASKS = [
 ] as const satisfies readonly CloseTask[]
 
 /**
- * C6: a task's `N of M` from canon's order, fixed when the agent phase starts: Happenings 1, a
- * part's tasks from `2 + 5 × (part − 1)`, Awareness last, `2 + 5 × parts` in all. `part` is
- * numbered as C4's: from 1, 0 for the chapter-wide tasks. Throws on a task placed in a slot or
- * part its order has no place for.
+ * C6: a task's `N of M`, fixed at agent-phase start: Happenings 1, a part's tasks from
+ * `2 + 5 × (part − 1)`, Awareness last, `2 + 5 × parts` in all. `part` as C4: from 1, 0 for
+ * chapter-wide tasks. Throws on a task in a slot or part its order has no place for.
  */
 export function closeTaskProgress(
   task: CloseTask,

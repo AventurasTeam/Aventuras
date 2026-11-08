@@ -19,10 +19,7 @@ import { closeIdsOf, requireCloseRange, seedCloseLedger } from './close-intermed
 import { storesHoldBranch } from './stores-hold-branch'
 import type { PhaseContext, PhaseEmittedEvent, PhaseResult } from '../types'
 
-/**
- * What every entry of one run shares: a task adds its task, part and read fields, a code
- * step its part only, without the ledger.
- */
+/** What every entry of one run shares; a task adds task, part, read fields, a code step part. */
 type AgentContext = Omit<TaskRunContext, 'task' | 'part' | 'readFields'>
 type SlotStop = Exclude<PhaseResult, { status: 'completed' }>
 /** One entry in run order; a task's `N of M` is placed (and checked) before the run starts. */
@@ -80,9 +77,8 @@ async function* runPlannedEntry(
 }
 
 /**
- * C2 → agent: the slots in run order (memory/chapter-close.md → Run order), `before` and `after`
- * as part 0 and `perPart` once per part from 1 (C4). A stopped task keeps what landed and the run
- * goes on; a failed or aborted entry ends the phase.
+ * C2 → agent: slots in run order (memory/chapter-close.md → Run order); `before`/`after` are part
+ * 0, `perPart` runs per part from 1 (C4). A stopped task keeps what landed; failed/aborted ends.
  */
 export async function* closeAgentPhase(
   ctx: PhaseContext,

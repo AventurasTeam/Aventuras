@@ -30,8 +30,8 @@ type CheckContext = { ids: CloseIds; chapterEntryIds: readonly string[]; readSet
 const TURN_HINT = 'cite turns by the handles the chapter shows (t1, t2…)'
 
 /**
- * A write's first refusals, in order: its turns, its why, then the read gate. The turns come back
- * as entry ids in position order, the last of them the write's prose entry for user precedence.
+ * A write's first refusals in order: turns, why, read gate. Turns return as entry ids in position
+ * order, the last being the write's prose entry for user precedence.
  */
 export function commonChecks(
   args: { turns: unknown; why: unknown },

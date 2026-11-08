@@ -28,9 +28,8 @@ const STABLE_SYSTEM_VARIABLES: readonly string[] = [
   'lead',
 ]
 
-// C3: a close's task templates hold the chapter or part in the system half, stable across a
-// part's tasks rather than the story. None ships yet (5.5b, 5.8). They are held to the same check
-// as any template, less the one read C3 allows them: the close-only variables, nothing else.
+// C3: a close task's template holds the chapter or part in its system half. None ships yet (5.5b,
+// 5.8); held to the same check, less the close-only variables C3 allows.
 const CLOSE_TASK_TEMPLATES: readonly TemplateId[] = []
 const CLOSE_ONLY: readonly string[] = CLOSE_ONLY_CHAPTER_VARIABLES
 const allowedPerCall = (templateId: string): readonly string[] =>
