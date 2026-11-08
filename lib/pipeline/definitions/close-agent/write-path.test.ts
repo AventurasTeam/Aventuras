@@ -22,7 +22,15 @@ const GROUP_ACTION = 'act_close_group'
 const TEST_CAP = 'over-test-cap'
 const NO_SURVIVOR = { survivorOf: () => undefined }
 
-const WREN_STATE: EntityState = {
+function deepFreeze<T>(value: T): T {
+  if (typeof value === 'object' && value !== null && !Object.isFrozen(value)) {
+    Object.freeze(value)
+    for (const child of Object.values(value)) deepFreeze(child)
+  }
+  return value
+}
+
+const WREN_STATE: EntityState = deepFreeze({
   visual: { hair: 'black' },
   traits: ['patient'],
   drives: ['deliver the letter'],
@@ -32,9 +40,9 @@ const WREN_STATE: EntityState = {
   inventory: [],
   faction_id: null,
   lastSeenAt: null,
-}
+})
 
-const CHARACTER: Entity = {
+const CHARACTER: Entity = deepFreeze({
   id: WREN,
   branchId: 'br_close',
   kind: 'character',
@@ -53,7 +61,7 @@ const CHARACTER: Entity = {
   embeddingStale: 0,
   createdAt: 1,
   updatedAt: 1,
-}
+})
 
 let f: CloseFixture
 
@@ -242,23 +250,28 @@ const input = (fields: Record<string, unknown>): Record<string, unknown> => ({
   ...fields,
 })
 
-// Answers by `column|path`, as RowVerdicts is asked, and records each question to the user half.
+// Answers by `column|path`, as RowVerdicts is asked, and records each question to both halves.
 function stubVerdicts(written: { user?: readonly string[]; later?: readonly string[] }): {
   row: RowVerdicts
   asked: string[]
+  askedLater: string[]
 } {
   const asked: string[] = []
+  const askedLater: string[] = []
   const key = (column: string, path: readonly string[] = []): string => [column, ...path].join('|')
   const row: RowVerdicts = {
     userWrote: (column, path) => {
       asked.push(key(column, path))
       return (written.user ?? []).includes(key(column, path))
     },
-    laterTurnWrote: (column, path) => (written.later ?? []).includes(key(column, path)),
+    laterTurnWrote: (column, path) => {
+      askedLater.push(key(column, path))
+      return (written.later ?? []).includes(key(column, path))
+    },
     userTouched: () => (written.user ?? []).length > 0,
     laterTurnTouched: () => (written.later ?? []).length > 0,
   }
-  return { row, asked }
+  return { row, asked, askedLater }
 }
 
 describe('fieldVerdicts', () => {
@@ -281,6 +294,15 @@ describe('fieldVerdicts', () => {
     ])
   })
 
+  it('protects only the state sub-field a later turn wrote, not its siblings', () => {
+    const { row } = stubVerdicts({ later: ['state|voice'] })
+
+    expect(fieldVerdicts(row, ['state.voice', 'state.traits'])).toEqual([
+      { field: 'state.voice', free: false, reason: CLOSE_REASON.laterTurn },
+      { field: 'state.traits', free: true },
+    ])
+  })
+
   it("reports the user's reason when a later turn wrote the field too", () => {
     const { row } = stubVerdicts({ user: ['description'], later: ['description'] })
 
@@ -290,11 +312,13 @@ describe('fieldVerdicts', () => {
   })
 
   it('asks a top-level column with no path and a state sub-field by its path inside state', () => {
-    const { row, asked } = stubVerdicts({})
+    const { row, asked, askedLater } = stubVerdicts({})
 
     fieldVerdicts(row, ['description', 'state.voice', 'state.visual.face'])
 
-    expect(asked).toEqual(['description', 'state|voice', 'state|visual|face'])
+    const paths = ['description', 'state|voice', 'state|visual|face']
+    expect(asked).toEqual(paths)
+    expect(askedLater).toEqual(paths)
   })
 })
 
@@ -351,11 +375,25 @@ describe('entityWriteAction', () => {
     ).toEqual([])
   })
 
+  it('compares a stored object by its keys and values, not by identity', () => {
+    const stored = { ...WREN_STATE.visual }
+
+    expect(entityWriteAction(CHARACTER, { 'state.visual': stored }).fields).toEqual([])
+    expect(
+      entityWriteAction(CHARACTER, { 'state.visual': { ...stored, face: 'scarred' } }).fields,
+    ).toEqual(['state.visual'])
+  })
+
+  it("counts a value the kind's empty state already holds as stored when the row has no state", () => {
+    expect(entityWriteAction({ ...CHARACTER, state: null }, { 'state.traits': [] }).fields).toEqual(
+      [],
+    )
+  })
+
   it('never changes the row it reads', () => {
     const before = JSON.parse(JSON.stringify(CHARACTER)) as Entity
 
-    // Values no other case writes: a mutated CHARACTER from an earlier case would otherwise hide a leak here.
-    entityWriteAction(CHARACTER, { 'state.voice': 'unheard', 'state.visual.face': 'unseen' })
+    entityWriteAction(CHARACTER, { 'state.voice': 'hoarse', 'state.visual.face': 'scarred' })
 
     expect(CHARACTER).toEqual(before)
   })
