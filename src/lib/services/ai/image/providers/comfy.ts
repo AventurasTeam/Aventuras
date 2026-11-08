@@ -511,6 +511,26 @@ export function createComfyProvider(config: ImageProviderConfig): ImageProvider 
   const fetchModels = (type: string, signal?: AbortSignal) =>
     fetchModelList(baseUrl, type, config.timeoutMs, signal)
 
+  async function readObjectInfo<T extends z.ZodType>(
+    node: string,
+    schema: T,
+    serviceId: string,
+    signal?: AbortSignal,
+  ): Promise<z.output<T>> {
+    const response = await imageGetFetch(endpoint(baseUrl, `object_info/${node}`), undefined, {
+      serviceId,
+      timeoutMs: config.timeoutMs,
+      signal,
+    })
+    const info = schema.safeParse(await response.json())
+    if (!info.success) {
+      throw new Error(
+        `ComfyUI sent an unreadable /object_info/${node} reply\n${z.prettifyError(info.error)}`,
+      )
+    }
+    return info.data
+  }
+
   return {
     id: 'comfyui',
     name: 'Comfy UI',
@@ -705,34 +725,14 @@ export function createComfyProvider(config: ImageProviderConfig): ImageProvider 
     },
 
     async getSamplerInfo(signal?: AbortSignal): Promise<ComfySamplerInfo> {
-      const response = await imageGetFetch(endpoint(baseUrl, 'object_info/KSampler'), undefined, {
-        serviceId: 'comfy-samplers',
-        timeoutMs: config.timeoutMs,
-        signal,
-      })
-      const info = KSamplerInfo.safeParse(await response.json())
-      if (!info.success) {
-        throw new Error(
-          `ComfyUI sent an unreadable /object_info/KSampler reply\n${z.prettifyError(info.error)}`,
-        )
-      }
-      const { sampler_name, scheduler } = info.data.KSampler.input.required
+      const info = await readObjectInfo('KSampler', KSamplerInfo, 'comfy-samplers', signal)
+      const { sampler_name, scheduler } = info.KSampler.input.required
       return { samplers: choices(sampler_name), schedulers: choices(scheduler) }
     },
 
     async listClipTypes(signal?: AbortSignal): Promise<string[]> {
-      const response = await imageGetFetch(endpoint(baseUrl, 'object_info/CLIPLoader'), undefined, {
-        serviceId: 'comfy-clip-types',
-        timeoutMs: config.timeoutMs,
-        signal,
-      })
-      const info = CLIPLoaderInfo.safeParse(await response.json())
-      if (!info.success) {
-        throw new Error(
-          `ComfyUI sent an unreadable /object_info/CLIPLoader reply\n${z.prettifyError(info.error)}`,
-        )
-      }
-      return choices(info.data.CLIPLoader.input.required.type)
+      const info = await readObjectInfo('CLIPLoader', CLIPLoaderInfo, 'comfy-clip-types', signal)
+      return choices(info.CLIPLoader.input.required.type)
     },
   }
 }
