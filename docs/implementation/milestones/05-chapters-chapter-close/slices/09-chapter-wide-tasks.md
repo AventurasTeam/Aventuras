@@ -371,11 +371,13 @@ Each test file runs under `pnpm vitest run --project unit <file>`.
   `skipped`. A row with only a later retrieval bump still merges, a user
   edit of the kept row's `icon` doesn't stop a merge writing only
   `description`, and a user's value on the kept row's own awareness row
-  stands while the merge lands (`close-agent/close-happenings.test.ts`).
+  stands while the merge lands, the model's list naming its character
+  (`close-agent/close-happenings.test.ts`).
 - **Merge shape:** the survivor holds the composite and the earliest
   anchor; two absorbed rows naming one character give one upsert with max,
   earliest and sum; two naming one involvement give one create; a
-  user-removed involvement stays removed; a composite past the bound
+  user-removed involvement stays removed, the model's list naming its
+  character; a composite past the bound
   lands bounded; the ledger entry of a landed merge lists every row and
   has `survivor` (`close-agent/close-happenings.test.ts`).
 - **Awareness arm:** a `chapter_close` upsert moves `learned_at_entry_id`
