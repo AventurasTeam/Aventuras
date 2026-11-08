@@ -1133,6 +1133,58 @@ describe('dispatchToolCall in a close phase', () => {
     expect(await runDeltas(result.actionId)).toEqual([])
   })
 
+  it('records a write the checks refuse by its tool and the rows it names, with no values', async () => {
+    const update: ScriptedCall = {
+      toolName: 'set_fields',
+      input: { id: 'c2', description: 'Bram, at the toll.', ...cite(['t7'], 'He waits.') },
+    }
+    const create = (why: string): ScriptedCall => ({
+      toolName: 'create_note',
+      input: { title: 'The Toll', body: 'Paid at dawn.', ...cite(['t7'], why) },
+    })
+
+    await runDispatch([
+      update,
+      { toolName: 'peek_row', input: { id: 'c2' } },
+      update,
+      create(''),
+      create('She pays it.'),
+    ])
+
+    const [unread, , retried, whyless, created] = recorded()
+    expect(unread).toEqual({
+      task: 'identity',
+      part: 1,
+      tool: 'set_fields',
+      rows: [{ table: 'entities', id: BRAM, name: 'Bram' }],
+      why: 'He waits.',
+      turns: [endEntryId()],
+      result: 'rejected',
+      reason: expect.stringContaining("c2 hasn't been read"),
+    })
+    expect(retried).toMatchObject({
+      tool: 'set_fields',
+      rows: [{ table: 'entities', id: BRAM }],
+      result: 'ok',
+      values: { description: 'Bram, at the toll.' },
+    })
+    expect(whyless).toEqual({
+      task: 'identity',
+      part: 1,
+      tool: 'create_note',
+      rows: [],
+      why: '',
+      turns: [endEntryId()],
+      result: 'rejected',
+      reason: expect.stringContaining('why is empty'),
+    })
+    expect(created).toMatchObject({
+      tool: 'create_note',
+      rows: [{ table: 'lore', name: 'The Toll' }],
+      result: 'ok',
+    })
+  })
+
   it("keeps a refused plan's proposed values, and names a gone row's survivor to the model only", async () => {
     seeds = [
       { table: 'entities', id: WREN },
