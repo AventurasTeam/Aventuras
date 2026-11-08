@@ -458,7 +458,7 @@ describe('Image Provider Registry', () => {
         listModels = vi.fn(async (): Promise<ImageModelInfo[]> => []),
         getModelCapabilities,
       }: {
-        listModels?: () => Promise<ImageModelInfo[]>
+        listModels?: (signal?: AbortSignal) => Promise<ImageModelInfo[]>
         getModelCapabilities?: (model: string) => Promise<ImageModelCapabilities | undefined>
       } = {},
     ) {
@@ -696,18 +696,18 @@ describe('Image Provider Registry', () => {
 
   describe('cancelled model listing', () => {
     it('hands the signal to the adapter', async () => {
-      const listModels = vi.fn(async (_apiKey?: string, _signal?: AbortSignal) => [])
+      const listModels = vi.fn(async (_signal?: AbortSignal) => [])
       vi.mocked(createOpenAIProvider).mockReturnValue(adapter(listModels))
       const { signal } = new AbortController()
 
       await listImageModels(conn('openai', 'sk-abort-pass'), true, signal)
 
-      expect(listModels.mock.calls[0][1]).toBe(signal)
+      expect(listModels.mock.calls[0][0]).toBe(signal)
     })
 
     it('rejects and caches nothing when the abort lands as the adapter returns a list', async () => {
       const controller = new AbortController()
-      const listModels = vi.fn(async (_apiKey?: string, _signal?: AbortSignal) => {
+      const listModels = vi.fn(async (_signal?: AbortSignal) => {
         controller.abort()
         return [{ id: 'partial', name: 'partial' }]
       })

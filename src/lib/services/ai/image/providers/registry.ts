@@ -298,7 +298,7 @@ export async function listImageModels(
   forceReload: boolean,
   signal?: AbortSignal,
 ): Promise<ImageModelInfo[]> {
-  const { providerType, apiKey } = connection
+  const { providerType } = connection
   const cacheKey = modelListKey(connection)
   if (!forceReload) {
     const cached = modelCaches.get(cacheKey)
@@ -308,7 +308,7 @@ export async function listImageModels(
   }
 
   try {
-    const models = await createProvider(connection).listModels(apiKey, signal)
+    const models = await createProvider(connection).listModels(signal)
     signal?.throwIfAborted()
     modelCaches.set(cacheKey, { models, timestamp: Date.now() })
     return models

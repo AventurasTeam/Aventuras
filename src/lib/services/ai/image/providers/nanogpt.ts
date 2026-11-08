@@ -174,19 +174,13 @@ export function createNanoGPTProvider(config: ImageProviderConfig): ImageProvide
   })
 
   // Discovery works without a key; it is sent when set in case NanoGPT starts to vary the list by account.
-  const discoveryHeaders = (apiKey?: string) => {
-    return bearerHeaders(apiKey || config.apiKey)
-  }
+  const discoveryHeaders = bearerHeaders(config.apiKey)
 
-  async function fetchModels(apiKey?: string, signal?: AbortSignal): Promise<NanoGptModel[]> {
-    const response = await imageGetFetch(
-      endpoint(baseUrl, 'images/models'),
-      discoveryHeaders(apiKey),
-      {
-        serviceId: DISCOVERY_SERVICE_ID,
-        signal,
-      },
-    )
+  async function fetchModels(signal?: AbortSignal): Promise<NanoGptModel[]> {
+    const response = await imageGetFetch(endpoint(baseUrl, 'images/models'), discoveryHeaders, {
+      serviceId: DISCOVERY_SERVICE_ID,
+      signal,
+    })
     return parseModelList(await response.json(), NanoGptModel, 'NanoGPT /images/models')
   }
 
@@ -215,8 +209,8 @@ export function createNanoGPTProvider(config: ImageProviderConfig): ImageProvide
       })
     },
 
-    async listModels(apiKey?: string, signal?: AbortSignal): Promise<ImageModelInfo[]> {
-      return (await fetchModels(apiKey, signal)).map(toModelInfo)
+    async listModels(signal?: AbortSignal): Promise<ImageModelInfo[]> {
+      return (await fetchModels(signal)).map(toModelInfo)
     },
 
     // The list omits some ids that `/images` still serves, under a shorter name; those resolve here.
@@ -228,7 +222,7 @@ export function createNanoGPTProvider(config: ImageProviderConfig): ImageProvide
       const path = model.split('/').map(encodeURIComponent).join('/')
       const response = await imageGetFetchOptional(
         endpoint(baseUrl, `images/models/${path}/endpoints`),
-        discoveryHeaders(),
+        discoveryHeaders,
         { serviceId: DISCOVERY_SERVICE_ID, absentStatuses: [404] },
       )
       if (!response) return undefined

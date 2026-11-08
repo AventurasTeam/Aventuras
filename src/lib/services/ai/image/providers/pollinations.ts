@@ -81,9 +81,8 @@ function toModelInfo(m: PollinationsModel): ImageModelInfo {
 
 export function createPollinationsProvider(config: ImageProviderConfig): ImageProvider {
   // Discovery works without a key; it is sent when set.
-  async function listModels(apiKey?: string, signal?: AbortSignal): Promise<ImageModelInfo[]> {
-    const key = apiKey || config.apiKey
-    const headers = { Accept: 'application/json', ...bearerHeaders(key) }
+  async function listModels(signal?: AbortSignal): Promise<ImageModelInfo[]> {
+    const headers = { Accept: 'application/json', ...bearerHeaders(config.apiKey) }
 
     const response = await imageGetFetch(MODELS_ENDPOINT, headers, {
       serviceId: 'pollinations-image-models',

@@ -119,9 +119,9 @@ export function createOpenAICompatibleProvider(config: ImageProviderConfig): Ima
       })
     },
 
-    async listModels(apiKey?: string, signal?: AbortSignal): Promise<ImageModelInfo[]> {
+    async listModels(signal?: AbortSignal): Promise<ImageModelInfo[]> {
       if (!baseUrl) return []
-      return fetchImageModels(baseUrl, apiKey, signal)
+      return fetchImageModels(baseUrl, config.apiKey, signal)
     },
   }
 }
@@ -143,7 +143,7 @@ async function fetchEntries(
 
 async function fetchImageModels(
   baseUrl: string,
-  apiKey?: string,
+  apiKey: string,
   signal?: AbortSignal,
 ): Promise<ImageModelInfo[]> {
   const headers = bearerHeaders(apiKey)

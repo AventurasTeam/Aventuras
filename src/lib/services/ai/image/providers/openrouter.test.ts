@@ -144,12 +144,6 @@ describe('OpenRouter model discovery', () => {
     )
   })
 
-  it('sends the key it is given in preference to the configured one', async () => {
-    vi.mocked(imageGetFetch).mockResolvedValue(jsonResponse({ data: [] }))
-    await provider().listModels('other')
-    expect(vi.mocked(imageGetFetch).mock.calls[0][1]).toEqual({ Authorization: 'Bearer other' })
-  })
-
   it('sends no Authorization header without a key', async () => {
     vi.mocked(imageGetFetch).mockResolvedValue(jsonResponse({ data: [] }))
     await createOpenRouterProvider({ apiKey: '' }).listModels()

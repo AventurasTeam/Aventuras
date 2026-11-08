@@ -84,8 +84,7 @@ describe('Pollinations adapter', () => {
   })
 
   describe('listModels', () => {
-    const list = (apiKey?: string, configKey = 'k') =>
-      createPollinationsProvider({ apiKey: configKey }).listModels(apiKey)
+    const list = (apiKey = 'k') => createPollinationsProvider({ apiKey }).listModels()
 
     it('lists image models and skips the rest', async () => {
       catalogue(
@@ -174,19 +173,14 @@ describe('Pollinations adapter', () => {
 
     it('sends the key when there is one', async () => {
       catalogue(image('a/m'))
-      await list('arg-key')
+      await list('config-key')
       expect(imageGetFetch).toHaveBeenLastCalledWith(
         'https://gen.pollinations.ai/image/models',
-        { Accept: 'application/json', Authorization: 'Bearer arg-key' },
+        { Accept: 'application/json', Authorization: 'Bearer config-key' },
         expect.objectContaining({ serviceId: 'pollinations-image-models' }),
       )
 
-      await list(undefined, 'config-key')
-      expect(vi.mocked(imageGetFetch).mock.lastCall![1]).toMatchObject({
-        Authorization: 'Bearer config-key',
-      })
-
-      await list(undefined, '')
+      await list('')
       expect(vi.mocked(imageGetFetch).mock.lastCall![1]).toEqual({ Accept: 'application/json' })
     })
   })

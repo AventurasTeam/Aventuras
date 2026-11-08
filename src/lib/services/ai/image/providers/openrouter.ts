@@ -134,12 +134,12 @@ export function createOpenRouterProvider(config: ImageProviderConfig): ImageProv
     },
 
     // Discovery works without a key; it is sent when set.
-    async listModels(apiKey?: string, signal?: AbortSignal): Promise<ImageModelInfo[]> {
-      const key = apiKey || config.apiKey
-      const response = await imageGetFetch(endpoint(baseUrl, 'images/models'), bearerHeaders(key), {
-        serviceId: 'openrouter-image-models',
-        signal,
-      })
+    async listModels(signal?: AbortSignal): Promise<ImageModelInfo[]> {
+      const response = await imageGetFetch(
+        endpoint(baseUrl, 'images/models'),
+        bearerHeaders(config.apiKey),
+        { serviceId: 'openrouter-image-models', signal },
+      )
       return parseModelList(
         await response.json(),
         OpenRouterModel,

@@ -89,8 +89,8 @@ export function createOpenAIProvider(config: ImageProviderConfig): ImageProvider
       })
     },
 
-    async listModels(apiKey: string, signal?: AbortSignal): Promise<ImageModelInfo[]> {
-      return fetchOpenAIImageModels(baseUrl, apiKey, signal)
+    async listModels(signal?: AbortSignal): Promise<ImageModelInfo[]> {
+      return fetchOpenAIImageModels(baseUrl, config.apiKey, signal)
     },
   }
 }

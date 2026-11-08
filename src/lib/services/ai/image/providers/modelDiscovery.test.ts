@@ -30,29 +30,29 @@ describe('model discovery', () => {
   describe.each(EMPTY)('%s', (_name, create, emptyBody) => {
     it('rejects when the request fails', async () => {
       vi.mocked(imageGetFetch).mockRejectedValue(new Error('Image API error 500: boom'))
-      await expect(create().listModels('k')).rejects.toThrow('boom')
+      await expect(create().listModels()).rejects.toThrow('boom')
     })
 
     it('rejects on a network error', async () => {
       vi.mocked(imageGetFetch).mockRejectedValue(new TypeError('Failed to fetch'))
-      await expect(create().listModels('k')).rejects.toThrow('Failed to fetch')
+      await expect(create().listModels()).rejects.toThrow('Failed to fetch')
     })
 
     it('returns an empty list, not a substitute, when nothing matches', async () => {
       vi.mocked(imageGetFetch).mockResolvedValue(reply(emptyBody))
-      expect(await create().listModels('k')).toEqual([])
+      expect(await create().listModels()).toEqual([])
     })
 
     it('rejects a reply that is not a list, rather than listing nothing', async () => {
       vi.mocked(imageGetFetch).mockResolvedValue(reply('<html>not the API</html>'))
-      await expect(create().listModels('k')).rejects.toThrow(/did not return a (model )?list/)
+      await expect(create().listModels()).rejects.toThrow(/did not return a (model )?list/)
     })
 
     it('forwards the abort signal to its request', async () => {
       vi.mocked(imageGetFetch).mockResolvedValue(reply(emptyBody))
       const { signal } = new AbortController()
 
-      await create().listModels('k', signal)
+      await create().listModels(signal)
 
       const calls = vi.mocked(imageGetFetch).mock.calls
       expect(calls.length).toBeGreaterThan(0)
@@ -67,14 +67,14 @@ describe('model discovery', () => {
         throw new SyntaxError('Unexpected token <')
       },
     } as unknown as Response)
-    await expect(createOpenRouterProvider({ apiKey: 'k' }).listModels('k')).rejects.toThrow(
+    await expect(createOpenRouterProvider({ apiKey: 'k' }).listModels()).rejects.toThrow(
       'Unexpected token',
     )
   })
 
   it('rejects A1111 entries that name no model, rather than listing blank ones', async () => {
     vi.mocked(imageGetFetch).mockResolvedValue(reply([{ filename: 'x' }]))
-    await expect(createA1111Provider({ apiKey: '' }).listModels('')).rejects.toThrow(
+    await expect(createA1111Provider({ apiKey: '' }).listModels()).rejects.toThrow(
       'no readable entries',
     )
   })
@@ -140,7 +140,7 @@ describe('model discovery', () => {
   })
 
   it('makes no OpenAI request without a key', async () => {
-    expect(await createOpenAIProvider({ apiKey: '' }).listModels('')).toEqual([])
+    expect(await createOpenAIProvider({ apiKey: '' }).listModels()).toEqual([])
     expect(imageGetFetch).not.toHaveBeenCalled()
   })
 })

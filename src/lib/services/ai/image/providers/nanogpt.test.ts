@@ -134,12 +134,6 @@ describe('NanoGPT model catalogue', () => {
     )
   })
 
-  it('sends the key it is given in preference to the configured one', async () => {
-    withModels(listed('m'))
-    await createNanoGPTProvider({ apiKey: 'old' }).listModels('new')
-    expect(vi.mocked(imageGetFetch).mock.calls[0][1]).toEqual({ Authorization: 'Bearer new' })
-  })
-
   it('sends no Authorization header without a key', async () => {
     withModels(listed('m'))
     await createNanoGPTProvider({ apiKey: '' }).listModels()

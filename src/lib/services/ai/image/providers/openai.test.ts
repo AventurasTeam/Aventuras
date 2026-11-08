@@ -195,7 +195,7 @@ describe('OpenAI model listing', () => {
         ],
       }),
     )
-    const models = await createOpenAIProvider({ apiKey: 'k' }).listModels('k')
+    const models = await createOpenAIProvider({ apiKey: 'k' }).listModels()
     expect(models.map((m) => [m.id, m.supportsImg2Img, m.maxReferenceImages])).toEqual([
       ['gpt-image-2', true, 16],
       ['chatgpt-image-latest', true, 16],
@@ -206,7 +206,7 @@ describe('OpenAI model listing', () => {
     vi.mocked(imageGetFetch).mockResolvedValue(
       modelsResponse({ data: [{ id: 'gpt-image-2' }, { id: 'gpt-image-1.5' }] }),
     )
-    const [free, fixed] = await createOpenAIProvider({ apiKey: 'k' }).listModels('k')
+    const [free, fixed] = await createOpenAIProvider({ apiKey: 'k' }).listModels()
     expect(free.supportedResolutions).toBeUndefined()
     expect(fixed.supportedResolutions).toEqual(['1024x1024', '1536x1024', '1024x1536'])
   })
@@ -217,14 +217,14 @@ describe('OpenAI model listing', () => {
         data: [{ id: 'gpt-image-2.5-flare' }, { id: 'gpt-image-2.5-flare-2026-09-08' }],
       }),
     )
-    const [model, snapshot] = await createOpenAIProvider({ apiKey: 'k' }).listModels('k')
+    const [model, snapshot] = await createOpenAIProvider({ apiKey: 'k' }).listModels()
     expect(snapshot).toMatchObject({ id: 'gpt-image-2.5-flare-2026-09-08' })
     expect(snapshot.maxReferenceImages).toBe(model.maxReferenceImages)
   })
 
   it('knows only that an unlisted image model takes references', async () => {
     vi.mocked(imageGetFetch).mockResolvedValue(modelsResponse({ data: [{ id: 'gpt-image-9' }] }))
-    const [model] = await createOpenAIProvider({ apiKey: 'k' }).listModels('k')
+    const [model] = await createOpenAIProvider({ apiKey: 'k' }).listModels()
     expect(model.supportsImg2Img).toBe(true)
     expect(model.maxReferenceImages).toBeUndefined()
     expect(model.supportedResolutions).toBeUndefined()
@@ -234,7 +234,7 @@ describe('OpenAI model listing', () => {
     vi.mocked(imageGetFetch).mockResolvedValue(
       modelsResponse({ data: [null, 'gpt-image-2', { id: 7 }, { id: 'gpt-image-2' }] }),
     )
-    const models = await createOpenAIProvider({ apiKey: 'k' }).listModels('k')
+    const models = await createOpenAIProvider({ apiKey: 'k' }).listModels()
     expect(models.map((m) => m.id)).toEqual(['gpt-image-2'])
   })
 })

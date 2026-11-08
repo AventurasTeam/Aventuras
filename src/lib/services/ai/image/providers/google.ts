@@ -46,7 +46,7 @@ export function createGoogleProvider(config: ImageProviderConfig): ImageProvider
       })
     },
 
-    async listModels(_apiKey?: string, signal?: AbortSignal): Promise<ImageModelInfo[]> {
+    async listModels(signal?: AbortSignal): Promise<ImageModelInfo[]> {
       return fetchGoogleImageModels(baseUrl, config.apiKey, signal)
     },
   }

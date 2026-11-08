@@ -68,7 +68,7 @@ describe('ComfyUI model discovery', () => {
     const { signal } = new AbortController()
     const provider = createComfyProvider({ apiKey: '' })
 
-    await provider.listModels(undefined, signal)
+    await provider.listModels(signal)
     await provider.listLoras!(signal)
     await provider.getSamplerInfo!(signal).catch(() => {})
     await provider.listClipTypes!(signal).catch(() => {})

@@ -115,7 +115,7 @@ describe('Google model listing', () => {
     respond({ json: async () => ({ models: [] }) })
     const { signal } = new AbortController()
 
-    await createGoogleProvider({ apiKey: 'k' }).listModels(undefined, signal)
+    await createGoogleProvider({ apiKey: 'k' }).listModels(signal)
 
     expect(vi.mocked(imageGetFetch).mock.calls[0][2]?.signal).toBe(signal)
   })

@@ -680,7 +680,7 @@ export function createComfyProvider(config: ImageProviderConfig): ImageProvider 
       })
     },
 
-    async listModels(_apiKey?: string, signal?: AbortSignal): Promise<ImageModelInfo[]> {
+    async listModels(signal?: AbortSignal): Promise<ImageModelInfo[]> {
       const [checkpoints, diffusionModels] = await Promise.all([
         fetchModels('checkpoints', signal),
         fetchModels('diffusion_models', signal).catch(() => []),

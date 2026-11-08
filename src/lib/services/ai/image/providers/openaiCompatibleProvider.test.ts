@@ -101,13 +101,13 @@ describe('OpenAI Compatible model listing', () => {
   }
 
   const list = (apiKey = 'k') =>
-    createOpenAICompatibleProvider({ apiKey, baseUrl: BASE_URL }).listModels(apiKey)
+    createOpenAICompatibleProvider({ apiKey, baseUrl: BASE_URL }).listModels()
 
   it('forwards the abort signal to both list requests', async () => {
     mockHost({ models: json({ data: [] }) })
     const { signal } = new AbortController()
 
-    await createOpenAICompatibleProvider({ apiKey: 'k', baseUrl: BASE_URL }).listModels('k', signal)
+    await createOpenAICompatibleProvider({ apiKey: 'k', baseUrl: BASE_URL }).listModels(signal)
 
     const calls = vi.mocked(imageGetFetch).mock.calls
     expect(calls).toHaveLength(2)
@@ -480,7 +480,7 @@ describe('OpenAI Compatible model listing', () => {
     })
 
     it('returns an empty list, and makes no request, without a base URL', async () => {
-      expect(await createOpenAICompatibleProvider({ apiKey: 'k' }).listModels('k')).toEqual([])
+      expect(await createOpenAICompatibleProvider({ apiKey: 'k' }).listModels()).toEqual([])
       expect(imageGetFetch).not.toHaveBeenCalled()
     })
   })

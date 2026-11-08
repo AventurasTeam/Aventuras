@@ -80,7 +80,7 @@ export function createA1111Provider(config: ImageProviderConfig): ImageProvider 
       })
     },
 
-    async listModels(apiKey: string, signal?: AbortSignal): Promise<ImageModelInfo[]> {
+    async listModels(signal?: AbortSignal): Promise<ImageModelInfo[]> {
       const response = await imageGetFetch(endpoint(baseUrl, 'sdapi/v1/sd-models'), undefined, {
         serviceId: 'a1111-models',
         signal,

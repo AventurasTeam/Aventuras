@@ -70,7 +70,7 @@ export interface ImageProvider {
   readonly id: ImageProviderType
   readonly name: string
   generate(options: ImageGenerateOptions): Promise<ImageGenerateResult>
-  listModels(apiKey?: string, signal?: AbortSignal): Promise<ImageModelInfo[]>
+  listModels(signal?: AbortSignal): Promise<ImageModelInfo[]>
   /**
    * One model's capabilities, for snapshot providers that can describe a model without listing
    * them all: the lookup that backfills a profile's snapshot. Rejects on failure; `undefined`
