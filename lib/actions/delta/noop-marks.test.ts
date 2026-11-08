@@ -61,6 +61,10 @@ type NoopCall = {
   markText: string | null
 }
 
+const isNoMark = (node: ts.Expression): boolean =>
+  (ts.isIdentifier(node) && node.text === 'undefined') ||
+  (ts.isVoidExpression(node) && ts.isNumericLiteral(node.expression))
+
 function noopCalls(path: string, source: string): NoopCall[] {
   const file = ts.createSourceFile(path, source, ts.ScriptTarget.Latest, true, ts.ScriptKind.TS)
   const calls: NoopCall[] = []
@@ -76,7 +80,7 @@ function noopCalls(path: string, source: string): NoopCall[] {
         at: `${path}:${line + 1}`,
         reason: reason?.getText(file) ?? '',
         literal: reason !== undefined && ts.isStringLiteralLike(reason) ? reason.text : null,
-        marked: mark !== undefined,
+        marked: mark !== undefined && !isNoMark(mark),
         markText: mark?.getText(file) ?? null,
       })
     }
@@ -118,6 +122,8 @@ const PROBE = [
   'noopRefusal(PLACE_REFUSAL.storyInside)',
   "noopRefusal(\n  'relationship unchanged',\n  'restated',\n)",
   "noopRefusal('not-active', status === 'retired' ? 'restated' : undefined)",
+  "noopRefusal('relationship unchanged', undefined)",
+  "noopRefusal('already-flagged', void 0)",
 ].join('\n')
 
 const NOT_FOUND_PROBE = [
@@ -133,11 +139,13 @@ const NOT_FOUND_PROBE = [
 describe('noopRefusal marks: the scan (C11)', () => {
   it('flags an unmarked value or gone row and passes a mark, a rule or precedence', () => {
     const calls = noopCalls('probe.ts', PROBE)
-    expect(calls).toHaveLength(8)
+    expect(calls).toHaveLength(10)
     expect(unmarked(calls)).toEqual([
       "probe.ts:1 'no-op lore patch'",
       'probe.ts:2 reasonFor(id)',
       "probe.ts:3 'USER_EDITED_SINCE_PROSE'",
+      "probe.ts:12 'relationship unchanged'",
+      "probe.ts:13 'already-flagged'",
     ])
   })
 
