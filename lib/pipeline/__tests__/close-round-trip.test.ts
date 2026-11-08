@@ -3,10 +3,14 @@ import { and, asc, desc, eq, isNotNull } from 'drizzle-orm'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { startManualClose } from '@/lib/actions/chapters/start-manual-close'
-import { applyDeltaAction } from '@/lib/actions/delta/apply-delta-action'
+import {
+  applyDeltaAction,
+  applyDeltaActionGroupWithOutcomes,
+} from '@/lib/actions/delta/apply-delta-action'
 import { shownCounts } from '@/lib/actions/story-entries/__tests__/shown-counts'
 import { rollbackToEntry } from '@/lib/actions/story-entries/operational'
 import { redoLastAction, undoLastAction } from '@/lib/actions/story-entries/undo'
+import type { GroupOutcome, PipelineAction } from '@/lib/actions/types'
 import type {
   generateStructured,
   generateToolStep,
@@ -27,11 +31,11 @@ import {
   threads,
   type Delta,
 } from '@/lib/db'
-import { pipelineEventBus, type TxResult } from '@/lib/pipeline'
+import { configureDeltaActionPort, pipelineEventBus, type TxResult } from '@/lib/pipeline'
 import { interruptMemoryRuns } from '@/lib/stores'
 
 import { standInSlots, standInTool } from './close-stand-in'
-import { expectRan, resetSingletons } from './harness'
+import { expectRan, realDeltaActionPort, resetSingletons } from './harness'
 import {
   metadataReplyResult,
   openCloseFixture,
@@ -139,12 +143,6 @@ const WORLD_TABLES = [
 ] as const
 type WorldTable = (typeof WORLD_TABLES)[number]
 
-const LINK_TABLES: readonly WorldTable[] = [
-  'happening_involvements',
-  'happening_awareness',
-  'character_relationships',
-]
-
 const isWorldTable = (table: string): table is WorldTable =>
   (WORLD_TABLES as readonly string[]).includes(table)
 
@@ -251,13 +249,20 @@ type CloseHarness = {
   readonly before: WorldState
   /** Runs the close to completion; a case must land at least one tool group. */
   close: () => Promise<void>
-  /** Starts the close and calls `act` as its first tool group commits; resolves with the run. */
+  /** Starts the close and calls `act` once its first tool group has landed; resolves with the run. */
   closeActingOnToolGroup: (act: () => void) => Promise<TxResult>
+  /** The group `act` ran on, if it ran. */
+  actedOn: () => ToolGroup | undefined
   /** The close's action, once it started. */
   actionId: () => string
   /** The state and the close's own log as the close completed. */
   closed: () => { state: WorldState; log: Delta[] }
 }
+
+type ToolGroup = { kinds: readonly PipelineAction['kind'][]; landed: boolean }
+
+const landedAny = (outcome: GroupOutcome | undefined): boolean =>
+  outcome?.status === 'ok' && outcome.outcomes.some((one) => one.status === 'landed')
 
 function defined<T>(value: T | undefined, what: string): T {
   if (value === undefined) throw new Error(`round trip: ${what}`)
@@ -269,15 +274,31 @@ async function openHarness(c: RoundTripCase): Promise<CloseHarness> {
   await seedCharacter(fx)
   __setCloseAgentSlots(c.slots())
   script(c.steps)
-  let toolGroups = 0
+  // The bus hears every group the orchestrator dispatched, refused or not; the port has its outcome.
+  let lastOutcome: GroupOutcome | undefined
+  configureDeltaActionPort({
+    ...realDeltaActionPort(),
+    applyDeltaActionGroupWithOutcomes: async (actions, args, ctx) => {
+      lastOutcome = await applyDeltaActionGroupWithOutcomes(actions, args, ctx)
+      return lastOutcome
+    },
+  })
+  const toolGroups: ToolGroup[] = []
   let onToolGroup: (() => void) | undefined
-  // The bus sees a group once it has committed; the metadata group is the one with the create.
+  let actedOn: ToolGroup | undefined
+  // The metadata group is the one with the create.
   pipelineEventBus.subscribe('delta_group_emitted', (event) => {
-    if (event.actions.some((a) => a.kind === 'createChapter')) return
-    toolGroups += 1
+    const group: ToolGroup = {
+      kinds: event.actions.map((a) => a.kind),
+      landed: landedAny(lastOutcome),
+    }
+    if (group.kinds.includes('createChapter')) return
+    toolGroups.push(group)
     const act = onToolGroup
+    if (act === undefined || !group.landed) return
     onToolGroup = undefined
-    act?.()
+    actedOn = group
+    act()
   })
   const endEntryId = fx.replyIds[END_REPLY]
   const before = await worldState(fx)
@@ -296,13 +317,23 @@ async function openHarness(c: RoundTripCase): Promise<CloseHarness> {
     close: async () => {
       const tx = await start()
       expect(tx).toMatchObject({ outcome: 'completed' })
-      expect(toolGroups, 'a case lands at least one tool group').toBeGreaterThan(0)
-      closed = { state: await worldState(fx), log: await deltasOf(fx, tx.actionId) }
+      expect(
+        toolGroups.some((group) => group.landed),
+        'the case landed nothing',
+      ).toBe(true)
+      const log = await deltasOf(fx, tx.actionId)
+      // A table the snapshot misses would let a reversal leave rows behind unseen.
+      const unlisted = new Set(
+        log.map((d) => d.targetTable).filter((t) => t !== 'story_entries' && !isWorldTable(t)),
+      )
+      expect([...unlisted], 'close deltas on tables the snapshot misses').toEqual([])
+      closed = { state: await worldState(fx), log }
     },
     closeActingOnToolGroup: (act) => {
       onToolGroup = act
       return start()
     },
+    actedOn: () => actedOn,
     actionId: () => defined(actionId, 'the close has not started'),
     closed: () => defined(closed, 'the close has not completed'),
   }
@@ -317,17 +348,7 @@ async function undoClose(h: CloseHarness): Promise<void> {
     ).toBe(true)
   // C9: a hold redo can't restore refuses as `integrity`, with `held-in-redo` in its reason.
   expect(await undoLastAction(h.fx.branchId, h.fx.ctx)).toEqual({ status: 'ok' })
-  if (!h.merge) return
-  const after = await worldState(h.fx)
-  for (const table of LINK_TABLES)
-    expect(after.rows[table], `${table} after CTRL-Z`).toHaveLength(h.before.rows[table].length)
-  const createdLeft = log.filter(
-    (d) =>
-      d.op === 'create' &&
-      isWorldTable(d.targetTable) &&
-      after.rows[d.targetTable].some((row) => row.id === d.targetId),
-  )
-  expect(createdLeft, 'rows the close created, left after CTRL-Z').toEqual([])
+  expect(await worldState(h.fx), 'the world after CTRL-Z').toEqual(h.before)
 }
 
 async function rollBack(h: CloseHarness, targetId: string): Promise<void> {
@@ -386,6 +407,8 @@ const ARMS: readonly RoundTripArm[] = [
       const tx = await h.closeActingOnToolGroup(() => {
         void interruptMemoryRuns(h.fx.branchId)
       })
+      const group = defined(h.actedOn(), 'the abort never fired: no tool group landed')
+      expect(group.kinds, 'the group the abort fired on').not.toContain('createChapter')
       expect(tx.outcome).toBe('aborted')
     },
   },
