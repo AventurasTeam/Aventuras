@@ -329,7 +329,7 @@ async function main(): Promise<void> {
     let completed = 0
     for (let k = 1; k <= RUNS; k++)
       if (await probeRun(k, source, { url: LLM_URL, model: LLM_MODEL })) completed++
-    if (completed === 0) process.exitCode = 1
+    if (completed < RUNS) process.exitCode = 1
   } finally {
     const after = sha256(source)
     console.log(
