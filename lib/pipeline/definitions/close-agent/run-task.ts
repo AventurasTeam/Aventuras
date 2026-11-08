@@ -85,14 +85,12 @@ export async function* runCloseTask(
   def: CloseTaskDef,
   ctx: TaskRunContext,
 ): AsyncGenerator<PhaseEmittedEvent, TaskEnd, GroupOutcome | undefined> {
-  // The guard reads ctx.phase's db and branch, so the tools must read the same ones.
-  const taskCtx: TaskRunContext = {
-    ...ctx,
-    db: ctx.phase.db,
-    branchId: ctx.phase.branchId,
-    task: def.task,
-    readFields: def.readFields,
-  }
+  // The guard reads ctx.branchId with ctx.phase.db, and the orchestrator applies groups on the
+  // phase's branch: a context that names another db or branch would split a write from its guard.
+  if (ctx.db !== ctx.phase.db) throw new Error("runCloseTask: the context's db isn't the phase's")
+  if (ctx.branchId !== ctx.phase.branchId)
+    throw new Error("runCloseTask: the context's branch isn't the phase's")
+  const taskCtx: TaskRunContext = { ...ctx, task: def.task, readFields: def.readFields }
   const start = await def.start(taskCtx)
   if (start === null) return { status: 'finished' }
   // Per task and part: a row read in one task is unread in the next.

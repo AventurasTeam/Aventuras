@@ -666,24 +666,18 @@ describe('runCloseTask', () => {
     expect(ledger.stopped).toEqual([{ task: 'identity', part: 1, reason: 'window' }])
   })
 
-  it("runs on the phase's branch, whatever the context's own field holds", async () => {
-    vi.mocked(generateToolStep).mockResolvedValueOnce(okStep([appendCall('k1', 'first')]))
-    const seen: string[] = []
-    const def = taskDef({
-      start: async (ctx) => {
-        seen.push(ctx.branchId)
-        return { show: ['c1'], seeds: [{ table: 'entities', id: WREN }] }
-      },
-    })
+  it.each<[string, (phase: PhaseContext) => Partial<TaskRunContext>]>([
+    ['branch', () => ({ branchId: 'br_00000000-0000-4000-8000-0000000000ff' })],
+    ['db', (phase) => ({ db: Object.create(phase.db) as PhaseContext['db'] })],
+  ])("throws, starting nothing, when the context's %s isn't the phase's", async (field, over) => {
+    const start = vi.fn(taskDef().start)
+    const phase = phaseContext()
 
-    const { end } = await drive(
-      def,
-      runContext(phaseContext(), { branchId: 'br_00000000-0000-4000-8000-0000000000ff' }),
+    await expect(drive(taskDef({ start }), runContext(phase, over(phase)))).rejects.toThrow(
+      `runCloseTask: the context's ${field} isn't the phase's`,
     )
-
-    expect(end).toEqual({ status: 'finished' })
-    expect(seen).toEqual([f.branchId])
-    expect(await description()).toBe('A courier. first')
+    expect(start).not.toHaveBeenCalled()
+    expect(generateToolStep).not.toHaveBeenCalled()
   })
 
   const NOT_JSON: [string, unknown][] = [
