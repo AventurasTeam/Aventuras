@@ -11,14 +11,17 @@ import { imageGetFetch } from './fetchAdapter'
 import { createNanoGPTImage } from './nanogptImage'
 import { parseModelList } from './parseModelList'
 import { createImageSdkFetch, generateSdkImage } from './sdkImage'
-import { specToPixels, formatImageSize, pickSize, specToAspectRatio } from '#lib/utils/image.ts'
+import {
+  specToPixels,
+  formatImageSize,
+  isAspectRatio,
+  pickSize,
+  specToAspectRatio,
+} from '#lib/utils/image.ts'
 import { endpoint } from '#lib/utils/url.ts'
 import { resolveBaseUrl } from './baseUrls'
 
 const DISCOVERY_SERVICE_ID = 'nanogpt-image-models'
-
-// Keeps `w:h` ratios; the catalogue also lists values like `auto` and `match_input_image`.
-const ASPECT_RATIO = /^\d+(\.\d+)?:\d+(\.\d+)?$/
 
 const optionalString = z.string().optional().catch(undefined)
 const optionalNumber = z.number().optional().catch(undefined)
@@ -159,7 +162,7 @@ function toCapabilities({
     requiresReferenceImage: requiresReferenceImage ? true : undefined,
     referenceConstraints: toReferenceConstraints(params.input_image_constraints),
     supportedResolutions: nonEmpty(params.resolutions) ?? nonEmpty(params.resolution),
-    supportedAspectRatios: nonEmpty(params.aspect_ratio?.filter((v) => ASPECT_RATIO.test(v))),
+    supportedAspectRatios: nonEmpty(params.aspect_ratio?.filter(isAspectRatio)),
   }
 }
 

@@ -8,7 +8,7 @@
 import * as z from 'zod'
 import { createOpenRouter } from '@openrouter/ai-sdk-provider'
 import type { ImageModelCapabilities } from '#lib/types/index.ts'
-import { pickResolution, specToAspectRatio } from '#lib/utils/image.ts'
+import { isAspectRatio, pickResolution, specToAspectRatio } from '#lib/utils/image.ts'
 import { endpoint } from '#lib/utils/url.ts'
 import { resolveBaseUrl } from './baseUrls'
 import type {
@@ -25,7 +25,6 @@ import { createImageSdkFetch, generateSdkImage } from './sdkImage'
 const optionalString = z.string().optional().catch(undefined)
 const optionalNumber = z.number().optional().catch(undefined)
 const modalities = z.array(z.string()).optional().catch(undefined)
-const ASPECT_RATIO = /^\d+(\.\d+)?:\d+(\.\d+)?$/
 
 const OpenRouterModel = z.object({
   id: z.string(),
@@ -60,7 +59,7 @@ function toCapabilities({
   supported_parameters: params,
 }: OpenRouterModel): ImageModelCapabilities {
   const refs = params.input_references
-  const ratios = params.aspect_ratio?.values.filter((v) => ASPECT_RATIO.test(v))
+  const ratios = params.aspect_ratio?.values.filter(isAspectRatio)
   const maxReferenceImages = refs?.max && refs.max > 0 ? refs.max : undefined
 
   // A model that takes images but lists no reference count still takes references; one whose
