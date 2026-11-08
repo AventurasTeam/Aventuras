@@ -19,7 +19,13 @@ import type {
   ImageModelInfo,
 } from './types'
 import { imageGetFetch } from './fetchAdapter'
-import { architectureSchema, nonEmpty, optionalNumber, optionalString } from './modelCatalogue'
+import {
+  architectureSchema,
+  nonEmpty,
+  optionalNumber,
+  optionalString,
+  referenceSupport,
+} from './modelCatalogue'
 import { parseModelList } from './parseModelList'
 import { createImageSdkFetch, generateSdkImage } from './sdkImage'
 
@@ -56,15 +62,8 @@ function toCapabilities({
   const refs = params.input_references
   const maxReferenceImages = refs?.max && refs.max > 0 ? refs.max : undefined
 
-  // A model that takes images but lists no reference count still takes references; one whose
-  // inputs could not be read stays unknown.
-  const inputs = architecture?.input_modalities
-  let supportsImg2Img: boolean | undefined
-  if (maxReferenceImages || inputs?.includes('image')) supportsImg2Img = true
-  else if (inputs) supportsImg2Img = false
-
   return {
-    supportsImg2Img,
+    supportsImg2Img: referenceSupport(architecture?.input_modalities, maxReferenceImages),
     maxReferenceImages,
     requiresReferenceImage: (refs?.min ?? 0) >= 1 ? true : undefined,
     supportedResolutions: nonEmpty(params.resolution?.values),

@@ -17,7 +17,13 @@ import type {
 } from './types'
 import { imageGetFetch } from './fetchAdapter'
 import { findListedModel } from './modelSnapshot'
-import { nonEmpty, optionalString, optionalStrings } from './modelCatalogue'
+import {
+  editsOnly,
+  nonEmpty,
+  optionalString,
+  optionalStrings,
+  referenceSupport,
+} from './modelCatalogue'
 import { parseModelList } from './parseModelList'
 import { generateOpenAICompatibleImage } from './openaiCompatible'
 
@@ -45,18 +51,10 @@ function toCapabilities({
 }: PollinationsModel): ImageModelCapabilities {
   const maxReferenceImages = refs && refs > 0 ? refs : undefined
 
-  // A model that takes images but lists no reference count still takes references; one whose
-  // inputs could not be read stays unknown.
-  let supportsImg2Img: boolean | undefined
-  if (maxReferenceImages || inputs?.includes('image')) supportsImg2Img = true
-  else if (inputs) supportsImg2Img = false
-
-  const editsOnly = !!inputs?.includes('image') && !inputs.includes('text')
-
   return {
-    supportsImg2Img,
+    supportsImg2Img: referenceSupport(inputs, maxReferenceImages),
     maxReferenceImages,
-    requiresReferenceImage: editsOnly ? true : undefined,
+    requiresReferenceImage: editsOnly(inputs) ? true : undefined,
     supportedResolutions: nonEmpty(resolutions),
   }
 }

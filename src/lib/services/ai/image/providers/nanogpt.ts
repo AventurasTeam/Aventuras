@@ -8,7 +8,13 @@ import type {
   ImageModelInfo,
 } from './types'
 import { imageGetFetch } from './fetchAdapter'
-import { architectureSchema, nonEmpty, optionalNumber, optionalString } from './modelCatalogue'
+import {
+  architectureSchema,
+  editsOnly,
+  nonEmpty,
+  optionalNumber,
+  optionalString,
+} from './modelCatalogue'
 import { createNanoGPTImage } from './nanogptImage'
 import { parseModelList } from './parseModelList'
 import { createImageSdkFetch, generateSdkImage } from './sdkImage'
@@ -142,11 +148,8 @@ function toCapabilities({
   // A text-to-image model that lists a reference count still takes references.
   const supportsImg2Img = (maxReferenceImages ?? 0) > 0 ? true : flags?.image_to_image
 
-  // Only a model that takes images and no text is reference-only; an unreadable
-  // `architecture` must not mark a text-to-image model as one.
-  const inputs = architecture?.input_modalities
-  const editsOnly = !!inputs?.includes('image') && !inputs.includes('text')
-  const requiresReferenceImage = editsOnly || (params.input_references?.min ?? 0) >= 1
+  const requiresReferenceImage =
+    editsOnly(architecture?.input_modalities) || (params.input_references?.min ?? 0) >= 1
 
   return {
     supportsImg2Img,
