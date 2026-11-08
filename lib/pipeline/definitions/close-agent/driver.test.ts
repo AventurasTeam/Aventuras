@@ -390,7 +390,7 @@ describe('runCloseTask', () => {
     ])
   })
 
-  it("skips an invalid call, answers the rest, and keeps the SDK's messages as they came", async () => {
+  it("skips an invalid call, answers the rest, and sends the model's message, then one tool message in call order", async () => {
     const first = okStep([peekCall('k1')], {
       invalid: [
         { toolCallId: 'k2', toolName: 'peek_row', detail: 'Invalid input for tool peek_row' },
@@ -846,13 +846,24 @@ describe('runCloseTask', () => {
       { a: [1, 'x', null, true, { b: -2.5 }] },
       { type: 'json', value: { a: [1, 'x', null, true, { b: -2.5 }] } },
     ],
+    [
+      'an absent property as JSON does, leaving it out',
+      { name: 'Wren', keywords: undefined },
+      { type: 'json', value: { name: 'Wren' } },
+    ],
+    [
+      'a nested absent property, leaving it out',
+      { name: 'Wren', state: { voice: undefined, face: 'scarred' } },
+      { type: 'json', value: { name: 'Wren', state: { face: 'scarred' } } },
+    ],
   ])('sends a read answering %s', async (_, output, sent) => {
     echoOutput = output
     vi.mocked(generateToolStep).mockResolvedValueOnce(okStep([echoCall]))
 
     await drive(taskDef({ tools: [echoTool] }), runContext(phaseContext()))
 
-    expect(sentMessages(1).at(-1)).toEqual({
+    // Strict: toEqual reads an undefined property as absent, so it can't tell a key dropped.
+    expect(sentMessages(1).at(-1)).toStrictEqual({
       role: 'tool',
       content: [{ type: 'tool-result', toolCallId: 'k1', toolName: 'echo', output: sent }],
     })

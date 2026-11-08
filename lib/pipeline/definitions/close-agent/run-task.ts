@@ -26,13 +26,28 @@ export type TaskEnd =
 
 type StopReason = Extract<TaskEnd, { status: 'stopped' }>['reason']
 
-function isJsonValue(value: unknown): value is JSONValue {
-  if (value === null || typeof value === 'string' || typeof value === 'boolean') return true
-  if (typeof value === 'number') return Number.isFinite(value)
-  if (Array.isArray(value)) return value.every(isJsonValue)
-  if (typeof value !== 'object') return false
+const NOT_JSON = Symbol('not JSON')
+
+// The value as JSON sends it: an undefined property is absent, as JSON.stringify leaves it out;
+// undefined anywhere else, a non-finite number or a non-plain object is no JSON at all.
+function plainJson(value: unknown): JSONValue | typeof NOT_JSON {
+  if (value === null || typeof value === 'string' || typeof value === 'boolean') return value
+  if (typeof value === 'number') return Number.isFinite(value) ? value : NOT_JSON
+  if (Array.isArray(value)) {
+    const items = value.map(plainJson)
+    return items.includes(NOT_JSON) ? NOT_JSON : (items as JSONValue[])
+  }
+  if (typeof value !== 'object') return NOT_JSON
   const proto: unknown = Object.getPrototypeOf(value)
-  return (proto === Object.prototype || proto === null) && Object.values(value).every(isJsonValue)
+  if (proto !== Object.prototype && proto !== null) return NOT_JSON
+  const out: Record<string, JSONValue> = {}
+  for (const [key, item] of Object.entries(value)) {
+    if (item === undefined) continue
+    const json = plainJson(item)
+    if (json === NOT_JSON) return NOT_JSON
+    out[key] = json
+  }
+  return out
 }
 
 // The SDK refuses a non-JSON tool result only when the next step builds its prompt, as a
@@ -42,9 +57,9 @@ function resultOutput(
   output: unknown,
 ): { type: 'text'; value: string } | { type: 'json'; value: JSONValue } {
   if (typeof output === 'string') return { type: 'text', value: output }
-  if (!isJsonValue(output))
-    throw new Error(`close tool ${toolName} answered a value that isn't JSON`)
-  return { type: 'json', value: output }
+  const value = plainJson(output)
+  if (value === NOT_JSON) throw new Error(`close tool ${toolName} answered a value that isn't JSON`)
+  return { type: 'json', value }
 }
 
 function toolMessage(answers: readonly ToolAnswer[]): ToolModelMessage {
