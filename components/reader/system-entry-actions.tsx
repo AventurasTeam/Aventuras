@@ -18,7 +18,6 @@ import {
   EMPTY_REPLY,
   PER_TURN_KIND,
   pipelineErrorDetail,
-  REVERSAL_BLOCKER,
   type PipelineError,
   type RejectedStart,
   type TxResult,
@@ -299,11 +298,10 @@ export function passResolvedEntry(submission: NonNullable<SystemFailureMeta['sub
   }
 }
 
-// What refuses a pass or a close while something else runs: the orchestrator's blockers, and the
-// close's own busy check.
+// What refuses a pass or a close while another run holds the story: a running kind, and the
+// close's own busy check. A prose reversal is no run, so it takes the entry's own line.
 const RUN_BLOCKERS: ReadonlySet<string> = new Set([
   MANUAL_CLOSE_REFUSAL.busy,
-  REVERSAL_BLOCKER,
   PER_TURN_KIND,
   PERIODIC_CLASSIFIER_KIND,
   CHAPTER_CLOSE_KIND,
