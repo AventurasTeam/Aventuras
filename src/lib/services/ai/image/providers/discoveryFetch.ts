@@ -1,7 +1,10 @@
 // Helpers for the GET requests that list a provider's models.
 
 import type { Fetch } from '#lib/services/ai/sdk/providers/index.ts'
+import { IMAGE_DISCOVERY_TIMEOUT } from '#lib/constants/timeout.ts'
 import { imageGetFetch } from './fetchAdapter'
+
+type GetOptions = NonNullable<Parameters<typeof imageGetFetch>[2]>
 
 /** The `Authorization` header for a key, or none when there is no key. */
 export const bearerHeaders = (key: string): { Authorization: string } | undefined =>
@@ -17,18 +20,29 @@ export const withBearerKey = (fetch: Fetch, key: string): Fetch =>
       }
     : fetch
 
-/** A GET whose reply may be one of `absentStatuses`, meaning the host has no such route: `undefined`. */
+/** `imageGetFetch` for a request that lists models: it gives up after `IMAGE_DISCOVERY_TIMEOUT` unless told otherwise. */
+export const imageDiscoveryFetch = (
+  url: string,
+  headers: Record<string, string> | undefined,
+  options: GetOptions = {},
+): Promise<Response> =>
+  imageGetFetch(url, headers, {
+    ...options,
+    timeoutMs: options.timeoutMs ?? IMAGE_DISCOVERY_TIMEOUT,
+  })
+
+/** A discovery GET whose reply may be one of `absentStatuses`, meaning the host has no such route: `undefined`. */
 export async function imageGetFetchOptional(
   url: string,
   headers: Record<string, string> | undefined,
   {
     absentStatuses,
     ...options
-  }: NonNullable<Parameters<typeof imageGetFetch>[2]> & {
+  }: GetOptions & {
     absentStatuses?: number[]
   },
 ): Promise<Response | undefined> {
-  const response = await imageGetFetch(url, headers, {
+  const response = await imageDiscoveryFetch(url, headers, {
     ...options,
     allowStatuses: absentStatuses,
   })

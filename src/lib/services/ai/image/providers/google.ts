@@ -13,7 +13,7 @@ import type {
 } from './types'
 import { createGoogleGenerativeAI } from '@ai-sdk/google'
 import { isGoogleImageModel } from '../../sdk/providers/modelFetcher'
-import { imageGetFetch } from './fetchAdapter'
+import { imageDiscoveryFetch } from './discoveryFetch'
 import { createImageSdkFetch, generateSdkImage } from './sdkImage'
 
 export function createGoogleProvider(config: ImageProviderConfig): ImageProvider {
@@ -116,7 +116,7 @@ async function fetchGoogleImageModels(
   if (!apiKey) return []
 
   // The key goes in a header: the debug log records the request URL.
-  const response = await imageGetFetch(
+  const response = await imageDiscoveryFetch(
     endpoint(baseUrl, 'models', { pageSize: '200' }),
     { 'x-goog-api-key': apiKey },
     { serviceId: 'google-image-models', signal },

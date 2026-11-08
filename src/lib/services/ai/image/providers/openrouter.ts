@@ -18,8 +18,7 @@ import type {
   ImageGenerateResult,
   ImageModelInfo,
 } from './types'
-import { imageGetFetch } from './fetchAdapter'
-import { bearerHeaders } from './discoveryFetch'
+import { bearerHeaders, imageDiscoveryFetch } from './discoveryFetch'
 import {
   architectureSchema,
   catalogueModelInfo,
@@ -135,7 +134,7 @@ export function createOpenRouterProvider(config: ImageProviderConfig): ImageProv
 
     // Discovery works without a key; it is sent when set.
     async listModels(signal?: AbortSignal): Promise<ImageModelInfo[]> {
-      const response = await imageGetFetch(
+      const response = await imageDiscoveryFetch(
         endpoint(baseUrl, 'images/models'),
         bearerHeaders(config.apiKey),
         { serviceId: 'openrouter-image-models', signal },

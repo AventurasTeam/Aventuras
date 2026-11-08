@@ -15,8 +15,7 @@ import type {
   ImageGenerateResult,
   ImageModelInfo,
 } from './types'
-import { imageGetFetch } from './fetchAdapter'
-import { bearerHeaders } from './discoveryFetch'
+import { bearerHeaders, imageDiscoveryFetch } from './discoveryFetch'
 import {
   editsOnly,
   nonEmpty,
@@ -83,7 +82,7 @@ export function createPollinationsProvider(config: ImageProviderConfig): ImagePr
   async function listModels(signal?: AbortSignal): Promise<ImageModelInfo[]> {
     const headers = { Accept: 'application/json', ...bearerHeaders(config.apiKey) }
 
-    const response = await imageGetFetch(MODELS_ENDPOINT, headers, {
+    const response = await imageDiscoveryFetch(MODELS_ENDPOINT, headers, {
       serviceId: 'pollinations-image-models',
       signal,
     })

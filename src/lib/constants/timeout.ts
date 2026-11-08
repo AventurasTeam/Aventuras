@@ -25,3 +25,6 @@ export const LLM_TIMEOUT_MAX_SECONDS = LLM_TIMEOUT_MAX / 1000
 
 /** Default timeout for image generation requests: 5 minutes */
 export const IMAGE_TIMEOUT_DEFAULT = 300000
+
+/** Timeout for a request that lists a provider's models: 10 seconds */
+export const IMAGE_DISCOVERY_TIMEOUT = 10000

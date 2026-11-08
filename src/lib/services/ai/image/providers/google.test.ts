@@ -15,6 +15,7 @@ vi.mock('./fetchAdapter', () => ({
 }))
 
 import { createGoogleGenerativeAI } from '@ai-sdk/google'
+import { IMAGE_DISCOVERY_TIMEOUT } from '#lib/constants/timeout.ts'
 import { IMAGE_SIZE_TIERS, type ImageSizeTier } from '#lib/utils/image.ts'
 import { imageGetFetch } from './fetchAdapter'
 import { generateSdkImage } from './sdkImage'
@@ -128,7 +129,7 @@ describe('Google model listing', () => {
     expect(imageGetFetch).toHaveBeenCalledWith(
       'https://generativelanguage.googleapis.com/v1beta/models?pageSize=200',
       { 'x-goog-api-key': 'k' },
-      { serviceId: 'google-image-models', signal: undefined },
+      { serviceId: 'google-image-models', signal: undefined, timeoutMs: IMAGE_DISCOVERY_TIMEOUT },
     )
   })
 

@@ -7,8 +7,7 @@ import type {
   ImageGenerateResult,
   ImageModelInfo,
 } from './types'
-import { imageGetFetch } from './fetchAdapter'
-import { bearerHeaders, imageGetFetchOptional } from './discoveryFetch'
+import { bearerHeaders, imageDiscoveryFetch, imageGetFetchOptional } from './discoveryFetch'
 import { createNanoGPTImage } from './nanogptImage'
 import {
   architectureSchema,
@@ -203,10 +202,14 @@ export function createNanoGPTProvider(config: ImageProviderConfig): ImageProvide
     },
 
     async listModels(signal?: AbortSignal): Promise<ImageModelInfo[]> {
-      const response = await imageGetFetch(endpoint(baseUrl, 'images/models'), discoveryHeaders, {
-        serviceId: DISCOVERY_SERVICE_ID,
-        signal,
-      })
+      const response = await imageDiscoveryFetch(
+        endpoint(baseUrl, 'images/models'),
+        discoveryHeaders,
+        {
+          serviceId: DISCOVERY_SERVICE_ID,
+          signal,
+        },
+      )
       return parseModelList(await response.json(), NanoGptModel, 'NanoGPT /images/models').map(
         toModelInfo,
       )

@@ -18,8 +18,7 @@ import type {
   ImageModelInfo,
   ComfySamplerInfo,
 } from './types'
-import { imageGetFetch } from './fetchAdapter'
-import { bearerHeaders, imageGetFetchOptional } from './discoveryFetch'
+import { bearerHeaders, imageDiscoveryFetch, imageGetFetchOptional } from './discoveryFetch'
 import { optionalString } from './modelCatalogue'
 import { parseModelList } from './parseModelList'
 import { createA1111Image } from './a1111Image'
@@ -81,7 +80,7 @@ export function createA1111Provider(config: ImageProviderConfig): ImageProvider 
     },
 
     async listModels(signal?: AbortSignal): Promise<ImageModelInfo[]> {
-      const response = await imageGetFetch(
+      const response = await imageDiscoveryFetch(
         endpoint(baseUrl, 'sdapi/v1/sd-models'),
         bearerHeaders(config.apiKey),
         {
