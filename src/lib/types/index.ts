@@ -901,7 +901,7 @@ export interface ImageProviderConnection {
   baseUrl: string | undefined
 }
 
-/** An `ImageProfile` as stored: its provider may be one this build does not know. */
+/** An `ImageProfile` as parsed from the settings blob, before its provider is checked. */
 export type StoredImageProfile = Omit<ImageProfile, keyof ImageProviderConnection> & {
   providerType: string
   apiKey: string
