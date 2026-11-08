@@ -215,6 +215,7 @@ describe("the close's system-half macros", () => {
     'Use the ids you are shown, exactly as written; never invent one.',
     'and "why", one sentence on what in the cited turns makes the write true.',
     'Write only to a row you have read in this task',
+    'one read_row returned, or one you created in this task.',
     'Creating a row names a new one, so it needs no read.',
     "A create's answer gives the new row's id.",
     "Don't write it again.",

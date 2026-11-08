@@ -28,6 +28,7 @@ import {
 } from '@/lib/ai'
 import { entities, type CloseTask } from '@/lib/db'
 import { makeLogger } from '@/lib/diagnostics'
+import { generateId } from '@/lib/ids'
 import { appSettingsStore, currentStoryStore, entitiesStore, resetAllStores } from '@/lib/stores'
 
 import { entityWriteAction } from './entity-write'
@@ -197,6 +198,63 @@ const peekRowTool: ReadTool = {
   },
 }
 
+const createNoteTool: WriteTool = {
+  kind: 'write',
+  name: 'create_note',
+  description: 'Create a lore note.',
+  schema: writeToolSchema({ title: z.string() }),
+  ids: {},
+  plan: async (args, ctx) => {
+    const id = generateId('lore')
+    const title = args.title as string
+    return {
+      kind: 'write',
+      actions: [
+        {
+          action: {
+            kind: 'createLore',
+            source: 'chapter_close',
+            payload: {
+              entry: {
+                id,
+                branchId: ctx.branchId,
+                title,
+                body: 'Paid.',
+                injectionMode: 'auto',
+                createdAt: 1,
+                updatedAt: 1,
+              },
+            },
+          },
+          fields: ['title', 'body'],
+        },
+      ],
+      lost: [],
+      rows: [{ table: 'lore', id, name: title }],
+      values: { title },
+      createdId: id,
+    }
+  },
+}
+
+// Names a lore row and writes nothing, so only the read gate decides its answer.
+const touchNoteTool: WriteTool = {
+  kind: 'write',
+  name: 'touch_note',
+  description: 'Name a lore note.',
+  schema: writeToolSchema({ id: z.string() }),
+  ids: { id: { shape: 'single', prefixes: ['lore'] } },
+  plan: async (args, ctx) => ({
+    kind: 'write',
+    actions: [],
+    lost: [],
+    rows: [
+      { table: 'lore', id: args.id as string, name: ctx.ids.nameOfId(args.id as string) ?? '' },
+    ],
+    values: {},
+  }),
+}
+
 // Answers whatever the test sets, to pin how an answer goes out.
 let echoOutput: unknown
 const echoTool: ReadTool = {
@@ -278,6 +336,18 @@ const appendCall = (toolCallId: string, note: string): ToolStepCall => ({
   toolCallId,
   toolName: 'append_note',
   input: { id: 'c1', note, turns: ['t7'], why: 'She says so at the toll house.' },
+})
+
+const createCall = (toolCallId: string): ToolStepCall => ({
+  toolCallId,
+  toolName: 'create_note',
+  input: { title: 'The Toll', turns: ['t7'], why: 'The toll is named at the river.' },
+})
+
+const touchCall = (toolCallId: string): ToolStepCall => ({
+  toolCallId,
+  toolName: 'touch_note',
+  input: { id: 'lo1', turns: ['t7'], why: 'The toll is paid again.' },
 })
 
 const peekCall = (toolCallId: string): ToolStepCall => ({
@@ -797,6 +867,30 @@ describe('runCloseTask', () => {
       ['upkeep', 'append_note', 'rejected'],
     ])
     expect(await description()).toBe('A courier.')
+  })
+
+  it('counts a row a task created as read for that task, and for no later one', async () => {
+    const noteTools = taskDef({
+      tools: [createNoteTool, touchNoteTool],
+      start: async () => ({ show: [], seeds: [] }),
+    })
+    vi.mocked(generateToolStep)
+      .mockResolvedValueOnce(okStep([createCall('k1'), touchCall('k2')]))
+      .mockResolvedValueOnce(okStep([]))
+      .mockResolvedValueOnce(okStep([touchCall('k3')]))
+    const phase = phaseContext()
+
+    await drive(noteTools, runContext(phase))
+    await drive({ ...noteTools, task: 'upkeep' }, runContext(phase, { task: 'upkeep' }))
+
+    expect(ledger.calls.map((call) => [call.task, call.tool, call.result])).toEqual([
+      ['identity', 'create_note', 'ok'],
+      ['identity', 'touch_note', 'ok'],
+      ['upkeep', 'touch_note', 'rejected'],
+    ])
+    expect(ledger.calls[2]!.reason).toBe(
+      "lo1 hasn't been read in this task: call read_row on it, then write it",
+    )
   })
 
   it("runs under the def's task and fields, whatever the context names", async () => {

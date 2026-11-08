@@ -5,7 +5,7 @@ export const CLOSE_INSTRUCTIONS = `You are closing a chapter of an ongoing story
 
 - Ids. Rows are named by short ids such as c1 or lo2, and the story's turns by ids such as t3. Use the ids you are shown, exactly as written; never invent one.
 - Evidence. Every write gives "turns", the ids of the turns that show the change, and "why", one sentence on what in the cited turns makes the write true. Write only what the turns support; never invent.
-- Reading. Write only to a row you have read in this task: one whose fields the task's start shows you, or one read_row returned. Creating a row names a new one, so it needs no read.
+- Reading. Write only to a row you have read in this task: one whose fields the task's start shows you, one read_row returned, or one you created in this task. Creating a row names a new one, so it needs no read.
 - Results. Every write answers ok, rejected or skipped:
   - ok: it landed. A value already stored is ok too, with nothing written. A create's answer gives the new row's id. When some of its fields didn't land, the answer names each with its reason.
   - rejected: it didn't land, and the reason or its note says what to do. Fix the call and send it again, or leave that change.

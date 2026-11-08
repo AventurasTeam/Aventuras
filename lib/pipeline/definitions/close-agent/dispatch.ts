@@ -8,6 +8,7 @@ import { nameCloseProse, withHandlesDeep, type CloseIds } from './ids'
 import type { CloseLedgerWriter } from './ledger'
 import {
   resolveIdArgs,
+  tableOfId,
   type CloseTool,
   type ReadTool,
   type ReportRow,
@@ -262,7 +263,12 @@ async function* writeCall(
   }
   const verdict = verdictOf(plan, outcome, { survivorOf: ctx.survivorOf })
   const created = landedCreate(plan, outcome)
-  if (created !== undefined) ctx.ids.show(created.id, created.name)
+  if (created !== undefined) {
+    ctx.ids.show(created.id, created.name)
+    // A row the task made is one it knows the fields of, so a later write to it needs no read_row.
+    const table = tableOfId(created.id)
+    if (table !== null) ctx.readSet.add([{ table, id: created.id }])
+  }
   recordWrite(ctx, tool.name, args, {
     rows: plan.rows,
     turns: check.turns,
