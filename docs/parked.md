@@ -1612,7 +1612,9 @@ A chapter close's Threads task starts from every open thread on the
 branch ([`chapter-close.md → Run order`](./memory/chapter-close.md#run-order)),
 and a task's first call not fitting is a failed call instead
 ([`chapter-close.md → When a task stops`](./memory/chapter-close.md#when-a-task-stops)).
-The same signal applies. Added 2026-11-09 from Slice 5.5b's review.
+Its signal is a Threads start nearing the `lore-mgmt` model's window,
+which `probe:close`'s saved steps show, and past which the close
+fails. Added 2026-11-09 from Slice 5.5b's review.
 
 #### Cross-chapter semantic dedup of happenings
 

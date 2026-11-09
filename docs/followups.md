@@ -53,7 +53,11 @@ No open items.
   entry during the build is untested. On the same device a count of
   40,000 characters took 35 ms of English, 591 ms of Chinese and 2,088 ms
   of Japanese, on the JS thread, and the prompt is counted on every model
-  call. A real phone on a release build is unmeasured. Raised 2026-11-01
+  call. A real phone on a release build is unmeasured.
+  [Slice 5.5b's per-step measure](./implementation/milestones/05-chapters-chapter-close/slices/05b-identity-threads.md#per-step-count-measure),
+  pending on the Fold's release build, times a close's per-step counts
+  there in English and Japanese, which answers part of it, not the build.
+  Raised 2026-11-01
   by Slice 5.1, moved here 2026-11-02 by its closing review, which added
   the tap and CJK numbers.
 
@@ -288,6 +292,9 @@ No open items.
   shared group; consent and cost, since a close is the costliest call.
   A design before Slices 5.11 and 5.12 are planned; one of them likely
   builds it. Raised by the developer 2026-11-09.
+  [`chapter-timeline.md → Per-card actions`](./ui/screens/chapter-timeline/chapter-timeline.md#per-card-actions)
+  still calls re-running lore-management a destructive re-application out
+  of scope for v1, the line a design session reconciles.
 
 ## Tuning and play testing
 
@@ -436,7 +443,7 @@ breakdown under [UX](#ux).
   first-person narration, and one of fifteen ran away to 39,689 output
   tokens with no max output set and failed (the developer keeps the
   profile without one). The third is
-  [Slice 5.5b's per-step measure](./implementation/milestones/05-chapters-chapter-close/slices/05b-identity-threads.md)
+  [Slice 5.5b's per-step measure](./implementation/milestones/05-chapters-chapter-close/slices/05b-identity-threads.md#per-step-count-measure)
   (2026-11-09): a dev-route close on Gemma4-26B-A4B-QAT-MTP ran away to
   39,655 output tokens in the metadata call and failed.
 
@@ -472,7 +479,12 @@ breakdown under [UX](#ux).
   ([the slice's note](./implementation/milestones/05-chapters-chapter-close/slices/05b-identity-threads.md#implementation-notes)).
   Watch for it in play testing, and decide on a rule (refusing an entry
   that reads as a list, for example) only if it shows up. Developer
-  ruling, 2026-11-09.
+  ruling, 2026-11-09. Review probes found other shapes the read misses:
+  a single-quoted list (`['brave', 'wary']`) and a JSON list with a
+  trailing comma each read as one entry, so they pass the soft cap, and
+  an unparseable multi-line bracketed list lands its `[` and `]` lines as
+  entries. They're handled the same way: watched in play testing, with a
+  rule only if they show up.
 
 - **The close's writes at the capability floor: invented facts, malformed
   batches, and sampling.** 5.5b's measure on the dev model (Gemma 4
@@ -481,7 +493,7 @@ breakdown under [UX](#ux).
   - Facts the cited turns don't show landed: Pew called "one-legged",
     Supervisor Dance given Dr. Livesey's "a gentleman and a
     magistrate", Billy Bones' drives replaced by one no turn shows, and
-    "The August deadline" failed early in runs 3, 5 and 10.
+    "The August deadline" resolved or failed early in runs 3, 5 and 10.
   - Every Identity first step that skipped its thinking and sent a
     batch of calls had malformed arguments (6 of 6): lists sent as
     strings, `turns` padded with `true`, an escaped array landing as
