@@ -419,13 +419,13 @@ describe('update_thread', () => {
 
   it("writes resolved_at_entry_id at the cited turn when it follows the thread's opening", async () => {
     const run = await runThreadCalls(f, THREADS_SHOWN, [
-      { toolName: 'update_thread', input: { id: 'th2', status: 'resolved', ...cite(['t5']) } },
+      { toolName: 'update_thread', input: { id: 'th2', status: 'resolved', ...cite(['t7']) } },
     ])
 
     expect(run.calls[0]).toMatchObject({ result: 'ok' })
     expect(await threadRow(f, SEALED.id)).toMatchObject({
       triggeredAtEntryId: f.replyIds[1],
-      resolvedAtEntryId: f.entries[4]!.id,
+      resolvedAtEntryId: endEntryIdOf(f),
     })
   })
 
