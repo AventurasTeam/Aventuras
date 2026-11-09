@@ -364,7 +364,6 @@ type CloseHarness = {
   readonly fx: CloseFixture
   /** E: the case's close ends on the third reply of six. */
   readonly endEntryId: string
-  readonly merge: boolean
   /** The state before the close ran. */
   readonly before: WorldState
   /** The branch's whole delta log before the close ran: other actions' deltas only. */
@@ -441,7 +440,6 @@ async function openHarness(c: RoundTripCase): Promise<CloseHarness> {
   return {
     fx,
     endEntryId,
-    merge: c.merge,
     before,
     beforeLog,
     close: async () => {
@@ -452,6 +450,11 @@ async function openHarness(c: RoundTripCase): Promise<CloseHarness> {
         'the case landed nothing',
       ).toBe(true)
       const log = await deltasOf(fx, tx.actionId)
+      if (c.merge)
+        expect(
+          log.some((d) => d.op === 'delete'),
+          'a merge case deletes the row it absorbs',
+        ).toBe(true)
       // A table the snapshot misses would let a reversal leave rows behind unseen.
       const unlisted = new Set(
         log.map((d) => d.targetTable).filter((t) => t !== 'story_entries' && !isWorldTable(t)),
@@ -478,12 +481,6 @@ async function openHarness(c: RoundTripCase): Promise<CloseHarness> {
 }
 
 async function undoClose(h: CloseHarness): Promise<void> {
-  const log = await deltasOf(h.fx, h.actionId())
-  if (h.merge)
-    expect(
-      log.some((d) => d.op === 'delete'),
-      'a merge case deletes the row it absorbs',
-    ).toBe(true)
   // C9: a hold redo can't restore refuses as `integrity`, with `held-in-redo` in its reason.
   expect(await undoLastAction(h.fx.branchId, h.fx.ctx)).toEqual({ status: 'ok' })
   expect(await worldState(h.fx), 'the world after CTRL-Z').toEqual(h.before)
