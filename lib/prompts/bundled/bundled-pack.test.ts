@@ -362,7 +362,7 @@ describe('the close task templates', () => {
     'set "resolved" when the chapter achieves a thread, or "failed" when it makes the thread impossible or plainly abandons it',
     "Bring a thread's description up to date when the chapter moves it on.",
     'Merge before you update: a thread this close already wrote can be kept, never absorbed.',
-    'When one is active, keep the active one: an active thread can be absorbed only into another active one.',
+    'When one is active, keep an active one: an active thread can be absorbed only into another active one.',
     'a duplicate the kept thread already covers merges with neither.',
     "A thread's title changes only in a merge.",
   ])('the Threads task states: %s', (line) => {

@@ -1038,6 +1038,52 @@ describe('merge_threads', () => {
     expect(opsOf(await runDeltas(f, run.result.actionId))).toEqual([['update', FAR_BANK.id]])
   })
 
+  it.each(['resolved', 'failed'] as const)(
+    'refuses as unmergeable, with no note, when keeping the thread this close %s would drop an active one',
+    async (status) => {
+      const run = await runThreadCalls(f, THREADS_SHOWN, [
+        { toolName: 'update_thread', input: { id: 'th2', status, ...cite() } },
+        merge({ keep: 'th1', absorb: ['th2'] }),
+      ])
+
+      expect(run.calls[1]).toMatchObject({
+        result: 'rejected',
+        reason: expect.stringContaining('cannot be merged in this close'),
+      })
+      expect(run.answers[1]).not.toHaveProperty('note')
+      expect(opsOf(await runDeltas(f, run.result.actionId))).toEqual([['update', SEALED.id]])
+    },
+  )
+
+  it.each(['resolved', 'failed'] as const)(
+    'answers a merge into a thread this close %s as unmergeable, not as one to swap',
+    async (status) => {
+      const run = await runThreadCalls(f, THREADS_SHOWN, [
+        { toolName: 'update_thread', input: { id: 'th2', status, ...cite() } },
+        merge({ keep: 'th2', absorb: ['th1'] }),
+      ])
+
+      expect(run.calls[1]).toMatchObject({
+        result: 'rejected',
+        reason: expect.stringContaining('cannot be merged in this close'),
+      })
+      expect(run.answers[1]).not.toHaveProperty('note')
+      expect(opsOf(await runDeltas(f, run.result.actionId))).toEqual([['update', SEALED.id]])
+    },
+  )
+
+  it('lands the advice to a refusal: keep the active thread, then settle it', async () => {
+    const run = await runThreadCalls(f, THREADS_SHOWN, [
+      merge({ keep: 'th3', absorb: ['th1'] }),
+      merge({ keep: 'th1', absorb: ['th3'] }),
+      { toolName: 'update_thread', input: { id: 'th1', status: 'resolved', ...cite() } },
+    ])
+
+    expect(run.calls.map(({ result }) => result)).toEqual(['rejected', 'ok', 'ok'])
+    expect(await threadRow(f, FAR_BANK.id)).toBeUndefined()
+    expect(await threadRow(f, LETTER.id)).toMatchObject({ status: 'resolved' })
+  })
+
   it("records only the text keep doesn't hold when the close's own write refuses the merge", async () => {
     const description = 'Wren must bring the letter to Low Ashby with its seal whole.'
 
@@ -1078,7 +1124,7 @@ describe('merge_threads', () => {
 
     expect(run.calls[0]).toMatchObject({
       result: 'rejected',
-      reason: expect.stringContaining('keep the active one'),
+      reason: expect.stringContaining('keep an active one'),
     })
     expect(run.calls[0]!.values).toEqual({ title: 'The light and the letter' })
     expect(run.calls[0]).not.toHaveProperty('survivor')
@@ -1098,13 +1144,13 @@ describe('merge_threads', () => {
 
     expect(run.calls[0]).toMatchObject({
       result: 'rejected',
-      reason: expect.stringContaining('keep the active one'),
+      reason: expect.stringContaining('keep an active one'),
     })
     expect(await runDeltas(f, run.result.actionId)).toEqual([])
   })
 
   it.each(['resolved', 'failed'] as const)(
-    'refuses a %s keep absorbing an active thread, saying to resolve it first if the chapter settled it',
+    'refuses a %s keep absorbing an active thread, saying to keep an active one and settle it after',
     async (status) => {
       const kept: SeedThread = { ...SETTLED, status }
       await seedPassThread(f, kept, 3)
@@ -1117,9 +1163,9 @@ describe('merge_threads', () => {
 
       expect(run.calls[0]).toMatchObject({
         result: 'rejected',
-        reason: expect.stringContaining('keep the active one'),
+        reason: expect.stringContaining('keep an active one'),
       })
-      expect(run.calls[0]!.reason).toContain('resolve it with update_thread first')
+      expect(run.calls[0]!.reason).toContain('settle it with update_thread')
       expect(run.calls[0]).not.toHaveProperty('survivor')
       expect(await runDeltas(f, run.result.actionId)).toEqual([])
       expect(await threadRow(f, LETTER.id)).toMatchObject({ status: 'active' })
