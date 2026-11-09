@@ -1133,6 +1133,23 @@ describe('merge_threads', () => {
     expect(await threadRow(f, LETTER.id)).toBeDefined()
   })
 
+  it('refuses a pending keep absorbing an active thread this close wrote as active into inactive, with no note', async () => {
+    const run = await runThreadCalls(f, THREADS_SHOWN, [
+      {
+        toolName: 'update_thread',
+        input: { id: 'th1', description: 'Wren hides the letter in her boot.', ...cite() },
+      },
+      merge({ keep: 'th3', absorb: ['th1'] }),
+    ])
+
+    expect(run.calls[1]).toMatchObject({
+      result: 'rejected',
+      reason: expect.stringContaining('keep an active one'),
+    })
+    expect(run.answers[1]).not.toHaveProperty('note')
+    expect(opsOf(await runDeltas(f, run.result.actionId))).toEqual([['update', LETTER.id]])
+  })
+
   it('refuses a pending keep absorbing an active thread beside a settled one', async () => {
     await seedPassThread(f, SETTLED, 3)
 
@@ -1274,6 +1291,101 @@ describe('merge_threads', () => {
       title: LETTER.title,
       description: `${LETTER.title}, sealed.`,
     })
+  })
+})
+
+// Threads key on (branch_id, id): the fork's copies would judge each call the other way. Inserted
+// after the close's rows, under a branch id sorting after the close's, so a read that drops the
+// branch meets the fork's row last in either scan order.
+const FORK_ID = 'br_close_fork'
+const FORK_LETTER = {
+  ...LETTER,
+  description: 'Wren burns the letter at the ford.',
+  status: 'pending',
+} as const
+const FORK_SEALED = { ...SEALED, status: 'resolved' } as const
+const FORK_FAR_BANK = { ...FAR_BANK, status: 'active' } as const
+
+async function seedFork(fx: CloseFixture): Promise<void> {
+  await fx.ctx.db.insert(branches).values({
+    id: FORK_ID,
+    storyId: fx.storyId,
+    parentBranchId: fx.branchId,
+    name: 'fork',
+    createdAt: 2,
+  })
+  for (const thread of [FORK_LETTER, FORK_SEALED, FORK_FAR_BANK])
+    await fx.ctx.db.insert(threads).values({
+      ...thread,
+      branchId: FORK_ID,
+      triggeredAtEntryId: null,
+      resolvedAtEntryId: null,
+      updatedAt: thread.createdAt,
+    })
+}
+
+async function forkRow(fx: CloseFixture, id: string): Promise<Thread | undefined> {
+  const [row] = await fx.ctx.db
+    .select()
+    .from(threads)
+    .where(and(eq(threads.branchId, FORK_ID), eq(threads.id, id)))
+  return row
+}
+
+describe("thread tools beside a fork holding the close's thread ids", () => {
+  beforeEach(async () => {
+    f = await openThreadsFixture()
+    await seedFork(f)
+  })
+
+  it("judges update_thread on the close's branch row and writes only it", async () => {
+    const run = await runThreadCalls(f, THREADS_SHOWN, [
+      {
+        toolName: 'update_thread',
+        input: { id: 'th1', description: FORK_LETTER.description, ...cite() },
+      },
+      { toolName: 'update_thread', input: { id: 'th2', status: 'resolved', ...cite() } },
+      { toolName: 'update_thread', input: { id: 'th3', status: 'resolved', ...cite(['t4']) } },
+    ])
+
+    expect(run.calls.map(({ result, values }) => [result, values])).toEqual([
+      ['ok', { description: FORK_LETTER.description }],
+      ['ok', { status: 'resolved' }],
+      ['ok', { status: 'resolved' }],
+    ])
+    expect(await threadRow(f, LETTER.id)).toMatchObject({ description: FORK_LETTER.description })
+    expect(await threadRow(f, SEALED.id)).toMatchObject({ status: 'resolved' })
+    expect(await threadRow(f, FAR_BANK.id)).toMatchObject({
+      status: 'resolved',
+      resolvedAtEntryId: f.replyIds[2],
+    })
+    expect(await forkRow(f, LETTER.id)).toMatchObject(FORK_LETTER)
+    expect(await forkRow(f, SEALED.id)).toMatchObject({
+      status: 'resolved',
+      resolvedAtEntryId: null,
+    })
+    expect(await forkRow(f, FAR_BANK.id)).toMatchObject({
+      status: 'active',
+      resolvedAtEntryId: null,
+    })
+  })
+
+  it("judges merge_threads on the close's branch rows and deletes only its absorbed row", async () => {
+    const run = await runThreadCalls(f, THREADS_SHOWN, [
+      {
+        toolName: 'merge_threads',
+        input: { keep: 'th1', absorb: ['th3'], ...cite(['t7'], 'The same errand.') },
+      },
+    ])
+
+    expect(run.calls[0]).toMatchObject({
+      result: 'ok',
+      survivor: { table: 'threads', id: LETTER.id },
+    })
+    expect(await threadRow(f, FAR_BANK.id)).toBeUndefined()
+    expect(await threadRow(f, LETTER.id)).toMatchObject({ status: 'active' })
+    expect(await forkRow(f, FAR_BANK.id)).toMatchObject(FORK_FAR_BANK)
+    expect(await forkRow(f, LETTER.id)).toMatchObject(FORK_LETTER)
   })
 })
 
@@ -1501,6 +1613,30 @@ describe('threadsTask', () => {
     ])
     const { user } = threadsTask.render(start!, { ...ctx, writesSoFar: '' })
     expect(user).not.toMatch(/\b(?:thr|char)_/)
+  })
+
+  it('orders by createdAt before id', async () => {
+    const fx = await openCloseFixture()
+    // Inserted in id order, the reverse of their age.
+    await putThreadRow(fx, {
+      id: 'thr_00000000-0000-4000-8000-00000000c060',
+      title: 'Younger, first by id',
+      status: 'active',
+      createdAt: 70,
+    })
+    await putThreadRow(fx, {
+      id: 'thr_00000000-0000-4000-8000-00000000c070',
+      title: 'Older, last by id',
+      status: 'pending',
+      createdAt: 60,
+    })
+
+    const { start } = await startOf(fx)
+
+    expect(start?.show.threads.map(({ id, title }) => [id, title])).toEqual([
+      ['th1', 'Older, last by id'],
+      ['th2', 'Younger, first by id'],
+    ])
   })
 
   it('seeds every shown thread as read, and no other', async () => {
