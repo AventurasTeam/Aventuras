@@ -462,4 +462,4 @@ None open: each was answered here or moved to the slice that owns it
   [Slice 5.5a](./05a-task-runner.md#implementation-notes), which puts it
   on every step; the cross-check
   on a server that drops past reasoning, and a cut attempt's dropped
-  usage, went to [Slice 5.5b](./05b-identity-threads.md#open-questions).
+  usage, went to [Slice 5.5b](./05b-identity-threads.md#implementation-notes).
