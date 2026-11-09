@@ -1,17 +1,24 @@
 import { and, eq } from 'drizzle-orm'
 import { describe, expect, it, vi } from 'vitest'
 
-import type { ResolveModelConfig } from '@/lib/ai'
+import type { PromptHalves, ResolveModelConfig } from '@/lib/ai'
 import { __clearPromptCountCache, countPromptTokens } from '@/lib/ai/context-window'
 import { entities, storyEntries, threads } from '@/lib/db'
 import { makeLogger } from '@/lib/diagnostics'
+import { TEMPLATE_IDS } from '@/lib/prompts'
 import { countTokens } from '@/lib/tokens'
 
 import { IDENTITY_READ_FIELDS, identityTask } from './identity'
 import { CloseIds } from './ids'
 import type { CloseTaskDef, TaskPromptContext } from './task'
 import { threadsTask } from './threads'
-import { blankTurns, primeCloseSystemCount, readTaskTurns } from './turns'
+import {
+  blankTurns,
+  hasTurns,
+  primeCloseSystemCount,
+  readTaskTurns,
+  renderClosePrompt,
+} from './turns'
 import { openCloseFixture, type CloseFixture } from '../__tests__/close-fixture'
 
 const { countTokensSpy } = vi.hoisted(() => ({
@@ -132,6 +139,22 @@ describe('readTaskTurns → proseTokens', () => {
     const { proseTokens } = await readTaskTurns(taskContextFor(fx, [action, reply, uncounted]))
 
     expect(proseTokens).toBe(5 + 7 + countTokens('Tobin poles faster.'))
+  })
+})
+
+describe('hasTurns', () => {
+  it('holds for one turn or more, and not for none', () => {
+    expect(hasTurns([])).toBe(false)
+    expect(hasTurns([{ handle: 't1', kind: 'opening', content: 'Rain on the river.' }])).toBe(true)
+  })
+})
+
+describe('CloseTurns (checked by tsc)', () => {
+  it('takes no empty list into a close prompt', () => {
+    const render = (): PromptHalves =>
+      // @ts-expect-error an empty list renders an empty "# The turns"
+      renderClosePrompt(TEMPLATE_IDS.closeThreads, [], {}, 0)
+    expect(render).toBeTypeOf('function')
   })
 })
 

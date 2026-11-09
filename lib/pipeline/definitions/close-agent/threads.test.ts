@@ -1823,19 +1823,6 @@ describe('threadsTask', () => {
     expect(adventure.threads).not.toContain('Each is a direction or prose')
     expect(adventure.threads).toBe(adventure.identity)
   })
-
-  it('refuses to render with no turns', async () => {
-    const fx = await openCloseFixture()
-    await putThreadRoster(fx)
-    const { ctx, start } = await startOf(fx)
-
-    expect(() =>
-      threadsTask.render(
-        { ...start!, show: { ...start!.show, closeTurns: [] } },
-        { ...ctx, writesSoFar: '' },
-      ),
-    ).toThrow('at least one turn')
-  })
 })
 
 function threadsNoCallStep(): ToolStepResult {

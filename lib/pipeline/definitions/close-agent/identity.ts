@@ -13,7 +13,7 @@ import { IDENTITY_WRITE_PATHS, updateCharacterTool, updateFactionTool } from './
 import { readRowTool, searchWorldTool } from './read-tools'
 import type { CloseTaskDef, TaskPromptContext, TaskStart } from './task'
 import type { ReadFields } from './tool'
-import { readTaskTurns, renderClosePrompt, storyModeOf } from './turns'
+import { hasTurns, readTaskTurns, renderClosePrompt, storyModeOf, type CloseTurns } from './turns'
 import type { CloseTurn } from '../chapter-context'
 
 /** C11: the fields Identity's tools write, which its start shows and read_row returns. */
@@ -42,7 +42,7 @@ export type IdentityFaction = {
 
 export type IdentityShow = {
   mode: StoryMode
-  closeTurns: CloseTurn[]
+  closeTurns: CloseTurns
   /** readTaskTurns' stored count of the turns, which primes the system half's count. */
   proseTokens: number
   characters: IdentityCharacter[]
@@ -107,6 +107,7 @@ async function touchedFactions(
 
 async function startIdentity(ctx: TaskPromptContext): Promise<TaskStart<IdentityShow> | null> {
   const { entries, closeTurns, proseTokens } = await readTaskTurns(ctx)
+  if (!hasTurns(closeTurns)) return null
   const sceneIds = new Set(entries.flatMap((entry) => strings(entry.metadata?.sceneEntities)))
   const characters = await sceneCharacters(ctx, [...sceneIds])
   const factions = await touchedFactions(ctx, characters, closeTurns)
@@ -151,9 +152,6 @@ function renderIdentity(
   { show }: TaskStart<IdentityShow>,
   ctx: TaskPromptContext & { writesSoFar: string },
 ): PromptHalves {
-  // An unset closeTurns renders an empty "# The turns".
-  if (show.closeTurns.length === 0)
-    throw new Error('identity: a close task renders over at least one turn')
   return renderClosePrompt(
     TEMPLATE_IDS.closeIdentity,
     show.closeTurns,

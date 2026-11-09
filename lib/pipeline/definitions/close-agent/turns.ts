@@ -17,9 +17,16 @@ import { countTokens } from '@/lib/tokens'
 import type { TaskPromptContext } from './task'
 import { buildCloseTurns, type CloseRangeEntry, type CloseTurn } from '../chapter-context'
 
+/** A close task's turns, at least one: with none, its prompt's "# The turns" renders empty. */
+export type CloseTurns = readonly [CloseTurn, ...CloseTurn[]]
+
+export function hasTurns(turns: readonly CloseTurn[]): turns is CloseTurns {
+  return turns.length > 0
+}
+
 export type TaskTurns = {
   entries: readonly CloseRangeEntry[]
-  closeTurns: CloseTurn[]
+  closeTurns: readonly CloseTurn[]
   /** Each entry's stored contentTokens summed; a null one counted from promptProse. */
   proseTokens: number
 }
@@ -72,7 +79,7 @@ export function primeCloseSystemCount(
 /** Renders a close template over `closeTurns` and primes the count of its system half. */
 export function renderClosePrompt(
   templateId: TemplateId,
-  closeTurns: readonly CloseTurn[],
+  closeTurns: CloseTurns,
   variables: Record<string, unknown>,
   proseTokens: number,
 ): PromptHalves {

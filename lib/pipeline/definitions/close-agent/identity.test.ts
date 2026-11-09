@@ -1755,21 +1755,6 @@ describe('identityTask', () => {
     expect(system).toContain('Each is what the lead does, says or attempts')
     expect(system).not.toContain('Each is a direction or prose')
   })
-
-  // An unset closeTurns would render an empty "# The turns".
-  it('refuses to render with no turns', async () => {
-    const fx = await openCloseFixture()
-    await putEntityRow(fx, { id: START_ROWS.pip, kind: 'character', name: 'Pip' })
-    await setSceneOf(fx, fx.entries[2]!.id, [START_ROWS.pip])
-    const { ctx, start } = await startOf(fx)
-
-    expect(() =>
-      identityTask.render(
-        { ...start!, show: { ...start!.show, closeTurns: [] } },
-        { ...ctx, writesSoFar: '' },
-      ),
-    ).toThrow('at least one turn')
-  })
 })
 
 // A reply with no tool call: the task ends after one step.
