@@ -34,7 +34,7 @@ export const THREAD_SHAPE = {
 }
 
 type ThreadArgs = z.output<WriteToolSchema<typeof THREAD_SHAPE>>
-type ThreadUpdate = { description?: string; status?: 'resolved' | 'failed' }
+type ThreadUpdate = Partial<Pick<ThreadArgs, 'description' | 'status'>>
 
 const NOTHING_SENT = 'nothing to write: send a description, a status or both'
 

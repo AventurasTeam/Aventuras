@@ -503,6 +503,18 @@ describe('update_thread', () => {
     expect(await runDeltas(f, run.result.actionId)).toHaveLength(1)
   })
 
+  it('leaves a restated description out of the report beside a status that lands', async () => {
+    const run = await runThreadCalls(f, THREADS_SHOWN, [
+      {
+        toolName: 'update_thread',
+        input: { id: 'th1', description: LETTER.description, status: 'resolved', ...cite() },
+      },
+    ])
+
+    expect(run.calls[0]).toMatchObject({ result: 'ok' })
+    expect(run.calls[0]?.values).toEqual({ status: 'resolved' })
+  })
+
   it('answers ok, emitting no group, for a status and a description the thread already holds', async () => {
     await seedPassThread(f, SETTLED)
 
