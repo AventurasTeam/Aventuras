@@ -115,8 +115,8 @@ function countOnce(text: string): number {
   return tokens
 }
 
-/** Records a text's count without encoding it. `tokens` must be the count of exactly this text:
- *  the pre-send check trusts it. */
+/** Records a text's count without encoding it. The pre-send check trusts `tokens` for exactly this
+ *  text: a slight overcount is safe, an undercount isn't. */
 export function primePromptCount(text: string, tokens: number): void {
   remember(text, tokens)
 }
