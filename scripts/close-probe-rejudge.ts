@@ -23,11 +23,18 @@ function readReport(runDir: string): CloseReport | null {
   return existsSync(path) ? closeReportSchema.parse(readJson(path)) : null
 }
 
-function readAttempts(runDir: string, hasReport: boolean): StepAttempt[] {
+function readAttempts(runDir: string, report: CloseReport | null): StepAttempt[] {
   const names = readdirSync(runDir).filter((name) => STEP_FILE.test(name))
   // A close that wrote a report made tool steps: no file for them means a layout this can't read.
-  if (hasReport && names.length === 0)
+  if (report !== null && names.length === 0)
     throw new Error(`[probe:close] ${runDir} has a report and no step files to read`)
+  // A task with no step file would pass the output bound unread.
+  const saved = new Set(names.map((name) => (STEP_FILE.exec(name) as RegExpExecArray)[1]))
+  const unsaved = [...new Set(report?.calls.map(({ task }) => task))].filter((t) => !saved.has(t))
+  if (unsaved.length > 0)
+    throw new Error(
+      `[probe:close] ${runDir} has no step file for ${unsaved.join(', ')}, whose calls its report holds`,
+    )
   const found = names.flatMap((name) => {
     const match = STEP_FILE.exec(name) as RegExpExecArray
     const [, task, step, retry] = match
@@ -59,7 +66,7 @@ export function rejudgeSaved(
     const tally = tallyRun({
       completed: report !== null,
       report,
-      attempts: readAttempts(runDir, report !== null),
+      attempts: readAttempts(runDir, report),
       cappedLists,
     })
     return { run, tally }

@@ -105,9 +105,14 @@ describe('rejudgeSaved', () => {
   })
 
   it('orders runs by number, and names each by its own, across a gap', () => {
-    save(10, { 'threads-p1-s1.json': reply('stop', 9), 'report.json': reportOf() })
-    save(2, { 'threads-p1-s1.json': reply('stop', 9), 'report.json': reportOf() })
-    save(7, { 'threads-p1-s1.json': reply('stop', 9), 'report.json': reportOf() })
+    const steps = {
+      'identity-p1-s1.json': reply('stop', 9),
+      'threads-p1-s1.json': reply('stop', 9),
+      'report.json': reportOf(),
+    }
+    save(10, steps)
+    save(2, steps)
+    save(7, steps)
     expect(rejudgeSaved(dir, []).runs.map(({ run }) => run)).toEqual([2, 7, 10])
   })
 
@@ -115,6 +120,7 @@ describe('rejudgeSaved', () => {
     save(1, {
       'identity-p1-s1.json': { error: { message: 'fetch failed' } },
       'identity-p1-s1-r1.json': reply('stop', 300),
+      'threads-p1-s1.json': reply('stop', 9),
       'report.json': reportOf(),
     })
     const tally = onlyTally()
@@ -127,6 +133,8 @@ describe('rejudgeSaved', () => {
     expect(task).toBeDefined()
     save(1, {
       [`${task}-p1-s1.json`]: reply('length', 8_000),
+      'identity-p1-s1.json': reply('stop', 9),
+      'threads-p1-s1.json': reply('stop', 9),
       'report.json': reportOf(),
     })
     const tally = onlyTally()
@@ -136,6 +144,11 @@ describe('rejudgeSaved', () => {
   it('refuses a run with a report and no step file it can read', () => {
     save(1, { 'report.json': reportOf(), 'notes.txt': 'x' })
     expect(() => rejudgeSaved(dir, [])).toThrow(/run1.*step files/)
+  })
+
+  it("refuses a run whose report holds a task's calls and no step file of that task", () => {
+    save(1, { 'threads-p1-s1.json': reply('stop', 9), 'report.json': reportOf() })
+    expect(() => rejudgeSaved(dir, [])).toThrow(/run1.*identity/)
   })
 
   it('refuses a folder with no bar.json, which marks an overlay measure', () => {
