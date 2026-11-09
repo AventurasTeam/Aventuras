@@ -63,8 +63,8 @@ const MERGE_REFUSAL = {
   emptyAbsorb: 'absorb is empty: name the threads to fold into keep',
   keepAbsorbed: 'keep is also in absorb: keep one thread and absorb the others',
   repeated: 'absorb names a thread twice: name each thread once',
-  activeIntoPending:
-    'an active thread cannot be absorbed into a pending one, or the narrator would lose it: keep the active thread and absorb the pending one',
+  activeIntoInactive:
+    'an active thread can be absorbed only into another active one, or the narrator would lose it: keep the active one, or resolve it with update_thread first if the chapter settled it',
   closeWrote:
     'this close already wrote a thread in absorb, and absorbing it would block undoing the close: keep that thread instead',
   closeWroteNoKeep:
@@ -188,9 +188,9 @@ async function planUpdateThread(args: ThreadArgs, ctx: WriteContext): Promise<Wr
   return { kind: 'write', actions, lost, rows, values: wanted }
 }
 
-// Keep's status stands, so an active thread absorbed into a pending one would leave the prompt.
+// Keep's status stands, so an active thread absorbed into a non-active one would leave the prompt.
 const dropsActive = (kept: Thread, absorbed: readonly Thread[]): boolean =>
-  kept.status === 'pending' && absorbed.some(({ status }) => status === 'active')
+  kept.status !== 'active' && absorbed.some(({ status }) => status === 'active')
 
 function mergeShapeFault(keep: string, absorb: readonly string[]): string | undefined {
   if (absorb.length === 0) return MERGE_REFUSAL.emptyAbsorb
@@ -266,7 +266,7 @@ async function planMergeThreads(args: MergeArgs, ctx: WriteContext): Promise<Wri
       : { description: description.bounded }),
   }
   if (dropsActive(kept, absorbed))
-    return { kind: 'refused', reason: MERGE_REFUSAL.activeIntoPending, rows, values: wanted }
+    return { kind: 'refused', reason: MERGE_REFUSAL.activeIntoInactive, rows, values: wanted }
   // Keep may be a row this close wrote. A second written row, or a written one that can't be kept
   // either, leaves no merge that can land.
   const written = await closeWrote(ctx, named)
@@ -353,7 +353,7 @@ export const mergeThreadsTool: WriteTool<typeof MERGE_SHAPE> = {
   kind: 'write',
   name: 'merge_threads',
   description:
-    "Merge threads that track the same thing: keep one, and absorb the others, which are deleted. Keep the active thread when the others are pending; keep's status stands. Send a title or a description only to rewrite keep's, covering what the absorbed threads held. Merge all of one thread's duplicates in one call.",
+    "Merge threads that track the same thing: keep one, and absorb the others, which are deleted. Keep the active thread when any is active: an active thread can be absorbed only into another active one, and keep's status stands. Send a title or a description only to rewrite keep's, covering what the absorbed threads held. Merge all of one thread's duplicates in one call.",
   schema: writeToolSchema(MERGE_SHAPE),
   ids: {
     keep: { shape: 'single', prefixes: ['thr_'] },

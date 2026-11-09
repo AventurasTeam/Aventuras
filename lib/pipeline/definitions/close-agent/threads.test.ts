@@ -1078,7 +1078,7 @@ describe('merge_threads', () => {
 
     expect(run.calls[0]).toMatchObject({
       result: 'rejected',
-      reason: expect.stringContaining('keep the active thread'),
+      reason: expect.stringContaining('keep the active one'),
     })
     expect(run.calls[0]!.values).toEqual({ title: 'The light and the letter' })
     expect(run.calls[0]).not.toHaveProperty('survivor')
@@ -1098,10 +1098,34 @@ describe('merge_threads', () => {
 
     expect(run.calls[0]).toMatchObject({
       result: 'rejected',
-      reason: expect.stringContaining('keep the active thread'),
+      reason: expect.stringContaining('keep the active one'),
     })
     expect(await runDeltas(f, run.result.actionId)).toEqual([])
   })
+
+  it.each(['resolved', 'failed'] as const)(
+    'refuses a %s keep absorbing an active thread, saying to resolve it first if the chapter settled it',
+    async (status) => {
+      const kept: SeedThread = { ...SETTLED, status }
+      await seedPassThread(f, kept, 3)
+
+      const run = await runThreadCalls(
+        f,
+        [...THREADS_SHOWN, kept],
+        [merge({ keep: 'th5', absorb: ['th1'] })],
+      )
+
+      expect(run.calls[0]).toMatchObject({
+        result: 'rejected',
+        reason: expect.stringContaining('keep the active one'),
+      })
+      expect(run.calls[0]!.reason).toContain('resolve it with update_thread first')
+      expect(run.calls[0]).not.toHaveProperty('survivor')
+      expect(await runDeltas(f, run.result.actionId)).toEqual([])
+      expect(await threadRow(f, LETTER.id)).toMatchObject({ status: 'active' })
+      expect(await threadRow(f, SETTLED.id)).toMatchObject({ status })
+    },
+  )
 
   it("records only the text keep doesn't hold when an active thread can't join a pending one", async () => {
     const description = 'A light on the far bank, and the letter Wren carries past it.'
