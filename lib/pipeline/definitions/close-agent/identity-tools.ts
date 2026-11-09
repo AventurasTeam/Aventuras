@@ -194,10 +194,9 @@ async function planIdentityWrite<A extends { readonly id: string }>(
     }
     wanted[field.path] = landingValue(field)
   }
-  const planned = Object.keys(wanted).length > 0 ? entityWriteAction(row, wanted) : undefined
   return {
     kind: 'write',
-    actions: planned !== undefined && planned.fields.length > 0 ? [planned] : [],
+    actions: Object.keys(wanted).length > 0 ? [entityWriteAction(row, wanted)] : [],
     lost,
     rows,
     values: Object.fromEntries(changed.map((field) => [field.path, landingValue(field)])),
