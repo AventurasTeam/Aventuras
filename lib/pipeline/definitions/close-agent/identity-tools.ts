@@ -185,7 +185,7 @@ async function planIdentityWrite(
     if (field.kind === 'list') {
       const cap = CAST_SOFT_CAPS[field.cap]
       if (overSoftCap(field.list.entries, storedValue(row, field.path), cap)) {
-        const reason = softCapReason(field.cap, cap, field.list)
+        const reason = softCapReason(field.cap, field.list)
         lost.push({ field: field.path, row: id, kind: 'refused', reason })
         continue
       }

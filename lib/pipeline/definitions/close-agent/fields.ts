@@ -117,8 +117,8 @@ export function overSoftCap(sent: readonly string[], stored: unknown, cap: numbe
 }
 
 /** A rule refusal's reason: the cap, and to replace rather than add. */
-export function softCapReason(list: CappedList, cap: number, sent?: SentList): string {
-  const reason = `${list} is over its soft cap of ${cap}: replace an entry rather than add one`
+export function softCapReason(list: CappedList, sent?: SentList): string {
+  const reason = `${list} is over its soft cap of ${CAST_SOFT_CAPS[list]}: replace an entry rather than add one`
   if (sent === undefined || sent.entries.length <= sent.deduped.length) return reason
   return `${reason} (read as ${sent.entries.length} entries: a list joined into one string holds one entry per item)`
 }

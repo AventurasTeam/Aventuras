@@ -249,21 +249,24 @@ describe('overSoftCap', () => {
 })
 
 describe('softCapReason', () => {
-  it('names the list, its cap, and to replace an entry rather than add one', () => {
-    expect(softCapReason('traits', 8)).toBe(
+  it('names the list, its own cap, and to replace an entry rather than add one', () => {
+    expect(softCapReason('traits')).toBe(
       'traits is over its soft cap of 8: replace an entry rather than add one',
     )
-    expect(softCapReason('agenda', 4)).toBe(
+    expect(softCapReason('drives')).toBe(
+      'drives is over its soft cap of 6: replace an entry rather than add one',
+    )
+    expect(softCapReason('agenda')).toBe(
       'agenda is over its soft cap of 4: replace an entry rather than add one',
     )
   })
 
   it('says a list joined into one entry was read as the entries it holds', () => {
-    expect(softCapReason('traits', 8, sentList([TWELVE_TRAITS.join('","')]))).toBe(
+    expect(softCapReason('traits', sentList([TWELVE_TRAITS.join('","')]))).toBe(
       'traits is over its soft cap of 8: replace an entry rather than add one' +
         ' (read as 12 entries: a list joined into one string holds one entry per item)',
     )
-    expect(softCapReason('traits', 8, sentList(terms(9)))).toBe(
+    expect(softCapReason('traits', sentList(terms(9)))).toBe(
       'traits is over its soft cap of 8: replace an entry rather than add one',
     )
   })

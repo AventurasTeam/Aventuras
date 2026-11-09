@@ -785,9 +785,9 @@ describe('update_character and update_faction', () => {
     )
 
     expect(calls.map(({ result: outcome, reason }) => [outcome, reason])).toEqual([
-      ['rejected', softCapReason('traits', 8)],
-      ['rejected', softCapReason('drives', 6)],
-      ['rejected', softCapReason('agenda', 4)],
+      ['rejected', softCapReason('traits')],
+      ['rejected', softCapReason('drives')],
+      ['rejected', softCapReason('agenda')],
     ])
     for (const call of calls) expect(call).not.toHaveProperty('skippedFields')
     expect(await runDeltas(f, result.actionId)).toEqual([])
@@ -831,12 +831,12 @@ describe('update_character and update_faction', () => {
 
     expect(calls[0]).toMatchObject({
       result: 'ok',
-      skippedFields: [{ field: 'state.traits', reason: softCapReason('traits', 8) }],
+      skippedFields: [{ field: 'state.traits', reason: softCapReason('traits') }],
     })
     expect(Object.keys(calls[0]!.values ?? {}).sort()).toEqual(['state.traits', 'state.voice'])
     expect(calls[1]).toMatchObject({
       result: 'ok',
-      skippedFields: [{ field: 'state.agenda', reason: softCapReason('agenda', 4) }],
+      skippedFields: [{ field: 'state.agenda', reason: softCapReason('agenda') }],
     })
     expect((await storedEntity(f, WREN)).state).toMatchObject({
       traits: ['patient'],
@@ -864,7 +864,7 @@ describe('update_character and update_faction', () => {
       )
 
       expect(calls[0]).toMatchObject({ result: 'rejected' })
-      expect(calls[0]!.reason).toContain(softCapReason('traits', 8))
+      expect(calls[0]!.reason).toContain(softCapReason('traits'))
       expect(calls[0]!.reason).toContain('read as 12 entries')
       expect(await runDeltas(f, result.actionId)).toEqual([])
       expect((await storedEntity(f, WREN)).state).toMatchObject({ traits: terms('trait', 8) })
@@ -975,7 +975,7 @@ describe('update_character and update_faction', () => {
 
     expect(calls.map(({ result, reason }) => [result, reason])).toEqual([
       ['ok', undefined],
-      ['rejected', softCapReason('traits', 8)],
+      ['rejected', softCapReason('traits')],
       ['ok', undefined],
     ])
     expect((await storedEntity(f, TOBIN)).state).toMatchObject({ traits: shorter })
