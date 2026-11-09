@@ -2,7 +2,7 @@ import { and, eq, inArray } from 'drizzle-orm'
 import { z } from 'zod'
 
 import { USER_EDITED_SINCE_PROSE, type GuardRow, type RowGuard } from '@/lib/actions/types'
-import { deltas, readEntryPosition, threads, type Thread } from '@/lib/db'
+import { deltas, readEntryPosition, threads, type InjectionMode, type Thread } from '@/lib/db'
 
 import { restatedText, sentText } from './fields'
 import {
@@ -193,12 +193,20 @@ async function planUpdateThread(args: ThreadArgs, ctx: WriteContext): Promise<Wr
   return { kind: 'write', actions, lost, rows, values: wanted }
 }
 
+/** What a merge's threads hold that keep must hold too: an active status, and each mode a user set. */
+type MergedThreads = { anyActive: boolean; userModes: ReadonlySet<InjectionMode> }
+
+function mergedThreads(rows: readonly Thread[]): MergedThreads {
+  return {
+    anyActive: rows.some(({ status }) => status === 'active'),
+    userModes: new Set(rows.flatMap(({ injectionMode: mode }) => (mode === 'auto' ? [] : [mode]))),
+  }
+}
+
 // Keep's status and injection mode stand, so a merge refuses what the narrator would silently lose.
-function keepFault(kept: Thread, merged: readonly Thread[]): string | undefined {
-  const absorbed = merged.filter((row) => row !== kept)
-  if (kept.status !== 'active' && absorbed.some(({ status }) => status === 'active'))
-    return MERGE_REFUSAL.activeIntoInactive
-  if (absorbed.some(({ injectionMode: mode }) => mode !== 'auto' && mode !== kept.injectionMode))
+function keepFault(kept: Thread, merged: MergedThreads): string | undefined {
+  if (kept.status !== 'active' && merged.anyActive) return MERGE_REFUSAL.activeIntoInactive
+  if ([...merged.userModes].some((mode) => mode !== kept.injectionMode))
     return MERGE_REFUSAL.modeIntoOther
   return undefined
 }
@@ -278,10 +286,13 @@ async function planMergeThreads(args: MergeArgs, ctx: WriteContext): Promise<Wri
   }
   // Each of the threads tried as keep, so a refusal's advice names only a merge that would land.
   const merged = [kept, ...absorbed]
-  const fitting = merged.filter((row) => keepFault(row, merged) === undefined)
+  const held = mergedThreads(merged)
+  const fitting = merged.filter((row) => keepFault(row, held) === undefined)
   // A row this close wrote can be kept, never absorbed.
   const written = await closeWrote(ctx, named)
-  const landing = fitting.filter((row) => [...written].every((id) => id === row.id))
+  const landing = fitting.filter(
+    (row) => written.size === 0 || (written.size === 1 && written.has(row.id)),
+  )
   if (landing.length === 0) {
     const reason = fitting.length === 0 ? MERGE_REFUSAL.noKeep : MERGE_REFUSAL.closeWroteNoKeep
     return { kind: 'refused', reason, rows, values: wanted }
@@ -289,7 +300,7 @@ async function planMergeThreads(args: MergeArgs, ctx: WriteContext): Promise<Wri
   if (!landing.includes(kept))
     return {
       kind: 'refused',
-      reason: keepFault(kept, merged) ?? MERGE_REFUSAL.closeWrote,
+      reason: keepFault(kept, held) ?? MERGE_REFUSAL.closeWrote,
       rows,
       values: wanted,
       note: `Send ${landing.map(({ id }) => id).join(' or ')} as keep.`,
