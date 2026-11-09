@@ -718,11 +718,16 @@ beside it, since the stand-in has no Threads task. Every run, overlay or
 not, turns diagnostics and their debug level on, and unless it is a
 stand-in run prints whether Identity and Threads held: the close
 completed, the task ended on a reply with no tool call and no budget,
-window or cut-off stop, it landed at least one write, and none of its
-replies was cut off or reached the 8k output bound. It also prints each
-step's `provider.input_ratio`, a cut attempt's output tokens beside its
-retry, the largest value the report recorded, measured before its bound,
-and the report's size in bytes. The overlay adds the coverage counts:
+window or cut-off stop, it landed at least one write, and no step's
+reply reached the 8k output bound. A step cut off at that bound, or
+stopped by a filter, whose one retry succeeds still holds; a task whose
+retry is cut off too is stopped, and misses. The 8k clause judges each
+step by its final attempt, so a cut attempt's output never counts toward
+it. It also prints each run's cut-offs (task, step and output tokens;
+`cutOffs` in each tally of `bar.json`), each step's
+`provider.input_ratio`, a cut attempt's output tokens beside its retry,
+the largest value the report recorded, measured before its bound, and
+the report's size in bytes. The overlay adds the coverage counts:
 Identity calls whose list on an overlay row at or over its cap reached
 the cap check, landed or refused, and `merge_threads` calls, each with
 its hits. After the runs it prints the bar: met when there are 8 runs of
@@ -730,7 +735,11 @@ its hits. After the runs it prints the bar: met when there are 8 runs of
 of 10, both scaled to `PROBE_RUNS`; inconclusive when enough runs held
 but a count fell short; missed otherwise. It writes the verdict and each
 run's tally to `bar.json` in `PROBE_OUT`, and exits non-zero unless the
-bar is met.
+bar is met. `PROBE_REJUDGE=<probe-out dir>` judges a saved overlay
+measure by the bar as it stands, rebuilding each run's tally from its
+saved steps and report with no model call; it needs the directory's
+`bar.json`, writes `bar-rejudged.json` beside the runs, and never
+overwrites one.
 
 ## Selector strategy
 

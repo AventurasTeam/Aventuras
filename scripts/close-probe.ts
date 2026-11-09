@@ -590,14 +590,16 @@ function refuseUsedOutput(): void {
 // The saved runs' tallies, rebuilt: the bar's coverage reads the overlay's capped lists, as a run's.
 function rejudge(outDir: string): void {
   const dir = resolve(outDir)
-  const { bar, tallies } = rejudgeSaved(dir, overlayCappedLists())
-  tallies.forEach(({ holds, cutOffs }, i) => {
+  const { bar, runs } = rejudgeSaved(dir, overlayCappedLists())
+  const tallies = runs.map(({ tally }) => tally)
+  for (const { run, tally } of runs) {
+    const { holds, cutOffs } = tally
     const verdicts = holds.map((hold) => `${hold.task} ${hold.held ? 'held' : hold.why}`)
     const cuts = cutOffs.map((cut) => `${cut.task} step ${cut.step} ${cut.outputTokens ?? '?'}`)
     console.log(
-      `[probe:close] run ${i + 1}: ${verdicts.join('; ')}; cut-offs: ${cuts.length === 0 ? 'none' : cuts.join(', ')}`,
+      `[probe:close] run ${run}: ${verdicts.join('; ')}; cut-offs: ${cuts.length === 0 ? 'none' : cuts.join(', ')}`,
     )
-  })
+  }
   console.log(`[probe:close] ${barLine(bar)}`)
   writeFileSync(
     join(dir, 'bar-rejudged.json'),
