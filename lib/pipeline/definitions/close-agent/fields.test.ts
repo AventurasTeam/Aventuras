@@ -109,6 +109,13 @@ describe('sentList', () => {
     expect(entries([joined])).toEqual(held)
   })
 
+  it('reads a bracketed one-entry list as its entry, escaped or not, and keeps bare brackets', () => {
+    expect(entries(['["patient"]'])).toEqual(['patient'])
+    expect(entries(['[\\"patient\\"]'])).toEqual(['patient'])
+    expect(entries(['\n[\n  "patient"\n]\n'])).toEqual(['patient'])
+    expect(entries(['[patient]'])).toEqual(['[patient]'])
+  })
+
   it('splits an entry on its line breaks, deduping across the pieces', () => {
     expect(entries(['brave\nwary\r\npatient', 'Wary'])).toEqual(['brave', 'wary', 'patient'])
   })

@@ -42,19 +42,25 @@ function stringList(json: string): string[] | undefined {
   }
 }
 
+const BRACKETED = /^\[[\s\S]*\]$/
+
 /**
  * A list the model escaped into one string, read by parsing it once its edge quotes and brackets
- * are restored, then again while an item unescapes further. Prose with its own quotes won't parse.
+ * are restored, then again while an item unescapes further. Prose with its own quotes won't parse,
+ * and a single quoted entry stays whole unless it came in brackets, as a one-entry list.
  */
-function joinedList(entry: string): string[] | undefined {
-  const body = entry.trim().replace(/^\[/, '').replace(/\]$/, '').trim()
+function joinedList(entry: string, bracketed = false): string[] | undefined {
+  const trimmed = entry.trim()
+  const body = trimmed.replace(/^\[/, '').replace(/\]$/, '').trim()
   const open = body.startsWith('"') ? '' : '"'
   const close = body.endsWith('"') && !body.endsWith('\\"') ? '' : '"'
   const list = stringList(`[${open}${body}${close}]`)
   if (list === undefined || list.length > 1) return list
-  // Each pass parses a shorter string, so this ends.
   const [only] = list
-  return only === undefined || only === body ? undefined : joinedList(only)
+  if (only === undefined) return undefined
+  if (only === body) return bracketed ? list : undefined
+  // Each pass parses a shorter string, so this ends.
+  return joinedList(only, bracketed || BRACKETED.test(trimmed))
 }
 
 const LIST_MARKER = /^(?:[-*]|\d+\.)\s+/
