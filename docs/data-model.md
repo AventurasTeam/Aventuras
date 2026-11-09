@@ -1165,7 +1165,10 @@ is mitigated structurally:
 - **Soft caps in the writers' prompts.** `traits ≤ 8`, `drives ≤ 6`,
   `agenda ≤ 4`. The periodic classifier writes within them when it
   creates an entity; chapter close is told "replace, don't append" when
-  at cap.
+  at cap. A close's list over its soft cap is refused only when it is
+  also longer than the stored list, so a row already over its cap, from
+  a user edit or an import, can shrink, or swap entries at the same
+  length.
 - **No per-turn or per-pass update to traits / drives / voice /
   agenda.** The periodic classifier writes them once, from the window
   that introduces the entity; after that these slow-evolving identity

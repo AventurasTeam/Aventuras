@@ -386,8 +386,9 @@ spec's ids stay stable across runs.
 
 `pnpm db:seed:dataset [db path]` seeds the default dataset, then one
 played story from a checked-in file: Slice 5.2's _Treasure Island_
-chapter as `pnpm dataset:chapter` built it and its first close left it
-([5.2's Implementation notes](./implementation/milestones/05-chapters-chapter-close/slices/02-first-chapter.md#implementation-notes)).
+chapter as `pnpm dataset:chapter` built it
+([5.2's Implementation notes](./implementation/milestones/05-chapters-chapter-close/slices/02-first-chapter.md#implementation-notes)),
+closed by its latest refresh, below.
 It is a shared dev baseline, not an E2E fixture: no spec loads it, and
 `pnpm db:seed`, the on-device reseed and every fixture leave it out.
 The file, `scripts/dataset-chapter/treasure-island.seed.json`, holds

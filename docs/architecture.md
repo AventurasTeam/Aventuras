@@ -986,9 +986,13 @@ stored `content_tokens`
 counting a null one from its prose. The rest of each step's request is
 encoded as above. Stored content can hold what the prompt leaves out,
 such as a trailing block an older reply still carries, so the count
-can lean slightly high. The lean is small, since current writers store
-stripped prose, and is accepted as small, not as safe: the estimate is
-compared with no margin, as below.
+can lean slightly high; current writers store stripped prose, so that
+lean is small. It can also lean a few tokens low: the tokenizer can
+merge text across a turn's edges, so the half counted whole differs a
+little from its parts counted apart, and a synthetic 133-turn Japanese
+chapter primed 0.4% low where English was exact. The lean goes either way by a little,
+and is accepted as small, not as safe: the estimate is compared with no
+margin, as below, where a low lean is the cheaper miss.
 
 Counts are cached by text, up to 4,096 texts and 2,000,000 characters,
 the least recently used out, and a counting pass keeps its system half.

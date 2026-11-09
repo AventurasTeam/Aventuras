@@ -157,7 +157,8 @@ A write returns one of three results:
   with nothing written: the model isn't wrong, and nothing was lost.
 - `rejected`, with the reason and what to do: the row wasn't read, it
   cites nothing or a turn outside the chapter, it's over the lore cap or
-  a soft cap, it removes a keyword the user added, it breaks a rule of
+  over a soft cap and longer than the stored list
+  ([3b](#3b--identity-compaction)), it removes a keyword the user added, it breaks a rule of
   its sub-job, or the row moved or went since the task read it, saying
   where it went.
 - `skipped`, when the field stands and a retry won't help: the user wrote
@@ -460,7 +461,9 @@ character the prose only mentions is left to `search_world`.
 
 **Operations the agent may make.** It sends each list whole
 (`traits: [...]`) and code checks the soft caps, so it never plans these
-one by one:
+one by one. A list over its soft cap is refused only when it is also
+longer than the stored list, so a row already over its cap, from a user
+edit or an import, can shrink, or swap entries at the same length:
 
 | Op          | Trigger                                                                                              | Discipline                                                     |
 | ----------- | ---------------------------------------------------------------------------------------------------- | -------------------------------------------------------------- |
@@ -620,7 +623,10 @@ row is a merge that keeps the kept row's text. Keep distinct is no call.
 **A merge lands whole, once per row.** Code checks user precedence on
 every row of a merge before any of it lands, so a merge can't delete a
 row while its composite is skipped: one protected row skips the whole
-merge, as does a row a later turn touched. A merge can't absorb a row this close already wrote, since redo
+merge, as does a row a later turn touched. An absorbed row is protected
+by a user edit of it or its link rows. The kept row is protected only by
+a user edit of a field the merge writes, since its other fields lose
+nothing to a merge. A merge can't absorb a row this close already wrote, since redo
 refuses an update and a delete of one row in one group, and CTRL-Z of
 the close would then be refused for good. The agent merges everything
 in one call instead of in a chain.
@@ -656,11 +662,9 @@ conservative bias as the sub-jobs above:
   reads the cited turn. An active thread costs every turn's prompt
   until it closes ([`classifier.md → Threads`](./classifier.md#threads)).
   A merge follows 3e's rules: nothing links to a thread, so it is an
-  update and a delete. The one loosening: a user edit of the kept row
-  stops the merge only when it touched a field the merge writes, its title
-  or description, where an edit of an absorbed row always does. The kept
-  row's status, entry refs, category, icon and injection mode stand, and
-  the merge writes only its title and description. Absorbing an `active`
+  update and a delete. The merge writes only the kept row's title and
+  description; its status, entry refs, category, icon and injection mode
+  stand. Absorbing an `active`
   thread is refused unless the kept row is `active` too, since the kept
   row would drop the thread from the narrator's prompt with no write
   saying so. The refusal says to keep an active one, then settle it with
