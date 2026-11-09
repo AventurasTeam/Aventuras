@@ -64,7 +64,6 @@ export function rejudgeSaved(
     const runDir = join(outDir, `run${run}`)
     const report = readReport(runDir)
     const tally = tallyRun({
-      completed: report !== null,
       report,
       attempts: readAttempts(runDir, report),
       cappedLists,

@@ -99,8 +99,8 @@ describe('rejudgeSaved', () => {
     expect(tallyOf(runs, 0)?.holds.map(({ why }) => why)).toEqual(['stopped: cut-off', 'held'])
     expect(tallyOf(runs, 0)?.cutOffs.map(({ outputTokens }) => outputTokens)).toEqual([8_000, 40])
     expect(tallyOf(runs, 1)?.holds.map(({ why }) => why)).toEqual([
-      'the close did not complete',
-      'the close did not complete',
+      'no report: the close did not complete, or wrote none',
+      'no report: the close did not complete, or wrote none',
     ])
   })
 

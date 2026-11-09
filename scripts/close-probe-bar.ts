@@ -47,7 +47,7 @@ export type RunTally = {
 }
 
 type RunInput = {
-  completed: boolean
+  /** Null for a close that did not complete, or completed and wrote no report: nothing to judge. */
   report: CloseReport | null
   attempts: readonly StepAttempt[]
   cappedLists: readonly { id: string; list: CappedList }[]
@@ -76,7 +76,7 @@ function largestFinalOutput(task: CloseTask, attempts: readonly StepAttempt[]): 
 function holdOf(task: CloseTask, input: RunInput): TaskHold {
   const missed = (why: string): TaskHold => ({ task, held: false, why })
   const { report } = input
-  if (!input.completed || report === null) return missed('the close did not complete')
+  if (report === null) return missed('no report: the close did not complete, or wrote none')
   const stop = report.stopped.find((stopped) => stopped.task === task)
   if (stop !== undefined) return missed(`stopped: ${stop.reason}`)
   const most = largestFinalOutput(task, input.attempts)

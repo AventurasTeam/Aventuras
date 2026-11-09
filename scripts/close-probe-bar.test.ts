@@ -58,9 +58,10 @@ const attempt = (
   cut = false,
 ): StepAttempt => ({ task, step, outputTokens, cut })
 
+const NO_REPORT = 'no report: the close did not complete, or wrote none'
+
 const run = (over: Partial<Parameters<typeof tallyRun>[0]> = {}) =>
   tallyRun({
-    completed: true,
     report: report([LANDED_IDENTITY, LANDED_THREADS]),
     attempts: [],
     cappedLists: CAPPED_LISTS,
@@ -75,11 +76,11 @@ describe('tallyRun', () => {
     ])
   })
 
-  it('misses both tasks, and counts nothing, on a close that did not complete', () => {
-    expect(run({ completed: false, report: null })).toEqual({
+  it('misses both tasks, and counts nothing, on a run with no report', () => {
+    expect(run({ report: null })).toEqual({
       holds: [
-        { task: 'identity', held: false, why: 'the close did not complete' },
-        { task: 'threads', held: false, why: 'the close did not complete' },
+        { task: 'identity', held: false, why: NO_REPORT },
+        { task: 'threads', held: false, why: NO_REPORT },
       ],
       cutOffs: [],
       capCalls: 0,

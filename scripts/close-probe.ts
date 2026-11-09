@@ -565,7 +565,6 @@ async function probeRun(k: number, source: string, server: Server): Promise<RunR
       writeFileSync(join(capture.dir, 'report.json'), `${JSON.stringify(report, null, 2)}\n`)
     printRun(k, result, ms, report)
     const tally = tallyRun({
-      completed,
       report,
       attempts: capture.attempts,
       cappedLists: OVERLAY ? overlayCappedLists() : [],
