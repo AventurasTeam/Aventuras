@@ -53,7 +53,11 @@ No open items.
   entry during the build is untested. On the same device a count of
   40,000 characters took 35 ms of English, 591 ms of Chinese and 2,088 ms
   of Japanese, on the JS thread, and the prompt is counted on every model
-  call. A real phone on a release build is unmeasured. Raised 2026-11-01
+  call. A real phone on a release build is unmeasured.
+  [Slice 5.5b's per-step measure](./implementation/milestones/05-chapters-chapter-close/slices/05b-identity-threads.md#per-step-count-measure),
+  pending on the Fold's release build, times a close's per-step counts
+  there in English and Japanese, which answers part of it, not the build.
+  Raised 2026-11-01
   by Slice 5.1, moved here 2026-11-02 by its closing review, which added
   the tap and CJK numbers.
 
@@ -268,6 +272,30 @@ No open items.
   down. Both from 5.3's slice review, 2026-11-03, in stories, not on a
   device. Routed from triage 2026-11-05.
 
+- **Re-run a chapter's close.** The review window
+  ([`chapter-timeline.md → Review window`](./ui/screens/chapter-timeline/chapter-timeline.md#review-window))
+  shows what a close changed but offers no way to run it again when its
+  output is poor overall. Canon leaves re-running a close's writes as an
+  open question
+  ([`chapter-timeline.md → Screen-specific open questions`](./ui/screens/chapter-timeline/chapter-timeline.md#screen-specific-open-questions)).
+  The nearest path, deleting the chapter and then closing it again by hand
+  ([`memory/chapter-close.md → Deleting a chapter`](./memory/chapter-close.md#deleting-a-chapter),
+  [Manual user-triggered close](./memory/chapter-close.md#manual-user-triggered-close)),
+  can't be undone, so a worse second close can't be traded back for the
+  first, and the next Send may close the reopened turns first, at an end
+  it picks. Points for the design: one undoable group (the close's
+  reversal and a fresh close), so CTRL-Z restores the first outcome; the
+  latest chapter only, as Delete is, since later closes build on an
+  earlier one's merges; a re-run after later turns reads rows those turns
+  wrote, under later-turn protection, so it isn't the first close again;
+  re-running one task (Identity, Threads and so on) against the tasks'
+  shared group; consent and cost, since a close is the costliest call.
+  A design before Slices 5.11 and 5.12 are planned; one of them likely
+  builds it. Raised by the developer 2026-11-09.
+  [`chapter-timeline.md → Per-card actions`](./ui/screens/chapter-timeline/chapter-timeline.md#per-card-actions)
+  still calls re-running lore-management a destructive re-application out
+  of scope for v1, the line a design session reconciles.
+
 ## Tuning and play testing
 
 v1 work held for the end of the cycle, once every base system is
@@ -408,15 +436,30 @@ breakdown under [UX](#ux).
   - part size, half the window, and how a chapter cut in parts reads;
   - servers that take the tool list and ignore it.
 
-  Play tunes the metadata prompt too, outside the agent. It has two data
-  points in
+  Play tunes the metadata prompt too, outside the agent. It has three data
+  points. Two are in
   [Slice 5.2's Implementation notes](./implementation/milestones/05-chapters-chapter-close/slices/02-first-chapter.md#implementation-notes):
   one dev-model close told its summary in the second person against
   first-person narration, and one of fifteen ran away to 39,689 output
   tokens with no max output set and failed (the developer keeps the
-  profile without one).
+  profile without one). The third is
+  [Slice 5.5b's per-step measure](./implementation/milestones/05-chapters-chapter-close/slices/05b-identity-threads.md#per-step-count-measure)
+  (2026-11-09): a dev-route close on Gemma4-26B-A4B-QAT-MTP ran away to
+  39,655 output tokens in the metadata call and failed.
 
   Raised 2026-10-31 by the chapter-close agent design.
+
+- **The dataset chapter's bare profiles.** The Treasure Island seed's
+  characters, as the classifier wrote them and before Slice 5.5b's
+  refresh, are nearly bare: of 25, the most traits on a live one is 4,
+  no live one holds a drive, only the retired Pew holds a `voice`, and 8
+  have no description, Captain Smollett among them. The periodic
+  classifier created 24 of them, so whether that is the book's shape, a first
+  chapter that shows little of most of its cast, or the classifier
+  writing thin first profiles is open. Play testing tells, on a played
+  story's passes. Meanwhile a close is measured on the seed with
+  [its test overlay](./testing.md#the-dataset-seed). Raised 2026-11-09
+  by Slice 5.5b's planning.
 
 - **World's "stale active" surface.**
   [`chapter-close.md → Phase 4`](./memory/chapter-close.md#phase-4--lifecycle-review)
@@ -424,6 +467,45 @@ breakdown under [UX](#ux).
   active", derived with no schema column. `world.md` has no such surface,
   "far back" needs played stories to define, and a close doesn't produce
   it. Moved out of M5 at its promotion, 2026-11-01.
+
+- **A list joined with commas into one entry.** The close's Identity
+  tools read a list leaked into one entry as the entries it holds: an
+  entry that parses as a JSON string list (the shape the dev model leaked
+  in 5.5b's measure, plus its backslash-escaped, bracketed,
+  pretty-printed and trailing-comma variants) and a line-separated list.
+  A list joined with plain commas or semicolons ("brave, honest, loyal,
+  ...") still lands as one entry, as sent, so it passes the soft cap. It
+  isn't split, because that would break legitimate entries like
+  "quick-witted, if rash"
+  ([the slice's note](./implementation/milestones/05-chapters-chapter-close/slices/05b-identity-threads.md#implementation-notes)).
+  Watch for it in play testing, and decide on a rule (refusing an entry
+  that reads as a list, for example) only if it shows up. Developer
+  ruling, 2026-11-09. Review probes found one more shape the read
+  misses: a single-quoted list (`['brave', 'wary']`) lands as one entry,
+  as sent, so it passes the soft cap; split over lines, it lands each
+  item with its quotes (`'brave'`, `'wary'`), counted right but quoted.
+  Converting its quotes would break an apostrophe like "won't back
+  down", so it's handled the same way: watched in play testing, with a
+  rule only if it shows up.
+
+- **The close's writes at the capability floor: invented facts, malformed
+  batches, and sampling.** 5.5b's measure on the dev model (Gemma 4
+  26B-A4B, ten closes of the Treasure Island chapter) held the bar, but
+  its transcripts show work for prompt tuning, not a code fix:
+  - Facts the cited turns don't show landed: Pew called "one-legged",
+    Supervisor Dance given Dr. Livesey's "a gentleman and a
+    magistrate", Billy Bones' drives replaced by one no turn shows, and
+    "The August deadline" resolved or failed early in runs 3, 5 and 10.
+  - Every Identity first step that skipped its thinking and sent a
+    batch of calls had malformed arguments (6 of 6): lists sent as
+    strings, `turns` padded with `true`, an escaped array landing as
+    one entry.
+  - The close's tool steps send no temperature, so the dev server
+    samples at its 1.0 with no repeat penalty; all four replies cut
+    off at the 8,000-token bound were loops or over-long deliberation.
+
+  The record and the saved conversations are the inputs; see 5.5b's
+  measure record in its slice doc. Raised in 5.5b's measure.
 
 - **Parked items play gives a signal for.** Each waits on evidence
   only play produces, so play checks them rather than letting the

@@ -202,7 +202,12 @@ describe('happeningActions', () => {
       {
         kind: 'updateHappening',
         source: 'user_edit',
-        payload: { branchId: 'br_1', id: 'hap_1', patch: { commonKnowledge: 1 } },
+        payload: {
+          branchId: 'br_1',
+          id: 'hap_1',
+          patch: { commonKnowledge: 1 },
+          proseEntryId: null,
+        },
       },
       {
         kind: 'updateHappeningInvolvement',
@@ -364,6 +369,7 @@ describe('happeningActions', () => {
           branchId: 'br_1',
           id: 'hap_1',
           patch: { temporal: 'years past', occurredAtEntryId: null },
+          proseEntryId: null,
         },
       },
     ])
@@ -384,6 +390,7 @@ describe('happeningActions', () => {
           branchId: 'br_1',
           id: 'hap_1',
           patch: { temporal: null, occurredAtEntryId: 'e_20' },
+          proseEntryId: null,
         },
       },
     ])
@@ -400,6 +407,7 @@ describe('happeningActions', () => {
           branchId: 'br_1',
           id: 'hap_1',
           patch: { temporal: null, occurredAtEntryId: 'e_5' },
+          proseEntryId: null,
         },
       },
     ])

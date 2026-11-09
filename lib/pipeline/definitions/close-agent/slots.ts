@@ -1,8 +1,10 @@
 import type { GroupOutcome } from '@/lib/actions/types'
 import type { CloseTask } from '@/lib/db'
 
+import { identityTask } from './identity'
 import type { PartTask } from './progress'
 import type { CloseTaskDef, TaskRunContext } from './task'
+import { threadsTask } from './threads'
 import type { PhaseEmittedEvent, PhaseResult } from '../../types'
 
 /** A code step's context: a task's, with no task, no read fields and no ledger: it records nothing. */
@@ -30,8 +32,21 @@ export type CloseAgentSlots = {
 
 export type SlotName = keyof CloseAgentSlots
 
-/** No close tasks yet (5.5b, 5.8, 5.9). */
+// Typed here: inside the freeze below, `kind: 'task'` would widen to string.
+const PER_PART: readonly SlotEntry<PartTask>[] = Object.freeze([
+  { kind: 'task', def: identityTask },
+  { kind: 'task', def: threadsTask },
+])
+
+/** C2: Identity then Threads per part; the other tasks join with Slices 5.8 and 5.9. */
 export const PRODUCTION_CLOSE_SLOTS: CloseAgentSlots = Object.freeze({
+  before: Object.freeze([]),
+  perPart: PER_PART,
+  after: Object.freeze([]),
+})
+
+/** No task in any slot: for a close test that isn't about the tasks. */
+export const NO_CLOSE_TASKS: CloseAgentSlots = Object.freeze({
   before: Object.freeze([]),
   perPart: Object.freeze([]),
   after: Object.freeze([]),

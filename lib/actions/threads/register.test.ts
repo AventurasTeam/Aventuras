@@ -6,7 +6,11 @@ import { createTestDb } from '@/lib/db/__tests__/test-db'
 import { entriesStore, threadsStore } from '@/lib/stores'
 
 import { registerThreads } from './register'
-import { applyDeltaAction, lockKeysFor } from '../delta/apply-delta-action'
+import {
+  applyDeltaAction,
+  applyDeltaActionGroupWithOutcomes,
+  lockKeysFor,
+} from '../delta/apply-delta-action'
 import { __resetRegistry } from '../delta/registry'
 import { reverseReplayDeltas } from '../delta/reverse-replay'
 import { USER_EDITED_SINCE_PROSE } from '../delta/user-precedence'
@@ -52,7 +56,7 @@ const create = (ctx: Ctx, entry: NewThread, source: 'user_edit' | 'periodic_clas
 const userPatch = (patch: Record<string, unknown>): PipelineAction => ({
   kind: 'updateThread',
   source: 'user_edit',
-  payload: { branchId: 'br_1', id: 'thr_1', patch },
+  payload: { branchId: 'br_1', id: 'thr_1', patch, proseEntryId: null },
 })
 const undoOf = async (db: Awaited<ReturnType<typeof setup>>['db'], actionId: string) =>
   (await db.select().from(deltas).where(eq(deltas.actionId, actionId)))[0]?.undoPayload
@@ -102,7 +106,7 @@ describe('threads CRUD arms', () => {
         action: {
           kind: 'updateThread',
           source: 'user_edit',
-          payload: { branchId: 'br_1', id: 'thr_1', patch: {} },
+          payload: { branchId: 'br_1', id: 'thr_1', patch: {}, proseEntryId: null },
         },
         actionId: 'act_noop',
         branchId: 'br_1',
@@ -132,7 +136,7 @@ describe('threads CRUD arms', () => {
           action: {
             kind: 'updateThread',
             source: 'user_edit',
-            payload: { branchId: 'br_1', id, patch },
+            payload: { branchId: 'br_1', id, patch, proseEntryId: null },
           },
           actionId: 'act_u',
           branchId: 'br_1',
@@ -188,6 +192,7 @@ describe('threads CRUD arms', () => {
             branchId: 'br_1',
             id: 'thr_1',
             patch: { status: 'active', triggeredAtEntryId: 'se_5' },
+            proseEntryId: null,
           },
         },
         actionId: 'act_u',
@@ -225,7 +230,12 @@ describe('threads CRUD arms', () => {
         action: {
           kind: 'updateThread',
           source: 'user_edit',
-          payload: { branchId: 'br_1', id: 'thr_1', patch: { triggeredAtEntryId: '' } },
+          payload: {
+            branchId: 'br_1',
+            id: 'thr_1',
+            patch: { triggeredAtEntryId: '' },
+            proseEntryId: null,
+          },
         },
         actionId: 'act_u',
         branchId: 'br_1',
@@ -315,7 +325,7 @@ describe('threads CRUD arms', () => {
         action: {
           kind: 'updateThread',
           source: 'user_edit',
-          payload: { branchId: 'br_1', id: 'thr_1', patch: { icon: 'shield' } },
+          payload: { branchId: 'br_1', id: 'thr_1', patch: { icon: 'shield' }, proseEntryId: null },
         },
         actionId: 'act_u1',
         branchId: 'br_1',
@@ -329,7 +339,12 @@ describe('threads CRUD arms', () => {
         action: {
           kind: 'updateThread',
           source: 'user_edit',
-          payload: { branchId: 'br_1', id: 'thr_1', patch: { title: 'Recover the relic' } },
+          payload: {
+            branchId: 'br_1',
+            id: 'thr_1',
+            patch: { title: 'Recover the relic' },
+            proseEntryId: null,
+          },
         },
         actionId: 'act_u2',
         branchId: 'br_1',
@@ -343,7 +358,12 @@ describe('threads CRUD arms', () => {
         action: {
           kind: 'updateThread',
           source: 'user_edit',
-          payload: { branchId: 'br_1', id: 'thr_1', patch: { description: 'new text' } },
+          payload: {
+            branchId: 'br_1',
+            id: 'thr_1',
+            patch: { description: 'new text' },
+            proseEntryId: null,
+          },
         },
         actionId: 'act_u3',
         branchId: 'br_1',
@@ -385,6 +405,41 @@ describe('updateThread — the entry a status ended on', () => {
     },
   )
 
+  it('logs the stored ref beside a status change whose patch restates it', async () => {
+    const { db, ctx } = await setup()
+    await create(ctx, PASS_THREAD, 'periodic_classifier')
+    const patch: PipelineAction = {
+      kind: 'updateThread',
+      source: 'chapter_close',
+      payload: {
+        branchId: 'br_1',
+        id: 'thr_1',
+        patch: { status: 'failed', resolvedAtEntryId: 'e_old' },
+        proseEntryId: null,
+      },
+    }
+
+    expect((await apply(ctx, patch, 'act_m')).status).toBe('ok')
+    expect(await rowFor(db, 'thr_1')).toMatchObject({
+      status: 'failed',
+      resolvedAtEntryId: 'e_old',
+    })
+    expect(await undoOf(db, 'act_m')).toEqual({ status: 'resolved', resolvedAtEntryId: 'e_old' })
+  })
+
+  it('keeps the ref a user patch names and restates beside a status change', async () => {
+    const { db, ctx } = await setup()
+    await create(ctx, PASS_THREAD, 'periodic_classifier')
+
+    await apply(ctx, userPatch({ status: 'failed', resolvedAtEntryId: 'e_old' }), 'act_u')
+
+    expect(await rowFor(db, 'thr_1')).toMatchObject({
+      status: 'failed',
+      resolvedAtEntryId: 'e_old',
+    })
+    expect(await undoOf(db, 'act_u')).toEqual({ status: 'resolved', resolvedAtEntryId: 'e_old' })
+  })
+
   it('writes the ref a status-changing patch names itself', async () => {
     const { db, ctx } = await setup()
     await create(ctx, PASS_THREAD, 'periodic_classifier')
@@ -401,7 +456,7 @@ describe('updateThread — the entry a status ended on', () => {
     const machinePatch: PipelineAction = {
       kind: 'updateThread',
       source: 'chapter_close',
-      payload: { branchId: 'br_1', id: 'thr_1', patch: { status: 'failed' } },
+      payload: { branchId: 'br_1', id: 'thr_1', patch: { status: 'failed' }, proseEntryId: null },
     }
     expect((await apply(ctx, machinePatch, 'act_m')).status).toBe('ok')
     expect(await rowFor(db, 'thr_1')).toMatchObject({
@@ -411,19 +466,31 @@ describe('updateThread — the entry a status ended on', () => {
     expect(await undoOf(db, 'act_m')).toEqual({ status: 'resolved', resolvedAtEntryId: 'e_old' })
   })
 
-  it.each([[{ status: 'resolved' }], [{ title: 'Return the relic' }]])(
-    'keeps it on a save that leaves the status as it was (%o)',
-    async (patch) => {
-      const { db, ctx } = await setup()
-      await create(ctx, PASS_THREAD, 'periodic_classifier')
-      expect((await apply(ctx, userPatch(patch), 'act_u')).status).toBe('ok')
-      expect(await rowFor(db, 'thr_1')).toMatchObject({
-        status: 'resolved',
-        resolvedAtEntryId: 'e_old',
-      })
-      expect(Object.keys((await undoOf(db, 'act_u')) ?? {})).toEqual(Object.keys(patch))
-    },
-  )
+  it('keeps it on a save that leaves the status as it was', async () => {
+    const { db, ctx } = await setup()
+    await create(ctx, PASS_THREAD, 'periodic_classifier')
+    expect((await apply(ctx, userPatch({ title: 'Return the relic' }), 'act_u')).status).toBe('ok')
+    expect(await rowFor(db, 'thr_1')).toMatchObject({
+      status: 'resolved',
+      resolvedAtEntryId: 'e_old',
+    })
+    expect(Object.keys((await undoOf(db, 'act_u')) ?? {})).toEqual(['title'])
+  })
+
+  it('answers a save restating the status with the restated noop, logging nothing', async () => {
+    const { db, ctx } = await setup()
+    await create(ctx, PASS_THREAD, 'periodic_classifier')
+    expect(await apply(ctx, userPatch({ status: 'resolved' }), 'act_u')).toEqual({
+      status: 'rejected',
+      reason: 'no-op thread patch',
+      code: 'noop',
+    })
+    expect(await rowFor(db, 'thr_1')).toMatchObject({
+      status: 'resolved',
+      resolvedAtEntryId: 'e_old',
+    })
+    expect(await undoOf(db, 'act_u')).toBeUndefined()
+  })
 
   it("writes only the status of a user's thread", async () => {
     const { db, ctx } = await setup()
@@ -713,5 +780,222 @@ describe("a thread's status and entry ref through a rollback", () => {
     const shown = await shownCounts('br_1', 't2', ctx)
     expect((await rollbackToEntry('br_1', 't2', ctx, { expectedCounts: shown })).status).toBe('ok')
     expect(await rowFor(db, 'thr_1')).toMatchObject({ status: 'active', resolvedAtEntryId: null })
+  })
+})
+
+// cadence.md → User edits and classifier writes; milestone C11's restated mark.
+describe('updateThread — columns that already stand, and the user edits a machine write keeps', () => {
+  const PROSE = 'e_prose'
+  type ThreadPatch = Extract<PipelineAction, { kind: 'updateThread' }>['payload']['patch']
+  type Db = Awaited<ReturnType<typeof setup>>['db']
+
+  const closePatch = (patch: ThreadPatch, proseEntryId: string | null = null): PipelineAction => ({
+    kind: 'updateThread',
+    source: 'chapter_close',
+    payload: { branchId: 'br_1', id: 'thr_1', patch, proseEntryId },
+  })
+  const inGroup = (ctx: Ctx, action: PipelineAction, actionId: string) =>
+    applyDeltaActionGroupWithOutcomes([action], { actionId, branchId: 'br_1' }, ctx)
+  const deltasOf = (db: Db, actionId: string) =>
+    db.select().from(deltas).where(eq(deltas.actionId, actionId))
+  const noop = (reason: string) => ({ status: 'rejected', reason, code: 'noop' })
+
+  async function setupWithProse() {
+    const harness = await setup()
+    registerStoryEntries()
+    return harness
+  }
+  const writeProse = (ctx: Ctx) =>
+    apply(
+      ctx,
+      {
+        kind: 'createStoryEntry',
+        source: 'ai_classifier',
+        payload: {
+          entry: {
+            id: PROSE,
+            branchId: 'br_1',
+            position: 1,
+            kind: 'ai_reply',
+            content: 'Kael lifts the relic from the altar.',
+            createdAt: 1,
+          },
+        },
+      },
+      'act_prose',
+    )
+
+  it('answers a patch restating every column with the restated noop, logging nothing', async () => {
+    const { db, ctx } = await setup()
+    await create(ctx, { ...THREAD, triggeredAtEntryId: 'e_setup' }, 'periodic_classifier')
+    const restating = closePatch({
+      title: 'Recover the relic',
+      description: 'A quest line.',
+      status: 'pending',
+      triggeredAtEntryId: 'e_setup',
+    })
+
+    expect(await inGroup(ctx, restating, 'act_g')).toEqual({
+      status: 'ok',
+      outcomes: [{ status: 'noop', reason: 'no-op thread patch', mark: 'restated' }],
+    })
+    expect(await apply(ctx, restating, 'act_s')).toEqual(noop('no-op thread patch'))
+    expect(await deltasOf(db, 'act_g')).toEqual([])
+    expect(await deltasOf(db, 'act_s')).toEqual([])
+  })
+
+  it('logs only the column that changed when a patch names two', async () => {
+    const { db, ctx } = await setup()
+    await create(ctx, THREAD, 'periodic_classifier')
+
+    const result = await apply(
+      ctx,
+      closePatch({ title: 'Recover the relic', description: 'The relic is found.' }),
+      'act_u',
+    )
+
+    expect(result.status).toBe('ok')
+    expect(await undoOf(db, 'act_u')).toEqual({ description: 'A quest line.' })
+    expect(threadsStore.getById('thr_1')?.description).toBe('The relic is found.')
+  })
+
+  it('reads an empty entry ref over a null one as restated', async () => {
+    const { db, ctx } = await setup()
+    await create(ctx, THREAD, 'periodic_classifier')
+
+    expect(await apply(ctx, closePatch({ triggeredAtEntryId: '' }), 'act_u')).toEqual(
+      noop('no-op thread patch'),
+    )
+    expect(await deltasOf(db, 'act_u')).toEqual([])
+  })
+
+  it('keeps a patch naming no column a plain rejection, with no code', async () => {
+    const { ctx } = await setup()
+    await create(ctx, THREAD, 'periodic_classifier')
+
+    expect(await apply(ctx, closePatch({}), 'act_u')).toEqual({
+      status: 'rejected',
+      reason: 'update patch for threads br_1:thr_1 has no updatable fields',
+    })
+  })
+
+  it('keeps a column the user wrote after the prose while a sibling lands', async () => {
+    const { db, ctx } = await setupWithProse()
+    await create(ctx, THREAD, 'periodic_classifier')
+    await writeProse(ctx)
+    await apply(ctx, userPatch({ title: 'Return the relic' }), 'act_user')
+
+    const result = await apply(
+      ctx,
+      closePatch({ title: 'Claim the relic', description: 'Claimed at last.' }, PROSE),
+      'act_m',
+    )
+
+    expect(result.status).toBe('ok')
+    expect(await rowFor(db, 'thr_1')).toMatchObject({
+      title: 'Return the relic',
+      description: 'Claimed at last.',
+    })
+    expect(await undoOf(db, 'act_m')).toEqual({ description: 'A quest line.' })
+  })
+
+  it('writes over a user edit made before the prose', async () => {
+    const { db, ctx } = await setupWithProse()
+    await create(ctx, THREAD, 'periodic_classifier')
+    await apply(ctx, userPatch({ title: 'Return the relic' }), 'act_user')
+    await writeProse(ctx)
+
+    expect(
+      (await apply(ctx, closePatch({ title: 'Claim the relic' }, PROSE), 'act_m')).status,
+    ).toBe('ok')
+    expect((await rowFor(db, 'thr_1')).title).toBe('Claim the relic')
+  })
+
+  it('answers a write whose every column the user kept with USER_EDITED_SINCE_PROSE', async () => {
+    const { db, ctx } = await setupWithProse()
+    await create(ctx, THREAD, 'periodic_classifier')
+    await writeProse(ctx)
+    await apply(ctx, userPatch({ title: 'Return the relic', description: 'Mine now.' }), 'act_user')
+    const write = closePatch({ title: 'Claim the relic', description: 'Claimed.' }, PROSE)
+
+    expect(await inGroup(ctx, write, 'act_g')).toEqual({
+      status: 'ok',
+      outcomes: [{ status: 'noop', reason: USER_EDITED_SINCE_PROSE }],
+    })
+    expect(await apply(ctx, write, 'act_s')).toEqual(noop(USER_EDITED_SINCE_PROSE))
+    expect(await deltasOf(db, 'act_g')).toEqual([])
+    expect(await deltasOf(db, 'act_s')).toEqual([])
+    expect(await rowFor(db, 'thr_1')).toMatchObject({
+      title: 'Return the relic',
+      description: 'Mine now.',
+    })
+  })
+
+  it("names the user's edit, not a restated column, when neither lands", async () => {
+    const { ctx } = await setupWithProse()
+    await create(ctx, THREAD, 'periodic_classifier')
+    await writeProse(ctx)
+    await apply(ctx, userPatch({ title: 'Return the relic' }), 'act_user')
+
+    expect(
+      await apply(
+        ctx,
+        closePatch({ title: 'Claim the relic', description: 'A quest line.' }, PROSE),
+        'act_m',
+      ),
+    ).toEqual(noop(USER_EDITED_SINCE_PROSE))
+  })
+
+  it('reads a column restating what the user wrote after the prose as restated', async () => {
+    const { db, ctx } = await setupWithProse()
+    await create(ctx, THREAD, 'periodic_classifier')
+    await writeProse(ctx)
+    await apply(ctx, userPatch({ title: 'Return the relic' }), 'act_user')
+    const write = closePatch({ title: 'Return the relic' }, PROSE)
+
+    expect(await inGroup(ctx, write, 'act_g')).toEqual({
+      status: 'ok',
+      outcomes: [{ status: 'noop', reason: 'no-op thread patch', mark: 'restated' }],
+    })
+    expect(await apply(ctx, write, 'act_s')).toEqual(noop('no-op thread patch'))
+    expect(await deltasOf(db, 'act_g')).toEqual([])
+    expect(await deltasOf(db, 'act_s')).toEqual([])
+  })
+
+  it('drops a status the user wrote after the prose, and logs no entry ref for it', async () => {
+    const { db, ctx } = await setupWithProse()
+    await create(
+      ctx,
+      { ...THREAD, status: 'resolved', triggeredAtEntryId: 'e_setup', resolvedAtEntryId: 'e_old' },
+      'periodic_classifier',
+    )
+    await writeProse(ctx)
+    await apply(ctx, userPatch({ status: 'failed' }), 'act_user')
+
+    const result = await apply(
+      ctx,
+      closePatch({ status: 'resolved', description: 'Found again.' }, PROSE),
+      'act_m',
+    )
+
+    expect(result.status).toBe('ok')
+    expect(await rowFor(db, 'thr_1')).toMatchObject({
+      status: 'failed',
+      resolvedAtEntryId: null,
+      description: 'Found again.',
+    })
+    expect(await undoOf(db, 'act_m')).toEqual({ description: 'A quest line.' })
+  })
+
+  it('writes over a user edit after the prose when the write names no prose', async () => {
+    const { db, ctx } = await setupWithProse()
+    await create(ctx, THREAD, 'periodic_classifier')
+    await writeProse(ctx)
+    await apply(ctx, userPatch({ title: 'Return the relic' }), 'act_user')
+
+    expect((await apply(ctx, closePatch({ title: 'Claim the relic' }, null), 'act_m')).status).toBe(
+      'ok',
+    )
+    expect((await rowFor(db, 'thr_1')).title).toBe('Claim the relic')
   })
 })

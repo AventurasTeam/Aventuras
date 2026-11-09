@@ -145,8 +145,10 @@ slice-planning gate forces its resolution before that slice is planned.
   close still ends the app before its userData goes" timed out at its
   120 s on the packaged project in CI, then the worker's teardown passed
   Playwright's 90 s, an error outside any test; the retry passed in 4 s.
-  Seen once (PR 717, E2E shard 3/3, run `42462233487`, 2026-11-08) on a
-  docs-only push whose code had passed E2E one push before. Not yet
+  Seen twice on E2E shard 3/3: PR 717 (run `42462233487`, 2026-11-08),
+  a docs-only push whose code had passed E2E one push before, and PR 721
+  (run `42665576759`, 2026-11-09), a code push that touched no `e2e/` or
+  `electron/` file. Not yet
   traced: whether the hang is in the harness ending the app after the
   rejected close, or in the app itself. Raised in 5.5a's review.
 - **`set.state` in `updateEntity` stores a patch's keys the schema
@@ -182,3 +184,127 @@ patch`, which 5.5a marks `restated`, so a close tool's write of it
   but `vitest.setup.ts` must not load the `@/lib/pipeline` barrel before
   a test's mocks, and `bootstrap.ts` pulls in UI modules a script can't
   load. Raised in 5.5a's review.
+- **The close's scripted-dispatch test harness exists three times.**
+  `write-path.test.ts`, `identity.test.ts` and `threads.test.ts` under
+  `lib/pipeline/definitions/close-agent/` each build the same
+  `DispatchContext` (about 80 lines), and the two task test files also
+  repeat their fixture helpers (story mode, scene setters, thread
+  seeds). One helper beside `__tests__/close-fixture.ts` would serve all
+  three before 5.8 and 5.9 add more. Raised in 5.5b's review.
+- **`setThreadStatus` and `updateThread` read "carries refs"
+  differently.** `setThreadStatus` writes the resolved ref only when
+  `triggeredAtEntryId` is set, while `updateThread` asks whether either
+  ref is (`lib/actions/threads/register.ts`). A thread holding only a
+  resolved ref would keep a stale one after a status change. Nothing
+  writes that shape today, since a pass's create always sets the
+  trigger. Raised in 5.5b's review.
+- **A close's "Writes so far" names delta paths, not fields.** The
+  ledger's lines read `state.traits` (`close-agent/ledger.ts`), while
+  the task templates show the same field as `traits`, so the model has
+  to join the two itself. Raised in 5.5b's review.
+- **The 5.5a probe test restates the close's system half.**
+  `lib/prompts/bundled/bundled-pack.test.ts` keeps a copy of the
+  `CLOSE_TASK_SYSTEM` text instead of importing the constant, so the
+  macros test checks a copy rather than the half that ships. Raised in
+  5.5b's review.
+- **`search_world` breaks ties with `localeCompare`.** Its result order
+  then depends on the device's locale
+  (`close-agent/read-tools.ts`), which `identity.ts` and
+  `lib/retrieval/injection.ts` avoid with a code-unit compare. Raised in
+  5.5b's review.
+- **Katakana with the long-vowel mark loses substring matching.**
+  `usesSubstringMatch` (`lib/retrieval/name-index.ts`) tests
+  `\p{Script=Katakana}`, but ー (U+30FC) is Script=Common and a letter,
+  so a term such as シルバー falls back to word-boundary anchoring:
+  `matchTerms('シルバーは笑った。', ['シルバー'])` returns nothing. That
+  contradicts
+  [`retrieval.md`](../memory/retrieval.md)'s rule that kana terms match
+  by substring, and it reaches the keyword scan and name suppression in
+  Japanese stories. A likely fix is `Script_Extensions=Katakana`.
+  Separately, `normalizeTerm` doesn't collapse internal whitespace, so a
+  query with a doubled space matches nothing. Raised in 5.5b's review.
+- **`code-conventions.md` doesn't name the pipeline's two import
+  exceptions.** `eslint.config.js` lets `lib/pipeline` deep-import
+  `actions/types.ts` and, since 5.5b, forbids a value import of the
+  `lib/actions` barrel (a cycle through the mocked `@/lib/pipeline`);
+  [Module structure](../code-conventions.md#module-structure) mentions
+  neither. Raised in 5.5b's review.
+- **The close's round-trip snapshot leaves out translations and vector
+  rows.** `WORLD_TABLES` in `lib/pipeline/__tests__/close-round-trip.test.ts`
+  compares neither, though they are a thread's link rows, and its
+  full-row compare can't hold for an embedded row (a reversal marks it
+  stale), so every fixture row is one that was never embedded. Worth
+  fixing before M8 writes thread translations. Raised in 5.5b's review.
+- **The dataset seed test keeps its own copy of the branch id.**
+  `scripts/dataset-chapter/treasure-island.seed.test.ts` spells the
+  dataset branch out instead of importing `DATASET_BRANCH_ID`. Raised in
+  5.5b's review.
+- **"Every history marks the user's turns" leaves two histories out.**
+  [`architecture.md`](../architecture.md#system-and-user-halves) names
+  the narrator's histories and the close's turns, but the
+  chapter-metadata call and the suggestion refresh render through
+  `macro_story_entry` and mark them too. Raised in 5.5b's review.
+- **Boot recovery reverts a close that is still running.**
+  `recoverInFlightRuns` (`lib/pipeline/runtime/recovery.ts`, called only
+  from `runBootstrap`) reverses every `pipeline_runs` row with no
+  `finished_at`, with no check against the runs live in this process.
+  Observed: 5.5b's dev-route close failed once in a way that fits, the
+  report phase finding no chapter row and a "Story recovered" modal
+  following. It didn't reproduce on a clean rerun and no Fast Refresh
+  was observed, so the trigger is unconfirmed. Assumed, not shown: that
+  only a dev build can re-run the bootstrap under a live run, through a
+  Fast Refresh that re-runs `RootLayout`'s bootstrap effect. Production
+  is unverified. A candidate production path to check (the
+  coordinator's reading, not verified on a device): React Native's
+  Android host keeps the JS runtime in the Application, which outlives
+  the Activity, so a re-created Activity remounts `RootLayout` in the
+  same runtime, `useBootstrap`'s effect runs `runBootstrap` again while
+  the close's promises are live, and `recoverInFlightRuns` reverses its
+  unfinished `pipeline_runs` row. The Activity is re-created on a config
+  change outside the manifest's `configChanges` (locale, font scale,
+  density), on Back from the root Activity on Android 11 and below, and
+  under "Don't keep activities"; the prebuild manifest's
+  `configChanges` is `keyboard|keyboardHidden|orientation|screenSize|screenLayout|uiMode|smallestScreenSize`.
+  Raised in 5.5b's measure.
+- **The close's count priming assumes the system half holds each turn's
+  prose once.** `renderClosePrompt` / `primeCloseSystemCount`
+  (`lib/pipeline/definitions/close-agent/turns.ts`) prime the system
+  half's count as the blank half's count plus the turns' stored prose
+  tokens, with no check. That holds while the
+  bundled pack renders `macro_story_entry` and the close templates as
+  shipped. Once M7.2's pack tab lets a user edit them, a truncating,
+  moved or doubled `{{ entry.content }}` makes the estimate wrong
+  silently, and the pre-send check has no margin. A guard: prime only
+  when the rendered half's length minus the blank half's equals the
+  summed turn contents, else count exactly. Raised in 5.5b's final
+  review.
+- **5.5b's slice doc has stale passages.** The slice review couldn't
+  edit
+  [the slice doc](./milestones/05-chapters-chapter-close/slices/05b-identity-threads.md).
+  Scope's refs point at moved lines: `lib/classifier/plan-creates.ts:55-57`
+  (now `boundVoice`, with `stateList` moved), and
+  `lib/actions/threads/register.ts:135-142`, `:145-154` and `:152`.
+  [The test overlay](./milestones/05-chapters-chapter-close/slices/05b-identity-threads.md#the-test-overlay)'s
+  dataset facts ("the most traits on a live one is 4", "8 have no
+  description, Jim Hawkins among them", the faction's state `{}`) are the
+  seed before its refresh, in the present tense, where
+  [`followups.md`](../followups.md#tuning-and-play-testing) says "before
+  Slice 5.5b's refresh". The seed-refresh note, "27 calls, 16 landed (11
+  entity updates, 4 thread updates and the merge) and 1 merge", counts
+  the merge twice: all 27 calls were `ok`, 16 wrote and 11 restated.
+  [Canon edits](./milestones/05-chapters-chapter-close/slices/05b-identity-threads.md#canon-edits)
+  leaves out 3b's start and empty-list sentence, 3f's ref clamp, the
+  merge's kept-row rule, `search_world`'s limit and ranking,
+  `architecture.md`'s halves-table row and count-cache paragraph,
+  `observability.md` and `testing.md`. Raised in 5.5b's slice review.
+- **Two duplicates the close's code waits on a third use for.** The
+  capped list names (`traits`, `drives`, `agenda`) are spelled in
+  `scripts/dataset-chapter/overlay.ts` and again in
+  `scripts/close-probe-rejudge.ts`; one exported constant in
+  `close-agent/fields.ts` would make the re-judge load the classifier,
+  piggyback and wizard barrels it now avoids by importing a type only.
+  And `updateThread` and `updateHappening` repeat one
+  restated, user-kept and write loop (`lib/actions/threads/register.ts`,
+  `lib/actions/happenings/register-happenings.ts`), which a shared
+  helper would take about six parameters to serve. Worth lifting when a
+  third copy appears. Raised in 5.5b's slice review.

@@ -100,7 +100,7 @@ describe('lock keys', () => {
       lockKeysFor({
         kind: 'updateThread',
         source: 'user_edit',
-        payload: { branchId: 'b1', id: 'thr_1', patch: { status: 'active' } },
+        payload: { branchId: 'b1', id: 'thr_1', patch: { status: 'active' }, proseEntryId: null },
       }),
     ).toEqual([THREAD_ROW])
     expect(

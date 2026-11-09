@@ -4,6 +4,7 @@ import type { Entity } from '@/lib/db'
 import { storyPlaceOf } from '@/lib/world'
 
 import { buildClassifierActions, clampEmbeddedText, type PlanDeps, type PlannedWrite } from './plan'
+import { boundVoice } from './plan-creates'
 import type { ReconcileDecision } from './reconcile'
 import type { ClassifierExtraction, ClassifierPlacesExtraction, NewPlace } from './schema'
 import { buildClassifierWindow } from './window'
@@ -3498,6 +3499,25 @@ describe('first profiles', () => {
     expect(stateOf(planned)).toEqual(EMPTY_CHARACTER)
   })
 
+  it('writes no voice for a blank one', () => {
+    const { planned } = buildClassifierActions(
+      reply({
+        newCharacters: [
+          {
+            handle: 'new:ilsa',
+            name: 'Ilsa',
+            description: 'x',
+            keywords: [],
+            sourceTurn: 't1',
+            voice: '   ',
+          },
+        ],
+      }),
+      deps({ decisions: forCharacters(decided('new:ilsa')) }),
+    )
+    expect(stateOf(planned)).toEqual(EMPTY_CHARACTER)
+  })
+
   it('cuts a long visual value at a clause, and reports the cut', () => {
     const { planned, cutTexts } = buildClassifierActions(
       reply({
@@ -5397,5 +5417,16 @@ describe('planning order', () => {
       ['appendEntityKeywords', 'e3'],
     ])
     expect(createsOf(planned).map((c) => c.name)).toEqual(['Tess', 'the Inn', 'Ann'])
+  })
+})
+
+describe('boundVoice', () => {
+  it('cuts a voice to 2,000 characters and leaves a shorter one as it is, untrimmed', () => {
+    expect(boundVoice('v'.repeat(3000))).toBe('v'.repeat(2000))
+    expect(boundVoice('  slow, certain  ')).toBe('  slow, certain  ')
+  })
+
+  it('never splits a surrogate pair at the cut', () => {
+    expect(boundVoice(`${'v'.repeat(1999)}😀tail`)).toBe('v'.repeat(1999))
   })
 })

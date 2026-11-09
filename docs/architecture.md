@@ -285,14 +285,15 @@ Wider caching is
 
 The bundled pack splits its templates this way:
 
-| Template                      | System half                                                                       | User half                                                                                                                                                                                                    |
-| ----------------------------- | --------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| Per-turn narrative            | The standing instructions, Setting, Genre, Tone, Calendar, the output-format line | In scene, Current location, Current time, the location map and held items, the memory blocks, the ID instructions, Story so far, the state and suggestion emission                                           |
-| Piggyback fallback classifier | Calendar, the mode rule                                                           | Everything else in its order: the ID roster and the lead, the scene, the location map and held items, the memory blocks, the characters the turn names, the turns and the report directives that follow them |
-| Periodic classifier           | The role line and the rules, the mode rule among them                             | The Known lists, the lead and the turns                                                                                                                                                                      |
-| Suggestion refresh            | Setting, Genre, Tone                                                              | In scene, Story so far, the next-turn options and the reader's draft                                                                                                                                         |
-| Chapter metadata              | The instructions, the mode rule                                                   | The previous chapter's summary, the open threads, the chapter's entries                                                                                                                                      |
-| Wizard templates              | Empty; on the prompt-injection path the structured-output contract supplies one   | Everything                                                                                                                                                                                                   |
+| Template                        | System half                                                                       | User half                                                                                                                                                                                                    |
+| ------------------------------- | --------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Per-turn narrative              | The standing instructions, Setting, Genre, Tone, Calendar, the output-format line | In scene, Current location, Current time, the location map and held items, the memory blocks, the ID instructions, Story so far, the state and suggestion emission                                           |
+| Piggyback fallback classifier   | Calendar, the mode rule                                                           | Everything else in its order: the ID roster and the lead, the scene, the location map and held items, the memory blocks, the characters the turn names, the turns and the report directives that follow them |
+| Periodic classifier             | The role line and the rules, the mode rule among them                             | The Known lists, the lead and the turns                                                                                                                                                                      |
+| Suggestion refresh              | Setting, Genre, Tone                                                              | In scene, Story so far, the next-turn options and the reader's draft                                                                                                                                         |
+| Chapter metadata                | The instructions, the mode rule                                                   | The previous chapter's summary, the open threads, the chapter's entries                                                                                                                                      |
+| Close tasks (Identity, Threads) | The close instructions, the mode rule among them, then the part's turns           | The task's instructions, its starting rows and the writes so far                                                                                                                                             |
+| Wizard templates                | Empty; on the prompt-injection path the structured-output contract supplies one   | Everything                                                                                                                                                                                                   |
 
 **The standing instructions are shared macros.** One holds the
 narrator's, given the mode, the narration person and the lead's name,
@@ -312,10 +313,13 @@ wizard draft's. Without a lead the instructions name none, and
 narration in first or second person still holds.
 
 **Every history marks the user's turns.** Story so far, the fallback's
-turns and the periodic classifier's turns mark a `user_action` entry
-as the user's, so a model can tell the lead's attempt or a direction
-from the narration; the opening and the replies render unmarked. The
-mark costs a few tokens per user turn.
+turns, the periodic classifier's turns and the turns a chapter close
+task's prompt shows
+([`chapter-close.md → Conversations`](./memory/chapter-close.md#conversations))
+mark a `user_action` entry as the user's, so a model can tell the lead's
+attempt or a direction from the narration; the opening and the replies
+render unmarked, though the close's turns also label the opening and each
+reply. The mark costs a few tokens per user turn.
 
 ### Structured output — the JSON contract is not pack content
 
@@ -972,6 +976,29 @@ and on a tool step the tool definitions, calls, results and reasoning,
 with `countTokens`: o200k, an
 estimate for every provider. When the window is known and the estimate
 exceeds it, the call is not sent and not retried.
+
+A close task's system half holds every turn of its part of the chapter,
+so the check doesn't encode that prose on the JS thread. Before a
+part's first step the close records the half's count. It encodes the
+half rendered with every turn's content blank, and adds each entry's
+stored `content_tokens`
+([`data-model.md → Chapters / memory system`](./data-model.md#chapters--memory-system)),
+counting a null one from its prose. The rest of each step's request is
+encoded as above. Stored content can hold what the prompt leaves out,
+such as a trailing block an older reply still carries, so the count
+can lean slightly high; current writers store stripped prose, so that
+lean is small. It can also lean a few tokens low: the tokenizer can
+merge text across a turn's edges, so the half counted whole differs a
+little from its parts counted apart, and a synthetic 133-turn Japanese
+chapter primed 0.4% low where English was exact. The lean goes either way by a little,
+and is accepted as small, not as safe: the estimate is compared with no
+margin, as below, where a low lean is the cheaper miss.
+
+Counts are cached by text, up to 4,096 texts and 2,000,000 characters,
+the least recently used out, and a counting pass keeps its system half.
+A text over the character budget isn't kept
+(`provider.prompt_count_uncached`), so a part that large is encoded at
+each step.
 
 The prompt alone is compared, with no reserve for the reply. A
 profile's `maxOutput` is a ceiling, not the reply's size, and many

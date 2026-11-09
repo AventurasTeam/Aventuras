@@ -8,11 +8,14 @@ import { countTokens } from '@/lib/retrieval'
 
 import type { ProviderInstance } from '../db'
 import {
+  __clearPromptCountCache,
+  __promptCountCacheChars,
   ContextWindowError,
   countPromptTokens,
   describeContextWindow,
   displayEstimate,
   generationWindow,
+  primePromptCount,
   windowCheckMiddleware,
   type ContextWindowFailure,
   type GenerationWindow,
@@ -24,6 +27,16 @@ import {
   type ModelPrompt,
   type ModelTools,
 } from './prompt-schema'
+
+const { countTokensSpy } = vi.hoisted(() => ({
+  countTokensSpy: vi.fn<(text: string) => number>(),
+}))
+
+vi.mock('@/lib/tokens', async (importOriginal) => {
+  const actual = await importOriginal<Record<string, unknown>>()
+  countTokensSpy.mockImplementation(actual.countTokens as (text: string) => number)
+  return { ...actual, countTokens: countTokensSpy }
+})
 
 type GenerateResult = Awaited<ReturnType<MockLanguageModelV3['doGenerate']>>
 type StreamResult = Awaited<ReturnType<MockLanguageModelV3['doStream']>>
@@ -431,6 +444,262 @@ async function refusalOf(pending: PromiseLike<unknown>): Promise<ContextWindowEr
   }
   throw new Error('expected a ContextWindowError; the call went through')
 }
+
+describe('the prompt count cache', () => {
+  beforeEach(() => {
+    __clearPromptCountCache()
+    countTokensSpy.mockClear()
+  })
+
+  const encodings = (text: string): number =>
+    countTokensSpy.mock.calls.filter(([counted]) => counted === text).length
+  const systemOnly = (text: string): ModelPrompt => [{ role: 'system', content: text }]
+
+  const STEP_TOOLS: ModelTools = [
+    { type: 'function', name: 'update_thread', inputSchema: { type: 'object' } },
+  ]
+  const step = (result: string): ModelPrompt => [
+    { role: 'system', content: 'Record what the chapter changed.' },
+    { role: 'user', content: [{ type: 'text', text: 'Bring the open threads up to date.' }] },
+    {
+      role: 'assistant',
+      content: [
+        { type: 'reasoning', text: 'The letter reached the reeve.' },
+        {
+          type: 'tool-call',
+          toolCallId: 'call-1',
+          toolName: 'update_thread',
+          input: { id: 'th1', status: 'resolved' },
+        },
+      ],
+    },
+    {
+      role: 'tool',
+      content: [
+        {
+          type: 'tool-result',
+          toolCallId: 'call-1',
+          toolName: 'update_thread',
+          output: { type: 'json', value: { result } },
+        },
+      ],
+    },
+  ]
+
+  it('gives the same totals from a warm cache as from a fresh one', () => {
+    const cold = countPromptTokens(step('ok'), STEP_TOOLS)
+    const warm = countPromptTokens(step('ok'), STEP_TOOLS)
+    const other = countPromptTokens(step('rejected'), STEP_TOOLS)
+    __clearPromptCountCache()
+
+    expect(warm).toBe(cold)
+    expect(countPromptTokens(step('rejected'), STEP_TOOLS)).toBe(other)
+    expect(cold).toBe(
+      countTokens('Record what the chapter changed.') +
+        countTokens('Bring the open threads up to date.') +
+        countTokens('The letter reached the reeve.') +
+        countTokens('update_thread') +
+        countTokens('{"id":"th1","status":"resolved"}') +
+        countTokens('update_thread') +
+        countTokens('{"result":"ok"}') +
+        countTokens('{"type":"function","name":"update_thread","inputSchema":{"type":"object"}}'),
+    )
+  })
+
+  it('encodes a text it already counted once, whether repeated in a prompt or in a later step', () => {
+    const system = 'Record what the chapter changed.'
+    const said = 'The ferry runs at dawn.'
+    const prompt: ModelPrompt = [
+      { role: 'system', content: system },
+      {
+        role: 'user',
+        content: [
+          { type: 'text', text: said },
+          { type: 'text', text: said },
+        ],
+      },
+    ]
+
+    const first = countPromptTokens(prompt)
+    const second = countPromptTokens(prompt)
+
+    expect(encodings(system)).toBe(1)
+    expect(encodings(said)).toBe(1)
+    expect(second).toBe(first)
+    expect(first).toBe(countTokens(system) + 2 * countTokens(said))
+  })
+
+  it('holds 4096 texts and evicts the least recently counted, not the first counted', () => {
+    const texts = Array.from({ length: 4097 }, (_, i) => `Entry ${i} of the ferry ledger.`)
+    for (const text of texts.slice(0, 4096)) countPromptTokens(systemOnly(text))
+
+    countTokensSpy.mockClear()
+    countPromptTokens(systemOnly(texts[0]!))
+    expect(encodings(texts[0]!)).toBe(0)
+
+    // A 4097th text: the least recently counted is now the second, the first having just hit.
+    countPromptTokens(systemOnly(texts[4096]!))
+    countTokensSpy.mockClear()
+    countPromptTokens(systemOnly(texts[0]!))
+    countPromptTokens(systemOnly(texts[1]!))
+
+    expect(encodings(texts[0]!)).toBe(0)
+    expect(encodings(texts[1]!)).toBe(1)
+  })
+
+  it('counts a primed text at its primed value, never encoding it, as the most recently used', () => {
+    const chapter = "The whole chapter, as a close task's system half holds it."
+    countPromptTokens(systemOnly(chapter))
+    for (let i = 0; i < 4095; i++) countPromptTokens(systemOnly(`Entry ${i} of the ferry ledger.`))
+    primePromptCount(chapter, 9_999)
+    // A 4097th text evicts the least recently used: Entry 0, since the prime refreshed the chapter.
+    countPromptTokens(systemOnly('One text past the bound.'))
+    countTokensSpy.mockClear()
+
+    expect(countPromptTokens(systemOnly(chapter))).toBe(9_999)
+    expect(encodings(chapter)).toBe(0)
+  })
+
+  it('keeps a primed 100k-character text through a thousand distinct small texts counted after it', () => {
+    const chapter = 'The ferry crossed at dawn. '.repeat(3_800)
+    expect(chapter.length).toBeGreaterThan(100_000)
+    primePromptCount(chapter, 9_999)
+    for (let i = 0; i < 1_000; i++) countPromptTokens(systemOnly(`Tool result ${i}: ok.`))
+    countTokensSpy.mockClear()
+
+    expect(countPromptTokens(systemOnly(chapter))).toBe(9_999)
+    expect(encodings(chapter)).toBe(0)
+  })
+
+  // Varied prose of exactly `length` characters, led by `tag`: a run of one letter makes the
+  // encoder crawl. Primed, such a text is never encoded; counted, varied prose stays quick.
+  const prose = (tag: string, length: number): string =>
+    `${tag}: ${'The ferry crossed at dawn. '.repeat(Math.ceil(length / 27))}`.slice(0, length)
+  const big = (tag: string): string => prose(tag, 600_000)
+
+  it('evicts the least recently used once the held texts pass 2,000,000 characters', () => {
+    primePromptCount(big('a'), 11)
+    primePromptCount(big('b'), 22)
+    primePromptCount(big('c'), 33)
+    // 3 x 600,000 = 1,800,000 held; a fourth makes 2,400,000, so the oldest goes.
+    primePromptCount(big('d'), 44)
+    countTokensSpy.mockClear()
+
+    expect(countPromptTokens(systemOnly(big('b')))).toBe(22)
+    expect(countPromptTokens(systemOnly(big('c')))).toBe(33)
+    expect(countPromptTokens(systemOnly(big('d')))).toBe(44)
+    expect(countTokensSpy).not.toHaveBeenCalled()
+    countPromptTokens(systemOnly(big('a')))
+    expect(encodings(big('a'))).toBe(1)
+  })
+
+  it('evicts as many texts as it takes to get back under the character budget', () => {
+    primePromptCount(big('a'), 11)
+    primePromptCount(big('b'), 22)
+    primePromptCount(big('c'), 33)
+    primePromptCount(prose('e', 1_500_000), 55)
+    countTokensSpy.mockClear()
+
+    expect(countPromptTokens(systemOnly(prose('e', 1_500_000)))).toBe(55)
+    expect(countTokensSpy).not.toHaveBeenCalled()
+    // Newest first: counting one puts it back and evicts, so only the first reads the state the
+    // prime left.
+    for (const tag of ['c', 'b', 'a']) {
+      countPromptTokens(systemOnly(big(tag)))
+      expect(encodings(big(tag))).toBe(1)
+    }
+  })
+
+  it('keeps a text of exactly 2,000,000 characters', () => {
+    const edge = prose('x', 2_000_000)
+    primePromptCount(edge, 77)
+    countTokensSpy.mockClear()
+
+    expect(countPromptTokens(systemOnly(edge))).toBe(77)
+    expect(countTokensSpy).not.toHaveBeenCalled()
+  })
+
+  it("keeps a pass's system half cached while the pass's other texts overflow the budget", () => {
+    const system = prose('system', 1_000_000)
+    primePromptCount(system, 5_555)
+    // 30 x 70,000 = 2,100,000 characters of user text: the budget is passed mid-pass.
+    const parts = Array.from({ length: 30 }, (_, i) => ({
+      type: 'text' as const,
+      text: prose(`part ${i}`, 70_000),
+    }))
+
+    countPromptTokens([
+      { role: 'system', content: system },
+      { role: 'user', content: parts },
+    ])
+    countTokensSpy.mockClear()
+
+    // The budget held through the pass, the pinned system half and all.
+    expect(__promptCountCacheChars()).toBeLessThanOrEqual(2_000_000)
+    countTokensSpy.mockClear()
+
+    expect(countPromptTokens(systemOnly(system))).toBe(5_555)
+    expect(encodings(system)).toBe(0)
+  })
+
+  it("keeps a pass's system half cached when outside texts are counted after the pass", () => {
+    const system = prose('system', 600_000)
+    primePromptCount(system, 5_555)
+    const parts = Array.from({ length: 30 }, (_, i) => ({
+      type: 'text' as const,
+      text: prose(`part ${i}`, 10_000),
+    }))
+    countPromptTokens([
+      { role: 'system', content: system },
+      { role: 'user', content: parts },
+    ])
+
+    // 600,000 + 300,000 held; 1,200,000 more makes 2,100,000, so 100,000 characters must go.
+    primePromptCount(prose('a', 600_000), 11)
+    primePromptCount(prose('b', 400_000), 22)
+    primePromptCount(prose('c', 200_000), 33)
+    countTokensSpy.mockClear()
+
+    expect(countPromptTokens(systemOnly(system))).toBe(5_555)
+    expect(encodings(system)).toBe(0)
+  })
+
+  it("lets a pass end its system half's pin, so a later prime can evict it", () => {
+    countPromptTokens(systemOnly(big('s')))
+    primePromptCount(big('a'), 11)
+    primePromptCount(big('b'), 22)
+    primePromptCount(big('c'), 33)
+    countTokensSpy.mockClear()
+
+    countPromptTokens(systemOnly(big('s')))
+    expect(encodings(big('s'))).toBe(1)
+  })
+
+  it('logs a debug line for a primed text over the budget, which is not kept', () => {
+    const debug = vi.spyOn(logger, 'debug').mockImplementation(() => {})
+    try {
+      primePromptCount(prose('z', 2_000_001), 77)
+
+      expect(debug).toHaveBeenCalledWith('provider.prompt_count_uncached', {
+        chars: 2_000_001,
+        budget: 2_000_000,
+      })
+    } finally {
+      debug.mockRestore()
+    }
+  })
+
+  it('does not keep a text over 2,000,000 characters, and leaves the held ones be', () => {
+    primePromptCount('A text held already.', 5)
+    primePromptCount(prose('y', 2_000_001), 77)
+    countTokensSpy.mockClear()
+
+    expect(countPromptTokens(systemOnly('A text held already.'))).toBe(5)
+    expect(countTokensSpy).not.toHaveBeenCalled()
+    expect(countPromptTokens(systemOnly(prose('y', 2_000_001)))).not.toBe(77)
+    expect(encodings(prose('y', 2_000_001))).toBe(1)
+  })
+})
 
 describe('windowCheckMiddleware', () => {
   let debug: MockInstance<Logger['debug']>

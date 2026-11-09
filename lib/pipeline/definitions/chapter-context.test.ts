@@ -83,6 +83,18 @@ describe('buildChapterContext', () => {
     )
   })
 
+  // Only a close task's render sets these; the metadata call's context leaves every one unset.
+  it('sets none of the close-only variables', () => {
+    const context: Record<string, unknown> = buildChapterContext({
+      entries: ENTRIES,
+      previousChapterSummary: SUMMARY,
+      threads: THREADS,
+      mode: 'adventure',
+    })
+    expect(CLOSE_ONLY_CHAPTER_VARIABLES).toContain('closeCharacters')
+    expect(CLOSE_ONLY_CHAPTER_VARIABLES.filter((name) => Object.hasOwn(context, name))).toEqual([])
+  })
+
   // A row written before the write-path strip still carries its trailing block, and an entry id
   // would leak raw: `entry_` doesn't substitute.
   it('projects each entry to its position, kind and prose', () => {

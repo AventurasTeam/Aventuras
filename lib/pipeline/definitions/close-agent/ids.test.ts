@@ -241,6 +241,18 @@ describe('nameCloseProse', () => {
       body: 'Under The toll law, Wren pays; c9 stays',
     })
   })
+  it('puts back the full id of a handle text minted with no name, so prose keeps its reference', () => {
+    const ids = new CloseIds()
+    ids.showTurns([ENTRY_1])
+    ids.show(CHAR_A, 'Wren')
+    const shown = ids.withHandles(`Owes ${CHAR_B} since t1`)
+    expect(shown).toBe('Owes c2 since t1')
+
+    expect(nameCloseProse({ drives: ['owes c2'], why: 'c1 owes [c2] in t1' }, ids)).toEqual({
+      drives: [`owes ${CHAR_B}`],
+      why: `Wren owes ${CHAR_B} in t1`,
+    })
+  })
 })
 
 describe('withHandlesDeep', () => {

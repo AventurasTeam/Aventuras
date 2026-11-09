@@ -9,6 +9,7 @@ import {
 import { readRowGuard } from '@/lib/actions/delta/row-guard'
 import {
   USER_EDITED_SINCE_PROSE,
+  type ActionOutcome,
   type GroupOutcome,
   type GuardRow,
   type RowVerdicts,
@@ -24,6 +25,7 @@ import { entityWriteAction, fieldVerdicts, restatedFields } from './entity-write
 import { CloseIds } from './ids'
 import { CloseLedgerWriter } from './ledger'
 import {
+  DELETE_PATH,
   readToolSchema,
   writeToolSchema,
   type CloseTool,
@@ -203,6 +205,7 @@ function writeContext(proseEntryId = endEntryId()): WriteContext {
     proseEntryId,
     guard: (rows) =>
       readRowGuard({ branchId: f.branchId, endEntryId: endEntryId(), proseEntryId, rows }, f.ctx),
+    actionId: GROUP_ACTION,
   }
 }
 
@@ -474,6 +477,12 @@ describe('entityWriteAction', () => {
   })
 })
 
+describe('DELETE_PATH', () => {
+  it('is spelt as merge_threads and merge_happenings share it, under no column', () => {
+    expect(DELETE_PATH).toBe('$deleted')
+  })
+})
+
 describe('the entity write path', () => {
   beforeEach(async () => {
     f = await openCloseFixture()
@@ -630,6 +639,7 @@ let setup: ((ids: CloseIds, ledger: CloseLedgerWriter) => void) | undefined
 let answers: ToolAnswer[] = []
 let seenProse: string[] = []
 let seenTurns: (readonly string[])[] = []
+let seenActions: string[] = []
 let ledger: CloseLedger | undefined
 let shown: CloseIds | undefined
 let readRows: ReadSet | undefined
@@ -644,6 +654,7 @@ const setFieldsTool: WriteTool<typeof SET_FIELDS_SHAPE> = {
   plan: (args, ctx) => {
     seenProse.push(ctx.proseEntryId)
     seenTurns.push(ctx.turns)
+    seenActions.push(ctx.actionId)
     return planSetFields(args, ctx)
   },
 }
@@ -845,7 +856,7 @@ async function* dispatchPhase(
   ids.show(BRAM, 'Bram')
   ids.show(GONE, 'Old Wren')
   ledger = seedCloseLedger(phase.intermediates)
-  const writer = new CloseLedgerWriter(ledger, (id) => ids.nameOfId(id))
+  const writer = new CloseLedgerWriter(ledger, (id) => ids.nameOfId(id), phase.actionId)
   setup?.(ids, writer)
   shown = ids
   const readSet = createReadSet()
@@ -954,6 +965,7 @@ describe('dispatchToolCall in a close phase', () => {
     answers = []
     seenProse = []
     seenTurns = []
+    seenActions = []
     readRows = undefined
     ledger = undefined
     shown = undefined
@@ -1107,6 +1119,14 @@ describe('dispatchToolCall in a close phase', () => {
     expect(seenTurns).toEqual([[f.entries[2]!.id, f.entries[4]!.id]])
     expect(guarded).toEqual([f.entries[4]!.id])
     expect(recorded()[0]!.turns).toEqual([f.entries[2]!.id, f.entries[4]!.id])
+  })
+
+  it("hands the plan the run's action", async () => {
+    const { result } = await runDispatch([
+      { toolName: 'set_fields', input: { id: 'c1', description: 'Soaked.', ...cite(['t5']) } },
+    ])
+
+    expect(seenActions).toEqual([result.actionId])
   })
 
   it('emits no group when nothing is left to land: skipped if protected, rejected if refused', async () => {
@@ -1591,6 +1611,45 @@ describe('dispatchToolCall in a close phase', () => {
       skippedFields: [{ field: 'description', reason: 'not-active' }],
     })
   })
+
+  it.each<[string, ActionOutcome, string]>([
+    ['lands', { status: 'landed' }, 'The courier'],
+    ['is kept by the user', { status: 'noop', reason: USER_EDITED_SINCE_PROSE }, 'Wren'],
+  ])(
+    "names a merge's kept row by the title it sent only when the title %s",
+    async (_label, titleOutcome, name) => {
+      // The port stands in for a title the handler keeps while the merge's delete lands.
+      configurePort({
+        applyDeltaActionGroupWithOutcomes: async () => ({
+          status: 'ok',
+          outcomes: [titleOutcome, { status: 'landed' }],
+        }),
+      })
+      scriptedPlan = (ctx) => ({
+        kind: 'write',
+        actions: [
+          { ...describeAs(ctx, WREN, 'The courier'), fields: ['title'] },
+          describeAs(ctx, BRAM, 'Folded into Wren.'),
+        ],
+        lost: [],
+        rows: entityRows(WREN, BRAM),
+        values: { title: 'The courier' },
+        survivor: { table: 'entities', id: WREN },
+      })
+      seeds = [
+        { table: 'entities', id: WREN },
+        { table: 'entities', id: BRAM },
+      ]
+
+      await runDispatch([{ toolName: 'scripted', input: { rows: ['c1', 'c2'], ...cite(['t7']) } }])
+
+      expect(recorded()[0]).toMatchObject({
+        result: 'ok',
+        survivor: { table: 'entities', id: WREN },
+      })
+      expect(shown?.nameOfId(WREN)).toBe(name)
+    },
+  )
 
   it.each<[string, LostField]>([
     [

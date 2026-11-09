@@ -97,5 +97,11 @@ export function threadActions({
   }
   const patch = threadPatch(row, draft)
   if (Object.keys(patch).length === 0) return []
-  return [{ kind: 'updateThread', source: 'user_edit', payload: { branchId, id: row.id, patch } }]
+  return [
+    {
+      kind: 'updateThread',
+      source: 'user_edit',
+      payload: { branchId, id: row.id, patch, proseEntryId: null },
+    },
+  ]
 }

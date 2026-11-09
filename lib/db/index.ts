@@ -129,6 +129,7 @@ export { inheritedEntryMetadata } from './story-entries/inherited-metadata'
 export { openRegionSeries, openRegionWhere } from './story-entries/open-region'
 export type { OpenRegionRow } from './story-entries/open-region'
 export { readChapterTimeRanges } from './story-entries/chapter-time-ranges'
+export { readEntryPosition } from './story-entries/entry-position'
 export type { ChapterTimeRange, ChapterTimeRanges } from './story-entries/chapter-time-ranges'
 export {
   appSettings,

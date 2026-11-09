@@ -528,6 +528,9 @@ stays covered. Ids, titles and positions don't move (C8).
   rule ([`chapter-close.md → Review`](../../../../memory/chapter-close.md#review)).
   Where nothing landed, a path lost on two rows for different reasons
   shows only its first loss's reason. Surfaced by 5.5a.
+- **Where does re-running a close land?** A design for
+  [re-running a close](../../../../followups.md#ux) comes before this slice's
+  planning, and may land in this slice or in [Slice 5.12](./12-chapter-delete-rollback.md).
 
 ## Implementation notes
 

@@ -77,4 +77,24 @@ describe('lib module edges', () => {
       expect(await boundaryHits(source, 'lib/chapters/__edge-fixture.ts')).toBe(hits)
     })
   })
+
+  describe('lib/pipeline takes no value import of the lib/actions barrel', () => {
+    it.each([
+      ['lib/pipeline', 'lib/pipeline/__edge-fixture.ts'],
+      ['the close agent', 'lib/pipeline/definitions/close-agent/__edge-fixture.ts'],
+    ])('from %s', async (_name, filePath) => {
+      expect(
+        await boundaryHits("import { applyDeltaAction } from '@/lib/actions'\n", filePath),
+      ).toBe(1)
+      expect(
+        await boundaryHits("import type { PipelineAction } from '@/lib/actions'\n", filePath),
+      ).toBe(0)
+      expect(
+        await boundaryHits(
+          "import { USER_EDITED_SINCE_PROSE } from '@/lib/actions/types'\n",
+          filePath,
+        ),
+      ).toBe(0)
+    })
+  })
 })

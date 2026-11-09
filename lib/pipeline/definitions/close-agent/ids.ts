@@ -85,6 +85,13 @@ export class CloseIds {
     return name?.trim() || undefined
   }
 
+  /** A row handle text minted with no name: its full id, which prose keeps where a handle can't. */
+  citedIdOf(token: string): string | undefined {
+    const id = this.map.getUuidFor(token)
+    if (id === undefined || this.names.has(id)) return undefined
+    return id.startsWith(TURN_PREFIX) || id.startsWith(AWARENESS_PREFIX) ? undefined : id
+  }
+
   /** Full ids in `text` as handles; a `br_` qualifier is dropped, any other id becomes "a row". */
   withHandles(text: string): string {
     return this.withUnpatterned(text.replace(FULL_ID_IN_TEXT, (id) => this.handleInText(id)))
@@ -138,7 +145,7 @@ export class CloseIds {
 
 /** nameIdsInProse with this run's names: a handle in `why` or a text field is stored as its name. */
 export function nameCloseProse<T>(value: T, ids: CloseIds): T {
-  return nameIdsInProse(value, (token) => ids.nameOf(token))
+  return nameIdsInProse(value, (token) => ids.nameOf(token) ?? ids.citedIdOf(token))
 }
 
 const hasToJson = (value: object): value is { toJSON: () => unknown } =>

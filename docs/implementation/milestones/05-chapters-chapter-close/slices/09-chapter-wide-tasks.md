@@ -538,6 +538,16 @@ Each test file runs under `pnpm vitest run --project unit <file>`.
   suite's abort arm. When 5.9 adds one, the case should declare its
   tool's action kinds. Surfaced by 5.5a.
 
+- **Is a happening's time one field for user precedence?**
+  `updateHappening` (5.5b) drops a column the user wrote after the
+  prose, but it reads `temporal` and `occurred_at_entry_id` as two
+  fields. A write sending both, when the user moved only the anchor,
+  keeps the user's anchor, lands the temporal, and then fails the
+  pair's exclusivity check as a plain rejection that aborts the group.
+  `merge_happenings` is the first caller that could send both.
+  Suggested: treat the pair as one field, or send only the anchor.
+  Raised in 5.5b's review.
+
 ## Implementation notes
 
 _Populated at finish: notable deviations from the plan and resolved developer decisions._

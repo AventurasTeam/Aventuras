@@ -99,8 +99,9 @@ Slice 5.5a's runner.
   ref arm (`register.ts:145-154`) stays: a real status change on a
   thread with refs still logs `resolvedAtEntryId` beside it.
 - **`proseEntryId` on two handlers.** `updateThread` and
-  `updateHappening` take an optional `proseEntryId: ProseEntryId`, which
-  no user caller sends, so no shipped caller changes. With it, a column
+  `updateHappening` take a `proseEntryId: ProseEntryId`, required and
+  nullable as on `setThreadStatus`; the user's saves send null, which
+  skips the check. With a prose entry, a column
   the user wrote after that prose is dropped from `set`, by
   `userEditsSinceProse` and `wroteField`, and a `set` left empty by that
   ends in `noopRefusal(USER_EDITED_SINCE_PROSE, null)`, which C11 maps to
@@ -201,19 +202,37 @@ safe, read and not run: per-turn stackable keys are bounded at parse
   2. A row that's gone is `rejected`, naming its survivor from the
      ledger. The same goes for `update_thread` on a row this close
      absorbed.
-  3. Absorbing an `active` thread into a `pending` one is `rejected`,
-     saying to keep the active one, since the kept row would drop the
-     thread from the narrator's prompt with no write saying so.
-  4. A row this close already wrote can't be absorbed: any delta on it
+  3. Each named row is tried as `keep`. A row fits when keeping it
+     breaks neither rule 4 nor rule 5, and it lands when it also absorbs
+     no row this close wrote (rule 6). When no row fits, the merge is
+     `rejected` as one no `keep` lands ("leave them apart"). When rows
+     fit but this close's writes leave none landing, it is `rejected` as
+     unmergeable in this close. Neither refusal has a row to swap, so
+     neither carries a note.
+  4. Absorbing an `active` thread is `rejected` unless `keep` is `active`
+     too, since the kept row would drop the thread from the narrator's
+     prompt with no write saying so. It says to keep an active one, then
+     settle it with `update_thread` if the chapter resolved or failed it.
+  5. Absorbing a thread whose `injection_mode` is `always` or `disabled`
+     is `rejected` unless `keep` has the same mode, since the kept row's
+     mode would undo the user's setting with no write saying so. An
+     `auto` thread may join a row of either mode. It says to keep that
+     thread instead, or to leave the threads apart.
+  6. A row this close already wrote can't be absorbed: any delta on it
      under the run's `actionId` is `rejected`, saying to keep that row
      instead. `snapshotForRedo` would otherwise refuse CTRL-Z of the
      close for good (`lib/actions/delta/redo.ts:118-126`). Such a row may
      still be the kept one.
-  5. `laterTurnTouched` on any row is `skipped` whole.
-  6. A user edit after the latest cited turn is `skipped` whole:
+  7. `laterTurnTouched` on any row is `skipped` whole.
+  8. A user edit after the latest cited turn is `skipped` whole:
      `userTouched` on an absorbed row, or `userWrote` on `keep` for a
      field the merge writes. A kept row's other fields lose nothing to a
      merge, so they don't stop one (C11).
+
+  A refusal by rule 4, 5 or 6 gives the first of them `keep` breaks as
+  its reason, and its answer to the model names every row that would
+  land as `keep` ("Send th5 as keep."), so no advice leads to another
+  refusal.
 
   The kept row's status, refs, `category`, `icon` and `injection_mode`
   stand (developer decision, 2026-11-09): the merge writes only its
@@ -235,8 +254,8 @@ safe, read and not run: per-turn stackable keys are bounded at parse
 - **Identity's start.** The slow fields of the characters in the closed
   range's `metadata.sceneEntities`, dropping ids with no row (a retired
   row stays: canon names the entities the chapter touches), and of the
-  factions the chapter touches (confirmed at planning, see Open
-  questions). Scene data holds no factions
+  factions the chapter touches (confirmed at planning, see
+  [Implementation notes](#implementation-notes)). Scene data holds no factions
   ([`principles.md → Scene presence`](../../../../ui/principles.md#scene-presence-is-runtime-derived-not-status)),
   so a faction comes from those characters' `faction_id`, and from
   matching faction names and keywords over the range's prose with
@@ -247,23 +266,28 @@ safe, read and not run: per-turn stackable keys are bounded at parse
   them, as `closeTurns`, in `show`. Both tasks build them the same way,
   so their system halves match byte for byte.
 - **Threads' start.** Every `pending` and `active` thread on the branch,
-  the user's included, by `title`, `description` and `status`.
+  the user's included, by `title`, `description`, `status` and
+  `injection_mode`: a header reads `(pending, always)` for a mode the
+  user set, and leaves `auto` unsaid (see
+  [Implementation notes](#implementation-notes)).
 - **`read_row`'s fields,** each task definition's `readFields`, keyed
   by row kind:
   `description`, `traits`, `drives` and `voice` for a character;
   `description`, `standing` and `agenda` for a faction; `title`,
-  `description` and `status` for a thread. Both starts show these fields,
-  so their rows count as read (C11).
+  `description`, `status` and `injectionMode` for a thread, so a thread
+  the start leaves out shows its mode before a merge names it. Both
+  starts show these fields, so their rows count as read (C11).
 - **Templates.** Two `TEMPLATE_IDS` entries mapped to `chapter` in
   `TEMPLATE_GROUPS`, on Slice 5.5a's shared system half, each user half
   holding its task's instructions, starting rows and the writes so far.
   Identity's carries 3b's operations and "don't churn stable identity",
   "replace, don't append" at a cap, and that a blank `description`,
   `voice` or `standing` may be filled when the cited turns show it
-  (developer decision, 2026-11-09). Threads' carries 3f's bullet and
-  what an active thread costs. The shared instructions tell the model it
-  may send several calls in one reply, and a render with no `closeTurns`
-  throws, since an unset one renders an empty "# The turns". Both ids
+  (developer decision, 2026-11-09). Threads' carries 3f's bullet, the
+  merge's active and injection-mode rules, and what an active thread
+  costs. The shared instructions tell the model it
+  may send several calls in one reply, and a start's `closeTurns` is
+  typed non-empty, since an empty one renders an empty "# The turns". Both ids
   join the named list at
   `lib/prompts/bundled/system-half-stability.test.ts:346`, which 5.5a
   ships empty (C3). Two checks come here from 5.5a, since the list first
@@ -303,7 +327,7 @@ The check selects by `actionId`, so it holds across the parts 5.8 adds.
   chapter has to fit half of it. At planning `Gemma4-26B-A4B-QAT-MTP`
   served 65,536 tokens, half of which holds the chapter's 23,907.
 - **The bar** was set at slice planning, before any run, and stands in
-  [Open questions](#open-questions). A miss goes to the developer and
+  [Implementation notes](#implementation-notes). A miss goes to the developer and
   holds 5.8 and 5.9.
 - **`CLOSE_REPORT_VALUE_BOUND`** takes its number from these runs: the
   largest `values` entry and the whole report's size go in Implementation
@@ -320,7 +344,9 @@ The check selects by `actionId`, so it holds across the parts 5.8 adds.
   under Node at planning, cache or not (developer decision, 2026-11-09).
   The count can lean slightly high where an older entry still stores a
   trailing block the prompt strips (rows written today hold stripped
-  prose), and canon compares with no margin, so the lean is accepted as
+  prose), and a few tokens either way where the tokenizer merges text
+  across a turn's edges (−0.4% on a Japanese chapter, exact on the
+  English one), and canon compares with no margin, so the lean is accepted as
   small, not as safe. Then read `provider.prompt_estimate`'s `ms` on a close of
   the dataset chapter with the overlay, from the dev route. The bar: no
   step's count over 100 ms on the Galaxy Z Fold release build, for the
@@ -337,7 +363,7 @@ The check selects by `actionId`, so it holds across the parts 5.8 adds.
 ### The test overlay
 
 The dataset chapter's characters are nearly bare: of 25, the most traits
-on a live one is 4 and none holds a drive, only the retired Pew holds a
+on a live one is 4 and no live one holds a drive, only the retired Pew holds a
 `voice`, and 8 have no description, Jim Hawkins among them. The periodic
 classifier created 24 of them. The one faction has state `{}` and no
 member. So a run on the seed alone never reaches a soft cap. The dataset
@@ -400,15 +426,15 @@ stays what the pipeline wrote.
   material change or when blank".
 - [`chapter-close.md → 3f`](../../../../memory/chapter-close.md#3f--world-upkeep):
   a thread merge keeps the kept row's status, refs, category, icon and
-  injection mode, and absorbing an active thread into a pending one is
-  refused.
+  injection mode, absorbing an active thread is refused unless the kept
+  row is active too, and absorbing an `always` or `disabled` thread is
+  refused unless the kept row has the same mode.
 - [`architecture.md → System and user halves`](../../../../architecture.md#system-and-user-halves):
   the paragraph "Every history marks the user's turns" extends to the
   close's task templates.
 - [`architecture.md → The pre-send check`](../../../../architecture.md#the-pre-send-check):
   a close's system half counts from its entries' stored `content_tokens`
-  plus the rest encoded, a count that can lean slightly high on older
-  entries.
+  plus the rest encoded, a count that can lean slightly either way.
 - [`followups.md → Tuning and play testing`](../../../../followups.md#tuning-and-play-testing):
   the dataset's bare profiles, all from the periodic classifier, are
   open between the book's shape and the classifier, for play testing to
@@ -502,9 +528,18 @@ Test paths below run with `pnpm vitest run --project unit <path>`.
    skipping it whole with no delta; a user edit of another field on
    `keep` not stopping it; absorbing a row the close wrote refused;
    keeping that row landing; absorbing an `active` thread into a
-   `pending` one refused with no delta, while the reverse lands and keeps
-   the kept row's status and refs; `survivor` set on a landed merge and
-   absent on a refused or skipped one; and `update_thread` on an absorbed
+   `pending`, `resolved` or `failed` one refused with no delta, while an
+   `active` keep lands and keeps the kept row's status and refs;
+   absorbing an `always` or `disabled` thread into a row of another
+   mode refused with no delta, the `always` thread still seated by
+   `buildStructuralFloor`, while an `auto` thread absorbed into either
+   mode lands and so does a merge of two rows of one mode; a written row
+   that can't be kept without dropping an `active` one refused as
+   unmergeable with no note; a pair no keep can land, such as an
+   `active` `auto` thread beside a `pending` `always` one, refused with
+   "leave them apart" and no note; each other refusal's note naming
+   every keep that would land, and only those; `survivor` set on a landed merge
+   and absent on a refused or skipped one; and `update_thread` on an absorbed
    row refused, naming the survivor.
 10. **Round trip.** `lib/pipeline/__tests__/close-round-trip.test.ts` holds
     a case for each of the four tools and both cases of `update_thread`
@@ -536,7 +571,7 @@ Test paths below run with `pnpm vitest run --project unit <path>`.
     (`lib/pipeline/definitions/close-agent/turns.test.ts`).
 15. **The measure.** `PROBE_RUNS=10 pnpm probe:close`, with
     `SMOKE_LLM_URL`, `SMOKE_LLM_MODEL` and `PROBE_OUT` set, meets the bar
-    in Open questions on Slice 5.2's dataset chapter with the overlay, on
+    in Implementation notes on Slice 5.2's dataset chapter with the overlay, on
     the dev model. Implementation notes hold the model id from
     `/v1/models`, each task's outcome per run, `provider.input_ratio`, and
     where the saved messages are. A miss has gone to the developer.
@@ -566,171 +601,403 @@ Test paths below run with `pnpm vitest run --project unit <path>`.
   proves the whole close.
 
 Green proves little here without a mutation: for each new guard (soft
-cap, growth past a cap, already-wrote, active into pending, kept-row
-field, restated compare, empty list, latest by position, the overlay's
-second application) break it and confirm its test fails, and keep caps
+cap, growth past a cap, already-wrote, active into non-active, an
+injection mode into another, a refusal's named keep, kept-row field,
+restated compare, empty list, a bracket-only line, a trailing comma,
+latest by position, the overlay's second application) break it and confirm its test fails, and keep caps
 as literals so a test can't derive its expectation from the constant.
 
 ## Open questions
 
-- **Does the whole-prompt count hold for a story in Japanese or Chinese?**
-  An English dataset chapter says little about those. On an x86_64
-  emulator's debug build a count of 40,000 characters took 35 ms of
-  English, 591 ms of Chinese and 2,088 ms of Japanese, on the JS thread
-  ([Slice 5.1's closing review](../../../../followups.md#ux)), and this
-  slice counts per tool step. Measure a CJK prompt beside the English one.
-  **Answered (developer, 2026-11-09):** a count cache lands first, and a
-  part's system half is primed from the stored `content_tokens`, since
-  its first count would encode the chapter (see
-  [The measure](#the-measure)); then Japanese, the worst of the three, is
-  timed by a temporary in-app probe on the Identity prompt with its turns
-  and its user half's rows swapped for Japanese text of the same token
-  count, against the bar in
-  [The measure](#the-measure): no step's count over 100 ms on the Fold
-  release build.
-- **What bar does the measure have to clear?** Set it at slice planning
-  and amend this question with it, since a bar written after the runs
-  proves nothing. Suggested: both tasks finish in 8 of 10 runs, with no
-  step reaching the 8k output bound, reading before writing. "Finishing"
-  alone would pass a model that answers in plain text, so count a run
-  with `noToolCalls` as a miss. **Set (developer, 2026-11-09), before any
-  run.** On the dataset chapter with [the test overlay](#the-test-overlay),
-  a run passes when both tasks hold in it, and 8 of 10 runs must pass. A
-  task holds when it ends with a reply that has no tool call, not stopped
-  by its budget, the window or a cut-off; it lands at least one write;
-  and no step's reply reaches the 8k output bound, a cut-off retry
-  counting as reaching it. A close that fails is a miss for both tasks.
-  With caps to compact and a planted duplicate, a task that writes
-  nothing hasn't engaged, so a landed write replaces "reading before
-  writing", which the read gate already enforces. Across the 10 runs the
-  overlay's shapes must also come up (developer, 2026-11-09): in at
-  least 3 runs Identity sends a list whose stored one was at or over its
-  cap and that reaches the cap check, landed or refused, and in at least
-  3 Threads calls `merge_threads`. A list the read gate or the turns and
-  `why` checks stop, or one resent unchanged, doesn't count, since
-  neither tests the cap. Below that the measure is
-  inconclusive and goes to the developer as a miss does, since one
-  filled description alone would meet the per-run bar. Rejected and
-  skipped writes, invalid calls and steps used are reported per run but
-  don't gate, and every miss's transcript is read, with a sample of the
-  passes.
-- **Which status and refs survive `merge_threads` when the rows differ?**
-  Canon names neither, and a kept `pending` thread absorbing an `active`
-  one would drop it from the narrator's prompt with no write saying so.
-  Suggested: the kept row's status, refs, `category`, `icon` and
-  `injection_mode` stand, and absorbing an `active` thread into a
-  `pending` one is `rejected`, saying to keep the active one.
-  **Answered (developer, 2026-11-09):** as suggested, in
-  [Tools](#tools) and [Canon edits](#canon-edits).
-- **What does a soft cap do on a row already over it?** A user's or an
-  import's 12 traits, and an agent sending 10, is over the cap and an
-  improvement. Suggested: refused only when the list would grow past the
-  cap, so a reduction lands. **Answered (developer, 2026-11-09):** as
-  suggested. A list is refused when it is over its cap and longer than
-  the stored one, so a swap at the same length lands too.
-- **What makes a faction "touched"?** Canon's start names entities the
-  chapter touches, scene data never holds factions, and membership and
-  name matching are this doc's reading. Confirm it, since Slice 5.8's
-  starts read the same way, and check how many rows it brings on the
-  dataset chapter. **Confirmed (developer, 2026-11-09).** On the seed it
-  brings one row, "the buccaneers", by name in 4 turns, and none by
-  membership, since no character holds a `faction_id`; the overlay adds
-  members. A name matches only as stored, so "the buccaneers" misses a
-  turn that says "buccaneers" alone.
-- **Should Identity fill a blank field?** Canon's 3b lets a close rewrite
-  a `description` on a material change, and a `voice` or `standing` when
-  the chapter shows it changed, and says nothing of one that is blank,
-  while no writer fills it after the create. **Answered (developer,
-  2026-11-09):** Identity may fill a blank `description`, `voice` or
-  `standing` when the cited turns show it, per
-  [Canon edits](#canon-edits).
-
-- **Does a close's entity write read as the turn's first move?**
-  `firstLocationWrites` (`lib/actions/story-entries/pre-entry-locations.ts`)
-  takes any entity write anchored on an entry as that entry's turn's own.
-  A close anchors every write on its end entry
-  ([milestone C1](../milestone.md#c1--a-closes-delta-shape)), so a task
-  that writes `current_location_id` for a character the end turn didn't
-  move would read as that turn's first move. Unverified; check before the
-  first task that writes a location lands. **Answered at planning, by
-  reading, not run:** it reads a write only when its undo payload's
-  `state` holds `current_location_id`, `updateEntity` logs only the
-  `state` fields that changed, and no close tool in this milestone
-  writes a character's location.
-- **Does the cross-check hold on a server that drops past reasoning?** A
-  close's step estimate counts the reasoning sent back. A chat template
-  that renders only the latest reasoning reports fewer input tokens, so
-  a long conversation could read under half the estimate, raise the
-  truncation toast and stop early on a window it hasn't filled. The dev
-  model renders it: [Slice 5.4](./04-tool-step.md)'s two steps on
-  `Gemma4-26B-A4B-QAT-MTP` reported the second's input as the first's
-  input and output plus the tool result. Other servers are unverified;
-  `provider.input_ratio` in this slice's run shows it. **Watched during
-  the run:** the probe records `provider.input_ratio`, and Implementation
-  notes hold it.
-- **Does a cut attempt's spend count?** A step whose first reply was cut
-  returns the retry's usage; the cut attempt's survives only as
-  `outputTokens` in its `recoverable` failure. Does the cost measure
-  need it? **Answered at planning:** not in the report. The probe prints
-  a cut attempt's `outputTokens` from its `recoverable_error` beside the
-  step, and a cost measure past that waits for
-  [tuning](../../../../followups.md#tuning-and-play-testing).
-- **Which delta path does a delete's `PlannedAction` name?** Slice
-  5.5a's `verdictOf` throws on a planned action that names none, and a
-  merge's absorbed rows, as in `merge_threads`, are deletes. The path
-  must never appear in `values`, or
-  [Slice 5.11](./11-review-window.md)'s review would render a Changes
-  `update` row for it. Inside a close a delete either lands or rejects
-  the whole group, as a missing row returns `rejected`
-  (`lib/actions/threads/register.ts`,
-  `lib/actions/happenings/register-happenings.ts`), so its path never
-  reaches `skippedFields`. Slice 5.9 needs the same spelling. Surfaced
-  by 5.5a. **Answered at planning:** `$deleted`, one exported constant,
-  per [Tools](#tools).
-- **Does the read gate reach a row a tool only names?** It applies to
-  every id argument, so a location a character moves to or a faction a
-  character joins needs a `read_row` first, though the tool writes
-  neither. Intended, or should a reference need no read? If the gate
-  stays, every kind a tool references must be one its task's
-  `readFields` can read, or the reference can never pass. Surfaced by
-  5.5a. **Not reached here:** no tool in this slice takes an id it
-  doesn't write. [Slice 5.8](./08-prose-tasks.md) already gates a row a
-  tool only names, such as `flag_duplicate`'s partner.
-- **Does `search_world` rank an exact match first?** It ranks a partial
-  name match with an exact one, and above an exact keyword match, so
-  with a short query and more than 20 hits an exact match can fall past
-  the cap and into `omitted`. Suggested: whole-term matches first.
-  Surfaced by 5.5a. **Answered at planning:** as suggested, since
-  Identity is its first real caller.
-- **Do the tools' tests send each id argument as a handle?** They
-  should, through `resolveIdArgs`: a tool whose id argument names a row
-  it writes without reading would store a raw handle if its `ids` key
-  were misspelt. A tool declared with its shape,
-  `WriteTool<typeof SHAPE>`, fails to compile on that typo; one declared
-  as a plain `WriteTool` doesn't, so each tool should name its shape.
-  Surfaced by 5.5a. **Answered at planning:** yes to both.
-- **How does a merge case reach `held-in-redo` in the round-trip
-  suite?** Only when an earlier call in the same close writes the row
-  the merge absorbs, since one group's update plus cascaded delete is
-  refused by the group-conflict check first. Script the case that way;
-  5.9's merges too. Surfaced by 5.5a. **Answered:** as the two cases in
-  [Round-trip suite](#round-trip-suite) script it.
-- **What must the task render pin?** A non-empty `closeTurns`, since an
-  unset one renders an empty "# The turns". `read_turns` must mark user
-  turns through `macro_story_entry`, the model is told it may send
-  several calls per reply (the 24-step budget rewards it), and when the
-  templates ship, the paragraph "Every history marks the user's turns" in
-  [`architecture.md → System and user halves`](../../../../architecture.md#system-and-user-halves)
-  extends to them. Surfaced by 5.5a. **Answered at planning:** per
-  [Tasks and templates](#tasks-and-templates) and
-  [Canon edits](#canon-edits); `read_turns` is 5.9's.
-- **Where does a task's start get the prose it shows?** A task's
-  `render` is synchronous, so its `start` must read any prose it shows
-  and carry it in `show`, and the task context carries no range: the
-  start gets it from the run's intermediates or by `chapterEntryIds`.
-  Surfaced by 5.5a. **Answered at planning:** by `chapterEntryIds`, per
-  [Tasks and templates](#tasks-and-templates), which 5.8's parts narrow.
+None open: Implementation notes record each answer.
 
 ## Implementation notes
 
-_Populated at finish: notable deviations from the plan and resolved developer decisions._
+- **The measure runs on the dataset chapter with a test overlay
+  (developer decision, 2026-11-09).** The seed's characters are nearly
+  bare, so a run on it never reaches a soft cap. The overlay, committed
+  beside the dataset ([The test overlay](#the-test-overlay)), puts each
+  write shape in reach, and the seed JSON stays the pipeline's real
+  output, so whether a bare profile comes from the book or the
+  classifier stays answerable at play testing. Only `later-turn` is
+  proved by unit tests alone: the dataset branch has no later turn.
+- **The bar (developer decision, 2026-11-09, set before any run;
+  amended after them).** A run passes when both tasks hold in it, and 8
+  of 10 runs must pass. A task holds when it ends with a reply that has
+  no tool call, not stopped by its budget, the window or a cut-off; it
+  lands at least one write; and no step's reply reaches the 8k output
+  bound, a cut-off retry counting as reaching it. A close that fails is
+  a miss for both tasks. Across the 10 runs, in at least 3 Identity
+  sends a list whose stored one was at or over its cap and that reaches
+  the cap check, landed or refused, and in at least 3 Threads calls
+  `merge_threads`. A list the read gate or the turns and `why` checks
+  stop, or one resent unchanged, doesn't count. Below that the measure
+  is inconclusive and goes to the developer as a miss does. Rejected and
+  skipped writes, invalid calls and steps used are reported but don't
+  gate. Under that original clause the 10 runs read 6 of 10, missed: all
+  four misses were a step cut off at the 8,000-token bound whose one
+  retry then succeeded. The developer amended the clause after the runs
+  (2026-11-09): a step cut off at the bound whose one retry succeeds
+  counts as a hold: the developer judged a token limit not a failure as
+  such, being model and environment dependent, so long as the close
+  recovers from a single cut-off step on its retry (the four were three
+  repetition loops and one over-long deliberation, each recovered by its
+  retry); a task whose retry is cut off too still
+  misses, being stopped, and every other clause stands. The same 10
+  runs, re-judged with no rerun, read met: 10 of 10 passing, a cap-check
+  call in 10 and `merge_threads` in 10. The probe now judges the amended
+  bar and reports cut-offs per run, and `PROBE_REJUDGE=<probe-out dir>`
+  re-judges saved runs. The run is in
+  [Close-task measure](#close-task-measure).
+- **Identity may fill a blank `description`, `voice` or `standing`
+  (developer decision, 2026-11-09)** when the cited turns show it, and
+  then follows 3b's rewrite rules, since no other writer fills one after
+  the create.
+  [`chapter-close.md → 3b`](../../../../memory/chapter-close.md#3b--identity-compaction)
+  and the `description` row of the
+  [authorship table](../../../../data-model.md#authorship-contract) say
+  so.
+- **A merge keeps the kept row's status, refs, `category`, `icon` and
+  `injection_mode` (developer decision, 2026-11-09),** and absorbing an
+  `active` thread is refused unless the kept thread is `active` too
+  (widened by the developer the same day from a `pending` keep alone):
+  the kept row would drop the thread from the narrator's prompt with no
+  write saying so. The refusal says to keep an active one, then settle
+  it with `update_thread` if the chapter resolved or failed it, since
+  "resolve it first" would lead into the already-wrote refusal below.
+  [`chapter-close.md → 3f`](../../../../memory/chapter-close.md#3f--world-upkeep)
+  says so. The measure ran before the widening; all 16 of its merges
+  kept an active thread, so none would change.
+- **A merge refuses to drop a user's injection mode (developer decision
+  after the slice review, 2026-11-09: "R1: b + brackets").** Absorbing
+  an `always` or `disabled` thread is refused unless the kept thread has
+  the same mode, since keep's mode stands and the close never writes
+  one. An `auto` thread may join either mode: refusing it into a
+  `disabled` keep, where it would no longer rank, was offered and not
+  taken. Every refusal names each keep that would land, and a pair with
+  none, such as an `active` `auto` thread beside a `pending` `always`
+  one, is refused as "leave them apart". A keep "lands" when it passes
+  the refusal rules; C11's protection still runs after them, so when the
+  user edited the old keep after the cited turns, the swapped merge comes
+  back `skipped` with the user's edit standing, at the cost of one step
+  (provisional, coordinator default after CodeRabbit; alternative: count
+  a keep whose merge protection would skip as not landing). The Threads
+  start shows a mode the user set after the status, `(pending, always)`,
+  and leaves `auto` unsaid, as Identity's start leaves `active`, so the
+  rare user-set mode stands out (an implementer's call the developer
+  left open); `read_row` shows every thread's `injectionMode`. The
+  measure wasn't rerun: every thread in the seed and the overlay is
+  `auto`, so none of its merges would change. The "brackets" half: a
+  list entry split by line drops a line that, trimmed, holds only `[` or
+  `]`, with a trailing comma or not, so an unparseable bracketed list no
+  longer lands its brackets as entries.
+- **A leaked list's trailing commas are dropped (developer decision,
+  2026-11-09: "TC: 1+2").** A comma after a list's last quoted item is
+  dropped before the list parses, so `["brave", "wary",]` and its
+  pretty-printed form read as their items, and each line of an entry
+  split by line drops a trailing comma, so `brave,` on its own line
+  reads `brave`. An entry of one line stays as sent, and nothing splits
+  on a comma (Q28).
+- **A soft cap refuses a list only when it is over its cap and longer
+  than the stored one (developer decision, 2026-11-09),** so a row
+  already over a cap, from a user edit or an import, can shrink, or swap
+  at the same length. A cut to the cap in one call would delete
+  user-written entries nobody asked the close to remove. Identity's
+  list descriptions say "at most N, or no longer than the stored list",
+  so they don't invite a cut to N.
+- **A faction is touched by membership or by name (developer decision,
+  2026-11-09).** Identity starts from the characters in the range's
+  `metadata.sceneEntities` that have a row, retired ones included, the
+  factions their `faction_id` names, and every faction whose name or a
+  keyword `matchTerms` finds in a turn's prose. A character the prose
+  only mentions is left to `search_world`. On the seed this brings one
+  faction, "the buccaneers", by name in 4 turns and none by membership;
+  the overlay adds members. A name matches only as stored, so "the
+  buccaneers" misses a turn that says "buccaneers" alone. Slice 5.8's
+  starts read the same way. A faction row shows `status`, "(retired)"
+  like a character's, and Identity's start sorts names by code units, not
+  the device locale, so the prompt's row order doesn't depend on it.
+- **Whole-prompt counting per step: a count cache, then a bar on the
+  Fold (developer decision, 2026-11-09).** `countPromptTokens` caches
+  each text's count, bounded by characters (2,000,000, and at most
+  4,096 entries, least recently used out), so a task's earlier steps
+  count once, and narrator turns share it. A counting pass pins its
+  system half for the pass and re-touches it after: at 256 entries a
+  24-step Identity task's distinct texts evicted the primed system half,
+  and every later step re-encoded the chapter. One helper,
+  `renderClosePrompt`, renders, blanks and primes for both tasks, and a
+  primed text over the budget logs `provider.prompt_count_uncached`. The
+  bar: no step's count over 100 ms on the Galaxy Z Fold release build,
+  for the English chapter and for a Japanese prompt of the same token
+  count. The desktop renderer's number is recorded. The Fold run gates
+  the merge, not the PR's opening. The numbers are in
+  [Per-step count measure](#per-step-count-measure).
+- **A part's first step never encodes the chapter (developer decision,
+  2026-11-09: "Seed from stored counts").** Counting a 24k-token
+  chapter in Japanese took about 335 ms under Node on desktop, so the
+  cache alone couldn't meet the bar at a part's first step.
+  `readTaskTurns` sums the entries' stored `contentTokens` as
+  `proseTokens`, counting a null one from its prose, and each task's
+  render primes its system half, through `primeCloseSystemCount`, at
+  the same half rendered with blank turns, counted, plus `proseTokens`.
+  The window check's count of that half then hits the cache. The
+  estimate is approximate: an older row's stored count still covers a
+  trailing block the prompt strips, so it can run a little long. Canon
+  compares with no margin, so the lean is accepted as small, not as
+  safe.
+- **A close's entity write doesn't read as a turn's first move,** by
+  reading, not run: `firstLocationWrites` reads a write only when its
+  undo payload's `state` holds `current_location_id`, `updateEntity`
+  logs only the `state` fields that changed, and no close tool in this
+  milestone writes a character's location.
+- **The truncation cross-check was watched on the run,** for a server
+  that drops past reasoning: `provider.input_ratio` on the dev model is
+  in [Close-task measure](#close-task-measure).
+- **A cut attempt's spend isn't in the report.** The probe prints a cut
+  attempt's `outputTokens`, from its `recoverable_error`, beside the
+  step; a cost measure past that waits for
+  [tuning](../../../../followups.md#tuning-and-play-testing).
+- **A delete's delta path is `DELETE_PATH`, `$deleted`, exported from
+  `close-agent/tool.ts`.** No column starts with `$`, and no plan puts
+  it in `values`; a merge that doesn't land loses it under the call's
+  one reason, so it never reaches the ledger. Slice 5.9's
+  `merge_happenings` imports it.
+- **A write tool knows its run's action:** `WriteContext.actionId`,
+  which dispatch fills from the phase. `merge_threads` refuses to absorb
+  a row with a delta under it, since `snapshotForRedo` would refuse
+  CTRL-Z of the close for good; that row may still be the kept one. The
+  check selects by action, so it holds across 5.8's parts, and 5.9's
+  merges reuse it. In the round-trip suite, `update_thread(B)` before
+  `merge_threads(keep: A, absorb: [B])` is the case that reaches it:
+  with the check removed, the close's CTRL-Z fails `held-in-redo`. The
+  check is refined: when this close's writes leave no keep that lands
+  (two or more written threads, or a written one that can't be kept
+  without dropping an active thread or a user's injection mode), the
+  merge is refused as unmergeable in this close ("leave them apart");
+  when exactly one absorbed thread was written and keeping it lands, the
+  original refusal stands and the model's answer names it ("Send thN as
+  keep.").
+  A refused plan's advice reaches the model through a `note` on the plan
+  (`WritePlan.note`, a stable reason's note winning), never the ledger,
+  and a refusal records `values` with restated text dropped.
+- **A task's start reads its own prose.** `readTaskTurns`
+  (`close-agent/turns.ts`) reads the task's `chapterEntryIds` in
+  position order under their turn handles and carries them in `show` as
+  `closeTurns`, since `render` is synchronous, and `storyModeOf` reads
+  the story's mode from its `definition`. `closeTurns` is typed
+  non-empty (`CloseTurns`), since an empty one renders an empty "# The
+  turns": each start narrows with `hasTurns` and returns null with no
+  turns. 5.8's parts narrow `chapterEntryIds`, and its tasks reuse both;
+  `read_turns` is 5.9's. The open statuses are shared with
+  `chapter-context.ts`.
+- **The tasks' template variables are close-only.** `closeCharacters`,
+  `closeFactions`, `closeThreads`, `closeWritesSoFar` and
+  `closeSoftCaps` join `VARIABLES.chapter` and
+  `CLOSE_ONLY_CHAPTER_VARIABLES` beside `closeTurns`, and the stability
+  test allows only `closeTurns` in a close template's system half, so a
+  task's own variable can't reach the shared half. The shared
+  instructions tell the model a reply may hold several tool calls. The
+  templates of 5.8 and 5.9 join the same lists. Threads' template lists
+  Duplicates first, with "Merge before you update: a thread this close
+  already wrote can be kept, never absorbed", since the already-wrote
+  rule would refuse a merge after both duplicates were updated.
+  Identity's names its write tools, says "A list can't be emptied" (an
+  empty list reads as omitted), and limits descriptions to detail its
+  other fields don't already carry.
+- **A close test that isn't about the tasks sets `NO_CLOSE_TASKS`**
+  through `__setCloseAgentSlots` in its own setup, with no default in
+  `vitest.setup.ts`, so the production slots stay in force where a test
+  needs them. The tasks 5.8 and 5.9 add reach those closes the same way.
+- **Tools are declared with their shape,** `WriteTool<typeof SHAPE>`, so
+  a misspelt `ids` key fails to compile, and their tests send each id
+  argument as a handle through `dispatchToolCall`.
+- **`search_world` ranks whole-term matches first:** an exact name or an
+  exact keyword ranks first (rank 0), then a name found whole, a keyword
+  found whole, a partial name and a partial keyword, ties by name, and
+  its description says best matches come first. The cap cuts after
+  ranking, so an exact match falls into `omitted` only when more than 20
+  rows tie at the top rank.
+- **A voice is bounded once:** `lib/classifier` exports `boundVoice`, at
+  2,000 characters, which a pass's first profile and the close share.
+- **The read gate isn't reached by a reference here:** no tool in this
+  slice takes an id it doesn't write.
+  [Slice 5.8](./08-prose-tasks.md) gates a row a tool only names.
+- **The overlay applies twice to the same rows.** Its direct writes
+  never touch the field its user edit sets, so a second application
+  restates that edit and logs nothing, and the planted thread goes in by
+  a fixed id only when absent. On a closed chapter it undoes the close
+  first, since that close's CTRL-Z would put the seed's values back over
+  the overlay's. A re-application refuses when the planted thread has
+  changed, comparing the columns the action layer writes.
+- **The dataset seed holds this slice's close.** Its close was undone
+  and run again from the dev route on `Gemma4-26B-A4B-QAT-MTP`, through
+  `pnpm mock`'s passthrough, without the overlay: 27 calls, 16 landed
+  (11 entity updates, 4 thread updates and the merge) and 1 merge, and
+  the chapter's title is now "The Admiral Benbow and the Treasure Map",
+  replacing the title and summary written before the metadata prompt's
+  rewording. The refresh moved the overlay's data not at all, but the
+  overlay's guard test now reopens the seed's close first, since the
+  refreshed close sets the duplicate's status the test then resolves.
+- **A status's resolved ref never precedes the thread's opening
+  (provisional, coordinator default; alternative: accept the cited turn
+  as 3f's letter reads and triage).** `update_thread` writes
+  `resolved_at_entry_id` as the later, by branch position, of the latest
+  cited turn and `triggered_at_entry_id`, as a pass's closing turn does
+  ([`classifier.md → Threads`](../../../../memory/classifier.md#threads)),
+  while precedence still reads the latest cited turn.
+  [`chapter-close.md → 3f`](../../../../memory/chapter-close.md#3f--world-upkeep)
+  says so. The PR lists it for the developer.
+- **`updateThread` logs the stored ref beside a restated-ref status
+  change.** With the restated-column drop, a patch naming a status and
+  an unchanged ref would have logged the status alone, and canon says a
+  pass's thread logs its ref beside every status change.
+- **`readEntryPosition` moved to `lib/db`,** since the clamp's position
+  read through the `@/lib/actions` barrel closed an import cycle once
+  the slots reached `thread-tools`; an eslint boundaries rule now
+  refuses a value import of the actions barrel from `lib/pipeline`.
+- **The probe names what it counted:** each counted cap check (row,
+  path, the list's own outcome) and merge, run-numbered report sizes
+  with aggregates, `console.debug` silenced, and `PROBE_OVERLAY` with
+  `PROBE_STAND_IN` refused.
+- **A list joined into one entry is read as the entries it holds,**
+  after the measure's run 9 landed 12 Silver traits as one entry past the
+  soft cap. Before `dedupeTerms`, an entry that parses as a JSON string
+  list (edge quotes and brackets restored, a comma after its last quoted
+  item dropped, escapes decoded) is read as that list, else it is split
+  by line, dropping a line that holds only `[` or `]` and each line's
+  list marker (`- `, `* `, `1. `) and trailing comma; a list is restated
+  when the stored one equals it as sent or as its entries, and the
+  soft-cap refusal says "read as N entries" when a joined list was
+  split. Known gap (developer, 2026-11-09: "no new rule"): the read
+  covers the run-9 shape and its escaped, bracketed, pretty-printed,
+  trailing-comma and line-separated variants, with a decoded item split
+  by line as an entry is (provisional, coordinator default, after
+  review), but a plain comma- or semicolon-joined entry still reads as
+  one entry and passes the soft cap, and it isn't split since that would
+  break entries like "quick-witted, if rash". A single-quoted list
+  (`['brave', 'wary']`) reads as one entry on one line, since converting
+  its quotes would break an apostrophe like "won't back down"; split
+  over lines, each item keeps its quotes (`'brave'`). Also not fixed: a stored joined
+  entry counts as one for the growth rule, forcing compaction; rare
+  double-leak shapes (pretty-printed and escaped JSON, a joined pair
+  plus a line break); and `1)` and `•` markers. The play-testing side is
+  in [`followups.md`](../../../../followups.md#tuning-and-play-testing).
+- **`CLOSE_REPORT_VALUE_BOUND` stays 2,000:** the largest well-formed
+  value was 226 characters, and run 9's 238-character value was the
+  corrupted joined list.
+- **A close on the dev build reverted once, cause unconfirmed.** The
+  per-step count measure's first attempt hit it; it is a
+  [triage](../../../triage.md#inbox) entry.
+
+### Close-task measure
+
+Bar: [above](#implementation-notes), set before any run and amended
+after them as noted there.
+`PROBE_RUNS=10 PROBE_OVERLAY=1 pnpm probe:close` at `ccad81f6b` on
+`Gemma4-26B-A4B-QAT-MTP` (window 65,536 tokens, read from
+`/v1/models`), on the dataset seed with the test overlay.
+
+| Run | Identity | Threads | Cap-check call                                                                                                                                        | `merge_threads` | Notes                                                                 |
+| --- | -------- | ------- | ----------------------------------------------------------------------------------------------------------------------------------------------------- | --------------- | --------------------------------------------------------------------- |
+| 1   | held     | held    | Jim Hawkins state.traits (ok); the buccaneers state.agenda (ok)                                                                                       | yes             | Identity step 1 cut off, retry held; 0 rejected, 0 skipped, 0 invalid |
+| 2   | held     | held    | Dr. Livesey, Jim Hawkins, Long John Silver state.traits (each refused, then ok)                                                                       | yes             | no cut-off; 1 rejected, 0 skipped, 0 invalid                          |
+| 3   | held     | held    | Jim Hawkins state.traits (refused, then ok)                                                                                                           | yes             | Identity step 1 cut off, retry held; 0 rejected, 0 skipped, 0 invalid |
+| 4   | held     | held    | Dr. Livesey, Jim Hawkins, Long John Silver state.traits (each refused, then ok); Trelawney state.drives (refused)                                     | yes             | no cut-off; 0 rejected, 0 skipped, 14 invalid                         |
+| 5   | held     | held    | Dr. Livesey state.traits (refused, then ok); Jim Hawkins state.traits (ok); Long John Silver state.traits (refused); the buccaneers state.agenda (ok) | yes             | Threads step 2 cut off, retry held; 1 rejected, 0 skipped, 20 invalid |
+| 6   | held     | held    | Long John Silver state.traits, Trelawney state.drives, the buccaneers state.agenda (each refused, then ok)                                            | yes             | no cut-off; 1 rejected, 0 skipped, 2 invalid                          |
+| 7   | held     | held    | Jim Hawkins, Long John Silver state.traits (each refused, then ok); the buccaneers state.agenda (ok)                                                  | yes             | no cut-off; 1 rejected, 0 skipped, 1 invalid                          |
+| 8   | held     | held    | Dr. Livesey state.traits (refused, then ok); Jim Hawkins, Long John Silver state.traits (ok); the buccaneers state.agenda (ok)                        | yes             | no cut-off; 2 rejected, 0 skipped, 1 invalid                          |
+| 9   | held     | held    | Long John Silver state.traits (ok, a corrupted list: see below); the buccaneers state.agenda (ok)                                                     | yes             | no cut-off; 5 rejected, 0 skipped, 3 invalid                          |
+| 10  | held     | held    | Dr. Livesey, Long John Silver state.traits (each refused, then ok); Jim Hawkins state.traits (ok); the buccaneers state.agenda (ok)                   | yes             | Identity step 1 cut off, retry held; 4 rejected, 0 skipped, 1 invalid |
+
+Verdict: met, 10 of 10 runs passing, a cap-check call in 10 runs and
+`merge_threads` in 10 (the amended bar, judged on the saved runs). The
+original clause read 6 of 10, missed: runs 1, 3 and 10 in Identity and
+run 5 in Threads were each cut off once at the bound. The `id`-for-`keep`
+slips the model made on `merge_threads` in runs 5, 6 and 9 were
+schema-invalid, so they never reached the report and aren't counted. No call
+ended `skipped`; fields lost from a call that landed are in the report's
+`skippedFields`, and aren't counted here.
+`provider.input_ratio` ran 1.05 to 1.13 in Identity and 1.05 to 1.06 in
+Threads, with no later step under 0.5. The largest report value was 226
+characters (`update_character`, `state.drives`, run 4; run 9's
+238-character value was a corrupted joined list) and the largest report
+18,243 bytes (run 5), so `CLOSE_REPORT_VALUE_BOUND` stays at 2,000. The
+saved messages are in
+`failerko-desktopserver:/home/failerko/.cache/aventuras-measure/m5-5b/probe-20261109T0742Z`
+(the probe log is beside it). Runs 1, 3, 5
+and 10 and the first three passes, runs 2, 4 and 6, had their
+transcripts read: the verdicts matched, the merges kept the active
+thread, and the cap calls were real swaps at the cap. The reads also
+showed churn at a cap (stable traits dropped for synonyms), a few
+writes citing turns that don't show them (blanket ranges; a
+misattributed description in run 10), invented detail in two thread
+`why`s (Pew taken for one-legged), and `The August deadline` resolved or
+failed early in runs 3, 5 and 10; tuning's, not the bar's.
+
+All four cut-offs were at the 8,000-token bound with
+`finish_reason: length`, and each retry was byte-identical to the cut
+request and succeeded. They share the symptom, not one mechanism: runs 3
+and 10 are token-level repetition loops in tool-call arguments, run 5
+a repetition loop in reasoning, and run 1 a non-repeating deliberation
+that used the bound. Identity step 1 is the same 29,411-token request
+in every run, 3 of its 13 samples (10 runs and 3 retries) were cut, and
+every Identity step 1 that skipped its thinking block and batched calls
+(6 of 6) produced bad arguments; observed, not shown causal.
+
+### Per-step count measure
+
+Bar: no step's count over 100 ms on the Fold release build, for the
+English chapter and for a Japanese prompt of the same token count.
+Timed inside the app by a temporary probe on the dev route, not
+committed: the close's `provider.prompt_estimate` `ms` for each step,
+and a part's first step as the close runs it, five times from a
+cleared count cache: `primeCloseSystemCount` on the Identity task's
+first prompt, `proseTokens` taken as stored, then `countPromptTokens`
+on the primed prompt. The Japanese prompt (developer decision,
+2026-11-09) is that same prompt at its real size with each turn and
+each row field the start shows (names, descriptions, traits, drives,
+voice, standing, agenda) given the next stretch of Natsume Sōseki's
+_I Am a Cat_ (Aozora Bunko) at its own count: 23,900 of 23,907 turn
+tokens and 447 of 447 row tokens, the user half's instructions as the
+template renders them. The turns are seeded from stored counts, so a
+Japanese miss reopens the approach for the user half's rows. Two
+columns are information, not the bar: the same prompt with only its
+turns in Japanese, and the largest single Japanese entry's
+`countTokens`, the cost a write pays.
+
+| Platform, build                               | Close, largest step            | English, first step | Japanese, first step | Japanese turns only | Largest Japanese entry |
+| --------------------------------------------- | ------------------------------ | ------------------- | -------------------- | ------------------- | ---------------------- |
+| Desktop, `pnpm desktop` dev build (Linux)     | 10 ms (Identity step 1: 10 ms) | 40.1 ms             | 12.5 ms              | 5.5 ms              | 32.4 ms (436 tokens)   |
+| Galaxy Z Fold (SM-F966B), release `arm64-v8a` | not run                        | 46.7 ms             | 56.9 ms              | 40.3 ms             | 37.9 ms (436 tokens)   |
+
+The desktop figures are each the larger of two page loads, on the
+renderer of slot 1 under Xvfb at `f908bd1b4` with the temporary probe
+applied, not committed. The measure's real closes ran three times:
+attempt A failed in the report phase with the "Story recovered" modal,
+cause unconfirmed (see [triage](../../../triage.md#inbox)); attempt B failed
+in the metadata phase when the dev model ran away to 39,655 output
+tokens (a [followup](../../../../followups.md#tuning-and-play-testing)
+data point); attempt C completed. Attempt C's 15 steps (28,122 tokens at
+Identity step 1) all counted in 10 ms or less, and the
+probe's English prompt matched that close's Identity step 1 estimate
+exactly (28,122 tokens, gap 0). A warm step took 0.0 ms for the English
+prompt, 0.0 to 0.1 ms for the Japanese and 0.0 ms for the turns-only
+one. The renderer's JS heap, after a forced collection, went from 126.8
+to 123.7 MB over the close (the cache holds whole texts).
+
+The Fold figures are each the largest of three fresh launches of the
+release build, folded, on 2026-11-09, at `6faee5f05` with the same
+probe applied, not committed. Per launch, the first-step maxima were
+43.9, 42.0 and 46.7 ms for English (28,122 tokens), 49.9, 50.4 and
+56.9 ms for Japanese (28,138) and 35.7, 37.7 and 40.3 ms for the turns
+only (28,115); the largest Japanese entry's `countTokens` took at most
+33.2, 34.1 and 37.9 ms. A warm step took 1.0 to 1.2 ms for the English
+prompt and 0.4 ms for both Japanese ones. The probe has no order
+option: each launch warms the encoder, then counts English, Japanese
+and the turns only in that order, so no Japanese first step ran on a
+cold app; within a launch, English's first run sat 5 to 9 ms above its
+other four, Japanese's five within 3 ms of each other. No real close
+ran on the Fold (the optional cross-check was skipped). Verdict: met.
+The largest English and Japanese first steps, 46.7 and 56.9 ms, sit
+under the 100 ms bar, so the merge gate passes.

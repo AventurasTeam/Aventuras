@@ -50,7 +50,7 @@ const RULE_EXPRESSIONS: readonly string[] = [
 ]
 
 // A floor, not a count: fewer means the glob or the parse stopped reading the calls.
-const KNOWN_NOOP_CALLS = 57
+const KNOWN_NOOP_CALLS = 61
 
 // The ten entity targets, partner-not-found, threads' status target, the relationship delete.
 const KNOWN_NOT_FOUND_CALLS = 13
@@ -383,6 +383,23 @@ const restateThreadStatus: PipelineAction = {
   payload: { branchId: BRANCH, id: 'thr_1', status: 'active', proseEntryId: null },
 }
 
+const restateThreadTitle: PipelineAction = {
+  kind: 'updateThread',
+  source: 'periodic_classifier',
+  payload: {
+    branchId: BRANCH,
+    id: 'thr_1',
+    patch: { title: 'Recover the relic' },
+    proseEntryId: null,
+  },
+}
+
+const restateHappeningTitle: PipelineAction = {
+  kind: 'updateHappening',
+  source: 'periodic_classifier',
+  payload: { branchId: BRANCH, id: 'hap_1', patch: { title: 'The fire' }, proseEntryId: null },
+}
+
 const linkToGone: PipelineAction = {
   kind: 'upsertCharacterRelationship',
   source: 'periodic_classifier',
@@ -482,6 +499,16 @@ describe('noopRefusal marks: sample handlers (C11)', () => {
       'setThreadStatus to the status it has',
       restateThreadStatus,
       noop('status-unchanged', 'restated'),
+    ],
+    [
+      'updateThread restating the stored title',
+      restateThreadTitle,
+      noop('no-op thread patch', 'restated'),
+    ],
+    [
+      'updateHappening restating the stored title',
+      restateHappeningTitle,
+      noop('no-op happening patch', 'restated'),
     ],
   ])('%s', async (_label, action, expected) => {
     const ctx = await setup()

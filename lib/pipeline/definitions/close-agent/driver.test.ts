@@ -39,6 +39,7 @@ import { CLOSE_TASK_STEP_BUDGET, runCloseTask, type TaskEnd, type TaskRunArgs } 
 import {
   __setCloseAgentSlots,
   closeAgentSlots,
+  NO_CLOSE_TASKS,
   PRODUCTION_CLOSE_SLOTS,
   type CloseAgentSlots,
   type CodeStepContext,
@@ -467,7 +468,7 @@ describe('runCloseTask', () => {
     ids.showTurns(chapterEntryIds())
     ids.show(WREN, 'Wren')
     ledger = seedCloseLedger({})
-    writer = new CloseLedgerWriter(ledger, (id) => ids.nameOfId(id))
+    writer = new CloseLedgerWriter(ledger, (id) => ids.nameOfId(id), ACTION_ID)
   })
 
   it("runs a step's calls in order, the second reading the first's write", async () => {
@@ -1401,6 +1402,31 @@ describe('closeAgentPhase', () => {
     })
   })
 
+  it("hands a task a ledger that logs a report value under the run's actionId", async () => {
+    __setCloseAgentSlots({ before: [quietTask('happenings', [])], perPart: [], after: [] })
+    await drain(phaseCtx())
+    const { ledger } = vi.mocked(runCloseTask).mock.calls[0]![1]
+    const debug = vi.spyOn(logger, 'debug')
+    onTestFinished(() => debug.mockRestore())
+
+    ledger.record({
+      task: 'happenings',
+      part: 0,
+      tool: 'update_happening',
+      rows: [],
+      why: '',
+      turns: [],
+      result: 'ok',
+      values: { description: 'The ferry runs late.' },
+    })
+
+    expect(debug).toHaveBeenCalledWith(
+      'memory.close_report_value',
+      { tool: 'update_happening', path: 'description', length: 20 },
+      { actionId: 'act_slots' },
+    )
+  })
+
   it("gives a task's start its part and the lore-mgmt model config", async () => {
     let captured: TaskPromptContext | undefined
     __setCloseAgentSlots({
@@ -1580,11 +1606,22 @@ describe('closeAgentPhase', () => {
     expect(log).toEqual([])
   })
 
-  it('with the production slots, starts nothing and reads no store, the ledger seeded', async () => {
+  it('with the production slots, runs Identity then Threads in each part', () => {
     __setCloseAgentSlots({ before: [], perPart: [quietTask('identity', [])], after: [] })
     __setCloseAgentSlots(undefined)
     expect(closeAgentSlots()).toBe(PRODUCTION_CLOSE_SLOTS)
-    expect(PRODUCTION_CLOSE_SLOTS).toEqual({ before: [], perPart: [], after: [] })
+    expect(PRODUCTION_CLOSE_SLOTS.before).toEqual([])
+    expect(PRODUCTION_CLOSE_SLOTS.after).toEqual([])
+    expect(
+      PRODUCTION_CLOSE_SLOTS.perPart.map((entry) =>
+        entry.kind === 'task' ? entry.def.task : entry.step.name,
+      ),
+    ).toEqual(['identity', 'threads'])
+  })
+
+  it('with no task in any slot, starts nothing and reads no store, the ledger seeded', async () => {
+    __setCloseAgentSlots(NO_CLOSE_TASKS)
+    expect(NO_CLOSE_TASKS).toEqual({ before: [], perPart: [], after: [] })
     // A phase that read the stores here would fail: nothing holds the branch.
     resetAllStores()
     const ctx = phaseCtx()
@@ -1594,6 +1631,20 @@ describe('closeAgentPhase', () => {
     expect(result).toEqual({ status: 'completed' })
     expect(events).toEqual([])
     expect(closeLedgerOf(ctx.intermediates)).toEqual({ calls: [], stopped: [], noToolCalls: true })
+  })
+
+  // Control for the case above: the production slots do read the stores.
+  it('with the production slots and no story open, fails before any task', async () => {
+    __setCloseAgentSlots(undefined)
+    resetAllStores()
+
+    const { events, result } = await drain(phaseCtx())
+
+    expect(result).toEqual({
+      status: 'failed',
+      error: { kind: 'orchestrator', detail: 'chapter-close: branch not loaded' },
+    })
+    expect(events).toEqual([])
   })
 
   it.each([

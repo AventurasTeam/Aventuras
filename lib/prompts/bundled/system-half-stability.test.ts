@@ -12,7 +12,7 @@ import {
   type MacroId,
   type TemplateId,
 } from '../index'
-import { CLOSE_ONLY_CHAPTER_VARIABLES } from '../templateContextMap'
+import { CLOSE_ONLY_CHAPTER_VARIABLES, TEMPLATE_GROUPS } from '../templateContextMap'
 
 // architecture.md → System and user halves: a system half must render byte-identically from call
 // to call unless the user changes what it reads, so it may read only what the story or the
@@ -28,12 +28,29 @@ const STABLE_SYSTEM_VARIABLES: readonly string[] = [
   'lead',
 ]
 
-// C3: a close task's template holds the chapter or part in its system half. None ships yet (5.5b,
-// 5.8); held to the same check, less the close-only variables C3 allows.
-const CLOSE_TASK_TEMPLATES: readonly TemplateId[] = []
-const CLOSE_ONLY: readonly string[] = CLOSE_ONLY_CHAPTER_VARIABLES
+// C3: a close task's template holds the chapter or part in its system half, the one per-call read
+// it may make there; its task's rows and the writes so far stay in its user half.
+const CLOSE_TASK_TEMPLATES: readonly TemplateId[] = [
+  TEMPLATE_IDS.closeIdentity,
+  TEMPLATE_IDS.closeThreads,
+]
+const CLOSE_SYSTEM_VARIABLES: readonly string[] = ['closeTurns']
+
+// Only a chapter-group template is a close's, so the exemption can't reach another group's.
+function closeTaskTemplates(
+  list: readonly string[],
+  groups: Readonly<Record<string, string>>,
+): readonly string[] {
+  const outside = list.filter((id) => groups[id] !== 'chapter')
+  if (outside.length > 0)
+    throw new Error(`close task templates outside the chapter group: ${outside.join(', ')}`)
+  return list
+}
+
 const allowedPerCall = (templateId: string): readonly string[] =>
-  CLOSE_TASK_TEMPLATES.some((id) => id === templateId) ? CLOSE_ONLY : []
+  closeTaskTemplates(CLOSE_TASK_TEMPLATES, TEMPLATE_GROUPS).includes(templateId)
+    ? CLOSE_SYSTEM_VARIABLES
+    : []
 
 const unallowedSystemReads = (
   eng: Parameters<typeof templateGlobals>[0],
@@ -377,23 +394,60 @@ describe('bundled system halves read only what the story fixes', () => {
     expect(allowedPerCall(TEMPLATE_IDS.chapterMetadata)).toEqual([])
   })
 
-  // Positive control: with no close template shipped, the rule that holds one to the close-only
-  // reads is shown on a probe, which may read closeTurns and nothing else per call.
-  it('lets a close task template read the close-only variables and no other per-call one', () => {
+  // A task's rows in a system half would move the prefix every later task reuses: only the turns
+  // pass. The probe reads every close-only variable, so a new one is held to the rule too.
+  it('lets a close task template read the turns in its system half, and no other per-call variable', () => {
     const probe = 'tmpl_close_task_probe'
+    const reads = CLOSE_ONLY_CHAPTER_VARIABLES.map((name) => `{{ ${name}.size }}`).join('')
     const { engine: probed } = loadPack({
       ...bundledPack,
       templates: {
         ...bundledPack.templates,
         [probe]: {
           group: 'chapter',
-          system: '{{ mode }}{% for t in closeTurns %}{{ t.handle }}{% endfor %}{{ entries.size }}',
+          system: `{{ mode }}${reads}{{ entries.size }}`,
           user: 'Begin.',
         },
       },
     })
-    expect(unallowedSystemReads(probed, probe, CLOSE_ONLY)).toEqual(['entries'])
-    expect(unallowedSystemReads(probed, probe, [])).toEqual(['closeTurns', 'entries'])
+    expect(unallowedSystemReads(probed, probe, CLOSE_SYSTEM_VARIABLES)).toEqual([
+      'closeCharacters',
+      'closeFactions',
+      'closeSoftCaps',
+      'closeThreads',
+      'closeWritesSoFar',
+      'entries',
+    ])
+    expect(unallowedSystemReads(probed, probe, [])).toEqual([
+      'closeCharacters',
+      'closeFactions',
+      'closeSoftCaps',
+      'closeThreads',
+      'closeTurns',
+      'closeWritesSoFar',
+      'entries',
+    ])
+  })
+
+  // C3's named list: exactly the templates whose system half holds the turns.
+  it("names the close's task templates, which are the ones holding the turns in their system half", () => {
+    const holding = Object.values(TEMPLATE_IDS).filter((id) =>
+      templateGlobals(engine, id, 'system').has('closeTurns'),
+    )
+    expect(CLOSE_TASK_TEMPLATES).toEqual([TEMPLATE_IDS.closeIdentity, TEMPLATE_IDS.closeThreads])
+    expect([...holding].sort()).toEqual([...CLOSE_TASK_TEMPLATES].sort())
+  })
+
+  it('refuses a close task template outside the chapter group', () => {
+    const fixture = 'tmpl_close_fixture'
+    expect(() =>
+      closeTaskTemplates([...CLOSE_TASK_TEMPLATES, fixture], {
+        ...TEMPLATE_GROUPS,
+        [fixture]: 'generationContext',
+      }),
+    ).toThrow(fixture)
+    expect(() => closeTaskTemplates([fixture], TEMPLATE_GROUPS)).toThrow(fixture)
+    expect(closeTaskTemplates(CLOSE_TASK_TEMPLATES, TEMPLATE_GROUPS)).toEqual(CLOSE_TASK_TEMPLATES)
   })
 
   // Every close task's system half opens with them, Happenings and Awareness too, which hold no
@@ -442,6 +496,96 @@ describe('bundled system halves render byte-identically across calls', () => {
       // Positive control: the per-call contexts reach the prompt.
       expect(a.user).not.toBe(b.user)
     })
+  })
+})
+
+// memory/chapter-close.md → Conversations: a part's tasks share their system half byte for byte,
+// so the chapter stays cached across tool lists; each task's own rows sit in its user half.
+describe("a close's task templates share one system half", () => {
+  const CLOSE_TASK_TURNS = [
+    { handle: 't1', kind: 'opening', content: 'The marsh road ended at a wall of black water.' },
+    { handle: 't2', kind: 'user_action', content: 'I wade in.' },
+    {
+      handle: 't3',
+      kind: 'ai_reply',
+      content: 'The cold takes your breath, and the sigil with it.',
+    },
+  ]
+  const SHARED = { mode: 'adventure', closeTurns: CLOSE_TASK_TURNS }
+  const TASK_CONTEXTS: Readonly<Record<string, Record<string, unknown>>> = {
+    [TEMPLATE_IDS.closeIdentity]: {
+      closeCharacters: [
+        {
+          id: 'c1',
+          name: 'Kael',
+          status: 'active',
+          description: 'A courier.',
+          traits: ['wary'],
+          drives: ['deliver the sigil'],
+          voice: 'Clipped.',
+        },
+      ],
+      closeFactions: [
+        {
+          id: 'f1',
+          name: 'The Tidewardens',
+          status: 'active',
+          description: '',
+          standing: 'Feared.',
+          agenda: ['hold the ford'],
+        },
+      ],
+      closeWritesSoFar: '',
+      closeSoftCaps: { traits: 8, drives: 6, agenda: 4 },
+    },
+    [TEMPLATE_IDS.closeThreads]: {
+      closeThreads: [
+        {
+          id: 'th1',
+          title: 'Find the heir',
+          description: 'Still open.',
+          status: 'active',
+          injectionMode: 'always',
+        },
+      ],
+      closeWritesSoFar: '- update_character Kael (c1): state.traits',
+    },
+  }
+
+  it('gives every listed template its own context', () => {
+    expect(Object.keys(TASK_CONTEXTS).sort()).toEqual([...CLOSE_TASK_TEMPLATES].sort())
+  })
+
+  it('renders the same system half for each task of one part, from its own context', () => {
+    const prompts = CLOSE_TASK_TEMPLATES.map((id) =>
+      renderTemplate(id, { ...SHARED, ...TASK_CONTEXTS[id] }),
+    )
+    const [first] = prompts
+    for (const prompt of prompts) expect(prompt.system).toBe(first!.system)
+    expect(first!.system).toContain('This is an automated system.')
+    expect(first!.system).toContain(
+      "## t2 (the user's turn)\n<user_turn>\nI wade in.\n</user_turn>",
+    )
+    // Positive control: each task's own rows reach its prompt.
+    expect(new Set(prompts.map((prompt) => prompt.user)).size).toBe(prompts.length)
+  })
+
+  it("renders the same system half under one context holding every task's variables", () => {
+    const merged = Object.assign({}, SHARED, ...Object.values(TASK_CONTEXTS))
+    const systems = CLOSE_TASK_TEMPLATES.map((id) => renderTemplate(id, merged).system)
+    expect(new Set(systems).size).toBe(1)
+  })
+
+  // Control: the half isn't equal by being empty of the chapter; other turns change it.
+  it('changes with the turns', () => {
+    const id = TEMPLATE_IDS.closeIdentity
+    const full = renderTemplate(id, { ...SHARED, ...TASK_CONTEXTS[id] }).system
+    const shorter = renderTemplate(id, {
+      ...SHARED,
+      ...TASK_CONTEXTS[id],
+      closeTurns: CLOSE_TASK_TURNS.slice(0, 1),
+    }).system
+    expect(shorter).not.toBe(full)
   })
 })
 

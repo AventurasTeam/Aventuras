@@ -13,14 +13,17 @@ import { happeningsStore } from '@/lib/stores'
 
 import { nullifyRef } from '../coerce'
 import { cascadedDelete, defineCascade, rowCascade } from '../delta/delete-cascade'
+import { deepEqual } from '../delta/delta-encoding'
 import {
+  noopRefusal,
   register,
   TARGET_NOT_FOUND,
   undefinedColumn,
   type ActionHandler,
   type PatchMatchesColumns,
 } from '../delta/registry'
-import type { DeltaSource } from '../types'
+import { USER_EDITED_SINCE_PROSE, userEditsSinceProse, wroteField } from '../delta/user-precedence'
+import type { DeltaSource, ProseEntryId } from '../types'
 
 const ownCascade = rowCascade('happening')
 
@@ -39,7 +42,13 @@ declare module '@/lib/actions/action-map' {
     createHappening: { source: DeltaSource; payload: { entry: NewHappening } }
     updateHappening: {
       source: DeltaSource
-      payload: { branchId: string; id: string; patch: HappeningUpdatePatch }
+      payload: {
+        branchId: string
+        id: string
+        patch: HappeningUpdatePatch
+        /** A machine write's prose: a column the user wrote after it is dropped (cadence.md). */
+        proseEntryId: ProseEntryId
+      }
     }
     deleteHappening: { source: DeltaSource; payload: { branchId: string; id: string } }
   }
@@ -102,7 +111,7 @@ const createHandler: ActionHandler = (action, branchId, ctx) => {
 const updateHandler: ActionHandler = async (action, branchId, ctx) => {
   if (action.kind !== 'updateHappening')
     throw new Error(`handler/kind mismatch: expected 'updateHappening', got '${action.kind}'`)
-  const { branchId: bid, id, patch } = action.payload
+  const { branchId: bid, id, patch, proseEntryId } = action.payload
   if (bid !== branchId)
     return { status: 'rejected', reason: `branch mismatch: delta ${branchId} vs target ${bid}` }
   const parsed = happeningWriteObject.partial().safeParse(patch)
@@ -122,22 +131,37 @@ const updateHandler: ActionHandler = async (action, branchId, ctx) => {
   if (blank != null)
     return { status: 'rejected', reason: `invalid happening patch: ${blank} is undefined` }
 
-  const set: Record<string, unknown> = {}
-  const undoPayload: Record<string, unknown> = {}
-  for (const col of UPDATABLE) {
-    if (!(col in patch)) continue
-    const next =
-      col === 'temporal' || col === 'occurredAtEntryId' ? nullifyRef(patch[col]) : patch[col]
-    set[col] = next
-    undoPayload[col] = current[col as keyof Happening]
-  }
-  // A patch that parsed but touched no updatable column would reach Drizzle's
-  // .set({}) and throw "No values to set" — reject instead.
-  if (Object.keys(set).length === 0)
+  const named = UPDATABLE.filter((col) => col in patch)
+  // A patch naming no updatable column would reach Drizzle's .set({}) and throw — reject instead.
+  if (named.length === 0)
     return {
       status: 'rejected',
       reason: `update patch for happening ${bid}:${id} has no updatable fields`,
     }
+
+  const edits =
+    proseEntryId != null ? await userEditsSinceProse(ctx, bid, 'happenings', id, proseEntryId) : []
+  // Unchanged columns are dropped: History and the later-turn rule read an undo payload's keys as
+  // written. Only the incoming side is normalized, so a stored blank temporal still clears.
+  const set: Record<string, unknown> = {}
+  const undoPayload: Record<string, unknown> = {}
+  let userKept = false
+  for (const col of named) {
+    const next =
+      col === 'temporal' || col === 'occurredAtEntryId' ? nullifyRef(patch[col]) : patch[col]
+    const prior = current[col as keyof Happening]
+    if (deepEqual(next, prior)) continue
+    if (wroteField(edits, 'happenings', col, [])) {
+      userKept = true
+      continue
+    }
+    set[col] = next
+    undoPayload[col] = prior
+  }
+  if (Object.keys(set).length === 0) {
+    if (userKept) return noopRefusal(USER_EDITED_SINCE_PROSE, null)
+    return noopRefusal('no-op happening patch', 'restated')
+  }
 
   const merged = { ...current, ...set } as Happening
   // Friendly graceful-reject surface over the DDL CHECK constraint.

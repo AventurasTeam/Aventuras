@@ -1,0 +1,105 @@
+import { and, eq, inArray } from 'drizzle-orm'
+
+import { primePromptCount, type PromptHalves } from '@/lib/ai'
+import {
+  branches,
+  chunked,
+  isStoryMode,
+  stories,
+  storyEntries,
+  type StoryEntry,
+  type StoryMode,
+} from '@/lib/db'
+import { promptProse } from '@/lib/piggyback'
+import { renderTemplate, type TemplateId } from '@/lib/prompts'
+import { countTokens } from '@/lib/tokens'
+
+import type { TaskPromptContext } from './task'
+import { buildCloseTurns, type CloseRangeEntry, type CloseTurn } from '../chapter-context'
+
+/** A close task's turns, at least one: with none, its prompt's "# The turns" renders empty. */
+export type CloseTurns = readonly [CloseTurn, ...CloseTurn[]]
+
+export function hasTurns(turns: readonly CloseTurn[]): turns is CloseTurns {
+  return turns.length > 0
+}
+
+export type TaskTurns = {
+  entries: readonly CloseRangeEntry[]
+  closeTurns: readonly CloseTurn[]
+  /** Each entry's stored contentTokens summed; a null one counted from promptProse. */
+  proseTokens: number
+}
+
+/** The task's chapterEntryIds, in position order, under their turn handles. */
+export async function readTaskTurns(ctx: TaskPromptContext): Promise<TaskTurns> {
+  const rows: StoryEntry[] = []
+  for (const ids of chunked(ctx.chapterEntryIds))
+    rows.push(
+      ...(await ctx.db
+        .select()
+        .from(storyEntries)
+        .where(and(eq(storyEntries.branchId, ctx.branchId), inArray(storyEntries.id, ids)))),
+    )
+  const entries = rows
+    .sort((a, b) => a.position - b.position || a.createdAt - b.createdAt)
+    .flatMap((row): CloseRangeEntry[] =>
+      row.kind === 'system' ? [] : [{ ...row, kind: row.kind }],
+    )
+  // C5: content_tokens has no backfill, so a row stored without one is counted here.
+  const proseTokens = entries.reduce(
+    (sum, entry) => sum + (entry.contentTokens ?? countTokens(promptProse(entry))),
+    0,
+  )
+  // handleOf is a method on the id map: passed bare it would lose its `this`.
+  return {
+    entries,
+    closeTurns: buildCloseTurns(entries, (id) => ctx.ids.handleOf(id)),
+    proseTokens,
+  }
+}
+
+/** The turns with every content blank: the half primeCloseSystemCount counts. */
+export function blankTurns(turns: readonly CloseTurn[]): CloseTurn[] {
+  return turns.map((turn) => ({ ...turn, content: '' }))
+}
+
+/**
+ * Primes `system` at `countTokens(blankSystem) + proseTokens`, so a part's first step doesn't
+ * encode the chapter (a half over the cache's character budget still is). Leans a little either
+ * way: high on a stored stripped block, low where o200k merges text across a turn's edges.
+ */
+export function primeCloseSystemCount(
+  system: string,
+  blankSystem: string,
+  proseTokens: number,
+): void {
+  primePromptCount(system, countTokens(blankSystem) + proseTokens)
+}
+
+/** Renders a close template over `closeTurns` and primes the count of its system half. */
+export function renderClosePrompt(
+  templateId: TemplateId,
+  closeTurns: CloseTurns,
+  variables: Record<string, unknown>,
+  proseTokens: number,
+): PromptHalves {
+  const halves = renderTemplate(templateId, { ...variables, closeTurns })
+  const blank = renderTemplate(templateId, { ...variables, closeTurns: blankTurns(closeTurns) })
+  primeCloseSystemCount(halves.system, blank.system, proseTokens)
+  return halves
+}
+
+/** Throws when the story behind the branch has no mode. */
+export async function storyModeOf(ctx: TaskPromptContext): Promise<StoryMode> {
+  const [row] = await ctx.db
+    .select({ definition: stories.definition })
+    .from(branches)
+    .innerJoin(stories, eq(stories.id, branches.storyId))
+    .where(eq(branches.id, ctx.branchId))
+    .limit(1)
+  const mode: unknown = row?.definition?.mode
+  if (!isStoryMode(mode))
+    throw new Error(`close task: the story behind branch ${ctx.branchId} has no mode`)
+  return mode
+}

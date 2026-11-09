@@ -1,7 +1,9 @@
-import { describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
+
+import { logger } from '@/lib/diagnostics'
 
 import { CloseIds } from './ids'
-import { CLOSE_REPORT_VALUE_BOUND, CloseLedgerWriter, reportValue } from './ledger'
+import { CLOSE_REPORT_VALUE_BOUND, CloseLedgerWriter } from './ledger'
 import { seedCloseLedger } from '../close-intermediates'
 
 const WREN = 'char_00000000-0000-4000-8000-000000000001'
@@ -13,6 +15,7 @@ const LETTER = 'lore_00000000-0000-4000-8000-000000000006'
 const AWARENESS = 'haw_00000000-0000-4000-8000-000000000007'
 const SEAL = 'item_00000000-0000-4000-8000-000000000008'
 const ENTRY = 'entry_close_007'
+const ACTION_ID = 'act_close_ledger'
 
 type RecordedCall = Parameters<CloseLedgerWriter['record']>[0]
 
@@ -24,7 +27,11 @@ function setup() {
   ids.show(TOLL, 'The Toll')
   ids.show(SEAL, 'The Seal')
   const ledger = seedCloseLedger({})
-  return { ids, ledger, writer: new CloseLedgerWriter(ledger, (id) => ids.nameOfId(id)) }
+  return {
+    ids,
+    ledger,
+    writer: new CloseLedgerWriter(ledger, (id) => ids.nameOfId(id), ACTION_ID),
+  }
 }
 
 const call = (over: Partial<RecordedCall> = {}): RecordedCall => ({
@@ -36,6 +43,10 @@ const call = (over: Partial<RecordedCall> = {}): RecordedCall => ({
   turns: [ENTRY],
   result: 'ok',
   ...over,
+})
+
+afterEach(() => {
+  vi.restoreAllMocks()
 })
 
 describe('CloseLedgerWriter', () => {
@@ -160,6 +171,85 @@ describe('CloseLedgerWriter', () => {
     expect(values.description).toBe('x'.repeat(2_000))
     expect(values['state.traits']).toHaveLength(2_000)
     expect(values['state.traits']!.startsWith('wary, wary, ')).toBe(true)
+  })
+
+  it('keeps nothing as empty, a number or flag as text, an object as JSON, an unnamed ref as its id', () => {
+    const { ledger, writer } = setup()
+
+    writer.record(
+      call({
+        values: {
+          cleared: null,
+          count: 3,
+          pinned: true,
+          object: { gold: 3 },
+          named: WREN,
+          unnamed: OLD_TOLL,
+          prose: `Ask ${WREN} first`,
+        },
+      }),
+    )
+
+    expect(ledger.calls[0]!.values).toEqual({
+      cleared: '',
+      count: '3',
+      pinned: 'true',
+      object: '{"gold":3}',
+      named: 'Wren',
+      unnamed: OLD_TOLL,
+      prose: `Ask ${WREN} first`,
+    })
+  })
+
+  it('cuts by code point, never through a surrogate pair', () => {
+    const { ledger, writer } = setup()
+
+    writer.record(call({ values: { description: 'a' + '😀'.repeat(2_500) } }))
+
+    expect(ledger.calls[0]!.values!.description).toBe('a' + '😀'.repeat(1_999))
+  })
+
+  it("logs each value's length before the bound under the run's actionId, a refused call's included", () => {
+    const { writer } = setup()
+    const debug = vi.spyOn(logger, 'debug')
+
+    writer.record(
+      call({
+        result: 'rejected',
+        reason: 'over the soft cap',
+        values: {
+          description: 'x'.repeat(2_500),
+          'state.traits': ['patient', 'wary'],
+          'state.voice': undefined,
+        },
+      }),
+    )
+
+    expect(debug.mock.calls.filter(([kind]) => kind === 'memory.close_report_value')).toEqual([
+      [
+        'memory.close_report_value',
+        { tool: 'update_character', path: 'description', length: 2_500 },
+        { actionId: ACTION_ID },
+      ],
+      [
+        'memory.close_report_value',
+        { tool: 'update_character', path: 'state.traits', length: 13 },
+        { actionId: ACTION_ID },
+      ],
+    ])
+  })
+
+  it('logs a length in code points, an astral character as one', () => {
+    const { writer } = setup()
+    const debug = vi.spyOn(logger, 'debug')
+
+    writer.record(call({ values: { 'state.drives': ['𠮷野家', '😀'] } }))
+
+    expect(debug).toHaveBeenCalledWith(
+      'memory.close_report_value',
+      { tool: 'update_character', path: 'state.drives', length: 6 },
+      { actionId: ACTION_ID },
+    )
   })
 
   it("keeps a refused create's minted id and name", () => {
@@ -352,24 +442,5 @@ describe('CloseLedgerWriter', () => {
     writer.record(call({ tool: 'read_row', why: '', turns: [] }))
 
     expect(writer.writesSoFar(ids)).toBe('')
-  })
-})
-
-describe('reportValue', () => {
-  it('gives nothing as empty, a number or flag as text, an object as JSON, an unnamed ref as its id', () => {
-    const nameOfId = (id: string): string | undefined => (id === WREN ? 'Wren' : undefined)
-
-    expect(reportValue(null, nameOfId)).toBe('')
-    expect(reportValue(undefined, nameOfId)).toBe('')
-    expect(reportValue(3, nameOfId)).toBe('3')
-    expect(reportValue(true, nameOfId)).toBe('true')
-    expect(reportValue({ gold: 3 }, nameOfId)).toBe('{"gold":3}')
-    expect(reportValue(WREN, nameOfId)).toBe('Wren')
-    expect(reportValue(TOBIN, nameOfId)).toBe(TOBIN)
-    expect(reportValue(`Ask ${WREN} first`, nameOfId)).toBe(`Ask ${WREN} first`)
-  })
-
-  it('cuts by code point, never through a surrogate pair', () => {
-    expect(reportValue('a' + '😀'.repeat(2_500), () => undefined)).toBe('a' + '😀'.repeat(1_999))
   })
 })

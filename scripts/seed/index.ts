@@ -1,13 +1,13 @@
 import { mkdirSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { DatabaseSync } from 'node:sqlite'
-import { parseArgs } from 'node:util'
 
 import { getTableName } from 'drizzle-orm'
 import { drizzle } from 'drizzle-orm/sqlite-proxy'
 import { migrate } from 'drizzle-orm/sqlite-proxy/migrator'
 import { getLoadablePath } from 'sqlite-vec'
 
+import { parseCli } from './cli'
 import { datasetStorySteps, seedAppRefs } from './dataset-story'
 import { buildLongBranchSteps, entryIdAt, LONG_BRANCH_SCALES, longBranchId } from './long-branch'
 import { replaceSeedRows } from './replace'
@@ -17,35 +17,13 @@ import { dbSchema } from '../../lib/db/schema'
 import { resolveDevSlot } from '../dev-slot/resolve'
 import { slotPorts } from '../dev-slot/slot'
 
-// Strict: an ignored typo would seed something other than what was asked for.
-function parseCli(argv: string[]): {
-  path: string | undefined
-  longBranch: boolean
-  dataset: boolean
-} {
-  const { values, positionals } = parseArgs({
-    args: argv,
-    options: {
-      'long-branch': { type: 'boolean', default: false },
-      dataset: { type: 'boolean', default: false },
-    },
-    allowPositionals: true,
-  })
-  if (positionals.length > 1) {
-    throw new Error(
-      `one database path at most, got ${positionals.length}: ${positionals.join(' ')}`,
-    )
-  }
-  return { path: positionals[0], longBranch: values['long-branch'], dataset: values.dataset }
-}
-
 let cli: ReturnType<typeof parseCli>
 try {
   cli = parseCli(process.argv.slice(2))
 } catch (err) {
   console.error(`[seed] ${err instanceof Error ? err.message : String(err)}`)
   console.error(
-    '[seed] usage: pnpm db:seed [db path], pnpm db:seed:long [db path], or pnpm db:seed:dataset [db path]',
+    '[seed] usage: pnpm db:seed [db path], pnpm db:seed:long [db path], or pnpm db:seed:dataset [--overlay] [db path]',
   )
   process.exit(1)
 }
@@ -69,6 +47,28 @@ function repointSeedProvider(steps: SeedStep[], port: number): void {
         if (provider.endpoint === seeded) provider.endpoint = `http://localhost:${port}/v1`
       }
     }
+  }
+}
+
+// Loaded only with --overlay: it runs through the action layer, far heavier than the seed itself.
+async function applyOverlay(dbPath: string): Promise<void> {
+  const [{ registerAllDomains }, { openTestDb }, { applyDatasetOverlay }] = await Promise.all([
+    import('../../lib/actions'),
+    import('../../lib/db/__tests__/test-db'),
+    import('../dataset-chapter/overlay'),
+  ])
+  const opened = await openTestDb(dbPath)
+  try {
+    registerAllDomains()
+    const outcome = await applyDatasetOverlay({
+      db: opened.db,
+      runInTransaction: opened.runInTransaction,
+    })
+    console.log(
+      `[seed] dataset overlay applied: chapter ${outcome.reopened ? 'reopened' : 'already open'}, user edit ${outcome.userEdit}`,
+    )
+  } finally {
+    opened.sqlite.close()
   }
 }
 
@@ -119,6 +119,11 @@ async function main() {
   }
   for (const branch of dataset.find((s) => s.name === 'branches')?.rows ?? [])
     console.log(`[seed] dataset branch: ${(branch as { id: string }).id}`)
+  if (cli.overlay) {
+    // The overlay opens the file again, through the action layer.
+    sqlite.close()
+    await applyOverlay(dbPath)
+  }
 }
 
 main().catch((err) => {

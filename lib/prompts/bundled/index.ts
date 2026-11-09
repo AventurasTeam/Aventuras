@@ -3,8 +3,10 @@ import { TEMPLATE_GROUPS } from '../templateContextMap'
 import type { Pack, TemplateEntry, TemplateSources } from '../types'
 import { CHAPTER_METADATA } from './chapter-metadata'
 import { CLASSIFIER_MODE_RULE } from './classifier-mode-rule'
+import { CLOSE_IDENTITY } from './close-identity'
 import { CLOSE_INSTRUCTIONS } from './close-instructions'
 import { CLOSE_PROSE } from './close-prose'
+import { CLOSE_THREADS } from './close-threads'
 import { ENTITY_STATE, ITEM_LINE } from './entity-state'
 import { MEMORY_BLOCKS } from './memory-blocks'
 import { NARRATOR_INSTRUCTIONS } from './narrator-instructions'
@@ -63,6 +65,8 @@ export const bundledPack: Pack = {
     ),
     [TEMPLATE_IDS.suggestionRefresh]: template(TEMPLATE_IDS.suggestionRefresh, SUGGESTION_REFRESH),
     [TEMPLATE_IDS.chapterMetadata]: template(TEMPLATE_IDS.chapterMetadata, CHAPTER_METADATA),
+    [TEMPLATE_IDS.closeIdentity]: template(TEMPLATE_IDS.closeIdentity, CLOSE_IDENTITY),
+    [TEMPLATE_IDS.closeThreads]: template(TEMPLATE_IDS.closeThreads, CLOSE_THREADS),
     [TEMPLATE_IDS.wizardOpening]: wizardTemplate(TEMPLATE_IDS.wizardOpening, WIZARD_OPENING),
     [TEMPLATE_IDS.wizardOpeningRefine]: wizardTemplate(
       TEMPLATE_IDS.wizardOpeningRefine,

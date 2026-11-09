@@ -247,7 +247,9 @@ convention, and the expectation that subsystems route through
   `prompt_estimate` (debug: every attempt's token estimate, so a
   retried call logs it again, with `providerId`, `modelId`, `estimate`,
   `window`, `windowSource`
-  and `ms`, the count's cost), `input_ratio` (debug: the provider's
+  and `ms`, the count's cost), `prompt_count_uncached` (debug: a text
+  over the pre-send count cache's character budget, so its count isn't
+  kept, with `chars` and `budget`), `input_ratio` (debug: the provider's
   reported input tokens over the estimate, on every attempt that reported
   a positive count, with `providerId`, `modelId`, `estimate`,
   `reported` and `ratio`), `prompt_truncation_suspected` (warn: that
@@ -265,8 +267,11 @@ convention, and the expectation that subsystems route through
   `close_tool_action_noop` (one action's noop, with its reason and
   mark), `close_tool_call_invalid` (a malformed call or an unknown
   tool, which the SDK answered itself, with the task, part, tool and
-  the SDK's detail) and `close_task_failed` (a task whose step failed
-  the close, with the task, part and error kind)
+  the SDK's detail), `close_task_failed` (a task whose step failed
+  the close, with the task, part and error kind) and
+  `close_report_value` (every value a close's report records, a refused
+  or skipped call's included, with the tool, the delta path and its
+  `length` in characters before `CLOSE_REPORT_VALUE_BOUND` cuts it)
 - `bootstrap.*` — boot-time hydration failures (e.g.
   `app_settings_hydrate_failed`)
 - `calendar.*` — `format_miss` (a `displayFormat` that fails or

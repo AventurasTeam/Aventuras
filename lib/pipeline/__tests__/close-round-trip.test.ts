@@ -7,6 +7,7 @@ import {
   applyDeltaAction,
   applyDeltaActionGroupWithOutcomes,
 } from '@/lib/actions/delta/apply-delta-action'
+import { loadOpenStory } from '@/lib/actions/stories/operational'
 import { shownCounts } from '@/lib/actions/story-entries/__tests__/shown-counts'
 import { rollbackToEntry } from '@/lib/actions/story-entries/operational'
 import { redoLastAction, undoLastAction } from '@/lib/actions/story-entries/undo'
@@ -22,6 +23,7 @@ import {
   chapters,
   characterRelationships,
   deltas,
+  emptyEntityState,
   entities,
   happeningAwareness,
   happeningInvolvements,
@@ -30,6 +32,7 @@ import {
   storyEntries,
   threads,
   type Delta,
+  type EntityState,
 } from '@/lib/db'
 import { configureDeltaActionPort, pipelineEventBus, type TxResult } from '@/lib/pipeline'
 import { interruptMemoryRuns } from '@/lib/stores'
@@ -41,7 +44,9 @@ import {
   openCloseFixture,
   type CloseFixture,
 } from '../definitions/__tests__/close-fixture'
+import { identityTask } from '../definitions/close-agent/identity'
 import { __setCloseAgentSlots, type CloseAgentSlots } from '../definitions/close-agent/slots'
+import { threadsTask } from '../definitions/close-agent/threads'
 import { assertReplaySafe } from '../definitions/close-agent/tool'
 
 const { generateStructuredMock, generateToolStepMock } = vi.hoisted(() => ({
@@ -223,6 +228,7 @@ type SeedEntity = {
   name: string
   description: string
   status: 'active' | 'retired'
+  state?: EntityState
 }
 
 const TOBIN: SeedEntity = {
@@ -259,11 +265,105 @@ async function seedEntity(fx: CloseFixture, seed: SeedEntity): Promise<void> {
   if (result.status !== 'ok') throw new Error(`round trip: seed refused: ${result.reason}`)
 }
 
+const SYNDICATE: SeedEntity = {
+  id: 'fact_3c9e1a5d-7b42-4f08-9d6e-1a2b3c4d5e6f',
+  kind: 'faction',
+  name: 'The Syndicate',
+  description: 'The toll-takers who hold the far bank.',
+  status: 'active',
+  state: { standing: 'Taxes the ferry, the road and the bread since the spring.' },
+}
+
+type SeedThread = { id: string; title: string; description: string; createdAt: number }
+
+// A before B by creation, so Threads shows A as th1 and B as th2.
+const THREAD_A: SeedThread = {
+  id: 'thr_7a1c2e3f-4b5d-4c6e-8f70-9a1b2c3d4e5f',
+  title: 'The letter for Low Ashby',
+  description: 'Wren carries a sealed letter to the reeve of Low Ashby.',
+  createdAt: 1_767_225_700_100,
+}
+
+const THREAD_B: SeedThread = {
+  id: 'thr_8b2d3f40-5c6e-4d7f-9a81-0b2c3d4e5f60',
+  title: 'The sealed letter',
+  description: 'The courier seal must reach Low Ashby unbroken.',
+  createdAt: 1_767_225_700_200,
+}
+
+async function seedPassWrite(
+  fx: CloseFixture,
+  actionId: string,
+  action: PipelineAction,
+): Promise<void> {
+  const result = await applyDeltaAction(
+    { action, actionId, branchId: fx.branchId, entryId: fx.replyIds[0] },
+    fx.ctx,
+  )
+  if (result.status !== 'ok') throw new Error(`round trip: seed refused: ${result.reason}`)
+}
+
+// A pass's active thread with its trigger ref, anchored as seedEntity's create is.
+async function seedThread(fx: CloseFixture, seed: SeedThread): Promise<void> {
+  await seedPassWrite(fx, `act_close_seed_${seed.id}`, {
+    kind: 'createThread',
+    source: 'periodic_classifier',
+    payload: {
+      entry: {
+        ...seed,
+        branchId: fx.branchId,
+        status: 'active',
+        injectionMode: 'auto',
+        triggeredAtEntryId: fx.replyIds[0],
+        updatedAt: seed.createdAt,
+      },
+    },
+  })
+}
+
+// Identity starts from the chapter's scene characters; no action writes an older entry's scene.
+async function putInScene(
+  fx: CloseFixture,
+  entryId: string,
+  ids: readonly string[],
+): Promise<void> {
+  const [entry] = await fx.ctx.db
+    .select({ metadata: storyEntries.metadata })
+    .from(storyEntries)
+    .where(and(eq(storyEntries.branchId, fx.branchId), eq(storyEntries.id, entryId)))
+  const metadata = defined(entry?.metadata ?? undefined, `no metadata on ${entryId}`)
+  await fx.ctx.db
+    .update(storyEntries)
+    .set({ metadata: { ...metadata, sceneEntities: [...ids] } })
+    .where(and(eq(storyEntries.branchId, fx.branchId), eq(storyEntries.id, entryId)))
+  const opened = await loadOpenStory(fx.branchId, fx.ctx)
+  if (opened.status !== 'ok') throw new Error(`round trip: story did not reopen: ${opened.status}`)
+}
+
+/**
+ * Tobin in Tobin's reply's scene and in the Syndicate; A and B active pass threads. No merge rule
+ * but the one a case reaches can refuse.
+ */
+async function seedWorld(fx: CloseFixture): Promise<void> {
+  await seedEntity(fx, SYNDICATE)
+  await seedPassWrite(fx, 'act_close_seed_membership', {
+    kind: 'updateEntity',
+    source: 'periodic_classifier',
+    payload: {
+      branchId: fx.branchId,
+      id: TOBIN.id,
+      patch: { state: { ...emptyEntityState('character'), faction_id: SYNDICATE.id } },
+    },
+  })
+  await seedThread(fx, THREAD_A)
+  await seedThread(fx, THREAD_B)
+  await putInScene(fx, fx.replyIds[1], [TOBIN.id])
+}
+
 type CloseHarness = {
   readonly fx: CloseFixture
   /** E: the case's close ends on the third reply of six. */
   readonly endEntryId: string
-  readonly merge: boolean
   /** The state before the close ran. */
   readonly before: WorldState
   /** The branch's whole delta log before the close ran: other actions' deltas only. */
@@ -297,6 +397,7 @@ function defined<T>(value: T | undefined, what: string): T {
 async function openHarness(c: RoundTripCase): Promise<CloseHarness> {
   const fx = await openCloseFixture()
   await seedEntity(fx, TOBIN)
+  await c.seed?.(fx)
   __setCloseAgentSlots(c.slots())
   script(c.steps)
   // The bus hears every group the orchestrator dispatched, refused or not; the port has its outcome.
@@ -339,7 +440,6 @@ async function openHarness(c: RoundTripCase): Promise<CloseHarness> {
   return {
     fx,
     endEntryId,
-    merge: c.merge,
     before,
     beforeLog,
     close: async () => {
@@ -350,6 +450,11 @@ async function openHarness(c: RoundTripCase): Promise<CloseHarness> {
         'the case landed nothing',
       ).toBe(true)
       const log = await deltasOf(fx, tx.actionId)
+      if (c.merge)
+        expect(
+          log.some((d) => d.op === 'delete'),
+          'a merge case deletes the row it absorbs',
+        ).toBe(true)
       // A table the snapshot misses would let a reversal leave rows behind unseen.
       const unlisted = new Set(
         log.map((d) => d.targetTable).filter((t) => t !== 'story_entries' && !isWorldTable(t)),
@@ -376,12 +481,6 @@ async function openHarness(c: RoundTripCase): Promise<CloseHarness> {
 }
 
 async function undoClose(h: CloseHarness): Promise<void> {
-  const log = await deltasOf(h.fx, h.actionId())
-  if (h.merge)
-    expect(
-      log.some((d) => d.op === 'delete'),
-      'a merge case deletes the row it absorbs',
-    ).toBe(true)
   // C9: a hold redo can't restore refuses as `integrity`, with `held-in-redo` in its reason.
   expect(await undoLastAction(h.fx.branchId, h.fx.ctx)).toEqual({ status: 'ok' })
   expect(await worldState(h.fx), 'the world after CTRL-Z').toEqual(h.before)
@@ -402,6 +501,8 @@ function keptByRollback(h: CloseHarness, targetId: string): Delta[] {
 type RoundTripCase = {
   name: string
   slots: () => CloseAgentSlots
+  /** Rows the case's tools need, written before the state the arms compare against. */
+  seed?: (fx: CloseFixture) => Promise<void>
   steps: ScriptedStep[]
   merge: boolean
 }
@@ -419,8 +520,122 @@ const STAND_IN_CASE: RoundTripCase = {
   merge: false,
 }
 
+const identitySlots = (): CloseAgentSlots => ({
+  before: [],
+  perPart: [{ kind: 'task', def: identityTask }],
+  after: [],
+})
+
+const threadsSlots = (): CloseAgentSlots => ({
+  before: [],
+  perPart: [{ kind: 'task', def: threadsTask }],
+  after: [],
+})
+
+const WHY = 'The innkeeper says the ferry runs when Tobin says it runs.'
+
+const UPDATE_CHARACTER = {
+  id: 'c1',
+  traits: ['stubborn', 'drinks from noon'],
+  description: 'The Harrow ferryman, who runs the night crossing only when he chooses.',
+  turns: ['t5'],
+  why: WHY,
+}
+
+const UPDATE_FACTION = {
+  id: 'f1',
+  agenda: ['tax every crossing', 'read every letter'],
+  standing: 'Holds the ferry town of Harrow.',
+  turns: ['t5'],
+  why: WHY,
+}
+
+const UPDATE_THREAD = {
+  id: 'th1',
+  description: 'Wren reaches Harrow with the sealed letter for the reeve of Low Ashby.',
+  status: 'resolved',
+  turns: ['t5'],
+  why: WHY,
+}
+
+const UPDATE_KEPT = {
+  id: 'th1',
+  description: 'Wren keeps the sealed letter close while she looks for a night crossing.',
+  turns: ['t5'],
+  why: WHY,
+}
+
+const UPDATE_ABSORBED = {
+  id: 'th2',
+  description: 'The seal must reach Low Ashby unbroken, and the toll guards read letters.',
+  turns: ['t5'],
+  why: WHY,
+}
+
+const MERGE = {
+  keep: 'th1',
+  absorb: ['th2'],
+  description: 'Wren carries a sealed courier letter to the reeve of Low Ashby, to deliver unread.',
+  turns: ['t5'],
+  why: 'Both threads are the one sealed letter in her satchel.',
+}
+
+/** The case that reaches merge_threads' already-wrote check: B was written by this close. */
+const ABSORBED_WROTE_CASE: RoundTripCase = {
+  name: 'update_thread on the absorbed row, then merge_threads',
+  slots: threadsSlots,
+  seed: seedWorld,
+  steps: [
+    { calls: [{ toolName: 'update_thread', input: UPDATE_ABSORBED }] },
+    { calls: [{ toolName: 'merge_threads', input: MERGE }] },
+  ],
+  // The merge is refused, so the log holds no delete.
+  merge: false,
+}
+
 /** C9: every tool's landed group joins this table. */
-const CASES: readonly RoundTripCase[] = [STAND_IN_CASE]
+const CASES: readonly RoundTripCase[] = [
+  STAND_IN_CASE,
+  {
+    name: 'update_character',
+    slots: identitySlots,
+    seed: seedWorld,
+    steps: [{ calls: [{ toolName: 'update_character', input: UPDATE_CHARACTER }] }],
+    merge: false,
+  },
+  {
+    name: 'update_faction',
+    slots: identitySlots,
+    seed: seedWorld,
+    steps: [{ calls: [{ toolName: 'update_faction', input: UPDATE_FACTION }] }],
+    merge: false,
+  },
+  {
+    name: 'update_thread',
+    slots: threadsSlots,
+    seed: seedWorld,
+    steps: [{ calls: [{ toolName: 'update_thread', input: UPDATE_THREAD }] }],
+    merge: false,
+  },
+  {
+    name: 'merge_threads',
+    slots: threadsSlots,
+    seed: seedWorld,
+    steps: [{ calls: [{ toolName: 'merge_threads', input: MERGE }] }],
+    merge: true,
+  },
+  {
+    name: 'update_thread on the kept row, then merge_threads',
+    slots: threadsSlots,
+    seed: seedWorld,
+    steps: [
+      { calls: [{ toolName: 'update_thread', input: UPDATE_KEPT }] },
+      { calls: [{ toolName: 'merge_threads', input: MERGE }] },
+    ],
+    merge: true,
+  },
+  ABSORBED_WROTE_CASE,
+]
 
 /** C9's arms; chapter delete's two modes join here (5.12). */
 const ARMS: readonly RoundTripArm[] = [
@@ -596,5 +811,38 @@ describe('the stand-in task', () => {
       .from(chapters)
       .where(eq(chapters.branchId, fx.branchId))
     expect(chapter.closeReport).toMatchObject({ calls: [], noToolCalls: true })
+  })
+})
+
+describe('a merge of a row this close already wrote', () => {
+  it('is refused, deletes nothing, and leaves the earlier update standing', async () => {
+    const h = await openHarness(ABSORBED_WROTE_CASE)
+
+    await h.close()
+
+    const [chapter] = await h.fx.ctx.db
+      .select()
+      .from(chapters)
+      .where(eq(chapters.branchId, h.fx.branchId))
+    expect(chapter.closeReport).toMatchObject({
+      calls: [
+        { task: 'threads', tool: 'update_thread', result: 'ok' },
+        {
+          task: 'threads',
+          tool: 'merge_threads',
+          result: 'rejected',
+          reason: expect.stringContaining('keep that thread instead'),
+        },
+      ],
+    })
+    const threadDeltas = (await deltasOf(h.fx, h.actionId())).filter(
+      (d) => d.targetTable === 'threads',
+    )
+    expect(threadDeltas.map((d) => `${d.op} ${d.targetId}`)).toEqual([`update ${THREAD_B.id}`])
+    const [absorbed] = await h.fx.ctx.db
+      .select()
+      .from(threads)
+      .where(and(eq(threads.branchId, h.fx.branchId), eq(threads.id, THREAD_B.id)))
+    expect(absorbed?.description).toBe(UPDATE_ABSORBED.description)
   })
 })

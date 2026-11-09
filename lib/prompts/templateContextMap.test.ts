@@ -47,23 +47,65 @@ describe('templateContextMap', () => {
     expect(TEMPLATE_GROUPS[TEMPLATE_IDS.chapterMetadata]).toBe('chapter')
   })
 
-  it("defines the chapter group's variables: the metadata builder's and a close task's turns", () => {
+  it("defines the chapter group's variables: the metadata builder's and a close task's own", () => {
     expect(VARIABLES.chapter.map((v) => v.name)).toEqual([
       'entries',
       'previousChapterSummary',
       'threads',
       'mode',
       'closeTurns',
+      'closeCharacters',
+      'closeFactions',
+      'closeThreads',
+      'closeWritesSoFar',
+      'closeSoftCaps',
     ])
   })
 
   // Only a close task's render sets them, so the metadata call may leave them unset.
   it('lists the close-only chapter variables, none of them required', () => {
     const closeOnly: readonly string[] = CLOSE_ONLY_CHAPTER_VARIABLES
-    expect(CLOSE_ONLY_CHAPTER_VARIABLES).toEqual(['closeTurns'])
+    expect(CLOSE_ONLY_CHAPTER_VARIABLES).toEqual([
+      'closeTurns',
+      'closeCharacters',
+      'closeFactions',
+      'closeThreads',
+      'closeWritesSoFar',
+      'closeSoftCaps',
+    ])
     expect(
       VARIABLES.chapter.filter((v) => closeOnly.includes(v.name)).map((v) => [v.name, v.required]),
-    ).toEqual([['closeTurns', false]])
+    ).toEqual([
+      ['closeTurns', false],
+      ['closeCharacters', false],
+      ['closeFactions', false],
+      ['closeThreads', false],
+      ['closeWritesSoFar', false],
+      ['closeSoftCaps', false],
+    ])
+  })
+
+  it("maps the close's task templates to the chapter group", () => {
+    expect(TEMPLATE_GROUPS[TEMPLATE_IDS.closeIdentity]).toBe('chapter')
+    expect(TEMPLATE_GROUPS[TEMPLATE_IDS.closeThreads]).toBe('chapter')
+  })
+
+  // The editor files a variable by its display group; `category` must name the same one.
+  it('files each close-only variable under the display group its category names', () => {
+    const closeOnly: readonly string[] = CLOSE_ONLY_CHAPTER_VARIABLES
+    const categories = Object.fromEntries(
+      VARIABLES.chapter.filter((v) => closeOnly.includes(v.name)).map((v) => [v.name, v.category]),
+    )
+    expect(categories).toEqual({
+      closeTurns: 'Story',
+      closeCharacters: 'Entities',
+      closeFactions: 'Entities',
+      closeThreads: 'Plot',
+      closeWritesSoFar: 'Story',
+      closeSoftCaps: 'Story Config',
+    })
+    for (const [name, category] of Object.entries(categories))
+      expect(DISPLAY_GROUPS[category], name).toContain(name)
   })
 
   it('passes integrity validation on the shipped registry', () => {

@@ -122,6 +122,25 @@ function landedCreate(
   return { id, name: plan.rows.find((row) => row.id === id)?.name ?? '' }
 }
 
+// The rows a close merges, threads and happenings, are named by their title.
+const MERGED_NAME_PATH = 'title'
+
+/** A landed merge's new title for its kept row, which later prose naming that row's handle reads. */
+function retitledSurvivor(
+  plan: Write,
+  verdict: ToolVerdict,
+): { id: string; name: string } | undefined {
+  const title = plan.values[MERGED_NAME_PATH]
+  if (
+    verdict.result !== 'ok' ||
+    verdict.survivor === undefined ||
+    typeof title !== 'string' ||
+    !verdict.landed.includes(MERGED_NAME_PATH)
+  )
+    return undefined
+  return { id: verdict.survivor.id, name: title }
+}
+
 // C4: a restated path wrote nothing, so the report holds no value for it, unless another action
 // or a lost field carries the same path: that one landed it or leaves it proposed.
 function landedOrProposed(
@@ -237,6 +256,7 @@ async function* writeCall(
         { branchId: ctx.branchId, endEntryId: ctx.endEntryId, proseEntryId, rows },
         { db: ctx.phase.db, runInTransaction: ctx.phase.runInTransaction },
       ),
+    actionId: ctx.phase.actionId,
   })
 
   if (plan.kind === 'refused') {
@@ -247,7 +267,7 @@ async function* writeCall(
       verdict,
       values: plan.values,
     })
-    return modelAnswer(verdict, {}, ctx.ids)
+    return modelAnswer(verdict, { note: plan.note }, ctx.ids)
   }
 
   assertPlanShape(plan)
@@ -277,6 +297,9 @@ async function* writeCall(
       ? { survivor: verdict.survivor }
       : {}),
   })
+  // After the record, so this call's why names keep as it stood.
+  const retitled = retitledSurvivor(plan, verdict)
+  if (retitled !== undefined) ctx.ids.show(retitled.id, retitled.name)
   return modelAnswer(verdict, created === undefined ? {} : { createdId: created.id }, ctx.ids)
 }
 

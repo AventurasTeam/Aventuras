@@ -260,15 +260,95 @@ describe('search_world', () => {
     expect(out.matches[0]!.line).toBe('character: Mira (retired) — A healer who left Harrow.')
   })
 
-  it('lists name matches before keyword matches, each group by name', async () => {
-    const aldous = rowId('char', 50) // a keyword match whose name sorts before the name match
+  it('lists whole-word keyword matches before part of a name, and part of a keyword last, each tier by name', async () => {
+    const aldous = rowId('char', 50)
     await db
       .insert(entities)
       .values(entity(aldous, 'character', 'Aldous', { keywords: ['ferry pass'] }))
 
     const { out } = await search('ferry')
 
-    expect(matchedIds(out)).toEqual([FERRYHOUSE, aldous, HARROW, TOBIN])
+    expect(matchedIds(out)).toEqual([aldous, HARROW, FERRYHOUSE, TOBIN])
+  })
+
+  it('ranks the exact name, then a whole name either way, a whole keyword either way, part of a name, part of a keyword', async () => {
+    // Each tier's names sort before the tier above it, so ordering by name alone reverses the tiers.
+    const exactName = rowId('char', 400)
+    const nameInQuery = rowId('char', 401)
+    const queryInName = rowId('char', 402)
+    const queryInKeyword = rowId('char', 403)
+    const keywordInQuery = rowId('char', 404)
+    const partName = rowId('char', 405)
+    const partKeyword = rowId('char', 406)
+    await db
+      .insert(entities)
+      .values([
+        entity(exactName, 'character', 'Harbour Master'),
+        entity(nameInQuery, 'character', 'Harbour'),
+        entity(queryInName, 'character', 'Hale, old harbour master'),
+        entity(queryInKeyword, 'character', 'Cole', { keywords: ['Old Harbour Master'] }),
+        entity(keywordInQuery, 'character', 'Gull', { keywords: ['Master'] }),
+        entity(partName, 'character', 'Bay harbour masterclass'),
+        entity(partKeyword, 'character', 'Ada', { keywords: ['Harbour Masters'] }),
+      ])
+
+    const { out } = await search('harbour master')
+
+    expect(matchedIds(out)).toEqual([
+      exactName,
+      queryInName,
+      nameInQuery,
+      queryInKeyword,
+      keywordInQuery,
+      partName,
+      partKeyword,
+    ])
+  })
+
+  it('ranks a happening by its title as it ranks a name', async () => {
+    const tollCross = rowId('loc', 60)
+    await db.insert(entities).values(entity(tollCross, 'location', 'Toll cross'))
+
+    const { out } = await search('cross')
+
+    expect(matchedIds(out)).toEqual([tollCross, CROSSING])
+  })
+
+  it('keeps an exact keyword inside the cap ahead of more than 20 names the query is whole in', async () => {
+    const ulric = rowId('char', 540)
+    await db
+      .insert(entities)
+      .values([
+        ...Array.from({ length: 25 }, (_, i) =>
+          entity(rowId('char', 541 + i), 'character', `Guard ${i + 1}`),
+        ),
+        entity(ulric, 'character', 'Ulric', { keywords: ['Guard'] }),
+      ])
+
+    const { out } = await search('guard')
+
+    expect(matchedIds(out)[0]).toBe(ulric)
+    expect(out.omitted).toBe(6)
+  })
+
+  it('keeps an exact name and an exact keyword inside the cap ahead of more than 20 partial names', async () => {
+    const tide = rowId('char', 530)
+    const zora = rowId('char', 531)
+    await db
+      .insert(entities)
+      .values([
+        ...Array.from({ length: 25 }, (_, i) =>
+          entity(rowId('char', 500 + i), 'character', `Eventide ${i + 1}`),
+        ),
+        entity(tide, 'character', 'Tide'),
+        entity(zora, 'character', 'Zora', { keywords: ['Tide'] }),
+      ])
+
+    const { out } = await search('tide')
+
+    expect(out.matches).toHaveLength(20)
+    expect(matchedIds(out).slice(0, 2)).toEqual([tide, zora])
+    expect(out.omitted).toBe(7)
   })
 
   it('stops at 20 matches and says how many it left out', async () => {
@@ -318,8 +398,8 @@ describe('search_world', () => {
     expect(answer.read).toEqual([])
     expect(answer.rows).toEqual([])
     expect(out.matches.map((match) => ids.nameOf(match.id))).toEqual([
-      'Ferryhouse',
       'Harrow',
+      'Ferryhouse',
       'Tobin',
     ])
     expect(JSON.stringify(answer.output)).not.toMatch(FULL_ID)

@@ -29,6 +29,8 @@ const READ_ROW_PREFIXES = ['char', 'loc', 'item', 'fact', 'lore', 'thr', 'hap'] 
 /** A row as read_row reads it: its kind, its name or title, its columns by name. */
 type ReadRow = { kind: RowKind; name: string; columns: Readonly<Record<string, unknown>> }
 
+type Rank = 0 | 1 | 2 | 3 | 4
+
 // Raw, so a row the cap cuts mints no handle: only a shown row's line swaps its ids.
 type Match = {
   id: string
@@ -36,11 +38,14 @@ type Match = {
   name: string
   status: string | null
   description: string | null
-  byName: boolean
+  rank: Rank
 }
 
+/** What reading a row by id needs: a start's context has it, as a tool's does. */
+type RowReadContext = Pick<ToolContext, 'db' | 'branchId' | 'ids'>
+
 async function readRow(
-  ctx: ToolContext,
+  ctx: RowReadContext,
   table: PrecedenceTable,
   id: string,
 ): Promise<ReadRow | undefined> {
@@ -106,7 +111,7 @@ function refIdsIn(value: unknown): string[] {
 
 /** A row the answer names: its handle, shown with its name so later prose can name it. */
 async function showRef(
-  ctx: ToolContext,
+  ctx: RowReadContext,
   id: string,
 ): Promise<{ handle: string; name: string } | undefined> {
   const table = tableOfId(id)
@@ -115,7 +120,7 @@ async function showRef(
 }
 
 /** Every row a value names, and every row their names name in turn, each by handle and name. */
-async function refsIn(ctx: ToolContext, value: unknown): Promise<Record<string, string>> {
+export async function refsIn(ctx: RowReadContext, value: unknown): Promise<Record<string, string>> {
   const refs: Record<string, string> = {}
   const seen = new Set<string>()
   let pending = refIdsIn(value)
@@ -171,6 +176,24 @@ const searchWorldSchema = readToolSchema({
   query: z.string().describe('A name, an alias or a keyword, or part of one.'),
 })
 
+// 0 an exact name or keyword; 1 a name, 2 a keyword, whole in the query or holding it whole;
+// 3, 4 the query inside one, not whole. Lower ranks first, so the cap cuts the weakest first.
+function rankOf(
+  query: string,
+  needle: string,
+  name: string,
+  keywords: readonly string[],
+): Rank | undefined {
+  const term = normalizeTerm(name)
+  const holdsQuery = (text: string): boolean => matchTerms(text, [needle]).length > 0
+  if (term === needle || keywords.includes(needle)) return 0
+  if (matchTerms(query, [term]).length > 0 || holdsQuery(term)) return 1
+  if (matchTerms(query, keywords).length > 0 || keywords.some(holdsQuery)) return 2
+  if (term.includes(needle)) return 3
+  if (keywords.some((keyword) => keyword.includes(needle))) return 4
+  return undefined
+}
+
 async function searchWorld(
   { query }: z.output<typeof searchWorldSchema>,
   ctx: ToolContext,
@@ -182,13 +205,6 @@ async function searchWorld(
       rows: [],
       read: [],
     }
-  // Both ways: a term the query holds whole (an alias inside a longer question), or the query
-  // inside a term (part of a keyword).
-  const hits = (terms: readonly string[]): boolean => {
-    const present = terms.filter((term) => term !== '')
-    return matchTerms(query, present).length > 0 || present.some((term) => term.includes(needle))
-  }
-
   const found: Match[] = []
   const entityRows = await ctx.db
     .select({
@@ -202,12 +218,12 @@ async function searchWorld(
     .from(entities)
     .where(eq(entities.branchId, ctx.branchId))
   for (const row of entityRows) {
-    const byName = hits([normalizeTerm(row.name)])
-    if (!byName && !hits(keywordTerms(row.keywords))) continue
+    const rank = rankOf(query, needle, row.name, keywordTerms(row.keywords))
+    if (rank === undefined) continue
     found.push({
       id: row.id,
       name: row.name,
-      byName,
+      rank,
       kind: row.kind,
       status: row.status,
       description: row.description,
@@ -218,18 +234,19 @@ async function searchWorld(
     .from(happenings)
     .where(eq(happenings.branchId, ctx.branchId))
   for (const row of happeningRows) {
-    if (!hits([normalizeTerm(row.title)])) continue
+    const rank = rankOf(query, needle, row.title, [])
+    if (rank === undefined) continue
     found.push({
       id: row.id,
       name: row.title,
-      byName: true,
+      rank,
       kind: 'happening',
       status: null,
       description: row.description,
     })
   }
 
-  found.sort((a, b) => Number(b.byName) - Number(a.byName) || a.name.localeCompare(b.name))
+  found.sort((a, b) => a.rank - b.rank || a.name.localeCompare(b.name))
   const matches: { id: string; line: string }[] = []
   for (const match of found.slice(0, SEARCH_WORLD_LIMIT)) {
     const id = ctx.ids.show(match.id, match.name)
@@ -304,7 +321,7 @@ async function readRowAnswer(
 export const searchWorldTool: ReadTool<typeof searchWorldSchema> = {
   kind: 'read',
   name: 'search_world',
-  description: `Find rows of the story's world by name, alias or keyword: characters, places, items, factions and happenings. Use it for a row your task's start doesn't show, such as one the prose calls "the capital". Answers up to ${SEARCH_WORLD_LIMIT} matches, each an id and one line. A match isn't read: call read_row before writing to it.`,
+  description: `Find rows of the story's world by name, alias or keyword: characters, places, items, factions and happenings. Use it for a row your task's start doesn't show, such as one the prose calls "the capital". Answers up to ${SEARCH_WORLD_LIMIT} matches, each an id and one line. Best matches first; narrow the query if a row you need is omitted. A match isn't read: call read_row before writing to it.`,
   schema: searchWorldSchema,
   ids: {},
   read: searchWorld,

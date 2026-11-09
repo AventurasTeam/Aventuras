@@ -137,7 +137,9 @@ the review shows. Only chapters too big to send whole pay this.
 ### Tools and writes
 
 - **`search_world`** matches names and keywords and returns ids with a
-  line each, for what code can't pick out, such as "the capital".
+  line each, for what code can't pick out, such as "the capital". It
+  answers at most 20 matches, best first (an exact name or keyword before
+  a partial one), with a count of those omitted.
 - **`read_row`** returns the fields the task may write. Rows a task
   starts with count as read, and so do rows it creates.
 - **`read_turns`** is for the two tasks without the prose.
@@ -155,7 +157,8 @@ A write returns one of three results:
   with nothing written: the model isn't wrong, and nothing was lost.
 - `rejected`, with the reason and what to do: the row wasn't read, it
   cites nothing or a turn outside the chapter, it's over the lore cap or
-  a soft cap, it removes a keyword the user added, it breaks a rule of
+  over a soft cap and longer than the stored list
+  ([3b](#3b--identity-compaction)), it removes a keyword the user added, it breaks a rule of
   its sub-job, or the row moved or went since the task read it, saying
   where it went.
 - `skipped`, when the field stands and a retry won't help: the user wrote
@@ -451,9 +454,16 @@ against soft caps from
 [`data-model.md → Soft caps`](../data-model.md#soft-caps--compaction-discipline)
 (`traits ≤ 8`, `drives ≤ 6`, `agenda ≤ 4`).
 
+**What the task starts with.** The characters the chapter's turns list in
+their scene data, whatever their status, and the factions of a starting
+character (`faction_id`) or named in the turns by name or keyword. A
+character the prose only mentions is left to `search_world`.
+
 **Operations the agent may make.** It sends each list whole
 (`traits: [...]`) and code checks the soft caps, so it never plans these
-one by one:
+one by one. A list over its soft cap is refused only when it is also
+longer than the stored list, so a row already over its cap, from a user
+edit or an import, can shrink, or swap entries at the same length:
 
 | Op          | Trigger                                                                                              | Discipline                                                     |
 | ----------- | ---------------------------------------------------------------------------------------------------- | -------------------------------------------------------------- |
@@ -464,13 +474,16 @@ one by one:
 
 **Discipline:** don't churn stable identity. "Brave" doesn't get
 removed because the chapter happened not to show bravery; it gets
-removed only when the chapter explicitly contradicts it.
+removed only when the chapter explicitly contradicts it. An empty list
+reads as left out, so the close can't prune a list's last entry.
 
 **Beyond the arrays.** A character's `voice` and a faction's `standing`
 are rewritten whole when the chapter shows them changed, and an
 entity's `description` when the chapter materially changes who or what
 it is (the stable boy who became the king's champion), never for
-detail the state slots already carry.
+detail the state slots already carry. A blank `description`, `voice` or
+`standing` may be filled when the cited turns show it, and from then on
+follows the same rules.
 
 **Cited evidence:** like lore creation, each write requires prose
 citation, and the latest entry it cites anchors the write's user
@@ -610,7 +623,10 @@ row is a merge that keeps the kept row's text. Keep distinct is no call.
 **A merge lands whole, once per row.** Code checks user precedence on
 every row of a merge before any of it lands, so a merge can't delete a
 row while its composite is skipped: one protected row skips the whole
-merge, as does a row a later turn touched. A merge can't absorb a row this close already wrote, since redo
+merge, as does a row a later turn touched. An absorbed row is protected
+by a user edit of it or its link rows. The kept row is protected only by
+a user edit of a field the merge writes, since its other fields lose
+nothing to a merge. A merge can't absorb a row this close already wrote, since redo
 refuses an update and a delete of one row in one group, and CTRL-Z of
 the close would then be refused for good. The agent merges everything
 in one call instead of in a chain.
@@ -639,10 +655,30 @@ conservative bias as the sub-jobs above:
 - **Threads**, as their own task. Duplicates merged, descriptions brought
   up to date, and a thread resolved or failed when the chapter settles it
   or leaves it plainly abandoned, through `setThreadStatus` with the
-  latest cited turn. An active thread costs every turn's prompt until it
-  closes ([`classifier.md → Threads`](./classifier.md#threads)). A merge
-  follows 3e's rules: nothing links to a thread, so it is an update and a
-  delete.
+  latest cited turn. When the latest cited turn precedes the thread's
+  opening, a status's `resolved_at_entry_id` takes the opening, as a
+  pass's closing turn does
+  ([`classifier.md → Threads`](./classifier.md#threads)); precedence still
+  reads the cited turn. An active thread costs every turn's prompt
+  until it closes ([`classifier.md → Threads`](./classifier.md#threads)).
+  A merge follows 3e's rules: nothing links to a thread, so it is an
+  update and a delete. The merge writes only the kept row's title and
+  description; its status, entry refs, category, icon and injection mode
+  stand. Absorbing an `active`
+  thread is refused unless the kept row is `active` too, since the kept
+  row would drop the thread from the narrator's prompt with no write
+  saying so. The refusal says to keep an active one, then settle it with
+  `update_thread` if the chapter resolved or failed it. Absorbing a
+  thread whose injection mode is `always` or `disabled` is refused
+  unless the kept row has the same mode, since the kept row's mode would
+  undo the user's setting with no write saying so, and only the user
+  writes it
+  ([`data-model.md → Authorship contract`](../data-model.md#authorship-contract)).
+  An `auto` thread may join a row of either mode. The refusal says to
+  keep that thread instead, or to leave the threads apart. Every
+  refusal's answer names each keep that would land; when none would, the
+  refusal says to leave the threads apart. The Threads start shows a
+  mode the user set beside each thread's status, as `read_row` shows it.
 - **`common_knowledge`** on a happening the chapter shows has spread
   to everyone: news is a chapter-scale judgment. A wrong flag makes
   every character aware, so the bar is explicit spread in the prose.

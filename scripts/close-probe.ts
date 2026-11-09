@@ -33,6 +33,12 @@ import {
 } from '@/lib/db'
 import { openTestDb } from '@/lib/db/__tests__/test-db'
 import {
+  clearBuffers,
+  configureDiagnosticsGate,
+  getDiagnosticsSnapshot,
+  type LogEntry,
+} from '@/lib/diagnostics'
+import {
   configureDeltaActionPort,
   ensureChapterClosePipelineRegistered,
   pipelineErrorDetail,
@@ -47,26 +53,52 @@ import {
 import { standInSlots } from '@/lib/pipeline/__tests__/close-stand-in'
 import { realDeltaActionPort } from '@/lib/pipeline/__tests__/harness'
 import { __setCloseAgentSlots } from '@/lib/pipeline/definitions/close-agent/slots'
-import { hydrateAppSettings, resetAllStores } from '@/lib/stores'
+import { appSettingsStore, hydrateAppSettings, resetAllStores } from '@/lib/stores'
 
+import {
+  attemptOf,
+  barLine,
+  barVerdict,
+  failedRunsExit,
+  largestOf,
+  stepFileName,
+  tallyRun,
+  type Measured,
+  type RunTally,
+  type StepAttempt,
+} from './close-probe-bar'
+import { rejudgeSaved } from './close-probe-rejudge'
+import {
+  applyDatasetOverlay,
+  DATASET_BRANCH_ID,
+  overlayCappedLists,
+} from './dataset-chapter/overlay'
 import { resolveDevSlot } from './dev-slot/resolve'
 
 // Opt-in: a whole chapter close, as the app runs one, on a copy of a branch's database.
 //   SMOKE_LLM_URL=http://host:port/v1 SMOKE_LLM_MODEL=<id> pnpm probe:close
-// SMOKE_LLM_KEY (none), PROBE_RUNS (1), PROBE_BRANCH_ID (br_hero_main), PROBE_END_ENTRY (the open
-// region's latest ai_reply), PROBE_OUT (a directory a run: each tool step's request and response,
-// and the report), PROBE_STAND_IN=1 (the stand-in task in place of the shipped slots),
-// AVENTURAS_DB_PATH (the dev slot's database; only ever read, through a VACUUM INTO copy). Close
-// the app first: a live write moves the source's hash, and a held write lock fails the copy.
+// SMOKE_LLM_KEY (none), PROBE_RUNS (1), PROBE_BRANCH_ID (br_hero_main; the dataset branch under
+// PROBE_OVERLAY), PROBE_END_ENTRY (the open region's latest ai_reply), PROBE_OUT (a directory a
+// run: each tool step's request and response, and the report; bar.json beside the runs),
+// PROBE_STAND_IN=1 (the stand-in task in place of the shipped slots), PROBE_OVERLAY=1 (the dataset
+// seed's test overlay on each run's copy, and the bar over the runs), AVENTURAS_DB_PATH (the dev
+// slot's database; only ever read, through a VACUUM INTO copy), PROBE_REJUDGE (a saved PROBE_OUT
+// directory: judges its runs by the bar as it stands, from the saved files, with no model call, and
+// writes bar-rejudged.json beside them). Close the app first: a live write moves the source's
+// hash, and a held write lock fails the copy.
 // A PROBE_OUT that already holds files is refused, so each invocation saves to its own directory.
 const LLM_URL = process.env.SMOKE_LLM_URL
 const LLM_MODEL = process.env.SMOKE_LLM_MODEL
 const LLM_KEY = process.env.SMOKE_LLM_KEY ?? ''
 const RUNS = Number(process.env.PROBE_RUNS ?? 1)
-const BRANCH_ID = process.env.PROBE_BRANCH_ID ?? 'br_hero_main'
+const OVERLAY = process.env.PROBE_OVERLAY === '1'
+const BRANCH_ID = process.env.PROBE_BRANCH_ID ?? (OVERLAY ? DATASET_BRANCH_ID : 'br_hero_main')
 const END_ENTRY = process.env.PROBE_END_ENTRY
 const OUT = process.env.PROBE_OUT
 const STAND_IN = process.env.PROBE_STAND_IN === '1'
+const REJUDGE = process.env.PROBE_REJUDGE
+// The overlay's capped lists as the bar reads them, recorded in bar.json for a later re-judge.
+const OVERLAY_LISTS = overlayCappedLists().map(({ id, list }) => ({ id, list }))
 
 const PROVIDER_ID = 'prov_probe'
 const PROFILE_ID = 'prof_probe'
@@ -107,6 +139,10 @@ type StepCapture = {
   steps: Map<string, number>
   written: Set<string>
   retries: string[]
+  /** Every tool-step response, a cut attempt and its retry alike. */
+  attempts: StepAttempt[]
+  /** Debug log entries, each under the task or phase it was logged in. */
+  log: { at: string; entry: LogEntry }[]
 }
 
 const capture: StepCapture = {
@@ -116,6 +152,8 @@ const capture: StepCapture = {
   steps: new Map(),
   written: new Set(),
   retries: [],
+  attempts: [],
+  log: [],
 }
 
 function parseJson(text: string): unknown {
@@ -141,9 +179,10 @@ function toolStepNumber(body: unknown): number | null {
   return replies + 1
 }
 
-function unusedName(base: string): string {
-  let name = base
-  for (let retry = 1; capture.written.has(name); retry++) name = `${base}-r${retry}`
+function unusedName(step: number): string {
+  let retry = 0
+  while (capture.written.has(stepFileName(capture.task, step, retry))) retry += 1
+  const name = stepFileName(capture.task, step, retry)
   capture.written.add(name)
   return name
 }
@@ -155,10 +194,25 @@ function noteStep(step: number, saved: () => object): void {
   const key = capture.task === null ? 'unknown-p0' : callKey(capture.task)
   capture.steps.set(key, Math.max(capture.steps.get(key) ?? 0, step))
   if (capture.dir === null) return
-  writeFileSync(
-    join(capture.dir, `${unusedName(`${key}-s${step}`)}.json`),
-    `${JSON.stringify(saved(), null, 2)}\n`,
-  )
+  writeFileSync(join(capture.dir, unusedName(step)), `${JSON.stringify(saved(), null, 2)}\n`)
+}
+
+const where = (): string =>
+  capture.task === null ? (capture.phase ?? 'start') : callKey(capture.task)
+
+// The diagnostics buffer keeps its last 500 entries, so it is drained at each step and each start.
+function drainLog(): void {
+  const { logEntries } = getDiagnosticsSnapshot()
+  if (logEntries.length === 0) return
+  const at = where()
+  for (const entry of logEntries) capture.log.push({ at, entry })
+  clearBuffers()
+}
+
+function noteAttempt(step: number, body: unknown): void {
+  if (capture.task === null) return
+  const attempt = attemptOf(capture.task.task, step, body)
+  if (attempt !== null) capture.attempts.push(attempt)
 }
 
 // fetch's own message is just "fetch failed"; ECONNREFUSED and its addresses sit in the causes.
@@ -178,6 +232,7 @@ function savedError(error: unknown, depth = 0): unknown {
 function captureSteps(): void {
   const sdkFetch = globalThis.fetch
   globalThis.fetch = async (input, init) => {
+    drainLog()
     // The transport calls fetch(Request), so the body is on the Request, not in init.
     const text = input instanceof Request ? await input.clone().text() : (init?.body ?? undefined)
     const request = typeof text === 'string' ? parseJson(text) : null
@@ -186,12 +241,16 @@ function captureSteps(): void {
     let body: unknown = null
     try {
       response = await sdkFetch(input, init)
-      if (step !== null && capture.dir !== null) body = parseJson(await response.clone().text())
+      // Read with no capture dir too: the bar reads each step's output tokens.
+      if (step !== null) body = parseJson(await response.clone().text())
     } catch (error) {
       if (step !== null) noteStep(step, () => ({ request, error: savedError(error) }))
       throw error
     }
-    if (step !== null) noteStep(step, () => ({ request, response: body }))
+    if (step !== null) {
+      noteAttempt(step, body)
+      noteStep(step, () => ({ request, response: body }))
+    }
     return response
   }
 }
@@ -219,10 +278,18 @@ async function hydrateProbeSettings(server: Server): Promise<void> {
     ],
     assignments: { 'lore-mgmt': PROFILE_ID },
     defaultProviderId: PROVIDER_ID,
-    diagnostics: { enabled: false, debug_level_enabled: false },
+    diagnostics: { enabled: true, debug_level_enabled: true },
   }))
   if (hydrated.status !== 'ok')
     throw new Error(`[probe:close] provider config rejected: ${hydrated.error}`)
+}
+
+// As boot's ensureDiagnosticsGate (lib/boot/bootstrap.ts), whose module also wires the app's boot.
+function enableDiagnosticsGate(): void {
+  configureDiagnosticsGate({
+    isEnabled: () => appSettingsStore.getAppSettings().diagnostics.enabled,
+    isDebugEnabled: () => appSettingsStore.getAppSettings().diagnostics.debug_level_enabled,
+  })
 }
 
 function latestReply(series: readonly OpenRegionRow[]): string {
@@ -285,6 +352,92 @@ function printRun(
   )
 }
 
+type LargestValue = { length: number; tool: string; path: string }
+
+function largestValueLogged(): LargestValue | null {
+  let largest: LargestValue | null = null
+  for (const { entry } of capture.log) {
+    const { fields } = entry
+    if (
+      entry.kind === 'memory.close_report_value' &&
+      typeof fields.length === 'number' &&
+      (largest === null || fields.length > largest.length)
+    )
+      largest = { length: fields.length, tool: String(fields.tool), path: String(fields.path) }
+  }
+  return largest
+}
+
+const hitSuffix = (result: string, reason: string | undefined): string =>
+  `${result}${reason === undefined ? '' : ` (${reason})`}`
+
+function printMeasures(
+  k: number,
+  tally: RunTally,
+  largest: LargestValue | null,
+  bytes: number | null,
+): void {
+  for (const hold of tally.holds)
+    console.log(`[probe:close]   ${hold.task}: ${hold.held ? 'held' : `not held (${hold.why})`}`)
+  console.log(`[probe:close]   cut-offs: ${tally.cutOffs.length}`)
+  for (const cut of tally.cutOffs)
+    console.log(
+      `[probe:close]     ${cut.task} step ${cut.step}: ${cut.outputTokens ?? 'unreported'} output tokens`,
+    )
+  if (OVERLAY) {
+    console.log(
+      `[probe:close]   coverage: ${tally.capCalls} Identity calls reached a cap, ${tally.mergeCalls} merge_threads calls`,
+    )
+    for (const hit of tally.capHits)
+      console.log(
+        `[probe:close]     cap check ${hit.row} ${hit.path}: ${hitSuffix(hit.result, hit.result === 'refused' ? hit.reason : undefined)}`,
+      )
+    for (const hit of tally.mergeHits)
+      console.log(
+        `[probe:close]     merge_threads ${hit.rows.join(', ')}: ${hitSuffix(hit.result, hit.reason)}`,
+      )
+  }
+  const ratios = new Map<string, string[]>()
+  for (const { at, entry } of capture.log) {
+    const { fields } = entry
+    if (entry.kind === 'provider.input_ratio' && typeof fields.ratio === 'number')
+      ratios.set(at, [...(ratios.get(at) ?? []), fields.ratio.toFixed(2)])
+  }
+  for (const [at, list] of ratios)
+    console.log(`[probe:close]   ${at} input_ratio: ${list.join(', ')}`)
+  console.log(
+    `[probe:close]   run ${k} largest report value: ${largest === null ? 'none' : `${largest.length} characters (${largest.tool} ${largest.path})`}`,
+  )
+  if (bytes !== null) console.log(`[probe:close]   run ${k} report size: ${bytes} bytes`)
+}
+
+function printLargest(
+  values: readonly Measured<LargestValue>[],
+  sizes: readonly Measured<number>[],
+): void {
+  const value = largestOf(values, ({ length }) => length)
+  const size = largestOf(sizes, (bytes) => bytes)
+  console.log(
+    `[probe:close] largest report value: ${value === null ? 'none' : `${value.value.length} characters (${value.value.tool} ${value.value.path}, run ${value.run})`}`,
+  )
+  console.log(
+    `[probe:close] largest report: ${size === null ? 'none' : `${size.value} bytes (run ${size.run})`}`,
+  )
+}
+
+function printBar(tallies: readonly RunTally[]): void {
+  const bar = barVerdict(tallies)
+  console.log(`[probe:close] ${barLine(bar)}`)
+  if (OUT !== undefined) {
+    mkdirSync(resolve(OUT), { recursive: true })
+    writeFileSync(
+      join(resolve(OUT), 'bar.json'),
+      `${JSON.stringify({ ...bar, cappedLists: OVERLAY_LISTS, tallies }, null, 2)}\n`,
+    )
+  }
+  if (bar.verdict !== 'met') process.exitCode = 1
+}
+
 const OVERRIDE_PATH = '$.models."lore-mgmt"'
 
 // The probe measures the server it was given, and a story override outranks App Settings'
@@ -328,7 +481,14 @@ function stopOn(signal: NodeJS.Signals, exitCode: number): void {
   })
 }
 
-async function probeRun(k: number, source: string, server: Server): Promise<boolean> {
+type RunResult = {
+  completed: boolean
+  tally: RunTally
+  largestValue: LargestValue | null
+  reportBytes: number | null
+}
+
+async function probeRun(k: number, source: string, server: Server): Promise<RunResult> {
   const scratch = mkdtempSync(join(tmpdir(), 'aventuras-close-probe-'))
   let sqlite: DatabaseSync | null = null
   const cleanUp = (): void => {
@@ -346,17 +506,25 @@ async function probeRun(k: number, source: string, server: Server): Promise<bool
   capture.steps.clear()
   capture.written.clear()
   capture.retries = []
+  capture.attempts = []
+  capture.log = []
+  clearBuffers()
   const unsubscribe = [
     pipelineEventBus.subscribe('phase_start', (event) => {
+      drainLog()
       capture.phase = event.name
       capture.task = null
     }),
     pipelineEventBus.subscribe('close_task_start', (event) => {
+      drainLog()
       capture.task = { task: event.task, part: event.part }
     }),
     pipelineEventBus.subscribe('recoverable_error', (event) => {
-      const at = capture.task === null ? (capture.phase ?? 'start') : callKey(capture.task)
-      capture.retries.push(`${at}: ${errorLine(event.error)}`)
+      const { error } = event
+      let cut = ''
+      if (error.kind === 'reply-cut-off')
+        cut = `; the cut attempt's output: ${error.outputTokens ?? 'unreported'} tokens`
+      capture.retries.push(`${where()}: ${errorLine(error)}${cut}`)
     }),
   ]
   try {
@@ -369,6 +537,12 @@ async function probeRun(k: number, source: string, server: Server): Promise<bool
     if (capture.dir !== null) mkdirSync(capture.dir, { recursive: true })
     resetAllStores()
     await recoverAsBootDoes(ctx)
+    if (OVERLAY) {
+      const overlay = await applyDatasetOverlay(ctx)
+      console.log(
+        `[probe:close] run ${k}: overlay applied${overlay.reopened ? ", the seed's close undone first" : ''}; its user edit ${overlay.userEdit}`,
+      )
+    }
     // startCloseChain would run a classifier pass first, which this probe doesn't measure.
     const { processedThrough } = await readClassifierStatus(BRANCH_ID, ctx)
     const unprocessed = await unprocessedEntryCount(BRANCH_ID, processedThrough, ctx)
@@ -384,13 +558,22 @@ async function probeRun(k: number, source: string, server: Server): Promise<bool
     const started = Date.now()
     const result = await startManualClose(BRANCH_ID, end, ctx)
     const ms = Date.now() - started
+    drainLog()
     const completed = result.outcome === 'completed'
     // A refused start leaves the chapter at `end` with an earlier close's report.
     const report = completed ? await readReport(ctx, end) : null
     if (report !== null && capture.dir !== null)
       writeFileSync(join(capture.dir, 'report.json'), `${JSON.stringify(report, null, 2)}\n`)
     printRun(k, result, ms, report)
-    return completed
+    const tally = tallyRun({
+      report,
+      attempts: capture.attempts,
+      cappedLists: OVERLAY ? OVERLAY_LISTS : [],
+    })
+    const largestValue = largestValueLogged()
+    const reportBytes = report === null ? null : Buffer.byteLength(JSON.stringify(report))
+    if (!STAND_IN) printMeasures(k, tally, largestValue, reportBytes)
+    return { completed, tally, largestValue, reportBytes }
   } finally {
     removeScratch = null
     for (const stop of unsubscribe) stop()
@@ -405,12 +588,47 @@ function refuseUsedOutput(): void {
   )
 }
 
+function rejudge(outDir: string): void {
+  const dir = resolve(outDir)
+  const { bar, runs, cappedLists } = rejudgeSaved(dir, OVERLAY_LISTS)
+  const tallies = runs.map(({ tally }) => tally)
+  console.log(
+    cappedLists.from === 'bar.json'
+      ? `[probe:close] coverage reads the ${cappedLists.lists.length} capped lists bar.json recorded`
+      : `[probe:close] bar.json records no capped lists: coverage reads today's ${cappedLists.lists.length} in scripts/dataset-chapter/overlay-data.ts`,
+  )
+  for (const { run, tally } of runs) {
+    const { holds, cutOffs } = tally
+    const verdicts = holds.map((hold) => `${hold.task} ${hold.held ? 'held' : hold.why}`)
+    const cuts = cutOffs.map((cut) => `${cut.task} step ${cut.step} ${cut.outputTokens ?? '?'}`)
+    console.log(
+      `[probe:close] run ${run}: ${verdicts.join('; ')}; cut-offs: ${cuts.length === 0 ? 'none' : cuts.join(', ')}`,
+    )
+  }
+  console.log(`[probe:close] ${barLine(bar)}`)
+  writeFileSync(
+    join(dir, 'bar-rejudged.json'),
+    `${JSON.stringify({ ...bar, cappedLists: cappedLists.lists, tallies }, null, 2)}\n`,
+    { flag: 'wx' },
+  )
+  if (bar.verdict !== 'met') process.exitCode = 1
+}
+
 async function main(): Promise<void> {
+  if (REJUDGE !== undefined) return rejudge(REJUDGE)
   if (!LLM_URL || !LLM_MODEL) {
     console.log('[probe:close] skipped: set SMOKE_LLM_URL and SMOKE_LLM_MODEL to run')
     return
   }
   if (!Number.isInteger(RUNS) || RUNS < 1) throw new Error('PROBE_RUNS must be a positive integer')
+  if (OVERLAY && STAND_IN)
+    throw new Error(
+      '[probe:close] PROBE_OVERLAY=1 and PROBE_STAND_IN=1 cannot run together: the stand-in has no Threads task, so the bar would always read missed',
+    )
+  if (OVERLAY && BRANCH_ID !== DATASET_BRANCH_ID)
+    throw new Error(
+      `[probe:close] PROBE_OVERLAY=1 runs on the dataset branch ${DATASET_BRANCH_ID}, not ${BRANCH_ID}: unset PROBE_BRANCH_ID`,
+    )
   const source = resolveDbPath()
   if (!existsSync(source)) throw new Error(`[probe:close] no database at ${source}`)
   refuseUsedOutput()
@@ -423,12 +641,27 @@ async function main(): Promise<void> {
   configureDeltaActionPort(realDeltaActionPort())
   ensureChapterClosePipelineRegistered()
   if (STAND_IN) __setCloseAgentSlots(standInSlots())
+  // The logger mirrors each debug entry to console.debug; the buffer the probe drains still fills.
+  console.debug = () => {}
+  enableDiagnosticsGate()
   captureSteps()
   try {
-    let completed = 0
+    const results: RunResult[] = []
     for (let k = 1; k <= RUNS; k++)
-      if (await probeRun(k, source, { url: LLM_URL, model: LLM_MODEL })) completed++
-    if (completed < RUNS) process.exitCode = 1
+      results.push(await probeRun(k, source, { url: LLM_URL, model: LLM_MODEL }))
+    if (
+      failedRunsExit(
+        OVERLAY,
+        results.map(({ completed }) => completed),
+      )
+    )
+      process.exitCode = 1
+    if (!STAND_IN)
+      printLargest(
+        results.map(({ largestValue }, i) => ({ value: largestValue, run: i + 1 })),
+        results.map(({ reportBytes }, i) => ({ value: reportBytes, run: i + 1 })),
+      )
+    if (OVERLAY) printBar(results.map(({ tally }) => tally))
   } finally {
     const after = sha256(source)
     console.log(

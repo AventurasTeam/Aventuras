@@ -113,7 +113,7 @@ export async function* closeAgentPhase(
     storyModels: open.settings.models,
   }
   const ids = closeIdsOf(ctx.intermediates)
-  const ledger = new CloseLedgerWriter(ledgerRecord, (id) => ids.nameOfId(id))
+  const ledger = new CloseLedgerWriter(ledgerRecord, (id) => ids.nameOfId(id), ctx.actionId)
   const entries = await readCloseRangeEntries(ctx.db, ctx.branchId, range)
   const chapterEntryIds = entries.map((entry) => entry.id)
   ids.showTurns(chapterEntryIds)

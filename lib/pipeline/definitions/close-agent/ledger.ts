@@ -1,11 +1,12 @@
 import type { CloseReportCall } from '@/lib/db'
+import { logger } from '@/lib/diagnostics'
 import { ID_PATTERN } from '@/lib/ids'
 import { oneLine } from '@/lib/text'
 
 import type { CloseIds } from './ids'
 import type { CloseLedger } from '../intermediates'
 
-/** C4: what a report keeps of one value; provisional until a real model's run sizes it (5.5b). */
+/** C4: what a report keeps of one value. */
 export const CLOSE_REPORT_VALUE_BOUND = 2_000
 
 type NameOfId = (id: string) => string | undefined
@@ -25,16 +26,12 @@ function bounded(text: string): string {
   return Array.from(text).slice(0, CLOSE_REPORT_VALUE_BOUND).join('')
 }
 
-/** C4: a list joins with ", ", a ref (a whole id) is its row's name, and every value is cut to the bound. */
-export function reportValue(value: unknown, nameOfId: NameOfId): string {
-  return bounded(formatted(value, nameOfId))
-}
-
 /** chapter-close.md → Review: the run-long ledger the report phase writes as `close_report` (C4). */
 export class CloseLedgerWriter {
   constructor(
     private readonly ledger: CloseLedger,
     private readonly nameOfId: NameOfId,
+    private readonly actionId: string,
   ) {}
 
   /** Any call the model made, an invalid one included, which records no row. */
@@ -42,13 +39,23 @@ export class CloseLedgerWriter {
     this.ledger.noToolCalls = false
   }
 
+  /** C4: a list joins with ", ", a ref (a whole id) is its row's name, every value cut to the bound. */
   record(
     call: Omit<CloseReportCall, 'values'> & { values?: Readonly<Record<string, unknown>> },
   ): void {
     const { values, ...rest } = call
     const shown = Object.entries(values ?? {})
       .filter(([, value]) => value !== undefined)
-      .map(([path, value]) => [path, reportValue(value, this.nameOfId)] as const)
+      .map(([path, value]) => {
+        const text = formatted(value, this.nameOfId)
+        // C4's bound is set from a real run's largest value, so its length is read before the cut.
+        logger.debug(
+          'memory.close_report_value',
+          { tool: rest.tool, path, length: Array.from(text).length },
+          { actionId: this.actionId },
+        )
+        return [path, bounded(text)] as const
+      })
     this.ledger.calls.push({
       ...rest,
       rows: rest.rows.map((row) => ({ ...row })),

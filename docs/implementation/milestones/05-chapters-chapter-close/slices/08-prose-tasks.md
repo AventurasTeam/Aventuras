@@ -254,8 +254,8 @@ bounds it there, `condition` by `boundStateText` and `description` by
 - **Three task templates** in the `chapter` group (C3), each in
   `TEMPLATE_IDS` and `TEMPLATE_GROUPS`, on 5.5a's shared macro, with the
   task's instructions, starting rows and the writes so far in the user
-  half. Each joins the named list at
-  `lib/prompts/bundled/system-half-stability.test.ts:346`. Canon's bars
+  half. Each joins the named list `CLOSE_TASK_TEMPLATES` in
+  `lib/prompts/bundled/system-half-stability.test.ts`. Canon's bars
   go in the prompt: 3a's establishes-not-mentions test, 3b's bar on a
   place's or item's `description`, a material change and never detail the
   state slots already carry, explicit spread for `common_knowledge`, hard
@@ -649,6 +649,21 @@ is [Slice 5.10](./10-two-starts.md)'s.
   exposure. Surfaced by 5.5a's review. Either the prompts tell the model
   not to cite turns in text fields, or the token is rewritten when it
   lands, to the turn's position or dropped.
+- **One name-or-keyword match for the starts?** 5.5b's Identity start
+  finds a faction the turns name with its own `namedIn`
+  (`close-agent/identity.ts`), beside `search_world`'s `keywordTerms`
+  (`close-agent/read-tools.ts`), and Upkeep starts from the off-scene
+  rows the chapter mentions by name or keyword, the same test over far
+  more rows. Suggested: one shared match before Upkeep's start is
+  written. Raised in 5.5b's review.
+- **May Upkeep fill a blank place or item description?**
+  [`data-model.md → Authorship contract`](../../../../data-model.md#authorship-contract)'s
+  `description` row now reads "Chapter close, on a material change or when
+  blank" for every kind, but the developer's blank-fill decision in 5.5b was
+  about Identity's characters and factions, and 3f and this slice give
+  Upkeep a material change only. Either Upkeep fills a blank one when the
+  cited turns show it, as Identity does, or the row narrows the blank case
+  to Identity's kinds. Raised in 5.5b's slice review.
 - **Does the slice stay under the ceiling?** It's priced at about 19 tasks,
   and the placement rules and `setLoreKeywords` weren't in that estimate.
   If its plan passes 20, parts split cleanly from the tools: the cut,

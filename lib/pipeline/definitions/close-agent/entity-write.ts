@@ -37,7 +37,8 @@ function setAt(target: Record<string, unknown>, path: readonly string[], value: 
   node[path[path.length - 1]!] = value
 }
 
-function storedValue(row: Entity, field: string): unknown {
+/** A delta path's stored value on the row: a column, or a path inside its state. */
+export function storedValue(row: Entity, field: string): unknown {
   const { column, path } = splitPath(field)
   if (column !== 'state' || path.length === 0) return row[column as keyof Entity]
   return valueAt(row.state ?? emptyEntityState(row.kind), path)

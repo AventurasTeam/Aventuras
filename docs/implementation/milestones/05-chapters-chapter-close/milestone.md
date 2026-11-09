@@ -301,8 +301,8 @@ Prose tasks hold the chapter or part in the system half; the design
 measured 6,088 of 6,181 tokens reused across different tool lists that
 way, and 0 of 6,176 with it in the user turn. Their system half is
 stable across a part's tasks, not across the story.
-`lib/prompts/bundled/system-half-stability.test.ts:346` gets a named
-exemption for the close's task templates only, added by 5.5a, and it
+`CLOSE_TASK_TEMPLATES` in `lib/prompts/bundled/system-half-stability.test.ts`
+is a named exemption for the close's task templates only, added by 5.5a, and it
 grows with each task template in 5.5b and 5.8. Happenings and Awareness
 don't read the prose. Boundary and metadata follow the normal rule, with
 everything in the user half.
@@ -871,8 +871,13 @@ on a chapter no close wrote, so it ships hidden.
   ([5.2's Close measure](./slices/02-first-chapter.md#close-measure)):
   the Android burst stalls the JS thread about 1.1 s, a miss 5.5a's move
   to one group carries as a hard bar.
-- **Report size.** A guess until a real close runs. 5.5b's run gives the
-  first number, which sets `CLOSE_REPORT_VALUE_BOUND`.
+  5.5b's per-step count is measured on desktop, with the Fold release
+  run as its merge gate
+  ([5.5b's Per-step count measure](./slices/05b-identity-threads.md#per-step-count-measure)).
+- **Report size.** 5.5b's run measured it
+  ([5.5b's Close-task measure](./slices/05b-identity-threads.md#close-task-measure)):
+  the largest value 226 characters and the largest report 18,243 bytes,
+  and `CLOSE_REPORT_VALUE_BOUND` stays at 2,000.
 - **Unaudited.** The contract audit ran two rechecks and stopped, as
   planned. The last round's fixes weren't rechecked: C2's fallback, C5's
   single series read and `canClose`, C6's labels, C10's one copy, C11's

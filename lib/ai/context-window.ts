@@ -75,16 +75,88 @@ export function describeContextWindow(failure: ContextWindowFailure): string {
   )
 }
 
-/** countTokens over the request as sent: system content; text and reasoning parts; each tool
- *  call's name and input; each tool result's name and output; each tool definition as JSON. */
-export function countPromptTokens(prompt: ModelPrompt, tools?: ModelTools): number {
-  let total = 0
-  for (const message of prompt) {
-    if (message.role === 'system') total += countTokens(message.content)
-    else for (const part of message.content) total += countPartTokens(part)
+/** The most texts the count cache holds. */
+export const PROMPT_COUNT_CACHE_ENTRIES = 4096
+/** The most characters the count cache holds across its texts. */
+export const PROMPT_COUNT_CACHE_CHARS = 2_000_000
+
+// A plain LRU evicts a close's chapter-long system half first, so a pass pins it. Capped by texts
+// and by characters; Map keeps insertion order, so the oldest entry is evicted first.
+const promptCounts = new Map<string, number>()
+let cachedChars = 0
+let pinned: string | null = null
+
+function forget(text: string): void {
+  if (promptCounts.delete(text)) cachedChars -= text.length
+}
+
+function remember(text: string, tokens: number): void {
+  forget(text)
+  if (text.length > PROMPT_COUNT_CACHE_CHARS) {
+    logger.debug('provider.prompt_count_uncached', {
+      chars: text.length,
+      budget: PROMPT_COUNT_CACHE_CHARS,
+    })
+    return
   }
-  for (const tool of tools ?? []) total += countTokens(JSON.stringify(tool))
-  return total
+  promptCounts.set(text, tokens)
+  cachedChars += text.length
+  for (const oldest of promptCounts.keys()) {
+    if (promptCounts.size <= PROMPT_COUNT_CACHE_ENTRIES && cachedChars <= PROMPT_COUNT_CACHE_CHARS)
+      break
+    if (oldest !== pinned) forget(oldest)
+  }
+}
+
+function countOnce(text: string): number {
+  const tokens = promptCounts.get(text) ?? countTokens(text)
+  remember(text, tokens)
+  return tokens
+}
+
+/** Records a text's count without encoding it; a text over the character budget isn't kept, so it
+ *  is encoded when counted. The pre-send check trusts `tokens` as this text's count, with no
+ *  margin: an overcount can refuse a call that fits, so any lean must stay small. */
+export function primePromptCount(text: string, tokens: number): void {
+  remember(text, tokens)
+}
+
+/** Test seam: the characters the count cache holds. */
+export function __promptCountCacheChars(): number {
+  return cachedChars
+}
+
+/** Test seam: empties the count cache. */
+export function __clearPromptCountCache(): void {
+  promptCounts.clear()
+  cachedChars = 0
+}
+
+/** countTokens over the request as sent: system content; text and reasoning parts; each tool
+ *  call's name and input; each tool result's name and output; each tool definition as JSON. Each
+ *  text is counted through the count cache, the system half pinned while the pass runs. */
+export function countPromptTokens(prompt: ModelPrompt, tools?: ModelTools): number {
+  pinned = prompt.find((message) => message.role === 'system')?.content ?? null
+  try {
+    let total = 0
+    for (const message of prompt) {
+      if (message.role === 'system') total += countOnce(message.content)
+      else for (const part of message.content) total += countPartTokens(part)
+    }
+    for (const tool of tools ?? []) total += countOnce(JSON.stringify(tool))
+    return total
+  } finally {
+    // The pin held the system half through the pass; ending newest keeps it clear of an unrelated
+    // insert's eviction before the next pass.
+    if (pinned !== null) {
+      const held = promptCounts.get(pinned)
+      if (held !== undefined) {
+        promptCounts.delete(pinned)
+        promptCounts.set(pinned, held)
+      }
+    }
+    pinned = null
+  }
 }
 
 type PromptPart = Exclude<ModelPrompt[number], { role: 'system' }>['content'][number]
@@ -94,11 +166,11 @@ function countPartTokens(part: PromptPart): number {
   switch (part.type) {
     case 'text':
     case 'reasoning':
-      return countTokens(part.text)
+      return countOnce(part.text)
     case 'tool-call':
-      return countTokens(part.toolName) + countTokens(JSON.stringify(part.input) ?? '')
+      return countOnce(part.toolName) + countOnce(JSON.stringify(part.input) ?? '')
     case 'tool-result':
-      return countTokens(part.toolName) + countTokens(outputText(part.output))
+      return countOnce(part.toolName) + countOnce(outputText(part.output))
     case 'file':
     case 'tool-approval-response':
       return 0
