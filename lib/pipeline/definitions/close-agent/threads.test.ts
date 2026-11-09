@@ -465,6 +465,35 @@ describe('update_thread', () => {
     })
   })
 
+  // triggered_at_entry_id has no foreign key, so a copied thread can name an entry another branch holds.
+  it("keeps the cited turn when the thread's opening entry is on another branch, past it", async () => {
+    await f.ctx.db
+      .insert(branches)
+      .values({ id: 'br_other', storyId: f.storyId, name: 'Other', createdAt: 0 })
+    await f.ctx.db.insert(storyEntries).values({
+      id: 'entry_only_on_other_branch',
+      branchId: 'br_other',
+      position: 99,
+      kind: 'user_action',
+      content: 'Elsewhere.',
+      createdAt: 99,
+    })
+    await f.ctx.db
+      .update(threads)
+      .set({ triggeredAtEntryId: 'entry_only_on_other_branch' })
+      .where(eq(threads.id, LETTER.id))
+
+    const run = await runThreadCalls(f, THREADS_SHOWN, [
+      { toolName: 'update_thread', input: { id: 'th1', status: 'resolved', ...cite(['t4']) } },
+    ])
+
+    expect(run.calls[0]).toMatchObject({ result: 'ok' })
+    expect(await threadRow(f, LETTER.id)).toMatchObject({
+      status: 'resolved',
+      resolvedAtEntryId: f.entries[3]!.id,
+    })
+  })
+
   it("keeps both refs of the user's thread null when it fails it", async () => {
     const run = await runThreadCalls(f, THREADS_SHOWN, [
       { toolName: 'update_thread', input: { id: 'th4', status: 'failed', ...cite() } },

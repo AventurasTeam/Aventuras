@@ -3,7 +3,7 @@ import { beforeEach, describe, expect, it } from 'vitest'
 import { branches, stories, storyEntries } from '@/lib/db'
 import { createTestDb } from '@/lib/db/__tests__/test-db'
 
-import { readEntriesBetween, readEntryPosition } from './recent-window'
+import { readEntriesBetween } from './recent-window'
 
 type Db = Awaited<ReturnType<typeof createTestDb>>['db']
 
@@ -36,17 +36,6 @@ describe('entry reads', () => {
         entry('br_a', 'e4', 4),
         entry('br_b', 'shared', 9),
       ])
-  })
-
-  describe('readEntryPosition', () => {
-    it("reads the row's position on this branch", async () => {
-      expect(await readEntryPosition('br_a', 'shared', db)).toBe(3)
-      expect(await readEntryPosition('br_b', 'shared', db)).toBe(9)
-    })
-
-    it('is null for an id not on the branch', async () => {
-      expect(await readEntryPosition('br_b', 'e1', db)).toBeNull()
-    })
   })
 
   describe('readEntriesBetween', () => {

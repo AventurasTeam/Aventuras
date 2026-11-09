@@ -32,18 +32,8 @@ export async function readEntriesBefore(
   return rows.reverse()
 }
 
-export async function readEntryPosition(
-  branchId: string,
-  entryId: string,
-  db: DbCtx['db'],
-): Promise<number | null> {
-  const [row] = await db
-    .select({ position: storyEntries.position })
-    .from(storyEntries)
-    .where(and(eq(storyEntries.branchId, branchId), eq(storyEntries.id, entryId)))
-    .limit(1)
-  return row?.position ?? null
-}
+// Lives in lib/db so lib/pipeline can read it without importing this module's barrel.
+export { readEntryPosition } from '@/lib/db'
 
 /** The position of the nearest row above `position` on the branch, or null at the branch top. */
 export async function readPositionAbove(

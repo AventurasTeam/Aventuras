@@ -2,7 +2,7 @@ import { and, eq, inArray } from 'drizzle-orm'
 import { z } from 'zod'
 
 import { USER_EDITED_SINCE_PROSE, type GuardRow, type RowGuard } from '@/lib/actions/types'
-import { deltas, storyEntries, threads, type Thread, type DbCtx } from '@/lib/db'
+import { deltas, readEntryPosition, threads, type Thread } from '@/lib/db'
 
 import { restatedText, sentText } from './fields'
 import {
@@ -101,21 +101,6 @@ const protectedField = (field: string, row: string, reason: ProtectionReason): L
   kind: 'protected',
   reason,
 })
-
-// Not lib/actions' readEntryPosition: that barrel imports this pipeline back, so a runtime
-// import of it here is a cycle (the slots now reach this file).
-async function readEntryPosition(
-  branchId: string,
-  entryId: string,
-  db: DbCtx['db'],
-): Promise<number | null> {
-  const [row] = await db
-    .select({ position: storyEntries.position })
-    .from(storyEntries)
-    .where(and(eq(storyEntries.branchId, branchId), eq(storyEntries.id, entryId)))
-    .limit(1)
-  return row?.position ?? null
-}
 
 /**
  * A status change can't precede its thread: a cited turn before the opening stores the opening
