@@ -19,12 +19,15 @@ import { happeningsStore, happeningInvolvementsStore, happeningAwarenessStore } 
 import { registerHappeningAwareness } from './register-awareness'
 import { registerHappenings } from './register-happenings'
 import { registerHappeningInvolvements } from './register-involvements'
-import { applyDeltaAction } from '../delta/apply-delta-action'
+import { applyDeltaAction, applyDeltaActionGroupWithOutcomes } from '../delta/apply-delta-action'
 import { applyRedo, prepareUndo } from '../delta/redo'
 import { __resetRegistry } from '../delta/registry'
 import { reverseReplayDeltas } from '../delta/reverse-replay'
 import { selectReversalSet } from '../delta/row-closure'
+import { USER_EDITED_SINCE_PROSE } from '../delta/user-precedence'
 import { registerEntities } from '../entities/register'
+import { registerStoryEntries } from '../story-entries/register'
+import type { PipelineAction } from '../types'
 
 async function setup() {
   __resetRegistry()
@@ -639,5 +642,229 @@ describe('happenings CRUD arms', () => {
       ctx,
     )
     expect((await rowFor(db, 'hap_1')).embeddingStale).toBe(1) // embedded column changed
+  })
+})
+
+// cadence.md → User edits and classifier writes; milestone C11's restated mark.
+describe('updateHappening — columns that already stand, and the user edits a machine write keeps', () => {
+  const PROSE = 'e_prose'
+  type Ctx = Awaited<ReturnType<typeof setup>>['ctx']
+  type Db = Awaited<ReturnType<typeof setup>>['db']
+  type HappeningPatch = Extract<PipelineAction, { kind: 'updateHappening' }>['payload']['patch']
+
+  const apply = (ctx: Ctx, action: PipelineAction, actionId: string) =>
+    applyDeltaAction({ action, actionId, branchId: 'br_1' }, ctx)
+  const inGroup = (ctx: Ctx, action: PipelineAction, actionId: string) =>
+    applyDeltaActionGroupWithOutcomes([action], { actionId, branchId: 'br_1' }, ctx)
+  const deltasOf = (db: Db, actionId: string) =>
+    db.select().from(deltas).where(eq(deltas.actionId, actionId))
+  const undoOf = async (db: Db, actionId: string) => (await deltasOf(db, actionId))[0]?.undoPayload
+  const noop = (reason: string) => ({ status: 'rejected', reason, code: 'noop' })
+  const createHap = (ctx: Ctx) =>
+    apply(
+      ctx,
+      { kind: 'createHappening', source: 'ai_classifier', payload: { entry: HAP } },
+      'act_c',
+    )
+  const patchAs = (
+    source: 'user_edit' | 'chapter_close',
+    patch: HappeningPatch,
+    proseEntryId?: string | null,
+  ): PipelineAction => ({
+    kind: 'updateHappening',
+    source,
+    payload: {
+      branchId: 'br_1',
+      id: 'hap_1',
+      patch,
+      ...(proseEntryId === undefined ? {} : { proseEntryId }),
+    },
+  })
+
+  async function setupWithProse() {
+    const harness = await setup()
+    registerStoryEntries()
+    return harness
+  }
+  const writeProse = (ctx: Ctx) =>
+    apply(
+      ctx,
+      {
+        kind: 'createStoryEntry',
+        source: 'ai_classifier',
+        payload: {
+          entry: {
+            id: PROSE,
+            branchId: 'br_1',
+            position: 1,
+            kind: 'ai_reply',
+            content: 'Kael and Aria cross blades at dawn.',
+            createdAt: 1,
+          },
+        },
+      },
+      'act_prose',
+    )
+
+  it('answers a patch restating every column with the restated noop, logging nothing', async () => {
+    const { db, ctx } = await setup()
+    await createHap(ctx)
+    const restating = patchAs('chapter_close', {
+      title: 'The duel',
+      description: 'Kael vs Aria',
+      temporal: 'at dawn',
+      occurredAtEntryId: null,
+      commonKnowledge: 0,
+    })
+
+    expect(await inGroup(ctx, restating, 'act_g')).toEqual({
+      status: 'ok',
+      outcomes: [{ status: 'noop', reason: 'no-op happening patch', mark: 'restated' }],
+    })
+    expect(await apply(ctx, restating, 'act_s')).toEqual(noop('no-op happening patch'))
+    expect(await deltasOf(db, 'act_g')).toEqual([])
+    expect(await deltasOf(db, 'act_s')).toEqual([])
+  })
+
+  it('logs only the column that changed when a patch names two', async () => {
+    const { db, ctx } = await setup()
+    await createHap(ctx)
+
+    const result = await apply(
+      ctx,
+      patchAs('chapter_close', { title: 'The duel', description: 'Both fall.' }),
+      'act_u',
+    )
+
+    expect(result.status).toBe('ok')
+    expect(await undoOf(db, 'act_u')).toEqual({ description: 'Kael vs Aria' })
+  })
+
+  it('reads an empty entry ref over a null one as restated', async () => {
+    const { db, ctx } = await setup()
+    await createHap(ctx)
+
+    expect(await apply(ctx, patchAs('chapter_close', { occurredAtEntryId: '' }), 'act_u')).toEqual(
+      noop('no-op happening patch'),
+    )
+    expect(await deltasOf(db, 'act_u')).toEqual([])
+  })
+
+  it('keeps a patch naming no column a plain rejection, with no code', async () => {
+    const { ctx } = await setup()
+    await createHap(ctx)
+
+    expect(await apply(ctx, patchAs('chapter_close', {}), 'act_u')).toEqual({
+      status: 'rejected',
+      reason: 'update patch for happening br_1:hap_1 has no updatable fields',
+    })
+  })
+
+  it('clears a stored blank temporal when an entry ref replaces it', async () => {
+    const { db, ctx } = await setup()
+    // Past the create handler, which stores '' as null: the stored side must not read as null.
+    await db.insert(happenings).values({
+      id: 'hap_1',
+      branchId: 'br_1',
+      title: 'The duel',
+      temporal: '',
+      createdAt: 1,
+      updatedAt: 1,
+    })
+
+    const result = await apply(
+      ctx,
+      patchAs('chapter_close', { temporal: null, occurredAtEntryId: 'entry_5' }),
+      'act_u',
+    )
+
+    expect(result.status).toBe('ok')
+    expect(await rowFor(db, 'hap_1')).toMatchObject({
+      temporal: null,
+      occurredAtEntryId: 'entry_5',
+    })
+    expect(await undoOf(db, 'act_u')).toEqual({ temporal: '', occurredAtEntryId: null })
+  })
+
+  it('checks the time fields on the row a patch leaves, a restated temporal included', async () => {
+    const { db, ctx } = await setup()
+    await createHap(ctx)
+
+    expect(
+      await apply(
+        ctx,
+        patchAs('chapter_close', { temporal: 'at dawn', occurredAtEntryId: 'entry_5' }),
+        'act_u',
+      ),
+    ).toEqual({
+      status: 'rejected',
+      reason: 'occurred_at_entry_id and temporal are mutually exclusive',
+    })
+    expect(await deltasOf(db, 'act_u')).toEqual([])
+  })
+
+  it('keeps a column the user wrote after the prose while a sibling lands', async () => {
+    const { db, ctx } = await setupWithProse()
+    await createHap(ctx)
+    await writeProse(ctx)
+    await apply(ctx, patchAs('user_edit', { title: 'The reckoning' }), 'act_user')
+
+    const result = await apply(
+      ctx,
+      patchAs('chapter_close', { title: 'The last duel', description: 'Both fall.' }, PROSE),
+      'act_m',
+    )
+
+    expect(result.status).toBe('ok')
+    expect(await rowFor(db, 'hap_1')).toMatchObject({
+      title: 'The reckoning',
+      description: 'Both fall.',
+    })
+    expect(await undoOf(db, 'act_m')).toEqual({ description: 'Kael vs Aria' })
+  })
+
+  it('writes over a user edit made before the prose', async () => {
+    const { db, ctx } = await setupWithProse()
+    await createHap(ctx)
+    await apply(ctx, patchAs('user_edit', { title: 'The reckoning' }), 'act_user')
+    await writeProse(ctx)
+
+    const result = await apply(
+      ctx,
+      patchAs('chapter_close', { title: 'The last duel' }, PROSE),
+      'act_m',
+    )
+
+    expect(result.status).toBe('ok')
+    expect((await rowFor(db, 'hap_1')).title).toBe('The last duel')
+  })
+
+  it('answers a write whose every column the user kept with USER_EDITED_SINCE_PROSE', async () => {
+    const { db, ctx } = await setupWithProse()
+    await createHap(ctx)
+    await writeProse(ctx)
+    await apply(ctx, patchAs('user_edit', { title: 'The reckoning' }), 'act_user')
+    const write = patchAs('chapter_close', { title: 'The last duel' }, PROSE)
+
+    expect(await inGroup(ctx, write, 'act_g')).toEqual({
+      status: 'ok',
+      outcomes: [{ status: 'noop', reason: USER_EDITED_SINCE_PROSE }],
+    })
+    expect(await apply(ctx, write, 'act_s')).toEqual(noop(USER_EDITED_SINCE_PROSE))
+    expect(await deltasOf(db, 'act_g')).toEqual([])
+    expect(await deltasOf(db, 'act_s')).toEqual([])
+    expect((await rowFor(db, 'hap_1')).title).toBe('The reckoning')
+  })
+
+  it('writes over a user edit after the prose when the write names no prose', async () => {
+    const { db, ctx } = await setupWithProse()
+    await createHap(ctx)
+    await writeProse(ctx)
+    await apply(ctx, patchAs('user_edit', { title: 'The reckoning' }), 'act_user')
+
+    expect(
+      (await apply(ctx, patchAs('chapter_close', { title: 'The last duel' }), 'act_m')).status,
+    ).toBe('ok')
+    expect((await rowFor(db, 'hap_1')).title).toBe('The last duel')
   })
 })

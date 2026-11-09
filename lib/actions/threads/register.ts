@@ -6,6 +6,7 @@ import { threadsStore } from '@/lib/stores'
 
 import { nullifyRef } from '../coerce'
 import { cascadedDelete, rowCascade } from '../delta/delete-cascade'
+import { deepEqual } from '../delta/delta-encoding'
 import {
   noopRefusal,
   register,
@@ -35,7 +36,13 @@ declare module '@/lib/actions/action-map' {
     createThread: { source: DeltaSource; payload: { entry: NewThread } }
     updateThread: {
       source: DeltaSource
-      payload: { branchId: string; id: string; patch: ThreadUpdatePatch }
+      payload: {
+        branchId: string
+        id: string
+        patch: ThreadUpdatePatch
+        /** A machine write's prose: a column the user wrote after it is dropped (cadence.md). */
+        proseEntryId?: ProseEntryId
+      }
     }
     deleteThread: { source: DeltaSource; payload: { branchId: string; id: string } }
     setThreadStatus: {
@@ -114,7 +121,7 @@ const createHandler: ActionHandler = (action, branchId, ctx) => {
 const updateHandler: ActionHandler = async (action, branchId, ctx) => {
   if (action.kind !== 'updateThread')
     throw new Error(`handler/kind mismatch: expected 'updateThread', got '${action.kind}'`)
-  const { branchId: bid, id, patch } = action.payload
+  const { branchId: bid, id, patch, proseEntryId } = action.payload
   if (bid !== branchId)
     return { status: 'rejected', reason: `branch mismatch: delta ${branchId} vs target ${bid}` }
   const parsed = threadWriteSchema.partial().safeParse(patch)
@@ -134,33 +141,48 @@ const updateHandler: ActionHandler = async (action, branchId, ctx) => {
   if (blank != null)
     return { status: 'rejected', reason: `invalid thread patch: ${blank} is undefined` }
 
-  const set: Record<string, unknown> = {}
-  const undoPayload: Record<string, unknown> = {}
-  for (const col of UPDATABLE) {
-    if (!(col in patch)) continue
-    set[col] = REF_COLS.has(col) ? nullifyRef(patch[col] as string | null | undefined) : patch[col]
-    // No columnSchemas registered: scalar/nullable columns take the whole prior value as undo.
-    undoPayload[col] = current[col as keyof Thread]
-  }
-  // The ref is the pass's claim of where its status ended: a user's status change retracts it, and
-  // a thread with refs logs it beside every status change, so a reversal restores the pair whole.
-  const carriesRefs = current.triggeredAtEntryId !== null || current.resolvedAtEntryId !== null
-  if (
-    carriesRefs &&
-    !('resolvedAtEntryId' in patch) &&
-    'status' in set &&
-    set.status !== current.status
-  ) {
-    set.resolvedAtEntryId = isUserOriginatedSource(action.source) ? null : current.resolvedAtEntryId
-    undoPayload.resolvedAtEntryId = current.resolvedAtEntryId
-  }
-  // A patch that parsed but touched no updatable column would reach Drizzle's
-  // .set({}) and throw "No values to set" — reject instead.
-  if (Object.keys(set).length === 0)
+  const named = UPDATABLE.filter((col) => col in patch)
+  // A patch naming no updatable column would reach Drizzle's .set({}) and throw — reject instead.
+  if (named.length === 0)
     return {
       status: 'rejected',
       reason: `update patch for threads ${bid}:${id} has no updatable fields`,
     }
+
+  const edits =
+    typeof proseEntryId === 'string'
+      ? await userEditsSinceProse(ctx, bid, 'threads', id, proseEntryId)
+      : []
+  // Unchanged columns are dropped: History and the later-turn rule read an undo payload's keys as
+  // written. Only the incoming side is normalized.
+  const set: Record<string, unknown> = {}
+  const undoPayload: Record<string, unknown> = {}
+  let userKept = false
+  for (const col of named) {
+    const next = REF_COLS.has(col)
+      ? nullifyRef(patch[col] as string | null | undefined)
+      : patch[col]
+    const prior = current[col as keyof Thread]
+    if (deepEqual(next, prior)) continue
+    if (wroteField(edits, 'threads', col, [])) {
+      userKept = true
+      continue
+    }
+    set[col] = next
+    // No columnSchemas registered: scalar/nullable columns take the whole prior value as undo.
+    undoPayload[col] = prior
+  }
+  // The ref is the pass's claim of where its status ended: a user's status change retracts it, and
+  // a thread with refs logs it beside every status change, so a reversal restores the pair whole.
+  const carriesRefs = current.triggeredAtEntryId !== null || current.resolvedAtEntryId !== null
+  if (carriesRefs && !('resolvedAtEntryId' in patch) && 'status' in set) {
+    set.resolvedAtEntryId = isUserOriginatedSource(action.source) ? null : current.resolvedAtEntryId
+    undoPayload.resolvedAtEntryId = current.resolvedAtEntryId
+  }
+  if (Object.keys(set).length === 0) {
+    if (userKept) return noopRefusal(USER_EDITED_SINCE_PROSE, null)
+    return noopRefusal('no-op thread patch', 'restated')
+  }
 
   // Embedded-column change flips the flag; see entities/register.ts for the reasoning.
   const [firstField, secondField] = KIND_FIELDS.thread
