@@ -887,6 +887,22 @@ describe('updateHappening — columns that already stand, and the user edits a m
     ).toEqual(noop(USER_EDITED_SINCE_PROSE))
   })
 
+  it('reads a column restating what the user wrote after the prose as restated', async () => {
+    const { db, ctx } = await setupWithProse()
+    await createHap(ctx)
+    await writeProse(ctx)
+    await apply(ctx, patchAs('user_edit', { title: 'The reckoning' }), 'act_user')
+    const write = patchAs('chapter_close', { title: 'The reckoning' }, PROSE)
+
+    expect(await inGroup(ctx, write, 'act_g')).toEqual({
+      status: 'ok',
+      outcomes: [{ status: 'noop', reason: 'no-op happening patch', mark: 'restated' }],
+    })
+    expect(await apply(ctx, write, 'act_s')).toEqual(noop('no-op happening patch'))
+    expect(await deltasOf(db, 'act_g')).toEqual([])
+    expect(await deltasOf(db, 'act_s')).toEqual([])
+  })
+
   it('writes over a user edit after the prose when the write names no prose', async () => {
     const { db, ctx } = await setupWithProse()
     await createHap(ctx)

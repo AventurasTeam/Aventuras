@@ -946,6 +946,22 @@ describe('updateThread — columns that already stand, and the user edits a mach
     ).toEqual(noop(USER_EDITED_SINCE_PROSE))
   })
 
+  it('reads a column restating what the user wrote after the prose as restated', async () => {
+    const { db, ctx } = await setupWithProse()
+    await create(ctx, THREAD, 'periodic_classifier')
+    await writeProse(ctx)
+    await apply(ctx, userPatch({ title: 'Return the relic' }), 'act_user')
+    const write = closePatch({ title: 'Return the relic' }, PROSE)
+
+    expect(await inGroup(ctx, write, 'act_g')).toEqual({
+      status: 'ok',
+      outcomes: [{ status: 'noop', reason: 'no-op thread patch', mark: 'restated' }],
+    })
+    expect(await apply(ctx, write, 'act_s')).toEqual(noop('no-op thread patch'))
+    expect(await deltasOf(db, 'act_g')).toEqual([])
+    expect(await deltasOf(db, 'act_s')).toEqual([])
+  })
+
   it('drops a status the user wrote after the prose, and logs no entry ref for it', async () => {
     const { db, ctx } = await setupWithProse()
     await create(
