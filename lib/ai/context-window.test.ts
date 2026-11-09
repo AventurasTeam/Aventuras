@@ -32,7 +32,6 @@ const { countTokensSpy } = vi.hoisted(() => ({
   countTokensSpy: vi.fn<(text: string) => number>(),
 }))
 
-// Counts as the real encoder does; the spy records which texts reached it.
 vi.mock('@/lib/tokens', async (importOriginal) => {
   const actual = await importOriginal<Record<string, unknown>>()
   countTokensSpy.mockImplementation(actual.countTokens as (text: string) => number)
