@@ -1,13 +1,13 @@
 import { mkdirSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { DatabaseSync } from 'node:sqlite'
-import { parseArgs } from 'node:util'
 
 import { getTableName } from 'drizzle-orm'
 import { drizzle } from 'drizzle-orm/sqlite-proxy'
 import { migrate } from 'drizzle-orm/sqlite-proxy/migrator'
 import { getLoadablePath } from 'sqlite-vec'
 
+import { parseCli } from './cli'
 import { datasetStorySteps, seedAppRefs } from './dataset-story'
 import { buildLongBranchSteps, entryIdAt, LONG_BRANCH_SCALES, longBranchId } from './long-branch'
 import { replaceSeedRows } from './replace'
@@ -16,37 +16,6 @@ import { buildSeedSteps, type SeedStep } from '../../lib/db/devtools/seed-datase
 import { dbSchema } from '../../lib/db/schema'
 import { resolveDevSlot } from '../dev-slot/resolve'
 import { slotPorts } from '../dev-slot/slot'
-
-// Strict: an ignored typo would seed something other than what was asked for.
-function parseCli(argv: string[]): {
-  path: string | undefined
-  longBranch: boolean
-  dataset: boolean
-  overlay: boolean
-} {
-  const { values, positionals } = parseArgs({
-    args: argv,
-    options: {
-      'long-branch': { type: 'boolean', default: false },
-      dataset: { type: 'boolean', default: false },
-      overlay: { type: 'boolean', default: false },
-    },
-    allowPositionals: true,
-  })
-  if (positionals.length > 1) {
-    throw new Error(
-      `one database path at most, got ${positionals.length}: ${positionals.join(' ')}`,
-    )
-  }
-  if (values.overlay && !values.dataset)
-    throw new Error('--overlay goes on the dataset seed: pnpm db:seed:dataset --overlay')
-  return {
-    path: positionals[0],
-    longBranch: values['long-branch'],
-    dataset: values.dataset,
-    overlay: values.overlay,
-  }
-}
 
 let cli: ReturnType<typeof parseCli>
 try {
