@@ -27,8 +27,19 @@ export type CapHit = {
 }
 /** A merge_threads call, by the names of the rows it named. */
 export type MergeHit = { rows: string[]; result: CloseReportCall['result']; reason?: string }
+/** One response to a tool step; a step the server cut or filtered is retried, so a step has several. */
+export type StepAttempt = {
+  task: CloseTask
+  step: number
+  /** As the server reported it; null when it reported none. */
+  outputTokens: number | null
+  cut: boolean
+}
+/** A step attempt the server cut off at its length or stopped by a filter. */
+export type CutOff = { task: CloseTask; step: number; outputTokens: number | null }
 export type RunTally = {
   holds: readonly TaskHold[]
+  cutOffs: readonly CutOff[]
   capCalls: number
   mergeCalls: number
   capHits: readonly CapHit[]
@@ -38,9 +49,7 @@ export type RunTally = {
 type RunInput = {
   completed: boolean
   report: CloseReport | null
-  cutOffTasks: readonly CloseTask[]
-  /** Each task's largest step output, from captured usage. */
-  maxOutputTokens: Readonly<Partial<Record<CloseTask, number>>>
+  attempts: readonly StepAttempt[]
   cappedLists: readonly { id: string; list: CappedList }[]
 }
 
@@ -51,15 +60,27 @@ function landedWrite(call: CloseReportCall): boolean {
   return Object.keys(call.values ?? {}).some((path) => !skipped.has(path))
 }
 
+// A cut attempt is never a step (generation-pipeline.md → Cut-off replies): its one retry stands
+// for it, and a retry cut too stops the task, which the report's stops already carry.
+function largestFinalOutput(task: CloseTask, attempts: readonly StepAttempt[]): number {
+  return Math.max(
+    0,
+    ...attempts.flatMap((attempt) =>
+      attempt.task === task && !attempt.cut && attempt.outputTokens !== null
+        ? [attempt.outputTokens]
+        : [],
+    ),
+  )
+}
+
 function holdOf(task: CloseTask, input: RunInput): TaskHold {
   const missed = (why: string): TaskHold => ({ task, held: false, why })
   const { report } = input
   if (!input.completed || report === null) return missed('the close did not complete')
   const stop = report.stopped.find((stopped) => stopped.task === task)
   if (stop !== undefined) return missed(`stopped: ${stop.reason}`)
-  if (input.cutOffTasks.includes(task)) return missed('a reply was cut off')
-  const most = input.maxOutputTokens[task]
-  if (most !== undefined && most >= TOOL_STEP_MAX_OUTPUT_DEFAULT)
+  const most = largestFinalOutput(task, input.attempts)
+  if (most >= TOOL_STEP_MAX_OUTPUT_DEFAULT)
     return missed(`a step's reply reached ${most} output tokens`)
   if (!report.calls.some((call) => call.task === task && landedWrite(call)))
     return missed('no write landed')
@@ -100,12 +121,32 @@ function mergeHitOf(call: CloseReportCall): MergeHit {
   }
 }
 
+/** A tool step's response body as an attempt: null for a body that is no reply. */
+export function attemptOf(task: CloseTask, step: number, body: unknown): StepAttempt | null {
+  if (typeof body !== 'object' || body === null) return null
+  const { usage, choices } = body as {
+    usage?: { completion_tokens?: unknown }
+    choices?: { finish_reason?: unknown }[]
+  }
+  const finish = choices?.[0]?.finish_reason
+  const tokens = usage?.completion_tokens
+  return {
+    task,
+    step,
+    outputTokens: typeof tokens === 'number' ? tokens : null,
+    cut: finish === 'length' || finish === 'content_filter',
+  }
+}
+
 export function tallyRun(input: RunInput): RunTally {
   const calls = input.report?.calls ?? []
   const capped = calls.map((call) => capHitsOf(call, input.cappedLists))
   const merges = calls.filter((call) => call.task === 'threads' && call.tool === 'merge_threads')
   return {
     holds: BAR_TASKS.map((task) => holdOf(task, input)),
+    cutOffs: input.attempts
+      .filter(({ cut }) => cut)
+      .map(({ task, step, outputTokens }) => ({ task, step, outputTokens })),
     capCalls: capped.filter((hits) => hits.length > 0).length,
     mergeCalls: merges.length,
     capHits: capped.flat(),
@@ -155,3 +196,6 @@ export function largestOf<T>(
       best = { value, run }
   return best
 }
+
+export const barLine = (bar: BarVerdict): string =>
+  `bar: ${bar.passing} of ${bar.runs} runs passed; a cap reached in ${bar.capRuns} runs, merge_threads called in ${bar.mergeRuns}: ${bar.verdict}`

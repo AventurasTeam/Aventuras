@@ -55,7 +55,17 @@ import { realDeltaActionPort } from '@/lib/pipeline/__tests__/harness'
 import { __setCloseAgentSlots } from '@/lib/pipeline/definitions/close-agent/slots'
 import { appSettingsStore, hydrateAppSettings, resetAllStores } from '@/lib/stores'
 
-import { barVerdict, largestOf, tallyRun, type Measured, type RunTally } from './close-probe-bar'
+import {
+  attemptOf,
+  barLine,
+  barVerdict,
+  largestOf,
+  tallyRun,
+  type Measured,
+  type RunTally,
+  type StepAttempt,
+} from './close-probe-bar'
+import { rejudgeSaved } from './close-probe-rejudge'
 import {
   applyDatasetOverlay,
   DATASET_BRANCH_ID,
@@ -70,7 +80,9 @@ import { resolveDevSlot } from './dev-slot/resolve'
 // run: each tool step's request and response, and the report; bar.json beside the runs),
 // PROBE_STAND_IN=1 (the stand-in task in place of the shipped slots), PROBE_OVERLAY=1 (the dataset
 // seed's test overlay on each run's copy, and the bar over the runs), AVENTURAS_DB_PATH (the dev
-// slot's database; only ever read, through a VACUUM INTO copy). Close
+// slot's database; only ever read, through a VACUUM INTO copy), PROBE_REJUDGE (a saved PROBE_OUT
+// directory: judges its runs by the bar as it stands, from the saved files, with no model call, and
+// writes bar-rejudged.json beside them). Close
 // the app first: a live write moves the source's hash, and a held write lock fails the copy.
 // A PROBE_OUT that already holds files is refused, so each invocation saves to its own directory.
 const LLM_URL = process.env.SMOKE_LLM_URL
@@ -82,6 +94,7 @@ const BRANCH_ID = process.env.PROBE_BRANCH_ID ?? (OVERLAY ? DATASET_BRANCH_ID : 
 const END_ENTRY = process.env.PROBE_END_ENTRY
 const OUT = process.env.PROBE_OUT
 const STAND_IN = process.env.PROBE_STAND_IN === '1'
+const REJUDGE = process.env.PROBE_REJUDGE
 
 const PROVIDER_ID = 'prov_probe'
 const PROFILE_ID = 'prof_probe'
@@ -122,10 +135,8 @@ type StepCapture = {
   steps: Map<string, number>
   written: Set<string>
   retries: string[]
-  /** Tasks with a reply cut off at its length, retried or not. */
-  cutOff: Set<CloseTask>
-  /** Each task's largest step output, as the server reported it. */
-  maxOutput: Map<CloseTask, number>
+  /** Every tool-step response, a cut attempt and its retry alike. */
+  attempts: StepAttempt[]
   /** Debug log entries, each under the task or phase it was logged in. */
   log: { at: string; entry: LogEntry }[]
 }
@@ -137,8 +148,7 @@ const capture: StepCapture = {
   steps: new Map(),
   written: new Set(),
   retries: [],
-  cutOff: new Set(),
-  maxOutput: new Map(),
+  attempts: [],
   log: [],
 }
 
@@ -197,17 +207,10 @@ function drainLog(): void {
   clearBuffers()
 }
 
-function completionTokens(body: unknown): number | null {
-  if (typeof body !== 'object' || body === null) return null
-  const { usage } = body as { usage?: { completion_tokens?: unknown } }
-  return typeof usage?.completion_tokens === 'number' ? usage.completion_tokens : null
-}
-
-function noteOutput(body: unknown): void {
-  const tokens = completionTokens(body)
-  if (tokens === null || capture.task === null) return
-  const { task } = capture.task
-  capture.maxOutput.set(task, Math.max(capture.maxOutput.get(task) ?? 0, tokens))
+function noteAttempt(step: number, body: unknown): void {
+  if (capture.task === null) return
+  const attempt = attemptOf(capture.task.task, step, body)
+  if (attempt !== null) capture.attempts.push(attempt)
 }
 
 // fetch's own message is just "fetch failed"; ECONNREFUSED and its addresses sit in the causes.
@@ -243,7 +246,7 @@ function captureSteps(): void {
       throw error
     }
     if (step !== null) {
-      noteOutput(body)
+      noteAttempt(step, body)
       noteStep(step, () => ({ request, response: body }))
     }
     return response
@@ -374,6 +377,11 @@ function printMeasures(
 ): void {
   for (const hold of tally.holds)
     console.log(`[probe:close]   ${hold.task}: ${hold.held ? 'held' : `not held (${hold.why})`}`)
+  console.log(`[probe:close]   cut-offs: ${tally.cutOffs.length}`)
+  for (const cut of tally.cutOffs)
+    console.log(
+      `[probe:close]     ${cut.task} step ${cut.step}: ${cut.outputTokens ?? 'unreported'} output tokens`,
+    )
   if (OVERLAY) {
     console.log(
       `[probe:close]   coverage: ${tally.capCalls} Identity calls reached a cap, ${tally.mergeCalls} merge_threads calls`,
@@ -417,9 +425,7 @@ function printLargest(
 
 function printBar(tallies: readonly RunTally[]): void {
   const bar = barVerdict(tallies)
-  console.log(
-    `[probe:close] bar: ${bar.passing} of ${bar.runs} runs passed; a cap reached in ${bar.capRuns} runs, merge_threads called in ${bar.mergeRuns}: ${bar.verdict}`,
-  )
+  console.log(`[probe:close] ${barLine(bar)}`)
   if (OUT !== undefined) {
     mkdirSync(resolve(OUT), { recursive: true })
     writeFileSync(
@@ -498,8 +504,7 @@ async function probeRun(k: number, source: string, server: Server): Promise<RunR
   capture.steps.clear()
   capture.written.clear()
   capture.retries = []
-  capture.cutOff.clear()
-  capture.maxOutput.clear()
+  capture.attempts = []
   capture.log = []
   clearBuffers()
   const unsubscribe = [
@@ -515,10 +520,8 @@ async function probeRun(k: number, source: string, server: Server): Promise<RunR
     pipelineEventBus.subscribe('recoverable_error', (event) => {
       const { error } = event
       let cut = ''
-      if (error.kind === 'reply-cut-off') {
-        if (capture.task !== null) capture.cutOff.add(capture.task.task)
+      if (error.kind === 'reply-cut-off')
         cut = `; the cut attempt's output: ${error.outputTokens ?? 'unreported'} tokens`
-      }
       capture.retries.push(`${where()}: ${errorLine(error)}${cut}`)
     }),
   ]
@@ -563,8 +566,7 @@ async function probeRun(k: number, source: string, server: Server): Promise<RunR
     const tally = tallyRun({
       completed,
       report,
-      cutOffTasks: [...capture.cutOff],
-      maxOutputTokens: Object.fromEntries(capture.maxOutput),
+      attempts: capture.attempts,
       cappedLists: OVERLAY ? overlayCappedLists() : [],
     })
     const largestValue = largestValueLogged()
@@ -585,7 +587,28 @@ function refuseUsedOutput(): void {
   )
 }
 
+// The saved runs' tallies, rebuilt: the bar's coverage reads the overlay's capped lists, as a run's.
+function rejudge(outDir: string): void {
+  const dir = resolve(outDir)
+  const { bar, tallies } = rejudgeSaved(dir, overlayCappedLists())
+  tallies.forEach(({ holds, cutOffs }, i) => {
+    const verdicts = holds.map((hold) => `${hold.task} ${hold.held ? 'held' : hold.why}`)
+    const cuts = cutOffs.map((cut) => `${cut.task} step ${cut.step} ${cut.outputTokens ?? '?'}`)
+    console.log(
+      `[probe:close] run ${i + 1}: ${verdicts.join('; ')}; cut-offs: ${cuts.length === 0 ? 'none' : cuts.join(', ')}`,
+    )
+  })
+  console.log(`[probe:close] ${barLine(bar)}`)
+  writeFileSync(
+    join(dir, 'bar-rejudged.json'),
+    `${JSON.stringify({ ...bar, tallies }, null, 2)}\n`,
+    { flag: 'wx' },
+  )
+  if (bar.verdict !== 'met') process.exitCode = 1
+}
+
 async function main(): Promise<void> {
+  if (REJUDGE !== undefined) return rejudge(REJUDGE)
   if (!LLM_URL || !LLM_MODEL) {
     console.log('[probe:close] skipped: set SMOKE_LLM_URL and SMOKE_LLM_MODEL to run')
     return

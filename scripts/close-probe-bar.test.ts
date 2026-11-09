@@ -2,7 +2,14 @@ import { describe, expect, it } from 'vitest'
 
 import type { CloseReport, CloseReportCall } from '@/lib/db'
 
-import { barVerdict, largestOf, tallyRun, type RunTally } from './close-probe-bar'
+import {
+  attemptOf,
+  barVerdict,
+  largestOf,
+  tallyRun,
+  type StepAttempt,
+  type RunTally,
+} from './close-probe-bar'
 
 const CAPPED = 'char_00000000-0000-4000-8000-000000000001'
 const BARE = 'char_00000000-0000-4000-8000-000000000002'
@@ -43,12 +50,18 @@ const report = (calls: CloseReportCall[], stopped: CloseReport['stopped'] = []):
   noToolCalls: calls.length === 0,
 })
 
+const attempt = (
+  task: StepAttempt['task'],
+  step: number,
+  outputTokens: number | null,
+  cut = false,
+): StepAttempt => ({ task, step, outputTokens, cut })
+
 const run = (over: Partial<Parameters<typeof tallyRun>[0]> = {}) =>
   tallyRun({
     completed: true,
     report: report([LANDED_IDENTITY, LANDED_THREADS]),
-    cutOffTasks: [],
-    maxOutputTokens: {},
+    attempts: [],
     cappedLists: CAPPED_LISTS,
     ...over,
   })
@@ -67,6 +80,7 @@ describe('tallyRun', () => {
         { task: 'identity', held: false, why: 'the close did not complete' },
         { task: 'threads', held: false, why: 'the close did not complete' },
       ],
+      cutOffs: [],
       capCalls: 0,
       mergeCalls: 0,
       capHits: [],
@@ -125,12 +139,54 @@ describe('tallyRun', () => {
     })
   })
 
-  it('misses a task whose reply was cut off, or whose step reached 8,000 output tokens', () => {
-    expect(run({ cutOffTasks: ['identity'], maxOutputTokens: { threads: 8_000 } }).holds).toEqual([
-      { task: 'identity', held: false, why: 'a reply was cut off' },
+  it("holds a task whose cut attempt's retry succeeded, and reports the cut-off", () => {
+    const tallied = run({
+      attempts: [attempt('identity', 1, 8_000, true), attempt('identity', 1, 3_323)],
+    })
+    expect(tallied.holds[0]).toEqual({ task: 'identity', held: true, why: 'held' })
+    expect(tallied.cutOffs).toEqual([{ task: 'identity', step: 1, outputTokens: 8_000 }])
+  })
+
+  it('misses a task whose retry was cut off too, which stopped it, and reports both cut-offs', () => {
+    const stopped = report(
+      [LANDED_IDENTITY, LANDED_THREADS],
+      [{ task: 'identity', part: 1, reason: 'cut-off' }],
+    )
+    const tallied = run({
+      report: stopped,
+      attempts: [attempt('identity', 1, 8_000, true), attempt('identity', 1, 8_000, true)],
+    })
+    expect(tallied.holds).toEqual([
+      { task: 'identity', held: false, why: 'stopped: cut-off' },
+      { task: 'threads', held: true, why: 'held' },
+    ])
+    expect(tallied.cutOffs).toEqual([
+      { task: 'identity', step: 1, outputTokens: 8_000 },
+      { task: 'identity', step: 1, outputTokens: 8_000 },
+    ])
+  })
+
+  it('reports a cut-off whose output the server did not report', () => {
+    expect(run({ attempts: [attempt('threads', 2, null, true)] }).cutOffs).toEqual([
+      { task: 'threads', step: 2, outputTokens: null },
+    ])
+  })
+
+  it("misses a task whose final attempt's reply reached 8,000 output tokens", () => {
+    expect(run({ attempts: [attempt('threads', 2, 8_000)] }).holds).toEqual([
+      { task: 'identity', held: true, why: 'held' },
       { task: 'threads', held: false, why: "a step's reply reached 8000 output tokens" },
     ])
-    expect(run({ maxOutputTokens: { identity: 7_999 } }).holds[0]?.held).toBe(true)
+    expect(run({ attempts: [attempt('identity', 1, 7_999)] }).holds[0]?.held).toBe(true)
+  })
+
+  it("leaves a cut attempt's output out of the task's largest step output", () => {
+    const attempts = [
+      attempt('threads', 1, 8_000, true),
+      attempt('threads', 1, 7_999),
+      attempt('identity', 2, 5_000),
+    ]
+    expect(run({ attempts }).holds.every(({ held }) => held)).toBe(true)
   })
 
   it('counts the Identity calls whose capped list reached the cap check, landed or refused', () => {
@@ -283,6 +339,7 @@ const tally = (passed: boolean, capCalls = 0, mergeCalls = 0): RunTally => ({
     { task: 'identity', held: passed, why: passed ? 'held' : 'no write landed' },
     { task: 'threads', held: true, why: 'held' },
   ],
+  cutOffs: [],
   capCalls,
   mergeCalls,
   capHits: [],
@@ -291,6 +348,41 @@ const tally = (passed: boolean, capCalls = 0, mergeCalls = 0): RunTally => ({
 
 const runs = (n: number, make: (k: number) => RunTally): RunTally[] =>
   Array.from({ length: n }, (_, k) => make(k))
+
+describe('attemptOf', () => {
+  const reply = (finishReason: string, tokens: number) => ({
+    choices: [{ finish_reason: finishReason }],
+    usage: { completion_tokens: tokens },
+  })
+
+  it('reads a step reply as final, and one the server cut or filtered as a cut attempt', () => {
+    expect(attemptOf('identity', 3, reply('tool_calls', 120))).toEqual({
+      task: 'identity',
+      step: 3,
+      outputTokens: 120,
+      cut: false,
+    })
+    expect(attemptOf('identity', 3, reply('stop', 90))?.cut).toBe(false)
+    expect(attemptOf('threads', 1, reply('length', 8_000))).toEqual({
+      task: 'threads',
+      step: 1,
+      outputTokens: 8_000,
+      cut: true,
+    })
+    expect(attemptOf('threads', 1, reply('content_filter', 40))?.cut).toBe(true)
+  })
+
+  it('reports no output tokens when the body carries no usage, and is null for no body', () => {
+    expect(attemptOf('threads', 1, { choices: [{ finish_reason: 'length' }] })).toEqual({
+      task: 'threads',
+      step: 1,
+      outputTokens: null,
+      cut: true,
+    })
+    expect(attemptOf('threads', 1, null)).toBeNull()
+    expect(attemptOf('threads', 1, 'not json')).toBeNull()
+  })
+})
 
 describe('barVerdict', () => {
   it('meets the bar at 8 passing runs of 10, with a cap and a merge in 3 runs each', () => {
