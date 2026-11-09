@@ -47,7 +47,8 @@ const BRACKETED = /^\[[\s\S]*\]$/
 /**
  * A list the model escaped into one string, read by parsing it once its edge quotes and brackets
  * are restored, then again while an item unescapes further. Prose with its own quotes won't parse,
- * and a single quoted entry stays whole unless it came in brackets, as a one-entry list.
+ * a single quoted entry stays whole unless it came in brackets, as a one-entry list, and a decoded
+ * entry keeps its own brackets.
  */
 function joinedList(entry: string, bracketed = false): string[] | undefined {
   const trimmed = entry.trim()
@@ -58,7 +59,7 @@ function joinedList(entry: string, bracketed = false): string[] | undefined {
   if (list === undefined || list.length > 1) return list
   const [only] = list
   if (only === undefined) return undefined
-  if (only === body) return bracketed ? list : undefined
+  if (only === body) return bracketed ? [trimmed] : undefined
   const inBrackets = bracketed || BRACKETED.test(trimmed)
   // Each pass parses a shorter string, so this ends. An item holding a raw line break won't parse
   // again, so a bracketed one stands as decoded.

@@ -116,6 +116,12 @@ describe('sentList', () => {
     expect(entries(['[patient]'])).toEqual(['[patient]'])
   })
 
+  it("keeps a decoded entry's own brackets, and reads a list encoded twice as its entry", () => {
+    expect(entries(['["[patient]"]'])).toEqual(['[patient]'])
+    expect(entries(['["[patient"]'])).toEqual(['[patient'])
+    expect(entries(['["[\\"patient\\"]"]'])).toEqual(['patient'])
+  })
+
   it('splits a decoded item on its escaped line breaks, its list markers dropped', () => {
     expect(entries(['["brave\\nwary", "patient"]'])).toEqual(['brave', 'wary', 'patient'])
     expect(entries(['["- brave\\n- wary"]'])).toEqual(['brave', 'wary'])
