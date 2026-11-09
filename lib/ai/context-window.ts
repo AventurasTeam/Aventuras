@@ -80,13 +80,12 @@ export const PROMPT_COUNT_CACHE_ENTRIES = 4096
 /** The most characters the count cache holds across its texts. */
 export const PROMPT_COUNT_CACHE_CHARS = 2_000_000
 
-// A tool step resends its system half, its tools and every earlier step, and a turn its system
-// prompt, so each text counts once while held. A close task's steps count the same texts in the
-// same order, so the system half, a chapter long, must outlast the task's other texts: the bound
-// is characters, with a generous entry cap, since a small entry bound would evict it. A Map iterates in insertion order: re-setting an entry on every use keeps the least
-// recently used first.
+// A close task's steps recount the same texts, led by a chapter-long system half that a plain LRU
+// would evict first once a pass overflows; the pass pins its system half and the budget is
+// characters. A Map iterates in insertion order, so re-setting an entry keeps the oldest first.
 const promptCounts = new Map<string, number>()
 let cachedChars = 0
+let pinned: string | null = null
 
 function forget(text: string): void {
   if (promptCounts.delete(text)) cachedChars -= text.length
@@ -94,14 +93,19 @@ function forget(text: string): void {
 
 function remember(text: string, tokens: number): void {
   forget(text)
-  // Longer than the whole budget: counted each time, and no held text goes for it.
-  if (text.length > PROMPT_COUNT_CACHE_CHARS) return
+  if (text.length > PROMPT_COUNT_CACHE_CHARS) {
+    logger.debug('provider.prompt_count_uncached', {
+      chars: text.length,
+      budget: PROMPT_COUNT_CACHE_CHARS,
+    })
+    return
+  }
   promptCounts.set(text, tokens)
   cachedChars += text.length
-  while (promptCounts.size > PROMPT_COUNT_CACHE_ENTRIES || cachedChars > PROMPT_COUNT_CACHE_CHARS) {
-    const oldest = promptCounts.keys().next()
-    if (oldest.done) break
-    forget(oldest.value)
+  for (const oldest of promptCounts.keys()) {
+    if (promptCounts.size <= PROMPT_COUNT_CACHE_ENTRIES && cachedChars <= PROMPT_COUNT_CACHE_CHARS)
+      break
+    if (oldest !== pinned) forget(oldest)
   }
 }
 
@@ -125,15 +129,20 @@ export function __clearPromptCountCache(): void {
 
 /** countTokens over the request as sent: system content; text and reasoning parts; each tool
  *  call's name and input; each tool result's name and output; each tool definition as JSON. Each
- *  text is counted through the count cache. */
+ *  text is counted through the count cache, the system half pinned while the pass runs. */
 export function countPromptTokens(prompt: ModelPrompt, tools?: ModelTools): number {
-  let total = 0
-  for (const message of prompt) {
-    if (message.role === 'system') total += countOnce(message.content)
-    else for (const part of message.content) total += countPartTokens(part)
+  pinned = prompt.find((message) => message.role === 'system')?.content ?? null
+  try {
+    let total = 0
+    for (const message of prompt) {
+      if (message.role === 'system') total += countOnce(message.content)
+      else for (const part of message.content) total += countPartTokens(part)
+    }
+    for (const tool of tools ?? []) total += countOnce(JSON.stringify(tool))
+    return total
+  } finally {
+    pinned = null
   }
-  for (const tool of tools ?? []) total += countOnce(JSON.stringify(tool))
-  return total
 }
 
 type PromptPart = Exclude<ModelPrompt[number], { role: 'system' }>['content'][number]

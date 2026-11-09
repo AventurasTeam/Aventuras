@@ -619,6 +619,50 @@ describe('the prompt count cache', () => {
     expect(countTokensSpy).not.toHaveBeenCalled()
   })
 
+  it("keeps a pass's system half cached while the pass's other texts overflow the budget", () => {
+    const system = prose('system', 1_000_000)
+    primePromptCount(system, 5_555)
+    // 30 x 70,000 = 2,100,000 characters of user text: the budget is passed mid-pass.
+    const parts = Array.from({ length: 30 }, (_, i) => ({
+      type: 'text' as const,
+      text: prose(`part ${i}`, 70_000),
+    }))
+
+    countPromptTokens([
+      { role: 'system', content: system },
+      { role: 'user', content: parts },
+    ])
+    countTokensSpy.mockClear()
+
+    expect(countPromptTokens(systemOnly(system))).toBe(5_555)
+    expect(encodings(system)).toBe(0)
+  })
+
+  it('lets a pass end its system half' + "'" + 's pin, so a later prime can evict it', () => {
+    countPromptTokens(systemOnly(big('s')))
+    primePromptCount(big('a'), 11)
+    primePromptCount(big('b'), 22)
+    primePromptCount(big('c'), 33)
+    countTokensSpy.mockClear()
+
+    countPromptTokens(systemOnly(big('s')))
+    expect(encodings(big('s'))).toBe(1)
+  })
+
+  it('logs a debug line for a primed text over the budget, which is not kept', () => {
+    const debug = vi.spyOn(logger, 'debug').mockImplementation(() => {})
+    try {
+      primePromptCount(prose('z', 2_000_001), 77)
+
+      expect(debug).toHaveBeenCalledWith('provider.prompt_count_uncached', {
+        chars: 2_000_001,
+        budget: 2_000_000,
+      })
+    } finally {
+      debug.mockRestore()
+    }
+  })
+
   it('does not keep a text over 2,000,000 characters, and leaves the held ones be', () => {
     primePromptCount('A text held already.', 5)
     primePromptCount(prose('y', 2_000_001), 77)
