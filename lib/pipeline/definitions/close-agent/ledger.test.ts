@@ -15,6 +15,7 @@ const LETTER = 'lore_00000000-0000-4000-8000-000000000006'
 const AWARENESS = 'haw_00000000-0000-4000-8000-000000000007'
 const SEAL = 'item_00000000-0000-4000-8000-000000000008'
 const ENTRY = 'entry_close_007'
+const ACTION_ID = 'act_close_ledger'
 
 type RecordedCall = Parameters<CloseLedgerWriter['record']>[0]
 
@@ -26,7 +27,11 @@ function setup() {
   ids.show(TOLL, 'The Toll')
   ids.show(SEAL, 'The Seal')
   const ledger = seedCloseLedger({})
-  return { ids, ledger, writer: new CloseLedgerWriter(ledger, (id) => ids.nameOfId(id)) }
+  return {
+    ids,
+    ledger,
+    writer: new CloseLedgerWriter(ledger, (id) => ids.nameOfId(id), ACTION_ID),
+  }
 }
 
 const call = (over: Partial<RecordedCall> = {}): RecordedCall => ({
@@ -168,7 +173,7 @@ describe('CloseLedgerWriter', () => {
     expect(values['state.traits']!.startsWith('wary, wary, ')).toBe(true)
   })
 
-  it("logs each value's length before the bound, a refused call's included", () => {
+  it("logs each value's length before the bound under the run's actionId, a refused call's included", () => {
     const { writer } = setup()
     const debug = vi.spyOn(logger, 'debug')
 
@@ -188,8 +193,13 @@ describe('CloseLedgerWriter', () => {
       [
         'memory.close_report_value',
         { tool: 'update_character', path: 'description', length: 2_500 },
+        { actionId: ACTION_ID },
       ],
-      ['memory.close_report_value', { tool: 'update_character', path: 'state.traits', length: 13 }],
+      [
+        'memory.close_report_value',
+        { tool: 'update_character', path: 'state.traits', length: 13 },
+        { actionId: ACTION_ID },
+      ],
     ])
   })
 

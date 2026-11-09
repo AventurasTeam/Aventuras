@@ -263,7 +263,7 @@ async function* threadCallsPhase(
   ids.showTurns(chapterEntryIds)
   for (const { id, title } of run.shown) ids.show(id, title)
   const ledger = seedCloseLedger(phase.intermediates)
-  const writer = new CloseLedgerWriter(ledger, (id) => ids.nameOfId(id))
+  const writer = new CloseLedgerWriter(ledger, (id) => ids.nameOfId(id), phase.actionId)
   const readSet = createReadSet()
   readSet.add(run.shown.map(({ id }): GuardRow => ({ table: 'threads', id })))
   const ctx: DispatchContext = {

@@ -252,7 +252,7 @@ async function* scriptedPhase(
   for (const { id, name } of run.shown) ids.show(id, name)
   const ledger = seedCloseLedger(phase.intermediates)
   run.ledger = ledger
-  const writer = new CloseLedgerWriter(ledger, (id) => ids.nameOfId(id))
+  const writer = new CloseLedgerWriter(ledger, (id) => ids.nameOfId(id), phase.actionId)
   run.setup?.(ids, writer)
   const readSet = createReadSet()
   readSet.add(run.shown.map(({ id }) => ({ table: 'entities' as const, id })))

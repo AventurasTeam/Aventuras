@@ -36,6 +36,7 @@ export class CloseLedgerWriter {
   constructor(
     private readonly ledger: CloseLedger,
     private readonly nameOfId: NameOfId,
+    private readonly actionId: string,
   ) {}
 
   /** Any call the model made, an invalid one included, which records no row. */
@@ -52,11 +53,11 @@ export class CloseLedgerWriter {
       .map(([path, value]) => {
         const text = formatted(value, this.nameOfId)
         // C4's bound is set from a real run's largest value, so its length is read before the cut.
-        logger.debug('memory.close_report_value', {
-          tool: rest.tool,
-          path,
-          length: Array.from(text).length,
-        })
+        logger.debug(
+          'memory.close_report_value',
+          { tool: rest.tool, path, length: Array.from(text).length },
+          { actionId: this.actionId },
+        )
         return [path, bounded(text)] as const
       })
     this.ledger.calls.push({

@@ -856,7 +856,7 @@ async function* dispatchPhase(
   ids.show(BRAM, 'Bram')
   ids.show(GONE, 'Old Wren')
   ledger = seedCloseLedger(phase.intermediates)
-  const writer = new CloseLedgerWriter(ledger, (id) => ids.nameOfId(id))
+  const writer = new CloseLedgerWriter(ledger, (id) => ids.nameOfId(id), phase.actionId)
   setup?.(ids, writer)
   shown = ids
   const readSet = createReadSet()

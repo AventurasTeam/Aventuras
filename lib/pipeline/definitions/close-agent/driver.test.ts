@@ -468,7 +468,7 @@ describe('runCloseTask', () => {
     ids.showTurns(chapterEntryIds())
     ids.show(WREN, 'Wren')
     ledger = seedCloseLedger({})
-    writer = new CloseLedgerWriter(ledger, (id) => ids.nameOfId(id))
+    writer = new CloseLedgerWriter(ledger, (id) => ids.nameOfId(id), ACTION_ID)
   })
 
   it("runs a step's calls in order, the second reading the first's write", async () => {
@@ -1400,6 +1400,31 @@ describe('closeAgentPhase', () => {
       table: 'happenings',
       id: 'hap_kept',
     })
+  })
+
+  it("hands a task a ledger that logs a report value under the run's actionId", async () => {
+    __setCloseAgentSlots({ before: [quietTask('happenings', [])], perPart: [], after: [] })
+    await drain(phaseCtx())
+    const { ledger } = vi.mocked(runCloseTask).mock.calls[0]![1]
+    const debug = vi.spyOn(logger, 'debug')
+    onTestFinished(() => debug.mockRestore())
+
+    ledger.record({
+      task: 'happenings',
+      part: 0,
+      tool: 'update_happening',
+      rows: [],
+      why: '',
+      turns: [],
+      result: 'ok',
+      values: { description: 'The ferry runs late.' },
+    })
+
+    expect(debug).toHaveBeenCalledWith(
+      'memory.close_report_value',
+      { tool: 'update_happening', path: 'description', length: 20 },
+      { actionId: 'act_slots' },
+    )
   })
 
   it("gives a task's start its part and the lore-mgmt model config", async () => {
