@@ -9,18 +9,15 @@ import { TEMPLATE_IDS } from '@/lib/prompts'
 import { matchTerms } from '@/lib/retrieval'
 import { CAST_SOFT_CAPS } from '@/lib/wizard'
 
-import { updateCharacterTool, updateFactionTool } from './identity-tools'
+import { IDENTITY_WRITE_PATHS, updateCharacterTool, updateFactionTool } from './identity-tools'
 import { readRowTool, searchWorldTool } from './read-tools'
 import type { CloseTaskDef, TaskPromptContext, TaskStart } from './task'
 import type { ReadFields } from './tool'
 import { readTaskTurns, renderClosePrompt, storyModeOf } from './turns'
 import type { CloseTurn } from '../chapter-context'
 
-/** C11: the fields Identity's start shows, so read_row returns the same; its rows count as read. */
-export const IDENTITY_READ_FIELDS: ReadFields = {
-  character: ['description', 'state.traits', 'state.drives', 'state.voice'],
-  faction: ['description', 'state.standing', 'state.agenda'],
-}
+/** C11: the fields Identity's tools write, which its start shows and read_row returns. */
+export const IDENTITY_READ_FIELDS: ReadFields = IDENTITY_WRITE_PATHS
 
 /** A starting character as the template shows it: `id` is its handle, a missing text ''. */
 export type IdentityCharacter = {

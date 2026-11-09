@@ -102,6 +102,12 @@ const FACTION_FIELDS: readonly FieldSpec<FactionArgs>[] = [
   { kind: 'text', of: (args) => args.description, path: 'description', bound: 'description' },
 ]
 
+/** The delta paths each tool writes, in its fields' order. */
+export const IDENTITY_WRITE_PATHS: Readonly<Record<IdentityKind, readonly string[]>> = {
+  character: CHARACTER_FIELDS.map(({ path }) => path),
+  faction: FACTION_FIELDS.map(({ path }) => path),
+}
+
 const NOT_OF_KIND: Readonly<Record<IdentityKind, string>> = {
   character: 'not-a-character',
   faction: 'not-a-faction',

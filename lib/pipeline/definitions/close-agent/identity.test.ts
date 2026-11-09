@@ -1251,8 +1251,8 @@ describe('identityTask', () => {
       'update_faction',
     ])
     expect(IDENTITY_READ_FIELDS).toEqual({
-      character: ['description', 'state.traits', 'state.drives', 'state.voice'],
-      faction: ['description', 'state.standing', 'state.agenda'],
+      character: ['state.traits', 'state.drives', 'state.voice', 'description'],
+      faction: ['state.agenda', 'state.standing', 'description'],
     })
     expect(identityTask.readFields).toBe(IDENTITY_READ_FIELDS)
   })
