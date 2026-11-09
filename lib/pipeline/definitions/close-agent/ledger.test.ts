@@ -203,6 +203,19 @@ describe('CloseLedgerWriter', () => {
     ])
   })
 
+  it('logs a length in code points, an astral character as one', () => {
+    const { writer } = setup()
+    const debug = vi.spyOn(logger, 'debug')
+
+    writer.record(call({ values: { 'state.drives': ['𠮷野家', '😀'] } }))
+
+    expect(debug).toHaveBeenCalledWith(
+      'memory.close_report_value',
+      { tool: 'update_character', path: 'state.drives', length: 6 },
+      { actionId: ACTION_ID },
+    )
+  })
+
   it("keeps a refused create's minted id and name", () => {
     const { ledger, writer } = setup()
 
