@@ -12,11 +12,13 @@ import {
   stories,
   storyEntries,
   threads,
+  type InjectionMode,
   type StoryMode,
   type Thread,
   type ThreadStatus,
 } from '@/lib/db'
 import { makeLogger } from '@/lib/diagnostics'
+import { buildStructuralFloor } from '@/lib/retrieval'
 import { resetAllStores } from '@/lib/stores'
 
 import { createReadSet } from './common-checks'
@@ -24,6 +26,7 @@ import { dispatchToolCall, type DispatchContext } from './dispatch'
 import { IDENTITY_READ_FIELDS, identityTask } from './identity'
 import { CloseIds, nameCloseProse } from './ids'
 import { CloseLedgerWriter } from './ledger'
+import { readRowTool } from './read-tools'
 import { __setCloseAgentSlots } from './slots'
 import type { TaskPromptContext } from './task'
 import { mergeThreadsTool, updateThreadTool } from './thread-tools'
@@ -96,7 +99,7 @@ const FAR_BANK: SeedThread = {
   status: 'pending',
   category: 'mystery',
   icon: 'eye',
-  injectionMode: 'always',
+  injectionMode: 'auto',
   createdAt: 30,
 }
 const SECOND_MARK: SeedThread = {
@@ -121,6 +124,22 @@ const SETTLED: SeedThread = {
   injectionMode: 'auto',
   createdAt: 50,
 }
+
+/** A thread the user set to a mode, pending unless given; a merge test seeds it after THREADS_SHOWN. */
+const userSet = (
+  n: number,
+  injectionMode: InjectionMode,
+  status: ThreadStatus = 'pending',
+): SeedThread => ({
+  id: threadId(n),
+  title: `The ${injectionMode} thread ${n}`,
+  description: `A thread the user set to ${injectionMode}.`,
+  status,
+  category: 'mystery',
+  icon: 'eye',
+  injectionMode,
+  createdAt: n * 10,
+})
 
 // The chapter runs from the opening to the third reply (positions 1-7); E is that reply.
 const endEntryIdOf = (fx: CloseFixture): string => fx.entries[6]!.id
@@ -1126,6 +1145,7 @@ describe('merge_threads', () => {
       result: 'rejected',
       reason: expect.stringContaining('keep an active one'),
     })
+    expect(run.answers[0]).toMatchObject({ note: 'Send th1 as keep.' })
     expect(run.calls[0]!.values).toEqual({ title: 'The light and the letter' })
     expect(run.calls[0]).not.toHaveProperty('survivor')
     expect(groupEvents(run.events)).toEqual([])
@@ -1133,7 +1153,7 @@ describe('merge_threads', () => {
     expect(await threadRow(f, LETTER.id)).toBeDefined()
   })
 
-  it('refuses a pending keep absorbing an active thread this close wrote as active into inactive, with no note', async () => {
+  it('refuses a pending keep absorbing an active thread this close wrote as active into inactive, naming it as keep', async () => {
     const run = await runThreadCalls(f, THREADS_SHOWN, [
       {
         toolName: 'update_thread',
@@ -1146,7 +1166,7 @@ describe('merge_threads', () => {
       result: 'rejected',
       reason: expect.stringContaining('keep an active one'),
     })
-    expect(run.answers[1]).not.toHaveProperty('note')
+    expect(run.answers[1]).toMatchObject({ note: 'Send th1 as keep.' })
     expect(opsOf(await runDeltas(f, run.result.actionId))).toEqual([['update', LETTER.id]])
   })
 
@@ -1292,6 +1312,270 @@ describe('merge_threads', () => {
       description: `${LETTER.title}, sealed.`,
     })
   })
+
+  describe('beside a thread the user set to always or disabled', () => {
+    const MODE_RULE = 'can be absorbed only into one with the same mode'
+    const NO_KEEP = 'no choice of keep can land without dropping an active thread'
+    const IN_THIS_CLOSE = 'cannot be merged in this close'
+
+    /** Seeds `extra` after THREADS_SHOWN, shown in order as th5, th6…, then runs `calls`. */
+    async function runBeside(extra: readonly SeedThread[], calls: readonly ThreadCall[]) {
+      for (const thread of extra) await seedPassThread(f, thread, 3)
+      return runThreadCalls(f, [...THREADS_SHOWN, ...extra], calls)
+    }
+
+    async function branchThreads(): Promise<Thread[]> {
+      return f.ctx.db.select().from(threads).where(eq(threads.branchId, f.branchId))
+    }
+
+    it('refuses absorbing a pending always thread into a pending auto one, so the narrator still seats it', async () => {
+      const lantern = userSet(6, 'always')
+      const floorOf = async () =>
+        buildStructuralFloor({
+          entities: [],
+          storeEntities: [],
+          lore: [],
+          threads: await branchThreads(),
+          sceneEntityIds: [],
+          currentLocationId: null,
+          disabledPlaceIds: new Set(),
+        }).alwaysThreads.map(({ id }) => id)
+      await seedPassThread(f, lantern, 3)
+      expect(await floorOf()).toEqual([lantern.id])
+
+      const run = await runThreadCalls(
+        f,
+        [...THREADS_SHOWN, lantern],
+        [merge({ keep: 'th3', absorb: ['th5'] })],
+      )
+
+      expect(run.calls[0]).toMatchObject({
+        result: 'rejected',
+        reason: expect.stringContaining(MODE_RULE),
+      })
+      expect(run.calls[0]).not.toHaveProperty('survivor')
+      expect(run.answers[0]).toMatchObject({ result: 'rejected', note: 'Send th5 as keep.' })
+      expect(groupEvents(run.events)).toEqual([])
+      expect(await runDeltas(f, run.result.actionId)).toEqual([])
+      expect(await threadRow(f, lantern.id)).toMatchObject({ injectionMode: 'always' })
+      expect(await threadRow(f, FAR_BANK.id)).toMatchObject({ injectionMode: 'auto' })
+      expect(await floorOf()).toEqual([lantern.id])
+    })
+
+    it('refuses absorbing a pending disabled thread into a pending auto one, saying to send it as keep', async () => {
+      const run = await runBeside(
+        [userSet(6, 'disabled')],
+        [merge({ keep: 'th3', absorb: ['th5'] })],
+      )
+
+      expect(run.calls[0]).toMatchObject({
+        result: 'rejected',
+        reason: expect.stringContaining(MODE_RULE),
+      })
+      expect(run.answers[0]).toMatchObject({ note: 'Send th5 as keep.' })
+      expect(await runDeltas(f, run.result.actionId)).toEqual([])
+    })
+
+    it.each<InjectionMode>(['always', 'disabled'])(
+      "lands a pending auto thread absorbed into a pending %s one, keep's mode standing",
+      async (mode) => {
+        const kept = userSet(6, mode)
+
+        const run = await runBeside([kept], [merge({ keep: 'th5', absorb: ['th3'] })])
+
+        expect(run.calls[0]).toMatchObject({
+          result: 'ok',
+          survivor: { table: 'threads', id: kept.id },
+        })
+        expect(await threadRow(f, kept.id)).toMatchObject({ injectionMode: mode })
+        expect(await threadRow(f, FAR_BANK.id)).toBeUndefined()
+      },
+    )
+
+    it.each<InjectionMode>(['always', 'disabled'])(
+      'lands a merge of two pending threads both set to %s',
+      async (mode) => {
+        const [kept, twin] = [userSet(6, mode), userSet(7, mode)]
+
+        const run = await runBeside([kept, twin], [merge({ keep: 'th5', absorb: ['th6'] })])
+
+        expect(run.calls[0]).toMatchObject({ result: 'ok' })
+        expect(await threadRow(f, kept.id)).toMatchObject({ injectionMode: mode })
+        expect(await threadRow(f, twin.id)).toBeUndefined()
+      },
+    )
+
+    it.each([
+      ['always kept, disabled absorbed', 'th5', 'th6'],
+      ['disabled kept, always absorbed', 'th6', 'th5'],
+    ])(
+      'refuses an always thread beside a disabled one, %s, as one no keep lands: leave them apart',
+      async (_label, keep, absorbed) => {
+        const run = await runBeside(
+          [userSet(6, 'always'), userSet(7, 'disabled')],
+          [merge({ keep, absorb: [absorbed] })],
+        )
+
+        expect(run.calls[0]).toMatchObject({
+          result: 'rejected',
+          reason: expect.stringContaining(NO_KEEP),
+        })
+        expect(run.calls[0]!.reason).toContain('leave them apart')
+        expect(run.answers[0]).not.toHaveProperty('note')
+        expect(await runDeltas(f, run.result.actionId)).toEqual([])
+      },
+    )
+
+    it.each([
+      ['the active auto one kept', 'th1', 'th5'],
+      ['the pending always one kept', 'th5', 'th1'],
+    ])(
+      'refuses an active auto thread beside a pending always one, %s, as one no keep lands, with no note',
+      async (_label, keep, absorbed) => {
+        const run = await runBeside([userSet(6, 'always')], [merge({ keep, absorb: [absorbed] })])
+
+        expect(run.calls[0]).toMatchObject({
+          result: 'rejected',
+          reason: expect.stringContaining(NO_KEEP),
+        })
+        expect(run.answers[0]).not.toHaveProperty('note')
+        expect(await runDeltas(f, run.result.actionId)).toEqual([])
+      },
+    )
+
+    it('refuses a pending auto keep absorbing an active always thread as the active rule, naming it as keep', async () => {
+      const active = userSet(6, 'always', 'active')
+
+      const run = await runBeside(
+        [active],
+        [merge({ keep: 'th3', absorb: ['th5'] }), merge({ keep: 'th5', absorb: ['th3'] })],
+      )
+
+      expect(run.calls.map(({ result }) => result)).toEqual(['rejected', 'ok'])
+      expect(run.calls[0]!.reason).toContain('keep an active one')
+      expect(run.answers[0]).toMatchObject({ note: 'Send th5 as keep.' })
+      expect(await threadRow(f, active.id)).toMatchObject({
+        status: 'active',
+        injectionMode: 'always',
+      })
+    })
+
+    it('names as keep only the active thread that would land, not one that would drop a mode', async () => {
+      const active = userSet(6, 'always', 'active')
+
+      const run = await runBeside(
+        [active],
+        [
+          merge({ keep: 'th3', absorb: ['th1', 'th5'] }),
+          merge({ keep: 'th5', absorb: ['th3', 'th1'] }),
+        ],
+      )
+
+      expect(run.calls.map(({ result }) => result)).toEqual(['rejected', 'ok'])
+      expect(run.calls[0]!.reason).toContain('keep an active one')
+      expect(run.answers[0]).toMatchObject({ note: 'Send th5 as keep.' })
+      expect(await threadRow(f, LETTER.id)).toBeUndefined()
+      expect(await threadRow(f, FAR_BANK.id)).toBeUndefined()
+    })
+
+    it('names every keep that would land', async () => {
+      const run = await runBeside(
+        [userSet(6, 'always'), userSet(7, 'always')],
+        [merge({ keep: 'th3', absorb: ['th5', 'th6'] })],
+      )
+
+      expect(run.calls[0]!.reason).toContain(MODE_RULE)
+      expect(run.answers[0]).toMatchObject({ note: 'Send th5 or th6 as keep.' })
+    })
+
+    it('refuses a written auto thread absorbed into an always keep as unmergeable in this close, with no swap note', async () => {
+      const run = await runBeside(
+        [userSet(6, 'always')],
+        [
+          {
+            toolName: 'update_thread',
+            input: {
+              id: 'th3',
+              description: 'The light moves again, closer to the ford.',
+              ...cite(),
+            },
+          },
+          merge({ keep: 'th5', absorb: ['th3'] }),
+        ],
+      )
+
+      expect(run.calls[1]).toMatchObject({
+        result: 'rejected',
+        reason: expect.stringContaining(IN_THIS_CLOSE),
+      })
+      expect(run.answers[1]).not.toHaveProperty('note')
+      expect(opsOf(await runDeltas(f, run.result.actionId))).toEqual([['update', FAR_BANK.id]])
+    })
+
+    it('refuses a written auto keep absorbing an always thread as unmergeable in this close', async () => {
+      const run = await runBeside(
+        [userSet(6, 'always')],
+        [
+          {
+            toolName: 'update_thread',
+            input: {
+              id: 'th3',
+              description: 'The light moves again, closer to the ford.',
+              ...cite(),
+            },
+          },
+          merge({ keep: 'th3', absorb: ['th5'] }),
+        ],
+      )
+
+      expect(run.calls[1]).toMatchObject({
+        result: 'rejected',
+        reason: expect.stringContaining(IN_THIS_CLOSE),
+      })
+      expect(run.answers[1]).not.toHaveProperty('note')
+    })
+
+    it('names a written always thread as keep when absorbing it would drop its mode, and that lands', async () => {
+      const lantern = userSet(6, 'always')
+
+      const run = await runBeside(
+        [lantern],
+        [
+          {
+            toolName: 'update_thread',
+            input: { id: 'th5', description: 'The lantern gutters but burns.', ...cite() },
+          },
+          merge({ keep: 'th3', absorb: ['th5'] }),
+          merge({ keep: 'th5', absorb: ['th3'] }),
+        ],
+      )
+
+      expect(run.calls.map(({ result }) => result)).toEqual(['ok', 'rejected', 'ok'])
+      expect(run.calls[1]!.reason).toContain(MODE_RULE)
+      expect(run.answers[1]).toMatchObject({ note: 'Send th5 as keep.' })
+      expect(await threadRow(f, FAR_BANK.id)).toBeUndefined()
+      expect(await threadRow(f, lantern.id)).toMatchObject({ injectionMode: 'always' })
+    })
+
+    it('refuses a written active keep beside a pending always thread as one no keep lands, not only in this close', async () => {
+      const run = await runBeside(
+        [userSet(6, 'always')],
+        [
+          {
+            toolName: 'update_thread',
+            input: { id: 'th1', description: 'Wren hides the letter in her boot.', ...cite() },
+          },
+          merge({ keep: 'th1', absorb: ['th5'] }),
+        ],
+      )
+
+      expect(run.calls[1]).toMatchObject({
+        result: 'rejected',
+        reason: expect.stringContaining(NO_KEEP),
+      })
+      expect(run.answers[1]).not.toHaveProperty('note')
+    })
+  })
 })
 
 // Threads key on (branch_id, id); the fork's copies would judge each call the other way. Inserted
@@ -1405,6 +1689,7 @@ type ThreadRowSeed = {
   status: ThreadStatus
   createdAt: number
   description?: string | null
+  injectionMode?: InjectionMode
   /** A user's thread keeps both refs null (data-model.md → Authorship contract). */
   byUser?: boolean
 }
@@ -1424,7 +1709,7 @@ async function putThreadRow(fx: CloseFixture, row: ThreadRowSeed): Promise<void>
             title: row.title,
             description: row.description ?? null,
             status: row.status,
-            injectionMode: 'auto',
+            injectionMode: row.injectionMode ?? 'auto',
             triggeredAtEntryId: sourceTurn,
             resolvedAtEntryId: closed && !row.byUser ? fx.entries[3]!.id : null,
             createdAt: row.createdAt,
@@ -1482,6 +1767,7 @@ async function putThreadRoster(fx: CloseFixture): Promise<void> {
     status: 'pending',
     createdAt: 30,
     description: 'Someone answers from the far bank.',
+    injectionMode: 'always',
   })
 }
 
@@ -1550,14 +1836,16 @@ describe('threadsTask', () => {
     return { ctx, ids, start: await threadsTask.start(ctx) }
   }
 
-  it("lists canon's tools in order and reads a thread's title, description and status", () => {
+  it("lists canon's tools in order and reads a thread's title, description, status and injection mode", () => {
     expect(threadsTask.task).toBe('threads')
     expect(threadsTask.tools.map((tool) => tool.name)).toEqual([
       'read_row',
       'update_thread',
       'merge_threads',
     ])
-    expect(THREADS_READ_FIELDS).toEqual({ thread: ['title', 'description', 'status'] })
+    expect(THREADS_READ_FIELDS).toEqual({
+      thread: ['title', 'description', 'status', 'injectionMode'],
+    })
     expect(threadsTask.readFields).toBe(THREADS_READ_FIELDS)
   })
 
@@ -1573,15 +1861,29 @@ describe('threadsTask', () => {
         title: 'The debt to the guild',
         description: 'Owed since the spring.',
         status: 'pending',
+        injectionMode: 'auto',
       },
-      { id: 'th2', title: 'Deliver the letter', description: '', status: 'active' },
+      {
+        id: 'th2',
+        title: 'Deliver the letter',
+        description: '',
+        status: 'active',
+        injectionMode: 'auto',
+      },
       {
         id: 'th3',
         title: 'Echoes on the river',
         description: 'Someone answers from the far bank.',
         status: 'pending',
+        injectionMode: 'always',
       },
-      { id: 'th4', title: 'Find the heir', description: 'Still open.', status: 'active' },
+      {
+        id: 'th4',
+        title: 'Find the heir',
+        description: 'Still open.',
+        status: 'active',
+        injectionMode: 'auto',
+      },
     ])
     expect(ids.handleOf(OPEN_ROWS.map)).toBeUndefined()
     expect(ids.handleOf(OPEN_ROWS.abbey)).toBeUndefined()
@@ -1630,6 +1932,28 @@ describe('threadsTask', () => {
     expect(ids.nameOf(handle)).toBe('Kael')
     expect(nameCloseProse({ description: debt?.description }, ids)).toEqual({
       description: 'Owed to Kael.',
+    })
+  })
+
+  it("gives read_row a thread's injection mode, so a merge can see it on a thread the start leaves out", async () => {
+    const fx = await openCloseFixture()
+    await putThreadRoster(fx)
+    const settled = 'thr_00000000-0000-4000-8000-00000000c080'
+    await putThreadRow(fx, {
+      id: settled,
+      title: 'The old toll',
+      status: 'resolved',
+      createdAt: 40,
+      injectionMode: 'always',
+    })
+    const { ctx, start } = await startOf(fx)
+
+    const answer = await readRowTool.read({ id: settled }, ctx)
+
+    expect(start?.show.threads.map(({ title }) => title)).not.toContain('The old toll')
+    expect(answer.output).toMatchObject({
+      kind: 'thread',
+      fields: { status: 'resolved', injectionMode: 'always' },
     })
   })
 
@@ -1705,7 +2029,9 @@ describe('threadsTask', () => {
       '## th1: The debt to the guild (pending)\n- description: "Owed since the spring."',
     )
     expect(user).toContain('## th2: Deliver the letter (active)\n- description: ""')
-    expect(user).toContain('## th3: Echoes on the river (pending)\n')
+    expect(user).toContain(
+      '## th3: Echoes on the river (pending, always)\n- description: "Someone answers from the far bank."',
+    )
     expect(user).toContain('## th4: Find the heir (active)\n- description: "Still open."')
     expect(user).not.toContain('The lost map')
     expect(user).not.toContain('Warn the abbey')
@@ -1775,6 +2101,7 @@ describe('threadsTask', () => {
       title: 'Find the heir',
       description: 'Fork.',
       status: 'active',
+      injectionMode: 'disabled',
       createdAt: 30,
     })
     await fx.ctx.db.insert(threads).values({
@@ -1789,7 +2116,13 @@ describe('threadsTask', () => {
     const { ids, start } = await startOf(fx)
 
     expect(start?.show.threads).toEqual([
-      { id: 'th1', title: 'Find the heir', description: 'Main.', status: 'active' },
+      {
+        id: 'th1',
+        title: 'Find the heir',
+        description: 'Main.',
+        status: 'active',
+        injectionMode: 'auto',
+      },
     ])
     expect(start?.seeds).toEqual([{ table: 'threads', id: OPEN_ROWS.heir }])
     expect(ids.handleOf(OPEN_ROWS.debt)).toBeUndefined()

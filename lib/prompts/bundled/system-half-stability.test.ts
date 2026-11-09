@@ -540,7 +540,13 @@ describe("a close's task templates share one system half", () => {
     },
     [TEMPLATE_IDS.closeThreads]: {
       closeThreads: [
-        { id: 'th1', title: 'Find the heir', description: 'Still open.', status: 'active' },
+        {
+          id: 'th1',
+          title: 'Find the heir',
+          description: 'Still open.',
+          status: 'active',
+          injectionMode: 'always',
+        },
       ],
       closeWritesSoFar: '- update_character Kael (c1): state.traits',
     },

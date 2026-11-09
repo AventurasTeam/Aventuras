@@ -1,7 +1,7 @@
 import { and, asc, eq, inArray } from 'drizzle-orm'
 
 import type { PromptHalves } from '@/lib/ai'
-import { threads, type StoryMode } from '@/lib/db'
+import { threads, type InjectionMode, type StoryMode } from '@/lib/db'
 import { TEMPLATE_IDS } from '@/lib/prompts'
 
 import { readRowTool, refsIn } from './read-tools'
@@ -12,14 +12,22 @@ import { hasTurns, readTaskTurns, renderClosePrompt, storyModeOf, type CloseTurn
 import { isOpen, OPEN_THREAD_STATUSES, type OpenThreadStatus } from '../chapter-context'
 
 /** C11: the fields Threads' start shows, so read_row returns the same and its rows count as read. */
-export const THREADS_READ_FIELDS: ReadFields = { thread: ['title', 'description', 'status'] }
+export const THREADS_READ_FIELDS: ReadFields = {
+  thread: ['title', 'description', 'status', 'injectionMode'],
+}
 
 export type ThreadsShow = {
   mode: StoryMode
   closeTurns: CloseTurns
   /** readTaskTurns' stored count of the turns, which primes the system half's count. */
   proseTokens: number
-  threads: { id: string; title: string; description: string; status: OpenThreadStatus }[]
+  threads: {
+    id: string
+    title: string
+    description: string
+    status: OpenThreadStatus
+    injectionMode: InjectionMode
+  }[]
 }
 
 // memory/chapter-close.md → Run order: the open threads, the user's included.
@@ -30,6 +38,7 @@ async function startThreads(ctx: TaskPromptContext): Promise<TaskStart<ThreadsSh
       title: threads.title,
       description: threads.description,
       status: threads.status,
+      injectionMode: threads.injectionMode,
     })
     .from(threads)
     .where(
@@ -58,6 +67,7 @@ async function startThreads(ctx: TaskPromptContext): Promise<TaskStart<ThreadsSh
         title: ctx.ids.withHandles(row.title),
         description: ctx.ids.withHandles(row.description ?? ''),
         status: row.status,
+        injectionMode: row.injectionMode,
       })),
     },
     seeds: open.map(({ id }) => ({ table: 'threads', id })),

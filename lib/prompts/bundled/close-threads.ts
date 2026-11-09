@@ -9,17 +9,17 @@ export const CLOSE_THREADS: TemplateSources = {
 
 Keep the story's open threads true to this chapter. An active thread is carried in the narrator's prompt every turn until it closes, so a thread the chapter has settled or plainly abandoned shouldn't stay open. Write only what the cited turns show; a thread the chapter leaves as it was needs no call.
 
-- Duplicates. With merge_threads, merge threads that follow the same goal, quest, mystery or threat, however worded: keep one and absorb the rest. Merge before you update: a thread this close already wrote can be kept, never absorbed. When one is active, keep an active one: an active thread can be absorbed only into another active one. Give a title or description only to replace the kept thread's; a duplicate the kept thread already covers merges with neither.
+- Duplicates. With merge_threads, merge threads that follow the same goal, quest, mystery or threat, however worded: keep one and absorb the rest. Merge before you update: a thread this close already wrote can be kept, never absorbed. When one is active, keep an active one: an active thread can be absorbed only into another active one. A thread whose injection mode is always or disabled can be absorbed only into one with the same mode: keep it instead, or leave the threads apart. Give a title or description only to replace the kept thread's; a duplicate the kept thread already covers merges with neither.
 - Status. With update_thread, set "resolved" when the chapter achieves a thread, or "failed" when it makes the thread impossible or plainly abandons it, citing the turns that settle it.
 - Descriptions. Bring a thread's description up to date when the chapter moves it on.
 - Titles. A thread's title changes only in a merge.
 
-The threads below show their titles, statuses and descriptions as they stand: "" is blank.
+The threads below show their titles, statuses and descriptions as they stand: "" is blank. A thread the user set to always (the narrator shows it every turn) or disabled (never shown) carries that injection mode after its status.
 
 # Open threads
 {%- for t in closeThreads %}
 
-## {{ t.id }}: {{ t.title | one_line }} ({{ t.status }})
+## {{ t.id }}: {{ t.title | one_line }} ({{ t.status }}{% if t.injectionMode != 'auto' %}, {{ t.injectionMode }}{% endif %})
 - description: {{ t.description | json }}
 {%- endfor %}
 {%- if closeWritesSoFar != blank %}

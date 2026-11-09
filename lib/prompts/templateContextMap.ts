@@ -633,10 +633,10 @@ export const VARIABLES: Record<ContextGroup, VariableDef[]> = {
     },
     {
       name: 'closeThreads',
-      type: "{ id: string; title: string; description: string; status: 'pending' | 'active' }[]",
+      type: "{ id: string; title: string; description: string; status: 'pending' | 'active'; injectionMode: 'always' | 'auto' | 'disabled' }[]",
       category: 'Plot',
       description:
-        "The Threads task's starting threads: every pending and active thread on the branch, the user's included, oldest first. `id` is the short id (th1, th2…); a missing description is an empty string. Only a close task's render sets it.",
+        "The Threads task's starting threads: every pending and active thread on the branch, the user's included, oldest first. `id` is the short id (th1, th2…); a missing description is an empty string; `injectionMode` is as stored. Only a close task's render sets it.",
       required: false,
     },
     {

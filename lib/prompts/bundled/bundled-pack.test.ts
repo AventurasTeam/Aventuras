@@ -298,8 +298,27 @@ describe('the close task templates', () => {
       mode: 'adventure',
       closeTurns: TURNS,
       closeThreads: [
-        { id: 'th1', title: 'Find the heir', description: 'Still open.', status: 'active' },
-        { id: 'th2', title: 'The debt\nto the guild', description: '', status: 'pending' },
+        {
+          id: 'th1',
+          title: 'Find the heir',
+          description: 'Still open.',
+          status: 'active',
+          injectionMode: 'auto',
+        },
+        {
+          id: 'th2',
+          title: 'The debt\nto the guild',
+          description: '',
+          status: 'pending',
+          injectionMode: 'always',
+        },
+        {
+          id: 'th3',
+          title: 'The quiet road',
+          description: 'Hidden.',
+          status: 'pending',
+          injectionMode: 'disabled',
+        },
       ],
       closeWritesSoFar: '',
       ...over,
@@ -353,7 +372,15 @@ describe('the close task templates', () => {
   it('shows each open thread under its id, its title on one line, with its status and description', () => {
     const { user } = threads()
     expect(user).toContain('## th1: Find the heir (active)\n- description: "Still open."')
-    expect(user).toContain('## th2: The debt to the guild (pending)\n- description: ""')
+    expect(user).toContain('## th2: The debt to the guild (pending, always)\n- description: ""')
+  })
+
+  it('shows an injection mode the user set after the status, and leaves auto unsaid', () => {
+    const { user } = threads()
+    expect(user).toContain('## th2: The debt to the guild (pending, always)\n')
+    expect(user).toContain('## th3: The quiet road (pending, disabled)\n')
+    expect(user).toContain('## th1: Find the heir (active)\n')
+    expect(user).not.toContain(', auto')
   })
 
   // memory/chapter-close.md → 3f's Threads bullet.
@@ -363,6 +390,8 @@ describe('the close task templates', () => {
     "Bring a thread's description up to date when the chapter moves it on.",
     'Merge before you update: a thread this close already wrote can be kept, never absorbed.',
     'When one is active, keep an active one: an active thread can be absorbed only into another active one.',
+    'A thread whose injection mode is always or disabled can be absorbed only into one with the same mode: keep it instead, or leave the threads apart.',
+    'A thread the user set to always (the narrator shows it every turn) or disabled (never shown) carries that injection mode after its status.',
     'a duplicate the kept thread already covers merges with neither.',
     "A thread's title changes only in a merge.",
   ])('the Threads task states: %s', (line) => {

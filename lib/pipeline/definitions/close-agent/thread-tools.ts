@@ -65,8 +65,12 @@ const MERGE_REFUSAL = {
   repeated: 'absorb names a thread twice: name each thread once',
   activeIntoInactive:
     'an active thread can be absorbed only into another active one, or the narrator would lose it: keep an active one, then settle it with update_thread if the chapter resolved or failed it',
+  modeIntoOther:
+    "a thread whose injection mode is always or disabled can be absorbed only into one with the same mode, or the user's setting would be lost: keep that thread instead, or leave the threads apart",
   closeWrote:
     'this close already wrote a thread in absorb, and absorbing it would block undoing the close: keep that thread instead',
+  noKeep:
+    "no choice of keep can land without dropping an active thread or a user's injection mode: leave them apart",
   closeWroteNoKeep:
     'this close already wrote among these threads and no choice of keep can land, so they cannot be merged in this close: leave them apart',
 } as const
@@ -189,9 +193,15 @@ async function planUpdateThread(args: ThreadArgs, ctx: WriteContext): Promise<Wr
   return { kind: 'write', actions, lost, rows, values: wanted }
 }
 
-// Keep's status stands, so an active thread absorbed into a non-active one would leave the prompt.
-const dropsActive = (kept: Thread, absorbed: readonly Thread[]): boolean =>
-  kept.status !== 'active' && absorbed.some(({ status }) => status === 'active')
+// Keep's status and injection mode stand, so a merge refuses what the narrator would silently lose.
+function keepFault(kept: Thread, merged: readonly Thread[]): string | undefined {
+  const absorbed = merged.filter((row) => row !== kept)
+  if (kept.status !== 'active' && absorbed.some(({ status }) => status === 'active'))
+    return MERGE_REFUSAL.activeIntoInactive
+  if (absorbed.some(({ injectionMode: mode }) => mode !== 'auto' && mode !== kept.injectionMode))
+    return MERGE_REFUSAL.modeIntoOther
+  return undefined
+}
 
 function mergeShapeFault(keep: string, absorb: readonly string[]): string | undefined {
   if (absorb.length === 0) return MERGE_REFUSAL.emptyAbsorb
@@ -266,26 +276,23 @@ async function planMergeThreads(args: MergeArgs, ctx: WriteContext): Promise<Wri
       ? {}
       : { description: description.bounded }),
   }
-  // Keep may be a row this close wrote. A second written row, or a written one that can't be kept
-  // either, leaves no merge that can land, so this answers before the advice to swap keep.
+  // Each of the threads tried as keep, so a refusal's advice names only a merge that would land.
+  const merged = [kept, ...absorbed]
+  const fitting = merged.filter((row) => keepFault(row, merged) === undefined)
+  // A row this close wrote can be kept, never absorbed.
   const written = await closeWrote(ctx, named)
-  const writtenAbsorbed = absorbed.find(({ id }) => written.has(id))
-  const swapped = absorbed.filter((row) => row !== writtenAbsorbed)
-  if (
-    written.size > 1 ||
-    (written.has(kept.id) && dropsActive(kept, absorbed)) ||
-    (writtenAbsorbed !== undefined && dropsActive(writtenAbsorbed, [kept, ...swapped]))
-  )
-    return { kind: 'refused', reason: MERGE_REFUSAL.closeWroteNoKeep, rows, values: wanted }
-  if (dropsActive(kept, absorbed))
-    return { kind: 'refused', reason: MERGE_REFUSAL.activeIntoInactive, rows, values: wanted }
-  if (writtenAbsorbed !== undefined)
+  const landing = fitting.filter((row) => [...written].every((id) => id === row.id))
+  if (landing.length === 0) {
+    const reason = fitting.length === 0 ? MERGE_REFUSAL.noKeep : MERGE_REFUSAL.closeWroteNoKeep
+    return { kind: 'refused', reason, rows, values: wanted }
+  }
+  if (!landing.includes(kept))
     return {
       kind: 'refused',
-      reason: MERGE_REFUSAL.closeWrote,
+      reason: keepFault(kept, merged) ?? MERGE_REFUSAL.closeWrote,
       rows,
       values: wanted,
-      note: `Send ${writtenAbsorbed.id} as keep.`,
+      note: `Send ${landing.map(({ id }) => id).join(' or ')} as keep.`,
     }
   const fields = Object.keys(wanted)
   const guard = await ctx.guard(named.map((id): GuardRow => ({ table: 'threads', id })))
@@ -355,7 +362,7 @@ export const mergeThreadsTool: WriteTool<typeof MERGE_SHAPE> = {
   kind: 'write',
   name: 'merge_threads',
   description:
-    "Merge threads that track the same thing: keep one, and absorb the others, which are deleted. Keep an active thread when any is active: an active thread can be absorbed only into another active one, and keep's status stands. Send a title or a description only to rewrite keep's, covering what the absorbed threads held. Merge all of one thread's duplicates in one call.",
+    "Merge threads that track the same thing: keep one, and absorb the others, which are deleted. Keep's status and injection mode stand. Keep an active thread when any is active: an active thread can be absorbed only into another active one. A thread whose injection mode is always or disabled can be absorbed only into one with the same mode. Send a title or a description only to rewrite keep's, covering what the absorbed threads held. Merge all of one thread's duplicates in one call.",
   schema: writeToolSchema(MERGE_SHAPE),
   ids: {
     keep: { shape: 'single', prefixes: ['thr_'] },
