@@ -88,9 +88,14 @@ export function restatedText(stored: unknown, text: SentText): boolean {
   return sameValue(stored, text.sent) || sameValue(stored, text.bounded)
 }
 
-/** The stored list equals the list as sent or the entries it holds: a stored joined entry is no change. */
+/**
+ * The stored list equals the list as sent or the entries it holds: a stored joined entry is no
+ * change, nor is a stored list whose duplicates or padding dedupeTerms drops.
+ */
 export function restatedList(stored: unknown, list: SentList): boolean {
-  return sameValue(stored, list.sent) || sameValue(stored, list.entries)
+  if (sameValue(stored, list.sent) || sameValue(stored, list.entries)) return true
+  const storedList = Array.isArray(stored) && stored.every((item) => typeof item === 'string')
+  return storedList && sameValue(dedupeTerms(stored), list.entries)
 }
 
 export type CappedList = 'traits' | 'drives' | 'agenda'

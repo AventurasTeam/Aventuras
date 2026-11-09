@@ -182,6 +182,12 @@ describe('restatedList', () => {
     expect(restatedList(['stubborn', 'wary'], list(['stubborn\nwary']))).toBe(true)
     expect(restatedList(['stubborn'], list(['stubborn\nwary']))).toBe(false)
   })
+
+  it('reads a resent stored list holding duplicates or padding as restated', () => {
+    expect(restatedList(['brave', 'brave'], list(['brave', 'brave']))).toBe(true)
+    expect(restatedList([' brave ', 'wary'], list([' brave ', 'wary']))).toBe(true)
+    expect(restatedList(['brave', 'brave'], list(['brave', 'wary']))).toBe(false)
+  })
 })
 
 describe('overSoftCap', () => {
