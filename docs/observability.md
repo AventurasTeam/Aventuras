@@ -222,7 +222,9 @@ convention, and the expectation that subsystems route through
   (warn: the description embed call threw, so every namesake went
   unscored)
 - `retrieval.*` — `row_skipped_stale`, `empty_pool`, `knn_error`
-- `provider.*` — `url_redaction_failed`
+- `provider.*` — `prompt_count_uncached` (debug: a text over the
+  pre-send count cache's character budget, so its count isn't kept,
+  with `chars` and `budget`), `url_redaction_failed`
   (the URL pass failed to parse a span and left it unredacted —
   it fails open, so it must not fail silently),
   `narrative_stream_failed` (error: a stream error that fails the turn,
@@ -265,8 +267,11 @@ convention, and the expectation that subsystems route through
   `close_tool_action_noop` (one action's noop, with its reason and
   mark), `close_tool_call_invalid` (a malformed call or an unknown
   tool, which the SDK answered itself, with the task, part, tool and
-  the SDK's detail) and `close_task_failed` (a task whose step failed
-  the close, with the task, part and error kind)
+  the SDK's detail), `close_task_failed` (a task whose step failed
+  the close, with the task, part and error kind) and
+  `close_report_value` (every value a close's report records, a refused
+  or skipped call's included, with the tool, the delta path and its
+  `length` in characters before `CLOSE_REPORT_VALUE_BOUND` cuts it)
 - `bootstrap.*` — boot-time hydration failures (e.g.
   `app_settings_hydrate_failed`)
 - `calendar.*` — `format_miss` (a `displayFormat` that fails or

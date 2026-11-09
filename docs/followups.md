@@ -418,6 +418,17 @@ breakdown under [UX](#ux).
 
   Raised 2026-10-31 by the chapter-close agent design.
 
+- **The dataset chapter's bare profiles.** The Treasure Island seed's
+  characters are nearly bare: of 25, the most traits on a live one is 4,
+  no live one holds a drive, only the retired Pew holds a `voice`, and 8
+  have no description, Jim Hawkins among them. The periodic classifier
+  created 24 of them, so whether that is the book's shape, a first
+  chapter that shows little of most of its cast, or the classifier
+  writing thin first profiles is open. Play testing tells, on a played
+  story's passes. Meanwhile a close is measured on the seed with
+  [its test overlay](./testing.md#the-dataset-seed). Raised 2026-11-09
+  by Slice 5.5b's planning.
+
 - **World's "stale active" surface.**
   [`chapter-close.md → Phase 4`](./memory/chapter-close.md#phase-4--lifecycle-review)
   puts a character far past `lastSeenAt` in the World panel as "stale

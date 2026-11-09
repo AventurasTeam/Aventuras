@@ -312,10 +312,12 @@ wizard draft's. Without a lead the instructions name none, and
 narration in first or second person still holds.
 
 **Every history marks the user's turns.** Story so far, the fallback's
-turns and the periodic classifier's turns mark a `user_action` entry
-as the user's, so a model can tell the lead's attempt or a direction
-from the narration; the opening and the replies render unmarked. The
-mark costs a few tokens per user turn.
+turns, the periodic classifier's turns and the turns a chapter close's
+tasks read
+([`chapter-close.md → Conversations`](./memory/chapter-close.md#conversations))
+mark a `user_action` entry as the user's, so a model can tell the lead's
+attempt or a direction from the narration; the opening and the replies
+render unmarked. The mark costs a few tokens per user turn.
 
 ### Structured output — the JSON contract is not pack content
 
@@ -972,6 +974,19 @@ and on a tool step the tool definitions, calls, results and reasoning,
 with `countTokens`: o200k, an
 estimate for every provider. When the window is known and the estimate
 exceeds it, the call is not sent and not retried.
+
+A close task's system half holds every turn of its part of the chapter,
+so the check doesn't encode that prose on the JS thread. Before a
+part's first step the close records the half's count. It encodes the
+half rendered with every turn's content blank, and adds each entry's
+stored `content_tokens`
+([`data-model.md → Chapters / memory system`](./data-model.md#chapters--memory-system)),
+counting a null one from its prose. The rest of each step's request is
+encoded as above. Stored content can hold what the prompt leaves out,
+such as a trailing block an older reply still carries, so the count
+can lean slightly high. The lean is small, since rows written today
+hold stripped prose, and is accepted as small, not as safe: the
+estimate is compared with no margin, as below.
 
 The prompt alone is compared, with no reserve for the reply. A
 profile's `maxOutput` is a ceiling, not the reply's size, and many

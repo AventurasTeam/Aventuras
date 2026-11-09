@@ -421,6 +421,23 @@ and
 [5.9](./implementation/milestones/05-chapters-chapter-close/slices/09-chapter-wide-tasks.md#scope-in)
 carry the step.
 
+`pnpm db:seed:dataset --overlay [db path]` loads the seed, then its test
+overlay, `scripts/dataset-chapter/overlay-data.ts`
+([Slice 5.5b → The test overlay](./implementation/milestones/05-chapters-chapter-close/slices/05b-identity-threads.md#the-test-overlay)),
+since a close on the seed alone never meets a soft cap. Written from the
+chapter's own text, it puts main-cast lists at their caps and one over,
+synonym pairs, an entry the chapter contradicts, the faction's standing,
+agenda and members, and a planted duplicate thread. It writes them
+directly, with no delta, so they read as a first profile that nothing
+protects and a close's CTRL-Z restores; one user edit goes through the
+action layer as `user_edit`, so precedence reads it. It undoes the seed's
+close first, since that close's undo would later put the bare values
+back, and refuses a closed chapter whose close isn't the branch's last
+action. It fails on a seed row whose id or name no longer matches,
+before writing anything. Applying it twice changes nothing and logs the
+user edit once. The seed file stays the pipeline's output: a refresh
+runs without the overlay.
+
 ## Embedder in E2E
 
 The embedder is central to the story flow, so E2E exercises the real
@@ -692,6 +709,26 @@ place of the close's shipped slots, a write landing a create and an
 update in one group, so the mock can drive the whole runner: script its
 `tools:read_row+stand_in_write` lane with one step calling
 `stand_in_write` on `c1`, then the empty step.
+
+`PROBE_OVERLAY=1` runs the probe on [the dataset seed](#the-dataset-seed)
+with its overlay, applied to each run's copy after the boot's recovery
+and before the classifier check. `PROBE_BRANCH_ID` then defaults to the
+dataset branch, and another branch is refused. The probe turns
+diagnostics and their debug level on for every run. Each run prints
+whether Identity and Threads held: the close completed, the task ended
+on a reply with no tool call and no budget, window or cut-off stop, it
+landed at least one write, and none of its replies was cut off or
+reached the 8k output bound. It also prints each step's
+`provider.input_ratio`, a cut attempt's output tokens beside its retry,
+the largest value the report recorded, measured before its bound, the
+report's size in bytes, and two coverage counts: Identity calls whose
+list on an overlay row at or over its cap reached the cap check, landed
+or refused, and `merge_threads` calls. After the runs it prints the
+bar: met when both tasks held in 8 runs of 10 and each coverage count
+came up in 3 runs of 10, both scaled to `PROBE_RUNS`; inconclusive when
+enough runs held but a count fell short; missed otherwise. It writes the
+verdict and each run's tally to `bar.json` in `PROBE_OUT`, and exits
+non-zero unless the bar is met.
 
 ## Selector strategy
 

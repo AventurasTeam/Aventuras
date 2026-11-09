@@ -470,7 +470,9 @@ removed only when the chapter explicitly contradicts it.
 are rewritten whole when the chapter shows them changed, and an
 entity's `description` when the chapter materially changes who or what
 it is (the stable boy who became the king's champion), never for
-detail the state slots already carry.
+detail the state slots already carry. A blank `description`, `voice` or
+`standing` may be filled when the cited turns show it, and from then on
+follows the same rules.
 
 **Cited evidence:** like lore creation, each write requires prose
 citation, and the latest entry it cites anchors the write's user
@@ -639,10 +641,16 @@ conservative bias as the sub-jobs above:
 - **Threads**, as their own task. Duplicates merged, descriptions brought
   up to date, and a thread resolved or failed when the chapter settles it
   or leaves it plainly abandoned, through `setThreadStatus` with the
-  latest cited turn. An active thread costs every turn's prompt until it
-  closes ([`classifier.md → Threads`](./classifier.md#threads)). A merge
-  follows 3e's rules: nothing links to a thread, so it is an update and a
-  delete.
+  latest cited turn. A cited turn earlier than the thread's opening is
+  written at the opening, as the pass writes a closing turn
+  ([`classifier.md → Threads`](./classifier.md#threads)); the latest cited
+  turn still sets precedence. An active thread costs every turn's prompt
+  until it closes. A merge follows 3e's rules: nothing links to a thread,
+  so it is an update and a delete. The kept row's status, entry refs,
+  category, icon and injection mode stand, and the merge writes only its
+  title and description. Absorbing an `active` thread into a `pending`
+  one is refused, since the kept row would drop the thread from the
+  narrator's prompt with no write saying so.
 - **`common_knowledge`** on a happening the chapter shows has spread
   to everyone: news is a chapter-scale judgment. A wrong flag makes
   every character aware, so the bar is explicit spread in the prose.
