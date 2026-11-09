@@ -19,16 +19,16 @@ import BasicTxt2ImgWorkflow from './comfyWorkflows/basic-txt2img-workflow.json'
 import LoraTxt2ImgWorkflow from './comfyWorkflows/lora-txt2img-workflow.json'
 import UnetTxt2ImgWorkflow from './comfyWorkflows/unet-txt2img-workflow.json'
 import { formatImageSize, specToPixels } from '#lib/utils/image.ts'
-import { normalizeBaseUrl } from '#lib/utils/url.ts'
+import { endpoint } from '#lib/utils/url.ts'
+import { HttpStatusError } from '#lib/utils/error.ts'
+import { resolveBaseUrl } from './baseUrls'
+import { imageConnectionFor, modelListKey } from './connection'
 import { isNewerVersion } from '#lib/utils/version.ts'
 import { imageGetFetch } from './fetchAdapter'
+import { bearerHeaders, withBearerKey } from './discoveryFetch'
+import { parseModelList } from './parseModelList'
 import { MIN_COMFYUI_VERSION, createComfyImage, type ComfyImageOptions } from './comfyImage'
 import { createImageSdkFetch, createPollImageSdkFetch, generateSdkImage } from './sdkImage'
-
-const DEFAULT_BASE_URL = 'http://localhost:8188'
-
-export const resolveComfyBaseUrl = (baseUrl: string | undefined): string =>
-  normalizeBaseUrl(baseUrl) || DEFAULT_BASE_URL
 
 // A server that does not answer is not worth the generation's own timeout.
 const PROBE_TIMEOUT_MS = 5_000
@@ -41,11 +41,8 @@ export enum ComfyMode {
   UnetTxt2Img = 'unet-txt2img',
 }
 
-// Tracks which model names came from diffusion_models/, keyed by baseUrl.
-// Values are Promises to prevent parallel fetches for the same baseUrl.
-const unetModelNames = new Map<string, Promise<Set<string>>>()
-
-// Cached auto-detected clip/vae names per baseUrl, populated in listModels()
+// The first text encoder and VAE the server lists, for a UNet profile that names none. Keyed by
+// `modelListKey`, like the model lists and capabilities, so a connection's entries drop together.
 const autoClipCache = new Map<string, string>()
 const autoVaeCache = new Map<string, string>()
 
@@ -58,37 +55,44 @@ const SystemStats = z.object({
 
 type ServerSystem = z.infer<typeof SystemStats>['system']
 
-// Per baseUrl, as a Promise so parallel generations share one request. A server that could not be
-// asked is not cached, and its own error comes from the generation request.
+// Per connection, as a Promise so parallel generations share one request. A server that could not
+// be asked is not cached, and its own error comes from the generation request.
 const serverSystems = new Map<string, Promise<ServerSystem | undefined>>()
 
 export async function fetchModelList(
   baseUrl: string | undefined,
+  apiKey: string,
   type: string,
   timeoutMs?: number,
+  signal?: AbortSignal,
 ): Promise<string[]> {
   // Tauri HTTP, not the WebView's fetch (docs/architecture/overview.md, "Local image servers").
-  const resp = await imageGetFetch(`${resolveComfyBaseUrl(baseUrl)}/models/${type}`, undefined, {
-    serviceId: 'comfy-models',
-    timeoutMs,
-  })
-  return (await resp.json()) as string[]
+  const resp = await imageGetFetch(
+    endpoint(resolveBaseUrl('comfyui', baseUrl), `models/${type}`),
+    bearerHeaders(apiKey),
+    {
+      serviceId: 'comfy-models',
+      timeoutMs,
+      signal,
+    },
+  )
+  return parseModelList(await resp.json(), z.string(), `ComfyUI /models/${type}`)
 }
 
-export function clearComfyCacheForUrl(baseUrl: string | undefined): void {
-  const key = resolveComfyBaseUrl(baseUrl)
-  unetModelNames.delete(key)
-  autoClipCache.delete(key)
-  autoVaeCache.delete(key)
-  serverSystems.delete(key)
+/** Drops what is cached for a `modelListKey`. */
+export function clearComfyCache(listKey: string): void {
+  autoClipCache.delete(listKey)
+  autoVaeCache.delete(listKey)
+  serverSystems.delete(listKey)
 }
 
 async function readServerSystem(
   baseUrl: string,
+  apiKey: string,
   timeoutMs?: number,
 ): Promise<ServerSystem | undefined> {
   try {
-    const response = await imageGetFetch(`${baseUrl}/system_stats`, undefined, {
+    const response = await imageGetFetch(endpoint(baseUrl, 'system_stats'), bearerHeaders(apiKey), {
       serviceId: 'comfy-system',
       timeoutMs: Math.min(timeoutMs ?? PROBE_TIMEOUT_MS, PROBE_TIMEOUT_MS),
     })
@@ -99,20 +103,25 @@ async function readServerSystem(
 }
 
 /** Throws for a server below the supported version; returns what it reports about itself. */
-async function checkServer(baseUrl: string, timeoutMs?: number): Promise<ServerSystem | undefined> {
-  let pending = serverSystems.get(baseUrl)
+async function checkServer(
+  listKey: string,
+  baseUrl: string,
+  apiKey: string,
+  timeoutMs?: number,
+): Promise<ServerSystem | undefined> {
+  let pending = serverSystems.get(listKey)
   if (!pending) {
-    pending = readServerSystem(baseUrl, timeoutMs)
-    serverSystems.set(baseUrl, pending)
+    pending = readServerSystem(baseUrl, apiKey, timeoutMs)
+    serverSystems.set(listKey, pending)
   }
   const system = await pending
   if (!system) {
-    serverSystems.delete(baseUrl)
+    serverSystems.delete(listKey)
     return undefined
   }
   const version = system.comfyui_version
   if (version && isNewerVersion(MIN_COMFYUI_VERSION, version)) {
-    serverSystems.delete(baseUrl)
+    serverSystems.delete(listKey)
     throw new Error(
       `ComfyUI ${version} is older than ${MIN_COMFYUI_VERSION}, the oldest version Aventuras supports. Update ComfyUI.`,
     )
@@ -473,6 +482,14 @@ const KSamplerInfo = z.object({
   }),
 })
 
+const CLIPLoaderInfo = z.object({
+  CLIPLoader: z.object({
+    input: z.object({
+      required: z.object({ type: z.array(z.unknown()) }),
+    }),
+  }),
+})
+
 const ComboConfig = z.object({ options: z.array(z.unknown()) })
 
 const isString = (value: unknown): value is string => typeof value === 'string'
@@ -487,22 +504,51 @@ function choices(input: unknown[]): string[] {
 
 type TemplateInputs = NonNullable<ComfyImageOptions['inputs']>
 
-const numberOr = (value: unknown, fallback: number): number =>
+export const numberOr = (value: unknown, fallback: number): number =>
   typeof value === 'number' ? value : fallback
 
 export function createComfyProvider(config: ImageProviderConfig): ImageProvider {
-  const baseUrl = resolveComfyBaseUrl(config.baseUrl)
+  const baseUrl = resolveBaseUrl('comfyui', config.baseUrl)
+  const listKey = modelListKey(imageConnectionFor('comfyui', config.apiKey, config.baseUrl))
 
   // One per generation, so concurrent generations keep separate poll traces in the debug log.
   const comfyModel = (model: string) =>
     createComfyImage({
       baseURL: baseUrl,
-      fetch: createImageSdkFetch('comfyui-image'),
-      pollFetch: createPollImageSdkFetch('comfyui-image', POLL_TIMEOUT_MS),
+      fetch: withBearerKey(createImageSdkFetch('comfyui-image'), config.apiKey),
+      pollFetch: withBearerKey(
+        createPollImageSdkFetch('comfyui-image', POLL_TIMEOUT_MS),
+        config.apiKey,
+      ),
     }).imageModel(model)
 
   // Binds baseUrl + optional timeout so internal callers don't repeat them.
-  const fetchModels = (type: string) => fetchModelList(baseUrl, type, config.timeoutMs)
+  const fetchModels = (type: string, signal?: AbortSignal) =>
+    fetchModelList(baseUrl, config.apiKey, type, config.timeoutMs, signal)
+
+  async function readObjectInfo<T extends z.ZodType>(
+    node: string,
+    schema: T,
+    serviceId: string,
+    signal?: AbortSignal,
+  ): Promise<z.output<T>> {
+    const response = await imageGetFetch(
+      endpoint(baseUrl, `object_info/${node}`),
+      bearerHeaders(config.apiKey),
+      {
+        serviceId,
+        timeoutMs: config.timeoutMs,
+        signal,
+      },
+    )
+    const info = schema.safeParse(await response.json())
+    if (!info.success) {
+      throw new Error(
+        `ComfyUI sent an unreadable /object_info/${node} reply\n${z.prettifyError(info.error)}`,
+      )
+    }
+    return info.data
+  }
 
   return {
     id: 'comfyui',
@@ -513,9 +559,8 @@ export function createComfyProvider(config: ImageProviderConfig): ImageProvider 
       // Strip the source-namespace prefix added by listModels() to deduplicate entries
       // (e.g. "checkpoint:model.safetensors" → "model.safetensors"). Handles both
       // prefixed IDs (new) and bare filenames (profiles saved before this change).
-      const model = /^(?:checkpoint|unet):/.test(options.model)
-        ? options.model.replace(/^(?:checkpoint|unet):/, '')
-        : options.model
+      const prefixed = /^(checkpoint|unet):/.exec(options.model)
+      const model = prefixed ? options.model.slice(prefixed[0].length) : options.model
 
       const positiveTags = (providerOptions?.positivePrompt as string) || ''
       const negativeTags = (providerOptions?.negativePrompt as string) || ''
@@ -523,7 +568,7 @@ export function createComfyProvider(config: ImageProviderConfig): ImageProvider 
 
       const explicitMode = providerOptions?.mode as ComfyMode | undefined
 
-      const server = await checkServer(baseUrl, config.timeoutMs)
+      const server = await checkServer(listKey, baseUrl, config.apiKey, config.timeoutMs)
 
       // -----------------------------------------------------------------------
       // Custom workflow path — only when mode is explicitly CustomWorkflow.
@@ -568,31 +613,11 @@ export function createComfyProvider(config: ImageProviderConfig): ImageProvider 
       const loraOptions = providerOptions?.lora as
         { name: string; strengthModel?: number; strengthClip?: number } | undefined
 
-      // Explicit mode always wins. Auto-detection only runs when no mode is set.
-      const hasExplicitOverride = !!explicitMode
-      const isLoraMode =
-        explicitMode === ComfyMode.LoraTxt2Img || (!hasExplicitOverride && !!loraOptions)
-
-      // Only fetch diffusion_models when auto-detection is needed; explicit basic/lora
-      // overrides skip it entirely to avoid an unnecessary network round-trip.
-      const needsUnetDetection = !hasExplicitOverride || explicitMode === ComfyMode.UnetTxt2Img
-      let unetNames = new Set<string>()
-      if (needsUnetDetection) {
-        if (!unetModelNames.has(baseUrl)) {
-          const p = fetchModels('diffusion_models')
-            .then((m) => new Set(m))
-            .catch((err) => {
-              unetModelNames.delete(baseUrl)
-              throw err
-            })
-          unetModelNames.set(baseUrl, p)
-        }
-        unetNames = await unetModelNames.get(baseUrl)!
-      }
-
+      // An explicit mode wins; without one, the LoRA option and then the id's source prefix decide.
+      const isLoraMode = explicitMode === ComfyMode.LoraTxt2Img || (!explicitMode && !!loraOptions)
       const isUnetMode =
         explicitMode === ComfyMode.UnetTxt2Img ||
-        (!hasExplicitOverride && !isLoraMode && unetNames.has(model))
+        (!explicitMode && !isLoraMode && prefixed?.[1] === 'unet')
 
       const serverPath = (name: string) => toServerPath(name, server?.os)
 
@@ -607,18 +632,19 @@ export function createComfyProvider(config: ImageProviderConfig): ImageProvider 
         const clipType = (providerOptions?.clipType as string) || 'lumina2'
         const weightDtype = (providerOptions?.weightDtype as string) || 'default'
 
-        let clipName = (providerOptions?.clipName as string) || autoClipCache.get(baseUrl) || ''
+        let clipName = (providerOptions?.clipName as string) || autoClipCache.get(listKey) || ''
+        let vaeName = (providerOptions?.vaeName as string) || autoVaeCache.get(listKey) || ''
+        const [clips, vaes] = await Promise.all([
+          clipName ? [] : fetchModels('text_encoders', signal),
+          vaeName ? [] : fetchModels('vae', signal),
+        ])
         if (!clipName) {
-          const clips = await fetchModels('text_encoders')
           clipName = clips[0] || ''
-          if (clipName) autoClipCache.set(baseUrl, clipName)
+          if (clipName) autoClipCache.set(listKey, clipName)
         }
-
-        let vaeName = (providerOptions?.vaeName as string) || autoVaeCache.get(baseUrl) || ''
         if (!vaeName) {
-          const vaes = await fetchModels('vae')
           vaeName = vaes[0] || ''
-          if (vaeName) autoVaeCache.set(baseUrl, vaeName)
+          if (vaeName) autoVaeCache.set(listKey, vaeName)
         }
 
         if (!clipName) throw new Error('No CLIP/text encoder model found in ComfyUI.')
@@ -694,20 +720,15 @@ export function createComfyProvider(config: ImageProviderConfig): ImageProvider 
       })
     },
 
-    async listModels(): Promise<ImageModelInfo[]> {
-      const [checkpoints, diffusionModels, textEncoders, vaeModels] = await Promise.all([
-        fetchModels('checkpoints'),
-        fetchModels('diffusion_models').catch(() => []),
-        fetchModels('text_encoders').catch(() => []),
-        fetchModels('vae').catch(() => []),
+    async listModels(signal?: AbortSignal): Promise<ImageModelInfo[]> {
+      const [checkpoints, diffusionModels] = await Promise.all([
+        fetchModels('checkpoints', signal),
+        // A server older than the folder answers 404; any other failure is the picker's to report.
+        fetchModels('diffusion_models', signal).catch((error: unknown) => {
+          if (error instanceof HttpStatusError && error.status === 404) return []
+          throw error
+        }),
       ])
-
-      // Cache auto-detected clip/vae for this baseUrl
-      if (textEncoders[0]) autoClipCache.set(baseUrl, textEncoders[0])
-      if (vaeModels[0]) autoVaeCache.set(baseUrl, vaeModels[0])
-
-      // Track which models require the unet workflow (keyed per baseUrl, resolved Promise)
-      unetModelNames.set(baseUrl, Promise.resolve(new Set(diffusionModels)))
 
       const toInfo =
         (prefix: string, description: string) =>
@@ -715,7 +736,6 @@ export function createComfyProvider(config: ImageProviderConfig): ImageProvider 
           id: `${prefix}:${m}`,
           name: m,
           description,
-          costPerImage: 0,
         })
 
       return [
@@ -724,22 +744,19 @@ export function createComfyProvider(config: ImageProviderConfig): ImageProvider 
       ]
     },
 
-    async listLoras(): Promise<string[]> {
-      try {
-        return await fetchModels('loras')
-      } catch {
-        return []
-      }
+    async listLoras(signal?: AbortSignal): Promise<string[]> {
+      return fetchModels('loras', signal)
     },
 
-    async getSamplerInfo(): Promise<ComfySamplerInfo> {
-      const response = await imageGetFetch(`${baseUrl}/object_info/KSampler`, undefined, {
-        serviceId: 'comfy-samplers',
-        timeoutMs: config.timeoutMs,
-      })
-      const { sampler_name, scheduler } = KSamplerInfo.parse(await response.json()).KSampler.input
-        .required
+    async getSamplerInfo(signal?: AbortSignal): Promise<ComfySamplerInfo> {
+      const info = await readObjectInfo('KSampler', KSamplerInfo, 'comfy-samplers', signal)
+      const { sampler_name, scheduler } = info.KSampler.input.required
       return { samplers: choices(sampler_name), schedulers: choices(scheduler) }
+    },
+
+    async listClipTypes(signal?: AbortSignal): Promise<string[]> {
+      const info = await readObjectInfo('CLIPLoader', CLIPLoaderInfo, 'comfy-clip-types', signal)
+      return choices(info.CLIPLoader.input.required.type)
     },
   }
 }

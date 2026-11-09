@@ -4,13 +4,8 @@
  * Helper functions for image generation using the standalone provider registry.
  */
 
-import {
-  generateImage,
-  supportsImageGeneration,
-  requiresApiKey,
-  baseUrlMode,
-  IMAGE_PROVIDER_LABELS,
-} from './providers/registry'
+import { generateImage, IMAGE_PROVIDER_LABELS, warmImageCapabilities } from './providers/registry'
+import { baseUrlMode, requiresApiKey } from './providers/connection'
 import { database } from '#lib/services/database.ts'
 import { settings } from '#lib/stores/settings.svelte.ts'
 import type { EmbeddedImage, StorySettings } from '#lib/types/index.ts'
@@ -26,7 +21,9 @@ import {
 
 const log = createLogger('ImageUtils')
 
-export type ImageProfileSlot = 'standard' | 'background' | 'portrait' | 'reference'
+const IMAGE_PROFILE_SLOTS = ['standard', 'background', 'portrait', 'reference'] as const
+
+export type ImageProfileSlot = (typeof IMAGE_PROFILE_SLOTS)[number]
 
 const SLOT_PROFILE_KEYS = {
   standard: 'profileId',
@@ -63,10 +60,7 @@ export function isImageGenerationEnabled(
   const profileId = slotProfileId(type)
   if (!profileId) return false
 
-  const profile = settings.getImageProfile(profileId)
-  if (!profile) return false
-
-  return supportsImageGeneration(profile.providerType)
+  return !!settings.getImageProfile(profileId)
 }
 
 export type MissingCredential = 'profile' | 'apiKey' | 'baseUrl'
@@ -79,7 +73,7 @@ export function missingCredential(
   if (!profileId) return 'profile'
 
   const profile = settings.getImageProfile(profileId)
-  if (!profile || !supportsImageGeneration(profile.providerType)) return 'profile'
+  if (!profile) return 'profile'
 
   if (requiresApiKey(profile.providerType) && !profile.apiKey) return 'apiKey'
   if (baseUrlMode(profile.providerType) === 'required' && !normalizeBaseUrl(profile.baseUrl))
@@ -92,6 +86,18 @@ export function missingCredential(
  */
 export function hasRequiredCredentials(slot: ImageProfileSlot = 'standard'): boolean {
   return missingCredential(slot) === undefined
+}
+
+/** Loads the capabilities of every profile an image slot selects, so the first generation does not wait on them. */
+export async function warmSlotCapabilities(): Promise<void> {
+  const profiles = IMAGE_PROFILE_SLOTS.filter((slot) => hasRequiredCredentials(slot)).flatMap(
+    (slot) => {
+      const id = slotProfileId(slot)
+      const profile = id ? settings.getImageProfile(id) : undefined
+      return profile ? [profile] : []
+    },
+  )
+  await warmImageCapabilities(profiles)
 }
 
 const PORTRAIT_CREDENTIAL_ERRORS: Record<MissingCredential, (providerName: string) => string> = {

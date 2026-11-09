@@ -21,23 +21,50 @@ export {
   generateImage,
   supportsReferenceImages,
   toRawBase64,
-  listImageModelsByProvider,
+  listImageModels,
+  evictReplacedModelList,
   getProviderSamplerInfo,
   listLoras,
-  requiresApiKey,
-  takesApiKey,
-  baseUrlMode,
+  getProviderClipTypes,
+  isLocalServer,
   referenceLimit,
+  takesCapabilityOverride,
   IMAGE_PROVIDER_LABELS,
   IMAGE_PROVIDER_OPTIONS,
   type ImageModelInfo,
 } from './providers/registry'
+
+export { resolveBaseUrl } from './providers/baseUrls'
+
+export {
+  baseUrlMode,
+  imageConnectionFor,
+  modelListKey,
+  requiresApiKey,
+} from './providers/connection'
+
+export {
+  applyCapabilityOverride,
+  canonicalModelId,
+  findListedModel,
+  overriddenFields,
+  overrideConflicts,
+} from './providers/modelCapabilities'
+
+export {
+  LOADED_LIST_LABELS,
+  groupLoadFailures,
+  sortLoadFailures,
+  type LoadFailure,
+  type LoadedList,
+} from './loadFailures'
 
 // Image generation utilities
 export {
   isImageGenerationEnabled,
   hasRequiredCredentials,
   missingCredential,
+  warmSlotCapabilities,
   portraitCredentialError,
   type MissingCredential,
   type ImageProfileSlot,

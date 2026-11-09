@@ -4,9 +4,10 @@
 import * as z from 'zod'
 import { InvalidResponseDataError } from 'ai'
 import type { ImageModelV4, SharedV4Warning } from '@ai-sdk/provider'
-import { bytesToBase64 } from '#lib/utils/image.ts'
-import { isPublicHttpUrl } from '#lib/utils/url.ts'
+import { providerMessage } from '#lib/utils/error.ts'
+import { endpoint } from '#lib/utils/url.ts'
 import type { Fetch } from '#lib/services/ai/sdk/providers/index.ts'
+import { fetchPublicImageBase64 } from './fetchAdapter'
 import {
   definedHeaders,
   fileBase64,
@@ -35,34 +36,8 @@ const GenerationResponse = z.object({
     .catch([]),
 })
 
-// Two shapes: `{ error: { message } }` and `{ error: '<message>' }`.
-const ErrorBody = z.object({
-  error: z.union([z.string(), z.object({ message: z.string() })]).optional(),
-  message: z.string().optional(),
-})
-
-function errorMessage(parsed: unknown, text: string, status: number): string {
-  const body = ErrorBody.safeParse(parsed)
-  if (body.success) {
-    const { error, message } = body.data
-    const found = typeof error === 'string' ? error : (error?.message ?? message)
-    if (found) return found
-  }
-  return responseExcerpt(text, status)
-}
-
-// A plain Error, not an APICallError: a 429 from the host would otherwise make the 429 middleware
-// re-run, and re-bill, the generation. The URL comes from the reply, so it must be public and is
-// not redirected.
-async function downloadBase64(fetch: Fetch, url: string, signal?: AbortSignal): Promise<string> {
-  if (!isPublicHttpUrl(url)) throw new Error('Image URL does not point at a public host')
-  const response = await fetch(url, { signal, redirect: 'manual' })
-  if (!response.ok) throw new Error(`Image download failed: HTTP ${response.status}`)
-  return bytesToBase64(new Uint8Array(await response.arrayBuffer()))
-}
-
 export function createNanoGPTImage(settings: NanoGPTImageSettings) {
-  const url = `${settings.baseURL}/images`
+  const url = endpoint(settings.baseURL, 'images')
 
   return {
     imageModel(modelId: string): ImageModelV4 {
@@ -129,7 +104,7 @@ export function createNanoGPTImage(settings: NanoGPTImageSettings) {
               response,
               text,
               url,
-              message: errorMessage(parsed, text, response.status),
+              message: providerMessage(text) ?? responseExcerpt(text, response.status),
               requestBodyValues: { ...body, input_references: inputReferences?.length },
             })
           }
@@ -147,7 +122,14 @@ export function createNanoGPTImage(settings: NanoGPTImageSettings) {
             if (item.b64_json) {
               images.push(item.b64_json)
             } else if (item.url) {
-              images.push(await downloadBase64(settings.fetch, item.url, abortSignal))
+              // A plain Error on failure, not an APICallError: the 429 middleware would otherwise re-run,
+              // and re-bill, the generation.
+              images.push(
+                await fetchPublicImageBase64(item.url, {
+                  signal: abortSignal,
+                  serviceId: 'nanogpt-image-download',
+                }),
+              )
             }
           }
 

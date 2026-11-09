@@ -12,6 +12,7 @@ vi.mock('#lib/services/ai/sdk/providers/sdkFetch.ts', () => ({
 
 import { imageGetFetch } from './fetchAdapter'
 import { createComfyProvider } from './comfy'
+import { HttpStatusError } from '#lib/utils/error.ts'
 
 const reply = (body: unknown) => ({ ok: true, json: async () => body }) as unknown as Response
 
@@ -19,7 +20,7 @@ const reply = (body: unknown) => ({ ok: true, json: async () => body }) as unkno
 function serveModels(lists: Record<string, string[]>) {
   vi.mocked(imageGetFetch).mockImplementation(async (url) => {
     const type = String(url).split('/models/')[1]
-    if (!(type in lists)) throw new Error('Image API error 404')
+    if (!(type in lists)) throw new HttpStatusError(404, '', 'Image API')
     return reply(lists[type])
   })
 }
@@ -32,15 +33,49 @@ describe('ComfyUI model discovery', () => {
     await expect(createComfyProvider({ apiKey: '' }).listModels()).rejects.toThrow('ECONNREFUSED')
   })
 
-  it('treats the optional lists as empty when they fail', async () => {
+  it.each([
+    ['k', { Authorization: 'Bearer k' }],
+    ['', undefined],
+  ])('sends the key %j to the list requests as %j', async (apiKey, headers) => {
+    serveModels({ checkpoints: [], diffusion_models: [] })
+    await createComfyProvider({ apiKey }).listModels()
+
+    const calls = vi.mocked(imageGetFetch).mock.calls
+    expect(calls.length).toBeGreaterThan(0)
+    for (const [, sent] of calls) expect(sent).toEqual(headers)
+  })
+
+  it('lists checkpoints alone from a server without the diffusion model folder', async () => {
     serveModels({ checkpoints: ['sd15.safetensors'] })
     const models = await createComfyProvider({ apiKey: '' }).listModels()
     expect(models.map((m) => m.id)).toEqual(['checkpoint:sd15.safetensors'])
   })
 
+  it('rejects when the diffusion model list fails for any other reason', async () => {
+    vi.mocked(imageGetFetch).mockImplementation(async (url) => {
+      if (String(url).endsWith('/models/checkpoints')) return reply(['sd15.safetensors'])
+      throw new HttpStatusError(500, 'boom', 'Image API')
+    })
+    await expect(createComfyProvider({ apiKey: '' }).listModels()).rejects.toThrow('500')
+  })
+
   it('returns an empty list when the server has no models', async () => {
     serveModels({ checkpoints: [], diffusion_models: [], text_encoders: [], vae: [] })
     expect(await createComfyProvider({ apiKey: '' }).listModels()).toEqual([])
+  })
+
+  it('reads only the checkpoint and diffusion model folders', async () => {
+    serveModels({ checkpoints: ['a.safetensors'], diffusion_models: [] })
+    await createComfyProvider({ apiKey: '' }).listModels()
+    expect(
+      vi
+        .mocked(imageGetFetch)
+        .mock.calls.map(([url]) => String(url))
+        .toSorted(),
+    ).toEqual([
+      'http://localhost:8188/models/checkpoints',
+      'http://localhost:8188/models/diffusion_models',
+    ])
   })
 
   it('prefixes checkpoints and diffusion models by source', async () => {
@@ -49,11 +84,26 @@ describe('ComfyUI model discovery', () => {
     expect(models.map((m) => m.id)).toEqual(['checkpoint:a.safetensors', 'unet:flux.safetensors'])
   })
 
-  it('lists LoRAs, and none when the folder cannot be read', async () => {
+  it('forwards the abort signal to every list request', async () => {
+    serveModels({ checkpoints: [], diffusion_models: [], loras: [] })
+    const { signal } = new AbortController()
+    const provider = createComfyProvider({ apiKey: '' })
+
+    await provider.listModels(signal)
+    await provider.listLoras!(signal)
+    await provider.getSamplerInfo!(signal).catch(() => {})
+    await provider.listClipTypes!(signal).catch(() => {})
+
+    const calls = vi.mocked(imageGetFetch).mock.calls
+    expect(calls).toHaveLength(5)
+    for (const [, , options] of calls) expect(options?.signal).toBe(signal)
+  })
+
+  it('lists LoRAs, and rejects when the folder cannot be read', async () => {
     serveModels({ loras: ['detail.safetensors'] })
     expect(await createComfyProvider({ apiKey: '' }).listLoras!()).toEqual(['detail.safetensors'])
     serveModels({})
-    expect(await createComfyProvider({ apiKey: '' }).listLoras!()).toEqual([])
+    await expect(createComfyProvider({ apiKey: '' }).listLoras!()).rejects.toThrow('404')
   })
 
   it('reads samplers and schedulers from the KSampler node', async () => {
@@ -91,6 +141,61 @@ describe('ComfyUI model discovery', () => {
     )
     const info = await createComfyProvider({ apiKey: '' }).getSamplerInfo!()
     expect(info).toEqual({ samplers: ['euler', 'dpmpp_2m'], schedulers: ['karras', 'simple'] })
+  })
+
+  it('names the endpoint on the first line of an unreadable KSampler reply', async () => {
+    vi.mocked(imageGetFetch).mockResolvedValue(reply({ KSampler: { input: {} } }))
+    const error = await createComfyProvider({ apiKey: '' }).getSamplerInfo!().catch((e: Error) => e)
+    expect(error).toBeInstanceOf(Error)
+    expect((error as Error).message.split('\n')[0]).toBe(
+      'ComfyUI sent an unreadable /object_info/KSampler reply',
+    )
+  })
+
+  describe('CLIP types', () => {
+    const clipLoader = (type: unknown[]) => reply({ CLIPLoader: { input: { required: { type } } } })
+
+    it('reads the types from the CLIPLoader node', async () => {
+      vi.mocked(imageGetFetch).mockResolvedValue(clipLoader([['lumina2', 'flux', 'wan']]))
+      expect(await createComfyProvider({ apiKey: '' }).listClipTypes!()).toEqual([
+        'lumina2',
+        'flux',
+        'wan',
+      ])
+      expect(vi.mocked(imageGetFetch).mock.calls[0][0]).toBe(
+        'http://localhost:8188/object_info/CLIPLoader',
+      )
+    })
+
+    it('reads the options of the COMBO form and drops non-string entries', async () => {
+      vi.mocked(imageGetFetch).mockResolvedValue(
+        clipLoader(['COMBO', { options: ['lumina2', 7, 'flux'] }]),
+      )
+      expect(await createComfyProvider({ apiKey: '' }).listClipTypes!()).toEqual([
+        'lumina2',
+        'flux',
+      ])
+    })
+
+    it.each([
+      ['no CLIPLoader node', {}],
+      ['a type that is not an array', { CLIPLoader: { input: { required: { type: 'x' } } } }],
+    ])('names the endpoint on the first line of a reply with %s', async (_, body) => {
+      vi.mocked(imageGetFetch).mockResolvedValue(reply(body))
+      const error = await createComfyProvider({ apiKey: '' }).listClipTypes!().catch(
+        (e: Error) => e,
+      )
+      expect((error as Error).message.split('\n')[0]).toBe(
+        'ComfyUI sent an unreadable /object_info/CLIPLoader reply',
+      )
+    })
+  })
+
+  it('rejects a model folder reply that is not a list', async () => {
+    vi.mocked(imageGetFetch).mockResolvedValue(reply('<html></html>'))
+    await expect(createComfyProvider({ apiKey: '' }).listLoras!()).rejects.toThrow(
+      'ComfyUI /models/loras did not return a list',
+    )
   })
 
   it('finds no choices in an input of another type', async () => {

@@ -30,3 +30,53 @@ export function errMessage(e: unknown): string {
     return String(e)
   }
 }
+
+/** The first non-blank line of `text`, cut to `max` characters. */
+export function errorSummary(text: string, max = 200): string {
+  const first = text.split('\n').find((line) => line.trim()) ?? ''
+  const line = first.trim()
+  return line.length > max ? `${line.slice(0, max - 1)}…` : line
+}
+
+/** A response that was not a success, with the status and body it came back with. */
+export class HttpStatusError extends Error {
+  override name = 'HttpStatusError'
+  constructor(
+    readonly status: number,
+    readonly body: string,
+    what: string,
+  ) {
+    super(`${what} error ${status}: ${body}`)
+  }
+}
+
+const isRecord = (value: unknown): value is Record<string, unknown> =>
+  typeof value === 'object' && value !== null
+
+/** The message field of a provider's JSON error body, in the shapes providers actually use. */
+export function providerMessage(body: string | undefined): string | null {
+  if (!body) return null
+  let parsed: unknown
+  try {
+    parsed = JSON.parse(body)
+  } catch {
+    return null
+  }
+  if (!isRecord(parsed)) return null
+  const { error, message, detail } = parsed
+  if (isRecord(error) && typeof error.message === 'string' && error.message) return error.message
+  for (const candidate of [error, message, detail]) {
+    if (typeof candidate === 'string' && candidate) return candidate
+  }
+  return null
+}
+
+/** One line for a failed load, and the full text behind it. */
+export function describeLoadError(error: unknown): { summary: string; detail: string } {
+  const detail = errMessage(error)
+  if (error instanceof HttpStatusError) {
+    const reason = providerMessage(error.body) ?? errorSummary(error.body)
+    return { summary: errorSummary(`${error.status} · ${reason}`), detail }
+  }
+  return { summary: errorSummary(detail), detail }
+}

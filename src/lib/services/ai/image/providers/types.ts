@@ -5,13 +5,15 @@
  * Each provider makes direct HTTP calls instead of going through the Vercel AI SDK.
  */
 
-import type { ImageProviderType } from '#lib/types/index.ts'
+import type { ImageModelCapabilities, ImageProviderType } from '#lib/types/index.ts'
 import type { ImageSpec } from '#lib/utils/image.ts'
 import type { Json } from './comfyImage'
 // Provider specific types
 export type ComfySamplerInfo = {
   samplers: string[]
   schedulers: string[]
+  /** Why `schedulers` is empty when the server cannot list them, as opposed to having none. */
+  schedulersUnavailable?: string
 }
 
 /** A user-uploaded ComfyUI API-format workflow with auto-detected field paths. */
@@ -42,8 +44,8 @@ export interface ImageGenerateOptions {
   prompt: string
   /** What the user asked for. Each adapter turns it into whatever its backend takes. */
   spec: ImageSpec
-  /** The selected model's catalogue entry, when the provider publishes one. */
-  modelInfo?: ImageModelInfo
+  /** The selected model's capabilities, from the provider's model list or its table. */
+  modelInfo?: ImageModelCapabilities
   referenceImages?: string[] // raw base64 (no data: prefix)
   signal?: AbortSignal
   providerOptions?: Record<string, unknown>
@@ -54,26 +56,12 @@ export interface ImageGenerateResult {
   revisedPrompt?: string
 }
 
-export interface ImageModelInfo {
+export interface ImageModelInfo extends ImageModelCapabilities {
   id: string
   name: string
+  /** Other ids the provider serves this model under. */
+  aliases?: string[]
   description?: string
-  /** Absent means unknown. */
-  supportsImg2Img?: boolean
-  /** How many reference images one request takes; absent means no known limit. */
-  maxReferenceImages?: number
-  /**
-   * The exact values this model accepts for its size parameter, verbatim.
-   *
-   * Not normalised: NanoGPT's catalogue mixes `1024x1024` with `square_hd`, `auto` and
-   * `1k`/`2k`/`4k`, and a model offering only the latter has no dimensions to normalise to.
-   */
-  supportedResolutions?: string[]
-  /** The `w:h` ratios this model accepts, verbatim; options like `auto` are left out. */
-  supportedAspectRatios?: string[]
-  costPerImage?: number
-  costPerTextToken?: number
-  costPerImageToken?: number
   inputModalities?: string[]
   outputModalities?: string[]
 }
@@ -82,10 +70,20 @@ export interface ImageProvider {
   readonly id: ImageProviderType
   readonly name: string
   generate(options: ImageGenerateOptions): Promise<ImageGenerateResult>
-  listModels(apiKey?: string): Promise<ImageModelInfo[]>
+  listModels(signal?: AbortSignal): Promise<ImageModelInfo[]>
+  /**
+   * One model's capabilities, for a provider that can describe a model its `listed` models lack.
+   * Rejects on failure; `undefined` means the provider does not know the model.
+   */
+  getModelCapabilities?(
+    model: string,
+    listed: ImageModelInfo[],
+    signal?: AbortSignal,
+  ): Promise<ImageModelCapabilities | undefined>
   // ComfyUI specific
-  getSamplerInfo?(): Promise<ComfySamplerInfo>
-  listLoras?(): Promise<string[]>
+  getSamplerInfo?(signal?: AbortSignal): Promise<ComfySamplerInfo>
+  listLoras?(signal?: AbortSignal): Promise<string[]>
+  listClipTypes?(signal?: AbortSignal): Promise<string[]>
 }
 
 export interface ImageProviderConfig {

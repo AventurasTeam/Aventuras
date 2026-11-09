@@ -7,7 +7,9 @@
  */
 
 import { IMAGE_TIMEOUT_DEFAULT } from '#lib/constants/timeout.ts'
+import { isAbortError } from '#lib/services/activity/index.ts'
 import { debug } from '#lib/stores/debug.svelte.ts'
+import { errMessage, HttpStatusError } from '#lib/utils/error.ts'
 import { createRequestGuard } from '#lib/utils/idleTimeout.ts'
 import { bytesToBase64 } from '#lib/utils/image.ts'
 import { isPublicHttpUrl } from '#lib/utils/url.ts'
@@ -42,6 +44,7 @@ export async function fetchPublicImageBase64(
 /**
  * GET-based image fetch (for providers like Pollinations that use URL params).
  * With `followRedirects: false` a 3xx is returned to the caller instead of followed or thrown.
+ * A status in `allowStatuses` is returned the same way; the caller reads or cancels its body.
  */
 export async function imageGetFetch(
   url: string,
@@ -51,6 +54,7 @@ export async function imageGetFetch(
     timeoutMs?: number
     serviceId?: string
     followRedirects?: boolean
+    allowStatuses?: number[]
   },
 ): Promise<Response> {
   const {
@@ -58,11 +62,13 @@ export async function imageGetFetch(
     timeoutMs = IMAGE_TIMEOUT_DEFAULT,
     serviceId = 'image-gen',
     followRedirects = true,
+    allowStatuses = [],
   } = options ?? {}
 
   const guard = createRequestGuard({ timeoutMs, what: 'Image fetch', callerSignal: signal })
   const startTime = Date.now()
   const debugId = debug.addDebugRequest(serviceId, { url, method: 'GET', body: {} })
+  let statusLogged = false
 
   try {
     const response = await httpFetch(url, {
@@ -73,7 +79,11 @@ export async function imageGetFetch(
     })
 
     const isRedirect = response.status >= 300 && response.status < 400
-    if (!response.ok && !(isRedirect && !followRedirects)) {
+    if (
+      !response.ok &&
+      !(isRedirect && !followRedirects) &&
+      !allowStatuses.includes(response.status)
+    ) {
       const errorText = await response.text()
       debug.addDebugResponse(
         debugId,
@@ -82,13 +92,19 @@ export async function imageGetFetch(
         startTime,
         errorText,
       )
-      throw new Error(`Image API error ${response.status}: ${errorText}`)
+      statusLogged = true
+      throw new HttpStatusError(response.status, errorText, 'Image API')
     }
 
     debug.addDebugResponse(debugId, serviceId, { status: response.status }, startTime)
     return guard.wrapBody(response)
   } catch (error) {
-    throw guard.mapError(error)
+    const mapped = guard.mapError(error)
+    if (!statusLogged) {
+      const reason = isAbortError(mapped) ? 'aborted' : errMessage(mapped)
+      debug.addDebugResponse(debugId, serviceId, { error: reason }, startTime, reason)
+    }
+    throw mapped
   } finally {
     guard.dispose()
   }

@@ -148,7 +148,7 @@ export default [
       'node_modules/',
       '.npm-cache/',
       'src-tauri/',
-      '.release-pre3-check/',
+      '.delta/',
     ],
   },
   {

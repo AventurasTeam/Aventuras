@@ -15,10 +15,7 @@
  */
 
 import { extractPicTags, type ParsedPicTag } from '#lib/utils/inlineImageParser.ts'
-import {
-  generateImage as registryGenerateImage,
-  supportsImageGeneration,
-} from './providers/registry'
+import { generateImage as registryGenerateImage } from './providers/registry'
 import { recordImageResult } from './imageUtils'
 import { database } from '#lib/services/database.ts'
 import { settings } from '#lib/stores/settings.svelte.ts'
@@ -143,10 +140,7 @@ export class InlineImageTracker {
       return
     }
 
-    // Check if provider supports image generation
-    const profile = settings.getImageProfile(profileId)
-    if (!profile) return
-    if (!supportsImageGeneration(profile.providerType)) return
+    if (!settings.getImageProfile(profileId)) return
 
     // Build full prompt with style
     const stylePrompt = await resolveStylePrompt(this.storyId, imageSettings.styleId)

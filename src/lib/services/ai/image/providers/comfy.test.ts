@@ -19,22 +19,14 @@ vi.mock('#lib/utils/async.ts', async (importOriginal) => ({
   sleep: vi.fn(async () => {}),
 }))
 
-vi.mock('#lib/utils/url.ts', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('#lib/utils/url.ts')>()
-  return { ...actual, normalizeBaseUrl: vi.fn(actual.normalizeBaseUrl) }
-})
-
 import { specToPixels } from '#lib/utils/image.ts'
-import { normalizeBaseUrl } from '#lib/utils/url.ts'
 import { imageGetFetch } from './fetchAdapter'
 import {
   ComfyMode,
-  clearComfyCacheForUrl,
+  clearComfyCache,
   comfyReferenceLimit,
   createComfyProvider,
-  fetchModelList,
   loadImageInputs,
-  resolveComfyBaseUrl,
   suggestReferenceInputs,
 } from './comfy'
 import BasicWorkflow from './comfyWorkflows/basic-txt2img-workflow.json'
@@ -42,6 +34,7 @@ import LoraWorkflow from './comfyWorkflows/lora-txt2img-workflow.json'
 import UnetWorkflow from './comfyWorkflows/unet-txt2img-workflow.json'
 import type { Json } from './comfyImage'
 import type { ImageGenerateOptions } from './types'
+import { imageConnectionFor, modelListKey } from './connection'
 
 type Graph = Record<string, { inputs: Record<string, unknown> }>
 
@@ -64,6 +57,9 @@ function postedGraph(): Graph {
   )!
   return JSON.parse(call[1].body as string).prompt as Graph
 }
+
+const listKeyOf = (apiKey: string, baseUrl?: string) =>
+  modelListKey(imageConnectionFor('comfyui', apiKey, baseUrl))
 
 const generate = (
   providerOptions: Record<string, unknown>,
@@ -107,9 +103,15 @@ const listing = (lists: Record<string, string[]>) =>
 const statsRequests = () =>
   vi.mocked(imageGetFetch).mock.calls.filter(([url]) => String(url).endsWith('/system_stats'))
 
+const modelRequests = () =>
+  vi
+    .mocked(imageGetFetch)
+    .mock.calls.map(([url]) => String(url))
+    .filter((url) => url.includes('/models/'))
+
 beforeEach(() => {
   vi.clearAllMocks()
-  clearComfyCacheForUrl('http://localhost:8188')
+  clearComfyCache(listKeyOf(''))
   system = { ...SERVER }
   listing({})
   serve('9')
@@ -233,15 +235,18 @@ describe('UNet graph', () => {
     expect(graph['10']).toEqual((UnetWorkflow as Graph)['10'])
   })
 
-  it('detects a diffusion model by its folder when no mode is set', async () => {
+  it('reads no model list when the profile names the text encoder and VAE', async () => {
+    await generate(opts, { model: 'unet:flux.safetensors' })
+    expect(modelRequests()).toEqual([])
+  })
+
+  it('takes the first text encoder and VAE the server lists when the profile names none', async () => {
     listing({
-      diffusion_models: ['flux.safetensors'],
-      text_encoders: ['clip.safetensors'],
-      vae: ['ae.safetensors'],
+      text_encoders: ['clip.safetensors', 'other.safetensors'],
+      vae: ['ae.safetensors', 'other.safetensors'],
     })
-    await generate({}, { model: 'flux.safetensors' })
+    await generate({ mode: ComfyMode.UnetTxt2Img }, { model: 'unet:flux.safetensors' })
     const graph = postedGraph()
-    expect(graph['1'].inputs.unet_name).toBe('flux.safetensors')
     expect(graph['3'].inputs.clip_name).toBe('clip.safetensors')
     expect(graph['4'].inputs.vae_name).toBe('ae.safetensors')
   })
@@ -250,6 +255,33 @@ describe('UNet graph', () => {
     await expect(
       generate({ mode: ComfyMode.UnetTxt2Img }, { model: 'unet:flux.safetensors' }),
     ).rejects.toThrow('No CLIP/text encoder model found')
+  })
+})
+
+describe('workflow selection', () => {
+  it('picks the UNet workflow from the id prefix when no mode is set', async () => {
+    serve('10')
+    listing({ text_encoders: ['clip.safetensors'], vae: ['ae.safetensors'] })
+    await generate({}, { model: 'unet:flux.safetensors' })
+    const graph = postedGraph()
+    expect(graph['1'].inputs.unet_name).toBe('flux.safetensors')
+    expect(modelRequests().some((url) => url.endsWith('/models/diffusion_models'))).toBe(false)
+  })
+
+  it('picks the checkpoint workflow for a bare id when no mode is set', async () => {
+    serve('9')
+    await generate({}, { model: 'sd15.safetensors' })
+    const graph = postedGraph()
+    expect(graph['4'].inputs.ckpt_name).toBe('sd15.safetensors')
+    expect(modelRequests()).toEqual([])
+  })
+
+  it('keeps a checkpoint-prefixed id on the checkpoint workflow even if a diffusion model shares its name', async () => {
+    listing({ diffusion_models: ['m.safetensors'] })
+    serve('9')
+    await generate({}, { model: 'checkpoint:m.safetensors' })
+    expect(postedGraph()['4'].inputs.ckpt_name).toBe('m.safetensors')
+    expect(modelRequests()).toEqual([])
   })
 })
 
@@ -345,6 +377,34 @@ describe('custom workflow', () => {
     const upload = sdkFetch.mock.calls.find(([input]) => String(input).endsWith('/upload/image'))!
     expect((upload[1].body as FormData).get('type')).toBe('input')
     expect(postedGraph()['61'].inputs.image).toBe('aventuras/uploaded.png')
+  })
+
+  describe('API key', () => {
+    const authorizations = () =>
+      sdkFetch.mock.calls.map(([, init]) => new Headers(init?.headers).get('Authorization'))
+
+    it('goes to every generation request, uploads and downloads included', async () => {
+      await createComfyProvider({ apiKey: 'k' }).generate(
+        options({
+          model: '',
+          referenceImages: ['iVBORw0KGgo='],
+          providerOptions: {
+            mode: ComfyMode.CustomWorkflow,
+            customWorkflow: custom({ workflow: withLoad }),
+            inputReferences: true,
+          },
+        }),
+      )
+      const paths = sdkFetch.mock.calls.map(([input]) => new URL(input).pathname)
+      expect(paths).toEqual(expect.arrayContaining(['/upload/image', '/prompt', '/view']))
+      expect(authorizations().every((value) => value === 'Bearer k')).toBe(true)
+    })
+
+    it('is not sent when empty', async () => {
+      await generate({ mode: ComfyMode.CustomWorkflow, customWorkflow: custom() }, { model: '' })
+      expect(sdkFetch).toHaveBeenCalled()
+      expect(authorizations().every((value) => value === null)).toBe(true)
+    })
   })
 
   it('refuses custom-workflow mode without a workflow instead of drawing another one', async () => {
@@ -586,51 +646,40 @@ describe('server version', () => {
   })
 })
 
-describe('resolveComfyBaseUrl', () => {
-  it('returns a default that is already normalized', () => {
-    const fallback = resolveComfyBaseUrl(undefined)
-    expect(fallback).toBe('http://localhost:8188')
-    expect(fallback).toBe(normalizeBaseUrl(fallback))
-  })
-})
-
-describe('base URL', () => {
-  const requestedUrls = () => [
-    ...vi.mocked(imageGetFetch).mock.calls.map(([url]) => String(url)),
-    ...sdkFetch.mock.calls.map(([url]) => String(url)),
-  ]
-
-  it('sends every request to the normalized base URL', async () => {
-    vi.mocked(normalizeBaseUrl).mockReturnValueOnce('http://normalized.test:8188')
-    listing({ diffusion_models: ['flux.safetensors'] })
-    const provider = createComfyProvider({ apiKey: '', baseUrl: ' http://raw.test:8188// ' })
-    await provider.generate(options({ model: 'checkpoint:m.safetensors' }))
-    await provider.listModels()
-    await provider.getSamplerInfo?.()?.catch(() => {})
-
-    expect(normalizeBaseUrl).toHaveBeenCalledWith(' http://raw.test:8188// ')
-    const urls = requestedUrls()
-    expect(urls).not.toHaveLength(0)
-    expect(urls.filter((url) => !url.startsWith('http://normalized.test:8188/'))).toEqual([])
-  })
-
-  it('has fetchModelList request the normalized base URL', async () => {
-    vi.mocked(normalizeBaseUrl).mockReturnValueOnce('http://normalized.test:8188')
-    await fetchModelList(' http://raw.test:8188/ ', 'checkpoints')
-    expect(normalizeBaseUrl).toHaveBeenCalledWith(' http://raw.test:8188/ ')
-    expect(String(vi.mocked(imageGetFetch).mock.calls[0][0])).toBe(
-      'http://normalized.test:8188/models/checkpoints',
+describe('connection cache', () => {
+  const unet = { mode: ComfyMode.UnetTxt2Img }
+  const generateAs = (apiKey: string, baseUrl = 'http://localhost:8188') =>
+    createComfyProvider({ apiKey, baseUrl }).generate(
+      options({ model: 'unet:flux.safetensors', providerOptions: unet }),
     )
+
+  beforeEach(() => {
+    for (const key of ['k1', 'k2']) clearComfyCache(listKeyOf(key, 'http://localhost:8188'))
+    listing({ text_encoders: ['clip.safetensors'], vae: ['ae.safetensors'] })
+    serve('10')
   })
 
-  it('keys clearComfyCacheForUrl by the normalized base URL', async () => {
-    const provider = createComfyProvider({ apiKey: '', baseUrl: 'http://localhost:8188' })
-    await provider.generate(options({ providerOptions: { mode: ComfyMode.BasicTxt2Img } }))
-    vi.mocked(normalizeBaseUrl).mockReturnValueOnce('http://localhost:8188')
-    clearComfyCacheForUrl('http://raw.test:8188/')
-    expect(normalizeBaseUrl).toHaveBeenCalledWith('http://raw.test:8188/')
-    await provider.generate(options({ providerOptions: { mode: ComfyMode.BasicTxt2Img } }))
-    expect(statsRequests()).toHaveLength(2)
+  it('clears what is cached for a connection, and only that one', async () => {
+    const baseUrl = 'http://localhost:8188/'
+    await generateAs('k1', baseUrl)
+    await generateAs('k2', baseUrl)
+    clearComfyCache(listKeyOf('k1', baseUrl))
+    await generateAs('k1', baseUrl)
+    await generateAs('k2', baseUrl)
+    expect(statsRequests()).toHaveLength(3)
+  })
+
+  it('keeps a text encoder and VAE picked for one API key from another key at the same URL', async () => {
+    listing({ text_encoders: ['one.safetensors'], vae: ['one-ae.safetensors'] })
+    await generateAs('k1')
+    expect(postedGraph()['3'].inputs.clip_name).toBe('one.safetensors')
+
+    listing({ text_encoders: ['two.safetensors'], vae: ['two-ae.safetensors'] })
+    sdkFetch.mockClear()
+    await generateAs('k2')
+    const graph = postedGraph()
+    expect(graph['3'].inputs.clip_name).toBe('two.safetensors')
+    expect(graph['4'].inputs.vae_name).toBe('two-ae.safetensors')
   })
 })
 

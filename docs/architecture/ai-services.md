@@ -56,9 +56,14 @@ A configured base URL (an API profile, an image profile, the TTS endpoint) is no
 with `normalizeBaseUrl` in `utils/url.ts`, where it becomes a request URL: the provider factories,
 `fetchModelsFromProvider`, `getEffectiveBaseUrl` and `TTSService.getEndpoint`. The forms and the
 store keep what the user typed, and code below those boundaries (`pingModel`, the `create*Image`
-clients) takes the URL as given. Defaults we own (`PROVIDERS`, each provider's
-`DEFAULT_BASE_URL`) are never normalized at runtime. `config.test.ts` and the provider tests pin
-them instead.
+clients) takes the URL as given. Defaults we own (`PROVIDERS`, and the image providers' `PROVIDER_BASE_URL` in
+`image/providers/baseUrls.ts`) are never normalized at runtime. `config.test.ts` and
+`baseUrls.test.ts` pin them instead. An image adapter resolves its URL with `resolveBaseUrl`, which
+falls back to that table's default.
+
+The image adapters build their discovery endpoints with `endpoint(baseUrl, 'models')`, which
+parses the normalized string and appends the path, so a malformed base URL throws one message
+before any request rather than failing inside a fetch. SDK `baseURL`s stay strings.
 
 ## Reasoning Effort
 

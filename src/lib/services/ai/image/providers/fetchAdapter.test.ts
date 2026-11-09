@@ -7,8 +7,10 @@ vi.mock('#lib/stores/debug.svelte.ts', () => ({
   debug: { isActive: false, addDebugRequest: vi.fn(), addDebugResponse: vi.fn() },
 }))
 
+import { APICallError } from 'ai'
 import { fetch as tauriHttpFetch } from '@tauri-apps/plugin-http'
 import { isAbortError } from '#lib/services/activity/describeError.ts'
+import { debug } from '#lib/stores/debug.svelte.ts'
 import { RequestTimeoutError } from '#lib/utils/error.ts'
 import { fetchPublicImageBase64, imageGetFetch } from './fetchAdapter'
 
@@ -106,6 +108,16 @@ describe('fetchPublicImageBase64', () => {
       'Image API error 404',
     )
   })
+
+  it('fails a 429 with a plain Error, which the 429 middleware leaves alone', async () => {
+    mockFetch.mockResolvedValueOnce(new Response('slow down', { status: 429 }))
+
+    const error = await fetchPublicImageBase64('https://img.test/a.png').catch((e: unknown) => e)
+
+    expect(error).toBeInstanceOf(Error)
+    expect(APICallError.isInstance(error)).toBe(false)
+    expect(error).not.toHaveProperty('statusCode')
+  })
 })
 
 /** Like the plugin: stays pending, then rejects with a bare string when its signal aborts. */
@@ -153,6 +165,47 @@ describe('imageGetFetch abort handling', () => {
   })
 })
 
+describe('imageGetFetch debug log', () => {
+  const logged = () => vi.mocked(debug.addDebugResponse)
+
+  beforeEach(() => {
+    mockFetch.mockReset()
+    logged().mockClear()
+  })
+
+  it('logs a cancelled request as aborted', async () => {
+    mockFetch.mockImplementation(pendingUntilAborted)
+    const caller = new AbortController()
+    const request = imageGetFetch('https://img.test/a', undefined, {
+      signal: caller.signal,
+    }).catch((e: unknown) => e)
+
+    caller.abort()
+    await request
+
+    expect(logged()).toHaveBeenCalledTimes(1)
+    expect(logged().mock.calls[0][2]).toEqual({ error: 'aborted' })
+  })
+
+  it('logs a failure that never got a response', async () => {
+    mockFetch.mockRejectedValue(new TypeError('Failed to fetch'))
+
+    await expect(imageGetFetch('https://img.test/a')).rejects.toThrow('Failed to fetch')
+
+    expect(logged()).toHaveBeenCalledTimes(1)
+    expect(logged().mock.calls[0][2]).toEqual({ error: 'Failed to fetch' })
+  })
+
+  it('logs an error status once', async () => {
+    mockFetch.mockImplementation(async () => new Response('nope', { status: 500 }))
+
+    await expect(imageGetFetch('https://img.test/a')).rejects.toThrow('Image API error 500')
+
+    expect(logged()).toHaveBeenCalledTimes(1)
+    expect(logged().mock.calls[0][2]).toMatchObject({ status: 500 })
+  })
+})
+
 describe('imageGetFetch body timeout', () => {
   const what = 'Image fetch'
   const run = (timeoutMs: number) =>
@@ -179,6 +232,27 @@ describe('imageGetFetch body timeout', () => {
     const error = await read
     expect(error).toBeInstanceOf(RequestTimeoutError)
     expect(error).toMatchObject({ message: `${what} timed out after 5s` })
+  })
+})
+
+describe('imageGetFetch allowStatuses', () => {
+  beforeEach(() => {
+    mockFetch.mockReset()
+    mockFetch.mockImplementation(async () => new Response('missing', { status: 404 }))
+  })
+
+  it('returns a listed error status instead of throwing', async () => {
+    const response = await imageGetFetch('https://img.test/a', undefined, {
+      allowStatuses: [404],
+    })
+    expect(response.status).toBe(404)
+    await response.body?.cancel()
+  })
+
+  it('still throws on an error status that is not listed', async () => {
+    await expect(
+      imageGetFetch('https://img.test/a', undefined, { allowStatuses: [410] }),
+    ).rejects.toThrow('Image API error 404')
   })
 })
 

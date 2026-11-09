@@ -2,13 +2,16 @@
  * OpenAI Image Provider
  *
  * Generates through `@ai-sdk/openai`. Models are fetched live from {baseUrl}/models and
- * filtered by image-capable prefixes; a failed fetch throws.
+ * filtered by image-capable prefixes; a failed fetch throws. `/models` carries no
+ * capabilities, so those come from a table.
  */
 
 import { createOpenAI } from '@ai-sdk/openai'
 import * as z from 'zod'
-import { specToPixels, formatImageSize } from '#lib/utils/image.ts'
-import { normalizeBaseUrl } from '#lib/utils/url.ts'
+import type { ImageModelCapabilities } from '#lib/types/index.ts'
+import { pickRequestSize } from '#lib/utils/image.ts'
+import { endpoint } from '#lib/utils/url.ts'
+import { resolveBaseUrl } from './baseUrls'
 import type {
   ImageProvider,
   ImageProviderConfig,
@@ -16,19 +19,57 @@ import type {
   ImageGenerateResult,
   ImageModelInfo,
 } from './types'
-import { imageGetFetch } from './fetchAdapter'
+import { bearerHeaders, imageDiscoveryFetch } from './discoveryFetch'
 import { parseModelList } from './parseModelList'
 import { createImageSdkFetch, generateSdkImage } from './sdkImage'
-
-const DEFAULT_BASE_URL = 'https://api.openai.com/v1'
 
 // Prefixes used to identify image-capable models in the /v1/models response
 const IMAGE_MODEL_PREFIXES = ['gpt-image-', 'chatgpt-image-']
 
+const isOpenAIImageModel = (id: string): boolean =>
+  IMAGE_MODEL_PREFIXES.some((prefix) => id.startsWith(prefix))
+
 const ModelEntry = z.object({ id: z.string() })
 
+const STANDARD_SIZES = ['1024x1024', '1536x1024', '1024x1536']
+
+const imageModel = (supportedResolutions?: readonly string[]): ImageModelCapabilities => ({
+  supportsImg2Img: true,
+  maxReferenceImages: 16,
+  ...(supportedResolutions && { supportedResolutions: [...supportedResolutions] }),
+})
+
+// From the image generation guide. `gpt-image-2` and `gpt-image-2.5-*` take any `WxH` within the
+// pixel bounds, so they list no sizes; the other models take the standard three. `gpt-image-2.6-*`
+// is free-form per the image prompting guide, though the API reference's `size` text omits it.
+const OPENAI_IMAGE_MODELS = new Map<string, ImageModelCapabilities>([
+  ['gpt-image-2', imageModel()],
+  ['gpt-image-2.5-sunburst', imageModel()],
+  ['gpt-image-2.5-flare', imageModel()],
+  ['gpt-image-2.6-sunburst', imageModel()],
+  ['gpt-image-2.6-flare', imageModel()],
+  ['gpt-image-1.5', imageModel(STANDARD_SIZES)],
+  ['gpt-image-1-mini', imageModel(STANDARD_SIZES)],
+  ['chatgpt-image-latest', imageModel(STANDARD_SIZES)],
+])
+
+/** A dated snapshot without an entry of its own is its undated model. */
+function openaiImageCapabilities(id: string): ImageModelCapabilities {
+  return (
+    OPENAI_IMAGE_MODELS.get(id) ??
+    OPENAI_IMAGE_MODELS.get(id.replace(/-\d{4}-\d{2}-\d{2}$/, '')) ?? { supportsImg2Img: true }
+  )
+}
+
+/** What generation reads for a model; `undefined` for an id that is not an image model. */
+export const openaiModelCapabilities = (model: string): ImageModelCapabilities | undefined =>
+  isOpenAIImageModel(model) ? openaiImageCapabilities(model) : undefined
+
+// Free-form sizes have a pixel floor: the tiny tier and non-square small are below it.
+const MIN_PIXELS = 655_360
+
 export function createOpenAIProvider(config: ImageProviderConfig): ImageProvider {
-  const baseUrl = normalizeBaseUrl(config.baseUrl) || DEFAULT_BASE_URL
+  const baseUrl = resolveBaseUrl('openai', config.baseUrl)
   const openai = createOpenAI({
     apiKey: config.apiKey,
     baseURL: baseUrl,
@@ -40,32 +81,34 @@ export function createOpenAIProvider(config: ImageProviderConfig): ImageProvider
     name: 'OpenAI',
 
     async generate(options: ImageGenerateOptions): Promise<ImageGenerateResult> {
-      const { model, prompt, spec, referenceImages, signal } = options
-
+      const { model, prompt, spec, modelInfo, referenceImages, signal } = options
       return generateSdkImage({
         model: openai.image(model),
         prompt,
         referenceImages,
-        size: formatImageSize(specToPixels(spec)),
+        size: pickRequestSize(spec, modelInfo?.supportedResolutions, MIN_PIXELS),
         signal,
       })
     },
 
-    async listModels(apiKey: string): Promise<ImageModelInfo[]> {
-      return fetchOpenAIImageModels(baseUrl, apiKey)
+    async listModels(signal?: AbortSignal): Promise<ImageModelInfo[]> {
+      return fetchOpenAIImageModels(baseUrl, config.apiKey, signal)
     },
   }
 }
 
-async function fetchOpenAIImageModels(baseUrl: string, apiKey: string): Promise<ImageModelInfo[]> {
+async function fetchOpenAIImageModels(
+  baseUrl: string,
+  apiKey: string,
+  signal?: AbortSignal,
+): Promise<ImageModelInfo[]> {
   if (!apiKey) return []
 
-  const response = await imageGetFetch(
-    `${baseUrl}/models`,
-    { Authorization: `Bearer ${apiKey}` },
-    { serviceId: 'openai-image-models' },
-  )
-  return parseModelList(await response.json(), ModelEntry)
-    .filter(({ id }) => IMAGE_MODEL_PREFIXES.some((prefix) => id.startsWith(prefix)))
-    .map(({ id }) => ({ id, name: id, supportsImg2Img: true }))
+  const response = await imageDiscoveryFetch(endpoint(baseUrl, 'models'), bearerHeaders(apiKey), {
+    serviceId: 'openai-image-models',
+    signal,
+  })
+  return parseModelList(await response.json(), ModelEntry, 'OpenAI /models')
+    .filter(({ id }) => isOpenAIImageModel(id))
+    .map(({ id }) => ({ id, name: id, ...openaiImageCapabilities(id) }))
 }

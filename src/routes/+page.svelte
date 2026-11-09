@@ -8,6 +8,7 @@
   import { updateNotifier } from '#lib/stores/updateNotifier.svelte.ts'
   import { packService } from '#lib/services/packs/pack-service.ts'
   import { warmupAllProfiles } from '#lib/services/modelHealthOrchestrator.ts'
+  import { warmSlotCapabilities } from '#lib/services/ai/image/index.ts'
   import AppShell from '#lib/components/layout/AppShell.svelte'
   import WelcomeScreen from '#lib/components/intro/WelcomeScreen.svelte'
 
@@ -65,6 +66,8 @@
             .catch((err) => console.error('[Updater] Startup check failed:', err))
         }
       }
+
+      warmSlotCapabilities().catch((err) => console.warn('[ImageCapabilities] warmup failed', err))
 
       initialized = true
     } catch (e) {

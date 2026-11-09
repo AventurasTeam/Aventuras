@@ -59,18 +59,39 @@ export function normalizeBaseUrl(url: string | undefined): string {
   return /^[a-z][a-z\d+.-]*:$/i.test(normalized) ? '' : normalized
 }
 
+/** The parsed URL, or `null` when `url` is not an absolute `http(s)` URL. */
+export function parseHttpUrl(url: string): URL | null {
+  let parsed: URL
+  try {
+    parsed = new URL(url)
+  } catch {
+    return null
+  }
+  return parsed.protocol === 'http:' || parsed.protocol === 'https:' ? parsed : null
+}
+
+/** A base URL with a trailing-slash path, so `new URL('models', base)` appends. Throws unless absolute `http(s)`. */
+export function parseBaseUrl(url: string): URL {
+  const parsed = parseHttpUrl(url)
+  if (!parsed) throw new Error(`Base URL is not an http(s) URL: ${url}`)
+  if (!parsed.pathname.endsWith('/')) parsed.pathname += '/'
+  return parsed
+}
+
+/** `path` (no leading `/`) under a base URL's own path. Throws unless the base is absolute `http(s)`. */
+export function endpoint(baseUrl: string, path: string, query?: Record<string, string>): string {
+  const url = new URL(path, parseBaseUrl(baseUrl))
+  for (const [key, value] of Object.entries(query ?? {})) url.searchParams.set(key, value)
+  return url.href
+}
+
 /**
  * Whether an `http(s)` URL points at a host outside the user's own machine and network.
  * Judges the name and IP literals only: a public name that resolves to a private address passes.
  */
 export function isPublicHttpUrl(url: string): boolean {
-  let parsed: URL
-  try {
-    parsed = new URL(url)
-  } catch {
-    return false
-  }
-  if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') return false
+  const parsed = parseHttpUrl(url)
+  if (!parsed) return false
 
   // The parser has already normalised numeric IPv4 forms (`2130706433`, `0x7f.1`) to dotted quads.
   const host = parsed.hostname.replace(/\.$/, '')

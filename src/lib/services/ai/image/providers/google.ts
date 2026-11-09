@@ -1,7 +1,9 @@
 // Image generation through `@ai-sdk/google`.
 
-import { specToAspectRatio } from '#lib/utils/image.ts'
-import { normalizeBaseUrl } from '#lib/utils/url.ts'
+import type { ImageModelCapabilities } from '#lib/types/index.ts'
+import { pickResolution, specToAspectRatio } from '#lib/utils/image.ts'
+import { endpoint } from '#lib/utils/url.ts'
+import { resolveBaseUrl } from './baseUrls'
 import type {
   ImageProvider,
   ImageProviderConfig,
@@ -11,13 +13,11 @@ import type {
 } from './types'
 import { createGoogleGenerativeAI } from '@ai-sdk/google'
 import { isGoogleImageModel } from '../../sdk/providers/modelFetcher'
-import { createTimeoutFetch } from '../../sdk/providers/fetch'
+import { imageDiscoveryFetch } from './discoveryFetch'
 import { createImageSdkFetch, generateSdkImage } from './sdkImage'
 
-const DEFAULT_BASE_URL = 'https://generativelanguage.googleapis.com/v1beta'
-
 export function createGoogleProvider(config: ImageProviderConfig): ImageProvider {
-  const baseUrl = normalizeBaseUrl(config.baseUrl) || DEFAULT_BASE_URL
+  const baseUrl = resolveBaseUrl('google', config.baseUrl)
   const googleSDK = createGoogleGenerativeAI({
     apiKey: config.apiKey,
     baseURL: baseUrl,
@@ -29,52 +29,98 @@ export function createGoogleProvider(config: ImageProviderConfig): ImageProvider
     name: 'Google AI Studio',
 
     async generate(options: ImageGenerateOptions): Promise<ImageGenerateResult> {
-      const { model, prompt, spec, referenceImages, signal } = options
+      const { model, prompt, spec, modelInfo, referenceImages, signal } = options
+      const imageSize = pickResolution(spec, modelInfo?.supportedResolutions)
 
       return generateSdkImage({
         model: googleSDK.image(model),
         prompt,
         referenceImages,
-        aspectRatio: specToAspectRatio(spec, GOOGLE_ASPECT_RATIOS) as `${number}:${number}`,
+        aspectRatio: specToAspectRatio(
+          spec,
+          modelInfo?.supportedAspectRatios ?? [],
+          GOOGLE_ASPECT_RATIOS,
+        ),
+        providerOptions: imageSize ? { google: { imageConfig: { imageSize } } } : undefined,
         signal,
       })
     },
 
-    async listModels(): Promise<ImageModelInfo[]> {
-      return fetchGoogleImageModels(baseUrl, config.apiKey)
+    async listModels(signal?: AbortSignal): Promise<ImageModelInfo[]> {
+      return fetchGoogleImageModels(baseUrl, config.apiKey, signal)
     },
   }
 }
 
-/**
- * The aspect ratios the Gemini image models accept. There is no pixel parameter, and this
- * is a closed enum: an unlisted ratio is rejected, not rounded.
- */
-const GOOGLE_ASPECT_RATIOS = [
+/** The ratios every Gemini image model accepts. */
+const STANDARD_ASPECT_RATIOS = [
   '1:1',
-  '1:4',
-  '1:8',
   '2:3',
   '3:2',
   '3:4',
-  '4:1',
   '4:3',
   '4:5',
   '5:4',
-  '8:1',
   '9:16',
   '16:9',
   '21:9',
 ] as const
 
-async function fetchGoogleImageModels(baseUrl: string, apiKey?: string): Promise<ImageModelInfo[]> {
+/**
+ * The aspect ratios the Gemini image models accept. There is no pixel parameter, and this
+ * is a closed enum: an unlisted ratio is rejected, not rounded.
+ */
+const GOOGLE_ASPECT_RATIOS = [...STANDARD_ASPECT_RATIOS, '1:4', '1:8', '4:1', '8:1'] as const
+
+const imageModel = (
+  maxReferenceImages: number,
+  aspectRatios: readonly string[],
+  supportedResolutions?: readonly string[],
+): ImageModelCapabilities => ({
+  supportsImg2Img: true,
+  maxReferenceImages,
+  supportedAspectRatios: [...aspectRatios],
+  ...(supportedResolutions && { supportedResolutions: [...supportedResolutions] }),
+})
+
+// From the Gemini image generation guide. For Flash Lite the guide's prose (1K, ten ratios) and
+// tables (512, the wide ratios) disagree and nothing is probed, so it takes the narrower prose.
+const GOOGLE_IMAGE_MODELS = new Map<string, ImageModelCapabilities>([
+  ['gemini-3.1-flash-image', imageModel(14, GOOGLE_ASPECT_RATIOS, ['512', '1K', '2K', '4K'])],
+  ['gemini-nano-banana-2.1', imageModel(14, GOOGLE_ASPECT_RATIOS, ['1K', '2K', '4K'])],
+  ['gemini-3-pro-image', imageModel(14, STANDARD_ASPECT_RATIOS, ['1K', '2K', '4K'])],
+  ['gemini-3.1-flash-lite-image', imageModel(14, STANDARD_ASPECT_RATIOS, ['1K'])],
+  ['gemini-2.5-flash-image', imageModel(3, STANDARD_ASPECT_RATIOS)],
+])
+
+/** A preview without an entry of its own is its generally available model. */
+function googleImageCapabilities(id: string): ImageModelCapabilities {
+  return (
+    GOOGLE_IMAGE_MODELS.get(id) ??
+    GOOGLE_IMAGE_MODELS.get(id.replace(/-preview$/, '')) ?? { supportsImg2Img: true }
+  )
+}
+
+/** The SDK refuses a Google image model whose id does not start with `gemini-`. */
+const isSdkImageModel = (id: string): boolean => id.startsWith('gemini-') && isGoogleImageModel(id)
+
+/** What generation reads for a model; `undefined` for an id that is not an image model. */
+export const googleModelCapabilities = (model: string): ImageModelCapabilities | undefined =>
+  isSdkImageModel(model) ? googleImageCapabilities(model) : undefined
+
+async function fetchGoogleImageModels(
+  baseUrl: string,
+  apiKey?: string,
+  signal?: AbortSignal,
+): Promise<ImageModelInfo[]> {
   if (!apiKey) return []
 
-  const url = baseUrl + '/models?key=' + encodeURIComponent(apiKey) + '&pageSize=200'
-
-  const fetchFn = createTimeoutFetch(30000, 'google-image-models')
-  const response = await fetchFn(url)
-  if (!response.ok) throw new Error(`Google models request failed: HTTP ${response.status}`)
+  // The key goes in a header: the debug log records the request URL.
+  const response = await imageDiscoveryFetch(
+    endpoint(baseUrl, 'models', { pageSize: '200' }),
+    { 'x-goog-api-key': apiKey },
+    { serviceId: 'google-image-models', signal },
+  )
 
   const data = await response.json()
   if (!Array.isArray(data.models)) throw new Error('Google models response has no models array')
@@ -82,12 +128,12 @@ async function fetchGoogleImageModels(baseUrl: string, apiKey?: string): Promise
   const models: ImageModelInfo[] = []
   for (const m of data.models as GoogleModelEntry[]) {
     const id = m.name.replace(/^models\//, '')
-    if (!isGoogleImageModel(id)) continue
+    if (!isSdkImageModel(id)) continue
     models.push({
       id,
       name: m.displayName || id,
       description: m.description,
-      supportsImg2Img: true,
+      ...googleImageCapabilities(id),
     })
   }
   return models

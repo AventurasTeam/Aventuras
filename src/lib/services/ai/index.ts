@@ -142,8 +142,7 @@ export interface TimelineFillSettings {
 
 // Image Generation settings (automatic image generation for narrative)
 export interface ImageGenerationServiceSettings {
-  // Profile-based image generation (profiles must have supportsImageGeneration capability)
-  profileId: string | null // API profile for standard image generation
+  profileId: string | null // Image profile for standard image generation
   size: ImageSpec // Regular image size
 
   // Reference model settings (for image-to-image with portrait references)

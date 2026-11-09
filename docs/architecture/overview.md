@@ -636,10 +636,36 @@ release with a single job-status route and a cancel that can only stop the app's
 someone else's. Older servers are refused with a message asking the user to update; a server that
 cannot be asked its version is let through.
 
+**A1111 scheduler list: 1.9.1 and later** (`MIN_A1111_SCHEDULERS_VERSION` in `a1111.ts`), the first
+release with `/sdapi/v1/schedulers`. A server without the route still lists its samplers and generates;
+the form says that schedulers need the newer version.
+
+**Parsing replies from these servers.** The parsing of a response follows what the response is for:
+
+1. An error body is read for its message, with the shared `providerMessage` for the common JSON shapes or an
+   adapter's own `safeParse` schema for a stranger one, and falls back to the raw excerpt, so the original
+   failure is never masked.
+2. A reply the operation depends on is parsed with `safeParse`, and a failure throws a readable error whose
+   first line names the endpoint, followed by `z.prettifyError` or a body excerpt. It is never a raw
+   `ZodError` (its message is multi-line JSON and shows as `[`), and never an empty result in its place: a
+   server that answers 200 with something else is not the server the profile names, and the form shows that.
+3. A best-effort probe, such as the ComfyUI system stats or a job cancel, may swallow its failure, because
+   the request that matters reports its own.
+4. In a list, an entry that does not match is skipped; a reply that is not a list throws.
+
 Resolution is chosen as an **intent** — orientation (1:1 / 16:9 / 9:16) plus one of four size
-steps — and each adapter turns it into what its backend accepts: an aspect ratio for Google, a
-ratio plus a resolution tier for OpenRouter, the model's own published resolution list for NanoGPT,
-real dimensions for ComfyUI/A1111/Pollinations, and a snapped-to-grid size inside Z.AI's limits
+steps — and each adapter turns it into what its backend accepts: an aspect ratio plus an `imageSize`
+tier where the model has them for Google (its capabilities are a table in the adapter, because
+`models.list` carries none), the closest of the model's own listed ratios plus one of its listed
+resolution tiers for OpenRouter (no tier when it lists none, because a tier is only honoured where
+listed), the model's own published resolution list for NanoGPT, for OpenAI one of the three standard
+sizes where a model takes only those and otherwise real dimensions raised to its pixel floor (its
+capabilities are a table in the adapter, because `/models` carries none; OpenAI Compatible shares the
+step, `pickRequestSize`, with the floor from its capability override), real dimensions for
+ComfyUI/A1111, real dimensions plus one of the model's listed resolution tiers for Pollinations (no
+tier when it lists none, because the pixel count follows the tier where there is one), and a
+snapped-to-grid size inside the model's limits for Z.AI (glm-image, and the CogView models on BigModel;
+its API reference publishes both, because no endpoint lists image models)
 (`src/lib/utils/image.ts`). A backend that is handed pixel dimensions it does not offer answers
 with the nearest thing it does, which is not the same picture.
 
@@ -649,9 +675,25 @@ image host makes the whole generation run again, and it is billed again. The key
 the API's own origin, and redirects are checked rather than followed blindly.
 
 Each adapter keeps its own model discovery and size handling; discovery throws on a failed request
-rather than substituting a list. Whether a provider takes an API key or a base URL is declared per
-provider in the registry (`PROVIDER_API_KEY`, `PROVIDER_BASE_URL`), and the settings form and
-`hasRequiredCredentials` read those tables. Migration `042` moved image settings that still named an
+rather than substituting a list. ComfyUI generation reads no model list to choose a workflow: the
+id's `checkpoint:` or `unet:` prefix does, and a UNet text encoder or VAE left blank falls back to
+the first file the server lists. That pick is kept per connection until the connection's model list
+is loaded again; the form shows the first one as the blank field's placeholder. OpenAI Compatible has no standard model list: its filtering and
+capability reading were assembled from a handful of hosts' replies, and `/images/models` is an optional
+extra whose failure never fails the listing. Whether a provider takes an API key or a base URL is declared per
+provider (`PROVIDER_API_KEY` in `providers/connection.ts`, `PROVIDER_BASE_URL` in `providers/baseUrls.ts`, which also holds each default), and the settings form and
+`hasRequiredCredentials` read those tables. The form keeps a value typed for another provider, so a
+connection is cut down to the fields its provider has an input for (`imageConnectionFor`) where it
+enters: in the form, and when settings load. The result is an `ImageProviderConnection`, branded so only that
+function makes one; `ImageProfile` extends it and the store takes one to save, so the registry and the
+model-list cache use a connection as given. A leftover base URL is never saved for OpenRouter, nor a
+leftover API key for A1111. A stored profile whose provider this build does not know is skipped on load.
+Discovery (`listModels`, `getSamplerInfo`,
+`listLoras`, `listClipTypes`, `getModelCapabilities`) takes an `AbortSignal`. The profile form debounces key and base URL edits, aborts the request
+a newer one or Stop replaces, and writes only what the current request returns. A cancelled model list is
+never cached, even when an adapter answers with a partial one. Model lists are cached for 12 hours per
+connection (`modelListKey`: provider, API key, base URL); a save that changes a profile's connection
+drops the entry it replaced (`evictReplacedModelList`), and the form's Refresh bypasses the cache. For NanoGPT, OpenRouter, Pollinations and OpenAI Compatible, generation reads a model's capabilities from the connection's cached list by id or alias, so they are no older than the list. A model the list omits is looked up through the provider (`getModelCapabilities`) and kept in a second in-memory cache, 12 hours per connection and model; the lookup is cancelled after 10 seconds. A failed lookup is not retried for 5 minutes and generation proceeds with unknown capabilities. Loading a connection's list clears that second cache for it, and Stop cancels the wait. Nothing is saved on the profile. At the end of startup the lists, and the capabilities of any model they omit, for the profiles in the four image slots are loaded once, so the first image does not wait; a connection shared by several slots is fetched once, and a failure there is only logged and caches nothing. Migration `042` moved image settings that still named an
 API profile into image profiles, moved proxy-style `openai` profiles and every `chutes` profile
 (that provider is gone) to OpenAI Compatible, and pinned `zhipu` profiles with an empty base URL to
 `open.bigmodel.cn`, which they used before the default became `api.z.ai`.
@@ -663,8 +705,8 @@ otherwise cuts the references to the smaller of that limit and the model's `maxR
 before fetching `http(s)` ones to base64, so every adapter receives raw base64. A reference URL can
 come from a discovery card, so it is fetched only from a public host and each redirect is checked
 the same way (`fetchPublicImageBase64`); a name that merely resolves to a private address is not
-caught. A NanoGPT reply that carries a URL instead of base64 gets the same public-host check, and
-that download is not redirected. A reference that cannot be fetched is dropped and the image is
+caught. A NanoGPT reply that carries a URL instead of base64 is downloaded the same way, and a failed
+download is a plain error, so the 429 retry cannot re-run, and re-bill, the generation. A reference that cannot be fetched is dropped and the image is
 generated without it. Google takes them on every image model it lists.
 
 Two local backends take them differently. A1111 sends them as `extra_images` on the `txt2img`
@@ -700,6 +742,11 @@ App Transport Security blocks the WebView's `fetch` to plaintext `http://` hosts
 local-network exception, and it does so silently. Local backends therefore make every HTTP call
 through Tauri's HTTP plugin (`imageGetFetch` for discovery, `createSdkFetch` for generation), on
 every platform.
+
+Neither A1111 nor ComfyUI has working auth of its own, so a server reachable online sits behind a
+proxy or tunnel. Their profiles take an optional API key, sent as `Authorization: Bearer` on every
+request, discovery and generation alike. Basic auth (A1111's `--api-auth`) and multi-header schemes
+such as Cloudflare Access service tokens are not supported.
 
 ## Network transport
 

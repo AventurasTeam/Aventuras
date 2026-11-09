@@ -17,7 +17,7 @@ const reply = (body: unknown) => ({ ok: true, json: async () => body }) as unkno
 
 // A successful fetch that lists no image model, per adapter.
 const EMPTY: [string, () => ImageProvider, unknown][] = [
-  ['NanoGPT', () => createNanoGPTProvider({ apiKey: 'k' }), { models: { image: {} } }],
+  ['NanoGPT', () => createNanoGPTProvider({ apiKey: 'k' }), { data: [] }],
   ['OpenRouter', () => createOpenRouterProvider({ apiKey: 'k' }), { data: [] }],
   ['Pollinations', () => createPollinationsProvider({ apiKey: 'k' }), []],
   ['OpenAI', () => createOpenAIProvider({ apiKey: 'k' }), { data: [{ id: 'gpt-4o' }] }],
@@ -30,25 +30,34 @@ describe('model discovery', () => {
   describe.each(EMPTY)('%s', (_name, create, emptyBody) => {
     it('rejects when the request fails', async () => {
       vi.mocked(imageGetFetch).mockRejectedValue(new Error('Image API error 500: boom'))
-      await expect(create().listModels('k')).rejects.toThrow('boom')
+      await expect(create().listModels()).rejects.toThrow('boom')
     })
 
     it('rejects on a network error', async () => {
       vi.mocked(imageGetFetch).mockRejectedValue(new TypeError('Failed to fetch'))
-      await expect(create().listModels('k')).rejects.toThrow('Failed to fetch')
+      await expect(create().listModels()).rejects.toThrow('Failed to fetch')
     })
 
     it('returns an empty list, not a substitute, when nothing matches', async () => {
       vi.mocked(imageGetFetch).mockResolvedValue(reply(emptyBody))
-      expect(await create().listModels('k')).toEqual([])
+      expect(await create().listModels()).toEqual([])
     })
-  })
 
-  it('rejects when Pollinations returns something other than a list', async () => {
-    vi.mocked(imageGetFetch).mockResolvedValue(reply({ error: 'nope' }))
-    await expect(createPollinationsProvider({ apiKey: 'k' }).listModels('k')).rejects.toThrow(
-      'unexpected model list',
-    )
+    it('rejects a reply that is not a list, rather than listing nothing', async () => {
+      vi.mocked(imageGetFetch).mockResolvedValue(reply('<html>not the API</html>'))
+      await expect(create().listModels()).rejects.toThrow(/did not return a (model )?list/)
+    })
+
+    it('forwards the abort signal to its request', async () => {
+      vi.mocked(imageGetFetch).mockResolvedValue(reply(emptyBody))
+      const { signal } = new AbortController()
+
+      await create().listModels(signal)
+
+      const calls = vi.mocked(imageGetFetch).mock.calls
+      expect(calls.length).toBeGreaterThan(0)
+      for (const [, , options] of calls) expect(options?.signal).toBe(signal)
+    })
   })
 
   it('rejects when a response body is not JSON', async () => {
@@ -58,34 +67,95 @@ describe('model discovery', () => {
         throw new SyntaxError('Unexpected token <')
       },
     } as unknown as Response)
-    await expect(createOpenRouterProvider({ apiKey: 'k' }).listModels('k')).rejects.toThrow(
+    await expect(createOpenRouterProvider({ apiKey: 'k' }).listModels()).rejects.toThrow(
       'Unexpected token',
     )
   })
 
-  it('makes no OpenAI request without a key', async () => {
-    expect(await createOpenAIProvider({ apiKey: '' }).listModels('')).toEqual([])
-    expect(imageGetFetch).not.toHaveBeenCalled()
+  it('rejects A1111 entries that name no model, rather than listing blank ones', async () => {
+    vi.mocked(imageGetFetch).mockResolvedValue(reply([{ filename: 'x' }]))
+    await expect(createA1111Provider({ apiKey: '' }).listModels()).rejects.toThrow(
+      'no readable entries',
+    )
   })
 
-  it('lists OpenRouter models through the Tauri transport', async () => {
-    vi.mocked(imageGetFetch).mockResolvedValue(
-      reply({
-        data: [
-          {
-            id: 'google/gemini-2.5-flash-image',
-            architecture: { input_modalities: ['text', 'image'], output_modalities: ['image'] },
-          },
-          { id: 'openai/gpt-5', architecture: { output_modalities: ['text'] } },
-        ],
-      }),
-    )
-    const models = await createOpenRouterProvider({ apiKey: 'k' }).listModels('k')
-    expect(models.map((m) => m.id)).toEqual(['google/gemini-2.5-flash-image'])
-    expect(imageGetFetch).toHaveBeenCalledWith(
-      'https://openrouter.ai/api/v1/models',
-      { Authorization: 'Bearer k' },
-      expect.anything(),
-    )
+  it('forwards the abort signal to both A1111 sampler requests', async () => {
+    vi.mocked(imageGetFetch).mockResolvedValue(reply([]))
+    const { signal } = new AbortController()
+
+    await createA1111Provider({ apiKey: '' }).getSamplerInfo!(signal)
+
+    const calls = vi.mocked(imageGetFetch).mock.calls
+    expect(calls).toHaveLength(2)
+    for (const [, , options] of calls) expect(options?.signal).toBe(signal)
+  })
+
+  it.each([
+    ['k', { Authorization: 'Bearer k' }],
+    ['', undefined],
+  ])('sends A1111 key %j to the model and sampler requests as %j', async (apiKey, headers) => {
+    vi.mocked(imageGetFetch).mockResolvedValue(reply([]))
+    const provider = createA1111Provider({ apiKey })
+
+    await provider.listModels()
+    await provider.getSamplerInfo!()
+
+    const calls = vi.mocked(imageGetFetch).mock.calls
+    expect(calls).toHaveLength(3)
+    for (const [, sent] of calls) expect(sent).toEqual(headers)
+  })
+
+  describe('A1111 sampler info', () => {
+    const missing = { ok: false, status: 404, body: null } as unknown as Response
+
+    it('reads sampler and scheduler names', async () => {
+      vi.mocked(imageGetFetch).mockImplementation(async (url) =>
+        String(url).endsWith('/samplers')
+          ? reply([{ name: 'Euler a' }, { name: 'DPM++ 2M' }])
+          : reply([{ name: 'karras' }]),
+      )
+      expect(await createA1111Provider({ apiKey: '' }).getSamplerInfo!()).toEqual({
+        samplers: ['Euler a', 'DPM++ 2M'],
+        schedulers: ['karras'],
+      })
+    })
+
+    it('keeps the samplers and names the minimum version when there is no schedulers route', async () => {
+      vi.mocked(imageGetFetch).mockImplementation(async (url, _headers, options) =>
+        String(url).endsWith('/schedulers') && options?.allowStatuses?.includes(404)
+          ? missing
+          : reply([{ name: 'Euler a' }]),
+      )
+      const info = await createA1111Provider({ apiKey: '' }).getSamplerInfo!()
+      expect(info.samplers).toEqual(['Euler a'])
+      expect(info.schedulers).toEqual([])
+      expect(info.schedulersUnavailable).toContain('1.9.1')
+    })
+
+    it('rejects when the samplers request fails or the schedulers one fails otherwise', async () => {
+      vi.mocked(imageGetFetch).mockImplementation(async (url) => {
+        if (String(url).endsWith('/samplers')) throw new Error('Image API error 404')
+        return reply([])
+      })
+      await expect(createA1111Provider({ apiKey: '' }).getSamplerInfo!()).rejects.toThrow('404')
+
+      vi.mocked(imageGetFetch).mockImplementation(async (url) => {
+        if (String(url).endsWith('/schedulers')) throw new Error('Image API error 500')
+        return reply([])
+      })
+      await expect(createA1111Provider({ apiKey: '' }).getSamplerInfo!()).rejects.toThrow('500')
+    })
+
+    it('rejects a reply that is not a list', async () => {
+      vi.mocked(imageGetFetch).mockResolvedValue(reply('<html></html>'))
+      await expect(createA1111Provider({ apiKey: '' }).getSamplerInfo!()).rejects.toThrow(
+        'did not return a list',
+      )
+    })
+  })
+
+  it('makes no OpenAI request without a key', async () => {
+    expect(await createOpenAIProvider({ apiKey: '' }).listModels()).toEqual([])
+    expect(imageGetFetch).not.toHaveBeenCalled()
   })
 })

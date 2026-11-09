@@ -25,7 +25,6 @@ vi.mock('#lib/stores/settings.svelte.ts', () => ({
 }))
 
 vi.mock('./providers/registry', () => ({
-  supportsImageGeneration: () => true,
   generateImage: async () => ({ base64: null, error: 'no backend in test' }),
 }))
 

@@ -5,9 +5,11 @@ import type {
   FontSource,
   FontSizeOption,
   GenerationPreset,
+  ImageProviderConnection,
   ImageProfile,
   ProviderType,
   ReasoningEffort,
+  StoredImageProfile,
   TextModel,
   ThemeId,
   TranslationSettings,
@@ -15,6 +17,10 @@ import type {
   UpdateSettings,
 } from '#lib/types/index.ts'
 import { database } from '#lib/services/database.ts'
+import {
+  imageConnectionFor,
+  isImageProviderType,
+} from '#lib/services/ai/image/providers/connection.ts'
 import { grammarService } from '#lib/services/grammar.ts'
 import { PROVIDERS } from '#lib/services/ai/sdk/providers/config.ts'
 import {
@@ -2863,20 +2869,36 @@ class SettingsStore {
     const json = await database.getSetting('image_profiles')
     if (json) {
       try {
-        const parsed = JSON.parse(json) as ImageProfile[]
-        this.imageProfiles = parsed.map((p) => ({
-          ...p,
-          providerOptions: p.providerOptions ?? {},
-        }))
+        const parsed = JSON.parse(json) as StoredImageProfile[]
+        this.imageProfiles = parsed.flatMap((p) => {
+          if (!isImageProviderType(p.providerType)) {
+            console.warn(
+              '[Settings] Skipped an image profile with an unknown provider:',
+              p.providerType,
+            )
+            return []
+          }
+          return [
+            {
+              ...p,
+              ...imageConnectionFor(p.providerType, p.apiKey, p.baseUrl),
+              providerOptions: p.providerOptions ?? {},
+            },
+          ]
+        })
       } catch {
         this.imageProfiles = []
       }
     }
   }
 
-  async addImageProfile(profile: Omit<ImageProfile, 'id' | 'createdAt'>): Promise<ImageProfile> {
+  async addImageProfile(
+    profile: Omit<ImageProfile, 'id' | 'createdAt' | keyof ImageProviderConnection>,
+    connection: ImageProviderConnection,
+  ): Promise<ImageProfile> {
     const newProfile: ImageProfile = {
       ...profile,
+      ...connection,
       id: crypto.randomUUID(),
       createdAt: Date.now(),
     }
@@ -2885,10 +2907,14 @@ class SettingsStore {
     return newProfile
   }
 
-  async updateImageProfile(id: string, updates: Partial<Omit<ImageProfile, 'id' | 'createdAt'>>) {
+  async updateImageProfile(
+    id: string,
+    updates: Partial<Omit<ImageProfile, 'id' | 'createdAt' | keyof ImageProviderConnection>>,
+    connection?: ImageProviderConnection,
+  ) {
     const index = this.imageProfiles.findIndex((p) => p.id === id)
     if (index === -1) return
-    this.imageProfiles[index] = { ...this.imageProfiles[index], ...updates }
+    this.imageProfiles[index] = { ...this.imageProfiles[index], ...updates, ...connection }
     this.imageProfiles = [...this.imageProfiles]
     await this.saveImageProfiles()
   }

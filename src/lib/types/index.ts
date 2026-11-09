@@ -870,13 +870,66 @@ export type ImageProviderType =
   | 'comfyui'
   | 'a1111'
 
-export interface ImageProfile {
-  id: string
-  name: string
+export interface ReferenceImageConstraints {
+  maxBytes?: number
+  /** Pixels, applied to each side. */
+  minSide?: number
+  maxSide?: number
+  mimeTypes?: string[]
+}
+
+export interface ImageModelCapabilities {
+  /** Absent means unknown. */
+  supportsImg2Img?: boolean
+  /** How many reference images one request takes; absent means no known limit. */
+  maxReferenceImages?: number
+  /** The model edits only: a request without a reference fails. */
+  requiresReferenceImage?: boolean
+  referenceConstraints?: ReferenceImageConstraints
+  /**
+   * The exact values this model accepts for its size parameter, verbatim.
+   *
+   * Not normalised: NanoGPT's catalogue mixes `1024x1024` with `square_hd`, `auto` and
+   * `1k`/`2k`/`4k`, and a model offering only the latter has no dimensions to normalise to.
+   */
+  supportedResolutions?: string[]
+  /** The `w:h` ratios this model accepts, verbatim; options like `auto` are left out. */
+  supportedAspectRatios?: string[]
+  /** The fewest pixels a request may ask for. Set only by a profile's override, never listed. */
+  minPixels?: number
+}
+
+/** What a profile says about its model where the provider publishes nothing usable. A blank field defers to the provider. */
+export interface ImageCapabilityOverride {
+  minPixels?: number
+  /** Sizes to send, as `WxH`. */
+  sizes?: string[]
+  references?: boolean
+}
+
+declare const imageConnectionBrand: unique symbol
+
+/** The provider, key and URL a provider is built from. Only `imageConnectionFor` makes one. */
+export interface ImageProviderConnection {
+  readonly [imageConnectionBrand]: true
   providerType: ImageProviderType
   apiKey: string
+  baseUrl: string | undefined
+}
+
+/** An `ImageProfile` as parsed from the settings blob, before its provider is checked. */
+export type StoredImageProfile = Omit<ImageProfile, keyof ImageProviderConnection> & {
+  providerType: string
+  apiKey: string
   baseUrl?: string
+}
+
+export interface ImageProfile extends ImageProviderConnection {
+  id: string
+  name: string
   model: string
+  /** Saved only for providers that take one. */
+  capabilityOverride?: ImageCapabilityOverride
   providerOptions: Record<string, unknown>
   createdAt: number
 }

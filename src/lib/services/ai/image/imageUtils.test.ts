@@ -1,4 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
+import type { ImageProviderType } from '#lib/types/index.ts'
 import type { ImageProfileSlot } from './imageUtils'
 
 const state = {
@@ -10,7 +11,7 @@ const state = {
   },
   profiles: {} as Record<
     string,
-    { id: string; providerType: string; apiKey: string; baseUrl?: string }
+    { id: string; providerType: ImageProviderType; apiKey: string; baseUrl?: string }
   >,
 }
 
@@ -28,15 +29,19 @@ vi.mock('#lib/stores/settings.svelte.ts', () => ({
   },
 }))
 
+const warmImageCapabilities = vi.fn(async (_profiles: unknown[]) => {})
+
 vi.mock('./providers/registry', () => ({
   IMAGE_PROVIDER_LABELS: { openai: 'OpenAI' },
-  supportsImageGeneration: (providerType: string) => providerType !== 'no-backend',
-  requiresApiKey: (providerType: string) => providerType === 'openai',
-  baseUrlMode: (providerType: string) => (providerType === 'proxy' ? 'required' : 'none'),
+  warmImageCapabilities: (profiles: unknown[]) => warmImageCapabilities(profiles),
 }))
 
-const { isImageGenerationEnabled, hasRequiredCredentials, missingCredential } =
-  await import('./imageUtils')
+const {
+  isImageGenerationEnabled,
+  hasRequiredCredentials,
+  missingCredential,
+  warmSlotCapabilities,
+} = await import('./imageUtils')
 
 const SLOTS: ImageProfileSlot[] = ['standard', 'background', 'portrait', 'reference']
 
@@ -56,37 +61,28 @@ beforeEach(() => {
   setSlotIds('p-std', null, null, null)
   state.profiles = {
     'p-std': { id: 'p-std', providerType: 'openai', apiKey: '' },
-    'p-bg': { id: 'p-bg', providerType: 'local', apiKey: '' },
-    'p-port': { id: 'p-port', providerType: 'local', apiKey: '' },
-    'p-ref': { id: 'p-ref', providerType: 'local', apiKey: '' },
-    'p-local': { id: 'p-local', providerType: 'local', apiKey: '' },
+    'p-bg': { id: 'p-bg', providerType: 'a1111', apiKey: '' },
+    'p-port': { id: 'p-port', providerType: 'a1111', apiKey: '' },
+    'p-ref': { id: 'p-ref', providerType: 'a1111', apiKey: '' },
+    'p-local': { id: 'p-local', providerType: 'a1111', apiKey: '' },
   }
 })
 
 describe('hasRequiredCredentials', () => {
-  it('does not fall back to the standard profile for background', () => {
-    setSlotIds('p-std', null, null, null)
-
-    expect(hasRequiredCredentials('background')).toBe(false)
-  })
-
   it('is true when the background profile supports generation and needs no api key', () => {
     setSlotIds('p-std', 'p-bg', null, null)
 
     expect(hasRequiredCredentials('background')).toBe(true)
   })
 
-  it('does not fall back to the standard profile for portrait', () => {
-    setSlotIds('p-std', null, null, null)
+  it.each(['background', 'portrait', 'reference'] satisfies ImageProfileSlot[])(
+    'does not fall back to the standard profile for %s',
+    (slot) => {
+      setSlotIds('p-std', null, null, null)
 
-    expect(hasRequiredCredentials('portrait')).toBe(false)
-  })
-
-  it('does not fall back to the standard profile for reference', () => {
-    setSlotIds('p-std', null, null, null)
-
-    expect(hasRequiredCredentials('reference')).toBe(false)
-  })
+      expect(hasRequiredCredentials(slot)).toBe(false)
+    },
+  )
 
   it('requires the api key when the provider needs one', () => {
     setSlotIds('p-std', null, null, null)
@@ -100,7 +96,7 @@ describe('hasRequiredCredentials', () => {
 
   it('requires a base URL when the provider has no endpoint of its own', () => {
     setSlotIds('p-proxy', null, null, null)
-    state.profiles['p-proxy'] = { id: 'p-proxy', providerType: 'proxy', apiKey: '' }
+    state.profiles['p-proxy'] = { id: 'p-proxy', providerType: 'openai-compatible', apiKey: '' }
 
     expect(hasRequiredCredentials('standard')).toBe(false)
 
@@ -113,17 +109,13 @@ describe('hasRequiredCredentials', () => {
 })
 
 describe('missingCredential', () => {
-  it("names the slot's profile when none is set or the provider is unsupported", () => {
+  it("names the slot's profile when none is set", () => {
     setSlotIds('p-std', null, null, null)
     expect(missingCredential('background')).toBe('profile')
-
-    state.profiles['p-none'] = { id: 'p-none', providerType: 'no-backend', apiKey: 'k' }
-    setSlotIds('p-none', null, null, null)
-    expect(missingCredential()).toBe('profile')
   })
 
   it('names the api key or the base URL, whichever is missing', () => {
-    state.profiles['p-proxy'] = { id: 'p-proxy', providerType: 'proxy', apiKey: '' }
+    state.profiles['p-proxy'] = { id: 'p-proxy', providerType: 'openai-compatible', apiKey: '' }
     setSlotIds('p-proxy', null, null, null)
     expect(missingCredential()).toBe('baseUrl')
 
@@ -132,6 +124,15 @@ describe('missingCredential', () => {
     expect(missingCredential()).toBe('apiKey')
   })
 
+  it.each(['a1111', 'comfyui'] as const)(
+    'does not ask a %s profile for an api key',
+    (providerType) => {
+      state.profiles['p-local'] = { id: 'p-local', providerType, apiKey: '' }
+      setSlotIds('p-local', null, null, null)
+      expect(missingCredential()).toBeUndefined()
+    },
+  )
+
   it('is undefined once the slot is usable', () => {
     state.profiles['p-std'].apiKey = 'sk-test'
     expect(missingCredential()).toBeUndefined()
@@ -139,18 +140,6 @@ describe('missingCredential', () => {
 })
 
 describe('isImageGenerationEnabled', () => {
-  it('is false for background when backgroundProfileId is unset, even with a standard profile', () => {
-    setSlotIds('p-std', null, null, null)
-
-    expect(isImageGenerationEnabled(undefined, 'background')).toBe(false)
-  })
-
-  it('is true for standard when the profile supports generation', () => {
-    setSlotIds('p-std', null, null, null)
-
-    expect(isImageGenerationEnabled(undefined, 'standard')).toBe(true)
-  })
-
   it('is false for non-background slots when generation mode is none', () => {
     setSlotIds('p-std', 'p-bg', null, null)
 
@@ -208,4 +197,32 @@ describe('agreement between isImageGenerationEnabled and hasRequiredCredentials'
       })
     }
   }
+})
+
+describe('warmSlotCapabilities', () => {
+  beforeEach(() => {
+    warmImageCapabilities.mockClear()
+  })
+
+  it('passes the profile of every slot that is ready, in slot order', async () => {
+    state.profiles['p-std'].apiKey = 'sk-test'
+    setSlotIds('p-std', 'p-bg', 'p-port', 'p-ref')
+
+    await warmSlotCapabilities()
+
+    expect(warmImageCapabilities).toHaveBeenCalledWith([
+      state.profiles['p-std'],
+      state.profiles['p-bg'],
+      state.profiles['p-port'],
+      state.profiles['p-ref'],
+    ])
+  })
+
+  it('leaves out a slot with no profile, a missing profile, or missing credentials', async () => {
+    setSlotIds('p-std', 'p-gone', null, 'p-ref')
+
+    await warmSlotCapabilities()
+
+    expect(warmImageCapabilities).toHaveBeenCalledWith([state.profiles['p-ref']])
+  })
 })
