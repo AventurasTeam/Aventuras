@@ -1226,6 +1226,55 @@ describe('merge_threads', () => {
     })
     expect(run.answers[2]).toMatchObject({ result: 'rejected', survivor: 'th1' })
   })
+
+  it("names keep by the title a landed merge gave it in the close's later prose, its own why as it stood", async () => {
+    const title = 'Deliver the sealed letter'
+
+    const run = await runThreadCalls(f, THREADS_SHOWN, [
+      {
+        toolName: 'merge_threads',
+        input: { keep: 'th1', absorb: ['th2'], title, ...cite(['t7'], 'th2 repeats th1.') },
+      },
+      {
+        toolName: 'update_thread',
+        input: {
+          id: 'th1',
+          description: 'th1 now rests with the reeve.',
+          ...cite(['t7'], 'th1 is done.'),
+        },
+      },
+    ])
+
+    expect(run.calls.map(({ result, why }) => [result, why])).toEqual([
+      ['ok', `${SEALED.title} repeats ${LETTER.title}.`],
+      ['ok', `${title} is done.`],
+    ])
+    expect(await threadRow(f, LETTER.id)).toMatchObject({
+      title,
+      description: `${title} now rests with the reeve.`,
+    })
+  })
+
+  it('keeps naming keep by its stored title after a merge that leaves the title or is refused', async () => {
+    const run = await runThreadCalls(f, THREADS_SHOWN, [
+      merge({ keep: 'th3', absorb: ['th1'], title: 'The light and the letter' }),
+      merge({ keep: 'th1', absorb: ['th2'], description: 'th1, sealed.' }),
+      {
+        toolName: 'update_thread',
+        input: { id: 'th3', description: 'th3 is gone.', ...cite(['t7'], 'th1 holds.') },
+      },
+    ])
+
+    expect(run.calls.map(({ result }) => result)).toEqual(['rejected', 'ok', 'ok'])
+    expect(run.calls[2]!.why).toBe(`${LETTER.title} holds.`)
+    expect(await threadRow(f, FAR_BANK.id)).toMatchObject({
+      description: `${FAR_BANK.title} is gone.`,
+    })
+    expect(await threadRow(f, LETTER.id)).toMatchObject({
+      title: LETTER.title,
+      description: `${LETTER.title}, sealed.`,
+    })
+  })
 })
 
 // Real prefix_<uuid> ids. echo sorts before heir: the two share a createdAt.

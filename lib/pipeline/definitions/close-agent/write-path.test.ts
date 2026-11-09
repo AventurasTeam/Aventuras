@@ -9,6 +9,7 @@ import {
 import { readRowGuard } from '@/lib/actions/delta/row-guard'
 import {
   USER_EDITED_SINCE_PROSE,
+  type ActionOutcome,
   type GroupOutcome,
   type GuardRow,
   type RowVerdicts,
@@ -1610,6 +1611,45 @@ describe('dispatchToolCall in a close phase', () => {
       skippedFields: [{ field: 'description', reason: 'not-active' }],
     })
   })
+
+  it.each<[string, ActionOutcome, string]>([
+    ['lands', { status: 'landed' }, 'The courier'],
+    ['is kept by the user', { status: 'noop', reason: USER_EDITED_SINCE_PROSE }, 'Wren'],
+  ])(
+    "names a merge's kept row by the title it sent only when the title %s",
+    async (_label, titleOutcome, name) => {
+      // The port stands in for a title the handler keeps while the merge's delete lands.
+      configurePort({
+        applyDeltaActionGroupWithOutcomes: async () => ({
+          status: 'ok',
+          outcomes: [titleOutcome, { status: 'landed' }],
+        }),
+      })
+      scriptedPlan = (ctx) => ({
+        kind: 'write',
+        actions: [
+          { ...describeAs(ctx, WREN, 'The courier'), fields: ['title'] },
+          describeAs(ctx, BRAM, 'Folded into Wren.'),
+        ],
+        lost: [],
+        rows: entityRows(WREN, BRAM),
+        values: { title: 'The courier' },
+        survivor: { table: 'entities', id: WREN },
+      })
+      seeds = [
+        { table: 'entities', id: WREN },
+        { table: 'entities', id: BRAM },
+      ]
+
+      await runDispatch([{ toolName: 'scripted', input: { rows: ['c1', 'c2'], ...cite(['t7']) } }])
+
+      expect(recorded()[0]).toMatchObject({
+        result: 'ok',
+        survivor: { table: 'entities', id: WREN },
+      })
+      expect(shown?.nameOfId(WREN)).toBe(name)
+    },
+  )
 
   it.each<[string, LostField]>([
     [
