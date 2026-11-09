@@ -29,6 +29,8 @@ const READ_ROW_PREFIXES = ['char', 'loc', 'item', 'fact', 'lore', 'thr', 'hap'] 
 /** A row as read_row reads it: its kind, its name or title, its columns by name. */
 type ReadRow = { kind: RowKind; name: string; columns: Readonly<Record<string, unknown>> }
 
+type Rank = 0 | 1 | 2 | 3 | 4
+
 // Raw, so a row the cap cuts mints no handle: only a shown row's line swaps its ids.
 type Match = {
   id: string
@@ -36,11 +38,7 @@ type Match = {
   name: string
   status: string | null
   description: string | null
-  /**
-   * 0 the exact name; 1 the name whole in the query or the query whole in the name; 2 the same
-   * for a keyword; 3 the query inside a word of the name; 4 the same in a keyword.
-   */
-  rank: number
+  rank: Rank
 }
 
 async function readRow(
@@ -175,17 +173,17 @@ const searchWorldSchema = readToolSchema({
   query: z.string().describe('A name, an alias or a keyword, or part of one.'),
 })
 
-// Whole matches first, so a short query's exact hit isn't cut past the cap by partial ones. Whole
-// runs both ways: an alias inside a longer question, or "silver" for "Long John Silver".
+// 0 an exact name or keyword; 1 a name, 2 a keyword, whole in the query or holding it whole;
+// 3 a name, 4 a keyword, holding the query inside it but not whole. Lower ranks sort first.
 function rankOf(
   query: string,
   needle: string,
   name: string,
   keywords: readonly string[],
-): number | undefined {
+): Rank | undefined {
   const term = normalizeTerm(name)
   const holdsQuery = (text: string): boolean => matchTerms(text, [needle]).length > 0
-  if (term === needle) return 0
+  if (term === needle || keywords.includes(needle)) return 0
   if (matchTerms(query, [term]).length > 0 || holdsQuery(term)) return 1
   if (matchTerms(query, keywords).length > 0 || keywords.some(holdsQuery)) return 2
   if (term.includes(needle)) return 3
@@ -320,7 +318,7 @@ async function readRowAnswer(
 export const searchWorldTool: ReadTool<typeof searchWorldSchema> = {
   kind: 'read',
   name: 'search_world',
-  description: `Find rows of the story's world by name, alias or keyword: characters, places, items, factions and happenings. Use it for a row your task's start doesn't show, such as one the prose calls "the capital". Answers up to ${SEARCH_WORLD_LIMIT} matches, each an id and one line. A match isn't read: call read_row before writing to it.`,
+  description: `Find rows of the story's world by name, alias or keyword: characters, places, items, factions and happenings. Use it for a row your task's start doesn't show, such as one the prose calls "the capital". Answers up to ${SEARCH_WORLD_LIMIT} matches, each an id and one line. Best matches first; narrow the query if a row you need is omitted. A match isn't read: call read_row before writing to it.`,
   schema: searchWorldSchema,
   ids: {},
   read: searchWorld,

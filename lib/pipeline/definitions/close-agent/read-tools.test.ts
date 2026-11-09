@@ -285,7 +285,7 @@ describe('search_world', () => {
       .values([
         entity(exactName, 'character', 'Harbour Master'),
         entity(nameInQuery, 'character', 'Harbour'),
-        entity(queryInName, 'character', 'Old harbour master Hale'),
+        entity(queryInName, 'character', 'Hale, old harbour master'),
         entity(queryInKeyword, 'character', 'Cole', { keywords: ['Old Harbour Master'] }),
         entity(keywordInQuery, 'character', 'Gull', { keywords: ['Master'] }),
         entity(partName, 'character', 'Bay harbour masterclass'),
@@ -296,8 +296,8 @@ describe('search_world', () => {
 
     expect(matchedIds(out)).toEqual([
       exactName,
-      nameInQuery,
       queryInName,
+      nameInQuery,
       queryInKeyword,
       keywordInQuery,
       partName,
@@ -305,7 +305,33 @@ describe('search_world', () => {
     ])
   })
 
-  it('keeps an exact name and a whole keyword inside the cap ahead of more than 20 partial names', async () => {
+  it('ranks a happening by its title as it ranks a name', async () => {
+    const tollCross = rowId('loc', 60)
+    await db.insert(entities).values(entity(tollCross, 'location', 'Toll cross'))
+
+    const { out } = await search('cross')
+
+    expect(matchedIds(out)).toEqual([tollCross, CROSSING])
+  })
+
+  it('keeps an exact keyword inside the cap ahead of more than 20 names the query is whole in', async () => {
+    const bram = rowId('char', 540)
+    await db
+      .insert(entities)
+      .values([
+        ...Array.from({ length: 25 }, (_, i) =>
+          entity(rowId('char', 541 + i), 'character', `Guard ${i + 1}`),
+        ),
+        entity(bram, 'character', 'Bram', { keywords: ['Guard'] }),
+      ])
+
+    const { out } = await search('guard')
+
+    expect(matchedIds(out)[0]).toBe(bram)
+    expect(out.omitted).toBe(6)
+  })
+
+  it('keeps an exact name and an exact keyword inside the cap ahead of more than 20 partial names', async () => {
     const tide = rowId('char', 530)
     const zora = rowId('char', 531)
     await db
