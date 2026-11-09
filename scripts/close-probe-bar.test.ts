@@ -217,8 +217,31 @@ describe('tallyRun', () => {
     expect(tallied.capCalls).toBe(3)
     expect(tallied.capHits).toEqual([
       { row: 'Silver', path: 'state.traits', result: 'ok' },
-      { row: 'Silver', path: 'state.traits', result: 'rejected', reason: 'over the soft cap' },
-      { row: 'Silver', path: 'state.traits', result: 'ok', reason: 'over the soft cap' },
+      { row: 'Silver', path: 'state.traits', result: 'refused', reason: 'over the soft cap' },
+      { row: 'Silver', path: 'state.traits', result: 'refused', reason: 'over the soft cap' },
+    ])
+  })
+
+  it('counts one call sending two capped lists once, with a hit for each list', () => {
+    const both = call({
+      task: 'identity',
+      tool: 'update_character',
+      result: 'ok',
+      ...onCapped,
+      values: { 'state.traits': 'a', 'state.drives': 'b' },
+      skippedFields: [{ field: 'state.drives', reason: 'over the soft cap' }],
+    })
+    const tallied = run({
+      report: report([both]),
+      cappedLists: [
+        { id: CAPPED, list: 'traits' },
+        { id: CAPPED, list: 'drives' },
+      ],
+    })
+    expect(tallied.capCalls).toBe(1)
+    expect(tallied.capHits).toEqual([
+      { row: 'Silver', path: 'state.traits', result: 'ok' },
+      { row: 'Silver', path: 'state.drives', result: 'refused', reason: 'over the soft cap' },
     ])
   })
 

@@ -18,11 +18,11 @@ const BEFORE_THE_CAP = new Set<string>([
 ])
 
 export type TaskHold = { task: CloseTask; held: boolean; why: string }
-/** A call counted as a cap check: the row's name, the list path, and why it was refused, if it was. */
+/** A capped list that reached the cap check: `result` is the list's own outcome, `refused` when it was lost. */
 export type CapHit = {
   row: string
   path: string
-  result: CloseReportCall['result']
+  result: CloseReportCall['result'] | 'refused'
   reason?: string
 }
 /** A merge_threads call, by the names of the rows it named. */
@@ -84,9 +84,11 @@ function capHitsOf(call: CloseReportCall, capped: RunInput['cappedLists']): CapH
     const loss = lossOf(call, path)
     if (row === undefined || !Object.hasOwn(values, path)) return []
     if (loss !== undefined && BEFORE_THE_CAP.has(loss)) return []
-    return [
-      { row: row.name, path, result: call.result, ...(loss === undefined ? {} : { reason: loss }) },
-    ]
+    const hit: CapHit =
+      loss === undefined
+        ? { row: row.name, path, result: call.result }
+        : { row: row.name, path, result: 'refused', reason: loss }
+    return [hit]
   })
 }
 
