@@ -47,7 +47,10 @@ async function seededWithDataset() {
 
 type Ctx = Awaited<ReturnType<typeof seededWithDataset>>
 
-async function branchCount(ctx: Ctx, table: typeof entities | typeof deltas | typeof storyEntries) {
+async function branchCount(
+  ctx: Ctx,
+  table: typeof entities | typeof deltas | typeof storyEntries | typeof threads,
+) {
   const [row] = await ctx.db.select({ n: count() }).from(table).where(eq(table.branchId, BRANCH))
   return row!.n
 }
@@ -139,6 +142,7 @@ describe('the Treasure Island seed', () => {
     expect(await chapterRows(ctx)).toEqual([])
     expect(await openRegion(ctx)).toBe(133)
     expect(await branchCount(ctx, deltas)).toBe(1033 - 151)
+    expect(await branchCount(ctx, threads)).toBe(8)
 
     expect(await redoLastAction(BRANCH, ctx)).toEqual({ status: 'ok' })
     expect(await chapterRows(ctx)).toEqual(closed)
@@ -150,6 +154,7 @@ describe('the Treasure Island seed', () => {
       .orderBy(asc(storyEntries.chapterId))
     expect(chapterOf).toEqual([{ chapterId: closed[0]!.id }])
     expect(await branchCount(ctx, deltas)).toBe(1033)
+    expect(await branchCount(ctx, threads)).toBe(7)
   })
 
   // A rollback reads a close's anchors, which a CTRL-Z of the close never does (C1).

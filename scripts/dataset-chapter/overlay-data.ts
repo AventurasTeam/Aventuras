@@ -161,24 +161,21 @@ export const DATASET_OVERLAY: DatasetOverlay = {
       'The one-legged cook of the Hispaniola, who keeps the Spy-glass tavern on the Bristol docks.',
   },
   plantedThread: {
-    duplicates: {
-      id: 'thr_1b3d556f-e9aa-4701-a6f6-aa3076965215',
-      title: "The search for Flint's treasure",
-    },
+    duplicates: { id: 'thr_1e574e0e-a260-4b5c-8fa0-e3d0093030d3', title: 'The one-legged man' },
     row: {
       id: 'thr_6f1c0b7e-3a52-4d88-9e41-2b7c5d0a9f13',
-      title: 'Where Flint buried his treasure',
+      title: 'The seafaring man with one leg',
       description:
-        'The doctor holds a clue to where Captain Flint buried his treasure, and the squire means to fit out a ship and have it.',
+        'Billy Bones pays Jim a silver fourpenny a month to watch for a seafaring man with one leg.',
       category: 'quest',
-      icon: 'map',
+      icon: 'eye',
       status: 'pending',
       injectionMode: 'auto',
-      triggeredAtEntryId: 'entry_571c194c-f31b-45fc-ab40-cf4a4d02b7cc',
+      triggeredAtEntryId: 'entry_57f65203-2490-4b71-8953-496c0592296e',
       resolvedAtEntryId: null,
       embeddingStale: 1,
-      createdAt: 1_793_910_711_930,
-      updatedAt: 1_793_910_711_930,
+      createdAt: 1_793_907_370_600,
+      updatedAt: 1_793_907_370_600,
     },
   },
 }

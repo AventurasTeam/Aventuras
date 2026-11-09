@@ -380,6 +380,7 @@ describe('the dataset overlay', () => {
 
   it('throws when the thread the planted one repeats is no longer active, before writing', async () => {
     const ctx = await seededDataset()
+    await undoSeedClose(ctx)
     await ctx.db
       .update(threads)
       .set({ status: 'resolved' })
