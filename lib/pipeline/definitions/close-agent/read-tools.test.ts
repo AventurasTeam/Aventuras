@@ -315,19 +315,19 @@ describe('search_world', () => {
   })
 
   it('keeps an exact keyword inside the cap ahead of more than 20 names the query is whole in', async () => {
-    const bram = rowId('char', 540)
+    const ulric = rowId('char', 540)
     await db
       .insert(entities)
       .values([
         ...Array.from({ length: 25 }, (_, i) =>
           entity(rowId('char', 541 + i), 'character', `Guard ${i + 1}`),
         ),
-        entity(bram, 'character', 'Bram', { keywords: ['Guard'] }),
+        entity(ulric, 'character', 'Ulric', { keywords: ['Guard'] }),
       ])
 
     const { out } = await search('guard')
 
-    expect(matchedIds(out)[0]).toBe(bram)
+    expect(matchedIds(out)[0]).toBe(ulric)
     expect(out.omitted).toBe(6)
   })
 
