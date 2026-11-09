@@ -274,9 +274,18 @@ describe('the close task templates', () => {
         {
           id: 'f1',
           name: 'The Syndicate',
+          status: 'active',
           description: '',
           standing: 'Holds the road.',
           agenda: ['tax the ferry'],
+        },
+        {
+          id: 'f2',
+          name: 'The Old Guild',
+          status: 'retired',
+          description: 'Broken up.',
+          standing: '',
+          agenda: [],
         },
       ],
       closeWritesSoFar: '',
@@ -306,6 +315,9 @@ describe('the close task templates', () => {
     )
     expect(user).toContain(
       '## f1: The Syndicate\n- description: ""\n- standing: "Holds the road."\n- agenda: ["tax the ferry"]',
+    )
+    expect(user).toContain(
+      '## f2: The Old Guild (retired)\n- description: "Broken up."\n- standing: ""\n- agenda: []',
     )
   })
 

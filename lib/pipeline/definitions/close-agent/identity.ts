@@ -36,6 +36,7 @@ export type IdentityCharacter = {
 export type IdentityFaction = {
   id: string
   name: string
+  status: string
   description: string
   standing: string
   agenda: string[]
@@ -54,8 +55,9 @@ const strings = (value: unknown): string[] =>
 const text = (value: unknown): string => (typeof value === 'string' ? value : '')
 const stateOf = (row: Entity): Readonly<Record<string, unknown>> =>
   isJsonObject(row.state) ? row.state : {}
-const byNameThenId = (a: Entity, b: Entity): number =>
-  a.name.localeCompare(b.name) || (a.id < b.id ? -1 : a.id > b.id ? 1 : 0)
+// Code units, never localeCompare: the host locale would make the prompt's row order device-dependent.
+const cmp = (a: string, b: string): number => (a < b ? -1 : a > b ? 1 : 0)
+const byNameThenId = (a: Entity, b: Entity): number => cmp(a.name, b.name) || cmp(a.id, b.id)
 
 // Any status: canon names the entities the chapter touches, and a retired one was still there.
 async function sceneCharacters(
@@ -130,6 +132,7 @@ async function startIdentity(ctx: TaskPromptContext): Promise<TaskStart<Identity
         return {
           id: ctx.ids.show(row.id, row.name),
           name: row.name,
+          status: row.status,
           description: row.description ?? '',
           standing: text(state.standing),
           agenda: strings(state.agenda),

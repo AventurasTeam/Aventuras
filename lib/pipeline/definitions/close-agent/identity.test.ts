@@ -5,6 +5,7 @@ import { applyDeltaAction } from '@/lib/actions/delta/apply-delta-action'
 import { USER_EDITED_SINCE_PROSE, type DeltaSource, type GroupOutcome } from '@/lib/actions/types'
 import type { ResolveModelConfig } from '@/lib/ai'
 import {
+  branches,
   deltas,
   emptyEntityState,
   entities,
@@ -965,6 +966,9 @@ const START_ROWS = {
   ledger: 'fact_00000000-0000-4000-8000-00000000b007',
   syndicate: 'fact_00000000-0000-4000-8000-00000000b008',
   tollmen: 'fact_00000000-0000-4000-8000-00000000b009',
+  greyLower: 'fact_00000000-0000-4000-8000-00000000b00a',
+  quietUpper: 'fact_00000000-0000-4000-8000-00000000b00b',
+  quietTwin: 'fact_00000000-0000-4000-8000-00000000b00c',
 } as const
 
 type EntityRowSeed = {
@@ -975,13 +979,15 @@ type EntityRowSeed = {
   description?: string | null
   state?: EntityState | null
   keywords?: string[]
+  /** The fixture's branch unless given. */
+  branchId?: string
 }
 
 // Written as a hand-edited or imported row is, with no delta: a start reads rows, not history.
 async function putEntityRow(fx: CloseFixture, row: EntityRowSeed): Promise<void> {
   await fx.ctx.db.insert(entities).values({
     id: row.id,
-    branchId: fx.branchId,
+    branchId: row.branchId ?? fx.branchId,
     kind: row.kind,
     name: row.name,
     description: row.description ?? null,
@@ -1224,7 +1230,7 @@ describe('identityTask', () => {
     })
     await setSceneOf(fx, fx.entries[2]!.id, [START_ROWS.pip, START_ROWS.bess])
 
-    const { start } = await startOf(fx)
+    const { ctx, start } = await startOf(fx)
 
     expect(start?.show.characters).toEqual([
       { id: 'c1', name: 'Bess', status: 'active', description: '', traits, drives: [], voice: '' },
@@ -1242,11 +1248,16 @@ describe('identityTask', () => {
       {
         id: 'f1',
         name: 'The Quiet Hand',
+        status: 'active',
         description: 'Smugglers who keep to the dark.',
         standing: 'Feared along the river.',
         agenda: ['tax the ferry', 'read every letter'],
       },
     ])
+    const { user } = identityTask.render(start!, { ...ctx, writesSoFar: '' })
+    expect(user).toContain('The caps are 8 traits, 6 drives and 4 agenda items.')
+    expect(user).toContain('- traits: ["curious"]\n- drives: ["find the ferryman"]')
+    expect(user).toContain('- standing: "Feared along the river."')
   })
 
   it("brings a scene character's faction by membership, and no faction the chapter doesn't touch", async () => {
@@ -1271,6 +1282,97 @@ describe('identityTask', () => {
     expect(start?.show.factions.map((faction) => faction.name)).toEqual(['The Quiet Hand'])
   })
 
+  // Code units, not the host locale: "The…" sorts before "the…". Inserted out of order.
+  it('orders factions by name in code units, then by id', async () => {
+    const fx = await openCloseFixture()
+    const member = (id: string, name: string, factionId: string) =>
+      putEntityRow(fx, {
+        id,
+        kind: 'character',
+        name,
+        state: { ...emptyEntityState('character'), faction_id: factionId },
+      })
+    await member(START_ROWS.bess, 'Bess', START_ROWS.greyLower)
+    await member(START_ROWS.pew, 'Pew', START_ROWS.quietTwin)
+    await member(START_ROWS.pip, 'Pip', START_ROWS.quietUpper)
+    await putEntityRow(fx, { id: START_ROWS.greyLower, kind: 'faction', name: 'the grey ledger' })
+    await putEntityRow(fx, { id: START_ROWS.quietTwin, kind: 'faction', name: 'The Quiet Hand' })
+    await putEntityRow(fx, { id: START_ROWS.quietUpper, kind: 'faction', name: 'The Quiet Hand' })
+    await setSceneOf(fx, fx.entries[2]!.id, [START_ROWS.bess, START_ROWS.pew, START_ROWS.pip])
+
+    const { ids, start } = await startOf(fx)
+
+    expect(start?.show.factions.map((faction) => [faction.id, faction.name])).toEqual([
+      ['f1', 'The Quiet Hand'],
+      ['f2', 'The Quiet Hand'],
+      ['f3', 'the grey ledger'],
+    ])
+    expect(ids.handleOf(START_ROWS.quietUpper)).toBe('f1')
+    expect(ids.handleOf(START_ROWS.quietTwin)).toBe('f2')
+  })
+
+  // Forks share entry and entity ids under (branch_id, id): every read keeps to the close's branch.
+  it("reads only the close's branch, where a fork holds the same ids", async () => {
+    const fx = await openCloseFixture({ turns: 9 })
+    const forkId = 'br_close_fork'
+    await fx.ctx.db.insert(branches).values({
+      id: forkId,
+      storyId: fx.storyId,
+      parentBranchId: fx.branchId,
+      name: 'fork',
+      createdAt: 2,
+    })
+    const copied = fx.entries[2]!.id
+    const [row] = await fx.ctx.db
+      .select()
+      .from(storyEntries)
+      .where(and(eq(storyEntries.branchId, fx.branchId), eq(storyEntries.id, copied)))
+    await fx.ctx.db.insert(storyEntries).values({
+      ...row!,
+      branchId: forkId,
+      content: 'Only the fork remembers this.',
+      metadata: { ...row!.metadata!, sceneEntities: [START_ROWS.bess] },
+    })
+    await putEntityRow(fx, {
+      id: START_ROWS.pip,
+      kind: 'character',
+      name: 'Pip',
+      description: 'The stable boy on the main branch.',
+    })
+    await putEntityRow(fx, {
+      id: START_ROWS.pip,
+      kind: 'character',
+      name: 'Pip',
+      description: 'The stable boy on the fork.',
+      branchId: forkId,
+    })
+    await putEntityRow(fx, {
+      id: START_ROWS.bess,
+      kind: 'character',
+      name: 'Bess',
+      branchId: forkId,
+    })
+    // The main branch's prose names "the Syndicate"; only the fork holds the faction.
+    await putEntityRow(fx, {
+      id: START_ROWS.syndicate,
+      kind: 'faction',
+      name: 'The Syndicate',
+      branchId: forkId,
+    })
+    await setSceneOf(fx, fx.entries[2]!.id, [START_ROWS.pip])
+
+    const { start } = await startOf(fx)
+
+    expect(start?.show.closeTurns).toHaveLength(fx.entries.length)
+    expect(start?.show.closeTurns.map((turn) => turn.content).join('\n')).not.toContain(
+      'Only the fork',
+    )
+    expect(start?.show.characters.map((c) => [c.name, c.description])).toEqual([
+      ['Pip', 'The stable boy on the main branch.'],
+    ])
+    expect(start?.show.factions).toEqual([])
+  })
+
   // Nine turns: the seventh and ninth replies name "the Syndicate".
   it('brings a faction the turns name by its name, with no character in the scene', async () => {
     const fx = await openCloseFixture({ turns: 9 })
@@ -1286,7 +1388,14 @@ describe('identityTask', () => {
 
     expect(start?.show.characters).toEqual([])
     expect(start?.show.factions).toEqual([
-      { id: 'f1', name: 'The Syndicate', description: '', standing: '', agenda: [] },
+      {
+        id: 'f1',
+        name: 'The Syndicate',
+        status: 'active',
+        description: '',
+        standing: '',
+        agenda: [],
+      },
     ])
   })
 
@@ -1358,8 +1467,15 @@ describe('identityTask', () => {
       kind: 'character',
       name: 'Pew',
       status: 'retired',
+      state: { ...emptyEntityState('character'), faction_id: START_ROWS.ledger },
     })
     await putEntityRow(fx, { id: START_ROWS.hand, kind: 'faction', name: 'The Quiet Hand' })
+    await putEntityRow(fx, {
+      id: START_ROWS.ledger,
+      kind: 'faction',
+      name: 'The Grey Ledger',
+      status: 'retired',
+    })
     await setSceneOf(fx, fx.entries[2]!.id, [START_ROWS.pip, START_ROWS.pew])
     const { ctx, start } = await startOf(fx)
     const writes = '- update_thread Find the heir (th1): description'
@@ -1368,7 +1484,8 @@ describe('identityTask', () => {
 
     expect(user).toContain('## c1: Pew (retired)\n')
     expect(user).toContain('## c2: Pip\n')
-    expect(user).toContain('## f1: The Quiet Hand\n')
+    expect(user).toContain('## f1: The Grey Ledger (retired)\n')
+    expect(user).toContain('## f2: The Quiet Hand\n')
     expect(
       user.endsWith(`# Writes so far\nWhat this close has written, in earlier tasks:\n${writes}`),
     ).toBe(true)

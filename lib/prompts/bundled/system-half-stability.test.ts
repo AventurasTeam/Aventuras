@@ -529,6 +529,7 @@ describe("a close's task templates share one system half", () => {
         {
           id: 'f1',
           name: 'The Tidewardens',
+          status: 'active',
           description: '',
           standing: 'Feared.',
           agenda: ['hold the ford'],

@@ -38,7 +38,7 @@ None.
 # Factions
 {%- for f in closeFactions %}
 
-## {{ f.id }}: {{ f.name | one_line }}
+## {{ f.id }}: {{ f.name | one_line }}{% if f.status != 'active' %} ({{ f.status }}){% endif %}
 - description: {{ f.description | json }}
 - standing: {{ f.standing | json }}
 - agenda: {{ f.agenda | json }}
