@@ -8,6 +8,9 @@ import { sameValue } from './tool'
 /** A text field as the model sent it, and as it would be stored. */
 export type SentText = { readonly sent: string; readonly bounded: string }
 
+/** A list as the model sent it, and as the entries it holds, which is what would be stored. */
+export type SentList = { readonly sent: readonly string[]; readonly entries: readonly string[] }
+
 export type BoundedField = 'description' | 'title' | 'voice' | 'standing'
 
 /**
@@ -28,30 +31,50 @@ export function sentText(value: string | undefined, field: BoundedField): SentTe
   return { sent: value, bounded: TEXT_BOUNDS[field](value) }
 }
 
-/** Where a list the model escaped into one string joins its entries; a plain comma is no join. */
-const LEAKED_JOIN = /"\s*,\s*"|\r\n|\r|\n/
-
-/** The joined list's outer quote is left unpartnered at a piece's edge. */
-function dropStrayQuote(piece: string): string {
-  const trimmed = piece.trim()
-  if (trimmed.split('"').length % 2 === 1) return trimmed
-  if (trimmed.startsWith('"')) return trimmed.slice(1)
-  return trimmed.endsWith('"') ? trimmed.slice(0, -1) : trimmed
-}
-
-function leakedEntries(entry: string): string[] {
-  const pieces = entry.split(LEAKED_JOIN)
-  return pieces.length === 1 ? pieces : pieces.map(dropStrayQuote)
+function stringList(json: string): string[] | undefined {
+  try {
+    const parsed: unknown = JSON.parse(json)
+    return Array.isArray(parsed) && parsed.every((item) => typeof item === 'string')
+      ? parsed
+      : undefined
+  } catch {
+    return undefined
+  }
 }
 
 /**
- * A list replaces the stored one whole, so an empty one reads as omitted; else split where the
- * model joined entries into one, so the soft cap counts each, then deduped.
+ * A list the model escaped into one string, read by parsing it once its edge quotes and brackets
+ * are restored, then again while an item unescapes further. Prose with its own quotes won't parse.
  */
-export function sentList(value: readonly string[] | undefined): string[] | undefined {
+function joinedList(entry: string): string[] | undefined {
+  const body = entry.trim().replace(/^\[/, '').replace(/\]$/, '').trim()
+  const open = body.startsWith('"') ? '' : '"'
+  const close = body.endsWith('"') && !body.endsWith('\\"') ? '' : '"'
+  const list = stringList(`[${open}${body}${close}]`)
+  if (list === undefined || list.length > 1) return list
+  // Each pass parses a shorter string, so this ends.
+  const [only] = list
+  return only === undefined || only === body ? undefined : joinedList(only)
+}
+
+const LIST_MARKER = /^(?:[-*]|\d+\.)\s+/
+
+/** A list entry never spans lines, nor starts a line with a list marker. */
+function entryLines(entry: string): string[] {
+  const lines = entry.split('\n')
+  return lines.length === 1 ? lines : lines.map((line) => line.trim().replace(LIST_MARKER, ''))
+}
+
+const heldEntries = (entry: string): string[] => joinedList(entry) ?? entryLines(entry)
+
+/**
+ * A list replaces the stored one whole, so an empty one reads as omitted; else as the entries it
+ * holds, so the soft cap counts each one a model joined into a string, then deduped.
+ */
+export function sentList(value: readonly string[] | undefined): SentList | undefined {
   if (value === undefined) return undefined
-  const list = dedupeTerms(value.flatMap(leakedEntries))
-  return list.length === 0 ? undefined : list
+  const entries = dedupeTerms(value.flatMap(heldEntries))
+  return entries.length === 0 ? undefined : { sent: dedupeTerms(value), entries }
 }
 
 /** The stored value equals the text as sent or as bounded: a user's longer text is no change. */
@@ -59,8 +82,9 @@ export function restatedText(stored: unknown, text: SentText): boolean {
   return sameValue(stored, text.sent) || sameValue(stored, text.bounded)
 }
 
-export function restatedList(stored: unknown, list: readonly string[]): boolean {
-  return sameValue(stored, list)
+/** The stored list equals the list as sent or the entries it holds: a stored joined entry is no change. */
+export function restatedList(stored: unknown, list: SentList): boolean {
+  return sameValue(stored, list.sent) || sameValue(stored, list.entries)
 }
 
 export type CappedList = 'traits' | 'drives' | 'agenda'
@@ -73,6 +97,8 @@ export function overSoftCap(sent: readonly string[], stored: unknown, cap: numbe
 }
 
 /** A rule refusal's reason: the cap, and to replace rather than add. */
-export function softCapReason(list: CappedList, cap: number): string {
-  return `${list} is over its soft cap of ${cap}: replace an entry rather than add one`
+export function softCapReason(list: CappedList, cap: number, sent?: SentList): string {
+  const reason = `${list} is over its soft cap of ${cap}: replace an entry rather than add one`
+  if (sent === undefined || sent.entries.length <= sent.sent.length) return reason
+  return `${reason} (read as ${sent.entries.length} entries: a list joined into one string holds one entry per item)`
 }

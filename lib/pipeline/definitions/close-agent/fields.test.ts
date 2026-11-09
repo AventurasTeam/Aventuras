@@ -13,7 +13,8 @@ import {
 const terms = (n: number, word = 'trait'): string[] =>
   Array.from({ length: n }, (_, i) => `${word} ${i + 1}`)
 
-const RUN_9_TRAITS = [
+/** Twelve traits, as a list a model escaped into one string held them. */
+const TWELVE_TRAITS = [
   'old sailor',
   'man of substance',
   "has a banker's account",
@@ -78,6 +79,8 @@ describe('TEXT_BOUNDS', () => {
 })
 
 describe('sentList', () => {
+  const entries = (value: string[]) => sentList(value)?.entries
+
   it('reads a missing, empty or all-blank list as omitted', () => {
     expect(sentList(undefined)).toBeUndefined()
     expect(sentList([])).toBeUndefined()
@@ -85,32 +88,56 @@ describe('sentList', () => {
   })
 
   it('dedupes as a pass does: trimmed, first spelling kept, blanks dropped', () => {
-    expect(sentList(['brave', ' Brave ', '', 'courageous'])).toEqual(['brave', 'courageous'])
+    expect(entries(['brave', ' Brave ', '', 'courageous'])).toEqual(['brave', 'courageous'])
   })
 
-  // The measure's run 9: a whole JSON array escaped into one string, 12 traits as one entry.
-  it('reads a list the model joined into one entry as the entries it holds', () => {
-    expect(sentList([RUN_9_TRAITS.join('","')])).toEqual(RUN_9_TRAITS)
+  it('keeps the list as sent, deduped, beside the entries it holds', () => {
+    expect(sentList(['brave","wary', 'brave","wary', 'patient'])).toEqual({
+      sent: ['brave","wary', 'patient'],
+      entries: ['brave', 'wary', 'patient'],
+    })
   })
 
-  it('drops the quote the joined list leaves at its edges, and splits on any spacing', () => {
-    expect(sentList(['"brave" , "wary",\n  "patient"'])).toEqual(['brave', 'wary', 'patient'])
+  it.each([
+    ['quotes between its entries', TWELVE_TRAITS.join('","'), TWELVE_TRAITS],
+    ['spacing around the commas', 'brave", "wary" ,"patient', ['brave', 'wary', 'patient']],
+    ['its brackets', '["brave","wary"]', ['brave', 'wary']],
+    ['escaped quotes', 'brave\\",\\"wary\\",\\"patient', ['brave', 'wary', 'patient']],
+    ['escaped quotes and brackets', '[\\"brave\\",\\"wary\\"]', ['brave', 'wary']],
+    ['pretty-printed lines', '\n[\n  "brave",\n  "wary"\n]\n', ['brave', 'wary']],
+  ])('reads a list joined into one entry with %s as the entries it holds', (_, joined, held) => {
+    expect(entries([joined])).toEqual(held)
   })
 
   it('splits an entry on its line breaks, deduping across the pieces', () => {
-    expect(sentList(['brave\nwary\r\npatient', 'Wary'])).toEqual(['brave', 'wary', 'patient'])
+    expect(entries(['brave\nwary\r\npatient', 'Wary'])).toEqual(['brave', 'wary', 'patient'])
   })
 
-  it('keeps an entry with a plain comma or its own quotes whole', () => {
-    expect(sentList(['quick-witted, if rash', 'called "Barbecue"', `stands 6'2"`])).toEqual([
-      'quick-witted, if rash',
-      'called "Barbecue"',
-      `stands 6'2"`,
+  it("drops a list marker from a split entry's lines, and keeps a line's own leading number", () => {
+    expect(entries(['  - brave\n  * wary\n  12. patient'])).toEqual(['brave', 'wary', 'patient'])
+    expect(entries(['wary\n1.5 times the size of a man'])).toEqual([
+      'wary',
+      '1.5 times the size of a man',
     ])
   })
 
-  it("keeps a split piece's own paired quotes", () => {
-    expect(sentList(['called "Barbecue"\nwary'])).toEqual(['called "Barbecue"', 'wary'])
+  it('keeps whole an entry with a comma, its own quotes, or a marker on its only line', () => {
+    const whole = [
+      'quick-witted, if rash',
+      'called "Barbecue"',
+      `stands 6'2"`,
+      'known as "Barbecue", "Long John" to some',
+      'says "aye", "nay"',
+      '"Pieces of eight," says the parrot',
+      '"brave"',
+      '"brave", 1, "wary"',
+      '- brave',
+    ]
+    expect(entries(whole)).toEqual(whole)
+  })
+
+  it("keeps a split line's own quotes", () => {
+    expect(entries([`stands 6'2"\nwary`])).toEqual([`stands 6'2"`, 'wary'])
   })
 })
 
@@ -134,11 +161,19 @@ describe('restatedText', () => {
 })
 
 describe('restatedList', () => {
+  const list = (value: string[]) => sentList(value)!
+
   it('reads only the same entries in the same order as restated', () => {
-    expect(restatedList(['patient', 'wary'], ['patient', 'wary'])).toBe(true)
-    expect(restatedList(['wary', 'patient'], ['patient', 'wary'])).toBe(false)
-    expect(restatedList(['patient'], ['patient', 'wary'])).toBe(false)
-    expect(restatedList(undefined, ['patient'])).toBe(false)
+    expect(restatedList(['patient', 'wary'], list(['patient', 'wary']))).toBe(true)
+    expect(restatedList(['wary', 'patient'], list(['patient', 'wary']))).toBe(false)
+    expect(restatedList(['patient'], list(['patient', 'wary']))).toBe(false)
+    expect(restatedList(undefined, list(['patient']))).toBe(false)
+  })
+
+  it('reads a stored list equal to the list as sent or to the entries it holds as restated', () => {
+    expect(restatedList(['stubborn\nwary'], list(['stubborn\nwary']))).toBe(true)
+    expect(restatedList(['stubborn', 'wary'], list(['stubborn\nwary']))).toBe(true)
+    expect(restatedList(['stubborn'], list(['stubborn\nwary']))).toBe(false)
   })
 })
 
@@ -177,6 +212,16 @@ describe('softCapReason', () => {
     )
     expect(softCapReason('agenda', 4)).toBe(
       'agenda is over its soft cap of 4: replace an entry rather than add one',
+    )
+  })
+
+  it('says a list joined into one entry was read as the entries it holds', () => {
+    expect(softCapReason('traits', 8, sentList([TWELVE_TRAITS.join('","')]))).toBe(
+      'traits is over its soft cap of 8: replace an entry rather than add one' +
+        ' (read as 12 entries: a list joined into one string holds one entry per item)',
+    )
+    expect(softCapReason('traits', 8, sentList(terms(9)))).toBe(
+      'traits is over its soft cap of 8: replace an entry rather than add one',
     )
   })
 })

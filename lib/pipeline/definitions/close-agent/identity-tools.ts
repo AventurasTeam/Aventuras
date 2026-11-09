@@ -14,6 +14,7 @@ import {
   softCapReason,
   type BoundedField,
   type CappedList,
+  type SentList,
   type SentText,
 } from './fields'
 import {
@@ -81,7 +82,7 @@ type FieldSpec<A extends string = string> =
 
 /** A field still sent after blanks and empty lists are dropped. */
 type SentField =
-  | { kind: 'list'; path: string; cap: CappedList; list: string[] }
+  | { kind: 'list'; path: string; cap: CappedList; list: SentList }
   | { kind: 'text'; path: string; text: SentText }
 
 const CHARACTER_FIELDS: readonly FieldSpec<keyof typeof CHARACTER_SHAPE>[] = [
@@ -109,7 +110,7 @@ const isStringList = (value: unknown): value is string[] =>
   Array.isArray(value) && value.every((item) => typeof item === 'string')
 
 const landingValue = (field: SentField): unknown =>
-  field.kind === 'list' ? field.list : field.text.bounded
+  field.kind === 'list' ? field.list.entries : field.text.bounded
 
 function sentFields(
   args: Readonly<Record<string, unknown>>,
@@ -183,8 +184,8 @@ async function planIdentityWrite(
     // Only a list precedence leaves free meets its cap: a protected one never reaches this check.
     if (field.kind === 'list') {
       const cap = CAST_SOFT_CAPS[field.cap]
-      if (overSoftCap(field.list, storedValue(row, field.path), cap)) {
-        const reason = softCapReason(field.cap, cap)
+      if (overSoftCap(field.list.entries, storedValue(row, field.path), cap)) {
+        const reason = softCapReason(field.cap, cap, field.list)
         lost.push({ field: field.path, row: id, kind: 'refused', reason })
         continue
       }

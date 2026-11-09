@@ -829,21 +829,58 @@ describe('update_character and update_faction', () => {
     })
   })
 
-  // The measure's run 9: 12 traits escaped into one string, which slipped the cap as one entry.
-  it('refuses a list joined into one entry by the entries it holds, on a row at its cap', async () => {
-    await editEntity(f, WREN, 'earlier-close', { state: { traits: terms('trait', 8) } })
-    const joined = [terms('sailor', 12).join('","')]
+  it.each([
+    ['quotes', '","'],
+    ['escaped quotes', '\\",\\"'],
+  ])(
+    'refuses 12 traits joined into one entry with %s, on a row at its cap, saying how it read them',
+    async (_, join) => {
+      await editEntity(f, WREN, 'earlier-close', { state: { traits: terms('trait', 8) } })
+      const joined = [terms('sailor', 12).join(join)]
 
-    const { result, calls } = await dispatchScripted(
+      const { result, calls } = await dispatchScripted(
+        f,
+        [{ toolName: 'update_character', input: { id: 'c1', traits: joined, ...cite() } }],
+        { shown: CAST },
+      )
+
+      expect(calls[0]).toMatchObject({ result: 'rejected' })
+      expect(calls[0]!.reason).toContain(softCapReason('traits', 8))
+      expect(calls[0]!.reason).toContain('read as 12 entries')
+      expect(await runDeltas(f, result.actionId)).toEqual([])
+      expect((await storedEntity(f, WREN)).state).toMatchObject({ traits: terms('trait', 8) })
+    },
+  )
+
+  it('lands a list joined into one entry under its cap as the entries it holds', async () => {
+    const { calls } = await dispatchScripted(
       f,
-      [{ toolName: 'update_character', input: { id: 'c1', traits: joined, ...cite() } }],
+      [{ toolName: 'update_character', input: { id: 'c1', traits: ['brave","wary'], ...cite() } }],
       { shown: CAST },
     )
 
-    expect(calls[0]).toMatchObject({ result: 'rejected', reason: softCapReason('traits', 8) })
-    expect(await runDeltas(f, result.actionId)).toEqual([])
-    expect((await storedEntity(f, WREN)).state).toMatchObject({ traits: terms('trait', 8) })
+    expect(calls[0]).toMatchObject({ result: 'ok' })
+    expect((await storedEntity(f, WREN)).state).toMatchObject({ traits: ['brave', 'wary'] })
   })
+
+  it.each([['user'], ['earlier-close']] as const)(
+    'reads a resent list whose stored entry holds a line break as restated, after a %s edit',
+    async (editor) => {
+      const traits = ['patient', 'stubborn\nwary']
+      await editEntity(f, WREN, editor, { state: { traits } })
+
+      const { result, calls } = await dispatchScripted(
+        f,
+        [{ toolName: 'update_character', input: { id: 'c1', traits, ...cite() } }],
+        { shown: CAST },
+      )
+
+      expect(calls[0]).toMatchObject({ result: 'ok' })
+      expect(calls[0]).not.toHaveProperty('skippedFields')
+      expect(await runDeltas(f, result.actionId)).toEqual([])
+      expect((await storedEntity(f, WREN)).state).toMatchObject({ traits })
+    },
+  )
 
   it('dedupes a list before its cap: 9 entries with one repeat land as 8', async () => {
     const { calls } = await dispatchScripted(
