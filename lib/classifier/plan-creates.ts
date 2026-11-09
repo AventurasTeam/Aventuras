@@ -52,6 +52,11 @@ export function clampEmbeddedText(candidate: { name: string; description: string
 const MAX_VOICE = 2000
 const MAX_STATE_LIST = 50
 
+/** data-model.md → Soft caps: a voice cut to its Zod degradation bound (2,000), as a pass cuts it. */
+export function boundVoice(text: string): string {
+  return clampEmbedded(text, MAX_VOICE)
+}
+
 function stateList(items: readonly string[] | undefined): string[] {
   return dedupeTerms(items ?? []).slice(0, MAX_STATE_LIST)
 }
@@ -66,7 +71,7 @@ function characterProfile(candidate: NewCharacter, cutTexts: CutText[]): Charact
     if (text !== undefined) visual[type] = text
   }
   const voiceText = nonBlank(candidate.voice)
-  const voice = voiceText === undefined ? undefined : clampEmbedded(voiceText, MAX_VOICE)
+  const voice = voiceText === undefined ? undefined : boundVoice(voiceText)
   return {
     ...emptyEntityState('character'),
     visual,

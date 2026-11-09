@@ -48,7 +48,12 @@ export type WriteContext = ToolContext & {
   /** The latest cited turn by position. */
   readonly proseEntryId: string
   readonly guard: (rows: readonly GuardRow[]) => Promise<RowGuard>
+  /** The run's action: a delta under it is this close's own write. */
+  readonly actionId: string
 }
+
+/** The delta path a delete's PlannedAction names: no column starts with `$`, so never in `values`. */
+export const DELETE_PATH = '$deleted'
 
 export type PlannedAction = {
   readonly action: PipelineAction & { readonly source: 'chapter_close' }

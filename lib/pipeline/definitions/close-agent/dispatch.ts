@@ -237,6 +237,7 @@ async function* writeCall(
         { branchId: ctx.branchId, endEntryId: ctx.endEntryId, proseEntryId, rows },
         { db: ctx.phase.db, runInTransaction: ctx.phase.runInTransaction },
       ),
+    actionId: ctx.phase.actionId,
   })
 
   if (plan.kind === 'refused') {

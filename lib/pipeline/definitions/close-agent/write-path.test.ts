@@ -24,6 +24,7 @@ import { entityWriteAction, fieldVerdicts, restatedFields } from './entity-write
 import { CloseIds } from './ids'
 import { CloseLedgerWriter } from './ledger'
 import {
+  DELETE_PATH,
   readToolSchema,
   writeToolSchema,
   type CloseTool,
@@ -203,6 +204,7 @@ function writeContext(proseEntryId = endEntryId()): WriteContext {
     proseEntryId,
     guard: (rows) =>
       readRowGuard({ branchId: f.branchId, endEntryId: endEntryId(), proseEntryId, rows }, f.ctx),
+    actionId: GROUP_ACTION,
   }
 }
 
@@ -474,6 +476,12 @@ describe('entityWriteAction', () => {
   })
 })
 
+describe('DELETE_PATH', () => {
+  it('is spelt as merge_threads and merge_happenings share it, under no column', () => {
+    expect(DELETE_PATH).toBe('$deleted')
+  })
+})
+
 describe('the entity write path', () => {
   beforeEach(async () => {
     f = await openCloseFixture()
@@ -630,6 +638,7 @@ let setup: ((ids: CloseIds, ledger: CloseLedgerWriter) => void) | undefined
 let answers: ToolAnswer[] = []
 let seenProse: string[] = []
 let seenTurns: (readonly string[])[] = []
+let seenActions: string[] = []
 let ledger: CloseLedger | undefined
 let shown: CloseIds | undefined
 let readRows: ReadSet | undefined
@@ -644,6 +653,7 @@ const setFieldsTool: WriteTool<typeof SET_FIELDS_SHAPE> = {
   plan: (args, ctx) => {
     seenProse.push(ctx.proseEntryId)
     seenTurns.push(ctx.turns)
+    seenActions.push(ctx.actionId)
     return planSetFields(args, ctx)
   },
 }
@@ -954,6 +964,7 @@ describe('dispatchToolCall in a close phase', () => {
     answers = []
     seenProse = []
     seenTurns = []
+    seenActions = []
     readRows = undefined
     ledger = undefined
     shown = undefined
@@ -1107,6 +1118,14 @@ describe('dispatchToolCall in a close phase', () => {
     expect(seenTurns).toEqual([[f.entries[2]!.id, f.entries[4]!.id]])
     expect(guarded).toEqual([f.entries[4]!.id])
     expect(recorded()[0]!.turns).toEqual([f.entries[2]!.id, f.entries[4]!.id])
+  })
+
+  it("hands the plan the run's action", async () => {
+    const { result } = await runDispatch([
+      { toolName: 'set_fields', input: { id: 'c1', description: 'Soaked.', ...cite(['t5']) } },
+    ])
+
+    expect(seenActions).toEqual([result.actionId])
   })
 
   it('emits no group when nothing is left to land: skipped if protected, rejected if refused', async () => {
