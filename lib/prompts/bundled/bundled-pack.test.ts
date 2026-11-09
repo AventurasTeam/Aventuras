@@ -320,7 +320,9 @@ describe('the close task templates', () => {
 
   // memory/chapter-close.md → 3b.
   it.each([
+    "with update_character and update_faction: a character's traits, drives, voice and description",
     'Send a list whole, as it should stand after the chapter: it replaces the stored one.',
+    "A list can't be emptied: an empty list reads as left out, so a list's last entry stays.",
     'Add an entry when the turns show a new trait, drive or agenda item.',
     'Replace, don\'t append: at a cap, drop the entry the new one supersedes, or the one the chapter shows least, to make room, and say which in "why".',
     'A list over its cap is rejected unless it is no longer than the stored one.',
@@ -329,6 +331,7 @@ describe('the close task templates', () => {
     "Don't churn stable identity.",
     "Rewrite a character's voice or a faction's standing whole when the chapter shows it changed.",
     'Rewrite a description only when the chapter materially changes who or what the row is',
+    'never for detail its state slots already carry.',
     'A blank description, voice or standing may be filled when the cited turns show it.',
     'find it with search_world and read it with read_row before writing to it.',
   ])('the Identity task states: %s', (line) => {
@@ -346,7 +349,7 @@ describe('the close task templates', () => {
     "An active thread is carried in the narrator's prompt every turn until it closes",
     'set "resolved" when the chapter achieves a thread, or "failed" when it makes the thread impossible or plainly abandons it',
     "Bring a thread's description up to date when the chapter moves it on.",
-    "Merge before you update either thread: a thread this close already wrote can't be absorbed.",
+    'Merge before you update: a thread this close already wrote can be kept, never absorbed.',
     "When one is active and another pending, keep the active one: an active thread can't be absorbed into a pending one.",
     'a duplicate the kept thread already covers merges with neither.',
     "A thread's title changes only in a merge.",
