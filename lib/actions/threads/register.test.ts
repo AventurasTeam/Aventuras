@@ -389,6 +389,40 @@ describe('updateThread — the entry a status ended on', () => {
     },
   )
 
+  it('logs the stored ref beside a status change whose patch restates it', async () => {
+    const { db, ctx } = await setup()
+    await create(ctx, PASS_THREAD, 'periodic_classifier')
+    const patch: PipelineAction = {
+      kind: 'updateThread',
+      source: 'chapter_close',
+      payload: {
+        branchId: 'br_1',
+        id: 'thr_1',
+        patch: { status: 'failed', resolvedAtEntryId: 'e_old' },
+      },
+    }
+
+    expect((await apply(ctx, patch, 'act_m')).status).toBe('ok')
+    expect(await rowFor(db, 'thr_1')).toMatchObject({
+      status: 'failed',
+      resolvedAtEntryId: 'e_old',
+    })
+    expect(await undoOf(db, 'act_m')).toEqual({ status: 'resolved', resolvedAtEntryId: 'e_old' })
+  })
+
+  it('keeps the ref a user patch names and restates beside a status change', async () => {
+    const { db, ctx } = await setup()
+    await create(ctx, PASS_THREAD, 'periodic_classifier')
+
+    await apply(ctx, userPatch({ status: 'failed', resolvedAtEntryId: 'e_old' }), 'act_u')
+
+    expect(await rowFor(db, 'thr_1')).toMatchObject({
+      status: 'failed',
+      resolvedAtEntryId: 'e_old',
+    })
+    expect(await undoOf(db, 'act_u')).toEqual({ status: 'resolved', resolvedAtEntryId: 'e_old' })
+  })
+
   it('writes the ref a status-changing patch names itself', async () => {
     const { db, ctx } = await setup()
     await create(ctx, PASS_THREAD, 'periodic_classifier')

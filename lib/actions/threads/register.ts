@@ -154,7 +154,7 @@ const updateHandler: ActionHandler = async (action, branchId, ctx) => {
       ? await userEditsSinceProse(ctx, bid, 'threads', id, proseEntryId)
       : []
   // Unchanged columns are dropped: History and the later-turn rule read an undo payload's keys as
-  // written. Only the incoming side is normalized.
+  // written. Only the incoming side is normalized, so a stored '' ref still clears.
   const set: Record<string, unknown> = {}
   const undoPayload: Record<string, unknown> = {}
   let userKept = false
@@ -174,9 +174,13 @@ const updateHandler: ActionHandler = async (action, branchId, ctx) => {
   }
   // The ref is the pass's claim of where its status ended: a user's status change retracts it, and
   // a thread with refs logs it beside every status change, so a reversal restores the pair whole.
+  // A ref the patch named but `set` lacks was restated or user-kept: the stored one stands.
   const carriesRefs = current.triggeredAtEntryId !== null || current.resolvedAtEntryId !== null
-  if (carriesRefs && !('resolvedAtEntryId' in patch) && 'status' in set) {
-    set.resolvedAtEntryId = isUserOriginatedSource(action.source) ? null : current.resolvedAtEntryId
+  if (carriesRefs && 'status' in set && !('resolvedAtEntryId' in set)) {
+    set.resolvedAtEntryId =
+      'resolvedAtEntryId' in patch || !isUserOriginatedSource(action.source)
+        ? current.resolvedAtEntryId
+        : null
     undoPayload.resolvedAtEntryId = current.resolvedAtEntryId
   }
   if (Object.keys(set).length === 0) {

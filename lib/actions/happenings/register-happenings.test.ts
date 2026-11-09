@@ -856,6 +856,21 @@ describe('updateHappening — columns that already stand, and the user edits a m
     expect((await rowFor(db, 'hap_1')).title).toBe('The reckoning')
   })
 
+  it("names the user's edit, not a restated column, when neither lands", async () => {
+    const { ctx } = await setupWithProse()
+    await createHap(ctx)
+    await writeProse(ctx)
+    await apply(ctx, patchAs('user_edit', { title: 'The reckoning' }), 'act_user')
+
+    expect(
+      await apply(
+        ctx,
+        patchAs('chapter_close', { title: 'The last duel', description: 'Kael vs Aria' }, PROSE),
+        'act_m',
+      ),
+    ).toEqual(noop(USER_EDITED_SINCE_PROSE))
+  })
+
   it('writes over a user edit after the prose when the write names no prose', async () => {
     const { db, ctx } = await setupWithProse()
     await createHap(ctx)
@@ -866,5 +881,10 @@ describe('updateHappening — columns that already stand, and the user edits a m
       (await apply(ctx, patchAs('chapter_close', { title: 'The last duel' }), 'act_m')).status,
     ).toBe('ok')
     expect((await rowFor(db, 'hap_1')).title).toBe('The last duel')
+    expect(
+      (await apply(ctx, patchAs('chapter_close', { title: 'The last stand' }, null), 'act_m2'))
+        .status,
+    ).toBe('ok')
+    expect((await rowFor(db, 'hap_1')).title).toBe('The last stand')
   })
 })

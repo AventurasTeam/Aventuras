@@ -137,8 +137,8 @@ export function rowDeltasSince(
 
 /**
  * Whether the delta recorded `column`'s prior value. User update paths (`updateEntity`,
- * `updateLore`, the both-perspective upsert) drop unchanged columns, so a user update carries
- * only changed ones.
+ * `updateLore`, `updateThread`, `updateHappening`, the both-perspective upsert) drop unchanged
+ * columns, so a user update carries only changed ones.
  */
 export function carriesColumn(delta: Delta, column: string): boolean {
   return delta.undoPayload != null && column in delta.undoPayload
