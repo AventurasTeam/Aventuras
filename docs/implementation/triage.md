@@ -245,13 +245,24 @@ patch`, which 5.5a marks `restated`, so a close tool's write of it
 - **Boot recovery reverts a close that is still running.**
   `recoverInFlightRuns` (`lib/pipeline/runtime/recovery.ts`, called only
   from `runBootstrap`) reverses every `pipeline_runs` row with no
-  `finished_at`, with no check against the runs live in this process. In
-  production only a reload re-runs it, and a reload ends the run too; in
-  a dev build, a Fast Refresh that re-runs `RootLayout`'s bootstrap
-  effect could revert an in-flight close. 5.5b's dev-route close failed
-  once in a way that fits: the report phase found no chapter row and a
-  "Story recovered" modal followed. It didn't reproduce on a clean rerun
-  and no Fast Refresh was observed, so the trigger is unconfirmed.
+  `finished_at`, with no check against the runs live in this process.
+  Observed: 5.5b's dev-route close failed once in a way that fits, the
+  report phase finding no chapter row and a "Story recovered" modal
+  following. It didn't reproduce on a clean rerun and no Fast Refresh
+  was observed, so the trigger is unconfirmed. Assumed, not shown: that
+  only a dev build can re-run the bootstrap under a live run, through a
+  Fast Refresh that re-runs `RootLayout`'s bootstrap effect. Production
+  is unverified. A candidate production path to check (the
+  coordinator's reading, not verified on a device): React Native's
+  Android host keeps the JS runtime in the Application, which outlives
+  the Activity, so a re-created Activity remounts `RootLayout` in the
+  same runtime, `useBootstrap`'s effect runs `runBootstrap` again while
+  the close's promises are live, and `recoverInFlightRuns` reverses its
+  unfinished `pipeline_runs` row. The Activity is re-created on a config
+  change outside the manifest's `configChanges` (locale, font scale,
+  density), on Back from the root Activity on Android 11 and below, and
+  under "Don't keep activities"; the prebuild manifest's
+  `configChanges` is `keyboard|keyboardHidden|orientation|screenSize|screenLayout|uiMode|smallestScreenSize`.
   Raised in 5.5b's measure.
 - **The close's count priming assumes the system half holds each turn's
   prose once.** `renderClosePrompt` / `primeCloseSystemCount`
