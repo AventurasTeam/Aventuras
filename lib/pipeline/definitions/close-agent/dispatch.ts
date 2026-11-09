@@ -267,7 +267,7 @@ async function* writeCall(
       verdict,
       values: plan.values,
     })
-    return modelAnswer(verdict, plan.note === undefined ? {} : { note: plan.note }, ctx.ids)
+    return modelAnswer(verdict, { note: plan.note }, ctx.ids)
   }
 
   assertPlanShape(plan)
