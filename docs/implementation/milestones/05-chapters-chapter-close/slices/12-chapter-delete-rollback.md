@@ -597,6 +597,9 @@ change amends the scope above.
   seeded entry refuses `rollback-floor`, and CTRL-Z finds nothing to undo. Fine
   while it stays a measure fixture. A scale measure of delete needs it to write
   close-shaped deltas first. Routed from triage 2026-11-07.
+- **Where does re-running a close land?** A design for
+  [re-running a close](../../../../followups.md#ux) comes before this slice's
+  planning, and may land in this slice or in [Slice 5.11](./11-review-window.md).
 
 ## Implementation notes
 
