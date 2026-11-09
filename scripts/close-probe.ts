@@ -55,7 +55,7 @@ import { realDeltaActionPort } from '@/lib/pipeline/__tests__/harness'
 import { __setCloseAgentSlots } from '@/lib/pipeline/definitions/close-agent/slots'
 import { appSettingsStore, hydrateAppSettings, resetAllStores } from '@/lib/stores'
 
-import { barVerdict, tallyRun, type RunTally } from './close-probe-bar'
+import { barVerdict, largestOf, tallyRun, type Measured, type RunTally } from './close-probe-bar'
 import {
   applyDatasetOverlay,
   DATASET_BRANCH_ID,
@@ -347,18 +347,12 @@ function printRun(
   )
 }
 
-function printMeasures(tally: RunTally, report: CloseReport | null): void {
-  for (const hold of tally.holds)
-    console.log(`[probe:close]   ${hold.task}: ${hold.held ? 'held' : `not held (${hold.why})`}`)
-  console.log(
-    `[probe:close]   coverage: ${tally.capCalls} Identity calls reached a cap, ${tally.mergeCalls} merge_threads calls`,
-  )
-  const ratios = new Map<string, string[]>()
-  let largest: { length: number; tool: string; path: string } | null = null
-  for (const { at, entry } of capture.log) {
+type LargestValue = { length: number; tool: string; path: string }
+
+function largestValueLogged(): LargestValue | null {
+  let largest: LargestValue | null = null
+  for (const { entry } of capture.log) {
     const { fields } = entry
-    if (entry.kind === 'provider.input_ratio' && typeof fields.ratio === 'number')
-      ratios.set(at, [...(ratios.get(at) ?? []), fields.ratio.toFixed(2)])
     if (
       entry.kind === 'memory.close_report_value' &&
       typeof fields.length === 'number' &&
@@ -366,13 +360,59 @@ function printMeasures(tally: RunTally, report: CloseReport | null): void {
     )
       largest = { length: fields.length, tool: String(fields.tool), path: String(fields.path) }
   }
+  return largest
+}
+
+const hitSuffix = (result: string, reason: string | undefined): string =>
+  `${result}${reason === undefined ? '' : ` (${reason})`}`
+
+function printMeasures(
+  k: number,
+  tally: RunTally,
+  largest: LargestValue | null,
+  bytes: number | null,
+): void {
+  for (const hold of tally.holds)
+    console.log(`[probe:close]   ${hold.task}: ${hold.held ? 'held' : `not held (${hold.why})`}`)
+  if (OVERLAY) {
+    console.log(
+      `[probe:close]   coverage: ${tally.capCalls} Identity calls reached a cap, ${tally.mergeCalls} merge_threads calls`,
+    )
+    for (const hit of tally.capHits)
+      console.log(
+        `[probe:close]     cap check ${hit.row} ${hit.path}: ${hitSuffix(hit.result, hit.reason)}`,
+      )
+    for (const hit of tally.mergeHits)
+      console.log(
+        `[probe:close]     merge_threads ${hit.rows.join(', ')}: ${hitSuffix(hit.result, hit.reason)}`,
+      )
+  }
+  const ratios = new Map<string, string[]>()
+  for (const { at, entry } of capture.log) {
+    const { fields } = entry
+    if (entry.kind === 'provider.input_ratio' && typeof fields.ratio === 'number')
+      ratios.set(at, [...(ratios.get(at) ?? []), fields.ratio.toFixed(2)])
+  }
   for (const [at, list] of ratios)
     console.log(`[probe:close]   ${at} input_ratio: ${list.join(', ')}`)
   console.log(
-    `[probe:close]   largest report value: ${largest === null ? 'none' : `${largest.length} characters (${largest.tool} ${largest.path})`}`,
+    `[probe:close]   run ${k} largest report value: ${largest === null ? 'none' : `${largest.length} characters (${largest.tool} ${largest.path})`}`,
   )
-  if (report !== null)
-    console.log(`[probe:close]   report size: ${Buffer.byteLength(JSON.stringify(report))} bytes`)
+  if (bytes !== null) console.log(`[probe:close]   run ${k} report size: ${bytes} bytes`)
+}
+
+function printLargest(
+  values: readonly Measured<LargestValue>[],
+  sizes: readonly Measured<number>[],
+): void {
+  const value = largestOf(values, ({ length }) => length)
+  const size = largestOf(sizes, (bytes) => bytes)
+  console.log(
+    `[probe:close] largest report value: ${value === null ? 'none' : `${value.value.length} characters (${value.value.tool} ${value.value.path}, run ${value.run})`}`,
+  )
+  console.log(
+    `[probe:close] largest report: ${size === null ? 'none' : `${size.value} bytes (run ${size.run})`}`,
+  )
 }
 
 function printBar(tallies: readonly RunTally[]): void {
@@ -433,7 +473,12 @@ function stopOn(signal: NodeJS.Signals, exitCode: number): void {
   })
 }
 
-type RunResult = { completed: boolean; tally: RunTally }
+type RunResult = {
+  completed: boolean
+  tally: RunTally
+  largestValue: LargestValue | null
+  reportBytes: number | null
+}
 
 async function probeRun(k: number, source: string, server: Server): Promise<RunResult> {
   const scratch = mkdtempSync(join(tmpdir(), 'aventuras-close-probe-'))
@@ -520,10 +565,12 @@ async function probeRun(k: number, source: string, server: Server): Promise<RunR
       report,
       cutOffTasks: [...capture.cutOff],
       maxOutputTokens: Object.fromEntries(capture.maxOutput),
-      cappedLists: overlayCappedLists(),
+      cappedLists: OVERLAY ? overlayCappedLists() : [],
     })
-    if (!STAND_IN) printMeasures(tally, report)
-    return { completed, tally }
+    const largestValue = largestValueLogged()
+    const reportBytes = report === null ? null : Buffer.byteLength(JSON.stringify(report))
+    if (!STAND_IN) printMeasures(k, tally, largestValue, reportBytes)
+    return { completed, tally, largestValue, reportBytes }
   } finally {
     removeScratch = null
     for (const stop of unsubscribe) stop()
@@ -544,6 +591,10 @@ async function main(): Promise<void> {
     return
   }
   if (!Number.isInteger(RUNS) || RUNS < 1) throw new Error('PROBE_RUNS must be a positive integer')
+  if (OVERLAY && STAND_IN)
+    throw new Error(
+      '[probe:close] PROBE_OVERLAY=1 and PROBE_STAND_IN=1 cannot run together: the stand-in has no Threads task, so the bar would always read missed',
+    )
   if (OVERLAY && BRANCH_ID !== DATASET_BRANCH_ID)
     throw new Error(
       `[probe:close] PROBE_OVERLAY=1 runs on the dataset branch ${DATASET_BRANCH_ID}, not ${BRANCH_ID}: unset PROBE_BRANCH_ID`,
@@ -560,6 +611,8 @@ async function main(): Promise<void> {
   configureDeltaActionPort(realDeltaActionPort())
   ensureChapterClosePipelineRegistered()
   if (STAND_IN) __setCloseAgentSlots(standInSlots())
+  // The logger mirrors each debug entry to console.debug; the buffer the probe drains still fills.
+  console.debug = () => {}
   enableDiagnosticsGate()
   captureSteps()
   try {
@@ -567,6 +620,11 @@ async function main(): Promise<void> {
     for (let k = 1; k <= RUNS; k++)
       results.push(await probeRun(k, source, { url: LLM_URL, model: LLM_MODEL }))
     if (results.some(({ completed }) => !completed)) process.exitCode = 1
+    if (!STAND_IN)
+      printLargest(
+        results.map(({ largestValue }, i) => ({ value: largestValue, run: i + 1 })),
+        results.map(({ reportBytes }, i) => ({ value: reportBytes, run: i + 1 })),
+      )
     if (OVERLAY) printBar(results.map(({ tally }) => tally))
   } finally {
     const after = sha256(source)

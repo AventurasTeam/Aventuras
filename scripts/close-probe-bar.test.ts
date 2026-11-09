@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest'
 
 import type { CloseReport, CloseReportCall } from '@/lib/db'
 
-import { barVerdict, tallyRun, type RunTally } from './close-probe-bar'
+import { barVerdict, largestOf, tallyRun, type RunTally } from './close-probe-bar'
 
 const CAPPED = 'char_00000000-0000-4000-8000-000000000001'
 const BARE = 'char_00000000-0000-4000-8000-000000000002'
@@ -69,6 +69,8 @@ describe('tallyRun', () => {
       ],
       capCalls: 0,
       mergeCalls: 0,
+      capHits: [],
+      mergeHits: [],
     })
   })
 
@@ -211,15 +213,26 @@ describe('tallyRun', () => {
         values: { 'state.drives': 'a' },
       }),
     ]
-    expect(run({ report: report(calls) }).capCalls).toBe(3)
+    const tallied = run({ report: report(calls) })
+    expect(tallied.capCalls).toBe(3)
+    expect(tallied.capHits).toEqual([
+      { row: 'Silver', path: 'state.traits', result: 'ok' },
+      { row: 'Silver', path: 'state.traits', result: 'rejected', reason: 'over the soft cap' },
+      { row: 'Silver', path: 'state.traits', result: 'ok', reason: 'over the soft cap' },
+    ])
   })
 
   it('counts every merge_threads call, whatever its result', () => {
+    const rows = [
+      { table: 'threads', id: KEEP, name: 'The map' },
+      { table: 'threads', id: 'thr_00000000-0000-4000-8000-000000000004', name: 'The chart' },
+    ]
     const calls = [
       call({
         task: 'threads',
         tool: 'merge_threads',
         result: 'ok',
+        rows,
         survivor: { table: 'threads', id: KEEP },
       }),
       call({
@@ -227,11 +240,18 @@ describe('tallyRun', () => {
         tool: 'merge_threads',
         result: 'rejected',
         reason: 'keep the active one',
+        rows,
       }),
       call({ task: 'threads', tool: 'merge_threads', result: 'skipped', reason: 'later-turn' }),
       LANDED_THREADS,
     ]
-    expect(run({ report: report(calls) }).mergeCalls).toBe(3)
+    const tallied = run({ report: report(calls) })
+    expect(tallied.mergeCalls).toBe(3)
+    expect(tallied.mergeHits).toEqual([
+      { rows: ['The map', 'The chart'], result: 'ok' },
+      { rows: ['The map', 'The chart'], result: 'rejected', reason: 'keep the active one' },
+      { rows: [], result: 'skipped', reason: 'later-turn' },
+    ])
   })
 })
 
@@ -242,6 +262,8 @@ const tally = (passed: boolean, capCalls = 0, mergeCalls = 0): RunTally => ({
   ],
   capCalls,
   mergeCalls,
+  capHits: [],
+  mergeHits: [],
 })
 
 const runs = (n: number, make: (k: number) => RunTally): RunTally[] =>
@@ -278,5 +300,23 @@ describe('barVerdict', () => {
 
   it('refuses to judge no runs', () => {
     expect(() => barVerdict([])).toThrow(/no runs/)
+  })
+})
+
+describe('largestOf', () => {
+  it('names the run of the largest value, the first of a tie, and skips runs with none', () => {
+    const items = [
+      { value: null, run: 1 },
+      { value: 120, run: 2 },
+      { value: 300, run: 3 },
+      { value: 300, run: 4 },
+      { value: 90, run: 5 },
+    ]
+    expect(largestOf(items, (n) => n)).toEqual({ value: 300, run: 3 })
+  })
+
+  it('is null when no run has a value', () => {
+    expect(largestOf([{ value: null, run: 1 }], (n: number) => n)).toBeNull()
+    expect(largestOf([], (n: number) => n)).toBeNull()
   })
 })

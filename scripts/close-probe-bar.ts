@@ -18,7 +18,22 @@ const BEFORE_THE_CAP = new Set<string>([
 ])
 
 export type TaskHold = { task: CloseTask; held: boolean; why: string }
-export type RunTally = { holds: readonly TaskHold[]; capCalls: number; mergeCalls: number }
+/** A call counted as a cap check: the row's name, the list path, and why it was refused, if it was. */
+export type CapHit = {
+  row: string
+  path: string
+  result: CloseReportCall['result']
+  reason?: string
+}
+/** A merge_threads call, by the names of the rows it named. */
+export type MergeHit = { rows: string[]; result: CloseReportCall['result']; reason?: string }
+export type RunTally = {
+  holds: readonly TaskHold[]
+  capCalls: number
+  mergeCalls: number
+  capHits: readonly CapHit[]
+  mergeHits: readonly MergeHit[]
+}
 
 type RunInput = {
   completed: boolean
@@ -58,27 +73,41 @@ function lossOf(call: CloseReportCall, path: string): string | undefined {
   return call.result === 'ok' ? undefined : call.reason
 }
 
-function reachedCap(call: CloseReportCall, capped: RunInput['cappedLists']): boolean {
-  if (call.task !== 'identity' || call.values === undefined) return false
+// One hit per capped list a call sent that reached the cap check, so a call sending two lists on
+// one row holds two.
+function capHitsOf(call: CloseReportCall, capped: RunInput['cappedLists']): CapHit[] {
+  if (call.task !== 'identity' || call.values === undefined) return []
   const { values } = call
-  return capped.some(({ id, list }) => {
+  return capped.flatMap(({ id, list }) => {
+    const row = call.rows.find((named) => named.table === 'entities' && named.id === id)
     const path = `state.${list}`
     const loss = lossOf(call, path)
-    return (
-      call.rows.some((row) => row.table === 'entities' && row.id === id) &&
-      Object.hasOwn(values, path) &&
-      (loss === undefined || !BEFORE_THE_CAP.has(loss))
-    )
+    if (row === undefined || !Object.hasOwn(values, path)) return []
+    if (loss !== undefined && BEFORE_THE_CAP.has(loss)) return []
+    return [
+      { row: row.name, path, result: call.result, ...(loss === undefined ? {} : { reason: loss }) },
+    ]
   })
+}
+
+function mergeHitOf(call: CloseReportCall): MergeHit {
+  return {
+    rows: call.rows.map(({ name }) => name),
+    result: call.result,
+    ...(call.reason === undefined ? {} : { reason: call.reason }),
+  }
 }
 
 export function tallyRun(input: RunInput): RunTally {
   const calls = input.report?.calls ?? []
+  const capped = calls.map((call) => capHitsOf(call, input.cappedLists))
+  const merges = calls.filter((call) => call.task === 'threads' && call.tool === 'merge_threads')
   return {
     holds: BAR_TASKS.map((task) => holdOf(task, input)),
-    capCalls: calls.filter((call) => reachedCap(call, input.cappedLists)).length,
-    mergeCalls: calls.filter((call) => call.task === 'threads' && call.tool === 'merge_threads')
-      .length,
+    capCalls: capped.filter((hits) => hits.length > 0).length,
+    mergeCalls: merges.length,
+    capHits: capped.flat(),
+    mergeHits: merges.map(mergeHitOf),
   }
 }
 
@@ -90,7 +119,6 @@ export type BarVerdict = {
   verdict: 'met' | 'missed' | 'inconclusive'
 }
 
-// A share of the runs, in integer arithmetic, rounded up.
 const shareOf = (runs: number, ofTen: number): number => Math.ceil((runs * ofTen) / 10)
 
 /** 8 of 10 passing; coverage at least 3 and 3, scaled to PROBE_RUNS. */
@@ -110,4 +138,18 @@ export function barVerdict(tallies: readonly RunTally[]): BarVerdict {
         ? 'inconclusive'
         : 'met'
   return { passing, runs, capRuns, mergeRuns, verdict }
+}
+
+export type Measured<T> = { value: T | null; run: number }
+
+/** The run holding the largest value; the first of a tie, and a run with none is skipped. */
+export function largestOf<T>(
+  items: readonly Measured<T>[],
+  sizeOf: (value: T) => number,
+): { value: T; run: number } | null {
+  let best: { value: T; run: number } | null = null
+  for (const { value, run } of items)
+    if (value !== null && (best === null || sizeOf(value) > sizeOf(best.value)))
+      best = { value, run }
+  return best
 }
