@@ -177,8 +177,8 @@ export const DATASET_OVERLAY: DatasetOverlay = {
       triggeredAtEntryId: 'entry_571c194c-f31b-45fc-ab40-cf4a4d02b7cc',
       resolvedAtEntryId: null,
       embeddingStale: 1,
-      createdAt: 1_793_907_370_600,
-      updatedAt: 1_793_907_370_600,
+      createdAt: 1_793_910_711_930,
+      updatedAt: 1_793_910_711_930,
     },
   },
 }
