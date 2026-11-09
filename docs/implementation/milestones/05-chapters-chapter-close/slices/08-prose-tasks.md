@@ -649,6 +649,13 @@ is [Slice 5.10](./10-two-starts.md)'s.
   exposure. Surfaced by 5.5a's review. Either the prompts tell the model
   not to cite turns in text fields, or the token is rewritten when it
   lands, to the turn's position or dropped.
+- **One name-or-keyword match for the starts?** 5.5b's Identity start
+  finds a faction the turns name with its own `namedIn`
+  (`close-agent/identity.ts`), beside `search_world`'s `keywordTerms`
+  (`close-agent/read-tools.ts`), and Upkeep starts from the off-scene
+  rows the chapter mentions by name or keyword, the same test over far
+  more rows. Suggested: one shared match before Upkeep's start is
+  written. Raised in 5.5b's review.
 - **Does the slice stay under the ceiling?** It's priced at about 19 tasks,
   and the placement rules and `setLoreKeywords` weren't in that estimate.
   If its plan passes 20, parts split cleanly from the tools: the cut,

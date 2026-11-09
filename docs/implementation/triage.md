@@ -182,3 +182,63 @@ patch`, which 5.5a marks `restated`, so a close tool's write of it
   but `vitest.setup.ts` must not load the `@/lib/pipeline` barrel before
   a test's mocks, and `bootstrap.ts` pulls in UI modules a script can't
   load. Raised in 5.5a's review.
+- **The close's scripted-dispatch test harness exists three times.**
+  `write-path.test.ts`, `identity.test.ts` and `threads.test.ts` under
+  `lib/pipeline/definitions/close-agent/` each build the same
+  `DispatchContext` (about 80 lines), and the two task test files also
+  repeat their fixture helpers (story mode, scene setters, thread
+  seeds). One helper beside `__tests__/close-fixture.ts` would serve all
+  three before 5.8 and 5.9 add more. Raised in 5.5b's review.
+- **`setThreadStatus` and `updateThread` read "carries refs"
+  differently.** `setThreadStatus` writes the resolved ref only when
+  `triggeredAtEntryId` is set, while `updateThread` asks whether either
+  ref is (`lib/actions/threads/register.ts`). A thread holding only a
+  resolved ref would keep a stale one after a status change. Nothing
+  writes that shape today, since a pass's create always sets the
+  trigger. Raised in 5.5b's review.
+- **A close's "Writes so far" names delta paths, not fields.** The
+  ledger's lines read `state.traits` (`close-agent/ledger.ts`), while
+  the task templates show the same field as `traits`, so the model has
+  to join the two itself. Raised in 5.5b's review.
+- **The 5.5a probe test restates the close's system half.**
+  `lib/prompts/bundled/bundled-pack.test.ts` keeps a copy of the
+  `CLOSE_TASK_SYSTEM` text instead of importing the constant, so the
+  macros test checks a copy rather than the half that ships. Raised in
+  5.5b's review.
+- **`search_world` breaks ties with `localeCompare`.** Its result order
+  then depends on the device's locale
+  (`close-agent/read-tools.ts`), which `identity.ts` and
+  `lib/retrieval/injection.ts` avoid with a code-unit compare. Raised in
+  5.5b's review.
+- **Katakana with the long-vowel mark loses substring matching.**
+  `usesSubstringMatch` (`lib/retrieval/name-index.ts`) tests
+  `\p{Script=Katakana}`, but ー (U+30FC) is Script=Common and a letter,
+  so a term such as シルバー falls back to word-boundary anchoring:
+  `matchTerms('シルバーは笑った。', ['シルバー'])` returns nothing. That
+  contradicts
+  [`retrieval.md`](../memory/retrieval.md)'s rule that kana terms match
+  by substring, and it reaches the keyword scan and name suppression in
+  Japanese stories. A likely fix is `Script_Extensions=Katakana`.
+  Separately, `normalizeTerm` doesn't collapse internal whitespace, so a
+  query with a doubled space matches nothing. Raised in 5.5b's review.
+- **`code-conventions.md` doesn't name the pipeline's two import
+  exceptions.** `eslint.config.js` lets `lib/pipeline` deep-import
+  `actions/types.ts` and, since 5.5b, forbids a value import of the
+  `lib/actions` barrel (a cycle through the mocked `@/lib/pipeline`);
+  [Module structure](../code-conventions.md#module-structure) mentions
+  neither. Raised in 5.5b's review.
+- **The close's round-trip snapshot leaves out translations and vector
+  rows.** `WORLD_TABLES` in `lib/pipeline/__tests__/close-round-trip.test.ts`
+  compares neither, though they are a thread's link rows, and its
+  full-row compare can't hold for an embedded row (a reversal marks it
+  stale), so every fixture row is one that was never embedded. Worth
+  fixing before M8 writes thread translations. Raised in 5.5b's review.
+- **The dataset seed test keeps its own copy of the branch id.**
+  `scripts/dataset-chapter/treasure-island.seed.test.ts` spells the
+  dataset branch out instead of importing `DATASET_BRANCH_ID`. Raised in
+  5.5b's review.
+- **"Every history marks the user's turns" leaves two histories out.**
+  [`architecture.md`](../architecture.md#system-and-user-halves) names
+  the narrator's histories and the close's turns, but the
+  chapter-metadata call and the suggestion refresh render through
+  `macro_story_entry` and mark them too. Raised in 5.5b's review.
