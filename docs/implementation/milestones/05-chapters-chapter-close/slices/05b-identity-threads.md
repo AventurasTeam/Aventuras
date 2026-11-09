@@ -99,8 +99,9 @@ Slice 5.5a's runner.
   ref arm (`register.ts:145-154`) stays: a real status change on a
   thread with refs still logs `resolvedAtEntryId` beside it.
 - **`proseEntryId` on two handlers.** `updateThread` and
-  `updateHappening` take an optional `proseEntryId: ProseEntryId`, which
-  no user caller sends, so no shipped caller changes. With it, a column
+  `updateHappening` take a `proseEntryId: ProseEntryId`, required and
+  nullable as on `setThreadStatus`; the user's saves send null, which
+  skips the check. With a prose entry, a column
   the user wrote after that prose is dropped from `set`, by
   `userEditsSinceProse` and `wroteField`, and a `set` left empty by that
   ends in `noopRefusal(USER_EDITED_SINCE_PROSE, null)`, which C11 maps to
@@ -327,7 +328,9 @@ The check selects by `actionId`, so it holds across the parts 5.8 adds.
   under Node at planning, cache or not (developer decision, 2026-11-09).
   The count can lean slightly high where an older entry still stores a
   trailing block the prompt strips (rows written today hold stripped
-  prose), and canon compares with no margin, so the lean is accepted as
+  prose), and a few tokens either way where the tokenizer merges text
+  across a turn's edges (−0.4% on a Japanese chapter, exact on the
+  English one), and canon compares with no margin, so the lean is accepted as
   small, not as safe. Then read `provider.prompt_estimate`'s `ms` on a close of
   the dataset chapter with the overlay, from the dev route. The bar: no
   step's count over 100 ms on the Galaxy Z Fold release build, for the
@@ -414,8 +417,7 @@ stays what the pipeline wrote.
   close's task templates.
 - [`architecture.md → The pre-send check`](../../../../architecture.md#the-pre-send-check):
   a close's system half counts from its entries' stored `content_tokens`
-  plus the rest encoded, a count that can lean slightly high on older
-  entries.
+  plus the rest encoded, a count that can lean slightly either way.
 - [`followups.md → Tuning and play testing`](../../../../followups.md#tuning-and-play-testing):
   the dataset's bare profiles, all from the periodic classifier, are
   open between the book's shape and the classifier, for play testing to
