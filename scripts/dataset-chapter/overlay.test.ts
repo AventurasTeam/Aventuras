@@ -5,6 +5,7 @@ import { afterEach, beforeEach, describe, expect, it, vi, type MockInstance } fr
 import { startManualClose } from '@/lib/actions/chapters/start-manual-close'
 import { applyDeltaAction } from '@/lib/actions/delta/apply-delta-action'
 import { loadOpenStory } from '@/lib/actions/stories/operational'
+import { updateStoryEntryContent } from '@/lib/actions/story-entries/operational'
 import { writeSystemEntry } from '@/lib/actions/story-entries/system-entry'
 import { undoLastAction } from '@/lib/actions/story-entries/undo'
 import type {
@@ -31,7 +32,7 @@ import { metadataReplyResult } from '@/lib/pipeline/definitions/__tests__/close-
 import { identityTask } from '@/lib/pipeline/definitions/close-agent/identity'
 import { CloseIds } from '@/lib/pipeline/definitions/close-agent/ids'
 import { __setCloseAgentSlots } from '@/lib/pipeline/definitions/close-agent/slots'
-import { hydrateAppSettings } from '@/lib/stores'
+import { entitiesStore, hydrateAppSettings, threadsStore } from '@/lib/stores'
 
 import { applyDatasetOverlay, DATASET_BRANCH_ID, overlayCappedLists } from './overlay'
 import { DATASET_OVERLAY } from './overlay-data'
@@ -312,6 +313,18 @@ describe('the dataset overlay', () => {
     for (const id of [SMOLLETT, ARROW, JIMS_MOTHER]) expect(after.get(id)).toEqual(before.get(id))
   })
 
+  it('leaves the open stores holding what it wrote', async () => {
+    const ctx = await seededDataset()
+
+    await applyDatasetOverlay(ctx)
+
+    for (const entry of DATASET_OVERLAY.entities)
+      expect(entitiesStore.getById(entry.id)?.state, entry.name).toMatchObject(entry.state)
+    expect(threadsStore.getById(DATASET_OVERLAY.plantedThread.row.id)).toMatchObject({
+      title: DATASET_OVERLAY.plantedThread.row.title,
+    })
+  })
+
   it('changes nothing when applied again, and logs its user edit once', async () => {
     vi.useFakeTimers({ toFake: ['Date'] })
     const ctx = await seededDataset()
@@ -438,6 +451,36 @@ describe('the dataset overlay', () => {
     expect(await userEdits(ctx)).toEqual([])
   })
 
+  it('throws on a seed that holds the user edit, though a user edit of another field follows', async () => {
+    const ctx = await seededDataset()
+    await undoSeedClose(ctx)
+    const atSilver = and(eq(entities.branchId, B), eq(entities.id, SILVER))
+    await ctx.db
+      .update(entities)
+      .set({ description: DATASET_OVERLAY.userEdit.description })
+      .where(atSilver)
+    const [silver] = await ctx.db.select().from(entities).where(atSilver)
+    const keywordEdit = await applyDeltaAction(
+      {
+        action: {
+          kind: 'updateEntity',
+          source: 'user_edit',
+          payload: {
+            branchId: B,
+            id: SILVER,
+            patch: { keywords: [...silver!.keywords, 'Barbecue'] },
+          },
+        },
+        actionId: 'act_overlay_test_keywords',
+        branchId: B,
+      },
+      ctx,
+    )
+    expect(keywordEdit.status).toBe('ok')
+
+    await expect(applyDatasetOverlay(ctx)).rejects.toThrow(/no user edit/)
+  })
+
   it('throws on a held user edit older than a reply, though a system entry follows that reply', async () => {
     const ctx = await seededDataset()
     await applyDatasetOverlay(ctx)
@@ -449,6 +492,16 @@ describe('the dataset overlay', () => {
     )
   })
 
+  it('throws on a held user edit older than an earlier turn edited since', async () => {
+    const ctx = await seededDataset()
+    await applyDatasetOverlay(ctx)
+    expect(
+      await updateStoryEntryContent(B, SPY_GLASS, 'Silver smiles at the Spy-glass door.', ctx),
+    ).toEqual({ status: 'ok' })
+
+    await expect(applyDatasetOverlay(ctx)).rejects.toThrow(/no user edit.*a turn edited/)
+  })
+
   // A chapter ends on a reply, so no close can cite an action no reply follows yet.
   it('keeps a held user edit that only an action with no reply postdates', async () => {
     const ctx = await seededDataset()
@@ -457,6 +510,34 @@ describe('the dataset overlay', () => {
 
     expect(await applyDatasetOverlay(ctx)).toEqual({ reopened: false, userEdit: 'restated' })
     expect(await userEdits(ctx)).toHaveLength(1)
+  })
+
+  it('throws on a branch holding more than one chapter, before writing', async () => {
+    const ctx = await seededDataset()
+    const [closed] = await ctx.db.select().from(chapters).where(eq(chapters.branchId, B))
+    await ctx.db
+      .insert(chapters)
+      .values({ ...closed!, id: generateId('chap'), sequenceNumber: closed!.sequenceNumber + 1 })
+
+    await expect(applyDatasetOverlay(ctx)).rejects.toThrow(/holds 2 chapters/)
+
+    expect(await chapterCount(ctx)).toBe(2)
+    expect(byId(await entityRows(ctx, [JIM])).get(JIM)?.state).toMatchObject({ traits: [] })
+  })
+
+  it('throws on a seed row of another kind than the overlay names, before writing', async () => {
+    const ctx = await seededDataset()
+    await undoSeedClose(ctx)
+    await ctx.db
+      .update(entities)
+      .set({ kind: 'location' })
+      .where(and(eq(entities.branchId, B), eq(entities.id, BUCCANEERS)))
+
+    await expect(applyDatasetOverlay(ctx)).rejects.toThrow(
+      /is a location in the seed, not a faction/,
+    )
+
+    expect(byId(await entityRows(ctx, [JIM])).get(JIM)?.state).toMatchObject({ traits: [] })
   })
 
   it('throws when the thread the planted one repeats is no longer active, before writing', async () => {
