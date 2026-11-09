@@ -202,26 +202,37 @@ safe, read and not run: per-turn stackable keys are bounded at parse
   2. A row that's gone is `rejected`, naming its survivor from the
      ledger. The same goes for `update_thread` on a row this close
      absorbed.
-  3. When this close wrote two of the named rows, or a written row can't
-     be kept without dropping an `active` thread (a written `keep` that
-     isn't `active` beside an `active` absorbed row, or a written
-     absorbed row that isn't `active` beside an `active` one), no `keep`
-     can land and the merge is `rejected` as unmergeable in this close,
-     with no row to swap.
+  3. Each named row is tried as `keep`. A row fits when keeping it
+     breaks neither rule 4 nor rule 5, and it lands when it also absorbs
+     no row this close wrote (rule 6). When no row fits, the merge is
+     `rejected` as one no `keep` lands ("leave them apart"). When rows
+     fit but this close's writes leave none landing, it is `rejected` as
+     unmergeable in this close. Neither refusal has a row to swap, so
+     neither carries a note.
   4. Absorbing an `active` thread is `rejected` unless `keep` is `active`
      too, since the kept row would drop the thread from the narrator's
      prompt with no write saying so. It says to keep an active one, then
      settle it with `update_thread` if the chapter resolved or failed it.
-  5. A row this close already wrote can't be absorbed: any delta on it
+  5. Absorbing a thread whose `injection_mode` is `always` or `disabled`
+     is `rejected` unless `keep` has the same mode, since the kept row's
+     mode would undo the user's setting with no write saying so. An
+     `auto` thread may join a row of either mode. It says to keep that
+     thread instead, or to leave the threads apart.
+  6. A row this close already wrote can't be absorbed: any delta on it
      under the run's `actionId` is `rejected`, saying to keep that row
      instead. `snapshotForRedo` would otherwise refuse CTRL-Z of the
      close for good (`lib/actions/delta/redo.ts:118-126`). Such a row may
      still be the kept one.
-  6. `laterTurnTouched` on any row is `skipped` whole.
-  7. A user edit after the latest cited turn is `skipped` whole:
+  7. `laterTurnTouched` on any row is `skipped` whole.
+  8. A user edit after the latest cited turn is `skipped` whole:
      `userTouched` on an absorbed row, or `userWrote` on `keep` for a
      field the merge writes. A kept row's other fields lose nothing to a
      merge, so they don't stop one (C11).
+
+  A refusal by rule 4, 5 or 6 gives the first of them `keep` breaks as
+  its reason, and its answer to the model names every row that would
+  land as `keep` ("Send th5 as keep."), so no advice leads to another
+  refusal.
 
   The kept row's status, refs, `category`, `icon` and `injection_mode`
   stand (developer decision, 2026-11-09): the merge writes only its
@@ -255,21 +266,26 @@ safe, read and not run: per-turn stackable keys are bounded at parse
   them, as `closeTurns`, in `show`. Both tasks build them the same way,
   so their system halves match byte for byte.
 - **Threads' start.** Every `pending` and `active` thread on the branch,
-  the user's included, by `title`, `description` and `status`.
+  the user's included, by `title`, `description`, `status` and
+  `injection_mode`: a header reads `(pending, always)` for a mode the
+  user set, and leaves `auto` unsaid (see
+  [Implementation notes](#implementation-notes)).
 - **`read_row`'s fields,** each task definition's `readFields`, keyed
   by row kind:
   `description`, `traits`, `drives` and `voice` for a character;
   `description`, `standing` and `agenda` for a faction; `title`,
-  `description` and `status` for a thread. Both starts show these fields,
-  so their rows count as read (C11).
+  `description`, `status` and `injectionMode` for a thread, so a thread
+  the start leaves out shows its mode before a merge names it. Both
+  starts show these fields, so their rows count as read (C11).
 - **Templates.** Two `TEMPLATE_IDS` entries mapped to `chapter` in
   `TEMPLATE_GROUPS`, on Slice 5.5a's shared system half, each user half
   holding its task's instructions, starting rows and the writes so far.
   Identity's carries 3b's operations and "don't churn stable identity",
   "replace, don't append" at a cap, and that a blank `description`,
   `voice` or `standing` may be filled when the cited turns show it
-  (developer decision, 2026-11-09). Threads' carries 3f's bullet and
-  what an active thread costs. The shared instructions tell the model it
+  (developer decision, 2026-11-09). Threads' carries 3f's bullet, the
+  merge's active and injection-mode rules, and what an active thread
+  costs. The shared instructions tell the model it
   may send several calls in one reply, and a start's `closeTurns` is
   typed non-empty, since an empty one renders an empty "# The turns". Both ids
   join the named list at
@@ -410,8 +426,9 @@ stays what the pipeline wrote.
   material change or when blank".
 - [`chapter-close.md → 3f`](../../../../memory/chapter-close.md#3f--world-upkeep):
   a thread merge keeps the kept row's status, refs, category, icon and
-  injection mode, and absorbing an active thread is refused unless the
-  kept row is active too.
+  injection mode, absorbing an active thread is refused unless the kept
+  row is active too, and absorbing an `always` or `disabled` thread is
+  refused unless the kept row has the same mode.
 - [`architecture.md → System and user halves`](../../../../architecture.md#system-and-user-halves):
   the paragraph "Every history marks the user's turns" extends to the
   close's task templates.
@@ -512,9 +529,16 @@ Test paths below run with `pnpm vitest run --project unit <path>`.
    `keep` not stopping it; absorbing a row the close wrote refused;
    keeping that row landing; absorbing an `active` thread into a
    `pending`, `resolved` or `failed` one refused with no delta, while an
-   `active` keep lands and keeps the kept row's status and refs; a
-   written row that can't be kept without dropping an `active` one
-   refused as unmergeable with no note; `survivor` set on a landed merge
+   `active` keep lands and keeps the kept row's status and refs;
+   absorbing an `always` or `disabled` thread into a row of another
+   mode refused with no delta, the `always` thread still seated by
+   `buildStructuralFloor`, while an `auto` thread absorbed into either
+   mode lands and so does a merge of two rows of one mode; a written row
+   that can't be kept without dropping an `active` one refused as
+   unmergeable with no note; a pair no keep can land, such as an
+   `active` `auto` thread beside a `pending` `always` one, refused with
+   "leave them apart" and no note; each other refusal's note naming
+   every keep that would land, and only those; `survivor` set on a landed merge
    and absent on a refused or skipped one; and `update_thread` on an absorbed
    row refused, naming the survivor.
 10. **Round trip.** `lib/pipeline/__tests__/close-round-trip.test.ts` holds
@@ -577,9 +601,10 @@ Test paths below run with `pnpm vitest run --project unit <path>`.
   proves the whole close.
 
 Green proves little here without a mutation: for each new guard (soft
-cap, growth past a cap, already-wrote, active into non-active, kept-row
-field, restated compare, empty list, latest by position, the overlay's
-second application) break it and confirm its test fails, and keep caps
+cap, growth past a cap, already-wrote, active into non-active, an
+injection mode into another, a refusal's named keep, kept-row field,
+restated compare, empty list, a bracket-only line, a trailing comma,
+latest by position, the overlay's second application) break it and confirm its test fails, and keep caps
 as literals so a test can't derive its expectation from the constant.
 
 ## Open questions
@@ -643,6 +668,31 @@ None open: Implementation notes record each answer.
   [`chapter-close.md → 3f`](../../../../memory/chapter-close.md#3f--world-upkeep)
   says so. The measure ran before the widening; all 16 of its merges
   kept an active thread, so none would change.
+- **A merge refuses to drop a user's injection mode (developer decision
+  after the slice review, 2026-11-09: "R1: b + brackets").** Absorbing
+  an `always` or `disabled` thread is refused unless the kept thread has
+  the same mode, since keep's mode stands and the close never writes
+  one. An `auto` thread may join either mode: refusing it into a
+  `disabled` keep, where it would no longer rank, was offered and not
+  taken. Every refusal names each keep that would land, and a pair with
+  none, such as an `active` `auto` thread beside a `pending` `always`
+  one, is refused as "leave them apart". The Threads start shows a mode
+  the user set after the status, `(pending, always)`, and leaves `auto`
+  unsaid, as Identity's start leaves `active`, so the rare user-set mode
+  stands out (an implementer's call the developer left open); `read_row`
+  shows every thread's `injectionMode`. The measure wasn't rerun: every
+  thread in the seed and the overlay is `auto`, so none of its merges
+  would change. The "brackets" half: a list entry split by line drops a
+  line that, trimmed, holds only `[` or `]`, with a trailing comma or
+  not, so an unparseable bracketed list no longer lands its brackets as
+  entries.
+- **A leaked list's trailing commas are dropped (developer decision,
+  2026-11-09: "TC: 1+2").** A comma after a list's last quoted item is
+  dropped before the list parses, so `["brave", "wary",]` and its
+  pretty-printed form read as their items, and each line of an entry
+  split by line drops a trailing comma, so `brave,` on its own line
+  reads `brave`. An entry of one line stays as sent, and nothing splits
+  on a comma (Q28).
 - **A soft cap refuses a list only when it is over its cap and longer
   than the stored one (developer decision, 2026-11-09),** so a row
   already over a cap, from a user edit or an import, can shrink, or swap
@@ -715,11 +765,13 @@ None open: Implementation notes record each answer.
   merges reuse it. In the round-trip suite, `update_thread(B)` before
   `merge_threads(keep: A, absorb: [B])` is the case that reaches it:
   with the check removed, the close's CTRL-Z fails `held-in-redo`. The
-  check is refined: when this close wrote two or more of the named
-  threads, or a written thread can't be kept without dropping an active
-  one, the merge is refused as unmergeable in this close ("leave them
-  apart"); when exactly one absorbed thread was written, the original
-  refusal stands and the model's answer names it ("Send thN as keep.").
+  check is refined: when this close's writes leave no keep that lands
+  (two or more written threads, or a written one that can't be kept
+  without dropping an active thread or a user's injection mode), the
+  merge is refused as unmergeable in this close ("leave them apart");
+  when exactly one absorbed thread was written and keeping it lands, the
+  original refusal stands and the model's answer names it ("Send thN as
+  keep.").
   A refused plan's advice reaches the model through a `note` on the plan
   (`WritePlan.note`, a stable reason's note winning), never the ledger,
   and a refusal records `values` with restated text dropped.
@@ -805,18 +857,22 @@ None open: Implementation notes record each answer.
 - **A list joined into one entry is read as the entries it holds,**
   after the measure's run 9 landed 12 Silver traits as one entry past the
   soft cap. Before `dedupeTerms`, an entry that parses as a JSON string
-  list (edge quotes and brackets restored, escapes decoded) is read as
-  that list, else it is split by line with list markers (`- `, `* `,
-  `1. `) dropped; a list is restated when the stored one equals it as
-  sent or as its entries, and the soft-cap refusal says "read as N
-  entries" when a joined list was split. Known gap (developer,
-  2026-11-09: "no new rule"): the read covers the run-9 shape and its
-  escaped, bracketed, pretty-printed and line-separated variants, with a
-  decoded item split by line as an entry is (provisional, coordinator
-  default, after review), but a plain comma- or semicolon-joined entry
-  still reads as one entry and passes the soft cap, and it isn't split
-  since that would break
-  entries like "quick-witted, if rash". Also not fixed: a stored joined
+  list (edge quotes and brackets restored, a comma after its last quoted
+  item dropped, escapes decoded) is read as that list, else it is split
+  by line, dropping a line that holds only `[` or `]` and each line's
+  list marker (`- `, `* `, `1. `) and trailing comma; a list is restated
+  when the stored one equals it as sent or as its entries, and the
+  soft-cap refusal says "read as N entries" when a joined list was
+  split. Known gap (developer, 2026-11-09: "no new rule"): the read
+  covers the run-9 shape and its escaped, bracketed, pretty-printed,
+  trailing-comma and line-separated variants, with a decoded item split
+  by line as an entry is (provisional, coordinator default, after
+  review), but a plain comma- or semicolon-joined entry still reads as
+  one entry and passes the soft cap, and it isn't split since that would
+  break entries like "quick-witted, if rash". A single-quoted list
+  (`['brave', 'wary']`) reads as one entry on one line, since converting
+  its quotes would break an apostrophe like "won't back down"; split
+  over lines, each item keeps its quotes (`'brave'`). Also not fixed: a stored joined
   entry counts as one for the growth rule, forcing compaction; rare
   double-leak shapes (pretty-printed and escaped JSON, a joined pair
   plus a line break); and `1)` and `•` markers. The play-testing side is

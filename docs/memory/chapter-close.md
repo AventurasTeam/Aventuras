@@ -668,7 +668,17 @@ conservative bias as the sub-jobs above:
   thread is refused unless the kept row is `active` too, since the kept
   row would drop the thread from the narrator's prompt with no write
   saying so. The refusal says to keep an active one, then settle it with
-  `update_thread` if the chapter resolved or failed it.
+  `update_thread` if the chapter resolved or failed it. Absorbing a
+  thread whose injection mode is `always` or `disabled` is refused
+  unless the kept row has the same mode, since the kept row's mode would
+  undo the user's setting with no write saying so, and only the user
+  writes it
+  ([`data-model.md → Authorship contract`](../data-model.md#authorship-contract)).
+  An `auto` thread may join a row of either mode. The refusal says to
+  keep that thread instead, or to leave the threads apart. Every
+  refusal's answer names each keep that would land; when none would, the
+  refusal says to leave the threads apart. The Threads start shows a
+  mode the user set beside each thread's status, as `read_row` shows it.
 - **`common_knowledge`** on a happening the chapter shows has spread
   to everyone: news is a chapter-scale judgment. A wrong flag makes
   every character aware, so the bar is explicit spread in the prose.

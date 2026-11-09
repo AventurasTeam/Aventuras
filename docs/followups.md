@@ -471,20 +471,22 @@ breakdown under [UX](#ux).
 - **A list joined with commas into one entry.** The close's Identity
   tools read a list leaked into one entry as the entries it holds: an
   entry that parses as a JSON string list (the shape the dev model leaked
-  in 5.5b's measure, plus its backslash-escaped, bracketed and
-  pretty-printed variants) and a line-separated list. A list joined with
-  plain commas or semicolons ("brave, honest, loyal, ...") still reads as
-  one entry, so it passes the soft cap. It isn't split, because that would
-  break legitimate entries like "quick-witted, if rash"
+  in 5.5b's measure, plus its backslash-escaped, bracketed,
+  pretty-printed and trailing-comma variants) and a line-separated list.
+  A list joined with plain commas or semicolons ("brave, honest, loyal,
+  ...") still lands as one entry, as sent, so it passes the soft cap. It
+  isn't split, because that would break legitimate entries like
+  "quick-witted, if rash"
   ([the slice's note](./implementation/milestones/05-chapters-chapter-close/slices/05b-identity-threads.md#implementation-notes)).
   Watch for it in play testing, and decide on a rule (refusing an entry
   that reads as a list, for example) only if it shows up. Developer
-  ruling, 2026-11-09. Review probes found other shapes the read misses:
-  a single-quoted list (`['brave', 'wary']`) and a JSON list with a
-  trailing comma each read as one entry, so they pass the soft cap, and
-  an unparseable multi-line bracketed list lands its `[` and `]` lines as
-  entries. They're handled the same way: watched in play testing, with a
-  rule only if they show up.
+  ruling, 2026-11-09. Review probes found one more shape the read
+  misses: a single-quoted list (`['brave', 'wary']`) lands as one entry,
+  as sent, so it passes the soft cap; split over lines, it lands each
+  item with its quotes (`'brave'`, `'wary'`), counted right but quoted.
+  Converting its quotes would break an apostrophe like "won't back
+  down", so it's handled the same way: watched in play testing, with a
+  rule only if it shows up.
 
 - **The close's writes at the capability floor: invented facts, malformed
   batches, and sampling.** 5.5b's measure on the dev model (Gemma 4
