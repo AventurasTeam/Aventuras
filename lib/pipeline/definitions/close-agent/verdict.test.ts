@@ -529,6 +529,31 @@ describe('modelAnswer', () => {
     })
   })
 
+  it("lets a stable reason's note stand over a plan's note", () => {
+    const ids = shownIds()
+    const planNote = { note: `Keep ${LORE_A} instead.` }
+    expect(
+      modelAnswer(
+        { result: 'skipped', reason: USER_EDITED_SINCE_PROSE, landed: [], skippedFields: [] },
+        planNote,
+        ids,
+      ),
+    ).toMatchObject({ note: expect.stringMatching(/user.*stands/i) })
+    expect(
+      modelAnswer(
+        {
+          result: 'rejected',
+          reason: CLOSE_REASON.rowGone,
+          landed: [],
+          skippedFields: [],
+          survivor: { table: 'lore', id: LORE_KEPT },
+        },
+        planNote,
+        ids,
+      ),
+    ).toMatchObject({ note: 'The row was merged into lo2; write to lo2 instead.' })
+  })
+
   it('says what to do for each stable reason', () => {
     const ids = shownIds()
     expect(

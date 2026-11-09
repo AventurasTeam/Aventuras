@@ -217,7 +217,7 @@ type ModelAnswer = {
   notWritten?: { field: string; row: string; reason: string; note?: string }[]
 }
 
-/** The tool result the model reads: handles only, and what to do about a stable reason. */
+/** The tool result the model reads: handles only, and what to do, a stable reason's note first. */
 export function modelAnswer(
   verdict: ToolVerdict,
   extra: { createdId?: string; note?: string },
@@ -230,11 +230,10 @@ export function modelAnswer(
   if (verdict.reason !== undefined) {
     answer.reason = ids.withHandles(verdict.reason)
     const note =
-      extra.note !== undefined
-        ? ids.withHandles(extra.note)
-        : verdict.reason === CLOSE_REASON.rowGone && survivor !== undefined
-          ? `The row was merged into ${survivor}; write to ${survivor} instead.`
-          : NOTES.get(verdict.reason)
+      verdict.reason === CLOSE_REASON.rowGone && survivor !== undefined
+        ? `The row was merged into ${survivor}; write to ${survivor} instead.`
+        : (NOTES.get(verdict.reason) ??
+          (extra.note === undefined ? undefined : ids.withHandles(extra.note)))
     if (note !== undefined) answer.note = note
   }
   if (survivor !== undefined) answer.survivor = survivor

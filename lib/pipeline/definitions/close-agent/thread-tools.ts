@@ -68,8 +68,8 @@ const MERGE_REFUSAL = {
     'an active thread cannot be absorbed into a pending one, or the narrator would lose it: keep the active thread and absorb the pending one',
   closeWrote:
     'this close already wrote a thread in absorb, and absorbing it would block undoing the close: keep that thread instead',
-  closeWroteSeveral:
-    'this close already wrote more than one of these threads, so they cannot be merged in this close: leave them apart',
+  closeWroteNoKeep:
+    'this close already wrote among these threads and no choice of keep can land, so they cannot be merged in this close: leave them apart',
 } as const
 
 async function readThreads(
@@ -189,6 +189,10 @@ async function planUpdateThread(args: ThreadArgs, ctx: WriteContext): Promise<Wr
   return { kind: 'write', actions, lost, rows, values: wanted }
 }
 
+// Keep's status stands, so an active thread absorbed into a pending one would leave the prompt.
+const dropsActive = (kept: Thread, absorbed: readonly Thread[]): boolean =>
+  kept.status === 'pending' && absorbed.some(({ status }) => status === 'active')
+
 function mergeShapeFault(keep: string, absorb: readonly string[]): string | undefined {
   if (absorb.length === 0) return MERGE_REFUSAL.emptyAbsorb
   if (absorb.includes(keep)) return MERGE_REFUSAL.keepAbsorbed
@@ -262,21 +266,25 @@ async function planMergeThreads(args: MergeArgs, ctx: WriteContext): Promise<Wri
       ? {}
       : { description: description.bounded }),
   }
-  // Keep's status stands, so an active thread absorbed into a pending one would leave the prompt.
-  if (kept.status === 'pending' && absorbed.some(({ status }) => status === 'active'))
+  if (dropsActive(kept, absorbed))
     return { kind: 'refused', reason: MERGE_REFUSAL.activeIntoPending, rows, values: wanted }
-  // Keep may be a row this close wrote; a second written row leaves no merge that can land.
+  // Keep may be a row this close wrote. A second written row, or a written one that can't be kept
+  // either, leaves no merge that can land.
   const written = await closeWrote(ctx, named)
-  if (written.size > 1)
-    return { kind: 'refused', reason: MERGE_REFUSAL.closeWroteSeveral, rows, values: wanted }
-  const writtenAbsorbed = absorb.find((id) => written.has(id))
+  const writtenAbsorbed = absorbed.find(({ id }) => written.has(id))
+  const swapped = absorbed.filter((row) => row !== writtenAbsorbed)
+  if (
+    written.size > 1 ||
+    (writtenAbsorbed !== undefined && dropsActive(writtenAbsorbed, [kept, ...swapped]))
+  )
+    return { kind: 'refused', reason: MERGE_REFUSAL.closeWroteNoKeep, rows, values: wanted }
   if (writtenAbsorbed !== undefined)
     return {
       kind: 'refused',
       reason: MERGE_REFUSAL.closeWrote,
       rows,
       values: wanted,
-      note: `Send ${writtenAbsorbed} as keep.`,
+      note: `Send ${writtenAbsorbed.id} as keep.`,
     }
   const fields = Object.keys(wanted)
   const guard = await ctx.guard(named.map((id): GuardRow => ({ table: 'threads', id })))

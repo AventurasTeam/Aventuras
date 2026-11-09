@@ -970,6 +970,23 @@ describe('merge_threads', () => {
     },
   )
 
+  it('refuses as unmergeable, with no note, when keeping the written thread would drop an active one', async () => {
+    const run = await runThreadCalls(f, THREADS_SHOWN, [
+      {
+        toolName: 'update_thread',
+        input: { id: 'th3', description: 'The light moves again, closer to the ford.', ...cite() },
+      },
+      merge({ keep: 'th1', absorb: ['th3'] }),
+    ])
+
+    expect(run.calls[1]).toMatchObject({
+      result: 'rejected',
+      reason: expect.stringContaining('cannot be merged in this close'),
+    })
+    expect(run.answers[1]).not.toHaveProperty('note')
+    expect(opsOf(await runDeltas(f, run.result.actionId))).toEqual([['update', FAR_BANK.id]])
+  })
+
   it("records only the text keep doesn't hold when the close's own write refuses the merge", async () => {
     const description = 'Wren must bring the letter to Low Ashby with its seal whole.'
 
