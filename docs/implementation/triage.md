@@ -145,8 +145,10 @@ slice-planning gate forces its resolution before that slice is planned.
   close still ends the app before its userData goes" timed out at its
   120 s on the packaged project in CI, then the worker's teardown passed
   Playwright's 90 s, an error outside any test; the retry passed in 4 s.
-  Seen once (PR 717, E2E shard 3/3, run `42462233487`, 2026-11-08) on a
-  docs-only push whose code had passed E2E one push before. Not yet
+  Seen twice on E2E shard 3/3: PR 717 (run `42462233487`, 2026-11-08),
+  a docs-only push whose code had passed E2E one push before, and PR 721
+  (run `42665576759`, 2026-11-09), a code push that touched no `e2e/` or
+  `electron/` file. Not yet
   traced: whether the hang is in the harness ending the app after the
   rejected close, or in the app itself. Raised in 5.5a's review.
 - **`set.state` in `updateEntity` stores a patch's keys the schema
