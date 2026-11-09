@@ -270,8 +270,8 @@ safe, read and not run: per-turn stackable keys are bounded at parse
   `voice` or `standing` may be filled when the cited turns show it
   (developer decision, 2026-11-09). Threads' carries 3f's bullet and
   what an active thread costs. The shared instructions tell the model it
-  may send several calls in one reply, and a render with no `closeTurns`
-  throws, since an unset one renders an empty "# The turns". Both ids
+  may send several calls in one reply, and a start's `closeTurns` is
+  typed non-empty, since an empty one renders an empty "# The turns". Both ids
   join the named list at
   `lib/prompts/bundled/system-half-stability.test.ts:346`, which 5.5a
   ships empty (C3). Two checks come here from 5.5a, since the list first
@@ -727,11 +727,11 @@ None open: Implementation notes record each answer.
   (`close-agent/turns.ts`) reads the task's `chapterEntryIds` in
   position order under their turn handles and carries them in `show` as
   `closeTurns`, since `render` is synchronous, and `storyModeOf` reads
-  the story's mode from its `definition`. A render with no turns throws,
-  since an unset `closeTurns` renders an empty "# The turns". 5.8's
-  parts narrow `chapterEntryIds`, and its tasks reuse both; `read_turns`
-  is 5.9's. Threads' start returns null when the task has no turns, so
-  that guard stays an invariant, and the open statuses are shared with
+  the story's mode from its `definition`. `closeTurns` is typed
+  non-empty (`CloseTurns`), since an empty one renders an empty "# The
+  turns": each start narrows with `hasTurns` and returns null with no
+  turns. 5.8's parts narrow `chapterEntryIds`, and its tasks reuse both;
+  `read_turns` is 5.9's. The open statuses are shared with
   `chapter-context.ts`.
 - **The tasks' template variables are close-only.** `closeCharacters`,
   `closeFactions`, `closeThreads`, `closeWritesSoFar` and
