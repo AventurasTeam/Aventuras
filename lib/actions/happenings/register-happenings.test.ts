@@ -130,7 +130,7 @@ describe('happenings CRUD arms', () => {
         action: {
           kind: 'updateHappening',
           source: 'user_edit',
-          payload: { branchId: 'br_1', id: 'hap_1', patch: {} },
+          payload: { branchId: 'br_1', id: 'hap_1', patch: {}, proseEntryId: null },
         },
         actionId: 'act_noop',
         branchId: 'br_1',
@@ -160,7 +160,7 @@ describe('happenings CRUD arms', () => {
           action: {
             kind: 'updateHappening',
             source: 'user_edit',
-            payload: { branchId: 'br_1', id, patch },
+            payload: { branchId: 'br_1', id, patch, proseEntryId: null },
           },
           actionId: 'act_u',
           branchId: 'br_1',
@@ -199,6 +199,7 @@ describe('happenings CRUD arms', () => {
             branchId: 'br_1',
             id: 'hap_1',
             patch: { title: 'The reckoning', commonKnowledge: 1 },
+            proseEntryId: null,
           },
         },
         actionId: 'act_u',
@@ -228,7 +229,12 @@ describe('happenings CRUD arms', () => {
         action: {
           kind: 'updateHappening',
           source: 'user_edit',
-          payload: { branchId: 'br_1', id: 'hap_1', patch: { commonKnowledge: 99 as 0 | 1 } },
+          payload: {
+            branchId: 'br_1',
+            id: 'hap_1',
+            patch: { commonKnowledge: 99 as 0 | 1 },
+            proseEntryId: null,
+          },
         },
         actionId: 'act_u',
         branchId: 'br_1',
@@ -606,7 +612,12 @@ describe('happenings CRUD arms', () => {
         action: {
           kind: 'updateHappening',
           source: 'user_edit',
-          payload: { branchId: 'br_1', id: 'hap_1', patch: { commonKnowledge: 1 } },
+          payload: {
+            branchId: 'br_1',
+            id: 'hap_1',
+            patch: { commonKnowledge: 1 },
+            proseEntryId: null,
+          },
         },
         actionId: 'act_u1',
         branchId: 'br_1',
@@ -620,7 +631,12 @@ describe('happenings CRUD arms', () => {
         action: {
           kind: 'updateHappening',
           source: 'user_edit',
-          payload: { branchId: 'br_1', id: 'hap_1', patch: { title: 'The duel' } },
+          payload: {
+            branchId: 'br_1',
+            id: 'hap_1',
+            patch: { title: 'The duel' },
+            proseEntryId: null,
+          },
         },
         actionId: 'act_u2',
         branchId: 'br_1',
@@ -634,7 +650,12 @@ describe('happenings CRUD arms', () => {
         action: {
           kind: 'updateHappening',
           source: 'user_edit',
-          payload: { branchId: 'br_1', id: 'hap_1', patch: { description: 'new text' } },
+          payload: {
+            branchId: 'br_1',
+            id: 'hap_1',
+            patch: { description: 'new text' },
+            proseEntryId: null,
+          },
         },
         actionId: 'act_u3',
         branchId: 'br_1',
@@ -669,16 +690,11 @@ describe('updateHappening — columns that already stand, and the user edits a m
   const patchAs = (
     source: 'user_edit' | 'chapter_close',
     patch: HappeningPatch,
-    proseEntryId?: string | null,
+    proseEntryId: string | null = null,
   ): PipelineAction => ({
     kind: 'updateHappening',
     source,
-    payload: {
-      branchId: 'br_1',
-      id: 'hap_1',
-      patch,
-      ...(proseEntryId === undefined ? {} : { proseEntryId }),
-    },
+    payload: { branchId: 'br_1', id: 'hap_1', patch, proseEntryId },
   })
 
   async function setupWithProse() {
@@ -878,13 +894,9 @@ describe('updateHappening — columns that already stand, and the user edits a m
     await apply(ctx, patchAs('user_edit', { title: 'The reckoning' }), 'act_user')
 
     expect(
-      (await apply(ctx, patchAs('chapter_close', { title: 'The last duel' }), 'act_m')).status,
-    ).toBe('ok')
-    expect((await rowFor(db, 'hap_1')).title).toBe('The last duel')
-    expect(
-      (await apply(ctx, patchAs('chapter_close', { title: 'The last stand' }, null), 'act_m2'))
+      (await apply(ctx, patchAs('chapter_close', { title: 'The last duel' }, null), 'act_m'))
         .status,
     ).toBe('ok')
-    expect((await rowFor(db, 'hap_1')).title).toBe('The last stand')
+    expect((await rowFor(db, 'hap_1')).title).toBe('The last duel')
   })
 })

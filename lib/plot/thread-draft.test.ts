@@ -67,6 +67,7 @@ describe('threadActions', () => {
           branchId: 'br_1',
           id: 'thread_1',
           patch: { status: 'resolved', description: null },
+          proseEntryId: null,
         },
       },
     ])

@@ -607,7 +607,12 @@ const STALE_CASES_BY_KIND: { [K in VecTargetKind]: StaleCase<K> } = {
       action: {
         kind: 'updateThread',
         source: 'user_edit',
-        payload: { branchId: 'b1', id: 'thread_1', patch: { description: 'Aria hunts for it' } },
+        payload: {
+          branchId: 'b1',
+          id: 'thread_1',
+          patch: { description: 'Aria hunts for it' },
+          proseEntryId: null,
+        },
       },
       column: 'description',
       restored: 'Kael hunts for it',
@@ -616,7 +621,12 @@ const STALE_CASES_BY_KIND: { [K in VecTargetKind]: StaleCase<K> } = {
       action: {
         kind: 'updateThread',
         source: 'user_edit',
-        payload: { branchId: 'b1', id: 'thread_1', patch: { category: 'quest' } },
+        payload: {
+          branchId: 'b1',
+          id: 'thread_1',
+          patch: { category: 'quest' },
+          proseEntryId: null,
+        },
       },
       column: 'category',
       restored: null,
@@ -644,7 +654,12 @@ const STALE_CASES_BY_KIND: { [K in VecTargetKind]: StaleCase<K> } = {
       action: {
         kind: 'updateHappening',
         source: 'user_edit',
-        payload: { branchId: 'b1', id: 'hap_1', patch: { title: 'The duel at dawn' } },
+        payload: {
+          branchId: 'b1',
+          id: 'hap_1',
+          patch: { title: 'The duel at dawn' },
+          proseEntryId: null,
+        },
       },
       column: 'title',
       restored: 'The duel',
@@ -653,7 +668,7 @@ const STALE_CASES_BY_KIND: { [K in VecTargetKind]: StaleCase<K> } = {
       action: {
         kind: 'updateHappening',
         source: 'user_edit',
-        payload: { branchId: 'b1', id: 'hap_1', patch: { category: 'combat' } },
+        payload: { branchId: 'b1', id: 'hap_1', patch: { category: 'combat' }, proseEntryId: null },
       },
       column: 'category',
       restored: null,

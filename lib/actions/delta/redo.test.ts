@@ -398,7 +398,12 @@ const CASES_BY_KIND: Record<VecTargetKind, RedoCase> = {
     update: {
       kind: 'updateThread',
       source: 'user_edit',
-      payload: { branchId: 'b1', id: 'thread_1', patch: { description: 'Aria hunts for it' } },
+      payload: {
+        branchId: 'b1',
+        id: 'thread_1',
+        patch: { description: 'Aria hunts for it' },
+        proseEntryId: null,
+      },
     },
     column: 'description',
     created: 'Kael hunts for it',
@@ -424,7 +429,12 @@ const CASES_BY_KIND: Record<VecTargetKind, RedoCase> = {
     update: {
       kind: 'updateHappening',
       source: 'user_edit',
-      payload: { branchId: 'b1', id: 'hap_1', patch: { title: 'The duel at dawn' } },
+      payload: {
+        branchId: 'b1',
+        id: 'hap_1',
+        patch: { title: 'The duel at dawn' },
+        proseEntryId: null,
+      },
     },
     column: 'title',
     created: 'The duel',

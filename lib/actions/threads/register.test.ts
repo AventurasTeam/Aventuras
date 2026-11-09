@@ -56,7 +56,7 @@ const create = (ctx: Ctx, entry: NewThread, source: 'user_edit' | 'periodic_clas
 const userPatch = (patch: Record<string, unknown>): PipelineAction => ({
   kind: 'updateThread',
   source: 'user_edit',
-  payload: { branchId: 'br_1', id: 'thr_1', patch },
+  payload: { branchId: 'br_1', id: 'thr_1', patch, proseEntryId: null },
 })
 const undoOf = async (db: Awaited<ReturnType<typeof setup>>['db'], actionId: string) =>
   (await db.select().from(deltas).where(eq(deltas.actionId, actionId)))[0]?.undoPayload
@@ -106,7 +106,7 @@ describe('threads CRUD arms', () => {
         action: {
           kind: 'updateThread',
           source: 'user_edit',
-          payload: { branchId: 'br_1', id: 'thr_1', patch: {} },
+          payload: { branchId: 'br_1', id: 'thr_1', patch: {}, proseEntryId: null },
         },
         actionId: 'act_noop',
         branchId: 'br_1',
@@ -136,7 +136,7 @@ describe('threads CRUD arms', () => {
           action: {
             kind: 'updateThread',
             source: 'user_edit',
-            payload: { branchId: 'br_1', id, patch },
+            payload: { branchId: 'br_1', id, patch, proseEntryId: null },
           },
           actionId: 'act_u',
           branchId: 'br_1',
@@ -192,6 +192,7 @@ describe('threads CRUD arms', () => {
             branchId: 'br_1',
             id: 'thr_1',
             patch: { status: 'active', triggeredAtEntryId: 'se_5' },
+            proseEntryId: null,
           },
         },
         actionId: 'act_u',
@@ -229,7 +230,12 @@ describe('threads CRUD arms', () => {
         action: {
           kind: 'updateThread',
           source: 'user_edit',
-          payload: { branchId: 'br_1', id: 'thr_1', patch: { triggeredAtEntryId: '' } },
+          payload: {
+            branchId: 'br_1',
+            id: 'thr_1',
+            patch: { triggeredAtEntryId: '' },
+            proseEntryId: null,
+          },
         },
         actionId: 'act_u',
         branchId: 'br_1',
@@ -319,7 +325,7 @@ describe('threads CRUD arms', () => {
         action: {
           kind: 'updateThread',
           source: 'user_edit',
-          payload: { branchId: 'br_1', id: 'thr_1', patch: { icon: 'shield' } },
+          payload: { branchId: 'br_1', id: 'thr_1', patch: { icon: 'shield' }, proseEntryId: null },
         },
         actionId: 'act_u1',
         branchId: 'br_1',
@@ -333,7 +339,12 @@ describe('threads CRUD arms', () => {
         action: {
           kind: 'updateThread',
           source: 'user_edit',
-          payload: { branchId: 'br_1', id: 'thr_1', patch: { title: 'Recover the relic' } },
+          payload: {
+            branchId: 'br_1',
+            id: 'thr_1',
+            patch: { title: 'Recover the relic' },
+            proseEntryId: null,
+          },
         },
         actionId: 'act_u2',
         branchId: 'br_1',
@@ -347,7 +358,12 @@ describe('threads CRUD arms', () => {
         action: {
           kind: 'updateThread',
           source: 'user_edit',
-          payload: { branchId: 'br_1', id: 'thr_1', patch: { description: 'new text' } },
+          payload: {
+            branchId: 'br_1',
+            id: 'thr_1',
+            patch: { description: 'new text' },
+            proseEntryId: null,
+          },
         },
         actionId: 'act_u3',
         branchId: 'br_1',
@@ -399,6 +415,7 @@ describe('updateThread — the entry a status ended on', () => {
         branchId: 'br_1',
         id: 'thr_1',
         patch: { status: 'failed', resolvedAtEntryId: 'e_old' },
+        proseEntryId: null,
       },
     }
 
@@ -439,7 +456,7 @@ describe('updateThread — the entry a status ended on', () => {
     const machinePatch: PipelineAction = {
       kind: 'updateThread',
       source: 'chapter_close',
-      payload: { branchId: 'br_1', id: 'thr_1', patch: { status: 'failed' } },
+      payload: { branchId: 'br_1', id: 'thr_1', patch: { status: 'failed' }, proseEntryId: null },
     }
     expect((await apply(ctx, machinePatch, 'act_m')).status).toBe('ok')
     expect(await rowFor(db, 'thr_1')).toMatchObject({
@@ -772,15 +789,10 @@ describe('updateThread — columns that already stand, and the user edits a mach
   type ThreadPatch = Extract<PipelineAction, { kind: 'updateThread' }>['payload']['patch']
   type Db = Awaited<ReturnType<typeof setup>>['db']
 
-  const closePatch = (patch: ThreadPatch, proseEntryId?: string | null): PipelineAction => ({
+  const closePatch = (patch: ThreadPatch, proseEntryId: string | null = null): PipelineAction => ({
     kind: 'updateThread',
     source: 'chapter_close',
-    payload: {
-      branchId: 'br_1',
-      id: 'thr_1',
-      patch,
-      ...(proseEntryId === undefined ? {} : { proseEntryId }),
-    },
+    payload: { branchId: 'br_1', id: 'thr_1', patch, proseEntryId },
   })
   const inGroup = (ctx: Ctx, action: PipelineAction, actionId: string) =>
     applyDeltaActionGroupWithOutcomes([action], { actionId, branchId: 'br_1' }, ctx)
@@ -965,11 +977,9 @@ describe('updateThread — columns that already stand, and the user edits a mach
     await writeProse(ctx)
     await apply(ctx, userPatch({ title: 'Return the relic' }), 'act_user')
 
-    expect((await apply(ctx, closePatch({ title: 'Claim the relic' }), 'act_m')).status).toBe('ok')
-    expect((await rowFor(db, 'thr_1')).title).toBe('Claim the relic')
-    expect((await apply(ctx, closePatch({ title: 'Keep the relic' }, null), 'act_m2')).status).toBe(
+    expect((await apply(ctx, closePatch({ title: 'Claim the relic' }, null), 'act_m')).status).toBe(
       'ok',
     )
-    expect((await rowFor(db, 'thr_1')).title).toBe('Keep the relic')
+    expect((await rowFor(db, 'thr_1')).title).toBe('Claim the relic')
   })
 })

@@ -386,13 +386,18 @@ const restateThreadStatus: PipelineAction = {
 const restateThreadTitle: PipelineAction = {
   kind: 'updateThread',
   source: 'periodic_classifier',
-  payload: { branchId: BRANCH, id: 'thr_1', patch: { title: 'Recover the relic' } },
+  payload: {
+    branchId: BRANCH,
+    id: 'thr_1',
+    patch: { title: 'Recover the relic' },
+    proseEntryId: null,
+  },
 }
 
 const restateHappeningTitle: PipelineAction = {
   kind: 'updateHappening',
   source: 'periodic_classifier',
-  payload: { branchId: BRANCH, id: 'hap_1', patch: { title: 'The fire' } },
+  payload: { branchId: BRANCH, id: 'hap_1', patch: { title: 'The fire' }, proseEntryId: null },
 }
 
 const linkToGone: PipelineAction = {

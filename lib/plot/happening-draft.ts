@@ -271,7 +271,7 @@ export function happeningActions({
       actions.push({
         kind: 'updateHappening',
         source: 'user_edit',
-        payload: { branchId, id: row.id, patch },
+        payload: { branchId, id: row.id, patch, proseEntryId: null },
       })
     }
   }

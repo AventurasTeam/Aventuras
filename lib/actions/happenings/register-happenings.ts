@@ -47,7 +47,7 @@ declare module '@/lib/actions/action-map' {
         id: string
         patch: HappeningUpdatePatch
         /** A machine write's prose: a column the user wrote after it is dropped (cadence.md). */
-        proseEntryId?: ProseEntryId
+        proseEntryId: ProseEntryId
       }
     }
     deleteHappening: { source: DeltaSource; payload: { branchId: string; id: string } }
@@ -140,9 +140,7 @@ const updateHandler: ActionHandler = async (action, branchId, ctx) => {
     }
 
   const edits =
-    typeof proseEntryId === 'string'
-      ? await userEditsSinceProse(ctx, bid, 'happenings', id, proseEntryId)
-      : []
+    proseEntryId != null ? await userEditsSinceProse(ctx, bid, 'happenings', id, proseEntryId) : []
   // Unchanged columns are dropped: History and the later-turn rule read an undo payload's keys as
   // written. Only the incoming side is normalized, so a stored blank temporal still clears.
   const set: Record<string, unknown> = {}
