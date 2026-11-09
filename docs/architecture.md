@@ -312,13 +312,13 @@ wizard draft's. Without a lead the instructions name none, and
 narration in first or second person still holds.
 
 **Every history marks the user's turns.** Story so far, the fallback's
-turns, the periodic classifier's turns and the turns a chapter close's
-tasks read
+turns, the periodic classifier's turns and the turns a chapter close
+task's prompt shows
 ([`chapter-close.md → Conversations`](./memory/chapter-close.md#conversations))
 mark a `user_action` entry as the user's, so a model can tell the lead's
 attempt or a direction from the narration; the opening and the replies
-render unmarked, though the close's turns also label the opening and the
-narration. The mark costs a few tokens per user turn.
+render unmarked, though the close's turns also label the opening and each
+reply. The mark costs a few tokens per user turn.
 
 ### Structured output — the JSON contract is not pack content
 
@@ -985,9 +985,15 @@ stored `content_tokens`
 counting a null one from its prose. The rest of each step's request is
 encoded as above. Stored content can hold what the prompt leaves out,
 such as a trailing block an older reply still carries, so the count
-can lean slightly high. The lean is small, since rows written today
-hold stripped prose, and is accepted as small, not as safe: the
-estimate is compared with no margin, as below.
+can lean slightly high. The lean is small, since current writers store
+stripped prose, and is accepted as small, not as safe: the estimate is
+compared with no margin, as below.
+
+Counts are cached by text, up to 4,096 texts and 2,000,000 characters,
+the least recently used out, and a counting pass keeps its system half.
+A text over the character budget isn't kept
+(`provider.prompt_count_uncached`), so a part that large is encoded at
+each step.
 
 The prompt alone is compared, with no reserve for the reply. A
 profile's `maxOutput` is a ceiling, not the reply's size, and many

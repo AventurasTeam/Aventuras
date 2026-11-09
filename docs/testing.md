@@ -434,9 +434,9 @@ action layer as `user_edit`, so precedence reads it. It undoes the seed's
 close first, since that close's undo would later put the bare values
 back, and refuses a closed chapter whose close isn't the branch's last
 action. It fails on a seed row whose id or name no longer matches,
-before writing any overlay value. Applying it twice changes nothing and logs the
-user edit once. The seed file stays the pipeline's output: a refresh
-runs without the overlay.
+before writing any overlay value. Applying it twice changes nothing and
+logs the user edit once. The seed file stays the pipeline's output: a
+refresh runs without the overlay.
 
 ## Embedder in E2E
 
@@ -713,22 +713,24 @@ update in one group, so the mock can drive the whole runner: script its
 `PROBE_OVERLAY=1` runs the probe on [the dataset seed](#the-dataset-seed)
 with its overlay, applied to each run's copy after the boot's recovery
 and before the classifier check. `PROBE_BRANCH_ID` then defaults to the
-dataset branch, and another branch is refused. The probe turns
-diagnostics and their debug level on for every run. Each run prints
-whether Identity and Threads held: the close completed, the task ended
-on a reply with no tool call and no budget, window or cut-off stop, it
-landed at least one write, and none of its replies was cut off or
-reached the 8k output bound. It also prints each step's
-`provider.input_ratio`, a cut attempt's output tokens beside its retry,
-the largest value the report recorded, measured before its bound, the
-report's size in bytes, and two coverage counts: Identity calls whose
-list on an overlay row at or over its cap reached the cap check, landed
-or refused, and `merge_threads` calls. After the runs it prints the
-bar: met when both tasks held in 8 runs of 10 and each coverage count
-came up in 3 runs of 10, both scaled to `PROBE_RUNS`; inconclusive when
-enough runs held but a count fell short; missed otherwise. It writes the
-verdict and each run's tally to `bar.json` in `PROBE_OUT`, and exits
-non-zero unless the bar is met.
+dataset branch, and another branch is refused, as is `PROBE_STAND_IN=1`
+beside it, since the stand-in has no Threads task. Every run, overlay or
+not, turns diagnostics and their debug level on, and unless it is a
+stand-in run prints whether Identity and Threads held: the close
+completed, the task ended on a reply with no tool call and no budget,
+window or cut-off stop, it landed at least one write, and none of its
+replies was cut off or reached the 8k output bound. It also prints each
+step's `provider.input_ratio`, a cut attempt's output tokens beside its
+retry, the largest value the report recorded, measured before its bound,
+and the report's size in bytes. The overlay adds the coverage counts:
+Identity calls whose list on an overlay row at or over its cap reached
+the cap check, landed or refused, and `merge_threads` calls, each with
+its hits. After the runs it prints the bar: met when there are 8 runs of
+10 in which both tasks held and each coverage count came up in 3 runs
+of 10, both scaled to `PROBE_RUNS`; inconclusive when enough runs held
+but a count fell short; missed otherwise. It writes the verdict and each
+run's tally to `bar.json` in `PROBE_OUT`, and exits non-zero unless the
+bar is met.
 
 ## Selector strategy
 

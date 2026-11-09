@@ -137,7 +137,9 @@ the review shows. Only chapters too big to send whole pay this.
 ### Tools and writes
 
 - **`search_world`** matches names and keywords and returns ids with a
-  line each, for what code can't pick out, such as "the capital".
+  line each, for what code can't pick out, such as "the capital". It
+  answers at most 20 matches, best first (an exact name or keyword before
+  a partial one), with a count of those omitted.
 - **`read_row`** returns the fields the task may write. Rows a task
   starts with count as read, and so do rows it creates.
 - **`read_turns`** is for the two tasks without the prose.
@@ -451,6 +453,11 @@ against soft caps from
 [`data-model.md → Soft caps`](../data-model.md#soft-caps--compaction-discipline)
 (`traits ≤ 8`, `drives ≤ 6`, `agenda ≤ 4`).
 
+**What the task starts with.** The characters the chapter's turns list in
+their scene data, whatever their status, and the factions of a starting
+character (`faction_id`) or named in the turns by name or keyword. A
+character the prose only mentions is left to `search_world`.
+
 **Operations the agent may make.** It sends each list whole
 (`traits: [...]`) and code checks the soft caps, so it never plans these
 one by one:
@@ -464,7 +471,8 @@ one by one:
 
 **Discipline:** don't churn stable identity. "Brave" doesn't get
 removed because the chapter happened not to show bravery; it gets
-removed only when the chapter explicitly contradicts it.
+removed only when the chapter explicitly contradicts it. An empty list
+reads as left out, so the close can't prune a list's last entry.
 
 **Beyond the arrays.** A character's `voice` and a faction's `standing`
 are rewritten whole when the chapter shows them changed, and an
@@ -641,17 +649,20 @@ conservative bias as the sub-jobs above:
 - **Threads**, as their own task. Duplicates merged, descriptions brought
   up to date, and a thread resolved or failed when the chapter settles it
   or leaves it plainly abandoned, through `setThreadStatus` with the
-  latest cited turn. A cited turn earlier than the thread's opening is
-  written at the opening, as the pass writes a closing turn
-  ([`classifier.md → Threads`](./classifier.md#threads)); the latest cited
-  turn still sets precedence. An active thread costs every turn's prompt
+  latest cited turn. When the latest cited turn precedes the thread's
+  opening, a status's `resolved_at_entry_id` takes the opening, as a
+  pass's closing turn does
+  ([`classifier.md → Threads`](./classifier.md#threads)); precedence still
+  reads the cited turn. An active thread costs every turn's prompt
   until it closes ([`classifier.md → Threads`](./classifier.md#threads)).
   A merge follows 3e's rules: nothing links to a thread, so it is an
-  update and a delete. The kept row's status, entry refs,
-  category, icon and injection mode stand, and the merge writes only its
-  title and description. Absorbing an `active` thread into a `pending`
-  one is refused, since the kept row would drop the thread from the
-  narrator's prompt with no write saying so.
+  update and a delete. The one loosening: a user edit of the kept row
+  stops the merge only when it touched a field the merge writes, its title
+  or description, where an edit of an absorbed row always does. The kept
+  row's status, entry refs, category, icon and injection mode stand, and
+  the merge writes only its title and description. Absorbing an `active`
+  thread into a `pending` one is refused, since the kept row would drop
+  the thread from the narrator's prompt with no write saying so.
 - **`common_knowledge`** on a happening the chapter shows has spread
   to everyone: news is a chapter-scale judgment. A wrong flag makes
   every character aware, so the bar is explicit spread in the prose.

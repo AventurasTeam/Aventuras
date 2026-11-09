@@ -222,9 +222,7 @@ convention, and the expectation that subsystems route through
   (warn: the description embed call threw, so every namesake went
   unscored)
 - `retrieval.*` — `row_skipped_stale`, `empty_pool`, `knn_error`
-- `provider.*` — `prompt_count_uncached` (debug: a text over the
-  pre-send count cache's character budget, so its count isn't kept,
-  with `chars` and `budget`), `url_redaction_failed`
+- `provider.*` — `url_redaction_failed`
   (the URL pass failed to parse a span and left it unredacted —
   it fails open, so it must not fail silently),
   `narrative_stream_failed` (error: a stream error that fails the turn,
@@ -249,7 +247,9 @@ convention, and the expectation that subsystems route through
   `prompt_estimate` (debug: every attempt's token estimate, so a
   retried call logs it again, with `providerId`, `modelId`, `estimate`,
   `window`, `windowSource`
-  and `ms`, the count's cost), `input_ratio` (debug: the provider's
+  and `ms`, the count's cost), `prompt_count_uncached` (debug: a text
+  over the pre-send count cache's character budget, so its count isn't
+  kept, with `chars` and `budget`), `input_ratio` (debug: the provider's
   reported input tokens over the estimate, on every attempt that reported
   a positive count, with `providerId`, `modelId`, `estimate`,
   `reported` and `ratio`), `prompt_truncation_suspected` (warn: that

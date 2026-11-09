@@ -419,7 +419,8 @@ breakdown under [UX](#ux).
   Raised 2026-10-31 by the chapter-close agent design.
 
 - **The dataset chapter's bare profiles.** The Treasure Island seed's
-  characters are nearly bare: of 25, the most traits on a live one is 4,
+  characters, as the classifier wrote them and before Slice 5.5b's
+  refresh, are nearly bare: of 25, the most traits on a live one is 4,
   no live one holds a drive, only the retired Pew holds a `voice`, and 8
   have no description, Jim Hawkins among them. The periodic classifier
   created 24 of them, so whether that is the book's shape, a first
