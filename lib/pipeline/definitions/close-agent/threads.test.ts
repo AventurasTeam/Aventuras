@@ -1476,6 +1476,33 @@ describe('threadsTask', () => {
     expect(ids.handleOf(OPEN_ROWS.abbey)).toBeUndefined()
   })
 
+  it('shows a full id in a title or a description as its handle, threads numbered as listed', async () => {
+    const fx = await openCloseFixture()
+    await putThreadRoster(fx)
+    const retext = (id: string, text: Partial<Pick<Thread, 'title' | 'description'>>) =>
+      fx.ctx.db
+        .update(threads)
+        .set(text)
+        .where(and(eq(threads.branchId, fx.branchId), eq(threads.id, id)))
+    await retext(OPEN_ROWS.debt, {
+      description: `Owed to ${OPEN_ROWS.kael} since ${OPEN_ROWS.heir} went missing.`,
+    })
+    await retext(OPEN_ROWS.echo, { title: `Echoes of ${OPEN_ROWS.debt}` })
+
+    const { ctx, start } = await startOf(fx)
+
+    expect(
+      start?.show.threads.map(({ id, title, description }) => [id, title, description]),
+    ).toEqual([
+      ['th1', 'The debt to the guild', 'Owed to c1 since th4 went missing.'],
+      ['th2', 'Deliver the letter', ''],
+      ['th3', 'Echoes of th1', 'Someone answers from the far bank.'],
+      ['th4', 'Find the heir', 'Still open.'],
+    ])
+    const { user } = threadsTask.render(start!, { ...ctx, writesSoFar: '' })
+    expect(user).not.toMatch(/\b(?:thr|char)_/)
+  })
+
   it('seeds every shown thread as read, and no other', async () => {
     const fx = await openCloseFixture()
     await putThreadRoster(fx)

@@ -46,15 +46,17 @@ async function startThreads(ctx: TaskPromptContext): Promise<TaskStart<ThreadsSh
   const { closeTurns, proseTokens } = await readTaskTurns(ctx)
   // A task with nothing to start from makes no call; render needs a turn to show.
   if (closeTurns.length === 0) return null
+  // Every thread's handle first, so one a text names keeps the number of its place in the list.
+  const shown = open.map((row) => ({ row, id: ctx.ids.show(row.id, row.title) }))
   return {
     show: {
       mode: await storyModeOf(ctx),
       closeTurns,
       proseTokens,
-      threads: open.map((row) => ({
-        id: ctx.ids.show(row.id, row.title),
-        title: row.title,
-        description: row.description ?? '',
+      threads: shown.map(({ row, id }) => ({
+        id,
+        title: ctx.ids.withHandles(row.title),
+        description: ctx.ids.withHandles(row.description ?? ''),
         status: row.status,
       })),
     },
