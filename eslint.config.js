@@ -138,6 +138,23 @@ module.exports = defineConfig([
               message:
                 'Import a lib module through its public API (index.ts) or types.ts, not its internal files. See docs/code-conventions.md.',
             },
+            // lib/actions/index.ts re-exports run-now, which imports the lib/pipeline barrel; a value
+            // import back closes that cycle, and a mocked pipeline barrel then resolves to the real one.
+            {
+              from: [{ type: 'lib-module', captured: { name: 'pipeline' } }],
+              disallow: [
+                {
+                  to: {
+                    type: 'lib-module',
+                    captured: { name: 'actions' },
+                    internalPath: 'index.ts',
+                  },
+                  dependency: { kind: 'value' },
+                },
+              ],
+              message:
+                'lib/pipeline takes no value import of the lib/actions barrel: it imports @/lib/pipeline back, a cycle. Read from lib/db, or import types from @/lib/actions/types.',
+            },
             // lib/diagnostics is zero-dependency infrastructure; importing
             // lib/stores would invert the layering and close an import cycle
             // (the gate is injected, not imported). See
