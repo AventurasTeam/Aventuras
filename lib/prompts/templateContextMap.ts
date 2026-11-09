@@ -615,12 +615,59 @@ export const VARIABLES: Record<ContextGroup, VariableDef[]> = {
         "A close task's turns: the chapter, or the part the task runs over, each entry in order under its turn id (`t1`, `t2`…, the ids its writes cite), with its `kind` ('user_action', 'ai_reply' or 'opening') and `content`, the prose with no trailing blocks. Only a close task's render sets it; the metadata call leaves it unset.",
       required: false,
     },
+    {
+      name: 'closeCharacters',
+      type: '{ id: string; name: string; status: string; description: string; traits: string[]; drives: string[]; voice: string }[]',
+      category: 'Entities',
+      description:
+        "The Identity task's starting characters: every character in the scene of a turn the task reads, any status, by name. `id` is the short id its writes name it by (c1, c2…); the fields are as stored, a missing text an empty string and a missing list empty. Only a close task's render sets it.",
+      required: false,
+    },
+    {
+      name: 'closeFactions',
+      type: '{ id: string; name: string; description: string; standing: string; agenda: string[] }[]',
+      category: 'Entities',
+      description:
+        "The Identity task's starting factions: those a starting character belongs to, and those whose name or a keyword the task's turns mention, by name. `id` is the short id (f1, f2…); the fields are as stored, a missing text an empty string and a missing list empty. Only a close task's render sets it.",
+      required: false,
+    },
+    {
+      name: 'closeThreads',
+      type: "{ id: string; title: string; description: string; status: 'pending' | 'active' }[]",
+      category: 'Plot',
+      description:
+        "The Threads task's starting threads: every pending and active thread on the branch, the user's included, oldest first. `id` is the short id (th1, th2…); a missing description is an empty string. Only a close task's render sets it.",
+      required: false,
+    },
+    {
+      name: 'closeWritesSoFar',
+      type: 'string',
+      category: 'Story',
+      description:
+        "What this close wrote in its earlier tasks, one line per call that landed: the tool, its rows by name and short id, and the fields that landed or the row a merge kept. Empty before the first. Only a close task's render sets it.",
+      required: false,
+    },
+    {
+      name: 'closeSoftCaps',
+      type: '{ traits: number; drives: number; agenda: number }',
+      category: 'Story Config',
+      description:
+        "The soft caps a close checks a whole list against: a character's traits and drives, a faction's agenda. Only a close task's render sets it.",
+      required: false,
+    },
   ],
   staticContent: [],
 }
 
 /** The `chapter` variables only a close task's render sets; the metadata call reads the rest. */
-export const CLOSE_ONLY_CHAPTER_VARIABLES = ['closeTurns'] as const
+export const CLOSE_ONLY_CHAPTER_VARIABLES = [
+  'closeTurns',
+  'closeCharacters',
+  'closeFactions',
+  'closeThreads',
+  'closeWritesSoFar',
+  'closeSoftCaps',
+] as const
 
 // Intersection keeps the string index (validateRegistry probes arbitrary ids)
 // while requiring every TemplateId to be mapped — a missing one fails to compile.
@@ -630,6 +677,8 @@ export const TEMPLATE_GROUPS: Record<string, ContextGroup> & Record<TemplateId, 
   [TEMPLATE_IDS.periodicClassifier]: 'classifierContext',
   [TEMPLATE_IDS.suggestionRefresh]: 'generationContext',
   [TEMPLATE_IDS.chapterMetadata]: 'chapter',
+  [TEMPLATE_IDS.closeIdentity]: 'chapter',
+  [TEMPLATE_IDS.closeThreads]: 'chapter',
   [TEMPLATE_IDS.wizardOpening]: 'wizard',
   [TEMPLATE_IDS.wizardOpeningRefine]: 'wizard',
   [TEMPLATE_IDS.wizardTitleChips]: 'wizard',
@@ -648,7 +697,14 @@ export const TEMPLATE_GROUPS: Record<string, ContextGroup> & Record<TemplateId, 
 // UI-level grouping name -> variable names it surfaces. A name that matches
 // no defined variable is "dangling" and reported by validateRegistry.
 export const DISPLAY_GROUPS: Record<string, string[]> = {
-  Story: ['entries', 'lastTurns', 'turns', 'previousChapterSummary', 'closeTurns'],
+  Story: [
+    'entries',
+    'lastTurns',
+    'turns',
+    'previousChapterSummary',
+    'closeTurns',
+    'closeWritesSoFar',
+  ],
   Entities: [
     'entities',
     'sceneMetadata',
@@ -668,8 +724,10 @@ export const DISPLAY_GROUPS: Record<string, string[]> = {
     'lead',
     'cast',
     'relationships',
+    'closeCharacters',
+    'closeFactions',
   ],
-  Plot: ['happenings', 'threads'],
+  Plot: ['happenings', 'threads', 'closeThreads'],
   Retrieval: [
     'retrievedEntities',
     'retrievedLore',
@@ -697,6 +755,7 @@ export const DISPLAY_GROUPS: Record<string, string[]> = {
     'suggestionSlots',
     'suggestionCount',
     'mentionedPlaces',
+    'closeSoftCaps',
   ],
   'Generation Results': [
     'intermediates',
