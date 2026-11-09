@@ -41,6 +41,18 @@ describe('sentText', () => {
   })
 })
 
+describe('a bound cuts as a pass cuts', () => {
+  it('cuts a standing at a clause boundary, not mid-word', () => {
+    expect(sentText(`${'a'.repeat(300)}. ${'b'.repeat(300)}`, 'standing')?.bounded).toBe(
+      `${'a'.repeat(300)}.`,
+    )
+  })
+
+  it('trims the end of a description after the cut', () => {
+    expect(sentText(`${'d'.repeat(1199)} tail`, 'description')?.bounded).toBe('d'.repeat(1199))
+  })
+})
+
 describe('TEXT_BOUNDS', () => {
   it('trims each text before it cuts it, and leaves a short one whole', () => {
     expect(TEXT_BOUNDS.description('  A courier.  ')).toBe('A courier.')
@@ -114,6 +126,7 @@ describe('overSoftCap', () => {
   it('counts a stored value that is no list as empty', () => {
     expect(overSoftCap(terms(9), 'patient', 8)).toBe(true)
     expect(overSoftCap(terms(9), null, 8)).toBe(true)
+    expect(overSoftCap(terms(9), 'x'.repeat(20), 8)).toBe(true)
   })
 })
 
