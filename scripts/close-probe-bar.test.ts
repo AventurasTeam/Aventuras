@@ -1,0 +1,282 @@
+import { describe, expect, it } from 'vitest'
+
+import type { CloseReport, CloseReportCall } from '@/lib/db'
+
+import { barVerdict, tallyRun, type RunTally } from './close-probe-bar'
+
+const CAPPED = 'char_00000000-0000-4000-8000-000000000001'
+const BARE = 'char_00000000-0000-4000-8000-000000000002'
+const KEEP = 'thr_00000000-0000-4000-8000-000000000003'
+const CAPPED_LISTS = [{ id: CAPPED, list: 'traits' as const }]
+
+type CallFields = Pick<CloseReportCall, 'task' | 'tool' | 'result'> & Partial<CloseReportCall>
+
+const call = (over: CallFields): CloseReportCall => ({
+  part: 1,
+  rows: [],
+  why: 'The turn says so.',
+  turns: ['entry_1'],
+  ...over,
+})
+
+const onCapped = { rows: [{ table: 'entities', id: CAPPED, name: 'Silver' }] }
+
+const LANDED_IDENTITY = call({
+  task: 'identity',
+  tool: 'update_character',
+  result: 'ok',
+  ...onCapped,
+  values: { description: 'The cook.' },
+})
+const LANDED_THREADS = call({
+  task: 'threads',
+  tool: 'update_thread',
+  result: 'ok',
+  values: { description: 'Settled.' },
+})
+
+const report = (calls: CloseReportCall[], stopped: CloseReport['stopped'] = []): CloseReport => ({
+  version: 1,
+  actionId: 'act_probe',
+  calls,
+  stopped,
+  noToolCalls: calls.length === 0,
+})
+
+const run = (over: Partial<Parameters<typeof tallyRun>[0]> = {}) =>
+  tallyRun({
+    completed: true,
+    report: report([LANDED_IDENTITY, LANDED_THREADS]),
+    cutOffTasks: [],
+    maxOutputTokens: {},
+    cappedLists: CAPPED_LISTS,
+    ...over,
+  })
+
+describe('tallyRun', () => {
+  it('holds both tasks on a completed close where each landed a write', () => {
+    expect(run().holds).toEqual([
+      { task: 'identity', held: true, why: 'held' },
+      { task: 'threads', held: true, why: 'held' },
+    ])
+  })
+
+  it('misses both tasks, and counts nothing, on a close that did not complete', () => {
+    expect(run({ completed: false, report: null })).toEqual({
+      holds: [
+        { task: 'identity', held: false, why: 'the close did not complete' },
+        { task: 'threads', held: false, why: 'the close did not complete' },
+      ],
+      capCalls: 0,
+      mergeCalls: 0,
+    })
+  })
+
+  it('misses a task that stopped, whatever it landed', () => {
+    const stopped = report(
+      [LANDED_IDENTITY, LANDED_THREADS],
+      [{ task: 'identity', part: 1, reason: 'budget' }],
+    )
+    expect(run({ report: stopped }).holds).toEqual([
+      { task: 'identity', held: false, why: 'stopped: budget' },
+      { task: 'threads', held: true, why: 'held' },
+    ])
+  })
+
+  it('misses a task whose calls landed nothing: a read, a refusal, an ok call wholly skipped', () => {
+    const calls = [
+      call({ task: 'identity', tool: 'read_row', result: 'ok', why: '', turns: [] }),
+      call({
+        task: 'identity',
+        tool: 'update_character',
+        result: 'rejected',
+        reason: 'over the soft cap',
+        values: { 'state.traits': 'a, b' },
+      }),
+      call({
+        task: 'identity',
+        tool: 'update_character',
+        result: 'ok',
+        values: { 'state.voice': 'Gruff.' },
+        skippedFields: [{ field: 'state.voice', reason: 'later-turn' }],
+      }),
+      LANDED_THREADS,
+    ]
+    expect(run({ report: report(calls) }).holds[0]).toEqual({
+      task: 'identity',
+      held: false,
+      why: 'no write landed',
+    })
+  })
+
+  it("counts a landed merge's kept row as a write", () => {
+    const merged = call({
+      task: 'threads',
+      tool: 'merge_threads',
+      result: 'ok',
+      survivor: { table: 'threads', id: KEEP },
+    })
+    expect(run({ report: report([LANDED_IDENTITY, merged]) }).holds[1]).toEqual({
+      task: 'threads',
+      held: true,
+      why: 'held',
+    })
+  })
+
+  it('misses a task whose reply was cut off, or whose step reached 8,000 output tokens', () => {
+    expect(run({ cutOffTasks: ['identity'], maxOutputTokens: { threads: 8_000 } }).holds).toEqual([
+      { task: 'identity', held: false, why: 'a reply was cut off' },
+      { task: 'threads', held: false, why: "a step's reply reached 8000 output tokens" },
+    ])
+    expect(run({ maxOutputTokens: { identity: 7_999 } }).holds[0]?.held).toBe(true)
+  })
+
+  it('counts the Identity calls whose capped list reached the cap check, landed or refused', () => {
+    const calls = [
+      // Landed.
+      call({
+        task: 'identity',
+        tool: 'update_character',
+        result: 'ok',
+        ...onCapped,
+        values: { 'state.traits': 'a' },
+      }),
+      // Refused at the cap, alone.
+      call({
+        task: 'identity',
+        tool: 'update_character',
+        result: 'rejected',
+        reason: 'over the soft cap',
+        ...onCapped,
+        values: { 'state.traits': 'a' },
+      }),
+      // Refused at the cap beside a landed sibling.
+      call({
+        task: 'identity',
+        tool: 'update_character',
+        result: 'ok',
+        ...onCapped,
+        values: { 'state.traits': 'a', description: 'b' },
+        skippedFields: [{ field: 'state.traits', reason: 'over the soft cap' }],
+      }),
+      // Protected beside a landed sibling: never reached the check.
+      call({
+        task: 'identity',
+        tool: 'update_character',
+        result: 'ok',
+        ...onCapped,
+        values: { 'state.traits': 'a', description: 'b' },
+        skippedFields: [{ field: 'state.traits', reason: 'later-turn' }],
+      }),
+      // Wholly protected: one shared reason, no skippedFields.
+      call({
+        task: 'identity',
+        tool: 'update_character',
+        result: 'skipped',
+        reason: 'user-edited-since-prose',
+        ...onCapped,
+        values: { 'state.traits': 'a' },
+      }),
+      // Stopped by the read gate: no values.
+      call({
+        task: 'identity',
+        tool: 'update_character',
+        result: 'rejected',
+        reason: 'unread',
+        ...onCapped,
+      }),
+      // A gone row.
+      call({
+        task: 'identity',
+        tool: 'update_character',
+        result: 'rejected',
+        reason: 'row-gone',
+        ...onCapped,
+        values: { 'state.traits': 'a' },
+      }),
+      // A row with no capped list.
+      call({
+        task: 'identity',
+        tool: 'update_character',
+        result: 'ok',
+        rows: [{ table: 'entities', id: BARE, name: 'Arrow' }],
+        values: { 'state.traits': 'a' },
+      }),
+      // Another list on the capped row.
+      call({
+        task: 'identity',
+        tool: 'update_character',
+        result: 'ok',
+        ...onCapped,
+        values: { 'state.drives': 'a' },
+      }),
+    ]
+    expect(run({ report: report(calls) }).capCalls).toBe(3)
+  })
+
+  it('counts every merge_threads call, whatever its result', () => {
+    const calls = [
+      call({
+        task: 'threads',
+        tool: 'merge_threads',
+        result: 'ok',
+        survivor: { table: 'threads', id: KEEP },
+      }),
+      call({
+        task: 'threads',
+        tool: 'merge_threads',
+        result: 'rejected',
+        reason: 'keep the active one',
+      }),
+      call({ task: 'threads', tool: 'merge_threads', result: 'skipped', reason: 'later-turn' }),
+      LANDED_THREADS,
+    ]
+    expect(run({ report: report(calls) }).mergeCalls).toBe(3)
+  })
+})
+
+const tally = (passed: boolean, capCalls = 0, mergeCalls = 0): RunTally => ({
+  holds: [
+    { task: 'identity', held: passed, why: passed ? 'held' : 'no write landed' },
+    { task: 'threads', held: true, why: 'held' },
+  ],
+  capCalls,
+  mergeCalls,
+})
+
+const runs = (n: number, make: (k: number) => RunTally): RunTally[] =>
+  Array.from({ length: n }, (_, k) => make(k))
+
+describe('barVerdict', () => {
+  it('meets the bar at 8 passing runs of 10, with a cap and a merge in 3 runs each', () => {
+    expect(barVerdict(runs(10, (k) => tally(k < 8, k < 3 ? 1 : 0, k >= 7 ? 2 : 0)))).toEqual({
+      passing: 8,
+      runs: 10,
+      capRuns: 3,
+      mergeRuns: 3,
+      verdict: 'met',
+    })
+  })
+
+  it('misses it at 7 passing runs, whatever the coverage', () => {
+    expect(barVerdict(runs(10, (k) => tally(k < 7, 1, 1))).verdict).toBe('missed')
+    expect(barVerdict(runs(10, (k) => tally(k < 7))).verdict).toBe('missed')
+  })
+
+  it('is inconclusive when the runs pass but a coverage count reaches only 2 runs', () => {
+    expect(barVerdict(runs(10, (k) => tally(true, k < 2 ? 1 : 0, 1))).verdict).toBe('inconclusive')
+    expect(barVerdict(runs(10, (k) => tally(true, 1, k < 2 ? 1 : 0))).verdict).toBe('inconclusive')
+  })
+
+  it('scales to the runs made: 4 of 5 passing, coverage in 2 runs', () => {
+    expect(barVerdict(runs(5, (k) => tally(k < 4, k < 2 ? 1 : 0, k < 2 ? 1 : 0))).verdict).toBe(
+      'met',
+    )
+    expect(barVerdict(runs(5, (k) => tally(k < 4, k < 1 ? 1 : 0, 1))).verdict).toBe('inconclusive')
+    expect(barVerdict(runs(5, (k) => tally(k < 3, 1, 1))).verdict).toBe('missed')
+  })
+
+  it('refuses to judge no runs', () => {
+    expect(() => barVerdict([])).toThrow(/no runs/)
+  })
+})

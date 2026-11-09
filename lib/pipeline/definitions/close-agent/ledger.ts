@@ -1,4 +1,5 @@
 import type { CloseReportCall } from '@/lib/db'
+import { logger } from '@/lib/diagnostics'
 import { ID_PATTERN } from '@/lib/ids'
 import { oneLine } from '@/lib/text'
 
@@ -48,7 +49,16 @@ export class CloseLedgerWriter {
     const { values, ...rest } = call
     const shown = Object.entries(values ?? {})
       .filter(([, value]) => value !== undefined)
-      .map(([path, value]) => [path, reportValue(value, this.nameOfId)] as const)
+      .map(([path, value]) => {
+        const text = formatted(value, this.nameOfId)
+        // C4's bound is set from a real run's largest value, so its length is read before the cut.
+        logger.debug('memory.close_report_value', {
+          tool: rest.tool,
+          path,
+          length: Array.from(text).length,
+        })
+        return [path, bounded(text)] as const
+      })
     this.ledger.calls.push({
       ...rest,
       rows: rest.rows.map((row) => ({ ...row })),

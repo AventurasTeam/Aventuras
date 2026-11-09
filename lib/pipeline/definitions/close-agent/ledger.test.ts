@@ -1,4 +1,6 @@
-import { describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
+
+import { logger } from '@/lib/diagnostics'
 
 import { CloseIds } from './ids'
 import { CLOSE_REPORT_VALUE_BOUND, CloseLedgerWriter, reportValue } from './ledger'
@@ -36,6 +38,10 @@ const call = (over: Partial<RecordedCall> = {}): RecordedCall => ({
   turns: [ENTRY],
   result: 'ok',
   ...over,
+})
+
+afterEach(() => {
+  vi.restoreAllMocks()
 })
 
 describe('CloseLedgerWriter', () => {
@@ -160,6 +166,31 @@ describe('CloseLedgerWriter', () => {
     expect(values.description).toBe('x'.repeat(2_000))
     expect(values['state.traits']).toHaveLength(2_000)
     expect(values['state.traits']!.startsWith('wary, wary, ')).toBe(true)
+  })
+
+  it("logs each value's length before the bound, a refused call's included", () => {
+    const { writer } = setup()
+    const debug = vi.spyOn(logger, 'debug')
+
+    writer.record(
+      call({
+        result: 'rejected',
+        reason: 'over the soft cap',
+        values: {
+          description: 'x'.repeat(2_500),
+          'state.traits': ['patient', 'wary'],
+          'state.voice': undefined,
+        },
+      }),
+    )
+
+    expect(debug.mock.calls.filter(([kind]) => kind === 'memory.close_report_value')).toEqual([
+      [
+        'memory.close_report_value',
+        { tool: 'update_character', path: 'description', length: 2_500 },
+      ],
+      ['memory.close_report_value', { tool: 'update_character', path: 'state.traits', length: 13 }],
+    ])
   })
 
   it("keeps a refused create's minted id and name", () => {
