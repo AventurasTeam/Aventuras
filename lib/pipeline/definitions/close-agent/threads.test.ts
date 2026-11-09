@@ -196,7 +196,7 @@ async function editThreadAs(
       action: {
         kind: 'updateThread',
         source: who === 'user' ? 'user_edit' : 'per_turn_classifier',
-        payload: { branchId: fx.branchId, id, patch },
+        payload: { branchId: fx.branchId, id, patch, proseEntryId: null },
       },
       actionId: who === 'user' ? 'act_user_edit' : 'act_close_turn_5',
       branchId: fx.branchId,
