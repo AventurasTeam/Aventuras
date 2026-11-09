@@ -59,8 +59,10 @@ function joinedList(entry: string, bracketed = false): string[] | undefined {
   const [only] = list
   if (only === undefined) return undefined
   if (only === body) return bracketed ? list : undefined
-  // Each pass parses a shorter string, so this ends.
-  return joinedList(only, bracketed || BRACKETED.test(trimmed))
+  const inBrackets = bracketed || BRACKETED.test(trimmed)
+  // Each pass parses a shorter string, so this ends. An item holding a raw line break won't parse
+  // again, so a bracketed one stands as decoded.
+  return joinedList(only, inBrackets) ?? (inBrackets ? list : undefined)
 }
 
 const LIST_MARKER = /^(?:[-*]|\d+\.)\s+/
@@ -71,7 +73,8 @@ function entryLines(entry: string): string[] {
   return lines.length === 1 ? lines : lines.map((line) => line.trim().replace(LIST_MARKER, ''))
 }
 
-const heldEntries = (entry: string): string[] => joinedList(entry) ?? entryLines(entry)
+const heldEntries = (entry: string): string[] =>
+  joinedList(entry)?.flatMap(entryLines) ?? entryLines(entry)
 
 /**
  * A list replaces the stored one whole, so an empty one reads as omitted; else as the entries it

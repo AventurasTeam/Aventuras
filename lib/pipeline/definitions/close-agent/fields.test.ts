@@ -116,6 +116,11 @@ describe('sentList', () => {
     expect(entries(['[patient]'])).toEqual(['[patient]'])
   })
 
+  it('splits a decoded item on its escaped line breaks, its list markers dropped', () => {
+    expect(entries(['["brave\\nwary", "patient"]'])).toEqual(['brave', 'wary', 'patient'])
+    expect(entries(['["- brave\\n- wary"]'])).toEqual(['brave', 'wary'])
+  })
+
   it('splits an entry on its line breaks, deduping across the pieces', () => {
     expect(entries(['brave\nwary\r\npatient', 'Wary'])).toEqual(['brave', 'wary', 'patient'])
   })

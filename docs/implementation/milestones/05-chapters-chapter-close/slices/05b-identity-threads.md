@@ -809,9 +809,11 @@ None open: Implementation notes record each answer.
   sent or as its entries, and the soft-cap refusal says "read as N
   entries" when a joined list was split. Known gap (developer,
   2026-11-09: "no new rule"): the read covers the run-9 shape and its
-  escaped, bracketed, pretty-printed and line-separated variants, but a
-  plain comma- or semicolon-joined entry still reads as one entry and
-  passes the soft cap, and it isn't split since that would break
+  escaped, bracketed, pretty-printed and line-separated variants, with a
+  decoded item split by line as an entry is (provisional, coordinator
+  default, after review), but a plain comma- or semicolon-joined entry
+  still reads as one entry and passes the soft cap, and it isn't split
+  since that would break
   entries like "quick-witted, if rash". Also not fixed: a stored joined
   entry counts as one for the growth rule, forcing compaction; rare
   double-leak shapes (pretty-printed and escaped JSON, a joined pair
