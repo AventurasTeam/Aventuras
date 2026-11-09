@@ -429,7 +429,9 @@ describe('the dataset overlay', () => {
       .where(and(eq(entities.branchId, B), eq(entities.id, SILVER)))
     const before = await overlaidState(ctx)
 
-    await expect(applyDatasetOverlay(ctx)).rejects.toThrow(/no user edit/)
+    await expect(applyDatasetOverlay(ctx)).rejects.toThrow(
+      /no user edit.*if not, update scripts\/dataset-chapter\/overlay-data\.ts to the seed/,
+    )
 
     expect(await overlaidState(ctx)).toEqual(before)
     expect(byId(await entityRows(ctx, [JIM])).get(JIM)?.state).toMatchObject({ traits: [] })
@@ -442,7 +444,9 @@ describe('the dataset overlay', () => {
     await appendTurn(ctx, 'ai_reply', 'Silver waits for you by the boats.')
     await writeSystemEntry({ branchId: B, content: 'The next reply failed.' }, ctx)
 
-    await expect(applyDatasetOverlay(ctx)).rejects.toThrow(/no user edit/)
+    await expect(applyDatasetOverlay(ctx)).rejects.toThrow(
+      /no user edit.*if a reply was played.*since an --overlay load, reload the seed with pnpm db:seed:dataset --overlay/,
+    )
   })
 
   // A chapter ends on a reply, so no close can cite an action no reply follows yet.

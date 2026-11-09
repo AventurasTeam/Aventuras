@@ -154,7 +154,7 @@ async function plannedStates(ctx: DbCtx): Promise<PlannedState[]> {
   const edited = held.get(userEdit.id)!
   if (edited.description === userEdit.description && !(await userEditProtects(ctx, edited)))
     throw overlayError(
-      `${userEdit.name}'s description already holds the overlay's user edit, with no user edit logged after the chapter to protect it: ${REFRESH}`,
+      `${userEdit.name}'s description already holds the overlay's user edit, with no user edit logged after the chapter's prose to protect it: if a reply was played or a turn edited since an --overlay load, reload the seed with pnpm db:seed:dataset --overlay; if not, ${REFRESH}`,
     )
   const { id, title } = plantedThread.duplicates
   const [duplicated] = await ctx.db
