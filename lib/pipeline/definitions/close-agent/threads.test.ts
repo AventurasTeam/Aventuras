@@ -700,6 +700,13 @@ describe('merge_threads', () => {
       ['rejected', expect.stringContaining('absorb names a thread twice')],
       ['rejected', expect.stringContaining('absorb is empty')],
     ])
+    const letterRow = { table: 'threads', id: LETTER.id, name: LETTER.title }
+    const sealedRow = { table: 'threads', id: SEALED.id, name: SEALED.title }
+    expect(run.calls.map(({ rows }) => rows)).toEqual([
+      [letterRow, sealedRow],
+      [letterRow, sealedRow],
+      [letterRow],
+    ])
     for (const call of run.calls) expect(call).not.toHaveProperty('survivor')
     expect(groupEvents(run.events)).toEqual([])
     expect(await runDeltas(f, run.result.actionId)).toEqual([])
@@ -758,7 +765,8 @@ describe('merge_threads', () => {
     ])
 
     expect((await threadRow(f, LETTER.id))?.title).toBe('L'.repeat(120))
-    expect(run.calls[0]).toMatchObject({ result: 'ok', values: { title: 'L'.repeat(120) } })
+    expect(run.calls[0]).toMatchObject({ result: 'ok' })
+    expect(run.calls[0]!.values).toEqual({ title: 'L'.repeat(120) })
   })
 
   it.each<[string, Record<string, unknown>]>([
@@ -799,11 +807,8 @@ describe('merge_threads', () => {
         merge({ keep: 'th1', absorb: ['th2'], title: 'Deliver the sealed letter' }),
       ])
 
-      expect(run.calls[0]).toMatchObject({
-        result: 'skipped',
-        reason: CLOSE_REASON.laterTurn,
-        values: { title: 'Deliver the sealed letter' },
-      })
+      expect(run.calls[0]).toMatchObject({ result: 'skipped', reason: CLOSE_REASON.laterTurn })
+      expect(run.calls[0]!.values).toEqual({ title: 'Deliver the sealed letter' })
       expect(run.calls[0]).not.toHaveProperty('skippedFields')
       expect(run.calls[0]).not.toHaveProperty('survivor')
       expect(JSON.stringify(run.calls)).not.toContain(DELETE_PATH)
@@ -823,6 +828,28 @@ describe('merge_threads', () => {
     expect(run.calls[0]).not.toHaveProperty('skippedFields')
     expect(run.answers[0]).toMatchObject({ result: 'skipped', reason: USER_EDITED_SINCE_PROSE })
     expect(await runDeltas(f, run.result.actionId)).toEqual([])
+    expect(await threadRow(f, SEALED.id)).toBeDefined()
+  })
+
+  it("records only the text keep doesn't hold when a user's edit skips the merge", async () => {
+    await editThreadAs(f, 'user', SEALED.id, { icon: 'feather' })
+    const description = 'Wren must bring the letter to Low Ashby with its seal whole.'
+
+    const run = await runThreadCalls(f, THREADS_SHOWN, [
+      merge({ keep: 'th1', absorb: ['th2'], title: LETTER.title, description }),
+    ])
+
+    expect(run.calls[0]).toMatchObject({ result: 'skipped', reason: USER_EDITED_SINCE_PROSE })
+    expect(run.calls[0]!.values).toEqual({ description })
+  })
+
+  it("skips a merge as a later turn's when one row has a later turn's write and another the user's edit", async () => {
+    await editThreadAs(f, 'later-turn', LETTER.id, { category: 'errand' })
+    await editThreadAs(f, 'user', SEALED.id, { icon: 'feather' })
+
+    const run = await runThreadCalls(f, THREADS_SHOWN, [merge({ keep: 'th1', absorb: ['th2'] })])
+
+    expect(run.calls[0]).toMatchObject({ result: 'skipped', reason: CLOSE_REASON.laterTurn })
     expect(await threadRow(f, SEALED.id)).toBeDefined()
   })
 
@@ -849,10 +876,8 @@ describe('merge_threads', () => {
       merge({ keep: 'th1', absorb: ['th2'], title: 'Deliver the sealed letter' }),
     ])
 
-    expect(run.calls[0]).toMatchObject({
-      result: 'ok',
-      values: { title: 'Deliver the sealed letter' },
-    })
+    expect(run.calls[0]).toMatchObject({ result: 'ok' })
+    expect(run.calls[0]!.values).toEqual({ title: 'Deliver the sealed letter' })
     expect(await threadRow(f, LETTER.id)).toMatchObject({
       title: 'Deliver the sealed letter',
       description: "The user's note on the letter.",
@@ -917,12 +942,28 @@ describe('merge_threads', () => {
     expect(run.calls[0]).toMatchObject({
       result: 'rejected',
       reason: expect.stringContaining('keep the active thread'),
-      values: { title: 'The light and the letter' },
     })
+    expect(run.calls[0]!.values).toEqual({ title: 'The light and the letter' })
     expect(run.calls[0]).not.toHaveProperty('survivor')
     expect(groupEvents(run.events)).toEqual([])
     expect(await runDeltas(f, run.result.actionId)).toEqual([])
     expect(await threadRow(f, LETTER.id)).toBeDefined()
+  })
+
+  it('refuses a pending keep absorbing an active thread beside a settled one', async () => {
+    await seedPassThread(f, SETTLED, 3)
+
+    const run = await runThreadCalls(
+      f,
+      [...THREADS_SHOWN, SETTLED],
+      [merge({ keep: 'th3', absorb: ['th1', 'th5'] })],
+    )
+
+    expect(run.calls[0]).toMatchObject({
+      result: 'rejected',
+      reason: expect.stringContaining('keep the active thread'),
+    })
+    expect(await runDeltas(f, run.result.actionId)).toEqual([])
   })
 
   it("lands the reverse, keep's status, refs, category, icon and injection mode standing", async () => {
