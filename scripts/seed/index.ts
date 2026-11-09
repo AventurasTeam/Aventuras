@@ -22,12 +22,14 @@ function parseCli(argv: string[]): {
   path: string | undefined
   longBranch: boolean
   dataset: boolean
+  overlay: boolean
 } {
   const { values, positionals } = parseArgs({
     args: argv,
     options: {
       'long-branch': { type: 'boolean', default: false },
       dataset: { type: 'boolean', default: false },
+      overlay: { type: 'boolean', default: false },
     },
     allowPositionals: true,
   })
@@ -36,7 +38,14 @@ function parseCli(argv: string[]): {
       `one database path at most, got ${positionals.length}: ${positionals.join(' ')}`,
     )
   }
-  return { path: positionals[0], longBranch: values['long-branch'], dataset: values.dataset }
+  if (values.overlay && !values.dataset)
+    throw new Error('--overlay goes on the dataset seed: pnpm db:seed:dataset --overlay')
+  return {
+    path: positionals[0],
+    longBranch: values['long-branch'],
+    dataset: values.dataset,
+    overlay: values.overlay,
+  }
 }
 
 let cli: ReturnType<typeof parseCli>
@@ -45,7 +54,7 @@ try {
 } catch (err) {
   console.error(`[seed] ${err instanceof Error ? err.message : String(err)}`)
   console.error(
-    '[seed] usage: pnpm db:seed [db path], pnpm db:seed:long [db path], or pnpm db:seed:dataset [db path]',
+    '[seed] usage: pnpm db:seed [db path], pnpm db:seed:long [db path], or pnpm db:seed:dataset [--overlay] [db path]',
   )
   process.exit(1)
 }
@@ -69,6 +78,28 @@ function repointSeedProvider(steps: SeedStep[], port: number): void {
         if (provider.endpoint === seeded) provider.endpoint = `http://localhost:${port}/v1`
       }
     }
+  }
+}
+
+// Loaded only with --overlay: it runs through the action layer, far heavier than the seed itself.
+async function applyOverlay(dbPath: string): Promise<void> {
+  const [{ registerAllDomains }, { openTestDb }, { applyDatasetOverlay }] = await Promise.all([
+    import('../../lib/actions'),
+    import('../../lib/db/__tests__/test-db'),
+    import('../dataset-chapter/overlay'),
+  ])
+  const opened = await openTestDb(dbPath)
+  try {
+    registerAllDomains()
+    const outcome = await applyDatasetOverlay({
+      db: opened.db,
+      runInTransaction: opened.runInTransaction,
+    })
+    console.log(
+      `[seed] dataset overlay applied: chapter ${outcome.reopened ? 'reopened' : 'already open'}, user edit ${outcome.userEdit}`,
+    )
+  } finally {
+    opened.sqlite.close()
   }
 }
 
@@ -119,6 +150,11 @@ async function main() {
   }
   for (const branch of dataset.find((s) => s.name === 'branches')?.rows ?? [])
     console.log(`[seed] dataset branch: ${(branch as { id: string }).id}`)
+  if (cli.overlay) {
+    // The overlay opens the file again, through the action layer.
+    sqlite.close()
+    await applyOverlay(dbPath)
+  }
 }
 
 main().catch((err) => {
