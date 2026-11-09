@@ -661,8 +661,10 @@ conservative bias as the sub-jobs above:
   or description, where an edit of an absorbed row always does. The kept
   row's status, entry refs, category, icon and injection mode stand, and
   the merge writes only its title and description. Absorbing an `active`
-  thread into a `pending` one is refused, since the kept row would drop
-  the thread from the narrator's prompt with no write saying so.
+  thread is refused unless the kept row is `active` too, since the kept
+  row would drop the thread from the narrator's prompt with no write
+  saying so. The refusal says to keep the active one, or to resolve it
+  with `update_thread` first if the chapter settled it.
 - **`common_knowledge`** on a happening the chapter shows has spread
   to everyone: news is a chapter-scale judgment. A wrong flag makes
   every character aware, so the bar is explicit spread in the prose.

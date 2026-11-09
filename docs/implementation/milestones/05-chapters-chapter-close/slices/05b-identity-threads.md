@@ -201,9 +201,11 @@ safe, read and not run: per-turn stackable keys are bounded at parse
   2. A row that's gone is `rejected`, naming its survivor from the
      ledger. The same goes for `update_thread` on a row this close
      absorbed.
-  3. Absorbing an `active` thread into a `pending` one is `rejected`,
-     saying to keep the active one, since the kept row would drop the
-     thread from the narrator's prompt with no write saying so.
+  3. Absorbing an `active` thread is `rejected` unless `keep` is `active`
+     too, saying to keep the active one or to resolve it with
+     `update_thread` first if the chapter settled it, since the kept row
+     would drop the thread from the narrator's prompt with no write
+     saying so.
   4. A row this close already wrote can't be absorbed: any delta on it
      under the run's `actionId` is `rejected`, saying to keep that row
      instead. `snapshotForRedo` would otherwise refuse CTRL-Z of the
@@ -400,8 +402,8 @@ stays what the pipeline wrote.
   material change or when blank".
 - [`chapter-close.md → 3f`](../../../../memory/chapter-close.md#3f--world-upkeep):
   a thread merge keeps the kept row's status, refs, category, icon and
-  injection mode, and absorbing an active thread into a pending one is
-  refused.
+  injection mode, and absorbing an active thread is refused unless the
+  kept row is active too.
 - [`architecture.md → System and user halves`](../../../../architecture.md#system-and-user-halves):
   the paragraph "Every history marks the user's turns" extends to the
   close's task templates.
@@ -502,8 +504,8 @@ Test paths below run with `pnpm vitest run --project unit <path>`.
    skipping it whole with no delta; a user edit of another field on
    `keep` not stopping it; absorbing a row the close wrote refused;
    keeping that row landing; absorbing an `active` thread into a
-   `pending` one refused with no delta, while the reverse lands and keeps
-   the kept row's status and refs; `survivor` set on a landed merge and
+   `pending`, `resolved` or `failed` one refused with no delta, while an
+   `active` keep lands and keeps the kept row's status and refs; `survivor` set on a landed merge and
    absent on a refused or skipped one; and `update_thread` on an absorbed
    row refused, naming the survivor.
 10. **Round trip.** `lib/pipeline/__tests__/close-round-trip.test.ts` holds
@@ -566,7 +568,7 @@ Test paths below run with `pnpm vitest run --project unit <path>`.
   proves the whole close.
 
 Green proves little here without a mutation: for each new guard (soft
-cap, growth past a cap, already-wrote, active into pending, kept-row
+cap, growth past a cap, already-wrote, active into non-active, kept-row
 field, restated compare, empty list, latest by position, the overlay's
 second application) break it and confirm its test fails, and keep caps
 as literals so a test can't derive its expectation from the constant.
