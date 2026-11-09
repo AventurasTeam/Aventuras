@@ -2,10 +2,12 @@ import { and, eq, inArray } from 'drizzle-orm'
 import { z } from 'zod'
 
 import { readEntryPosition } from '@/lib/actions'
-import { threads, type Thread } from '@/lib/db'
+import { USER_EDITED_SINCE_PROSE, type GuardRow, type RowGuard } from '@/lib/actions/types'
+import { deltas, threads, type Thread } from '@/lib/db'
 
 import { restatedText, sentText } from './fields'
 import {
+  DELETE_PATH,
   writeToolSchema,
   type LostField,
   type PlannedAction,
@@ -34,10 +36,39 @@ export const THREAD_SHAPE = {
     ),
 }
 
+export const MERGE_SHAPE = {
+  keep: z.string().describe('The thread to keep, by its id as shown (th1, th2…).'),
+  absorb: z
+    .array(z.string())
+    .describe('The threads that duplicate it, by id: each is folded into keep and deleted.'),
+  title: z
+    .string()
+    .optional()
+    .describe("keep's title, rewritten whole. Leave it out to keep its title."),
+  description: z
+    .string()
+    .optional()
+    .describe(
+      "keep's description, rewritten whole to hold what the absorbed threads added. Leave it out to keep its description.",
+    ),
+}
+
 type ThreadArgs = z.output<WriteToolSchema<typeof THREAD_SHAPE>>
+type MergeArgs = z.output<WriteToolSchema<typeof MERGE_SHAPE>>
 type ThreadUpdate = Partial<Pick<ThreadArgs, 'description' | 'status'>>
+type ThreadText = Partial<Pick<MergeArgs, 'title' | 'description'>>
 
 const NOTHING_SENT = 'nothing to write: send a description, a status or both'
+
+const MERGE_REFUSAL = {
+  emptyAbsorb: 'absorb is empty: name the threads to fold into keep',
+  keepAbsorbed: 'keep is also in absorb: keep one thread and absorb the others',
+  repeated: 'absorb names a thread twice: name each thread once',
+  activeIntoPending:
+    'an active thread cannot be absorbed into a pending one, or the narrator would lose it: keep the active thread and absorb the pending one',
+  closeWrote:
+    'this close already wrote a thread in absorb, and absorbing it would block undoing the close: keep that thread instead',
+} as const
 
 async function readThreads(
   ctx: WriteContext,
@@ -156,6 +187,137 @@ async function planUpdateThread(args: ThreadArgs, ctx: WriteContext): Promise<Wr
   return { kind: 'write', actions, lost, rows, values: wanted }
 }
 
+function mergeShapeFault(keep: string, absorb: readonly string[]): string | undefined {
+  if (absorb.length === 0) return MERGE_REFUSAL.emptyAbsorb
+  if (absorb.includes(keep)) return MERGE_REFUSAL.keepAbsorbed
+  if (new Set(absorb).size !== absorb.length) return MERGE_REFUSAL.repeated
+  return undefined
+}
+
+// generation-pipeline.md → Reverse-replay: redo refuses an update and a delete of one row under one
+// action, so absorbing a row this close wrote would refuse CTRL-Z of the close for good.
+async function closeWroteAny(ctx: WriteContext, ids: readonly string[]): Promise<boolean> {
+  const [hit] = await ctx.db
+    .select({ id: deltas.id })
+    .from(deltas)
+    .where(
+      and(
+        eq(deltas.branchId, ctx.branchId),
+        eq(deltas.actionId, ctx.actionId),
+        eq(deltas.targetTable, 'threads'),
+        inArray(deltas.targetId, [...ids]),
+      ),
+    )
+    .limit(1)
+  return hit !== undefined
+}
+
+// C11: a later turn's write on any row skips the merge whole, then the user's edit of an absorbed
+// row or of a field the merge writes on keep; keep's other fields lose nothing to a merge.
+function mergeProtection(
+  guard: RowGuard,
+  keep: string,
+  absorb: readonly string[],
+  fields: readonly string[],
+): ProtectionReason | undefined {
+  const rowOf = (id: string) => guard.row('threads', id)
+  if ([keep, ...absorb].some((id) => rowOf(id).laterTurnTouched())) return CLOSE_REASON.laterTurn
+  if (
+    absorb.some((id) => rowOf(id).userTouched()) ||
+    fields.some((field) => rowOf(keep).userWrote(field))
+  )
+    return USER_EDITED_SINCE_PROSE
+  return undefined
+}
+
+async function planMergeThreads(args: MergeArgs, ctx: WriteContext): Promise<WritePlan> {
+  const { keep, absorb } = args
+  const title = sentText(args.title, 'title')
+  const description = sentText(args.description, 'description')
+  const proposed: ThreadText = {
+    ...(title === undefined ? {} : { title: title.bounded }),
+    ...(description === undefined ? {} : { description: description.bounded }),
+  }
+  const named = [keep, ...absorb]
+  const fault = mergeShapeFault(keep, absorb)
+  if (fault !== undefined)
+    return {
+      kind: 'refused',
+      reason: fault,
+      rows: threadRows(ctx, named, new Map()),
+      values: proposed,
+    }
+
+  const stored = await readThreads(ctx, named)
+  const rows = threadRows(ctx, named, stored)
+  const kept = stored.get(keep)
+  const absorbed = absorb.flatMap((id) => stored.get(id) ?? [])
+  if (kept === undefined || absorbed.length < absorb.length)
+    return { kind: 'refused', reason: CLOSE_REASON.rowGone, rows, values: proposed }
+  // Keep's status stands, so an active thread absorbed into a pending one would leave the prompt.
+  if (kept.status === 'pending' && absorbed.some(({ status }) => status === 'active'))
+    return { kind: 'refused', reason: MERGE_REFUSAL.activeIntoPending, rows, values: proposed }
+  if (await closeWroteAny(ctx, absorb))
+    return { kind: 'refused', reason: MERGE_REFUSAL.closeWrote, rows, values: proposed }
+
+  const wanted: ThreadText = {
+    ...(title === undefined || restatedText(kept.title, title) ? {} : { title: title.bounded }),
+    ...(description === undefined || restatedText(kept.description, description)
+      ? {}
+      : { description: description.bounded }),
+  }
+  const fields = Object.keys(wanted)
+  const guard = await ctx.guard(named.map((id): GuardRow => ({ table: 'threads', id })))
+  const protection = mergeProtection(guard, keep, absorb, fields)
+  if (protection !== undefined)
+    return {
+      kind: 'write',
+      actions: [],
+      // The deletes are lost too, so a skipped merge with no text reads skipped, not ok.
+      lost: [
+        ...fields.map((field) => protectedField(field, keep, protection)),
+        ...absorb.map((id) => protectedField(DELETE_PATH, id, protection)),
+      ],
+      rows,
+      values: wanted,
+    }
+
+  const actions: PlannedAction[] = []
+  if (fields.length > 0)
+    actions.push({
+      action: {
+        kind: 'updateThread',
+        source: 'chapter_close',
+        payload: {
+          branchId: ctx.branchId,
+          id: keep,
+          patch: wanted,
+          proseEntryId: ctx.proseEntryId,
+        },
+      },
+      fields,
+      row: keep,
+    })
+  for (const id of absorb)
+    actions.push({
+      action: {
+        kind: 'deleteThread',
+        source: 'chapter_close',
+        payload: { branchId: ctx.branchId, id },
+      },
+      fields: [DELETE_PATH],
+      row: id,
+    })
+  return {
+    kind: 'write',
+    actions,
+    lost: [],
+    rows,
+    values: wanted,
+    survivor: { table: 'threads', id: keep },
+  }
+}
+
 /** chapter-close.md → 3f: a thread's description brought up to date, and its status once settled. */
 export const updateThreadTool: WriteTool<typeof THREAD_SHAPE> = {
   kind: 'write',
@@ -165,4 +327,18 @@ export const updateThreadTool: WriteTool<typeof THREAD_SHAPE> = {
   schema: writeToolSchema(THREAD_SHAPE),
   ids: { id: { shape: 'single', prefixes: ['thr_'] } },
   plan: planUpdateThread,
+}
+
+/** chapter-close.md → 3f: duplicates merged as an update of keep and a delete of each absorbed row. */
+export const mergeThreadsTool: WriteTool<typeof MERGE_SHAPE> = {
+  kind: 'write',
+  name: 'merge_threads',
+  description:
+    "Merge threads that track the same thing: keep one, and absorb the others, which are deleted. Keep the active thread when the others are pending; keep's status stands. Send a title or a description only to rewrite keep's, covering what the absorbed threads held. Merge all of one thread's duplicates in one call.",
+  schema: writeToolSchema(MERGE_SHAPE),
+  ids: {
+    keep: { shape: 'single', prefixes: ['thr_'] },
+    absorb: { shape: 'array', prefixes: ['thr_'] },
+  },
+  plan: planMergeThreads,
 }

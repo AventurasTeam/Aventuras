@@ -11,8 +11,8 @@ import { createReadSet } from './common-checks'
 import { dispatchToolCall, type DispatchContext } from './dispatch'
 import type { CloseIds } from './ids'
 import { CloseLedgerWriter } from './ledger'
-import { updateThreadTool } from './thread-tools'
-import { assertReplaySafe, type CloseTool } from './tool'
+import { mergeThreadsTool, updateThreadTool } from './thread-tools'
+import { assertReplaySafe, DELETE_PATH, type CloseTool } from './tool'
 import { CLOSE_REASON } from './verdict'
 import { expectRan } from '../../__tests__/harness'
 import { definePipeline } from '../../authoring/define'
@@ -223,7 +223,10 @@ type StagedRun = {
   ids?: CloseIds
 }
 
-const THREAD_TOOLS: Readonly<Record<string, CloseTool>> = { update_thread: updateThreadTool }
+const THREAD_TOOLS: Readonly<Record<string, CloseTool>> = {
+  update_thread: updateThreadTool,
+  merge_threads: mergeThreadsTool,
+}
 
 let staged: StagedRun | undefined
 
@@ -333,6 +336,17 @@ describe('thread tool schemas', () => {
         why: 'She does.',
       },
       { id: 'th1', status: 'failed', turns: ['t5', 't7'], why: 'The seal broke.' },
+    ])
+    assertReplaySafe(mergeThreadsTool.schema, [
+      { keep: 'th1', absorb: ['th2'], turns: ['t7'], why: 'One errand.' },
+      {
+        keep: 'th1',
+        absorb: ['th2', 'th3'],
+        title: 'Deliver the sealed letter',
+        description: 'Wren must bring the letter to Low Ashby unread.',
+        turns: ['t5', 't7'],
+        why: 'The same errand, twice.',
+      },
     ])
   })
 })
@@ -659,5 +673,298 @@ describe('update_thread', () => {
     })
     expect(run.answers[0]).toMatchObject({ result: 'rejected', reason: CLOSE_REASON.rowGone })
     expect(await runDeltas(f, run.result.actionId)).toEqual([])
+  })
+})
+
+describe('merge_threads', () => {
+  beforeEach(async () => {
+    f = await openThreadsFixture()
+  })
+
+  const merge = (input: Record<string, unknown>): ThreadCall => ({
+    toolName: 'merge_threads',
+    input: { ...input, ...cite(['t7'], 'The two threads are one errand.') },
+  })
+  const opsOf = (written: Awaited<ReturnType<typeof runDeltas>>) =>
+    written.map(({ op, targetId }) => [op, targetId])
+
+  it('refuses keep inside absorb, a repeated id and an empty absorb, writing nothing', async () => {
+    const run = await runThreadCalls(f, THREADS_SHOWN, [
+      merge({ keep: 'th1', absorb: ['th1', 'th2'] }),
+      merge({ keep: 'th1', absorb: ['th2', 'th2'] }),
+      merge({ keep: 'th1', absorb: [] }),
+    ])
+
+    expect(run.calls.map(({ result, reason }) => [result, reason])).toEqual([
+      ['rejected', expect.stringContaining('keep is also in absorb')],
+      ['rejected', expect.stringContaining('absorb names a thread twice')],
+      ['rejected', expect.stringContaining('absorb is empty')],
+    ])
+    for (const call of run.calls) expect(call).not.toHaveProperty('survivor')
+    expect(groupEvents(run.events)).toEqual([])
+    expect(await runDeltas(f, run.result.actionId)).toEqual([])
+    expect(await threadRow(f, SEALED.id)).toBeDefined()
+  })
+
+  it('lands a clean merge as one update of keep and a delete of each absorbed thread, in one group', async () => {
+    const title = 'Deliver the sealed letter'
+    const description = 'Wren must bring the letter to the reeve of Low Ashby with its seal whole.'
+
+    const run = await runThreadCalls(f, THREADS_SHOWN, [
+      merge({ keep: 'th1', absorb: ['th2', 'th3'], title, description }),
+    ])
+
+    expect(run.calls).toEqual([
+      {
+        task: 'threads',
+        part: 1,
+        tool: 'merge_threads',
+        rows: [
+          { table: 'threads', id: LETTER.id, name: LETTER.title },
+          { table: 'threads', id: SEALED.id, name: SEALED.title },
+          { table: 'threads', id: FAR_BANK.id, name: FAR_BANK.title },
+        ],
+        why: 'The two threads are one errand.',
+        turns: [endEntryIdOf(f)],
+        result: 'ok',
+        values: { title, description },
+        survivor: { table: 'threads', id: LETTER.id },
+      },
+    ])
+    expect(run.answers).toEqual([{ result: 'ok', survivor: 'th1' }])
+    expect(groupEvents(run.events).map(({ actions }) => actions.map(({ kind }) => kind))).toEqual([
+      ['updateThread', 'deleteThread', 'deleteThread'],
+    ])
+    expect(await threadRow(f, LETTER.id)).toMatchObject({ title, description })
+    expect(await threadRow(f, SEALED.id)).toBeUndefined()
+    expect(await threadRow(f, FAR_BANK.id)).toBeUndefined()
+    const written = await runDeltas(f, run.result.actionId)
+    expect(opsOf(written)).toEqual([
+      ['update', LETTER.id],
+      ['delete', SEALED.id],
+      ['delete', FAR_BANK.id],
+    ])
+    for (const delta of written)
+      expect(delta).toMatchObject({
+        source: 'chapter_close',
+        actionId: run.result.actionId,
+        entryId: endEntryIdOf(f),
+      })
+  })
+
+  it('stores an over-bound title cut to 120 characters, the report holding the same text', async () => {
+    const run = await runThreadCalls(f, THREADS_SHOWN, [
+      merge({ keep: 'th1', absorb: ['th2'], title: 'L'.repeat(200) }),
+    ])
+
+    expect((await threadRow(f, LETTER.id))?.title).toBe('L'.repeat(120))
+    expect(run.calls[0]).toMatchObject({ result: 'ok', values: { title: 'L'.repeat(120) } })
+  })
+
+  it.each<[string, Record<string, unknown>]>([
+    ['no text', {}],
+    ['only the text keep holds', { title: LETTER.title, description: LETTER.description }],
+  ])(
+    'lands a redundant merge with %s as the delete alone, keep untouched',
+    async (_label, text) => {
+      const run = await runThreadCalls(f, THREADS_SHOWN, [
+        merge({ keep: 'th1', absorb: ['th2'], ...text }),
+      ])
+
+      expect(run.calls[0]).toMatchObject({
+        result: 'ok',
+        survivor: { table: 'threads', id: LETTER.id },
+      })
+      expect(run.calls[0]).not.toHaveProperty('values')
+      expect(groupEvents(run.events).map(({ actions }) => actions.map(({ kind }) => kind))).toEqual(
+        [['deleteThread']],
+      )
+      expect(await threadRow(f, LETTER.id)).toMatchObject({
+        title: LETTER.title,
+        description: LETTER.description,
+      })
+      expect(await threadRow(f, SEALED.id)).toBeUndefined()
+    },
+  )
+
+  it.each<[string, SeedThread, ThreadEdit]>([
+    ['a field of keep it leaves alone', LETTER, { category: 'errand' }],
+    ['the absorbed thread', SEALED, { description: 'Wren breaks the seal at the milestone.' }],
+  ])(
+    'skips a merge whole when a later turn wrote %s, writing nothing',
+    async (_label, thread, patch) => {
+      await editThreadAs(f, 'later-turn', thread.id, patch)
+
+      const run = await runThreadCalls(f, THREADS_SHOWN, [
+        merge({ keep: 'th1', absorb: ['th2'], title: 'Deliver the sealed letter' }),
+      ])
+
+      expect(run.calls[0]).toMatchObject({
+        result: 'skipped',
+        reason: CLOSE_REASON.laterTurn,
+        values: { title: 'Deliver the sealed letter' },
+      })
+      expect(run.calls[0]).not.toHaveProperty('skippedFields')
+      expect(run.calls[0]).not.toHaveProperty('survivor')
+      expect(JSON.stringify(run.calls)).not.toContain(DELETE_PATH)
+      expect(groupEvents(run.events)).toEqual([])
+      expect(await runDeltas(f, run.result.actionId)).toEqual([])
+      expect(await threadRow(f, SEALED.id)).toBeDefined()
+    },
+  )
+
+  it('skips a redundant merge whole, not ok, when the user edited any field of an absorbed thread', async () => {
+    await editThreadAs(f, 'user', SEALED.id, { icon: 'feather' })
+
+    const run = await runThreadCalls(f, THREADS_SHOWN, [merge({ keep: 'th1', absorb: ['th2'] })])
+
+    expect(run.calls[0]).toMatchObject({ result: 'skipped', reason: USER_EDITED_SINCE_PROSE })
+    expect(run.calls[0]).not.toHaveProperty('survivor')
+    expect(run.calls[0]).not.toHaveProperty('skippedFields')
+    expect(run.answers[0]).toMatchObject({ result: 'skipped', reason: USER_EDITED_SINCE_PROSE })
+    expect(await runDeltas(f, run.result.actionId)).toEqual([])
+    expect(await threadRow(f, SEALED.id)).toBeDefined()
+  })
+
+  it('skips a merge whole when the user wrote, after the cited turn, a field it writes on keep', async () => {
+    await editThreadAs(f, 'user', LETTER.id, { title: "The reeve's letter" })
+
+    const run = await runThreadCalls(f, THREADS_SHOWN, [
+      merge({ keep: 'th1', absorb: ['th2'], title: 'Deliver the sealed letter' }),
+    ])
+
+    expect(run.calls[0]).toMatchObject({ result: 'skipped', reason: USER_EDITED_SINCE_PROSE })
+    expect(await runDeltas(f, run.result.actionId)).toEqual([])
+    expect(await threadRow(f, LETTER.id)).toMatchObject({ title: "The reeve's letter" })
+    expect(await threadRow(f, SEALED.id)).toBeDefined()
+  })
+
+  it("lands a merge when the user edited only fields of keep it doesn't write", async () => {
+    await editThreadAs(f, 'user', LETTER.id, {
+      category: 'errand',
+      description: "The user's note on the letter.",
+    })
+
+    const run = await runThreadCalls(f, THREADS_SHOWN, [
+      merge({ keep: 'th1', absorb: ['th2'], title: 'Deliver the sealed letter' }),
+    ])
+
+    expect(run.calls[0]).toMatchObject({
+      result: 'ok',
+      values: { title: 'Deliver the sealed letter' },
+    })
+    expect(await threadRow(f, LETTER.id)).toMatchObject({
+      title: 'Deliver the sealed letter',
+      description: "The user's note on the letter.",
+      category: 'errand',
+    })
+    expect(await threadRow(f, SEALED.id)).toBeUndefined()
+  })
+
+  it('lands a merge that resends the title the user gave keep: nothing to write there, so nothing to protect', async () => {
+    await editThreadAs(f, 'user', LETTER.id, { title: "The reeve's letter" })
+
+    const run = await runThreadCalls(f, THREADS_SHOWN, [
+      merge({ keep: 'th1', absorb: ['th2'], title: "The reeve's letter" }),
+    ])
+
+    expect(run.calls[0]).toMatchObject({ result: 'ok' })
+    expect(run.calls[0]).not.toHaveProperty('values')
+    expect(opsOf(await runDeltas(f, run.result.actionId))).toEqual([['delete', SEALED.id]])
+  })
+
+  it('refuses absorbing a thread this close already wrote, saying to keep it instead', async () => {
+    const run = await runThreadCalls(f, THREADS_SHOWN, [
+      {
+        toolName: 'update_thread',
+        input: { id: 'th2', description: 'The seal is cracked but holds.', ...cite() },
+      },
+      merge({ keep: 'th1', absorb: ['th2'] }),
+    ])
+
+    expect(run.calls.map(({ result }) => result)).toEqual(['ok', 'rejected'])
+    expect(run.calls[1]!.reason).toContain('keep that thread instead')
+    expect(run.calls[1]).not.toHaveProperty('survivor')
+    expect(await threadRow(f, SEALED.id)).toMatchObject({
+      description: 'The seal is cracked but holds.',
+    })
+    expect(opsOf(await runDeltas(f, run.result.actionId))).toEqual([['update', SEALED.id]])
+  })
+
+  it('lands a merge that keeps the thread this close already wrote', async () => {
+    const run = await runThreadCalls(f, THREADS_SHOWN, [
+      {
+        toolName: 'update_thread',
+        input: { id: 'th2', description: 'The seal is cracked but holds.', ...cite() },
+      },
+      merge({ keep: 'th2', absorb: ['th1'] }),
+    ])
+
+    expect(run.calls.map(({ result }) => result)).toEqual(['ok', 'ok'])
+    expect(run.calls[1]).toMatchObject({ survivor: { table: 'threads', id: SEALED.id } })
+    expect(await threadRow(f, LETTER.id)).toBeUndefined()
+    expect(opsOf(await runDeltas(f, run.result.actionId))).toEqual([
+      ['update', SEALED.id],
+      ['delete', LETTER.id],
+    ])
+  })
+
+  it('refuses absorbing an active thread into a pending one, saying to keep the active one', async () => {
+    const run = await runThreadCalls(f, THREADS_SHOWN, [
+      merge({ keep: 'th3', absorb: ['th1'], title: 'The light and the letter' }),
+    ])
+
+    expect(run.calls[0]).toMatchObject({
+      result: 'rejected',
+      reason: expect.stringContaining('keep the active thread'),
+      values: { title: 'The light and the letter' },
+    })
+    expect(run.calls[0]).not.toHaveProperty('survivor')
+    expect(groupEvents(run.events)).toEqual([])
+    expect(await runDeltas(f, run.result.actionId)).toEqual([])
+    expect(await threadRow(f, LETTER.id)).toBeDefined()
+  })
+
+  it("lands the reverse, keep's status, refs, category, icon and injection mode standing", async () => {
+    const run = await runThreadCalls(f, THREADS_SHOWN, [
+      merge({
+        keep: 'th1',
+        absorb: ['th3'],
+        description: 'Wren carries the letter east while a light watches from the far bank.',
+      }),
+    ])
+
+    expect(run.calls[0]).toMatchObject({ result: 'ok' })
+    expect(await threadRow(f, LETTER.id)).toMatchObject({
+      status: 'active',
+      triggeredAtEntryId: f.replyIds[0],
+      resolvedAtEntryId: null,
+      category: 'quest',
+      icon: 'scroll',
+      injectionMode: 'auto',
+    })
+    expect(await threadRow(f, FAR_BANK.id)).toBeUndefined()
+  })
+
+  it('refuses a later write to a thread a merge absorbed, naming the kept thread to the model only', async () => {
+    const run = await runThreadCalls(f, THREADS_SHOWN, [
+      merge({ keep: 'th1', absorb: ['th2'] }),
+      { toolName: 'update_thread', input: { id: 'th2', status: 'resolved', ...cite() } },
+      merge({ keep: 'th3', absorb: ['th2'] }),
+    ])
+
+    expect(run.calls.map(({ result, reason }) => [result, reason])).toEqual([
+      ['ok', undefined],
+      ['rejected', CLOSE_REASON.rowGone],
+      ['rejected', CLOSE_REASON.rowGone],
+    ])
+    expect(run.calls[1]).not.toHaveProperty('survivor')
+    expect(run.calls[2]).not.toHaveProperty('survivor')
+    expect(run.answers[1]).toMatchObject({
+      result: 'rejected',
+      reason: CLOSE_REASON.rowGone,
+      survivor: 'th1',
+    })
+    expect(run.answers[2]).toMatchObject({ result: 'rejected', survivor: 'th1' })
   })
 })
