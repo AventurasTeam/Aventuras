@@ -1,10 +1,10 @@
 import { and, asc, eq } from 'drizzle-orm'
-import { afterEach, beforeEach, describe, expect, it } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { applyDeltaAction } from '@/lib/actions/delta/apply-delta-action'
 import { loadOpenStory } from '@/lib/actions/stories/operational'
 import { USER_EDITED_SINCE_PROSE, type GroupOutcome, type GuardRow } from '@/lib/actions/types'
-import type { ResolveModelConfig } from '@/lib/ai'
+import { generateToolStep, type ResolveModelConfig, type ToolStepResult } from '@/lib/ai'
 import {
   branches,
   deltas,
@@ -24,6 +24,7 @@ import { dispatchToolCall, type DispatchContext } from './dispatch'
 import { IDENTITY_READ_FIELDS, identityTask } from './identity'
 import { CloseIds } from './ids'
 import { CloseLedgerWriter } from './ledger'
+import { __setCloseAgentSlots } from './slots'
 import type { TaskPromptContext } from './task'
 import { mergeThreadsTool, updateThreadTool } from './thread-tools'
 import { THREADS_READ_FIELDS, threadsTask } from './threads'
@@ -42,8 +43,14 @@ import type {
   TxResult,
 } from '../../types'
 import { openCloseFixture, type CloseFixture } from '../__tests__/close-fixture'
-import { closeIdsOf, seedCloseLedger } from '../close-intermediates'
+import { closeAgentPhase } from '../chapter-close-agent'
+import { closeIdsOf, seedCloseLedger, setCloseRange } from '../close-intermediates'
 import type { CloseLedger } from '../intermediates'
+
+vi.mock('@/lib/ai', async (importOriginal) => ({
+  ...(await importOriginal<Record<string, unknown>>()),
+  generateToolStep: vi.fn(),
+}))
 
 const KIND = 'close-threads-test'
 
@@ -1517,5 +1524,123 @@ describe('threadsTask', () => {
         { ...ctx, writesSoFar: '' },
       ),
     ).toThrow('at least one turn')
+  })
+})
+
+function threadsNoCallStep(): ToolStepResult {
+  return {
+    status: 'ok',
+    step: {
+      calls: [],
+      invalidCalls: [],
+      responseMessages: [
+        { role: 'assistant', content: [{ type: 'text', text: 'Nothing to change.' }] },
+      ],
+      text: 'Nothing to change.',
+      finishReason: 'stop',
+      usage: {
+        inputTokens: 100,
+        inputTokenDetails: { noCacheTokens: 100, cacheReadTokens: 0, cacheWriteTokens: 0 },
+        outputTokens: 5,
+        outputTokenDetails: { textTokens: 5, reasoningTokens: 0 },
+        totalTokens: 105,
+      },
+    },
+    recoverable: [],
+  }
+}
+
+// The opening through the third reply (positions 1-7): one part.
+function threadsClosePhase(fx: CloseFixture): PhaseContext {
+  const actionId = 'act_threads_close'
+  const intermediates: Record<string, unknown> = {}
+  setCloseRange(intermediates, {
+    chapterId: 'chap_threads_close',
+    startEntryId: fx.entries[0]!.id,
+    endEntryId: fx.replyIds[2]!,
+  })
+  return {
+    actionId,
+    abortSignal: new AbortController().signal,
+    intermediates,
+    log: makeLogger(actionId),
+    db: fx.ctx.db,
+    runInTransaction: fx.ctx.runInTransaction,
+    storyId: fx.storyId,
+    branchId: fx.branchId,
+  }
+}
+
+async function drainThreadsAgent(
+  ctx: PhaseContext,
+): Promise<{ events: PhaseEmittedEvent[]; result: PhaseResult }> {
+  const gen = closeAgentPhase(ctx)
+  const events: PhaseEmittedEvent[] = []
+  for (;;) {
+    const next = await gen.next(undefined)
+    if (next.done) return { events, result: next.value }
+    events.push(next.value)
+  }
+}
+
+describe('Threads in the production close', () => {
+  let fx: CloseFixture
+  const starts = [
+    { type: 'close_task_start', task: 'identity', part: 1, index: 3, total: 7 },
+    { type: 'close_task_start', task: 'threads', part: 1, index: 4, total: 7 },
+  ]
+  const startsIn = (events: readonly PhaseEmittedEvent[]) =>
+    events.filter((event) => event.type === 'close_task_start')
+
+  beforeEach(async () => {
+    vi.mocked(generateToolStep).mockReset()
+    vi.mocked(generateToolStep).mockResolvedValue(threadsNoCallStep())
+    __setCloseAgentSlots(undefined)
+    fx = await openCloseFixture()
+  })
+
+  afterEach(() => {
+    __setCloseAgentSlots(undefined)
+    resetAllStores()
+  })
+
+  it("sends canon's Threads tools, starting 4 of 7, on a chapter with an open thread", async () => {
+    await putThreadRow(fx, {
+      id: OPEN_ROWS.heir,
+      title: 'Find the heir',
+      status: 'active',
+      createdAt: 30,
+      description: 'Still open.',
+    })
+
+    const { events, result } = await drainThreadsAgent(threadsClosePhase(fx))
+
+    expect(result).toEqual({ status: 'completed' })
+    expect(startsIn(events)).toEqual(starts)
+    expect(generateToolStep).toHaveBeenCalledTimes(1)
+    const [, request] = vi.mocked(generateToolStep).mock.calls[0]!
+    expect(Object.keys(request.tools)).toEqual(['read_row', 'update_thread', 'merge_threads'])
+    expect(request.prompt.user).toContain('## th1: Find the heir (active)')
+  })
+
+  it('makes no step call when every thread is resolved or failed', async () => {
+    await putThreadRow(fx, {
+      id: OPEN_ROWS.map,
+      title: 'The lost map',
+      status: 'resolved',
+      createdAt: 5,
+    })
+    await putThreadRow(fx, {
+      id: OPEN_ROWS.abbey,
+      title: 'Warn the abbey',
+      status: 'failed',
+      createdAt: 6,
+    })
+
+    const { events, result } = await drainThreadsAgent(threadsClosePhase(fx))
+
+    expect(result).toEqual({ status: 'completed' })
+    expect(startsIn(events)).toEqual(starts)
+    expect(generateToolStep).not.toHaveBeenCalled()
   })
 })

@@ -31,7 +31,14 @@ import { closeBoundaryPhase } from './chapter-close-boundary'
 import { closeMetadataPhase } from './chapter-close-metadata'
 import { readCloseRangeEntries } from './chapter-close-metadata-call'
 import { closeReportPhase } from './chapter-close-report'
-import { closeAgentSlots, PRODUCTION_CLOSE_SLOTS } from './close-agent/slots'
+import { identityTask } from './close-agent/identity'
+import {
+  __setCloseAgentSlots,
+  closeAgentSlots,
+  NO_CLOSE_TASKS,
+  PRODUCTION_CLOSE_SLOTS,
+} from './close-agent/slots'
+import { threadsTask } from './close-agent/threads'
 import { closeLedgerOf } from './close-intermediates'
 import { readClassifierStatus } from './memory-chain'
 import { expectRan, realDeltaActionPort } from '../__tests__/harness'
@@ -53,11 +60,13 @@ beforeEach(async () => {
   __resetRegistry()
   __resetBus()
   ensureChapterClosePipelineRegistered()
+  __setCloseAgentSlots(NO_CLOSE_TASKS)
   vi.mocked(generateStructured).mockResolvedValue(metadataReplyResult())
   f = await openCloseFixture()
 })
 
 afterEach(() => {
+  __setCloseAgentSlots(undefined)
   resetAllStores()
 })
 
@@ -652,18 +661,30 @@ describe('a failed close', () => {
 })
 
 describe('the agent phase with the production slots', () => {
-  it('ships every slot empty', () => {
+  beforeEach(() => {
+    __setCloseAgentSlots(undefined)
+  })
+
+  it('runs Identity then Threads in each part, and nothing before or after', () => {
     expect(closeAgentSlots()).toBe(PRODUCTION_CLOSE_SLOTS)
-    expect(PRODUCTION_CLOSE_SLOTS).toEqual({ before: [], perPart: [], after: [] })
+    expect(PRODUCTION_CLOSE_SLOTS.before).toEqual([])
+    expect(PRODUCTION_CLOSE_SLOTS.after).toEqual([])
+    const [identity, threads, ...rest] = PRODUCTION_CLOSE_SLOTS.perPart
+    expect(identity?.kind === 'task' && identity.def).toBe(identityTask)
+    expect(threads?.kind === 'task' && threads.def).toBe(threadsTask)
+    expect(rest).toEqual([])
   })
 
-  it('freezes the slot table and each slot', () => {
-    expect(Object.isFrozen(PRODUCTION_CLOSE_SLOTS)).toBe(true)
-    for (const slot of Object.values(PRODUCTION_CLOSE_SLOTS))
-      expect(Object.isFrozen(slot)).toBe(true)
+  it('freezes both slot tables and each slot', () => {
+    for (const table of [PRODUCTION_CLOSE_SLOTS, NO_CLOSE_TASKS]) {
+      expect(Object.isFrozen(table)).toBe(true)
+      for (const slot of Object.values(table)) expect(Object.isFrozen(slot)).toBe(true)
+    }
+    expect(NO_CLOSE_TASKS).toEqual({ before: [], perPart: [], after: [] })
   })
 
-  it('still ends with the row, its stamps and a report of no tool calls, starting no task', async () => {
+  // The fixture has no scene character and no thread: both tasks start and make no call.
+  it('ends a close that touches no row with the row, its stamps and a report of no tool calls', async () => {
     const end = f.replyIds[2]!
     const events = recordEvents()
     let ledgerAtAgentEnd: unknown
@@ -675,7 +696,10 @@ describe('the agent phase with the production slots', () => {
     const run = await runClose(end)
 
     expect(run.outcome).toBe('completed')
-    expect(events.filter((event) => event.type === 'close_task_start')).toEqual([])
+    expect(events.filter((event) => event.type === 'close_task_start')).toEqual([
+      { type: 'close_task_start', task: 'identity', part: 1, index: 3, total: 7 },
+      { type: 'close_task_start', task: 'threads', part: 1, index: 4, total: 7 },
+    ])
     expect(ledgerAtAgentEnd).toEqual({ calls: [], stopped: [], noToolCalls: true })
     const [row] = await chapterRows()
     expect(row!.closeReport).toEqual({

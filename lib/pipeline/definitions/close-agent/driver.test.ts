@@ -39,6 +39,7 @@ import { CLOSE_TASK_STEP_BUDGET, runCloseTask, type TaskEnd, type TaskRunArgs } 
 import {
   __setCloseAgentSlots,
   closeAgentSlots,
+  NO_CLOSE_TASKS,
   PRODUCTION_CLOSE_SLOTS,
   type CloseAgentSlots,
   type CodeStepContext,
@@ -1580,11 +1581,22 @@ describe('closeAgentPhase', () => {
     expect(log).toEqual([])
   })
 
-  it('with the production slots, starts nothing and reads no store, the ledger seeded', async () => {
+  it('with the production slots, runs Identity then Threads in each part', () => {
     __setCloseAgentSlots({ before: [], perPart: [quietTask('identity', [])], after: [] })
     __setCloseAgentSlots(undefined)
     expect(closeAgentSlots()).toBe(PRODUCTION_CLOSE_SLOTS)
-    expect(PRODUCTION_CLOSE_SLOTS).toEqual({ before: [], perPart: [], after: [] })
+    expect(PRODUCTION_CLOSE_SLOTS.before).toEqual([])
+    expect(PRODUCTION_CLOSE_SLOTS.after).toEqual([])
+    expect(
+      PRODUCTION_CLOSE_SLOTS.perPart.map((entry) =>
+        entry.kind === 'task' ? entry.def.task : entry.step.name,
+      ),
+    ).toEqual(['identity', 'threads'])
+  })
+
+  it('with no task in any slot, starts nothing and reads no store, the ledger seeded', async () => {
+    __setCloseAgentSlots(NO_CLOSE_TASKS)
+    expect(NO_CLOSE_TASKS).toEqual({ before: [], perPart: [], after: [] })
     // A phase that read the stores here would fail: nothing holds the branch.
     resetAllStores()
     const ctx = phaseCtx()
@@ -1594,6 +1606,20 @@ describe('closeAgentPhase', () => {
     expect(result).toEqual({ status: 'completed' })
     expect(events).toEqual([])
     expect(closeLedgerOf(ctx.intermediates)).toEqual({ calls: [], stopped: [], noToolCalls: true })
+  })
+
+  // Control for the case above: the production slots do read the stores.
+  it('with the production slots and no story open, fails before any task', async () => {
+    __setCloseAgentSlots(undefined)
+    resetAllStores()
+
+    const { events, result } = await drain(phaseCtx())
+
+    expect(result).toEqual({
+      status: 'failed',
+      error: { kind: 'orchestrator', detail: 'chapter-close: branch not loaded' },
+    })
+    expect(events).toEqual([])
   })
 
   it.each([

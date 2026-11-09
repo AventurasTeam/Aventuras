@@ -161,7 +161,7 @@ test.describe('first chapter — a close from the dev route', () => {
         endEntryId: endId,
       })
       expect({ title, summary, theme, keywords: JSON.parse(keywords) as unknown }).toEqual(CHAPTER)
-      expect(JSON.parse(report) as unknown, 'the report of a close with no tasks').toEqual({
+      expect(JSON.parse(report) as unknown, 'a close whose tasks called no tool').toEqual({
         version: 1,
         actionId,
         calls: [],

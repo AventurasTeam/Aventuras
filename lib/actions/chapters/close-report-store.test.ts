@@ -10,6 +10,7 @@ import {
   openCloseFixture,
   type CloseFixture,
 } from '@/lib/pipeline/definitions/__tests__/close-fixture'
+import { __setCloseAgentSlots, NO_CLOSE_TASKS } from '@/lib/pipeline/definitions/close-agent/slots'
 import { chaptersStore, type StoreChapter } from '@/lib/stores'
 
 import { startManualClose } from './start-manual-close'
@@ -28,11 +29,13 @@ vi.mock('@/lib/ai', async (importOriginal) => ({
 
 beforeEach(() => {
   resetSingletons()
+  __setCloseAgentSlots(NO_CLOSE_TASKS)
   generateStructuredMock.mockReset()
   generateStructuredMock.mockResolvedValue(metadataReplyResult())
 })
 
 afterEach(() => {
+  __setCloseAgentSlots(undefined)
   resetSingletons()
   vi.restoreAllMocks()
 })

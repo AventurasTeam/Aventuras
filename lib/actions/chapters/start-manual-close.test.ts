@@ -25,6 +25,7 @@ import {
   setClassifierStatus,
   type CloseFixture,
 } from '@/lib/pipeline/definitions/__tests__/close-fixture'
+import { __setCloseAgentSlots, NO_CLOSE_TASKS } from '@/lib/pipeline/definitions/close-agent/slots'
 import {
   currentStoryStore,
   generationStore,
@@ -53,11 +54,13 @@ beforeEach(async () => {
   vi.resetAllMocks()
   __resetRegistry()
   __resetBus()
+  __setCloseAgentSlots(NO_CLOSE_TASKS)
   vi.mocked(generateStructured).mockResolvedValue(metadataReplyResult())
   f = await openCloseFixture()
 })
 
 afterEach(() => {
+  __setCloseAgentSlots(undefined)
   resetSingletons()
 })
 

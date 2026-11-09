@@ -1,9 +1,9 @@
 import { and, asc, eq } from 'drizzle-orm'
-import { afterEach, beforeEach, describe, expect, it } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { applyDeltaAction } from '@/lib/actions/delta/apply-delta-action'
 import { USER_EDITED_SINCE_PROSE, type DeltaSource, type GroupOutcome } from '@/lib/actions/types'
-import type { ResolveModelConfig } from '@/lib/ai'
+import { generateToolStep, type ResolveModelConfig, type ToolStepResult } from '@/lib/ai'
 import {
   branches,
   deltas,
@@ -26,6 +26,7 @@ import { IDENTITY_READ_FIELDS, identityTask } from './identity'
 import { updateCharacterTool, updateFactionTool } from './identity-tools'
 import { CloseIds } from './ids'
 import { CloseLedgerWriter } from './ledger'
+import { __setCloseAgentSlots, closeAgentSlots, NO_CLOSE_TASKS } from './slots'
 import type { TaskPromptContext } from './task'
 import { assertReplaySafe, type CloseTool } from './tool'
 import { readTaskTurns, storyModeOf } from './turns'
@@ -36,8 +37,14 @@ import { getPipelineSafe } from '../../authoring/registry'
 import { runPipeline } from '../../runtime/orchestrator'
 import type { PhaseContext, PhaseEmittedEvent, PhaseResult, TxResult } from '../../types'
 import { openCloseFixture, type CloseFixture } from '../__tests__/close-fixture'
-import { closeIdsOf, seedCloseLedger } from '../close-intermediates'
+import { closeAgentPhase } from '../chapter-close-agent'
+import { closeIdsOf, closeLedgerOf, seedCloseLedger, setCloseRange } from '../close-intermediates'
 import type { CloseLedger } from '../intermediates'
+
+vi.mock('@/lib/ai', async (importOriginal) => ({
+  ...(await importOriginal<Record<string, unknown>>()),
+  generateToolStep: vi.fn(),
+}))
 
 // ---- Fixture helpers: a cast on openCloseFixture and a scripted dispatch context. ----
 
@@ -1530,5 +1537,132 @@ describe('identityTask', () => {
         { ...ctx, writesSoFar: '' },
       ),
     ).toThrow('at least one turn')
+  })
+})
+
+// A reply with no tool call: the task ends after one step.
+function noCallStep(): ToolStepResult {
+  return {
+    status: 'ok',
+    step: {
+      calls: [],
+      invalidCalls: [],
+      responseMessages: [
+        { role: 'assistant', content: [{ type: 'text', text: 'Nothing to change.' }] },
+      ],
+      text: 'Nothing to change.',
+      finishReason: 'stop',
+      usage: {
+        inputTokens: 100,
+        inputTokenDetails: { noCacheTokens: 100, cacheReadTokens: 0, cacheWriteTokens: 0 },
+        outputTokens: 5,
+        outputTokenDetails: { textTokens: 5, reasoningTokens: 0 },
+        totalTokens: 105,
+      },
+    },
+    recoverable: [],
+  }
+}
+
+// The opening through the third reply (positions 1-7): one part.
+function closePhaseFor(fx: CloseFixture): PhaseContext {
+  const actionId = 'act_identity_close'
+  const intermediates: Record<string, unknown> = {}
+  setCloseRange(intermediates, {
+    chapterId: 'chap_identity_close',
+    startEntryId: fx.entries[0]!.id,
+    endEntryId: fx.replyIds[2]!,
+  })
+  return {
+    actionId,
+    abortSignal: new AbortController().signal,
+    intermediates,
+    log: makeLogger(actionId),
+    db: fx.ctx.db,
+    runInTransaction: fx.ctx.runInTransaction,
+    storyId: fx.storyId,
+    branchId: fx.branchId,
+  }
+}
+
+// No step writes here, so no group outcome is ever owed back.
+async function drainAgent(
+  ctx: PhaseContext,
+): Promise<{ events: PhaseEmittedEvent[]; result: PhaseResult }> {
+  const gen = closeAgentPhase(ctx)
+  const events: PhaseEmittedEvent[] = []
+  for (;;) {
+    const next = await gen.next(undefined)
+    if (next.done) return { events, result: next.value }
+    events.push(next.value)
+  }
+}
+
+const taskStartsIn = (events: readonly PhaseEmittedEvent[]): PhaseEmittedEvent[] =>
+  events.filter((event) => event.type === 'close_task_start')
+
+// C6: both tasks start, a task with nothing to show included, in a one-part chapter of 7.
+const PART_ONE_STARTS = [
+  { type: 'close_task_start', task: 'identity', part: 1, index: 3, total: 7 },
+  { type: 'close_task_start', task: 'threads', part: 1, index: 4, total: 7 },
+]
+
+describe('Identity in the production close', () => {
+  let fx: CloseFixture
+
+  beforeEach(async () => {
+    vi.mocked(generateToolStep).mockReset()
+    vi.mocked(generateToolStep).mockResolvedValue(noCallStep())
+    __setCloseAgentSlots(undefined)
+    fx = await openCloseFixture()
+  })
+
+  afterEach(() => {
+    __setCloseAgentSlots(undefined)
+    resetAllStores()
+  })
+
+  it("sends canon's Identity tools, starting 3 of 7, on a chapter with a scene character", async () => {
+    await putEntityRow(fx, { id: START_ROWS.pip, kind: 'character', name: 'Pip' })
+    await setSceneOf(fx, fx.entries[2]!.id, [START_ROWS.pip])
+
+    const { events, result } = await drainAgent(closePhaseFor(fx))
+
+    expect(result).toEqual({ status: 'completed' })
+    expect(taskStartsIn(events)).toEqual(PART_ONE_STARTS)
+    expect(generateToolStep).toHaveBeenCalledTimes(1)
+    const [, request] = vi.mocked(generateToolStep).mock.calls[0]!
+    expect(Object.keys(request.tools)).toEqual([
+      'search_world',
+      'read_row',
+      'update_character',
+      'update_faction',
+    ])
+    expect(request.prompt.user).toContain('## c1: Pip\n')
+  })
+
+  it('makes no step call and no failure when neither task has anything to start from', async () => {
+    const ctx = closePhaseFor(fx)
+
+    const { events, result } = await drainAgent(ctx)
+
+    expect(result).toEqual({ status: 'completed' })
+    expect(taskStartsIn(events)).toEqual(PART_ONE_STARTS)
+    expect(generateToolStep).not.toHaveBeenCalled()
+    expect(closeLedgerOf(ctx.intermediates)).toEqual({ calls: [], stopped: [], noToolCalls: true })
+  })
+
+  // Positive control: the first case's fixture makes a step on the production slots.
+  it('runs no task on the empty slots a close test that is not about the tasks sets', async () => {
+    await putEntityRow(fx, { id: START_ROWS.pip, kind: 'character', name: 'Pip' })
+    await setSceneOf(fx, fx.entries[2]!.id, [START_ROWS.pip])
+    __setCloseAgentSlots(NO_CLOSE_TASKS)
+
+    expect(closeAgentSlots()).toBe(NO_CLOSE_TASKS)
+    const { events, result } = await drainAgent(closePhaseFor(fx))
+
+    expect(result).toEqual({ status: 'completed' })
+    expect(events).toEqual([])
+    expect(generateToolStep).not.toHaveBeenCalled()
   })
 })
