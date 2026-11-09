@@ -138,7 +138,8 @@ export function rowDeltasSince(
 /**
  * Whether the delta recorded `column`'s prior value. User update paths (`updateEntity`,
  * `updateLore`, `updateThread`, `updateHappening`, the both-perspective upsert) drop unchanged
- * columns, so a user update carries only changed ones.
+ * columns, except `resolvedAtEntryId`, which `updateThread` logs beside a status change on a
+ * thread with refs even when unchanged.
  */
 export function carriesColumn(delta: Delta, column: string): boolean {
   return delta.undoPayload != null && column in delta.undoPayload
