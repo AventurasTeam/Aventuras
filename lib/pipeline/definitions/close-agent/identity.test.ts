@@ -3,23 +3,31 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 
 import { applyDeltaAction } from '@/lib/actions/delta/apply-delta-action'
 import { USER_EDITED_SINCE_PROSE, type DeltaSource, type GroupOutcome } from '@/lib/actions/types'
+import type { ResolveModelConfig } from '@/lib/ai'
 import {
   deltas,
   emptyEntityState,
   entities,
+  stories,
+  storyEntries,
   type Entity,
   type EntityState,
   type NewEntity,
+  type StoryMode,
 } from '@/lib/db'
+import { makeLogger } from '@/lib/diagnostics'
 import { resetAllStores } from '@/lib/stores'
 
 import { createReadSet } from './common-checks'
 import { dispatchToolCall, type DispatchContext, type ToolAnswer } from './dispatch'
 import { softCapReason } from './fields'
+import { IDENTITY_READ_FIELDS, identityTask } from './identity'
 import { updateCharacterTool, updateFactionTool } from './identity-tools'
-import type { CloseIds } from './ids'
+import { CloseIds } from './ids'
 import { CloseLedgerWriter } from './ledger'
+import type { TaskPromptContext } from './task'
 import { assertReplaySafe, type CloseTool } from './tool'
+import { readTaskTurns, storyModeOf } from './turns'
 import { CLOSE_REASON } from './verdict'
 import { expectRan } from '../../__tests__/harness'
 import { definePipeline } from '../../authoring/define'
@@ -943,5 +951,467 @@ describe('update_character and update_faction', () => {
       { 'state.standing': 'feared' },
     ])
     expect(await runDeltas(f, result.actionId)).toEqual([])
+  })
+})
+
+// Real prefix_<uuid> ids: CloseIds hands a handle only to a substitutable id.
+const START_ROWS = {
+  bess: 'char_00000000-0000-4000-8000-00000000b001',
+  pew: 'char_00000000-0000-4000-8000-00000000b002',
+  pip: 'char_00000000-0000-4000-8000-00000000b003',
+  ghost: 'char_00000000-0000-4000-8000-00000000b004',
+  landing: 'loc_00000000-0000-4000-8000-00000000b005',
+  hand: 'fact_00000000-0000-4000-8000-00000000b006',
+  ledger: 'fact_00000000-0000-4000-8000-00000000b007',
+  syndicate: 'fact_00000000-0000-4000-8000-00000000b008',
+  tollmen: 'fact_00000000-0000-4000-8000-00000000b009',
+} as const
+
+type EntityRowSeed = {
+  id: string
+  kind: 'character' | 'location' | 'faction'
+  name: string
+  status?: 'active' | 'retired'
+  description?: string | null
+  state?: EntityState | null
+  keywords?: string[]
+}
+
+// Written as a hand-edited or imported row is, with no delta: a start reads rows, not history.
+async function putEntityRow(fx: CloseFixture, row: EntityRowSeed): Promise<void> {
+  await fx.ctx.db.insert(entities).values({
+    id: row.id,
+    branchId: fx.branchId,
+    kind: row.kind,
+    name: row.name,
+    description: row.description ?? null,
+    status: row.status ?? 'active',
+    retiredReason: row.status === 'retired' ? 'Left the story.' : null,
+    injectionMode: 'auto',
+    state: row.state ?? null,
+    keywords: row.keywords ?? [],
+    createdAt: 1,
+    updatedAt: 1,
+  })
+}
+
+async function setSceneOf(
+  fx: CloseFixture,
+  entryId: string,
+  sceneIds: readonly string[],
+): Promise<void> {
+  const where = and(eq(storyEntries.branchId, fx.branchId), eq(storyEntries.id, entryId))
+  const [row] = await fx.ctx.db
+    .select({ metadata: storyEntries.metadata })
+    .from(storyEntries)
+    .where(where)
+  if (!row?.metadata) throw new Error(`setSceneOf: entry ${entryId} has no metadata`)
+  await fx.ctx.db
+    .update(storyEntries)
+    .set({ metadata: { ...row.metadata, sceneEntities: [...sceneIds] } })
+    .where(where)
+}
+
+async function setStoryMode(fx: CloseFixture, mode: StoryMode): Promise<void> {
+  const [story] = await fx.ctx.db
+    .select({ definition: stories.definition })
+    .from(stories)
+    .where(eq(stories.id, fx.storyId))
+  if (!story?.definition) throw new Error('setStoryMode: the fixture story has no definition')
+  await fx.ctx.db
+    .update(stories)
+    .set({ definition: { ...story.definition, mode } })
+    .where(eq(stories.id, fx.storyId))
+}
+
+// As the agent phase does before any task: every chapter entry a turn, t1 the first.
+function idsWithTurns(fx: CloseFixture): CloseIds {
+  const ids = new CloseIds()
+  ids.showTurns(fx.entries.map((entry) => entry.id))
+  return ids
+}
+
+// A start makes no call, so the config is only carried.
+const START_CONFIG: ResolveModelConfig = { providers: [], profiles: [], assignments: {} }
+
+function promptContextFor(
+  fx: CloseFixture,
+  ids: CloseIds,
+  chapterEntryIds: readonly string[] = fx.entries.map((entry) => entry.id),
+): TaskPromptContext {
+  const actionId = 'act_identity_start'
+  return {
+    db: fx.ctx.db,
+    branchId: fx.branchId,
+    endEntryId: fx.entries.at(-1)!.id,
+    task: 'identity',
+    part: 1,
+    ids,
+    readFields: IDENTITY_READ_FIELDS,
+    survivorOf: () => undefined,
+    phase: {
+      actionId,
+      abortSignal: new AbortController().signal,
+      intermediates: {},
+      log: makeLogger(actionId),
+      db: fx.ctx.db,
+      runInTransaction: fx.ctx.runInTransaction,
+      storyId: fx.storyId,
+      branchId: fx.branchId,
+    },
+    chapterEntryIds,
+    config: START_CONFIG,
+  }
+}
+
+describe('readTaskTurns', () => {
+  it("reads the task's entries in position order, each under its turn handle", async () => {
+    const fx = await openCloseFixture()
+    const ids = idsWithTurns(fx)
+    // A part's ids, given out of order: the read orders them by position.
+    const part = [fx.entries[3]!.id, fx.entries[1]!.id]
+
+    const { entries, closeTurns } = await readTaskTurns(promptContextFor(fx, ids, part))
+
+    expect(entries.map((entry) => entry.id)).toEqual([fx.entries[1]!.id, fx.entries[3]!.id])
+    expect(closeTurns).toEqual([
+      {
+        handle: 't2',
+        kind: 'user_action',
+        content: 'I tie the mare outside the inn and shake the rain from my hood.',
+      },
+      {
+        handle: 't4',
+        kind: 'user_action',
+        content: 'I ask the innkeeper whether the ferry still runs at night.',
+      },
+    ])
+  })
+
+  // Ids and insertion follow position in the fixture, so one entry moves past the other.
+  it('orders by position, not by id', async () => {
+    const fx = await openCloseFixture()
+    const ids = idsWithTurns(fx)
+    const [moved, kept] = [fx.entries[1]!.id, fx.entries[3]!.id]
+    await fx.ctx.db
+      .update(storyEntries)
+      .set({ position: 100 })
+      .where(and(eq(storyEntries.branchId, fx.branchId), eq(storyEntries.id, moved)))
+
+    const { entries } = await readTaskTurns(promptContextFor(fx, ids, [moved, kept]))
+
+    expect(entries.map((entry) => entry.id)).toEqual([kept, moved])
+  })
+
+  it('reads nothing for a task with no entries', async () => {
+    const fx = await openCloseFixture()
+
+    expect(await readTaskTurns(promptContextFor(fx, idsWithTurns(fx), []))).toEqual({
+      entries: [],
+      closeTurns: [],
+    })
+  })
+})
+
+describe('storyModeOf', () => {
+  it('reads the mode of the story behind the branch', async () => {
+    const fx = await openCloseFixture()
+    const ctx = promptContextFor(fx, idsWithTurns(fx))
+
+    expect(await storyModeOf(ctx)).toBe('creative')
+    await setStoryMode(fx, 'adventure')
+    expect(await storyModeOf(ctx)).toBe('adventure')
+  })
+
+  it('throws for a story with no definition', async () => {
+    const fx = await openCloseFixture()
+    await fx.ctx.db.update(stories).set({ definition: null }).where(eq(stories.id, fx.storyId))
+
+    await expect(storyModeOf(promptContextFor(fx, idsWithTurns(fx)))).rejects.toThrow('no mode')
+  })
+})
+
+describe('identityTask', () => {
+  async function startOf(fx: CloseFixture, ids = idsWithTurns(fx)) {
+    const ctx = promptContextFor(fx, ids)
+    return { ctx, ids, start: await identityTask.start(ctx) }
+  }
+
+  it("lists canon's tools in order and reads a character's and a faction's slow fields", () => {
+    expect(identityTask.task).toBe('identity')
+    expect(identityTask.tools.map((tool) => tool.name)).toEqual([
+      'search_world',
+      'read_row',
+      'update_character',
+      'update_faction',
+    ])
+    expect(IDENTITY_READ_FIELDS).toEqual({
+      character: ['description', 'state.traits', 'state.drives', 'state.voice'],
+      faction: ['description', 'state.standing', 'state.agenda'],
+    })
+    expect(identityTask.readFields).toBe(IDENTITY_READ_FIELDS)
+  })
+
+  it('starts from the scene characters of any status, and from no scene id without a character row', async () => {
+    const fx = await openCloseFixture()
+    await putEntityRow(fx, { id: START_ROWS.pip, kind: 'character', name: 'Pip' })
+    await putEntityRow(fx, {
+      id: START_ROWS.pew,
+      kind: 'character',
+      name: 'Pew',
+      status: 'retired',
+    })
+    await putEntityRow(fx, { id: START_ROWS.landing, kind: 'location', name: 'The landing' })
+    await setSceneOf(fx, fx.entries[2]!.id, [START_ROWS.pip, START_ROWS.ghost])
+    await setSceneOf(fx, fx.entries[5]!.id, [START_ROWS.pew, START_ROWS.landing, START_ROWS.pip])
+
+    const { ctx, ids, start } = await startOf(fx)
+
+    expect(start?.show.characters.map((c) => [c.id, c.name, c.status])).toEqual([
+      ['c1', 'Pew', 'retired'],
+      ['c2', 'Pip', 'active'],
+    ])
+    expect(ids.handleOf(START_ROWS.ghost)).toBeUndefined()
+    expect(ids.handleOf(START_ROWS.landing)).toBeUndefined()
+    const { system, user } = identityTask.render(start!, { ...ctx, writesSoFar: '' })
+    expect(`${system}${user}`).not.toContain(START_ROWS.ghost)
+    expect(user).not.toContain('The landing')
+  })
+
+  it("shows each row's writable fields as stored, a missing text as empty", async () => {
+    const fx = await openCloseFixture()
+    // Over its cap and with a repeat: a start shows the list as it stands.
+    const traits = [
+      'brave',
+      'brave',
+      'loyal',
+      'stubborn',
+      'quick',
+      'proud',
+      'kind',
+      'sly',
+      'shy',
+      'loud',
+    ]
+    await putEntityRow(fx, {
+      id: START_ROWS.bess,
+      kind: 'character',
+      name: 'Bess',
+      state: { ...emptyEntityState('character'), traits },
+    })
+    await putEntityRow(fx, {
+      id: START_ROWS.pip,
+      kind: 'character',
+      name: 'Pip',
+      description: 'A stable boy at the inn.',
+      state: {
+        ...emptyEntityState('character'),
+        traits: ['curious'],
+        drives: ['find the ferryman'],
+        voice: 'Quick and bright.',
+        faction_id: START_ROWS.hand,
+      },
+    })
+    await putEntityRow(fx, {
+      id: START_ROWS.hand,
+      kind: 'faction',
+      name: 'The Quiet Hand',
+      description: 'Smugglers who keep to the dark.',
+      state: {
+        standing: 'Feared along the river.',
+        agenda: ['tax the ferry', 'read every letter'],
+      },
+    })
+    await setSceneOf(fx, fx.entries[2]!.id, [START_ROWS.pip, START_ROWS.bess])
+
+    const { start } = await startOf(fx)
+
+    expect(start?.show.characters).toEqual([
+      { id: 'c1', name: 'Bess', status: 'active', description: '', traits, drives: [], voice: '' },
+      {
+        id: 'c2',
+        name: 'Pip',
+        status: 'active',
+        description: 'A stable boy at the inn.',
+        traits: ['curious'],
+        drives: ['find the ferryman'],
+        voice: 'Quick and bright.',
+      },
+    ])
+    expect(start?.show.factions).toEqual([
+      {
+        id: 'f1',
+        name: 'The Quiet Hand',
+        description: 'Smugglers who keep to the dark.',
+        standing: 'Feared along the river.',
+        agenda: ['tax the ferry', 'read every letter'],
+      },
+    ])
+  })
+
+  it("brings a scene character's faction by membership, and no faction the chapter doesn't touch", async () => {
+    const fx = await openCloseFixture()
+    await putEntityRow(fx, {
+      id: START_ROWS.pip,
+      kind: 'character',
+      name: 'Pip',
+      state: { ...emptyEntityState('character'), faction_id: START_ROWS.hand },
+    })
+    await putEntityRow(fx, { id: START_ROWS.hand, kind: 'faction', name: 'The Quiet Hand' })
+    await putEntityRow(fx, {
+      id: START_ROWS.ledger,
+      kind: 'faction',
+      name: 'The Grey Ledger',
+      keywords: ['Ledger'],
+    })
+    await setSceneOf(fx, fx.entries[2]!.id, [START_ROWS.pip])
+
+    const { start } = await startOf(fx)
+
+    expect(start?.show.factions.map((faction) => faction.name)).toEqual(['The Quiet Hand'])
+  })
+
+  // Nine turns: the seventh and ninth replies name "the Syndicate".
+  it('brings a faction the turns name by its name, with no character in the scene', async () => {
+    const fx = await openCloseFixture({ turns: 9 })
+    await putEntityRow(fx, { id: START_ROWS.syndicate, kind: 'faction', name: 'The Syndicate' })
+    await putEntityRow(fx, {
+      id: START_ROWS.ledger,
+      kind: 'faction',
+      name: 'The Grey Ledger',
+      keywords: ['Ledger'],
+    })
+
+    const { start } = await startOf(fx)
+
+    expect(start?.show.characters).toEqual([])
+    expect(start?.show.factions).toEqual([
+      { id: 'f1', name: 'The Syndicate', description: '', standing: '', agenda: [] },
+    ])
+  })
+
+  // matchTerms lowercases only the prose: a keyword stored "Syndicate" must be normalized first.
+  it('brings a faction by a keyword alone, whatever case the keyword is stored in', async () => {
+    const fx = await openCloseFixture({ turns: 9 })
+    await putEntityRow(fx, {
+      id: START_ROWS.tollmen,
+      kind: 'faction',
+      name: 'The Tollmen',
+      keywords: ['Syndicate'],
+    })
+
+    const { start } = await startOf(fx)
+
+    expect(start?.show.factions.map((faction) => faction.name)).toEqual(['The Tollmen'])
+  })
+
+  it('seeds every shown row as read, and no other', async () => {
+    const fx = await openCloseFixture()
+    await putEntityRow(fx, { id: START_ROWS.bess, kind: 'character', name: 'Bess' })
+    await putEntityRow(fx, {
+      id: START_ROWS.pip,
+      kind: 'character',
+      name: 'Pip',
+      state: { ...emptyEntityState('character'), faction_id: START_ROWS.hand },
+    })
+    await putEntityRow(fx, { id: START_ROWS.hand, kind: 'faction', name: 'The Quiet Hand' })
+    await putEntityRow(fx, { id: START_ROWS.ledger, kind: 'faction', name: 'The Grey Ledger' })
+    await setSceneOf(fx, fx.entries[2]!.id, [START_ROWS.pip, START_ROWS.bess])
+
+    const { start } = await startOf(fx)
+
+    expect(start?.seeds).toEqual([
+      { table: 'entities', id: START_ROWS.bess },
+      { table: 'entities', id: START_ROWS.pip },
+      { table: 'entities', id: START_ROWS.hand },
+    ])
+  })
+
+  it('returns null, showing nothing, when the chapter touches no character and no faction', async () => {
+    const fx = await openCloseFixture()
+    await putEntityRow(fx, { id: START_ROWS.pip, kind: 'character', name: 'Pip' })
+    await putEntityRow(fx, {
+      id: START_ROWS.ledger,
+      kind: 'faction',
+      name: 'The Grey Ledger',
+      keywords: ['Ledger'],
+    })
+    await setSceneOf(fx, fx.entries[2]!.id, [START_ROWS.landing, START_ROWS.ghost])
+
+    const { ids, start } = await startOf(fx)
+
+    expect(start).toBeNull()
+    expect(ids.handleOf(START_ROWS.pip)).toBeUndefined()
+    expect(ids.handleOf(START_ROWS.ledger)).toBeUndefined()
+  })
+
+  it("names every shown row's id and name in the user half, then the writes so far", async () => {
+    const fx = await openCloseFixture()
+    await putEntityRow(fx, {
+      id: START_ROWS.pip,
+      kind: 'character',
+      name: 'Pip',
+      state: { ...emptyEntityState('character'), faction_id: START_ROWS.hand },
+    })
+    await putEntityRow(fx, {
+      id: START_ROWS.pew,
+      kind: 'character',
+      name: 'Pew',
+      status: 'retired',
+    })
+    await putEntityRow(fx, { id: START_ROWS.hand, kind: 'faction', name: 'The Quiet Hand' })
+    await setSceneOf(fx, fx.entries[2]!.id, [START_ROWS.pip, START_ROWS.pew])
+    const { ctx, start } = await startOf(fx)
+    const writes = '- update_thread Find the heir (th1): description'
+
+    const { system, user } = identityTask.render(start!, { ...ctx, writesSoFar: writes })
+
+    expect(user).toContain('## c1: Pew (retired)\n')
+    expect(user).toContain('## c2: Pip\n')
+    expect(user).toContain('## f1: The Quiet Hand\n')
+    expect(
+      user.endsWith(`# Writes so far\nWhat this close has written, in earlier tasks:\n${writes}`),
+    ).toBe(true)
+    expect(system).not.toContain('# Characters')
+    expect(system).not.toContain('The Quiet Hand')
+  })
+
+  it("puts the task's turns and the story mode's rule in the system half", async () => {
+    const fx = await openCloseFixture()
+    await putEntityRow(fx, { id: START_ROWS.pip, kind: 'character', name: 'Pip' })
+    await setSceneOf(fx, fx.entries[2]!.id, [START_ROWS.pip])
+
+    const creative = await startOf(fx)
+    const creativePrompt = identityTask.render(creative.start!, {
+      ...creative.ctx,
+      writesSoFar: '',
+    })
+    expect(creativePrompt.system).toContain('Each is a direction or prose')
+    expect(creativePrompt.system).not.toContain('Each is what the lead does, says or attempts')
+    expect(creativePrompt.system).toContain(
+      '## t3 (narration)\nThe inn is warm and loud with drovers.',
+    )
+    expect(creativePrompt.user).not.toContain('# The turns')
+
+    await setStoryMode(fx, 'adventure')
+    const adventure = await startOf(fx)
+    const { system } = identityTask.render(adventure.start!, { ...adventure.ctx, writesSoFar: '' })
+    expect(system).toContain('Each is what the lead does, says or attempts')
+    expect(system).not.toContain('Each is a direction or prose')
+  })
+
+  // An unset closeTurns would render an empty "# The turns".
+  it('refuses to render with no turns', async () => {
+    const fx = await openCloseFixture()
+    await putEntityRow(fx, { id: START_ROWS.pip, kind: 'character', name: 'Pip' })
+    await setSceneOf(fx, fx.entries[2]!.id, [START_ROWS.pip])
+    const { ctx, start } = await startOf(fx)
+
+    expect(() =>
+      identityTask.render(
+        { ...start!, show: { ...start!.show, closeTurns: [] } },
+        { ...ctx, writesSoFar: '' },
+      ),
+    ).toThrow('at least one turn')
   })
 })
