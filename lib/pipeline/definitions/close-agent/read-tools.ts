@@ -174,7 +174,7 @@ const searchWorldSchema = readToolSchema({
 })
 
 // 0 an exact name or keyword; 1 a name, 2 a keyword, whole in the query or holding it whole;
-// 3, 4 the query inside one, not whole. Lower ranks first, so the cap can't cut an exact hit.
+// 3, 4 the query inside one, not whole. Lower ranks first, so the cap cuts the weakest first.
 function rankOf(
   query: string,
   needle: string,

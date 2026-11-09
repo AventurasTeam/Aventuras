@@ -80,8 +80,9 @@ export const PROMPT_COUNT_CACHE_ENTRIES = 4096
 /** The most characters the count cache holds across its texts. */
 export const PROMPT_COUNT_CACHE_CHARS = 2_000_000
 
-// A plain LRU evicts a close task's chapter-long system half first, so a pass pins it; the budget
-// is characters. Map iterates in insertion order: re-setting an entry keeps the oldest first.
+// A plain LRU evicts a close task's chapter-long system half first, so a pass pins it; the cache
+// caps both its texts and its characters. Map iterates in insertion order: re-setting an entry
+// keeps the oldest first.
 const promptCounts = new Map<string, number>()
 let cachedChars = 0
 let pinned: string | null = null
@@ -114,8 +115,9 @@ function countOnce(text: string): number {
   return tokens
 }
 
-/** Records a text's count without encoding it. The pre-send check trusts `tokens` as this text's
- *  count, with no margin: an overcount can refuse a call that fits, so any lean must stay small. */
+/** Records a text's count without encoding it; a text over the character budget isn't kept, so it
+ *  is encoded when counted. The pre-send check trusts `tokens` as this text's count, with no
+ *  margin: an overcount can refuse a call that fits, so any lean must stay small. */
 export function primePromptCount(text: string, tokens: number): void {
   remember(text, tokens)
 }

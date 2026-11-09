@@ -572,7 +572,7 @@ describe('the prompt count cache', () => {
   })
 
   // Varied prose of exactly `length` characters, led by `tag`: a run of one letter makes the
-  // encoder crawl. Primed, such a text is never encoded; counted, it takes under a second.
+  // encoder crawl. Primed, such a text is never encoded; counted, varied prose stays quick.
   const prose = (tag: string, length: number): string =>
     `${tag}: ${'The ferry crossed at dawn. '.repeat(Math.ceil(length / 27))}`.slice(0, length)
   const big = (tag: string): string => prose(tag, 600_000)
