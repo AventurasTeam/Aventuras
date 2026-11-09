@@ -794,6 +794,25 @@ describe('update_character and update_faction', () => {
     expect((await storedEntity(f, WREN)).state).toMatchObject(WREN_STATE)
   })
 
+  it.each([['[]'], ['[ ]'], ['""'], ['[""]']])(
+    'reads traits sent as %j as not sent, the row unchanged',
+    async (empty) => {
+      const { result, calls } = await dispatchScripted(
+        f,
+        [{ toolName: 'update_character', input: { id: 'c1', traits: [empty], ...cite() } }],
+        { shown: CAST },
+      )
+
+      expect(calls[0]).toMatchObject({
+        result: 'rejected',
+        reason: expect.stringContaining('blank or empty'),
+      })
+      expect(calls[0]).not.toHaveProperty('values')
+      expect(await runDeltas(f, result.actionId)).toEqual([])
+      expect((await storedEntity(f, WREN)).state).toMatchObject(WREN_STATE)
+    },
+  )
+
   it('lands a sibling beside a list over its cap, ok naming the list and its reason', async () => {
     const { calls } = await dispatchScripted(
       f,

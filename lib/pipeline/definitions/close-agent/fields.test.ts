@@ -155,6 +155,14 @@ describe('sentList', () => {
     expect(entries(whole)).toEqual(whole)
   })
 
+  it.each([['[]'], ['[ ]'], ['""'], ['[""]'], ['\\"\\"'], ['\n[\n]\n'], ['["[]"]']])(
+    'reads an entry holding an empty list or only blanks, %j, as holding no entry',
+    (empty) => {
+      expect(sentList([empty])).toBeUndefined()
+      expect(entries([empty, 'brave'])).toEqual(['brave'])
+    },
+  )
+
   it("keeps a split line's own quotes", () => {
     expect(entries([`stands 6'2"\nwary`])).toEqual([`stands 6'2"`, 'wary'])
   })
