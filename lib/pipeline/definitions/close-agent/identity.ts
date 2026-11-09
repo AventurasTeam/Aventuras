@@ -23,7 +23,7 @@ export const IDENTITY_READ_FIELDS: ReadFields = IDENTITY_WRITE_PATHS
 export type IdentityCharacter = {
   id: string
   name: string
-  status: string
+  status: Entity['status']
   description: string
   traits: string[]
   drives: string[]
@@ -34,7 +34,7 @@ export type IdentityCharacter = {
 export type IdentityFaction = {
   id: string
   name: string
-  status: string
+  status: Entity['status']
   description: string
   standing: string
   agenda: string[]
