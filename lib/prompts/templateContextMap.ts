@@ -620,7 +620,7 @@ export const VARIABLES: Record<ContextGroup, VariableDef[]> = {
       type: "{ id: string; name: string; status: 'active' | 'staged' | 'retired'; description: string; traits: string[]; drives: string[]; voice: string }[]",
       category: 'Entities',
       description:
-        "The Identity task's starting characters: every character in the scene of a turn the task reads, any status, by name. `id` is the short id its writes name it by (c1, c2…); the fields are as stored, a missing text an empty string and a missing list empty. Only a close task's render sets it.",
+        "The Identity task's starting characters: every character in the scene of a turn the task reads, any status, by name. `id` is the short id its writes name it by (c1, c2…); the fields are as stored, a full id in them as its short id, a missing text an empty string and a missing list empty. Only a close task's render sets it.",
       required: false,
     },
     {
@@ -628,7 +628,7 @@ export const VARIABLES: Record<ContextGroup, VariableDef[]> = {
       type: "{ id: string; name: string; status: 'active' | 'staged' | 'retired'; description: string; standing: string; agenda: string[] }[]",
       category: 'Entities',
       description:
-        "The Identity task's starting factions: those a starting character belongs to, and those whose name or a keyword the task's turns mention, by name. `id` is the short id (f1, f2…); the fields are as stored, a missing text an empty string and a missing list empty. Only a close task's render sets it.",
+        "The Identity task's starting factions: those a starting character belongs to, and those whose name or a keyword the task's turns mention, by name. `id` is the short id (f1, f2…); the fields are as stored, a full id in them as its short id, a missing text an empty string and a missing list empty. Only a close task's render sets it.",
       required: false,
     },
     {
