@@ -1021,6 +1021,51 @@ describe('update_character and update_faction', () => {
     expect(await runDeltas(f, result.actionId)).toEqual([])
   })
 
+  // Entities key on (branch_id, id): the fork's copy goes in first, where a read by id finds it.
+  it("judges and writes the close's branch row, where a fork holds the same id", async () => {
+    const forkId = 'br_close_fork'
+    await f.ctx.db.insert(branches).values({
+      id: forkId,
+      storyId: f.storyId,
+      parentBranchId: f.branchId,
+      name: 'fork',
+      createdAt: 2,
+    })
+    const forkState = { ...emptyEntityState('character'), traits: ['wary', 'sly'], voice: 'dry' }
+    await putEntityRow(f, {
+      id: SCRIBE,
+      kind: 'character',
+      name: 'The fork scribe',
+      state: forkState,
+      branchId: forkId,
+    })
+    await seedEntity(f, {
+      id: SCRIBE,
+      kind: 'character',
+      name: 'The scribe',
+      state: { traits: ['patient'] },
+    })
+
+    const { result, calls } = await dispatchScripted(
+      f,
+      [{ toolName: 'update_character', input: { id: 'c3', traits: ['wary', 'sly'], ...cite() } }],
+      { shown: [...CAST, { id: SCRIBE, name: 'The scribe' }] },
+    )
+
+    expect(calls[0]).toMatchObject({
+      result: 'ok',
+      rows: [{ table: 'entities', id: SCRIBE, name: 'The scribe' }],
+      values: { 'state.traits': 'wary, sly' },
+    })
+    expect((await runDeltas(f, result.actionId)).map(({ targetId }) => targetId)).toEqual([SCRIBE])
+    expect((await storedEntity(f, SCRIBE)).state).toMatchObject({ traits: ['wary', 'sly'] })
+    const [fork] = await f.ctx.db
+      .select()
+      .from(entities)
+      .where(and(eq(entities.branchId, forkId), eq(entities.id, SCRIBE)))
+    expect(fork).toMatchObject({ name: 'The fork scribe', state: forkState })
+  })
+
   it('refuses a row of another kind', async () => {
     const tollId = 'char_00000000-0000-4000-8000-00000000b006'
     const bramId = 'fact_00000000-0000-4000-8000-00000000b007'
@@ -1448,6 +1493,32 @@ describe('identityTask', () => {
     const { start } = await startOf(fx)
 
     expect(start?.show.factions.map((faction) => faction.name)).toEqual(['The Quiet Hand'])
+  })
+
+  // Code units, not the host locale: "Pip" sorts before "bess". Inserted out of order.
+  it('orders scene characters by name in code units, then by id', async () => {
+    const fx = await openCloseFixture()
+    await putEntityRow(fx, { id: START_ROWS.bess, kind: 'character', name: 'bess' })
+    await putEntityRow(fx, { id: START_ROWS.pip, kind: 'character', name: 'Pip' })
+    await putEntityRow(fx, { id: START_ROWS.ghost, kind: 'character', name: 'Ann' })
+    await putEntityRow(fx, { id: START_ROWS.pew, kind: 'character', name: 'Pip' })
+    await setSceneOf(fx, fx.entries[2]!.id, [
+      START_ROWS.bess,
+      START_ROWS.pip,
+      START_ROWS.ghost,
+      START_ROWS.pew,
+    ])
+
+    const { ids, start } = await startOf(fx)
+
+    expect(start?.show.characters.map((character) => [character.id, character.name])).toEqual([
+      ['c1', 'Ann'],
+      ['c2', 'Pip'],
+      ['c3', 'Pip'],
+      ['c4', 'bess'],
+    ])
+    expect(ids.handleOf(START_ROWS.pew)).toBe('c2')
+    expect(ids.handleOf(START_ROWS.pip)).toBe('c3')
   })
 
   // Code units, not the host locale: "The…" sorts before "the…". Inserted out of order.
