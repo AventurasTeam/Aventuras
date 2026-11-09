@@ -104,7 +104,8 @@ const protectedField = (field: string, row: string, reason: ProtectionReason): L
 
 /**
  * A status change can't precede its thread: a cited turn before the opening stores the opening
- * (classifier.md → Threads). A thread with no opening, or one off the branch, keeps the cited turn.
+ * (classifier.md → Threads), and an opening off the branch keeps the cited turn. A thread with no
+ * opening stores no ref at all (setThreadStatus).
  */
 async function closingRef(ctx: WriteContext, thread: Thread): Promise<string> {
   if (thread.triggeredAtEntryId === null) return ctx.proseEntryId

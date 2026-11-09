@@ -369,7 +369,7 @@ describe('the close task templates', () => {
     expect(threads().user).toContain(line)
   })
 
-  // merge_threads refuses a thread this close already wrote, so a merge must come before an update.
+  // merge_threads can't absorb a thread this close already wrote, so merges come before updates.
   it('lists the duplicates before the status updates it would be refused after', () => {
     const { user } = threads()
     expect(user.indexOf('- Duplicates.')).toBeGreaterThan(-1)
