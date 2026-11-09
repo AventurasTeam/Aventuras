@@ -91,9 +91,10 @@ describe('sentList', () => {
     expect(entries(['brave', ' Brave ', '', 'courageous'])).toEqual(['brave', 'courageous'])
   })
 
-  it('keeps the list as sent, deduped, beside the entries it holds', () => {
+  it('keeps the list as sent and deduped beside the entries it holds', () => {
     expect(sentList(['brave","wary', 'brave","wary', 'patient'])).toEqual({
-      sent: ['brave","wary', 'patient'],
+      raw: ['brave","wary', 'brave","wary', 'patient'],
+      deduped: ['brave","wary', 'patient'],
       entries: ['brave', 'wary', 'patient'],
     })
   })
@@ -198,6 +199,16 @@ describe('restatedList', () => {
     expect(restatedList(['brave', 'brave'], list(['brave', 'brave']))).toBe(true)
     expect(restatedList([' brave ', 'wary'], list([' brave ', 'wary']))).toBe(true)
     expect(restatedList(['brave', 'brave'], list(['brave', 'wary']))).toBe(false)
+  })
+
+  it('reads a stored list equal to the list as sent once deduped as restated', () => {
+    const stored = ['brave","wary', 'patient']
+    expect(restatedList(stored, list(['brave","wary', ' Brave","Wary ', 'patient']))).toBe(true)
+  })
+
+  it('reads a list that drops a stored duplicate as a change', () => {
+    expect(restatedList(['brave', 'Brave', 'loyal'], list(['brave', 'loyal']))).toBe(false)
+    expect(restatedList([...terms(8), 'Trait 8'], list(terms(8)))).toBe(false)
   })
 })
 

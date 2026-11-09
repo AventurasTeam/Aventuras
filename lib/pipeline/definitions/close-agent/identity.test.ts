@@ -898,6 +898,25 @@ describe('update_character and update_faction', () => {
     expect((await storedEntity(f, WREN)).state).toMatchObject({ traits: terms('trait', 8) })
   })
 
+  it('lands a list that drops a stored duplicate, compacting a row over its cap', async () => {
+    await editEntity(f, WREN, 'earlier-close', {
+      state: { traits: [...terms('trait', 8), 'Trait 8'] },
+    })
+
+    const { result, calls } = await dispatchScripted(
+      f,
+      [{ toolName: 'update_character', input: { id: 'c1', traits: terms('trait', 8), ...cite() } }],
+      { shown: CAST },
+    )
+
+    expect(calls[0]).toMatchObject({
+      result: 'ok',
+      values: { 'state.traits': terms('trait', 8).join(', ') },
+    })
+    expect(await runDeltas(f, result.actionId)).toHaveLength(1)
+    expect((await storedEntity(f, WREN)).state).toMatchObject({ traits: terms('trait', 8) })
+  })
+
   it('checks no cap on a list the guard removed', async () => {
     await editEntity(f, WREN, 'user', { state: { traits: ['stubborn'] } })
 

@@ -8,8 +8,12 @@ import { sameValue } from './tool'
 /** A text field as the model sent it, and as it would be stored. */
 export type SentText = { readonly sent: string; readonly bounded: string }
 
-/** A list as the model sent it, and as the entries it holds, which is what would be stored. */
-export type SentList = { readonly sent: readonly string[]; readonly entries: readonly string[] }
+/** A list as the model sent it, that list deduped, and the entries it holds: what would be stored. */
+export type SentList = {
+  readonly raw: readonly string[]
+  readonly deduped: readonly string[]
+  readonly entries: readonly string[]
+}
 
 export type BoundedField = 'description' | 'title' | 'voice' | 'standing'
 
@@ -84,7 +88,7 @@ const heldEntries = (entry: string): string[] =>
 export function sentList(value: readonly string[] | undefined): SentList | undefined {
   if (value === undefined) return undefined
   const entries = dedupeTerms(value.flatMap(heldEntries))
-  return entries.length === 0 ? undefined : { sent: dedupeTerms(value), entries }
+  return entries.length === 0 ? undefined : { raw: value, deduped: dedupeTerms(value), entries }
 }
 
 /** The stored value equals the text as sent or as bounded: a user's longer text is no change. */
@@ -93,13 +97,11 @@ export function restatedText(stored: unknown, text: SentText): boolean {
 }
 
 /**
- * The stored list equals the list as sent or the entries it holds: a stored joined entry is no
- * change, nor is a stored list whose duplicates or padding dedupeTerms drops.
+ * The stored list equals the list as sent, deduped or as the entries it holds: a stored joined
+ * entry is no change, nor a stored list resent with its duplicates, but dropping one is.
  */
 export function restatedList(stored: unknown, list: SentList): boolean {
-  if (sameValue(stored, list.sent) || sameValue(stored, list.entries)) return true
-  const storedList = Array.isArray(stored) && stored.every((item) => typeof item === 'string')
-  return storedList && sameValue(dedupeTerms(stored), list.entries)
+  return [list.raw, list.deduped, list.entries].some((sent) => sameValue(stored, sent))
 }
 
 export type CappedList = 'traits' | 'drives' | 'agenda'
@@ -114,6 +116,6 @@ export function overSoftCap(sent: readonly string[], stored: unknown, cap: numbe
 /** A rule refusal's reason: the cap, and to replace rather than add. */
 export function softCapReason(list: CappedList, cap: number, sent?: SentList): string {
   const reason = `${list} is over its soft cap of ${cap}: replace an entry rather than add one`
-  if (sent === undefined || sent.entries.length <= sent.sent.length) return reason
+  if (sent === undefined || sent.entries.length <= sent.deduped.length) return reason
   return `${reason} (read as ${sent.entries.length} entries: a list joined into one string holds one entry per item)`
 }
