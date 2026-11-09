@@ -24,7 +24,7 @@ import { dispatchToolCall, type DispatchContext, type ToolAnswer } from './dispa
 import { softCapReason } from './fields'
 import { IDENTITY_READ_FIELDS, identityTask } from './identity'
 import { updateCharacterTool, updateFactionTool } from './identity-tools'
-import { CloseIds } from './ids'
+import { CloseIds, nameCloseProse } from './ids'
 import { CloseLedgerWriter } from './ledger'
 import { __setCloseAgentSlots, closeAgentSlots, NO_CLOSE_TASKS } from './slots'
 import type { TaskPromptContext } from './task'
@@ -1471,6 +1471,25 @@ describe('identityTask', () => {
     ])
     const { system, user } = identityTask.render(start!, { ...ctx, writesSoFar: '' })
     for (const id of Object.values(START_ROWS)) expect(`${system}${user}`).not.toContain(id)
+  })
+
+  it("names a row a start's text cites, so a write copying its handle stores the row's name", async () => {
+    const fx = await openCloseFixture()
+    await putEntityRow(fx, {
+      id: START_ROWS.bess,
+      kind: 'character',
+      name: 'Bess',
+      state: { ...emptyEntityState('character'), drives: [`find ${START_ROWS.ghost}`] },
+    })
+    await putEntityRow(fx, { id: START_ROWS.ghost, kind: 'character', name: 'Ann' })
+    await setSceneOf(fx, fx.entries[2]!.id, [START_ROWS.bess])
+
+    const { ids, start } = await startOf(fx)
+
+    const [drive] = start?.show.characters[0]?.drives ?? []
+    const handle = /^find (c\d+)$/.exec(drive ?? '')?.[1] ?? ''
+    expect(ids.nameOf(handle)).toBe('Ann')
+    expect(nameCloseProse({ drives: [drive] }, ids)).toEqual({ drives: ['find Ann'] })
   })
 
   it("brings a scene character's faction by membership, and no faction the chapter doesn't touch", async () => {

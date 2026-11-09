@@ -10,7 +10,7 @@ import { matchTerms } from '@/lib/retrieval'
 import { CAST_SOFT_CAPS } from '@/lib/wizard'
 
 import { IDENTITY_WRITE_PATHS, updateCharacterTool, updateFactionTool } from './identity-tools'
-import { readRowTool, searchWorldTool } from './read-tools'
+import { readRowTool, refsIn, searchWorldTool } from './read-tools'
 import type { CloseTaskDef, TaskPromptContext, TaskStart } from './task'
 import type { ReadFields } from './tool'
 import { hasTurns, readTaskTurns, renderClosePrompt, storyModeOf, type CloseTurns } from './turns'
@@ -105,6 +105,20 @@ async function touchedFactions(
   return rows.filter((row) => members.has(row.id) || namedIn(prose, row)).sort(byNameThenId)
 }
 
+// The text a start shows of a row, which is all an id it cites can reach the model through.
+const shownText = (row: Entity): unknown => {
+  const state = stateOf(row)
+  return [
+    row.name,
+    row.description,
+    state.traits,
+    state.drives,
+    state.voice,
+    state.standing,
+    state.agenda,
+  ]
+}
+
 async function startIdentity(ctx: TaskPromptContext): Promise<TaskStart<IdentityShow> | null> {
   const { entries, closeTurns, proseTokens } = await readTaskTurns(ctx)
   if (!hasTurns(closeTurns)) return null
@@ -112,8 +126,10 @@ async function startIdentity(ctx: TaskPromptContext): Promise<TaskStart<Identity
   const characters = await sceneCharacters(ctx, [...sceneIds])
   const factions = await touchedFactions(ctx, characters, closeTurns)
   if (characters.length === 0 && factions.length === 0) return null
-  // Shown rows take their handles in the order shown, before an id in their text can take one.
+  // Shown rows take their handles in the order shown, before an id in their text can take one; a
+  // row their text cites is named, so a write copying its handle stores the name, not the handle.
   for (const row of [...characters, ...factions]) ctx.ids.show(row.id, row.name)
+  await refsIn(ctx, [...characters, ...factions].map(shownText))
   const handled = (value: string): string => ctx.ids.withHandles(value)
   return {
     show: {

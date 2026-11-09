@@ -22,7 +22,7 @@ import { resetAllStores } from '@/lib/stores'
 import { createReadSet } from './common-checks'
 import { dispatchToolCall, type DispatchContext } from './dispatch'
 import { IDENTITY_READ_FIELDS, identityTask } from './identity'
-import { CloseIds } from './ids'
+import { CloseIds, nameCloseProse } from './ids'
 import { CloseLedgerWriter } from './ledger'
 import { __setCloseAgentSlots } from './slots'
 import type { TaskPromptContext } from './task'
@@ -1612,6 +1612,25 @@ describe('threadsTask', () => {
     ])
     const { user } = threadsTask.render(start!, { ...ctx, writesSoFar: '' })
     expect(user).not.toMatch(/\b(?:thr|char)_/)
+  })
+
+  it("names a row a thread's text cites, so a write copying its handle stores the row's name", async () => {
+    const fx = await openCloseFixture()
+    await putThreadRoster(fx)
+    await putSceneCharacter(fx, OPEN_ROWS.kael, 'Kael', fx.entries[2]!.id)
+    await fx.ctx.db
+      .update(threads)
+      .set({ description: `Owed to ${OPEN_ROWS.kael}.` })
+      .where(and(eq(threads.branchId, fx.branchId), eq(threads.id, OPEN_ROWS.debt)))
+
+    const { ids, start } = await startOf(fx)
+
+    const debt = start?.show.threads.find(({ title }) => title === 'The debt to the guild')
+    const handle = /^Owed to (c\d+)\.$/.exec(debt?.description ?? '')?.[1] ?? ''
+    expect(ids.nameOf(handle)).toBe('Kael')
+    expect(nameCloseProse({ description: debt?.description }, ids)).toEqual({
+      description: 'Owed to Kael.',
+    })
   })
 
   it('orders by createdAt before id', async () => {

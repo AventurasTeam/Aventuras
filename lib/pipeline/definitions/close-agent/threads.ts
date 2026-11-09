@@ -4,7 +4,7 @@ import type { PromptHalves } from '@/lib/ai'
 import { threads, type StoryMode } from '@/lib/db'
 import { TEMPLATE_IDS } from '@/lib/prompts'
 
-import { readRowTool } from './read-tools'
+import { readRowTool, refsIn } from './read-tools'
 import type { CloseTaskDef, TaskPromptContext, TaskStart } from './task'
 import { mergeThreadsTool, updateThreadTool } from './thread-tools'
 import type { ReadFields } from './tool'
@@ -41,8 +41,13 @@ async function startThreads(ctx: TaskPromptContext): Promise<TaskStart<ThreadsSh
   const { closeTurns, proseTokens } = await readTaskTurns(ctx)
   // A task with nothing to start from makes no call.
   if (!hasTurns(closeTurns)) return null
-  // Every thread's handle first, so one a text names keeps the number of its place in the list.
+  // Every thread's handle first, so one a text names keeps the number of its place in the list; a
+  // row a text cites is named, so a write copying its handle stores the name, not the handle.
   const shown = open.map((row) => ({ row, id: ctx.ids.show(row.id, row.title) }))
+  await refsIn(
+    ctx,
+    open.map((row) => [row.title, row.description]),
+  )
   return {
     show: {
       mode: await storyModeOf(ctx),

@@ -41,8 +41,11 @@ type Match = {
   rank: Rank
 }
 
+/** What reading a row by id needs: a start's context has it, as a tool's does. */
+type RowReadContext = Pick<ToolContext, 'db' | 'branchId' | 'ids'>
+
 async function readRow(
-  ctx: ToolContext,
+  ctx: RowReadContext,
   table: PrecedenceTable,
   id: string,
 ): Promise<ReadRow | undefined> {
@@ -108,7 +111,7 @@ function refIdsIn(value: unknown): string[] {
 
 /** A row the answer names: its handle, shown with its name so later prose can name it. */
 async function showRef(
-  ctx: ToolContext,
+  ctx: RowReadContext,
   id: string,
 ): Promise<{ handle: string; name: string } | undefined> {
   const table = tableOfId(id)
@@ -117,7 +120,7 @@ async function showRef(
 }
 
 /** Every row a value names, and every row their names name in turn, each by handle and name. */
-async function refsIn(ctx: ToolContext, value: unknown): Promise<Record<string, string>> {
+export async function refsIn(ctx: RowReadContext, value: unknown): Promise<Record<string, string>> {
   const refs: Record<string, string> = {}
   const seen = new Set<string>()
   let pending = refIdsIn(value)
