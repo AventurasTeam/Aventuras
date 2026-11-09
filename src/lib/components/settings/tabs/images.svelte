@@ -46,6 +46,7 @@
     validateApiWorkflow,
     detectWorkflowFields,
     fetchModelList,
+    numberOr,
   } from '#lib/services/ai/image/providers/comfy.ts'
   import ImageModelSelect from '#lib/components/settings/ImageModelSelect.svelte'
   import type {
@@ -225,8 +226,13 @@
   let availableClips = $state<string[]>([])
   let availableVaes = $state<string[]>([])
   let availableClipTypes = $state<string[]>([])
-  // Fields the form filled from a single-entry server list, as opposed to ones the user set.
-  const autoFilled = $state({ clip: false, vae: false })
+  // A blank field falls back to the first file the server lists, so that is what the placeholder names.
+  const clipPlaceholder = $derived(
+    availableClips.length ? `Auto: ${availableClips[0]}` : 'Auto-detect first available',
+  )
+  const vaePlaceholder = $derived(
+    availableVaes.length ? `Auto: ${availableVaes[0]}` : 'Auto-detect first available',
+  )
   const clipItems = $derived(availableClips.map((c) => ({ value: c, label: c })))
   const vaeItems = $derived(availableVaes.map((v) => ({ value: v, label: v })))
   const clipTypeItems = $derived(availableClipTypes.map((t) => ({ value: t, label: t })))
@@ -372,24 +378,12 @@
         read(
           'textEncoders',
           () => fetchModelList(baseUrl, inputs.apiKey, 'text_encoders', timeoutMs, request.signal),
-          (clips) => {
-            availableClips = clips
-            if (!profileClipName && clips.length === 1) {
-              profileClipName = clips[0]
-              autoFilled.clip = true
-            }
-          },
+          (clips) => (availableClips = clips),
         ),
         read(
           'vaes',
           () => fetchModelList(baseUrl, inputs.apiKey, 'vae', timeoutMs, request.signal),
-          (vaes) => {
-            availableVaes = vaes
-            if (!profileVaeName && vaes.length === 1) {
-              profileVaeName = vaes[0]
-              autoFilled.vae = true
-            }
-          },
+          (vaes) => (availableVaes = vaes),
         ),
         read(
           'clipTypes',
@@ -438,10 +432,6 @@
         availableVaes = []
         availableClipTypes = []
         profileLoadFailures = []
-        if (autoFilled.clip) profileClipName = ''
-        if (autoFilled.vae) profileVaeName = ''
-        autoFilled.clip = false
-        autoFilled.vae = false
       }
       if (invalid) {
         stopProfileModels()
@@ -528,9 +518,8 @@
     }
     if (profileInputReferences) opts.inputReferences = true
     if (profileMode === ComfyMode.UnetTxt2Img) {
-      // A name the form filled in is the server's only one; generation picks it again unsaved.
-      if (profileClipName && !autoFilled.clip) opts.clipName = profileClipName
-      if (profileVaeName && !autoFilled.vae) opts.vaeName = profileVaeName
+      if (profileClipName) opts.clipName = profileClipName
+      if (profileVaeName) opts.vaeName = profileVaeName
       if (profileClipType) opts.clipType = profileClipType
       if (profileWeightDtype) opts.weightDtype = profileWeightDtype
     }
@@ -610,8 +599,6 @@
         profileTakesReferences,
         profileClipName,
         profileVaeName,
-        autoFilled.clip,
-        autoFilled.vae,
         profileClipType,
         profileWeightDtype,
         // a1111 fields reuse profileSteps, profileCfg, profileNegativePrompt, profileSampler
@@ -661,8 +648,6 @@
     workflowFileName = null
     profileClipName = ''
     profileVaeName = ''
-    autoFilled.clip = false
-    autoFilled.vae = false
     profileClipType = 'lumina2'
     profileWeightDtype = 'default'
     availableClips = []
@@ -692,7 +677,7 @@
     if (profile.providerType === 'a1111') {
       const opts = profile.providerOptions || {}
       profileSteps = Number(opts.steps) || 20
-      profileCfg = Number(opts.cfg) || 7
+      profileCfg = numberOr(opts.cfg, 7)
       profileNegativePrompt = (opts.negativePrompt as string) || ''
       profileSampler = (opts.sampler as string) || 'Euler a'
       profileScheduler = (opts.scheduler as string) || 'karras'
@@ -703,7 +688,7 @@
       profileSampler = (opts.sampler as string) || 'dpmpp_2m_sde_gpu'
       profileScheduler = (opts.scheduler as string) || 'sgm_uniform'
       profileMode = (opts.mode as string) || ComfyMode.BasicTxt2Img
-      profileCfg = Number(opts.cfg) || 1
+      profileCfg = numberOr(opts.cfg, 1)
       profileSteps = Number(opts.step) || 6
       profilePositivePrompt = (opts.positivePrompt as string) || ''
       profileNegativePrompt = (opts.negativePrompt as string) || ''
@@ -715,8 +700,6 @@
       workflowError = null
       profileClipName = (opts.clipName as string) || ''
       profileVaeName = (opts.vaeName as string) || ''
-      autoFilled.clip = false
-      autoFilled.vae = false
       profileClipType = (opts.clipType as string) || 'lumina2'
       profileWeightDtype = (opts.weightDtype as string) || 'default'
       availableClips = []
@@ -1861,18 +1844,12 @@
                 : profileClipName
                   ? { value: profileClipName, label: profileClipName }
                   : undefined}
-              onSelect={(v) => {
-                profileClipName = (v as { value: string }).value
-                autoFilled.clip = false
-              }}
+              onSelect={(v) => (profileClipName = (v as { value: string }).value)}
               allowCustom={true}
-              onCustomSelect={(v) => {
-                profileClipName = v
-                autoFilled.clip = false
-              }}
+              onCustomSelect={(v) => (profileClipName = v)}
               itemLabel={(s: { label: string }) => s.label}
               itemValue={(s: { value: string }) => s.value}
-              placeholder="Auto-detect first available"
+              placeholder={clipPlaceholder}
             />
             <p class="text-muted-foreground text-xs">
               Empty uses the first text encoder ComfyUI lists, so pick one if the server has
@@ -1889,18 +1866,12 @@
                 : profileVaeName
                   ? { value: profileVaeName, label: profileVaeName }
                   : undefined}
-              onSelect={(v) => {
-                profileVaeName = (v as { value: string }).value
-                autoFilled.vae = false
-              }}
+              onSelect={(v) => (profileVaeName = (v as { value: string }).value)}
               allowCustom={true}
-              onCustomSelect={(v) => {
-                profileVaeName = v
-                autoFilled.vae = false
-              }}
+              onCustomSelect={(v) => (profileVaeName = v)}
               itemLabel={(s: { label: string }) => s.label}
               itemValue={(s: { value: string }) => s.value}
-              placeholder="Auto-detect first available"
+              placeholder={vaePlaceholder}
             />
             <p class="text-muted-foreground text-xs">
               Empty uses the first VAE ComfyUI lists, so pick one if the server has several.

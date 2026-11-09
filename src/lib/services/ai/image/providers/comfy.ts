@@ -504,7 +504,7 @@ function choices(input: unknown[]): string[] {
 
 type TemplateInputs = NonNullable<ComfyImageOptions['inputs']>
 
-const numberOr = (value: unknown, fallback: number): number =>
+export const numberOr = (value: unknown, fallback: number): number =>
   typeof value === 'number' ? value : fallback
 
 export function createComfyProvider(config: ImageProviderConfig): ImageProvider {
