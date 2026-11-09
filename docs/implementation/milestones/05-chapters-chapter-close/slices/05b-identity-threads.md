@@ -146,11 +146,13 @@ or actions tagged with the fields they write.
    `proseEntryId`.
 5. **Soft caps.** A list that would still land is checked against
    `CAST_SOFT_CAPS` (`lib/wizard/assist-schemas.ts:69-73`), by `traits`,
-   `drives` and `agenda`. Over a cap that list is refused and what else
-   the call holds lands, `ok` naming the list and its reason, per C11; a
-   call with nothing else is `rejected`. The tool schema carries no
-   `.max()`: a schema failure would reach the model as a malformed call,
-   with no entry in the report.
+   `drives` and `agenda`. A list over its cap and longer than the stored
+   one is refused (developer decision, 2026-11-09), so a row already over
+   a cap, from a user edit or an import, can shrink or swap at the same
+   length. What else the call holds lands, `ok` naming the list and its
+   reason, per C11; a call with nothing else is `rejected`. The tool
+   schema carries no `.max()`: a schema failure would reach the model as
+   a malformed call, with no entry in the report.
 6. **Landing.** For an entity, Slice 5.5a's `entityWriteAction`
    makes the one `updateEntity` from the fields still wanted, with `description` in its
    patch. What's left goes out as one `delta_group_emitted`, and Slice
@@ -199,19 +201,29 @@ safe, read and not run: per-turn stackable keys are bounded at parse
   2. A row that's gone is `rejected`, naming its survivor from the
      ledger. The same goes for `update_thread` on a row this close
      absorbed.
-  3. A row this close already wrote can't be absorbed: any delta on it
+  3. Absorbing an `active` thread into a `pending` one is `rejected`,
+     saying to keep the active one, since the kept row would drop the
+     thread from the narrator's prompt with no write saying so.
+  4. A row this close already wrote can't be absorbed: any delta on it
      under the run's `actionId` is `rejected`, saying to keep that row
      instead. `snapshotForRedo` would otherwise refuse CTRL-Z of the
      close for good (`lib/actions/delta/redo.ts:118-126`). Such a row may
      still be the kept one.
-  4. `laterTurnTouched` on any row is `skipped` whole.
-  5. A user edit after the latest cited turn is `skipped` whole:
+  5. `laterTurnTouched` on any row is `skipped` whole.
+  6. A user edit after the latest cited turn is `skipped` whole:
      `userTouched` on an absorbed row, or `userWrote` on `keep` for a
      field the merge writes. A kept row's other fields lose nothing to a
      merge, so they don't stop one (C11).
 
-  The ledger entry lists every row, and sets `survivor` to `keep` only on
-  a landed merge (C4).
+  The kept row's status, refs, `category`, `icon` and `injection_mode`
+  stand (developer decision, 2026-11-09): the merge writes only its
+  `title` and `description`. The ledger entry lists every row, and sets
+  `survivor` to `keep` only on a landed merge (C4).
+
+- **A delete's delta path** is one exported constant, `$deleted`, which
+  `merge_threads` and 5.9's `merge_happenings` share. No column starts
+  with `$`, so it never names a real path, and no plan puts it in
+  `values`.
 
 ### Tasks and templates
 
@@ -221,13 +233,19 @@ safe, read and not run: per-turn stackable keys are bounded at parse
   `read_row`, `update_thread` and `merge_threads`. One part only, since
   parts are 5.8's.
 - **Identity's start.** The slow fields of the characters in the closed
-  range's `metadata.sceneEntities`, dropping ids with no live row, and of
-  the factions the chapter touches (see Open questions). Scene data holds
-  no factions
+  range's `metadata.sceneEntities`, dropping ids with no row (a retired
+  row stays: canon names the entities the chapter touches), and of the
+  factions the chapter touches (confirmed at planning, see Open
+  questions). Scene data holds no factions
   ([`principles.md → Scene presence`](../../../../ui/principles.md#scene-presence-is-runtime-derived-not-status)),
   so a faction comes from those characters' `faction_id`, and from
   matching faction names and keywords over the range's prose with
-  `matchTerms`.
+  `matchTerms`. A character the prose only mentions is left to
+  `search_world`.
+- **Where a start's prose comes from.** A task's `render` is synchronous,
+  so its `start` reads the turns for its `chapterEntryIds` and carries
+  them, as `closeTurns`, in `show`. Both tasks build them the same way,
+  so their system halves match byte for byte.
 - **Threads' start.** Every `pending` and `active` thread on the branch,
   the user's included, by `title`, `description` and `status`.
 - **`read_row`'s fields,** each task definition's `readFields`, keyed
@@ -240,13 +258,25 @@ safe, read and not run: per-turn stackable keys are bounded at parse
   `TEMPLATE_GROUPS`, on Slice 5.5a's shared system half, each user half
   holding its task's instructions, starting rows and the writes so far.
   Identity's carries 3b's operations and "don't churn stable identity",
-  and "replace, don't append" at a cap. Threads' carries 3f's bullet and
-  what an active thread costs. Both ids join the named list at
+  "replace, don't append" at a cap, and that a blank `description`,
+  `voice` or `standing` may be filled when the cited turns show it
+  (developer decision, 2026-11-09). Threads' carries 3f's bullet and
+  what an active thread costs. The shared instructions tell the model it
+  may send several calls in one reply, and a render with no `closeTurns`
+  throws, since an unset one renders an empty "# The turns". Both ids
+  join the named list at
   `lib/prompts/bundled/system-half-stability.test.ts:346`, which 5.5a
   ships empty (C3). Two checks come here from 5.5a, since the list first
   holds a template in this slice: a function over a list and a group map
   refuses a template outside the `chapter` group, and the shared half
   renders the same bytes across the two tasks of one part.
+- **Existing closes in the suite.** With the two tasks in the production
+  slots, a close test whose fixture holds an open thread or a scene
+  character now makes tool steps, while 18 test files run a real close
+  and mock only `generateStructured`. A test that isn't about the tasks
+  sets empty slots explicitly, through `__setCloseAgentSlots`, rather
+  than a default in `vitest.setup.ts` that would hide the production
+  slots from the tests that need them.
 
 ### Round-trip suite
 
@@ -267,20 +297,78 @@ The check selects by `actionId`, so it holds across the parts 5.8 adds.
 ### The measure
 
 - **`pnpm probe:close`** runs Identity and Threads on Slice 5.2's dataset
-  chapter on the dev model, at `PROBE_RUNS=10`, with `PROBE_OUT` outside
-  tracked files. Until 5.8 the chapter is one part, so read the served
-  model's window first: the chapter has to fit half of it.
-- **The bar** is set at slice planning, before the runs, by amending the
-  open question below. A miss goes to the developer and holds 5.8 and
-  5.9.
+  chapter with [the test overlay](#the-test-overlay) on the dev model, at
+  `PROBE_RUNS=10`, with `PROBE_OUT` outside tracked files. Until 5.8 the
+  chapter is one part, so read the served model's window first: the
+  chapter has to fit half of it. At planning `Gemma4-26B-A4B-QAT-MTP`
+  served 65,536 tokens, half of which holds the chapter's 23,907.
+- **The bar** was set at slice planning, before any run, and stands in
+  [Open questions](#open-questions). A miss goes to the developer and
+  holds 5.8 and 5.9.
 - **`CLOSE_REPORT_VALUE_BOUND`** takes its number from these runs: the
   largest `values` entry and the whole report's size go in Implementation
   notes (C4).
-- **Whole-prompt counting per step.** Read `provider.prompt_estimate`'s
-  `ms` (`lib/ai/context-window.ts:109-122`), on a close of the dataset
-  chapter from the dev route, on the desktop renderer and on Android with
-  diagnostics on. `probe:close` runs under Node, so it can't give either
-  number. A bad number reopens this slice's approach, not the layout.
+- **A count cache, then whole-prompt counting per step (developer
+  decision, 2026-11-09).** `countPromptTokens`
+  (`lib/ai/context-window.ts`) caches counts by text, bounded, so a
+  task's system half and earlier steps count once, and narrator turns
+  share it. Before a part's first step the close primes that cache with
+  its system half, valued at the half rendered with every turn's content
+  blank and counted, plus the turns' stored `content_tokens` (a null one
+  counted from its prose), so the chapter is never encoded on the JS
+  thread: a part's first count took about 335 ms for a Japanese chapter
+  under Node at planning, cache or not (developer decision, 2026-11-09).
+  The count can lean slightly high where an older entry still stores a
+  trailing block the prompt strips (rows written today hold stripped
+  prose), and canon compares with no margin, so the lean is accepted as
+  small, not as safe. Then read `provider.prompt_estimate`'s `ms` on a close of
+  the dataset chapter with the overlay, from the dev route. The bar: no
+  step's count over 100 ms on the Galaxy Z Fold release build, for the
+  English chapter and for a Japanese prompt of the same size, which a
+  temporary in-app probe times on the Identity prompt with its turns
+  and its user half's rows swapped for Japanese: with the turns primed,
+  a turns-only Japanese prompt would encode almost no Japanese, so it is
+  recorded as information only (developer decision, 2026-11-09). The
+  desktop renderer's number is recorded. The Fold
+  run gates the merge, not the PR's opening. `probe:close` runs under
+  Node, so it gives neither number. A miss reopens this slice's
+  approach, not the layout.
+
+### The test overlay
+
+The dataset chapter's characters are nearly bare: of 25, the most traits
+on a live one is 4 and none holds a drive, only the retired Pew holds a
+`voice`, and 8 have no description, Jim Hawkins among them. The periodic
+classifier created 24 of them. The one faction has state `{}` and no
+member. So a run on the seed alone never reaches a soft cap. The dataset
+is a basis modified for testing (developer decision, 2026-11-09):
+
+- **An opt-in overlay,** committed beside the dataset in
+  `scripts/dataset-chapter/`. `probe:close` applies it to each run's
+  copy, and a `db:seed:dataset` flag loads the same data, for the dev
+  route's counting measure and manual checks. The seed JSON stays the
+  pipeline's real output.
+- **What it holds,** written from the chapter's own text, so every change
+  has evidence in the turns: main-cast lists at their caps, one character
+  over a cap, synonym pairs, one entry the chapter contradicts or
+  resolves, the faction's `standing`, a full `agenda` and members by
+  `faction_id`, one user edit of one field logged after the chapter, and
+  one planted duplicate thread. A character at its cap is one the chapter
+  gives a new trait or drive, so a replace is warranted, and the probe
+  counts per run the calls whose list on such a row reached the cap
+  check, read from the report's `values` and `skippedFields`, and the
+  `merge_threads` calls, which the bar's coverage reads. A few characters
+  stay bare, so filling a blank runs too.
+- **How it writes.** Rows are written directly with no delta, so they
+  read as a first profile: nothing protects them, and a close's CTRL-Z
+  restores them. The user edit alone goes through the action layer as
+  `user_edit`, so precedence reads it.
+- **On an open chapter only.** The flagged load reverses the seed's close
+  first, since once this slice's refresh lands, that close's undo would
+  put the bare values back over the fields it wrote. Applying the overlay
+  twice changes nothing and logs the user edit once.
+- **No later turn exists** on the dataset branch, so the `later-turn`
+  path stays proved by the unit tests alone.
 
 ### The dataset seed
 
@@ -298,7 +386,33 @@ rewrites churn; that is expected. A story-level model override has to
 name a provider the default seed defines, or the export refuses it. This first
 refresh also replaces the chapter's title and summary, written before
 the metadata prompt's rewording
-([5.2's "R1: A"](./02-first-chapter.md#implementation-notes)).
+([5.2's "R1: A"](./02-first-chapter.md#implementation-notes)). The
+refresh runs without [the test overlay](#the-test-overlay), so the seed
+stays what the pipeline wrote.
+
+### Canon edits
+
+- [`chapter-close.md → 3b`](../../../../memory/chapter-close.md#3b--identity-compaction):
+  a blank `description`, `voice` or `standing` may be filled when the
+  cited turns show it, and then follows 3b's rewrite rules.
+- [`data-model.md → Authorship contract`](../../../../data-model.md#authorship-contract):
+  the `description` row's later writes read "Chapter close, on a
+  material change or when blank".
+- [`chapter-close.md → 3f`](../../../../memory/chapter-close.md#3f--world-upkeep):
+  a thread merge keeps the kept row's status, refs, category, icon and
+  injection mode, and absorbing an active thread into a pending one is
+  refused.
+- [`architecture.md → System and user halves`](../../../../architecture.md#system-and-user-halves):
+  the paragraph "Every history marks the user's turns" extends to the
+  close's task templates.
+- [`architecture.md → The pre-send check`](../../../../architecture.md#the-pre-send-check):
+  a close's system half counts from its entries' stored `content_tokens`
+  plus the rest encoded, a count that can lean slightly high on older
+  entries.
+- [`followups.md → Tuning and play testing`](../../../../followups.md#tuning-and-play-testing):
+  the dataset's bare profiles, all from the periodic classifier, are
+  open between the book's shape and the classifier, for play testing to
+  tell.
 
 ## Scope: out
 
@@ -370,7 +484,8 @@ Test paths below run with `pnpm vitest run --project unit <path>`.
    drives and 4 agenda land. Sent alone, 9, 7 and 5 are `rejected` with no
    delta. Beside a sibling field, the sibling lands and the result is
    `ok`, with the list in `skippedFields` and its reason. A list the guard
-   removes reaches no cap check.
+   removes reaches no cap check. On a row stored with 12 traits, 10 land
+   and so does a swap of 12, while 13 are `rejected`.
 7. **Delta shape.** Every delta these tools write has
    `source = 'chapter_close'`, the run's `action_id` and `entry_id = E`,
    asserted on the DB rows.
@@ -386,9 +501,11 @@ Test paths below run with `pnpm vitest run --project unit <path>`.
    field of an absorbed row, or of a field the merge writes on `keep`,
    skipping it whole with no delta; a user edit of another field on
    `keep` not stopping it; absorbing a row the close wrote refused;
-   keeping that row landing; `survivor` set on a landed merge and absent
-   on a refused or skipped one; and `update_thread` on an absorbed row
-   refused, naming the survivor.
+   keeping that row landing; absorbing an `active` thread into a
+   `pending` one refused with no delta, while the reverse lands and keeps
+   the kept row's status and refs; `survivor` set on a landed merge and
+   absent on a refused or skipped one; and `update_thread` on an absorbed
+   row refused, naming the survivor.
 10. **Round trip.** `lib/pipeline/__tests__/close-round-trip.test.ts` holds
     a case for each of the four tools and both cases of `update_thread`
     before a merge, through all five arms, and it fails if `merge_threads`'
@@ -396,9 +513,10 @@ Test paths below run with `pnpm vitest run --project unit <path>`.
 11. **Tasks.** With scripted steps: each task sends canon's tool list; an
     empty start makes no step call and no failure; and
     `close_task_start` gives `3 of 7` for Identity and `4 of 7` for
-    Threads on a one-part chapter. A scene id with no live row reaches no
-    prompt, and a faction reaches Identity's start by membership and by
-    name.
+    Threads on a one-part chapter. A scene id with no row reaches no
+    prompt, a retired scene character does, and a faction reaches
+    Identity's start by membership and by name. A close test that isn't
+    about the tasks runs on empty slots it sets itself.
 12. **Templates.** `lib/prompts/bundled/system-half-stability.test.ts`
     passes with its list naming exactly the two templates. The list's
     check, given a list and a group map, refuses a fixture id outside
@@ -406,16 +524,27 @@ Test paths below run with `pnpm vitest run --project unit <path>`.
     half renders the same bytes across Identity and Threads in one part.
     `lib/prompts/templateContextMap.test.ts` and
     `lib/prompts/bundled/bundled-pack.test.ts` pass.
-13. **The measure.** `PROBE_RUNS=10 pnpm probe:close`, with
+13. **The overlay.** Applied twice it changes nothing and logs its user
+    edit once; the flagged load leaves the chapter open with the overlay's
+    values; and a close's CTRL-Z restores them (vitest, beside the
+    overlay).
+14. **The count cache.** `countPromptTokens` gives the same total with the
+    cache as without it, counts a repeated text once, and stays within its
+    bound (`lib/ai/context-window.test.ts`). After a task's render, its
+    system half counts at the blank half's count plus the stored
+    `content_tokens`, with no encoder call for it
+    (`lib/pipeline/definitions/close-agent/turns.test.ts`).
+15. **The measure.** `PROBE_RUNS=10 pnpm probe:close`, with
     `SMOKE_LLM_URL`, `SMOKE_LLM_MODEL` and `PROBE_OUT` set, meets the bar
-    in Open questions on Slice 5.2's dataset chapter on the dev model.
-    Implementation notes hold the model id from `/v1/models`, each task's
-    outcome per run and where the saved messages are. A miss has gone to
-    the developer.
-14. **Numbers.** `CLOSE_REPORT_VALUE_BOUND` is set from those runs, and
-    Implementation notes hold the report sizes and the per-step counting
-    time on desktop and Android.
-15. **Gates.** `pnpm lint`, `pnpm format:check`, `pnpm compiler:check`,
+    in Open questions on Slice 5.2's dataset chapter with the overlay, on
+    the dev model. Implementation notes hold the model id from
+    `/v1/models`, each task's outcome per run, `provider.input_ratio`, and
+    where the saved messages are. A miss has gone to the developer.
+16. **Numbers.** `CLOSE_REPORT_VALUE_BOUND` is set from those runs, and
+    Implementation notes hold the report sizes, the per-step counting
+    time on the Fold release build in English and Japanese, under 100 ms,
+    and the desktop's.
+17. **Gates.** `pnpm lint`, `pnpm format:check`, `pnpm compiler:check`,
     `pnpm typecheck`, `tsc -p electron/tsconfig.json`, `pnpm lint:docs`
     and `pnpm test:run` pass.
 
@@ -429,6 +558,7 @@ Test paths below run with `pnpm vitest run --project unit <path>`.
   carries reversal.
 - **Vitest on the templates,** through the shipped stability and pack
   tests.
+- **Vitest on the overlay and the count cache,** beside each.
 - **`pnpm probe:close`** on the dev model, the slice's main evidence.
   Read the transcripts as well as the counts: an earlier classifier
   probe misled on counts alone.
@@ -436,9 +566,10 @@ Test paths below run with `pnpm vitest run --project unit <path>`.
   proves the whole close.
 
 Green proves little here without a mutation: for each new guard (soft
-cap, already-wrote, kept-row field, restated compare, empty list, latest
-by position) break it and confirm its test fails, and keep caps as
-literals so a test can't derive its expectation from the constant.
+cap, growth past a cap, already-wrote, active into pending, kept-row
+field, restated compare, empty list, latest by position, the overlay's
+second application) break it and confirm its test fails, and keep caps
+as literals so a test can't derive its expectation from the constant.
 
 ## Open questions
 
@@ -448,27 +579,71 @@ literals so a test can't derive its expectation from the constant.
   English, 591 ms of Chinese and 2,088 ms of Japanese, on the JS thread
   ([Slice 5.1's closing review](../../../../followups.md#ux)), and this
   slice counts per tool step. Measure a CJK prompt beside the English one.
+  **Answered (developer, 2026-11-09):** a count cache lands first, and a
+  part's system half is primed from the stored `content_tokens`, since
+  its first count would encode the chapter (see
+  [The measure](#the-measure)); then Japanese, the worst of the three, is
+  timed by a temporary in-app probe on the Identity prompt with its turns
+  and its user half's rows swapped for Japanese text of the same token
+  count, against the bar in
+  [The measure](#the-measure): no step's count over 100 ms on the Fold
+  release build.
 - **What bar does the measure have to clear?** Set it at slice planning
   and amend this question with it, since a bar written after the runs
   proves nothing. Suggested: both tasks finish in 8 of 10 runs, with no
   step reaching the 8k output bound, reading before writing. "Finishing"
   alone would pass a model that answers in plain text, so count a run
-  with `noToolCalls` as a miss.
+  with `noToolCalls` as a miss. **Set (developer, 2026-11-09), before any
+  run.** On the dataset chapter with [the test overlay](#the-test-overlay),
+  a run passes when both tasks hold in it, and 8 of 10 runs must pass. A
+  task holds when it ends with a reply that has no tool call, not stopped
+  by its budget, the window or a cut-off; it lands at least one write;
+  and no step's reply reaches the 8k output bound, a cut-off retry
+  counting as reaching it. A close that fails is a miss for both tasks.
+  With caps to compact and a planted duplicate, a task that writes
+  nothing hasn't engaged, so a landed write replaces "reading before
+  writing", which the read gate already enforces. Across the 10 runs the
+  overlay's shapes must also come up (developer, 2026-11-09): in at
+  least 3 runs Identity sends a list whose stored one was at or over its
+  cap and that reaches the cap check, landed or refused, and in at least
+  3 Threads calls `merge_threads`. A list the read gate or the turns and
+  `why` checks stop, or one resent unchanged, doesn't count, since
+  neither tests the cap. Below that the measure is
+  inconclusive and goes to the developer as a miss does, since one
+  filled description alone would meet the per-run bar. Rejected and
+  skipped writes, invalid calls and steps used are reported per run but
+  don't gate, and every miss's transcript is read, with a sample of the
+  passes.
 - **Which status and refs survive `merge_threads` when the rows differ?**
   Canon names neither, and a kept `pending` thread absorbing an `active`
   one would drop it from the narrator's prompt with no write saying so.
   Suggested: the kept row's status, refs, `category`, `icon` and
   `injection_mode` stand, and absorbing an `active` thread into a
   `pending` one is `rejected`, saying to keep the active one.
+  **Answered (developer, 2026-11-09):** as suggested, in
+  [Tools](#tools) and [Canon edits](#canon-edits).
 - **What does a soft cap do on a row already over it?** A user's or an
   import's 12 traits, and an agent sending 10, is over the cap and an
   improvement. Suggested: refused only when the list would grow past the
-  cap, so a reduction lands.
+  cap, so a reduction lands. **Answered (developer, 2026-11-09):** as
+  suggested. A list is refused when it is over its cap and longer than
+  the stored one, so a swap at the same length lands too.
 - **What makes a faction "touched"?** Canon's start names entities the
   chapter touches, scene data never holds factions, and membership and
   name matching are this doc's reading. Confirm it, since Slice 5.8's
   starts read the same way, and check how many rows it brings on the
-  dataset chapter.
+  dataset chapter. **Confirmed (developer, 2026-11-09).** On the seed it
+  brings one row, "the buccaneers", by name in 4 turns, and none by
+  membership, since no character holds a `faction_id`; the overlay adds
+  members. A name matches only as stored, so "the buccaneers" misses a
+  turn that says "buccaneers" alone.
+- **Should Identity fill a blank field?** Canon's 3b lets a close rewrite
+  a `description` on a material change, and a `voice` or `standing` when
+  the chapter shows it changed, and says nothing of one that is blank,
+  while no writer fills it after the create. **Answered (developer,
+  2026-11-09):** Identity may fill a blank `description`, `voice` or
+  `standing` when the cited turns show it, per
+  [Canon edits](#canon-edits).
 
 - **Does a close's entity write read as the turn's first move?**
   `firstLocationWrites` (`lib/actions/story-entries/pre-entry-locations.ts`)
@@ -477,7 +652,11 @@ literals so a test can't derive its expectation from the constant.
   ([milestone C1](../milestone.md#c1--a-closes-delta-shape)), so a task
   that writes `current_location_id` for a character the end turn didn't
   move would read as that turn's first move. Unverified; check before the
-  first task that writes a location lands.
+  first task that writes a location lands. **Answered at planning, by
+  reading, not run:** it reads a write only when its undo payload's
+  `state` holds `current_location_id`, `updateEntity` logs only the
+  `state` fields that changed, and no close tool in this milestone
+  writes a character's location.
 - **Does the cross-check hold on a server that drops past reasoning?** A
   close's step estimate counts the reasoning sent back. A chat template
   that renders only the latest reasoning reports fewer input tokens, so
@@ -486,11 +665,16 @@ literals so a test can't derive its expectation from the constant.
   model renders it: [Slice 5.4](./04-tool-step.md)'s two steps on
   `Gemma4-26B-A4B-QAT-MTP` reported the second's input as the first's
   input and output plus the tool result. Other servers are unverified;
-  `provider.input_ratio` in this slice's run shows it.
+  `provider.input_ratio` in this slice's run shows it. **Watched during
+  the run:** the probe records `provider.input_ratio`, and Implementation
+  notes hold it.
 - **Does a cut attempt's spend count?** A step whose first reply was cut
   returns the retry's usage; the cut attempt's survives only as
   `outputTokens` in its `recoverable` failure. Does the cost measure
-  need it?
+  need it? **Answered at planning:** not in the report. The probe prints
+  a cut attempt's `outputTokens` from its `recoverable_error` beside the
+  step, and a cost measure past that waits for
+  [tuning](../../../../followups.md#tuning-and-play-testing).
 - **Which delta path does a delete's `PlannedAction` name?** Slice
   5.5a's `verdictOf` throws on a planned action that names none, and a
   merge's absorbed rows, as in `merge_threads`, are deletes. The path
@@ -501,43 +685,51 @@ literals so a test can't derive its expectation from the constant.
   (`lib/actions/threads/register.ts`,
   `lib/actions/happenings/register-happenings.ts`), so its path never
   reaches `skippedFields`. Slice 5.9 needs the same spelling. Surfaced
-  by 5.5a.
+  by 5.5a. **Answered at planning:** `$deleted`, one exported constant,
+  per [Tools](#tools).
 - **Does the read gate reach a row a tool only names?** It applies to
   every id argument, so a location a character moves to or a faction a
   character joins needs a `read_row` first, though the tool writes
   neither. Intended, or should a reference need no read? If the gate
   stays, every kind a tool references must be one its task's
   `readFields` can read, or the reference can never pass. Surfaced by
-  5.5a.
+  5.5a. **Not reached here:** no tool in this slice takes an id it
+  doesn't write. [Slice 5.8](./08-prose-tasks.md) already gates a row a
+  tool only names, such as `flag_duplicate`'s partner.
 - **Does `search_world` rank an exact match first?** It ranks a partial
   name match with an exact one, and above an exact keyword match, so
   with a short query and more than 20 hits an exact match can fall past
   the cap and into `omitted`. Suggested: whole-term matches first.
-  Surfaced by 5.5a.
+  Surfaced by 5.5a. **Answered at planning:** as suggested, since
+  Identity is its first real caller.
 - **Do the tools' tests send each id argument as a handle?** They
   should, through `resolveIdArgs`: a tool whose id argument names a row
   it writes without reading would store a raw handle if its `ids` key
   were misspelt. A tool declared with its shape,
   `WriteTool<typeof SHAPE>`, fails to compile on that typo; one declared
   as a plain `WriteTool` doesn't, so each tool should name its shape.
-  Surfaced by 5.5a.
+  Surfaced by 5.5a. **Answered at planning:** yes to both.
 - **How does a merge case reach `held-in-redo` in the round-trip
   suite?** Only when an earlier call in the same close writes the row
   the merge absorbs, since one group's update plus cascaded delete is
   refused by the group-conflict check first. Script the case that way;
-  5.9's merges too. Surfaced by 5.5a.
+  5.9's merges too. Surfaced by 5.5a. **Answered:** as the two cases in
+  [Round-trip suite](#round-trip-suite) script it.
 - **What must the task render pin?** A non-empty `closeTurns`, since an
   unset one renders an empty "# The turns". `read_turns` must mark user
   turns through `macro_story_entry`, the model is told it may send
   several calls per reply (the 24-step budget rewards it), and when the
   templates ship, the paragraph "Every history marks the user's turns" in
   [`architecture.md → System and user halves`](../../../../architecture.md#system-and-user-halves)
-  extends to them. Surfaced by 5.5a.
+  extends to them. Surfaced by 5.5a. **Answered at planning:** per
+  [Tasks and templates](#tasks-and-templates) and
+  [Canon edits](#canon-edits); `read_turns` is 5.9's.
 - **Where does a task's start get the prose it shows?** A task's
   `render` is synchronous, so its `start` must read any prose it shows
   and carry it in `show`, and the task context carries no range: the
   start gets it from the run's intermediates or by `chapterEntryIds`.
-  Surfaced by 5.5a.
+  Surfaced by 5.5a. **Answered at planning:** by `chapterEntryIds`, per
+  [Tasks and templates](#tasks-and-templates), which 5.8's parts narrow.
 
 ## Implementation notes
 
