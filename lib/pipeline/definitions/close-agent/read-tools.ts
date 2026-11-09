@@ -36,7 +36,11 @@ type Match = {
   name: string
   status: string | null
   description: string | null
-  byName: boolean
+  /**
+   * 0 the exact name; 1 the name whole in the query or the query whole in the name; 2 the same
+   * for a keyword; 3 the query inside a word of the name; 4 the same in a keyword.
+   */
+  rank: number
 }
 
 async function readRow(
@@ -171,6 +175,24 @@ const searchWorldSchema = readToolSchema({
   query: z.string().describe('A name, an alias or a keyword, or part of one.'),
 })
 
+// Whole matches first, so a short query's exact hit isn't cut past the cap by partial ones. Whole
+// runs both ways: an alias inside a longer question, or "silver" for "Long John Silver".
+function rankOf(
+  query: string,
+  needle: string,
+  name: string,
+  keywords: readonly string[],
+): number | undefined {
+  const term = normalizeTerm(name)
+  const holdsQuery = (text: string): boolean => matchTerms(text, [needle]).length > 0
+  if (term === needle) return 0
+  if (matchTerms(query, [term]).length > 0 || holdsQuery(term)) return 1
+  if (matchTerms(query, keywords).length > 0 || keywords.some(holdsQuery)) return 2
+  if (term.includes(needle)) return 3
+  if (keywords.some((keyword) => keyword.includes(needle))) return 4
+  return undefined
+}
+
 async function searchWorld(
   { query }: z.output<typeof searchWorldSchema>,
   ctx: ToolContext,
@@ -182,13 +204,6 @@ async function searchWorld(
       rows: [],
       read: [],
     }
-  // Both ways: a term the query holds whole (an alias inside a longer question), or the query
-  // inside a term (part of a keyword).
-  const hits = (terms: readonly string[]): boolean => {
-    const present = terms.filter((term) => term !== '')
-    return matchTerms(query, present).length > 0 || present.some((term) => term.includes(needle))
-  }
-
   const found: Match[] = []
   const entityRows = await ctx.db
     .select({
@@ -202,12 +217,12 @@ async function searchWorld(
     .from(entities)
     .where(eq(entities.branchId, ctx.branchId))
   for (const row of entityRows) {
-    const byName = hits([normalizeTerm(row.name)])
-    if (!byName && !hits(keywordTerms(row.keywords))) continue
+    const rank = rankOf(query, needle, row.name, keywordTerms(row.keywords))
+    if (rank === undefined) continue
     found.push({
       id: row.id,
       name: row.name,
-      byName,
+      rank,
       kind: row.kind,
       status: row.status,
       description: row.description,
@@ -218,18 +233,19 @@ async function searchWorld(
     .from(happenings)
     .where(eq(happenings.branchId, ctx.branchId))
   for (const row of happeningRows) {
-    if (!hits([normalizeTerm(row.title)])) continue
+    const rank = rankOf(query, needle, row.title, [])
+    if (rank === undefined) continue
     found.push({
       id: row.id,
       name: row.title,
-      byName: true,
+      rank,
       kind: 'happening',
       status: null,
       description: row.description,
     })
   }
 
-  found.sort((a, b) => Number(b.byName) - Number(a.byName) || a.name.localeCompare(b.name))
+  found.sort((a, b) => a.rank - b.rank || a.name.localeCompare(b.name))
   const matches: { id: string; line: string }[] = []
   for (const match of found.slice(0, SEARCH_WORLD_LIMIT)) {
     const id = ctx.ids.show(match.id, match.name)
