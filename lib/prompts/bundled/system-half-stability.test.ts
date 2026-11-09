@@ -499,7 +499,6 @@ describe('bundled system halves render byte-identically across calls', () => {
   })
 })
 
-// architecture.md → System and user halves: the one change besides the story and its settings.
 // memory/chapter-close.md → Conversations: a part's tasks share their system half byte for byte,
 // so the chapter stays cached across tool lists; each task's own rows sit in its user half.
 describe("a close's task templates share one system half", () => {
@@ -583,6 +582,7 @@ describe("a close's task templates share one system half", () => {
   })
 })
 
+// architecture.md → System and user halves: the one change besides the story and its settings.
 describe("a lead's rename", () => {
   const LEAD_SYSTEM_TEMPLATES = Object.values(TEMPLATE_IDS).filter((id) =>
     templateGlobals(engine, id, 'system').has('lead'),
