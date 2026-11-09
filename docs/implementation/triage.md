@@ -306,11 +306,3 @@ patch`, which 5.5a marks `restated`, so a close tool's write of it
   `lib/actions/happenings/register-happenings.ts`), which a shared
   helper would take about six parameters to serve. Worth lifting when a
   third copy appears. Raised in 5.5b's slice review.
-- **A gone row's id in stored text reaches a close as a nameless
-  handle.** `read_row` and the close's starts name every row their text
-  cites (`refsIn`, `close-agent/read-tools.ts`), but an id whose row no
-  longer exists still becomes a handle `CloseIds.withHandles` mints with
-  no name. A write that copies it into prose keeps the handle, since
-  `nameIdsInProse` leaves a token it can't name, and a later prompt reads
-  it as whatever holds that handle then. Showing such an id as "a row"
-  would close it. Raised in 5.5b's slice review (CodeRabbit).
