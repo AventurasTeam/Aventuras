@@ -382,13 +382,16 @@ describe('the dataset overlay', () => {
 
   it('throws on a seed that holds the user edit with no user edit logged, before writing', async () => {
     const ctx = await seededDataset()
+    await undoSeedClose(ctx)
     await ctx.db
       .update(entities)
       .set({ description: DATASET_OVERLAY.userEdit.description })
       .where(and(eq(entities.branchId, B), eq(entities.id, SILVER)))
+    const before = await overlaidState(ctx)
 
     await expect(applyDatasetOverlay(ctx)).rejects.toThrow(/no user edit/)
 
+    expect(await overlaidState(ctx)).toEqual(before)
     expect(byId(await entityRows(ctx, [JIM])).get(JIM)?.state).toMatchObject({ traits: [] })
     expect(await userEdits(ctx)).toEqual([])
   })
