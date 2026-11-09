@@ -6,7 +6,7 @@ import { oneLine } from '@/lib/text'
 import type { CloseIds } from './ids'
 import type { CloseLedger } from '../intermediates'
 
-/** C4: what a report keeps of one value; provisional until a real model's run sizes it (5.5b). */
+/** C4: what a report keeps of one value. */
 export const CLOSE_REPORT_VALUE_BOUND = 2_000
 
 type NameOfId = (id: string) => string | undefined
