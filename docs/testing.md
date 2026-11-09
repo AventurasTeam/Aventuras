@@ -734,13 +734,15 @@ the cap check, landed or refused, and `merge_threads` calls, each with
 its hits. After the runs it prints the bar: met when there are 8 runs of
 10 in which both tasks held and each coverage count came up in 3 runs
 of 10, both scaled to `PROBE_RUNS`; inconclusive when enough runs held
-but a count fell short; missed otherwise. It writes the verdict and each
-run's tally to `bar.json` in `PROBE_OUT`, and exits non-zero unless the
-bar is met. `PROBE_REJUDGE=<probe-out dir>` judges a saved overlay
-measure by the bar as it stands, rebuilding each run's tally from its
-saved steps and report with no model call; it needs the directory's
-`bar.json`, writes `bar-rejudged.json` beside the runs, and never
-overwrites one.
+but a count fell short; missed otherwise. It writes the verdict, each
+run's tally and the overlay's capped lists that coverage counted by to
+`bar.json` in `PROBE_OUT`, and exits non-zero unless the bar is met.
+`PROBE_REJUDGE=<probe-out dir>` judges a saved overlay measure by the
+bar as it stands, rebuilding each run's tally from its saved steps and
+report with no model call. Coverage counts by the capped lists
+`bar.json` recorded, or by today's overlay where it records none, and
+the probe prints which. It needs the directory's `bar.json`, writes
+`bar-rejudged.json` beside the runs, and never overwrites one.
 
 ## Selector strategy
 
