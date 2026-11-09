@@ -242,21 +242,3 @@ patch`, which 5.5a marks `restated`, so a close tool's write of it
   the narrator's histories and the close's turns, but the
   chapter-metadata call and the suggestion refresh render through
   `macro_story_entry` and mark them too. Raised in 5.5b's review.
-- **The close's writes at the capability floor: invented facts, malformed
-  batches, and sampling.** 5.5b's measure on the dev model (Gemma 4
-  26B-A4B, ten closes of the Treasure Island chapter) held the bar, but
-  its transcripts show work for prompt tuning, not a code fix:
-  - Facts the cited turns don't show landed: Pew called "one-legged",
-    Supervisor Dance given Dr. Livesey's "a gentleman and a
-    magistrate", Billy Bones' drives replaced by one no turn shows, and
-    "The August deadline" failed early in runs 3, 5 and 10.
-  - Every Identity first step that skipped its thinking and sent a
-    batch of calls had malformed arguments (6 of 6): lists sent as
-    strings, `turns` padded with `true`, an escaped array landing as
-    one entry.
-  - The close's tool steps send no temperature, so the dev server
-    samples at its 1.0 with no repeat penalty; all four replies cut
-    off at the 8,000-token bound were loops or over-long deliberation.
-
-  The record and the saved conversations are the inputs; see 5.5b's
-  measure record in its slice doc. Raised in 5.5b's measure.

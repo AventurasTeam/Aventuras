@@ -458,6 +458,38 @@ breakdown under [UX](#ux).
   "far back" needs played stories to define, and a close doesn't produce
   it. Moved out of M5 at its promotion, 2026-11-01.
 
+- **A list joined with commas into one entry.** The close's Identity
+  tools read a list leaked into one entry as the entries it holds: an
+  entry that parses as a JSON string list (the shape the dev model leaked
+  in 5.5b's measure, plus its backslash-escaped, bracketed and
+  pretty-printed variants) and a line-separated list. A list joined with
+  plain commas or semicolons ("brave, honest, loyal, ...") still reads as
+  one entry, so it passes the soft cap. It isn't split, because that would
+  break legitimate entries like "quick-witted, if rash"
+  ([the slice's note](./implementation/milestones/05-chapters-chapter-close/slices/05b-identity-threads.md#implementation-notes)).
+  Watch for it in play testing, and decide on a rule (refusing an entry
+  that reads as a list, for example) only if it shows up. Developer
+  ruling, 2026-11-09.
+
+- **The close's writes at the capability floor: invented facts, malformed
+  batches, and sampling.** 5.5b's measure on the dev model (Gemma 4
+  26B-A4B, ten closes of the Treasure Island chapter) held the bar, but
+  its transcripts show work for prompt tuning, not a code fix:
+  - Facts the cited turns don't show landed: Pew called "one-legged",
+    Supervisor Dance given Dr. Livesey's "a gentleman and a
+    magistrate", Billy Bones' drives replaced by one no turn shows, and
+    "The August deadline" failed early in runs 3, 5 and 10.
+  - Every Identity first step that skipped its thinking and sent a
+    batch of calls had malformed arguments (6 of 6): lists sent as
+    strings, `turns` padded with `true`, an escaped array landing as
+    one entry.
+  - The close's tool steps send no temperature, so the dev server
+    samples at its 1.0 with no repeat penalty; all four replies cut
+    off at the 8,000-token bound were loops or over-long deliberation.
+
+  The record and the saved conversations are the inputs; see 5.5b's
+  measure record in its slice doc. Raised in 5.5b's measure.
+
 - **Parked items play gives a signal for.** Each waits on evidence
   only play produces, so play checks them rather than letting the
   signal pass unseen:
