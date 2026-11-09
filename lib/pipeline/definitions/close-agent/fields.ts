@@ -73,11 +73,19 @@ function joinedList(entry: string, bracketed = false): string[] | undefined {
 }
 
 const LIST_MARKER = /^(?:[-*]|\d+\.)\s+/
+const BRACKET_LINE = /^[[\]],?$/
 
-/** A list entry never spans lines; a split entry's lines drop their list markers. */
+/**
+ * A list entry never spans lines; a split entry drops the lines that hold only a list's bracket,
+ * and its lines' list markers.
+ */
 function entryLines(entry: string): string[] {
   const lines = entry.split('\n')
-  return lines.length === 1 ? lines : lines.map((line) => line.trim().replace(LIST_MARKER, ''))
+  if (lines.length === 1) return lines
+  return lines
+    .map((line) => line.trim())
+    .filter((line) => !BRACKET_LINE.test(line))
+    .map((line) => line.replace(LIST_MARKER, ''))
 }
 
 const heldEntries = (entry: string): string[] =>

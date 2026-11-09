@@ -163,6 +163,21 @@ describe('sentList', () => {
     },
   )
 
+  it('drops the lines of a split entry that hold only a bracket, with a trailing comma or not', () => {
+    expect(entries(['[\npatient\nwary\n]'])).toEqual(['patient', 'wary'])
+    expect(entries(['  [\r\n  patient\n  ],\n  [,\n  wary\n  ]  '])).toEqual(['patient', 'wary'])
+  })
+
+  it("keeps a trailing-comma list's quoted lines, with their quotes and commas, once its bracket lines drop", () => {
+    expect(entries(['[\n  "patient",\n  "wary",\n]'])).toEqual(['"patient",', '"wary",'])
+  })
+
+  it('keeps a bracket on an entry of one line, or on a split line holding more', () => {
+    expect(entries(['],'])).toEqual(['],'])
+    expect(entries(['[,'])).toEqual(['[,'])
+    expect(entries(['[ wary ]\n- [\n],]'])).toEqual(['[ wary ]', '[', '],]'])
+  })
+
   it("keeps a split line's own quotes", () => {
     expect(entries([`stands 6'2"\nwary`])).toEqual([`stands 6'2"`, 'wary'])
   })

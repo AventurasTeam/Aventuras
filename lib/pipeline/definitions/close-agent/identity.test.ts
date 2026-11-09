@@ -882,6 +882,35 @@ describe('update_character and update_faction', () => {
     expect((await storedEntity(f, WREN)).state).toMatchObject({ traits: ['brave', 'wary'] })
   })
 
+  it('lands a bracketed list split over lines as its entries, its bracket lines dropped', async () => {
+    const { calls } = await dispatchScripted(
+      f,
+      [
+        {
+          toolName: 'update_character',
+          input: { id: 'c1', traits: ['[\npatient\nwary\n]'], ...cite() },
+        },
+      ],
+      { shown: CAST },
+    )
+
+    expect(calls[0]).toMatchObject({ result: 'ok', values: { 'state.traits': 'patient, wary' } })
+    expect((await storedEntity(f, WREN)).state).toMatchObject({ traits: ['patient', 'wary'] })
+  })
+
+  it('counts a bracketed list split over lines without its bracket lines: 8 traits land at the cap of 8', async () => {
+    const traits = [`[\n${terms('sailor', 8).join('\n')}\n]`]
+
+    const { calls } = await dispatchScripted(
+      f,
+      [{ toolName: 'update_character', input: { id: 'c1', traits, ...cite() } }],
+      { shown: CAST },
+    )
+
+    expect(calls[0]).toMatchObject({ result: 'ok' })
+    expect((await storedEntity(f, WREN)).state).toMatchObject({ traits: terms('sailor', 8) })
+  })
+
   it.each([['user'], ['earlier-close']] as const)(
     'reads a resent list whose stored entry holds a line break as restated, after a %s edit',
     async (editor) => {
