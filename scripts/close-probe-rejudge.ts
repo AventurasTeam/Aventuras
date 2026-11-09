@@ -1,20 +1,18 @@
 import { existsSync, readdirSync, readFileSync } from 'node:fs'
 import { join } from 'node:path'
 
-import { CLOSE_TASKS, closeReportSchema, type CloseReport, type CloseTask } from '@/lib/db'
+import { closeReportSchema, type CloseReport } from '@/lib/db'
 import type { CappedList } from '@/lib/pipeline/definitions/close-agent/fields'
 
 import {
   attemptOf,
   barVerdict,
+  parseStepFileName,
   type BarVerdict,
   type RunTally,
   type StepAttempt,
   tallyRun,
 } from './close-probe-bar'
-
-// <task>-p<part>-s<step>.json, and <task>-p<part>-s<step>-r<k>.json for an attempt the step retried.
-const STEP_FILE = new RegExp(`^(${CLOSE_TASKS.join('|')})-p\\d+-s(\\d+)(?:-r(\\d+))?\\.json$`)
 
 const readJson = (path: string): unknown => JSON.parse(readFileSync(path, 'utf8')) as unknown
 
@@ -24,23 +22,24 @@ function readReport(runDir: string): CloseReport | null {
 }
 
 function readAttempts(runDir: string, report: CloseReport | null): StepAttempt[] {
-  const names = readdirSync(runDir).filter((name) => STEP_FILE.test(name))
+  const files = readdirSync(runDir).flatMap((name) => {
+    const file = parseStepFileName(name)
+    return file === null ? [] : [{ name, file }]
+  })
   // A close that wrote a report made tool steps: no file for them means a layout this can't read.
-  if (report !== null && names.length === 0)
+  if (report !== null && files.length === 0)
     throw new Error(`[probe:close] ${runDir} has a report and no step files to read`)
   // A task with no step file would pass the output bound unread.
-  const saved = new Set(names.map((name) => (STEP_FILE.exec(name) as RegExpExecArray)[1]))
+  const saved = new Set(files.map(({ file }) => file.task))
   const unsaved = [...new Set(report?.calls.map(({ task }) => task))].filter((t) => !saved.has(t))
   if (unsaved.length > 0)
     throw new Error(
       `[probe:close] ${runDir} has no step file for ${unsaved.join(', ')}, whose calls its report holds`,
     )
-  const found = names.flatMap((name) => {
-    const match = STEP_FILE.exec(name) as RegExpExecArray
-    const [, task, step, retry] = match
+  const found = files.flatMap(({ name, file }) => {
     const response = (readJson(join(runDir, name)) as { response?: unknown }).response
-    const attempt = attemptOf(task as CloseTask, Number(step), response)
-    return attempt === null ? [] : [{ attempt, retry: Number(retry ?? 0) }]
+    const attempt = attemptOf(file.task, file.step, response)
+    return attempt === null ? [] : [{ attempt, retry: file.retry }]
   })
   return found
     .sort((a, b) => a.attempt.step - b.attempt.step || a.retry - b.retry)

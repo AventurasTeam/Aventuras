@@ -1,12 +1,14 @@
 import { describe, expect, it } from 'vitest'
 
-import type { CloseReport, CloseReportCall } from '@/lib/db'
+import { CLOSE_TASKS, type CloseReport, type CloseReportCall } from '@/lib/db'
 
 import {
   attemptOf,
   barVerdict,
   failedRunsExit,
   largestOf,
+  parseStepFileName,
+  stepFileName,
   tallyRun,
   type CapHit,
   type StepAttempt,
@@ -393,6 +395,43 @@ describe('attemptOf', () => {
     })
     expect(attemptOf('threads', 1, null)).toBeNull()
     expect(attemptOf('threads', 1, 'not json')).toBeNull()
+  })
+})
+
+describe('step file names', () => {
+  it('names a step by task, part and step, and a retried attempt by its retry beside it', () => {
+    expect(stepFileName({ task: 'identity', part: 1 }, 2, 0)).toBe('identity-p1-s2.json')
+    expect(stepFileName({ task: 'threads', part: 1 }, 3, 1)).toBe('threads-p1-s3-r1.json')
+    expect(stepFileName({ task: 'identity', part: 2 }, 12, 0)).toBe('identity-p2-s12.json')
+  })
+
+  it('reads back every name it writes, for every close task', () => {
+    for (const task of CLOSE_TASKS)
+      for (const [part, step, retry] of [
+        [0, 1, 0],
+        [1, 3, 1],
+        [2, 12, 0],
+        [11, 10, 12],
+      ] as const)
+        expect(parseStepFileName(stepFileName({ task, part }, step, retry))).toEqual({
+          task,
+          part,
+          step,
+          retry,
+        })
+  })
+
+  it('reads no other file, and no step that no task start preceded', () => {
+    expect(stepFileName(null, 3, 0)).toBe('unknown-p0-s3.json')
+    for (const name of [
+      'unknown-p0-s3.json',
+      'report.json',
+      'identity-p1-s2.json.bak',
+      'identity-p1-s.json',
+      'identity-s2.json',
+      'scribe-p1-s2.json',
+    ])
+      expect(parseStepFileName(name), name).toBeNull()
   })
 })
 

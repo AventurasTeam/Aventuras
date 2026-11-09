@@ -61,6 +61,7 @@ import {
   barVerdict,
   failedRunsExit,
   largestOf,
+  stepFileName,
   tallyRun,
   type Measured,
   type RunTally,
@@ -176,9 +177,10 @@ function toolStepNumber(body: unknown): number | null {
   return replies + 1
 }
 
-function unusedName(base: string): string {
-  let name = base
-  for (let retry = 1; capture.written.has(name); retry++) name = `${base}-r${retry}`
+function unusedName(step: number): string {
+  let retry = 0
+  while (capture.written.has(stepFileName(capture.task, step, retry))) retry += 1
+  const name = stepFileName(capture.task, step, retry)
   capture.written.add(name)
   return name
 }
@@ -190,10 +192,7 @@ function noteStep(step: number, saved: () => object): void {
   const key = capture.task === null ? 'unknown-p0' : callKey(capture.task)
   capture.steps.set(key, Math.max(capture.steps.get(key) ?? 0, step))
   if (capture.dir === null) return
-  writeFileSync(
-    join(capture.dir, `${unusedName(`${key}-s${step}`)}.json`),
-    `${JSON.stringify(saved(), null, 2)}\n`,
-  )
+  writeFileSync(join(capture.dir, unusedName(step)), `${JSON.stringify(saved(), null, 2)}\n`)
 }
 
 const where = (): string =>

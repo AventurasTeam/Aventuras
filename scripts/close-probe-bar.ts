@@ -1,6 +1,6 @@
 import { USER_EDITED_SINCE_PROSE } from '@/lib/actions/types'
 import { TOOL_STEP_MAX_OUTPUT_DEFAULT } from '@/lib/ai'
-import type { CloseReport, CloseReportCall, CloseTask } from '@/lib/db'
+import { CLOSE_TASKS, type CloseReport, type CloseReportCall, type CloseTask } from '@/lib/db'
 import type { CappedList } from '@/lib/pipeline/definitions/close-agent/fields'
 import { CLOSE_REASON } from '@/lib/pipeline/definitions/close-agent/verdict'
 
@@ -115,6 +115,34 @@ function mergeHitOf(call: CloseReportCall): MergeHit {
     rows: call.rows.map(({ name }) => name),
     result: call.result,
     ...(call.reason === undefined ? {} : { reason: call.reason }),
+  }
+}
+
+/** A saved tool-step attempt's file, by its task and part, its step, and its retry (0 for none). */
+export type StepFile = { task: CloseTask; part: number; step: number; retry: number }
+
+const STEP_FILE = new RegExp(`^(${CLOSE_TASKS.join('|')})-p(\\d+)-s(\\d+)(?:-r(\\d+))?\\.json$`)
+
+// A step no task start preceded is saved too, under a name the reader skips: it is no task's.
+export function stepFileName(
+  at: { task: CloseTask; part: number } | null,
+  step: number,
+  retry: number,
+): string {
+  const key = at === null ? 'unknown-p0' : `${at.task}-p${at.part}`
+  return `${key}-s${step}${retry === 0 ? '' : `-r${retry}`}.json`
+}
+
+/** A step file's name read back; null for any other file. */
+export function parseStepFileName(name: string): StepFile | null {
+  const match = STEP_FILE.exec(name)
+  if (match === null) return null
+  const [, task, part, step, retry] = match
+  return {
+    task: task as CloseTask,
+    part: Number(part),
+    step: Number(step),
+    retry: Number(retry ?? 0),
   }
 }
 
