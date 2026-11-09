@@ -242,3 +242,14 @@ patch`, which 5.5a marks `restated`, so a close tool's write of it
   the narrator's histories and the close's turns, but the
   chapter-metadata call and the suggestion refresh render through
   `macro_story_entry` and mark them too. Raised in 5.5b's review.
+- **Boot recovery reverts a close that is still running.**
+  `recoverInFlightRuns` (`lib/pipeline/runtime/recovery.ts`, called only
+  from `runBootstrap`) reverses every `pipeline_runs` row with no
+  `finished_at`, with no check against the runs live in this process. In
+  production only a reload re-runs it, and a reload ends the run too; in
+  a dev build, a Fast Refresh that re-runs `RootLayout`'s bootstrap
+  effect could revert an in-flight close. 5.5b's dev-route close failed
+  once in a way that fits: the report phase found no chapter row and a
+  "Story recovered" modal followed. It didn't reproduce on a clean rerun
+  and no Fast Refresh was observed, so the trigger is unconfirmed.
+  Raised in 5.5b's measure.

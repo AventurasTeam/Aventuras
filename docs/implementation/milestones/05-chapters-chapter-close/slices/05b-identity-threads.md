@@ -611,8 +611,11 @@ None open: Implementation notes record each answer.
   four misses were a step cut off at the 8,000-token bound whose one
   retry then succeeded. The developer amended the clause after the runs
   (2026-11-09): a step cut off at the bound whose one retry succeeds
-  counts as a hold, since the four were model instability, loops
-  the close recovered from; a task whose retry is cut off too still
+  counts as a hold: the developer judged a token limit not a failure as
+  such, being model and environment dependent, so long as the close
+  recovers from a single failed phase into a pass (the four were three
+  repetition loops and one over-long deliberation, each recovered by its
+  retry); a task whose retry is cut off too still
   misses, being stopped, and every other clause stands. The same 10
   runs, re-judged with no rerun, read met: 10 of 10 passing, a cap-check
   call in 10 and `merge_threads` in 10. The probe now judges the amended
@@ -636,7 +639,7 @@ None open: Implementation notes record each answer.
   it with `update_thread` if the chapter resolved or failed it, since
   "resolve it first" would lead into the already-wrote refusal below.
   [`chapter-close.md → 3f`](../../../../memory/chapter-close.md#3f--world-upkeep)
-  says so. The measure ran before the widening; all 17 of its merges
+  says so. The measure ran before the widening; all 16 of its merges
   kept an active thread, so none would change.
 - **A soft cap refuses a list only when it is over its cap and longer
   than the stored one (developer decision, 2026-11-09),** so a row
@@ -655,7 +658,8 @@ None open: Implementation notes record each answer.
   the overlay adds members. A name matches only as stored, so "the
   buccaneers" misses a turn that says "buccaneers" alone. Slice 5.8's
   starts read the same way. A faction row shows `status`, "(retired)"
-  like a character's.
+  like a character's, and the starts sort names by code units, not the
+  device locale, so the prompt's row order doesn't depend on it.
 - **Whole-prompt counting per step: a count cache, then a bar on the
   Fold (developer decision, 2026-11-09).** `countPromptTokens` caches
   each text's count, bounded by characters (2,000,000, and at most
@@ -748,9 +752,10 @@ None open: Implementation notes record each answer.
 - **Tools are declared with their shape,** `WriteTool<typeof SHAPE>`, so
   a misspelt `ids` key fails to compile, and their tests send each id
   argument as a handle through `dispatchToolCall`.
-- **`search_world` ranks whole-term matches first:** an exact name or
-  keyword ranks first, then a name found whole, a keyword found whole, a
-  partial name and a partial keyword, ties by name. The cap cuts after
+- **`search_world` ranks whole-term matches first:** an exact name or an
+  exact keyword ranks first (rank 0), then a name found whole, a keyword
+  found whole, a partial name and a partial keyword, ties by name, and
+  its description says best matches come first. The cap cuts after
   ranking, so an exact match falls into `omitted` only when more than 20
   rows tie at the top rank.
 - **A voice is bounded once:** `lib/classifier` exports `boundVoice`, at
@@ -791,9 +796,6 @@ None open: Implementation notes record each answer.
   read through the `@/lib/actions` barrel closed an import cycle once
   the slots reached `thread-tools`; an eslint boundaries rule now
   refuses a value import of the actions barrel from `lib/pipeline`.
-- **`search_world` ranks an exact keyword with an exact name** (rank 0),
-  so the cap can't cut an exact alias match, and its description says
-  best matches come first.
 - **The probe names what it counted:** each counted cap check (row,
   path, the list's own outcome) and merge, run-numbered report sizes
   with aggregates, `console.debug` silenced, and `PROBE_OVERLAY` with
@@ -818,13 +820,9 @@ None open: Implementation notes record each answer.
 - **`CLOSE_REPORT_VALUE_BOUND` stays 2,000:** the largest well-formed
   value was 226 characters, and run 9's 238-character value was the
   corrupted joined list.
-- **A close attempt on the dev build failed once, unexplained.** On the
-  per-step count measure's first attempt the report phase found no
-  chapter row and the "Story recovered" modal followed; a rerun of about
-  4 minutes with no source edit completed with neither, and the cause
-  isn't established (a Fast Refresh re-running boot recovery is
-  possible, nothing observed shows one). The evidence is under the
-  count probe's `_tmp/count-probe/close-attempt-1.txt`.
+- **A close on the dev build reverted once, cause unconfirmed.** The
+  per-step count measure's first attempt hit it; it is a
+  [triage](../../../triage.md#inbox) entry.
 
 ### Close-task measure
 
@@ -862,8 +860,7 @@ characters (`update_character`, `state.drives`, run 4; run 9's
 18,243 bytes (run 5), so `CLOSE_REPORT_VALUE_BOUND` stays at 2,000. The
 saved messages are in
 `failerko-desktopserver:/home/failerko/.cache/aventuras-measure/m5-5b/probe-20261109T0742Z`
-(the worktree's untracked `_tmp/measure/probe-out` holds the same files,
-with the probe log beside it in `_tmp/measure/probe.log`). Runs 1, 3, 5
+(the probe log is beside it). Runs 1, 3, 5
 and 10 and the first three passes, runs 2, 4 and 6, had their
 transcripts read: the verdicts matched, the merges kept the active
 thread, and the cap calls were real swaps at the cap. The reads also
@@ -910,9 +907,13 @@ turns in Japanese, and the largest single Japanese entry's
 | Galaxy Z Fold (SM-F966B), release `arm64-v8a` | pending                        | pending             | pending              | pending             | pending                |
 
 The desktop figures are each the larger of two page loads, on the
-renderer of slot 1 under Xvfb at `f908bd1b4` with the probe applied
-(`_tmp/count-probe.patch`). The real close's 15 steps (attempt C, 28,122
-tokens at Identity step 1) all counted in 10 ms or less, and the
+renderer of slot 1 under Xvfb at `f908bd1b4` with the temporary probe
+applied, not committed. The measure's real closes ran three times:
+attempt A failed in the report phase with the "Story recovered" modal,
+cause unconfirmed (see [triage](../../../triage.md#inbox)); attempt B failed
+in the metadata phase when the dev model ran away to 39,655 output
+tokens; attempt C completed. Attempt C's 15 steps (28,122 tokens at
+Identity step 1) all counted in 10 ms or less, and the
 probe's English prompt matched that close's Identity step 1 estimate
 exactly (28,122 tokens, gap 0). A warm step took 0.0 ms for the English
 prompt, 0.0 to 0.1 ms for the Japanese and 0.0 ms for the turns-only
