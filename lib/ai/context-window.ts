@@ -75,20 +75,33 @@ export function describeContextWindow(failure: ContextWindowFailure): string {
   )
 }
 
-/** The most texts the count cache holds; past it, the least recently used goes. */
-export const PROMPT_COUNT_CACHE_ENTRIES = 256
+/** The most texts the count cache holds. */
+export const PROMPT_COUNT_CACHE_ENTRIES = 4096
+/** The most characters the count cache holds across its texts. */
+export const PROMPT_COUNT_CACHE_CHARS = 2_000_000
 
 // A tool step resends its system half, its tools and every earlier step, and a turn its system
-// prompt, so each text counts once while held. A Map iterates in insertion order: re-setting an
-// entry on every use keeps the least recently used first.
+// prompt, so each text counts once while held. A close task's steps count the same texts in the
+// same order, so the system half, a chapter long, must outlast the task's other texts: the bound
+// is characters, with a generous entry cap, since a small entry bound would evict it. A Map iterates in insertion order: re-setting an entry on every use keeps the least
+// recently used first.
 const promptCounts = new Map<string, number>()
+let cachedChars = 0
+
+function forget(text: string): void {
+  if (promptCounts.delete(text)) cachedChars -= text.length
+}
 
 function remember(text: string, tokens: number): void {
-  promptCounts.delete(text)
+  forget(text)
+  // Longer than the whole budget: counted each time, and no held text goes for it.
+  if (text.length > PROMPT_COUNT_CACHE_CHARS) return
   promptCounts.set(text, tokens)
-  if (promptCounts.size > PROMPT_COUNT_CACHE_ENTRIES) {
+  cachedChars += text.length
+  while (promptCounts.size > PROMPT_COUNT_CACHE_ENTRIES || cachedChars > PROMPT_COUNT_CACHE_CHARS) {
     const oldest = promptCounts.keys().next()
-    if (!oldest.done) promptCounts.delete(oldest.value)
+    if (oldest.done) break
+    forget(oldest.value)
   }
 }
 
@@ -98,7 +111,8 @@ function countOnce(text: string): number {
   return tokens
 }
 
-/** Records a text's count without encoding it: an entry of the count cache like any other. */
+/** Records a text's count without encoding it. `tokens` must be the count of exactly this text:
+ *  the pre-send check trusts it. */
 export function primePromptCount(text: string, tokens: number): void {
   remember(text, tokens)
 }
@@ -106,6 +120,7 @@ export function primePromptCount(text: string, tokens: number): void {
 /** Test seam: empties the count cache. */
 export function __clearPromptCountCache(): void {
   promptCounts.clear()
+  cachedChars = 0
 }
 
 /** countTokens over the request as sent: system content; text and reasoning parts; each tool
