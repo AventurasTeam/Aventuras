@@ -830,7 +830,12 @@ describe('a merge of a row this close already wrote', () => {
     expect(chapter.closeReport).toMatchObject({
       calls: [
         { task: 'threads', tool: 'update_thread', result: 'ok' },
-        { task: 'threads', tool: 'merge_threads', result: 'rejected' },
+        {
+          task: 'threads',
+          tool: 'merge_threads',
+          result: 'rejected',
+          reason: expect.stringContaining('keep that thread instead'),
+        },
       ],
     })
     const threadDeltas = (await deltasOf(h.fx, h.actionId())).filter(
