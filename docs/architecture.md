@@ -317,7 +317,8 @@ tasks read
 ([`chapter-close.md → Conversations`](./memory/chapter-close.md#conversations))
 mark a `user_action` entry as the user's, so a model can tell the lead's
 attempt or a direction from the narration; the opening and the replies
-render unmarked. The mark costs a few tokens per user turn.
+render unmarked, though the close's turns also label the opening and the
+narration. The mark costs a few tokens per user turn.
 
 ### Structured output — the JSON contract is not pack content
 

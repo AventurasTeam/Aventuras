@@ -434,7 +434,7 @@ action layer as `user_edit`, so precedence reads it. It undoes the seed's
 close first, since that close's undo would later put the bare values
 back, and refuses a closed chapter whose close isn't the branch's last
 action. It fails on a seed row whose id or name no longer matches,
-before writing anything. Applying it twice changes nothing and logs the
+before writing any overlay value. Applying it twice changes nothing and logs the
 user edit once. The seed file stays the pipeline's output: a refresh
 runs without the overlay.
 

@@ -645,8 +645,9 @@ conservative bias as the sub-jobs above:
   written at the opening, as the pass writes a closing turn
   ([`classifier.md → Threads`](./classifier.md#threads)); the latest cited
   turn still sets precedence. An active thread costs every turn's prompt
-  until it closes. A merge follows 3e's rules: nothing links to a thread,
-  so it is an update and a delete. The kept row's status, entry refs,
+  until it closes ([`classifier.md → Threads`](./classifier.md#threads)).
+  A merge follows 3e's rules: nothing links to a thread, so it is an
+  update and a delete. The kept row's status, entry refs,
   category, icon and injection mode stand, and the merge writes only its
   title and description. Absorbing an `active` thread into a `pending`
   one is refused, since the kept row would drop the thread from the
