@@ -1,6 +1,8 @@
 import { existsSync, readdirSync, readFileSync } from 'node:fs'
 import { join } from 'node:path'
 
+import { z } from 'zod'
+
 import { closeReportSchema, type CloseReport } from '@/lib/db'
 import type { CappedList } from '@/lib/pipeline/definitions/close-agent/fields'
 
@@ -15,6 +17,21 @@ import {
 } from './close-probe-bar'
 
 const readJson = (path: string): unknown => JSON.parse(readFileSync(path, 'utf8')) as unknown
+
+type CappedLists = readonly { id: string; list: CappedList }[]
+
+const LIST_NAMES = ['traits', 'drives', 'agenda'] as const satisfies readonly CappedList[]
+
+const savedBarSchema = z.object({
+  cappedLists: z.array(z.object({ id: z.string(), list: z.enum(LIST_NAMES) })).optional(),
+})
+
+function savedCappedLists(outDir: string): CappedLists | undefined {
+  const saved = savedBarSchema.safeParse(readJson(join(outDir, 'bar.json')))
+  if (!saved.success)
+    throw new Error(`[probe:close] ${outDir}/bar.json records capped lists this can't read`)
+  return saved.data.cappedLists
+}
 
 function readReport(runDir: string): CloseReport | null {
   const path = join(runDir, 'report.json')
@@ -46,15 +63,27 @@ function readAttempts(runDir: string, report: CloseReport | null): StepAttempt[]
     .map(({ attempt }) => attempt)
 }
 
-/** Judges the runs a probe saved under `outDir` by the bar as it stands, with no model call. */
+/**
+ * Judges the runs a probe saved under `outDir` by the bar as it stands, with no model call. Coverage
+ * reads the capped lists bar.json recorded, and `overlayLists` only for a bar.json that records none.
+ */
 export function rejudgeSaved(
   outDir: string,
-  cappedLists: readonly { id: string; list: CappedList }[],
-): { bar: BarVerdict; runs: { run: number; tally: RunTally }[] } {
+  overlayLists: CappedLists,
+): {
+  bar: BarVerdict
+  runs: { run: number; tally: RunTally }[]
+  cappedLists: { from: 'bar.json' | 'overlay'; lists: CappedLists }
+} {
   if (!existsSync(join(outDir, 'bar.json')))
     throw new Error(
       `[probe:close] ${outDir} has no bar.json: re-judging applies the overlay's capped lists, which only a PROBE_OVERLAY=1 measure saves`,
     )
+  const saved = savedCappedLists(outDir)
+  const cappedLists =
+    saved === undefined
+      ? { from: 'overlay' as const, lists: overlayLists }
+      : { from: 'bar.json' as const, lists: saved }
   const numbers = readdirSync(outDir)
     .flatMap((name) => /^run(\d+)$/.exec(name)?.slice(1, 2) ?? [])
     .map(Number)
@@ -65,9 +94,9 @@ export function rejudgeSaved(
     const tally = tallyRun({
       report,
       attempts: readAttempts(runDir, report),
-      cappedLists,
+      cappedLists: cappedLists.lists,
     })
     return { run, tally }
   })
-  return { bar: barVerdict(runs.map(({ tally }) => tally)), runs }
+  return { bar: barVerdict(runs.map(({ tally }) => tally)), runs, cappedLists }
 }

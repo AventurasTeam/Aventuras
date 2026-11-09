@@ -54,6 +54,23 @@ function onlyTally(): RunTally {
 
 const tallyOf = (runs: ReturnType<typeof rejudgeSaved>['runs'], k: number) => runs[k]?.tally
 
+const SILVER = 'char_00000000-0000-4000-8000-000000000001'
+const ARROW = 'char_00000000-0000-4000-8000-000000000002'
+
+// One Identity call that sent Silver's traits, landed.
+function saveCapCall(): void {
+  const capCall = {
+    ...landed('identity'),
+    rows: [{ table: 'entities', id: SILVER, name: 'Silver' }],
+    values: { 'state.traits': 'a' },
+  }
+  save(1, {
+    'identity-p1-s1.json': reply('stop', 9),
+    'threads-p1-s1.json': reply('stop', 9),
+    'report.json': { ...reportOf(), calls: [capCall, landed('threads')] },
+  })
+}
+
 describe('rejudgeSaved', () => {
   it('rebuilds each run from its saved steps and report, a retried attempt beside its step', () => {
     save(1, {
@@ -149,6 +166,32 @@ describe('rejudgeSaved', () => {
   it("refuses a run whose report holds a task's calls and no step file of that task", () => {
     save(1, { 'threads-p1-s1.json': reply('stop', 9), 'report.json': reportOf() })
     expect(() => rejudgeSaved(dir, [])).toThrow(/run1.*identity/)
+  })
+
+  it("counts coverage by the capped lists bar.json recorded, over today's overlay lists", () => {
+    writeFileSync(
+      join(dir, 'bar.json'),
+      JSON.stringify({ verdict: 'met', cappedLists: [{ id: ARROW, list: 'traits' }] }),
+    )
+    saveCapCall()
+    const { runs, cappedLists } = rejudgeSaved(dir, [{ id: SILVER, list: 'traits' }])
+    expect(cappedLists).toEqual({ from: 'bar.json', lists: [{ id: ARROW, list: 'traits' }] })
+    expect(tallyOf(runs, 0)?.capCalls).toBe(0)
+  })
+
+  it("falls back to today's overlay lists for a bar.json that records none", () => {
+    saveCapCall()
+    const { runs, cappedLists } = rejudgeSaved(dir, [{ id: SILVER, list: 'traits' }])
+    expect(cappedLists).toEqual({ from: 'overlay', lists: [{ id: SILVER, list: 'traits' }] })
+    expect(tallyOf(runs, 0)?.capHits).toEqual([
+      { row: 'Silver', path: 'state.traits', result: 'ok' },
+    ])
+  })
+
+  it('refuses a bar.json whose recorded capped lists it cannot read', () => {
+    writeFileSync(join(dir, 'bar.json'), JSON.stringify({ cappedLists: [{ id: SILVER }] }))
+    saveCapCall()
+    expect(() => rejudgeSaved(dir, [])).toThrow(/bar\.json/)
   })
 
   it('refuses a folder with no bar.json, which marks an overlay measure', () => {

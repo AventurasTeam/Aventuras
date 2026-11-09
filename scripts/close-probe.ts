@@ -97,6 +97,8 @@ const END_ENTRY = process.env.PROBE_END_ENTRY
 const OUT = process.env.PROBE_OUT
 const STAND_IN = process.env.PROBE_STAND_IN === '1'
 const REJUDGE = process.env.PROBE_REJUDGE
+// The overlay's capped lists as the bar reads them, recorded in bar.json for a later re-judge.
+const OVERLAY_LISTS = overlayCappedLists().map(({ id, list }) => ({ id, list }))
 
 const PROVIDER_ID = 'prov_probe'
 const PROFILE_ID = 'prof_probe'
@@ -430,7 +432,7 @@ function printBar(tallies: readonly RunTally[]): void {
     mkdirSync(resolve(OUT), { recursive: true })
     writeFileSync(
       join(resolve(OUT), 'bar.json'),
-      `${JSON.stringify({ ...bar, tallies }, null, 2)}\n`,
+      `${JSON.stringify({ ...bar, cappedLists: OVERLAY_LISTS, tallies }, null, 2)}\n`,
     )
   }
   if (bar.verdict !== 'met') process.exitCode = 1
@@ -566,7 +568,7 @@ async function probeRun(k: number, source: string, server: Server): Promise<RunR
     const tally = tallyRun({
       report,
       attempts: capture.attempts,
-      cappedLists: OVERLAY ? overlayCappedLists() : [],
+      cappedLists: OVERLAY ? OVERLAY_LISTS : [],
     })
     const largestValue = largestValueLogged()
     const reportBytes = report === null ? null : Buffer.byteLength(JSON.stringify(report))
@@ -586,11 +588,15 @@ function refuseUsedOutput(): void {
   )
 }
 
-// The saved runs' tallies, rebuilt: the bar's coverage reads the overlay's capped lists, as a run's.
 function rejudge(outDir: string): void {
   const dir = resolve(outDir)
-  const { bar, runs } = rejudgeSaved(dir, overlayCappedLists())
+  const { bar, runs, cappedLists } = rejudgeSaved(dir, OVERLAY_LISTS)
   const tallies = runs.map(({ tally }) => tally)
+  console.log(
+    cappedLists.from === 'bar.json'
+      ? `[probe:close] coverage reads the ${cappedLists.lists.length} capped lists bar.json recorded`
+      : `[probe:close] bar.json records no capped lists: coverage reads today's ${cappedLists.lists.length} in scripts/dataset-chapter/overlay-data.ts`,
+  )
   for (const { run, tally } of runs) {
     const { holds, cutOffs } = tally
     const verdicts = holds.map((hold) => `${hold.task} ${hold.held ? 'held' : hold.why}`)
@@ -602,7 +608,7 @@ function rejudge(outDir: string): void {
   console.log(`[probe:close] ${barLine(bar)}`)
   writeFileSync(
     join(dir, 'bar-rejudged.json'),
-    `${JSON.stringify({ ...bar, tallies }, null, 2)}\n`,
+    `${JSON.stringify({ ...bar, cappedLists: cappedLists.lists, tallies }, null, 2)}\n`,
     { flag: 'wx' },
   )
   if (bar.verdict !== 'met') process.exitCode = 1
