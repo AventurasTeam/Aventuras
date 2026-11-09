@@ -5,7 +5,17 @@ import { applyDeltaAction } from '@/lib/actions/delta/apply-delta-action'
 import { loadOpenStory } from '@/lib/actions/stories/operational'
 import { USER_EDITED_SINCE_PROSE, type GroupOutcome, type GuardRow } from '@/lib/actions/types'
 import type { ResolveModelConfig } from '@/lib/ai'
-import { deltas, entities, storyEntries, threads, type Thread, type ThreadStatus } from '@/lib/db'
+import {
+  branches,
+  deltas,
+  entities,
+  stories,
+  storyEntries,
+  threads,
+  type StoryMode,
+  type Thread,
+  type ThreadStatus,
+} from '@/lib/db'
 import { makeLogger } from '@/lib/diagnostics'
 import { resetAllStores } from '@/lib/stores'
 
@@ -1396,6 +1406,104 @@ describe('threadsTask', () => {
       '## t3 (narration)\nThe inn is warm and loud with drovers.',
     )
     expect(threadsPrompt.user).not.toBe(identityPrompt.user)
+  })
+
+  // Forks share thread ids under (branch_id, id): the start keeps to the close's branch.
+  it("reads only the close's branch, where a fork holds the same ids", async () => {
+    const fx = await openCloseFixture()
+    const forkId = 'br_close_fork'
+    await fx.ctx.db.insert(branches).values({
+      id: forkId,
+      storyId: fx.storyId,
+      parentBranchId: fx.branchId,
+      name: 'fork',
+      createdAt: 2,
+    })
+    await putThreadRow(fx, {
+      id: OPEN_ROWS.heir,
+      title: 'Find the heir',
+      status: 'active',
+      createdAt: 30,
+      description: 'Main.',
+    })
+    const base = {
+      injectionMode: 'auto' as const,
+      triggeredAtEntryId: null,
+      resolvedAtEntryId: null,
+      updatedAt: 1,
+    }
+    await fx.ctx.db.insert(threads).values({
+      ...base,
+      id: OPEN_ROWS.heir,
+      branchId: forkId,
+      title: 'Find the heir',
+      description: 'Fork.',
+      status: 'active',
+      createdAt: 30,
+    })
+    await fx.ctx.db.insert(threads).values({
+      ...base,
+      id: OPEN_ROWS.debt,
+      branchId: forkId,
+      title: 'Fork only',
+      status: 'pending',
+      createdAt: 1,
+    })
+
+    const { ids, start } = await startOf(fx)
+
+    expect(start?.show.threads).toEqual([
+      { id: 'th1', title: 'Find the heir', description: 'Main.', status: 'active' },
+    ])
+    expect(start?.seeds).toEqual([{ table: 'threads', id: OPEN_ROWS.heir }])
+    expect(ids.handleOf(OPEN_ROWS.debt)).toBeUndefined()
+  })
+
+  it('returns null, allocating no handle, when the task has no turns', async () => {
+    const fx = await openCloseFixture()
+    await putThreadRoster(fx)
+    const ids = threadsIdsWithTurns(fx)
+    const ctx = { ...threadsPromptContext(fx, ids), chapterEntryIds: [] }
+
+    expect(await threadsTask.start(ctx)).toBeNull()
+    expect(ids.handleOf(OPEN_ROWS.debt)).toBeUndefined()
+  })
+
+  it("puts the story mode's rule in the system half, the same as Identity's", async () => {
+    const fx = await openCloseFixture()
+    await putSceneCharacter(fx, OPEN_ROWS.kael, 'Kael', fx.entries[2]!.id)
+    await putThreadRoster(fx)
+    const render = async (mode: StoryMode) => {
+      const [story] = await fx.ctx.db
+        .select({ definition: stories.definition })
+        .from(stories)
+        .where(eq(stories.id, fx.storyId))
+      await fx.ctx.db
+        .update(stories)
+        .set({ definition: { ...story!.definition!, mode } })
+        .where(eq(stories.id, fx.storyId))
+      const ctx = threadsPromptContext(fx, threadsIdsWithTurns(fx))
+      const identityStart = await identityTask.start({
+        ...ctx,
+        task: 'identity',
+        readFields: IDENTITY_READ_FIELDS,
+      })
+      const threadsStart = await threadsTask.start(ctx)
+      return {
+        identity: identityTask.render(identityStart!, { ...ctx, writesSoFar: '' }).system,
+        threads: threadsTask.render(threadsStart!, { ...ctx, writesSoFar: '' }).system,
+      }
+    }
+
+    const creative = await render('creative')
+    expect(creative.threads).toContain('Each is a direction or prose')
+    expect(creative.threads).not.toContain('Each is what the lead does, says or attempts')
+    expect(creative.threads).toBe(creative.identity)
+
+    const adventure = await render('adventure')
+    expect(adventure.threads).toContain('Each is what the lead does, says or attempts')
+    expect(adventure.threads).not.toContain('Each is a direction or prose')
+    expect(adventure.threads).toBe(adventure.identity)
   })
 
   it('refuses to render with no turns', async () => {

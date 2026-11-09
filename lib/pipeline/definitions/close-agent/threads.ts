@@ -1,7 +1,7 @@
 import { and, asc, eq, inArray } from 'drizzle-orm'
 
 import type { PromptHalves } from '@/lib/ai'
-import { threads, type StoryMode, type ThreadStatus } from '@/lib/db'
+import { threads, type StoryMode } from '@/lib/db'
 import { renderTemplate, TEMPLATE_IDS } from '@/lib/prompts'
 
 import { readRowTool } from './read-tools'
@@ -9,20 +9,20 @@ import type { CloseTaskDef, TaskPromptContext, TaskStart } from './task'
 import { mergeThreadsTool, updateThreadTool } from './thread-tools'
 import type { ReadFields } from './tool'
 import { readTaskTurns, storyModeOf } from './turns'
-import type { CloseTurn } from '../chapter-context'
+import {
+  isOpen,
+  OPEN_THREAD_STATUSES,
+  type CloseTurn,
+  type OpenThreadStatus,
+} from '../chapter-context'
 
 /** C11: the fields Threads' start shows, so read_row returns the same and its rows count as read. */
 export const THREADS_READ_FIELDS: ReadFields = { thread: ['title', 'description', 'status'] }
 
-type OpenStatus = Extract<ThreadStatus, 'pending' | 'active'>
-const OPEN_STATUSES: readonly OpenStatus[] = ['pending', 'active']
-const isOpen = (status: ThreadStatus): status is OpenStatus =>
-  status === 'pending' || status === 'active'
-
 export type ThreadsShow = {
   mode: StoryMode
   closeTurns: CloseTurn[]
-  threads: { id: string; title: string; description: string; status: 'pending' | 'active' }[]
+  threads: { id: string; title: string; description: string; status: OpenThreadStatus }[]
 }
 
 // memory/chapter-close.md → Run order: the open threads, the user's included.
@@ -35,11 +35,15 @@ async function startThreads(ctx: TaskPromptContext): Promise<TaskStart<ThreadsSh
       status: threads.status,
     })
     .from(threads)
-    .where(and(eq(threads.branchId, ctx.branchId), inArray(threads.status, [...OPEN_STATUSES])))
+    .where(
+      and(eq(threads.branchId, ctx.branchId), inArray(threads.status, [...OPEN_THREAD_STATUSES])),
+    )
     .orderBy(asc(threads.createdAt), asc(threads.id))
-  const open = rows.flatMap((row) => (isOpen(row.status) ? [{ ...row, status: row.status }] : []))
+  const open = rows.filter(isOpen)
   if (open.length === 0) return null
   const { closeTurns } = await readTaskTurns(ctx)
+  // A task with nothing to start from makes no call; render needs a turn to show.
+  if (closeTurns.length === 0) return null
   return {
     show: {
       mode: await storyModeOf(ctx),
