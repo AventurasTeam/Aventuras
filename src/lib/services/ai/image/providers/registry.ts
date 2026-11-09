@@ -343,6 +343,7 @@ export async function listImageModels(
       modelCaches.set(cacheKey, { models, timestamp: Date.now(), ttl, seq })
       // A lookup running against a first list was answered from it; one running across a reload was not.
       evictCapabilities(cacheKey, previous !== undefined)
+      clearComfyCache(cacheKey)
     }
     return models
   } catch (error) {

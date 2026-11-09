@@ -1215,6 +1215,18 @@ describe('Image Provider Registry', () => {
         await listImageModels(conn('openai', 'sk-force-0000'), false)
         expect(listModels).toHaveBeenCalledTimes(2)
       })
+
+      it('drops the Comfy picks for a connection when its list is reloaded', async () => {
+        const connection = conn('openai', 'sk-reload-comfy')
+        await listImageModels(connection, false)
+        clearComfyCache.mockClear()
+
+        await listImageModels(connection, false)
+        expect(clearComfyCache).not.toHaveBeenCalled()
+
+        await listImageModels(connection, true)
+        expect(clearComfyCache).toHaveBeenCalledExactlyOnceWith(modelListKey(connection))
+      })
     })
 
     describe('evictReplacedModelList', () => {
