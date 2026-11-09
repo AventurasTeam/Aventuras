@@ -389,7 +389,7 @@ function printMeasures(
     )
     for (const hit of tally.capHits)
       console.log(
-        `[probe:close]     cap check ${hit.row} ${hit.path}: ${hitSuffix(hit.result, hit.reason)}`,
+        `[probe:close]     cap check ${hit.row} ${hit.path}: ${hitSuffix(hit.result, hit.result === 'refused' ? hit.reason : undefined)}`,
       )
     for (const hit of tally.mergeHits)
       console.log(

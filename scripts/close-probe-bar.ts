@@ -19,12 +19,9 @@ const BEFORE_THE_CAP = new Set<string>([
 
 export type TaskHold = { task: CloseTask; held: boolean; why: string }
 /** A capped list that reached the cap check: `result` is its outcome, `refused` when lost. */
-export type CapHit = {
-  row: string
-  path: string
-  result: CloseReportCall['result'] | 'refused'
-  reason?: string
-}
+export type CapHit =
+  | { row: string; path: string; result: CloseReportCall['result'] }
+  | { row: string; path: string; result: 'refused'; reason: string }
 /** A merge_threads call, by the names of the rows it named. */
 export type MergeHit = { rows: string[]; result: CloseReportCall['result']; reason?: string }
 /** One response to a tool step; a cut or filtered step is retried, so a step has several. */

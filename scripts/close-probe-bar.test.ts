@@ -8,6 +8,7 @@ import {
   failedRunsExit,
   largestOf,
   tallyRun,
+  type CapHit,
   type StepAttempt,
   type RunTally,
 } from './close-probe-bar'
@@ -301,6 +302,15 @@ describe('tallyRun', () => {
       { row: 'Silver', path: 'state.traits', result: 'ok' },
       { row: 'Silver', path: 'state.drives', result: 'refused', reason: 'over the soft cap' },
     ])
+  })
+
+  it('types a reason on a refused cap hit only', () => {
+    const at = { row: 'Silver', path: 'state.traits' }
+    // @ts-expect-error a hit that passed the check has no reason
+    const passed: CapHit = { ...at, result: 'ok', reason: 'over the soft cap' }
+    // @ts-expect-error a refused hit carries its reason
+    const refused: CapHit = { ...at, result: 'refused' }
+    expect([passed.result, refused.result]).toEqual(['ok', 'refused'])
   })
 
   it('counts every merge_threads call, whatever its result', () => {
