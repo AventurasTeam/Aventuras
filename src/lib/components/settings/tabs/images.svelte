@@ -528,8 +528,9 @@
     }
     if (profileInputReferences) opts.inputReferences = true
     if (profileMode === ComfyMode.UnetTxt2Img) {
-      if (profileClipName) opts.clipName = profileClipName
-      if (profileVaeName) opts.vaeName = profileVaeName
+      // A name the form filled in is the server's only one; generation picks it again unsaved.
+      if (profileClipName && !autoFilled.clip) opts.clipName = profileClipName
+      if (profileVaeName && !autoFilled.vae) opts.vaeName = profileVaeName
       if (profileClipType) opts.clipType = profileClipType
       if (profileWeightDtype) opts.weightDtype = profileWeightDtype
     }
@@ -609,6 +610,8 @@
         profileTakesReferences,
         profileClipName,
         profileVaeName,
+        autoFilled.clip,
+        autoFilled.vae,
         profileClipType,
         profileWeightDtype,
         // a1111 fields reuse profileSteps, profileCfg, profileNegativePrompt, profileSampler
