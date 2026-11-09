@@ -1359,6 +1359,75 @@ describe('identityTask', () => {
     expect(user).toContain('- standing: "Feared along the river."')
   })
 
+  // As read_row answers: ids are the prompt's short ids. Each shown row takes its handle first.
+  it("shows a full id in a row's name or text as its handle, a shown row's as it is shown", async () => {
+    const fx = await openCloseFixture()
+    await putEntityRow(fx, {
+      id: START_ROWS.bess,
+      kind: 'character',
+      name: 'Bess',
+      description: `Owes ${START_ROWS.pip} a favour and fears ${START_ROWS.hand}.`,
+      state: {
+        ...emptyEntityState('character'),
+        traits: [`sworn to ${START_ROWS.ledger}`],
+        drives: [`find ${START_ROWS.ghost}`],
+        voice: `Like ${START_ROWS.pip}.`,
+        faction_id: START_ROWS.ledger,
+      },
+    })
+    await putEntityRow(fx, {
+      id: START_ROWS.pip,
+      kind: 'character',
+      name: `Pip of ${START_ROWS.hand}`,
+      state: { ...emptyEntityState('character'), faction_id: START_ROWS.hand },
+    })
+    await putEntityRow(fx, {
+      id: START_ROWS.ledger,
+      kind: 'faction',
+      name: 'The Grey Ledger',
+      state: { standing: `Rivals of ${START_ROWS.hand}.`, agenda: [`ruin ${START_ROWS.bess}`] },
+    })
+    await putEntityRow(fx, {
+      id: START_ROWS.hand,
+      kind: 'faction',
+      name: `The Hand that hunts ${START_ROWS.bess}`,
+    })
+    await setSceneOf(fx, fx.entries[2]!.id, [START_ROWS.pip, START_ROWS.bess])
+
+    const { ctx, start } = await startOf(fx)
+
+    expect(start?.show.characters[0]).toEqual({
+      id: 'c1',
+      name: 'Bess',
+      status: 'active',
+      description: 'Owes c2 a favour and fears f2.',
+      traits: ['sworn to f1'],
+      drives: [expect.stringMatching(/^find c\d+$/)],
+      voice: 'Like c2.',
+    })
+    expect(start?.show.characters[1]?.name).toBe('Pip of f2')
+    expect(start?.show.factions).toEqual([
+      {
+        id: 'f1',
+        name: 'The Grey Ledger',
+        status: 'active',
+        description: '',
+        standing: 'Rivals of f2.',
+        agenda: ['ruin c1'],
+      },
+      {
+        id: 'f2',
+        name: 'The Hand that hunts c1',
+        status: 'active',
+        description: '',
+        standing: '',
+        agenda: [],
+      },
+    ])
+    const { system, user } = identityTask.render(start!, { ...ctx, writesSoFar: '' })
+    for (const id of Object.values(START_ROWS)) expect(`${system}${user}`).not.toContain(id)
+  })
+
   it("brings a scene character's faction by membership, and no faction the chapter doesn't touch", async () => {
     const fx = await openCloseFixture()
     await putEntityRow(fx, {

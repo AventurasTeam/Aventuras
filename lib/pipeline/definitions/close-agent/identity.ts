@@ -111,6 +111,9 @@ async function startIdentity(ctx: TaskPromptContext): Promise<TaskStart<Identity
   const characters = await sceneCharacters(ctx, [...sceneIds])
   const factions = await touchedFactions(ctx, characters, closeTurns)
   if (characters.length === 0 && factions.length === 0) return null
+  // Shown rows take their handles in the order shown, before an id in their text can take one.
+  for (const row of [...characters, ...factions]) ctx.ids.show(row.id, row.name)
+  const handled = (value: string): string => ctx.ids.withHandles(value)
   return {
     show: {
       mode: await storyModeOf(ctx),
@@ -120,23 +123,23 @@ async function startIdentity(ctx: TaskPromptContext): Promise<TaskStart<Identity
         const state = stateOf(row)
         return {
           id: ctx.ids.show(row.id, row.name),
-          name: row.name,
+          name: handled(row.name),
           status: row.status,
-          description: row.description ?? '',
-          traits: strings(state.traits),
-          drives: strings(state.drives),
-          voice: text(state.voice),
+          description: handled(row.description ?? ''),
+          traits: strings(state.traits).map(handled),
+          drives: strings(state.drives).map(handled),
+          voice: handled(text(state.voice)),
         }
       }),
       factions: factions.map((row) => {
         const state = stateOf(row)
         return {
           id: ctx.ids.show(row.id, row.name),
-          name: row.name,
+          name: handled(row.name),
           status: row.status,
-          description: row.description ?? '',
-          standing: text(state.standing),
-          agenda: strings(state.agenda),
+          description: handled(row.description ?? ''),
+          standing: handled(text(state.standing)),
+          agenda: strings(state.agenda).map(handled),
         }
       }),
     },
