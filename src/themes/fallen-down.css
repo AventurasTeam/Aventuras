@@ -81,6 +81,8 @@
   --accent-foreground: hsl(0 0% 0%);
   --destructive: hsl(0 100% 50%);
   --destructive-foreground: hsl(0 0% 100%);
+  --warning: var(--color-ut-orange);
+  --warning-foreground: var(--color-ut-black);
   --border: hsl(0 0% 100%);
   --input: hsl(0 0% 100%);
   --ring: hsl(60 100% 50%);

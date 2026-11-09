@@ -94,6 +94,8 @@
   --accent-foreground: hsl(186 100% 50%);
   --destructive: hsl(0 100% 59%);
   --destructive-foreground: hsl(180 30% 2%);
+  --warning: var(--color-retro-amber);
+  --warning-foreground: var(--color-retro-black);
   --border: hsl(144 48% 20%);
   --input: hsl(144 48% 20%);
   --ring: hsl(186 100% 50%);

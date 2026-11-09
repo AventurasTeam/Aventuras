@@ -293,3 +293,35 @@ map.
 
 Tones are named after their trigger or their effect. None is named `danger` or `destructive`: the
 theme's `--destructive` red and `Button`'s `destructive` variant are louder, and stay out of this.
+
+## Warning colour
+
+`warning` is "attention, not an error": a missing model, a setting that is off, a value that will be
+ignored. Use the token, not a shade of amber or yellow:
+
+- **Text or an icon:** `text-warning`.
+- **A notice box:** `border-warning/30 bg-warning/10`, with `text-warning` on its icon.
+- **A solid fill:** `bg-warning text-warning-foreground`, and `hover:bg-warning/90` on a button.
+
+It is not a feature's amber (`featureColors.ts` names a feature, and keeps its own shades) and not a
+category colour such as a lorebook entry type, a tag or a genre. A palette entry that happens to be
+amber stays amber.
+
+The token is `--warning` and `--warning-foreground` in `src/app.css`, with one default for light
+themes (`amber-700`) and one for dark (`amber-400`). A theme sets its own in its `[data-theme]` block
+where the default does not suit it: a light theme overrides to `amber-800` when `amber-700` falls
+under 4.5:1 against its `--background` or `--bg-primary`, and `retro-console` and `fallen-down` use
+their own palette. Check a new light theme the same way.
+
+The 4.5:1 bar is for plain text on the theme's background. Text on its own `bg-warning` tint is
+weaker, and the tint's strength decides how much:
+
+- At `/10` it holds in every theme except `light` (4.4:1), `rose-pine-dawn` (4.3:1), and the dark
+  `catppuccin-frappe` and `nord` (4.4–4.5:1).
+- At `/15` it also drops below on every dark theme but `oled` (3.7–4.5:1), and on `light` and
+  `rose-pine-dawn`.
+- At `/20` it falls below on all dark themes (3.2–3.8:1).
+
+Keep a tint behind text at `/10`. An icon or a border on a stronger tint is a graphic, held to 3:1,
+and holds. Do not deepen one call site to fix a shortfall: a change to the colour is a change to
+the token.

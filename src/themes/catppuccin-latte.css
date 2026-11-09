@@ -89,6 +89,7 @@
 
   --destructive: #d20f39; /* Red */
   --destructive-foreground: #eff1f5; /* Base */
+  --warning: var(--color-amber-800);
 
   --border: #ccd0da; /* Surface 0 */
   --input: #ccd0da; /* Surface 0 */

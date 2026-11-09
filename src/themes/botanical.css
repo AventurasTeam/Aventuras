@@ -74,6 +74,7 @@
 
   --destructive: hsl(0 50% 50%); /* Muted Red */
   --destructive-foreground: hsl(0 0% 98%);
+  --warning: var(--color-amber-800);
 
   --border: hsl(115 15% 70%); /* Surface 300 approx */
   --input: hsl(115 15% 70%); /* Surface 300 approx */

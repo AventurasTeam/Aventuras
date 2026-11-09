@@ -91,6 +91,7 @@
 
   --destructive: #cc241d; /* neutral_red */
   --destructive-foreground: #fbf1c7; /* light0 */
+  --warning: var(--color-amber-800);
 
   --border: #d5c4a1; /* light2 */
   --input: #d5c4a1; /* light2 */

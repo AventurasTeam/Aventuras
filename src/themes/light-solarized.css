@@ -74,6 +74,7 @@
 
   --destructive: hsl(1 71% 52%);
   --destructive-foreground: hsl(45 30% 98%);
+  --warning: var(--color-amber-800);
 
   --border: hsl(42 15% 85%); /* Surface 200 */
   --input: hsl(42 15% 85%); /* Surface 200 */

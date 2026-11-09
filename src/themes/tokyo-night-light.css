@@ -84,6 +84,7 @@
 
   --destructive: #8c4351; /* Red */
   --destructive-foreground: #e6e7ed; /* Editor Background */
+  --warning: var(--color-amber-800);
 
   --border: #b0b3bd; /* Subtle */
   --input: #b0b3bd; /* Subtle */

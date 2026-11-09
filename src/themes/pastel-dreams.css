@@ -75,6 +75,7 @@
 
   --destructive: hsl(350 70% 60%); /* Soft Pink-Red */
   --destructive-foreground: hsl(285 50% 98%);
+  --warning: var(--color-amber-800);
 
   --border: hsl(285 35% 88%); /* Surface 200 approx */
   --input: hsl(285 35% 88%); /* Surface 200 approx */

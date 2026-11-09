@@ -86,6 +86,7 @@
 
   --destructive: #bf616a; /* Aurora Red */
   --destructive-foreground: #eceff4; /* nord6 */
+  --warning: var(--color-amber-800);
 
   --border: #c0c7d6; /* Light border */
   --input: #c0c7d6; /* Light border */
