@@ -534,6 +534,65 @@ describe('update_character and update_faction', () => {
     expect((await storedEntity(f, WREN)).state).toMatchObject({ voice: 'v'.repeat(2000) })
   })
 
+  it('lands a 1,600-character description cut to 1,200, on a character and a faction', async () => {
+    const { calls } = await dispatchScripted(
+      f,
+      [
+        {
+          toolName: 'update_character',
+          input: { id: 'c1', description: 'd'.repeat(1600), ...cite() },
+        },
+        {
+          toolName: 'update_faction',
+          input: { id: 'f1', description: 'e'.repeat(1600), ...cite() },
+        },
+      ],
+      { shown: CAST },
+    )
+
+    expect(calls.map(({ result }) => result)).toEqual(['ok', 'ok'])
+    expect((await storedEntity(f, WREN)).description).toBe('d'.repeat(1200))
+    expect((await storedEntity(f, SYNDICATE)).description).toBe('e'.repeat(1200))
+  })
+
+  it("lands an 800-character standing cut to 500, a state text's bound", async () => {
+    const { calls } = await dispatchScripted(
+      f,
+      [{ toolName: 'update_faction', input: { id: 'f1', standing: 's'.repeat(800), ...cite() } }],
+      { shown: CAST },
+    )
+
+    expect(calls[0]).toMatchObject({ result: 'ok' })
+    expect((await storedEntity(f, SYNDICATE)).state).toMatchObject({ standing: 's'.repeat(500) })
+  })
+
+  it("reads a resent user's value as restated, alone ok and beside a change out of values", async () => {
+    await editEntity(f, WREN, 'user', { state: { voice: 'gravel' } })
+
+    const { answers, calls } = await dispatchScripted(
+      f,
+      [
+        { toolName: 'update_character', input: { id: 'c1', voice: 'gravel', ...cite() } },
+        {
+          toolName: 'update_character',
+          input: { id: 'c1', voice: 'gravel', traits: ['patient', 'wary'], ...cite() },
+        },
+      ],
+      { shown: CAST },
+    )
+
+    expect(answers.map(({ output }) => output)).toEqual([{ result: 'ok' }, { result: 'ok' }])
+    expect(calls[0]).toMatchObject({ result: 'ok' })
+    expect(calls[0]).not.toHaveProperty('values')
+    expect(calls[1]).toMatchObject({ result: 'ok', values: { 'state.traits': 'patient, wary' } })
+    expect(Object.keys(calls[1]!.values ?? {})).toEqual(['state.traits'])
+    for (const call of calls) expect(call).not.toHaveProperty('skippedFields')
+    expect((await storedEntity(f, WREN)).state).toMatchObject({
+      voice: 'gravel',
+      traits: ['patient', 'wary'],
+    })
+  })
+
   it('fills a blank description and a missing voice', async () => {
     const { calls } = await dispatchScripted(
       f,
@@ -878,6 +937,10 @@ describe('update_character and update_faction', () => {
     expect(calls.map(({ result: outcome, reason }) => [outcome, reason])).toEqual([
       ['rejected', 'not-a-character'],
       ['rejected', 'not-a-faction'],
+    ])
+    expect(calls.map(({ values }) => values)).toEqual([
+      { 'state.voice': 'gruff' },
+      { 'state.standing': 'feared' },
     ])
     expect(await runDeltas(f, result.actionId)).toEqual([])
   })

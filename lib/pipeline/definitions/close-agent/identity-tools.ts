@@ -1,11 +1,10 @@
 import { and, eq } from 'drizzle-orm'
 import { z } from 'zod'
 
-import { emptyEntityState, entities, type Entity } from '@/lib/db'
-import { isJsonObject } from '@/lib/json-object'
+import { entities, type Entity } from '@/lib/db'
 import { CAST_SOFT_CAPS } from '@/lib/wizard'
 
-import { entityWriteAction, fieldVerdicts } from './entity-write'
+import { entityWriteAction, fieldVerdicts, storedValue } from './entity-write'
 import {
   overSoftCap,
   restatedList,
@@ -33,13 +32,13 @@ export const CHARACTER_SHAPE = {
     .array(z.string())
     .optional()
     .describe(
-      `The whole new list of traits, at most ${CAST_SOFT_CAPS.traits}. Leave it out if unchanged.`,
+      `The whole new list of traits, at most ${CAST_SOFT_CAPS.traits}, or no longer than the stored list. Leave it out if unchanged.`,
     ),
   drives: z
     .array(z.string())
     .optional()
     .describe(
-      `The whole new list of drives (goals, fears, sore spots), at most ${CAST_SOFT_CAPS.drives}. Leave it out if unchanged.`,
+      `The whole new list of drives (goals, fears, sore spots), at most ${CAST_SOFT_CAPS.drives}, or no longer than the stored list. Leave it out if unchanged.`,
     ),
   voice: z
     .string()
@@ -59,7 +58,7 @@ export const FACTION_SHAPE = {
     .array(z.string())
     .optional()
     .describe(
-      `The whole new list of current goals, at most ${CAST_SOFT_CAPS.agenda}. Leave it out if unchanged.`,
+      `The whole new list of current goals, at most ${CAST_SOFT_CAPS.agenda}, or no longer than the stored list. Leave it out if unchanged.`,
     ),
   standing: z
     .string()
@@ -130,15 +129,8 @@ function sentFields(
   return sent
 }
 
-// A delta path's stored value: 'description', or a key of state ('state.voice').
-function storedAt(row: Entity, path: string): unknown {
-  if (path === 'description') return row.description
-  const state: unknown = row.state ?? emptyEntityState(row.kind)
-  return isJsonObject(state) ? state[path.slice('state.'.length)] : undefined
-}
-
 function restated(row: Entity, field: SentField): boolean {
-  const stored = storedAt(row, field.path)
+  const stored = storedValue(row, field.path)
   return field.kind === 'list' ? restatedList(stored, field.list) : restatedText(stored, field.text)
 }
 
@@ -188,10 +180,10 @@ async function planIdentityWrite(
       lost.push({ field: field.path, row: id, kind: 'protected', reason: verdict.reason })
       continue
     }
-    // Only a list precedence leaves meets its cap: a protected one never reaches this check.
+    // Only a list precedence leaves free meets its cap: a protected one never reaches this check.
     if (field.kind === 'list') {
       const cap = CAST_SOFT_CAPS[field.cap]
-      if (overSoftCap(field.list, storedAt(row, field.path), cap)) {
+      if (overSoftCap(field.list, storedValue(row, field.path), cap)) {
         const reason = softCapReason(field.cap, cap)
         lost.push({ field: field.path, row: id, kind: 'refused', reason })
         continue
