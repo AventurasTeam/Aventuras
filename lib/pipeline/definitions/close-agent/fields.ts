@@ -49,13 +49,18 @@ function stringList(json: string): string[] | undefined {
 const BRACKETED = /^\[[\s\S]*\]$/
 
 /**
- * A list escaped into one string, parsed with its edge quotes and brackets restored, then again
- * while an item unescapes. Prose with its own quotes won't parse; a lone quoted entry stays whole
- * unless bracketed; a decoded entry keeps its brackets; a list of blanks holds no entry.
+ * A list escaped into one string, parsed with its edge quotes and brackets restored and a comma
+ * after its last quoted item dropped, then again while an item unescapes. Prose with its own quotes
+ * won't parse; a lone quoted entry stays whole unless bracketed; a decoded entry keeps its
+ * brackets; a list of blanks holds no entry.
  */
 function joinedList(entry: string, bracketed = false): string[] | undefined {
   const trimmed = entry.trim()
-  const body = trimmed.replace(/^\[/, '').replace(/\]$/, '').trim()
+  const body = trimmed
+    .replace(/^\[/, '')
+    .replace(/\]$/, '')
+    .trim()
+    .replace(/"\s*,$/, '"')
   const open = body.startsWith('"') ? '' : '"'
   const close = body.endsWith('"') && !body.endsWith('\\"') ? '' : '"'
   const list = stringList(`[${open}${body}${close}]`)
@@ -77,7 +82,7 @@ const BRACKET_LINE = /^[[\]],?$/
 
 /**
  * A list entry never spans lines; a split entry drops the lines that hold only a list's bracket,
- * and its lines' list markers.
+ * and its lines' list markers and trailing commas.
  */
 function entryLines(entry: string): string[] {
   const lines = entry.split('\n')
@@ -85,7 +90,7 @@ function entryLines(entry: string): string[] {
   return lines
     .map((line) => line.trim())
     .filter((line) => !BRACKET_LINE.test(line))
-    .map((line) => line.replace(LIST_MARKER, ''))
+    .map((line) => line.replace(LIST_MARKER, '').replace(/,$/, ''))
 }
 
 const heldEntries = (entry: string): string[] =>

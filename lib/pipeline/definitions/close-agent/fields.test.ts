@@ -106,12 +106,21 @@ describe('sentList', () => {
     ['escaped quotes', 'brave\\",\\"wary\\",\\"patient', ['brave', 'wary', 'patient']],
     ['escaped quotes and brackets', '[\\"brave\\",\\"wary\\"]', ['brave', 'wary']],
     ['pretty-printed lines', '\n[\n  "brave",\n  "wary"\n]\n', ['brave', 'wary']],
+    ['a comma after its last item', '["brave", "wary",]', ['brave', 'wary']],
+    ['a comma after its last item, spaced', '["brave", "wary" , ]', ['brave', 'wary']],
+    ['a comma after its last item, unbracketed', '"brave", "wary",', ['brave', 'wary']],
+    [
+      'pretty-printed lines and a comma after the last',
+      '[\n  "patient",\n  "wary",\n]',
+      ['patient', 'wary'],
+    ],
   ])('reads a list joined into one entry with %s as the entries it holds', (_, joined, held) => {
     expect(entries([joined])).toEqual(held)
   })
 
   it('reads a bracketed one-entry list as its entry, escaped or not, and keeps bare brackets', () => {
     expect(entries(['["patient"]'])).toEqual(['patient'])
+    expect(entries(['["patient",]'])).toEqual(['patient'])
     expect(entries(['[\\"patient\\"]'])).toEqual(['patient'])
     expect(entries(['\n[\n  "patient"\n]\n'])).toEqual(['patient'])
     expect(entries(['[patient]'])).toEqual(['[patient]'])
@@ -151,6 +160,9 @@ describe('sentList', () => {
       '"brave"',
       '"brave", 1, "wary"',
       '- brave',
+      'brave,',
+      'He said "go",',
+      '"Go," he said,',
     ]
     expect(entries(whole)).toEqual(whole)
   })
@@ -168,8 +180,14 @@ describe('sentList', () => {
     expect(entries(['  [\r\n  patient\n  ],\n  [,\n  wary\n  ]  '])).toEqual(['patient', 'wary'])
   })
 
-  it("keeps a trailing-comma list's quoted lines, with their quotes and commas, once its bracket lines drop", () => {
-    expect(entries(['[\n  "patient",\n  "wary",\n]'])).toEqual(['"patient",', '"wary",'])
+  it("drops a trailing comma from each line of a split entry, leaving a line's other commas", () => {
+    expect(entries(['brave,\nhonest,\nloyal'])).toEqual(['brave', 'honest', 'loyal'])
+    expect(entries(['quick-witted, if rash,\nwary'])).toEqual(['quick-witted, if rash', 'wary'])
+  })
+
+  it("keeps a single-quoted list's quotes: one entry on one line, an entry per item line over lines", () => {
+    expect(entries(["['brave', 'wary']"])).toEqual(["['brave', 'wary']"])
+    expect(entries(["[\n  'brave',\n  'wary'\n]"])).toEqual(["'brave'", "'wary'"])
   })
 
   it('keeps a bracket on an entry of one line, or on a split line holding more', () => {
