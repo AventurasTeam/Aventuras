@@ -4,14 +4,19 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { applyDeltaAction } from '@/lib/actions/delta/apply-delta-action'
 import { loadOpenStory } from '@/lib/actions/stories/operational'
 import { USER_EDITED_SINCE_PROSE, type GroupOutcome, type GuardRow } from '@/lib/actions/types'
-import { deltas, threads, type Thread } from '@/lib/db'
+import type { ResolveModelConfig } from '@/lib/ai'
+import { deltas, entities, storyEntries, threads, type Thread, type ThreadStatus } from '@/lib/db'
+import { makeLogger } from '@/lib/diagnostics'
 import { resetAllStores } from '@/lib/stores'
 
 import { createReadSet } from './common-checks'
 import { dispatchToolCall, type DispatchContext } from './dispatch'
-import type { CloseIds } from './ids'
+import { IDENTITY_READ_FIELDS, identityTask } from './identity'
+import { CloseIds } from './ids'
 import { CloseLedgerWriter } from './ledger'
+import type { TaskPromptContext } from './task'
 import { mergeThreadsTool, updateThreadTool } from './thread-tools'
+import { THREADS_READ_FIELDS, threadsTask } from './threads'
 import { assertReplaySafe, DELETE_PATH, type CloseTool } from './tool'
 import { CLOSE_REASON } from './verdict'
 import { expectRan } from '../../__tests__/harness'
@@ -1104,5 +1109,305 @@ describe('merge_threads', () => {
       survivor: 'th1',
     })
     expect(run.answers[2]).toMatchObject({ result: 'rejected', survivor: 'th1' })
+  })
+})
+
+// Real prefix_<uuid> ids. echo sorts before heir: the two share a createdAt.
+const OPEN_ROWS = {
+  debt: 'thr_00000000-0000-4000-8000-00000000c010',
+  letter: 'thr_00000000-0000-4000-8000-00000000c020',
+  echo: 'thr_00000000-0000-4000-8000-00000000c030',
+  heir: 'thr_00000000-0000-4000-8000-00000000c031',
+  map: 'thr_00000000-0000-4000-8000-00000000c040',
+  abbey: 'thr_00000000-0000-4000-8000-00000000c041',
+  kael: 'char_00000000-0000-4000-8000-00000000c050',
+} as const
+
+type ThreadRowSeed = {
+  id: string
+  title: string
+  status: ThreadStatus
+  createdAt: number
+  description?: string | null
+  /** A user's thread keeps both refs null (data-model.md → Authorship contract). */
+  byUser?: boolean
+}
+
+async function putThreadRow(fx: CloseFixture, row: ThreadRowSeed): Promise<void> {
+  const closed = row.status === 'resolved' || row.status === 'failed'
+  const sourceTurn = row.byUser ? null : fx.entries[1]!.id
+  const result = await applyDeltaAction(
+    {
+      action: {
+        kind: 'createThread',
+        source: row.byUser ? 'user_edit' : 'periodic_classifier',
+        payload: {
+          entry: {
+            id: row.id,
+            branchId: fx.branchId,
+            title: row.title,
+            description: row.description ?? null,
+            status: row.status,
+            injectionMode: 'auto',
+            triggeredAtEntryId: sourceTurn,
+            resolvedAtEntryId: closed && !row.byUser ? fx.entries[3]!.id : null,
+            createdAt: row.createdAt,
+            updatedAt: row.createdAt,
+          },
+        },
+      },
+      actionId: `act_seed_${row.id}`,
+      branchId: fx.branchId,
+      entryId: sourceTurn,
+    },
+    fx.ctx,
+  )
+  if (result.status !== 'ok') throw new Error(`seeding ${row.title} refused: ${result.reason}`)
+}
+
+// Two of each open status, the user's among them, and one resolved and one failed.
+async function putThreadRoster(fx: CloseFixture): Promise<void> {
+  await putThreadRow(fx, {
+    id: OPEN_ROWS.heir,
+    title: 'Find the heir',
+    status: 'active',
+    createdAt: 30,
+    description: 'Still open.',
+  })
+  await putThreadRow(fx, {
+    id: OPEN_ROWS.map,
+    title: 'The lost map',
+    status: 'resolved',
+    createdAt: 5,
+  })
+  await putThreadRow(fx, {
+    id: OPEN_ROWS.debt,
+    title: 'The debt to the guild',
+    status: 'pending',
+    createdAt: 10,
+    description: 'Owed since the spring.',
+  })
+  await putThreadRow(fx, {
+    id: OPEN_ROWS.abbey,
+    title: 'Warn the abbey',
+    status: 'failed',
+    createdAt: 6,
+  })
+  await putThreadRow(fx, {
+    id: OPEN_ROWS.letter,
+    title: 'Deliver the letter',
+    status: 'active',
+    createdAt: 20,
+    byUser: true,
+  })
+  await putThreadRow(fx, {
+    id: OPEN_ROWS.echo,
+    title: 'Echoes on the river',
+    status: 'pending',
+    createdAt: 30,
+    description: 'Someone answers from the far bank.',
+  })
+}
+
+// A character in one turn's scene, so Identity has a start beside Threads'.
+async function putSceneCharacter(fx: CloseFixture, id: string, name: string, entryId: string) {
+  await fx.ctx.db.insert(entities).values({
+    id,
+    branchId: fx.branchId,
+    kind: 'character',
+    name,
+    status: 'active',
+    injectionMode: 'auto',
+    createdAt: 1,
+    updatedAt: 1,
+  })
+  const where = and(eq(storyEntries.branchId, fx.branchId), eq(storyEntries.id, entryId))
+  const [row] = await fx.ctx.db
+    .select({ metadata: storyEntries.metadata })
+    .from(storyEntries)
+    .where(where)
+  if (!row?.metadata) throw new Error(`putSceneCharacter: entry ${entryId} has no metadata`)
+  await fx.ctx.db
+    .update(storyEntries)
+    .set({ metadata: { ...row.metadata, sceneEntities: [id] } })
+    .where(where)
+}
+
+// As the agent phase does before any task: every chapter entry a turn, t1 the first.
+function threadsIdsWithTurns(fx: CloseFixture): CloseIds {
+  const ids = new CloseIds()
+  ids.showTurns(fx.entries.map((entry) => entry.id))
+  return ids
+}
+
+const THREADS_START_CONFIG: ResolveModelConfig = { providers: [], profiles: [], assignments: {} }
+
+function threadsPromptContext(fx: CloseFixture, ids: CloseIds): TaskPromptContext {
+  const actionId = 'act_threads_start'
+  return {
+    db: fx.ctx.db,
+    branchId: fx.branchId,
+    endEntryId: fx.entries.at(-1)!.id,
+    task: 'threads',
+    part: 1,
+    ids,
+    readFields: THREADS_READ_FIELDS,
+    survivorOf: () => undefined,
+    phase: {
+      actionId,
+      abortSignal: new AbortController().signal,
+      intermediates: {},
+      log: makeLogger(actionId),
+      db: fx.ctx.db,
+      runInTransaction: fx.ctx.runInTransaction,
+      storyId: fx.storyId,
+      branchId: fx.branchId,
+    },
+    chapterEntryIds: fx.entries.map((entry) => entry.id),
+    config: THREADS_START_CONFIG,
+  }
+}
+
+describe('threadsTask', () => {
+  async function startOf(fx: CloseFixture, ids = threadsIdsWithTurns(fx)) {
+    const ctx = threadsPromptContext(fx, ids)
+    return { ctx, ids, start: await threadsTask.start(ctx) }
+  }
+
+  it("lists canon's tools in order and reads a thread's title, description and status", () => {
+    expect(threadsTask.task).toBe('threads')
+    expect(threadsTask.tools.map((tool) => tool.name)).toEqual([
+      'read_row',
+      'update_thread',
+      'merge_threads',
+    ])
+    expect(THREADS_READ_FIELDS).toEqual({ thread: ['title', 'description', 'status'] })
+    expect(threadsTask.readFields).toBe(THREADS_READ_FIELDS)
+  })
+
+  it("starts from every pending and active thread, the user's included, oldest first", async () => {
+    const fx = await openCloseFixture()
+    await putThreadRoster(fx)
+
+    const { ids, start } = await startOf(fx)
+
+    expect(start?.show.threads).toEqual([
+      {
+        id: 'th1',
+        title: 'The debt to the guild',
+        description: 'Owed since the spring.',
+        status: 'pending',
+      },
+      { id: 'th2', title: 'Deliver the letter', description: '', status: 'active' },
+      {
+        id: 'th3',
+        title: 'Echoes on the river',
+        description: 'Someone answers from the far bank.',
+        status: 'pending',
+      },
+      { id: 'th4', title: 'Find the heir', description: 'Still open.', status: 'active' },
+    ])
+    expect(ids.handleOf(OPEN_ROWS.map)).toBeUndefined()
+    expect(ids.handleOf(OPEN_ROWS.abbey)).toBeUndefined()
+  })
+
+  it('seeds every shown thread as read, and no other', async () => {
+    const fx = await openCloseFixture()
+    await putThreadRoster(fx)
+
+    const { start } = await startOf(fx)
+
+    expect(start?.seeds).toEqual([
+      { table: 'threads', id: OPEN_ROWS.debt },
+      { table: 'threads', id: OPEN_ROWS.letter },
+      { table: 'threads', id: OPEN_ROWS.echo },
+      { table: 'threads', id: OPEN_ROWS.heir },
+    ])
+  })
+
+  it('returns null when no thread is pending or active', async () => {
+    const fx = await openCloseFixture()
+    expect((await startOf(fx)).start).toBeNull()
+
+    await putThreadRow(fx, {
+      id: OPEN_ROWS.map,
+      title: 'The lost map',
+      status: 'resolved',
+      createdAt: 5,
+    })
+    await putThreadRow(fx, {
+      id: OPEN_ROWS.abbey,
+      title: 'Warn the abbey',
+      status: 'failed',
+      createdAt: 6,
+    })
+    const { ids, start } = await startOf(fx)
+
+    expect(start).toBeNull()
+    expect(ids.handleOf(OPEN_ROWS.map)).toBeUndefined()
+  })
+
+  it("names every shown thread's id and title in the user half, then the writes so far", async () => {
+    const fx = await openCloseFixture()
+    await putThreadRoster(fx)
+    const { ctx, start } = await startOf(fx)
+    const writes = '- update_character Kael (c1): state.traits'
+
+    const { system, user } = threadsTask.render(start!, { ...ctx, writesSoFar: writes })
+
+    expect(user).toContain(
+      '## th1: The debt to the guild (pending)\n- description: "Owed since the spring."',
+    )
+    expect(user).toContain('## th2: Deliver the letter (active)\n- description: ""')
+    expect(user).toContain('## th3: Echoes on the river (pending)\n')
+    expect(user).toContain('## th4: Find the heir (active)\n- description: "Still open."')
+    expect(user).not.toContain('The lost map')
+    expect(user).not.toContain('Warn the abbey')
+    expect(
+      user.endsWith(`# Writes so far\nWhat this close has written, in earlier tasks:\n${writes}`),
+    ).toBe(true)
+    expect(system).not.toContain('# Open threads')
+  })
+
+  // memory/chapter-close.md → Conversations: a part's tasks reuse the chapter's cached prefix.
+  it("renders a system half byte-identical to Identity's for the same turns and mode", async () => {
+    const fx = await openCloseFixture()
+    await putSceneCharacter(fx, OPEN_ROWS.kael, 'Kael', fx.entries[2]!.id)
+    await putThreadRow(fx, {
+      id: OPEN_ROWS.heir,
+      title: 'Find the heir',
+      status: 'active',
+      createdAt: 30,
+      description: 'Still open.',
+    })
+    const ctx = threadsPromptContext(fx, threadsIdsWithTurns(fx))
+    const identityStart = await identityTask.start({
+      ...ctx,
+      task: 'identity',
+      readFields: IDENTITY_READ_FIELDS,
+    })
+    const threadsStart = await threadsTask.start(ctx)
+
+    const identityPrompt = identityTask.render(identityStart!, { ...ctx, writesSoFar: '' })
+    const threadsPrompt = threadsTask.render(threadsStart!, { ...ctx, writesSoFar: '' })
+
+    expect(threadsPrompt.system).toBe(identityPrompt.system)
+    expect(threadsPrompt.system).toContain(
+      '## t3 (narration)\nThe inn is warm and loud with drovers.',
+    )
+    expect(threadsPrompt.user).not.toBe(identityPrompt.user)
+  })
+
+  it('refuses to render with no turns', async () => {
+    const fx = await openCloseFixture()
+    await putThreadRoster(fx)
+    const { ctx, start } = await startOf(fx)
+
+    expect(() =>
+      threadsTask.render(
+        { ...start!, show: { ...start!.show, closeTurns: [] } },
+        { ...ctx, writesSoFar: '' },
+      ),
+    ).toThrow('at least one turn')
   })
 })
