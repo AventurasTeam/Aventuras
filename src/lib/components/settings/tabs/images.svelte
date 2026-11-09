@@ -677,7 +677,7 @@
     if (profile.providerType === 'a1111') {
       const opts = profile.providerOptions || {}
       profileSteps = Number(opts.steps) || 20
-      profileCfg = numberOr(opts.cfg, 7)
+      profileCfg = Number(opts.cfg) || 7
       profileNegativePrompt = (opts.negativePrompt as string) || ''
       profileSampler = (opts.sampler as string) || 'Euler a'
       profileScheduler = (opts.scheduler as string) || 'karras'
