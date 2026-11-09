@@ -210,7 +210,8 @@ async function expectSystemHalfPrimed<Show extends { closeTurns: readonly { cont
   expect(
     texts.filter((text) => start!.show.closeTurns.some(({ content }) => text.includes(content))),
   ).toEqual([])
-  // The fixture's stored counts are accurate, so the sum is the system half's own count.
+  // Exact for this English fixture: its stored counts are accurate and o200k merges nothing across
+  // its turns' edges. A CJK chapter's can merge, and its half primes a little low.
   expect(total).toBe(countTokens(halves.system) + countTokens(halves.user))
 }
 

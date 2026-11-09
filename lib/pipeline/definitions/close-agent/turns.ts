@@ -65,8 +65,10 @@ export function blankTurns(turns: readonly CloseTurn[]): CloseTurn[] {
 }
 
 /**
- * Primes `system` at `countTokens(blankSystem) + proseTokens`, so a part's first step never encodes
- * the chapter. An older row's stored count includes a stripped trailing block: a small overcount.
+ * Primes `system` at `countTokens(blankSystem) + proseTokens`, so a part's first step doesn't
+ * encode the chapter unless the half is over the count cache's character budget. The count leans a
+ * little either way: high where an older row's stored count holds a stripped block, low where o200k
+ * merges text across a turn's edges.
  */
 export function primeCloseSystemCount(
   system: string,
@@ -89,7 +91,7 @@ export function renderClosePrompt(
   return halves
 }
 
-/** The story's mode, from the stories row behind the branch. */
+/** Throws when the story behind the branch has no mode. */
 export async function storyModeOf(ctx: TaskPromptContext): Promise<StoryMode> {
   const [row] = await ctx.db
     .select({ definition: stories.definition })
