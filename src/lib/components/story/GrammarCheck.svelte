@@ -148,7 +148,7 @@
               <div class="flex flex-wrap gap-1.5 sm:gap-2">
                 {#each issue.suggestions.slice(0, 5) as suggestion, suggestionIndex (suggestionIndex)}
                   <button
-                    class="flex min-h-[32px] items-center gap-1 rounded border border-green-700/40 bg-green-900/30 px-2 py-1.5 text-[11px] text-green-300 transition-colors hover:bg-green-900/50 active:bg-green-900/60 sm:text-xs"
+                    class="flex min-h-[32px] items-center gap-1 rounded border border-green-600/40 bg-green-500/10 px-2 py-1.5 text-[11px] text-green-700 transition-colors hover:bg-green-500/20 active:bg-green-500/30 sm:text-xs dark:text-green-300"
                     onclick={() => handleApplySuggestion(issue, suggestionIndex)}
                   >
                     <Check class="h-3 w-3 shrink-0" />
