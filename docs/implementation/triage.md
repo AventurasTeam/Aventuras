@@ -295,3 +295,14 @@ patch`, which 5.5a marks `restated`, so a close tool's write of it
   merge's kept-row rule, `search_world`'s limit and ranking,
   `architecture.md`'s halves-table row and count-cache paragraph,
   `observability.md` and `testing.md`. Raised in 5.5b's slice review.
+- **Two duplicates the close's code waits on a third use for.** The
+  capped list names (`traits`, `drives`, `agenda`) are spelled in
+  `scripts/dataset-chapter/overlay.ts` and again in
+  `scripts/close-probe-rejudge.ts`; one exported constant in
+  `close-agent/fields.ts` would make the re-judge load the classifier,
+  piggyback and wizard barrels it now avoids by importing a type only.
+  And `updateThread` and `updateHappening` repeat one
+  restated, user-kept and write loop (`lib/actions/threads/register.ts`,
+  `lib/actions/happenings/register-happenings.ts`), which a shared
+  helper would take about six parameters to serve. Worth lifting when a
+  third copy appears. Raised in 5.5b's slice review.
