@@ -4,6 +4,7 @@ import type { PromptHalves } from '@/lib/ai'
 import { chunked, entities, type Entity, type StoryMode } from '@/lib/db'
 import { isJsonObject } from '@/lib/json-object'
 import { normalizeTerm } from '@/lib/keyword-terms'
+import { compareId } from '@/lib/list-modules'
 import { TEMPLATE_IDS } from '@/lib/prompts'
 import { matchTerms } from '@/lib/retrieval'
 import { CAST_SOFT_CAPS } from '@/lib/wizard'
@@ -58,8 +59,8 @@ const text = (value: unknown): string => (typeof value === 'string' ? value : ''
 const stateOf = (row: Entity): Readonly<Record<string, unknown>> =>
   isJsonObject(row.state) ? row.state : {}
 // Code units, never localeCompare: the host locale would make the prompt's row order device-dependent.
-const cmp = (a: string, b: string): number => (a < b ? -1 : a > b ? 1 : 0)
-const byNameThenId = (a: Entity, b: Entity): number => cmp(a.name, b.name) || cmp(a.id, b.id)
+const byNameThenId = (a: Entity, b: Entity): number =>
+  compareId(a.name, b.name) || compareId(a.id, b.id)
 
 // Any status: canon names the entities the chapter touches, and a retired one was still there.
 async function sceneCharacters(
