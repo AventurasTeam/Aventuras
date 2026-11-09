@@ -1,6 +1,6 @@
 import { and, eq, inArray } from 'drizzle-orm'
 
-import { primePromptCount } from '@/lib/ai'
+import { primePromptCount, type PromptHalves } from '@/lib/ai'
 import {
   branches,
   chunked,
@@ -11,6 +11,7 @@ import {
   type StoryMode,
 } from '@/lib/db'
 import { promptProse } from '@/lib/piggyback'
+import { renderTemplate, type TemplateId } from '@/lib/prompts'
 import { countTokens } from '@/lib/tokens'
 
 import type { TaskPromptContext } from './task'
@@ -57,9 +58,9 @@ export function blankTurns(turns: readonly CloseTurn[]): CloseTurn[] {
 }
 
 /**
- * Primes `system` at `countTokens(blankSystem) + proseTokens` (developer, 2026-11-09), so a part's
- * first step never encodes the chapter. An older row's stored count includes a trailing block the
- * prompt strips, so the total can run slightly long: accepted as small, the check has no margin.
+ * Primes `system` at `countTokens(blankSystem) + proseTokens`, so a part's first step never encodes
+ * the chapter. An older row's stored count includes a trailing block the prompt strips, so the
+ * total can run slightly long: accepted as small, the check has no margin.
  */
 export function primeCloseSystemCount(
   system: string,
@@ -67,6 +68,19 @@ export function primeCloseSystemCount(
   proseTokens: number,
 ): void {
   primePromptCount(system, countTokens(blankSystem) + proseTokens)
+}
+
+/** Renders a close template over `closeTurns` and primes the count of its system half. */
+export function renderClosePrompt(
+  templateId: TemplateId,
+  closeTurns: readonly CloseTurn[],
+  variables: Record<string, unknown>,
+  proseTokens: number,
+): PromptHalves {
+  const halves = renderTemplate(templateId, { ...variables, closeTurns })
+  const blank = renderTemplate(templateId, { ...variables, closeTurns: blankTurns(closeTurns) })
+  primeCloseSystemCount(halves.system, blank.system, proseTokens)
+  return halves
 }
 
 /** The story's mode, from the stories row behind the branch. */

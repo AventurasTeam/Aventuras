@@ -1,21 +1,18 @@
 import { and, eq } from 'drizzle-orm'
 import { describe, expect, it, vi } from 'vitest'
 
-import type { PromptHalves, ResolveModelConfig } from '@/lib/ai'
+import type { ResolveModelConfig } from '@/lib/ai'
 import { __clearPromptCountCache, countPromptTokens } from '@/lib/ai/context-window'
-import { storyEntries } from '@/lib/db'
+import { entities, storyEntries, threads } from '@/lib/db'
 import { makeLogger } from '@/lib/diagnostics'
-import { renderTemplate, TEMPLATE_IDS } from '@/lib/prompts'
 import { countTokens } from '@/lib/tokens'
-import { CAST_SOFT_CAPS } from '@/lib/wizard'
 
 import { IDENTITY_READ_FIELDS, identityTask } from './identity'
 import { CloseIds } from './ids'
-import type { TaskPromptContext } from './task'
+import type { CloseTaskDef, TaskPromptContext } from './task'
 import { threadsTask } from './threads'
-import { blankTurns, primeCloseSystemCount, readTaskTurns, type TaskTurns } from './turns'
+import { blankTurns, primeCloseSystemCount, readTaskTurns } from './turns'
 import { openCloseFixture, type CloseFixture } from '../__tests__/close-fixture'
-import type { CloseTurn } from '../chapter-context'
 
 const { countTokensSpy } = vi.hoisted(() => ({
   countTokensSpy: vi.fn<(text: string) => number>(),
@@ -76,43 +73,48 @@ async function setEntry(
 
 const encodedTexts = (): string[] => countTokensSpy.mock.calls.map(([text]) => text)
 
-// Each task's halves over the turns its start read; its rows don't reach the system half.
-const RENDER: Record<
-  'identity' | 'threads',
-  (turns: TaskTurns, ctx: TaskPromptContext) => PromptHalves
-> = {
-  identity: ({ closeTurns, proseTokens }, ctx) =>
-    identityTask.render(
-      {
-        show: { mode: 'creative', closeTurns, proseTokens, characters: [], factions: [] },
-        seeds: [],
-      },
-      { ...ctx, writesSoFar: '' },
-    ),
-  threads: ({ closeTurns, proseTokens }, ctx) =>
-    threadsTask.render(
-      { show: { mode: 'creative', closeTurns, proseTokens, threads: [] }, seeds: [] },
-      { ...ctx, writesSoFar: '' },
-    ),
-}
-
-const BLANK_SYSTEM: Record<'identity' | 'threads', (closeTurns: readonly CloseTurn[]) => string> = {
-  identity: (closeTurns) =>
-    renderTemplate(TEMPLATE_IDS.closeIdentity, {
-      mode: 'creative',
-      closeTurns,
-      closeCharacters: [],
-      closeFactions: [],
-      closeWritesSoFar: '',
-      closeSoftCaps: { ...CAST_SOFT_CAPS },
-    }).system,
-  threads: (closeTurns) =>
-    renderTemplate(TEMPLATE_IDS.closeThreads, {
-      mode: 'creative',
-      closeTurns,
-      closeThreads: [],
-      closeWritesSoFar: '',
-    }).system,
+// Rows for both starts: Wren in the first turn's scene for Identity, an open thread for Threads.
+async function seedStartRows(fx: CloseFixture): Promise<void> {
+  const wren = 'char_00000000-0000-4000-8000-00000000c001'
+  await fx.ctx.db.insert(entities).values({
+    id: wren,
+    branchId: fx.branchId,
+    kind: 'character',
+    name: 'Wren',
+    description: 'A courier.',
+    status: 'active',
+    retiredReason: null,
+    injectionMode: 'auto',
+    state: null,
+    keywords: [],
+    createdAt: 1,
+    updatedAt: 1,
+  })
+  await fx.ctx.db.insert(threads).values({
+    id: 'thr_00000000-0000-4000-8000-000000000001',
+    branchId: fx.branchId,
+    title: 'Deliver the letter',
+    description: 'Wren carries a sealed letter to the reeve.',
+    status: 'active',
+    category: 'quest',
+    icon: 'scroll',
+    injectionMode: 'auto',
+    triggeredAtEntryId: null,
+    resolvedAtEntryId: null,
+    embeddingStale: 0,
+    createdAt: 1,
+    updatedAt: 1,
+  })
+  const first = fx.entries[0]!.id
+  const where = and(eq(storyEntries.branchId, fx.branchId), eq(storyEntries.id, first))
+  const [row] = await fx.ctx.db
+    .select({ metadata: storyEntries.metadata })
+    .from(storyEntries)
+    .where(where)
+  await fx.ctx.db
+    .update(storyEntries)
+    .set({ metadata: { ...row!.metadata!, sceneEntities: [wren] } })
+    .where(where)
 }
 
 describe('readTaskTurns → proseTokens', () => {
@@ -162,30 +164,36 @@ describe('primeCloseSystemCount', () => {
   })
 })
 
-describe("the close tasks' renders", () => {
-  it.each(['identity', 'threads'] as const)(
-    "prime %s's system half, so counting its prompt encodes no turn",
-    async (task) => {
-      const fx = await openCloseFixture()
-      const ctx = taskContextFor(fx)
-      const turns = await readTaskTurns(ctx)
-      const blanked = turns.closeTurns.map((turn) => ({ ...turn, content: '' }))
-      const primed = countTokens(BLANK_SYSTEM[task](blanked)) + turns.proseTokens
-      __clearPromptCountCache()
-      countTokensSpy.mockClear()
+// The task's own start, then its own render: nothing is built by hand between them.
+async function expectSystemHalfPrimed<Show extends { closeTurns: readonly { content: string }[] }>(
+  def: CloseTaskDef<Show>,
+): Promise<void> {
+  const fx = await openCloseFixture()
+  await seedStartRows(fx)
+  const ctx = taskContextFor(fx)
+  const start = await def.start(ctx)
+  expect(start).not.toBeNull()
+  __clearPromptCountCache()
+  countTokensSpy.mockClear()
 
-      const halves = RENDER[task](turns, ctx)
-      const total = countPromptTokens([
-        { role: 'system', content: halves.system },
-        { role: 'user', content: [{ type: 'text', text: halves.user }] },
-      ])
+  const halves = def.render(start!, { ...ctx, writesSoFar: '' })
+  const total = countPromptTokens([
+    { role: 'system', content: halves.system },
+    { role: 'user', content: [{ type: 'text', text: halves.user }] },
+  ])
 
-      const texts = encodedTexts()
-      expect(texts).not.toContain(halves.system)
-      expect(
-        texts.filter((text) => turns.closeTurns.some(({ content }) => text.includes(content))),
-      ).toEqual([])
-      expect(total).toBe(primed + countTokens(halves.user))
-    },
-  )
+  const texts = encodedTexts()
+  expect(texts).not.toContain(halves.system)
+  expect(
+    texts.filter((text) => start!.show.closeTurns.some(({ content }) => text.includes(content))),
+  ).toEqual([])
+  // The fixture's stored counts are accurate, so the sum is the system half's own count.
+  expect(total).toBe(countTokens(halves.system) + countTokens(halves.user))
+}
+
+describe("the close tasks' starts and renders", () => {
+  it("prime Identity's system half at its encoded count, so counting its prompt encodes no turn", () =>
+    expectSystemHalfPrimed(identityTask))
+  it("prime Threads' system half at its encoded count, so counting its prompt encodes no turn", () =>
+    expectSystemHalfPrimed(threadsTask))
 })

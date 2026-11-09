@@ -2,13 +2,13 @@ import { and, asc, eq, inArray } from 'drizzle-orm'
 
 import type { PromptHalves } from '@/lib/ai'
 import { threads, type StoryMode } from '@/lib/db'
-import { renderTemplate, TEMPLATE_IDS } from '@/lib/prompts'
+import { TEMPLATE_IDS } from '@/lib/prompts'
 
 import { readRowTool } from './read-tools'
 import type { CloseTaskDef, TaskPromptContext, TaskStart } from './task'
 import { mergeThreadsTool, updateThreadTool } from './thread-tools'
 import type { ReadFields } from './tool'
-import { blankTurns, primeCloseSystemCount, readTaskTurns, storyModeOf } from './turns'
+import { readTaskTurns, renderClosePrompt, storyModeOf } from './turns'
 import {
   isOpen,
   OPEN_THREAD_STATUSES,
@@ -69,16 +69,12 @@ function renderThreads(
   // An unset closeTurns renders an empty "# The turns".
   if (show.closeTurns.length === 0)
     throw new Error('threads: a close task renders over at least one turn')
-  const render = (closeTurns: readonly CloseTurn[]): PromptHalves =>
-    renderTemplate(TEMPLATE_IDS.closeThreads, {
-      mode: show.mode,
-      closeTurns,
-      closeThreads: show.threads,
-      closeWritesSoFar: ctx.writesSoFar,
-    })
-  const halves = render(show.closeTurns)
-  primeCloseSystemCount(halves.system, render(blankTurns(show.closeTurns)).system, show.proseTokens)
-  return halves
+  return renderClosePrompt(
+    TEMPLATE_IDS.closeThreads,
+    show.closeTurns,
+    { mode: show.mode, closeThreads: show.threads, closeWritesSoFar: ctx.writesSoFar },
+    show.proseTokens,
+  )
 }
 
 /** memory/chapter-close.md → Run order: Threads, 3f's Threads bullet, per part. */

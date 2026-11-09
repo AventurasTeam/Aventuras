@@ -4,7 +4,7 @@ import type { PromptHalves } from '@/lib/ai'
 import { chunked, entities, type Entity, type StoryMode } from '@/lib/db'
 import { isJsonObject } from '@/lib/json-object'
 import { normalizeTerm } from '@/lib/keyword-terms'
-import { renderTemplate, TEMPLATE_IDS } from '@/lib/prompts'
+import { TEMPLATE_IDS } from '@/lib/prompts'
 import { matchTerms } from '@/lib/retrieval'
 import { CAST_SOFT_CAPS } from '@/lib/wizard'
 
@@ -12,7 +12,7 @@ import { updateCharacterTool, updateFactionTool } from './identity-tools'
 import { readRowTool, searchWorldTool } from './read-tools'
 import type { CloseTaskDef, TaskPromptContext, TaskStart } from './task'
 import type { ReadFields } from './tool'
-import { blankTurns, primeCloseSystemCount, readTaskTurns, storyModeOf } from './turns'
+import { readTaskTurns, renderClosePrompt, storyModeOf } from './turns'
 import type { CloseTurn } from '../chapter-context'
 
 /** C11: the fields Identity's start shows, so read_row returns the same and its rows count as read. */
@@ -153,18 +153,18 @@ function renderIdentity(
   // An unset closeTurns renders an empty "# The turns".
   if (show.closeTurns.length === 0)
     throw new Error('identity: a close task renders over at least one turn')
-  const render = (closeTurns: readonly CloseTurn[]): PromptHalves =>
-    renderTemplate(TEMPLATE_IDS.closeIdentity, {
+  return renderClosePrompt(
+    TEMPLATE_IDS.closeIdentity,
+    show.closeTurns,
+    {
       mode: show.mode,
-      closeTurns,
       closeCharacters: show.characters,
       closeFactions: show.factions,
       closeWritesSoFar: ctx.writesSoFar,
       closeSoftCaps: { ...CAST_SOFT_CAPS },
-    })
-  const halves = render(show.closeTurns)
-  primeCloseSystemCount(halves.system, render(blankTurns(show.closeTurns)).system, show.proseTokens)
-  return halves
+    },
+    show.proseTokens,
+  )
 }
 
 /** memory/chapter-close.md → Run order: Identity, 3b, per part. */
