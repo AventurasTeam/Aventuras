@@ -676,16 +676,21 @@ None open: Implementation notes record each answer.
   `disabled` keep, where it would no longer rank, was offered and not
   taken. Every refusal names each keep that would land, and a pair with
   none, such as an `active` `auto` thread beside a `pending` `always`
-  one, is refused as "leave them apart". The Threads start shows a mode
-  the user set after the status, `(pending, always)`, and leaves `auto`
-  unsaid, as Identity's start leaves `active`, so the rare user-set mode
-  stands out (an implementer's call the developer left open); `read_row`
-  shows every thread's `injectionMode`. The measure wasn't rerun: every
-  thread in the seed and the overlay is `auto`, so none of its merges
-  would change. The "brackets" half: a list entry split by line drops a
-  line that, trimmed, holds only `[` or `]`, with a trailing comma or
-  not, so an unparseable bracketed list no longer lands its brackets as
-  entries.
+  one, is refused as "leave them apart". A keep "lands" when it passes
+  the refusal rules; C11's protection still runs after them, so when the
+  user edited the old keep after the cited turns, the swapped merge comes
+  back `skipped` with the user's edit standing, at the cost of one step
+  (provisional, coordinator default after CodeRabbit; alternative: count
+  a keep whose merge protection would skip as not landing). The Threads
+  start shows a mode the user set after the status, `(pending, always)`,
+  and leaves `auto` unsaid, as Identity's start leaves `active`, so the
+  rare user-set mode stands out (an implementer's call the developer
+  left open); `read_row` shows every thread's `injectionMode`. The
+  measure wasn't rerun: every thread in the seed and the overlay is
+  `auto`, so none of its merges would change. The "brackets" half: a
+  list entry split by line drops a line that, trimmed, holds only `[` or
+  `]`, with a trailing comma or not, so an unparseable bracketed list no
+  longer lands its brackets as entries.
 - **A leaked list's trailing commas are dropped (developer decision,
   2026-11-09: "TC: 1+2").** A comma after a list's last quoted item is
   dropped before the list parses, so `["brave", "wary",]` and its
