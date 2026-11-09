@@ -211,7 +211,7 @@ type ModelAnswer = {
   /** A create's new row, as its handle. */
   id?: string
   reason?: string
-  /** What to do, for a stable reason. */
+  /** What to do: for a stable reason, or a rule refusal's own advice. */
   note?: string
   survivor?: string
   notWritten?: { field: string; row: string; reason: string; note?: string }[]
@@ -220,7 +220,7 @@ type ModelAnswer = {
 /** The tool result the model reads: handles only, and what to do about a stable reason. */
 export function modelAnswer(
   verdict: ToolVerdict,
-  extra: { createdId?: string },
+  extra: { createdId?: string; note?: string },
   ids: CloseIds,
 ): unknown {
   const survivor = verdict.survivor === undefined ? undefined : ids.withHandles(verdict.survivor.id)
@@ -230,9 +230,11 @@ export function modelAnswer(
   if (verdict.reason !== undefined) {
     answer.reason = ids.withHandles(verdict.reason)
     const note =
-      verdict.reason === CLOSE_REASON.rowGone && survivor !== undefined
-        ? `The row was merged into ${survivor}; write to ${survivor} instead.`
-        : NOTES.get(verdict.reason)
+      extra.note !== undefined
+        ? ids.withHandles(extra.note)
+        : verdict.reason === CLOSE_REASON.rowGone && survivor !== undefined
+          ? `The row was merged into ${survivor}; write to ${survivor} instead.`
+          : NOTES.get(verdict.reason)
     if (note !== undefined) answer.note = note
   }
   if (survivor !== undefined) answer.survivor = survivor

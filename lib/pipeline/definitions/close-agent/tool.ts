@@ -91,6 +91,8 @@ export type WritePlan =
       rows: readonly ReportRow[]
       /** Proposed fields, delta path → raw value, kept as the report's Not applied values. */
       values?: Readonly<Record<string, unknown>>
+      /** What to do instead, for the model's answer only: the ledger keeps `reason` stable. */
+      note?: string
     }
   | {
       kind: 'write'

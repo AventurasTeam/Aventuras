@@ -516,6 +516,19 @@ describe('modelAnswer', () => {
     expect(JSON.stringify(answer)).not.toContain(LORE_A)
   })
 
+  it("gives a rule refusal's own note, its ids as handles", () => {
+    const answer = modelAnswer(
+      { result: 'rejected', reason: 'one of these was written', landed: [], skippedFields: [] },
+      { note: `Keep ${LORE_A} instead.` },
+      shownIds(),
+    )
+    expect(answer).toEqual({
+      result: 'rejected',
+      reason: 'one of these was written',
+      note: 'Keep lo1 instead.',
+    })
+  })
+
   it('says what to do for each stable reason', () => {
     const ids = shownIds()
     expect(
