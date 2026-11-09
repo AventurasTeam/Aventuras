@@ -59,6 +59,7 @@ import {
   attemptOf,
   barLine,
   barVerdict,
+  failedRunsExit,
   largestOf,
   tallyRun,
   type Measured,
@@ -644,7 +645,13 @@ async function main(): Promise<void> {
     const results: RunResult[] = []
     for (let k = 1; k <= RUNS; k++)
       results.push(await probeRun(k, source, { url: LLM_URL, model: LLM_MODEL }))
-    if (results.some(({ completed }) => !completed)) process.exitCode = 1
+    if (
+      failedRunsExit(
+        OVERLAY,
+        results.map(({ completed }) => completed),
+      )
+    )
+      process.exitCode = 1
     if (!STAND_IN)
       printLargest(
         results.map(({ largestValue }, i) => ({ value: largestValue, run: i + 1 })),

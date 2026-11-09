@@ -183,6 +183,11 @@ export function barVerdict(tallies: readonly RunTally[]): BarVerdict {
   return { passing, runs, capRuns, mergeRuns, verdict }
 }
 
+/** Whether a failed close sets a non-zero exit: an overlay run exits by its bar instead. */
+export function failedRunsExit(overlay: boolean, completed: readonly boolean[]): boolean {
+  return !overlay && completed.some((done) => !done)
+}
+
 export type Measured<T> = { value: T | null; run: number }
 
 /** The run holding the largest value; the first of a tie, and a run with none is skipped. */

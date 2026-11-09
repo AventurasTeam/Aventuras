@@ -5,6 +5,7 @@ import type { CloseReport, CloseReportCall } from '@/lib/db'
 import {
   attemptOf,
   barVerdict,
+  failedRunsExit,
   largestOf,
   tallyRun,
   type StepAttempt,
@@ -415,6 +416,17 @@ describe('barVerdict', () => {
 
   it('refuses to judge no runs', () => {
     expect(() => barVerdict([])).toThrow(/no runs/)
+  })
+})
+
+describe('failedRunsExit', () => {
+  it('fails a plain run on any close that did not complete', () => {
+    expect(failedRunsExit(false, [true, false, true])).toBe(true)
+    expect(failedRunsExit(false, [true, true])).toBe(false)
+  })
+
+  it('leaves an overlay run to the bar, which counts a failed close as a miss', () => {
+    expect(failedRunsExit(true, [true, false, true])).toBe(false)
   })
 })
 
