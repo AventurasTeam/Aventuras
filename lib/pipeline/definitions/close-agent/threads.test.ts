@@ -916,6 +916,75 @@ describe('merge_threads', () => {
     expect(opsOf(await runDeltas(f, run.result.actionId))).toEqual([['update', SEALED.id]])
   })
 
+  it('names the absorbed thread this close wrote in the answer only, the ledger keeping its reason', async () => {
+    const run = await runThreadCalls(f, THREADS_SHOWN, [
+      {
+        toolName: 'update_thread',
+        input: { id: 'th2', description: 'The seal is cracked but holds.', ...cite() },
+      },
+      merge({ keep: 'th1', absorb: ['th3', 'th2'] }),
+    ])
+
+    expect(run.calls[1]).toMatchObject({
+      result: 'rejected',
+      reason:
+        'this close already wrote a thread in absorb, and absorbing it would block undoing the close: keep that thread instead',
+    })
+    expect(JSON.stringify(run.calls[1])).not.toContain('th2')
+    expect(run.answers[1]).toMatchObject({
+      result: 'rejected',
+      note: expect.stringContaining('th2'),
+    })
+    expect(JSON.stringify(run.answers[1])).not.toContain('th3')
+  })
+
+  it.each<[string, SeedThread, string, string[]]>([
+    ['neither as keep', SECOND_MARK, 'th4', ['th1', 'th2']],
+    ['one as keep', LETTER, 'th1', ['th2', 'th4']],
+  ])(
+    'refuses a merge of two threads this close wrote, %s, as one that cannot land in this close',
+    async (_label, kept, keep, absorb) => {
+      const description = 'Wren must bring the letter to Low Ashby with its seal whole.'
+      const run = await runThreadCalls(f, THREADS_SHOWN, [
+        {
+          toolName: 'update_thread',
+          input: { id: 'th2', description: 'The seal is cracked but holds.', ...cite() },
+        },
+        {
+          toolName: 'update_thread',
+          input: { id: 'th1', description: 'Wren hides the letter in her boot.', ...cite() },
+        },
+        merge({ keep, absorb, title: kept.title, description }),
+      ])
+
+      expect(run.calls[2]).toMatchObject({
+        result: 'rejected',
+        reason: expect.stringContaining('cannot be merged in this close'),
+      })
+      expect(run.calls[2]!.values).toEqual({ description })
+      expect(run.answers[2]).not.toHaveProperty('note')
+      expect(opsOf(await runDeltas(f, run.result.actionId))).toEqual([
+        ['update', SEALED.id],
+        ['update', LETTER.id],
+      ])
+    },
+  )
+
+  it("records only the text keep doesn't hold when the close's own write refuses the merge", async () => {
+    const description = 'Wren must bring the letter to Low Ashby with its seal whole.'
+
+    const run = await runThreadCalls(f, THREADS_SHOWN, [
+      {
+        toolName: 'update_thread',
+        input: { id: 'th2', description: 'The seal is cracked but holds.', ...cite() },
+      },
+      merge({ keep: 'th1', absorb: ['th2'], title: LETTER.title, description }),
+    ])
+
+    expect(run.calls[1]).toMatchObject({ result: 'rejected' })
+    expect(run.calls[1]!.values).toEqual({ description })
+  })
+
   it('lands a merge that keeps the thread this close already wrote', async () => {
     const run = await runThreadCalls(f, THREADS_SHOWN, [
       {
@@ -964,6 +1033,17 @@ describe('merge_threads', () => {
       reason: expect.stringContaining('keep the active thread'),
     })
     expect(await runDeltas(f, run.result.actionId)).toEqual([])
+  })
+
+  it("records only the text keep doesn't hold when an active thread can't join a pending one", async () => {
+    const description = 'A light on the far bank, and the letter Wren carries past it.'
+
+    const run = await runThreadCalls(f, THREADS_SHOWN, [
+      merge({ keep: 'th3', absorb: ['th1'], title: FAR_BANK.title, description }),
+    ])
+
+    expect(run.calls[0]).toMatchObject({ result: 'rejected' })
+    expect(run.calls[0]!.values).toEqual({ description })
   })
 
   it("lands the reverse, keep's status, refs, category, icon and injection mode standing", async () => {
