@@ -16,7 +16,7 @@ import type { ReadFields } from './tool'
 import { readTaskTurns, renderClosePrompt, storyModeOf } from './turns'
 import type { CloseTurn } from '../chapter-context'
 
-/** C11: the fields Identity's start shows, so read_row returns the same and its rows count as read. */
+/** C11: the fields Identity's start shows, so read_row returns the same; its rows count as read. */
 export const IDENTITY_READ_FIELDS: ReadFields = {
   character: ['description', 'state.traits', 'state.drives', 'state.voice'],
   faction: ['description', 'state.standing', 'state.agenda'],
@@ -58,7 +58,7 @@ const strings = (value: unknown): string[] =>
 const text = (value: unknown): string => (typeof value === 'string' ? value : '')
 const stateOf = (row: Entity): Readonly<Record<string, unknown>> =>
   isJsonObject(row.state) ? row.state : {}
-// Code units, never localeCompare: the host locale would make the prompt's row order device-dependent.
+// Code units, never localeCompare: host locale would make the prompt's row order device-dependent.
 const byNameThenId = (a: Entity, b: Entity): number =>
   compareId(a.name, b.name) || compareId(a.id, b.id)
 

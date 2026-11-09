@@ -82,8 +82,8 @@ import { resolveDevSlot } from './dev-slot/resolve'
 // seed's test overlay on each run's copy, and the bar over the runs), AVENTURAS_DB_PATH (the dev
 // slot's database; only ever read, through a VACUUM INTO copy), PROBE_REJUDGE (a saved PROBE_OUT
 // directory: judges its runs by the bar as it stands, from the saved files, with no model call, and
-// writes bar-rejudged.json beside them). Close
-// the app first: a live write moves the source's hash, and a held write lock fails the copy.
+// writes bar-rejudged.json beside them). Close the app first: a live write moves the source's
+// hash, and a held write lock fails the copy.
 // A PROBE_OUT that already holds files is refused, so each invocation saves to its own directory.
 const LLM_URL = process.env.SMOKE_LLM_URL
 const LLM_MODEL = process.env.SMOKE_LLM_MODEL

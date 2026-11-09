@@ -18,7 +18,7 @@ const BEFORE_THE_CAP = new Set<string>([
 ])
 
 export type TaskHold = { task: CloseTask; held: boolean; why: string }
-/** A capped list that reached the cap check: `result` is the list's own outcome, `refused` when it was lost. */
+/** A capped list that reached the cap check: `result` is its outcome, `refused` when lost. */
 export type CapHit = {
   row: string
   path: string
@@ -27,7 +27,7 @@ export type CapHit = {
 }
 /** A merge_threads call, by the names of the rows it named. */
 export type MergeHit = { rows: string[]; result: CloseReportCall['result']; reason?: string }
-/** One response to a tool step; a step the server cut or filtered is retried, so a step has several. */
+/** One response to a tool step; a cut or filtered step is retried, so a step has several. */
 export type StepAttempt = {
   task: CloseTask
   step: number

@@ -128,7 +128,7 @@ const chapterEntryIdsOf = (fx: CloseFixture): string[] => fx.entries.slice(0, 7)
 // The fifth reply (position 11): past E, under the fixture's act_close_turn_5.
 const laterReplyIdOf = (fx: CloseFixture): string => fx.replyIds[4]!
 
-/** A pass's thread: triggered at a chapter reply, created unanchored under an action no turn owns. */
+/** A pass's thread: triggered at a chapter reply, created unanchored under no turn's action. */
 async function seedPassThread(fx: CloseFixture, thread: SeedThread, opensAt = 0): Promise<void> {
   const closed = thread.status === 'resolved' || thread.status === 'failed'
   const result = await applyDeltaAction(
@@ -156,8 +156,8 @@ async function seedPassThread(fx: CloseFixture, thread: SeedThread, opensAt = 0)
 }
 
 /**
- * The user's thread, both refs null, inserted with no delta as one written before the chapter: a
- * user_edit create logged now would read as the user's edit after every turn's prose.
+ * The user's thread, both refs null, inserted with no delta: a logged create would read as the
+ * user's edit after every turn's prose.
  */
 async function seedUsersThread(fx: CloseFixture, thread: SeedThread): Promise<void> {
   await fx.ctx.db.insert(threads).values({
@@ -174,7 +174,7 @@ async function seedUsersThread(fx: CloseFixture, thread: SeedThread): Promise<vo
     throw new Error(`threads fixture: the story did not reopen: ${reopened.status}`)
 }
 
-/** THREADS_SHOWN on the fixture: three a pass wrote, each opened at its own reply, and the user's. */
+/** THREADS_SHOWN on the fixture: three a pass wrote, each opened at its reply, and the user's. */
 async function seedThreads(fx: CloseFixture): Promise<void> {
   await seedPassThread(fx, LETTER, 0)
   await seedPassThread(fx, SEALED, 1)
@@ -465,7 +465,7 @@ describe('update_thread', () => {
     })
   })
 
-  // triggered_at_entry_id has no foreign key, so a copied thread can name an entry another branch holds.
+  // triggered_at_entry_id has no FK, so a copied thread can name an entry another branch holds.
   it("keeps the cited turn when the thread's opening entry is on another branch, past it", async () => {
     await f.ctx.db
       .insert(branches)

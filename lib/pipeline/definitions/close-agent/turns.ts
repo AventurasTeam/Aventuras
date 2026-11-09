@@ -59,8 +59,7 @@ export function blankTurns(turns: readonly CloseTurn[]): CloseTurn[] {
 
 /**
  * Primes `system` at `countTokens(blankSystem) + proseTokens`, so a part's first step never encodes
- * the chapter. An older row's stored count includes a trailing block the prompt strips, so the
- * total can run slightly long: accepted as small, the check has no margin.
+ * the chapter. An older row's stored count includes a stripped trailing block: a small overcount.
  */
 export function primeCloseSystemCount(
   system: string,

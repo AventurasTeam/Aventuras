@@ -172,9 +172,8 @@ const updateHandler: ActionHandler = async (action, branchId, ctx) => {
     // No columnSchemas registered: scalar/nullable columns take the whole prior value as undo.
     undoPayload[col] = prior
   }
-  // The ref is the pass's claim of where its status ended: a user's status change retracts it, and
-  // a thread with refs logs it beside every status change, so a reversal restores the pair whole.
-  // A ref the patch named but `set` lacks was restated or user-kept: the stored one stands.
+  // Refs log beside every status change so a reversal restores the pair; a user's status change
+  // retracts resolvedAt. A ref named in the patch but absent from `set` was restated or user-kept.
   const carriesRefs = current.triggeredAtEntryId !== null || current.resolvedAtEntryId !== null
   if (carriesRefs && 'status' in set && !('resolvedAtEntryId' in set)) {
     set.resolvedAtEntryId =
