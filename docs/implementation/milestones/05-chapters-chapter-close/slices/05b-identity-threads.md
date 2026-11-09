@@ -201,16 +201,20 @@ safe, read and not run: per-turn stackable keys are bounded at parse
   2. A row that's gone is `rejected`, naming its survivor from the
      ledger. The same goes for `update_thread` on a row this close
      absorbed.
-  3. Absorbing an `active` thread is `rejected` unless `keep` is `active`
-     too, saying to keep the active one or to resolve it with
-     `update_thread` first if the chapter settled it, since the kept row
-     would drop the thread from the narrator's prompt with no write
-     saying so.
-  4. A row this close already wrote can't be absorbed: any delta on it
+  3. A row this close already wrote can't be absorbed: any delta on it
      under the run's `actionId` is `rejected`, saying to keep that row
      instead. `snapshotForRedo` would otherwise refuse CTRL-Z of the
      close for good (`lib/actions/delta/redo.ts:118-126`). Such a row may
-     still be the kept one.
+     still be the kept one. When this close wrote two of the named rows,
+     or a written row can't be kept without dropping an `active` thread
+     (a written `keep` that isn't `active` beside an `active` absorbed
+     row, or a written absorbed row that isn't `active` beside an
+     `active` one), no `keep` can land and the merge is `rejected` as
+     unmergeable in this close, with no row to swap.
+  4. Absorbing an `active` thread is `rejected` unless `keep` is `active`
+     too, since the kept row would drop the thread from the narrator's
+     prompt with no write saying so. It says to keep an active one, then
+     settle it with `update_thread` if the chapter resolved or failed it.
   5. `laterTurnTouched` on any row is `skipped` whole.
   6. A user edit after the latest cited turn is `skipped` whole:
      `userTouched` on an absorbed row, or `userWrote` on `keep` for a
@@ -505,8 +509,10 @@ Test paths below run with `pnpm vitest run --project unit <path>`.
    `keep` not stopping it; absorbing a row the close wrote refused;
    keeping that row landing; absorbing an `active` thread into a
    `pending`, `resolved` or `failed` one refused with no delta, while an
-   `active` keep lands and keeps the kept row's status and refs; `survivor` set on a landed merge and
-   absent on a refused or skipped one; and `update_thread` on an absorbed
+   `active` keep lands and keeps the kept row's status and refs; a
+   written row that can't be kept without dropping an `active` one
+   refused as unmergeable with no note; `survivor` set on a landed merge
+   and absent on a refused or skipped one; and `update_thread` on an absorbed
    row refused, naming the survivor.
 10. **Round trip.** `lib/pipeline/__tests__/close-round-trip.test.ts` holds
     a case for each of the four tools and both cases of `update_thread`
@@ -623,7 +629,9 @@ as literals so a test can't derive its expectation from the constant.
   `injection_mode` stand, and absorbing an `active` thread into a
   `pending` one is `rejected`, saying to keep the active one.
   **Answered (developer, 2026-11-09):** as suggested, in
-  [Tools](#tools) and [Canon edits](#canon-edits).
+  [Tools](#tools) and [Canon edits](#canon-edits). Widened by the
+  developer on 2026-11-09 to any non-active keep: absorbing an `active`
+  thread is refused unless the kept row is `active` too.
 - **What does a soft cap do on a row already over it?** A user's or an
   import's 12 traits, and an agent sending 10, is over the cap and an
   improvement. Suggested: refused only when the list would grow past the

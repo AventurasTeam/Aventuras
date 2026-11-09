@@ -663,8 +663,8 @@ conservative bias as the sub-jobs above:
   the merge writes only its title and description. Absorbing an `active`
   thread is refused unless the kept row is `active` too, since the kept
   row would drop the thread from the narrator's prompt with no write
-  saying so. The refusal says to keep the active one, or to resolve it
-  with `update_thread` first if the chapter settled it.
+  saying so. The refusal says to keep an active one, then settle it with
+  `update_thread` if the chapter resolved or failed it.
 - **`common_knowledge`** on a happening the chapter shows has spread
   to everyone: news is a chapter-scale judgment. A wrong flag makes
   every character aware, so the bar is explicit spread in the prose.
