@@ -184,7 +184,6 @@ async function planIdentityWrite<A extends { readonly id: string }>(
       lost.push({ field: field.path, row: id, kind: 'protected', reason: verdict.reason })
       continue
     }
-    // Only a list precedence leaves free meets its cap: a protected one never reaches this check.
     if (field.kind === 'list') {
       const cap = CAST_SOFT_CAPS[field.cap]
       if (overSoftCap(field.list.entries, storedValue(row, field.path), cap)) {

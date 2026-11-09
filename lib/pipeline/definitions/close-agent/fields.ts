@@ -75,7 +75,7 @@ function joinedList(entry: string, bracketed = false): string[] | undefined {
 
 const LIST_MARKER = /^(?:[-*]|\d+\.)\s+/
 
-/** A list entry never spans lines, nor starts a line with a list marker. */
+/** A list entry never spans lines; a split entry's lines drop their list markers. */
 function entryLines(entry: string): string[] {
   const lines = entry.split('\n')
   return lines.length === 1 ? lines : lines.map((line) => line.trim().replace(LIST_MARKER, ''))
