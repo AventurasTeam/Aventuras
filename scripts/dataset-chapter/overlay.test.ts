@@ -5,6 +5,7 @@ import { afterEach, beforeEach, describe, expect, it, vi, type MockInstance } fr
 import { startManualClose } from '@/lib/actions/chapters/start-manual-close'
 import { applyDeltaAction } from '@/lib/actions/delta/apply-delta-action'
 import { loadOpenStory } from '@/lib/actions/stories/operational'
+import { writeSystemEntry } from '@/lib/actions/story-entries/system-entry'
 import { undoLastAction } from '@/lib/actions/story-entries/undo'
 import type {
   generateStructured,
@@ -24,6 +25,7 @@ import {
 } from '@/lib/db'
 import { createTestDb } from '@/lib/db/__tests__/test-db'
 import { buildSeedSteps } from '@/lib/db/devtools/seed-dataset'
+import { generateId } from '@/lib/ids'
 import { expectRan, resetSingletons } from '@/lib/pipeline/__tests__/harness'
 import { metadataReplyResult } from '@/lib/pipeline/definitions/__tests__/close-fixture'
 import { identityTask } from '@/lib/pipeline/definitions/close-agent/identity'
@@ -389,6 +391,43 @@ describe('the dataset overlay', () => {
 
     expect(byId(await entityRows(ctx, [JIM])).get(JIM)?.state).toMatchObject({ traits: [] })
     expect(await userEdits(ctx)).toEqual([])
+  })
+
+  it('throws on a held user edit older than a turn, though a system entry follows that turn', async () => {
+    const ctx = await seededDataset()
+    await applyDatasetOverlay(ctx)
+    const [tail] = await ctx.db
+      .select()
+      .from(storyEntries)
+      .where(and(eq(storyEntries.branchId, B), eq(storyEntries.id, LAST_REPLY)))
+    const newer = await applyDeltaAction(
+      {
+        action: {
+          kind: 'createStoryEntry',
+          source: 'user_edit',
+          payload: {
+            entry: {
+              id: generateId('entry'),
+              branchId: B,
+              position: tail!.position + 1,
+              kind: 'user_action',
+              content: 'I follow Silver down to the cove.',
+              chapterId: null,
+              metadata: tail!.metadata,
+              createdAt: Date.now(),
+            },
+          },
+        },
+        actionId: generateId('act'),
+        branchId: B,
+        entryId: null,
+      },
+      ctx,
+    )
+    expect(newer).toMatchObject({ status: 'ok' })
+    await writeSystemEntry({ branchId: B, content: 'The reply failed.' }, ctx)
+
+    await expect(applyDatasetOverlay(ctx)).rejects.toThrow(/no user edit/)
   })
 
   it('throws when the thread the planted one repeats is no longer active, before writing', async () => {

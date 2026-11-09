@@ -4,7 +4,7 @@ import { and, desc, eq, inArray } from 'drizzle-orm'
 import type { ZodType } from 'zod'
 
 import { applyDeltaAction, loadOpenStory, undoLastAction } from '@/lib/actions'
-import { userEditsSinceProse, wroteField } from '@/lib/actions/delta/user-precedence'
+import { proseLogPosition, userEditsSince, wroteField } from '@/lib/actions/delta/user-precedence'
 import {
   chapters,
   deltas,
@@ -115,16 +115,16 @@ function plannedState(row: Entity, entry: EntityOverlay): PlannedState {
 // Every check after the reopen, before any overlay write: a changed seed fails loudly and
 // leaves no half-applied overlay.
 // The edit is there to protect its field: a value the seed already holds, with no user edit after
-// the chapter's last turn, would make the edit a noop that leaves the field open to a close.
+// the prose of every turn a close may cite, would make the edit a noop that leaves it open.
 async function userEditProtects(ctx: DbCtx, row: Entity): Promise<boolean> {
-  const [last] = await ctx.db
+  const turns = await ctx.db
     .select({ id: storyEntries.id })
     .from(storyEntries)
     .where(eq(storyEntries.branchId, DATASET_BRANCH_ID))
-    .orderBy(desc(storyEntries.position))
-    .limit(1)
-  if (last === undefined) return false
-  const edits = await userEditsSinceProse(ctx, DATASET_BRANCH_ID, 'entities', row.id, last.id)
+  let since = 0
+  for (const { id } of turns)
+    since = Math.max(since, await proseLogPosition(ctx, DATASET_BRANCH_ID, id))
+  const edits = await userEditsSince(ctx, DATASET_BRANCH_ID, 'entities', row.id, since)
   return wroteField(edits, 'entities', 'description', [])
 }
 
