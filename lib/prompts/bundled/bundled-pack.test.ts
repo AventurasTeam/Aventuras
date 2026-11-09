@@ -331,7 +331,7 @@ describe('the close task templates', () => {
     "Don't churn stable identity.",
     "Rewrite a character's voice or a faction's standing whole when the chapter shows it changed.",
     'Rewrite a description only when the chapter materially changes who or what the row is',
-    'never for detail its state slots already carry.',
+    'never for detail its other fields already carry.',
     'A blank description, voice or standing may be filled when the cited turns show it.',
     'find it with search_world and read it with read_row before writing to it.',
   ])('the Identity task states: %s', (line) => {

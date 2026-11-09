@@ -16,7 +16,7 @@ Keep who the characters and factions below are true to this chapter, with update
   - Remove an entry only when the chapter plainly contradicts it.
 - Don't churn stable identity. An entry the chapter merely doesn't show stays: "brave" isn't removed because the chapter happened not to show bravery.
 - Voice and standing. Rewrite a character's voice or a faction's standing whole when the chapter shows it changed.
-- Descriptions. Rewrite a description only when the chapter materially changes who or what the row is (the stable boy who became the king's champion), never for detail its state slots already carry.
+- Descriptions. Rewrite a description only when the chapter materially changes who or what the row is (the stable boy who became the king's champion), never for detail its other fields already carry.
 - Blank fields. A blank description, voice or standing may be filled when the cited turns show it.
 - Other rows. For a character or faction the chapter names that isn't below, find it with search_world and read it with read_row before writing to it.
 
