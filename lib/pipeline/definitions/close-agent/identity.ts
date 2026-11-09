@@ -12,7 +12,7 @@ import { updateCharacterTool, updateFactionTool } from './identity-tools'
 import { readRowTool, searchWorldTool } from './read-tools'
 import type { CloseTaskDef, TaskPromptContext, TaskStart } from './task'
 import type { ReadFields } from './tool'
-import { readTaskTurns, storyModeOf } from './turns'
+import { blankTurns, primeCloseSystemCount, readTaskTurns, storyModeOf } from './turns'
 import type { CloseTurn } from '../chapter-context'
 
 /** C11: the fields Identity's start shows, so read_row returns the same and its rows count as read. */
@@ -45,6 +45,8 @@ export type IdentityFaction = {
 export type IdentityShow = {
   mode: StoryMode
   closeTurns: CloseTurn[]
+  /** readTaskTurns' stored count of the turns, which primes the system half's count. */
+  proseTokens: number
   characters: IdentityCharacter[]
   factions: IdentityFaction[]
 }
@@ -106,7 +108,7 @@ async function touchedFactions(
 }
 
 async function startIdentity(ctx: TaskPromptContext): Promise<TaskStart<IdentityShow> | null> {
-  const { entries, closeTurns } = await readTaskTurns(ctx)
+  const { entries, closeTurns, proseTokens } = await readTaskTurns(ctx)
   const sceneIds = new Set(entries.flatMap((entry) => strings(entry.metadata?.sceneEntities)))
   const characters = await sceneCharacters(ctx, [...sceneIds])
   const factions = await touchedFactions(ctx, characters, closeTurns)
@@ -115,6 +117,7 @@ async function startIdentity(ctx: TaskPromptContext): Promise<TaskStart<Identity
     show: {
       mode: await storyModeOf(ctx),
       closeTurns,
+      proseTokens,
       characters: characters.map((row) => {
         const state = stateOf(row)
         return {
@@ -150,14 +153,18 @@ function renderIdentity(
   // An unset closeTurns renders an empty "# The turns".
   if (show.closeTurns.length === 0)
     throw new Error('identity: a close task renders over at least one turn')
-  return renderTemplate(TEMPLATE_IDS.closeIdentity, {
-    mode: show.mode,
-    closeTurns: show.closeTurns,
-    closeCharacters: show.characters,
-    closeFactions: show.factions,
-    closeWritesSoFar: ctx.writesSoFar,
-    closeSoftCaps: { ...CAST_SOFT_CAPS },
-  })
+  const render = (closeTurns: readonly CloseTurn[]): PromptHalves =>
+    renderTemplate(TEMPLATE_IDS.closeIdentity, {
+      mode: show.mode,
+      closeTurns,
+      closeCharacters: show.characters,
+      closeFactions: show.factions,
+      closeWritesSoFar: ctx.writesSoFar,
+      closeSoftCaps: { ...CAST_SOFT_CAPS },
+    })
+  const halves = render(show.closeTurns)
+  primeCloseSystemCount(halves.system, render(blankTurns(show.closeTurns)).system, show.proseTokens)
+  return halves
 }
 
 /** memory/chapter-close.md → Run order: Identity, 3b, per part. */

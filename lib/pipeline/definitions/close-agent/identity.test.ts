@@ -1122,6 +1122,7 @@ describe('readTaskTurns', () => {
     expect(await readTaskTurns(promptContextFor(fx, idsWithTurns(fx), []))).toEqual({
       entries: [],
       closeTurns: [],
+      proseTokens: 0,
     })
   })
 })
