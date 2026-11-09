@@ -1,5 +1,5 @@
 import type { AssistantModelMessage, ToolCallPart } from 'ai'
-import { and, asc, count, eq, inArray, isNull } from 'drizzle-orm'
+import { and, asc, count, eq, inArray, isNull, max } from 'drizzle-orm'
 import { afterEach, beforeEach, describe, expect, it, vi, type MockInstance } from 'vitest'
 
 import { startManualClose } from '@/lib/actions/chapters/start-manual-close'
@@ -188,6 +188,46 @@ const userEdits = (ctx: DbCtx) =>
 async function undoSeedClose(ctx: DbCtx): Promise<void> {
   expect(await loadOpenStory(B, ctx)).toMatchObject({ status: 'ok' })
   expect(await undoLastAction(B, ctx)).toEqual({ status: 'ok' })
+}
+
+async function appendTurn(
+  ctx: DbCtx,
+  kind: 'user_action' | 'ai_reply',
+  content: string,
+): Promise<void> {
+  const [tail] = await ctx.db
+    .select()
+    .from(storyEntries)
+    .where(and(eq(storyEntries.branchId, B), eq(storyEntries.id, LAST_REPLY)))
+  const [{ next }] = await ctx.db
+    .select({ next: max(storyEntries.position) })
+    .from(storyEntries)
+    .where(eq(storyEntries.branchId, B))
+  const written = await applyDeltaAction(
+    {
+      action: {
+        kind: 'createStoryEntry',
+        source: kind === 'ai_reply' ? 'ai_classifier' : 'user_edit',
+        payload: {
+          entry: {
+            id: generateId('entry'),
+            branchId: B,
+            position: next! + 1,
+            kind,
+            content,
+            chapterId: null,
+            metadata: tail!.metadata,
+            createdAt: Date.now(),
+          },
+        },
+      },
+      actionId: generateId('act'),
+      branchId: B,
+      entryId: null,
+    },
+    ctx,
+  )
+  expect(written).toMatchObject({ status: 'ok' })
 }
 
 // The close shows the chapter's turns as t1…tN by position, and the chapter is every open entry.
@@ -396,41 +436,23 @@ describe('the dataset overlay', () => {
     expect(await userEdits(ctx)).toEqual([])
   })
 
-  it('throws on a held user edit older than a turn, though a system entry follows that turn', async () => {
+  it('throws on a held user edit older than a reply, though a system entry follows that reply', async () => {
     const ctx = await seededDataset()
     await applyDatasetOverlay(ctx)
-    const [tail] = await ctx.db
-      .select()
-      .from(storyEntries)
-      .where(and(eq(storyEntries.branchId, B), eq(storyEntries.id, LAST_REPLY)))
-    const newer = await applyDeltaAction(
-      {
-        action: {
-          kind: 'createStoryEntry',
-          source: 'user_edit',
-          payload: {
-            entry: {
-              id: generateId('entry'),
-              branchId: B,
-              position: tail!.position + 1,
-              kind: 'user_action',
-              content: 'I follow Silver down to the cove.',
-              chapterId: null,
-              metadata: tail!.metadata,
-              createdAt: Date.now(),
-            },
-          },
-        },
-        actionId: generateId('act'),
-        branchId: B,
-        entryId: null,
-      },
-      ctx,
-    )
-    expect(newer).toMatchObject({ status: 'ok' })
-    await writeSystemEntry({ branchId: B, content: 'The reply failed.' }, ctx)
+    await appendTurn(ctx, 'ai_reply', 'Silver waits for you by the boats.')
+    await writeSystemEntry({ branchId: B, content: 'The next reply failed.' }, ctx)
 
     await expect(applyDatasetOverlay(ctx)).rejects.toThrow(/no user edit/)
+  })
+
+  // A chapter ends on a reply, so no close can cite an action no reply follows yet.
+  it('keeps a held user edit that only an action with no reply postdates', async () => {
+    const ctx = await seededDataset()
+    await applyDatasetOverlay(ctx)
+    await appendTurn(ctx, 'user_action', 'I follow Silver down to the cove.')
+
+    expect(await applyDatasetOverlay(ctx)).toEqual({ reopened: false, userEdit: 'restated' })
+    expect(await userEdits(ctx)).toHaveLength(1)
   })
 
   it('throws when the thread the planted one repeats is no longer active, before writing', async () => {

@@ -5,13 +5,14 @@ import type { ZodType } from 'zod'
 
 import { applyDeltaAction, loadOpenStory, undoLastAction } from '@/lib/actions'
 import { proseLogPosition, userEditsSince, wroteField } from '@/lib/actions/delta/user-precedence'
+import { canEndChapter } from '@/lib/chapters'
 import {
   chapters,
   deltas,
   emptyEntityState,
   entities,
   entityStateSchemaForKind,
-  storyEntries,
+  openRegionSeries,
   threads,
   threadWriteSchema,
   type DbCtx,
@@ -115,14 +116,13 @@ function plannedState(row: Entity, entry: EntityOverlay): PlannedState {
 // Every check after the reopen, before any overlay write: a changed seed fails loudly and
 // leaves no half-applied overlay.
 // The edit is there to protect its field: a value the seed already holds, with no user edit after
-// the prose of every turn a close may cite, would make the edit a noop that leaves it open.
+// the prose of every turn a close may cite, would make the edit a noop that leaves it open. A close
+// ends on a reply, so it cites no turn past the latest one.
 async function userEditProtects(ctx: DbCtx, row: Entity): Promise<boolean> {
-  const turns = await ctx.db
-    .select({ id: storyEntries.id })
-    .from(storyEntries)
-    .where(eq(storyEntries.branchId, DATASET_BRANCH_ID))
+  const open = await openRegionSeries(DATASET_BRANCH_ID, ctx)
+  const citable = open.slice(0, open.findLastIndex(canEndChapter) + 1)
   let since = 0
-  for (const { id } of turns)
+  for (const { id } of citable)
     since = Math.max(since, await proseLogPosition(ctx, DATASET_BRANCH_ID, id))
   const edits = await userEditsSince(ctx, DATASET_BRANCH_ID, 'entities', row.id, since)
   return wroteField(edits, 'entities', 'description', [])
