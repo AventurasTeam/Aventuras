@@ -26,11 +26,6 @@ function bounded(text: string): string {
   return Array.from(text).slice(0, CLOSE_REPORT_VALUE_BOUND).join('')
 }
 
-/** C4: a list joins with ", ", a ref (a whole id) is its row's name, and every value is cut to the bound. */
-export function reportValue(value: unknown, nameOfId: NameOfId): string {
-  return bounded(formatted(value, nameOfId))
-}
-
 /** chapter-close.md → Review: the run-long ledger the report phase writes as `close_report` (C4). */
 export class CloseLedgerWriter {
   constructor(
@@ -44,6 +39,7 @@ export class CloseLedgerWriter {
     this.ledger.noToolCalls = false
   }
 
+  /** C4: a list joins with ", ", a ref (a whole id) is its row's name, every value cut to the bound. */
   record(
     call: Omit<CloseReportCall, 'values'> & { values?: Readonly<Record<string, unknown>> },
   ): void {

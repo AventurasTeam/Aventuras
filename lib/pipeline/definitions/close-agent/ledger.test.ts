@@ -3,7 +3,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import { logger } from '@/lib/diagnostics'
 
 import { CloseIds } from './ids'
-import { CLOSE_REPORT_VALUE_BOUND, CloseLedgerWriter, reportValue } from './ledger'
+import { CLOSE_REPORT_VALUE_BOUND, CloseLedgerWriter } from './ledger'
 import { seedCloseLedger } from '../close-intermediates'
 
 const WREN = 'char_00000000-0000-4000-8000-000000000001'
@@ -171,6 +171,42 @@ describe('CloseLedgerWriter', () => {
     expect(values.description).toBe('x'.repeat(2_000))
     expect(values['state.traits']).toHaveLength(2_000)
     expect(values['state.traits']!.startsWith('wary, wary, ')).toBe(true)
+  })
+
+  it('keeps nothing as empty, a number or flag as text, an object as JSON, an unnamed ref as its id', () => {
+    const { ledger, writer } = setup()
+
+    writer.record(
+      call({
+        values: {
+          cleared: null,
+          count: 3,
+          pinned: true,
+          object: { gold: 3 },
+          named: WREN,
+          unnamed: OLD_TOLL,
+          prose: `Ask ${WREN} first`,
+        },
+      }),
+    )
+
+    expect(ledger.calls[0]!.values).toEqual({
+      cleared: '',
+      count: '3',
+      pinned: 'true',
+      object: '{"gold":3}',
+      named: 'Wren',
+      unnamed: OLD_TOLL,
+      prose: `Ask ${WREN} first`,
+    })
+  })
+
+  it('cuts by code point, never through a surrogate pair', () => {
+    const { ledger, writer } = setup()
+
+    writer.record(call({ values: { description: 'a' + '😀'.repeat(2_500) } }))
+
+    expect(ledger.calls[0]!.values!.description).toBe('a' + '😀'.repeat(1_999))
   })
 
   it("logs each value's length before the bound under the run's actionId, a refused call's included", () => {
@@ -406,24 +442,5 @@ describe('CloseLedgerWriter', () => {
     writer.record(call({ tool: 'read_row', why: '', turns: [] }))
 
     expect(writer.writesSoFar(ids)).toBe('')
-  })
-})
-
-describe('reportValue', () => {
-  it('gives nothing as empty, a number or flag as text, an object as JSON, an unnamed ref as its id', () => {
-    const nameOfId = (id: string): string | undefined => (id === WREN ? 'Wren' : undefined)
-
-    expect(reportValue(null, nameOfId)).toBe('')
-    expect(reportValue(undefined, nameOfId)).toBe('')
-    expect(reportValue(3, nameOfId)).toBe('3')
-    expect(reportValue(true, nameOfId)).toBe('true')
-    expect(reportValue({ gold: 3 }, nameOfId)).toBe('{"gold":3}')
-    expect(reportValue(WREN, nameOfId)).toBe('Wren')
-    expect(reportValue(TOBIN, nameOfId)).toBe(TOBIN)
-    expect(reportValue(`Ask ${WREN} first`, nameOfId)).toBe(`Ask ${WREN} first`)
-  })
-
-  it('cuts by code point, never through a surrogate pair', () => {
-    expect(reportValue('a' + '😀'.repeat(2_500), () => undefined)).toBe('a' + '😀'.repeat(1_999))
   })
 })
