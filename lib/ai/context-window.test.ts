@@ -9,6 +9,7 @@ import { countTokens } from '@/lib/retrieval'
 import type { ProviderInstance } from '../db'
 import {
   __clearPromptCountCache,
+  __promptCountCacheChars,
   ContextWindowError,
   countPromptTokens,
   describeContextWindow,
@@ -634,11 +635,37 @@ describe('the prompt count cache', () => {
     ])
     countTokensSpy.mockClear()
 
+    // The budget held through the pass, the pinned system half and all.
+    expect(__promptCountCacheChars()).toBeLessThanOrEqual(2_000_000)
+    countTokensSpy.mockClear()
+
     expect(countPromptTokens(systemOnly(system))).toBe(5_555)
     expect(encodings(system)).toBe(0)
   })
 
-  it('lets a pass end its system half' + "'" + 's pin, so a later prime can evict it', () => {
+  it("keeps a pass's system half cached when outside texts are counted after the pass", () => {
+    const system = prose('system', 600_000)
+    primePromptCount(system, 5_555)
+    const parts = Array.from({ length: 30 }, (_, i) => ({
+      type: 'text' as const,
+      text: prose(`part ${i}`, 10_000),
+    }))
+    countPromptTokens([
+      { role: 'system', content: system },
+      { role: 'user', content: parts },
+    ])
+
+    // 600,000 + 300,000 held; 1,200,000 more makes 2,100,000, so 100,000 characters must go.
+    primePromptCount(prose('a', 600_000), 11)
+    primePromptCount(prose('b', 400_000), 22)
+    primePromptCount(prose('c', 200_000), 33)
+    countTokensSpy.mockClear()
+
+    expect(countPromptTokens(systemOnly(system))).toBe(5_555)
+    expect(encodings(system)).toBe(0)
+  })
+
+  it("lets a pass end its system half's pin, so a later prime can evict it", () => {
     countPromptTokens(systemOnly(big('s')))
     primePromptCount(big('a'), 11)
     primePromptCount(big('b'), 22)

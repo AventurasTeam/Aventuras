@@ -121,6 +121,11 @@ export function primePromptCount(text: string, tokens: number): void {
   remember(text, tokens)
 }
 
+/** Test seam: the characters the count cache holds. */
+export function __promptCountCacheChars(): number {
+  return cachedChars
+}
+
 /** Test seam: empties the count cache. */
 export function __clearPromptCountCache(): void {
   promptCounts.clear()
@@ -131,6 +136,7 @@ export function __clearPromptCountCache(): void {
  *  call's name and input; each tool result's name and output; each tool definition as JSON. Each
  *  text is counted through the count cache, the system half pinned while the pass runs. */
 export function countPromptTokens(prompt: ModelPrompt, tools?: ModelTools): number {
+  const outerPin = pinned
   pinned = prompt.find((message) => message.role === 'system')?.content ?? null
   try {
     let total = 0
@@ -141,7 +147,14 @@ export function countPromptTokens(prompt: ModelPrompt, tools?: ModelTools): numb
     for (const tool of tools ?? []) total += countOnce(JSON.stringify(tool))
     return total
   } finally {
-    pinned = null
+    // The pin held the system half through the pass; ending newest keeps it clear of an unrelated
+    // insert's eviction before the next pass.
+    const held = pinned === null ? undefined : promptCounts.get(pinned)
+    if (pinned !== null && held !== undefined) {
+      promptCounts.delete(pinned)
+      promptCounts.set(pinned, held)
+    }
+    pinned = outerPin
   }
 }
 
