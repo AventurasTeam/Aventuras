@@ -969,7 +969,7 @@ turns in Japanese, and the largest single Japanese entry's
 | Platform, build                               | Close, largest step            | English, first step | Japanese, first step | Japanese turns only | Largest Japanese entry |
 | --------------------------------------------- | ------------------------------ | ------------------- | -------------------- | ------------------- | ---------------------- |
 | Desktop, `pnpm desktop` dev build (Linux)     | 10 ms (Identity step 1: 10 ms) | 40.1 ms             | 12.5 ms              | 5.5 ms              | 32.4 ms (436 tokens)   |
-| Galaxy Z Fold (SM-F966B), release `arm64-v8a` | pending                        | pending             | pending              | pending             | pending                |
+| Galaxy Z Fold (SM-F966B), release `arm64-v8a` | not run                        | 46.7 ms             | 56.9 ms              | 40.3 ms             | 37.9 ms (436 tokens)   |
 
 The desktop figures are each the larger of two page loads, on the
 renderer of slot 1 under Xvfb at `f908bd1b4` with the temporary probe
@@ -984,5 +984,20 @@ probe's English prompt matched that close's Identity step 1 estimate
 exactly (28,122 tokens, gap 0). A warm step took 0.0 ms for the English
 prompt, 0.0 to 0.1 ms for the Japanese and 0.0 ms for the turns-only
 one. The renderer's JS heap, after a forced collection, went from 126.8
-to 123.7 MB over the close (the cache holds whole texts). The Fold row
-gates the merge and is the developer's run.
+to 123.7 MB over the close (the cache holds whole texts).
+
+The Fold figures are each the largest of three fresh launches of the
+release build, folded, on 2026-11-09, at `6faee5f05` with the same
+probe applied, not committed. Per launch, the first-step maxima were
+43.9, 42.0 and 46.7 ms for English (28,122 tokens), 49.9, 50.4 and
+56.9 ms for Japanese (28,138) and 35.7, 37.7 and 40.3 ms for the turns
+only (28,115); the largest Japanese entry's `countTokens` took at most
+33.2, 34.1 and 37.9 ms. A warm step took 1.0 to 1.2 ms for the English
+prompt and 0.4 ms for both Japanese ones. The probe has no order
+option: each launch warms the encoder, then counts English, Japanese
+and the turns only in that order, so no Japanese first step ran on a
+cold app; within a launch, English's first run sat 5 to 9 ms above its
+other four, Japanese's five within 3 ms of each other. No real close
+ran on the Fold (the optional cross-check was skipped). Verdict: met.
+The largest English and Japanese first steps, 46.7 and 56.9 ms, sit
+under the 100 ms bar, so the merge gate passes.
