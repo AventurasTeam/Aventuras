@@ -613,7 +613,7 @@ None open: Implementation notes record each answer.
   (2026-11-09): a step cut off at the bound whose one retry succeeds
   counts as a hold: the developer judged a token limit not a failure as
   such, being model and environment dependent, so long as the close
-  recovers from a single failed phase into a pass (the four were three
+  recovers from a single cut-off step on its retry (the four were three
   repetition loops and one over-long deliberation, each recovered by its
   retry); a task whose retry is cut off too still
   misses, being stopped, and every other clause stands. The same 10
@@ -658,8 +658,8 @@ None open: Implementation notes record each answer.
   the overlay adds members. A name matches only as stored, so "the
   buccaneers" misses a turn that says "buccaneers" alone. Slice 5.8's
   starts read the same way. A faction row shows `status`, "(retired)"
-  like a character's, and the starts sort names by code units, not the
-  device locale, so the prompt's row order doesn't depend on it.
+  like a character's, and Identity's start sorts names by code units, not
+  the device locale, so the prompt's row order doesn't depend on it.
 - **Whole-prompt counting per step: a count cache, then a bar on the
   Fold (developer decision, 2026-11-09).** `countPromptTokens` caches
   each text's count, bounded by characters (2,000,000, and at most
@@ -912,7 +912,8 @@ applied, not committed. The measure's real closes ran three times:
 attempt A failed in the report phase with the "Story recovered" modal,
 cause unconfirmed (see [triage](../../../triage.md#inbox)); attempt B failed
 in the metadata phase when the dev model ran away to 39,655 output
-tokens; attempt C completed. Attempt C's 15 steps (28,122 tokens at
+tokens (a [followup](../../../../followups.md#tuning-and-play-testing)
+data point); attempt C completed. Attempt C's 15 steps (28,122 tokens at
 Identity step 1) all counted in 10 ms or less, and the
 probe's English prompt matched that close's Identity step 1 estimate
 exactly (28,122 tokens, gap 0). A warm step took 0.0 ms for the English

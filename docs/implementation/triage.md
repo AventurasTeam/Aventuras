@@ -253,3 +253,15 @@ patch`, which 5.5a marks `restated`, so a close tool's write of it
   "Story recovered" modal followed. It didn't reproduce on a clean rerun
   and no Fast Refresh was observed, so the trigger is unconfirmed.
   Raised in 5.5b's measure.
+- **The close's count priming assumes the system half holds each turn's
+  prose once.** `renderClosePrompt` / `primeCloseSystemCount`
+  (`lib/pipeline/definitions/close-agent/turns.ts`) prime the system
+  half's count as the blank half's count plus the turns' stored prose
+  tokens, with no check. That holds while the
+  bundled pack renders `macro_story_entry` and the close templates as
+  shipped. Once M7.2's pack tab lets a user edit them, a truncating,
+  moved or doubled `{{ entry.content }}` makes the estimate wrong
+  silently, and the pre-send check has no margin. A guard: prime only
+  when the rendered half's length minus the blank half's equals the
+  summed turn contents, else count exactly. Raised in 5.5b's final
+  review.
