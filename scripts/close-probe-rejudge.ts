@@ -43,7 +43,8 @@ function readAttempts(runDir: string, report: CloseReport | null): StepAttempt[]
     const file = parseStepFileName(name)
     return file === null ? [] : [{ name, file }]
   })
-  // A close that wrote a report made tool steps: no file for them means a layout this can't read.
+  // bar.json marks an overlay measure, whose Identity and Threads always start and so make tool
+  // steps: a report with no step file is a layout this can't read.
   if (report !== null && files.length === 0)
     throw new Error(`[probe:close] ${runDir} has a report and no step files to read`)
   // A task with no step file would pass the output bound unread.

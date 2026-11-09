@@ -113,8 +113,6 @@ function plannedState(row: Entity, entry: EntityOverlay): PlannedState {
   return { row, state: state as EntityState }
 }
 
-// Every check after the reopen, before any overlay write: a changed seed fails loudly and
-// leaves no half-applied overlay.
 // The edit is there to protect its field: a value the seed already holds, with no user edit after
 // the prose of every turn a close may cite, would make the edit a noop that leaves it open. A close
 // ends on a reply, so it cites no turn past the latest one.
@@ -128,6 +126,8 @@ async function userEditProtects(ctx: DbCtx, row: Entity): Promise<boolean> {
   return wroteField(edits, 'entities', 'description', [])
 }
 
+// Every check after the reopen, before any overlay write: a changed seed fails loudly and
+// leaves no half-applied overlay.
 async function plannedStates(ctx: DbCtx): Promise<PlannedState[]> {
   const { entities: overlaid, userEdit, plantedThread } = DATASET_OVERLAY
   const named = [...overlaid, userEdit]

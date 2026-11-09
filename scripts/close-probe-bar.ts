@@ -4,7 +4,7 @@ import { CLOSE_TASKS, type CloseReport, type CloseReportCall, type CloseTask } f
 import type { CappedList } from '@/lib/pipeline/definitions/close-agent/fields'
 import { CLOSE_REASON } from '@/lib/pipeline/definitions/close-agent/verdict'
 
-// The measure's bar, set before any run (testing.md → Real-provider checks).
+// The measure's bar (testing.md → Real-provider checks).
 const BAR_TASKS = ['identity', 'threads'] as const satisfies readonly CloseTask[]
 const PASSING_OF_TEN = 8
 const COVERAGE_OF_TEN = 3
