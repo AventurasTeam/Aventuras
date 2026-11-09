@@ -75,15 +75,49 @@ export function describeContextWindow(failure: ContextWindowFailure): string {
   )
 }
 
+/** The most texts the count cache holds; past it, the least recently used goes. */
+export const PROMPT_COUNT_CACHE_ENTRIES = 256
+
+// A tool step resends its system half, its tools and every earlier step, and a turn its system
+// prompt, so each text counts once while held. A Map iterates in insertion order: re-setting an
+// entry on every use keeps the least recently used first.
+const promptCounts = new Map<string, number>()
+
+function remember(text: string, tokens: number): void {
+  promptCounts.delete(text)
+  promptCounts.set(text, tokens)
+  if (promptCounts.size > PROMPT_COUNT_CACHE_ENTRIES) {
+    const oldest = promptCounts.keys().next()
+    if (!oldest.done) promptCounts.delete(oldest.value)
+  }
+}
+
+function countOnce(text: string): number {
+  const tokens = promptCounts.get(text) ?? countTokens(text)
+  remember(text, tokens)
+  return tokens
+}
+
+/** Records a text's count without encoding it: an entry of the count cache like any other. */
+export function primePromptCount(text: string, tokens: number): void {
+  remember(text, tokens)
+}
+
+/** Test seam: empties the count cache. */
+export function __clearPromptCountCache(): void {
+  promptCounts.clear()
+}
+
 /** countTokens over the request as sent: system content; text and reasoning parts; each tool
- *  call's name and input; each tool result's name and output; each tool definition as JSON. */
+ *  call's name and input; each tool result's name and output; each tool definition as JSON. Each
+ *  text is counted through the count cache. */
 export function countPromptTokens(prompt: ModelPrompt, tools?: ModelTools): number {
   let total = 0
   for (const message of prompt) {
-    if (message.role === 'system') total += countTokens(message.content)
+    if (message.role === 'system') total += countOnce(message.content)
     else for (const part of message.content) total += countPartTokens(part)
   }
-  for (const tool of tools ?? []) total += countTokens(JSON.stringify(tool))
+  for (const tool of tools ?? []) total += countOnce(JSON.stringify(tool))
   return total
 }
 
@@ -94,11 +128,11 @@ function countPartTokens(part: PromptPart): number {
   switch (part.type) {
     case 'text':
     case 'reasoning':
-      return countTokens(part.text)
+      return countOnce(part.text)
     case 'tool-call':
-      return countTokens(part.toolName) + countTokens(JSON.stringify(part.input) ?? '')
+      return countOnce(part.toolName) + countOnce(JSON.stringify(part.input) ?? '')
     case 'tool-result':
-      return countTokens(part.toolName) + countTokens(outputText(part.output))
+      return countOnce(part.toolName) + countOnce(outputText(part.output))
     case 'file':
     case 'tool-approval-response':
       return 0

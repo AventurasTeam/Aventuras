@@ -13,6 +13,7 @@ export {
   describeContextWindow,
   displayEstimate,
   generationWindow,
+  primePromptCount,
   type ContextWindowFailure,
   type GenerationWindow,
 } from './context-window'

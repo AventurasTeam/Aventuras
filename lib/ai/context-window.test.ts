@@ -8,11 +8,13 @@ import { countTokens } from '@/lib/retrieval'
 
 import type { ProviderInstance } from '../db'
 import {
+  __clearPromptCountCache,
   ContextWindowError,
   countPromptTokens,
   describeContextWindow,
   displayEstimate,
   generationWindow,
+  primePromptCount,
   windowCheckMiddleware,
   type ContextWindowFailure,
   type GenerationWindow,
@@ -24,6 +26,17 @@ import {
   type ModelPrompt,
   type ModelTools,
 } from './prompt-schema'
+
+const { countTokensSpy } = vi.hoisted(() => ({
+  countTokensSpy: vi.fn<(text: string) => number>(),
+}))
+
+// Counts as the real encoder does; the spy records which texts reached it.
+vi.mock('@/lib/tokens', async (importOriginal) => {
+  const actual = await importOriginal<Record<string, unknown>>()
+  countTokensSpy.mockImplementation(actual.countTokens as (text: string) => number)
+  return { ...actual, countTokens: countTokensSpy }
+})
 
 type GenerateResult = Awaited<ReturnType<MockLanguageModelV3['doGenerate']>>
 type StreamResult = Awaited<ReturnType<MockLanguageModelV3['doStream']>>
@@ -431,6 +444,122 @@ async function refusalOf(pending: PromiseLike<unknown>): Promise<ContextWindowEr
   }
   throw new Error('expected a ContextWindowError; the call went through')
 }
+
+describe('the prompt count cache', () => {
+  beforeEach(() => {
+    __clearPromptCountCache()
+    countTokensSpy.mockClear()
+  })
+
+  const encodings = (text: string): number =>
+    countTokensSpy.mock.calls.filter(([counted]) => counted === text).length
+  const systemOnly = (text: string): ModelPrompt => [{ role: 'system', content: text }]
+
+  const STEP_TOOLS: ModelTools = [
+    { type: 'function', name: 'update_thread', inputSchema: { type: 'object' } },
+  ]
+  const step = (result: string): ModelPrompt => [
+    { role: 'system', content: 'Record what the chapter changed.' },
+    { role: 'user', content: [{ type: 'text', text: 'Bring the open threads up to date.' }] },
+    {
+      role: 'assistant',
+      content: [
+        { type: 'reasoning', text: 'The letter reached the reeve.' },
+        {
+          type: 'tool-call',
+          toolCallId: 'call-1',
+          toolName: 'update_thread',
+          input: { id: 'th1', status: 'resolved' },
+        },
+      ],
+    },
+    {
+      role: 'tool',
+      content: [
+        {
+          type: 'tool-result',
+          toolCallId: 'call-1',
+          toolName: 'update_thread',
+          output: { type: 'json', value: { result } },
+        },
+      ],
+    },
+  ]
+
+  it('gives the same totals from a warm cache as from a fresh one', () => {
+    const cold = countPromptTokens(step('ok'), STEP_TOOLS)
+    const warm = countPromptTokens(step('ok'), STEP_TOOLS)
+    const other = countPromptTokens(step('rejected'), STEP_TOOLS)
+    __clearPromptCountCache()
+
+    expect(warm).toBe(cold)
+    expect(countPromptTokens(step('rejected'), STEP_TOOLS)).toBe(other)
+    expect(cold).toBe(
+      countTokens('Record what the chapter changed.') +
+        countTokens('Bring the open threads up to date.') +
+        countTokens('The letter reached the reeve.') +
+        countTokens('update_thread') +
+        countTokens('{"id":"th1","status":"resolved"}') +
+        countTokens('update_thread') +
+        countTokens('{"result":"ok"}') +
+        countTokens('{"type":"function","name":"update_thread","inputSchema":{"type":"object"}}'),
+    )
+  })
+
+  it('encodes a text it already counted once, whether repeated in a prompt or in a later step', () => {
+    const system = 'Record what the chapter changed.'
+    const said = 'The ferry runs at dawn.'
+    const prompt: ModelPrompt = [
+      { role: 'system', content: system },
+      {
+        role: 'user',
+        content: [
+          { type: 'text', text: said },
+          { type: 'text', text: said },
+        ],
+      },
+    ]
+
+    const first = countPromptTokens(prompt)
+    const second = countPromptTokens(prompt)
+
+    expect(encodings(system)).toBe(1)
+    expect(encodings(said)).toBe(1)
+    expect(second).toBe(first)
+    expect(first).toBe(countTokens(system) + 2 * countTokens(said))
+  })
+
+  it('holds 256 texts and evicts the least recently counted, not the first counted', () => {
+    const texts = Array.from({ length: 257 }, (_, i) => `Entry ${i} of the ferry ledger.`)
+    for (const text of texts.slice(0, 256)) countPromptTokens(systemOnly(text))
+
+    countTokensSpy.mockClear()
+    countPromptTokens(systemOnly(texts[0]!))
+    expect(encodings(texts[0]!)).toBe(0)
+
+    // A 257th text: the least recently counted is now the second, the first having just hit.
+    countPromptTokens(systemOnly(texts[256]!))
+    countTokensSpy.mockClear()
+    countPromptTokens(systemOnly(texts[0]!))
+    countPromptTokens(systemOnly(texts[1]!))
+
+    expect(encodings(texts[0]!)).toBe(0)
+    expect(encodings(texts[1]!)).toBe(1)
+  })
+
+  it('counts a primed text at its primed value, never encoding it, as the most recently used', () => {
+    const chapter = "The whole chapter, as a close task's system half holds it."
+    countPromptTokens(systemOnly(chapter))
+    for (let i = 0; i < 255; i++) countPromptTokens(systemOnly(`Entry ${i} of the ferry ledger.`))
+    primePromptCount(chapter, 9_999)
+    // A 257th text evicts the least recently used: Entry 0, since the prime refreshed the chapter.
+    countPromptTokens(systemOnly('One text past the bound.'))
+    countTokensSpy.mockClear()
+
+    expect(countPromptTokens(systemOnly(chapter))).toBe(9_999)
+    expect(encodings(chapter)).toBe(0)
+  })
+})
 
 describe('windowCheckMiddleware', () => {
   let debug: MockInstance<Logger['debug']>
