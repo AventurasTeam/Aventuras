@@ -404,6 +404,31 @@ describe('update_thread', () => {
     })
   })
 
+  it("writes resolved_at_entry_id at the thread's opening when the cited turn precedes it", async () => {
+    const run = await runThreadCalls(f, THREADS_SHOWN, [
+      { toolName: 'update_thread', input: { id: 'th3', status: 'resolved', ...cite(['t4']) } },
+    ])
+
+    expect(run.calls[0]).toMatchObject({ result: 'ok', turns: [f.entries[3]!.id] })
+    expect(await threadRow(f, FAR_BANK.id)).toMatchObject({
+      status: 'resolved',
+      triggeredAtEntryId: f.replyIds[2],
+      resolvedAtEntryId: f.replyIds[2],
+    })
+  })
+
+  it("writes resolved_at_entry_id at the cited turn when it follows the thread's opening", async () => {
+    const run = await runThreadCalls(f, THREADS_SHOWN, [
+      { toolName: 'update_thread', input: { id: 'th2', status: 'resolved', ...cite(['t5']) } },
+    ])
+
+    expect(run.calls[0]).toMatchObject({ result: 'ok' })
+    expect(await threadRow(f, SEALED.id)).toMatchObject({
+      triggeredAtEntryId: f.replyIds[1],
+      resolvedAtEntryId: f.entries[4]!.id,
+    })
+  })
+
   it("keeps both refs of the user's thread null when it fails it", async () => {
     const run = await runThreadCalls(f, THREADS_SHOWN, [
       { toolName: 'update_thread', input: { id: 'th4', status: 'failed', ...cite() } },

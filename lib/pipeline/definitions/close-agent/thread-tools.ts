@@ -1,6 +1,7 @@
 import { and, eq, inArray } from 'drizzle-orm'
 import { z } from 'zod'
 
+import { readEntryPosition } from '@/lib/actions'
 import { threads, type Thread } from '@/lib/db'
 
 import { restatedText, sentText } from './fields'
@@ -69,6 +70,21 @@ const protectedField = (field: string, row: string, reason: ProtectionReason): L
   reason,
 })
 
+/**
+ * A status change can't precede its thread: a cited turn before the opening stores the opening
+ * (classifier.md → Threads). A thread with no opening, or one off the branch, keeps the cited turn.
+ */
+async function closingRef(ctx: WriteContext, thread: Thread): Promise<string> {
+  if (thread.triggeredAtEntryId === null) return ctx.proseEntryId
+  const [opened, cited] = await Promise.all([
+    readEntryPosition(ctx.branchId, thread.triggeredAtEntryId, ctx.db),
+    readEntryPosition(ctx.branchId, ctx.proseEntryId, ctx.db),
+  ])
+  return opened !== null && cited !== null && cited < opened
+    ? thread.triggeredAtEntryId
+    : ctx.proseEntryId
+}
+
 async function planUpdateThread(args: ThreadArgs, ctx: WriteContext): Promise<WritePlan> {
   const { id, status } = args
   const description = sentText(args.description, 'description')
@@ -130,7 +146,7 @@ async function planUpdateThread(args: ThreadArgs, ctx: WriteContext): Promise<Wr
             id,
             status: wanted.status,
             proseEntryId: ctx.proseEntryId,
-            resolvedAtEntryId: ctx.proseEntryId,
+            resolvedAtEntryId: await closingRef(ctx, thread),
           },
         },
         fields: ['status'],
