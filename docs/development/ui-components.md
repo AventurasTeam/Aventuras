@@ -273,6 +273,20 @@ longer text scrolls inside it.
 ## Feature colours
 
 Some features have a colour: Branch and Regenerate are amber, Checkpoint is blue, Delete is red.
+
+What each means:
+
+- **Amber: take the story another way.** Regenerate replaces an entry's response with a different
+  one, and undoes the world-state changes recorded for it; Branch forks a new line of the story from
+  a checkpoint. Both produce an alternative to content that exists, and both are chosen on purpose
+  rather than to recover from a problem. The triggers are the story entry's "Generate a different
+  response", "Generate a response" and "Branch from here", and the actions are those of the
+  Regenerate entry and Create a branch modals. A hint that points at Regenerate, like the entry
+  editor's "Regenerate narration after significant changes", follows it.
+- **Blue: keep a place.** Checkpoint saves a point to return to.
+- **Red: remove.** Delete, and `overwrite` until it earns a colour of its own.
+
+Amber here is a feature's identity, not a caution: a caution uses [Warning colour](#warning-colour).
 `shared/featureColors.ts` holds one colour per feature for light themes and one for dark themes,
 the same in every theme of a mode. Both the control that opens a feature's modal and the modal's
 action read it, so they cannot drift apart.
