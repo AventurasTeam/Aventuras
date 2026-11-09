@@ -85,7 +85,7 @@
         indicatorClass={cn(
           'transition-all duration-300',
           !isNearThreshold && 'bg-primary',
-          isNearThreshold && !isOverThreshold && 'bg-amber-500',
+          isNearThreshold && !isOverThreshold && 'bg-warning',
           isOverThreshold && 'bg-red-500',
         )}
       />

@@ -217,9 +217,7 @@
         {/each}
       </RadioGroup.Root>
       <p
-        class="min-h-[1.25rem] text-xs {lengthDisabled
-          ? 'text-amber-500'
-          : 'text-muted-foreground'}"
+        class="min-h-[1.25rem] text-xs {lengthDisabled ? 'text-warning' : 'text-muted-foreground'}"
       >
         {targetLengthDisabledReason ?? "The story's prompt pack decides what each length means."}
       </p>
@@ -255,7 +253,7 @@
       </RadioGroup.Root>
       <p
         class="min-h-[1.25rem] text-xs {reinforcementDisabled
-          ? 'text-amber-500'
+          ? 'text-warning'
           : 'text-muted-foreground'}"
       >
         {narratorReinforcementDisabledReason ?? selectedReinforcement.long}

@@ -232,9 +232,9 @@
         <!-- Lore Management Status -->
         {#if entry.loreManagementBlacklisted}
           <div
-            class="flex items-center gap-2 rounded-lg border border-amber-500/30 bg-amber-500/10 p-3"
+            class="border-warning/30 bg-warning/10 flex items-center gap-2 rounded-lg border p-3"
           >
-            <span class="text-sm text-amber-400">Hidden from AI Lore Management</span>
+            <span class="text-warning text-sm">Hidden from AI Lore Management</span>
           </div>
         {/if}
 

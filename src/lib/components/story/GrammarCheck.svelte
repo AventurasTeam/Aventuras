@@ -97,39 +97,37 @@
   <div class="space-y-1.5" transition:slide={{ duration: 150 }}>
     {#each issues as issue, index (issue.start + '-' + issue.end)}
       <div
-        class="overflow-hidden rounded-lg border border-yellow-700/40 bg-yellow-900/20"
+        class="border-warning/30 bg-warning/10 overflow-hidden rounded-lg border"
         transition:slide={{ duration: 150 }}
       >
         <!-- Issue header -->
         <div
-          class="flex w-full cursor-pointer items-start gap-2 p-2 text-left transition-colors hover:bg-yellow-900/10 active:bg-yellow-900/20 sm:p-2"
+          class="hover:bg-warning/10 active:bg-warning/20 flex w-full cursor-pointer items-start gap-2 p-2 text-left transition-colors sm:p-2"
           onclick={() => toggleIssue(index)}
           onkeydown={(e) => e.key === 'Enter' && toggleIssue(index)}
           role="button"
           tabindex="0"
         >
-          <AlertCircle class="mt-0.5 h-4 w-4 shrink-0 text-yellow-500" />
+          <AlertCircle class="text-warning mt-0.5 size-4 shrink-0" />
           <div class="min-w-0 flex-1">
             <div class="flex flex-wrap items-center gap-1.5 sm:gap-2">
               <span
-                class="rounded bg-yellow-900/40 px-1.5 py-0.5 text-[10px] font-medium text-yellow-400 sm:text-xs"
+                class="bg-warning/15 text-warning rounded px-1.5 py-0.5 text-[10px] font-medium sm:text-xs"
               >
                 {issue.kind}
               </span>
               <span
-                class="max-w-[150px] truncate text-[10px] text-yellow-300/80 sm:max-w-none sm:text-xs"
+                class="text-warning max-w-[150px] truncate text-[10px] sm:max-w-none sm:text-xs"
               >
                 "{issue.problemText}"
               </span>
             </div>
-            <p
-              class="mt-0.5 line-clamp-2 text-[10px] text-yellow-200/70 sm:line-clamp-1 sm:text-xs"
-            >
+            <p class="text-warning mt-0.5 line-clamp-2 text-[10px] sm:line-clamp-1 sm:text-xs">
               {issue.message}
             </p>
           </div>
           <button
-            class="-m-0.5 flex min-h-[28px] min-w-[28px] shrink-0 items-center justify-center rounded p-1.5 text-yellow-500/60 hover:bg-yellow-800/30 hover:text-yellow-400 active:bg-yellow-800/50"
+            class="text-warning/70 hover:bg-warning/20 hover:text-warning active:bg-warning/30 -m-0.5 flex min-h-[28px] min-w-[28px] shrink-0 items-center justify-center rounded p-1.5"
             onclick={(e) => {
               e.stopPropagation()
               handleDismiss(index)
@@ -143,7 +141,7 @@
         <!-- Expanded content with suggestions -->
         {#if expandedIssue === index}
           <div
-            class="border-t border-yellow-700/30 px-2 pt-1.5 pb-2"
+            class="border-warning/30 border-t px-2 pt-1.5 pb-2"
             transition:slide={{ duration: 150 }}
           >
             {#if issue.suggestions.length > 0}
@@ -171,7 +169,7 @@
                 {/if}
               </div>
             {:else}
-              <p class="text-xs text-yellow-400/60 italic">No suggestions available</p>
+              <p class="text-warning text-xs italic">No suggestions available</p>
             {/if}
           </div>
         {/if}

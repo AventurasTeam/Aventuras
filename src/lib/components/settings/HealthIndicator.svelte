@@ -56,11 +56,11 @@
     {#if status === 'ok'}
       <SignalHigh class="h-3 w-3 text-emerald-500" />
     {:else if status === 'slow'}
-      <SignalLow class="h-3 w-3 text-yellow-500" />
+      <SignalLow class="text-warning h-3 w-3" />
     {:else if status === 'rate_limited'}
-      <Clock class="h-3 w-3 text-yellow-500" />
+      <Clock class="text-warning h-3 w-3" />
     {:else if status === 'auth'}
-      <X class="h-3 w-3 text-yellow-500" />
+      <X class="text-warning h-3 w-3" />
     {:else}
       <X class="h-3 w-3 text-red-500" />
     {/if}

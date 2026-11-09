@@ -1027,7 +1027,7 @@
         <div class="border-border/60 my-1 border-t"></div>
         {@render anchorRow('End', 'to')}
         {#if forkWarning > 0 && !isRefused}
-          <p class="mt-1 flex items-start gap-1 text-amber-700 dark:text-amber-500">
+          <p class="text-warning mt-1 flex items-start gap-1">
             <TriangleAlert class="mt-0.5 h-3 w-3 shrink-0" />
             <span>
               Entry {entryNumber(range.to.entryId)} is a fork point:
@@ -1238,9 +1238,9 @@
 
     {#if collapsed.length > 0}
       <p
-        class="flex items-start gap-2 rounded-md border border-amber-500/50 bg-amber-500/10 p-2 text-xs"
+        class="border-warning/50 bg-warning/10 flex items-start gap-2 rounded-md border p-2 text-xs"
       >
-        <TriangleAlert class="mt-0.5 h-3.5 w-3.5 shrink-0 text-amber-600" />
+        <TriangleAlert class="text-warning mt-0.5 h-3.5 w-3.5 shrink-0" />
         <span>
           {collapsed.length === 1 ? 'One entry is' : `${collapsed.length} entries are`}
           compressed to no length, marked above. Their share of the pacing cannot be recovered by widening
@@ -1299,7 +1299,7 @@
         </p>
       {:else if unreadable.length > 0}
         <p class="text-muted-foreground flex items-start gap-1 text-xs">
-          <TriangleAlert class="mt-0.5 h-3 w-3 shrink-0 text-amber-600" />
+          <TriangleAlert class="text-warning mt-0.5 h-3 w-3 shrink-0" />
           <span>
             {unreadable.length}
             {unreadable.length === 1 ? 'entry needs' : 'entries need'} a length. Nothing is calculated
@@ -1345,7 +1345,7 @@
               <td class="py-1 pr-2 align-top">
                 <span class="flex items-center gap-1">
                   {#if request}
-                    <TriangleAlert class="h-3 w-3 shrink-0 text-amber-600" />
+                    <TriangleAlert class="text-warning h-3 w-3 shrink-0" />
                   {/if}
                   {@render entryChip(entry.id)}
                 </span>
@@ -1380,7 +1380,7 @@
                       <span>Weight:</span>
                       <span class="flex items-center gap-1">
                         {#if collapsed.includes(entry.id)}
-                          <TriangleAlert class="h-3 w-3 shrink-0 text-amber-600" />
+                          <TriangleAlert class="text-warning h-3 w-3 shrink-0" />
                         {/if}
                         {formatDuration(toMinutes(reconciled.end) - toMinutes(reconciled.start))}
                       </span>
@@ -1515,7 +1515,7 @@
             <span class="flex-1">Nothing outstanding</span>
             <span class="text-muted-foreground shrink-0">Jump to end ›</span>
           {:else}
-            <TriangleAlert class="h-3.5 w-3.5 shrink-0 text-amber-600" />
+            <TriangleAlert class="text-warning h-3.5 w-3.5 shrink-0" />
             <span class="flex-1">
               {unreadable.length}
               {unreadable.length === 1 ? 'entry still needs' : 'entries still need'} a weight
@@ -1662,7 +1662,7 @@
   >
     <span class="flex-1 text-xs">{bandLabel(band)}</span>
     {#if bandUnsettled(band)}
-      <span class="flex items-center gap-1 text-xs text-amber-700 dark:text-amber-500">
+      <span class="text-warning flex items-center gap-1 text-xs">
         <TriangleAlert class="h-3 w-3 shrink-0" />
         needs a weight
       </span>
@@ -1712,7 +1712,7 @@
     {@render entryChip(entry.id)}
     <span class="flex-1">Entry {entryNumber(entry.id)}</span>
     {#if request}
-      <TriangleAlert class="h-3 w-3 shrink-0 text-amber-600" />
+      <TriangleAlert class="text-warning h-3 w-3 shrink-0" />
     {/if}
   {/snippet}
   {#snippet body()}
@@ -1789,12 +1789,12 @@
   {#snippet header()}
     <span class="text-muted-foreground flex-1 tracking-wide uppercase">Weight</span>
     {#if request}
-      <span class="flex shrink-0 items-center gap-1 text-amber-700 dark:text-amber-500">
+      <span class="text-warning flex shrink-0 items-center gap-1">
         <TriangleAlert class="h-3 w-3 shrink-0" />
         unreadable
       </span>
     {:else if collapsed.includes(entryId)}
-      <span class="flex shrink-0 items-center gap-1 text-amber-700 dark:text-amber-500">
+      <span class="text-warning flex shrink-0 items-center gap-1">
         <TriangleAlert class="h-3 w-3 shrink-0" />
         no length
       </span>
@@ -1814,7 +1814,7 @@
   {/snippet}
   {#snippet controls()}
     {#if request}
-      <p class="flex items-start gap-1 text-amber-700 dark:text-amber-500">
+      <p class="text-warning flex items-start gap-1">
         <TriangleAlert class="mt-0.5 h-3 w-3 shrink-0" />
         <span>{reasonText(request.reason)}</span>
       </p>
@@ -2024,7 +2024,7 @@
     </Button>
 
     {#if request}
-      <p class="mb-2 flex items-start gap-1 text-amber-700 dark:text-amber-500">
+      <p class="text-warning mb-2 flex items-start gap-1">
         <TriangleAlert class="mt-0.5 h-3 w-3 shrink-0" />
         <span>{reasonText(request.reason)}</span>
       </p>
@@ -2118,7 +2118,7 @@
 
 {#snippet gapChip()}
   <span
-    class="shrink-0 rounded bg-amber-500/15 px-1 text-[10px] tracking-wide text-amber-700 uppercase dark:text-amber-500"
+    class="bg-warning/15 text-warning shrink-0 rounded px-1 text-[10px] tracking-wide uppercase"
   >
     Time gap
   </span>

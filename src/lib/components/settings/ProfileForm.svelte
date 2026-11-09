@@ -172,8 +172,8 @@
 
   <!-- Alert for providers without services -->
   {#if !PROVIDERS[providerType].services}
-    <Alert class="border-yellow-500/50 bg-yellow-500/10">
-      <AlertCircle class="h-4 w-4 text-yellow-500" />
+    <Alert class="border-warning/50 bg-warning/10">
+      <AlertCircle class="text-warning h-4 w-4" />
       <AlertDescription class="text-xs">
         This provider requires manual model configuration. Go to the <strong>Generation</strong> tab to
         set models for each service.

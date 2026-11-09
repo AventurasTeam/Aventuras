@@ -79,7 +79,7 @@
   <Card.Content class="grid gap-3 pt-4">
     {#if settings.apiSettings.profiles.length === 0}
       <div
-        class="flex items-center gap-2 rounded border border-amber-500/20 bg-amber-500/10 px-3 py-2 text-sm text-amber-600 dark:text-amber-400"
+        class="border-warning/20 bg-warning/10 text-warning flex items-center gap-2 rounded border px-3 py-2 text-sm"
       >
         <AlertTriangle class="h-4 w-4 shrink-0" />
         No API profiles configured. Add one in the API tab.

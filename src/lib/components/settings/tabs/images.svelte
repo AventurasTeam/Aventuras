@@ -154,7 +154,7 @@
   let profileSizesText = $state('')
   let profileReferences = $state<'' | 'on' | 'off'>('')
   let capabilitiesOpen = $state(false)
-  const markedClass = 'ring-2 ring-amber-500/60'
+  const markedClass = 'ring-2 ring-warning/60'
   const referencesItems = [
     { value: '', label: 'From the provider' },
     { value: 'on', label: 'On' },
@@ -1356,7 +1356,7 @@
         onStop={stopProfileModels}
       />
       {#if referenceProfileWarningReason}
-        <p class="mt-1 text-xs text-amber-600 dark:text-amber-400">
+        <p class="text-warning mt-1 text-xs">
           This profile is used for reference image generation, but {referenceProfileWarningReason}
         </p>
       {:else}
@@ -1414,7 +1414,7 @@
                   Not a WxH size: {invalidSizes.join(', ')}
                 </p>
               {:else if overridden.includes('sizes') && publishedCapabilities?.supportedResolutions}
-                <p class="text-xs text-amber-600 dark:text-amber-400">
+                <p class="text-warning text-xs">
                   Replaces the provider's list: {publishedCapabilities.supportedResolutions.join(
                     ', ',
                   )}
@@ -1439,12 +1439,12 @@
                 class={cn(overridden.includes('references') && markedClass)}
               />
               {#if overridden.includes('references')}
-                <p class="text-xs text-amber-600 dark:text-amber-400">
+                <p class="text-warning text-xs">
                   Replaces what the provider says about reference images
                 </p>
               {/if}
               {#each conflicts as conflict (conflict.field)}
-                <p class="text-xs text-amber-600 dark:text-amber-400" role="alert">
+                <p class="text-warning text-xs" role="alert">
                   {conflict.message}
                 </p>
               {/each}

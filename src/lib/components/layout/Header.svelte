@@ -175,9 +175,9 @@
     />
     {#if settings.hasGenerationConfigIssues}
       <span
-        class="pointer-events-none absolute top-1 right-1 flex h-3.5 w-3.5 items-center justify-center rounded-full bg-amber-500"
+        class="bg-warning pointer-events-none absolute top-1 right-1 flex h-3.5 w-3.5 items-center justify-center rounded-full"
       >
-        <AlertTriangle class="h-2.5 w-2.5 text-white" />
+        <AlertTriangle class="text-warning-foreground size-2.5" />
       </span>
     {/if}
   </div>
@@ -347,7 +347,7 @@
             <Settings class="text-muted-foreground h-4 w-4" />
             Settings
             {#if settings.hasGenerationConfigIssues}
-              <AlertTriangle class="ml-auto h-3.5 w-3.5 text-amber-500" />
+              <AlertTriangle class="text-warning ml-auto h-3.5 w-3.5" />
             {/if}
           </DropdownMenu.Item>
         </DropdownMenu.Content>

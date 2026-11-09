@@ -176,7 +176,7 @@
   /** Fills as the window runs out, so it reads at a glance rather than by arithmetic. */
   function carryOverStyle(ratio: number): { text: string; bar: string } {
     if (ratio <= 0.34) return { text: 'text-rose-500', bar: 'bg-rose-500' }
-    if (ratio <= 0.67) return { text: 'text-amber-500', bar: 'bg-amber-500' }
+    if (ratio <= 0.67) return { text: 'text-warning', bar: 'bg-warning' }
     return { text: 'text-emerald-500', bar: 'bg-emerald-500' }
   }
 

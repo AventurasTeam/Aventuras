@@ -396,7 +396,7 @@
           <div class="flex flex-col gap-1">
             {#each validationErrors as error (error.message)}
               <div class="flex items-start gap-2 text-xs">
-                <AlertTriangle class="mt-0.5 h-3.5 w-3.5 shrink-0 text-yellow-500" />
+                <AlertTriangle class="text-warning mt-0.5 h-3.5 w-3.5 shrink-0" />
                 <span class="text-muted-foreground">
                   {error.message}
                   {#if error.line}

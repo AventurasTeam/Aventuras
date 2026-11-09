@@ -154,7 +154,7 @@
       <Label>{label}</Label>
       <div class="flex items-center gap-2">
         {#if isModelMissing}
-          <span class="hidden text-[0.7rem] text-yellow-500 md:inline">Not in profile list</span>
+          <span class="text-warning hidden text-[0.7rem] md:inline">Not in profile list</span>
         {:else if availableModels.length === 0}
           <span class="text-muted-foreground hidden text-[0.7rem] md:inline"
             >No models available</span
@@ -183,7 +183,7 @@
       allowCustom={true}
       onCustomSelect={handleSelectModel}
       {placeholder}
-      class={cn(isModelMissing && 'border-yellow-500/50')}
+      class={cn(isModelMissing && 'border-warning/50')}
       virtualized
     >
       {#snippet itemSnippet(modelOption, modelIndex)}
@@ -211,14 +211,14 @@
       {#snippet triggerSnippet()}
         <span class="flex items-center gap-1.5 truncate">
           {#if isModelMissing}
-            <AlertTriangle class="h-3.5 w-3.5 shrink-0 text-yellow-500" />
+            <AlertTriangle class="text-warning h-3.5 w-3.5 shrink-0" />
           {/if}
           <span class="truncate">{model || placeholder}</span>
         </span>
       {/snippet}
     </Autocomplete>
     {#if isModelMissing}
-      <p class="mt-1 text-[0.8rem] text-yellow-500 md:hidden">
+      <p class="text-warning mt-1 text-[0.8rem] md:hidden">
         Model not found in this profile's model list.
       </p>
     {:else if availableModels.length === 0}

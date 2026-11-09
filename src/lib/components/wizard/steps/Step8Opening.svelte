@@ -316,7 +316,7 @@
             disabled={isGeneratingOpening || isRefiningOpening || generatedOpening !== null}
           />
           {#if generatedOpening}
-            <p class="text-xs text-amber-400">
+            <p class="text-warning text-xs">
               AI-generated opening active. Clear it below to write your own.
             </p>
           {:else if manualOpeningText.trim()}
@@ -369,7 +369,7 @@
             )}
 
             {#if openingReceivesStart === false}
-              <p class="rounded-md border border-amber-500/40 bg-amber-500/10 p-2 text-xs">
+              <p class="border-warning/40 bg-warning/10 rounded-md border p-2 text-xs">
                 The active prompt pack features the opening template that does not use
                 <code class="bg-muted rounded px-1 py-0.5 font-mono"
                   >{`{{ ${STARTING_TIME_VAR} }}`}</code
@@ -411,7 +411,7 @@
         {/if}
 
         {#if !generatedOpening && !isGeneratingOpening && !manualOpeningText.trim() && !cardImportedFirstMessage}
-          <span class="text-center text-sm text-amber-400">
+          <span class="text-warning text-center text-sm">
             Either write your own opening or generate one with AI
           </span>
         {/if}

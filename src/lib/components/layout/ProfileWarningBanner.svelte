@@ -41,7 +41,7 @@
 
 {#if hasIssues}
   <div
-    class="flex items-center justify-between gap-3 bg-amber-500/90 px-4 py-2 text-amber-950 shadow-md"
+    class="bg-warning/90 text-warning-foreground flex items-center justify-between gap-3 px-4 py-2 shadow-md"
   >
     <div class="flex min-w-0 flex-1 items-center gap-3">
       <AlertTriangle class="h-5 w-5 shrink-0" />
@@ -50,7 +50,7 @@
     <Button
       variant="secondary"
       size="sm"
-      class="shrink-0 bg-amber-950 text-amber-100 hover:bg-amber-900 hover:text-amber-50"
+      class="bg-warning-foreground text-warning hover:bg-warning-foreground/90 hover:text-warning shrink-0"
       onclick={handleFix}
     >
       <Settings class="h-4 w-4" />

@@ -159,7 +159,7 @@
     {/if}
   {/snippet}
   {#if authorMismatch}
-    <p class="rounded-md border border-amber-500/30 bg-amber-500/10 p-3 text-xs text-amber-500">
+    <p class="border-warning/30 bg-warning/10 text-warning rounded-md border p-3 text-xs">
       Your pack "{authorMismatch.name}" has the same name but a different author ({authorMismatch.author ??
         'no author'}). It may not be the same pack.
     </p>

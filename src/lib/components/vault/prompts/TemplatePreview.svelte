@@ -87,7 +87,7 @@
 
   <div class="flex-1 overflow-auto bg-[hsl(var(--muted)/0.3)] p-4">
     {#if previewError}
-      <div class="flex items-start gap-2 text-sm text-yellow-500">
+      <div class="text-warning flex items-start gap-2 text-sm">
         <AlertTriangle class="mt-0.5 h-4 w-4 shrink-0" />
         <span>{previewError}</span>
       </div>

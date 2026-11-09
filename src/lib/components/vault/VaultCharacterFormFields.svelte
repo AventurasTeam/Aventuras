@@ -148,7 +148,7 @@
       placeholder="Face: oval, Hair: dark brown, Eyes: blue"
     />
     {#if visualDescriptorsInvalid}
-      <p class="text-[0.8rem] text-amber-500">
+      <p class="text-warning text-[0.8rem]">
         Use "Category: value" format, e.g. <span class="font-medium">Face: oval, Hair: dark</span>.
         Categories: Face, Hair, Eyes, Build, Clothing, Accessories, Distinguishing features.
       </p>

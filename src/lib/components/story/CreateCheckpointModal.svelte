@@ -129,7 +129,7 @@
     {#if status === 'ok'}
       <Check class="mt-px h-3.5 w-3.5 shrink-0 text-green-500" />
     {:else if status === 'warn'}
-      <TriangleAlert class="mt-px h-3.5 w-3.5 shrink-0 text-amber-500" />
+      <TriangleAlert class="text-warning mt-px h-3.5 w-3.5 shrink-0" />
     {:else}
       <X class="mt-px h-3.5 w-3.5 shrink-0 text-red-500" />
     {/if}
@@ -197,7 +197,7 @@
       <p class="text-muted-foreground text-xs italic">Checking the recorded world state changes…</p>
     {:else if pastCheckpoint.refusal}
       <!-- The diagnosis below explains a refusal; the warning only heads it. -->
-      <p class="text-xs text-amber-500">
+      <p class="text-warning text-xs">
         {pastCheckpoint.diagnosis
           ? 'The world state at this entry cannot be guaranteed.'
           : pastCheckpoint.refusal}
@@ -277,7 +277,7 @@
         <p>The world state at this entry is known:</p>
         {#each pastCheckpoint.skipped as position, i (i)}
           <p class="flex items-start gap-1.5">
-            <TriangleAlert class="mt-px size-3.5 shrink-0 text-amber-500" />
+            <TriangleAlert class="text-warning mt-px size-3.5 shrink-0" />
             {skippedSnapshotText(position)}
           </p>
         {/each}

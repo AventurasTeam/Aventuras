@@ -795,8 +795,8 @@
         {:else if showReceivedConflict && received}
           <!-- Conflict warning for received push -->
           <div class="flex flex-col items-center py-4 text-center">
-            <div class="mb-4 flex size-16 items-center justify-center rounded-full bg-amber-500/20">
-              <AlertTriangle class="size-8 text-amber-500" />
+            <div class="bg-warning/20 mb-4 flex size-16 items-center justify-center rounded-full">
+              <AlertTriangle class="text-warning size-8" />
             </div>
             <h3 class="mb-2 text-lg font-semibold">Already on this device</h3>
             <p class="text-muted-foreground mb-4 break-words">
@@ -906,8 +906,8 @@
         <!-- Version Mismatch Warning -->
         {#if showVersionWarning}
           <div class="flex flex-col items-center py-4 text-center">
-            <div class="mb-4 flex size-16 items-center justify-center rounded-full bg-amber-500/20">
-              <AlertTriangle class="size-8 text-amber-500" />
+            <div class="bg-warning/20 mb-4 flex size-16 items-center justify-center rounded-full">
+              <AlertTriangle class="text-warning size-8" />
             </div>
             <h3 class="mb-2 text-lg font-semibold">Version mismatch</h3>
             <p class="text-muted-foreground mb-2">

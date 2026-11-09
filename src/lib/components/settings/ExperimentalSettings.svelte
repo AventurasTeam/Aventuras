@@ -319,10 +319,10 @@
 
 <div class="space-y-6">
   <!-- Header Banner -->
-  <div class="flex items-start gap-3 rounded-lg border border-amber-500/30 bg-amber-500/10 p-4">
-    <AlertTriangle class="mt-0.5 h-5 w-5 shrink-0 text-amber-500" />
+  <div class="border-warning/30 bg-warning/10 flex items-start gap-3 rounded-lg border p-4">
+    <AlertTriangle class="text-warning mt-0.5 h-5 w-5 shrink-0" />
     <div class="space-y-1">
-      <p class="text-sm font-medium text-amber-500">Experimental Features</p>
+      <p class="text-warning text-sm font-medium">Experimental Features</p>
       <p class="text-muted-foreground text-xs">
         These features are in active development. They may change behavior or data formats.
         <strong>Always create a backup before enabling.</strong>
@@ -408,7 +408,7 @@
         {#if closingTracking}
           <p class="text-muted-foreground pt-1 text-xs italic">Saving where tracking stops…</p>
         {:else if settings.experimentalFeatures.stateTracking}
-          <p class="pt-1 text-xs font-medium text-amber-500">
+          <p class="text-warning pt-1 text-xs font-medium">
             Active — every change to the world and the lorebook is recorded.
           </p>
         {/if}
@@ -441,7 +441,7 @@
             Requires State Tracking to be enabled.
           </p>
         {:else if settings.experimentalFeatures.rollbackOnDelete}
-          <p class="pt-1 text-xs font-medium text-amber-500">
+          <p class="text-warning pt-1 text-xs font-medium">
             Active — deleting entries will cascade and rollback state.
           </p>
         {/if}
@@ -474,7 +474,7 @@
             Requires State Tracking to be enabled.
           </p>
         {:else if settings.experimentalFeatures.lightweightBranches}
-          <p class="pt-1 text-xs font-medium text-amber-500">
+          <p class="text-warning pt-1 text-xs font-medium">
             Active — new branches will use copy-on-write.
           </p>
         {/if}
@@ -545,7 +545,7 @@
             {/if}
           </p>
           {#if settings.experimentalFeatures.backgroundGeneration}
-            <p class="pt-1 text-xs font-medium text-amber-500">
+            <p class="text-warning pt-1 text-xs font-medium">
               Active — generation will continue when the app is backgrounded.
             </p>
           {/if}
@@ -758,7 +758,7 @@
 </div>
 
 {#snippet warning()}
-  <AlertTriangle class="size-5 text-amber-500" />
+  <AlertTriangle class="text-warning size-5" />
 {/snippet}
 
 <ActionModal
@@ -774,7 +774,7 @@
         <strong class="text-destructive">API keys</strong> and
         <strong class="text-destructive">API provider profiles</strong>.
       </span>
-      <span class="block font-medium text-amber-500">
+      <span class="text-warning block font-medium">
         Do not share this file with others — anyone with the backup can access your API keys.
       </span>
     </span>
@@ -802,7 +802,7 @@
         A safety copy of your current database will be saved as
         <span class="font-mono text-xs">aventura-pre-restore.db</span> in the app data folder.
       </span>
-      <span class="block font-medium text-amber-500">
+      <span class="text-warning block font-medium">
         {#if onIos}
           iOS cannot close the app for you. After restoring, close Aventuras from the app switcher,
           then reopen it.

@@ -386,7 +386,7 @@
       {:else if fullPack}
         <h2 class="min-w-0 shrink truncate font-semibold">{fullPack.pack.name}</h2>
         {#if isEditorDirty}
-          <Badge variant="outline" class="shrink-0 border-yellow-500/50 text-xs text-yellow-500"
+          <Badge variant="outline" class="border-warning/50 text-warning shrink-0 text-xs"
             >Unsaved</Badge
           >
         {/if}

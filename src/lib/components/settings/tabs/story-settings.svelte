@@ -278,9 +278,7 @@
       <div class="flex items-center gap-2">
         <Label class="text-sm font-medium">Custom System Prompt</Label>
         {#if isActive}
-          <span
-            class="rounded-full bg-amber-500/15 px-2 py-0.5 text-xs font-medium text-amber-600 dark:text-amber-400"
-          >
+          <span class="bg-warning/15 text-warning rounded-full px-2 py-0.5 text-xs font-medium">
             Active
           </span>
         {/if}
@@ -346,7 +344,7 @@
         {/if}
 
         {#if unknownVars.length > 0}
-          <p class="text-xs text-amber-600 dark:text-amber-400">
+          <p class="text-warning text-xs">
             ⚠ Unknown variables (will render empty):
             {#each unknownVars as v, i (i)}
               <code class="font-mono">{v}</code>{i < unknownVars.length - 1 ? ', ' : ''}

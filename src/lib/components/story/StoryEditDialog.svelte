@@ -234,7 +234,7 @@
         class="text-muted-foreground flex items-start gap-2 text-xs"
         {@attach (el) => el.scrollIntoView({ block: 'nearest' })}
       >
-        <AlertTriangle class="mt-px size-4 shrink-0 text-amber-500" />
+        <AlertTriangle class="text-warning mt-px size-4 shrink-0" />
         Old entries keep their wording. New entries are written in the new voice.
       </p>
     {/if}

@@ -292,8 +292,8 @@
         </div>
 
         <!-- Destructive warning -->
-        <div class="flex gap-3 rounded-lg border border-amber-500/40 bg-amber-500/10 p-4">
-          <AlertTriangle class="mt-0.5 h-5 w-5 shrink-0 text-amber-500" />
+        <div class="border-warning/40 bg-warning/10 flex gap-3 rounded-lg border p-4">
+          <AlertTriangle class="text-warning mt-0.5 h-5 w-5 shrink-0" />
           <div class="space-y-1 text-sm">
             <p class="text-foreground font-medium">
               This will permanently replace all entries in "{story.currentStory?.title}".
@@ -322,7 +322,7 @@
         <Button
           onclick={handleKeepWorldState}
           disabled={resettingWorldState}
-          class="gap-2 bg-yellow-500 text-black hover:bg-yellow-400"
+          class="bg-warning text-warning-foreground hover:bg-warning/90 gap-2"
         >
           Keep World State
         </Button>

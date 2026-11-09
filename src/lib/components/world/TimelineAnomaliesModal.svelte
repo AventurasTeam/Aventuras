@@ -72,7 +72,7 @@
 
   function marker(anomaly: TimelineAnomaly): { text: string; class: string } {
     if (anomaly.kind === 'gap') {
-      return { text: 'Time gap', class: 'bg-amber-500/15 text-amber-700 dark:text-amber-500' }
+      return { text: 'Time gap', class: 'bg-warning/15 text-warning' }
     }
     const entry = subject(anomaly)
     if (entry?.type === 'user_action') return { text: 'Action', class: 'bg-muted text-foreground' }

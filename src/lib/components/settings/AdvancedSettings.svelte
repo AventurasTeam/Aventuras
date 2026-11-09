@@ -226,7 +226,7 @@
           Edit full request body parameters for advanced models.
         </p>
         {#if settings.advancedRequestSettings.manualMode}
-          <p class="pt-1 text-xs font-medium text-amber-500">
+          <p class="text-warning pt-1 text-xs font-medium">
             Manual mode active. Temperature and max token controls are locked.
           </p>
         {/if}
@@ -246,7 +246,7 @@
         </div>
         <p class="text-muted-foreground text-xs">Log API requests and responses for debugging.</p>
         {#if settings.uiSettings.debugMode}
-          <p class="pt-1 text-xs font-medium text-amber-500">
+          <p class="text-warning pt-1 text-xs font-medium">
             Logs are session-only and not persisted.
           </p>
         {/if}

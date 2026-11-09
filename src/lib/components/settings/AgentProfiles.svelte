@@ -685,7 +685,7 @@
                 {@const _models = settings.getAvailableModels(_profileId)}
                 {@const _profile = settings.getProfile(_profileId)}
                 {#if _models.length > 0 && !_models.find((m) => m.id === preset.model)}
-                  <div class="mt-0.5 flex items-center gap-1 text-xs text-yellow-500">
+                  <div class="text-warning mt-0.5 flex items-center gap-1 text-xs">
                     <AlertTriangle class="h-3 w-3" />
                     Model not in profile
                   </div>
@@ -803,7 +803,7 @@
         >
           {#if getServicesForProfile('custom').length > 0}
             <div
-              class="mb-2 rounded border border-amber-500/20 bg-amber-500/10 px-2 py-1.5 text-xs text-amber-600 dark:text-amber-400"
+              class="border-warning/20 bg-warning/10 text-warning mb-2 rounded border px-2 py-1.5 text-xs"
             >
               Unassigned agents will not work. Assign them to a profile.
             </div>

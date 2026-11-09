@@ -179,7 +179,7 @@
                   {#if lorebook.result.warnings.length > 0 && !lorebook.isLoading}
                     <Badge
                       variant="outline"
-                      class="h-5 border-amber-500/50 px-1 py-0 text-[10px] text-amber-600 dark:text-amber-500"
+                      class="border-warning/50 text-warning h-5 px-1 py-0 text-[10px]"
                     >
                       {lorebook.result.warnings.length} Warnings
                     </Badge>
