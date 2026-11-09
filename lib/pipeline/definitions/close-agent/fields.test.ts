@@ -13,6 +13,21 @@ import {
 const terms = (n: number, word = 'trait'): string[] =>
   Array.from({ length: n }, (_, i) => `${word} ${i + 1}`)
 
+const RUN_9_TRAITS = [
+  'old sailor',
+  'man of substance',
+  "has a banker's account",
+  'lost a leg',
+  'one-legged',
+  'keeps a public-house in Bristol',
+  'knows every seaman in Bristol',
+  "ship's cook of the Hispaniola",
+  'cheerful',
+  'intelligent',
+  'smiling',
+  'has a large firm grasp',
+]
+
 describe('sentText', () => {
   it('reads a missing or blank text as omitted', () => {
     expect(sentText(undefined, 'voice')).toBeUndefined()
@@ -71,6 +86,31 @@ describe('sentList', () => {
 
   it('dedupes as a pass does: trimmed, first spelling kept, blanks dropped', () => {
     expect(sentList(['brave', ' Brave ', '', 'courageous'])).toEqual(['brave', 'courageous'])
+  })
+
+  // The measure's run 9: a whole JSON array escaped into one string, 12 traits as one entry.
+  it('reads a list the model joined into one entry as the entries it holds', () => {
+    expect(sentList([RUN_9_TRAITS.join('","')])).toEqual(RUN_9_TRAITS)
+  })
+
+  it('drops the quote the joined list leaves at its edges, and splits on any spacing', () => {
+    expect(sentList(['"brave" , "wary",\n  "patient"'])).toEqual(['brave', 'wary', 'patient'])
+  })
+
+  it('splits an entry on its line breaks, deduping across the pieces', () => {
+    expect(sentList(['brave\nwary\r\npatient', 'Wary'])).toEqual(['brave', 'wary', 'patient'])
+  })
+
+  it('keeps an entry with a plain comma or its own quotes whole', () => {
+    expect(sentList(['quick-witted, if rash', 'called "Barbecue"', `stands 6'2"`])).toEqual([
+      'quick-witted, if rash',
+      'called "Barbecue"',
+      `stands 6'2"`,
+    ])
+  })
+
+  it("keeps a split piece's own paired quotes", () => {
+    expect(sentList(['called "Barbecue"\nwary'])).toEqual(['called "Barbecue"', 'wary'])
   })
 })
 

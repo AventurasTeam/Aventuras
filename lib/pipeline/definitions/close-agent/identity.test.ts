@@ -829,6 +829,22 @@ describe('update_character and update_faction', () => {
     })
   })
 
+  // The measure's run 9: 12 traits escaped into one string, which slipped the cap as one entry.
+  it('refuses a list joined into one entry by the entries it holds, on a row at its cap', async () => {
+    await editEntity(f, WREN, 'earlier-close', { state: { traits: terms('trait', 8) } })
+    const joined = [terms('sailor', 12).join('","')]
+
+    const { result, calls } = await dispatchScripted(
+      f,
+      [{ toolName: 'update_character', input: { id: 'c1', traits: joined, ...cite() } }],
+      { shown: CAST },
+    )
+
+    expect(calls[0]).toMatchObject({ result: 'rejected', reason: softCapReason('traits', 8) })
+    expect(await runDeltas(f, result.actionId)).toEqual([])
+    expect((await storedEntity(f, WREN)).state).toMatchObject({ traits: terms('trait', 8) })
+  })
+
   it('dedupes a list before its cap: 9 entries with one repeat land as 8', async () => {
     const { calls } = await dispatchScripted(
       f,

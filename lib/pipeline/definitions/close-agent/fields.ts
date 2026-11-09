@@ -28,10 +28,29 @@ export function sentText(value: string | undefined, field: BoundedField): SentTe
   return { sent: value, bounded: TEXT_BOUNDS[field](value) }
 }
 
-/** A list replaces the stored one whole, so an empty one reads as omitted; else deduped. */
+/** Where a list the model escaped into one string joins its entries; a plain comma is no join. */
+const LEAKED_JOIN = /"\s*,\s*"|\r\n|\r|\n/
+
+/** The joined list's outer quote is left unpartnered at a piece's edge. */
+function dropStrayQuote(piece: string): string {
+  const trimmed = piece.trim()
+  if (trimmed.split('"').length % 2 === 1) return trimmed
+  if (trimmed.startsWith('"')) return trimmed.slice(1)
+  return trimmed.endsWith('"') ? trimmed.slice(0, -1) : trimmed
+}
+
+function leakedEntries(entry: string): string[] {
+  const pieces = entry.split(LEAKED_JOIN)
+  return pieces.length === 1 ? pieces : pieces.map(dropStrayQuote)
+}
+
+/**
+ * A list replaces the stored one whole, so an empty one reads as omitted; else split where the
+ * model joined entries into one, so the soft cap counts each, then deduped.
+ */
 export function sentList(value: readonly string[] | undefined): string[] | undefined {
   if (value === undefined) return undefined
-  const list = dedupeTerms(value)
+  const list = dedupeTerms(value.flatMap(leakedEntries))
   return list.length === 0 ? undefined : list
 }
 
