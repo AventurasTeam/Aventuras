@@ -301,8 +301,8 @@ Prose tasks hold the chapter or part in the system half; the design
 measured 6,088 of 6,181 tokens reused across different tool lists that
 way, and 0 of 6,176 with it in the user turn. Their system half is
 stable across a part's tasks, not across the story.
-`lib/prompts/bundled/system-half-stability.test.ts:346` gets a named
-exemption for the close's task templates only, added by 5.5a, and it
+`CLOSE_TASK_TEMPLATES` in `lib/prompts/bundled/system-half-stability.test.ts`
+is a named exemption for the close's task templates only, added by 5.5a, and it
 grows with each task template in 5.5b and 5.8. Happenings and Awareness
 don't read the prose. Boundary and metadata follow the normal rule, with
 everything in the user half.

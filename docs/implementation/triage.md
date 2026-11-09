@@ -276,3 +276,22 @@ patch`, which 5.5a marks `restated`, so a close tool's write of it
   when the rendered half's length minus the blank half's equals the
   summed turn contents, else count exactly. Raised in 5.5b's final
   review.
+- **5.5b's slice doc has stale passages.** The slice review couldn't
+  edit
+  [the slice doc](./milestones/05-chapters-chapter-close/slices/05b-identity-threads.md).
+  Scope's refs point at moved lines: `lib/classifier/plan-creates.ts:55-57`
+  (now `boundVoice`, with `stateList` moved), and
+  `lib/actions/threads/register.ts:135-142`, `:145-154` and `:152`.
+  [The test overlay](./milestones/05-chapters-chapter-close/slices/05b-identity-threads.md#the-test-overlay)'s
+  dataset facts ("the most traits on a live one is 4", "8 have no
+  description, Jim Hawkins among them", the faction's state `{}`) are the
+  seed before its refresh, in the present tense, where
+  [`followups.md`](../followups.md#tuning-and-play-testing) says "before
+  Slice 5.5b's refresh". The seed-refresh note, "27 calls, 16 landed (11
+  entity updates, 4 thread updates and the merge) and 1 merge", counts
+  the merge twice: all 27 calls were `ok`, 16 wrote and 11 restated.
+  [Canon edits](./milestones/05-chapters-chapter-close/slices/05b-identity-threads.md#canon-edits)
+  leaves out 3b's start and empty-list sentence, 3f's ref clamp, the
+  merge's kept-row rule, `search_world`'s limit and ranking,
+  `architecture.md`'s halves-table row and count-cache paragraph,
+  `observability.md` and `testing.md`. Raised in 5.5b's slice review.
