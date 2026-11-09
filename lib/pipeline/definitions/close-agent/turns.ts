@@ -66,9 +66,8 @@ export function blankTurns(turns: readonly CloseTurn[]): CloseTurn[] {
 
 /**
  * Primes `system` at `countTokens(blankSystem) + proseTokens`, so a part's first step doesn't
- * encode the chapter unless the half is over the count cache's character budget. The count leans a
- * little either way: high where an older row's stored count holds a stripped block, low where o200k
- * merges text across a turn's edges.
+ * encode the chapter (a half over the cache's character budget still is). Leans a little either
+ * way: high on a stored stripped block, low where o200k merges text across a turn's edges.
  */
 export function primeCloseSystemCount(
   system: string,

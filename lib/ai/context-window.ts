@@ -80,9 +80,8 @@ export const PROMPT_COUNT_CACHE_ENTRIES = 4096
 /** The most characters the count cache holds across its texts. */
 export const PROMPT_COUNT_CACHE_CHARS = 2_000_000
 
-// A plain LRU evicts a close task's chapter-long system half first, so a pass pins it; the cache
-// caps both its texts and its characters. Map iterates in insertion order: re-setting an entry
-// keeps the oldest first.
+// A plain LRU evicts a close's chapter-long system half first, so a pass pins it. Capped by texts
+// and by characters; Map keeps insertion order, so the oldest entry is evicted first.
 const promptCounts = new Map<string, number>()
 let cachedChars = 0
 let pinned: string | null = null

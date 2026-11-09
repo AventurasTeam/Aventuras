@@ -8,7 +8,7 @@ import { sameValue } from './tool'
 /** A text field as the model sent it, and as it would be stored. */
 export type SentText = { readonly sent: string; readonly bounded: string }
 
-/** A list as the model sent it, that list deduped, and the entries it holds: what would be stored. */
+/** A list as sent, that list deduped, and the entries it holds, which is what would be stored. */
 export type SentList = {
   readonly raw: readonly string[]
   readonly deduped: readonly string[]
@@ -49,10 +49,9 @@ function stringList(json: string): string[] | undefined {
 const BRACKETED = /^\[[\s\S]*\]$/
 
 /**
- * A list the model escaped into one string, read by parsing it once its edge quotes and brackets
- * are restored, then again while an item unescapes further. Prose with its own quotes won't parse,
- * a single quoted entry stays whole unless it came in brackets, as a one-entry list, a decoded
- * entry keeps its own brackets, and a list of blanks holds no entry.
+ * A list escaped into one string, parsed with its edge quotes and brackets restored, then again
+ * while an item unescapes. Prose with its own quotes won't parse; a lone quoted entry stays whole
+ * unless bracketed; a decoded entry keeps its brackets; a list of blanks holds no entry.
  */
 function joinedList(entry: string, bracketed = false): string[] | undefined {
   const trimmed = entry.trim()

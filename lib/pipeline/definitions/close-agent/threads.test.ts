@@ -1294,9 +1294,8 @@ describe('merge_threads', () => {
   })
 })
 
-// Threads key on (branch_id, id): the fork's copies would judge each call the other way. Inserted
-// after the close's rows, under a branch id sorting after the close's, so a read that drops the
-// branch meets the fork's row last in either scan order.
+// Threads key on (branch_id, id); the fork's copies would judge each call the other way. Inserted
+// last, under a later-sorting branch id, so a read that drops the branch meets the fork's row last.
 const FORK_ID = 'br_close_fork'
 const FORK_LETTER = {
   ...LETTER,
