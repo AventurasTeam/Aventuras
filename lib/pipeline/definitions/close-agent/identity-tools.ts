@@ -24,6 +24,7 @@ import {
   type WriteContext,
   type WritePlan,
   type WriteTool,
+  type WriteToolSchema,
 } from './tool'
 import { CLOSE_REASON } from './verdict'
 
@@ -75,27 +76,30 @@ export const FACTION_SHAPE = {
 
 type IdentityKind = 'character' | 'faction'
 
-/** A field a tool takes: its argument, the delta path it lands at, and how it's read as sent. */
-type FieldSpec<A extends string = string> =
-  | { kind: 'list'; arg: A; path: string; cap: CappedList }
-  | { kind: 'text'; arg: A; path: string; bound: BoundedField }
+type CharacterArgs = z.output<WriteToolSchema<typeof CHARACTER_SHAPE>>
+type FactionArgs = z.output<WriteToolSchema<typeof FACTION_SHAPE>>
+
+/** A field a tool takes: its value in the parsed call, the delta path it lands at, its rule. */
+type FieldSpec<A> =
+  | { kind: 'list'; of: (args: A) => readonly string[] | undefined; path: string; cap: CappedList }
+  | { kind: 'text'; of: (args: A) => string | undefined; path: string; bound: BoundedField }
 
 /** A field still sent after blanks and empty lists are dropped. */
 type SentField =
   | { kind: 'list'; path: string; cap: CappedList; list: SentList }
   | { kind: 'text'; path: string; text: SentText }
 
-const CHARACTER_FIELDS: readonly FieldSpec<keyof typeof CHARACTER_SHAPE>[] = [
-  { kind: 'list', arg: 'traits', path: 'state.traits', cap: 'traits' },
-  { kind: 'list', arg: 'drives', path: 'state.drives', cap: 'drives' },
-  { kind: 'text', arg: 'voice', path: 'state.voice', bound: 'voice' },
-  { kind: 'text', arg: 'description', path: 'description', bound: 'description' },
+const CHARACTER_FIELDS: readonly FieldSpec<CharacterArgs>[] = [
+  { kind: 'list', of: (args) => args.traits, path: 'state.traits', cap: 'traits' },
+  { kind: 'list', of: (args) => args.drives, path: 'state.drives', cap: 'drives' },
+  { kind: 'text', of: (args) => args.voice, path: 'state.voice', bound: 'voice' },
+  { kind: 'text', of: (args) => args.description, path: 'description', bound: 'description' },
 ]
 
-const FACTION_FIELDS: readonly FieldSpec<keyof typeof FACTION_SHAPE>[] = [
-  { kind: 'list', arg: 'agenda', path: 'state.agenda', cap: 'agenda' },
-  { kind: 'text', arg: 'standing', path: 'state.standing', bound: 'standing' },
-  { kind: 'text', arg: 'description', path: 'description', bound: 'description' },
+const FACTION_FIELDS: readonly FieldSpec<FactionArgs>[] = [
+  { kind: 'list', of: (args) => args.agenda, path: 'state.agenda', cap: 'agenda' },
+  { kind: 'text', of: (args) => args.standing, path: 'state.standing', bound: 'standing' },
+  { kind: 'text', of: (args) => args.description, path: 'description', bound: 'description' },
 ]
 
 const NOT_OF_KIND: Readonly<Record<IdentityKind, string>> = {
@@ -106,24 +110,17 @@ const NOT_OF_KIND: Readonly<Record<IdentityKind, string>> = {
 const NOTHING_SENT =
   'every field is blank or empty: send only the fields you change, each with its whole new value'
 
-const isStringList = (value: unknown): value is string[] =>
-  Array.isArray(value) && value.every((item) => typeof item === 'string')
-
 const landingValue = (field: SentField): unknown =>
   field.kind === 'list' ? field.list.entries : field.text.bounded
 
-function sentFields(
-  args: Readonly<Record<string, unknown>>,
-  specs: readonly FieldSpec[],
-): SentField[] {
+function sentFields<A>(args: A, specs: readonly FieldSpec<A>[]): SentField[] {
   const sent: SentField[] = []
   for (const spec of specs) {
-    const raw = args[spec.arg]
     if (spec.kind === 'list') {
-      const list = sentList(isStringList(raw) ? raw : undefined)
+      const list = sentList(spec.of(args))
       if (list !== undefined) sent.push({ kind: 'list', path: spec.path, cap: spec.cap, list })
     } else {
-      const text = sentText(typeof raw === 'string' ? raw : undefined, spec.bound)
+      const text = sentText(spec.of(args), spec.bound)
       if (text !== undefined) sent.push({ kind: 'text', path: spec.path, text })
     }
   }
@@ -145,10 +142,10 @@ async function readEntity(ctx: WriteContext, id: string): Promise<Entity | undef
 }
 
 /** chapter-close.md → 3b: one entity's fields, as sent, past precedence and the soft caps. */
-async function planIdentityWrite(
+async function planIdentityWrite<A extends { readonly id: string }>(
   kind: IdentityKind,
-  specs: readonly FieldSpec[],
-  args: Readonly<Record<string, unknown>> & { readonly id: string },
+  specs: readonly FieldSpec<A>[],
+  args: A,
   ctx: WriteContext,
 ): Promise<WritePlan> {
   const { id } = args
