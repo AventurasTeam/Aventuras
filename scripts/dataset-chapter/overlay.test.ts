@@ -377,4 +377,34 @@ describe('the dataset overlay', () => {
 
     expect(byId(await entityRows(ctx, [JIM])).get(JIM)?.state).toMatchObject({ traits: [] })
   })
+
+  it('throws when the thread the planted one repeats is no longer active, before writing', async () => {
+    const ctx = await seededDataset()
+    await ctx.db
+      .update(threads)
+      .set({ status: 'resolved' })
+      .where(
+        and(eq(threads.branchId, B), eq(threads.id, DATASET_OVERLAY.plantedThread.duplicates.id)),
+      )
+
+    await expect(applyDatasetOverlay(ctx)).rejects.toThrow(/no active thread on the branch/)
+
+    expect(byId(await entityRows(ctx, [JIM])).get(JIM)?.state).toMatchObject({ traits: [] })
+    expect((await overlaidState(ctx)).planted).toEqual([])
+  })
+
+  it('throws on a held planted thread whose written fields differ, and ignores bookkeeping', async () => {
+    const ctx = await seededDataset()
+    await applyDatasetOverlay(ctx)
+    const planted = DATASET_OVERLAY.plantedThread.row.id
+    const atPlanted = and(eq(threads.branchId, B), eq(threads.id, planted))
+    await ctx.db.update(threads).set({ embeddingStale: 0, updatedAt: SECOND }).where(atPlanted)
+
+    expect(await applyDatasetOverlay(ctx)).toEqual({ reopened: false, userEdit: 'restated' })
+
+    await ctx.db.update(threads).set({ status: 'active' }).where(atPlanted)
+
+    await expect(applyDatasetOverlay(ctx)).rejects.toThrow(new RegExp(planted))
+    expect((await overlaidState(ctx)).planted).toMatchObject([{ status: 'active' }])
+  })
 })

@@ -110,7 +110,8 @@ function plannedState(row: Entity, entry: EntityOverlay): PlannedState {
   return { row, state: state as EntityState }
 }
 
-// Every check before any write: a changed seed fails loudly and leaves no half-applied overlay.
+// Every check after the reopen, before any overlay write: a changed seed fails loudly and
+// leaves no half-applied overlay.
 async function plannedStates(ctx: DbCtx): Promise<PlannedState[]> {
   const { entities: overlaid, userEdit, plantedThread } = DATASET_OVERLAY
   const named = [...overlaid, userEdit]
@@ -146,6 +147,19 @@ async function plannedStates(ctx: DbCtx): Promise<PlannedState[]> {
   const planted = threadWriteSchema.safeParse({ ...plantedThread.row, branchId: DATASET_BRANCH_ID })
   if (!planted.success)
     throw overlayError(`the planted thread is invalid: ${planted.error.message}`)
+  const [heldPlanted] = await ctx.db
+    .select()
+    .from(threads)
+    .where(and(eq(threads.branchId, DATASET_BRANCH_ID), eq(threads.id, plantedThread.row.id)))
+  // Compared on the written columns: the embedding sweep clears `embeddingStale`, and the
+  // timestamps aren't content.
+  if (
+    heldPlanted !== undefined &&
+    !isDeepStrictEqual(threadWriteSchema.parse(heldPlanted), planted.data)
+  )
+    throw overlayError(
+      `the planted thread ${plantedThread.row.id} is held with other values than the overlay's: reload the seed with pnpm db:seed:dataset --overlay`,
+    )
   return overlaid.map((entry) => plannedState(held.get(entry.id)!, entry))
 }
 
