@@ -4,12 +4,14 @@ import { and, desc, eq, inArray } from 'drizzle-orm'
 import type { ZodType } from 'zod'
 
 import { applyDeltaAction, loadOpenStory, undoLastAction } from '@/lib/actions'
+import { userEditsSinceProse, wroteField } from '@/lib/actions/delta/user-precedence'
 import {
   chapters,
   deltas,
   emptyEntityState,
   entities,
   entityStateSchemaForKind,
+  storyEntries,
   threads,
   threadWriteSchema,
   type DbCtx,
@@ -112,6 +114,20 @@ function plannedState(row: Entity, entry: EntityOverlay): PlannedState {
 
 // Every check after the reopen, before any overlay write: a changed seed fails loudly and
 // leaves no half-applied overlay.
+// The edit is there to protect its field: a value the seed already holds, with no user edit after
+// the chapter's last turn, would make the edit a noop that leaves the field open to a close.
+async function userEditProtects(ctx: DbCtx, row: Entity): Promise<boolean> {
+  const [last] = await ctx.db
+    .select({ id: storyEntries.id })
+    .from(storyEntries)
+    .where(eq(storyEntries.branchId, DATASET_BRANCH_ID))
+    .orderBy(desc(storyEntries.position))
+    .limit(1)
+  if (last === undefined) return false
+  const edits = await userEditsSinceProse(ctx, DATASET_BRANCH_ID, 'entities', row.id, last.id)
+  return wroteField(edits, 'entities', 'description', [])
+}
+
 async function plannedStates(ctx: DbCtx): Promise<PlannedState[]> {
   const { entities: overlaid, userEdit, plantedThread } = DATASET_OVERLAY
   const named = [...overlaid, userEdit]
@@ -135,6 +151,11 @@ async function plannedStates(ctx: DbCtx): Promise<PlannedState[]> {
     if (row.name !== name)
       throw overlayError(`${id} is "${row.name}" in the seed, not "${name}": ${REFRESH}`)
   }
+  const edited = held.get(userEdit.id)!
+  if (edited.description === userEdit.description && !(await userEditProtects(ctx, edited)))
+    throw overlayError(
+      `${userEdit.name}'s description already holds the overlay's user edit, with no user edit logged after the chapter to protect it: ${REFRESH}`,
+    )
   const { id, title } = plantedThread.duplicates
   const [duplicated] = await ctx.db
     .select({ title: threads.title, status: threads.status })
