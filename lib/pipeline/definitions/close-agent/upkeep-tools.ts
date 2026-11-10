@@ -88,12 +88,7 @@ const UNPLACED_PATH = 'state.unplaced'
 // C4: the top mark changes only state.unplaced, so its value names the move.
 const TOP_LEVEL_VALUE = 'top level'
 
-const PLACE_TEXT: readonly TextSpec<PlaceArgs>[] = [
-  { of: (args) => args.condition, path: 'state.condition', bound: 'condition' },
-  { of: (args) => args.description, path: 'description', bound: 'description' },
-]
-
-const ITEM_TEXT: readonly TextSpec<ItemArgs>[] = [
+const UPKEEP_TEXT: readonly TextSpec<PlaceArgs | ItemArgs>[] = [
   { of: (args) => args.condition, path: 'state.condition', bound: 'condition' },
   { of: (args) => args.description, path: 'description', bound: 'description' },
 ]
@@ -218,7 +213,7 @@ async function planUpdatePlace(args: PlaceArgs, ctx: WriteContext): Promise<Writ
       reason: PARENT_AND_TOP,
       rows: [{ table: 'entities', id: args.id, name: ctx.ids.nameOfId(args.id) ?? '' }],
     }
-  return planUpkeepWrite('location', PLACE_TEXT, args, sentPlacement(args), ctx)
+  return planUpkeepWrite('location', UPKEEP_TEXT, args, sentPlacement(args), ctx)
 }
 
 /** chapter-close.md → 3f: a place's condition, description and placement, one updateEntity. */
@@ -243,7 +238,7 @@ export const updateItemTool: WriteTool<typeof UPDATE_ITEM_SHAPE> = {
     "Updates an item from this chapter's turns: its condition when the chapter shows it changed while the scene was elsewhere, and its description on a material change or when blank. Send only the fields you change, each whole.",
   schema: writeToolSchema(UPDATE_ITEM_SHAPE),
   ids: { id: { shape: 'single', prefixes: ['item_'] } },
-  plan: (args, ctx) => planUpkeepWrite('item', ITEM_TEXT, args, undefined, ctx),
+  plan: (args, ctx) => planUpkeepWrite('item', UPKEEP_TEXT, args, undefined, ctx),
 }
 
 export const SET_KEYWORDS_SHAPE = {
