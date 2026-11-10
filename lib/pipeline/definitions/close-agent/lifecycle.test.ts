@@ -237,7 +237,7 @@ describe('lifecycleTask', () => {
     })
     expect(lifecycleTask.readFields).toBe(LIFECYCLE_READ_FIELDS)
     expect(lifecycleTask.tools[2]?.description).toContain(
-      'a death, an exile, a destruction or a disbanding',
+      'a death, a permanent exile, a destruction or a disbanding',
     )
   })
 
@@ -412,7 +412,7 @@ describe('lifecycleTask', () => {
   })
 
   it('orders each kind by name, whatever the order of the ids', async () => {
-    // Pew's id sorts before Bess's; Lantern's after Satchel's.
+    // Pew's id sorts before Bess's: only the characters tell a name sort from an id sort.
     await seedRow(fx, { id: ROWS.pew, kind: 'character', name: 'Pew' })
     await seedRow(fx, { id: ROWS.bess, kind: 'character', name: 'Bess' })
     await seedRow(fx, { id: ROWS.satchel, kind: 'item', name: 'Satchel' })
@@ -532,7 +532,7 @@ describe('lifecycleTask', () => {
     )
     expect(prompt.user).toContain('Never a place.')
     expect(prompt.user).toContain(
-      'a death, an exile or other leaving the story for good, a destruction, a disbanding. A death the narration reports as fact counts, even off the scene; one a character only suspects or hears as rumour does not.',
+      'a death, an exile with no promise of return, another permanent departure, a destruction, a disbanding. A death the narration reports as fact counts, even off the scene; one a character only suspects or hears as rumour does not.',
     )
     expect(prompt.user).toContain(
       'an item lost, stolen or handed on, a faction beaten or scattered',

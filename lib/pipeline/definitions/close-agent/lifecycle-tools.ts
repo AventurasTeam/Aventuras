@@ -202,7 +202,7 @@ export const retireEntityTool: WriteTool<typeof RETIRE_SHAPE> = {
   kind: 'write',
   name: 'retire_entity',
   description:
-    "Retire a character, an item or a faction the chapter shows gone for good: a death, an exile, a destruction or a disbanding the cited turns state outright. Never a place: only the user retires one. Your why becomes the row's retirement reason, so write it as one plain sentence on how the row left the story, naming no turn id.",
+    "Retire a character, an item or a faction the chapter shows gone for good: a death, a permanent exile, a destruction or a disbanding the cited turns state outright. Never a place: only the user retires one. Your why becomes the row's retirement reason, so write it as one plain sentence on how the row left the story, naming no turn id.",
   schema: writeToolSchema(RETIRE_SHAPE),
   ids: { id: { shape: 'single', prefixes: ENTITY_PREFIXES } },
   plan: planRetire,
