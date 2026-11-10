@@ -961,6 +961,86 @@ describe('flag_duplicate', () => {
     expect(flagOf(await storedEntity(f, STRANGER))).toEqual([0, null, null])
   })
 
+  it("flags the stranger when a later turn gave Tobin a flag on a third row, Tobin's untouched", async () => {
+    await seedRow(f, { id: TOBIN, kind: 'character', name: 'Tobin' })
+    await seedRow(f, { id: STRANGER, kind: 'character', name: 'the hooded stranger' })
+    await seedRow(f, { id: NAMESAKE, kind: 'character', name: 'Tobin' })
+    await write(
+      f,
+      {
+        kind: 'raiseCollisionFlag',
+        source: 'per_turn_classifier',
+        payload: {
+          branchId: f.branchId,
+          id: TOBIN,
+          partnerId: NAMESAKE,
+          reason: 'name-taken',
+          proseEntryId: laterReplyId(f),
+        },
+      },
+      'act_close_turn_5',
+      laterReplyId(f),
+    )
+
+    const { result, answers, calls } = await dispatchScripted(f, [flagCall()], { shown: SHOWN })
+
+    expect(outputs(answers)).toEqual([{ result: 'ok' }])
+    expect(flagOf(await storedEntity(f, STRANGER))).toEqual([1, TOBIN, 'duplicate'])
+    expect(flagOf(await storedEntity(f, TOBIN))).toEqual([1, NAMESAKE, 'name-taken'])
+    const log = await runDeltas(f, result.actionId)
+    expect(log.map((d) => [d.targetId, d.op])).toEqual([[STRANGER, 'update']])
+    expect(calls[0]).toMatchObject({
+      result: 'ok',
+      rows: [
+        { table: 'entities', id: STRANGER, name: 'the hooded stranger' },
+        { table: 'entities', id: TOBIN, name: 'Tobin' },
+      ],
+    })
+  })
+
+  it("skips the stranger's row when a later turn wrote its flag, Tobin's flag naming a third row", async () => {
+    await seedRow(f, { id: CLERK, kind: 'character', name: 'the toll clerk' })
+    await seedRow(f, { id: WREN, kind: 'character', name: 'Wren' })
+    await seedRow(f, {
+      id: TOBIN,
+      kind: 'character',
+      name: 'Tobin',
+      flag: { partnerId: CLERK, reason: 'duplicate' },
+    })
+    await seedRow(f, {
+      id: STRANGER,
+      kind: 'character',
+      name: 'the hooded stranger',
+      flag: { partnerId: WREN, reason: 'duplicate' },
+    })
+    // A later turn clears the stranger's flag: free now, but that turn's write wins.
+    await write(
+      f,
+      {
+        kind: 'updateEntity',
+        source: 'per_turn_classifier',
+        payload: {
+          branchId: f.branchId,
+          id: STRANGER,
+          patch: { nameCollisionFlag: 0, nameCollisionPartnerId: null, nameCollisionReason: null },
+        },
+      },
+      'act_close_turn_5',
+      laterReplyId(f),
+    )
+
+    const { result, answers, calls } = await dispatchScripted(f, [flagCall()], { shown: SHOWN })
+
+    expect(outputs(answers)).toEqual([
+      { result: 'skipped', reason: CLOSE_REASON.laterTurn, note: expect.any(String) },
+    ])
+    expect(await runDeltas(f, result.actionId)).toEqual([])
+    expect(calls[0]).toMatchObject({
+      rows: [expect.objectContaining({ id: STRANGER }), expect.objectContaining({ id: TOBIN })],
+    })
+    expect(flagOf(await storedEntity(f, STRANGER))).toEqual([0, null, null])
+  })
+
   it.each([
     { held: 'the row named first', holder: TOBIN, partner: STRANGER },
     { held: 'the partner', holder: STRANGER, partner: TOBIN },
