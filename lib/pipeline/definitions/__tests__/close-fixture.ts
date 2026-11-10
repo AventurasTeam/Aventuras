@@ -125,7 +125,10 @@ function modelsWithLoreWindow(tokens: number) {
   }
 }
 
-/** A lore-mgmt window one token under half the first `entryCount` entries' counts: two parts. */
+/**
+ * A lore-mgmt window whose part limit, half of it, is one token under the first `entryCount`
+ * entries' total: two parts.
+ */
 export function twoPartWindow(entryCount: number): number {
   const counts = [countTokens(OPENING)]
   for (let turn = 0; counts.length < entryCount; turn++)
