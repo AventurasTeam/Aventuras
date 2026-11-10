@@ -293,7 +293,7 @@ async function planMergeThreads(args: MergeArgs, ctx: WriteContext): Promise<Wri
       ? {}
       : { description: description.bounded }),
   }
-  // Refused whole, not dropped: once the merge lands, no tool could resend keep's new text.
+  // Refused whole, not dropped: once the merge lands, no tool could resend keep's new title.
   const handle = [wanted.title, wanted.description]
     .map((text) => (text === undefined ? undefined : turnHandleIn(text, ctx.ids)))
     .find((found) => found !== undefined)
