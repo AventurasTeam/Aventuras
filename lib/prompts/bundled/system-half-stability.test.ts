@@ -644,7 +644,12 @@ describe("a close's task templates share one system half", () => {
       "## t2 (the user's turn)\n<user_turn>\nI wade in.\n</user_turn>",
     )
     // Positive control: each task's own rows reach its prompt.
-    expect(new Set(prompts.map((prompt) => prompt.user)).size).toBe(prompts.length)
+    const user = (id: TemplateId) => prompts[CLOSE_TASK_TEMPLATES.indexOf(id)]!.user
+    expect(user(TEMPLATE_IDS.closeLore)).toContain('- lo2: House Eldrin')
+    expect(user(TEMPLATE_IDS.closeIdentity)).toContain('## c1: Kael\n- description: "A courier."')
+    expect(user(TEMPLATE_IDS.closeThreads)).toContain('## th1: Find the heir (active, always)')
+    expect(user(TEMPLATE_IDS.closeUpkeep)).toContain('## i1: a rusted lantern (item, in the scene)')
+    expect(user(TEMPLATE_IDS.closeLifecycle)).toContain('- flag: f2 "The Ebb Wardens" (duplicate)')
   })
 
   it("renders the same system half under one context holding every task's variables", () => {
