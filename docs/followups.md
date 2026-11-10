@@ -534,4 +534,8 @@ breakdown under [UX](#ux).
   ("these are turns t6–t12, part 2 of 3; later parts follow"), which
   stays stable across a part's tasks; or a reopen path, later parts
   seeing what this close resolved or retired with leave to set it
-  back. Raised 2026-11-10 by 5.8's review.
+  back. The same long chapters should judge the starts' size: on the
+  dataset chapter cut at a 40,000 window, part 1's Upkeep start held
+  39 rows and 29 happenings and its Lifecycle start 29 rows (part 2:
+  20 and 22), with no bound on either, and the close still ran without
+  a window stop. Raised 2026-11-10 by 5.8's review.
