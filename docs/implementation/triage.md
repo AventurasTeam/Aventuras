@@ -323,3 +323,51 @@ patch`, which 5.5a marks `restated`, so a close tool's write of it
   file is deleted; 5.8's chapter metadata part and merge lanes are the
   latest case, and a multi-part close then fails to parse in the dev
   mock. Raised in 5.8's task review.
+- **A bracket of several handles hides them from prose naming.**
+  `PROSE_TOKEN` in `lib/classifier/substitute.ts` takes a whole
+  bracket as one token, so `nameIdsInProse` and the close's
+  `nameCloseProse` leave `[c1,c2]`, `[c1-c3]` or `[c1,t3]` unnamed,
+  and a stored row handle survives in a pass's and a close's prose.
+  The close's turn-handle check scans bare tokens instead. Raised in
+  5.8's task review.
+- **No test pins a prose task's token count into its render.** In
+  the close's Identity, Threads, Lore and Upkeep tasks, passing 0 for
+  `proseTokens` to `renderClosePrompt` still passes every task test.
+  The count primes the system half's token total, so losing it would
+  undercount the window check. One shared pin would cover every prose
+  task. Raised in 5.8's task review.
+- **The close's placement plan copies two handler details.** The
+  `not-unplaced` and `parent-not-a-place` refusals are inline strings
+  in `state-patch-actions.ts`, outside `PLACE_REFUSAL`, and
+  `branchPlaces` (`parent-chain-check.ts`) isn't exported, so
+  `close-agent/placement.ts` copies both and can drift from the
+  handler. Raised in 5.8's task review.
+- **`search_world` breaks ties by locale.** Its sort
+  (`close-agent/read-tools.ts`) uses `localeCompare`, so its order can
+  differ by device, against the code-unit rule the close's task starts
+  follow. Raised in 5.8's task review.
+- **`retiredReason` has no length bound.** The classifier's `reason`
+  (`lib/classifier/schema.ts`) is a plain optional string, and the
+  close stores `retire_entity`'s `why` the same way, while the close's
+  other stored text is capped (a condition at 500, a lore body at
+  1,200). Raised in 5.8's task review.
+- **Reactivating a row in World keeps its retired reason.**
+  `lib/world/entity-actions.ts` patches `retiredReason` only when the
+  draft changes it, and the settings tab only makes it read-only, so a
+  row set back to active keeps a reason `data-model.md` calls
+  meaningful only while retired; the classifier's return from
+  retirement clears it. A close's Lifecycle start then shows that
+  stale reason on an active row, which reads as evidence to retire it
+  again. Read in the code, not run. Raised in 5.8's task review.
+- **Undoing a user's keyword edit wipes a later pass's term.** CTRL-Z
+  or a rollback window of a user's keyword edit under a later
+  periodic keyword write restores the whole list from the undo
+  payload, wiping the pass's term, while the pass's surviving delta
+  keeps a before-list without the user's restored term. The close's
+  keyword-author walk then credits that term to the pass, and a later
+  close may remove it (5.8 records this as the walk's second known
+  gap). The same whole-list restore may hit other list fields a pass
+  appends to, unchecked, and `data-model.md`'s "periodic-classifier
+  deltas above it … stay put" doesn't hold when they wrote the same
+  field. For the undo substrate's owner. Raised in 5.8's execution,
+  developer decision 2026-11-10.
