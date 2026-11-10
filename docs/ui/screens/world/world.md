@@ -999,8 +999,9 @@ action and delta-logged, so CTRL-Z re-flags the row:
   the deleted row takes the deleted row's live partner and reason
   instead ([Reversibility](#reversibility)).
 
-A `duplicate` flag was never a namesake pair, so no rename, re-parent
-or merge clears it while its partner stands.
+A `duplicate` flag holds while its partner stands, whether or not the
+pair is still a namesake pair (a close re-marks a namesake flag
+`duplicate`), so no rename, re-parent or merge clears it.
 
 A reversal can still leave one, such as undoing the partner's
 create, and so can a pass's rename that renames the row, which writes

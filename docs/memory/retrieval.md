@@ -195,10 +195,11 @@ blocking embed failure, per [Compute lifecycle](#compute-lifecycle) —
 or truncates exactly as local does, and which one it does is a
 property of the backend rather than of the API.
 
-A pass is bounded so it cannot reach that ceiling: the classifier
-clamps the fields it emits, a new row's description to 1,200
-characters, in `lib/classifier/plan.ts`. A chapter close bounds a lore
-body by its growth instead, at most 1,200 characters past the body as it
+The app's own writers are bounded so they cannot reach that ceiling:
+the classifier clamps the fields it emits, a new row's description to
+1,200 characters, in `lib/classifier/plan.ts`, and a chapter close
+clamps its texts the same way, save a lore body, which it bounds by
+its growth instead, at most 1,200 characters past the body as it
 stood before the close
 ([`chapter-close.md → 3a`](./chapter-close.md#3a--lore-creation)), so
 it can extend a user's long body without cutting it, and a body a close

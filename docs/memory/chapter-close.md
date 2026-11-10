@@ -126,12 +126,12 @@ defaults.
 A prose task reads at most half the model's window at a time, or 32k
 tokens when the window is unknown. A longer chapter is cut into parts
 between turns: a player's turn stays with the reply after it, since the
-reply decides what the turn did, so no part ends on one. A player's turn
-and its reply that pass the limit together are a part alone, sent whole.
-Each
-part runs the prose tasks in turn, which keeps its cache warm; under
-`single`, each part is one conversation. Chapter-wide limits hold across
-parts, and each part sees the writes so far. A part's writes cite only
+reply decides what the turn did, so no part ends on one. A turn over
+the limit is a part alone, sent whole: a reply with the player's turn
+before it, or an entry on its own such as the opening. Each part runs
+the prose tasks in turn, which keeps its cache warm; under `single`,
+each part is one conversation. Chapter-wide limits hold across parts,
+and each part sees the writes so far. A part's writes cite only
 its own turns: a turn of another part is refused as one outside the
 chapter is, since the part never showed it.
 
@@ -411,7 +411,8 @@ above. Each task starts from its rows and reads the rest through tools,
 seeing a field's current value before it writes it
 ([`data-model.md → Authorship contract`](../data-model.md#authorship-contract)):
 
-- Closed range entries (the chapter's content).
+- Closed range entries (the chapter's content), or a [part](#parts)'s
+  for a task that runs per part.
 - Existing lore rows — titles, bodies on request.
 - The entities the part touches, with their state, and the rest of
   the world on request: places, items and factions off the scene.
