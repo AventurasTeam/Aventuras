@@ -163,10 +163,7 @@ type CollisionView = {
   flaggedBy: string[]
 }
 
-/**
- * world.md → Surfacing: a flag is live or dormant, and one row's pair may be flagged from the other.
- * `named`: the ids of the rows the view shows, for the answer's refs.
- */
+/** world.md → Surfacing. `named`: the ids of the rows the view shows, for the answer's refs. */
 async function collisionView(
   ctx: ToolContext,
   row: Entity,

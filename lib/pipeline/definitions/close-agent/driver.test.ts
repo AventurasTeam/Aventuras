@@ -1136,8 +1136,7 @@ describe('runCloseTask', () => {
   })
 })
 
-// The agent phase over `range` in `fixture`; `cuts: null` parks no parts, as a run whose metadata
-// phase never ran.
+// `cuts: null` parks no parts, as a run whose metadata phase never ran.
 function closePhaseContext(
   fixture: CloseFixture,
   opts: {

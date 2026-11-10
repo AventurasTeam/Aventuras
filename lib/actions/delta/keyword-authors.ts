@@ -46,10 +46,9 @@ async function keywordDeltas(ctx: DbCtx, branchId: string, table: 'entities' | '
 
 /**
  * Normalized live term → who added it (retrieval.md → Keywords schema): the latest update whose
- * list before lacks the term, else the create. An undone update has left the log, so its term
- * falls back to the latest earlier keyword update still in the log, else the create's source.
- * Undoing a user's keyword edit under a later machine keyword write restores the whole list, so a
- * user's term that write's before-list lacks is credited to that write, and a close may remove it.
+ * before-list lacks the term, else the create; an undone update has left the log. Undoing a user's
+ * keyword edit under a later machine keyword write restores the whole list, so a user's term that
+ * write's before-list lacks is credited to that write, and a close may remove it.
  */
 export async function keywordAuthors(
   ctx: DbCtx,

@@ -224,9 +224,8 @@ const optionalArg = (tool: CloseTool, key: string): boolean =>
   tool.schema.shape[key]?.safeParse(undefined).success === true
 
 /**
- * Swaps each declared id argument's handles for full ids; a handle never shown, or of a kind the
- * argument doesn't take, refuses the call. A blank optional one reads as left out, since a model
- * fills optional fields. `named` holds each resolved row once.
+ * Swaps each declared id argument's handles for full ids; an unshown or wrong-kind handle refuses
+ * the call. A blank optional one reads as left out (models fill them); `named` has each row once.
  */
 export function resolveIdArgs(
   input: Readonly<Record<string, unknown>>,

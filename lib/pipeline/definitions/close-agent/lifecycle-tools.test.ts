@@ -225,7 +225,7 @@ type DispatchRun = {
 
 const SCRIPTED_KIND = 'close-lifecycle-tools-test'
 
-/** flag_duplicate whose partner, the stranger, takes a live flag naming Tobin after the plan reads. */
+/** flag_duplicate whose partner takes a live flag naming Tobin after the plan reads. */
 const flagDuplicateRaced: WriteTool<typeof FLAG_DUPLICATE_SHAPE> = {
   ...flagDuplicateTool,
   plan: async (args, ctx) => {
