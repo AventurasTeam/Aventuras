@@ -55,7 +55,10 @@ describe('closeParts', () => {
     { name: 'two cuts sharing an entry', cuts: [cut(1, 'e1', 'e3'), cut(2, 'e3', 'e6')] },
     { name: 'entries after the last cut', cuts: [cut(1, 'e1', 'e5')] },
     { name: 'a first cut past the range start', cuts: [cut(1, 'e2', 'e6')] },
-    { name: 'a cut ending before it starts', cuts: [cut(1, 'e1', 'e1'), cut(2, 'e2', 'e1')] },
+    {
+      name: 'a cut ending before it starts',
+      cuts: [cut(1, 'e1', 'e1'), cut(2, 'e2', 'e1'), cut(3, 'e2', 'e6')],
+    },
     { name: 'parts numbered out of order', cuts: [cut(2, 'e1', 'e3'), cut(1, 'e4', 'e6')] },
     { name: 'no cut over a range of entries', cuts: [] },
   ])('throws on $name', ({ cuts }) => {
