@@ -678,8 +678,9 @@ None open: Implementation notes record each answer.
   lore `title`, `body` or `category`; a `description`, `condition`,
   `voice` or `standing`; an Identity `traits`, `drives` or `agenda` list
   with an entry holding one; a thread's `title` or `description`; and
-  `retire_entity`'s `why`, stored as `retiredReason`. A keyword term
-  holding any handle the close knows is refused the same way. Another
+  `retire_entity`'s `why`, stored as `retiredReason`. A keyword term the
+  close adds holding any handle it knows is refused the same way; a
+  removal stores nothing, so its terms aren't checked. Another
   tool's `why`, shown only in the review, keeps handles as written. The
   shared close instructions state the rule. A stored `t3` names another
   turn in a later prompt, and nothing correct can replace it.
@@ -805,8 +806,12 @@ None open: Implementation notes record each answer.
   Identity cell, Parts, `Tools and writes` (turn ids in stored text,
   the `rejected` list), 3a, 3f's collision bullet and Phase 4;
   `data-model.md`'s flag row; `retrieval.md`'s bound paragraph;
-  `architecture.md`'s halves table; `testing.md`'s `PROBE_WINDOW`; and
-  the triage inbox.
+  `architecture.md`'s halves table; `testing.md`'s `PROBE_WINDOW` and
+  mock-marker paragraph; `chapter-close.md`'s Phase 2 part and merge
+  paragraph, Phase 3's context bullets, 3b's start and 3f's keyword
+  bullet; `parked.md`'s chunking paragraph; `scripts/mock-llm/README.md`;
+  and the triage inbox. The slice review added `generation-pipeline.md`'s
+  intermediates paragraph and `world.md`'s `duplicate` flag sentence.
 - **Stale code claims in this doc.** Two actions writing one column of
   a row refuse the group in `applyDeltaActionGroupUnlocked`'s `prepare`
   (`lib/actions/delta/apply-delta-action.ts`, "twice on one column"),
@@ -823,8 +828,9 @@ None open: Implementation notes record each answer.
   a system half, and its case "separates every shape that shares a
   block by a distinct, non-empty marker". 5.5b made `updateThread`'s
   and `updateHappening`'s `proseEntryId` required, their user callers
-  passing `null`, so "optional, as 5.5b gives `updateThread`" holds only
-  for `updateLore`, whose `proseEntryId` stays optional as specced.
+  passing `null`, so "optional, as 5.5b gives `updateThread`" held for
+  none; the slice review made `updateLore`'s `proseEntryId` required the
+  same way, the lore pane passing `null`.
 - **The two-part probe (a smoke check, not a measure).**
   `PROBE_WINDOW=40000 PROBE_OVERLAY=1 pnpm probe:close` at `b817d7d13` on
   `Gemma4-26B-A4B-QAT-MTP` (served window 65,536 tokens) cut the dataset
@@ -892,6 +898,9 @@ None open: Implementation notes record each answer.
 - **The plan's `closeLedgerOf(…).calls` destructure didn't typecheck,**
   since `closeLedgerOf` returns `CloseLedger | undefined`; Tasks 18 and
   19 use `?.calls` or `!`.
-- **`retire_entity` checks a later turn's `status` write before the turn
-  handle in `why`,** the order the other tools settled on in review, and
-  `update_place`'s and `update_item`'s texts the same.
+- **`retire_entity` checks a later turn's `status` write, then the
+  user's, before the turn handle in `why`,** the order the other tools
+  settled on in review, and `update_place`'s and `update_item`'s texts
+  the same. `update_thread` judges the user's description edit in its
+  plan before the handle, and `merge_threads` its protection, so a
+  protected text reads `skipped`.

@@ -160,10 +160,9 @@ is named before it lands
 ([`classifier.md → ID handling in classifier output`](./classifier.md#id-handling-in-classifier-output)).
 A turn id names no row, so a text field the close stores that holds one
 of its turns is refused, and so is a `traits`, `drives` or `agenda` list
-with an entry that does, and a keyword holding any id it shows: a stored
-`t3` would name another turn in a later prompt, a stored row id another
-row. Turns are cited
-in `turns`; a `why` only the review shows keeps them as written.
+with an entry that does, and a keyword it adds holding any id it shows:
+a stored `t3` would name another turn in a later prompt, a stored row
+id another row. Turns are cited in `turns`; a `why` only the review shows keeps them as written.
 
 A write returns one of three results:
 
