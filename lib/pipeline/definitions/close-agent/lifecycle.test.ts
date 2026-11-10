@@ -63,6 +63,8 @@ type RowSpec = {
   kind: NewEntity['kind']
   name: string
   status?: NewEntity['status']
+  /** Stored as given; a retired row defaults to a reason, any other to none. */
+  retiredReason?: string
   keywords?: string[]
   /** Merged over the kind's empty state. */
   state?: Readonly<Record<string, unknown>>
@@ -85,7 +87,7 @@ async function seedRow(fx: CloseFixture, spec: RowSpec): Promise<void> {
             name: spec.name,
             description: null,
             status,
-            retiredReason: status === 'retired' ? 'Left the story.' : null,
+            retiredReason: spec.retiredReason ?? (status === 'retired' ? 'Left the story.' : null),
             injectionMode: 'auto',
             keywords: spec.keywords ?? [],
             state: { ...emptyEntityState(spec.kind), ...spec.state } as EntityState,
@@ -523,6 +525,24 @@ describe('lifecycleTask', () => {
     expect(ids.nameOf('c2')).toBe('the hooded stranger')
     // A partner is named, not shown with its fields: it is no seed.
     expect(start?.seeds).toEqual(seedsOf(ROWS.tobin, ROWS.lantern, ROWS.satchel))
+  })
+
+  it("shows a restored row's stale retirement reason as blank", async () => {
+    await seedRow(fx, {
+      id: ROWS.tobin,
+      kind: 'character',
+      name: 'Tobin',
+      retiredReason: 'Died at the bridge.',
+    })
+    await setSceneOf(fx, fx.entries[4]!.id, [ROWS.tobin])
+
+    const { ctx, start } = await startOf(fx)
+    if (start === null) throw new Error('Tobin should start the task')
+
+    expect(start.show.rows).toEqual([shown('c1', 'character', 'Tobin')])
+    const prompt = lifecycleTask.render(start, { ...ctx, writesSoFar: '' })
+    expect(prompt.user).toContain('- retiredReason: ""')
+    expect(prompt.user).not.toContain('Died at the bridge')
   })
 
   it("renders its rows and the writes so far in the user half, the part's turns in the system half", async () => {

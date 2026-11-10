@@ -69,6 +69,9 @@ const sceneTagged = (row: LifecycleEntity): boolean => row.kind !== 'faction'
 // A hand-edited row may hold anything in a JSON column; only strings are ids.
 const strings = (value: unknown): string[] =>
   Array.isArray(value) ? value.filter((item): item is string => typeof item === 'string') : []
+// A restored row keeps its old reason in storage; the model reads it only on a retired row.
+const shownReason = (row: Entity): string =>
+  row.status === 'retired' ? (row.retiredReason ?? '') : ''
 // Code units, never localeCompare: host locale would make the prompt's row order device-dependent.
 const byKindThenName = (a: LifecycleEntity, b: LifecycleEntity): number =>
   KIND_ORDER.indexOf(a.kind) - KIND_ORDER.indexOf(b.kind) ||
@@ -155,7 +158,7 @@ async function startLifecycle(ctx: TaskPromptContext): Promise<TaskStart<Lifecyc
   for (const row of held) ctx.ids.show(row.id, row.name)
   const partners = await partnersOf(ctx, held)
   await refsIn(ctx, [
-    ...held.map((row) => [row.name, row.retiredReason]),
+    ...held.map((row) => [row.name, shownReason(row)]),
     ...[...partners.values()].map((partner) => partner.name),
   ])
   const handled = (value: string): string => ctx.ids.withHandles(value)
@@ -169,7 +172,7 @@ async function startLifecycle(ctx: TaskPromptContext): Promise<TaskStart<Lifecyc
         kind: row.kind,
         name: handled(row.name),
         status: row.status,
-        retiredReason: handled(row.retiredReason ?? ''),
+        retiredReason: handled(shownReason(row)),
         collision: collisionOf(row, partners, ctx.ids),
       })),
     },

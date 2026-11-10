@@ -712,6 +712,38 @@ describe('read_row on a forked story', () => {
   })
 })
 
+describe('read_row on a task that reads the retirement reason', () => {
+  const REASON_FIELDS: ReadFields = { character: ['status', 'retiredReason'] }
+  const RESTORED = rowId('char', 40)
+  const GONE = rowId('char', 41)
+
+  beforeEach(async () => {
+    await db.insert(entities).values([
+      entity(RESTORED, 'character', 'Restored', { retiredReason: 'Died at the bridge.' }),
+      entity(GONE, 'character', 'Gone', {
+        status: 'retired',
+        retiredReason: 'Died at the bridge.',
+      }),
+    ])
+  })
+
+  const read = (id: string) => readRowTool.read({ id }, toolCtx({ readFields: REASON_FIELDS }))
+
+  it('reads the reason of a row that is not retired as blank', async () => {
+    const answer = await read(RESTORED)
+
+    expect(answer.output).toMatchObject({ fields: { status: 'active', retiredReason: '' } })
+  })
+
+  it("keeps a retired row's reason", async () => {
+    const answer = await read(GONE)
+
+    expect(answer.output).toMatchObject({
+      fields: { status: 'retired', retiredReason: 'Died at the bridge.' },
+    })
+  })
+})
+
 describe('read_row on a task that reads the flag', () => {
   const FLAG_FIELDS: ReadFields = {
     character: ['status', 'nameCollisionFlag', 'nameCollisionPartnerId', 'nameCollisionReason'],

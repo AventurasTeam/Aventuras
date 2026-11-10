@@ -148,6 +148,7 @@ export async function refsIn(ctx: RowReadContext, value: unknown): Promise<Recor
 }
 
 const FLAG_PATH = 'nameCollisionFlag'
+const REASON_PATH = 'retiredReason'
 
 type CollisionView = {
   /** The row's own flag; `partner` null when that row is gone. */
@@ -358,6 +359,9 @@ async function readRowAnswer(
   }
 
   const fields = Object.fromEntries(paths.map((path) => [path, valueAt(row.columns, path)]))
+  // A restored row keeps its old reason in storage; only a retired row shows one.
+  if (row.entity !== undefined && row.entity.status !== 'retired' && REASON_PATH in fields)
+    fields[REASON_PATH] = ''
   const refs = await refsIn(ctx, [row.name, fields])
   const flag =
     row.entity !== undefined && paths.includes(FLAG_PATH)
