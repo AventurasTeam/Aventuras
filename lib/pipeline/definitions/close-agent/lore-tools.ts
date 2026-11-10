@@ -3,12 +3,19 @@ import { z } from 'zod'
 
 import { lore, type Lore, type NewLore } from '@/lib/db'
 import { generateId } from '@/lib/ids'
-import { dedupeTerms, newTerms, normalizeTerm } from '@/lib/keyword-terms'
+import { dedupeTerms, normalizeTerm } from '@/lib/keyword-terms'
 
 import { fieldVerdicts } from './entity-write'
 import { restatedText, sentText, TEXT_BOUNDS, type SentText } from './fields'
 import type { CloseIds } from './ids'
-import { handleInTerm, turnHandleIn, turnInTextReason } from './text-checks'
+import {
+  firstTermHandle,
+  keywordsRefusal,
+  plannedKeywords,
+  termHandleReason,
+  type SentKeywords,
+} from './keyword-args'
+import { turnHandleIn, turnInTextReason } from './text-checks'
 import {
   sameValue,
   writeToolSchema,
@@ -50,21 +57,6 @@ const titleTakenNote = (id: string): string =>
 
 const bodyOverLimitReason = (length: number): string =>
   `body is ${length} characters, over the limit of ${LORE_BODY_LIMIT}: state the rule in fewer words`
-
-/** A keyword holding a handle, which names nothing past this close. */
-const termHandleReason = (term: string, handle: string): string =>
-  `the keyword "${term}" holds ${handle}, an id: a keyword is a word the prose uses, never an id`
-
-function firstTermHandle(
-  terms: readonly string[],
-  ids: CloseIds,
-): { term: string; handle: string } | undefined {
-  for (const term of terms) {
-    const handle = handleInTerm(term, ids)
-    if (handle !== undefined) return { term, handle }
-  }
-  return undefined
-}
 
 /** A lore row on the branch whose title is `title`, trimmed and case-folded. */
 async function loreTitled(
@@ -235,7 +227,6 @@ export const UPDATE_LORE_SHAPE = {
 type UpdateArgs = z.output<WriteToolSchema<typeof UPDATE_LORE_SHAPE>>
 type LoreText = 'title' | 'body' | 'category'
 type SentLoreText = { field: LoreText; text: SentText }
-type SentKeywords = { add: readonly string[]; remove: readonly string[] }
 
 const LORE_TEXT: readonly LoreText[] = ['title', 'body', 'category']
 
@@ -244,9 +235,6 @@ const NOTHING_SENT =
 
 const bodyGrowthReason = (length: number, stored: number): string =>
   `body is ${length} characters: a body over ${LORE_BODY_LIMIT} may grow the stored one (${stored}) by at most ${LORE_BODY_LIMIT}, so send a shorter one`
-
-const keywordInBothReason = (term: string): string =>
-  `"${term}" is in both add and remove: send each term in one list`
 
 // Never cut: a body over the bound is refused, so a user's long body is never shortened.
 function sentBody(value: string | undefined): SentText | undefined {
@@ -262,20 +250,6 @@ function sentKeywords(value: UpdateArgs['keywords']): SentKeywords | undefined {
   const add = dedupeTerms(value?.add ?? [])
   const remove = dedupeTerms(value?.remove ?? [])
   return add.length === 0 && remove.length === 0 ? undefined : { add, remove }
-}
-
-/** The list as setLoreKeywords would leave it: the stored terms less the removals, then the adds. */
-function plannedKeywords(stored: readonly string[], { add, remove }: SentKeywords): string[] {
-  const removing = new Set(remove.map(normalizeTerm))
-  return [...stored.filter((term) => !removing.has(normalizeTerm(term))), ...newTerms(stored, add)]
-}
-
-function keywordsRefusal({ add, remove }: SentKeywords, ids: CloseIds): string | undefined {
-  const removing = new Set(remove.map(normalizeTerm))
-  const both = add.find((term) => removing.has(normalizeTerm(term)))
-  if (both !== undefined) return keywordInBothReason(both)
-  const held = firstTermHandle([...add, ...remove], ids)
-  return held === undefined ? undefined : termHandleReason(held.term, held.handle)
 }
 
 function textRefusal(

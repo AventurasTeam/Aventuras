@@ -2,7 +2,7 @@ import { normalizeTerm } from '@/lib/keyword-terms'
 import { matchTerms } from '@/lib/retrieval'
 
 // A hand-edited row may hold anything in its keywords; only strings are terms.
-const termsOf = (keywords: unknown): string[] =>
+export const termsOf = (keywords: unknown): string[] =>
   Array.isArray(keywords) ? keywords.filter((k): k is string => typeof k === 'string') : []
 
 /** Whether the prose names the row by its name or a keyword, whole words as retrieval matches. */

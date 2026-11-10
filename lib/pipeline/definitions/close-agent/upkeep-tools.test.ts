@@ -538,6 +538,22 @@ describe('update_place', () => {
     expect(await runDeltas(f, result.actionId)).toEqual([])
   })
 
+  it('answers ok, not skipped, for a text a later turn wrote and the call restates', async () => {
+    await editEntity(f, QUAY, 'later-turn', { state: { condition: 'Crowded with boats' } })
+
+    const { result, answers, calls } = await runUpkeepCalls(f, WORLD_SHOWN, [
+      {
+        toolName: 'update_place',
+        input: { id: 'l1', condition: 'Crowded with boats ', ...cite() },
+      },
+    ])
+
+    expect(answers).toEqual([{ result: 'ok' }])
+    expect(calls[0]).toMatchObject({ result: 'ok' })
+    expect(calls[0]).not.toHaveProperty('values')
+    expect(await runDeltas(f, result.actionId)).toEqual([])
+  })
+
   // C11: a refused placement drops alone; the condition beside it lands.
   it.each([
     {
@@ -1072,6 +1088,27 @@ describe('set_keywords', () => {
     expect((await storedEntity(f, OLD_TOBIN)).keywords).toEqual(['old tobin', 'the ferryman'])
   })
 
+  it('answers ok, not skipped, for a list a later turn wrote and the call restates', async () => {
+    const { result, answers, calls } = await runUpkeepCalls(f, KEYWORD_SHOWN, [
+      { toolName: 'set_keywords', input: { id: 'c1', add: ['The Ferryman'], ...cite() } },
+    ])
+
+    expect(answers).toEqual([{ result: 'ok' }])
+    expect(calls[0]).toMatchObject({ result: 'ok' })
+    expect(calls[0]).not.toHaveProperty('values')
+    expect(await runDeltas(f, result.actionId)).toEqual([])
+  })
+
+  it('skips a list a later turn wrote before refusing its terms', async () => {
+    const { calls } = await runUpkeepCalls(f, KEYWORD_SHOWN, [
+      { toolName: 'set_keywords', input: { id: 'c1', add: ['c1'], ...cite() } },
+      { toolName: 'set_keywords', input: { id: 'c1', add: ['x'], remove: ['X'], ...cite() } },
+    ])
+
+    expect(calls[0]).toMatchObject({ result: 'skipped', reason: CLOSE_REASON.laterTurn })
+    expect(calls[1]).toMatchObject({ result: 'skipped', reason: CLOSE_REASON.laterTurn })
+  })
+
   it('answers ok writing nothing when every add is held and no removal names a held term', async () => {
     const { result, answers, calls } = await runUpkeepCalls(f, KEYWORD_SHOWN, [
       {
@@ -1108,11 +1145,11 @@ describe('set_keywords', () => {
 
     expect(calls[0]).toMatchObject({
       result: 'rejected',
-      reason: expect.stringContaining('"c1" holds c1, a short id'),
+      reason: expect.stringContaining('the keyword "c1" holds c1, an id'),
     })
     expect(calls[1]).toMatchObject({
       result: 'rejected',
-      reason: expect.stringContaining('"the road from t3" holds t3, a short id'),
+      reason: expect.stringContaining('the keyword "the road from t3" holds t3, an id'),
     })
     expect(await runDeltas(f, result.actionId)).toEqual([])
   })
@@ -1138,13 +1175,15 @@ const TOLL = hap(32)
 const CROSSING = hap(33)
 // Shown, never seeded: a row gone before the call.
 const GONE_HAP = hap(34)
+const SPREAD = hap(35)
 
-// hp1…hp4 in this order.
+// hp1…hp5 in this order.
 const HAPPENING_SHOWN: readonly ShownRow[] = [
   { table: 'happenings', id: FIGHT, name: 'A fight at the inn' },
   { table: 'happenings', id: TOLL, name: 'The new toll' },
   { table: 'happenings', id: CROSSING, name: 'The night crossing' },
   { table: 'happenings', id: GONE_HAP, name: 'A lost rumour' },
+  { table: 'happenings', id: SPREAD, name: 'The harvest news' },
 ]
 
 async function seedHappening(
@@ -1219,6 +1258,8 @@ describe('mark_common_knowledge', () => {
     await editHappening(f, TOLL, 'later-turn', { commonKnowledge: 0 })
     await seedHappening(f, { id: CROSSING, title: 'The night crossing', commonKnowledge: 1 })
     await editHappening(f, CROSSING, 'user', { commonKnowledge: 0 })
+    await seedHappening(f, { id: SPREAD, title: 'The harvest news', commonKnowledge: 0 })
+    await editHappening(f, SPREAD, 'later-turn', { commonKnowledge: 1 })
   })
 
   it('sets 1 through one updateHappening on E, and a repeat answers ok writing nothing', async () => {
@@ -1273,6 +1314,17 @@ describe('mark_common_knowledge', () => {
     expect(calls[0]).toMatchObject({ result: 'skipped', reason: USER_EDITED_SINCE_PROSE })
     expect(await runDeltas(f, result.actionId)).toEqual([])
     expect((await storedHappening(f, CROSSING)).commonKnowledge).toBe(0)
+  })
+
+  it('answers ok, not skipped, for a mark a later turn set to 1', async () => {
+    const { result, answers, calls } = await runUpkeepCalls(f, HAPPENING_SHOWN, [
+      { toolName: 'mark_common_knowledge', input: { id: 'hp5', ...cite() } },
+    ])
+
+    expect(answers).toEqual([{ result: 'ok' }])
+    expect(calls[0]).toMatchObject({ result: 'ok' })
+    expect(calls[0]).not.toHaveProperty('values')
+    expect(await runDeltas(f, result.actionId)).toEqual([])
   })
 
   it('refuses a gone happening as row-gone', async () => {
