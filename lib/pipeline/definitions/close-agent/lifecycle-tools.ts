@@ -1,10 +1,10 @@
-import { and, eq } from 'drizzle-orm'
 import { z } from 'zod'
 
 import { USER_EDITED_SINCE_PROSE } from '@/lib/actions/types'
-import { entities, type Entity } from '@/lib/db'
+import type { Entity } from '@/lib/db'
 import { flagStillHolds } from '@/lib/world'
 
+import { readEntity } from './entity-write'
 import { charactersInSceneAfterTask } from './later-scene'
 import { turnHandleIn, turnInTextReason } from './text-checks'
 import {
@@ -65,15 +65,6 @@ const RETIREMENT_FIELDS = ['status', 'retiredReason'] as const
 // Every column the raise writes, so a restated flag drops the partner value too (C4).
 const FLAG_FIELDS = ['nameCollisionFlag', 'nameCollisionPartnerId', 'nameCollisionReason'] as const
 const PARTNER_PATH = 'nameCollisionPartnerId'
-
-async function readEntity(ctx: WriteContext, id: string): Promise<Entity | undefined> {
-  const [row] = await ctx.db
-    .select()
-    .from(entities)
-    .where(and(eq(entities.branchId, ctx.branchId), eq(entities.id, id)))
-    .limit(1)
-  return row
-}
 
 // A gone row keeps the name the model was shown it by.
 function reportRow(ctx: WriteContext, id: string, row: Entity | undefined): ReportRow {

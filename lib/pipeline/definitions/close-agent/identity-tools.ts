@@ -1,10 +1,9 @@
-import { and, eq } from 'drizzle-orm'
 import { z } from 'zod'
 
-import { entities, type Entity } from '@/lib/db'
+import type { Entity } from '@/lib/db'
 import { CAST_SOFT_CAPS } from '@/lib/wizard'
 
-import { entityWriteAction, fieldVerdicts, storedValue } from './entity-write'
+import { entityWriteAction, fieldVerdicts, readEntity, storedValue } from './entity-write'
 import {
   overSoftCap,
   restatedList,
@@ -146,15 +145,6 @@ function sentFields<A>(args: A, specs: readonly FieldSpec<A>[]): SentField[] {
 function restated(row: Entity, field: SentField): boolean {
   const stored = storedValue(row, field.path)
   return field.kind === 'list' ? restatedList(stored, field.list) : restatedText(stored, field.text)
-}
-
-async function readEntity(ctx: WriteContext, id: string): Promise<Entity | undefined> {
-  const [row] = await ctx.db
-    .select()
-    .from(entities)
-    .where(and(eq(entities.branchId, ctx.branchId), eq(entities.id, id)))
-    .limit(1)
-  return row
 }
 
 /** chapter-close.md → 3b: one entity's fields, as sent, past precedence and the soft caps. */

@@ -1,8 +1,10 @@
+import { and, eq } from 'drizzle-orm'
+
 import { USER_EDITED_SINCE_PROSE, type PipelineAction, type RowVerdicts } from '@/lib/actions/types'
-import { emptyEntityState, type Entity } from '@/lib/db'
+import { emptyEntityState, entities, type Entity } from '@/lib/db'
 import { isJsonObject } from '@/lib/json-object'
 
-import { sameValue, type PlannedAction, type ProtectionReason } from './tool'
+import { sameValue, type PlannedAction, type ProtectionReason, type WriteContext } from './tool'
 import { CLOSE_REASON } from './verdict'
 
 export type FieldVerdict =
@@ -43,6 +45,15 @@ function setAt(target: Record<string, unknown>, path: readonly string[], value: 
 function deleteAt(target: Record<string, unknown>, path: readonly string[]): void {
   const parent = valueAt(target, path.slice(0, -1))
   if (isJsonObject(parent)) delete parent[path[path.length - 1]!]
+}
+
+export async function readEntity(ctx: WriteContext, id: string): Promise<Entity | undefined> {
+  const [row] = await ctx.db
+    .select()
+    .from(entities)
+    .where(and(eq(entities.branchId, ctx.branchId), eq(entities.id, id)))
+    .limit(1)
+  return row
 }
 
 const stateCopyOf = (row: Entity): Record<string, unknown> =>

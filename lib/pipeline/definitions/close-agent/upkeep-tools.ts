@@ -1,10 +1,16 @@
 import { and, eq } from 'drizzle-orm'
 import { z } from 'zod'
 
-import { entities, happenings, type Entity, type Happening } from '@/lib/db'
+import { happenings, type Happening } from '@/lib/db'
 import { dedupeTerms } from '@/lib/keyword-terms'
 
-import { entityWriteAction, fieldVerdicts, storedValue, type StatePath } from './entity-write'
+import {
+  entityWriteAction,
+  fieldVerdicts,
+  readEntity,
+  storedValue,
+  type StatePath,
+} from './entity-write'
 import { restatedText, sentText, type BoundedField, type SentText } from './fields'
 import { keywordsRefusal, plannedKeywords, type SentKeywords } from './keyword-args'
 import { termsOf } from './name-match'
@@ -100,15 +106,6 @@ const NOTHING_SENT =
   'every field is blank or left out: send only the fields you change, each with its whole new value'
 const PARENT_AND_TOP =
   'parent and top are both sent: send a parent to place the place under it, or top: true to mark an unplaced place top level, not both'
-
-async function readEntity(ctx: WriteContext, id: string): Promise<Entity | undefined> {
-  const [row] = await ctx.db
-    .select()
-    .from(entities)
-    .where(and(eq(entities.branchId, ctx.branchId), eq(entities.id, id)))
-    .limit(1)
-  return row
-}
 
 function sentTexts<A>(args: A, specs: readonly TextSpec<A>[]): SentField[] {
   return specs.flatMap((spec) => {
