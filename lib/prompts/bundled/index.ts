@@ -10,6 +10,7 @@ import { CLOSE_INSTRUCTIONS } from './close-instructions'
 import { CLOSE_LORE } from './close-lore'
 import { CLOSE_PROSE } from './close-prose'
 import { CLOSE_THREADS } from './close-threads'
+import { CLOSE_UPKEEP } from './close-upkeep'
 import { ENTITY_STATE, ITEM_LINE } from './entity-state'
 import { MEMORY_BLOCKS } from './memory-blocks'
 import { NARRATOR_INSTRUCTIONS } from './narrator-instructions'
@@ -79,6 +80,7 @@ export const bundledPack: Pack = {
     [TEMPLATE_IDS.closeLore]: template(TEMPLATE_IDS.closeLore, CLOSE_LORE),
     [TEMPLATE_IDS.closeIdentity]: template(TEMPLATE_IDS.closeIdentity, CLOSE_IDENTITY),
     [TEMPLATE_IDS.closeThreads]: template(TEMPLATE_IDS.closeThreads, CLOSE_THREADS),
+    [TEMPLATE_IDS.closeUpkeep]: template(TEMPLATE_IDS.closeUpkeep, CLOSE_UPKEEP),
     [TEMPLATE_IDS.wizardOpening]: wizardTemplate(TEMPLATE_IDS.wizardOpening, WIZARD_OPENING),
     [TEMPLATE_IDS.wizardOpeningRefine]: wizardTemplate(
       TEMPLATE_IDS.wizardOpeningRefine,

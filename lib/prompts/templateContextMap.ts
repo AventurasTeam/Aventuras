@@ -679,6 +679,22 @@ export const VARIABLES: Record<ContextGroup, VariableDef[]> = {
         "The Lore task's limits: the lore rows one close may create (`creates`), how many it still may, earlier parts counted (`left`), and the characters a new row's body may hold, which is also the most an update may grow a body by (`bodyChars`). Only a close task's render sets it.",
       required: false,
     },
+    {
+      name: 'closeUpkeepRows',
+      type: "{ id: string; kind: 'character' | 'location' | 'item' | 'faction'; name: string; status: 'active' | 'staged'; description: string; keywords: string[]; condition: string; placement: string; inScene: boolean }[]",
+      category: 'Entities',
+      description:
+        "The Upkeep task's starting rows: the entities not retired that the task's turns name by name or keyword while their scene was elsewhere (`inScene` false), then the places and items in those turns' scene with no keywords or a blank description (`inScene` true), each set by name. `id` is the short id (c1, l1, i1, f1…); the fields are as stored, a full id in them as its short id, a missing text an empty string. `description` and `condition` are a place's or an item's, `placement` a place's (`under <name> (<id>)`, `top level` or `unplaced`); another kind leaves them empty. Only a close task's render sets it.",
+      required: false,
+    },
+    {
+      name: 'closeUpkeepHappenings',
+      type: '{ id: string; title: string }[]',
+      category: 'Plot',
+      description:
+        "The Upkeep task's starting happenings: those set at one of the task's turns or made from one, not yet common knowledge, by title. `id` is the short id (hp1, hp2…). Only a close task's render sets it.",
+      required: false,
+    },
   ],
   staticContent: [],
 }
@@ -693,6 +709,8 @@ export const CLOSE_ONLY_CHAPTER_VARIABLES = [
   'closeSoftCaps',
   'closeLore',
   'closeLoreLimits',
+  'closeUpkeepRows',
+  'closeUpkeepHappenings',
 ] as const
 
 /** The `chapter` variable only the merge of a chapter closed in parts sets. */
@@ -711,6 +729,7 @@ export const TEMPLATE_GROUPS: Record<string, ContextGroup> & Record<TemplateId, 
   [TEMPLATE_IDS.closeLore]: 'chapter',
   [TEMPLATE_IDS.closeIdentity]: 'chapter',
   [TEMPLATE_IDS.closeThreads]: 'chapter',
+  [TEMPLATE_IDS.closeUpkeep]: 'chapter',
   [TEMPLATE_IDS.wizardOpening]: 'wizard',
   [TEMPLATE_IDS.wizardOpeningRefine]: 'wizard',
   [TEMPLATE_IDS.wizardTitleChips]: 'wizard',
@@ -759,8 +778,9 @@ export const DISPLAY_GROUPS: Record<string, string[]> = {
     'relationships',
     'closeCharacters',
     'closeFactions',
+    'closeUpkeepRows',
   ],
-  Plot: ['happenings', 'threads', 'closeThreads'],
+  Plot: ['happenings', 'threads', 'closeThreads', 'closeUpkeepHappenings'],
   Retrieval: [
     'retrievedEntities',
     'retrievedLore',

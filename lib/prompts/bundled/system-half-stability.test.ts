@@ -34,6 +34,7 @@ const CLOSE_TASK_TEMPLATES: readonly TemplateId[] = [
   TEMPLATE_IDS.closeLore,
   TEMPLATE_IDS.closeIdentity,
   TEMPLATE_IDS.closeThreads,
+  TEMPLATE_IDS.closeUpkeep,
 ]
 const CLOSE_SYSTEM_VARIABLES: readonly string[] = ['closeTurns']
 
@@ -418,6 +419,8 @@ describe('bundled system halves read only what the story fixes', () => {
       'closeLoreLimits',
       'closeSoftCaps',
       'closeThreads',
+      'closeUpkeepHappenings',
+      'closeUpkeepRows',
       'closeWritesSoFar',
       'entries',
     ])
@@ -429,6 +432,8 @@ describe('bundled system halves read only what the story fixes', () => {
       'closeSoftCaps',
       'closeThreads',
       'closeTurns',
+      'closeUpkeepHappenings',
+      'closeUpkeepRows',
       'closeWritesSoFar',
       'entries',
     ])
@@ -443,6 +448,7 @@ describe('bundled system halves read only what the story fixes', () => {
       TEMPLATE_IDS.closeLore,
       TEMPLATE_IDS.closeIdentity,
       TEMPLATE_IDS.closeThreads,
+      TEMPLATE_IDS.closeUpkeep,
     ])
     expect([...holding].sort()).toEqual([...CLOSE_TASK_TEMPLATES].sort())
   })
@@ -566,6 +572,34 @@ describe("a close's task templates share one system half", () => {
         },
       ],
       closeWritesSoFar: '- update_character Kael (c1): state.traits',
+    },
+    [TEMPLATE_IDS.closeUpkeep]: {
+      closeUpkeepRows: [
+        {
+          id: 'l1',
+          kind: 'location',
+          name: 'The Drowned Keep',
+          status: 'active',
+          description: 'Half sunk into the marsh.',
+          keywords: ['the keep'],
+          condition: '',
+          placement: 'top level',
+          inScene: false,
+        },
+        {
+          id: 'i1',
+          kind: 'item',
+          name: 'a rusted lantern',
+          status: 'active',
+          description: '',
+          keywords: [],
+          condition: 'Green with age.',
+          placement: '',
+          inScene: true,
+        },
+      ],
+      closeUpkeepHappenings: [{ id: 'hp1', title: 'The siege' }],
+      closeWritesSoFar: '- update_thread Find the heir (th1): description',
     },
   }
 
