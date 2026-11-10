@@ -3,6 +3,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 
 import { applyDeltaAction } from '@/lib/actions/delta/apply-delta-action'
 import { keywordUserAddedReason } from '@/lib/actions/delta/keyword-authors'
+import { readRowGuard } from '@/lib/actions/delta/row-guard'
 import { USER_EDITED_SINCE_PROSE, type GroupOutcome, type GuardRow } from '@/lib/actions/types'
 import { clampEmbeddedText } from '@/lib/classifier'
 import { branches, deltas, lore, type Lore } from '@/lib/db'
@@ -10,12 +11,12 @@ import { resetAllStores } from '@/lib/stores'
 
 import { createReadSet } from './common-checks'
 import { dispatchToolCall, type DispatchContext } from './dispatch'
-import type { CloseIds } from './ids'
+import { CloseIds } from './ids'
 import { CloseLedgerWriter } from './ledger'
 import { createLoreTool, LORE_BODY_LIMIT, updateLoreTool } from './lore-tools'
 import { readRowTool } from './read-tools'
 import { turnInTextReason } from './text-checks'
-import { assertReplaySafe, type CloseTool, type ReadFields } from './tool'
+import { assertReplaySafe, type CloseTool, type ReadFields, type WriteContext } from './tool'
 import { CLOSE_REASON } from './verdict'
 import { expectRan } from '../../__tests__/harness'
 import { definePipeline } from '../../authoring/define'
@@ -843,6 +844,15 @@ describe('update_lore', () => {
     })
   })
 
+  it('cuts a category at 120 characters, as a title is cut', async () => {
+    const run = await dispatchScripted(f, [read, update({ category: 'k'.repeat(121) })], {
+      shown: SHOWN,
+    })
+
+    expect(run.answers[1]).toEqual({ result: 'ok' })
+    expect((await storedLore(f, TOLL)).category).toBe('k'.repeat(120))
+  })
+
   it('adds and removes keywords beside a text field, one action each in one group', async () => {
     const run = await dispatchScripted(
       f,
@@ -1080,6 +1090,45 @@ describe('update_lore', () => {
     expect(run.answers[2]).toEqual({ result: 'ok', id: 'lo2' })
     const gate = (await loreRows(f)).find(({ title }) => title === 'The Toll Gate')
     expect(gate?.body).toBe('Unlike The Midnight Toll, it bars the crossing.')
+  })
+
+  it('anchors both actions on the latest cited turn, not E', async () => {
+    // t5, before E (t7): a user edit between the two is the user's after the prose.
+    const t5 = f.entries[4]!.id
+    const ctx: WriteContext = {
+      db: f.ctx.db,
+      branchId: f.branchId,
+      endEntryId: endEntryId(f),
+      task: 'lore',
+      part: 1,
+      ids: new CloseIds(),
+      readFields: LORE_FIELDS,
+      survivorOf: () => undefined,
+      landedCalls: () => 0,
+      turns: [t5],
+      proseEntryId: t5,
+      guard: (rows) =>
+        readRowGuard(
+          { branchId: f.branchId, endEntryId: endEntryId(f), proseEntryId: t5, rows },
+          f.ctx,
+        ),
+      actionId: 'act_close_plan',
+    }
+
+    const plan = await updateLoreTool.plan(
+      {
+        id: TOLL,
+        body: 'The toll doubles after dark.',
+        keywords: { add: ['ferry'] },
+        ...cite(['t5']),
+      },
+      ctx,
+    )
+
+    expect(plan.kind === 'write' && plan.actions.map(({ action }) => action.payload)).toEqual([
+      expect.objectContaining({ proseEntryId: t5 }),
+      expect.objectContaining({ proseEntryId: t5 }),
+    ])
   })
 
   it('refuses a row gone since it was read, keeping the proposed text', async () => {
