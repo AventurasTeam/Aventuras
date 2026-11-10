@@ -70,7 +70,7 @@ import {
   setCloseParts,
   setCloseRange,
 } from '../close-intermediates'
-import type { CloseLedger } from '../intermediates'
+import type { CloseLedger, CloseRange } from '../intermediates'
 
 vi.mock('@/lib/ai', async (importOriginal) => ({
   ...(await importOriginal<Record<string, unknown>>()),
@@ -1136,6 +1136,33 @@ describe('runCloseTask', () => {
   })
 })
 
+// The agent phase over `range` in `fixture`; `cuts: null` parks no parts, as a run whose metadata
+// phase never ran.
+function closePhaseContext(
+  fixture: CloseFixture,
+  opts: {
+    actionId: string
+    range: CloseRange
+    cuts: readonly ChapterPartCut[] | null
+    abortSignal?: AbortSignal
+  },
+): PhaseContext {
+  const { actionId, range, cuts, abortSignal = new AbortController().signal } = opts
+  const intermediates: Record<string, unknown> = {}
+  setCloseRange(intermediates, range)
+  if (cuts !== null) setCloseParts(intermediates, cuts)
+  return {
+    actionId,
+    abortSignal,
+    intermediates,
+    log: makeLogger(actionId),
+    db: fixture.ctx.db,
+    runInTransaction: fixture.ctx.runInTransaction,
+    storyId: fixture.storyId,
+    branchId: fixture.branchId,
+  }
+}
+
 // Stands in for the orchestrator over a whole phase: each group lands in `fixture` and its outcome
 // goes back, so a landed create counts toward a cap as it does in a close.
 async function drainApplying(
@@ -1196,25 +1223,17 @@ describe('closeAgentPhase', () => {
     { part: 2, startEntryId: chapterIds()[4]!, endEntryId: chapterIds()[6]!, tokens: 0 },
   ]
 
-  // `cuts: null` parks no parts, as a run whose metadata phase never ran.
   function phaseCtx(cuts: readonly ChapterPartCut[] | null = onePart()): PhaseContext {
-    const intermediates: Record<string, unknown> = {}
-    setCloseRange(intermediates, {
-      chapterId: 'chap_slots',
-      startEntryId: fixture.entries[0]!.id,
-      endEntryId: fixture.replyIds[2]!,
-    })
-    if (cuts !== null) setCloseParts(intermediates, cuts)
-    return {
+    return closePhaseContext(fixture, {
       actionId: 'act_slots',
+      range: {
+        chapterId: 'chap_slots',
+        startEntryId: fixture.entries[0]!.id,
+        endEntryId: fixture.replyIds[2]!,
+      },
+      cuts,
       abortSignal: abort.signal,
-      intermediates,
-      log: makeLogger('act_slots'),
-      db: fixture.ctx.db,
-      runInTransaction: fixture.ctx.runInTransaction,
-      storyId: fixture.storyId,
-      branchId: fixture.branchId,
-    }
+    })
   }
 
   // With a log, each close_task_start lands in it as it is yielded, among the tasks' own entries.
@@ -1820,27 +1839,19 @@ describe('closeAgentPhase over three parts', () => {
 
   // Three parts: t1–t5, t6–t12 and t13–t17.
   function partsCtx(): PhaseContext {
-    const intermediates: Record<string, unknown> = {}
-    setCloseRange(intermediates, {
-      chapterId: 'chap_parts',
-      startEntryId: f.entries[0]!.id,
-      endEntryId: f.entries[16]!.id,
-    })
-    setCloseParts(intermediates, [
-      { part: 1, startEntryId: f.entries[0]!.id, endEntryId: f.entries[4]!.id, tokens: 0 },
-      { part: 2, startEntryId: f.entries[5]!.id, endEntryId: f.entries[11]!.id, tokens: 0 },
-      { part: 3, startEntryId: f.entries[12]!.id, endEntryId: f.entries[16]!.id, tokens: 0 },
-    ])
-    return {
+    return closePhaseContext(f, {
       actionId: ACTION_ID,
-      abortSignal: new AbortController().signal,
-      intermediates,
-      log: makeLogger(ACTION_ID),
-      db: f.ctx.db,
-      runInTransaction: f.ctx.runInTransaction,
-      storyId: f.storyId,
-      branchId: f.branchId,
-    }
+      range: {
+        chapterId: 'chap_parts',
+        startEntryId: f.entries[0]!.id,
+        endEntryId: f.entries[16]!.id,
+      },
+      cuts: [
+        { part: 1, startEntryId: f.entries[0]!.id, endEntryId: f.entries[4]!.id, tokens: 0 },
+        { part: 2, startEntryId: f.entries[5]!.id, endEntryId: f.entries[11]!.id, tokens: 0 },
+        { part: 3, startEntryId: f.entries[12]!.id, endEntryId: f.entries[16]!.id, tokens: 0 },
+      ],
+    })
   }
 
   const sentPrompt = (call: number) => vi.mocked(generateToolStep).mock.calls[call]![1].prompt
@@ -2072,32 +2083,17 @@ describe('closeAgentPhase over parts, with the real tasks', () => {
   // The opening to the third reply (positions 1-7, t1-t7), cut at range indexes, first to last.
   function partsPhase(bounds: readonly (readonly [number, number])[]): PhaseContext {
     const range = fx.entries.slice(0, 7)
-    const intermediates: Record<string, unknown> = {}
-    setCloseRange(intermediates, {
-      chapterId: 'chap_parts',
-      startEntryId: range[0]!.id,
-      endEntryId: range[6]!.id,
-    })
-    // The agent loop reads a cut's ids; its token count is the metadata phase's.
-    setCloseParts(
-      intermediates,
-      bounds.map(([first, last], index) => ({
+    return closePhaseContext(fx, {
+      actionId: 'act_parts',
+      range: { chapterId: 'chap_parts', startEntryId: range[0]!.id, endEntryId: range[6]!.id },
+      // The agent loop reads a cut's ids; its token count is the metadata phase's.
+      cuts: bounds.map(([first, last], index) => ({
         part: index + 1,
         startEntryId: range[first]!.id,
         endEntryId: range[last]!.id,
         tokens: 0,
       })),
-    )
-    return {
-      actionId: 'act_parts',
-      abortSignal: new AbortController().signal,
-      intermediates,
-      log: makeLogger('act_parts'),
-      db: fx.ctx.db,
-      runInTransaction: fx.ctx.runInTransaction,
-      storyId: fx.storyId,
-      branchId: fx.branchId,
-    }
+    })
   }
 
   const createLore = (
