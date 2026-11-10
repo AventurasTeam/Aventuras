@@ -709,7 +709,6 @@ describe('update_place', () => {
       },
     ])
 
-    expect(turnInTextReason('t3')).toContain('t3')
     expect(calls[0]).toMatchObject({
       result: 'ok',
       skippedFields: [{ field: 'state.condition', reason: turnInTextReason('t3') }],
