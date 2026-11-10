@@ -189,7 +189,7 @@ export async function* requestChapterMetadata(
     )
     const call = yield* structuredCall(ctx, prompt, chapterPartSummarySchema, modelConfig)
     if (call.status !== 'ok') return call
-    partSummaries.push(normalizeChapterPartSummary(call.value).summary)
+    partSummaries.push(normalizeChapterPartSummary(call.value))
   }
   if (ctx.abortSignal.aborted) return { status: 'aborted' }
   const prompt = renderTemplate(
