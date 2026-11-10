@@ -580,7 +580,7 @@ export const VARIABLES: Record<ContextGroup, VariableDef[]> = {
       type: 'Entry[]',
       category: 'Story',
       description:
-        "The chapter being closed, whole: its entries in order from the open region's first through the chosen end, the opening included in a story's first chapter, system entries excluded. A part's summary call of a chapter closed in parts holds that part's entries instead. Each item carries `position`, `kind` ('user_action', 'ai_reply' or 'opening') and `content`, the prose with no trailing blocks; a `user_action` is the user's turn, which the bundled templates mark (macro_story_entry). Never cut to a budget.",
+        "The chapter being closed, whole: its entries in order from the open region's first through the chosen end, the opening included in a story's first chapter, system entries excluded. A part's summary call of a chapter closed in parts holds that part's entries instead, and the merge after them has none: it reads `partSummaries`. Each item carries `position`, `kind` ('user_action', 'ai_reply' or 'opening') and `content`, the prose with no trailing blocks; a `user_action` is the user's turn, which the bundled templates mark (macro_story_entry). Never cut to a budget.",
       required: true,
     },
     {
@@ -604,7 +604,7 @@ export const VARIABLES: Record<ContextGroup, VariableDef[]> = {
       type: "'adventure' | 'creative'",
       category: 'Story Config',
       description:
-        "The story's mode, which decides what a user's turn establishes: an adventure's is the lead's attempt, a creative story's a direction or prose.",
+        "The story's mode, which decides what a user's turn establishes: an adventure's is the lead's attempt, a creative story's a direction or prose. The merge of a chapter closed in parts has none: it reads `partSummaries`, not turns.",
       required: true,
     },
     {
