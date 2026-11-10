@@ -698,7 +698,9 @@ None open: Implementation notes record each answer.
   with an entry holding one; a thread's `title` or `description`; and
   `retire_entity`'s `why`, stored as `retiredReason`. A keyword term the
   close adds holding any handle it knows is refused the same way; a
-  removal stores nothing, so its terms aren't checked. Another
+  removal stores nothing, so its terms aren't checked (the slice
+  review's narrowing to added terms, ratified by the developer,
+  2026-11-10). Another
   tool's `why`, shown only in the review, keeps handles as written. The
   shared close instructions state the rule. A stored `t3` names another
   turn in a later prompt, and nothing correct can replace it.
