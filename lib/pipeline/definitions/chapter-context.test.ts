@@ -11,9 +11,17 @@ import {
   VARIABLES,
 } from '@/lib/prompts'
 import { renderWith } from '@/lib/prompts/engine'
-import { CLOSE_ONLY_CHAPTER_VARIABLES } from '@/lib/prompts/templateContextMap'
+import {
+  CLOSE_ONLY_CHAPTER_VARIABLES,
+  MERGE_ONLY_CHAPTER_VARIABLES,
+} from '@/lib/prompts/templateContextMap'
 
-import { buildChapterContext, buildCloseTurns, type CloseRangeEntry } from './chapter-context'
+import {
+  buildChapterContext,
+  buildChapterMergeContext,
+  buildCloseTurns,
+  type CloseRangeEntry,
+} from './chapter-context'
 
 function entry(position: number, kind: CloseRangeEntry['kind'], content: string): CloseRangeEntry {
   return {
@@ -57,10 +65,14 @@ const THREADS = [
 
 const SUMMARY = 'Kael left the keep at dawn with the stolen sigil.'
 
-// The close-only variables are a close task's to set; the metadata call reads the rest.
-const closeOnly: readonly string[] = CLOSE_ONLY_CHAPTER_VARIABLES
+// The close-only variables are a close task's to set and the merge-only ones the merge's; the
+// whole-chapter and part calls read the rest.
+const notMetadata: readonly string[] = [
+  ...CLOSE_ONLY_CHAPTER_VARIABLES,
+  ...MERGE_ONLY_CHAPTER_VARIABLES,
+]
 const metadataVariables = (): string[] =>
-  VARIABLES.chapter.map((v) => v.name).filter((name) => !closeOnly.includes(name))
+  VARIABLES.chapter.map((v) => v.name).filter((name) => !notMetadata.includes(name))
 
 // Each mode's paragraph on reading a user's turn (ui/principles.md → Mode), as the system says it.
 const ADVENTURE_TURN_RULE = 'Each is what the lead does, says or attempts'
@@ -77,14 +89,15 @@ describe('buildChapterContext', () => {
     expect(Object.keys(context).sort()).toEqual(metadataVariables().sort())
   })
 
-  it('is what the metadata template reads, and all of it', () => {
-    expect([...templateReads(TEMPLATE_IDS.chapterMetadata)].sort()).toEqual(
-      metadataVariables().sort(),
-    )
-  })
+  it.each([TEMPLATE_IDS.chapterMetadata, TEMPLATE_IDS.chapterMetadataPart])(
+    'is what %s reads, and all of it',
+    (templateId) => {
+      expect([...templateReads(templateId)].sort()).toEqual(metadataVariables().sort())
+    },
+  )
 
   // Only a close task's render sets these; the metadata call's context leaves every one unset.
-  it('sets none of the close-only variables', () => {
+  it('sets none of the close-only or merge-only variables', () => {
     const context: Record<string, unknown> = buildChapterContext({
       entries: ENTRIES,
       previousChapterSummary: SUMMARY,
@@ -93,6 +106,7 @@ describe('buildChapterContext', () => {
     })
     expect(CLOSE_ONLY_CHAPTER_VARIABLES).toContain('closeCharacters')
     expect(CLOSE_ONLY_CHAPTER_VARIABLES.filter((name) => Object.hasOwn(context, name))).toEqual([])
+    expect(MERGE_ONLY_CHAPTER_VARIABLES.filter((name) => Object.hasOwn(context, name))).toEqual([])
   })
 
   // A row written before the write-path strip still carries its trailing block, and an entry id
@@ -209,7 +223,12 @@ describe('buildChapterContext', () => {
     )
     expect(user).not.toContain('# The previous chapter')
     expect(user).not.toContain('# Open threads')
-    expect(user.startsWith('# The chapter\n')).toBe(true)
+    // The opener is the mock's marker for this call (scripts/mock-llm/shapes.ts → markerOf).
+    expect(
+      user.startsWith(
+        'Give this chapter its title, summary, theme and keywords.\n\n# The chapter\n',
+      ),
+    ).toBe(true)
   })
 
   // A creative prose turn is part of the story; an adventure's speech stands unless contradicted.
@@ -254,6 +273,99 @@ describe('buildChapterContext', () => {
     expect(adventure.system).toContain('outside quoted speech, its "I" is the lead')
     expect(adventure.system).not.toContain(CREATIVE_TURN_RULE)
     expect(adventure.user).toContain('<user_turn>\nI tell Mora the heir is dead.\n</user_turn>')
+  })
+})
+
+describe("a chapter in parts: a part's call and the merge", () => {
+  const PART_SUMMARIES = [
+    'You wade into the black water with the sigil held high.',
+    'On the far bank Mora raises a shuttered lantern.',
+  ]
+
+  it("renders a part's entries, the one before it and the open threads in the user half alone", () => {
+    const { system, user } = renderTemplate(
+      TEMPLATE_IDS.chapterMetadataPart,
+      buildChapterContext({
+        entries: ENTRIES,
+        previousChapterSummary: SUMMARY,
+        threads: THREADS,
+        mode: 'creative',
+      }),
+    )
+    expect(
+      user.startsWith(
+        `Summarize this part of the chapter.\n\n# The previous chapter\n${SUMMARY}\n\n# Open threads\n`,
+      ),
+    ).toBe(true)
+    expect(user).toContain('# This part of the chapter\n\nThe marsh road ended at a wall')
+    expect(user).toContain('<user_turn>\nI wade in, holding the sigil above my head.\n</user_turn>')
+    expect(user).not.toContain('<state>')
+    expect(user).not.toContain('The lost map')
+    expect(system).toContain(CREATIVE_TURN_RULE)
+    expect(system).toContain('Summarize this part alone')
+    expect(system).toContain('Name a thread in the summary only when this part moves it')
+    expect(system).not.toContain(SUMMARY)
+    expect(system).not.toContain('Find the heir')
+  })
+
+  it('emits exactly what the merge template reads: the summaries, the prior summary and the threads', () => {
+    const context = buildChapterMergeContext({
+      partSummaries: PART_SUMMARIES,
+      previousChapterSummary: null,
+      threads: [],
+    })
+    expect(Object.keys(context).sort()).toEqual([
+      'partSummaries',
+      'previousChapterSummary',
+      'threads',
+    ])
+    expect([...templateReads(TEMPLATE_IDS.chapterMetadataMerge)].sort()).toEqual([
+      'partSummaries',
+      'previousChapterSummary',
+      'threads',
+    ])
+  })
+
+  it('keeps the pending and active threads for the merge, each title on one line', () => {
+    expect(
+      buildChapterMergeContext({
+        partSummaries: PART_SUMMARIES,
+        previousChapterSummary: SUMMARY,
+        threads: THREADS,
+      }),
+    ).toEqual({
+      partSummaries: PART_SUMMARIES,
+      previousChapterSummary: SUMMARY,
+      threads: [
+        { title: 'Find the heir', status: 'active' },
+        { title: 'The debt to the guild', status: 'pending' },
+      ],
+    })
+  })
+
+  it('renders the summaries in order, the one before them and the open threads in the user half alone', () => {
+    const { system, user } = renderTemplate(
+      TEMPLATE_IDS.chapterMetadataMerge,
+      buildChapterMergeContext({
+        partSummaries: PART_SUMMARIES,
+        previousChapterSummary: SUMMARY,
+        threads: THREADS,
+      }),
+    )
+    expect(
+      user.startsWith(
+        `Give the chapter its title, summary, theme and keywords from the summaries of its parts.\n\n# The previous chapter\n${SUMMARY}\n\n`,
+      ),
+    ).toBe(true)
+    expect(user).toContain('- Find the heir (active)\n- The debt to the guild (pending)')
+    expect(user).toContain(
+      `# The chapter's parts\n\n## Part 1\n${PART_SUMMARIES[0]}\n\n## Part 2\n${PART_SUMMARIES[1]}`,
+    )
+    expect(system).toContain('- Title. A few words naming the chapter')
+    expect(system).toContain('Two to four sentences telling what happened across the whole chapter')
+    expect(system).not.toContain(PART_SUMMARIES[0])
+    expect(system).not.toContain(SUMMARY)
+    expect(system).not.toContain('<user_turn>')
   })
 })
 

@@ -104,9 +104,10 @@ export async function* closeMetadataPhase(
     }
   const window = closeWindowTokens(inputs.modelConfig)
   if (!window.ok) return { status: 'failed', error: window.error }
-  setCloseParts(ctx.intermediates, cutChapterParts(series, window.tokens))
+  const parts = cutChapterParts(series, window.tokens)
+  setCloseParts(ctx.intermediates, parts)
 
-  const call = yield* requestChapterMetadata(ctx, range, inputs)
+  const call = yield* requestChapterMetadata(ctx, range, parts, inputs)
   if (call.status === 'aborted') return { status: 'aborted' }
   if (call.status === 'failed') return { status: 'failed', error: call.error }
 

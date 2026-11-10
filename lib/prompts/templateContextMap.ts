@@ -573,14 +573,15 @@ export const VARIABLES: Record<ContextGroup, VariableDef[]> = {
     },
   ],
   // buildChapterContext emits all but CLOSE_ONLY_CHAPTER_VARIABLES, which a close task's render
-  // sets; chapter-context.test.ts pins both.
+  // sets, and MERGE_ONLY_CHAPTER_VARIABLES, which buildChapterMergeContext sets beside the prior
+  // summary and the threads; chapter-context.test.ts pins all three.
   chapter: [
     {
       name: 'entries',
       type: 'Entry[]',
       category: 'Story',
       description:
-        "The chapter being closed, whole: its entries in order from the open region's first through the chosen end, the opening included in a story's first chapter, system entries excluded. Each item carries `position`, `kind` ('user_action', 'ai_reply' or 'opening') and `content`, the prose with no trailing blocks; a `user_action` is the user's turn, which the bundled templates mark (macro_story_entry). Never cut to a budget.",
+        "The chapter being closed, whole: its entries in order from the open region's first through the chosen end, the opening included in a story's first chapter, system entries excluded. A part's summary call of a chapter closed in parts holds that part's entries instead. Each item carries `position`, `kind` ('user_action', 'ai_reply' or 'opening') and `content`, the prose with no trailing blocks; a `user_action` is the user's turn, which the bundled templates mark (macro_story_entry). Never cut to a budget.",
       required: true,
     },
     {
@@ -606,6 +607,14 @@ export const VARIABLES: Record<ContextGroup, VariableDef[]> = {
       description:
         "The story's mode, which decides what a user's turn establishes: an adventure's is the lead's attempt, a creative story's a direction or prose.",
       required: true,
+    },
+    {
+      name: 'partSummaries',
+      type: 'string[]',
+      category: 'Story',
+      description:
+        "A chapter closed in parts: each part's summary, in the chapter's order, for the last metadata call to name and summarize the whole chapter from. Only that call sets it.",
+      required: false,
     },
     {
       name: 'closeTurns',
@@ -669,6 +678,9 @@ export const CLOSE_ONLY_CHAPTER_VARIABLES = [
   'closeSoftCaps',
 ] as const
 
+/** The `chapter` variable only the merge of a chapter closed in parts sets. */
+export const MERGE_ONLY_CHAPTER_VARIABLES = ['partSummaries'] as const
+
 // Intersection keeps the string index (validateRegistry probes arbitrary ids)
 // while requiring every TemplateId to be mapped — a missing one fails to compile.
 export const TEMPLATE_GROUPS: Record<string, ContextGroup> & Record<TemplateId, ContextGroup> = {
@@ -677,6 +689,8 @@ export const TEMPLATE_GROUPS: Record<string, ContextGroup> & Record<TemplateId, 
   [TEMPLATE_IDS.periodicClassifier]: 'classifierContext',
   [TEMPLATE_IDS.suggestionRefresh]: 'generationContext',
   [TEMPLATE_IDS.chapterMetadata]: 'chapter',
+  [TEMPLATE_IDS.chapterMetadataPart]: 'chapter',
+  [TEMPLATE_IDS.chapterMetadataMerge]: 'chapter',
   [TEMPLATE_IDS.closeIdentity]: 'chapter',
   [TEMPLATE_IDS.closeThreads]: 'chapter',
   [TEMPLATE_IDS.wizardOpening]: 'wizard',
@@ -702,6 +716,7 @@ export const DISPLAY_GROUPS: Record<string, string[]> = {
     'lastTurns',
     'turns',
     'previousChapterSummary',
+    'partSummaries',
     'closeTurns',
     'closeWritesSoFar',
   ],

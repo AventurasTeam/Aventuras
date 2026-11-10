@@ -37,6 +37,8 @@ describe('bundled pack', () => {
     periodicClassifier: 'classifierContext',
     suggestionRefresh: 'generationContext',
     chapterMetadata: 'chapter',
+    chapterMetadataPart: 'chapter',
+    chapterMetadataMerge: 'chapter',
     closeIdentity: 'chapter',
     closeThreads: 'chapter',
     wizardOpening: 'wizard',

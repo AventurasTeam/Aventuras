@@ -254,7 +254,12 @@ describe('closeMetadataPhase', () => {
 
     expect(result).toEqual({ status: 'completed' })
     expect(readInputsMock).toHaveBeenCalledWith(ctx)
-    expect(requestMock).toHaveBeenCalledWith(ctx, RANGE, inputs)
+    expect(requestMock).toHaveBeenCalledWith(
+      ctx,
+      RANGE,
+      [{ part: 1, startEntryId: 'e1', endEntryId: 'e7', tokens: 154 }],
+      inputs,
+    )
     expect(events).toEqual([
       {
         type: 'delta_group_emitted',
@@ -536,6 +541,8 @@ describe('closeMetadataPhase', () => {
       expect(result).toEqual({ status: 'completed' })
       expect(closePartsOf(ctx.intermediates)).toEqual(FOUR_PARTS)
       expect(atCall).toEqual(FOUR_PARTS)
+      // The call cuts its part calls by the very parts the agent will read.
+      expect(requestMock.mock.calls[0]![2]).toBe(closePartsOf(ctx.intermediates))
     })
 
     it("cuts by a story override's model, whatever the profile's model holds", async () => {

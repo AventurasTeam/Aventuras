@@ -41,7 +41,11 @@ export {
   SUGGESTIONS_UNUSABLE,
   type SuggestionRefreshInput,
 } from './definitions/suggestion-refresh'
-export { chapterMetadataSchema, type ChapterMetadata } from './definitions/chapter-metadata-schema'
+export {
+  chapterMetadataSchema,
+  chapterPartSummarySchema,
+  type ChapterMetadata,
+} from './definitions/chapter-metadata-schema'
 export { __resetRegistry, getPipeline, registerPipeline } from './authoring/registry'
 export { __resetBus, pipelineEventBus } from './runtime/event-bus'
 export { emitDeltaGroup } from './runtime/emit-group'

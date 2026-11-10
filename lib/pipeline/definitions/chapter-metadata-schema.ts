@@ -18,6 +18,13 @@ export const chapterMetadataSchema = z.object({
 
 export type ChapterMetadata = z.infer<typeof chapterMetadataSchema>
 
+/** chapter-close.md → Phase 2, a chapter in parts: one part's call's reply. */
+export const chapterPartSummarySchema = z.object({
+  summary: nonBlank.describe(
+    'Three to five sentences telling what happened in this part of the chapter.',
+  ),
+})
+
 /** The most browse keywords a chapter keeps (chapter-close.md → Phase 2). */
 export const CHAPTER_KEYWORDS_MAX = 8
 
@@ -34,4 +41,11 @@ export function normalizeChapterMetadata(reply: ChapterMetadata): NormalizedChap
     theme: reply.theme.trim(),
     keywords: dedupeTerms(reply.keywords).slice(0, CHAPTER_KEYWORDS_MAX),
   } as NormalizedChapterMetadata
+}
+
+/** A part's reply fit for the merge: the summary trimmed. */
+export function normalizeChapterPartSummary(value: z.output<typeof chapterPartSummarySchema>): {
+  summary: string
+} {
+  return { summary: value.summary.trim() }
 }

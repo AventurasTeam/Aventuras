@@ -10,6 +10,8 @@ export const TEMPLATE_IDS = {
   periodicClassifier: 'tmpl_periodic_classifier',
   suggestionRefresh: 'tmpl_suggestion_refresh',
   chapterMetadata: 'tmpl_chapter_metadata',
+  chapterMetadataPart: 'tmpl_chapter_metadata_part',
+  chapterMetadataMerge: 'tmpl_chapter_metadata_merge',
   closeIdentity: 'tmpl_close_identity',
   closeThreads: 'tmpl_close_threads',
   wizardOpening: 'tmpl_wizard_opening',
