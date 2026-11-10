@@ -12,6 +12,7 @@ import { charactersInSceneAfterTask } from './later-scene'
 import { flagDuplicateTool, retireEntityTool } from './lifecycle-tools'
 import { namedInProse } from './name-match'
 import { readRowTool, refsIn, searchWorldTool } from './read-tools'
+import { strings } from './row-values'
 import type { CloseTaskDef, TaskPromptContext, TaskStart } from './task'
 import type { ReadFields } from './tool'
 import { hasTurns, readTaskTurns, renderClosePrompt, storyModeOf, type CloseTurns } from './turns'
@@ -66,9 +67,6 @@ const GONE_PARTNER = 'a row that no longer exists'
 const isLifecycleRow = (row: Entity): row is LifecycleEntity => row.kind !== 'location'
 // Scene data holds characters and items, never factions (data-model.md → Entry metadata shape).
 const sceneTagged = (row: LifecycleEntity): boolean => row.kind !== 'faction'
-// A hand-edited row may hold anything in a JSON column; only strings are ids.
-const strings = (value: unknown): string[] =>
-  Array.isArray(value) ? value.filter((item): item is string => typeof item === 'string') : []
 // A restored row keeps its old reason in storage; the model reads it only on a retired row.
 const shownReason = (row: Entity): string =>
   row.status === 'retired' ? (row.retiredReason ?? '') : ''

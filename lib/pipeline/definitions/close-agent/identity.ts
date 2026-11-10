@@ -10,6 +10,7 @@ import { CAST_SOFT_CAPS } from '@/lib/wizard'
 import { IDENTITY_WRITE_PATHS, updateCharacterTool, updateFactionTool } from './identity-tools'
 import { namedInProse } from './name-match'
 import { readRowTool, refsIn, searchWorldTool } from './read-tools'
+import { strings } from './row-values'
 import type { CloseTaskDef, TaskPromptContext, TaskStart } from './task'
 import type { ReadFields } from './tool'
 import { hasTurns, readTaskTurns, renderClosePrompt, storyModeOf, type CloseTurns } from './turns'
@@ -48,9 +49,6 @@ export type IdentityShow = {
   factions: IdentityFaction[]
 }
 
-// A hand-edited row may hold anything in a JSON column; only strings are shown.
-const strings = (value: unknown): string[] =>
-  Array.isArray(value) ? value.filter((item): item is string => typeof item === 'string') : []
 const text = (value: unknown): string => (typeof value === 'string' ? value : '')
 const stateOf = (row: Entity): Readonly<Record<string, unknown>> =>
   isJsonObject(row.state) ? row.state : {}

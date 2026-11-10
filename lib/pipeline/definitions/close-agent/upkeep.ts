@@ -19,6 +19,7 @@ import { realPlacementOf } from '@/lib/world'
 
 import { namedInProse } from './name-match'
 import { readRowTool, refsIn, searchWorldTool } from './read-tools'
+import { strings } from './row-values'
 import type { CloseTaskDef, TaskPromptContext, TaskStart } from './task'
 import type { ReadFields } from './tool'
 import { hasTurns, readTaskTurns, renderClosePrompt, storyModeOf, type CloseTurns } from './turns'
@@ -70,9 +71,6 @@ export type UpkeepShow = {
   happenings: { id: string; title: string }[]
 }
 
-// A hand-edited row may hold anything in a JSON column; only strings are shown.
-const strings = (value: unknown): string[] =>
-  Array.isArray(value) ? value.filter((item): item is string => typeof item === 'string') : []
 const text = (value: unknown): string => (typeof value === 'string' ? value : '')
 const stateRecord = (row: Entity): Readonly<Record<string, unknown>> =>
   isJsonObject(row.state) ? row.state : {}

@@ -13,8 +13,8 @@ import {
 } from './entity-write'
 import { restatedText, sentText, type BoundedField, type SentText } from './fields'
 import { keywordsRefusal, plannedKeywords, type SentKeywords } from './keyword-args'
-import { termsOf } from './name-match'
 import { planPlacement, type PlacementArg } from './placement'
+import { strings } from './row-values'
 import { turnHandleIn, turnInTextReason } from './text-checks'
 import {
   sameValue,
@@ -287,7 +287,7 @@ async function planSetKeywords(args: KeywordArgs, ctx: WriteContext): Promise<Wr
   const rows: ReportRow[] = [
     { table: 'entities', id, name: row?.name ?? ctx.ids.nameOfId(id) ?? '' },
   ]
-  const live = termsOf(row?.keywords)
+  const live = strings(row?.keywords)
   const proposed = { keywords: plannedKeywords(live, sent) }
   if (row === undefined)
     return { kind: 'refused', reason: CLOSE_REASON.rowGone, rows, values: proposed }

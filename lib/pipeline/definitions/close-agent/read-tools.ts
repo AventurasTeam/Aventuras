@@ -12,6 +12,7 @@ import { excerpt, oneLine } from '@/lib/text'
 import { flagStillHolds } from '@/lib/world'
 
 import { withHandlesDeep, type CloseIds } from './ids'
+import { strings } from './row-values'
 import {
   readToolSchema,
   tableOfId,
@@ -232,13 +233,6 @@ function lineOf(
   return about === undefined ? `${kind}: ${label}` : `${kind}: ${label} — ${about}`
 }
 
-// A hand-edited row may hold anything in its keywords; only strings are terms.
-function keywordTerms(keywords: unknown): string[] {
-  return Array.isArray(keywords)
-    ? keywords.filter((k): k is string => typeof k === 'string').map(normalizeTerm)
-    : []
-}
-
 const searchWorldSchema = readToolSchema({
   query: z.string().describe('A name, an alias or a keyword, or part of one.'),
 })
@@ -285,7 +279,7 @@ async function searchWorld(
     .from(entities)
     .where(eq(entities.branchId, ctx.branchId))
   for (const row of entityRows) {
-    const rank = rankOf(query, needle, row.name, keywordTerms(row.keywords))
+    const rank = rankOf(query, needle, row.name, strings(row.keywords).map(normalizeTerm))
     if (rank === undefined) continue
     found.push({
       id: row.id,
