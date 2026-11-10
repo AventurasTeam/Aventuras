@@ -696,6 +696,24 @@ describe('update_place', () => {
     expect(quay.state).toMatchObject({ condition: 'Slick with rain' })
   })
 
+  // C11: a protected field reads skipped, its handle never judged.
+  it('skips a condition the user wrote after the cited turn though it holds a turn handle', async () => {
+    await editEntity(f, QUAY, 'user', { state: { condition: 'Swept clean' } })
+
+    const { result, answers, calls } = await runUpkeepCalls(f, WORLD_SHOWN, [
+      { toolName: 'update_place', input: { id: 'l1', condition: 'Flooded since t3', ...cite() } },
+    ])
+
+    expect(calls[0]).toMatchObject({
+      result: 'skipped',
+      reason: USER_EDITED_SINCE_PROSE,
+      values: { 'state.condition': 'Flooded since t3' },
+    })
+    expect(answers[0]).toMatchObject({ result: 'skipped', reason: USER_EDITED_SINCE_PROSE })
+    expect(await runDeltas(f, result.actionId)).toEqual([])
+    expect((await storedEntity(f, QUAY)).state).toMatchObject({ condition: 'Swept clean' })
+  })
+
   it('refuses parent and top sent together, writing nothing', async () => {
     const { result, calls } = await runUpkeepCalls(f, WORLD_SHOWN, [
       { toolName: 'update_place', input: { id: 'l8', parent: 'l2', top: true, ...cite() } },

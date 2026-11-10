@@ -124,8 +124,8 @@ function sentPlacement(args: PlaceArgs): SentPlacement | undefined {
 
 /**
  * chapter-close.md → 3f: a place's or an item's condition and description, and a place's placement,
- * as one updateEntity; what can land does (C11). Rules refuse a field before precedence judges it,
- * as placeLocation judges a placement.
+ * as one updateEntity; what can land does (C11). A placement's rules run before precedence, as
+ * placeLocation judges them; a text's handle check after, so a protected text reads skipped.
  */
 async function planUpkeepWrite<A extends { readonly id: string }>(
   kind: UpkeepKind,
@@ -157,15 +157,6 @@ async function planUpkeepWrite<A extends { readonly id: string }>(
     changed.map((field) => [field.path, field.text.bounded]),
   )
   const lost: LostField[] = []
-  const free: SentField[] = []
-  for (const field of changed) {
-    const handle = turnHandleIn(field.text.sent, ctx.ids)
-    if (handle === undefined) {
-      free.push(field)
-      continue
-    }
-    lost.push({ field: field.path, row: id, kind: 'refused', reason: turnInTextReason(handle) })
-  }
   let move: { path: string; wanted: Record<string, unknown>; removed: string[] } | undefined
   if (placement !== undefined) {
     const planned = await planPlacement(row, placement.arg, ctx)
@@ -177,27 +168,32 @@ async function planUpkeepWrite<A extends { readonly id: string }>(
       move = { path: placement.path, wanted: planned.wanted, removed: planned.removed }
     }
   }
-  if (free.length === 0 && move === undefined)
+  if (changed.length === 0 && move === undefined)
     return { kind: 'write', actions: [], lost, rows, values }
 
   // The guard reads a place's parent and unplaced mark as one field.
   const guard = await ctx.guard([{ table: 'entities', id }])
   const verdicts = fieldVerdicts(guard.row('entities', id), [
-    ...free.map((field) => field.path),
+    ...changed.map((field) => field.path),
     ...(move === undefined ? [] : [PARENT_PATH]),
   ])
   const wanted: Record<string, unknown> = {}
   const removed: string[] = []
-  for (const [index, field] of free.entries()) {
+  for (const [index, field] of changed.entries()) {
     const verdict = verdicts[index]
     if (!verdict.free) {
       lost.push({ field: field.path, row: id, kind: 'protected', reason: verdict.reason })
       continue
     }
+    const handle = turnHandleIn(field.text.bounded, ctx.ids)
+    if (handle !== undefined) {
+      lost.push({ field: field.path, row: id, kind: 'refused', reason: turnInTextReason(handle) })
+      continue
+    }
     wanted[field.path] = field.text.bounded
   }
   if (move !== undefined) {
-    const verdict = verdicts[free.length]
+    const verdict = verdicts[changed.length]
     if (!verdict.free) {
       lost.push({ field: move.path, row: id, kind: 'protected', reason: verdict.reason })
     } else {
