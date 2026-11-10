@@ -96,6 +96,19 @@ describe('cutChapterParts', () => {
     ])
   })
 
+  // Limit 50: the opening o is 10; a with its reply b joins it at 25; c with d would make 55.
+  it("joins a player's turn and its reply to the open part, ending it on the reply", () => {
+    expect(
+      cutChapterParts(
+        [entry('o', 10, 'opening'), turn('a', 5), entry('b', 10), turn('c', 5), entry('d', 25)],
+        100,
+      ),
+    ).toEqual([
+      { part: 1, startEntryId: 'o', endEntryId: 'b', tokens: 25 },
+      { part: 2, startEntryId: 'c', endEntryId: 'd', tokens: 30 },
+    ])
+  })
+
   // Limit 50: the turn b with its reply c is 55, over the limit, so it is a part alone.
   it('makes a turn over the limit a part alone, though it passes the limit', () => {
     expect(
