@@ -342,10 +342,6 @@ patch`, which 5.5a marks `restated`, so a close tool's write of it
   `branchPlaces` (`parent-chain-check.ts`) isn't exported, so
   `close-agent/placement.ts` copies both and can drift from the
   handler. Raised in 5.8's task review.
-- **`search_world` breaks ties by locale.** Its sort
-  (`close-agent/read-tools.ts`) uses `localeCompare`, so its order can
-  differ by device, against the code-unit rule the close's task starts
-  follow. Raised in 5.8's task review.
 - **`retiredReason` has no length bound.** The classifier's `reason`
   (`lib/classifier/schema.ts`) is a plain optional string, and the
   close stores `retire_entity`'s `why` the same way, while the close's
