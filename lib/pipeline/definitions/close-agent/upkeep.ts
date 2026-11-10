@@ -1,8 +1,15 @@
-import { and, eq } from 'drizzle-orm'
+import { and, eq, inArray, type SQL } from 'drizzle-orm'
 
 import type { GuardRow } from '@/lib/actions/types'
 import type { PromptHalves } from '@/lib/ai'
-import { entities, happenings, type Entity, type Happening, type StoryMode } from '@/lib/db'
+import {
+  chunked,
+  entities,
+  happenings,
+  type Entity,
+  type Happening,
+  type StoryMode,
+} from '@/lib/db'
 import { isJsonObject } from '@/lib/json-object'
 import { dedupeTerms } from '@/lib/keyword-terms'
 import { compareId } from '@/lib/list-modules'
@@ -94,19 +101,20 @@ async function openHappenings(
   ctx: TaskPromptContext,
   entries: readonly CloseRangeEntry[],
 ): Promise<Happening[]> {
-  const entryIds = new Set(entries.map((entry) => entry.id))
-  const madeFrom = await readHappeningsMadeFrom(ctx.db, ctx.branchId, entryIds)
-  const rows = await ctx.db
-    .select()
-    .from(happenings)
-    .where(and(eq(happenings.branchId, ctx.branchId), eq(happenings.commonKnowledge, 0)))
-  return rows
-    .filter(
-      (row) =>
-        (row.occurredAtEntryId !== null && entryIds.has(row.occurredAtEntryId)) ||
-        madeFrom.has(row.id),
-    )
-    .sort((a, b) => compareId(a.title, b.title) || compareId(a.id, b.id))
+  const entryIds = entries.map((entry) => entry.id)
+  const madeFrom = await readHappeningsMadeFrom(ctx.db, ctx.branchId, new Set(entryIds))
+  const openWhere = (match: SQL) =>
+    ctx.db
+      .select()
+      .from(happenings)
+      .where(and(eq(happenings.branchId, ctx.branchId), eq(happenings.commonKnowledge, 0), match))
+  const open = new Map<string, Happening>()
+  for (const ids of chunked(entryIds))
+    for (const row of await openWhere(inArray(happenings.occurredAtEntryId, ids)))
+      open.set(row.id, row)
+  for (const ids of chunked([...madeFrom]))
+    for (const row of await openWhere(inArray(happenings.id, ids))) open.set(row.id, row)
+  return [...open.values()].sort((a, b) => compareId(a.title, b.title) || compareId(a.id, b.id))
 }
 
 // Upkeep writes a place's and an item's texts; a character or a faction shows only its keywords.
