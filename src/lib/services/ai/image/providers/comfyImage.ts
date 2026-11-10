@@ -51,9 +51,12 @@ const Options = z.object({
   workflow: z.record(z.string(), Json),
   outputNodeId: z.string(),
   paths: z.object({
-    positive: z.string(),
-    seed: z.string(),
-    negative: z.string().optional(),
+    /** Every one receives the prompt. */
+    positive: z.array(z.string()).min(1),
+    /** Absent keeps the workflow's own seed. */
+    seed: z.string().optional(),
+    /** Every one receives the negative prompt, unless the prompt claims it. */
+    negative: z.array(z.string()).optional(),
     width: z.string().optional(),
     height: z.string().optional(),
     /** `LoadImage` image inputs, filled in order with the uploaded reference images. */
@@ -167,7 +170,7 @@ function assign(node: Graph, keys: string[], value: Json): Graph {
 
 /**
  * Returns `graph` with `value` at a dot-path such as `57:27.inputs.text`, creating missing levels.
- * Only the objects along the path are copied.
+ * The objects along the path are copied shallowly; everything else is shared with `graph`.
  */
 export function setGraphInput(graph: Graph, path: string, value: Json): Graph {
   const keys = path.split('.')
@@ -410,9 +413,13 @@ export function createComfyImage(settings: ComfyImageSettings) {
 
           let graph: Graph = workflow
           for (const [path, value] of inputs ?? []) graph = setGraphInput(graph, path, value)
-          graph = setGraphInput(graph, paths.positive, prompt)
-          if (paths.negative) graph = setGraphInput(graph, paths.negative, negativePrompt ?? '')
-          graph = setGraphInput(graph, paths.seed, seed ?? randomSeed())
+          for (const path of paths.positive) graph = setGraphInput(graph, path, prompt)
+          for (const path of paths.negative ?? []) {
+            // A negative that shares an input with the prompt would overwrite it.
+            if (!paths.positive.includes(path))
+              graph = setGraphInput(graph, path, negativePrompt ?? '')
+          }
+          if (paths.seed) graph = setGraphInput(graph, paths.seed, seed ?? randomSeed())
 
           const dimensions = parseImageSize(size)
           if (dimensions && paths.width && paths.height) {

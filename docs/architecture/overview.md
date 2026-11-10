@@ -734,7 +734,22 @@ preprocessor, mask or inpaint node, or is VAE-encoded into a sampler's `latent_i
 another path reaches a reference consumer (`ReferenceLatent`, `TextEncodeQwenImage*`).
 The server reports node types, not intent, so this is only the default: the picker under the
 workflow summary in the image settings is the authority, and it is pre-filled from the probe when a
-workflow is loaded. Names are a hash of the bytes, so an image reused across scenes is stored once,
+workflow is loaded. The same holds for the rest of a custom workflow's fields. `detectWorkflowFields`
+only pre-fills them: it takes the sampler upstream of the single `SaveImage` (a node with a latent
+and either conditioning or a guider, so custom samplers count), reads the text inputs of the
+encoder nearest its positive conditioning, the same for the negative (a text input another node
+feeds is followed to that node's text, `value` or `string` input, never into a loader, and not to
+any other string widget), and finds the seed on the
+sampler or the noise node it links, or on the source of a seed input another node feeds (a seed- or
+`value`-named input, or the source's only number). A conditioning that leads back to the positive
+encoder through `ConditioningZeroOut` is not a negative. Only a graph with no sampler falls back to
+encoders, and only to one whose title says `positive` or `negative`; a sampler that settled nothing
+leaves the field unset, as does anything else the graph does not settle. The form lists every string
+and number input and every node for the user to choose, and keeps listing a stored choice whose
+input is now linked; a workflow with no prompt input or no output node is not saved. Every checked
+prompt input receives the same prompt, so a Flux encoder can fill both `clip_l` and `t5xxl`, and
+every checked negative input receives the negative; an input is one or the other. With no seed input
+the workflow's own seed is used for every image. Names are a hash of the bytes, so an image reused across scenes is stored once,
 and concurrent generations share a pending upload. ComfyUI empties `temp` on restart; a per-profile
 switch (`inputReferences`) uploads to `input/aventuras/` instead, which it never clears. The
 built-in basic, LoRA and UNet workflows take none, so the registry downloads nothing for them

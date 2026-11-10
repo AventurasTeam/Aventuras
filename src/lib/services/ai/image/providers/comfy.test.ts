@@ -26,8 +26,15 @@ import {
   clearComfyCache,
   comfyReferenceLimit,
   createComfyProvider,
+  detectWorkflowFields,
+  isWorkflowComplete,
+  workflowProblems,
+  pickInputs,
+  workflowInputs,
+  listNodes,
   loadImageInputs,
   suggestReferenceInputs,
+  validateWorkflowPath,
 } from './comfy'
 import BasicWorkflow from './comfyWorkflows/basic-txt2img-workflow.json'
 import LoraWorkflow from './comfyWorkflows/lora-txt2img-workflow.json'
@@ -116,6 +123,12 @@ beforeEach(() => {
   listing({})
   serve('9')
 })
+
+const listInputs = (
+  graph: Parameters<typeof workflowInputs>[0],
+  kind: 'string' | 'number',
+  selected?: string[],
+) => pickInputs(workflowInputs(graph), kind, selected)
 
 describe('basic checkpoint graph', () => {
   const opts = {
@@ -294,10 +307,10 @@ describe('custom workflow', () => {
   }
   const custom = (over: Record<string, unknown> = {}) => ({
     workflow,
-    positivePromptPath: '57:27.inputs.text',
+    positivePromptPaths: ['57:27.inputs.text'],
     seedPath: '57:3.inputs.seed',
     outputNodeId: '60',
-    negativePromptPath: '57:28.inputs.text',
+    negativePromptPaths: ['57:28.inputs.text'],
     ...over,
   })
   const withLoad = {
@@ -325,7 +338,7 @@ describe('custom workflow', () => {
     await generate(
       {
         mode: ComfyMode.CustomWorkflow,
-        customWorkflow: custom({ negativePromptPath: null }),
+        customWorkflow: custom({ negativePromptPaths: [] }),
         negativePrompt: 'bad',
       },
       { model: '' },
@@ -411,6 +424,41 @@ describe('custom workflow', () => {
     await expect(generate({ mode: ComfyMode.CustomWorkflow }, { model: '' })).rejects.toThrow(
       'no custom workflow',
     )
+  })
+
+  it.each([
+    ['no prompt input', { positivePromptPaths: [] }],
+    ['no output node', { outputNodeId: null }],
+    ['a prompt input the workflow lacks', { positivePromptPaths: ['1.inputs.text'] }],
+  ])('refuses a workflow with %s', async (_name, over) => {
+    await expect(
+      generate({ mode: ComfyMode.CustomWorkflow, customWorkflow: custom(over) }, { model: '' }),
+    ).rejects.toThrow('no complete custom workflow')
+  })
+
+  it('writes into every prompt input and leaves the seed alone without a seed path', async () => {
+    serve('9')
+    const encoders = {
+      '1': { class_type: 'CLIPTextEncodeFlux', inputs: { clip_l: '', t5xxl: '' } },
+      '2': { class_type: 'RandomNoise', inputs: { noise_seed: 5 } },
+      '9': { class_type: 'SaveImage', inputs: {} },
+    }
+    await generate(
+      {
+        mode: ComfyMode.CustomWorkflow,
+        customWorkflow: {
+          workflow: encoders,
+          positivePromptPaths: ['1.inputs.clip_l', '1.inputs.t5xxl'],
+          seedPath: null,
+          outputNodeId: '9',
+          negativePromptPaths: [],
+        },
+      },
+      { model: '' },
+    )
+    const graph = postedGraph()
+    expect(graph['1'].inputs).toEqual({ clip_l: 'a castle', t5xxl: 'a castle' })
+    expect(graph['2'].inputs.noise_seed).toBe(5)
   })
 
   it('sends no upload for a workflow without a LoadImage node', async () => {
@@ -728,5 +776,344 @@ describe('model names in a subfolder', () => {
     expect(graph['1'].inputs.unet_name).toBe('flux\\dev.safetensors')
     expect(graph['3'].inputs.clip_name).toBe('te\\clip.safetensors')
     expect(graph['4'].inputs.vae_name).toBe('vae\\ae.safetensors')
+  })
+})
+
+describe('detectWorkflowFields', () => {
+  type Workflow = Parameters<typeof detectWorkflowFields>[0]
+  const node = (class_type: string, inputs: Record<string, Json>, title?: string) => ({
+    class_type,
+    inputs,
+    ...(title && { _meta: { title } }),
+  })
+
+  it('finds the prompt, negative, seed and output of a plain graph', () => {
+    const workflow: Workflow = {
+      '3': node('KSampler', {
+        seed: 1,
+        positive: ['6', 0],
+        negative: ['7', 0],
+        latent_image: ['5', 0],
+      }),
+      '6': node('CLIPTextEncode', { text: 'a', clip: ['4', 1] }),
+      '7': node('CLIPTextEncode', { text: 'b', clip: ['4', 1] }),
+      '4': node('CheckpointLoaderSimple', { ckpt_name: 'm.safetensors' }),
+      '8': node('VAEDecode', { samples: ['3', 0] }),
+      '9': node('SaveImage', { images: ['8', 0] }),
+    }
+    expect(detectWorkflowFields(workflow)).toEqual({
+      positivePromptPaths: ['6.inputs.text'],
+      negativePromptPaths: ['7.inputs.text'],
+      seedPath: '3.inputs.seed',
+      outputNodeId: '9',
+    })
+  })
+
+  it('uses noise_seed for KSamplerAdvanced', () => {
+    const workflow: Workflow = {
+      '3': node('KSamplerAdvanced', {
+        noise_seed: 1,
+        positive: ['6', 0],
+        latent_image: ['5', 0],
+      }),
+      '6': node('CLIPTextEncode', { text: 'a' }),
+      '9': node('SaveImage', { images: ['3', 0] }),
+    }
+    expect(detectWorkflowFields(workflow).seedPath).toBe('3.inputs.noise_seed')
+  })
+
+  it('finds a Flux graph through its guider, with the seed on the noise node', () => {
+    const workflow: Workflow = {
+      '1': node('CLIPTextEncodeFlux', { clip_l: '', t5xxl: '', guidance: 3.5 }),
+      '2': node('FluxGuidance', { conditioning: ['1', 0], guidance: 3.5 }),
+      '3': node('BasicGuider', { conditioning: ['2', 0], model: ['10', 0] }),
+      '4': node('RandomNoise', { noise_seed: 7 }),
+      '5': node('SamplerCustomAdvanced', {
+        noise: ['4', 0],
+        guider: ['3', 0],
+        sampler: ['11', 0],
+        latent_image: ['12', 0],
+      }),
+      '10': node('UNETLoader', { unet_name: 'flux.safetensors' }),
+      '11': node('KSamplerSelect', { sampler_name: 'euler' }),
+      '12': node('EmptySD3LatentImage', { width: 1024, height: 1024 }),
+      '13': node('VAEDecode', { samples: ['5', 0] }),
+      '14': node('SaveImage', { images: ['13', 0] }),
+    }
+    expect(detectWorkflowFields(workflow)).toEqual({
+      positivePromptPaths: ['1.inputs.clip_l', '1.inputs.t5xxl'],
+      negativePromptPaths: [],
+      seedPath: '4.inputs.noise_seed',
+      outputNodeId: '14',
+    })
+  })
+
+  it('follows a prompt input linked from a string node to that node', () => {
+    const workflow: Workflow = {
+      '1': node('CLIPTextEncode', { text: ['2', 0] }),
+      '2': node('PrimitiveString', { value: 'a castle' }),
+      '3': node('KSampler', { seed: 1, positive: ['1', 0], latent_image: ['5', 0] }),
+      '9': node('SaveImage', { images: ['3', 0] }),
+    }
+    expect(detectWorkflowFields(workflow).positivePromptPaths).toEqual(['2.inputs.value'])
+  })
+
+  it('does not take a non-text widget of the node a prompt input links to', () => {
+    const workflow: Workflow = {
+      '1': node('CLIPTextEncode', { text: ['2', 0] }),
+      '2': node('StringConcatenate', {
+        string_a: ['4', 0],
+        string_b: ['5', 0],
+        delimiter: ', ',
+      }),
+      '3': node('KSampler', { seed: 1, positive: ['1', 0], latent_image: ['6', 0] }),
+      '9': node('SaveImage', { images: ['3', 0] }),
+    }
+    expect(detectWorkflowFields(workflow).positivePromptPaths).toEqual([])
+  })
+
+  it('does not follow a prompt input into a loader', () => {
+    const workflow: Workflow = {
+      '1': node('CLIPTextEncode', { text: ['2', 0] }),
+      '2': node('TextFileLoader', { text_file: 'notes.txt' }),
+      '3': node('KSampler', { seed: 1, positive: ['1', 0], latent_image: ['6', 0] }),
+      '9': node('SaveImage', { images: ['3', 0] }),
+    }
+    expect(detectWorkflowFields(workflow).positivePromptPaths).toEqual([])
+  })
+
+  it('does not take the system prompt of a Lumina2 encoder', () => {
+    const workflow: Workflow = {
+      '1': node('CLIPTextEncodeLumina2', { system_prompt: 'superior', user_prompt: '' }),
+      '3': node('KSampler', { seed: 1, positive: ['1', 0], latent_image: ['5', 0] }),
+      '9': node('SaveImage', { images: ['3', 0] }),
+    }
+    expect(detectWorkflowFields(workflow).positivePromptPaths).toEqual(['1.inputs.user_prompt'])
+  })
+
+  it('follows each conditioning through a node that takes both a positive and a negative', () => {
+    const workflow: Workflow = {
+      '1': node('CLIPTextEncode', { text: 'a' }),
+      '2': node('CLIPTextEncode', { text: 'b' }),
+      '3': node('ControlNetApplyAdvanced', { negative: ['2', 0], positive: ['1', 0] }),
+      '4': node('KSampler', {
+        seed: 1,
+        positive: ['3', 0],
+        negative: ['3', 1],
+        latent_image: ['5', 0],
+      }),
+      '9': node('SaveImage', { images: ['4', 0] }),
+    }
+    const detected = detectWorkflowFields(workflow)
+    expect(detected.positivePromptPaths).toEqual(['1.inputs.text'])
+    expect(detected.negativePromptPaths).toEqual(['2.inputs.text'])
+  })
+
+  it('finds no negative behind a zeroed-out conditioning', () => {
+    const detected = detectWorkflowFields(UnetWorkflow as unknown as Workflow)
+    expect(detected.positivePromptPaths).toEqual(['5.inputs.text'])
+    expect(detected.negativePromptPaths).toEqual([])
+    expect(detected.seedPath).toBe('8.inputs.seed')
+    expect(detected.outputNodeId).toBe('10')
+  })
+
+  it('leaves the output unset without exactly one SaveImage', () => {
+    const none: Workflow = { '1': node('CLIPTextEncode', { text: '' }) }
+    const two: Workflow = {
+      '1': node('SaveImage', { images: ['3', 0] }),
+      '2': node('SaveImage', { images: ['3', 0] }),
+    }
+    expect(detectWorkflowFields(none).outputNodeId).toBeNull()
+    expect(detectWorkflowFields(two).outputNodeId).toBeNull()
+  })
+
+  it('falls back to encoder titles that name their role when no sampler is found', () => {
+    const workflow: Workflow = {
+      '1': node('CLIPTextEncode', { text: '' }, 'Positive prompt'),
+      '2': node('CLIPTextEncode', { text: '' }, 'Negative'),
+      '9': node('SaveImage', {}),
+    }
+    expect(detectWorkflowFields(workflow)).toEqual({
+      positivePromptPaths: ['1.inputs.text'],
+      negativePromptPaths: ['2.inputs.text'],
+      seedPath: null,
+      outputNodeId: '9',
+    })
+  })
+
+  it('does not guess a prompt from encoders whose titles name no role', () => {
+    const workflow: Workflow = {
+      '1': node('CLIPTextEncode', { text: '' }, 'CLIP Text Encode (Prompt)'),
+      '2': node('CLIPTextEncode', { text: '' }, 'CLIP Text Encode (Prompt)'),
+      '9': node('SaveImage', {}),
+    }
+    expect(detectWorkflowFields(workflow).positivePromptPaths).toEqual([])
+  })
+
+  it('skips a titled encoder whose text another node feeds', () => {
+    const workflow: Workflow = {
+      '1': node('CLIPTextEncode', { text: ['2', 0] }, 'Positive'),
+      '2': node('PrimitiveString', { value: 'a' }),
+      '9': node('SaveImage', {}),
+    }
+    expect(detectWorkflowFields(workflow).positivePromptPaths).toEqual([])
+  })
+
+  it('leaves a negative unset when the sampler settled none, whatever an encoder is titled', () => {
+    const workflow: Workflow = {
+      '1': node('CLIPTextEncode', { text: '' }),
+      '2': node('CLIPTextEncode', { text: '' }, 'Negative'),
+      '3': node('KSampler', { seed: 1, positive: ['1', 0], latent_image: ['5', 0] }),
+      '9': node('SaveImage', { images: ['3', 0] }),
+    }
+    const detected = detectWorkflowFields(workflow)
+    expect(detected.positivePromptPaths).toEqual(['1.inputs.text'])
+    expect(detected.negativePromptPaths).toEqual([])
+  })
+
+  it('takes every text input of a negative encoder', () => {
+    const workflow: Workflow = {
+      '1': node('CLIPTextEncodeSDXL', { text_g: '', text_l: '' }),
+      '2': node('CLIPTextEncodeSDXL', { text_g: '', text_l: '' }),
+      '3': node('KSampler', {
+        seed: 1,
+        positive: ['1', 0],
+        negative: ['2', 0],
+        latent_image: ['5', 0],
+      }),
+      '9': node('SaveImage', { images: ['3', 0] }),
+    }
+    expect(detectWorkflowFields(workflow).negativePromptPaths).toEqual([
+      '2.inputs.text_g',
+      '2.inputs.text_l',
+    ])
+  })
+
+  it('follows a seed linked from a primitive to that node', () => {
+    const workflow: Workflow = {
+      '3': node('KSampler', { seed: ['12', 0], positive: ['1', 0], latent_image: ['5', 0] }),
+      '12': node('PrimitiveInt', { value: 5 }),
+      '9': node('SaveImage', { images: ['3', 0] }),
+    }
+    expect(detectWorkflowFields(workflow).seedPath).toBe('12.inputs.value')
+  })
+
+  it('leaves a linked seed unset when its source has no clear seed input', () => {
+    const workflow: Workflow = {
+      '3': node('KSampler', { seed: ['12', 0], positive: ['1', 0], latent_image: ['5', 0] }),
+      '12': node('SomeMath', { a: 1, b: 2 }),
+      '9': node('SaveImage', { images: ['3', 0] }),
+    }
+    expect(detectWorkflowFields(workflow).seedPath).toBeNull()
+  })
+
+  it('suggests nothing for a graph it does not recognise, without throwing', () => {
+    const workflow: Workflow = { '1': node('MyCustomNode', { strength: 1 }) }
+    expect(detectWorkflowFields(workflow)).toEqual({
+      positivePromptPaths: [],
+      negativePromptPaths: [],
+      seedPath: null,
+      outputNodeId: null,
+    })
+  })
+
+  it('terminates on a cycle', () => {
+    const workflow: Workflow = {
+      '1': node('KSampler', { seed: 1, positive: ['2', 0], latent_image: ['2', 0] }),
+      '2': node('ConditioningCombine', { conditioning_1: ['1', 0] }),
+      '9': node('SaveImage', { images: ['1', 0] }),
+    }
+    expect(() => detectWorkflowFields(workflow)).not.toThrow()
+  })
+})
+
+describe('workflow inputs', () => {
+  const workflow = {
+    '10': { class_type: 'KSampler', inputs: { seed: 1, steps: 20, positive: ['2', 0] } },
+    '2': {
+      class_type: 'CLIPTextEncode',
+      inputs: { text: 'a', clip: ['4', 1] },
+      _meta: { title: 'Prompt' },
+    },
+    '9': { class_type: 'SaveImage', inputs: { filename_prefix: 'x' } },
+  }
+
+  it('lists the string inputs in node-id order, text inputs first', () => {
+    expect(listInputs(workflow, 'string').map((i) => i.path)).toEqual([
+      '2.inputs.text',
+      '9.inputs.filename_prefix',
+    ])
+  })
+
+  it('lists the number inputs, seed inputs first, and names a node by its title or class', () => {
+    const inputs = listInputs(workflow, 'number')
+    expect(inputs.map((i) => i.path)).toEqual(['10.inputs.seed', '10.inputs.steps'])
+    expect(listInputs(workflow, 'string')[0].title).toBe('Prompt')
+    expect(inputs[0].title).toBe('KSampler')
+  })
+
+  it('lists a selected path whose input is linked, marked with a null value', () => {
+    const linked = {
+      '1': { class_type: 'CLIPTextEncode', inputs: { text: ['2', 0] } },
+      '2': { class_type: 'PrimitiveString', inputs: { value: 'a' } },
+    }
+    expect(listInputs(linked, 'string').map((i) => i.path)).toEqual(['2.inputs.value'])
+    const inputs = listInputs(linked, 'string', ['1.inputs.text'])
+    expect(inputs.map((i) => [i.path, i.value])).toEqual([
+      ['1.inputs.text', null],
+      ['2.inputs.value', 'a'],
+    ])
+  })
+
+  it('lists the saving nodes first', () => {
+    expect(listNodes(workflow).map((n) => n.nodeId)).toEqual(['9', '2', '10'])
+  })
+
+  it.each([
+    ['2.inputs.text', true],
+    ['2.inputs.missing', false],
+    ['3.inputs.text', false],
+    ['2.text', false],
+    ['2.inputs.text.extra', false],
+    ['__proto__.inputs.text', false],
+  ])('validates the path %s as %s', (path, valid) => {
+    expect(validateWorkflowPath(workflow, path)).toBe(valid)
+  })
+
+  it('treats a workflow as complete only with a valid prompt input and an output node', () => {
+    const complete = {
+      workflow,
+      positivePromptPaths: ['2.inputs.text'],
+      seedPath: '10.inputs.seed',
+      outputNodeId: '9',
+      negativePromptPaths: [],
+    }
+    expect(isWorkflowComplete(complete)).toBe(true)
+    expect(isWorkflowComplete({ ...complete, positivePromptPaths: [] })).toBe(false)
+    expect(isWorkflowComplete({ ...complete, outputNodeId: null })).toBe(false)
+    expect(isWorkflowComplete({ ...complete, outputNodeId: '1' })).toBe(false)
+    expect(isWorkflowComplete({ ...complete, seedPath: '10.inputs.gone' })).toBe(false)
+    expect(isWorkflowComplete({ ...complete, seedPath: null })).toBe(true)
+  })
+
+  it('says what is missing from an incomplete workflow', () => {
+    const complete = {
+      workflow,
+      positivePromptPaths: ['2.inputs.text'],
+      seedPath: null,
+      outputNodeId: '9',
+      negativePromptPaths: [],
+    }
+    expect(workflowProblems(complete)).toEqual([])
+    expect(workflowProblems({ ...complete, positivePromptPaths: [], outputNodeId: null })).toEqual([
+      'Choose a prompt input.',
+      'Choose an output node.',
+    ])
+    expect(workflowProblems({ ...complete, negativePromptPaths: ['2.inputs.gone'] })).toEqual([
+      'A selected input is not in this workflow.',
+    ])
+    expect(workflowProblems({ ...complete, outputNodeId: '1' })).toEqual([
+      'The output node is not in this workflow.',
+    ])
   })
 })

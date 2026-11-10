@@ -25,10 +25,16 @@
     IMAGE_PROVIDER_LABELS,
     IMAGE_PROVIDER_OPTIONS,
     ComfyMode,
+    detectWorkflowFields,
+    listNodes,
     loadImageInputs,
+    pickInputs,
     referenceBlocker,
     referenceInputsOf,
     suggestReferenceInputs,
+    validateApiWorkflow,
+    workflowInputs,
+    workflowProblems,
     applyCapabilityOverride,
     canonicalModelId,
     findListedModel,
@@ -40,14 +46,10 @@
     type ImageModelInfo,
     type LoadedList,
     type LoadFailure,
+    type WorkflowInput,
   } from '#lib/services/ai/image/index.ts'
   import { isAbortError } from '#lib/services/activity/index.ts'
-  import {
-    validateApiWorkflow,
-    detectWorkflowFields,
-    fetchModelList,
-    numberOr,
-  } from '#lib/services/ai/image/providers/comfy.ts'
+  import { fetchModelList, numberOr } from '#lib/services/ai/image/providers/comfy.ts'
   import ImageModelSelect from '#lib/components/settings/ImageModelSelect.svelte'
   import type {
     ImageProfile,
@@ -183,7 +185,12 @@
   )
   const workflowGraph = $derived(activeWorkflow?.workflow)
   const loadImageNodes = $derived(workflowGraph ? loadImageInputs(workflowGraph) : [])
-  const selectedReferenceInputs = $derived(activeWorkflow ? referenceInputsOf(activeWorkflow) : [])
+  // Read apart from the rest of the workflow, so an edit to anything else does not rerun them.
+  const referenceInputPaths = $derived(activeWorkflow?.referenceInputPaths)
+  const seedPath = $derived(activeWorkflow?.seedPath)
+  const selectedReferenceInputs = $derived(
+    workflowGraph ? referenceInputsOf({ workflow: workflowGraph, referenceInputPaths }) : [],
+  )
   // Null when the profile can send references.
   const referenceProfileWarningReason = $derived.by(() => {
     if (!isEditingReferenceProfile) return null
@@ -197,18 +204,32 @@
       ? 'the selected model does not support img2img.'
       : null
   })
-  // Holds parsed workflow data while the user resolves an ambiguous picker — not yet saved to profileCustomWorkflow
-  let pendingWorkflowData = $state<Omit<ComfyCustomWorkflow, 'positivePromptPath'> | null>(null)
-  let workflowAmbiguousNodes = $state<
-    Array<{
-      nodeId: string
-      title: string
-      path: string
-      textPreview: string
-      kSamplerSlot: string | null
-    }>
-  >([])
-  let workflowPickerSelection = $state<string>('')
+  const inputLabel = (input: WorkflowInput) =>
+    `${input.nodeId} · ${input.title} · ${input.name}${input.value === null ? ' · linked' : ''}`
+  const selectedPromptPaths = $derived(activeWorkflow?.positivePromptPaths ?? [])
+  const selectedNegativePaths = $derived(activeWorkflow?.negativePromptPaths ?? [])
+  const graphInputs = $derived(workflowGraph ? workflowInputs(workflowGraph) : [])
+  const promptInputs = $derived(
+    pickInputs(graphInputs, 'string', [...selectedPromptPaths, ...selectedNegativePaths]),
+  )
+  const seedInputs = $derived(pickInputs(graphInputs, 'number', seedPath ? [seedPath] : []))
+  const seedItems = $derived([
+    { value: '', label: 'None (fixed seed)' },
+    ...seedInputs.map((input) => ({ value: input.path, label: inputLabel(input) })),
+  ])
+  const outputItems = $derived(
+    (workflowGraph ? listNodes(workflowGraph) : []).map((node) => ({
+      value: node.nodeId,
+      label: `${node.nodeId} · ${node.title}`,
+    })),
+  )
+  const workflowIssues = $derived(
+    profileCustomWorkflow ? workflowProblems(profileCustomWorkflow) : [],
+  )
+  const workflowComplete = $derived(!!profileCustomWorkflow && workflowIssues.length === 0)
+  const workflowMissing = $derived(workflowIssues.length > 0 ? workflowIssues.join(' ') : null)
+  const previewOf = (value: string | number | null) =>
+    value === null ? 'linked from another node' : String(value).slice(0, 80)
   let workflowError = $state<string | null>(null)
   let workflowFileName = $state<string | null>(null)
 
@@ -239,7 +260,7 @@
   const needsWorkflow = $derived(
     profileProviderType === 'comfyui' &&
       profileMode === ComfyMode.CustomWorkflow &&
-      (!profileCustomWorkflow || !!pendingWorkflowData),
+      !workflowComplete,
   )
   // A field the provider has no input for is neither saved nor sent; the form keeps what was typed.
   const connection = $derived(
@@ -635,9 +656,6 @@
     profileCustomWorkflow = null
     profileInputReferences = false
     profileTakesReferences = false
-    pendingWorkflowData = null
-    workflowAmbiguousNodes = []
-    workflowPickerSelection = ''
     workflowError = null
     workflowFileName = null
     profileClipName = ''
@@ -687,10 +705,7 @@
       profilePositivePrompt = (opts.positivePrompt as string) || ''
       profileNegativePrompt = (opts.negativePrompt as string) || ''
       profileCustomWorkflow = (opts.customWorkflow as ComfyCustomWorkflow) || null
-      pendingWorkflowData = null
       workflowFileName = profileCustomWorkflow ? 'Loaded from profile' : null
-      workflowAmbiguousNodes = []
-      workflowPickerSelection = ''
       workflowError = null
       profileClipName = (opts.clipName as string) || ''
       profileVaeName = (opts.vaeName as string) || ''
@@ -761,14 +776,9 @@
   // Custom workflow handlers
   // ---------------------------------------------------------------------------
 
-  /**
-   * Called after a file is selected or JSON is pasted.
-   * Validates the JSON, runs detection, and either auto-confirms or shows the picker.
-   */
+  // Detection only pre-fills the fields; the user edits every one of them.
   function processWorkflowJson(json: unknown, filename: string) {
     workflowError = null
-    workflowAmbiguousNodes = []
-    workflowPickerSelection = ''
 
     const validationError = validateApiWorkflow(json)
     if (validationError) {
@@ -777,46 +787,11 @@
     }
 
     const workflow = json as ComfyCustomWorkflow['workflow']
-    const { positiveNodes, negativeNode, seedPath, outputNodeId, saveImageCount } =
-      detectWorkflowFields(workflow)
-
-    if (positiveNodes.length === 0) {
-      workflowError = 'No CLIPTextEncode (positive) node found in workflow.'
-      return
-    }
-    if (!seedPath) {
-      workflowError = 'No KSampler or KSamplerAdvanced node found — cannot detect seed path.'
-      return
-    }
-    if (saveImageCount === 0) {
-      workflowError = 'No SaveImage node found in workflow.'
-      return
-    }
-    if (saveImageCount > 1) {
-      workflowError = `Workflow has ${saveImageCount} SaveImage nodes. Please keep exactly one SaveImage node.`
-      return
-    }
-
     workflowFileName = filename
-    const detected = {
+    profileCustomWorkflow = {
       workflow,
-      seedPath,
-      outputNodeId: outputNodeId!,
-      negativePromptPath: negativeNode?.path ?? null,
+      ...detectWorkflowFields(workflow),
       referenceInputPaths: suggestReferenceInputs(workflow),
-    }
-
-    if (positiveNodes.length > 1) {
-      // Ambiguous — show picker. Store parsed data in pending state; do NOT write
-      // profileCustomWorkflow yet so the auto-save effect doesn't fire prematurely.
-      pendingWorkflowData = detected
-      workflowAmbiguousNodes = positiveNodes
-      workflowPickerSelection = positiveNodes[0].path
-    } else {
-      // Unambiguous — auto-confirm immediately
-      pendingWorkflowData = null
-      profileCustomWorkflow = { ...detected, positivePromptPath: positiveNodes[0].path }
-      workflowAmbiguousNodes = []
     }
   }
 
@@ -838,27 +813,28 @@
     input.value = ''
   }
 
-  function toggleReferenceInput(path: string, selected: boolean) {
-    if (!profileCustomWorkflow) return
-    const others = selectedReferenceInputs.filter((p) => p !== path)
-    profileCustomWorkflow = {
-      ...profileCustomWorkflow,
-      referenceInputPaths: selected ? [...others, path] : others,
-    }
+  function updateWorkflow(patch: Partial<ComfyCustomWorkflow>) {
+    if (profileCustomWorkflow) profileCustomWorkflow = { ...profileCustomWorkflow, ...patch }
   }
 
-  function confirmWorkflowPicker() {
-    if (!pendingWorkflowData || !workflowPickerSelection) return
-    profileCustomWorkflow = { ...pendingWorkflowData, positivePromptPath: workflowPickerSelection }
-    pendingWorkflowData = null
-    workflowAmbiguousNodes = []
+  function toggleReferenceInput(path: string, selected: boolean) {
+    const others = selectedReferenceInputs.filter((p) => p !== path)
+    updateWorkflow({ referenceInputPaths: selected ? [...others, path] : others })
+  }
+
+  // An input takes the prompt or the negative, never both.
+  function togglePromptInput(role: 'positive' | 'negative', path: string, selected: boolean) {
+    const drop = (paths: string[]) => paths.filter((p) => p !== path)
+    const next = (paths: string[], listRole: typeof role) =>
+      selected && listRole === role ? [...drop(paths), path] : drop(paths)
+    updateWorkflow({
+      positivePromptPaths: next(selectedPromptPaths, 'positive'),
+      negativePromptPaths: next(selectedNegativePaths, 'negative'),
+    })
   }
 
   function clearCustomWorkflow() {
     profileCustomWorkflow = null
-    pendingWorkflowData = null
-    workflowAmbiguousNodes = []
-    workflowPickerSelection = ''
     workflowError = null
     workflowFileName = null
   }
@@ -921,7 +897,7 @@
               {@render profileForm()}
               {#if needsWorkflow}
                 <p class="text-destructive pt-2 text-xs">
-                  Upload and confirm a workflow before saving.
+                  Load a workflow with a prompt input and an output node before saving.
                 </p>
               {/if}
               <div class="flex gap-2 pt-2">
@@ -1598,7 +1574,7 @@
           <Label>Positive Prompt Base</Label>
           <Textarea bind:value={profilePositivePrompt} placeholder="Base positive prompt..." />
         </div>
-        {#if (profileMode !== ComfyMode.CustomWorkflow && profileMode !== ComfyMode.UnetTxt2Img) || profileCustomWorkflow?.negativePromptPath}
+        {#if (profileMode !== ComfyMode.CustomWorkflow && profileMode !== ComfyMode.UnetTxt2Img) || selectedNegativePaths.length > 0}
           <div class="col-span-2 space-y-2">
             <Label>Negative Prompt</Label>
             <Textarea bind:value={profileNegativePrompt} placeholder="Negative prompt..." />
@@ -1620,31 +1596,96 @@
               {/if}
             </div>
 
-            {#if profileCustomWorkflow && workflowAmbiguousNodes.length === 0}
-              <!-- State B: workflow loaded and confirmed -->
-              <div class="bg-muted/40 space-y-1 rounded-md border px-3 py-2 text-xs">
+            {#if profileCustomWorkflow}
+              <!-- State B: workflow loaded -->
+              <div class="bg-muted/40 space-y-2 rounded-md border px-3 py-2 text-xs">
                 <p class="text-foreground font-medium">
                   ✓ {workflowFileName ?? 'Workflow loaded'} ({Object.keys(
                     profileCustomWorkflow.workflow,
                   ).length} nodes)
                 </p>
-                <p class="text-muted-foreground">
-                  Prompt → <code class="text-xs">{profileCustomWorkflow.positivePromptPath}</code>
-                </p>
-                <p class="text-muted-foreground">
-                  Seed → <code class="text-xs">{profileCustomWorkflow.seedPath}</code>
-                </p>
-                {#if profileCustomWorkflow.negativePromptPath}
-                  <p class="text-muted-foreground">
-                    Negative → <code class="text-xs"
-                      >{profileCustomWorkflow.negativePromptPath}</code
-                    >
-                  </p>
-                {:else}
-                  <p class="text-muted-foreground italic">
-                    No negative prompt node detected (ignored).
+                {#if workflowMissing}
+                  <p class="text-xs text-amber-600 dark:text-amber-400" role="alert">
+                    {workflowMissing}
                   </p>
                 {/if}
+                {#snippet inputChecklist(
+                  role: 'positive' | 'negative',
+                  hint: string,
+                  selectedPaths: string[],
+                )}
+                  <div class="space-y-1">
+                    <p class="text-muted-foreground">{hint}</p>
+                    <div class="max-h-48 space-y-1 overflow-y-auto">
+                      {#each promptInputs as input (input.path)}
+                        <div class="flex items-center gap-2">
+                          <Checkbox
+                            id="comfy-{role}-{input.path}"
+                            checked={selectedPaths.includes(input.path)}
+                            onCheckedChange={(checked) =>
+                              togglePromptInput(role, input.path, checked)}
+                          />
+                          <Label for="comfy-{role}-{input.path}" class="min-w-0 font-normal">
+                            <span class="block truncate">
+                              <code class="text-xs">{input.nodeId}</code>
+                              {input.title}
+                              <span class="text-muted-foreground"
+                                >{input.name}: {previewOf(input.value)}</span
+                              >
+                            </span>
+                          </Label>
+                        </div>
+                      {:else}
+                        <p class="text-muted-foreground italic">
+                          This workflow has no text inputs.
+                        </p>
+                      {/each}
+                    </div>
+                  </div>
+                {/snippet}
+                {@render inputChecklist(
+                  'positive',
+                  'Prompt inputs → every checked input receives the scene prompt.',
+                  selectedPromptPaths,
+                )}
+                {@render inputChecklist(
+                  'negative',
+                  'Negative inputs → every checked input receives the negative prompt.',
+                  selectedNegativePaths,
+                )}
+                <div class="space-y-1">
+                  <Label>Seed input</Label>
+                  <Autocomplete
+                    items={seedItems}
+                    selected={seedItems.find(
+                      (item) => item.value === (profileCustomWorkflow?.seedPath ?? ''),
+                    )}
+                    onSelect={(v) =>
+                      updateWorkflow({ seedPath: (v as { value: string }).value || null })}
+                    itemLabel={(s: { label: string }) => s.label}
+                    itemValue={(s: { value: string }) => s.value}
+                    placeholder="None (fixed seed)"
+                  />
+                  {#if profileCustomWorkflow.seedPath === null}
+                    <p class="text-muted-foreground">
+                      Every image will use the workflow's own seed.
+                    </p>
+                  {/if}
+                </div>
+                <div class="space-y-1">
+                  <Label>Output node</Label>
+                  <Autocomplete
+                    items={outputItems}
+                    selected={outputItems.find(
+                      (item) => item.value === profileCustomWorkflow?.outputNodeId,
+                    )}
+                    onSelect={(v) =>
+                      updateWorkflow({ outputNodeId: (v as { value: string }).value })}
+                    itemLabel={(s: { label: string }) => s.label}
+                    itemValue={(s: { value: string }) => s.value}
+                    placeholder="Select output node"
+                  />
+                </div>
                 {#if loadImageNodes.length === 0}
                   <p class="text-muted-foreground italic">
                     No LoadImage node detected (reference images ignored).
@@ -1688,42 +1729,6 @@
                   </div>
                 {/if}
               </div>
-            {:else if workflowAmbiguousNodes.length > 0}
-              <!-- Picker: multiple CLIPTextEncode positive nodes found -->
-              <div class="bg-muted/40 space-y-2 rounded-md border px-3 py-2">
-                <p class="text-muted-foreground text-xs">
-                  Multiple prompt nodes found. Select the one to use as the positive prompt:
-                </p>
-                {#each workflowAmbiguousNodes as node (node.nodeId)}
-                  <label
-                    class="hover:bg-muted/60 flex cursor-pointer items-start gap-2.5 rounded p-1.5 text-xs transition-colors"
-                  >
-                    <input
-                      type="radio"
-                      name="workflow-positive-node"
-                      value={node.path}
-                      bind:group={workflowPickerSelection}
-                      class="mt-0.5 shrink-0"
-                    />
-                    <span class="flex flex-col gap-0.5">
-                      <span class="font-mono text-[11px]"
-                        >{node.nodeId}{#if node.title}
-                          <span class="text-muted-foreground font-sans">— {node.title}</span>{/if}
-                        {#if node.kSamplerSlot}
-                          <span
-                            class="bg-primary/10 text-primary ml-1 rounded px-1 py-0.5 font-sans text-[10px] not-italic"
-                            >{node.kSamplerSlot}</span
-                          >
-                        {/if}
-                      </span>
-                      <span class="text-muted-foreground italic">{node.textPreview}</span>
-                    </span>
-                  </label>
-                {/each}
-                <Button size="sm" class="w-full" onclick={confirmWorkflowPicker}
-                  >Confirm selection</Button
-                >
-              </div>
             {:else}
               <!-- State A: no workflow loaded -->
               <details class="group text-xs">
@@ -1760,8 +1765,7 @@
                   <li>
                     <span class="text-foreground font-medium">4. Upload it below.</span>
                     <br />
-                    The app will automatically detect your prompt and seed nodes. If multiple prompt nodes
-                    are found, you will be asked to pick one.
+                    The app pre-fills your prompt, seed and output nodes. You can change any of them afterwards.
                   </li>
                 </ol>
               </details>

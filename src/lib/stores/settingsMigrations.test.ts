@@ -4,6 +4,7 @@ import {
   migrateContextWindow,
   migrateEntryRetrieval,
   migrateImageGeneration,
+  migrateImageProviderOptions,
   migrateWorldStateBudget,
   migrateWorldStateInjection,
 } from './settingsMigrations'
@@ -181,6 +182,89 @@ describe('migrateImageGeneration', () => {
 
   it('preserves the other settings', () => {
     expect(migrateImageGeneration({ ...legacy, backgroundBlur: 2 }).backgroundBlur).toBe(2)
+  })
+})
+
+describe('migrateImageProviderOptions', () => {
+  const workflow = {
+    '3': { class_type: 'KSampler', inputs: { seed: 1 } },
+    '4': { class_type: 'KSamplerAdvanced', inputs: { noise_seed: 1 } },
+    '6': { class_type: 'CLIPTextEncode', inputs: { text: '' } },
+  }
+  const stored = (over: Record<string, unknown> = {}) => ({
+    mode: 'custom-workflow',
+    cfg: 1,
+    customWorkflow: {
+      workflow,
+      positivePromptPath: '6.inputs.text',
+      seedPath: '3.inputs.seed',
+      outputNodeId: '9',
+      negativePromptPath: null,
+      ...over,
+    },
+  })
+  const customWorkflowOf = (options: Record<string, unknown>) =>
+    options.customWorkflow as Record<string, unknown>
+
+  it('turns the single prompt path into a list and drops the old key', () => {
+    const custom = customWorkflowOf(migrateImageProviderOptions(stored()))
+
+    expect(custom.positivePromptPaths).toEqual(['6.inputs.text'])
+    expect(custom).not.toHaveProperty('positivePromptPath')
+    expect(custom).toMatchObject({ outputNodeId: '9', negativePromptPaths: [] })
+    expect(custom).not.toHaveProperty('negativePromptPath')
+  })
+
+  it('turns the single negative path into a list', () => {
+    const custom = customWorkflowOf(
+      migrateImageProviderOptions(stored({ negativePromptPath: '7.inputs.text' })),
+    )
+    expect(custom.negativePromptPaths).toEqual(['7.inputs.text'])
+    expect(custom).not.toHaveProperty('negativePromptPath')
+  })
+
+  it('drops a negative that is also a prompt input', () => {
+    const custom = customWorkflowOf(
+      migrateImageProviderOptions(stored({ negativePromptPath: '6.inputs.text' })),
+    )
+    expect(custom.positivePromptPaths).toEqual(['6.inputs.text'])
+    expect(custom.negativePromptPaths).toEqual([])
+  })
+
+  it('keeps a list that is already there over the old key', () => {
+    const custom = customWorkflowOf(
+      migrateImageProviderOptions(
+        stored({ positivePromptPaths: ['6.inputs.text', '7.inputs.t5'] }),
+      ),
+    )
+    expect(custom.positivePromptPaths).toEqual(['6.inputs.text', '7.inputs.t5'])
+  })
+
+  it('points a seed path that missed noise_seed at it, and leaves a real seed alone', () => {
+    const repaired = migrateImageProviderOptions(stored({ seedPath: '4.inputs.seed' }))
+    const untouched = migrateImageProviderOptions(stored({ seedPath: '3.inputs.seed' }))
+
+    expect(customWorkflowOf(repaired).seedPath).toBe('4.inputs.noise_seed')
+    expect(customWorkflowOf(untouched).seedPath).toBe('3.inputs.seed')
+  })
+
+  it('leaves a seed path alone that is not on a node of the workflow', () => {
+    const custom = customWorkflowOf(
+      migrateImageProviderOptions(stored({ seedPath: '99.inputs.seed' })),
+    )
+    expect(custom.seedPath).toBe('99.inputs.seed')
+  })
+
+  it('is idempotent', () => {
+    const once = migrateImageProviderOptions(stored({ seedPath: '4.inputs.seed' }))
+    expect(migrateImageProviderOptions(once)).toEqual(once)
+  })
+
+  it('preserves the other options, and options with no custom workflow', () => {
+    expect(migrateImageProviderOptions(stored())).toMatchObject({ mode: 'custom-workflow', cfg: 1 })
+    const plain = { mode: 'basic-txt2img', cfg: 7 }
+    expect(migrateImageProviderOptions(plain)).toBe(plain)
+    expect(migrateImageProviderOptions({ customWorkflow: null })).toEqual({ customWorkflow: null })
   })
 })
 
