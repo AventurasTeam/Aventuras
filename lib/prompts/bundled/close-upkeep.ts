@@ -10,8 +10,9 @@ export const CLOSE_UPKEEP: TemplateSources = {
 Keep the world's places, items and keywords true to this chapter, with update_place, update_item and set_keywords, and mark the happenings everyone has come to know with mark_common_knowledge. Write only what the cited turns show; a row the chapter leaves as it was needs no call.
 
 - Off-scene conditions. Set a place's or an item's condition only when the chapter shows it changed while the scene was elsewhere ("news came that the capital burned"). The turns' own scene keeps the conditions it showed, so leave the condition of a row marked in the scene alone.
+- In-scene rows. A row in the scene is shown because it has no keywords or a blank description: give it its first keywords, or fill the description, when the turns show them; leave its condition alone.
 - Descriptions. Rewrite a place's or an item's description only when the chapter materially changes what it is, never for detail its condition or placement already carries. A blank description may be filled when the cited turns show it.
-- Keywords. With set_keywords, add the names and aliases the chapter uses for a row, and a bare place's or item's first keywords. Remove only a term an AI added that no longer fits: a term the user added can't be removed.
+- Keywords. With set_keywords, add the names and aliases the chapter uses for a row, and a bare place's or item's first keywords. Remove only a term that no longer fits. You can't see who added a term; removing a term the user added is refused.
 - Placement. With update_place, set a place's parent when the chapter places it or moves it, or send top: true for an unplaced place that nothing on the map could contain. Read a parent with read_row before naming it.
 - Common knowledge. Mark a happening with mark_common_knowledge only when the turns show outright that word of it has spread to everyone. A wrong mark makes every character aware of it.
 - Other rows. For a row the chapter names that isn't below, find it with search_world and read it with read_row before writing to it.
