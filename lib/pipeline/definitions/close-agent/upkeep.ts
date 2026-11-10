@@ -44,7 +44,7 @@ export type UpkeepRow = {
   id: string
   kind: 'character' | 'location' | 'item' | 'faction'
   name: string
-  status: string
+  status: Entity['status']
   description: string
   keywords: string[]
   condition: string
