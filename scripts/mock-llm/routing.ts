@@ -146,8 +146,9 @@ function candidatesFor(
 
 /**
  * Earliest occurrence wins, not registry order: the real marker opens the user half (wizard system
- * halves are empty; no contract carries a marker, per routing.test.ts), while a sibling's, quoted
- * in a refine's `current` preview, sits deeper.
+ * halves are empty, shapes.test.ts keeps each chapter-metadata marker out of the other metadata
+ * templates, and no contract carries a marker, per routing.test.ts), while a sibling's, quoted in
+ * a refine's `current` preview, sits deeper.
  */
 function pickByMarker(
   candidates: readonly StructuredShape[],

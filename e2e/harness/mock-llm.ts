@@ -123,6 +123,14 @@ export const EXAMPLES: Record<string, unknown> = {
     theme: 'mock',
     keywords: ['mock'],
   },
+  'chapter-metadata-part': { summary: 'Mock part summary.' },
+  // Not the single call's default, so a spec can tell which call wrote the chapter row.
+  'chapter-metadata-merge': {
+    title: 'Mock merged chapter',
+    summary: 'Mock merged chapter summary.',
+    theme: 'mock',
+    keywords: ['mock'],
+  },
 
   // Wizard assist. Nothing here is written until the user imports it, so the
   // inertness rule the classifier defaults follow does not apply — and could

@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest'
 
-import { STRUCTURED_SHAPES } from './shapes'
+import { bundledPack, TEMPLATE_IDS, type TemplateId } from '@/lib/prompts'
+
+import { findShapeByName, STRUCTURED_SHAPES } from './shapes'
 import { EXAMPLES } from '../../e2e/harness/mock-llm'
 
 // The registry is shared with the E2E harness but the default replies are not.
@@ -55,5 +57,48 @@ describe('E2E harness examples', () => {
       knownAwareness: [],
       newPlaces: [],
     })
+  })
+})
+
+// The single call and the merge share chapterMetadataSchema's block, and pickByMarker takes the
+// earliest marker across the system and user halves, so no metadata marker may sit in a sibling.
+describe('chapter metadata markers', () => {
+  const METADATA_TEMPLATES: Record<string, TemplateId> = {
+    'chapter-metadata': TEMPLATE_IDS.chapterMetadata,
+    'chapter-metadata-part': TEMPLATE_IDS.chapterMetadataPart,
+    'chapter-metadata-merge': TEMPLATE_IDS.chapterMetadataMerge,
+  }
+
+  const markerFor = (name: string): string => {
+    const shape = findShapeByName(name)
+    if (shape === undefined) throw new Error(`registry lost ${name}`)
+    return shape.marker
+  }
+
+  it('gives each metadata call a distinct, non-empty marker that opens its own user half', () => {
+    const markers = Object.keys(METADATA_TEMPLATES).map(markerFor)
+    expect(markers).not.toContain('')
+    expect(new Set(markers).size).toBe(markers.length)
+    for (const [name, templateId] of Object.entries(METADATA_TEMPLATES)) {
+      const user = bundledPack.templates[templateId]?.user ?? ''
+      expect(user.trimStart().startsWith(markerFor(name)), name).toBe(true)
+    }
+  })
+
+  it("keeps each metadata marker out of the other metadata templates' halves", () => {
+    for (const name of Object.keys(METADATA_TEMPLATES)) {
+      const marker = markerFor(name)
+      for (const [other, templateId] of Object.entries(METADATA_TEMPLATES)) {
+        if (other === name) continue
+        const template = bundledPack.templates[templateId]
+        expect(
+          template?.system.includes(marker),
+          `${name}'s marker in ${other}'s system half`,
+        ).toBe(false)
+        expect(template?.user.includes(marker), `${name}'s marker in ${other}'s user half`).toBe(
+          false,
+        )
+      }
+    }
   })
 })

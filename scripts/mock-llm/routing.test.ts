@@ -95,12 +95,12 @@ describe('classifyRequest', () => {
     )
   })
 
-  // Story call sites carry no marker, so the extracted block alone has to name them.
+  // A story shape's marker, where it has one, opens the user half as its template's does.
   for (const shape of STRUCTURED_SHAPES.filter((s) => s.group === 'story')) {
     it(`routes ${shape.name} from a request with a system half`, async () => {
       const body = await requestAsSent(
         shape.schema,
-        'Classify the turn.',
+        shape.marker === '' ? 'Classify the turn.' : `${shape.marker}\n\nClassify the turn.`,
         '# Calendar\nThe year turns on the thaw.',
       )
 
@@ -119,23 +119,35 @@ describe('classifyRequest', () => {
     expect(route).toMatchObject({ lane: 'structured', key: 'per-turn-classifier-suggestions' })
   })
 
-  // The real template's halves through the real middleware, so the lane holds as the prompt changes.
-  it('routes a rendered chapter-metadata call to its own lane', async () => {
-    const shape = findShapeByName('chapter-metadata')
-    if (shape === undefined) throw new Error('registry lost chapter-metadata')
-    const { system, user } = renderTemplate(TEMPLATE_IDS.chapterMetadata, {
-      entries: [
-        { position: 3, kind: 'ai_reply', content: 'Mora waited at the ford with a lantern.' },
-      ],
-      previousChapterSummary: 'Kael crossed the marsh and lost the sigil.',
-      threads: [{ title: 'Find the heir', status: 'active' }],
-      mode: 'adventure',
+  // The real templates' halves through the real middleware, so each lane holds as the prompts change.
+  const METADATA_CALLS: [string, TemplateId][] = [
+    ['chapter-metadata', TEMPLATE_IDS.chapterMetadata],
+    ['chapter-metadata-part', TEMPLATE_IDS.chapterMetadataPart],
+    ['chapter-metadata-merge', TEMPLATE_IDS.chapterMetadataMerge],
+  ]
+  const METADATA_CONTEXT = {
+    entries: [
+      { position: 3, kind: 'ai_reply', content: 'Mora waited at the ford with a lantern.' },
+    ],
+    partSummaries: [
+      'Mora waited at the ford with a lantern.',
+      'Kael crossed at dawn and gave her the sigil.',
+    ],
+    previousChapterSummary: 'Kael crossed the marsh and lost the sigil.',
+    threads: [{ title: 'Find the heir', status: 'active' }],
+    mode: 'adventure',
+  }
+  for (const [name, templateId] of METADATA_CALLS) {
+    it(`routes a rendered ${name} call to its own lane`, async () => {
+      const shape = findShapeByName(name)
+      if (shape === undefined) throw new Error(`registry lost ${name}`)
+      const { system, user } = renderTemplate(templateId, METADATA_CONTEXT)
+      expect(classifyRequest(await requestAsSent(shape.schema, user, system))).toMatchObject({
+        lane: 'structured',
+        key: name,
+      })
     })
-    expect(classifyRequest(await requestAsSent(shape.schema, user, system))).toMatchObject({
-      lane: 'structured',
-      key: 'chapter-metadata',
-    })
-  })
+  }
 
   it('matches the force-on path, which sends a JSON Schema instead of a prompt block', () => {
     const route = classifyRequest(

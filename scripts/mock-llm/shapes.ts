@@ -4,6 +4,7 @@ import { schemaToTypeScriptBlock, type JsonSchema } from '@/lib/ai'
 import { classifierExtractionSchema, classifierExtractionWithPlacesSchema } from '@/lib/classifier'
 import {
   chapterMetadataSchema,
+  chapterPartSummarySchema,
   fallbackClassifierSchema,
   fallbackClassifierWithSuggestionsSchema,
   suggestionRefreshSchema,
@@ -30,7 +31,8 @@ import {
 // One entry per CALL SITE. Where call sites share a schema (hence a block), `marker`
 // separates them: the text a template's user half opens with before its first Liquid
 // tag, sliced from the app's own pack so editing a template moves its marker with it.
-// Story shapes are one call site each and carry none.
+// A story shape carries one only when given its template: the chapter close's single metadata
+// call and its merge share a schema.
 //
 // Default replies are NOT shared. E2E wants inert no-ops for determinism, the
 // dev mock wants defaults lively enough that a manual turn visibly does
@@ -59,8 +61,9 @@ function markerOf(templateId: TemplateId): string {
   return (tag === -1 ? source : source.slice(0, tag)).trim()
 }
 
-function storyShape(name: string, schema: z.ZodType): StructuredShape {
-  return { name, group: 'story', schema, block: blockOf(schema), marker: '' }
+function storyShape(name: string, schema: z.ZodType, templateId?: TemplateId): StructuredShape {
+  const marker = templateId === undefined ? '' : markerOf(templateId)
+  return { name, group: 'story', schema, block: blockOf(schema), marker }
 }
 
 function wizardShape(name: string, schema: z.ZodType, templateId: TemplateId): StructuredShape {
@@ -73,7 +76,9 @@ export const STRUCTURED_SHAPES: readonly StructuredShape[] = [
   storyShape('periodic-classifier', classifierExtractionSchema),
   storyShape('periodic-classifier-places', classifierExtractionWithPlacesSchema),
   storyShape('suggestion-refresh', suggestionRefreshSchema),
-  storyShape('chapter-metadata', chapterMetadataSchema),
+  storyShape('chapter-metadata', chapterMetadataSchema, TEMPLATE_IDS.chapterMetadata),
+  storyShape('chapter-metadata-part', chapterPartSummarySchema, TEMPLATE_IDS.chapterMetadataPart),
+  storyShape('chapter-metadata-merge', chapterMetadataSchema, TEMPLATE_IDS.chapterMetadataMerge),
 
   wizardShape('wizard-genre', labeledPromptOutputSchema, TEMPLATE_IDS.wizardGenre),
   wizardShape('wizard-genre-refine', labeledPromptOutputSchema, TEMPLATE_IDS.wizardGenreRefine),
