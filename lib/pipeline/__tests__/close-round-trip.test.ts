@@ -1246,7 +1246,7 @@ describe('a merge of a row this close already wrote', () => {
           task: 'threads',
           tool: 'merge_threads',
           result: 'rejected',
-          reason: expect.stringContaining('keep that thread instead'),
+          reason: expect.stringContaining('this close already wrote a thread in absorb'),
         },
       ],
     })
@@ -1264,7 +1264,11 @@ describe('a merge of a row this close already wrote', () => {
 
 describe('the round trip table', () => {
   it("scripts every production task's write tool in some case (C9)", () => {
-    const writeTools = PRODUCTION_CLOSE_SLOTS.perPart.flatMap((entry) =>
+    const writeTools = [
+      ...PRODUCTION_CLOSE_SLOTS.before,
+      ...PRODUCTION_CLOSE_SLOTS.perPart,
+      ...PRODUCTION_CLOSE_SLOTS.after,
+    ].flatMap((entry) =>
       entry.kind === 'task'
         ? entry.def.tools.flatMap((tool) => (tool.kind === 'write' ? [tool.name] : []))
         : [],
@@ -1344,7 +1348,7 @@ describe('each new case lands what it names', () => {
       [1, 'update_thread', 'ok'],
       [2, 'merge_threads', 'rejected'],
     ])
-    expect(calls[1]!.reason).toContain('keep that thread instead')
+    expect(calls[1]!.reason).toContain('this close already wrote a thread in absorb')
     const threadDeltas = (await deltasOf(h.fx, h.actionId())).filter(
       (d) => d.targetTable === 'threads',
     )
