@@ -28,7 +28,7 @@ export type CommonCheck =
 /** `taskEntryIds`: the turns the task was shown, by position; a write cites only these. */
 type CheckContext = { ids: CloseIds; taskEntryIds: readonly string[]; readSet: ReadSet }
 
-const TURN_HINT = 'cite turns by the handles the chapter shows (t1, t2…)'
+const TURN_HINT = 'cite the turns this task was shown, by their handles'
 
 /**
  * A write's first refusals in order: turns, why, read gate. Turns return as entry ids in position
@@ -65,7 +65,7 @@ function citedTurns(value: unknown, { ids, taskEntryIds }: CheckContext): Common
     if (id === undefined && typeof handle === 'string' && FULL_ID_SHAPE.test(handle))
       return {
         ok: false,
-        reason: 'turns takes the short handles as shown (t1, t2…), not a full id',
+        reason: 'turns takes the short handles of the turns this task was shown, not a full id',
       }
     if (id === undefined || !id.startsWith('entry_'))
       return { ok: false, reason: `${String(handle)} is not a turn: ${TURN_HINT}` }
