@@ -29,6 +29,7 @@ import { CloseLedgerWriter } from './ledger'
 import { readRowTool } from './read-tools'
 import { __setCloseAgentSlots } from './slots'
 import type { TaskPromptContext } from './task'
+import { turnInTextReason } from './text-checks'
 import { mergeThreadsTool, updateThreadTool } from './thread-tools'
 import { THREADS_READ_FIELDS, threadsTask } from './threads'
 import { assertReplaySafe, DELETE_PATH, type CloseTool } from './tool'
@@ -745,6 +746,41 @@ describe('update_thread', () => {
     expect(run.answers[0]).toMatchObject({ result: 'rejected', reason: CLOSE_REASON.rowGone })
     expect(await runDeltas(f, run.result.actionId)).toEqual([])
   })
+
+  it('refuses a description holding a turn handle, landing a status beside it', async () => {
+    const run = await runThreadCalls(f, THREADS_SHOWN, [
+      {
+        toolName: 'update_thread',
+        input: {
+          id: 'th1',
+          description: 'Settled at t7, at the milestone.',
+          status: 'resolved',
+          ...cite(),
+        },
+      },
+      {
+        toolName: 'update_thread',
+        input: { id: 'th2', description: 'The seal broke open [t5].', ...cite() },
+      },
+    ])
+
+    expect(run.answers).toEqual([
+      {
+        result: 'ok',
+        notWritten: [{ field: 'description', row: 'th1', reason: turnInTextReason('t7') }],
+      },
+      { result: 'rejected', reason: turnInTextReason('t5') },
+    ])
+    expect(run.calls.map(({ result, skippedFields }) => [result, skippedFields])).toEqual([
+      ['ok', [{ field: 'description', reason: turnInTextReason('t7') }]],
+      ['rejected', undefined],
+    ])
+    expect(await threadRow(f, LETTER.id)).toMatchObject({
+      description: LETTER.description,
+      status: 'resolved',
+    })
+    expect(await threadRow(f, SEALED.id)).toMatchObject({ description: SEALED.description })
+  })
 })
 
 describe('merge_threads', () => {
@@ -1312,6 +1348,26 @@ describe('merge_threads', () => {
       title: LETTER.title,
       description: `${LETTER.title}, sealed.`,
     })
+  })
+
+  // update_thread takes no title and the absorbed rows go, so a merge can't land without its text.
+  it('refuses a merge whose title or description names a turn, whole, writing nothing', async () => {
+    const run = await runThreadCalls(f, THREADS_SHOWN, [
+      merge({ keep: 'th1', absorb: ['th2'], title: 'Deliver the letter (t5)' }),
+      merge({ keep: 'th1', absorb: ['th2'], description: 'One errand since [t3].' }),
+    ])
+
+    expect(run.answers).toEqual([
+      { result: 'rejected', reason: turnInTextReason('t5') },
+      { result: 'rejected', reason: turnInTextReason('t3') },
+    ])
+    expect(run.calls.map(({ values }) => values)).toEqual([
+      { title: 'Deliver the letter (t5)' },
+      { description: 'One errand since [t3].' },
+    ])
+    expect(groupEvents(run.events)).toEqual([])
+    expect(await runDeltas(f, run.result.actionId)).toEqual([])
+    expect(await threadRow(f, SEALED.id)).toBeDefined()
   })
 
   describe('beside a thread the user set to always or disabled', () => {

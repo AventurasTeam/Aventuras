@@ -21,6 +21,7 @@ import { resetAllStores } from '@/lib/stores'
 
 import { createReadSet } from './common-checks'
 import { dispatchToolCall, type DispatchContext, type ToolAnswer } from './dispatch'
+import { storedValue } from './entity-write'
 import { softCapReason } from './fields'
 import { IDENTITY_READ_FIELDS, identityTask } from './identity'
 import { updateCharacterTool, updateFactionTool } from './identity-tools'
@@ -28,6 +29,7 @@ import { CloseIds, nameCloseProse } from './ids'
 import { CloseLedgerWriter } from './ledger'
 import { __setCloseAgentSlots, closeAgentSlots, NO_CLOSE_TASKS } from './slots'
 import type { TaskPromptContext } from './task'
+import { turnInTextReason } from './text-checks'
 import { assertReplaySafe, type CloseTool } from './tool'
 import { readTaskTurns, storyModeOf } from './turns'
 import { CLOSE_REASON } from './verdict'
@@ -1132,6 +1134,75 @@ describe('update_character and update_faction', () => {
     ])
     expect(await runDeltas(f, result.actionId)).toEqual([])
   })
+})
+
+// classifier.md → ID handling: a stored turn handle names another turn in a later prompt.
+describe('update_character and update_faction: a turn handle in a text field', () => {
+  let f: CloseFixture
+
+  beforeEach(async () => {
+    f = await openCloseFixture()
+    await seedCast(f)
+  })
+
+  // Each adopted field, by the delta path it lands at; the cast is Wren (c1) and the Syndicate (f1).
+  const TEXT_PATH: Readonly<Record<string, string>> = {
+    voice: 'state.voice',
+    description: 'description',
+    standing: 'state.standing',
+  }
+  const rowOf = (handle: string): string => (handle === 'c1' ? WREN : SYNDICATE)
+
+  it.each<[string, string, string]>([
+    ['update_character', 'c1', 'voice'],
+    ['update_character', 'c1', 'description'],
+    ['update_faction', 'f1', 'standing'],
+    ['update_faction', 'f1', 'description'],
+  ])(
+    '%s on %s refuses a %s naming a turn, sent alone, writing nothing',
+    async (toolName, id, field) => {
+      const before = await storedEntity(f, rowOf(id))
+
+      const { answers } = await dispatchScripted(
+        f,
+        [{ toolName, input: { id, [field]: 'Changed since [t3].', ...cite() } }],
+        { shown: CAST },
+      )
+
+      expect(answers.map(({ output }) => output)).toEqual([
+        { result: 'rejected', reason: turnInTextReason('t3') },
+      ])
+      expect(await storedEntity(f, rowOf(id))).toEqual(before)
+    },
+  )
+
+  it.each<[string, string, string, string, unknown]>([
+    ['update_character', 'c1', 'voice', 'description', 'A courier, soaked.'],
+    ['update_character', 'c1', 'description', 'voice', 'hoarse'],
+    ['update_faction', 'f1', 'standing', 'agenda', ['tax the bridge']],
+    ['update_faction', 'f1', 'description', 'agenda', ['tax the bridge']],
+  ])(
+    '%s on %s lands the field beside a %s naming a turn, ok naming that one',
+    async (toolName, id, field, other, value) => {
+      const path = TEXT_PATH[field]!
+      const otherPath = other === 'agenda' ? 'state.agenda' : (TEXT_PATH[other] ?? other)
+      const before = await storedEntity(f, rowOf(id))
+
+      const { answers, calls } = await dispatchScripted(
+        f,
+        [{ toolName, input: { id, [field]: 'Changed since t7.', [other]: value, ...cite() } }],
+        { shown: CAST },
+      )
+
+      expect(answers.map(({ output }) => output)).toEqual([
+        { result: 'ok', notWritten: [{ field: path, row: id, reason: turnInTextReason('t7') }] },
+      ])
+      expect(calls[0]!.skippedFields).toEqual([{ field: path, reason: turnInTextReason('t7') }])
+      const after = await storedEntity(f, rowOf(id))
+      expect(storedValue(after, path)).toEqual(storedValue(before, path))
+      expect(storedValue(after, otherPath)).toEqual(value)
+    },
+  )
 })
 
 // Real prefix_<uuid> ids: CloseIds hands a handle only to a substitutable id.

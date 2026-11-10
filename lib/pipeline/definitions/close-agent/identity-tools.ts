@@ -17,6 +17,7 @@ import {
   type SentList,
   type SentText,
 } from './fields'
+import { turnHandleIn, turnInTextReason } from './text-checks'
 import {
   writeToolSchema,
   type LostField,
@@ -183,6 +184,13 @@ async function planIdentityWrite<A extends { readonly id: string }>(
     if (!verdict.free) {
       lost.push({ field: field.path, row: id, kind: 'protected', reason: verdict.reason })
       continue
+    }
+    if (field.kind === 'text') {
+      const handle = turnHandleIn(field.text.bounded, ctx.ids)
+      if (handle !== undefined) {
+        lost.push({ field: field.path, row: id, kind: 'refused', reason: turnInTextReason(handle) })
+        continue
+      }
     }
     if (field.kind === 'list') {
       const cap = CAST_SOFT_CAPS[field.cap]
