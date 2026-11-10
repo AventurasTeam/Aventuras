@@ -1,12 +1,13 @@
 import { and, eq } from 'drizzle-orm'
 import { z } from 'zod'
 
-import { entities, type Entity } from '@/lib/db'
+import { entities, happenings, type Entity, type Happening } from '@/lib/db'
+import { dedupeTerms, newTerms, normalizeTerm } from '@/lib/keyword-terms'
 
 import { entityWriteAction, fieldVerdicts, storedValue } from './entity-write'
 import { restatedText, sentText, type BoundedField, type SentText } from './fields'
 import { planPlacement, type PlacementArg } from './placement'
-import { turnHandleIn, turnInTextReason } from './text-checks'
+import { handleInTerm, turnHandleIn, turnInTextReason } from './text-checks'
 import {
   writeToolSchema,
   type LostField,
@@ -244,4 +245,187 @@ export const updateItemTool: WriteTool<typeof UPDATE_ITEM_SHAPE> = {
   schema: writeToolSchema(UPDATE_ITEM_SHAPE),
   ids: { id: { shape: 'single', prefixes: ['item_'] } },
   plan: (args, ctx) => planUpkeepWrite('item', ITEM_TEXT, args, undefined, ctx),
+}
+
+export const SET_KEYWORDS_SHAPE = {
+  id: z.string().describe('The row, by the short id it is shown under (c1, l1, i1, f1…).'),
+  add: z
+    .array(z.string())
+    .optional()
+    .describe(
+      'Terms to add: names and aliases the chapter uses for the row. A term the row already has stays as it is.',
+    ),
+  remove: z
+    .array(z.string())
+    .optional()
+    .describe(
+      'Terms to remove: only a term an AI added that no longer fits. Removing a term the user added is rejected.',
+    ),
+}
+
+export const MARK_COMMON_KNOWLEDGE_SHAPE = {
+  id: z.string().describe('The happening, by the short id it is shown under (hp1, hp2…).'),
+}
+
+type KeywordArgs = z.output<WriteToolSchema<typeof SET_KEYWORDS_SHAPE>>
+type MarkArgs = z.output<WriteToolSchema<typeof MARK_COMMON_KNOWLEDGE_SHAPE>>
+
+const NO_TERMS = 'add and remove are both empty: send the terms to add, to remove, or both'
+const inBothReason = (term: string): string =>
+  `"${term}" is in both add and remove: send each term in one list`
+const termHandleReason = (term: string, handle: string): string =>
+  `"${term}" holds ${handle}, a short id: a keyword is a word the prose uses for the row, never an id`
+
+// A hand-edited row may hold anything in its keywords; only strings are terms.
+const strings = (value: unknown): string[] =>
+  Array.isArray(value) ? value.filter((item): item is string => typeof item === 'string') : []
+
+/** The list as the write would leave it: kept terms, then the adds it lacks (setEntityKeywords' order). */
+function plannedKeywords(
+  live: readonly string[],
+  add: readonly string[],
+  remove: readonly string[],
+): string[] {
+  const removing = new Set(remove.map(normalizeTerm))
+  return [...live.filter((term) => !removing.has(normalizeTerm(term))), ...newTerms(live, add)]
+}
+
+/**
+ * chapter-close.md → 3f Keywords: one keywords write; who added a term, and what the user removed
+ * after the prose, the action judges as it lands. A later turn's list skips the call whole, since an
+ * undo restores the whole prior list (parked.md).
+ */
+async function planSetKeywords(args: KeywordArgs, ctx: WriteContext): Promise<WritePlan> {
+  const { id } = args
+  const add = dedupeTerms(args.add ?? [])
+  const remove = dedupeTerms(args.remove ?? [])
+  const row = await readEntity(ctx, id)
+  const rows: ReportRow[] = [
+    { table: 'entities', id, name: row?.name ?? ctx.ids.nameOfId(id) ?? '' },
+  ]
+  const live = strings(row?.keywords)
+  const proposed = { keywords: plannedKeywords(live, add, remove) }
+  if (row === undefined)
+    return { kind: 'refused', reason: CLOSE_REASON.rowGone, rows, values: proposed }
+  if (add.length === 0 && remove.length === 0) return { kind: 'refused', reason: NO_TERMS, rows }
+  const removing = new Set(remove.map(normalizeTerm))
+  const both = add.find((term) => removing.has(normalizeTerm(term)))
+  if (both !== undefined)
+    return { kind: 'refused', reason: inBothReason(both), rows, values: proposed }
+  for (const term of [...add, ...remove]) {
+    const handle = handleInTerm(term, ctx.ids)
+    if (handle !== undefined)
+      return { kind: 'refused', reason: termHandleReason(term, handle), rows, values: proposed }
+  }
+
+  // Ahead of the guard: a list already as asked is ok with nothing written, never skipped.
+  const held = new Set(live.map(normalizeTerm))
+  if (newTerms(live, add).length === 0 && !remove.some((term) => held.has(normalizeTerm(term))))
+    return { kind: 'write', actions: [], lost: [], rows, values: {} }
+  const verdicts = (await ctx.guard([{ table: 'entities', id }])).row('entities', id)
+  if (verdicts.laterTurnWrote('keywords'))
+    return {
+      kind: 'write',
+      actions: [],
+      lost: [{ field: 'keywords', row: id, kind: 'protected', reason: CLOSE_REASON.laterTurn }],
+      rows,
+      values: proposed,
+    }
+  return {
+    kind: 'write',
+    actions: [
+      {
+        action: {
+          kind: 'setEntityKeywords',
+          source: 'chapter_close',
+          payload: { branchId: ctx.branchId, id, add, remove, proseEntryId: ctx.proseEntryId },
+        },
+        fields: ['keywords'],
+        row: id,
+      },
+    ],
+    lost: [],
+    rows,
+    values: proposed,
+  }
+}
+
+async function readHappening(ctx: WriteContext, id: string): Promise<Happening | undefined> {
+  const [row] = await ctx.db
+    .select()
+    .from(happenings)
+    .where(and(eq(happenings.branchId, ctx.branchId), eq(happenings.id, id)))
+    .limit(1)
+  return row
+}
+
+/**
+ * chapter-close.md → 3f common_knowledge: sets 1, never 0. Read first, since updateHappening ends a
+ * gone row in a hard not-found that would name no survivor.
+ */
+async function planMarkCommonKnowledge(args: MarkArgs, ctx: WriteContext): Promise<WritePlan> {
+  const { id } = args
+  const row = await readHappening(ctx, id)
+  const rows: ReportRow[] = [
+    { table: 'happenings', id, name: row?.title ?? ctx.ids.nameOfId(id) ?? '' },
+  ]
+  const proposed = { commonKnowledge: 1 }
+  if (row === undefined)
+    return { kind: 'refused', reason: CLOSE_REASON.rowGone, rows, values: proposed }
+  if (row.commonKnowledge === 1) return { kind: 'write', actions: [], lost: [], rows, values: {} }
+  const verdicts = (await ctx.guard([{ table: 'happenings', id }])).row('happenings', id)
+  if (verdicts.laterTurnWrote('commonKnowledge'))
+    return {
+      kind: 'write',
+      actions: [],
+      lost: [
+        { field: 'commonKnowledge', row: id, kind: 'protected', reason: CLOSE_REASON.laterTurn },
+      ],
+      rows,
+      values: proposed,
+    }
+  return {
+    kind: 'write',
+    actions: [
+      {
+        action: {
+          kind: 'updateHappening',
+          source: 'chapter_close',
+          payload: {
+            branchId: ctx.branchId,
+            id,
+            patch: { commonKnowledge: 1 },
+            proseEntryId: ctx.proseEntryId,
+          },
+        },
+        fields: ['commonKnowledge'],
+        row: id,
+      },
+    ],
+    lost: [],
+    rows,
+    values: proposed,
+  }
+}
+
+/** chapter-close.md → 3f Keywords: add and remove on any entity, one setEntityKeywords. */
+export const setKeywordsTool: WriteTool<typeof SET_KEYWORDS_SHAPE> = {
+  kind: 'write',
+  name: 'set_keywords',
+  description:
+    "Adds and removes a row's keywords, the names and aliases retrieval finds it by. Add the aliases the chapter uses for a row, and a bare place's or item's first keywords. Remove only a term an AI added that no longer fits: removing a term the user added is rejected, naming it. A term is a word the prose uses, never an id.",
+  schema: writeToolSchema(SET_KEYWORDS_SHAPE),
+  ids: { id: { shape: 'single', prefixes: ['char_', 'loc_', 'item_', 'fact_'] } },
+  plan: planSetKeywords,
+}
+
+/** chapter-close.md → 3f common_knowledge: a happening known to every character, one updateHappening. */
+export const markCommonKnowledgeTool: WriteTool<typeof MARK_COMMON_KNOWLEDGE_SHAPE> = {
+  kind: 'write',
+  name: 'mark_common_knowledge',
+  description:
+    'Marks a happening as common knowledge, known to every character, when the cited turns show outright that word of it has spread to everyone. A wrong mark makes every character aware of it, so leave anything less unmarked.',
+  schema: writeToolSchema(MARK_COMMON_KNOWLEDGE_SHAPE),
+  ids: { id: { shape: 'single', prefixes: ['hap_'] } },
+  plan: planMarkCommonKnowledge,
 }

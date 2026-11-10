@@ -2,6 +2,7 @@ import { and, asc, eq } from 'drizzle-orm'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 
 import { applyDeltaAction } from '@/lib/actions/delta/apply-delta-action'
+import { loadOpenStory } from '@/lib/actions/stories/operational'
 import { undoLastAction } from '@/lib/actions/story-entries/undo'
 import {
   USER_EDITED_SINCE_PROSE,
@@ -13,9 +14,11 @@ import {
   deltas,
   emptyEntityState,
   entities,
+  happenings,
   storyEntries,
   type Entity,
   type EntityState,
+  type Happening,
   type NewEntity,
 } from '@/lib/db'
 import { resetAllStores } from '@/lib/stores'
@@ -25,7 +28,12 @@ import { dispatchToolCall, type DispatchContext } from './dispatch'
 import { CloseLedgerWriter } from './ledger'
 import { turnInTextReason } from './text-checks'
 import { assertReplaySafe, type CloseTool } from './tool'
-import { updateItemTool, updatePlaceTool } from './upkeep-tools'
+import {
+  markCommonKnowledgeTool,
+  setKeywordsTool,
+  updateItemTool,
+  updatePlaceTool,
+} from './upkeep-tools'
 import { CLOSE_REASON } from './verdict'
 import { expectRan } from '../../__tests__/harness'
 import { definePipeline } from '../../authoring/define'
@@ -43,6 +51,8 @@ const KIND = 'close-upkeep-tools-test'
 const UPKEEP_TOOLS: Readonly<Record<string, CloseTool>> = {
   update_place: updatePlaceTool,
   update_item: updateItemTool,
+  set_keywords: setKeywordsTool,
+  mark_common_knowledge: markCommonKnowledgeTool,
 }
 
 /** The chapter: the opening to the third reply, t1…t7. E is that reply. */
@@ -856,5 +866,424 @@ describe('update_item', () => {
       reason: 'l1 in id is a place; id takes an item',
     })
     expect(await runDeltas(f, result.actionId)).toEqual([])
+  })
+})
+
+// ---- set_keywords ----
+
+/** Inserted with no delta, as the wizard and the default seed write a row; then the stores reopen. */
+async function putWizardRow(
+  fx: CloseFixture,
+  row: { id: string; kind: Entity['kind']; name: string; keywords: string[] },
+): Promise<void> {
+  await fx.ctx.db.insert(entities).values({
+    id: row.id,
+    branchId: fx.branchId,
+    kind: row.kind,
+    name: row.name,
+    description: null,
+    status: 'active',
+    retiredReason: null,
+    injectionMode: 'auto',
+    state: emptyEntityState(row.kind),
+    keywords: row.keywords,
+    createdAt: 1,
+    updatedAt: 1,
+  })
+  const reopened = await loadOpenStory(fx.branchId, fx.ctx)
+  if (reopened.status !== 'ok') throw new Error(`the story did not reopen: ${reopened.status}`)
+}
+
+/** A later turn's per-turn writer appending a term: anchored past E. */
+async function laterTurnAppends(fx: CloseFixture, id: string, keywords: string[]): Promise<void> {
+  const result = await applyDeltaAction(
+    {
+      action: {
+        kind: 'appendEntityKeywords',
+        source: 'per_turn_classifier',
+        payload: { branchId: fx.branchId, id, keywords, proseEntryId: null },
+      },
+      actionId: 'act_close_turn_5',
+      branchId: fx.branchId,
+      entryId: laterReplyIdOf(fx),
+    },
+    fx.ctx,
+  )
+  if (result.status !== 'ok') throw new Error(`the later turn's append refused: ${result.reason}`)
+}
+
+const MILL = place(21)
+const HARBOUR = place(22)
+const TOWER = place(23)
+const GATE = place(24)
+const FERRY = 'item_00000000-0000-4000-8000-000000000025'
+const OLD_TOBIN = 'char_00000000-0000-4000-8000-000000000026'
+
+// l1…l4, i1, c1 in this order.
+const KEYWORD_SHOWN: readonly ShownRow[] = [
+  { table: 'entities', id: MILL, name: 'The mill' },
+  { table: 'entities', id: HARBOUR, name: 'The harbour' },
+  { table: 'entities', id: TOWER, name: 'The tower' },
+  { table: 'entities', id: GATE, name: 'The gate' },
+  { table: 'entities', id: FERRY, name: 'ferry token' },
+  { table: 'entities', id: OLD_TOBIN, name: 'Tobin' },
+]
+
+/**
+ * The mill: a pass's two terms. The harbour: a pass's 'quay', then the user's 'harbour'. The tower:
+ * a wizard row, no create delta. The gate: a pass's 'north gate', then a user merge's union, logged
+ * as the merge logs it (a user_edit updateEntity on the kept row). The ferry token: a pass's two
+ * terms, then the user's removal of 'crossing'. Tobin: a pass's term, then a later turn's append.
+ */
+async function seedKeywordRows(fx: CloseFixture): Promise<void> {
+  await seedEntity(fx, {
+    id: MILL,
+    kind: 'location',
+    name: 'The mill',
+    keywords: ['old mill', 'the miller'],
+  })
+  await seedEntity(fx, { id: HARBOUR, kind: 'location', name: 'The harbour', keywords: ['quay'] })
+  await editEntity(fx, HARBOUR, 'user', { keywords: ['quay', 'harbour'] })
+  await putWizardRow(fx, {
+    id: TOWER,
+    kind: 'location',
+    name: 'The tower',
+    keywords: ['the wizard tower'],
+  })
+  await seedEntity(fx, { id: GATE, kind: 'location', name: 'The gate', keywords: ['north gate'] })
+  await editEntity(fx, GATE, 'user', { keywords: ['north gate', 'the gatehouse'] })
+  await seedEntity(fx, {
+    id: FERRY,
+    kind: 'item',
+    name: 'ferry token',
+    keywords: ['ferry', 'crossing'],
+  })
+  await editEntity(fx, FERRY, 'user', { keywords: ['ferry'] })
+  await seedEntity(fx, { id: OLD_TOBIN, kind: 'character', name: 'Tobin', keywords: ['old tobin'] })
+  await laterTurnAppends(fx, OLD_TOBIN, ['the ferryman'])
+}
+
+describe('set_keywords and mark_common_knowledge: the tools', () => {
+  it('replay as sent', () => {
+    assertReplaySafe(setKeywordsTool.schema, [
+      { id: 'l1', add: ['grain store'], turns: ['t1'], why: 'They call it so.' },
+      { id: 'l1', add: [], remove: ['the miller'], turns: ['t1', 't2'], why: 'He left.' },
+      { id: 'c1', turns: ['t3'], why: 'Nothing.' },
+    ])
+    assertReplaySafe(markCommonKnowledgeTool.schema, [
+      { id: 'hp1', turns: ['t1'], why: 'The whole town talks of it.' },
+    ])
+  })
+
+  it("take canon's names, any entity for keywords and a happening for the mark", () => {
+    expect(setKeywordsTool).toMatchObject({
+      kind: 'write',
+      name: 'set_keywords',
+      ids: { id: { shape: 'single', prefixes: ['char_', 'loc_', 'item_', 'fact_'] } },
+    })
+    expect(markCommonKnowledgeTool).toMatchObject({
+      kind: 'write',
+      name: 'mark_common_knowledge',
+      ids: { id: { shape: 'single', prefixes: ['hap_'] } },
+    })
+  })
+})
+
+describe('set_keywords', () => {
+  let f: CloseFixture
+
+  beforeEach(async () => {
+    f = await openCloseFixture()
+    await seedKeywordRows(f)
+  })
+
+  it("adds and removes in one setEntityKeywords delta on E, a pass's term going", async () => {
+    const { result, answers, calls } = await runUpkeepCalls(f, KEYWORD_SHOWN, [
+      {
+        toolName: 'set_keywords',
+        input: { id: 'l1', add: ['grain store'], remove: ['the miller'], ...cite() },
+      },
+    ])
+
+    expect(answers).toEqual([{ result: 'ok' }])
+    expect(calls).toEqual([
+      {
+        task: 'upkeep',
+        part: 1,
+        tool: 'set_keywords',
+        rows: [{ table: 'entities', id: MILL, name: 'The mill' }],
+        why: 'The turns show it at the landing.',
+        turns: [endEntryIdOf(f)],
+        result: 'ok',
+        values: { keywords: 'old mill, grain store' },
+      },
+    ])
+    const written = await runDeltas(f, result.actionId)
+    expect(written).toHaveLength(1)
+    expect(written[0]).toMatchObject({
+      targetId: MILL,
+      source: 'chapter_close',
+      entryId: endEntryIdOf(f),
+    })
+    expect((await storedEntity(f, MILL)).keywords).toEqual(['old mill', 'grain store'])
+  })
+
+  // retrieval.md → Keywords schema: only a term an AI added can go; the add beside it waits too.
+  it.each([
+    { name: 'a term the user added', id: 'l2', row: HARBOUR, term: 'harbour' },
+    {
+      name: 'a wizard row term with no create delta',
+      id: 'l3',
+      row: TOWER,
+      term: 'the wizard tower',
+    },
+    { name: "a user merge's unioned term", id: 'l4', row: GATE, term: 'the gatehouse' },
+  ])('refuses removing $name, naming it and writing nothing', async ({ id, row, term }) => {
+    const before = (await storedEntity(f, row)).keywords
+
+    const { result, calls } = await runUpkeepCalls(f, KEYWORD_SHOWN, [
+      { toolName: 'set_keywords', input: { id, add: ['landmark'], remove: [term], ...cite() } },
+    ])
+
+    expect(calls[0]).toMatchObject({ result: 'rejected', reason: `keyword-user-added: ${term}` })
+    expect(await runDeltas(f, result.actionId)).toEqual([])
+    expect((await storedEntity(f, row)).keywords).toEqual(before)
+  })
+
+  it("keeps a term the user removed after the cited turn removed, while the call's other terms land", async () => {
+    const { calls } = await runUpkeepCalls(f, KEYWORD_SHOWN, [
+      {
+        toolName: 'set_keywords',
+        input: { id: 'i1', add: ['crossing', 'night ferry'], ...cite() },
+      },
+    ])
+
+    expect(calls[0]).toMatchObject({ result: 'ok' })
+    expect((await storedEntity(f, FERRY)).keywords).toEqual(['ferry', 'night ferry'])
+  })
+
+  it('skips a list a later turn wrote, writing nothing', async () => {
+    const { result, calls } = await runUpkeepCalls(f, KEYWORD_SHOWN, [
+      { toolName: 'set_keywords', input: { id: 'c1', add: ['ferryman tobin'], ...cite() } },
+    ])
+
+    expect(calls[0]).toMatchObject({ result: 'skipped', reason: CLOSE_REASON.laterTurn })
+    expect(await runDeltas(f, result.actionId)).toEqual([])
+    expect((await storedEntity(f, OLD_TOBIN)).keywords).toEqual(['old tobin', 'the ferryman'])
+  })
+
+  it('answers ok writing nothing when every add is held and no removal names a held term', async () => {
+    const { result, answers, calls } = await runUpkeepCalls(f, KEYWORD_SHOWN, [
+      {
+        toolName: 'set_keywords',
+        input: { id: 'l1', add: ['Old Mill '], remove: ['millpond'], ...cite() },
+      },
+    ])
+
+    expect(answers).toEqual([{ result: 'ok' }])
+    expect(calls[0]).not.toHaveProperty('values')
+    expect(await runDeltas(f, result.actionId)).toEqual([])
+  })
+
+  it('refuses a term in both lists, matched by its normalized form, writing nothing', async () => {
+    const { result, calls } = await runUpkeepCalls(f, KEYWORD_SHOWN, [
+      {
+        toolName: 'set_keywords',
+        input: { id: 'l1', add: ['Gate'], remove: ['gate '], ...cite() },
+      },
+    ])
+
+    expect(calls[0]).toMatchObject({
+      result: 'rejected',
+      reason: expect.stringContaining('"Gate" is in both add and remove'),
+    })
+    expect(await runDeltas(f, result.actionId)).toEqual([])
+  })
+
+  it("refuses a term holding a short id, a row's or a turn's, writing nothing", async () => {
+    const { result, calls } = await runUpkeepCalls(f, KEYWORD_SHOWN, [
+      { toolName: 'set_keywords', input: { id: 'l1', add: ['c1'], ...cite() } },
+      { toolName: 'set_keywords', input: { id: 'l1', add: ['the road from t3'], ...cite() } },
+    ])
+
+    expect(calls[0]).toMatchObject({
+      result: 'rejected',
+      reason: expect.stringContaining('"c1" holds c1, a short id'),
+    })
+    expect(calls[1]).toMatchObject({
+      result: 'rejected',
+      reason: expect.stringContaining('"the road from t3" holds t3, a short id'),
+    })
+    expect(await runDeltas(f, result.actionId)).toEqual([])
+  })
+
+  it('refuses a call with nothing to add or remove', async () => {
+    const { calls } = await runUpkeepCalls(f, KEYWORD_SHOWN, [
+      { toolName: 'set_keywords', input: { id: 'l1', add: ['  '], remove: [], ...cite() } },
+    ])
+
+    expect(calls[0]).toMatchObject({
+      result: 'rejected',
+      reason: expect.stringContaining('both empty'),
+    })
+    expect(calls[0]).not.toHaveProperty('values')
+  })
+})
+
+// ---- mark_common_knowledge ----
+
+const hap = (n: number): string => `hap_00000000-0000-4000-8000-${String(n).padStart(12, '0')}`
+const FIGHT = hap(31)
+const TOLL = hap(32)
+const CROSSING = hap(33)
+// Shown, never seeded: a row gone before the call.
+const GONE_HAP = hap(34)
+
+// hp1…hp4 in this order.
+const HAPPENING_SHOWN: readonly ShownRow[] = [
+  { table: 'happenings', id: FIGHT, name: 'A fight at the inn' },
+  { table: 'happenings', id: TOLL, name: 'The new toll' },
+  { table: 'happenings', id: CROSSING, name: 'The night crossing' },
+  { table: 'happenings', id: GONE_HAP, name: 'A lost rumour' },
+]
+
+async function seedHappening(
+  fx: CloseFixture,
+  row: { id: string; title: string; commonKnowledge: 0 | 1 },
+): Promise<void> {
+  const result = await applyDeltaAction(
+    {
+      action: {
+        kind: 'createHappening',
+        source: 'periodic_classifier',
+        payload: {
+          entry: {
+            id: row.id,
+            branchId: fx.branchId,
+            title: row.title,
+            occurredAtEntryId: fx.entries[4]!.id,
+            commonKnowledge: row.commonKnowledge,
+            createdAt: 1,
+            updatedAt: 1,
+          },
+        },
+      },
+      actionId: 'act_seed_world',
+      branchId: fx.branchId,
+      entryId: null,
+    },
+    fx.ctx,
+  )
+  if (result.status !== 'ok') throw new Error(`seeding ${row.title} refused: ${result.reason}`)
+}
+
+async function editHappening(
+  fx: CloseFixture,
+  id: string,
+  who: Editor,
+  patch: { commonKnowledge: 0 | 1 },
+): Promise<void> {
+  const editor = EDITORS[who]
+  const result = await applyDeltaAction(
+    {
+      action: {
+        kind: 'updateHappening',
+        source: editor.source,
+        payload: { branchId: fx.branchId, id, patch, proseEntryId: null },
+      },
+      actionId: editor.actionId,
+      branchId: fx.branchId,
+      entryId: editor.past ? laterReplyIdOf(fx) : null,
+    },
+    fx.ctx,
+  )
+  if (result.status !== 'ok') throw new Error(`${who} edit of ${id} refused: ${result.reason}`)
+}
+
+async function storedHappening(fx: CloseFixture, id: string): Promise<Happening> {
+  const [found] = await fx.ctx.db
+    .select()
+    .from(happenings)
+    .where(and(eq(happenings.branchId, fx.branchId), eq(happenings.id, id)))
+  if (found === undefined) throw new Error(`no happening ${id}`)
+  return found
+}
+
+describe('mark_common_knowledge', () => {
+  let f: CloseFixture
+
+  beforeEach(async () => {
+    f = await openCloseFixture()
+    await seedHappening(f, { id: FIGHT, title: 'A fight at the inn', commonKnowledge: 0 })
+    await seedHappening(f, { id: TOLL, title: 'The new toll', commonKnowledge: 1 })
+    await editHappening(f, TOLL, 'later-turn', { commonKnowledge: 0 })
+    await seedHappening(f, { id: CROSSING, title: 'The night crossing', commonKnowledge: 1 })
+    await editHappening(f, CROSSING, 'user', { commonKnowledge: 0 })
+  })
+
+  it('sets 1 through one updateHappening on E, and a repeat answers ok writing nothing', async () => {
+    const { result, answers, calls } = await runUpkeepCalls(f, HAPPENING_SHOWN, [
+      { toolName: 'mark_common_knowledge', input: { id: 'hp1', ...cite() } },
+      { toolName: 'mark_common_knowledge', input: { id: 'hp1', ...cite() } },
+    ])
+
+    expect(answers).toEqual([{ result: 'ok' }, { result: 'ok' }])
+    expect(calls[0]).toEqual({
+      task: 'upkeep',
+      part: 1,
+      tool: 'mark_common_knowledge',
+      rows: [{ table: 'happenings', id: FIGHT, name: 'A fight at the inn' }],
+      why: 'The turns show it at the landing.',
+      turns: [endEntryIdOf(f)],
+      result: 'ok',
+      values: { commonKnowledge: '1' },
+    })
+    expect(calls[1]).toMatchObject({ result: 'ok' })
+    expect(calls[1]).not.toHaveProperty('values')
+    const written = await runDeltas(f, result.actionId)
+    expect(written).toHaveLength(1)
+    expect(written[0]).toMatchObject({
+      targetTable: 'happenings',
+      targetId: FIGHT,
+      source: 'chapter_close',
+      entryId: endEntryIdOf(f),
+    })
+    expect((await storedHappening(f, FIGHT)).commonKnowledge).toBe(1)
+  })
+
+  it('skips a happening whose mark a later turn wrote, writing nothing', async () => {
+    const { result, calls } = await runUpkeepCalls(f, HAPPENING_SHOWN, [
+      { toolName: 'mark_common_knowledge', input: { id: 'hp2', ...cite() } },
+    ])
+
+    expect(calls[0]).toMatchObject({
+      result: 'skipped',
+      reason: CLOSE_REASON.laterTurn,
+      values: { commonKnowledge: '1' },
+    })
+    expect(await runDeltas(f, result.actionId)).toEqual([])
+    expect((await storedHappening(f, TOLL)).commonKnowledge).toBe(0)
+  })
+
+  it('skips a mark the user cleared after the cited turn', async () => {
+    const { result, calls } = await runUpkeepCalls(f, HAPPENING_SHOWN, [
+      { toolName: 'mark_common_knowledge', input: { id: 'hp3', ...cite() } },
+    ])
+
+    expect(calls[0]).toMatchObject({ result: 'skipped', reason: USER_EDITED_SINCE_PROSE })
+    expect(await runDeltas(f, result.actionId)).toEqual([])
+    expect((await storedHappening(f, CROSSING)).commonKnowledge).toBe(0)
+  })
+
+  it('refuses a gone happening as row-gone', async () => {
+    const { calls } = await runUpkeepCalls(f, HAPPENING_SHOWN, [
+      { toolName: 'mark_common_knowledge', input: { id: 'hp4', ...cite() } },
+    ])
+
+    expect(calls[0]).toMatchObject({
+      result: 'rejected',
+      reason: CLOSE_REASON.rowGone,
+      values: { commonKnowledge: '1' },
+    })
   })
 })
