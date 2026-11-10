@@ -739,6 +739,11 @@ describe('the agent phase with the production slots', () => {
       { type: 'close_task_start', task: 'lifecycle', part: 1, index: 6, total: 7 },
     ])
     expect(generateToolStep).toHaveBeenCalledTimes(1)
+    expect(Object.keys(vi.mocked(generateToolStep).mock.calls[0]![1].tools)).toEqual([
+      'read_row',
+      'create_lore',
+      'update_lore',
+    ])
     expect(ledgerAtAgentEnd).toEqual({ calls: [], stopped: [], noToolCalls: true })
     const [row] = await chapterRows()
     expect(row!.closeReport).toEqual({

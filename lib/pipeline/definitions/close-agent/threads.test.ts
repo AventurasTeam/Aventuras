@@ -2376,7 +2376,7 @@ describe('Threads in the production close', () => {
 
     expect(result).toEqual({ status: 'completed' })
     expect(startsIn(events)).toEqual(starts)
-    // Lore always reads the part; no other task has a row here.
+    // Lore always reads the part; no task besides Threads has a row here.
     const requests = vi.mocked(generateToolStep).mock.calls.map(([, request]) => request)
     expect(requests.map((request) => Object.keys(request.tools))).toEqual([
       ['read_row', 'create_lore', 'update_lore'],

@@ -2134,7 +2134,8 @@ describe('closeAgentPhase over parts, with the real tasks', () => {
 
   it('holds the lore cap across parts: a refused create spends none, three land, part 2 is refused', async () => {
     __setCloseAgentSlots({ before: [], perPart: [{ kind: 'task', def: loreTask }], after: [] })
-    // Part 1 is t1-t4, part 2 t5-t7: each create cites its own part's turn, so only the cap refuses.
+    // Part 1 is t1-t4, part 2 t5-t7: each create cites its own part's turn, so k1 is refused for
+    // its blank body and the part 2 create only by the cap.
     vi.mocked(generateToolStep)
       .mockResolvedValueOnce(
         okStep([
@@ -2177,7 +2178,7 @@ describe('closeAgentPhase over parts, with the real tasks', () => {
       [2, 'create_lore', 'rejected'],
     ])
     const capped = calls[4]!
-    expect(capped.reason).toMatch(/cap/)
+    expect(capped.reason).toBe('lore-cap')
     expect(capped.turns).toEqual([fx.entries[6]!.id])
     expect(capped.rows).toEqual([
       { table: 'lore', id: expect.stringMatching(/^lore_/), name: 'The night crossing' },
@@ -2195,7 +2196,7 @@ describe('closeAgentPhase over parts, with the real tasks', () => {
     expect(stored.map(({ id }) => id)).not.toContain(capped.rows[0]!.id)
   })
 
-  it('starts the five prose tasks in each of three parts, 17 in all, in run order', async () => {
+  it('starts the five prose tasks in each of three parts, 15 of 17, in run order', async () => {
     __setCloseAgentSlots(undefined)
     const ctx = partsPhase([
       [0, 2],
