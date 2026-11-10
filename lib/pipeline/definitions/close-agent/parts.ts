@@ -2,7 +2,7 @@ import type { ChapterPartCut } from '@/lib/chapters'
 
 import type { CloseRangeEntry } from '../chapter-context'
 
-/** A run of the chapter's entries the prose tasks read at once; `index` from 1 (C4). */
+/** The run of entries a task reads at once; `index` from 1, or 0 for the whole chapter (C4). */
 export type ClosePart = { index: number; entryIds: readonly string[] }
 
 /**
