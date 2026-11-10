@@ -633,6 +633,7 @@ describe("a close's task templates share one system half", () => {
   })
 
   it('renders the same system half for each task of one part, from its own context', () => {
+    expect(CLOSE_TASK_TEMPLATES).toHaveLength(5)
     const prompts = CLOSE_TASK_TEMPLATES.map((id) =>
       renderTemplate(id, { ...SHARED, ...TASK_CONTEXTS[id] }),
     )
@@ -662,6 +663,34 @@ describe("a close's task templates share one system half", () => {
       closeTurns: CLOSE_TASK_TURNS.slice(0, 1),
     }).system
     expect(shorter).not.toBe(full)
+  })
+
+  // C3: a part's tasks share one system half; the next part's tasks share another.
+  it("renders one system half per part, a second part's apart from the first's", () => {
+    const SECOND_PART_TURNS = [
+      { handle: 't4', kind: 'user_action', content: 'I climb out onto the far bank.' },
+      {
+        handle: 't5',
+        kind: 'ai_reply',
+        content: 'The keep looms over the water, dark but for one window.',
+      },
+    ]
+    const systemsOver = (closeTurns: readonly Record<string, string>[]) =>
+      CLOSE_TASK_TEMPLATES.map(
+        (id) => renderTemplate(id, { ...SHARED, ...TASK_CONTEXTS[id], closeTurns }).system,
+      )
+
+    const first = systemsOver(CLOSE_TASK_TURNS)
+    const second = systemsOver(SECOND_PART_TURNS)
+
+    expect(CLOSE_TASK_TEMPLATES).toHaveLength(5)
+    expect(new Set(first).size).toBe(1)
+    expect(new Set(second).size).toBe(1)
+    expect(second[0]).not.toBe(first[0])
+    expect(second[0]).toContain(
+      "## t4 (the user's turn)\n<user_turn>\nI climb out onto the far bank.\n</user_turn>",
+    )
+    expect(second[0]).not.toContain('I wade in.')
   })
 })
 

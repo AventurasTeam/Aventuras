@@ -2009,10 +2009,13 @@ async function drainAgent(
 const taskStartsIn = (events: readonly PhaseEmittedEvent[]): PhaseEmittedEvent[] =>
   events.filter((event) => event.type === 'close_task_start')
 
-// C6: both tasks start, a task with nothing to show included, in a one-part chapter of 7.
+// C6: the five prose tasks start, those with nothing to show included, in a one-part chapter of 7.
 const PART_ONE_STARTS = [
+  { type: 'close_task_start', task: 'lore', part: 1, index: 2, total: 7 },
   { type: 'close_task_start', task: 'identity', part: 1, index: 3, total: 7 },
   { type: 'close_task_start', task: 'threads', part: 1, index: 4, total: 7 },
+  { type: 'close_task_start', task: 'upkeep', part: 1, index: 5, total: 7 },
+  { type: 'close_task_start', task: 'lifecycle', part: 1, index: 6, total: 7 },
 ]
 
 describe('Identity in the production close', () => {
@@ -2038,25 +2041,26 @@ describe('Identity in the production close', () => {
 
     expect(result).toEqual({ status: 'completed' })
     expect(taskStartsIn(events)).toEqual(PART_ONE_STARTS)
-    expect(generateToolStep).toHaveBeenCalledTimes(1)
-    const [, request] = vi.mocked(generateToolStep).mock.calls[0]!
-    expect(Object.keys(request.tools)).toEqual([
-      'search_world',
-      'read_row',
-      'update_character',
-      'update_faction',
+    // Lore always reads the part; Pip, active in the part's scene, starts Lifecycle too.
+    const requests = vi.mocked(generateToolStep).mock.calls.map(([, request]) => request)
+    expect(requests.map((request) => Object.keys(request.tools))).toEqual([
+      ['read_row', 'create_lore', 'update_lore'],
+      ['search_world', 'read_row', 'update_character', 'update_faction'],
+      ['search_world', 'read_row', 'retire_entity', 'flag_duplicate'],
     ])
-    expect(request.prompt.user).toContain('## c1: Pip\n')
+    expect(requests[1]!.prompt.user).toContain('## c1: Pip\n')
   })
 
-  it('makes no step call and no failure when neither task has anything to start from', async () => {
+  it("makes only Lore's step, and no failure, when no other task has anything to start from", async () => {
     const ctx = closePhaseFor(fx)
 
     const { events, result } = await drainAgent(ctx)
 
     expect(result).toEqual({ status: 'completed' })
     expect(taskStartsIn(events)).toEqual(PART_ONE_STARTS)
-    expect(generateToolStep).not.toHaveBeenCalled()
+    expect(generateToolStep).toHaveBeenCalledTimes(1)
+    const [, request] = vi.mocked(generateToolStep).mock.calls[0]!
+    expect(Object.keys(request.tools)).toEqual(['read_row', 'create_lore', 'update_lore'])
     expect(closeLedgerOf(ctx.intermediates)).toEqual({ calls: [], stopped: [], noToolCalls: true })
   })
 

@@ -2,9 +2,12 @@ import type { GroupOutcome } from '@/lib/actions/types'
 import type { CloseTask } from '@/lib/db'
 
 import { identityTask } from './identity'
+import { lifecycleTask } from './lifecycle'
+import { loreTask } from './lore'
 import type { PartTask } from './progress'
 import type { CloseTaskDef, TaskRunContext } from './task'
 import { threadsTask } from './threads'
+import { upkeepTask } from './upkeep'
 import type { PhaseEmittedEvent, PhaseResult } from '../../types'
 
 /** A code step's context: a task's, with no task, no read fields and no ledger: it records nothing. */
@@ -34,11 +37,14 @@ export type SlotName = keyof CloseAgentSlots
 
 // Typed here: inside the freeze below, `kind: 'task'` would widen to string.
 const PER_PART: readonly SlotEntry<PartTask>[] = Object.freeze([
+  { kind: 'task', def: loreTask },
   { kind: 'task', def: identityTask },
   { kind: 'task', def: threadsTask },
+  { kind: 'task', def: upkeepTask },
+  { kind: 'task', def: lifecycleTask },
 ])
 
-/** C2: Identity then Threads per part; the other tasks join with Slices 5.8 and 5.9. */
+/** C2: the five prose tasks per part, in canon's run order; Happenings and Awareness land with 5.9. */
 export const PRODUCTION_CLOSE_SLOTS: CloseAgentSlots = Object.freeze({
   before: Object.freeze([]),
   perPart: PER_PART,

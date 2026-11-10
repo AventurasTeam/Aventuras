@@ -2342,8 +2342,11 @@ async function drainThreadsAgent(
 describe('Threads in the production close', () => {
   let fx: CloseFixture
   const starts = [
+    { type: 'close_task_start', task: 'lore', part: 1, index: 2, total: 7 },
     { type: 'close_task_start', task: 'identity', part: 1, index: 3, total: 7 },
     { type: 'close_task_start', task: 'threads', part: 1, index: 4, total: 7 },
+    { type: 'close_task_start', task: 'upkeep', part: 1, index: 5, total: 7 },
+    { type: 'close_task_start', task: 'lifecycle', part: 1, index: 6, total: 7 },
   ]
   const startsIn = (events: readonly PhaseEmittedEvent[]) =>
     events.filter((event) => event.type === 'close_task_start')
@@ -2373,13 +2376,16 @@ describe('Threads in the production close', () => {
 
     expect(result).toEqual({ status: 'completed' })
     expect(startsIn(events)).toEqual(starts)
-    expect(generateToolStep).toHaveBeenCalledTimes(1)
-    const [, request] = vi.mocked(generateToolStep).mock.calls[0]!
-    expect(Object.keys(request.tools)).toEqual(['read_row', 'update_thread', 'merge_threads'])
-    expect(request.prompt.user).toContain('## th1: Find the heir (active)')
+    // Lore always reads the part; no other task has a row here.
+    const requests = vi.mocked(generateToolStep).mock.calls.map(([, request]) => request)
+    expect(requests.map((request) => Object.keys(request.tools))).toEqual([
+      ['read_row', 'create_lore', 'update_lore'],
+      ['read_row', 'update_thread', 'merge_threads'],
+    ])
+    expect(requests[1]!.prompt.user).toContain('## th1: Find the heir (active)')
   })
 
-  it('makes no step call when every thread is resolved or failed', async () => {
+  it("makes only Lore's step when every thread is resolved or failed", async () => {
     await putThreadRow(fx, {
       id: OPEN_ROWS.map,
       title: 'The lost map',
@@ -2397,6 +2403,11 @@ describe('Threads in the production close', () => {
 
     expect(result).toEqual({ status: 'completed' })
     expect(startsIn(events)).toEqual(starts)
-    expect(generateToolStep).not.toHaveBeenCalled()
+    expect(generateToolStep).toHaveBeenCalledTimes(1)
+    expect(Object.keys(vi.mocked(generateToolStep).mock.calls[0]![1].tools)).toEqual([
+      'read_row',
+      'create_lore',
+      'update_lore',
+    ])
   })
 })
