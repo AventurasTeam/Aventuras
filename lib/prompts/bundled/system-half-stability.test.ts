@@ -621,7 +621,7 @@ describe("a close's task templates share one system half", () => {
           name: 'The Tidewardens',
           status: 'active',
           retiredReason: '',
-          collision: 'f2 (duplicate)',
+          collision: 'f2 "The Ebb Wardens" (duplicate)',
         },
       ],
       closeWritesSoFar: '- update_thread Find the heir (th1): description',

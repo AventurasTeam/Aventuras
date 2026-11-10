@@ -4,6 +4,7 @@ import type { PromptHalves } from '@/lib/ai'
 import { chunked, entities, type Entity, type StoryMode } from '@/lib/db'
 import { compareId } from '@/lib/list-modules'
 import { TEMPLATE_IDS } from '@/lib/prompts'
+import { oneLine } from '@/lib/text'
 import { characterFactionId, flagStillHolds } from '@/lib/world'
 
 import type { CloseIds } from './ids'
@@ -46,7 +47,7 @@ export type LifecycleRow = {
   name: string
   status: string
   retiredReason: string
-  /** Its flag: the partner's handle and the reason, marked dormant when it no longer holds; '' if none. */
+  /** Its flag: the partner's handle, name and the reason, marked dormant when it no longer holds; '' if none. */
   collision: string
 }
 
@@ -98,12 +99,15 @@ async function partnersOf(
   return found
 }
 
-/** world.md → Surfacing: the row's flag as read_row reads it; a dormant flag counts as none. */
+/** world.md → Surfacing: the row's flag as read_row reads it, its partner by id and name; a dormant flag counts as none. */
 function collisionOf(row: Entity, partners: ReadonlyMap<string, Entity>, ids: CloseIds): string {
   const partnerId = row.nameCollisionFlag === 1 ? row.nameCollisionPartnerId : null
   if (partnerId === null) return ''
   const partner = partners.get(partnerId)
-  const who = partner === undefined ? GONE_PARTNER : ids.show(partner.id, partner.name)
+  const who =
+    partner === undefined
+      ? GONE_PARTNER
+      : `${ids.show(partner.id, partner.name)} ${JSON.stringify(oneLine(ids.withHandles(partner.name)))}`
   const reason = row.nameCollisionReason ?? ''
   return flagStillHolds(row, partner) ? `${who} (${reason})` : `${who} (${reason}, dormant)`
 }
@@ -150,10 +154,10 @@ async function startLifecycle(ctx: TaskPromptContext): Promise<TaskStart<Lifecyc
   // Shown rows take their handles in the order shown, before a partner or an id in their text.
   for (const row of held) ctx.ids.show(row.id, row.name)
   const partners = await partnersOf(ctx, held)
-  await refsIn(
-    ctx,
-    held.map((row) => [row.name, row.retiredReason]),
-  )
+  await refsIn(ctx, [
+    ...held.map((row) => [row.name, row.retiredReason]),
+    ...[...partners.values()].map((partner) => partner.name),
+  ])
   const handled = (value: string): string => ctx.ids.withHandles(value)
   return {
     show: {

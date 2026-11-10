@@ -236,6 +236,9 @@ describe('lifecycleTask', () => {
       faction: paths,
     })
     expect(lifecycleTask.readFields).toBe(LIFECYCLE_READ_FIELDS)
+    expect(lifecycleTask.tools[2]?.description).toContain(
+      'a death, an exile, a destruction or a disbanding',
+    )
   })
 
   it("starts from the part's active characters and items in scene and the rows its prose names, never a place", async () => {
@@ -408,6 +411,73 @@ describe('lifecycleTask', () => {
     expect(ids.handleOf(ROWS.pew)).toBeUndefined()
   })
 
+  it('orders each kind by name, whatever the order of the ids', async () => {
+    // Pew's id sorts before Bess's; Lantern's after Satchel's.
+    await seedRow(fx, { id: ROWS.pew, kind: 'character', name: 'Pew' })
+    await seedRow(fx, { id: ROWS.bess, kind: 'character', name: 'Bess' })
+    await seedRow(fx, { id: ROWS.satchel, kind: 'item', name: 'Satchel' })
+    await seedRow(fx, { id: ROWS.lantern, kind: 'item', name: 'Lantern' })
+    await setSceneOf(fx, fx.entries[4]!.id, [ROWS.pew, ROWS.bess, ROWS.lantern, ROWS.satchel])
+
+    const { start } = await startOf(fx)
+
+    expect(start?.show.rows.map(({ id, name }) => [id, name])).toEqual([
+      ['c1', 'Bess'],
+      ['c2', 'Pew'],
+      ['i1', 'Lantern'],
+      ['i2', 'Satchel'],
+    ])
+  })
+
+  it('gives the shown rows their handles before a flag partner no row shows', async () => {
+    await seedRow(fx, { id: ROWS.stranger, kind: 'character', name: 'the hooded stranger' })
+    await seedRow(fx, {
+      id: ROWS.tobin,
+      kind: 'character',
+      name: 'Tobin',
+      flag: { partnerId: ROWS.stranger, reason: 'duplicate' },
+    })
+    await seedRow(fx, { id: ROWS.wren, kind: 'character', name: 'Wren' })
+    await setSceneOf(fx, fx.entries[4]!.id, [ROWS.tobin, ROWS.wren])
+
+    const { start } = await startOf(fx)
+
+    expect(start?.show.rows).toEqual([
+      shown('c1', 'character', 'Tobin', 'c3 "the hooded stranger" (duplicate)'),
+      shown('c2', 'character', 'Wren'),
+    ])
+  })
+
+  it('names a row a shown text holds the full id of, so its handle carries a name', async () => {
+    await seedRow(fx, { id: ROWS.stranger, kind: 'character', name: 'the hooded stranger' })
+    await seedRow(fx, { id: ROWS.tobin, kind: 'character', name: `Tobin, kin to ${ROWS.stranger}` })
+    await setSceneOf(fx, fx.entries[4]!.id, [ROWS.tobin])
+
+    const { ids, start } = await startOf(fx)
+
+    expect(start?.show.rows).toEqual([shown('c1', 'character', 'Tobin, kin to c2')])
+    expect(ids.nameOf('c2')).toBe('the hooded stranger')
+  })
+
+  it("names a row its flag partner's name holds the full id of", async () => {
+    await seedRow(fx, { id: ROWS.lantern, kind: 'item', name: 'Lantern' })
+    await seedRow(fx, { id: ROWS.stranger, kind: 'character', name: `the hooded ${ROWS.lantern}` })
+    await seedRow(fx, {
+      id: ROWS.tobin,
+      kind: 'character',
+      name: 'Tobin',
+      flag: { partnerId: ROWS.stranger, reason: 'duplicate' },
+    })
+    await setSceneOf(fx, fx.entries[4]!.id, [ROWS.tobin])
+
+    const { ids, start } = await startOf(fx)
+
+    expect(start?.show.rows).toEqual([
+      shown('c1', 'character', 'Tobin', 'c2 "the hooded i1" (duplicate)'),
+    ])
+    expect(ids.nameOf('i1')).toBe('Lantern')
+  })
+
   it("shows each row's flag: its partner by handle and reason, dormant when it no longer holds", async () => {
     await seedRow(fx, { id: ROWS.stranger, kind: 'character', name: 'the hooded stranger' })
     await seedRow(fx, {
@@ -434,8 +504,8 @@ describe('lifecycleTask', () => {
     const { ids, start } = await startOf(fx)
 
     expect(start?.show.rows).toEqual([
-      shown('c1', 'character', 'Tobin', 'c2 (duplicate)'),
-      shown('i1', 'item', 'Lantern', 'i2 (alike, dormant)'),
+      shown('c1', 'character', 'Tobin', 'c2 "the hooded stranger" (duplicate)'),
+      shown('i1', 'item', 'Lantern', 'i2 "Satchel" (alike, dormant)'),
       shown('i2', 'item', 'Satchel', 'a row that no longer exists (alike, dormant)'),
     ])
     expect(ids.nameOf('c2')).toBe('the hooded stranger')
@@ -461,6 +531,12 @@ describe('lifecycleTask', () => {
       '# Writes so far\nWhat this close has written, in earlier tasks:\n- update_character Tobin (c1): description',
     )
     expect(prompt.user).toContain('Never a place.')
+    expect(prompt.user).toContain(
+      'a death, an exile or other leaving the story for good, a destruction, a disbanding. A death the narration reports as fact counts, even off the scene; one a character only suspects or hears as rumour does not.',
+    )
+    expect(prompt.user).toContain(
+      'an item lost, stolen or handed on, a faction beaten or scattered',
+    )
     expect(prompt.user).not.toContain('# The turns')
     expect(prompt.system).toContain('# The turns')
     expect(prompt.system).toContain('## t5 (narration)')
