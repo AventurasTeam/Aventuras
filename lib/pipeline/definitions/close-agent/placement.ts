@@ -10,6 +10,8 @@ import {
   placementOf,
   realPlacementOf,
   samePlacement,
+  stateOf,
+  withPlacement,
   type PlacementDrop,
 } from '@/lib/world'
 
@@ -44,13 +46,16 @@ const DROP_REASON: Readonly<Record<PlacementDrop['cause'], string>> = {
 const refused = (reason: string): PlacementPlan => ({ ok: false, reason })
 const restated = (): PlacementPlan => ({ ok: true, restated: true, wanted: {}, removed: [] })
 
-// withPlacement's pair: a placed place never keeps the unplaced mark (data-model.md → LocationState).
-const landing = (parentId: string | null): PlacementPlan => ({
-  ok: true,
-  restated: false,
-  wanted: { 'state.parent_location_id': parentId },
-  removed: ['state.unplaced'],
-})
+// withPlacement writes the pair, so a placed place never keeps the unplaced mark.
+function landing(row: Entity, arg: PlacementArg): PlacementPlan {
+  const next = withPlacement(stateOf(row, 'location'), arg)
+  return {
+    ok: true,
+    restated: false,
+    wanted: { 'state.parent_location_id': next.parent_location_id },
+    removed: next.unplaced === undefined ? ['state.unplaced'] : [],
+  }
+}
 
 function branchPlaces(ctx: WriteContext) {
   return ctx.db
@@ -79,7 +84,7 @@ export async function planPlacement(
   const places = await branchPlaces(ctx)
   if (arg.kind === 'top') {
     if (realPlacementOf(places)(row.id).kind !== 'unplaced') return refused(NOT_UNPLACED)
-    return landing(null)
+    return landing(row, arg)
   }
   const parent = places.find((place) => place.id === arg.parentId)
   if (parent === undefined) return refused(PARENT_NOT_A_PLACE)
@@ -92,5 +97,5 @@ export async function planPlacement(
     story: await readStoryPlace(ctx.db, ctx.branchId),
   })
   if (drop !== null) return refused(DROP_REASON[drop.cause])
-  return landing(arg.parentId)
+  return landing(row, arg)
 }
