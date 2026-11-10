@@ -220,9 +220,13 @@ export function tableOfId(id: string): PrecedenceTable | null {
   return TABLE_BY_PREFIX.get(prefixOf(id)) ?? null
 }
 
+const optionalArg = (tool: CloseTool, key: string): boolean =>
+  tool.schema.shape[key]?.safeParse(undefined).success === true
+
 /**
  * Swaps each declared id argument's handles for full ids; a handle never shown, or of a kind the
- * argument doesn't take, refuses the call. `named` holds each resolved row once.
+ * argument doesn't take, refuses the call. A blank optional one reads as left out, since a model
+ * fills optional fields. `named` holds each resolved row once.
  */
 export function resolveIdArgs(
   input: Readonly<Record<string, unknown>>,
@@ -237,6 +241,10 @@ export function resolveIdArgs(
     if (arg === undefined) continue
     const value = input[key]
     if (value === undefined || value === null) continue
+    if (typeof value === 'string' && value.trim() === '' && optionalArg(tool, key)) {
+      delete args[key]
+      continue
+    }
     if ((arg.shape === 'array') !== Array.isArray(value))
       return {
         ok: false,

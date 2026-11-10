@@ -387,6 +387,27 @@ describe('resolveIdArgs', () => {
     })
   })
 
+  // A model fills optional fields, so a blank one reads as left out, as a blank text does.
+  it('reads a blank optional id argument as left out, and refuses a blank required one', () => {
+    const ids = shownIds()
+    expect(resolveIdArgs({ ...MERGE_SAMPLE, place: ' \n ' }, mergeRows, ids)).toStrictEqual({
+      ok: true,
+      args: { keep: CHAR_A, absorb: [CHAR_B], turns: ['t1'], why: 'The same man.' },
+      named: [
+        { table: 'entities', id: CHAR_A },
+        { table: 'entities', id: CHAR_B },
+      ],
+    })
+    expect(resolveIdArgs({ ...MERGE_SAMPLE, keep: '' }, mergeRows, ids)).toEqual({
+      ok: false,
+      reason: ' in keep is not a known id; use an id this task showed you',
+    })
+    expect(resolveIdArgs({ turn: ' ' }, readTurn, ids)).toEqual({
+      ok: false,
+      reason: '  in turn is not a known id; use an id this task showed you',
+    })
+  })
+
   it('rejects a handle the close never showed, naming it', () => {
     const resolved = resolveIdArgs({ ...MERGE_SAMPLE, absorb: ['c2', 'c9'] }, mergeRows, shownIds())
     expect(resolved).toEqual({ ok: false, reason: expect.stringContaining('c9 in absorb') })
