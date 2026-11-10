@@ -8,6 +8,7 @@ import {
   type PipelineAction,
 } from '@/lib/actions/types'
 import {
+  branches,
   deltas,
   emptyEntityState,
   entities,
@@ -419,6 +420,45 @@ describe('retire_entity', () => {
       expect(changedPaths(log[0]!)).toEqual(expect.arrayContaining(['status']))
     },
   )
+
+  it("retires the close's own row when a fork holds the same id already retired", async () => {
+    // Inserted first, under a branch id sorting before the close's: a read that drops the branch
+    // meets the fork's row first, by rowid or by the key.
+    const fork = 'br_a_fork'
+    await f.ctx.db.insert(branches).values({
+      id: fork,
+      storyId: f.storyId,
+      parentBranchId: f.branchId,
+      name: 'fork',
+      createdAt: 2,
+    })
+    await f.ctx.db.insert(entities).values({
+      id: TOBIN,
+      branchId: fork,
+      kind: 'character',
+      name: 'Tobin',
+      status: 'retired',
+      retiredReason: 'Sails for the far coast.',
+      injectionMode: 'auto',
+      createdAt: 1,
+      updatedAt: 1,
+    })
+    await seedRow(f, { id: TOBIN, kind: 'character', name: 'Tobin' })
+
+    const { answers } = await dispatchScripted(
+      f,
+      [{ toolName: 'retire_entity', input: { id: 'c1', ...cite() } }],
+      { shown: [{ id: TOBIN, name: 'Tobin' }] },
+    )
+
+    expect(outputs(answers)).toEqual([{ result: 'ok' }])
+    expect(await storedEntity(f, TOBIN)).toMatchObject({ status: 'retired', retiredReason: WHY })
+    const [forkRow] = await f.ctx.db
+      .select()
+      .from(entities)
+      .where(and(eq(entities.branchId, fork), eq(entities.id, TOBIN)))
+    expect(forkRow).toMatchObject({ status: 'retired', retiredReason: 'Sails for the far coast.' })
+  })
 
   it('stores why trimmed, a row handle in it named', async () => {
     await seedRow(f, { id: TOBIN, kind: 'character', name: 'Tobin' })
