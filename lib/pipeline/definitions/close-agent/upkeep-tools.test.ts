@@ -64,7 +64,8 @@ const laterReplyIdOf = (fx: CloseFixture): string => fx.replyIds[4]!
 type ShownRow = { table: 'entities' | 'happenings'; id: string; name: string }
 type ToolCall = { toolName: string; input: Record<string, unknown> }
 type CallsRun = { result: TxResult; answers: unknown[]; calls: CloseLedger['calls'] }
-type StagedRun = {
+type TaskTurns = { endEntryId: string; taskEntryIds: readonly string[] }
+type StagedRun = TaskTurns & {
   fx: CloseFixture
   shown: readonly ShownRow[]
   calls: readonly ToolCall[]
@@ -79,7 +80,7 @@ async function* upkeepCallsPhase(
 ): AsyncGenerator<PhaseEmittedEvent, PhaseResult, GroupOutcome | undefined> {
   const run = staged
   if (run === undefined) throw new Error('upkeepCallsPhase: no run staged')
-  const taskEntryIds = taskEntryIdsOf(run.fx)
+  const { taskEntryIds } = run
   const ids = closeIdsOf(phase.intermediates)
   ids.showTurns(taskEntryIds)
   for (const { id, name } of run.shown) ids.show(id, name)
@@ -90,7 +91,7 @@ async function* upkeepCallsPhase(
   const ctx: DispatchContext = {
     db: phase.db,
     branchId: phase.branchId,
-    endEntryId: endEntryIdOf(run.fx),
+    endEntryId: run.endEntryId,
     task: 'upkeep',
     part: 1,
     ids,
@@ -116,11 +117,15 @@ async function* upkeepCallsPhase(
   return { status: 'completed' }
 }
 
-/** Runs `calls` in order through dispatch, in one close-like run, `shown` shown and read in order. */
+/**
+ * Runs `calls` in order through dispatch, in one close-like run, `shown` shown and read in order;
+ * the task's turns are the chapter's unless `turns` names others.
+ */
 async function runUpkeepCalls(
   fx: CloseFixture,
   shown: readonly ShownRow[],
   calls: readonly ToolCall[],
+  turns: TaskTurns = { endEntryId: endEntryIdOf(fx), taskEntryIds: taskEntryIdsOf(fx) },
 ): Promise<CallsRun> {
   if (getPipelineSafe(KIND) === undefined)
     definePipeline({
@@ -130,7 +135,7 @@ async function runUpkeepCalls(
       gateBehavior: 'hard-gate',
       concurrencyPolicy: {},
     })
-  const run: StagedRun = { fx, shown, calls, answers: [] }
+  const run: StagedRun = { ...turns, fx, shown, calls, answers: [] }
   staged = run
   try {
     const result = expectRan(
@@ -287,6 +292,59 @@ async function setStoryPlace(fx: CloseFixture, placeId: string): Promise<void> {
     .update(storyEntries)
     .set({ metadata: { ...row.metadata, currentLocationId: placeId } })
     .where(where)
+}
+
+/** A turn written after the fixture's, as the fixture writes one: the reply anchored on itself. */
+async function appendTurnEntry(
+  fx: CloseFixture,
+  entry: { id: string; position: number; kind: 'user_action' | 'ai_reply'; content: string },
+): Promise<void> {
+  const result = await applyDeltaAction(
+    {
+      action: {
+        kind: 'createStoryEntry',
+        source: entry.kind === 'user_action' ? 'user_edit' : 'ai_classifier',
+        payload: {
+          entry: {
+            ...entry,
+            branchId: fx.branchId,
+            chapterId: null,
+            metadata: {
+              sceneEntities: [],
+              currentLocationId: null,
+              worldTime: entry.position * 60,
+            },
+            createdAt: 1_767_225_600_000 + entry.position,
+          },
+        },
+      },
+      actionId: `act_late_turn_${entry.position}`,
+      branchId: fx.branchId,
+      entryId: entry.kind === 'ai_reply' ? entry.id : null,
+    },
+    fx.ctx,
+  )
+  if (result.status !== 'ok') throw new Error(`appending ${entry.id} refused: ${result.reason}`)
+}
+
+/** On a two-turn fixture (t1–t5): appends t6, t7 (E), so a write before them lands before E. */
+async function appendLateTurns(fx: CloseFixture): Promise<TaskTurns> {
+  await appendTurnEntry(fx, {
+    id: 'entry_late_006',
+    position: 6,
+    kind: 'user_action',
+    content: 'I ask who keeps the far bank.',
+  })
+  await appendTurnEntry(fx, {
+    id: 'entry_late_007',
+    position: 7,
+    kind: 'ai_reply',
+    content: 'Tobin pulls his hood low and says nothing.',
+  })
+  return {
+    endEntryId: 'entry_late_007',
+    taskEntryIds: [...fx.entries.map((entry) => entry.id), 'entry_late_006', 'entry_late_007'],
+  }
 }
 
 afterEach(() => {
@@ -1071,6 +1129,34 @@ describe('set_keywords', () => {
     expect((await storedEntity(f, FERRY)).keywords).toEqual(['ferry', 'night ferry'])
   })
 
+  // The action judges a user's removal against the latest cited turn's prose, not E's.
+  it('keeps a term the user removed after the cited turn though before E', async () => {
+    f = await openCloseFixture({ turns: 2 })
+    await seedEntity(f, {
+      id: FERRY,
+      kind: 'item',
+      name: 'ferry token',
+      keywords: ['ferry', 'crossing'],
+    })
+    await editEntity(f, FERRY, 'user', { keywords: ['ferry'] })
+    const late = await appendLateTurns(f)
+
+    const { calls } = await runUpkeepCalls(
+      f,
+      [{ table: 'entities', id: FERRY, name: 'ferry token' }],
+      [
+        {
+          toolName: 'set_keywords',
+          input: { id: 'i1', add: ['crossing', 'night ferry'], ...cite(['t5']) },
+        },
+      ],
+      late,
+    )
+
+    expect(calls[0]).toMatchObject({ result: 'ok' })
+    expect((await storedEntity(f, FERRY)).keywords).toEqual(['ferry', 'night ferry'])
+  })
+
   it('skips a list a later turn wrote, writing nothing', async () => {
     const { result, calls } = await runUpkeepCalls(f, KEYWORD_SHOWN, [
       { toolName: 'set_keywords', input: { id: 'c1', add: ['ferryman tobin'], ...cite() } },
@@ -1339,6 +1425,25 @@ describe('mark_common_knowledge', () => {
     const { result, calls } = await runUpkeepCalls(f, HAPPENING_SHOWN, [
       { toolName: 'mark_common_knowledge', input: { id: 'hp3', ...cite() } },
     ])
+
+    expect(calls[0]).toMatchObject({ result: 'skipped', reason: USER_EDITED_SINCE_PROSE })
+    expect(await runDeltas(f, result.actionId)).toEqual([])
+    expect((await storedHappening(f, CROSSING)).commonKnowledge).toBe(0)
+  })
+
+  // The action judges the user's edit against the latest cited turn's prose, not E's.
+  it('skips a mark the user cleared after the cited turn though before E', async () => {
+    f = await openCloseFixture({ turns: 2 })
+    await seedHappening(f, { id: CROSSING, title: 'The night crossing', commonKnowledge: 1 })
+    await editHappening(f, CROSSING, 'user', { commonKnowledge: 0 })
+    const late = await appendLateTurns(f)
+
+    const { result, calls } = await runUpkeepCalls(
+      f,
+      [{ table: 'happenings', id: CROSSING, name: 'The night crossing' }],
+      [{ toolName: 'mark_common_knowledge', input: { id: 'hp1', ...cite(['t5']) } }],
+      late,
+    )
 
     expect(calls[0]).toMatchObject({ result: 'skipped', reason: USER_EDITED_SINCE_PROSE })
     expect(await runDeltas(f, result.actionId)).toEqual([])
