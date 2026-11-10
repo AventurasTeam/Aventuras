@@ -33,11 +33,14 @@ export function plannedKeywords(
   return [...stored.filter((term) => !removing.has(normalizeTerm(term))), ...newTerms(stored, add)]
 }
 
-/** Why a keyword write is refused whole: a term in both lists, or one holding a handle. */
+/**
+ * Why a keyword write is refused whole: a term in both lists, or an add holding a handle. A removal
+ * stores nothing, so a handle in one names no turn later.
+ */
 export function keywordsRefusal({ add, remove }: SentKeywords, ids: CloseIds): string | undefined {
   const removing = new Set(remove.map(normalizeTerm))
   const both = add.find((term) => removing.has(normalizeTerm(term)))
   if (both !== undefined) return keywordInBothReason(both)
-  const held = firstTermHandle([...add, ...remove], ids)
+  const held = firstTermHandle(add, ids)
   return held === undefined ? undefined : termHandleReason(held.term, held.handle)
 }
