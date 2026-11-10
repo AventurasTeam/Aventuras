@@ -303,6 +303,18 @@ describe('readMetadataInputs', () => {
     expect(settings.assignments).toMatchObject({ 'lore-mgmt': 'prof-lore' })
   })
 
+  it("carries the story's model overrides into the config", () => {
+    const models = { 'lore-mgmt': { providerId: 'prov-1', modelId: 'big' } }
+    currentStoryStore.set({
+      storyId: 's1',
+      branchId: 'b1',
+      definition: DEFINITION,
+      settings: { ...STORY_SETTINGS_DEFAULTS, models },
+    })
+
+    expect(readMetadataInputs(phaseCtx())).toMatchObject({ modelConfig: { storyModels: models } })
+  })
+
   it("reads no previous summary for a branch's first chapter", () => {
     expect(readMetadataInputs(phaseCtx())).toMatchObject({ previousChapterSummary: null })
   })
