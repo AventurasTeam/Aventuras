@@ -354,8 +354,9 @@ patch`, which 5.5a marks `restated`, so a close tool's write of it
   meaningful only while retired; the classifier's return from
   retirement clears it. A close's Lifecycle task shows a reason only
   on a retired row (developer decision, 2026-11-10), so the stale one
-  stays in the database and the export. Read in the code, not run.
-  Raised in 5.8's task review.
+  stays in the database and the export, and World's list search
+  (`lib/list-modules/entity-list.ts`) still matches a restored row on
+  it. Read in the code, not run. Raised in 5.8's task review.
 - **Undoing a user's keyword edit wipes a later pass's term.** CTRL-Z
   or a rollback window of a user's keyword edit under a later
   periodic keyword write restores the whole list from the undo
@@ -366,7 +367,9 @@ patch`, which 5.5a marks `restated`, so a close tool's write of it
   gap). The same whole-list restore may hit other list fields a pass
   appends to, unchecked, and `data-model.md`'s "periodic-classifier
   deltas above it … stay put" doesn't hold when they wrote the same
-  field. For the undo substrate's owner. Raised in 5.8's execution,
+  field. For the undo substrate's owner; `retrieval.md → Keywords
+schema` links this item, so a triage pass updates that link when
+  routing it. Raised in 5.8's execution,
   developer decision 2026-11-10.
 
 - **A pass stores a turn handle written into prose.**
