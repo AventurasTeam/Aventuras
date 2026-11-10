@@ -641,6 +641,7 @@ describe('the entity write path', () => {
       condition: 'flooded',
     })
   })
+
   it('lands the free sub-field beside a protected one, ok naming the skipped field', async () => {
     await editAs('user', { state: { voice: 'gravel' } })
 
