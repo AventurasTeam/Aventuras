@@ -1204,6 +1204,70 @@ describe('update_character and update_faction: a turn handle in a text field', (
     },
   )
 
+  it.each<[string, string, string, string, string, unknown]>([
+    ['update_character', 'c1', 'traits', 'state.traits', 'voice', 'hoarse'],
+    ['update_character', 'c1', 'drives', 'state.drives', 'description', 'A courier, soaked.'],
+    ['update_faction', 'f1', 'agenda', 'state.agenda', 'standing', 'Broke since the flood.'],
+  ])(
+    '%s on %s refuses %s with an entry naming a turn, landing the free field beside it',
+    async (toolName, id, field, path, other, value) => {
+      const before = await storedEntity(f, rowOf(id))
+
+      const { answers, calls } = await dispatchScripted(
+        f,
+        [
+          {
+            toolName,
+            input: { id, [field]: ['wary', 'owes the ferryman [t3]'], [other]: value, ...cite() },
+          },
+        ],
+        { shown: CAST },
+      )
+
+      expect(answers.map(({ output }) => output)).toEqual([
+        { result: 'ok', notWritten: [{ field: path, row: id, reason: turnInTextReason('t3') }] },
+      ])
+      expect(calls[0]!.skippedFields).toEqual([{ field: path, reason: turnInTextReason('t3') }])
+      const after = await storedEntity(f, rowOf(id))
+      expect(storedValue(after, path)).toEqual(storedValue(before, path))
+      expect(storedValue(after, TEXT_PATH[other]!)).toEqual(value)
+    },
+  )
+
+  it('refuses a traits list naming a turn bare, sent alone, writing nothing', async () => {
+    const before = await storedEntity(f, WREN)
+
+    const { answers } = await dispatchScripted(
+      f,
+      [{ toolName: 'update_character', input: { id: 'c1', traits: ['scarred at t5'], ...cite() } }],
+      { shown: CAST },
+    )
+
+    expect(answers.map(({ output }) => output)).toEqual([
+      { result: 'rejected', reason: turnInTextReason('t5') },
+    ])
+    expect(await storedEntity(f, WREN)).toEqual(before)
+  })
+
+  it('answers ok, writing nothing, for a stored traits list holding a turn handle resent', async () => {
+    await editEntity(f, WREN, 'earlier-close', { state: { traits: ['wary', 'scarred at t5'] } })
+
+    const { result, answers, calls } = await dispatchScripted(
+      f,
+      [
+        {
+          toolName: 'update_character',
+          input: { id: 'c1', traits: ['wary', 'scarred at t5'], ...cite() },
+        },
+      ],
+      { shown: CAST },
+    )
+
+    expect(answers.map(({ output }) => output)).toEqual([{ result: 'ok' }])
+    expect(calls[0]).not.toHaveProperty('skippedFields')
+    expect(await runDeltas(f, result.actionId)).toEqual([])
+  })
+
   // Checked after the restated drop: a stored value is no new text, whatever it holds.
   it('answers ok, writing nothing, for a stored description holding a turn handle resent', async () => {
     await editEntity(f, WREN, 'earlier-close', { description: 'Changed since t3.' })

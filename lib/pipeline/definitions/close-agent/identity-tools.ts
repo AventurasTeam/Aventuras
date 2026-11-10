@@ -120,6 +120,15 @@ const NOTHING_SENT =
 const landingValue = (field: SentField): unknown =>
   field.kind === 'list' ? field.list.entries : field.text.bounded
 
+function turnHandleInField(field: SentField, ids: WriteContext['ids']): string | undefined {
+  if (field.kind === 'text') return turnHandleIn(field.text.bounded, ids)
+  for (const entry of field.list.entries) {
+    const handle = turnHandleIn(entry, ids)
+    if (handle !== undefined) return handle
+  }
+  return undefined
+}
+
 function sentFields<A>(args: A, specs: readonly FieldSpec<A>[]): SentField[] {
   const sent: SentField[] = []
   for (const spec of specs) {
@@ -185,12 +194,10 @@ async function planIdentityWrite<A extends { readonly id: string }>(
       lost.push({ field: field.path, row: id, kind: 'protected', reason: verdict.reason })
       continue
     }
-    if (field.kind === 'text') {
-      const handle = turnHandleIn(field.text.bounded, ctx.ids)
-      if (handle !== undefined) {
-        lost.push({ field: field.path, row: id, kind: 'refused', reason: turnInTextReason(handle) })
-        continue
-      }
+    const handle = turnHandleInField(field, ctx.ids)
+    if (handle !== undefined) {
+      lost.push({ field: field.path, row: id, kind: 'refused', reason: turnInTextReason(handle) })
+      continue
     }
     if (field.kind === 'list') {
       const cap = CAST_SOFT_CAPS[field.cap]
