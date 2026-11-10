@@ -114,7 +114,8 @@ bounds it there, `condition` by `boundStateText` and `description` by
 - **The lore cap.** A create past the cap, 3 by default, is `rejected`,
   telling the task to extend a row instead. The count reads the ledger's
   landed `create_lore` calls, so it holds across parts and a refused
-  create doesn't spend it. Where the number lives is an open question.
+  create doesn't spend it. Where the number lives is in
+  [Implementation notes](#implementation-notes).
 - **`update_lore`.** Writes `title`, `body`, `category` and `keywords` on
   any lore row, the user's included. It can send several columns, so the
   plan reads ahead through the row guard, as `update_thread` does.
@@ -247,7 +248,7 @@ bounds it there, `condition` by `boundStateText` and `description` by
   `lastSeenAt` and no scene tag, it never lists a location, and it isn't
   the stale-active threshold. Each row shows `status`, `retiredReason` and
   its flag, the fields its tools write, so it seeds the read gate (C11).
-  What it selects is an open question.
+  What it selects is in [Implementation notes](#implementation-notes).
 
 ### Tasks and templates
 
@@ -594,83 +595,303 @@ is [Slice 5.10](./10-two-starts.md)'s.
 
 ## Open questions
 
-- **Where does the lore cap live?** Canon calls it tunable in app
-  settings, but `data-model.md → App settings storage` has no key,
-  `lib/db/app-settings` has none, and no surface could set one before
-  M7.1. The same reasoning moved `closeConversation` to M7.1. Suggested: a
-  named constant of 3 here, with the key, its range and its surface
-  decided at M7.1, and 3a's line saying so.
-- **Does the keyword rule reach lore?** Canon's `rejected` bullet says a
-  write can't remove "a keyword the user added", with no table named, but
-  3f's rule is about entities and 3a only says the agent extends or
-  corrects a row's keywords. Suggested: yes, by the same walk, which this
-  doc assumes. "No `create` delta reads as the user's" then protects
-  wizard lore.
-- **What does "active entities not seen lately" select, and for which
-  kinds?** It can't exclude canon's own auto-retire case, a character who
-  dies in this chapter. It must reach factions, which have neither
-  `lastSeenAt` nor a scene tag. It isn't the stale-active threshold, and a
-  read that returns nothing means the task never runs and nothing says so.
-  Since a retirement must cite a turn of the chapter, a row the part never
-  mentions has nothing to cite. Suggested: `active` rows of the three
-  non-location kinds that the part touches, by 5.5b's reading of "touches"
-  for a faction, less characters an `ai_reply` past E has in scene, whose
-  retirement would be refused anyway. Check the size against the dataset
-  chapter. `lastSeenSpan` (`lib/world/overview.ts:88-95`) then has no role
-  here.
-- **Is a lore body bounded?** `retrieval.md` bounds the app's own writers
-  and exempts the user's lore, where "a long body is the feature". 5.5b
-  bounds a description by `clampEmbeddedText`'s 1,200 characters and 5.9
-  suggests the same for a composite, but 1,200 is short for a definitional
-  rule. Is a machine body bounded at all, and by what? And `update_lore`
-  extending a user's body already past the bound can't be cut without
-  losing the user's text. Suggested: a body limit of its own on a create,
-  and on an update a `rejected` the model can act on, never a cut.
-- **Should `flag_duplicate` refuse a pair flagged from the other side?**
-  `raiseRefusal` reads only the row's own flag, so part 1 can flag A
-  naming B and part 2 B naming A: two strips and a pill of 2 for one
-  question, though one resolve clears both. Canon says "a row with a live
-  flag". Suggested: refuse it as `already-flagged`, at the cost of one
-  read.
-- **Should a removal that breaks a live flag's pair be refused?** When a
-  keyword is what makes two flagged rows namesakes, removing it turns the
-  flag dormant, and a question the user hadn't answered disappears. Canon
-  lets a reversal or a pass's rename do this, and World's own writes clear
-  such a flag. Either `brokenFlags` refuses the removal or the dormancy is
-  accepted.
-- **What becomes of a turn handle the model writes into a text field?**
-  "As `t3` shows" names a turn but has no name to put in its place, so
-  `nameIdsInProse` keeps it as written, and it lands in a `why`, a body or
-  a description. That is the hazard
-  [`classifier.md → ID handling in classifier output`](../../../../memory/classifier.md#id-handling-in-classifier-output)
-  gives for rewriting the other tokens: a stored `[c1] charged` would
-  otherwise name whoever holds `c1` in a later prompt, and a later window
-  reads a stored `t3` as its own turn. A classifier pass has the same
-  exposure. Surfaced by 5.5a's review. Either the prompts tell the model
-  not to cite turns in text fields, or the token is rewritten when it
-  lands, to the turn's position or dropped.
-- **One name-or-keyword match for the starts?** 5.5b's Identity start
-  finds a faction the turns name with its own `namedIn`
-  (`close-agent/identity.ts`), beside `search_world`'s `keywordTerms`
-  (`close-agent/read-tools.ts`), and Upkeep starts from the off-scene
-  rows the chapter mentions by name or keyword, the same test over far
-  more rows. Suggested: one shared match before Upkeep's start is
-  written. Raised in 5.5b's review.
-- **May Upkeep fill a blank place or item description?**
-  [`data-model.md → Authorship contract`](../../../../data-model.md#authorship-contract)'s
-  `description` row now reads "Chapter close, on a material change or when
-  blank" for every kind, but the developer's blank-fill decision in 5.5b was
-  about Identity's characters and factions, and 3f and this slice give
-  Upkeep a material change only. Either Upkeep fills a blank one when the
-  cited turns show it, as Identity does, or the row narrows the blank case
-  to Identity's kinds. Raised in 5.5b's slice review.
-- **Does the slice stay under the ceiling?** It's priced at about 19 tasks,
-  and the placement rules and `setLoreKeywords` weren't in that estimate.
-  If its plan passes 20, parts split cleanly from the tools: the cut,
-  metadata per part, the loop and the across-parts cases touch neither the
-  actions nor the task prompts. They free no edge, so keep them together
-  unless the count demands it.
+None open: Implementation notes record each answer.
 
 ## Implementation notes
 
-_Populated at finish: notable deviations from the plan and resolved developer decisions._
+- **Lifecycle starts from what each part shows or names (developer
+  decision, 2026-11-10).** Per part: the `active` characters and items
+  in any part entry's `metadata.sceneEntities`, and the `active`
+  characters, items and factions whose name or a keyword the part's
+  prose matches, with the active factions of those characters by `faction_id`,
+  taken before the subtraction; less the characters an `ai_reply` past
+  the part's last turn (past E for the last part) has in its
+  `sceneEntities`. `retire_entity`'s `in-scene-later` refusal holds the
+  same boundary: a later part's replies are newer evidence (developer
+  decision, 2026-11-10). Never a location. Canon's "not seen
+  lately" reached neither factions nor a character the chapter shows
+  dying, and a retirement must cite the chapter, so a row the part
+  never mentions has nothing to cite; a prose mention catches finality
+  off the scene ("news came that the king had died"). `lastSeenSpan`
+  plays no part. Canon's Run order cell and Phase 4 say so. The start
+  and `read_row` show `retiredReason` as "" on a row that isn't retired
+  (developer decision, 2026-11-10), since a row restored in World keeps
+  its old reason.
+- **A part never ends on a player's turn (developer decision,
+  2026-11-10).** The cut's unit is a turn: a `user_action` joins the
+  reply after it, since the reply decides what the turn did, as a
+  chapter ends on a reply (C10). A turn over the limit is a part alone,
+  even when it passes the limit.
+- **A part's write cites only its own turns (developer decision,
+  2026-11-10).** The cite check takes the task's entries, the part's in
+  `perPart` and the chapter's for a chapter-wide task, so a turn of
+  another part is refused as one outside the chapter is: the part never
+  showed it, and 5.5b's transcripts showed blanket-range citations.
+  Turn handles stay chapter-wide (`showTurns` once over the range), so
+  `t12` names one entry in every part. A task's entries are its
+  context's `taskEntryIds`, which replaced `chapterEntryIds`.
+- **The resolved-pair read counts every user clear of the pair
+  (developer decision, 2026-11-10).** Any `user_edit` delta on either
+  row whose undo payload holds `nameCollisionFlag: 1` and the other row
+  as `nameCollisionPartnerId` counts as resolved, World's sweeps of
+  dormant flags included: no delta marks which pair the user answered,
+  and asking less fits the close's bias. Known limit: a sweep reads as
+  the user's answer, and undoing it lifts the refusal. The read runs in
+  `raiseCollisionFlagHandler`, for `duplicate` only, ahead of
+  `raiseRefusal`; `flag_duplicate`'s plan checks only a later turn's
+  write of the flag, so a Keep after the cited turn reaches the read
+  instead of ending as `skipped`.
+- **A pair already in question is re-marked (developer decision,
+  2026-11-10, revised after a side agent's note).** When either row
+  holds a live flag naming the other under another reason,
+  `flag_duplicate` rewrites that flag's reason to `duplicate` on the row
+  that holds it, partner unchanged, still one strip. It is a real
+  write: the dialog shows "The chapter close judged these the same.",
+  the review lists the call, CTRL-Z restores the old reason, and the
+  guards apply to the row written. A pair already `duplicate` is `ok`
+  with nothing written. The rule is symmetric (developer decision,
+  2026-11-10): when the named row's live flag names a third row and its
+  partner has none, the flag goes on the partner, naming it, and
+  `already-flagged` is `rejected` only when both rows' live flags name
+  other rows. Writing nothing would have
+  left the verdict nowhere, since C4's review leaves out an `ok` call
+  with no field, while the dialog kept a reason that may point the
+  other way. A re-marked flag no longer goes dormant on a rename. The
+  re-mark runs before the resolved-pair read, so it holds after an old
+  Keep too. 3f and the authorship row say so.
+- **A lore body is bounded by its growth (developer decision,
+  2026-11-10).** A body the close writes is at most 1,200 characters,
+  the embedder's whole-text bound, or longer only by growth: per close,
+  a body grows by at most 1,200 characters over the body as it stood
+  before the close, across the close's calls and parts, read from the
+  close's own deltas. A create's is at most 1,200. A longer one is
+  `rejected` naming its length, never cut: a runaway loop can't land,
+  and a user's long body stays editable. The tool description, the Lore
+  template and the refusal state the limit; there is no Zod `.max()`. A
+  title is cut at 120, as a name is. `update_lore` refuses a title
+  another live lore row holds (trimmed, case-folded), the title field
+  only, as `create_lore`'s refusal below does. 3a and `retrieval.md`
+  say so.
+- **A turn id never lands in stored text (developer decision,
+  2026-11-10).** A stored text field holding a handle that resolves to
+  one of the close's turns (`t3`, `[t3]`) is refused for that field: a
+  lore `title`, `body` or `category`; a `description`, `condition`,
+  `voice` or `standing`; an Identity `traits`, `drives` or `agenda` list
+  with an entry holding one; a thread's `title` or `description`; and
+  `retire_entity`'s `why`, stored as `retiredReason`. A keyword term
+  holding any handle the close knows is refused the same way. Another
+  tool's `why`, shown only in the review, keeps handles as written. The
+  shared close instructions state the rule. A stored `t3` names another
+  turn in a later prompt, and nothing correct can replace it.
+  `Tools and writes` says so, and the periodic classifier's same
+  exposure went to the triage inbox.
+- **A keyword removal that breaks a live flag's pair is refused
+  (developer decision, 2026-11-10).** `setEntityKeywords` runs
+  `brokenFlags` over the list as it would land and refuses the
+  removal, naming the term: a namesake through a keyword is canon's,
+  and the removal would drop an unanswered question from World.
+- **The keyword-author rule reaches lore (developer decision,
+  2026-11-10),** by the same walk, `lib/actions/delta/keyword-authors.ts`.
+  Every lore term today reads as the user's (the lore pane and an
+  `.avts` import log `user_edit`; wizard lore has no keywords and no
+  delta), so only terms a close added can go.
+- **Upkeep may fill a blank place or item description (developer
+  decision, 2026-11-10)** when the cited turns show it, as 3b and the
+  authorship row already allowed; its in-scene set takes places and
+  items with no keywords or a blank description.
+- **Placement runs in the plan (developer decision, 2026-11-10).** A
+  placement lands through `withPlacement` in one `updateEntity`, so
+  `unplaced` clears in the write that sets the parent. `parent` takes
+  any entity handle and passes the read gate as any named row; `top: true`
+  is its own argument, and both together are `rejected`. Every rule
+  runs in the plan, in `placeLocation`'s order and with its refusal
+  strings, each refusal dropping only the placement (C11), and a
+  placement already stored is `ok` before any rule runs. The placement's
+  rules run before precedence, while the text fields beside it judge
+  precedence first and the turn-handle check after, so a protected text
+  reads `skipped`. The story is
+  `readStoryPlace(db, branchId)` with no bound, the head's place, as a
+  pass reads it.
+- **`entityWriteAction` deletes `state` keys, a Scope: out crossing
+  (developer decision, 2026-11-10).** Scope: out left the `state`
+  helper to 5.5a, but a placement must delete `state.unplaced` in the
+  write that sets the parent, so the helper takes the `state.*` paths
+  to delete beside the fields it sets.
+- **Acceptance lines amended at planning (developer decision,
+  2026-11-10).** A failed part call or merge fails the close with no
+  chapter row and no stamps, since no group exists before the metadata
+  calls. A chapter of one part keeps 5.2's single call and output, its
+  user half opening with a literal line the mock routes by (each
+  metadata template has one, since the merge shares 5.2's schema
+  block). `retire_entity` refuses any location before it reads status,
+  so a retired place is `rejected`, not restated. The flag lines read
+  as the re-mark above, and undoing a Keep reopens the pair: the
+  restored flag is re-marked, or `ok` when already `duplicate`. The
+  manual probe sets its window through `PROBE_WINDOW`, on the probe's
+  own provider.
+- **Refusals added at planning (developer decision, 2026-11-10).**
+  `flag_duplicate` across kinds, or naming one row twice, is `rejected`,
+  as the handler already refused. `create_lore` with a title a live lore
+  row holds, trimmed and case-folded, is `rejected` naming that row and
+  pointing at `update_lore`. A term in both `add` and `remove` is
+  `rejected`. `condition` is bounded by `boundStateText` (500
+  characters) with a blank read as omitted, so a close can replace a
+  condition but never clear it.
+- **Size (developer decision, 2026-11-10).** One slice of 23 tasks in
+  two stacked PRs: parts (the cut, the intermediate, the loop, metadata
+  per part, the mock shapes), then the actions, tools, tasks and gates.
+  Parts alone would have been about six tasks, too thin, and the
+  across-parts cases need the tools.
+- **The lore cap is a constant,** `LORE_CREATE_CAP = 3` in
+  `close-agent/lore-tools.ts`, counted over the ledger's landed
+  `create_lore` calls, so it holds across parts and a refused create
+  doesn't spend it. M7.1 owns the setting, its range and its surface.
+- **One name match.** `namedInProse` (`close-agent/name-match.ts`),
+  Identity's former `namedIn`, serves the Identity, Upkeep and
+  Lifecycle starts; `search_world` keeps its own ranking.
+- **Keyword precedence, per term.** A list a later turn wrote skips the
+  whole call; there is no whole-list user check. Adds drop terms the
+  list holds and terms the user removed after the prose; removals match
+  by `normalizeTerm`, every spelling alike; a term only a user or an
+  unlogged write added can't go. Every add present and no removal is
+  `ok` with nothing written; every add one the user removed, and no
+  removal, is `skipped`. `updateLore`'s patch never carries `keywords` beside
+  `setLoreKeywords`. The walk credits a term to the latest keyword
+  update whose recorded before-list lacks it. It has two known gaps. A
+  machine keyword update undone under a later user edit is pruned from
+  the log, so its term falls back to the create's source. And when an
+  undo or a rollback window reverts a user's keyword edit under a later
+  classifier keyword write, a term that edit had removed comes back
+  credited to that pass, so a later close may remove it (developer
+  decision, 2026-11-10).
+  [`retrieval.md → Keywords schema`](../../../../memory/retrieval.md#keywords-schema)
+  says so, and the reverse-replay wipe is in the triage inbox.
+- **`read_row` shows a flag's state.** Fields stay raw; where a task's
+  `readFields` hold `nameCollisionFlag`, the answer adds `collision`
+  (`{ partner, reason, live }`, `live` from `flagStillHolds`) and
+  `flaggedBy`, the handles of rows whose live flag names this one.
+- **`merge_threads` refuses whole on a turn handle** in its `title` or
+  `description`: landing without its title, the merge could never be
+  resent, since the absorbed rows are gone and `update_thread` takes no
+  title. `update_thread`'s `description` refuses only that field.
+- **The merge call takes no mode.** It reads the part summaries, the
+  previous chapter's summary and the open threads; the mode is for
+  reading turns, which only the part calls do.
+- **Upkeep's in-scene set leaves out retired rows,** and a parent named
+  in a place's placement is shown by name, not seeded, so placing under
+  it takes a `read_row`.
+- **The pair refusal names the question.** It reads `keyword-pairs-flag`,
+  then the term, then the pairing row and that the pair is an open
+  question for the user.
+- **A part's happenings** are those whose `occurredAtEntryId` is one of
+  the part's entries or made from one (`readHappeningsMadeFrom`), at
+  `commonKnowledge = 0`.
+- **Off-scene isn't enforced on writes.** The prompt carries 3f's
+  off-scene bar, as canon's Order lets the later layer win, and retired
+  rows stay writable by Upkeep's tools.
+- **The metadata phase reads its stores once,** synchronously before its
+  first await (`readMetadataInputs`), then cuts the parts from 5.2's
+  series read (`setCloseParts`); a part call renders as Phase 2's does
+  with the part as its range, and there are no running summaries.
+- **A keyword write's review value (known limit, developer decision,
+  2026-11-10).** `values.keywords` is the planned list, so when the action
+  drops an add the user removed after the cited prose, the review shows
+  that term though it isn't stored.
+- **Null token counts (known limit).** The cut reads a null
+  `content_tokens` as 0 while the render counts the prose, so a chapter
+  of older entries can pass the cut as one part and fail its first
+  call's window check. No users before MVP, and dev databases reseed.
+- **Canon edited beyond the three this doc lists.** `chapter-close.md`'s
+  Identity cell, Parts, `Tools and writes` (turn ids in stored text,
+  the `rejected` list), 3a, 3f's collision bullet and Phase 4;
+  `data-model.md`'s flag row; `retrieval.md`'s bound paragraph;
+  `architecture.md`'s halves table; `testing.md`'s `PROBE_WINDOW`; and
+  the triage inbox.
+- **Stale code claims in this doc.** Two actions writing one column of
+  a row refuse the group in `applyDeltaActionGroupUnlocked`'s `prepare`
+  (`lib/actions/delta/apply-delta-action.ts`, "twice on one column"),
+  not at `:318-325`. `updateEntity`'s parent check is its `refuseParent`
+  call with `refuseRetired: false` (`lib/actions/entities/register.ts`).
+  The `.avts` body rule is `requiredText` at `lib/avts/lore.ts:13`. An
+  `.avts` import logs a `user_edit` create (`saveLore`), so an imported
+  term reads as the user's by its delta, not for want of one, and the
+  wizard's lore drafts carry no keywords. `retireEntity`'s restated arm
+  for a retired row shipped in 5.5a. `updateHappening`'s `not-found`
+  carries `TARGET_NOT_FOUND`, which the close's verdict already maps to
+  `row-gone`. The routing tests this doc cites by line are
+  `routing.test.ts`'s loop routing each story shape from a request with
+  a system half, and its case "separates every shape that shares a
+  block by a distinct, non-empty marker". 5.5b made `updateThread`'s
+  and `updateHappening`'s `proseEntryId` required, their user callers
+  passing `null`, so "optional, as 5.5b gives `updateThread`" holds only
+  for `updateLore`, whose `proseEntryId` stays optional as specced.
+- **The two-part probe (a smoke check, not a measure).**
+  `PROBE_WINDOW=40000 PROBE_OVERLAY=1 pnpm probe:close` at `b817d7d13` on
+  `Gemma4-26B-A4B-QAT-MTP` (served window 65,536 tokens) cut the dataset
+  chapter's 23,907 tokens into part 1, t1 to t109 (19,755 tokens), and
+  part 2, t110 to t133 (4,152): the user's turn t110 opens part 2 beside
+  its reply, since a part never ends on a player's turn. The close
+  completed in 705 s, 40 calls, with no window, budget or cut-off stop.
+  The system halves of each part's five tasks hashed alike, and the two
+  parts' differed. Part 2's Lore start listed 25 lines for part 1's 26
+  landed writes; the one with no line is an Upkeep `update_place` whose
+  values were all skipped. No landed call cited a turn outside its part,
+  and no cross-part cite was refused. Jim Hawkins kept `c4` across parts
+  (the buccaneers' `f1` and the treasure thread's `th7` too), but
+  Threads' starts differed, not as the plan expected: part 1 listed nine
+  open threads and part 2 two, `th1` and `th7`, because part 1 merged two
+  and resolved five. Part 2's Identity had two `update_character` calls
+  `rejected` on the traits soft cap, each re-called and landed. Starting
+  rows, parts 1 and 2: Upkeep 39 (the plan's two-dozen signal) and 20,
+  Lifecycle 29 (the plan's two-dozen signal) and 22. The developer kept
+  them unbounded, and the start sizes are in the part followup below. The
+  saved messages are in
+  `/home/failerko/_LLM/Aventura/_v2/Aventuras/.worktrees/Aventuras/M05-08-prose-tasks/_tmp/m5.8-probe/out/run1`
+  on `failerko-desktopserver`.
+- **The dataset seed holds this slice's close.** Its close was undone
+  and run again from the dev route on `Gemma4-26B-A4B-QAT-MTP` through
+  `pnpm mock`'s passthrough, without the overlay, as one part: the
+  seed's provider publishes no window, so the 32,000 limit holds the
+  chapter. The report holds 36 calls, 36 ok (landed writes and reads),
+  1 lore row created and 1 thread merge, and the chapter's title is now
+  "The Captain's Death and the Map". Lore 1 call, 1 ok; Identity 9, 9;
+  Threads 5, 5; Upkeep 20, 20; Lifecycle 1, 1.
+- **Per-part tasks aren't told they read a part (known limit, developer
+  decision, 2026-11-10).** A thread resolved, an entity retired or
+  threads merged in an earlier part can't be undone by a later part of
+  the same close; the probe's part 1 resolved five threads and merged
+  two. The review window lists the writes and the user can undo them.
+  Two candidate fixes (a part notice in the per-part system half, a
+  reopen path) and the start sizes are in
+  [`followups.md → Tuning and play testing`](../../../../followups.md#tuning-and-play-testing).
+- **The keyword tools share one rule.** `set_keywords` and `update_lore`
+  take their keyword arguments through `close-agent/keyword-args.ts`:
+  shape errors first, then a list already as asked is `ok`, then a later
+  turn's write skips the call, then the both-lists and handle refusals;
+  a call carrying a refusal isn't restated.
+- **A retitled lore row is named by its new title** for the rest of the
+  part: dispatch re-shows a single-row write whose `title` landed, as it
+  did a merge's survivor.
+- **`taskEntryIds` is on `ToolContext`,** so a tool's own checks (the
+  scene boundary) read the part.
+- **Prompt text tightened in review.** Lore's template gained a "Not
+  lore" line (what one character, place, item or faction is like is that
+  row's, kept by other tasks) and read-before-create; Upkeep's an "In-scene
+  rows" line and an honest removal rule (the model can't see who added a
+  term); Lifecycle's finality list (an exile with no promise of return; a
+  death reported as fact, even off-scene) and its flag line naming the
+  partner (`c2 "<name>" (duplicate)`).
+- **Known limits from review.** A `top` mark on a place whose parent
+  names a missing row records `values` `{ "state.unplaced": "top level" }`
+  while its changed path is `state.parent_location_id`; user precedence
+  treats a row's three flag columns as one field, so a Keep of another
+  pair after the cited turn makes a close's duplicate on this row
+  `skipped`.
+- **Four plan tests were strengthened in review** after a mutation the
+  plan's test missed survived (Tasks 1 to 5; PR 1's body lists them).
+- **The plan's `closeLedgerOf(…).calls` destructure didn't typecheck,**
+  since `closeLedgerOf` returns `CloseLedger | undefined`; Tasks 18 and
+  19 use `?.calls` or `!`.
+- **`retire_entity` checks a later turn's `status` write before the turn
+  handle in `why`,** the order the other tools settled on in review, and
+  `update_place`'s and `update_item`'s texts the same.
