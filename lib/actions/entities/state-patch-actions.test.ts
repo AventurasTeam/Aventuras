@@ -2904,6 +2904,22 @@ describe('setEntityKeywords', () => {
       expect(await keywordsOf(db)).toEqual(['the stranger', 'Mira'])
     })
 
+    it("refuses a user's term the pair rests on as the user's, not the pair's", async () => {
+      const { db, ctx } = await setup()
+      await passCreate(ctx, { ...STRANGER, keywords: ['the stranger'] })
+      expect(
+        (await apply(ctx, userPatch({ keywords: ['the stranger', 'Mira'] }), 'act_u')).status,
+      ).toBe('ok')
+      await db.insert(entities).values([MIRA, BRAM])
+      await flag(db, 'char_1', 'char_2', 'name-taken')
+      expect(await outcomeOf(ctx, setKeywords([], ['Mira']))).toStrictEqual({
+        status: 'noop',
+        reason: 'keyword-user-added: Mira',
+      })
+      expect(await keywordsOf(db)).toEqual(['the stranger', 'Mira'])
+      expect(await undoPayloadsOf(db, 'act_k')).toEqual([])
+    })
+
     it('removes a term the pair does not rest on', async () => {
       const { db, ctx } = await setup()
       await seed(ctx, db)
