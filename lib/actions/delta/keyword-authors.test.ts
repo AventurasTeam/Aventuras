@@ -22,6 +22,7 @@ import {
   keywordUserAddedReason,
   protectedKeywordTerms,
 } from './keyword-authors'
+import { reverseReplayDeltas } from './reverse-replay'
 
 const BRANCH = 'br_1'
 
@@ -264,6 +265,29 @@ describe('keywordAuthors', () => {
     expect(await authorsOf(ctx)).toEqual({
       'the knight': 'user_edit',
       'the wanderer': 'chapter_close',
+    })
+  })
+
+  // An undone update leaves the log, so its term falls back to an earlier writer: the known gap.
+  it("credits a term a pruned machine update added to the create's source", async () => {
+    const ctx = await setup()
+    await applyOk(
+      ctx,
+      createdBy('periodic_classifier', { ...KAEL, keywords: ['the knight'] }),
+      'act_c',
+    )
+    await applyOk(ctx, userKeywords([]), 'act_u1')
+    await applyOk(ctx, appended('per_turn_classifier', ['the knight']), 'act_m')
+    await applyOk(ctx, userKeywords(['the knight', 'the drunk']), 'act_u2')
+    expect(await authorsOf(ctx)).toEqual({
+      'the knight': 'per_turn_classifier',
+      'the drunk': 'user_edit',
+    })
+    await reverseReplayDeltas('act_m', ctx)
+    expect(await liveKeywords(ctx, 'entities', 'char_1')).toEqual(['the knight', 'the drunk'])
+    expect(await authorsOf(ctx)).toEqual({
+      'the knight': 'periodic_classifier',
+      'the drunk': 'user_edit',
     })
   })
 })

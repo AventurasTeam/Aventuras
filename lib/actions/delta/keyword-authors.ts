@@ -44,9 +44,8 @@ async function keywordDeltas(ctx: DbCtx, branchId: string, table: 'entities' | '
 
 /**
  * Normalized live term → who added it (retrieval.md → Keywords schema): the latest update whose
- * list before lacks the term and whose list after holds it, else the create. An undone update has
- * left the log, so its term falls back to the latest earlier keyword update still in the log, else
- * the create's source.
+ * list before lacks the term, else the create. An undone update has left the log, so its term
+ * falls back to the latest earlier keyword update still in the log, else the create's source.
  */
 export async function keywordAuthors(
   ctx: DbCtx,
@@ -61,10 +60,9 @@ export async function keywordAuthors(
   const updates = rows.slice(created + 1)
   const before = updates.map((update) => termKeys(update.undoPayload?.keywords))
   const liveKeys = termKeys(live)
-  const after = [...before.slice(1), liveKeys]
   const authors = new Map<string, KeywordAuthor>()
   for (const key of liveKeys) {
-    const adder = updates.findLastIndex((_, i) => !before[i].has(key) && after[i].has(key))
+    const adder = updates.findLastIndex((_, i) => !before[i].has(key))
     authors.set(key, adder === -1 ? createdBy : updates[adder].source)
   }
   return authors
