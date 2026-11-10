@@ -36,7 +36,7 @@ import { createOpenAICompatibleProvider } from './openaiCompatibleProvider'
 import { createPollinationsProvider } from './pollinations'
 import { createGoogleProvider, googleModelCapabilities } from './google'
 import { createZhipuProvider } from './zhipu'
-import { clearComfyCache, comfyReferenceLimit, createComfyProvider } from './comfy'
+import { clearComfyCache, comfyNeedsModel, comfyReferenceLimit, createComfyProvider } from './comfy'
 import { createOpenRouterProvider } from './openrouter'
 import { a1111ReferenceLimit, createA1111Provider } from './a1111'
 
@@ -107,6 +107,33 @@ export const referenceLimit = (
   providerType: ImageProviderType,
   providerOptions: ImageProfile['providerOptions'],
 ): number => PROVIDER_REFERENCE_LIMIT[providerType](providerOptions)
+
+const always = () => true
+const never = () => false
+
+/**
+ * Whether a profile must name a model. A host that has its own default, serves one model, or
+ * (ComfyUI custom workflow) names its checkpoints itself generates without one.
+ */
+const PROVIDER_REQUIRES_MODEL: Record<
+  ImageProviderType,
+  (providerOptions: ImageProfile['providerOptions']) => boolean
+> = {
+  nanogpt: always,
+  openai: always,
+  'openai-compatible': never,
+  openrouter: always,
+  pollinations: never,
+  google: always,
+  zhipu: always,
+  comfyui: comfyNeedsModel,
+  a1111: never,
+}
+
+export const providerNeedsModel = (
+  providerType: ImageProviderType,
+  providerOptions: ImageProfile['providerOptions'],
+): boolean => PROVIDER_REQUIRES_MODEL[providerType](providerOptions)
 
 type CapabilitySource =
   | { kind: 'listed' }
@@ -193,6 +220,7 @@ async function providedCapabilities(
   profile: ImageProfile,
   model: string,
 ): Promise<ImageModelCapabilities | undefined> {
+  if (!model) return undefined
   const source = PROVIDER_CAPABILITIES[profile.providerType]
   switch (source.kind) {
     case 'table':
@@ -259,6 +287,11 @@ export async function generateImage(options: {
   const profile = settings.getImageProfile(profileId)
   if (!profile) {
     throw new Error(`Image profile not found: ${profileId}`)
+  }
+  if (!model && providerNeedsModel(profile.providerType, profile.providerOptions)) {
+    throw new Error(
+      `No image model configured for ${IMAGE_PROVIDER_LABELS[profile.providerType]}. Choose a model in Settings → Images.`,
+    )
   }
 
   log('generateImage', {

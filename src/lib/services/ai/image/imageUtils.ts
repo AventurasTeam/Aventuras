@@ -282,9 +282,6 @@ export async function generatePortrait(prompt: string): Promise<string> {
 
   const profile = settings.getImageProfile(profileId)
   const model = profile?.model ?? ''
-  if (!model) {
-    throw new Error('No image model configured')
-  }
 
   const size = imageSettings.portraitSize ?? defaultImageSpec()
 

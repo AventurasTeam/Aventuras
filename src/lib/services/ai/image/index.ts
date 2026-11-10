@@ -28,6 +28,7 @@ export {
   getProviderClipTypes,
   isLocalServer,
   referenceLimit,
+  providerNeedsModel,
   takesCapabilityOverride,
   IMAGE_PROVIDER_LABELS,
   IMAGE_PROVIDER_OPTIONS,

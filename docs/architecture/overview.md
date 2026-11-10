@@ -698,6 +698,14 @@ API profile into image profiles, moved proxy-style `openai` profiles and every `
 (that provider is gone) to OpenAI Compatible, and pinned `zhipu` profiles with an empty base URL to
 `open.bigmodel.cn`, which they used before the default became `api.z.ai`.
 
+A profile may leave its model empty only where the host does not need one
+(`PROVIDER_REQUIRES_MODEL`, read through `providerNeedsModel`): Pollinations, which defaults it,
+OpenAI Compatible, A1111, and a ComfyUI custom workflow, whose checkpoints are the workflow's own.
+The others fail an empty model in `generateImage`, and the vault image tools say so before calling
+it. The SDK writes its model id into every OpenAI-style request, so an empty one is dropped from the
+JSON and the multipart edit body alike, leaving the host's own default. An empty model looks up no
+capabilities.
+
 Every cloud provider except Z.AI takes reference images. A1111 takes them only with its profile
 switch on, and ComfyUI only through a custom workflow's selected nodes. The registry holds each
 provider's reference limit (`PROVIDER_REFERENCE_LIMIT`), downloads nothing for a limit of 0, and

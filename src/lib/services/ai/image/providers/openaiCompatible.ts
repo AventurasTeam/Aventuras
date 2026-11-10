@@ -34,7 +34,15 @@ export async function generateOpenAICompatibleImage(options: {
     prompt,
     referenceImages,
     size,
-    providerOptions: { [PROVIDER_OPTIONS_KEY]: { response_format: 'b64_json', ...extraFields } },
+    providerOptions: {
+      [PROVIDER_OPTIONS_KEY]: {
+        response_format: 'b64_json',
+        ...extraFields,
+        // The SDK writes its model id into every request and spreads these over it; an undefined
+        // value drops the key, so a host without a model gets its own default.
+        ...(!model && ({ model: undefined } as unknown as Record<string, JSONValue>)),
+      },
+    },
     signal,
   })
 }

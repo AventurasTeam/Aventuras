@@ -18,6 +18,7 @@ import {
   generatePortrait as sdkGeneratePortrait,
   isImageGenerationEnabled,
   missingCredential,
+  providerNeedsModel,
   type MissingCredential,
 } from '#lib/services/ai/image/index.ts'
 import { DEFAULT_FALLBACK_STYLE_PROMPT } from '#lib/services/ai/image/constants.ts'
@@ -107,8 +108,9 @@ function resolveImageProfile(
   const missing = missingCredential(slot)
   if (missing) return { error: missingCredentialsError(slot, missing) }
 
-  const model = settings.getImageProfile(profileId)?.model
-  if (!model) {
+  const profile = settings.getImageProfile(profileId)
+  const model = profile?.model ?? ''
+  if (!model && profile && providerNeedsModel(profile.providerType, profile.providerOptions)) {
     return {
       error: `The ${slot} image profile has no model configured. Please tell the user to choose a model in Settings → Images.`,
     }

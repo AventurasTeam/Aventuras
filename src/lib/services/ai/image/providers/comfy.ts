@@ -465,6 +465,9 @@ function customWorkflowOf(
     : undefined
 }
 
+export const comfyNeedsModel = (providerOptions: Record<string, unknown> | undefined): boolean =>
+  providerOptions?.mode !== ComfyMode.CustomWorkflow
+
 /** How many references a ComfyUI profile uses: the number of selected `LoadImage` inputs. */
 export function comfyReferenceLimit(providerOptions: Record<string, unknown> | undefined): number {
   const customWorkflow = customWorkflowOf(providerOptions)
