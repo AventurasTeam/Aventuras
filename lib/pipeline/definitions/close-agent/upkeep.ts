@@ -24,7 +24,7 @@ import {
 import type { CloseRangeEntry } from '../chapter-context'
 import { readHappeningsMadeFrom } from '../entry-reads'
 
-/** C11: the fields Upkeep's tools write, which its start shows and read_row returns. */
+// C11: the fields its start shows and read_row returns; a happening's title and description are read only.
 export const UPKEEP_READ_FIELDS: ReadFields = {
   location: [
     'description',

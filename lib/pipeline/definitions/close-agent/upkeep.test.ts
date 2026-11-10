@@ -12,13 +12,16 @@ import {
   emptyEntityState,
   entities,
   happenings,
+  stories,
   storyEntries,
   type Entity,
   type EntityState,
+  type StoryMode,
 } from '@/lib/db'
 import { makeLogger } from '@/lib/diagnostics'
 import { resetAllStores } from '@/lib/stores'
 
+import { IDENTITY_READ_FIELDS, identityTask } from './identity'
 import { CloseIds } from './ids'
 import { readRowTool } from './read-tools'
 import { __setCloseAgentSlots, type CloseAgentSlots } from './slots'
@@ -45,6 +48,7 @@ const ROWS = {
   tobin: 'char_00000000-0000-4000-8000-00000000d007',
   letter: 'item_00000000-0000-4000-8000-00000000d008',
   ferry: 'loc_00000000-0000-4000-8000-00000000d009',
+  mara: 'char_00000000-0000-4000-8000-00000000d00a',
 } as const
 
 const HAPS = {
@@ -161,7 +165,8 @@ async function setSceneOf(
 /**
  * The part's prose names Harrow, the ferry and Tobin off the scene, and the inn, the satchel, the
  * landing and the letter besides. t3's scene holds the satchel at the inn, t7's is the landing. The
- * seal is named only past the part, the letter is retired, the River Country is never named.
+ * seal is named only past the part, the letter is retired, the River Country is never named. Mara
+ * is a bare character in t3's scene, and the retired letter is in it too: neither is shown.
  */
 async function seedUpkeepWorld(fx: CloseFixture): Promise<void> {
   await putEntityRow(fx, {
@@ -233,8 +238,14 @@ async function seedUpkeepWorld(fx: CloseFixture): Promise<void> {
     description: 'Sealed.',
     state: { at_location_id: null },
   })
+  await putEntityRow(fx, {
+    id: ROWS.mara,
+    kind: 'character',
+    name: 'Mara',
+    state: emptyEntityState('character'),
+  })
   await setSceneOf(fx, fx.entries[2]!.id, {
-    sceneEntities: [ROWS.satchel],
+    sceneEntities: [ROWS.satchel, ROWS.mara, ROWS.letter],
     currentLocationId: ROWS.inn,
   })
   await setSceneOf(fx, fx.entries[6]!.id, { sceneEntities: [], currentLocationId: ROWS.landing })
@@ -422,6 +433,30 @@ describe('upkeepTask', () => {
     expect(ids.handleOf(ROWS.letter)).toBeUndefined()
   })
 
+  // A character in the scene with no keywords is no first-keywords case, nor a retired item in it.
+  it('leaves out a character and a retired item in the scene, however bare', async () => {
+    await seedUpkeepWorld(fx)
+
+    const { ids } = await startOf()
+
+    expect(ids.handleOf(ROWS.mara)).toBeUndefined()
+    expect(ids.handleOf(ROWS.letter)).toBeUndefined()
+  })
+
+  // A shown text may hold another row's full id: it names that row, so a copied handle stores a name.
+  it('names a row a shown description cites, in its handle', async () => {
+    await seedUpkeepWorld(fx)
+    await fx.ctx.db
+      .update(entities)
+      .set({ description: `A ferry town; the seal ${ROWS.seal} hangs here.` })
+      .where(eq(entities.id, ROWS.harrow))
+
+    const { ids, start } = await startOf()
+
+    expect(start?.show.rows[0]?.description).toBe('A ferry town; the seal i2 hangs here.')
+    expect(ids.nameOf('i2')).toBe('seal')
+  })
+
   it("starts from the part's happenings not yet common knowledge, set at its turns or made from one", async () => {
     await seedUpkeepWorld(fx)
 
@@ -541,7 +576,8 @@ describe('upkeepTask', () => {
     "Rewrite a place's or an item's description only when the chapter materially changes what it is, never for detail its condition or placement already carries.",
     'A blank description may be filled when the cited turns show it.',
     "add the names and aliases the chapter uses for a row, and a bare place's or item's first keywords.",
-    "Remove only a term an AI added that no longer fits: a term the user added can't be removed.",
+    "Remove only a term that no longer fits. You can't see who added a term; removing a term the user added is refused.",
+    'A row in the scene is shown because it has no keywords or a blank description: give it its first keywords, or fill the description, when the turns show them; leave its condition alone.',
     'or send top: true for an unplaced place that nothing on the map could contain.',
     'only when the turns show outright that word of it has spread to everyone. A wrong mark makes every character aware of it.',
     'Never write a turn id such as t3 into a condition, a description or a keyword: cite turns only in "turns".',
@@ -550,6 +586,62 @@ describe('upkeepTask', () => {
     const { ctx, start } = await startOf()
 
     expect(upkeepTask.render(start!, { ...ctx, writesSoFar: '' }).user).toContain(line)
+  })
+
+  // memory/chapter-close.md → Conversations: a part's tasks reuse the chapter's cached prefix.
+  it("renders a system half byte-identical to Identity's for the same turns and mode", async () => {
+    await seedUpkeepWorld(fx)
+    const ctx = promptContextFor(fx, idsWithTurns(fx))
+    const identityStart = await identityTask.start({
+      ...ctx,
+      task: 'identity',
+      readFields: IDENTITY_READ_FIELDS,
+    })
+    const upkeepStart = await upkeepTask.start(ctx)
+
+    const identityPrompt = identityTask.render(identityStart!, { ...ctx, writesSoFar: '' })
+    const upkeepPrompt = upkeepTask.render(upkeepStart!, { ...ctx, writesSoFar: '' })
+
+    expect(upkeepPrompt.system).toBe(identityPrompt.system)
+    expect(upkeepPrompt.system).toContain(
+      '## t3 (narration)\nThe inn is warm and loud with drovers.',
+    )
+    expect(upkeepPrompt.user).not.toBe(identityPrompt.user)
+  })
+
+  it("puts the story mode's rule in the system half, the same as Identity's", async () => {
+    await seedUpkeepWorld(fx)
+    const render = async (mode: StoryMode) => {
+      const [story] = await fx.ctx.db
+        .select({ definition: stories.definition })
+        .from(stories)
+        .where(eq(stories.id, fx.storyId))
+      await fx.ctx.db
+        .update(stories)
+        .set({ definition: { ...story!.definition!, mode } })
+        .where(eq(stories.id, fx.storyId))
+      const ctx = promptContextFor(fx, idsWithTurns(fx))
+      const identityStart = await identityTask.start({
+        ...ctx,
+        task: 'identity',
+        readFields: IDENTITY_READ_FIELDS,
+      })
+      const upkeepStart = await upkeepTask.start(ctx)
+      return {
+        identity: identityTask.render(identityStart!, { ...ctx, writesSoFar: '' }).system,
+        upkeep: upkeepTask.render(upkeepStart!, { ...ctx, writesSoFar: '' }).system,
+      }
+    }
+
+    const creative = await render('creative')
+    expect(creative.upkeep).toContain('Each is a direction or prose')
+    expect(creative.upkeep).not.toContain('Each is what the lead does, says or attempts')
+    expect(creative.upkeep).toBe(creative.identity)
+
+    const adventure = await render('adventure')
+    expect(adventure.upkeep).toContain('Each is what the lead does, says or attempts')
+    expect(adventure.upkeep).not.toContain('Each is a direction or prose')
+    expect(adventure.upkeep).toBe(adventure.identity)
   })
 
   it("lets read_row return a place's and a happening's upkeep fields", async () => {
