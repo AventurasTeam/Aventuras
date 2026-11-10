@@ -5,17 +5,17 @@ import { readEntryPosition, storyEntries } from '@/lib/db'
 import type { ToolContext } from './tool'
 
 /**
- * Ids in the sceneEntities of the branch's ai_reply entries positioned after `endEntryId`. A
+ * Ids in the sceneEntities of the branch's ai_reply entries positioned after `afterEntryId`. A
  * user_action carries the scene before it forward (data-model.md → Entry metadata shape), so only
- * replies count: the action after `endEntryId` would otherwise hold everyone who dies there.
+ * replies count: the action after `afterEntryId` would otherwise hold everyone who dies there.
  */
 export async function charactersInSceneAfter(
   ctx: Pick<ToolContext, 'db' | 'branchId'>,
-  endEntryId: string,
+  afterEntryId: string,
 ): Promise<ReadonlySet<string>> {
-  const end = await readEntryPosition(ctx.branchId, endEntryId, ctx.db)
+  const end = await readEntryPosition(ctx.branchId, afterEntryId, ctx.db)
   if (end === null)
-    throw new Error(`charactersInSceneAfter: branch ${ctx.branchId} holds no entry ${endEntryId}`)
+    throw new Error(`charactersInSceneAfter: branch ${ctx.branchId} holds no entry ${afterEntryId}`)
   const replies = await ctx.db
     .select({ metadata: storyEntries.metadata })
     .from(storyEntries)
