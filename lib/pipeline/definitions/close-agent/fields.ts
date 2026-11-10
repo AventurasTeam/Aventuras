@@ -15,7 +15,7 @@ export type SentList = {
   readonly entries: readonly string[]
 }
 
-export type BoundedField = 'description' | 'title' | 'voice' | 'standing'
+export type BoundedField = 'description' | 'title' | 'voice' | 'standing' | 'condition'
 
 /**
  * Each text as a pass bounds it, trimmed first, so updateEntity's Zod parse can't refuse it and the
@@ -27,6 +27,7 @@ export const TEXT_BOUNDS: Readonly<Record<BoundedField, (text: string) => string
   title: (text: string) => clampEmbeddedText({ name: text, description: '' }).name,
   voice: (text: string) => boundVoice(text.trim()),
   standing: (text: string) => boundStateText(text.trim()).text,
+  condition: (text: string) => boundStateText(text.trim()).text,
 })
 
 /** A blank text reads as omitted, since a model fills optional fields; else as sent and bounded. */

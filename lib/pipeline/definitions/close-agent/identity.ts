@@ -3,13 +3,12 @@ import { and, eq, inArray } from 'drizzle-orm'
 import type { PromptHalves } from '@/lib/ai'
 import { chunked, entities, type Entity, type StoryMode } from '@/lib/db'
 import { isJsonObject } from '@/lib/json-object'
-import { normalizeTerm } from '@/lib/keyword-terms'
 import { compareId } from '@/lib/list-modules'
 import { TEMPLATE_IDS } from '@/lib/prompts'
-import { matchTerms } from '@/lib/retrieval'
 import { CAST_SOFT_CAPS } from '@/lib/wizard'
 
 import { IDENTITY_WRITE_PATHS, updateCharacterTool, updateFactionTool } from './identity-tools'
+import { namedInProse } from './name-match'
 import { readRowTool, refsIn, searchWorldTool } from './read-tools'
 import type { CloseTaskDef, TaskPromptContext, TaskStart } from './task'
 import type { ReadFields } from './tool'
@@ -81,14 +80,6 @@ async function sceneCharacters(
   return rows.sort(byNameThenId)
 }
 
-function namedIn(prose: string, row: Entity): boolean {
-  // matchTerms lowercases only the prose, so the terms arrive normalized.
-  const terms = [row.name, ...strings(row.keywords)]
-    .map(normalizeTerm)
-    .filter((term) => term !== '')
-  return matchTerms(prose, terms).length > 0
-}
-
 // principles.md → Scene presence: scene data holds no factions, so a faction comes by a
 // starting character's membership or by its name or a keyword in the turns.
 async function touchedFactions(
@@ -102,7 +93,7 @@ async function touchedFactions(
     .select()
     .from(entities)
     .where(and(eq(entities.branchId, ctx.branchId), eq(entities.kind, 'faction')))
-  return rows.filter((row) => members.has(row.id) || namedIn(prose, row)).sort(byNameThenId)
+  return rows.filter((row) => members.has(row.id) || namedInProse(prose, row)).sort(byNameThenId)
 }
 
 // The text a start shows of a row, which is all an id it cites can reach the model through.

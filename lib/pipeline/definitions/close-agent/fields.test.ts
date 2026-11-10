@@ -55,6 +55,11 @@ describe('sentText', () => {
     expect(sentText('t'.repeat(200), 'title')?.bounded).toBe('t'.repeat(120))
     expect(sentText('s'.repeat(510), 'standing')?.bounded).toBe('s'.repeat(500))
   })
+
+  it('bounds a condition at 500, as a standing', () => {
+    expect(sentText('c'.repeat(600), 'condition')?.bounded).toBe('c'.repeat(500))
+    expect(sentText(' \n ', 'condition')).toBeUndefined()
+  })
 })
 
 describe('a bound cuts as a pass cuts', () => {
@@ -75,6 +80,7 @@ describe('TEXT_BOUNDS', () => {
     expect(TEXT_BOUNDS.title('  The relic  ')).toBe('The relic')
     expect(TEXT_BOUNDS.voice('  soft  ')).toBe('soft')
     expect(TEXT_BOUNDS.standing('  feared  ')).toBe('feared')
+    expect(TEXT_BOUNDS.condition('  flooded  ')).toBe('flooded')
   })
 })
 

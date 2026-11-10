@@ -6,6 +6,7 @@ import {
   applyDeltaAction,
   applyDeltaActionGroupWithOutcomes,
 } from '@/lib/actions/delta/apply-delta-action'
+import { reverseReplayDeltas } from '@/lib/actions/delta/reverse-replay'
 import { readRowGuard } from '@/lib/actions/delta/row-guard'
 import {
   USER_EDITED_SINCE_PROSE,
@@ -14,7 +15,15 @@ import {
   type GuardRow,
   type RowVerdicts,
 } from '@/lib/actions/types'
-import { deltas, emptyEntityState, entities, lore, type Entity, type EntityState } from '@/lib/db'
+import {
+  deltas,
+  emptyEntityState,
+  entities,
+  lore,
+  type Entity,
+  type EntityState,
+  type LocationState,
+} from '@/lib/db'
 import { logger } from '@/lib/diagnostics'
 import { generateId } from '@/lib/ids'
 import { resetAllStores } from '@/lib/stores'
@@ -103,6 +112,18 @@ const CHARACTER: Entity = deepFreeze({
   updatedAt: 1,
 })
 
+const VARN = 'loc_00000000-0000-4000-8000-000000000011'
+const HARROW = 'loc_00000000-0000-4000-8000-000000000012'
+
+// An unplaced place with a condition: what a placement removes `unplaced` from.
+const UNPLACED_PLACE: Entity = deepFreeze({
+  ...CHARACTER,
+  id: VARN,
+  kind: 'location',
+  name: 'Varn',
+  state: { parent_location_id: null, unplaced: true, condition: 'flooded' },
+})
+
 let f: CloseFixture
 
 afterEach(() => {
@@ -131,6 +152,36 @@ async function seedCharacter(id: string, name: string): Promise<void> {
             status: 'active',
             injectionMode: 'auto',
             state: WREN_STATE,
+            createdAt: 1,
+            updatedAt: 1,
+          },
+        },
+      },
+      actionId: 'act_seed_world',
+      branchId: f.branchId,
+      entryId: null,
+    },
+    f.ctx,
+  )
+  if (result.status !== 'ok') throw new Error(`seeding ${name} refused: ${result.reason}`)
+}
+
+// A place a pass created before the chapter, unanchored, as seedCharacter seeds a character.
+async function seedPlace(id: string, name: string, state: LocationState): Promise<void> {
+  const result = await applyDeltaAction(
+    {
+      action: {
+        kind: 'createEntity',
+        source: 'periodic_classifier',
+        payload: {
+          entry: {
+            id,
+            branchId: f.branchId,
+            kind: 'location',
+            name,
+            status: 'active',
+            injectionMode: 'auto',
+            state,
             createdAt: 1,
             updatedAt: 1,
           },
@@ -475,6 +526,56 @@ describe('entityWriteAction', () => {
   it('refuses an empty write, which the handler would refuse for the whole group', () => {
     expect(() => entityWriteAction(CHARACTER, {})).toThrow(/nothing to write/)
   })
+
+  it('deletes a removed state path beside the paths it sets, listing it after them', () => {
+    expect(
+      entityWriteAction(UNPLACED_PLACE, { 'state.parent_location_id': HARROW }, ['state.unplaced']),
+    ).toEqual({
+      action: {
+        kind: 'updateEntity',
+        source: 'chapter_close',
+        payload: {
+          branchId: 'br_close',
+          id: VARN,
+          patch: { state: { parent_location_id: HARROW, condition: 'flooded' } },
+        },
+      },
+      fields: ['state.parent_location_id', 'state.unplaced'],
+      row: VARN,
+    })
+  })
+
+  it('writes a removal beside a path the row already holds, which stays out of the fields', () => {
+    const planned = entityWriteAction(UNPLACED_PLACE, { 'state.parent_location_id': null }, [
+      'state.unplaced',
+    ])
+    expect(planned.fields).toEqual(['state.unplaced'])
+    expect(planned.action.payload).toEqual({
+      branchId: 'br_close',
+      id: VARN,
+      patch: { state: { parent_location_id: null, condition: 'flooded' } },
+    })
+  })
+
+  it('counts a removed path the row lacks as stored, starting no state write for it', () => {
+    const placed: Entity = { ...UNPLACED_PLACE, state: { parent_location_id: HARROW } }
+    const planned = entityWriteAction(placed, { description: 'A drowned village.' }, [
+      'state.unplaced',
+    ])
+    expect(planned.fields).toEqual(['description'])
+    expect(planned.action.payload).toEqual({
+      branchId: 'br_close',
+      id: VARN,
+      patch: { description: 'A drowned village.' },
+    })
+  })
+
+  it('refuses to remove a path outside state, and a call with nothing wanted or removed', () => {
+    expect(() => entityWriteAction(UNPLACED_PLACE, {}, ['description'])).toThrow(
+      /only a state path/,
+    )
+    expect(() => entityWriteAction(UNPLACED_PLACE, {}, [])).toThrow(/nothing to write/)
+  })
 })
 
 describe('DELETE_PATH', () => {
@@ -507,6 +608,38 @@ describe('the entity write path', () => {
     expect(verdict.skippedFields).toEqual([])
   })
 
+  it('lands a removed state key in the one state write, and CTRL-Z puts it back', async () => {
+    await seedPlace(VARN, 'Varn', {
+      parent_location_id: null,
+      unplaced: true,
+      condition: 'flooded',
+    })
+    await seedPlace(HARROW, 'Harrow', { parent_location_id: null })
+    const planned = entityWriteAction(
+      await row(VARN),
+      { 'state.parent_location_id': HARROW, 'state.condition': 'drained' },
+      ['state.unplaced'],
+    )
+
+    const outcome = await applyDeltaActionGroupWithOutcomes(
+      [planned.action],
+      { actionId: GROUP_ACTION, branchId: f.branchId, entryId: endEntryId() },
+      f.ctx,
+    )
+
+    expect(outcome).toEqual({ status: 'ok', outcomes: [{ status: 'landed' }] })
+    expect((await row(VARN)).state).toEqual({ parent_location_id: HARROW, condition: 'drained' })
+    const written = await groupDeltas()
+    expect(written.map(({ undoPayload }) => undoPayload)).toEqual([
+      { state: { parent_location_id: null, unplaced: true, condition: 'flooded' } },
+    ])
+    expect(await reverseReplayDeltas(GROUP_ACTION, f.ctx)).toBe(1)
+    expect((await row(VARN)).state).toEqual({
+      parent_location_id: null,
+      unplaced: true,
+      condition: 'flooded',
+    })
+  })
   it('lands the free sub-field beside a protected one, ok naming the skipped field', async () => {
     await editAs('user', { state: { voice: 'gravel' } })
 
