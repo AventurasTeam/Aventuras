@@ -163,16 +163,24 @@ type CollisionView = {
   flaggedBy: string[]
 }
 
-/** world.md → Surfacing: a flag is live or dormant, and one row's pair may be flagged from the other. */
-async function collisionView(ctx: ToolContext, row: Entity): Promise<CollisionView> {
+/**
+ * world.md → Surfacing: a flag is live or dormant, and one row's pair may be flagged from the other.
+ * `named`: the ids of the rows the view shows, for the answer's refs.
+ */
+async function collisionView(
+  ctx: ToolContext,
+  row: Entity,
+): Promise<{ view: CollisionView; named: string[] }> {
   const partnerId = row.nameCollisionFlag === 1 ? row.nameCollisionPartnerId : null
   let collision: CollisionView['collision'] = null
+  const named: string[] = []
   if (partnerId !== null) {
     const [partner] = await ctx.db
       .select()
       .from(entities)
       .where(and(eq(entities.branchId, ctx.branchId), eq(entities.id, partnerId)))
       .limit(1)
+    if (partner !== undefined) named.push(partner.id)
     collision = {
       partner: partner === undefined ? null : ctx.ids.show(partner.id, partner.name),
       reason: row.nameCollisionReason ?? '',
@@ -189,12 +197,13 @@ async function collisionView(ctx: ToolContext, row: Entity): Promise<CollisionVi
         eq(entities.nameCollisionPartnerId, row.id),
       ),
     )
-  const flaggedBy = holders
+  const live = holders
     .filter((holder) => flagStillHolds(holder, row))
     // Code units, never localeCompare: host locale would make the answer device-dependent.
     .sort((a, b) => compareId(a.name, b.name) || compareId(a.id, b.id))
-    .map((holder) => ctx.ids.show(holder.id, holder.name))
-  return { collision, flaggedBy }
+  named.push(...live.map((holder) => holder.id))
+  const flaggedBy = live.map((holder) => ctx.ids.show(holder.id, holder.name))
+  return { view: { collision, flaggedBy }, named }
 }
 
 // Ids go to handles before the cut: excerpt can cut where there's no space, inside an id. It can
@@ -368,15 +377,15 @@ async function readRowAnswer(
   // A restored row keeps its old reason in storage; only a retired row shows one.
   if ('entity' in row && row.entity.status !== 'retired' && REASON_PATH in fields)
     fields[REASON_PATH] = ''
-  const refs = await refsIn(ctx, [row.name, fields])
   const flag =
-    'entity' in row && paths.includes(FLAG_PATH) ? await collisionView(ctx, row.entity) : {}
+    'entity' in row && paths.includes(FLAG_PATH) ? await collisionView(ctx, row.entity) : undefined
+  const refs = await refsIn(ctx, [row.name, fields, flag?.named ?? []])
   const output = {
     id: handle,
     kind: row.kind,
     name: row.name,
     fields,
-    ...flag,
+    ...flag?.view,
     ...(Object.keys(refs).length > 0 ? { refs } : {}),
   }
   return { output: withHandlesDeep(output, ctx.ids), rows, read: [{ table, id }] }
