@@ -35,7 +35,8 @@ export const FLAG_DUPLICATE_SHAPE = {
 type RetireArgs = z.output<WriteToolSchema<typeof RETIRE_SHAPE>>
 type FlagArgs = z.output<WriteToolSchema<typeof FLAG_DUPLICATE_SHAPE>>
 
-// The handlers' own strings (retireEntityHandler, raiseCollisionFlagHandler): C4 keeps one spelling.
+// C4 keeps one spelling: the handlers' strings (retireEntityHandler, raiseCollisionFlagHandler),
+// and in-scene-later, which only the plan refuses.
 const REFUSAL = {
   location: 'location',
   notActive: 'not-active',
