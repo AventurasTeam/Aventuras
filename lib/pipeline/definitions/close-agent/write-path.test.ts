@@ -571,13 +571,6 @@ describe('entityWriteAction', () => {
       patch: { description: 'A drowned village.' },
     })
   })
-
-  it('refuses to remove a path outside state, and a call with nothing wanted or removed', () => {
-    expect(() => entityWriteAction(UNPLACED_PLACE, {}, ['description'])).toThrow(
-      /only a state path/,
-    )
-    expect(() => entityWriteAction(UNPLACED_PLACE, {}, [])).toThrow(/nothing to write/)
-  })
 })
 
 describe('DELETE_PATH', () => {

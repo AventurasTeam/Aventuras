@@ -11,6 +11,9 @@ export type FieldVerdict =
 
 type EntityPatch = Extract<PipelineAction, { kind: 'updateEntity' }>['payload']['patch']
 
+/** A delta path inside `state`, the only kind `entityWriteAction` removes. */
+export type StatePath = `state.${string}`
+
 // A delta path is a column, then a path inside it: 'description', 'state.visual.face'.
 function splitPath(field: string): { column: string; path: string[] } {
   const [column = '', ...path] = field.split('.')
@@ -82,14 +85,11 @@ export function fieldVerdicts(row: RowVerdicts, fields: readonly string[]): Fiel
 export function entityWriteAction(
   row: Entity,
   wanted: Readonly<Record<string, unknown>>,
-  removed: readonly string[] = [],
+  removed: readonly StatePath[] = [],
 ): PlannedAction {
   const entries = Object.entries(wanted)
   if (entries.length === 0 && removed.length === 0)
     throw new Error(`entityWriteAction: nothing to write on ${row.id}`)
-  for (const field of removed)
-    if (!field.startsWith('state.'))
-      throw new Error(`entityWriteAction: only a state path can be removed, not ${field}`)
   const restated = new Set(restatedFields(row, wanted))
   const removing = removed.filter((field) => storedValue(row, field) !== undefined)
   const fields = [...Object.keys(wanted).filter((field) => !restated.has(field)), ...removing]

@@ -174,7 +174,7 @@ const LANDS_TOP = {
   wanted: { 'state.parent_location_id': null },
   removed: ['state.unplaced'],
 }
-const RESTATED = { ok: true, restated: true, wanted: {}, removed: [] }
+const RESTATED = { ok: true, restated: true }
 
 describe('planPlacement', () => {
   let fx: CloseFixture

@@ -4,7 +4,7 @@ import { z } from 'zod'
 import { entities, happenings, type Entity, type Happening } from '@/lib/db'
 import { dedupeTerms } from '@/lib/keyword-terms'
 
-import { entityWriteAction, fieldVerdicts, storedValue } from './entity-write'
+import { entityWriteAction, fieldVerdicts, storedValue, type StatePath } from './entity-write'
 import { restatedText, sentText, type BoundedField, type SentText } from './fields'
 import { keywordsRefusal, plannedKeywords, type SentKeywords } from './keyword-args'
 import { termsOf } from './name-match'
@@ -161,7 +161,7 @@ async function planUpkeepWrite<A extends { readonly id: string }>(
     changed.map((field) => [field.path, field.text.bounded]),
   )
   const lost: LostField[] = []
-  let move: { path: string; wanted: Record<string, unknown>; removed: string[] } | undefined
+  let move: { path: string; wanted: Record<string, unknown>; removed: StatePath[] } | undefined
   if (placement !== undefined) {
     const planned = await planPlacement(row, placement.arg, ctx)
     if (!planned.ok) {
@@ -182,7 +182,7 @@ async function planUpkeepWrite<A extends { readonly id: string }>(
     ...(move === undefined ? [] : [PARENT_PATH]),
   ])
   const wanted: Record<string, unknown> = {}
-  const removed: string[] = []
+  const removed: StatePath[] = []
   for (const [index, field] of changed.entries()) {
     const verdict = verdicts[index]
     if (!verdict.free) {
