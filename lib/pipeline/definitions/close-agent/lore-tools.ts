@@ -1,13 +1,12 @@
 import { and, asc, eq } from 'drizzle-orm'
 import { z } from 'zod'
 
-import { lore, type Lore, type NewLore } from '@/lib/db'
+import { deltas, lore, type Lore, type NewLore } from '@/lib/db'
 import { generateId } from '@/lib/ids'
 import { dedupeTerms, normalizeTerm } from '@/lib/keyword-terms'
 
 import { fieldVerdicts } from './entity-write'
 import { restatedText, sentText, TEXT_BOUNDS, type SentText } from './fields'
-import type { CloseIds } from './ids'
 import {
   firstTermHandle,
   keywordsRefusal,
@@ -55,13 +54,18 @@ const NOTE = {
 const titleTakenNote = (id: string): string =>
   `${id} already holds this title: read it with read_row, then extend or correct it with update_lore instead of creating a second row.`
 
+// A field refusal has no note, so the reason itself points at the holder.
+const titleTakenReason = (id: string): string =>
+  `${LORE_REFUSAL.titleTaken}: ${id} already holds this title: keep this row's title, or extend or correct ${id} with update_lore`
+
 const bodyOverLimitReason = (length: number): string =>
   `body is ${length} characters, over the limit of ${LORE_BODY_LIMIT}: state the rule in fewer words`
 
-/** A lore row on the branch whose title is `title`, trimmed and case-folded. */
+/** A lore row on the branch, other than `except`, whose title is `title`, trimmed and case-folded. */
 async function loreTitled(
   ctx: WriteContext,
   title: string,
+  except?: string,
 ): Promise<{ id: string; title: string } | undefined> {
   const key = normalizeTerm(title)
   const rows = await ctx.db
@@ -69,7 +73,7 @@ async function loreTitled(
     .from(lore)
     .where(eq(lore.branchId, ctx.branchId))
     .orderBy(asc(lore.id))
-  return rows.find((row) => normalizeTerm(row.title) === key)
+  return rows.find((row) => row.id !== except && normalizeTerm(row.title) === key)
 }
 
 export const CREATE_LORE_SHAPE = {
@@ -233,8 +237,8 @@ const LORE_TEXT: readonly LoreText[] = ['title', 'body', 'category']
 const NOTHING_SENT =
   'nothing to write: send a title, a body, a category or keywords to add or remove'
 
-const bodyGrowthReason = (length: number, stored: number): string =>
-  `body is ${length} characters: a body over ${LORE_BODY_LIMIT} may grow the stored one (${stored}) by at most ${LORE_BODY_LIMIT}, so send a shorter one`
+const bodyGrowthReason = (length: number, base: number): string =>
+  `body is ${length} characters: a body over ${LORE_BODY_LIMIT} may grow the body as it stood before this close (${base}) by at most ${LORE_BODY_LIMIT}, so send a shorter one`
 
 // Never cut: a body over the bound is refused, so a user's long body is never shortened.
 function sentBody(value: string | undefined): SentText | undefined {
@@ -252,19 +256,52 @@ function sentKeywords(value: UpdateArgs['keywords']): SentKeywords | undefined {
   return add.length === 0 && remove.length === 0 ? undefined : { add, remove }
 }
 
-function textRefusal(
+/**
+ * The body before this close's first write to the row, '' for a row it created: the growth bound
+ * holds per close, so a chain of calls can't grow a body by the bound each time.
+ */
+async function bodyBeforeClose(ctx: WriteContext, row: Lore): Promise<string> {
+  const own = await ctx.db
+    .select({ op: deltas.op, undoPayload: deltas.undoPayload })
+    .from(deltas)
+    .where(
+      and(
+        eq(deltas.branchId, ctx.branchId),
+        eq(deltas.actionId, ctx.actionId),
+        eq(deltas.targetTable, 'lore'),
+        eq(deltas.targetId, row.id),
+      ),
+    )
+    .orderBy(asc(deltas.logPosition))
+  for (const { op, undoPayload } of own) {
+    if (op === 'create') return ''
+    // updateLore's undo payload holds only the columns it changed.
+    if (undoPayload !== null && 'body' in undoPayload)
+      return typeof undoPayload.body === 'string' ? undoPayload.body : ''
+  }
+  return row.body ?? ''
+}
+
+async function textRefusal(
   field: LoreText,
   text: string,
-  stored: Lore,
-  ids: CloseIds,
-): string | undefined {
-  const handle = turnHandleIn(text, ids)
+  row: Lore,
+  ctx: WriteContext,
+): Promise<string | undefined> {
+  if (field === 'title') {
+    const holder = await loreTitled(ctx, text, row.id)
+    if (holder !== undefined) {
+      ctx.ids.show(holder.id, holder.title)
+      return titleTakenReason(holder.id)
+    }
+  }
+  const handle = turnHandleIn(text, ctx.ids)
   if (handle !== undefined) return turnInTextReason(handle)
   if (field !== 'body') return undefined
-  const storedLength = (stored.body ?? '').length
-  // Over the stored length plus the bound is over the bound too, so this one test holds both.
-  return text.length > storedLength + LORE_BODY_LIMIT
-    ? bodyGrowthReason(text.length, storedLength)
+  const baseLength = (await bodyBeforeClose(ctx, row)).length
+  // Over the base length plus the bound is over the bound too, so this one test holds both.
+  return text.length > baseLength + LORE_BODY_LIMIT
+    ? bodyGrowthReason(text.length, baseLength)
     : undefined
 }
 
@@ -321,7 +358,7 @@ async function planUpdateLore(args: UpdateArgs, ctx: WriteContext): Promise<Writ
       lost.push({ field, row: id, kind: 'protected', reason: verdict.reason })
       continue
     }
-    const refusal = textRefusal(field, text.bounded, row, ctx.ids)
+    const refusal = await textRefusal(field, text.bounded, row, ctx)
     if (refusal !== undefined) lost.push({ field, row: id, kind: 'refused', reason: refusal })
     else wanted[field] = text.bounded
   }
@@ -367,7 +404,7 @@ async function planUpdateLore(args: UpdateArgs, ctx: WriteContext): Promise<Writ
 export const updateLoreTool: WriteTool<typeof UPDATE_LORE_SHAPE> = {
   kind: 'write',
   name: 'update_lore',
-  description: `Extend or correct a lore row from this chapter's turns, the user's rows included: its title, body or category rewritten whole, and keywords added or removed. Read the row with read_row first, and send only what changes. A body over ${LORE_BODY_LIMIT} characters lands only by growing the stored body by at most ${LORE_BODY_LIMIT}. Never remove a keyword the user added.`,
+  description: `Extend or correct a lore row from this chapter's turns, the user's rows included: its title, body or category rewritten whole, and keywords added or removed. Read the row with read_row first, and send only what changes. A body over ${LORE_BODY_LIMIT} characters lands only by growing the body as it stood before this chapter's close by at most ${LORE_BODY_LIMIT}, across all your calls. A title another lore row holds is refused. Never remove a keyword the user added.`,
   schema: writeToolSchema(UPDATE_LORE_SHAPE),
   ids: { id: { shape: 'single', prefixes: ['lore_'] } },
   plan: planUpdateLore,

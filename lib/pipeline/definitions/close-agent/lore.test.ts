@@ -265,7 +265,7 @@ describe('loreTask', () => {
     expect(user).toContain('# Lore rows\n- lo1: House Eldrin\n- lo2: The Aetherium')
     expect(user).toContain('At most 3 new lore rows per chapter, across all its parts; 2 left.')
     expect(user).toContain(
-      "A new row's body holds at most 1200 characters, and an update may grow a body by at most 1200 characters.",
+      "A new row's body holds at most 1200 characters, and updates may grow a body by at most 1200 characters in all, across this chapter's calls.",
     )
     expect(user).not.toContain('# The turns')
     expect(user).not.toContain('# Writes so far')

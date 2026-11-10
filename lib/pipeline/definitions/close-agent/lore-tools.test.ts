@@ -128,7 +128,8 @@ const cite = (turns: readonly string[] = ['t7'], why = 'The ferryman names the t
   why,
 })
 
-type ScriptedCall = { toolName: string; input: Record<string, unknown> }
+/** `part`: the part the call runs in, the run's by default; one run is one close, whatever the part. */
+type ScriptedCall = { toolName: string; input: Record<string, unknown>; part?: number }
 type ShownRow = { id: string; name: string }
 type LoreRun = {
   result: TxResult
@@ -192,13 +193,13 @@ async function* scriptedPhase(
     readSet,
     ledger: writer,
   }
-  for (const [index, { toolName, input }] of run.calls.entries()) {
+  for (const [index, { toolName, input, part }] of run.calls.entries()) {
     const tool = LORE_TOOLS[toolName]
     if (tool === undefined) throw new Error(`no lore test tool ${toolName}`)
     const answer = yield* dispatchToolCall(
       { toolCallId: `call_${index + 1}`, toolName, input },
       tool,
-      ctx,
+      part === undefined ? ctx : { ...ctx, part },
     )
     run.answers.push(answer.output)
   }
@@ -1023,12 +1024,117 @@ describe('update_lore', () => {
 
       expect(run.answers[1]).toEqual({
         result: 'rejected',
-        reason: `body is ${refused} characters: a body over 1200 may grow the stored one (${stored}) by at most 1200, so send a shorter one`,
+        reason: `body is ${refused} characters: a body over 1200 may grow the body as it stood before this close (${stored}) by at most 1200, so send a shorter one`,
       })
       expect(run.answers[2]).toEqual({ result: 'ok' })
       expect((await storedLore(f, FERRY)).body).toBe('x'.repeat(lands))
     },
   )
+
+  const growthRefusal = (length: number, base: number): string =>
+    `body is ${length} characters: a body over 1200 may grow the body as it stood before this close (${base}) by at most 1200, so send a shorter one`
+
+  it("grows a body by 1200 in all across one part's calls, from the body before the close", async () => {
+    await seedLore(f, { id: FERRY, title: 'The Night Ferry', body: 'b'.repeat(100) })
+
+    const run = await dispatchScripted(
+      f,
+      [
+        read,
+        update({ title: 'The Midnight Ferry' }),
+        update({ body: 'x'.repeat(1_300) }),
+        update({ body: 'y'.repeat(1_400) }),
+        update({ body: 'z'.repeat(1_300) }),
+      ],
+      { shown: [{ id: FERRY, name: 'The Night Ferry' }] },
+    )
+
+    expect(run.answers.slice(1)).toEqual([
+      { result: 'ok' },
+      { result: 'ok' },
+      { result: 'rejected', reason: growthRefusal(1_400, 100) },
+      { result: 'ok' },
+    ])
+    expect((await storedLore(f, FERRY)).body).toBe('z'.repeat(1_300))
+  })
+
+  it('grows a body by 1200 in all across parts', async () => {
+    await seedLore(f, { id: FERRY, title: 'The Night Ferry', body: 'b'.repeat(100) })
+
+    const run = await dispatchScripted(
+      f,
+      [
+        read,
+        update({ body: 'x'.repeat(1_300) }),
+        { ...update({ body: 'y'.repeat(1_400) }), part: 2 },
+      ],
+      { shown: [{ id: FERRY, name: 'The Night Ferry' }] },
+    )
+
+    const updates = run.calls.filter(({ tool }) => tool === 'update_lore')
+    expect(updates.map(({ part, result }) => [part, result])).toEqual([
+      [1, 'ok'],
+      [2, 'rejected'],
+    ])
+    expect(run.answers[2]).toEqual({ result: 'rejected', reason: growthRefusal(1_400, 100) })
+    expect((await storedLore(f, FERRY)).body).toBe('x'.repeat(1_300))
+  })
+
+  it('grows a row this close created from no body at all', async () => {
+    const run = await dispatchScripted(f, [
+      {
+        toolName: 'create_lore',
+        input: { title: 'The Second Mark', body: 'm'.repeat(1_000), ...cite() },
+      },
+      update({ body: 'x'.repeat(1_200) }),
+      update({ body: 'y'.repeat(1_201) }),
+    ])
+
+    expect(run.answers).toEqual([
+      { result: 'ok', id: 'lo1' },
+      { result: 'ok' },
+      { result: 'rejected', reason: growthRefusal(1_201, 0) },
+    ])
+  })
+
+  it('refuses a title another lore row holds, trimmed and case-folded, landing the category beside it', async () => {
+    await seedLore(f, { id: FERRY, title: 'The Night Ferry' })
+    const taken = `title-taken: lo2 already holds this title: keep this row's title, or extend or correct lo2 with update_lore`
+
+    const run = await dispatchScripted(
+      f,
+      [
+        read,
+        update({ title: '  the night FERRY ', category: 'tolls' }),
+        update({ title: 'The Night Ferry' }),
+      ],
+      { shown: SHOWN },
+    )
+
+    expect(run.answers.slice(1)).toEqual([
+      { result: 'ok', notWritten: [{ field: 'title', row: 'lo1', reason: taken }] },
+      { result: 'rejected', reason: taken },
+    ])
+    expect(run.calls[1]).toMatchObject({
+      result: 'ok',
+      skippedFields: [
+        {
+          field: 'title',
+          reason: `title-taken: ${FERRY} already holds this title: keep this row's title, or extend or correct ${FERRY} with update_lore`,
+        },
+      ],
+    })
+    expect(await storedLore(f, TOLL)).toMatchObject({ title: 'The Ferry Toll', category: 'tolls' })
+  })
+
+  it('lands its own title in another case: a row never takes its own title', async () => {
+    const run = await dispatchScripted(f, [read, update({ title: 'the ferry TOLL' })], {
+      shown: SHOWN,
+    })
+
+    expect(run.answers[1]).toEqual({ result: 'ok' })
+    expect((await storedLore(f, TOLL)).title).toBe('the ferry TOLL')
+  })
 
   it('lands a free title beside a body grown past the bound', async () => {
     await seedLore(f, { id: FERRY, title: 'The Night Ferry', body: 'b'.repeat(100) })
@@ -1045,7 +1151,7 @@ describe('update_lore', () => {
         {
           field: 'body',
           reason:
-            'body is 1301 characters: a body over 1200 may grow the stored one (100) by at most 1200, so send a shorter one',
+            'body is 1301 characters: a body over 1200 may grow the body as it stood before this close (100) by at most 1200, so send a shorter one',
         },
       ],
     })

@@ -676,7 +676,7 @@ export const VARIABLES: Record<ContextGroup, VariableDef[]> = {
       type: '{ creates: number; left: number; bodyChars: number }',
       category: 'Story Config',
       description:
-        "The Lore task's limits: the lore rows one close may create (`creates`), how many it still may, earlier parts counted (`left`), and the characters a new row's body may hold, which is also the most an update may grow a body by (`bodyChars`). Only a close task's render sets it.",
+        "The Lore task's limits: the lore rows one close may create (`creates`), how many it still may, earlier parts counted (`left`), and the characters a new row's body may hold, which is also the most a close's updates may grow a body by in all (`bodyChars`). Only a close task's render sets it.",
       required: false,
     },
     {
