@@ -43,6 +43,7 @@ describe('bundled pack', () => {
     closeIdentity: 'chapter',
     closeThreads: 'chapter',
     closeUpkeep: 'chapter',
+    closeLifecycle: 'chapter',
     wizardOpening: 'wizard',
     wizardOpeningRefine: 'wizard',
     wizardTitleChips: 'wizard',

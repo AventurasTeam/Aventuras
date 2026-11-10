@@ -35,6 +35,7 @@ const CLOSE_TASK_TEMPLATES: readonly TemplateId[] = [
   TEMPLATE_IDS.closeIdentity,
   TEMPLATE_IDS.closeThreads,
   TEMPLATE_IDS.closeUpkeep,
+  TEMPLATE_IDS.closeLifecycle,
 ]
 const CLOSE_SYSTEM_VARIABLES: readonly string[] = ['closeTurns']
 
@@ -415,6 +416,7 @@ describe('bundled system halves read only what the story fixes', () => {
     expect(unallowedSystemReads(probed, probe, CLOSE_SYSTEM_VARIABLES)).toEqual([
       'closeCharacters',
       'closeFactions',
+      'closeLifecycleRows',
       'closeLore',
       'closeLoreLimits',
       'closeSoftCaps',
@@ -427,6 +429,7 @@ describe('bundled system halves read only what the story fixes', () => {
     expect(unallowedSystemReads(probed, probe, [])).toEqual([
       'closeCharacters',
       'closeFactions',
+      'closeLifecycleRows',
       'closeLore',
       'closeLoreLimits',
       'closeSoftCaps',
@@ -449,6 +452,7 @@ describe('bundled system halves read only what the story fixes', () => {
       TEMPLATE_IDS.closeIdentity,
       TEMPLATE_IDS.closeThreads,
       TEMPLATE_IDS.closeUpkeep,
+      TEMPLATE_IDS.closeLifecycle,
     ])
     expect([...holding].sort()).toEqual([...CLOSE_TASK_TEMPLATES].sort())
   })
@@ -599,6 +603,27 @@ describe("a close's task templates share one system half", () => {
         },
       ],
       closeUpkeepHappenings: [{ id: 'hp1', title: 'The siege' }],
+      closeWritesSoFar: '- update_thread Find the heir (th1): description',
+    },
+    [TEMPLATE_IDS.closeLifecycle]: {
+      closeLifecycleRows: [
+        {
+          id: 'c1',
+          kind: 'character',
+          name: 'Kael',
+          status: 'active',
+          retiredReason: '',
+          collision: '',
+        },
+        {
+          id: 'f1',
+          kind: 'faction',
+          name: 'The Tidewardens',
+          status: 'active',
+          retiredReason: '',
+          collision: 'f2 (duplicate)',
+        },
+      ],
       closeWritesSoFar: '- update_thread Find the heir (th1): description',
     },
   }

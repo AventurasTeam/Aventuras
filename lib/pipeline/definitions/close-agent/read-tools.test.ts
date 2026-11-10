@@ -8,6 +8,7 @@ import {
   lore,
   stories,
   threads,
+  type CollisionReason,
   type NewEntity,
 } from '@/lib/db'
 import { createTestDb } from '@/lib/db/__tests__/test-db'
@@ -707,6 +708,99 @@ describe('read_row on a forked story', () => {
       'state.voice': null,
       'state.current_location_id': null,
     })
+  })
+})
+
+describe('read_row on a task that reads the flag', () => {
+  const FLAG_FIELDS: ReadFields = {
+    character: ['status', 'nameCollisionFlag', 'nameCollisionPartnerId', 'nameCollisionReason'],
+  }
+  const ANSEL = rowId('char', 20)
+  const ANSEL_TWIN = rowId('char', 21)
+  const ANSEL_THIRD = rowId('char', 22)
+  const CORIN = rowId('char', 23)
+  const DOV = rowId('char', 24)
+  const EVA = rowId('char', 25)
+  const LOST = rowId('char', 26) // never written: a partner that's gone
+  const GIL = rowId('char', 27)
+  const OTHER_ANSEL = rowId('char', 28)
+
+  const flag = (partnerId: string, reason: CollisionReason): Partial<NewEntity> => ({
+    nameCollisionFlag: 1,
+    nameCollisionPartnerId: partnerId,
+    nameCollisionReason: reason,
+  })
+
+  beforeEach(async () => {
+    await db.insert(entities).values([
+      entity(ANSEL, 'character', 'Ansel', flag(ANSEL_TWIN, 'name-taken')),
+      entity(ANSEL_TWIN, 'character', 'Ansel'),
+      entity(ANSEL_THIRD, 'character', 'Ansel', flag(ANSEL_TWIN, 'name-taken')),
+      entity(CORIN, 'character', 'Corin', flag(DOV, 'alike')),
+      entity(DOV, 'character', 'Dov'),
+      entity(EVA, 'character', 'Eva', flag(LOST, 'alike')),
+      // Gil and Ansel are no namesakes: the flag naming the twin is dormant.
+      entity(GIL, 'character', 'Gil', flag(ANSEL_TWIN, 'alike')),
+      entity(OTHER_ANSEL, 'character', 'Ansel', flag(ANSEL_TWIN, 'name-taken'), OTHER_BRANCH),
+    ])
+  })
+
+  const read = (id: string, readFields: ReadFields = FLAG_FIELDS) =>
+    readRowTool.read({ id }, toolCtx({ readFields }))
+
+  it("adds the row's live flag with its partner as a named handle, and no row naming it", async () => {
+    const answer = await read(ANSEL)
+
+    const twin = ids.handleOf(ANSEL_TWIN)
+    expect(twin).toMatch(/^c\d+$/)
+    expect(ids.nameOf(twin!)).toBe('Ansel')
+    expect(answer.output).toMatchObject({
+      fields: {
+        status: 'active',
+        nameCollisionFlag: 1,
+        nameCollisionPartnerId: twin,
+        nameCollisionReason: 'name-taken',
+      },
+      collision: { partner: twin, reason: 'name-taken', live: true },
+      flaggedBy: [],
+    })
+    expect(answer.read).toEqual([{ table: 'entities', id: ANSEL }])
+  })
+
+  it('lists the rows on its branch whose live flag names it, by name then id, a dormant one left out', async () => {
+    const answer = await read(ANSEL_TWIN)
+
+    const output = answer.output as { collision: unknown; flaggedBy: string[] }
+    expect(output.collision).toBeNull()
+    expect(output.flaggedBy).toEqual([ids.handleOf(ANSEL), ids.handleOf(ANSEL_THIRD)])
+    expect(output.flaggedBy.every((handle) => /^c\d+$/.test(handle))).toBe(true)
+    expect(ids.handleOf(GIL)).toBeUndefined()
+    expect(ids.handleOf(OTHER_ANSEL)).toBeUndefined()
+  })
+
+  it('reads a flag whose names no longer pair as dormant, its partner still named', async () => {
+    const answer = await read(CORIN)
+
+    expect(answer.output).toMatchObject({
+      collision: { partner: ids.handleOf(DOV), reason: 'alike', live: false },
+    })
+    expect(ids.nameOf(ids.handleOf(DOV)!)).toBe('Dov')
+  })
+
+  it('reads a flag whose partner is gone as dormant, with no partner', async () => {
+    const answer = await read(EVA)
+
+    expect(answer.output).toMatchObject({
+      collision: { partner: null, reason: 'alike', live: false },
+      flaggedBy: [],
+    })
+  })
+
+  it("adds nothing when the task's fields leave the flag out", async () => {
+    const answer = await read(ANSEL, { character: ['status'] })
+
+    expect(answer.output).not.toHaveProperty('collision')
+    expect(answer.output).not.toHaveProperty('flaggedBy')
   })
 })
 

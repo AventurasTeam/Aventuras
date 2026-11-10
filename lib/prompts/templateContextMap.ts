@@ -695,6 +695,14 @@ export const VARIABLES: Record<ContextGroup, VariableDef[]> = {
         "The Upkeep task's starting happenings: those set at one of the task's turns or made from one, not yet common knowledge, by title. `id` is the short id (hp1, hp2…). Only a close task's render sets it.",
       required: false,
     },
+    {
+      name: 'closeLifecycleRows',
+      type: "{ id: string; kind: 'character' | 'item' | 'faction'; name: string; status: string; retiredReason: string; collision: string }[]",
+      category: 'Entities',
+      description:
+        "The Lifecycle task's starting rows: the active characters and items in the scene of a turn the task reads, the active characters, items and factions whose name or a keyword those turns mention, and the active factions those characters belong to, less a character a reply after the chapter still has in its scene; never a place. Characters, then items, then factions, each by name. `id` is the short id (c1, i1, f1…); a missing `retiredReason` is an empty string; `collision` is the row's flag as its partner's short id and reason, marked dormant when it no longer holds, and empty when the row holds none. Only a close task's render sets it.",
+      required: false,
+    },
   ],
   staticContent: [],
 }
@@ -711,6 +719,7 @@ export const CLOSE_ONLY_CHAPTER_VARIABLES = [
   'closeLoreLimits',
   'closeUpkeepRows',
   'closeUpkeepHappenings',
+  'closeLifecycleRows',
 ] as const
 
 /** The `chapter` variable only the merge of a chapter closed in parts sets. */
@@ -730,6 +739,7 @@ export const TEMPLATE_GROUPS: Record<string, ContextGroup> & Record<TemplateId, 
   [TEMPLATE_IDS.closeIdentity]: 'chapter',
   [TEMPLATE_IDS.closeThreads]: 'chapter',
   [TEMPLATE_IDS.closeUpkeep]: 'chapter',
+  [TEMPLATE_IDS.closeLifecycle]: 'chapter',
   [TEMPLATE_IDS.wizardOpening]: 'wizard',
   [TEMPLATE_IDS.wizardOpeningRefine]: 'wizard',
   [TEMPLATE_IDS.wizardTitleChips]: 'wizard',
@@ -779,6 +789,7 @@ export const DISPLAY_GROUPS: Record<string, string[]> = {
     'closeCharacters',
     'closeFactions',
     'closeUpkeepRows',
+    'closeLifecycleRows',
   ],
   Plot: ['happenings', 'threads', 'closeThreads', 'closeUpkeepHappenings'],
   Retrieval: [

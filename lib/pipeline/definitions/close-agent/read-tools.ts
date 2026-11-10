@@ -2,12 +2,14 @@ import { and, eq } from 'drizzle-orm'
 import { z } from 'zod'
 
 import type { PrecedenceTable } from '@/lib/actions/types'
-import { entities, happenings, lore, threads } from '@/lib/db'
+import { entities, happenings, lore, threads, type Entity } from '@/lib/db'
 import { SUBSTITUTABLE_PREFIXES } from '@/lib/ids'
 import { isJsonObject } from '@/lib/json-object'
 import { normalizeTerm } from '@/lib/keyword-terms'
+import { compareId } from '@/lib/list-modules'
 import { matchTerms } from '@/lib/retrieval'
 import { excerpt, oneLine } from '@/lib/text'
+import { flagStillHolds } from '@/lib/world'
 
 import { withHandlesDeep, type CloseIds } from './ids'
 import {
@@ -27,7 +29,13 @@ const LINE_DESCRIPTION_CHARS = 100
 const READ_ROW_PREFIXES = ['char', 'loc', 'item', 'fact', 'lore', 'thr', 'hap'] as const
 
 /** A row as read_row reads it: its kind, its name or title, its columns by name. */
-type ReadRow = { kind: RowKind; name: string; columns: Readonly<Record<string, unknown>> }
+type ReadRow = {
+  kind: RowKind
+  name: string
+  columns: Readonly<Record<string, unknown>>
+  /** An entity row as stored, which its flag is read from. */
+  entity?: Entity
+}
 
 type Rank = 0 | 1 | 2 | 3 | 4
 
@@ -56,7 +64,7 @@ async function readRow(
         .from(entities)
         .where(and(eq(entities.branchId, ctx.branchId), eq(entities.id, id)))
         .limit(1)
-      return row && { kind: row.kind, name: row.name, columns: row }
+      return row && { kind: row.kind, name: row.name, columns: row, entity: row }
     }
     case 'lore': {
       const [row] = await ctx.db
@@ -137,6 +145,49 @@ export async function refsIn(ctx: RowReadContext, value: unknown): Promise<Recor
     pending = next
   }
   return refs
+}
+
+const FLAG_PATH = 'nameCollisionFlag'
+
+type CollisionView = {
+  /** The row's own flag; `partner` null when that row is gone. */
+  collision: { partner: string | null; reason: string; live: boolean } | null
+  /** Rows on the branch whose live flag names this one. */
+  flaggedBy: string[]
+}
+
+/** world.md → Surfacing: a flag is live or dormant, and one row's pair may be flagged from the other. */
+async function collisionView(ctx: ToolContext, row: Entity): Promise<CollisionView> {
+  const partnerId = row.nameCollisionFlag === 1 ? row.nameCollisionPartnerId : null
+  let collision: CollisionView['collision'] = null
+  if (partnerId !== null) {
+    const [partner] = await ctx.db
+      .select()
+      .from(entities)
+      .where(and(eq(entities.branchId, ctx.branchId), eq(entities.id, partnerId)))
+      .limit(1)
+    collision = {
+      partner: partner === undefined ? null : ctx.ids.show(partner.id, partner.name),
+      reason: row.nameCollisionReason ?? '',
+      live: flagStillHolds(row, partner),
+    }
+  }
+  const holders = await ctx.db
+    .select()
+    .from(entities)
+    .where(
+      and(
+        eq(entities.branchId, ctx.branchId),
+        eq(entities.nameCollisionFlag, 1),
+        eq(entities.nameCollisionPartnerId, row.id),
+      ),
+    )
+  const flaggedBy = holders
+    .filter((holder) => flagStillHolds(holder, row))
+    // Code units, never localeCompare: host locale would make the answer device-dependent.
+    .sort((a, b) => compareId(a.name, b.name) || compareId(a.id, b.id))
+    .map((holder) => ctx.ids.show(holder.id, holder.name))
+  return { collision, flaggedBy }
 }
 
 // Ids go to handles before the cut: excerpt can cut where there's no space, inside an id. It can
@@ -308,11 +359,16 @@ async function readRowAnswer(
 
   const fields = Object.fromEntries(paths.map((path) => [path, valueAt(row.columns, path)]))
   const refs = await refsIn(ctx, [row.name, fields])
+  const flag =
+    row.entity !== undefined && paths.includes(FLAG_PATH)
+      ? await collisionView(ctx, row.entity)
+      : {}
   const output = {
     id: handle,
     kind: row.kind,
     name: row.name,
     fields,
+    ...flag,
     ...(Object.keys(refs).length > 0 ? { refs } : {}),
   }
   return { output: withHandlesDeep(output, ctx.ids), rows, read: [{ table, id }] }
