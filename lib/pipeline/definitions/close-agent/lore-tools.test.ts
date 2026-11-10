@@ -1120,6 +1120,28 @@ describe('update_lore', () => {
     expect((await storedLore(f, FERRY)).body).toBe('x'.repeat(1_300))
   })
 
+  it('grows a row whose body was null before the close from no body at all', async () => {
+    await seedLore(f, { id: FERRY, title: 'The Night Ferry', body: null })
+
+    const run = await dispatchScripted(
+      f,
+      [
+        read,
+        update({ body: 'x'.repeat(1_000) }),
+        update({ body: 'y'.repeat(1_201) }),
+        update({ body: 'z'.repeat(1_200) }),
+      ],
+      { shown: [{ id: FERRY, name: 'The Night Ferry' }] },
+    )
+
+    expect(run.answers.slice(1)).toEqual([
+      { result: 'ok' },
+      { result: 'rejected', reason: growthRefusal(1_201, 0) },
+      { result: 'ok' },
+    ])
+    expect((await storedLore(f, FERRY)).body).toBe('z'.repeat(1_200))
+  })
+
   it('grows a row this close created from no body at all', async () => {
     const run = await dispatchScripted(f, [
       {
