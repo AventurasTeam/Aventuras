@@ -197,6 +197,10 @@ property of the backend rather than of the API.
 
 The app's own writers are bounded so they cannot reach that ceiling:
 the classifier clamps the fields it emits, in `lib/classifier/plan.ts`.
+A chapter close bounds a lore body by its growth instead, at most 1,200
+characters past the body it replaces
+([`chapter-close.md → 3a`](./chapter-close.md#3a--lore-creation)), so
+it can extend a user's long body without cutting it.
 User-authored lore is deliberately not bounded — a long body is the
 feature, not a defect — which is why making it retrievable is a
 [deferred design session](../parked.md#chunking-long-embedded-text)

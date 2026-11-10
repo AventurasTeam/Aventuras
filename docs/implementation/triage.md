@@ -371,3 +371,13 @@ patch`, which 5.5a marks `restated`, so a close tool's write of it
   deltas above it … stay put" doesn't hold when they wrote the same
   field. For the undo substrate's owner. Raised in 5.8's execution,
   developer decision 2026-11-10.
+
+- **A pass stores a turn handle written into prose.**
+  [classifier.md's ID handling](../memory/classifier.md#id-handling-in-classifier-output)
+  names each id a pass's reply writes into prose before it lands, and
+  keeps a token that names nothing as written. A turn handle names no
+  row, so a reply that writes "as t3 shows" into a description stores
+  `t3`, which a later prompt reads as its own turn. Chapter close
+  refuses such a field
+  ([Slice 5.8](./milestones/05-chapters-chapter-close/slices/08-prose-tasks.md#implementation-notes));
+  the periodic classifier has no such check. Raised in 5.8's planning.
