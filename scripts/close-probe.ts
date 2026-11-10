@@ -21,7 +21,7 @@ import {
   resetStuckClassifierRunState,
   startManualClose,
 } from '@/lib/actions'
-import { canEndChapter } from '@/lib/chapters'
+import { canEndChapter, partTokenLimit } from '@/lib/chapters'
 import {
   chapters,
   closeReportSchema,
@@ -81,11 +81,13 @@ import { resolveDevSlot } from './dev-slot/resolve'
 // PROBE_OVERLAY), PROBE_END_ENTRY (the open region's latest ai_reply), PROBE_OUT (a directory a
 // run: each tool step's request and response, and the report; bar.json beside the runs),
 // PROBE_STAND_IN=1 (the stand-in task in place of the shipped slots), PROBE_OVERLAY=1 (the dataset
-// seed's test overlay on each run's copy, and the bar over the runs), AVENTURAS_DB_PATH (the dev
-// slot's database; only ever read, through a VACUUM INTO copy), PROBE_REJUDGE (a saved PROBE_OUT
-// directory: judges its runs by the bar as it stands, from the saved files, with no model call, and
-// writes bar-rejudged.json beside them). Close the app first: a live write moves the source's
-// hash, and a held write lock fails the copy.
+// seed's test overlay on each run's copy, and the bar over the runs), PROBE_WINDOW (none; the
+// model's window in tokens, set on the probe's provider as App Settings' override is, so a close
+// cuts its chapter into parts at half of it), AVENTURAS_DB_PATH (the dev slot's database; only
+// ever read, through a VACUUM INTO copy), PROBE_REJUDGE (a saved PROBE_OUT directory: judges its
+// runs by the bar as it stands, from the saved files, with no model call, and writes
+// bar-rejudged.json beside them). Close the app first: a live write moves the source's hash, and
+// a held write lock fails the copy.
 // A PROBE_OUT that already holds files is refused, so each invocation saves to its own directory.
 const LLM_URL = process.env.SMOKE_LLM_URL
 const LLM_MODEL = process.env.SMOKE_LLM_MODEL
@@ -97,6 +99,8 @@ const END_ENTRY = process.env.PROBE_END_ENTRY
 const OUT = process.env.PROBE_OUT
 const STAND_IN = process.env.PROBE_STAND_IN === '1'
 const REJUDGE = process.env.PROBE_REJUDGE
+const WINDOW_ENV = process.env.PROBE_WINDOW
+const WINDOW = WINDOW_ENV === undefined ? undefined : Number(WINDOW_ENV)
 // The overlay's capped lists as the bar reads them, recorded in bar.json for a later re-judge.
 const OVERLAY_LISTS = overlayCappedLists().map(({ id, list }) => ({ id, list }))
 
@@ -266,6 +270,7 @@ async function hydrateProbeSettings(server: Server): Promise<void> {
         apiKey: LLM_KEY,
         endpoint: server.url,
         favoriteModelIds: [server.model],
+        ...(WINDOW === undefined ? {} : { contextWindowOverrides: { [server.model]: WINDOW } }),
       },
     ],
     profiles: [
@@ -621,6 +626,8 @@ async function main(): Promise<void> {
     return
   }
   if (!Number.isInteger(RUNS) || RUNS < 1) throw new Error('PROBE_RUNS must be a positive integer')
+  if (WINDOW !== undefined && (!Number.isInteger(WINDOW) || WINDOW < 1))
+    throw new Error('PROBE_WINDOW must be a positive integer')
   if (OVERLAY && STAND_IN)
     throw new Error(
       '[probe:close] PROBE_OVERLAY=1 and PROBE_STAND_IN=1 cannot run together: the stand-in has no Threads task, so the bar would always read missed',
@@ -636,6 +643,10 @@ async function main(): Promise<void> {
   stopOn('SIGTERM', 143)
   const before = sha256(source)
   console.log(`[probe:close] source ${source}, sha256 ${before}`)
+  if (WINDOW !== undefined)
+    console.log(
+      `[probe:close] PROBE_WINDOW ${WINDOW}: a part holds at most ${partTokenLimit(WINDOW)} tokens`,
+    )
 
   registerAllDomains()
   configureDeltaActionPort(realDeltaActionPort())
