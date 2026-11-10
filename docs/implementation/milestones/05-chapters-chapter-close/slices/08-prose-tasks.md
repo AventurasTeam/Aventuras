@@ -639,6 +639,9 @@ None open: Implementation notes record each answer.
   never counts, so a part's second write of a field lands; a phase-0
   fact anchored in a later part's turn counts, being that turn's
   evidence. It gives up an earlier part correcting a wrong later write.
+  A row a later part's turn created counts as written in every field,
+  so an earlier part writes nothing to it (known limit, developer
+  decision, 2026-11-10); the candidate fix is in the triage inbox.
 - **A reply that didn't report its scene counts as one (known limit,
   developer decision, 2026-11-10, from the slice review).** A reply
   missing `<scene_entities>` inherits the previous scene

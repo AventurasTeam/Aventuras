@@ -430,3 +430,16 @@ patch`, which 5.5a marks `restated`, so a close tool's write of it
   it misleads only the template editor (M7): an override that reads
   `entries` in a close task renders it empty. 5.8 added four more
   templates to the group. Raised in 5.8's slice review.
+- **A later part's create closes the row to an earlier part.** A close's
+  per-part task reads C12 past its part's last turn, and a create
+  counts as writing every field, blank ones included (`wrotePath` in
+  `lib/actions/delta/user-precedence.ts`, through `wroteField`). Upkeep
+  shows a part every live row its prose names off the scene
+  (`startUpkeep`), so an earlier part can name a row a later part's turn
+  first created and write nothing to it: detail only the earlier part's
+  turns hold is lost. Candidate fix: inside the later-turn check only,
+  a later part's create counts only for the fields it set non-blank;
+  `wroteField`'s create rule stays as it is for user precedence. 5.8
+  records the limit
+  ([`chapter-close.md → Tools and writes`](../memory/chapter-close.md#tools-and-writes)).
+  Raised in 5.8's slice review, developer decision 2026-11-10.

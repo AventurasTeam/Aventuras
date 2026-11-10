@@ -189,7 +189,9 @@ fall in the next chapter, whose close reviews the same rows. A
 the same grounds: they are newer evidence than any turn it read, and
 the later part's tasks read them. It gives up an earlier part
 correcting a wrong later write, which stays until the user or a later
-close fixes it.
+close fixes it. A row a later part's turn created counts as written in
+every field, so an earlier part writes nothing to it, and detail only
+the earlier part's turns hold is lost to the close.
 
 A write counts as a later turn's when it anchors past the task's last
 turn, the end entry for the last part and a chapter-wide task, or has
