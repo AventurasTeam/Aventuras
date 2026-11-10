@@ -144,7 +144,7 @@ describe('lock keys', () => {
     ).toEqual(['entities:b1:char_1'])
   })
 
-  // Lore isn't row-locked: its handlers read and judge precedence as the write lands.
+  // cadence.md → Concurrency row-locks only entities and threads rows; lore has no key.
   it('takes no lock for a lore keyword write or a lore update', () => {
     expect(
       lockKeysFor({

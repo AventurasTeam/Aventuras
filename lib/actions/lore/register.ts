@@ -191,8 +191,8 @@ const updateHandler: ActionHandler = async (action, branchId, ctx) => {
 
 /**
  * chapter-close.md → 3a "Existing rows too": adds and removals in one `keywords` write, checked as
- * it lands. Only a machine's term goes. `keywords` alone: an `updateLore` in the same group may set
- * the row's other columns, and a group refuses two writes to one column.
+ * it lands. Only a machine's term goes. `keywords` alone, no `embeddingStale`: keywords aren't
+ * embedded, and beside an `updateLore` the group would write that column twice and be refused.
  */
 const setKeywordsHandler: ActionHandler = async (action, branchId, ctx) => {
   if (action.kind !== 'setLoreKeywords')
@@ -218,6 +218,7 @@ const setKeywordsHandler: ActionHandler = async (action, branchId, ctx) => {
     return edit.userDropped
       ? noopRefusal(USER_EDITED_SINCE_PROSE, null)
       : noopRefusal('no-keyword-change', 'restated')
+  const columns = { keywords: edit.next }
   return {
     status: 'ok',
     targetTable: 'lore',
@@ -227,11 +228,11 @@ const setKeywordsHandler: ActionHandler = async (action, branchId, ctx) => {
     ops: [
       ctx.db
         .update(lore)
-        .set({ keywords: edit.next })
+        .set(columns)
         .where(and(eq(lore.branchId, bid), eq(lore.id, id)))
         .toSQL(),
     ],
-    patch: { op: 'update', id, columns: { keywords: edit.next } },
+    patch: { op: 'update', id, columns },
   }
 }
 
