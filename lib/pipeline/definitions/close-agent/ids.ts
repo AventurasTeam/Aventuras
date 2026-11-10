@@ -2,7 +2,7 @@ import { nameIdsInProse } from '@/lib/classifier'
 import { IdBiMap, SUBSTITUTABLE_PREFIXES } from '@/lib/ids'
 import { isJsonObject } from '@/lib/json-object'
 
-const TURN_PREFIX = 'entry_'
+export const TURN_PREFIX = 'entry_'
 const AWARENESS_PREFIX = 'haw_'
 const UUID = '[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}'
 const SHOWN_KINDS = [...SUBSTITUTABLE_PREFIXES, 'entry', 'haw'].join('|')

@@ -1,6 +1,6 @@
 import type { GuardRow } from '@/lib/actions/types'
 
-import type { CloseIds } from './ids'
+import { TURN_PREFIX, type CloseIds } from './ids'
 import { FULL_ID_SHAPE } from './tool'
 
 /** Rows a task and part has read: seeded by its start, then read_row and landed creates (C11). */
@@ -67,7 +67,7 @@ function citedTurns(value: unknown, { ids, taskEntryIds }: CheckContext): Common
         ok: false,
         reason: 'turns takes the short handles of the turns this task was shown, not a full id',
       }
-    if (id === undefined || !id.startsWith('entry_'))
+    if (id === undefined || !id.startsWith(TURN_PREFIX))
       return { ok: false, reason: `${String(handle)} is not a turn: ${TURN_HINT}` }
     const at = positions.get(id)
     if (at === undefined)

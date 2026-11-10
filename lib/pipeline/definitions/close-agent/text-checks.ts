@@ -1,8 +1,7 @@
-import type { CloseIds } from './ids'
+import { TURN_PREFIX, type CloseIds } from './ids'
 
 // Every handle CloseIds mints is 1–2 letters and digits; a bracket around one or several hides none.
 const HANDLE_TOKEN = /\b[a-z]{1,2}\d+\b/g
-const TURN_PREFIX = 'entry_'
 
 function handlesIn(text: string, ids: CloseIds): { handle: string; id: string }[] {
   const found: { handle: string; id: string }[] = []
