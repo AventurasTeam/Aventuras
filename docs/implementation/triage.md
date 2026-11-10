@@ -367,9 +367,9 @@ patch`, which 5.5a marks `restated`, so a close tool's write of it
   gap). The same whole-list restore may hit other list fields a pass
   appends to, unchecked, and `data-model.md`'s "periodic-classifier
   deltas above it … stay put" doesn't hold when they wrote the same
-  field. For the undo substrate's owner; `retrieval.md → Keywords
-schema` links this item, so a triage pass updates that link when
-  routing it. Raised in 5.8's execution,
+  field. For the undo substrate's owner. The Keywords
+  schema section of `retrieval.md` links this item, so a triage pass
+  updates that link when routing it. Raised in 5.8's execution,
   developer decision 2026-11-10.
 
 - **A pass stores a turn handle written into prose.**
