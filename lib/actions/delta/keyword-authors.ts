@@ -115,23 +115,41 @@ export type KeywordEdit =
   /** `next`: the kept terms in stored order, then the adds. */
   | { kind: 'changed'; next: string[]; removed: string[] }
 
+type KeywordRow = {
+  table: 'entities' | 'lore'
+  branchId: string
+  id: string
+  keywords: readonly string[]
+}
+
 /**
- * cadence.md → User edits and classifier writes: adds are the terms the list lacks, less any the
- * user removed after the prose; removals match by `normalizeTerm`, every spelling alike, and a term
- * the list lacks is ignored.
+ * cadence.md → User edits and classifier writes: `fresh`, the terms of `add` the list lacks;
+ * `added`, those less any the user removed after the prose.
+ */
+export async function planKeywordAdds(
+  ctx: DbCtx,
+  row: KeywordRow,
+  add: readonly string[],
+  proseEntryId: ProseEntryId,
+): Promise<{ fresh: string[]; added: string[] }> {
+  const { table, branchId, id, keywords } = row
+  const fresh = newTerms(keywords, add)
+  if (fresh.length === 0 || proseEntryId === null) return { fresh, added: fresh }
+  const userRemoved = priorTerms(await userEditsSinceProse(ctx, branchId, table, id, proseEntryId))
+  return { fresh, added: fresh.filter((term) => !userRemoved.has(normalizeTerm(term))) }
+}
+
+/**
+ * cadence.md → User edits and classifier writes: adds as `planKeywordAdds` keeps them; removals
+ * match by `normalizeTerm`, every spelling alike, and a term the list lacks is ignored.
  */
 export async function planKeywordEdit(
   ctx: DbCtx,
-  row: { table: 'entities' | 'lore'; branchId: string; id: string; keywords: readonly string[] },
+  row: KeywordRow,
   edit: { add: readonly string[]; remove: readonly string[]; proseEntryId: ProseEntryId },
 ): Promise<KeywordEdit> {
   const { table, branchId, id, keywords } = row
-  const fresh = newTerms(keywords, edit.add)
-  const userRemoved =
-    fresh.length > 0 && edit.proseEntryId !== null
-      ? priorTerms(await userEditsSinceProse(ctx, branchId, table, id, edit.proseEntryId))
-      : new Set<string>()
-  const added = fresh.filter((term) => !userRemoved.has(normalizeTerm(term)))
+  const { fresh, added } = await planKeywordAdds(ctx, row, edit.add, edit.proseEntryId)
   const dropped = new Set(edit.remove.map(normalizeTerm).filter((key) => key !== ''))
   const removed = keywords.filter((term) => dropped.has(normalizeTerm(term)))
   if (removed.length > 0) {
