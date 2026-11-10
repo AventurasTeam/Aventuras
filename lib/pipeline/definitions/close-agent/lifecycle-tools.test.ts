@@ -169,6 +169,31 @@ async function appendTurnEntry(
   )
 }
 
+/**
+ * On a two-turn fixture (t1–t5): appends t6 and t7, E being t7, so a write made before this call
+ * lands after t5 and before E. Returns dispatchScripted's options for that chapter.
+ */
+async function appendLateTurns(
+  f: CloseFixture,
+): Promise<{ endEntryId: string; taskEntryIds: string[] }> {
+  await appendTurnEntry(f, {
+    id: 'entry_late_006',
+    position: 6,
+    kind: 'user_action',
+    content: 'I ask who keeps the far bank.',
+  })
+  await appendTurnEntry(f, {
+    id: 'entry_late_007',
+    position: 7,
+    kind: 'ai_reply',
+    content: 'Tobin pulls his hood low and says nothing.',
+  })
+  return {
+    endEntryId: 'entry_late_007',
+    taskEntryIds: [...f.entries.map((entry) => entry.id), 'entry_late_006', 'entry_late_007'],
+  }
+}
+
 async function storedEntity(f: CloseFixture, id: string): Promise<Entity> {
   const [found] = await f.ctx.db
     .select()
@@ -617,8 +642,40 @@ describe('retire_entity', () => {
     expect(await runDeltas(f, result.actionId)).toEqual([])
   })
 
-  it('refuses a gone row as row-gone', async () => {
-    const { answers } = await dispatchScripted(
+  it('skips a row whose status the user wrote after the cited turn, though before E', async () => {
+    f = await openCloseFixture({ turns: 2 })
+    await seedRow(f, { id: TOBIN, kind: 'character', name: 'Tobin', status: 'retired' })
+    await write(
+      f,
+      {
+        kind: 'updateEntity',
+        source: 'user_edit',
+        payload: {
+          branchId: f.branchId,
+          id: TOBIN,
+          patch: { status: 'active', retiredReason: null },
+        },
+      },
+      'act_user_edit',
+      null,
+    )
+    const late = await appendLateTurns(f)
+
+    const { result, answers } = await dispatchScripted(
+      f,
+      [{ toolName: 'retire_entity', input: { id: 'c1', ...cite(['t5']) } }],
+      { shown: [{ id: TOBIN, name: 'Tobin' }], ...late },
+    )
+
+    expect(outputs(answers)).toEqual([
+      { result: 'skipped', reason: USER_EDITED_SINCE_PROSE, note: expect.any(String) },
+    ])
+    expect(await runDeltas(f, result.actionId)).toEqual([])
+    expect((await storedEntity(f, TOBIN)).status).toBe('active')
+  })
+
+  it('refuses a gone row as row-gone, naming it as shown', async () => {
+    const { answers, calls } = await dispatchScripted(
       f,
       [{ toolName: 'retire_entity', input: { id: 'c1', ...cite() } }],
       { shown: [{ id: GONE, name: 'Ansel' }] },
@@ -627,6 +684,12 @@ describe('retire_entity', () => {
     expect(outputs(answers)).toEqual([
       { result: 'rejected', reason: CLOSE_REASON.rowGone, note: expect.any(String) },
     ])
+    expect(calls[0]).toMatchObject({
+      result: 'rejected',
+      reason: CLOSE_REASON.rowGone,
+      rows: [{ table: 'entities', id: GONE, name: 'Ansel' }],
+      values: { status: 'retired' },
+    })
   })
 })
 
@@ -754,6 +817,40 @@ describe('flag_duplicate', () => {
       })
     },
   )
+
+  it('re-marks the partner flag naming the row, though the row flags a third', async () => {
+    await seedRow(f, { id: CLERK, kind: 'character', name: 'the toll clerk' })
+    await seedRow(f, {
+      id: TOBIN,
+      kind: 'character',
+      name: 'Tobin',
+      flag: { partnerId: CLERK, reason: 'duplicate' },
+    })
+    // The stranger's keyword names Tobin, so its `alike` flag on him is live.
+    await seedRow(f, {
+      id: STRANGER,
+      kind: 'character',
+      name: 'the hooded stranger',
+      keywords: ['tobin'],
+      flag: { partnerId: TOBIN, reason: 'alike' },
+    })
+
+    const { result, answers, calls } = await dispatchScripted(f, [flagCall()], { shown: SHOWN })
+
+    expect(outputs(answers)).toEqual([{ result: 'ok' }])
+    expect(flagOf(await storedEntity(f, STRANGER))).toEqual([1, TOBIN, 'duplicate'])
+    expect(flagOf(await storedEntity(f, TOBIN))).toEqual([1, CLERK, 'duplicate'])
+    const log = await runDeltas(f, result.actionId)
+    expect(log.map((d) => [d.targetId, d.op])).toEqual([[STRANGER, 'update']])
+    expect(calls[0]).toMatchObject({
+      result: 'ok',
+      rows: [
+        { table: 'entities', id: STRANGER, name: 'the hooded stranger' },
+        { table: 'entities', id: TOBIN, name: 'Tobin' },
+      ],
+      values: { nameCollisionPartnerId: 'Tobin' },
+    })
+  })
 
   it('refuses a row whose live flag names a third row, writing nothing', async () => {
     await seedRow(f, { id: CLERK, kind: 'character', name: 'the toll clerk' })
@@ -883,6 +980,31 @@ describe('flag_duplicate', () => {
     expect(await runDeltas(f, result.actionId)).toEqual([])
   })
 
+  it('skips a row whose flag the user wrote after the cited turn, though before E', async () => {
+    f = await openCloseFixture({ turns: 2 })
+    await seedRow(f, { id: CLERK, kind: 'character', name: 'the toll clerk' })
+    await seedRow(f, {
+      id: TOBIN,
+      kind: 'character',
+      name: 'Tobin',
+      flag: { partnerId: CLERK, reason: 'duplicate' },
+    })
+    await seedRow(f, { id: STRANGER, kind: 'character', name: 'the hooded stranger' })
+    await keepPair(f, TOBIN, CLERK)
+    const late = await appendLateTurns(f)
+
+    const { result, answers } = await dispatchScripted(f, [flagCall(cite(['t5']))], {
+      shown: SHOWN,
+      ...late,
+    })
+
+    expect(outputs(answers)).toEqual([
+      { result: 'skipped', reason: USER_EDITED_SINCE_PROSE, note: expect.any(String) },
+    ])
+    expect(await runDeltas(f, result.actionId)).toEqual([])
+    expect(flagOf(await storedEntity(f, TOBIN))).toEqual([0, null, null])
+  })
+
   it('refuses the same row twice', async () => {
     await seedRow(f, { id: TOBIN, kind: 'character', name: 'Tobin' })
 
@@ -914,10 +1036,10 @@ describe('flag_duplicate', () => {
     expect(await runDeltas(f, result.actionId)).toEqual([])
   })
 
-  it('refuses a gone partner as row-gone', async () => {
+  it('refuses a gone partner as row-gone, naming it as shown and keeping the proposed partner', async () => {
     await seedRow(f, { id: TOBIN, kind: 'character', name: 'Tobin' })
 
-    const { answers } = await dispatchScripted(f, [flagCall()], {
+    const { answers, calls } = await dispatchScripted(f, [flagCall()], {
       shown: [
         { id: TOBIN, name: 'Tobin' },
         { id: GONE, name: 'Ansel' },
@@ -927,5 +1049,14 @@ describe('flag_duplicate', () => {
     expect(outputs(answers)).toEqual([
       { result: 'rejected', reason: CLOSE_REASON.rowGone, note: expect.any(String) },
     ])
+    expect(calls[0]).toMatchObject({
+      result: 'rejected',
+      reason: CLOSE_REASON.rowGone,
+      rows: [
+        { table: 'entities', id: TOBIN, name: 'Tobin' },
+        { table: 'entities', id: GONE, name: 'Ansel' },
+      ],
+      values: { nameCollisionPartnerId: 'Ansel' },
+    })
   })
 })
