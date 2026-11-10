@@ -139,6 +139,7 @@ async function startLifecycle(ctx: TaskPromptContext): Promise<TaskStart<Lifecyc
       .filter((row) => (sceneTagged(row) && sceneIds.has(row.id)) || namedInProse(prose, row))
       .map(({ id }) => id),
   )
+  if (touched.size === 0) return null
   const later = await charactersInSceneAfterTask(ctx)
   // Membership before the subtraction: a faction whose member a later reply shows is still in play.
   const members = new Set(
