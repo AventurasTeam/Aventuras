@@ -6,6 +6,7 @@ import { loreStore } from '@/lib/stores'
 
 import { cascadedDelete, rowCascade } from '../delta/delete-cascade'
 import { deepEqual } from '../delta/delta-encoding'
+import { keywordUserAddedReason, planKeywordEdit } from '../delta/keyword-authors'
 import {
   noopRefusal,
   register,
@@ -14,7 +15,8 @@ import {
   type ActionHandler,
   type PatchMatchesColumns,
 } from '../delta/registry'
-import type { DeltaSource } from '../types'
+import { USER_EDITED_SINCE_PROSE, userEditsSinceProse, wroteField } from '../delta/user-precedence'
+import type { DeltaSource, ProseEntryId } from '../types'
 
 const cascade = rowCascade('lore')
 
@@ -33,7 +35,23 @@ declare module '@/lib/actions/action-map' {
     createLore: { source: DeltaSource; payload: { entry: NewLore } }
     updateLore: {
       source: DeltaSource
-      payload: { branchId: string; id: string; patch: LoreUpdatePatch }
+      payload: {
+        branchId: string
+        id: string
+        patch: LoreUpdatePatch
+        /** A machine write's prose: a column the user wrote after it is dropped (cadence.md). */
+        proseEntryId?: ProseEntryId
+      }
+    }
+    setLoreKeywords: {
+      source: DeltaSource
+      payload: {
+        branchId: string
+        id: string
+        add: string[]
+        remove: string[]
+        proseEntryId: ProseEntryId
+      }
     }
     deleteLore: { source: DeltaSource; payload: { branchId: string; id: string } }
   }
@@ -96,7 +114,7 @@ const createHandler: ActionHandler = (action, branchId, ctx) => {
 const updateHandler: ActionHandler = async (action, branchId, ctx) => {
   if (action.kind !== 'updateLore')
     throw new Error(`handler/kind mismatch: expected 'updateLore', got '${action.kind}'`)
-  const { branchId: bid, id, patch } = action.payload
+  const { branchId: bid, id, patch, proseEntryId } = action.payload
   if (bid !== branchId)
     return { status: 'rejected', reason: `branch mismatch: delta ${branchId} vs target ${bid}` }
   const parsed = loreWriteSchema.partial().safeParse(patch)
@@ -124,16 +142,26 @@ const updateHandler: ActionHandler = async (action, branchId, ctx) => {
       reason: `update patch for lore ${bid}:${id} has no updatable fields`,
     }
 
+  const edits =
+    proseEntryId != null ? await userEditsSinceProse(ctx, bid, 'lore', id, proseEntryId) : []
   // Unchanged columns are dropped: History reads an undo payload's keys as fields that changed.
   const set: Record<string, unknown> = {}
   const undoPayload: Record<string, unknown> = {}
+  let userKept = false
   for (const col of named) {
     const prior = current[col as keyof Lore]
     if (deepEqual(patch[col], prior)) continue
+    if (wroteField(edits, 'lore', col, [])) {
+      userKept = true
+      continue
+    }
     set[col] = patch[col]
     undoPayload[col] = prior
   }
-  if (Object.keys(set).length === 0) return noopRefusal('no-op lore patch', 'restated')
+  if (Object.keys(set).length === 0) {
+    if (userKept) return noopRefusal(USER_EDITED_SINCE_PROSE, null)
+    return noopRefusal('no-op lore patch', 'restated')
+  }
 
   // Embedded-column change flips the flag; see entities/register.ts for the reasoning.
   const [firstField, secondField] = KIND_FIELDS.lore
@@ -158,6 +186,52 @@ const updateHandler: ActionHandler = async (action, branchId, ctx) => {
         .toSQL(),
     ],
     patch: { op: 'update', id, columns: set },
+  }
+}
+
+/**
+ * chapter-close.md → 3a "Existing rows too": adds and removals in one `keywords` write, checked as
+ * it lands. Only a machine's term goes. `keywords` alone: an `updateLore` in the same group may set
+ * the row's other columns, and a group refuses two writes to one column.
+ */
+const setKeywordsHandler: ActionHandler = async (action, branchId, ctx) => {
+  if (action.kind !== 'setLoreKeywords')
+    throw new Error(`handler/kind mismatch: expected 'setLoreKeywords', got '${action.kind}'`)
+  const { branchId: bid, id, add, remove, proseEntryId } = action.payload
+  if (bid !== branchId)
+    return { status: 'rejected', reason: `branch mismatch: delta ${branchId} vs target ${bid}` }
+  const [current] = await ctx.db
+    .select()
+    .from(lore)
+    .where(and(eq(lore.branchId, bid), eq(lore.id, id)))
+  if (!current) return noopRefusal(`keyword target lore ${bid}:${id} not found`, 'gone')
+  const edit = await planKeywordEdit(
+    ctx,
+    { table: 'lore', branchId: bid, id, keywords: current.keywords },
+    { add, remove, proseEntryId },
+  )
+  if (edit.kind === 'user-term') {
+    const { term } = edit
+    return noopRefusal(keywordUserAddedReason(term), null)
+  }
+  if (edit.kind === 'unchanged')
+    return edit.userDropped
+      ? noopRefusal(USER_EDITED_SINCE_PROSE, null)
+      : noopRefusal('no-keyword-change', 'restated')
+  return {
+    status: 'ok',
+    targetTable: 'lore',
+    targetId: id,
+    op: 'update',
+    undoPayload: { keywords: current.keywords },
+    ops: [
+      ctx.db
+        .update(lore)
+        .set({ keywords: edit.next })
+        .where(and(eq(lore.branchId, bid), eq(lore.id, id)))
+        .toSQL(),
+    ],
+    patch: { op: 'update', id, columns: { keywords: edit.next } },
   }
 }
 
@@ -192,7 +266,12 @@ export function registerLore(): void {
     table: 'lore',
     descriptor: { table: lore, idCol: lore.id, branchCol: lore.branchId },
     columnSchemas: {},
-    handlers: { createLore: createHandler, updateLore: updateHandler, deleteLore: deleteHandler },
+    handlers: {
+      createLore: createHandler,
+      updateLore: updateHandler,
+      setLoreKeywords: setKeywordsHandler,
+      deleteLore: deleteHandler,
+    },
     patcher: (branchId, p) => loreStore.patch(branchId, p),
     cascade,
   })

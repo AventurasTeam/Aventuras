@@ -144,6 +144,30 @@ describe('lock keys', () => {
     ).toEqual(['entities:b1:char_1'])
   })
 
+  // Lore isn't row-locked: its handlers read and judge precedence as the write lands.
+  it('takes no lock for a lore keyword write or a lore update', () => {
+    expect(
+      lockKeysFor({
+        kind: 'setLoreKeywords',
+        source: 'chapter_close',
+        payload: {
+          branchId: 'b1',
+          id: 'lore_1',
+          add: ['ley line'],
+          remove: [],
+          proseEntryId: 'e_1',
+        },
+      }),
+    ).toEqual([])
+    expect(
+      lockKeysFor({
+        kind: 'updateLore',
+        source: 'chapter_close',
+        payload: { branchId: 'b1', id: 'lore_1', patch: { body: 'A city.' }, proseEntryId: 'e_1' },
+      }),
+    ).toEqual([])
+  })
+
   it('makes a reversal of a happening link delta hold the happening links', () => {
     for (const targetTable of ['happening_involvements', 'happening_awareness']) {
       const delta = { branchId: 'b1', targetTable, targetId: 'link_1' } as Delta

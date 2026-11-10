@@ -78,6 +78,7 @@ const LOCK_KEY: { [K in ProductionKind]: LockKey<K> } = {
   deleteCharacterRelationship: relationships,
   createLore: null,
   updateLore: null,
+  setLoreKeywords: null,
   deleteLore: null,
   createThread: null,
   updateThread: threadRow,
