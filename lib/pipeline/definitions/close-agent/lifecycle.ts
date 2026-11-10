@@ -102,7 +102,7 @@ async function partnersOf(
   return found
 }
 
-/** world.md → Surfacing: the row's flag as read_row reads it, its partner by id and name; a dormant flag counts as none. */
+/** world.md → Surfacing: the row's flag as read_row reads it, its partner by id and name; a dormant flag marked dormant. */
 function collisionOf(row: Entity, partners: ReadonlyMap<string, Entity>, ids: CloseIds): string {
   const partnerId = row.nameCollisionFlag === 1 ? row.nameCollisionPartnerId : null
   if (partnerId === null) return ''
