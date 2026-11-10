@@ -220,6 +220,16 @@ export function tableOfId(id: string): PrecedenceTable | null {
   return TABLE_BY_PREFIX.get(prefixOf(id)) ?? null
 }
 
+/**
+ * The task's last turn: E for the last part or a chapter-wide task, the part's last otherwise. A
+ * turn past it is newer evidence than any the task read.
+ */
+export function lastTaskTurn(ctx: Pick<ToolContext, 'taskEntryIds'>): string {
+  const last = ctx.taskEntryIds.at(-1)
+  if (last === undefined) throw new Error('lastTaskTurn: the task was shown no turn')
+  return last
+}
+
 const optionalArg = (tool: CloseTool, key: string): boolean =>
   tool.schema.shape[key]?.safeParse(undefined).success === true
 

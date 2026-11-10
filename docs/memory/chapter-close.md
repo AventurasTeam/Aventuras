@@ -133,7 +133,9 @@ the prose tasks in turn, which keeps its cache warm; under `single`,
 each part is one conversation. Chapter-wide limits hold across parts,
 and each part sees the writes so far. A part's writes cite only
 its own turns: a turn of another part is refused as one outside the
-chapter is, since the part never showed it.
+chapter is, since the part never showed it. A part leaves alone what a
+later part's turns wrote
+([Tools and writes](#tools-and-writes)).
 
 On a long chapter no single call sees the whole arc, and a rule refined
 under another name in a later part can land as a second lore row, which
@@ -182,14 +184,21 @@ turns past its chapter but anchors before them, so it skips a field one
 of them wrote, whichever writer it was, and a merge touching a row they
 touched is `skipped` whole. A rollback's undo would otherwise write over
 the close, and older chapter evidence over a newer fact. Those turns
-fall in the next chapter, whose close reviews the same rows.
+fall in the next chapter, whose close reviews the same rows. A
+[part](#parts)'s task leaves alone what a later part's turns wrote on
+the same grounds: they are newer evidence than any turn it read, and
+the later part's tasks read them. It gives up an earlier part
+correcting a wrong later write, which stays until the user or a later
+close fixes it.
 
-A write counts as a later turn's when it anchors past the end entry, or
-has no anchor and belongs to a turn past it. A `retrieval_count` bump
+A write counts as a later turn's when it anchors past the task's last
+turn, the end entry for the last part and a chapter-wide task, or has
+no anchor and belongs to a turn past it. A `retrieval_count` bump
 doesn't count, or most merges of recently retrieved rows would be
 refused, and the reset is exempt on the same grounds: a stale counter
-does no harm. A `chapter_close` delta doesn't count either, so work a
-divider-only removal kept
+does no harm. A `chapter_close` delta doesn't count either, so this
+close's earlier writes, which anchor on the end entry, never read as a
+later part's, and work a divider-only removal kept
 ([Deleting a chapter](#deleting-a-chapter)) doesn't read as a later
 turn's when the chapter closes again.
 

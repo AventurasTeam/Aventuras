@@ -7,6 +7,7 @@ import { commonChecks, type ReadSet } from './common-checks'
 import { nameCloseProse, withHandlesDeep, type CloseIds } from './ids'
 import type { CloseLedgerWriter } from './ledger'
 import {
+  lastTaskTurn,
   resolveIdArgs,
   tableOfId,
   type CloseTool,
@@ -251,9 +252,10 @@ async function* writeCall(
     ...toolContextOf(ctx),
     turns: check.turns,
     proseEntryId,
+    // C12 past the task's last turn: an earlier part never read a later part's turns.
     guard: (rows) =>
       readRowGuard(
-        { branchId: ctx.branchId, endEntryId: ctx.endEntryId, proseEntryId, rows },
+        { branchId: ctx.branchId, endEntryId: lastTaskTurn(ctx), proseEntryId, rows },
         { db: ctx.phase.db, runInTransaction: ctx.phase.runInTransaction },
       ),
     actionId: ctx.phase.actionId,

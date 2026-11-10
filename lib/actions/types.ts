@@ -89,7 +89,7 @@ export type RowGuard = { row: (table: PrecedenceTable, id: string) => RowVerdict
 
 export type RowGuardArgs = {
   branchId: string
-  /** The chapter's end entry, E. */
+  /** The writing task's last turn: E, or its part's last entry; a write anchored past it is C12's. */
   endEntryId: string
   /** The latest cited turn: user edits after its prose win. */
   proseEntryId: string

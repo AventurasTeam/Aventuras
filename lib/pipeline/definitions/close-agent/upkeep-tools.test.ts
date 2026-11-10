@@ -65,7 +65,14 @@ const laterReplyIdOf = (fx: CloseFixture): string => fx.replyIds[4]!
 type ShownRow = { table: 'entities' | 'happenings'; id: string; name: string }
 type ToolCall = { toolName: string; input: Record<string, unknown> }
 type CallsRun = { result: TxResult; answers: unknown[]; calls: CloseLedger['calls'] }
-type TaskTurns = { endEntryId: string; taskEntryIds: readonly string[] }
+type TaskTurns = {
+  endEntryId: string
+  taskEntryIds: readonly string[]
+  /** 1 unless given; 0 is a chapter-wide task. */
+  part?: number
+  /** The turns handed handles, as the close shows the chapter's; the task's own unless given. */
+  chapterEntryIds?: readonly string[]
+}
 type StagedRun = TaskTurns & {
   fx: CloseFixture
   shown: readonly ShownRow[]
@@ -83,7 +90,7 @@ async function* upkeepCallsPhase(
   if (run === undefined) throw new Error('upkeepCallsPhase: no run staged')
   const { taskEntryIds } = run
   const ids = closeIdsOf(phase.intermediates)
-  ids.showTurns(taskEntryIds)
+  ids.showTurns(run.chapterEntryIds ?? taskEntryIds)
   for (const { id, name } of run.shown) ids.show(id, name)
   const ledger = seedCloseLedger(phase.intermediates)
   const writer = new CloseLedgerWriter(ledger, (id) => ids.nameOfId(id), phase.actionId)
@@ -94,7 +101,7 @@ async function* upkeepCallsPhase(
     branchId: phase.branchId,
     endEntryId: run.endEntryId,
     task: 'upkeep',
-    part: 1,
+    part: run.part ?? 1,
     ids,
     readFields: {},
     survivorOf: (table, id) => writer.survivorOf(table, id),
@@ -221,14 +228,23 @@ async function seedEntity(fx: CloseFixture, spec: SeedSpec): Promise<void> {
   if (result.status !== 'ok') throw new Error(`seeding ${spec.name} refused: ${result.reason}`)
 }
 
-type Editor = 'user' | 'later-turn'
+type Editor = 'user' | 'later-turn' | 'turn-on-e' | 'this-close'
+type Anchor = 'none' | 'e' | 'past-e'
 
-// user: after every turn's prose, unanchored. later-turn: anchored past E, a turn's own source.
-const EDITORS: Readonly<Record<Editor, { source: DeltaSource; actionId: string; past: boolean }>> =
+// user: after every turn's prose, unanchored. later-turn: past E, a turn's own source. turn-on-e:
+// t7's per-turn writer. this-close: an earlier group of the close, on E as C1 anchors it.
+const EDITORS: Readonly<Record<Editor, { source: DeltaSource; actionId: string; anchor: Anchor }>> =
   {
-    user: { source: 'user_edit', actionId: 'act_user_edit', past: false },
-    'later-turn': { source: 'per_turn_classifier', actionId: 'act_close_turn_5', past: true },
+    user: { source: 'user_edit', actionId: 'act_user_edit', anchor: 'none' },
+    'later-turn': { source: 'per_turn_classifier', actionId: 'act_close_turn_5', anchor: 'past-e' },
+    'turn-on-e': { source: 'per_turn_classifier', actionId: 'act_close_turn_3', anchor: 'e' },
+    'this-close': { source: 'chapter_close', actionId: 'act_close_earlier', anchor: 'e' },
   }
+
+function anchorOf(fx: CloseFixture, anchor: Anchor): string | null {
+  if (anchor === 'none') return null
+  return anchor === 'e' ? endEntryIdOf(fx) : laterReplyIdOf(fx)
+}
 
 type EntityEdit = {
   description?: string
@@ -271,7 +287,7 @@ async function editEntity(
       },
       actionId: editor.actionId,
       branchId: fx.branchId,
-      entryId: editor.past ? laterReplyIdOf(fx) : null,
+      entryId: anchorOf(fx, editor.anchor),
     },
     fx.ctx,
   )
@@ -1400,7 +1416,7 @@ async function editHappening(
       },
       actionId: editor.actionId,
       branchId: fx.branchId,
-      entryId: editor.past ? laterReplyIdOf(fx) : null,
+      entryId: anchorOf(fx, editor.anchor),
     },
     fx.ctx,
   )
@@ -1550,5 +1566,93 @@ describe('mark_common_knowledge', () => {
 
     expect(calls[0]).toMatchObject({ result: 'rejected', reason: CLOSE_REASON.rowGone })
     expect(await runDeltas(f, result.actionId)).toEqual([])
+  })
+})
+
+// C12 past the task's last turn: part 1 is t1–t5, part 2 t6–t7 (E), t7's writer on E.
+describe("a part and a later part's turns", () => {
+  let f: CloseFixture
+
+  const partOne = (fx: CloseFixture): TaskTurns => ({
+    endEntryId: endEntryIdOf(fx),
+    taskEntryIds: taskEntryIdsOf(fx).slice(0, 5),
+  })
+  const partTwo = (fx: CloseFixture): TaskTurns => ({
+    endEntryId: endEntryIdOf(fx),
+    taskEntryIds: taskEntryIdsOf(fx).slice(5),
+    part: 2,
+    chapterEntryIds: taskEntryIdsOf(fx),
+  })
+  const chapterWide = (fx: CloseFixture): TaskTurns => ({
+    endEntryId: endEntryIdOf(fx),
+    taskEntryIds: taskEntryIdsOf(fx),
+    part: 0,
+  })
+  const burned = (turn: string): ToolCall => ({
+    toolName: 'update_place',
+    input: { id: 'l1', condition: 'Burned to the waterline', ...cite([turn]) },
+  })
+
+  beforeEach(async () => {
+    f = await openCloseFixture()
+    await seedWorld(f)
+    await editEntity(f, QUAY, 'turn-on-e', { state: { condition: 'Rebuilt' } })
+  })
+
+  it("skips, in part 1, a condition part 2's turn wrote: the part never read it", async () => {
+    const { result, calls } = await runUpkeepCalls(f, WORLD_SHOWN, [burned('t3')], partOne(f))
+
+    expect(calls[0]).toMatchObject({
+      result: 'skipped',
+      reason: CLOSE_REASON.laterTurn,
+      values: { 'state.condition': 'Burned to the waterline' },
+    })
+    expect(await runDeltas(f, result.actionId)).toEqual([])
+    expect((await storedEntity(f, QUAY)).state).toMatchObject({ condition: 'Rebuilt' })
+  })
+
+  it.each([
+    { name: 'part 2, whose turn wrote it', turns: partTwo, cited: 't6' },
+    { name: 'a chapter-wide task', turns: chapterWide, cited: 't3' },
+  ])('lands it in $name, which reads to E', async ({ turns, cited }) => {
+    const { calls } = await runUpkeepCalls(f, WORLD_SHOWN, [burned(cited)], turns(f))
+
+    expect(calls[0]).toMatchObject({ result: 'ok' })
+    expect((await storedEntity(f, QUAY)).state).toMatchObject({
+      condition: 'Burned to the waterline',
+    })
+  })
+
+  it("lands part 1's write over a field it wrote earlier in the close, its group on E", async () => {
+    const { calls } = await runUpkeepCalls(
+      f,
+      WORLD_SHOWN,
+      [
+        {
+          toolName: 'update_place',
+          input: { id: 'l2', condition: 'Smouldering', ...cite(['t3']) },
+        },
+        { toolName: 'update_place', input: { id: 'l2', condition: 'Ash', ...cite(['t5']) } },
+      ],
+      partOne(f),
+    )
+
+    expect(calls.map((call) => call.result)).toEqual(['ok', 'ok'])
+    expect((await storedEntity(f, HARROW)).state).toMatchObject({ condition: 'Ash' })
+  })
+
+  it("lands part 1's mark over a chapter-wide task's write on E, as no later turn's", async () => {
+    await seedHappening(f, { id: TOLL, title: 'The new toll', commonKnowledge: 1 })
+    await editHappening(f, TOLL, 'this-close', { commonKnowledge: 0 })
+
+    const { calls } = await runUpkeepCalls(
+      f,
+      HAPPENING_SHOWN,
+      [{ toolName: 'mark_common_knowledge', input: { id: 'hp2', ...cite(['t3']) } }],
+      partOne(f),
+    )
+
+    expect(calls[0]).toMatchObject({ result: 'ok', values: { commonKnowledge: '1' } })
+    expect((await storedHappening(f, TOLL)).commonKnowledge).toBe(1)
   })
 })
