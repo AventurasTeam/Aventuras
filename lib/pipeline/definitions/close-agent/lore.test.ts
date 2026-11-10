@@ -363,7 +363,7 @@ describe('loreTask', () => {
     'call read_row on a row before update_lore, so you see its body and keywords as they stand.',
     'A body explains the rule in plain prose, stated as a standing fact of the world, not as what happened in the scene.',
     'Past the cap a create is rejected: extend a row instead.',
-    "remove only one that no longer fits. A term the user added can't be removed.",
+    "remove only one that no longer fits. You can't see who added a term; removing one the user added is refused, and that call's keyword adds with it.",
     'Never write a turn id such as t3 into a title, body, category or keyword: cite turns only in "turns".',
   ])('the Lore task states: %s', async (line) => {
     const { ctx, start } = await startOf()

@@ -224,7 +224,9 @@ export const UPDATE_LORE_SHAPE = {
       remove: z
         .array(z.string())
         .optional()
-        .describe('Terms an AI added that no longer fit; never one the user added.'),
+        .describe(
+          "Terms that no longer fit. You can't see who added a term; removing one the user added is refused, and this call's adds with it.",
+        ),
     })
     .optional()
     .describe('Keywords to add or remove; the others stay as they are.'),
@@ -403,7 +405,7 @@ async function planUpdateLore(args: UpdateArgs, ctx: WriteContext): Promise<Writ
 export const updateLoreTool: WriteTool<typeof UPDATE_LORE_SHAPE> = {
   kind: 'write',
   name: 'update_lore',
-  description: `Extend or correct a lore row from this chapter's turns, the user's rows included: its title, body or category rewritten whole, and keywords added or removed. Read the row with read_row first, and send only what changes. A body over ${LORE_BODY_LIMIT} characters lands only by growing the body as it stood before this chapter's close by at most ${LORE_BODY_LIMIT}, across all your calls. A title another lore row holds is refused. Never remove a keyword the user added.`,
+  description: `Extend or correct a lore row from this chapter's turns, the user's rows included: its title, body or category rewritten whole, and keywords added or removed. Read the row with read_row first, and send only what changes. A body over ${LORE_BODY_LIMIT} characters lands only by growing the body as it stood before this chapter's close by at most ${LORE_BODY_LIMIT}, across all your calls. A title another lore row holds is refused. You can't see who added a keyword; removing one the user added is refused, naming it, and the call's keyword adds with it, while its other fields land.`,
   schema: writeToolSchema(UPDATE_LORE_SHAPE),
   ids: { id: { shape: 'single', prefixes: ['lore_'] } },
   plan: planUpdateLore,

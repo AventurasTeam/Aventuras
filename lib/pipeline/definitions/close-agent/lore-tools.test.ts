@@ -675,6 +675,17 @@ describe('update_lore: the tool', () => {
     ).toBe(false)
   })
 
+  it("tells the model it can't see a keyword's author, and what removing a user's term costs", () => {
+    const { remove } = updateLoreTool.schema.shape.keywords.unwrap().shape
+    expect(remove.description).toBe(
+      "Terms that no longer fit. You can't see who added a term; removing one the user added is refused, and this call's adds with it.",
+    )
+    expect(updateLoreTool.description).toContain(
+      "You can't see who added a keyword; removing one the user added is refused, naming it, and the call's keyword adds with it, while its other fields land.",
+    )
+    expect(updateLoreTool.description).not.toContain('Never remove')
+  })
+
   it('takes one lore id, under its canon name', () => {
     expect(updateLoreTool).toMatchObject({
       kind: 'write',
