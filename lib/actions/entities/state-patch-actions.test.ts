@@ -3063,6 +3063,19 @@ describe('setEntityKeywords', () => {
     expect(await undoPayloadsOf(db, 'act_k')).toEqual([])
   })
 
+  it("refuses a removal naming a pass's term and then the user's, naming the user's", async () => {
+    const { db, ctx } = await setup()
+    await passCreate(ctx, { ...ACTIVE, keywords: ['the knight'] })
+    expect(
+      (await apply(ctx, userPatch({ keywords: ['the knight', 'ser kael'] }), 'act_u')).status,
+    ).toBe('ok')
+    expect(await outcomeOf(ctx, setKeywords([], ['the knight', 'Ser Kael']))).toStrictEqual({
+      status: 'noop',
+      reason: 'keyword-user-added: ser kael',
+    })
+    expect(await keywordsOf(db)).toEqual(['the knight', 'ser kael'])
+  })
+
   it('refuses to remove a term on a row no create delta logged', async () => {
     const { db, ctx } = await setup()
     await db.insert(entities).values({ ...ACTIVE, keywords: ['the knight'] })
