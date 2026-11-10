@@ -1,5 +1,7 @@
 import { describe, expect, it } from 'vitest'
 
+import { PLACEHOLDER_PREFIX_BY_KIND } from '@/lib/ids'
+
 import { CloseIds } from './ids'
 import { handleInTerm, turnHandleIn, turnInTextReason } from './text-checks'
 
@@ -15,6 +17,11 @@ function shown(): CloseIds {
 }
 
 describe('turnHandleIn', () => {
+  it('reads every row prefix CloseIds mints, each 1–2 letters as the token scan assumes', () => {
+    for (const prefix of Object.values(PLACEHOLDER_PREFIX_BY_KIND))
+      expect(prefix).toMatch(/^[a-z]{1,2}$/)
+  })
+
   it('finds a turn handle, bare or bracketed, and answers it bare', () => {
     const ids = shown()
     expect(turnHandleIn('As t2 shows, the ferry runs late.', ids)).toBe('t2')
