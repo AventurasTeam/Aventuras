@@ -77,6 +77,7 @@ function toolCtx(over: Partial<ToolContext> = {}): ToolContext {
     endEntryId: 'entry_read_end',
     task: 'identity',
     part: 1,
+    taskEntryIds: ['entry_read_end'],
     ids,
     readFields: READ_FIELDS,
     survivorOf: () => undefined,

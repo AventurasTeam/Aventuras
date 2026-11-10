@@ -498,6 +498,23 @@ describe('retire_entity', () => {
     expect(await runDeltas(f, result.actionId)).toEqual([])
   })
 
+  it("refuses, in part 1, a character a reply of part 2 has in its scene: the part's turns are older", async () => {
+    await seedRow(f, { id: TOBIN, kind: 'character', name: 'Tobin' })
+    // Part 1 is t1-t5; E (t7), part 2's reply, holds him.
+    await setSceneOf(f, endEntryId(f), [TOBIN])
+
+    const { result, answers } = await dispatchScripted(
+      f,
+      [{ toolName: 'retire_entity', input: { id: 'c1', ...cite(['t5']) } }],
+      { shown: [{ id: TOBIN, name: 'Tobin' }], taskEntryIds: chapterIds(f).slice(0, 5) },
+    )
+
+    expect(outputs(answers)).toEqual([
+      { result: 'rejected', reason: 'in-scene-later', note: expect.any(String) },
+    ])
+    expect(await runDeltas(f, result.actionId)).toEqual([])
+  })
+
   it('retires a character only the action after E has in scene, which carries E forward', async () => {
     await seedRow(f, { id: TOBIN, kind: 'character', name: 'Tobin' })
     await setSceneOf(f, endEntryId(f), [TOBIN])

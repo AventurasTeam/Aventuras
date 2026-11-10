@@ -1101,6 +1101,7 @@ describe('update_lore', () => {
       endEntryId: endEntryId(f),
       task: 'lore',
       part: 1,
+      taskEntryIds: chapterEntryIds(f),
       ids: new CloseIds(),
       readFields: LORE_FIELDS,
       survivorOf: () => undefined,

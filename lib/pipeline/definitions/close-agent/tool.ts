@@ -37,6 +37,8 @@ export type ToolContext = {
   readonly endEntryId: string
   readonly task: CloseTask
   readonly part: number
+  /** The entries this task was shown, by position: its part's, or the chapter's for part 0. */
+  readonly taskEntryIds: readonly string[]
   readonly ids: CloseIds
   readonly readFields: ReadFields
   /** A landed merge's kept row for a row this close absorbed. */

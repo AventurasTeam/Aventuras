@@ -334,6 +334,18 @@ describe('lifecycleTask', () => {
     expect((await startOf(fx)).start).not.toBeNull()
   })
 
+  it("leaves out of part 1 a character a reply of part 2 has in scene, E's reply included", async () => {
+    await seedRow(fx, { id: ROWS.pew, kind: 'character', name: 'Pew' })
+    await seedRow(fx, { id: ROWS.wren, kind: 'character', name: 'Wren' })
+    await setSceneOf(fx, fx.entries[2]!.id, [ROWS.pew, ROWS.wren])
+    // Part 1 is t1-t5; E (t7) is part 2's reply.
+    await setSceneOf(fx, fx.entries[6]!.id, [ROWS.pew])
+
+    const { start } = await startOf(fx, chapterIds(fx).slice(0, 5))
+
+    expect(start?.show.rows).toEqual([shown('c1', 'character', 'Wren')])
+  })
+
   it('keeps an item a later reply has in scene: only a character is subtracted', async () => {
     await seedRow(fx, { id: ROWS.lantern, kind: 'item', name: 'Lantern' })
     await seedRow(fx, { id: ROWS.pew, kind: 'character', name: 'Pew' })

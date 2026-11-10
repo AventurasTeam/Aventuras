@@ -8,7 +8,7 @@ import { oneLine } from '@/lib/text'
 import { characterFactionId, flagStillHolds } from '@/lib/world'
 
 import type { CloseIds } from './ids'
-import { charactersInSceneAfter } from './later-scene'
+import { charactersInSceneAfterTask } from './later-scene'
 import { flagDuplicateTool, retireEntityTool } from './lifecycle-tools'
 import { namedInProse } from './name-match'
 import { readRowTool, refsIn, searchWorldTool } from './read-tools'
@@ -113,7 +113,7 @@ function collisionOf(row: Entity, partners: ReadonlyMap<string, Entity>, ids: Cl
 }
 
 // memory/chapter-close.md → Run order: the part's active characters and items in scene, the active
-// rows its prose names and those characters' factions, less a character a later reply shows.
+// rows its prose names and those characters' factions, less a character a reply past the part shows.
 async function startLifecycle(ctx: TaskPromptContext): Promise<TaskStart<LifecycleShow> | null> {
   const { entries, closeTurns, proseTokens } = await readTaskTurns(ctx)
   if (!hasTurns(closeTurns)) return null
@@ -136,7 +136,7 @@ async function startLifecycle(ctx: TaskPromptContext): Promise<TaskStart<Lifecyc
       .filter((row) => (sceneTagged(row) && sceneIds.has(row.id)) || namedInProse(prose, row))
       .map(({ id }) => id),
   )
-  const later = await charactersInSceneAfter(ctx, ctx.endEntryId)
+  const later = await charactersInSceneAfterTask(ctx)
   // Membership before the subtraction: a faction whose member a later reply shows is still in play.
   const members = new Set(
     active

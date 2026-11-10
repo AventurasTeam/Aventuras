@@ -148,6 +148,7 @@ function writeContextFor(fx: CloseFixture): WriteContext {
     endEntryId,
     task: 'upkeep',
     part: 1,
+    taskEntryIds: [endEntryId],
     ids: new CloseIds(),
     readFields: {},
     survivorOf: () => undefined,

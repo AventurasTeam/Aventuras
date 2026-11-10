@@ -249,6 +249,7 @@ function writeContext(proseEntryId = endEntryId()): WriteContext {
     endEntryId: endEntryId(),
     task: 'identity',
     part: 1,
+    taskEntryIds: chapterEntryIds(),
     ids: new CloseIds(),
     readFields: {},
     survivorOf: () => undefined,

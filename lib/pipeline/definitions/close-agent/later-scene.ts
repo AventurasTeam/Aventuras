@@ -35,3 +35,15 @@ export async function charactersInSceneAfter(
   }
   return ids
 }
+
+/**
+ * The characters a reply past the task's last turn has in scene: past E for the last part or a
+ * chapter-wide task, past the part otherwise, since a later part's reply is newer evidence too.
+ */
+export async function charactersInSceneAfterTask(
+  ctx: Pick<ToolContext, 'db' | 'branchId' | 'taskEntryIds'>,
+): Promise<ReadonlySet<string>> {
+  const last = ctx.taskEntryIds.at(-1)
+  if (last === undefined) throw new Error('charactersInSceneAfterTask: the task was shown no turn')
+  return charactersInSceneAfter(ctx, last)
+}

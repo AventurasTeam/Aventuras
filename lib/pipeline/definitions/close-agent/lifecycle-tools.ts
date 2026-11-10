@@ -4,7 +4,7 @@ import { z } from 'zod'
 import { entities, type Entity } from '@/lib/db'
 import { flagStillHolds } from '@/lib/world'
 
-import { charactersInSceneAfter } from './later-scene'
+import { charactersInSceneAfterTask } from './later-scene'
 import { turnHandleIn, turnInTextReason } from './text-checks'
 import {
   writeToolSchema,
@@ -48,7 +48,7 @@ const NOTE = {
   location: 'Only the user retires a place: leave it active.',
   notActive: 'Only an active row retires: a staged row is not in the story yet, so leave it.',
   inSceneLater:
-    'A turn after this chapter still has this character in its scene, so the chapter is older evidence: leave it active.',
+    'A later turn still has this character in its scene, so the turns you were shown are older evidence: leave it active.',
   whyHandle:
     'Your why becomes the retirement reason the user reads: send it again naming no turn id.',
   self: 'Name two different rows: the row, and the one it is the same as.',
@@ -77,7 +77,7 @@ function reportRow(ctx: WriteContext, id: string, row: Entity | undefined): Repo
   return { table: 'entities', id, name: row?.name ?? ctx.ids.nameOfId(id) ?? '' }
 }
 
-/** chapter-close.md → Phase 4: hard finality only, never a place, nor a character seen later. */
+/** chapter-close.md → Phase 4: hard finality only, never a place, nor a character a later turn shows. */
 async function planRetire(args: RetireArgs, ctx: WriteContext): Promise<WritePlan> {
   const { id } = args
   const row = await readEntity(ctx, id)
@@ -93,7 +93,7 @@ async function planRetire(args: RetireArgs, ctx: WriteContext): Promise<WritePla
   if (row.kind === 'location') return refused(REFUSAL.location, NOTE.location)
   if (row.status === 'retired') return { kind: 'write', actions: [], lost: [], rows, values: {} }
   if (row.status !== 'active') return refused(REFUSAL.notActive, NOTE.notActive)
-  if (row.kind === 'character' && (await charactersInSceneAfter(ctx, ctx.endEntryId)).has(id))
+  if (row.kind === 'character' && (await charactersInSceneAfterTask(ctx)).has(id))
     return refused(REFUSAL.inSceneLater, NOTE.inSceneLater)
   const verdicts = (await ctx.guard([{ table: 'entities', id }])).row('entities', id)
   if (verdicts.laterTurnWrote('status', []))

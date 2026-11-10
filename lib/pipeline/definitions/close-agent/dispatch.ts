@@ -23,8 +23,6 @@ import type { PhaseContext, PhaseEmittedEvent } from '../../types'
 
 export type DispatchContext = ToolContext & {
   readonly phase: PhaseContext
-  /** The entries this task was shown, by position: its part's, or the chapter's for part 0. */
-  readonly taskEntryIds: readonly string[]
   readonly readSet: ReadSet
   readonly ledger: CloseLedgerWriter
 }
@@ -49,6 +47,7 @@ function toolContextOf(ctx: DispatchContext): ToolContext {
     endEntryId: ctx.endEntryId,
     task: ctx.task,
     part: ctx.part,
+    taskEntryIds: ctx.taskEntryIds,
     ids: ctx.ids,
     readFields: ctx.readFields,
     survivorOf: ctx.survivorOf,
