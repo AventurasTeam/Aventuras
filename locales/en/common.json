@@ -217,6 +217,7 @@
       "alike": "Their descriptions read alike.",
       "ambiguous": "Their descriptions are partly alike.",
       "distinct": "Their descriptions differ.",
+      "duplicate": "The chapter close judged these the same.",
       "inScene": "Their descriptions differ, but \"{{other}}\" was in the scene where \"{{flagged}}\" first appeared.",
       "nameTaken": "The turns call \"{{flagged}}\" by a name \"{{other}}\" already holds.",
       "noSignal": "Their descriptions couldn't be compared.",

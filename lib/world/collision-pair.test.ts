@@ -212,7 +212,7 @@ describe('stillPaired', () => {
     ).toBe(true)
   })
 
-  it('needs the two to stay namesakes under every reason', () => {
+  it('needs the two to stay namesakes under every reason but duplicate', () => {
     expect(stillPaired('same-parent', side('The Market', 'loc_p'), side('The Quay', 'loc_p'))).toBe(
       false,
     )
@@ -276,5 +276,38 @@ describe('collisionPairOf — the same-parent clause', () => {
     const naming = place('loc_m', 'The Market', 'loc_p', flaggedWith('loc_s', 'distinct'))
     expect(flaggedSideOf(split, naming)).toBe(naming)
     expect(collisionPairOf([naming, split], ['loc_s', 'loc_m'])).toEqual({ pair: [split, naming] })
+  })
+})
+
+// world.md → Surfacing: a close's judgment, usually on a pair that shares no name.
+describe('the duplicate reason', () => {
+  const kael = row('char_a', 'Kael')
+  const stranger = row('char_s', 'the hooded stranger', flaggedWith('char_a', 'duplicate'))
+
+  it('pairs whatever the names and the parents', () => {
+    expect(stillPaired('duplicate', pairSideOf(kael), pairSideOf(stranger))).toBe(true)
+    expect(
+      stillPaired(
+        'duplicate',
+        { name: 'The Market', keywords: [], placement: under('loc_p') },
+        { name: 'The Quay', keywords: [], placement: UNPLACED },
+      ),
+    ).toBe(true)
+  })
+
+  it('holds while its partner is the row it names, and only then', () => {
+    expect(flagStillHolds(stranger, kael)).toBe(true)
+    expect(flagStillHolds(stranger, undefined)).toBe(false)
+    expect(flagStillHolds(stranger, row('char_x', 'Kael'))).toBe(false)
+  })
+
+  it('makes a pair of two rows with no namesake basis, where another reason is dormant', () => {
+    expect(collisionPairOf([kael, stranger], ['char_a', 'char_s'])).toEqual({
+      pair: [kael, stranger],
+    })
+    const distinct = row('char_s', 'the hooded stranger', flaggedWith('char_a', 'distinct'))
+    expect(collisionPairOf([kael, distinct], ['char_a', 'char_s'])).toEqual({
+      miss: COLLISION_PAIR_MISS.notFlagged,
+    })
   })
 })

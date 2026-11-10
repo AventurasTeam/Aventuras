@@ -1497,6 +1497,30 @@ export const NameTaken: Story = {
   },
 }
 
+// chapter-close.md → 3f: a close's duplicate on a pair with no namesake basis, so no basis line.
+const strangerWithNoKeyword = baseEntity({
+  id: 'ent_stranger_2',
+  name: 'the hooded stranger',
+  createdAt: NEWER_AT,
+  keywords: [],
+})
+
+export const Duplicate: Story = {
+  render: () => (
+    <ControlledDialog
+      entityA={olderKael}
+      entityB={strangerWithNoKeyword}
+      reason="duplicate"
+      onResolve={resolveOk}
+    />
+  ),
+  play: async () => {
+    expect(await dialogNamed('⚠ "the hooded stranger" may be "Kael"')).toBeInTheDocument()
+    expect(screen.getByText('The chapter close judged these the same.')).toBeInTheDocument()
+    expect(screen.queryByText(BASIS)).toBeNull()
+  },
+}
+
 // Only `same-parent` reads the parent: any other reason keeps its own line.
 export const ParentNameOnlyForSameParent: Story = {
   render: () => (

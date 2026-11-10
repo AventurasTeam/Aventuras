@@ -404,6 +404,35 @@ describe('entityMergeActions — collision flags', () => {
     ])
   })
 
+  it("re-points another row's duplicate flag on the loser at the canonical, the two no namesakes", () => {
+    const stranger = entity('char_s', 'character', {
+      name: 'the hooded stranger',
+      ...flaggedWith('char_b', 'duplicate'),
+    })
+    expect(merge({ branchEntities: [A, B, stranger] }).actions).toStrictEqual([
+      updateOf('char_s', { nameCollisionPartnerId: 'char_a' }),
+      deleteLoser,
+    ])
+  })
+
+  it("keeps the canonical's duplicate flag on a third row with no namesake basis", () => {
+    const third = entity('char_t', 'character', { name: 'the hooded stranger' })
+    const canonical = entity('char_a', 'character', flaggedWith('char_t', 'duplicate'))
+    expect(merge({ canonical, branchEntities: [canonical, B, third] }).actions).toStrictEqual([
+      deleteLoser,
+    ])
+  })
+
+  // The dialog's merge resolves a duplicate pair as any: the flag clears, the loser's name stays on.
+  it('clears the flag of the duplicate pair it merges, the loser’s name a keyword', () => {
+    const canonical = entity('char_a', 'character', flaggedWith('char_b', 'duplicate'))
+    const loser = entity('char_b', 'character', { name: 'the hooded stranger' })
+    expect(merge({ canonical, loser, branchEntities: [canonical, loser] }).actions).toStrictEqual([
+      updateOf('char_a', { keywords: ['the hooded stranger'], ...FLAG_CLEAR }),
+      deleteLoser,
+    ])
+  })
+
   describe("the canonical inherits the loser's question", () => {
     const canonical = entity('char_a', 'character', flaggedWith('char_b'))
     const loserNaming = (partnerId: string) =>

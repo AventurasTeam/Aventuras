@@ -48,8 +48,12 @@ export function sharesRequiredParent(reason: CollisionReason, a: PairSide, b: Pa
   return a.placement.kind === 'top' && b.placement.kind === 'top'
 }
 
-/** Still namesakes, and `sharesRequiredParent`. What a write judges before keeping a flag. */
+/**
+ * Still namesakes, and `sharesRequiredParent`; a `duplicate`, a close's judgment on a pair that is
+ * usually no namesake pair, always (world.md → Surfacing). What a write judges before keeping a flag.
+ */
 export function stillPaired(reason: CollisionReason, a: PairSide, b: PairSide): boolean {
+  if (reason === 'duplicate') return true
   return namesakeBasis(a, b) != null && sharesRequiredParent(reason, a, b)
 }
 
