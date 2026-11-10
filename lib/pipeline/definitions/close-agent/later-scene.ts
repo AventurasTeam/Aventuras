@@ -7,7 +7,7 @@ import type { ToolContext } from './tool'
 /**
  * Ids in the sceneEntities of the branch's ai_reply entries positioned after `endEntryId`. A
  * user_action carries the scene before it forward (data-model.md → Entry metadata shape), so only
- * replies count: the action after E would otherwise hold everyone who dies at E.
+ * replies count: the action after `endEntryId` would otherwise hold everyone who dies there.
  */
 export async function charactersInSceneAfter(
   ctx: Pick<ToolContext, 'db' | 'branchId'>,
