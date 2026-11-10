@@ -9,6 +9,7 @@ import {
   type ToolStepResult,
 } from '@/lib/ai'
 import {
+  branches,
   emptyEntityState,
   entities,
   happenings,
@@ -56,6 +57,7 @@ const HAPS = {
   toll: 'hap_00000000-0000-4000-8000-00000000d102',
   crossing: 'hap_00000000-0000-4000-8000-00000000d103',
   talk: 'hap_00000000-0000-4000-8000-00000000d104',
+  brawl: 'hap_00000000-0000-4000-8000-00000000d105',
 } as const
 
 /** The part: the opening to the third reply, t1…t7. */
@@ -97,11 +99,12 @@ async function putHappening(
     description?: string
     occurredAtEntryId: string | null
     commonKnowledge: 0 | 1
+    branchId?: string
   },
 ): Promise<void> {
   await fx.ctx.db.insert(happenings).values({
     id: row.id,
-    branchId: fx.branchId,
+    branchId: row.branchId ?? fx.branchId,
     title: row.title,
     description: row.description ?? null,
     category: null,
@@ -481,6 +484,34 @@ describe('upkeepTask', () => {
     ])
     expect(ids.handleOf(HAPS.toll)).toBeUndefined()
     expect(ids.handleOf(HAPS.crossing)).toBeUndefined()
+  })
+
+  // A fork's happenings name the entries it shares with the branch it forked from.
+  it("leaves out another branch's happening set at the part's turns", async () => {
+    await seedUpkeepWorld(fx)
+    await fx.ctx.db.insert(branches).values({
+      id: 'br_fork',
+      storyId: fx.storyId,
+      parentBranchId: fx.branchId,
+      forkEntryId: fx.entries[6]!.id,
+      name: 'fork',
+      createdAt: 2,
+    })
+    await putHappening(fx, {
+      id: HAPS.brawl,
+      title: 'A brawl at the inn',
+      occurredAtEntryId: fx.entries[2]!.id,
+      commonKnowledge: 0,
+      branchId: 'br_fork',
+    })
+
+    const { ids, start } = await startOf()
+
+    expect(start?.show.happenings).toEqual([
+      { id: 'hp1', title: 'A fight at the inn' },
+      { id: 'hp2', title: 'Talk of the ferryman' },
+    ])
+    expect(ids.handleOf(HAPS.brawl)).toBeUndefined()
   })
 
   // C11: every shown row shows the fields its tools write; a placement's parent shows only a name.

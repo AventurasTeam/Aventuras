@@ -1,7 +1,7 @@
 import { and, eq } from 'drizzle-orm'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 
-import { entities, storyEntries, type Entity, type EntityState } from '@/lib/db'
+import { branches, entities, storyEntries, type Entity, type EntityState } from '@/lib/db'
 import { resetAllStores } from '@/lib/stores'
 
 import { CloseIds } from './ids'
@@ -27,10 +27,13 @@ const ROWS = {
   yard: place(12),
   oldCellar: place(13),
   tobin: 'char_00000000-0000-4000-8000-000000000014',
+  // Seeded on a fork only.
+  forkHall: place(15),
 } as const
 
 type RowSeed = {
   id: string
+  branchId?: string
   kind: Entity['kind']
   name: string
   status?: Entity['status']
@@ -42,7 +45,7 @@ type RowSeed = {
 async function putRow(fx: CloseFixture, row: RowSeed): Promise<void> {
   await fx.ctx.db.insert(entities).values({
     id: row.id,
-    branchId: fx.branchId,
+    branchId: row.branchId ?? fx.branchId,
     kind: row.kind,
     name: row.name,
     description: null,
@@ -220,6 +223,29 @@ describe('planPlacement', () => {
       reason: 'parent-not-a-place',
     })
     expect(await plan(ROWS.quay, underOf(ROWS.gone))).toEqual({
+      ok: false,
+      reason: 'parent-not-a-place',
+    })
+  })
+
+  it('refuses a parent that is a place only on another branch', async () => {
+    await fx.ctx.db.insert(branches).values({
+      id: 'br_fork',
+      storyId: fx.storyId,
+      parentBranchId: fx.branchId,
+      forkEntryId: fx.entries[6]!.id,
+      name: 'fork',
+      createdAt: 2,
+    })
+    await putRow(fx, {
+      id: ROWS.forkHall,
+      branchId: 'br_fork',
+      kind: 'location',
+      name: 'The fork hall',
+      state: top,
+    })
+
+    expect(await plan(ROWS.quay, underOf(ROWS.forkHall))).toEqual({
       ok: false,
       reason: 'parent-not-a-place',
     })

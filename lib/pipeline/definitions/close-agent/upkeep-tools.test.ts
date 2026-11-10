@@ -11,6 +11,7 @@ import {
   type GuardRow,
 } from '@/lib/actions/types'
 import {
+  branches,
   deltas,
   emptyEntityState,
   entities,
@@ -292,6 +293,20 @@ async function setStoryPlace(fx: CloseFixture, placeId: string): Promise<void> {
     .update(storyEntries)
     .set({ metadata: { ...row.metadata, currentLocationId: placeId } })
     .where(where)
+}
+
+const FORK = 'br_fork'
+
+/** A branch forked at E: a row written only there is no row on the close's branch. */
+async function addFork(fx: CloseFixture): Promise<void> {
+  await fx.ctx.db.insert(branches).values({
+    id: FORK,
+    storyId: fx.storyId,
+    parentBranchId: fx.branchId,
+    forkEntryId: endEntryIdOf(fx),
+    name: 'fork',
+    createdAt: 2,
+  })
 }
 
 /** A turn written after the fixture's, as the fixture writes one: the reply anchored on itself. */
@@ -926,6 +941,34 @@ describe('update_item', () => {
     expect((await storedEntity(f, SATCHEL)).state).toMatchObject({ condition: 'Mended' })
   })
 
+  it('refuses an item that exists only on another branch as row-gone', async () => {
+    const KNIFE = 'item_00000000-0000-4000-8000-000000000011'
+    await addFork(f)
+    await f.ctx.db.insert(entities).values({
+      id: KNIFE,
+      branchId: FORK,
+      kind: 'item',
+      name: 'knife',
+      description: null,
+      status: 'active',
+      retiredReason: null,
+      injectionMode: 'auto',
+      state: emptyEntityState('item'),
+      keywords: [],
+      createdAt: 1,
+      updatedAt: 1,
+    })
+
+    const { result, calls } = await runUpkeepCalls(
+      f,
+      [{ table: 'entities', id: KNIFE, name: 'knife' }],
+      [{ toolName: 'update_item', input: { id: 'i1', condition: 'Notched', ...cite() } }],
+    )
+
+    expect(calls[0]).toMatchObject({ result: 'rejected', reason: CLOSE_REASON.rowGone })
+    expect(await runDeltas(f, result.actionId)).toEqual([])
+  })
+
   it('refuses a place sent as the item, writing nothing', async () => {
     const { result, calls } = await runUpkeepCalls(f, WORLD_SHOWN, [
       { toolName: 'update_item', input: { id: 'l1', condition: 'Flooded', ...cite() } },
@@ -1471,5 +1514,31 @@ describe('mark_common_knowledge', () => {
       reason: CLOSE_REASON.rowGone,
       values: { commonKnowledge: '1' },
     })
+  })
+
+  // Marked on the fork: a read off the branch would answer ok for a row this branch lacks.
+  it('refuses a happening that exists only on another branch as row-gone', async () => {
+    await addFork(f)
+    await f.ctx.db.insert(happenings).values({
+      id: GONE_HAP,
+      branchId: FORK,
+      title: 'A lost rumour',
+      description: null,
+      category: null,
+      icon: null,
+      temporal: null,
+      occurredAtEntryId: null,
+      commonKnowledge: 1,
+      embeddingStale: 0,
+      createdAt: 1,
+      updatedAt: 1,
+    })
+
+    const { result, calls } = await runUpkeepCalls(f, HAPPENING_SHOWN, [
+      { toolName: 'mark_common_knowledge', input: { id: 'hp4', ...cite() } },
+    ])
+
+    expect(calls[0]).toMatchObject({ result: 'rejected', reason: CLOSE_REASON.rowGone })
+    expect(await runDeltas(f, result.actionId)).toEqual([])
   })
 })
