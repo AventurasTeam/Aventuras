@@ -58,7 +58,7 @@ function landing(row: Entity, arg: PlacementArg): PlacementPlan {
     ok: true,
     restated: false,
     wanted: { 'state.parent_location_id': next.parent_location_id },
-    removed: next.unplaced === undefined ? ['state.unplaced'] : [],
+    removed: ['state.unplaced'],
   }
 }
 
