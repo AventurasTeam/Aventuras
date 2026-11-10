@@ -885,10 +885,12 @@ None open: Implementation notes record each answer.
   and run again from the dev route on `Gemma4-26B-A4B-QAT-MTP` through
   `pnpm mock`'s passthrough, without the overlay, as one part: the
   seed's provider publishes no window, so the 32,000 limit holds the
-  chapter. The report holds 36 calls, 36 ok (landed writes and reads),
-  1 lore row created and 1 thread merge, and the chapter's title is now
-  "The Captain's Death and the Map". Lore 1 call, 1 ok; Identity 9, 9;
-  Threads 5, 5; Upkeep 20, 20; Lifecycle 1, 1.
+  chapter. After the slice review's fixes and decisions it was undone
+  and run again the same way (developer decision R6, 2026-11-10). The
+  report holds 38 calls, 38 ok, 1 lore row created and no thread
+  merge, and the chapter's title is now "The Discovery of the Map".
+  Lore 1 call, 1 ok; Identity 8, 8; Threads 8, 8; Upkeep 18, 18;
+  Lifecycle 3, 3.
 - **Per-part tasks aren't told they read a part (known limit, developer
   decision, 2026-11-10).** A thread resolved, an entity retired or
   threads merged in an earlier part can't be undone by a later part of
