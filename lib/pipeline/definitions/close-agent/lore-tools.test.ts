@@ -1,8 +1,9 @@
-import { asc, eq } from 'drizzle-orm'
+import { and, asc, eq } from 'drizzle-orm'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 
 import { applyDeltaAction } from '@/lib/actions/delta/apply-delta-action'
-import type { GroupOutcome, GuardRow } from '@/lib/actions/types'
+import { keywordUserAddedReason } from '@/lib/actions/delta/keyword-authors'
+import { USER_EDITED_SINCE_PROSE, type GroupOutcome, type GuardRow } from '@/lib/actions/types'
 import { clampEmbeddedText } from '@/lib/classifier'
 import { branches, deltas, lore, type Lore } from '@/lib/db'
 import { resetAllStores } from '@/lib/stores'
@@ -11,10 +12,11 @@ import { createReadSet } from './common-checks'
 import { dispatchToolCall, type DispatchContext } from './dispatch'
 import type { CloseIds } from './ids'
 import { CloseLedgerWriter } from './ledger'
-import { createLoreTool, LORE_BODY_LIMIT } from './lore-tools'
+import { createLoreTool, LORE_BODY_LIMIT, updateLoreTool } from './lore-tools'
 import { readRowTool } from './read-tools'
 import { turnInTextReason } from './text-checks'
 import { assertReplaySafe, type CloseTool, type ReadFields } from './tool'
+import { CLOSE_REASON } from './verdict'
 import { expectRan } from '../../__tests__/harness'
 import { definePipeline } from '../../authoring/define'
 import { getPipelineSafe } from '../../authoring/registry'
@@ -29,6 +31,9 @@ import type { CloseLedger } from '../intermediates'
 // Real `prefix_<uuid>` ids: CloseIds.show allocates handles for those only.
 const WREN = 'char_00000000-0000-4000-8000-00000000d001'
 const TOLL = 'lore_00000000-0000-4000-8000-00000000d002'
+const FERRY = 'lore_00000000-0000-4000-8000-00000000d003'
+// Shown and counted as read, never seeded: a row gone since the task read it.
+const GONE = 'lore_00000000-0000-4000-8000-00000000d004'
 // generateId's shape, as a create mints it.
 const MINTED = /^lore_[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/
 
@@ -76,6 +81,39 @@ function loreRows(f: CloseFixture): Promise<Lore[]> {
   return f.ctx.db.select().from(lore).where(eq(lore.branchId, f.branchId)).orderBy(asc(lore.title))
 }
 
+async function storedLore(f: CloseFixture, id: string): Promise<Lore> {
+  const [found] = await f.ctx.db
+    .select()
+    .from(lore)
+    .where(and(eq(lore.branchId, f.branchId), eq(lore.id, id)))
+  if (found === undefined) throw new Error(`no lore ${id}`)
+  return found
+}
+
+/** A user's edit lands unanchored after every turn's prose; a later turn's anchors past E. */
+async function editLore(
+  f: CloseFixture,
+  who: 'user' | 'later-turn',
+  id: string,
+  patch: Partial<Pick<Lore, 'title' | 'body' | 'category' | 'keywords'>>,
+): Promise<void> {
+  const result = await applyDeltaAction(
+    {
+      action: {
+        kind: 'updateLore',
+        source: who === 'user' ? 'user_edit' : 'periodic_classifier',
+        payload: { branchId: f.branchId, id, patch },
+      },
+      actionId: who === 'user' ? 'act_user_edit' : 'act_close_turn_5',
+      branchId: f.branchId,
+      // The fifth reply: past E, under the fixture's act_close_turn_5.
+      entryId: who === 'user' ? null : f.replyIds[4]!,
+    },
+    f.ctx,
+  )
+  if (result.status !== 'ok') throw new Error(`${who} edit of ${id} refused: ${result.reason}`)
+}
+
 function runDeltas(f: CloseFixture, actionId: string) {
   return f.ctx.db
     .select()
@@ -114,6 +152,7 @@ type Pending = {
 const SCRIPTED_KIND = 'close-lore-tools-test'
 const LORE_TOOLS: Readonly<Record<string, CloseTool>> = {
   create_lore: createLoreTool,
+  update_lore: updateLoreTool,
   read_row: readRowTool,
 }
 
@@ -593,5 +632,385 @@ describe('create_lore', () => {
       ['The Ferry Toll', null, ['toll']],
       ['The Night Crossing', null, []],
     ])
+  })
+})
+
+// ---- update_lore ----
+
+describe('update_lore: the tool', () => {
+  it('replays as sent, its keywords a strict object of two optional lists', () => {
+    assertReplaySafe(updateLoreTool.schema, [
+      { id: 'lo1', turns: ['t1'], why: 'It says so.' },
+      {
+        id: 'lo1',
+        title: 'The toll',
+        body: 'Paid at the bank.',
+        category: '',
+        keywords: { add: ['toll'], remove: [] },
+        turns: ['t1', 't2'],
+        why: 'It says so.',
+      },
+      { id: 'lo1', keywords: {}, turns: ['t3'], why: 'It says so.' },
+    ])
+    expect(
+      updateLoreTool.schema.safeParse({
+        id: 'lo1',
+        keywords: { add: [], replace: [] },
+        turns: ['t1'],
+        why: 'It says so.',
+      }).success,
+    ).toBe(false)
+  })
+
+  it('takes one lore id, under its canon name', () => {
+    expect(updateLoreTool).toMatchObject({
+      kind: 'write',
+      name: 'update_lore',
+      ids: { id: { shape: 'single', prefixes: ['lore_'] } },
+    })
+  })
+})
+
+describe('update_lore', () => {
+  let f: CloseFixture
+
+  // The Ferry Toll, a pass's row: its keywords are an AI's, so a close may remove them.
+  beforeEach(async () => {
+    f = await openCloseFixture()
+    await seedLore(f, {
+      id: TOLL,
+      title: 'The Ferry Toll',
+      body: 'Paid at the far bank.',
+      category: 'custom',
+      keywords: ['toll', 'night crossing'],
+    })
+  })
+
+  const SHOWN: readonly ShownRow[] = [{ id: TOLL, name: 'The Ferry Toll' }]
+  const read: ScriptedCall = { toolName: 'read_row', input: { id: 'lo1' } }
+  const update = (input: Record<string, unknown>): ScriptedCall => ({
+    toolName: 'update_lore',
+    input: { id: 'lo1', ...input, ...cite() },
+  })
+
+  it('refuses a row the title list showed until read_row reads it, then lands the call', async () => {
+    const call = update({ category: 'tolls' })
+
+    const run = await dispatchScripted(f, [call, read, call], { shown: SHOWN })
+
+    expect(run.answers[0]).toEqual({
+      result: 'rejected',
+      reason: "lo1 hasn't been read in this task: call read_row on it, then write it",
+    })
+    expect(run.answers[2]).toEqual({ result: 'ok' })
+    expect(run.calls[2]).toEqual({
+      task: 'lore',
+      part: 1,
+      tool: 'update_lore',
+      rows: [{ table: 'lore', id: TOLL, name: 'The Ferry Toll' }],
+      why: 'The ferryman names the toll.',
+      turns: [endEntryId(f)],
+      result: 'ok',
+      values: { category: 'tolls' },
+    })
+    expect((await storedLore(f, TOLL)).category).toBe('tolls')
+    const written = await runDeltas(f, run.result.actionId)
+    expect(written).toHaveLength(1)
+    expect(written[0]).toMatchObject({
+      op: 'update',
+      targetTable: 'lore',
+      targetId: TOLL,
+      source: 'chapter_close',
+      entryId: endEntryId(f),
+      undoPayload: { category: 'custom' },
+    })
+  })
+
+  it('lands a free category beside a body the user edited after the cited turn, ok naming it', async () => {
+    await editLore(f, 'user', TOLL, { body: 'The user wrote this.' })
+
+    const run = await dispatchScripted(
+      f,
+      [read, update({ body: 'The toll doubles after dark.', category: 'tolls' })],
+      { shown: SHOWN },
+    )
+
+    expect(run.calls[1]).toMatchObject({
+      result: 'ok',
+      values: { body: 'The toll doubles after dark.', category: 'tolls' },
+      skippedFields: [{ field: 'body', reason: USER_EDITED_SINCE_PROSE }],
+    })
+    expect(await storedLore(f, TOLL)).toMatchObject({
+      body: 'The user wrote this.',
+      category: 'tolls',
+    })
+  })
+
+  it('skips a body the user edited after the cited turn, sent alone', async () => {
+    await editLore(f, 'user', TOLL, { body: 'The user wrote this.' })
+
+    const run = await dispatchScripted(
+      f,
+      [read, update({ body: 'The toll doubles after dark.' })],
+      {
+        shown: SHOWN,
+      },
+    )
+
+    expect(run.answers[1]).toEqual({
+      result: 'skipped',
+      reason: USER_EDITED_SINCE_PROSE,
+      note: 'The user edited this after the cited turns; their value stands. Do not write it again.',
+    })
+    expect(await runDeltas(f, run.result.actionId)).toEqual([])
+  })
+
+  it('reads stored values as ok, nothing written', async () => {
+    const run = await dispatchScripted(
+      f,
+      [
+        read,
+        update({
+          title: ' The Ferry Toll ',
+          body: 'Paid at the far bank.',
+          category: 'custom',
+          keywords: { add: ['TOLL'], remove: ['the far bank'] },
+        }),
+      ],
+      { shown: SHOWN },
+    )
+
+    expect(run.answers[1]).toEqual({ result: 'ok' })
+    expect(run.calls[1]).not.toHaveProperty('values')
+    expect(await runDeltas(f, run.result.actionId)).toEqual([])
+  })
+
+  it('reads a blank body as omitted beside a free field', async () => {
+    const run = await dispatchScripted(f, [read, update({ body: '  \n ', category: 'tolls' })], {
+      shown: SHOWN,
+    })
+
+    expect(run.calls[1]).toMatchObject({ result: 'ok' })
+    expect(run.calls[1]!.values).toEqual({ category: 'tolls' })
+    expect(run.calls[1]).not.toHaveProperty('skippedFields')
+    expect(await storedLore(f, TOLL)).toMatchObject({
+      body: 'Paid at the far bank.',
+      category: 'tolls',
+    })
+  })
+
+  it('adds and removes keywords beside a text field, one action each in one group', async () => {
+    const run = await dispatchScripted(
+      f,
+      [
+        read,
+        update({
+          body: 'The toll doubles after dark.',
+          keywords: { add: ['the far bank', 'Toll'], remove: ['NIGHT CROSSING'] },
+        }),
+      ],
+      { shown: SHOWN },
+    )
+
+    expect(run.answers[1]).toEqual({ result: 'ok' })
+    expect(run.calls[1]!.values).toEqual({
+      body: 'The toll doubles after dark.',
+      keywords: 'toll, the far bank',
+    })
+    expect(await storedLore(f, TOLL)).toMatchObject({
+      body: 'The toll doubles after dark.',
+      keywords: ['toll', 'the far bank'],
+    })
+    const written = await runDeltas(f, run.result.actionId)
+    expect(written.map(({ undoPayload }) => undoPayload)).toEqual([
+      { body: 'Paid at the far bank.' },
+      { keywords: ['toll', 'night crossing'] },
+    ])
+  })
+
+  it('lands the body beside a removal of a term the user added, ok naming the keywords', async () => {
+    await editLore(f, 'user', TOLL, { keywords: ['toll', 'night crossing', 'the toll'] })
+
+    const run = await dispatchScripted(
+      f,
+      [read, update({ body: 'The toll doubles after dark.', keywords: { remove: ['the toll'] } })],
+      { shown: SHOWN },
+    )
+
+    expect(run.calls[1]).toMatchObject({
+      result: 'ok',
+      skippedFields: [{ field: 'keywords', reason: keywordUserAddedReason('the toll') }],
+    })
+    expect(await storedLore(f, TOLL)).toMatchObject({
+      body: 'The toll doubles after dark.',
+      keywords: ['toll', 'night crossing', 'the toll'],
+    })
+  })
+
+  it('skips keywords a later turn wrote, landing the text beside them', async () => {
+    await editLore(f, 'later-turn', TOLL, { keywords: ['toll', 'ferry'] })
+
+    const run = await dispatchScripted(
+      f,
+      [read, update({ category: 'tolls', keywords: { add: ['night'] } })],
+      { shown: SHOWN },
+    )
+
+    expect(run.calls[1]).toMatchObject({
+      result: 'ok',
+      skippedFields: [{ field: 'keywords', reason: CLOSE_REASON.laterTurn }],
+    })
+    expect(await storedLore(f, TOLL)).toMatchObject({
+      category: 'tolls',
+      keywords: ['toll', 'ferry'],
+    })
+  })
+
+  it('refuses keywords naming a term in both lists, landing the text beside them', async () => {
+    const run = await dispatchScripted(
+      f,
+      [read, update({ category: 'tolls', keywords: { add: ['Gate'], remove: ['gate '] } })],
+      { shown: SHOWN },
+    )
+
+    expect(run.calls[1]).toMatchObject({
+      result: 'ok',
+      skippedFields: [
+        {
+          field: 'keywords',
+          reason: '"Gate" is in both add and remove: send each term in one list',
+        },
+      ],
+    })
+    expect(await storedLore(f, TOLL)).toMatchObject({
+      category: 'tolls',
+      keywords: ['toll', 'night crossing'],
+    })
+  })
+
+  it('refuses keywords holding a handle, landing the text beside them', async () => {
+    const run = await dispatchScripted(
+      f,
+      [read, update({ category: 'tolls', keywords: { add: ['c1'] } })],
+      { shown: [...SHOWN, { id: WREN, name: 'Wren' }] },
+    )
+
+    expect(run.calls[1]).toMatchObject({
+      result: 'ok',
+      skippedFields: [
+        {
+          field: 'keywords',
+          reason:
+            'the keyword "c1" holds c1, an id: a keyword is a word the prose uses, never an id',
+        },
+      ],
+    })
+    expect((await storedLore(f, TOLL)).keywords).toEqual(['toll', 'night crossing'])
+  })
+
+  it('refuses a text field naming a turn, landing the fields beside it', async () => {
+    const run = await dispatchScripted(
+      f,
+      [
+        read,
+        update({ body: 'As t5 shows, the toll doubles after dark.', category: 'tolls' }),
+        update({ title: 'The toll of [t3]' }),
+      ],
+      { shown: SHOWN },
+    )
+
+    expect(run.calls[1]).toMatchObject({
+      result: 'ok',
+      skippedFields: [{ field: 'body', reason: turnInTextReason('t5') }],
+    })
+    expect(run.answers[2]).toEqual({ result: 'rejected', reason: turnInTextReason('t3') })
+    expect(await storedLore(f, TOLL)).toMatchObject({
+      title: 'The Ferry Toll',
+      body: 'Paid at the far bank.',
+      category: 'tolls',
+    })
+  })
+
+  it.each([
+    [3_000, 4_200, 4_201],
+    [100, 1_300, 1_301],
+  ])(
+    'grows a stored body of %i characters to %i and refuses %i',
+    async (stored, lands, refused) => {
+      await seedLore(f, { id: FERRY, title: 'The Night Ferry', body: 'b'.repeat(stored) })
+
+      const run = await dispatchScripted(
+        f,
+        [read, update({ body: 'x'.repeat(refused) }), update({ body: 'x'.repeat(lands) })],
+        { shown: [{ id: FERRY, name: 'The Night Ferry' }] },
+      )
+
+      expect(run.answers[1]).toEqual({
+        result: 'rejected',
+        reason: `body is ${refused} characters: a body over 1200 may grow the stored one (${stored}) by at most 1200, so send a shorter one`,
+      })
+      expect(run.answers[2]).toEqual({ result: 'ok' })
+      expect((await storedLore(f, FERRY)).body).toBe('x'.repeat(lands))
+    },
+  )
+
+  it('lands a free title beside a body grown past the bound', async () => {
+    await seedLore(f, { id: FERRY, title: 'The Night Ferry', body: 'b'.repeat(100) })
+
+    const run = await dispatchScripted(
+      f,
+      [read, update({ title: 'The Midnight Ferry', body: 'x'.repeat(1_301) })],
+      { shown: [{ id: FERRY, name: 'The Night Ferry' }] },
+    )
+
+    expect(run.calls[1]).toMatchObject({
+      result: 'ok',
+      skippedFields: [
+        {
+          field: 'body',
+          reason:
+            'body is 1301 characters: a body over 1200 may grow the stored one (100) by at most 1200, so send a shorter one',
+        },
+      ],
+    })
+    expect(await storedLore(f, FERRY)).toMatchObject({
+      title: 'The Midnight Ferry',
+      body: 'b'.repeat(100),
+    })
+  })
+
+  it('writes a row this task created with no read_row', async () => {
+    const run = await dispatchScripted(f, [
+      {
+        toolName: 'create_lore',
+        input: {
+          title: 'The Second Mark',
+          body: 'A smaller mark under the seal names a reader.',
+          ...cite(),
+        },
+      },
+      update({ category: 'seals' }),
+    ])
+
+    expect(run.answers).toEqual([{ result: 'ok', id: 'lo1' }, { result: 'ok' }])
+    const created = (await loreRows(f)).find(({ title }) => title === 'The Second Mark')
+    expect(created?.category).toBe('seals')
+  })
+
+  it('refuses a row gone since it was read, keeping the proposed text', async () => {
+    const run = await dispatchScripted(f, [update({ body: 'The toll doubles after dark.' })], {
+      shown: [{ id: GONE, name: 'The Old Toll' }],
+      seeds: [{ table: 'lore', id: GONE }],
+    })
+
+    expect(run.answers[0]).toEqual({
+      result: 'rejected',
+      reason: CLOSE_REASON.rowGone,
+      note: 'The row is gone; do not write to it again.',
+    })
+    expect(run.calls[0]).toMatchObject({
+      rows: [{ table: 'lore', id: GONE, name: 'The Old Toll' }],
+      values: { body: 'The toll doubles after dark.' },
+    })
   })
 })

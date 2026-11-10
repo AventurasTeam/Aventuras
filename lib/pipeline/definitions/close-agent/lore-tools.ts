@@ -1,22 +1,26 @@
-import { asc, eq } from 'drizzle-orm'
+import { and, asc, eq } from 'drizzle-orm'
 import { z } from 'zod'
 
-import { lore, type NewLore } from '@/lib/db'
+import { lore, type Lore, type NewLore } from '@/lib/db'
 import { generateId } from '@/lib/ids'
-import { dedupeTerms, normalizeTerm } from '@/lib/keyword-terms'
+import { dedupeTerms, newTerms, normalizeTerm } from '@/lib/keyword-terms'
 
-import { TEXT_BOUNDS } from './fields'
+import { fieldVerdicts } from './entity-write'
+import { restatedText, sentText, TEXT_BOUNDS, type SentText } from './fields'
 import type { CloseIds } from './ids'
 import { handleInTerm, turnHandleIn, turnInTextReason } from './text-checks'
 import {
+  sameValue,
   writeToolSchema,
   type LostField,
+  type PlannedAction,
   type ReportRow,
   type WriteContext,
   type WritePlan,
   type WriteTool,
   type WriteToolSchema,
 } from './tool'
+import { CLOSE_REASON } from './verdict'
 
 /** chapter-close.md → 3a: the creates a close lands, across its parts; no setting for it yet (M7.1). */
 export const LORE_CREATE_CAP = 3
@@ -193,4 +197,204 @@ export const createLoreTool: WriteTool<typeof CREATE_LORE_SHAPE> = {
   schema: writeToolSchema(CREATE_LORE_SHAPE),
   ids: {},
   plan: planCreateLore,
+}
+
+export const UPDATE_LORE_SHAPE = {
+  id: z
+    .string()
+    .describe('The lore row, by its id as shown (lo1, lo2…). Read it with read_row first.'),
+  title: z
+    .string()
+    .optional()
+    .describe("The row's title, rewritten whole. Leave it out to keep it."),
+  body: z
+    .string()
+    .optional()
+    .describe(
+      "The row's body, rewritten whole with what the chapter adds or corrects. Leave it out to keep it.",
+    ),
+  category: z
+    .string()
+    .optional()
+    .describe("The row's category, rewritten whole. Leave it out to keep it."),
+  keywords: z
+    .strictObject({
+      add: z
+        .array(z.string())
+        .optional()
+        .describe('Terms the prose uses for the row that its keywords lack.'),
+      remove: z
+        .array(z.string())
+        .optional()
+        .describe('Terms an AI added that no longer fit; never one the user added.'),
+    })
+    .optional()
+    .describe('Keywords to add or remove; the others stay as they are.'),
+}
+
+type UpdateArgs = z.output<WriteToolSchema<typeof UPDATE_LORE_SHAPE>>
+type LoreText = 'title' | 'body' | 'category'
+type SentLoreText = { field: LoreText; text: SentText }
+type SentKeywords = { add: readonly string[]; remove: readonly string[] }
+
+const LORE_TEXT: readonly LoreText[] = ['title', 'body', 'category']
+
+const NOTHING_SENT =
+  'nothing to write: send a title, a body, a category or keywords to add or remove'
+
+const bodyGrowthReason = (length: number, stored: number): string =>
+  `body is ${length} characters: a body over ${LORE_BODY_LIMIT} may grow the stored one (${stored}) by at most ${LORE_BODY_LIMIT}, so send a shorter one`
+
+const keywordInBothReason = (term: string): string =>
+  `"${term}" is in both add and remove: send each term in one list`
+
+// Never cut: a body over the bound is refused, so a user's long body is never shortened.
+function sentBody(value: string | undefined): SentText | undefined {
+  if (value === undefined || value.trim() === '') return undefined
+  return { sent: value, bounded: value.trim() }
+}
+
+function sentLoreText(args: UpdateArgs, field: LoreText): SentText | undefined {
+  return field === 'body' ? sentBody(args.body) : sentText(args[field], 'title')
+}
+
+function sentKeywords(value: UpdateArgs['keywords']): SentKeywords | undefined {
+  const add = dedupeTerms(value?.add ?? [])
+  const remove = dedupeTerms(value?.remove ?? [])
+  return add.length === 0 && remove.length === 0 ? undefined : { add, remove }
+}
+
+/** The list as setLoreKeywords would leave it: the stored terms less the removals, then the adds. */
+function plannedKeywords(stored: readonly string[], { add, remove }: SentKeywords): string[] {
+  const removing = new Set(remove.map(normalizeTerm))
+  return [...stored.filter((term) => !removing.has(normalizeTerm(term))), ...newTerms(stored, add)]
+}
+
+function keywordsRefusal({ add, remove }: SentKeywords, ids: CloseIds): string | undefined {
+  const removing = new Set(remove.map(normalizeTerm))
+  const both = add.find((term) => removing.has(normalizeTerm(term)))
+  if (both !== undefined) return keywordInBothReason(both)
+  const held = firstTermHandle([...add, ...remove], ids)
+  return held === undefined ? undefined : termHandleReason(held.term, held.handle)
+}
+
+function textRefusal(
+  field: LoreText,
+  text: string,
+  stored: Lore,
+  ids: CloseIds,
+): string | undefined {
+  const handle = turnHandleIn(text, ids)
+  if (handle !== undefined) return turnInTextReason(handle)
+  if (field !== 'body') return undefined
+  const storedLength = (stored.body ?? '').length
+  // Over the stored length plus the bound is over the bound too, so this one test holds both.
+  return text.length > storedLength + LORE_BODY_LIMIT
+    ? bodyGrowthReason(text.length, storedLength)
+    : undefined
+}
+
+const proposedText = (sent: readonly SentLoreText[]): Record<string, unknown> =>
+  Object.fromEntries(sent.map(({ field, text }) => [field, text.bounded]))
+
+async function readLoreRow(ctx: WriteContext, id: string): Promise<Lore | undefined> {
+  const [row] = await ctx.db
+    .select()
+    .from(lore)
+    .where(and(eq(lore.branchId, ctx.branchId), eq(lore.id, id)))
+    .limit(1)
+  return row
+}
+
+/** chapter-close.md → 3a "Existing rows too": one row's text and keywords, past precedence. */
+async function planUpdateLore(args: UpdateArgs, ctx: WriteContext): Promise<WritePlan> {
+  const { id } = args
+  const sent = LORE_TEXT.flatMap((field): SentLoreText[] => {
+    const text = sentLoreText(args, field)
+    return text === undefined ? [] : [{ field, text }]
+  })
+  const keywords = sentKeywords(args.keywords)
+  const row = await readLoreRow(ctx, id)
+  const rows: ReportRow[] = [{ table: 'lore', id, name: row?.title ?? ctx.ids.nameOfId(id) ?? '' }]
+  if (row === undefined)
+    return { kind: 'refused', reason: CLOSE_REASON.rowGone, rows, values: proposedText(sent) }
+  if (sent.length === 0 && keywords === undefined)
+    return { kind: 'refused', reason: NOTHING_SENT, rows }
+
+  // Restated before the guard, so a restated protected field reads ok, not skipped (C11).
+  const changed = sent.filter(({ field, text }) => !restatedText(row[field], text))
+  const planned = keywords === undefined ? undefined : plannedKeywords(row.keywords, keywords)
+  const keywordRefusal = keywords === undefined ? undefined : keywordsRefusal(keywords, ctx.ids)
+  const keywordsSent =
+    planned !== undefined && (keywordRefusal !== undefined || !sameValue(planned, row.keywords))
+  const values: Record<string, unknown> = {
+    ...proposedText(changed),
+    ...(keywordsSent ? { keywords: planned } : {}),
+  }
+  if (changed.length === 0 && !keywordsSent)
+    return { kind: 'write', actions: [], lost: [], rows, values: {} }
+
+  const verdicts = (await ctx.guard([{ table: 'lore', id }])).row('lore', id)
+  const lost: LostField[] = []
+  const wanted: Partial<Record<LoreText, string>> = {}
+  const textVerdicts = fieldVerdicts(
+    verdicts,
+    changed.map(({ field }) => field),
+  )
+  for (const [index, { field, text }] of changed.entries()) {
+    const verdict = textVerdicts[index]!
+    if (!verdict.free) {
+      lost.push({ field, row: id, kind: 'protected', reason: verdict.reason })
+      continue
+    }
+    const refusal = textRefusal(field, text.bounded, row, ctx.ids)
+    if (refusal !== undefined) lost.push({ field, row: id, kind: 'refused', reason: refusal })
+    else wanted[field] = text.bounded
+  }
+
+  const actions: PlannedAction[] = []
+  if (Object.keys(wanted).length > 0)
+    actions.push({
+      action: {
+        kind: 'updateLore',
+        source: 'chapter_close',
+        payload: { branchId: ctx.branchId, id, patch: wanted, proseEntryId: ctx.proseEntryId },
+      },
+      fields: Object.keys(wanted),
+      row: id,
+    })
+  if (keywordsSent && keywords !== undefined) {
+    // The handler judges each term against the user's edits; only a later turn's list skips whole.
+    if (verdicts.laterTurnWrote('keywords'))
+      lost.push({ field: 'keywords', row: id, kind: 'protected', reason: CLOSE_REASON.laterTurn })
+    else if (keywordRefusal !== undefined)
+      lost.push({ field: 'keywords', row: id, kind: 'refused', reason: keywordRefusal })
+    else
+      actions.push({
+        action: {
+          kind: 'setLoreKeywords',
+          source: 'chapter_close',
+          payload: {
+            branchId: ctx.branchId,
+            id,
+            add: [...keywords.add],
+            remove: [...keywords.remove],
+            proseEntryId: ctx.proseEntryId,
+          },
+        },
+        fields: ['keywords'],
+        row: id,
+      })
+  }
+  return { kind: 'write', actions, lost, rows, values }
+}
+
+/** chapter-close.md → 3a: an existing row extended or corrected, its keywords by setLoreKeywords. */
+export const updateLoreTool: WriteTool<typeof UPDATE_LORE_SHAPE> = {
+  kind: 'write',
+  name: 'update_lore',
+  description: `Extend or correct a lore row from this chapter's turns, the user's rows included: its title, body or category rewritten whole, and keywords added or removed. Read the row with read_row first, and send only what changes. A body over ${LORE_BODY_LIMIT} characters lands only by growing the stored body by at most ${LORE_BODY_LIMIT}. Never remove a keyword the user added.`,
+  schema: writeToolSchema(UPDATE_LORE_SHAPE),
+  ids: { id: { shape: 'single', prefixes: ['lore_'] } },
+  plan: planUpdateLore,
 }
