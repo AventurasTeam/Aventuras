@@ -63,6 +63,8 @@ describe('templateContextMap', () => {
       'closeThreads',
       'closeWritesSoFar',
       'closeSoftCaps',
+      'closeLore',
+      'closeLoreLimits',
     ])
   })
 
@@ -76,6 +78,8 @@ describe('templateContextMap', () => {
       'closeThreads',
       'closeWritesSoFar',
       'closeSoftCaps',
+      'closeLore',
+      'closeLoreLimits',
     ])
     expect(
       VARIABLES.chapter.filter((v) => closeOnly.includes(v.name)).map((v) => [v.name, v.required]),
@@ -86,6 +90,8 @@ describe('templateContextMap', () => {
       ['closeThreads', false],
       ['closeWritesSoFar', false],
       ['closeSoftCaps', false],
+      ['closeLore', false],
+      ['closeLoreLimits', false],
     ])
   })
 
@@ -101,6 +107,7 @@ describe('templateContextMap', () => {
   })
 
   it("maps the close's task templates to the chapter group", () => {
+    expect(TEMPLATE_GROUPS[TEMPLATE_IDS.closeLore]).toBe('chapter')
     expect(TEMPLATE_GROUPS[TEMPLATE_IDS.closeIdentity]).toBe('chapter')
     expect(TEMPLATE_GROUPS[TEMPLATE_IDS.closeThreads]).toBe('chapter')
   })
@@ -118,6 +125,8 @@ describe('templateContextMap', () => {
       closeThreads: 'Plot',
       closeWritesSoFar: 'Story',
       closeSoftCaps: 'Story Config',
+      closeLore: 'Retrieval',
+      closeLoreLimits: 'Story Config',
     })
     for (const [name, category] of Object.entries(categories))
       expect(DISPLAY_GROUPS[category], name).toContain(name)

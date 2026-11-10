@@ -7,6 +7,7 @@ import { CHAPTER_METADATA_PART } from './chapter-metadata-part'
 import { CLASSIFIER_MODE_RULE } from './classifier-mode-rule'
 import { CLOSE_IDENTITY } from './close-identity'
 import { CLOSE_INSTRUCTIONS } from './close-instructions'
+import { CLOSE_LORE } from './close-lore'
 import { CLOSE_PROSE } from './close-prose'
 import { CLOSE_THREADS } from './close-threads'
 import { ENTITY_STATE, ITEM_LINE } from './entity-state'
@@ -75,6 +76,7 @@ export const bundledPack: Pack = {
       TEMPLATE_IDS.chapterMetadataMerge,
       CHAPTER_METADATA_MERGE,
     ),
+    [TEMPLATE_IDS.closeLore]: template(TEMPLATE_IDS.closeLore, CLOSE_LORE),
     [TEMPLATE_IDS.closeIdentity]: template(TEMPLATE_IDS.closeIdentity, CLOSE_IDENTITY),
     [TEMPLATE_IDS.closeThreads]: template(TEMPLATE_IDS.closeThreads, CLOSE_THREADS),
     [TEMPLATE_IDS.wizardOpening]: wizardTemplate(TEMPLATE_IDS.wizardOpening, WIZARD_OPENING),

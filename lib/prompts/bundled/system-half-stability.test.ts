@@ -31,6 +31,7 @@ const STABLE_SYSTEM_VARIABLES: readonly string[] = [
 // C3: a close task's template holds the chapter or part in its system half, the one per-call read
 // it may make there; its task's rows and the writes so far stay in its user half.
 const CLOSE_TASK_TEMPLATES: readonly TemplateId[] = [
+  TEMPLATE_IDS.closeLore,
   TEMPLATE_IDS.closeIdentity,
   TEMPLATE_IDS.closeThreads,
 ]
@@ -413,6 +414,8 @@ describe('bundled system halves read only what the story fixes', () => {
     expect(unallowedSystemReads(probed, probe, CLOSE_SYSTEM_VARIABLES)).toEqual([
       'closeCharacters',
       'closeFactions',
+      'closeLore',
+      'closeLoreLimits',
       'closeSoftCaps',
       'closeThreads',
       'closeWritesSoFar',
@@ -421,6 +424,8 @@ describe('bundled system halves read only what the story fixes', () => {
     expect(unallowedSystemReads(probed, probe, [])).toEqual([
       'closeCharacters',
       'closeFactions',
+      'closeLore',
+      'closeLoreLimits',
       'closeSoftCaps',
       'closeThreads',
       'closeTurns',
@@ -434,7 +439,11 @@ describe('bundled system halves read only what the story fixes', () => {
     const holding = Object.values(TEMPLATE_IDS).filter((id) =>
       templateGlobals(engine, id, 'system').has('closeTurns'),
     )
-    expect(CLOSE_TASK_TEMPLATES).toEqual([TEMPLATE_IDS.closeIdentity, TEMPLATE_IDS.closeThreads])
+    expect(CLOSE_TASK_TEMPLATES).toEqual([
+      TEMPLATE_IDS.closeLore,
+      TEMPLATE_IDS.closeIdentity,
+      TEMPLATE_IDS.closeThreads,
+    ])
     expect([...holding].sort()).toEqual([...CLOSE_TASK_TEMPLATES].sort())
   })
 
@@ -513,6 +522,14 @@ describe("a close's task templates share one system half", () => {
   ]
   const SHARED = { mode: 'adventure', closeTurns: CLOSE_TASK_TURNS }
   const TASK_CONTEXTS: Readonly<Record<string, Record<string, unknown>>> = {
+    [TEMPLATE_IDS.closeLore]: {
+      closeLore: [
+        { id: 'lo1', title: 'The Forgotten Hour' },
+        { id: 'lo2', title: 'House Eldrin' },
+      ],
+      closeLoreLimits: { creates: 3, left: 2, bodyChars: 1200 },
+      closeWritesSoFar: '- update_thread Find the heir (th1): description',
+    },
     [TEMPLATE_IDS.closeIdentity]: {
       closeCharacters: [
         {

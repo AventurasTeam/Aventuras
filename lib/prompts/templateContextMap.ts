@@ -663,6 +663,22 @@ export const VARIABLES: Record<ContextGroup, VariableDef[]> = {
         "The soft caps a close checks a whole list against: a character's traits and drives, a faction's agenda. Only a close task's render sets it.",
       required: false,
     },
+    {
+      name: 'closeLore',
+      type: '{ id: string; title: string }[]',
+      category: 'Retrieval',
+      description:
+        "The Lore task's starting rows: every lore row on the branch, the user's included, by title in code-unit order. `id` is the short id its writes name it by (lo1, lo2…); the title is as stored, a full id in it as its short id. No body: a write to a row reads it first. Only a close task's render sets it.",
+      required: false,
+    },
+    {
+      name: 'closeLoreLimits',
+      type: '{ creates: number; left: number; bodyChars: number }',
+      category: 'Story Config',
+      description:
+        "The Lore task's limits: the lore rows one close may create (`creates`), how many it still may, earlier parts counted (`left`), and the characters a new row's body may hold, which is also the most an update may grow a body by (`bodyChars`). Only a close task's render sets it.",
+      required: false,
+    },
   ],
   staticContent: [],
 }
@@ -675,6 +691,8 @@ export const CLOSE_ONLY_CHAPTER_VARIABLES = [
   'closeThreads',
   'closeWritesSoFar',
   'closeSoftCaps',
+  'closeLore',
+  'closeLoreLimits',
 ] as const
 
 /** The `chapter` variable only the merge of a chapter closed in parts sets. */
@@ -690,6 +708,7 @@ export const TEMPLATE_GROUPS: Record<string, ContextGroup> & Record<TemplateId, 
   [TEMPLATE_IDS.chapterMetadata]: 'chapter',
   [TEMPLATE_IDS.chapterMetadataPart]: 'chapter',
   [TEMPLATE_IDS.chapterMetadataMerge]: 'chapter',
+  [TEMPLATE_IDS.closeLore]: 'chapter',
   [TEMPLATE_IDS.closeIdentity]: 'chapter',
   [TEMPLATE_IDS.closeThreads]: 'chapter',
   [TEMPLATE_IDS.wizardOpening]: 'wizard',
@@ -757,6 +776,7 @@ export const DISPLAY_GROUPS: Record<string, string[]> = {
     'structuralPinnedThreads',
     'lore',
     'suggested',
+    'closeLore',
   ],
   'Story Config': [
     'definition',
@@ -770,6 +790,7 @@ export const DISPLAY_GROUPS: Record<string, string[]> = {
     'suggestionCount',
     'mentionedPlaces',
     'closeSoftCaps',
+    'closeLoreLimits',
   ],
   'Generation Results': [
     'intermediates',
