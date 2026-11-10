@@ -29,13 +29,19 @@ const LINE_DESCRIPTION_CHARS = 100
 const READ_ROW_PREFIXES = ['char', 'loc', 'item', 'fact', 'lore', 'thr', 'hap'] as const
 
 /** A row as read_row reads it: its kind, its name or title, its columns by name. */
-type ReadRow = {
-  kind: RowKind
-  name: string
-  columns: Readonly<Record<string, unknown>>
-  /** An entity row as stored, which its flag is read from. */
-  entity?: Entity
-}
+type ReadRow =
+  | {
+      kind: Entity['kind']
+      name: string
+      columns: Readonly<Record<string, unknown>>
+      /** The row as stored, which its flag is read from. */
+      entity: Entity
+    }
+  | {
+      kind: Exclude<RowKind, Entity['kind']>
+      name: string
+      columns: Readonly<Record<string, unknown>>
+    }
 
 type Rank = 0 | 1 | 2 | 3 | 4
 
@@ -360,13 +366,11 @@ async function readRowAnswer(
 
   const fields = Object.fromEntries(paths.map((path) => [path, valueAt(row.columns, path)]))
   // A restored row keeps its old reason in storage; only a retired row shows one.
-  if (row.entity !== undefined && row.entity.status !== 'retired' && REASON_PATH in fields)
+  if ('entity' in row && row.entity.status !== 'retired' && REASON_PATH in fields)
     fields[REASON_PATH] = ''
   const refs = await refsIn(ctx, [row.name, fields])
   const flag =
-    row.entity !== undefined && paths.includes(FLAG_PATH)
-      ? await collisionView(ctx, row.entity)
-      : {}
+    'entity' in row && paths.includes(FLAG_PATH) ? await collisionView(ctx, row.entity) : {}
   const output = {
     id: handle,
     kind: row.kind,
