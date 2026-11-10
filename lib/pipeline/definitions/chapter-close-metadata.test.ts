@@ -1,24 +1,32 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import type { ActionOutcome, GroupOutcome, PipelineAction } from '@/lib/actions/types'
-import type { OpenRegionRow, StoryEntry } from '@/lib/db'
+import type { ResolveModelConfig } from '@/lib/ai'
+import type { ModelProfile, OpenRegionRow, ProviderInstance, StoryEntry } from '@/lib/db'
 import { makeLogger } from '@/lib/diagnostics'
 
 import { createPhaseDb, type PhaseDb } from './__tests__/phase-db'
-import { closeMetadataPhase, closeSeriesThrough } from './chapter-close-metadata'
-import type { MetadataCallOutcome, requestChapterMetadata } from './chapter-close-metadata-call'
+import { closeMetadataPhase, closeSeriesThrough, closeWindowTokens } from './chapter-close-metadata'
+import type {
+  MetadataCallInputs,
+  MetadataCallOutcome,
+  readMetadataInputs,
+  requestChapterMetadata,
+} from './chapter-close-metadata-call'
 import { normalizeChapterMetadata } from './chapter-metadata-schema'
-import { setCloseRange } from './close-intermediates'
+import { closePartsOf, setCloseRange } from './close-intermediates'
 import type { CloseRange } from './intermediates'
 import type { PhaseContext, PhaseEmittedEvent, PipelineError } from '../types'
 
-const { requestMock } = vi.hoisted(() => ({
+const { readInputsMock, requestMock } = vi.hoisted(() => ({
+  readInputsMock: vi.fn<typeof readMetadataInputs>(),
   requestMock: vi.fn<typeof requestChapterMetadata>(),
 }))
 
-// The call has its own tests; here it only hands the phase an outcome.
+// The store reads and the call have their own tests; here they hand the phase inputs and an outcome.
 vi.mock('./chapter-close-metadata-call', async (importOriginal) => ({
   ...(await importOriginal<Record<string, unknown>>()),
+  readMetadataInputs: readInputsMock,
   requestChapterMetadata: requestMock,
 }))
 
@@ -56,10 +64,61 @@ const ROWS: readonly Row[] = [
 // 40 + 8 + 30 + 9 + 31 + 7 + 29: positions 1 through 7 only.
 const RANGE_TOKENS = 154
 
+const LORE_PROFILE: ModelProfile = {
+  id: 'prof_lore',
+  kind: 'agent',
+  name: 'Lore',
+  modelRef: { providerId: 'prov_local', modelId: 'lore-model' },
+}
+const CLASSIFIER_PROFILE: ModelProfile = {
+  id: 'prof_classifier',
+  kind: 'agent',
+  name: 'Classifier',
+  modelRef: { providerId: 'prov_local', modelId: 'classifier-model' },
+}
+
+function provider(id: string, windows?: Record<string, number>): ProviderInstance {
+  return {
+    id,
+    type: 'openai-compatible',
+    displayName: id,
+    apiKey: 'k',
+    endpoint: 'http://localhost:4319/v1',
+    favoriteModelIds: [],
+    ...(windows === undefined ? {} : { contextWindowOverrides: windows }),
+  }
+}
+
+// What readMetadataInputs hands the phase; no model window is known unless a test sets one.
+function inputsWith(config: Partial<ResolveModelConfig> = {}): MetadataCallInputs {
+  return {
+    previousChapterSummary: null,
+    threads: [],
+    mode: 'creative',
+    modelConfig: {
+      providers: [provider('prov_local')],
+      profiles: [LORE_PROFILE, CLASSIFIER_PROFILE],
+      assignments: { 'lore-mgmt': 'prof_lore', classifier: 'prof_classifier' },
+      ...config,
+    },
+  }
+}
+
+// Half of 100 is 50, worked by hand over ROWS by turn (a player's turn joins the reply after it):
+// the opening's 40, then 8+30, then 9+31, then 7+29.
+const FOUR_PARTS = [
+  { part: 1, startEntryId: 'e1', endEntryId: 'e1', tokens: 40 },
+  { part: 2, startEntryId: 'e2', endEntryId: 'e3', tokens: 38 },
+  { part: 3, startEntryId: 'e4', endEntryId: 'e5', tokens: 40 },
+  { part: 4, startEntryId: 'e6', endEntryId: 'e7', tokens: 36 },
+]
+
 let phaseDb: PhaseDb
 
 beforeEach(async () => {
   requestMock.mockReset()
+  readInputsMock.mockReset()
+  readInputsMock.mockReturnValue(inputsWith())
   vi.spyOn(Date, 'now').mockReturnValue(NOW)
   phaseDb = await createPhaseDb()
 })
@@ -186,13 +245,16 @@ describe('closeSeriesThrough', () => {
 describe('closeMetadataPhase', () => {
   it('writes the row, then a stamp per entry through the end, as one group on the end', async () => {
     insertEntries(ROWS)
+    const inputs = inputsWith()
+    readInputsMock.mockReturnValue(inputs)
     callReturns({ status: 'ok', metadata: METADATA })
 
     const ctx = phaseCtx()
     const { events, result } = await drain(ctx)
 
     expect(result).toEqual({ status: 'completed' })
-    expect(requestMock).toHaveBeenCalledWith(ctx, RANGE)
+    expect(readInputsMock).toHaveBeenCalledWith(ctx)
+    expect(requestMock).toHaveBeenCalledWith(ctx, RANGE, inputs)
     expect(events).toEqual([
       {
         type: 'delta_group_emitted',
@@ -397,12 +459,13 @@ describe('closeMetadataPhase', () => {
       'e7',
     ],
   ] as const)(
-    'fails as phase-logic, writing nothing, when the end %s',
+    'fails as phase-logic before the call, writing nothing, when the end %s',
     async (_label, rows, endEntryId) => {
       insertEntries(rows)
       callReturns({ status: 'ok', metadata: METADATA })
 
-      const { events, result } = await drain(phaseCtx({ range: { ...RANGE, endEntryId } }))
+      const ctx = phaseCtx({ range: { ...RANGE, endEntryId } })
+      const { events, result } = await drain(ctx)
 
       expect(result).toEqual({
         status: 'failed',
@@ -413,6 +476,203 @@ describe('closeMetadataPhase', () => {
         },
       })
       expect(events).toEqual([])
+      expect(requestMock).not.toHaveBeenCalled()
+      expect(closePartsOf(ctx.intermediates)).toBeUndefined()
     },
   )
+
+  it("returns the stores' refusal, making no call and storing no parts", async () => {
+    insertEntries(ROWS)
+    readInputsMock.mockReturnValue({
+      status: 'failed',
+      error: { kind: 'orchestrator', detail: 'chapter-close: branch not loaded' },
+    })
+
+    const ctx = phaseCtx()
+    const { events, result } = await drain(ctx)
+
+    expect(result).toEqual({
+      status: 'failed',
+      error: { kind: 'orchestrator', detail: 'chapter-close: branch not loaded' },
+    })
+    expect(events).toEqual([])
+    expect(requestMock).not.toHaveBeenCalled()
+    expect(closePartsOf(ctx.intermediates)).toBeUndefined()
+  })
+
+  // An open publishing during the first await would swap the stores for another branch's rows.
+  it('reads its store inputs before its first await', async () => {
+    insertEntries(ROWS)
+    callReturns({ status: 'ok', metadata: METADATA })
+
+    const gen = closeMetadataPhase(phaseCtx())
+    const first = gen.next()
+
+    expect(readInputsMock).toHaveBeenCalledOnce()
+    await first
+  })
+
+  describe('the parts', () => {
+    it("cuts the range at half the window of lore-mgmt's model, and stores the cut before the call", async () => {
+      insertEntries(ROWS)
+      readInputsMock.mockReturnValue(
+        inputsWith({
+          providers: [provider('prov_local', { 'lore-model': 100, 'classifier-model': 100_000 })],
+        }),
+      )
+      const ctx = phaseCtx()
+      let atCall: unknown
+      callReturns(
+        { status: 'ok', metadata: METADATA },
+        {
+          beforeReturn: () => {
+            atCall = closePartsOf(ctx.intermediates)
+          },
+        },
+      )
+
+      const { result } = await drain(ctx)
+
+      expect(result).toEqual({ status: 'completed' })
+      expect(closePartsOf(ctx.intermediates)).toEqual(FOUR_PARTS)
+      expect(atCall).toEqual(FOUR_PARTS)
+    })
+
+    it("cuts by a story override's model, whatever the profile's model holds", async () => {
+      insertEntries(ROWS)
+      readInputsMock.mockReturnValue(
+        inputsWith({
+          providers: [
+            provider('prov_local', { 'lore-model': 100_000 }),
+            provider('prov_big', { 'big-model': 100 }),
+          ],
+          storyModels: { 'lore-mgmt': { providerId: 'prov_big', modelId: 'big-model' } },
+        }),
+      )
+      callReturns({ status: 'ok', metadata: METADATA })
+
+      const ctx = phaseCtx()
+      await drain(ctx)
+
+      expect(closePartsOf(ctx.intermediates)).toEqual(FOUR_PARTS)
+    })
+
+    it('stores one part spanning the range for a chapter that fits', async () => {
+      insertEntries(ROWS)
+      callReturns({ status: 'ok', metadata: METADATA })
+
+      const ctx = phaseCtx()
+      await drain(ctx)
+
+      expect(closePartsOf(ctx.intermediates)).toEqual([
+        { part: 1, startEntryId: 'e1', endEntryId: 'e7', tokens: 154 },
+      ])
+    })
+
+    it("sums the parts' tokens to the row's tokenCount", async () => {
+      insertEntries(ROWS)
+      readInputsMock.mockReturnValue(
+        inputsWith({ providers: [provider('prov_local', { 'lore-model': 100 })] }),
+      )
+      callReturns({ status: 'ok', metadata: METADATA })
+
+      const ctx = phaseCtx()
+      const { events } = await drain(ctx)
+
+      const parts = closePartsOf(ctx.intermediates) ?? []
+      expect(parts).toHaveLength(4)
+      expect(createdChapter(events)?.tokenCount).toBe(RANGE_TOKENS)
+      expect(parts.reduce((sum, part) => sum + part.tokens, 0)).toBe(RANGE_TOKENS)
+    })
+
+    // C5: openRegionSeries reads a row stored with no count as 0.
+    it('reads a range row stored with no count as 0 in its part', async () => {
+      insertEntries(ROWS.map((row): Row => (row.id === 'e3' ? { ...row, tokens: null } : row)))
+      readInputsMock.mockReturnValue(
+        inputsWith({ providers: [provider('prov_local', { 'lore-model': 100 })] }),
+      )
+      callReturns({ status: 'ok', metadata: METADATA })
+
+      const ctx = phaseCtx()
+      await drain(ctx)
+
+      // By turn: 40 with 8+0, then 9+31, then 7+29.
+      expect(closePartsOf(ctx.intermediates)).toEqual([
+        { part: 1, startEntryId: 'e1', endEntryId: 'e3', tokens: 48 },
+        { part: 2, startEntryId: 'e4', endEntryId: 'e5', tokens: 40 },
+        { part: 3, startEntryId: 'e6', endEntryId: 'e7', tokens: 36 },
+      ])
+    })
+
+    it('fails as config-resolver, with no call and no parts, when lore-mgmt resolves to no model', async () => {
+      insertEntries(ROWS)
+      readInputsMock.mockReturnValue(inputsWith({ assignments: {} }))
+
+      const ctx = phaseCtx()
+      const { events, result } = await drain(ctx)
+
+      expect(result).toEqual({
+        status: 'failed',
+        error: {
+          kind: 'config-resolver',
+          failure: 'no-profile-assigned',
+          target: 'lore-mgmt',
+          phaseName: 'metadata',
+        },
+      })
+      expect(events).toEqual([])
+      expect(requestMock).not.toHaveBeenCalled()
+      expect(closePartsOf(ctx.intermediates)).toBeUndefined()
+    })
+  })
+})
+
+describe('closeWindowTokens', () => {
+  it.each<{ name: string; config: Partial<ResolveModelConfig>; tokens: number | null }>([
+    {
+      name: "the configured window of lore-mgmt's model, not the classifier's",
+      config: {
+        providers: [provider('prov_local', { 'lore-model': 8_192, 'classifier-model': 65_536 })],
+      },
+      tokens: 8_192,
+    },
+    {
+      name: 'the detected window when none is configured',
+      config: {
+        providers: [
+          {
+            ...provider('prov_local'),
+            cachedModels: [{ id: 'lore-model', capabilities: { contextWindow: 16_384 } }],
+          },
+        ],
+      },
+      tokens: 16_384,
+    },
+    {
+      name: "a story override's model's window",
+      config: {
+        providers: [
+          provider('prov_local', { 'lore-model': 8_192 }),
+          provider('prov_big', { 'big-model': 131_072 }),
+        ],
+        storyModels: { 'lore-mgmt': { providerId: 'prov_big', modelId: 'big-model' } },
+      },
+      tokens: 131_072,
+    },
+    { name: 'null for a window no one knows', config: {}, tokens: null },
+  ])('reads $name', ({ config, tokens }) => {
+    expect(closeWindowTokens(inputsWith(config).modelConfig)).toEqual({ ok: true, tokens })
+  })
+
+  it('fails as config-resolver in the metadata phase when lore-mgmt resolves to no model', () => {
+    expect(closeWindowTokens(inputsWith({ assignments: {} }).modelConfig)).toEqual({
+      ok: false,
+      error: {
+        kind: 'config-resolver',
+        failure: 'no-profile-assigned',
+        target: 'lore-mgmt',
+        phaseName: 'metadata',
+      },
+    })
+  })
 })

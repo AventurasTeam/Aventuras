@@ -1,10 +1,15 @@
 import { describe, expect, it } from 'vitest'
 
+import type { ChapterPartCut } from '@/lib/chapters'
+
 import {
   closeLedgerOf,
+  closePartsOf,
   closeRangeOf,
+  requireCloseParts,
   requireCloseRange,
   seedCloseLedger,
+  setCloseParts,
   setCloseRange,
 } from './close-intermediates'
 import type { CloseRange } from './intermediates'
@@ -21,6 +26,7 @@ describe('the close range', () => {
     expect(closeRangeOf(intermediates)).toBe(RANGE)
     expect(requireCloseRange({ intermediates })).toBe(RANGE)
     expect(closeLedgerOf(intermediates)).toBeUndefined()
+    expect(closePartsOf(intermediates)).toBeUndefined()
   })
 
   it('gives the failure a close phase returns when no range is parked', () => {
@@ -51,6 +57,32 @@ describe('the close ledger', () => {
       calls: [],
       stopped: [{ task: 'lore', part: 1, reason: 'budget' }],
       noToolCalls: false,
+    })
+  })
+})
+
+describe('the close parts', () => {
+  const PARTS: readonly ChapterPartCut[] = [
+    { part: 1, startEntryId: 'e1', endEntryId: 'e4', tokens: 12_000 },
+    { part: 2, startEntryId: 'e5', endEntryId: 'e7', tokens: 9_000 },
+  ]
+
+  it('reads back the parts parked on the record, and only under their own key', () => {
+    const intermediates: Record<string, unknown> = {}
+    expect(closePartsOf(intermediates)).toBeUndefined()
+
+    setCloseParts(intermediates, PARTS)
+
+    expect(closePartsOf(intermediates)).toBe(PARTS)
+    expect(requireCloseParts({ intermediates })).toBe(PARTS)
+    expect(closeRangeOf(intermediates)).toBeUndefined()
+    expect(closeLedgerOf(intermediates)).toBeUndefined()
+  })
+
+  it('gives the failure the agent phase returns when no parts are parked', () => {
+    expect(requireCloseParts({ intermediates: {} })).toEqual({
+      status: 'failed',
+      error: { kind: 'orchestrator', detail: 'chapter-close: no close parts' },
     })
   })
 })

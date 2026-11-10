@@ -4,6 +4,7 @@ import type { CallRetryError, generateStructured } from '@/lib/ai'
 import { STORY_SETTINGS_DEFAULTS, type StoryEntry, type Thread, type ThreadStatus } from '@/lib/db'
 import { makeLogger } from '@/lib/diagnostics'
 import {
+  appSettingsStore,
   chaptersStore,
   currentStoryStore,
   entitiesStore,
@@ -14,7 +15,11 @@ import {
 } from '@/lib/stores'
 
 import { createPhaseDb, hydrateEntries, resetPhaseDb, type PhaseDb } from './__tests__/phase-db'
-import { readCloseRangeEntries, requestChapterMetadata } from './chapter-close-metadata-call'
+import {
+  readCloseRangeEntries,
+  readMetadataInputs,
+  requestChapterMetadata,
+} from './chapter-close-metadata-call'
 import { chapterMetadataSchema, type ChapterMetadata } from './chapter-metadata-schema'
 import type { CloseRange } from './intermediates'
 import type { PhaseContext, PhaseEmittedEvent, PipelineError } from '../types'
@@ -208,8 +213,11 @@ function phaseCtx(abortSignal: AbortSignal = new AbortController().signal): Phas
   }
 }
 
+// As the phase does: the store inputs first, before the call's own range read.
 async function drain(ctx: PhaseContext, range: CloseRange = RANGE) {
-  const gen = requestChapterMetadata(ctx, range)
+  const inputs = readMetadataInputs(ctx)
+  if ('status' in inputs) throw new Error(`readMetadataInputs refused: ${inputs.error.kind}`)
+  const gen = requestChapterMetadata(ctx, range, inputs)
   const events: PhaseEmittedEvent[] = []
   for (;;) {
     const next = await gen.next()
@@ -261,6 +269,53 @@ describe('readCloseRangeEntries', () => {
     expect(await readCloseRangeEntries(phaseDb.db, 'b1', { ...RANGE, startEntryId: 'x2' })).toEqual(
       [],
     )
+  })
+})
+
+describe('readMetadataInputs', () => {
+  it("reads the latest chapter's summary, the branch's threads as held, the mode and lore-mgmt's config", () => {
+    // Out of sequence order, as an open can hydrate them: its read has no ORDER BY, ids are random.
+    chaptersStore.hydrate('b1', [
+      chapter(1, 'Kael left the keep at dawn with the stolen sigil.'),
+      chapter(3, 'Kael reached the marsh as the bells began to ring.'),
+      chapter(2, 'Kael hid from the riders in a flooded chapel.'),
+    ])
+    const roster = [
+      thread('thr_1', 'Find the heir', 'active'),
+      thread('thr_3', 'The lost map', 'resolved'),
+    ]
+    threadsStore.hydrate('b1', roster)
+
+    const inputs = readMetadataInputs(phaseCtx())
+
+    const settings = appSettingsStore.getAppSettings()
+    expect(inputs).toEqual({
+      previousChapterSummary: 'Kael reached the marsh as the bells began to ring.',
+      threads: roster,
+      mode: 'adventure',
+      modelConfig: {
+        providers: settings.providers,
+        profiles: settings.profiles,
+        assignments: settings.assignments,
+        storyModels: {},
+      },
+    })
+    expect(settings.assignments).toMatchObject({ 'lore-mgmt': 'prof-lore' })
+  })
+
+  it("reads no previous summary for a branch's first chapter", () => {
+    expect(readMetadataInputs(phaseCtx())).toMatchObject({ previousChapterSummary: null })
+  })
+
+  it.each([
+    { name: 'no story is open', unload: () => currentStoryStore.clear() },
+    { name: 'the stores hold another branch', unload: () => entitiesStore.hydrate('b2', []) },
+  ])('fails when $name', ({ unload }) => {
+    unload()
+    expect(readMetadataInputs(phaseCtx())).toEqual({
+      status: 'failed',
+      error: { kind: 'orchestrator', detail: 'chapter-close: branch not loaded' },
+    })
   })
 })
 
@@ -329,7 +384,7 @@ describe('requestChapterMetadata', () => {
   })
 
   // An open publishes its branch over the working-set stores (loadAndPublish).
-  it("prompts with its own branch's chapter and threads when another branch is published mid-read", async () => {
+  it('prompts with the inputs read before it, though another branch is published during its range read', async () => {
     chaptersStore.hydrate('b1', [chapter(1, 'Kael left the keep at dawn with the stolen sigil.')])
     threadsStore.hydrate('b1', [thread('thr_1', 'Find the heir', 'active')])
     generateStructuredMock.mockResolvedValue({ status: 'ok', value: REPLY, recoverable: [] })
@@ -482,20 +537,6 @@ describe('requestChapterMetadata', () => {
     expect(events).toEqual([
       { type: 'recoverable_error', error: { kind: 'provider', reason: 'network' } },
     ])
-  })
-
-  it.each([
-    { name: 'no story is open', unload: () => currentStoryStore.clear() },
-    { name: 'the stores hold another branch', unload: () => entitiesStore.hydrate('b2', []) },
-  ])('fails before any call when $name', async ({ unload }) => {
-    unload()
-    const { events, outcome } = await drain(phaseCtx())
-    expect(outcome).toEqual({
-      status: 'failed',
-      error: { kind: 'orchestrator', detail: 'chapter-close: branch not loaded' },
-    })
-    expect(events).toEqual([])
-    expect(generateStructuredMock).not.toHaveBeenCalled()
   })
 
   // classifier.md → Failure policy: a never-answering provider expires as a failure, not an abort,
