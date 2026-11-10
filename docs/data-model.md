@@ -831,12 +831,12 @@ result. A placement's rejection never fails the run: `placeLocation`,
 which the per-turn writer and a pass use to place or move an existing
 place, refuses a cycle, a broken chain, a retired parent or, for a
 pass, a disabled place around the story (Disabled places, below) as a
-no-op, so a planner slip there is a logged skip. Chapter close places a
-row through its plan and `updateEntity` instead, so a parent lands in
-the same write as the row's condition and description: the plan runs
-the same checks first, a disabled place around the story among them,
-judged on the story's place as a pass judges it, and a placement that
-fails one drops from the call while the rest lands
+no-op, so a planner slip there is a logged skip. Chapter close checks a
+placement in code before the write and lands it through `updateEntity`
+instead, so a parent lands in the same write as the row's condition and
+description: the check runs the same rules first, a disabled place
+around the story among them, judged on the story's place as a pass
+judges it, and a placement that fails one drops from the call while the rest lands
 ([`chapter-close.md → Tools and writes`](./memory/chapter-close.md#tools-and-writes)).
 The machine paths that write
 `parent_location_id` are the per-turn writer creating a location or

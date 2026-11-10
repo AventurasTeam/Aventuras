@@ -66,15 +66,15 @@ before the next turn's retrieval embeds them
 ([`retrieval.md → Compute lifecycle`](./retrieval.md#compute-lifecycle)).
 The one exception is 3e's clustering, which embeds first.
 
-| Task       | Sub-jobs                                  | Reads the prose | Starts with                                                                                                                                                                                                                                 | Tools                                                                                              |
-| ---------- | ----------------------------------------- | --------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------- |
-| Happenings | [3e](#3e--happenings-consolidation)       | No              | The clusters code found                                                                                                                                                                                                                     | `read_row`, `read_turns`, `merge_happenings`                                                       |
-| Lore       | [3a](#3a--lore-creation)                  | Yes             | Lore titles, and the writes so far                                                                                                                                                                                                          | `read_row`, `create_lore`, `update_lore`                                                           |
-| Identity   | [3b](#3b--identity-compaction)            | Yes             | Slow fields of the entities the part touches                                                                                                                                                                                                | `search_world`, `read_row`, `update_character`, `update_faction`                                   |
-| Threads    | [3f](#3f--world-upkeep)                   | Yes             | Open threads                                                                                                                                                                                                                                | `read_row`, `update_thread`, `merge_threads`                                                       |
-| Upkeep     | [3f](#3f--world-upkeep)                   | Yes             | Rows the part names, by name or keyword, that aren't in its scene or retired; places and items in its scene, not retired, with no keywords or a blank description; its happenings not yet common knowledge                                  | `search_world`, `read_row`, `update_place`, `update_item`, `set_keywords`, `mark_common_knowledge` |
-| Lifecycle  | [Phase 4](#phase-4--lifecycle-review), 3f | Yes             | Active characters and items in the part's scene; active characters, items and factions it names, by name or keyword, and the active factions of the characters above; less characters a reply past the part has in its scene. Never a place | `search_world`, `read_row`, `retire_entity`, `flag_duplicate`                                      |
-| Awareness  | [3d](#3d--awareness-pin-tuning)           | No              | The chapter's rows, the high-frequency set and the chapter's summary                                                                                                                                                                        | `read_turns`, `set_pin`                                                                            |
+| Task       | Sub-jobs                                  | Reads the prose | Starts with                                                                                                                                                                                                                                    | Tools                                                                                              |
+| ---------- | ----------------------------------------- | --------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------- |
+| Happenings | [3e](#3e--happenings-consolidation)       | No              | The clusters code found                                                                                                                                                                                                                        | `read_row`, `read_turns`, `merge_happenings`                                                       |
+| Lore       | [3a](#3a--lore-creation)                  | Yes             | Lore titles, and the writes so far                                                                                                                                                                                                             | `read_row`, `create_lore`, `update_lore`                                                           |
+| Identity   | [3b](#3b--identity-compaction)            | Yes             | Slow fields of the entities the part touches                                                                                                                                                                                                   | `search_world`, `read_row`, `update_character`, `update_faction`                                   |
+| Threads    | [3f](#3f--world-upkeep)                   | Yes             | Open threads                                                                                                                                                                                                                                   | `read_row`, `update_thread`, `merge_threads`                                                       |
+| Upkeep     | [3f](#3f--world-upkeep)                   | Yes             | Rows the part names, by name or keyword, that aren't in its scene or retired; places and items in its scene, not retired, with no keywords or a blank description; its happenings not yet common knowledge                                     | `search_world`, `read_row`, `update_place`, `update_item`, `set_keywords`, `mark_common_knowledge` |
+| Lifecycle  | [Phase 4](#phase-4--lifecycle-review), 3f | Yes             | Active characters and items in the part's scene; active characters, items and factions it names, by name or keyword, and the active factions of the characters it holds; less characters a reply past the part has in its scene. Never a place | `search_world`, `read_row`, `retire_entity`, `flag_duplicate`                                      |
+| Awareness  | [3d](#3d--awareness-pin-tuning)           | No              | The chapter's rows, the high-frequency set and the chapter's summary                                                                                                                                                                           | `read_turns`, `set_pin`                                                                            |
 
 Happenings runs first so later tasks read the merged rows, and Awareness
 last, once the merges and the chapter's other judgment are done. A task
@@ -126,8 +126,9 @@ defaults.
 A prose task reads at most half the model's window at a time, or 32k
 tokens when the window is unknown. A longer chapter is cut into parts
 between turns: a player's turn stays with the reply after it, since the
-reply decides what the turn did, so no part ends on one. A single turn
-over the limit is a part alone, even when it passes the limit. Each
+reply decides what the turn did, so no part ends on one. A player's turn
+and its reply that pass the limit together are a part alone, sent whole.
+Each
 part runs the prose tasks in turn, which keeps its cache warm; under
 `single`, each part is one conversation. Chapter-wide limits hold across
 parts, and each part sees the writes so far. A part's writes cite only
@@ -158,9 +159,10 @@ are the prompt's short ids, as in a pass; a placeholder in a text field
 is named before it lands
 ([`classifier.md → ID handling in classifier output`](./classifier.md#id-handling-in-classifier-output)).
 A turn id names no row, so a text field the close stores that holds one
-of its turns is refused, and so is an entry of Identity's `traits`,
-`drives` or `agenda` that does, and a keyword holding any id it shows: a
-stored `t3` would name another turn in a later prompt. Turns are cited
+of its turns is refused, and so is a `traits`, `drives` or `agenda` list
+with an entry that does, and a keyword holding any id it shows: a stored
+`t3` would name another turn in a later prompt, a stored row id another
+row. Turns are cited
 in `turns`; a `why` only the review shows keeps them as written.
 
 A write returns one of three results:
@@ -366,7 +368,8 @@ them.
 
 **Prompt context:**
 
-- All entries in the closed range (the chapter's content).
+- The closed range's entries (the chapter's content), or a part's
+  (below).
 - The previous chapter's summary, if any, for narrative continuity.
 - The open threads: titles and statuses of threads that are pending or
   active. The status tells the model which one the story follows and
@@ -410,7 +413,7 @@ seeing a field's current value before it writes it
 
 - Closed range entries (the chapter's content).
 - Existing lore rows — titles, bodies on request.
-- The entities the chapter touches, with their state, and the rest of
+- The entities the part touches, with their state, and the rest of
   the world on request: places, items and factions off the scene.
 - Happenings and awareness rows in the range, threads, and the
   high-frequency awareness set (3d).
@@ -459,7 +462,7 @@ spam. The criterion for emitting a new lore row:
 - **A bounded body.** A body grows by at most 1,200 characters over the
   body as it stood before the close, across all the close's calls and
   parts, so a create's is at most 1,200 characters: the length a pass
-  clamps an embedded text to
+  clamps a new row's description to
   ([`retrieval.md → What gets embedded per type`](./retrieval.md#what-gets-embedded-per-type)).
   A longer one is refused with its length, never cut, so a runaway
   loop can't land and a user's long body stays editable.
@@ -480,9 +483,9 @@ against soft caps from
 [`data-model.md → Soft caps`](../data-model.md#soft-caps--compaction-discipline)
 (`traits ≤ 8`, `drives ≤ 6`, `agenda ≤ 4`).
 
-**What the task starts with.** The characters the chapter's turns list in
+**What the task starts with.** The characters the part's turns list in
 their scene data, whatever their status, and the factions of a starting
-character (`faction_id`) or named in the turns by name or keyword. A
+character (`faction_id`) or named in the part's turns by name or keyword. A
 character the prose only mentions is left to `search_world`.
 
 **Operations the agent may make.** It sends each list whole
@@ -719,7 +722,7 @@ conservative bias as the sub-jobs above:
   re-marks that flag `duplicate` on the row that holds it, so the
   resolve dialog gives the close's verdict, and one already `duplicate`
   stays as it is. Otherwise the flag goes on whichever row of the pair
-  is free: the row the agent named, or, when that row's live flag names
+  is free: the row the call flags (its `id`), or, when that row's live flag names
   a third row, its partner. It is refused when both rows' live flags
   name other rows or the user already resolved the pair, or each close
   could ask the same question. The agent never merges.
@@ -745,14 +748,14 @@ chapter-scope evidence:
 Conservative bias: prefer surfacing over auto-retire on weak signal.
 The only auto-retire path is hard-finality signal that the periodic
 classifier should have caught but didn't. A death the narration reports
-as fact counts even off the scene, since a part's prose names the
-character; one a character only suspects or hears as rumour does not.
+as fact counts even off the scene, since the start reaches a
+character the part's prose names; one a character only suspects or hears as rumour does not.
 `retire_entity` is refused for a character a reply past the part has in
 its scene, a later part's replies included: the evidence the part cites
 is older
 ([Tools and writes](#tools-and-writes)). A user's turn carries the scene
 it follows forward, so it doesn't count: reading it would refuse every
-character who dies at the chapter's end.
+character who dies at a part's end.
 
 ## Failure modes and atomic rollback
 

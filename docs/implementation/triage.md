@@ -379,5 +379,5 @@ patch`, which 5.5a marks `restated`, so a close tool's write of it
   row, so a reply that writes "as t3 shows" into a description stores
   `t3`, which a later prompt reads as its own turn. Chapter close
   refuses such a field
-  ([Slice 5.8](./milestones/05-chapters-chapter-close/slices/08-prose-tasks.md#implementation-notes));
-  the periodic classifier has no such check. Raised in 5.8's planning.
+  ([`chapter-close.md → Tools and writes`](../memory/chapter-close.md#tools-and-writes));
+  the periodic classifier has no such check. Surfaced by 5.5a's review.
