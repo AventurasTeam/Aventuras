@@ -51,11 +51,13 @@ import { chapterPartSummarySchema } from '../definitions/chapter-metadata-schema
 import { identityTask } from '../definitions/close-agent/identity'
 import { lifecycleTask } from '../definitions/close-agent/lifecycle'
 import { loreTask } from '../definitions/close-agent/lore'
+import type { PartTask } from '../definitions/close-agent/progress'
 import {
   __setCloseAgentSlots,
   PRODUCTION_CLOSE_SLOTS,
   type CloseAgentSlots,
 } from '../definitions/close-agent/slots'
+import type { CloseTaskDef } from '../definitions/close-agent/task'
 import { threadsTask } from '../definitions/close-agent/threads'
 import { assertReplaySafe } from '../definitions/close-agent/tool'
 import { upkeepTask } from '../definitions/close-agent/upkeep'
@@ -567,17 +569,12 @@ const STAND_IN_CASE: RoundTripCase = {
   merge: false,
 }
 
-const identitySlots = (): CloseAgentSlots => ({
-  before: [],
-  perPart: [{ kind: 'task', def: identityTask }],
-  after: [],
-})
+function perPartSlots(def: CloseTaskDef & { task: PartTask }): () => CloseAgentSlots {
+  return () => ({ before: [], perPart: [{ kind: 'task', def }], after: [] })
+}
 
-const threadsSlots = (): CloseAgentSlots => ({
-  before: [],
-  perPart: [{ kind: 'task', def: threadsTask }],
-  after: [],
-})
+const identitySlots = perPartSlots(identityTask)
+const threadsSlots = perPartSlots(threadsTask)
 
 const WHY = 'The innkeeper says the ferry runs when Tobin says it runs.'
 
@@ -640,23 +637,9 @@ const ABSORBED_WROTE_CASE: RoundTripCase = {
   merge: false,
 }
 
-const loreSlots = (): CloseAgentSlots => ({
-  before: [],
-  perPart: [{ kind: 'task', def: loreTask }],
-  after: [],
-})
-
-const upkeepSlots = (): CloseAgentSlots => ({
-  before: [],
-  perPart: [{ kind: 'task', def: upkeepTask }],
-  after: [],
-})
-
-const lifecycleSlots = (): CloseAgentSlots => ({
-  before: [],
-  perPart: [{ kind: 'task', def: lifecycleTask }],
-  after: [],
-})
+const loreSlots = perPartSlots(loreTask)
+const upkeepSlots = perPartSlots(upkeepTask)
+const lifecycleSlots = perPartSlots(lifecycleTask)
 
 // E is position 7: part 1 holds t1-t5 and part 2 E's turn, t6-t7, so part-2 calls cite t7.
 const PART_WINDOW = twoPartWindow(7)
