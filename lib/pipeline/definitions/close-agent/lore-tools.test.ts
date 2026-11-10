@@ -1356,4 +1356,31 @@ describe('update_lore', () => {
       values: { body: 'The toll doubles after dark.' },
     })
   })
+
+  // After a fork another branch can still hold a row this one deleted, under the same id.
+  it('refuses a row only another branch holds as gone, though that row reads as sent', async () => {
+    await f.ctx.db
+      .insert(branches)
+      .values({ id: 'br_other', storyId: f.storyId, name: 'other', createdAt: 1 })
+    await f.ctx.db.insert(lore).values({
+      id: GONE,
+      branchId: 'br_other',
+      title: 'The Old Toll',
+      body: 'The toll doubles after dark.',
+      injectionMode: 'auto',
+      createdAt: 1,
+      updatedAt: 1,
+    })
+
+    const run = await dispatchScripted(f, [update({ body: 'The toll doubles after dark.' })], {
+      shown: [{ id: GONE, name: 'The Old Toll' }],
+      seeds: [{ table: 'lore', id: GONE }],
+    })
+
+    expect(run.answers[0]).toEqual({
+      result: 'rejected',
+      reason: CLOSE_REASON.rowGone,
+      note: 'The row is gone; do not write to it again.',
+    })
+  })
 })

@@ -307,6 +307,33 @@ describe('protectedKeywordTerms', () => {
     const guarded = await protectedKeywordTerms(ctx, BRANCH, 'entities', 'char_1', live)
     expect([...guarded].sort()).toEqual(['ser kael', 'the knight'])
   })
+
+  // After a fork both branches hold char_1, each with its own log.
+  it("reads only its own branch's log: another branch's append credits nothing here", async () => {
+    const ctx = await setup()
+    await ctx.db
+      .insert(branches)
+      .values({ id: 'br_2', storyId: 'story_1', name: 'fork', createdAt: 2 })
+    await applyOk(ctx, createdBy('user_edit', { ...KAEL, keywords: ['the knight'] }), 'act_c')
+    const onFork = async (action: PipelineAction, actionId: string) => {
+      const result = await applyDeltaAction({ action, actionId, branchId: 'br_2' }, ctx)
+      if (result.status !== 'ok') throw new Error(`${action.kind} refused: ${result.reason}`)
+    }
+    await onFork(
+      createdBy('periodic_classifier', { ...KAEL, branchId: 'br_2', keywords: [] }),
+      'act_fork_c',
+    )
+    await onFork(
+      {
+        kind: 'appendEntityKeywords',
+        source: 'per_turn_classifier',
+        payload: { branchId: 'br_2', id: 'char_1', keywords: ['the knight'], proseEntryId: null },
+      },
+      'act_fork_a',
+    )
+    const guarded = await protectedKeywordTerms(ctx, BRANCH, 'entities', 'char_1', ['the knight'])
+    expect([...guarded]).toEqual(['the knight'])
+  })
 })
 
 describe('keyword refusal reasons', () => {
