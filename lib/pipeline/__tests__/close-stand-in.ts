@@ -153,7 +153,7 @@ function renderStandIn(
     system: STAND_IN_SYSTEM,
     user: [
       `Character: [${shown.handle}] ${shown.name}: ${shown.description}`,
-      `Turns of this chapter: ${turns.join(', ')}`,
+      `Turns this task reads: ${turns.join(', ')}`,
       `Writes so far:\n${ctx.writesSoFar === '' ? '(none)' : ctx.writesSoFar}`,
     ].join('\n\n'),
   }
