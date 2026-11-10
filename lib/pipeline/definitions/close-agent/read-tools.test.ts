@@ -724,6 +724,11 @@ describe('read_row on a task that reads the flag', () => {
   const LOST = rowId('char', 26) // never written: a partner that's gone
   const GIL = rowId('char', 27)
   const OTHER_ANSEL = rowId('char', 28)
+  const FAR = rowId('char', 29)
+  const FAR_PARTNER = rowId('char', 30) // only the other branch holds it
+  const ZORA = rowId('char', 31)
+  const ALDO = rowId('char', 32)
+  const MARA = rowId('char', 33)
 
   const flag = (partnerId: string, reason: CollisionReason): Partial<NewEntity> => ({
     nameCollisionFlag: 1,
@@ -742,6 +747,12 @@ describe('read_row on a task that reads the flag', () => {
       // Gil and Ansel are no namesakes: the flag naming the twin is dormant.
       entity(GIL, 'character', 'Gil', flag(ANSEL_TWIN, 'alike')),
       entity(OTHER_ANSEL, 'character', 'Ansel', flag(ANSEL_TWIN, 'name-taken'), OTHER_BRANCH),
+      entity(FAR, 'character', 'Far', flag(FAR_PARTNER, 'duplicate')),
+      entity(FAR_PARTNER, 'character', 'Far', {}, OTHER_BRANCH),
+      // Inserted before Aldo, named after him.
+      entity(ZORA, 'character', 'Zora', flag(MARA, 'duplicate')),
+      entity(ALDO, 'character', 'Aldo', flag(MARA, 'duplicate')),
+      entity(MARA, 'character', 'Mara'),
     ])
   })
 
@@ -794,6 +805,21 @@ describe('read_row on a task that reads the flag', () => {
       collision: { partner: null, reason: 'alike', live: false },
       flaggedBy: [],
     })
+  })
+
+  it("reads a partner only the other branch holds as gone, though that branch's copy would hold", async () => {
+    const answer = await read(FAR)
+
+    expect(answer.output).toMatchObject({
+      collision: { partner: null, reason: 'duplicate', live: false },
+    })
+  })
+
+  it('lists the rows naming it by name, not by the order they were written', async () => {
+    const answer = await read(MARA)
+
+    const { flaggedBy } = answer.output as { flaggedBy: string[] }
+    expect(flaggedBy.map((handle) => ids.nameOf(handle))).toEqual(['Aldo', 'Zora'])
   })
 
   it("adds nothing when the task's fields leave the flag out", async () => {
