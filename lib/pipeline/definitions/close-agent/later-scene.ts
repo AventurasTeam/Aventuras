@@ -2,6 +2,7 @@ import { and, eq, gt } from 'drizzle-orm'
 
 import { readEntryPosition, storyEntries } from '@/lib/db'
 
+import { strings } from './row-values'
 import type { ToolContext } from './tool'
 
 /**
@@ -26,14 +27,7 @@ export async function charactersInSceneAfter(
         gt(storyEntries.position, end),
       ),
     )
-  const ids = new Set<string>()
-  for (const { metadata } of replies) {
-    // A hand-edited row may hold anything in its scene; only strings are ids.
-    const scene: unknown = metadata?.sceneEntities
-    if (!Array.isArray(scene)) continue
-    for (const id of scene) if (typeof id === 'string') ids.add(id)
-  }
-  return ids
+  return new Set(replies.flatMap(({ metadata }) => strings(metadata?.sceneEntities)))
 }
 
 /**
