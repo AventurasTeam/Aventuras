@@ -21,8 +21,8 @@ function termKeys(terms: unknown): Set<string> {
   return keys
 }
 
-// The row's creates, and each update whose undo payload holds the list it replaced. A delete's
-// payload is the whole row, keywords included, so the op is what keeps it out.
+// The row's creates, and each update whose undo payload holds the list or the name it replaced. A
+// delete's payload is the whole row, keywords included, so the op is what keeps it out.
 async function keywordDeltas(ctx: DbCtx, branchId: string, table: 'entities' | 'lore', id: string) {
   return ctx.db
     .select({ op: deltas.op, source: deltas.source, undoPayload: deltas.undoPayload })
@@ -36,7 +36,10 @@ async function keywordDeltas(ctx: DbCtx, branchId: string, table: 'entities' | '
           eq(deltas.op, 'create'),
           and(
             eq(deltas.op, 'update'),
-            sql`json_type(${deltas.undoPayload}, '$.keywords') = 'array'`,
+            or(
+              sql`json_type(${deltas.undoPayload}, '$.keywords') = 'array'`,
+              sql`json_type(${deltas.undoPayload}, '$.name') = 'text'`,
+            ),
           ),
         ),
       ),
@@ -44,11 +47,23 @@ async function keywordDeltas(ctx: DbCtx, branchId: string, table: 'entities' | '
     .orderBy(asc(deltas.logPosition))
 }
 
+type KeywordDelta = Awaited<ReturnType<typeof keywordDeltas>>[number]
+
+const nameBefore = (row: KeywordDelta): string | undefined =>
+  typeof row.undoPayload?.name === 'string' ? row.undoPayload.name : undefined
+
+// A machine rename's demoted name (classifier.md → Names): credited to whoever wrote that name.
+function demotedName(row: KeywordDelta, key: string): boolean {
+  const name = nameBefore(row)
+  return name !== undefined && normalizeTerm(name) === key && !isUserOriginatedSource(row.source)
+}
+
 /**
  * Normalized live term → who added it (retrieval.md → Keywords schema): the latest update whose
- * before-list lacks the term, else the create; an undone update has left the log. Undoing a user's
- * keyword edit under a later machine keyword write restores the whole list, so a user's term that
- * write's before-list lacks is credited to that write, and a close may remove it.
+ * before-list lacks the term, else the create; an undone update has left the log. A name a machine
+ * rename demoted goes to the latest earlier name write, else the create. Undoing a user's keyword
+ * edit under a later machine keyword write restores the whole list, so a user's term that write's
+ * before-list lacks is credited to that write, and a close may remove it.
  */
 export async function keywordAuthors(
   ctx: DbCtx,
@@ -61,12 +76,19 @@ export async function keywordAuthors(
   const created = rows.findLastIndex((row) => row.op === 'create')
   const createdBy: KeywordAuthor = created === -1 ? 'unlogged' : rows[created].source
   const updates = rows.slice(created + 1)
-  const before = updates.map((update) => termKeys(update.undoPayload?.keywords))
-  const liveKeys = termKeys(live)
+  const before = updates.map((update) =>
+    Array.isArray(update.undoPayload?.keywords) ? termKeys(update.undoPayload.keywords) : null,
+  )
+  const nameWriter = (until: number): KeywordAuthor => {
+    const at = updates.findLastIndex((update, i) => i < until && nameBefore(update) !== undefined)
+    return at === -1 ? createdBy : updates[at].source
+  }
   const authors = new Map<string, KeywordAuthor>()
-  for (const key of liveKeys) {
-    const adder = updates.findLastIndex((_, i) => !before[i].has(key))
-    authors.set(key, adder === -1 ? createdBy : updates[adder].source)
+  for (const key of termKeys(live)) {
+    const adder = updates.findLastIndex((_, i) => before[i] !== null && !before[i].has(key))
+    if (adder === -1) authors.set(key, createdBy)
+    else
+      authors.set(key, demotedName(updates[adder], key) ? nameWriter(adder) : updates[adder].source)
   }
   return authors
 }

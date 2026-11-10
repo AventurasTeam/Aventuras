@@ -1390,6 +1390,8 @@ a re-observed epithet does not accumulate. Chapter close may remove a
 keyword an AI added that the chapter shows no longer fits, never one
 the user wrote, which the delta log tells apart
 ([`chapter-close.md → 3f — world upkeep`](./chapter-close.md#3f--world-upkeep)).
+A name a classifier rename keeps as a keyword is credited to whoever
+wrote that name, so a name the user typed stays the user's.
 
 One known gap: when an undo or a rollback window reverts a user's
 keyword edit under a later classifier keyword write, a term that edit

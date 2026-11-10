@@ -772,7 +772,11 @@ None open: Implementation notes record each answer.
   `ok` with nothing written; every add one the user removed, and no
   removal, is `skipped`. `updateLore`'s patch never carries `keywords` beside
   `setLoreKeywords`. The walk credits a term to the latest keyword
-  update whose recorded before-list lacks it. It has two known gaps. A
+  update whose recorded before-list lacks it, and a name a machine
+  rename demoted into the keywords to the latest earlier write of the
+  name, else the create (developer decision, 2026-11-10, from the slice
+  review), so a name the user typed survives a classifier rename. It
+  has two known gaps. A
   machine keyword update undone under a later user edit is pruned from
   the log, so its term falls back to the create's source. And when an
   undo or a rollback window reverts a user's keyword edit under a later
