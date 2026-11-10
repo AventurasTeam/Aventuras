@@ -338,6 +338,13 @@ describe('retire_entity and flag_duplicate: the tools', () => {
     ])
   })
 
+  it("tells the model flag_duplicate's rule: both rows' flags taken, or a pair kept apart", () => {
+    expect(flagDuplicateTool.description).toContain(
+      "A pair already flagged is marked as the same, whichever row holds the flag. A row holds one flag, so it is refused when both rows' flags already name other rows, and for a pair the user already kept apart.",
+    )
+    expect(flagDuplicateTool.description).not.toContain('third row')
+  })
+
   it("take entity ids of any kind under canon's names, a place included so the plan answers it", () => {
     const prefixes = ['char_', 'loc_', 'item_', 'fact_']
     expect(retireEntityTool).toMatchObject({
@@ -869,21 +876,89 @@ describe('flag_duplicate', () => {
     })
   })
 
-  it('refuses a row whose live flag names a third row, writing nothing', async () => {
-    await seedRow(f, { id: CLERK, kind: 'character', name: 'the toll clerk' })
+  it.each([
+    { order: 'Tobin first', input: { id: 'c1', partner: 'c2' } },
+    { order: 'the stranger first', input: { id: 'c2', partner: 'c1' } },
+  ])(
+    "flags the stranger naming Tobin when Tobin's live flag names a third row, $order",
+    async ({ input }) => {
+      await seedRow(f, { id: CLERK, kind: 'character', name: 'the toll clerk' })
+      await seedRow(f, {
+        id: TOBIN,
+        kind: 'character',
+        name: 'Tobin',
+        flag: { partnerId: CLERK, reason: 'duplicate' },
+      })
+      await seedRow(f, { id: STRANGER, kind: 'character', name: 'the hooded stranger' })
+
+      const { result, answers, calls } = await dispatchScripted(f, [flagCall(input)], {
+        shown: SHOWN,
+      })
+
+      expect(outputs(answers)).toEqual([{ result: 'ok' }])
+      expect(flagOf(await storedEntity(f, STRANGER))).toEqual([1, TOBIN, 'duplicate'])
+      expect(flagOf(await storedEntity(f, TOBIN))).toEqual([1, CLERK, 'duplicate'])
+      const log = await runDeltas(f, result.actionId)
+      expect(log.map((d) => [d.targetId, d.op, d.source, d.entryId])).toEqual([
+        [STRANGER, 'update', 'chapter_close', endEntryId(f)],
+      ])
+      expect(calls[0]).toMatchObject({
+        result: 'ok',
+        rows: [
+          { table: 'entities', id: STRANGER, name: 'the hooded stranger' },
+          { table: 'entities', id: TOBIN, name: 'Tobin' },
+        ],
+        values: { nameCollisionPartnerId: 'Tobin' },
+      })
+    },
+  )
+
+  it.each([
+    { order: 'Tobin first', input: { id: 'c1', partner: 'c2' } },
+    { order: 'the stranger first', input: { id: 'c2', partner: 'c1' } },
+  ])(
+    "refuses a pair both of whose rows' live flags name other rows, writing nothing, $order",
+    async ({ input }) => {
+      await seedRow(f, { id: CLERK, kind: 'character', name: 'the toll clerk' })
+      await seedRow(f, { id: WREN, kind: 'character', name: 'Wren' })
+      await seedRow(f, {
+        id: TOBIN,
+        kind: 'character',
+        name: 'Tobin',
+        flag: { partnerId: CLERK, reason: 'duplicate' },
+      })
+      await seedRow(f, {
+        id: STRANGER,
+        kind: 'character',
+        name: 'the hooded stranger',
+        flag: { partnerId: WREN, reason: 'duplicate' },
+      })
+
+      const { result, answers } = await dispatchScripted(f, [flagCall(input)], { shown: SHOWN })
+
+      expect(outputs(answers)).toEqual([{ result: 'rejected', reason: 'already-flagged' }])
+      expect(await runDeltas(f, result.actionId)).toEqual([])
+      expect(flagOf(await storedEntity(f, TOBIN))).toEqual([1, CLERK, 'duplicate'])
+      expect(flagOf(await storedEntity(f, STRANGER))).toEqual([1, WREN, 'duplicate'])
+    },
+  )
+
+  it('flags the row named first over a dormant flag of its own, which counts as none', async () => {
+    // Tobin's name-taken flag on Wren no longer holds: the two share no name.
+    await seedRow(f, { id: WREN, kind: 'character', name: 'Wren' })
     await seedRow(f, {
       id: TOBIN,
       kind: 'character',
       name: 'Tobin',
-      flag: { partnerId: CLERK, reason: 'duplicate' },
+      flag: { partnerId: WREN, reason: 'name-taken' },
     })
     await seedRow(f, { id: STRANGER, kind: 'character', name: 'the hooded stranger' })
 
-    const { result, answers } = await dispatchScripted(f, [flagCall()], { shown: SHOWN })
+    const { answers } = await dispatchScripted(f, [flagCall()], { shown: SHOWN })
 
-    expect(outputs(answers)).toEqual([{ result: 'rejected', reason: 'already-flagged' }])
-    expect(await runDeltas(f, result.actionId)).toEqual([])
-    expect(flagOf(await storedEntity(f, TOBIN))).toEqual([1, CLERK, 'duplicate'])
+    expect(outputs(answers)).toEqual([{ result: 'ok' }])
+    expect(flagOf(await storedEntity(f, TOBIN))).toEqual([1, STRANGER, 'duplicate'])
+    expect(flagOf(await storedEntity(f, STRANGER))).toEqual([0, null, null])
   })
 
   it.each([
@@ -950,7 +1025,14 @@ describe('flag_duplicate', () => {
 
   it("skips a row whose flag a later turn wrote, before the handler reads that turn's flag", async () => {
     await seedRow(f, { id: TOBIN, kind: 'character', name: 'Tobin' })
-    await seedRow(f, { id: STRANGER, kind: 'character', name: 'the hooded stranger' })
+    // The stranger's own flag holds too, so the write stays on Tobin's row.
+    await seedRow(f, { id: WREN, kind: 'character', name: 'Wren' })
+    await seedRow(f, {
+      id: STRANGER,
+      kind: 'character',
+      name: 'the hooded stranger',
+      flag: { partnerId: WREN, reason: 'duplicate' },
+    })
     await seedRow(f, { id: NAMESAKE, kind: 'character', name: 'Tobin' })
     await write(
       f,

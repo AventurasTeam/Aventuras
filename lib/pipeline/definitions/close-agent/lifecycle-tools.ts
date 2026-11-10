@@ -131,6 +131,27 @@ async function planRetire(args: RetireArgs, ctx: WriteContext): Promise<WritePla
   }
 }
 
+// One flag per row; a dormant flag counts as none.
+async function flagsAnotherRow(ctx: WriteContext, row: Entity, pair: Entity): Promise<boolean> {
+  const named = row.nameCollisionPartnerId
+  if (row.nameCollisionFlag !== 1 || named === null || named === pair.id) return false
+  return flagStillHolds(row, await readEntity(ctx, named))
+}
+
+/**
+ * The pair's flag goes on the partner when the partner holds it, or when the row's own flag names a
+ * third row and the partner's names none. Both taken: on the row, which the handler refuses.
+ */
+async function flagGoesOnPartner(
+  ctx: WriteContext,
+  row: Entity,
+  partner: Entity,
+): Promise<boolean> {
+  if (flagStillHolds(row, partner)) return false
+  if (flagStillHolds(partner, row)) return true
+  return (await flagsAnotherRow(ctx, row, partner)) && !(await flagsAnotherRow(ctx, partner, row))
+}
+
 /** chapter-close.md → 3f: a `duplicate` flag for the user to merge, on the row holding the pair's. */
 async function planFlagDuplicate(args: FlagArgs, ctx: WriteContext): Promise<WritePlan> {
   const row = await readEntity(ctx, args.id)
@@ -152,9 +173,9 @@ async function planFlagDuplicate(args: FlagArgs, ctx: WriteContext): Promise<Wri
       values: proposed,
       note: NOTE.otherKind,
     }
-  // A pair flagged from the partner's side is re-marked there, so it keeps one strip.
-  const [flagged, other] =
-    flagStillHolds(partner, row) && !flagStillHolds(row, partner) ? [partner, row] : [row, partner]
+  const [flagged, other] = (await flagGoesOnPartner(ctx, row, partner))
+    ? [partner, row]
+    : [row, partner]
   const rows = [reportRow(ctx, flagged.id, flagged), reportRow(ctx, other.id, other)]
   const values = { [PARTNER_PATH]: other.id }
   // Not userWrote: a Keep after the cited turn must reach the handler's resolved-pair read.
@@ -213,7 +234,7 @@ export const flagDuplicateTool: WriteTool<typeof FLAG_DUPLICATE_SHAPE> = {
   kind: 'write',
   name: 'flag_duplicate',
   description:
-    'Flag two rows of one kind that the chapter shows are one person, place or thing under two names (the hooded stranger who turns out to be Kael), for the user to merge; it never merges them. A row whose flag already names a third row refuses it, and so does a pair the user already kept apart. A pair already flagged is marked as the same, whichever row holds the flag.',
+    "Flag two rows of one kind that the chapter shows are one person, place or thing under two names (the hooded stranger who turns out to be Kael), for the user to merge; it never merges them. A pair already flagged is marked as the same, whichever row holds the flag. A row holds one flag, so it is refused when both rows' flags already name other rows, and for a pair the user already kept apart.",
   schema: writeToolSchema(FLAG_DUPLICATE_SHAPE),
   ids: {
     id: { shape: 'single', prefixes: ENTITY_PREFIXES },

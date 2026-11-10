@@ -750,6 +750,15 @@ const FERRYMAN: SeedEntity = {
   status: 'active',
 }
 
+// Named nowhere in the prose, so Lifecycle's start never lists her.
+const YSOLDE: SeedEntity = {
+  id: 'char_51627384-9eaf-4b01-82d3-4e5f60718293',
+  kind: 'character',
+  name: 'Ysolde',
+  description: 'A toll clerk on the far bank.',
+  status: 'active',
+}
+
 const CROSSING_HAPPENING = {
   id: 'hap_51627384-9eaf-40b1-82c3-4e5f60718293',
   title: 'Tobin names a courier price',
@@ -818,6 +827,23 @@ async function seedTollLore(fx: CloseFixture): Promise<void> {
 
 async function seedLaterFerryman(fx: CloseFixture): Promise<void> {
   await seedLaterEntity(fx, FERRYMAN)
+}
+
+// The ferryman before E, and Tobin already flagged as Ysolde's duplicate: the flag goes on the ferryman.
+async function seedFlaggedTobin(fx: CloseFixture): Promise<void> {
+  await seedEntity(fx, FERRYMAN)
+  await seedEntity(fx, YSOLDE)
+  await seedPassWrite(fx, 'act_close_seed_flag', {
+    kind: 'raiseCollisionFlag',
+    source: 'periodic_classifier',
+    payload: {
+      branchId: fx.branchId,
+      id: TOBIN.id,
+      partnerId: YSOLDE.id,
+      reason: 'duplicate',
+      proseEntryId: fx.replyIds[0]!,
+    },
+  })
 }
 
 const LORE_CREATE = {
@@ -982,6 +1008,14 @@ const FLAG_CASE: RoundTripCase = {
   },
 }
 
+const FLAG_ON_PARTNER_CASE: RoundTripCase = {
+  name: "flag_duplicate landing on the partner's row",
+  slots: lifecycleSlots,
+  seed: seedFlaggedTobin,
+  steps: [{ calls: [{ toolName: 'flag_duplicate', input: FLAG_DUPLICATE }] }],
+  merge: false,
+}
+
 const THREADS_ACROSS_PARTS_CASE: RoundTripCase = {
   name: 'update_thread in part 1, then merge_threads absorbing that row in part 2',
   slots: threadsSlots,
@@ -1047,6 +1081,7 @@ const CASES: readonly RoundTripCase[] = [
   MARK_COMMON_CASE,
   RETIRE_CASE,
   FLAG_CASE,
+  FLAG_ON_PARTNER_CASE,
   THREADS_ACROSS_PARTS_CASE,
 ]
 
@@ -1412,6 +1447,24 @@ describe('each new case lands what it names', () => {
     expect(await entityRow(h, TOBIN.id)).toMatchObject({
       status: 'retired',
       retiredReason: RETIRE.why,
+    })
+  })
+
+  it("flag_duplicate: the ferryman flagged as Tobin's duplicate, Tobin's own flag kept", async () => {
+    const h = await closedHarness(FLAG_ON_PARTNER_CASE)
+
+    expect((await writeCalls(h)).map((call) => [call.tool, call.result])).toEqual([
+      ['flag_duplicate', 'ok'],
+    ])
+    expect(await entityRow(h, FERRYMAN.id)).toMatchObject({
+      nameCollisionFlag: 1,
+      nameCollisionPartnerId: TOBIN.id,
+      nameCollisionReason: 'duplicate',
+    })
+    expect(await entityRow(h, TOBIN.id)).toMatchObject({
+      nameCollisionFlag: 1,
+      nameCollisionPartnerId: YSOLDE.id,
+      nameCollisionReason: 'duplicate',
     })
   })
 
