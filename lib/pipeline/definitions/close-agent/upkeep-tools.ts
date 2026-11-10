@@ -297,8 +297,10 @@ async function planSetKeywords(args: KeywordArgs, ctx: WriteContext): Promise<Wr
   if (sent.add.length === 0 && sent.remove.length === 0)
     return { kind: 'refused', reason: NO_TERMS, rows }
 
-  // Ahead of the guard: a list already as asked is ok with nothing written, never skipped.
-  if (sameValue(proposed.keywords, live))
+  // Ahead of the guard: a list already as asked is ok with nothing written, never skipped. A call
+  // carrying a refusal is not restated, as update_lore reads it.
+  const refusal = keywordsRefusal(sent, ctx.ids)
+  if (refusal === undefined && sameValue(proposed.keywords, live))
     return { kind: 'write', actions: [], lost: [], rows, values: {} }
   const verdicts = (await ctx.guard([{ table: 'entities', id }])).row('entities', id)
   if (verdicts.laterTurnWrote('keywords'))
@@ -309,7 +311,6 @@ async function planSetKeywords(args: KeywordArgs, ctx: WriteContext): Promise<Wr
       rows,
       values: proposed,
     }
-  const refusal = keywordsRefusal(sent, ctx.ids)
   if (refusal !== undefined) return { kind: 'refused', reason: refusal, rows, values: proposed }
   return {
     kind: 'write',

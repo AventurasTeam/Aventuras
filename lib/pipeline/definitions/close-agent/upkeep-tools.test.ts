@@ -1099,6 +1099,24 @@ describe('set_keywords', () => {
     expect(await runDeltas(f, result.actionId)).toEqual([])
   })
 
+  it('refuses a handle-holding term even when the list is already as asked', async () => {
+    const SHELF = place(27)
+    await seedEntity(f, { id: SHELF, kind: 'location', name: 'The shelf', keywords: ['c1'] })
+    const shown = [...KEYWORD_SHOWN, { table: 'entities', id: SHELF, name: 'The shelf' } as const]
+
+    const { result, calls } = await runUpkeepCalls(f, shown, [
+      { toolName: 'set_keywords', input: { id: 'l1', remove: ['c1'], ...cite() } },
+      { toolName: 'set_keywords', input: { id: 'l5', add: ['c1'], ...cite() } },
+    ])
+
+    for (const call of calls)
+      expect(call).toMatchObject({
+        result: 'rejected',
+        reason: expect.stringContaining('the keyword "c1" holds c1, an id'),
+      })
+    expect(await runDeltas(f, result.actionId)).toEqual([])
+  })
+
   it('skips a list a later turn wrote before refusing its terms', async () => {
     const { calls } = await runUpkeepCalls(f, KEYWORD_SHOWN, [
       { toolName: 'set_keywords', input: { id: 'c1', add: ['c1'], ...cite() } },
