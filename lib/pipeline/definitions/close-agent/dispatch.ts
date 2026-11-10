@@ -124,23 +124,25 @@ function landedCreate(
   return { id, name: plan.rows.find((row) => row.id === id)?.name ?? '' }
 }
 
-// The rows a close merges, threads and happenings, are named by their title.
-const MERGED_NAME_PATH = 'title'
+// The rows a close retitles, threads, happenings and lore, are named by their title.
+const TITLE_PATH = 'title'
 
-/** A landed merge's new title for its kept row, which later prose naming that row's handle reads. */
-function retitledSurvivor(
-  plan: Write,
-  verdict: ToolVerdict,
-): { id: string; name: string } | undefined {
-  const title = plan.values[MERGED_NAME_PATH]
+/**
+ * A landed title's row, a merge's kept row or a one-row update's, with the name later prose
+ * naming that row's handle reads.
+ */
+function retitledRow(plan: Write, verdict: ToolVerdict): { id: string; name: string } | undefined {
+  const title = plan.values[TITLE_PATH]
+  const [only] = plan.rows.length === 1 && plan.createdId === undefined ? plan.rows : []
+  const id = verdict.survivor?.id ?? only?.id
   if (
     verdict.result !== 'ok' ||
-    verdict.survivor === undefined ||
+    id === undefined ||
     typeof title !== 'string' ||
-    !verdict.landed.includes(MERGED_NAME_PATH)
+    !verdict.landed.includes(TITLE_PATH)
   )
     return undefined
-  return { id: verdict.survivor.id, name: title }
+  return { id, name: title }
 }
 
 // C4: a restated path wrote nothing, so the report holds no value for it, unless another action
@@ -300,7 +302,7 @@ async function* writeCall(
       : {}),
   })
   // After the record, so this call's why names keep as it stood.
-  const retitled = retitledSurvivor(plan, verdict)
+  const retitled = retitledRow(plan, verdict)
   if (retitled !== undefined) ctx.ids.show(retitled.id, retitled.name)
   return modelAnswer(verdict, created === undefined ? {} : { createdId: created.id }, ctx.ids)
 }

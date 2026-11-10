@@ -1063,6 +1063,25 @@ describe('update_lore', () => {
     expect(created?.category).toBe('seals')
   })
 
+  it('names a retitled row by its new title in a later write', async () => {
+    const run = await dispatchScripted(
+      f,
+      [
+        read,
+        update({ title: 'The Midnight Toll' }),
+        {
+          toolName: 'create_lore',
+          input: { title: 'The Toll Gate', body: 'Unlike lo1, it bars the crossing.', ...cite() },
+        },
+      ],
+      { shown: SHOWN },
+    )
+
+    expect(run.answers[2]).toEqual({ result: 'ok', id: 'lo2' })
+    const gate = (await loreRows(f)).find(({ title }) => title === 'The Toll Gate')
+    expect(gate?.body).toBe('Unlike The Midnight Toll, it bars the crossing.')
+  })
+
   it('refuses a row gone since it was read, keeping the proposed text', async () => {
     const run = await dispatchScripted(f, [update({ body: 'The toll doubles after dark.' })], {
       shown: [{ id: GONE, name: 'The Old Toll' }],
