@@ -1,5 +1,5 @@
 import type { AssistantModelMessage, ToolCallPart } from 'ai'
-import { and, asc, desc, eq, isNotNull } from 'drizzle-orm'
+import { and, asc, desc, eq, isNotNull, lte } from 'drizzle-orm'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { startManualClose } from '@/lib/actions/chapters/start-manual-close'
@@ -13,12 +13,14 @@ import { rollbackToEntry } from '@/lib/actions/story-entries/operational'
 import { redoLastAction, undoLastAction } from '@/lib/actions/story-entries/undo'
 import type { GroupOutcome, PipelineAction } from '@/lib/actions/types'
 import type {
+  GenerateStructuredResult,
   generateStructured,
   generateToolStep,
   ToolStep,
   ToolStepCall,
   ToolStepResult,
 } from '@/lib/ai'
+import { cutChapterParts } from '@/lib/chapters'
 import {
   chapters,
   characterRelationships,
@@ -42,12 +44,21 @@ import { expectRan, realDeltaActionPort, resetSingletons } from './harness'
 import {
   metadataReplyResult,
   openCloseFixture,
+  twoPartWindow,
   type CloseFixture,
 } from '../definitions/__tests__/close-fixture'
+import { chapterPartSummarySchema } from '../definitions/chapter-metadata-schema'
 import { identityTask } from '../definitions/close-agent/identity'
-import { __setCloseAgentSlots, type CloseAgentSlots } from '../definitions/close-agent/slots'
+import { lifecycleTask } from '../definitions/close-agent/lifecycle'
+import { loreTask } from '../definitions/close-agent/lore'
+import {
+  __setCloseAgentSlots,
+  PRODUCTION_CLOSE_SLOTS,
+  type CloseAgentSlots,
+} from '../definitions/close-agent/slots'
 import { threadsTask } from '../definitions/close-agent/threads'
 import { assertReplaySafe } from '../definitions/close-agent/tool'
+import { upkeepTask } from '../definitions/close-agent/upkeep'
 
 const { generateStructuredMock, generateToolStepMock } = vi.hoisted(() => ({
   generateStructuredMock: vi.fn<typeof generateStructured>(),
@@ -224,7 +235,7 @@ async function deltasOf(fx: CloseFixture, actionId: string): Promise<Delta[]> {
 
 type SeedEntity = {
   id: string
-  kind: 'character' | 'faction'
+  kind: 'character' | 'location' | 'item' | 'faction'
   name: string
   description: string
   status: 'active' | 'retired'
@@ -263,6 +274,32 @@ async function seedEntity(fx: CloseFixture, seed: SeedEntity): Promise<void> {
     fx.ctx,
   )
   if (result.status !== 'ok') throw new Error(`round trip: seed refused: ${result.reason}`)
+}
+
+// A later turn's create: anchored on the fourth reply (position 9, past E) under that turn's action.
+async function seedLaterEntity(fx: CloseFixture, seed: SeedEntity): Promise<void> {
+  const result = await applyDeltaAction(
+    {
+      action: {
+        kind: 'createEntity',
+        source: 'per_turn_classifier',
+        payload: {
+          entry: {
+            ...seed,
+            branchId: fx.branchId,
+            injectionMode: 'auto',
+            createdAt: 1_767_225_800_000,
+            updatedAt: 1_767_225_800_000,
+          },
+        },
+      },
+      actionId: 'act_close_turn_4',
+      branchId: fx.branchId,
+      entryId: fx.replyIds[3]!,
+    },
+    fx.ctx,
+  )
+  if (result.status !== 'ok') throw new Error(`round trip: later seed refused: ${result.reason}`)
 }
 
 const SYNDICATE: SeedEntity = {
@@ -395,9 +432,15 @@ function defined<T>(value: T | undefined, what: string): T {
 }
 
 async function openHarness(c: RoundTripCase): Promise<CloseHarness> {
-  const fx = await openCloseFixture()
+  const fx = await openCloseFixture(
+    c.partWindow === undefined ? undefined : { loreWindow: c.partWindow },
+  )
   await seedEntity(fx, TOBIN)
   await c.seed?.(fx)
+  if (c.partWindow !== undefined) {
+    await expectCutBeforeEnd(fx, c.partWindow)
+    answerPartCalls()
+  }
   __setCloseAgentSlots(c.slots())
   script(c.steps)
   // The bus hears every group the orchestrator dispatched, refused or not; the port has its outcome.
@@ -505,6 +548,10 @@ type RoundTripCase = {
   seed?: (fx: CloseFixture) => Promise<void>
   steps: ScriptedStep[]
   merge: boolean
+  /** lore-mgmt's window for this case, so the fixture's range cuts into parts. */
+  partWindow?: number
+  /** An arm's own expected world, in place of the shared before/closed comparison. */
+  armExpect?: Partial<Record<string, (h: CloseHarness) => Promise<void>>>
 }
 
 type RoundTripArm = {
@@ -593,6 +640,363 @@ const ABSORBED_WROTE_CASE: RoundTripCase = {
   merge: false,
 }
 
+const loreSlots = (): CloseAgentSlots => ({
+  before: [],
+  perPart: [{ kind: 'task', def: loreTask }],
+  after: [],
+})
+
+const upkeepSlots = (): CloseAgentSlots => ({
+  before: [],
+  perPart: [{ kind: 'task', def: upkeepTask }],
+  after: [],
+})
+
+const lifecycleSlots = (): CloseAgentSlots => ({
+  before: [],
+  perPart: [{ kind: 'task', def: lifecycleTask }],
+  after: [],
+})
+
+// E is position 7: part 1 holds t1-t5 and part 2 E's turn, t6-t7, so part-2 calls cite t7.
+const PART_WINDOW = twoPartWindow(7)
+
+const PART_SUMMARY: GenerateStructuredResult<{ summary: string }> = {
+  status: 'ok',
+  value: { summary: 'Wren reaches Harrow and finds the night ferry.' },
+  recoverable: [],
+}
+
+// A part call answers the part shape; the merge, and a one-part close, the metadata.
+function answerPartCalls(): void {
+  generateStructuredMock.mockImplementation(
+    async (_target, _prompt, schema) =>
+      ((schema as unknown) === chapterPartSummarySchema
+        ? PART_SUMMARY
+        : metadataReplyResult()) as never,
+  )
+}
+
+// The case's window comes from the fixture's prose; the cut must agree with the counts it stored.
+async function expectCutBeforeEnd(fx: CloseFixture, window: number): Promise<void> {
+  const endIndex = fx.entries.findIndex((entry) => entry.id === fx.replyIds[END_REPLY])
+  const stored = await fx.ctx.db
+    .select({ id: storyEntries.id, kind: storyEntries.kind, tokens: storyEntries.contentTokens })
+    .from(storyEntries)
+    .where(
+      and(
+        eq(storyEntries.branchId, fx.branchId),
+        lte(storyEntries.position, fx.entries[endIndex]!.position),
+      ),
+    )
+    .orderBy(asc(storyEntries.position))
+  const cuts = cutChapterParts(
+    stored.map(({ id, kind, tokens }) => ({ id, kind, tokens: tokens ?? 0 })),
+    window,
+  )
+  // E's turn (the player's turn before it) goes with E: a part never ends on a player's turn.
+  expect(fx.entries[endIndex - 1]!.kind).toBe('user_action')
+  expect(
+    cuts.map(({ part, startEntryId, endEntryId }) => [part, startEntryId, endEntryId]),
+    "the case window cuts the chapter just before E's turn",
+  ).toEqual([
+    [1, fx.entries[0]!.id, fx.entries[endIndex - 2]!.id],
+    [2, fx.entries[endIndex - 1]!.id, fx.entries[endIndex]!.id],
+  ])
+}
+
+function withoutEntity(state: WorldState, id: string): WorldState {
+  return {
+    ...state,
+    rows: { ...state.rows, entities: state.rows.entities.filter((row) => row.id !== id) },
+  }
+}
+
+// Named in the opening ("the ferry town of Harrow"), unplaced: Upkeep shows it as l1.
+const HARROW: SeedEntity = {
+  id: 'loc_1d2e3f40-5a6b-4c7d-8e9f-0a1b2c3d4e5f',
+  kind: 'location',
+  name: 'Harrow',
+  description: 'A ferry town low on the river.',
+  status: 'active',
+  state: { parent_location_id: null, unplaced: true },
+}
+
+// Named nowhere in the chapter: reached by search_world, so it is l2.
+const RIVER_COUNTRY: SeedEntity = {
+  id: 'loc_2e3f4051-6b7c-4d8e-9fa0-1b2c3d4e5f60',
+  kind: 'location',
+  name: 'The River Country',
+  description: 'The flat country the river drains, under a new toll.',
+  status: 'active',
+  state: { parent_location_id: null },
+}
+
+// Named in the opening ("the letter in her satchel"): Upkeep shows it as i1.
+const SATCHEL: SeedEntity = {
+  id: 'item_3f405162-7c8d-4e9f-a0b1-2c3d4e5f6071',
+  kind: 'item',
+  name: 'Satchel',
+  description: 'A courier satchel.',
+  status: 'active',
+}
+
+// Named by the sixth entry ("look for the ferryman"); a later turn creates it.
+const FERRYMAN: SeedEntity = {
+  id: 'char_40516273-8d9e-4fa0-b1c2-3d4e5f607182',
+  kind: 'character',
+  name: 'The Ferryman',
+  description: 'The ferryman the far bank talks of.',
+  status: 'active',
+}
+
+const CROSSING_HAPPENING = {
+  id: 'hap_51627384-9eaf-40b1-82c3-4e5f60718293',
+  title: 'Tobin names a courier price',
+  description: 'The ferryman asks twice the boat for a night crossing.',
+}
+
+const TOLL_LORE = {
+  id: 'lore_62738495-afb0-41c2-93d4-5f6071829304',
+  title: 'The Harrow toll',
+  body: 'The Syndicate takes a toll on every crossing at Harrow.',
+  keywords: ['toll'],
+}
+
+async function seedPlaces(fx: CloseFixture): Promise<void> {
+  await seedEntity(fx, HARROW)
+  await seedEntity(fx, RIVER_COUNTRY)
+}
+
+async function seedSatchel(fx: CloseFixture): Promise<void> {
+  await seedEntity(fx, SATCHEL)
+}
+
+// A pass's keyword on Tobin, which the keyword-author walk lets a close remove.
+async function seedTobinKeyword(fx: CloseFixture): Promise<void> {
+  await seedPassWrite(fx, 'act_close_seed_keywords', {
+    kind: 'updateEntity',
+    source: 'periodic_classifier',
+    payload: { branchId: fx.branchId, id: TOBIN.id, patch: { keywords: ['the old man'] } },
+  })
+}
+
+// A happening of the chapter's second reply, not yet common knowledge: Upkeep shows it as hp1.
+async function seedCrossing(fx: CloseFixture): Promise<void> {
+  await seedPassWrite(fx, 'act_close_seed_happening', {
+    kind: 'createHappening',
+    source: 'periodic_classifier',
+    payload: {
+      entry: {
+        ...CROSSING_HAPPENING,
+        branchId: fx.branchId,
+        occurredAtEntryId: fx.replyIds[1]!,
+        commonKnowledge: 0,
+        createdAt: 1_767_225_700_400,
+        updatedAt: 1_767_225_700_400,
+      },
+    },
+  })
+}
+
+// An earlier lore agent's row: its keyword is a machine's, so a close may remove it.
+async function seedTollLore(fx: CloseFixture): Promise<void> {
+  await seedPassWrite(fx, 'act_close_seed_lore', {
+    kind: 'createLore',
+    source: 'lore_agent',
+    payload: {
+      entry: {
+        ...TOLL_LORE,
+        branchId: fx.branchId,
+        injectionMode: 'auto',
+        createdAt: 1_767_225_700_300,
+        updatedAt: 1_767_225_700_300,
+      },
+    },
+  })
+}
+
+async function seedLaterFerryman(fx: CloseFixture): Promise<void> {
+  await seedLaterEntity(fx, FERRYMAN)
+}
+
+const LORE_CREATE = {
+  title: 'The night ferry',
+  body: 'The Harrow ferry crosses at night only when old Tobin chooses, for a price a courier pays.',
+  keywords: ['night ferry'],
+  turns: ['t5'],
+  why: 'The innkeeper says the ferry runs at night when Tobin says it runs.',
+}
+
+// lo1: the row part 1 created, which part 2's Lore start lists by title.
+const LORE_UPDATE_CREATED = {
+  id: 'lo1',
+  body: 'The Harrow ferry crosses at night only when old Tobin chooses, for a price a courier pays; he waits for fares on his barrel at the landing.',
+  turns: ['t7'],
+  why: 'Tobin sits waiting on an upturned barrel at the landing.',
+}
+
+const LORE_KEYWORDS = {
+  id: 'lo1',
+  category: 'Law',
+  keywords: { add: ['ferry toll'], remove: ['toll'] },
+  turns: ['t5'],
+  why: 'The innkeeper names the ferry price as the law of the crossing.',
+}
+
+const UPDATE_PLACE = {
+  id: 'l1',
+  condition: 'Its lamps are lit against the dusk.',
+  parent: 'l2',
+  turns: ['t1'],
+  why: 'The opening finds Harrow low on the river, its lamps lit.',
+}
+
+const UPDATE_ITEM = {
+  id: 'i1',
+  condition: 'Heavy with the letter, three days wet.',
+  description: 'A courier satchel of oiled leather.',
+  turns: ['t1'],
+  why: 'The letter in her satchel has not grown lighter in three days of rain.',
+}
+
+const SET_KEYWORDS = {
+  id: 'c1',
+  add: ['old tobin'],
+  remove: ['the old man'],
+  turns: ['t5'],
+  why: 'The innkeeper calls him old Tobin.',
+}
+
+const MARK_COMMON = {
+  id: 'hp1',
+  turns: ['t5'],
+  why: 'The innkeeper speaks of the ferry price as all of Harrow knows it.',
+}
+
+const RETIRE = {
+  id: 'c1',
+  turns: ['t7'],
+  why: 'Tobin goes into the black water off the landing and does not come up.',
+}
+
+// Lifecycle shows its rows by name: "The Ferryman" (c1) sorts before "Tobin" (c2).
+const FLAG_DUPLICATE = {
+  id: 'c2',
+  partner: 'c1',
+  turns: ['t7'],
+  why: 'The ferryman Wren goes looking for is Tobin, on his barrel at the landing.',
+}
+
+const LORE_ACROSS_PARTS_CASE: RoundTripCase = {
+  name: 'create_lore in part 1, then update_lore of that row in part 2',
+  slots: loreSlots,
+  partWindow: PART_WINDOW,
+  steps: [
+    { calls: [{ toolName: 'create_lore', input: LORE_CREATE }] },
+    // Ends part 1's Lore; the next step is part 2's.
+    { calls: [] },
+    { calls: [{ toolName: 'read_row', input: { id: 'lo1' } }] },
+    { calls: [{ toolName: 'update_lore', input: LORE_UPDATE_CREATED }] },
+  ],
+  merge: false,
+}
+
+const LORE_KEYWORDS_CASE: RoundTripCase = {
+  name: "update_lore's keywords beside a text field",
+  slots: loreSlots,
+  seed: seedTollLore,
+  steps: [
+    { calls: [{ toolName: 'read_row', input: { id: 'lo1' } }] },
+    { calls: [{ toolName: 'update_lore', input: LORE_KEYWORDS }] },
+  ],
+  merge: false,
+}
+
+const UPDATE_PLACE_CASE: RoundTripCase = {
+  name: 'update_place writing condition and a parent',
+  slots: upkeepSlots,
+  seed: seedPlaces,
+  steps: [
+    { calls: [{ toolName: 'search_world', input: { query: 'The River Country' } }] },
+    { calls: [{ toolName: 'read_row', input: { id: 'l2' } }] },
+    { calls: [{ toolName: 'update_place', input: UPDATE_PLACE }] },
+  ],
+  merge: false,
+}
+
+const UPDATE_ITEM_CASE: RoundTripCase = {
+  name: 'update_item',
+  slots: upkeepSlots,
+  seed: seedSatchel,
+  steps: [{ calls: [{ toolName: 'update_item', input: UPDATE_ITEM }] }],
+  merge: false,
+}
+
+const SET_KEYWORDS_CASE: RoundTripCase = {
+  name: 'set_keywords adding and removing',
+  slots: upkeepSlots,
+  seed: seedTobinKeyword,
+  steps: [{ calls: [{ toolName: 'set_keywords', input: SET_KEYWORDS }] }],
+  merge: false,
+}
+
+const MARK_COMMON_CASE: RoundTripCase = {
+  name: 'mark_common_knowledge',
+  slots: upkeepSlots,
+  seed: seedCrossing,
+  steps: [{ calls: [{ toolName: 'mark_common_knowledge', input: MARK_COMMON }] }],
+  merge: false,
+}
+
+const RETIRE_CASE: RoundTripCase = {
+  name: 'retire_entity',
+  slots: lifecycleSlots,
+  steps: [{ calls: [{ toolName: 'retire_entity', input: RETIRE }] }],
+  merge: false,
+}
+
+const FLAG_CASE: RoundTripCase = {
+  name: 'flag_duplicate whose partner a later turn created',
+  slots: lifecycleSlots,
+  seed: seedLaterFerryman,
+  steps: [{ calls: [{ toolName: 'flag_duplicate', input: FLAG_DUPLICATE }] }],
+  merge: false,
+  // Both rollbacks take the turn that created the partner; the flag stays on Tobin, dormant.
+  armExpect: {
+    'a rollback past E': async (h) => {
+      expect(await worldState(h.fx)).toEqual(withoutEntity(h.closed().state, FERRYMAN.id))
+      const [tobin] = await h.fx.ctx.db
+        .select()
+        .from(entities)
+        .where(and(eq(entities.branchId, h.fx.branchId), eq(entities.id, TOBIN.id)))
+      expect(tobin).toMatchObject({
+        nameCollisionFlag: 1,
+        nameCollisionPartnerId: FERRYMAN.id,
+        nameCollisionReason: 'duplicate',
+      })
+    },
+    'a rollback to E': async (h) => {
+      expect(await worldState(h.fx)).toEqual(withoutEntity(h.before, FERRYMAN.id))
+    },
+  },
+}
+
+const THREADS_ACROSS_PARTS_CASE: RoundTripCase = {
+  name: 'update_thread in part 1, then merge_threads absorbing that row in part 2',
+  slots: threadsSlots,
+  seed: seedWorld,
+  partWindow: PART_WINDOW,
+  steps: [
+    { calls: [{ toolName: 'update_thread', input: UPDATE_ABSORBED }] },
+    // Ends part 1's Threads; the next step is part 2's.
+    { calls: [] },
+    { calls: [{ toolName: 'merge_threads', input: { ...MERGE, turns: ['t7'] } }] },
+  ],
+  // The merge is refused, so the log holds no delete.
+  merge: false,
+}
+
 /** C9: every tool's landed group joins this table. */
 const CASES: readonly RoundTripCase[] = [
   STAND_IN_CASE,
@@ -635,6 +1039,15 @@ const CASES: readonly RoundTripCase[] = [
     merge: true,
   },
   ABSORBED_WROTE_CASE,
+  LORE_ACROSS_PARTS_CASE,
+  LORE_KEYWORDS_CASE,
+  UPDATE_PLACE_CASE,
+  UPDATE_ITEM_CASE,
+  SET_KEYWORDS_CASE,
+  MARK_COMMON_CASE,
+  RETIRE_CASE,
+  FLAG_CASE,
+  THREADS_ACROSS_PARTS_CASE,
 ]
 
 /** C9's arms; chapter delete's two modes join here (5.12). */
@@ -694,7 +1107,9 @@ describe.each(CASES)('the round trip of $name', (c) => {
     await arm.run(h)
 
     const expected = arm.expect === 'before-close' ? { state: h.before, log: [] } : h.closed()
-    expect(await worldState(h.fx)).toEqual(expected.state)
+    const own = c.armExpect?.[arm.name]
+    if (own === undefined) expect(await worldState(h.fx)).toEqual(expected.state)
+    else await own(h)
     expect(await deltasOf(h.fx, h.actionId())).toEqual(expected.log)
     const target = h.rolledBackTo()
     const others = (await branchLog(h.fx)).filter((d) => d.actionId !== h.actionId())
@@ -844,5 +1259,165 @@ describe('a merge of a row this close already wrote', () => {
       .from(threads)
       .where(and(eq(threads.branchId, h.fx.branchId), eq(threads.id, THREAD_B.id)))
     expect(absorbed?.description).toBe(UPDATE_ABSORBED.description)
+  })
+})
+
+describe('the round trip table', () => {
+  it("scripts every production task's write tool in some case (C9)", () => {
+    const writeTools = PRODUCTION_CLOSE_SLOTS.perPart.flatMap((entry) =>
+      entry.kind === 'task'
+        ? entry.def.tools.flatMap((tool) => (tool.kind === 'write' ? [tool.name] : []))
+        : [],
+    )
+    expect(writeTools).toEqual(
+      expect.arrayContaining([
+        'create_lore',
+        'update_lore',
+        'update_place',
+        'update_item',
+        'set_keywords',
+        'mark_common_knowledge',
+        'retire_entity',
+        'flag_duplicate',
+      ]),
+    )
+    const scripted = new Set(
+      CASES.flatMap((c) => c.steps.flatMap((step) => step.calls.map((call) => call.toolName))),
+    )
+    expect(writeTools.filter((tool) => !scripted.has(tool))).toEqual([])
+  })
+
+  it("names only real arms in a case's own expectations", () => {
+    const arms = new Set(ARMS.map((arm) => arm.name))
+    for (const c of CASES)
+      for (const name of Object.keys(c.armExpect ?? {}))
+        expect(arms.has(name), `${c.name}: ${name}`).toBe(true)
+    expect(Object.keys(FLAG_CASE.armExpect ?? {})).toEqual(['a rollback past E', 'a rollback to E'])
+  })
+})
+
+// A round trip passes whatever a case wrote: these pin that each case wrote what it is named for.
+describe('each new case lands what it names', () => {
+  async function closedHarness(c: RoundTripCase): Promise<CloseHarness> {
+    const h = await openHarness(c)
+    await h.close()
+    return h
+  }
+
+  // The report's write calls, reads left out.
+  async function writeCalls(h: CloseHarness) {
+    const [chapter] = await h.fx.ctx.db
+      .select()
+      .from(chapters)
+      .where(eq(chapters.branchId, h.fx.branchId))
+    return (chapter?.closeReport?.calls ?? []).filter(
+      (call) => call.tool !== 'read_row' && call.tool !== 'search_world',
+    )
+  }
+
+  async function entityRow(h: CloseHarness, id: string) {
+    const [row] = await h.fx.ctx.db
+      .select()
+      .from(entities)
+      .where(and(eq(entities.branchId, h.fx.branchId), eq(entities.id, id)))
+    return defined(row, `no entity ${id}`)
+  }
+
+  it('create_lore in part 1, then update_lore of that row in part 2', async () => {
+    const h = await closedHarness(LORE_ACROSS_PARTS_CASE)
+
+    expect((await writeCalls(h)).map((call) => [call.part, call.tool, call.result])).toEqual([
+      [1, 'create_lore', 'ok'],
+      [2, 'update_lore', 'ok'],
+    ])
+    const rows = await h.fx.ctx.db.select().from(lore).where(eq(lore.branchId, h.fx.branchId))
+    expect(rows.map(({ title, body, keywords }) => ({ title, body, keywords }))).toEqual([
+      { title: LORE_CREATE.title, body: LORE_UPDATE_CREATED.body, keywords: LORE_CREATE.keywords },
+    ])
+  })
+
+  it('update_thread in part 1, then merge_threads absorbing that row in part 2: the merge is refused', async () => {
+    const h = await closedHarness(THREADS_ACROSS_PARTS_CASE)
+
+    const calls = await writeCalls(h)
+    expect(calls.map((call) => [call.part, call.tool, call.result])).toEqual([
+      [1, 'update_thread', 'ok'],
+      [2, 'merge_threads', 'rejected'],
+    ])
+    expect(calls[1]!.reason).toContain('keep that thread instead')
+    const threadDeltas = (await deltasOf(h.fx, h.actionId())).filter(
+      (d) => d.targetTable === 'threads',
+    )
+    expect(threadDeltas.map((d) => `${d.op} ${d.targetId}`)).toEqual([`update ${THREAD_B.id}`])
+  })
+
+  it("update_lore: a category and setLoreKeywords' add and removal in one group", async () => {
+    const h = await closedHarness(LORE_KEYWORDS_CASE)
+
+    const [row] = await h.fx.ctx.db.select().from(lore).where(eq(lore.id, TOLL_LORE.id))
+    expect(row).toMatchObject({ category: 'Law', keywords: ['ferry toll'] })
+    expect(
+      (await deltasOf(h.fx, h.actionId())).filter((d) => d.targetTable === 'lore'),
+    ).toHaveLength(2)
+  })
+
+  it('update_place: the condition and a parent in one delta, unplaced cleared', async () => {
+    const h = await closedHarness(UPDATE_PLACE_CASE)
+
+    const harrow = await entityRow(h, HARROW.id)
+    expect(harrow.state).toMatchObject({
+      parent_location_id: RIVER_COUNTRY.id,
+      condition: UPDATE_PLACE.condition,
+    })
+    expect(harrow.state).not.toHaveProperty('unplaced')
+    expect(
+      (await deltasOf(h.fx, h.actionId())).filter((d) => d.targetId === HARROW.id),
+    ).toHaveLength(1)
+  })
+
+  it("update_item: the satchel's condition and description", async () => {
+    const h = await closedHarness(UPDATE_ITEM_CASE)
+
+    const satchel = await entityRow(h, SATCHEL.id)
+    expect(satchel.description).toBe(UPDATE_ITEM.description)
+    expect(satchel.state).toMatchObject({ condition: UPDATE_ITEM.condition })
+  })
+
+  it("set_keywords: an add and a pass's term removed, in one delta", async () => {
+    const h = await closedHarness(SET_KEYWORDS_CASE)
+
+    expect((await entityRow(h, TOBIN.id)).keywords).toEqual(['old tobin'])
+    expect(
+      (await deltasOf(h.fx, h.actionId())).filter((d) => d.targetId === TOBIN.id),
+    ).toHaveLength(1)
+  })
+
+  it('mark_common_knowledge: the happening is common knowledge', async () => {
+    const h = await closedHarness(MARK_COMMON_CASE)
+
+    const [crossing] = await h.fx.ctx.db
+      .select()
+      .from(happenings)
+      .where(eq(happenings.id, CROSSING_HAPPENING.id))
+    expect(crossing?.commonKnowledge).toBe(1)
+  })
+
+  it('retire_entity: Tobin retired, the why as his reason', async () => {
+    const h = await closedHarness(RETIRE_CASE)
+
+    expect(await entityRow(h, TOBIN.id)).toMatchObject({
+      status: 'retired',
+      retiredReason: RETIRE.why,
+    })
+  })
+
+  it("flag_duplicate: Tobin flagged as the later turn's row", async () => {
+    const h = await closedHarness(FLAG_CASE)
+
+    expect(await entityRow(h, TOBIN.id)).toMatchObject({
+      nameCollisionFlag: 1,
+      nameCollisionPartnerId: FERRYMAN.id,
+      nameCollisionReason: 'duplicate',
+    })
   })
 })
