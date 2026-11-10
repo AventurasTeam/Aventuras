@@ -678,6 +678,36 @@ describe('retire_entity', () => {
     expect(await runDeltas(f, result.actionId)).toEqual([])
   })
 
+  it('skips a row whose status the user wrote after the cited turns before refusing a turn handle in why', async () => {
+    await seedRow(f, { id: TOBIN, kind: 'character', name: 'Tobin', status: 'retired' })
+    await write(
+      f,
+      {
+        kind: 'updateEntity',
+        source: 'user_edit',
+        payload: {
+          branchId: f.branchId,
+          id: TOBIN,
+          patch: { status: 'active', retiredReason: null },
+        },
+      },
+      'act_user_edit',
+      null,
+    )
+
+    const { result, answers } = await dispatchScripted(
+      f,
+      [{ toolName: 'retire_entity', input: { id: 'c1', ...cite(['t7'], 'He drowns [t5].') } }],
+      { shown: [{ id: TOBIN, name: 'Tobin' }] },
+    )
+
+    expect(outputs(answers)).toEqual([
+      { result: 'skipped', reason: USER_EDITED_SINCE_PROSE, note: expect.any(String) },
+    ])
+    expect(await runDeltas(f, result.actionId)).toEqual([])
+    expect((await storedEntity(f, TOBIN)).status).toBe('active')
+  })
+
   it('skips a row whose status the user wrote after the cited turn, though before E', async () => {
     f = await openCloseFixture({ turns: 2 })
     await seedRow(f, { id: TOBIN, kind: 'character', name: 'Tobin', status: 'retired' })

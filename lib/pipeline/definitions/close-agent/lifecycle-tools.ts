@@ -1,6 +1,7 @@
 import { and, eq } from 'drizzle-orm'
 import { z } from 'zod'
 
+import { USER_EDITED_SINCE_PROSE } from '@/lib/actions/types'
 import { entities, type Entity } from '@/lib/db'
 import { flagStillHolds } from '@/lib/world'
 
@@ -8,6 +9,7 @@ import { charactersInSceneAfterTask } from './later-scene'
 import { turnHandleIn, turnInTextReason } from './text-checks'
 import {
   writeToolSchema,
+  type ProtectionReason,
   type ReportRow,
   type WriteContext,
   type WritePlan,
@@ -97,11 +99,16 @@ async function planRetire(args: RetireArgs, ctx: WriteContext): Promise<WritePla
   if (row.kind === 'character' && (await charactersInSceneAfterTask(ctx)).has(id))
     return refused(REFUSAL.inSceneLater, NOTE.inSceneLater)
   const verdicts = (await ctx.guard([{ table: 'entities', id }])).row('entities', id)
-  if (verdicts.laterTurnWrote('status', []))
+  const protection: ProtectionReason | undefined = verdicts.laterTurnWrote('status', [])
+    ? CLOSE_REASON.laterTurn
+    : verdicts.userWrote('status', [])
+      ? USER_EDITED_SINCE_PROSE
+      : undefined
+  if (protection !== undefined)
     return {
       kind: 'write',
       actions: [],
-      lost: [{ field: 'status', row: id, kind: 'protected', reason: CLOSE_REASON.laterTurn }],
+      lost: [{ field: 'status', row: id, kind: 'protected', reason: protection }],
       rows,
       values: RETIRED,
     }
