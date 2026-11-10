@@ -79,6 +79,7 @@ function toolCtx(over: Partial<ToolContext> = {}): ToolContext {
     ids,
     readFields: READ_FIELDS,
     survivorOf: () => undefined,
+    landedCalls: () => 0,
     ...over,
   }
 }

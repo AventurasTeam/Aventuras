@@ -252,6 +252,7 @@ function writeContext(proseEntryId = endEntryId()): WriteContext {
     ids: new CloseIds(),
     readFields: {},
     survivorOf: () => undefined,
+    landedCalls: () => 0,
     turns: [proseEntryId],
     proseEntryId,
     guard: (rows) =>
@@ -1004,6 +1005,7 @@ async function* dispatchPhase(
     ids,
     readFields: {},
     survivorOf: (table, id) => writer.survivorOf(table, id),
+    landedCalls: (tool) => writer.landedCalls(tool),
     phase,
     taskEntryIds: chapterEntryIds(),
     readSet,
@@ -1260,6 +1262,46 @@ describe('dispatchToolCall in a close phase', () => {
     ])
 
     expect(seenActions).toEqual([result.actionId])
+  })
+
+  it("hands the plan the ledger's landed calls of a tool, earlier tasks' and parts' included", async () => {
+    const counts: number[] = []
+    setup = (_ids, writer) => {
+      writer.record({
+        task: 'lore',
+        part: 1,
+        tool: 'create_note',
+        rows: [],
+        why: 'An earlier part established it.',
+        turns: [],
+        result: 'ok',
+      })
+      writer.record({
+        task: 'lore',
+        part: 1,
+        tool: 'create_note',
+        rows: [],
+        why: 'Refused.',
+        turns: [],
+        result: 'rejected',
+        reason: TEST_CAP,
+      })
+    }
+    scriptedPlan = (ctx) => {
+      counts.push(ctx.landedCalls('create_note'), ctx.landedCalls('scripted'))
+      return { kind: 'write', actions: [], lost: [], rows: entityRows(WREN), values: {} }
+    }
+
+    await runDispatch([
+      { toolName: 'scripted', input: { rows: ['c1'], ...cite(['t5']) } },
+      {
+        toolName: 'create_note',
+        input: { title: 'The toll', body: 'Paid on the far bank.', ...cite(['t5']) },
+      },
+      { toolName: 'scripted', input: { rows: ['c1'], ...cite(['t5']) } },
+    ])
+
+    expect(counts).toEqual([1, 0, 2, 1])
   })
 
   it('emits no group when nothing is left to land: skipped if protected, rejected if refused', async () => {

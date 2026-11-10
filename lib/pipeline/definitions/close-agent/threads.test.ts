@@ -294,6 +294,7 @@ async function* threadCallsPhase(
     ids,
     readFields: { thread: ['title', 'description', 'status'] },
     survivorOf: (table, id) => writer.survivorOf(table, id),
+    landedCalls: (tool) => writer.landedCalls(tool),
     phase,
     taskEntryIds: chapterEntryIds,
     readSet,
@@ -1815,6 +1816,7 @@ function threadsPromptContext(fx: CloseFixture, ids: CloseIds): TaskPromptContex
     ids,
     readFields: THREADS_READ_FIELDS,
     survivorOf: () => undefined,
+    landedCalls: () => 0,
     phase: {
       actionId,
       abortSignal: new AbortController().signal,

@@ -271,6 +271,7 @@ async function* scriptedPhase(
     ids,
     readFields: {},
     survivorOf: (table, id) => writer.survivorOf(table, id),
+    landedCalls: (tool) => writer.landedCalls(tool),
     phase,
     taskEntryIds: chapterEntryIds(f),
     readSet,
@@ -1233,6 +1234,7 @@ function promptContextFor(
     ids,
     readFields: IDENTITY_READ_FIELDS,
     survivorOf: () => undefined,
+    landedCalls: () => 0,
     phase: {
       actionId,
       abortSignal: new AbortController().signal,

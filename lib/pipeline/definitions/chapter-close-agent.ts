@@ -149,6 +149,7 @@ export async function* closeAgentPhase(
     endEntryId: range.endEntryId,
     ids,
     survivorOf: (table, id) => ledger.survivorOf(table, id),
+    landedCalls: (tool) => ledger.landedCalls(tool),
     phase: ctx,
     ledger,
     config,

@@ -52,6 +52,7 @@ function toolContextOf(ctx: DispatchContext): ToolContext {
     ids: ctx.ids,
     readFields: ctx.readFields,
     survivorOf: ctx.survivorOf,
+    landedCalls: ctx.landedCalls,
   }
 }
 
