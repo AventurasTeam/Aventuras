@@ -262,7 +262,7 @@ export const SET_KEYWORDS_SHAPE = {
     .array(z.string())
     .optional()
     .describe(
-      'Terms to remove: only a term an AI added that no longer fits. Removing a term the user added is rejected.',
+      "Terms to remove: only a term that no longer fits. You can't see who added a term; removing one the user added is rejected.",
     ),
 }
 
@@ -396,7 +396,7 @@ export const setKeywordsTool: WriteTool<typeof SET_KEYWORDS_SHAPE> = {
   kind: 'write',
   name: 'set_keywords',
   description:
-    "Adds and removes a row's keywords, the names and aliases retrieval finds it by. Add the aliases the chapter uses for a row, and a bare place's or item's first keywords. Remove only a term an AI added that no longer fits: removing a term the user added is rejected, naming it. A term is a word the prose uses, never an id.",
+    "Adds and removes a row's keywords, the names and aliases retrieval finds it by. Add the aliases the chapter uses for a row, and a bare place's or item's first keywords. Remove only a term that no longer fits. You can't see who added a term; removing one the user added is rejected, naming it. A term is a word the prose uses, never an id.",
   schema: writeToolSchema(SET_KEYWORDS_SHAPE),
   ids: { id: { shape: 'single', prefixes: ['char_', 'loc_', 'item_', 'fact_'] } },
   plan: planSetKeywords,

@@ -1097,6 +1097,16 @@ describe('set_keywords and mark_common_knowledge: the tools', () => {
       ids: { id: { shape: 'single', prefixes: ['hap_'] } },
     })
   })
+
+  it("tells the model it can't see a keyword's author", () => {
+    expect(setKeywordsTool.schema.shape.remove.description).toBe(
+      "Terms to remove: only a term that no longer fits. You can't see who added a term; removing one the user added is rejected.",
+    )
+    expect(setKeywordsTool.description).toContain(
+      "Remove only a term that no longer fits. You can't see who added a term; removing one the user added is rejected, naming it.",
+    )
+    expect(setKeywordsTool.description).not.toContain('an AI added')
+  })
 })
 
 describe('set_keywords', () => {
