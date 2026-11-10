@@ -142,10 +142,10 @@ describe('classifyRequest', () => {
       const shape = findShapeByName(name)
       if (shape === undefined) throw new Error(`registry lost ${name}`)
       const { system, user } = renderTemplate(templateId, METADATA_CONTEXT)
-      expect(classifyRequest(await requestAsSent(shape.schema, user, system))).toMatchObject({
-        lane: 'structured',
-        key: name,
-      })
+      const body = await requestAsSent(shape.schema, user, system)
+      expect(classifyRequest(body)).toMatchObject({ lane: 'structured', key: name })
+      // The E2E harness has no block to hand, so it routes on the whole prompt text.
+      expect(matchShape(null, promptText(body))?.name).toBe(name)
     })
   }
 

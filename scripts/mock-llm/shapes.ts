@@ -45,7 +45,7 @@ export type StructuredShape = {
   group: ShapeGroup
   schema: z.ZodType
   block: string
-  /** Prompt prefix separating call sites that share a block; '' when unneeded. */
+  /** Prompt prefix separating call sites that share a block; consulted only then, '' if none. */
   marker: string
 }
 

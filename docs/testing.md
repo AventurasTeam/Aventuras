@@ -507,7 +507,10 @@ calls share seven schemas. Those entries carry a `marker` as well: the
 literal text their template's user half opens with, sliced out of the
 prompt pack the app itself renders, so a template edit moves the marker
 in the same edit. The marker is consulted only when the block is
-ambiguous.
+ambiguous. The chapter close's single metadata call and its merge share
+one block and are told apart only by their user-half openers, and the
+earliest marker wins only while no sibling's marker sits in a template's
+system half, which story templates have.
 
 Three one-shot narrative controls model the boundary states a running
 turn can hit: `failNextNarrative()` makes the next streaming call return
