@@ -57,7 +57,7 @@ const titleTakenReason = (id: string): string =>
   `${LORE_REFUSAL.titleTaken}: ${id} already holds this title: keep this row's title, or extend or correct ${id} with update_lore`
 
 const bodyOverLimitReason = (length: number): string =>
-  `body is ${length} characters, over the limit of ${LORE_BODY_LIMIT}: state the rule in fewer words`
+  `body is ${length} characters as stored, ids written as names, over the limit of ${LORE_BODY_LIMIT}: state the rule in fewer words`
 
 /**
  * A lore row on the branch, other than `except`, whose title is `title`, trimmed and case-folded.
@@ -242,7 +242,7 @@ const NOTHING_SENT =
   'nothing to write: send a title, a body, a category or keywords to add or remove'
 
 const bodyGrowthReason = (length: number, base: number): string =>
-  `body is ${length} characters: a body over ${LORE_BODY_LIMIT} may grow the body as it stood before this close (${base}) by at most ${LORE_BODY_LIMIT}, so send a shorter one`
+  `body is ${length} characters as stored, ids written as names: a body over ${LORE_BODY_LIMIT} may grow the body as it stood before this close (${base}) by at most ${LORE_BODY_LIMIT}, so send a shorter one`
 
 // Never cut: a body over the bound is refused, so a user's long body is never shortened.
 function sentBody(value: string | undefined): SentText | undefined {

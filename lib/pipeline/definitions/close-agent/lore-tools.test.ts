@@ -580,11 +580,29 @@ describe('create_lore', () => {
     expect(run.answers).toEqual([
       {
         result: 'rejected',
-        reason: 'body is 1201 characters, over the limit of 1200: state the rule in fewer words',
+        reason:
+          'body is 1201 characters as stored, ids written as names, over the limit of 1200: state the rule in fewer words',
       },
       { result: 'ok', id: 'lo1' },
     ])
     expect((await loreRows(f)).map(({ body }) => body)).toEqual(['x'.repeat(1_200)])
+  })
+
+  it('measures a body as stored, a row handle written as its name, and says so', async () => {
+    await seedLore(f, { id: TOLL, title: 'The Ferry Toll' })
+
+    // Sent: 1,195 + ' lo1' = 1,199 characters; stored: 1,195 + ' The Ferry Toll' = 1,210.
+    const run = await dispatchScripted(
+      f,
+      [create({ title: 'The Toll Keeper', body: `${'x'.repeat(1_195)} lo1` })],
+      { shown: [{ id: TOLL, name: 'The Ferry Toll' }] },
+    )
+
+    expect(run.answers[0]).toEqual({
+      result: 'rejected',
+      reason:
+        'body is 1210 characters as stored, ids written as names, over the limit of 1200: state the rule in fewer words',
+    })
   })
 
   it('refuses a create whose title or body names a turn', async () => {
@@ -1046,7 +1064,7 @@ describe('update_lore', () => {
 
       expect(run.answers[1]).toEqual({
         result: 'rejected',
-        reason: `body is ${refused} characters: a body over 1200 may grow the body as it stood before this close (${stored}) by at most 1200, so send a shorter one`,
+        reason: `body is ${refused} characters as stored, ids written as names: a body over 1200 may grow the body as it stood before this close (${stored}) by at most 1200, so send a shorter one`,
       })
       expect(run.answers[2]).toEqual({ result: 'ok' })
       expect((await storedLore(f, FERRY)).body).toBe('x'.repeat(lands))
@@ -1054,7 +1072,7 @@ describe('update_lore', () => {
   )
 
   const growthRefusal = (length: number, base: number): string =>
-    `body is ${length} characters: a body over 1200 may grow the body as it stood before this close (${base}) by at most 1200, so send a shorter one`
+    `body is ${length} characters as stored, ids written as names: a body over 1200 may grow the body as it stood before this close (${base}) by at most 1200, so send a shorter one`
 
   it("grows a body by 1200 in all across one part's calls, from the body before the close", async () => {
     await seedLore(f, { id: FERRY, title: 'The Night Ferry', body: 'b'.repeat(100) })
@@ -1213,7 +1231,7 @@ describe('update_lore', () => {
         {
           field: 'body',
           reason:
-            'body is 1301 characters: a body over 1200 may grow the body as it stood before this close (100) by at most 1200, so send a shorter one',
+            'body is 1301 characters as stored, ids written as names: a body over 1200 may grow the body as it stood before this close (100) by at most 1200, so send a shorter one',
         },
       ],
     })
