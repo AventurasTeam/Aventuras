@@ -48,7 +48,12 @@ import {
   type HandlerCtx,
   type HandlerOutcome,
 } from '../delta/registry'
-import { USER_EDITED_SINCE_PROSE, userEditsSinceProse, wroteField } from '../delta/user-precedence'
+import {
+  USER_EDITED_SINCE_PROSE,
+  userEditsSince,
+  userEditsSinceProse,
+  wroteField,
+} from '../delta/user-precedence'
 import type { DbCtx, DeltaSource, ProseEntryId } from '../types'
 import { branchPlaces, parentChainRefusal } from './parent-chain-check'
 import { loadStoryPlace } from '../story-entries/story-place'
@@ -661,6 +666,56 @@ const flagUndo = (row: Entity) => ({
   nameCollisionReason: row.nameCollisionReason,
 })
 
+// No delta says which pair a clear answered: a user edit whose undo held this pair's flag did.
+async function userResolvedPair(ctx: DbCtx, a: Entity, b: Entity): Promise<boolean> {
+  for (const [row, other] of [
+    [a, b],
+    [b, a],
+  ] as const) {
+    const edits = await userEditsSince(ctx, row.branchId, 'entities', row.id, 0)
+    if (
+      edits.some(
+        ({ undoPayload }) =>
+          undoPayload?.nameCollisionFlag === 1 && undoPayload.nameCollisionPartnerId === other.id,
+      )
+    )
+      return true
+  }
+  return false
+}
+
+/**
+ * chapter-close.md → 3f: a close's duplicate re-marks the pair's live flag, restates one already
+ * duplicate, and never asks a pair the user resolved, either row, any time. Null: raise as any.
+ */
+async function duplicateOutcome(
+  ctx: DbCtx,
+  current: Entity,
+  partner: Entity,
+  edits: readonly Delta[],
+): Promise<HandlerOutcome | null> {
+  if (flagStillHolds(current, partner)) {
+    if (current.nameCollisionReason === 'duplicate')
+      return noopRefusal('already-flagged', 'restated')
+    if (wroteField(edits, 'entities', 'nameCollisionFlag', []))
+      return noopRefusal(USER_EDITED_SINCE_PROSE, null)
+    return columnsWriteOutcome(
+      current.branchId,
+      current.id,
+      flagColumns(partner.id, 'duplicate'),
+      flagUndo(current),
+      ctx,
+    )
+  }
+  // The close's plan writes the row that holds the pair's flag, so landing here is its slip.
+  if (flagStillHolds(partner, current))
+    return partner.nameCollisionReason === 'duplicate'
+      ? noopRefusal('already-flagged', 'restated')
+      : noopRefusal('flag-held-by-partner', null)
+  if (await userResolvedPair(ctx, current, partner)) return noopRefusal('pair-resolved', null)
+  return null
+}
+
 /** classifier.md → Names: the name joins the keywords and the flag names the holder, for merging. */
 async function renameClashOutcome(
   ctx: HandlerCtx,
@@ -734,7 +789,7 @@ export const renameEntityHandler: ActionHandler = async (action, branchId, ctx) 
   )
 }
 
-/** edge-cases.md → Layer B. */
+/** edge-cases.md → Layer B; chapter-close.md → 3f for a close's duplicate. */
 export const raiseCollisionFlagHandler: ActionHandler = async (action, branchId, ctx) => {
   if (action.kind !== 'raiseCollisionFlag')
     throw new Error(`handler/kind mismatch: expected 'raiseCollisionFlag', got '${action.kind}'`)
@@ -749,6 +804,10 @@ export const raiseCollisionFlagHandler: ActionHandler = async (action, branchId,
   if (partner.kind !== current.kind) return noopRefusal('partner-not-of-kind', null)
   const edits =
     proseEntryId === null ? [] : await userEditsSinceProse(ctx, bid, 'entities', id, proseEntryId)
+  if (reason === 'duplicate') {
+    const outcome = await duplicateOutcome(ctx, current, partner, edits)
+    if (outcome !== null) return outcome
+  }
   const refused = await raiseRefusal(ctx, current, partner, reason, edits)
   if (refused !== null) {
     // Any other live flag is the one-flag-per-row rule; only the same flag again is a stored value.

@@ -3,6 +3,7 @@ import { afterEach, describe, expect, it } from 'vitest'
 
 import {
   branches,
+  COLLISION_REASONS,
   deltas,
   entities,
   entityStateSchemaForKind,
@@ -22,7 +23,13 @@ import {
   getDiagnosticsSnapshot,
 } from '@/lib/diagnostics'
 import { entitiesStore } from '@/lib/stores'
-import { collisionPairOf, entityDeleteActions, entityMergeActions, storyPlaceOf } from '@/lib/world'
+import {
+  collisionPairOf,
+  entityDeleteActions,
+  entityKeepActions,
+  entityMergeActions,
+  storyPlaceOf,
+} from '@/lib/world'
 
 import { registerEntities } from './register'
 import {
@@ -2382,6 +2389,225 @@ describe('raiseCollisionFlag', () => {
 
   it("serializes on the entity's row key", () => {
     expect(lockKeysFor(raise())).toEqual(['entities:br_1:char_1'])
+  })
+})
+
+// chapter-close.md → 3f: a close's duplicate needs no namesake pair, re-marks a live flag the pair
+// holds, and never asks a pair the user resolved (world.md → Keep as distinct).
+describe('raiseCollisionFlag: duplicate', () => {
+  const KAEL: NewEntity = { ...CHAR, status: 'active', name: 'Kael', keywords: [] }
+  const STRANGER: NewEntity = {
+    ...CHAR,
+    id: 'char_2',
+    status: 'active',
+    name: 'the hooded stranger',
+    keywords: [],
+  }
+  // Kael's namesake through its keyword, so a flag for another reason holds on the pair.
+  const ALIAS: NewEntity = { ...STRANGER, keywords: ['Kael'] }
+  const THIRD: NewEntity = { ...KAEL, id: 'char_3' }
+  const NO_FLAG = [0, null, null]
+
+  const flagNaming = (partnerId: string, reason: CollisionReason) => ({
+    nameCollisionFlag: 1,
+    nameCollisionPartnerId: partnerId,
+    nameCollisionReason: reason,
+  })
+  const raiseOf = (
+    id: string,
+    partnerId: string,
+    reason: CollisionReason = 'duplicate',
+  ): PipelineAction => ({
+    kind: 'raiseCollisionFlag',
+    source: 'chapter_close',
+    payload: { branchId: 'br_1', id, partnerId, reason, proseEntryId: REVEAL },
+  })
+  const editOf = (id: string, patch: Record<string, unknown>): PipelineAction => ({
+    kind: 'updateEntity',
+    source: 'user_edit',
+    payload: { branchId: 'br_1', id, patch },
+  })
+  const flagOf = async (db: StateDb, id: string) => {
+    const row = await rowFor(db, id)
+    return [row.nameCollisionFlag, row.nameCollisionPartnerId, row.nameCollisionReason]
+  }
+  const other = (id: string): string => (id === 'char_1' ? 'char_2' : 'char_1')
+
+  /** World's Keep on char_1 and char_2, as the dialog writes it: one user group of flag clears. */
+  async function keepPair(ctx: Ctx, db: StateDb, actionId = 'act_keep'): Promise<void> {
+    const rows = await db.select().from(entities)
+    const lookup = collisionPairOf(rows, ['char_1', 'char_2'])
+    if ('miss' in lookup) throw new Error(`not a flagged pair: ${lookup.miss}`)
+    const actions = entityKeepActions({ branchId: 'br_1', pair: lookup.pair, branchEntities: rows })
+    expect(await applyDeltaActionGroup(actions, { actionId, branchId: 'br_1' }, ctx)).toEqual({
+      status: 'ok',
+    })
+  }
+
+  it('raises on two rows with no namesake basis, and reverses to no flag', async () => {
+    const { db, ctx } = await setup()
+    await db.insert(entities).values([KAEL, STRANGER])
+    await writeRevealProse(ctx)
+
+    expect((await apply(ctx, raiseOf('char_1', 'char_2'), 'act_f')).status).toBe('ok')
+
+    expect(await flagOf(db, 'char_1')).toEqual([1, 'char_2', 'duplicate'])
+    expect(await undoPayloadOf(db, 'act_f')).toEqual({
+      nameCollisionFlag: 0,
+      nameCollisionPartnerId: null,
+      nameCollisionReason: null,
+    })
+    expect(await reverseReplayDeltas('act_f', ctx)).toBe(1)
+    expect(await flagOf(db, 'char_1')).toEqual(NO_FLAG)
+  })
+
+  it.each(COLLISION_REASONS.filter((reason) => reason !== 'duplicate'))(
+    'still needs a namesake pair for %s',
+    async (reason) => {
+      const { db, ctx } = await setup()
+      await db.insert(entities).values([KAEL, STRANGER])
+      await writeRevealProse(ctx)
+
+      expect(await apply(ctx, raiseOf('char_1', 'char_2', reason), 'act_f')).toEqual(
+        noopBecause('not-namesakes'),
+      )
+      expect(await flagOf(db, 'char_1')).toEqual(NO_FLAG)
+    },
+  )
+
+  // Either row can hold the flag the Keep clears, and either can take the raise.
+  it.each<[string, string, 'before' | 'after']>([
+    ['char_1', 'char_1', 'before'],
+    ['char_1', 'char_2', 'before'],
+    ['char_2', 'char_1', 'before'],
+    ['char_2', 'char_2', 'before'],
+    ['char_1', 'char_1', 'after'],
+    ['char_1', 'char_2', 'after'],
+    ['char_2', 'char_1', 'after'],
+    ['char_2', 'char_2', 'after'],
+  ])(
+    'refuses a pair the user kept: flag on %s, raised from %s, kept %s the prose',
+    async (holder, raised, when) => {
+      const { db, ctx } = await setup()
+      await db
+        .insert(entities)
+        .values(
+          [KAEL, STRANGER].map((row) =>
+            row.id === holder ? { ...row, ...flagNaming(other(holder), 'duplicate') } : row,
+          ),
+        )
+      if (when === 'after') await writeRevealProse(ctx)
+      await keepPair(ctx, db)
+      if (when === 'before') await writeRevealProse(ctx)
+
+      expect(await apply(ctx, raiseOf(raised, other(raised)), 'act_f')).toEqual(
+        noopBecause('pair-resolved'),
+      )
+      expect(await flagOf(db, 'char_1')).toEqual(NO_FLAG)
+      expect(await flagOf(db, 'char_2')).toEqual(NO_FLAG)
+    },
+  )
+
+  it('does not read a re-point of the flag as resolving the pair', async () => {
+    const { db, ctx } = await setup()
+    await db.insert(entities).values([{ ...KAEL, ...flagNaming('char_2', 'distinct') }, STRANGER])
+    // The user moves the question to a row the branch doesn't have: dormant, and no clear.
+    expect(
+      (await apply(ctx, editOf('char_1', { nameCollisionPartnerId: 'char_gone' }), 'act_u')).status,
+    ).toBe('ok')
+    await writeRevealProse(ctx)
+
+    expect((await apply(ctx, raiseOf('char_1', 'char_2'), 'act_f')).status).toBe('ok')
+    expect(await flagOf(db, 'char_1')).toEqual([1, 'char_2', 'duplicate'])
+  })
+
+  it('lifts the refusal when the Keep is undone, and re-marks the flag it restores', async () => {
+    const { db, ctx } = await setup()
+    await db.insert(entities).values([KAEL, { ...ALIAS, ...flagNaming('char_1', 'distinct') }])
+    await writeRevealProse(ctx)
+    await keepPair(ctx, db)
+    expect(await apply(ctx, raiseOf('char_2', 'char_1'), 'act_f1')).toEqual(
+      noopBecause('pair-resolved'),
+    )
+
+    expect(await reverseReplayDeltas('act_keep', ctx)).toBe(1)
+    expect(await flagOf(db, 'char_2')).toEqual([1, 'char_1', 'distinct'])
+    expect((await apply(ctx, raiseOf('char_2', 'char_1'), 'act_f2')).status).toBe('ok')
+    expect(await flagOf(db, 'char_2')).toEqual([1, 'char_1', 'duplicate'])
+  })
+
+  it('re-marks a live flag on the pair as duplicate, partner kept, and reverses to its reason', async () => {
+    const { db, ctx } = await setup()
+    await db.insert(entities).values([KAEL, { ...ALIAS, ...flagNaming('char_1', 'distinct') }])
+    await writeRevealProse(ctx)
+
+    expect((await apply(ctx, raiseOf('char_2', 'char_1'), 'act_f')).status).toBe('ok')
+
+    expect(await flagOf(db, 'char_2')).toEqual([1, 'char_1', 'duplicate'])
+    expect(await flagOf(db, 'char_1')).toEqual(NO_FLAG)
+    expect(await undoPayloadOf(db, 'act_f')).toEqual({
+      nameCollisionFlag: 1,
+      nameCollisionPartnerId: 'char_1',
+      nameCollisionReason: 'distinct',
+    })
+    expect(await reverseReplayDeltas('act_f', ctx)).toBe(1)
+    expect(await flagOf(db, 'char_2')).toEqual([1, 'char_1', 'distinct'])
+  })
+
+  it('writes nothing for a pair already flagged duplicate, raised from either row', async () => {
+    const { db, ctx } = await setup()
+    await db.insert(entities).values([{ ...KAEL, ...flagNaming('char_2', 'duplicate') }, STRANGER])
+    await writeRevealProse(ctx)
+
+    expect(await apply(ctx, raiseOf('char_1', 'char_2'), 'act_f1')).toEqual(
+      noopBecause('already-flagged'),
+    )
+    expect(await apply(ctx, raiseOf('char_2', 'char_1'), 'act_f2')).toEqual(
+      noopBecause('already-flagged'),
+    )
+    expect(await flagOf(db, 'char_1')).toEqual([1, 'char_2', 'duplicate'])
+    expect(await flagOf(db, 'char_2')).toEqual(NO_FLAG)
+    expect(await undoPayloadsOf(db, 'act_f1')).toEqual([])
+    expect(await undoPayloadsOf(db, 'act_f2')).toEqual([])
+  })
+
+  it('refuses the row whose partner holds the flag for another reason', async () => {
+    const { db, ctx } = await setup()
+    await db.insert(entities).values([KAEL, { ...ALIAS, ...flagNaming('char_1', 'distinct') }])
+    await writeRevealProse(ctx)
+
+    expect(await apply(ctx, raiseOf('char_1', 'char_2'), 'act_f')).toEqual(
+      noopBecause('flag-held-by-partner'),
+    )
+    expect(await flagOf(db, 'char_1')).toEqual(NO_FLAG)
+    expect(await flagOf(db, 'char_2')).toEqual([1, 'char_1', 'distinct'])
+  })
+
+  it('keeps a flag the user re-pointed at the partner after the prose', async () => {
+    const { db, ctx } = await setup()
+    await db
+      .insert(entities)
+      .values([KAEL, { ...ALIAS, ...flagNaming('char_3', 'distinct') }, THIRD])
+    await writeRevealProse(ctx)
+    expect(
+      (await apply(ctx, editOf('char_2', { nameCollisionPartnerId: 'char_1' }), 'act_u')).status,
+    ).toBe('ok')
+
+    expect(await apply(ctx, raiseOf('char_2', 'char_1'), 'act_f')).toEqual(userWonOver)
+    expect(await flagOf(db, 'char_2')).toEqual([1, 'char_1', 'distinct'])
+  })
+
+  it('refuses a row whose live flag names a third row', async () => {
+    const { db, ctx } = await setup()
+    await db
+      .insert(entities)
+      .values([KAEL, { ...ALIAS, ...flagNaming('char_3', 'distinct') }, THIRD])
+    await writeRevealProse(ctx)
+
+    expect(await apply(ctx, raiseOf('char_2', 'char_1'), 'act_f')).toEqual(
+      noopBecause('already-flagged'),
+    )
+    expect(await flagOf(db, 'char_2')).toEqual([1, 'char_3', 'distinct'])
   })
 })
 
