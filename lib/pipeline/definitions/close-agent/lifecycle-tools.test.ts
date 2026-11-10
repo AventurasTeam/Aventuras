@@ -169,10 +169,7 @@ async function appendTurnEntry(
   )
 }
 
-/**
- * On a two-turn fixture (t1–t5): appends t6 and t7, E being t7, so a write made before this call
- * lands after t5 and before E. Returns dispatchScripted's options for that chapter.
- */
+/** On a two-turn fixture (t1–t5): appends t6, t7 (E), so an earlier write lands before E. */
 async function appendLateTurns(
   f: CloseFixture,
 ): Promise<{ endEntryId: string; taskEntryIds: string[] }> {

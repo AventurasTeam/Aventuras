@@ -127,9 +127,9 @@ function sentPlacement(args: PlaceArgs): SentPlacement | undefined {
 }
 
 /**
- * chapter-close.md → 3f: a place's or an item's condition and description, and a place's placement,
- * as one updateEntity; what can land does (C11). A placement's rules run before precedence, as
- * placeLocation judges them; a text's handle check after, so a protected text reads skipped.
+ * chapter-close.md → 3f: condition, description and (places) placement as one updateEntity; what
+ * can land does (C11). Placement rules run before precedence, the text handle check after, so a
+ * protected text reads skipped.
  */
 async function planUpkeepWrite<A extends { readonly id: string }>(
   kind: UpkeepKind,
@@ -276,9 +276,9 @@ type MarkArgs = z.output<WriteToolSchema<typeof MARK_COMMON_KNOWLEDGE_SHAPE>>
 const NO_TERMS = 'add and remove are both empty: send the terms to add, to remove, or both'
 
 /**
- * chapter-close.md → 3f Keywords: one keywords write; who added a term, and what the user removed
- * after the prose, the action judges as it lands. A later turn's list skips the call whole, since an
- * undo restores the whole prior list (parked.md).
+ * chapter-close.md → 3f Keywords: one keywords write; the action judges authorship and user
+ * removals as it lands. A later turn's list skips the call whole: an undo restores the prior list
+ * (parked.md).
  */
 async function planSetKeywords(args: KeywordArgs, ctx: WriteContext): Promise<WritePlan> {
   const { id } = args
@@ -297,8 +297,7 @@ async function planSetKeywords(args: KeywordArgs, ctx: WriteContext): Promise<Wr
   if (sent.add.length === 0 && sent.remove.length === 0)
     return { kind: 'refused', reason: NO_TERMS, rows }
 
-  // Ahead of the guard: a list already as asked is ok with nothing written, never skipped. A call
-  // carrying a refusal is not restated, as update_lore reads it.
+  // Ahead of the guard: a list already as asked is ok, not skipped. A refused call is not restated.
   const refusal = keywordsRefusal(sent, ctx.ids)
   if (refusal === undefined && sameValue(proposed.keywords, live))
     return { kind: 'write', actions: [], lost: [], rows, values: {} }

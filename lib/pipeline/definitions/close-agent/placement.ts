@@ -71,9 +71,8 @@ function branchPlaces(ctx: WriteContext) {
 }
 
 /**
- * data-model.md → LocationState shape: placeLocation's rules in its order, ahead of the write, since
- * updateEntity refuses only a loop and fails the whole call. The story's place binds a close as it
- * binds a pass.
+ * data-model.md → LocationState shape: placeLocation's rules in order, before the write, since
+ * updateEntity refuses only a loop and fails the whole call. The story's place binds a close too.
  */
 export async function planPlacement(
   row: Entity,

@@ -322,11 +322,8 @@ const WORLD_SHOWN: readonly ShownRow[] = [
 
 const QUAY_DESCRIPTION = 'Stone steps down to the river.'
 
-/**
- * The quay top level with a condition; Harrow top level; the old keep, retired after the keep yard
- * was placed in it; the cellar in the quay; the marsh disabled; the landing, where the story is;
- * Varn unplaced; a satchel; Tobin.
- */
+// Quay (top level, condition); Harrow; old keep (retired after the keep yard was placed in it);
+// cellar in the quay; marsh disabled; landing (the story's place); Varn unplaced; satchel; Tobin.
 async function seedWorld(fx: CloseFixture): Promise<void> {
   await seedEntity(fx, {
     id: QUAY,
@@ -945,12 +942,9 @@ const KEYWORD_SHOWN: readonly ShownRow[] = [
   { table: 'entities', id: OLD_TOBIN, name: 'Tobin' },
 ]
 
-/**
- * The mill: a pass's two terms. The harbour: a pass's 'quay', then the user's 'harbour'. The tower:
- * a wizard row, no create delta. The gate: a pass's 'north gate', then a user merge's union, logged
- * as the merge logs it (a user_edit updateEntity on the kept row). The ferry token: a pass's two
- * terms, then the user's removal of 'crossing'. Tobin: a pass's term, then a later turn's append.
- */
+// Mill: a pass's two terms. Harbour: pass 'quay', then user 'harbour'. Tower: wizard row, no create
+// delta. Gate: pass 'north gate', then a user merge's union (user_edit updateEntity, kept row).
+// Ferry token: pass's two terms, user removes 'crossing'. Tobin: pass term, later-turn append.
 async function seedKeywordRows(fx: CloseFixture): Promise<void> {
   await seedEntity(fx, {
     id: MILL,

@@ -256,10 +256,7 @@ function sentKeywords(value: UpdateArgs['keywords']): SentKeywords | undefined {
   return add.length === 0 && remove.length === 0 ? undefined : { add, remove }
 }
 
-/**
- * The body before this close's first write to the row, '' for a row it created: the growth bound
- * holds per close, so a chain of calls can't grow a body by the bound each time.
- */
+/** The body before this close's first write, '' for a created row: the growth bound holds per close. */
 async function bodyBeforeClose(ctx: WriteContext, row: Lore): Promise<string> {
   const own = await ctx.db
     .select({ op: deltas.op, undoPayload: deltas.undoPayload })

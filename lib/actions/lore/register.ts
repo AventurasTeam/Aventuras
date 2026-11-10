@@ -190,9 +190,8 @@ const updateHandler: ActionHandler = async (action, branchId, ctx) => {
 }
 
 /**
- * chapter-close.md → 3a "Existing rows too": adds and removals in one `keywords` write, checked as
- * it lands. Only a machine's term goes. `keywords` alone, no `embeddingStale`: keywords aren't
- * embedded, and beside an `updateLore` the group would write that column twice and be refused.
+ * chapter-close.md → 3a "Existing rows too": one `keywords` write; only a machine's term goes.
+ * No `embeddingStale`: keywords aren't embedded, and beside an `updateLore` it would be refused.
  */
 const setKeywordsHandler: ActionHandler = async (action, branchId, ctx) => {
   if (action.kind !== 'setLoreKeywords')

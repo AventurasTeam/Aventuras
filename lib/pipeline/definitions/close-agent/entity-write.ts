@@ -75,10 +75,9 @@ export function fieldVerdicts(row: RowVerdicts, fields: readonly string[]): Fiel
 }
 
 /**
- * The one `updateEntity` a close writes on a row: `state.*` paths set or removed on a copy of the
- * current state, beside the top-level columns (a group refuses two `state` writes on one row).
- * Stored paths, and removed paths the row lacks, stay out of `fields`; none left → the caller emits
- * no action. `state` is replaced whole: read it under the close's gate.
+ * The one `updateEntity` a close writes on a row: `state.*` paths set or removed on a state copy
+ * (a group refuses two `state` writes on one row). Stored or already-absent paths stay out of
+ * `fields`; none left → no action. `state` is replaced whole: read it under the close's gate.
  */
 export function entityWriteAction(
   row: Entity,

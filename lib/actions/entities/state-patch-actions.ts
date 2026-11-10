@@ -425,8 +425,7 @@ export const appendEntityKeywordsHandler: ActionHandler = async (action, branchI
 
 /**
  * The removed term a live flag's pair rests on once `next` lands, with the pair's other row's name,
- * or null (world.md → Surfacing: a keyword can make two rows namesakes). A flag already dormant
- * isn't this write's to keep.
+ * or null (world.md → Surfacing: a keyword can make two rows namesakes). A dormant flag is skipped.
  */
 async function flagPairTerm(
   ctx: DbCtx,

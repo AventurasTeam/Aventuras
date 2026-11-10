@@ -125,10 +125,7 @@ function modelsWithLoreWindow(tokens: number) {
   }
 }
 
-/**
- * A lore-mgmt window whose half is one token under the stored counts of the first `entryCount`
- * entries openCloseFixture writes: those entries cut into two parts, the last turn alone.
- */
+/** A lore-mgmt window one token under half the first `entryCount` entries' counts: two parts. */
 export function twoPartWindow(entryCount: number): number {
   const counts = [countTokens(OPENING)]
   for (let turn = 0; counts.length < entryCount; turn++)

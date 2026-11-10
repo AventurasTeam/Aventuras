@@ -90,10 +90,7 @@ export function keywordUserAddedReason(term: string): string {
   return `keyword-user-added: ${term}`
 }
 
-/**
- * `keyword-pairs-flag: <term> (pairs this row with <other>, …)` — a removal that would break a
- * live flag's pair, naming the open question (entities only).
- */
+/** `keyword-pairs-flag: <term> (pairs this row with <other>, …)` — a removal breaking a flag pair. */
 export function keywordPairsFlagReason(term: string, other: string): string {
   return `keyword-pairs-flag: ${term} (pairs this row with ${other}, an open question for the user)`
 }

@@ -126,10 +126,7 @@ function landedCreate(
 // The rows a close retitles, threads, happenings and lore, are named by their title.
 const TITLE_PATH = 'title'
 
-/**
- * A landed title's row, a merge's kept row or a one-row update's, with the name later prose
- * naming that row's handle reads.
- */
+/** A landed title's row (a merge's kept row or a one-row update's), with the name prose uses. */
 function retitledRow(plan: Write, verdict: ToolVerdict): { id: string; name: string } | undefined {
   const title = plan.values[TITLE_PATH]
   const [only] = plan.rows.length === 1 && plan.createdId === undefined ? plan.rows : []

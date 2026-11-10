@@ -163,10 +163,9 @@ async function setSceneOf(
 }
 
 /**
- * The part's prose names Harrow, the ferry and Tobin off the scene, and the inn, the satchel, the
- * landing and the letter besides. t3's scene holds the satchel at the inn, t7's is the landing. The
- * seal is named only past the part, the letter is retired, the River Country is never named. Mara
- * is a bare character in t3's scene, and the retired letter is in it too: neither is shown.
+ * The part names Harrow, the ferry, Tobin, the inn, the satchel, the landing and the letter; the
+ * seal only past it, the River Country never. t3's scene holds the satchel at the inn, t7's the
+ * landing. Mara (bare) and the retired letter are in t3's scene but not shown.
  */
 async function seedUpkeepWorld(fx: CloseFixture): Promise<void> {
   await putEntityRow(fx, {
