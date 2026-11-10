@@ -2,6 +2,7 @@ import { and, asc, eq } from 'drizzle-orm'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 
 import { applyDeltaAction } from '@/lib/actions/delta/apply-delta-action'
+import { undoLastAction } from '@/lib/actions/story-entries/undo'
 import {
   USER_EDITED_SINCE_PROSE,
   type GroupOutcome,
@@ -353,7 +354,7 @@ describe('retire_entity and flag_duplicate: the tools', () => {
 
   it("tells the model flag_duplicate's rule: both rows' flags taken, or a pair kept apart", () => {
     expect(flagDuplicateTool.description).toContain(
-      "A pair already flagged is marked as the same, whichever row holds the flag. A row holds one flag, so it is refused when both rows' flags already name other rows, and for a pair the user already kept apart.",
+      "A pair already flagged is marked as the same, whichever row holds the flag, or both when each row's flag names the other. A row holds one flag, so it is refused when both rows' flags already name other rows, and for a pair the user already kept apart.",
     )
     expect(flagDuplicateTool.description).not.toContain('third row')
   })
@@ -1363,6 +1364,176 @@ describe('flag_duplicate', () => {
         { table: 'entities', id: GONE, name: 'Ansel' },
       ],
       values: { nameCollisionPartnerId: 'Ansel' },
+    })
+  })
+
+  // Through the writers: the classifier's alike flag on Tobin, then its rename of the stranger to
+  // Tobin, which clashes and lands a name-taken flag back. Each row's live flag names the other.
+  describe('a pair whose rows flag each other', () => {
+    const renameClash = (anchor: { actionId: string; entryId: string | null }) =>
+      write(
+        f,
+        {
+          kind: 'renameEntity',
+          source: 'periodic_classifier',
+          payload: { branchId: f.branchId, id: STRANGER, name: 'Tobin', proseEntryId: null },
+        },
+        anchor.actionId,
+        anchor.entryId,
+      )
+
+    async function flagEachOther(): Promise<void> {
+      await seedRow(f, {
+        id: TOBIN,
+        kind: 'character',
+        name: 'Tobin',
+        flag: { partnerId: STRANGER, reason: 'alike' },
+      })
+      await renameClash({ actionId: 'act_rename', entryId: null })
+    }
+
+    async function expectFlagsEachOther(): Promise<void> {
+      const tobin = await storedEntity(f, TOBIN)
+      const stranger = await storedEntity(f, STRANGER)
+      expect(flagOf(tobin)).toEqual([1, STRANGER, 'alike'])
+      expect(flagOf(stranger)).toEqual([1, TOBIN, 'name-taken'])
+      expect(flagStillHolds(tobin, stranger) && flagStillHolds(stranger, tobin)).toBe(true)
+    }
+
+    beforeEach(async () => {
+      await seedRow(f, { id: STRANGER, kind: 'character', name: 'the hooded stranger' })
+    })
+
+    it.each([
+      { order: 'Tobin first', input: { id: 'c1', partner: 'c2' } },
+      { order: 'the stranger first', input: { id: 'c2', partner: 'c1' } },
+    ])(
+      're-marks both flags duplicate in one group, $order, and CTRL-Z restores both',
+      async ({ input }) => {
+        await flagEachOther()
+        await expectFlagsEachOther()
+
+        const { result, answers, calls } = await dispatchScripted(f, [flagCall(input)], {
+          shown: SHOWN,
+        })
+
+        expect(outputs(answers)).toEqual([{ result: 'ok' }])
+        expect(flagOf(await storedEntity(f, TOBIN))).toEqual([1, STRANGER, 'duplicate'])
+        expect(flagOf(await storedEntity(f, STRANGER))).toEqual([1, TOBIN, 'duplicate'])
+        const log = await runDeltas(f, result.actionId)
+        expect(log.map((d) => [d.targetId, d.op, d.source, d.entryId]).sort()).toEqual(
+          [
+            [TOBIN, 'update', 'chapter_close', endEntryId(f)],
+            [STRANGER, 'update', 'chapter_close', endEntryId(f)],
+          ].sort(),
+        )
+        expect(calls).toHaveLength(1)
+        expect(calls[0]).toMatchObject({ result: 'ok' })
+
+        expect(await undoLastAction(f.branchId, f.ctx)).toEqual({ status: 'ok' })
+        await expectFlagsEachOther()
+      },
+    )
+
+    it("re-marks Tobin's flag and reports the stranger's lost when the user wrote its flag after the cited turn", async () => {
+      // The user kept the stranger apart from a namesake; the rename's clash came after.
+      await seedRow(f, { id: CLERK, kind: 'character', name: 'the hooded stranger' })
+      await write(
+        f,
+        {
+          kind: 'raiseCollisionFlag',
+          source: 'periodic_classifier',
+          payload: {
+            branchId: f.branchId,
+            id: STRANGER,
+            partnerId: CLERK,
+            reason: 'name-taken',
+            proseEntryId: null,
+          },
+        },
+        'act_namesake',
+        null,
+      )
+      await keepPair(f, STRANGER, CLERK)
+      await flagEachOther()
+      await expectFlagsEachOther()
+
+      const { answers } = await dispatchScripted(f, [flagCall()], { shown: SHOWN })
+
+      expect(outputs(answers)).toEqual([
+        {
+          result: 'ok',
+          notWritten: ['nameCollisionFlag', 'nameCollisionPartnerId', 'nameCollisionReason'].map(
+            (field) => ({
+              field,
+              row: 'c2',
+              reason: USER_EDITED_SINCE_PROSE,
+              note: expect.any(String),
+            }),
+          ),
+        },
+      ])
+      expect(flagOf(await storedEntity(f, TOBIN))).toEqual([1, STRANGER, 'duplicate'])
+      expect(flagOf(await storedEntity(f, STRANGER))).toEqual([1, TOBIN, 'name-taken'])
+    })
+
+    it.each([
+      { order: 'Tobin first', input: { id: 'c1', partner: 'c2' } },
+      { order: 'the stranger first', input: { id: 'c2', partner: 'c1' } },
+    ])(
+      "re-marks Tobin's flag and reports the stranger's lost when a later turn's rename wrote it, $order",
+      async ({ input }) => {
+        await seedRow(f, {
+          id: TOBIN,
+          kind: 'character',
+          name: 'Tobin',
+          flag: { partnerId: STRANGER, reason: 'alike' },
+        })
+        await renameClash({ actionId: 'act_close_turn_5', entryId: laterReplyId(f) })
+        await expectFlagsEachOther()
+
+        const { answers } = await dispatchScripted(f, [flagCall(input)], { shown: SHOWN })
+
+        expect(outputs(answers)).toEqual([
+          {
+            result: 'ok',
+            notWritten: [
+              {
+                field: 'nameCollisionPartnerId',
+                row: 'c2',
+                reason: CLOSE_REASON.laterTurn,
+                note: expect.any(String),
+              },
+            ],
+          },
+        ])
+        expect(flagOf(await storedEntity(f, TOBIN))).toEqual([1, STRANGER, 'duplicate'])
+        expect(flagOf(await storedEntity(f, STRANGER))).toEqual([1, TOBIN, 'name-taken'])
+      },
+    )
+
+    it('re-marks only the side not yet duplicate, then answers a pair duplicate on both ok writing nothing', async () => {
+      await seedRow(f, {
+        id: TOBIN,
+        kind: 'character',
+        name: 'Tobin',
+        flag: { partnerId: STRANGER, reason: 'duplicate' },
+      })
+      await renameClash({ actionId: 'act_rename', entryId: null })
+
+      const { result, answers, calls } = await dispatchScripted(
+        f,
+        [flagCall(), flagCall({ id: 'c2', partner: 'c1' })],
+        { shown: SHOWN },
+      )
+
+      expect(outputs(answers)).toEqual([{ result: 'ok' }, { result: 'ok' }])
+      expect(flagOf(await storedEntity(f, TOBIN))).toEqual([1, STRANGER, 'duplicate'])
+      expect(flagOf(await storedEntity(f, STRANGER))).toEqual([1, TOBIN, 'duplicate'])
+      const log = await runDeltas(f, result.actionId)
+      expect(log.map((d) => d.targetId)).toEqual([STRANGER])
+      expect(calls[1]).toMatchObject({ result: 'ok' })
+      expect(calls[1]).not.toHaveProperty('values')
     })
   })
 })

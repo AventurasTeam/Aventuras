@@ -728,9 +728,10 @@ conservative bias as the sub-jobs above:
   namesake pair
   ([`world.md → Surfacing`](../ui/screens/world/world.md#surfacing)).
   When either row already holds a live flag naming the other, the close
-  re-marks that flag `duplicate` on the row that holds it, so the
-  resolve dialog gives the close's verdict, and one already `duplicate`
-  stays as it is. Otherwise the flag goes on whichever row of the pair
+  re-marks that flag `duplicate` on the row that holds it, both rows'
+  flags in one write when each names the other, so every resolve dialog
+  gives the close's verdict. A flag already `duplicate` stays as it is,
+  and each row's precedence guards its own flag. Otherwise the flag goes on whichever row of the pair
   is free: the row the call flags (its `id`), or, when that row's live flag names
   a third row, its partner. It is refused when both rows' live flags
   name other rows or the user already resolved the pair, or each close

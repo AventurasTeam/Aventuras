@@ -672,7 +672,11 @@ None open: Implementation notes record each answer.
   with no field, while the dialog kept a reason that may point the
   other way. A re-marked flag no longer goes dormant on a rename. The
   re-mark runs before the resolved-pair read, so it holds after an old
-  Keep too. 3f and the authorship row say so.
+  Keep too. When each row's live flag names the other, both are
+  re-marked in one call and one group, which CTRL-Z restores together,
+  each under its own row's guards, so a protected row's flag is
+  reported lost while the other lands (developer decision, 2026-11-10,
+  from the slice review). 3f and the authorship row say so.
 - **A lore body is bounded by its growth (developer decision,
   2026-11-10).** A body the close writes is at most 1,200 characters,
   the embedder's whole-text bound, or longer only by growth: per close,

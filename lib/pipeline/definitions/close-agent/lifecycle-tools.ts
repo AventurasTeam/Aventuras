@@ -9,6 +9,8 @@ import { charactersInSceneAfterTask } from './later-scene'
 import { turnHandleIn, turnInTextReason } from './text-checks'
 import {
   writeToolSchema,
+  type LostField,
+  type PlannedAction,
   type ProtectionReason,
   type WriteContext,
   type WritePlan,
@@ -166,49 +168,46 @@ async function planFlagDuplicate(args: FlagArgs, ctx: WriteContext): Promise<Wri
       values: proposed,
       note: NOTE.otherKind,
     }
-  const [flagged, other] = (await flagGoesOnPartner(ctx, row, partner))
-    ? [partner, row]
-    : [row, partner]
+  // Each row's live flag names the other: both re-mark, so neither strip keeps its old reason.
+  const sides: readonly (readonly [Entity, Entity])[] =
+    flagStillHolds(row, partner) && flagStillHolds(partner, row)
+      ? [
+          [row, partner],
+          [partner, row],
+        ]
+      : [(await flagGoesOnPartner(ctx, row, partner)) ? [partner, row] : [row, partner]]
+  const [[flagged, other]] = sides
   const rows = [entityReportRow(ctx, flagged.id, flagged), entityReportRow(ctx, other.id, other)]
-  const values = { [PARTNER_PATH]: other.id }
   // Not userWrote: a Keep after the cited turn must reach the handler's resolved-pair read.
-  const verdicts = (await ctx.guard([{ table: 'entities', id: flagged.id }])).row(
-    'entities',
-    flagged.id,
-  )
-  if (verdicts.laterTurnWrote('nameCollisionFlag', []))
-    return {
-      kind: 'write',
-      actions: [],
-      lost: [
-        { field: PARTNER_PATH, row: flagged.id, kind: 'protected', reason: CLOSE_REASON.laterTurn },
-      ],
-      rows,
-      values,
-    }
-  return {
-    kind: 'write',
-    actions: [
-      {
+  const guard = await ctx.guard(sides.map(([side]) => ({ table: 'entities', id: side.id })))
+  const actions: PlannedAction[] = []
+  const lost: LostField[] = []
+  for (const [side, sidePartner] of sides) {
+    if (guard.row('entities', side.id).laterTurnWrote('nameCollisionFlag', []))
+      lost.push({
+        field: PARTNER_PATH,
+        row: side.id,
+        kind: 'protected',
+        reason: CLOSE_REASON.laterTurn,
+      })
+    else
+      actions.push({
         action: {
           kind: 'raiseCollisionFlag',
           source: 'chapter_close',
           payload: {
             branchId: ctx.branchId,
-            id: flagged.id,
-            partnerId: other.id,
+            id: side.id,
+            partnerId: sidePartner.id,
             reason: 'duplicate',
             proseEntryId: ctx.proseEntryId,
           },
         },
         fields: FLAG_FIELDS,
-        row: flagged.id,
-      },
-    ],
-    lost: [],
-    rows,
-    values,
+        row: side.id,
+      })
   }
+  return { kind: 'write', actions, lost, rows, values: { [PARTNER_PATH]: other.id } }
 }
 
 /** chapter-close.md → Phase 4: `retireEntity`, its reason the call's why. */
@@ -227,7 +226,7 @@ export const flagDuplicateTool: WriteTool<typeof FLAG_DUPLICATE_SHAPE> = {
   kind: 'write',
   name: 'flag_duplicate',
   description:
-    "Flag two rows of one kind that the chapter shows are one person, place or thing under two names (the hooded stranger who turns out to be Kael), for the user to merge; it never merges them. A pair already flagged is marked as the same, whichever row holds the flag. A row holds one flag, so it is refused when both rows' flags already name other rows, and for a pair the user already kept apart.",
+    "Flag two rows of one kind that the chapter shows are one person, place or thing under two names (the hooded stranger who turns out to be Kael), for the user to merge; it never merges them. A pair already flagged is marked as the same, whichever row holds the flag, or both when each row's flag names the other. A row holds one flag, so it is refused when both rows' flags already name other rows, and for a pair the user already kept apart.",
   schema: writeToolSchema(FLAG_DUPLICATE_SHAPE),
   ids: {
     id: { shape: 'single', prefixes: ENTITY_PREFIXES },
