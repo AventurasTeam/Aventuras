@@ -1,9 +1,15 @@
 import { describe, expect, it } from 'vitest'
 
+import type { StoryEntry } from '@/lib/db'
+
 import { cutChapterParts, partTokenLimit, UNKNOWN_WINDOW_PART_TOKENS } from './cut-parts'
 
 // A reply unless a test says otherwise: a reply is a unit of its own.
-const entry = (id: string, tokens: number, kind = 'ai_reply') => ({ id, kind, tokens })
+const entry = (id: string, tokens: number, kind: StoryEntry['kind'] = 'ai_reply') => ({
+  id,
+  kind,
+  tokens,
+})
 const turn = (id: string, tokens: number) => entry(id, tokens, 'user_action')
 
 describe('partTokenLimit', () => {
