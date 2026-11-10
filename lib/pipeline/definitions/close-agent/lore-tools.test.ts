@@ -3,14 +3,15 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 
 import { applyDeltaAction } from '@/lib/actions/delta/apply-delta-action'
 import type { GroupOutcome, GuardRow } from '@/lib/actions/types'
-import { deltas, lore, type Lore } from '@/lib/db'
+import { clampEmbeddedText } from '@/lib/classifier'
+import { branches, deltas, lore, type Lore } from '@/lib/db'
 import { resetAllStores } from '@/lib/stores'
 
 import { createReadSet } from './common-checks'
 import { dispatchToolCall, type DispatchContext } from './dispatch'
 import type { CloseIds } from './ids'
 import { CloseLedgerWriter } from './ledger'
-import { createLoreTool } from './lore-tools'
+import { createLoreTool, LORE_BODY_LIMIT } from './lore-tools'
 import { readRowTool } from './read-tools'
 import { turnInTextReason } from './text-checks'
 import { assertReplaySafe, type CloseTool, type ReadFields } from './tool'
@@ -234,6 +235,13 @@ describe('create_lore: the tool', () => {
 
   it('takes no id, under its canon name', () => {
     expect(createLoreTool).toMatchObject({ kind: 'write', name: 'create_lore', ids: {} })
+  })
+
+  it('holds a body to the embedder’s whole-text bound', () => {
+    const over = 'x'.repeat(LORE_BODY_LIMIT + 1)
+    expect(clampEmbeddedText({ name: '', description: over }).description).toHaveLength(
+      LORE_BODY_LIMIT,
+    )
   })
 })
 
@@ -465,6 +473,50 @@ describe('create_lore', () => {
       [TOLL, 'Paid at the far bank.'],
       [expect.stringMatching(MINTED), 'The ferryman collects The Ferry Toll at the far bank.'],
     ])
+  })
+
+  it('finds a taken title on its own branch only', async () => {
+    await f.ctx.db
+      .insert(branches)
+      .values({ id: 'br_other', storyId: f.storyId, name: 'other', createdAt: 1 })
+    await f.ctx.db.insert(lore).values({
+      id: TOLL,
+      branchId: 'br_other',
+      title: 'The Ferry Toll',
+      body: 'Paid at the near bank.',
+      injectionMode: 'auto',
+      createdAt: 1,
+      updatedAt: 1,
+    })
+
+    const run = await dispatchScripted(f, [
+      create({ title: 'The Ferry Toll', body: 'Paid at the far bank.' }),
+    ])
+
+    expect(run.answers[0]).toEqual({ result: 'ok', id: 'lo1' })
+    expect((await loreRows(f)).map(({ title }) => title)).toEqual(['The Ferry Toll'])
+  })
+
+  it('lands a blank category as null, and leaves it and empty keywords out of values', async () => {
+    const run = await dispatchScripted(f, [
+      create({
+        title: 'The Ferry Toll',
+        body: 'Paid at the far bank.',
+        category: '  ',
+        keywords: [],
+      }),
+    ])
+
+    expect(run.calls[0]!.values).toEqual({ title: 'The Ferry Toll', body: 'Paid at the far bank.' })
+    expect((await loreRows(f)).map(({ category }) => category)).toEqual([null])
+  })
+
+  it('cuts a category at 120 characters, as a title is cut', async () => {
+    await dispatchScripted(f, [
+      create({ title: 'The Ferry Toll', body: 'Paid at the far bank.', category: 'k'.repeat(130) }),
+    ])
+
+    expect((await loreRows(f)).map(({ category }) => category)).toEqual(['k'.repeat(120)])
   })
 
   it('lands a body at the limit and refuses one a character over, naming its length', async () => {
