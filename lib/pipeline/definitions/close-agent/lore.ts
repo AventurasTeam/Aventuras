@@ -53,7 +53,7 @@ async function startLore(ctx: TaskPromptContext): Promise<TaskStart<LoreShow> | 
         bodyChars: LORE_BODY_LIMIT,
       },
     },
-    // C11: a title is no field update_lore writes whole.
+    // C11: titles alone are not every field update_lore writes, so a row takes a read_row first.
     seeds: [],
   }
 }

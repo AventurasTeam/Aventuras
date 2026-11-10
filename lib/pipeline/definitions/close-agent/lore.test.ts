@@ -167,7 +167,7 @@ describe('loreTask', () => {
     expect(ids.nameOf('lo3')).toBe('The Aetherium')
   })
 
-  // C11: a title list shows no field update_lore writes whole, so its rows need a read_row.
+  // C11: titles alone are not every field update_lore writes, so a row takes a read_row first.
   it('seeds no row as read, though it shows every title', async () => {
     await putLoreRow(fx, { id: LORE_ROWS.eldrin, title: 'House Eldrin' })
 
