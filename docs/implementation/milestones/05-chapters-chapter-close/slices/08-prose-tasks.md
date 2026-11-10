@@ -630,6 +630,20 @@ None open: Implementation notes record each answer.
   Turn handles stay chapter-wide (`showTurns` once over the range), so
   `t12` names one entry in every part. A task's entries are its
   context's `taskEntryIds`, which replaced `chapterEntryIds`.
+- **A part leaves alone what a later part's turns wrote (developer
+  decision, 2026-11-10, from the slice review).** The row guard reads
+  C12 past the task's last turn (`lastTaskTurn`), the part's for a
+  per-part task and E for the last part and a chapter-wide task, as the
+  scene check does, while the group still anchors on E (C1). The close's
+  own earlier writes anchor on E but are `chapter_close`, which C12
+  never counts, so a part's second write of a field lands; a phase-0
+  fact anchored in a later part's turn counts, being that turn's
+  evidence. It gives up an earlier part correcting a wrong later write.
+- **A reply that didn't report its scene counts as one (known limit,
+  developer decision, 2026-11-10, from the slice review).** A reply
+  missing `<scene_entities>` inherits the previous scene
+  (`lib/piggyback/apply.ts:81`) and counts as in-scene-later, which errs
+  toward not retiring.
 - **The resolved-pair read counts every user clear of the pair
   (developer decision, 2026-11-10).** Any `user_edit` delta on either
   row whose undo payload holds `nameCollisionFlag: 1` and the other row
