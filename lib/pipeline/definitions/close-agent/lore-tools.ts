@@ -59,19 +59,23 @@ const titleTakenReason = (id: string): string =>
 const bodyOverLimitReason = (length: number): string =>
   `body is ${length} characters, over the limit of ${LORE_BODY_LIMIT}: state the rule in fewer words`
 
-/** A lore row on the branch, other than `except`, whose title is `title`, trimmed and case-folded. */
+/**
+ * A lore row on the branch, other than `except`, whose title is `title`, trimmed and case-folded.
+ * A stored title is cut as a sent one is, since a user's title may run past the cut.
+ */
 async function loreTitled(
   ctx: WriteContext,
   title: string,
   except?: string,
 ): Promise<{ id: string; title: string } | undefined> {
-  const key = normalizeTerm(title)
+  const titleKey = (text: string): string => normalizeTerm(TEXT_BOUNDS.title(text))
+  const key = titleKey(title)
   const rows = await ctx.db
     .select({ id: lore.id, title: lore.title })
     .from(lore)
     .where(eq(lore.branchId, ctx.branchId))
     .orderBy(asc(lore.id))
-  return rows.find((row) => row.id !== except && normalizeTerm(row.title) === key)
+  return rows.find((row) => row.id !== except && titleKey(row.title) === key)
 }
 
 export const CREATE_LORE_SHAPE = {

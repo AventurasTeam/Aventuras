@@ -538,6 +538,17 @@ describe('create_lore', () => {
     expect((await loreRows(f)).map(({ title }) => title)).toEqual(['The Ferry Toll'])
   })
 
+  it('refuses a title a lore row holds past the 120-character cut, the stored title cut alike', async () => {
+    await seedLore(f, { id: TOLL, title: 't'.repeat(127) })
+
+    const run = await dispatchScripted(f, [
+      create({ title: 't'.repeat(127), body: 'Crossing after dark costs a courier purse.' }),
+    ])
+
+    expect(run.answers[0]).toMatchObject({ result: 'rejected', reason: 'title-taken' })
+    expect((await loreRows(f)).map(({ id }) => id)).toEqual([TOLL])
+  })
+
   it('lands a blank category as null, and leaves it and empty keywords out of values', async () => {
     const run = await dispatchScripted(f, [
       create({
@@ -1128,6 +1139,18 @@ describe('update_lore', () => {
     expect(await storedLore(f, TOLL)).toMatchObject({ title: 'The Ferry Toll', category: 'tolls' })
     // Shown by name, so prose naming lo2 stores the holder's title.
     expect(runIds?.nameOfId(FERRY)).toBe('The Night Ferry')
+  })
+
+  it('refuses a title another lore row holds past the 120-character cut, the stored title cut alike', async () => {
+    await seedLore(f, { id: FERRY, title: 't'.repeat(127) })
+    const taken = `title-taken: lo2 already holds this title: keep this row's title, or extend or correct lo2 with update_lore`
+
+    const run = await dispatchScripted(f, [read, update({ title: 't'.repeat(127) })], {
+      shown: SHOWN,
+    })
+
+    expect(run.answers[1]).toEqual({ result: 'rejected', reason: taken })
+    expect((await storedLore(f, TOLL)).title).toBe('The Ferry Toll')
   })
 
   it('measures each row from its own body before the close', async () => {
