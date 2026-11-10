@@ -47,6 +47,8 @@ const RULE_EXPRESSIONS: readonly string[] = [
   'PLACE_REFUSAL.retiredParent',
   'PLACE_REFUSAL.storyInside',
   'chainRefusal',
+  'keywordUserAddedReason(term)',
+  'keywordPairsFlagReason(term, other)',
 ]
 
 // A floor, not a count: fewer means the glob or the parse stopped reading the calls.

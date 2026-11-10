@@ -1,9 +1,10 @@
 import { and, asc, eq, or, sql } from 'drizzle-orm'
 
-import { deltas } from '@/lib/db'
-import { normalizeTerm } from '@/lib/keyword-terms'
+import { deltas, type Delta } from '@/lib/db'
+import { newTerms, normalizeTerm } from '@/lib/keyword-terms'
 
-import { isUserOriginatedSource, type DbCtx, type DeltaSource } from '../types'
+import { isUserOriginatedSource, type DbCtx, type DeltaSource, type ProseEntryId } from '../types'
+import { userEditsSinceProse } from './user-precedence'
 
 /** Who added a live keyword: a delta's source, or `unlogged` when no delta accounts for it. */
 export type KeywordAuthor = DeltaSource | 'unlogged'
@@ -93,4 +94,57 @@ export function keywordUserAddedReason(term: string): string {
  */
 export function keywordPairsFlagReason(term: string, other: string): string {
   return `keyword-pairs-flag: ${term} (pairs this row with ${other}, an open question for the user)`
+}
+
+// Matched only against terms the live list lacks, so a hit is one the user removed.
+export function priorTerms(edits: readonly Delta[]): Set<string> {
+  const terms = new Set<string>()
+  for (const edit of edits) {
+    const prior = edit.undoPayload?.keywords
+    if (!Array.isArray(prior)) continue
+    for (const term of prior) if (typeof term === 'string') terms.add(normalizeTerm(term))
+  }
+  return terms
+}
+
+/** A close's keyword edit, planned against the live list. */
+export type KeywordEdit =
+  /** A removal names a term the user added, or one no delta accounts for. */
+  | { kind: 'user-term'; term: string }
+  /** Nothing to write; `userDropped` when every add was a term the user removed after the prose. */
+  | { kind: 'unchanged'; userDropped: boolean }
+  /** `next`: the kept terms in stored order, then the adds. */
+  | { kind: 'changed'; next: string[]; removed: string[] }
+
+/**
+ * cadence.md → User edits and classifier writes: adds are the terms the list lacks, less any the
+ * user removed after the prose; removals match by `normalizeTerm`, every spelling alike, and a term
+ * the list lacks is ignored.
+ */
+export async function planKeywordEdit(
+  ctx: DbCtx,
+  row: { table: 'entities' | 'lore'; branchId: string; id: string; keywords: readonly string[] },
+  edit: { add: readonly string[]; remove: readonly string[]; proseEntryId: ProseEntryId },
+): Promise<KeywordEdit> {
+  const { table, branchId, id, keywords } = row
+  const fresh = newTerms(keywords, edit.add)
+  const userRemoved =
+    fresh.length > 0 && edit.proseEntryId !== null
+      ? priorTerms(await userEditsSinceProse(ctx, branchId, table, id, edit.proseEntryId))
+      : new Set<string>()
+  const added = fresh.filter((term) => !userRemoved.has(normalizeTerm(term)))
+  const dropped = new Set(edit.remove.map(normalizeTerm).filter((key) => key !== ''))
+  const removed = keywords.filter((term) => dropped.has(normalizeTerm(term)))
+  if (removed.length > 0) {
+    const guarded = await protectedKeywordTerms(ctx, branchId, table, id, keywords)
+    const term = removed.find((stored) => guarded.has(normalizeTerm(stored)))
+    if (term !== undefined) return { kind: 'user-term', term }
+  }
+  if (added.length === 0 && removed.length === 0)
+    return { kind: 'unchanged', userDropped: fresh.length > 0 }
+  return {
+    kind: 'changed',
+    next: [...keywords.filter((term) => !dropped.has(normalizeTerm(term))), ...added],
+    removed,
+  }
 }

@@ -25,7 +25,12 @@ import { entitiesStore } from '@/lib/stores'
 import { collisionPairOf, entityDeleteActions, entityMergeActions, storyPlaceOf } from '@/lib/world'
 
 import { registerEntities } from './register'
-import { applyDeltaAction, applyDeltaActionGroup, lockKeysFor } from '../delta/apply-delta-action'
+import {
+  applyDeltaAction,
+  applyDeltaActionGroup,
+  applyDeltaActionGroupWithOutcomes,
+  lockKeysFor,
+} from '../delta/apply-delta-action'
 import { __resetRegistry } from '../delta/registry'
 import { reverseReplayDeltas } from '../delta/reverse-replay'
 import { USER_EDITED_SINCE_PROSE } from '../delta/user-precedence'
@@ -2670,4 +2675,251 @@ describe("a retirement's status and reason, one field", () => {
       expect(await statusOf(db)).toEqual([entry.status, 'a note'])
     },
   )
+})
+
+// chapter-close.md → 3f, Keywords: a close adds and removes in one write; only a machine's term goes.
+describe('setEntityKeywords', () => {
+  const PROSE = 'e_keywords'
+  const writeProse = (ctx: Ctx) =>
+    writeProseEntry(ctx, PROSE, 'The wanderer crossed the ford at dusk.')
+  const ACTIVE: NewEntity = { ...CHAR, status: 'active' }
+  const LANDED = { status: 'landed' }
+
+  const setKeywords = (add: string[], remove: string[]): PipelineAction => ({
+    kind: 'setEntityKeywords',
+    source: 'chapter_close',
+    payload: { branchId: 'br_1', id: 'char_1', add, remove, proseEntryId: PROSE },
+  })
+
+  // A pass's create: its terms are the machine's, so a close may remove them.
+  async function passCreate(ctx: Ctx, entry: NewEntity) {
+    const result = await apply(
+      ctx,
+      { kind: 'createEntity', source: 'periodic_classifier', payload: { entry } },
+      `act_c_${entry.id}`,
+    )
+    expect(result.status).toBe('ok')
+  }
+
+  // The group path keeps a noop's mark, which the single path drops.
+  async function outcomeOf(ctx: Ctx, action: PipelineAction) {
+    const result = await applyDeltaActionGroupWithOutcomes(
+      [action],
+      { actionId: 'act_k', branchId: 'br_1' },
+      ctx,
+    )
+    if (result.status !== 'ok') throw new Error(`group refused: ${result.reason}`)
+    return result.outcomes[0]
+  }
+
+  const keywordsOf = async (db: StateDb) => (await rowFor(db, 'char_1')).keywords
+
+  it('adds and removes in one delta, the kept terms first', async () => {
+    const { db, ctx } = await setup()
+    await passCreate(ctx, { ...ACTIVE, keywords: ['the knight', 'the drunk'] })
+    await writeProse(ctx)
+    expect(await outcomeOf(ctx, setKeywords(['the wanderer'], ['The Drunk']))).toStrictEqual(LANDED)
+    expect(await keywordsOf(db)).toEqual(['the knight', 'the wanderer'])
+    expect(entitiesStore.getById('char_1')?.keywords).toEqual(['the knight', 'the wanderer'])
+    expect(await undoPayloadsOf(db, 'act_k')).toEqual([{ keywords: ['the knight', 'the drunk'] }])
+  })
+
+  it('removes every spelling of a term alike', async () => {
+    const { db, ctx } = await setup()
+    await passCreate(ctx, { ...ACTIVE, keywords: ['The Gate', 'the knight', 'the gate '] })
+    expect(await outcomeOf(ctx, setKeywords([], ['THE GATE']))).toStrictEqual(LANDED)
+    expect(await keywordsOf(db)).toEqual(['the knight'])
+  })
+
+  it('ignores a removal the list lacks while the adds land', async () => {
+    const { db, ctx } = await setup()
+    await passCreate(ctx, { ...ACTIVE, keywords: ['the knight'] })
+    expect(await outcomeOf(ctx, setKeywords(['the wanderer'], ['the ghost']))).toStrictEqual(LANDED)
+    expect(await keywordsOf(db)).toEqual(['the knight', 'the wanderer'])
+  })
+
+  it('reverses to the list it replaced', async () => {
+    const { db, ctx } = await setup()
+    await passCreate(ctx, { ...ACTIVE, keywords: ['the knight', 'the drunk'] })
+    expect(await outcomeOf(ctx, setKeywords(['the wanderer'], ['the drunk']))).toStrictEqual(LANDED)
+    expect(await reverseReplayDeltas('act_k', ctx)).toBe(1)
+    expect(await keywordsOf(db)).toEqual(['the knight', 'the drunk'])
+  })
+
+  it('restates a call that changes nothing, marked restated', async () => {
+    const { db, ctx } = await setup()
+    await passCreate(ctx, { ...ACTIVE, keywords: ['the knight'] })
+    expect(await outcomeOf(ctx, setKeywords([' THE KNIGHT '], ['the ghost']))).toStrictEqual({
+      status: 'noop',
+      reason: 'no-keyword-change',
+      mark: 'restated',
+    })
+    expect(await undoPayloadsOf(db, 'act_k')).toEqual([])
+  })
+
+  it('no-ops on a row that is gone, marked gone', async () => {
+    const { ctx } = await setup()
+    expect(await outcomeOf(ctx, setKeywords(['the wanderer'], []))).toStrictEqual({
+      status: 'noop',
+      reason: 'keyword target entities br_1:char_1 not found',
+      mark: 'gone',
+    })
+  })
+
+  it('refuses to remove a term the user added, naming it, and writes nothing', async () => {
+    const { db, ctx } = await setup()
+    await passCreate(ctx, { ...ACTIVE, keywords: ['the knight'] })
+    expect(
+      (await apply(ctx, userPatch({ keywords: ['the knight', 'ser kael'] }), 'act_u')).status,
+    ).toBe('ok')
+    await writeProse(ctx)
+    expect(await outcomeOf(ctx, setKeywords(['the wanderer'], ['Ser Kael']))).toStrictEqual({
+      status: 'noop',
+      reason: 'keyword-user-added: ser kael',
+    })
+    expect(await keywordsOf(db)).toEqual(['the knight', 'ser kael'])
+    expect(await undoPayloadsOf(db, 'act_k')).toEqual([])
+  })
+
+  it('refuses to remove a term on a row no create delta logged', async () => {
+    const { db, ctx } = await setup()
+    await db.insert(entities).values({ ...ACTIVE, keywords: ['the knight'] })
+    expect(await outcomeOf(ctx, setKeywords([], ['the knight']))).toStrictEqual({
+      status: 'noop',
+      reason: 'keyword-user-added: the knight',
+    })
+    expect(await keywordsOf(db)).toEqual(['the knight'])
+  })
+
+  it("removes a term a pass appended to the user's row, keeping the user's own", async () => {
+    const { db, ctx } = await setup()
+    await create(ctx, { ...ACTIVE, keywords: ['ser kael'] })
+    const append: PipelineAction = {
+      kind: 'appendEntityKeywords',
+      source: 'per_turn_classifier',
+      payload: { branchId: 'br_1', id: 'char_1', keywords: ['the drunk'], proseEntryId: null },
+    }
+    expect((await apply(ctx, append, 'act_a')).status).toBe('ok')
+    expect(await outcomeOf(ctx, setKeywords([], ['the drunk']))).toStrictEqual(LANDED)
+    expect(await keywordsOf(db)).toEqual(['ser kael'])
+  })
+
+  it('keeps out an add the user removed after the prose while the other terms land', async () => {
+    const { db, ctx } = await setup()
+    await passCreate(ctx, { ...ACTIVE, keywords: ['the knight', 'the drunk'] })
+    await writeProse(ctx)
+    await apply(ctx, userPatch({ keywords: ['the knight'] }), 'act_u')
+    expect(await outcomeOf(ctx, setKeywords(['The Drunk', 'the wanderer'], []))).toStrictEqual(
+      LANDED,
+    )
+    expect(await keywordsOf(db)).toEqual(['the knight', 'the wanderer'])
+  })
+
+  it('skips a call whose every add the user removed after the prose', async () => {
+    const { db, ctx } = await setup()
+    await passCreate(ctx, { ...ACTIVE, keywords: ['the knight', 'the drunk'] })
+    await writeProse(ctx)
+    await apply(ctx, userPatch({ keywords: ['the knight'] }), 'act_u')
+    expect(await outcomeOf(ctx, setKeywords(['the drunk'], []))).toStrictEqual({
+      status: 'noop',
+      reason: USER_EDITED_SINCE_PROSE,
+    })
+    expect(await keywordsOf(db)).toEqual(['the knight'])
+  })
+
+  it('restores an add the user removed before the prose', async () => {
+    const { db, ctx } = await setup()
+    await passCreate(ctx, { ...ACTIVE, keywords: ['the knight', 'the drunk'] })
+    await apply(ctx, userPatch({ keywords: ['the knight'] }), 'act_u')
+    await writeProse(ctx)
+    expect(await outcomeOf(ctx, setKeywords(['the drunk'], []))).toStrictEqual(LANDED)
+    expect(await keywordsOf(db)).toEqual(['the knight', 'the drunk'])
+  })
+
+  // world.md → Surfacing: a keyword naming another row makes the two namesakes.
+  describe('a keyword a flag pair rests on', () => {
+    const STRANGER: NewEntity = {
+      ...ACTIVE,
+      name: 'the hooded stranger',
+      keywords: ['Mira', 'the stranger'],
+    }
+    const MIRA: NewEntity = { ...ACTIVE, id: 'char_2', name: 'Mira', keywords: [] }
+    const BRAM: NewEntity = { ...ACTIVE, id: 'char_3', name: 'Bram', keywords: [] }
+
+    const flag = (db: StateDb, id: string, partnerId: string, reason: CollisionReason) =>
+      db
+        .update(entities)
+        .set({
+          nameCollisionFlag: 1,
+          nameCollisionPartnerId: partnerId,
+          nameCollisionReason: reason,
+        })
+        .where(eq(entities.id, id))
+
+    const flagOf = async (db: StateDb, id: string) => {
+      const row = await rowFor(db, id)
+      return [row.nameCollisionFlag, row.nameCollisionPartnerId, row.nameCollisionReason]
+    }
+
+    async function seed(ctx: Ctx, db: StateDb) {
+      await passCreate(ctx, STRANGER)
+      await db.insert(entities).values([MIRA, BRAM])
+    }
+
+    it('refuses to remove the keyword a live flag pairs its row by, naming it', async () => {
+      const { db, ctx } = await setup()
+      await seed(ctx, db)
+      await flag(db, 'char_1', 'char_2', 'name-taken')
+      expect(await outcomeOf(ctx, setKeywords([], ['mira']))).toStrictEqual({
+        status: 'noop',
+        reason:
+          'keyword-pairs-flag: Mira (pairs this row with Mira, an open question for the user)',
+      })
+      expect(await keywordsOf(db)).toEqual(['Mira', 'the stranger'])
+      expect(await flagOf(db, 'char_1')).toEqual([1, 'char_2', 'name-taken'])
+    })
+
+    it('refuses it when the partner holds the flag', async () => {
+      const { db, ctx } = await setup()
+      await seed(ctx, db)
+      await flag(db, 'char_2', 'char_1', 'alike')
+      expect(await outcomeOf(ctx, setKeywords([], ['Mira']))).toStrictEqual({
+        status: 'noop',
+        reason:
+          'keyword-pairs-flag: Mira (pairs this row with Mira, an open question for the user)',
+      })
+      expect(await keywordsOf(db)).toEqual(['Mira', 'the stranger'])
+    })
+
+    it('names the removed term the pair rests on, not the first one removed', async () => {
+      const { db, ctx } = await setup()
+      await passCreate(ctx, { ...STRANGER, keywords: ['the stranger', 'Mira'] })
+      await db.insert(entities).values([MIRA, BRAM])
+      await flag(db, 'char_1', 'char_2', 'name-taken')
+      expect(await outcomeOf(ctx, setKeywords([], ['the stranger', 'mira']))).toStrictEqual({
+        status: 'noop',
+        reason:
+          'keyword-pairs-flag: Mira (pairs this row with Mira, an open question for the user)',
+      })
+      expect(await keywordsOf(db)).toEqual(['the stranger', 'Mira'])
+    })
+
+    it('removes a term the pair does not rest on', async () => {
+      const { db, ctx } = await setup()
+      await seed(ctx, db)
+      await flag(db, 'char_1', 'char_2', 'name-taken')
+      expect(await outcomeOf(ctx, setKeywords([], ['the stranger']))).toStrictEqual(LANDED)
+      expect(await keywordsOf(db)).toEqual(['Mira'])
+      expect(await flagOf(db, 'char_1')).toEqual([1, 'char_2', 'name-taken'])
+    })
+
+    it('removes the keyword under a flag that is already dormant', async () => {
+      const { db, ctx } = await setup()
+      await seed(ctx, db)
+      // Bram shares no name or keyword with the stranger, so this flag holds nothing already.
+      await flag(db, 'char_1', 'char_3', 'name-taken')
+      expect(await outcomeOf(ctx, setKeywords([], ['Mira']))).toStrictEqual(LANDED)
+      expect(await keywordsOf(db)).toEqual(['the stranger'])
+    })
+  })
 })

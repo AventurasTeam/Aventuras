@@ -128,6 +128,22 @@ describe('lock keys', () => {
     ).toEqual([THREAD_ROW])
   })
 
+  it("puts setEntityKeywords on its entity's row key", () => {
+    expect(
+      lockKeysFor({
+        kind: 'setEntityKeywords',
+        source: 'chapter_close',
+        payload: {
+          branchId: 'b1',
+          id: 'char_1',
+          add: [],
+          remove: ['the drunk'],
+          proseEntryId: 'e_1',
+        },
+      }),
+    ).toEqual(['entities:b1:char_1'])
+  })
+
   it('makes a reversal of a happening link delta hold the happening links', () => {
     for (const targetTable of ['happening_involvements', 'happening_awareness']) {
       const delta = { branchId: 'b1', targetTable, targetId: 'link_1' } as Delta

@@ -1,4 +1,4 @@
-import { and, eq } from 'drizzle-orm'
+import { and, eq, or } from 'drizzle-orm'
 
 import {
   emptyEntityState,
@@ -15,10 +15,12 @@ import { newTerms, normalizeTerm } from '@/lib/keyword-terms'
 import { boundStateText } from '@/lib/piggyback'
 import { entitiesStore } from '@/lib/stores'
 import {
+  brokenFlags,
   characterFactionId,
   flagStillHolds,
   moveHidesStory,
   nameBasis,
+  namesakeBasis,
   nameHolders,
   pairSideOf,
   parentOfLocations,
@@ -32,6 +34,12 @@ import {
 } from '@/lib/world'
 
 import { computeUndoPayload } from '../delta/delta-encoding'
+import {
+  keywordPairsFlagReason,
+  keywordUserAddedReason,
+  planKeywordEdit,
+  priorTerms,
+} from '../delta/keyword-authors'
 import {
   noopRefusal,
   createdKey,
@@ -89,6 +97,16 @@ declare module '@/lib/actions/action-map' {
       source: DeltaSource
       payload: { branchId: string; id: string; keywords: string[]; proseEntryId: ProseEntryId }
     }
+    setEntityKeywords: {
+      source: DeltaSource
+      payload: {
+        branchId: string
+        id: string
+        add: string[]
+        remove: string[]
+        proseEntryId: ProseEntryId
+      }
+    }
     retireEntity: {
       source: DeltaSource
       payload: {
@@ -142,17 +160,6 @@ declare module '@/lib/actions/action-map' {
       }
     }
   }
-}
-
-// Matched only against terms the live list lacks, so a hit is one the user removed.
-function priorTerms(edits: readonly Delta[]): Set<string> {
-  const terms = new Set<string>()
-  for (const edit of edits) {
-    const prior = edit.undoPayload?.keywords
-    if (!Array.isArray(prior)) continue
-    for (const term of prior) if (typeof term === 'string') terms.add(normalizeTerm(term))
-  }
-  return terms
 }
 
 async function loadCurrent(branchId: string, id: string, ctx: DbCtx): Promise<Entity | undefined> {
@@ -409,6 +416,85 @@ export const appendEntityKeywordsHandler: ActionHandler = async (action, branchI
   }
   const next = [...current.keywords, ...added]
   return columnsWriteOutcome(bid, id, { keywords: next }, { keywords: current.keywords }, ctx)
+}
+
+/**
+ * The removed term a live flag's pair rests on once `next` lands, with the pair's other row's name,
+ * or null (world.md → Surfacing: a keyword can make two rows namesakes). A flag already dormant
+ * isn't this write's to keep.
+ */
+async function flagPairTerm(
+  ctx: DbCtx,
+  current: Entity,
+  next: readonly string[],
+  removed: readonly string[],
+): Promise<{ term: string; other: string } | null> {
+  const partnerId = current.nameCollisionPartnerId
+  const rows = await ctx.db
+    .select()
+    .from(entities)
+    .where(
+      and(
+        eq(entities.branchId, current.branchId),
+        or(
+          eq(entities.id, current.id),
+          eq(entities.nameCollisionPartnerId, current.id),
+          partnerId == null ? undefined : eq(entities.id, partnerId),
+        ),
+      ),
+    )
+  const byId = new Map(rows.map((row) => [row.id, row]))
+  const after = new Map([[current.id, { ...pairSideOf(current), keywords: next }]])
+  for (const flaggedId of brokenFlags({ entities: rows, after })) {
+    const flagged = byId.get(flaggedId)
+    const partner =
+      flagged?.nameCollisionPartnerId == null ? undefined : byId.get(flagged.nameCollisionPartnerId)
+    if (flagged === undefined || partner === undefined || !flagStillHolds(flagged, partner))
+      continue
+    const other = flagged.id === current.id ? partner : flagged
+    const namesOther = (term: string) =>
+      namesakeBasis(
+        { name: current.name, keywords: [term] },
+        { name: other.name, keywords: [] },
+      ) !== null
+    return { term: removed.find(namesOther) ?? removed[0], other: other.name }
+  }
+  return null
+}
+
+/**
+ * chapter-close.md → 3f, Keywords: adds and removals in one `keywords` write, checked as it lands.
+ * Only a machine's term goes, and never one a live flag's pair rests on.
+ */
+export const setEntityKeywordsHandler: ActionHandler = async (action, branchId, ctx) => {
+  if (action.kind !== 'setEntityKeywords')
+    throw new Error(`handler/kind mismatch: expected 'setEntityKeywords', got '${action.kind}'`)
+  const { branchId: bid, id, add, remove, proseEntryId } = action.payload
+  if (bid !== branchId)
+    return { status: 'rejected', reason: `branch mismatch: delta ${branchId} vs target ${bid}` }
+  const current = await loadCurrent(bid, id, ctx)
+  if (!current) return noopRefusal(`keyword target entities ${bid}:${id} not found`, 'gone')
+  const edit = await planKeywordEdit(
+    ctx,
+    { table: 'entities', branchId: bid, id, keywords: current.keywords },
+    { add, remove, proseEntryId },
+  )
+  if (edit.kind === 'user-term') {
+    const { term } = edit
+    return noopRefusal(keywordUserAddedReason(term), null)
+  }
+  if (edit.kind === 'unchanged')
+    return edit.userDropped
+      ? noopRefusal(USER_EDITED_SINCE_PROSE, null)
+      : noopRefusal('no-keyword-change', 'restated')
+  if (edit.removed.length > 0) {
+    const pair = await flagPairTerm(ctx, current, edit.next, edit.removed)
+    if (pair !== null) {
+      const { term, other } = pair
+      return noopRefusal(keywordPairsFlagReason(term, other), null)
+    }
+  }
+  return columnsWriteOutcome(bid, id, { keywords: edit.next }, { keywords: current.keywords }, ctx)
 }
 
 /** active → retired only, checked as the write lands, so a user-moved row keeps its status. */
