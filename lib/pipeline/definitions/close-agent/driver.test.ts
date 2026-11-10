@@ -76,7 +76,7 @@ vi.mock('@/lib/ai', async (importOriginal) => ({
   generateToolStep: vi.fn(),
 }))
 
-// Pass-throughs: a slot case scripts a part cut or a task end, every other case runs the real one.
+// Pass-throughs: closeParts is spied for its arguments; a slot case scripts a task end.
 vi.mock('./parts', async (importOriginal) => {
   const actual = await importOriginal<{ closeParts: typeof closeParts }>()
   return { ...actual, closeParts: vi.fn(actual.closeParts) }
@@ -1786,7 +1786,7 @@ describe('closeAgentPhase over three parts', () => {
     after: [],
   }
 
-  // t1–t5, t6–t12 and t13–t17, as the metadata phase would store them.
+  // Three parts: t1–t5, t6–t12 and t13–t17.
   function partsCtx(): PhaseContext {
     const intermediates: Record<string, unknown> = {}
     setCloseRange(intermediates, {
