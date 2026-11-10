@@ -307,7 +307,12 @@ patch`, which 5.5a marks `restated`, so a close tool's write of it
   restated, user-kept and write loop (`lib/actions/threads/register.ts`,
   `lib/actions/happenings/register-happenings.ts`), which a shared
   helper would take about six parameters to serve. Worth lifting when a
-  third copy appears. Raised in 5.5b's slice review.
+  third copy appears. Raised in 5.5b's slice review. The third copy of
+  the loop has appeared: 5.8 gave `updateLore` the same restated,
+  user-kept and write loop (`lib/actions/lore/register.ts`), with no
+  refs, so a helper may take fewer parameters than that estimate; three
+  handlers now carry one precedence rule, so drift is a precedence
+  bug. Noted in 5.8's final review.
 - **The close's model target is spelled three times.** The chapter
   close's metadata phase, its call and the close agent each declare
   their own `lore-mgmt` target (`chapter-close-metadata.ts`,
@@ -371,7 +376,6 @@ patch`, which 5.5a marks `restated`, so a close tool's write of it
   schema section of `retrieval.md` links this item, so a triage pass
   updates that link when routing it. Raised in 5.8's execution,
   developer decision 2026-11-10.
-
 - **A pass stores a turn handle written into prose.**
   [classifier.md's ID handling](../memory/classifier.md#id-handling-in-classifier-output)
   names each id a pass's reply writes into prose before it lands, and
@@ -381,3 +385,21 @@ patch`, which 5.5a marks `restated`, so a close tool's write of it
   refuses such a field
   ([`chapter-close.md → Tools and writes`](../memory/chapter-close.md#tools-and-writes));
   the periodic classifier has no such check. Surfaced by 5.5a's review.
+- **A close's stored refusal reasons carry raw ids and per-close
+  handles.** `update_lore`'s title refusal stores the holder's full
+  lore id twice in the ledger (`close-agent/lore-tools.ts`), while
+  `create_lore`'s stores the bare `title-taken`; and the turn-handle and
+  keyword-handle reasons store per-close handles (`t3`, `c1`) that mean
+  nothing once the close ends. The `why` is named at record time; the
+  reasons aren't, so a review UI (5.11) would show a UUID and two
+  spellings of one rule. Raised in 5.8's final review.
+- **Same-name items carry no namesake flag.** The dataset seed held two
+  active items both named "the black spot" with no collision flag
+  until 5.8's close flagged them `duplicate`. Unverified whether the
+  per-turn writer or the classifier skips same-name items by design.
+  Raised in 5.8's final review.
+- **Keyword lists have no count or term-length bound.**
+  `appendEntityKeywords`, and now the close's `set_keywords` and
+  `create_lore`, land whatever terms the model sends, while chapter
+  metadata caps its keywords (`CHAPTER_KEYWORDS_MAX`). Each term feeds
+  keyword injection on later turns. Raised in 5.8's reviews.
