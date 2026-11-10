@@ -908,6 +908,28 @@ describe('update_lore', () => {
     expect((await storedLore(f, TOLL)).keywords).toEqual(['toll', 'night crossing'])
   })
 
+  it('refuses a removal holding a handle though the list would not change', async () => {
+    const run = await dispatchScripted(f, [read, update({ keywords: { remove: ['c1'] } })], {
+      shown: [...SHOWN, { id: WREN, name: 'Wren' }],
+    })
+
+    expect(run.answers[1]).toEqual({
+      result: 'rejected',
+      reason: 'the keyword "c1" holds c1, an id: a keyword is a word the prose uses, never an id',
+    })
+    expect(await runDeltas(f, run.result.actionId)).toEqual([])
+  })
+
+  it('refuses keywords with neither list as nothing to write', async () => {
+    const run = await dispatchScripted(f, [read, update({ keywords: {} })], { shown: SHOWN })
+
+    expect(run.answers[1]).toEqual({
+      result: 'rejected',
+      reason: 'nothing to write: send a title, a body, a category or keywords to add or remove',
+    })
+    expect(await runDeltas(f, run.result.actionId)).toEqual([])
+  })
+
   it('refuses a text field naming a turn, landing the fields beside it', async () => {
     const run = await dispatchScripted(
       f,
