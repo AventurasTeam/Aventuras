@@ -77,8 +77,8 @@ describe('cutChapterParts', () => {
     ])
   })
 
-  // Limit 50. Entry by entry, a and b make 25 and c would make 55, so the old cut ended part 1 on
-  // the player's turn b. As a turn, b and c make 35, so part 1 is a alone and b opens part 2.
+  // Limit 50: a and b alone make 25 and c would make 55, which would end part 1 on turn b; as a
+  // unit b and c make 35, so part 1 is a alone and b opens part 2.
   it("never ends a part on a player's turn: the turn moves to the part holding its reply", () => {
     expect(cutChapterParts([entry('a', 20), turn('b', 5), entry('c', 30)], 100)).toEqual([
       { part: 1, startEntryId: 'a', endEntryId: 'a', tokens: 20 },

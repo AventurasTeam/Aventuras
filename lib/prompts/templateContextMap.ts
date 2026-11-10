@@ -572,9 +572,8 @@ export const VARIABLES: Record<ContextGroup, VariableDef[]> = {
       required: false,
     },
   ],
-  // buildChapterContext emits all but CLOSE_ONLY_CHAPTER_VARIABLES, which a close task's render
-  // sets, and MERGE_ONLY_CHAPTER_VARIABLES, which buildChapterMergeContext sets beside the prior
-  // summary and the threads; chapter-context.test.ts pins all three.
+  // buildChapterContext emits all but CLOSE_ONLY_CHAPTER_VARIABLES (a close task's render sets)
+  // and MERGE_ONLY_CHAPTER_VARIABLES (buildChapterMergeContext); chapter-context.test.ts pins them.
   chapter: [
     {
       name: 'entries',

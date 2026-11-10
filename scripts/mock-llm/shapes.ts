@@ -31,8 +31,7 @@ import {
 // One entry per CALL SITE. Where call sites share a schema (hence a block), `marker`
 // separates them: the text a template's user half opens with before its first Liquid
 // tag, sliced from the app's own pack so editing a template moves its marker with it.
-// A story shape carries one only when given its template: the chapter close's single metadata
-// call and its merge share a schema.
+// A story shape has one only when given its template (chapter metadata and its merge share one).
 //
 // Default replies are NOT shared. E2E wants inert no-ops for determinism, the
 // dev mock wants defaults lively enough that a manual turn visibly does
