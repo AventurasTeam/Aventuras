@@ -4,13 +4,12 @@ import { USER_EDITED_SINCE_PROSE } from '@/lib/actions/types'
 import type { Entity } from '@/lib/db'
 import { flaggedSideOf, flagStillHolds } from '@/lib/world'
 
-import { readEntity } from './entity-write'
+import { entityReportRow, readEntity } from './entity-write'
 import { charactersInSceneAfterTask } from './later-scene'
 import { turnHandleIn, turnInTextReason } from './text-checks'
 import {
   writeToolSchema,
   type ProtectionReason,
-  type ReportRow,
   type WriteContext,
   type WritePlan,
   type WriteTool,
@@ -66,16 +65,11 @@ const RETIREMENT_FIELDS = ['status', 'retiredReason'] as const
 const FLAG_FIELDS = ['nameCollisionFlag', 'nameCollisionPartnerId', 'nameCollisionReason'] as const
 const PARTNER_PATH = 'nameCollisionPartnerId'
 
-// A gone row keeps the name the model was shown it by.
-function reportRow(ctx: WriteContext, id: string, row: Entity | undefined): ReportRow {
-  return { table: 'entities', id, name: row?.name ?? ctx.ids.nameOfId(id) ?? '' }
-}
-
 /** chapter-close.md → Phase 4: hard finality only, never a place, nor a character a later turn shows. */
 async function planRetire(args: RetireArgs, ctx: WriteContext): Promise<WritePlan> {
   const { id } = args
   const row = await readEntity(ctx, id)
-  const rows = [reportRow(ctx, id, row)]
+  const rows = [entityReportRow(ctx, id, row)]
   const refused = (reason: string, note?: string): WritePlan => ({
     kind: 'refused',
     reason,
@@ -157,8 +151,8 @@ async function planFlagDuplicate(args: FlagArgs, ctx: WriteContext): Promise<Wri
   const partner = await readEntity(ctx, args.partner)
   const named =
     args.id === args.partner
-      ? [reportRow(ctx, args.id, row)]
-      : [reportRow(ctx, args.id, row), reportRow(ctx, args.partner, partner)]
+      ? [entityReportRow(ctx, args.id, row)]
+      : [entityReportRow(ctx, args.id, row), entityReportRow(ctx, args.partner, partner)]
   const proposed = { [PARTNER_PATH]: args.partner }
   if (row === undefined || partner === undefined)
     return { kind: 'refused', reason: CLOSE_REASON.rowGone, rows: named, values: proposed }
@@ -175,7 +169,7 @@ async function planFlagDuplicate(args: FlagArgs, ctx: WriteContext): Promise<Wri
   const [flagged, other] = (await flagGoesOnPartner(ctx, row, partner))
     ? [partner, row]
     : [row, partner]
-  const rows = [reportRow(ctx, flagged.id, flagged), reportRow(ctx, other.id, other)]
+  const rows = [entityReportRow(ctx, flagged.id, flagged), entityReportRow(ctx, other.id, other)]
   const values = { [PARTNER_PATH]: other.id }
   // Not userWrote: a Keep after the cited turn must reach the handler's resolved-pair read.
   const verdicts = (await ctx.guard([{ table: 'entities', id: flagged.id }])).row(

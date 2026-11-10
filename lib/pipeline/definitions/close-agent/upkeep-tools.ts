@@ -5,6 +5,7 @@ import { happenings, type Happening } from '@/lib/db'
 import { dedupeTerms } from '@/lib/keyword-terms'
 
 import {
+  entityReportRow,
   entityWriteAction,
   fieldVerdicts,
   readEntity,
@@ -138,9 +139,7 @@ async function planUpkeepWrite<A extends { readonly id: string }>(
   const { id } = args
   const sent = sentTexts(args, specs)
   const row = await readEntity(ctx, id)
-  const rows: ReportRow[] = [
-    { table: 'entities', id, name: row?.name ?? ctx.ids.nameOfId(id) ?? '' },
-  ]
+  const rows = [entityReportRow(ctx, id, row)]
   const proposed: Record<string, unknown> = Object.fromEntries(
     sent.map((field) => [field.path, field.text.bounded]),
   )
@@ -284,9 +283,7 @@ async function planSetKeywords(args: KeywordArgs, ctx: WriteContext): Promise<Wr
     remove: dedupeTerms(args.remove ?? []),
   }
   const row = await readEntity(ctx, id)
-  const rows: ReportRow[] = [
-    { table: 'entities', id, name: row?.name ?? ctx.ids.nameOfId(id) ?? '' },
-  ]
+  const rows = [entityReportRow(ctx, id, row)]
   const live = strings(row?.keywords)
   const proposed = { keywords: plannedKeywords(live, sent) }
   if (row === undefined)

@@ -4,7 +4,13 @@ import { USER_EDITED_SINCE_PROSE, type PipelineAction, type RowVerdicts } from '
 import { emptyEntityState, entities, type Entity } from '@/lib/db'
 import { isJsonObject } from '@/lib/json-object'
 
-import { sameValue, type PlannedAction, type ProtectionReason, type WriteContext } from './tool'
+import {
+  sameValue,
+  type PlannedAction,
+  type ProtectionReason,
+  type ReportRow,
+  type WriteContext,
+} from './tool'
 import { CLOSE_REASON } from './verdict'
 
 export type FieldVerdict =
@@ -54,6 +60,11 @@ export async function readEntity(ctx: WriteContext, id: string): Promise<Entity 
     .where(and(eq(entities.branchId, ctx.branchId), eq(entities.id, id)))
     .limit(1)
   return row
+}
+
+// A gone row keeps the name the model was shown it by.
+export function entityReportRow(ctx: WriteContext, id: string, row: Entity | undefined): ReportRow {
+  return { table: 'entities', id, name: row?.name ?? ctx.ids.nameOfId(id) ?? '' }
 }
 
 const stateCopyOf = (row: Entity): Record<string, unknown> =>
