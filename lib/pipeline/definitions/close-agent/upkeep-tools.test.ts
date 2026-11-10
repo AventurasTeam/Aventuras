@@ -770,6 +770,17 @@ describe('update_place', () => {
     expect(long.startsWith(stored.condition ?? '')).toBe(true)
   })
 
+  it('cuts a description at 1,200 characters, as a pass does', async () => {
+    const { calls } = await runUpkeepCalls(f, WORLD_SHOWN, [
+      { toolName: 'update_place', input: { id: 'l1', description: 'x'.repeat(1201), ...cite() } },
+    ])
+
+    expect(calls[0]).toMatchObject({ result: 'ok' })
+    const stored = (await storedEntity(f, QUAY)).description
+    expect(stored).toHaveLength(1200)
+    expect(stored).toBe('x'.repeat(1200))
+  })
+
   it('refuses an item sent as the place, writing nothing', async () => {
     const { result, calls } = await runUpkeepCalls(f, WORLD_SHOWN, [
       { toolName: 'update_place', input: { id: 'i1', condition: 'Torn', ...cite() } },
