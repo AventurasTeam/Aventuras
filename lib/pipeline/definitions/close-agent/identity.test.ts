@@ -1203,6 +1203,40 @@ describe('update_character and update_faction: a turn handle in a text field', (
       expect(storedValue(after, otherPath)).toEqual(value)
     },
   )
+
+  // Checked after the restated drop: a stored value is no new text, whatever it holds.
+  it('answers ok, writing nothing, for a stored description holding a turn handle resent', async () => {
+    await editEntity(f, WREN, 'earlier-close', { description: 'Changed since t3.' })
+
+    const { result, answers, calls } = await dispatchScripted(
+      f,
+      [
+        {
+          toolName: 'update_character',
+          input: { id: 'c1', description: 'Changed since t3.', ...cite() },
+        },
+      ],
+      { shown: CAST },
+    )
+
+    expect(answers.map(({ output }) => output)).toEqual([{ result: 'ok' }])
+    expect(calls[0]).not.toHaveProperty('skippedFields')
+    expect(await runDeltas(f, result.actionId)).toEqual([])
+  })
+
+  // Checked after protection: a field the user holds is skipped, not refused for its text.
+  it('skips a voice the user wrote after the cited turn, though it names a turn', async () => {
+    await editEntity(f, WREN, 'user', { state: { voice: 'gravel' } })
+
+    const { result, calls } = await dispatchScripted(
+      f,
+      [{ toolName: 'update_character', input: { id: 'c1', voice: 'Hoarse since t7.', ...cite() } }],
+      { shown: CAST },
+    )
+
+    expect(calls[0]).toMatchObject({ result: 'skipped', reason: USER_EDITED_SINCE_PROSE })
+    expect(await runDeltas(f, result.actionId)).toEqual([])
+  })
 })
 
 // Real prefix_<uuid> ids: CloseIds hands a handle only to a substitutable id.

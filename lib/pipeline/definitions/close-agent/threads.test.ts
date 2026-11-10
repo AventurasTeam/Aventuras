@@ -781,6 +781,38 @@ describe('update_thread', () => {
     })
     expect(await threadRow(f, SEALED.id)).toMatchObject({ description: SEALED.description })
   })
+
+  it('answers ok, writing nothing, for a stored description holding a turn handle resent', async () => {
+    await editThreadAs(f, 'user', LETTER.id, { description: 'Settled at t7, at the milestone.' })
+
+    const run = await runThreadCalls(f, THREADS_SHOWN, [
+      {
+        toolName: 'update_thread',
+        input: { id: 'th1', description: 'Settled at t7, at the milestone.', ...cite() },
+      },
+    ])
+
+    expect(run.answers).toEqual([{ result: 'ok' }])
+    expect(run.calls[0]).not.toHaveProperty('skippedFields')
+    expect(groupEvents(run.events)).toEqual([])
+    expect(await runDeltas(f, run.result.actionId)).toEqual([])
+  })
+
+  it('skips a description a later turn wrote, though the one sent names a turn', async () => {
+    await editThreadAs(f, 'later-turn', LETTER.id, {
+      description: 'Wren hides the letter in her boot.',
+    })
+
+    const run = await runThreadCalls(f, THREADS_SHOWN, [
+      {
+        toolName: 'update_thread',
+        input: { id: 'th1', description: 'Wren hands it over at t7.', ...cite() },
+      },
+    ])
+
+    expect(run.calls[0]).toMatchObject({ result: 'skipped', reason: CLOSE_REASON.laterTurn })
+    expect(await runDeltas(f, run.result.actionId)).toEqual([])
+  })
 })
 
 describe('merge_threads', () => {
@@ -1368,6 +1400,18 @@ describe('merge_threads', () => {
     expect(groupEvents(run.events)).toEqual([])
     expect(await runDeltas(f, run.result.actionId)).toEqual([])
     expect(await threadRow(f, SEALED.id)).toBeDefined()
+  })
+
+  it("lands a merge resending keep's stored title that holds a turn handle", async () => {
+    await editThreadAs(f, 'user', LETTER.id, { title: 'Deliver the letter (t5)' })
+
+    const run = await runThreadCalls(f, THREADS_SHOWN, [
+      merge({ keep: 'th1', absorb: ['th2'], title: 'Deliver the letter (t5)' }),
+    ])
+
+    expect(run.calls[0]).toMatchObject({ result: 'ok' })
+    expect(run.calls[0]).not.toHaveProperty('values')
+    expect(opsOf(await runDeltas(f, run.result.actionId))).toEqual([['delete', SEALED.id]])
   })
 
   describe('beside a thread the user set to always or disabled', () => {
