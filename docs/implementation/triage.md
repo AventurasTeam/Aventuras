@@ -421,3 +421,12 @@ patch`, which 5.5a marks `restated`, so a close tool's write of it
   `create_lore`, land whatever terms the model sends, while chapter
   metadata caps its keywords (`CHAPTER_KEYWORDS_MAX`). Each term feeds
   keyword injection on later turns. Raised in 5.8's reviews.
+- **A context group promises variables some of its templates never
+  get.** `lib/prompts/templateContextMap.ts` describes one variable list
+  per group and marks `chapter`'s `entries`, `previousChapterSummary`,
+  `threads` and `mode` `required`, but the close tasks' renders set only
+  `mode` and their own variables, and the metadata merge sets no
+  `entries` or `mode`. Nothing reads `required` outside tests today, so
+  it misleads only the template editor (M7): an override that reads
+  `entries` in a close task renders it empty. 5.8 added four more
+  templates to the group. Raised in 5.8's slice review.
