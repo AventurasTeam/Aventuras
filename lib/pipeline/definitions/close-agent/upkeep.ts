@@ -10,7 +10,6 @@ import {
   type Happening,
   type StoryMode,
 } from '@/lib/db'
-import { isJsonObject } from '@/lib/json-object'
 import { dedupeTerms } from '@/lib/keyword-terms'
 import { compareId } from '@/lib/list-modules'
 import { TEMPLATE_IDS } from '@/lib/prompts'
@@ -19,7 +18,7 @@ import { realPlacementOf } from '@/lib/world'
 
 import { namedInProse } from './name-match'
 import { readRowTool, refsIn, searchWorldTool } from './read-tools'
-import { strings } from './row-values'
+import { byNameThenId, stateOf, strings, text } from './row-values'
 import type { CloseTaskDef, TaskPromptContext, TaskStart } from './task'
 import type { ReadFields } from './tool'
 import { hasTurns, readTaskTurns, renderClosePrompt, storyModeOf, type CloseTurns } from './turns'
@@ -71,13 +70,6 @@ export type UpkeepShow = {
   happenings: { id: string; title: string }[]
 }
 
-const text = (value: unknown): string => (typeof value === 'string' ? value : '')
-const stateRecord = (row: Entity): Readonly<Record<string, unknown>> =>
-  isJsonObject(row.state) ? row.state : {}
-// Code units, never localeCompare: host locale would make the prompt's row order device-dependent.
-const byNameThenId = (a: Entity, b: Entity): number =>
-  compareId(a.name, b.name) || compareId(a.id, b.id)
-
 /** data-model.md → Entry metadata shape: a part's scene, its characters and items and its place. */
 function sceneIdsOf(entries: readonly CloseRangeEntry[]): Set<string> {
   const ids = new Set<string>()
@@ -121,7 +113,7 @@ const ownsText = (row: Entity): boolean => row.kind === 'location' || row.kind =
 // The text a start shows of a row, which is all an id it cites can reach the model through.
 const shownText = (row: Entity): unknown => [
   row.name,
-  ...(ownsText(row) ? [row.description, stateRecord(row).condition] : []),
+  ...(ownsText(row) ? [row.description, stateOf(row).condition] : []),
   row.keywords,
 ]
 
@@ -184,7 +176,7 @@ async function startUpkeep(ctx: TaskPromptContext): Promise<TaskStart<UpkeepShow
         status: row.status,
         description: ownsText(row) ? handled(text(row.description)) : '',
         keywords: strings(row.keywords).map(handled),
-        condition: ownsText(row) ? handled(text(stateRecord(row).condition)) : '',
+        condition: ownsText(row) ? handled(text(stateOf(row).condition)) : '',
         placement: placement(row),
         inScene,
       })),

@@ -2,15 +2,13 @@ import { and, eq, inArray } from 'drizzle-orm'
 
 import type { PromptHalves } from '@/lib/ai'
 import { chunked, entities, type Entity, type StoryMode } from '@/lib/db'
-import { isJsonObject } from '@/lib/json-object'
-import { compareId } from '@/lib/list-modules'
 import { TEMPLATE_IDS } from '@/lib/prompts'
 import { CAST_SOFT_CAPS } from '@/lib/wizard'
 
 import { IDENTITY_WRITE_PATHS, updateCharacterTool, updateFactionTool } from './identity-tools'
 import { namedInProse } from './name-match'
 import { readRowTool, refsIn, searchWorldTool } from './read-tools'
-import { strings } from './row-values'
+import { byNameThenId, stateOf, strings, text } from './row-values'
 import type { CloseTaskDef, TaskPromptContext, TaskStart } from './task'
 import type { ReadFields } from './tool'
 import { hasTurns, readTaskTurns, renderClosePrompt, storyModeOf, type CloseTurns } from './turns'
@@ -48,13 +46,6 @@ export type IdentityShow = {
   characters: IdentityCharacter[]
   factions: IdentityFaction[]
 }
-
-const text = (value: unknown): string => (typeof value === 'string' ? value : '')
-const stateOf = (row: Entity): Readonly<Record<string, unknown>> =>
-  isJsonObject(row.state) ? row.state : {}
-// Code units, never localeCompare: host locale would make the prompt's row order device-dependent.
-const byNameThenId = (a: Entity, b: Entity): number =>
-  compareId(a.name, b.name) || compareId(a.id, b.id)
 
 // Any status: canon names the entities the chapter touches, and a retired one was still there.
 async function sceneCharacters(

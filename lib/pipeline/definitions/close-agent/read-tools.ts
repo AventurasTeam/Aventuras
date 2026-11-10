@@ -6,13 +6,12 @@ import { entities, happenings, lore, threads, type Entity } from '@/lib/db'
 import { SUBSTITUTABLE_PREFIXES } from '@/lib/ids'
 import { isJsonObject } from '@/lib/json-object'
 import { normalizeTerm } from '@/lib/keyword-terms'
-import { compareId } from '@/lib/list-modules'
 import { matchTerms } from '@/lib/retrieval'
 import { excerpt, oneLine } from '@/lib/text'
 import { flagStillHolds } from '@/lib/world'
 
 import { withHandlesDeep, type CloseIds } from './ids'
-import { strings } from './row-values'
+import { byNameThenId, strings } from './row-values'
 import {
   readToolSchema,
   tableOfId,
@@ -198,10 +197,7 @@ async function collisionView(
         eq(entities.nameCollisionPartnerId, row.id),
       ),
     )
-  const live = holders
-    .filter((holder) => flagStillHolds(holder, row))
-    // Code units, never localeCompare: host locale would make the answer device-dependent.
-    .sort((a, b) => compareId(a.name, b.name) || compareId(a.id, b.id))
+  const live = holders.filter((holder) => flagStillHolds(holder, row)).sort(byNameThenId)
   named.push(...live.map((holder) => holder.id))
   const flaggedBy = live.map((holder) => ctx.ids.show(holder.id, holder.name))
   return { view: { collision, flaggedBy }, named }

@@ -2,7 +2,6 @@ import { and, eq, inArray } from 'drizzle-orm'
 
 import type { PromptHalves } from '@/lib/ai'
 import { chunked, entities, type Entity, type StoryMode } from '@/lib/db'
-import { compareId } from '@/lib/list-modules'
 import { TEMPLATE_IDS } from '@/lib/prompts'
 import { oneLine } from '@/lib/text'
 import { characterFactionId, flagStillHolds } from '@/lib/world'
@@ -12,7 +11,7 @@ import { charactersInSceneAfterTask } from './later-scene'
 import { flagDuplicateTool, retireEntityTool } from './lifecycle-tools'
 import { namedInProse } from './name-match'
 import { readRowTool, refsIn, searchWorldTool } from './read-tools'
-import { strings } from './row-values'
+import { byNameThenId, strings } from './row-values'
 import type { CloseTaskDef, TaskPromptContext, TaskStart } from './task'
 import type { ReadFields } from './tool'
 import { hasTurns, readTaskTurns, renderClosePrompt, storyModeOf, type CloseTurns } from './turns'
@@ -70,11 +69,8 @@ const sceneTagged = (row: LifecycleEntity): boolean => row.kind !== 'faction'
 // A restored row keeps its old reason in storage; the model reads it only on a retired row.
 const shownReason = (row: Entity): string =>
   row.status === 'retired' ? (row.retiredReason ?? '') : ''
-// Code units, never localeCompare: host locale would make the prompt's row order device-dependent.
 const byKindThenName = (a: LifecycleEntity, b: LifecycleEntity): number =>
-  KIND_ORDER.indexOf(a.kind) - KIND_ORDER.indexOf(b.kind) ||
-  compareId(a.name, b.name) ||
-  compareId(a.id, b.id)
+  KIND_ORDER.indexOf(a.kind) - KIND_ORDER.indexOf(b.kind) || byNameThenId(a, b)
 
 async function partnersOf(
   ctx: TaskPromptContext,
