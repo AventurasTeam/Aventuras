@@ -26,12 +26,14 @@ import {
   type ToolStepInvalidCall,
   type ToolStepResult,
 } from '@/lib/ai'
-import { entities, type CloseTask } from '@/lib/db'
+import type { ChapterPartCut } from '@/lib/chapters'
+import { entities, storyEntries, threads, type CloseTask } from '@/lib/db'
 import { logger, makeLogger } from '@/lib/diagnostics'
 import { generateId } from '@/lib/ids'
 import { appSettingsStore, currentStoryStore, entitiesStore, resetAllStores } from '@/lib/stores'
 
 import { entityWriteAction } from './entity-write'
+import { identityTask } from './identity'
 import { CloseIds } from './ids'
 import { CloseLedgerWriter } from './ledger'
 import { closeParts } from './parts'
@@ -47,6 +49,7 @@ import {
   type SlotName,
 } from './slots'
 import type { CloseTaskDef, TaskPromptContext } from './task'
+import { threadsTask } from './threads'
 import {
   readToolSchema,
   writeToolSchema,
@@ -54,11 +57,18 @@ import {
   type ReadTool,
   type WriteTool,
 } from './tool'
+import { readTaskTurns } from './turns'
 import { CLOSE_REASON } from './verdict'
 import type { PhaseContext, PhaseEmittedEvent, PhaseResult, PipelineError } from '../../types'
 import { openCloseFixture, type CloseFixture } from '../__tests__/close-fixture'
 import { closeAgentPhase } from '../chapter-close-agent'
-import { closeIdsOf, closeLedgerOf, seedCloseLedger, setCloseRange } from '../close-intermediates'
+import {
+  closeIdsOf,
+  closeLedgerOf,
+  seedCloseLedger,
+  setCloseParts,
+  setCloseRange,
+} from '../close-intermediates'
 import type { CloseLedger } from '../intermediates'
 
 vi.mock('@/lib/ai', async (importOriginal) => ({
@@ -302,7 +312,7 @@ function runContext(phase: PhaseContext): TaskRunArgs {
     ids,
     survivorOf: (table, id) => writer.survivorOf(table, id),
     phase,
-    chapterEntryIds: chapterEntryIds(),
+    taskEntryIds: chapterEntryIds(),
     ledger: writer,
     config: CONFIG,
   }
@@ -1147,13 +1157,27 @@ describe('closeAgentPhase', () => {
   // The range below ends on the third reply: the opening and three turns, positions 1 to 7.
   const chapterIds = (): string[] => fixture.entries.slice(0, 7).map((entry) => entry.id)
 
-  function phaseCtx(): PhaseContext {
+  // One cut over the range, as the metadata phase stores a chapter that fits; the agent reads
+  // only a cut's ids, so its tokens stay 0.
+  const onePart = (): ChapterPartCut[] => [
+    { part: 1, startEntryId: fixture.entries[0]!.id, endEntryId: fixture.replyIds[2]!, tokens: 0 },
+  ]
+
+  // Two cuts over the range: t1–t4 and t5–t7.
+  const twoParts = (): ChapterPartCut[] => [
+    { part: 1, startEntryId: chapterIds()[0]!, endEntryId: chapterIds()[3]!, tokens: 0 },
+    { part: 2, startEntryId: chapterIds()[4]!, endEntryId: chapterIds()[6]!, tokens: 0 },
+  ]
+
+  // `cuts: null` parks no parts, as a run whose metadata phase never ran.
+  function phaseCtx(cuts: readonly ChapterPartCut[] | null = onePart()): PhaseContext {
     const intermediates: Record<string, unknown> = {}
     setCloseRange(intermediates, {
       chapterId: 'chap_slots',
       startEntryId: fixture.entries[0]!.id,
       endEntryId: fixture.replyIds[2]!,
     })
+    if (cuts !== null) setCloseParts(intermediates, cuts)
     return {
       actionId: 'act_slots',
       abortSignal: abort.signal,
@@ -1248,17 +1272,14 @@ describe('closeAgentPhase', () => {
   it('runs before once, perPart once per part and after once, in that order', async () => {
     const log: string[] = []
     const turnIds = chapterIds()
-    vi.mocked(closeParts).mockReturnValueOnce([
-      { index: 1, entryIds: turnIds.slice(0, 4) },
-      { index: 2, entryIds: turnIds.slice(4) },
-    ])
+    const cuts = twoParts()
     __setCloseAgentSlots({
       before: [codeStep('normalize', log), quietTask('happenings', log)],
       perPart: [quietTask('lore', log), codeStep('between', log), quietTask('identity', log)],
       after: [quietTask('awareness', log), codeStep('reset', log)],
     })
 
-    const { events, result } = await drain(phaseCtx(), log)
+    const { events, result } = await drain(phaseCtx(cuts), log)
 
     expect(result).toEqual({ status: 'completed' })
     expect(log).toEqual([
@@ -1288,11 +1309,13 @@ describe('closeAgentPhase', () => {
       { type: 'close_task_start', task: 'awareness', part: 0, index: 12, total: 12 },
     ])
     expect(
-      vi.mocked(closeParts).mock.calls.map(([entries]) => entries.map((entry) => entry.id)),
-    ).toEqual([turnIds])
+      vi
+        .mocked(closeParts)
+        .mock.calls.map(([entries, passed]) => [entries.map((entry) => entry.id), passed]),
+    ).toEqual([[turnIds, cuts]])
   })
 
-  it('reads the chapter as one part numbered 1, so Identity starts 3 of 7', async () => {
+  it('reads the one part the metadata phase stored, numbered 1, so Identity starts 3 of 7', async () => {
     const log: string[] = []
     __setCloseAgentSlots({ before: [], perPart: [quietTask('identity', log)], after: [] })
 
@@ -1303,8 +1326,54 @@ describe('closeAgentPhase', () => {
     expect(taskStarts(events)).toEqual([
       { type: 'close_task_start', task: 'identity', part: 1, index: 3, total: 7 },
     ])
-    const [entries] = vi.mocked(closeParts).mock.calls[0]!
-    expect(closeParts(entries)).toEqual([{ index: 1, entryIds: chapterIds() }])
+    const [entries, cuts] = vi.mocked(closeParts).mock.calls[0]!
+    expect(cuts).toEqual(onePart())
+    expect(closeParts(entries, cuts)).toEqual([{ index: 1, entryIds: chapterIds() }])
+  })
+
+  it("hands a part's entries to each of its entries, and the chapter's to a chapter-wide one", async () => {
+    const shown: string[][] = []
+    const record = (c: { taskEntryIds: readonly string[] }): void => {
+      shown.push([...c.taskEntryIds])
+    }
+    __setCloseAgentSlots({
+      before: [quietTask('happenings', [], { seen: record })],
+      perPart: [
+        codeStep('between', [], (c) => {
+          record(c)
+          return { status: 'completed' }
+        }),
+        quietTask('lore', [], { seen: record }),
+      ],
+      after: [quietTask('awareness', [], { seen: record })],
+    })
+    const turnIds = chapterIds()
+
+    await drain(phaseCtx(twoParts()))
+
+    expect(shown).toEqual([
+      turnIds,
+      turnIds.slice(0, 4),
+      turnIds.slice(0, 4),
+      turnIds.slice(4),
+      turnIds.slice(4),
+      turnIds,
+    ])
+  })
+
+  it('refuses parts that leave a range entry out, before any entry has run or been announced', async () => {
+    const log: string[] = []
+    __setCloseAgentSlots({
+      before: [quietTask('happenings', log)],
+      perPart: [quietTask('identity', log)],
+      after: [],
+    })
+    const short: ChapterPartCut[] = [
+      { part: 1, startEntryId: chapterIds()[0]!, endEntryId: chapterIds()[5]!, tokens: 0 },
+    ]
+
+    await expect(drain(phaseCtx(short), log)).rejects.toThrow(RangeError)
+    expect(log).toEqual([])
   })
 
   it('starts a task with nothing to show and makes no step for it', async () => {
@@ -1363,7 +1432,7 @@ describe('closeAgentPhase', () => {
       expect(c.db).toBe(fixture.ctx.db)
       expect(c.branchId).toBe(fixture.branchId)
       expect(c.endEntryId).toBe(fixture.replyIds[2])
-      expect(c.chapterEntryIds).toEqual(chapterIds())
+      expect(c.taskEntryIds).toEqual(chapterIds())
     }
     // The writer wraps the run's own ledger, and every entry's survivorOf reads it.
     runWriter.noteToolCall()
@@ -1619,12 +1688,12 @@ describe('closeAgentPhase', () => {
     ).toEqual(['identity', 'threads'])
   })
 
-  it('with no task in any slot, starts nothing and reads no store, the ledger seeded', async () => {
+  it('with no task in any slot, starts nothing and reads no store and no parts, the ledger seeded', async () => {
     __setCloseAgentSlots(NO_CLOSE_TASKS)
     expect(NO_CLOSE_TASKS).toEqual({ before: [], perPart: [], after: [] })
     // A phase that read the stores here would fail: nothing holds the branch.
     resetAllStores()
-    const ctx = phaseCtx()
+    const ctx = phaseCtx(null)
 
     const { events, result } = await drain(ctx)
 
@@ -1674,5 +1743,308 @@ describe('closeAgentPhase', () => {
       status: 'failed',
       error: { kind: 'orchestrator', detail: 'chapter-close: no close range' },
     })
+  })
+
+  it('fails as it does without a range when no parts were stored, before any entry', async () => {
+    const log: string[] = []
+    __setCloseAgentSlots({ before: [quietTask('happenings', log)], perPart: [], after: [] })
+
+    const { events, result } = await drain(phaseCtx(null))
+
+    expect(result).toEqual({
+      status: 'failed',
+      error: { kind: 'orchestrator', detail: 'chapter-close: no close parts' },
+    })
+    expect(events).toEqual([])
+    expect(log).toEqual([])
+  })
+})
+
+describe('closeAgentPhase over three parts', () => {
+  const TOBIN = 'char_00000000-0000-4000-8000-000000000002'
+  const LETTER = 'thr_00000000-0000-4000-8000-000000000003'
+
+  beforeEach(async () => {
+    beforePlan = undefined
+    vi.mocked(generateToolStep).mockClear()
+    // Eight turns: the opening through the eighth reply, t1 to t17.
+    f = await openCloseFixture({ turns: 8 })
+    await seedWren()
+  })
+
+  afterEach(() => {
+    __setCloseAgentSlots(undefined)
+  })
+
+  // The two real prose tasks, slotted by hand: the production slots grow, these cases don't.
+  const IDENTITY_AND_THREADS: CloseAgentSlots = {
+    before: [],
+    perPart: [
+      { kind: 'task', def: identityTask },
+      { kind: 'task', def: threadsTask },
+    ],
+    after: [],
+  }
+
+  // t1–t5, t6–t12 and t13–t17, as the metadata phase would store them.
+  function partsCtx(): PhaseContext {
+    const intermediates: Record<string, unknown> = {}
+    setCloseRange(intermediates, {
+      chapterId: 'chap_parts',
+      startEntryId: f.entries[0]!.id,
+      endEntryId: f.entries[16]!.id,
+    })
+    setCloseParts(intermediates, [
+      { part: 1, startEntryId: f.entries[0]!.id, endEntryId: f.entries[4]!.id, tokens: 0 },
+      { part: 2, startEntryId: f.entries[5]!.id, endEntryId: f.entries[11]!.id, tokens: 0 },
+      { part: 3, startEntryId: f.entries[12]!.id, endEntryId: f.entries[16]!.id, tokens: 0 },
+    ])
+    return {
+      actionId: ACTION_ID,
+      abortSignal: new AbortController().signal,
+      intermediates,
+      log: makeLogger(ACTION_ID),
+      db: f.ctx.db,
+      runInTransaction: f.ctx.runInTransaction,
+      storyId: f.storyId,
+      branchId: f.branchId,
+    }
+  }
+
+  // Stands in for the orchestrator: applies each group and sends its outcome back.
+  async function drainApplying(
+    ctx: PhaseContext,
+  ): Promise<{ events: PhaseEmittedEvent[]; result: PhaseResult }> {
+    const gen = closeAgentPhase(ctx)
+    const events: PhaseEmittedEvent[] = []
+    let reply: GroupOutcome | undefined
+    for (;;) {
+      const next = await gen.next(reply)
+      if (next.done) return { events, result: next.value }
+      const event = next.value
+      events.push(event)
+      reply =
+        event.type === 'delta_group_emitted'
+          ? await applyDeltaActionGroupWithOutcomes(
+              event.actions,
+              { actionId: ctx.actionId, branchId: ctx.branchId, entryId: event.entryId },
+              f.ctx,
+            )
+          : undefined
+    }
+  }
+
+  const sentPrompt = (call: number) => vi.mocked(generateToolStep).mock.calls[call]![1].prompt
+
+  const citing = (toolCallId: string, note: string, turn: string): ToolStepCall => ({
+    toolCallId,
+    toolName: 'append_note',
+    input: { id: 'c1', note, turns: [turn], why: 'The crossing shows it.' },
+  })
+
+  // A per-part task over append_note and peek_row, Wren shown as c1: its system half lists the
+  // turns it was shown, its user half the writes so far.
+  function partTask(opts: { seeded: boolean }): SlotEntry<'identity'> {
+    const def: CloseTaskDef<string[]> & { task: 'identity' } = {
+      task: 'identity',
+      tools: [appendNoteTool, peekRowTool],
+      readFields: { character: ['description'] },
+      start: async (ctx) => {
+        ctx.ids.show(WREN, 'Wren')
+        const { closeTurns } = await readTaskTurns(ctx)
+        return {
+          show: closeTurns.map((turn) => turn.handle),
+          seeds: opts.seeded ? [{ table: 'entities', id: WREN }] : [],
+        }
+      },
+      render: ({ show }, ctx) => ({
+        system: `Turns: ${show.join(', ')}`,
+        user: `Identity.\n${ctx.writesSoFar}`,
+      }),
+    }
+    return { kind: 'task', def }
+  }
+
+  async function putCharacter(id: string, name: string): Promise<void> {
+    await f.ctx.db.insert(entities).values({
+      id,
+      branchId: f.branchId,
+      kind: 'character',
+      name,
+      status: 'active',
+      injectionMode: 'auto',
+      createdAt: 1,
+      updatedAt: 1,
+    })
+  }
+
+  async function setScene(entryId: string, sceneIds: readonly string[]): Promise<void> {
+    const where = and(eq(storyEntries.branchId, f.branchId), eq(storyEntries.id, entryId))
+    const [row] = await f.ctx.db
+      .select({ metadata: storyEntries.metadata })
+      .from(storyEntries)
+      .where(where)
+    if (!row?.metadata) throw new Error(`setScene: entry ${entryId} has no metadata`)
+    await f.ctx.db
+      .update(storyEntries)
+      .set({ metadata: { ...row.metadata, sceneEntities: [...sceneIds] } })
+      .where(where)
+  }
+
+  async function putThread(id: string, title: string): Promise<void> {
+    await f.ctx.db.insert(threads).values({
+      id,
+      branchId: f.branchId,
+      title,
+      status: 'active',
+      injectionMode: 'auto',
+      createdAt: 1,
+      updatedAt: 1,
+    })
+  }
+
+  // C6: 2 + 5 × 3. Only Identity and Threads are slotted, so the other places (2, 5, 6, …) start
+  // nothing.
+  it('counts 17 tasks over three parts, Identity and Threads in part order', async () => {
+    __setCloseAgentSlots(IDENTITY_AND_THREADS)
+
+    const { events, result } = await drainApplying(partsCtx())
+
+    expect(result).toEqual({ status: 'completed' })
+    expect(events.filter((event) => event.type === 'close_task_start')).toEqual([
+      { type: 'close_task_start', task: 'identity', part: 1, index: 3, total: 17 },
+      { type: 'close_task_start', task: 'threads', part: 1, index: 4, total: 17 },
+      { type: 'close_task_start', task: 'identity', part: 2, index: 8, total: 17 },
+      { type: 'close_task_start', task: 'threads', part: 2, index: 9, total: 17 },
+      { type: 'close_task_start', task: 'identity', part: 3, index: 13, total: 17 },
+      { type: 'close_task_start', task: 'threads', part: 3, index: 14, total: 17 },
+    ])
+    expect(generateToolStep).not.toHaveBeenCalled()
+  })
+
+  it("records each write under its part, and lists part 1's writes in part 2's prompt", async () => {
+    __setCloseAgentSlots({ before: [], perPart: [partTask({ seeded: true })], after: [] })
+    vi.mocked(generateToolStep)
+      .mockResolvedValueOnce(okStep([citing('k1', 'first', 't3')]))
+      .mockResolvedValueOnce(okStep([]))
+      .mockResolvedValueOnce(okStep([citing('k2', 'second', 't8')]))
+    const ctx = partsCtx()
+
+    const { result } = await drainApplying(ctx)
+
+    expect(result).toEqual({ status: 'completed' })
+    expect(await description()).toBe('A courier. first second')
+    expect(
+      closeLedgerOf(ctx.intermediates)?.calls.map((call) => [call.tool, call.part, call.result]),
+    ).toEqual([
+      ['append_note', 1, 'ok'],
+      ['append_note', 2, 'ok'],
+    ])
+    // Steps: part 1's two, part 2's two, part 3's one.
+    expect(generateToolStep).toHaveBeenCalledTimes(5)
+    expect(sentPrompt(0).user).toBe('Identity.\n')
+    expect(sentPrompt(2).user).toBe('Identity.\n- append_note Wren (c1): description')
+  })
+
+  it("shows each part its own turns under the chapter's handles, one map for every part", async () => {
+    __setCloseAgentSlots({ before: [], perPart: [partTask({ seeded: true })], after: [] })
+    vi.mocked(generateToolStep)
+      .mockResolvedValueOnce(okStep([]))
+      .mockResolvedValueOnce(okStep([citing('k1', 'twelfth', 't12')]))
+    const ctx = partsCtx()
+
+    await drainApplying(ctx)
+
+    // Steps: part 1's one, part 2's two, part 3's one.
+    expect(sentPrompt(0).system).toBe('Turns: t1, t2, t3, t4, t5')
+    expect(sentPrompt(1).system).toBe('Turns: t6, t7, t8, t9, t10, t11, t12')
+    expect(sentPrompt(3).system).toBe('Turns: t13, t14, t15, t16, t17')
+    expect(closeIdsOf(ctx.intermediates).idOf('t12')).toBe(f.entries[11]!.id)
+    expect(closeLedgerOf(ctx.intermediates)?.calls).toMatchObject([
+      { part: 2, result: 'ok', turns: [f.entries[11]!.id] },
+    ])
+  })
+
+  it('leaves a row read in part 1 unread in part 2, so a write to it there is refused', async () => {
+    __setCloseAgentSlots({ before: [], perPart: [partTask({ seeded: false })], after: [] })
+    vi.mocked(generateToolStep)
+      .mockResolvedValueOnce(okStep([peekCall('k1'), citing('k2', 'first', 't3')]))
+      .mockResolvedValueOnce(okStep([]))
+      .mockResolvedValueOnce(okStep([citing('k3', 'second', 't8')]))
+    const ctx = partsCtx()
+
+    await drainApplying(ctx)
+
+    expect(await description()).toBe('A courier. first')
+    const calls = closeLedgerOf(ctx.intermediates)?.calls ?? []
+    expect(calls.map((call) => [call.tool, call.part, call.result])).toEqual([
+      ['peek_row', 1, 'ok'],
+      ['append_note', 1, 'ok'],
+      ['append_note', 2, 'rejected'],
+    ])
+    expect(calls[2]?.reason).toMatch(/^c1 hasn't been read in this task/)
+  })
+
+  it('refuses a part-2 write citing a turn only part 1 was shown', async () => {
+    __setCloseAgentSlots({ before: [], perPart: [partTask({ seeded: true })], after: [] })
+    vi.mocked(generateToolStep)
+      .mockResolvedValueOnce(okStep([]))
+      .mockResolvedValueOnce(okStep([citing('k1', 'late', 't3')]))
+    const ctx = partsCtx()
+
+    await drainApplying(ctx)
+
+    expect(await description()).toBe('A courier.')
+    expect(closeLedgerOf(ctx.intermediates)?.calls).toEqual([
+      expect.objectContaining({
+        tool: 'append_note',
+        part: 2,
+        result: 'rejected',
+        turns: [],
+        reason: 't3 is not one of the turns this task was shown: cite only those turns',
+      }),
+    ])
+  })
+
+  it("starts Identity in part 2 from part 2's scene characters only", async () => {
+    __setCloseAgentSlots(IDENTITY_AND_THREADS)
+    await putCharacter(TOBIN, 'Tobin')
+    await setScene(f.entries[2]!.id, [WREN])
+    await setScene(f.entries[7]!.id, [TOBIN])
+
+    await drainApplying(partsCtx())
+
+    // Identity in parts 1 and 2; nobody is in part 3's scene, and no thread is open.
+    expect(generateToolStep).toHaveBeenCalledTimes(2)
+    expect(sentPrompt(0).user).toContain('## c1: Wren')
+    expect(sentPrompt(0).user).not.toContain('Tobin')
+    expect(sentPrompt(1).user).toContain('## c2: Tobin')
+    expect(sentPrompt(1).user).not.toContain('Wren')
+  })
+
+  it('renders one system half for Identity and Threads in a part, and another in the next', async () => {
+    __setCloseAgentSlots(IDENTITY_AND_THREADS)
+    await putCharacter(TOBIN, 'Tobin')
+    await setScene(f.entries[2]!.id, [WREN])
+    await setScene(f.entries[7]!.id, [TOBIN])
+    await putThread(LETTER, 'Deliver the letter')
+
+    await drainApplying(partsCtx())
+
+    // Identity then Threads in parts 1 and 2; Threads alone in part 3.
+    const systems = vi
+      .mocked(generateToolStep)
+      .mock.calls.map(([, request]) => request.prompt.system)
+    expect(systems).toHaveLength(5)
+    expect(systems[1]).toBe(systems[0])
+    expect(systems[3]).toBe(systems[2])
+    expect(systems[2]).not.toBe(systems[0])
+    expect(systems[4]).not.toBe(systems[3])
+    expect(systems[0]).toContain('## t5 (')
+    expect(systems[0]).not.toContain('## t6 (')
+    expect(systems[2]).toContain('## t6 (')
+    expect(systems[2]).toContain('## t12 (')
+    expect(systems[2]).not.toContain('## t5 (')
+    expect(systems[2]).not.toContain('## t13 (')
   })
 })

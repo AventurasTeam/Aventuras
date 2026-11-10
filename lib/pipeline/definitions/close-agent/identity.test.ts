@@ -38,7 +38,13 @@ import { runPipeline } from '../../runtime/orchestrator'
 import type { PhaseContext, PhaseEmittedEvent, PhaseResult, TxResult } from '../../types'
 import { openCloseFixture, type CloseFixture } from '../__tests__/close-fixture'
 import { closeAgentPhase } from '../chapter-close-agent'
-import { closeIdsOf, closeLedgerOf, seedCloseLedger, setCloseRange } from '../close-intermediates'
+import {
+  closeIdsOf,
+  closeLedgerOf,
+  seedCloseLedger,
+  setCloseParts,
+  setCloseRange,
+} from '../close-intermediates'
 import type { CloseLedger } from '../intermediates'
 
 vi.mock('@/lib/ai', async (importOriginal) => ({
@@ -266,7 +272,7 @@ async function* scriptedPhase(
     readFields: {},
     survivorOf: (table, id) => writer.survivorOf(table, id),
     phase,
-    chapterEntryIds: chapterEntryIds(f),
+    taskEntryIds: chapterEntryIds(f),
     readSet,
     ledger: writer,
   }
@@ -1215,7 +1221,7 @@ const START_CONFIG: ResolveModelConfig = { providers: [], profiles: [], assignme
 function promptContextFor(
   fx: CloseFixture,
   ids: CloseIds,
-  chapterEntryIds: readonly string[] = fx.entries.map((entry) => entry.id),
+  taskEntryIds: readonly string[] = fx.entries.map((entry) => entry.id),
 ): TaskPromptContext {
   const actionId = 'act_identity_start'
   return {
@@ -1237,7 +1243,7 @@ function promptContextFor(
       storyId: fx.storyId,
       branchId: fx.branchId,
     },
-    chapterEntryIds,
+    taskEntryIds,
     config: START_CONFIG,
   }
 }
@@ -1355,6 +1361,31 @@ describe('identityTask', () => {
     const { system, user } = identityTask.render(start!, { ...ctx, writesSoFar: '' })
     expect(`${system}${user}`).not.toContain(START_ROWS.ghost)
     expect(user).not.toContain('The landing')
+  })
+
+  it("starts from the scene characters of its own entries, a part's, and no earlier one", async () => {
+    const fx = await openCloseFixture()
+    await putEntityRow(fx, { id: START_ROWS.pip, kind: 'character', name: 'Pip' })
+    await putEntityRow(fx, { id: START_ROWS.bess, kind: 'character', name: 'Bess' })
+    await setSceneOf(fx, fx.entries[2]!.id, [START_ROWS.pip])
+    await setSceneOf(fx, fx.entries[8]!.id, [START_ROWS.bess])
+    const ids = idsWithTurns(fx)
+    const part = fx.entries.slice(5).map((entry) => entry.id)
+
+    const start = await identityTask.start(promptContextFor(fx, ids, part))
+
+    expect(start?.show.characters.map((c) => c.name)).toEqual(['Bess'])
+    expect(ids.handleOf(START_ROWS.pip)).toBeUndefined()
+    expect(start?.show.closeTurns.map((turn) => turn.handle)).toEqual([
+      't6',
+      't7',
+      't8',
+      't9',
+      't10',
+      't11',
+      't12',
+      't13',
+    ])
   })
 
   it("shows each row's writable fields as stored, a missing text as empty", async () => {
@@ -1833,11 +1864,16 @@ function noCallStep(): ToolStepResult {
 function closePhaseFor(fx: CloseFixture): PhaseContext {
   const actionId = 'act_identity_close'
   const intermediates: Record<string, unknown> = {}
-  setCloseRange(intermediates, {
+  const range = {
     chapterId: 'chap_identity_close',
     startEntryId: fx.entries[0]!.id,
     endEntryId: fx.replyIds[2]!,
-  })
+  }
+  setCloseRange(intermediates, range)
+  // As the metadata phase stores a chapter that fits; the agent reads only the cut's ids.
+  setCloseParts(intermediates, [
+    { part: 1, startEntryId: range.startEntryId, endEntryId: range.endEntryId, tokens: 0 },
+  ])
   return {
     actionId,
     abortSignal: new AbortController().signal,

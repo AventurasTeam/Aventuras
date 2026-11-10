@@ -148,7 +148,7 @@ function renderStandIn(
   { show: shown }: TaskStart<StandInShow>,
   ctx: TaskPromptContext & { writesSoFar: string },
 ): PromptHalves {
-  const turns = ctx.chapterEntryIds.flatMap((id) => ctx.ids.handleOf(id) ?? [])
+  const turns = ctx.taskEntryIds.flatMap((id) => ctx.ids.handleOf(id) ?? [])
   return {
     system: STAND_IN_SYSTEM,
     user: [

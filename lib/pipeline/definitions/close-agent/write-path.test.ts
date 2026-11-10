@@ -872,7 +872,7 @@ async function* dispatchPhase(
     readFields: {},
     survivorOf: (table, id) => writer.survivorOf(table, id),
     phase,
-    chapterEntryIds: chapterEntryIds(),
+    taskEntryIds: chapterEntryIds(),
     readSet,
     ledger: writer,
   }
