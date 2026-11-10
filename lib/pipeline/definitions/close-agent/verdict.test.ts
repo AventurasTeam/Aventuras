@@ -35,7 +35,7 @@ const loreUpdate = (
   action: {
     kind: 'updateLore',
     source: 'chapter_close',
-    payload: { branchId: BRANCH, id, patch },
+    payload: { branchId: BRANCH, id, patch, proseEntryId: null },
   },
   fields,
   row: id,

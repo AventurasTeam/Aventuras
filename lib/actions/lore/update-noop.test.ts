@@ -29,7 +29,7 @@ describe('updateLore', () => {
           action: {
             kind: 'updateLore',
             source: 'user_edit',
-            payload: { branchId: 'b1', id: 'lore_1', patch },
+            payload: { branchId: 'b1', id: 'lore_1', patch, proseEntryId: null },
           },
           actionId: 'a',
           branchId: 'b1',
@@ -113,7 +113,11 @@ describe("a close's lore writes against the user's edits", () => {
   const userEdit = (ctx: Ctx, patch: LorePatch, actionId = 'act_u') =>
     ok(
       ctx,
-      { kind: 'updateLore', source: 'user_edit', payload: { branchId: 'b1', id: 'lore_1', patch } },
+      {
+        kind: 'updateLore',
+        source: 'user_edit',
+        payload: { branchId: 'b1', id: 'lore_1', patch, proseEntryId: null },
+      },
       actionId,
     )
 
@@ -190,7 +194,7 @@ describe("a close's lore writes against the user's edits", () => {
       expect((await loreRow(db)).category).toBeNull()
     })
 
-    it('checks nothing when the payload carries no prose entry', async () => {
+    it('checks nothing when the prose entry is null', async () => {
       const { db, ctx } = await setup()
       await createLore(ctx)
       await writeProse(ctx)
@@ -198,7 +202,12 @@ describe("a close's lore writes against the user's edits", () => {
       const unanchored: PipelineAction = {
         kind: 'updateLore',
         source: 'chapter_close',
-        payload: { branchId: 'b1', id: 'lore_1', patch: { body: 'A drowned city.' } },
+        payload: {
+          branchId: 'b1',
+          id: 'lore_1',
+          patch: { body: 'A drowned city.' },
+          proseEntryId: null,
+        },
       }
       expect((await run(ctx, unanchored, 'act_k')).status).toBe('ok')
       expect((await loreRow(db)).body).toBe('A drowned city.')

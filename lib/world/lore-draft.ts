@@ -101,5 +101,11 @@ export function loreActions({ branchId, row, draft, id, now }: LoreActionArgs): 
   }
   const patch = lorePatch(row, draft)
   if (Object.keys(patch).length === 0) return []
-  return [{ kind: 'updateLore', source: 'user_edit', payload: { branchId, id: row.id, patch } }]
+  return [
+    {
+      kind: 'updateLore',
+      source: 'user_edit',
+      payload: { branchId, id: row.id, patch, proseEntryId: null },
+    },
+  ]
 }

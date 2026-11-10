@@ -39,8 +39,11 @@ declare module '@/lib/actions/action-map' {
         branchId: string
         id: string
         patch: LoreUpdatePatch
-        /** A machine write's prose: a column the user wrote after it is dropped (cadence.md). */
-        proseEntryId?: ProseEntryId
+        /**
+         * A machine write's prose, null for a user's write: a column the user wrote after it is
+         * dropped (cadence.md).
+         */
+        proseEntryId: ProseEntryId
       }
     }
     setLoreKeywords: {

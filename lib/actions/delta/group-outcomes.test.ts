@@ -81,7 +81,7 @@ async function land(ctx: DbCtx, action: PipelineAction, actionId: string): Promi
 const restateLore: PipelineAction = {
   kind: 'updateLore',
   source: 'periodic_classifier',
-  payload: { branchId: BRANCH, id: 'lore_1', patch: { title: 'The old road' } },
+  payload: { branchId: BRANCH, id: 'lore_1', patch: { title: 'The old road' }, proseEntryId: null },
 }
 
 const describeChar1: PipelineAction = {
@@ -218,7 +218,12 @@ describe('applyDeltaActionGroupWithOutcomes (C11)', () => {
       {
         kind: 'updateLore',
         source: 'periodic_classifier',
-        payload: { branchId: BRANCH, id: 'lore_gone', patch: { title: 'Gone' } },
+        payload: {
+          branchId: BRANCH,
+          id: 'lore_gone',
+          patch: { title: 'Gone' },
+          proseEntryId: null,
+        },
       },
     ])
 

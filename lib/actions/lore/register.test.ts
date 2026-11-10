@@ -87,7 +87,7 @@ describe('lore CRUD arms', () => {
         action: {
           kind: 'updateLore',
           source: 'user_edit',
-          payload: { branchId: 'br_1', id: 'lore_1', patch: {} },
+          payload: { branchId: 'br_1', id: 'lore_1', patch: {}, proseEntryId: null },
         },
         actionId: 'act_noop',
         branchId: 'br_1',
@@ -119,7 +119,7 @@ describe('lore CRUD arms', () => {
           action: {
             kind: 'updateLore',
             source: 'user_edit',
-            payload: { branchId: 'br_1', id, patch },
+            payload: { branchId: 'br_1', id, patch, proseEntryId: null },
           },
           actionId: 'act_u',
           branchId: 'br_1',
@@ -179,6 +179,7 @@ describe('lore CRUD arms', () => {
               keywords: ['aether'], // whole-array change (shrink)
               priority: 50, // scalar change
             },
+            proseEntryId: null,
           },
         },
         actionId: 'act_u',
@@ -263,7 +264,12 @@ describe('lore CRUD arms', () => {
         action: {
           kind: 'updateLore',
           source: 'user_edit',
-          payload: { branchId: 'br_1', id: 'lore_1', patch: { category: 'astral' } },
+          payload: {
+            branchId: 'br_1',
+            id: 'lore_1',
+            patch: { category: 'astral' },
+            proseEntryId: null,
+          },
         },
         actionId: 'act_u1',
         branchId: 'br_1',
@@ -277,7 +283,12 @@ describe('lore CRUD arms', () => {
         action: {
           kind: 'updateLore',
           source: 'user_edit',
-          payload: { branchId: 'br_1', id: 'lore_1', patch: { title: 'Aether' } },
+          payload: {
+            branchId: 'br_1',
+            id: 'lore_1',
+            patch: { title: 'Aether' },
+            proseEntryId: null,
+          },
         },
         actionId: 'act_u2',
         branchId: 'br_1',
@@ -291,7 +302,12 @@ describe('lore CRUD arms', () => {
         action: {
           kind: 'updateLore',
           source: 'user_edit',
-          payload: { branchId: 'br_1', id: 'lore_1', patch: { body: 'new text' } },
+          payload: {
+            branchId: 'br_1',
+            id: 'lore_1',
+            patch: { body: 'new text' },
+            proseEntryId: null,
+          },
         },
         actionId: 'act_u3',
         branchId: 'br_1',

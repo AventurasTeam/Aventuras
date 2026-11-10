@@ -103,7 +103,7 @@ async function editLore(
       action: {
         kind: 'updateLore',
         source: who === 'user' ? 'user_edit' : 'periodic_classifier',
-        payload: { branchId: f.branchId, id, patch },
+        payload: { branchId: f.branchId, id, patch, proseEntryId: null },
       },
       actionId: who === 'user' ? 'act_user_edit' : 'act_close_turn_5',
       branchId: f.branchId,

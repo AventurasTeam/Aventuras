@@ -288,7 +288,7 @@ describe('PlannedAction (checked by tsc)', () => {
     const update = <S extends 'chapter_close' | 'user_edit'>(source: S) => ({
       kind: 'updateLore' as const,
       source,
-      payload: { branchId: 'br_close', id: LORE_A, patch: { body: 'Paid.' } },
+      payload: { branchId: 'br_close', id: LORE_A, patch: { body: 'Paid.' }, proseEntryId: null },
     })
     const planned = (): PlannedAction[] => [
       { action: update('chapter_close'), fields: ['body'], row: LORE_A },

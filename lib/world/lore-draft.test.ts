@@ -148,6 +148,7 @@ describe('loreActions', () => {
           injectionMode: 'always',
           priority: 42,
         },
+        proseEntryId: null,
       },
     })
   })

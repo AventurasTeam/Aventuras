@@ -217,7 +217,12 @@ describe('keywordAuthors', () => {
       {
         kind: 'updateLore',
         source: 'chapter_close',
-        payload: { branchId: BRANCH, id: 'lore_1', patch: { keywords: ['aether', 'Ley line'] } },
+        payload: {
+          branchId: BRANCH,
+          id: 'lore_1',
+          patch: { keywords: ['aether', 'Ley line'] },
+          proseEntryId: null,
+        },
       },
       'act_u',
     )
