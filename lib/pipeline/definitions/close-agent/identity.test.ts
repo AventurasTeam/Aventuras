@@ -1137,7 +1137,7 @@ describe('update_character and update_faction', () => {
 })
 
 // classifier.md → ID handling: a stored turn handle names another turn in a later prompt.
-describe('update_character and update_faction: a turn handle in a text field', () => {
+describe('update_character and update_faction: a turn handle in a text or list field', () => {
   let f: CloseFixture
 
   beforeEach(async () => {

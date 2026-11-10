@@ -1100,6 +1100,7 @@ describe('update_lore', () => {
   it('refuses a title another lore row holds, trimmed and case-folded, landing the category beside it', async () => {
     await seedLore(f, { id: FERRY, title: 'The Night Ferry' })
     const taken = `title-taken: lo2 already holds this title: keep this row's title, or extend or correct lo2 with update_lore`
+    let runIds: CloseIds | undefined
 
     const run = await dispatchScripted(
       f,
@@ -1108,7 +1109,7 @@ describe('update_lore', () => {
         update({ title: '  the night FERRY ', category: 'tolls' }),
         update({ title: 'The Night Ferry' }),
       ],
-      { shown: SHOWN },
+      { shown: SHOWN, setup: (ids) => (runIds = ids) },
     )
 
     expect(run.answers.slice(1)).toEqual([
@@ -1125,6 +1126,33 @@ describe('update_lore', () => {
       ],
     })
     expect(await storedLore(f, TOLL)).toMatchObject({ title: 'The Ferry Toll', category: 'tolls' })
+    // Shown by name, so prose naming lo2 stores the holder's title.
+    expect(runIds?.nameOfId(FERRY)).toBe('The Night Ferry')
+  })
+
+  it('measures each row from its own body before the close', async () => {
+    await seedLore(f, { id: FERRY, title: 'The Night Ferry', body: 'b'.repeat(3_000) })
+
+    // The Ferry Toll's body is 21 characters before the close; the Night Ferry's 3,000.
+    const run = await dispatchScripted(
+      f,
+      [
+        read,
+        update({ body: 'x'.repeat(1_221) }),
+        { toolName: 'read_row', input: { id: 'lo2' } },
+        { toolName: 'update_lore', input: { id: 'lo2', body: 'y'.repeat(4_200), ...cite() } },
+      ],
+      { shown: [...SHOWN, { id: FERRY, name: 'The Night Ferry' }] },
+    )
+
+    expect(run.answers).toEqual([
+      expect.anything(),
+      { result: 'ok' },
+      expect.anything(),
+      { result: 'ok' },
+    ])
+    expect((await storedLore(f, TOLL)).body).toBe('x'.repeat(1_221))
+    expect((await storedLore(f, FERRY)).body).toBe('y'.repeat(4_200))
   })
 
   it('lands its own title in another case: a row never takes its own title', async () => {
