@@ -74,6 +74,14 @@ describe('handleInTerm', () => {
     expect(handleInTerm(`the ${term} road`, shown())).toBe(handle)
   })
 
+  it('finds a two-letter row handle the close showed, bare or bracketed', () => {
+    const ids = shown()
+    ids.show('lore_00000000-0000-4000-8000-000000000001', 'The toll law')
+    expect(ids.show('lore_00000000-0000-4000-8000-000000000002', 'The ferry rule')).toBe('lo2')
+    expect(handleInTerm('lo2', ids)).toBe('lo2')
+    expect(handleInTerm('the [lo2] rule', ids)).toBe('lo2')
+  })
+
   it('passes a term holding no handle the close showed', () => {
     const ids = shown()
     expect(handleInTerm('the ferry', ids)).toBeUndefined()
