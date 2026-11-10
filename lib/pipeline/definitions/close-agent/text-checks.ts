@@ -1,13 +1,12 @@
 import type { CloseIds } from './ids'
 
-// A bracketed token or a bare handle: the tokens nameIdsInProse reads in prose.
-const HANDLE_TOKEN = /\[([^[\]\s]+)\]|\b[a-z]{1,2}\d+\b/g
+// Every handle CloseIds mints is 1–2 letters and digits; brackets around one or several pass.
+const HANDLE_TOKEN = /\b[a-z]{1,2}\d+\b/g
 const TURN_PREFIX = 'entry_'
 
 function handlesIn(text: string, ids: CloseIds): { handle: string; id: string }[] {
   const found: { handle: string; id: string }[] = []
-  for (const match of text.matchAll(HANDLE_TOKEN)) {
-    const handle = match[1] ?? match[0]
+  for (const [handle] of text.matchAll(HANDLE_TOKEN)) {
     const id = ids.idOf(handle)
     if (id !== undefined) found.push({ handle, id })
   }

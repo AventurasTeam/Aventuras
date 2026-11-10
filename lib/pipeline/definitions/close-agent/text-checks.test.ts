@@ -22,6 +22,13 @@ describe('turnHandleIn', () => {
     expect(turnHandleIn("(t1) and t1's", ids)).toBe('t1')
   })
 
+  it.each(['[t3,t5]', '[t3-t5]', '[t3–t5]', "[t3's]", '[t3/t4]', '[c1,t3]'])(
+    'finds a turn handle inside a bracket holding more than one token: %s',
+    (text) => {
+      expect(turnHandleIn(`The ferry runs late ${text}.`, shown())).toBe('t3')
+    },
+  )
+
   it('answers the first turn handle, past a row handle before it', () => {
     expect(turnHandleIn('c1 crossed at t3, then t2.', shown())).toBe('t3')
   })
@@ -47,6 +54,17 @@ describe('handleInTerm', () => {
     expect(handleInTerm('c1', ids)).toBe('c1')
     expect(handleInTerm('the [c1] road', ids)).toBe('c1')
     expect(handleInTerm('t2', ids)).toBe('t2')
+  })
+
+  it.each([
+    ['[t3,t5]', 't3'],
+    ['[t3-t5]', 't3'],
+    ['[t3–t5]', 't3'],
+    ["[t3's]", 't3'],
+    ['[t3/t4]', 't3'],
+    ['[c1,t3]', 'c1'],
+  ])('finds a handle inside a bracket holding more than one token: %s', (term, handle) => {
+    expect(handleInTerm(`the ${term} road`, shown())).toBe(handle)
   })
 
   it('passes a term holding no handle the close showed', () => {
