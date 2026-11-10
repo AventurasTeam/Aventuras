@@ -45,7 +45,7 @@ export type LifecycleRow = {
   id: string
   kind: LifecycleKind
   name: string
-  status: string
+  status: Entity['status']
   retiredReason: string
   /** Its flag: the partner's handle, name and the reason, marked dormant when it no longer holds; '' if none. */
   collision: string
