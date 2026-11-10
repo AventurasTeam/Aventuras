@@ -1,10 +1,12 @@
+import { and, eq } from 'drizzle-orm'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { generateToolStep, type ResolveModelConfig, type ToolStepResult } from '@/lib/ai'
-import { branches, entities, lore } from '@/lib/db'
+import { branches, entities, lore, stories, storyEntries, type StoryMode } from '@/lib/db'
 import { makeLogger } from '@/lib/diagnostics'
 import { resetAllStores } from '@/lib/stores'
 
+import { IDENTITY_READ_FIELDS, identityTask } from './identity'
 import { CloseIds } from './ids'
 import { LORE_READ_FIELDS, loreTask } from './lore'
 import { __setCloseAgentSlots, type CloseAgentSlots } from './slots'
@@ -27,6 +29,7 @@ const LORE_ROWS = {
   eldrinTwin: 'lore_00000000-0000-4000-8000-00000000c004',
 } as const
 const SYNDICATE = 'fact_00000000-0000-4000-8000-00000000c005'
+const KAEL = 'char_00000000-0000-4000-8000-00000000c006'
 
 // Written with no delta, as an import or a hand edit leaves a row: a start reads rows, not history.
 async function putLoreRow(
@@ -47,6 +50,30 @@ async function putLoreRow(
     createdAt: 1,
     updatedAt: 1,
   })
+}
+
+// Identity starts only on a scene character; the system-half tests compare against its render.
+async function putSceneCharacter(fx: CloseFixture): Promise<void> {
+  await fx.ctx.db.insert(entities).values({
+    id: KAEL,
+    branchId: fx.branchId,
+    kind: 'character',
+    name: 'Kael',
+    status: 'active',
+    injectionMode: 'auto',
+    createdAt: 1,
+    updatedAt: 1,
+  })
+  const where = and(eq(storyEntries.branchId, fx.branchId), eq(storyEntries.id, fx.entries[2]!.id))
+  const [row] = await fx.ctx.db
+    .select({ metadata: storyEntries.metadata })
+    .from(storyEntries)
+    .where(where)
+  if (!row?.metadata) throw new Error('putSceneCharacter: the entry has no metadata')
+  await fx.ctx.db
+    .update(storyEntries)
+    .set({ metadata: { ...row.metadata, sceneEntities: [KAEL] } })
+    .where(where)
 }
 
 // As the agent phase does before any task: every chapter entry a turn, t1 the first.
@@ -118,7 +145,7 @@ describe('loreTask', () => {
     expect(loreTask.readFields).toBe(LORE_READ_FIELDS)
   })
 
-  // Inserted out of order. Code units put "aether tides" last, where a locale sort puts it first.
+  // Code units put "aether tides" last, where a locale sort puts it first.
   it('shows every lore row by title in code units, then by id, each under its short id', async () => {
     await putLoreRow(fx, { id: LORE_ROWS.tides, title: 'aether tides' })
     await putLoreRow(fx, { id: LORE_ROWS.aetherium, title: 'The Aetherium' })
@@ -214,6 +241,20 @@ describe('loreTask', () => {
     expect(ids.nameOf('f1')).toBe('The Syndicate')
   })
 
+  // A title naming another row must not take that row's handle ahead of its place in the list.
+  it("keeps a row's handle at its place in the list when an earlier title names it", async () => {
+    await putLoreRow(fx, { id: LORE_ROWS.eldrin, title: `A rule tied to ${LORE_ROWS.tides}` })
+    await putLoreRow(fx, { id: LORE_ROWS.tides, title: 'Tides' })
+
+    const { ids, start } = await startOf()
+
+    expect(start?.show.lore).toEqual([
+      { id: 'lo1', title: 'A rule tied to lo2' },
+      { id: 'lo2', title: 'Tides' },
+    ])
+    expect(ids.idOf('lo2')).toBe(LORE_ROWS.tides)
+  })
+
   it('renders the titles and the limits in the user half, the turns in the system half', async () => {
     await putLoreRow(fx, { id: LORE_ROWS.eldrin, title: 'House Eldrin' })
     await putLoreRow(fx, { id: LORE_ROWS.aetherium, title: 'The\nAetherium' })
@@ -230,6 +271,62 @@ describe('loreTask', () => {
     expect(user).not.toContain('# Writes so far')
     expect(system).toContain('## t3 (narration)\nThe inn is warm and loud with drovers.')
     expect(system).not.toContain('House Eldrin')
+  })
+
+  // memory/chapter-close.md → Conversations: a part's tasks reuse the chapter's cached prefix.
+  it("renders a system half byte-identical to Identity's for the same turns and mode", async () => {
+    await putLoreRow(fx, { id: LORE_ROWS.eldrin, title: 'House Eldrin' })
+    await putSceneCharacter(fx)
+    const ids = idsWithTurns(fx)
+    const ctx = promptContextFor(fx, ids)
+    const identityStart = await identityTask.start({
+      ...ctx,
+      task: 'identity',
+      readFields: IDENTITY_READ_FIELDS,
+    })
+    const loreStart = await loreTask.start(ctx)
+
+    const identityPrompt = identityTask.render(identityStart!, { ...ctx, writesSoFar: '' })
+    const lorePrompt = loreTask.render(loreStart!, { ...ctx, writesSoFar: '' })
+
+    expect(lorePrompt.system).toBe(identityPrompt.system)
+    expect(lorePrompt.system).toContain('## t3 (narration)\nThe inn is warm and loud with drovers.')
+    expect(lorePrompt.user).not.toBe(identityPrompt.user)
+  })
+
+  it("puts the story mode's rule in the system half, the same as Identity's", async () => {
+    await putSceneCharacter(fx)
+    const render = async (mode: StoryMode) => {
+      const [story] = await fx.ctx.db
+        .select({ definition: stories.definition })
+        .from(stories)
+        .where(eq(stories.id, fx.storyId))
+      await fx.ctx.db
+        .update(stories)
+        .set({ definition: { ...story!.definition!, mode } })
+        .where(eq(stories.id, fx.storyId))
+      const ctx = promptContextFor(fx, idsWithTurns(fx))
+      const identityStart = await identityTask.start({
+        ...ctx,
+        task: 'identity',
+        readFields: IDENTITY_READ_FIELDS,
+      })
+      const loreStart = await loreTask.start(ctx)
+      return {
+        identity: identityTask.render(identityStart!, { ...ctx, writesSoFar: '' }).system,
+        lore: loreTask.render(loreStart!, { ...ctx, writesSoFar: '' }).system,
+      }
+    }
+
+    const creative = await render('creative')
+    expect(creative.lore).toContain('Each is a direction or prose')
+    expect(creative.lore).not.toContain('Each is what the lead does, says or attempts')
+    expect(creative.lore).toBe(creative.identity)
+
+    const adventure = await render('adventure')
+    expect(adventure.lore).toContain('Each is what the lead does, says or attempts')
+    expect(adventure.lore).not.toContain('Each is a direction or prose')
+    expect(adventure.lore).toBe(adventure.identity)
   })
 
   it('says so when the branch holds no lore', async () => {
