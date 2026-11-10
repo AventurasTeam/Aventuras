@@ -35,8 +35,8 @@ import {
 
 import { computeUndoPayload } from '../delta/delta-encoding'
 import {
+  keywordEditNoop,
   keywordPairsFlagReason,
-  keywordUserAddedReason,
   planKeywordAdds,
   planKeywordEdit,
   priorTerms,
@@ -485,14 +485,7 @@ export const setEntityKeywordsHandler: ActionHandler = async (action, branchId, 
     { table: 'entities', branchId: bid, id, keywords: current.keywords },
     { add, remove, proseEntryId },
   )
-  if (edit.kind === 'user-term') {
-    const { term } = edit
-    return noopRefusal(keywordUserAddedReason(term), null)
-  }
-  if (edit.kind === 'unchanged')
-    return edit.userDropped
-      ? noopRefusal(USER_EDITED_SINCE_PROSE, null)
-      : noopRefusal('no-keyword-change', 'restated')
+  if (edit.kind !== 'changed') return keywordEditNoop(edit)
   if (edit.removed.length > 0) {
     const pair = await flagPairTerm(ctx, current, edit.next, edit.removed)
     if (pair !== null) {

@@ -4,7 +4,8 @@ import { deltas, type Delta } from '@/lib/db'
 import { newTerms, normalizeTerm } from '@/lib/keyword-terms'
 
 import { isUserOriginatedSource, type DbCtx, type DeltaSource, type ProseEntryId } from '../types'
-import { userEditsSinceProse } from './user-precedence'
+import { noopRefusal, type HandlerOutcome } from './registry'
+import { USER_EDITED_SINCE_PROSE, userEditsSinceProse } from './user-precedence'
 
 /** Who added a live keyword: a delta's source, or `unlogged` when no delta accounts for it. */
 export type KeywordAuthor = DeltaSource | 'unlogged'
@@ -164,4 +165,16 @@ export async function planKeywordEdit(
     next: [...keywords.filter((term) => !dropped.has(normalizeTerm(term))), ...added],
     removed,
   }
+}
+
+/** A keyword edit that writes nothing, as its handler's no-op. */
+export function keywordEditNoop(edit: Exclude<KeywordEdit, { kind: 'changed' }>): HandlerOutcome {
+  if (edit.kind === 'user-term') {
+    // noop-marks.test passes this null mark by its source text, `keywordUserAddedReason(term)`.
+    const { term } = edit
+    return noopRefusal(keywordUserAddedReason(term), null)
+  }
+  return edit.userDropped
+    ? noopRefusal(USER_EDITED_SINCE_PROSE, null)
+    : noopRefusal('no-keyword-change', 'restated')
 }
