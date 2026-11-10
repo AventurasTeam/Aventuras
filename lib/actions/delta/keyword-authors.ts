@@ -45,7 +45,8 @@ async function keywordDeltas(ctx: DbCtx, branchId: string, table: 'entities' | '
 /**
  * Normalized live term → who added it (retrieval.md → Keywords schema): the latest update whose
  * list before lacks the term and whose list after holds it, else the create. An undone update has
- * left the log, so its term falls back to the create's source.
+ * left the log, so its term falls back to the latest earlier keyword update still in the log, else
+ * the create's source.
  */
 export async function keywordAuthors(
   ctx: DbCtx,
@@ -88,7 +89,10 @@ export function keywordUserAddedReason(term: string): string {
   return `keyword-user-added: ${term}`
 }
 
-/** `keyword-pairs-flag: <term> (pairs this row with <other>, …)` — a removal that would break a live flag's pair, naming the open question (entities only). */
+/**
+ * `keyword-pairs-flag: <term> (pairs this row with <other>, …)` — a removal that would break a
+ * live flag's pair, naming the open question (entities only).
+ */
 export function keywordPairsFlagReason(term: string, other: string): string {
   return `keyword-pairs-flag: ${term} (pairs this row with ${other}, an open question for the user)`
 }
