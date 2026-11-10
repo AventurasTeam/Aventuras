@@ -204,6 +204,16 @@ const NOTES = new Map<string, string>([
   ],
   [CLOSE_REASON.laterTurn, 'A later turn wrote this; its value stands. Do not write it again.'],
   [CLOSE_REASON.rowGone, 'The row is gone; do not write to it again.'],
+  // raiseCollisionFlagHandler's refusals of a flag_duplicate.
+  [
+    'already-flagged',
+    'Each row already holds a flag naming another row, and a row holds one flag: leave this pair for the user.',
+  ],
+  ['pair-resolved', 'The user already kept these two rows apart: do not flag them again.'],
+  [
+    'flag-held-by-partner',
+    'The other row already holds a flag naming this one: send the call again to mark that flag as the same.',
+  ],
 ])
 
 type ModelAnswer = {

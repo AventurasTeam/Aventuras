@@ -24,9 +24,9 @@ import { collisionPairOf, entityKeepActions, flagStillHolds } from '@/lib/world'
 import { createReadSet } from './common-checks'
 import { dispatchToolCall, type DispatchContext, type ToolAnswer } from './dispatch'
 import { CloseLedgerWriter } from './ledger'
-import { flagDuplicateTool, retireEntityTool } from './lifecycle-tools'
+import { type FLAG_DUPLICATE_SHAPE, flagDuplicateTool, retireEntityTool } from './lifecycle-tools'
 import { turnInTextReason } from './text-checks'
-import { assertReplaySafe, type CloseTool } from './tool'
+import { assertReplaySafe, type CloseTool, type WriteTool } from './tool'
 import { CLOSE_REASON } from './verdict'
 import { expectRan } from '../../__tests__/harness'
 import { definePipeline } from '../../authoring/define'
@@ -223,9 +223,24 @@ type DispatchRun = {
 }
 
 const SCRIPTED_KIND = 'close-lifecycle-tools-test'
+
+/** flag_duplicate whose partner, the stranger, takes a live flag naming Tobin after the plan reads. */
+const flagDuplicateRaced: WriteTool<typeof FLAG_DUPLICATE_SHAPE> = {
+  ...flagDuplicateTool,
+  plan: async (args, ctx) => {
+    const plan = await flagDuplicateTool.plan(args, ctx)
+    await ctx.db
+      .update(entities)
+      .set({ nameCollisionFlag: 1, nameCollisionPartnerId: TOBIN, nameCollisionReason: 'alike' })
+      .where(and(eq(entities.branchId, ctx.branchId), eq(entities.id, STRANGER)))
+    return plan
+  },
+}
+
 const LIFECYCLE_TOOLS: Readonly<Record<string, CloseTool>> = {
   retire_entity: retireEntityTool,
   flag_duplicate: flagDuplicateTool,
+  flag_duplicate_raced: flagDuplicateRaced,
 }
 
 type PendingRun = {
@@ -933,7 +948,13 @@ describe('flag_duplicate', () => {
 
       const { result, answers } = await dispatchScripted(f, [flagCall(input)], { shown: SHOWN })
 
-      expect(outputs(answers)).toEqual([{ result: 'rejected', reason: 'already-flagged' }])
+      expect(outputs(answers)).toEqual([
+        {
+          result: 'rejected',
+          reason: 'already-flagged',
+          note: 'Each row already holds a flag naming another row, and a row holds one flag: leave this pair for the user.',
+        },
+      ])
       expect(await runDeltas(f, result.actionId)).toEqual([])
       expect(flagOf(await storedEntity(f, TOBIN))).toEqual([1, CLERK, 'duplicate'])
       expect(flagOf(await storedEntity(f, STRANGER))).toEqual([1, WREN, 'duplicate'])
@@ -1061,7 +1082,13 @@ describe('flag_duplicate', () => {
       const { result, answers } = await dispatchScripted(f, [flagCall()], { shown: SHOWN })
 
       // Not skipped: the user's clear answers the question, whenever it came.
-      expect(outputs(answers)).toEqual([{ result: 'rejected', reason: 'pair-resolved' }])
+      expect(outputs(answers)).toEqual([
+        {
+          result: 'rejected',
+          reason: 'pair-resolved',
+          note: 'The user already kept these two rows apart: do not flag them again.',
+        },
+      ])
       expect(await runDeltas(f, result.actionId)).toEqual([])
     },
   )
@@ -1096,8 +1123,41 @@ describe('flag_duplicate', () => {
       taskEntryIds: [...f.entries.map((entry) => entry.id), 'entry_late_006', 'entry_late_007'],
     })
 
-    expect(outputs(answers)).toEqual([{ result: 'rejected', reason: 'pair-resolved' }])
+    expect(outputs(answers)).toEqual([
+      {
+        result: 'rejected',
+        reason: 'pair-resolved',
+        note: 'The user already kept these two rows apart: do not flag them again.',
+      },
+    ])
     expect(await runDeltas(f, result.actionId)).toEqual([])
+  })
+
+  it("tells the model to resend when the partner's flag came to name the row after the plan read", async () => {
+    await seedRow(f, { id: TOBIN, kind: 'character', name: 'Tobin' })
+    // The stranger's keyword names Tobin, so the `alike` flag it takes mid-call is live.
+    await seedRow(f, {
+      id: STRANGER,
+      kind: 'character',
+      name: 'the hooded stranger',
+      keywords: ['tobin'],
+    })
+
+    const { result, answers } = await dispatchScripted(
+      f,
+      [{ toolName: 'flag_duplicate_raced', input: { id: 'c1', partner: 'c2', ...cite() } }],
+      { shown: SHOWN },
+    )
+
+    expect(outputs(answers)).toEqual([
+      {
+        result: 'rejected',
+        reason: 'flag-held-by-partner',
+        note: 'The other row already holds a flag naming this one: send the call again to mark that flag as the same.',
+      },
+    ])
+    expect(await runDeltas(f, result.actionId)).toEqual([])
+    expect(flagOf(await storedEntity(f, TOBIN))).toEqual([0, null, null])
   })
 
   it("skips a row whose flag a later turn wrote, before the handler reads that turn's flag", async () => {
