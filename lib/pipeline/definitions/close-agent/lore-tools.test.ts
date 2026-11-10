@@ -765,6 +765,50 @@ describe('update_lore', () => {
     expect(await runDeltas(f, run.result.actionId)).toEqual([])
   })
 
+  it('reads a protected text restated as ok, not skipped, alone or beside a free field', async () => {
+    await editLore(f, 'user', TOLL, { body: 'The user wrote this.' })
+
+    const run = await dispatchScripted(
+      f,
+      [
+        read,
+        update({ body: 'The user wrote this.' }),
+        update({ body: ' The user wrote this. ', category: 'tolls' }),
+      ],
+      { shown: SHOWN },
+    )
+
+    expect(run.answers[1]).toEqual({ result: 'ok' })
+    expect(run.answers[2]).toEqual({ result: 'ok' })
+    expect(run.calls[2]).not.toHaveProperty('skippedFields')
+    expect(run.calls[2]!.values).toEqual({ category: 'tolls' })
+  })
+
+  it('reads keywords a later turn wrote, restated, as ok, not skipped', async () => {
+    await editLore(f, 'later-turn', TOLL, { keywords: ['toll', 'ferry'] })
+
+    const run = await dispatchScripted(f, [read, update({ keywords: { add: ['Ferry'] } })], {
+      shown: SHOWN,
+    })
+
+    expect(run.answers[1]).toEqual({ result: 'ok' })
+    expect(await runDeltas(f, run.result.actionId)).toEqual([])
+  })
+
+  it('skips a protected text before a rule refuses it', async () => {
+    await editLore(f, 'user', TOLL, { body: 'The user wrote this.' })
+    await editLore(f, 'later-turn', TOLL, { category: 'river' })
+
+    const run = await dispatchScripted(
+      f,
+      [read, update({ body: 'As t5 shows, the toll doubles.' }), update({ category: 'tolls' })],
+      { shown: SHOWN },
+    )
+
+    expect(run.answers[1]).toMatchObject({ result: 'skipped', reason: USER_EDITED_SINCE_PROSE })
+    expect(run.answers[2]).toMatchObject({ result: 'skipped', reason: CLOSE_REASON.laterTurn })
+  })
+
   it('reads stored values as ok, nothing written', async () => {
     const run = await dispatchScripted(
       f,
