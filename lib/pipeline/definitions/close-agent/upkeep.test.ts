@@ -456,6 +456,20 @@ describe('upkeepTask', () => {
     expect(ids.nameOf('i2')).toBe('seal')
   })
 
+  // A character shows only its keywords: an id its description cites reaches no prompt.
+  it('gives no handle to a row only a character description cites', async () => {
+    await seedUpkeepWorld(fx)
+    await fx.ctx.db
+      .update(entities)
+      .set({ description: `The ferryman; he keeps ${ROWS.seal} for the reeve.` })
+      .where(eq(entities.id, ROWS.tobin))
+
+    const { ids, start } = await startOf()
+
+    expect(start?.show.rows.map((row) => row.id)).toContain('c1')
+    expect(ids.handleOf(ROWS.seal)).toBeUndefined()
+  })
+
   it("starts from the part's happenings not yet common knowledge, set at its turns or made from one", async () => {
     await seedUpkeepWorld(fx)
 

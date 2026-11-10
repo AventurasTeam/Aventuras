@@ -109,11 +109,13 @@ async function openHappenings(
     .sort((a, b) => compareId(a.title, b.title) || compareId(a.id, b.id))
 }
 
+// Upkeep writes a place's and an item's texts; a character or a faction shows only its keywords.
+const ownsText = (row: Entity): boolean => row.kind === 'location' || row.kind === 'item'
+
 // The text a start shows of a row, which is all an id it cites can reach the model through.
 const shownText = (row: Entity): unknown => [
   row.name,
-  row.description,
-  stateRecord(row).condition,
+  ...(ownsText(row) ? [row.description, stateRecord(row).condition] : []),
   row.keywords,
 ]
 
@@ -169,20 +171,17 @@ async function startUpkeep(ctx: TaskPromptContext): Promise<TaskStart<UpkeepShow
       mode: await storyModeOf(ctx),
       closeTurns,
       proseTokens,
-      rows: shown.map(({ row, inScene }) => {
-        const ownsText = row.kind === 'location' || row.kind === 'item'
-        return {
-          id: ctx.ids.show(row.id, row.name),
-          kind: row.kind,
-          name: handled(row.name),
-          status: row.status,
-          description: ownsText ? handled(text(row.description)) : '',
-          keywords: strings(row.keywords).map(handled),
-          condition: ownsText ? handled(text(stateRecord(row).condition)) : '',
-          placement: placement(row),
-          inScene,
-        }
-      }),
+      rows: shown.map(({ row, inScene }) => ({
+        id: ctx.ids.show(row.id, row.name),
+        kind: row.kind,
+        name: handled(row.name),
+        status: row.status,
+        description: ownsText(row) ? handled(text(row.description)) : '',
+        keywords: strings(row.keywords).map(handled),
+        condition: ownsText(row) ? handled(text(stateRecord(row).condition)) : '',
+        placement: placement(row),
+        inScene,
+      })),
       happenings: open.map((row) => ({
         id: ctx.ids.show(row.id, row.title),
         title: handled(row.title),
