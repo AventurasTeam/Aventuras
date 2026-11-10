@@ -1827,6 +1827,31 @@ describe('dispatchToolCall in a close phase', () => {
     },
   )
 
+  it('names neither row anew when a title lands on one of two rows with no kept row', async () => {
+    configurePort({
+      applyDeltaActionGroupWithOutcomes: async () => ({
+        status: 'ok',
+        outcomes: [{ status: 'landed' }],
+      }),
+    })
+    scriptedPlan = (ctx) => ({
+      kind: 'write',
+      actions: [{ ...describeAs(ctx, BRAM, 'The courier'), fields: ['title'] }],
+      lost: [],
+      rows: entityRows(WREN, BRAM),
+      values: { title: 'The courier' },
+    })
+    seeds = [
+      { table: 'entities', id: WREN },
+      { table: 'entities', id: BRAM },
+    ]
+
+    await runDispatch([{ toolName: 'scripted', input: { rows: ['c1', 'c2'], ...cite(['t7']) } }])
+
+    expect(recorded()[0]).toMatchObject({ result: 'ok' })
+    expect([shown?.nameOfId(WREN), shown?.nameOfId(BRAM)]).toEqual(['Wren', 'Bram'])
+  })
+
   it.each<[string, LostField]>([
     [
       'skipped',
