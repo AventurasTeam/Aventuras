@@ -108,6 +108,20 @@ export const referenceLimit = (
   providerOptions: ImageProfile['providerOptions'],
 ): number => PROVIDER_REFERENCE_LIMIT[providerType](providerOptions)
 
+const NO_REFERENCES_REASON: Partial<Record<ImageProviderType, string>> = {
+  comfyui: 'it needs a custom workflow with a selected LoadImage node to use reference images.',
+  a1111: 'the "Model takes reference images" switch is off.',
+}
+
+/** The clause after "but" saying why a profile sends no references; undefined when it can. */
+export const referenceBlocker = (
+  providerType: ImageProviderType,
+  providerOptions: ImageProfile['providerOptions'],
+): string | undefined =>
+  referenceLimit(providerType, providerOptions) === 0
+    ? (NO_REFERENCES_REASON[providerType] ?? 'its provider cannot send reference images.')
+    : undefined
+
 const always = () => true
 const never = () => false
 

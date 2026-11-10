@@ -79,6 +79,7 @@ import {
   IMAGE_PROVIDER_OPTIONS,
   generateImage,
   providerNeedsModel,
+  referenceBlocker,
   supportsReferenceImages,
   listImageModels,
   evictReplacedModelList,
@@ -131,6 +132,20 @@ describe('Image Provider Registry', () => {
       ['comfyui', { mode: 'custom-workflow' }, false],
     ])('for %s with %j is %s', (providerType, providerOptions, expected) => {
       expect(providerNeedsModel(providerType, providerOptions)).toBe(expected)
+    })
+  })
+
+  describe('referenceBlocker', () => {
+    it('names what to fix for a provider whose settings control references', () => {
+      expect(referenceBlocker('comfyui', { mode: 'custom-workflow' })).toContain('LoadImage')
+    })
+
+    it('falls back to a generic reason for a provider that never sends references', () => {
+      expect(referenceBlocker('zhipu', {})).toBe('its provider cannot send reference images.')
+    })
+
+    it('is undefined when the provider can send references', () => {
+      expect(referenceBlocker('openai', {})).toBeUndefined()
     })
   })
 

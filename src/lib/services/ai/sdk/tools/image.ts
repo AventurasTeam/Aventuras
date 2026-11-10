@@ -19,6 +19,7 @@ import {
   isImageGenerationEnabled,
   missingCredential,
   providerNeedsModel,
+  referenceBlocker,
   type MissingCredential,
 } from '#lib/services/ai/image/index.ts'
 import { DEFAULT_FALLBACK_STYLE_PROMPT } from '#lib/services/ai/image/constants.ts'
@@ -317,9 +318,13 @@ export function createImageTools(context: ImageToolContext) {
         if ('error' in resolved) return { success: false, error: resolved.error }
 
         if (!(await supportsReferenceImages(resolved.profileId, resolved.model))) {
+          const profile = settings.getImageProfile(resolved.profileId)
+          const blocker = profile && referenceBlocker(profile.providerType, profile.providerOptions)
           return {
             success: false,
-            error: `The Reference profile's provider or model "${resolved.model}" cannot take a reference image. Please tell the user to pick an img2img-capable model in Settings → Images.`,
+            error: blocker
+              ? `The Reference profile cannot take a reference image: ${blocker} Please tell the user to fix it in Settings → Images.`
+              : `The Reference profile's provider or model "${resolved.model}" cannot take a reference image. Please tell the user to pick an img2img-capable model in Settings → Images.`,
           }
         }
 

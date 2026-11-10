@@ -26,8 +26,8 @@
     IMAGE_PROVIDER_OPTIONS,
     ComfyMode,
     loadImageInputs,
+    referenceBlocker,
     referenceInputsOf,
-    referenceLimit,
     suggestReferenceInputs,
     applyCapabilityOverride,
     canonicalModelId,
@@ -184,17 +184,11 @@
   const workflowGraph = $derived(activeWorkflow?.workflow)
   const loadImageNodes = $derived(workflowGraph ? loadImageInputs(workflowGraph) : [])
   const selectedReferenceInputs = $derived(activeWorkflow ? referenceInputsOf(activeWorkflow) : [])
-  // The clause after "but" for a provider type that cannot send references.
-  const NO_REFERENCES_REASON: Partial<Record<ImageProviderType, string>> = {
-    comfyui: 'it needs a custom workflow with a selected LoadImage node to use reference images.',
-    a1111: 'the "Model takes reference images" switch is off.',
-  }
   // Null when the profile can send references.
   const referenceProfileWarningReason = $derived.by(() => {
     if (!isEditingReferenceProfile) return null
-    if (referenceLimit(profileProviderType, buildProviderOptions()) === 0) {
-      return NO_REFERENCES_REASON[profileProviderType] ?? 'it cannot send reference images.'
-    }
+    const blocker = referenceBlocker(profileProviderType, buildProviderOptions())
+    if (blocker) return blocker
     if (capabilityOverride?.references === false) {
       return 'reference images are switched off under Model capabilities.'
     }

@@ -29,6 +29,7 @@ export {
   isLocalServer,
   referenceLimit,
   providerNeedsModel,
+  referenceBlocker,
   takesCapabilityOverride,
   IMAGE_PROVIDER_LABELS,
   IMAGE_PROVIDER_OPTIONS,

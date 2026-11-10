@@ -30,6 +30,7 @@ vi.mock('#lib/services/ai/image/index.ts', () => ({
   isImageGenerationEnabled: vi.fn(),
   missingCredential: vi.fn(),
   providerNeedsModel: vi.fn(),
+  referenceBlocker: vi.fn(),
 }))
 
 vi.mock('#lib/services/database.ts', () => ({
@@ -46,6 +47,7 @@ import {
   isImageGenerationEnabled,
   missingCredential,
   providerNeedsModel,
+  referenceBlocker,
 } from '#lib/services/ai/image/index.ts'
 import { database } from '#lib/services/database.ts'
 import type { VaultCharacter } from '#lib/types/index.ts'
@@ -173,6 +175,19 @@ describe('edit_image', () => {
     expect(result.success).toBe(false)
     expect(result.error).toContain('reference image')
     expect(generateImage).not.toHaveBeenCalled()
+  })
+
+  it('says what to fix when the provider sends no references at all', async () => {
+    const { edit, generatedImages } = makeTools()
+    generatedImages.set('a', 'data:image/png;base64,AAAA')
+    profiles.ref = { model: '', providerType: 'comfyui' }
+    vi.mocked(supportsReferenceImages).mockResolvedValue(false)
+    vi.mocked(referenceBlocker).mockReturnValue('it needs a LoadImage node.')
+
+    const result = await edit({ instruction: 'x', imageId: 'a' })
+
+    expect(result.error).toContain('it needs a LoadImage node.')
+    expect(result.error).not.toContain('img2img-capable')
   })
 
   it('fails when an http portrait cannot be fetched', async () => {
