@@ -356,9 +356,10 @@ patch`, which 5.5a marks `restated`, so a close tool's write of it
   draft changes it, and the settings tab only makes it read-only, so a
   row set back to active keeps a reason `data-model.md` calls
   meaningful only while retired; the classifier's return from
-  retirement clears it. A close's Lifecycle start then shows that
-  stale reason on an active row, which reads as evidence to retire it
-  again. Read in the code, not run. Raised in 5.8's task review.
+  retirement clears it. A close's Lifecycle task shows a reason only
+  on a retired row (developer decision, 2026-11-10), so the stale one
+  stays in the database and the export. Read in the code, not run.
+  Raised in 5.8's task review.
 - **Undoing a user's keyword edit wipes a later pass's term.** CTRL-Z
   or a rollback window of a user's keyword edit under a later
   periodic keyword write restores the whole list from the undo
