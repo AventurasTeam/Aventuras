@@ -184,13 +184,15 @@ patch`, which 5.5a marks `restated`, so a close tool's write of it
   but `vitest.setup.ts` must not load the `@/lib/pipeline` barrel before
   a test's mocks, and `bootstrap.ts` pulls in UI modules a script can't
   load. Raised in 5.5a's review.
-- **The close's scripted-dispatch test harness exists three times.**
-  `write-path.test.ts`, `identity.test.ts` and `threads.test.ts` under
-  `lib/pipeline/definitions/close-agent/` each build the same
-  `DispatchContext` (about 80 lines), and the two task test files also
-  repeat their fixture helpers (story mode, scene setters, thread
-  seeds). One helper beside `__tests__/close-fixture.ts` would serve all
-  three before 5.8 and 5.9 add more. Raised in 5.5b's review.
+- **The close's scripted-dispatch test harness exists six times.**
+  `write-path.test.ts`, `identity.test.ts`, `threads.test.ts`,
+  `lore-tools.test.ts`, `upkeep-tools.test.ts` and
+  `lifecycle-tools.test.ts` under `lib/pipeline/definitions/close-agent/`
+  each build the same `DispatchContext` (about 80 lines), and the task
+  test files also repeat their fixture helpers (story mode, scene
+  setters, thread seeds). One helper beside `__tests__/close-fixture.ts`
+  would serve all six before 5.9 adds more. Raised in 5.5b's review;
+  5.8 added the last three.
 - **`setThreadStatus` and `updateThread` read "carries refs"
   differently.** `setThreadStatus` writes the resolved ref only when
   `triggeredAtEntryId` is set, while `updateThread` asks whether either
@@ -239,11 +241,12 @@ patch`, which 5.5a marks `restated`, so a close tool's write of it
   `scripts/dataset-chapter/treasure-island.seed.test.ts` spells the
   dataset branch out instead of importing `DATASET_BRANCH_ID`. Raised in
   5.5b's review.
-- **"Every history marks the user's turns" leaves two histories out.**
+- **"Every history marks the user's turns" leaves three histories out.**
   [`architecture.md`](../architecture.md#system-and-user-halves) names
   the narrator's histories and the close's turns, but the
-  chapter-metadata call and the suggestion refresh render through
-  `macro_story_entry` and mark them too. Raised in 5.5b's review.
+  chapter-metadata call, its per-part call and the suggestion refresh
+  render through `macro_story_entry` and mark them too. Raised in 5.5b's
+  review; 5.8 added the per-part call.
 - **Boot recovery reverts a close that is still running.**
   `recoverInFlightRuns` (`lib/pipeline/runtime/recovery.ts`, called only
   from `runBootstrap`) reverses every `pipeline_runs` row with no
@@ -320,7 +323,15 @@ patch`, which 5.5a marks `restated`, so a close tool's write of it
   `CHAPTER_CLOSE_RESOLVES` in `chapter-close.ts`. The parts cut reads
   its window from that target, so it is right only while the prose
   tasks run on the same model, and nothing ties the copies together.
-  One exported close target would. Raised in 5.8's task review.
+  One exported close target would. The phases also resolve it at
+  different times: the metadata phase cuts the parts from its own
+  settings snapshot and the agent phase reads a later one, and App
+  Settings → Providers (Quick wire, Fetch models) isn't gated during a
+  close. A reassignment or a smaller detected window between the two
+  leaves parts sized for the old window, so the first task call fails
+  the close, and the next run cuts afresh. Resolving the target once and
+  storing it beside the parts would close both. Raised in 5.8's task
+  review; the timing in its slice review.
 - **A new mock shape answers `{}` from an older `state.json`.** In
   `scripts/mock-llm/state.ts`, `loadState` gives a shape the saved file
   lacks an empty lane, not its shipped default. So every shape added
@@ -346,7 +357,12 @@ patch`, which 5.5a marks `restated`, so a close tool's write of it
   in `state-patch-actions.ts`, outside `PLACE_REFUSAL`, and
   `branchPlaces` (`parent-chain-check.ts`) isn't exported, so
   `close-agent/placement.ts` copies both and can drift from the
-  handler. Raised in 5.8's task review.
+  handler. `close-agent/lifecycle-tools.ts`'s `REFUSAL` copies four
+  more inline handler strings the same way: `location` and `not-active`
+  (`retireEntityHandler`), `partner-is-self` and `partner-not-of-kind`
+  (`raiseCollisionFlagHandler`). An exported constant, as `lib/world`'s
+  `PLACE_REFUSAL` is, would tie each pair. Raised in 5.8's task review;
+  the lifecycle copies in its slice review.
 - **`retiredReason` has no length bound.** The classifier's `reason`
   (`lib/classifier/schema.ts`) is a plain optional string, and the
   close stores `retire_entity`'s `why` the same way, while the close's
@@ -372,7 +388,9 @@ patch`, which 5.5a marks `restated`, so a close tool's write of it
   gap). The same whole-list restore may hit other list fields a pass
   appends to, unchecked, and `data-model.md`'s "periodic-classifier
   deltas above it … stay put" doesn't hold when they wrote the same
-  field. For the undo substrate's owner. The Keywords
+  field. Same root cause and fix as the parked
+  [keyword undo item](../parked.md#a-keyword-writes-undo-restores-the-whole-prior-list),
+  whose revisit signal this is. For the undo substrate's owner. The Keywords
   schema section of `retrieval.md` links this item, so a triage pass
   updates that link when routing it. Raised in 5.8's execution,
   developer decision 2026-11-10.

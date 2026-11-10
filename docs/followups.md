@@ -538,4 +538,9 @@ breakdown under [UX](#ux).
   dataset chapter cut at a 40,000 window, part 1's Upkeep start held
   39 rows and 29 happenings and its Lifecycle start 29 rows (part 2:
   20 and 22), with no bound on either, and the close still ran without
-  a window stop. Raised 2026-11-10 by 5.8's review.
+  a window stop. The metadata merge grows with the part count too (about
+  75 tokens a part summary over a 420-token base) with no size check or
+  staged merge, so on a small window a very long chapter could fail the
+  close at the merge after every part call ran; only near an 8k window
+  and a chapter past about 420k tokens. Raised 2026-11-10 by 5.8's
+  review; the merge size by its slice review.
