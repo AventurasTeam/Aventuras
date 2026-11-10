@@ -1783,7 +1783,7 @@ describe('closeAgentPhase over three parts', () => {
     __setCloseAgentSlots(undefined)
   })
 
-  // The two real prose tasks, slotted by hand: the production slots grow, these cases don't.
+  // Identity and Threads, slotted by hand: the production slots grow, these cases don't.
   const IDENTITY_AND_THREADS: CloseAgentSlots = {
     before: [],
     perPart: [
