@@ -2,7 +2,7 @@ import { z } from 'zod'
 
 import { USER_EDITED_SINCE_PROSE } from '@/lib/actions/types'
 import type { Entity } from '@/lib/db'
-import { flagStillHolds } from '@/lib/world'
+import { flaggedSideOf, flagStillHolds } from '@/lib/world'
 
 import { readEntity } from './entity-write'
 import { charactersInSceneAfterTask } from './later-scene'
@@ -146,8 +146,8 @@ async function flagGoesOnPartner(
   row: Entity,
   partner: Entity,
 ): Promise<boolean> {
-  if (flagStillHolds(row, partner)) return false
-  if (flagStillHolds(partner, row)) return true
+  const holder = flaggedSideOf(row, partner)
+  if (holder !== null) return holder === partner
   return (await flagsAnotherRow(ctx, row, partner)) && !(await flagsAnotherRow(ctx, partner, row))
 }
 
