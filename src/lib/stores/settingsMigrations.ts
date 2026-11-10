@@ -96,57 +96,6 @@ export function migrateImageGeneration<
   }
 }
 
-/** The ComfyUI custom-workflow keys these migrations read, as they may appear on disk. */
-interface StoredCustomWorkflow {
-  workflow?: Record<string, { inputs?: Record<string, unknown> }>
-  positivePromptPath?: string
-  positivePromptPaths?: string[]
-  negativePromptPath?: string | null
-  negativePromptPaths?: string[]
-  seedPath?: string | null
-}
-
-const isStoredCustomWorkflow = (value: unknown): value is StoredCustomWorkflow =>
-  typeof value === 'object' && value !== null && !Array.isArray(value)
-
-// `KSamplerAdvanced` and `SamplerCustom` keep their seed in `noise_seed`.
-function repairedSeedPath({ workflow, seedPath }: StoredCustomWorkflow) {
-  const [nodeId, inputs, name, ...rest] = (seedPath ?? '').split('.')
-  if (inputs !== 'inputs' || name !== 'seed' || rest.length > 0) return seedPath
-  const nodeInputs = workflow?.[nodeId]?.inputs
-  return nodeInputs && !Object.hasOwn(nodeInputs, 'seed') && Object.hasOwn(nodeInputs, 'noise_seed')
-    ? `${nodeId}.inputs.noise_seed`
-    : seedPath
-}
-
-/**
- * A custom workflow's prompt and negative are lists, `positivePromptPaths` and
- * `negativePromptPaths`; the single-path keys they replace are folded in. An input the prompt
- * takes is not also a negative. The same pass repairs a seed path that named the wrong input.
- */
-export function migrateImageProviderOptions(
-  providerOptions: Record<string, unknown>,
-): Record<string, unknown> {
-  const stored = providerOptions.customWorkflow
-  if (!isStoredCustomWorkflow(stored)) return providerOptions
-
-  const { positivePromptPath, negativePromptPath, ...rest } = stored
-  const positivePromptPaths =
-    stored.positivePromptPaths ?? (positivePromptPath ? [positivePromptPath] : [])
-  const negativePromptPaths = (
-    stored.negativePromptPaths ?? (negativePromptPath ? [negativePromptPath] : [])
-  ).filter((path) => !positivePromptPaths.includes(path))
-  return {
-    ...providerOptions,
-    customWorkflow: {
-      ...rest,
-      positivePromptPaths,
-      negativePromptPaths,
-      seedPath: repairedSeedPath(stored) ?? null,
-    },
-  }
-}
-
 /**
  * `llmThreshold` counted world-state *records*; the control that replaced it counts
  * *words*, the same unit Entry Retrieval already used.

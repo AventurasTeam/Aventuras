@@ -36,7 +36,6 @@ import {
   migrateContextWindow,
   migrateEntryRetrieval,
   migrateImageGeneration,
-  migrateImageProviderOptions,
   migrateWorldStateBudget,
   migrateWorldStateInjection,
 } from './settingsMigrations'
@@ -2883,7 +2882,7 @@ class SettingsStore {
             {
               ...p,
               ...imageConnectionFor(p.providerType, p.apiKey, p.baseUrl),
-              providerOptions: migrateImageProviderOptions(p.providerOptions ?? {}),
+              providerOptions: p.providerOptions ?? {},
             },
           ]
         })
