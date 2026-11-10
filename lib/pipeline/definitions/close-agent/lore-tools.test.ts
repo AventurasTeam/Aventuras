@@ -447,7 +447,7 @@ describe('create_lore', () => {
       'The Night Crossing',
       'The Syndicate Sash',
     ])
-    expect(run.writer.landedCalls('create_lore')).toBe(3)
+    expect(run.writer.landedCalls(createLoreTool)).toBe(3)
   })
 
   it('counts only landed creates toward the cap, an earlier task’s and part’s included', async () => {

@@ -1472,10 +1472,10 @@ describe('closeAgentPhase', () => {
       id: 'hap_kept',
     })
     // Every entry counts the same ledger's landed calls, across tasks: a chapter-wide cap's count.
-    expect(seen[1]!.landedCalls('merge_happenings')).toBe(1)
-    expect(seen[0]!.landedCalls('update_happening')).toBe(1)
-    expect(stepSeen[0]!.landedCalls('merge_happenings')).toBe(1)
-    expect(seen[1]!.landedCalls('create_lore')).toBe(0)
+    expect(seen[1]!.landedCalls({ name: 'merge_happenings' })).toBe(1)
+    expect(seen[0]!.landedCalls({ name: 'update_happening' })).toBe(1)
+    expect(stepSeen[0]!.landedCalls({ name: 'merge_happenings' })).toBe(1)
+    expect(seen[1]!.landedCalls({ name: 'create_lore' })).toBe(0)
   })
 
   it("hands a task a ledger that logs a report value under the run's actionId", async () => {

@@ -49,7 +49,7 @@ async function startLore(ctx: TaskPromptContext): Promise<TaskStart<LoreShow> | 
       lore: shown.map(({ row, id }) => ({ id, title: ctx.ids.withHandles(row.title) })),
       limits: {
         creates: LORE_CREATE_CAP,
-        left: Math.max(0, LORE_CREATE_CAP - ctx.landedCalls('create_lore')),
+        left: Math.max(0, LORE_CREATE_CAP - ctx.landedCalls(createLoreTool)),
         bodyChars: LORE_BODY_LIMIT,
       },
     },

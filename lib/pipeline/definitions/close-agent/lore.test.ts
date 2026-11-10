@@ -9,8 +9,10 @@ import { resetAllStores } from '@/lib/stores'
 import { IDENTITY_READ_FIELDS, identityTask } from './identity'
 import { CloseIds } from './ids'
 import { LORE_READ_FIELDS, loreTask } from './lore'
+import { createLoreTool } from './lore-tools'
 import { __setCloseAgentSlots, type CloseAgentSlots } from './slots'
 import type { TaskPromptContext } from './task'
+import type { CloseTool, ToolContext } from './tool'
 import type { PhaseContext, PhaseEmittedEvent, PhaseResult } from '../../types'
 import { openCloseFixture, type CloseFixture } from '../__tests__/close-fixture'
 import { closeAgentPhase } from '../chapter-close-agent'
@@ -89,7 +91,7 @@ const START_CONFIG: ResolveModelConfig = { providers: [], profiles: [], assignme
 function promptContextFor(
   fx: CloseFixture,
   ids: CloseIds,
-  opts: { taskEntryIds?: readonly string[]; landedCalls?: (tool: string) => number } = {},
+  opts: { taskEntryIds?: readonly string[]; landedCalls?: ToolContext['landedCalls'] } = {},
 ): TaskPromptContext {
   const actionId = 'act_lore_start'
   return {
@@ -190,12 +192,12 @@ describe('loreTask', () => {
   })
 
   it("shows the cap, the creates the ledger's landed create_lore calls leave, and the body limit", async () => {
-    const landedCalls = vi.fn((tool: string) => (tool === 'create_lore' ? 2 : 7))
+    const landedCalls = vi.fn((tool: Pick<CloseTool, 'name'>) => (tool === createLoreTool ? 2 : 7))
 
     const { start } = await startOf({ landedCalls })
 
     expect(start?.show.limits).toEqual({ creates: 3, left: 1, bodyChars: 1200 })
-    expect(landedCalls).toHaveBeenCalledWith('create_lore')
+    expect(landedCalls).toHaveBeenCalledWith(createLoreTool)
     expect((await startOf()).start?.show.limits).toEqual({ creates: 3, left: 3, bodyChars: 1200 })
   })
 

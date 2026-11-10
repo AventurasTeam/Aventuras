@@ -41,8 +41,6 @@ export const LORE_REFUSAL = {
   titleTaken: 'title-taken',
 } as const
 
-const CREATE_LORE = 'create_lore'
-
 const NOTE = {
   titleBlank: 'Give the row a title: the name the story uses for the rule or thing.',
   bodyBlank:
@@ -120,7 +118,7 @@ async function planCreateLore(args: CreateArgs, ctx: WriteContext): Promise<Writ
 
   if (title === '') return refused(LORE_REFUSAL.titleBlank, NOTE.titleBlank)
   if (body === '') return refused(LORE_REFUSAL.bodyBlank, NOTE.bodyBlank)
-  if (ctx.landedCalls(CREATE_LORE) >= LORE_CREATE_CAP) return refused(LORE_REFUSAL.cap, NOTE.cap)
+  if (ctx.landedCalls(createLoreTool) >= LORE_CREATE_CAP) return refused(LORE_REFUSAL.cap, NOTE.cap)
   const holder = await loreTitled(ctx, title)
   if (holder !== undefined) {
     ctx.ids.show(holder.id, holder.title)
@@ -188,7 +186,7 @@ async function planCreateLore(args: CreateArgs, ctx: WriteContext): Promise<Writ
 /** chapter-close.md → 3a: a lore row the chapter establishes, cited, under the cap, with a body. */
 export const createLoreTool: WriteTool<typeof CREATE_LORE_SHAPE> = {
   kind: 'write',
-  name: CREATE_LORE,
+  name: 'create_lore',
   description: `Create a lore row for what the chapter's turns establish: a world-rule, magic system, religion, faction charter, cosmology or term whose working or meaning the prose explains, not one it merely mentions. At most ${LORE_CREATE_CAP} per chapter, so when a row already holds the rule, extend or correct it with update_lore instead. Always a body, of at most ${LORE_BODY_LIMIT} characters. Keywords are the names and words the prose uses for it.`,
   schema: writeToolSchema(CREATE_LORE_SHAPE),
   ids: {},

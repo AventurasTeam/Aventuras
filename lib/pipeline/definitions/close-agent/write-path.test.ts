@@ -1283,7 +1283,7 @@ describe('dispatchToolCall in a close phase', () => {
       })
     }
     scriptedPlan = (ctx) => {
-      counts.push(ctx.landedCalls('create_note'), ctx.landedCalls('scripted'))
+      counts.push(ctx.landedCalls(createNoteTool), ctx.landedCalls(scriptedTool))
       return { kind: 'write', actions: [], lost: [], rows: entityRows(WREN), values: {} }
     }
 

@@ -44,7 +44,7 @@ export type ToolContext = {
   /** A landed merge's kept row for a row this close absorbed. */
   readonly survivorOf: (table: string, id: string) => { table: string; id: string } | undefined
   /** The ledger's landed (`ok`) calls of `tool` so far, across tasks and parts. */
-  readonly landedCalls: (tool: string) => number
+  readonly landedCalls: (tool: Pick<CloseTool, 'name'>) => number
 }
 export type WriteContext = ToolContext & {
   /** Cited entry ids, resolved. */
