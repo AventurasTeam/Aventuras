@@ -56,7 +56,7 @@
 
   let isLoading = $state(false)
   let isSaving = $state(false)
-  let isRegenerating = $state(false)
+  const regeneratingImageIds = new SvelteSet<string>()
 
   const selectedImageIds = new SvelteSet<string>()
   const selectAllChecked = $derived(images.length > 0 && selectedImageIds.size === images.length)
@@ -69,6 +69,9 @@
   )
   // Not gated on `lightboxOpen`: the modal keeps rendering its image while it animates out.
   const lightboxImage = $derived(lightboxIndex >= 0 ? images[lightboxIndex] : null)
+  const lightboxRegenerating = $derived(
+    lightboxImage ? regeneratingImageIds.has(lightboxImage.id) : false,
+  )
   let editingImagePrompt = $state('')
   let touchStartX = 0
 
@@ -164,6 +167,20 @@
       failedImageIds.add(id)
     } finally {
       loadingImageIds.delete(id)
+    }
+  }
+
+  async function regenerate(id: string, prompt: string) {
+    if (regeneratingImageIds.has(id)) return
+    regeneratingImageIds.add(id)
+    try {
+      await retryImageGeneration(id, prompt)
+      await refreshImages()
+    } catch (error) {
+      console.error('[Gallery] Regenerate failed:', error)
+      ui.showToast(`Failed to regenerate image: ${errMessage(error)}`, 'error')
+    } finally {
+      regeneratingImageIds.delete(id)
     }
   }
 
@@ -348,24 +365,12 @@
 
   // Submit edit modal - regenerate with new prompt
   async function handleEditImageSubmit(imageId: string) {
-    if (!editingImagePrompt.trim()) return
-
-    const image = images.find((img) => img.id === imageId)
-    if (!image) return
-
     // Use the prompt as-is - don't append style (user has full control)
     const fullPrompt = editingImagePrompt.trim()
+    if (!fullPrompt || !imageById.has(imageId)) return
 
-    // Close modal and regenerate
     closeLightbox()
-
-    // Use centralized retry logic from ImageGenerationService
-    await retryImageGeneration(imageId, fullPrompt)
-
-    editingImagePrompt = ''
-
-    // Refresh gallery images
-    await refreshImages()
+    await regenerate(imageId, fullPrompt)
   }
 </script>
 
@@ -635,7 +640,7 @@
               alt={`Generated image ${lightboxIndex + 1}`}
               class={[
                 'max-h-[40vh] max-w-full rounded object-contain sm:max-h-[50vh]',
-                isRegenerating && 'opacity-50',
+                lightboxRegenerating && 'opacity-50',
               ]}
             />
           {:else if failedImageIds.has(lightboxImage.id)}
@@ -652,7 +657,7 @@
               ></div>
             </div>
           {/if}
-          {#if isRegenerating}
+          {#if lightboxRegenerating}
             <div class="absolute inset-0 flex items-center justify-center">
               <div class="bg-surface-900/80 flex flex-col items-center gap-2 rounded-lg px-4 py-3">
                 <div
@@ -712,22 +717,16 @@
         {#if lightboxImage}
           <Button
             size="sm"
-            onclick={async () => {
-              if (lightboxImage && editingImagePrompt.trim()) {
-                isRegenerating = true
-                await handleEditImageSubmit(lightboxImage.id)
-                isRegenerating = false
-              }
-            }}
-            disabled={!editingImagePrompt.trim() || isRegenerating}
+            onclick={() => lightboxImage && handleEditImageSubmit(lightboxImage.id)}
+            disabled={!editingImagePrompt.trim() || lightboxRegenerating}
             class="h-8 gap-1.5 text-xs"
           >
-            {#if isRegenerating}
+            {#if lightboxRegenerating}
               <div
-                class="h-3.5 w-3.5 animate-spin rounded-full border-2 border-current border-t-transparent"
+                class="size-3.5 animate-spin rounded-full border-2 border-current border-t-transparent"
               ></div>
             {:else}
-              <RotateCcw class="h-3.5 w-3.5" />
+              <RotateCcw class="size-3.5" />
             {/if}
             Regenerate
           </Button>
