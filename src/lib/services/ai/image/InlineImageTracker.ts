@@ -54,6 +54,7 @@ export class InlineImageTracker {
    * unrecorded image is deleted from the narration at render time.
    */
   private starting = new Set<Promise<void>>()
+  private abandoned = false
 
   constructor(
     private storyId: string,
@@ -146,6 +147,7 @@ export class InlineImageTracker {
 
     // Build full prompt with style
     const stylePrompt = await resolveStylePrompt(this.storyId, imageSettings.styleId)
+    if (this.abandoned) return
     const fullPrompt = `${tag.prompt}. ${stylePrompt}`
 
     log('Starting async image generation', {
@@ -232,7 +234,8 @@ export class InlineImageTracker {
 
     const imageSettings = settings.systemServicesSettings.imageGeneration
 
-    for (const pending of this.pendingImages) {
+    // Shifted off as each is registered, so a failure part-way leaves only unregistered ones to abandon.
+    for (let pending = this.pendingImages.shift(); pending; pending = this.pendingImages.shift()) {
       // Determine dimensions from size setting
       const { width, height } = expectedPixels(pending.size)
 
@@ -261,16 +264,20 @@ export class InlineImageTracker {
       void this.settle(pending)
     }
 
-    log('All pending images flushed (generation continues in background)', {
-      count: this.pendingImages.length,
-    })
-    this.pendingImages = []
+    log('All pending images flushed (generation continues in background)')
   }
 
   /** Record a flushed image once its generation finishes. Never rejects: neither step throws. */
   private async settle(pending: PendingImage): Promise<void> {
     const result = await pending.generationPromise
     await recordImageResult(pending.id, this.entryId, result, pending.attempt)
+  }
+
+  /** Abort generations that were never flushed, because the turn ended before its entry was saved. */
+  abandon(): void {
+    this.abandoned = true
+    for (const pending of this.pendingImages) pending.attempt.abort()
+    this.pendingImages = []
   }
 
   /**

@@ -1110,6 +1110,7 @@
 
       await notifyFailureIfBackgrounded(keepAliveEnded)
     } finally {
+      inlineImageTracker?.abandon()
       ui.endStreaming()
       ui.setGenerating(false)
       ui.setGenerationStatus('')

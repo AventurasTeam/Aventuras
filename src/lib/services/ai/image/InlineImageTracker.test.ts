@@ -67,6 +67,42 @@ describe('InlineImageTracker', () => {
     expect(signal?.aborted).toBe(true)
   })
 
+  it('aborts a generation that was never flushed when abandoned', async () => {
+    const tracker = new InlineImageTracker('story', 'entry', () => [])
+
+    tracker.processChunk(TAG, false)
+    await vi.waitFor(() => expect(generateImage).toHaveBeenCalledTimes(1))
+    const signal = generateImage.mock.calls[0][0].signal
+
+    tracker.abandon()
+
+    expect(signal?.aborted).toBe(true)
+    expect(tracker.hasPendingImages).toBe(false)
+  })
+
+  it('starts nothing for a tag still in its style lookup when abandoned', async () => {
+    const tracker = new InlineImageTracker('story', 'entry', () => [])
+
+    tracker.processChunk(TAG, false)
+    tracker.abandon()
+    await tracker.flushToDatabase()
+
+    expect(generateImage).not.toHaveBeenCalled()
+    expect(createEmbeddedImage).not.toHaveBeenCalled()
+  })
+
+  it('leaves a flushed generation running when abandoned', async () => {
+    const tracker = new InlineImageTracker('story', 'entry', () => [])
+
+    tracker.processChunk(TAG, false)
+    await tracker.flushToDatabase()
+    const signal = generateImage.mock.calls[0][0].signal
+
+    tracker.abandon()
+
+    expect(signal?.aborted).toBe(false)
+  })
+
   it('records a tag seen in the final chunk, flushed before its style lookup resolves', async () => {
     const tracker = new InlineImageTracker('story', 'entry', () => [])
 
