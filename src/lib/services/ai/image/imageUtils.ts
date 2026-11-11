@@ -87,6 +87,11 @@ export const MISSING_CREDENTIAL_REASONS: Record<MissingCredential, string> = {
   baseUrl: 'has no base URL configured',
 }
 
+/** User-facing explanation of what keeps an image slot from generating. */
+export function imageSetupMessage(missing: MissingCredential): string {
+  return `The image profile ${MISSING_CREDENTIAL_REASONS[missing]}. Fix it in Settings → Images.`
+}
+
 /**
  * Check if required credentials are configured for a given image slot.
  */
@@ -298,10 +303,16 @@ export async function runImageGeneration(request: ImageGenerationRequest): Promi
  * a retry only rewrites the row, never `characters.portrait`, so the entry gets a picture
  * and the character keeps the one it has.
  */
-export async function retryImageGeneration(imageId: string, prompt: string): Promise<void> {
-  if (!isImageGenerationEnabled()) {
-    log('Cannot retry - image generation not enabled')
-    return
+export async function retryImageGeneration(
+  imageId: string,
+  prompt: string,
+): Promise<MissingCredential | undefined> {
+  // A setup the user can fix comes back to the caller to report. A generation that fails is
+  // recorded on the row and raised through `notifyFailure`, so it returns nothing either.
+  const missing = missingCredential()
+  if (missing) {
+    log('Cannot retry - image setup incomplete', { missing })
+    return missing
   }
 
   const image = await database.getEmbeddedImage(imageId)
@@ -312,11 +323,7 @@ export async function retryImageGeneration(imageId: string, prompt: string): Pro
 
   const imageSettings = settings.systemServicesSettings.imageGeneration
   const profileId = imageSettings.profileId
-
-  if (!profileId) {
-    log('Cannot retry - no profile configured')
-    return
-  }
+  if (!profileId) return 'profile'
 
   const profile = settings.getImageProfile(profileId)
   const model = profile?.model ?? ''

@@ -4,7 +4,11 @@
   import { ui } from '#lib/stores/ui.svelte.ts'
   import { database } from '#lib/services/database.ts'
   import { imageExportService } from '#lib/services/imageExport.ts'
-  import { cancelImageGeneration, retryImageGeneration } from '#lib/services/ai/image/index.ts'
+  import {
+    cancelImageGeneration,
+    imageSetupMessage,
+    retryImageGeneration,
+  } from '#lib/services/ai/image/index.ts'
   import { eventBus, type ImageQueuedEvent, type ImageReadyEvent } from '#lib/services/events.ts'
   import { errMessage } from '#lib/utils/error.ts'
   import { normalizeImageDataUrl } from '#lib/utils/image.ts'
@@ -200,7 +204,8 @@
     if (regeneratingImageIds.has(id)) return
     regeneratingImageIds.add(id)
     try {
-      await retryImageGeneration(id, prompt)
+      const missing = await retryImageGeneration(id, prompt)
+      if (missing) ui.showToast(imageSetupMessage(missing), 'error')
     } catch (error) {
       console.error('[Gallery] Regenerate failed:', error)
       ui.showToast(`Failed to regenerate image: ${errMessage(error)}`, 'error')

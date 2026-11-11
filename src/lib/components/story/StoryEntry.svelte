@@ -71,6 +71,7 @@
     type TTSQueuedEvent,
   } from '#lib/services/events.ts'
   import {
+    imageSetupMessage,
     inlineImageService,
     resolveStylePrompt,
     retryImageGeneration,
@@ -955,10 +956,14 @@
 
     try {
       // Use centralized retry logic from ImageGenerationService
-      await retryImageGeneration(imageId, finalPrompt)
+      const missing = await retryImageGeneration(imageId, finalPrompt)
+      if (missing) ui.showToast(imageSetupMessage(missing), 'error')
 
       // Reload images to show updated state
       await loadEmbeddedImages()
+    } catch (error) {
+      console.error('[StoryEntry] Regenerate failed:', error)
+      ui.showToast(`Failed to regenerate image: ${errMessage(error)}`, 'error')
     } finally {
       // Remove from regenerating set
       const newSet = new SvelteSet(regeneratingImageIds)

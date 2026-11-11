@@ -8,6 +8,7 @@ const state = {
     backgroundProfileId: null as string | null,
     portraitProfileId: null as string | null,
     referenceProfileId: null as string | null,
+    size: { orientation: 'square' as const, size: 'medium' as const },
   },
   profiles: {} as Record<
     string,
@@ -37,6 +38,9 @@ vi.mock('#lib/stores/settings.svelte.ts', () => ({
 
 const updateEmbeddedImage = vi.fn(async (_id: string, _updates: unknown) => {})
 const cancelEmbeddedImage = vi.fn(async (_id: string) => true)
+const getEmbeddedImage = vi.fn(async (_id: string): Promise<{ entryId: string } | null> => ({
+  entryId: 'entry',
+}))
 const emitImageQueued = vi.fn()
 const emitImageReady = vi.fn()
 const emitImageAnalysisFailed = vi.fn()
@@ -45,6 +49,7 @@ vi.mock('#lib/services/database.ts', () => ({
   database: {
     updateEmbeddedImage: (id: string, updates: unknown) => updateEmbeddedImage(id, updates),
     cancelEmbeddedImage: (id: string) => cancelEmbeddedImage(id),
+    getEmbeddedImage: (id: string) => getEmbeddedImage(id),
   },
 }))
 
@@ -70,6 +75,7 @@ const {
   warmSlotCapabilities,
   generatePortrait,
   runImageGeneration,
+  retryImageGeneration,
   beginImageAttempt,
   cancelImageGeneration,
 } = await import('./imageUtils')
@@ -286,6 +292,65 @@ const deferred = () => {
 }
 
 const tick = () => new Promise((resolve) => setTimeout(resolve, 0))
+
+describe('retryImageGeneration', () => {
+  beforeEach(() => {
+    state.profiles['p-std'].apiKey = 'sk-test'
+    getEmbeddedImage.mockReset()
+    getEmbeddedImage.mockResolvedValue({ entryId: 'entry' })
+    generateImage.mockReset()
+    generateImage.mockResolvedValue({ base64: 'PIXELS' })
+    updateEmbeddedImage.mockClear()
+    emitImageQueued.mockClear()
+    emitImageReady.mockClear()
+  })
+
+  const expectUntouched = () => {
+    expect(getEmbeddedImage).not.toHaveBeenCalled()
+    expect(updateEmbeddedImage).not.toHaveBeenCalled()
+    expect(generateImage).not.toHaveBeenCalled()
+  }
+
+  it('returns the api key, and touches nothing, when the profile has none', async () => {
+    state.profiles['p-std'].apiKey = ''
+
+    await expect(retryImageGeneration('img', 'a scene')).resolves.toBe('apiKey')
+
+    expectUntouched()
+  })
+
+  it('returns the profile, and touches nothing, when none is selected', async () => {
+    setSlotIds(null, null, null, null)
+
+    await expect(retryImageGeneration('img', 'a scene')).resolves.toBe('profile')
+
+    expectUntouched()
+  })
+
+  it('returns nothing, and generates nothing, when the row is gone', async () => {
+    getEmbeddedImage.mockResolvedValue(null)
+
+    await expect(retryImageGeneration('img', 'a scene')).resolves.toBeUndefined()
+
+    expect(updateEmbeddedImage).not.toHaveBeenCalled()
+    expect(generateImage).not.toHaveBeenCalled()
+  })
+
+  it('regenerates the row and announces it', async () => {
+    await expect(retryImageGeneration('img', 'a scene')).resolves.toBeUndefined()
+
+    expect(updateEmbeddedImage).toHaveBeenNthCalledWith(
+      1,
+      'img',
+      expect.objectContaining({ prompt: 'a scene', status: 'generating' }),
+    )
+    expect(updateEmbeddedImage).toHaveBeenLastCalledWith('img', {
+      imageData: 'PIXELS',
+      status: 'complete',
+    })
+    expect(emitImageQueued).toHaveBeenCalledWith('img', 'entry')
+  })
+})
 
 describe('image attempts', () => {
   const request = (attempt: AbortController, notifyFailure = false) => ({
