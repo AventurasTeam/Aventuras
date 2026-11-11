@@ -107,6 +107,8 @@ describe('InlineImageTracker', () => {
   it('aborts the generation of an image whose record could not be created', async () => {
     const tracker = new InlineImageTracker('story', 'entry', () => [])
     createEmbeddedImage.mockRejectedValueOnce(new Error('insert failed'))
+    let finishRequest: (result: { base64: null; error: string }) => void = () => {}
+    generateImage.mockImplementationOnce(() => new Promise((resolve) => (finishRequest = resolve)))
 
     tracker.processChunk(TAG, false)
     await vi.waitFor(() => expect(generateImage).toHaveBeenCalledTimes(1))
@@ -114,7 +116,9 @@ describe('InlineImageTracker', () => {
 
     await expect(tracker.flushToDatabase()).rejects.toThrow('insert failed')
 
+    // Checked while the request is still pending, so it is the abort that reached it.
     expect(signal?.aborted).toBe(true)
+    finishRequest({ base64: null, error: 'aborted' })
   })
 
   it('records a tag seen in the final chunk, flushed before its style lookup resolves', async () => {
