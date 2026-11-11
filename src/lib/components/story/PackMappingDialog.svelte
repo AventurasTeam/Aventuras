@@ -9,6 +9,7 @@
   it renders is owned here.
 -->
 <script lang="ts">
+  import { Alert } from '#lib/components/ui/alert/index.ts'
   import ActionModal from '#lib/components/shared/ActionModal.svelte'
   import StepPackSelection from '../wizard/steps/StepPackSelection.svelte'
   import { database } from '#lib/services/database.ts'
@@ -159,10 +160,10 @@
     {/if}
   {/snippet}
   {#if authorMismatch}
-    <p class="border-warning/30 bg-warning/10 text-warning rounded-md border p-3 text-xs">
+    <Alert variant="warning" class="text-warning rounded-md p-3 text-xs">
       Your pack "{authorMismatch.name}" has the same name but a different author ({authorMismatch.author ??
         'no author'}). It may not be the same pack.
-    </p>
+    </Alert>
   {/if}
 
   {#if !loading}

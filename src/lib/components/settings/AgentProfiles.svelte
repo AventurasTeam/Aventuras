@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { Alert } from '#lib/components/ui/alert/index.ts'
   import { SvelteMap } from 'svelte/reactivity'
   import { onDestroy } from 'svelte'
   import { createDebouncedSave } from '#lib/utils/debounce.ts'
@@ -802,11 +803,9 @@
             : ''}"
         >
           {#if getServicesForProfile('custom').length > 0}
-            <div
-              class="border-warning/20 bg-warning/10 text-warning mb-2 rounded border px-2 py-1.5 text-xs"
-            >
+            <Alert variant="warning" class="text-warning mb-2 rounded px-2 py-1.5 text-xs">
               Unassigned agents will not work. Assign them to a profile.
-            </div>
+            </Alert>
           {/if}
           {#each getServicesForProfile('custom') as service (service.id)}
             <div

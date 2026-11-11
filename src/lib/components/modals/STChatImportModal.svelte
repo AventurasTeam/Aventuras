@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { Alert } from '#lib/components/ui/alert/index.ts'
   import { ui } from '#lib/stores/ui.svelte.ts'
   import { story } from '#lib/stores/story.svelte.ts'
   import { parseSTChat, type STChatParseResult } from '#lib/services/stChatImporter.ts'
@@ -292,8 +293,8 @@
         </div>
 
         <!-- Destructive warning -->
-        <div class="border-warning/40 bg-warning/10 flex gap-3 rounded-lg border p-4">
-          <AlertTriangle class="text-warning mt-0.5 h-5 w-5 shrink-0" />
+        <Alert variant="warning">
+          <AlertTriangle class="h-5 w-5" />
           <div class="space-y-1 text-sm">
             <p class="text-foreground font-medium">
               This will permanently replace all entries in "{story.currentStory?.title}".
@@ -303,7 +304,7 @@
               <strong>Settings → Labs</strong> for a full database backup.
             </p>
           </div>
-        </div>
+        </Alert>
 
         <!-- Change file button -->
         <Button variant="link" class="h-auto p-0 text-xs" onclick={() => (parseResult = null)}>

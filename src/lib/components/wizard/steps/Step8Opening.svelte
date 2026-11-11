@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { Alert } from '#lib/components/ui/alert/index.ts'
   import StoryTimeField from '#lib/components/shared/StoryTimeField.svelte'
   import { slide } from 'svelte/transition'
   import { FileJson, Loader2, Check, Sparkles, PenTool, Book, X, ChevronDown } from '@lucide/svelte'
@@ -369,7 +370,7 @@
             )}
 
             {#if openingReceivesStart === false}
-              <p class="border-warning/40 bg-warning/10 rounded-md border p-2 text-xs">
+              <Alert variant="warning" class="rounded-md p-2 text-xs">
                 The active prompt pack features the opening template that does not use
                 <code class="bg-muted rounded px-1 py-0.5 font-mono"
                   >{`{{ ${STARTING_TIME_VAR} }}`}</code
@@ -377,7 +378,7 @@
                 <code class="bg-muted rounded px-1 py-0.5 font-mono"
                   >TIME: opening ends at {`{{ ${STARTING_TIME_VAR} }}`}</code
                 > line above the protagonist in the opening templates, or choose a pack that has it.
-              </p>
+              </Alert>
             {/if}
             <div class="flex gap-2">
               <Button

@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { Alert } from '#lib/components/ui/alert/index.ts'
   import StoryTimeField from '#lib/components/shared/StoryTimeField.svelte'
   import DiscardConfirm from '#lib/components/shared/DiscardConfirm.svelte'
   import { PendingQuestion } from '#lib/components/shared/pendingQuestion.svelte.ts'
@@ -1237,16 +1238,17 @@
     </div>
 
     {#if collapsed.length > 0}
-      <p
-        class="border-warning/50 bg-warning/10 flex items-start gap-2 rounded-md border p-2 text-xs"
+      <Alert
+        variant="warning"
+        class="rounded-md p-2 text-xs [&>svg]:top-2.5 [&>svg]:left-2 [&>svg~*]:pl-6"
       >
-        <TriangleAlert class="text-warning mt-0.5 h-3.5 w-3.5 shrink-0" />
-        <span>
+        <TriangleAlert class="h-3.5 w-3.5" />
+        <div>
           {collapsed.length === 1 ? 'One entry is' : `${collapsed.length} entries are`}
           compressed to no length, marked above. Their share of the pacing cannot be recovered by widening
           the range later.
-        </span>
-      </p>
+        </div>
+      </Alert>
     {/if}
   {/if}
 

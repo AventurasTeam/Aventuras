@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { Alert } from '#lib/components/ui/alert/index.ts'
   import type { Entry, EntryType } from '#lib/types/index.ts'
   import { ui } from '#lib/stores/ui.svelte.ts'
   import { story } from '#lib/stores/story.svelte.ts'
@@ -231,11 +232,9 @@
 
         <!-- Lore Management Status -->
         {#if entry.loreManagementBlacklisted}
-          <div
-            class="border-warning/30 bg-warning/10 flex items-center gap-2 rounded-lg border p-3"
-          >
-            <span class="text-warning text-sm">Hidden from AI Lore Management</span>
-          </div>
+          <Alert variant="warning" class="text-warning p-3 text-sm">
+            Hidden from AI Lore Management
+          </Alert>
         {/if}
 
         <!-- Hidden Info -->

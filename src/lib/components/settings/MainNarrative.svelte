@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { Alert } from '#lib/components/ui/alert/index.ts'
   import { onDestroy } from 'svelte'
   import { createDebouncedSave } from '#lib/utils/debounce.ts'
   import { settings } from '#lib/stores/settings.svelte.ts'
@@ -78,12 +79,13 @@
 
   <Card.Content class="grid gap-3 pt-4">
     {#if settings.apiSettings.profiles.length === 0}
-      <div
-        class="border-warning/20 bg-warning/10 text-warning flex items-center gap-2 rounded border px-3 py-2 text-sm"
+      <Alert
+        variant="warning"
+        class="text-warning rounded px-3 py-2 text-sm [&>svg]:top-2.5 [&>svg]:left-3 [&>svg~*]:pl-6"
       >
-        <AlertTriangle class="h-4 w-4 shrink-0" />
-        No API profiles configured. Add one in the API tab.
-      </div>
+        <AlertTriangle class="h-4 w-4" />
+        <div>No API profiles configured. Add one in the API tab.</div>
+      </Alert>
     {:else if !settings.apiSettings.defaultModel}
       <div
         class="text-muted-foreground bg-muted/50 flex items-center gap-2 rounded border border-dashed px-3 py-2 text-sm"

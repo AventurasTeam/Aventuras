@@ -29,6 +29,7 @@
     Bell,
     Eye,
   } from '@lucide/svelte'
+  import { Alert } from '#lib/components/ui/alert/index.ts'
   import { Switch } from '#lib/components/ui/switch/index.ts'
   import { Label } from '#lib/components/ui/label/index.ts'
   import { Button } from '#lib/components/ui/button/index.ts'
@@ -319,8 +320,8 @@
 
 <div class="space-y-6">
   <!-- Header Banner -->
-  <div class="border-warning/30 bg-warning/10 flex items-start gap-3 rounded-lg border p-4">
-    <AlertTriangle class="text-warning mt-0.5 h-5 w-5 shrink-0" />
+  <Alert variant="warning">
+    <AlertTriangle class="h-5 w-5" />
     <div class="space-y-1">
       <p class="text-warning text-sm font-medium">Experimental Features</p>
       <p class="text-muted-foreground text-xs">
@@ -328,7 +329,7 @@
         <strong>Always create a backup before enabling.</strong>
       </p>
     </div>
-  </div>
+  </Alert>
 
   <!-- Backup Section -->
   <div class="bg-muted/30 space-y-3 rounded-lg border p-4">
