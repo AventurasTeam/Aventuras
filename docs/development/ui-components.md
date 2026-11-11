@@ -314,7 +314,8 @@ theme's `--destructive` red and `Button`'s `destructive` variant are louder, and
 ignored. Use the token, not a shade of amber or yellow:
 
 - **Text or an icon:** `text-warning`.
-- **A notice box:** `border-warning/30 bg-warning/10`, with `text-warning` on its icon.
+- **A notice box:** `<Alert variant="warning">`, which sets `border-warning/30 bg-warning/10` and
+  colours a direct-child icon. Do not hand-copy the classes onto a `div`.
 - **A solid fill:** `bg-warning text-warning-foreground`, and `hover:bg-warning/90` on a button.
 
 It is not a feature's amber (`featureColors.ts` names a feature, and keeps its own shades) and not a
