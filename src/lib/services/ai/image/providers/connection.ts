@@ -1,4 +1,4 @@
-import type { ImageProviderConnection, ImageProviderType } from '#lib/types/index.ts'
+import type { ImageProviderConnection, ImageProviderType, ProviderType } from '#lib/types/index.ts'
 import { normalizeBaseUrl } from '#lib/utils/url.ts'
 import { PROVIDER_BASE_URL, type BaseUrlRule } from './baseUrls'
 
@@ -26,6 +26,23 @@ const API_KEY_REQUIRED: Record<ImageProviderType, boolean> = {
 
 export const isImageProviderType = (value: string): value is ImageProviderType =>
   Object.hasOwn(API_KEY_REQUIRED, value)
+
+const SHARED_PROVIDER = {
+  nanogpt: true,
+  openai: true,
+  'openai-compatible': true,
+  openrouter: true,
+  pollinations: true,
+  google: true,
+  zhipu: true,
+} as const satisfies Record<Extract<ImageProviderType, ProviderType>, true>
+
+/**
+ * The provider whose API key a profile of this type takes, text or image. A type only one side
+ * has is keyed like OpenAI Compatible.
+ */
+export const keyProvider = (providerType: ImageProviderType | ProviderType): string =>
+  Object.hasOwn(SHARED_PROVIDER, providerType) ? providerType : 'openai-compatible'
 
 /** Whether a profile of this provider needs an API key to be usable. */
 export const requiresApiKey = (providerType: ImageProviderType): boolean =>

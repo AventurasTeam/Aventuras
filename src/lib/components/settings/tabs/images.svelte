@@ -22,6 +22,7 @@
     requiresApiKey,
     baseUrlMode,
     imageConnectionFor,
+    keyProvider,
     IMAGE_PROVIDER_LABELS,
     IMAGE_PROVIDER_OPTIONS,
     ComfyMode,
@@ -61,6 +62,7 @@
   import * as Alert from '#lib/components/ui/alert/index.ts'
   import { Card, CardContent } from '#lib/components/ui/card/index.ts'
   import * as Collapsible from '#lib/components/ui/collapsible/index.ts'
+  import * as DropdownMenu from '#lib/components/ui/dropdown-menu/index.ts'
   import IconRow from '#lib/components/ui/icon-row.svelte'
   import ImageResolutionSelector from '#lib/components/settings/ImageResolutionSelector.svelte'
   import {
@@ -138,7 +140,6 @@
   let profileApiKey = $state('')
   let profileBaseUrl = $state('')
   let showApiKey = $state(false)
-  let showCopyDropdown = $state(false)
 
   // Profile form model state
   let profileModel = $state('')
@@ -270,6 +271,11 @@
   const invalidSizes = $derived(parsedSizes.filter((s) => !isSizeString(s)))
   const sizesInvalid = $derived(takesOverride && invalidSizes.length > 0)
   const canSaveProfile = $derived(!!profileName.trim() && !baseUrlInvalid && !sizesInvalid)
+  const copyableApiProfiles = $derived(
+    settings.apiSettings.profiles.filter(
+      (p) => keyProvider(p.providerType) === keyProvider(profileProviderType),
+    ),
+  )
 
   onDestroy(() => {
     flushAutoSave()
@@ -630,8 +636,8 @@
     }
     editingProfileId = crypto.randomUUID()
     isNewProfile = true
-    profileName = ''
     profileProviderType = 'nanogpt'
+    profileName = IMAGE_PROVIDER_LABELS[profileProviderType]
     profileApiKey = ''
     profileBaseUrl = ''
     profileModel = ''
@@ -657,7 +663,14 @@
     availableClips = []
     availableVaes = []
     showApiKey = false
-    showCopyDropdown = false
+  }
+
+  function selectProviderType(next: ImageProviderType) {
+    const name = profileName.trim()
+    if (!name || name === IMAGE_PROVIDER_LABELS[profileProviderType]) {
+      profileName = IMAGE_PROVIDER_LABELS[next]
+    }
+    profileProviderType = next
   }
 
   function startEditProfile(profile: ImageProfile) {
@@ -718,13 +731,11 @@
     }
 
     showApiKey = false
-    showCopyDropdown = false
   }
 
   function resetEditState() {
     editingProfileId = null
     isNewProfile = false
-    showCopyDropdown = false
   }
 
   async function handleSaveProfile() {
@@ -750,7 +761,6 @@
 
   function copyApiKeyFromProfile(apiProfile: APIProfile) {
     profileApiKey = apiProfile.apiKey
-    showCopyDropdown = false
   }
 
   function handleProfileOpenChange(open: boolean, profile: ImageProfile) {
@@ -1253,7 +1263,7 @@
         items={IMAGE_PROVIDER_OPTIONS}
         selected={IMAGE_PROVIDER_OPTIONS.find((p) => p.value === profileProviderType)}
         onSelect={(v) => {
-          if (v && !Array.isArray(v)) profileProviderType = v.value
+          if (v && !Array.isArray(v)) selectProviderType(v.value)
         }}
         itemLabel={(p) => p.label}
         itemValue={(p) => p.value}
@@ -1286,31 +1296,25 @@
         </div>
       </div>
 
-      {#if settings.apiSettings.profiles.length > 0}
-        <div class="relative">
-          <Button
-            variant="outline"
-            size="sm"
-            onclick={() => (showCopyDropdown = !showCopyDropdown)}
-          >
-            <Copy class="mr-1 h-3 w-3" />
-            Copy from API Profile
-          </Button>
-          {#if showCopyDropdown}
-            <div class="bg-popover absolute z-10 mt-1 w-64 rounded-md border shadow-md">
-              {#each settings.apiSettings.profiles as apiProfile (apiProfile.id)}
-                <button
-                  type="button"
-                  class="hover:bg-accent w-full px-3 py-2 text-left text-sm"
-                  onclick={() => copyApiKeyFromProfile(apiProfile)}
-                >
-                  {apiProfile.name}
-                  <span class="text-muted-foreground text-xs">({apiProfile.providerType})</span>
-                </button>
-              {/each}
-            </div>
-          {/if}
-        </div>
+      {#if copyableApiProfiles.length > 0}
+        <DropdownMenu.Root>
+          <DropdownMenu.Trigger>
+            {#snippet child({ props })}
+              <Button {...props} variant="outline" size="sm">
+                <Copy class="mr-1 h-3 w-3" />
+                Copy from API Profile
+              </Button>
+            {/snippet}
+          </DropdownMenu.Trigger>
+          <DropdownMenu.Content align="start" class="w-64">
+            {#each copyableApiProfiles as apiProfile (apiProfile.id)}
+              <DropdownMenu.Item onSelect={() => copyApiKeyFromProfile(apiProfile)}>
+                {apiProfile.name}
+                <span class="text-muted-foreground text-xs">({apiProfile.providerType})</span>
+              </DropdownMenu.Item>
+            {/each}
+          </DropdownMenu.Content>
+        </DropdownMenu.Root>
       {/if}
     </div>
 

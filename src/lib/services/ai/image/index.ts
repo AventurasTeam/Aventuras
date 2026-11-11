@@ -41,6 +41,7 @@ export { resolveBaseUrl } from './providers/baseUrls'
 export {
   baseUrlMode,
   imageConnectionFor,
+  keyProvider,
   modelListKey,
   requiresApiKey,
 } from './providers/connection'
