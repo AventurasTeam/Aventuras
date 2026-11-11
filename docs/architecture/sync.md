@@ -72,6 +72,10 @@ trigger shows no error: edits go uncounted and the item reads as in sync.
 
 An edit that is reverted still reads as moved. That costs a question, never data.
 
+The startup sweep that fails images a closed app left generating, and the gallery's Cancel, are
+counted edits. A story received mid-generation and then swept or cancelled here reads as changed on
+both devices once the sender's image finishes, which costs a conflict prompt, not data.
+
 ## Applying an item
 
 SQLite cannot disable a trigger, so a write made to apply an item would count as an edit. Nothing

@@ -4,7 +4,7 @@
   import { ui } from '#lib/stores/ui.svelte.ts'
   import { database } from '#lib/services/database.ts'
   import { imageExportService } from '#lib/services/imageExport.ts'
-  import { retryImageGeneration } from '#lib/services/ai/image/index.ts'
+  import { cancelImageGeneration, retryImageGeneration } from '#lib/services/ai/image/index.ts'
   import { eventBus, type ImageQueuedEvent, type ImageReadyEvent } from '#lib/services/events.ts'
   import { errMessage } from '#lib/utils/error.ts'
   import { normalizeImageDataUrl } from '#lib/utils/image.ts'
@@ -201,6 +201,22 @@
     } finally {
       regeneratingImageIds.delete(id)
     }
+  }
+
+  /** A failed generation is run again; a payload that merely failed to load is fetched again. */
+  function retryImage(image: EmbeddedImageMeta, prompt = image.prompt) {
+    if (image.status === 'failed') regenerate(image.id, prompt.trim() || image.prompt)
+    else ensureImageData(image.id)
+  }
+
+  async function cancelGeneration(id: string) {
+    try {
+      await cancelImageGeneration(id)
+    } catch (error) {
+      console.error('[Gallery] Cancel failed:', error)
+      ui.showToast(`Failed to cancel image: ${errMessage(error)}`, 'error')
+    }
+    loadImages()
   }
 
   /** Svelte attachment: load an image's pixels once its grid cell scrolls near the viewport. */
@@ -456,6 +472,7 @@
 <!-- What an image's cell shows, in the grid and in the lightbox. -->
 {#snippet imageStage(image: EmbeddedImageMeta, alt: string, lightbox: boolean)}
   {@const regenerating = regeneratingImageIds.has(image.id)}
+  {@const inProgress = isImageInProgress(image)}
   {@const pixels = imageDataCache.get(image.id)}
   {@const frame = [
     'flex w-full items-center justify-center',
@@ -478,10 +495,23 @@
         variant="outline"
         size="sm"
         class="relative z-20"
-        onclick={() => ensureImageData(image.id)}
+        disabled={regenerating}
+        onclick={() => retryImage(image, lightbox ? editingImagePrompt : undefined)}
       >
         <RefreshCw class="size-4" />
         Retry
+      </Button>
+    </div>
+  {:else if inProgress}
+    <div class={[frame, 'flex-col gap-2']}>
+      {@render spinner(lightbox ? 'size-8' : 'size-6')}
+      <Button
+        variant={lightbox ? 'outline' : 'ghost'}
+        size="sm"
+        class="relative z-20"
+        onclick={() => cancelGeneration(image.id)}
+      >
+        Cancel
       </Button>
     </div>
   {:else}
@@ -489,12 +519,16 @@
       {@render spinner(lightbox ? 'size-8' : 'size-6')}
     </div>
   {/if}
-  {#if lightbox && regenerating}
+  {#if regenerating && !inProgress}
     <div class="pointer-events-none absolute inset-0 flex items-center justify-center">
-      <div class="bg-surface-900/80 flex flex-col items-center gap-2 rounded-lg px-4 py-3">
+      {#if lightbox}
+        <div class="bg-surface-900/80 flex flex-col items-center gap-2 rounded-lg px-4 py-3">
+          {@render spinner('size-6')}
+          <span class="text-surface-300 text-sm">Regenerating...</span>
+        </div>
+      {:else}
         {@render spinner('size-6')}
-        <span class="text-surface-300 text-sm">Regenerating...</span>
-      </div>
+      {/if}
     </div>
   {/if}
 {/snippet}
@@ -643,7 +677,7 @@
 
             <div class="bg-surface-700 relative aspect-video" {@attach lazyImage(image.id)}>
               {@render imageStage(image, `Generated image ${index + 1}`, false)}
-              <!-- Opens the lightbox; Retry sits above it -->
+              <!-- Opens the lightbox; Retry and Cancel sit above it -->
               <button
                 type="button"
                 class="focus-visible:ring-accent-400 absolute inset-0 cursor-pointer focus-visible:ring-2 focus-visible:outline-none focus-visible:ring-inset"
