@@ -226,7 +226,6 @@
   const workflowIssues = $derived(
     profileCustomWorkflow ? workflowProblems(profileCustomWorkflow) : [],
   )
-  const workflowComplete = $derived(!!profileCustomWorkflow && workflowIssues.length === 0)
   const workflowMissing = $derived(workflowIssues.length > 0 ? workflowIssues.join(' ') : null)
   const previewOf = (value: string | number | null) =>
     value === null ? 'linked from another node' : String(value).slice(0, 80)
@@ -257,11 +256,6 @@
       !availableClipTypes.includes(profileClipType),
   )
 
-  const needsWorkflow = $derived(
-    profileProviderType === 'comfyui' &&
-      profileMode === ComfyMode.CustomWorkflow &&
-      !workflowComplete,
-  )
   // A field the provider has no input for is neither saved nor sent; the form keeps what was typed.
   const connection = $derived(
     imageConnectionFor(profileProviderType, profileApiKey, profileBaseUrl || undefined),
@@ -275,9 +269,7 @@
   const parsedSizes = $derived(profileSizesText.split(/[\s,]+/).filter(Boolean))
   const invalidSizes = $derived(parsedSizes.filter((s) => !isSizeString(s)))
   const sizesInvalid = $derived(takesOverride && invalidSizes.length > 0)
-  const canSaveProfile = $derived(
-    !!profileName.trim() && !needsWorkflow && !baseUrlInvalid && !sizesInvalid,
-  )
+  const canSaveProfile = $derived(!!profileName.trim() && !baseUrlInvalid && !sizesInvalid)
 
   onDestroy(() => {
     flushAutoSave()
@@ -895,11 +887,6 @@
           <Card class="border-primary/50 bg-primary/5">
             <CardContent>
               {@render profileForm()}
-              {#if needsWorkflow}
-                <p class="text-destructive pt-2 text-xs">
-                  Load a workflow with a prompt input and an output node before saving.
-                </p>
-              {/if}
               <div class="flex gap-2 pt-2">
                 <Button variant="outline" onclick={resetEditState} class="flex-1">Cancel</Button>
                 <Button onclick={handleSaveProfile} disabled={!canSaveProfile} class="flex-1">
