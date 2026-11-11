@@ -8,6 +8,7 @@ vi.mock('#lib/services/database.ts', () => ({
     createEmbeddedImage: (...args: unknown[]) => createEmbeddedImage(...args),
     updateEmbeddedImage: (...args: unknown[]) => updateEmbeddedImage(...args),
     cancelEmbeddedImage: async () => true,
+    failEmbeddedImage: async () => {},
     // The style lookup the tracker awaits before it registers a tag.
     getPackTemplate: async () => {
       await new Promise((resolve) => setTimeout(resolve, 5))

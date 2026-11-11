@@ -184,19 +184,18 @@ export async function recordImageResult(
   entryId: string,
   result: { base64: string | null; error?: string },
   attempt: AbortController,
+  resultUpdates?: Partial<EmbeddedImage>,
 ): Promise<boolean> {
   let completed = false
   try {
     completed = await writeImageRow(imageId, async () => {
       if (attempt.signal.aborted) return false
       if (!result.base64) {
-        await database.updateEmbeddedImage(imageId, {
-          status: 'failed',
-          errorMessage: result.error ?? 'Image generation failed',
-        })
+        await database.failEmbeddedImage(imageId, result.error ?? 'Image generation failed')
         return false
       }
       await database.updateEmbeddedImage(imageId, {
+        ...resultUpdates,
         imageData: result.base64,
         status: 'complete',
       })
@@ -227,6 +226,9 @@ export interface ImageGenerationRequest {
   /** Written with the flip to `generating`, so a caller resetting the row for a fresh
    *  attempt spends one round trip and not two. */
   recordUpdates?: Partial<EmbeddedImage>
+  /** Written with the finished image instead, for a row whose current pixels a failure must leave
+   *  describing themselves. */
+  resultUpdates?: Partial<EmbeddedImage>
   /** Emit `ImageQueued` once the row reads `generating`, for a caller resetting a finished row. */
   announce?: boolean
 }
@@ -285,7 +287,13 @@ export async function runImageGeneration(request: ImageGenerationRequest): Promi
     }
   }
 
-  const completed = await recordImageResult(imageId, entryId, { base64, error: failure }, attempt)
+  const completed = await recordImageResult(
+    imageId,
+    entryId,
+    { base64, error: failure },
+    attempt,
+    request.resultUpdates,
+  )
 
   if (failure && request.notifyFailure && !attempt.signal.aborted) {
     emitImageAnalysisFailed(entryId, failure)
@@ -332,6 +340,10 @@ export async function retryImageGeneration(
 
   log('Retrying image generation', { imageId, profileId, model, size })
 
+  // A row with pixels keeps its prompt, model and size until a new image replaces them.
+  const description = { prompt, model, width, height }
+  const holdsPixels = !!image.imageData
+
   // `ImageReady` decrements the header's in-flight count, so the retry has to announce itself.
   // It does so after the row reads `generating`, which is what the gallery's reload looks for.
   await runImageGeneration({
@@ -344,7 +356,8 @@ export async function retryImageGeneration(
     model,
     size,
     notifyFailure: true,
-    recordUpdates: { prompt, model, width, height },
+    recordUpdates: holdsPixels ? undefined : description,
+    resultUpdates: holdsPixels ? description : undefined,
   })
 }
 

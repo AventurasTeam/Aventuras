@@ -38,9 +38,12 @@ vi.mock('#lib/stores/settings.svelte.ts', () => ({
 
 const updateEmbeddedImage = vi.fn(async (_id: string, _updates: unknown) => {})
 const cancelEmbeddedImage = vi.fn(async (_id: string) => true)
-const getEmbeddedImage = vi.fn(async (_id: string): Promise<{ entryId: string } | null> => ({
-  entryId: 'entry',
-}))
+const failEmbeddedImage = vi.fn(async (_id: string, _errorMessage: string) => {})
+const getEmbeddedImage = vi.fn(
+  async (_id: string): Promise<{ entryId: string; imageData?: string } | null> => ({
+    entryId: 'entry',
+  }),
+)
 const emitImageQueued = vi.fn()
 const emitImageReady = vi.fn()
 const emitImageAnalysisFailed = vi.fn()
@@ -49,6 +52,7 @@ vi.mock('#lib/services/database.ts', () => ({
   database: {
     updateEmbeddedImage: (id: string, updates: unknown) => updateEmbeddedImage(id, updates),
     cancelEmbeddedImage: (id: string) => cancelEmbeddedImage(id),
+    failEmbeddedImage: (id: string, errorMessage: string) => failEmbeddedImage(id, errorMessage),
     getEmbeddedImage: (id: string) => getEmbeddedImage(id),
   },
 }))
@@ -301,6 +305,7 @@ describe('retryImageGeneration', () => {
     generateImage.mockReset()
     generateImage.mockResolvedValue({ base64: 'PIXELS' })
     updateEmbeddedImage.mockClear()
+    failEmbeddedImage.mockClear()
     emitImageQueued.mockClear()
     emitImageReady.mockClear()
   })
@@ -349,6 +354,49 @@ describe('retryImageGeneration', () => {
       status: 'complete',
     })
     expect(emitImageQueued).toHaveBeenCalledWith('img', 'entry')
+  })
+
+  describe('a row that already holds pixels', () => {
+    beforeEach(() => {
+      getEmbeddedImage.mockResolvedValue({ entryId: 'entry', imageData: 'OLD' })
+    })
+
+    it('flips only the status, and writes the new description with the new image', async () => {
+      await retryImageGeneration('img', 'a scene')
+
+      expect(updateEmbeddedImage).toHaveBeenNthCalledWith(1, 'img', { status: 'generating' })
+      expect(updateEmbeddedImage).toHaveBeenLastCalledWith(
+        'img',
+        expect.objectContaining({
+          prompt: 'a scene',
+          imageData: 'PIXELS',
+          status: 'complete',
+        }),
+      )
+    })
+
+    it('leaves the old description alone when the generation fails', async () => {
+      generateImage.mockResolvedValue({ base64: null, error: 'provider down' } as never)
+
+      await retryImageGeneration('img', 'a scene')
+
+      expect(updateEmbeddedImage).toHaveBeenCalledTimes(1)
+      expect(updateEmbeddedImage).toHaveBeenCalledWith('img', { status: 'generating' })
+      expect(failEmbeddedImage).toHaveBeenCalledWith('img', expect.any(String))
+    })
+  })
+
+  it('keeps the new description on a row without pixels when the generation fails', async () => {
+    generateImage.mockResolvedValue({ base64: null, error: 'provider down' } as never)
+
+    await retryImageGeneration('img', 'a scene')
+
+    expect(updateEmbeddedImage).toHaveBeenCalledTimes(1)
+    expect(updateEmbeddedImage).toHaveBeenCalledWith(
+      'img',
+      expect.objectContaining({ prompt: 'a scene', status: 'generating' }),
+    )
+    expect(failEmbeddedImage).toHaveBeenCalledTimes(1)
   })
 })
 
@@ -468,6 +516,18 @@ describe('image attempts', () => {
       status: 'complete',
     })
     expect(emitImageReady).toHaveBeenCalledWith('img', 'entry', true)
+  })
+
+  it('settles a failed generation through the database, and reports the failure', async () => {
+    const attempt = beginImageAttempt('img')
+    generateImage.mockResolvedValue({ base64: null, error: 'provider down' } as never)
+    failEmbeddedImage.mockClear()
+
+    await expect(runImageGeneration(request(attempt, true))).resolves.toBeNull()
+
+    expect(failEmbeddedImage).toHaveBeenCalledWith('img', 'No image data returned')
+    expect(emitImageAnalysisFailed).toHaveBeenCalledWith('entry', 'No image data returned')
+    expect(emitImageReady).toHaveBeenCalledWith('img', 'entry', false)
   })
 
   it('returns no pixels when the result write fails', async () => {

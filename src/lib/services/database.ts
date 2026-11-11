@@ -92,10 +92,9 @@ const RUNTIME_VAR_ENTITY_TABLES = ['characters', 'locations', 'items', 'story_be
 /** Must match the partial index in migration 047, or SQLite scans the table instead. */
 const IN_PROGRESS_IMAGES = "status IN ('pending', 'generating')"
 
-/** SET clause for an unfinished row: a regeneration still holding its old pixels reverts to `complete`. `reason` is an internal literal. */
-const settleUnfinishedImage = (reason: 'Cancelled' | 'Interrupted') =>
-  `status = CASE WHEN image_data <> '' THEN 'complete' ELSE 'failed' END,
-   error_message = CASE WHEN image_data <> '' THEN NULL ELSE '${reason}' END`
+/** SET clause for an unfinished row, with one `?` for the reason: a row still holding pixels reverts to `complete`. */
+const SETTLE_UNFINISHED_IMAGE = `status = CASE WHEN image_data <> '' THEN 'complete' ELSE 'failed' END,
+   error_message = CASE WHEN image_data <> '' THEN NULL ELSE ? END`
 
 export interface DbStatement {
   sql: string
@@ -2890,19 +2889,29 @@ class DatabaseService {
   async cancelEmbeddedImage(id: string): Promise<boolean> {
     const db = await this.getDb()
     const result = await db.execute(
-      `UPDATE embedded_images SET ${settleUnfinishedImage('Cancelled')}
+      `UPDATE embedded_images SET ${SETTLE_UNFINISHED_IMAGE}
        WHERE id = ? AND ${IN_PROGRESS_IMAGES}`,
-      [id],
+      ['Cancelled', id],
     )
     return (result.rowsAffected ?? 0) > 0
+  }
+
+  /** Settles a row whose generation failed. A row holding pixels keeps them and reads `complete`. */
+  async failEmbeddedImage(id: string, errorMessage: string): Promise<void> {
+    const db = await this.getDb()
+    await db.execute(`UPDATE embedded_images SET ${SETTLE_UNFINISHED_IMAGE} WHERE id = ?`, [
+      errorMessage,
+      id,
+    ])
   }
 
   /** Settles every row a closed app left unfinished. Run once per launch, before any generation. */
   async failInterruptedEmbeddedImages(): Promise<number> {
     const db = await this.getDb()
     const result = await db.execute(
-      `UPDATE embedded_images SET ${settleUnfinishedImage('Interrupted')}
+      `UPDATE embedded_images SET ${SETTLE_UNFINISHED_IMAGE}
        WHERE ${IN_PROGRESS_IMAGES}`,
+      ['Interrupted'],
     )
     return result.rowsAffected ?? 0
   }
