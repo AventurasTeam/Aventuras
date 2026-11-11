@@ -89,6 +89,14 @@ function runtimeVarPath(defId: string, field?: string): string {
 /** Entity tables that can carry runtime-variable values in their metadata JSON. */
 const RUNTIME_VAR_ENTITY_TABLES = ['characters', 'locations', 'items', 'story_beats'] as const
 
+/** Must match the partial index in migration 047, or SQLite scans the table instead. */
+const IN_PROGRESS_IMAGES = "status IN ('pending', 'generating')"
+
+/** SET clause for an unfinished row: a regeneration still holding its old pixels reverts to `complete`. `reason` is an internal literal. */
+const settleUnfinishedImage = (reason: 'Cancelled' | 'Interrupted') =>
+  `status = CASE WHEN image_data <> '' THEN 'complete' ELSE 'failed' END,
+   error_message = CASE WHEN image_data <> '' THEN NULL ELSE '${reason}' END`
+
 export interface DbStatement {
   sql: string
   params: unknown[]
@@ -2876,6 +2884,17 @@ class DatabaseService {
     if (setClauses.length === 0) return
     values.push(id)
     await db.execute(`UPDATE embedded_images SET ${setClauses.join(', ')} WHERE id = ?`, values)
+  }
+
+  /** Marks a row that has not finished as failed. False when it had already finished. */
+  async cancelEmbeddedImage(id: string): Promise<boolean> {
+    const db = await this.getDb()
+    const result = await db.execute(
+      `UPDATE embedded_images SET ${settleUnfinishedImage('Cancelled')}
+       WHERE id = ? AND ${IN_PROGRESS_IMAGES}`,
+      [id],
+    )
+    return (result.rowsAffected ?? 0) > 0
   }
 
   async deleteEmbeddedImage(id: string): Promise<void> {
