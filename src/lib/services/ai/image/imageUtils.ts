@@ -144,11 +144,26 @@ export function beginImageAttempt(
   return controller
 }
 
-/** Abort the image's attempt and settle its row. */
+// Statements land on any pooled connection, so writes to one row must be issued in order.
+const rowWrites = new Map<string, Promise<unknown>>()
+
+/** Run `write` once the row's earlier writes have settled; a failed write does not block the next. */
+function writeImageRow<T>(imageId: string, write: () => Promise<T>): Promise<T> {
+  const run = (rowWrites.get(imageId) ?? Promise.resolve()).then(write)
+  const tail = run
+    .catch(() => {})
+    .finally(() => {
+      if (rowWrites.get(imageId) === tail) rowWrites.delete(imageId)
+    })
+  rowWrites.set(imageId, tail)
+  return run
+}
+
+/** Abort the image's attempt and settle its row. A write already sent finishes first. */
 export async function cancelImageGeneration(imageId: string): Promise<void> {
   attempts.get(imageId)?.abort()
   attempts.delete(imageId)
-  await database.cancelEmbeddedImage(imageId)
+  await writeImageRow(imageId, () => database.cancelEmbeddedImage(imageId))
 }
 
 /**
@@ -165,18 +180,20 @@ export async function recordImageResult(
   attempt: AbortController,
 ): Promise<void> {
   try {
-    if (attempt.signal.aborted) return
-    if (result.base64) {
-      await database.updateEmbeddedImage(imageId, {
-        imageData: result.base64,
-        status: 'complete',
-      })
-    } else {
-      await database.updateEmbeddedImage(imageId, {
-        status: 'failed',
-        errorMessage: result.error ?? 'Image generation failed',
-      })
-    }
+    await writeImageRow(imageId, async () => {
+      if (attempt.signal.aborted) return
+      if (result.base64) {
+        await database.updateEmbeddedImage(imageId, {
+          imageData: result.base64,
+          status: 'complete',
+        })
+      } else {
+        await database.updateEmbeddedImage(imageId, {
+          status: 'failed',
+          errorMessage: result.error ?? 'Image generation failed',
+        })
+      }
+    })
   } catch (error) {
     log('Failed to record image result', { imageId, error })
   } finally {
@@ -217,56 +234,45 @@ export async function runImageGeneration(request: ImageGenerationRequest): Promi
   let base64: string | null = null
   let failure: string | undefined
 
-  // Cancelled while it waited to start: the record is already settled, so leave it as it is.
-  if (attempt.signal.aborted) {
-    if (request.announce) emitImageQueued(imageId, entryId)
-  } else {
-    // Its own try: a failed status flip is a database problem, not a generation failure, and
-    // reporting it as one raises a user-facing notice for the wrong thing. The generation goes
-    // ahead regardless — `recordImageResult` writes the terminal status either way.
-    try {
+  // Its own try: a failed status flip is a database problem, not a generation failure, and
+  // reporting it as one raises a user-facing notice for the wrong thing. The generation goes
+  // ahead regardless — `recordImageResult` writes the terminal status either way. An attempt
+  // cancelled or superseded before its turn in the write order leaves the row to whoever did.
+  try {
+    await writeImageRow(imageId, async () => {
+      if (attempt.signal.aborted) return
       await database.updateEmbeddedImage(imageId, {
         ...request.recordUpdates,
         status: 'generating',
       })
+    })
+  } catch (error) {
+    log('Failed to mark the image generating', { imageId, error })
+  }
+  if (request.announce) emitImageQueued(imageId, entryId)
+
+  if (!attempt.signal.aborted) {
+    try {
+      log('Generating image', {
+        imageId,
+        profileId,
+        model,
+        hasReference: !!referenceImages?.length,
+      })
+      const result = await generateImage({
+        profileId,
+        model,
+        prompt,
+        size,
+        referenceImages,
+        signal: attempt.signal,
+      })
+
+      if (!result.base64) throw new Error('No image data returned')
+      if (!attempt.signal.aborted) base64 = result.base64
     } catch (error) {
-      log('Failed to mark the image generating', { imageId, error })
-    }
-    if (request.announce) emitImageQueued(imageId, entryId)
-
-    if (attempt.signal.aborted) {
-      // A cancel that landed during the flip may have been overwritten by it. A superseded
-      // attempt has a successor registered, and that one owns the row.
-      if (!attempts.has(imageId)) {
-        try {
-          await database.cancelEmbeddedImage(imageId)
-        } catch (error) {
-          log('Failed to settle the cancelled image', { imageId, error })
-        }
-      }
-    } else {
-      try {
-        log('Generating image', {
-          imageId,
-          profileId,
-          model,
-          hasReference: !!referenceImages?.length,
-        })
-        const result = await generateImage({
-          profileId,
-          model,
-          prompt,
-          size,
-          referenceImages,
-          signal: attempt.signal,
-        })
-
-        if (!result.base64) throw new Error('No image data returned')
-        if (!attempt.signal.aborted) base64 = result.base64
-      } catch (error) {
-        failure = error instanceof Error ? error.message : 'Unknown error'
-        log('Image generation failed', { imageId, error: failure })
-      }
+      failure = error instanceof Error ? error.message : 'Unknown error'
+      log('Image generation failed', { imageId, error: failure })
     }
   }
 

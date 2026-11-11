@@ -279,6 +279,14 @@ describe('generatePortrait', () => {
   })
 })
 
+const deferred = () => {
+  let resolve: () => void = () => {}
+  const promise = new Promise<void>((done) => (resolve = done))
+  return { promise, resolve }
+}
+
+const tick = () => new Promise((resolve) => setTimeout(resolve, 0))
+
 describe('image attempts', () => {
   const request = (attempt: AbortController, notifyFailure = false) => ({
     imageId: 'img',
@@ -353,18 +361,72 @@ describe('image attempts', () => {
     expect(cancelEmbeddedImage).toHaveBeenCalledWith('img')
   })
 
-  it('re-settles a cancel that landed while the generating flip was in flight', async () => {
+  it('sends a cancel only after the generating flip already in flight has finished', async () => {
     const attempt = beginImageAttempt('img')
-    updateEmbeddedImage.mockImplementationOnce(async () => {
-      await cancelImageGeneration('img')
-    })
+    const flip = deferred()
+    updateEmbeddedImage.mockImplementationOnce(() => flip.promise)
     cancelEmbeddedImage.mockClear()
 
-    await expect(runImageGeneration(request(attempt))).resolves.toBeNull()
+    const run = runImageGeneration(request(attempt))
+    await vi.waitFor(() => expect(updateEmbeddedImage).toHaveBeenCalledTimes(1))
+    const cancel = cancelImageGeneration('img')
+    await tick()
+    expect(cancelEmbeddedImage).not.toHaveBeenCalled()
 
-    // Once for the cancel itself, once after the flip that may have overwritten it.
-    expect(cancelEmbeddedImage).toHaveBeenCalledTimes(2)
+    flip.resolve()
+    await Promise.all([run, cancel])
+
+    expect(cancelEmbeddedImage).toHaveBeenCalledTimes(1)
     expect(generateImage).not.toHaveBeenCalled()
+    await expect(run).resolves.toBeNull()
+  })
+
+  it('lets the result write already sent finish, so a cancel during it is too late', async () => {
+    const attempt = beginImageAttempt('img')
+    const write = deferred()
+    updateEmbeddedImage.mockImplementationOnce(async () => {})
+    updateEmbeddedImage.mockImplementationOnce(() => write.promise)
+    cancelEmbeddedImage.mockClear()
+
+    const run = runImageGeneration(request(attempt))
+    await vi.waitFor(() => expect(updateEmbeddedImage).toHaveBeenCalledTimes(2))
+    const cancel = cancelImageGeneration('img')
+    await tick()
+    expect(cancelEmbeddedImage).not.toHaveBeenCalled()
+
+    write.resolve()
+
+    await expect(run).resolves.toBe('PIXELS')
+    await cancel
+    expect(updateEmbeddedImage).toHaveBeenLastCalledWith('img', {
+      imageData: 'PIXELS',
+      status: 'complete',
+    })
+  })
+
+  it('keeps an older attempt from settling over the retry that replaced it', async () => {
+    const first = beginImageAttempt('img')
+    let finishFirst: (value: { base64: string }) => void = () => {}
+    generateImage.mockImplementationOnce(
+      () => new Promise((resolve) => (finishFirst = resolve as typeof finishFirst)),
+    )
+    const firstRun = runImageGeneration(request(first))
+    await vi.waitFor(() => expect(generateImage).toHaveBeenCalledTimes(1))
+
+    const flip = deferred()
+    updateEmbeddedImage.mockImplementationOnce(() => flip.promise)
+    const second = beginImageAttempt('img')
+    const secondRun = runImageGeneration(request(second))
+    await vi.waitFor(() => expect(updateEmbeddedImage).toHaveBeenCalledTimes(2))
+
+    // The older attempt's result reaches its turn in the write order after the retry's flip.
+    finishFirst({ base64: 'OLD' })
+    flip.resolve()
+    await Promise.all([firstRun, secondRun])
+
+    expect(
+      updateEmbeddedImage.mock.calls.map(([, updates]) => (updates as { status: string }).status),
+    ).toEqual(['generating', 'generating', 'complete'])
   })
 
   it('reports an aborted attempt as failed even when the provider still returned pixels', async () => {
