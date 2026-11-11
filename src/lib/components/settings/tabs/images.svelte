@@ -630,8 +630,8 @@
     }
     editingProfileId = crypto.randomUUID()
     isNewProfile = true
-    profileName = ''
     profileProviderType = 'nanogpt'
+    profileName = IMAGE_PROVIDER_LABELS[profileProviderType]
     profileApiKey = ''
     profileBaseUrl = ''
     profileModel = ''
@@ -658,6 +658,14 @@
     availableVaes = []
     showApiKey = false
     showCopyDropdown = false
+  }
+
+  function selectProviderType(next: ImageProviderType) {
+    const name = profileName.trim()
+    if (!name || name === IMAGE_PROVIDER_LABELS[profileProviderType]) {
+      profileName = IMAGE_PROVIDER_LABELS[next]
+    }
+    profileProviderType = next
   }
 
   function startEditProfile(profile: ImageProfile) {
@@ -1253,7 +1261,7 @@
         items={IMAGE_PROVIDER_OPTIONS}
         selected={IMAGE_PROVIDER_OPTIONS.find((p) => p.value === profileProviderType)}
         onSelect={(v) => {
-          if (v && !Array.isArray(v)) profileProviderType = v.value
+          if (v && !Array.isArray(v)) selectProviderType(v.value)
         }}
         itemLabel={(p) => p.label}
         itemValue={(p) => p.value}
