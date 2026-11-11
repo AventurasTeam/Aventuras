@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { ImageProviderConnection, ImageProviderType } from '#lib/types/index.ts'
-import { imageConnectionFor, isImageProviderType, modelListKey } from './connection'
+import { imageConnectionFor, isImageProviderType, keyProvider, modelListKey } from './connection'
 
 describe('imageConnectionFor', () => {
   it.each([
@@ -59,5 +59,32 @@ describe('isImageProviderType', () => {
     expect(isImageProviderType('openrouter')).toBe(true)
     expect(isImageProviderType('chutes')).toBe(false)
     expect(isImageProviderType('toString')).toBe(false)
+  })
+})
+
+describe('keyProvider', () => {
+  it.each([
+    'nanogpt',
+    'openai',
+    'openai-compatible',
+    'openrouter',
+    'pollinations',
+    'google',
+    'zhipu',
+  ] as const)('keeps %s', (type) => {
+    expect(keyProvider(type)).toBe(type)
+  })
+
+  it.each([
+    'ollama',
+    'lmstudio',
+    'llamacpp',
+    'nvidia-nim',
+    'chutes',
+    'anthropic',
+    'comfyui',
+    'a1111',
+  ] as const)('keys %s like OpenAI Compatible', (type) => {
+    expect(keyProvider(type)).toBe('openai-compatible')
   })
 })
