@@ -1,12 +1,14 @@
 <script lang="ts">
-  import { untrack } from 'svelte'
+  import { onMount, untrack } from 'svelte'
   import { story } from '#lib/stores/story.svelte.ts'
   import { ui } from '#lib/stores/ui.svelte.ts'
   import { database } from '#lib/services/database.ts'
   import { imageExportService } from '#lib/services/imageExport.ts'
   import { retryImageGeneration } from '#lib/services/ai/image/index.ts'
+  import { eventBus, type ImageQueuedEvent, type ImageReadyEvent } from '#lib/services/events.ts'
   import { errMessage } from '#lib/utils/error.ts'
   import { normalizeImageDataUrl } from '#lib/utils/image.ts'
+  import { diffGalleryImages, isImageInProgress } from '#lib/utils/galleryImages.ts'
   import type { EmbeddedImageMeta } from '#lib/types/index.ts'
   import {
     Download,
@@ -47,6 +49,9 @@
   const loadingImageIds = new SvelteSet<string>()
   // Ids whose load failed; rendered as a retry affordance rather than an endless spinner.
   const failedImageIds = new SvelteSet<string>()
+  // The fetch each id is waiting on. A fetch that finds its token gone was invalidated while it
+  // ran, and must not put its payload back.
+  const fetchTokens = new SvelteMap<string, symbol>()
   const MAX_CACHE_BYTES = 96 * 1024 * 1024
   let cacheBytes = 0
   // Only read when evicting, never from the template.
@@ -54,6 +59,7 @@
   const visibleIds = new SvelteSet<string>()
   let useTick = 0
 
+  // True only until a story's first list is on screen; every later reload happens in place.
   let isLoading = $state(false)
   let isSaving = $state(false)
   const regeneratingImageIds = new SvelteSet<string>()
@@ -125,7 +131,16 @@
     lastUse.clear()
     loadingImageIds.clear()
     failedImageIds.clear()
+    fetchTokens.clear()
     cacheBytes = 0
+  }
+
+  /** Forget one image's payload, failure and in-flight fetch, so the next view of it fetches again. */
+  function dropImageData(id: string) {
+    uncache(id)
+    failedImageIds.delete(id)
+    loadingImageIds.delete(id)
+    fetchTokens.delete(id)
   }
 
   function resetSelection() {
@@ -136,13 +151,9 @@
     ui.activePanel = 'story'
   }
 
-  async function refreshImages() {
-    const storyId = story.currentStory?.id
-    if (!storyId) return
-
-    ui.clearGalleryImages(storyId)
+  function refreshImages() {
     clearImageCache()
-    await loadImagesForStory(storyId)
+    loadImages()
   }
 
   /** Lazily fetch (and cache) the base64 payload for a single image. */
@@ -153,20 +164,29 @@
       return
     }
     if (loadingImageIds.has(id)) return
+    const meta = imageById.get(id)
+    if (meta && isImageInProgress(meta)) return
+    const token = Symbol()
+    fetchTokens.set(id, token)
     loadingImageIds.add(id)
     failedImageIds.delete(id)
     try {
       const full = await database.getEmbeddedImage(id)
+      if (fetchTokens.get(id) !== token) return
       if (full?.imageData) {
         cacheImageData(id, full.imageData)
       } else {
         failedImageIds.add(id)
       }
     } catch (error) {
+      if (fetchTokens.get(id) !== token) return
       console.error('[Gallery] Failed to load image data:', error)
       failedImageIds.add(id)
     } finally {
-      loadingImageIds.delete(id)
+      if (fetchTokens.get(id) === token) {
+        fetchTokens.delete(id)
+        loadingImageIds.delete(id)
+      }
     }
   }
 
@@ -175,7 +195,6 @@
     regeneratingImageIds.add(id)
     try {
       await retryImageGeneration(id, prompt)
-      await refreshImages()
     } catch (error) {
       console.error('[Gallery] Regenerate failed:', error)
       ui.showToast(`Failed to regenerate image: ${errMessage(error)}`, 'error')
@@ -208,46 +227,98 @@
       }
     }
 
-  async function loadImagesForStory(storyId: string) {
-    isLoading = true
+  /** Put a fresh list on screen, and let go of what it no longer covers. */
+  function applyLoaded(storyId: string, loaded: EmbeddedImageMeta[]) {
+    const { removed, statusChanged } = diffGalleryImages(loadedImages, loaded)
+    for (const id of [...removed, ...statusChanged]) dropImageData(id)
+    for (const id of removed) selectedImageIds.delete(id)
+    if (lightboxOpen && lightboxImageId !== null && removed.includes(lightboxImageId)) {
+      closeLightbox()
+    }
+    loadedImages = loaded
+    ui.setGalleryImages(storyId, loaded)
+    isLoading = false
+  }
+
+  let loadActive = false
+  let loadAgain = false
+
+  // One query at a time. A request that lands mid-flight reruns once afterwards, so the list
+  // written last was read after the last change.
+  async function loadImages() {
+    if (loadActive) {
+      loadAgain = true
+      return
+    }
+    loadActive = true
     try {
-      const loaded = await database.getEmbeddedImageMetaForStory(storyId)
-      ui.setGalleryImages(storyId, loaded)
-      loadedImages = loaded
-    } catch (error) {
-      console.error('[Gallery] Failed to load images:', error)
-      ui.showToast('Failed to load gallery images', 'error')
-      loadedImages = []
+      do {
+        loadAgain = false
+        const storyId = story.currentStory?.id
+        if (!storyId) {
+          isLoading = false
+          break
+        }
+        try {
+          const loaded = await database.getEmbeddedImageMetaForStory(storyId)
+          if (story.currentStory?.id === storyId) applyLoaded(storyId, loaded)
+          else loadAgain = true
+        } catch (error) {
+          if (story.currentStory?.id === storyId) {
+            console.error('[Gallery] Failed to load images:', error)
+            ui.showToast('Failed to load gallery images', 'error')
+            isLoading = false
+          } else {
+            loadAgain = true
+          }
+        }
+      } while (loadAgain)
     } finally {
-      isLoading = false
+      loadActive = false
     }
   }
 
-  // Tracks which story the cache holds pixels for. Plain `let`: it must not make this effect
-  // re-run, and the effect can fire again for the same story when currentStory is replaced.
-  let cachedStoryId: string | null = null
+  const currentStoryId = $derived(story.currentStory?.id)
+  const listCached = $derived(currentStoryId ? ui.hasGalleryImages(currentStoryId) : false)
+
+  // The story the pixel cache, selection and lightbox belong to. Plain `let`: changing it must
+  // not re-run the effect.
+  let shownStoryId: string | undefined
 
   $effect(() => {
-    const storyId = story.currentStory?.id
-    resetSelection() // Always reset selection on story change
-
-    // Drop the previous story's payloads — otherwise they stay in the heap for the whole session.
-    if (storyId !== cachedStoryId) {
-      clearImageCache()
-      cachedStoryId = storyId ?? null
-    }
-
-    if (storyId) {
-      const cached = ui.getGalleryImages(storyId)
-      if (cached) {
-        loadedImages = cached
-        isLoading = false
-      } else {
-        loadImagesForStory(storyId)
+    const storyId = currentStoryId
+    const cached = listCached
+    untrack(() => {
+      if (storyId !== shownStoryId) {
+        shownStoryId = storyId
+        // The previous story's payloads would otherwise stay in the heap for the whole session.
+        resetSelection()
+        clearImageCache()
+        closeLightbox()
+        lightboxImageId = null
+        const list = storyId ? ui.getGalleryImages(storyId) : undefined
+        loadedImages = list ?? []
+        isLoading = !!storyId && !list
+        // A cached list is shown at once and revalidated.
+        if (storyId) loadImages()
+      } else if (storyId && !cached) {
+        loadImages()
       }
-    } else {
-      loadedImages = []
-      isLoading = false
+    })
+  })
+
+  onMount(() => {
+    const unsubQueued = eventBus.subscribe<ImageQueuedEvent>('ImageQueued', () => {
+      loadImages()
+    })
+    const unsubReady = eventBus.subscribe<ImageReadyEvent>('ImageReady', (event) => {
+      // A regenerated image keeps its id and its `complete` status, so the payload is dropped by id.
+      dropImageData(event.imageId)
+      loadImages()
+    })
+    return () => {
+      unsubQueued()
+      unsubReady()
     }
   })
 
@@ -406,11 +477,11 @@
             variant="ghost"
             size="icon"
             onclick={refreshImages}
-            disabled={isLoading || !story.currentStory}
+            disabled={!story.currentStory}
             title="Refresh gallery"
             class="h-8 w-8"
           >
-            <RefreshCw class="h-3.5 w-3.5 {isLoading ? 'animate-spin' : ''}" />
+            <RefreshCw class="size-3.5" />
           </Button>
 
           <!-- Save button -->
