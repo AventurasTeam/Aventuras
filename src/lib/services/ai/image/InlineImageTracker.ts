@@ -255,7 +255,13 @@ export class InlineImageTracker {
         generationMode: 'inline',
       }
 
-      await database.createEmbeddedImage(embeddedImage)
+      try {
+        await database.createEmbeddedImage(embeddedImage)
+      } catch (error) {
+        // Already off the list `abandon()` walks, so nothing else would stop its request.
+        pending.attempt.abort()
+        throw error
+      }
       beginImageAttempt(pending.id, pending.attempt)
       emitImageQueued(pending.id, this.entryId)
 

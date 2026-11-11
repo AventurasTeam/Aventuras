@@ -103,6 +103,19 @@ describe('InlineImageTracker', () => {
     expect(signal?.aborted).toBe(false)
   })
 
+  it('aborts the generation of an image whose record could not be created', async () => {
+    const tracker = new InlineImageTracker('story', 'entry', () => [])
+    createEmbeddedImage.mockRejectedValueOnce(new Error('insert failed'))
+
+    tracker.processChunk(TAG, false)
+    await vi.waitFor(() => expect(generateImage).toHaveBeenCalledTimes(1))
+    const signal = generateImage.mock.calls[0][0].signal
+
+    await expect(tracker.flushToDatabase()).rejects.toThrow('insert failed')
+
+    expect(signal?.aborted).toBe(true)
+  })
+
   it('records a tag seen in the final chunk, flushed before its style lookup resolves', async () => {
     const tracker = new InlineImageTracker('story', 'entry', () => [])
 
