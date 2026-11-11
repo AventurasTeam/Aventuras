@@ -24,6 +24,14 @@
       // Initialize database connection
       await database.init()
 
+      // Nothing from a previous run is still generating. Awaited so it cannot touch a new
+      // generation, but a failure here must not stop the app from starting.
+      try {
+        await database.failInterruptedEmbeddedImages()
+      } catch (err) {
+        console.error('[Images] Startup sweep failed:', err)
+      }
+
       // Seed prompt templates into the database (idempotent)
       await packService.initialize()
 
