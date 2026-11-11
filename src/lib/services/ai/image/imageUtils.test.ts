@@ -402,6 +402,19 @@ describe('image attempts', () => {
       imageData: 'PIXELS',
       status: 'complete',
     })
+    expect(emitImageReady).toHaveBeenCalledWith('img', 'entry', true)
+  })
+
+  it('returns no pixels when the result write fails', async () => {
+    const attempt = beginImageAttempt('img')
+    updateEmbeddedImage.mockImplementationOnce(async () => {})
+    updateEmbeddedImage.mockImplementationOnce(async () => {
+      throw new Error('disk full')
+    })
+
+    await expect(runImageGeneration(request(attempt))).resolves.toBeNull()
+
+    expect(emitImageReady).toHaveBeenCalledWith('img', 'entry', false)
   })
 
   it('keeps an older attempt from settling over the retry that replaced it', async () => {

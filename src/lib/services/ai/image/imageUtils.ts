@@ -167,7 +167,8 @@ export async function cancelImageGeneration(imageId: string): Promise<void> {
 }
 
 /**
- * Write a finished generation onto its record, unless the attempt was aborted.
+ * Write a finished generation onto its record, unless the attempt was aborted. Resolves to
+ * whether the image now reads `complete`.
  *
  * `ImageReady` goes out in a `finally`: it balances the `ImageQueued` the caller emitted
  * when it scheduled the work, and the header's in-flight count has to come back down even
@@ -178,28 +179,31 @@ export async function recordImageResult(
   entryId: string,
   result: { base64: string | null; error?: string },
   attempt: AbortController,
-): Promise<void> {
+): Promise<boolean> {
+  let completed = false
   try {
-    await writeImageRow(imageId, async () => {
-      if (attempt.signal.aborted) return
-      if (result.base64) {
-        await database.updateEmbeddedImage(imageId, {
-          imageData: result.base64,
-          status: 'complete',
-        })
-      } else {
+    completed = await writeImageRow(imageId, async () => {
+      if (attempt.signal.aborted) return false
+      if (!result.base64) {
         await database.updateEmbeddedImage(imageId, {
           status: 'failed',
           errorMessage: result.error ?? 'Image generation failed',
         })
+        return false
       }
+      await database.updateEmbeddedImage(imageId, {
+        imageData: result.base64,
+        status: 'complete',
+      })
+      return true
     })
   } catch (error) {
     log('Failed to record image result', { imageId, error })
   } finally {
     if (attempts.get(imageId) === attempt) attempts.delete(imageId)
-    emitImageReady(imageId, entryId, !!result.base64 && !attempt.signal.aborted)
+    emitImageReady(imageId, entryId, completed)
   }
+  return completed
 }
 
 export interface ImageGenerationRequest {
@@ -276,13 +280,13 @@ export async function runImageGeneration(request: ImageGenerationRequest): Promi
     }
   }
 
-  await recordImageResult(imageId, entryId, { base64, error: failure }, attempt)
+  const completed = await recordImageResult(imageId, entryId, { base64, error: failure }, attempt)
 
   if (failure && request.notifyFailure && !attempt.signal.aborted) {
     emitImageAnalysisFailed(entryId, failure)
   }
 
-  return base64
+  return completed ? base64 : null
 }
 
 /**
