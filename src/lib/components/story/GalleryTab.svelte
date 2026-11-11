@@ -447,6 +447,58 @@
 
 <svelte:window onkeydown={handleKeydown} />
 
+{#snippet spinner(sizeClass: string)}
+  <div
+    class={['border-surface-600 border-t-accent-400 animate-spin rounded-full border-2', sizeClass]}
+  ></div>
+{/snippet}
+
+<!-- What an image's cell shows, in the grid and in the lightbox. -->
+{#snippet imageStage(image: EmbeddedImageMeta, alt: string, lightbox: boolean)}
+  {@const regenerating = regeneratingImageIds.has(image.id)}
+  {@const pixels = imageDataCache.get(image.id)}
+  {@const frame = [
+    'flex w-full items-center justify-center',
+    lightbox ? 'h-(--image-view-height) sm:h-(--image-view-height-sm)' : 'h-full',
+  ]}
+  {#if pixels !== undefined}
+    <img
+      src={normalizeImageDataUrl(pixels) ?? ''}
+      {alt}
+      class={[
+        lightbox
+          ? 'max-h-(--image-view-height) max-w-full rounded object-contain sm:max-h-(--image-view-height-sm)'
+          : 'h-full w-full object-contain',
+        regenerating && 'opacity-50',
+      ]}
+    />
+  {:else if failedImageIds.has(image.id)}
+    <div class={frame}>
+      <Button
+        variant="outline"
+        size="sm"
+        class="relative z-20"
+        onclick={() => ensureImageData(image.id)}
+      >
+        <RefreshCw class="size-4" />
+        Retry
+      </Button>
+    </div>
+  {:else}
+    <div class={frame}>
+      {@render spinner(lightbox ? 'size-8' : 'size-6')}
+    </div>
+  {/if}
+  {#if lightbox && regenerating}
+    <div class="pointer-events-none absolute inset-0 flex items-center justify-center">
+      <div class="bg-surface-900/80 flex flex-col items-center gap-2 rounded-lg px-4 py-3">
+        {@render spinner('size-6')}
+        <span class="text-surface-300 text-sm">Regenerating...</span>
+      </div>
+    </div>
+  {/if}
+{/snippet}
+
 <div class="bg-surface-900 flex h-full flex-col">
   <!-- Header -->
   <div class="border-surface-700 border-b px-4 py-3 sm:px-6">
@@ -590,27 +642,7 @@
             </div>
 
             <div class="bg-surface-700 relative aspect-video" {@attach lazyImage(image.id)}>
-              {#if imageDataCache.has(image.id)}
-                <img
-                  src={normalizeImageDataUrl(imageDataCache.get(image.id)) ?? ''}
-                  alt={`Generated image ${index + 1}`}
-                  class="h-full w-full object-contain"
-                />
-              {:else if failedImageIds.has(image.id)}
-                <button
-                  class="text-surface-400 hover:text-surface-200 relative z-20 flex h-full w-full flex-col items-center justify-center gap-1 text-xs"
-                  onclick={() => ensureImageData(image.id)}
-                >
-                  <RefreshCw class="h-4 w-4" />
-                  Retry
-                </button>
-              {:else}
-                <div class="flex h-full w-full items-center justify-center">
-                  <div
-                    class="border-surface-600 border-t-accent-400 h-6 w-6 animate-spin rounded-full border-2"
-                  ></div>
-                </div>
-              {/if}
+              {@render imageStage(image, `Generated image ${index + 1}`, false)}
               <!-- Opens the lightbox; Retry sits above it -->
               <button
                 type="button"
@@ -702,43 +734,7 @@
       <!-- Image with loading overlay -->
       {#if lightboxImage}
         <div class="relative">
-          {#if imageDataCache.has(lightboxImage.id)}
-            <img
-              src={normalizeImageDataUrl(imageDataCache.get(lightboxImage.id)) ?? ''}
-              alt={`Generated image ${lightboxIndex + 1}`}
-              class={[
-                'max-h-(--image-view-height) max-w-full rounded object-contain sm:max-h-(--image-view-height-sm)',
-                lightboxRegenerating && 'opacity-50',
-              ]}
-            />
-          {:else if failedImageIds.has(lightboxImage.id)}
-            <div
-              class="flex h-(--image-view-height) w-full items-center justify-center sm:h-(--image-view-height-sm)"
-            >
-              <Button variant="outline" size="sm" onclick={() => ensureImageData(lightboxImage.id)}>
-                <RefreshCw class="h-4 w-4" />
-                Retry
-              </Button>
-            </div>
-          {:else}
-            <div
-              class="flex h-(--image-view-height) w-full items-center justify-center sm:h-(--image-view-height-sm)"
-            >
-              <div
-                class="border-surface-600 border-t-accent-400 h-8 w-8 animate-spin rounded-full border-2"
-              ></div>
-            </div>
-          {/if}
-          {#if lightboxRegenerating}
-            <div class="absolute inset-0 flex items-center justify-center">
-              <div class="bg-surface-900/80 flex flex-col items-center gap-2 rounded-lg px-4 py-3">
-                <div
-                  class="border-surface-400 border-t-accent-400 h-6 w-6 animate-spin rounded-full border-2"
-                ></div>
-                <span class="text-surface-300 text-sm">Regenerating...</span>
-              </div>
-            </div>
-          {/if}
+          {@render imageStage(lightboxImage, `Generated image ${lightboxIndex + 1}`, true)}
         </div>
       {/if}
 
