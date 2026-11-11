@@ -68,6 +68,7 @@ export {
   missingCredential,
   warmSlotCapabilities,
   portraitCredentialError,
+  MISSING_CREDENTIAL_REASONS,
   type MissingCredential,
   type ImageProfileSlot,
   getProviderDisplayName,

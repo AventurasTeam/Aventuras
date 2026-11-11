@@ -17,6 +17,7 @@ import {
   toRawBase64,
   generatePortrait as sdkGeneratePortrait,
   isImageGenerationEnabled,
+  MISSING_CREDENTIAL_REASONS,
   missingCredential,
   providerNeedsModel,
   referenceBlocker,
@@ -66,12 +67,6 @@ async function getStylePrompt(styleId: string): Promise<string> {
 function unknownImageError(generatedImages: Map<string, string>, imageId: string): string {
   const available = [...generatedImages.keys()].join(', ')
   return `Image with ID "${imageId}" not found. It may be from a previous session or hallucinated. Available IDs right now: [${available || 'none'}].`
-}
-
-const MISSING_CREDENTIAL_REASONS: Record<MissingCredential, string> = {
-  profile: 'is missing or its provider is unsupported',
-  apiKey: 'has no API key configured',
-  baseUrl: 'has no base URL configured',
 }
 
 function missingCredentialsError(slot: string, missing: MissingCredential): string {

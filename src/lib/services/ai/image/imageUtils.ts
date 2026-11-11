@@ -81,6 +81,12 @@ export function missingCredential(
   return undefined
 }
 
+export const MISSING_CREDENTIAL_REASONS: Record<MissingCredential, string> = {
+  profile: 'is missing or its provider is unsupported',
+  apiKey: 'has no API key configured',
+  baseUrl: 'has no base URL configured',
+}
+
 /**
  * Check if required credentials are configured for a given image slot.
  */
