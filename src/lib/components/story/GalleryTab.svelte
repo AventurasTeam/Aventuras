@@ -9,7 +9,12 @@
     imageSetupMessage,
     retryImageGeneration,
   } from '#lib/services/ai/image/index.ts'
-  import { eventBus, type ImageQueuedEvent, type ImageReadyEvent } from '#lib/services/events.ts'
+  import {
+    eventBus,
+    type ImageAnalysisFailedEvent,
+    type ImageQueuedEvent,
+    type ImageReadyEvent,
+  } from '#lib/services/events.ts'
   import { errMessage } from '#lib/utils/error.ts'
   import { normalizeImageDataUrl } from '#lib/utils/image.ts'
   import { diffGalleryImages, isImageInProgress } from '#lib/utils/galleryImages.ts'
@@ -345,9 +350,19 @@
       dropImageData(event.imageId)
       loadImages()
     })
+    // The story view, which otherwise raises this, is not mounted while the gallery is.
+    const unsubFailed = eventBus.subscribe<ImageAnalysisFailedEvent>(
+      'ImageAnalysisFailed',
+      (event) => {
+        if (loadedImages.some((img) => img.entryId === event.entryId)) {
+          ui.showToast(`Image generation failed: ${event.error}`, 'error', 10000)
+        }
+      },
+    )
     return () => {
       unsubQueued()
       unsubReady()
+      unsubFailed()
     }
   })
 
