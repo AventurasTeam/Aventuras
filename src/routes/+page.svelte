@@ -52,20 +52,7 @@
             ? true
             : !lastChecked || now - lastChecked >= checkInterval * 60 * 60 * 1000
 
-        if (shouldCheck) {
-          updaterService
-            .checkForUpdates()
-            .then(async (updateInfo) => {
-              await settings.setLastChecked(Date.now())
-              // Offer the update in a dialog rather than logging it: a console message
-              // reaches nobody outside a dev build.
-              updateNotifier.show(updateInfo)
-            })
-            // A failed startup check stays silent. The user did not ask for it, so an
-            // error toast about it would interrupt them over something they cannot act on;
-            // the manual button in Settings reports failures properly.
-            .catch((err) => console.error('[Updater] Startup check failed:', err))
-        }
+        if (shouldCheck) void checkForUpdatesOnStartup()
       }
 
       warmSlotCapabilities().catch((err) => console.warn('[ImageCapabilities] warmup failed', err))
@@ -76,6 +63,19 @@
       error = errMessage(e)
     }
   })
+
+  // A failed startup check stays silent: the user did not ask for it and cannot act on it.
+  // The manual button in Settings reports failures.
+  async function checkForUpdatesOnStartup() {
+    try {
+      const updateInfo = await updaterService.checkForUpdates()
+      await settings.setLastChecked(Date.now())
+      // A dialog, not a log line: a console message reaches nobody outside a dev build.
+      updateNotifier.show(updateInfo)
+    } catch (err) {
+      console.error('[Updater] Startup check failed:', err)
+    }
+  }
 
   async function handleProviderSetupComplete() {
     showProviderSetup = false
