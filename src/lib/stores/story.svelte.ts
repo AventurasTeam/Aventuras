@@ -5727,7 +5727,11 @@ class StoryStore {
 
     // Delete the branch and all of its owned data in one persistence transaction, which selects
     // the branch's checkpoints itself rather than trusting this list to be complete.
+    const storyId = this.currentStory.id
     await database.deleteBranch(branchId)
+
+    // The branch's images went with its entries, and an open gallery is showing them.
+    ui.clearGalleryImages(storyId)
 
     // Update in-memory state only after the persistence transaction commits.
     this.checkpoints = this.checkpoints.filter((checkpoint) => checkpoint.branchId !== branchId)
