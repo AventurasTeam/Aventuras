@@ -406,7 +406,6 @@
 
   function closeLightbox() {
     lightboxOpen = false
-    evictOverBudget(protectedIds())
   }
 
   function previousImage() {
@@ -456,11 +455,12 @@
 
   const OrderIcon = $derived(ui.galleryNewestFirst ? ClockArrowDown : ClockArrowUp)
 
-  // Lazily load pixels (current + neighbors) when navigating the lightbox
+  // Load the lightbox window's pixels, and evict what it no longer protects.
   $effect(() => {
     const ids = lightboxWindowIds
     untrack(() => {
       for (const id of ids) ensureImageData(id)
+      evictOverBudget(protectedIds())
     })
   })
 
