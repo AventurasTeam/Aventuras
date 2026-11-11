@@ -19,6 +19,7 @@
     ChevronLeft,
     ChevronRight,
     RotateCcw,
+    Pencil,
     ClockArrowDown,
     ClockArrowUp,
   } from '@lucide/svelte'
@@ -490,7 +491,7 @@
       ]}
     />
   {:else if failedImageIds.has(image.id)}
-    <div class={frame}>
+    <div class={[frame, 'gap-2']}>
       <Button
         variant="outline"
         size="sm"
@@ -501,6 +502,18 @@
         <RefreshCw class="size-4" />
         Retry
       </Button>
+      {#if !lightbox && image.status === 'failed'}
+        <Button
+          variant="outline"
+          size="sm"
+          class="relative z-20"
+          disabled={regenerating}
+          onclick={() => openLightbox(image.id)}
+        >
+          <Pencil class="size-4" />
+          Edit
+        </Button>
+      {/if}
     </div>
   {:else if inProgress}
     <div class={[frame, 'flex-col gap-2']}>
