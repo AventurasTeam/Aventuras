@@ -493,7 +493,11 @@
                 {/if}
               </div>
 
-              <IconRow class="-mr-1.5" onDelete={() => deleteLocation(location)} showDelete={true}>
+              <IconRow
+                class="-mr-1.5"
+                onDelete={() => deleteLocation(location)}
+                showDelete={story.canDeleteLocation(location.id)}
+              >
                 <Button
                   variant="text"
                   size="sm"

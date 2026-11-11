@@ -117,6 +117,34 @@ describe('WorldStateInjector', () => {
     expect(result.tier1.map((e) => e.name)).not.toContain('Borin')
   })
 
+  it('counts only items in the inventory as inventory', async () => {
+    const placed = {
+      ...worldState,
+      items: [
+        { id: 'i3', name: 'Cloak', location: 'inventory', equipped: true, description: null },
+        { id: 'i4', name: 'Anvil', location: 'l2', equipped: false, description: null },
+      ] as Item[],
+    }
+    const result = await injector.buildContext(placed, '', [], { storyId: undefined })
+
+    expect(result.tier1.find((e) => e.name === 'Cloak')?.metadata?.equipped).toBe(true)
+    expect(result.tier1.map((e) => e.name)).not.toContain('Anvil')
+    expect(result.contextBlock).toContain('Cloak [equipped]')
+    // Not mentioned, so Tier 3, which names its location too.
+    expect(result.tier3.map((e) => e.name)).toContain('Anvil')
+    expect(result.contextBlock).toContain('• Anvil — Location: Iron Mountain')
+  })
+
+  it('names the location of an item it matched', async () => {
+    const lying = {
+      ...worldState,
+      items: [{ id: 'i4', name: 'Anvil', location: 'l2', equipped: false, description: null }],
+    } as typeof worldState
+    const result = await injector.buildContext(lying, 'the Anvil', [], { storyId: undefined })
+
+    expect(result.contextBlock).toContain('• Anvil — Location: Iron Mountain')
+  })
+
   it('selects Tier 2 entities via fuzzy matching against user input and recent narrative', async () => {
     const recentEntries: StoryEntry[] = [
       {
