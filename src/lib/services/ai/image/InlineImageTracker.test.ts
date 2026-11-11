@@ -7,6 +7,7 @@ vi.mock('#lib/services/database.ts', () => ({
   database: {
     createEmbeddedImage: (...args: unknown[]) => createEmbeddedImage(...args),
     updateEmbeddedImage: (...args: unknown[]) => updateEmbeddedImage(...args),
+    cancelEmbeddedImage: async () => true,
     // The style lookup the tracker awaits before it registers a tag.
     getPackTemplate: async () => {
       await new Promise((resolve) => setTimeout(resolve, 5))
@@ -24,8 +25,13 @@ vi.mock('#lib/stores/settings.svelte.ts', () => ({
   },
 }))
 
+const generateImage = vi.fn(async (_options: { signal?: AbortSignal }) => ({
+  base64: null,
+  error: 'no backend in test',
+}))
+
 vi.mock('./providers/registry', () => ({
-  generateImage: async () => ({ base64: null, error: 'no backend in test' }),
+  generateImage: (options: { signal?: AbortSignal }) => generateImage(options),
 }))
 
 vi.mock('#lib/services/events.ts', () => ({
@@ -35,6 +41,7 @@ vi.mock('#lib/services/events.ts', () => ({
 }))
 
 const { InlineImageTracker } = await import('./InlineImageTracker')
+const { cancelImageGeneration } = await import('./imageUtils')
 
 const TAG = '<pic prompt="a long enough prompt to pass the floor"></pic>'
 
@@ -42,6 +49,22 @@ describe('InlineImageTracker', () => {
   beforeEach(() => {
     createEmbeddedImage.mockClear()
     updateEmbeddedImage.mockClear()
+    generateImage.mockClear()
+  })
+
+  it('can cancel a flushed image, and the cancel reaches its request', async () => {
+    const tracker = new InlineImageTracker('story', 'entry', () => [])
+
+    tracker.processChunk(TAG, false)
+    await tracker.flushToDatabase()
+
+    const imageId = createEmbeddedImage.mock.calls[0][0].id
+    const signal = generateImage.mock.calls[0][0].signal
+    expect(signal?.aborted).toBe(false)
+
+    await cancelImageGeneration(imageId)
+
+    expect(signal?.aborted).toBe(true)
   })
 
   it('records a tag seen in the final chunk, flushed before its style lookup resolves', async () => {

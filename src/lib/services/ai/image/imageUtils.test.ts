@@ -35,6 +35,25 @@ vi.mock('#lib/stores/settings.svelte.ts', () => ({
   },
 }))
 
+const updateEmbeddedImage = vi.fn(async (_id: string, _updates: unknown) => {})
+const cancelEmbeddedImage = vi.fn(async (_id: string) => true)
+const emitImageQueued = vi.fn()
+const emitImageReady = vi.fn()
+const emitImageAnalysisFailed = vi.fn()
+
+vi.mock('#lib/services/database.ts', () => ({
+  database: {
+    updateEmbeddedImage: (id: string, updates: unknown) => updateEmbeddedImage(id, updates),
+    cancelEmbeddedImage: (id: string) => cancelEmbeddedImage(id),
+  },
+}))
+
+vi.mock('#lib/services/events.ts', () => ({
+  emitImageQueued: (...args: unknown[]) => emitImageQueued(...args),
+  emitImageReady: (...args: unknown[]) => emitImageReady(...args),
+  emitImageAnalysisFailed: (...args: unknown[]) => emitImageAnalysisFailed(...args),
+}))
+
 const warmImageCapabilities = vi.fn(async (_profiles: unknown[]) => {})
 const generateImage = vi.fn(async (_options: unknown) => ({ base64: 'PORTRAIT' }))
 
@@ -50,6 +69,9 @@ const {
   missingCredential,
   warmSlotCapabilities,
   generatePortrait,
+  runImageGeneration,
+  beginImageAttempt,
+  cancelImageGeneration,
 } = await import('./imageUtils')
 
 const SLOTS: ImageProfileSlot[] = ['standard', 'background', 'portrait', 'reference']
@@ -254,5 +276,134 @@ describe('generatePortrait', () => {
   it('refuses when no portrait profile is set', async () => {
     await expect(generatePortrait('a face')).rejects.toThrow('No image generation profile')
     expect(generateImage).not.toHaveBeenCalled()
+  })
+})
+
+describe('image attempts', () => {
+  const request = (attempt: AbortController, notifyFailure = false) => ({
+    imageId: 'img',
+    entryId: 'entry',
+    attempt,
+    prompt: 'a scene',
+    profileId: 'p-std',
+    model: 'm',
+    size: { orientation: 'square' as const, size: 'medium' as const },
+    notifyFailure,
+  })
+
+  beforeEach(() => {
+    generateImage.mockReset()
+    generateImage.mockResolvedValue({ base64: 'PIXELS' })
+    updateEmbeddedImage.mockClear()
+    cancelEmbeddedImage.mockClear()
+    emitImageQueued.mockClear()
+    emitImageReady.mockClear()
+    emitImageAnalysisFailed.mockClear()
+  })
+
+  it('writes a finished generation and hands its signal to the request', async () => {
+    const attempt = beginImageAttempt('img')
+
+    await expect(runImageGeneration(request(attempt))).resolves.toBe('PIXELS')
+
+    expect(generateImage).toHaveBeenCalledWith(expect.objectContaining({ signal: attempt.signal }))
+    expect(updateEmbeddedImage).toHaveBeenLastCalledWith('img', {
+      imageData: 'PIXELS',
+      status: 'complete',
+    })
+    expect(emitImageReady).toHaveBeenCalledWith('img', 'entry', true)
+  })
+
+  it('does not start, flip the record or write when cancelled before it began', async () => {
+    const attempt = beginImageAttempt('img')
+    await cancelImageGeneration('img')
+
+    await expect(runImageGeneration(request(attempt, true))).resolves.toBeNull()
+
+    expect(generateImage).not.toHaveBeenCalled()
+    expect(updateEmbeddedImage).not.toHaveBeenCalled()
+    expect(emitImageAnalysisFailed).not.toHaveBeenCalled()
+    // The queued event still needs its pair.
+    expect(emitImageReady).toHaveBeenCalledWith('img', 'entry', false)
+  })
+
+  it('leaves the record alone, and raises nothing, when cancelled mid-request', async () => {
+    const attempt = beginImageAttempt('img')
+    generateImage.mockImplementation(async (options) => {
+      await cancelImageGeneration('img')
+      ;(options as { signal: AbortSignal }).signal.throwIfAborted()
+      return { base64: 'LATE' }
+    })
+
+    await expect(runImageGeneration(request(attempt, true))).resolves.toBeNull()
+
+    expect(updateEmbeddedImage).toHaveBeenCalledTimes(1)
+    expect(updateEmbeddedImage).toHaveBeenCalledWith('img', { status: 'generating' })
+    expect(cancelEmbeddedImage).toHaveBeenCalledTimes(1)
+    expect(emitImageAnalysisFailed).not.toHaveBeenCalled()
+    expect(emitImageReady).toHaveBeenCalledTimes(1)
+  })
+
+  it('settles the row through the database when cancelled', async () => {
+    const attempt = beginImageAttempt('img')
+
+    await cancelImageGeneration('img')
+
+    expect(attempt.signal.aborted).toBe(true)
+    expect(cancelEmbeddedImage).toHaveBeenCalledWith('img')
+  })
+
+  it('re-settles a cancel that landed while the generating flip was in flight', async () => {
+    const attempt = beginImageAttempt('img')
+    updateEmbeddedImage.mockImplementationOnce(async () => {
+      await cancelImageGeneration('img')
+    })
+    cancelEmbeddedImage.mockClear()
+
+    await expect(runImageGeneration(request(attempt))).resolves.toBeNull()
+
+    // Once for the cancel itself, once after the flip that may have overwritten it.
+    expect(cancelEmbeddedImage).toHaveBeenCalledTimes(2)
+    expect(generateImage).not.toHaveBeenCalled()
+  })
+
+  it('reports an aborted attempt as failed even when the provider still returned pixels', async () => {
+    const attempt = beginImageAttempt('img')
+    generateImage.mockImplementation(async () => {
+      attempt.abort()
+      return { base64: 'LATE' }
+    })
+
+    await expect(runImageGeneration(request(attempt))).resolves.toBeNull()
+
+    expect(emitImageReady).toHaveBeenCalledWith('img', 'entry', false)
+  })
+
+  it('keeps a superseded request from writing over the one that replaced it', async () => {
+    const first = beginImageAttempt('img')
+    let finishFirst: (value: { base64: string }) => void = () => {}
+    generateImage.mockImplementationOnce(
+      () => new Promise((resolve) => (finishFirst = resolve as typeof finishFirst)),
+    )
+    const firstRun = runImageGeneration(request(first))
+    await vi.waitFor(() => expect(generateImage).toHaveBeenCalledTimes(1))
+
+    const second = beginImageAttempt('img')
+    expect(first.signal.aborted).toBe(true)
+    expect(second.signal.aborted).toBe(false)
+
+    finishFirst({ base64: 'OLD' })
+    await firstRun
+
+    expect(updateEmbeddedImage).not.toHaveBeenCalledWith(
+      'img',
+      expect.objectContaining({ imageData: 'OLD' }),
+    )
+  })
+
+  it('adopts a controller made earlier instead of making its own', () => {
+    const controller = new AbortController()
+
+    expect(beginImageAttempt('adopted', controller)).toBe(controller)
   })
 })

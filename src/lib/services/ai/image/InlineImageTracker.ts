@@ -16,10 +16,10 @@
 
 import { extractPicTags, type ParsedPicTag } from '#lib/utils/inlineImageParser.ts'
 import { generateImage as registryGenerateImage } from './providers/registry'
-import { recordImageResult } from './imageUtils'
+import { beginImageAttempt, recordImageResult } from './imageUtils'
 import { database } from '#lib/services/database.ts'
 import { settings } from '#lib/stores/settings.svelte.ts'
-import { emitImageQueued, emitImageReady } from '#lib/services/events.ts'
+import { emitImageQueued } from '#lib/services/events.ts'
 import { normalizeImageDataUrl, expectedPixels, type ImageSpec } from '#lib/utils/image.ts'
 import { resolveStylePrompt } from './stylePrompt'
 import { createLogger } from '#lib/log.ts'
@@ -34,6 +34,8 @@ interface PendingImage {
   profileId: string
   model: string
   size: ImageSpec
+  /** Registered once the record exists, which is when the image can first be cancelled. */
+  attempt: AbortController
   /** Promise that resolves to base64 image data or null on failure */
   generationPromise: Promise<{ base64: string | null; error?: string }>
 }
@@ -154,11 +156,13 @@ export class InlineImageTracker {
     })
 
     // Start generation - store promise for later resolution
+    const attempt = new AbortController()
     const generationPromise = this.generateImage(
       profileId,
       modelToUse,
       fullPrompt,
       sizeToUse,
+      attempt.signal,
       referenceImageUrls,
     )
 
@@ -169,6 +173,7 @@ export class InlineImageTracker {
       profileId,
       model: modelToUse,
       size: sizeToUse,
+      attempt,
       generationPromise,
     })
   }
@@ -181,6 +186,7 @@ export class InlineImageTracker {
     model: string,
     prompt: string,
     size: ImageSpec,
+    signal: AbortSignal,
     referenceImageUrls?: string[],
   ): Promise<{ base64: string | null; error?: string }> {
     try {
@@ -190,6 +196,7 @@ export class InlineImageTracker {
         prompt,
         size,
         referenceImages: referenceImageUrls,
+        signal,
       })
 
       if (!result.base64) {
@@ -246,25 +253,24 @@ export class InlineImageTracker {
       }
 
       await database.createEmbeddedImage(embeddedImage)
+      beginImageAttempt(pending.id, pending.attempt)
       emitImageQueued(pending.id, this.entryId)
 
       log('Image record created with generating status', { imageId: pending.id })
 
-      // Update record when generation completes (non-blocking)
-      pending.generationPromise
-        .then((result) => recordImageResult(pending.id, this.entryId, result))
-        .catch((error) => {
-          log('Failed to update image record', { imageId: pending.id, error })
-          // The `Queued` above is still outstanding: a rejected generation that never
-          // emits `Ready` leaves the header counting an image that will never arrive.
-          emitImageReady(pending.id, this.entryId, false)
-        })
+      void this.settle(pending)
     }
 
     log('All pending images flushed (generation continues in background)', {
       count: this.pendingImages.length,
     })
     this.pendingImages = []
+  }
+
+  /** Record a flushed image once its generation finishes. Never rejects: neither step throws. */
+  private async settle(pending: PendingImage): Promise<void> {
+    const result = await pending.generationPromise
+    await recordImageResult(pending.id, this.entryId, result, pending.attempt)
   }
 
   /**

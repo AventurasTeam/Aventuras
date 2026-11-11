@@ -124,19 +124,42 @@ export function getProviderDisplayName(): string {
   return IMAGE_PROVIDER_LABELS[profile.providerType] ?? profile.providerType
 }
 
+// The live generation of each image. An aborted attempt never writes its record, so a cancelled
+// or superseded request cannot land over what replaced it.
+const attempts = new Map<string, AbortController>()
+
+/** Make `controller` the image's current attempt, aborting the one it replaces. */
+export function beginImageAttempt(
+  imageId: string,
+  controller = new AbortController(),
+): AbortController {
+  attempts.get(imageId)?.abort()
+  attempts.set(imageId, controller)
+  return controller
+}
+
+/** Abort the image's attempt and settle its row. */
+export async function cancelImageGeneration(imageId: string): Promise<void> {
+  attempts.get(imageId)?.abort()
+  attempts.delete(imageId)
+  await database.cancelEmbeddedImage(imageId)
+}
+
 /**
- * Write a finished generation onto its record.
+ * Write a finished generation onto its record, unless the attempt was aborted.
  *
  * `ImageReady` goes out in a `finally`: it balances the `ImageQueued` the caller emitted
  * when it scheduled the work, and the header's in-flight count has to come back down even
- * when recording the outcome is itself what failed.
+ * when recording the outcome is itself what failed, and when it was skipped.
  */
 export async function recordImageResult(
   imageId: string,
   entryId: string,
   result: { base64: string | null; error?: string },
+  attempt: AbortController,
 ): Promise<void> {
   try {
+    if (attempt.signal.aborted) return
     if (result.base64) {
       await database.updateEmbeddedImage(imageId, {
         imageData: result.base64,
@@ -151,13 +174,16 @@ export async function recordImageResult(
   } catch (error) {
     log('Failed to record image result', { imageId, error })
   } finally {
-    emitImageReady(imageId, entryId, !!result.base64)
+    if (attempts.get(imageId) === attempt) attempts.delete(imageId)
+    emitImageReady(imageId, entryId, !!result.base64 && !attempt.signal.aborted)
   }
 }
 
 export interface ImageGenerationRequest {
   imageId: string
   entryId: string
+  /** From `beginImageAttempt`, started when the record was created. */
+  attempt: AbortController
   prompt: string
   profileId: string
   model: string
@@ -178,37 +204,64 @@ export interface ImageGenerationRequest {
  * onto its character — does not have to read the row back.
  */
 export async function runImageGeneration(request: ImageGenerationRequest): Promise<string | null> {
-  const { imageId, entryId, prompt, profileId, model, size, referenceImages } = request
+  const { imageId, entryId, prompt, profileId, model, size, referenceImages, attempt } = request
 
   let base64: string | null = null
   let failure: string | undefined
 
-  // Its own try: a failed status flip is a database problem, not a generation failure, and
-  // reporting it as one raises a user-facing notice for the wrong thing. The generation goes
-  // ahead regardless — `recordImageResult` writes the terminal status either way.
-  try {
-    await database.updateEmbeddedImage(imageId, {
-      ...request.recordUpdates,
-      status: 'generating',
-    })
-  } catch (error) {
-    log('Failed to mark the image generating', { imageId, error })
+  // Cancelled while it waited to start: the record is already settled, so leave it as it is.
+  if (!attempt.signal.aborted) {
+    // Its own try: a failed status flip is a database problem, not a generation failure, and
+    // reporting it as one raises a user-facing notice for the wrong thing. The generation goes
+    // ahead regardless — `recordImageResult` writes the terminal status either way.
+    try {
+      await database.updateEmbeddedImage(imageId, {
+        ...request.recordUpdates,
+        status: 'generating',
+      })
+    } catch (error) {
+      log('Failed to mark the image generating', { imageId, error })
+    }
+
+    if (attempt.signal.aborted) {
+      // A cancel that landed during the flip may have been overwritten by it. A superseded
+      // attempt has a successor registered, and that one owns the row.
+      if (!attempts.has(imageId)) {
+        try {
+          await database.cancelEmbeddedImage(imageId)
+        } catch (error) {
+          log('Failed to settle the cancelled image', { imageId, error })
+        }
+      }
+    } else {
+      try {
+        log('Generating image', {
+          imageId,
+          profileId,
+          model,
+          hasReference: !!referenceImages?.length,
+        })
+        const result = await generateImage({
+          profileId,
+          model,
+          prompt,
+          size,
+          referenceImages,
+          signal: attempt.signal,
+        })
+
+        if (!result.base64) throw new Error('No image data returned')
+        if (!attempt.signal.aborted) base64 = result.base64
+      } catch (error) {
+        failure = error instanceof Error ? error.message : 'Unknown error'
+        log('Image generation failed', { imageId, error: failure })
+      }
+    }
   }
 
-  try {
-    log('Generating image', { imageId, profileId, model, hasReference: !!referenceImages?.length })
-    const result = await generateImage({ profileId, model, prompt, size, referenceImages })
+  await recordImageResult(imageId, entryId, { base64, error: failure }, attempt)
 
-    if (!result.base64) throw new Error('No image data returned')
-    base64 = result.base64
-  } catch (error) {
-    failure = error instanceof Error ? error.message : 'Unknown error'
-    log('Image generation failed', { imageId, error: failure })
-  }
-
-  await recordImageResult(imageId, entryId, { base64, error: failure })
-
-  if (failure && request.notifyFailure) {
+  if (failure && request.notifyFailure && !attempt.signal.aborted) {
     emitImageAnalysisFailed(entryId, failure)
   }
 
@@ -259,6 +312,7 @@ export async function retryImageGeneration(imageId: string, prompt: string): Pro
   await runImageGeneration({
     imageId,
     entryId: image.entryId,
+    attempt: beginImageAttempt(imageId),
     prompt,
     profileId,
     model,

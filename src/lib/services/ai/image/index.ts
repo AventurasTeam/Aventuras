@@ -74,6 +74,8 @@ export {
   retryImageGeneration,
   generatePortrait,
   runImageGeneration,
+  beginImageAttempt,
+  cancelImageGeneration,
 } from './imageUtils'
 
 // Portrait lookups for reference-mode scenes
