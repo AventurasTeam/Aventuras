@@ -262,9 +262,7 @@
         </div>
         <div class="flex items-center gap-1.5">
           {#if isTokenManualOverride || showNumericOverride}
-            <span
-              class="text-muted-foreground bg-warning/10 text-warning rounded px-1.5 py-0.5 text-[10px] font-medium"
-            >
+            <span class="bg-warning/10 text-warning rounded px-1.5 py-0.5 text-[10px] font-medium">
               Manual
             </span>
           {:else}
