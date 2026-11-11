@@ -1596,7 +1596,7 @@
                   ).length} nodes)
                 </p>
                 {#if workflowMissing}
-                  <p class="text-xs text-amber-600 dark:text-amber-400" role="alert">
+                  <p class="text-warning text-xs" role="alert">
                     {workflowMissing}
                   </p>
                 {/if}
