@@ -37,6 +37,10 @@
   /* The tallest a framed modal or sheet grows (for max-h-(--modal-max-height)) */
   --modal-max-height: 85dvh;
 
+  /* The gallery lightbox's image area (for h-(--image-view-height)) */
+  --image-view-height: 40dvh;
+  --image-view-height-sm: 50dvh;
+
   /* Colors - map to Tailwind theme system */
   --color-background: var(--background);
   --color-foreground: var(--foreground);

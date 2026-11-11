@@ -1,11 +1,23 @@
 <script lang="ts">
+  import { onMount, untrack } from 'svelte'
   import { story } from '#lib/stores/story.svelte.ts'
   import { ui } from '#lib/stores/ui.svelte.ts'
   import { database } from '#lib/services/database.ts'
   import { imageExportService } from '#lib/services/imageExport.ts'
-  import { retryImageGeneration } from '#lib/services/ai/image/index.ts'
+  import {
+    cancelImageGeneration,
+    imageSetupMessage,
+    retryImageGeneration,
+  } from '#lib/services/ai/image/index.ts'
+  import {
+    eventBus,
+    type ImageAnalysisFailedEvent,
+    type ImageQueuedEvent,
+    type ImageReadyEvent,
+  } from '#lib/services/events.ts'
   import { errMessage } from '#lib/utils/error.ts'
   import { normalizeImageDataUrl } from '#lib/utils/image.ts'
+  import { diffGalleryImages, isImageInProgress } from '#lib/utils/galleryImages.ts'
   import type { EmbeddedImageMeta } from '#lib/types/index.ts'
   import {
     Download,
@@ -16,6 +28,7 @@
     ChevronLeft,
     ChevronRight,
     RotateCcw,
+    Pencil,
     ClockArrowDown,
     ClockArrowUp,
   } from '@lucide/svelte'
@@ -33,6 +46,7 @@
   // Always chronological, as loaded and cached in `ui`; `images` is the display order.
   let loadedImages = $state.raw<EmbeddedImageMeta[]>([])
   const images = $derived(ui.galleryNewestFirst ? loadedImages.toReversed() : loadedImages)
+  const imageById = $derived(new Map(loadedImages.map((img) => [img.id, img])))
   // Lazy-loaded base64 payloads, keyed by image id. The grid/lightbox only loads the
   // pixels that are actually visible, so a story with many images never pulls all of
   // them through the SQL/IPC bridge at once (which caused Android OOM crashes).
@@ -45,62 +59,103 @@
   const loadingImageIds = new SvelteSet<string>()
   // Ids whose load failed; rendered as a retry affordance rather than an endless spinner.
   const failedImageIds = new SvelteSet<string>()
+  // The fetch each id is waiting on. A fetch that finds its token gone was invalidated while it
+  // ran, and must not put its payload back.
+  const fetchTokens = new SvelteMap<string, symbol>()
   const MAX_CACHE_BYTES = 96 * 1024 * 1024
   let cacheBytes = 0
+  // Only read when evicting, never from the template.
+  const lastUse = new SvelteMap<string, number>()
+  const visibleIds = new SvelteSet<string>()
+  let useTick = 0
 
+  // True only until a story's first list is on screen; every later reload happens in place.
   let isLoading = $state(false)
   let isSaving = $state(false)
-  let isRegenerating = $state(false)
+  const regeneratingImageIds = new SvelteSet<string>()
 
   const selectedImageIds = new SvelteSet<string>()
   const selectAllChecked = $derived(images.length > 0 && selectedImageIds.size === images.length)
 
   let lightboxOpen = $state(false)
-  let lightboxImageIndex = $state(0)
+  // The lightbox follows an image, not a position: a reload or a change of order moves indices.
+  let lightboxImageId = $state<string | null>(null)
+  const lightboxIndex = $derived(
+    lightboxImageId === null ? -1 : images.findIndex((img) => img.id === lightboxImageId),
+  )
+  // Not gated on `lightboxOpen`: the modal keeps rendering its image while it animates out.
+  const lightboxImage = $derived(lightboxIndex >= 0 ? images[lightboxIndex] : null)
+  const lightboxRegenerating = $derived(
+    lightboxImage ? regeneratingImageIds.has(lightboxImage.id) : false,
+  )
+  const lightboxGenerating = $derived(
+    lightboxImage ? lightboxRegenerating || isImageInProgress(lightboxImage) : false,
+  )
+  let editingImagePrompt = $state('')
   let touchStartX = 0
 
-  /** Ids that must survive eviction: whatever the lightbox is showing or about to show. */
-  function visibleImageIds(): Set<string> {
-    if (!lightboxOpen) return new Set()
-    return new Set(
-      [
-        images[lightboxImageIndex - 1]?.id,
-        images[lightboxImageIndex]?.id,
-        images[lightboxImageIndex + 1]?.id,
-      ].filter((id): id is string => !!id),
-    )
+  /** What the lightbox shows or is about to show: these load first and survive eviction. */
+  const lightboxWindowIds = $derived(
+    !lightboxOpen || lightboxIndex < 0
+      ? []
+      : [
+          images[lightboxIndex - 1]?.id,
+          images[lightboxIndex]?.id,
+          images[lightboxIndex + 1]?.id,
+        ].filter((id): id is string => !!id),
+  )
+
+  const protectedIds = () => new Set([...lightboxWindowIds, ...visibleIds])
+
+  function uncache(id: string) {
+    lastUse.delete(id)
+    const data = imageDataCache.get(id)
+    if (data === undefined) return
+    imageDataCache.delete(id)
+    cacheBytes -= data.length
   }
 
-  /** Drop least-recently-used payloads until the cache is back inside its budget. */
-  function evictOverBudget(protectedIds: Set<string>) {
-    if (cacheBytes <= MAX_CACHE_BYTES) return
-    // SvelteMap iterates in insertion order, and cacheImageData re-inserts on every hit,
-    // so the oldest entries here are the least recently used.
-    for (const [id, data] of imageDataCache) {
-      if (cacheBytes <= MAX_CACHE_BYTES) break
-      if (protectedIds.has(id)) continue
-      imageDataCache.delete(id)
-      cacheBytes -= data.length
+  /** Drop least-recently-used payloads until the cache fits its budget; protected ids stay. */
+  function evictOverBudget(protectedIds: ReadonlySet<string>) {
+    while (cacheBytes > MAX_CACHE_BYTES) {
+      let oldest: string | undefined
+      let oldestUse = Infinity
+      for (const id of imageDataCache.keys()) {
+        const use = lastUse.get(id) ?? 0
+        if (!protectedIds.has(id) && use < oldestUse) {
+          oldest = id
+          oldestUse = use
+        }
+      }
+      if (oldest === undefined) return
+      uncache(oldest)
     }
   }
 
-  /** Insert (or refresh) a payload, then evict whatever no longer fits. */
+  /** Insert (or replace) a payload, then evict whatever no longer fits. */
   function cacheImageData(id: string, data: string) {
-    const existing = imageDataCache.get(id)
-    if (existing !== undefined) {
-      cacheBytes -= existing.length
-      imageDataCache.delete(id)
-    }
+    uncache(id)
     imageDataCache.set(id, data)
+    lastUse.set(id, ++useTick)
     cacheBytes += data.length
-    evictOverBudget(visibleImageIds())
+    evictOverBudget(protectedIds())
   }
 
   function clearImageCache() {
     imageDataCache.clear()
+    lastUse.clear()
     loadingImageIds.clear()
     failedImageIds.clear()
+    fetchTokens.clear()
     cacheBytes = 0
+  }
+
+  /** Forget one image's payload, failure and in-flight fetch, so the next view of it fetches again. */
+  function dropImageData(id: string) {
+    uncache(id)
+    failedImageIds.delete(id)
+    loadingImageIds.delete(id)
+    fetchTokens.delete(id)
   }
 
   function resetSelection() {
@@ -111,94 +166,203 @@
     ui.activePanel = 'story'
   }
 
-  async function refreshImages() {
-    const storyId = story.currentStory?.id
-    if (!storyId) return
-
-    ui.clearGalleryImages(storyId)
+  function refreshImages() {
     clearImageCache()
-    await loadImagesForStory(storyId)
+    loadImages()
   }
 
   /** Lazily fetch (and cache) the base64 payload for a single image. */
   async function ensureImageData(id: string | undefined) {
-    if (!id || imageDataCache.has(id) || loadingImageIds.has(id)) return
+    if (!id) return
+    if (imageDataCache.has(id)) {
+      lastUse.set(id, ++useTick)
+      return
+    }
+    if (loadingImageIds.has(id)) return
+    const meta = imageById.get(id)
+    if (meta && isImageInProgress(meta)) return
+    const token = Symbol()
+    fetchTokens.set(id, token)
     loadingImageIds.add(id)
     failedImageIds.delete(id)
     try {
       const full = await database.getEmbeddedImage(id)
+      if (fetchTokens.get(id) !== token) return
       if (full?.imageData) {
         cacheImageData(id, full.imageData)
       } else {
         failedImageIds.add(id)
       }
     } catch (error) {
+      if (fetchTokens.get(id) !== token) return
       console.error('[Gallery] Failed to load image data:', error)
       failedImageIds.add(id)
     } finally {
-      loadingImageIds.delete(id)
+      if (fetchTokens.get(id) === token) {
+        fetchTokens.delete(id)
+        loadingImageIds.delete(id)
+      }
     }
+  }
+
+  async function regenerate(id: string, prompt: string) {
+    if (regeneratingImageIds.has(id)) return
+    regeneratingImageIds.add(id)
+    try {
+      const missing = await retryImageGeneration(id, prompt)
+      if (missing) ui.showToast(imageSetupMessage(missing), 'error')
+    } catch (error) {
+      console.error('[Gallery] Regenerate failed:', error)
+      ui.showToast(`Failed to regenerate image: ${errMessage(error)}`, 'error')
+    } finally {
+      regeneratingImageIds.delete(id)
+    }
+  }
+
+  /** A failed generation is run again; a payload that merely failed to load is fetched again. */
+  function retryImage(image: EmbeddedImageMeta, prompt = image.prompt) {
+    if (image.status === 'failed') regenerate(image.id, prompt.trim() || image.prompt)
+    else ensureImageData(image.id)
+  }
+
+  async function cancelGeneration(id: string) {
+    try {
+      await cancelImageGeneration(id)
+    } catch (error) {
+      console.error('[Gallery] Cancel failed:', error)
+      ui.showToast(`Failed to cancel image: ${errMessage(error)}`, 'error')
+    }
+    loadImages()
   }
 
   /** Svelte attachment: load an image's pixels once its grid cell scrolls near the viewport. */
   const lazyImage =
     (id: string): Attachment<HTMLElement> =>
     (node) => {
-      // Deliberately keeps observing instead of unobserving after the first hit: a payload can be
-      // evicted by the LRU once it scrolls away, and scrolling back must fetch it again.
-      // ensureImageData is itself a no-op when the data is already cached or in flight.
+      // Keeps observing: an evicted payload refetches when its cell scrolls back.
       const observer = new IntersectionObserver(
         (entries) => {
           for (const entry of entries) {
-            if (entry.isIntersecting) ensureImageData(id)
+            if (!entry.isIntersecting) visibleIds.delete(id)
+            else {
+              visibleIds.add(id)
+              ensureImageData(id)
+            }
           }
+          evictOverBudget(protectedIds())
         },
         { rootMargin: '300px' },
       )
       observer.observe(node)
-      return () => observer.disconnect()
+      return () => {
+        observer.disconnect()
+        visibleIds.delete(id)
+        evictOverBudget(protectedIds())
+      }
     }
 
-  async function loadImagesForStory(storyId: string) {
-    isLoading = true
+  /** Put a fresh list on screen, and let go of what it no longer covers. */
+  function applyLoaded(storyId: string, loaded: EmbeddedImageMeta[]) {
+    const { removed, statusChanged } = diffGalleryImages(loadedImages, loaded)
+    for (const id of [...removed, ...statusChanged]) dropImageData(id)
+    for (const id of removed) selectedImageIds.delete(id)
+    if (lightboxOpen && lightboxImageId !== null && removed.includes(lightboxImageId)) {
+      closeLightbox()
+    }
+    loadedImages = loaded
+    ui.setGalleryImages(storyId, loaded)
+    isLoading = false
+  }
+
+  let loadActive = false
+  let loadAgain = false
+
+  // One query at a time. A request that lands mid-flight reruns once afterwards, so the list
+  // written last was read after the last change.
+  async function loadImages() {
+    if (loadActive) {
+      loadAgain = true
+      return
+    }
+    loadActive = true
     try {
-      const loaded = await database.getEmbeddedImageMetaForStory(storyId)
-      ui.setGalleryImages(storyId, loaded)
-      loadedImages = loaded
-    } catch (error) {
-      console.error('[Gallery] Failed to load images:', error)
-      ui.showToast('Failed to load gallery images', 'error')
-      loadedImages = []
+      do {
+        loadAgain = false
+        const storyId = story.currentStory?.id
+        if (!storyId) {
+          isLoading = false
+          break
+        }
+        try {
+          const loaded = await database.getEmbeddedImageMetaForStory(storyId)
+          if (story.currentStory?.id === storyId) applyLoaded(storyId, loaded)
+          else loadAgain = true
+        } catch (error) {
+          if (story.currentStory?.id === storyId) {
+            console.error('[Gallery] Failed to load images:', error)
+            ui.showToast('Failed to load gallery images', 'error')
+            isLoading = false
+          } else {
+            loadAgain = true
+          }
+        }
+      } while (loadAgain)
     } finally {
-      isLoading = false
+      loadActive = false
     }
   }
 
-  // Tracks which story the cache holds pixels for. Plain `let`: it must not make this effect
-  // re-run, and the effect can fire again for the same story when currentStory is replaced.
-  let cachedStoryId: string | null = null
+  const currentStoryId = $derived(story.currentStory?.id)
+  const listCached = $derived(currentStoryId ? ui.hasGalleryImages(currentStoryId) : false)
+
+  // The story the pixel cache, selection and lightbox belong to. Plain `let`: changing it must
+  // not re-run the effect.
+  let shownStoryId: string | undefined
 
   $effect(() => {
-    const storyId = story.currentStory?.id
-    resetSelection() // Always reset selection on story change
-
-    // Drop the previous story's payloads — otherwise they stay in the heap for the whole session.
-    if (storyId !== cachedStoryId) {
-      clearImageCache()
-      cachedStoryId = storyId ?? null
-    }
-
-    if (storyId) {
-      const cached = ui.getGalleryImages(storyId)
-      if (cached) {
-        loadedImages = cached
-        isLoading = false
-      } else {
-        loadImagesForStory(storyId)
+    const storyId = currentStoryId
+    const cached = listCached
+    untrack(() => {
+      if (storyId !== shownStoryId) {
+        shownStoryId = storyId
+        // The previous story's payloads would otherwise stay in the heap for the whole session.
+        resetSelection()
+        clearImageCache()
+        closeLightbox()
+        lightboxImageId = null
+        const list = storyId ? ui.getGalleryImages(storyId) : undefined
+        loadedImages = list ?? []
+        isLoading = !!storyId && !list
+        // A cached list is shown at once and revalidated.
+        if (storyId) loadImages()
+      } else if (storyId && !cached) {
+        loadImages()
       }
-    } else {
-      loadedImages = []
-      isLoading = false
+    })
+  })
+
+  onMount(() => {
+    const unsubQueued = eventBus.subscribe<ImageQueuedEvent>('ImageQueued', () => {
+      loadImages()
+    })
+    const unsubReady = eventBus.subscribe<ImageReadyEvent>('ImageReady', (event) => {
+      // A regenerated image keeps its id and its `complete` status, so the payload is dropped by id.
+      dropImageData(event.imageId)
+      loadImages()
+    })
+    // The story view, which otherwise raises this, is not mounted while the gallery is.
+    const unsubFailed = eventBus.subscribe<ImageAnalysisFailedEvent>(
+      'ImageAnalysisFailed',
+      (event) => {
+        if (loadedImages.some((img) => img.entryId === event.entryId)) {
+          ui.showToast(`Image generation failed: ${event.error}`, 'error', 10000)
+        }
+      },
+    )
+    return () => {
+      unsubQueued()
+      unsubReady()
+      unsubFailed()
     }
   })
 
@@ -244,13 +408,14 @@
     }
   }
 
-  function openLightbox(index: number) {
-    lightboxImageIndex = index
-    // Show the full stored prompt - user can edit as needed
-    const image = images[index]
-    if (image) {
-      editingImagePrompt = image.prompt
-    }
+  // Show the full stored prompt - user can edit as needed
+  function showLightboxImage(id: string) {
+    lightboxImageId = id
+    editingImagePrompt = imageById.get(id)?.prompt ?? ''
+  }
+
+  function openLightbox(id: string) {
+    showLightboxImage(id)
     lightboxOpen = true
   }
 
@@ -259,15 +424,13 @@
   }
 
   function previousImage() {
-    if (lightboxImageIndex > 0) {
-      lightboxImageIndex--
-    }
+    const previous = lightboxIndex > 0 ? images[lightboxIndex - 1] : undefined
+    if (previous) showLightboxImage(previous.id)
   }
 
   function nextImage() {
-    if (lightboxImageIndex < images.length - 1) {
-      lightboxImageIndex++
-    }
+    const next = lightboxIndex >= 0 ? images[lightboxIndex + 1] : undefined
+    if (next) showLightboxImage(next.id)
   }
 
   function handleTouchStart(e: TouchEvent) {
@@ -305,53 +468,111 @@
     }
   }
 
-  // Edit modal state
-  let editingImagePrompt = $state('')
-
-  // Get the current lightbox image
-  const lightboxImage = $derived(
-    lightboxOpen && images.length > 0 ? images[lightboxImageIndex] : null,
-  )
-
   const OrderIcon = $derived(ui.galleryNewestFirst ? ClockArrowDown : ClockArrowUp)
 
-  // Update prompt and lazily load pixels (current + neighbors) when navigating the lightbox
+  // Load the lightbox window's pixels, and evict what it no longer protects.
   $effect(() => {
-    if (lightboxOpen && images.length > 0) {
-      const image = images[lightboxImageIndex]
-      if (image) {
-        editingImagePrompt = image.prompt
-      }
-      ensureImageData(images[lightboxImageIndex]?.id)
-      ensureImageData(images[lightboxImageIndex - 1]?.id)
-      ensureImageData(images[lightboxImageIndex + 1]?.id)
-    }
+    const ids = lightboxWindowIds
+    untrack(() => {
+      for (const id of ids) ensureImageData(id)
+      evictOverBudget(protectedIds())
+    })
   })
 
   // Submit edit modal - regenerate with new prompt
   async function handleEditImageSubmit(imageId: string) {
-    if (!editingImagePrompt.trim()) return
-
-    const image = images.find((img) => img.id === imageId)
-    if (!image) return
-
     // Use the prompt as-is - don't append style (user has full control)
     const fullPrompt = editingImagePrompt.trim()
+    if (!fullPrompt || !imageById.has(imageId)) return
 
-    // Close modal and regenerate
     closeLightbox()
-
-    // Use centralized retry logic from ImageGenerationService
-    await retryImageGeneration(imageId, fullPrompt)
-
-    editingImagePrompt = ''
-
-    // Refresh gallery images
-    await refreshImages()
+    await regenerate(imageId, fullPrompt)
   }
 </script>
 
 <svelte:window onkeydown={handleKeydown} />
+
+{#snippet spinner(sizeClass: string)}
+  <div
+    class={['border-surface-600 border-t-accent-400 animate-spin rounded-full border-2', sizeClass]}
+  ></div>
+{/snippet}
+
+<!-- What an image's cell shows, in the grid and in the lightbox. -->
+{#snippet imageStage(image: EmbeddedImageMeta, alt: string, lightbox: boolean)}
+  {@const regenerating = regeneratingImageIds.has(image.id)}
+  {@const inProgress = isImageInProgress(image)}
+  {@const pixels = imageDataCache.get(image.id)}
+  {@const frame = [
+    'flex w-full items-center justify-center',
+    lightbox ? 'h-(--image-view-height) sm:h-(--image-view-height-sm)' : 'h-full',
+  ]}
+  {#if pixels !== undefined}
+    <img
+      src={normalizeImageDataUrl(pixels) ?? ''}
+      {alt}
+      class={[
+        lightbox
+          ? 'max-h-(--image-view-height) max-w-full rounded object-contain sm:max-h-(--image-view-height-sm)'
+          : 'h-full w-full object-contain',
+        regenerating && 'opacity-50',
+      ]}
+    />
+  {:else if failedImageIds.has(image.id)}
+    <div class={[frame, 'gap-2']}>
+      <Button
+        variant="outline"
+        size="sm"
+        class="relative z-20"
+        disabled={regenerating}
+        onclick={() => retryImage(image, lightbox ? editingImagePrompt : undefined)}
+      >
+        <RefreshCw class="size-4" />
+        Retry
+      </Button>
+      {#if !lightbox && image.status === 'failed'}
+        <Button
+          variant="outline"
+          size="sm"
+          class="relative z-20"
+          disabled={regenerating}
+          onclick={() => openLightbox(image.id)}
+        >
+          <Pencil class="size-4" />
+          Edit
+        </Button>
+      {/if}
+    </div>
+  {:else if inProgress}
+    <div class={[frame, 'flex-col gap-2']}>
+      {@render spinner(lightbox ? 'size-8' : 'size-6')}
+      <Button
+        variant={lightbox ? 'outline' : 'ghost'}
+        size="sm"
+        class="relative z-20"
+        onclick={() => cancelGeneration(image.id)}
+      >
+        Cancel
+      </Button>
+    </div>
+  {:else}
+    <div class={frame}>
+      {@render spinner(lightbox ? 'size-8' : 'size-6')}
+    </div>
+  {/if}
+  {#if regenerating && !inProgress}
+    <div class="pointer-events-none absolute inset-0 flex items-center justify-center">
+      {#if lightbox}
+        <div class="bg-surface-900/80 flex flex-col items-center gap-2 rounded-lg px-4 py-3">
+          {@render spinner('size-6')}
+          <span class="text-surface-300 text-sm">Regenerating...</span>
+        </div>
+      {:else}
+        {@render spinner('size-6')}
+      {/if}
+    </div>
+  {/if}
+{/snippet}
 
 <div class="bg-surface-900 flex h-full flex-col">
   <!-- Header -->
@@ -383,11 +604,11 @@
             variant="ghost"
             size="icon"
             onclick={refreshImages}
-            disabled={isLoading || !story.currentStory}
+            disabled={!story.currentStory}
             title="Refresh gallery"
             class="h-8 w-8"
           >
-            <RefreshCw class="h-3.5 w-3.5 {isLoading ? 'animate-spin' : ''}" />
+            <RefreshCw class="size-3.5" />
           </Button>
 
           <!-- Save button -->
@@ -479,6 +700,10 @@
       <div class="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
         {#each images as image, index (image.id)}
           {@const selected = selectedImageIds.has(image.id)}
+          {@const viewable =
+            imageDataCache.has(image.id) &&
+            !isImageInProgress(image) &&
+            !regeneratingImageIds.has(image.id)}
           <div
             class={[
               'group bg-surface-800 relative overflow-hidden rounded-lg border-2 transition-colors',
@@ -495,44 +720,23 @@
               />
             </div>
 
-            <!-- Image container - click opens lightbox -->
-            <!-- svelte-ignore a11y_click_events_have_key_events -->
-            <!-- svelte-ignore a11y_no_static_element_interactions -->
-            <div
-              class="bg-surface-700 relative aspect-video cursor-pointer"
-              {@attach lazyImage(image.id)}
-              onclick={() => openLightbox(index)}
-            >
-              {#if imageDataCache.has(image.id)}
-                <img
-                  src={normalizeImageDataUrl(imageDataCache.get(image.id)) ?? ''}
-                  alt={`Generated image ${index + 1}`}
-                  class="h-full w-full object-contain"
-                />
-              {:else if failedImageIds.has(image.id)}
-                <button
-                  class="text-surface-400 hover:text-surface-200 flex h-full w-full flex-col items-center justify-center gap-1 text-xs"
-                  onclick={(e) => {
-                    e.stopPropagation()
-                    ensureImageData(image.id)
-                  }}
+            <div class="bg-surface-700 relative aspect-video" {@attach lazyImage(image.id)}>
+              {@render imageStage(image, `Generated image ${index + 1}`, false)}
+              <!-- Opens the lightbox; Retry and Cancel sit above it -->
+              <button
+                type="button"
+                class="focus-visible:ring-accent-400 absolute inset-0 cursor-pointer focus-visible:ring-2 focus-visible:outline-none focus-visible:ring-inset"
+                aria-label={`Open image ${index + 1}`}
+                onclick={() => openLightbox(image.id)}
+              ></button>
+              <!-- Hover overlay over a finished image only, so it never covers Cancel or Retry -->
+              {#if viewable}
+                <div
+                  class="can-hover:flex pointer-events-none absolute inset-0 hidden items-center justify-center bg-black/40 opacity-0 transition-opacity duration-200 group-hover:opacity-100"
                 >
-                  <RefreshCw class="h-4 w-4" />
-                  Retry
-                </button>
-              {:else}
-                <div class="flex h-full w-full items-center justify-center">
-                  <div
-                    class="border-surface-600 border-t-accent-400 h-6 w-6 animate-spin rounded-full border-2"
-                  ></div>
+                  <Button variant="default" size="sm">View</Button>
                 </div>
               {/if}
-              <!-- Hover overlay: hover-capable devices only; clicks pass through to the image and Retry -->
-              <div
-                class="can-hover:flex pointer-events-none absolute inset-0 hidden items-center justify-center bg-black/40 opacity-0 transition-opacity duration-200 group-hover:opacity-100"
-              >
-                <Button variant="default" size="sm">View</Button>
-              </div>
             </div>
 
             <!-- Image metadata (shown below) -->
@@ -599,7 +803,7 @@
       {#if images.length > 1}
         <button
           onclick={previousImage}
-          disabled={lightboxImageIndex === 0}
+          disabled={lightboxIndex <= 0}
           class="bg-surface-800/80 hover:bg-surface-700 text-surface-300 absolute top-1/2 left-2 -translate-y-1/2 rounded-full p-2 transition-colors hover:text-white disabled:cursor-not-allowed disabled:opacity-30"
           title="Previous (←)"
           aria-label="Previous image"
@@ -609,45 +813,9 @@
       {/if}
 
       <!-- Image with loading overlay -->
-      {#if images.length > 0}
+      {#if lightboxImage}
         <div class="relative">
-          {#if imageDataCache.has(images[lightboxImageIndex].id)}
-            <img
-              src={normalizeImageDataUrl(imageDataCache.get(images[lightboxImageIndex].id)) ?? ''}
-              alt={`Generated image ${lightboxImageIndex + 1}`}
-              class={[
-                'max-h-[40vh] max-w-full rounded object-contain sm:max-h-[50vh]',
-                isRegenerating && 'opacity-50',
-              ]}
-            />
-          {:else if failedImageIds.has(images[lightboxImageIndex].id)}
-            <div class="flex h-[40vh] w-full items-center justify-center sm:h-[50vh]">
-              <Button
-                variant="outline"
-                size="sm"
-                onclick={() => ensureImageData(images[lightboxImageIndex].id)}
-              >
-                <RefreshCw class="h-4 w-4" />
-                Retry
-              </Button>
-            </div>
-          {:else}
-            <div class="flex h-[40vh] w-full items-center justify-center sm:h-[50vh]">
-              <div
-                class="border-surface-600 border-t-accent-400 h-8 w-8 animate-spin rounded-full border-2"
-              ></div>
-            </div>
-          {/if}
-          {#if isRegenerating}
-            <div class="absolute inset-0 flex items-center justify-center">
-              <div class="bg-surface-900/80 flex flex-col items-center gap-2 rounded-lg px-4 py-3">
-                <div
-                  class="border-surface-400 border-t-accent-400 h-6 w-6 animate-spin rounded-full border-2"
-                ></div>
-                <span class="text-surface-300 text-sm">Regenerating...</span>
-              </div>
-            </div>
-          {/if}
+          {@render imageStage(lightboxImage, `Generated image ${lightboxIndex + 1}`, true)}
         </div>
       {/if}
 
@@ -655,7 +823,7 @@
       {#if images.length > 1}
         <button
           onclick={nextImage}
-          disabled={lightboxImageIndex === images.length - 1}
+          disabled={lightboxIndex === images.length - 1}
           class="bg-surface-800/80 hover:bg-surface-700 text-surface-300 absolute top-1/2 right-2 -translate-y-1/2 rounded-full p-2 transition-colors hover:text-white disabled:cursor-not-allowed disabled:opacity-30"
           title="Next (→)"
           aria-label="Next image"
@@ -673,6 +841,7 @@
         bind:value={editingImagePrompt}
         placeholder="Describe the image you want to generate..."
         rows={3}
+        disabled={lightboxGenerating}
         class="resize-none text-sm"
       />
     </div>
@@ -684,7 +853,7 @@
       <!-- Counter -->
       <div class="text-surface-400 text-sm tabular-nums">
         {#if images.length > 1}
-          {lightboxImageIndex + 1} of {images.length}
+          {lightboxIndex + 1} of {images.length}
         {:else}
           1 image
         {/if}
@@ -698,22 +867,16 @@
         {#if lightboxImage}
           <Button
             size="sm"
-            onclick={async () => {
-              if (lightboxImage && editingImagePrompt.trim()) {
-                isRegenerating = true
-                await handleEditImageSubmit(lightboxImage.id)
-                isRegenerating = false
-              }
-            }}
-            disabled={!editingImagePrompt.trim() || isRegenerating}
+            onclick={() => lightboxImage && handleEditImageSubmit(lightboxImage.id)}
+            disabled={!editingImagePrompt.trim() || lightboxGenerating}
             class="h-8 gap-1.5 text-xs"
           >
-            {#if isRegenerating}
+            {#if lightboxRegenerating}
               <div
-                class="h-3.5 w-3.5 animate-spin rounded-full border-2 border-current border-t-transparent"
+                class="size-3.5 animate-spin rounded-full border-2 border-current border-t-transparent"
               ></div>
             {:else}
-              <RotateCcw class="h-3.5 w-3.5" />
+              <RotateCcw class="size-3.5" />
             {/if}
             Regenerate
           </Button>

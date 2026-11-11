@@ -12,7 +12,7 @@
  */
 
 import type { Character, EmbeddedImage } from '#lib/types/index.ts'
-import { runImageGeneration } from './imageUtils'
+import { beginImageAttempt, runImageGeneration } from './imageUtils'
 import { database } from '#lib/services/database.ts'
 import { settings } from '#lib/stores/settings.svelte.ts'
 import { emitImageQueued } from '#lib/services/events.ts'
@@ -202,6 +202,8 @@ export class InlineImageGenerationService {
       model: modelToUse,
     })
 
+    const attempt = beginImageAttempt(imageId)
+
     // Emit queued event
     emitImageQueued(imageId, context.entryId)
 
@@ -209,6 +211,7 @@ export class InlineImageGenerationService {
     runImageGeneration({
       imageId,
       entryId: context.entryId,
+      attempt,
       prompt: fullPrompt,
       profileId,
       model: modelToUse,

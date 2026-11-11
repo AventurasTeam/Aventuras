@@ -69,12 +69,16 @@ export {
   missingCredential,
   warmSlotCapabilities,
   portraitCredentialError,
+  imageSetupMessage,
+  MISSING_CREDENTIAL_REASONS,
   type MissingCredential,
   type ImageProfileSlot,
   getProviderDisplayName,
   retryImageGeneration,
   generatePortrait,
   runImageGeneration,
+  beginImageAttempt,
+  cancelImageGeneration,
 } from './imageUtils'
 
 // Portrait lookups for reference-mode scenes

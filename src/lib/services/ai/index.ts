@@ -71,6 +71,7 @@ import {
   resolveScenes,
   resolveStylePrompt,
   runImageGeneration,
+  beginImageAttempt,
 } from './image'
 import type {
   InlineImageContext,
@@ -1217,6 +1218,9 @@ class AIService {
       isPortrait: scene.generatePortrait,
     })
 
+    // Registered before the portrait wait below, so a cancel during it holds.
+    const attempt = beginImageAttempt(imageId)
+
     // Emit queued event
     emitImageQueued(imageId, entryId)
 
@@ -1231,6 +1235,7 @@ class AIService {
       scene,
       portraitCharacter,
       onPortraitGenerated,
+      attempt,
       references,
     ).catch((error) => {
       log('Async analyzed image generation failed', { imageId, error })
@@ -1254,6 +1259,7 @@ class AIService {
     scene: ResolvedScene,
     portraitCharacter: Character | undefined,
     onPortraitGenerated: ImageGenerationContext['onPortraitGenerated'],
+    attempt: AbortController,
     references?: AnalyzedImageReferences,
   ): Promise<string | null> {
     let referenceImages: string[] | undefined
@@ -1287,6 +1293,7 @@ class AIService {
     const base64 = await runImageGeneration({
       imageId,
       entryId,
+      attempt,
       prompt,
       profileId,
       model,

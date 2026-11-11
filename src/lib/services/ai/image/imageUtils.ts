@@ -81,6 +81,17 @@ export function missingCredential(
   return undefined
 }
 
+export const MISSING_CREDENTIAL_REASONS: Record<MissingCredential, string> = {
+  profile: 'is missing or its provider is unsupported',
+  apiKey: 'has no API key configured',
+  baseUrl: 'has no base URL configured',
+}
+
+/** User-facing explanation of what keeps an image slot from generating. */
+export function imageSetupMessage(missing: MissingCredential): string {
+  return `The image profile ${MISSING_CREDENTIAL_REASONS[missing]}. Fix it in Settings → Images.`
+}
+
 /**
  * Check if required credentials are configured for a given image slot.
  */
@@ -124,40 +135,86 @@ export function getProviderDisplayName(): string {
   return IMAGE_PROVIDER_LABELS[profile.providerType] ?? profile.providerType
 }
 
+// The live generation of each image. An aborted attempt never writes its record, so a cancelled
+// or superseded request cannot land over what replaced it.
+const attempts = new Map<string, AbortController>()
+
+/** Make `controller` the image's current attempt, aborting the one it replaces. */
+export function beginImageAttempt(
+  imageId: string,
+  controller = new AbortController(),
+): AbortController {
+  attempts.get(imageId)?.abort()
+  attempts.set(imageId, controller)
+  return controller
+}
+
+// Statements land on any pooled connection, so writes to one row must be issued in order.
+const rowWrites = new Map<string, Promise<unknown>>()
+
+/** Run `write` once the row's earlier writes have settled; a failed write does not block the next. */
+function writeImageRow<T>(imageId: string, write: () => Promise<T>): Promise<T> {
+  const run = (rowWrites.get(imageId) ?? Promise.resolve()).then(write)
+  const tail = run
+    .catch(() => {})
+    .finally(() => {
+      if (rowWrites.get(imageId) === tail) rowWrites.delete(imageId)
+    })
+  rowWrites.set(imageId, tail)
+  return run
+}
+
+/** Abort the image's attempt and settle its row. A write already sent finishes first. */
+export async function cancelImageGeneration(imageId: string): Promise<void> {
+  attempts.get(imageId)?.abort()
+  attempts.delete(imageId)
+  await writeImageRow(imageId, () => database.cancelEmbeddedImage(imageId))
+}
+
 /**
- * Write a finished generation onto its record.
+ * Write a finished generation onto its record, unless the attempt was aborted. Resolves to
+ * whether the image now reads `complete`.
  *
  * `ImageReady` goes out in a `finally`: it balances the `ImageQueued` the caller emitted
  * when it scheduled the work, and the header's in-flight count has to come back down even
- * when recording the outcome is itself what failed.
+ * when recording the outcome is itself what failed, and when it was skipped.
  */
 export async function recordImageResult(
   imageId: string,
   entryId: string,
   result: { base64: string | null; error?: string },
-): Promise<void> {
+  attempt: AbortController,
+  resultUpdates?: Partial<EmbeddedImage>,
+): Promise<boolean> {
+  let completed = false
   try {
-    if (result.base64) {
+    completed = await writeImageRow(imageId, async () => {
+      if (attempt.signal.aborted) return false
+      if (!result.base64) {
+        await database.failEmbeddedImage(imageId, result.error ?? 'Image generation failed')
+        return false
+      }
       await database.updateEmbeddedImage(imageId, {
+        ...resultUpdates,
         imageData: result.base64,
         status: 'complete',
       })
-    } else {
-      await database.updateEmbeddedImage(imageId, {
-        status: 'failed',
-        errorMessage: result.error ?? 'Image generation failed',
-      })
-    }
+      return true
+    })
   } catch (error) {
     log('Failed to record image result', { imageId, error })
   } finally {
-    emitImageReady(imageId, entryId, !!result.base64)
+    if (attempts.get(imageId) === attempt) attempts.delete(imageId)
+    emitImageReady(imageId, entryId, completed)
   }
+  return completed
 }
 
 export interface ImageGenerationRequest {
   imageId: string
   entryId: string
+  /** From `beginImageAttempt`, started when the record was created. */
+  attempt: AbortController
   prompt: string
   profileId: string
   model: string
@@ -169,6 +226,11 @@ export interface ImageGenerationRequest {
   /** Written with the flip to `generating`, so a caller resetting the row for a fresh
    *  attempt spends one round trip and not two. */
   recordUpdates?: Partial<EmbeddedImage>
+  /** Written with the finished image instead, for a row whose current pixels a failure must leave
+   *  describing themselves. */
+  resultUpdates?: Partial<EmbeddedImage>
+  /** Emit `ImageQueued` once the row reads `generating`, for a caller resetting a finished row. */
+  announce?: boolean
 }
 
 /**
@@ -178,41 +240,66 @@ export interface ImageGenerationRequest {
  * onto its character — does not have to read the row back.
  */
 export async function runImageGeneration(request: ImageGenerationRequest): Promise<string | null> {
-  const { imageId, entryId, prompt, profileId, model, size, referenceImages } = request
+  const { imageId, entryId, prompt, profileId, model, size, referenceImages, attempt } = request
 
   let base64: string | null = null
   let failure: string | undefined
 
   // Its own try: a failed status flip is a database problem, not a generation failure, and
   // reporting it as one raises a user-facing notice for the wrong thing. The generation goes
-  // ahead regardless — `recordImageResult` writes the terminal status either way.
+  // ahead regardless — `recordImageResult` writes the terminal status either way. An attempt
+  // cancelled or superseded before its turn in the write order leaves the row to whoever did.
   try {
-    await database.updateEmbeddedImage(imageId, {
-      ...request.recordUpdates,
-      status: 'generating',
+    await writeImageRow(imageId, async () => {
+      if (attempt.signal.aborted) return
+      await database.updateEmbeddedImage(imageId, {
+        ...request.recordUpdates,
+        status: 'generating',
+      })
     })
   } catch (error) {
     log('Failed to mark the image generating', { imageId, error })
   }
+  if (request.announce) emitImageQueued(imageId, entryId)
 
-  try {
-    log('Generating image', { imageId, profileId, model, hasReference: !!referenceImages?.length })
-    const result = await generateImage({ profileId, model, prompt, size, referenceImages })
+  if (!attempt.signal.aborted) {
+    try {
+      log('Generating image', {
+        imageId,
+        profileId,
+        model,
+        hasReference: !!referenceImages?.length,
+      })
+      const result = await generateImage({
+        profileId,
+        model,
+        prompt,
+        size,
+        referenceImages,
+        signal: attempt.signal,
+      })
 
-    if (!result.base64) throw new Error('No image data returned')
-    base64 = result.base64
-  } catch (error) {
-    failure = error instanceof Error ? error.message : 'Unknown error'
-    log('Image generation failed', { imageId, error: failure })
+      if (!result.base64) throw new Error('No image data returned')
+      if (!attempt.signal.aborted) base64 = result.base64
+    } catch (error) {
+      failure = error instanceof Error ? error.message : 'Unknown error'
+      log('Image generation failed', { imageId, error: failure })
+    }
   }
 
-  await recordImageResult(imageId, entryId, { base64, error: failure })
+  const completed = await recordImageResult(
+    imageId,
+    entryId,
+    { base64, error: failure },
+    attempt,
+    request.resultUpdates,
+  )
 
-  if (failure && request.notifyFailure) {
+  if (failure && request.notifyFailure && !attempt.signal.aborted) {
     emitImageAnalysisFailed(entryId, failure)
   }
 
-  return base64
+  return completed ? base64 : null
 }
 
 /**
@@ -224,10 +311,16 @@ export async function runImageGeneration(request: ImageGenerationRequest): Promi
  * a retry only rewrites the row, never `characters.portrait`, so the entry gets a picture
  * and the character keeps the one it has.
  */
-export async function retryImageGeneration(imageId: string, prompt: string): Promise<void> {
-  if (!isImageGenerationEnabled()) {
-    log('Cannot retry - image generation not enabled')
-    return
+export async function retryImageGeneration(
+  imageId: string,
+  prompt: string,
+): Promise<MissingCredential | undefined> {
+  // A setup the user can fix comes back to the caller to report. A generation that fails is
+  // recorded on the row and raised through `notifyFailure`, so it returns nothing either.
+  const missing = missingCredential()
+  if (missing) {
+    log('Cannot retry - image setup incomplete', { missing })
+    return missing
   }
 
   const image = await database.getEmbeddedImage(imageId)
@@ -238,11 +331,7 @@ export async function retryImageGeneration(imageId: string, prompt: string): Pro
 
   const imageSettings = settings.systemServicesSettings.imageGeneration
   const profileId = imageSettings.profileId
-
-  if (!profileId) {
-    log('Cannot retry - no profile configured')
-    return
-  }
+  if (!profileId) return 'profile'
 
   const profile = settings.getImageProfile(profileId)
   const model = profile?.model ?? ''
@@ -251,20 +340,24 @@ export async function retryImageGeneration(imageId: string, prompt: string): Pro
 
   log('Retrying image generation', { imageId, profileId, model, size })
 
-  // `runImageGeneration` emits `ImageReady`, which decrements the header's in-flight count —
-  // so the retry has to announce itself, or it spends another image's increment and the
-  // indicator disappears while that one is still generating.
-  emitImageQueued(imageId, image.entryId)
+  // A row with pixels keeps its prompt, model and size until a new image replaces them.
+  const description = { prompt, model, width, height }
+  const holdsPixels = !!image.imageData
 
+  // `ImageReady` decrements the header's in-flight count, so the retry has to announce itself.
+  // It does so after the row reads `generating`, which is what the gallery's reload looks for.
   await runImageGeneration({
     imageId,
     entryId: image.entryId,
+    attempt: beginImageAttempt(imageId),
+    announce: true,
     prompt,
     profileId,
     model,
     size,
     notifyFailure: true,
-    recordUpdates: { prompt, model, width, height },
+    recordUpdates: holdsPixels ? undefined : description,
+    resultUpdates: holdsPixels ? description : undefined,
   })
 }
 

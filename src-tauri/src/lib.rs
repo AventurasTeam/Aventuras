@@ -312,6 +312,12 @@ pub(crate) fn migrations() -> Vec<Migration> {
             sql: include_str!("../migrations/046_comfy_workflow_paths.sql"),
             kind: MigrationKind::Up,
         },
+        Migration {
+            version: 47,
+            description: "embedded_images_in_progress_index",
+            sql: include_str!("../migrations/047_embedded_images_in_progress_index.sql"),
+            kind: MigrationKind::Up,
+        },
     ]
 }
 

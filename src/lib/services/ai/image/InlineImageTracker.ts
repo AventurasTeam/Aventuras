@@ -16,10 +16,10 @@
 
 import { extractPicTags, type ParsedPicTag } from '#lib/utils/inlineImageParser.ts'
 import { generateImage as registryGenerateImage } from './providers/registry'
-import { recordImageResult } from './imageUtils'
+import { beginImageAttempt, recordImageResult } from './imageUtils'
 import { database } from '#lib/services/database.ts'
 import { settings } from '#lib/stores/settings.svelte.ts'
-import { emitImageQueued, emitImageReady } from '#lib/services/events.ts'
+import { emitImageQueued } from '#lib/services/events.ts'
 import { normalizeImageDataUrl, expectedPixels, type ImageSpec } from '#lib/utils/image.ts'
 import { resolveStylePrompt } from './stylePrompt'
 import { createLogger } from '#lib/log.ts'
@@ -34,6 +34,8 @@ interface PendingImage {
   profileId: string
   model: string
   size: ImageSpec
+  /** Registered once the record exists, which is when the image can first be cancelled. */
+  attempt: AbortController
   /** Promise that resolves to base64 image data or null on failure */
   generationPromise: Promise<{ base64: string | null; error?: string }>
 }
@@ -52,6 +54,7 @@ export class InlineImageTracker {
    * unrecorded image is deleted from the narration at render time.
    */
   private starting = new Set<Promise<void>>()
+  private abandoned = false
 
   constructor(
     private storyId: string,
@@ -144,6 +147,7 @@ export class InlineImageTracker {
 
     // Build full prompt with style
     const stylePrompt = await resolveStylePrompt(this.storyId, imageSettings.styleId)
+    if (this.abandoned) return
     const fullPrompt = `${tag.prompt}. ${stylePrompt}`
 
     log('Starting async image generation', {
@@ -154,11 +158,13 @@ export class InlineImageTracker {
     })
 
     // Start generation - store promise for later resolution
+    const attempt = new AbortController()
     const generationPromise = this.generateImage(
       profileId,
       modelToUse,
       fullPrompt,
       sizeToUse,
+      attempt.signal,
       referenceImageUrls,
     )
 
@@ -169,6 +175,7 @@ export class InlineImageTracker {
       profileId,
       model: modelToUse,
       size: sizeToUse,
+      attempt,
       generationPromise,
     })
   }
@@ -181,6 +188,7 @@ export class InlineImageTracker {
     model: string,
     prompt: string,
     size: ImageSpec,
+    signal: AbortSignal,
     referenceImageUrls?: string[],
   ): Promise<{ base64: string | null; error?: string }> {
     try {
@@ -190,6 +198,7 @@ export class InlineImageTracker {
         prompt,
         size,
         referenceImages: referenceImageUrls,
+        signal,
       })
 
       if (!result.base64) {
@@ -225,7 +234,8 @@ export class InlineImageTracker {
 
     const imageSettings = settings.systemServicesSettings.imageGeneration
 
-    for (const pending of this.pendingImages) {
+    // Shifted off as each is registered, so a failure part-way leaves only unregistered ones to abandon.
+    for (let pending = this.pendingImages.shift(); pending; pending = this.pendingImages.shift()) {
       // Determine dimensions from size setting
       const { width, height } = expectedPixels(pending.size)
 
@@ -245,25 +255,34 @@ export class InlineImageTracker {
         generationMode: 'inline',
       }
 
-      await database.createEmbeddedImage(embeddedImage)
+      try {
+        await database.createEmbeddedImage(embeddedImage)
+      } catch (error) {
+        // Already off the list `abandon()` walks, so nothing else would stop its request.
+        pending.attempt.abort()
+        throw error
+      }
+      beginImageAttempt(pending.id, pending.attempt)
       emitImageQueued(pending.id, this.entryId)
 
       log('Image record created with generating status', { imageId: pending.id })
 
-      // Update record when generation completes (non-blocking)
-      pending.generationPromise
-        .then((result) => recordImageResult(pending.id, this.entryId, result))
-        .catch((error) => {
-          log('Failed to update image record', { imageId: pending.id, error })
-          // The `Queued` above is still outstanding: a rejected generation that never
-          // emits `Ready` leaves the header counting an image that will never arrive.
-          emitImageReady(pending.id, this.entryId, false)
-        })
+      void this.settle(pending)
     }
 
-    log('All pending images flushed (generation continues in background)', {
-      count: this.pendingImages.length,
-    })
+    log('All pending images flushed (generation continues in background)')
+  }
+
+  /** Record a flushed image once its generation finishes. Never rejects: neither step throws. */
+  private async settle(pending: PendingImage): Promise<void> {
+    const result = await pending.generationPromise
+    await recordImageResult(pending.id, this.entryId, result, pending.attempt)
+  }
+
+  /** Abort generations that were never flushed, because the turn ended before its entry was saved. */
+  abandon(): void {
+    this.abandoned = true
+    for (const pending of this.pendingImages) pending.attempt.abort()
     this.pendingImages = []
   }
 

@@ -1,6 +1,7 @@
 <script lang="ts">
   import { onMount } from 'svelte'
   import { database } from '#lib/services/database.ts'
+  import { errMessage } from '#lib/utils/error.ts'
   import { initPlatform } from '#lib/utils/platform.ts'
   import { settings } from '#lib/stores/settings.svelte.ts'
   import { grammarService } from '#lib/services/grammar.ts'
@@ -22,6 +23,14 @@
 
       // Initialize database connection
       await database.init()
+
+      // Nothing from a previous run is still generating. Awaited so it cannot touch a new
+      // generation, but a failure here must not stop the app from starting.
+      try {
+        await database.failInterruptedEmbeddedImages()
+      } catch (err) {
+        console.error('[Images] Startup sweep failed:', err)
+      }
 
       // Seed prompt templates into the database (idempotent)
       await packService.initialize()
@@ -51,20 +60,7 @@
             ? true
             : !lastChecked || now - lastChecked >= checkInterval * 60 * 60 * 1000
 
-        if (shouldCheck) {
-          updaterService
-            .checkForUpdates()
-            .then(async (updateInfo) => {
-              await settings.setLastChecked(Date.now())
-              // Offer the update in a dialog rather than logging it: a console message
-              // reaches nobody outside a dev build.
-              updateNotifier.show(updateInfo)
-            })
-            // A failed startup check stays silent. The user did not ask for it, so an
-            // error toast about it would interrupt them over something they cannot act on;
-            // the manual button in Settings reports failures properly.
-            .catch((err) => console.error('[Updater] Startup check failed:', err))
-        }
+        if (shouldCheck) void checkForUpdatesOnStartup()
       }
 
       warmSlotCapabilities().catch((err) => console.warn('[ImageCapabilities] warmup failed', err))
@@ -72,9 +68,22 @@
       initialized = true
     } catch (e) {
       console.error('Initialization error:', e)
-      error = e instanceof Error ? e.message : 'Failed to initialize application'
+      error = errMessage(e)
     }
   })
+
+  // A failed startup check stays silent: the user did not ask for it and cannot act on it.
+  // The manual button in Settings reports failures.
+  async function checkForUpdatesOnStartup() {
+    try {
+      const updateInfo = await updaterService.checkForUpdates()
+      await settings.setLastChecked(Date.now())
+      // A dialog, not a log line: a console message reaches nobody outside a dev build.
+      updateNotifier.show(updateInfo)
+    } catch (err) {
+      console.error('[Updater] Startup check failed:', err)
+    }
+  }
 
   async function handleProviderSetupComplete() {
     showProviderSetup = false

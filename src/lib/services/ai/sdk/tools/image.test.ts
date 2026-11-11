@@ -29,6 +29,11 @@ vi.mock('#lib/services/ai/image/index.ts', () => ({
   toRawBase64: vi.fn(),
   isImageGenerationEnabled: vi.fn(),
   missingCredential: vi.fn(),
+  MISSING_CREDENTIAL_REASONS: {
+    profile: 'is missing or its provider is unsupported',
+    apiKey: 'has no API key configured',
+    baseUrl: 'has no base URL configured',
+  },
   providerNeedsModel: vi.fn(),
   referenceBlocker: vi.fn(),
 }))
