@@ -659,6 +659,10 @@
       <div class="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
         {#each images as image, index (image.id)}
           {@const selected = selectedImageIds.has(image.id)}
+          {@const viewable =
+            imageDataCache.has(image.id) &&
+            !isImageInProgress(image) &&
+            !regeneratingImageIds.has(image.id)}
           <div
             class={[
               'group bg-surface-800 relative overflow-hidden rounded-lg border-2 transition-colors',
@@ -684,12 +688,14 @@
                 aria-label={`Open image ${index + 1}`}
                 onclick={() => openLightbox(image.id)}
               ></button>
-              <!-- Hover overlay: hover-capable devices only; clicks pass through to the open button -->
-              <div
-                class="can-hover:flex pointer-events-none absolute inset-0 hidden items-center justify-center bg-black/40 opacity-0 transition-opacity duration-200 group-hover:opacity-100"
-              >
-                <Button variant="default" size="sm">View</Button>
-              </div>
+              <!-- Hover overlay over a finished image only, so it never covers Cancel or Retry -->
+              {#if viewable}
+                <div
+                  class="can-hover:flex pointer-events-none absolute inset-0 hidden items-center justify-center bg-black/40 opacity-0 transition-opacity duration-200 group-hover:opacity-100"
+                >
+                  <Button variant="default" size="sm">View</Button>
+                </div>
+              {/if}
             </div>
 
             <!-- Image metadata (shown below) -->
