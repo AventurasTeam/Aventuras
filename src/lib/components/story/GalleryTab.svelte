@@ -96,6 +96,8 @@
         ].filter((id): id is string => !!id),
   )
 
+  const protectedIds = () => new Set([...lightboxWindowIds, ...visibleIds])
+
   function uncache(id: string) {
     lastUse.delete(id)
     const data = imageDataCache.get(id)
@@ -127,7 +129,7 @@
     imageDataCache.set(id, data)
     lastUse.set(id, ++useTick)
     cacheBytes += data.length
-    evictOverBudget(new Set([...lightboxWindowIds, ...visibleIds]))
+    evictOverBudget(protectedIds())
   }
 
   function clearImageCache() {
@@ -237,6 +239,7 @@
               ensureImageData(id)
             }
           }
+          evictOverBudget(protectedIds())
         },
         { rootMargin: '300px' },
       )
@@ -244,6 +247,7 @@
       return () => {
         observer.disconnect()
         visibleIds.delete(id)
+        evictOverBudget(protectedIds())
       }
     }
 
@@ -397,6 +401,7 @@
 
   function closeLightbox() {
     lightboxOpen = false
+    evictOverBudget(protectedIds())
   }
 
   function previousImage() {
