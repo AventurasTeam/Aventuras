@@ -1,6 +1,7 @@
 <script lang="ts">
   import { onMount } from 'svelte'
   import { database } from '#lib/services/database.ts'
+  import { errMessage } from '#lib/utils/error.ts'
   import { initPlatform } from '#lib/utils/platform.ts'
   import { settings } from '#lib/stores/settings.svelte.ts'
   import { grammarService } from '#lib/services/grammar.ts'
@@ -72,7 +73,7 @@
       initialized = true
     } catch (e) {
       console.error('Initialization error:', e)
-      error = e instanceof Error ? e.message : 'Failed to initialize application'
+      error = errMessage(e)
     }
   })
 
