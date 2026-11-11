@@ -118,6 +118,12 @@ already labelled "Plot Suggestions". Two properties every migration there must h
 - **Silent about untouched values**, because a stored value equal to the old default was never a
   choice, and carrying it across pins everyone who never opened the panel to a stale number.
 
+Image profiles are their own blob, the `image_profiles` setting, and its changes are SQL migrations
+rather than load-time functions. Migration 046 turns a ComfyUI custom workflow's single
+`positivePromptPath` and `negativePromptPath` into the lists `positivePromptPaths` and
+`negativePromptPaths` (an input in both stays only a prompt input), and points a `KSamplerAdvanced`
+seed path that named `seed` at `noise_seed`. Its rules are tested in `src-tauri/src/comfy_workflow_paths.rs`.
+
 ## Story Settings
 
 A story's settings are a JSON column, read through `mapStory`, which passes them through

@@ -43,6 +43,7 @@ const clearComfyCache = vi.hoisted(() => vi.fn())
 vi.mock('./comfy', () => ({
   createComfyProvider: vi.fn(),
   comfyReferenceLimit: vi.fn(),
+  comfyNeedsModel: (options?: { mode?: string }) => options?.mode !== 'custom-workflow',
   clearComfyCache,
 }))
 
@@ -77,6 +78,8 @@ import {
   IMAGE_PROVIDER_LABELS,
   IMAGE_PROVIDER_OPTIONS,
   generateImage,
+  providerNeedsModel,
+  referenceBlocker,
   supportsReferenceImages,
   listImageModels,
   evictReplacedModelList,
@@ -111,6 +114,38 @@ describe('Image Provider Registry', () => {
       for (const { value, label } of IMAGE_PROVIDER_OPTIONS) {
         expect(label).toBe(IMAGE_PROVIDER_LABELS[value])
       }
+    })
+  })
+
+  describe('providerNeedsModel', () => {
+    it.each<[ImageProviderType, Record<string, unknown>, boolean]>([
+      ['nanogpt', {}, true],
+      ['openai', {}, true],
+      ['openrouter', {}, true],
+      ['google', {}, true],
+      ['zhipu', {}, true],
+      ['pollinations', {}, false],
+      ['openai-compatible', {}, false],
+      ['a1111', {}, false],
+      ['comfyui', {}, true],
+      ['comfyui', { mode: 'basic-txt2img' }, true],
+      ['comfyui', { mode: 'custom-workflow' }, false],
+    ])('for %s with %j is %s', (providerType, providerOptions, expected) => {
+      expect(providerNeedsModel(providerType, providerOptions)).toBe(expected)
+    })
+  })
+
+  describe('referenceBlocker', () => {
+    it('names what to fix for a provider whose settings control references', () => {
+      expect(referenceBlocker('comfyui', { mode: 'custom-workflow' })).toContain('LoadImage')
+    })
+
+    it('falls back to a generic reason for a provider that never sends references', () => {
+      expect(referenceBlocker('zhipu', {})).toBe('its provider cannot send reference images.')
+    })
+
+    it('is undefined when the provider can send references', () => {
+      expect(referenceBlocker('openai', {})).toBeUndefined()
     })
   })
 
@@ -154,6 +189,26 @@ describe('Image Provider Registry', () => {
       vi.mocked(fetchPublicImageBase64).mockResolvedValue('DOWNLOADED')
       return generate
     }
+
+    it('refuses an empty model for a provider that needs one', async () => {
+      const generate = setup('openai')
+
+      await expect(generateImage({ profileId: 'p', model: '', prompt: 'x' })).rejects.toThrow(
+        'No image model configured for OpenAI',
+      )
+      expect(generate).not.toHaveBeenCalled()
+    })
+
+    it.each<['a1111' | 'comfyui', Record<string, unknown>]>([
+      ['a1111', {}],
+      ['comfyui', { mode: 'custom-workflow' }],
+    ])('generates with an empty model for %s with %j', async (providerType, providerOptions) => {
+      const generate = setup(providerType, [], providerOptions)
+
+      await generateImage({ profileId: 'p', model: '', prompt: 'x' })
+
+      expect(generate).toHaveBeenCalledWith(expect.objectContaining({ model: '' }))
+    })
 
     it('hands adapters raw base64 for data: and http(s) references', async () => {
       const generate = setup('openai')
@@ -426,6 +481,12 @@ describe('Image Provider Registry', () => {
     it('passes a model absent from the list', async () => {
       setup('openrouter', [{ id: 'other', name: 'other', supportsImg2Img: false }])
       expect(await supportsReferenceImages('p', 'm')).toBe(true)
+    })
+
+    it('looks up no capabilities for an empty model', async () => {
+      setup('openrouter', [{ id: 'm', name: 'm', supportsImg2Img: false }])
+      expect(await supportsReferenceImages('p', '')).toBe(true)
+      expect(createOpenRouterProvider).not.toHaveBeenCalled()
     })
 
     it('is false for an unknown profile', async () => {

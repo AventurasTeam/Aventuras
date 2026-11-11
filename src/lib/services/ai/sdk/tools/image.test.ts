@@ -9,7 +9,10 @@ const { imageSettings, profiles } = vi.hoisted(() => ({
     size: { orientation: 'square', size: 'small' },
     referenceSize: { orientation: 'square', size: 'small' },
   },
-  profiles: {} as Record<string, { model: string }>,
+  profiles: {} as Record<
+    string,
+    { model: string; providerType?: string; providerOptions?: Record<string, unknown> }
+  >,
 }))
 
 vi.mock('#lib/stores/settings.svelte.ts', () => ({
@@ -26,6 +29,8 @@ vi.mock('#lib/services/ai/image/index.ts', () => ({
   toRawBase64: vi.fn(),
   isImageGenerationEnabled: vi.fn(),
   missingCredential: vi.fn(),
+  providerNeedsModel: vi.fn(),
+  referenceBlocker: vi.fn(),
 }))
 
 vi.mock('#lib/services/database.ts', () => ({
@@ -41,6 +46,8 @@ import {
   toRawBase64,
   isImageGenerationEnabled,
   missingCredential,
+  providerNeedsModel,
+  referenceBlocker,
 } from '#lib/services/ai/image/index.ts'
 import { database } from '#lib/services/database.ts'
 import type { VaultCharacter } from '#lib/types/index.ts'
@@ -124,7 +131,7 @@ describe('edit_image', () => {
     expect(generateImage).not.toHaveBeenCalled()
   })
 
-  it('reports missing credentials and a profile with no model', async () => {
+  it('reports missing credentials', async () => {
     const { edit, generatedImages } = makeTools()
     generatedImages.set('a', 'data:image/png;base64,AAAA')
 
@@ -133,10 +140,29 @@ describe('edit_image', () => {
 
     vi.mocked(missingCredential).mockReturnValue('baseUrl')
     expect((await edit({ instruction: 'x', imageId: 'a' })).error).toContain('base URL')
+  })
 
-    vi.mocked(missingCredential).mockReturnValue(undefined)
+  it('reports a profile with no model when its provider needs one', async () => {
+    const { edit, generatedImages } = makeTools()
+    generatedImages.set('a', 'data:image/png;base64,AAAA')
+    profiles.ref = { model: '', providerType: 'openai' }
+    vi.mocked(providerNeedsModel).mockReturnValue(true)
+
+    const result = await edit({ instruction: 'x', imageId: 'a' })
+
+    expect(result.error).toContain('no model')
+    expect(generateImage).not.toHaveBeenCalled()
+  })
+
+  it('edits with a profile that names no model', async () => {
+    const { edit, generatedImages } = makeTools()
+    generatedImages.set('a', 'data:image/png;base64,AAAA')
     profiles.ref = { model: '' }
-    expect((await edit({ instruction: 'x', imageId: 'a' })).error).toContain('no model')
+
+    const result = await edit({ instruction: 'x', imageId: 'a' })
+
+    expect(result.success).toBe(true)
+    expect(generateImage).toHaveBeenCalledWith(expect.objectContaining({ model: '' }))
   })
 
   it('refuses a provider or model that cannot take a reference', async () => {
@@ -149,6 +175,19 @@ describe('edit_image', () => {
     expect(result.success).toBe(false)
     expect(result.error).toContain('reference image')
     expect(generateImage).not.toHaveBeenCalled()
+  })
+
+  it('says what to fix when the provider sends no references at all', async () => {
+    const { edit, generatedImages } = makeTools()
+    generatedImages.set('a', 'data:image/png;base64,AAAA')
+    profiles.ref = { model: '', providerType: 'comfyui' }
+    vi.mocked(supportsReferenceImages).mockResolvedValue(false)
+    vi.mocked(referenceBlocker).mockReturnValue('it needs a LoadImage node.')
+
+    const result = await edit({ instruction: 'x', imageId: 'a' })
+
+    expect(result.error).toContain('it needs a LoadImage node.')
+    expect(result.error).not.toContain('img2img-capable')
   })
 
   it('fails when an http portrait cannot be fetched', async () => {
@@ -210,7 +249,13 @@ describe('generate_standard_image', () => {
     ['generation is disabled', () => (imageSettings.profileId = null)],
     ['the profile is unusable', () => vi.mocked(isImageGenerationEnabled).mockReturnValue(false)],
     ['credentials are missing', () => vi.mocked(missingCredential).mockReturnValue('apiKey')],
-    ['the profile has no model', () => (profiles.std = { model: '' })],
+    [
+      'the profile has no model and its provider needs one',
+      () => {
+        profiles.std = { model: '', providerType: 'openai' }
+        vi.mocked(providerNeedsModel).mockReturnValue(true)
+      },
+    ],
   ])('fails when %s', async (_name, arrange) => {
     arrange()
     const { standard } = makeTools()
@@ -219,6 +264,16 @@ describe('generate_standard_image', () => {
 
     expect(result.success).toBe(false)
     expect(generateImage).not.toHaveBeenCalled()
+  })
+
+  it('generates with a profile that names no model', async () => {
+    profiles.std = { model: '' }
+    const { standard } = makeTools()
+
+    const result = await standard({ prompt: 'a cat' })
+
+    expect(result.success).toBe(true)
+    expect(generateImage).toHaveBeenCalledWith(expect.objectContaining({ model: '' }))
   })
 
   it('fails when the call throws or returns no image', async () => {

@@ -11,7 +11,13 @@ const state = {
   },
   profiles: {} as Record<
     string,
-    { id: string; providerType: ImageProviderType; apiKey: string; baseUrl?: string }
+    {
+      id: string
+      providerType: ImageProviderType
+      apiKey: string
+      baseUrl?: string
+      model?: string
+    }
   >,
 }
 
@@ -30,10 +36,12 @@ vi.mock('#lib/stores/settings.svelte.ts', () => ({
 }))
 
 const warmImageCapabilities = vi.fn(async (_profiles: unknown[]) => {})
+const generateImage = vi.fn(async (_options: unknown) => ({ base64: 'PORTRAIT' }))
 
 vi.mock('./providers/registry', () => ({
   IMAGE_PROVIDER_LABELS: { openai: 'OpenAI' },
   warmImageCapabilities: (profiles: unknown[]) => warmImageCapabilities(profiles),
+  generateImage: (options: unknown) => generateImage(options),
 }))
 
 const {
@@ -41,6 +49,7 @@ const {
   hasRequiredCredentials,
   missingCredential,
   warmSlotCapabilities,
+  generatePortrait,
 } = await import('./imageUtils')
 
 const SLOTS: ImageProfileSlot[] = ['standard', 'background', 'portrait', 'reference']
@@ -224,5 +233,26 @@ describe('warmSlotCapabilities', () => {
     await warmSlotCapabilities()
 
     expect(warmImageCapabilities).toHaveBeenCalledWith([state.profiles['p-ref']])
+  })
+})
+
+describe('generatePortrait', () => {
+  beforeEach(() => {
+    generateImage.mockClear()
+  })
+
+  it('generates with a profile that names no model', async () => {
+    setSlotIds('p-std', null, 'p-port', null)
+
+    await expect(generatePortrait('a face')).resolves.toBe('PORTRAIT')
+
+    expect(generateImage).toHaveBeenCalledWith(
+      expect.objectContaining({ profileId: 'p-port', model: '', prompt: 'a face' }),
+    )
+  })
+
+  it('refuses when no portrait profile is set', async () => {
+    await expect(generatePortrait('a face')).rejects.toThrow('No image generation profile')
+    expect(generateImage).not.toHaveBeenCalled()
   })
 })

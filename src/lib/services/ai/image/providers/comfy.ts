@@ -27,7 +27,12 @@ import { isNewerVersion } from '#lib/utils/version.ts'
 import { imageGetFetch } from './fetchAdapter'
 import { bearerHeaders, withBearerKey } from './discoveryFetch'
 import { parseModelList } from './parseModelList'
-import { MIN_COMFYUI_VERSION, createComfyImage, type ComfyImageOptions } from './comfyImage'
+import {
+  MIN_COMFYUI_VERSION,
+  createComfyImage,
+  type ComfyImageOptions,
+  type Json,
+} from './comfyImage'
 import { createImageSdkFetch, createPollImageSdkFetch, generateSdkImage } from './sdkImage'
 
 // A server that does not answer is not worth the generation's own timeout.
@@ -174,212 +179,351 @@ export function validateApiWorkflow(json: unknown): string | null {
   return null
 }
 
-type WorkflowNode = ComfyCustomWorkflow['workflow'][string]
+type Workflow = ComfyCustomWorkflow['workflow']
+type WorkflowNode = Workflow[string]
 
-/** Extracts a short preview string from a CLIPTextEncode `text` input. */
-function textPreview(textInput: unknown): string {
-  if (typeof textInput === 'string') {
-    const trimmed = textInput.trim()
-    if (!trimmed) return '(empty)'
-    return trimmed.length > 60 ? trimmed.slice(0, 60) + '…' : trimmed
+/** A `[nodeId, slot]` input: the node it comes from and which of its outputs. */
+const parseLink = (value: Json | undefined): { from: string; slot: number } | undefined =>
+  Array.isArray(value) && typeof value[1] === 'number'
+    ? { from: String(value[0]), slot: value[1] }
+    : undefined
+
+const linkTarget = (value: Json | undefined): string | undefined => parseLink(value)?.from
+
+const inputPath = (nodeId: string, name: string) => `${nodeId}.inputs.${name}`
+
+const nodeTitle = (node: WorkflowNode) => node._meta?.title ?? node.class_type
+
+const nodeIdCollator = new Intl.Collator(undefined, { numeric: true })
+const byNodeId = nodeIdCollator.compare
+
+const preferredFirst = <T>(items: T[], isPreferred: (item: T) => boolean): T[] => [
+  ...items.filter(isPreferred),
+  ...items.filter((item) => !isPreferred(item)),
+]
+
+// A sampler takes a latent and either conditioning or a guider; matching the shape finds custom
+// samplers too.
+const isSampler = (node: WorkflowNode) =>
+  linkTarget(node.inputs.latent_image) !== undefined &&
+  (linkTarget(node.inputs.positive) !== undefined || linkTarget(node.inputs.guider) !== undefined)
+
+// Never a prompt: a zeroed-out conditioning has no text of its own, and a loader's inputs are
+// file names.
+const NOT_A_PROMPT_NODE = /ConditioningZeroOut|Loader/
+
+// `system_prompt` is a fixed choice on `CLIPTextEncodeLumina2`, next to its `user_prompt`.
+const isTextInputName = (name: string) =>
+  name !== 'system_prompt' && /text|prompt|^clip_[lg]$|t5xxl|llama|qwen/.test(name)
+
+const SEED_INPUT_NAMES = ['seed', 'noise_seed']
+
+const numberInput = (node: WorkflowNode, names: readonly string[]) =>
+  names.find((name) => typeof node.inputs[name] === 'number')
+
+interface WalkOptions {
+  /** A node it rejects is skipped, and so is what only it leads to. */
+  prune?: (node: WorkflowNode) => boolean
+  /** The inputs to follow from a node; all of them by default. */
+  follow?: (node: WorkflowNode) => Json[]
+}
+
+/** Breadth-first from `startId` against the links. */
+function* upstream(
+  workflow: Workflow,
+  startId: string,
+  { prune, follow = (node) => Object.values(node.inputs) }: WalkOptions = {},
+): Generator<[string, WorkflowNode]> {
+  const seen = new Set<string>()
+  const queue = [startId]
+  for (let id = queue.shift(); id !== undefined; id = queue.shift()) {
+    if (seen.has(id)) continue
+    seen.add(id)
+    const node = workflow[id]
+    if (!node || prune?.(node)) continue
+    yield [id, node]
+    for (const input of follow(node)) {
+      const target = linkTarget(input)
+      if (target !== undefined) queue.push(target)
+    }
   }
-  if (Array.isArray(textInput)) return '(connected to another node)'
-  return ''
+}
+
+function firstUpstream(
+  workflow: Workflow,
+  startId: string,
+  matches: (node: WorkflowNode) => boolean,
+): [string, WorkflowNode] | undefined {
+  for (const entry of upstream(workflow, startId)) {
+    if (matches(entry[1])) return entry
+  }
+  return undefined
+}
+
+// The number a seed link stands for: a seed-named input or a primitive's `value`, else the only
+// number the source has. Anything looser would pick an arbitrary widget.
+function sourceSeedInput(node: WorkflowNode): string | undefined {
+  const named = numberInput(node, [...SEED_INPUT_NAMES, 'value'])
+  if (named) return named
+  const numbers = Object.entries(node.inputs).filter(([, value]) => typeof value === 'number')
+  return numbers.length === 1 ? numbers[0][0] : undefined
+}
+
+/** The seed input of node `id`, or of the node its seed input is linked from. */
+function seedPathOf(workflow: Workflow, id: string): string | undefined {
+  const node = workflow[id]
+  if (!node) return undefined
+  const name = numberInput(node, SEED_INPUT_NAMES)
+  if (name) return inputPath(id, name)
+  for (const input of SEED_INPUT_NAMES) {
+    const sourceId = linkTarget(node.inputs[input])
+    const source = sourceId ? workflow[sourceId] : undefined
+    const sourceName = source && sourceSeedInput(source)
+    if (sourceId && sourceName) return inputPath(sourceId, sourceName)
+  }
+  return undefined
+}
+
+function detectSeedPath(workflow: Workflow, samplerId: string | undefined, rootId: string | null) {
+  const sampler = samplerId ? workflow[samplerId] : undefined
+  // `SamplerCustomAdvanced` takes its seed from the noise node it links.
+  const noiseId = linkTarget(sampler?.inputs.noise)
+  for (const id of [samplerId, noiseId]) {
+    const path = id && seedPathOf(workflow, id)
+    if (path) return path
+  }
+  if (!rootId) return null
+  for (const [id] of upstream(workflow, rootId)) {
+    const path = seedPathOf(workflow, id)
+    if (path) return path
+  }
+  return null
+}
+
+// A string primitive's own input is `value` or `string`; any other string widget on a node (a
+// delimiter, a model name) is not the text a link carries.
+const isLinkedTextInputName = (name: string) =>
+  isTextInputName(name) || name === 'value' || name === 'string'
+
+/**
+ * The text inputs of one node that take a prompt. An input linked from another node (a string
+ * primitive, a wildcard node) is followed to the text input of its source, unless the source is
+ * a loader.
+ */
+function textInputPaths(workflow: Workflow, nodeId: string): string[] {
+  const paths = new Set<string>()
+  for (const [name, value] of Object.entries(workflow[nodeId].inputs)) {
+    if (!isTextInputName(name)) continue
+    if (typeof value === 'string') {
+      paths.add(inputPath(nodeId, name))
+      continue
+    }
+    const sourceId = linkTarget(value)
+    const source = sourceId ? workflow[sourceId] : undefined
+    if (!sourceId || !source || NOT_A_PROMPT_NODE.test(source.class_type)) continue
+    const sourceName = Object.entries(source.inputs).find(
+      ([inputName, v]) => typeof v === 'string' && isLinkedTextInputName(inputName),
+    )?.[0]
+    if (sourceName) paths.add(inputPath(sourceId, sourceName))
+  }
+  return [...paths]
+}
+
+/** The `text` input of the first `CLIPTextEncode` whose title says it is `role`, if unlinked. */
+function titledEncoderPath(workflow: Workflow, role: RegExp): string | undefined {
+  const id = Object.keys(workflow)
+    .toSorted(byNodeId)
+    .find((nodeId) => {
+      const node = workflow[nodeId]
+      return (
+        node.class_type === 'CLIPTextEncode' &&
+        typeof node.inputs.text === 'string' &&
+        role.test(nodeTitle(node))
+      )
+    })
+  return id === undefined ? undefined : inputPath(id, 'text')
 }
 
 /**
- * Auto-detects key field paths from a ComfyUI API-format workflow.
- *
- * Strategy (in priority order):
- * 1. Find the KSampler / KSamplerAdvanced node and follow its `positive` and
- *    `negative` input links. If those links point directly to a CLIPTextEncode
- *    node, we have an unambiguous answer regardless of node titles.
- * 2. Fall back to title-based heuristics for any CLIPTextEncode nodes that
- *    are not resolved by the graph traversal:
- *    - title contains "negative" → negative candidate
- *    - otherwise → positive candidate
- *
- * Returns:
- *  - positiveNodes: candidates for positive prompt injection (≥1 triggers picker if >1)
- *  - negativeNode: resolved negative CLIPTextEncode, or null
- *  - seedPath: first KSampler seed dot-path, or null
- *  - outputNodeId: single SaveImage node ID, or null if 0 or 2+
- *  - saveImageCount: total SaveImage nodes found
+ * The text inputs of the nearest encoder upstream of `startId`. A node that takes both a
+ * positive and a negative conditioning (ControlNet, inpaint) is followed through its own slot.
  */
-export function detectWorkflowFields(workflow: ComfyCustomWorkflow['workflow']): {
-  positiveNodes: Array<{
-    nodeId: string
-    title: string
-    path: string
-    textPreview: string
-    kSamplerSlot: string | null
-  }>
-  negativeNode: { nodeId: string; title: string; path: string } | null
-  seedPath: string | null
-  outputNodeId: string | null
-  saveImageCount: number
-} {
-  // ── Pass 1: collect everything ──────────────────────────────────────────
-  const clipNodes = new Map<
-    string,
-    { nodeId: string; title: string; path: string; textPreview: string }
-  >()
-  const kSamplerNodes = new Map<string, WorkflowNode>()
-  let kSamplerNodeId: string | null = null
-  let kSamplerNode: WorkflowNode | null = null
-  let seedPath: string | null = null
-  let outputNodeId: string | null = null
-  let saveImageCount = 0
-
-  for (const [nodeId, node] of Object.entries(workflow) as [string, WorkflowNode][]) {
-    switch (node.class_type) {
-      case 'CLIPTextEncode': {
-        const title = node._meta?.title ?? ''
-        clipNodes.set(nodeId, {
-          nodeId,
-          title,
-          path: `${nodeId}.inputs.text`,
-          textPreview: textPreview(node.inputs.text),
-        })
-        break
-      }
-      case 'KSampler':
-      case 'KSamplerAdvanced': {
-        kSamplerNodes.set(nodeId, node)
-        break
-      }
-      case 'SaveImage': {
-        saveImageCount++
-        if (saveImageCount === 1) outputNodeId = nodeId
-        break
-      }
-    }
+function nearestTextInputs(
+  workflow: Workflow,
+  startId: string | undefined,
+  slot: 'positive' | 'negative',
+): string[] {
+  if (!startId) return []
+  const follow = (node: WorkflowNode) =>
+    linkTarget(node.inputs[slot]) === undefined ? Object.values(node.inputs) : [node.inputs[slot]]
+  for (const [id] of upstream(workflow, startId, {
+    prune: (node) => NOT_A_PROMPT_NODE.test(node.class_type),
+    follow,
+  })) {
+    const paths = textInputPaths(workflow, id)
+    if (paths.length > 0) return paths
   }
-
-  // ── Walk back from SaveImage to find the sampler on the output branch ───
-  // Object.entries() order is unrelated to graph topology, so we can't just
-  // pick the first KSampler seen — in multi-stage workflows a refiner or
-  // upscaler sampler may appear earlier than the one that feeds SaveImage.
-  if (outputNodeId) {
-    const visited = new Set<string>()
-    const queue = [outputNodeId]
-    while (queue.length > 0) {
-      const currentId = queue.shift()!
-      if (visited.has(currentId)) continue
-      visited.add(currentId)
-      if (kSamplerNodes.has(currentId)) {
-        kSamplerNodeId = currentId
-        kSamplerNode = kSamplerNodes.get(currentId)!
-        seedPath = `${currentId}.inputs.seed`
-        break
-      }
-      const n = workflow[currentId]
-      if (!n) continue
-      for (const input of Object.values(n.inputs)) {
-        if (Array.isArray(input)) queue.push(String(input[0]))
-      }
-    }
-  }
-  // Fallback for workflows without SaveImage: use first sampler in iteration order
-  if (!kSamplerNodeId && kSamplerNodes.size > 0) {
-    const [id, node] = kSamplerNodes.entries().next().value as [string, WorkflowNode]
-    kSamplerNodeId = id
-    kSamplerNode = node
-    seedPath = `${id}.inputs.seed`
-  }
-
-  // ── Pass 2: resolve via KSampler connections ────────────────────────────
-  let resolvedPositiveId: string | null = null
-  let resolvedNegativeId: string | null = null
-  // Maps CLIPTextEncode nodeId → the KSampler slot name it's wired to (e.g. "positive", "negative")
-  const kSamplerSlotMap = new Map<string, string>()
-
-  if (kSamplerNode) {
-    for (const [slotName, link] of Object.entries(kSamplerNode.inputs)) {
-      if (Array.isArray(link)) {
-        const targetId = String(link[0])
-        if (clipNodes.has(targetId)) {
-          kSamplerSlotMap.set(targetId, slotName)
-        }
-      }
-    }
-
-    const positiveLink = kSamplerNode.inputs['positive']
-    const negativeLink = kSamplerNode.inputs['negative']
-
-    if (Array.isArray(positiveLink)) {
-      const targetId = String(positiveLink[0])
-      if (clipNodes.has(targetId)) resolvedPositiveId = targetId
-    }
-    if (Array.isArray(negativeLink)) {
-      const targetId = String(negativeLink[0])
-      if (clipNodes.has(targetId)) resolvedNegativeId = targetId
-    }
-  }
-
-  // ── Pass 3: build result ────────────────────────────────────────────────
-  const positiveNodes: Array<{
-    nodeId: string
-    title: string
-    path: string
-    textPreview: string
-    kSamplerSlot: string | null
-  }> = []
-  let negativeNode: { nodeId: string; title: string; path: string } | null = null
-
-  const withSlot = (node: {
-    nodeId: string
-    title: string
-    path: string
-    textPreview: string
-  }) => ({
-    ...node,
-    kSamplerSlot: kSamplerSlotMap.get(node.nodeId) ?? null,
-  })
-
-  if (resolvedPositiveId && resolvedNegativeId) {
-    // Both resolved via graph — perfect, no ambiguity
-    positiveNodes.push(withSlot(clipNodes.get(resolvedPositiveId)!))
-    const neg = clipNodes.get(resolvedNegativeId)!
-    negativeNode = { nodeId: neg.nodeId, title: neg.title, path: neg.path }
-  } else if (resolvedPositiveId) {
-    // Positive resolved, use title heuristics for remaining nodes
-    positiveNodes.push(withSlot(clipNodes.get(resolvedPositiveId)!))
-    for (const [id, node] of clipNodes) {
-      if (id === resolvedPositiveId) continue
-      if (node.title.toLowerCase().includes('negative') && !negativeNode) {
-        negativeNode = { nodeId: node.nodeId, title: node.title, path: node.path }
-      }
-      // Other unresolved CLIPTextEncode nodes are ignored (they may be prompt enhancers etc.)
-    }
-  } else {
-    // No KSampler links resolved — fall back fully to title heuristics
-    for (const node of clipNodes.values()) {
-      if (node.title.toLowerCase().includes('negative')) {
-        if (!negativeNode)
-          negativeNode = { nodeId: node.nodeId, title: node.title, path: node.path }
-      } else {
-        positiveNodes.push(withSlot(node))
-      }
-    }
-  }
-
-  return { positiveNodes, negativeNode, seedPath, outputNodeId, saveImageCount }
+  return []
 }
 
-const byNodeId = (a: string, b: string) => a.localeCompare(b, undefined, { numeric: true })
+/**
+ * Suggests where a workflow's prompt, negative, seed and output go; what the graph does not
+ * settle comes back unset. How it reads the graph: docs/architecture/overview.md.
+ */
+export function detectWorkflowFields(
+  workflow: Workflow,
+): Pick<
+  ComfyCustomWorkflow,
+  'positivePromptPaths' | 'negativePromptPaths' | 'seedPath' | 'outputNodeId'
+> {
+  const saveImages = Object.keys(workflow).filter((id) => workflow[id].class_type === 'SaveImage')
+  const outputNodeId = saveImages.length === 1 ? saveImages[0] : null
 
-const imageInput = (nodeId: string) => `${nodeId}.inputs.image`
+  const sampler = outputNodeId
+    ? firstUpstream(workflow, outputNodeId, isSampler)
+    : Object.entries(workflow).find(([, node]) => isSampler(node))
+  const [samplerId, samplerNode] = sampler ?? ([undefined, undefined] as const)
+
+  const guider = linkTarget(samplerNode?.inputs.guider)
+  const guiderInputs = guider ? workflow[guider]?.inputs : undefined
+  const conditioning = (slot: 'positive' | 'negative') =>
+    linkTarget(samplerNode?.inputs[slot]) ??
+    linkTarget(guiderInputs?.[slot]) ??
+    (slot === 'positive' ? linkTarget(guiderInputs?.conditioning) : undefined)
+
+  // With no sampler to follow, an encoder titled for its role is all there is.
+  const promptPaths = (slot: 'positive' | 'negative', title: RegExp) => {
+    if (samplerId !== undefined) return nearestTextInputs(workflow, conditioning(slot), slot)
+    const path = titledEncoderPath(workflow, title)
+    return path ? [path] : []
+  }
+  const positivePromptPaths = promptPaths('positive', /positive/i)
+  // A negative that leads back to the positive encoder is no negative.
+  const negativePromptPaths = promptPaths('negative', /negative/i).filter(
+    (path) => !positivePromptPaths.includes(path),
+  )
+
+  return {
+    positivePromptPaths,
+    negativePromptPaths,
+    seedPath: detectSeedPath(workflow, samplerId, outputNodeId),
+    outputNodeId,
+  }
+}
+
+export interface WorkflowInput {
+  nodeId: string
+  title: string
+  name: string
+  /** Dot-path, e.g. `57:27.inputs.text`. */
+  path: string
+  /** Null for an input another node feeds. */
+  value: string | number | null
+}
+
+/**
+ * Every string, number or linked input of a workflow, in node-id order. It depends on the graph
+ * alone, so a picker computes it once per workflow and narrows it with `pickInputs`.
+ */
+export function workflowInputs(workflow: Workflow): WorkflowInput[] {
+  return Object.keys(workflow)
+    .toSorted(byNodeId)
+    .flatMap((nodeId) =>
+      Object.entries(workflow[nodeId].inputs).flatMap(([name, value]) =>
+        typeof value === 'string' || typeof value === 'number' || linkTarget(value) !== undefined
+          ? [
+              {
+                nodeId,
+                title: nodeTitle(workflow[nodeId]),
+                name,
+                path: inputPath(nodeId, name),
+                value: typeof value === 'string' || typeof value === 'number' ? value : null,
+              },
+            ]
+          : [],
+      ),
+    )
+}
+
+/**
+ * The unlinked string or number inputs for a picker, and any `selected` path whose input is
+ * linked, so a stored choice never goes missing from its picker. The ones likely to be wanted
+ * (text inputs, seed inputs) come first.
+ */
+export function pickInputs(
+  inputs: WorkflowInput[],
+  kind: 'string' | 'number',
+  selected: readonly string[] = [],
+): WorkflowInput[] {
+  const wanted =
+    kind === 'string' ? isTextInputName : (name: string) => SEED_INPUT_NAMES.includes(name)
+  return preferredFirst(
+    inputs.filter(
+      (input) =>
+        typeof input.value === kind || (input.value === null && selected.includes(input.path)),
+    ),
+    (input) => wanted(input.name),
+  )
+}
+
+/** Every node of a workflow for the output picker, in node-id order, saving nodes first. */
+export function listNodes(workflow: Workflow) {
+  const nodes = Object.keys(workflow)
+    .toSorted(byNodeId)
+    .map((nodeId) => ({
+      nodeId,
+      title: nodeTitle(workflow[nodeId]),
+      classType: workflow[nodeId].class_type,
+    }))
+  return preferredFirst(nodes, (node) => /Save|Preview/.test(node.classType))
+}
+
+/** Whether `path` names an input the workflow has. `setGraphInput` would create one it lacks. */
+export function validateWorkflowPath(workflow: Workflow, path: string): boolean {
+  const [nodeId, inputs, name, ...rest] = path.split('.')
+  return (
+    rest.length === 0 &&
+    inputs === 'inputs' &&
+    name !== undefined &&
+    Object.hasOwn(workflow, nodeId) &&
+    Object.hasOwn(workflow[nodeId].inputs, name)
+  )
+}
+
+/** What stops a custom workflow from generating, as sentences for the user; empty when complete. */
+export function workflowProblems(customWorkflow: ComfyCustomWorkflow): string[] {
+  const { workflow, positivePromptPaths, negativePromptPaths, seedPath, outputNodeId } =
+    customWorkflow
+  const problems: string[] = []
+  if (positivePromptPaths.length === 0) problems.push('Choose a prompt input.')
+  const paths = [...positivePromptPaths, ...negativePromptPaths, ...(seedPath ? [seedPath] : [])]
+  if (!paths.every((path) => validateWorkflowPath(workflow, path))) {
+    problems.push('A selected input is not in this workflow.')
+  }
+  if (outputNodeId === null) problems.push('Choose an output node.')
+  else if (!Object.hasOwn(workflow, outputNodeId)) {
+    problems.push('The output node is not in this workflow.')
+  }
+  return problems
+}
+
+/** Whether a custom workflow has what generation needs: a prompt input and an output node. */
+export const isWorkflowComplete = (
+  customWorkflow: ComfyCustomWorkflow,
+): customWorkflow is ComfyCustomWorkflow & { outputNodeId: string } =>
+  workflowProblems(customWorkflow).length === 0
+
+const imageInput = (nodeId: string) => inputPath(nodeId, 'image')
 
 /** The `image` input of every `LoadImage` node, in node-id order. */
-export function loadImageInputs(workflow: ComfyCustomWorkflow['workflow']) {
+export function loadImageInputs(workflow: Workflow) {
   return Object.entries(workflow)
     .filter(([, node]) => node.class_type === 'LoadImage')
     .toSorted(([a], [b]) => byNodeId(a, b))
     .map(([nodeId, node]) => ({
       nodeId,
       path: imageInput(nodeId),
-      title: node._meta?.title ?? 'LoadImage',
+      title: nodeTitle(node),
       image: typeof node.inputs.image === 'string' ? node.inputs.image : '',
     }))
 }
@@ -396,15 +540,15 @@ interface Edge {
   slot: number
 }
 
-function outgoingEdges(workflow: ComfyCustomWorkflow['workflow']): Map<string, Edge[]> {
+function outgoingEdges(workflow: Workflow): Map<string, Edge[]> {
   const edges = new Map<string, Edge[]>()
   for (const [to, node] of Object.entries(workflow)) {
     for (const [input, value] of Object.entries(node.inputs)) {
-      if (!Array.isArray(value) || typeof value[1] !== 'number') continue
-      const from = String(value[0])
-      const list = edges.get(from) ?? []
-      list.push({ to, input, slot: value[1] })
-      edges.set(from, list)
+      const link = parseLink(value)
+      if (!link) continue
+      const list = edges.get(link.from) ?? []
+      list.push({ to, input, slot: link.slot })
+      edges.set(link.from, list)
     }
   }
   return edges
@@ -415,7 +559,7 @@ function outgoingEdges(workflow: ComfyCustomWorkflow['workflow']): Map<string, E
  * ControlNet, mask, preprocessor or sampler latent, and none reaches a reference consumer.
  */
 function isGuideOrCanvas(
-  workflow: ComfyCustomWorkflow['workflow'],
+  workflow: Workflow,
   edges: Map<string, Edge[]>,
   loadImageId: string,
 ): boolean {
@@ -442,7 +586,7 @@ function isGuideOrCanvas(
  * only reaches a ControlNet, IP-Adapter, preprocessor, mask or an img2img sampler. Only the graph
  * is known here, not the user's intent, so the profile's own selection overrides it.
  */
-export function suggestReferenceInputs(workflow: ComfyCustomWorkflow['workflow']): string[] {
+export function suggestReferenceInputs(workflow: Workflow): string[] {
   const edges = outgoingEdges(workflow)
   return loadImageInputs(workflow)
     .filter(({ nodeId }) => !isGuideOrCanvas(workflow, edges, nodeId))
@@ -450,7 +594,9 @@ export function suggestReferenceInputs(workflow: ComfyCustomWorkflow['workflow']
 }
 
 /** The inputs references go to: the profile's selection, else the probe's suggestion. */
-export const referenceInputsOf = (customWorkflow: ComfyCustomWorkflow): string[] =>
+export const referenceInputsOf = (
+  customWorkflow: Pick<ComfyCustomWorkflow, 'workflow' | 'referenceInputPaths'>,
+): string[] =>
   customWorkflow.referenceInputPaths?.toSorted(byNodeId) ??
   suggestReferenceInputs(customWorkflow.workflow)
 
@@ -464,6 +610,10 @@ function customWorkflowOf(
     ? customWorkflow
     : undefined
 }
+
+/** A custom workflow names its own checkpoints, so only the built-in workflows read the model. */
+export const comfyNeedsModel = (providerOptions: Record<string, unknown> | undefined): boolean =>
+  providerOptions?.mode !== ComfyMode.CustomWorkflow
 
 /** How many references a ComfyUI profile uses: the number of selected `LoadImage` inputs. */
 export function comfyReferenceLimit(providerOptions: Record<string, unknown> | undefined): number {
@@ -575,14 +725,17 @@ export function createComfyProvider(config: ImageProviderConfig): ImageProvider 
       // -----------------------------------------------------------------------
       const customWorkflow = customWorkflowOf(providerOptions)
       if (customWorkflow) {
+        if (!isWorkflowComplete(customWorkflow)) {
+          throw new Error('This ComfyUI profile has no complete custom workflow.')
+        }
         const comfyui = {
           workflow: customWorkflow.workflow,
           outputNodeId: customWorkflow.outputNodeId,
           paths: {
-            positive: customWorkflow.positivePromptPath,
-            seed: customWorkflow.seedPath,
-            ...(customWorkflow.negativePromptPath && {
-              negative: customWorkflow.negativePromptPath,
+            positive: customWorkflow.positivePromptPaths,
+            ...(customWorkflow.seedPath && { seed: customWorkflow.seedPath }),
+            ...(customWorkflow.negativePromptPaths.length > 0 && {
+              negative: customWorkflow.negativePromptPaths,
             }),
             references: referenceInputsOf(customWorkflow),
           },
@@ -666,7 +819,7 @@ export function createComfyProvider(config: ImageProviderConfig): ImageProvider 
           ],
           outputNodeId: '10',
           paths: {
-            positive: '5.inputs.text',
+            positive: ['5.inputs.text'],
             seed: '8.inputs.seed',
             width: '7.inputs.width',
             height: '7.inputs.height',
@@ -700,8 +853,8 @@ export function createComfyProvider(config: ImageProviderConfig): ImageProvider 
           inputs,
           outputNodeId: '9',
           paths: {
-            positive: '6.inputs.text',
-            negative: '7.inputs.text',
+            positive: ['6.inputs.text'],
+            negative: ['7.inputs.text'],
             seed: '3.inputs.seed',
             width: '5.inputs.width',
             height: '5.inputs.height',

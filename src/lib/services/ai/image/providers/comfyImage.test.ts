@@ -50,8 +50,8 @@ const WORKFLOW = {
 }
 
 const PATHS = {
-  positive: '6.inputs.text',
-  negative: '7.inputs.text',
+  positive: ['6.inputs.text'],
+  negative: ['7.inputs.text'],
   seed: '3.inputs.seed',
   width: '5.inputs.width',
   height: '5.inputs.height',
@@ -241,7 +241,7 @@ describe('request', () => {
           comfyui: {
             workflow,
             outputNodeId: '60',
-            paths: { positive: '57:27.inputs.text', seed: '57:3.inputs.seed' },
+            paths: { positive: ['57:27.inputs.text'], seed: '57:3.inputs.seed' },
           },
         },
       }),
@@ -249,6 +249,68 @@ describe('request', () => {
     const { prompt } = sentPrompt().body
     expect(prompt['57:27'].inputs.text).toBe('a castle')
     expect(typeof prompt['57:3'].inputs.seed).toBe('number')
+  })
+
+  it('writes the prompt into every positive path', async () => {
+    const workflow = {
+      '1': { class_type: 'CLIPTextEncodeFlux', inputs: { clip_l: '', t5xxl: '', guidance: 3.5 } },
+      '9': { class_type: 'SaveImage', inputs: {} },
+    }
+    await model().doGenerate(
+      callOptions({
+        size: undefined,
+        providerOptions: {
+          comfyui: {
+            workflow,
+            outputNodeId: '9',
+            paths: { positive: ['1.inputs.clip_l', '1.inputs.t5xxl'] },
+          },
+        },
+      }),
+    )
+    expect(sentPrompt().body.prompt['1'].inputs).toEqual({
+      clip_l: 'a castle',
+      t5xxl: 'a castle',
+      guidance: 3.5,
+    })
+  })
+
+  it('leaves the workflow seed alone without a seed path', async () => {
+    const { seed: _, ...paths } = PATHS
+    await model().doGenerate(callOptions({ seed: 42, providerOptions: comfyOptions({ paths }) }))
+    expect(sentPrompt().body.prompt['3'].inputs.seed).toBe(1)
+  })
+
+  it('does not let the negative overwrite a prompt input it shares', async () => {
+    const paths = { ...PATHS, negative: [...PATHS.positive, PATHS.negative[0]] }
+    await model().doGenerate(
+      callOptions({ providerOptions: comfyOptions({ paths, negativePrompt: 'blurry' }) }),
+    )
+    const { prompt } = sentPrompt().body
+    expect(prompt['6'].inputs.text).toBe('a castle')
+    expect(prompt['7'].inputs.text).toBe('blurry')
+  })
+
+  it('writes the negative into every negative input', async () => {
+    const workflow = {
+      ...WORKFLOW,
+      '8': { class_type: 'CLIPTextEncodeSDXL', inputs: { text_g: 'p', text_l: 'q' } },
+    }
+    const paths = { ...PATHS, negative: ['8.inputs.text_g', '8.inputs.text_l'] }
+    await model().doGenerate(
+      callOptions({
+        providerOptions: comfyOptions({ workflow, paths, negativePrompt: 'blurry' }),
+      }),
+    )
+    expect(sentPrompt().body.prompt['8'].inputs).toEqual({ text_g: 'blurry', text_l: 'blurry' })
+  })
+
+  it('rejects options with no positive path', async () => {
+    const paths = { ...PATHS, positive: [] }
+    const error = await rejection(
+      model().doGenerate(callOptions({ providerOptions: comfyOptions({ paths }) })),
+    )
+    expect((error as Error).message).toContain('invalid provider options')
   })
 
   it('leaves out the negative prompt when the workflow has no path for it', async () => {

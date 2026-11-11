@@ -28,6 +28,8 @@ export {
   getProviderClipTypes,
   isLocalServer,
   referenceLimit,
+  providerNeedsModel,
+  referenceBlocker,
   takesCapabilityOverride,
   IMAGE_PROVIDER_LABELS,
   IMAGE_PROVIDER_OPTIONS,
@@ -93,8 +95,16 @@ export { DEFAULT_FALLBACK_STYLE_PROMPT } from './constants'
 // Provider types
 export {
   ComfyMode,
+  detectWorkflowFields,
+  isWorkflowComplete,
+  listNodes,
   loadImageInputs,
+  pickInputs,
   referenceInputsOf,
   suggestReferenceInputs,
+  validateApiWorkflow,
+  workflowInputs,
+  workflowProblems,
+  type WorkflowInput,
 } from './providers/comfy'
 export type { ComfyCustomWorkflow } from './providers/types'

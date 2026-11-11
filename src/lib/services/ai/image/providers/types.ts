@@ -16,7 +16,7 @@ export type ComfySamplerInfo = {
   schedulersUnavailable?: string
 }
 
-/** A user-uploaded ComfyUI API-format workflow with auto-detected field paths. */
+/** A user-uploaded ComfyUI API-format workflow and the inputs the app writes into. */
 export interface ComfyCustomWorkflow {
   /** The raw API-format workflow JSON (node IDs as keys). */
   workflow: Record<
@@ -27,14 +27,14 @@ export interface ComfyCustomWorkflow {
       _meta?: { title?: string }
     }
   >
-  /** Dot-path to the positive CLIPTextEncode text input, e.g. "57:27.inputs.text" */
-  positivePromptPath: string
-  /** Dot-path to the seed input on the KSampler node, e.g. "57:3.inputs.seed" */
-  seedPath: string
-  /** Node ID of the SaveImage output node, e.g. "9" */
-  outputNodeId: string
-  /** Dot-path to the negative CLIPTextEncode text input, if detected — null otherwise. */
-  negativePromptPath: string | null
+  /** Dot-paths of the text inputs that each receive the scene prompt, e.g. "57:27.inputs.text". */
+  positivePromptPaths: string[]
+  /** Dot-path to the seed input, e.g. "57:3.inputs.noise_seed"; null keeps the workflow's own seed. */
+  seedPath: string | null
+  /** Node ID of the output node, e.g. "9"; null until one is chosen. */
+  outputNodeId: string | null
+  /** Dot-paths of the text inputs that each receive the negative prompt; empty when the workflow has none. */
+  negativePromptPaths: string[]
   /** `LoadImage` image inputs that take reference images; absent means the probe's suggestion. */
   referenceInputPaths?: string[]
 }

@@ -3,6 +3,8 @@ use tauri_plugin_sql::{Migration, MigrationKind};
 
 mod avt_import;
 mod backup;
+#[cfg(test)]
+mod comfy_workflow_paths;
 mod db;
 mod db_tx;
 mod image_profiles;
@@ -302,6 +304,12 @@ pub(crate) fn migrations() -> Vec<Migration> {
             version: 45,
             description: "sync_identity",
             sql: include_str!("../migrations/045_sync_identity.sql"),
+            kind: MigrationKind::Up,
+        },
+        Migration {
+            version: 46,
+            description: "comfy_workflow_paths",
+            sql: include_str!("../migrations/046_comfy_workflow_paths.sql"),
             kind: MigrationKind::Up,
         },
     ]
