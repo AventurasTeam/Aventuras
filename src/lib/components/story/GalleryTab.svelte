@@ -79,6 +79,9 @@
   const lightboxRegenerating = $derived(
     lightboxImage ? regeneratingImageIds.has(lightboxImage.id) : false,
   )
+  const lightboxGenerating = $derived(
+    lightboxImage ? lightboxRegenerating || isImageInProgress(lightboxImage) : false,
+  )
   let editingImagePrompt = $state('')
   let touchStartX = 0
 
@@ -813,6 +816,7 @@
         bind:value={editingImagePrompt}
         placeholder="Describe the image you want to generate..."
         rows={3}
+        disabled={lightboxGenerating}
         class="resize-none text-sm"
       />
     </div>
@@ -839,7 +843,7 @@
           <Button
             size="sm"
             onclick={() => lightboxImage && handleEditImageSubmit(lightboxImage.id)}
-            disabled={!editingImagePrompt.trim() || lightboxRegenerating}
+            disabled={!editingImagePrompt.trim() || lightboxGenerating}
             class="h-8 gap-1.5 text-xs"
           >
             {#if lightboxRegenerating}
