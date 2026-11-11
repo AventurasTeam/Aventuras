@@ -707,19 +707,23 @@
               src={normalizeImageDataUrl(imageDataCache.get(lightboxImage.id)) ?? ''}
               alt={`Generated image ${lightboxIndex + 1}`}
               class={[
-                'max-h-[40vh] max-w-full rounded object-contain sm:max-h-[50vh]',
+                'max-h-(--image-view-height) max-w-full rounded object-contain sm:max-h-(--image-view-height-sm)',
                 lightboxRegenerating && 'opacity-50',
               ]}
             />
           {:else if failedImageIds.has(lightboxImage.id)}
-            <div class="flex h-[40vh] w-full items-center justify-center sm:h-[50vh]">
+            <div
+              class="flex h-(--image-view-height) w-full items-center justify-center sm:h-(--image-view-height-sm)"
+            >
               <Button variant="outline" size="sm" onclick={() => ensureImageData(lightboxImage.id)}>
                 <RefreshCw class="h-4 w-4" />
                 Retry
               </Button>
             </div>
           {:else}
-            <div class="flex h-[40vh] w-full items-center justify-center sm:h-[50vh]">
+            <div
+              class="flex h-(--image-view-height) w-full items-center justify-center sm:h-(--image-view-height-sm)"
+            >
               <div
                 class="border-surface-600 border-t-accent-400 h-8 w-8 animate-spin rounded-full border-2"
               ></div>
