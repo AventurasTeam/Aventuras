@@ -746,7 +746,7 @@ encoder through `ConditioningZeroOut` is not a negative. Only a graph with no sa
 encoders, and only to one whose title says `positive` or `negative`; a sampler that settled nothing
 leaves the field unset, as does anything else the graph does not settle. The form lists every string
 and number input and every node for the user to choose, and keeps listing a stored choice whose
-input is now linked; a workflow with no prompt input or no output node is not saved. Every checked
+input is now linked; a workflow with no prompt input or no output node still saves, but `generateImage` refuses it. Every checked
 prompt input receives the same prompt, so a Flux encoder can fill both `clip_l` and `t5xxl`, and
 every checked negative input receives the negative; an input is one or the other. With no seed input
 the workflow's own seed is used for every image. Names are a hash of the bytes, so an image reused across scenes is stored once,
