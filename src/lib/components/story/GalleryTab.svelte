@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { untrack } from 'svelte'
   import { story } from '#lib/stores/story.svelte.ts'
   import { ui } from '#lib/stores/ui.svelte.ts'
   import { database } from '#lib/services/database.ts'
@@ -33,6 +34,7 @@
   // Always chronological, as loaded and cached in `ui`; `images` is the display order.
   let loadedImages = $state.raw<EmbeddedImageMeta[]>([])
   const images = $derived(ui.galleryNewestFirst ? loadedImages.toReversed() : loadedImages)
+  const imageById = $derived(new Map(loadedImages.map((img) => [img.id, img])))
   // Lazy-loaded base64 payloads, keyed by image id. The grid/lightbox only loads the
   // pixels that are actually visible, so a story with many images never pulls all of
   // them through the SQL/IPC bridge at once (which caused Android OOM crashes).
@@ -60,20 +62,26 @@
   const selectAllChecked = $derived(images.length > 0 && selectedImageIds.size === images.length)
 
   let lightboxOpen = $state(false)
-  let lightboxImageIndex = $state(0)
+  // The lightbox follows an image, not a position: a reload or a change of order moves indices.
+  let lightboxImageId = $state<string | null>(null)
+  const lightboxIndex = $derived(
+    lightboxImageId === null ? -1 : images.findIndex((img) => img.id === lightboxImageId),
+  )
+  // Not gated on `lightboxOpen`: the modal keeps rendering its image while it animates out.
+  const lightboxImage = $derived(lightboxIndex >= 0 ? images[lightboxIndex] : null)
+  let editingImagePrompt = $state('')
   let touchStartX = 0
 
-  /** Ids that must survive eviction: whatever the lightbox is showing or about to show. */
-  function visibleImageIds(): Set<string> {
-    if (!lightboxOpen) return new Set()
-    return new Set(
-      [
-        images[lightboxImageIndex - 1]?.id,
-        images[lightboxImageIndex]?.id,
-        images[lightboxImageIndex + 1]?.id,
-      ].filter((id): id is string => !!id),
-    )
-  }
+  /** What the lightbox shows or is about to show: these load first and survive eviction. */
+  const lightboxWindowIds = $derived(
+    !lightboxOpen || lightboxIndex < 0
+      ? []
+      : [
+          images[lightboxIndex - 1]?.id,
+          images[lightboxIndex]?.id,
+          images[lightboxIndex + 1]?.id,
+        ].filter((id): id is string => !!id),
+  )
 
   function uncache(id: string) {
     lastUse.delete(id)
@@ -106,7 +114,7 @@
     imageDataCache.set(id, data)
     lastUse.set(id, ++useTick)
     cacheBytes += data.length
-    evictOverBudget(new Set([...visibleImageIds(), ...visibleIds]))
+    evictOverBudget(new Set([...lightboxWindowIds, ...visibleIds]))
   }
 
   function clearImageCache() {
@@ -268,13 +276,14 @@
     }
   }
 
-  function openLightbox(index: number) {
-    lightboxImageIndex = index
-    // Show the full stored prompt - user can edit as needed
-    const image = images[index]
-    if (image) {
-      editingImagePrompt = image.prompt
-    }
+  // Show the full stored prompt - user can edit as needed
+  function showLightboxImage(id: string) {
+    lightboxImageId = id
+    editingImagePrompt = imageById.get(id)?.prompt ?? ''
+  }
+
+  function openLightbox(id: string) {
+    showLightboxImage(id)
     lightboxOpen = true
   }
 
@@ -283,15 +292,13 @@
   }
 
   function previousImage() {
-    if (lightboxImageIndex > 0) {
-      lightboxImageIndex--
-    }
+    const previous = lightboxIndex > 0 ? images[lightboxIndex - 1] : undefined
+    if (previous) showLightboxImage(previous.id)
   }
 
   function nextImage() {
-    if (lightboxImageIndex < images.length - 1) {
-      lightboxImageIndex++
-    }
+    const next = lightboxIndex >= 0 ? images[lightboxIndex + 1] : undefined
+    if (next) showLightboxImage(next.id)
   }
 
   function handleTouchStart(e: TouchEvent) {
@@ -329,27 +336,14 @@
     }
   }
 
-  // Edit modal state
-  let editingImagePrompt = $state('')
-
-  // Get the current lightbox image
-  const lightboxImage = $derived(
-    lightboxOpen && images.length > 0 ? images[lightboxImageIndex] : null,
-  )
-
   const OrderIcon = $derived(ui.galleryNewestFirst ? ClockArrowDown : ClockArrowUp)
 
-  // Update prompt and lazily load pixels (current + neighbors) when navigating the lightbox
+  // Lazily load pixels (current + neighbors) when navigating the lightbox
   $effect(() => {
-    if (lightboxOpen && images.length > 0) {
-      const image = images[lightboxImageIndex]
-      if (image) {
-        editingImagePrompt = image.prompt
-      }
-      ensureImageData(images[lightboxImageIndex]?.id)
-      ensureImageData(images[lightboxImageIndex - 1]?.id)
-      ensureImageData(images[lightboxImageIndex + 1]?.id)
-    }
+    const ids = lightboxWindowIds
+    untrack(() => {
+      for (const id of ids) ensureImageData(id)
+    })
   })
 
   // Submit edit modal - regenerate with new prompt
@@ -525,7 +519,7 @@
             <div
               class="bg-surface-700 relative aspect-video cursor-pointer"
               {@attach lazyImage(image.id)}
-              onclick={() => openLightbox(index)}
+              onclick={() => openLightbox(image.id)}
             >
               {#if imageDataCache.has(image.id)}
                 <img
@@ -623,7 +617,7 @@
       {#if images.length > 1}
         <button
           onclick={previousImage}
-          disabled={lightboxImageIndex === 0}
+          disabled={lightboxIndex <= 0}
           class="bg-surface-800/80 hover:bg-surface-700 text-surface-300 absolute top-1/2 left-2 -translate-y-1/2 rounded-full p-2 transition-colors hover:text-white disabled:cursor-not-allowed disabled:opacity-30"
           title="Previous (←)"
           aria-label="Previous image"
@@ -633,24 +627,20 @@
       {/if}
 
       <!-- Image with loading overlay -->
-      {#if images.length > 0}
+      {#if lightboxImage}
         <div class="relative">
-          {#if imageDataCache.has(images[lightboxImageIndex].id)}
+          {#if imageDataCache.has(lightboxImage.id)}
             <img
-              src={normalizeImageDataUrl(imageDataCache.get(images[lightboxImageIndex].id)) ?? ''}
-              alt={`Generated image ${lightboxImageIndex + 1}`}
+              src={normalizeImageDataUrl(imageDataCache.get(lightboxImage.id)) ?? ''}
+              alt={`Generated image ${lightboxIndex + 1}`}
               class={[
                 'max-h-[40vh] max-w-full rounded object-contain sm:max-h-[50vh]',
                 isRegenerating && 'opacity-50',
               ]}
             />
-          {:else if failedImageIds.has(images[lightboxImageIndex].id)}
+          {:else if failedImageIds.has(lightboxImage.id)}
             <div class="flex h-[40vh] w-full items-center justify-center sm:h-[50vh]">
-              <Button
-                variant="outline"
-                size="sm"
-                onclick={() => ensureImageData(images[lightboxImageIndex].id)}
-              >
+              <Button variant="outline" size="sm" onclick={() => ensureImageData(lightboxImage.id)}>
                 <RefreshCw class="h-4 w-4" />
                 Retry
               </Button>
@@ -679,7 +669,7 @@
       {#if images.length > 1}
         <button
           onclick={nextImage}
-          disabled={lightboxImageIndex === images.length - 1}
+          disabled={lightboxIndex === images.length - 1}
           class="bg-surface-800/80 hover:bg-surface-700 text-surface-300 absolute top-1/2 right-2 -translate-y-1/2 rounded-full p-2 transition-colors hover:text-white disabled:cursor-not-allowed disabled:opacity-30"
           title="Next (→)"
           aria-label="Next image"
@@ -708,7 +698,7 @@
       <!-- Counter -->
       <div class="text-surface-400 text-sm tabular-nums">
         {#if images.length > 1}
-          {lightboxImageIndex + 1} of {images.length}
+          {lightboxIndex + 1} of {images.length}
         {:else}
           1 image
         {/if}
