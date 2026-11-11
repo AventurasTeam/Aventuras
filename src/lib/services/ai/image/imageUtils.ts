@@ -195,6 +195,8 @@ export interface ImageGenerationRequest {
   /** Written with the flip to `generating`, so a caller resetting the row for a fresh
    *  attempt spends one round trip and not two. */
   recordUpdates?: Partial<EmbeddedImage>
+  /** Emit `ImageQueued` once the row reads `generating`, for a caller resetting a finished row. */
+  announce?: boolean
 }
 
 /**
@@ -210,7 +212,9 @@ export async function runImageGeneration(request: ImageGenerationRequest): Promi
   let failure: string | undefined
 
   // Cancelled while it waited to start: the record is already settled, so leave it as it is.
-  if (!attempt.signal.aborted) {
+  if (attempt.signal.aborted) {
+    if (request.announce) emitImageQueued(imageId, entryId)
+  } else {
     // Its own try: a failed status flip is a database problem, not a generation failure, and
     // reporting it as one raises a user-facing notice for the wrong thing. The generation goes
     // ahead regardless — `recordImageResult` writes the terminal status either way.
@@ -222,6 +226,7 @@ export async function runImageGeneration(request: ImageGenerationRequest): Promi
     } catch (error) {
       log('Failed to mark the image generating', { imageId, error })
     }
+    if (request.announce) emitImageQueued(imageId, entryId)
 
     if (attempt.signal.aborted) {
       // A cancel that landed during the flip may have been overwritten by it. A superseded
@@ -304,15 +309,13 @@ export async function retryImageGeneration(imageId: string, prompt: string): Pro
 
   log('Retrying image generation', { imageId, profileId, model, size })
 
-  // `runImageGeneration` emits `ImageReady`, which decrements the header's in-flight count —
-  // so the retry has to announce itself, or it spends another image's increment and the
-  // indicator disappears while that one is still generating.
-  emitImageQueued(imageId, image.entryId)
-
+  // `ImageReady` decrements the header's in-flight count, so the retry has to announce itself.
+  // It does so after the row reads `generating`, which is what the gallery's reload looks for.
   await runImageGeneration({
     imageId,
     entryId: image.entryId,
     attempt: beginImageAttempt(imageId),
+    announce: true,
     prompt,
     profileId,
     model,

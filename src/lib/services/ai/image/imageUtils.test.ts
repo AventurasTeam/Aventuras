@@ -379,6 +379,23 @@ describe('image attempts', () => {
     expect(emitImageReady).toHaveBeenCalledWith('img', 'entry', false)
   })
 
+  it('announces a reset row after it reads generating, and before it is ready', async () => {
+    const attempt = beginImageAttempt('img')
+    const order: string[] = []
+    updateEmbeddedImage.mockImplementation(async (_id, updates) => {
+      order.push(`update:${(updates as { status: string }).status}`)
+    })
+    emitImageQueued.mockImplementation(() => order.push('queued'))
+    emitImageReady.mockImplementation(() => order.push('ready'))
+
+    await runImageGeneration({ ...request(attempt), announce: true })
+
+    expect(order).toEqual(['update:generating', 'queued', 'update:complete', 'ready'])
+    updateEmbeddedImage.mockImplementation(async () => {})
+    emitImageQueued.mockReset()
+    emitImageReady.mockReset()
+  })
+
   it('keeps a superseded request from writing over the one that replaced it', async () => {
     const first = beginImageAttempt('img')
     let finishFirst: (value: { base64: string }) => void = () => {}
