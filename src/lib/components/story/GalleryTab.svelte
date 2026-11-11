@@ -47,6 +47,10 @@
   const failedImageIds = new SvelteSet<string>()
   const MAX_CACHE_BYTES = 96 * 1024 * 1024
   let cacheBytes = 0
+  // Only read when evicting, never from the template.
+  const lastUse = new SvelteMap<string, number>()
+  const visibleIds = new SvelteSet<string>()
+  let useTick = 0
 
   let isLoading = $state(false)
   let isSaving = $state(false)
@@ -71,33 +75,43 @@
     )
   }
 
-  /** Drop least-recently-used payloads until the cache is back inside its budget. */
-  function evictOverBudget(protectedIds: Set<string>) {
-    if (cacheBytes <= MAX_CACHE_BYTES) return
-    // SvelteMap iterates in insertion order, and cacheImageData re-inserts on every hit,
-    // so the oldest entries here are the least recently used.
-    for (const [id, data] of imageDataCache) {
-      if (cacheBytes <= MAX_CACHE_BYTES) break
-      if (protectedIds.has(id)) continue
-      imageDataCache.delete(id)
-      cacheBytes -= data.length
+  function uncache(id: string) {
+    lastUse.delete(id)
+    const data = imageDataCache.get(id)
+    if (data === undefined) return
+    imageDataCache.delete(id)
+    cacheBytes -= data.length
+  }
+
+  /** Drop least-recently-used payloads until the cache fits its budget; protected ids stay. */
+  function evictOverBudget(protectedIds: ReadonlySet<string>) {
+    while (cacheBytes > MAX_CACHE_BYTES) {
+      let oldest: string | undefined
+      let oldestUse = Infinity
+      for (const id of imageDataCache.keys()) {
+        const use = lastUse.get(id) ?? 0
+        if (!protectedIds.has(id) && use < oldestUse) {
+          oldest = id
+          oldestUse = use
+        }
+      }
+      if (oldest === undefined) return
+      uncache(oldest)
     }
   }
 
-  /** Insert (or refresh) a payload, then evict whatever no longer fits. */
+  /** Insert (or replace) a payload, then evict whatever no longer fits. */
   function cacheImageData(id: string, data: string) {
-    const existing = imageDataCache.get(id)
-    if (existing !== undefined) {
-      cacheBytes -= existing.length
-      imageDataCache.delete(id)
-    }
+    uncache(id)
     imageDataCache.set(id, data)
+    lastUse.set(id, ++useTick)
     cacheBytes += data.length
-    evictOverBudget(visibleImageIds())
+    evictOverBudget(new Set([...visibleImageIds(), ...visibleIds]))
   }
 
   function clearImageCache() {
     imageDataCache.clear()
+    lastUse.clear()
     loadingImageIds.clear()
     failedImageIds.clear()
     cacheBytes = 0
@@ -122,7 +136,12 @@
 
   /** Lazily fetch (and cache) the base64 payload for a single image. */
   async function ensureImageData(id: string | undefined) {
-    if (!id || imageDataCache.has(id) || loadingImageIds.has(id)) return
+    if (!id) return
+    if (imageDataCache.has(id)) {
+      lastUse.set(id, ++useTick)
+      return
+    }
+    if (loadingImageIds.has(id)) return
     loadingImageIds.add(id)
     failedImageIds.delete(id)
     try {
@@ -144,19 +163,24 @@
   const lazyImage =
     (id: string): Attachment<HTMLElement> =>
     (node) => {
-      // Deliberately keeps observing instead of unobserving after the first hit: a payload can be
-      // evicted by the LRU once it scrolls away, and scrolling back must fetch it again.
-      // ensureImageData is itself a no-op when the data is already cached or in flight.
+      // Keeps observing: an evicted payload refetches when its cell scrolls back.
       const observer = new IntersectionObserver(
         (entries) => {
           for (const entry of entries) {
-            if (entry.isIntersecting) ensureImageData(id)
+            if (!entry.isIntersecting) visibleIds.delete(id)
+            else {
+              visibleIds.add(id)
+              ensureImageData(id)
+            }
           }
         },
         { rootMargin: '300px' },
       )
       observer.observe(node)
-      return () => observer.disconnect()
+      return () => {
+        observer.disconnect()
+        visibleIds.delete(id)
+      }
     }
 
   async function loadImagesForStory(storyId: string) {
