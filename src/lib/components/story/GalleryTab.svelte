@@ -589,14 +589,7 @@
               />
             </div>
 
-            <!-- Image container - click opens lightbox -->
-            <!-- svelte-ignore a11y_click_events_have_key_events -->
-            <!-- svelte-ignore a11y_no_static_element_interactions -->
-            <div
-              class="bg-surface-700 relative aspect-video cursor-pointer"
-              {@attach lazyImage(image.id)}
-              onclick={() => openLightbox(image.id)}
-            >
+            <div class="bg-surface-700 relative aspect-video" {@attach lazyImage(image.id)}>
               {#if imageDataCache.has(image.id)}
                 <img
                   src={normalizeImageDataUrl(imageDataCache.get(image.id)) ?? ''}
@@ -605,11 +598,8 @@
                 />
               {:else if failedImageIds.has(image.id)}
                 <button
-                  class="text-surface-400 hover:text-surface-200 flex h-full w-full flex-col items-center justify-center gap-1 text-xs"
-                  onclick={(e) => {
-                    e.stopPropagation()
-                    ensureImageData(image.id)
-                  }}
+                  class="text-surface-400 hover:text-surface-200 relative z-20 flex h-full w-full flex-col items-center justify-center gap-1 text-xs"
+                  onclick={() => ensureImageData(image.id)}
                 >
                   <RefreshCw class="h-4 w-4" />
                   Retry
@@ -621,7 +611,14 @@
                   ></div>
                 </div>
               {/if}
-              <!-- Hover overlay: hover-capable devices only; clicks pass through to the image and Retry -->
+              <!-- Opens the lightbox; Retry sits above it -->
+              <button
+                type="button"
+                class="focus-visible:ring-accent-400 absolute inset-0 cursor-pointer focus-visible:ring-2 focus-visible:outline-none focus-visible:ring-inset"
+                aria-label={`Open image ${index + 1}`}
+                onclick={() => openLightbox(image.id)}
+              ></button>
+              <!-- Hover overlay: hover-capable devices only; clicks pass through to the open button -->
               <div
                 class="can-hover:flex pointer-events-none absolute inset-0 hidden items-center justify-center bg-black/40 opacity-0 transition-opacity duration-200 group-hover:opacity-100"
               >
