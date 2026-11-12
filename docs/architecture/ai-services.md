@@ -57,7 +57,9 @@ with `normalizeBaseUrl` in `utils/url.ts`, where it becomes a request URL: the p
 `fetchModelsFromProvider`, `getEffectiveBaseUrl` and `TTSService.getEndpoint`. The forms and the
 store keep what the user typed, and code below those boundaries (`pingModel`, the `create*Image`
 clients) takes the URL as given. Defaults we own (`PROVIDERS`, and the image providers' `PROVIDER_BASE_URL` in
-`image/providers/baseUrls.ts`) are never normalized at runtime. `config.test.ts` and
+`image/providers/baseUrls.ts`) are never normalized at runtime. Deciding whether an edit changed
+the URL (clearing a profile's health rows, reloading a model list) compares normalized values, so
+a trailing slash or stray space is not a change. `config.test.ts` and
 `baseUrls.test.ts` pin them instead. An image adapter resolves its URL with `resolveBaseUrl`, which
 falls back to that table's default.
 

@@ -414,17 +414,18 @@
   }
 
   // Reactive deps are captured before untrack() so the loaders' own reads (e.g.
-  // settings.apiSettings.llmTimeoutMs) do not become dependencies of this effect.
+  // settings.apiSettings.llmTimeoutMs) do not become dependencies of this effect. The list key
+  // stands in for the connection so an edit that leaves the effective URL alone does not reload.
   let loadedProfileId: string | null = null
   let loadedProviderType: ImageProviderType | null = null
 
   $effect(() => {
     const profileId = editingProfileId
-    const inputs = connection
-    const { providerType } = inputs
+    const listKey = modelListKey(connection)
     const invalid = baseUrlInvalid
 
     untrack(() => {
+      const { providerType } = connection
       if (!profileId) {
         stopProfileModels()
         loadedProfileId = null
@@ -435,7 +436,7 @@
       loadedProfileId = profileId
       loadedProviderType = providerType
 
-      if (invalid || profileModelsKey !== modelListKey(inputs)) {
+      if (invalid || profileModelsKey !== listKey) {
         profileModels = []
         profileModelsKey = null
         profileSamplers = []
