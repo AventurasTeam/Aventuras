@@ -21,6 +21,8 @@
   import { Separator } from '#lib/components/ui/separator/index.ts'
   import { Autocomplete } from '#lib/components/ui/autocomplete/index.ts'
   import { cn } from '#lib/utils/cn.ts'
+  import { errMessage } from '#lib/utils/error.ts'
+  import { DebugJsonCache, safeStringify } from './debugJson'
 
   interface Props {
     logs: DebugLogEntry[]
@@ -30,6 +32,7 @@
   }
 
   let { logs, onClear, renderNewlines, onToggleRenderNewlines }: Props = $props()
+  const jsonCache = new DebugJsonCache()
 
   let copiedId = $state<string | null>(null)
   let exporting = $state(false)
@@ -67,32 +70,6 @@
     return `${(duration / 1000).toFixed(2)}s`
   }
 
-  // eslint-disable-next-line svelte/prefer-svelte-reactivity -- SvelteMap cannot be mutated inside template expressions (state_unsafe_mutation)
-  const jsonCache = new Map<string, string>()
-
-  const MAX_DISPLAY_CHARS = 200_000
-
-  /** JSON.stringify that survives circular references instead of throwing. */
-  function safeStringify(value: unknown, indent = 2): string {
-    try {
-      return JSON.stringify(value, null, indent) ?? ''
-    } catch {
-      // eslint-disable-next-line svelte/prefer-svelte-reactivity -- plain Set: not reactive state
-      const seen = new Set()
-      return JSON.stringify(
-        value,
-        (_key, v) => {
-          if (typeof v === 'object' && v !== null) {
-            if (seen.has(v)) return '[Circular]'
-            seen.add(v)
-          }
-          return v
-        },
-        indent,
-      )
-    }
-  }
-
   /**
    * Write every log entry to a JSON file. Exports the full set, not the current filter:
    * the point is to hand the whole session to someone else.
@@ -116,7 +93,7 @@
       setTimeout(() => (exported = false), 2000)
     } catch (err) {
       console.error('[DebugLogView] Failed to export logs:', err)
-      exportError = err instanceof Error ? err.message : String(err)
+      exportError = errMessage(err)
       setTimeout(() => (exportError = null), 4000)
     } finally {
       exporting = false
@@ -124,51 +101,7 @@
   }
 
   function formatJson(entry: DebugLogEntry): string {
-    const cacheKey = `${entry.id}-${renderNewlines}`
-    const cached = jsonCache.get(cacheKey)
-    if (cached) return cached
-
-    let raw: string | undefined
-    try {
-      raw = JSON.stringify(entry.data, null, 2)
-    } catch {
-      // Likely circular references — retry with a safe replacer
-      try {
-        // eslint-disable-next-line svelte/prefer-svelte-reactivity -- SvelteSet cannot be mutated inside template expressions (state_unsafe_mutation)
-        const seen = new Set()
-        raw = JSON.stringify(
-          entry.data,
-          (_key, value) => {
-            if (typeof value === 'object' && value !== null) {
-              if (seen.has(value)) return '[Circular]'
-              seen.add(value)
-            }
-            return value
-          },
-          2,
-        )
-      } catch (e) {
-        console.error('[DebugLogView] formatJson failed for entry', entry.id, e)
-        // Not cached — lets the next render retry in case the data changes
-        return `[Serialization error: ${e instanceof Error ? e.message : String(e)}]`
-      }
-    }
-
-    let json = raw ?? '(no data)'
-    if (renderNewlines) {
-      json = json.replace(/\\n/g, '\n')
-    }
-    if (json.length > MAX_DISPLAY_CHARS) {
-      json =
-        json.slice(0, MAX_DISPLAY_CHARS) +
-        `\n\n... [truncated — ${json.length.toLocaleString()} total chars] ...`
-    }
-    if (jsonCache.size > 200) {
-      const firstKey = jsonCache.keys().next().value
-      if (firstKey) jsonCache.delete(firstKey)
-    }
-    jsonCache.set(cacheKey, json)
-    return json
+    return jsonCache.get(entry, renderNewlines)
   }
 
   async function copyToClipboard(entry: DebugLogEntry) {
