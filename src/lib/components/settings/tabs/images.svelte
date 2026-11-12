@@ -261,6 +261,7 @@
   const connection = $derived(
     imageConnectionFor(profileProviderType, profileApiKey, profileBaseUrl || undefined),
   )
+  const listKey = $derived(modelListKey(connection))
   const baseUrlInvalid = $derived(
     baseUrlMode(profileProviderType) !== 'none' &&
       !!profileBaseUrl.trim() &&
@@ -414,28 +415,30 @@
   }
 
   // Reactive deps are captured before untrack() so the loaders' own reads (e.g.
-  // settings.apiSettings.llmTimeoutMs) do not become dependencies of this effect.
+  // settings.apiSettings.llmTimeoutMs) do not become dependencies of this effect. The list key
+  // stands in for the connection so an edit that leaves the effective URL alone does not reload.
   let loadedProfileId: string | null = null
   let loadedProviderType: ImageProviderType | null = null
 
   $effect(() => {
-    const profileId = editingProfileId
-    const inputs = connection
-    const { providerType } = inputs
-    const invalid = baseUrlInvalid
+    void editingProfileId
+    void listKey
+    void baseUrlInvalid
 
     untrack(() => {
-      if (!profileId) {
+      const { providerType } = connection
+      if (!editingProfileId) {
         stopProfileModels()
         loadedProfileId = null
         loadedProviderType = null
         return
       }
-      const targetChanged = profileId !== loadedProfileId || providerType !== loadedProviderType
-      loadedProfileId = profileId
+      const targetChanged =
+        editingProfileId !== loadedProfileId || providerType !== loadedProviderType
+      loadedProfileId = editingProfileId
       loadedProviderType = providerType
 
-      if (invalid || profileModelsKey !== modelListKey(inputs)) {
+      if (baseUrlInvalid || profileModelsKey !== listKey) {
         profileModels = []
         profileModelsKey = null
         profileSamplers = []
@@ -446,7 +449,7 @@
         availableClipTypes = []
         profileLoadFailures = []
       }
-      if (invalid) {
+      if (baseUrlInvalid) {
         stopProfileModels()
         return
       }
@@ -540,7 +543,7 @@
   }
 
   // Whether the loaded model list is for the form's current provider, key and URL.
-  const modelsSettled = $derived(profileModelsKey === modelListKey(connection))
+  const modelsSettled = $derived(profileModelsKey === listKey)
 
   // Undefined when every field is blank or the provider takes no override; the form keeps what was typed.
   const capabilityOverride = $derived.by((): ImageCapabilityOverride | undefined => {
