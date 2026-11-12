@@ -1,12 +1,6 @@
 import { emit, listen, type UnlistenFn } from '@tauri-apps/api/event'
 import { WebviewWindow } from '@tauri-apps/api/webviewWindow'
 
-export function countRequests(debugLogs: Array<DebugLogEntry>) {
-  return debugLogs.reduce((req, e) => {
-    return req + (e.type === 'request' ? 1 : 0)
-  }, 0)
-}
-
 // Entries are replaced, never mutated: the log viewer's JSON cache is keyed on identity.
 export type DebugLogEntry = {
   readonly id: string
@@ -74,7 +68,12 @@ class DebugStore {
   get requestCount(): number {
     // touch logsVersion to make this reactive
     void this.logsVersion
-    return countRequests(this.debugLogs)
+    return this.debugLogs.filter((e) => e.type === 'request').length
+  }
+
+  /** Not reactive; callers already track `logsVersion`. */
+  get logCount(): number {
+    return this.debugLogs.length
   }
 
   // Debug log methods
@@ -191,6 +190,53 @@ class DebugStore {
   clearDebugLogs() {
     this.resetLogs()
     this.emitToDebugWindow('debug-logs-cleared', {})
+  }
+
+  /**
+   * Pop-out window side: mirror what the main window sends, then ask it for the current log.
+   * Returns the function that removes the listeners; never rejects.
+   */
+  async connectAsDebugWindow(): Promise<() => void> {
+    const settled = await Promise.allSettled([
+      listen<{ logs: DebugLogEntry[]; renderNewlines: boolean }>(
+        'initial-debug-logs',
+        ({ payload }) => {
+          console.log('[DebugWin] Received initial-debug-logs', payload.logs.length)
+          this.resetLogs(payload.logs)
+          this.debugRenderNewlines = payload.renderNewlines
+        },
+      ),
+      // The main window re-emits an entry each time it merges into it.
+      listen<DebugLogEntry>('debug-log-added', ({ payload }) => {
+        console.log('[DebugWin] Received debug-log-added', payload.id)
+        this.upsertEntry(payload)
+      }),
+      listen('debug-logs-cleared', () => {
+        console.log('[DebugWin] Received debug-logs-cleared')
+        this.resetLogs()
+      }),
+      listen<boolean>('debug-render-newlines-changed', ({ payload }) => {
+        console.log('[DebugWin] Received debug-render-newlines-changed', payload)
+        this.debugRenderNewlines = payload
+      }),
+    ])
+
+    const unlisteners = settled.flatMap((r) => (r.status === 'fulfilled' ? [r.value] : []))
+    const unlistenAll = () => unlisteners.forEach((unlisten) => unlisten())
+
+    try {
+      const failed = settled.find((r) => r.status === 'rejected')
+      if (failed) throw failed.reason
+      // Raw `emit`: `emitToDebugWindow` is gated on `debugWindowReady`, which only the main
+      // window sets.
+      console.log('[DebugWin] Emitting request-initial-debug-logs')
+      await emit('request-initial-debug-logs')
+    } catch (err) {
+      console.error('[DebugWin] Failed to connect to the main window:', err)
+      unlistenAll()
+      return () => {}
+    }
+    return unlistenAll
   }
 
   /**

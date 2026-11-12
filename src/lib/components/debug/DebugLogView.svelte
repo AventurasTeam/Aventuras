@@ -1,5 +1,6 @@
 <script lang="ts">
-  import { type DebugLogEntry } from '#lib/stores/debug.svelte.ts'
+  import { onDestroy, untrack } from 'svelte'
+  import { debug, type DebugLogEntry } from '#lib/stores/debug.svelte.ts'
   import {
     ArrowUpCircle,
     ArrowDownCircle,
@@ -25,13 +26,17 @@
   import { DebugJsonCache, safeStringify } from './debugJson'
 
   interface Props {
-    logs: DebugLogEntry[]
     onClear?: () => void
-    renderNewlines: boolean
     onToggleRenderNewlines?: () => void
   }
 
-  let { logs, onClear, renderNewlines, onToggleRenderNewlines }: Props = $props()
+  let { onClear, onToggleRenderNewlines }: Props = $props()
+
+  /** Window between snapshots of the store's log. */
+  const THROTTLE_MS = 1200
+
+  // Raw: entries are replaced, never mutated, and their bodies are large.
+  let logs = $state.raw<DebugLogEntry[]>([])
   const jsonCache = new DebugJsonCache()
 
   let copiedId = $state<string | null>(null)
@@ -46,12 +51,43 @@
   let currentPage = $state(1)
   let pageSize = $state(20)
 
+  let lastSnapshotAt = 0
+  let pendingSnapshot: ReturnType<typeof setTimeout> | null = null
+
   $effect(() => {
     // Reset to page 1 when filters change, logs are cleared, or page size changes
     void selectedCategories
     void logs
     void pageSize
     currentPage = 1
+  })
+
+  $effect(() => {
+    void debug.logsVersion
+
+    // Only `logsVersion` may trigger a snapshot; scrolling and paging must not.
+    untrack(() => {
+      const elapsed = Date.now() - lastSnapshotAt
+
+      // An empty list on either side is applied at once: the pop-out mounts before its
+      // first batch arrives, and a clear should not linger.
+      if (elapsed >= THROTTLE_MS || logs.length === 0 || debug.logCount === 0) {
+        if (pendingSnapshot) clearTimeout(pendingSnapshot)
+        pendingSnapshot = null
+        logs = debug.getSnapshot()
+        lastSnapshotAt = Date.now()
+      } else if (!pendingSnapshot) {
+        pendingSnapshot = setTimeout(() => {
+          pendingSnapshot = null
+          logs = debug.getSnapshot()
+          lastSnapshotAt = Date.now()
+        }, THROTTLE_MS - elapsed)
+      }
+    })
+  })
+
+  onDestroy(() => {
+    if (pendingSnapshot) clearTimeout(pendingSnapshot)
   })
 
   function formatTimestamp(timestamp: number): string {
@@ -75,13 +111,14 @@
    * the point is to hand the whole session to someone else.
    */
   async function exportLogs() {
-    if (logs.length === 0 || exporting) return
+    const all = debug.getSnapshot()
+    if (all.length === 0 || exporting) return
     exporting = true
     try {
       const content = safeStringify({
         exportedAt: new Date().toISOString(),
-        count: logs.length,
-        logs,
+        count: all.length,
+        logs: all,
       })
       const stamp = new Date().toISOString().slice(0, 19).replace(/[:T]/g, '-')
       const target = await resolveSaveTarget(`aventura-debug-${stamp}.json`, [
@@ -101,7 +138,7 @@
   }
 
   function formatJson(entry: DebugLogEntry): string {
-    return jsonCache.get(entry, renderNewlines)
+    return jsonCache.get(entry, debug.debugRenderNewlines)
   }
 
   async function copyToClipboard(entry: DebugLogEntry) {
@@ -153,6 +190,8 @@
     return groups.toReversed()
   })
 
+  let requestCount = $derived(groupedLogs.filter((g) => g.request).length)
+
   let totalPages = $derived(Math.ceil(groupedLogs.length / pageSize) || 1)
 
   let pagedLogs = $derived.by(() => {
@@ -194,6 +233,9 @@
   <!-- Toolbar -->
   <div class="border-border bg-card/50 flex items-center justify-between border-b px-6 py-3">
     <div class="flex items-center gap-2">
+      <span class="bg-secondary text-secondary-foreground rounded px-2 py-0.5 font-mono text-xs">
+        {requestCount}
+      </span>
       <Filter class="text-muted-foreground size-3.5" />
       <Autocomplete
         items={categories}
@@ -259,11 +301,13 @@
         <Button
           variant="ghost"
           size="icon"
-          class={renderNewlines
+          class={debug.debugRenderNewlines
             ? 'text-blue-400 hover:text-blue-500'
             : 'text-muted-foreground hover:text-foreground'}
           onclick={onToggleRenderNewlines}
-          title={renderNewlines ? 'Show escaped newlines (\\n)' : 'Render newlines as line breaks'}
+          title={debug.debugRenderNewlines
+            ? 'Show escaped newlines (\\n)'
+            : 'Render newlines as line breaks'}
         >
           <WrapText class="size-4" />
         </Button>
@@ -275,7 +319,7 @@
         class="text-muted-foreground hover:text-foreground size-8"
         onclick={exportLogs}
         disabled={logs.length === 0 || exporting}
-        title={exportError ?? `Export all ${logs.length} log entries as JSON`}
+        title={exportError ?? 'Export all log entries as JSON'}
       >
         {#if exported}
           <Check class="size-4 text-green-400" />
