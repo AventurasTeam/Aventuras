@@ -53,6 +53,7 @@ import { MAX_SIDEBAR_WIDTH, MIN_SIDEBAR_WIDTH } from '#lib/constants/layout.ts'
 import { SvelteSet } from 'svelte/reactivity'
 import { dedupeTextModels } from '#lib/utils/dedupeTextModels.ts'
 import { applyIncognitoKeyboard } from '#lib/utils/platform.ts'
+import { normalizeBaseUrl } from '#lib/utils/url.ts'
 import type { ActivityReporting } from '#lib/services/activity/index.ts'
 import type {
   ImageGenerationServiceSettings,
@@ -2050,7 +2051,9 @@ class SettingsStore {
       updates.apiKey !== undefined && updates.apiKey !== oldProfile.apiKey && !!oldProfile.apiKey
     const providerChanged =
       updates.providerType !== undefined && updates.providerType !== oldProfile.providerType
-    const baseUrlChanged = updates.baseUrl !== undefined && updates.baseUrl !== oldProfile.baseUrl
+    const baseUrlChanged =
+      updates.baseUrl !== undefined &&
+      normalizeBaseUrl(updates.baseUrl) !== normalizeBaseUrl(oldProfile.baseUrl)
     if (pingDisabled || apiKeyChanged || providerChanged || baseUrlChanged) {
       await clearProfileHealth(oldProfile).catch((err) =>
         console.warn('[Settings] Failed to clear health cache:', err),
