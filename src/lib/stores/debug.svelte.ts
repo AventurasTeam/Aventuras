@@ -7,15 +7,15 @@ export function countRequests(debugLogs: Array<DebugLogEntry>) {
   }, 0)
 }
 
-// Debug log entry for request/response logging
+// Entries are replaced, never mutated: the log viewer's JSON cache is keyed on identity.
 export type DebugLogEntry = {
-  id: string
-  timestamp: number
-  type: 'request' | 'response'
-  serviceName: string
-  data: Record<string, unknown>
-  duration?: number // For responses, time taken in ms
-  error?: string // For error responses
+  readonly id: string
+  readonly timestamp: number
+  readonly type: 'request' | 'response'
+  readonly serviceName: string
+  readonly data: Record<string, unknown>
+  readonly duration?: number // For responses, time taken in ms
+  readonly error?: string // For error responses
 }
 
 class DebugStore {
@@ -88,6 +88,22 @@ class DebugStore {
     this.logsVersion++
   }
 
+  /** Replaces the entry with the same id, else appends. */
+  private upsertEntry(entry: DebugLogEntry) {
+    const index = this.debugLogs.findIndex((l) => l.id === entry.id)
+    if (index === -1) {
+      this.appendLogEntry(entry)
+      return
+    }
+    this.debugLogs[index] = entry
+    this.logsVersion++
+  }
+
+  private resetLogs(logs: DebugLogEntry[] = []) {
+    this.debugLogs = logs
+    this.logsVersion++
+  }
+
   /** Max IPC payload size for external window events (~500KB). */
   private static readonly DEBUG_IPC_LIMIT = 500_000
 
@@ -146,33 +162,26 @@ class DebugStore {
     if (!this.isActive) return
 
     const entryId = `${requestId}-response`
-    const existingEntry = this.debugLogs.find((l) => l.id === entryId)
+    const existing = this.debugLogs.find((l) => l.id === entryId)
 
-    if (existingEntry) {
-      // Merge data instead of overwriting
-      existingEntry.data = { ...existingEntry.data, ...data }
-      existingEntry.duration = Date.now() - startTime
-      if (error) existingEntry.error = error
+    const entry: DebugLogEntry = existing
+      ? {
+          ...existing,
+          data: { ...existing.data, ...data },
+          duration: Date.now() - startTime,
+          error: error || existing.error,
+        }
+      : {
+          id: entryId,
+          timestamp: Date.now(),
+          type: 'response',
+          serviceName,
+          data,
+          duration: Date.now() - startTime,
+          error,
+        }
 
-      // Signal that logs have changed
-      this.logsVersion++
-
-      this.emitToDebugWindow('debug-log-added', this.safeIpcEntry(existingEntry))
-      return
-    }
-
-    const entry: DebugLogEntry = {
-      id: entryId,
-      timestamp: Date.now(),
-      type: 'response',
-      serviceName,
-      data,
-      duration: Date.now() - startTime,
-      error,
-    }
-
-    this.appendLogEntry(entry)
-
+    this.upsertEntry(entry)
     this.emitToDebugWindow('debug-log-added', this.safeIpcEntry(entry))
   }
 
@@ -180,8 +189,7 @@ class DebugStore {
    * Clear all debug logs (session clear).
    */
   clearDebugLogs() {
-    this.debugLogs = []
-    this.logsVersion++
+    this.resetLogs()
     this.emitToDebugWindow('debug-logs-cleared', {})
   }
 
