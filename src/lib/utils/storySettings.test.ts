@@ -16,11 +16,11 @@ describe('storyPov and storyTense', () => {
     expect(storyPov({ mode: 'adventure', settings: null })).toBe('first')
     expect(storyPov({ mode: 'creative-writing', settings: null })).toBe('third')
     expect(storyTense({ mode: 'adventure', settings: null })).toBe('present')
+    expect(storyTense({ mode: 'creative-writing', settings: null })).toBe('present')
   })
 
-  it('keeps Creative Writing in past tense whatever is stored', () => {
-    const story = { mode: 'creative-writing', settings: { tense: 'present' } } as const
-    expect(storyTense(story)).toBe('past')
+  it.each(['past', 'present'] as const)('reads a stored %s tense in Creative Writing', (tense) => {
+    expect(storyTense({ mode: 'creative-writing', settings: { tense } })).toBe(tense)
   })
 })
 

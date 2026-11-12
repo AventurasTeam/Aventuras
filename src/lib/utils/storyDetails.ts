@@ -7,7 +7,7 @@ import { storyPov, storyTense } from './storySettings'
  *
  * Blank genre and description clear their column; a blank title is refused, since a story with
  * no name cannot be found again. A voice is compared as the story reads it, so saving leaves an
- * unset or overruled stored value alone.
+ * unset stored value alone.
  */
 export function storyDetailsUpdate(stored: Story, details: StoryDetails): Partial<Story> | null {
   const title = details.title.trim()
