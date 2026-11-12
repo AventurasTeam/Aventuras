@@ -44,13 +44,15 @@ describe('storyDetailsUpdate', () => {
     expect(storyDetailsUpdate(stored, details({ pov: 'first' }))).toBeNull()
   })
 
-  it('leaves the tense Creative Writing overrules as it is stored', () => {
+  it('lets a Creative Writing story change its tense', () => {
     const stored = story({
       mode: 'creative-writing',
       settings: { pov: 'second', tense: 'present' },
     })
 
-    expect(storyDetailsUpdate(stored, details({ tense: 'past' }))).toBeNull()
+    expect(storyDetailsUpdate(stored, details({ tense: 'past' }))).toEqual({
+      settings: { pov: 'second', tense: 'past' },
+    })
   })
 
   it('writes nothing when nothing changed', () => {

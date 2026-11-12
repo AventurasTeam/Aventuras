@@ -9,9 +9,8 @@ export function storyPov(story: Voiced | null | undefined): POV {
   return story?.settings?.pov ?? (story?.mode === 'creative-writing' ? 'third' : 'first')
 }
 
-/** The tense a story is written in; Creative Writing is always past, whatever is stored. */
+/** The tense a story is written in. */
 export function storyTense(story: Voiced | null | undefined): Tense {
-  if (story?.mode === 'creative-writing') return 'past'
   return story?.settings?.tense ?? 'present'
 }
 

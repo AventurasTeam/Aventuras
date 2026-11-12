@@ -53,8 +53,6 @@
     disabledReason?: string
     /** Overrides `disabledReason` for perspective and tense. */
     voiceDisabledReason?: string
-    /** Overrides both for tense alone. */
-    tenseDisabledReason?: string
   }
 
   let {
@@ -84,7 +82,6 @@
     disabledFields,
     disabledReason,
     voiceDisabledReason,
-    tenseDisabledReason,
   }: Props = $props()
 
   const IMAGE_MODE_TEXT: Record<ImageGenerationMode, { label: string; description: string }> = {
@@ -169,7 +166,7 @@
     disabled={disabledFields}
     reasons={{
       pov: voiceDisabledReason ?? disabledReason,
-      tense: tenseDisabledReason ?? voiceDisabledReason ?? disabledReason,
+      tense: voiceDisabledReason ?? disabledReason,
     }}
   />
 

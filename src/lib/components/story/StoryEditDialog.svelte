@@ -10,7 +10,6 @@
   import ActionModal from '#lib/components/shared/ActionModal.svelte'
   import ExplanationFold from '#lib/components/shared/ExplanationFold.svelte'
   import NarrativeVoiceFields from '#lib/components/shared/NarrativeVoiceFields.svelte'
-  import { TENSE_FIXED_REASON } from '#lib/components/shared/narrativeVoice.ts'
   import { AlertTriangle, ChevronDown, Check } from '@lucide/svelte'
   import { Switch } from '#lib/components/ui/switch/index.ts'
   import { Textarea } from '#lib/components/ui/textarea/index.ts'
@@ -50,7 +49,6 @@
   let pov = $state(initialPOV)
   let tense = $state(initialTense)
   let voiceUnlocked = $state(false)
-  const tenseFixed = initial.mode === 'creative-writing'
   let saving = $state(false)
   let isOpen = $state(true)
 
@@ -229,8 +227,7 @@
       selectedTense={tense}
       onPOVChange={(v) => (pov = v)}
       onTenseChange={(v) => (tense = v)}
-      disabled={{ pov: !voiceUnlocked, tense: !voiceUnlocked || tenseFixed }}
-      reasons={{ tense: tenseFixed ? TENSE_FIXED_REASON : undefined }}
+      disabled={{ pov: !voiceUnlocked, tense: !voiceUnlocked }}
     />
     {#if voiceChanged}
       <p

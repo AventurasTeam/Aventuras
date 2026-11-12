@@ -83,6 +83,26 @@ describe('ContextBuilder', () => {
     expect(ctx.currentLocation).toBe('Oakvale')
   })
 
+  it('resolves a Creative Writing story with no stored pov through the story helpers', async () => {
+    vi.mocked(database.getStory).mockResolvedValue({
+      id: 'story-2',
+      mode: 'creative-writing',
+      settings: { tense: 'present' },
+    } as any)
+    vi.mocked(database.getStoryPackId).mockResolvedValue('default-pack')
+    vi.mocked(database.getCharacters).mockResolvedValue([])
+    vi.mocked(database.getLocations).mockResolvedValue([])
+    vi.mocked(database.getItems).mockResolvedValue([])
+    vi.mocked(database.getStoryBeats).mockResolvedValue([])
+    vi.mocked(database.getPackVariables).mockResolvedValue([])
+    vi.mocked(database.getRuntimeVariables).mockResolvedValue([])
+
+    const ctx = (await ContextBuilder.forStory('story-2')).getContext()
+
+    expect(ctx.pov).toBe('third')
+    expect(ctx.tense).toBe('present')
+  })
+
   it.each([
     'opening-generation-adventure',
     'opening-generation-creative',
