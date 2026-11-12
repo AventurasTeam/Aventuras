@@ -188,7 +188,7 @@
     const templateIds = new Set(PROMPT_TEMPLATES.map((t) => t.id))
     const logServiceNames = new Set(logs.map((l) => l.serviceName))
     const all = new Set([...templateIds, ...logServiceNames])
-    return Array.from(all).sort()
+    return [...all].toSorted()
   })
 
   let groupedLogs = $derived.by(() => {
@@ -217,7 +217,7 @@
       }
     }
 
-    return groups.reverse()
+    return groups.toReversed()
   })
 
   let totalPages = $derived(Math.ceil(groupedLogs.length / pageSize) || 1)
@@ -423,9 +423,10 @@
                       <ArrowDownCircle class="size-4" />
                     </span>
                     <span
-                      class="text-sm font-medium {group.response.error
-                        ? 'text-red-400'
-                        : 'text-green-400'}"
+                      class={cn(
+                        'text-sm font-medium',
+                        group.response.error ? 'text-red-400' : 'text-green-400',
+                      )}
                     >
                       {group.response.error ? 'Error' : 'Response'}
                     </span>
@@ -457,9 +458,10 @@
                   </div>
                 </div>
                 <pre
-                  class="bg-primary-foreground/5 max-h-[500px] overflow-x-auto overflow-y-auto p-3 font-mono text-xs whitespace-pre-wrap"
-                  class:text-muted-foreground={!group.response.error}
-                  class:text-red-300={group.response.error}>{formatJson(group.response)}</pre>
+                  class={cn(
+                    'bg-primary-foreground/5 max-h-[500px] overflow-x-auto overflow-y-auto p-3 font-mono text-xs whitespace-pre-wrap',
+                    group.response.error ? 'text-red-300' : 'text-muted-foreground',
+                  )}>{formatJson(group.response)}</pre>
               </div>
             {/if}
           </div>
