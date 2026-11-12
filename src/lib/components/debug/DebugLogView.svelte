@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { onDestroy, untrack } from 'svelte'
+  import { onDestroy, tick, untrack } from 'svelte'
   import { debug, type DebugLogEntry } from '#lib/stores/debug.svelte.ts'
   import {
     ArrowUpCircle,
@@ -32,6 +32,10 @@
 
   let { onClear, onToggleRenderNewlines }: Props = $props()
 
+  // `id` is the request's id, whether or not the request itself is still in the list.
+  type LogGroup = { id: string; request?: DebugLogEntry; response?: DebugLogEntry }
+  type ScrollAnchor = { id: string; offset: number }
+
   /** Window between snapshots of the store's log. */
   const THROTTLE_MS = 1200
 
@@ -48,19 +52,66 @@
   let userScrolledAway = $state(false)
 
   // Pagination
-  let currentPage = $state(1)
+  let requestedPage = $state(1)
   let pageSize = $state(20)
 
   let lastSnapshotAt = 0
   let pendingSnapshot: ReturnType<typeof setTimeout> | null = null
 
-  $effect(() => {
-    // Reset to page 1 when filters change, logs are cleared, or page size changes
-    void selectedCategories
-    void logs
-    void pageSize
-    currentPage = 1
-  })
+  function setCategories(next: string[]) {
+    selectedCategories = next
+    requestedPage = 1
+  }
+
+  function setPageSize(next: number) {
+    pageSize = next
+    requestedPage = 1
+  }
+
+  function findAnchor(container: HTMLElement): ScrollAnchor | null {
+    const top = container.getBoundingClientRect().top
+    for (const row of container.querySelectorAll<HTMLElement>('[data-log-id]')) {
+      const rect = row.getBoundingClientRect()
+      const id = row.dataset.logId
+      if (id && rect.bottom > top) return { id, offset: rect.top - top }
+    }
+    return null
+  }
+
+  function restoreAnchor(container: HTMLElement, anchor: ScrollAnchor | null) {
+    if (!anchor) return
+    const row = container.querySelector<HTMLElement>(`[data-log-id="${CSS.escape(anchor.id)}"]`)
+    if (!row) return
+    const offset = row.getBoundingClientRect().top - container.getBoundingClientRect().top
+    container.scrollTop += offset - anchor.offset
+  }
+
+  async function applySnapshot(next: DebugLogEntry[]) {
+    lastSnapshotAt = Date.now()
+    const container = scrollContainer
+    const following = currentPage === 1 && !userScrolledAway
+    // Ids, not lengths or identities: the log is capped, and a merge replaces the newest entry.
+    const hasNewer = next.at(-1)?.id !== logs.at(-1)?.id
+    // Stable row keys let engines with scroll anchoring keep the reader's place.
+    const anchor =
+      container && !following && !CSS.supports('overflow-anchor', 'auto')
+        ? findAnchor(container)
+        : null
+
+    logs = next
+    // A list that shrank may have clamped the view; keep it from drifting back on regrowth.
+    requestedPage = currentPage
+
+    if (!container) return
+    if (following) {
+      if (!hasNewer) return
+      await tick()
+      container.scrollTop = 0
+    } else if (anchor) {
+      await tick()
+      restoreAnchor(container, anchor)
+    }
+  }
 
   $effect(() => {
     void debug.logsVersion
@@ -74,13 +125,11 @@
       if (elapsed >= THROTTLE_MS || logs.length === 0 || debug.logCount === 0) {
         if (pendingSnapshot) clearTimeout(pendingSnapshot)
         pendingSnapshot = null
-        logs = debug.getSnapshot()
-        lastSnapshotAt = Date.now()
+        void applySnapshot(debug.getSnapshot())
       } else if (!pendingSnapshot) {
         pendingSnapshot = setTimeout(() => {
           pendingSnapshot = null
-          logs = debug.getSnapshot()
-          lastSnapshotAt = Date.now()
+          void applySnapshot(debug.getSnapshot())
         }, THROTTLE_MS - elapsed)
       }
     })
@@ -168,13 +217,13 @@
       currentLogs = currentLogs.filter((l) => selectedCategories.includes(l.serviceName))
     }
 
-    const groups: { request?: DebugLogEntry; response?: DebugLogEntry }[] = []
+    const groups: LogGroup[] = []
     // eslint-disable-next-line svelte/prefer-svelte-reactivity -- SvelteMap cannot be mutated inside $derived (state_unsafe_mutation)
     const requestMap = new Map<string, number>()
 
     for (const log of currentLogs) {
       if (log.type === 'request') {
-        groups.push({ request: log })
+        groups.push({ id: log.id, request: log })
         requestMap.set(log.id, groups.length - 1)
       } else {
         const requestId = log.id.replace('-response', '')
@@ -182,7 +231,7 @@
         if (groupIndex !== undefined) {
           groups[groupIndex].response = log
         } else {
-          groups.push({ response: log })
+          groups.push({ id: requestId, response: log })
         }
       }
     }
@@ -193,14 +242,13 @@
   let requestCount = $derived(groupedLogs.filter((g) => g.request).length)
 
   let totalPages = $derived(Math.ceil(groupedLogs.length / pageSize) || 1)
+  // Clamped, so a shrinking list (a clear, a narrower filter) never strands the view past the end.
+  let currentPage = $derived(Math.min(requestedPage, totalPages))
 
   let pagedLogs = $derived.by(() => {
     const start = (currentPage - 1) * pageSize
     return groupedLogs.slice(start, start + pageSize)
   })
-
-  // Auto-scroll to top when new logs arrive (newest logs appear at top)
-  let prevLogCount = 0
 
   function scrollToTop() {
     if (!scrollContainer) return
@@ -216,17 +264,6 @@
     if (!scrollContainer) return
     userScrolledAway = !isNearTop()
   }
-
-  $effect(() => {
-    const currentCount = logs.length
-    if (currentCount > prevLogCount && !userScrolledAway) {
-      // New logs arrived and user hasn't scrolled away — scroll to top
-      requestAnimationFrame(() => {
-        if (scrollContainer) scrollContainer.scrollTop = 0
-      })
-    }
-    prevLogCount = currentCount
-  })
 </script>
 
 <div class="bg-background flex h-full flex-col overflow-hidden">
@@ -240,9 +277,7 @@
       <Autocomplete
         items={categories}
         selected={selectedCategories}
-        onSelect={(val) => {
-          selectedCategories = val as string[]
-        }}
+        onSelect={(val) => setCategories(val as string[])}
         multiple
         placeholder="Services"
         class="bg-muted/20 h-8 w-48 shrink-0 border-dashed"
@@ -276,9 +311,7 @@
             <Badge
               variant="secondary"
               class="hover:bg-secondary/80 flex cursor-pointer items-center gap-1 rounded-sm px-1.5 py-0.5 text-[10px] font-normal transition-colors"
-              onclick={() => {
-                selectedCategories = selectedCategories.filter((c) => c !== cat)
-              }}
+              onclick={() => setCategories(selectedCategories.filter((c) => c !== cat))}
             >
               {cat}
               <Trash2 class="size-3 opacity-50 hover:opacity-100" />
@@ -288,7 +321,7 @@
             variant="ghost"
             size="sm"
             class="text-muted-foreground h-6 px-1.5 text-[10px] font-medium transition-colors hover:text-red-400"
-            onclick={() => (selectedCategories = [])}
+            onclick={() => setCategories([])}
           >
             Clear all
           </Button>
@@ -354,8 +387,11 @@
       </div>
     {:else}
       <div class="space-y-4 pb-4">
-        {#each pagedLogs as group, i (`${group.request?.id ?? group.response?.id ?? i}-${i}`)}
-          <div class="border-border bg-card overflow-hidden rounded-lg border">
+        {#each pagedLogs as group (group.id)}
+          <div
+            class="border-border bg-card overflow-hidden rounded-lg border"
+            data-log-id={group.id}
+          >
             <!-- Request -->
             {#if group.request}
               <div class="bg-muted/30">
@@ -485,7 +521,7 @@
           type="single"
           value={String(pageSize)}
           onValueChange={(v) => {
-            if (v) pageSize = Number(v)
+            if (v) setPageSize(Number(v))
           }}
         >
           <Select.Trigger class="bg-muted/20 border-border h-7 w-16 text-xs">
@@ -508,7 +544,7 @@
         class="h-7 px-2 text-xs"
         disabled={currentPage === 1}
         onclick={() => {
-          currentPage--
+          requestedPage = currentPage - 1
           scrollContainer?.scrollTo({ top: 0, behavior: 'smooth' })
         }}
       >
@@ -523,7 +559,7 @@
         class="h-7 px-2 text-xs"
         disabled={currentPage === totalPages}
         onclick={() => {
-          currentPage++
+          requestedPage = currentPage + 1
           scrollContainer?.scrollTo({ top: 0, behavior: 'smooth' })
         }}
       >
