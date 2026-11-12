@@ -94,7 +94,7 @@
 
     <div class="flex items-center gap-2">
       <Button variant="outline" size="sm" class="gap-2" onclick={handlePopIn}>
-        <Minimize2 class="h-4 w-4" />
+        <Minimize2 class="size-4" />
         Pop In
       </Button>
     </div>

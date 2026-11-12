@@ -261,7 +261,7 @@
   <!-- Toolbar -->
   <div class="border-border bg-card/50 flex items-center justify-between border-b px-6 py-3">
     <div class="flex items-center gap-2">
-      <Filter class="text-muted-foreground h-3.5 w-3.5" />
+      <Filter class="text-muted-foreground size-3.5" />
       <Autocomplete
         items={categories}
         selected={selectedCategories}
@@ -276,7 +276,7 @@
       >
         {#snippet triggerSnippet()}
           <div class="flex items-center gap-2">
-            <CirclePlus class="h-4 w-4 opacity-50" />
+            <CirclePlus class="size-4 opacity-50" />
             <span class="text-xs">Services</span>
           </div>
         {/snippet}
@@ -284,11 +284,11 @@
           {@const isSelected = selectedCategories.includes(cat)}
           <div
             class={cn(
-              'border-primary mr-2 flex h-4 w-4 shrink-0 items-center justify-center rounded-sm border transition-colors',
+              'border-primary mr-2 flex size-4 shrink-0 items-center justify-center rounded-sm border transition-colors',
               isSelected ? 'bg-primary text-primary-foreground' : 'opacity-50 [&_svg]:invisible',
             )}
           >
-            <Check class="h-4 w-4" />
+            <Check class="size-4" />
           </div>
           <span class="truncate text-xs">{cat}</span>
         {/snippet}
@@ -306,7 +306,7 @@
               }}
             >
               {cat}
-              <Trash2 class="h-3 w-3 opacity-50 hover:opacity-100" />
+              <Trash2 class="size-3 opacity-50 hover:opacity-100" />
             </Badge>
           {/each}
           <Button
@@ -332,22 +332,22 @@
           onclick={onToggleRenderNewlines}
           title={renderNewlines ? 'Show escaped newlines (\\n)' : 'Render newlines as line breaks'}
         >
-          <WrapText class="h-4 w-4" />
+          <WrapText class="size-4" />
         </Button>
       {/if}
 
       <Button
         variant="ghost"
         size="icon"
-        class="text-muted-foreground hover:text-foreground h-8 w-8"
+        class="text-muted-foreground hover:text-foreground size-8"
         onclick={exportLogs}
         disabled={logs.length === 0 || exporting}
         title={exportError ?? `Export all ${logs.length} log entries as JSON`}
       >
         {#if exported}
-          <Check class="h-4 w-4 text-green-400" />
+          <Check class="size-4 text-green-400" />
         {:else}
-          <Download class={cn('h-4 w-4', exportError && 'text-red-400')} />
+          <Download class={cn('size-4', exportError && 'text-red-400')} />
         {/if}
       </Button>
 
@@ -355,11 +355,11 @@
         <Button
           variant="ghost"
           size="icon"
-          class="text-muted-foreground h-8 w-8 hover:bg-red-900/10 hover:text-red-400"
+          class="text-muted-foreground size-8 hover:bg-red-900/10 hover:text-red-400"
           onclick={onClear}
           title="Clear all logs"
         >
-          <Trash2 class="h-4 w-4" />
+          <Trash2 class="size-4" />
         </Button>
       {/if}
     </div>
@@ -384,7 +384,7 @@
               <div class="bg-muted/30">
                 <div class="border-border flex items-center justify-between border-b px-4 py-2">
                   <div class="flex items-center gap-2">
-                    <ArrowUpCircle class="h-4 w-4 text-blue-400" />
+                    <ArrowUpCircle class="size-4 text-blue-400" />
                     <span class="text-sm font-medium text-blue-400">Request</span>
                     <span class="text-muted-foreground text-xs">{group.request.serviceName}</span>
                   </div>
@@ -395,14 +395,14 @@
                     <Button
                       variant="ghost"
                       size="icon"
-                      class="text-muted-foreground hover:text-foreground h-6 w-6"
+                      class="text-muted-foreground hover:text-foreground size-6"
                       onclick={() => copyToClipboard(group.request!)}
                       title="Copy JSON"
                     >
                       {#if copiedId === group.request.id}
-                        <Check class="h-3.5 w-3.5 text-green-400" />
+                        <Check class="size-3.5 text-green-400" />
                       {:else}
-                        <Copy class="h-3.5 w-3.5" />
+                        <Copy class="size-3.5" />
                       {/if}
                     </Button>
                   </div>
@@ -420,7 +420,7 @@
                 <div class="border-border flex items-center justify-between border-b px-4 py-2">
                   <div class="flex items-center gap-2">
                     <span class={group.response.error ? 'text-red-400' : 'text-green-400'}>
-                      <ArrowDownCircle class="h-4 w-4" />
+                      <ArrowDownCircle class="size-4" />
                     </span>
                     <span
                       class="text-sm font-medium {group.response.error
@@ -444,14 +444,14 @@
                     <Button
                       variant="ghost"
                       size="icon"
-                      class="text-muted-foreground hover:text-foreground h-6 w-6"
+                      class="text-muted-foreground hover:text-foreground size-6"
                       onclick={() => copyToClipboard(group.response!)}
                       title="Copy JSON"
                     >
                       {#if copiedId === group.response.id}
-                        <Check class="h-3.5 w-3.5 text-green-400" />
+                        <Check class="size-3.5 text-green-400" />
                       {:else}
-                        <Copy class="h-3.5 w-3.5" />
+                        <Copy class="size-3.5" />
                       {/if}
                     </Button>
                   </div>
@@ -477,7 +477,7 @@
           onclick={scrollToTop}
           aria-label="Scroll to latest"
         >
-          <ArrowUp class="mr-1.5 h-3.5 w-3.5" />
+          <ArrowUp class="mr-1.5 size-3.5" />
           <span class="text-xs">Latest</span>
         </Button>
       </div>

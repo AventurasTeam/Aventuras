@@ -107,11 +107,11 @@
             <Button
               variant="ghost"
               size="icon"
-              class="text-muted-foreground hover:text-foreground hidden h-8 w-8 md:inline-flex"
+              class="text-muted-foreground hover:text-foreground hidden size-8 md:inline-flex"
               onclick={handlePopOut}
               title="Pop out to separate window"
             >
-              <ExternalLink class="h-4 w-4" />
+              <ExternalLink class="size-4" />
             </Button>
           {/if}
         </div>
@@ -125,7 +125,7 @@
       {#if debug.debugWindowActive}
         <div class="flex flex-1 flex-col items-center justify-center space-y-4 p-8 text-center">
           <div class="rounded-full bg-blue-500/10 p-4 text-blue-400">
-            <ExternalLink class="h-8 w-8" />
+            <ExternalLink class="size-8" />
           </div>
           <div class="space-y-2">
             <h3 class="text-lg font-medium">Logs are in an external window</h3>
@@ -135,7 +135,7 @@
             </p>
           </div>
           <Button variant="outline" class="gap-2" onclick={handlePopIn}>
-            <RefreshCcw class="h-4 w-4" />
+            <RefreshCcw class="size-4" />
             Bring Back to Modal
           </Button>
         </div>
