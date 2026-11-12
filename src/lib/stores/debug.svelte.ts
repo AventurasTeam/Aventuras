@@ -131,7 +131,7 @@ class DebugStore {
     if (!this.isActive) return ''
     let id = debugId || `debug-${++this.debugLogIdCounter}-${Date.now()}`
     // Multi-step streamText reuses the same debugId for each fetch call — deduplicate
-    if (debugId && this.debugLogs.some((e) => e.id === id)) {
+    if (debugId && this.debugLogs.some((e) => e.id === id || e.id === `${id}-response`)) {
       id = `${debugId}-${++this.debugLogIdCounter}`
     }
     const entry: DebugLogEntry = {
