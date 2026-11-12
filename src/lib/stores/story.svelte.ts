@@ -944,37 +944,6 @@ class StoryStore {
     emitStoryLoaded(storyId, story.mode)
   }
 
-  // Create a new story
-  async createStory(
-    title: string,
-    templateId?: string,
-    genre?: string,
-    mode: StoryMode = 'adventure',
-  ): Promise<Story> {
-    const storyData = await database.createStory({
-      id: crypto.randomUUID(),
-      title,
-      description: null,
-      genre: genre ?? null,
-      templateId: templateId ?? null,
-      mode,
-      settings: null,
-      memoryConfig: DEFAULT_MEMORY_CONFIG,
-      retryState: null,
-      styleReviewState: null,
-      timeTracker: null,
-      currentBranchId: null,
-      currentBgImage: null,
-    })
-
-    this.allStories = [storyData, ...this.allStories]
-
-    // Emit event
-    eventBus.emit<StoryCreatedEvent>({ type: 'StoryCreated', storyId: storyData.id, mode })
-
-    return storyData
-  }
-
   /**
    * Import a SillyTavern chat into the current story, replacing all existing
    * main-branch entries. The current story must be loaded before calling this.
