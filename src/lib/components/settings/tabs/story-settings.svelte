@@ -243,7 +243,7 @@
   </div>
 
   <WritingStyleFields
-    selectedPOV={storySettings.pov ?? 'second'}
+    selectedPOV={story.pov}
     selectedTense={story.tense}
     tone={storySettings.tone ?? ''}
     visualProseMode={storySettings.visualProseMode ?? false}
