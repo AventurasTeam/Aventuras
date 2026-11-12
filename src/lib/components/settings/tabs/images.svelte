@@ -261,6 +261,7 @@
   const connection = $derived(
     imageConnectionFor(profileProviderType, profileApiKey, profileBaseUrl || undefined),
   )
+  const listKey = $derived(modelListKey(connection))
   const baseUrlInvalid = $derived(
     baseUrlMode(profileProviderType) !== 'none' &&
       !!profileBaseUrl.trim() &&
@@ -420,23 +421,24 @@
   let loadedProviderType: ImageProviderType | null = null
 
   $effect(() => {
-    const profileId = editingProfileId
-    const listKey = modelListKey(connection)
-    const invalid = baseUrlInvalid
+    void editingProfileId
+    void listKey
+    void baseUrlInvalid
 
     untrack(() => {
       const { providerType } = connection
-      if (!profileId) {
+      if (!editingProfileId) {
         stopProfileModels()
         loadedProfileId = null
         loadedProviderType = null
         return
       }
-      const targetChanged = profileId !== loadedProfileId || providerType !== loadedProviderType
-      loadedProfileId = profileId
+      const targetChanged =
+        editingProfileId !== loadedProfileId || providerType !== loadedProviderType
+      loadedProfileId = editingProfileId
       loadedProviderType = providerType
 
-      if (invalid || profileModelsKey !== listKey) {
+      if (baseUrlInvalid || profileModelsKey !== listKey) {
         profileModels = []
         profileModelsKey = null
         profileSamplers = []
@@ -447,7 +449,7 @@
         availableClipTypes = []
         profileLoadFailures = []
       }
-      if (invalid) {
+      if (baseUrlInvalid) {
         stopProfileModels()
         return
       }
@@ -541,7 +543,7 @@
   }
 
   // Whether the loaded model list is for the form's current provider, key and URL.
-  const modelsSettled = $derived(profileModelsKey === modelListKey(connection))
+  const modelsSettled = $derived(profileModelsKey === listKey)
 
   // Undefined when every field is blank or the provider takes no override; the form keeps what was typed.
   const capabilityOverride = $derived.by((): ImageCapabilityOverride | undefined => {
