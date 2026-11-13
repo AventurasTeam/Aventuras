@@ -381,7 +381,6 @@ describe('logStreamResponse', () => {
       'test',
       {
         body: {
-          _note: 'Aggregated from stream',
           id: 'c1',
           model: 'm',
           choices: [
@@ -403,11 +402,11 @@ describe('logStreamResponse', () => {
             },
           ],
         },
-        providerMetadata: undefined,
         status: 200,
-        stream: true,
+        stream: { format: 'chat-completions', complete: true, eventCount: 3 },
       },
       0,
+      undefined,
     )
   })
 
@@ -429,6 +428,7 @@ describe('logStreamResponse', () => {
         },
       }),
       0,
+      undefined,
     )
   })
 })

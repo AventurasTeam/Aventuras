@@ -410,10 +410,11 @@ describe('createTimeoutFetch debug log', () => {
     await read
 
     await vi.waitFor(() => expect(entries('response')).toHaveLength(1))
-    expect(entries('response')[0].data).toEqual({
+    expect(entries('response')[0].data).toMatchObject({
       status: 200,
       error: 'Request timed out after 5s (17 bytes received)',
-      received: { bytes: 17, body: 'data: {"partial":' },
+      body: ['{"partial":'],
+      stream: { format: 'unknown', complete: false },
     })
   })
 
@@ -428,7 +429,10 @@ describe('createTimeoutFetch debug log', () => {
 
     expect(await result.text()).toBe(event)
     await vi.waitFor(() => expect(entries('response')).toHaveLength(1))
-    expect(entries('response')[0].data).toMatchObject({ status: 200, stream: true })
+    expect(entries('response')[0].data).toMatchObject({
+      status: 200,
+      stream: { format: 'chat-completions', complete: false, eventCount: 1 },
+    })
   })
 
   it('logs the JSON response unpatched, scrubbed, with its status', async () => {

@@ -805,7 +805,14 @@ it got: `(headers received, no body yet)` or `(N bytes received)`. The poll tran
 same way.
 
 The AI SDK transports are the same dispatcher with Gemini safety metadata and stream aggregation
-(`sdk/providers/debugLog.ts`). Every read is of
+(`sdk/providers/debugLog.ts`, `streamLog.ts`). A stream is parsed as SSE and summarized as the one
+body it would have been without streaming, by format: Anthropic Messages, OpenAI Responses, Chat
+Completions (and its many compatible providers) and Gemini; any other format is the list of its
+payloads, and a body with no SSE events is logged as text. `stream` records the format, the number
+of events and whether the format's final event (`message_stop`, `response.completed`, `[DONE]` or a
+finish reason, a terminal Responses event) arrived. A stream cut off before it is logged with what
+had arrived, `complete: false`, the last payload as `lastEvent`, and the error: the read failure,
+else an error event the stream carried, else `stream ended before its final event`. Every read is of
 a clone, taken only while debug mode is on. A reply the caller will cancel (a redirect under
 `followRedirects: false`, an `allowStatuses` status) is logged by status alone, because a live clone
 would keep the plugin's body open on the Rust side.
