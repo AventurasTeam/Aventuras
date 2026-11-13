@@ -649,7 +649,7 @@ describe('happeningsTask', () => {
       const user = await renderUser()
 
       expect(user).toContain(
-        'Keep them apart when the merge would tell someone something new: everyone who knows any merged happening comes to know all of them, and every character does if one is common knowledge. So when one is common knowledge and another is not, or someone knows one but not another, merge only when the happening fewer characters know adds nothing to the one more characters know.',
+        'Keep them apart when the merge would tell someone something new: everyone who knows any merged happening comes to know all of them, and every character does if one is common knowledge. So when one is common knowledge and another is not, or someone knows one but not another, merge only when the happening fewer characters know adds nothing to the one more characters know; when neither list holds the other, merge only a duplicate that adds nothing either way.',
       )
       expect(user).not.toContain('unless one only repeats the other')
     })
