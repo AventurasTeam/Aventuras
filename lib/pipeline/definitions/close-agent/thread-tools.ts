@@ -8,6 +8,7 @@ import { restatedText, sentText } from './fields'
 import { turnHandleIn, turnInTextReason } from './text-checks'
 import {
   DELETE_PATH,
+  protectedField,
   writeToolSchema,
   type LostField,
   type PlannedAction,
@@ -99,13 +100,6 @@ function threadRows(
     name: stored.get(id)?.title ?? ctx.ids.nameOfId(id) ?? '',
   }))
 }
-
-const protectedField = (field: string, row: string, reason: ProtectionReason): LostField => ({
-  field,
-  row,
-  kind: 'protected',
-  reason,
-})
 
 /**
  * A status change can't precede its thread: a cited turn before the opening stores the opening

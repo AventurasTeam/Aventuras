@@ -73,8 +73,9 @@ export type PlannedAction = {
    * - A create's action and its LostFields: the table name, since a minted id has no handle unless
    *   the create lands.
    * - A link row (involvement, awareness): the character it links, as
-   *   `${characterId} on ${happeningId}` only when the call spans several happenings. Never the
-   *   link row's own id: `hinv_` has no handle, and a character tells the model more than an `aw`.
+   *   `${characterId} on ${happeningId}` only when the call's link writes span several happenings.
+   *   Never the link row's own id: `hinv_` has no handle, and a character tells the model more than
+   *   an `aw`.
    * - Else the row's table name.
    */
   readonly row: string
@@ -89,6 +90,16 @@ export type LostField = {
   | { readonly kind: 'protected'; readonly reason: ProtectionReason }
   | { readonly kind: 'refused'; readonly reason: string }
 )
+export const protectedField = (
+  field: string,
+  row: string,
+  reason: ProtectionReason,
+): LostField => ({
+  field,
+  row,
+  kind: 'protected',
+  reason,
+})
 export type WritePlan =
   | {
       kind: 'refused'
