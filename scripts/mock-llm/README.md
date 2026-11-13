@@ -76,7 +76,11 @@ the app itself renders. Editing a template therefore moves its marker in the
 same edit, and `routing.test.ts` renders every wizard template through the
 real engine to prove the marker still survives. The contract sits in the
 system message, ahead of the user half, so a separate test in the same
-file checks that no contract carries a marker.
+file checks that no contract carries a marker. The chapter close's single
+metadata call and its merge share one schema block too, told apart only by
+their user-half openers. The earliest marker wins, which holds only while no
+sibling's marker sits in a template's system half, and story templates have
+system halves, so `shapes.test.ts` checks that for the metadata templates.
 
 The marker only breaks ties. Where a block already names one call site it is
 never consulted, so a user-authored pack that rewrites wizard templates

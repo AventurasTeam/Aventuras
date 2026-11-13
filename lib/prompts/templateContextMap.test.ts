@@ -4,6 +4,7 @@ import { TEMPLATE_IDS } from './ids'
 import {
   CLOSE_ONLY_CHAPTER_VARIABLES,
   DISPLAY_GROUPS,
+  MERGE_ONLY_CHAPTER_VARIABLES,
   TEMPLATE_GROUPS,
   VARIABLES,
   validateRegistry,
@@ -43,16 +44,19 @@ describe('templateContextMap', () => {
   })
 
   // C3: a close's templates read their own group, not generationContext's budgeted entries.
-  it('maps the chapter metadata template to the chapter group', () => {
+  it("maps the chapter metadata templates, a part's and the merge's too, to the chapter group", () => {
     expect(TEMPLATE_GROUPS[TEMPLATE_IDS.chapterMetadata]).toBe('chapter')
+    expect(TEMPLATE_GROUPS[TEMPLATE_IDS.chapterMetadataPart]).toBe('chapter')
+    expect(TEMPLATE_GROUPS[TEMPLATE_IDS.chapterMetadataMerge]).toBe('chapter')
   })
 
-  it("defines the chapter group's variables: the metadata builder's and a close task's own", () => {
+  it("defines the chapter group's variables: the metadata builders' and a close task's own", () => {
     expect(VARIABLES.chapter.map((v) => v.name)).toEqual([
       'entries',
       'previousChapterSummary',
       'threads',
       'mode',
+      'partSummaries',
       'closeTurns',
       'closeCharacters',
       'closeFactions',
@@ -83,6 +87,17 @@ describe('templateContextMap', () => {
       ['closeWritesSoFar', false],
       ['closeSoftCaps', false],
     ])
+  })
+
+  // Only the merge of a chapter closed in parts sets it; every other metadata call leaves it unset.
+  it('lists the merge-only chapter variable, not required, filed under Story', () => {
+    expect(MERGE_ONLY_CHAPTER_VARIABLES).toEqual(['partSummaries'])
+    expect(VARIABLES.chapter.find((v) => v.name === 'partSummaries')).toMatchObject({
+      type: 'string[]',
+      category: 'Story',
+      required: false,
+    })
+    expect(DISPLAY_GROUPS.Story).toContain('partSummaries')
   })
 
   it("maps the close's task templates to the chapter group", () => {

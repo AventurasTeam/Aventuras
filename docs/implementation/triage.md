@@ -308,3 +308,18 @@ patch`, which 5.5a marks `restated`, so a close tool's write of it
   `lib/actions/happenings/register-happenings.ts`), which a shared
   helper would take about six parameters to serve. Worth lifting when a
   third copy appears. Raised in 5.5b's slice review.
+- **The close's model target is spelled three times.** The chapter
+  close's metadata phase, its call and the close agent each declare
+  their own `lore-mgmt` target (`chapter-close-metadata.ts`,
+  `chapter-close-metadata-call.ts`, `close-agent/run-task.ts`), beside
+  `CHAPTER_CLOSE_RESOLVES` in `chapter-close.ts`. The parts cut reads
+  its window from that target, so it is right only while the prose
+  tasks run on the same model, and nothing ties the copies together.
+  One exported close target would. Raised in 5.8's task review.
+- **A new mock shape answers `{}` from an older `state.json`.** In
+  `scripts/mock-llm/state.ts`, `loadState` gives a shape the saved file
+  lacks an empty lane, not its shipped default. So every shape added
+  after a developer's `state.json` was written answers `{}` until the
+  file is deleted; 5.8's chapter metadata part and merge lanes are the
+  latest case, and a multi-part close then fails to parse in the dev
+  mock. Raised in 5.8's task review.

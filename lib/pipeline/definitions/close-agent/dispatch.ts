@@ -23,7 +23,8 @@ import type { PhaseContext, PhaseEmittedEvent } from '../../types'
 
 export type DispatchContext = ToolContext & {
   readonly phase: PhaseContext
-  readonly chapterEntryIds: readonly string[]
+  /** The entries this task was shown, by position: its part's, or the chapter's for part 0. */
+  readonly taskEntryIds: readonly string[]
   readonly readSet: ReadSet
   readonly ledger: CloseLedgerWriter
 }
@@ -66,13 +67,13 @@ function namedWhy(args: Readonly<Record<string, unknown>>, ids: CloseIds): strin
   return typeof args.why === 'string' ? nameCloseProse({ why: args.why }, ids).why : ''
 }
 
-// A call refused before its checks passed records its in-chapter turns, as an ok does.
-function turnsInChapter(raw: unknown, ctx: DispatchContext): string[] {
+// A call refused before its checks passed records the cited turns it was shown, as an ok does.
+function turnsShown(raw: unknown, ctx: DispatchContext): string[] {
   if (!Array.isArray(raw)) return []
   const ids = new Set(
     raw.map((handle) => (typeof handle === 'string' ? ctx.ids.idOf(handle) : undefined)),
   )
-  return ctx.chapterEntryIds.filter((id) => ids.has(id))
+  return ctx.taskEntryIds.filter((id) => ids.has(id))
 }
 
 function rowsNamed(rows: readonly GuardRow[], ids: CloseIds): ReportRow[] {
@@ -233,14 +234,14 @@ async function* writeCall(
 ): AsyncGenerator<PhaseEmittedEvent, unknown, GroupOutcome | undefined> {
   const check = commonChecks({ turns: args.turns, why: args.why }, named, {
     ids: ctx.ids,
-    chapterEntryIds: ctx.chapterEntryIds,
+    taskEntryIds: ctx.taskEntryIds,
     readSet: ctx.readSet,
   })
   if (!check.ok) {
     const verdict = rejectedWhole(check.reason, [], ctx)
     recordWrite(ctx, tool.name, args, {
       rows: rowsNamed(named, ctx.ids),
-      turns: turnsInChapter(args.turns, ctx),
+      turns: turnsShown(args.turns, ctx),
       verdict,
     })
     return modelAnswer(verdict, {}, ctx.ids)
@@ -319,7 +320,7 @@ export async function* dispatchToolCall(
     if (tool.kind === 'write')
       recordWrite(ctx, tool.name, call.input, {
         rows: [],
-        turns: turnsInChapter(call.input.turns, ctx),
+        turns: turnsShown(call.input.turns, ctx),
         verdict,
       })
     return answerTo(call, modelAnswer(verdict, {}, ctx.ids), ctx.ids)

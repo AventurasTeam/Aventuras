@@ -31,10 +31,10 @@ export type TaskTurns = {
   proseTokens: number
 }
 
-/** The task's chapterEntryIds, in position order, under their turn handles. */
+/** The entries the task was shown (`taskEntryIds`), in position order, under their turn handles. */
 export async function readTaskTurns(ctx: TaskPromptContext): Promise<TaskTurns> {
   const rows: StoryEntry[] = []
-  for (const ids of chunked(ctx.chapterEntryIds))
+  for (const ids of chunked(ctx.taskEntryIds))
     rows.push(
       ...(await ctx.db
         .select()

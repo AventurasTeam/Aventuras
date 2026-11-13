@@ -25,7 +25,8 @@ export type CommonCheck =
   | { ok: true; turns: readonly string[]; proseEntryId: string }
   | { ok: false; reason: string }
 
-type CheckContext = { ids: CloseIds; chapterEntryIds: readonly string[]; readSet: ReadSet }
+/** `taskEntryIds`: the turns the task was shown, by position; a write cites only these. */
+type CheckContext = { ids: CloseIds; taskEntryIds: readonly string[]; readSet: ReadSet }
 
 const TURN_HINT = 'cite turns by the handles the chapter shows (t1, t2…)'
 
@@ -54,10 +55,10 @@ export function commonChecks(
   return cited
 }
 
-function citedTurns(value: unknown, { ids, chapterEntryIds }: CheckContext): CommonCheck {
+function citedTurns(value: unknown, { ids, taskEntryIds }: CheckContext): CommonCheck {
   if (!Array.isArray(value) || value.length === 0)
     return { ok: false, reason: `turns is empty: ${TURN_HINT}` }
-  const positions = new Map(chapterEntryIds.map((id, at) => [id, at] as const))
+  const positions = new Map(taskEntryIds.map((id, at) => [id, at] as const))
   const cited = new Set<number>()
   for (const handle of value) {
     const id = typeof handle === 'string' ? ids.idOf(handle) : undefined
@@ -72,10 +73,10 @@ function citedTurns(value: unknown, { ids, chapterEntryIds }: CheckContext): Com
     if (at === undefined)
       return {
         ok: false,
-        reason: `${String(handle)} is outside this chapter: cite only this chapter's turns`,
+        reason: `${String(handle)} is not one of the turns this task was shown: cite only those turns`,
       }
     cited.add(at)
   }
-  const ordered = [...cited].sort((a, b) => a - b).map((at) => chapterEntryIds[at])
+  const ordered = [...cited].sort((a, b) => a - b).map((at) => taskEntryIds[at])
   return { ok: true, turns: ordered, proseEntryId: ordered[ordered.length - 1] }
 }

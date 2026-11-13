@@ -1,9 +1,11 @@
 import { beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import type { CallRetryError, generateStructured } from '@/lib/ai'
+import type { ChapterPartCut } from '@/lib/chapters'
 import { STORY_SETTINGS_DEFAULTS, type StoryEntry, type Thread, type ThreadStatus } from '@/lib/db'
 import { makeLogger } from '@/lib/diagnostics'
 import {
+  appSettingsStore,
   chaptersStore,
   currentStoryStore,
   entitiesStore,
@@ -14,8 +16,16 @@ import {
 } from '@/lib/stores'
 
 import { createPhaseDb, hydrateEntries, resetPhaseDb, type PhaseDb } from './__tests__/phase-db'
-import { readCloseRangeEntries, requestChapterMetadata } from './chapter-close-metadata-call'
-import { chapterMetadataSchema, type ChapterMetadata } from './chapter-metadata-schema'
+import {
+  readCloseRangeEntries,
+  readMetadataInputs,
+  requestChapterMetadata,
+} from './chapter-close-metadata-call'
+import {
+  chapterMetadataSchema,
+  chapterPartSummarySchema,
+  type ChapterMetadata,
+} from './chapter-metadata-schema'
 import type { CloseRange } from './intermediates'
 import type { PhaseContext, PhaseEmittedEvent, PipelineError } from '../types'
 
@@ -108,6 +118,78 @@ const REPLY: ChapterMetadata = {
   theme: 'loss',
   keywords: ['Mora', 'the ford', 'the sigil'],
 }
+
+// One cut over the range, as the metadata phase stores a chapter that fits.
+const ONE_PART: readonly ChapterPartCut[] = [
+  { part: 1, startEntryId: 'e1', endEntryId: 'e6', tokens: 0 },
+]
+
+// The range's rows are e1, e2, e3, e5 and e6 (s4 is a system row): cut e1–e2, e3, then e5–e6.
+const THREE_PARTS: readonly ChapterPartCut[] = [
+  { part: 1, startEntryId: 'e1', endEntryId: 'e2', tokens: 0 },
+  { part: 2, startEntryId: 'e3', endEntryId: 'e3', tokens: 0 },
+  { part: 3, startEntryId: 'e5', endEntryId: 'e6', tokens: 0 },
+]
+
+const PART_SUMMARIES = [
+  'You reach the end of the marsh road and wade in with the sigil held high.',
+  'The current tears the sigil from your hand halfway across.',
+  'Mora meets you at the ford and asks for the sigil you no longer have.',
+]
+
+const MERGED: ChapterMetadata = {
+  title: 'The Lost Sigil',
+  summary:
+    'You waded the marsh and lost the sigil to the current. Mora met you at the ford, and you had nothing to show her.',
+  theme: 'loss',
+  keywords: ['Mora', 'the sigil', 'the ford'],
+}
+
+// Part calls answer PART_SUMMARIES in turn, padded, and the merge MERGED with a padded title;
+// `failPart` fails that part's call, `failMerge` the merge, and `onPart` runs as a part's call does.
+function answerParts(
+  over: { failPart?: number; failMerge?: boolean; onPart?: (part: number) => void } = {},
+): void {
+  let part = 0
+  generateStructuredMock.mockImplementation(async (_target, _prompt, schema) => {
+    if (schema === chapterPartSummarySchema) {
+      part++
+      over.onPart?.(part)
+      if (over.failPart === part)
+        return {
+          status: 'failed',
+          error: { tier: 'provider', reason: 'network', detail: 'ECONNRESET' },
+          recoverable: [],
+        } as never
+      return {
+        status: 'ok',
+        value: { summary: ` ${PART_SUMMARIES[part - 1]}\n` },
+        recoverable: [],
+      } as never
+    }
+    if (over.failMerge)
+      return {
+        status: 'failed',
+        error: { tier: 'parse', detail: 'title: Invalid string', attempt: 3 },
+        recoverable: [],
+      } as never
+    return {
+      status: 'ok',
+      value: { ...MERGED, title: `  ${MERGED.title} ` },
+      recoverable: [],
+    } as never
+  })
+}
+
+// Which call each was: a part's summary or the whole chapter's metadata (one part, or the merge).
+const callKinds = (): string[] =>
+  generateStructuredMock.mock.calls.map(([, , schema]) =>
+    schema === chapterPartSummarySchema
+      ? 'part'
+      : schema === chapterMetadataSchema
+        ? 'chapter'
+        : 'other',
+  )
 
 function thread(id: string, title: string, status: ThreadStatus): Thread {
   return {
@@ -208,8 +290,15 @@ function phaseCtx(abortSignal: AbortSignal = new AbortController().signal): Phas
   }
 }
 
-async function drain(ctx: PhaseContext, range: CloseRange = RANGE) {
-  const gen = requestChapterMetadata(ctx, range)
+// As the phase does: the store inputs first, before the call's own range read.
+async function drain(
+  ctx: PhaseContext,
+  range: CloseRange = RANGE,
+  parts: readonly ChapterPartCut[] = ONE_PART,
+) {
+  const inputs = readMetadataInputs(ctx)
+  if ('status' in inputs) throw new Error(`readMetadataInputs refused: ${inputs.error.kind}`)
+  const gen = requestChapterMetadata(ctx, range, parts, inputs)
   const events: PhaseEmittedEvent[] = []
   for (;;) {
     const next = await gen.next()
@@ -261,6 +350,65 @@ describe('readCloseRangeEntries', () => {
     expect(await readCloseRangeEntries(phaseDb.db, 'b1', { ...RANGE, startEntryId: 'x2' })).toEqual(
       [],
     )
+  })
+})
+
+describe('readMetadataInputs', () => {
+  it("reads the latest chapter's summary, the branch's threads as held, the mode and lore-mgmt's config", () => {
+    // Out of sequence order, as an open can hydrate them: its read has no ORDER BY, ids are random.
+    chaptersStore.hydrate('b1', [
+      chapter(1, 'Kael left the keep at dawn with the stolen sigil.'),
+      chapter(3, 'Kael reached the marsh as the bells began to ring.'),
+      chapter(2, 'Kael hid from the riders in a flooded chapel.'),
+    ])
+    const roster = [
+      thread('thr_1', 'Find the heir', 'active'),
+      thread('thr_3', 'The lost map', 'resolved'),
+    ]
+    threadsStore.hydrate('b1', roster)
+
+    const inputs = readMetadataInputs(phaseCtx())
+
+    const settings = appSettingsStore.getAppSettings()
+    expect(inputs).toEqual({
+      previousChapterSummary: 'Kael reached the marsh as the bells began to ring.',
+      threads: roster,
+      mode: 'adventure',
+      modelConfig: {
+        providers: settings.providers,
+        profiles: settings.profiles,
+        assignments: settings.assignments,
+        storyModels: {},
+      },
+    })
+    expect(settings.assignments).toMatchObject({ 'lore-mgmt': 'prof-lore' })
+  })
+
+  it("carries the story's model overrides into the config", () => {
+    const models = { 'lore-mgmt': { providerId: 'prov-1', modelId: 'big' } }
+    currentStoryStore.set({
+      storyId: 's1',
+      branchId: 'b1',
+      definition: DEFINITION,
+      settings: { ...STORY_SETTINGS_DEFAULTS, models },
+    })
+
+    expect(readMetadataInputs(phaseCtx())).toMatchObject({ modelConfig: { storyModels: models } })
+  })
+
+  it("reads no previous summary for a branch's first chapter", () => {
+    expect(readMetadataInputs(phaseCtx())).toMatchObject({ previousChapterSummary: null })
+  })
+
+  it.each([
+    { name: 'no story is open', unload: () => currentStoryStore.clear() },
+    { name: 'the stores hold another branch', unload: () => entitiesStore.hydrate('b2', []) },
+  ])('fails when $name', ({ unload }) => {
+    unload()
+    expect(readMetadataInputs(phaseCtx())).toEqual({
+      status: 'failed',
+      error: { kind: 'orchestrator', detail: 'chapter-close: branch not loaded' },
+    })
   })
 })
 
@@ -329,7 +477,7 @@ describe('requestChapterMetadata', () => {
   })
 
   // An open publishes its branch over the working-set stores (loadAndPublish).
-  it("prompts with its own branch's chapter and threads when another branch is published mid-read", async () => {
+  it('prompts with the inputs read before it, though another branch is published during its range read', async () => {
     chaptersStore.hydrate('b1', [chapter(1, 'Kael left the keep at dawn with the stolen sigil.')])
     threadsStore.hydrate('b1', [thread('thr_1', 'Find the heir', 'active')])
     generateStructuredMock.mockResolvedValue({ status: 'ok', value: REPLY, recoverable: [] })
@@ -484,20 +632,6 @@ describe('requestChapterMetadata', () => {
     ])
   })
 
-  it.each([
-    { name: 'no story is open', unload: () => currentStoryStore.clear() },
-    { name: 'the stores hold another branch', unload: () => entitiesStore.hydrate('b2', []) },
-  ])('fails before any call when $name', async ({ unload }) => {
-    unload()
-    const { events, outcome } = await drain(phaseCtx())
-    expect(outcome).toEqual({
-      status: 'failed',
-      error: { kind: 'orchestrator', detail: 'chapter-close: branch not loaded' },
-    })
-    expect(events).toEqual([])
-    expect(generateStructuredMock).not.toHaveBeenCalled()
-  })
-
   // classifier.md → Failure policy: a never-answering provider expires as a failure, not an abort,
   // at the lore-mgmt agent's own bound (M5 milestone → C2).
   describe('the bound on the call', () => {
@@ -567,5 +701,234 @@ describe('requestChapterMetadata', () => {
         error: { detail: 'lore-mgmt: timeout after 600000ms' },
       })
     })
+  })
+})
+
+describe('requestChapterMetadata over parts', () => {
+  it("makes one call and no merge for a chapter of one part, opening on the call's marker", async () => {
+    generateStructuredMock.mockResolvedValue({ status: 'ok', value: REPLY, recoverable: [] })
+
+    const { outcome } = await drain(phaseCtx(), RANGE, ONE_PART)
+
+    expect(outcome).toEqual({ status: 'ok', metadata: REPLY })
+    expect(callKinds()).toEqual(['chapter'])
+    const { user } = generateStructuredMock.mock.calls[0]![1]
+    expect(user.startsWith('Give this chapter its title, summary, theme and keywords.\n\n')).toBe(
+      true,
+    )
+  })
+
+  it("asks once per part, in order, then merges, and returns the merge's metadata, normalized", async () => {
+    answerParts()
+
+    const { events, outcome } = await drain(phaseCtx(), RANGE, THREE_PARTS)
+
+    expect(outcome).toEqual({ status: 'ok', metadata: MERGED })
+    expect(events).toEqual([])
+    expect(callKinds()).toEqual(['part', 'part', 'part', 'chapter'])
+    for (const [target, , , config, , options] of generateStructuredMock.mock.calls) {
+      expect(target).toBe('lore-mgmt')
+      expect(config).toMatchObject({ assignments: { 'lore-mgmt': 'prof-lore' } })
+      expect(options).toEqual({ actionId: 'act_close' })
+    }
+  })
+
+  it("prompts each part with its own entries and the chapter's other inputs", async () => {
+    chaptersStore.hydrate('b1', [chapter(1, 'Kael left the keep at dawn with the stolen sigil.')])
+    threadsStore.hydrate('b1', [
+      thread('thr_1', 'Find the heir', 'active'),
+      thread('thr_3', 'The lost map', 'resolved'),
+    ])
+    answerParts()
+
+    await drain(phaseCtx(), RANGE, THREE_PARTS)
+
+    const [first, second, third] = generateStructuredMock.mock.calls.map(([, prompt]) => prompt)
+    expect(first!.user.startsWith('Summarize this part of the chapter.\n\n')).toBe(true)
+    expect(first!.user).toContain('The marsh road ended at a wall of black water')
+    expect(first!.user).toContain(
+      '<user_turn>\nI wade in, holding the sigil above my head.\n</user_turn>',
+    )
+    expect(first!.user).not.toContain('The cold takes your breath')
+    expect(second!.user).toContain('The cold takes your breath')
+    expect(second!.user).not.toContain('I wade in')
+    expect(second!.user).not.toContain('Mora is waiting')
+    expect(third!.user).toContain('I climb out on the far bank')
+    expect(third!.user).toContain('Mora is waiting by the ford')
+    expect(third!.user).not.toContain('The cold takes your breath')
+    expect(third!.user).not.toContain('She laughs, not kindly')
+    for (const prompt of [first!, second!, third!]) {
+      expect(prompt.user).toContain(
+        '# The previous chapter\nKael left the keep at dawn with the stolen sigil.',
+      )
+      expect(prompt.user).toContain('# Open threads\n- Find the heir (active)')
+      expect(prompt.user).not.toContain('The lost map')
+      expect(prompt.user).not.toContain('<state>')
+      // DEFINITION is an adventure.
+      expect(prompt.system).toContain('Each is what the lead does, says or attempts')
+      expect(prompt.system).not.toContain('Find the heir')
+    }
+  })
+
+  it('prompts the merge with the part summaries in order, the prior summary and the open threads', async () => {
+    chaptersStore.hydrate('b1', [chapter(1, 'Kael left the keep at dawn with the stolen sigil.')])
+    threadsStore.hydrate('b1', [thread('thr_1', 'Find the heir', 'active')])
+    answerParts()
+
+    await drain(phaseCtx(), RANGE, THREE_PARTS)
+
+    const merge = generateStructuredMock.mock.calls[3]![1]
+    expect(
+      merge.user.startsWith(
+        'Give the chapter its title, summary, theme and keywords from the summaries of its parts.\n\n',
+      ),
+    ).toBe(true)
+    expect(merge.user).toContain(
+      `# The chapter's parts\n\n## Part 1\n${PART_SUMMARIES[0]}\n\n## Part 2\n${PART_SUMMARIES[1]}\n\n## Part 3\n${PART_SUMMARIES[2]}`,
+    )
+    expect(merge.user).toContain(
+      '# The previous chapter\nKael left the keep at dawn with the stolen sigil.',
+    )
+    expect(merge.user).toContain('# Open threads\n- Find the heir (active)')
+    expect(merge.user).not.toContain('The marsh road ended')
+    expect(merge.system).not.toContain(PART_SUMMARIES[0])
+  })
+
+  it('fails at a failed part call, making no further call', async () => {
+    answerParts({ failPart: 2 })
+
+    const { outcome } = await drain(phaseCtx(), RANGE, THREE_PARTS)
+
+    expect(outcome).toEqual({
+      status: 'failed',
+      error: { kind: 'provider', reason: 'network', detail: 'ECONNRESET' },
+    })
+    expect(callKinds()).toEqual(['part', 'part'])
+  })
+
+  it('fails at a failed merge', async () => {
+    answerParts({ failMerge: true })
+
+    const { outcome } = await drain(phaseCtx(), RANGE, THREE_PARTS)
+
+    expect(outcome).toEqual({
+      status: 'failed',
+      error: { kind: 'phase-logic', detail: 'title: Invalid string' },
+    })
+    expect(callKinds()).toEqual(['part', 'part', 'part', 'chapter'])
+  })
+
+  it.each([
+    { name: 'between part calls', at: 1, calls: ['part'] },
+    { name: 'after the last part, before the merge', at: 3, calls: ['part', 'part', 'part'] },
+  ])('returns aborted on a cancel $name, making no further call', async ({ at, calls }) => {
+    const controller = new AbortController()
+    answerParts({
+      onPart: (part) => {
+        if (part === at) controller.abort()
+      },
+    })
+
+    const { outcome } = await drain(phaseCtx(controller.signal), RANGE, THREE_PARTS)
+
+    expect(outcome).toEqual({ status: 'aborted' })
+    expect(callKinds()).toEqual(calls)
+  })
+
+  it("yields each call's retried attempts, in call order", async () => {
+    let part = 0
+    generateStructuredMock.mockImplementation(async (_target, _prompt, schema) => {
+      if (schema === chapterPartSummarySchema) {
+        part++
+        return {
+          status: 'ok',
+          value: { summary: PART_SUMMARIES[part - 1] },
+          recoverable: [{ tier: 'provider', reason: 'timeout', detail: `part ${part}` }],
+        } as never
+      }
+      return {
+        status: 'ok',
+        value: MERGED,
+        recoverable: [{ tier: 'parse', detail: 'the merge reply was not JSON', attempt: 1 }],
+      } as never
+    })
+
+    const { events } = await drain(phaseCtx(), RANGE, THREE_PARTS)
+
+    expect(events).toEqual([
+      {
+        type: 'recoverable_error',
+        error: { kind: 'provider', reason: 'timeout', detail: 'part 1' },
+      },
+      {
+        type: 'recoverable_error',
+        error: { kind: 'provider', reason: 'timeout', detail: 'part 2' },
+      },
+      {
+        type: 'recoverable_error',
+        error: { kind: 'provider', reason: 'timeout', detail: 'part 3' },
+      },
+      {
+        type: 'recoverable_error',
+        error: { kind: 'phase-logic', detail: 'the merge reply was not JSON' },
+      },
+    ])
+  })
+
+  // Four calls of 30s each take 120s: a bound shared across them would expire in the second.
+  it('bounds each call on its own, so calls that each fit the bound all land', async () => {
+    await wireModels({ lore: 45 })
+    generateStructuredMock.mockImplementation(
+      (_target, _prompt, schema, _config, signal) =>
+        new Promise((resolve) => {
+          const value = schema === chapterPartSummarySchema ? { summary: 'A part.' } : MERGED
+          const timer = setTimeout(() => resolve({ status: 'ok', value, recoverable: [] }), 30_000)
+          signal.addEventListener('abort', () => {
+            clearTimeout(timer)
+            resolve({ status: 'aborted', recoverable: [] })
+          })
+        }) as never,
+    )
+    vi.useFakeTimers()
+    try {
+      const call = drain(phaseCtx(), RANGE, THREE_PARTS)
+      await vi.advanceTimersByTimeAsync(200_000)
+      const { outcome } = await call
+
+      expect(outcome).toEqual({ status: 'ok', metadata: MERGED })
+      expect(callKinds()).toEqual(['part', 'part', 'part', 'chapter'])
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  it('fails, not aborts, when a later part call expires at its own bound', async () => {
+    await wireModels({ lore: 45 })
+    let part = 0
+    generateStructuredMock.mockImplementation(
+      (_target, _prompt, schema, _config, signal) =>
+        new Promise((resolve) => {
+          if (schema === chapterPartSummarySchema) part++
+          if (part === 1) {
+            resolve({ status: 'ok', value: { summary: 'A part.' }, recoverable: [] })
+            return
+          }
+          signal.addEventListener('abort', () => resolve({ status: 'aborted', recoverable: [] }))
+        }) as never,
+    )
+    vi.useFakeTimers()
+    try {
+      const call = drain(phaseCtx(), RANGE, THREE_PARTS)
+      await vi.advanceTimersByTimeAsync(1_000_000)
+      const { outcome } = await call
+
+      expect(outcome).toEqual({
+        status: 'failed',
+        error: { kind: 'provider', reason: 'timeout', detail: 'lore-mgmt: timeout after 45000ms' },
+      })
+      expect(callKinds()).toEqual(['part', 'part'])
+    } finally {
+      vi.useRealTimers()
+    }
   })
 })

@@ -47,7 +47,7 @@ import type {
 } from '../../types'
 import { openCloseFixture, type CloseFixture } from '../__tests__/close-fixture'
 import { closeAgentPhase } from '../chapter-close-agent'
-import { closeIdsOf, seedCloseLedger, setCloseRange } from '../close-intermediates'
+import { closeIdsOf, seedCloseLedger, setCloseParts, setCloseRange } from '../close-intermediates'
 import type { CloseLedger } from '../intermediates'
 
 vi.mock('@/lib/ai', async (importOriginal) => ({
@@ -295,7 +295,7 @@ async function* threadCallsPhase(
     readFields: { thread: ['title', 'description', 'status'] },
     survivorOf: (table, id) => writer.survivorOf(table, id),
     phase,
-    chapterEntryIds,
+    taskEntryIds: chapterEntryIds,
     readSet,
     ledger: writer,
   }
@@ -1825,7 +1825,7 @@ function threadsPromptContext(fx: CloseFixture, ids: CloseIds): TaskPromptContex
       storyId: fx.storyId,
       branchId: fx.branchId,
     },
-    chapterEntryIds: fx.entries.map((entry) => entry.id),
+    taskEntryIds: fx.entries.map((entry) => entry.id),
     config: THREADS_START_CONFIG,
   }
 }
@@ -2132,7 +2132,7 @@ describe('threadsTask', () => {
     const fx = await openCloseFixture()
     await putThreadRoster(fx)
     const ids = threadsIdsWithTurns(fx)
-    const ctx = { ...threadsPromptContext(fx, ids), chapterEntryIds: [] }
+    const ctx = { ...threadsPromptContext(fx, ids), taskEntryIds: [] }
 
     expect(await threadsTask.start(ctx)).toBeNull()
     expect(ids.handleOf(OPEN_ROWS.debt)).toBeUndefined()
@@ -2203,11 +2203,16 @@ function threadsNoCallStep(): ToolStepResult {
 function threadsClosePhase(fx: CloseFixture): PhaseContext {
   const actionId = 'act_threads_close'
   const intermediates: Record<string, unknown> = {}
-  setCloseRange(intermediates, {
+  const range = {
     chapterId: 'chap_threads_close',
     startEntryId: fx.entries[0]!.id,
     endEntryId: fx.replyIds[2]!,
-  })
+  }
+  setCloseRange(intermediates, range)
+  // As the metadata phase stores a chapter that fits; the agent reads only the cut's ids.
+  setCloseParts(intermediates, [
+    { part: 1, startEntryId: range.startEntryId, endEntryId: range.endEntryId, tokens: 0 },
+  ])
   return {
     actionId,
     abortSignal: new AbortController().signal,

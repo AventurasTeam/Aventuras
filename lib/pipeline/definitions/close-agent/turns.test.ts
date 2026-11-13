@@ -38,7 +38,7 @@ const NO_MODELS: ResolveModelConfig = { providers: [], profiles: [], assignments
 // As the agent phase does before any task: every fixture entry a turn, t1 the first.
 function taskContextFor(
   fx: CloseFixture,
-  chapterEntryIds: readonly string[] = fx.entries.map(({ id }) => id),
+  taskEntryIds: readonly string[] = fx.entries.map(({ id }) => id),
 ): TaskPromptContext {
   const ids = new CloseIds()
   ids.showTurns(fx.entries.map(({ id }) => id))
@@ -62,7 +62,7 @@ function taskContextFor(
       storyId: fx.storyId,
       branchId: fx.branchId,
     },
-    chapterEntryIds,
+    taskEntryIds,
     config: NO_MODELS,
   }
 }

@@ -1,9 +1,12 @@
+import type { ChapterPartCut } from '@/lib/chapters'
+
 import { CloseIds } from './close-agent/ids'
 import type { CloseLedger, CloseRange } from './intermediates'
 import type { PhaseContext, PhaseFailure } from '../types'
 
 // The close's own keys, read and written only through the accessors below.
 const RANGE_KEY = 'closeRange'
+const PARTS_KEY = 'closeParts'
 const LEDGER_KEY = 'closeLedger'
 const IDS_KEY = 'closeIds'
 
@@ -25,6 +28,32 @@ export function requireCloseRange(
     closeRangeOf(ctx.intermediates) ?? {
       status: 'failed',
       error: { kind: 'orchestrator', detail: 'chapter-close: no close range' },
+    }
+  )
+}
+
+/** The metadata phase's cut of the range (chapter-close.md → Parts), part 1 first. */
+export function setCloseParts(
+  intermediates: Record<string, unknown>,
+  parts: readonly ChapterPartCut[],
+): void {
+  intermediates[PARTS_KEY] = parts
+}
+
+export function closePartsOf(
+  intermediates: Readonly<Record<string, unknown>>,
+): readonly ChapterPartCut[] | undefined {
+  return intermediates[PARTS_KEY] as readonly ChapterPartCut[] | undefined
+}
+
+/** The parts, or the failure the agent phase returns without them. */
+export function requireCloseParts(
+  ctx: Pick<PhaseContext, 'intermediates'>,
+): readonly ChapterPartCut[] | PhaseFailure {
+  return (
+    closePartsOf(ctx.intermediates) ?? {
+      status: 'failed',
+      error: { kind: 'orchestrator', detail: 'chapter-close: no close parts' },
     }
   )
 }

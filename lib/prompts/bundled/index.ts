@@ -2,6 +2,8 @@ import { MACRO_IDS, TEMPLATE_IDS, type TemplateId } from '../ids'
 import { TEMPLATE_GROUPS } from '../templateContextMap'
 import type { Pack, TemplateEntry, TemplateSources } from '../types'
 import { CHAPTER_METADATA } from './chapter-metadata'
+import { CHAPTER_METADATA_MERGE } from './chapter-metadata-merge'
+import { CHAPTER_METADATA_PART } from './chapter-metadata-part'
 import { CLASSIFIER_MODE_RULE } from './classifier-mode-rule'
 import { CLOSE_IDENTITY } from './close-identity'
 import { CLOSE_INSTRUCTIONS } from './close-instructions'
@@ -65,6 +67,14 @@ export const bundledPack: Pack = {
     ),
     [TEMPLATE_IDS.suggestionRefresh]: template(TEMPLATE_IDS.suggestionRefresh, SUGGESTION_REFRESH),
     [TEMPLATE_IDS.chapterMetadata]: template(TEMPLATE_IDS.chapterMetadata, CHAPTER_METADATA),
+    [TEMPLATE_IDS.chapterMetadataPart]: template(
+      TEMPLATE_IDS.chapterMetadataPart,
+      CHAPTER_METADATA_PART,
+    ),
+    [TEMPLATE_IDS.chapterMetadataMerge]: template(
+      TEMPLATE_IDS.chapterMetadataMerge,
+      CHAPTER_METADATA_MERGE,
+    ),
     [TEMPLATE_IDS.closeIdentity]: template(TEMPLATE_IDS.closeIdentity, CLOSE_IDENTITY),
     [TEMPLATE_IDS.closeThreads]: template(TEMPLATE_IDS.closeThreads, CLOSE_THREADS),
     [TEMPLATE_IDS.wizardOpening]: wizardTemplate(TEMPLATE_IDS.wizardOpening, WIZARD_OPENING),

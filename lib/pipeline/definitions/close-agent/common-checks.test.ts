@@ -16,8 +16,9 @@ const LORE_A = 'lore_66666666-6666-4666-8666-666666666666'
 const WREN: GuardRow = { table: 'entities', id: CHAR_A }
 const TOLL_LAW: GuardRow = { table: 'lore', id: LORE_A }
 
-// The chapter is t1…t3; t4 is a turn past it. Wren (c1) is seeded as read, the toll law (lo1) isn't.
-function checkContext() {
+// The chapter is t1…t3, all shown to the task; t4 is a turn past it. Wren (c1) is seeded as read,
+// the toll law (lo1) isn't.
+function checkContext(taskEntryIds: readonly string[] = [ENTRY_1, ENTRY_2, ENTRY_3]) {
   const ids = new CloseIds()
   ids.showTurns([ENTRY_1, ENTRY_2, ENTRY_3])
   ids.showTurn(ENTRY_LATER)
@@ -25,7 +26,7 @@ function checkContext() {
   ids.show(LORE_A, 'The toll law')
   const readSet = createReadSet()
   readSet.add([WREN])
-  return { ids, chapterEntryIds: [ENTRY_1, ENTRY_2, ENTRY_3], readSet }
+  return { ids, taskEntryIds, readSet }
 }
 
 describe('commonChecks', () => {
@@ -63,7 +64,7 @@ describe('commonChecks', () => {
     {
       name: 'cites a turn outside the chapter',
       args: { turns: ['t4'], why: 'w' },
-      reason: /^t4 is outside this chapter/,
+      reason: /^t4 is not one of the turns this task was shown/,
     },
     { name: 'gives a blank why', args: { turns: ['t1'], why: '   ' }, reason: /^why is empty/ },
     { name: 'gives no why', args: { turns: ['t1'], why: undefined }, reason: /^why is empty/ },
@@ -71,6 +72,20 @@ describe('commonChecks', () => {
     expect(commonChecks(args, [WREN], checkContext())).toEqual({
       ok: false,
       reason: expect.stringMatching(reason),
+    })
+  })
+
+  // A part shows its own turns; another part's are as unseen as a turn past the chapter.
+  it("refuses a chapter turn this task wasn't shown, as another part's, naming what to cite", () => {
+    const partTwo = checkContext([ENTRY_2, ENTRY_3])
+    expect(commonChecks({ turns: ['t2', 't1'], why: 'w' }, [WREN], partTwo)).toEqual({
+      ok: false,
+      reason: 't1 is not one of the turns this task was shown: cite only those turns',
+    })
+    expect(commonChecks({ turns: ['t3', 't2'], why: 'w' }, [WREN], partTwo)).toEqual({
+      ok: true,
+      turns: [ENTRY_2, ENTRY_3],
+      proseEntryId: ENTRY_3,
     })
   })
 

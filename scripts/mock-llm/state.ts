@@ -110,6 +110,14 @@ const SAMPLE_SUGGESTIONS = [
   { categoryRef: 'cat3', text: 'You ask what the bell is for.' },
 ]
 
+const FLOODED_STAIR = {
+  title: 'The Bell Under the Water',
+  summary:
+    'You come down into the flooded quarter with a drawn blade while the rooftop bells answer each other. The stair gives under you, and something unhurried moves in the water below. The chapter ends at the waterline, the bells still calling.',
+  theme: 'descent',
+  keywords: ['the drowned city', 'the bells', 'the flooded stair', 'the thing in the water'],
+}
+
 // Entity placeholders (c1, l1, …) are allocated per run in prompt-encounter
 // order by IdBiMap, so a shipped default cannot safely name one. Defaults stay
 // entity-free; the request log's "author from this request" flow is how you
@@ -201,15 +209,15 @@ function defaultLanes(): Record<string, Lane> {
     // the empty list the other lanes use.
     'suggestion-refresh': lane([canned('Three chips', { suggestions: SAMPLE_SUGGESTIONS })]),
     // Names no rows by id, so unlike the classifier defaults it can carry content.
-    'chapter-metadata': lane([
-      canned('The flooded stair', {
-        title: 'The Bell Under the Water',
+    'chapter-metadata': lane([canned('The flooded stair', FLOODED_STAIR)]),
+    // A chapter over half the window: one summary a part, then the merge's row.
+    'chapter-metadata-part': lane([
+      canned('One part of the flooded stair', {
         summary:
-          'You come down into the flooded quarter with a drawn blade while the rooftop bells answer each other. The stair gives under you, and something unhurried moves in the water below. The chapter ends at the waterline, the bells still calling.',
-        theme: 'descent',
-        keywords: ['the drowned city', 'the bells', 'the flooded stair', 'the thing in the water'],
+          'You come down the stair into the flooded quarter with a drawn blade, while the rooftop bells answer each other.',
       }),
     ]),
+    'chapter-metadata-merge': lane([canned('The flooded stair, merged', FLOODED_STAIR)]),
 
     ...wizardLanes(),
   }
