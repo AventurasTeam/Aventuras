@@ -389,7 +389,11 @@ describe('createTimeoutFetch debug log', () => {
     )
 
     await vi.waitFor(() => expect(entries('response')).toHaveLength(1))
-    expect(entries('response')[0].data).toEqual({ status: 200, error: 'connection lost' })
+    expect(entries('response')[0].data).toEqual({
+      status: 200,
+      error: 'connection lost (headers received, no body yet)',
+      received: { bytes: 0 },
+    })
   })
 
   it('logs the status and the error when a stream stalls', async () => {
@@ -408,7 +412,8 @@ describe('createTimeoutFetch debug log', () => {
     await vi.waitFor(() => expect(entries('response')).toHaveLength(1))
     expect(entries('response')[0].data).toEqual({
       status: 200,
-      error: 'Request timed out after 5s',
+      error: 'Request timed out after 5s (17 bytes received)',
+      received: { bytes: 17, body: 'data: {"partial":' },
     })
   })
 

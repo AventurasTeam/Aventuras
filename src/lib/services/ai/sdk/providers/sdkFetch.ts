@@ -2,11 +2,12 @@
 // back unthrown so the SDK builds its own errors. `createTimeoutFetch` is the text-model transport.
 
 import {
+  describeReadFailure,
   describeRequestBody,
-  failureReason,
   headerEntries,
   loggedFetch,
   parseLoggedBody,
+  readLoggedBody,
   redactHeaders,
 } from '#lib/services/http/index.ts'
 import { debugLog } from '#lib/stores/debugLog.ts'
@@ -76,7 +77,7 @@ interface PollFailure {
 
 type PollRequest =
   | { method: string; url: string; status: number; body: unknown }
-  | { method: string; url: string; status?: number; error: string }
+  | { method: string; url: string; status?: number; error: string; body?: unknown }
 
 /**
  * A fetch whose requests share one debug entry, updated in place: how many there were, the last
@@ -141,27 +142,31 @@ export function createPollSdkFetch(options: Omit<SdkFetchOptions, 'log' | 'debug
     const copy = response.clone()
     const { status, ok } = response
     enqueue(async () => {
-      let text: string
-      try {
-        text = await copy.text()
-      } catch (error) {
-        const reason = failureReason(error)
+      const read = await readLoggedBody(copy)
+      if (!read.ok) {
+        const error = describeReadFailure(read)
+        const received = read.bytes > 0 ? parseLoggedBody(read.text) : undefined
         write(
           id,
           count,
-          { method, url, status, error: reason },
-          { method, url, status, error: reason },
+          { method, url, status, error, body: received },
+          {
+            method,
+            url,
+            status,
+            error,
+            body: read.text.slice(0, FAILURE_BODY_EXCERPT) || undefined,
+          },
         )
         return
       }
-      const body = parseLoggedBody(text)
       write(
         id,
         count,
-        { method, url, status, body },
+        { method, url, status, body: parseLoggedBody(read.text) },
         ok
           ? undefined
-          : { method, url, status, body: text.slice(0, FAILURE_BODY_EXCERPT) || undefined },
+          : { method, url, status, body: read.text.slice(0, FAILURE_BODY_EXCERPT) || undefined },
       )
     })
     return response

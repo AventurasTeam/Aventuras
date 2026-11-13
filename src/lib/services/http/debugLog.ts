@@ -90,32 +90,77 @@ export function failureReason(error: unknown): string {
   return isAbortError(error) ? 'aborted' : errMessage(error)
 }
 
-/** For a body that failed while being read: the status it arrived with, and why it stopped. */
-export function logReadFailure(response: Response, entry: DebugEntry, error: unknown): void {
-  const reason = failureReason(error)
+/** What a body read produced: the text that arrived, whether or not the read finished. */
+export type BodyRead = { text: string; bytes: number } & (
+  { ok: true } | { ok: false; error: unknown }
+)
+
+export type FailedRead = Extract<BodyRead, { ok: false }>
+
+/** Never throws: a body that fails partway returns the text decoded so far, with the error. */
+export async function readLoggedBody(response: Response): Promise<BodyRead> {
+  const reader = response.body?.getReader()
+  if (!reader) return { ok: true, text: '', bytes: 0 }
+  const decoder = new TextDecoder()
+  let text = ''
+  let bytes = 0
+  try {
+    for (;;) {
+      const { done, value } = await reader.read()
+      if (done) break
+      bytes += value.byteLength
+      text += decoder.decode(value, { stream: true })
+    }
+    return { ok: true, text: text + decoder.decode(), bytes }
+  } catch (error) {
+    return { ok: false, text: text + decoder.decode(), bytes, error }
+  }
+}
+
+/** Why a body stopped and how far it got. */
+export function describeReadFailure(read: FailedRead): string {
+  const reason = failureReason(read.error)
+  return read.bytes === 0
+    ? `${reason} (headers received, no body yet)`
+    : `${reason} (${read.bytes} bytes received)`
+}
+
+/** For a body that failed while being read: the status it arrived with, why it stopped, and what came before. */
+export function logReadFailure(response: Response, entry: DebugEntry, read: FailedRead): void {
   debugLog.addResponse(
     entry.debugId,
     entry.serviceId,
-    { status: response.status, error: reason },
+    {
+      status: response.status,
+      error: describeReadFailure(read),
+      received: {
+        bytes: read.bytes,
+        ...(read.bytes > 0 && { body: parseLoggedBody(read.text) }),
+      },
+    },
     entry.startTime,
-    reason,
+    describeReadFailure(read),
   )
 }
 
 export async function logErrorResponse(response: Response, entry: DebugEntry): Promise<void> {
   const { debugId, serviceId, startTime } = entry
-  try {
-    const text = await response.text()
-    debugLog.addResponse(
-      debugId,
-      serviceId,
-      { status: response.status, statusText: response.statusText, error: parseLoggedBody(text) },
-      startTime,
-      text,
-    )
-  } catch (err) {
-    logReadFailure(response, entry, err)
+  const read = await readLoggedBody(response)
+  if (!read.ok) {
+    logReadFailure(response, entry, read)
+    return
   }
+  debugLog.addResponse(
+    debugId,
+    serviceId,
+    {
+      status: response.status,
+      statusText: response.statusText,
+      error: parseLoggedBody(read.text),
+    },
+    startTime,
+    read.text,
+  )
 }
 
 /** `describe` adds fields derived from the parsed body, for callers that know its shape. */
@@ -125,17 +170,18 @@ export async function logJsonResponse(
   describe?: (body: unknown) => Record<string, unknown>,
 ): Promise<void> {
   const { debugId, serviceId, startTime } = entry
-  try {
-    const body = parseLoggedBody(await response.text())
-    debugLog.addResponse(
-      debugId,
-      serviceId,
-      { status: response.status, body, ...describe?.(body) },
-      startTime,
-    )
-  } catch (err) {
-    logReadFailure(response, entry, err)
+  const read = await readLoggedBody(response)
+  if (!read.ok) {
+    logReadFailure(response, entry, read)
+    return
   }
+  const body = parseLoggedBody(read.text)
+  debugLog.addResponse(
+    debugId,
+    serviceId,
+    { status: response.status, body, ...describe?.(body) },
+    startTime,
+  )
 }
 
 /** Logs the type and size without reading the body. */

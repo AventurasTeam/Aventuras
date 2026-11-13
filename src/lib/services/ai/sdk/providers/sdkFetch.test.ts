@@ -545,7 +545,12 @@ describe('createPollSdkFetch', () => {
     await poll()(POLL_URL)
     await flush()
 
-    const failure = { method: 'GET', url: POLL_URL, status: 200, error: 'connection lost' }
+    const failure = {
+      method: 'GET',
+      url: POLL_URL,
+      status: 200,
+      error: 'connection lost (headers received, no body yet)',
+    }
     expect(lastResponseData()).toEqual({ requests: 1, last: failure, failures: [failure] })
   })
 

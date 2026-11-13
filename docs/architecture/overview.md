@@ -797,8 +797,15 @@ included, is bounded only by the idle timer. Prefer the helpers built on it:
 Debug logging writes the whole response. The generic dispatcher (`services/http/debugLog.ts`)
 writes status and body for JSON and text, status, type and size for binary (or untyped) bodies, and
 the status and error body for a failure. A multipart request body is logged field by field: strings
-as sent (long base64 scrubbed), a file as its name, type and size, a repeated key as an array. The AI SDK transports are the same dispatcher with Gemini safety metadata and stream aggregation
-(`sdk/providers/debugLog.ts`). A body that fails while it is read is logged with its status and the error, not the text that arrived before it. Every read is of
+as sent (long base64 scrubbed), a file as its name, type and size, a repeated key as an array.
+
+Bodies are read with `readLoggedBody`, which never throws: a body that fails partway is logged with
+its status, the reason, and the text that did arrive (`received`). The entry's error says how far
+it got: `(headers received, no body yet)` or `(N bytes received)`. The poll transport reads the
+same way.
+
+The AI SDK transports are the same dispatcher with Gemini safety metadata and stream aggregation
+(`sdk/providers/debugLog.ts`). Every read is of
 a clone, taken only while debug mode is on. A reply the caller will cancel (a redirect under
 `followRedirects: false`, an `allowStatuses` status) is logged by status alone, because a live clone
 would keep the plugin's body open on the Rust side.

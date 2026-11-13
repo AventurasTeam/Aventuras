@@ -2,9 +2,11 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 
 import { debugLog } from '#lib/stores/debugLog.ts'
 import {
+  describeReadFailure,
   describeRequestBody,
   logResponse,
   parseLoggedBody,
+  readLoggedBody,
   redactHeaders,
   scrubBase64,
   type DebugEntry,
@@ -86,6 +88,53 @@ describe('describeRequestBody', () => {
   })
 })
 
+// `controller.error` discards queued chunks, so the failure waits for the second pull.
+function failAfter(chunk?: string): ReadableStream<Uint8Array> {
+  let pulls = 0
+  return new ReadableStream<Uint8Array>({
+    pull(controller) {
+      if (chunk && pulls++ === 0) controller.enqueue(new TextEncoder().encode(chunk))
+      else controller.error(new Error('connection lost'))
+    },
+  })
+}
+
+describe('readLoggedBody', () => {
+  const failing = (chunk?: string) => new Response(failAfter(chunk))
+
+  const failedRead = async (response: Response) => {
+    const read = await readLoggedBody(response)
+    if (read.ok) throw new Error('expected the read to fail')
+    return read
+  }
+
+  it('returns the whole text of a body that finishes', async () => {
+    expect(await readLoggedBody(new Response('héllo'))).toEqual({
+      ok: true,
+      text: 'héllo',
+      bytes: 6,
+    })
+  })
+
+  it('returns the text that arrived before a failure, without throwing', async () => {
+    expect(await readLoggedBody(failing('{"partial":'))).toMatchObject({
+      ok: false,
+      text: '{"partial":',
+      bytes: 11,
+      error: new Error('connection lost'),
+    })
+  })
+
+  it('describes how far a failed body got', async () => {
+    expect(describeReadFailure(await failedRead(failing()))).toBe(
+      'connection lost (headers received, no body yet)',
+    )
+    expect(describeReadFailure(await failedRead(failing('abc')))).toBe(
+      'connection lost (3 bytes received)',
+    )
+  })
+})
+
 describe('redactHeaders', () => {
   it('shortens a key longer than eight characters, whatever the header shape', () => {
     const key = 'sk-1234567890abcdef'
@@ -148,8 +197,31 @@ describe('logResponse', () => {
     logResponse(new Response(body, { headers: { 'content-type': 'application/json' } }), entry)
 
     await vi.waitFor(() =>
-      expect(written()).toContainEqual({ status: 200, error: 'connection lost' }),
+      expect(written()).toContainEqual({
+        status: 200,
+        error: 'connection lost (headers received, no body yet)',
+        received: { bytes: 0 },
+      }),
     )
+    expect(debugLog.snapshot().at(-1)?.error).toBe(
+      'connection lost (headers received, no body yet)',
+    )
+  })
+
+  it('keeps the text that arrived before a body failed', async () => {
+    logResponse(
+      new Response(failAfter('{"a":1'), { headers: { 'content-type': 'application/json' } }),
+      entry,
+    )
+
+    await vi.waitFor(() =>
+      expect(written()).toContainEqual({
+        status: 200,
+        error: 'connection lost (6 bytes received)',
+        received: { bytes: 6, body: '{"a":1' },
+      }),
+    )
+    expect(debugLog.snapshot().at(-1)?.error).toBe('connection lost (6 bytes received)')
   })
 
   it('logs an untyped body as binary rather than reading it as text', () => {

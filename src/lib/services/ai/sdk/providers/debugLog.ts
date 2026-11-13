@@ -1,7 +1,12 @@
 // AI-specific debug logging for the SDK transports: Gemini safety metadata and stream aggregation.
 // The generic request/response helpers live in `#lib/services/http`.
 
-import { createResponseLogger, logReadFailure, type DebugEntry } from '#lib/services/http/index.ts'
+import {
+  createResponseLogger,
+  logReadFailure,
+  readLoggedBody,
+  type DebugEntry,
+} from '#lib/services/http/index.ts'
 import { debugLog } from '#lib/stores/debugLog.ts'
 
 interface ProviderMetadata {
@@ -96,8 +101,13 @@ function isCompletionChunk(value: unknown): value is CompletionChunk {
 
 export async function logStreamResponse(response: Response, entry: DebugEntry): Promise<void> {
   const { debugId, serviceId, startTime } = entry
+  const read = await readLoggedBody(response)
+  if (!read.ok) {
+    logReadFailure(response, entry, read)
+    return
+  }
   try {
-    const text = await response.text()
+    const text = read.text
     let parsedBody: unknown = text
     const providerMetadata: ProviderMetadata = {}
     try {
@@ -200,7 +210,5 @@ export async function logStreamResponse(response: Response, entry: DebugEntry): 
       },
       startTime,
     )
-  } catch (err) {
-    logReadFailure(response, entry, err)
-  }
+  } catch {}
 }
