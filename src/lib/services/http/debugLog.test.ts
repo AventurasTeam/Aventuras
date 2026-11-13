@@ -115,6 +115,18 @@ describe('logResponse', () => {
     expect(response.bodyUsed).toBe(false)
   })
 
+  it('logs the status and the reason when a body fails mid-read', async () => {
+    const body = new ReadableStream<Uint8Array>({
+      start: (controller) => controller.error(new Error('connection lost')),
+    })
+
+    logResponse(new Response(body, { headers: { 'content-type': 'application/json' } }), entry)
+
+    await vi.waitFor(() =>
+      expect(written()).toContainEqual({ status: 200, error: 'connection lost' }),
+    )
+  })
+
   it('logs an untyped body as binary rather than reading it as text', () => {
     const response = new Response(new Uint8Array([1, 2, 3]))
     response.headers.delete('content-type')

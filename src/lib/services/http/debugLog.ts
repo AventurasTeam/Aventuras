@@ -75,6 +75,18 @@ export function failureReason(error: unknown): string {
   return isAbortError(error) ? 'aborted' : errMessage(error)
 }
 
+/** For a body that failed while being read: the status it arrived with, and why it stopped. */
+export function logReadFailure(response: Response, entry: DebugEntry, error: unknown): void {
+  const reason = failureReason(error)
+  debugLog.addResponse(
+    entry.debugId,
+    entry.serviceId,
+    { status: response.status, error: reason },
+    entry.startTime,
+    reason,
+  )
+}
+
 export async function logErrorResponse(response: Response, entry: DebugEntry): Promise<void> {
   const { debugId, serviceId, startTime } = entry
   try {
@@ -87,7 +99,7 @@ export async function logErrorResponse(response: Response, entry: DebugEntry): P
       text,
     )
   } catch (err) {
-    console.warn('[Fetch] Failed to read error response for logging:', err)
+    logReadFailure(response, entry, err)
   }
 }
 
@@ -107,7 +119,7 @@ export async function logJsonResponse(
       startTime,
     )
   } catch (err) {
-    console.warn('[Fetch] Failed to read JSON response for logging:', err)
+    logReadFailure(response, entry, err)
   }
 }
 

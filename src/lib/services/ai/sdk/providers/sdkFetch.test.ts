@@ -534,6 +534,21 @@ describe('createPollSdkFetch', () => {
     })
   })
 
+  it('records the status and the error of a body that fails mid-read', async () => {
+    const body = new ReadableStream<Uint8Array>({
+      start: (controller) => controller.error(new Error('connection lost')),
+    })
+    mockFetch.mockResolvedValueOnce(
+      new Response(body, { status: 200, headers: { 'content-type': 'application/json' } }),
+    )
+
+    await poll()(POLL_URL)
+    await flush()
+
+    const failure = { method: 'GET', url: POLL_URL, status: 200, error: 'connection lost' }
+    expect(lastResponseData()).toEqual({ requests: 1, last: failure, failures: [failure] })
+  })
+
   it('keeps only the most recent failures', async () => {
     mockFetch.mockImplementation(async () => new Response('busy', { status: 503 }))
     const fetch = poll()

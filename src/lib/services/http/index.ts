@@ -9,6 +9,7 @@ export {
   logBinaryResponse,
   logErrorResponse,
   logJsonResponse,
+  logReadFailure,
   logResponse,
   logStatus,
   parseLoggedBody,

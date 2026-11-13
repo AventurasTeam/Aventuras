@@ -82,8 +82,8 @@ describe('createTimeoutFetch abort handling', () => {
   })
 })
 
-/** An SSE response whose body the test drives; the plugin errors it with a bare string on abort. */
-function sseResponse(signal?: AbortSignal | null) {
+/** A response whose body the test drives; the plugin errors it with a bare string on abort. */
+function sseResponse(signal?: AbortSignal | null, contentType = 'text/event-stream') {
   let controller!: ReadableStreamDefaultController<Uint8Array>
   const body = new ReadableStream<Uint8Array>({
     start: (c) => {
@@ -93,10 +93,12 @@ function sseResponse(signal?: AbortSignal | null) {
   })
   const response = new Response(body, {
     status: 200,
-    headers: { 'content-type': 'text/event-stream' },
+    headers: { 'content-type': contentType },
   })
   return { response, controller }
 }
+
+const encode = (text: string) => new TextEncoder().encode(text)
 
 describe('createTimeoutFetch body handling', () => {
   beforeEach(() => {
@@ -329,6 +331,57 @@ describe('createTimeoutFetch debug log', () => {
   afterEach(() => {
     debugLog.active = false
     debugLog.reset()
+    vi.useRealTimers()
+  })
+
+  it('logs the status and the error when a JSON body fails mid-read', async () => {
+    mockFetch.mockImplementation(async (_url, init) => {
+      const { controller, response } = sseResponse(init?.signal, 'application/json')
+      controller.enqueue(encode('{"partial":'))
+      controller.error(new Error('connection lost'))
+      return response
+    })
+
+    await expect(createTimeoutFetch(60_000, 'test')('https://api.test/v1')).rejects.toThrow(
+      'connection lost',
+    )
+
+    await vi.waitFor(() => expect(entries('response')).toHaveLength(1))
+    expect(entries('response')[0].data).toEqual({ status: 200, error: 'connection lost' })
+  })
+
+  it('logs the status and the error when a stream stalls', async () => {
+    vi.useFakeTimers()
+    mockFetch.mockImplementation(async (_url, init) => {
+      const { controller, response } = sseResponse(init?.signal)
+      controller.enqueue(encode('data: {"partial":'))
+      return response
+    })
+
+    const response = await createTimeoutFetch(5_000, 'test')('https://api.test/v1')
+    const read = response.text().catch((e: unknown) => e)
+    await vi.advanceTimersByTimeAsync(5_000)
+    await read
+
+    await vi.waitFor(() => expect(entries('response')).toHaveLength(1))
+    expect(entries('response')[0].data).toEqual({
+      status: 200,
+      error: 'Request timed out after 5s',
+    })
+  })
+
+  it('leaves the caller the whole stream while logging it', async () => {
+    const { controller, response } = sseResponse()
+    mockFetch.mockResolvedValue(response)
+    const event = 'data: {"choices":[{"index":0,"delta":{"content":"hi"}}]}\n\n'
+
+    const result = await createTimeoutFetch(60_000, 'test')('https://api.test/v1')
+    controller.enqueue(encode(event))
+    controller.close()
+
+    expect(await result.text()).toBe(event)
+    await vi.waitFor(() => expect(entries('response')).toHaveLength(1))
+    expect(entries('response')[0].data).toMatchObject({ status: 200, stream: true })
   })
 
   it('logs the JSON response unpatched, scrubbed, with its status', async () => {

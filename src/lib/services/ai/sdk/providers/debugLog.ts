@@ -1,7 +1,7 @@
 // AI-specific debug logging for the SDK transports: Gemini safety metadata and stream aggregation.
 // The generic request/response helpers live in `#lib/services/http`.
 
-import { createResponseLogger, type DebugEntry } from '#lib/services/http/index.ts'
+import { createResponseLogger, logReadFailure, type DebugEntry } from '#lib/services/http/index.ts'
 import { debugLog } from '#lib/stores/debugLog.ts'
 
 interface ProviderMetadata {
@@ -201,6 +201,6 @@ export async function logStreamResponse(response: Response, entry: DebugEntry): 
       startTime,
     )
   } catch (err) {
-    console.warn('[Fetch] Failed to read streaming response for logging:', err)
+    logReadFailure(response, entry, err)
   }
 }

@@ -3,6 +3,7 @@
 
 import {
   describeRequestBody,
+  failureReason,
   headerEntries,
   loggedFetch,
   parseLoggedBody,
@@ -75,7 +76,7 @@ interface PollFailure {
 
 type PollRequest =
   | { method: string; url: string; status: number; body: unknown }
-  | { method: string; url: string; error: string }
+  | { method: string; url: string; status?: number; error: string }
 
 /**
  * A fetch whose requests share one debug entry, updated in place: how many there were, the last
@@ -140,7 +141,19 @@ export function createPollSdkFetch(options: Omit<SdkFetchOptions, 'log' | 'debug
     const copy = response.clone()
     const { status, ok } = response
     enqueue(async () => {
-      const text = await copy.text()
+      let text: string
+      try {
+        text = await copy.text()
+      } catch (error) {
+        const reason = failureReason(error)
+        write(
+          id,
+          count,
+          { method, url, status, error: reason },
+          { method, url, status, error: reason },
+        )
+        return
+      }
       const body = parseLoggedBody(text)
       write(
         id,
