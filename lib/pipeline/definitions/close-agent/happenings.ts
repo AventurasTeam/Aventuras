@@ -20,16 +20,16 @@ export const HAPPENINGS_READ_FIELDS: ReadFields = {
   happening: ['title', 'description', 'commonKnowledge', 'occurredAtEntryId'],
 }
 
-type CastMember = { id: string; name: string }
+type NamedEntity = { id: string; name: string }
 
 /** A clustered happening as the template shows it: `id`, the cast's ids and `turn` are handles. */
 export type HappeningClusterRow = {
   id: string
   title: string
   description: string
-  cast: CastMember[]
+  cast: NamedEntity[]
   /** The characters with an awareness row of it. */
-  knownBy: CastMember[]
+  knownBy: NamedEntity[]
   turn: string
   commonKnowledge: boolean
 }
@@ -62,7 +62,7 @@ async function readLinked(
   ctx: TaskPromptContext,
   links: EntityLinks,
   happeningIds: readonly string[],
-): Promise<ReadonlyMap<string, CastMember[]>> {
+): Promise<ReadonlyMap<string, NamedEntity[]>> {
   const rows = await ctx.db
     .select({ happeningId: links.happeningId, id: entities.id, name: entities.name })
     .from(links.table)
@@ -71,7 +71,7 @@ async function readLinked(
       and(eq(entities.branchId, links.branchId), eq(entities.id, links.entityId)),
     )
     .where(and(eq(links.branchId, ctx.branchId), inArray(links.happeningId, [...happeningIds])))
-  const linked = new Map<string, CastMember[]>()
+  const linked = new Map<string, NamedEntity[]>()
   for (const { happeningId, id, name } of rows) {
     const members = linked.get(happeningId) ?? []
     if (!members.some((member) => member.id === id)) members.push({ id, name })
@@ -95,11 +95,14 @@ async function startHappenings(ctx: TaskPromptContext): Promise<TaskStart<Happen
   const rows = listed.flat()
   const rowIds = rows.map((row) => row.id)
   const casts = await readLinked(ctx, INVOLVEMENTS, rowIds)
-  const knownBy = await readLinked(ctx, AWARENESS, rowIds)
-  // Every happening's handle first, so one a text names keeps the number of its place in the list;
-  // then every cast, then every knownBy, so an entity only an awareness row names never moves the
-  // number of a cast member in a later row. A row a text cites is named, so a write copying its
-  // handle stores the name, not the handle.
+  // Common knowledge reaches every character, so its awareness rows list no one and get no handle.
+  const knownBy = await readLinked(
+    ctx,
+    AWARENESS,
+    rows.filter((row) => row.commonKnowledge !== 1).map((row) => row.id),
+  )
+  // Handles in list order: happenings, then casts, then knownBy, so awareness-only entities never
+  // move a cast number. A row a text cites is named, so a write copying its handle stores the name.
   for (const row of rows) ctx.ids.show(row.id, row.title)
   for (const row of rows)
     for (const member of casts.get(row.id) ?? []) ctx.ids.show(member.id, member.name)
@@ -110,7 +113,7 @@ async function startHappenings(ctx: TaskPromptContext): Promise<TaskStart<Happen
     rows.map((row) => [row.title, row.description]),
   )
   const handled = (value: string): string => ctx.ids.withHandles(value)
-  const named = (member: CastMember): CastMember => ({
+  const named = (member: NamedEntity): NamedEntity => ({
     id: ctx.ids.show(member.id, member.name),
     name: handled(member.name),
   })

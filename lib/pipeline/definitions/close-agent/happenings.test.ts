@@ -38,6 +38,7 @@ const FORD = 'loc_00000000-0000-4000-8000-00000000e005'
 const GONE = 'char_00000000-0000-4000-8000-00000000e0ff'
 const ELSEWHERE = 'char_00000000-0000-4000-8000-00000000e0aa'
 const PIKE = 'char_00000000-0000-4000-8000-00000000e006'
+const ARIA = 'char_00000000-0000-4000-8000-00000000e007'
 const OTHER_BRANCH = 'br_other'
 
 // As the range embed stores them: each cluster in anchor order.
@@ -294,7 +295,7 @@ describe('happeningsTask', () => {
             title: 'The Syndicate taxes the ferry',
             description: 'The Syndicate taxes the ferry, the road and the bread.',
             cast: [{ id: 'c3', name: 'Tobin' }],
-            knownBy: [{ id: 'c3', name: 'Tobin' }],
+            knownBy: [],
             turn: 't7',
             commonKnowledge: true,
           },
@@ -590,20 +591,146 @@ describe('happeningsTask', () => {
     }
   })
 
-  it('tells the model to keep apart happenings known to different people, and what a merge does to awareness', async () => {
-    await seedClusters(f)
-    const ctx = promptContextFor(f, idsWithTurns(f), clustered(CLUSTERS))
-    const start = await happeningsTask.start(ctx)
+  it("names no one only a common-knowledge happening's awareness holds, and lists no one for it", async () => {
+    await seedCharacter(f, PIKE, 'Pike')
+    await seedHappening(f, {
+      id: LIGHT,
+      title: 'A',
+      at: 2,
+      cast: [],
+      commonKnowledge: 1,
+      knownBy: [PIKE],
+    })
+    await seedHappening(f, { id: CROSSING, title: 'B', at: 4, cast: [], knownBy: [PIKE] })
+    const ids = idsWithTurns(f)
 
-    const { user, system } = happeningsTask.render(start!, { ...ctx, writesSoFar: '' })
+    const start = await happeningsTask.start(
+      promptContextFor(f, ids, clustered([[LIGHT, CROSSING]])),
+    )
 
-    expect(user).toContain(
-      'Keep them apart when one is common knowledge and another is not, or when different characters know each, unless one only repeats the other.',
+    expect(start?.show.clusters[0]?.map((row) => row.knownBy)).toEqual([
+      [],
+      [{ id: 'c1', name: 'Pike' }],
+    ])
+  })
+
+  it('lists no one for a cluster of common-knowledge happenings alone, and no handle for their awareness', async () => {
+    await seedCharacter(f, PIKE, 'Pike')
+    await seedHappening(f, {
+      id: LIGHT,
+      title: 'A',
+      at: 2,
+      cast: [],
+      commonKnowledge: 1,
+      knownBy: [PIKE],
+    })
+    await seedHappening(f, { id: CROSSING, title: 'B', at: 4, cast: [], commonKnowledge: 1 })
+    const ids = idsWithTurns(f)
+
+    const start = await happeningsTask.start(
+      promptContextFor(f, ids, clustered([[LIGHT, CROSSING]])),
     )
-    expect(user).toContain(
-      'A merge with a common-knowledge happening makes keep common knowledge, and keep takes the awareness of every merged happening.',
-    )
-    expect(system).not.toContain('common knowledge')
+
+    expect(start?.show.clusters[0]?.map((row) => row.knownBy)).toEqual([[], []])
+    expect(ids.nameOfId(PIKE)).toBeUndefined()
+  })
+
+  describe('the rendered rules', () => {
+    async function renderUser(): Promise<string> {
+      await seedClusters(f)
+      const ctx = promptContextFor(f, idsWithTurns(f), clustered(CLUSTERS))
+      const start = await happeningsTask.start(ctx)
+      const { user, system } = happeningsTask.render(start!, { ...ctx, writesSoFar: '' })
+      expect(system).not.toContain('common knowledge')
+      return user
+    }
+
+    it('keeps apart a merge that would tell someone something new, with no exception for a repeat', async () => {
+      const user = await renderUser()
+
+      expect(user).toContain(
+        'Keep them apart when the merge would tell someone something new: everyone who knows any merged happening comes to know all of them, and every character does if one is common knowledge. So when one is common knowledge and another is not, or someone knows one but not another, merge only when the happening fewer characters know adds nothing to the one more characters know.',
+      )
+      expect(user).not.toContain('unless one only repeats the other')
+    })
+
+    it('words the one-call and composite bullets without contradicting themselves', async () => {
+      const user = await renderUser()
+
+      expect(user).toContain(
+        'One call per event. Merge everything that records one event in one call, never in a chain. If you missed one, a happening a merge kept can be kept again, but never absorbed.',
+      )
+      expect(user).toContain(
+        "Keep the happening whose title covers the others best and absorb the event's others;",
+      )
+      expect(user).not.toContain('never in a chain:')
+    })
+
+    it('shows the awareness a model weighs: a common-knowledge generality beside a private detail, and a vague row beside a detailed one', async () => {
+      await seedCharacter(f, ARIA, 'Aria')
+      await seedCharacter(f, WREN, 'Wren')
+      await seedCharacter(f, TOBIN, 'Tobin')
+      await seedHappening(f, {
+        id: LIGHT,
+        title: 'The king is dead',
+        at: 2,
+        cast: [],
+        commonKnowledge: 1,
+      })
+      await seedHappening(f, {
+        id: CROSSING,
+        title: 'Aria finds the king poisoned in his chamber',
+        at: 4,
+        cast: [],
+        knownBy: [ARIA],
+      })
+      await seedHappening(f, {
+        id: TOLL,
+        title: 'Something stirs at the ford',
+        at: 6,
+        cast: [],
+        knownBy: [WREN, TOBIN],
+      })
+      await seedHappening(f, {
+        id: SASH,
+        title: 'A guard at the ford signals Wren',
+        at: 6,
+        cast: [],
+        knownBy: [WREN],
+      })
+      const ctx = promptContextFor(f, idsWithTurns(f), clustered(CLUSTERS))
+      const start = await happeningsTask.start(ctx)
+
+      const { user } = happeningsTask.render(start!, { ...ctx, writesSoFar: '' })
+
+      expect(user).toContain(
+        '### hp1: The king is dead (common knowledge)\n- occurred at: t3\n- cast: none\n- known by: every character\n',
+      )
+      expect(user).toContain(
+        '### hp2: Aria finds the king poisoned in his chamber\n- occurred at: t5\n- cast: none\n- known by: Aria (c1)\n',
+      )
+      expect(user).toContain(
+        '### hp3: Something stirs at the ford\n- occurred at: t7\n- cast: none\n- known by: Tobin (c2), Wren (c3)\n',
+      )
+      expect(user).toContain(
+        '### hp4: A guard at the ford signals Wren\n- occurred at: t7\n- cast: none\n- known by: Wren (c3)\n',
+      )
+    })
+
+    it('leaves out the writes-so-far section until something was written', async () => {
+      await seedClusters(f)
+      const ctx = promptContextFor(f, idsWithTurns(f), clustered(CLUSTERS))
+      const start = await happeningsTask.start(ctx)
+
+      const empty = happeningsTask.render(start!, { ...ctx, writesSoFar: '' })
+      const written = happeningsTask.render(start!, {
+        ...ctx,
+        writesSoFar: '- merge_happenings A (hp1): kept hp1',
+      })
+
+      expect(empty.user).not.toContain('# Writes so far')
+      expect(written.user).toContain('# Writes so far')
+    })
   })
 
   it('lets read_row return the fields the start shows, and count the row as read', async () => {
