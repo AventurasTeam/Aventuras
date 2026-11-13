@@ -3,6 +3,7 @@ export { loggedFetch, type LoggedFetchOptions } from './loggedFetch'
 export {
   createResponseLogger,
   describeRequestBody,
+  failureReason,
   headerEntries,
   isBinaryContentType,
   logBinaryResponse,

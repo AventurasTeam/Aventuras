@@ -1,6 +1,8 @@
 // Debug-log helpers for HTTP requests: what a request entry shows and how a response is written.
 
+import { isAbortError } from '#lib/services/activity/index.ts'
 import { debugLog } from '#lib/stores/debugLog.ts'
+import { errMessage } from '#lib/utils/error.ts'
 
 const SENSITIVE_HEADERS = new Set(['authorization', 'x-api-key', 'api-key', 'x-goog-api-key'])
 const BINARY_CONTENT_TYPE = /^(image|audio|video)\/|octet-stream/
@@ -67,6 +69,10 @@ export function describeRequestBody(body: RequestInit['body']): unknown {
   }
   if (body instanceof FormData) return { formData: [...body.keys()] }
   return undefined
+}
+
+export function failureReason(error: unknown): string {
+  return isAbortError(error) ? 'aborted' : errMessage(error)
 }
 
 export async function logErrorResponse(response: Response, entry: DebugEntry): Promise<void> {

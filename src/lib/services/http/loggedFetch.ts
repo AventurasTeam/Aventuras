@@ -1,10 +1,14 @@
 // The debug-logged transport: a request entry, the request guard, the plugin, and the response entry.
 
-import { isAbortError } from '#lib/services/activity/index.ts'
 import { debugLog } from '#lib/stores/debugLog.ts'
-import { errMessage } from '#lib/utils/error.ts'
 import { createRequestGuard } from '#lib/utils/idleTimeout.ts'
-import { describeRequestBody, logResponse, redactHeaders, type ResponseLogger } from './debugLog'
+import {
+  describeRequestBody,
+  failureReason,
+  logResponse,
+  redactHeaders,
+  type ResponseLogger,
+} from './debugLog'
 import { httpFetch, type HttpInit } from './httpFetch'
 
 export interface LoggedFetchOptions {
@@ -57,7 +61,7 @@ export async function loggedFetch(
   } catch (error) {
     const mapped = guard ? guard.mapError(error) : error
     if (logging) {
-      const reason = isAbortError(mapped) ? 'aborted' : errMessage(mapped)
+      const reason = failureReason(mapped)
       debugLog.addResponse(debugId, serviceId, { error: reason }, startTime, reason)
     }
     throw mapped
