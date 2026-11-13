@@ -457,14 +457,6 @@ patch`, which 5.5a marks `restated`, so a close tool's write of it
   boost loop in `lib/retrieval/run.ts` keeps all its cases green,
   including the one named for that admission. Raised in 5.9's Task 2
   review.
-- **The open chapter's number and retrieval's `current` can disagree.**
-  Retrieval numbers the open chapter one past the highest closed
-  chapter that still holds a stamped entry (the stamp join in
-  `loadChapterRanges`), while the story card's open chapter
-  (`openChapterNumber`) is one past the highest closed chapter whatever
-  it holds. Deleting every entry of the newest closed chapter, which
-  `deleteStoryEntry` allows, splits them, so ages run one short of the
-  number the user sees. Raised in 5.9's Task 3 review.
 - **A folded stackable key can outgrow its schema bound.**
   `foldStackableKey` lowercases, and some letters lengthen when
   lowercased (`İ` becomes two code units), so a 40-character key can
