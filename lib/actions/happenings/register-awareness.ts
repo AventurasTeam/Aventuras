@@ -53,7 +53,8 @@ declare module '@/lib/actions/action-map' {
 
 const USER_WON = noopRefusal(USER_EDITED_SINCE_PROSE, null)
 
-// A close's merge carries the folded learned_at and count.
+// Any chapter_close write may move learned_at and the count, so close callers send only folded
+// values (the merge) or neither (set_pin).
 const isCloseMerge = (source: DeltaSource): boolean => source === 'chapter_close'
 
 const upsertHandler: ActionHandler = async (action, branchId, ctx, group) => {

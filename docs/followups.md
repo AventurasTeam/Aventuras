@@ -384,10 +384,10 @@ breakdown under [UX](#ux).
   boosting before decay or by a larger factor. Raised 2026-11-13 by
   Slice 5.9's planning, when `chapters_old` came live.
 
-  A thread the user created, or one the user resolved or failed,
-  carries no `resolved_at_entry_id` and never decays: the
-  [authorship contract](./data-model.md#authorship-contract) keeps
-  entry refs AI-only. If real stories show such threads crowding
+- **User threads never decay.** A thread the user created, or one the
+  user resolved or failed, carries no `resolved_at_entry_id` and never
+  decays: the [authorship contract](./data-model.md#authorship-contract)
+  keeps entry refs AI-only. If real stories show such threads crowding
   retrieval, their age can come read-side from the delta log, from the
   entry at the user's status-change delta's `log_position` (a user's
   thread edit logs a null `entry_id` but a log position). That keeps
