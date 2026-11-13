@@ -866,8 +866,8 @@ describe('buildGenerationContext — structural floor', () => {
   })
 
   // The floor is built over LOADED source rows, so every row here still carries
-  // embeddingStale (and lore's keywords) at runtime; StructuralFloor's declared
-  // shape hides that from the compiler, which is why it needs a runtime pin.
+  // LOADED_EXTRAS at runtime; StructuralFloor's declared shape hides that from
+  // the compiler, which is why it needs a runtime pin.
   it('projects floor rows to render fields only, dropping retrieval bookkeeping', async () => {
     const ctx = await buildContext({
       ...base(),

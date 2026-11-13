@@ -2,13 +2,13 @@ import { isJsonObject } from '@/lib/json-object'
 
 /**
  * retrieval.md → Scoring function, `chapters_old`: distance in chapters from the open chapter,
- * numbered one past the highest closed `sequence_number`. Derived per pass and never stored, so a
- * reversed or deleted chapter reads right on the next pass.
+ * numbered one past the highest `sequence_number` a stamped entry carries. Derived per pass and
+ * never stored, so a reversed or deleted chapter reads right on the next pass.
  */
 export type ChapterAgeIndex = {
   /** A stamped entry's chapter sequence_number. */
   readonly sequenceOf: ReadonlyMap<string, number>
-  /** Highest closed sequence_number + 1; 0 when the branch has no closed chapter. */
+  /** One past the highest stamped sequence_number; 0 with no stamp. */
   readonly current: number
 }
 

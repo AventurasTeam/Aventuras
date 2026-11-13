@@ -987,10 +987,13 @@ describe('runRetrieval — chapter age', () => {
           lore: [loreRow('lore_1', 'Veilstone')],
           happenings: [
             happeningRow('hap_1', 'The oath', { occurredAt: 'e_ch1' }),
+            happeningRow('hap_2', 'The flood', { occurredAt: 'e_ch2' }),
             happeningRow('hap_common', 'The bell', { common: 1, occurredAt: 'e_ch1' }),
           ],
           awareness: [
             awarenessRow('haw_1', 'hap_1', { learnedAt: 'e_ch1', pin: 0.5 }),
+            // No anchor of its own, so it ages from the happening's.
+            awarenessRow('haw_2', 'hap_2', { learnedAt: null }),
             awarenessRow('haw_common', 'hap_common', { learnedAt: 'e_ch1', pin: 0.9 }),
           ],
           threads: [
@@ -1007,6 +1010,7 @@ describe('runRetrieval — chapter age', () => {
             hit('loc_1'),
             hit('lore_1'),
             hit('hap_1'),
+            hit('hap_2'),
             hit('hap_common'),
             hit('th_resolved'),
             hit('th_pending'),
@@ -1050,6 +1054,7 @@ describe('runRetrieval — chapter age', () => {
       loc_1: 0,
       lore_1: 0,
       hap_1: 0,
+      hap_2: 0,
       hap_common: 0,
       th_resolved: 0,
       th_pending: 0,
@@ -1065,6 +1070,7 @@ describe('runRetrieval — chapter age', () => {
       loc_1: 0,
       lore_1: 0,
       hap_1: 3,
+      hap_2: 2,
       hap_common: 0,
       th_resolved: 3,
       th_pending: 0,

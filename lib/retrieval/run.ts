@@ -772,8 +772,6 @@ function assembleCandidates(
     return vector
   }
 
-  // Rebuilt per candidate: awarenessIds is an array, and one instance spread
-  // across a pool would alias every candidate's list.
   const shared = () => ({
     // Stale rows keep their old vector in vec0 and stay reachable by KNN, so
     // each pool below drops them; everything that survives is fresh.
