@@ -775,14 +775,35 @@ such as Cloudflare Access service tokens are not supported.
 
 Remote HTTP goes through `@tauri-apps/plugin-http`, not the WebView's `fetch`: the endpoints are
 user-configured, so CORS, Android's cleartext block and iOS ATS (above) would each break some of
-them. `httpFetch` (`utils/http.ts`) is the only way into the plugin, and an ESLint rule rejects
-any other import of its `fetch`. Prefer the existing helpers built on it: `createTimeoutFetch` for
-AI SDK providers, `createSdkFetch` for SDK image models (Tauri transport, request guard and
-debug logging; Google, OpenAI, OpenAI Compatible, Pollinations, Z.AI, OpenRouter, NanoGPT, A1111 and
-ComfyUI use it; ComfyUI polls through `createPollSdkFetch`, which keeps them in one entry so they
-do not push the generation POST out of the debug store's last 100 entries),
-`imageGetFetch` / `fetchPublicImageBase64` for model
-discovery and reference fetching, `corsFetch` for discovery.
+them. `httpFetch` (`services/http/httpFetch.ts`) is the only way into the plugin, and an ESLint
+rule rejects any other import of its `fetch`.
+
+`loggedFetch` (`services/http/`) is the transport the app's own requests share: the request's
+debug entry, the request guard (header and idle timeouts, abort mapping) and the response's entry.
+Prefer the helpers built on it:
+
+- `createTimeoutFetch` for AI SDK providers (it adds manual-body merging and usage patching).
+- `createSdkFetch` for SDK image models. Google, OpenAI, OpenAI Compatible, Pollinations, Z.AI,
+  OpenRouter, NanoGPT, A1111 and ComfyUI use it. ComfyUI polls through `createPollSdkFetch`, which
+  keeps them in one entry so they do not push the generation POST out of the debug log's last 100
+  entries.
+- `imageGetFetch` / `fetchPublicImageBase64` for model discovery and reference fetching.
+- `corsFetch` for character-card discovery and other plain GETs. It logs nothing unless a caller
+  passes `debug: { serviceId }`.
+
+`updater.ts` and the model-health ping call `httpFetch` directly and are not logged.
+
+Debug logging writes the whole response. The generic dispatcher (`services/http/debugLog.ts`)
+writes status and body for JSON and text, status, type and size for binary (or untyped) bodies, and
+the status and error body for a failure. The AI SDK transports add Gemini safety metadata and
+aggregate streams (`sdk/providers/debugLog.ts`). Every read is of a clone, taken only while debug
+mode is on. A reply the caller will cancel (a redirect under `followRedirects: false`, an
+`allowStatuses` status) is logged by status alone, because a live clone would keep the plugin's
+body open on the Rust side.
+
+Entries are written to `stores/debugLog.ts`, a plain module with no runes or Tauri imports, so
+transports and their tests need no store mock. `debug.svelte.ts` wraps it for reactivity and the
+pop-out window.
 
 What the plugin changes for the server on the other end:
 
