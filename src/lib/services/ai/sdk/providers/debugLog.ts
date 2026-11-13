@@ -1,14 +1,7 @@
 // AI-specific debug logging for the SDK transports: Gemini safety metadata and stream aggregation.
 // The generic request/response helpers live in `#lib/services/http`.
 
-import {
-  isBinaryContentType,
-  logBinaryResponse,
-  logErrorResponse,
-  logJsonResponse,
-  type DebugEntry,
-  type ResponseLogger,
-} from '#lib/services/http/index.ts'
+import { createResponseLogger, type DebugEntry } from '#lib/services/http/index.ts'
 import { debugLog } from '#lib/stores/debugLog.ts'
 
 interface ProviderMetadata {
@@ -43,21 +36,12 @@ function nonEmpty(metadata: ProviderMetadata): ProviderMetadata | undefined {
   return metadata.promptFeedback || metadata.safetyRatings ? metadata : undefined
 }
 
-/** Like the generic dispatcher, but an untyped success is a stream: the SDK's chat endpoints send SSE. */
-export const logSdkResponse: ResponseLogger = (response, entry) => {
-  const contentType = response.headers.get('content-type') ?? ''
-  if (!response.ok) {
-    void logErrorResponse(response.clone(), entry)
-  } else if (isBinaryContentType(contentType)) {
-    logBinaryResponse(response, entry)
-  } else if (contentType.includes('json')) {
-    void logJsonResponse(response.clone(), entry, (body) => ({
-      providerMetadata: providerMetadataOf(body),
-    }))
-  } else {
-    void logStreamResponse(response.clone(), entry)
-  }
-}
+/** Like the generic dispatcher, but any other success is a stream: the SDK's chat endpoints send SSE. */
+export const logSdkResponse = createResponseLogger({
+  describeJson: (body) => ({ providerMetadata: providerMetadataOf(body) }),
+  // A clone: the SDK reads the original.
+  logOther: (response, entry) => void logStreamResponse(response.clone(), entry),
+})
 
 interface ToolCallDelta {
   index: number

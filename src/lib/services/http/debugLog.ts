@@ -126,13 +126,31 @@ export function logStatus(response: Response, entry: DebugEntry): void {
 }
 
 /** An untyped response is treated as binary: unknown bytes are never read as text. */
-export const logResponse: ResponseLogger = (response, entry) => {
-  const contentType = response.headers.get('content-type')
-  if (!response.ok) {
-    void logErrorResponse(response.clone(), entry)
-  } else if (!contentType || isBinaryContentType(contentType)) {
-    logBinaryResponse(response, entry)
-  } else {
-    void logJsonResponse(response.clone(), entry)
+const logUntypedOrText: ResponseLogger = (response, entry) => {
+  if (response.headers.get('content-type')) void logJsonResponse(response.clone(), entry)
+  else logBinaryResponse(response, entry)
+}
+
+interface ResponseLoggerOptions {
+  describeJson?: (body: unknown) => Record<string, unknown>
+  /** Logs a success that is neither binary nor JSON. */
+  logOther?: ResponseLogger
+}
+
+export function createResponseLogger(options: ResponseLoggerOptions = {}): ResponseLogger {
+  const { describeJson, logOther = logUntypedOrText } = options
+  return (response, entry) => {
+    const contentType = response.headers.get('content-type') ?? ''
+    if (!response.ok) {
+      void logErrorResponse(response.clone(), entry)
+    } else if (isBinaryContentType(contentType)) {
+      logBinaryResponse(response, entry)
+    } else if (contentType.includes('json')) {
+      void logJsonResponse(response.clone(), entry, describeJson)
+    } else {
+      logOther(response, entry)
+    }
   }
 }
+
+export const logResponse = createResponseLogger()

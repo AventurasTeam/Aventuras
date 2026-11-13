@@ -1,6 +1,7 @@
 export { httpFetch, type HttpInit } from './httpFetch'
 export { loggedFetch, type LoggedFetchOptions } from './loggedFetch'
 export {
+  createResponseLogger,
   describeRequestBody,
   headerEntries,
   isBinaryContentType,
