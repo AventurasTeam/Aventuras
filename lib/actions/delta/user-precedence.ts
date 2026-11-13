@@ -240,7 +240,7 @@ export function wroteField(
 async function userDeletedRowSince(
   ctx: DbCtx,
   branchId: string,
-  table: 'character_relationships' | 'happening_awareness',
+  table: 'character_relationships' | 'happening_awareness' | 'happening_involvements',
   key: Readonly<Record<string, string>>,
   since: number,
 ): Promise<boolean> {
@@ -288,6 +288,23 @@ export function userDeletedAwarenessSince(
     branchId,
     'happening_awareness',
     { characterId, happeningId },
+    since,
+  )
+}
+
+/** Whether the user deleted an involvement of the entity in the happening after `since`. */
+export function userDeletedInvolvementSince(
+  ctx: DbCtx,
+  branchId: string,
+  entityId: string,
+  happeningId: string,
+  since: number,
+): Promise<boolean> {
+  return userDeletedRowSince(
+    ctx,
+    branchId,
+    'happening_involvements',
+    { happeningId, entityId },
     since,
   )
 }
