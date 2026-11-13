@@ -68,7 +68,8 @@ export async function loggedFetch(
   } catch (error) {
     const mapped = guard ? guard.mapError(error) : error
     if (logging) {
-      const reason = failureReason(mapped)
+      // Without a guard the plugin's bare-string rejection is not an AbortError.
+      const reason = !guard && signal?.aborted ? 'aborted' : failureReason(mapped)
       debugLog.addResponse(debugId, serviceId, { error: reason }, startTime, reason)
     }
     throw mapped

@@ -195,6 +195,19 @@ describe('loggedFetch without a timeout', () => {
     expect(mockFetch.mock.calls[0][1]?.signal).toBe(caller.signal)
   })
 
+  it('logs a caller abort as aborted and rethrows what the plugin gave', async () => {
+    mockFetch.mockImplementation(pendingUntilAborted)
+    const caller = new AbortController()
+    const request = loggedFetch(API_URL, {}, { serviceId: 'svc', signal: caller.signal }).catch(
+      (e: unknown) => e,
+    )
+
+    caller.abort()
+
+    expect(await request).toBe('Request canceled')
+    expect(entries('response')[0].data).toEqual({ error: 'aborted' })
+  })
+
   it('rethrows an error as the plugin gave it', async () => {
     mockFetch.mockRejectedValue('Request canceled')
 
