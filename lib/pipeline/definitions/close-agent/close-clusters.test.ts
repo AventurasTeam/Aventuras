@@ -100,21 +100,6 @@ describe('findClusters', () => {
     expect(findClusters([row('a', { cast: cast() }), row('b')])).toEqual([])
   })
 
-  it('makes every pair of a cluster meet the criteria, so a chain stops where it drifts', () => {
-    // a~b and b~c, but a and c sit 0.8 rad apart (cosine 0.70): c opens a cluster d joins.
-    const rows = [
-      row('d', { vector: at(0.85), anchorIndex: 3 }),
-      row('b', { vector: at(0.4), anchorIndex: 1 }),
-      row('c', { vector: at(0.8), anchorIndex: 2 }),
-      row('a', { vector: at(0), anchorIndex: 0 }),
-    ]
-
-    expect(findClusters(rows)).toEqual([
-      ['a', 'b'],
-      ['c', 'd'],
-    ])
-  })
-
   it('makes a later member meet the first member and the ones that joined after it', () => {
     // c fits a (cosine 0.83) but not b (0.36), and b joined a: c stays out.
     const rows = [
@@ -126,15 +111,106 @@ describe('findClusters', () => {
     expect(findClusters(rows)).toEqual([['a', 'b']])
   })
 
-  it('gives a row to one cluster only, the earliest it fits', () => {
-    // b fits a and c alike (cosine 0.90 each); a and c don't fit (0.62): a's cluster takes b.
+  it('joins the strongest pair first, so a row its weaker partner reaches stays out', () => {
+    // a~b 0.825, b~c 0.999, a~c 0.796: b and c pair first, then a fits b but not c.
     const rows = [
       row('a', { vector: at(0), anchorIndex: 0 }),
-      row('c', { vector: at(0.9), anchorIndex: 1 }),
-      row('b', { vector: at(0.45), anchorIndex: 2 }),
+      row('b', { vector: at(0.6), anchorIndex: 1 }),
+      row('c', { vector: at(0.65), anchorIndex: 2 }),
     ]
 
-    expect(findClusters(rows)).toEqual([['a', 'b']])
+    expect(findClusters(rows)).toEqual([['b', 'c']])
+  })
+
+  it('merges two clusters only when every cross pair fits', () => {
+    // a~b 0.939 and c~d 0.999 pair first; b~c (0.921) bridges them, but a and c sit 0.75 rad
+    // apart (cosine 0.73), so the clusters stay two.
+    const rows = [
+      row('a', { vector: at(0), anchorIndex: 0 }),
+      row('b', { vector: at(0.35), anchorIndex: 1 }),
+      row('c', { vector: at(0.75), anchorIndex: 2 }),
+      row('d', { vector: at(0.8), anchorIndex: 3 }),
+    ]
+
+    expect(findClusters(rows)).toEqual([
+      ['a', 'b'],
+      ['c', 'd'],
+    ])
+  })
+
+  it('merges clusters whose every cross pair fits, listing the rows in anchor order', () => {
+    // a~c 0.999 pairs first, then b joins both (0.969, 0.955): the cluster lists a, b, c.
+    const rows = [
+      row('c', { vector: at(0.05), anchorIndex: 2 }),
+      row('a', { vector: at(0), anchorIndex: 0 }),
+      row('b', { vector: at(0.3), anchorIndex: 1 }),
+    ]
+
+    expect(findClusters(rows)).toEqual([['a', 'b', 'c']])
+  })
+
+  it('checks a cross pair by its own two rows, never through a key another pair shares', () => {
+    // hub fits all three leaves, the leaves fit none of each other: hub~p1 (0.999) pairs first,
+    // and p2 can't join, though a sum-keyed lookup would read (p1, p2) as (p0, hub).
+    const leaf = (id: string, angle: number, anchorIndex: number): ClusterInput =>
+      row(id, { vector: at(angle), anchorIndex, cast: cast(id) })
+    const rows = [
+      leaf('p0', 0.4, 0),
+      leaf('p1', 0.05, 1),
+      leaf('p2', 0.2, 2),
+      row('hub', { vector: at(0), anchorIndex: 3, cast: cast('p0', 'p1', 'p2') }),
+    ]
+
+    expect(findClusters(rows)).toEqual([['p1', 'hub']])
+  })
+
+  it('orders the clusters by their first row, not by which pair was strongest', () => {
+    // The pair at entries 10 and 11 (cosine 1) forms before the pair at 0 and 1 (0.99).
+    const rows = [
+      row('p', { vector: BASE, anchorIndex: 10 }),
+      row('q', { vector: BASE, anchorIndex: 11 }),
+      row('a', { vector: at(0), anchorIndex: 0 }),
+      row('b', { vector: at(0.14), anchorIndex: 1 }),
+    ]
+
+    expect(findClusters(rows)).toEqual([
+      ['a', 'b'],
+      ['p', 'q'],
+    ])
+  })
+
+  describe('a tie in cosine', () => {
+    // Every vector is BASE, so each qualifying pair reads cosine 1 and only the cast or the span
+    // keeps a pair apart: the first pair walked decides which of two rival merges lands.
+    it('goes to the pair whose earlier member has the smaller anchor', () => {
+      const rows = [
+        row('z', { anchorIndex: 0 }),
+        row('m', { anchorIndex: 3 }),
+        row('a', { anchorIndex: 6 }),
+      ]
+
+      expect(findClusters(rows)).toEqual([['z', 'm']])
+    })
+
+    it('goes, at one anchor, to the pair whose earlier member has the smaller id', () => {
+      const rows = [
+        row('n', { anchorIndex: 0, cast: cast(MIRA, SILAS) }),
+        row('m', { anchorIndex: 0, cast: cast(WREN, TOBIN) }),
+        row('z', { anchorIndex: 1, cast: cast(WREN, TOBIN, MIRA, SILAS) }),
+      ]
+
+      expect(findClusters(rows)).toEqual([['m', 'z']])
+    })
+
+    it('goes, with one earlier member, to the pair whose later member sorts first', () => {
+      const rows = [
+        row('a', { anchorIndex: 0, cast: cast(WREN, TOBIN, MIRA, SILAS) }),
+        row('c', { anchorIndex: 2, cast: cast(MIRA, SILAS) }),
+        row('b', { anchorIndex: 1, cast: cast(WREN, TOBIN) }),
+      ]
+
+      expect(findClusters(rows)).toEqual([['a', 'b']])
+    })
   })
 
   it('lists a cluster in anchor order, a tie by id', () => {

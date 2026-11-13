@@ -27,40 +27,63 @@ function castOverlap(a: ReadonlySet<string>, b: ReadonlySet<string>): number {
   return shared / smaller.size
 }
 
-// Cheapest first: the cosine reads every dim.
-function belongTogether(a: Anchored, b: Anchored): boolean {
-  return (
-    Math.abs(a.anchorIndex - b.anchorIndex) <= CLUSTER_ENTRY_SPAN_MAX &&
-    castOverlap(a.cast, b.cast) >= CLUSTER_CAST_OVERLAP_MIN &&
-    cosine(a.vector, b.vector) >= CLUSTER_COSINE_MIN
-  )
+// The pair's cosine when it meets all three criteria, else null. Cheapest first: the cosine reads
+// every dim.
+function qualifyingCosine(a: Anchored, b: Anchored): number | null {
+  if (Math.abs(a.anchorIndex - b.anchorIndex) > CLUSTER_ENTRY_SPAN_MAX) return null
+  if (castOverlap(a.cast, b.cast) < CLUSTER_CAST_OVERLAP_MIN) return null
+  const similarity = cosine(a.vector, b.vector)
+  return similarity >= CLUSTER_COSINE_MIN ? similarity : null
 }
 
 const byAnchorThenId = (a: Anchored, b: Anchored): number =>
   a.anchorIndex - b.anchorIndex || (a.id < b.id ? -1 : a.id > b.id ? 1 : 0)
 
+type Pair = { first: number; second: number; similarity: number }
+
+/** Strongest first; a tie goes to the pair whose earlier member sorts first, then its later one. */
+const strongestFirst = (a: Pair, b: Pair): number =>
+  b.similarity - a.similarity || a.first - b.first || a.second - b.second
+
 /**
- * chapter-close.md → 3e's candidates. Greedy in anchor order: each unassigned row opens a cluster
- * that a later unassigned row joins only when it meets every member, so no chain drifts. A row
- * sits in one cluster at most; clusters of two or more return, each in anchor order.
+ * chapter-close.md → 3e's candidates, by complete linkage from the strongest pair down: every
+ * pair meeting all three criteria is walked in descending cosine, and two rows' clusters merge
+ * only when every cross pair meets all three too, so no chain drifts. A row sits in one cluster
+ * at most; clusters of two or more return, each in anchor order (then id), ordered by their
+ * first row.
  */
 export function findClusters(rows: readonly ClusterInput[]): string[][] {
   const anchored = rows
     .filter((row): row is Anchored => row.anchorIndex !== null)
     .sort(byAnchorThenId)
-  const assigned = new Set<string>()
-  const clusters: string[][] = []
-  for (const [at, seed] of anchored.entries()) {
-    if (assigned.has(seed.id)) continue
-    assigned.add(seed.id)
-    const members = [seed]
-    for (const candidate of anchored.slice(at + 1)) {
-      if (assigned.has(candidate.id)) continue
-      if (!members.every((member) => belongTogether(member, candidate))) continue
-      members.push(candidate)
-      assigned.add(candidate.id)
+  const pairs: Pair[] = []
+  const qualifying = new Set<number>()
+  const pairKey = (first: number, second: number): number => first * anchored.length + second
+  for (let first = 0; first < anchored.length; first++) {
+    for (let second = first + 1; second < anchored.length; second++) {
+      const similarity = qualifyingCosine(anchored[first], anchored[second])
+      if (similarity === null) continue
+      pairs.push({ first, second, similarity })
+      qualifying.add(pairKey(first, second))
     }
-    if (members.length >= 2) clusters.push(members.map(({ id }) => id))
   }
-  return clusters
+
+  const clusterOf = anchored.map((_, index) => [index])
+  for (const { first, second } of pairs.sort(strongestFirst)) {
+    const left = clusterOf[first]
+    const right = clusterOf[second]
+    if (left === right) continue
+    const everyCrossPairFits = left.every((l) =>
+      right.every((r) => qualifying.has(pairKey(Math.min(l, r), Math.max(l, r)))),
+    )
+    if (!everyCrossPairFits) continue
+    const merged = [...left, ...right]
+    for (const member of merged) clusterOf[member] = merged
+  }
+
+  return [...new Set(clusterOf)]
+    .filter((members) => members.length >= 2)
+    .map((members) => members.toSorted((a, b) => a - b))
+    .sort((a, b) => a[0] - b[0])
+    .map((members) => members.map((index) => anchored[index].id))
 }
