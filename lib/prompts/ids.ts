@@ -12,6 +12,7 @@ export const TEMPLATE_IDS = {
   chapterMetadata: 'tmpl_chapter_metadata',
   chapterMetadataPart: 'tmpl_chapter_metadata_part',
   chapterMetadataMerge: 'tmpl_chapter_metadata_merge',
+  closeHappenings: 'tmpl_close_happenings',
   closeLore: 'tmpl_close_lore',
   closeIdentity: 'tmpl_close_identity',
   closeThreads: 'tmpl_close_threads',

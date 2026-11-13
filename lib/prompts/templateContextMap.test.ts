@@ -63,6 +63,7 @@ describe('templateContextMap', () => {
       'closeThreads',
       'closeWritesSoFar',
       'closeSoftCaps',
+      'closeHappeningClusters',
       'closeLore',
       'closeLoreLimits',
       'closeUpkeepRows',
@@ -81,6 +82,7 @@ describe('templateContextMap', () => {
       'closeThreads',
       'closeWritesSoFar',
       'closeSoftCaps',
+      'closeHappeningClusters',
       'closeLore',
       'closeLoreLimits',
       'closeUpkeepRows',
@@ -96,6 +98,7 @@ describe('templateContextMap', () => {
       ['closeThreads', false],
       ['closeWritesSoFar', false],
       ['closeSoftCaps', false],
+      ['closeHappeningClusters', false],
       ['closeLore', false],
       ['closeLoreLimits', false],
       ['closeUpkeepRows', false],
@@ -116,6 +119,7 @@ describe('templateContextMap', () => {
   })
 
   it("maps the close's task templates to the chapter group", () => {
+    expect(TEMPLATE_GROUPS[TEMPLATE_IDS.closeHappenings]).toBe('chapter')
     expect(TEMPLATE_GROUPS[TEMPLATE_IDS.closeLore]).toBe('chapter')
     expect(TEMPLATE_GROUPS[TEMPLATE_IDS.closeUpkeep]).toBe('chapter')
     expect(TEMPLATE_GROUPS[TEMPLATE_IDS.closeIdentity]).toBe('chapter')
@@ -136,6 +140,7 @@ describe('templateContextMap', () => {
       closeThreads: 'Plot',
       closeWritesSoFar: 'Story',
       closeSoftCaps: 'Story Config',
+      closeHappeningClusters: 'Plot',
       closeLore: 'Retrieval',
       closeLoreLimits: 'Story Config',
       closeUpkeepRows: 'Entities',

@@ -326,6 +326,55 @@ const CLOSE_B: Record<string, unknown> = {
   threads: [],
 }
 
+// Two Happenings calls of one story: the clusters and the writes so far differ; the mode doesn't.
+const HAPPENINGS_A: Record<string, unknown> = {
+  closeHappeningClusters: [
+    [
+      {
+        id: 'hp1',
+        title: 'The ford gives way',
+        description: 'The stones shift under Kael.',
+        cast: [{ id: 'c1', name: 'Kael' }],
+        turn: 't2',
+        commonKnowledge: false,
+      },
+      {
+        id: 'hp2',
+        title: 'Kael falls in the ford',
+        description: 'Kael goes under and loses the sigil.',
+        cast: [{ id: 'c1', name: 'Kael' }],
+        turn: 't3',
+        commonKnowledge: false,
+      },
+    ],
+  ],
+  closeWritesSoFar: '',
+}
+
+const HAPPENINGS_B: Record<string, unknown> = {
+  closeHappeningClusters: [
+    [
+      {
+        id: 'hp4',
+        title: 'Mora lights a lantern',
+        description: 'Mora waits at the ford with a lantern.',
+        cast: [{ id: 'c2', name: 'Mora' }],
+        turn: 't7',
+        commonKnowledge: false,
+      },
+      {
+        id: 'hp5',
+        title: 'A lantern at the ford',
+        description: '',
+        cast: [{ id: 'c2', name: 'Mora' }],
+        turn: 't7',
+        commonKnowledge: true,
+      },
+    ],
+  ],
+  closeWritesSoFar: '- merge_happenings The ford gives way (hp1): kept hp1',
+}
+
 type RenderCase = {
   templateId: TemplateId
   first: Record<string, unknown>
@@ -383,6 +432,13 @@ const RENDER_CASES: RenderCase[] = [
       'Each is what the lead does, says or attempts',
     ],
   },
+  // C3: Happenings reads no prose, so its system half is the shared instructions alone.
+  {
+    templateId: TEMPLATE_IDS.closeHappenings,
+    first: HAPPENINGS_A,
+    second: HAPPENINGS_B,
+    systemShows: ['This is an automated system.', 'Each is what the lead does, says or attempts'],
+  },
 ]
 
 // Stands in, on the bundled pack, for the deferred pack validator's system-half warning
@@ -416,6 +472,7 @@ describe('bundled system halves read only what the story fixes', () => {
     expect(unallowedSystemReads(probed, probe, CLOSE_SYSTEM_VARIABLES)).toEqual([
       'closeCharacters',
       'closeFactions',
+      'closeHappeningClusters',
       'closeLifecycleRows',
       'closeLore',
       'closeLoreLimits',
@@ -429,6 +486,7 @@ describe('bundled system halves read only what the story fixes', () => {
     expect(unallowedSystemReads(probed, probe, [])).toEqual([
       'closeCharacters',
       'closeFactions',
+      'closeHappeningClusters',
       'closeLifecycleRows',
       'closeLore',
       'closeLoreLimits',
