@@ -780,7 +780,8 @@ rule rejects any other import of its `fetch`.
 
 `loggedFetch` (`services/http/`) is the transport the app's own requests share: the request's
 debug entry, the request guard (header and idle timeouts, abort mapping) and the response's entry.
-Prefer the helpers built on it:
+The header timer stops when the headers arrive; every body after that, a buffered JSON completion
+included, is bounded only by the idle timer. Prefer the helpers built on it:
 
 - `createTimeoutFetch` for AI SDK providers (it adds manual-body merging and usage patching).
 - `createSdkFetch` for SDK image models. Google, OpenAI, OpenAI Compatible, Pollinations, Z.AI,

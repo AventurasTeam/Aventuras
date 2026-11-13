@@ -134,6 +134,48 @@ describe('createTimeoutFetch body handling', () => {
     },
   )
 
+  it('times out a JSON body that stalls, as a RequestTimeoutError', async () => {
+    vi.useFakeTimers()
+    mockFetch.mockImplementation(async (_url, init) => {
+      const { controller, response } = sseResponse(init?.signal, 'application/json')
+      controller.enqueue(encode('{"partial":'))
+      return response
+    })
+
+    const request = createTimeoutFetch(
+      5_000,
+      'test',
+    )('https://api.test/v1').catch((e: unknown) => e)
+    await vi.advanceTimersByTimeAsync(5_000)
+
+    expect(await request).toBeInstanceOf(RequestTimeoutError)
+  })
+
+  it('does not time out a JSON body that keeps arriving, however long it takes in all', async () => {
+    vi.useFakeTimers()
+    let controller!: ReadableStreamDefaultController<Uint8Array>
+    mockFetch.mockImplementation(async (_url, init) => {
+      const reply = sseResponse(init?.signal, 'application/json')
+      controller = reply.controller
+      controller.enqueue(encode('{"a":'))
+      return reply.response
+    })
+
+    const request = createTimeoutFetch(5_000, 'test')('https://api.test/v1')
+    await vi.advanceTimersByTimeAsync(4_000)
+    controller.enqueue(encode('1,'))
+    await vi.advanceTimersByTimeAsync(4_000)
+    controller.enqueue(encode('"b":2}'))
+    controller.close()
+
+    const response = await request
+    expect(await response.json()).toEqual({
+      a: 1,
+      b: 2,
+      usage: { input_tokens: 0, output_tokens: 0 },
+    })
+  })
+
   it('rejects a caller abort mid-body as an AbortError', async () => {
     mockFetch.mockImplementation(async (_url, init) => sseResponse(init?.signal).response)
     const caller = new AbortController()

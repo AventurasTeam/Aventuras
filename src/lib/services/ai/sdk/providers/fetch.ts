@@ -72,6 +72,7 @@ export function createTimeoutFetch(
     )
 
     // Errors and streams go back to the SDK unread; only a JSON success is buffered and patched.
+    // The buffered body is bounded by the idle timer on each read, not by a total deadline.
     const isJson = response.headers.get('content-type')?.includes('application/json') ?? false
     if (!response.ok || !isJson) return response
 
