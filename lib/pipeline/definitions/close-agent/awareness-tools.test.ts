@@ -42,7 +42,7 @@ const KAI = `char_${uuid(3)}`
 const FIGHT = `hap_${uuid(11)}`
 const TOLL = `hap_${uuid(12)}`
 const CROSSING = `hap_${uuid(13)}`
-// aw1…aw6, in the order SHOWN lists them.
+// aw1…aw9, in the order SHOWN lists them.
 const PINNED = `haw_${uuid(21)}`
 const FREQUENT = `haw_${uuid(22)}`
 const USER_PINNED = `haw_${uuid(23)}`
@@ -50,8 +50,10 @@ const LATER_PINNED = `haw_${uuid(24)}`
 const LATER_SOURCED = `haw_${uuid(25)}`
 // Shown, never seeded: a row gone before the call.
 const GONE = `haw_${uuid(26)}`
+// Seeded frequent rows: learned before the chapter.
 const LATER_FREQUENT = `haw_${uuid(27)}`
 const UNPINNED_FREQUENT = `haw_${uuid(28)}`
+const USER_FREQUENT = `haw_${uuid(29)}`
 
 const SHOWN: readonly ShownRow[] = [
   PINNED,
@@ -62,6 +64,7 @@ const SHOWN: readonly ShownRow[] = [
   GONE,
   LATER_FREQUENT,
   UNPINNED_FREQUENT,
+  USER_FREQUENT,
 ].map((id): ShownRow => ({ table: 'happening_awareness', id, name: '' }))
 
 /** The chapter: the second turn to the third reply, t1…t4 by position; E is that reply. */
@@ -231,7 +234,7 @@ describe('set_pin', () => {
   // frequent row); aw3 Aria on the toll, the user's pin since; aw4 Jorin on the toll, a later
   // turn's pin; aw5 Aria on the crossing, whose source and count a later turn wrote; aw6 gone; aw7
   // Jorin on the crossing, a frequent row whose pin a later turn raised; aw8 Kai on the fight, a
-  // frequent row with no pin.
+  // frequent row with no pin; aw9 Kai on the toll, a frequent row the user re-pinned.
   beforeEach(async () => {
     f = await openCloseFixture()
     await putCharacter(f, ARIA, 'Aria')
@@ -324,6 +327,19 @@ describe('set_pin', () => {
       learnedAtEntryId: null,
       decayResistance: null,
     })
+    await putAwareness(f, {
+      id: USER_FREQUENT,
+      characterId: KAI,
+      happeningId: TOLL,
+      learnedAtEntryId: earlierReplyOf(f),
+      decayResistance: 0.5,
+    })
+    await editAwareness(
+      f,
+      'user',
+      { characterId: KAI, happeningId: TOLL },
+      { decayResistance: 0.95 },
+    )
     await apply(
       f,
       {
@@ -337,7 +353,7 @@ describe('set_pin', () => {
   })
 
   it('lands a lower pin on a row learned in this chapter as one upsertHappeningAwareness on E', async () => {
-    const { result, answers, calls } = await pinCalls(f, [pin('aw1', 0.2)])
+    const { result, answers, calls } = await pinCalls(f, [pin('aw1', 0.2, ['t4'])])
 
     expect(answers).toEqual([{ result: 'ok' }])
     expect(calls).toEqual([
@@ -347,7 +363,7 @@ describe('set_pin', () => {
         tool: 'set_pin',
         rows: [{ table: 'happening_awareness', id: PINNED, name: 'Aria on A fight at the ferry' }],
         why: WHY,
-        turns: [f.entries[4]!.id],
+        turns: [f.entries[6]!.id],
         result: 'ok',
         values: { decayResistance: '0.2' },
       },
@@ -399,6 +415,7 @@ describe('set_pin', () => {
       'aw6',
       'aw7',
       'aw8',
+      'aw9',
     ])
   })
 
@@ -408,6 +425,18 @@ describe('set_pin', () => {
       pin('aw1', 0.2),
       pin('aw1', 0.2, ['t2'], 'c1 keeps the fight in mind.'),
     ])
+
+    expect(calls[1]).toMatchObject({ result: 'ok', why: 'Aria keeps the fight in mind.' })
+  })
+
+  it('keeps the name of a character already shown nameless current', async () => {
+    const { calls } = await runDispatchCalls(f, {
+      task: 'awareness',
+      tools: { set_pin: setPinTool },
+      shown: [{ table: 'entities', id: ARIA, name: '' }, ...SHOWN],
+      calls: [pin('aw1', 0.2), pin('aw1', 0.2, ['t2'], 'c1 keeps the fight in mind.')],
+      turns: awarenessTurns(f),
+    })
 
     expect(calls[1]).toMatchObject({ result: 'ok', why: 'Aria keeps the fight in mind.' })
   })
@@ -479,7 +508,7 @@ describe('set_pin', () => {
     expect(await storedPin(f, FREQUENT)).toBe(0.5)
   })
 
-  it('skips a pin the user set after the cited turn, through the action', async () => {
+  it('skips a pin the user set after the cited turn', async () => {
     const { result, answers, calls } = await pinCalls(f, [pin('aw3', 0.7)])
 
     expect(answers[0]).toMatchObject({ result: 'skipped', reason: USER_EDITED_SINCE_PROSE })
@@ -490,6 +519,15 @@ describe('set_pin', () => {
     })
     expect(await runDeltas(f, result.actionId)).toEqual([])
     expect(await storedPin(f, USER_PINNED)).toBe(0.95)
+  })
+
+  it('skips, not refuses, a lower pin over the user on a frequent row', async () => {
+    const { result, answers, calls } = await pinCalls(f, [pin('aw9', 0.3)])
+
+    expect(answers[0]).toMatchObject({ result: 'skipped', reason: USER_EDITED_SINCE_PROSE })
+    expect(calls[0]).toMatchObject({ result: 'skipped', reason: USER_EDITED_SINCE_PROSE })
+    expect(await runDeltas(f, result.actionId)).toEqual([])
+    expect(await storedPin(f, USER_FREQUENT)).toBe(0.95)
   })
 
   it('skips a pin a later turn wrote, writing nothing', async () => {
@@ -505,7 +543,7 @@ describe('set_pin', () => {
     expect(await storedPin(f, LATER_PINNED)).toBe(0.1)
   })
 
-  // C12: the later turn's source write is another field, and its retrieval bump never counts.
+  // C12: a later turn's write to another field does not protect the pin.
   it('lands over a later turn that wrote another field and bumped the count', async () => {
     const { result, answers } = await pinCalls(f, [pin('aw5', 0.8)])
 

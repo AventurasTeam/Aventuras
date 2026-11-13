@@ -1,6 +1,7 @@
 import { and, eq } from 'drizzle-orm'
 import { z } from 'zod'
 
+import { USER_EDITED_SINCE_PROSE } from '@/lib/actions/types'
 import { entities, happeningAwareness, happenings, type HappeningAwareness } from '@/lib/db'
 
 import {
@@ -80,8 +81,7 @@ async function planSetPin(args: SetPinArgs, ctx: WriteContext): Promise<WritePla
     }
   const names = await linkNames(ctx, row)
   // The character is the write's row: its handle needs a name for prose naming it to resolve.
-  if (ctx.ids.handleOf(row.characterId) === undefined)
-    ctx.ids.show(row.characterId, names.character)
+  ctx.ids.show(row.characterId, names.character)
   const rows: ReportRow[] = [{ table: 'happening_awareness', id, name: names.row }]
 
   // Ahead of the guard: a pin already stored is ok, not skipped.
@@ -96,6 +96,15 @@ async function planSetPin(args: SetPinArgs, ctx: WriteContext): Promise<WritePla
       kind: 'write',
       actions: [],
       lost: [protectedField(PIN_PATH, row.characterId, CLOSE_REASON.laterTurn)],
+      rows,
+      values: proposed,
+    }
+  // Before the one-way rule: a user's pin answers skipped, not a refusal the model would retry.
+  if (verdicts.userWrote(PIN_PATH))
+    return {
+      kind: 'write',
+      actions: [],
+      lost: [protectedField(PIN_PATH, row.characterId, USER_EDITED_SINCE_PROSE)],
       rows,
       values: proposed,
     }
