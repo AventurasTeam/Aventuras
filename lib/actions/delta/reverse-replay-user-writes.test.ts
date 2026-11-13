@@ -738,6 +738,33 @@ describe("reversing a close's stackable normalization under a later user write",
     expect(state.traits).toEqual(['brave', 'stern'])
   })
 
+  it("restores a close's other state field beside the whole record", async () => {
+    const { db, ctx } = await setup()
+    await createKael(ctx, { state: BEFORE })
+    await apply(ctx, normalize('chapter_close'), 'act_close')
+    await apply(
+      ctx,
+      {
+        kind: 'updateEntity',
+        source: 'chapter_close',
+        payload: {
+          branchId: 'b1',
+          id: 'char_kael',
+          patch: { state: { ...NORMALIZED, traits: ['brave', 'stern'] } },
+        },
+      },
+      'act_close',
+    )
+    const closed: CharacterState = { ...NORMALIZED, traits: ['brave', 'stern'] }
+    await apply(ctx, userPatch({ state: { ...closed, stackables: { gold: 10 } } }), 'act_u')
+
+    expect(await reverseReplayDeltas('act_close', ctx)).toBe(2)
+
+    const state = (await kael(db)).state as CharacterState
+    expect(state.stackables).toEqual({ gold: 10 })
+    expect(state.traits).toEqual(['brave'])
+  })
+
   it('keeps the per-key yield for a write that is not a close', async () => {
     const { db, ctx } = await setup()
     await normalizeThen(ctx, { ...BASE, stackables: { gold: 10 } }, 'periodic_classifier')
