@@ -76,6 +76,8 @@ async function seedHappening(
     at: number
     commonKnowledge?: 0 | 1
     cast: readonly string[]
+    /** Ids for the cast's links, in cast order; random when absent. */
+    linkIds?: readonly string[]
   },
 ): Promise<void> {
   await apply(fx, {
@@ -94,13 +96,13 @@ async function seedHappening(
       },
     },
   })
-  for (const entityId of row.cast)
+  for (const [index, entityId] of row.cast.entries())
     await apply(fx, {
       kind: 'createHappeningInvolvement',
       source: 'periodic_classifier',
       payload: {
         entry: {
-          id: generateId('hinv'),
+          id: row.linkIds?.[index] ?? generateId('hinv'),
           branchId: fx.branchId,
           happeningId: row.id,
           entityId,
@@ -320,6 +322,8 @@ describe('happeningsTask', () => {
       title: 'A',
       at: 2,
       cast: [WREN_TWIN, FORD, WREN, WREN],
+      // The scan returns links by id: the twin's comes before Wren's, against the sorted order.
+      linkIds: [1, 2, 3, 4].map((n) => `hinv_00000000-0000-4000-8000-00000000f00${n}`),
     })
     await seedHappening(f, { id: CROSSING, title: 'B', at: 4, cast: [WREN] })
     // A link outlives its entity only when the entity's cascade missed it.
