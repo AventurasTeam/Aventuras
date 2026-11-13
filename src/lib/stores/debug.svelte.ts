@@ -22,7 +22,8 @@ class DebugStore {
   constructor() {
     debugLog.onChange((change) => {
       this.logsVersion++
-      if (change.kind === 'entry') {
+      // Checked first: serialising an entry nobody is listening for is wasted work.
+      if (change.kind === 'entry' && this.debugWindowReady) {
         this.emitToDebugWindow('debug-log-added', this.safeIpcEntry(change.entry))
       }
     })
