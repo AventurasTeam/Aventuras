@@ -24,7 +24,7 @@ export function createReadSet(): ReadSet {
 
 export type CommonCheck =
   | { ok: true; turns: readonly string[]; proseEntryId: string }
-  | { ok: false; reason: string }
+  | { ok: false; reason: string; gone?: GuardRow }
 
 /** `taskEntryIds`: the turns the task was shown, by position; a write cites only these. */
 type CheckContext = {
@@ -56,7 +56,7 @@ export function commonChecks(
   const unread = named.find((row) => !ctx.readSet.has(row))
   if (unread === undefined) return cited
   if (ctx.survivorOf(unread.table, unread.id) !== undefined)
-    return { ok: false, reason: CLOSE_REASON.rowGone }
+    return { ok: false, reason: CLOSE_REASON.rowGone, gone: unread }
   return {
     ok: false,
     reason: `${ctx.ids.handleOf(unread.id) ?? unread.id} hasn't been read in this task: call read_row on it, then write it`,

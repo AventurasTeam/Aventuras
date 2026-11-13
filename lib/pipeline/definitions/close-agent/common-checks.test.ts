@@ -188,7 +188,7 @@ describe('commonChecks on a row a landed merge absorbed', () => {
         [WREN, TOLL_LAW],
         checkContext(undefined, tollLawMerged),
       ),
-    ).toEqual({ ok: false, reason: CLOSE_REASON.rowGone })
+    ).toEqual({ ok: false, reason: CLOSE_REASON.rowGone, gone: TOLL_LAW })
   })
 
   it('judges only the first unread row: one no merge took keeps the read refusal', () => {

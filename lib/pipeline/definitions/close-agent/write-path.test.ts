@@ -2119,7 +2119,7 @@ describe('the read gate on a row a landed merge absorbed', () => {
   })
 
   it('keeps the read refusal for an unread row no merge took', async () => {
-    const { answers, calls } = await runDispatchCalls(f, {
+    const { answers } = await runDispatchCalls(f, {
       task: 'identity',
       tools: { find_by_name: findByNameTool, set_fields: setFieldsTool },
       shown: [{ table: 'entities', id: WREN, name: 'Wren' }],
@@ -2137,6 +2137,78 @@ describe('the read gate on a row a landed merge absorbed', () => {
       result: 'rejected',
       reason: "c2 hasn't been read in this task: call read_row on it, then write it",
     })
-    expect(calls[1]).not.toHaveProperty('survivor')
+  })
+})
+
+describe('the read gate names the survivor of the row it judged', () => {
+  const KEPT_WREN = 'char_00000000-0000-4000-8000-000000000004'
+  const KEEP_SHAPE = { id: z.string(), other: z.string(), description: z.string() }
+  const keepRowTool: WriteTool<typeof KEEP_SHAPE> = {
+    kind: 'write',
+    name: 'keep_row',
+    description: 'Write two characters as one.',
+    schema: writeToolSchema(KEEP_SHAPE),
+    ids: {
+      id: { shape: 'single', prefixes: ['char'] },
+      other: { shape: 'single', prefixes: ['char'] },
+    },
+    // The gate refuses before a plan runs; a plan that ran would fail the test.
+    plan: async () => {
+      throw new Error('keep_row: the plan ran for a refused write')
+    },
+  }
+
+  beforeEach(async () => {
+    f = await openCloseFixture()
+    await seedCharacter(WREN, 'Wren')
+    await seedCharacter(BRAM, 'Bram')
+  })
+
+  it("names the unread row's survivor, not a read row's named before it", async () => {
+    const { answers } = await runDispatchCalls(f, {
+      task: 'identity',
+      tools: { keep_row: keepRowTool },
+      shown: [
+        { table: 'entities', id: WREN, name: 'Wren' },
+        { table: 'entities', id: KEPT_WREN, name: 'Wren the elder' },
+        { table: 'entities', id: BRAM, name: 'Bram' },
+        { table: 'entities', id: GONE, name: 'Old Wren' },
+      ],
+      // Wren was read, then a merge took her into KEPT_WREN; Old Wren went into Bram and was never read.
+      seeds: [{ table: 'entities', id: WREN }],
+      setup: (_ids, ledger) => {
+        for (const [kept, absorbed] of [
+          [KEPT_WREN, WREN],
+          [BRAM, GONE],
+        ] as const)
+          ledger.record({
+            task: 'identity',
+            part: 1,
+            tool: 'keep_row',
+            rows: [
+              { table: 'entities', id: kept, name: '' },
+              { table: 'entities', id: absorbed, name: '' },
+            ],
+            why: 'One courier.',
+            turns: [],
+            result: 'ok',
+            survivor: { table: 'entities', id: kept },
+          })
+      },
+      calls: [
+        {
+          toolName: 'keep_row',
+          input: { id: 'c1', other: 'c4', description: 'x', turns: ['t7'], why: 'w' },
+        },
+      ],
+      turns: { endEntryId: endEntryId(), taskEntryIds: chapterEntryIds() },
+    })
+
+    expect(answers[0]).toEqual({
+      result: 'rejected',
+      reason: CLOSE_REASON.rowGone,
+      note: 'The row was merged into c3; write to c3 instead.',
+      survivor: 'c3',
+    })
   })
 })

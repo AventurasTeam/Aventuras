@@ -240,8 +240,9 @@ async function* writeCall(
   })
   if (!check.ok) {
     const rows = rowsNamed(named, ctx.ids)
-    // The rows go to rejectedWhole so a row-gone finds its survivor; the ledger's entry gets none.
-    const verdict = rejectedWhole(check.reason, rows, ctx)
+    // Only the judged row goes to rejectedWhole: a row-gone names its survivor; the ledger gets none.
+    const gone = check.gone === undefined ? [] : rowsNamed([check.gone], ctx.ids)
+    const verdict = rejectedWhole(check.reason, gone, ctx)
     recordWrite(ctx, tool.name, args, { rows, turns: turnsShown(args.turns, ctx), verdict })
     return modelAnswer(verdict, {}, ctx.ids)
   }
