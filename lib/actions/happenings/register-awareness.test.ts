@@ -723,6 +723,35 @@ describe('resetAwarenessRetrieval', () => {
     expect(await deltaRows(ctx)).toEqual([])
   })
 
+  // An undo of NaN or a fraction would be stored and replayed, so the reset refuses them up front.
+  it.each([NaN, -3, 2.5])(
+    'rejects a priorCount of %s without writing or logging',
+    async (prior) => {
+      const { ctx } = await setup([awarenessRow('haw_1', 6)])
+
+      const result = await applyDeltaAction(reset('haw_1', prior), ctx)
+
+      expect(result).toEqual({
+        status: 'rejected',
+        reason: 'invalid reset: priorCount must be a non-negative integer',
+      })
+      expect(await countOf(ctx, 'haw_1')).toBe(6)
+      expect(await deltaRows(ctx)).toEqual([])
+    },
+  )
+
+  // The branch check runs first: a zero count on a foreign branch is a mismatch, not a restatement.
+  it('checks the branch before the zero-count noop', async () => {
+    const { ctx } = await setup([awarenessRow('haw_1', 0)])
+
+    const result = await applyDeltaAction(reset('haw_1', 0, { payloadBranchId: 'br_other' }), ctx)
+
+    expect(result).toEqual({
+      status: 'rejected',
+      reason: `branch mismatch: delta ${BRANCH} vs target br_other`,
+    })
+  })
+
   it('reads nothing, so its cost does not scale with the rows it resets', async () => {
     const { ctx } = await setup([
       awarenessRow('haw_1', 2),

@@ -292,6 +292,12 @@ const resetRetrievalHandler: ActionHandler = (action, branchId, ctx) => {
   const { branchId: bid, id, priorCount } = action.payload
   if (bid !== branchId)
     return { status: 'rejected', reason: `branch mismatch: delta ${branchId} vs target ${bid}` }
+  // An undo of NaN or a fraction would be stored and replayed, so refuse it before the noop.
+  if (!(Number.isSafeInteger(priorCount) && priorCount >= 0))
+    return {
+      status: 'rejected',
+      reason: 'invalid reset: priorCount must be a non-negative integer',
+    }
   // No read of its own, as a bump: the close read every count in one statement.
   if (priorCount === 0) return noopRefusal('retrieval count already zero', 'restated')
   return {
