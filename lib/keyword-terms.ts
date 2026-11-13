@@ -45,3 +45,67 @@ export function foldStackables(
   }
   return folded
 }
+
+// Tried in order; `-s` never strips a double s (`glass`).
+const PLURAL_ENDINGS: readonly (readonly [plural: string, singular: string])[] = [
+  ['ies', 'y'],
+  ['es', ''],
+  ['s', ''],
+]
+
+// A folded key is trimmed and single-spaced, so its end is its last word's end.
+function heldSingular(key: string, held: ReadonlySet<string>): string | undefined {
+  for (const [plural, singular] of PLURAL_ENDINGS) {
+    if (!key.endsWith(plural) || (plural === 's' && key.endsWith('ss'))) continue
+    const candidate = key.slice(0, -plural.length) + singular
+    if (held.has(candidate)) return candidate
+  }
+  return undefined
+}
+
+/**
+ * chapter-close.md → 3c: every record folded by `foldStackableKey`, then each plural key moved one
+ * step onto the singular some record on the branch holds, counts summed; a key another key folds
+ * onto stays put. Every input id gets a record; an absent one comes back empty.
+ */
+export function normalizeStackables(
+  records: ReadonlyMap<string, Readonly<Record<string, number>> | undefined>,
+): Map<string, Record<string, number>> {
+  const folded = new Map<string, Map<string, number>>()
+  const held = new Set<string>()
+  for (const [id, record] of records) {
+    const keys = foldStackables(record)
+    folded.set(id, keys)
+    for (const key of keys.keys()) held.add(key)
+  }
+  const foldsTo = new Map<string, string>()
+  for (const key of held) {
+    const singular = heldSingular(key, held)
+    if (singular !== undefined) foldsTo.set(key, singular)
+  }
+  // A key that receives a fold is a singular: folding it on would chain (buses → bus → bu).
+  const receivers = new Set(foldsTo.values())
+  const normalized = new Map<string, Record<string, number>>()
+  for (const [id, keys] of folded) {
+    const merged = new Map<string, number>()
+    for (const [key, count] of keys) {
+      const target = receivers.has(key) ? key : (foldsTo.get(key) ?? key)
+      merged.set(target, (merged.get(target) ?? 0) + count)
+    }
+    normalized.set(id, Object.fromEntries(merged))
+  }
+  return normalized
+}
+
+/** The same keys with the same counts, in any order; an absent record reads as empty. */
+export function sameStackables(
+  a: Readonly<Record<string, number>> | undefined,
+  b: Readonly<Record<string, number>> | undefined,
+): boolean {
+  const left = Object.entries(a ?? {})
+  const right = b ?? {}
+  return (
+    left.length === Object.keys(right).length &&
+    left.every(([key, count]) => Object.hasOwn(right, key) && right[key] === count)
+  )
+}

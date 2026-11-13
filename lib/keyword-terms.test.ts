@@ -1,6 +1,12 @@
 import { describe, expect, it } from 'vitest'
 
-import { dedupeTerms, foldStackables, newTerms } from './keyword-terms'
+import {
+  dedupeTerms,
+  foldStackables,
+  newTerms,
+  normalizeStackables,
+  sameStackables,
+} from './keyword-terms'
 
 describe('dedupeTerms', () => {
   it('collapses case variants to the first spelling', () => {
@@ -47,5 +53,107 @@ describe('foldStackables', () => {
     expect([...foldStackables({ 'Silver\n coins': 3, 'silver coins': 4 })]).toEqual([
       ['silver coins', 7],
     ])
+  })
+})
+
+// chapter-close.md → 3c. Expectations are written out by hand, never derived from the rule.
+describe('normalizeStackables', () => {
+  const normalize = (records: Record<string, Record<string, number> | undefined>) =>
+    Object.fromEntries(normalizeStackables(new Map(Object.entries(records))))
+
+  it('folds case variants into one lowercase key, summing them', () => {
+    expect(normalize({ char_a: { Gold: 5, gold: 3 } })).toEqual({ char_a: { gold: 8 } })
+  })
+
+  it('folds a plural onto a singular another record holds', () => {
+    expect(normalize({ char_a: { arrows: 12 }, char_b: { arrow: 1 } })).toEqual({
+      char_a: { arrow: 12 },
+      char_b: { arrow: 1 },
+    })
+  })
+
+  it('folds a plural onto a singular its own record holds, summing', () => {
+    expect(normalize({ char_a: { arrow: 1, Arrows: 4 } })).toEqual({ char_a: { arrow: 5 } })
+  })
+
+  it('keeps a plural whose singular no record holds', () => {
+    expect(normalize({ char_a: { arrows: 12 } })).toEqual({ char_a: { arrows: 12 } })
+    expect(normalize({ char_a: { glass: 2 } })).toEqual({ char_a: { glass: 2 } })
+  })
+
+  it('never strips the s of a double s, even when the stripped key is held', () => {
+    expect(normalize({ char_a: { glass: 2 }, char_b: { glas: 1 } })).toEqual({
+      char_a: { glass: 2 },
+      char_b: { glas: 1 },
+    })
+  })
+
+  it('folds -es and -ies plurals only onto a singular that is held', () => {
+    expect(
+      normalize({ char_a: { torches: 2, berries: 3 }, char_b: { torch: 1, berry: 4 } }),
+    ).toEqual({ char_a: { torch: 2, berry: 3 }, char_b: { torch: 1, berry: 4 } })
+    expect(normalize({ char_a: { torches: 2, berries: 3 } })).toEqual({
+      char_a: { torches: 2, berries: 3 },
+    })
+  })
+
+  it('tries -ies, then -es, then -s, and the first held key wins', () => {
+    expect(
+      normalize({
+        char_a: { berries: 3, torches: 2 },
+        char_b: { berry: 1, berri: 1, berrie: 1, torch: 1, torche: 1 },
+      }),
+    ).toEqual({
+      char_a: { berry: 3, torch: 2 },
+      char_b: { berry: 1, berri: 1, berrie: 1, torch: 1, torche: 1 },
+    })
+  })
+
+  it('folds a multi-word key on its last word', () => {
+    expect(normalize({ char_a: { 'Silver  Coins': 3 }, char_b: { 'silver coin': 2 } })).toEqual({
+      char_a: { 'silver coin': 3 },
+      char_b: { 'silver coin': 2 },
+    })
+  })
+
+  it('folds each key one step, and a key another key folds onto stays put', () => {
+    // bus receives buses, so it never folds on to bu: no chain, no singular moved off.
+    expect(normalize({ char_a: { buses: 2, bus: 1, bu: 4 } })).toEqual({
+      char_a: { bus: 3, bu: 4 },
+    })
+  })
+
+  it('drops blank keys and empty counts, and a dropped key is no fold target', () => {
+    expect(
+      normalize({ char_a: { ' ': 4, rope: 0, gold: 2 }, char_b: { arrows: 3, arrow: 0 } }),
+    ).toEqual({ char_a: { gold: 2 }, char_b: { arrows: 3 } })
+  })
+
+  it('returns a record for every character, an absent one empty', () => {
+    expect(normalize({ char_a: undefined, char_b: {} })).toEqual({ char_a: {}, char_b: {} })
+  })
+
+  it('returns an already-normal record equal to its input', () => {
+    const records = { char_a: { gold: 8, arrow: 3 }, char_b: { 'silver coin': 1 } }
+    const out = normalizeStackables(new Map(Object.entries(records)))
+    expect(sameStackables(out.get('char_a'), records.char_a)).toBe(true)
+    expect(sameStackables(out.get('char_b'), records.char_b)).toBe(true)
+  })
+})
+
+describe('sameStackables', () => {
+  it('compares keys and counts in any order', () => {
+    expect(sameStackables({ gold: 8, arrow: 3 }, { arrow: 3, gold: 8 })).toBe(true)
+    expect(sameStackables({ gold: 8 }, { gold: 7 })).toBe(false)
+    expect(sameStackables({ gold: 8 }, { Gold: 8 })).toBe(false)
+    expect(sameStackables({ gold: 8 }, { gold: 8, arrow: 1 })).toBe(false)
+    expect(sameStackables({ gold: 8, arrow: 1 }, { gold: 8 })).toBe(false)
+  })
+
+  it('reads an absent record as an empty one', () => {
+    expect(sameStackables(undefined, {})).toBe(true)
+    expect(sameStackables({}, undefined)).toBe(true)
+    expect(sameStackables(undefined, undefined)).toBe(true)
+    expect(sameStackables(undefined, { gold: 1 })).toBe(false)
   })
 })
