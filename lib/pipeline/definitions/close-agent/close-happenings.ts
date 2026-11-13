@@ -10,12 +10,12 @@ import {
   queryRows,
   staleRowsQuery,
   toEmbeddedFieldRow,
-  unpackFloat32,
   vectorsByIdQuery,
 } from '@/lib/db'
 import { embedderReadDim } from '@/lib/embedder'
 import { composeRetrievalEmbedDeps, resolveStorySwapConfig } from '@/lib/embedder-swap'
 import {
+  decodeVector,
   runSyncStage,
   VectorInvariantError,
   type SyncStageDeps,
@@ -102,15 +102,6 @@ function staleInRange(
     return rows
       .map((raw) => toEmbeddedFieldRow('happening', raw))
       .filter((row) => inRange.has(row.id))
-  }
-}
-
-// unpackFloat32's blob-length throw means what cosine's guards mean, so it joins their family.
-function decodeVector(blob: unknown): Float32Array {
-  try {
-    return unpackFloat32(blob as Uint8Array)
-  } catch (error) {
-    throw new VectorInvariantError(error instanceof Error ? error.message : String(error))
   }
 }
 
