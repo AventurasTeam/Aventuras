@@ -36,6 +36,7 @@ import {
   type PlannedAction,
   type ProtectionReason,
   type ReportRow,
+  type ToolContext,
   type WriteContext,
   type WritePlan,
   type WriteTool,
@@ -105,8 +106,9 @@ function mergeShapeFault(
   return undefined
 }
 
-async function readHappenings(
-  ctx: WriteContext,
+/** The branch's happenings among `ids`, by id; an id with no row is absent. */
+export async function readHappenings(
+  ctx: Pick<ToolContext, 'db' | 'branchId'>,
   ids: readonly string[],
 ): Promise<ReadonlyMap<string, Happening>> {
   const rows = await ctx.db

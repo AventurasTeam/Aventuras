@@ -2,17 +2,11 @@ import { and, eq, inArray } from 'drizzle-orm'
 
 import type { GuardRow } from '@/lib/actions/types'
 import type { PromptHalves } from '@/lib/ai'
-import {
-  entities,
-  happeningInvolvements,
-  happenings,
-  type Happening,
-  type StoryMode,
-} from '@/lib/db'
+import { entities, happeningInvolvements, type StoryMode } from '@/lib/db'
 import { compareId } from '@/lib/list-modules'
 import { renderTemplate, TEMPLATE_IDS } from '@/lib/prompts'
 
-import { mergeHappeningsTool } from './happening-tools'
+import { mergeHappeningsTool, readHappenings } from './happening-tools'
 import { readRowTool, refsIn } from './read-tools'
 import { readTurnsTool } from './read-turns'
 import type { CloseTaskDef, TaskPromptContext, TaskStart } from './task'
@@ -25,29 +19,19 @@ export const HAPPENINGS_READ_FIELDS: ReadFields = {
   happening: ['title', 'description', 'commonKnowledge', 'occurredAtEntryId'],
 }
 
+type CastMember = { id: string; name: string }
+
 /** A clustered happening as the template shows it: `id`, the cast's ids and `turn` are handles. */
 export type HappeningClusterRow = {
   id: string
   title: string
   description: string
-  cast: { id: string; name: string }[]
+  cast: CastMember[]
   turn: string
   commonKnowledge: boolean
 }
 
 type HappeningsShow = { clusters: HappeningClusterRow[][]; mode: StoryMode }
-type CastMember = { id: string; name: string }
-
-async function readClusterRows(
-  ctx: TaskPromptContext,
-  ids: readonly string[],
-): Promise<ReadonlyMap<string, Happening>> {
-  const rows = await ctx.db
-    .select()
-    .from(happenings)
-    .where(and(eq(happenings.branchId, ctx.branchId), inArray(happenings.id, [...new Set(ids)])))
-  return new Map(rows.map((row) => [row.id, row]))
-}
 
 /** Each happening's cast: the entities its involvements name that still exist, by name then id. */
 async function readCasts(
@@ -90,7 +74,7 @@ async function readCasts(
 async function startHappenings(ctx: TaskPromptContext): Promise<TaskStart<HappeningsShow> | null> {
   const clusters = closeClustersOf(ctx.phase.intermediates)
   if (clusters.length === 0) return null
-  const stored = await readClusterRows(ctx, clusters.flat())
+  const stored = await readHappenings(ctx, clusters.flat())
   const listed = clusters
     .map((cluster) => cluster.flatMap((id) => stored.get(id) ?? []))
     .filter((cluster) => cluster.length >= 2)
