@@ -19,7 +19,12 @@ import { dispatchToolCall, type DispatchContext } from '../close-agent/dispatch'
 import type { CloseIds } from '../close-agent/ids'
 import { CloseLedgerWriter } from '../close-agent/ledger'
 import { tableOfId, type CloseTool, type ReadFields } from '../close-agent/tool'
-import { closeIdsOf, seedCloseLedger } from '../close-intermediates'
+import {
+  closeClustersOf,
+  closeIdsOf,
+  seedCloseLedger,
+  setCloseClusters,
+} from '../close-intermediates'
 import type { CloseLedger } from '../intermediates'
 
 /** A row the task's start showed: handed its handle in order, and read unless `seeds` is given. */
@@ -59,6 +64,8 @@ type DispatchSpec = {
   setup?: DispatchSetup
   /** The run's expected outcome; `completed` when absent. */
   outcome?: TxResult['outcome']
+  /** The range embed's clusters (happening ids), parked as the close parks them; none unless given. */
+  clusters?: readonly (readonly string[])[]
 }
 
 const KIND = 'close-dispatch-test'
@@ -95,6 +102,7 @@ async function* dispatchPhase(
   run.ledger = ledger
   run.ids = ids
   run.readSet = readSet
+  if (spec.clusters !== undefined) setCloseClusters(phase.intermediates, spec.clusters)
   const ctx: DispatchContext = {
     db: phase.db,
     branchId: phase.branchId,
@@ -104,6 +112,8 @@ async function* dispatchPhase(
     ids,
     readFields: spec.readFields ?? {},
     survivorOf: (table, id) => writer.survivorOf(table, id),
+    clusterOf: (happeningId) =>
+      closeClustersOf(phase.intermediates).find((cluster) => cluster.includes(happeningId)),
     landedCalls: (tool) => writer.landedCalls(tool),
     phase,
     taskEntryIds: turns.taskEntryIds,

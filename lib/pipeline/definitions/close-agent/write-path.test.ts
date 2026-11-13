@@ -249,6 +249,7 @@ function writeContext(proseEntryId = endEntryId()): WriteContext {
     ids: new CloseIds(),
     readFields: {},
     survivorOf: () => undefined,
+    clusterOf: () => undefined,
     landedCalls: () => 0,
     turns: [proseEntryId],
     proseEntryId,
@@ -2210,5 +2211,50 @@ describe('the read gate names the survivor of the row it judged', () => {
       note: 'The row was merged into c3; write to c3 instead.',
       survivor: 'c3',
     })
+  })
+})
+
+const CROSSING = 'hap_00000000-0000-4000-8000-0000000000a1'
+const FARE = 'hap_00000000-0000-4000-8000-0000000000a2'
+const STORM = 'hap_00000000-0000-4000-8000-0000000000a3'
+
+// Answers the cluster dispatch hands a tool for one happening.
+const CLUSTER_OF_SCHEMA = readToolSchema({ id: z.string() })
+const clusterOfTool: ReadTool<typeof CLUSTER_OF_SCHEMA> = {
+  kind: 'read',
+  name: 'cluster_of',
+  description: "Name a happening's cluster.",
+  schema: CLUSTER_OF_SCHEMA,
+  ids: { id: { shape: 'single', prefixes: ['hap'] } },
+  read: async ({ id }, ctx) => ({
+    output: { cluster: ctx.clusterOf(id) ?? null },
+    rows: [],
+    read: [],
+  }),
+}
+
+describe('clusterOf through dispatch', () => {
+  beforeEach(async () => {
+    f = await openCloseFixture()
+  })
+
+  it("hands a tool the range embed's cluster of a happening, and none for one it left out", async () => {
+    const { answers } = await runDispatchCalls(f, {
+      task: 'happenings',
+      tools: { cluster_of: clusterOfTool },
+      shown: [
+        { table: 'happenings', id: CROSSING, name: 'The night crossing' },
+        { table: 'happenings', id: FARE, name: 'The fare' },
+        { table: 'happenings', id: STORM, name: 'The storm' },
+      ],
+      calls: [
+        { toolName: 'cluster_of', input: { id: 'hp1' } },
+        { toolName: 'cluster_of', input: { id: 'hp3' } },
+      ],
+      turns: { endEntryId: endEntryId(), taskEntryIds: chapterEntryIds(), part: 0 },
+      clusters: [[CROSSING, FARE]],
+    })
+
+    expect(answers).toEqual([{ cluster: ['hp1', 'hp2'] }, { cluster: null }])
   })
 })

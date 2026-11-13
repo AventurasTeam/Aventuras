@@ -1222,6 +1222,7 @@ describe('update_lore', () => {
       ids: new CloseIds(),
       readFields: LORE_FIELDS,
       survivorOf: () => undefined,
+      clusterOf: () => undefined,
       landedCalls: () => 0,
       turns: [t5],
       proseEntryId: t5,

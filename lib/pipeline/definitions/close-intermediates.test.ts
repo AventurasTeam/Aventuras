@@ -3,12 +3,14 @@ import { describe, expect, it } from 'vitest'
 import type { ChapterPartCut } from '@/lib/chapters'
 
 import {
+  closeClustersOf,
   closeLedgerOf,
   closePartsOf,
   closeRangeOf,
   requireCloseParts,
   requireCloseRange,
   seedCloseLedger,
+  setCloseClusters,
   setCloseParts,
   setCloseRange,
 } from './close-intermediates'
@@ -84,5 +86,25 @@ describe('the close parts', () => {
       status: 'failed',
       error: { kind: 'orchestrator', detail: 'chapter-close: no close parts' },
     })
+  })
+})
+
+describe('the close clusters', () => {
+  it('reads none until the range embed parks them, then those, under their own key', () => {
+    const intermediates: Record<string, unknown> = {}
+    expect(closeClustersOf(intermediates)).toEqual([])
+
+    setCloseClusters(intermediates, [
+      ['hap_a', 'hap_b'],
+      ['hap_c', 'hap_d', 'hap_e'],
+    ])
+
+    expect(closeClustersOf(intermediates)).toEqual([
+      ['hap_a', 'hap_b'],
+      ['hap_c', 'hap_d', 'hap_e'],
+    ])
+    expect(closeRangeOf(intermediates)).toBeUndefined()
+    expect(closePartsOf(intermediates)).toBeUndefined()
+    expect(closeLedgerOf(intermediates)).toBeUndefined()
   })
 })

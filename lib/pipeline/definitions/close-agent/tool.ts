@@ -43,6 +43,8 @@ export type ToolContext = {
   readonly readFields: ReadFields
   /** A landed merge's kept row for a row this close absorbed. */
   readonly survivorOf: (table: string, id: string) => { table: string; id: string } | undefined
+  /** The cluster the range embed put this happening in; undefined when none. */
+  readonly clusterOf: (happeningId: string) => readonly string[] | undefined
   /** The ledger's landed (`ok`) calls of `tool` so far, across tasks and parts. */
   readonly landedCalls: (tool: Pick<CloseTool, 'name'>) => number
 }

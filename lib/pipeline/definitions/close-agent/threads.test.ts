@@ -1883,6 +1883,7 @@ function threadsPromptContext(fx: CloseFixture, ids: CloseIds): TaskPromptContex
     ids,
     readFields: THREADS_READ_FIELDS,
     survivorOf: () => undefined,
+    clusterOf: () => undefined,
     landedCalls: () => 0,
     phase: {
       actionId,

@@ -312,6 +312,7 @@ function runContext(phase: PhaseContext): TaskRunArgs {
     part: 1,
     ids,
     survivorOf: (table, id) => writer.survivorOf(table, id),
+    clusterOf: () => undefined,
     landedCalls: (tool) => writer.landedCalls(tool),
     phase,
     taskEntryIds: chapterEntryIds(),

@@ -43,6 +43,7 @@ function chapterContext(fx: CloseFixture, endAt: number): ToolContext {
     ids,
     readFields: {},
     survivorOf: () => undefined,
+    clusterOf: () => undefined,
     landedCalls: () => 0,
   }
 }
