@@ -7,6 +7,7 @@ import type { ResolveModelConfig } from '@/lib/ai'
 import {
   branches,
   entities,
+  happeningAwareness,
   happeningInvolvements,
   happenings,
   stories,
@@ -36,6 +37,7 @@ const WREN_TWIN = 'char_00000000-0000-4000-8000-00000000e004'
 const FORD = 'loc_00000000-0000-4000-8000-00000000e005'
 const GONE = 'char_00000000-0000-4000-8000-00000000e0ff'
 const ELSEWHERE = 'char_00000000-0000-4000-8000-00000000e0aa'
+const PIKE = 'char_00000000-0000-4000-8000-00000000e006'
 const OTHER_BRANCH = 'br_other'
 
 // As the range embed stores them: each cluster in anchor order.
@@ -88,6 +90,9 @@ async function seedHappening(
     cast: readonly string[]
     /** Ids for the cast's links, in cast order; random when absent. */
     linkIds?: readonly string[]
+    /** Characters with an awareness row of this happening; ids as for `linkIds`. */
+    knownBy?: readonly string[]
+    awarenessIds?: readonly string[]
   },
 ): Promise<void> {
   await apply(fx, {
@@ -120,18 +125,28 @@ async function seedHappening(
         },
       },
     })
+  for (const [index, characterId] of (row.knownBy ?? []).entries())
+    await fx.ctx.db.insert(happeningAwareness).values({
+      id: row.awarenessIds?.[index] ?? generateId('haw'),
+      branchId: fx.branchId,
+      happeningId: row.id,
+      characterId,
+      retrievalCount: 0,
+    })
 }
 
 async function seedClusters(fx: CloseFixture): Promise<void> {
   await seedCharacter(fx, WREN, 'Wren')
   await seedCharacter(fx, TOBIN, 'Tobin')
   await seedCharacter(fx, MARA, 'Mara')
+  await seedCharacter(fx, PIKE, 'Pike')
   await seedHappening(fx, {
     id: LIGHT,
     title: 'A light on the far bank',
     description: 'Halfway across, a light moves on the far bank and goes out.',
     at: 2,
     cast: [WREN, MARA],
+    knownBy: [WREN, PIKE, TOBIN],
   })
   await seedHappening(fx, {
     id: CROSSING,
@@ -147,6 +162,7 @@ async function seedClusters(fx: CloseFixture): Promise<void> {
     at: 6,
     commonKnowledge: 1,
     cast: [TOBIN],
+    knownBy: [TOBIN],
   })
   await seedHappening(fx, { id: SASH, title: 'A guard in a Syndicate sash', at: 6, cast: [TOBIN] })
 }
@@ -232,7 +248,7 @@ describe('happeningsTask', () => {
     ).toBeNull()
   })
 
-  it("lists each cluster's happenings with their title, description, cast, turn and common knowledge, each seeded", async () => {
+  it("lists each cluster's happenings with their title, description, cast, who knows it, turn and common knowledge, each seeded", async () => {
     await seedClusters(f)
 
     const start = await happeningsTask.start(
@@ -251,6 +267,11 @@ describe('happeningsTask', () => {
               { id: 'c1', name: 'Mara' },
               { id: 'c2', name: 'Wren' },
             ],
+            knownBy: [
+              { id: 'c4', name: 'Pike' },
+              { id: 'c3', name: 'Tobin' },
+              { id: 'c2', name: 'Wren' },
+            ],
             turn: 't3',
             commonKnowledge: false,
           },
@@ -262,6 +283,7 @@ describe('happeningsTask', () => {
               { id: 'c3', name: 'Tobin' },
               { id: 'c2', name: 'Wren' },
             ],
+            knownBy: [],
             turn: 't5',
             commonKnowledge: false,
           },
@@ -272,6 +294,7 @@ describe('happeningsTask', () => {
             title: 'The Syndicate taxes the ferry',
             description: 'The Syndicate taxes the ferry, the road and the bread.',
             cast: [{ id: 'c3', name: 'Tobin' }],
+            knownBy: [{ id: 'c3', name: 'Tobin' }],
             turn: 't7',
             commonKnowledge: true,
           },
@@ -280,6 +303,7 @@ describe('happeningsTask', () => {
             title: 'A guard in a Syndicate sash',
             description: '',
             cast: [{ id: 'c3', name: 'Tobin' }],
+            knownBy: [],
             turn: 't7',
             commonKnowledge: false,
           },
@@ -361,10 +385,11 @@ describe('happeningsTask', () => {
     expect(start?.show.clusters[0]?.[1]?.cast).toEqual([{ id: 'c1', name: 'Wren' }])
   })
 
-  it('numbers the listed happenings and their cast in list order, before a text names one', async () => {
+  it('numbers the listed happenings, their cast and who knows them in list order, before a text names one', async () => {
     await seedCharacter(f, WREN, 'Wren')
     await seedCharacter(f, TOBIN, 'Tobin')
     await seedCharacter(f, MARA, 'Mara')
+    await seedCharacter(f, PIKE, 'Pike')
     await seedHappening(f, {
       id: LIGHT,
       title: 'A light',
@@ -372,7 +397,13 @@ describe('happeningsTask', () => {
       at: 2,
       cast: [WREN],
     })
-    await seedHappening(f, { id: CROSSING, title: 'A crossing', at: 4, cast: [WREN, TOBIN] })
+    await seedHappening(f, {
+      id: CROSSING,
+      title: 'A crossing',
+      at: 4,
+      cast: [WREN, TOBIN],
+      knownBy: [PIKE],
+    })
     await seedHappening(f, { id: TOLL, title: 'A toll', at: 6, cast: [TOBIN] })
     await seedHappening(f, { id: SASH, title: 'A sash', at: 6, cast: [TOBIN] })
 
@@ -391,13 +422,44 @@ describe('happeningsTask', () => {
 
     const rows = start?.show.clusters.flat()
     expect(rows?.map((row) => row.id)).toEqual(['hp1', 'hp2', 'hp3', 'hp4'])
-    expect(rows?.[0]?.description).toBe('hp4 watched c2 and c3.')
+    expect(rows?.[0]?.description).toBe('hp4 watched c2 and c4.')
+    expect(rows?.[1]?.knownBy).toEqual([{ id: 'c3', name: 'Pike' }])
     expect(ids.nameOfId(MARA)).toBe('Mara')
     expect(rows?.[0]?.cast).toEqual([{ id: 'c1', name: 'Wren' }])
     expect(rows?.[1]?.cast).toEqual([
       { id: 'c2', name: 'Tobin' },
       { id: 'c1', name: 'Wren' },
     ])
+  })
+
+  it('shows who knows a happening: live entities only, by name then id', async () => {
+    await seedCharacter(f, WREN, 'Wren')
+    await seedCharacter(f, WREN_TWIN, 'Wren')
+    await seedCharacter(f, MARA, 'Mara')
+    await seedHappening(f, {
+      id: LIGHT,
+      title: 'A',
+      at: 2,
+      cast: [],
+      knownBy: [WREN_TWIN, GONE, MARA, WREN],
+      // The scan returns the rows by id: the twin's comes before Wren's, against the sorted order.
+      awarenessIds: [1, 2, 3, 4].map((n) => `haw_00000000-0000-4000-8000-00000000f00${n}`),
+    })
+    await seedHappening(f, { id: CROSSING, title: 'B', at: 4, cast: [] })
+    const ids = idsWithTurns(f)
+
+    const start = await happeningsTask.start(
+      promptContextFor(f, ids, clustered([[LIGHT, CROSSING]])),
+    )
+
+    expect(ids.show(WREN, 'Wren')).toBe('c2')
+    expect(ids.show(WREN_TWIN, 'Wren')).toBe('c3')
+    expect(start?.show.clusters[0]?.[0]?.knownBy).toEqual([
+      { id: 'c1', name: 'Mara' },
+      { id: 'c2', name: 'Wren' },
+      { id: 'c3', name: 'Wren' },
+    ])
+    expect(start?.show.clusters[0]?.[1]?.knownBy).toEqual([])
   })
 
   it("shows only this branch's rows when a sibling branch holds rows under the same ids", async () => {
@@ -434,6 +496,15 @@ describe('happeningsTask', () => {
         role: null,
       })),
     )
+    await f.ctx.db.insert(happeningAwareness).values(
+      [OTHER_BRANCH, f.branchId].map((branchId) => ({
+        id: generateId('haw'),
+        branchId,
+        happeningId: LIGHT,
+        characterId: ELSEWHERE,
+        retrievalCount: 0,
+      })),
+    )
 
     const start = await happeningsTask.start(
       promptContextFor(f, idsWithTurns(f), clustered(CLUSTERS)),
@@ -443,6 +514,11 @@ describe('happeningsTask', () => {
       title: 'A light on the far bank',
       cast: [
         { id: 'c1', name: 'Mara' },
+        { id: 'c2', name: 'Wren' },
+      ],
+      knownBy: [
+        { id: 'c4', name: 'Pike' },
+        { id: 'c3', name: 'Tobin' },
         { id: 'c2', name: 'Wren' },
       ],
     })
@@ -487,6 +563,8 @@ describe('happeningsTask', () => {
     expect(prompt.user).toContain('### hp1: A light on the far bank')
     expect(prompt.user).toContain('- occurred at: t3')
     expect(prompt.user).toContain('- cast: Mara (c1), Wren (c2)')
+    expect(prompt.user).toContain('- known by: Pike (c4), Tobin (c3), Wren (c2)')
+    expect(prompt.user).toContain('- known by: none')
     expect(prompt.user).toContain(
       '- description: "Halfway across, a light moves on the far bank and goes out."',
     )
@@ -504,6 +582,22 @@ describe('happeningsTask', () => {
       expect(prompt.system).not.toContain(content)
       expect(prompt.user).not.toContain(content)
     }
+  })
+
+  it('tells the model to keep apart happenings known to different people, and what a merge does to awareness', async () => {
+    await seedClusters(f)
+    const ctx = promptContextFor(f, idsWithTurns(f), clustered(CLUSTERS))
+    const start = await happeningsTask.start(ctx)
+
+    const { user, system } = happeningsTask.render(start!, { ...ctx, writesSoFar: '' })
+
+    expect(user).toContain(
+      'Keep them apart when one is common knowledge and another is not, or when different characters know each, unless one only repeats the other.',
+    )
+    expect(user).toContain(
+      'A merge with a common-knowledge happening makes keep common knowledge, and keep takes the awareness of every merged happening.',
+    )
+    expect(system).not.toContain('common knowledge')
   })
 
   it('lets read_row return the fields the start shows, and count the row as read', async () => {

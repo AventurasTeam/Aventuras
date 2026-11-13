@@ -665,10 +665,10 @@ export const VARIABLES: Record<ContextGroup, VariableDef[]> = {
     },
     {
       name: 'closeHappeningClusters',
-      type: '{ id: string; title: string; description: string; cast: { id: string; name: string }[]; turn: string; commonKnowledge: boolean }[][]',
+      type: '{ id: string; title: string; description: string; cast: { id: string; name: string }[]; knownBy: { id: string; name: string }[]; turn: string; commonKnowledge: boolean }[][]',
       category: 'Plot',
       description:
-        "The Happenings task's clusters: happenings of the chapter that code found may record one event, at least two to a cluster, each in the order of the turns they occurred at. `id` is the short id its writes name it by (hp1, hp2…); `turn` the turn it occurred at (t1, t2…); `cast` the entities its involvements name, each by short id and name; a missing description is an empty string; `commonKnowledge` is true for one every character knows. Only a close task's render sets it.",
+        "The Happenings task's clusters: happenings of the chapter that code found may record one event, at least two to a cluster, each in the order of the turns they occurred at. `id` is the short id its writes name it by (hp1, hp2…); `turn` the turn it occurred at (t1, t2…); `cast` the entities its involvements name, each by short id and name; `knownBy` the characters with an awareness row of it, in the same form; a missing description is an empty string; `commonKnowledge` is true for one every character knows. Only a close task's render sets it.",
       required: false,
     },
     {

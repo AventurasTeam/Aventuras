@@ -1,8 +1,9 @@
 import { and, eq, inArray } from 'drizzle-orm'
+import type { AnySQLiteColumn, SQLiteTable } from 'drizzle-orm/sqlite-core'
 
 import type { GuardRow } from '@/lib/actions/types'
 import type { PromptHalves } from '@/lib/ai'
-import { entities, happeningInvolvements, type StoryMode } from '@/lib/db'
+import { entities, happeningAwareness, happeningInvolvements, type StoryMode } from '@/lib/db'
 import { compareId } from '@/lib/list-modules'
 import { renderTemplate, TEMPLATE_IDS } from '@/lib/prompts'
 
@@ -27,46 +28,58 @@ export type HappeningClusterRow = {
   title: string
   description: string
   cast: CastMember[]
+  /** The characters with an awareness row of it. */
+  knownBy: CastMember[]
   turn: string
   commonKnowledge: boolean
 }
 
 type HappeningsShow = { clusters: HappeningClusterRow[][]; mode: StoryMode }
 
-/** Each happening's cast: the entities its involvements name that still exist, by name then id. */
-async function readCasts(
+type EntityLinks = {
+  table: SQLiteTable
+  branchId: AnySQLiteColumn<{ data: string; notNull: true }>
+  happeningId: AnySQLiteColumn<{ data: string; notNull: true }>
+  entityId: AnySQLiteColumn<{ data: string; notNull: true }>
+}
+
+const INVOLVEMENTS: EntityLinks = {
+  table: happeningInvolvements,
+  branchId: happeningInvolvements.branchId,
+  happeningId: happeningInvolvements.happeningId,
+  entityId: happeningInvolvements.entityId,
+}
+
+const AWARENESS: EntityLinks = {
+  table: happeningAwareness,
+  branchId: happeningAwareness.branchId,
+  happeningId: happeningAwareness.happeningId,
+  entityId: happeningAwareness.characterId,
+}
+
+/** Each happening's entities through a link table: those that still exist, by name then id. */
+async function readLinked(
   ctx: TaskPromptContext,
+  links: EntityLinks,
   happeningIds: readonly string[],
 ): Promise<ReadonlyMap<string, CastMember[]>> {
   const rows = await ctx.db
-    .select({
-      happeningId: happeningInvolvements.happeningId,
-      id: entities.id,
-      name: entities.name,
-    })
-    .from(happeningInvolvements)
+    .select({ happeningId: links.happeningId, id: entities.id, name: entities.name })
+    .from(links.table)
     .innerJoin(
       entities,
-      and(
-        eq(entities.branchId, happeningInvolvements.branchId),
-        eq(entities.id, happeningInvolvements.entityId),
-      ),
+      and(eq(entities.branchId, links.branchId), eq(entities.id, links.entityId)),
     )
-    .where(
-      and(
-        eq(happeningInvolvements.branchId, ctx.branchId),
-        inArray(happeningInvolvements.happeningId, [...happeningIds]),
-      ),
-    )
-  const casts = new Map<string, CastMember[]>()
+    .where(and(eq(links.branchId, ctx.branchId), inArray(links.happeningId, [...happeningIds])))
+  const linked = new Map<string, CastMember[]>()
   for (const { happeningId, id, name } of rows) {
-    const cast = casts.get(happeningId) ?? []
-    if (!cast.some((member) => member.id === id)) cast.push({ id, name })
-    casts.set(happeningId, cast)
+    const members = linked.get(happeningId) ?? []
+    if (!members.some((member) => member.id === id)) members.push({ id, name })
+    linked.set(happeningId, members)
   }
-  for (const cast of casts.values())
-    cast.sort((a, b) => compareId(a.name, b.name) || compareId(a.id, b.id))
-  return casts
+  for (const members of linked.values())
+    members.sort((a, b) => compareId(a.name, b.name) || compareId(a.id, b.id))
+  return linked
 }
 
 // memory/chapter-close.md → Run order: the clusters the range embed found. A row gone since then
@@ -80,20 +93,27 @@ async function startHappenings(ctx: TaskPromptContext): Promise<TaskStart<Happen
     .filter((cluster) => cluster.length >= 2)
   if (listed.length === 0) return null
   const rows = listed.flat()
-  const casts = await readCasts(
-    ctx,
-    rows.map((row) => row.id),
-  )
+  const rowIds = rows.map((row) => row.id)
+  const casts = await readLinked(ctx, INVOLVEMENTS, rowIds)
+  const knownBy = await readLinked(ctx, AWARENESS, rowIds)
   // Every happening's handle first, so one a text names keeps the number of its place in the list;
-  // a row a text cites is named, so a write copying its handle stores the name, not the handle.
+  // then every cast, then every knownBy, so an entity only an awareness row names never moves the
+  // number of a cast member in a later row. A row a text cites is named, so a write copying its
+  // handle stores the name, not the handle.
   for (const row of rows) ctx.ids.show(row.id, row.title)
   for (const row of rows)
     for (const member of casts.get(row.id) ?? []) ctx.ids.show(member.id, member.name)
+  for (const row of rows)
+    for (const member of knownBy.get(row.id) ?? []) ctx.ids.show(member.id, member.name)
   await refsIn(
     ctx,
     rows.map((row) => [row.title, row.description]),
   )
   const handled = (value: string): string => ctx.ids.withHandles(value)
+  const named = (member: CastMember): CastMember => ({
+    id: ctx.ids.show(member.id, member.name),
+    name: handled(member.name),
+  })
   return {
     show: {
       mode: await storyModeOf(ctx),
@@ -103,10 +123,8 @@ async function startHappenings(ctx: TaskPromptContext): Promise<TaskStart<Happen
             id: ctx.ids.show(row.id, row.title),
             title: handled(row.title),
             description: handled(row.description ?? ''),
-            cast: (casts.get(row.id) ?? []).map((member) => ({
-              id: ctx.ids.show(member.id, member.name),
-              name: handled(member.name),
-            })),
+            cast: (casts.get(row.id) ?? []).map(named),
+            knownBy: (knownBy.get(row.id) ?? []).map(named),
             turn: row.occurredAtEntryId === null ? '' : ctx.ids.showTurn(row.occurredAtEntryId),
             commonKnowledge: row.commonKnowledge === 1,
           }),
