@@ -176,7 +176,13 @@ describe('aggregateStream: OpenAI Responses', () => {
         {
           type: 'response.output_item.added',
           output_index: 0,
-          item: { id: 'msg_1', type: 'message' },
+          item: {
+            id: 'msg_1',
+            type: 'message',
+            status: 'in_progress',
+            role: 'assistant',
+            content: [],
+          },
         },
         { type: 'response.output_text.delta', output_index: 0, content_index: 0, delta: 'In a ' },
         { type: 'response.output_text.delta', output_index: 0, content_index: 0, delta: 'forest' },
@@ -190,6 +196,34 @@ describe('aggregateStream: OpenAI Responses', () => {
       output: [{ id: 'msg_1', content: [{ type: 'output_text', text: 'In a forest' }] }],
     })
     expect(summary.lastEvent).toMatchObject({ delta: 'forest' })
+  })
+
+  it('rebuilds a message item that arrived without content', () => {
+    const summary = summarize(
+      sse(
+        created,
+        {
+          type: 'response.output_item.added',
+          output_index: 0,
+          item: { id: 'msg_1', type: 'message' },
+        },
+        { type: 'response.output_text.delta', output_index: 0, content_index: 0, delta: 'Hi' },
+        { type: 'response.output_text.delta', output_index: 0, content_index: 1, delta: 'There' },
+      ),
+      false,
+    )
+
+    expect(summary.body).toMatchObject({
+      output: [
+        {
+          id: 'msg_1',
+          content: [
+            { type: 'output_text', text: 'Hi' },
+            { type: 'output_text', text: 'There' },
+          ],
+        },
+      ],
+    })
   })
 
   it('reports a failed response', () => {

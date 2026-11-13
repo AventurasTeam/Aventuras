@@ -174,7 +174,8 @@ function aggregateResponses(payloads: unknown[]): Aggregated {
   let complete = false
   let error: string | undefined
   const items = new Map<number, JsonObject>()
-  const texts = new Map<string, string>()
+  // Text per output item, then per content part.
+  const texts = new Map<number, Map<number, string>>()
   const args = new Map<number, string>()
 
   for (const payload of payloads) {
@@ -192,8 +193,9 @@ function aggregateResponses(payloads: unknown[]): Aggregated {
         break
       case 'response.output_text.delta':
         if (typeof payload.delta === 'string') {
-          const key = `${outputIndex}:${contentIndex}`
-          texts.set(key, `${texts.get(key) ?? ''}${payload.delta}`)
+          const parts = texts.get(outputIndex) ?? new Map<number, string>()
+          parts.set(contentIndex, `${parts.get(contentIndex) ?? ''}${payload.delta}`)
+          texts.set(outputIndex, parts)
         }
         break
       case 'response.function_call_arguments.delta':
@@ -229,11 +231,15 @@ function aggregateResponses(payloads: unknown[]): Aggregated {
       const argText = args.get(index)
       if (item.type === 'function_call' && argText !== undefined)
         return { ...item, arguments: argText }
-      const text = texts.get(`${index}:0`)
-      if (item.type === 'message' && text !== undefined && !Array.isArray(item.content)) {
-        return { ...item, content: [{ type: 'output_text', text }] }
+      const parts = texts.get(index)
+      if (item.type !== 'message' || !parts) return item
+      // An in-progress message item arrives with `content: []`; the deltas fill it.
+      const content: unknown[] = Array.isArray(item.content) ? [...item.content] : []
+      for (const [partIndex, text] of parts) {
+        const part = content[partIndex]
+        content[partIndex] = { ...(isRecord(part) ? part : { type: 'output_text' }), text }
       }
-      return item
+      return { ...item, content }
     })
   return { body: { ...created, output }, complete, error }
 }
