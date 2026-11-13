@@ -34,6 +34,7 @@ import {
   type WriteToolSchema,
 } from './tool'
 import { CLOSE_REASON } from './verdict'
+import { userDeletedHappeningLink } from '../../runtime/action-port'
 
 /** 3e: a merge joins no source past this; a longer source already stored stands whole. */
 export const MERGED_SOURCE_MAX = 120
@@ -419,25 +420,41 @@ const protectedField = (field: string, row: string, reason: ProtectionReason): L
 })
 
 // C11: a later turn's write on any row of the merge, link rows included, skips it whole; then the
-// user's edit of an absorbed row or its link rows, or of a field the merge writes on keep. keep's
-// own link rows lose nothing to a merge: the group's per-field precedence keeps a user's value.
+// user's edit of an absorbed row or its link rows (a deleted one included), or of a field the merge
+// writes on keep. keep's own link rows lose nothing to a merge: the group's per-field precedence
+// keeps a user's value.
 function mergeProtection(
   guard: RowGuard,
   keep: string,
   absorb: readonly string[],
   links: ReadonlyMap<string, LinkRows>,
   fields: readonly string[],
+  absorbedLinkDeleted: boolean,
 ): ProtectionReason | undefined {
   const verdicts = ({ table, id }: GuardRow) => guard.row(table, id)
   const rowsOf = (id: string) => mergeRows(id, links)
   if ([keep, ...absorb].flatMap(rowsOf).some((row) => verdicts(row).laterTurnTouched()))
     return CLOSE_REASON.laterTurn
   if (
+    absorbedLinkDeleted ||
     absorb.flatMap(rowsOf).some((row) => verdicts(row).userTouched()) ||
     fields.some((field) => guard.row('happenings', keep).userWrote(field))
   )
     return USER_EDITED_SINCE_PROSE
   return undefined
+}
+
+// A deleted link row is in no guard's rows: the guard reads the rows that stand.
+async function userDeletedLinkOn(ctx: WriteContext, ids: readonly string[]): Promise<boolean> {
+  for (const happeningId of ids)
+    if (
+      await userDeletedHappeningLink(
+        { branchId: ctx.branchId, happeningId, proseEntryId: ctx.proseEntryId },
+        { db: ctx.db },
+      )
+    )
+      return true
+  return false
 }
 
 // PlannedAction.row: a link's character, shown with its name so the answer's handle has one.
@@ -587,7 +604,14 @@ async function planMergeHappenings(args: MergeArgs, ctx: WriteContext): Promise<
   const patch = keepPatch(kept, absorbed, wanted, positionOf)
   const fields = Object.keys(patch)
   const guard = await ctx.guard(named.flatMap((id) => mergeRows(id, links)))
-  const protection = mergeProtection(guard, keep, absorb, links, fields)
+  const protection = mergeProtection(
+    guard,
+    keep,
+    absorb,
+    links,
+    fields,
+    await userDeletedLinkOn(ctx, absorb),
+  )
   if (protection !== undefined)
     return {
       kind: 'write',

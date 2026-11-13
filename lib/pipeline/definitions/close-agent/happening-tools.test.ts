@@ -1012,6 +1012,46 @@ describe('merge_happenings refusals', () => {
     expect(await involvementsOn(f, LIGHT)).toContain(`${TOBIN}:lookout`)
   })
 
+  it.each<{ name: string; removed: (fx: CloseFixture) => Promise<PipelineAction> }>([
+    {
+      name: "Mara's awareness",
+      removed: async (fx) => ({
+        kind: 'deleteHappeningAwareness',
+        source: 'user_edit',
+        payload: { branchId: fx.branchId, id: await awarenessId(fx, LIGHT, MARA) },
+      }),
+    },
+    {
+      name: "Mara's involvement",
+      removed: async (fx) => ({
+        kind: 'deleteHappeningInvolvement',
+        source: 'user_edit',
+        payload: { branchId: fx.branchId, id: await involvementId(fx, LIGHT, MARA) },
+      }),
+    },
+  ])(
+    'skips the whole merge when the user deleted $name on an absorbed row',
+    async ({ removed }) => {
+      await apply(f, await removed(f), BY_USER)
+
+      const run = await runCalls(f, [
+        merge({ keep: 'hp1', absorb: ['hp2'], description: COMPOSITE }),
+      ])
+
+      expect(run.answers).toEqual([
+        { result: 'skipped', reason: USER_EDITED_SINCE_PROSE, note: NOTE.user },
+      ])
+      expect(run.calls[0]).toMatchObject({
+        result: 'skipped',
+        reason: USER_EDITED_SINCE_PROSE,
+        values: { description: COMPOSITE },
+      })
+      expect(run.calls[0]).not.toHaveProperty('survivor')
+      expect(await runDeltas(f, run.result.actionId)).toEqual([])
+      expect(await happeningRow(f, LIGHT)).toBeDefined()
+    },
+  )
+
   it("skips the whole merge when the user wrote a field of keep's the merge writes", async () => {
     await apply(
       f,
