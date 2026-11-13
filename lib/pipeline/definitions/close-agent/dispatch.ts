@@ -236,14 +236,13 @@ async function* writeCall(
     ids: ctx.ids,
     taskEntryIds: ctx.taskEntryIds,
     readSet: ctx.readSet,
+    survivorOf: ctx.survivorOf,
   })
   if (!check.ok) {
-    const verdict = rejectedWhole(check.reason, [], ctx)
-    recordWrite(ctx, tool.name, args, {
-      rows: rowsNamed(named, ctx.ids),
-      turns: turnsShown(args.turns, ctx),
-      verdict,
-    })
+    const rows = rowsNamed(named, ctx.ids)
+    // The rows go to rejectedWhole so a row-gone finds its survivor; the ledger's entry gets none.
+    const verdict = rejectedWhole(check.reason, rows, ctx)
+    recordWrite(ctx, tool.name, args, { rows, turns: turnsShown(args.turns, ctx), verdict })
     return modelAnswer(verdict, {}, ctx.ids)
   }
 
