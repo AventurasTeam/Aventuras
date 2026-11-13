@@ -130,6 +130,23 @@ describe('loggedFetch response', () => {
     })
   })
 
+  it('returns the response when the logger throws', async () => {
+    vi.spyOn(console, 'warn').mockImplementation(() => {})
+    mockFetch.mockResolvedValue(new Response('{"a":1}'))
+    const logResponse = vi.fn(() => {
+      throw new Error('boom')
+    })
+
+    const response = await loggedFetch(
+      API_URL,
+      {},
+      { serviceId: 'svc', timeoutMs: 1_000, logResponse },
+    )
+
+    expect(await response.json()).toEqual({ a: 1 })
+    expect(entries('response')).toHaveLength(0)
+  })
+
   it('calls no logger and writes nothing for log: false', async () => {
     mockFetch.mockResolvedValue(new Response('{}'))
     const logResponse = vi.fn()

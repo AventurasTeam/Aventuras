@@ -56,7 +56,14 @@ export async function loggedFetch(
   try {
     const raw = await httpFetch(url, { ...init, signal: guard?.signal ?? signal })
     const response = guard ? guard.wrapBody(raw) : raw
-    if (logging) logger(response, { debugId, serviceId, startTime })
+    if (logging) {
+      // A logger must not fail a request that succeeded.
+      try {
+        logger(response, { debugId, serviceId, startTime })
+      } catch (err) {
+        console.warn('[Fetch] Failed to log the response:', err)
+      }
+    }
     return response
   } catch (error) {
     const mapped = guard ? guard.mapError(error) : error
