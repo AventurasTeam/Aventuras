@@ -28,11 +28,10 @@ import { logger } from '@/lib/diagnostics'
 import { generateId } from '@/lib/ids'
 import { resetAllStores } from '@/lib/stores'
 
-import { createReadSet, type ReadSet } from './common-checks'
-import { dispatchToolCall, type DispatchContext, type ToolAnswer } from './dispatch'
+import type { ReadSet } from './common-checks'
 import { entityWriteAction, fieldVerdicts, restatedFields } from './entity-write'
 import { CloseIds } from './ids'
-import { CloseLedgerWriter } from './ledger'
+import type { CloseLedgerWriter } from './ledger'
 import {
   DELETE_PATH,
   readToolSchema,
@@ -48,21 +47,18 @@ import {
   type WriteToolSchema,
 } from './tool'
 import { CLOSE_REASON, verdictOf } from './verdict'
-import { expectRan, realDeltaActionPort } from '../../__tests__/harness'
-import { definePipeline } from '../../authoring/define'
+import { realDeltaActionPort } from '../../__tests__/harness'
 import { __resetRegistry } from '../../authoring/registry'
 import { configureDeltaActionPort, type DeltaActionPort } from '../../runtime/action-port'
-import { __resetBus, pipelineEventBus } from '../../runtime/event-bus'
-import { runPipeline } from '../../runtime/orchestrator'
-import type {
-  PhaseContext,
-  PhaseEmittedEvent,
-  PhaseResult,
-  PipelineEvent,
-  TxResult,
-} from '../../types'
+import { __resetBus } from '../../runtime/event-bus'
+import type { PipelineEvent, TxResult } from '../../types'
+import {
+  runDispatchCalls,
+  type DispatchSetup,
+  type ScriptedCall,
+  type ShownRow,
+} from '../__tests__/close-dispatch'
 import { openCloseFixture, type CloseFixture } from '../__tests__/close-fixture'
-import { closeIdsOf, seedCloseLedger } from '../close-intermediates'
 import type { CloseLedger } from '../intermediates'
 
 // Substitutable ids must be real uuids: CloseIds.show allocates only those (lib/ids/prefixes.ts).
@@ -754,22 +750,18 @@ describe('the entity write path', () => {
 const BRAM = 'char_00000000-0000-4000-8000-000000000002'
 // Shown to the model but never written: the row a merge absorbed.
 const GONE = 'char_00000000-0000-4000-8000-000000000003'
-const KIND = 'close-dispatch-test'
 // Any full id the model must never read.
 const FULL_ID = /(?:char|loc|item|fact|lore|thr|hap|chap|haw)_[0-9a-f]{8}-|entry_close_/
 
 const chapterEntryIds = (): string[] => f.entries.slice(0, 7).map((entry) => entry.id)
 
-type ScriptedCall = { toolName: string; input: Record<string, unknown> }
-
-let script: ScriptedCall[] = []
 let seeds: GuardRow[] = []
-let setup: ((ids: CloseIds, ledger: CloseLedgerWriter) => void) | undefined
-let answers: ToolAnswer[] = []
+let setup: DispatchSetup | undefined
+let answers: unknown[] = []
 let seenProse: string[] = []
 let seenTurns: (readonly string[])[] = []
 let seenActions: string[] = []
-let ledger: CloseLedger | undefined
+let ledgerCalls: CloseLedger['calls'] | undefined
 let shown: CloseIds | undefined
 let readRows: ReadSet | undefined
 let scriptedPlan: ((ctx: WriteContext) => WritePlan) | undefined
@@ -975,74 +967,40 @@ const TOOLS: Readonly<Record<string, CloseTool>> = {
   peek_raw: peekRawTool,
 }
 
-// Stands where the agent phase will: the run's ids and ledger, a fresh read set, scripted calls.
-async function* dispatchPhase(
-  phase: PhaseContext,
-): AsyncGenerator<PhaseEmittedEvent, PhaseResult, GroupOutcome | undefined> {
-  const ids = closeIdsOf(phase.intermediates)
-  ids.showTurns(chapterEntryIds())
-  ids.show(WREN, 'Wren')
-  ids.show(BRAM, 'Bram')
-  ids.show(GONE, 'Old Wren')
-  ledger = seedCloseLedger(phase.intermediates)
-  const writer = new CloseLedgerWriter(ledger, (id) => ids.nameOfId(id), phase.actionId)
-  setup?.(ids, writer)
-  shown = ids
-  const readSet = createReadSet()
-  readSet.add(seeds)
-  readRows = readSet
-  const ctx: DispatchContext = {
-    db: phase.db,
-    branchId: phase.branchId,
-    endEntryId: endEntryId(),
-    task: 'identity',
-    part: 1,
-    ids,
-    readFields: {},
-    survivorOf: (table, id) => writer.survivorOf(table, id),
-    landedCalls: (tool) => writer.landedCalls(tool),
-    phase,
-    taskEntryIds: chapterEntryIds(),
-    readSet,
-    ledger: writer,
-  }
-  for (const [index, { toolName, input }] of script.entries()) {
-    const tool = TOOLS[toolName]
-    if (tool === undefined) throw new Error(`no test tool ${toolName}`)
-    answers.push(
-      yield* dispatchToolCall({ toolCallId: `call_${index + 1}`, toolName, input }, tool, ctx),
-    )
-  }
-  return { status: 'completed' }
-}
+// The start showed Wren, Bram and the row a merge absorbed (c1, c2, c3); `seeds` were read.
+const SHOWN: readonly ShownRow[] = [
+  { table: 'entities', id: WREN, name: 'Wren' },
+  { table: 'entities', id: BRAM, name: 'Bram' },
+  { table: 'entities', id: GONE, name: 'Old Wren' },
+]
 
 async function runDispatch(
   calls: ScriptedCall[],
   outcome: TxResult['outcome'] = 'completed',
 ): Promise<{ result: TxResult; events: PipelineEvent[] }> {
-  script = calls
-  const events: PipelineEvent[] = []
-  pipelineEventBus.subscribeAll((event) => {
-    events.push(event)
+  const run = await runDispatchCalls(f, {
+    task: 'identity',
+    tools: TOOLS,
+    shown: SHOWN,
+    seeds,
+    calls,
+    turns: { endEntryId: endEntryId(), taskEntryIds: chapterEntryIds() },
+    setup,
+    outcome,
   })
-  const result = expectRan(
-    await runPipeline(KIND, {
-      storyId: f.storyId,
-      branchId: f.branchId,
-      db: f.ctx.db,
-      runInTransaction: f.ctx.runInTransaction,
-    }),
-  )
-  expect(result.outcome).toBe(outcome)
-  return { result, events }
+  answers = run.answers
+  ledgerCalls = run.calls
+  shown = run.ids
+  readRows = run.readSet
+  return { result: run.result, events: run.events }
 }
 
 const groupEvents = (events: readonly PipelineEvent[]): PipelineEvent[] =>
   events.filter((event) => event.type === 'delta_group_emitted')
 
 function recorded(): CloseLedger['calls'] {
-  if (ledger === undefined) throw new Error('the phase never ran')
-  return ledger.calls
+  if (ledgerCalls === undefined) throw new Error('the phase never ran')
+  return ledgerCalls
 }
 
 function runDeltas(actionId: string) {
@@ -1089,7 +1047,6 @@ describe('dispatchToolCall in a close phase', () => {
     f = await openCloseFixture()
     await seedCharacter(WREN, 'Wren')
     await seedCharacter(BRAM, 'Bram')
-    script = []
     seeds = [{ table: 'entities', id: WREN }]
     setup = undefined
     answers = []
@@ -1097,16 +1054,9 @@ describe('dispatchToolCall in a close phase', () => {
     seenTurns = []
     seenActions = []
     readRows = undefined
-    ledger = undefined
+    ledgerCalls = undefined
     shown = undefined
     scriptedPlan = undefined
-    definePipeline({
-      kind: KIND,
-      phases: [{ name: 'agent', run: dispatchPhase }],
-      affordance: 'invisible',
-      gateBehavior: 'hard-gate',
-      concurrencyPolicy: {},
-    })
   })
 
   it('refuses a write citing nothing, a turn outside the chapter or an unread row, emitting no group', async () => {
@@ -1161,7 +1111,7 @@ describe('dispatchToolCall in a close phase', () => {
     await runDispatch([{ toolName: 'peek_row', input: { id: 'c9' } }])
 
     expect(recorded()).toEqual([])
-    expect(answers[0]!.output).toMatchObject({
+    expect(answers[0]).toMatchObject({
       result: 'rejected',
       reason: expect.stringContaining('c9'),
     })
@@ -1225,7 +1175,7 @@ describe('dispatchToolCall in a close phase', () => {
       turns: [],
       result: 'ok',
     })
-    expect(answers[1]!.output).toEqual({ id: 'c2' })
+    expect(answers[1]).toEqual({ id: 'c2' })
     expect((await row(BRAM)).description).toBe('Bram, at the toll.')
   })
 
@@ -1351,7 +1301,7 @@ describe('dispatchToolCall in a close phase', () => {
         ],
       },
     ])
-    expect(answers[0]!.output).toEqual({
+    expect(answers[0]).toEqual({
       result: 'skipped',
       reason: CLOSE_REASON.laterTurn,
       note: expect.stringContaining('A later turn wrote this'),
@@ -1397,7 +1347,7 @@ describe('dispatchToolCall in a close phase', () => {
         { field: 'state.traits', reason: TEST_CAP },
       ],
     })
-    expect(answers[0]!.output).toEqual({
+    expect(answers[0]).toEqual({
       result: 'rejected',
       reason: TEST_CAP,
       notWritten: [
@@ -1433,7 +1383,7 @@ describe('dispatchToolCall in a close phase', () => {
       ['skipped', USER_EDITED_SINCE_PROSE, undefined],
       ['skipped', CLOSE_REASON.laterTurn, undefined],
     ])
-    expect(answers.map(({ output }) => output)).toEqual([
+    expect(answers).toEqual([
       {
         result: 'skipped',
         reason: USER_EDITED_SINCE_PROSE,
@@ -1524,7 +1474,7 @@ describe('dispatchToolCall in a close phase', () => {
       reason: CLOSE_REASON.rowGone,
       values: { description: 'Older.' },
     })
-    const told = JSON.stringify(answers[0]!.output)
+    const told = JSON.stringify(answers[0])
     expect(told).toContain('c1')
     expect(told).not.toMatch(FULL_ID)
   })
@@ -1542,7 +1492,7 @@ describe('dispatchToolCall in a close phase', () => {
 
     expect(recorded()[1]).toMatchObject({ result: 'rejected', reason: CLOSE_REASON.rowGone })
     expect(recorded()[1]).not.toHaveProperty('survivor')
-    expect(answers[0]!.output).toMatchObject({ result: 'rejected', survivor: 'c1' })
+    expect(answers[0]).toMatchObject({ result: 'rejected', survivor: 'c1' })
   })
 
   it("keeps a restated field out of the ledger's values, from the plan or the handler", async () => {
@@ -1579,7 +1529,7 @@ describe('dispatchToolCall in a close phase', () => {
 
     const created = recorded()[0]!.rows[0]!.id
     expect(shown!.handleOf(created)).toBe('lo1')
-    expect(answers[0]!.output).toMatchObject({ result: 'ok', id: 'lo1' })
+    expect(answers[0]).toMatchObject({ result: 'ok', id: 'lo1' })
     expect(recorded()[1]!.why).toBe('Learned at The Toll.')
     expect((await row(WREN)).description).toBe('Owes the toll (The Toll).')
     const [note] = await f.ctx.db.select().from(lore).where(eq(lore.id, created))
@@ -1600,10 +1550,10 @@ describe('dispatchToolCall in a close phase', () => {
       reason: `the note clashes with ${WREN}`,
       values: { title: 'The Toll', body: 'Paid.' },
     })
-    const told = JSON.stringify(answers[0]!.output)
+    const told = JSON.stringify(answers[0])
     expect(told).toContain('clashes with c1')
     expect(told).not.toMatch(FULL_ID)
-    expect(answers[1]!.output).toEqual({
+    expect(answers[1]).toEqual({
       row: 'c1',
       c1: 'line',
       nested: [{ deep: 'c1' }],
@@ -1688,7 +1638,7 @@ describe('dispatchToolCall in a close phase', () => {
       result: 'rejected',
       reason: `the note clashes with ${GONE}`,
     })
-    expect(answers[0]!.output).not.toHaveProperty('survivor')
+    expect(answers[0]).not.toHaveProperty('survivor')
   })
 
   it('keeps a path one action restates when another action lands it', async () => {
@@ -1900,7 +1850,7 @@ describe('dispatchToolCall in a close phase', () => {
       values: { description: 'Soaked.', 'state.condition': 'wet' },
       skippedFields: [{ field: 'state.condition', reason: 'not-a-place-or-item' }],
     })
-    expect(answers[0]!.output).toMatchObject({
+    expect(answers[0]).toMatchObject({
       notWritten: [{ field: 'state.condition', row: 'c1', reason: 'not-a-place-or-item' }],
     })
   })
@@ -1925,7 +1875,7 @@ describe('dispatchToolCall in a close phase', () => {
     expect(recorded()[0]).toMatchObject({ result: 'ok', values: { description: 'Soaked.' } })
     expect(recorded()[0]).not.toHaveProperty('skippedFields')
     expect(recorded()[0]).not.toHaveProperty('notWritten')
-    expect(answers[0]!.output).toEqual({
+    expect(answers[0]).toEqual({
       result: 'ok',
       notWritten: [
         {
@@ -1936,7 +1886,7 @@ describe('dispatchToolCall in a close phase', () => {
         },
       ],
     })
-    expect(JSON.stringify(answers[0]!.output)).not.toContain(BRAM)
+    expect(JSON.stringify(answers[0])).not.toContain(BRAM)
   })
 
   it("answers no handle for a create whose plan names a row its actions don't create", async () => {
@@ -1953,7 +1903,7 @@ describe('dispatchToolCall in a close phase', () => {
     await runDispatch([{ toolName: 'scripted', input: { rows: ['c1'], ...cite(['t7']) } }])
 
     expect(shown!.handleOf(named)).toBeUndefined()
-    expect(answers[0]!.output).toEqual({ result: 'ok' })
+    expect(answers[0]).toEqual({ result: 'ok' })
   })
 
   it("answers no handle for a create whose action didn't land", async () => {
@@ -1970,7 +1920,7 @@ describe('dispatchToolCall in a close phase', () => {
     ])
 
     expect(shown!.handleOf(recorded()[0]!.rows[0]!.id)).toBeUndefined()
-    expect(answers[0]!.output).not.toHaveProperty('id')
+    expect(answers[0]).not.toHaveProperty('id')
   })
 
   it('answers a create in a group refused whole as rejected, minting nothing, and runs on', async () => {
@@ -2013,8 +1963,8 @@ describe('dispatchToolCall in a close phase', () => {
       result: 'rejected',
       reason: expect.stringContaining('branch mismatch'),
     })
-    expect(answers[0]!.output).toMatchObject({ result: 'rejected' })
-    expect(answers[0]!.output).not.toHaveProperty('id')
+    expect(answers[0]).toMatchObject({ result: 'rejected' })
+    expect(answers[0]).not.toHaveProperty('id')
     expect(shown!.handleOf(minted)).toBeUndefined()
     expect(readRows!.has({ table: 'lore', id: minted })).toBe(false)
     expect(await f.ctx.db.select().from(lore).where(eq(lore.id, minted))).toEqual([])

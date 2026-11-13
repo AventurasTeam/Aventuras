@@ -4,12 +4,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { applyDeltaAction } from '@/lib/actions/delta/apply-delta-action'
 import { loadOpenStory } from '@/lib/actions/stories/operational'
 import { undoLastAction } from '@/lib/actions/story-entries/undo'
-import {
-  USER_EDITED_SINCE_PROSE,
-  type DeltaSource,
-  type GroupOutcome,
-  type GuardRow,
-} from '@/lib/actions/types'
+import { USER_EDITED_SINCE_PROSE, type DeltaSource } from '@/lib/actions/types'
 import {
   branches,
   deltas,
@@ -24,9 +19,6 @@ import {
 } from '@/lib/db'
 import { resetAllStores } from '@/lib/stores'
 
-import { createReadSet } from './common-checks'
-import { dispatchToolCall, type DispatchContext } from './dispatch'
-import { CloseLedgerWriter } from './ledger'
 import { turnInTextReason } from './text-checks'
 import { assertReplaySafe, type CloseTool } from './tool'
 import {
@@ -36,18 +28,16 @@ import {
   updatePlaceTool,
 } from './upkeep-tools'
 import { CLOSE_REASON } from './verdict'
-import { expectRan } from '../../__tests__/harness'
-import { definePipeline } from '../../authoring/define'
-import { getPipelineSafe } from '../../authoring/registry'
-import { runPipeline } from '../../runtime/orchestrator'
-import type { PhaseContext, PhaseEmittedEvent, PhaseResult, TxResult } from '../../types'
+import {
+  runDispatchCalls,
+  type DispatchRun,
+  type DispatchTurns,
+  type ScriptedCall,
+  type ShownRow,
+} from '../__tests__/close-dispatch'
 import { openCloseFixture, type CloseFixture } from '../__tests__/close-fixture'
-import { closeIdsOf, seedCloseLedger } from '../close-intermediates'
-import type { CloseLedger } from '../intermediates'
 
-// ---- Harness: the close's ids and ledger, the shown rows read, the scripted calls dispatched. ----
-
-const KIND = 'close-upkeep-tools-test'
+// ---- Harness: the Upkeep task's tools and turns, on the shared scripted dispatch. ----
 
 const UPKEEP_TOOLS: Readonly<Record<string, CloseTool>> = {
   update_place: updatePlaceTool,
@@ -62,105 +52,17 @@ const endEntryIdOf = (fx: CloseFixture): string => fx.entries[6]!.id
 /** The fifth reply: past E, under the fixture's act_close_turn_5. */
 const laterReplyIdOf = (fx: CloseFixture): string => fx.replyIds[4]!
 
-type ShownRow = { table: 'entities' | 'happenings'; id: string; name: string }
-type ToolCall = { toolName: string; input: Record<string, unknown> }
-type CallsRun = { result: TxResult; answers: unknown[]; calls: CloseLedger['calls'] }
-type TaskTurns = {
-  endEntryId: string
-  taskEntryIds: readonly string[]
-  /** 1 unless given; 0 is a chapter-wide task. */
-  part?: number
-  /** The turns handed handles, as the close shows the chapter's; the task's own unless given. */
-  chapterEntryIds?: readonly string[]
-}
-type StagedRun = TaskTurns & {
-  fx: CloseFixture
-  shown: readonly ShownRow[]
-  calls: readonly ToolCall[]
-  answers: unknown[]
-  ledger?: CloseLedger
-}
-
-let staged: StagedRun | undefined
-
-async function* upkeepCallsPhase(
-  phase: PhaseContext,
-): AsyncGenerator<PhaseEmittedEvent, PhaseResult, GroupOutcome | undefined> {
-  const run = staged
-  if (run === undefined) throw new Error('upkeepCallsPhase: no run staged')
-  const { taskEntryIds } = run
-  const ids = closeIdsOf(phase.intermediates)
-  ids.showTurns(run.chapterEntryIds ?? taskEntryIds)
-  for (const { id, name } of run.shown) ids.show(id, name)
-  const ledger = seedCloseLedger(phase.intermediates)
-  const writer = new CloseLedgerWriter(ledger, (id) => ids.nameOfId(id), phase.actionId)
-  const readSet = createReadSet()
-  readSet.add(run.shown.map(({ table, id }): GuardRow => ({ table, id })))
-  const ctx: DispatchContext = {
-    db: phase.db,
-    branchId: phase.branchId,
-    endEntryId: run.endEntryId,
-    task: 'upkeep',
-    part: run.part ?? 1,
-    ids,
-    readFields: {},
-    survivorOf: (table, id) => writer.survivorOf(table, id),
-    landedCalls: (tool) => writer.landedCalls(tool),
-    phase,
-    taskEntryIds,
-    readSet,
-    ledger: writer,
-  }
-  for (const [index, { toolName, input }] of run.calls.entries()) {
-    const tool = UPKEEP_TOOLS[toolName]
-    if (tool === undefined) throw new Error(`no upkeep tool ${toolName}`)
-    const answer = yield* dispatchToolCall(
-      { toolCallId: `call_${index + 1}`, toolName, input },
-      tool,
-      ctx,
-    )
-    run.answers.push(answer.output)
-  }
-  run.ledger = ledger
-  return { status: 'completed' }
-}
-
 /**
- * Runs `calls` in order through dispatch, in one close-like run, `shown` shown and read in order;
+ * Runs `calls` in order through dispatch as the Upkeep task, `shown` shown and read in order;
  * the task's turns are the chapter's unless `turns` names others.
  */
-async function runUpkeepCalls(
+function runUpkeepCalls(
   fx: CloseFixture,
   shown: readonly ShownRow[],
-  calls: readonly ToolCall[],
-  turns: TaskTurns = { endEntryId: endEntryIdOf(fx), taskEntryIds: taskEntryIdsOf(fx) },
-): Promise<CallsRun> {
-  if (getPipelineSafe(KIND) === undefined)
-    definePipeline({
-      kind: KIND,
-      phases: [{ name: 'agent', run: upkeepCallsPhase }],
-      affordance: 'invisible',
-      gateBehavior: 'hard-gate',
-      concurrencyPolicy: {},
-    })
-  const run: StagedRun = { ...turns, fx, shown, calls, answers: [] }
-  staged = run
-  try {
-    const result = expectRan(
-      await runPipeline(KIND, {
-        storyId: fx.storyId,
-        branchId: fx.branchId,
-        db: fx.ctx.db,
-        runInTransaction: fx.ctx.runInTransaction,
-      }),
-    )
-    if (result.outcome !== 'completed')
-      throw new Error(`the run ${result.outcome}: ${JSON.stringify(result.error)}`)
-    if (run.ledger === undefined) throw new Error('the phase never ran')
-    return { result, answers: run.answers, calls: run.ledger.calls }
-  } finally {
-    staged = undefined
-  }
+  calls: readonly ScriptedCall[],
+  turns: DispatchTurns = { endEntryId: endEntryIdOf(fx), taskEntryIds: taskEntryIdsOf(fx) },
+): Promise<DispatchRun> {
+  return runDispatchCalls(fx, { task: 'upkeep', tools: UPKEEP_TOOLS, shown, calls, turns })
 }
 
 const cite = (turns: readonly string[] = ['t7'], why = 'The turns show it at the landing.') => ({
@@ -359,7 +261,7 @@ async function appendTurnEntry(
 }
 
 /** On a two-turn fixture (t1–t5): appends t6, t7 (E), so a write before them lands before E. */
-async function appendLateTurns(fx: CloseFixture): Promise<TaskTurns> {
+async function appendLateTurns(fx: CloseFixture): Promise<DispatchTurns> {
   await appendTurnEntry(fx, {
     id: 'entry_late_006',
     position: 6,
@@ -1573,22 +1475,22 @@ describe('mark_common_knowledge', () => {
 describe("a part and a later part's turns", () => {
   let f: CloseFixture
 
-  const partOne = (fx: CloseFixture): TaskTurns => ({
+  const partOne = (fx: CloseFixture): DispatchTurns => ({
     endEntryId: endEntryIdOf(fx),
     taskEntryIds: taskEntryIdsOf(fx).slice(0, 5),
   })
-  const partTwo = (fx: CloseFixture): TaskTurns => ({
+  const partTwo = (fx: CloseFixture): DispatchTurns => ({
     endEntryId: endEntryIdOf(fx),
     taskEntryIds: taskEntryIdsOf(fx).slice(5),
     part: 2,
     chapterEntryIds: taskEntryIdsOf(fx),
   })
-  const chapterWide = (fx: CloseFixture): TaskTurns => ({
+  const chapterWide = (fx: CloseFixture): DispatchTurns => ({
     endEntryId: endEntryIdOf(fx),
     taskEntryIds: taskEntryIdsOf(fx),
     part: 0,
   })
-  const burned = (turn: string): ToolCall => ({
+  const burned = (turn: string): ScriptedCall => ({
     toolName: 'update_place',
     input: { id: 'l1', condition: 'Burned to the waterline', ...cite([turn]) },
   })

@@ -184,15 +184,15 @@ patch`, which 5.5a marks `restated`, so a close tool's write of it
   but `vitest.setup.ts` must not load the `@/lib/pipeline` barrel before
   a test's mocks, and `bootstrap.ts` pulls in UI modules a script can't
   load. Raised in 5.5a's review.
-- **The close's scripted-dispatch test harness exists six times.**
-  `write-path.test.ts`, `identity.test.ts`, `threads.test.ts`,
-  `lore-tools.test.ts`, `upkeep-tools.test.ts` and
-  `lifecycle-tools.test.ts` under `lib/pipeline/definitions/close-agent/`
-  each build the same `DispatchContext` (about 80 lines), and the task
-  test files also repeat their fixture helpers (story mode, scene
-  setters, thread seeds). One helper beside `__tests__/close-fixture.ts`
-  would serve all six before 5.9 adds more. Raised in 5.5b's review;
-  5.8 added the last three.
+- **The close's task test files repeat their fixture helpers.** Under
+  `lib/pipeline/definitions/close-agent/`, a `setSceneOf` is written in
+  five test files (`identity`, `upkeep`, `lifecycle`, `lifecycle-tools`
+  and `later-scene`), a `putSceneCharacter` in two (`lore`, `threads`), a
+  `putEntityRow` in two (`identity`, `upkeep`), and a story-mode write in
+  five. The scripted-dispatch harness they also repeated now lives in
+  `__tests__/close-dispatch.ts`; these helpers stayed per file, and one
+  module beside `__tests__/close-fixture.ts` would serve them. Raised in
+  5.5b's review.
 - **`setThreadStatus` and `updateThread` read "carries refs"
   differently.** `setThreadStatus` writes the resolved ref only when
   `triggeredAtEntryId` is set, while `updateThread` asks whether either
