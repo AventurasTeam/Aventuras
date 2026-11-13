@@ -120,6 +120,33 @@ describe('truncation', () => {
     expect(marginFor(out)).toBeLessThan(200)
   })
 
+  it.each([120_000, 140_000, 150_000])(
+    'cuts a string of %i newlines whose raw length fits but whose escaped length does not',
+    (count) => {
+      const out = text({ big: '\n'.repeat(count) })
+
+      const parsed = JSON.parse(out) as { big: string }
+      expect(parsed.big).toMatch(/… \[\d[\d,]* more chars\]$/)
+      expect(marginFor(out)).toBeLessThan(200)
+    },
+  )
+
+  it('charges a cut string at its escaped size, so a later field is cut too', () => {
+    const out = text({ a: '\n'.repeat(300_000), b: '\n'.repeat(300_000) })
+
+    const parsed = JSON.parse(out) as Record<string, string>
+    expect(parsed['…']).toBe('1 more keys')
+    expect(marginFor(out)).toBeLessThan(200)
+  })
+
+  it('never cuts between the halves of a surrogate pair', () => {
+    for (let pad = 0; pad < 8; pad++) {
+      const big = `${'a'.repeat(pad)}${'😀\n'.repeat(MAX_DISPLAY_CHARS)}`
+      const parsed = JSON.parse(text({ big })) as { big: string }
+      expect(parsed.big).not.toMatch(/[\ud800-\udbff](?![\udc00-\udfff])/)
+    }
+  })
+
   it('leaves data under the limit alone', () => {
     expect(text({ a: 'x'.repeat(1000) })).not.toContain('more')
   })

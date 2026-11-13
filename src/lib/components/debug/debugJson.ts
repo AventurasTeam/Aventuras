@@ -47,11 +47,22 @@ function parseJsonText(text: string): object | undefined {
   }
 }
 
+/** Characters `text` takes inside a JSON string literal, quotes excluded. */
+const escapedLength = (text: string) => JSON.stringify(text).length - 2
+
+const isHighSurrogate = (code: number) => code >= 0xd800 && code <= 0xdbff
+
+/** Cuts `text` so its escaped form fits `room`, never between the halves of a surrogate pair. */
 function cutString(text: string, room: number): string {
-  let keep = Math.max(0, room)
-  // Escapes take more than one character in the output.
-  const extra = JSON.stringify(text.slice(0, keep)).length - 2 - keep
-  keep = Math.max(0, keep - extra)
+  const budget = Math.max(0, room)
+  let keep = Math.min(budget, text.length)
+  for (;;) {
+    if (isHighSurrogate(text.charCodeAt(keep - 1))) keep--
+    const escaped = escapedLength(text.slice(0, keep))
+    if (escaped <= budget) break
+    // Shrinks by the escape ratio, so a string of escapes is not cut back to nothing.
+    keep = Math.floor((keep * budget) / escaped)
+  }
   return `${text.slice(0, keep)}… [${(text.length - keep).toLocaleString()} more chars]`
 }
 
@@ -62,12 +73,14 @@ function walkString(text: string, state: WalkState, depth: number): unknown {
     if (state.readable) return walk(parsed, state, depth)
   }
   const room = MAX_DISPLAY_CHARS - state.used
-  if (text.length > room) {
+  // Escaping never shortens a string, so one longer than the room needs no measuring.
+  const size = text.length > room ? Infinity : escapedLength(text)
+  if (size > room) {
     const cut = cutString(text, room)
-    state.used += cut.length
+    state.used += escapedLength(cut) + 2
     return cut
   }
-  state.used += text.length + 2
+  state.used += size + 2
   return text
 }
 
