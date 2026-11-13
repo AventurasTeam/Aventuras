@@ -124,11 +124,8 @@ function threadRow(id: string, title: string): ThreadRow {
   return { id, status: 'active', injectionMode: 'auto', title, description: null }
 }
 
-// The union of what loadSourceRows hangs off a floor row (embeddingStale on
-// every type, keywords on lore, resolvedAtEntryId on threads —
-// lib/retrieval/source-rows.ts). Spread onto all four fixtures so one projection
-// assertion covers the union; StructuralFloor's declared types omit all three, so
-// only a runtime fixture carries them in.
+// What loadSourceRows hangs off a floor row (lib/retrieval/source-rows.ts); StructuralFloor's
+// types omit it, so only a runtime fixture carries it in. Spread onto all four fixtures.
 const LOADED_EXTRAS = { embeddingStale: true, keywords: ['ghost'], resolvedAtEntryId: 'entry_1' }
 
 const keysOf = (bucket: unknown) => (bucket as object[]).map((r) => Object.keys(r).sort())
@@ -865,9 +862,8 @@ describe('buildGenerationContext — structural floor', () => {
     expect((ctx.structuralLocation as { id: string }).id).toBe('l1')
   })
 
-  // The floor is built over LOADED source rows, so every row here still carries
-  // LOADED_EXTRAS at runtime; StructuralFloor's declared shape hides that from
-  // the compiler, which is why it needs a runtime pin.
+  // Floor rows carry LOADED_EXTRAS at runtime but StructuralFloor's types hide it from the
+  // compiler, hence the runtime pin.
   it('projects floor rows to render fields only, dropping retrieval bookkeeping', async () => {
     const ctx = await buildContext({
       ...base(),

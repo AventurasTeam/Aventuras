@@ -73,7 +73,7 @@ type Staged = {
 
 let staged: Staged | undefined
 
-// Stands where the agent phase will: the run's ids and ledger, the start's rows shown and read.
+// Stands in for the agent phase: the run's ids and ledger, the start's rows shown and read.
 async function* dispatchPhase(
   phase: PhaseContext,
 ): AsyncGenerator<PhaseEmittedEvent, PhaseResult, GroupOutcome | undefined> {

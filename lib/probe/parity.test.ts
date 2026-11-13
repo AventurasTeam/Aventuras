@@ -809,9 +809,8 @@ describe('replayType', () => {
   })
 })
 
-// The pass end to end over source rows in SQLite, so the ages come from the stamp join, the
-// awareness rows and the store's states, as in the app. Three chapters are closed, so the open one
-// is chapter 4. Only the KNN is stubbed: every row comes back, each on its own direction.
+// End to end over SQLite source rows, so ages come from the stamp join, awareness rows and store
+// states. Chapters 1-3 are closed, so 4 is open. Only the KNN is stubbed (all rows, own direction).
 describe('parity — a pass whose rows decay', () => {
   const BRANCH = 'br_a'
   const ROW = { branchId: BRANCH, createdAt: 1, updatedAt: 1, embeddingStale: 0 as const }

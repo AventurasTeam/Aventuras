@@ -723,7 +723,7 @@ describe('resetAwarenessRetrieval', () => {
     expect(await deltaRows(ctx)).toEqual([])
   })
 
-  // An undo of NaN or a fraction would be stored and replayed, so the reset refuses them up front.
+  // The reset refuses an invalid priorCount before any write or delta.
   it.each([NaN, -3, 2.5])(
     'rejects a priorCount of %s without writing or logging',
     async (prior) => {

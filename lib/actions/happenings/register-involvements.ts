@@ -62,7 +62,6 @@ const createHandler: ActionHandler = async (action, branchId, ctx, group) => {
     { table: 'entities', id: row.entityId },
   ] as const
   if (await missingRef(ctx, branchId, refs, group)) return MISSING_REF
-  // A carry mints a new row id, so the user's removal is found by the pair it named.
   if (
     proseEntryId != null &&
     (await userDeletedInvolvementSince(

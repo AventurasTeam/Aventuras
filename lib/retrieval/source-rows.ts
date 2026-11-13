@@ -266,9 +266,8 @@ export async function loadChapterRanges(
   branchId: string,
 ): Promise<ChapterRanges> {
   const rows = await queryAll(
-    // Aliased because both sides of the join name their key `id`: the drivers
-    // rebuild positional rows with Object.values, and the duplicate key would
-    // collapse the pair into a single entry-id cell.
+    // Aliased: both join sides name their key `id`, and the drivers rebuild rows with
+    // Object.values, collapsing the pair into one cell.
     `SELECT c.id AS chapter_id, c.sequence_number, e.id AS entry_id FROM chapters c
      JOIN story_entries e ON e.branch_id = c.branch_id AND e.chapter_id = c.id
      WHERE c.branch_id = ?`,

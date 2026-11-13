@@ -136,10 +136,7 @@ const LORE_TOOLS: Readonly<Record<string, CloseTool>> = {
   read_row: readRowTool,
 }
 
-/**
- * Runs `calls` through dispatchToolCall in one close-like run, as the Lore task of `part`. The read
- * set holds only `seeds`, since Lore's start shows titles and seeds nothing (C11).
- */
+/** Runs `calls` as the Lore task of `part`; the read set holds only `seeds` (C11). */
 async function dispatchScripted(
   f: CloseFixture,
   calls: readonly ScriptedCall[],

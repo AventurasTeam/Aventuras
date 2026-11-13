@@ -52,10 +52,7 @@ const endEntryIdOf = (fx: CloseFixture): string => fx.entries[6]!.id
 /** The fifth reply: past E, under the fixture's act_close_turn_5. */
 const laterReplyIdOf = (fx: CloseFixture): string => fx.replyIds[4]!
 
-/**
- * Runs `calls` in order through dispatch as the Upkeep task, `shown` shown and read in order;
- * the task's turns are the chapter's unless `turns` names others.
- */
+/** Runs `calls` through dispatch as the Upkeep task; `turns` default to the chapter's. */
 function runUpkeepCalls(
   fx: CloseFixture,
   shown: readonly ShownRow[],

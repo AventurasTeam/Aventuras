@@ -962,10 +962,8 @@ describe('runRetrieval — chapter-range pool admission', () => {
   })
 })
 
-/**
- * retrieval.md → Scoring function, chapters_old: three closed chapters, so the open one is
- * chapter 4 and an entry stamped into chapter n reads 4 − n. e_open is in the open region.
- */
+// retrieval.md → Scoring function, chapters_old: three closed chapters, so an entry in chapter n
+// reads 4 − n; e_open sits in the open region (chapter 4).
 describe('runRetrieval — chapter age', () => {
   const CLOSED: Row[] = [
     ['ch_1', 1, 'e_ch1'],

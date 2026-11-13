@@ -841,9 +841,8 @@ function assembleCandidates(
       return inPool(pool).map((r) => {
         const vector = vectorFor(r.id)
         const rows = byHappening.get(r.id) ?? []
-        // Common knowledge carries no decay_resistance signal and no age (retrieval.md → Why on
-        // awareness only); nothing in the schema stops such a row from also having awareness rows,
-        // so the zeros are conditional on the flag.
+        // Common knowledge has no decay_resistance signal or age (retrieval.md → Why on awareness
+        // only), yet the schema allows awareness rows on it: the zeros hinge on the flag.
         const aged = r.commonKnowledge
           ? { chaptersOld: 0, pinSignal: 0 }
           : happeningAge(rows, r.occurredAtEntryId, chapterAges)

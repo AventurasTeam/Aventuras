@@ -110,8 +110,8 @@ const upsertHandler: ActionHandler = async (action, branchId, ctx, group) => {
       (isUserOriginatedSource(action.source) || isCloseMerge(action.source))
         ? nullifyRef(learnedAtEntryId)
         : undefined
-    // Only a close's merge sums counts into a standing pair; a user update's count is dropped, so a
-    // moved row's count never overwrites the one standing.
+    // Only a close's merge writes the count it sends (its folded total); a user update's count is
+    // dropped, so a moved row's count never overwrites the one standing.
     const count = isCloseMerge(action.source) ? retrievalCount : undefined
     // Update-only reject: a create with no authored fields is a valid awareness-only
     // record (the character knows the happening; source/decay simply unrecorded).
@@ -292,7 +292,8 @@ const resetRetrievalHandler: ActionHandler = (action, branchId, ctx) => {
   const { branchId: bid, id, priorCount } = action.payload
   if (bid !== branchId)
     return { status: 'rejected', reason: `branch mismatch: delta ${branchId} vs target ${bid}` }
-  // An undo of NaN or a fraction would be stored and replayed, so refuse it before the noop.
+  // An invalid count (NaN stores as null) leaves an undo that can't replay, or writes a bad count
+  // back; refuse it before the noop.
   if (!(Number.isSafeInteger(priorCount) && priorCount >= 0))
     return {
       status: 'rejected',
