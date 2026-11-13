@@ -460,8 +460,10 @@ patch`, which 5.5a marks `restated`, so a close tool's write of it
 - **A folded stackable key can outgrow its schema bound.**
   `foldStackableKey` lowercases, and some letters lengthen when
   lowercased (`İ` becomes two code units), so a 40-character key can
-  fold past the character schema's 40-character bound and the write is
-  refused. The per-turn transfer path has this today; 5.9's
-  normalization step inherits it, where a refused group fails the close
-  on every close until the key is edited. Rare input. Raised in 5.9's
-  Task 7 review.
+  fold past the character schema's 40-character bound.
+  `updateEntityStackables` doesn't check the schema, so such a key
+  lands, and every later `updateEntity` carrying that character's
+  `state` is refused until the key is shortened. 5.9's normalization
+  step skips a record that would fold past the bound; the per-turn
+  transfer writer goes through the same unchecked action. Rare input.
+  Raised in 5.9's Task 7 and Task 16 reviews.
