@@ -24,6 +24,13 @@ const QUILL = 'char_quill'
 const EXACT_A = Float32Array.of(7.947284075271455e-8, 1)
 const EXACT_B = Float32Array.of(0.6000001430511475, 0.7999999523162842)
 
+// 64 dims of +-0.125: unit-norm, and two vectors differing in k signs read cosine 1 - k/32 exactly.
+const flipped = (...dims: number[]): Float32Array => {
+  const v = new Float32Array(64).fill(0.125)
+  for (const d of dims) v[d] = -0.125
+  return v
+}
+
 const cast = (...ids: string[]): ReadonlySet<string> => new Set(ids)
 
 /** A row that meets every criterion with any other made the same way, unless `over` says not. */
@@ -100,7 +107,7 @@ describe('findClusters', () => {
     expect(findClusters([row('a', { cast: cast() }), row('b')])).toEqual([])
   })
 
-  it('makes a later member meet the first member and the ones that joined after it', () => {
+  it('keeps out a row that fits one member but not another', () => {
     // c fits a (cosine 0.83) but not b (0.36), and b joined a: c stays out.
     const rows = [
       row('a', { vector: at(0), anchorIndex: 0 }),
@@ -210,6 +217,22 @@ describe('findClusters', () => {
       ]
 
       expect(findClusters(rows)).toEqual([['a', 'b']])
+    })
+
+    it('goes to the pair whose earlier member sorts first, though no row is shared', () => {
+      // (r0,r1), (r0,r3) and (r1,r2) tie at 0.96875; (r0,r2) and (r1,r3) read 0.9375; r2 and r3
+      // share no cast. (r0,r3) walks before (r1,r2): r3 joins {r0,r1}, and r2 then can't.
+      const rows = [
+        row('r0', { anchorIndex: 0, vector: flipped(), cast: cast(WREN, TOBIN, MIRA, SILAS) }),
+        row('r1', { anchorIndex: 1, vector: flipped(0), cast: cast(WREN, TOBIN, MIRA, SILAS) }),
+        row('r2', { anchorIndex: 2, vector: flipped(0, 2), cast: cast(WREN, TOBIN) }),
+        row('r3', { anchorIndex: 3, vector: flipped(1), cast: cast(MIRA, SILAS) }),
+      ]
+      const [r0, r1, r2, r3] = rows.map(({ vector }) => vector)
+
+      expect([cosine(r0, r1), cosine(r0, r3), cosine(r1, r2)]).toEqual([0.96875, 0.96875, 0.96875])
+      expect([cosine(r0, r2), cosine(r1, r3)]).toEqual([0.9375, 0.9375])
+      expect(findClusters(rows)).toEqual([['r0', 'r1', 'r3']])
     })
   })
 

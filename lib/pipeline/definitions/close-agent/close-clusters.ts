@@ -83,7 +83,7 @@ export function findClusters(rows: readonly ClusterInput[]): string[][] {
 
   return [...new Set(clusterOf)]
     .filter((members) => members.length >= 2)
-    .map((members) => members.toSorted((a, b) => a - b))
+    .map((members) => [...members].sort((a, b) => a - b))
     .sort((a, b) => a[0] - b[0])
     .map((members) => members.map((index) => anchored[index].id))
 }
