@@ -12,7 +12,7 @@ import { runDispatchCalls } from '../__tests__/close-dispatch'
 import { openCloseFixture, type CloseFixture } from '../__tests__/close-fixture'
 
 const WREN = 'char_00000000-0000-4000-8000-000000000001'
-// The fixture's opening, first action and first two replies (close-fixture.ts).
+// The fixture's opening, first action, first reply and third reply (close-fixture.ts).
 const OPENING = /^Rain had followed Wren from the coast for three days/
 const FIRST_ACTION = 'I tie the mare outside the inn and shake the rain from my hood.'
 const FIRST_REPLY = /^The inn is warm and loud with drovers\./
@@ -189,6 +189,40 @@ describe('read_turns', () => {
     ])
     expect(answer.unread).toEqual(['t11'])
     expect(answer.notRead).toBeUndefined()
+  })
+
+  it('reads a turn of an earlier chapter, ahead of the chapter turns', async () => {
+    const fx = await openCloseFixture()
+    const chapter = fx.entries.slice(7, 13).map(({ id }) => id)
+    const ids = new CloseIds()
+    ids.showTurns(chapter)
+    const ctx: ToolContext = { ...chapterContext(fx, 12), ids, taskEntryIds: chapter }
+    const earlier = ids.showTurn(fx.entries[2]!.id)
+
+    expect(earlier).toBe('t7')
+    expect(await readTurns(ctx, ['t1', earlier])).toEqual({
+      turns: [
+        { id: 't7', kind: 'ai_reply', prose: expect.stringMatching(FIRST_REPLY) },
+        { id: 't1', kind: fx.entries[7]!.kind, prose: expect.any(String) },
+      ],
+    })
+  })
+
+  it('answers a bracketed handle as the plain handle', async () => {
+    const fx = await openCloseFixture()
+
+    expect(await readTurns(chapterContext(fx, 6), ['[t1]'])).toEqual({
+      turns: [{ id: 't1', kind: 'opening', prose: expect.stringMatching(OPENING) }],
+    })
+  })
+
+  it('throws when the chapter end is not on the branch', async () => {
+    const fx = await openCloseFixture()
+    const ctx = { ...chapterContext(fx, 6), endEntryId: 'entry_gone' }
+
+    await expect(readTurnsTool.read({ turns: ['t1'] }, ctx)).rejects.toThrow(
+      "read_turns: the chapter's end entry entry_gone is not on the branch",
+    )
   })
 
   it('replays its arguments as written', () => {
