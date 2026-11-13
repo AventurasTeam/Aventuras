@@ -11,6 +11,7 @@ import {
   type GuardRow,
 } from '@/lib/actions/types'
 import {
+  branches,
   deltas,
   emptyEntityState,
   entities,
@@ -64,7 +65,15 @@ const laterReplyIdOf = (fx: CloseFixture): string => fx.replyIds[4]!
 type ShownRow = { table: 'entities' | 'happenings'; id: string; name: string }
 type ToolCall = { toolName: string; input: Record<string, unknown> }
 type CallsRun = { result: TxResult; answers: unknown[]; calls: CloseLedger['calls'] }
-type StagedRun = {
+type TaskTurns = {
+  endEntryId: string
+  taskEntryIds: readonly string[]
+  /** 1 unless given; 0 is a chapter-wide task. */
+  part?: number
+  /** The turns handed handles, as the close shows the chapter's; the task's own unless given. */
+  chapterEntryIds?: readonly string[]
+}
+type StagedRun = TaskTurns & {
   fx: CloseFixture
   shown: readonly ShownRow[]
   calls: readonly ToolCall[]
@@ -79,9 +88,9 @@ async function* upkeepCallsPhase(
 ): AsyncGenerator<PhaseEmittedEvent, PhaseResult, GroupOutcome | undefined> {
   const run = staged
   if (run === undefined) throw new Error('upkeepCallsPhase: no run staged')
-  const taskEntryIds = taskEntryIdsOf(run.fx)
+  const { taskEntryIds } = run
   const ids = closeIdsOf(phase.intermediates)
-  ids.showTurns(taskEntryIds)
+  ids.showTurns(run.chapterEntryIds ?? taskEntryIds)
   for (const { id, name } of run.shown) ids.show(id, name)
   const ledger = seedCloseLedger(phase.intermediates)
   const writer = new CloseLedgerWriter(ledger, (id) => ids.nameOfId(id), phase.actionId)
@@ -90,9 +99,9 @@ async function* upkeepCallsPhase(
   const ctx: DispatchContext = {
     db: phase.db,
     branchId: phase.branchId,
-    endEntryId: endEntryIdOf(run.fx),
+    endEntryId: run.endEntryId,
     task: 'upkeep',
-    part: 1,
+    part: run.part ?? 1,
     ids,
     readFields: {},
     survivorOf: (table, id) => writer.survivorOf(table, id),
@@ -116,11 +125,15 @@ async function* upkeepCallsPhase(
   return { status: 'completed' }
 }
 
-/** Runs `calls` in order through dispatch, in one close-like run, `shown` shown and read in order. */
+/**
+ * Runs `calls` in order through dispatch, in one close-like run, `shown` shown and read in order;
+ * the task's turns are the chapter's unless `turns` names others.
+ */
 async function runUpkeepCalls(
   fx: CloseFixture,
   shown: readonly ShownRow[],
   calls: readonly ToolCall[],
+  turns: TaskTurns = { endEntryId: endEntryIdOf(fx), taskEntryIds: taskEntryIdsOf(fx) },
 ): Promise<CallsRun> {
   if (getPipelineSafe(KIND) === undefined)
     definePipeline({
@@ -130,7 +143,7 @@ async function runUpkeepCalls(
       gateBehavior: 'hard-gate',
       concurrencyPolicy: {},
     })
-  const run: StagedRun = { fx, shown, calls, answers: [] }
+  const run: StagedRun = { ...turns, fx, shown, calls, answers: [] }
   staged = run
   try {
     const result = expectRan(
@@ -215,14 +228,23 @@ async function seedEntity(fx: CloseFixture, spec: SeedSpec): Promise<void> {
   if (result.status !== 'ok') throw new Error(`seeding ${spec.name} refused: ${result.reason}`)
 }
 
-type Editor = 'user' | 'later-turn'
+type Editor = 'user' | 'later-turn' | 'turn-on-e' | 'this-close'
+type Anchor = 'none' | 'e' | 'past-e'
 
-// user: after every turn's prose, unanchored. later-turn: anchored past E, a turn's own source.
-const EDITORS: Readonly<Record<Editor, { source: DeltaSource; actionId: string; past: boolean }>> =
+// user: after every turn's prose, unanchored. later-turn: past E, a turn's own source. turn-on-e:
+// t7's per-turn writer. this-close: an earlier group of the close, on E as C1 anchors it.
+const EDITORS: Readonly<Record<Editor, { source: DeltaSource; actionId: string; anchor: Anchor }>> =
   {
-    user: { source: 'user_edit', actionId: 'act_user_edit', past: false },
-    'later-turn': { source: 'per_turn_classifier', actionId: 'act_close_turn_5', past: true },
+    user: { source: 'user_edit', actionId: 'act_user_edit', anchor: 'none' },
+    'later-turn': { source: 'per_turn_classifier', actionId: 'act_close_turn_5', anchor: 'past-e' },
+    'turn-on-e': { source: 'per_turn_classifier', actionId: 'act_close_turn_3', anchor: 'e' },
+    'this-close': { source: 'chapter_close', actionId: 'act_close_earlier', anchor: 'e' },
   }
+
+function anchorOf(fx: CloseFixture, anchor: Anchor): string | null {
+  if (anchor === 'none') return null
+  return anchor === 'e' ? endEntryIdOf(fx) : laterReplyIdOf(fx)
+}
 
 type EntityEdit = {
   description?: string
@@ -265,7 +287,7 @@ async function editEntity(
       },
       actionId: editor.actionId,
       branchId: fx.branchId,
-      entryId: editor.past ? laterReplyIdOf(fx) : null,
+      entryId: anchorOf(fx, editor.anchor),
     },
     fx.ctx,
   )
@@ -287,6 +309,73 @@ async function setStoryPlace(fx: CloseFixture, placeId: string): Promise<void> {
     .update(storyEntries)
     .set({ metadata: { ...row.metadata, currentLocationId: placeId } })
     .where(where)
+}
+
+const FORK = 'br_fork'
+
+/** A branch forked at E: a row written only there is no row on the close's branch. */
+async function addFork(fx: CloseFixture): Promise<void> {
+  await fx.ctx.db.insert(branches).values({
+    id: FORK,
+    storyId: fx.storyId,
+    parentBranchId: fx.branchId,
+    forkEntryId: endEntryIdOf(fx),
+    name: 'fork',
+    createdAt: 2,
+  })
+}
+
+/** A turn written after the fixture's, as the fixture writes one: the reply anchored on itself. */
+async function appendTurnEntry(
+  fx: CloseFixture,
+  entry: { id: string; position: number; kind: 'user_action' | 'ai_reply'; content: string },
+): Promise<void> {
+  const result = await applyDeltaAction(
+    {
+      action: {
+        kind: 'createStoryEntry',
+        source: entry.kind === 'user_action' ? 'user_edit' : 'ai_classifier',
+        payload: {
+          entry: {
+            ...entry,
+            branchId: fx.branchId,
+            chapterId: null,
+            metadata: {
+              sceneEntities: [],
+              currentLocationId: null,
+              worldTime: entry.position * 60,
+            },
+            createdAt: 1_767_225_600_000 + entry.position,
+          },
+        },
+      },
+      actionId: `act_late_turn_${entry.position}`,
+      branchId: fx.branchId,
+      entryId: entry.kind === 'ai_reply' ? entry.id : null,
+    },
+    fx.ctx,
+  )
+  if (result.status !== 'ok') throw new Error(`appending ${entry.id} refused: ${result.reason}`)
+}
+
+/** On a two-turn fixture (t1–t5): appends t6, t7 (E), so a write before them lands before E. */
+async function appendLateTurns(fx: CloseFixture): Promise<TaskTurns> {
+  await appendTurnEntry(fx, {
+    id: 'entry_late_006',
+    position: 6,
+    kind: 'user_action',
+    content: 'I ask who keeps the far bank.',
+  })
+  await appendTurnEntry(fx, {
+    id: 'entry_late_007',
+    position: 7,
+    kind: 'ai_reply',
+    content: 'Tobin pulls his hood low and says nothing.',
+  })
+  return {
+    endEntryId: 'entry_late_007',
+    taskEntryIds: [...fx.entries.map((entry) => entry.id), 'entry_late_006', 'entry_late_007'],
+  }
 }
 
 afterEach(() => {
@@ -709,7 +798,6 @@ describe('update_place', () => {
       },
     ])
 
-    expect(turnInTextReason('t3')).toContain('t3')
     expect(calls[0]).toMatchObject({
       result: 'ok',
       skippedFields: [{ field: 'state.condition', reason: turnInTextReason('t3') }],
@@ -869,6 +957,34 @@ describe('update_item', () => {
     expect((await storedEntity(f, SATCHEL)).state).toMatchObject({ condition: 'Mended' })
   })
 
+  it('refuses an item that exists only on another branch as row-gone', async () => {
+    const KNIFE = 'item_00000000-0000-4000-8000-000000000011'
+    await addFork(f)
+    await f.ctx.db.insert(entities).values({
+      id: KNIFE,
+      branchId: FORK,
+      kind: 'item',
+      name: 'knife',
+      description: null,
+      status: 'active',
+      retiredReason: null,
+      injectionMode: 'auto',
+      state: emptyEntityState('item'),
+      keywords: [],
+      createdAt: 1,
+      updatedAt: 1,
+    })
+
+    const { result, calls } = await runUpkeepCalls(
+      f,
+      [{ table: 'entities', id: KNIFE, name: 'knife' }],
+      [{ toolName: 'update_item', input: { id: 'i1', condition: 'Notched', ...cite() } }],
+    )
+
+    expect(calls[0]).toMatchObject({ result: 'rejected', reason: CLOSE_REASON.rowGone })
+    expect(await runDeltas(f, result.actionId)).toEqual([])
+  })
+
   it('refuses a place sent as the item, writing nothing', async () => {
     const { result, calls } = await runUpkeepCalls(f, WORLD_SHOWN, [
       { toolName: 'update_item', input: { id: 'l1', condition: 'Flooded', ...cite() } },
@@ -997,6 +1113,16 @@ describe('set_keywords and mark_common_knowledge: the tools', () => {
       ids: { id: { shape: 'single', prefixes: ['hap_'] } },
     })
   })
+
+  it("tells the model it can't see a keyword's author", () => {
+    expect(setKeywordsTool.schema.shape.remove.description).toBe(
+      "Terms to remove: only a term that no longer fits. You can't see who added a term; removing one the user added is rejected.",
+    )
+    expect(setKeywordsTool.description).toContain(
+      "Remove only a term that no longer fits. You can't see who added a term; removing one the user added is rejected, naming it.",
+    )
+    expect(setKeywordsTool.description).not.toContain('an AI added')
+  })
 })
 
 describe('set_keywords', () => {
@@ -1072,6 +1198,34 @@ describe('set_keywords', () => {
     expect((await storedEntity(f, FERRY)).keywords).toEqual(['ferry', 'night ferry'])
   })
 
+  // The action judges a user's removal against the latest cited turn's prose, not E's.
+  it('keeps a term the user removed after the cited turn though before E', async () => {
+    f = await openCloseFixture({ turns: 2 })
+    await seedEntity(f, {
+      id: FERRY,
+      kind: 'item',
+      name: 'ferry token',
+      keywords: ['ferry', 'crossing'],
+    })
+    await editEntity(f, FERRY, 'user', { keywords: ['ferry'] })
+    const late = await appendLateTurns(f)
+
+    const { calls } = await runUpkeepCalls(
+      f,
+      [{ table: 'entities', id: FERRY, name: 'ferry token' }],
+      [
+        {
+          toolName: 'set_keywords',
+          input: { id: 'i1', add: ['crossing', 'night ferry'], ...cite(['t5']) },
+        },
+      ],
+      late,
+    )
+
+    expect(calls[0]).toMatchObject({ result: 'ok' })
+    expect((await storedEntity(f, FERRY)).keywords).toEqual(['ferry', 'night ferry'])
+  })
+
   it('skips a list a later turn wrote, writing nothing', async () => {
     const { result, calls } = await runUpkeepCalls(f, KEYWORD_SHOWN, [
       { toolName: 'set_keywords', input: { id: 'c1', add: ['ferryman tobin'], ...cite() } },
@@ -1093,22 +1247,40 @@ describe('set_keywords', () => {
     expect(await runDeltas(f, result.actionId)).toEqual([])
   })
 
-  it('refuses a handle-holding term even when the list is already as asked', async () => {
+  it('refuses a handle-holding add even when the list is already as asked', async () => {
     const SHELF = place(27)
     await seedEntity(f, { id: SHELF, kind: 'location', name: 'The shelf', keywords: ['c1'] })
     const shown = [...KEYWORD_SHOWN, { table: 'entities', id: SHELF, name: 'The shelf' } as const]
 
     const { result, calls } = await runUpkeepCalls(f, shown, [
-      { toolName: 'set_keywords', input: { id: 'l1', remove: ['c1'], ...cite() } },
       { toolName: 'set_keywords', input: { id: 'l5', add: ['c1'], ...cite() } },
     ])
 
-    for (const call of calls)
-      expect(call).toMatchObject({
-        result: 'rejected',
-        reason: expect.stringContaining('the keyword "c1" holds c1, an id'),
-      })
+    expect(calls[0]).toMatchObject({
+      result: 'rejected',
+      reason: expect.stringContaining('the keyword "c1" holds c1, an id'),
+    })
     expect(await runDeltas(f, result.actionId)).toEqual([])
+  })
+
+  // A removal stores nothing, so a term a pass stored that reads as a handle can still go.
+  it('removes a term a pass added that holds a short id', async () => {
+    const SHELF = place(27)
+    await seedEntity(f, {
+      id: SHELF,
+      kind: 'location',
+      name: 'The shelf',
+      keywords: ['c1', 'top shelf'],
+    })
+    const shown = [...KEYWORD_SHOWN, { table: 'entities', id: SHELF, name: 'The shelf' } as const]
+
+    const { answers, calls } = await runUpkeepCalls(f, shown, [
+      { toolName: 'set_keywords', input: { id: 'l5', remove: ['c1'], ...cite() } },
+    ])
+
+    expect(answers).toEqual([{ result: 'ok' }])
+    expect(calls[0]).toMatchObject({ result: 'ok', values: { keywords: 'top shelf' } })
+    expect((await storedEntity(f, SHELF)).keywords).toEqual(['top shelf'])
   })
 
   it('skips a list a later turn wrote before refusing its terms', async () => {
@@ -1244,7 +1416,7 @@ async function editHappening(
       },
       actionId: editor.actionId,
       branchId: fx.branchId,
-      entryId: editor.past ? laterReplyIdOf(fx) : null,
+      entryId: anchorOf(fx, editor.anchor),
     },
     fx.ctx,
   )
@@ -1328,6 +1500,25 @@ describe('mark_common_knowledge', () => {
     expect((await storedHappening(f, CROSSING)).commonKnowledge).toBe(0)
   })
 
+  // The action judges the user's edit against the latest cited turn's prose, not E's.
+  it('skips a mark the user cleared after the cited turn though before E', async () => {
+    f = await openCloseFixture({ turns: 2 })
+    await seedHappening(f, { id: CROSSING, title: 'The night crossing', commonKnowledge: 1 })
+    await editHappening(f, CROSSING, 'user', { commonKnowledge: 0 })
+    const late = await appendLateTurns(f)
+
+    const { result, calls } = await runUpkeepCalls(
+      f,
+      [{ table: 'happenings', id: CROSSING, name: 'The night crossing' }],
+      [{ toolName: 'mark_common_knowledge', input: { id: 'hp1', ...cite(['t5']) } }],
+      late,
+    )
+
+    expect(calls[0]).toMatchObject({ result: 'skipped', reason: USER_EDITED_SINCE_PROSE })
+    expect(await runDeltas(f, result.actionId)).toEqual([])
+    expect((await storedHappening(f, CROSSING)).commonKnowledge).toBe(0)
+  })
+
   it('answers ok, not skipped, for a mark a later turn set to 1', async () => {
     const { result, answers, calls } = await runUpkeepCalls(f, HAPPENING_SHOWN, [
       { toolName: 'mark_common_knowledge', input: { id: 'hp5', ...cite() } },
@@ -1349,5 +1540,119 @@ describe('mark_common_knowledge', () => {
       reason: CLOSE_REASON.rowGone,
       values: { commonKnowledge: '1' },
     })
+  })
+
+  // Marked on the fork: a read off the branch would answer ok for a row this branch lacks.
+  it('refuses a happening that exists only on another branch as row-gone', async () => {
+    await addFork(f)
+    await f.ctx.db.insert(happenings).values({
+      id: GONE_HAP,
+      branchId: FORK,
+      title: 'A lost rumour',
+      description: null,
+      category: null,
+      icon: null,
+      temporal: null,
+      occurredAtEntryId: null,
+      commonKnowledge: 1,
+      embeddingStale: 0,
+      createdAt: 1,
+      updatedAt: 1,
+    })
+
+    const { result, calls } = await runUpkeepCalls(f, HAPPENING_SHOWN, [
+      { toolName: 'mark_common_knowledge', input: { id: 'hp4', ...cite() } },
+    ])
+
+    expect(calls[0]).toMatchObject({ result: 'rejected', reason: CLOSE_REASON.rowGone })
+    expect(await runDeltas(f, result.actionId)).toEqual([])
+  })
+})
+
+// C12 past the task's last turn: part 1 is t1–t5, part 2 t6–t7 (E), t7's writer on E.
+describe("a part and a later part's turns", () => {
+  let f: CloseFixture
+
+  const partOne = (fx: CloseFixture): TaskTurns => ({
+    endEntryId: endEntryIdOf(fx),
+    taskEntryIds: taskEntryIdsOf(fx).slice(0, 5),
+  })
+  const partTwo = (fx: CloseFixture): TaskTurns => ({
+    endEntryId: endEntryIdOf(fx),
+    taskEntryIds: taskEntryIdsOf(fx).slice(5),
+    part: 2,
+    chapterEntryIds: taskEntryIdsOf(fx),
+  })
+  const chapterWide = (fx: CloseFixture): TaskTurns => ({
+    endEntryId: endEntryIdOf(fx),
+    taskEntryIds: taskEntryIdsOf(fx),
+    part: 0,
+  })
+  const burned = (turn: string): ToolCall => ({
+    toolName: 'update_place',
+    input: { id: 'l1', condition: 'Burned to the waterline', ...cite([turn]) },
+  })
+
+  beforeEach(async () => {
+    f = await openCloseFixture()
+    await seedWorld(f)
+    await editEntity(f, QUAY, 'turn-on-e', { state: { condition: 'Rebuilt' } })
+  })
+
+  it("skips, in part 1, a condition part 2's turn wrote: the part never read it", async () => {
+    const { result, calls } = await runUpkeepCalls(f, WORLD_SHOWN, [burned('t3')], partOne(f))
+
+    expect(calls[0]).toMatchObject({
+      result: 'skipped',
+      reason: CLOSE_REASON.laterTurn,
+      values: { 'state.condition': 'Burned to the waterline' },
+    })
+    expect(await runDeltas(f, result.actionId)).toEqual([])
+    expect((await storedEntity(f, QUAY)).state).toMatchObject({ condition: 'Rebuilt' })
+  })
+
+  it.each([
+    { name: 'part 2, whose turn wrote it', turns: partTwo, cited: 't6' },
+    { name: 'a chapter-wide task', turns: chapterWide, cited: 't3' },
+  ])('lands it in $name, which reads to E', async ({ turns, cited }) => {
+    const { calls } = await runUpkeepCalls(f, WORLD_SHOWN, [burned(cited)], turns(f))
+
+    expect(calls[0]).toMatchObject({ result: 'ok' })
+    expect((await storedEntity(f, QUAY)).state).toMatchObject({
+      condition: 'Burned to the waterline',
+    })
+  })
+
+  it("lands part 1's write over a field it wrote earlier in the close, its group on E", async () => {
+    const { calls } = await runUpkeepCalls(
+      f,
+      WORLD_SHOWN,
+      [
+        {
+          toolName: 'update_place',
+          input: { id: 'l2', condition: 'Smouldering', ...cite(['t3']) },
+        },
+        { toolName: 'update_place', input: { id: 'l2', condition: 'Ash', ...cite(['t5']) } },
+      ],
+      partOne(f),
+    )
+
+    expect(calls.map((call) => call.result)).toEqual(['ok', 'ok'])
+    expect((await storedEntity(f, HARROW)).state).toMatchObject({ condition: 'Ash' })
+  })
+
+  it("lands part 1's mark over a chapter-wide task's write on E, as no later turn's", async () => {
+    await seedHappening(f, { id: TOLL, title: 'The new toll', commonKnowledge: 1 })
+    await editHappening(f, TOLL, 'this-close', { commonKnowledge: 0 })
+
+    const { calls } = await runUpkeepCalls(
+      f,
+      HAPPENING_SHOWN,
+      [{ toolName: 'mark_common_knowledge', input: { id: 'hp2', ...cite(['t3']) } }],
+      partOne(f),
+    )
+
+    expect(calls[0]).toMatchObject({ result: 'ok', values: { commonKnowledge: '1' } })
+    expect((await storedHappening(f, TOLL)).commonKnowledge).toBe(1)
   })
 })

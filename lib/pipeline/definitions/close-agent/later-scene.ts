@@ -2,7 +2,8 @@ import { and, eq, gt } from 'drizzle-orm'
 
 import { readEntryPosition, storyEntries } from '@/lib/db'
 
-import type { ToolContext } from './tool'
+import { strings } from './row-values'
+import { lastTaskTurn, type ToolContext } from './tool'
 
 /**
  * Ids in the sceneEntities of the branch's ai_reply entries positioned after `afterEntryId`. A
@@ -26,24 +27,12 @@ export async function charactersInSceneAfter(
         gt(storyEntries.position, end),
       ),
     )
-  const ids = new Set<string>()
-  for (const { metadata } of replies) {
-    // A hand-edited row may hold anything in its scene; only strings are ids.
-    const scene: unknown = metadata?.sceneEntities
-    if (!Array.isArray(scene)) continue
-    for (const id of scene) if (typeof id === 'string') ids.add(id)
-  }
-  return ids
+  return new Set(replies.flatMap(({ metadata }) => strings(metadata?.sceneEntities)))
 }
 
-/**
- * The characters a reply past the task's last turn has in scene: past E for the last part or a
- * chapter-wide task, past the part otherwise, since a later part's reply is newer evidence too.
- */
+/** The characters a reply past the task's last turn has in scene. */
 export async function charactersInSceneAfterTask(
   ctx: Pick<ToolContext, 'db' | 'branchId' | 'taskEntryIds'>,
 ): Promise<ReadonlySet<string>> {
-  const last = ctx.taskEntryIds.at(-1)
-  if (last === undefined) throw new Error('charactersInSceneAfterTask: the task was shown no turn')
-  return charactersInSceneAfter(ctx, last)
+  return charactersInSceneAfter(ctx, lastTaskTurn(ctx))
 }

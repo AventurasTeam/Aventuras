@@ -1,14 +1,21 @@
 import { and, eq } from 'drizzle-orm'
 import { z } from 'zod'
 
-import { entities, happenings, type Entity, type Happening } from '@/lib/db'
+import { happenings, type Happening } from '@/lib/db'
 import { dedupeTerms } from '@/lib/keyword-terms'
 
-import { entityWriteAction, fieldVerdicts, storedValue } from './entity-write'
+import {
+  entityReportRow,
+  entityWriteAction,
+  fieldVerdicts,
+  readEntity,
+  storedValue,
+  type StatePath,
+} from './entity-write'
 import { restatedText, sentText, type BoundedField, type SentText } from './fields'
 import { keywordsRefusal, plannedKeywords, type SentKeywords } from './keyword-args'
-import { termsOf } from './name-match'
 import { planPlacement, type PlacementArg } from './placement'
+import { strings } from './row-values'
 import { turnHandleIn, turnInTextReason } from './text-checks'
 import {
   sameValue,
@@ -81,12 +88,7 @@ const UNPLACED_PATH = 'state.unplaced'
 // C4: the top mark changes only state.unplaced, so its value names the move.
 const TOP_LEVEL_VALUE = 'top level'
 
-const PLACE_TEXT: readonly TextSpec<PlaceArgs>[] = [
-  { of: (args) => args.condition, path: 'state.condition', bound: 'condition' },
-  { of: (args) => args.description, path: 'description', bound: 'description' },
-]
-
-const ITEM_TEXT: readonly TextSpec<ItemArgs>[] = [
+const UPKEEP_TEXT: readonly TextSpec<PlaceArgs | ItemArgs>[] = [
   { of: (args) => args.condition, path: 'state.condition', bound: 'condition' },
   { of: (args) => args.description, path: 'description', bound: 'description' },
 ]
@@ -100,15 +102,6 @@ const NOTHING_SENT =
   'every field is blank or left out: send only the fields you change, each with its whole new value'
 const PARENT_AND_TOP =
   'parent and top are both sent: send a parent to place the place under it, or top: true to mark an unplaced place top level, not both'
-
-async function readEntity(ctx: WriteContext, id: string): Promise<Entity | undefined> {
-  const [row] = await ctx.db
-    .select()
-    .from(entities)
-    .where(and(eq(entities.branchId, ctx.branchId), eq(entities.id, id)))
-    .limit(1)
-  return row
-}
 
 function sentTexts<A>(args: A, specs: readonly TextSpec<A>[]): SentField[] {
   return specs.flatMap((spec) => {
@@ -141,9 +134,7 @@ async function planUpkeepWrite<A extends { readonly id: string }>(
   const { id } = args
   const sent = sentTexts(args, specs)
   const row = await readEntity(ctx, id)
-  const rows: ReportRow[] = [
-    { table: 'entities', id, name: row?.name ?? ctx.ids.nameOfId(id) ?? '' },
-  ]
+  const rows = [entityReportRow(ctx, id, row)]
   const proposed: Record<string, unknown> = Object.fromEntries(
     sent.map((field) => [field.path, field.text.bounded]),
   )
@@ -161,7 +152,7 @@ async function planUpkeepWrite<A extends { readonly id: string }>(
     changed.map((field) => [field.path, field.text.bounded]),
   )
   const lost: LostField[] = []
-  let move: { path: string; wanted: Record<string, unknown>; removed: string[] } | undefined
+  let move: { path: string; wanted: Record<string, unknown>; removed: StatePath[] } | undefined
   if (placement !== undefined) {
     const planned = await planPlacement(row, placement.arg, ctx)
     if (!planned.ok) {
@@ -182,7 +173,7 @@ async function planUpkeepWrite<A extends { readonly id: string }>(
     ...(move === undefined ? [] : [PARENT_PATH]),
   ])
   const wanted: Record<string, unknown> = {}
-  const removed: string[] = []
+  const removed: StatePath[] = []
   for (const [index, field] of changed.entries()) {
     const verdict = verdicts[index]
     if (!verdict.free) {
@@ -222,7 +213,7 @@ async function planUpdatePlace(args: PlaceArgs, ctx: WriteContext): Promise<Writ
       reason: PARENT_AND_TOP,
       rows: [{ table: 'entities', id: args.id, name: ctx.ids.nameOfId(args.id) ?? '' }],
     }
-  return planUpkeepWrite('location', PLACE_TEXT, args, sentPlacement(args), ctx)
+  return planUpkeepWrite('location', UPKEEP_TEXT, args, sentPlacement(args), ctx)
 }
 
 /** chapter-close.md → 3f: a place's condition, description and placement, one updateEntity. */
@@ -247,7 +238,7 @@ export const updateItemTool: WriteTool<typeof UPDATE_ITEM_SHAPE> = {
     "Updates an item from this chapter's turns: its condition when the chapter shows it changed while the scene was elsewhere, and its description on a material change or when blank. Send only the fields you change, each whole.",
   schema: writeToolSchema(UPDATE_ITEM_SHAPE),
   ids: { id: { shape: 'single', prefixes: ['item_'] } },
-  plan: (args, ctx) => planUpkeepWrite('item', ITEM_TEXT, args, undefined, ctx),
+  plan: (args, ctx) => planUpkeepWrite('item', UPKEEP_TEXT, args, undefined, ctx),
 }
 
 export const SET_KEYWORDS_SHAPE = {
@@ -262,7 +253,7 @@ export const SET_KEYWORDS_SHAPE = {
     .array(z.string())
     .optional()
     .describe(
-      'Terms to remove: only a term an AI added that no longer fits. Removing a term the user added is rejected.',
+      "Terms to remove: only a term that no longer fits. You can't see who added a term; removing one the user added is rejected.",
     ),
 }
 
@@ -287,10 +278,8 @@ async function planSetKeywords(args: KeywordArgs, ctx: WriteContext): Promise<Wr
     remove: dedupeTerms(args.remove ?? []),
   }
   const row = await readEntity(ctx, id)
-  const rows: ReportRow[] = [
-    { table: 'entities', id, name: row?.name ?? ctx.ids.nameOfId(id) ?? '' },
-  ]
-  const live = termsOf(row?.keywords)
+  const rows = [entityReportRow(ctx, id, row)]
+  const live = strings(row?.keywords)
   const proposed = { keywords: plannedKeywords(live, sent) }
   if (row === undefined)
     return { kind: 'refused', reason: CLOSE_REASON.rowGone, rows, values: proposed }
@@ -396,7 +385,7 @@ export const setKeywordsTool: WriteTool<typeof SET_KEYWORDS_SHAPE> = {
   kind: 'write',
   name: 'set_keywords',
   description:
-    "Adds and removes a row's keywords, the names and aliases retrieval finds it by. Add the aliases the chapter uses for a row, and a bare place's or item's first keywords. Remove only a term an AI added that no longer fits: removing a term the user added is rejected, naming it. A term is a word the prose uses, never an id.",
+    "Adds and removes a row's keywords, the names and aliases retrieval finds it by. Add the aliases the chapter uses for a row, and a bare place's or item's first keywords. Remove only a term that no longer fits. You can't see who added a term; removing one the user added is rejected, naming it. A term is a word the prose uses, never an id.",
   schema: writeToolSchema(SET_KEYWORDS_SHAPE),
   ids: { id: { shape: 'single', prefixes: ['char_', 'loc_', 'item_', 'fact_'] } },
   plan: planSetKeywords,

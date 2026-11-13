@@ -84,7 +84,7 @@ const updateLore = (
 ): PipelineAction => ({
   kind: 'updateLore',
   source,
-  payload: { branchId: BRANCH, id: 'lore_1', patch },
+  payload: { branchId: BRANCH, id: 'lore_1', patch, proseEntryId: null },
 })
 
 const ROWS: readonly GuardRow[] = [

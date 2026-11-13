@@ -630,6 +630,23 @@ None open: Implementation notes record each answer.
   Turn handles stay chapter-wide (`showTurns` once over the range), so
   `t12` names one entry in every part. A task's entries are its
   context's `taskEntryIds`, which replaced `chapterEntryIds`.
+- **A part leaves alone what a later part's turns wrote (developer
+  decision, 2026-11-10, from the slice review).** The row guard reads
+  C12 past the task's last turn (`lastTaskTurn`), the part's for a
+  per-part task and E for the last part and a chapter-wide task, as the
+  scene check does, while the group still anchors on E (C1). The close's
+  own earlier writes anchor on E but are `chapter_close`, which C12
+  never counts, so a part's second write of a field lands; a phase-0
+  fact anchored in a later part's turn counts, being that turn's
+  evidence. It gives up an earlier part correcting a wrong later write.
+  A row a later part's turn created counts as written in every field,
+  so an earlier part writes nothing to it (known limit, developer
+  decision, 2026-11-10); the candidate fix is in the triage inbox.
+- **A reply that didn't report its scene counts as one (known limit,
+  developer decision, 2026-11-10, from the slice review).** A reply
+  missing `<scene_entities>` inherits the previous scene
+  (`lib/piggyback/apply.ts:81`) and counts as in-scene-later, which errs
+  toward not retiring.
 - **The resolved-pair read counts every user clear of the pair
   (developer decision, 2026-11-10).** Any `user_edit` delta on either
   row whose undo payload holds `nameCollisionFlag: 1` and the other row
@@ -658,7 +675,11 @@ None open: Implementation notes record each answer.
   with no field, while the dialog kept a reason that may point the
   other way. A re-marked flag no longer goes dormant on a rename. The
   re-mark runs before the resolved-pair read, so it holds after an old
-  Keep too. 3f and the authorship row say so.
+  Keep too. When each row's live flag names the other, both are
+  re-marked in one call and one group, which CTRL-Z restores together,
+  each under its own row's guards, so a protected row's flag is
+  reported lost while the other lands (developer decision, 2026-11-10,
+  from the slice review). 3f and the authorship row say so.
 - **A lore body is bounded by its growth (developer decision,
   2026-11-10).** A body the close writes is at most 1,200 characters,
   the embedder's whole-text bound, or longer only by growth: per close,
@@ -678,8 +699,11 @@ None open: Implementation notes record each answer.
   lore `title`, `body` or `category`; a `description`, `condition`,
   `voice` or `standing`; an Identity `traits`, `drives` or `agenda` list
   with an entry holding one; a thread's `title` or `description`; and
-  `retire_entity`'s `why`, stored as `retiredReason`. A keyword term
-  holding any handle the close knows is refused the same way. Another
+  `retire_entity`'s `why`, stored as `retiredReason`. A keyword term the
+  close adds holding any handle it knows is refused the same way; a
+  removal stores nothing, so its terms aren't checked (the slice
+  review's narrowing to added terms, ratified by the developer,
+  2026-11-10). Another
   tool's `why`, shown only in the review, keeps handles as written. The
   shared close instructions state the rule. A stored `t3` names another
   turn in a later prompt, and nothing correct can replace it.
@@ -757,7 +781,11 @@ None open: Implementation notes record each answer.
   `ok` with nothing written; every add one the user removed, and no
   removal, is `skipped`. `updateLore`'s patch never carries `keywords` beside
   `setLoreKeywords`. The walk credits a term to the latest keyword
-  update whose recorded before-list lacks it. It has two known gaps. A
+  update whose recorded before-list lacks it, and a name a machine
+  rename demoted into the keywords to the latest earlier write of the
+  name, else the create (developer decision, 2026-11-10, from the slice
+  review), so a name the user typed survives a classifier rename. It
+  has two known gaps. A
   machine keyword update undone under a later user edit is pruned from
   the log, so its term falls back to the create's source. And when an
   undo or a rollback window reverts a user's keyword edit under a later
@@ -805,8 +833,12 @@ None open: Implementation notes record each answer.
   Identity cell, Parts, `Tools and writes` (turn ids in stored text,
   the `rejected` list), 3a, 3f's collision bullet and Phase 4;
   `data-model.md`'s flag row; `retrieval.md`'s bound paragraph;
-  `architecture.md`'s halves table; `testing.md`'s `PROBE_WINDOW`; and
-  the triage inbox.
+  `architecture.md`'s halves table; `testing.md`'s `PROBE_WINDOW` and
+  mock-marker paragraph; `chapter-close.md`'s Phase 2 part and merge
+  paragraph, Phase 3's context bullets, 3b's start and 3f's keyword
+  bullet; `parked.md`'s chunking paragraph; `scripts/mock-llm/README.md`;
+  and the triage inbox. The slice review added `generation-pipeline.md`'s
+  intermediates paragraph and `world.md`'s `duplicate` flag sentence.
 - **Stale code claims in this doc.** Two actions writing one column of
   a row refuse the group in `applyDeltaActionGroupUnlocked`'s `prepare`
   (`lib/actions/delta/apply-delta-action.ts`, "twice on one column"),
@@ -823,8 +855,9 @@ None open: Implementation notes record each answer.
   a system half, and its case "separates every shape that shares a
   block by a distinct, non-empty marker". 5.5b made `updateThread`'s
   and `updateHappening`'s `proseEntryId` required, their user callers
-  passing `null`, so "optional, as 5.5b gives `updateThread`" holds only
-  for `updateLore`, whose `proseEntryId` stays optional as specced.
+  passing `null`, so "optional, as 5.5b gives `updateThread`" held for
+  none; the slice review made `updateLore`'s `proseEntryId` required the
+  same way, the lore pane passing `null`.
 - **The two-part probe (a smoke check, not a measure).**
   `PROBE_WINDOW=40000 PROBE_OVERLAY=1 pnpm probe:close` at `b817d7d13` on
   `Gemma4-26B-A4B-QAT-MTP` (served window 65,536 tokens) cut the dataset
@@ -852,10 +885,12 @@ None open: Implementation notes record each answer.
   and run again from the dev route on `Gemma4-26B-A4B-QAT-MTP` through
   `pnpm mock`'s passthrough, without the overlay, as one part: the
   seed's provider publishes no window, so the 32,000 limit holds the
-  chapter. The report holds 36 calls, 36 ok (landed writes and reads),
-  1 lore row created and 1 thread merge, and the chapter's title is now
-  "The Captain's Death and the Map". Lore 1 call, 1 ok; Identity 9, 9;
-  Threads 5, 5; Upkeep 20, 20; Lifecycle 1, 1.
+  chapter. After the slice review's fixes and decisions it was undone
+  and run again the same way (developer decision R6, 2026-11-10). The
+  report holds 38 calls, 38 ok, 1 lore row created and no thread
+  merge, and the chapter's title is now "The Discovery of the Map".
+  Lore 1 call, 1 ok; Identity 8, 8; Threads 8, 8; Upkeep 18, 18;
+  Lifecycle 3, 3.
 - **Per-part tasks aren't told they read a part (known limit, developer
   decision, 2026-11-10).** A thread resolved, an entity retired or
   threads merged in an earlier part can't be undone by a later part of
@@ -892,6 +927,9 @@ None open: Implementation notes record each answer.
 - **The plan's `closeLedgerOf(…).calls` destructure didn't typecheck,**
   since `closeLedgerOf` returns `CloseLedger | undefined`; Tasks 18 and
   19 use `?.calls` or `!`.
-- **`retire_entity` checks a later turn's `status` write before the turn
-  handle in `why`,** the order the other tools settled on in review, and
-  `update_place`'s and `update_item`'s texts the same.
+- **`retire_entity` checks a later turn's `status` write, then the
+  user's, before the turn handle in `why`,** the order the other tools
+  settled on in review, and `update_place`'s and `update_item`'s texts
+  the same. `update_thread` judges the user's description edit in its
+  plan before the handle, and `merge_threads` its protection, so a
+  protected text reads `skipped`.

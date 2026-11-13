@@ -126,14 +126,16 @@ defaults.
 A prose task reads at most half the model's window at a time, or 32k
 tokens when the window is unknown. A longer chapter is cut into parts
 between turns: a player's turn stays with the reply after it, since the
-reply decides what the turn did, so no part ends on one. A player's turn
-and its reply that pass the limit together are a part alone, sent whole.
-Each
-part runs the prose tasks in turn, which keeps its cache warm; under
-`single`, each part is one conversation. Chapter-wide limits hold across
-parts, and each part sees the writes so far. A part's writes cite only
+reply decides what the turn did, so no part ends on one. A turn over
+the limit is a part alone, sent whole: a reply with the player's turn
+before it, or an entry on its own such as the opening. Each part runs
+the prose tasks in turn, which keeps its cache warm; under `single`,
+each part is one conversation. Chapter-wide limits hold across parts,
+and each part sees the writes so far. A part's writes cite only
 its own turns: a turn of another part is refused as one outside the
-chapter is, since the part never showed it.
+chapter is, since the part never showed it. A part leaves alone what a
+later part's turns wrote
+([Tools and writes](#tools-and-writes)).
 
 On a long chapter no single call sees the whole arc, and a rule refined
 under another name in a later part can land as a second lore row, which
@@ -160,10 +162,9 @@ is named before it lands
 ([`classifier.md → ID handling in classifier output`](./classifier.md#id-handling-in-classifier-output)).
 A turn id names no row, so a text field the close stores that holds one
 of its turns is refused, and so is a `traits`, `drives` or `agenda` list
-with an entry that does, and a keyword holding any id it shows: a stored
-`t3` would name another turn in a later prompt, a stored row id another
-row. Turns are cited
-in `turns`; a `why` only the review shows keeps them as written.
+with an entry that does, and a keyword it adds holding any id it shows:
+a stored `t3` would name another turn in a later prompt, a stored row
+id another row. Turns are cited in `turns`; a `why` only the review shows keeps them as written.
 
 A write returns one of three results:
 
@@ -183,14 +184,23 @@ turns past its chapter but anchors before them, so it skips a field one
 of them wrote, whichever writer it was, and a merge touching a row they
 touched is `skipped` whole. A rollback's undo would otherwise write over
 the close, and older chapter evidence over a newer fact. Those turns
-fall in the next chapter, whose close reviews the same rows.
+fall in the next chapter, whose close reviews the same rows. A
+[part](#parts)'s task leaves alone what a later part's turns wrote on
+the same grounds: they are newer evidence than any turn it read, and
+the later part's tasks read them. It gives up an earlier part
+correcting a wrong later write, which stays until the user or a later
+close fixes it. A row a later part's turn created counts as written in
+every field, so an earlier part writes nothing to it, and detail only
+the earlier part's turns hold is lost to the close.
 
-A write counts as a later turn's when it anchors past the end entry, or
-has no anchor and belongs to a turn past it. A `retrieval_count` bump
+A write counts as a later turn's when it anchors past the task's last
+turn, the end entry for the last part and a chapter-wide task, or has
+no anchor and belongs to a turn past it. A `retrieval_count` bump
 doesn't count, or most merges of recently retrieved rows would be
 refused, and the reset is exempt on the same grounds: a stale counter
-does no harm. A `chapter_close` delta doesn't count either, so work a
-divider-only removal kept
+does no harm. A `chapter_close` delta doesn't count either, so this
+close's earlier writes, which anchor on the end entry, never read as a
+later part's, and work a divider-only removal kept
 ([Deleting a chapter](#deleting-a-chapter)) doesn't read as a later
 turn's when the chapter closes again.
 
@@ -411,7 +421,8 @@ above. Each task starts from its rows and reads the rest through tools,
 seeing a field's current value before it writes it
 ([`data-model.md → Authorship contract`](../data-model.md#authorship-contract)):
 
-- Closed range entries (the chapter's content).
+- Closed range entries (the chapter's content), or a [part](#parts)'s
+  for a task that runs per part.
 - Existing lore rows — titles, bodies on request.
 - The entities the part touches, with their state, and the rest of
   the world on request: places, items and factions off the scene.
@@ -719,9 +730,10 @@ conservative bias as the sub-jobs above:
   namesake pair
   ([`world.md → Surfacing`](../ui/screens/world/world.md#surfacing)).
   When either row already holds a live flag naming the other, the close
-  re-marks that flag `duplicate` on the row that holds it, so the
-  resolve dialog gives the close's verdict, and one already `duplicate`
-  stays as it is. Otherwise the flag goes on whichever row of the pair
+  re-marks that flag `duplicate` on the row that holds it, both rows'
+  flags in one write when each names the other, so every resolve dialog
+  gives the close's verdict. A flag already `duplicate` stays as it is,
+  and each row's precedence guards its own flag. Otherwise the flag goes on whichever row of the pair
   is free: the row the call flags (its `id`), or, when that row's live flag names
   a third row, its partner. It is refused when both rows' live flags
   name other rows or the user already resolved the pair, or each close

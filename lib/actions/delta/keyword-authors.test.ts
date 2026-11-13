@@ -217,7 +217,12 @@ describe('keywordAuthors', () => {
       {
         kind: 'updateLore',
         source: 'chapter_close',
-        payload: { branchId: BRANCH, id: 'lore_1', patch: { keywords: ['aether', 'Ley line'] } },
+        payload: {
+          branchId: BRANCH,
+          id: 'lore_1',
+          patch: { keywords: ['aether', 'Ley line'] },
+          proseEntryId: null,
+        },
       },
       'act_u',
     )
@@ -292,6 +297,77 @@ describe('keywordAuthors', () => {
   })
 })
 
+// classifier.md → Names: a rename keeps the old name as a keyword, which isn't the rename's word.
+describe('keywordAuthors: a name a rename demoted', () => {
+  const renamed = (name: string): PipelineAction => ({
+    kind: 'renameEntity',
+    source: 'periodic_classifier',
+    payload: { branchId: BRANCH, id: 'char_1', name, proseEntryId: null },
+  })
+
+  const userRenamed = (name: string, keywords?: string[]): PipelineAction => ({
+    kind: 'updateEntity',
+    source: 'user_edit',
+    payload: { branchId: BRANCH, id: 'char_1', patch: { name, ...(keywords ? { keywords } : {}) } },
+  })
+
+  const closeRemoves = (remove: string[]): PipelineAction => ({
+    kind: 'setEntityKeywords',
+    source: 'chapter_close',
+    payload: { branchId: BRANCH, id: 'char_1', add: [], remove, proseEntryId: null },
+  })
+
+  it("credits the user's name a classifier rename demoted to the user, so a close can't remove it", async () => {
+    const ctx = await setup()
+    await applyOk(ctx, createdBy('user_edit', KAEL), 'act_c')
+    await applyOk(ctx, renamed('Ser Kael Stormborn'), 'act_r')
+    expect(await liveKeywords(ctx, 'entities', 'char_1')).toEqual(['Kael'])
+    expect(await authorsOf(ctx)).toEqual({ kael: 'user_edit' })
+
+    const removal = await applyDeltaAction(
+      { action: closeRemoves(['Kael']), actionId: 'act_close', branchId: BRANCH },
+      ctx,
+    )
+    expect(removal).toMatchObject({ status: 'rejected', reason: keywordUserAddedReason('Kael') })
+    expect(await liveKeywords(ctx, 'entities', 'char_1')).toEqual(['Kael'])
+  })
+
+  it("keeps a classifier's own name, demoted by its rename, the pass's", async () => {
+    const ctx = await setup()
+    await applyOk(ctx, createdBy('periodic_classifier', KAEL), 'act_c')
+    await applyOk(ctx, renamed('Ser Kael Stormborn'), 'act_r')
+    expect(await authorsOf(ctx)).toEqual({ kael: 'periodic_classifier' })
+  })
+
+  it('credits a name the user gave in World, then a rename demoted, to the user', async () => {
+    const ctx = await setup()
+    await applyOk(ctx, createdBy('periodic_classifier', KAEL), 'act_c')
+    await applyOk(ctx, userRenamed('Brother Kael'), 'act_u')
+    await applyOk(ctx, renamed('Ser Kael Stormborn'), 'act_r')
+    expect(await liveKeywords(ctx, 'entities', 'char_1')).toEqual(['Brother Kael'])
+    expect(await authorsOf(ctx)).toEqual({ 'brother kael': 'user_edit' })
+  })
+
+  it('credits each of two renames in a row to the writer of the name it demoted', async () => {
+    const ctx = await setup()
+    await applyOk(ctx, createdBy('user_edit', KAEL), 'act_c')
+    await applyOk(ctx, renamed('Ser Kael Stormborn'), 'act_r1')
+    await applyOk(ctx, renamed('Lord Stormborn'), 'act_r2')
+    expect(await liveKeywords(ctx, 'entities', 'char_1')).toEqual(['Kael', 'Ser Kael Stormborn'])
+    expect(await authorsOf(ctx)).toEqual({
+      kael: 'user_edit',
+      'ser kael stormborn': 'periodic_classifier',
+    })
+  })
+
+  it("keeps a term the user's own rename kept as a keyword the user's", async () => {
+    const ctx = await setup()
+    await applyOk(ctx, createdBy('periodic_classifier', KAEL), 'act_c')
+    await applyOk(ctx, userRenamed('Ser Kael', ['Kael']), 'act_u')
+    expect(await authorsOf(ctx)).toEqual({ kael: 'user_edit' })
+  })
+})
+
 describe('protectedKeywordTerms', () => {
   it("holds the user's terms and the unlogged ones, never a pass's", async () => {
     const ctx = await setup()
@@ -301,6 +377,33 @@ describe('protectedKeywordTerms', () => {
     const live = await liveKeywords(ctx, 'entities', 'char_1')
     const guarded = await protectedKeywordTerms(ctx, BRANCH, 'entities', 'char_1', live)
     expect([...guarded].sort()).toEqual(['ser kael', 'the knight'])
+  })
+
+  // After a fork both branches hold char_1, each with its own log.
+  it("reads only its own branch's log: another branch's append credits nothing here", async () => {
+    const ctx = await setup()
+    await ctx.db
+      .insert(branches)
+      .values({ id: 'br_2', storyId: 'story_1', name: 'fork', createdAt: 2 })
+    await applyOk(ctx, createdBy('user_edit', { ...KAEL, keywords: ['the knight'] }), 'act_c')
+    const onFork = async (action: PipelineAction, actionId: string) => {
+      const result = await applyDeltaAction({ action, actionId, branchId: 'br_2' }, ctx)
+      if (result.status !== 'ok') throw new Error(`${action.kind} refused: ${result.reason}`)
+    }
+    await onFork(
+      createdBy('periodic_classifier', { ...KAEL, branchId: 'br_2', keywords: [] }),
+      'act_fork_c',
+    )
+    await onFork(
+      {
+        kind: 'appendEntityKeywords',
+        source: 'per_turn_classifier',
+        payload: { branchId: 'br_2', id: 'char_1', keywords: ['the knight'], proseEntryId: null },
+      },
+      'act_fork_a',
+    )
+    const guarded = await protectedKeywordTerms(ctx, BRANCH, 'entities', 'char_1', ['the knight'])
+    expect([...guarded]).toEqual(['the knight'])
   })
 })
 

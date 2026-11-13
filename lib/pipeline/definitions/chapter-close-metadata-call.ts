@@ -174,14 +174,14 @@ export async function* requestChapterMetadata(
     return { status: 'ok', metadata: normalizeChapterMetadata(call.value) }
   }
 
-  const byId = new Map(entries.map((entry) => [entry.id, entry] as const))
   const partSummaries: string[] = []
   for (const part of closeParts(entries, parts)) {
     if (ctx.abortSignal.aborted) return { status: 'aborted' }
+    const inPart = new Set(part.entryIds)
     const prompt = renderTemplate(
       TEMPLATE_IDS.chapterMetadataPart,
       buildChapterContext({
-        entries: part.entryIds.flatMap((id) => byId.get(id) ?? []),
+        entries: entries.filter((entry) => inPart.has(entry.id)),
         previousChapterSummary,
         threads,
         mode,
@@ -189,7 +189,7 @@ export async function* requestChapterMetadata(
     )
     const call = yield* structuredCall(ctx, prompt, chapterPartSummarySchema, modelConfig)
     if (call.status !== 'ok') return call
-    partSummaries.push(normalizeChapterPartSummary(call.value).summary)
+    partSummaries.push(normalizeChapterPartSummary(call.value))
   }
   if (ctx.abortSignal.aborted) return { status: 'aborted' }
   const prompt = renderTemplate(

@@ -813,6 +813,30 @@ describe('update_thread', () => {
     expect(run.calls[0]).toMatchObject({ result: 'skipped', reason: CLOSE_REASON.laterTurn })
     expect(await runDeltas(f, run.result.actionId)).toEqual([])
   })
+
+  it('skips a description the user wrote after the cited turn, though the one sent names a turn', async () => {
+    await editThreadAs(f, 'user', LETTER.id, { description: 'Wren means to read it first.' })
+
+    const run = await runThreadCalls(f, THREADS_SHOWN, [
+      {
+        toolName: 'update_thread',
+        input: { id: 'th1', description: 'Wren hands it over at t7.', ...cite() },
+      },
+    ])
+
+    expect(run.answers).toEqual([
+      { result: 'skipped', reason: USER_EDITED_SINCE_PROSE, note: expect.any(String) },
+    ])
+    expect(run.calls[0]).toMatchObject({
+      result: 'skipped',
+      reason: USER_EDITED_SINCE_PROSE,
+      values: { description: 'Wren hands it over at t7.' },
+    })
+    expect(await runDeltas(f, run.result.actionId)).toEqual([])
+    expect(await threadRow(f, LETTER.id)).toMatchObject({
+      description: 'Wren means to read it first.',
+    })
+  })
 })
 
 describe('merge_threads', () => {
@@ -1401,6 +1425,49 @@ describe('merge_threads', () => {
     expect(await runDeltas(f, run.result.actionId)).toEqual([])
     expect(await threadRow(f, SEALED.id)).toBeDefined()
   })
+
+  it.each<[string, SeedThread, 'user' | 'later-turn', ThreadEdit, string]>([
+    [
+      "a later turn's write on the absorbed thread",
+      SEALED,
+      'later-turn',
+      { description: 'Wren breaks the seal at the milestone.' },
+      CLOSE_REASON.laterTurn,
+    ],
+    [
+      "the user's edit of the absorbed thread",
+      SEALED,
+      'user',
+      { icon: 'feather' },
+      USER_EDITED_SINCE_PROSE,
+    ],
+    [
+      "the user's edit of keep's description",
+      LETTER,
+      'user',
+      { description: 'Wren means to read it first.' },
+      USER_EDITED_SINCE_PROSE,
+    ],
+  ])(
+    'skips, not refuses, a merge whose text names a turn when %s protects it',
+    async (_label, thread, who, patch, reason) => {
+      await editThreadAs(f, who, thread.id, patch)
+
+      const run = await runThreadCalls(f, THREADS_SHOWN, [
+        merge({ keep: 'th1', absorb: ['th2'], description: 'One errand since [t3].' }),
+      ])
+
+      expect(run.answers).toEqual([{ result: 'skipped', reason, note: expect.any(String) }])
+      expect(run.calls[0]).toMatchObject({
+        result: 'skipped',
+        reason,
+        values: { description: 'One errand since [t3].' },
+      })
+      expect(groupEvents(run.events)).toEqual([])
+      expect(await runDeltas(f, run.result.actionId)).toEqual([])
+      expect(await threadRow(f, SEALED.id)).toBeDefined()
+    },
+  )
 
   it("lands a merge resending keep's stored title that holds a turn handle", async () => {
     await editThreadAs(f, 'user', LETTER.id, { title: 'Deliver the letter (t5)' })

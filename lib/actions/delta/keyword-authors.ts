@@ -4,7 +4,8 @@ import { deltas, type Delta } from '@/lib/db'
 import { newTerms, normalizeTerm } from '@/lib/keyword-terms'
 
 import { isUserOriginatedSource, type DbCtx, type DeltaSource, type ProseEntryId } from '../types'
-import { userEditsSinceProse } from './user-precedence'
+import { noopRefusal, type HandlerOutcome } from './registry'
+import { USER_EDITED_SINCE_PROSE, userEditsSinceProse } from './user-precedence'
 
 /** Who added a live keyword: a delta's source, or `unlogged` when no delta accounts for it. */
 export type KeywordAuthor = DeltaSource | 'unlogged'
@@ -20,8 +21,8 @@ function termKeys(terms: unknown): Set<string> {
   return keys
 }
 
-// The row's creates, and each update whose undo payload holds the list it replaced. A delete's
-// payload is the whole row, keywords included, so the op is what keeps it out.
+// The row's creates, and each update whose undo payload holds the list or the name it replaced. A
+// delete's payload is the whole row, keywords included, so the op is what keeps it out.
 async function keywordDeltas(ctx: DbCtx, branchId: string, table: 'entities' | 'lore', id: string) {
   return ctx.db
     .select({ op: deltas.op, source: deltas.source, undoPayload: deltas.undoPayload })
@@ -35,7 +36,10 @@ async function keywordDeltas(ctx: DbCtx, branchId: string, table: 'entities' | '
           eq(deltas.op, 'create'),
           and(
             eq(deltas.op, 'update'),
-            sql`json_type(${deltas.undoPayload}, '$.keywords') = 'array'`,
+            or(
+              sql`json_type(${deltas.undoPayload}, '$.keywords') = 'array'`,
+              sql`json_type(${deltas.undoPayload}, '$.name') = 'text'`,
+            ),
           ),
         ),
       ),
@@ -43,12 +47,23 @@ async function keywordDeltas(ctx: DbCtx, branchId: string, table: 'entities' | '
     .orderBy(asc(deltas.logPosition))
 }
 
+type KeywordDelta = Awaited<ReturnType<typeof keywordDeltas>>[number]
+
+const nameBefore = (row: KeywordDelta): string | undefined =>
+  typeof row.undoPayload?.name === 'string' ? row.undoPayload.name : undefined
+
+// A machine rename's demoted name (classifier.md → Names): credited to whoever wrote that name.
+function demotedName(row: KeywordDelta, key: string): boolean {
+  const name = nameBefore(row)
+  return name !== undefined && normalizeTerm(name) === key && !isUserOriginatedSource(row.source)
+}
+
 /**
  * Normalized live term → who added it (retrieval.md → Keywords schema): the latest update whose
- * list before lacks the term, else the create. An undone update has left the log, so its term
- * falls back to the latest earlier keyword update still in the log, else the create's source.
- * Undoing a user's keyword edit under a later keyword update restores the whole list, so a user's
- * term that update's before-list lacks is credited to that update, and a close may remove it.
+ * before-list lacks the term, else the create; an undone update has left the log. A name a machine
+ * rename demoted goes to the latest earlier name write, else the create. Undoing a user's keyword
+ * edit under a later machine keyword write restores the whole list, so a user's term that write's
+ * before-list lacks is credited to that write, and a close may remove it.
  */
 export async function keywordAuthors(
   ctx: DbCtx,
@@ -61,12 +76,19 @@ export async function keywordAuthors(
   const created = rows.findLastIndex((row) => row.op === 'create')
   const createdBy: KeywordAuthor = created === -1 ? 'unlogged' : rows[created].source
   const updates = rows.slice(created + 1)
-  const before = updates.map((update) => termKeys(update.undoPayload?.keywords))
-  const liveKeys = termKeys(live)
+  const before = updates.map((update) =>
+    Array.isArray(update.undoPayload?.keywords) ? termKeys(update.undoPayload.keywords) : null,
+  )
+  const nameWriter = (until: number): KeywordAuthor => {
+    const at = updates.findLastIndex((update, i) => i < until && nameBefore(update) !== undefined)
+    return at === -1 ? createdBy : updates[at].source
+  }
   const authors = new Map<string, KeywordAuthor>()
-  for (const key of liveKeys) {
-    const adder = updates.findLastIndex((_, i) => !before[i].has(key))
-    authors.set(key, adder === -1 ? createdBy : updates[adder].source)
+  for (const key of termKeys(live)) {
+    const adder = updates.findLastIndex((_, i) => before[i] !== null && !before[i].has(key))
+    if (adder === -1) authors.set(key, createdBy)
+    else
+      authors.set(key, demotedName(updates[adder], key) ? nameWriter(adder) : updates[adder].source)
   }
   return authors
 }
@@ -115,23 +137,41 @@ export type KeywordEdit =
   /** `next`: the kept terms in stored order, then the adds. */
   | { kind: 'changed'; next: string[]; removed: string[] }
 
+type KeywordRow = {
+  table: 'entities' | 'lore'
+  branchId: string
+  id: string
+  keywords: readonly string[]
+}
+
 /**
- * cadence.md → User edits and classifier writes: adds are the terms the list lacks, less any the
- * user removed after the prose; removals match by `normalizeTerm`, every spelling alike, and a term
- * the list lacks is ignored.
+ * cadence.md → User edits and classifier writes: `fresh`, the terms of `add` the list lacks;
+ * `added`, those less any the user removed after the prose.
+ */
+export async function planKeywordAdds(
+  ctx: DbCtx,
+  row: KeywordRow,
+  add: readonly string[],
+  proseEntryId: ProseEntryId,
+): Promise<{ fresh: string[]; added: string[] }> {
+  const { table, branchId, id, keywords } = row
+  const fresh = newTerms(keywords, add)
+  if (fresh.length === 0 || proseEntryId === null) return { fresh, added: fresh }
+  const userRemoved = priorTerms(await userEditsSinceProse(ctx, branchId, table, id, proseEntryId))
+  return { fresh, added: fresh.filter((term) => !userRemoved.has(normalizeTerm(term))) }
+}
+
+/**
+ * cadence.md → User edits and classifier writes: adds as `planKeywordAdds` keeps them; removals
+ * match by `normalizeTerm`, every spelling alike, and a term the list lacks is ignored.
  */
 export async function planKeywordEdit(
   ctx: DbCtx,
-  row: { table: 'entities' | 'lore'; branchId: string; id: string; keywords: readonly string[] },
+  row: KeywordRow,
   edit: { add: readonly string[]; remove: readonly string[]; proseEntryId: ProseEntryId },
 ): Promise<KeywordEdit> {
   const { table, branchId, id, keywords } = row
-  const fresh = newTerms(keywords, edit.add)
-  const userRemoved =
-    fresh.length > 0 && edit.proseEntryId !== null
-      ? priorTerms(await userEditsSinceProse(ctx, branchId, table, id, edit.proseEntryId))
-      : new Set<string>()
-  const added = fresh.filter((term) => !userRemoved.has(normalizeTerm(term)))
+  const { fresh, added } = await planKeywordAdds(ctx, row, edit.add, edit.proseEntryId)
   const dropped = new Set(edit.remove.map(normalizeTerm).filter((key) => key !== ''))
   const removed = keywords.filter((term) => dropped.has(normalizeTerm(term)))
   if (removed.length > 0) {
@@ -146,4 +186,16 @@ export async function planKeywordEdit(
     next: [...keywords.filter((term) => !dropped.has(normalizeTerm(term))), ...added],
     removed,
   }
+}
+
+/** A keyword edit that writes nothing, as its handler's no-op. */
+export function keywordEditNoop(edit: Exclude<KeywordEdit, { kind: 'changed' }>): HandlerOutcome {
+  if (edit.kind === 'user-term') {
+    // noop-marks.test passes this null mark by its source text, `keywordUserAddedReason(term)`.
+    const { term } = edit
+    return noopRefusal(keywordUserAddedReason(term), null)
+  }
+  return edit.userDropped
+    ? noopRefusal(USER_EDITED_SINCE_PROSE, null)
+    : noopRefusal('no-keyword-change', 'restated')
 }

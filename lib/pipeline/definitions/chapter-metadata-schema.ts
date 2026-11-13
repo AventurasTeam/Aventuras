@@ -44,8 +44,8 @@ export function normalizeChapterMetadata(reply: ChapterMetadata): NormalizedChap
 }
 
 /** A part's reply fit for the merge: the summary trimmed. */
-export function normalizeChapterPartSummary(value: z.output<typeof chapterPartSummarySchema>): {
-  summary: string
-} {
-  return { summary: value.summary.trim() }
+export function normalizeChapterPartSummary(
+  value: z.output<typeof chapterPartSummarySchema>,
+): string {
+  return value.summary.trim()
 }

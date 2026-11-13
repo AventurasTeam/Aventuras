@@ -664,7 +664,9 @@ has a close leave alone what later turns wrote. No selector exists, and
 neither column alone gives one: a turn's fold writes carry a null anchor,
 and phase 0's passes land after later turns but anchor inside the
 chapter. A delta counts as later when it anchors past E, or when it's
-null-anchored in the action of a turn past E. A `retrieval_count`-only
+null-anchored in the action of a turn past E. A per-part task reads past
+its part's last turn instead; a chapter-wide task and the last part keep
+E. A `retrieval_count`-only
 update never counts, and neither does a `chapter_close` delta, so work
 kept by a divider-only removal doesn't read as a later turn's when the
 chapter closes again. This rule looks forward from a running close only;

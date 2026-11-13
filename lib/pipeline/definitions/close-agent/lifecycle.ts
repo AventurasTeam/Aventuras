@@ -2,7 +2,6 @@ import { and, eq, inArray } from 'drizzle-orm'
 
 import type { PromptHalves } from '@/lib/ai'
 import { chunked, entities, type Entity, type StoryMode } from '@/lib/db'
-import { compareId } from '@/lib/list-modules'
 import { TEMPLATE_IDS } from '@/lib/prompts'
 import { oneLine } from '@/lib/text'
 import { characterFactionId, flagStillHolds } from '@/lib/world'
@@ -12,6 +11,7 @@ import { charactersInSceneAfterTask } from './later-scene'
 import { flagDuplicateTool, retireEntityTool } from './lifecycle-tools'
 import { namedInProse } from './name-match'
 import { readRowTool, refsIn, searchWorldTool } from './read-tools'
+import { byNameThenId, strings } from './row-values'
 import type { CloseTaskDef, TaskPromptContext, TaskStart } from './task'
 import type { ReadFields } from './tool'
 import { hasTurns, readTaskTurns, renderClosePrompt, storyModeOf, type CloseTurns } from './turns'
@@ -45,7 +45,7 @@ export type LifecycleRow = {
   id: string
   kind: LifecycleKind
   name: string
-  status: string
+  status: Entity['status']
   retiredReason: string
   /** Its flag: the partner's handle, name and the reason, marked dormant when it no longer holds; '' if none. */
   collision: string
@@ -66,17 +66,11 @@ const GONE_PARTNER = 'a row that no longer exists'
 const isLifecycleRow = (row: Entity): row is LifecycleEntity => row.kind !== 'location'
 // Scene data holds characters and items, never factions (data-model.md → Entry metadata shape).
 const sceneTagged = (row: LifecycleEntity): boolean => row.kind !== 'faction'
-// A hand-edited row may hold anything in a JSON column; only strings are ids.
-const strings = (value: unknown): string[] =>
-  Array.isArray(value) ? value.filter((item): item is string => typeof item === 'string') : []
 // A restored row keeps its old reason in storage; the model reads it only on a retired row.
 const shownReason = (row: Entity): string =>
   row.status === 'retired' ? (row.retiredReason ?? '') : ''
-// Code units, never localeCompare: host locale would make the prompt's row order device-dependent.
 const byKindThenName = (a: LifecycleEntity, b: LifecycleEntity): number =>
-  KIND_ORDER.indexOf(a.kind) - KIND_ORDER.indexOf(b.kind) ||
-  compareId(a.name, b.name) ||
-  compareId(a.id, b.id)
+  KIND_ORDER.indexOf(a.kind) - KIND_ORDER.indexOf(b.kind) || byNameThenId(a, b)
 
 async function partnersOf(
   ctx: TaskPromptContext,
@@ -102,7 +96,7 @@ async function partnersOf(
   return found
 }
 
-/** world.md → Surfacing: the row's flag as read_row reads it, its partner by id and name; a dormant flag counts as none. */
+/** world.md → Surfacing: the row's flag as read_row reads it, a dormant one marked dormant. */
 function collisionOf(row: Entity, partners: ReadonlyMap<string, Entity>, ids: CloseIds): string {
   const partnerId = row.nameCollisionFlag === 1 ? row.nameCollisionPartnerId : null
   if (partnerId === null) return ''
@@ -139,6 +133,7 @@ async function startLifecycle(ctx: TaskPromptContext): Promise<TaskStart<Lifecyc
       .filter((row) => (sceneTagged(row) && sceneIds.has(row.id)) || namedInProse(prose, row))
       .map(({ id }) => id),
   )
+  if (touched.size === 0) return null
   const later = await charactersInSceneAfterTask(ctx)
   // Membership before the subtraction: a faction whose member a later reply shows is still in play.
   const members = new Set(

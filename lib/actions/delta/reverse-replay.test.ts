@@ -568,7 +568,12 @@ const STALE_CASES_BY_KIND: { [K in VecTargetKind]: StaleCase<K> } = {
       action: {
         kind: 'updateLore',
         source: 'user_edit',
-        payload: { branchId: 'b1', id: 'lore_1', patch: { body: 'ash fell for a decade' } },
+        payload: {
+          branchId: 'b1',
+          id: 'lore_1',
+          patch: { body: 'ash fell for a decade' },
+          proseEntryId: null,
+        },
       },
       column: 'body',
       restored: 'ash fell for a year',
@@ -577,7 +582,12 @@ const STALE_CASES_BY_KIND: { [K in VecTargetKind]: StaleCase<K> } = {
       action: {
         kind: 'updateLore',
         source: 'user_edit',
-        payload: { branchId: 'b1', id: 'lore_1', patch: { category: 'cataclysm' } },
+        payload: {
+          branchId: 'b1',
+          id: 'lore_1',
+          patch: { category: 'cataclysm' },
+          proseEntryId: null,
+        },
       },
       column: 'category',
       restored: null,

@@ -1,4 +1,4 @@
-import { eq } from 'drizzle-orm'
+import { and, eq } from 'drizzle-orm'
 import { afterEach, describe, expect, it } from 'vitest'
 
 import {
@@ -3063,6 +3063,19 @@ describe('setEntityKeywords', () => {
     expect(await undoPayloadsOf(db, 'act_k')).toEqual([])
   })
 
+  it("refuses a removal naming a pass's term and then the user's, naming the user's", async () => {
+    const { db, ctx } = await setup()
+    await passCreate(ctx, { ...ACTIVE, keywords: ['the knight'] })
+    expect(
+      (await apply(ctx, userPatch({ keywords: ['the knight', 'ser kael'] }), 'act_u')).status,
+    ).toBe('ok')
+    expect(await outcomeOf(ctx, setKeywords([], ['the knight', 'Ser Kael']))).toStrictEqual({
+      status: 'noop',
+      reason: 'keyword-user-added: ser kael',
+    })
+    expect(await keywordsOf(db)).toEqual(['the knight', 'ser kael'])
+  })
+
   it('refuses to remove a term on a row no create delta logged', async () => {
     const { db, ctx } = await setup()
     await db.insert(entities).values({ ...ACTIVE, keywords: ['the knight'] })
@@ -3209,6 +3222,35 @@ describe('setEntityKeywords', () => {
       expect(await outcomeOf(ctx, setKeywords([], ['the stranger']))).toStrictEqual(LANDED)
       expect(await keywordsOf(db)).toEqual(['Mira'])
       expect(await flagOf(db, 'char_1')).toEqual([1, 'char_2', 'name-taken'])
+    })
+
+    // After a fork both branches hold char_1 and char_2; only the other branch raised the flag.
+    it("removes a keyword another branch's live flag pairs the same rows by", async () => {
+      const { db, ctx } = await setup()
+      await seed(ctx, db)
+      await db
+        .insert(branches)
+        .values({ id: 'br_2', storyId: 'story_1', name: 'fork', createdAt: 2 })
+      await db.insert(entities).values([
+        { ...STRANGER, branchId: 'br_2' },
+        {
+          ...MIRA,
+          branchId: 'br_2',
+          nameCollisionFlag: 1,
+          nameCollisionPartnerId: 'char_1',
+          nameCollisionReason: 'alike',
+        },
+      ])
+      expect(await outcomeOf(ctx, setKeywords([], ['Mira']))).toStrictEqual(LANDED)
+      const keywordsOn = async (branchId: string) =>
+        (
+          await db
+            .select({ keywords: entities.keywords })
+            .from(entities)
+            .where(and(eq(entities.branchId, branchId), eq(entities.id, 'char_1')))
+        ).map(({ keywords }) => keywords)
+      expect(await keywordsOn('br_1')).toEqual([['the stranger']])
+      expect(await keywordsOn('br_2')).toEqual([['Mira', 'the stranger']])
     })
 
     it('removes the keyword under a flag that is already dormant', async () => {

@@ -1,8 +1,16 @@
+import { and, eq } from 'drizzle-orm'
+
 import { USER_EDITED_SINCE_PROSE, type PipelineAction, type RowVerdicts } from '@/lib/actions/types'
-import { emptyEntityState, type Entity } from '@/lib/db'
+import { emptyEntityState, entities, type Entity } from '@/lib/db'
 import { isJsonObject } from '@/lib/json-object'
 
-import { sameValue, type PlannedAction, type ProtectionReason } from './tool'
+import {
+  sameValue,
+  type PlannedAction,
+  type ProtectionReason,
+  type ReportRow,
+  type WriteContext,
+} from './tool'
 import { CLOSE_REASON } from './verdict'
 
 export type FieldVerdict =
@@ -10,6 +18,9 @@ export type FieldVerdict =
   | { field: string; free: false; reason: ProtectionReason }
 
 type EntityPatch = Extract<PipelineAction, { kind: 'updateEntity' }>['payload']['patch']
+
+/** A delta path inside `state`, the only kind `entityWriteAction` removes. */
+export type StatePath = `state.${string}`
 
 // A delta path is a column, then a path inside it: 'description', 'state.visual.face'.
 function splitPath(field: string): { column: string; path: string[] } {
@@ -40,6 +51,20 @@ function setAt(target: Record<string, unknown>, path: readonly string[], value: 
 function deleteAt(target: Record<string, unknown>, path: readonly string[]): void {
   const parent = valueAt(target, path.slice(0, -1))
   if (isJsonObject(parent)) delete parent[path[path.length - 1]!]
+}
+
+export async function readEntity(ctx: WriteContext, id: string): Promise<Entity | undefined> {
+  const [row] = await ctx.db
+    .select()
+    .from(entities)
+    .where(and(eq(entities.branchId, ctx.branchId), eq(entities.id, id)))
+    .limit(1)
+  return row
+}
+
+// A gone row keeps the name the model was shown it by.
+export function entityReportRow(ctx: WriteContext, id: string, row: Entity | undefined): ReportRow {
+  return { table: 'entities', id, name: row?.name ?? ctx.ids.nameOfId(id) ?? '' }
 }
 
 const stateCopyOf = (row: Entity): Record<string, unknown> =>
@@ -75,21 +100,18 @@ export function fieldVerdicts(row: RowVerdicts, fields: readonly string[]): Fiel
 }
 
 /**
- * The one `updateEntity` a close writes on a row: `state.*` paths set or removed on a state copy
- * (a group refuses two `state` writes on one row). Stored or already-absent paths stay out of
- * `fields`; none left → no action. `state` is replaced whole: read it under the close's gate.
+ * The one `updateEntity` a close writes on a row (a group refuses two `state` writes on one row).
+ * Stored or already-absent paths stay out of `fields`; if that leaves it empty, the caller skips
+ * the action. `state` is replaced whole: read it under the close's gate.
  */
 export function entityWriteAction(
   row: Entity,
   wanted: Readonly<Record<string, unknown>>,
-  removed: readonly string[] = [],
+  removed: readonly StatePath[] = [],
 ): PlannedAction {
   const entries = Object.entries(wanted)
   if (entries.length === 0 && removed.length === 0)
     throw new Error(`entityWriteAction: nothing to write on ${row.id}`)
-  for (const field of removed)
-    if (!field.startsWith('state.'))
-      throw new Error(`entityWriteAction: only a state path can be removed, not ${field}`)
   const restated = new Set(restatedFields(row, wanted))
   const removing = removed.filter((field) => storedValue(row, field) !== undefined)
   const fields = [...Object.keys(wanted).filter((field) => !restated.has(field)), ...removing]

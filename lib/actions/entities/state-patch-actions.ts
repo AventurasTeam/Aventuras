@@ -35,8 +35,9 @@ import {
 
 import { computeUndoPayload } from '../delta/delta-encoding'
 import {
+  keywordEditNoop,
   keywordPairsFlagReason,
-  keywordUserAddedReason,
+  planKeywordAdds,
   planKeywordEdit,
   priorTerms,
 } from '../delta/keyword-authors'
@@ -412,13 +413,14 @@ export const appendEntityKeywordsHandler: ActionHandler = async (action, branchI
     return { status: 'rejected', reason: `branch mismatch: delta ${branchId} vs target ${bid}` }
   const current = await loadCurrent(bid, id, ctx)
   if (!current) return noopRefusal(`keyword target entities ${bid}:${id} not found`, 'gone')
-  let added = newTerms(current.keywords, keywords)
-  if (added.length === 0) return noopRefusal('no-new-keywords', 'restated')
-  if (proseEntryId !== null) {
-    const removed = priorTerms(await userEditsSinceProse(ctx, bid, 'entities', id, proseEntryId))
-    added = added.filter((term) => !removed.has(normalizeTerm(term)))
-    if (added.length === 0) return noopRefusal(USER_EDITED_SINCE_PROSE, null)
-  }
+  const { fresh, added } = await planKeywordAdds(
+    ctx,
+    { table: 'entities', branchId: bid, id, keywords: current.keywords },
+    keywords,
+    proseEntryId,
+  )
+  if (fresh.length === 0) return noopRefusal('no-new-keywords', 'restated')
+  if (added.length === 0) return noopRefusal(USER_EDITED_SINCE_PROSE, null)
   const next = [...current.keywords, ...added]
   return columnsWriteOutcome(bid, id, { keywords: next }, { keywords: current.keywords }, ctx)
 }
@@ -483,14 +485,7 @@ export const setEntityKeywordsHandler: ActionHandler = async (action, branchId, 
     { table: 'entities', branchId: bid, id, keywords: current.keywords },
     { add, remove, proseEntryId },
   )
-  if (edit.kind === 'user-term') {
-    const { term } = edit
-    return noopRefusal(keywordUserAddedReason(term), null)
-  }
-  if (edit.kind === 'unchanged')
-    return edit.userDropped
-      ? noopRefusal(USER_EDITED_SINCE_PROSE, null)
-      : noopRefusal('no-keyword-change', 'restated')
+  if (edit.kind !== 'changed') return keywordEditNoop(edit)
   if (edit.removed.length > 0) {
     const pair = await flagPairTerm(ctx, current, edit.next, edit.removed)
     if (pair !== null) {

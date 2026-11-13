@@ -19,7 +19,7 @@ Keep the story's lore true to this chapter, with create_lore and update_lore. A 
 - Creates. At most {{ closeLoreLimits.creates }} new lore rows per chapter, across all its parts; {{ closeLoreLimits.left }} left. Past the cap a create is rejected: extend a row instead.
 - Bodies. A body explains the rule in plain prose, stated as a standing fact of the world, not as what happened in the scene. A new row's body holds at most {{ closeLoreLimits.bodyChars }} characters, and updates may grow a body by at most {{ closeLoreLimits.bodyChars }} characters in all, across this chapter's calls. update_lore sends a body whole: it replaces the stored one.
 - Category. A short label for the kind of lore, such as magic-system or religion.
-- Keywords. Give a new row the names and terms the prose uses for it. update_lore takes keywords as add and remove: add a term the chapter uses for the row, and remove only one that no longer fits. A term the user added can't be removed.
+- Keywords. Give a new row the names and terms the prose uses for it. update_lore takes keywords as add and remove: add a term the chapter uses for the row, and remove only one that no longer fits. You can't see who added a term; removing one the user added is refused, and that call's keyword adds with it.
 - Turn ids. Never write a turn id such as t3 into a title, body, category or keyword: cite turns only in "turns".
 
 # Lore rows

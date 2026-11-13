@@ -70,7 +70,7 @@ import {
   setCloseParts,
   setCloseRange,
 } from '../close-intermediates'
-import type { CloseLedger } from '../intermediates'
+import type { CloseLedger, CloseRange } from '../intermediates'
 
 vi.mock('@/lib/ai', async (importOriginal) => ({
   ...(await importOriginal<Record<string, unknown>>()),
@@ -1136,6 +1136,57 @@ describe('runCloseTask', () => {
   })
 })
 
+// `cuts: null` parks no parts, as a run whose metadata phase never ran.
+function closePhaseContext(
+  fixture: CloseFixture,
+  opts: {
+    actionId: string
+    range: CloseRange
+    cuts: readonly ChapterPartCut[] | null
+    abortSignal?: AbortSignal
+  },
+): PhaseContext {
+  const { actionId, range, cuts, abortSignal = new AbortController().signal } = opts
+  const intermediates: Record<string, unknown> = {}
+  setCloseRange(intermediates, range)
+  if (cuts !== null) setCloseParts(intermediates, cuts)
+  return {
+    actionId,
+    abortSignal,
+    intermediates,
+    log: makeLogger(actionId),
+    db: fixture.ctx.db,
+    runInTransaction: fixture.ctx.runInTransaction,
+    storyId: fixture.storyId,
+    branchId: fixture.branchId,
+  }
+}
+
+// Stands in for the orchestrator over a whole phase: each group lands in `fixture` and its outcome
+// goes back, so a landed create counts toward a cap as it does in a close.
+async function drainApplying(
+  ctx: PhaseContext,
+  fixture: CloseFixture,
+): Promise<{ events: PhaseEmittedEvent[]; result: PhaseResult }> {
+  const gen = closeAgentPhase(ctx)
+  const events: PhaseEmittedEvent[] = []
+  let reply: GroupOutcome | undefined
+  for (;;) {
+    const next = await gen.next(reply)
+    if (next.done) return { events, result: next.value }
+    const event = next.value
+    events.push(event)
+    reply =
+      event.type === 'delta_group_emitted'
+        ? await applyDeltaActionGroupWithOutcomes(
+            event.actions,
+            { actionId: ctx.actionId, branchId: ctx.branchId, entryId: event.entryId },
+            fixture.ctx,
+          )
+        : undefined
+  }
+}
+
 describe('closeAgentPhase', () => {
   const SCRIPTED_ERROR: PipelineError = { kind: 'orchestrator', detail: 'scripted task failure' }
   let fixture: CloseFixture
@@ -1171,25 +1222,17 @@ describe('closeAgentPhase', () => {
     { part: 2, startEntryId: chapterIds()[4]!, endEntryId: chapterIds()[6]!, tokens: 0 },
   ]
 
-  // `cuts: null` parks no parts, as a run whose metadata phase never ran.
   function phaseCtx(cuts: readonly ChapterPartCut[] | null = onePart()): PhaseContext {
-    const intermediates: Record<string, unknown> = {}
-    setCloseRange(intermediates, {
-      chapterId: 'chap_slots',
-      startEntryId: fixture.entries[0]!.id,
-      endEntryId: fixture.replyIds[2]!,
-    })
-    if (cuts !== null) setCloseParts(intermediates, cuts)
-    return {
+    return closePhaseContext(fixture, {
       actionId: 'act_slots',
+      range: {
+        chapterId: 'chap_slots',
+        startEntryId: fixture.entries[0]!.id,
+        endEntryId: fixture.replyIds[2]!,
+      },
+      cuts,
       abortSignal: abort.signal,
-      intermediates,
-      log: makeLogger('act_slots'),
-      db: fixture.ctx.db,
-      runInTransaction: fixture.ctx.runInTransaction,
-      storyId: fixture.storyId,
-      branchId: fixture.branchId,
-    }
+    })
   }
 
   // With a log, each close_task_start lands in it as it is yielded, among the tasks' own entries.
@@ -1472,10 +1515,10 @@ describe('closeAgentPhase', () => {
       id: 'hap_kept',
     })
     // Every entry counts the same ledger's landed calls, across tasks: a chapter-wide cap's count.
-    expect(seen[1]!.landedCalls('merge_happenings')).toBe(1)
-    expect(seen[0]!.landedCalls('update_happening')).toBe(1)
-    expect(stepSeen[0]!.landedCalls('merge_happenings')).toBe(1)
-    expect(seen[1]!.landedCalls('create_lore')).toBe(0)
+    expect(seen[1]!.landedCalls({ name: 'merge_happenings' })).toBe(1)
+    expect(seen[0]!.landedCalls({ name: 'update_happening' })).toBe(1)
+    expect(stepSeen[0]!.landedCalls({ name: 'merge_happenings' })).toBe(1)
+    expect(seen[1]!.landedCalls({ name: 'create_lore' })).toBe(0)
   })
 
   it("hands a task a ledger that logs a report value under the run's actionId", async () => {
@@ -1783,7 +1826,7 @@ describe('closeAgentPhase over three parts', () => {
     __setCloseAgentSlots(undefined)
   })
 
-  // The two real prose tasks, slotted by hand: the production slots grow, these cases don't.
+  // Identity and Threads, slotted by hand: the production slots grow, these cases don't.
   const IDENTITY_AND_THREADS: CloseAgentSlots = {
     before: [],
     perPart: [
@@ -1795,50 +1838,19 @@ describe('closeAgentPhase over three parts', () => {
 
   // Three parts: t1–t5, t6–t12 and t13–t17.
   function partsCtx(): PhaseContext {
-    const intermediates: Record<string, unknown> = {}
-    setCloseRange(intermediates, {
-      chapterId: 'chap_parts',
-      startEntryId: f.entries[0]!.id,
-      endEntryId: f.entries[16]!.id,
-    })
-    setCloseParts(intermediates, [
-      { part: 1, startEntryId: f.entries[0]!.id, endEntryId: f.entries[4]!.id, tokens: 0 },
-      { part: 2, startEntryId: f.entries[5]!.id, endEntryId: f.entries[11]!.id, tokens: 0 },
-      { part: 3, startEntryId: f.entries[12]!.id, endEntryId: f.entries[16]!.id, tokens: 0 },
-    ])
-    return {
+    return closePhaseContext(f, {
       actionId: ACTION_ID,
-      abortSignal: new AbortController().signal,
-      intermediates,
-      log: makeLogger(ACTION_ID),
-      db: f.ctx.db,
-      runInTransaction: f.ctx.runInTransaction,
-      storyId: f.storyId,
-      branchId: f.branchId,
-    }
-  }
-
-  // Stands in for the orchestrator: applies each group and sends its outcome back.
-  async function drainApplying(
-    ctx: PhaseContext,
-  ): Promise<{ events: PhaseEmittedEvent[]; result: PhaseResult }> {
-    const gen = closeAgentPhase(ctx)
-    const events: PhaseEmittedEvent[] = []
-    let reply: GroupOutcome | undefined
-    for (;;) {
-      const next = await gen.next(reply)
-      if (next.done) return { events, result: next.value }
-      const event = next.value
-      events.push(event)
-      reply =
-        event.type === 'delta_group_emitted'
-          ? await applyDeltaActionGroupWithOutcomes(
-              event.actions,
-              { actionId: ctx.actionId, branchId: ctx.branchId, entryId: event.entryId },
-              f.ctx,
-            )
-          : undefined
-    }
+      range: {
+        chapterId: 'chap_parts',
+        startEntryId: f.entries[0]!.id,
+        endEntryId: f.entries[16]!.id,
+      },
+      cuts: [
+        { part: 1, startEntryId: f.entries[0]!.id, endEntryId: f.entries[4]!.id, tokens: 0 },
+        { part: 2, startEntryId: f.entries[5]!.id, endEntryId: f.entries[11]!.id, tokens: 0 },
+        { part: 3, startEntryId: f.entries[12]!.id, endEntryId: f.entries[16]!.id, tokens: 0 },
+      ],
+    })
   }
 
   const sentPrompt = (call: number) => vi.mocked(generateToolStep).mock.calls[call]![1].prompt
@@ -1915,7 +1927,7 @@ describe('closeAgentPhase over three parts', () => {
   it('counts 17 tasks over three parts, Identity and Threads in part order', async () => {
     __setCloseAgentSlots(IDENTITY_AND_THREADS)
 
-    const { events, result } = await drainApplying(partsCtx())
+    const { events, result } = await drainApplying(partsCtx(), f)
 
     expect(result).toEqual({ status: 'completed' })
     expect(events.filter((event) => event.type === 'close_task_start')).toEqual([
@@ -1937,7 +1949,7 @@ describe('closeAgentPhase over three parts', () => {
       .mockResolvedValueOnce(okStep([citing('k2', 'second', 't8')]))
     const ctx = partsCtx()
 
-    const { result } = await drainApplying(ctx)
+    const { result } = await drainApplying(ctx, f)
 
     expect(result).toEqual({ status: 'completed' })
     expect(await description()).toBe('A courier. first second')
@@ -1960,7 +1972,7 @@ describe('closeAgentPhase over three parts', () => {
       .mockResolvedValueOnce(okStep([citing('k1', 'twelfth', 't12')]))
     const ctx = partsCtx()
 
-    await drainApplying(ctx)
+    await drainApplying(ctx, f)
 
     // Steps: part 1's one, part 2's two, part 3's one.
     expect(sentPrompt(0).system).toBe('Turns: t1, t2, t3, t4, t5')
@@ -1980,7 +1992,7 @@ describe('closeAgentPhase over three parts', () => {
       .mockResolvedValueOnce(okStep([citing('k3', 'second', 't8')]))
     const ctx = partsCtx()
 
-    await drainApplying(ctx)
+    await drainApplying(ctx, f)
 
     expect(await description()).toBe('A courier. first')
     const calls = closeLedgerOf(ctx.intermediates)?.calls ?? []
@@ -1999,7 +2011,7 @@ describe('closeAgentPhase over three parts', () => {
       .mockResolvedValueOnce(okStep([citing('k1', 'late', 't3')]))
     const ctx = partsCtx()
 
-    await drainApplying(ctx)
+    await drainApplying(ctx, f)
 
     expect(await description()).toBe('A courier.')
     expect(closeLedgerOf(ctx.intermediates)?.calls).toEqual([
@@ -2019,7 +2031,7 @@ describe('closeAgentPhase over three parts', () => {
     await setScene(f.entries[2]!.id, [WREN])
     await setScene(f.entries[7]!.id, [TOBIN])
 
-    await drainApplying(partsCtx())
+    await drainApplying(partsCtx(), f)
 
     // Identity in parts 1 and 2; nobody is in part 3's scene, and no thread is open.
     expect(generateToolStep).toHaveBeenCalledTimes(2)
@@ -2036,7 +2048,7 @@ describe('closeAgentPhase over three parts', () => {
     await setScene(f.entries[7]!.id, [TOBIN])
     await putThread(LETTER, 'Deliver the letter')
 
-    await drainApplying(partsCtx())
+    await drainApplying(partsCtx(), f)
 
     // Identity then Threads in parts 1 and 2; Threads alone in part 3.
     const systems = vi
@@ -2070,55 +2082,17 @@ describe('closeAgentPhase over parts, with the real tasks', () => {
   // The opening to the third reply (positions 1-7, t1-t7), cut at range indexes, first to last.
   function partsPhase(bounds: readonly (readonly [number, number])[]): PhaseContext {
     const range = fx.entries.slice(0, 7)
-    const intermediates: Record<string, unknown> = {}
-    setCloseRange(intermediates, {
-      chapterId: 'chap_parts',
-      startEntryId: range[0]!.id,
-      endEntryId: range[6]!.id,
-    })
-    // The agent loop reads a cut's ids; its token count is the metadata phase's.
-    setCloseParts(
-      intermediates,
-      bounds.map(([first, last], index) => ({
+    return closePhaseContext(fx, {
+      actionId: 'act_parts',
+      range: { chapterId: 'chap_parts', startEntryId: range[0]!.id, endEntryId: range[6]!.id },
+      // The agent loop reads a cut's ids; its token count is the metadata phase's.
+      cuts: bounds.map(([first, last], index) => ({
         part: index + 1,
         startEntryId: range[first]!.id,
         endEntryId: range[last]!.id,
         tokens: 0,
       })),
-    )
-    return {
-      actionId: 'act_parts',
-      abortSignal: new AbortController().signal,
-      intermediates,
-      log: makeLogger('act_parts'),
-      db: fx.ctx.db,
-      runInTransaction: fx.ctx.runInTransaction,
-      storyId: fx.storyId,
-      branchId: fx.branchId,
-    }
-  }
-
-  // Stands in for the orchestrator: each group lands and its outcome goes back, so a landed
-  // create counts toward the cap as it does in a close.
-  async function drainLanding(
-    ctx: PhaseContext,
-  ): Promise<{ events: PhaseEmittedEvent[]; result: PhaseResult }> {
-    const gen = closeAgentPhase(ctx)
-    const events: PhaseEmittedEvent[] = []
-    let reply: GroupOutcome | undefined
-    for (;;) {
-      const next = await gen.next(reply)
-      if (next.done) return { events, result: next.value }
-      events.push(next.value)
-      reply =
-        next.value.type === 'delta_group_emitted'
-          ? await applyDeltaActionGroupWithOutcomes(
-              next.value.actions,
-              { actionId: ctx.actionId, branchId: ctx.branchId, entryId: next.value.entryId },
-              fx.ctx,
-            )
-          : undefined
-    }
+    })
   }
 
   const createLore = (
@@ -2166,7 +2140,7 @@ describe('closeAgentPhase over parts, with the real tasks', () => {
       [4, 6],
     ])
 
-    const { result } = await drainLanding(ctx)
+    const { result } = await drainApplying(ctx, fx)
 
     expect(result).toEqual({ status: 'completed' })
     const { calls } = closeLedgerOf(ctx.intermediates)!
@@ -2204,7 +2178,7 @@ describe('closeAgentPhase over parts, with the real tasks', () => {
       [5, 6],
     ])
 
-    const { events, result } = await drainLanding(ctx)
+    const { events, result } = await drainApplying(ctx, fx)
 
     expect(result).toEqual({ status: 'completed' })
     expect(events.filter((event) => event.type === 'close_task_start')).toEqual([

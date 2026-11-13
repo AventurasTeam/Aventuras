@@ -120,8 +120,8 @@ describe('chapterPartSummarySchema', () => {
 
 describe('normalizeChapterPartSummary', () => {
   it('trims the summary', () => {
-    expect(normalizeChapterPartSummary({ summary: ' The current takes the sigil.\n' })).toEqual({
-      summary: 'The current takes the sigil.',
-    })
+    expect(normalizeChapterPartSummary({ summary: ' The current takes the sigil.\n' })).toBe(
+      'The current takes the sigil.',
+    )
   })
 })

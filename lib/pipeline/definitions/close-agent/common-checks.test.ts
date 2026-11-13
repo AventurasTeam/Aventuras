@@ -89,6 +89,24 @@ describe('commonChecks', () => {
     })
   })
 
+  // In a later part, t1 and t2 are the very turns refused: no turns refusal offers them.
+  it('points a turns refusal at the turns this task was shown, with no handle as an example', () => {
+    const partTwo = checkContext([ENTRY_2, ENTRY_3])
+    const reasonOf = (turns: unknown) => {
+      const result = commonChecks({ turns, why: 'w' }, [WREN], partTwo)
+      return result.ok ? undefined : result.reason
+    }
+    expect(reasonOf([])).toBe(
+      'turns is empty: cite the turns this task was shown, by their handles',
+    )
+    expect(reasonOf(['c1'])).toBe(
+      'c1 is not a turn: cite the turns this task was shown, by their handles',
+    )
+    expect(reasonOf([ENTRY_1])).toBe(
+      'turns takes the short handles of the turns this task was shown, not a full id',
+    )
+  })
+
   it('rejects a write on a row the task has not read, naming it and read_row', () => {
     expect(commonChecks({ turns: ['t1'], why: 'w' }, [WREN, TOLL_LAW], checkContext())).toEqual({
       ok: false,
@@ -127,9 +145,7 @@ describe('commonChecks', () => {
     const result = commonChecks({ turns: [cited], why: 'w' }, [WREN], ctx)
     expect(result).toEqual({
       ok: false,
-      reason: expect.stringMatching(
-        /^turns takes the short handles as shown \(t1, t2…\), not a full id/,
-      ),
+      reason: 'turns takes the short handles of the turns this task was shown, not a full id',
     })
     const reason = result.ok ? '' : result.reason
     expect(reason).not.toMatch(/_[0-9a-f]{8}-/)

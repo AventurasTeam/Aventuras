@@ -288,7 +288,7 @@ describe('PlannedAction (checked by tsc)', () => {
     const update = <S extends 'chapter_close' | 'user_edit'>(source: S) => ({
       kind: 'updateLore' as const,
       source,
-      payload: { branchId: 'br_close', id: LORE_A, patch: { body: 'Paid.' } },
+      payload: { branchId: 'br_close', id: LORE_A, patch: { body: 'Paid.' }, proseEntryId: null },
     })
     const planned = (): PlannedAction[] => [
       { action: update('chapter_close'), fields: ['body'], row: LORE_A },
@@ -384,6 +384,27 @@ describe('resolveIdArgs', () => {
       ok: true,
       args: { keep: CHAR_A, absorb: [], turns: ['t1'], why: 'w' },
       named: [{ table: 'entities', id: CHAR_A }],
+    })
+  })
+
+  // A model fills optional fields, so a blank one reads as left out, as a blank text does.
+  it('reads a blank optional id argument as left out, and refuses a blank required one', () => {
+    const ids = shownIds()
+    expect(resolveIdArgs({ ...MERGE_SAMPLE, place: ' \n ' }, mergeRows, ids)).toStrictEqual({
+      ok: true,
+      args: { keep: CHAR_A, absorb: [CHAR_B], turns: ['t1'], why: 'The same man.' },
+      named: [
+        { table: 'entities', id: CHAR_A },
+        { table: 'entities', id: CHAR_B },
+      ],
+    })
+    expect(resolveIdArgs({ ...MERGE_SAMPLE, keep: '' }, mergeRows, ids)).toEqual({
+      ok: false,
+      reason: ' in keep is not a known id; use an id this task showed you',
+    })
+    expect(resolveIdArgs({ turn: ' ' }, readTurn, ids)).toEqual({
+      ok: false,
+      reason: '  in turn is not a known id; use an id this task showed you',
     })
   })
 

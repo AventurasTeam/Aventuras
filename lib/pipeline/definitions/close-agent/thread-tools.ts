@@ -147,7 +147,8 @@ async function planUpdateThread(args: ThreadArgs, ctx: WriteContext): Promise<Wr
   if (wanted.description === undefined && wanted.status === undefined)
     return { kind: 'write', actions: [], lost: [], rows, values: {} }
 
-  // User precedence rides on each action's proseEntryId; only a later turn's write is read here.
+  // Precedence before the turn-handle check, so a protected description reads skipped; a user's
+  // status edit is kept by the handler, through the action's proseEntryId.
   const verdicts = (await ctx.guard([{ table: 'threads', id }])).row('threads', id)
   const actions: PlannedAction[] = []
   const lost: LostField[] = []
@@ -155,6 +156,8 @@ async function planUpdateThread(args: ThreadArgs, ctx: WriteContext): Promise<Wr
     const handle = turnHandleIn(wanted.description, ctx.ids)
     if (verdicts.laterTurnWrote('description'))
       lost.push(protectedField('description', id, CLOSE_REASON.laterTurn))
+    else if (verdicts.userWrote('description'))
+      lost.push(protectedField('description', id, USER_EDITED_SINCE_PROSE))
     else if (handle !== undefined)
       lost.push({
         field: 'description',
@@ -293,12 +296,6 @@ async function planMergeThreads(args: MergeArgs, ctx: WriteContext): Promise<Wri
       ? {}
       : { description: description.bounded }),
   }
-  // Refused whole, not dropped: once the merge lands, no tool could resend keep's new text.
-  const handle = [wanted.title, wanted.description]
-    .map((text) => (text === undefined ? undefined : turnHandleIn(text, ctx.ids)))
-    .find((found) => found !== undefined)
-  if (handle !== undefined)
-    return { kind: 'refused', reason: turnInTextReason(handle), rows, values: wanted }
   // Each of the threads tried as keep, so a refusal's advice names only a merge that would land.
   const merged = [kept, ...absorbed]
   const held = mergedThreads(merged)
@@ -335,6 +332,12 @@ async function planMergeThreads(args: MergeArgs, ctx: WriteContext): Promise<Wri
       rows,
       values: wanted,
     }
+  // Refused whole, not dropped: once the merge lands, no tool could resend keep's new title.
+  const handle = [wanted.title, wanted.description]
+    .map((text) => (text === undefined ? undefined : turnHandleIn(text, ctx.ids)))
+    .find((found) => found !== undefined)
+  if (handle !== undefined)
+    return { kind: 'refused', reason: turnInTextReason(handle), rows, values: wanted }
 
   const actions: PlannedAction[] = []
   if (fields.length > 0)

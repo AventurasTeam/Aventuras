@@ -1,3 +1,5 @@
+import type { StoryEntry } from '@/lib/db'
+
 /** chapter-close.md → Parts: what a prose task reads at once when the model's window is unknown. */
 export const UNKNOWN_WINDOW_PART_TOKENS = 32_000
 
@@ -9,8 +11,8 @@ export type ChapterPartCut = {
   tokens: number
 }
 
-/** An entry as the cut reads it; `kind` as `story_entries.kind` stores it. */
-export type CutEntry = { id: string; kind: string; tokens: number }
+/** An entry as the cut reads it. */
+export type CutEntry = { id: string; kind: StoryEntry['kind']; tokens: number }
 
 type Unit = { startEntryId: string; endEntryId: string; tokens: number }
 

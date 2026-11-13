@@ -1,9 +1,15 @@
-import { and, eq } from 'drizzle-orm'
+import { and, eq, inArray, type SQL } from 'drizzle-orm'
 
 import type { GuardRow } from '@/lib/actions/types'
 import type { PromptHalves } from '@/lib/ai'
-import { entities, happenings, type Entity, type Happening, type StoryMode } from '@/lib/db'
-import { isJsonObject } from '@/lib/json-object'
+import {
+  chunked,
+  entities,
+  happenings,
+  type Entity,
+  type Happening,
+  type StoryMode,
+} from '@/lib/db'
 import { dedupeTerms } from '@/lib/keyword-terms'
 import { compareId } from '@/lib/list-modules'
 import { TEMPLATE_IDS } from '@/lib/prompts'
@@ -12,6 +18,7 @@ import { realPlacementOf } from '@/lib/world'
 
 import { namedInProse } from './name-match'
 import { readRowTool, refsIn, searchWorldTool } from './read-tools'
+import { byNameThenId, stateOf, strings, text } from './row-values'
 import type { CloseTaskDef, TaskPromptContext, TaskStart } from './task'
 import type { ReadFields } from './tool'
 import { hasTurns, readTaskTurns, renderClosePrompt, storyModeOf, type CloseTurns } from './turns'
@@ -44,7 +51,7 @@ export type UpkeepRow = {
   id: string
   kind: 'character' | 'location' | 'item' | 'faction'
   name: string
-  status: string
+  status: Entity['status']
   description: string
   keywords: string[]
   condition: string
@@ -62,16 +69,6 @@ export type UpkeepShow = {
   rows: UpkeepRow[]
   happenings: { id: string; title: string }[]
 }
-
-// A hand-edited row may hold anything in a JSON column; only strings are shown.
-const strings = (value: unknown): string[] =>
-  Array.isArray(value) ? value.filter((item): item is string => typeof item === 'string') : []
-const text = (value: unknown): string => (typeof value === 'string' ? value : '')
-const stateRecord = (row: Entity): Readonly<Record<string, unknown>> =>
-  isJsonObject(row.state) ? row.state : {}
-// Code units, never localeCompare: host locale would make the prompt's row order device-dependent.
-const byNameThenId = (a: Entity, b: Entity): number =>
-  compareId(a.name, b.name) || compareId(a.id, b.id)
 
 /** data-model.md → Entry metadata shape: a part's scene, its characters and items and its place. */
 function sceneIdsOf(entries: readonly CloseRangeEntry[]): Set<string> {
@@ -94,26 +91,29 @@ async function openHappenings(
   ctx: TaskPromptContext,
   entries: readonly CloseRangeEntry[],
 ): Promise<Happening[]> {
-  const entryIds = new Set(entries.map((entry) => entry.id))
-  const madeFrom = await readHappeningsMadeFrom(ctx.db, ctx.branchId, entryIds)
-  const rows = await ctx.db
-    .select()
-    .from(happenings)
-    .where(and(eq(happenings.branchId, ctx.branchId), eq(happenings.commonKnowledge, 0)))
-  return rows
-    .filter(
-      (row) =>
-        (row.occurredAtEntryId !== null && entryIds.has(row.occurredAtEntryId)) ||
-        madeFrom.has(row.id),
-    )
-    .sort((a, b) => compareId(a.title, b.title) || compareId(a.id, b.id))
+  const entryIds = entries.map((entry) => entry.id)
+  const madeFrom = await readHappeningsMadeFrom(ctx.db, ctx.branchId, new Set(entryIds))
+  const openWhere = (match: SQL) =>
+    ctx.db
+      .select()
+      .from(happenings)
+      .where(and(eq(happenings.branchId, ctx.branchId), eq(happenings.commonKnowledge, 0), match))
+  const open = new Map<string, Happening>()
+  for (const ids of chunked(entryIds))
+    for (const row of await openWhere(inArray(happenings.occurredAtEntryId, ids)))
+      open.set(row.id, row)
+  for (const ids of chunked([...madeFrom]))
+    for (const row of await openWhere(inArray(happenings.id, ids))) open.set(row.id, row)
+  return [...open.values()].sort((a, b) => compareId(a.title, b.title) || compareId(a.id, b.id))
 }
+
+// Upkeep writes a place's and an item's texts; a character or a faction shows only its keywords.
+const ownsText = (row: Entity): boolean => row.kind === 'location' || row.kind === 'item'
 
 // The text a start shows of a row, which is all an id it cites can reach the model through.
 const shownText = (row: Entity): unknown => [
   row.name,
-  row.description,
-  stateRecord(row).condition,
+  ...(ownsText(row) ? [row.description, stateOf(row).condition] : []),
   row.keywords,
 ]
 
@@ -169,20 +169,17 @@ async function startUpkeep(ctx: TaskPromptContext): Promise<TaskStart<UpkeepShow
       mode: await storyModeOf(ctx),
       closeTurns,
       proseTokens,
-      rows: shown.map(({ row, inScene }) => {
-        const ownsText = row.kind === 'location' || row.kind === 'item'
-        return {
-          id: ctx.ids.show(row.id, row.name),
-          kind: row.kind,
-          name: handled(row.name),
-          status: row.status,
-          description: ownsText ? handled(text(row.description)) : '',
-          keywords: strings(row.keywords).map(handled),
-          condition: ownsText ? handled(text(stateRecord(row).condition)) : '',
-          placement: placement(row),
-          inScene,
-        }
-      }),
+      rows: shown.map(({ row, inScene }) => ({
+        id: ctx.ids.show(row.id, row.name),
+        kind: row.kind,
+        name: handled(row.name),
+        status: row.status,
+        description: ownsText(row) ? handled(text(row.description)) : '',
+        keywords: strings(row.keywords).map(handled),
+        condition: ownsText(row) ? handled(text(stateOf(row).condition)) : '',
+        placement: placement(row),
+        inScene,
+      })),
       happenings: open.map((row) => ({
         id: ctx.ids.show(row.id, row.title),
         title: handled(row.title),

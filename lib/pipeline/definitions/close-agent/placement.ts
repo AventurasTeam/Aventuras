@@ -15,6 +15,7 @@ import {
   type PlacementDrop,
 } from '@/lib/world'
 
+import type { StatePath } from './entity-write'
 import type { WriteContext } from './tool'
 import { readStoryPlace } from '../entry-reads'
 
@@ -25,11 +26,15 @@ export type PlacementPlan =
   | {
       ok: true
       /** The row already holds it: nothing to write. */
-      restated: boolean
+      restated: true
+    }
+  | {
+      ok: true
+      restated: false
       /** Delta paths for entityWriteAction: the parent, null for top level. */
       wanted: Record<string, unknown>
       /** State paths it deletes: the unplaced mark, in the same write. */
-      removed: string[]
+      removed: StatePath[]
     }
   | { ok: false; reason: string }
 
@@ -44,7 +49,7 @@ const DROP_REASON: Readonly<Record<PlacementDrop['cause'], string>> = {
 }
 
 const refused = (reason: string): PlacementPlan => ({ ok: false, reason })
-const restated = (): PlacementPlan => ({ ok: true, restated: true, wanted: {}, removed: [] })
+const restated = (): PlacementPlan => ({ ok: true, restated: true })
 
 // withPlacement writes the pair, so a placed place never keeps the unplaced mark.
 function landing(row: Entity, arg: PlacementArg): PlacementPlan {
@@ -53,7 +58,7 @@ function landing(row: Entity, arg: PlacementArg): PlacementPlan {
     ok: true,
     restated: false,
     wanted: { 'state.parent_location_id': next.parent_location_id },
-    removed: next.unplaced === undefined ? ['state.unplaced'] : [],
+    removed: ['state.unplaced'],
   }
 }
 

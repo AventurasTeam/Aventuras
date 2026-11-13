@@ -1,10 +1,15 @@
-import { and, eq } from 'drizzle-orm'
 import { z } from 'zod'
 
-import { entities, type Entity } from '@/lib/db'
+import type { Entity } from '@/lib/db'
 import { CAST_SOFT_CAPS } from '@/lib/wizard'
 
-import { entityWriteAction, fieldVerdicts, storedValue } from './entity-write'
+import {
+  entityReportRow,
+  entityWriteAction,
+  fieldVerdicts,
+  readEntity,
+  storedValue,
+} from './entity-write'
 import {
   overSoftCap,
   restatedList,
@@ -21,7 +26,6 @@ import { turnHandleIn, turnInTextReason } from './text-checks'
 import {
   writeToolSchema,
   type LostField,
-  type ReportRow,
   type WriteContext,
   type WritePlan,
   type WriteTool,
@@ -148,15 +152,6 @@ function restated(row: Entity, field: SentField): boolean {
   return field.kind === 'list' ? restatedList(stored, field.list) : restatedText(stored, field.text)
 }
 
-async function readEntity(ctx: WriteContext, id: string): Promise<Entity | undefined> {
-  const [row] = await ctx.db
-    .select()
-    .from(entities)
-    .where(and(eq(entities.branchId, ctx.branchId), eq(entities.id, id)))
-    .limit(1)
-  return row
-}
-
 /** chapter-close.md → 3b: one entity's fields, as sent, past precedence and the soft caps. */
 async function planIdentityWrite<A extends { readonly id: string }>(
   kind: IdentityKind,
@@ -167,9 +162,7 @@ async function planIdentityWrite<A extends { readonly id: string }>(
   const { id } = args
   const sent = sentFields(args, specs)
   const row = await readEntity(ctx, id)
-  const rows: ReportRow[] = [
-    { table: 'entities', id, name: row?.name ?? ctx.ids.nameOfId(id) ?? '' },
-  ]
+  const rows = [entityReportRow(ctx, id, row)]
   const proposed = Object.fromEntries(sent.map((field) => [field.path, landingValue(field)]))
   if (row === undefined)
     return { kind: 'refused', reason: CLOSE_REASON.rowGone, rows, values: proposed }

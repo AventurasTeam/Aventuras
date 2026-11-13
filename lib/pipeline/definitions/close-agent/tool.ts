@@ -44,7 +44,7 @@ export type ToolContext = {
   /** A landed merge's kept row for a row this close absorbed. */
   readonly survivorOf: (table: string, id: string) => { table: string; id: string } | undefined
   /** The ledger's landed (`ok`) calls of `tool` so far, across tasks and parts. */
-  readonly landedCalls: (tool: string) => number
+  readonly landedCalls: (tool: Pick<CloseTool, 'name'>) => number
 }
 export type WriteContext = ToolContext & {
   /** Cited entry ids, resolved. */
@@ -221,8 +221,21 @@ export function tableOfId(id: string): PrecedenceTable | null {
 }
 
 /**
- * Swaps each declared id argument's handles for full ids; a handle never shown, or of a kind the
- * argument doesn't take, refuses the call. `named` holds each resolved row once.
+ * The task's last turn: E for the last part or a chapter-wide task, the part's last otherwise. A
+ * turn past it is newer evidence than any the task read.
+ */
+export function lastTaskTurn(ctx: Pick<ToolContext, 'taskEntryIds'>): string {
+  const last = ctx.taskEntryIds.at(-1)
+  if (last === undefined) throw new Error('lastTaskTurn: the task was shown no turn')
+  return last
+}
+
+const optionalArg = (tool: CloseTool, key: string): boolean =>
+  tool.schema.shape[key]?.safeParse(undefined).success === true
+
+/**
+ * Swaps each declared id argument's handles for full ids; an unshown or wrong-kind handle refuses
+ * the call. A blank optional one reads as left out (models fill them); `named` has each row once.
  */
 export function resolveIdArgs(
   input: Readonly<Record<string, unknown>>,
@@ -237,6 +250,10 @@ export function resolveIdArgs(
     if (arg === undefined) continue
     const value = input[key]
     if (value === undefined || value === null) continue
+    if (typeof value === 'string' && value.trim() === '' && optionalArg(tool, key)) {
+      delete args[key]
+      continue
+    }
     if ((arg.shape === 'array') !== Array.isArray(value))
       return {
         ok: false,

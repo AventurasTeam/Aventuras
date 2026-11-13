@@ -41,8 +41,6 @@ export const LORE_REFUSAL = {
   titleTaken: 'title-taken',
 } as const
 
-const CREATE_LORE = 'create_lore'
-
 const NOTE = {
   titleBlank: 'Give the row a title: the name the story uses for the rule or thing.',
   bodyBlank:
@@ -59,21 +57,25 @@ const titleTakenReason = (id: string): string =>
   `${LORE_REFUSAL.titleTaken}: ${id} already holds this title: keep this row's title, or extend or correct ${id} with update_lore`
 
 const bodyOverLimitReason = (length: number): string =>
-  `body is ${length} characters, over the limit of ${LORE_BODY_LIMIT}: state the rule in fewer words`
+  `body is ${length} characters as stored, ids written as names, over the limit of ${LORE_BODY_LIMIT}: state the rule in fewer words`
 
-/** A lore row on the branch, other than `except`, whose title is `title`, trimmed and case-folded. */
+/**
+ * A lore row on the branch, other than `except`, whose title is `title`, trimmed and case-folded.
+ * A stored title is cut as a sent one is, since a user's title may run past the cut.
+ */
 async function loreTitled(
   ctx: WriteContext,
   title: string,
   except?: string,
 ): Promise<{ id: string; title: string } | undefined> {
-  const key = normalizeTerm(title)
+  const titleKey = (text: string): string => normalizeTerm(TEXT_BOUNDS.title(text))
+  const key = titleKey(title)
   const rows = await ctx.db
     .select({ id: lore.id, title: lore.title })
     .from(lore)
     .where(eq(lore.branchId, ctx.branchId))
     .orderBy(asc(lore.id))
-  return rows.find((row) => row.id !== except && normalizeTerm(row.title) === key)
+  return rows.find((row) => row.id !== except && titleKey(row.title) === key)
 }
 
 export const CREATE_LORE_SHAPE = {
@@ -120,7 +122,7 @@ async function planCreateLore(args: CreateArgs, ctx: WriteContext): Promise<Writ
 
   if (title === '') return refused(LORE_REFUSAL.titleBlank, NOTE.titleBlank)
   if (body === '') return refused(LORE_REFUSAL.bodyBlank, NOTE.bodyBlank)
-  if (ctx.landedCalls(CREATE_LORE) >= LORE_CREATE_CAP) return refused(LORE_REFUSAL.cap, NOTE.cap)
+  if (ctx.landedCalls(createLoreTool) >= LORE_CREATE_CAP) return refused(LORE_REFUSAL.cap, NOTE.cap)
   const holder = await loreTitled(ctx, title)
   if (holder !== undefined) {
     ctx.ids.show(holder.id, holder.title)
@@ -188,7 +190,7 @@ async function planCreateLore(args: CreateArgs, ctx: WriteContext): Promise<Writ
 /** chapter-close.md → 3a: a lore row the chapter establishes, cited, under the cap, with a body. */
 export const createLoreTool: WriteTool<typeof CREATE_LORE_SHAPE> = {
   kind: 'write',
-  name: CREATE_LORE,
+  name: 'create_lore',
   description: `Create a lore row for what the chapter's turns establish: a world-rule, magic system, religion, faction charter, cosmology or term whose working or meaning the prose explains, not one it merely mentions. At most ${LORE_CREATE_CAP} per chapter, so when a row already holds the rule, extend or correct it with update_lore instead. Always a body, of at most ${LORE_BODY_LIMIT} characters. Keywords are the names and words the prose uses for it.`,
   schema: writeToolSchema(CREATE_LORE_SHAPE),
   ids: {},
@@ -222,7 +224,9 @@ export const UPDATE_LORE_SHAPE = {
       remove: z
         .array(z.string())
         .optional()
-        .describe('Terms an AI added that no longer fit; never one the user added.'),
+        .describe(
+          "Terms that no longer fit. You can't see who added a term; removing one the user added is refused, and this call's adds with it.",
+        ),
     })
     .optional()
     .describe('Keywords to add or remove; the others stay as they are.'),
@@ -238,7 +242,7 @@ const NOTHING_SENT =
   'nothing to write: send a title, a body, a category or keywords to add or remove'
 
 const bodyGrowthReason = (length: number, base: number): string =>
-  `body is ${length} characters: a body over ${LORE_BODY_LIMIT} may grow the body as it stood before this close (${base}) by at most ${LORE_BODY_LIMIT}, so send a shorter one`
+  `body is ${length} characters as stored, ids written as names: a body over ${LORE_BODY_LIMIT} may grow the body as it stood before this close (${base}) by at most ${LORE_BODY_LIMIT}, so send a shorter one`
 
 // Never cut: a body over the bound is refused, so a user's long body is never shortened.
 function sentBody(value: string | undefined): SentText | undefined {
@@ -401,7 +405,7 @@ async function planUpdateLore(args: UpdateArgs, ctx: WriteContext): Promise<Writ
 export const updateLoreTool: WriteTool<typeof UPDATE_LORE_SHAPE> = {
   kind: 'write',
   name: 'update_lore',
-  description: `Extend or correct a lore row from this chapter's turns, the user's rows included: its title, body or category rewritten whole, and keywords added or removed. Read the row with read_row first, and send only what changes. A body over ${LORE_BODY_LIMIT} characters lands only by growing the body as it stood before this chapter's close by at most ${LORE_BODY_LIMIT}, across all your calls. A title another lore row holds is refused. Never remove a keyword the user added.`,
+  description: `Extend or correct a lore row from this chapter's turns, the user's rows included: its title, body or category rewritten whole, and keywords added or removed. Read the row with read_row first, and send only what changes. A body over ${LORE_BODY_LIMIT} characters lands only by growing the body as it stood before this chapter's close by at most ${LORE_BODY_LIMIT}, across all your calls. A title another lore row holds is refused. You can't see who added a keyword; removing one the user added is refused, naming it, and the call's keyword adds with it, while its other fields land.`,
   schema: writeToolSchema(UPDATE_LORE_SHAPE),
   ids: { id: { shape: 'single', prefixes: ['lore_'] } },
   plan: planUpdateLore,

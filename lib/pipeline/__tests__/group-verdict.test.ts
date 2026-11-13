@@ -36,13 +36,23 @@ const createHappening = (id: string): PipelineAction => ({
 const restateLore: PipelineAction = {
   kind: 'updateLore',
   source: 'chapter_close',
-  payload: { branchId: 'b1', id: 'lore_known', patch: { body: 'Ash fell for a year.' } },
+  payload: {
+    branchId: 'b1',
+    id: 'lore_known',
+    patch: { body: 'Ash fell for a year.' },
+    proseEntryId: null,
+  },
 }
 
 const updateMissingLore: PipelineAction = {
   kind: 'updateLore',
   source: 'chapter_close',
-  payload: { branchId: 'b1', id: 'lore_missing', patch: { body: 'Never written.' } },
+  payload: {
+    branchId: 'b1',
+    id: 'lore_missing',
+    patch: { body: 'Never written.' },
+    proseEntryId: null,
+  },
 }
 
 const RESTATED = { status: 'noop', reason: 'no-op lore patch', mark: 'restated' } as const

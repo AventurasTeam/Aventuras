@@ -247,8 +247,9 @@ second pipeline kind needing caller inputs is the trigger to revisit
 a generic seam.
 
 **What shipped for intermediates.** The chapter close's run-scoped
-state (its range, the shared missing-range failure, its ledger and its
-one id map, `closeIdsOf`) goes through typed accessors in `lib/pipeline/definitions/close-intermediates.ts`,
+state (its range, the shared missing-range failure, its ledger, its
+one id map, `closeIdsOf`, and the parts the metadata phase cuts,
+`closePartsOf`) goes through typed accessors in `lib/pipeline/definitions/close-intermediates.ts`,
 whose keys stay private. Every other kind's keys are still plain:
 retrieval's, the per-turn piggyback outcome and suggestions flag, the
 turn's id map, and the periodic pass's pre-run status. The per-kind

@@ -6,12 +6,12 @@ import { entities, happenings, lore, threads, type Entity } from '@/lib/db'
 import { SUBSTITUTABLE_PREFIXES } from '@/lib/ids'
 import { isJsonObject } from '@/lib/json-object'
 import { normalizeTerm } from '@/lib/keyword-terms'
-import { compareId } from '@/lib/list-modules'
 import { matchTerms } from '@/lib/retrieval'
 import { excerpt, oneLine } from '@/lib/text'
 import { flagStillHolds } from '@/lib/world'
 
 import { withHandlesDeep, type CloseIds } from './ids'
+import { byNameThenId, strings } from './row-values'
 import {
   readToolSchema,
   tableOfId,
@@ -29,13 +29,19 @@ const LINE_DESCRIPTION_CHARS = 100
 const READ_ROW_PREFIXES = ['char', 'loc', 'item', 'fact', 'lore', 'thr', 'hap'] as const
 
 /** A row as read_row reads it: its kind, its name or title, its columns by name. */
-type ReadRow = {
-  kind: RowKind
-  name: string
-  columns: Readonly<Record<string, unknown>>
-  /** An entity row as stored, which its flag is read from. */
-  entity?: Entity
-}
+type ReadRow =
+  | {
+      kind: Entity['kind']
+      name: string
+      columns: Readonly<Record<string, unknown>>
+      /** The row as stored, which its flag is read from. */
+      entity: Entity
+    }
+  | {
+      kind: Exclude<RowKind, Entity['kind']>
+      name: string
+      columns: Readonly<Record<string, unknown>>
+    }
 
 type Rank = 0 | 1 | 2 | 3 | 4
 
@@ -157,16 +163,21 @@ type CollisionView = {
   flaggedBy: string[]
 }
 
-/** world.md → Surfacing: a flag is live or dormant, and one row's pair may be flagged from the other. */
-async function collisionView(ctx: ToolContext, row: Entity): Promise<CollisionView> {
+/** world.md → Surfacing. `named`: the ids of the rows the view shows, for the answer's refs. */
+async function collisionView(
+  ctx: ToolContext,
+  row: Entity,
+): Promise<{ view: CollisionView; named: string[] }> {
   const partnerId = row.nameCollisionFlag === 1 ? row.nameCollisionPartnerId : null
   let collision: CollisionView['collision'] = null
+  const named: string[] = []
   if (partnerId !== null) {
     const [partner] = await ctx.db
       .select()
       .from(entities)
       .where(and(eq(entities.branchId, ctx.branchId), eq(entities.id, partnerId)))
       .limit(1)
+    if (partner !== undefined) named.push(partner.id)
     collision = {
       partner: partner === undefined ? null : ctx.ids.show(partner.id, partner.name),
       reason: row.nameCollisionReason ?? '',
@@ -183,12 +194,10 @@ async function collisionView(ctx: ToolContext, row: Entity): Promise<CollisionVi
         eq(entities.nameCollisionPartnerId, row.id),
       ),
     )
-  const flaggedBy = holders
-    .filter((holder) => flagStillHolds(holder, row))
-    // Code units, never localeCompare: host locale would make the answer device-dependent.
-    .sort((a, b) => compareId(a.name, b.name) || compareId(a.id, b.id))
-    .map((holder) => ctx.ids.show(holder.id, holder.name))
-  return { collision, flaggedBy }
+  const live = holders.filter((holder) => flagStillHolds(holder, row)).sort(byNameThenId)
+  named.push(...live.map((holder) => holder.id))
+  const flaggedBy = live.map((holder) => ctx.ids.show(holder.id, holder.name))
+  return { view: { collision, flaggedBy }, named }
 }
 
 // Ids go to handles before the cut: excerpt can cut where there's no space, inside an id. It can
@@ -215,13 +224,6 @@ function lineOf(
   const label = status === null || status === 'active' ? shown : `${shown} (${status})`
   const about = description === null ? undefined : aboutOf(ids, description)
   return about === undefined ? `${kind}: ${label}` : `${kind}: ${label} — ${about}`
-}
-
-// A hand-edited row may hold anything in its keywords; only strings are terms.
-function keywordTerms(keywords: unknown): string[] {
-  return Array.isArray(keywords)
-    ? keywords.filter((k): k is string => typeof k === 'string').map(normalizeTerm)
-    : []
 }
 
 const searchWorldSchema = readToolSchema({
@@ -270,7 +272,7 @@ async function searchWorld(
     .from(entities)
     .where(eq(entities.branchId, ctx.branchId))
   for (const row of entityRows) {
-    const rank = rankOf(query, needle, row.name, keywordTerms(row.keywords))
+    const rank = rankOf(query, needle, row.name, strings(row.keywords).map(normalizeTerm))
     if (rank === undefined) continue
     found.push({
       id: row.id,
@@ -360,19 +362,17 @@ async function readRowAnswer(
 
   const fields = Object.fromEntries(paths.map((path) => [path, valueAt(row.columns, path)]))
   // A restored row keeps its old reason in storage; only a retired row shows one.
-  if (row.entity !== undefined && row.entity.status !== 'retired' && REASON_PATH in fields)
+  if ('entity' in row && row.entity.status !== 'retired' && REASON_PATH in fields)
     fields[REASON_PATH] = ''
-  const refs = await refsIn(ctx, [row.name, fields])
   const flag =
-    row.entity !== undefined && paths.includes(FLAG_PATH)
-      ? await collisionView(ctx, row.entity)
-      : {}
+    'entity' in row && paths.includes(FLAG_PATH) ? await collisionView(ctx, row.entity) : undefined
+  const refs = await refsIn(ctx, [row.name, fields, flag?.named ?? []])
   const output = {
     id: handle,
     kind: row.kind,
     name: row.name,
     fields,
-    ...flag,
+    ...flag?.view,
     ...(Object.keys(refs).length > 0 ? { refs } : {}),
   }
   return { output: withHandlesDeep(output, ctx.ids), rows, read: [{ table, id }] }

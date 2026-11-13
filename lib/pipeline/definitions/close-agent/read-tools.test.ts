@@ -855,6 +855,24 @@ describe('read_row on a task that reads the flag', () => {
     expect(flaggedBy.map((handle) => ids.nameOf(handle))).toEqual(['Aldo', 'Zora'])
   })
 
+  it('names each row naming it in refs, by its handle', async () => {
+    const answer = await read(MARA)
+
+    const aldo = ids.handleOf(ALDO)!
+    const zora = ids.handleOf(ZORA)!
+    const output = answer.output as { flaggedBy: string[]; refs?: unknown }
+    expect(output.flaggedBy).toEqual([aldo, zora])
+    expect(output.refs).toEqual({ [aldo]: 'Aldo', [zora]: 'Zora' })
+  })
+
+  it("names its flag's partner in refs when the task's fields leave the partner's id out", async () => {
+    const answer = await read(ANSEL, { character: ['nameCollisionFlag'] })
+
+    const twin = ids.handleOf(ANSEL_TWIN)!
+    expect(answer.output).toMatchObject({ collision: { partner: twin } })
+    expect((answer.output as { refs?: unknown }).refs).toEqual({ [twin]: 'Ansel' })
+  })
+
   it("adds nothing when the task's fields leave the flag out", async () => {
     const answer = await read(ANSEL, { character: ['status'] })
 

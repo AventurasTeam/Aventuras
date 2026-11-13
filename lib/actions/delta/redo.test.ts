@@ -338,7 +338,12 @@ const CASES_BY_KIND: Record<VecTargetKind, RedoCase> = {
     update: {
       kind: 'updateLore',
       source: 'user_edit',
-      payload: { branchId: 'b1', id: 'lore_1', patch: { body: 'ash fell for a decade' } },
+      payload: {
+        branchId: 'b1',
+        id: 'lore_1',
+        patch: { body: 'ash fell for a decade' },
+        proseEntryId: null,
+      },
     },
     column: 'body',
     created: 'ash fell for a year',

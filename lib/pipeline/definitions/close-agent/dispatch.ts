@@ -7,6 +7,7 @@ import { commonChecks, type ReadSet } from './common-checks'
 import { nameCloseProse, withHandlesDeep, type CloseIds } from './ids'
 import type { CloseLedgerWriter } from './ledger'
 import {
+  lastTaskTurn,
   resolveIdArgs,
   tableOfId,
   type CloseTool,
@@ -123,7 +124,7 @@ function landedCreate(
   return { id, name: plan.rows.find((row) => row.id === id)?.name ?? '' }
 }
 
-// The rows a close retitles, threads, happenings and lore, are named by their title.
+// The rows a close retitles, threads and lore, are named by their title.
 const TITLE_PATH = 'title'
 
 /** A landed title's row (a merge's kept row or a one-row update's), with the name prose uses. */
@@ -251,9 +252,10 @@ async function* writeCall(
     ...toolContextOf(ctx),
     turns: check.turns,
     proseEntryId,
+    // C12 past the task's last turn: an earlier part never read a later part's turns.
     guard: (rows) =>
       readRowGuard(
-        { branchId: ctx.branchId, endEntryId: ctx.endEntryId, proseEntryId, rows },
+        { branchId: ctx.branchId, endEntryId: lastTaskTurn(ctx), proseEntryId, rows },
         { db: ctx.phase.db, runInTransaction: ctx.phase.runInTransaction },
       ),
     actionId: ctx.phase.actionId,

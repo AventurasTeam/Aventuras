@@ -6,7 +6,7 @@ import { loreStore } from '@/lib/stores'
 
 import { cascadedDelete, rowCascade } from '../delta/delete-cascade'
 import { deepEqual } from '../delta/delta-encoding'
-import { keywordUserAddedReason, planKeywordEdit } from '../delta/keyword-authors'
+import { keywordEditNoop, planKeywordEdit } from '../delta/keyword-authors'
 import {
   noopRefusal,
   register,
@@ -39,8 +39,11 @@ declare module '@/lib/actions/action-map' {
         branchId: string
         id: string
         patch: LoreUpdatePatch
-        /** A machine write's prose: a column the user wrote after it is dropped (cadence.md). */
-        proseEntryId?: ProseEntryId
+        /**
+         * A machine write's prose, null for a user's write: a column the user wrote after it is
+         * dropped (cadence.md).
+         */
+        proseEntryId: ProseEntryId
       }
     }
     setLoreKeywords: {
@@ -209,14 +212,7 @@ const setKeywordsHandler: ActionHandler = async (action, branchId, ctx) => {
     { table: 'lore', branchId: bid, id, keywords: current.keywords },
     { add, remove, proseEntryId },
   )
-  if (edit.kind === 'user-term') {
-    const { term } = edit
-    return noopRefusal(keywordUserAddedReason(term), null)
-  }
-  if (edit.kind === 'unchanged')
-    return edit.userDropped
-      ? noopRefusal(USER_EDITED_SINCE_PROSE, null)
-      : noopRefusal('no-keyword-change', 'restated')
+  if (edit.kind !== 'changed') return keywordEditNoop(edit)
   const columns = { keywords: edit.next }
   return {
     status: 'ok',

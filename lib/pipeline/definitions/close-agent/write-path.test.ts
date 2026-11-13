@@ -571,13 +571,6 @@ describe('entityWriteAction', () => {
       patch: { description: 'A drowned village.' },
     })
   })
-
-  it('refuses to remove a path outside state, and a call with nothing wanted or removed', () => {
-    expect(() => entityWriteAction(UNPLACED_PLACE, {}, ['description'])).toThrow(
-      /only a state path/,
-    )
-    expect(() => entityWriteAction(UNPLACED_PLACE, {}, [])).toThrow(/nothing to write/)
-  })
 })
 
 describe('DELETE_PATH', () => {
@@ -1290,7 +1283,7 @@ describe('dispatchToolCall in a close phase', () => {
       })
     }
     scriptedPlan = (ctx) => {
-      counts.push(ctx.landedCalls('create_note'), ctx.landedCalls('scripted'))
+      counts.push(ctx.landedCalls(createNoteTool), ctx.landedCalls(scriptedTool))
       return { kind: 'write', actions: [], lost: [], rows: entityRows(WREN), values: {} }
     }
 

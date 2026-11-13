@@ -835,6 +835,31 @@ describe('requestChapterMetadata over parts', () => {
     expect(callKinds()).toEqual(calls)
   })
 
+  it.each([
+    { name: 'a part call', at: 2, calls: ['part', 'part'] },
+    { name: 'the merge', at: 4, calls: ['part', 'part', 'part', 'chapter'] },
+  ])('returns aborted on a cancel during $name, making no further call', async ({ at, calls }) => {
+    const controller = new AbortController()
+    let call = 0
+    generateStructuredMock.mockImplementation(
+      (_target, _prompt, schema, _config, signal) =>
+        new Promise((resolve) => {
+          if (++call === at) {
+            signal.addEventListener('abort', () => resolve({ status: 'aborted', recoverable: [] }))
+            controller.abort()
+            return
+          }
+          const value = schema === chapterPartSummarySchema ? { summary: 'A part.' } : MERGED
+          resolve({ status: 'ok', value, recoverable: [] })
+        }) as never,
+    )
+
+    const { outcome } = await drain(phaseCtx(controller.signal), RANGE, THREE_PARTS)
+
+    expect(outcome).toEqual({ status: 'aborted' })
+    expect(callKinds()).toEqual(calls)
+  })
+
   it("yields each call's retried attempts, in call order", async () => {
     let part = 0
     generateStructuredMock.mockImplementation(async (_target, _prompt, schema) => {

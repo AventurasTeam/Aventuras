@@ -103,7 +103,7 @@ async function editLore(
       action: {
         kind: 'updateLore',
         source: who === 'user' ? 'user_edit' : 'periodic_classifier',
-        payload: { branchId: f.branchId, id, patch },
+        payload: { branchId: f.branchId, id, patch, proseEntryId: null },
       },
       actionId: who === 'user' ? 'act_user_edit' : 'act_close_turn_5',
       branchId: f.branchId,
@@ -447,7 +447,7 @@ describe('create_lore', () => {
       'The Night Crossing',
       'The Syndicate Sash',
     ])
-    expect(run.writer.landedCalls('create_lore')).toBe(3)
+    expect(run.writer.landedCalls(createLoreTool)).toBe(3)
   })
 
   it('counts only landed creates toward the cap, an earlier task’s and part’s included', async () => {
@@ -538,6 +538,17 @@ describe('create_lore', () => {
     expect((await loreRows(f)).map(({ title }) => title)).toEqual(['The Ferry Toll'])
   })
 
+  it('refuses a title a lore row holds past the 120-character cut, the stored title cut alike', async () => {
+    await seedLore(f, { id: TOLL, title: 't'.repeat(127) })
+
+    const run = await dispatchScripted(f, [
+      create({ title: 't'.repeat(127), body: 'Crossing after dark costs a courier purse.' }),
+    ])
+
+    expect(run.answers[0]).toMatchObject({ result: 'rejected', reason: 'title-taken' })
+    expect((await loreRows(f)).map(({ id }) => id)).toEqual([TOLL])
+  })
+
   it('lands a blank category as null, and leaves it and empty keywords out of values', async () => {
     const run = await dispatchScripted(f, [
       create({
@@ -569,11 +580,29 @@ describe('create_lore', () => {
     expect(run.answers).toEqual([
       {
         result: 'rejected',
-        reason: 'body is 1201 characters, over the limit of 1200: state the rule in fewer words',
+        reason:
+          'body is 1201 characters as stored, ids written as names, over the limit of 1200: state the rule in fewer words',
       },
       { result: 'ok', id: 'lo1' },
     ])
     expect((await loreRows(f)).map(({ body }) => body)).toEqual(['x'.repeat(1_200)])
+  })
+
+  it('measures a body as stored, a row handle written as its name, and says so', async () => {
+    await seedLore(f, { id: TOLL, title: 'The Ferry Toll' })
+
+    // Sent: 1,195 + ' lo1' = 1,199 characters; stored: 1,195 + ' The Ferry Toll' = 1,210.
+    const run = await dispatchScripted(
+      f,
+      [create({ title: 'The Toll Keeper', body: `${'x'.repeat(1_195)} lo1` })],
+      { shown: [{ id: TOLL, name: 'The Ferry Toll' }] },
+    )
+
+    expect(run.answers[0]).toEqual({
+      result: 'rejected',
+      reason:
+        'body is 1210 characters as stored, ids written as names, over the limit of 1200: state the rule in fewer words',
+    })
   })
 
   it('refuses a create whose title or body names a turn', async () => {
@@ -662,6 +691,17 @@ describe('update_lore: the tool', () => {
         why: 'It says so.',
       }).success,
     ).toBe(false)
+  })
+
+  it("tells the model it can't see a keyword's author, and what removing a user's term costs", () => {
+    const { remove } = updateLoreTool.schema.shape.keywords.unwrap().shape
+    expect(remove.description).toBe(
+      "Terms that no longer fit. You can't see who added a term; removing one the user added is refused, and this call's adds with it.",
+    )
+    expect(updateLoreTool.description).toContain(
+      "You can't see who added a keyword; removing one the user added is refused, naming it, and the call's keyword adds with it, while its other fields land.",
+    )
+    expect(updateLoreTool.description).not.toContain('Never remove')
   })
 
   it('takes one lore id, under its canon name', () => {
@@ -963,15 +1003,12 @@ describe('update_lore', () => {
     expect((await storedLore(f, TOLL)).keywords).toEqual(['toll', 'night crossing'])
   })
 
-  it('refuses a removal holding a handle though the list would not change', async () => {
+  it('answers ok writing nothing for a handle-like removal the list lacks', async () => {
     const run = await dispatchScripted(f, [read, update({ keywords: { remove: ['c1'] } })], {
       shown: [...SHOWN, { id: WREN, name: 'Wren' }],
     })
 
-    expect(run.answers[1]).toEqual({
-      result: 'rejected',
-      reason: 'the keyword "c1" holds c1, an id: a keyword is a word the prose uses, never an id',
-    })
+    expect(run.answers[1]).toEqual({ result: 'ok' })
     expect(await runDeltas(f, run.result.actionId)).toEqual([])
   })
 
@@ -1024,7 +1061,7 @@ describe('update_lore', () => {
 
       expect(run.answers[1]).toEqual({
         result: 'rejected',
-        reason: `body is ${refused} characters: a body over 1200 may grow the body as it stood before this close (${stored}) by at most 1200, so send a shorter one`,
+        reason: `body is ${refused} characters as stored, ids written as names: a body over 1200 may grow the body as it stood before this close (${stored}) by at most 1200, so send a shorter one`,
       })
       expect(run.answers[2]).toEqual({ result: 'ok' })
       expect((await storedLore(f, FERRY)).body).toBe('x'.repeat(lands))
@@ -1032,7 +1069,7 @@ describe('update_lore', () => {
   )
 
   const growthRefusal = (length: number, base: number): string =>
-    `body is ${length} characters: a body over 1200 may grow the body as it stood before this close (${base}) by at most 1200, so send a shorter one`
+    `body is ${length} characters as stored, ids written as names: a body over 1200 may grow the body as it stood before this close (${base}) by at most 1200, so send a shorter one`
 
   it("grows a body by 1200 in all across one part's calls, from the body before the close", async () => {
     await seedLore(f, { id: FERRY, title: 'The Night Ferry', body: 'b'.repeat(100) })
@@ -1078,6 +1115,28 @@ describe('update_lore', () => {
     ])
     expect(run.answers[2]).toEqual({ result: 'rejected', reason: growthRefusal(1_400, 100) })
     expect((await storedLore(f, FERRY)).body).toBe('x'.repeat(1_300))
+  })
+
+  it('grows a row whose body was null before the close from no body at all', async () => {
+    await seedLore(f, { id: FERRY, title: 'The Night Ferry', body: null })
+
+    const run = await dispatchScripted(
+      f,
+      [
+        read,
+        update({ body: 'x'.repeat(1_000) }),
+        update({ body: 'y'.repeat(1_201) }),
+        update({ body: 'z'.repeat(1_200) }),
+      ],
+      { shown: [{ id: FERRY, name: 'The Night Ferry' }] },
+    )
+
+    expect(run.answers.slice(1)).toEqual([
+      { result: 'ok' },
+      { result: 'rejected', reason: growthRefusal(1_201, 0) },
+      { result: 'ok' },
+    ])
+    expect((await storedLore(f, FERRY)).body).toBe('z'.repeat(1_200))
   })
 
   it('grows a row this close created from no body at all', async () => {
@@ -1130,6 +1189,18 @@ describe('update_lore', () => {
     expect(runIds?.nameOfId(FERRY)).toBe('The Night Ferry')
   })
 
+  it('refuses a title another lore row holds past the 120-character cut, the stored title cut alike', async () => {
+    await seedLore(f, { id: FERRY, title: 't'.repeat(127) })
+    const taken = `title-taken: lo2 already holds this title: keep this row's title, or extend or correct lo2 with update_lore`
+
+    const run = await dispatchScripted(f, [read, update({ title: 't'.repeat(127) })], {
+      shown: SHOWN,
+    })
+
+    expect(run.answers[1]).toEqual({ result: 'rejected', reason: taken })
+    expect((await storedLore(f, TOLL)).title).toBe('The Ferry Toll')
+  })
+
   it('measures each row from its own body before the close', async () => {
     await seedLore(f, { id: FERRY, title: 'The Night Ferry', body: 'b'.repeat(3_000) })
 
@@ -1179,7 +1250,7 @@ describe('update_lore', () => {
         {
           field: 'body',
           reason:
-            'body is 1301 characters: a body over 1200 may grow the body as it stood before this close (100) by at most 1200, so send a shorter one',
+            'body is 1301 characters as stored, ids written as names: a body over 1200 may grow the body as it stood before this close (100) by at most 1200, so send a shorter one',
         },
       ],
     })
@@ -1280,6 +1351,33 @@ describe('update_lore', () => {
     expect(run.calls[0]).toMatchObject({
       rows: [{ table: 'lore', id: GONE, name: 'The Old Toll' }],
       values: { body: 'The toll doubles after dark.' },
+    })
+  })
+
+  // After a fork another branch can still hold a row this one deleted, under the same id.
+  it('refuses a row only another branch holds as gone, though that row reads as sent', async () => {
+    await f.ctx.db
+      .insert(branches)
+      .values({ id: 'br_other', storyId: f.storyId, name: 'other', createdAt: 1 })
+    await f.ctx.db.insert(lore).values({
+      id: GONE,
+      branchId: 'br_other',
+      title: 'The Old Toll',
+      body: 'The toll doubles after dark.',
+      injectionMode: 'auto',
+      createdAt: 1,
+      updatedAt: 1,
+    })
+
+    const run = await dispatchScripted(f, [update({ body: 'The toll doubles after dark.' })], {
+      shown: [{ id: GONE, name: 'The Old Toll' }],
+      seeds: [{ table: 'lore', id: GONE }],
+    })
+
+    expect(run.answers[0]).toEqual({
+      result: 'rejected',
+      reason: CLOSE_REASON.rowGone,
+      note: 'The row is gone; do not write to it again.',
     })
   })
 })

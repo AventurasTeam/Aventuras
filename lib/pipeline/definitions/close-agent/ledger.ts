@@ -4,6 +4,7 @@ import { ID_PATTERN } from '@/lib/ids'
 import { oneLine } from '@/lib/text'
 
 import type { CloseIds } from './ids'
+import type { CloseTool } from './tool'
 import type { CloseLedger } from '../intermediates'
 
 /** C4: what a report keeps of one value. */
@@ -73,8 +74,8 @@ export class CloseLedgerWriter {
   }
 
   /** The landed (`ok`) calls of `tool` so far, across tasks and parts: a chapter-wide cap's count. */
-  landedCalls(tool: string): number {
-    return this.ledger.calls.filter((call) => call.tool === tool && call.result === 'ok').length
+  landedCalls({ name }: Pick<CloseTool, 'name'>): number {
+    return this.ledger.calls.filter((call) => call.tool === name && call.result === 'ok').length
   }
 
   /** Where a row this close merged away went: the last kept row of a chain of landed merges. */
