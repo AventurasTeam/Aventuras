@@ -46,18 +46,21 @@ export function foldStackables(
   return folded
 }
 
-// Tried in order; `-s` never strips a double s (`glass`).
-const PLURAL_ENDINGS: readonly (readonly [plural: string, singular: string])[] = [
+// Tried in order. `-s` never strips a double s (`glass`); `-es` only follows a stem that takes it
+// (`torch`, `box`, `potato`), so `capes` is not `cap` + `es`.
+const PLURAL_ENDINGS: readonly (readonly [plural: string, singular: string, stem?: RegExp])[] = [
   ['ies', 'y'],
-  ['es', ''],
+  ['es', '', /(?:[sxzo]|ch|sh)$/],
   ['s', ''],
 ]
 
 // A folded key is trimmed and single-spaced, so its end is its last word's end.
 function heldSingular(key: string, held: ReadonlySet<string>): string | undefined {
-  for (const [plural, singular] of PLURAL_ENDINGS) {
+  for (const [plural, singular, stem] of PLURAL_ENDINGS) {
     if (!key.endsWith(plural) || (plural === 's' && key.endsWith('ss'))) continue
-    const candidate = key.slice(0, -plural.length) + singular
+    const base = key.slice(0, -plural.length)
+    if (stem !== undefined && !stem.test(base)) continue
+    const candidate = base + singular
     if (held.has(candidate)) return candidate
   }
   return undefined
@@ -66,8 +69,9 @@ function heldSingular(key: string, held: ReadonlySet<string>): string | undefine
 /**
  * chapter-close.md → 3c: every record folded by `foldStackables` (a blank key or a count <= 0 is
  * dropped, so a stored `{ gold: 0 }` comes back `{}`), then each plural key moved one step onto
- * the singular some record on the branch holds, counts summed; a key another key folds onto stays
- * put. Every input id gets a record; an absent one comes back empty.
+ * the singular some record on the branch holds (`-ies` to `y`, `-es` only after s, x, z, ch, sh or
+ * o, then `-s`), counts summed; a key another key folds onto stays put. Every input id gets a
+ * record; an absent one comes back empty.
  */
 export function normalizeStackables(
   records: ReadonlyMap<string, Readonly<Record<string, number>> | undefined>,
