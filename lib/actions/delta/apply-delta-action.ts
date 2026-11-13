@@ -93,6 +93,7 @@ const LOCK_KEY: { [K in ProductionKind]: LockKey<K> } = {
   upsertHappeningAwareness: happeningLinks,
   deleteHappeningAwareness: happeningLinks,
   bumpAwarenessRetrieval: happeningLinks,
+  resetAwarenessRetrieval: happeningLinks,
   createChapter: null,
   updateChapter: null,
   deleteChapter: null,

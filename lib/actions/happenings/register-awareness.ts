@@ -44,6 +44,10 @@ declare module '@/lib/actions/action-map' {
       source: DeltaSource
       payload: { branchId: string; id: string; priorCount: number }
     }
+    resetAwarenessRetrieval: {
+      source: DeltaSource
+      payload: { branchId: string; id: string; priorCount: number }
+    }
   }
 }
 
@@ -280,6 +284,33 @@ const bumpRetrievalHandler: ActionHandler = (action, branchId, ctx) => {
   }
 }
 
+// chapter-close.md → 3d: counts are per chapter. The undo key is a bump's, so History and row
+// signals pass over a reset as they pass over a bump.
+const resetRetrievalHandler: ActionHandler = (action, branchId, ctx) => {
+  if (action.kind !== 'resetAwarenessRetrieval')
+    throw new Error(`handler/kind mismatch: ${action.kind}`)
+  const { branchId: bid, id, priorCount } = action.payload
+  if (bid !== branchId)
+    return { status: 'rejected', reason: `branch mismatch: delta ${branchId} vs target ${bid}` }
+  // No read of its own, as a bump: the close read every count in one statement.
+  if (priorCount === 0) return noopRefusal('retrieval count already zero', 'restated')
+  return {
+    status: 'ok',
+    targetTable: 'happening_awareness',
+    targetId: id,
+    op: 'update',
+    undoPayload: { retrievalCount: priorCount },
+    ops: [
+      ctx.db
+        .update(happeningAwareness)
+        .set({ retrievalCount: 0 })
+        .where(and(eq(happeningAwareness.branchId, bid), eq(happeningAwareness.id, id)))
+        .toSQL(),
+    ],
+    patch: { op: 'update', id, columns: { retrievalCount: 0 } },
+  }
+}
+
 export function registerHappeningAwareness(): void {
   register({
     table: 'happening_awareness',
@@ -293,6 +324,7 @@ export function registerHappeningAwareness(): void {
       upsertHappeningAwareness: upsertHandler,
       deleteHappeningAwareness: deleteHandler,
       bumpAwarenessRetrieval: bumpRetrievalHandler,
+      resetAwarenessRetrieval: resetRetrievalHandler,
     },
     patcher: (branchId, p) => happeningAwarenessStore.patch(branchId, p),
   })

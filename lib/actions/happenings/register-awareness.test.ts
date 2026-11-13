@@ -4,6 +4,8 @@ import { describe, expect, it, vi } from 'vitest'
 import type { Delta, HappeningAwareness } from '@/lib/db'
 import { branches, deltas, entities, happeningAwareness, happenings, stories } from '@/lib/db'
 import { createTestDb } from '@/lib/db/__tests__/test-db'
+import { loadHistoryChunk } from '@/lib/history'
+import { isRetrievalBumpOnly } from '@/lib/row-signals'
 import { happeningAwarenessStore } from '@/lib/stores'
 
 import { registerHappeningAwareness } from './register-awareness'
@@ -634,6 +636,159 @@ describe('bumpAwarenessRetrieval', () => {
 
     expect(await countOf(ctx, 'haw_1')).toBe(5)
     expect(await countOf(ctx, 'haw_1', OTHER_BRANCH)).toBe(9)
+  })
+})
+
+function reset(
+  id: string,
+  priorCount: number,
+  opts: { payloadBranchId?: string; actionId?: string } = {},
+) {
+  return {
+    action: {
+      kind: 'resetAwarenessRetrieval' as const,
+      source: 'chapter_close' as const,
+      payload: { branchId: opts.payloadBranchId ?? BRANCH, id, priorCount },
+    },
+    actionId: opts.actionId ?? 'act_reset',
+    branchId: BRANCH,
+  }
+}
+
+// chapter-close.md → 3d: counts are per chapter, so the close zeroes them after its last task.
+describe('resetAwarenessRetrieval', () => {
+  it('zeroes the count and mirrors it into the working-set store', async () => {
+    const { ctx } = await setup([awarenessRow('haw_1', 6)])
+
+    expect(await applyDeltaAction(reset('haw_1', 6), ctx)).toMatchObject({ status: 'ok' })
+
+    expect(await countOf(ctx, 'haw_1')).toBe(0)
+    expect(happeningAwarenessStore.getById('haw_1')?.retrievalCount).toBe(0)
+  })
+
+  it('logs one update whose undo payload is the prior count alone, which reads as a bump', async () => {
+    const { ctx } = await setup([awarenessRow('haw_1', 6)])
+
+    await applyDeltaAction(reset('haw_1', 6), ctx)
+
+    const rows = await deltaRows(ctx)
+    expect(rows).toHaveLength(1)
+    expect(rows[0]).toMatchObject({
+      targetTable: 'happening_awareness',
+      targetId: 'haw_1',
+      op: 'update',
+      source: 'chapter_close',
+      actionId: 'act_reset',
+    })
+    expect(rows[0].undoPayload).toEqual({ retrievalCount: 6 })
+    expect(isRetrievalBumpOnly(rows[0].op, rows[0].undoPayload)).toBe(true)
+  })
+
+  it('reverse-replay restores the prior count', async () => {
+    const { ctx } = await setup([awarenessRow('haw_1', 6)])
+    await applyDeltaAction(reset('haw_1', 6), ctx)
+
+    expect(await reverseReplayDeltas('act_reset', ctx)).toBe(1)
+
+    expect(await countOf(ctx, 'haw_1')).toBe(6)
+    expect(happeningAwarenessStore.getById('haw_1')?.retrievalCount).toBe(6)
+  })
+
+  it('no-ops a count already at zero, logging nothing', async () => {
+    const { ctx } = await setup([awarenessRow('haw_1', 0)])
+
+    const result = await applyDeltaActionGroupWithOutcomes(
+      [reset('haw_1', 0).action],
+      { actionId: 'act_reset', branchId: BRANCH },
+      ctx,
+    )
+
+    expect(result).toEqual({
+      status: 'ok',
+      outcomes: [{ status: 'noop', reason: 'retrieval count already zero', mark: 'restated' }],
+    })
+    expect(await deltaRows(ctx)).toEqual([])
+  })
+
+  it('rejects a branch mismatch and leaves the count alone', async () => {
+    const { ctx } = await setup([awarenessRow('haw_1', 6)])
+
+    const result = await applyDeltaAction(reset('haw_1', 6, { payloadBranchId: 'br_other' }), ctx)
+
+    expect(result).toEqual({
+      status: 'rejected',
+      reason: `branch mismatch: delta ${BRANCH} vs target br_other`,
+    })
+    expect(await countOf(ctx, 'haw_1')).toBe(6)
+    expect(await deltaRows(ctx)).toEqual([])
+  })
+
+  it('reads nothing, so its cost does not scale with the rows it resets', async () => {
+    const { ctx } = await setup([
+      awarenessRow('haw_1', 2),
+      awarenessRow('haw_2', 3),
+      awarenessRow('haw_3', 4),
+    ])
+    const select = vi.spyOn(ctx.db, 'select')
+
+    await applyDeltaAction(reset('haw_1', 2), ctx)
+    const afterOne = select.mock.calls.length
+    await applyDeltaAction(reset('haw_2', 3), ctx)
+    await applyDeltaAction(reset('haw_3', 4), ctx)
+
+    // applyDeltaAction's own readback is the one read; the handler adds none.
+    const READS_PER_RESET = 1
+    expect(afterOne).toBe(READS_PER_RESET)
+    expect(select.mock.calls.length).toBe(READS_PER_RESET * 3)
+    expect(await countOf(ctx, 'haw_3')).toBe(0)
+  })
+
+  it('resets only the run branch when both branches carry the id', async () => {
+    const { ctx } = await setup([
+      awarenessRow('haw_1', 9, { branchId: OTHER_BRANCH }),
+      awarenessRow('haw_1', 4),
+    ])
+
+    await applyDeltaAction(reset('haw_1', 4), ctx)
+
+    expect(await countOf(ctx, 'haw_1')).toBe(0)
+    expect(await countOf(ctx, 'haw_1', OTHER_BRANCH)).toBe(9)
+  })
+
+  it("stays out of the happening's History while the pair's edits show", async () => {
+    const { db, ctx } = await setup()
+    const write = (action: PipelineAction, actionId: string) =>
+      applyDeltaAction({ action, actionId, branchId: BRANCH }, ctx)
+    const userUpsert = (fields: { retrievalCount?: number; source?: string }): PipelineAction => ({
+      kind: 'upsertHappeningAwareness',
+      source: 'user_edit',
+      payload: {
+        branchId: BRANCH,
+        characterId: 'char_a',
+        happeningId: 'hap_1',
+        proseEntryId: null,
+        ...fields,
+      },
+    })
+    await write(userUpsert({ retrievalCount: 6 }), 'act_create')
+    const [row] = await awarenessRows(db, 'char_a', 'hap_1')
+    expect((await applyDeltaAction(reset(row.id, 6), ctx)).status).toBe('ok')
+    await write(userUpsert({ source: 'told' }), 'act_source')
+
+    const chunk = await loadHistoryChunk(db, {
+      branchId: BRANCH,
+      targetTable: 'happenings',
+      targetId: 'hap_1',
+      sort: 'newest',
+      cursor: null,
+    })
+
+    expect(chunk.rows.map((r) => r.delta.actionId)).toEqual(['act_source', 'act_create'])
+    expect((await deltaRows(ctx)).map((d) => d.actionId)).toEqual([
+      'act_create',
+      'act_reset',
+      'act_source',
+    ])
   })
 })
 

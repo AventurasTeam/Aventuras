@@ -60,6 +60,11 @@ describe('lock keys', () => {
         payload: { branchId: 'b1', id: 'haw_1', priorCount: 0 },
       }),
       lockKeysFor({
+        kind: 'resetAwarenessRetrieval',
+        source: 'chapter_close',
+        payload: { branchId: 'b1', id: 'haw_1', priorCount: 3 },
+      }),
+      lockKeysFor({
         kind: 'deleteHappening',
         source: 'user_edit',
         payload: { branchId: 'b1', id: 'hap_1' },
