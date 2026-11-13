@@ -443,3 +443,33 @@ patch`, which 5.5a marks `restated`, so a close tool's write of it
   records the limit
   ([`chapter-close.md → Tools and writes`](../memory/chapter-close.md#tools-and-writes)).
   Raised in 5.8's slice review, developer decision 2026-11-10.
+- **Two close tool tests don't pin what their names claim.** In
+  `close-agent/upkeep-tools.test.ts` the test named "…its group on E"
+  never checks the group's anchor, and neither does
+  `lifecycle-tools.test.ts`'s five-turn case ending before E: anchoring
+  on the task's last turn instead keeps every close tool test green. No
+  test cites a part-1 turn from part 2 and expects a refusal either, so
+  swapping the part's turns for the turns handed handles goes unseen.
+  Raised in 5.9's Task 1 review.
+- **No retrieval test admits a happening through a seated chapter
+  range.** `run.test.ts`'s `makeQueryAll` returns every happening
+  whatever entry ids the query binds, so emptying the chapter-range
+  boost loop in `lib/retrieval/run.ts` keeps all its cases green,
+  including the one named for that admission. Raised in 5.9's Task 2
+  review.
+- **The open chapter's number and retrieval's `current` can disagree.**
+  Retrieval numbers the open chapter one past the highest closed
+  chapter that still holds a stamped entry (the stamp join in
+  `loadChapterRanges`), while the story card's open chapter
+  (`openChapterNumber`) is one past the highest closed chapter whatever
+  it holds. Deleting every entry of the newest closed chapter, which
+  `deleteStoryEntry` allows, splits them, so ages run one short of the
+  number the user sees. Raised in 5.9's Task 3 review.
+- **A folded stackable key can outgrow its schema bound.**
+  `foldStackableKey` lowercases, and some letters lengthen when
+  lowercased (`İ` becomes two code units), so a 40-character key can
+  fold past the character schema's 40-character bound and the write is
+  refused. The per-turn transfer path has this today; 5.9's
+  normalization step inherits it, where a refused group fails the close
+  on every close until the key is edited. Rare input. Raised in 5.9's
+  Task 7 review.

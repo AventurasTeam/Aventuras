@@ -1654,8 +1654,9 @@ keys, the same as an edit of those keys, so the undo would restore a
 key the user removed with it. Nothing reaches that today, since the
 reversals that run after later user edits take only a pass's or a
 close's facts, whose `state` writes are whole values (a character's
-faction, a faction's standing, a place's parent, unplaced mark and
-condition, an item's condition), with one exception. A close's stackable
+faction, traits, drives and voice, a faction's standing and agenda, a
+place's parent, unplaced mark and condition, an item's condition), with
+one exception. A close's stackable
 normalization writes a record, so its undo carries that guard. The same
 reach keeps the rule from
 splitting one move across two rows: undoing a turn's `<item>` or
