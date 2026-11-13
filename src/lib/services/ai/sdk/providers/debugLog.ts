@@ -1,29 +1,15 @@
-// Debug-panel logging shared by the SDK `fetch` adapters.
+// AI-specific debug logging for the SDK transports: Gemini safety metadata and stream aggregation.
+// The generic request/response helpers live in `#lib/services/http`.
 
+import {
+  isBinaryContentType,
+  logBinaryResponse,
+  logErrorResponse,
+  logJsonResponse,
+  type DebugEntry,
+  type ResponseLogger,
+} from '#lib/services/http/index.ts'
 import { debugLog } from '#lib/stores/debugLog.ts'
-
-const SENSITIVE_HEADERS = new Set(['authorization', 'x-api-key', 'api-key', 'x-goog-api-key'])
-const BINARY_CONTENT_TYPE = /^(image|audio)\/|octet-stream/
-const SCRUB_MIN_LENGTH = 1024
-const BASE64_BODY = /^[A-Za-z0-9+/_-]+={0,2}$/
-
-// Not `new Headers(init)`: it lowercases names, and the panel shows them as sent.
-function headerEntries(headers: HeadersInit | undefined): Iterable<[string, string]> {
-  if (!headers) return []
-  if (headers instanceof Headers || Array.isArray(headers)) return headers
-  return Object.entries(headers)
-}
-
-export function redactHeaders(headers: HeadersInit | undefined): Record<string, string> {
-  return Object.fromEntries(
-    Array.from(headerEntries(headers), ([key, value]) => [
-      key,
-      SENSITIVE_HEADERS.has(key.toLowerCase()) && value.length > 8
-        ? value.slice(0, 4) + '...' + value.slice(-4)
-        : value,
-    ]),
-  )
-}
 
 interface ProviderMetadata {
   promptFeedback?: unknown
@@ -57,99 +43,20 @@ function nonEmpty(metadata: ProviderMetadata): ProviderMetadata | undefined {
   return metadata.promptFeedback || metadata.safetyRatings ? metadata : undefined
 }
 
-export function isBinaryContentType(contentType: string): boolean {
-  return BINARY_CONTENT_TYPE.test(contentType)
-}
-
-/** Replaces a large `data:` URI or bare base64 string, so the payload stays small enough to show. */
-export function scrubBase64(value: unknown): unknown {
-  return typeof value === 'string' &&
-    value.length >= SCRUB_MIN_LENGTH &&
-    (value.startsWith('data:') || BASE64_BODY.test(value))
-    ? `[base64, ${value.length} chars]`
-    : value
-}
-
-export function describeRequestBody(body: RequestInit['body']): unknown {
-  if (typeof body === 'string') {
-    try {
-      return JSON.parse(body, (_key, value) => scrubBase64(value))
-    } catch {
-      return { raw: body.slice(0, 200) }
-    }
+/** Like the generic dispatcher, but an untyped success is a stream: the SDK's chat endpoints send SSE. */
+export const logSdkResponse: ResponseLogger = (response, entry) => {
+  const contentType = response.headers.get('content-type') ?? ''
+  if (!response.ok) {
+    void logErrorResponse(response.clone(), entry)
+  } else if (isBinaryContentType(contentType)) {
+    logBinaryResponse(response, entry)
+  } else if (contentType.includes('json')) {
+    void logJsonResponse(response.clone(), entry, (body) => ({
+      providerMetadata: providerMetadataOf(body),
+    }))
+  } else {
+    void logStreamResponse(response.clone(), entry)
   }
-  if (body instanceof FormData) return { formData: [...body.keys()] }
-  return undefined
-}
-
-export async function logErrorResponse(
-  response: Response,
-  debugId: string,
-  serviceId: string,
-  startTime: number,
-): Promise<void> {
-  try {
-    const text = await response.text()
-    let errorPayload
-    try {
-      errorPayload = JSON.parse(text)
-    } catch {
-      errorPayload = text
-    }
-    debugLog.addResponse(
-      debugId,
-      serviceId,
-      { status: response.status, statusText: response.statusText, error: errorPayload },
-      startTime,
-      text,
-    )
-  } catch (err) {
-    console.warn('[Fetch] Failed to read error response for logging:', err)
-  }
-}
-
-export async function logJsonResponse(
-  response: Response,
-  debugId: string,
-  serviceId: string,
-  startTime: number,
-): Promise<void> {
-  try {
-    const text = await response.text()
-    let body: unknown
-    try {
-      body = JSON.parse(text, (_key, value) => scrubBase64(value))
-    } catch {
-      body = scrubBase64(text)
-    }
-    debugLog.addResponse(
-      debugId,
-      serviceId,
-      { body, providerMetadata: providerMetadataOf(body) },
-      startTime,
-    )
-  } catch (err) {
-    console.warn('[Fetch] Failed to read JSON response for logging:', err)
-  }
-}
-
-/** Logs the type and size without reading the body. */
-export function logBinaryResponse(
-  response: Response,
-  debugId: string,
-  serviceId: string,
-  startTime: number,
-): void {
-  const length = response.headers.get('content-length')
-  debugLog.addResponse(
-    debugId,
-    serviceId,
-    {
-      contentType: response.headers.get('content-type'),
-      size: length === null ? undefined : Number(length),
-    },
-    startTime,
-  )
 }
 
 interface ToolCallDelta {
@@ -203,12 +110,8 @@ function isCompletionChunk(value: unknown): value is CompletionChunk {
   )
 }
 
-export async function logStreamResponse(
-  response: Response,
-  debugId: string,
-  serviceId: string,
-  startTime: number,
-): Promise<void> {
+export async function logStreamResponse(response: Response, entry: DebugEntry): Promise<void> {
+  const { debugId, serviceId, startTime } = entry
   try {
     const text = await response.text()
     let parsedBody: unknown = text
@@ -306,6 +209,7 @@ export async function logStreamResponse(
       debugId,
       serviceId,
       {
+        status: response.status,
         body: parsedBody,
         providerMetadata: nonEmpty(providerMetadata),
         stream: true,

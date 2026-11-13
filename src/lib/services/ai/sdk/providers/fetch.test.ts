@@ -2,13 +2,9 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 
 vi.mock('@tauri-apps/plugin-http', () => ({ fetch: vi.fn() }))
 
-// The real store is a rune module, which this suite cannot import.
-vi.mock('#lib/stores/debugLog.ts', () => ({
-  debugLog: { active: false, addRequest: vi.fn(), addResponse: vi.fn() },
-}))
-
 import { fetch as tauriHttpFetch } from '@tauri-apps/plugin-http'
 import { isAbortError } from '#lib/services/activity/describeError.ts'
+import { debugLog } from '#lib/stores/debugLog.ts'
 import { RequestTimeoutError } from '#lib/utils/error.ts'
 import { firstReadError } from '#lib/utils/idleTimeout.testing.ts'
 import { createTimeoutFetch } from './fetch'
@@ -317,5 +313,91 @@ describe('createTimeoutFetch manual body', () => {
     await createTimeoutFetch(60_000, 'test')('https://api.test/v1')
 
     expect(mockFetch.mock.calls[0][1]?.body).toBeUndefined()
+  })
+})
+
+describe('createTimeoutFetch debug log', () => {
+  const entries = (type: 'request' | 'response') =>
+    debugLog.snapshot().filter((e) => e.type === type)
+
+  beforeEach(() => {
+    mockFetch.mockReset()
+    debugLog.reset()
+    debugLog.active = true
+  })
+
+  afterEach(() => {
+    debugLog.active = false
+    debugLog.reset()
+  })
+
+  it('logs the JSON response unpatched, scrubbed, with its status', async () => {
+    mockFetch.mockResolvedValue(jsonResponse({ id: 'x', image: 'A'.repeat(2048) }))
+
+    const response = await createTimeoutFetch(60_000, 'test')('https://api.test/v1')
+    expect(await response.json()).toEqual({
+      id: 'x',
+      image: 'A'.repeat(2048),
+      usage: { input_tokens: 0, output_tokens: 0 },
+    })
+
+    await vi.waitFor(() => expect(entries('response')).toHaveLength(1))
+    expect(entries('response')[0].data).toEqual({
+      status: 200,
+      body: { id: 'x', image: '[base64, 2048 chars]' },
+      providerMetadata: undefined,
+    })
+  })
+
+  it('shows the body it sends, manual keys included, with the key redacted', async () => {
+    mockFetch.mockResolvedValue(jsonResponse({}))
+
+    await createTimeoutFetch(
+      60_000,
+      'test',
+      '{"top_k":5}',
+    )('https://api.test/v1', {
+      method: 'POST',
+      headers: { Authorization: 'Bearer sk-1234567890' },
+      body: JSON.stringify({ model: 'm' }),
+    })
+
+    expect(entries('request')[0].data).toMatchObject({
+      method: 'POST',
+      headers: { Authorization: 'Bear...7890' },
+      body: { model: 'm', top_k: 5 },
+    })
+  })
+
+  it('attaches to the debug id it is given', async () => {
+    mockFetch.mockResolvedValue(jsonResponse({}))
+
+    await createTimeoutFetch(60_000, 'test', '', 'turn-1')('https://api.test/v1')
+
+    expect(entries('request')[0].id).toBe('turn-1')
+  })
+
+  it('writes an error entry when the request times out', async () => {
+    vi.useFakeTimers()
+    mockFetch.mockImplementation(pendingUntilAborted)
+
+    const request = createTimeoutFetch(
+      5_000,
+      'test',
+    )('https://api.test/v1').catch((e: unknown) => e)
+    await vi.advanceTimersByTimeAsync(5_000)
+
+    expect(await request).toBeInstanceOf(RequestTimeoutError)
+    expect(entries('response')[0].data).toEqual({ error: 'Request timed out after 5s' })
+    vi.useRealTimers()
+  })
+
+  it('writes nothing while debug mode is off', async () => {
+    debugLog.active = false
+    mockFetch.mockResolvedValue(jsonResponse({}))
+
+    await createTimeoutFetch(60_000, 'test')('https://api.test/v1')
+
+    expect(debugLog.snapshot()).toEqual([])
   })
 })
