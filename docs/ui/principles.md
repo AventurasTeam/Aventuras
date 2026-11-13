@@ -317,6 +317,10 @@ reversals until the turn starts, so a reversal can't interrupt it,
 minutes long for a close, and the pill's, the composer's or the banner's
 `Cancel` ends the whole Send
 ([`generation-pipeline.md → Gate derivation as a selector`](../generation-pipeline.md#gate-derivation-as-a-selector)).
+A close's re-run differs the other way: it moves nothing, since the
+close it replaces stands, a head reversal reaching that chapter confirms
+as it would with no run in flight, and CTRL-Z only cancels it
+([`memory/chapter-close.md → Re-running a close`](../memory/chapter-close.md#re-running-a-close)).
 
 The turn and the close are atomic per their `action_id` (see
 [`data-model.md → Entry mutability & rollback`](../data-model.md#entry-mutability--rollback))
@@ -330,7 +334,7 @@ User-origin mutations to: story entries, entities (fields, status,
 state, `injection_mode`), happenings, awareness links, lore,
 threads, branch operations (rollback, switch, branch creation),
 chapter metadata edits (title, theme, summary, keywords), chapter
-delete, translations, story settings, app settings that feed
+delete and re-run, translations, story settings, app settings that feed
 `generationContext`, calendar swap, lead switch, mode switch,
 narration switch, manual `worldTime` correction, story-level
 backup / export when reachable from inside the story (the Actions

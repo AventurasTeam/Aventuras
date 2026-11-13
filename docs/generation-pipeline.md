@@ -58,7 +58,7 @@ interface Pipeline {
   phases: readonly PhaseNode[]
   affordance: 'invisible' | 'pill-only' | 'pill-and-banner'
   gateBehavior: 'hard-gate' | 'no-gate' // 'scoped-gate' deferred; no v1 kind declares 'no-gate'
-  interruptible?: 'pass' | 'close' // a head reversal or Cancel ends me and defers me, in this txState.deferred slot, to the next turn; see Prose reversals and the interrupt
+  interruptible?: 'pass' | 'close' // a head reversal or Cancel ends me and defers me, in this txState.deferred slot, to the next turn; a close's re-run defers nothing; see Prose reversals and the interrupt
   concurrencyPolicy: ConcurrencyPolicy
   chainsTo?: (run: RunState, ctx) => string | null | Promise<string | null> // awaited at commit while the run holds the gate; sources its own deps
   onPreflightFailure?: (ctx, error: PipelineError) => Promise<void> // pre-flight halts before phase 0, so only this hook ever sees that failure
@@ -578,6 +578,7 @@ type TxState = {
   pendingTurns: ReadonlySet<PendingTurn> // turns admitted in their branch queue whose run isn't registered yet; see Gate derivation as a selector
   deferred: ReadonlyMap<string /* branchId */, { pass?: true; close?: true }> // interrupted runs, run before that branch's next turn; in memory only; the orchestrator records it, and Send or a close entry's Retry clears a close no longer owed
   pendingClose: ReadonlyMap<string /* branchId */, { endEntryId: string }> // a manual close's pick, owed once phase 0's passes catch up; a close the threshold owes keeps none
+  pendingRerun: ReadonlyMap<string /* branchId */, { chapterId: string }> // a close's re-run, from its start to its end, whatever the outcome; never owed
 }
 
 type PendingTurn = { readonly branchId: string } // identity is the token, so a stale end can't free another turn's mark
@@ -588,7 +589,7 @@ type RunState = {
   actionId: string // globally unique; never reused
   storyId: string | null // read by chainsTo + config resolution
   branchId: string
-  interruptible: 'pass' | 'close' | null // copied from the pipeline at reserve; a head reversal or Cancel ends the run and defers it in this slot
+  interruptible: 'pass' | 'close' | 'rerun' | null // copied from the pipeline at reserve, 'rerun' for a close reserved under pendingRerun; a head reversal or Cancel ends the run and defers it in this slot, a 'rerun' in none
   beforeTurn: boolean // Send's owed work before the turn: the run Send started and every run it chains
   abortController: AbortController
   currentPhase: string // name of declared phase or parallel group
@@ -603,12 +604,13 @@ type RunState = {
 
 The orchestrator records `deferred` through the generation store, in
 the same update that removes the run: an `interruptible` run that ends
-`aborted` records, for its branch, the slot its declaration names (the
-pass declares `pass`, the close `close`), and a commit of a run
-declaring that slot clears it. A failure leaves the record as it
-stands. So every way a pass or a close is cancelled — the interrupt,
-the pill's or the banner's Cancel, Cancel & leave — defers it, and a
-failed one stays owed: Send runs it first again. Other writers only
+`aborted` records, for its branch, the slot the run carries (the pass
+`pass`, the close `close`), and a commit of a run carrying that slot
+clears it. A failure leaves the record as it stands. So every way a
+pass or a close is cancelled — the interrupt, the pill's or the
+banner's Cancel, Cancel & leave — defers it, and a failed one stays
+owed: Send runs it first again. A close's re-run carries `rerun`, which
+records and clears nothing. Other writers only
 clear: Send, or a close entry's `Retry`, clears its branch's `close`
 slot when `closeOwed` reads false, as after a rollback below the
 threshold ([chainsTo on predecessor](#chainsto-on-predecessor)), and
@@ -621,11 +623,19 @@ the threshold owes is derived fresh by `closeOwed` each time, so a
 rollback below the threshold leaves nothing stale, and no record means
 boundary selection. The manual start writes the pick as its run
 reserves, so a refused start leaves the pick before it standing, and a
-second pick overwrites the first. A close's commit clears it; a
-cancelled or failed close leaves it owed. `boundary` drops a pick whose
+second pick overwrites the first. A close's commit clears it, a
+re-run's doesn't; a cancelled or failed close leaves it owed. `boundary` drops a pick whose
 entry is no longer an open-region reply, failing the close, and a
 reversal that removes the entry drops it once its sweep has ended. A
 restart drops everything.
+
+`pendingRerun` holds a close's re-run from its start to its end, its
+chapter the one input a chained successor can't take. Every outcome
+clears it, and none defers anything: the close the re-run replaces
+stands, so its interrupt and Cancel record no slot, and a failure
+leaves nothing owed. A close started while it holds the branch runs as
+that chapter's re-run
+([`memory/chapter-close.md → Re-running a close`](./memory/chapter-close.md#re-running-a-close)).
 
 ### Gate derivation as a selector
 
@@ -1130,7 +1140,8 @@ in-progress (currentPhase iterates)
                                                       │    restores its pre-run status here
                                                       │  remove run from txState; an interruptible pass
                                                       │    or close records its deferral ('aborted') in
-                                                      │    the same update; a failure leaves it as it is
+                                                      │    the same update, a re-run none; a failure
+                                                      │    leaves it as it is
                                                       │  emit run_complete (outcome: 'aborted' | 'failed')
                                                       │  emit run_deferred (work: the slot) if the
                                                       │    deferral is newly recorded
@@ -1384,6 +1395,12 @@ async function nextMemoryRun(
   const status = await readClassifierStatus(run.branchId, ctx)
   // a persisted 'running' (a pass left unfinished) waits for boot, and nothing builds on its writes
   if (status.state === 'running') return null
+  // A re-run catches up through its chapter's end only, and never starts an owed close.
+  const rerun = pendingRerun.get(run.branchId)
+  if (rerun)
+    return (await unprocessedThroughChapter(rerun.chapterId, status.processedThrough, ctx)) > 0
+      ? 'periodic-classifier'
+      : 'chapter-close'
   const unprocessed = await unprocessedEntryCount(run.branchId, status.processedThrough, ctx)
   if (await closeOwed(story, ctx))
     return unprocessed > 0 ? 'periodic-classifier' : 'chapter-close'
@@ -1422,7 +1439,8 @@ const periodicClassifierPipeline: Pipeline = {
   chainsTo: async (run, ctx) => {
     if (passStartedAlone(run)) return null // inputs: { alone: true }
     const story = openStory(run)
-    return story && (await closeOwed(story, ctx)) ? nextMemoryRun(run, ctx) : null
+    const catchingUp = pendingRerun.has(run.branchId) || (story && (await closeOwed(story, ctx)))
+    return story && catchingUp ? nextMemoryRun(run, ctx) : null
   },
 }
 ```
@@ -1451,6 +1469,11 @@ pass first when entries are unprocessed, the close otherwise. The
 record is in memory: a restart drops it, and so does a reversal that
 removes that entry. A pass started alone, by a pass-failure entry's
 `Retry` or Run now, chains nothing and leaves an owed close to the next Send.
+A close's re-run records `pendingRerun` and starts the same way, with
+passes only while an entry through its chapter's end is unprocessed.
+The record takes precedence over an owed close, which waits for the
+next Send rather than running in the re-run's place, and the re-run
+chains nothing.
 
 Every chained run generates its **own fresh `actionId`**; the
 orchestrator never carries the predecessor's into the successor. A
@@ -1705,7 +1728,8 @@ update of a happening: it clusters only rows with an
 `occurred_at_entry_id`, and a user edit writes both columns.
 
 **A chapter delete keeps later writes from any source.** It reverses a
-close's group with turns above it, the one reversal that does
+chapter's close groups with turns above them, which only it and a
+close's re-run do
 ([`memory/chapter-close.md → Deleting a chapter`](./memory/chapter-close.md#deleting-a-chapter)).
 So the rule above widens for it: a field yields to any delta outside the
 set logged after it, whatever its source, except one that only moved
@@ -1714,7 +1738,27 @@ later writes too when it decides what a `state` reference will hold. It
 runs in the reversal bracket, refused while the gate is closed, and
 rechecks there that the chapter is still the latest. Removing only the
 divider seeds the same reversal with the chapter row's deltas and the
-stamps, and leaves the group's other deltas in the log.
+stamps, and leaves the group's other deltas in the log. Both seed from
+the chapter's close groups, the `chapter_close` groups that wrote its
+row, which a re-run adds to.
+
+**A close's re-run logs its reversal.** It reverses the chapter's lore
+work, every delta in those groups except those on `chapters` and
+`story_entries`, with the same set and plan as a delete, but prunes
+nothing. Each row change commits as a new delta under the re-run's
+`action_id`, its undo payload read from the row before the change: a
+removed row is a `delete` holding the whole row, a returned row a
+`create`, a changed field an `update`. The reversed deltas stay in the
+log, so undoing the re-run's group restores the close it replaced. It
+edits no delta outside itself. A plain reversal's re-owned creates and
+stranded-write prunes arise only on relationship rows, which no close
+writes; where it would edit a held delete's payload, the row stays
+deleted, and that delete's undo restores it as the close left it. A row
+the reversal deletes is held by its own `delete`, so a later write left
+in the log to that row is a held write. Reversing a union of groups
+replays deltas that cancel, so the delete and re-run confirms count
+what the plan changes, not the deltas it replays
+([`memory/chapter-close.md → Re-running a close`](./memory/chapter-close.md#re-running-a-close)).
 
 **Undoing a `create` consults no cascade.**
 A domain may register a cascade hook for its child rows, but that hook
@@ -2335,7 +2379,9 @@ head turn, CTRL-Z of the turn, rollback) or Cancel ends me, and I run
 before the branch's next turn instead
 ([Prose reversals and the interrupt](#prose-reversals-and-the-interrupt)).
 Its value names the `txState.deferred` slot that records me: the
-periodic classifier declares `'pass'`, chapter-close `'close'`.
+periodic classifier declares `'pass'`, chapter-close `'close'`. A
+close's re-run runs as `'rerun'`, which no slot records: the close it
+replaces stands, so nothing moves to the next turn.
 
 `concurrencyPolicy`:
 
@@ -2534,7 +2580,13 @@ run's abort then records it in `txState.deferred` for its branch
 ([Multi-run txState](#multi-run-txstate)), so the next Send runs it
 before the turn ([chainsTo on predecessor](#chainsto-on-predecessor)),
 and a toast says the memory update, or the chapter close, moved to
-the next turn. An interrupted pass restores its pre-run status and
+the next turn. A close's re-run records nothing, since the close it
+replaces stands, and a reversal that reaches that chapter confirms as
+it would with no run in flight. CTRL-Z during a re-run ends it and
+reverses nothing more: the run is the latest action, and its cancel is
+its undo
+([`memory/chapter-close.md → Re-running a close`](./memory/chapter-close.md#re-running-a-close)).
+An interrupted pass restores its pre-run status and
 leaves the watermark where it was. The status is restored by
 the pipeline's `onInterrupt` hook, which the orchestrator runs after
 the abort's reversal has committed and before the run releases the

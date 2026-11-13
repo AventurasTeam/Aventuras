@@ -899,7 +899,8 @@ CTRL-Z from the user reverses the entire chapter-close. Full design in
 [`memory/chapter-close.md`](./memory/chapter-close.md). Chapter-close
 holds the user-edit gate via `gateBehavior: 'hard-gate'`, and a head
 reversal or Cancel interrupts it and defers it to the next turn, as
-for a pass. The framework-level transaction +
+for a pass. A close's re-run defers nothing, since the close it
+replaces stands. The framework-level transaction +
 gate mechanism lives in
 [`generation-pipeline.md → Transaction lifecycle`](./generation-pipeline.md#transaction-lifecycle).
 

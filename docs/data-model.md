@@ -186,7 +186,7 @@ erDiagram
         text end_entry_id "FK-less ref into story_entries; always set — only closed chapters exist as rows"
         integer token_count "sum of content_tokens over the chapter's non-system entries at close; a snapshot, so a later edit in the chapter leaves it alone"
         integer closed_at
-        json close_report "what the close's deltas don't hold: its action_id, each tool call's task, rows, why, turns and result, each landed write's new value, the writes that didn't land and any task that stopped early; null on a chapter no close wrote. Kept out of the working-set store. See docs/memory/chapter-close.md → Review"
+        json close_report "what the close's deltas don't hold: its action_id, each tool call's task, rows, why, turns and result, each landed write's new value, the writes that didn't land and any task that stopped early, and on a re-run where its reversal ends; null on a chapter no close wrote. Kept out of the working-set store. See docs/memory/chapter-close.md → Review"
         integer embedding_stale "0 | 1; 1 = embedded fields (summary/theme) need (re-)embedding. Set on any embedded-field write whose content hash differs from the vector's source_hash (edit, create, or failed sync); cleared when the pre-retrieval sync stage embeds the row or content reverts to the embedded value. Still flagged at retrieval means the sync stage couldn't embed it (embedder unavailable), so it is excluded. See docs/memory/retrieval.md → Compute lifecycle"
         integer created_at
         integer updated_at
@@ -2595,8 +2595,8 @@ background fact about a surviving turn). Entity rows
 (and lore / thread / happening / chapter rows) are mutated in place for
 fast reads; the delta log is the history of record.
 
-**A reversal takes its deltas with it.** Every reversal removes the
-deltas it replays in the same transaction: CTRL-Z and rollback (below),
+**A reversal takes its deltas with it.** Every reversal but a close's
+re-run (below) removes the deltas it replays in the same transaction: CTRL-Z and rollback (below),
 and every run the pipeline reverses itself — an aborted or failed run,
 a crash-recovered orphan, a turn refused at admission. Deltas are never
 kept and marked reversed: a kept row would read as the next undo head
@@ -2611,7 +2611,11 @@ row was its target; and a relationship the reversal leaves absent takes
 its other logged writes with it
 ([`generation-pipeline.md → Reverse-replay`](./generation-pipeline.md#reverse-replay)).
 Forward writes only ever append; only a reversal prunes or edits, and
-what it edits is a delete's payload or a kept create's owner.
+what it edits is a delete's payload or a kept create's owner. One
+reversal prunes nothing: a close's re-run commits its reversal of the
+chapter's lore work as new deltas, so undoing the re-run restores the
+close it replaced
+([`generation-pipeline.md → Reverse-replay`](./generation-pipeline.md#reverse-replay)).
 
 User editing an entry's text does **not** auto-trigger re-classification.
 Text edits are separate from state edits; state stays put unless the user
@@ -2962,13 +2966,18 @@ by the same user-visible operation. Action boundaries:
   share one `action_id`; the passes chained ahead of it as phase 0
   hold their own, like any pass. CTRL-Z collapses the entire batch as a
   single unit, because a user who clicks "undo" expects the whole
-  "the chapter closed" event to disappear in one press.
+  "the chapter closed" event to disappear in one press. A close's
+  re-run is one unit too, and undoing it brings back the close it
+  replaced
+  ([`memory/chapter-close.md → Re-running a close`](./memory/chapter-close.md#re-running-a-close)).
 
 Algorithm:
 
 1. **Select the target group** — walk back from the head to the most
    recent _undoable unit_ (a user turn, a user edit, or a chapter close,
-   auto or manual), skipping `source = periodic_classifier` deltas.
+   auto or manual, or a close's re-run), skipping
+   `source = periodic_classifier` deltas. While a re-run is in flight,
+   CTRL-Z cancels it and selects nothing more.
    Background classifier work is never an undo target; its `action_id`
    exists only for crash recovery, so a classifier commit sitting at the
    literal head is stepped over.

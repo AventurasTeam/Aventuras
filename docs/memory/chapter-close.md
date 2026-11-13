@@ -294,6 +294,8 @@ entries are unprocessed, whether or not the cadence is due, with the
 close still owed. A pass's `chainsTo` returns another pass while a
 close is owed and entries remain unprocessed, and the close once none
 do ([`classifier.md → Pipeline framing`](./classifier.md#pipeline-framing)).
+A [re-run](#re-running-a-close) catches up the same way, through its
+chapter's end only.
 A close the threshold owes keeps no record; only a manual close
 records its end entry.
 Each pass covers one window, up to
@@ -828,11 +830,13 @@ queue, so the user reviews it after the fact. `chapters.close_report`
 holds what the deltas don't: the close's `action_id`, each tool call's
 task, rows, `why`, `turns` and result, each landed write's new value,
 the writes that didn't land, and any task that stopped early. A merge
-names the row that survived. It's written last, in the close's group.
+names the row that survived. It's written last, in the close's group. A
+[re-run](#re-running-a-close)'s report also holds `reversedThrough`,
+where its reversal ends.
 
 A delta holds only the prior value, so old values come from the deltas
-under that `action_id` and new ones from the report, cut to a bound; the
-row itself has the full text. A restated value wrote nothing, so the
+under that `action_id`, above a re-run's `reversedThrough`, and new
+ones from the report, cut to a bound; the row itself has the full text. A restated value wrote nothing, so the
 report holds no value for it and the review leaves it out. The review
 also leaves out stamps, `retrieval_count` resets and stackable
 normalization, which is code with no `why`, and a spelling cleanup. The
@@ -881,9 +885,11 @@ would strand entries before a closed one. The surface is
 [`chapter-timeline.md → Delete a chapter`](../ui/screens/chapter-timeline/chapter-timeline.md#delete-a-chapter).
 Neither mode can be undone.
 
-- **Delete the chapter.** The close's `action_id` group reverses: stamps
-  clear, merged rows come back, and lore it created goes, even a row the
-  user edited since, as any machine create does.
+- **Delete the chapter.** The chapter's close groups reverse, the
+  `chapter_close` groups that wrote its row: the close's and each
+  [re-run](#re-running-a-close)'s. Stamps clear, merged rows come back,
+  and lore it created goes, even a row the user edited since, as any
+  machine create does.
 - **Remove the divider only.** The chapter row, its report and its stamps
   reverse, and everything else the close did stays. Those deltas stay in
   the log, anchored on the end entry, so a rollback into the range still
@@ -912,3 +918,75 @@ on top of the kept work, at full cost.
 **Prose stays.** Turns since the chapter stay as written and can still
 reflect what the close added. Full coherence is a rollback to the
 chapter's last entry, then a delete.
+
+## Re-running a close
+
+When a close's output is poor overall, the user runs its lore work
+again, and CTRL-Z trades a worse second run back for the first while
+the re-run is the latest action: after a turn or an edit, CTRL-Z
+reaches it only through them. A
+re-run reverses what the chapter's close did to the world and runs
+phases 3 and 4 again. The chapter row, its end, stamps, title and
+summary stay: metadata is `Regenerate summary`'s
+([`chapter-timeline.md → Per-card actions`](../ui/screens/chapter-timeline/chapter-timeline.md#per-card-actions)).
+Like a delete, it takes only the latest chapter, since later closes
+build on an earlier one's merges, and only one a close wrote. It runs
+on the `lore-mgmt` assignment or the story's override, as a close does.
+The surface is
+[`chapter-timeline.md → Re-run a close`](../ui/screens/chapter-timeline/chapter-timeline.md#re-run-a-close).
+
+**One group, logged.** The re-run's group holds the reversal of the
+chapter's lore work, then its own writes. The lore work is every delta
+in the chapter's close groups except those on `chapters` and
+`story_entries`, the opposite of a divider-only removal's seed. The
+reversal logs each row change as a new delta rather than pruning
+([`generation-pipeline.md → Reverse-replay`](../generation-pipeline.md#reverse-replay)),
+so the close's deltas stay in the log, and reversing the re-run's
+group, by CTRL-Z, Cancel, a failure or crash recovery, restores the
+close, its report included. Later writes win, as for a delete. Every
+delta anchors on the end entry and is `chapter_close`, so the re-run's
+tasks don't read the reversal as a later turn's, and a rollback into
+the chapter takes all of it.
+
+**Run order.**
+
+1. Catch-up passes while an entry through the chapter's end is
+   unprocessed, as in [Phase 0](#phase-0--catch-up-passes). That
+   happens after an edit of the chapter's last turn while it's the head.
+   The re-run chains nothing, and an owed close waits for Send.
+2. The reversal, as one write.
+3. Steps 4 to 9 of the [run order](#run-order), with parts cut for the
+   current model and Awareness reading the chapter's existing summary.
+
+The report is an update of the chapter row, with the re-run's
+`action_id` and `reversedThrough`, the log position of the reversal's
+last delta, absent when it logged none. The [review](#review) reads the
+group above it, so it shows the re-run's changes against the chapter
+before any close, as a close's review does.
+
+Starting it refuses as a manual close's start does, and inside the
+reversal bracket it rechecks that the chapter is still the latest and
+has a close.
+
+**Nothing is owed after it**, since the close it replaces stands:
+
+| Outcome                         | Result                                                             |
+| ------------------------------- | ------------------------------------------------------------------ |
+| Commits                         | Its report replaces the close's, and CTRL-Z brings the close back  |
+| Cancel, or a head reversal      | The group reverses, and nothing is deferred                        |
+| A call that fails after retries | The group reverses, and the toast gives the reason                 |
+| A catch-up pass fails           | The chain ends as a failed pass's does, and the re-run doesn't run |
+| Crash                           | Boot recovery reverses the group, and nothing re-runs              |
+
+**Head reversals.** Regenerate interrupts a running close with no
+confirm because nothing of it has committed. Under a re-run the close
+it replaces has, so a head reversal reaching that chapter confirms as
+it would with no run in flight, its counts taking the close, which the
+interrupt restores. CTRL-Z during a re-run cancels it and undoes nothing
+else: the run is the latest action, and its cancel is its undo.
+
+On the same model a re-run is mostly a reroll.
+[Steering a re-run](../parked.md#steering-a-re-run),
+[re-running one task](../parked.md#re-running-one-close-task) and
+[comparing runs or trading one back later](../parked.md#comparing-close-runs-and-trading-one-back-later)
+are parked.

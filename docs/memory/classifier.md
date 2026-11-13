@@ -874,7 +874,8 @@ own unreversed orphans
 ([`generation-pipeline.md → chainsTo on predecessor`](../generation-pipeline.md#chainsto-on-predecessor)).
 The pass runs while the user reads the reply. A pass's own `chainsTo`
 returns another pass while a chapter close is owed and entries
-remain unprocessed, then the close
+remain unprocessed, then the close, and likewise for a close's re-run
+through its chapter's end
 ([`chapter-close.md → Phase 0`](./chapter-close.md#phase-0--catch-up-passes)).
 `[Run classifier now]` starts one directly, as a pass-failure
 entry's `Retry` does, and a pass started either way chains nothing. Send runs

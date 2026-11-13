@@ -145,10 +145,12 @@
   .progress-summary-placeholder { padding: 0 16px 12px; font-size: 12px; color: var(--ink-faint); font-style: italic; }
   .in-progress-actions { padding: 4px 16px 14px; }
   .close-chapter-btn { padding: 7px 18px; border: 1px solid var(--ink); border-radius: 4px; background: var(--ink); color: #fff; font-size: 13px; font-weight: 600; cursor: pointer; font-family: inherit; }
-  /* gen-in-flight (principles.md → Edit restrictions): the fields, Save, Delete… and Close chapter…
-     disable; Discard, Jump to chapter → and expand / collapse stay live. The script disables the inputs. */
+  /* gen-in-flight (principles.md → Edit restrictions): the fields, Save, Re-run close…, Delete… and
+     Close chapter… disable; Discard, Jump to chapter → and expand / collapse stay live. The script disables the inputs. */
   body[data-gen-state="in-flight"] .close-chapter-btn,
   body[data-gen-state="in-flight"] .save-btn,
+  body[data-gen-state="in-flight"] .card-action-rerun,
+  body[data-gen-state="in-flight"] #review-rerun,
   body[data-gen-state="in-flight"] .card-action-delete { opacity: 0.4; pointer-events: none; cursor: not-allowed; }
   body[data-gen-state="in-flight"] .field-input,
   body[data-gen-state="in-flight"] .chip-editor { background: var(--bg); color: var(--ink-muted); border-color: var(--line-soft); }
@@ -163,8 +165,15 @@
   .modal-backdrop { position: absolute; inset: 0; background: var(--bg-dim); z-index: 6; display: none; align-items: center; justify-content: center; }
   body[data-modal="close"] #modal-backdrop,
   body[data-modal="review"] #review-backdrop,
-  body[data-modal="delete"] #delete-backdrop { display: flex; }
-  /* Delete… shows on the latest chapter's card only. */
+  body[data-modal="delete"] #delete-backdrop,
+  body[data-modal="rerun"] #rerun-backdrop,
+  body[data-modal="review-rerun"] #review-backdrop,
+  body[data-modal="review-rerun"] #rerun-backdrop { display: flex; }
+  /* The re-run confirm stacks over the review window it was opened from (layout.md → Stacking). */
+  #rerun-backdrop { z-index: 7; }
+  /* Re-run close… and Delete… show on the latest chapter's card only, Re-run… on its review. */
+  body[data-latest="no"] .card-action-rerun,
+  body[data-latest="no"] #review-rerun,
   body[data-latest="no"] .card-action-delete { display: none; }
   .modal { width: 480px; background: var(--bg-region); border: 1px solid var(--line); border-radius: 8px; box-shadow: 0 8px 32px rgba(0,0,0,0.18); overflow: hidden; }
   .modal-head { padding: 14px 18px; border-bottom: 1px solid var(--line-soft); display: flex; align-items: center; }
@@ -258,12 +267,12 @@
     .card-head { padding: 10px 12px; }
     .card-body { padding: 12px; }
     /* Phone tier: keep Jump as the primary affordance, tuck Regenerate,
-       Review changes and Delete behind a ⋯ overflow trigger that opens a
+       Review changes, Re-run close and Delete behind a ⋯ overflow trigger that opens a
        Sheet (short) per layout.md → Surface bindings. Avoids the 2-row
        wrap that read as cluttered and gave Delete the same weight as Jump. */
     .card-actions { gap: 8px; }
     .card-action-jump { flex: 1 1 auto; min-width: 0; }
-    .card-action-regen, .card-action-review, .card-action-delete { display: none; }
+    .card-action-regen, .card-action-review, .card-action-rerun, .card-action-delete { display: none; }
     .card-action-more {
       display: inline-flex;
       align-items: center;
@@ -329,6 +338,7 @@
     <button class="rb-btn" data-modal="close">close chapter</button>
     <button class="rb-btn" data-modal="review">review window</button>
     <button class="rb-btn" data-modal="delete">delete chapter</button>
+    <button class="rb-btn" data-modal="rerun">re-run close</button>
   </div>
   <div class="rb-group">
     <span class="gl">not applied:</span>
@@ -449,12 +459,13 @@
           <button class="card-action card-action-jump">Jump to chapter &rarr;</button>
           <button class="card-action card-action-regen">Regenerate summary</button>
           <button class="card-action card-action-review" id="review-changes">Review changes</button>
+          <button class="card-action card-action-rerun" id="rerun-close">Re-run close&hellip;</button>
           <button class="card-action danger card-action-delete">Delete&hellip;</button>
           <!-- Phone-tier overflow trigger — primary action (Jump) stays
-               full-label; Regenerate, Review changes and Delete tuck behind
-               ⋯ which opens a Sheet (short) per layout.md → Surface bindings.
-               Visual placeholder; sheet content is those actions, Delete on
-               the latest chapter's card only. -->
+               full-label; Regenerate, Review changes, Re-run close and Delete
+               tuck behind ⋯ which opens a Sheet (short) per layout.md → Surface
+               bindings. Visual placeholder; sheet content is those actions,
+               Re-run close and Delete on the latest chapter's card only. -->
           <button class="card-action card-action-more" title="More actions">&middot;&middot;&middot;</button>
         </div>
 
@@ -633,6 +644,30 @@
   </div>
 </div>
 
+<!-- re-run confirm — chapter-timeline.md → Re-run a close. An AlertDialog: an outside click does
+     nothing. Primary, not destructive: CTRL-Z after it brings the close back. -->
+<div class="modal-backdrop" id="rerun-backdrop">
+  <div class="modal">
+    <div class="modal-head">
+      <span class="modal-title">Re-run chapter 2's close?</span>
+    </div>
+    <div class="modal-body">
+      <p class="modal-context">This reverses what the close did to the world and runs it again on Gemma 4 26B. The chapter, its title and summary stay.</p>
+      <ul class="delete-impact">
+        <li>2 lore rows removed, your edits included</li>
+        <li>31 other changes reversed</li>
+        <li>14 turns since stay as written. What they changed stays, and the re-run leaves it alone</li>
+      </ul>
+      <p class="modal-context">A close is the costliest call the app makes: this one reads 24,310 tokens of story.</p>
+      <p class="modal-context">CTRL-Z brings this close back until your next turn or edit.</p>
+    </div>
+    <div class="modal-foot">
+      <button class="btn" id="rerun-cancel">Cancel</button>
+      <button class="btn primary" id="rerun-confirm">Re-run close</button>
+    </div>
+  </div>
+</div>
+
 <!-- review window — chapter-timeline.md → Review window, on card 2's chapter. The sketch's rows,
      with their citations moved into this chapter's entries 23–58: a close refuses a turn outside it. -->
 <div class="modal-backdrop" id="review-backdrop">
@@ -688,6 +723,7 @@
       </div>
     </div>
     <div class="modal-foot">
+      <button class="btn" id="review-rerun">Re-run&hellip;</button>
       <button class="btn primary" id="review-done">Done</button>
     </div>
   </div>
@@ -750,7 +786,7 @@
     b.addEventListener('click', () => setCardState(b.dataset.cardState));
   });
 
-  // whether card 2 stands in for the latest chapter, the only one with Delete…
+  // whether card 2 stands in for the latest chapter, the only one with Re-run close… and Delete…
   function setLatest(state) {
     body.dataset.latest = state;
     document.querySelectorAll('.rb-btn[data-latest]').forEach(b => {
@@ -834,6 +870,8 @@
 
   // review changes opens the review window
   document.getElementById('review-changes').addEventListener('click', () => setModal('review'));
+  document.getElementById('rerun-close').addEventListener('click', () => setModal('rerun'));
+  document.getElementById('review-rerun').addEventListener('click', () => setModal('review-rerun'));
 
   // delete opens its confirm
   document.querySelector('.card-action-delete').addEventListener('click', () => setModal('delete'));
@@ -892,13 +930,18 @@
   ['delete-cancel', 'delete-divider', 'delete-confirm'].forEach(id => {
     document.getElementById(id).addEventListener('click', () => setModal('hidden'));
   });
+  // Cancel returns to the review the confirm was opened from; confirming closes both.
+  document.getElementById('rerun-cancel').addEventListener('click', () =>
+    setModal(body.dataset.modal === 'review-rerun' ? 'review' : 'hidden'));
+  document.getElementById('rerun-confirm').addEventListener('click', () => setModal('hidden'));
   ['modal-backdrop', 'review-backdrop'].forEach(id => {
     document.getElementById(id).addEventListener('click', (e) => {
       if (e.target.id === id) setModal('hidden');
     });
   });
   document.addEventListener('keydown', (e) => {
-    if (e.key === 'Escape' && body.dataset.modal !== 'hidden') setModal('hidden');
+    if (e.key === 'Escape' && body.dataset.modal === 'review-rerun') setModal('review');
+    else if (e.key === 'Escape' && body.dataset.modal !== 'hidden') setModal('hidden');
   });
 </script>
 

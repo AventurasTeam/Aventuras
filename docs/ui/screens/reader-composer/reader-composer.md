@@ -274,7 +274,11 @@ prompting every time would nag.
 **While the chained pass or close still runs**, regenerate
 interrupts it instead, with no confirm: nothing of it has committed to
 re-run. The pass or close moves to the next turn, and a toast says so
-([During a memory update](#during-a-memory-update)).
+([During a memory update](#during-a-memory-update)). A close's
+[re-run](../chapter-timeline/chapter-timeline.md#re-run-a-close) is the
+exception: the close it replaces has committed, so a regenerate reaching
+that chapter confirms as below, counting that close, which the
+interrupt restores.
 
 **Confirm when the turn closed a chapter.** If a committed chapter
 close ends on this turn, as a manual close may, its
@@ -331,6 +335,16 @@ A close that commits shows `Chapter closed: <title>`, or
 `Chapter closed, but 2 tasks stopped early` as a warning, with a
 `Review` button opening the
 [review window](../chapter-timeline/chapter-timeline.md#review-window).
+
+A close's
+[re-run](../chapter-timeline/chapter-timeline.md#re-run-a-close) shows
+a close's progress and moves nothing to the next turn, since the close
+it replaces stands. An interrupt or Cancel shows
+`Re-run cancelled. Chapter 5's close is as it was.`, a failure the
+warning `Re-run failed. Chapter 5's close is as it was.` with its
+reason, and a commit `Chapter 5's close re-ran`, with `Review`, a
+warning when tasks stopped early. CTRL-Z while it runs cancels it and
+undoes nothing else.
 
 At the next Send the deferred or failed work runs first, the banner
 reading `Updating memory before your turn…`, or for a close its own

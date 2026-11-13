@@ -1900,6 +1900,42 @@ single reversal group a CTRL-Z relies on.
 Parked 2026-10-31; the signal is play showing failures common enough
 that the lost work matters.
 
+#### Re-running one close task
+
+A re-run reverses and repeats a chapter's whole lore work
+([`memory/chapter-close.md → Re-running a close`](./memory/chapter-close.md#re-running-a-close)).
+Re-running one task, Identity or Threads alone, would reverse only that
+task's writes, but deltas carry no task, and tasks feed each other:
+every later task reads Happenings' merges, and Threads, Upkeep and
+Lifecycle read Identity's writes, within a part and across parts.
+
+Parked 2026-11-13; the signal is whole re-runs used to fix one area.
+
+#### Steering a re-run
+
+On the same model a close's re-run is mostly a reroll, which can repeat
+the first run's mistakes. A note from the user, or the first run's
+report shown to the second, could steer it, at the cost of a prompt
+section every task carries.
+
+Parked 2026-11-13; the signal is re-runs that don't improve on the
+first.
+
+#### Comparing close runs and trading one back later
+
+CTRL-Z trades a close's re-run back for the close it replaced only while
+the re-run is the latest action; after a turn or an edit it reaches the
+re-run only by undoing them, prose included. The first run's review
+goes with it, so comparing the two takes an undo, a look and a redo,
+which any write or a restart clears. Both have a cheap path, since the
+logged reversal keeps the first run's deltas: a "previous run" view
+reading its report from the undo payload of the re-run's report update,
+and a `Restore previous run` that logs a reversal of the re-run's group
+under later-writes-win.
+
+Parked 2026-11-13; the signal is users wanting to compare runs, or to
+trade one back after playing on.
+
 #### An unattributed pass fact can be lost to a reversal
 
 A pass fact whose reply named no source turn falls back to the window

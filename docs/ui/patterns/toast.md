@@ -35,6 +35,9 @@ Used by:
   A chapter close that commits, info severity, or warning when a task
   stopped early, with a `Review` action opening the
   [review window](../screens/chapter-timeline/chapter-timeline.md#review-window).
+  A chapter close's re-run that commits, the same with `Review`; one
+  cancelled, info severity, or failed, warning severity, with no
+  action, both saying the close is as it was.
 - Any surface whose generation call came back with far fewer input
   tokens than were sent
   ([`architecture.md → Truncation cross-check`](../../architecture.md#truncation-cross-check))

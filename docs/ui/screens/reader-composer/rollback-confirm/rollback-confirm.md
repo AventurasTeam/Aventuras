@@ -25,7 +25,11 @@ Cross-cutting principles:
   via the status pill or composer cancel. A memory pass or a chapter
   close is the exception: rollback stays enabled, and confirming
   interrupts it. A pass or a close a failure entry's `Retry` started is
-  not, nor is a Send's owed work: they hold rollback until they end.
+  not, nor is a Send's owed work: they hold rollback until they end. A
+  close's
+  [re-run](../../chapter-timeline/chapter-timeline.md#re-run-a-close)
+  is interrupted the same way, but moves nothing to the next turn, since
+  the close it replaces stands, and the counts take that close.
 
 ## Two visible states
 
@@ -196,7 +200,9 @@ mechanism rather than the hover-preview.
   the `×` stays enabled and the modal opens as usual. While it is open
   it recounts each time a run settles under it, per [Counts](#counts).
   Confirming interrupts the pass or close and moves it to the next
-  turn, with its deferral toast. If the set the commit then resolves
+  turn, with its deferral toast; a close's re-run moves nothing and
+  shows its cancelled toast, and the counts take the close it replaces.
+  If the set the commit then resolves
   differs from the counts on screen, the commit refuses
   `counts-changed`: the counts-changed toast shows and the modal
   re-opens on the fresh counts.

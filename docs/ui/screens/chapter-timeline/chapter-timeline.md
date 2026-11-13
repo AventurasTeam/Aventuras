@@ -11,7 +11,7 @@ The reader's chapter popover handles **glance + jump + simple
 close**. This screen handles everything richer: viewing the
 LLM-generated metadata (summary, theme, keywords), editing it,
 closing the current chapter with explicit end-entry picking, and
-deleting the latest chapter.
+re-running or deleting the latest chapter's close.
 
 Cross-cutting principles that govern this screen are in
 [principles.md](../../principles.md). Relevant sections:
@@ -23,8 +23,8 @@ Cross-cutting principles that govern this screen are in
   per-row edit affordances.
 - [Edit restrictions during in-flight generation](../../principles.md#edit-restrictions-during-in-flight-generation) —
   while a generation pipeline is in flight, an expanded card's fields
-  and Save, `Delete…` and `Close chapter…` disable with the
-  principle's tooltip. `Discard`, `Jump to chapter →` and expanding or
+  and Save, `Re-run close…`, `Delete…`, `Close chapter…` and the
+  review window's `Re-run…` disable with the principle's tooltip. `Discard`, `Jump to chapter →` and expanding or
   collapsing a card stay live: a draft can always be thrown away, and
   navigation and reads aren't gated. The chapter-close pipeline
   itself surfaces the banner affordance specified in the principle.
@@ -143,20 +143,20 @@ Read-only context shown alongside (not part of the form):
 ### Per-card actions
 
 Buttons in a row beneath the form, before the card's save bar on
-tablet and desktop, four on the latest chapter's card and three on
+tablet and desktop, five on the latest chapter's card and three on
 the others:
 
 - **Jump to chapter →** — routes back to the reader scrolled to the
   chapter's start entry. No state mutation.
 - **Regenerate summary** — re-runs only the LLM metadata-generation
   step (title / summary / theme / keywords) on the chapter's
-  existing range. Idempotent for the metadata layer; does NOT
-  re-run lore-management (that's a destructive re-application and
-  out of scope for v1 — see
-  [open questions](#screen-specific-open-questions)). Confirm modal
+  existing range. Idempotent for the metadata layer; the lore work is
+  [`Re-run close…`](#re-run-a-close)'s. Confirm modal
   warns "this overwrites the current title/summary/theme/keywords."
 - **Review changes** — opens the [review window](#review-window) for
   this chapter's close. Hidden on a chapter no close wrote.
+- **Re-run close…** — on the latest chapter's card only, hidden on a
+  chapter no close wrote. Opens the [re-run confirm](#re-run-a-close).
 - **Delete…** — destructive, on the latest chapter's card only. Opens
   the [delete confirm](#delete-a-chapter). It undoes what the close did
   and leaves the chapter's entries in place. Removing entries is
@@ -209,8 +209,10 @@ generation pipeline is in flight:
 └──────────────────────────────────────────────────┘
 ```
 
-- **Counts.** Rows the close created, then the other changes it made.
-  The third line is omitted when no turn followed the chapter.
+- **Counts.** Rows the close created, then the other changes it made,
+  counted by what the reversal changes, not by the deltas it replays,
+  which cancel after a [re-run](#re-run-a-close). The third line is
+  omitted when no turn followed the chapter.
 - **The line after the list** reads the open region as the delete would
   leave it. With auto-close on and the region at the threshold, it's the
   line above. Under the threshold, `A close waits until the chapter grows
@@ -224,6 +226,56 @@ past the threshold.` With auto-close off,
 
 The reader beneath stays where it is, and the chapter's inline break
 goes.
+
+### Re-run a close
+
+Runs the latest chapter's lore work again, and CTRL-Z after it brings
+the close back
+([`chapter-close.md → Re-running a close`](../../../memory/chapter-close.md#re-running-a-close)).
+Opened from the card's `Re-run close…` or the review window's
+`Re-run…`. An [AlertDialog](../../patterns/alert-dialog.md), disabled
+while a generation pipeline is in flight:
+
+```
+┌──── Re-run chapter 5's close? ───────────────────┐
+│                                                  │
+│  This reverses what the close did to the world   │
+│  and runs it again on <model>. The chapter, its  │
+│  title and summary stay.                         │
+│                                                  │
+│  • 2 lore rows removed, your edits included      │
+│  • 31 other changes reversed                     │
+│  • 14 turns since stay as written. What they     │
+│    changed stays, and the re-run leaves it alone │
+│                                                  │
+│  A close is the costliest call the app makes:    │
+│  this one reads 24,310 tokens of story.          │
+│                                                  │
+│  CTRL-Z brings this close back until your next   │
+│  turn or edit.                                   │
+│                                                  │
+│               [ Cancel ]  [ Re-run close ]       │
+└──────────────────────────────────────────────────┘
+```
+
+- **Counts** read as [the delete's](#delete-a-chapter), net. When the
+  close changed nothing in the world, the list is one line,
+  `The close changed nothing in the world.`
+- **Cost.** The framing names the model the re-run uses, and the line
+  after the list the chapter's token count. No money estimate: the app
+  holds no pricing.
+- **`Re-run close`** is primary, not destructive, since CTRL-Z reverses
+  it while it is the latest action. After a turn or an edit, CTRL-Z
+  reaches it only through them.
+- **Counts stay true while it is open,** as the rollback modal's do
+  ([`rollback-confirm.md → Counts`](../reader-composer/rollback-confirm/rollback-confirm.md#counts)):
+  they recount as runs settle, and the start refuses `counts-changed`
+  with the fresh counts. If a close landed while it was open, the re-run
+  is refused with a toast, as the delete is.
+
+While it runs, the reader's banner shows a close's progress, and its
+toasts are
+[`reader-composer.md → During a memory update`](../reader-composer/reader-composer.md#during-a-memory-update)'s.
 
 ## In-progress chapter card
 
@@ -431,7 +483,7 @@ close stands.
 │     wry, joking → short, flat sentences             │
 │     He stops joking after Oss. entry 118 →          │
 │                                                     │
-│                                          [ Done ]   │
+│                              [ Re-run… ]  [ Done ]  │
 └─────────────────────────────────────────────────────┘
 ```
 
@@ -459,9 +511,17 @@ close stands.
   doesn't press.
 - **No per-change revert.** Reverting a merge or a delete isn't simple,
   and the old value is on screen. CTRL-Z undoes the whole close while it
-  is the latest action, and [`Delete…`](#delete-a-chapter) after that.
+  is the latest action, or after a re-run brings back the close it
+  replaced, and [`Delete…`](#delete-a-chapter) after that.
+- **`Re-run…`** in the footer, on the latest chapter's window, disabled
+  while a run is in flight, opens the [re-run confirm](#re-run-a-close)
+  over the window. `Cancel` returns to the review; confirming closes it.
+- **After a re-run** the window shows the re-run's report, its changes
+  against the chapter before any close, as a close's are; the reversal
+  that came first stays out.
 - **If the close reverses while the window is open,** the window closes,
-  since its chapter is gone. A toast's `Review` does nothing by then.
+  since its chapter is gone. A toast's `Review` does nothing by then. A
+  re-run's commit, or its undo, closes it too: its report is replaced.
 
 ## Empty state
 
@@ -503,12 +563,12 @@ end-entry picker in-flow inside it.
   plus a `⋯` overflow trigger. `[Jump to chapter →]` keeps its full
   label as the primary affordance (navigation, non-destructive,
   most-used). `Regenerate summary`, `Review changes` and, on the latest
-  chapter's card, `Delete…` tuck behind the `⋯` chip, which opens a Sheet (short) on phone per
+  chapter's card, `Re-run close…` and `Delete…` tuck behind the `⋯` chip, which opens a Sheet (short) on phone per
   [`mobile/layout.md → Surface bindings`](../../foundations/mobile/layout.md#surface-bindings--existing-app-surfaces).
   Same pattern as the
   [World detail-head's `⋯` overflow menu](../world/world.md#detail-head-structure);
-  both destructive actions retain their existing confirmation flows
-  inside the Sheet. Desktop and tablet keep every button inline (the
+  the actions that confirm keep their confirmation flows inside the
+  Sheet. Desktop and tablet keep every button inline (the
   row fits naturally).
 - **Save bar** leaves the card on phone and sits at the surface's
   bottom edge when a card is dirty, below the card list, per
@@ -529,6 +589,10 @@ end-entry picker in-flow inside it.
   push content past viewport height. No Modal-over-Sheet stacking
   introduced; the surface stack stays flat per
   [`mobile/layout.md → Stacking`](../../foundations/mobile/layout.md#stacking).
+- **Re-run confirm** opened from the review window stacks over its
+  Sheet on phone, the confirm-from-inside case
+  [`mobile/layout.md → Stacking`](../../foundations/mobile/layout.md#stacking)
+  allows.
 - **Entry-row anatomy** (start row, picker trigger, dropdown
   items) unchanged on phone. Single-line `text-overflow: ellipsis`
   handles narrow widths; time chip right-aligned.
@@ -542,15 +606,6 @@ end-entry picker in-flow inside it.
 
 ## Screen-specific open questions
 
-- **Re-run lore-mgmt for a closed chapter.** The Regenerate summary
-  action only re-runs the metadata layer. Re-running lore-mgmt
-  (Phase 3 of the chapter-close pipeline — lore creation, identity
-  compaction, awareness pin tuning, happenings consolidation) would
-  overwrite consolidated state; that's destructive and gated.
-  Likely answer: "available, but only via an explicit consent-modal
-  heavy enough that users don't fire it casually." See
-  [`docs/memory/chapter-close.md`](../../../memory/chapter-close.md)
-  for the phase contract.
 - **Bulk chapter operations.** Multi-select to regenerate summaries
   across chapters at once. Defer; matches
   the
