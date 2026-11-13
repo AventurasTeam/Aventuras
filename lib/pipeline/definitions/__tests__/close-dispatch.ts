@@ -20,7 +20,7 @@ import type { CloseIds } from '../close-agent/ids'
 import { CloseLedgerWriter } from '../close-agent/ledger'
 import { tableOfId, type CloseTool, type ReadFields } from '../close-agent/tool'
 import {
-  closeClustersOf,
+  closeClusterOf,
   closeIdsOf,
   seedCloseLedger,
   setCloseClusters,
@@ -112,8 +112,7 @@ async function* dispatchPhase(
     ids,
     readFields: spec.readFields ?? {},
     survivorOf: (table, id) => writer.survivorOf(table, id),
-    clusterOf: (happeningId) =>
-      closeClustersOf(phase.intermediates).find((cluster) => cluster.includes(happeningId)),
+    clusterOf: (happeningId) => closeClusterOf(phase.intermediates, happeningId),
     landedCalls: (tool) => writer.landedCalls(tool),
     phase,
     taskEntryIds: turns.taskEntryIds,

@@ -98,3 +98,11 @@ export function closeClustersOf(
 ): readonly (readonly string[])[] {
   return (intermediates[CLUSTERS_KEY] as readonly (readonly string[])[] | undefined) ?? []
 }
+
+/** The cluster the range embed put `happeningId` in; undefined when none. */
+export function closeClusterOf(
+  intermediates: Record<string, unknown>,
+  happeningId: string,
+): readonly string[] | undefined {
+  return closeClustersOf(intermediates).find((cluster) => cluster.includes(happeningId))
+}
