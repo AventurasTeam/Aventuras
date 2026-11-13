@@ -24,7 +24,10 @@ type AwarenessUpsertPayload = {
   learnedAtEntryId?: string | null
   decayResistance?: number | null
   source?: string | null
-  /** Honoured on a user-source create and on a chapter_close write; an invalid value rejects the action regardless. */
+  /**
+   * Honoured on a user-source create and on a chapter_close write; an invalid value rejects the
+   * action regardless.
+   */
   retrievalCount?: number
   /**
    * A pass's source entry (cadence.md → User edits and classifier writes): user writes after it
