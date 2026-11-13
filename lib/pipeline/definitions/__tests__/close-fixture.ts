@@ -1,4 +1,4 @@
-import { eq } from 'drizzle-orm'
+import { eq, sql } from 'drizzle-orm'
 
 import { applyDeltaAction } from '@/lib/actions/delta/apply-delta-action'
 import { __resetRegistrationGuard, registerAllDomains } from '@/lib/actions/delta/registrations'
@@ -205,6 +205,20 @@ export async function setClassifierStatus(
     .update(branches)
     .set({ classifierStatus: { lastSuccessAt: null, lastError: null, ...status } })
     .where(eq(branches.id, f.branchId))
+}
+
+/** The app's positional query seam (`queryRows`) over the fixture's db, binding each `?` in order. */
+export function queryAllOn(
+  db: DbCtx['db'],
+): (query: string, params: unknown[]) => Promise<unknown[][]> {
+  return async (query, params) => {
+    const [head, ...rest] = query.split('?')
+    const statement = sql.join([
+      sql.raw(head),
+      ...rest.flatMap((piece, i) => [sql`${params[i]}`, sql.raw(piece)]),
+    ])
+    return db.all<unknown[]>(statement)
+  }
 }
 
 /**
