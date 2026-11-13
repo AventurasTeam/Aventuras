@@ -3,7 +3,7 @@
 import { debugLog } from '#lib/stores/debugLog.ts'
 
 const SENSITIVE_HEADERS = new Set(['authorization', 'x-api-key', 'api-key', 'x-goog-api-key'])
-const BINARY_CONTENT_TYPE = /^(image|audio)\/|octet-stream/
+const BINARY_CONTENT_TYPE = /^(image|audio|video)\/|octet-stream/
 const SCRUB_MIN_LENGTH = 1024
 const BASE64_BODY = /^[A-Za-z0-9+/_-]+={0,2}$/
 

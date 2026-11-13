@@ -104,6 +104,17 @@ describe('logResponse', () => {
     expect(response.bodyUsed).toBe(false)
   })
 
+  it('logs a video by type and size and leaves the body unread', () => {
+    const response = new Response(new Uint8Array(4), {
+      headers: { 'content-type': 'video/mp4', 'content-length': '4' },
+    })
+
+    logResponse(response, entry)
+
+    expect(written()).toContainEqual({ status: 200, contentType: 'video/mp4', size: 4 })
+    expect(response.bodyUsed).toBe(false)
+  })
+
   it('logs an untyped body as binary rather than reading it as text', () => {
     const response = new Response(new Uint8Array([1, 2, 3]))
     response.headers.delete('content-type')
