@@ -379,6 +379,49 @@ const HAPPENINGS_B: Record<string, unknown> = {
   closeWritesSoFar: '- merge_happenings The ford gives way (hp1): kept hp1',
 }
 
+// Two closes' Awareness tasks: rows, summary, turns and writes so far all differ.
+const AWARENESS_A: Record<string, unknown> = {
+  closeAwarenessRows: [
+    {
+      happening: { id: 'hp1', title: 'The siege' },
+      rows: [
+        {
+          id: 'aw1',
+          character: { id: 'c1', name: 'Kael' },
+          decayResistance: 0.4,
+          source: 'saw the gate fall',
+          learnedAt: 't3',
+          list: 'chapter',
+        },
+      ],
+    },
+  ],
+  closeChapterSummary: 'Kael crossed the marsh and lost the sigil to the water.',
+  closeChapterTurns: { first: 't1', last: 't9' },
+  closeWritesSoFar: '- merge_happenings The siege (hp1): kept hp1',
+}
+
+const AWARENESS_B: Record<string, unknown> = {
+  closeAwarenessRows: [
+    {
+      happening: { id: 'hp2', title: 'The debt' },
+      rows: [
+        {
+          id: 'aw2',
+          character: { id: 'c3', name: 'Mora' },
+          decayResistance: null,
+          source: '',
+          learnedAt: '',
+          list: 'frequent',
+        },
+      ],
+    },
+  ],
+  closeChapterSummary: 'Mora waited at the ford with a lantern.',
+  closeChapterTurns: { first: 't10', last: 't14' },
+  closeWritesSoFar: '',
+}
+
 type RenderCase = {
   templateId: TemplateId
   first: Record<string, unknown>
@@ -443,6 +486,12 @@ const RENDER_CASES: RenderCase[] = [
     second: HAPPENINGS_B,
     systemShows: ['This is an automated system.', 'Each is what the lead does, says or attempts'],
   },
+  {
+    templateId: TEMPLATE_IDS.closeAwareness,
+    first: AWARENESS_A,
+    second: AWARENESS_B,
+    systemShows: ['This is an automated system.', 'Each is what the lead does, says or attempts'],
+  },
 ]
 
 // Stands in, on the bundled pack, for the deferred pack validator's system-half warning
@@ -474,6 +523,9 @@ describe('bundled system halves read only what the story fixes', () => {
       },
     })
     expect(unallowedSystemReads(probed, probe, CLOSE_SYSTEM_VARIABLES)).toEqual([
+      'closeAwarenessRows',
+      'closeChapterSummary',
+      'closeChapterTurns',
       'closeCharacters',
       'closeFactions',
       'closeHappeningClusters',
@@ -488,6 +540,9 @@ describe('bundled system halves read only what the story fixes', () => {
       'entries',
     ])
     expect(unallowedSystemReads(probed, probe, [])).toEqual([
+      'closeAwarenessRows',
+      'closeChapterSummary',
+      'closeChapterTurns',
       'closeCharacters',
       'closeFactions',
       'closeHappeningClusters',

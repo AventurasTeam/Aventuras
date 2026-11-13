@@ -40,6 +40,7 @@ describe('bundled pack', () => {
     chapterMetadataPart: 'chapter',
     chapterMetadataMerge: 'chapter',
     closeHappenings: 'chapter',
+    closeAwareness: 'chapter',
     closeLore: 'chapter',
     closeIdentity: 'chapter',
     closeThreads: 'chapter',

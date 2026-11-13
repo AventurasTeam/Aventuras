@@ -5,6 +5,7 @@ import { CHAPTER_METADATA } from './chapter-metadata'
 import { CHAPTER_METADATA_MERGE } from './chapter-metadata-merge'
 import { CHAPTER_METADATA_PART } from './chapter-metadata-part'
 import { CLASSIFIER_MODE_RULE } from './classifier-mode-rule'
+import { CLOSE_AWARENESS } from './close-awareness'
 import { CLOSE_HAPPENINGS } from './close-happenings'
 import { CLOSE_IDENTITY } from './close-identity'
 import { CLOSE_INSTRUCTIONS } from './close-instructions'
@@ -80,6 +81,7 @@ export const bundledPack: Pack = {
       CHAPTER_METADATA_MERGE,
     ),
     [TEMPLATE_IDS.closeHappenings]: template(TEMPLATE_IDS.closeHappenings, CLOSE_HAPPENINGS),
+    [TEMPLATE_IDS.closeAwareness]: template(TEMPLATE_IDS.closeAwareness, CLOSE_AWARENESS),
     [TEMPLATE_IDS.closeLore]: template(TEMPLATE_IDS.closeLore, CLOSE_LORE),
     [TEMPLATE_IDS.closeIdentity]: template(TEMPLATE_IDS.closeIdentity, CLOSE_IDENTITY),
     [TEMPLATE_IDS.closeThreads]: template(TEMPLATE_IDS.closeThreads, CLOSE_THREADS),
