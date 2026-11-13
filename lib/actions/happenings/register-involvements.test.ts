@@ -6,19 +6,21 @@ import {
   deltas,
   entities,
   happenings,
+  happeningAwareness,
   happeningInvolvements,
   stories,
   type NewHappeningInvolvement,
 } from '@/lib/db'
 import { createTestDb } from '@/lib/db/__tests__/test-db'
-import { happeningInvolvementsStore } from '@/lib/stores'
+import { happeningAwarenessStore, happeningInvolvementsStore } from '@/lib/stores'
 
+import { registerHappeningAwareness } from './register-awareness'
 import { registerHappenings } from './register-happenings'
 import { registerHappeningInvolvements } from './register-involvements'
 import { applyDeltaAction, applyDeltaActionGroupWithOutcomes } from '../delta/apply-delta-action'
 import { __resetRegistry } from '../delta/registry'
 import { reverseReplayDeltas } from '../delta/reverse-replay'
-import { USER_EDITED_SINCE_PROSE } from '../delta/user-precedence'
+import { USER_EDITED_SINCE_PROSE, userDeletedHappeningLink } from '../delta/user-precedence'
 import { registerEntities } from '../entities/register'
 import { registerStoryEntries } from '../story-entries/register'
 import type { DeltaSource, PipelineAction } from '../types'
@@ -207,57 +209,57 @@ describe('happening_involvements CRUD arms', () => {
   })
 })
 
+const PROSE = 'e_prose'
+type Ctx = Awaited<ReturnType<typeof setup>>['ctx']
+type Db = Awaited<ReturnType<typeof setup>>['db']
+
+async function setupWithProse() {
+  const harness = await setup()
+  registerStoryEntries()
+  await harness.db.insert(entities).values({
+    id: 'char_2',
+    branchId: 'br_1',
+    kind: 'character',
+    name: 'Bren',
+    status: 'active',
+    injectionMode: 'auto',
+    createdAt: 1,
+    updatedAt: 1,
+  })
+  await harness.db
+    .insert(happenings)
+    .values({ id: 'hap_2', branchId: 'br_1', title: 'The flood', createdAt: 1, updatedAt: 1 })
+  return harness
+}
+
+const run = (ctx: Ctx, action: PipelineAction, actionId: string) =>
+  applyDeltaAction({ action, actionId, branchId: 'br_1' }, ctx)
+
+const writeProse = (ctx: Ctx) =>
+  run(
+    ctx,
+    {
+      kind: 'createStoryEntry',
+      source: 'ai_classifier',
+      payload: {
+        entry: {
+          id: PROSE,
+          branchId: 'br_1',
+          position: 1,
+          kind: 'ai_reply',
+          content: 'Char and Bren fight the fire.',
+          createdAt: 1,
+        },
+      },
+    },
+    'act_prose',
+  )
+
 // cadence.md → User edits and classifier writes: an involvement the user removed after the prose a
 // close cites stays removed.
 describe('createHappeningInvolvement under user precedence', () => {
-  const PROSE = 'e_prose'
   const userWon = { status: 'rejected', reason: USER_EDITED_SINCE_PROSE, code: 'noop' }
   const CARRIED: NewHappeningInvolvement = { ...INV, id: 'hinv_carried' }
-
-  type Ctx = Awaited<ReturnType<typeof setup>>['ctx']
-  type Db = Awaited<ReturnType<typeof setup>>['db']
-
-  async function setupWithProse() {
-    const harness = await setup()
-    registerStoryEntries()
-    await harness.db.insert(entities).values({
-      id: 'char_2',
-      branchId: 'br_1',
-      kind: 'character',
-      name: 'Bren',
-      status: 'active',
-      injectionMode: 'auto',
-      createdAt: 1,
-      updatedAt: 1,
-    })
-    await harness.db
-      .insert(happenings)
-      .values({ id: 'hap_2', branchId: 'br_1', title: 'The flood', createdAt: 1, updatedAt: 1 })
-    return harness
-  }
-
-  const run = (ctx: Ctx, action: PipelineAction, actionId: string) =>
-    applyDeltaAction({ action, actionId, branchId: 'br_1' }, ctx)
-
-  const writeProse = (ctx: Ctx) =>
-    run(
-      ctx,
-      {
-        kind: 'createStoryEntry',
-        source: 'ai_classifier',
-        payload: {
-          entry: {
-            id: PROSE,
-            branchId: 'br_1',
-            position: 1,
-            kind: 'ai_reply',
-            content: 'Char and Bren fight the fire.',
-            createdAt: 1,
-          },
-        },
-      },
-      'act_prose',
-    )
 
   // `proseEntryId` undefined builds a payload without the key, so "absent" is tested as absent.
   const involve = (
@@ -382,5 +384,107 @@ describe('createHappeningInvolvement under user precedence', () => {
     })
     expect(await involvementsOf(db, 'hap_1', 'char_1')).toEqual([])
     expect((await involvementsOf(db, 'hap_1', 'char_2')).map((r) => r.id)).toEqual(['hinv_bren'])
+  })
+})
+
+type LinkTable = {
+  name: string
+  /** Links char_1 to the happening; the new row's id. */
+  add: (ctx: Ctx, happeningId: string) => Promise<string>
+  remove: (id: string) => PipelineAction
+}
+
+const LINK_TABLES: readonly LinkTable[] = [
+  {
+    name: 'an involvement',
+    add: async (ctx, happeningId) => {
+      const id = `hinv_${happeningId}`
+      await run(
+        ctx,
+        {
+          kind: 'createHappeningInvolvement',
+          source: 'ai_classifier',
+          payload: { entry: { ...INV, id, happeningId } },
+        },
+        `act_add_${id}`,
+      )
+      return id
+    },
+    remove: (id) => ({
+      kind: 'deleteHappeningInvolvement',
+      source: 'user_edit',
+      payload: { branchId: 'br_1', id },
+    }),
+  },
+  {
+    name: 'an awareness row',
+    add: async (ctx, happeningId) => {
+      await run(
+        ctx,
+        {
+          kind: 'upsertHappeningAwareness',
+          source: 'ai_classifier',
+          payload: {
+            branchId: 'br_1',
+            characterId: 'char_1',
+            happeningId,
+            decayResistance: 0.5,
+            proseEntryId: null,
+          },
+        },
+        `act_add_haw_${happeningId}`,
+      )
+      const [row] = await ctx.db
+        .select({ id: happeningAwareness.id })
+        .from(happeningAwareness)
+        .where(eq(happeningAwareness.happeningId, happeningId))
+      if (row === undefined) throw new Error(`no awareness on ${happeningId}`)
+      return row.id
+    },
+    remove: (id) => ({
+      kind: 'deleteHappeningAwareness',
+      source: 'user_edit',
+      payload: { branchId: 'br_1', id },
+    }),
+  },
+]
+
+describe.each(LINK_TABLES)('userDeletedHappeningLink over $name', ({ add, remove }) => {
+  async function setupLinks() {
+    const harness = await setupWithProse()
+    registerHappeningAwareness()
+    happeningAwarenessStore.__reset()
+    happeningAwarenessStore.hydrate('br_1', [])
+    return harness
+  }
+
+  const deletedOn = (ctx: Ctx, happeningId: string) =>
+    userDeletedHappeningLink({ branchId: 'br_1', happeningId, proseEntryId: PROSE }, ctx)
+
+  it('reads a removal after the prose as deleted', async () => {
+    const { ctx } = await setupLinks()
+    const id = await add(ctx, 'hap_1')
+    await writeProse(ctx)
+    await run(ctx, remove(id), 'act_remove')
+
+    expect(await deletedOn(ctx, 'hap_1')).toBe(true)
+  })
+
+  it('reads no removal before the prose', async () => {
+    const { ctx } = await setupLinks()
+    const id = await add(ctx, 'hap_1')
+    await run(ctx, remove(id), 'act_remove')
+    await writeProse(ctx)
+
+    expect(await deletedOn(ctx, 'hap_1')).toBe(false)
+  })
+
+  it("reads no removal on another happening's links", async () => {
+    const { ctx } = await setupLinks()
+    const id = await add(ctx, 'hap_2')
+    await writeProse(ctx)
+    await run(ctx, remove(id), 'act_remove')
+
+    expect(await deletedOn(ctx, 'hap_1')).toBe(false)
   })
 })
