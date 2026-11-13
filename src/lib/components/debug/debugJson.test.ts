@@ -6,35 +6,122 @@ function entry(data: Record<string, unknown>, id = 'debug-1'): DebugLogEntry {
   return { id, timestamp: 0, type: 'request', serviceName: 'narrative', data }
 }
 
+const text = (data: Record<string, unknown>, readable = false) =>
+  formatEntryJson(entry(data), readable).text
+
+/** Throws when `JSON.stringify` reaches it. */
+const unserializable = {
+  toJSON(): never {
+    throw new Error('cannot serialize')
+  },
+}
+
 afterEach(() => {
   vi.restoreAllMocks()
 })
 
 describe('formatEntryJson', () => {
   it('pretty-prints the entry data', () => {
-    expect(formatEntryJson(entry({ a: 1 }), false)).toBe('{\n  "a": 1\n}')
+    expect(text({ a: 1 })).toBe('{\n  "a": 1\n}')
   })
 
-  it('renders escaped newlines as line breaks only when asked', () => {
-    const e = entry({ text: 'one\ntwo' })
-    expect(formatEntryJson(e, false)).toContain('one\\ntwo')
-    expect(formatEntryJson(e, true)).toContain('one\ntwo')
+  it('renders escaped newlines as line breaks only when readable', () => {
+    const data = { text: 'one\ntwo' }
+    expect(text(data)).toContain('one\\ntwo')
+    expect(text(data, true)).toContain('one\ntwo')
   })
 
   it('cuts circular references instead of throwing', () => {
     const data: Record<string, unknown> = { name: 'loop' }
     data.self = data
-    expect(formatEntryJson(entry(data), false)).toContain('"[Circular]"')
+    expect(text(data)).toContain('"self": "[Circular]"')
   })
 
-  it('truncates past the display limit and reports the full size', () => {
-    const out = formatEntryJson(entry({ big: 'x'.repeat(MAX_DISPLAY_CHARS) }), false)
-    expect(out).toContain('truncated')
-    expect(out.length).toBeLessThan(MAX_DISPLAY_CHARS + 200)
+  it('does not mark a shared reference that is not a cycle', () => {
+    const shared = { n: 1 }
+    expect(text({ a: shared, b: shared })).not.toContain('Circular')
+  })
+
+  it('shows a bigint as text', () => {
+    expect(text({ n: 12n })).toContain('"12n"')
+  })
+
+  it('leaves values with toJSON to stringify', () => {
+    expect(text({ when: new Date(0) })).toContain('1970-01-01T00:00:00.000Z')
   })
 
   it('throws when the data cannot be serialized at all', () => {
-    expect(() => formatEntryJson(entry({ n: 1n }), false)).toThrow()
+    expect(() => text({ bad: unserializable })).toThrow('cannot serialize')
+  })
+
+  it('does not let a __proto__ key change the prototype', () => {
+    const data = JSON.parse('{"__proto__": {"x": 1}}') as Record<string, unknown>
+    expect(text(data)).toContain('"__proto__"')
+  })
+})
+
+describe('JSON text', () => {
+  const data = { body: { content: { text: '{"ids":[1,2],"note":"a\\nb"}' } }, plain: '{ not json' }
+
+  it('flags a string that holds JSON and leaves it a string when not readable', () => {
+    const out = formatEntryJson(entry(data), false)
+    expect(out.jsonText).toBe(true)
+    expect(JSON.parse(out.text)).toEqual(data)
+  })
+
+  it('expands it into the value it holds when readable', () => {
+    const out = formatEntryJson(entry(data), true)
+    expect(out.jsonText).toBe(true)
+    expect(out.text).toContain('"ids": [\n')
+    expect(out.text).not.toContain('{"ids"')
+  })
+
+  it('expands JSON text nested in JSON text', () => {
+    const inner = JSON.stringify({ deep: true })
+    const outer = JSON.stringify({ inner })
+    expect(text({ outer }, true)).toContain('"deep": true')
+  })
+
+  it('does not flag text that only looks like JSON', () => {
+    const out = formatEntryJson(
+      entry({ a: '{ not json', b: '[base64, 2048 chars]', c: 'plain' }),
+      true,
+    )
+    expect(out.jsonText).toBe(false)
+    expect(out.text).toContain('"{ not json"')
+  })
+})
+
+describe('truncation', () => {
+  const marginFor = (out: string) => out.length - MAX_DISPLAY_CHARS
+
+  it('cuts a giant string and still gives valid JSON', () => {
+    const out = text({ big: 'x'.repeat(MAX_DISPLAY_CHARS * 2), after: 'kept?' })
+
+    const parsed = JSON.parse(out) as Record<string, string>
+    expect(parsed.big).toMatch(/… \[\d[\d,]* more chars\]$/)
+    expect(marginFor(out)).toBeLessThan(200)
+    expect(parsed['…']).toBe('1 more keys')
+  })
+
+  it('collapses the rest of a long array into one marker', () => {
+    const list = Array.from({ length: 100_000 }, (_, i) => `item ${i}`)
+    const out = text({ list })
+
+    const parsed = JSON.parse(out) as { list: string[] }
+    expect(parsed.list.at(-1)).toMatch(/^… [\d,]+ more items$/)
+    expect(parsed.list.length).toBeLessThan(list.length)
+    expect(marginFor(out)).toBeLessThan(200)
+  })
+
+  it('cuts a string made mostly of escapes near the limit', () => {
+    const out = text({ big: '\n'.repeat(MAX_DISPLAY_CHARS) })
+    expect(JSON.parse(out)).toBeTruthy()
+    expect(marginFor(out)).toBeLessThan(200)
+  })
+
+  it('leaves data under the limit alone', () => {
+    expect(text({ a: 'x'.repeat(1000) })).not.toContain('more')
   })
 })
 
@@ -53,23 +140,31 @@ describe('DebugJsonCache', () => {
     const before = entry({ a: 1 })
     const after = { ...before, data: { a: 1, b: 2 } }
     cache.get(before, false)
-    expect(cache.get(after, false)).toContain('"b": 2')
+    expect(cache.get(after, false).text).toContain('"b": 2')
   })
 
-  it('recomputes when the newline flag flips', () => {
+  it('recomputes when the readable flag flips', () => {
     const cache = new DebugJsonCache()
-    const e = entry({ text: 'one\ntwo' })
-    expect(cache.get(e, false)).toContain('one\\ntwo')
-    expect(cache.get(e, true)).toContain('one\ntwo')
-    expect(cache.get(e, false)).toContain('one\\ntwo')
+    const e = entry({ text: 'one\ntwo', json: '{"a":1}' })
+    expect(cache.get(e, false).text).toContain('one\\ntwo')
+    expect(cache.get(e, true).text).toContain('one\ntwo')
+    expect(cache.get(e, true).text).toContain('"a": 1')
+    expect(cache.get(e, false).text).toContain('one\\ntwo')
+  })
+
+  it('reports JSON text for either mode', () => {
+    const cache = new DebugJsonCache()
+    const e = entry({ json: '{"a":1}' })
+    expect(cache.get(e, false).jsonText).toBe(true)
+    expect(cache.get(e, true).jsonText).toBe(true)
   })
 
   it('does not cache a serialization failure', () => {
     const logged = vi.spyOn(console, 'error').mockImplementation(() => {})
     const cache = new DebugJsonCache()
-    const e = entry({ n: 1n })
-    expect(cache.get(e, false)).toContain('Serialization error')
-    expect(cache.get(e, false)).toContain('Serialization error')
+    const e = entry({ bad: unserializable })
+    expect(cache.get(e, false).text).toContain('Serialization error')
+    expect(cache.get(e, false).text).toContain('Serialization error')
     expect(logged).toHaveBeenCalledTimes(2)
   })
 })

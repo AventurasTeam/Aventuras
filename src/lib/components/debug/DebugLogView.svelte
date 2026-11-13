@@ -187,7 +187,11 @@
   }
 
   function formatJson(entry: DebugLogEntry): string {
-    return jsonCache.get(entry, debug.readableView)
+    return jsonCache.get(entry, debug.readableView).text
+  }
+
+  function hasJsonText(entry: DebugLogEntry): boolean {
+    return jsonCache.get(entry, debug.readableView).jsonText
   }
 
   async function copyToClipboard(entry: DebugLogEntry) {
@@ -344,9 +348,7 @@
             ? 'text-blue-400 hover:text-blue-500'
             : 'text-muted-foreground hover:text-foreground'}
           onclick={onToggleReadableView}
-          title={debug.readableView
-            ? 'Show escaped newlines (\\n)'
-            : 'Render newlines as line breaks'}
+          title={debug.readableView ? 'Show raw strings' : 'Render newlines and expand JSON text'}
         >
           <WrapText class="size-4" />
         </Button>
@@ -454,6 +456,14 @@
                         class="bg-secondary text-secondary-foreground rounded px-1.5 py-0.5 font-mono text-xs"
                       >
                         {formatDuration(group.response.duration)}
+                      </span>
+                    {/if}
+                    {#if hasJsonText(group.response)}
+                      <span
+                        class="bg-secondary text-secondary-foreground rounded px-1.5 py-0.5 font-mono text-xs"
+                        title="A string in this response holds JSON; the readable view expands it"
+                      >
+                        JSON text
                       </span>
                     {/if}
                   </div>

@@ -817,6 +817,12 @@ a clone, taken only while debug mode is on. A reply the caller will cancel (a re
 `followRedirects: false`, an `allowStatuses` status) is logged by status alone, because a live clone
 would keep the plugin's body open on the Rust side.
 
+The log viewer's readable view (`debug.readableView`) renders escaped newlines as line breaks and
+expands a string value that holds JSON (a structured-output reply's text) into the value it holds;
+an entry with such a string gets a "JSON text" badge either way. An entry over the display limit is
+trimmed value by value, with `… N more items` / `… [N more chars]` markers, so the text stays valid
+JSON; the readable view is for reading, not parsing. Export and the store hold the raw entries.
+
 Entries are written to `stores/debugLog.ts`, a plain module with no runes or Tauri imports, so
 transports and their tests need no store mock. `debug.svelte.ts` wraps it for reactivity and the
 pop-out window.
