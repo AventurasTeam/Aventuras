@@ -4,7 +4,15 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { applyDeltaAction } from '@/lib/actions/delta/apply-delta-action'
 import type { PipelineAction } from '@/lib/actions/types'
 import type { ResolveModelConfig } from '@/lib/ai'
-import { happeningInvolvements, storyEntries } from '@/lib/db'
+import {
+  branches,
+  entities,
+  happeningInvolvements,
+  happenings,
+  stories,
+  storyEntries,
+  type StoryMode,
+} from '@/lib/db'
 import { makeLogger } from '@/lib/diagnostics'
 import { generateId } from '@/lib/ids'
 import { resetAllStores } from '@/lib/stores'
@@ -27,6 +35,8 @@ const SASH = 'hap_00000000-0000-4000-8000-00000000e104'
 const WREN_TWIN = 'char_00000000-0000-4000-8000-00000000e004'
 const FORD = 'loc_00000000-0000-4000-8000-00000000e005'
 const GONE = 'char_00000000-0000-4000-8000-00000000e0ff'
+const ELSEWHERE = 'char_00000000-0000-4000-8000-00000000e0aa'
+const OTHER_BRANCH = 'br_other'
 
 // As the range embed stores them: each cluster in anchor order.
 const CLUSTERS: readonly (readonly string[])[] = [
@@ -388,6 +398,79 @@ describe('happeningsTask', () => {
       { id: 'c2', name: 'Tobin' },
       { id: 'c1', name: 'Wren' },
     ])
+  })
+
+  it("shows only this branch's rows when a sibling branch holds rows under the same ids", async () => {
+    await seedClusters(f)
+    await f.ctx.db
+      .insert(branches)
+      .values({ id: OTHER_BRANCH, storyId: f.storyId, name: 'other', createdAt: 1 })
+    await f.ctx.db.insert(entities).values({
+      id: ELSEWHERE,
+      branchId: OTHER_BRANCH,
+      kind: 'character',
+      name: 'Elsewhere',
+      status: 'active',
+      injectionMode: 'auto',
+      createdAt: 1,
+      updatedAt: 1,
+    })
+    await f.ctx.db.insert(happenings).values({
+      id: LIGHT,
+      branchId: OTHER_BRANCH,
+      title: 'The light, on another branch',
+      occurredAtEntryId: f.entries[2]!.id,
+      commonKnowledge: 0,
+      createdAt: 1,
+      updatedAt: 1,
+    })
+    // One link on the sibling branch, and one on this branch to an entity only the sibling holds.
+    await f.ctx.db.insert(happeningInvolvements).values(
+      [OTHER_BRANCH, f.branchId].map((branchId) => ({
+        id: generateId('hinv'),
+        branchId,
+        happeningId: LIGHT,
+        entityId: ELSEWHERE,
+        role: null,
+      })),
+    )
+
+    const start = await happeningsTask.start(
+      promptContextFor(f, idsWithTurns(f), clustered(CLUSTERS)),
+    )
+
+    expect(start?.show.clusters[0]?.[0]).toMatchObject({
+      title: 'A light on the far bank',
+      cast: [
+        { id: 'c1', name: 'Mara' },
+        { id: 'c2', name: 'Wren' },
+      ],
+    })
+  })
+
+  it("puts the story mode's rule in the system half", async () => {
+    await seedClusters(f)
+    const render = async (mode: StoryMode) => {
+      const [story] = await f.ctx.db
+        .select({ definition: stories.definition })
+        .from(stories)
+        .where(eq(stories.id, f.storyId))
+      await f.ctx.db
+        .update(stories)
+        .set({ definition: { ...story!.definition!, mode } })
+        .where(eq(stories.id, f.storyId))
+      const ctx = promptContextFor(f, idsWithTurns(f), clustered(CLUSTERS))
+      const start = await happeningsTask.start(ctx)
+      return happeningsTask.render(start!, { ...ctx, writesSoFar: '' }).system
+    }
+
+    const adventure = await render('adventure')
+    const creative = await render('creative')
+
+    expect(adventure).toContain('Each is what the lead does, says or attempts')
+    expect(adventure).not.toContain('Each is a direction or prose')
+    expect(creative).toContain('Each is a direction or prose')
+    expect(creative).not.toContain('Each is what the lead does, says or attempts')
   })
 
   it('renders the clusters and the writes so far in the user half, and no chapter text anywhere', async () => {
