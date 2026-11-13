@@ -343,8 +343,8 @@ it replaces stands. An interrupt or Cancel shows
 `Re-run cancelled. Chapter 5's close is as it was.`, a failure the
 warning `Re-run failed. Chapter 5's close is as it was.` with its
 reason, and a commit `Chapter 5's close re-ran`, with `Review`, a
-warning when tasks stopped early. CTRL-Z while it runs cancels it and
-undoes nothing else.
+warning when tasks stopped early. CTRL-Z is refused while it runs, and
+Cancel stops it.
 
 At the next Send the deferred or failed work runs first, the banner
 reading `Updating memory before your turn…`, or for a close its own

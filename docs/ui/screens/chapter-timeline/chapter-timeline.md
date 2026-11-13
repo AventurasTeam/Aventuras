@@ -156,7 +156,9 @@ the others:
 - **Review changes** — opens the [review window](#review-window) for
   this chapter's close. Hidden on a chapter no close wrote.
 - **Re-run close…** — on the latest chapter's card only, hidden on a
-  chapter no close wrote. Opens the [re-run confirm](#re-run-a-close).
+  chapter no close wrote, and disabled while a close is owed, with the
+  tooltip `Close the open chapter first.` Opens the
+  [re-run confirm](#re-run-a-close).
 - **Delete…** — destructive, on the latest chapter's card only. Opens
   the [delete confirm](#delete-a-chapter). It undoes what the close did
   and leaves the chapter's entries in place. Removing entries is
@@ -209,10 +211,8 @@ generation pipeline is in flight:
 └──────────────────────────────────────────────────┘
 ```
 
-- **Counts.** Rows the close created, then the other changes it made,
-  counted by what the reversal changes, not by the deltas it replays,
-  which cancel after a [re-run](#re-run-a-close). The third line is
-  omitted when no turn followed the chapter.
+- **Counts.** Rows the close created, then the other changes it made.
+  The third line is omitted when no turn followed the chapter.
 - **The line after the list** reads the open region as the delete would
   leave it. With auto-close on and the region at the threshold, it's the
   line above. Under the threshold, `A close waits until the chapter grows
@@ -233,8 +233,9 @@ Runs the latest chapter's lore work again, and CTRL-Z after it brings
 the close back
 ([`chapter-close.md → Re-running a close`](../../../memory/chapter-close.md#re-running-a-close)).
 Opened from the card's `Re-run close…` or the review window's
-`Re-run…`. An [AlertDialog](../../patterns/alert-dialog.md), disabled
-while a generation pipeline is in flight:
+`Re-run…`, both disabled while a close is owed. An
+[AlertDialog](../../patterns/alert-dialog.md), disabled while a
+generation pipeline is in flight:
 
 ```
 ┌──── Re-run chapter 5's close? ───────────────────┐
@@ -245,8 +246,12 @@ while a generation pipeline is in flight:
 │                                                  │
 │  • 2 lore rows removed, your edits included      │
 │  • 31 other changes reversed                     │
-│  • 14 turns since stay as written. What they     │
-│    changed stays, and the re-run leaves it alone │
+│                                                  │
+│  3 turns since the close are removed first:      │
+│  • 6 entries (91–96)                             │
+│  • 12 world-state changes                        │
+│  They go for good, even if the re-run fails or   │
+│  you cancel it.                                  │
 │                                                  │
 │  A close is the costliest call the app makes:    │
 │  this one reads 24,310 tokens of story.          │
@@ -258,20 +263,26 @@ while a generation pipeline is in flight:
 └──────────────────────────────────────────────────┘
 ```
 
-- **Counts** read as [the delete's](#delete-a-chapter), net. When the
-  close changed nothing in the world, the list is one line,
+- **Counts** read as [the delete's](#delete-a-chapter). When the close
+  changed nothing in the world, the list is one line,
   `The close changed nothing in the world.`
+- **Turns since the close.** When turns followed the chapter's latest
+  close or re-run, the re-run removes them first, and the block counts
+  them as the [rollback confirm](../reader-composer/rollback-confirm/rollback-confirm.md#counts)
+  does. It's omitted when none did. The rollback can't be undone: CTRL-Z
+  after the re-run brings the close back, not those turns.
 - **Cost.** The framing names the model the re-run uses, and the line
   after the list the chapter's token count. No money estimate: the app
   holds no pricing.
 - **`Re-run close`** is primary, not destructive, since CTRL-Z reverses
-  it while it is the latest action. After a turn or an edit, CTRL-Z
-  reaches it only through them.
+  the re-run while it is the latest action. After a turn or an edit,
+  CTRL-Z reaches it only through them.
 - **Counts stay true while it is open,** as the rollback modal's do
   ([`rollback-confirm.md → Counts`](../reader-composer/rollback-confirm/rollback-confirm.md#counts)):
   they recount as runs settle, and the start refuses `counts-changed`
   with the fresh counts. If a close landed while it was open, the re-run
-  is refused with a toast, as the delete is.
+  is refused with a toast, as the delete is. Every refusal comes before
+  the turns go.
 
 While it runs, the reader's banner shows a close's progress, and its
 toasts are
@@ -514,11 +525,11 @@ close stands.
   is the latest action, or after a re-run brings back the close it
   replaced, and [`Delete…`](#delete-a-chapter) after that.
 - **`Re-run…`** in the footer, on the latest chapter's window, disabled
-  while a run is in flight, opens the [re-run confirm](#re-run-a-close)
+  while a run is in flight or a close is owed, with the card's tooltips,
+  opens the [re-run confirm](#re-run-a-close)
   over the window. `Cancel` returns to the review; confirming closes it.
 - **After a re-run** the window shows the re-run's report, its changes
-  against the chapter before any close, as a close's are; the reversal
-  that came first stays out.
+  against the chapter before any close, as a close's are.
 - **If the close reverses while the window is open,** the window closes,
   since its chapter is gone. A toast's `Review` does nothing by then. A
   re-run's commit, or its undo, closes it too: its report is replaced.

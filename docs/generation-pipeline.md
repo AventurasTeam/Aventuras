@@ -578,7 +578,7 @@ type TxState = {
   pendingTurns: ReadonlySet<PendingTurn> // turns admitted in their branch queue whose run isn't registered yet; see Gate derivation as a selector
   deferred: ReadonlyMap<string /* branchId */, { pass?: true; close?: true }> // interrupted runs, run before that branch's next turn; in memory only; the orchestrator records it, and Send or a close entry's Retry clears a close no longer owed
   pendingClose: ReadonlyMap<string /* branchId */, { endEntryId: string }> // a manual close's pick, owed once phase 0's passes catch up; a close the threshold owes keeps none
-  pendingRerun: ReadonlyMap<string /* branchId */, { chapterId: string }> // a close's re-run, from its start to its end, whatever the outcome; never owed
+  pendingRerun: ReadonlyMap<string /* branchId */, { chapterId: string }> // a close's re-run, for its chain's life, whatever ends it; never owed
 }
 
 type PendingTurn = { readonly branchId: string } // identity is the token, so a stale end can't free another turn's mark
@@ -623,18 +623,22 @@ the threshold owes is derived fresh by `closeOwed` each time, so a
 rollback below the threshold leaves nothing stale, and no record means
 boundary selection. The manual start writes the pick as its run
 reserves, so a refused start leaves the pick before it standing, and a
-second pick overwrites the first. A close's commit clears it, a
-re-run's doesn't; a cancelled or failed close leaves it owed. `boundary` drops a pick whose
+second pick overwrites the first. A close's commit clears it; a
+cancelled or failed close leaves it owed. `boundary` drops a pick whose
 entry is no longer an open-region reply, failing the close, and a
 reversal that removes the entry drops it once its sweep has ended. A
 restart drops everything.
 
-`pendingRerun` holds a close's re-run from its start to its end, its
-chapter the one input a chained successor can't take. Every outcome
-clears it, and none defers anything: the close the re-run replaces
-stands, so its interrupt and Cancel record no slot, and a failure
-leaves nothing owed. A close started while it holds the branch runs as
-that chapter's re-run
+`pendingRerun` holds a close's re-run for its chain's life, its
+chapter the one input a chained successor can't take. It's written as
+the chain starts and cleared as the chain ends, whatever ends it: a
+refused start, a catch-up pass that fails, is cancelled or is
+interrupted, or the re-run's own end. The re-run defers nothing: the
+close it replaces stands, so its interrupt and Cancel record no slot,
+and its failure leaves nothing owed. A catch-up pass of its chain
+defers or stays owed as any pass does, since its entries still need
+it. A close started while it holds the
+branch runs as that chapter's re-run
 ([`memory/chapter-close.md → Re-running a close`](./memory/chapter-close.md#re-running-a-close)).
 
 ### Gate derivation as a selector
@@ -1172,7 +1176,10 @@ CREATE TABLE pipeline_runs (
 Atomicity windows worth being honest about:
 
 - Between start marker and first delta — nothing to reverse, just
-  delete the row.
+  delete the row. A close's re-run is the exception once its reversal
+  has committed: its journal sits under the run's `actionId` with no
+  delta of the run's own, and recovery writes it back
+  ([Reverse-replay](#reverse-replay)).
 - Between consecutive deltas — standard reverse-replay path.
 - Between the final delta and the `commitRun` marker UPDATE —
   small data-loss window (tens of milliseconds). The run
@@ -1302,7 +1309,8 @@ can't happen; chained runs don't run simultaneously), so pretty UI
 for it isn't worth designing.
 
 Zero-reverse orphans don't mount the modal: the pre-first-delta case,
-where nothing reached disk, and a close whose reversal failed and whose
+where nothing reached disk (a re-run whose journal is written back
+counts as reversed, not zero), and a close whose reversal failed and whose
 deltas a second CTRL-Z then reversed. Nothing is left to reverse, so
 there is nothing to report, and recovery deletes the marker.
 Recovery failures do mount it, under a different title; see
@@ -1395,7 +1403,7 @@ async function nextMemoryRun(
   const status = await readClassifierStatus(run.branchId, ctx)
   // a persisted 'running' (a pass left unfinished) waits for boot, and nothing builds on its writes
   if (status.state === 'running') return null
-  // A re-run catches up through its chapter's end only, and never starts an owed close.
+  // A re-run catches up through its chapter's end only; it never starts while a close is owed.
   const rerun = pendingRerun.get(run.branchId)
   if (rerun)
     return (await unprocessedThroughChapter(rerun.chapterId, status.processedThrough, ctx)) > 0
@@ -1470,10 +1478,9 @@ record is in memory: a restart drops it, and so does a reversal that
 removes that entry. A pass started alone, by a pass-failure entry's
 `Retry` or Run now, chains nothing and leaves an owed close to the next Send.
 A close's re-run records `pendingRerun` and starts the same way, with
-passes only while an entry through its chapter's end is unprocessed.
-The record takes precedence over an owed close, which waits for the
-next Send rather than running in the re-run's place, and the re-run
-chains nothing.
+passes only while an entry through its chapter's end is unprocessed. It
+is refused while a close is owed, so none can be owed under its chain,
+and the re-run chains nothing.
 
 Every chained run generates its **own fresh `actionId`**; the
 orchestrator never carries the predecessor's into the successor. A
@@ -1728,8 +1735,8 @@ update of a happening: it clusters only rows with an
 `occurred_at_entry_id`, and a user edit writes both columns.
 
 **A chapter delete keeps later writes from any source.** It reverses a
-chapter's close groups with turns above them, which only it and a
-close's re-run do
+chapter's close groups with turns above them, the one reversal that
+does
 ([`memory/chapter-close.md → Deleting a chapter`](./memory/chapter-close.md#deleting-a-chapter)).
 So the rule above widens for it: a field yields to any delta outside the
 set logged after it, whatever its source, except one that only moved
@@ -1742,22 +1749,27 @@ stamps, and leaves the group's other deltas in the log. Both seed from
 the chapter's close groups, the `chapter_close` groups that wrote its
 row, which a re-run adds to.
 
-**A close's re-run logs its reversal.** It reverses the chapter's lore
-work, every delta in those groups except those on `chapters` and
-`story_entries`, with the same set and plan as a delete, but prunes
-nothing. Each row change commits as a new delta under the re-run's
-`action_id`, its undo payload read from the row before the change: a
-removed row is a `delete` holding the whole row, a returned row a
-`create`, a changed field an `update`. The reversed deltas stay in the
-log, so undoing the re-run's group restores the close it replaced. It
-edits no delta outside itself. A plain reversal's re-owned creates and
-stranded-write prunes arise only on relationship rows, which no close
-writes; where it would edit a held delete's payload, the row stays
-deleted, and that delete's undo restores it as the close left it. A row
-the reversal deletes is held by its own `delete`, so a later write left
-in the log to that row is a held write. Reversing a union of groups
-replays deltas that cancel, so the delete and re-run confirms count
-what the plan changes, not the deltas it replays
+**A close's re-run journals its reversal.** It reverses the chapter's
+lore work, every delta in those groups except those on `chapters` and
+`story_entries`, with a delete's set and plan, pruning as a delete
+does. In the same transaction, before the plan's ops run, it writes a
+journal: the before-image of every row the plan writes, whole or
+absent, and of every delta row it prunes or edits (the pruned deltas, a
+held delete's rewritten payload, a re-owned create). The journal is one
+`reversal_journals` row keyed by the re-run's `action_id`. Whenever the
+re-run's group reverses, by CTRL-Z, an abort or crash recovery, the
+same transaction writes the journal back after the group's own deltas
+reverse, found by the `actionId` even when the group logged no delta
+of its own, as when a re-run stops between its reversal and its first
+write: each row and delta row to its before-image, a delta at its
+first log position, an embedded row flagged stale since the sweep took
+its vector, and the journal row goes. That is exact because nothing
+else wrote in between: the gate holds through the run, and CTRL-Z of a
+re-run refuses when a delta outside its group was logged after it
+began. A reversal that takes the group otherwise, a rollback or a
+delete, takes the journal with it; a divider-only removal leaves the
+group's lore deltas and so its journal; a later re-run's journal holds
+this one's row as a before-image. CTRL-Z of a re-run isn't redoable
 ([`memory/chapter-close.md → Re-running a close`](./memory/chapter-close.md#re-running-a-close)).
 
 **Undoing a `create` consults no cascade.**
@@ -2574,7 +2586,9 @@ Dispositions:
 
 An interrupted run takes the standard abort path: a pass or a close
 cancelled before its writes has committed nothing, and one cancelled
-during them reverse-replays its own group. Under the gate nothing else
+during them reverse-replays its own group. A close's re-run cancelled
+after its reversal also writes its journal back, with or without
+writes of its own. Under the gate nothing else
 wrote meanwhile, so that reversal never meets a user write. The
 run's abort then records it in `txState.deferred` for its branch
 ([Multi-run txState](#multi-run-txstate)), so the next Send runs it
@@ -2582,9 +2596,8 @@ before the turn ([chainsTo on predecessor](#chainsto-on-predecessor)),
 and a toast says the memory update, or the chapter close, moved to
 the next turn. A close's re-run records nothing, since the close it
 replaces stands, and a reversal that reaches that chapter confirms as
-it would with no run in flight. CTRL-Z during a re-run ends it and
-reverses nothing more: the run is the latest action, and its cancel is
-its undo
+it would with no run in flight. CTRL-Z is refused while a re-run runs:
+its target is the close or an edit, never a turn
 ([`memory/chapter-close.md → Re-running a close`](./memory/chapter-close.md#re-running-a-close)).
 An interrupted pass restores its pre-run status and
 leaves the watermark where it was. The status is restored by

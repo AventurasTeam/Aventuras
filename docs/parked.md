@@ -1926,15 +1926,28 @@ first.
 CTRL-Z trades a close's re-run back for the close it replaced only while
 the re-run is the latest action; after a turn or an edit it reaches the
 re-run only by undoing them, prose included. The first run's review
-goes with it, so comparing the two takes an undo, a look and a redo,
-which any write or a restart clears. Both have a cheap path, since the
-logged reversal keeps the first run's deltas: a "previous run" view
-reading its report from the undo payload of the re-run's report update,
-and a `Restore previous run` that logs a reversal of the re-run's group
-under later-writes-win.
+goes with it, so comparing the two takes an undo and a fresh look, and
+a re-run can't be redone. A "previous run" view has a cheap path: the
+first run's report sits in the undo payload of the re-run's report
+update, and its deltas in the re-run's journal
+([`generation-pipeline.md → Reverse-replay`](./generation-pipeline.md#reverse-replay)).
+A `Restore previous run` after later turns has none, since the journal
+writes back exactly only while nothing has been logged above the
+re-run.
 
 Parked 2026-11-13; the signal is users wanting to compare runs, or to
 trade one back after playing on.
+
+#### Re-running a close on a fork
+
+When turns followed a close, its re-run rolls them back first, and
+they can't be recovered
+([`memory/chapter-close.md → Re-running a close`](./memory/chapter-close.md#re-running-a-close)).
+Re-running on a new branch from the close point would leave the played
+turns on the old one. It needs fork to carry a close's deltas and its
+re-runs' journals, which is M6.1's.
+
+Parked 2026-11-13 for M6.1; the signal is the fork landing.
 
 #### An unattributed pass fact can be lost to a reversal
 

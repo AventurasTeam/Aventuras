@@ -4,7 +4,8 @@ How the user runs a chapter's close again when its output is poor, and
 trades a worse second run back for the first. Designed 2026-11-13;
 resolves the UX followup "Re-run a chapter's close" and the
 Timeline's open question on re-running lore management, and adds
-Slice 5.13 to M5.
+Slice 5.13 to M5. Revised the same day after 5.13's planning audit
+broke the first design's reversal; see [Revision](#revision).
 
 ## Why
 
@@ -21,275 +22,193 @@ the reopened turns first, at an end it picks.
   and redo lives in memory, cleared by any logged write. That is why
   Delete can't be undone, and why "reverse the first close, then run a
   fresh one" can't hold the first for CTRL-Z: its deltas are gone.
-- **The reversal plan already separates row writes from log prunes.**
-  `buildReverseAndPrunePlan` (`lib/actions/delta/reverse-replay.ts`)
-  returns the row ops, the prunes and the row patches apart, for a
-  caller committing them in its own transaction.
+- **The substrate assumes one birth per row.** `writesTo`
+  (`lib/actions/delta/row-closure.ts:91`) takes every write to a row
+  whose create is undone, with no lower bound, and `loadHeldRows`
+  (`held-rows.ts:65`) treats any delete in the log as holding a row
+  that is gone.
+- **The reversal plan separates row writes from log prunes.**
+  `buildReverseAndPrunePlan` (`reverse-replay.ts:81`) returns the row
+  ops, the prunes and the row patches apart.
 - **The report is an `updateChapter` delta** in the close's own group,
   source `chapter_close`, anchored on the end entry
-  (`lib/pipeline/definitions/chapter-close-report.ts`), and it records
-  its group's `actionId` (C4).
-- **A plain reversal edits the log outside its set in three cases**: a
-  held delete's payload copy, a create re-owned to a user write that
-  keeps the row, and a relationship's stranded writes. The last two
-  arise only on relationship rows, which no close tool writes.
+  (`lib/pipeline/definitions/chapter-close-report.ts`), recording its
+  group's `actionId` (C4).
+- **Rollback can't be undone**
+  ([`rollback-confirm.md → Confirmation modal`](../ui/screens/reader-composer/rollback-confirm/rollback-confirm.md#confirmation-modal--post-click)).
+- **`undoLastAction` passes a running run only for a turn**
+  (`lib/actions/story-entries/undo.ts:80`): CTRL-Z whose target is a
+  close or an edit is refused while one runs.
 - **`Regenerate summary` is M7.2**, disabled until then.
 
 ## Decisions
 
-- **Undoable, durably.** CTRL-Z after a re-run restores the first close,
-  across restarts, while the re-run is the latest action, and a failed,
-  cancelled or crashed re-run leaves the first close standing. Durable
-  means surviving a restart, not reachable at any later time: after a
-  turn or an edit, CTRL-Z reaches the re-run only through them. Rejected: deleting the first close and holding
-  it in memory, which a restart or a crash loses; and a re-run with no
-  undo, which only fixes the "next Send picks the end" half.
-- **Lore work only.** A re-run reverses and re-runs phases 3 and 4 and
-  the in-code steps. The chapter row, its number, end, stamps, title
-  and summary stay; metadata stays `Regenerate summary`'s. Rejected:
-  re-running metadata too, which must decide what happens to a title
-  the user edited and overlaps M7.2; and a re-close with a new end,
-  which moves stamps and the open region.
-- **The current model.** The `lore-mgmt` assignment or the story's
-  override, as a close. Trying a stronger model means changing the
-  assignment first. Rejected: a per-run profile pick in the confirm, a
-  new model-selection surface.
-- **Latest chapter only**, as Delete: later closes build on an earlier
-  one's merges.
+- **Undoable, durably, while it's the latest action.** CTRL-Z after a
+  re-run restores the first close across restarts, and a failed,
+  cancelled or crashed re-run leaves the first close standing. After a
+  turn or an edit, CTRL-Z reaches the re-run only through them. It
+  can't be redone. Rejected: holding the first close in memory, which a
+  restart or a crash loses; and no undo at all.
+- **Lore work only.** Phases 3 and 4 and the in-code steps re-run. The
+  chapter row, its end, stamps, title and summary stay; metadata is
+  `Regenerate summary`'s. Rejected: re-running metadata, which must
+  decide about a title the user edited and overlaps M7.2; and a
+  re-close with a new end, which moves stamps and the open region.
+- **The current model**, the `lore-mgmt` assignment or the story's
+  override. Rejected: a per-run profile pick.
+- **Latest chapter only**, as Delete.
+- **Before the next turn.** A re-run runs on a chapter no turn has
+  followed since its latest close or re-run, and never while a close is
+  owed. When turns have followed, it rolls them back first, telling the
+  user, as a shortcut for rollback then re-run. Rejected: re-running
+  over later turns, which needed a chain precedence over owed closes, a
+  CTRL-Z rule mid-run, partial restores under later writes, copy about
+  turns that reflect reversed facts, and a third of the test matrix,
+  for a re-run C11 and C12 make weaker anyway.
 - **Its own slice, 5.13,** after 5.10, 5.11 and 5.12.
 
-## The logged reversal
+## The journaled reversal
 
-**What it reverses: the chapter's lore work.** Every delta in the
-chapter's close groups except those on `chapters` and `story_entries`
-(its row, report and stamps), the complement of
-`Remove divider only`'s seed. A chapter's close groups are the
-`chapter_close` groups that wrote its row: the first close's holds the
-create, and each re-run's a report update. No new column.
+**What it reverses.** The chapter's lore work: every delta in its
+close groups except those on `chapters` and `story_entries`, the
+complement of `Remove divider only`'s seed. A chapter's close groups
+are the `chapter_close` groups with a delta on its row.
 
-**How.** The same set and plan as a delete (`selectReversalSet` with
-`yieldTo: 'any'`, then `buildReverseAndPrunePlan`), but nothing is
-pruned. Each row change is logged as a forward delta under the
-re-run's `action_id`, its undo payload read from the row before the
-change: a removed row is a `delete` with the whole row, a returned row
-a `create`, a changed field an `update` with the old value. The first
-close's deltas stay in the log.
+**How.** As a delete: `selectReversalSet` with `yieldTo: 'any'`, then
+`buildReverseAndPrunePlan`, pruning. In the same transaction, before
+the ops run, it writes a journal of before-images: every row the plan
+writes, whole or absent, and every delta row it prunes or edits. One
+`reversal_journals` row, keyed by the re-run's `action_id`.
 
-**It edits no delta outside itself.** Of the plain reversal's three
-log edits, re-owning and stranded-write prunes arise only on
-relationship rows. The third is reachable: a row the close wrote that
-a later write deleted stays deleted, and that delete's undo restores it
-as the close left it, the case canon already accepts for Delete ("a
-later undo can bring a deleted value back"). A row the reversal itself
-deletes is held by its `delete` delta, so writes left in the log to
-that row, such as a user's edit of a close-created lore row, are held
-writes, as after a user's own delete.
+**Restore.** When the re-run's group reverses (CTRL-Z, an abort, crash
+recovery), the same transaction writes the journal back after the
+group's own deltas reverse: rows and delta rows to their before-images,
+deltas at their first log positions, embedded rows flagged stale. Exact,
+since nothing else wrote in between: the gate holds through the run,
+and CTRL-Z refuses when a delta outside the group was logged after it
+began. A rollback or delete taking the group takes the journal; a later
+re-run's journal holds this one's row as a before-image.
 
-**What follows.**
-
-- CTRL-Z of a re-run is an ordinary group undo: the re-run's writes,
-  then the reversal's, newest first, restoring the first close's state
-  and, through the report update, its report.
-- A failed, cancelled or crash-recovered re-run reverses its group the
-  same way.
-- Delete and `Remove divider only` seed from all the chapter's close
-  groups. Over the union the replay nets out: re-run, reversal, first
-  close.
-- A rollback into the chapter takes all of it, every delta anchoring on
-  the end entry.
-- Later writes win, as for Delete: the reversal yields on any field
-  written after the first close, except a `retrieval_count` bump.
-- C12 is unchanged: the reversal's deltas are `chapter_close`, so the
-  re-run's tasks don't read them as a later turn's.
-- **Counts are net.** A union replays deltas that cancel (a create and
-  the reversal's delete of it), so a confirm counts what the plan
-  changes in the world, not the deltas it replays. Delete's confirm
-  after a re-run needs the same.
+**What follows.** The re-run's group holds only its own writes, so the
+review, the close tools' `closeWrote` and lore growth bound, C12 and
+History need no scoping, and a re-run can merge what the first close
+merged. No union of a chapter's groups replays deltas that cancel, so
+every confirm keeps counting the set's rows. Because the journal is
+physical, redo's `held-in-redo` and `pruned-outside-redo` don't apply.
 
 ## The run
 
-The close pipeline in a re-run mode, on the latest chapter, its input
-the chapter id:
+1. **Catch-up passes** while an entry through the chapter's end is
+   unprocessed, counted through that end, not the branch's whole
+   backlog. `pendingRerun: { chapterId }` lives for the chain: written
+   as it starts, cleared as it ends, whatever ends it.
+2. **The journaled reversal**, one write.
+3. **Run order steps 4 to 9**, with parts cut from the chapter's
+   entries, not the open region.
+4. **The report** updates the existing row with the re-run's `actionId`.
 
-1. **Catch-up passes while any entry through the chapter's end is
-   unprocessed.** That arises after an edit of the chapter's last turn
-   while it's the head clamps the watermark. A chained successor takes
-   no inputs, so `TxState` gains `pendingRerun: { chapterId }` beside
-   `pendingClose`; a restart drops it. While it's set, a pass's
-   `chainsTo` returns a pass until those entries are processed, then
-   the re-run, and never an owed close: that waits for Send, as today.
-   The re-run chains nothing.
-2. **The logged reversal,** one write.
-3. **Run order steps 4 to 9:** normalization, Happenings, the part
-   tasks, Awareness, the reset, the report and display translation.
-   Parts are cut fresh for the current model's window; Awareness reads
-   the existing summary.
-4. **The report is an update of the chapter row** carrying the re-run's
-   `actionId` and `reversedThrough`, the log position of the
-   reversal's last delta.
+Starting refuses as the manual close's start does, then `not-latest`,
+`no-close`, a close owed, `counts-changed` and the pre-flight, all before
+any shortcut rollback commits.
 
-No boundary selection, metadata or stamps.
+| Outcome               | Result                                                                                         |
+| --------------------- | ---------------------------------------------------------------------------------------------- |
+| Commit                | `Chapter 5's close re-ran`, with `Review`; a warning when tasks stopped early                  |
+| Cancel / interrupt    | The group reverses, the journal restores; `Re-run cancelled. Chapter 5's close is as it was.`  |
+| A failed call         | The same; warning `Re-run failed. Chapter 5's close is as it was.` with the reason, no `Retry` |
+| A catch-up pass fails | The chain ends as a failed pass's does; the re-run doesn't run and isn't owed                  |
+| Crash                 | Boot recovery reverses the group and restores the journal                                      |
 
-**Starting.** Refused as the manual close's start is: a held branch, a
-pending swap, a busy story. Inside the bracket it rechecks that the
-chapter is the latest and has a close group, refusing `not-latest` or
-`no-close`. A pre-flight failure shows a toast.
-
-**While it runs** it holds the user-edit gate; the banner shows a
-close's progress and Send waits.
-
-**Ending.** Nothing is ever owed, since the first close stands:
-
-| Outcome            | Result                                                                                                       |
-| ------------------ | ------------------------------------------------------------------------------------------------------------ |
-| Commit             | `Chapter 5's close re-ran`, with `Review`; the warning variant when tasks stopped early                      |
-| Cancel / interrupt | The group reverses; `Re-run cancelled. Chapter 5's close is as it was.` The run declares no deferral slot.   |
-| A failed call      | The group reverses; warning `Re-run failed. Chapter 5's close is as it was.` with the reason, and no `Retry` |
-| Crash              | Boot recovery reverses the group from the log; nothing re-runs                                               |
-
-**Head reversals.** Canon lets regenerate interrupt a running close with
-no confirm because nothing of it has committed. Under a re-run the
-first close has. A head reversal that reaches the re-run's chapter
-confirms as it would with no run in flight, its counts leaving the run
-out and counting the first close, since the interrupt restores it.
-**CTRL-Z during a re-run cancels the run and undoes nothing else**: the
-run is the latest action, and its cancel is its undo. Shipped
-`undoLastAction` (`lib/actions/story-entries/undo.ts:80`) passes a
-running run only when its target is a turn: with no later turn it
-refuses a CTRL-Z during a re-run, and with one it interrupts the re-run
-and undoes that later turn, which has nothing to do with the re-run.
+**Head reversals.** One reaching the chapter, which only a manual close
+on the latest reply allows, confirms as with no run in flight, counting
+the first close. CTRL-Z is refused while a re-run runs; Cancel stops it.
 
 ## The UX
 
-**Entry points,** on the latest chapter, only when a close wrote it,
-disabled while a run is in flight:
+**Entry points,** on the latest chapter a close wrote, disabled while a
+run is in flight or a close is owed: `Re-run close…` on the Timeline
+card, between `Review changes` and `Delete…`, in the phone overflow;
+`Re-run…` in the review window's footer, its confirm stacking over the
+window.
 
-- `Re-run close…` on the Timeline card, between `Review changes` and
-  `Delete…`, five actions on the latest card. On phone it joins the
-  `⋯` overflow.
-- `Re-run…` in the review window's footer beside `Done`, where "poor
-  overall" is judged. The confirm stacks over the window, as
-  [`layout.md → Stacking`](../ui/foundations/mobile/layout.md#stacking)
-  allows a confirm started inside a surface; `Cancel` returns to the
-  review, and confirming closes it.
-
-**The confirm**, an AlertDialog:
-
-```
-┌──── Re-run chapter 5's close? ───────────────────┐
-│                                                  │
-│  This reverses what the close did to the world   │
-│  and runs it again on <model>. The chapter, its  │
-│  title and summary stay.                         │
-│                                                  │
-│  • 2 lore rows removed, your edits included      │
-│  • 31 other changes reversed                     │
-│  • 14 turns since stay as written. What they     │
-│    changed stays, and the re-run leaves it alone │
-│                                                  │
-│  A close is the costliest call the app makes:    │
-│  this one reads 24,310 tokens of story.          │
-│                                                  │
-│  CTRL-Z brings this close back until your next   │
-│  turn or edit.                                   │
-│                                                  │
-│               [ Cancel ]  [ Re-run close ]       │
-└──────────────────────────────────────────────────┘
-```
-
-Net counts as Delete's two lines; the third omitted with no later
-turn, and the count lines replaced by `The close changed nothing in the
-world.` when the plan is empty. Token count and model name, no money
-estimate. Primary, not destructive: CTRL-Z reverses it. Delete's rules
-hold: counts recount while open and refuse `counts-changed`; a close
-landing under it refuses `not-latest` with a toast.
+**The confirm** names the model and the chapter's token count, counts
+as Delete's, and, when turns followed the close, adds the turns it
+removes first with the rollback modal's counts and "They go for good,
+even if the re-run fails or you cancel it." Its last line:
+`CTRL-Z brings this close back until your next turn or edit.` Primary,
+not destructive. The sketch is canon's
+([`chapter-timeline.md → Re-run a close`](../ui/screens/chapter-timeline/chapter-timeline.md#re-run-a-close)).
 
 **The review after a re-run** shows its report against the chapter
-before any close, as a close's review does: it reads the group's deltas
-above `reversedThrough`, so the reversal half stays out. No re-run
-banner. The window closes when its report changes, on the re-run's
-commit and on its CTRL-Z.
+before any close, and closes when its report changes.
+
+## Revision
+
+The first design kept the first close restorable by a **logged
+reversal**: the re-run logged its reversal of the close as new deltas,
+so the close's deltas stayed in the log and an ordinary group undo of
+the re-run brought them back. Its load-bearing assumption, that those
+forward deltas undo cleanly, was marked "assumed, not prototyped", and
+5.13's `code` and `seams` audits broke it. Bringing back a row the close
+merged away logs a second `create` of that id while the close's
+`delete` stays:
+
+- undoing that `create` took the row's whole history with it, since
+  `writesTo` has no lower bound, on every Cancel and failure;
+- `loadHeldRows` held the live row, so `snapshotForRedo` refused CTRL-Z
+  of the re-run and of any later edit to the row;
+- the close tools' "rows this close wrote" reads counted the reversal,
+  and a re-merge would write and delete one row in one action, which
+  redo can't restore.
+
+`merge_threads` is on main, so this hit most chapters. Patching the
+three substrate rules was rejected for the journal, which never
+re-creates a row. The same session dropped re-runs over later turns
+(Decisions) and redo of a re-run, and the net counts and
+`reversedThrough` the logged design needed went with it.
 
 ## Adversarial pass
 
-**Load-bearing assumption.** The logged reversal leaves the world as
-the plain reversal would, and its undo restores the first close
-exactly. The undo half holds because CTRL-Z reaches the re-run only
-when no user action sits above it. Verified against canon's undo walk;
-the forward-delta construction from row patches plus a prior read, as
-the redo snapshot reads, is assumed, not prototyped.
-
-**Changed the design:**
-
-- **CTRL-Z mid-run had no re-run rule.** Shipped, it is refused with no
-  later turn and undoes an unrelated later turn with one. Now it
-  cancels the re-run only. (First reasoned as "cancels, then undoes the
-  first close", which the code read corrected.)
-- **Phase 0 could chain into an owed close.** A pass's `chainsTo` starts
-  the owed close once entries are processed, so with auto-close on and
-  the open region at the threshold, the re-run's catch-up pass would
-  close the open region instead. `pendingRerun` takes precedence and the
-  re-run chains nothing.
-- **The review couldn't tell the reversal from the re-run's own
-  writes** inside one group, and a `create` has no payload to mark. The
-  report's `reversedThrough` splits them; redo restores log positions,
-  so it holds through CTRL-Z and redo.
+**Load-bearing assumption.** The journal's write-back is exact. It
+holds while nothing outside the group logs between the reversal and its
+restore: the gate covers abort and crash, and CTRL-Z checks it.
+Checked against the write paths, not prototyped.
 
 **Accepted:**
 
-- Trading back works only while the re-run is the latest action, and
-  the first run's review goes once the re-run lands; comparing takes an
-  undo, a look and a redo. Raised after the design by a side review;
-  the copy now says so, and a previous-run view and a later
-  `Restore previous run` are parked.
-- The rollback confirm's world-changes line counts the deltas it
-  replays, so after a re-run it counts the reversal's too, deltas that
-  cancel. It already counts replayed deltas, not net changes; only the
-  delete and re-run confirms count net.
-
-- CTRL-Z of a re-run with a pass logged above it, only possible through
-  a pass's `Retry`, writes the first close's values over that pass's,
-  as CTRL-Z of any close does today.
-- A row's History shows the reversal's writes as `chapter close` rows,
-  three for a field both runs wrote. True, if noisy.
-- The log keeps the first close's deltas plus the reversal, about two
-  groups' worth per re-run.
-- A later write's own undo can restore a value the reversal removed,
-  as after a Delete: its payload holds the value it replaced, which may
-  be the first close's.
+- Trading back works only while the re-run is the latest action, and the
+  first run's review goes once it lands. Raised by a side review; the
+  copy says so, and a previous-run view and a later restore are parked.
+- The shortcut's turns can't be recovered, even if the re-run fails.
+  Re-running on a fork is parked for M6.1.
+- CTRL-Z of a re-run refuses when a pass logged above it, only possible
+  through a pass's `Retry` or `Run now`.
+- A later write's own undo can restore a value the reversal removed, as
+  after a Delete; with no turn since the close, only a user edit or a
+  pass can.
 
 **Checked by reasoning:**
 
 - A re-close after `Remove divider only` at the same end: the new
-  chapter's close groups hold only its own close, so a re-run leaves
-  the kept work, consistent with canon.
-- A re-run's own catch-up passes anchor inside the chapter: the
-  reversal yields to them, and the re-run's tasks may overwrite them,
-  since C12 counts only writes past the end entry.
-- Several re-runs: each reverses the union, so the counts stay net, and
-  CTRL-Z steps back one run at a time.
+  chapter's close groups hold only its own close, so a re-run leaves the
+  kept work.
+- `Remove divider only` after a re-run keeps the re-run's lore deltas and
+  their journal, so a later CTRL-Z of them restores the first close's
+  lore without a divider, as kept work does.
+- Several re-runs: each journals the last, and CTRL-Z steps back one run
+  at a time.
+- A close writes no display translations until M8.1 (the code audit).
 
-**Unverified, for 5.13's planning:**
-
-- Whether display translations are logged in the close's group; the
-  reversal does whatever Delete does with them.
-- The held-row arms (`undoHeldCreate`, `undoHeldUpdate`) under rows the
-  reversal holds: they exist, their behaviour here is unread.
-- The reversal's write burst on Android. Slice 5.2's 132-stamp burst
-  stalled the JS thread about 1.1 s; the reversal skips stamps but logs
-  a delta per row change. 5.13 measures it on a full group.
+**Unverified, for 5.13's planning:** the reversal's commit and the
+journal write on Android, against Slice 5.2's 1.1 s stamp burst.
 
 ## Parked
 
-- **Comparing runs, and trading one back later.** Cheap on this design:
-  the first run's report sits in the undo payload of the re-run's
-  report update, and its deltas stay logged. Signal: users wanting
-  either.
-
-- **Re-running one task.** Tasks feed each other within and across
-  parts, and deltas carry no task. Signal: whole re-runs used to fix
-  one area.
-- **Steering a re-run.** On one model a re-run is mostly a reroll that
-  can repeat the first run's mistakes: a note from the user, or the
-  first run's report shown to the second. Signal: re-runs that don't
-  improve.
+- **Re-running one task.** Tasks feed each other and deltas carry no
+  task.
+- **Steering a re-run.** A note, or the first run's report shown to the
+  second.
+- **Comparing runs, and trading one back later.** A previous-run view
+  has a cheap path; a later restore doesn't.
+- **Re-running on a fork,** keeping the turns the shortcut removes
+  (M6.1).

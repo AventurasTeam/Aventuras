@@ -22,6 +22,7 @@ erDiagram
     branches ||--o{ embeddings : "owns snapshot of"
     branches ||--o{ probe_captures : "captures retrieval state for"
     branches ||--o{ deltas : "logs changes in"
+    branches ||--o{ reversal_journals : "journals re-run reversals in"
     story_entries ||--o{ deltas : "triggers"
     story_entries }o--|| chapters : "belongs to (once chaptered)"
     story_entries ||--o{ entry_assets : "attaches"
@@ -186,7 +187,7 @@ erDiagram
         text end_entry_id "FK-less ref into story_entries; always set — only closed chapters exist as rows"
         integer token_count "sum of content_tokens over the chapter's non-system entries at close; a snapshot, so a later edit in the chapter leaves it alone"
         integer closed_at
-        json close_report "what the close's deltas don't hold: its action_id, each tool call's task, rows, why, turns and result, each landed write's new value, the writes that didn't land and any task that stopped early, and on a re-run where its reversal ends; null on a chapter no close wrote. Kept out of the working-set store. See docs/memory/chapter-close.md → Review"
+        json close_report "what the close's deltas don't hold: its action_id, each tool call's task, rows, why, turns and result, each landed write's new value, the writes that didn't land and any task that stopped early; null on a chapter no close wrote. Kept out of the working-set store. See docs/memory/chapter-close.md → Review"
         integer embedding_stale "0 | 1; 1 = embedded fields (summary/theme) need (re-)embedding. Set on any embedded-field write whose content hash differs from the vector's source_hash (edit, create, or failed sync); cleared when the pre-retrieval sync stage embeds the row or content reverts to the embedded value. Still flagged at retrieval means the sync stage couldn't embed it (embedder unavailable), so it is excluded. See docs/memory/retrieval.md → Compute lifecycle"
         integer created_at
         integer updated_at
@@ -279,6 +280,14 @@ erDiagram
     }
     %% INDEX deltas_chain_idx (branch_id, target_id, log_position) — chain-walk index for the diff cache walk and future rollback / CTRL-Z chain reads. See architecture.md → Delta history diff resolution. target_table excluded: the kind-prefixed UUID invariant makes target_id globally unique, so target_table stays in the query as a defensive post-filter rather than an index discriminator.
     %% UNIQUE INDEX deltas_log_position_uniq (branch_id, log_position) — backstop. The action-layer's MAX+1 assignment is the primary mechanism (see "log_position assignment" below); this index catches buggy writers at insert time. Can't double-up deltas_chain_idx because target_id sits between branch_id and log_position.
+
+    reversal_journals {
+        text action_id PK "the close re-run's action_id, whose group this journal belongs to"
+        text branch_id FK "composite PK with action_id"
+        json journal "before-images of every row and delta row the re-run's reversal touched: whole row, or absent. Written in the reversal's transaction, written back when the re-run's group reverses. See generation-pipeline.md → Reverse-replay"
+        integer created_at
+    }
+    %% Not delta-logged: the undo half of one delta group. Goes with the group: a rollback or delete taking the group drops it; a later re-run's journal holds it as a before-image. Fork carrying it with its group is M6.1's.
 
     vault_calendars {
         text id PK "UUID; user-authored calendars only — built-ins live in code/repo JSON loaded at boot"
@@ -501,6 +510,7 @@ way at fork unless flagged otherwise:
 | `*_vec` (embeddings)      | Copy current rows  | vec0 tables partition by `branch_id`; new branch needs its own vectors so post-fork edits stay branch-local. Cost is 2x storage at fork moment; per-branch re-embed on edits stays clean. Storage-optimization followup parked.                                                                                             |
 | `probe_captures`          | **Not copied**     | The only branch-scoped table the fork skips. A capture is meaningful only against the candidate pool that existed when it was written, and a fork immediately diverges that pool; the new branch starts empty. See [probe.md → Branch fork and capture portability](./memory/probe.md#branch-fork-and-capture-portability). |
 | `deltas`                  | Per step 2 above   | Special case — pre-fork log copies (step 2), post-fork deltas reverse-apply onto copies then are NOT copied (step 3). Not a "current rows" copy.                                                                                                                                                                            |
+| `reversal_journals`       | With its group     | A close re-run's journal is copied when step 2 copies that re-run's group, and not otherwise. M6.1 pins it.                                                                                                                                                                                                                 |
 
 If a branch-scoped table is added to the schema later, it MUST get a
 row here in the same commit. New branch-scoped table without a
@@ -1363,7 +1373,7 @@ transaction; **referenced/shared resources survive.**
   (`story_entries`, `entities`, `character_relationships`, `lore`, `threads`,
   `happenings`, `happening_involvements`, `happening_awareness`, `chapters`,
   `branch_era_flips`, `translations`, `probe_captures`, `deltas`,
-  `entry_assets`), plus story-scoped `pipeline_runs` and the `branches`
+  `reversal_journals`, `entry_assets`), plus story-scoped `pipeline_runs` and the `branches`
   themselves, then the `stories` row. The cascade enumerates **every** table
   even when empty, so future content cannot be orphaned. No DB-level
   `ON DELETE` cascade exists; the action layer deletes child→parent.
@@ -2595,8 +2605,8 @@ background fact about a surviving turn). Entity rows
 (and lore / thread / happening / chapter rows) are mutated in place for
 fast reads; the delta log is the history of record.
 
-**A reversal takes its deltas with it.** Every reversal but a close's
-re-run (below) removes the deltas it replays in the same transaction: CTRL-Z and rollback (below),
+**A reversal takes its deltas with it.** Every reversal removes the
+deltas it replays in the same transaction: CTRL-Z and rollback (below),
 and every run the pipeline reverses itself — an aborted or failed run,
 a crash-recovered orphan, a turn refused at admission. Deltas are never
 kept and marked reversed: a kept row would read as the next undo head
@@ -2611,10 +2621,9 @@ row was its target; and a relationship the reversal leaves absent takes
 its other logged writes with it
 ([`generation-pipeline.md → Reverse-replay`](./generation-pipeline.md#reverse-replay)).
 Forward writes only ever append; only a reversal prunes or edits, and
-what it edits is a delete's payload or a kept create's owner. One
-reversal prunes nothing: a close's re-run commits its reversal of the
-chapter's lore work as new deltas, so undoing the re-run restores the
-close it replaced
+what it edits is a delete's payload or a kept create's owner. A
+close's re-run also journals what its reversal prunes and writes, so
+undoing the re-run writes the close it replaced back
 ([`generation-pipeline.md → Reverse-replay`](./generation-pipeline.md#reverse-replay)).
 
 User editing an entry's text does **not** auto-trigger re-classification.
@@ -2967,8 +2976,8 @@ by the same user-visible operation. Action boundaries:
   hold their own, like any pass. CTRL-Z collapses the entire batch as a
   single unit, because a user who clicks "undo" expects the whole
   "the chapter closed" event to disappear in one press. A close's
-  re-run is one unit too, and undoing it brings back the close it
-  replaced
+  re-run is one unit too: undoing it brings back the close it
+  replaced, and it can't be redone
   ([`memory/chapter-close.md → Re-running a close`](./memory/chapter-close.md#re-running-a-close)).
 
 Algorithm:
@@ -2976,8 +2985,7 @@ Algorithm:
 1. **Select the target group** — walk back from the head to the most
    recent _undoable unit_ (a user turn, a user edit, or a chapter close,
    auto or manual, or a close's re-run), skipping
-   `source = periodic_classifier` deltas. While a re-run is in flight,
-   CTRL-Z cancels it and selects nothing more.
+   `source = periodic_classifier` deltas.
    Background classifier work is never an undo target; its `action_id`
    exists only for crash recovery, so a classifier commit sitting at the
    literal head is stepped over.
@@ -2991,15 +2999,20 @@ Algorithm:
      chapter-close batch) — reverse just that `action_id` group.
      Periodic-classifier deltas above it describe unrelated turns and
      stay put, except any that name a row the group created, which the
-     reversal's closure takes with it.
+     reversal's closure takes with it. A close's re-run is one such
+     group: after it reverses, its journal is written back, and it is
+     refused when a delta outside the group was logged after it began
+     ([`generation-pipeline.md → Reverse-replay`](./generation-pipeline.md#reverse-replay)).
 3. Reverse the selected deltas newest-to-oldest via their `undo_payload`,
    move them onto an in-memory redo stack (not persisted), and remove
    them from the `deltas` table.
 
 Redo re-applies from the in-memory stack, including the rows the
 closure took with the group, so undo and redo stay exact inverses; a
-sweep's rows stay out, since the clamped watermark re-derives them. The
-stack clears on any new action. Redo is runtime-only; no schema
+sweep's rows stay out, since the clamped watermark re-derives them. A
+close's re-run has no redo: its undo writes a journal back, which redo
+can't replay, so re-running is the way back. The stack clears on any
+new action. Redo is runtime-only; no schema
 support needed. If the app restarts, redo history is lost (acceptable
 — this matches editor conventions).
 
@@ -3390,6 +3403,7 @@ manifest exhaustive.
 | `translations`            | Travels                   | Paid LLM output; carries no provider or model coupling (see below).                                                                                                                                                |
 | `entry_assets`            | Travels                   | Delta-logged link table.                                                                                                                                                                                           |
 | `deltas`                  | Travels                   | The delta log itself; every other table's integrity depends on it.                                                                                                                                                 |
+| `reversal_journals`       | Travels                   | The undo half of a close's re-run group; without it CTRL-Z of the re-run couldn't restore the close it replaced.                                                                                                   |
 | `assets`                  | Dependency — carried      | Referenced rows only, collected via `entry_assets` and `stories.cover_asset_id`. Binary embedded.                                                                                                                  |
 | `vault_calendars`         | Dependency — carried      | The one referenced custom-calendar row, embedded (see below). Built-ins resolve by id and carry nothing.                                                                                                           |
 | `embeddings` (`vec0`)     | Stripped                  | Reproducible from source content; model-space-bound. Not delta-logged.                                                                                                                                             |

@@ -830,13 +830,11 @@ queue, so the user reviews it after the fact. `chapters.close_report`
 holds what the deltas don't: the close's `action_id`, each tool call's
 task, rows, `why`, `turns` and result, each landed write's new value,
 the writes that didn't land, and any task that stopped early. A merge
-names the row that survived. It's written last, in the close's group. A
-[re-run](#re-running-a-close)'s report also holds `reversedThrough`,
-where its reversal ends.
+names the row that survived. It's written last, in the close's group.
 
 A delta holds only the prior value, so old values come from the deltas
-under that `action_id`, above a re-run's `reversedThrough`, and new
-ones from the report, cut to a bound; the row itself has the full text. A restated value wrote nothing, so the
+under that `action_id` and new ones from the report, cut to a bound; the
+row itself has the full text. A restated value wrote nothing, so the
 report holds no value for it and the review leaves it out. The review
 also leaves out stamps, `retrieval_count` resets and stackable
 normalization, which is code with no `why`, and a spelling cleanup. The
@@ -924,10 +922,10 @@ chapter's last entry, then a delete.
 When a close's output is poor overall, the user runs its lore work
 again, and CTRL-Z trades a worse second run back for the first while
 the re-run is the latest action: after a turn or an edit, CTRL-Z
-reaches it only through them. A
-re-run reverses what the chapter's close did to the world and runs
-phases 3 and 4 again. The chapter row, its end, stamps, title and
-summary stay: metadata is `Regenerate summary`'s
+reaches it only through them. A re-run reverses what the chapter's
+close did to the world and runs phases 3 and 4 again. The chapter row,
+its end, stamps, title and summary stay: metadata is
+`Regenerate summary`'s
 ([`chapter-timeline.md → Per-card actions`](../ui/screens/chapter-timeline/chapter-timeline.md#per-card-actions)).
 Like a delete, it takes only the latest chapter, since later closes
 build on an earlier one's merges, and only one a close wrote. It runs
@@ -935,58 +933,75 @@ on the `lore-mgmt` assignment or the story's override, as a close does.
 The surface is
 [`chapter-timeline.md → Re-run a close`](../ui/screens/chapter-timeline/chapter-timeline.md#re-run-a-close).
 
-**One group, logged.** The re-run's group holds the reversal of the
-chapter's lore work, then its own writes. The lore work is every delta
+**Before the next turn.** A re-run runs on a chapter no turn has
+followed since its latest close or re-run, and never while a close is
+owed. When turns have followed, it first rolls them back: every turn
+with an entry written after that close, from the first such turn, a
+reply regenerated since taking its player's action with it. That
+rollback is the reader's, with its counts, and can't be undone, so the
+turns stay gone even if the re-run then fails or is cancelled. Every
+refusal is checked before it commits, the manual close's start refusals
+first: the pre-flight, the chapter still
+the latest with a close, the counts, and a close owed on the region the
+rollback leaves. Then the rollback commits and the re-run starts, two
+actions. With no turn after it, nothing the reversal yields to comes
+from a turn, and the re-run reads the turns past the chapter's end as
+its close did.
+
+**One group, journaled.** The re-run reverses the chapter's lore work,
+then writes its own under one group. The lore work is every delta
 in the chapter's close groups except those on `chapters` and
-`story_entries`, the opposite of a divider-only removal's seed. The
-reversal logs each row change as a new delta rather than pruning
+`story_entries`, the opposite of a divider-only removal's seed. It
+reverses as a delete does, pruning, and later writes win. Before it
+applies, the re-run journals the before-image of everything it touches
 ([`generation-pipeline.md → Reverse-replay`](../generation-pipeline.md#reverse-replay)),
-so the close's deltas stay in the log, and reversing the re-run's
-group, by CTRL-Z, Cancel, a failure or crash recovery, restores the
-close, its report included. Later writes win, as for a delete. Every
-delta anchors on the end entry and is `chapter_close`, so the re-run's
-tasks don't read the reversal as a later turn's, and a rollback into
-the chapter takes all of it.
+and reversing the re-run's group, by CTRL-Z, Cancel, a failure or crash
+recovery, writes the journal back after the re-run's own writes reverse
+(even before it has any),
+restoring the close, its deltas and report included. CTRL-Z of a re-run
+can't be redone: re-running is the way back. Every delta of the re-run
+anchors on the end entry and is `chapter_close`, so a rollback into the
+chapter takes all of it, and the journal with it; a divider-only
+removal leaves the re-run's lore deltas and their journal.
 
 **Run order.**
 
 1. Catch-up passes while an entry through the chapter's end is
-   unprocessed, as in [Phase 0](#phase-0--catch-up-passes). That
-   happens after an edit of the chapter's last turn while it's the head.
-   The re-run chains nothing, and an owed close waits for Send.
-2. The reversal, as one write.
-3. Steps 4 to 9 of the [run order](#run-order), with parts cut for the
-   current model and Awareness reading the chapter's existing summary.
+   unprocessed, as in [Phase 0](#phase-0--catch-up-passes), which
+   happens after an edit of the chapter's last turn while it's the
+   head. The re-run chains nothing.
+2. The reversal, as one write, with its journal.
+3. Steps 4 to 9 of the [run order](#run-order), with parts cut from the
+   chapter's entries for the current model and Awareness reading the
+   chapter's existing summary.
 
 The report is an update of the chapter row, with the re-run's
-`action_id` and `reversedThrough`, the log position of the reversal's
-last delta, absent when it logged none. The [review](#review) reads the
-group above it, so it shows the re-run's changes against the chapter
-before any close, as a close's review does.
-
-Starting it refuses as a manual close's start does, and inside the
-reversal bracket it rechecks that the chapter is still the latest and
-has a close.
+`action_id`. The group holds only the re-run's own writes, so the
+[review](#review) shows its changes against the chapter before any
+close, as a close's review does.
 
 **Nothing is owed after it**, since the close it replaces stands:
 
-| Outcome                         | Result                                                             |
-| ------------------------------- | ------------------------------------------------------------------ |
-| Commits                         | Its report replaces the close's, and CTRL-Z brings the close back  |
-| Cancel, or a head reversal      | The group reverses, and nothing is deferred                        |
-| A call that fails after retries | The group reverses, and the toast gives the reason                 |
-| A catch-up pass fails           | The chain ends as a failed pass's does, and the re-run doesn't run |
-| Crash                           | Boot recovery reverses the group, and nothing re-runs              |
+| Outcome                         | Result                                                                  |
+| ------------------------------- | ----------------------------------------------------------------------- |
+| Commits                         | Its report replaces the close's, and CTRL-Z brings the close back       |
+| Cancel, or a head reversal      | The group reverses and the journal restores the close; nothing deferred |
+| A call that fails after retries | The same, and the toast gives the reason                                |
+| A catch-up pass fails           | The chain ends as a failed pass's does, and the re-run doesn't run      |
+| Crash                           | Boot recovery reverses the group and restores the journal               |
 
 **Head reversals.** Regenerate interrupts a running close with no
 confirm because nothing of it has committed. Under a re-run the close
-it replaces has, so a head reversal reaching that chapter confirms as
-it would with no run in flight, its counts taking the close, which the
-interrupt restores. CTRL-Z during a re-run cancels it and undoes nothing
-else: the run is the latest action, and its cancel is its undo.
+it replaces has, so a head reversal reaching that chapter, a rollback
+into it or a regenerate of its end reply after a manual close on the
+latest reply, confirms as it would with no run in flight, its counts
+taking the close the interrupt restores.
+CTRL-Z is refused while a re-run runs, its target being the close or an
+edit, never a turn; Cancel stops it.
 
 On the same model a re-run is mostly a reroll.
 [Steering a re-run](../parked.md#steering-a-re-run),
-[re-running one task](../parked.md#re-running-one-close-task) and
+[re-running one task](../parked.md#re-running-one-close-task),
 [comparing runs or trading one back later](../parked.md#comparing-close-runs-and-trading-one-back-later)
+and [re-running on a fork](../parked.md#re-running-a-close-on-a-fork)
 are parked.

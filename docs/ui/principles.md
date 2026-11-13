@@ -319,7 +319,7 @@ minutes long for a close, and the pill's, the composer's or the banner's
 ([`generation-pipeline.md → Gate derivation as a selector`](../generation-pipeline.md#gate-derivation-as-a-selector)).
 A close's re-run differs the other way: it moves nothing, since the
 close it replaces stands, a head reversal reaching that chapter confirms
-as it would with no run in flight, and CTRL-Z only cancels it
+as it would with no run in flight, and CTRL-Z is refused while it runs
 ([`memory/chapter-close.md → Re-running a close`](../memory/chapter-close.md#re-running-a-close)).
 
 The turn and the close are atomic per their `action_id` (see

@@ -171,6 +171,10 @@
   body[data-modal="review-rerun"] #rerun-backdrop { display: flex; }
   /* The re-run confirm stacks over the review window it was opened from (layout.md → Stacking). */
   #rerun-backdrop { z-index: 7; }
+  body[data-rerun-turns="none"] .rerun-rollback { display: none; }
+  /* A close owed disables both re-run entry points (chapter-timeline.md → Per-card actions). */
+  body[data-close-owed="yes"] .card-action-rerun,
+  body[data-close-owed="yes"] #review-rerun { opacity: 0.4; cursor: not-allowed; }
   /* Re-run close… and Delete… show on the latest chapter's card only, Re-run… on its review. */
   body[data-latest="no"] .card-action-rerun,
   body[data-latest="no"] #review-rerun,
@@ -305,7 +309,7 @@
   }
 </style>
 </head>
-<body data-card-state="expanded" data-empty="no" data-modal="hidden" data-not-applied="collapsed" data-progress="safe" data-picker="closed" data-gen-state="idle">
+<body data-close-owed="no" data-rerun-turns="none" data-card-state="expanded" data-empty="no" data-modal="hidden" data-not-applied="collapsed" data-progress="safe" data-picker="closed" data-gen-state="idle">
 
 <div class="screen-label"><strong>Wireframe:</strong> Chapter Timeline &mdash; responsive across phone / tablet / desktop &mdash; low-fi, interactive</div>
 
@@ -339,6 +343,16 @@
     <button class="rb-btn" data-modal="review">review window</button>
     <button class="rb-btn" data-modal="delete">delete chapter</button>
     <button class="rb-btn" data-modal="rerun">re-run close</button>
+  </div>
+  <div class="rb-group">
+    <span class="gl">close owed:</span>
+    <button class="rb-btn active" data-close-owed="no">no</button>
+    <button class="rb-btn" data-close-owed="yes">yes</button>
+  </div>
+  <div class="rb-group">
+    <span class="gl">re-run, turns since close:</span>
+    <button class="rb-btn active" data-rerun-turns="none">none</button>
+    <button class="rb-btn" data-rerun-turns="some">3 turns</button>
   </div>
   <div class="rb-group">
     <span class="gl">not applied:</span>
@@ -656,8 +670,16 @@
       <ul class="delete-impact">
         <li>2 lore rows removed, your edits included</li>
         <li>31 other changes reversed</li>
-        <li>14 turns since stay as written. What they changed stays, and the re-run leaves it alone</li>
       </ul>
+      <!-- Shown only when turns followed the close: the re-run rolls them back first. -->
+      <div class="rerun-rollback">
+        <p class="modal-context">3 turns since the close are removed first:</p>
+        <ul class="delete-impact">
+          <li>6 entries (91&ndash;96)</li>
+          <li>12 world-state changes</li>
+        </ul>
+        <p class="modal-context">They go for good, even if the re-run fails or you cancel it.</p>
+      </div>
       <p class="modal-context">A close is the costliest call the app makes: this one reads 24,310 tokens of story.</p>
       <p class="modal-context">CTRL-Z brings this close back until your next turn or edit.</p>
     </div>
@@ -870,8 +892,32 @@
 
   // review changes opens the review window
   document.getElementById('review-changes').addEventListener('click', () => setModal('review'));
-  document.getElementById('rerun-close').addEventListener('click', () => setModal('rerun'));
-  document.getElementById('review-rerun').addEventListener('click', () => setModal('review-rerun'));
+  document.getElementById('rerun-close').addEventListener('click', () => {
+    if (body.dataset.closeOwed !== 'yes') setModal('rerun');
+  });
+  // A close owed: both re-run entry points disable with the tooltip, and a press opens nothing.
+  const OWED_TIP = 'Close the open chapter first.';
+  document.querySelectorAll('.rb-btn[data-close-owed]').forEach(b => {
+    b.addEventListener('click', () => {
+      body.dataset.closeOwed = b.dataset.closeOwed;
+      document.querySelectorAll('.rb-btn[data-close-owed]').forEach(o =>
+        o.classList.toggle('active', o === b));
+      ['rerun-close', 'review-rerun'].forEach(id => {
+        const el = document.getElementById(id);
+        if (b.dataset.closeOwed === 'yes') el.title = OWED_TIP; else el.removeAttribute('title');
+      });
+    });
+  });
+  document.querySelectorAll('.rb-btn[data-rerun-turns]').forEach(b => {
+    b.addEventListener('click', () => {
+      body.dataset.rerunTurns = b.dataset.rerunTurns;
+      document.querySelectorAll('.rb-btn[data-rerun-turns]').forEach(o =>
+        o.classList.toggle('active', o === b));
+    });
+  });
+  document.getElementById('review-rerun').addEventListener('click', () => {
+    if (body.dataset.closeOwed !== 'yes') setModal('review-rerun');
+  });
 
   // delete opens its confirm
   document.querySelector('.card-action-delete').addEventListener('click', () => setModal('delete'));
