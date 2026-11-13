@@ -3,6 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import type { ResolveModelConfig } from '@/lib/ai'
 import {
+  branches,
   clearEmbeddingStaleOp,
   entities,
   happeningInvolvements,
@@ -43,6 +44,7 @@ const TOBIN = 'char_00000000-0000-4000-8000-000000000002'
 const MIRA = 'char_00000000-0000-4000-8000-000000000003'
 const FERRY = 'loc_00000000-0000-4000-8000-000000000004'
 const LANTERN = 'item_00000000-0000-4000-8000-000000000005'
+const OTHER_BRANCH = 'br_other'
 const CAST = [
   { id: WREN, kind: 'character', name: 'Wren' },
   { id: TOBIN, kind: 'character', name: 'Tobin' },
@@ -96,14 +98,24 @@ type Seed = {
   vector: Float32Array
   /** Already embedded: a stored vector and a clear flag. */
   embedded?: boolean
+  /** The fixture's branch unless given. */
+  branchId?: string
 }
 
-async function seedHappening({ id, title, at, cast, vector, embedded = false }: Seed) {
+async function seedHappening({
+  id,
+  title,
+  at,
+  cast,
+  vector,
+  embedded = false,
+  branchId = fx.branchId,
+}: Seed) {
   vectors.set(id, vector)
   const description = `${title}, as the turn tells it.`
   await fx.ctx.db.insert(happenings).values({
     id,
-    branchId: fx.branchId,
+    branchId,
     title,
     description,
     occurredAtEntryId: at,
@@ -115,7 +127,7 @@ async function seedHappening({ id, title, at, cast, vector, embedded = false }: 
     await fx.ctx.db.insert(happeningInvolvements).values(
       cast.map((entityId, i) => ({
         id: `hinv_${id.slice(-2)}_${i}`,
-        branchId: fx.branchId,
+        branchId,
         happeningId: id,
         entityId,
         role: null,
@@ -123,7 +135,7 @@ async function seedHappening({ id, title, at, cast, vector, embedded = false }: 
     )
   if (embedded)
     await fx.ctx.runInTransaction(
-      vecWrite({ kind: 'happening', id, branchId: fx.branchId, fields: [title, description] }),
+      vecWrite({ kind: 'happening', id, branchId, fields: [title, description] }),
     )
 }
 
@@ -145,6 +157,26 @@ async function seedPair(over: { h1?: Partial<Seed>; h2?: Partial<Seed> } = {}): 
     vector: unitAt(0.2),
     ...over.h2,
   })
+}
+
+// A sibling branch of the same story: its rows share ids with the fixture branch's, never a range.
+async function openOtherBranch(characters: readonly string[] = []): Promise<void> {
+  await fx.ctx.db
+    .insert(branches)
+    .values({ id: OTHER_BRANCH, storyId: fx.storyId, name: 'other', createdAt: 1 })
+  for (const id of characters) {
+    const { kind, name } = CAST.find((row) => row.id === id)!
+    await fx.ctx.db.insert(entities).values({
+      id,
+      branchId: OTHER_BRANCH,
+      kind,
+      name,
+      status: 'active',
+      injectionMode: 'auto',
+      createdAt: 1,
+      updatedAt: 1,
+    })
+  }
 }
 
 type Embed = (rows: EmbeddedFieldRow[], signal?: AbortSignal) => Promise<SqlOp[]>
@@ -358,6 +390,52 @@ describe('the range embed', () => {
     expect(revalidated).toEqual([])
     expect(closeClustersOf(phase.intermediates)).toEqual([])
     expect(await staleOf()).toEqual({ [H1]: 1, [H_LATER]: 1 })
+  })
+
+  it("counts only this branch's happenings toward the range, so another branch's adds no embed", async () => {
+    await seedHappening({
+      id: H1,
+      title: 'Tobin names his price',
+      at: fx.entries[3]!.id,
+      cast: [WREN, TOBIN],
+      vector: unitAt(0),
+    })
+    await openOtherBranch()
+    await seedHappening({
+      id: H2,
+      title: 'Wren pays the fare',
+      at: fx.entries[4]!.id,
+      cast: [WREN, TOBIN],
+      vector: unitAt(0.2),
+      branchId: OTHER_BRANCH,
+    })
+    const { embedded } = script()
+    const phase = phaseOf()
+
+    expect(await runStep(phase)).toEqual({ status: 'completed' })
+
+    expect(embedded).toEqual([])
+    expect(closeClustersOf(phase.intermediates)).toEqual([])
+  })
+
+  it("reads a happening's cast on this branch only, never another branch's links", async () => {
+    await seedPair({ h1: { cast: [WREN] }, h2: { cast: [TOBIN] } })
+    // On the other branch the second beat also involves Wren: read here, the pair would cluster.
+    await openOtherBranch([WREN])
+    await seedHappening({
+      id: H2,
+      title: 'Wren pays the fare',
+      at: fx.entries[4]!.id,
+      cast: [WREN],
+      vector: unitAt(0.2),
+      branchId: OTHER_BRANCH,
+    })
+    script()
+    const phase = phaseOf()
+
+    expect(await runStep(phase)).toEqual({ status: 'completed' })
+
+    expect(closeClustersOf(phase.intermediates)).toEqual([])
   })
 
   it('needs no embedder at all for a chapter with one happening', async () => {
