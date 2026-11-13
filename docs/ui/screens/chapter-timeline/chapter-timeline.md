@@ -230,7 +230,7 @@ goes.
 ### Re-run a close
 
 Runs the latest chapter's lore work again, and CTRL-Z after it brings
-the close back
+the close back, until a turn, an edit or a rollback comes between
 ([`chapter-close.md → Re-running a close`](../../../memory/chapter-close.md#re-running-a-close)).
 Opened from the card's `Re-run close…` or the review window's
 `Re-run…`, both disabled while a close is owed. An
@@ -257,7 +257,7 @@ generation pipeline is in flight:
 │  this one reads 24,310 tokens of story.          │
 │                                                  │
 │  CTRL-Z brings this close back until your next   │
-│  turn or edit.                                   │
+│  turn, edit or rollback.                         │
 │                                                  │
 │               [ Cancel ]  [ Re-run close ]       │
 └──────────────────────────────────────────────────┘

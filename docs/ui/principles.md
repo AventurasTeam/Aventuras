@@ -308,7 +308,7 @@ turn and rollback stay enabled: each interrupts it, and the pass or
 close runs before the next turn instead, with a toast saying so. The
 user never waits minutes to redo the reply they just read. Two
 exceptions hold the reader's actions, head reversals included, until
-the run ends. One is a pass or a close a system entry's `Retry`
+the run ends, and a close's re-run holds some (below). One is a pass or a close a system entry's `Retry`
 started, which the pill's `Cancel` ends
 ([`memory/classifier.md → Failure policy`](../memory/classifier.md#failure-policy)).
 The other is a Send's owed work, the pass or close it runs before its
@@ -317,9 +317,10 @@ reversals until the turn starts, so a reversal can't interrupt it,
 minutes long for a close, and the pill's, the composer's or the banner's
 `Cancel` ends the whole Send
 ([`generation-pipeline.md → Gate derivation as a selector`](../generation-pipeline.md#gate-derivation-as-a-selector)).
-A close's re-run differs the other way: it moves nothing, since the
-close it replaces stands, a head reversal reaching that chapter confirms
-as it would with no run in flight, and CTRL-Z is refused while it runs
+A close's re-run moves nothing, since the close it replaces stands. A
+head reversal that would remove its chapter's end entry is held until
+it ends, one that spares the chapter interrupts it, and CTRL-Z is
+refused while it runs
 ([`memory/chapter-close.md → Re-running a close`](../memory/chapter-close.md#re-running-a-close)).
 
 The turn and the close are atomic per their `action_id` (see
@@ -417,12 +418,13 @@ editable control disables when a transaction is in flight,
 including form save buttons (so the user doesn't draft an edit
 they can't submit). Hover/focus reveals a uniform tooltip:
 
-| Pipeline            | Tooltip copy                                 |
-| ------------------- | -------------------------------------------- |
-| Per-turn            | `Generation is in flight. Cancel to edit.`   |
-| Periodic classifier | `Updating memory. Cancel to edit.`           |
-| Chapter-close       | `Chapter close in progress. Cancel to edit.` |
-| Suggestion refresh  | `Refreshing suggestions. Cancel to edit.`    |
+| Pipeline             | Tooltip copy                                      |
+| -------------------- | ------------------------------------------------- |
+| Per-turn             | `Generation is in flight. Cancel to edit.`        |
+| Periodic classifier  | `Updating memory. Cancel to edit.`                |
+| Chapter-close        | `Chapter close in progress. Cancel to edit.`      |
+| Chapter-close re-run | `Re-running the chapter's close. Cancel to edit.` |
+| Suggestion refresh   | `Refreshing suggestions. Cancel to edit.`         |
 
 Suggestion refresh is a hard-gate run too, and may run beside a pass
 or a close. It leaves Send in place rather than swapping it for Cancel,
@@ -434,7 +436,8 @@ A disabled control's tooltip names the run it waits on, which is not
 always the pill's. A head reversal passes through a pass or a close, so
 beside one it waits on whatever else holds the gate (a refresh, a
 turn) and names that run. With no such run, as during a failure
-entry's `Retry` or a Send's owed work, it names the pill's.
+entry's `Retry`, a Send's owed work, or a close's re-run holding a
+reversal that reaches its chapter, it names the pill's.
 
 Tooltip copy is principle-owned. Per-screen docs cite, don't
 reinvent.

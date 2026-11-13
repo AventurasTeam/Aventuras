@@ -28,8 +28,11 @@ Cross-cutting principles:
   not, nor is a Send's owed work: they hold rollback until they end. A
   close's
   [re-run](../../chapter-timeline/chapter-timeline.md#re-run-a-close)
-  is interrupted the same way, but moves nothing to the next turn, since
-  the close it replaces stands, and the counts take that close.
+  is interrupted the same way by a rollback that spares its chapter, and
+  moves nothing to the next turn, since the close it replaces stands. A
+  rollback into its chapter is held until it ends: the `×` disables
+  with the re-run's tooltip
+  ([`principles.md → Edit restrictions during in-flight generation`](../../../principles.md#edit-restrictions-during-in-flight-generation)).
 
 ## Two visible states
 
@@ -201,7 +204,8 @@ mechanism rather than the hover-preview.
   it recounts each time a run settles under it, per [Counts](#counts).
   Confirming interrupts the pass or close and moves it to the next
   turn, with its deferral toast; a close's re-run moves nothing and
-  shows its cancelled toast, and the counts take the close it replaces.
+  shows its cancelled toast. A rollback into a re-run's chapter is held
+  until the re-run ends.
   If the set the commit then resolves
   differs from the counts on screen, the commit refuses
   `counts-changed`: the counts-changed toast shows and the modal

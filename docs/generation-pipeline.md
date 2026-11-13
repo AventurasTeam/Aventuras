@@ -58,7 +58,7 @@ interface Pipeline {
   phases: readonly PhaseNode[]
   affordance: 'invisible' | 'pill-only' | 'pill-and-banner'
   gateBehavior: 'hard-gate' | 'no-gate' // 'scoped-gate' deferred; no v1 kind declares 'no-gate'
-  interruptible?: 'pass' | 'close' // a head reversal or Cancel ends me and defers me, in this txState.deferred slot, to the next turn; a close's re-run defers nothing; see Prose reversals and the interrupt
+  interruptible?: 'pass' | 'close' // a head reversal or Cancel ends me and defers me, in this txState.deferred slot, to the next turn; a close's re-run defers nothing, and holds a reversal reaching its chapter; see Prose reversals and the interrupt
   concurrencyPolicy: ConcurrencyPolicy
   chainsTo?: (run: RunState, ctx) => string | null | Promise<string | null> // awaited at commit while the run holds the gate; sources its own deps
   onPreflightFailure?: (ctx, error: PipelineError) => Promise<void> // pre-flight halts before phase 0, so only this hook ever sees that failure
@@ -589,7 +589,7 @@ type RunState = {
   actionId: string // globally unique; never reused
   storyId: string | null // read by chainsTo + config resolution
   branchId: string
-  interruptible: 'pass' | 'close' | 'rerun' | null // copied from the pipeline at reserve, 'rerun' for a close reserved under pendingRerun; a head reversal or Cancel ends the run and defers it in this slot, a 'rerun' in none
+  interruptible: 'pass' | 'close' | 'rerun' | null // copied from the pipeline at reserve, 'rerun' for a close reserved under pendingRerun; a head reversal or Cancel ends the run and defers it in this slot, a 'rerun' in none, and a reversal reaching the re-run's chapter waits for it instead
   beforeTurn: boolean // Send's owed work before the turn: the run Send started and every run it chains
   abortController: AbortController
   currentPhase: string // name of declared phase or parallel group
@@ -1178,7 +1178,8 @@ Atomicity windows worth being honest about:
 - Between start marker and first delta — nothing to reverse, just
   delete the row. A close's re-run is the exception once its reversal
   has committed: its journal sits under the run's `actionId` with no
-  delta of the run's own, and recovery writes it back
+  delta of the run's own, and recovery writes it back, or undoes the
+  close when it can't
   ([Reverse-replay](#reverse-replay)).
 - Between consecutive deltas — standard reverse-replay path.
 - Between the final delta and the `commitRun` marker UPDATE —
@@ -1221,7 +1222,8 @@ Invocation contract:
 ```ts
 async function recoverInFlightRuns(): Promise<RecoveryReport> {
   const orphans = await db.query(
-    'SELECT * FROM pipeline_runs WHERE finished_at IS NULL ORDER BY started_at ASC',
+    // Newest first, as undo goes: a close's re-run may have journaled an older orphan's rows.
+    'SELECT * FROM pipeline_runs WHERE finished_at IS NULL ORDER BY started_at DESC',
   )
   const reversed: RecoveredRun[] = []
   const failures: RecoveryFailure[] = []
@@ -1296,7 +1298,9 @@ action and kind-aware copy naming the affected story:
   story consistent."_
 - `chapter-close` → _"An interrupted shutdown was detected in
   `{storyName}`. The chapter-close pass was reverted; your story
-  content is intact."_
+  content is intact."_ A close's re-run whose journal couldn't be
+  written back adds _"The chapter's earlier close couldn't be restored,
+  so its close was undone."_
 - `periodic-classifier` → _"An interrupted shutdown was detected
   in `{storyName}`. A memory update was reverted; your story content
   is intact."_
@@ -1762,14 +1766,28 @@ same transaction writes the journal back after the group's own deltas
 reverse, found by the `actionId` even when the group logged no delta
 of its own, as when a re-run stops between its reversal and its first
 write: each row and delta row to its before-image, a delta at its
-first log position, an embedded row flagged stale since the sweep took
-its vector, and the journal row goes. That is exact because nothing
-else wrote in between: the gate holds through the run, and CTRL-Z of a
-re-run refuses when a delta outside its group was logged after it
-began. A reversal that takes the group otherwise, a rollback or a
-delete, takes the journal with it; a divider-only removal leaves the
-group's lore deltas and so its journal; a later re-run's journal holds
-this one's row as a before-image. CTRL-Z of a re-run isn't redoable
+first log position, every embedded row it writes flagged stale and
+every row it removes swept from the vector tables, its store patches
+after the group's own, and the journal row goes.
+
+The write-back is exact only while nothing but the re-run's own
+writes and their undo touched what the journal covers. So it checks
+that the group is whole and that no delta outside it sits above the
+group's first log position, and a reversal that sweeps from below that
+position while sparing the group, such as a rollback or regenerate of a
+turn between the chapter's end and the re-run, drops the journal, in
+the planner every sweep shares. When the journal is gone or the check
+fails, the re-run's reversal takes the chapter's other close groups
+with it, as a delete does: the close is undone altogether, and a toast
+says `Chapter <N>'s earlier close couldn't be restored, so its close was undone.` (the recovery modal's re-run line after a crash). Boot
+recovery takes orphans newest first, so a re-run's write-back runs
+before any older orphan it journaled. A reversal that takes the group
+otherwise, a rollback into the chapter or a delete, takes the journal
+with it; a divider-only removal leaves the group's lore deltas and so
+its journal; a later re-run's journal holds this one's row as a
+before-image. CTRL-Z of a re-run isn't redoable, and it clears the redo
+stack, since a later edit's snapshot there can hold the re-run's
+values
 ([`memory/chapter-close.md → Re-running a close`](./memory/chapter-close.md#re-running-a-close)).
 
 **Undoing a `create` consults no cascade.**
@@ -2388,12 +2406,14 @@ to `detail` alone otherwise.
 
 `interruptible` — a head reversal (regenerate, swipe, an edit of the
 head turn, CTRL-Z of the turn, rollback) or Cancel ends me, and I run
-before the branch's next turn instead
+before the branch's next turn instead, except as a close's re-run,
+below
 ([Prose reversals and the interrupt](#prose-reversals-and-the-interrupt)).
 Its value names the `txState.deferred` slot that records me: the
 periodic classifier declares `'pass'`, chapter-close `'close'`. A
 close's re-run runs as `'rerun'`, which no slot records: the close it
-replaces stands, so nothing moves to the next turn.
+replaces stands, so nothing moves to the next turn. A reversal that
+would reach the re-run's chapter waits for it instead of ending it.
 
 `concurrencyPolicy`:
 
@@ -2560,7 +2580,9 @@ with two cheap mechanisms.
 
 **The interrupt.** A reversal is refused while the gate is closed,
 with one exception: when the only runs holding it are `interruptible`
-ones on its branch, a pass or a close, it ends them first
+ones on its branch, a pass or a close, it ends them first, unless the
+run is a close's re-run and the reversal would remove its chapter's end
+entry, which it refuses as held
 (`interruptMemoryRuns`). While a suggestion
 refresh runs beside one, the reversal is refused, its controls disabled,
 until the refresh ends or its ✕ cancels it, as when the refresh runs
@@ -2595,8 +2617,10 @@ run's abort then records it in `txState.deferred` for its branch
 before the turn ([chainsTo on predecessor](#chainsto-on-predecessor)),
 and a toast says the memory update, or the chapter close, moved to
 the next turn. A close's re-run records nothing, since the close it
-replaces stands, and a reversal that reaches that chapter confirms as
-it would with no run in flight. CTRL-Z is refused while a re-run runs:
+replaces stands, and a reversal that would remove the re-run's chapter
+end entry, reaching the chapter, is held until the re-run ends, as the
+interrupt's exception above says. CTRL-Z is refused while a re-run
+runs:
 its target is the close or an edit, never a turn
 ([`memory/chapter-close.md → Re-running a close`](./memory/chapter-close.md#re-running-a-close)).
 An interrupted pass restores its pre-run status and

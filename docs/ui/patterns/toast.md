@@ -37,7 +37,9 @@ Used by:
   [review window](../screens/chapter-timeline/chapter-timeline.md#review-window).
   A chapter close's re-run that commits, the same with `Review`; one
   cancelled, info severity, or failed, warning severity, with no
-  action, both saying the close is as it was.
+  action, both saying the close is as it was; and a re-run undone with
+  no journal to write back, warning severity, saying the earlier close
+  couldn't be restored.
 - Any surface whose generation call came back with far fewer input
   tokens than were sent
   ([`architecture.md → Truncation cross-check`](../../architecture.md#truncation-cross-check))

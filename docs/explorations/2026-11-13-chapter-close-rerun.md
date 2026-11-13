@@ -117,11 +117,13 @@ any shortcut rollback commits.
 | Cancel / interrupt    | The group reverses, the journal restores; `Re-run cancelled. Chapter 5's close is as it was.`  |
 | A failed call         | The same; warning `Re-run failed. Chapter 5's close is as it was.` with the reason, no `Retry` |
 | A catch-up pass fails | The chain ends as a failed pass's does; the re-run doesn't run and isn't owed                  |
-| Crash                 | Boot recovery reverses the group and restores the journal                                      |
+| Crash                 | Boot recovery reverses the group and restores the journal, else undoes the close               |
 
-**Head reversals.** One reaching the chapter, which only a manual close
-on the latest reply allows, confirms as with no run in flight, counting
-the first close. CTRL-Z is refused while a re-run runs; Cancel stops it.
+**Head reversals.** One reaching the chapter (a rollback into it, or a
+regenerate of a manual close's end reply) is held until the re-run
+ends: once the reversal commits, the first close's lore sits in the
+journal, where no confirm can count it. CTRL-Z is refused while a
+re-run runs; Cancel stops it.
 
 ## The UX
 
@@ -135,7 +137,7 @@ window.
 as Delete's, and, when turns followed the close, adds the turns it
 removes first with the rollback modal's counts and "They go for good,
 even if the re-run fails or you cancel it." Its last line:
-`CTRL-Z brings this close back until your next turn or edit.` Primary,
+`CTRL-Z brings this close back until your next turn, edit or rollback.` Primary,
 not destructive. The sketch is canon's
 ([`chapter-timeline.md → Re-run a close`](../ui/screens/chapter-timeline/chapter-timeline.md#re-run-a-close)).
 
@@ -167,12 +169,32 @@ re-creates a row. The same session dropped re-runs over later turns
 (Decisions) and redo of a re-run, and the net counts and
 `reversedThrough` the logged design needed went with it.
 
+The second `code` audit, on the journal, bounded it:
+
+- **Redo.** CTRL-Z of a re-run must clear the redo stack, or a later
+  edit's snapshot redoes the re-run's undone value with no delta behind
+  it.
+- **Exactness.** A rollback or regenerate of a turn between the chapter's
+  end and the re-run sweeps from below it, and failure paths that drop
+  the gate can leave an orphan under later turns. Both make the journal
+  inexact. Such a sweep drops the journal, the write-back checks the
+  group, and without the journal the re-run's reversal undoes the
+  chapter's close altogether, as Delete does. Rejected: reversing the
+  re-run alone, which leaves the first close's report over lore that's
+  gone; and blocking those reversals, routine after an auto close.
+- **Held reversals.** A confirm can't count lore in the journal, so a
+  head reversal reaching the chapter waits for the re-run to end.
+- **Smaller fixes:** embeddings, store patches, newest-first recovery.
+
 ## Adversarial pass
 
 **Load-bearing assumption.** The journal's write-back is exact. It
-holds while nothing outside the group logs between the reversal and its
-restore: the gate covers abort and crash, and CTRL-Z checks it.
-Checked against the write paths, not prototyped.
+holds while nothing but the re-run's writes and their undo touched what
+the journal covers. The gate covers a normal abort, CTRL-Z checks that
+the group is whole and nothing foreign sits above it, and a sweep from
+below the re-run drops the journal. Where it can't hold, the re-run's
+reversal undoes the chapter's close altogether. Checked against the
+write paths by the second code audit, not prototyped.
 
 **Accepted:**
 

@@ -277,8 +277,7 @@ re-run. The pass or close moves to the next turn, and a toast says so
 ([During a memory update](#during-a-memory-update)). A close's
 [re-run](../chapter-timeline/chapter-timeline.md#re-run-a-close) is the
 exception: the close it replaces has committed, so a regenerate reaching
-that chapter confirms as below, counting that close, which the
-interrupt restores.
+that chapter is held until the re-run ends; Cancel stops it first.
 
 **Confirm when the turn closed a chapter.** If a committed chapter
 close ends on this turn, as a manual close may, its
@@ -313,7 +312,8 @@ the user reads the reply, and the head reversals, regenerate among
 them, interrupt them
 ([`principles.md → Edit restrictions during in-flight generation`](../../principles.md#edit-restrictions-during-in-flight-generation)),
 except a pass or a close a failure entry's `Retry` started and a Send's owed
-work (below).
+work (below), and a close's re-run holds those that would reach its
+chapter.
 In the reader the banner shows `Updating memory… [Cancel]` or the
 close's progress, and the composer stays live while Send waits. An
 interrupt, or the pill's or the banner's Cancel, shows an info

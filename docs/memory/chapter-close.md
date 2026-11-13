@@ -921,8 +921,9 @@ chapter's last entry, then a delete.
 
 When a close's output is poor overall, the user runs its lore work
 again, and CTRL-Z trades a worse second run back for the first while
-the re-run is the latest action: after a turn or an edit, CTRL-Z
-reaches it only through them. A re-run reverses what the chapter's
+the re-run is the latest action and nothing has rolled back a turn
+under it: after a turn or an edit, CTRL-Z reaches it only through them,
+and after such a rollback it undoes the close altogether. A re-run reverses what the chapter's
 close did to the world and runs phases 3 and 4 again. The chapter row,
 its end, stamps, title and summary stay: metadata is
 `Regenerate summary`'s
@@ -959,7 +960,13 @@ and reversing the re-run's group, by CTRL-Z, Cancel, a failure or crash
 recovery, writes the journal back after the re-run's own writes reverse
 (even before it has any),
 restoring the close, its deltas and report included. CTRL-Z of a re-run
-can't be redone: re-running is the way back. Every delta of the re-run
+can't be redone, and clears the redo stack: re-running is the way back.
+The journal is exact only while nothing else touched what it covers, so
+a rollback or regenerate of a turn between the chapter's end and the
+re-run drops it, and so does a check that finds the group broken or a
+foreign delta above its first log position. Without it, reversing the re-run undoes the
+chapter's close altogether, as a delete does, and says the close before
+it couldn't be restored. Every delta of the re-run
 anchors on the end entry and is `chapter_close`, so a rollback into the
 chapter takes all of it, and the journal with it; a divider-only
 removal leaves the re-run's lore deltas and their journal.
@@ -982,20 +989,21 @@ close, as a close's review does.
 
 **Nothing is owed after it**, since the close it replaces stands:
 
-| Outcome                         | Result                                                                  |
-| ------------------------------- | ----------------------------------------------------------------------- |
-| Commits                         | Its report replaces the close's, and CTRL-Z brings the close back       |
-| Cancel, or a head reversal      | The group reverses and the journal restores the close; nothing deferred |
-| A call that fails after retries | The same, and the toast gives the reason                                |
-| A catch-up pass fails           | The chain ends as a failed pass's does, and the re-run doesn't run      |
-| Crash                           | Boot recovery reverses the group and restores the journal               |
+| Outcome                         | Result                                                                           |
+| ------------------------------- | -------------------------------------------------------------------------------- |
+| Commits                         | Its report replaces the close's; CTRL-Z brings the close back, else undoes it    |
+| Cancel, or a head reversal      | The group reverses and the journal restores the close; nothing deferred          |
+| A call that fails after retries | The same, and the toast gives the reason                                         |
+| A catch-up pass fails           | The chain ends as a failed pass's does, and the re-run doesn't run               |
+| Crash                           | Boot recovery reverses the group and restores the journal, else undoes the close |
 
 **Head reversals.** Regenerate interrupts a running close with no
 confirm because nothing of it has committed. Under a re-run the close
-it replaces has, so a head reversal reaching that chapter, a rollback
-into it or a regenerate of its end reply after a manual close on the
-latest reply, confirms as it would with no run in flight, its counts
-taking the close the interrupt restores.
+it replaces has, and once the reversal commits its lore sits in the
+journal, where no confirm can count it. So a head reversal reaching
+that chapter, a rollback into it or a regenerate of its end reply after
+a manual close on the latest reply, is held until the re-run ends, as
+under a Send's owed work: Cancel stops the re-run first.
 CTRL-Z is refused while a re-run runs, its target being the close or an
 edit, never a turn; Cancel stops it.
 

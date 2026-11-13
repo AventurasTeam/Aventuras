@@ -659,7 +659,8 @@
 </div>
 
 <!-- re-run confirm — chapter-timeline.md → Re-run a close. An AlertDialog: an outside click does
-     nothing. Primary, not destructive: CTRL-Z after it brings the close back. -->
+     nothing. Primary, not destructive: CTRL-Z after it brings the close back, until a turn,
+     an edit or a rollback comes between. -->
 <div class="modal-backdrop" id="rerun-backdrop">
   <div class="modal">
     <div class="modal-head">
@@ -681,7 +682,7 @@
         <p class="modal-context">They go for good, even if the re-run fails or you cancel it.</p>
       </div>
       <p class="modal-context">A close is the costliest call the app makes: this one reads 24,310 tokens of story.</p>
-      <p class="modal-context">CTRL-Z brings this close back until your next turn or edit.</p>
+      <p class="modal-context">CTRL-Z brings this close back until your next turn, edit or rollback.</p>
     </div>
     <div class="modal-foot">
       <button class="btn" id="rerun-cancel">Cancel</button>

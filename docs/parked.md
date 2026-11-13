@@ -1925,15 +1925,16 @@ first.
 
 CTRL-Z trades a close's re-run back for the close it replaced only while
 the re-run is the latest action; after a turn or an edit it reaches the
-re-run only by undoing them, prose included. The first run's review
+re-run only by undoing them, prose included, and after a rollback of a
+turn under it the journal is gone. The first run's review
 goes with it, so comparing the two takes an undo and a fresh look, and
 a re-run can't be redone. A "previous run" view has a cheap path: the
 first run's report sits in the undo payload of the re-run's report
 update, and its deltas in the re-run's journal
 ([`generation-pipeline.md → Reverse-replay`](./generation-pipeline.md#reverse-replay)).
 A `Restore previous run` after later turns has none, since the journal
-writes back exactly only while nothing has been logged above the
-re-run.
+writes back exactly only while nothing but the re-run's own writes and
+their undo has touched what it covers.
 
 Parked 2026-11-13; the signal is users wanting to compare runs, or to
 trade one back after playing on.

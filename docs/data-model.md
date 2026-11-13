@@ -284,10 +284,10 @@ erDiagram
     reversal_journals {
         text action_id PK "the close re-run's action_id, whose group this journal belongs to"
         text branch_id FK "composite PK with action_id"
-        json journal "before-images of every row and delta row the re-run's reversal touched: whole row, or absent. Written in the reversal's transaction, written back when the re-run's group reverses. See generation-pipeline.md → Reverse-replay"
+        json journal "before-images of every row and delta row the re-run's reversal touched: whole row, or absent. Written in the reversal's transaction, written back when the re-run's group reverses, if still exact. See generation-pipeline.md → Reverse-replay"
         integer created_at
     }
-    %% Not delta-logged: the undo half of one delta group. Goes with the group: a rollback or delete taking the group drops it; a later re-run's journal holds it as a before-image. Fork carrying it with its group is M6.1's.
+    %% Not delta-logged: the undo half of one delta group. Goes with the group: a rollback or delete taking the group drops it, and so does a sweep from below the group that spares it; a later re-run's journal holds it as a before-image. Fork carrying it with its group is M6.1's.
 
     vault_calendars {
         text id PK "UUID; user-authored calendars only — built-ins live in code/repo JSON loaded at boot"
@@ -2623,7 +2623,9 @@ its other logged writes with it
 Forward writes only ever append; only a reversal prunes or edits, and
 what it edits is a delete's payload or a kept create's owner. A
 close's re-run also journals what its reversal prunes and writes, so
-undoing the re-run writes the close it replaced back
+undoing the re-run writes the close it replaced back, or undoes the
+chapter's close altogether when the journal can't be written back
+exactly
 ([`generation-pipeline.md → Reverse-replay`](./generation-pipeline.md#reverse-replay)).
 
 User editing an entry's text does **not** auto-trigger re-classification.
@@ -2977,7 +2979,8 @@ by the same user-visible operation. Action boundaries:
   single unit, because a user who clicks "undo" expects the whole
   "the chapter closed" event to disappear in one press. A close's
   re-run is one unit too: undoing it brings back the close it
-  replaced, and it can't be redone
+  replaced while its journal can be written back exactly, else undoes
+  the chapter's close altogether, and it can't be redone
   ([`memory/chapter-close.md → Re-running a close`](./memory/chapter-close.md#re-running-a-close)).
 
 Algorithm:
@@ -3000,8 +3003,10 @@ Algorithm:
      Periodic-classifier deltas above it describe unrelated turns and
      stay put, except any that name a row the group created, which the
      reversal's closure takes with it. A close's re-run is one such
-     group: after it reverses, its journal is written back, and it is
-     refused when a delta outside the group was logged after it began
+     group: after it reverses, its journal is written back and the redo
+     stack clears; when the journal can't be written back exactly, the
+     chapter's other close groups reverse with it, undoing the close as
+     a delete does
      ([`generation-pipeline.md → Reverse-replay`](./generation-pipeline.md#reverse-replay)).
 3. Reverse the selected deltas newest-to-oldest via their `undo_payload`,
    move them onto an in-memory redo stack (not persisted), and remove
@@ -3011,7 +3016,8 @@ Redo re-applies from the in-memory stack, including the rows the
 closure took with the group, so undo and redo stay exact inverses; a
 sweep's rows stay out, since the clamped watermark re-derives them. A
 close's re-run has no redo: its undo writes a journal back, which redo
-can't replay, so re-running is the way back. The stack clears on any
+can't replay, so re-running is the way back, and its undo clears the
+stack, whose snapshots can hold the re-run's values. The stack clears on any
 new action. Redo is runtime-only; no schema
 support needed. If the app restarts, redo history is lost (acceptable
 — this matches editor conventions).
