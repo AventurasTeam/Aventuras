@@ -392,7 +392,7 @@ describe('foldMergeLinks', () => {
   })
 })
 
-// ---- merge_happenings, through dispatch in a real run (Task 1's harness). ----
+// ---- merge_happenings, through dispatch in a real run. ----
 
 // Substitutable ids must be real uuids: CloseIds.show allocates handles for those only.
 const charId = (n: number): string => `char_00000000-0000-4000-8000-${String(n).padStart(12, '0')}`
@@ -1179,6 +1179,80 @@ describe('merge_happenings refusals', () => {
     },
   )
 
+  it("rejects a keep in no cluster as absorbing rows outside keep's cluster", async () => {
+    const run = await runCalls(f, [merge({ keep: 'hp4', absorb: ['hp1'] })])
+
+    expect(run.answers).toEqual([
+      {
+        result: 'rejected',
+        reason:
+          "absorb names a happening outside keep's cluster: merge only happenings listed in one cluster",
+      },
+    ])
+    expect(await happeningRow(f, CROSSING)).toBeDefined()
+  })
+
+  it("skips the whole merge when a later turn wrote keep's own awareness pair", async () => {
+    await apply(
+      f,
+      {
+        kind: 'upsertHappeningAwareness',
+        source: 'per_turn_classifier',
+        payload: {
+          branchId: f.branchId,
+          characterId: WREN,
+          happeningId: CROSSING,
+          decayResistance: 0.9,
+          proseEntryId: null,
+        },
+      },
+      byLaterTurn(f),
+    )
+
+    const run = await runCalls(f, [merge({ keep: 'hp1', absorb: ['hp2'] })])
+
+    expect(run.answers).toEqual([{ result: 'skipped', reason: 'later-turn', note: NOTE.laterTurn }])
+    expect(await happeningRow(f, LIGHT)).toBeDefined()
+  })
+
+  it.each<{ field: 'title' | 'description' }>([{ field: 'title' }, { field: 'description' }])(
+    "lands a merge restating the $field the user gave keep, writing none of keep's text",
+    async ({ field }) => {
+      const users = field === 'title' ? 'The crossing, as the user names it' : COMPOSITE
+      await apply(
+        f,
+        {
+          kind: 'updateHappening',
+          source: 'user_edit',
+          payload: {
+            branchId: f.branchId,
+            id: CROSSING,
+            patch: { [field]: users },
+            proseEntryId: null,
+          },
+        },
+        BY_USER,
+      )
+
+      const run = await runCalls(f, [merge({ keep: 'hp1', absorb: ['hp3'], [field]: users })])
+
+      expect(run.answers).toEqual([{ result: 'ok', survivor: 'hp1' }])
+      expect((await happeningRow(f, CROSSING))?.[field]).toBe(users)
+      expect(await happeningRow(f, PRICE)).toBeUndefined()
+    },
+  )
+
+  it('rejects a composite title holding a turn id, writing nothing', async () => {
+    const run = await runCalls(f, [
+      merge({ keep: 'hp1', absorb: ['hp2'], title: 'The t3 crossing' }),
+    ])
+
+    expect(run.answers).toEqual([
+      { result: 'rejected', reason: 't3 is a turn: cite turns in turns, never in the text' },
+    ])
+    expect(await runDeltas(f, run.result.actionId)).toEqual([])
+  })
+
   it('rejects a shape fault ahead of a gone row', async () => {
     await apply(
       f,
@@ -1538,6 +1612,58 @@ describe('merge_happenings shape', () => {
 
     expect(run.answers).toEqual([{ result: 'ok', survivor: 'hp1' }])
     expect((await happeningRow(f, CROSSING))?.commonKnowledge).toBe(1)
+  })
+
+  it('shows a character only an absorbed row names with its name, ahead of its handle', async () => {
+    const odo = charId(4)
+    await seedCharacter(f, odo, 'Odo')
+    await apply(f, {
+      kind: 'upsertHappeningAwareness',
+      source: 'periodic_classifier',
+      payload: {
+        branchId: f.branchId,
+        characterId: odo,
+        happeningId: LIGHT,
+        learnedAtEntryId: f.entries[2]!.id,
+        decayResistance: 0.3,
+        source: 'Odo saw the light from the mill',
+        proseEntryId: null,
+      },
+    })
+
+    const run = await runCalls(f, [merge({ keep: 'hp1', absorb: ['hp2'] })])
+
+    expect(run.answers).toEqual([{ result: 'ok', survivor: 'hp1' }])
+    expect(run.ids.nameOfId(odo)).toBe('Odo')
+    expect(await awarenessOf(f, CROSSING, odo)).toMatchObject({
+      source: 'Odo saw the light from the mill',
+    })
+  })
+
+  it('names a character whose awareness of keep the user deleted by characterId, and leaves it deleted', async () => {
+    await apply(
+      f,
+      {
+        kind: 'deleteHappeningAwareness',
+        source: 'user_edit',
+        payload: { branchId: f.branchId, id: await awarenessId(f, CROSSING, WREN) },
+      },
+      BY_USER,
+    )
+
+    const run = await runCalls(f, [merge({ keep: 'hp1', absorb: ['hp2'] })])
+
+    expect(run.answers).toEqual([
+      {
+        result: 'ok',
+        survivor: 'hp1',
+        notWritten: [
+          { field: 'characterId', row: 'c1', reason: USER_EDITED_SINCE_PROSE, note: NOTE.user },
+        ],
+      },
+    ])
+    expect(await awarenessOf(f, CROSSING, WREN)).toBeUndefined()
+    expect(await happeningRow(f, LIGHT)).toBeUndefined()
   })
 
   it('sends keep no common knowledge it already has', async () => {
