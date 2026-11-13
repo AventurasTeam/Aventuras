@@ -14,10 +14,6 @@ vi.mock('#lib/stores/activity.svelte.ts', () => ({
   },
 }))
 
-vi.mock('#lib/stores/debug.svelte.ts', () => ({
-  debug: { addDebugRequest: vi.fn(), addDebugResponse: vi.fn() },
-}))
-
 const generateStructured = vi.fn()
 vi.mock('../sdk/generate', () => ({
   generateStructured: (...args: unknown[]) => generateStructured(...args),

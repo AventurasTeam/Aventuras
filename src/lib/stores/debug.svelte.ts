@@ -7,7 +7,6 @@ export type { DebugLogEntry }
 // The entries live in `debugLog`, which writers import directly; this store adds reactivity and
 // the pop-out window on top.
 class DebugStore {
-  #active = $state(false)
   // Reactive signal that increments when logs change - UI can track this
   logsVersion = $state(0)
   debugModalOpen = $state(false)
@@ -27,16 +26,6 @@ class DebugStore {
         this.emitToDebugWindow('debug-log-added', this.safeIpcEntry(change.entry))
       }
     })
-  }
-
-  /** Session-only request/response logging; writers check `debugLog.active`. */
-  get isActive(): boolean {
-    return this.#active
-  }
-
-  set isActive(value: boolean) {
-    this.#active = value
-    debugLog.active = value
   }
 
   /**

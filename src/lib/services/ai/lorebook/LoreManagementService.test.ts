@@ -7,9 +7,6 @@ vi.mock('#lib/stores/activity.svelte.ts', () => ({
     return recorder.current
   },
 }))
-vi.mock('#lib/stores/debug.svelte.ts', () => ({
-  debug: { addDebugRequest: vi.fn(), addDebugResponse: vi.fn() },
-}))
 vi.mock('#lib/stores/settings.svelte.ts', () => ({
   settings: { getServicePresetId: vi.fn(() => 'preset') },
 }))

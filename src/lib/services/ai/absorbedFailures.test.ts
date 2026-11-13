@@ -10,9 +10,6 @@ const activity = vi.hoisted(() => ({
   recordStep: vi.fn(() => ''),
 }))
 vi.mock('#lib/stores/activity.svelte.ts', () => ({ activity }))
-vi.mock('#lib/stores/debug.svelte.ts', () => ({
-  debug: { addDebugRequest: vi.fn(), addDebugResponse: vi.fn() },
-}))
 vi.mock('#lib/stores/settings.svelte.ts', () => ({
   settings: {
     getServicePresetId: vi.fn(() => 'preset'),

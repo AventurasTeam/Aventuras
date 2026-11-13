@@ -12,11 +12,6 @@ vi.mock('#lib/stores/settings.svelte.ts', () => ({
   },
 }))
 
-vi.mock('#lib/stores/debug.svelte.ts', () => ({
-  debug: { isActive: false, addDebugRequest: vi.fn(), addDebugResponse: vi.fn() },
-  debugStore: { logApiRequest: vi.fn(), logApiResponse: vi.fn() },
-}))
-
 // Every provider is built with this fetch, so the request body is what the SDK would have sent.
 vi.mock('./providers/fetch', () => ({
   createTimeoutFetch: () => async (_input: unknown, init?: { body?: unknown }) => {

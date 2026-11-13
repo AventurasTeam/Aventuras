@@ -10,13 +10,6 @@ vi.mock('#lib/stores/activity.svelte.ts', () => ({
   },
 }))
 
-vi.mock('#lib/stores/debug.svelte.ts', () => ({
-  debug: {
-    addDebugRequest: vi.fn(),
-    addDebugResponse: vi.fn(),
-  },
-}))
-
 vi.mock('#lib/stores/settings.svelte.ts', () => ({
   settings: {
     systemServicesSettings: {
