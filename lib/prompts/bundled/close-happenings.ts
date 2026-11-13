@@ -29,7 +29,7 @@ Each happening below shows its title, the turn it occurred at, its cast, who kno
 ### {{ h.id }}: {{ h.title | one_line }}{% if h.commonKnowledge %} (common knowledge){% endif %}
 - occurred at: {{ h.turn }}
 - cast: {% for c in h.cast %}{{ c.name | one_line }} ({{ c.id }}){% unless forloop.last %}, {% endunless %}{% else %}none{% endfor %}
-- known by: {% for c in h.knownBy %}{{ c.name | one_line }} ({{ c.id }}){% unless forloop.last %}, {% endunless %}{% else %}none{% endfor %}
+- known by: {% if h.commonKnowledge %}every character{% else %}{% for c in h.knownBy %}{{ c.name | one_line }} ({{ c.id }}){% unless forloop.last %}, {% endunless %}{% else %}none{% endfor %}{% endif %}
 - description: {{ h.description | json }}
 {%- endfor %}
 {%- endfor %}

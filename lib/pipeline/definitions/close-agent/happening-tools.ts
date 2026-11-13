@@ -544,7 +544,7 @@ export const mergeHappeningsTool: WriteTool<typeof MERGE_HAPPENINGS_SHAPE> = {
   kind: 'write',
   name: 'merge_happenings',
   description:
-    "Merge happenings of one cluster that record the same event: keep one and absorb the others, which are deleted. keep takes the earliest turn among them, everyone involved in any of them, each character's knowledge of any of them, and common knowledge if any had it. For a composite, send keep's description, and its title if it no longer covers them, rewritten whole; for a duplicate that only repeats keep, send neither. keep and absorb come from one cluster: merge everything in it that belongs together in one call.",
+    "Merge happenings of one cluster that record the same event: keep one and absorb the others, which are deleted. keep takes the earliest turn among them, everyone involved in any of them, each character's knowledge of any of them, and common knowledge if any had it. For a composite, send keep's description, and its title if it no longer covers them, rewritten whole; for a duplicate that only repeats keep, send neither. keep and absorb come from one cluster. Merge everything that records one event in one call; never in a chain.",
   schema: writeToolSchema(MERGE_HAPPENINGS_SHAPE),
   ids: {
     keep: { shape: 'single', prefixes: ['hap_'] },

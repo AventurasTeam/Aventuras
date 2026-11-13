@@ -564,7 +564,13 @@ describe('happeningsTask', () => {
     expect(prompt.user).toContain('- occurred at: t3')
     expect(prompt.user).toContain('- cast: Mara (c1), Wren (c2)')
     expect(prompt.user).toContain('- known by: Pike (c4), Tobin (c3), Wren (c2)')
-    expect(prompt.user).toContain('- known by: none')
+    expect(prompt.user).toContain(
+      '### hp2: Tobin poles Wren across\n- occurred at: t5\n- cast: Tobin (c3), Wren (c2)\n- known by: none\n',
+    )
+    // The stored awareness rows of a common-knowledge happening don't matter: every character knows.
+    expect(prompt.user).toContain(
+      '### hp3: The Syndicate taxes the ferry (common knowledge)\n- occurred at: t7\n- cast: Tobin (c3)\n- known by: every character\n',
+    )
     expect(prompt.user).toContain(
       '- description: "Halfway across, a light moves on the far bank and goes out."',
     )

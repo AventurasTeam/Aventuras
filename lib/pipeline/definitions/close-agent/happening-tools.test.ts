@@ -389,6 +389,12 @@ describe('merge_happenings schema', () => {
       absorb: { shape: 'array', prefixes: ['hap_'] },
     })
   })
+
+  it('tells the model to merge one event in one call, never in a chain', () => {
+    expect(mergeHappeningsTool.description).toContain(
+      'Merge everything that records one event in one call; never in a chain.',
+    )
+  })
 })
 
 describe('merge_happenings refusals', () => {
