@@ -1,5 +1,6 @@
 import { chunked, SOURCE_TABLES, type VecTargetKind } from '@/lib/db'
 
+import { chapterAgeIndex, type ChapterAgeIndex } from './chapters-old'
 import { parseKeywords } from './name-index'
 import type { EntityRow, LoreRow, ThreadRow } from './pools'
 import type { QueryAll, RetrievalType } from './types'
@@ -240,25 +241,33 @@ export async function loadHappeningRows(
   return [...new Map(mapped.map((r) => [r.id, r])).values()]
 }
 
-/** Entry ids each closed chapter covers, for the chapter-match boost. */
+export type ChapterRanges = {
+  /** Entry ids each closed chapter covers, for the chapter-match boost. */
+  ranges: Map<string, Set<string>>
+  ages: ChapterAgeIndex
+}
+
+/** Each closed chapter's stamped entries, read once for the chapter-match boost and for decay. */
 export async function loadChapterRanges(
   queryAll: QueryAll,
   branchId: string,
-): Promise<Map<string, Set<string>>> {
+): Promise<ChapterRanges> {
   const rows = await queryAll(
     // Aliased because both sides of the join name their key `id`: the drivers
     // rebuild positional rows with Object.values, and the duplicate key would
     // collapse the pair into a single entry-id cell.
-    `SELECT c.id AS chapter_id, e.id AS entry_id FROM chapters c
+    `SELECT c.id AS chapter_id, c.sequence_number, e.id AS entry_id FROM chapters c
      JOIN story_entries e ON e.branch_id = c.branch_id AND e.chapter_id = c.id
      WHERE c.branch_id = ?`,
     [branchId],
   )
-  const out = new Map<string, Set<string>>()
-  for (const [chapterId, entryId] of rows as [string, string][]) {
-    const bucket = out.get(chapterId)
+  const ranges = new Map<string, Set<string>>()
+  const stamps: { sequence: number; entryId: string }[] = []
+  for (const [chapterId, sequence, entryId] of rows as [string, unknown, string][]) {
+    const bucket = ranges.get(chapterId)
     if (bucket) bucket.add(entryId)
-    else out.set(chapterId, new Set([entryId]))
+    else ranges.set(chapterId, new Set([entryId]))
+    stamps.push({ sequence: Number(sequence), entryId })
   }
-  return out
+  return { ranges, ages: chapterAgeIndex(stamps) }
 }

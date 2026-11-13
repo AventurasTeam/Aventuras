@@ -415,7 +415,7 @@ async function runRetrievalPass(
   const rankTypeInput = {
     params: RANKER_DEFAULTS,
     querySlots: queries.slots,
-    chapterRanges,
+    chapterRanges: chapterRanges.ranges,
     countTokens,
   }
 
@@ -452,7 +452,7 @@ async function runRetrievalPass(
   // the POV-awareness filter, the stale filter, or budget fill.
   const boostedEntryIds = new Set<string>()
   for (const chapter of chapters.selected) {
-    for (const entryId of chapterRanges.get(chapter.id) ?? []) boostedEntryIds.add(entryId)
+    for (const entryId of chapterRanges.ranges.get(chapter.id) ?? []) boostedEntryIds.add(entryId)
   }
   const happeningsStartedAt = performance.now()
   pools.happenings = await buildHappeningsPool(

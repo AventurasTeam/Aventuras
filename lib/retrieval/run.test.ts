@@ -872,7 +872,7 @@ describe('runRetrieval — chapter-range pool admission', () => {
       // The KNN never returns hap_far; only its chapter range does.
       knn: [hit('ch1')],
       chapters: [chapterRow('ch1', 'The Tin Gate')],
-      chapterRanges: [['ch1', 'entry_7']],
+      chapterRanges: [['ch1', 1, 'entry_7']],
       happenings: [happeningRow('hap_far', 'Kara traded the amulet', { occurredAt: 'entry_7' })],
       awareness: [awarenessRow('aw_1', 'hap_far')],
       vectorsById: [['hap_far', unitBlob(1, 0)]],
@@ -905,7 +905,7 @@ describe('runRetrieval — chapter-range pool admission', () => {
     const queryAll = makeQueryAll({
       knn: [hit('ch1')],
       chapters: [chapterRow('ch1', 'The Tin Gate')],
-      chapterRanges: [['ch1', 'entry_7']],
+      chapterRanges: [['ch1', 1, 'entry_7']],
       happenings: [happeningRow('hap_far', 'Unwitnessed', { occurredAt: 'entry_7' })],
       // No awareness row and not common knowledge: outside the scene POV union.
       awareness: [],
@@ -923,7 +923,7 @@ describe('runRetrieval — chapter-range pool admission', () => {
     const queryAll = makeQueryAll({
       knn: [hit('ch1')],
       chapters: [chapterRow('ch1', 'The Tin Gate')],
-      chapterRanges: [['ch1', 'entry_7']],
+      chapterRanges: [['ch1', 1, 'entry_7']],
       happenings: [happeningRow('hap_far', 'Never embedded', { occurredAt: 'entry_7' })],
       awareness: [awarenessRow('aw_1', 'hap_far')],
       vectorsById: [],
@@ -938,7 +938,7 @@ describe('runRetrieval — chapter-range pool admission', () => {
     const queryAll = makeQueryAll({
       knn: [hit('ch1')],
       chapters: [chapterRow('ch1', 'The Tin Gate')],
-      chapterRanges: [['ch1', 'entry_7']],
+      chapterRanges: [['ch1', 1, 'entry_7']],
       happenings: [happeningRow('hap_far', 'Kara traded', { occurredAt: 'entry_7' })],
       awareness: [awarenessRow('aw_1', 'hap_far')],
       vectorsById: [['hap_far', unitBlob(1, 0)]],
@@ -1621,7 +1621,7 @@ describe('runRetrieval — pools', () => {
       deps({
         queryAll: makeQueryAll({
           chapters: [chapterRow('chap_1', 'Chapter One')],
-          chapterRanges: [['chap_1', 'e1']],
+          chapterRanges: [['chap_1', 1, 'e1']],
           happenings: [
             happeningRow('hap_in', 'The blade', { common: 1, occurredAt: 'e1' }),
             happeningRow('hap_out', 'The bell', { common: 1, occurredAt: 'e9' }),
