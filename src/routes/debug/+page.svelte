@@ -36,7 +36,7 @@
   <title>API Debug Logs</title>
 </svelte:head>
 
-<div class="bg-background flex h-screen flex-col overflow-hidden">
+<div class="bg-background flex h-dvh flex-col overflow-hidden">
   <!-- Window Header -->
   <div class="border-border bg-card flex items-center justify-between border-b px-6 py-4">
     <div class="flex items-center gap-3">

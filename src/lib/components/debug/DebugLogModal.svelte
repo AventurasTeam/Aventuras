@@ -34,7 +34,7 @@
 </script>
 
 <ResponsiveModal.Root bind:open={debug.debugModalOpen}>
-  <ResponsiveModal.Content class="flex h-[85vh] max-h-[85vh] flex-col gap-0 p-0 sm:max-w-4xl">
+  <ResponsiveModal.Content class="flex h-[85dvh] max-h-[85dvh] flex-col gap-0 p-0 sm:max-w-4xl">
     <ResponsiveModal.Header class="border-border border-b px-6 py-4">
       <div class="flex w-full items-center justify-between">
         <div class="flex flex-1 items-center gap-4">
