@@ -9,7 +9,11 @@ export type Stale = { embeddingStale: boolean }
 
 export type LoadedEntityRow = EntityRow & Stale & { keywords: string[]; priority: number }
 export type LoadedLoreRow = LoreRow & Stale & { keywords: string[] }
-export type LoadedThreadRow = ThreadRow & Stale
+export type LoadedThreadRow = ThreadRow &
+  Stale & {
+    /** Where it resolved or failed: a thread's chapter age reads from it. */
+    resolvedAtEntryId: string | null
+  }
 export type LoadedHappeningRow = Stale & {
   id: string
   title: string
@@ -67,7 +71,15 @@ const SOURCE_COLUMNS = {
     'occurred_at_entry_id',
     'embedding_stale',
   ],
-  thread: ['id', 'status', 'injection_mode', 'title', 'description', 'embedding_stale'],
+  thread: [
+    'id',
+    'status',
+    'injection_mode',
+    'title',
+    'description',
+    'resolved_at_entry_id',
+    'embedding_stale',
+  ],
   chapter: ['id', 'title', 'summary', 'theme', 'keywords', 'embedding_stale'],
 } as const satisfies Record<VecTargetKind, readonly string[]>
 
@@ -140,6 +152,7 @@ export async function loadSourceRows(queryAll: QueryAll, branchId: string): Prom
       injectionMode: c.injection_mode as ThreadRow['injectionMode'],
       title: c.title as string,
       description: c.description as string | null,
+      resolvedAtEntryId: c.resolved_at_entry_id as string | null,
       embeddingStale: flagged(c.embedding_stale),
     }
   })

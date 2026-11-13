@@ -1105,7 +1105,8 @@ score(c) = w_action  × sim(Q1, c)
          + w_direct  × mean(sim(Q4ᵢ, c) for each emitted Q4ᵢ)
 ```
 
-Default weights (placeholder; user-tunable in advanced settings):
+Default weights (placeholders, hardcoded in v1; see
+[Tuning surface](#tuning-surface)):
 
 ```
 w_action  = 0.30
@@ -1561,8 +1562,10 @@ Decay model: salience decays per chapter, scaled by
 A `death` event auto-pinned at chapter 3 becomes obsolete when chapter
 25 reveals "actually alive." Auto-detection of contradicting evidence
 is parked for v1 — accept the cost (some stale-pin retrieval noise);
-user can manually un-pin. Lore-mgmt eventually catches the most
-egregious cases at chapter close.
+user can manually un-pin. Chapter close doesn't catch it either:
+[3d](./chapter-close.md#3d--awareness-pin-tuning) reviews the closed
+chapter's rows and the frequency set, and never lowers a row on
+frequency.
 
 ---
 
@@ -1750,17 +1753,38 @@ Where:
   and each live query vector (action / structural digest / piggyback
   summary / classifier-emitted). Already computed in the
   [query stack](#query-construction--the-query-stack).
-- **`pin_signal(c)`** — `decay_resistance` for awareness rows,
+- **`pin_signal(c)`** — the deciding awareness row's
+  `decay_resistance` for happenings (see `chapters_old` below),
   `priority/100` for lore, `0` for entities and threads (no
   continuous pin signal in v1). `entities.priority` exists but is
   deliberately outside this function: it orders keyword-inject
   overflow only, per
   [Keyword injection budget](#keyword-injection-budget).
 - **`λ_type`** — type-specific decay rate (table below).
-- **`chapters_old(c)`** — chapters since `c` became relevant
-  (`learned_at_entry_id` for awareness, `created_at` mapped to chapter
-  for happenings without awareness, `updated_at` for entities and
-  threads, effectively zero for lore since lore is timeless).
+- **`chapters_old(c)`** — chapters since `c` became relevant, counted
+  from the open chapter. An anchor stamped into closed chapter `n` reads
+  `current − n`, where `current` is one past the highest
+  `sequence_number` among closed chapters that still hold a stamped
+  entry, so a chapter-3 row reads 57 at chapter 60 and one in the
+  newest closed chapter reads 1. An anchor in the open
+  region or one no chapter holds reads 0, and a story with no closed
+  chapter reads 0 everywhere. By type:
+  - **Happenings** score per in-scene awareness row. A row ages from its
+    `learned_at_entry_id`, or from the happening's
+    `occurred_at_entry_id` when it has none; with neither it reads 0.
+    The row with the smallest age × (1 − `decay_resistance`) decides,
+    ties going to the larger pin and then the smaller age, and the
+    candidate carries that row's age and pin together: the one pair
+    reproduces its `recency_factor` under any `λ`, where the youngest
+    age beside the largest pin, taken from different rows, would claim
+    a recency no row earns. A common-knowledge happening reads 0 and
+    no pin.
+  - **Characters** age from `state.lastSeenAt`. One on stage sits in
+    the structural floor, so only off-stage characters decay. Places,
+    items and factions read 0.
+  - **Threads** age from `resolved_at_entry_id`, so a resolved or
+    failed thread decays and a pending one reads 0.
+  - **Lore and chapter summaries** read 0: neither decays.
 - **`kw_boost(c)`** — additive bonus when the keyword index hits
   (lore keywords, entity name and `entities.keywords`, awareness
   `source` string), matched over the
@@ -1946,9 +1970,9 @@ volumes** — calibrated in the sense of "λ=0.07 produces sensible-
 looking ranking on toy data," not "λ=0.07 has been validated against
 real stories." Real testing on real stories will move these numbers,
 possibly by 2× or more in either direction. v1 ships these
-starting points exposed for power-user override in advanced
-settings; empirical calibration happens organically once test
-stories surface real ranking-quality signal.
+starting points hardcoded, with no override
+([Tuning surface](#tuning-surface)); empirical calibration happens
+organically once test stories surface real ranking-quality signal.
 
 Architecturally, these volumes drove several choices we already
 made: pre-filter to top-200 before MMR (otherwise ranking thousands
@@ -1959,7 +1983,8 @@ scattered rather than coherent).
 
 ### Per-type decay rates
 
-Sensible starting defaults; tunable per story in advanced settings:
+Sensible starting defaults, hardcoded in v1
+([Tuning surface](#tuning-surface)):
 
 | Type                   | `λ`          | `recency_factor = 0.5` at | Rationale                                                                              |
 | ---------------------- | ------------ | ------------------------- | -------------------------------------------------------------------------------------- |

@@ -1,12 +1,23 @@
 import { describe, expect, it } from 'vitest'
 
-import type { ProbeCapturePayload } from '@/lib/db'
+import {
+  chapters,
+  entities,
+  happeningAwareness,
+  happenings,
+  storyEntries,
+  threads,
+  type ProbeCapturePayload,
+} from '@/lib/db'
+import { makeEntity } from '@/lib/list-modules/__tests__/fixtures'
 import {
   countTokens,
   rankPerType,
   RANKER_DEFAULTS,
+  runRetrieval,
   type Candidate,
   type DropReason,
+  type QueryAll,
   type QuerySource,
   type RankedType,
   type RankerParams,
@@ -795,5 +806,196 @@ describe('replayType', () => {
     const [row] = await queryAllOf(sqlite)(q.sql, q.params)
 
     expect(() => replayType(decodeCapture(row).payload, 'happenings')).toThrow(/deep capture/)
+  })
+})
+
+// The pass end to end over source rows in SQLite, so the ages come from the stamp join, the
+// awareness rows and the store's states, as in the app. Three chapters are closed, so the open one
+// is chapter 4. Only the KNN is stubbed: every row comes back, each on its own direction.
+describe('parity — a pass whose rows decay', () => {
+  const BRANCH = 'br_a'
+  const ROW = { branchId: BRANCH, createdAt: 1, updatedAt: 1, embeddingStale: 0 as const }
+  const HITS: readonly [id: string, x: number, y: number][] = [
+    ['hap_old', 1, 0.1],
+    ['hap_open', 1, 0.4],
+    ['hap_shared', 1, 0.7],
+    ['hap_common', 0.9, 0.3],
+    ['char_gone', 0.9, 0.2],
+    ['char_near', 0.8, 0.5],
+    ['th_done', 1, 0.3],
+    ['th_open', 0.7, 0.6],
+  ]
+  const blob = (x: number, y: number): Uint8Array => {
+    const n = Math.hypot(x, y)
+    return new Uint8Array(Float32Array.from([x / n, y / n]).buffer)
+  }
+  const lastSeenIn = (entryId: string) =>
+    ({ lastSeenAt: { entryId, locationId: null, worldTime: 0 } }) as never
+
+  async function seedDecayingStory() {
+    const seeded = await seededDb()
+    const { db } = seeded
+    await db.insert(storyEntries).values(
+      ['e_ch1', 'e_ch2', 'e_ch3', 'e_open'].map((id, i) => ({
+        id,
+        branchId: BRANCH,
+        position: i + 1,
+        kind: i === 0 ? ('opening' as const) : ('ai_reply' as const),
+        content: id,
+        chapterId: i < 3 ? `chap_${i + 1}` : null,
+        createdAt: 1,
+      })),
+    )
+    await db.insert(chapters).values(
+      [1, 2, 3].map((n) => ({
+        ...ROW,
+        id: `chap_${n}`,
+        sequenceNumber: n,
+        title: `Chapter ${n}`,
+        summary: 'What happened.',
+        theme: 'tide',
+        startEntryId: `e_ch${n}`,
+        endEntryId: `e_ch${n}`,
+        tokenCount: 1,
+        closedAt: 1,
+      })),
+    )
+    await db.insert(entities).values(
+      [
+        ['char_pov', 'Mira'],
+        ['char_pov2', 'Halvard'],
+        ['char_gone', 'Tam'],
+        ['char_near', 'Odo'],
+      ].map(([id, name]) => ({
+        ...ROW,
+        id,
+        kind: 'character' as const,
+        name,
+        status: 'active' as const,
+        injectionMode: 'auto' as const,
+      })),
+    )
+    await db.insert(happenings).values([
+      { ...ROW, id: 'hap_old', title: 'The archive sealed', occurredAtEntryId: 'e_ch1' },
+      { ...ROW, id: 'hap_open', title: 'The tide came early', occurredAtEntryId: 'e_open' },
+      { ...ROW, id: 'hap_shared', title: 'The ledger traded', occurredAtEntryId: 'e_ch2' },
+      {
+        ...ROW,
+        id: 'hap_common',
+        title: 'The bridge fell',
+        occurredAtEntryId: 'e_ch1',
+        commonKnowledge: 1,
+      },
+    ])
+    // hap_shared: Mira's row decays 3 × (1 − 0.9) = 0.3 and Halvard's 1 × (1 − 0) = 1, so Mira's
+    // decides. Common knowledge ages by nothing its row says.
+    await db.insert(happeningAwareness).values(
+      [
+        ['haw_1', 'hap_old', 'char_pov', 'e_ch1', 0.3],
+        ['haw_2', 'hap_open', 'char_pov', 'e_open', 0],
+        ['haw_3', 'hap_shared', 'char_pov', 'e_ch1', 0.9],
+        ['haw_4', 'hap_shared', 'char_pov2', 'e_ch3', 0],
+        ['haw_5', 'hap_common', 'char_pov', 'e_ch1', 0.9],
+      ].map(([id, happeningId, characterId, learnedAtEntryId, decayResistance]) => ({
+        id: id as string,
+        branchId: BRANCH,
+        happeningId: happeningId as string,
+        characterId: characterId as string,
+        learnedAtEntryId: learnedAtEntryId as string,
+        decayResistance: decayResistance as number,
+        source: 'saw it',
+      })),
+    )
+    await db.insert(threads).values([
+      {
+        ...ROW,
+        id: 'th_done',
+        title: 'The drowned rolls',
+        status: 'resolved' as const,
+        injectionMode: 'auto' as const,
+        resolvedAtEntryId: 'e_ch2',
+      },
+      {
+        ...ROW,
+        id: 'th_open',
+        title: 'The second seal',
+        status: 'pending' as const,
+        injectionMode: 'auto' as const,
+      },
+    ])
+    return seeded
+  }
+
+  // Source rows from SQLite; the vec0 families and their KNN answered here.
+  const stubbedVec =
+    (real: QueryAll): QueryAll =>
+    async (sql, params) => {
+      if (sql.includes('sqlite_master')) return params.map((name) => [name])
+      if (sql.includes('MATCH')) return HITS.map(([id, x, y], i) => [id, i / 10, blob(x, y)])
+      if (sql.includes('_vec_')) return []
+      return real(sql, params)
+    }
+
+  it('replays each decaying type to the traces the pass produced', async () => {
+    const { sqlite, runInTransaction } = await seedDecayingStory()
+    const outcome = await runRetrieval(
+      {
+        queryAll: stubbedVec(queryAllOf(sqlite)),
+        embedTexts: async (texts) => ({
+          vectors: texts.map(() => Float32Array.from([1, 0])),
+          dim: 2,
+        }),
+        embedRows: async () => [],
+        loadStaleRows: async () => [],
+        revalidateRows: async (rows) => ({ staleRows: rows, freshOps: [] }),
+        runInTransaction,
+      },
+      {
+        branchId: BRANCH,
+        modelId: 'Xenova/all-MiniLM-L6-v2',
+        dim: 2,
+        budgets: settings.retrievalBudgets,
+        query: { userAction: 'Mira reads the tide marks.', eraName: null, piggybackSummary: null },
+        sceneCharacterIds: ['char_pov', 'char_pov2'],
+        sceneEntityIds: [],
+        currentLocationId: null,
+        storeEntities: [
+          makeEntity({
+            id: 'char_gone',
+            kind: 'character',
+            name: 'Tam',
+            state: lastSeenIn('e_ch3'),
+          }),
+          makeEntity({
+            id: 'char_near',
+            kind: 'character',
+            name: 'Odo',
+            state: lastSeenIn('e_open'),
+          }),
+        ],
+        recentProse: '',
+        scanText: '',
+        keywordRetrieval: { mode: 'boost', budgetShare: 0.5, cascade: false, cascadeMaxDepth: 2 },
+      },
+    )
+    if (!outcome.ok) throw new Error('the pass failed')
+    const agesOf = (type: RetrievalType) =>
+      Object.fromEntries(outcome.bundles[type].traces.map((t) => [t.id, t.chaptersOld]))
+    // Non-zero where canon ages a row, so equal replays can't come from a pass of zeros.
+    expect(agesOf('happenings')).toEqual({ hap_old: 3, hap_open: 0, hap_shared: 3, hap_common: 0 })
+    expect(agesOf('entities')).toEqual({ char_gone: 1, char_near: 0 })
+    expect(agesOf('threads')).toEqual({ th_done: 2, th_open: 0 })
+
+    const written = await writeProbeCapture(
+      { runInTransaction },
+      captureInput({ id: 'pc_decay', mode: 'deep', outcome }),
+    )
+    expect(written).toBe('written')
+    const q = capturesForStoryQuery('st_1')
+    const [row] = await queryAllOf(sqlite)(q.sql, q.params)
+    const payload = decodeCapture(row).payload
+
+    for (const type of ['happenings', 'entities', 'threads'] as const)
+      expect(replayType(payload, type).traces).toEqual(outcome.bundles[type].traces)
   })
 })

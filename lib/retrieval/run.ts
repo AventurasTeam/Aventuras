@@ -13,6 +13,12 @@ import { countTokens } from '@/lib/tokens'
 import { placeModes } from '@/lib/world'
 
 import { loadAwarenessForScene, type AwarenessRow } from './awareness'
+import {
+  characterChaptersOld,
+  happeningAge,
+  threadChaptersOld,
+  type ChapterAgeIndex,
+} from './chapters-old'
 import { KNN_K, RANKER_DEFAULTS, REDUNDANCY_K } from './constants'
 import { buildKeywordInjections, type KeywordRetrievalSettings } from './injection'
 import { entityNameIndexFrom, matchTerms, normalizeTerm, type EntityNameIndex } from './name-index'
@@ -363,6 +369,8 @@ async function runRetrievalPass(
     sourceRows,
     happenings: [] as readonly LoadedHappeningRow[],
     awareness,
+    chapterAges: chapterRanges.ages,
+    entityStates: new Map(params.storeEntities.map((e) => [e.id, e.state])),
     recentProse: params.recentProse,
     disabledPlaceIds,
     scanText: params.scanText,
@@ -578,6 +586,9 @@ type PoolCtx = {
   /** Pool-scoped, unlike sourceRows: see loadHappeningRows. Empty for other kinds. */
   happenings: readonly LoadedHappeningRow[]
   awareness: readonly AwarenessRow[]
+  chapterAges: ChapterAgeIndex
+  /** The store's entity states by id: source rows carry none, and a character ages off its own. */
+  entityStates: ReadonlyMap<string, unknown>
   recentProse: string
   disabledPlaceIds: ReadonlySet<string>
   scanText: string
@@ -737,7 +748,7 @@ function assembleCandidates(
   wanted: ReadonlySet<string>,
   vectorById: ReadonlyMap<string, Float32Array>,
 ): Candidate[] {
-  const { index, floor, sourceRows, awareness, queryVectors } = ctx
+  const { index, floor, sourceRows, awareness, queryVectors, chapterAges } = ctx
 
   const sim = (vector: Float32Array, query: Float32Array | null): number | null =>
     query === null ? null : cosine(vector, query)
@@ -767,9 +778,6 @@ function assembleCandidates(
     // Stale rows keep their old vector in vec0 and stay reachable by KNN, so
     // each pool below drops them; everything that survives is fresh.
     embeddingStale: false,
-    // No source maps a row to its chapter distance yet (M5.9), so every row reads as
-    // current and recency_factor is 1.
-    chaptersOld: 0,
   })
 
   switch (ctx.kind) {
@@ -791,6 +799,10 @@ function assembleCandidates(
           entity,
           sims: simsFor(vector),
           vector,
+          chaptersOld:
+            r.kind === 'character'
+              ? characterChaptersOld(ctx.entityStates.get(r.id), chapterAges)
+              : 0,
           pinSignal: 0,
           keywordHits: kwHits([r.name, ...r.keywords]),
         }
@@ -809,6 +821,7 @@ function assembleCandidates(
           renderedText: loreRenderedText(r),
           sims: simsFor(vector),
           vector,
+          chaptersOld: 0,
           pinSignal: r.priority / 100,
           keywordHits: kwHits(r.keywords),
         }
@@ -830,6 +843,12 @@ function assembleCandidates(
       return inPool(pool).map((r) => {
         const vector = vectorFor(r.id)
         const rows = byHappening.get(r.id) ?? []
+        // Common knowledge carries no decay_resistance signal and no age (retrieval.md → Why on
+        // awareness only); nothing in the schema stops such a row from also having awareness rows,
+        // so the zeros are conditional on the flag.
+        const aged = r.commonKnowledge
+          ? { chaptersOld: 0, pinSignal: 0 }
+          : happeningAge(rows, r.occurredAtEntryId, chapterAges)
         return {
           ...shared(),
           kind: 'happening' as const,
@@ -843,12 +862,7 @@ function assembleCandidates(
           sims: simsFor(vector),
           vector,
           commonKnowledge: r.commonKnowledge,
-          // Common knowledge carries no decay_resistance signal (retrieval.md →
-          // Why on awareness only); nothing in the schema stops such a row from
-          // also having awareness rows, so the zero is conditional on the flag.
-          pinSignal: r.commonKnowledge
-            ? 0
-            : Math.max(0, ...rows.map((a) => a.decayResistance ?? 0)),
+          ...aged,
           occurredAtEntryId: r.occurredAtEntryId,
           awarenessIds: rows.map((a) => a.id),
           // Awareness `source` strings are freeform descriptors, not term lists,
@@ -878,6 +892,10 @@ function assembleCandidates(
           renderedText: lines(`${r.title} (${r.status})`, r.description),
           sims: simsFor(vector),
           vector,
+          // A pass's status change keeps the resolved ref (lib/actions/threads/register.ts), so a
+          // reopened thread can still carry one.
+          chaptersOld:
+            r.status === 'pending' ? 0 : threadChaptersOld(r.resolvedAtEntryId, chapterAges),
           pinSignal: 0,
           keywordHits: [],
         }
@@ -900,6 +918,7 @@ function assembleCandidates(
           renderedText: lines(r.title, r.summary, r.theme),
           sims: simsFor(vector),
           vector,
+          chaptersOld: 0,
           pinSignal: 0,
           keywordHits: kwHits(r.keywords),
         }

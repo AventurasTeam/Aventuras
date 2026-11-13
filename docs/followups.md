@@ -372,6 +372,18 @@ breakdown under [UX](#ux).
   waits on these defaults settling. Raised 2026-10-19 by the
   entity-state design (the budgets).
 
+- **Decay against the chapter-match boost.** The ×1.3
+  [chapter-match boost](./memory/retrieval.md#chapter-match-boost-on-happenings)
+  multiplies a score after decay, so it can't seat an old row: on the
+  default ranker an unpinned happening alone in its pool seats through
+  a matched chapter up to 9 chapters old at similarity 0.3, 13 at 0.4
+  and 16 at 0.5 (5, 9 and 13 without the boost). Past that only the
+  [high-similarity bypass](./memory/retrieval.md#high-similarity-bypass--revival-of-decayed-memories)
+  at 0.85 revives it. That is canon working as written on guessed `λ`
+  values; play tells whether a matched chapter should reach further, by
+  boosting before decay or by a larger factor. Raised 2026-11-13 by
+  Slice 5.9's planning, when `chapters_old` came live.
+
 - **Prompt tuning.** Once the prompt content pass has every input in
   the prompts, play tunes their wording for the writing itself: the
   narrator's narrative writing, prose and behaviors. The

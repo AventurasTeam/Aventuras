@@ -125,10 +125,11 @@ function threadRow(id: string, title: string): ThreadRow {
 }
 
 // The union of what loadSourceRows hangs off a floor row (embeddingStale on
-// every type, keywords on lore — lib/retrieval/source-rows.ts). Spread onto all
-// four fixtures so one projection assertion covers the union; StructuralFloor's
-// declared types omit both, so only a runtime fixture carries them in.
-const LOADED_EXTRAS = { embeddingStale: true, keywords: ['ghost'] }
+// every type, keywords on lore, resolvedAtEntryId on threads —
+// lib/retrieval/source-rows.ts). Spread onto all four fixtures so one projection
+// assertion covers the union; StructuralFloor's declared types omit all three, so
+// only a runtime fixture carries them in.
+const LOADED_EXTRAS = { embeddingStale: true, keywords: ['ghost'], resolvedAtEntryId: 'entry_1' }
 
 const keysOf = (bucket: unknown) => (bucket as object[]).map((r) => Object.keys(r).sort())
 
@@ -898,6 +899,7 @@ describe('buildGenerationContext — structural floor', () => {
     const leaked = { ...entityRow(CHAR_ID, 'Mara'), ...LOADED_EXTRAS }
     expect(Object.keys(leaked)).toContain('embeddingStale')
     expect(Object.keys(leaked)).toContain('keywords')
+    expect(Object.keys(leaked)).toContain('resolvedAtEntryId')
   })
 })
 

@@ -115,6 +115,7 @@ async function setup(): Promise<QueryAll> {
       description: 'Who holds it?',
       status: 'resolved',
       injectionMode: 'auto',
+      resolvedAtEntryId: 'ent_b',
       ...TS,
     },
     {
@@ -248,6 +249,7 @@ describe('loadSourceRows against a real DB', () => {
         injectionMode: 'auto',
         title: 'The Amulet',
         description: 'Who holds it?',
+        resolvedAtEntryId: 'ent_b',
         embeddingStale: false,
       },
     ])

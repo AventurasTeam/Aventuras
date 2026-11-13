@@ -13,7 +13,7 @@ import {
   type RetrievalParams,
   type RetrievalSuccess,
 } from './run'
-import { isHappeningCandidate, type QueryAll } from './types'
+import { isHappeningCandidate, RETRIEVAL_TYPES, type QueryAll } from './types'
 
 const DIM = 2
 
@@ -94,13 +94,20 @@ const happeningRow = (
 const threadRow = (
   id: string,
   title: string,
-  o: { status?: string; mode?: string; description?: string | null; stale?: 0 | 1 } = {},
+  o: {
+    status?: string
+    mode?: string
+    description?: string | null
+    resolvedAt?: string | null
+    stale?: 0 | 1
+  } = {},
 ): Row => [
   id,
   o.status ?? 'pending',
   o.mode ?? 'auto',
   title,
   o.description === undefined ? `Description of ${title}.` : o.description,
+  o.resolvedAt ?? null,
   o.stale ?? 0,
 ]
 
@@ -955,6 +962,142 @@ describe('runRetrieval — chapter-range pool admission', () => {
   })
 })
 
+/**
+ * retrieval.md → Scoring function, chapters_old: three closed chapters, so the open one is
+ * chapter 4 and an entry stamped into chapter n reads 4 − n. e_open is in the open region.
+ */
+describe('runRetrieval — chapter age', () => {
+  const CLOSED: Row[] = [
+    ['ch_1', 1, 'e_ch1'],
+    ['ch_2', 2, 'e_ch2'],
+    ['ch_3', 3, 'e_ch3'],
+  ]
+  const lastSeenIn = (entryId: string) =>
+    ({ lastSeenAt: { entryId, locationId: null, worldTime: 0 } }) as never
+
+  const pass = (chapterRanges: Row[], over: Partial<Fixture> = {}) =>
+    runRetrieval(
+      deps({
+        queryAll: makeQueryAll({
+          entities: [
+            entityRow('char_gone', 'Mira'),
+            entityRow('char_near', 'Dalen'),
+            entityRow('loc_1', 'The Hollow', { kind: 'location' }),
+          ],
+          lore: [loreRow('lore_1', 'Veilstone')],
+          happenings: [
+            happeningRow('hap_1', 'The oath', { occurredAt: 'e_ch1' }),
+            happeningRow('hap_common', 'The bell', { common: 1, occurredAt: 'e_ch1' }),
+          ],
+          awareness: [
+            awarenessRow('haw_1', 'hap_1', { learnedAt: 'e_ch1', pin: 0.5 }),
+            awarenessRow('haw_common', 'hap_common', { learnedAt: 'e_ch1', pin: 0.9 }),
+          ],
+          threads: [
+            threadRow('th_resolved', 'The debt', { status: 'resolved', resolvedAt: 'e_ch1' }),
+            threadRow('th_pending', 'The amulet'),
+            // Reopened by a pass, which keeps the resolved ref beside the new status.
+            threadRow('th_reopened', 'The toll', { status: 'pending', resolvedAt: 'e_ch1' }),
+          ],
+          chapters: [chapterRow('ch_1', 'Chapter One')],
+          chapterRanges,
+          knn: [
+            hit('char_gone'),
+            hit('char_near'),
+            hit('loc_1'),
+            hit('lore_1'),
+            hit('hap_1'),
+            hit('hap_common'),
+            hit('th_resolved'),
+            hit('th_pending'),
+            hit('th_reopened'),
+            hit('ch_1'),
+          ],
+          ...over,
+        }),
+      }),
+      params({
+        sceneEntityIds: [],
+        storeEntities: [
+          makeEntity({
+            id: 'char_gone',
+            kind: 'character',
+            name: 'Mira',
+            state: lastSeenIn('e_ch3'),
+          }),
+          makeEntity({
+            id: 'char_near',
+            kind: 'character',
+            name: 'Dalen',
+            state: lastSeenIn('e_open'),
+          }),
+          makeEntity({ id: 'loc_1', kind: 'location', name: 'The Hollow' }),
+        ],
+      }),
+    )
+
+  const agesOf = (out: RetrievalOutcome) => {
+    const { bundles } = expectOk(out)
+    return Object.fromEntries(
+      RETRIEVAL_TYPES.flatMap((type) => bundles[type].traces.map((t) => [t.id, t.chaptersOld])),
+    )
+  }
+
+  it('reads every candidate as current on a story with no closed chapter', async () => {
+    expect(agesOf(await pass([], { chapters: [] }))).toEqual({
+      char_gone: 0,
+      char_near: 0,
+      loc_1: 0,
+      lore_1: 0,
+      hap_1: 0,
+      hap_common: 0,
+      th_resolved: 0,
+      th_pending: 0,
+      th_reopened: 0,
+    })
+  })
+
+  it('ages a happening, an off-stage character and a resolved thread once chapters close', async () => {
+    expect(agesOf(await pass(CLOSED))).toEqual({
+      // Last seen in the newest closed chapter, and in the open region.
+      char_gone: 1,
+      char_near: 0,
+      loc_1: 0,
+      lore_1: 0,
+      hap_1: 3,
+      hap_common: 0,
+      th_resolved: 3,
+      th_pending: 0,
+      th_reopened: 0,
+      ch_1: 0,
+    })
+  })
+
+  it('reads a common-knowledge happening as unpinned and undecayed whatever its rows say', async () => {
+    const trace = expectOk(await pass(CLOSED)).bundles.happenings.traces.find(
+      (t) => t.id === 'hap_common',
+    )
+
+    expect(trace).toMatchObject({ chaptersOld: 0, pinSignal: 0, recencyFactor: 1 })
+  })
+
+  // Aria: 3 × (1 − 0.9) = 0.3. Jorin: 1 × (1 − 0) = 1. The youngest age beside the largest pin,
+  // from different rows, would read { 1, 0.9 }, a decay of 0.1 neither row earns.
+  it("takes the deciding holder's age and pin together", async () => {
+    const out = await pass(CLOSED, {
+      happenings: [happeningRow('hap_1', 'The oath', { occurredAt: 'e_ch1' })],
+      awareness: [
+        awarenessRow('haw_aria', 'hap_1', { characterId: 'char_a', learnedAt: 'e_ch1', pin: 0.9 }),
+        awarenessRow('haw_jorin', 'hap_1', { characterId: 'char_b', learnedAt: 'e_ch3', pin: 0 }),
+      ],
+    })
+
+    const trace = expectOk(out).bundles.happenings.traces.find((t) => t.id === 'hap_1')
+    expect(trace).toMatchObject({ chaptersOld: 3, pinSignal: 0.9 })
+    expect(trace?.recencyFactor).toBeCloseTo(Math.exp(-0.07 * 3 * 0.1), 6)
+  })
+})
+
 describe('runRetrieval — query stack', () => {
   it('renders Q2 from the structural floor', async () => {
     const out = await runRetrieval(
@@ -1606,8 +1749,7 @@ describe('runRetrieval — pools', () => {
     const selected = ok.bundles.happenings.selected
       .filter(isHappeningCandidate)
       .find((c) => c.id === 'hap_1')
-    // Max over the holders, not min or first-wins: the most pinned holder is
-    // what keeps the row alive against decay.
+    // No chapter is closed, so both holders read age 0 and the tie goes to the larger pin.
     expect(selected?.pinSignal).toBe(0.7)
     // retrieval.md → POV-awareness scope: every holder by name and source, not just the first
     // bucket entry, on one line sorted by name.
