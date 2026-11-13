@@ -1,4 +1,4 @@
-import type { DebugLogEntry } from '#lib/stores/debug.svelte.ts'
+import type { DebugLogEntry } from '#lib/stores/debugLog.ts'
 import { errMessage } from '#lib/utils/error.ts'
 
 export const MAX_DISPLAY_CHARS = 200_000

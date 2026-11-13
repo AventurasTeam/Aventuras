@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import type { DebugLogEntry } from '#lib/stores/debug.svelte.ts'
+import type { DebugLogEntry } from '#lib/stores/debugLog.ts'
 import { DebugJsonCache, MAX_DISPLAY_CHARS, formatEntryJson } from './debugJson'
 
 function entry(data: Record<string, unknown>, id = 'debug-1'): DebugLogEntry {
