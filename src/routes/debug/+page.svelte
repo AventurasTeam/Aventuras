@@ -21,9 +21,9 @@
     emit('request-clear-debug-logs')
   }
 
-  function handleToggleRenderNewlines() {
+  function handleToggleReadableView() {
     console.log('[DebugWin] Requesting toggle render newlines')
-    emit('request-toggle-debug-render-newlines')
+    emit('request-toggle-debug-readable-view')
   }
 
   function handlePopIn() {
@@ -53,6 +53,6 @@
 
   <!-- Content -->
   <div class="flex-1 overflow-hidden">
-    <DebugLogView onClear={handleClear} onToggleRenderNewlines={handleToggleRenderNewlines} />
+    <DebugLogView onClear={handleClear} onToggleReadableView={handleToggleReadableView} />
   </div>
 </div>

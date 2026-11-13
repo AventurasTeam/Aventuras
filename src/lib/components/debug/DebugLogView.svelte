@@ -27,10 +27,10 @@
 
   interface Props {
     onClear?: () => void
-    onToggleRenderNewlines?: () => void
+    onToggleReadableView?: () => void
   }
 
-  let { onClear, onToggleRenderNewlines }: Props = $props()
+  let { onClear, onToggleReadableView }: Props = $props()
 
   // `id` is the request's id, whether or not the request itself is still in the list.
   type LogGroup = { id: string; request?: DebugLogEntry; response?: DebugLogEntry }
@@ -187,7 +187,7 @@
   }
 
   function formatJson(entry: DebugLogEntry): string {
-    return jsonCache.get(entry, debug.debugRenderNewlines)
+    return jsonCache.get(entry, debug.readableView)
   }
 
   async function copyToClipboard(entry: DebugLogEntry) {
@@ -336,15 +336,15 @@
     </div>
 
     <div class="flex items-center gap-2">
-      {#if onToggleRenderNewlines}
+      {#if onToggleReadableView}
         <Button
           variant="ghost"
           size="icon"
-          class={debug.debugRenderNewlines
+          class={debug.readableView
             ? 'text-blue-400 hover:text-blue-500'
             : 'text-muted-foreground hover:text-foreground'}
-          onclick={onToggleRenderNewlines}
-          title={debug.debugRenderNewlines
+          onclick={onToggleReadableView}
+          title={debug.readableView
             ? 'Show escaped newlines (\\n)'
             : 'Render newlines as line breaks'}
         >

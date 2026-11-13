@@ -11,11 +11,11 @@ class DebugStore {
   logsVersion = $state(0)
   debugModalOpen = $state(false)
   debugWindowActive = $state(false)
-  debugRenderNewlines = $state(false)
+  readableView = $state(false)
   private unlistenPopIn: UnlistenFn | null = null
   private unlistenRequestLogs: UnlistenFn | null = null
   private unlistenClearLogs: UnlistenFn | null = null
-  private unlistenToggleRenderNewlines: UnlistenFn | null = null
+  private unlistenToggleReadableView: UnlistenFn | null = null
   /** See emitToDebugWindow: false from window creation until the window reports ready. */
   private debugWindowReady = false
 
@@ -109,12 +109,12 @@ class DebugStore {
    */
   async connectAsDebugWindow(): Promise<() => void> {
     const settled = await Promise.allSettled([
-      listen<{ logs: DebugLogEntry[]; renderNewlines: boolean }>(
+      listen<{ logs: DebugLogEntry[]; readableView: boolean }>(
         'initial-debug-logs',
         ({ payload }) => {
           console.log('[DebugWin] Received initial-debug-logs', payload.logs.length)
           debugLog.reset(payload.logs)
-          this.debugRenderNewlines = payload.renderNewlines
+          this.readableView = payload.readableView
         },
       ),
       // The main window re-emits an entry each time it merges into it.
@@ -126,9 +126,9 @@ class DebugStore {
         console.log('[DebugWin] Received debug-logs-cleared')
         debugLog.reset()
       }),
-      listen<boolean>('debug-render-newlines-changed', ({ payload }) => {
-        console.log('[DebugWin] Received debug-render-newlines-changed', payload)
-        this.debugRenderNewlines = payload
+      listen<boolean>('debug-readable-view-changed', ({ payload }) => {
+        console.log('[DebugWin] Received debug-readable-view-changed', payload)
+        this.readableView = payload
       }),
     ])
 
@@ -174,10 +174,10 @@ class DebugStore {
   /**
    * Toggle rendering of newlines in debug logs.
    */
-  toggleDebugRenderNewlines() {
-    this.debugRenderNewlines = !this.debugRenderNewlines
-    console.log('[UI] toggleDebugRenderNewlines', this.debugRenderNewlines)
-    this.emitToDebugWindow('debug-render-newlines-changed', this.debugRenderNewlines)
+  toggleReadableView() {
+    this.readableView = !this.readableView
+    console.log('[UI] toggleReadableView', this.readableView)
+    this.emitToDebugWindow('debug-readable-view-changed', this.readableView)
   }
 
   /** Listeners for everything the pop-out window sends back. */
@@ -194,7 +194,7 @@ class DebugStore {
       this.debugWindowReady = true
       this.emitToDebugWindow('initial-debug-logs', {
         logs: debugLog.snapshot().map((e) => this.safeIpcEntry(e) as DebugLogEntry),
-        renderNewlines: this.debugRenderNewlines,
+        readableView: this.readableView,
       })
     })
 
@@ -202,8 +202,8 @@ class DebugStore {
       this.clearDebugLogs()
     })
 
-    this.unlistenToggleRenderNewlines = await listen('request-toggle-debug-render-newlines', () => {
-      this.toggleDebugRenderNewlines()
+    this.unlistenToggleReadableView = await listen('request-toggle-debug-readable-view', () => {
+      this.toggleReadableView()
     })
   }
 
@@ -251,9 +251,9 @@ class DebugStore {
           this.unlistenClearLogs()
           this.unlistenClearLogs = null
         }
-        if (this.unlistenToggleRenderNewlines) {
-          this.unlistenToggleRenderNewlines()
-          this.unlistenToggleRenderNewlines = null
+        if (this.unlistenToggleReadableView) {
+          this.unlistenToggleReadableView()
+          this.unlistenToggleReadableView = null
         }
       })
 

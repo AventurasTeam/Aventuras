@@ -81,7 +81,7 @@
       {:else if showContent}
         <DebugLogView
           onClear={handleClearLogs}
-          onToggleRenderNewlines={() => debug.toggleDebugRenderNewlines()}
+          onToggleReadableView={() => debug.toggleReadableView()}
         />
       {/if}
     </div>
