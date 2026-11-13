@@ -1,5 +1,7 @@
 import { describe, expect, it } from 'vitest'
 
+import { cosine } from '@/lib/retrieval'
+
 import { findClusters, type ClusterInput } from './close-clusters'
 
 // Unit vectors in two dims (cosine refuses any other norm): two rows' cosine is the cosine of
@@ -17,6 +19,10 @@ const JORIN = 'char_jorin'
 const ORREN = 'char_orren'
 const PIP = 'char_pip'
 const QUILL = 'char_quill'
+
+// Within cosine's unit-norm tolerance, their double-precision dot product rounds to exactly 0.8.
+const EXACT_A = Float32Array.of(7.947284075271455e-8, 1)
+const EXACT_B = Float32Array.of(0.6000001430511475, 0.7999999523162842)
 
 const cast = (...ids: string[]): ReadonlySet<string> => new Set(ids)
 
@@ -53,6 +59,7 @@ describe('findClusters', () => {
 
   it.each<Pair>([
     { name: 'a cosine of 0.81', b: { vector: withCosine(0.81) } },
+    { name: 'a cosine of exactly 0.8', a: { vector: EXACT_A }, b: { vector: EXACT_B } },
     {
       name: 'exactly half the smaller cast shared',
       a: { cast: cast(WREN, TOBIN) },
@@ -66,6 +73,10 @@ describe('findClusters', () => {
     { name: 'anchors exactly 3 entries apart', b: { anchorIndex: 3 } },
   ])('clusters two rows at the edge: $name', ({ a, b }) => {
     expect(findClusters([row('a', a), row('b', b)])).toEqual([['a', 'b']])
+  })
+
+  it('has a cosine pair that lands exactly on the 0.8 edge', () => {
+    expect(cosine(EXACT_A, EXACT_B)).toBe(0.8)
   })
 
   it('never clusters a temporal row, which has no anchor', () => {

@@ -9,6 +9,7 @@ export const CLUSTER_ENTRY_SPAN_MAX = 3
 
 export type ClusterInput = {
   id: string
+  /** Unit-norm, one dimension across all rows: `cosine` throws otherwise. */
   vector: Float32Array
   cast: ReadonlySet<string>
   /** Index of its occurred_at entry among the range's non-system entries; null never clusters. */
