@@ -1,6 +1,10 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 
 vi.mock('@tauri-apps/plugin-http', () => ({ fetch: vi.fn() }))
+vi.mock('./streamLog', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('./streamLog')>()
+  return { ...actual, aggregateStream: vi.fn(actual.aggregateStream) }
+})
 
 import { fetch as tauriHttpFetch } from '@tauri-apps/plugin-http'
 import { isAbortError } from '#lib/services/activity/describeError.ts'
@@ -8,6 +12,7 @@ import { RequestTimeoutError } from '#lib/utils/error.ts'
 import { debugLog } from '#lib/stores/debugLog.ts'
 import { logStreamResponse } from './debugLog'
 import { createPollSdkFetch, createSdkFetch } from './sdkFetch'
+import { aggregateStream } from './streamLog'
 
 const mockFetch = vi.mocked(tauriHttpFetch)
 const API_URL = 'https://api.test/v1/images'
@@ -405,6 +410,41 @@ describe('logStreamResponse', () => {
         status: 200,
         stream: { format: 'chat-completions', complete: true, eventCount: 3 },
       },
+      0,
+      undefined,
+    )
+  })
+
+  it('logs the parsed events when summarizing them throws', async () => {
+    vi.mocked(aggregateStream).mockImplementationOnce(() => {
+      throw new Error('boom')
+    })
+    const response = sse({ choices: [{ index: 0, delta: { content: 'hi' } }] })
+
+    await logStreamResponse(response, { debugId: 'dbg', serviceId: 'test', startTime: 0 })
+
+    expect(addResponse).toHaveBeenCalledWith(
+      'dbg',
+      'test',
+      {
+        status: 200,
+        error: 'stream summary failed: boom',
+        body: [{ choices: [{ index: 0, delta: { content: 'hi' } }] }],
+      },
+      0,
+      'stream summary failed: boom',
+    )
+  })
+
+  it('records a stream whose choices hold a null', async () => {
+    const response = sse({ choices: [null] }, '[DONE]')
+
+    await logStreamResponse(response, { debugId: 'dbg', serviceId: 'test', startTime: 0 })
+
+    expect(addResponse).toHaveBeenCalledWith(
+      'dbg',
+      'test',
+      expect.objectContaining({ stream: expect.objectContaining({ format: 'chat-completions' }) }),
       0,
       undefined,
     )

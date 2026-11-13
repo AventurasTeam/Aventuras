@@ -6,10 +6,12 @@ import {
   describeReadFailure,
   parseLoggedBody,
   readLoggedBody,
+  type BodyRead,
   type DebugEntry,
 } from '#lib/services/http/index.ts'
 import { debugLog } from '#lib/stores/debugLog.ts'
-import { aggregateStream, parseStreamEvents } from './streamLog'
+import { errMessage } from '#lib/utils/error.ts'
+import { aggregateStream, parseStreamEvents, type StreamEvent } from './streamLog'
 
 interface ProviderMetadata {
   promptFeedback?: unknown
@@ -50,10 +52,36 @@ export const logSdkResponse = createResponseLogger({
   logOther: (response, entry) => void logStreamResponse(response.clone(), entry),
 })
 
+/** Never rejects: it runs unawaited, so a summary that throws is logged as what arrived instead. */
 export async function logStreamResponse(response: Response, entry: DebugEntry): Promise<void> {
   const { debugId, serviceId, startTime } = entry
   const read = await readLoggedBody(response)
   const events = parseStreamEvents(read.text)
+  try {
+    logSummary(response, entry, read, events)
+  } catch (err) {
+    const error = `stream summary failed: ${errMessage(err)}`
+    debugLog.addResponse(
+      debugId,
+      serviceId,
+      {
+        status: response.status,
+        error,
+        // Not `parseLoggedBody(read.text)`: SSE text starts with `data:`, which reads as base64.
+        body: events.length > 0 ? events.map((e) => e.payload) : parseLoggedBody(read.text),
+      },
+      startTime,
+      error,
+    )
+  }
+}
+
+function logSummary(
+  response: Response,
+  { debugId, serviceId, startTime }: DebugEntry,
+  read: BodyRead,
+  events: StreamEvent[],
+): void {
   const summary = aggregateStream(events, read.ok)
 
   const providerMetadata: ProviderMetadata = {}

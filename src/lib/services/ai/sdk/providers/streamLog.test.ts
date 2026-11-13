@@ -303,6 +303,18 @@ describe('aggregateStream: Chat Completions', () => {
     expect(summary.lastEvent).toMatchObject({ id: 'c1' })
   })
 
+  it('skips a choice or tool call that is not an object', () => {
+    const summary = summarize(
+      'data: {"id":"c1","choices":[null,{"index":0,"delta":{"content":"hi","tool_calls":[null]}}]}\n\n' +
+        'data: {"id":"c1","choices":[{"index":0,"delta":{"tool_calls":"nope"},"finish_reason":"stop"}]}\n\n',
+    )
+
+    expect(summary.complete).toBe(true)
+    expect(summary.body).toMatchObject({
+      choices: [{ index: 0, message: { content: 'hi' }, finish_reason: 'stop' }],
+    })
+  })
+
   it('reports a mid-stream error', () => {
     const summary = summarize(
       chunk({ content: 'hi' }) +

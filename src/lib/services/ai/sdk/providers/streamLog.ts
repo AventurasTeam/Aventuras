@@ -258,7 +258,7 @@ interface ChoiceChunk {
     content?: string
     reasoning?: string
     reasoning_content?: string
-    tool_calls?: ToolCallDelta[]
+    tool_calls?: unknown
   }
   finish_reason?: string | null
 }
@@ -267,7 +267,7 @@ interface CompletionChunk {
   id?: string
   model?: string
   usage?: unknown
-  choices: ChoiceChunk[]
+  choices: unknown[]
 }
 
 interface AggregatedToolCall {
@@ -292,6 +292,10 @@ function isCompletionChunk(value: unknown): value is CompletionChunk {
   return isRecord(value) && Array.isArray(value.choices)
 }
 
+// Providers differ on which fields they send, so only the container shape is checked.
+const isChoiceChunk = (value: unknown): value is ChoiceChunk => isRecord(value)
+const isToolCallDelta = (value: unknown): value is ToolCallDelta => isRecord(value)
+
 function aggregateChat(payloads: unknown[], sawDone: boolean): Aggregated {
   const choices = new Map<number, AggregatedChoice>()
   let id = ''
@@ -307,6 +311,7 @@ function aggregateChat(payloads: unknown[], sawDone: boolean): Aggregated {
     if (chunk.usage) usage = chunk.usage
 
     for (const choice of chunk.choices) {
+      if (!isChoiceChunk(choice)) continue
       let agg = choices.get(choice.index)
       if (!agg) {
         agg = {
@@ -321,7 +326,8 @@ function aggregateChat(payloads: unknown[], sawDone: boolean): Aggregated {
       if (delta.content) agg.message.content += delta.content
       const reasoning = delta.reasoning ?? delta.reasoning_content
       if (reasoning) agg.message.reasoning = (agg.message.reasoning ?? '') + reasoning
-      for (const tc of delta.tool_calls ?? []) {
+      for (const tc of Array.isArray(delta.tool_calls) ? (delta.tool_calls as unknown[]) : []) {
+        if (!isToolCallDelta(tc)) continue
         const toolCalls = (agg.message.tool_calls ??= [])
         let aggTc = toolCalls.find((t) => t.index === tc.index)
         if (!aggTc) {
