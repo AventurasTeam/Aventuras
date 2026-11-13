@@ -240,6 +240,7 @@
   })
 
   let requestCount = $derived(groupedLogs.filter((g) => g.request).length)
+  let totalRequests = $derived(logs.filter((l) => l.type === 'request').length)
 
   let totalPages = $derived(Math.ceil(groupedLogs.length / pageSize) || 1)
   // Clamped, so a shrinking list (a clear, a narrower filter) never strands the view past the end.
@@ -270,8 +271,13 @@
   <!-- Toolbar -->
   <div class="border-border bg-card/50 flex items-center justify-between border-b px-6 py-3">
     <div class="flex items-center gap-2">
-      <span class="bg-secondary text-secondary-foreground rounded px-2 py-0.5 font-mono text-xs">
+      <span
+        class="bg-secondary text-secondary-foreground rounded px-2 py-0.5 font-mono text-xs whitespace-nowrap"
+      >
         {requestCount}
+        {#if selectedCategories.length > 0}
+          <span class="hidden sm:inline">of {totalRequests}</span>
+        {/if}
       </span>
       <Filter class="text-muted-foreground size-3.5" />
       <Autocomplete
