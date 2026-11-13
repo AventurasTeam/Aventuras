@@ -143,11 +143,13 @@ describe('redactHeaders', () => {
     expect(redactHeaders([['X-Goog-Api-Key', key]])).toEqual({ 'X-Goog-Api-Key': 'sk-1...cdef' })
   })
 
-  it('keeps other headers and short values as sent', () => {
+  it('masks a short key outright and keeps other headers as sent', () => {
     expect(redactHeaders({ Accept: 'application/json', Authorization: 'short' })).toEqual({
       Accept: 'application/json',
-      Authorization: 'short',
+      Authorization: '[MASKED]',
     })
+    expect(redactHeaders({ 'x-api-key': 'a'.repeat(16) })).toEqual({ 'x-api-key': '[MASKED]' })
+    expect(redactHeaders({ 'x-api-key': 'a'.repeat(17) })).toEqual({ 'x-api-key': 'aaaa...aaaa' })
     expect(redactHeaders(undefined)).toEqual({})
   })
 })

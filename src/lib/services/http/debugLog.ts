@@ -6,6 +6,7 @@ import { errMessage } from '#lib/utils/error.ts'
 
 const SENSITIVE_HEADERS = new Set(['authorization', 'x-api-key', 'api-key', 'x-goog-api-key'])
 const BINARY_CONTENT_TYPE = /^(image|audio|video)\/|octet-stream/
+const SECRET_PARTIAL_MIN_LENGTH = 16
 const SCRUB_MIN_LENGTH = 1024
 const BASE64_BODY = /^[A-Za-z0-9+/_-]+={0,2}$/
 
@@ -30,11 +31,16 @@ export function redactHeaders(headers: HeadersInit | undefined): Record<string, 
   return Object.fromEntries(
     Array.from(headerEntries(headers), ([key, value]) => [
       key,
-      SENSITIVE_HEADERS.has(key.toLowerCase()) && value.length > 8
-        ? value.slice(0, 4) + '...' + value.slice(-4)
-        : value,
+      SENSITIVE_HEADERS.has(key.toLowerCase()) ? maskSecret(value) : value,
     ]),
   )
+}
+
+/** Keeps the ends of a long secret to tell keys apart; a short one would be mostly shown. */
+function maskSecret(value: string): string {
+  return value.length > SECRET_PARTIAL_MIN_LENGTH
+    ? value.slice(0, 4) + '...' + value.slice(-4)
+    : '[MASKED]'
 }
 
 export function isBinaryContentType(contentType: string): boolean {
