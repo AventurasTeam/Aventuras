@@ -712,7 +712,12 @@ copy and exits non-zero. `PROBE_STAND_IN=1` runs a stand-in task in
 place of the close's shipped slots, a write landing a create and an
 update in one group, so the mock can drive the whole runner: script its
 `tools:read_row+stand_in_write` lane with one step calling
-`stand_in_write` on `c1`, then the empty step.
+`stand_in_write` on `c1`, then the empty step. `PROBE_WINDOW=<tokens>`
+sets the probe model's context window on the probe's own provider, as
+App Settings' override does, so a close cuts the chapter into parts at
+half of it, and the pre-send check reads the same figure. The probe
+prints the part limit, and refuses a value that isn't a positive
+integer.
 
 `PROBE_OVERLAY=1` runs the probe on [the dataset seed](#the-dataset-seed)
 with its overlay, applied to each run's copy after the boot's recovery

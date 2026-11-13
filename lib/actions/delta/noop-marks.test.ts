@@ -29,6 +29,7 @@ import { noopRefusal, resolveByActionKind, type HandlerOutcome } from './registr
 // Literal reasons a null mark may carry: a broken rule, never a stored value or a gone row.
 // `not-a-faction` is for setFactionStanding only; setCharacterFaction's site is pinned by samples.
 const RULE_REASONS: readonly string[] = [
+  'flag-held-by-partner',
   'location',
   'name-blank',
   'name-taken',
@@ -37,6 +38,7 @@ const RULE_REASONS: readonly string[] = [
   'not-a-location',
   'not-a-place-or-item',
   'not-unplaced',
+  'pair-resolved',
   'partner-is-self',
   'partner-not-of-kind',
 ]
@@ -47,6 +49,8 @@ const RULE_EXPRESSIONS: readonly string[] = [
   'PLACE_REFUSAL.retiredParent',
   'PLACE_REFUSAL.storyInside',
   'chainRefusal',
+  'keywordUserAddedReason(term)',
+  'keywordPairsFlagReason(term, other)',
 ]
 
 // A floor, not a count: fewer means the glob or the parse stopped reading the calls.
@@ -230,6 +234,13 @@ async function setup(): Promise<DbCtx> {
       nameCollisionFlag: 1,
       nameCollisionPartnerId: 'char_3',
       nameCollisionReason: 'alike',
+    }),
+    // Flagged duplicate against char_bram, a pair with no namesake basis.
+    entity('char_dup', 'character', {
+      name: 'the cloaked stranger',
+      nameCollisionFlag: 1,
+      nameCollisionPartnerId: 'char_bram',
+      nameCollisionReason: 'duplicate',
     }),
     entity('loc_1', 'location'),
     entity('loc_inner', 'location', { state: { parent_location_id: 'loc_1' } }),
@@ -459,6 +470,21 @@ describe('noopRefusal marks: sample handlers (C11)', () => {
       noop('already-flagged'),
     ],
     ['raiseCollisionFlag on no namesake', raiseOn('char_bram'), noop('not-namesakes')],
+    [
+      'raiseCollisionFlag duplicate restating the duplicate flag it holds',
+      raiseOn('char_dup', 'char_bram', 'duplicate'),
+      noop('already-flagged', 'restated'),
+    ],
+    [
+      'raiseCollisionFlag duplicate on the partner of a duplicate flag',
+      raiseOn('char_bram', 'char_dup', 'duplicate'),
+      noop('already-flagged', 'restated'),
+    ],
+    [
+      'raiseCollisionFlag duplicate on the partner of a flag held for another reason',
+      raiseOn('char_3', 'char_flagged', 'duplicate'),
+      noop('flag-held-by-partner'),
+    ],
     [
       'updateEntityCondition restating the stored condition',
       restateCondition,

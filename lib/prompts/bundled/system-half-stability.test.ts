@@ -31,8 +31,11 @@ const STABLE_SYSTEM_VARIABLES: readonly string[] = [
 // C3: a close task's template holds the chapter or part in its system half, the one per-call read
 // it may make there; its task's rows and the writes so far stay in its user half.
 const CLOSE_TASK_TEMPLATES: readonly TemplateId[] = [
+  TEMPLATE_IDS.closeLore,
   TEMPLATE_IDS.closeIdentity,
   TEMPLATE_IDS.closeThreads,
+  TEMPLATE_IDS.closeUpkeep,
+  TEMPLATE_IDS.closeLifecycle,
 ]
 const CLOSE_SYSTEM_VARIABLES: readonly string[] = ['closeTurns']
 
@@ -413,17 +416,27 @@ describe('bundled system halves read only what the story fixes', () => {
     expect(unallowedSystemReads(probed, probe, CLOSE_SYSTEM_VARIABLES)).toEqual([
       'closeCharacters',
       'closeFactions',
+      'closeLifecycleRows',
+      'closeLore',
+      'closeLoreLimits',
       'closeSoftCaps',
       'closeThreads',
+      'closeUpkeepHappenings',
+      'closeUpkeepRows',
       'closeWritesSoFar',
       'entries',
     ])
     expect(unallowedSystemReads(probed, probe, [])).toEqual([
       'closeCharacters',
       'closeFactions',
+      'closeLifecycleRows',
+      'closeLore',
+      'closeLoreLimits',
       'closeSoftCaps',
       'closeThreads',
       'closeTurns',
+      'closeUpkeepHappenings',
+      'closeUpkeepRows',
       'closeWritesSoFar',
       'entries',
     ])
@@ -434,7 +447,13 @@ describe('bundled system halves read only what the story fixes', () => {
     const holding = Object.values(TEMPLATE_IDS).filter((id) =>
       templateGlobals(engine, id, 'system').has('closeTurns'),
     )
-    expect(CLOSE_TASK_TEMPLATES).toEqual([TEMPLATE_IDS.closeIdentity, TEMPLATE_IDS.closeThreads])
+    expect(CLOSE_TASK_TEMPLATES).toEqual([
+      TEMPLATE_IDS.closeLore,
+      TEMPLATE_IDS.closeIdentity,
+      TEMPLATE_IDS.closeThreads,
+      TEMPLATE_IDS.closeUpkeep,
+      TEMPLATE_IDS.closeLifecycle,
+    ])
     expect([...holding].sort()).toEqual([...CLOSE_TASK_TEMPLATES].sort())
   })
 
@@ -513,6 +532,14 @@ describe("a close's task templates share one system half", () => {
   ]
   const SHARED = { mode: 'adventure', closeTurns: CLOSE_TASK_TURNS }
   const TASK_CONTEXTS: Readonly<Record<string, Record<string, unknown>>> = {
+    [TEMPLATE_IDS.closeLore]: {
+      closeLore: [
+        { id: 'lo1', title: 'The Forgotten Hour' },
+        { id: 'lo2', title: 'House Eldrin' },
+      ],
+      closeLoreLimits: { creates: 3, left: 2, bodyChars: 1200 },
+      closeWritesSoFar: '- update_thread Find the heir (th1): description',
+    },
     [TEMPLATE_IDS.closeIdentity]: {
       closeCharacters: [
         {
@@ -550,6 +577,55 @@ describe("a close's task templates share one system half", () => {
       ],
       closeWritesSoFar: '- update_character Kael (c1): state.traits',
     },
+    [TEMPLATE_IDS.closeUpkeep]: {
+      closeUpkeepRows: [
+        {
+          id: 'l1',
+          kind: 'location',
+          name: 'The Drowned Keep',
+          status: 'active',
+          description: 'Half sunk into the marsh.',
+          keywords: ['the keep'],
+          condition: '',
+          placement: 'top level',
+          inScene: false,
+        },
+        {
+          id: 'i1',
+          kind: 'item',
+          name: 'a rusted lantern',
+          status: 'active',
+          description: '',
+          keywords: [],
+          condition: 'Green with age.',
+          placement: '',
+          inScene: true,
+        },
+      ],
+      closeUpkeepHappenings: [{ id: 'hp1', title: 'The siege' }],
+      closeWritesSoFar: '- update_thread Find the heir (th1): description',
+    },
+    [TEMPLATE_IDS.closeLifecycle]: {
+      closeLifecycleRows: [
+        {
+          id: 'c1',
+          kind: 'character',
+          name: 'Kael',
+          status: 'active',
+          retiredReason: '',
+          collision: '',
+        },
+        {
+          id: 'f1',
+          kind: 'faction',
+          name: 'The Tidewardens',
+          status: 'active',
+          retiredReason: '',
+          collision: 'f2 "The Ebb Wardens" (duplicate)',
+        },
+      ],
+      closeWritesSoFar: '- update_thread Find the heir (th1): description',
+    },
   }
 
   it('gives every listed template its own context', () => {
@@ -557,6 +633,7 @@ describe("a close's task templates share one system half", () => {
   })
 
   it('renders the same system half for each task of one part, from its own context', () => {
+    expect(CLOSE_TASK_TEMPLATES).toHaveLength(5)
     const prompts = CLOSE_TASK_TEMPLATES.map((id) =>
       renderTemplate(id, { ...SHARED, ...TASK_CONTEXTS[id] }),
     )
@@ -586,6 +663,34 @@ describe("a close's task templates share one system half", () => {
       closeTurns: CLOSE_TASK_TURNS.slice(0, 1),
     }).system
     expect(shorter).not.toBe(full)
+  })
+
+  // C3: a part's tasks share one system half; the next part's tasks share another.
+  it("renders one system half per part, a second part's apart from the first's", () => {
+    const SECOND_PART_TURNS = [
+      { handle: 't4', kind: 'user_action', content: 'I climb out onto the far bank.' },
+      {
+        handle: 't5',
+        kind: 'ai_reply',
+        content: 'The keep looms over the water, dark but for one window.',
+      },
+    ]
+    const systemsOver = (closeTurns: readonly Record<string, string>[]) =>
+      CLOSE_TASK_TEMPLATES.map(
+        (id) => renderTemplate(id, { ...SHARED, ...TASK_CONTEXTS[id], closeTurns }).system,
+      )
+
+    const first = systemsOver(CLOSE_TASK_TURNS)
+    const second = systemsOver(SECOND_PART_TURNS)
+
+    expect(CLOSE_TASK_TEMPLATES).toHaveLength(5)
+    expect(new Set(first).size).toBe(1)
+    expect(new Set(second).size).toBe(1)
+    expect(second[0]).not.toBe(first[0])
+    expect(second[0]).toContain(
+      "## t4 (the user's turn)\n<user_turn>\nI climb out onto the far bank.\n</user_turn>",
+    )
+    expect(second[0]).not.toContain('I wade in.')
   })
 })
 

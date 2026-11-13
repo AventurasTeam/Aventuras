@@ -663,6 +663,46 @@ export const VARIABLES: Record<ContextGroup, VariableDef[]> = {
         "The soft caps a close checks a whole list against: a character's traits and drives, a faction's agenda. Only a close task's render sets it.",
       required: false,
     },
+    {
+      name: 'closeLore',
+      type: '{ id: string; title: string }[]',
+      category: 'Retrieval',
+      description:
+        "The Lore task's starting rows: every lore row on the branch, the user's included, by title in code-unit order. `id` is the short id its writes name it by (lo1, lo2…); the title is as stored, a full id in it as its short id. No body: a write to a row reads it first. Only a close task's render sets it.",
+      required: false,
+    },
+    {
+      name: 'closeLoreLimits',
+      type: '{ creates: number; left: number; bodyChars: number }',
+      category: 'Story Config',
+      description:
+        "The Lore task's limits: the lore rows one close may create (`creates`), how many it still may, earlier parts counted (`left`), and the characters a new row's body may hold, which is also the most a close's updates may grow a body by in all (`bodyChars`). Only a close task's render sets it.",
+      required: false,
+    },
+    {
+      name: 'closeUpkeepRows',
+      type: "{ id: string; kind: 'character' | 'location' | 'item' | 'faction'; name: string; status: 'active' | 'staged'; description: string; keywords: string[]; condition: string; placement: string; inScene: boolean }[]",
+      category: 'Entities',
+      description:
+        "The Upkeep task's starting rows: the entities not retired that the task's turns name by name or keyword while their scene was elsewhere (`inScene` false), then the places and items in those turns' scene with no keywords or a blank description (`inScene` true), each set by name. `id` is the short id (c1, l1, i1, f1…); the fields are as stored, a full id in them as its short id, a missing text an empty string. `description` and `condition` are a place's or an item's, `placement` a place's (`under <name> (<id>)`, `top level` or `unplaced`); another kind leaves them empty. Only a close task's render sets it.",
+      required: false,
+    },
+    {
+      name: 'closeUpkeepHappenings',
+      type: '{ id: string; title: string }[]',
+      category: 'Plot',
+      description:
+        "The Upkeep task's starting happenings: those set at one of the task's turns or made from one, not yet common knowledge, by title. `id` is the short id (hp1, hp2…). Only a close task's render sets it.",
+      required: false,
+    },
+    {
+      name: 'closeLifecycleRows',
+      type: "{ id: string; kind: 'character' | 'item' | 'faction'; name: string; status: string; retiredReason: string; collision: string }[]",
+      category: 'Entities',
+      description:
+        "The Lifecycle task's starting rows: the active characters and items in the scene of a turn the task reads, the active characters, items and factions whose name or a keyword those turns mention, and the active factions those characters belong to, less a character a reply after the part's last turn still has in its scene; never a place. Characters, then items, then factions, each by name. `id` is the short id (c1, i1, f1…); `retiredReason` is set only on a retired row, so it is empty on every starting row; `collision` is the row's flag as its partner's short id, quoted name and reason, marked dormant when it no longer holds, and empty when the row holds none. Only a close task's render sets it.",
+      required: false,
+    },
   ],
   staticContent: [],
 }
@@ -675,6 +715,11 @@ export const CLOSE_ONLY_CHAPTER_VARIABLES = [
   'closeThreads',
   'closeWritesSoFar',
   'closeSoftCaps',
+  'closeLore',
+  'closeLoreLimits',
+  'closeUpkeepRows',
+  'closeUpkeepHappenings',
+  'closeLifecycleRows',
 ] as const
 
 /** The `chapter` variable only the merge of a chapter closed in parts sets. */
@@ -690,8 +735,11 @@ export const TEMPLATE_GROUPS: Record<string, ContextGroup> & Record<TemplateId, 
   [TEMPLATE_IDS.chapterMetadata]: 'chapter',
   [TEMPLATE_IDS.chapterMetadataPart]: 'chapter',
   [TEMPLATE_IDS.chapterMetadataMerge]: 'chapter',
+  [TEMPLATE_IDS.closeLore]: 'chapter',
   [TEMPLATE_IDS.closeIdentity]: 'chapter',
   [TEMPLATE_IDS.closeThreads]: 'chapter',
+  [TEMPLATE_IDS.closeUpkeep]: 'chapter',
+  [TEMPLATE_IDS.closeLifecycle]: 'chapter',
   [TEMPLATE_IDS.wizardOpening]: 'wizard',
   [TEMPLATE_IDS.wizardOpeningRefine]: 'wizard',
   [TEMPLATE_IDS.wizardTitleChips]: 'wizard',
@@ -740,8 +788,10 @@ export const DISPLAY_GROUPS: Record<string, string[]> = {
     'relationships',
     'closeCharacters',
     'closeFactions',
+    'closeUpkeepRows',
+    'closeLifecycleRows',
   ],
-  Plot: ['happenings', 'threads', 'closeThreads'],
+  Plot: ['happenings', 'threads', 'closeThreads', 'closeUpkeepHappenings'],
   Retrieval: [
     'retrievedEntities',
     'retrievedLore',
@@ -757,6 +807,7 @@ export const DISPLAY_GROUPS: Record<string, string[]> = {
     'structuralPinnedThreads',
     'lore',
     'suggested',
+    'closeLore',
   ],
   'Story Config': [
     'definition',
@@ -770,6 +821,7 @@ export const DISPLAY_GROUPS: Record<string, string[]> = {
     'suggestionCount',
     'mentionedPlaces',
     'closeSoftCaps',
+    'closeLoreLimits',
   ],
   'Generation Results': [
     'intermediates',

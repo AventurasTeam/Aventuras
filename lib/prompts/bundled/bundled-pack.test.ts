@@ -39,8 +39,11 @@ describe('bundled pack', () => {
     chapterMetadata: 'chapter',
     chapterMetadataPart: 'chapter',
     chapterMetadataMerge: 'chapter',
+    closeLore: 'chapter',
     closeIdentity: 'chapter',
     closeThreads: 'chapter',
+    closeUpkeep: 'chapter',
+    closeLifecycle: 'chapter',
     wizardOpening: 'wizard',
     wizardOpeningRefine: 'wizard',
     wizardTitleChips: 'wizard',
@@ -217,6 +220,7 @@ describe("the close's system-half macros", () => {
   // The instructions hold the model to the rules the gates enforce, line by line.
   it.each([
     'Use the ids you are shown, exactly as written; never invent one.',
+    'Cite turns only in "turns": never write a turn\'s id (t3) into any other text you send, "why" included.',
     'and "why", one sentence on what in the cited turns makes the write true.',
     'Write only to a row you have read in this task',
     'one read_row returned, or one you created in this task.',

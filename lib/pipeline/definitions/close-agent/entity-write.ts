@@ -37,6 +37,14 @@ function setAt(target: Record<string, unknown>, path: readonly string[], value: 
   node[path[path.length - 1]!] = value
 }
 
+function deleteAt(target: Record<string, unknown>, path: readonly string[]): void {
+  const parent = valueAt(target, path.slice(0, -1))
+  if (isJsonObject(parent)) delete parent[path[path.length - 1]!]
+}
+
+const stateCopyOf = (row: Entity): Record<string, unknown> =>
+  JSON.parse(JSON.stringify(row.state ?? emptyEntityState(row.kind))) as Record<string, unknown>
+
 /** A delta path's stored value on the row: a column, or a path inside its state. */
 export function storedValue(row: Entity, field: string): unknown {
   const { column, path } = splitPath(field)
@@ -67,32 +75,38 @@ export function fieldVerdicts(row: RowVerdicts, fields: readonly string[]): Fiel
 }
 
 /**
- * The one `updateEntity` a close writes on a row: `state.*` paths merged over current state beside
- * the top-level columns (a group refuses two `state` writes on one row). Stored paths stay out of
- * `fields`; all stored → empty, caller emits no action. `state` is replaced whole: read it under
- * the close's gate.
+ * The one `updateEntity` a close writes on a row: `state.*` paths set or removed on a state copy
+ * (a group refuses two `state` writes on one row). Stored or already-absent paths stay out of
+ * `fields`; none left → no action. `state` is replaced whole: read it under the close's gate.
  */
 export function entityWriteAction(
   row: Entity,
   wanted: Readonly<Record<string, unknown>>,
+  removed: readonly string[] = [],
 ): PlannedAction {
   const entries = Object.entries(wanted)
-  if (entries.length === 0) throw new Error(`entityWriteAction: nothing to write on ${row.id}`)
-  const patch: Record<string, unknown> = {}
+  if (entries.length === 0 && removed.length === 0)
+    throw new Error(`entityWriteAction: nothing to write on ${row.id}`)
+  for (const field of removed)
+    if (!field.startsWith('state.'))
+      throw new Error(`entityWriteAction: only a state path can be removed, not ${field}`)
   const restated = new Set(restatedFields(row, wanted))
-  const fields = Object.keys(wanted).filter((field) => !restated.has(field))
+  const removing = removed.filter((field) => storedValue(row, field) !== undefined)
+  const fields = [...Object.keys(wanted).filter((field) => !restated.has(field)), ...removing]
+  const patch: Record<string, unknown> = {}
   let state: Record<string, unknown> | undefined
   for (const [field, value] of entries) {
     const { column, path } = splitPath(field)
     if (column === 'state' && path.length > 0) {
-      state ??= JSON.parse(JSON.stringify(row.state ?? emptyEntityState(row.kind))) as Record<
-        string,
-        unknown
-      >
+      state ??= stateCopyOf(row)
       setAt(state, path, value)
     } else {
       patch[column] = value
     }
+  }
+  for (const field of removing) {
+    state ??= stateCopyOf(row)
+    deleteAt(state, splitPath(field).path)
   }
   if (state !== undefined) patch.state = state
   return {

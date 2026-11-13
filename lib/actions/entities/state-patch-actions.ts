@@ -1,4 +1,4 @@
-import { and, eq } from 'drizzle-orm'
+import { and, eq, or } from 'drizzle-orm'
 
 import {
   emptyEntityState,
@@ -15,10 +15,12 @@ import { newTerms, normalizeTerm } from '@/lib/keyword-terms'
 import { boundStateText } from '@/lib/piggyback'
 import { entitiesStore } from '@/lib/stores'
 import {
+  brokenFlags,
   characterFactionId,
   flagStillHolds,
   moveHidesStory,
   nameBasis,
+  namesakeBasis,
   nameHolders,
   pairSideOf,
   parentOfLocations,
@@ -33,6 +35,12 @@ import {
 
 import { computeUndoPayload } from '../delta/delta-encoding'
 import {
+  keywordPairsFlagReason,
+  keywordUserAddedReason,
+  planKeywordEdit,
+  priorTerms,
+} from '../delta/keyword-authors'
+import {
   noopRefusal,
   createdKey,
   type ActionHandler,
@@ -40,7 +48,12 @@ import {
   type HandlerCtx,
   type HandlerOutcome,
 } from '../delta/registry'
-import { USER_EDITED_SINCE_PROSE, userEditsSinceProse, wroteField } from '../delta/user-precedence'
+import {
+  USER_EDITED_SINCE_PROSE,
+  userEditsSince,
+  userEditsSinceProse,
+  wroteField,
+} from '../delta/user-precedence'
 import type { DbCtx, DeltaSource, ProseEntryId } from '../types'
 import { branchPlaces, parentChainRefusal } from './parent-chain-check'
 import { loadStoryPlace } from '../story-entries/story-place'
@@ -88,6 +101,16 @@ declare module '@/lib/actions/action-map' {
     appendEntityKeywords: {
       source: DeltaSource
       payload: { branchId: string; id: string; keywords: string[]; proseEntryId: ProseEntryId }
+    }
+    setEntityKeywords: {
+      source: DeltaSource
+      payload: {
+        branchId: string
+        id: string
+        add: string[]
+        remove: string[]
+        proseEntryId: ProseEntryId
+      }
     }
     retireEntity: {
       source: DeltaSource
@@ -142,17 +165,6 @@ declare module '@/lib/actions/action-map' {
       }
     }
   }
-}
-
-// Matched only against terms the live list lacks, so a hit is one the user removed.
-function priorTerms(edits: readonly Delta[]): Set<string> {
-  const terms = new Set<string>()
-  for (const edit of edits) {
-    const prior = edit.undoPayload?.keywords
-    if (!Array.isArray(prior)) continue
-    for (const term of prior) if (typeof term === 'string') terms.add(normalizeTerm(term))
-  }
-  return terms
 }
 
 async function loadCurrent(branchId: string, id: string, ctx: DbCtx): Promise<Entity | undefined> {
@@ -411,6 +423,84 @@ export const appendEntityKeywordsHandler: ActionHandler = async (action, branchI
   return columnsWriteOutcome(bid, id, { keywords: next }, { keywords: current.keywords }, ctx)
 }
 
+/**
+ * The removed term a live flag's pair rests on once `next` lands, with the pair's other row's name,
+ * or null (world.md → Surfacing: a keyword can make two rows namesakes). A dormant flag is skipped.
+ */
+async function flagPairTerm(
+  ctx: DbCtx,
+  current: Entity,
+  next: readonly string[],
+  removed: readonly string[],
+): Promise<{ term: string; other: string } | null> {
+  const partnerId = current.nameCollisionPartnerId
+  const rows = await ctx.db
+    .select()
+    .from(entities)
+    .where(
+      and(
+        eq(entities.branchId, current.branchId),
+        or(
+          eq(entities.id, current.id),
+          eq(entities.nameCollisionPartnerId, current.id),
+          partnerId == null ? undefined : eq(entities.id, partnerId),
+        ),
+      ),
+    )
+  const byId = new Map(rows.map((row) => [row.id, row]))
+  const after = new Map([[current.id, { ...pairSideOf(current), keywords: next }]])
+  for (const flaggedId of brokenFlags({ entities: rows, after })) {
+    const flagged = byId.get(flaggedId)
+    const partner =
+      flagged?.nameCollisionPartnerId == null ? undefined : byId.get(flagged.nameCollisionPartnerId)
+    if (flagged === undefined || partner === undefined || !flagStillHolds(flagged, partner))
+      continue
+    const other = flagged.id === current.id ? partner : flagged
+    const namesOther = (term: string) =>
+      namesakeBasis(
+        { name: current.name, keywords: [term] },
+        { name: other.name, keywords: [] },
+      ) !== null
+    return { term: removed.find(namesOther) ?? removed[0], other: other.name }
+  }
+  return null
+}
+
+/**
+ * chapter-close.md → 3f, Keywords: adds and removals in one `keywords` write, checked as it lands.
+ * Only a machine's term goes, and never one a live flag's pair rests on.
+ */
+export const setEntityKeywordsHandler: ActionHandler = async (action, branchId, ctx) => {
+  if (action.kind !== 'setEntityKeywords')
+    throw new Error(`handler/kind mismatch: expected 'setEntityKeywords', got '${action.kind}'`)
+  const { branchId: bid, id, add, remove, proseEntryId } = action.payload
+  if (bid !== branchId)
+    return { status: 'rejected', reason: `branch mismatch: delta ${branchId} vs target ${bid}` }
+  const current = await loadCurrent(bid, id, ctx)
+  if (!current) return noopRefusal(`keyword target entities ${bid}:${id} not found`, 'gone')
+  const edit = await planKeywordEdit(
+    ctx,
+    { table: 'entities', branchId: bid, id, keywords: current.keywords },
+    { add, remove, proseEntryId },
+  )
+  if (edit.kind === 'user-term') {
+    const { term } = edit
+    return noopRefusal(keywordUserAddedReason(term), null)
+  }
+  if (edit.kind === 'unchanged')
+    return edit.userDropped
+      ? noopRefusal(USER_EDITED_SINCE_PROSE, null)
+      : noopRefusal('no-keyword-change', 'restated')
+  if (edit.removed.length > 0) {
+    const pair = await flagPairTerm(ctx, current, edit.next, edit.removed)
+    if (pair !== null) {
+      const { term, other } = pair
+      return noopRefusal(keywordPairsFlagReason(term, other), null)
+    }
+  }
+  return columnsWriteOutcome(bid, id, { keywords: edit.next }, { keywords: current.keywords }, ctx)
+}
+
 /** active → retired only, checked as the write lands, so a user-moved row keeps its status. */
 export const retireEntityHandler: ActionHandler = async (action, branchId, ctx) => {
   if (action.kind !== 'retireEntity')
@@ -575,6 +665,56 @@ const flagUndo = (row: Entity) => ({
   nameCollisionReason: row.nameCollisionReason,
 })
 
+// No delta says which pair a clear answered: a user edit whose undo held this pair's flag did.
+async function userResolvedPair(ctx: DbCtx, a: Entity, b: Entity): Promise<boolean> {
+  for (const [row, other] of [
+    [a, b],
+    [b, a],
+  ] as const) {
+    const edits = await userEditsSince(ctx, row.branchId, 'entities', row.id, 0)
+    if (
+      edits.some(
+        ({ undoPayload }) =>
+          undoPayload?.nameCollisionFlag === 1 && undoPayload.nameCollisionPartnerId === other.id,
+      )
+    )
+      return true
+  }
+  return false
+}
+
+/**
+ * chapter-close.md → 3f: a close's duplicate re-marks the pair's live flag, restates one already
+ * duplicate, and never asks a pair the user resolved, either row, any time. Null: raise as any.
+ */
+async function duplicateOutcome(
+  ctx: DbCtx,
+  current: Entity,
+  partner: Entity,
+  edits: readonly Delta[],
+): Promise<HandlerOutcome | null> {
+  if (flagStillHolds(current, partner)) {
+    if (current.nameCollisionReason === 'duplicate')
+      return noopRefusal('already-flagged', 'restated')
+    if (wroteField(edits, 'entities', 'nameCollisionFlag', []))
+      return noopRefusal(USER_EDITED_SINCE_PROSE, null)
+    return columnsWriteOutcome(
+      current.branchId,
+      current.id,
+      flagColumns(partner.id, 'duplicate'),
+      flagUndo(current),
+      ctx,
+    )
+  }
+  // The close's plan writes the row that holds the pair's flag, so landing here is its slip.
+  if (flagStillHolds(partner, current))
+    return partner.nameCollisionReason === 'duplicate'
+      ? noopRefusal('already-flagged', 'restated')
+      : noopRefusal('flag-held-by-partner', null)
+  if (await userResolvedPair(ctx, current, partner)) return noopRefusal('pair-resolved', null)
+  return null
+}
+
 /** classifier.md → Names: the name joins the keywords and the flag names the holder, for merging. */
 async function renameClashOutcome(
   ctx: HandlerCtx,
@@ -648,7 +788,7 @@ export const renameEntityHandler: ActionHandler = async (action, branchId, ctx) 
   )
 }
 
-/** edge-cases.md → Layer B. */
+/** edge-cases.md → Layer B; chapter-close.md → 3f for a close's duplicate. */
 export const raiseCollisionFlagHandler: ActionHandler = async (action, branchId, ctx) => {
   if (action.kind !== 'raiseCollisionFlag')
     throw new Error(`handler/kind mismatch: expected 'raiseCollisionFlag', got '${action.kind}'`)
@@ -663,6 +803,10 @@ export const raiseCollisionFlagHandler: ActionHandler = async (action, branchId,
   if (partner.kind !== current.kind) return noopRefusal('partner-not-of-kind', null)
   const edits =
     proseEntryId === null ? [] : await userEditsSinceProse(ctx, bid, 'entities', id, proseEntryId)
+  if (reason === 'duplicate') {
+    const outcome = await duplicateOutcome(ctx, current, partner, edits)
+    if (outcome !== null) return outcome
+  }
   const refused = await raiseRefusal(ctx, current, partner, reason, edits)
   if (refused !== null) {
     // Any other live flag is the one-flag-per-row rule; only the same flag again is a stored value.

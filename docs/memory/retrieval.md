@@ -195,8 +195,14 @@ blocking embed failure, per [Compute lifecycle](#compute-lifecycle) —
 or truncates exactly as local does, and which one it does is a
 property of the backend rather than of the API.
 
-The app's own writers are bounded so they cannot reach that ceiling:
-the classifier clamps the fields it emits, in `lib/classifier/plan.ts`.
+A pass is bounded so it cannot reach that ceiling: the classifier
+clamps the fields it emits, a new row's description to 1,200
+characters, in `lib/classifier/plan.ts`. A chapter close bounds a lore
+body by its growth instead, at most 1,200 characters past the body as it
+stood before the close
+([`chapter-close.md → 3a`](./chapter-close.md#3a--lore-creation)), so
+it can extend a user's long body without cutting it, and a body a close
+extends over several chapters can pass the ceiling, as a user's can.
 User-authored lore is deliberately not bounded — a long body is the
 feature, not a defect — which is why making it retrievable is a
 [deferred design session](../parked.md#chunking-long-embedded-text)
@@ -1383,6 +1389,13 @@ a re-observed epithet does not accumulate. Chapter close may remove a
 keyword an AI added that the chapter shows no longer fits, never one
 the user wrote, which the delta log tells apart
 ([`chapter-close.md → 3f — world upkeep`](./chapter-close.md#3f--world-upkeep)).
+
+One known gap: when an undo or a rollback window reverts a user's
+keyword edit under a later classifier keyword write, a term that edit
+had removed comes back credited to that pass, so a close may remove it.
+The undo itself wipes the pass's term in the same restore
+([`triage.md`](../implementation/triage.md#inbox), "Undoing a user's
+keyword edit wipes a later pass's term").
 
 ### `auto` injection mode
 

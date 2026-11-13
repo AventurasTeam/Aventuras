@@ -29,6 +29,7 @@ import { CloseLedgerWriter } from './ledger'
 import { readRowTool } from './read-tools'
 import { __setCloseAgentSlots } from './slots'
 import type { TaskPromptContext } from './task'
+import { turnInTextReason } from './text-checks'
 import { mergeThreadsTool, updateThreadTool } from './thread-tools'
 import { THREADS_READ_FIELDS, threadsTask } from './threads'
 import { assertReplaySafe, DELETE_PATH, type CloseTool } from './tool'
@@ -294,6 +295,7 @@ async function* threadCallsPhase(
     ids,
     readFields: { thread: ['title', 'description', 'status'] },
     survivorOf: (table, id) => writer.survivorOf(table, id),
+    landedCalls: (tool) => writer.landedCalls(tool),
     phase,
     taskEntryIds: chapterEntryIds,
     readSet,
@@ -742,6 +744,73 @@ describe('update_thread', () => {
       values: { status: 'failed' },
     })
     expect(run.answers[0]).toMatchObject({ result: 'rejected', reason: CLOSE_REASON.rowGone })
+    expect(await runDeltas(f, run.result.actionId)).toEqual([])
+  })
+
+  it('refuses a description holding a turn handle, landing a status beside it', async () => {
+    const run = await runThreadCalls(f, THREADS_SHOWN, [
+      {
+        toolName: 'update_thread',
+        input: {
+          id: 'th1',
+          description: 'Settled at t7, at the milestone.',
+          status: 'resolved',
+          ...cite(),
+        },
+      },
+      {
+        toolName: 'update_thread',
+        input: { id: 'th2', description: 'The seal broke open [t5].', ...cite() },
+      },
+    ])
+
+    expect(run.answers).toEqual([
+      {
+        result: 'ok',
+        notWritten: [{ field: 'description', row: 'th1', reason: turnInTextReason('t7') }],
+      },
+      { result: 'rejected', reason: turnInTextReason('t5') },
+    ])
+    expect(run.calls.map(({ result, skippedFields }) => [result, skippedFields])).toEqual([
+      ['ok', [{ field: 'description', reason: turnInTextReason('t7') }]],
+      ['rejected', undefined],
+    ])
+    expect(await threadRow(f, LETTER.id)).toMatchObject({
+      description: LETTER.description,
+      status: 'resolved',
+    })
+    expect(await threadRow(f, SEALED.id)).toMatchObject({ description: SEALED.description })
+  })
+
+  it('answers ok, writing nothing, for a stored description holding a turn handle resent', async () => {
+    await editThreadAs(f, 'user', LETTER.id, { description: 'Settled at t7, at the milestone.' })
+
+    const run = await runThreadCalls(f, THREADS_SHOWN, [
+      {
+        toolName: 'update_thread',
+        input: { id: 'th1', description: 'Settled at t7, at the milestone.', ...cite() },
+      },
+    ])
+
+    expect(run.answers).toEqual([{ result: 'ok' }])
+    expect(run.calls[0]).not.toHaveProperty('skippedFields')
+    expect(groupEvents(run.events)).toEqual([])
+    expect(await runDeltas(f, run.result.actionId)).toEqual([])
+  })
+
+  it('skips a description a later turn wrote, though the one sent names a turn', async () => {
+    await editThreadAs(f, 'later-turn', LETTER.id, {
+      description: 'Wren hides the letter in her boot.',
+    })
+
+    const run = await runThreadCalls(f, THREADS_SHOWN, [
+      {
+        toolName: 'update_thread',
+        input: { id: 'th1', description: 'Wren hands it over at t7.', ...cite() },
+      },
+    ])
+
+    expect(run.calls[0]).toMatchObject({ result: 'skipped', reason: CLOSE_REASON.laterTurn })
     expect(await runDeltas(f, run.result.actionId)).toEqual([])
   })
 })
@@ -1313,6 +1382,38 @@ describe('merge_threads', () => {
     })
   })
 
+  // update_thread takes no title and the absorbed rows go, so a merge can't land without its text.
+  it('refuses a merge whose title or description names a turn, whole, writing nothing', async () => {
+    const run = await runThreadCalls(f, THREADS_SHOWN, [
+      merge({ keep: 'th1', absorb: ['th2'], title: 'Deliver the letter (t5)' }),
+      merge({ keep: 'th1', absorb: ['th2'], description: 'One errand since [t3].' }),
+    ])
+
+    expect(run.answers).toEqual([
+      { result: 'rejected', reason: turnInTextReason('t5') },
+      { result: 'rejected', reason: turnInTextReason('t3') },
+    ])
+    expect(run.calls.map(({ values }) => values)).toEqual([
+      { title: 'Deliver the letter (t5)' },
+      { description: 'One errand since [t3].' },
+    ])
+    expect(groupEvents(run.events)).toEqual([])
+    expect(await runDeltas(f, run.result.actionId)).toEqual([])
+    expect(await threadRow(f, SEALED.id)).toBeDefined()
+  })
+
+  it("lands a merge resending keep's stored title that holds a turn handle", async () => {
+    await editThreadAs(f, 'user', LETTER.id, { title: 'Deliver the letter (t5)' })
+
+    const run = await runThreadCalls(f, THREADS_SHOWN, [
+      merge({ keep: 'th1', absorb: ['th2'], title: 'Deliver the letter (t5)' }),
+    ])
+
+    expect(run.calls[0]).toMatchObject({ result: 'ok' })
+    expect(run.calls[0]).not.toHaveProperty('values')
+    expect(opsOf(await runDeltas(f, run.result.actionId))).toEqual([['delete', SEALED.id]])
+  })
+
   describe('beside a thread the user set to always or disabled', () => {
     const MODE_RULE = 'can be absorbed only into one with the same mode'
     const NO_KEEP = 'no choice of keep can land without dropping an active thread'
@@ -1815,6 +1916,7 @@ function threadsPromptContext(fx: CloseFixture, ids: CloseIds): TaskPromptContex
     ids,
     readFields: THREADS_READ_FIELDS,
     survivorOf: () => undefined,
+    landedCalls: () => 0,
     phase: {
       actionId,
       abortSignal: new AbortController().signal,
@@ -2240,8 +2342,11 @@ async function drainThreadsAgent(
 describe('Threads in the production close', () => {
   let fx: CloseFixture
   const starts = [
+    { type: 'close_task_start', task: 'lore', part: 1, index: 2, total: 7 },
     { type: 'close_task_start', task: 'identity', part: 1, index: 3, total: 7 },
     { type: 'close_task_start', task: 'threads', part: 1, index: 4, total: 7 },
+    { type: 'close_task_start', task: 'upkeep', part: 1, index: 5, total: 7 },
+    { type: 'close_task_start', task: 'lifecycle', part: 1, index: 6, total: 7 },
   ]
   const startsIn = (events: readonly PhaseEmittedEvent[]) =>
     events.filter((event) => event.type === 'close_task_start')
@@ -2271,13 +2376,16 @@ describe('Threads in the production close', () => {
 
     expect(result).toEqual({ status: 'completed' })
     expect(startsIn(events)).toEqual(starts)
-    expect(generateToolStep).toHaveBeenCalledTimes(1)
-    const [, request] = vi.mocked(generateToolStep).mock.calls[0]!
-    expect(Object.keys(request.tools)).toEqual(['read_row', 'update_thread', 'merge_threads'])
-    expect(request.prompt.user).toContain('## th1: Find the heir (active)')
+    // Lore always reads the part; no task besides Threads has a row here.
+    const requests = vi.mocked(generateToolStep).mock.calls.map(([, request]) => request)
+    expect(requests.map((request) => Object.keys(request.tools))).toEqual([
+      ['read_row', 'create_lore', 'update_lore'],
+      ['read_row', 'update_thread', 'merge_threads'],
+    ])
+    expect(requests[1]!.prompt.user).toContain('## th1: Find the heir (active)')
   })
 
-  it('makes no step call when every thread is resolved or failed', async () => {
+  it("makes only Lore's step when every thread is resolved or failed", async () => {
     await putThreadRow(fx, {
       id: OPEN_ROWS.map,
       title: 'The lost map',
@@ -2295,6 +2403,11 @@ describe('Threads in the production close', () => {
 
     expect(result).toEqual({ status: 'completed' })
     expect(startsIn(events)).toEqual(starts)
-    expect(generateToolStep).not.toHaveBeenCalled()
+    expect(generateToolStep).toHaveBeenCalledTimes(1)
+    expect(Object.keys(vi.mocked(generateToolStep).mock.calls[0]![1].tools)).toEqual([
+      'read_row',
+      'create_lore',
+      'update_lore',
+    ])
   })
 })

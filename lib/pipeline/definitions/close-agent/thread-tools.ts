@@ -5,6 +5,7 @@ import { USER_EDITED_SINCE_PROSE, type GuardRow, type RowGuard } from '@/lib/act
 import { deltas, readEntryPosition, threads, type InjectionMode, type Thread } from '@/lib/db'
 
 import { restatedText, sentText } from './fields'
+import { turnHandleIn, turnInTextReason } from './text-checks'
 import {
   DELETE_PATH,
   writeToolSchema,
@@ -151,8 +152,16 @@ async function planUpdateThread(args: ThreadArgs, ctx: WriteContext): Promise<Wr
   const actions: PlannedAction[] = []
   const lost: LostField[] = []
   if (wanted.description !== undefined) {
+    const handle = turnHandleIn(wanted.description, ctx.ids)
     if (verdicts.laterTurnWrote('description'))
       lost.push(protectedField('description', id, CLOSE_REASON.laterTurn))
+    else if (handle !== undefined)
+      lost.push({
+        field: 'description',
+        row: id,
+        kind: 'refused',
+        reason: turnInTextReason(handle),
+      })
     else
       actions.push({
         action: {
@@ -284,6 +293,12 @@ async function planMergeThreads(args: MergeArgs, ctx: WriteContext): Promise<Wri
       ? {}
       : { description: description.bounded }),
   }
+  // Refused whole, not dropped: once the merge lands, no tool could resend keep's new text.
+  const handle = [wanted.title, wanted.description]
+    .map((text) => (text === undefined ? undefined : turnHandleIn(text, ctx.ids)))
+    .find((found) => found !== undefined)
+  if (handle !== undefined)
+    return { kind: 'refused', reason: turnInTextReason(handle), rows, values: wanted }
   // Each of the threads tried as keep, so a refusal's advice names only a merge that would land.
   const merged = [kept, ...absorbed]
   const held = mergedThreads(merged)

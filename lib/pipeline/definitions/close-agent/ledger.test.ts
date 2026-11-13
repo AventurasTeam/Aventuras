@@ -288,6 +288,25 @@ describe('CloseLedgerWriter', () => {
     expect(ledger.stopped).toEqual([{ task: 'lore', part: 2, reason: 'window' }])
   })
 
+  it('counts the landed calls of one tool across tasks and parts, a refused or skipped one aside', () => {
+    const { writer } = setup()
+    expect(writer.landedCalls('create_lore')).toBe(0)
+
+    writer.record(call({ task: 'lore', part: 1, tool: 'create_lore' }))
+    writer.record(
+      call({ task: 'lore', part: 1, tool: 'create_lore', result: 'rejected', reason: 'lore-cap' }),
+    )
+    writer.record(
+      call({ task: 'lore', part: 2, tool: 'create_lore', result: 'skipped', reason: 'later-turn' }),
+    )
+    writer.record(call({ task: 'lore', part: 2, tool: 'create_lore' }))
+    writer.record(call({ task: 'identity', part: 2, tool: 'update_character' }))
+
+    expect(writer.landedCalls('create_lore')).toBe(2)
+    expect(writer.landedCalls('update_character')).toBe(1)
+    expect(writer.landedCalls('retire_entity')).toBe(0)
+  })
+
   it("finds a landed merge's kept row through a chain of merges, and none for a refused one", () => {
     const { writer } = setup()
     writer.record(

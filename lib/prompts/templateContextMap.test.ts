@@ -63,6 +63,11 @@ describe('templateContextMap', () => {
       'closeThreads',
       'closeWritesSoFar',
       'closeSoftCaps',
+      'closeLore',
+      'closeLoreLimits',
+      'closeUpkeepRows',
+      'closeUpkeepHappenings',
+      'closeLifecycleRows',
     ])
   })
 
@@ -76,6 +81,11 @@ describe('templateContextMap', () => {
       'closeThreads',
       'closeWritesSoFar',
       'closeSoftCaps',
+      'closeLore',
+      'closeLoreLimits',
+      'closeUpkeepRows',
+      'closeUpkeepHappenings',
+      'closeLifecycleRows',
     ])
     expect(
       VARIABLES.chapter.filter((v) => closeOnly.includes(v.name)).map((v) => [v.name, v.required]),
@@ -86,6 +96,11 @@ describe('templateContextMap', () => {
       ['closeThreads', false],
       ['closeWritesSoFar', false],
       ['closeSoftCaps', false],
+      ['closeLore', false],
+      ['closeLoreLimits', false],
+      ['closeUpkeepRows', false],
+      ['closeUpkeepHappenings', false],
+      ['closeLifecycleRows', false],
     ])
   })
 
@@ -101,8 +116,11 @@ describe('templateContextMap', () => {
   })
 
   it("maps the close's task templates to the chapter group", () => {
+    expect(TEMPLATE_GROUPS[TEMPLATE_IDS.closeLore]).toBe('chapter')
+    expect(TEMPLATE_GROUPS[TEMPLATE_IDS.closeUpkeep]).toBe('chapter')
     expect(TEMPLATE_GROUPS[TEMPLATE_IDS.closeIdentity]).toBe('chapter')
     expect(TEMPLATE_GROUPS[TEMPLATE_IDS.closeThreads]).toBe('chapter')
+    expect(TEMPLATE_GROUPS[TEMPLATE_IDS.closeLifecycle]).toBe('chapter')
   })
 
   // The editor files a variable by its display group; `category` must name the same one.
@@ -118,6 +136,11 @@ describe('templateContextMap', () => {
       closeThreads: 'Plot',
       closeWritesSoFar: 'Story',
       closeSoftCaps: 'Story Config',
+      closeLore: 'Retrieval',
+      closeLoreLimits: 'Story Config',
+      closeUpkeepRows: 'Entities',
+      closeUpkeepHappenings: 'Plot',
+      closeLifecycleRows: 'Entities',
     })
     for (const [name, category] of Object.entries(categories))
       expect(DISPLAY_GROUPS[category], name).toContain(name)

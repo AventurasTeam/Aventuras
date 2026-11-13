@@ -103,6 +103,7 @@ const REASON_TEXT: Record<CollisionReason, (input: ReasonInput) => string> = {
   alike: () => t('collisionDialog.reason.alike'),
   ambiguous: () => t('collisionDialog.reason.ambiguous'),
   distinct: () => t('collisionDialog.reason.distinct'),
+  duplicate: () => t('collisionDialog.reason.duplicate'),
   'in-scene': ({ flagged, other }) => t('collisionDialog.reason.inScene', { flagged, other }),
   'name-taken': ({ flagged, other }) => t('collisionDialog.reason.nameTaken', { flagged, other }),
   'no-signal': () => t('collisionDialog.reason.noSignal'),

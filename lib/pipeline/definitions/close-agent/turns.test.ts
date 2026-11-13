@@ -52,6 +52,7 @@ function taskContextFor(
     ids,
     readFields: IDENTITY_READ_FIELDS,
     survivorOf: () => undefined,
+    landedCalls: () => 0,
     phase: {
       actionId,
       abortSignal: new AbortController().signal,

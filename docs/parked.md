@@ -568,8 +568,9 @@ so a lore body past that ceiling is unretrievable and stays that way.
 
 The **steering** half has shipped: embedded fields carry a token
 counter against their model's own window, the embed path reports which
-rows it truncated, and the app's own writers are clamped so they cannot
-reach the ceiling. What remains is **chunking** — embedding long text
+rows it truncated, and a pass is clamped so it cannot reach the ceiling,
+though a lore body a chapter close extends over several chapters can
+pass it, as a user's can. What remains is **chunking** — embedding long text
 at all, rather than only telling the user it will not be.
 
 Deferred on its own cost rather than on a dependency. The ranking

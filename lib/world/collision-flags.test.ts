@@ -263,6 +263,18 @@ describe('brokenFlags', () => {
     expect(broken([dormant], [['char_d', { name: 'Brannoc', keywords: [] }]])).toStrictEqual([])
   })
 
+  it('leaves a duplicate flag through a rename of either row, the two no namesakes', () => {
+    const stranger = flagged('char_f', 'the hooded stranger', 'char_p', {
+      nameCollisionReason: 'duplicate',
+    })
+    expect(
+      broken([partner, stranger], [['char_f', { name: 'Brannoc', keywords: [] }]]),
+    ).toStrictEqual([])
+    expect(broken([partner, stranger], [['char_p', { name: 'Mira', keywords: [] }]])).toStrictEqual(
+      [],
+    )
+  })
+
   describe('a same-parent pair', () => {
     const place = (
       id: string,
@@ -347,6 +359,24 @@ describe('brokenFlags', () => {
         ),
       ).toStrictEqual([])
     })
+
+    it('keeps a duplicate flag across a re-parent and a rename together', () => {
+      const duplicate: Entity = { ...stalls, nameCollisionReason: 'duplicate' }
+      expect(
+        judged(
+          [market, duplicate],
+          [
+            [
+              'loc_s',
+              sideOf(duplicate, {
+                name: 'The Quay',
+                placement: { kind: 'under', parentId: 'loc_q' },
+              }),
+            ],
+          ],
+        ),
+      ).toStrictEqual([])
+    })
   })
 })
 
@@ -387,6 +417,31 @@ describe('pairFlagsToClear', () => {
     expect(pairFlagsToClear(pairOf(rows, ['char_a', 'char_b']), rows)).toStrictEqual([
       'char_a',
       'char_b',
+    ])
+  })
+
+  it('clears a duplicate flag on Keep and on the dialog’s Rename, the pair no namesakes', () => {
+    const kael = entity('char_a', 'Kael')
+    const stranger = flagged('char_b', 'the hooded stranger', 'char_a', {
+      nameCollisionReason: 'duplicate',
+    })
+    const rows = [kael, stranger]
+    const pair = pairOf(rows, ['char_a', 'char_b'])
+
+    expect(pairFlagsToClear(pair, rows)).toStrictEqual(['char_b'])
+    const plan = entityRenameActions({
+      branchId: 'b1',
+      pair,
+      renames: [{ id: 'char_b', name: 'Brannoc' }],
+      branchEntities: rows,
+    })
+    if ('issue' in plan) throw new Error(`unexpected rename issue: ${plan.issue}`)
+    expect(plan.actions).toStrictEqual([
+      {
+        kind: 'updateEntity',
+        source: 'user_edit',
+        payload: { branchId: 'b1', id: 'char_b', patch: { name: 'Brannoc', ...FLAG_CLEAR } },
+      },
     ])
   })
 
@@ -593,6 +648,35 @@ describe('flag clears through the entity arm', () => {
     ).toStrictEqual({ status: 'ok' })
     expect(await flagOf(ctx, 'char_f')).toStrictEqual(flagColumns(kael))
     expect((await deltaRows(ctx))[0].undoPayload).toStrictEqual({ name: 'Kael' })
+  })
+
+  it('a save renaming either row of a duplicate pair writes only the name, the flag kept', async () => {
+    const stranger = flagged('char_f', 'the hooded stranger', 'char_p', {
+      nameCollisionReason: 'duplicate',
+    })
+    const kael = entity('char_p', 'Kael')
+    const ctx = await setup([stranger, kael])
+
+    expect(
+      await applyDeltaActionGroup(
+        renameTo(stranger, 'the cloaked stranger', [stranger, kael]),
+        { actionId: 'act_1', branchId: 'b1' },
+        ctx,
+      ),
+    ).toStrictEqual({ status: 'ok' })
+    expect(
+      await applyDeltaActionGroup(
+        renameTo(kael, 'Brannoc', [stranger, kael]),
+        { actionId: 'act_2', branchId: 'b1' },
+        ctx,
+      ),
+    ).toStrictEqual({ status: 'ok' })
+
+    expect(await flagOf(ctx, 'char_f')).toStrictEqual([1, 'char_p', 'duplicate'])
+    expect((await deltaRows(ctx)).map((delta) => delta.undoPayload)).toStrictEqual([
+      { name: 'Kael' },
+      { name: 'the hooded stranger' },
+    ])
   })
 
   it('a delete folds the clear into the partner’s ref patch, and undo re-flags it', async () => {

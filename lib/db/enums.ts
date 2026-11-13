@@ -7,12 +7,13 @@ export type ThreadStatus = (typeof THREAD_STATUSES)[number]
 
 /**
  * Why a writer flagged a row: `name_collision_reason` (classifier.md → Disambiguation and What the
- * classifier writes, piggyback.md → Matching before creating).
+ * classifier writes, piggyback.md → Matching before creating, chapter-close.md → 3f).
  */
 export const COLLISION_REASONS = [
   'alike',
   'ambiguous',
   'distinct',
+  'duplicate',
   'in-scene',
   'name-taken',
   'no-signal',

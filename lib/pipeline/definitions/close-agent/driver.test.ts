@@ -27,7 +27,7 @@ import {
   type ToolStepResult,
 } from '@/lib/ai'
 import type { ChapterPartCut } from '@/lib/chapters'
-import { entities, storyEntries, threads, type CloseTask } from '@/lib/db'
+import { entities, lore, storyEntries, threads, type CloseTask } from '@/lib/db'
 import { logger, makeLogger } from '@/lib/diagnostics'
 import { generateId } from '@/lib/ids'
 import { appSettingsStore, currentStoryStore, entitiesStore, resetAllStores } from '@/lib/stores'
@@ -36,6 +36,7 @@ import { entityWriteAction } from './entity-write'
 import { identityTask } from './identity'
 import { CloseIds } from './ids'
 import { CloseLedgerWriter } from './ledger'
+import { loreTask } from './lore'
 import { closeParts } from './parts'
 import { CLOSE_TASK_STEP_BUDGET, runCloseTask, type TaskEnd, type TaskRunArgs } from './run-task'
 import {
@@ -311,6 +312,7 @@ function runContext(phase: PhaseContext): TaskRunArgs {
     part: 1,
     ids,
     survivorOf: (table, id) => writer.survivorOf(table, id),
+    landedCalls: (tool) => writer.landedCalls(tool),
     phase,
     taskEntryIds: chapterEntryIds(),
     ledger: writer,
@@ -1469,6 +1471,11 @@ describe('closeAgentPhase', () => {
       table: 'happenings',
       id: 'hap_kept',
     })
+    // Every entry counts the same ledger's landed calls, across tasks: a chapter-wide cap's count.
+    expect(seen[1]!.landedCalls('merge_happenings')).toBe(1)
+    expect(seen[0]!.landedCalls('update_happening')).toBe(1)
+    expect(stepSeen[0]!.landedCalls('merge_happenings')).toBe(1)
+    expect(seen[1]!.landedCalls('create_lore')).toBe(0)
   })
 
   it("hands a task a ledger that logs a report value under the run's actionId", async () => {
@@ -1675,7 +1682,7 @@ describe('closeAgentPhase', () => {
     expect(log).toEqual([])
   })
 
-  it('with the production slots, runs Identity then Threads in each part', () => {
+  it('with the production slots, runs Lore, Identity, Threads, Upkeep and Lifecycle in each part', () => {
     __setCloseAgentSlots({ before: [], perPart: [quietTask('identity', [])], after: [] })
     __setCloseAgentSlots(undefined)
     expect(closeAgentSlots()).toBe(PRODUCTION_CLOSE_SLOTS)
@@ -1685,7 +1692,7 @@ describe('closeAgentPhase', () => {
       PRODUCTION_CLOSE_SLOTS.perPart.map((entry) =>
         entry.kind === 'task' ? entry.def.task : entry.step.name,
       ),
-    ).toEqual(['identity', 'threads'])
+    ).toEqual(['lore', 'identity', 'threads', 'upkeep', 'lifecycle'])
   })
 
   it('with no task in any slot, starts nothing and reads no store and no parts, the ledger seeded', async () => {
@@ -2046,5 +2053,184 @@ describe('closeAgentPhase over three parts', () => {
     expect(systems[2]).toContain('## t12 (')
     expect(systems[2]).not.toContain('## t5 (')
     expect(systems[2]).not.toContain('## t13 (')
+  })
+})
+
+describe('closeAgentPhase over parts, with the real tasks', () => {
+  let fx: CloseFixture
+
+  beforeEach(async () => {
+    fx = await openCloseFixture()
+  })
+
+  afterEach(() => {
+    __setCloseAgentSlots(undefined)
+  })
+
+  // The opening to the third reply (positions 1-7, t1-t7), cut at range indexes, first to last.
+  function partsPhase(bounds: readonly (readonly [number, number])[]): PhaseContext {
+    const range = fx.entries.slice(0, 7)
+    const intermediates: Record<string, unknown> = {}
+    setCloseRange(intermediates, {
+      chapterId: 'chap_parts',
+      startEntryId: range[0]!.id,
+      endEntryId: range[6]!.id,
+    })
+    // The agent loop reads a cut's ids; its token count is the metadata phase's.
+    setCloseParts(
+      intermediates,
+      bounds.map(([first, last], index) => ({
+        part: index + 1,
+        startEntryId: range[first]!.id,
+        endEntryId: range[last]!.id,
+        tokens: 0,
+      })),
+    )
+    return {
+      actionId: 'act_parts',
+      abortSignal: new AbortController().signal,
+      intermediates,
+      log: makeLogger('act_parts'),
+      db: fx.ctx.db,
+      runInTransaction: fx.ctx.runInTransaction,
+      storyId: fx.storyId,
+      branchId: fx.branchId,
+    }
+  }
+
+  // Stands in for the orchestrator: each group lands and its outcome goes back, so a landed
+  // create counts toward the cap as it does in a close.
+  async function drainLanding(
+    ctx: PhaseContext,
+  ): Promise<{ events: PhaseEmittedEvent[]; result: PhaseResult }> {
+    const gen = closeAgentPhase(ctx)
+    const events: PhaseEmittedEvent[] = []
+    let reply: GroupOutcome | undefined
+    for (;;) {
+      const next = await gen.next(reply)
+      if (next.done) return { events, result: next.value }
+      events.push(next.value)
+      reply =
+        next.value.type === 'delta_group_emitted'
+          ? await applyDeltaActionGroupWithOutcomes(
+              next.value.actions,
+              { actionId: ctx.actionId, branchId: ctx.branchId, entryId: next.value.entryId },
+              fx.ctx,
+            )
+          : undefined
+    }
+  }
+
+  const createLore = (
+    toolCallId: string,
+    title: string,
+    body: string,
+    turn: string,
+  ): ToolStepCall => ({
+    toolCallId,
+    toolName: 'create_lore',
+    input: { title, body, turns: [turn], why: 'The innkeeper and the ferryman name it.' },
+  })
+
+  it('holds the lore cap across parts: a refused create spends none, three land, part 2 is refused', async () => {
+    __setCloseAgentSlots({ before: [], perPart: [{ kind: 'task', def: loreTask }], after: [] })
+    // Part 1 is t1-t4, part 2 t5-t7: each create cites its own part's turn, so k1 is refused for
+    // its blank body and the part 2 create only by the cap.
+    vi.mocked(generateToolStep)
+      .mockResolvedValueOnce(
+        okStep([
+          createLore('k1', 'The empty toll', '   ', 't4'),
+          createLore(
+            'k2',
+            'The ferry toll',
+            'A courier pays twice the boat to cross at night.',
+            't4',
+          ),
+          createLore('k3', 'The Harrow landing', 'A black line of planks over black water.', 't4'),
+          createLore(
+            'k4',
+            'The Harrow inn',
+            'Warm and loud with drovers; the innkeeper watches the road.',
+            't3',
+          ),
+        ]),
+      )
+      .mockResolvedValueOnce(okStep([]))
+      .mockResolvedValueOnce(
+        okStep([
+          createLore('k5', 'The night crossing', 'Tobin poles wide of the usual landing.', 't7'),
+        ]),
+      )
+    const ctx = partsPhase([
+      [0, 3],
+      [4, 6],
+    ])
+
+    const { result } = await drainLanding(ctx)
+
+    expect(result).toEqual({ status: 'completed' })
+    const { calls } = closeLedgerOf(ctx.intermediates)!
+    expect(calls.map((call) => [call.part, call.tool, call.result])).toEqual([
+      [1, 'create_lore', 'rejected'],
+      [1, 'create_lore', 'ok'],
+      [1, 'create_lore', 'ok'],
+      [1, 'create_lore', 'ok'],
+      [2, 'create_lore', 'rejected'],
+    ])
+    const capped = calls[4]!
+    expect(capped.reason).toBe('lore-cap')
+    expect(capped.turns).toEqual([fx.entries[6]!.id])
+    expect(capped.rows).toEqual([
+      { table: 'lore', id: expect.stringMatching(/^lore_/), name: 'The night crossing' },
+    ])
+    const stored = await fx.ctx.db
+      .select({ id: lore.id, title: lore.title })
+      .from(lore)
+      .where(eq(lore.branchId, fx.branchId))
+    expect(stored.map(({ title }) => title).sort()).toEqual([
+      'The Harrow inn',
+      'The Harrow landing',
+      'The ferry toll',
+    ])
+    // The refused create keeps its minted id, which names no row.
+    expect(stored.map(({ id }) => id)).not.toContain(capped.rows[0]!.id)
+  })
+
+  it('starts the five prose tasks in each of three parts, 15 of 17, in run order', async () => {
+    __setCloseAgentSlots(undefined)
+    const ctx = partsPhase([
+      [0, 2],
+      [3, 4],
+      [5, 6],
+    ])
+
+    const { events, result } = await drainLanding(ctx)
+
+    expect(result).toEqual({ status: 'completed' })
+    expect(events.filter((event) => event.type === 'close_task_start')).toEqual([
+      { type: 'close_task_start', task: 'lore', part: 1, index: 2, total: 17 },
+      { type: 'close_task_start', task: 'identity', part: 1, index: 3, total: 17 },
+      { type: 'close_task_start', task: 'threads', part: 1, index: 4, total: 17 },
+      { type: 'close_task_start', task: 'upkeep', part: 1, index: 5, total: 17 },
+      { type: 'close_task_start', task: 'lifecycle', part: 1, index: 6, total: 17 },
+      { type: 'close_task_start', task: 'lore', part: 2, index: 7, total: 17 },
+      { type: 'close_task_start', task: 'identity', part: 2, index: 8, total: 17 },
+      { type: 'close_task_start', task: 'threads', part: 2, index: 9, total: 17 },
+      { type: 'close_task_start', task: 'upkeep', part: 2, index: 10, total: 17 },
+      { type: 'close_task_start', task: 'lifecycle', part: 2, index: 11, total: 17 },
+      { type: 'close_task_start', task: 'lore', part: 3, index: 12, total: 17 },
+      { type: 'close_task_start', task: 'identity', part: 3, index: 13, total: 17 },
+      { type: 'close_task_start', task: 'threads', part: 3, index: 14, total: 17 },
+      { type: 'close_task_start', task: 'upkeep', part: 3, index: 15, total: 17 },
+      { type: 'close_task_start', task: 'lifecycle', part: 3, index: 16, total: 17 },
+    ])
+    // The fixture holds no row: only Lore, which starts from the prose, makes a step, once a part.
+    expect(
+      vi.mocked(generateToolStep).mock.calls.map(([, request]) => Object.keys(request.tools)),
+    ).toEqual([
+      ['read_row', 'create_lore', 'update_lore'],
+      ['read_row', 'create_lore', 'update_lore'],
+      ['read_row', 'create_lore', 'update_lore'],
+    ])
   })
 })

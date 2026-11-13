@@ -72,6 +72,11 @@ export class CloseLedgerWriter {
     this.ledger.stopped.push({ ...entry })
   }
 
+  /** The landed (`ok`) calls of `tool` so far, across tasks and parts: a chapter-wide cap's count. */
+  landedCalls(tool: string): number {
+    return this.ledger.calls.filter((call) => call.tool === tool && call.result === 'ok').length
+  }
+
   /** Where a row this close merged away went: the last kept row of a chain of landed merges. */
   survivorOf(table: string, id: string): Survivor | undefined {
     let found: Survivor | undefined

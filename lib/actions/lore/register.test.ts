@@ -6,9 +6,10 @@ import { createTestDb } from '@/lib/db/__tests__/test-db'
 import { loreStore } from '@/lib/stores'
 
 import { registerLore } from './register'
-import { applyDeltaAction } from '../delta/apply-delta-action'
+import { applyDeltaAction, applyDeltaActionGroupWithOutcomes } from '../delta/apply-delta-action'
 import { __resetRegistry } from '../delta/registry'
 import { reverseReplayDeltas } from '../delta/reverse-replay'
+import type { DeltaSource, PipelineAction } from '../types'
 
 async function setup() {
   // Registration is process-global; reset so only lore is live for this test.
@@ -298,5 +299,130 @@ describe('lore CRUD arms', () => {
       ctx,
     )
     expect((await rowFor(db, 'lore_1')).embeddingStale).toBe(1) // embedded column changed
+  })
+})
+
+// chapter-close.md → 3a "Existing rows too": a close extends or corrects a row's keywords.
+describe('setLoreKeywords', () => {
+  type Ctx = Awaited<ReturnType<typeof setup>>['ctx']
+  const LANDED = { status: 'landed' }
+
+  const setKeywords = (add: string[], remove: string[]): PipelineAction => ({
+    kind: 'setLoreKeywords',
+    source: 'chapter_close',
+    payload: { branchId: 'br_1', id: 'lore_1', add, remove, proseEntryId: null },
+  })
+
+  const closeBody = (body: string): PipelineAction => ({
+    kind: 'updateLore',
+    source: 'chapter_close',
+    payload: { branchId: 'br_1', id: 'lore_1', patch: { body }, proseEntryId: null },
+  })
+
+  async function createdBy(ctx: Ctx, source: DeltaSource) {
+    const result = await applyDeltaAction(
+      {
+        action: { kind: 'createLore', source, payload: { entry: LORE } },
+        actionId: 'act_c',
+        branchId: 'br_1',
+      },
+      ctx,
+    )
+    expect(result.status).toBe('ok')
+  }
+
+  // The group path keeps a noop's mark, which the single path drops.
+  async function outcomesOf(ctx: Ctx, actions: PipelineAction[], actionId = 'act_k') {
+    const result = await applyDeltaActionGroupWithOutcomes(
+      actions,
+      { actionId, branchId: 'br_1' },
+      ctx,
+    )
+    if (result.status !== 'ok') throw new Error(`group refused: ${result.reason}`)
+    return result.outcomes
+  }
+
+  it('adds and removes in one delta, the kept terms first, and reverses', async () => {
+    const { db, ctx } = await setup()
+    await createdBy(ctx, 'lore_agent')
+    expect(await outcomesOf(ctx, [setKeywords(['ley line'], ['MANA'])])).toStrictEqual([LANDED])
+    expect((await rowFor(db, 'lore_1')).keywords).toEqual(['aether', 'ley line'])
+    expect(loreStore.getById('lore_1')?.keywords).toEqual(['aether', 'ley line'])
+    const [delta] = await db.select().from(deltas).where(eq(deltas.actionId, 'act_k'))
+    expect(delta.undoPayload).toEqual({ keywords: ['aether', 'mana'] })
+    expect(await reverseReplayDeltas('act_k', ctx)).toBe(1)
+    expect((await rowFor(db, 'lore_1')).keywords).toEqual(['aether', 'mana'])
+  })
+
+  it('refuses to remove a term the user added, naming it, and writes nothing', async () => {
+    const { db, ctx } = await setup()
+    await createdBy(ctx, 'user_edit')
+    expect(await outcomesOf(ctx, [setKeywords(['ley line'], ['mana'])])).toStrictEqual([
+      { status: 'noop', reason: 'keyword-user-added: mana' },
+    ])
+    expect((await rowFor(db, 'lore_1')).keywords).toEqual(['aether', 'mana'])
+    expect((await db.select().from(deltas)).length).toBe(1)
+  })
+
+  it("removes a term a close added to the user's row", async () => {
+    const { db, ctx } = await setup()
+    await createdBy(ctx, 'user_edit')
+    expect(await outcomesOf(ctx, [setKeywords(['ley line'], [])], 'act_k1')).toStrictEqual([LANDED])
+    expect(await outcomesOf(ctx, [setKeywords([], ['Ley Line'])], 'act_k2')).toStrictEqual([LANDED])
+    expect((await rowFor(db, 'lore_1')).keywords).toEqual(['aether', 'mana'])
+  })
+
+  it('refuses to remove a term on a row no create delta logged, as a wizard row', async () => {
+    const { db, ctx } = await setup()
+    await db.insert(lore).values(LORE)
+    expect(await outcomesOf(ctx, [setKeywords([], ['aether'])])).toStrictEqual([
+      { status: 'noop', reason: 'keyword-user-added: aether' },
+    ])
+    expect((await rowFor(db, 'lore_1')).keywords).toEqual(['aether', 'mana'])
+  })
+
+  it('restates a call that changes nothing, marked restated', async () => {
+    const { db, ctx } = await setup()
+    await createdBy(ctx, 'lore_agent')
+    expect(await outcomesOf(ctx, [setKeywords([' AETHER '], ['the ghost'])])).toStrictEqual([
+      { status: 'noop', reason: 'no-keyword-change', mark: 'restated' },
+    ])
+    expect((await db.select().from(deltas)).length).toBe(1)
+  })
+
+  it('no-ops on a row that is gone, marked gone', async () => {
+    const { ctx } = await setup()
+    expect(await outcomesOf(ctx, [setKeywords(['ley line'], [])])).toStrictEqual([
+      { status: 'noop', reason: 'keyword target lore br_1:lore_1 not found', mark: 'gone' },
+    ])
+  })
+
+  it('lands beside an updateLore of the text fields in one group, as two deltas', async () => {
+    const { db, ctx } = await setup()
+    await createdBy(ctx, 'lore_agent')
+    expect(
+      await outcomesOf(ctx, [
+        closeBody('The magic that binds, and the tithe it takes.'),
+        setKeywords(['ley line'], []),
+      ]),
+    ).toStrictEqual([LANDED, LANDED])
+    const row = await rowFor(db, 'lore_1')
+    expect(row.body).toBe('The magic that binds, and the tithe it takes.')
+    expect(row.keywords).toEqual(['aether', 'mana', 'ley line'])
+    expect((await db.select().from(deltas).where(eq(deltas.actionId, 'act_k'))).length).toBe(2)
+  })
+
+  it('lands the text fields when the same group refuses the removal', async () => {
+    const { db, ctx } = await setup()
+    await createdBy(ctx, 'user_edit')
+    expect(
+      await outcomesOf(ctx, [
+        closeBody('The magic that binds, and the tithe it takes.'),
+        setKeywords([], ['mana']),
+      ]),
+    ).toStrictEqual([LANDED, { status: 'noop', reason: 'keyword-user-added: mana' }])
+    const row = await rowFor(db, 'lore_1')
+    expect(row.body).toBe('The magic that binds, and the tithe it takes.')
+    expect(row.keywords).toEqual(['aether', 'mana'])
   })
 })

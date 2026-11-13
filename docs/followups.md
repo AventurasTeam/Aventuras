@@ -520,3 +520,22 @@ breakdown under [UX](#ux).
   - [A twin across a placement](./parked.md#a-twin-across-a-placement)
   - [Resuming a failed close](./parked.md#resuming-a-failed-close)
   - [A staged row has no retirement](./parked.md#a-staged-row-has-no-retirement)
+
+- **A close's later part can't undo an earlier part's one-way
+  write.** On a chapter longer than half the window, each part's
+  prose tasks read only that part's turns
+  ([`chapter-close.md → Parts`](./memory/chapter-close.md#parts)),
+  and nothing tells a task that later parts follow. A thread
+  resolved, an entity retired or threads merged in an earlier part
+  stay so for the rest of the close: no later part's task is shown
+  the row again with a way back, though the review window lists the
+  write and the user can undo it. Two candidate fixes, to judge on
+  real long chapters: a part notice in the per-part system half
+  ("these are turns t6–t12, part 2 of 3; later parts follow"), which
+  stays stable across a part's tasks; or a reopen path, later parts
+  seeing what this close resolved or retired with leave to set it
+  back. The same long chapters should judge the starts' size: on the
+  dataset chapter cut at a 40,000 window, part 1's Upkeep start held
+  39 rows and 29 happenings and its Lifecycle start 29 rows (part 2:
+  20 and 22), with no bound on either, and the close still ran without
+  a window stop. Raised 2026-11-10 by 5.8's review.

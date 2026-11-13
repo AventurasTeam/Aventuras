@@ -37,10 +37,14 @@ export type ToolContext = {
   readonly endEntryId: string
   readonly task: CloseTask
   readonly part: number
+  /** The entries this task was shown, by position: its part's, or the chapter's for part 0. */
+  readonly taskEntryIds: readonly string[]
   readonly ids: CloseIds
   readonly readFields: ReadFields
   /** A landed merge's kept row for a row this close absorbed. */
   readonly survivorOf: (table: string, id: string) => { table: string; id: string } | undefined
+  /** The ledger's landed (`ok`) calls of `tool` so far, across tasks and parts. */
+  readonly landedCalls: (tool: string) => number
 }
 export type WriteContext = ToolContext & {
   /** Cited entry ids, resolved. */

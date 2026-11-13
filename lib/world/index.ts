@@ -35,7 +35,7 @@ export type {
   RelationshipLink,
   StackableDraft,
 } from './entity-draft'
-export { nameTakenByOther } from './collision-flags'
+export { brokenFlags, nameTakenByOther } from './collision-flags'
 export { nameHolders } from './name-holders'
 export { nameBasis, namesakeBasis } from './namesakes'
 export type { NameBasis, NamesakeMatch, NamesakeSide } from './namesakes'

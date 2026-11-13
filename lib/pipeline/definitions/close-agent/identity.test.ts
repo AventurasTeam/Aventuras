@@ -21,6 +21,7 @@ import { resetAllStores } from '@/lib/stores'
 
 import { createReadSet } from './common-checks'
 import { dispatchToolCall, type DispatchContext, type ToolAnswer } from './dispatch'
+import { storedValue } from './entity-write'
 import { softCapReason } from './fields'
 import { IDENTITY_READ_FIELDS, identityTask } from './identity'
 import { updateCharacterTool, updateFactionTool } from './identity-tools'
@@ -28,6 +29,7 @@ import { CloseIds, nameCloseProse } from './ids'
 import { CloseLedgerWriter } from './ledger'
 import { __setCloseAgentSlots, closeAgentSlots, NO_CLOSE_TASKS } from './slots'
 import type { TaskPromptContext } from './task'
+import { turnInTextReason } from './text-checks'
 import { assertReplaySafe, type CloseTool } from './tool'
 import { readTaskTurns, storyModeOf } from './turns'
 import { CLOSE_REASON } from './verdict'
@@ -271,6 +273,7 @@ async function* scriptedPhase(
     ids,
     readFields: {},
     survivorOf: (table, id) => writer.survivorOf(table, id),
+    landedCalls: (tool) => writer.landedCalls(tool),
     phase,
     taskEntryIds: chapterEntryIds(f),
     readSet,
@@ -1133,6 +1136,173 @@ describe('update_character and update_faction', () => {
   })
 })
 
+// classifier.md → ID handling: a stored turn handle names another turn in a later prompt.
+describe('update_character and update_faction: a turn handle in a text or list field', () => {
+  let f: CloseFixture
+
+  beforeEach(async () => {
+    f = await openCloseFixture()
+    await seedCast(f)
+  })
+
+  // Each adopted field, by the delta path it lands at; the cast is Wren (c1) and the Syndicate (f1).
+  const TEXT_PATH: Readonly<Record<string, string>> = {
+    voice: 'state.voice',
+    description: 'description',
+    standing: 'state.standing',
+  }
+  const rowOf = (handle: string): string => (handle === 'c1' ? WREN : SYNDICATE)
+
+  it.each<[string, string, string]>([
+    ['update_character', 'c1', 'voice'],
+    ['update_character', 'c1', 'description'],
+    ['update_faction', 'f1', 'standing'],
+    ['update_faction', 'f1', 'description'],
+  ])(
+    '%s on %s refuses a %s naming a turn, sent alone, writing nothing',
+    async (toolName, id, field) => {
+      const before = await storedEntity(f, rowOf(id))
+
+      const { answers } = await dispatchScripted(
+        f,
+        [{ toolName, input: { id, [field]: 'Changed since [t3].', ...cite() } }],
+        { shown: CAST },
+      )
+
+      expect(answers.map(({ output }) => output)).toEqual([
+        { result: 'rejected', reason: turnInTextReason('t3') },
+      ])
+      expect(await storedEntity(f, rowOf(id))).toEqual(before)
+    },
+  )
+
+  it.each<[string, string, string, string, unknown]>([
+    ['update_character', 'c1', 'voice', 'description', 'A courier, soaked.'],
+    ['update_character', 'c1', 'description', 'voice', 'hoarse'],
+    ['update_faction', 'f1', 'standing', 'agenda', ['tax the bridge']],
+    ['update_faction', 'f1', 'description', 'agenda', ['tax the bridge']],
+  ])(
+    '%s on %s lands the field beside a %s naming a turn, ok naming that one',
+    async (toolName, id, field, other, value) => {
+      const path = TEXT_PATH[field]!
+      const otherPath = other === 'agenda' ? 'state.agenda' : (TEXT_PATH[other] ?? other)
+      const before = await storedEntity(f, rowOf(id))
+
+      const { answers, calls } = await dispatchScripted(
+        f,
+        [{ toolName, input: { id, [field]: 'Changed since t7.', [other]: value, ...cite() } }],
+        { shown: CAST },
+      )
+
+      expect(answers.map(({ output }) => output)).toEqual([
+        { result: 'ok', notWritten: [{ field: path, row: id, reason: turnInTextReason('t7') }] },
+      ])
+      expect(calls[0]!.skippedFields).toEqual([{ field: path, reason: turnInTextReason('t7') }])
+      const after = await storedEntity(f, rowOf(id))
+      expect(storedValue(after, path)).toEqual(storedValue(before, path))
+      expect(storedValue(after, otherPath)).toEqual(value)
+    },
+  )
+
+  it.each<[string, string, string, string, string, unknown]>([
+    ['update_character', 'c1', 'traits', 'state.traits', 'voice', 'hoarse'],
+    ['update_character', 'c1', 'drives', 'state.drives', 'description', 'A courier, soaked.'],
+    ['update_faction', 'f1', 'agenda', 'state.agenda', 'standing', 'Broke since the flood.'],
+  ])(
+    '%s on %s refuses %s with an entry naming a turn, landing the free field beside it',
+    async (toolName, id, field, path, other, value) => {
+      const before = await storedEntity(f, rowOf(id))
+
+      const { answers, calls } = await dispatchScripted(
+        f,
+        [
+          {
+            toolName,
+            input: { id, [field]: ['wary', 'owes the ferryman [t3]'], [other]: value, ...cite() },
+          },
+        ],
+        { shown: CAST },
+      )
+
+      expect(answers.map(({ output }) => output)).toEqual([
+        { result: 'ok', notWritten: [{ field: path, row: id, reason: turnInTextReason('t3') }] },
+      ])
+      expect(calls[0]!.skippedFields).toEqual([{ field: path, reason: turnInTextReason('t3') }])
+      const after = await storedEntity(f, rowOf(id))
+      expect(storedValue(after, path)).toEqual(storedValue(before, path))
+      expect(storedValue(after, TEXT_PATH[other]!)).toEqual(value)
+    },
+  )
+
+  it('refuses a traits list naming a turn bare, sent alone, writing nothing', async () => {
+    const before = await storedEntity(f, WREN)
+
+    const { answers } = await dispatchScripted(
+      f,
+      [{ toolName: 'update_character', input: { id: 'c1', traits: ['scarred at t5'], ...cite() } }],
+      { shown: CAST },
+    )
+
+    expect(answers.map(({ output }) => output)).toEqual([
+      { result: 'rejected', reason: turnInTextReason('t5') },
+    ])
+    expect(await storedEntity(f, WREN)).toEqual(before)
+  })
+
+  it('answers ok, writing nothing, for a stored traits list holding a turn handle resent', async () => {
+    await editEntity(f, WREN, 'earlier-close', { state: { traits: ['wary', 'scarred at t5'] } })
+
+    const { result, answers, calls } = await dispatchScripted(
+      f,
+      [
+        {
+          toolName: 'update_character',
+          input: { id: 'c1', traits: ['wary', 'scarred at t5'], ...cite() },
+        },
+      ],
+      { shown: CAST },
+    )
+
+    expect(answers.map(({ output }) => output)).toEqual([{ result: 'ok' }])
+    expect(calls[0]).not.toHaveProperty('skippedFields')
+    expect(await runDeltas(f, result.actionId)).toEqual([])
+  })
+
+  // Checked after the restated drop: a stored value is no new text, whatever it holds.
+  it('answers ok, writing nothing, for a stored description holding a turn handle resent', async () => {
+    await editEntity(f, WREN, 'earlier-close', { description: 'Changed since t3.' })
+
+    const { result, answers, calls } = await dispatchScripted(
+      f,
+      [
+        {
+          toolName: 'update_character',
+          input: { id: 'c1', description: 'Changed since t3.', ...cite() },
+        },
+      ],
+      { shown: CAST },
+    )
+
+    expect(answers.map(({ output }) => output)).toEqual([{ result: 'ok' }])
+    expect(calls[0]).not.toHaveProperty('skippedFields')
+    expect(await runDeltas(f, result.actionId)).toEqual([])
+  })
+
+  // Checked after protection: a field the user holds is skipped, not refused for its text.
+  it('skips a voice the user wrote after the cited turn, though it names a turn', async () => {
+    await editEntity(f, WREN, 'user', { state: { voice: 'gravel' } })
+
+    const { result, calls } = await dispatchScripted(
+      f,
+      [{ toolName: 'update_character', input: { id: 'c1', voice: 'Hoarse since t7.', ...cite() } }],
+      { shown: CAST },
+    )
+
+    expect(calls[0]).toMatchObject({ result: 'skipped', reason: USER_EDITED_SINCE_PROSE })
+    expect(await runDeltas(f, result.actionId)).toEqual([])
+  })
+})
+
 // Real prefix_<uuid> ids: CloseIds hands a handle only to a substitutable id.
 const START_ROWS = {
   bess: 'char_00000000-0000-4000-8000-00000000b001',
@@ -1233,6 +1403,7 @@ function promptContextFor(
     ids,
     readFields: IDENTITY_READ_FIELDS,
     survivorOf: () => undefined,
+    landedCalls: () => 0,
     phase: {
       actionId,
       abortSignal: new AbortController().signal,
@@ -1902,10 +2073,13 @@ async function drainAgent(
 const taskStartsIn = (events: readonly PhaseEmittedEvent[]): PhaseEmittedEvent[] =>
   events.filter((event) => event.type === 'close_task_start')
 
-// C6: both tasks start, a task with nothing to show included, in a one-part chapter of 7.
+// C6: the five prose tasks start, those with nothing to show included, in a one-part chapter of 7.
 const PART_ONE_STARTS = [
+  { type: 'close_task_start', task: 'lore', part: 1, index: 2, total: 7 },
   { type: 'close_task_start', task: 'identity', part: 1, index: 3, total: 7 },
   { type: 'close_task_start', task: 'threads', part: 1, index: 4, total: 7 },
+  { type: 'close_task_start', task: 'upkeep', part: 1, index: 5, total: 7 },
+  { type: 'close_task_start', task: 'lifecycle', part: 1, index: 6, total: 7 },
 ]
 
 describe('Identity in the production close', () => {
@@ -1931,25 +2105,26 @@ describe('Identity in the production close', () => {
 
     expect(result).toEqual({ status: 'completed' })
     expect(taskStartsIn(events)).toEqual(PART_ONE_STARTS)
-    expect(generateToolStep).toHaveBeenCalledTimes(1)
-    const [, request] = vi.mocked(generateToolStep).mock.calls[0]!
-    expect(Object.keys(request.tools)).toEqual([
-      'search_world',
-      'read_row',
-      'update_character',
-      'update_faction',
+    // Lore always reads the part; Pip, active in the part's scene, starts Lifecycle too.
+    const requests = vi.mocked(generateToolStep).mock.calls.map(([, request]) => request)
+    expect(requests.map((request) => Object.keys(request.tools))).toEqual([
+      ['read_row', 'create_lore', 'update_lore'],
+      ['search_world', 'read_row', 'update_character', 'update_faction'],
+      ['search_world', 'read_row', 'retire_entity', 'flag_duplicate'],
     ])
-    expect(request.prompt.user).toContain('## c1: Pip\n')
+    expect(requests[1]!.prompt.user).toContain('## c1: Pip\n')
   })
 
-  it('makes no step call and no failure when neither task has anything to start from', async () => {
+  it("makes only Lore's step, and no failure, when no other task has anything to start from", async () => {
     const ctx = closePhaseFor(fx)
 
     const { events, result } = await drainAgent(ctx)
 
     expect(result).toEqual({ status: 'completed' })
     expect(taskStartsIn(events)).toEqual(PART_ONE_STARTS)
-    expect(generateToolStep).not.toHaveBeenCalled()
+    expect(generateToolStep).toHaveBeenCalledTimes(1)
+    const [, request] = vi.mocked(generateToolStep).mock.calls[0]!
+    expect(Object.keys(request.tools)).toEqual(['read_row', 'create_lore', 'update_lore'])
     expect(closeLedgerOf(ctx.intermediates)).toEqual({ calls: [], stopped: [], noToolCalls: true })
   })
 

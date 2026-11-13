@@ -4,7 +4,12 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { applyDeltaActionGroupWithOutcomes } from '@/lib/actions/delta/apply-delta-action'
 import { isContentEditDelta } from '@/lib/actions/story-entries/classifier-facts'
 import type { ActionOutcome, GroupOutcome, PipelineAction } from '@/lib/actions/types'
-import { generateStructured, type GenerateStructuredResult } from '@/lib/ai'
+import {
+  generateStructured,
+  generateToolStep,
+  type GenerateStructuredResult,
+  type ToolStepResult,
+} from '@/lib/ai'
 import { CHAPTER_CLOSE_KIND } from '@/lib/chapters'
 import { chapters, deltas, storyEntries, type Delta } from '@/lib/db'
 import {
@@ -32,6 +37,8 @@ import { closeMetadataPhase } from './chapter-close-metadata'
 import { readCloseRangeEntries } from './chapter-close-metadata-call'
 import { closeReportPhase } from './chapter-close-report'
 import { identityTask } from './close-agent/identity'
+import { lifecycleTask } from './close-agent/lifecycle'
+import { loreTask } from './close-agent/lore'
 import {
   __setCloseAgentSlots,
   closeAgentSlots,
@@ -39,6 +46,7 @@ import {
   PRODUCTION_CLOSE_SLOTS,
 } from './close-agent/slots'
 import { threadsTask } from './close-agent/threads'
+import { upkeepTask } from './close-agent/upkeep'
 import { closeLedgerOf } from './close-intermediates'
 import { readClassifierStatus } from './memory-chain'
 import { expectRan, realDeltaActionPort } from '../__tests__/harness'
@@ -51,6 +59,7 @@ import type { PipelineEvent, TxResult } from '../types'
 vi.mock('@/lib/ai', async (importOriginal) => ({
   ...(await importOriginal<Record<string, unknown>>()),
   generateStructured: vi.fn(),
+  generateToolStep: vi.fn(),
 }))
 
 let f: CloseFixture
@@ -660,18 +669,44 @@ describe('a failed close', () => {
   })
 })
 
+// A reply with no tool call, which ends a task (memory/chapter-close.md → Conversations).
+const NO_CALL_STEP: ToolStepResult = {
+  status: 'ok',
+  step: {
+    calls: [],
+    invalidCalls: [],
+    responseMessages: [
+      { role: 'assistant', content: [{ type: 'text', text: 'Nothing to change.' }] },
+    ],
+    text: 'Nothing to change.',
+    finishReason: 'stop',
+    usage: {
+      inputTokens: 100,
+      inputTokenDetails: { noCacheTokens: 100, cacheReadTokens: 0, cacheWriteTokens: 0 },
+      outputTokens: 5,
+      outputTokenDetails: { textTokens: 5, reasoningTokens: 0 },
+      totalTokens: 105,
+    },
+  },
+  recoverable: [],
+}
+
 describe('the agent phase with the production slots', () => {
   beforeEach(() => {
     __setCloseAgentSlots(undefined)
+    vi.mocked(generateToolStep).mockResolvedValue(NO_CALL_STEP)
   })
 
-  it('runs Identity then Threads in each part, and nothing before or after', () => {
+  it('runs Lore, Identity, Threads, Upkeep and Lifecycle in each part, and nothing before or after', () => {
     expect(closeAgentSlots()).toBe(PRODUCTION_CLOSE_SLOTS)
     expect(PRODUCTION_CLOSE_SLOTS.before).toEqual([])
     expect(PRODUCTION_CLOSE_SLOTS.after).toEqual([])
-    const [identity, threads, ...rest] = PRODUCTION_CLOSE_SLOTS.perPart
+    const [lore, identity, threads, upkeep, lifecycle, ...rest] = PRODUCTION_CLOSE_SLOTS.perPart
+    expect(lore?.kind === 'task' && lore.def).toBe(loreTask)
     expect(identity?.kind === 'task' && identity.def).toBe(identityTask)
     expect(threads?.kind === 'task' && threads.def).toBe(threadsTask)
+    expect(upkeep?.kind === 'task' && upkeep.def).toBe(upkeepTask)
+    expect(lifecycle?.kind === 'task' && lifecycle.def).toBe(lifecycleTask)
     expect(rest).toEqual([])
   })
 
@@ -683,7 +718,7 @@ describe('the agent phase with the production slots', () => {
     expect(NO_CLOSE_TASKS).toEqual({ before: [], perPart: [], after: [] })
   })
 
-  // The fixture has no scene character and no thread: both tasks start and make no call.
+  // The fixture holds no row: Lore reads the turns and calls no tool; the other four make no call.
   it('ends a close that touches no row with the row, its stamps and a report of no tool calls', async () => {
     const end = f.replyIds[2]!
     const events = recordEvents()
@@ -697,8 +732,17 @@ describe('the agent phase with the production slots', () => {
 
     expect(run.outcome).toBe('completed')
     expect(events.filter((event) => event.type === 'close_task_start')).toEqual([
+      { type: 'close_task_start', task: 'lore', part: 1, index: 2, total: 7 },
       { type: 'close_task_start', task: 'identity', part: 1, index: 3, total: 7 },
       { type: 'close_task_start', task: 'threads', part: 1, index: 4, total: 7 },
+      { type: 'close_task_start', task: 'upkeep', part: 1, index: 5, total: 7 },
+      { type: 'close_task_start', task: 'lifecycle', part: 1, index: 6, total: 7 },
+    ])
+    expect(generateToolStep).toHaveBeenCalledTimes(1)
+    expect(Object.keys(vi.mocked(generateToolStep).mock.calls[0]![1].tools)).toEqual([
+      'read_row',
+      'create_lore',
+      'update_lore',
     ])
     expect(ledgerAtAgentEnd).toEqual({ calls: [], stopped: [], noToolCalls: true })
     const [row] = await chapterRows()

@@ -114,6 +114,29 @@ const MODELS = {
   diagnostics: { enabled: false, debug_level_enabled: false },
 }
 
+/** MODELS with a window on lore-mgmt's model, as a user's override on its provider sets one. */
+function modelsWithLoreWindow(tokens: number) {
+  return {
+    ...MODELS,
+    providers: MODELS.providers.map((provider) => ({
+      ...provider,
+      contextWindowOverrides: { 'lore-model': tokens },
+    })),
+  }
+}
+
+/** A lore-mgmt window one token under half the first `entryCount` entries' counts: two parts. */
+export function twoPartWindow(entryCount: number): number {
+  const counts = [countTokens(OPENING)]
+  for (let turn = 0; counts.length < entryCount; turn++)
+    counts.push(
+      countTokens(ACTIONS[turn % ACTIONS.length]!),
+      countTokens(REPLIES[turn % REPLIES.length]!),
+    )
+  const total = counts.slice(0, entryCount).reduce((sum, tokens) => sum + tokens, 0)
+  return 2 * (total - 1)
+}
+
 // loadOpenStory refuses a definition or settings its schemas reject.
 const DEFINITION = storyDefinitionSchema.parse({
   mode: 'creative',
@@ -187,7 +210,11 @@ export async function setClassifierStatus(
  * under one action id. Every entry is counted from prose and the watermark sits at the tail.
  * Leaves the pipeline registry and the event bus alone, and fakes no model.
  */
-export async function openCloseFixture(opts?: { turns?: number }): Promise<CloseFixture> {
+export async function openCloseFixture(opts?: {
+  turns?: number
+  /** lore-mgmt's window, so a close over the fixture cuts into parts. */
+  loreWindow?: number
+}): Promise<CloseFixture> {
   const turns = opts?.turns ?? 6
   resetAllStores()
   // Past the latch: a test that cleared the delta registry would otherwise leave chapters
@@ -259,7 +286,8 @@ export async function openCloseFixture(opts?: { turns?: number }): Promise<Close
     })
     .where(eq(branches.id, BRANCH_ID))
 
-  const hydrated = await hydrateAppSettings(async () => MODELS)
+  const models = opts?.loreWindow === undefined ? MODELS : modelsWithLoreWindow(opts.loreWindow)
+  const hydrated = await hydrateAppSettings(async () => models)
   if (hydrated.status !== 'ok')
     throw new Error(`close fixture: settings refused: ${hydrated.error}`)
   const opened = await loadOpenStory(BRANCH_ID, ctx)
