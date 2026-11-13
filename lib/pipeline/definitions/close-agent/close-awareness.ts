@@ -213,11 +213,7 @@ function renderAwareness(
 }
 
 /** memory/chapter-close.md → Run order: Awareness, 3d, once after the parts. */
-export const awarenessTask: CloseTaskDef<{
-  groups: AwarenessGroup[]
-  summary: string
-  mode: StoryMode
-}> & { task: 'awareness' } = {
+export const awarenessTask: CloseTaskDef<AwarenessShow> & { task: 'awareness' } = {
   task: 'awareness',
   tools: [readTurnsTool, setPinTool],
   readFields: {},

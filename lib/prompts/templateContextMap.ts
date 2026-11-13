@@ -716,7 +716,7 @@ export const VARIABLES: Record<ContextGroup, VariableDef[]> = {
       type: "{ happening: { id: string; title: string }; rows: { id: string; character: { id: string; name: string }; decayResistance: number | null; source: string; learnedAt: string; list: 'chapter' | 'frequent' }[] }[]",
       category: 'Plot',
       description:
-        "The Awareness task's starting rows, under their happening, by title: the chapter's, each learned at one of its turns (`list` 'chapter'), then the high-frequency set, a fixed number of the rows retrieval drew on most since the last close (`list` 'frequent'), each by character name; a row in both is the chapter's, and a common-knowledge happening's row is never listed. `id` is the row's short id (aw1, aw2…), a happening's and a character's theirs (hp1, c1…); `decayResistance` is the row's pin, null when unset; `learnedAt` is the turn id it was learned at, empty when unrecorded; `source` as stored, empty when missing. Never the retrieval count. Only a close task's render sets it.",
+        "The Awareness task's starting rows, under their happening, by title: the chapter's, each learned at one of its turns (`list` 'chapter'), then the high-frequency set, at most a fixed number of the rows retrieval drew on most since the last close (`list` 'frequent'), each by character name; a row in both is the chapter's, and a common-knowledge happening's row is never listed. `id` is the row's short id (aw1, aw2…), a happening's and a character's theirs (hp1, c1…); `decayResistance` is the row's pin, null when unset; `learnedAt` is the turn id it was learned at, empty when unrecorded; `source` as stored, empty when missing. Never the retrieval count. Only a close task's render sets it.",
       required: false,
     },
     {

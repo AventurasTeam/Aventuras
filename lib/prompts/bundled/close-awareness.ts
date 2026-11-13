@@ -13,7 +13,7 @@ Each row below is what one character knows of a happening, with its pin: decay_r
 - This chapter's rows: what a character learned during this chapter. Raise a pin toward 1 when the happening turned out to carry the chapter, something that character's story now turns on. Lower it toward 0 when it was pinned high but proved incidental.
 - Rows that keep coming up: from any chapter, recalled often while this chapter was played. Raise a pin when the happening still carries that character's story; otherwise leave it. Never lower one of these: a lower value is refused.
 - A row already pinned where it belongs needs no call: one near 1 that keeps coming up is already doing its job.
-- Turns. No turn is shown here. Read the ones you need with read_turns: a row's "at" turn, or this chapter's turns, {{ closeChapterTurns.first }} to {{ closeChapterTurns.last }}. Cite only this chapter's turns in "turns".
+- Turns. No turn is shown here. Read the ones you need with read_turns: a row's "at" turn, or this chapter's turns, {{ closeChapterTurns.first }} to {{ closeChapterTurns.last }}. Cite only this chapter's turns in "turns". A row's "at" turn outside that range is from an earlier chapter: read it with read_turns, never cite it.
 {%- if closeChapterSummary != blank %}
 
 # This chapter
@@ -25,7 +25,7 @@ Each row below is what one character knows of a happening, with its pin: decay_r
 
 ## {{ g.happening.id }}: {{ g.happening.title | one_line }}
 {%- for r in g.rows %}
-- {{ r.id }}: {{ r.character.name | one_line }} ({{ r.character.id }}), pin {% if r.decayResistance == blank %}not set{% else %}{{ r.decayResistance }}{% endif %}, {% if r.list == 'chapter' %}learned this chapter{% else %}keeps coming up{% endif %}{% if r.learnedAt != blank %}, at {{ r.learnedAt }}{% endif %}{% if r.source != blank %}, how: {{ r.source | one_line | json }}{% endif %}
+- {{ r.id }}: {{ r.character.name | one_line }} ({{ r.character.id }}), pin {% if r.decayResistance == blank %}0 (unset){% else %}{{ r.decayResistance }}{% endif %}, {% if r.list == 'chapter' %}learned this chapter{% else %}keeps coming up{% endif %}{% if r.learnedAt != blank %}, at {{ r.learnedAt }}{% endif %}{% if r.source != blank %}, how: {{ r.source | one_line | json }}{% endif %}
 {%- endfor %}
 {%- endfor %}
 {%- if closeWritesSoFar != blank %}

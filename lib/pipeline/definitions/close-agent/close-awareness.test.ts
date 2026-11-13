@@ -9,7 +9,14 @@ import {
   type ToolStepCall,
   type ToolStepResult,
 } from '@/lib/ai'
-import { chapters, emptyEntityState, entities, happeningAwareness, happenings } from '@/lib/db'
+import {
+  branches,
+  chapters,
+  emptyEntityState,
+  entities,
+  happeningAwareness,
+  happenings,
+} from '@/lib/db'
 import { makeLogger } from '@/lib/diagnostics'
 import { renderTemplate, TEMPLATE_IDS } from '@/lib/prompts'
 import { resetAllStores } from '@/lib/stores'
@@ -429,7 +436,7 @@ describe('the Awareness start', () => {
       '- aw2: Jorin (c2), pin 0, learned this chapter, at t3, how: "fought in it"',
     )
     expect(user).toContain(
-      '- aw3: Jorin (c2), pin not set, keeps coming up, at t5, how: "paid it twice"',
+      '- aw3: Jorin (c2), pin 0 (unset), keeps coming up, at t5, how: "paid it twice"',
     )
     expect(user).toContain(`# This chapter\n${SUMMARY}`)
     expect(user).toContain("this chapter's turns, t1 to t4")
@@ -837,5 +844,150 @@ describe('the Awareness start', () => {
 
     expect(answers[0]).toEqual({ result: 'ok' })
     expect(answers[1]).toMatchObject({ result: 'rejected', reason: 'frequent-pin-lowered' })
+  })
+
+  // A sibling branch of the story holds rows under the same ids, with counts that would crowd
+  // this branch's out of the set; none of them may list, name a row or write the summary.
+  it("lists only this branch's rows when a sibling branch holds rows under the same ids", async () => {
+    const OTHER_BRANCH = 'br_other'
+    const sibling = fx.ctx.db
+    await sibling
+      .insert(branches)
+      .values({ id: OTHER_BRANCH, storyId: fx.storyId, name: 'other', createdAt: 1 })
+    await sibling.insert(chapters).values({
+      id: CHAPTER,
+      branchId: OTHER_BRANCH,
+      sequenceNumber: 2,
+      title: 'The other crossing',
+      summary: 'The sibling summary.',
+      theme: 'x',
+      keywords: [],
+      startEntryId: fx.entries[3]!.id,
+      endEntryId: endOf(fx),
+      tokenCount: 1,
+      closedAt: 1,
+      embeddingStale: 1,
+      createdAt: 1,
+      updatedAt: 1,
+    })
+    const characters = [ARIA, JORIN, MARA]
+    for (const id of characters)
+      await sibling.insert(entities).values({
+        id,
+        branchId: OTHER_BRANCH,
+        kind: 'character',
+        name: `Sibling ${id}`,
+        status: 'active',
+        injectionMode: 'auto',
+        state: emptyEntityState('character'),
+        keywords: [],
+        createdAt: 1,
+        updatedAt: 1,
+      })
+    const sharedRows = [
+      { id: A_CHAPTER, characterId: ARIA, happeningId: FIGHT, at: 4 },
+      { id: A_BOTH, characterId: JORIN, happeningId: FIGHT, at: 5 },
+      { id: A_FREQUENT, characterId: JORIN, happeningId: TOLL, at: 1 },
+      { id: A_IDLE, characterId: MARA, happeningId: TOLL, at: 1 },
+    ]
+    for (const [id, title] of [
+      [FIGHT, 'Sibling fight'],
+      [TOLL, 'Sibling toll'],
+    ] as const)
+      await sibling.insert(happenings).values({
+        id,
+        branchId: OTHER_BRANCH,
+        title,
+        occurredAtEntryId: fx.entries[1]!.id,
+        commonKnowledge: 0,
+        embeddingStale: 0,
+        createdAt: 1,
+        updatedAt: 1,
+      })
+    for (const [i, row] of sharedRows.entries())
+      await sibling.insert(happeningAwareness).values({
+        id: row.id,
+        branchId: OTHER_BRANCH,
+        happeningId: row.happeningId,
+        characterId: row.characterId,
+        learnedAtEntryId: fx.entries[row.at]!.id,
+        decayResistance: 0.9,
+        retrievalCount: 9000 + i,
+        source: 'sibling',
+      })
+    for (let n = 1; n <= AWARENESS_TOP_N; n++) {
+      await sibling.insert(happenings).values({
+        id: `hap_${uuid(600 + n)}`,
+        branchId: OTHER_BRANCH,
+        title: `Sibling rumour ${n}`,
+        occurredAtEntryId: fx.entries[1]!.id,
+        commonKnowledge: 0,
+        embeddingStale: 0,
+        createdAt: 1,
+        updatedAt: 1,
+      })
+      await sibling.insert(happeningAwareness).values({
+        id: `haw_${uuid(700 + n)}`,
+        branchId: OTHER_BRANCH,
+        happeningId: `hap_${uuid(600 + n)}`,
+        characterId: ARIA,
+        learnedAtEntryId: fx.entries[1]!.id,
+        decayResistance: 0.9,
+        retrievalCount: 9100 + n,
+        source: 'sibling',
+      })
+    }
+    await seedAwarenessWorld(fx)
+
+    const start = await awarenessTask.start(promptContextFor(fx))
+
+    expect(start?.seeds.map(({ id }) => id)).toEqual([A_CHAPTER, A_BOTH, A_FREQUENT])
+    expect(
+      start?.show.groups.map((group) => [
+        group.happening.title,
+        group.rows.map((row) => [row.character.name, row.source]),
+      ]),
+    ).toEqual([
+      [
+        'A fight at the ferry',
+        [
+          ['Aria', 'saw it'],
+          ['Jorin', 'fought in it'],
+        ],
+      ],
+      ['The new toll', [['Jorin', 'paid it twice']]],
+    ])
+    expect(start?.show.summary).toBe(SUMMARY)
+  })
+
+  it('says a turn outside the chapter is from an earlier chapter, to read and not cite', async () => {
+    await seedAwarenessWorld(fx)
+    const ctx = promptContextFor(fx)
+    const start = await awarenessTask.start(ctx)
+    if (start === null) throw new Error('the start listed nothing')
+
+    const { user } = awarenessTask.render(start, { ...ctx, writesSoFar: '' })
+
+    expect(user).toContain(
+      'A row\'s "at" turn outside that range is from an earlier chapter: read it with read_turns, never cite it.',
+    )
+  })
+
+  it('renders the writes so far after the rows, and the section only when there are some', async () => {
+    await seedAwarenessWorld(fx)
+    const ctx = promptContextFor(fx)
+    const start = await awarenessTask.start(ctx)
+    if (start === null) throw new Error('the start listed nothing')
+    const writes = '- merge_happenings The siege (hp1): kept hp1'
+
+    const written = awarenessTask.render(start, { ...ctx, writesSoFar: writes })
+    const empty = awarenessTask.render(start, { ...ctx, writesSoFar: '' })
+
+    expect(
+      written.user.endsWith(
+        `# Writes so far\nWhat this close has written, in earlier tasks:\n${writes}`,
+      ),
+    ).toBe(true)
+    expect(empty.user).not.toContain('# Writes so far')
   })
 })
