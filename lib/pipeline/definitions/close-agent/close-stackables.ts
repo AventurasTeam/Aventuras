@@ -1,7 +1,7 @@
 import { and, asc, eq } from 'drizzle-orm'
 
 import type { GroupOutcome, GuardRow, PipelineAction } from '@/lib/actions/types'
-import { entities } from '@/lib/db'
+import { entities, entityStateSchemaForKind } from '@/lib/db'
 import { isJsonObject } from '@/lib/json-object'
 import { normalizeStackables, sameStackables } from '@/lib/keyword-terms'
 
@@ -15,13 +15,16 @@ const STACKABLES_PATH: readonly string[] = ['stackables']
 /** A character's stored record; undefined when it holds none, or anything but counts. */
 function storedStackables(state: unknown): Record<string, number> | undefined {
   if (!isJsonObject(state) || !isJsonObject(state.stackables)) return undefined
-  const record: Record<string, number> = {}
-  for (const [key, count] of Object.entries(state.stackables)) {
-    if (typeof count !== 'number') return undefined
-    record[key] = count
-  }
-  return record
+  const entries = Object.entries(state.stackables)
+  if (!entries.every((entry): entry is [string, number] => typeof entry[1] === 'number'))
+    return undefined
+  // fromEntries defines own properties; assigning a `__proto__` key would hit the prototype setter.
+  return Object.fromEntries(entries)
 }
+
+// Folding can lengthen a key past the schema's bound, and a stackables write is not checked
+// against it: the row would land, then every later state write for the character would be refused.
+const stackablesSchema = entityStateSchemaForKind('character').shape.stackables
 
 /**
  * memory/chapter-close.md → 3c: every character's stackables folded to one spelling per fungible,
@@ -43,7 +46,8 @@ async function* normalizeRun(
   const normalized = normalizeStackables(stored)
   const changed = characters.flatMap(({ id }) => {
     const next = normalized.get(id)
-    return next === undefined || sameStackables(stored.get(id), next) ? [] : [{ id, next }]
+    if (next === undefined || sameStackables(stored.get(id), next)) return []
+    return stackablesSchema.safeParse(next).success ? [{ id, next }] : []
   })
   if (changed.length === 0) return { status: 'completed' }
 

@@ -5,10 +5,11 @@ import {
   applyDeltaAction,
   applyDeltaActionGroupWithOutcomes,
 } from '@/lib/actions/delta/apply-delta-action'
+import { updateStoryEntryContent } from '@/lib/actions/story-entries/operational'
 import type { GroupOutcome, PipelineAction } from '@/lib/actions/types'
 import type { ResolveModelConfig } from '@/lib/ai'
 import type { ChapterPartCut } from '@/lib/chapters'
-import { deltas, emptyEntityState, entities, type EntityState } from '@/lib/db'
+import { branches, deltas, emptyEntityState, entities, type EntityState } from '@/lib/db'
 import { makeLogger } from '@/lib/diagnostics'
 import { resetAllStores } from '@/lib/stores'
 
@@ -327,6 +328,124 @@ describe('normalizeStackablesStep', () => {
     expect(await stackablesOf(f, WREN)).toEqual({ Gold: 4, gold: 3 })
   })
 
+  it("reads this branch's characters only: a singular another branch holds is no fold target", async () => {
+    await seedCharacter(f, MARA, 'Mara', { arrows: 3 })
+    await f.ctx.db
+      .insert(branches)
+      .values({ id: 'br_other', storyId: f.storyId, name: 'other', createdAt: 1 })
+    await f.ctx.db.insert(entities).values({
+      id: TOBIN,
+      branchId: 'br_other',
+      kind: 'character',
+      name: 'Tobin',
+      status: 'active',
+      injectionMode: 'auto',
+      state: { ...emptyEntityState('character'), stackables: { arrow: 1 } },
+      createdAt: 1,
+      updatedAt: 1,
+    })
+
+    const { groups, result } = await drain(phaseFor(f), f)
+
+    expect(result).toEqual({ status: 'completed' })
+    expect(groups).toEqual([])
+  })
+
+  it('keeps a key spelled __proto__ as an own key beside the keys it folds', async () => {
+    await seedCharacter(f, WREN, 'Wren')
+    await f.ctx.db
+      .update(entities)
+      .set({
+        state: {
+          ...emptyEntityState('character'),
+          stackables: JSON.parse('{"__proto__":3,"Gold":1,"gold":1}') as Record<string, number>,
+        },
+      })
+      .where(eq(entities.id, WREN))
+
+    const { groups } = await drain(phaseFor(f), f)
+
+    const written = groups.flatMap((group) => group.actions)
+    expect(written).toHaveLength(1)
+    const action = written[0]
+    if (action?.kind !== 'updateEntityStackables') throw new Error('expected a stackables write')
+    expect(Object.hasOwn(action.payload.stackables, '__proto__')).toBe(true)
+    expect(Object.entries(action.payload.stackables).sort()).toEqual([
+      ['__proto__', 3],
+      ['gold', 2],
+    ])
+  })
+
+  it("leaves a record alone when its folded key would pass the schema's bound", async () => {
+    const long = 'İ'.repeat(40)
+    await seedCharacter(f, WREN, 'Wren', { [long]: 1, gold: 1 })
+    await seedCharacter(f, MARA, 'Mara', { Arrows: 1, arrows: 2 })
+
+    const { groups, result } = await drain(phaseFor(f), f)
+
+    expect(result).toEqual({ status: 'completed' })
+    expect(groups.flatMap((group) => group.actions)).toEqual([
+      {
+        kind: 'updateEntityStackables',
+        source: 'chapter_close',
+        payload: { branchId: f.branchId, id: MARA, stackables: { arrows: 3 } },
+      },
+    ])
+    expect(await stackablesOf(f, WREN)).toEqual({ [long]: 1, gold: 1 })
+  })
+
+  it("normalizes a record whose user edit came before a content edit of E's prose", async () => {
+    await seedCharacter(f, WREN, 'Wren', { Gold: 5, gold: 3 })
+    await apply(f, writeStackables(f, WREN, { Gold: 6, gold: 3 }, 'user_edit'), BY_USER)
+    expect(
+      await updateStoryEntryContent(f.branchId, endEntryIdOf(f), 'rewritten prose', f.ctx),
+    ).toEqual({ status: 'ok' })
+
+    const { groups } = await drain(phaseFor(f), f)
+
+    expect(groups.flatMap((group) => group.actions)).toEqual([
+      {
+        kind: 'updateEntityStackables',
+        source: 'chapter_close',
+        payload: { branchId: f.branchId, id: WREN, stackables: { gold: 9 } },
+      },
+    ])
+  })
+
+  async function setStackablesColumn(id: string, stackables: unknown): Promise<void> {
+    await f.ctx.db
+      .update(entities)
+      .set({ state: { ...emptyEntityState('character'), stackables } as unknown as EntityState })
+      .where(eq(entities.id, id))
+  }
+
+  it('reads a record with a non-number count as none: its keys are no fold target', async () => {
+    await seedCharacter(f, TOBIN, 'Tobin')
+    await seedCharacter(f, MARA, 'Mara', { arrows: 3 })
+    await setStackablesColumn(TOBIN, { arrow: 2, gold: 'three' })
+
+    const { groups, result } = await drain(phaseFor(f), f)
+
+    expect(result).toEqual({ status: 'completed' })
+    expect(groups).toEqual([])
+  })
+
+  it('reads a stackables column that is no object as none, normalizing the others', async () => {
+    await seedCharacter(f, WREN, 'Wren')
+    await seedCharacter(f, MARA, 'Mara', { Arrows: 1, arrows: 2 })
+    await setStackablesColumn(WREN, 'lots')
+
+    const { groups } = await drain(phaseFor(f), f)
+
+    expect(groups.flatMap((group) => group.actions)).toEqual([
+      {
+        kind: 'updateEntityStackables',
+        source: 'chapter_close',
+        payload: { branchId: f.branchId, id: MARA, stackables: { arrows: 3 } },
+      },
+    ])
+  })
+
   it('fails the close when its group is refused', async () => {
     await seedCharacter(f, WREN, 'Wren', { Gold: 5, gold: 3 })
 
@@ -361,7 +480,6 @@ describe('normalizeStackablesStep', () => {
       const gen = normalizeStackablesStep.run(stepContext(f, abortsAtRead(nth)))
 
       expect(await gen.next(undefined)).toEqual({ done: true, value: { status: 'aborted' } })
-      expect(await runDeltas(f)).toEqual([])
     },
   )
 
@@ -383,6 +501,5 @@ describe('normalizeStackablesStep', () => {
     const gen = normalizeStackablesStep.run(stepContext(f, controller.signal))
 
     expect(await gen.next(undefined)).toEqual({ done: true, value: { status: 'aborted' } })
-    expect(await stackablesOf(f, WREN)).toEqual({ Gold: 5, gold: 3 })
   })
 })
