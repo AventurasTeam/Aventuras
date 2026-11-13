@@ -170,6 +170,7 @@ describe('foldMergeLinks', () => {
           aware('wren'),
           aware('mara', { learnedAtEntryId: 'entry_gone', decayResistance: 0.6 }),
           aware('tobin', { learnedAtEntryId: 'entry_c' }),
+          aware('lena', { learnedAtEntryId: 'entry_b' }),
         ],
       }),
       [
@@ -178,6 +179,7 @@ describe('foldMergeLinks', () => {
             aware('wren', { learnedAtEntryId: 'entry_gone', decayResistance: 0 }),
             aware('mara', { learnedAtEntryId: 'entry_d' }),
             aware('tobin', { learnedAtEntryId: 'entry_gone', retrievalCount: 1 }),
+            aware('lena', { learnedAtEntryId: null, retrievalCount: 1 }),
           ],
         }),
       ],
@@ -206,6 +208,13 @@ describe('foldMergeLinks', () => {
         retrievalCount: 1,
         source: null,
       },
+      {
+        characterId: 'lena',
+        learnedAtEntryId: 'entry_b',
+        decayResistance: null,
+        retrievalCount: 1,
+        source: null,
+      },
     ])
   })
 
@@ -214,6 +223,7 @@ describe('foldMergeLinks', () => {
       links({ awareness: [aware('wren', { source: 'crossed with Tobin; saw the light' })] }),
       [
         links({ awareness: [aware('wren', { source: '  saw the light ', retrievalCount: 1 })] }),
+        links({ awareness: [aware('wren', { source: 'crossed with Tobin; saw the light' })] }),
         links({ awareness: [aware('wren', { source: '' })] }),
         links({ awareness: [aware('wren', { source: 'heard the bell' })] }),
         links({ awareness: [aware('wren', { source: 'crossed with Tobin' })] }),
