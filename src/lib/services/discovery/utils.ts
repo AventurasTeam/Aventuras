@@ -1,4 +1,4 @@
-import { httpFetch } from '#lib/utils/http.ts'
+import { httpFetch } from '#lib/services/http/index.ts'
 
 export async function corsFetch(url: string, options?: RequestInit): Promise<Response> {
   // Tauri's fetch implementation automatically bypasses CORS

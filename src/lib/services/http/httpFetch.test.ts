@@ -3,7 +3,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 vi.mock('@tauri-apps/plugin-http', () => ({ fetch: vi.fn() }))
 
 import { fetch as tauriHttpFetch } from '@tauri-apps/plugin-http'
-import { httpFetch } from './http'
+import { httpFetch } from './httpFetch'
 
 const mockFetch = vi.mocked(tauriHttpFetch)
 

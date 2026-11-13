@@ -4,7 +4,7 @@
 import { debug } from '#lib/stores/debug.svelte.ts'
 import { errMessage } from '#lib/utils/error.ts'
 import { createRequestGuard } from '#lib/utils/idleTimeout.ts'
-import { httpFetch } from '#lib/utils/http.ts'
+import { httpFetch } from '#lib/services/http/index.ts'
 import {
   describeRequestBody,
   isBinaryContentType,

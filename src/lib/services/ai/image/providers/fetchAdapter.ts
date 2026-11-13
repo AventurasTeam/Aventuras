@@ -13,7 +13,7 @@ import { errMessage, HttpStatusError } from '#lib/utils/error.ts'
 import { createRequestGuard } from '#lib/utils/idleTimeout.ts'
 import { bytesToBase64 } from '#lib/utils/image.ts'
 import { isPublicHttpUrl } from '#lib/utils/url.ts'
-import { httpFetch } from '#lib/utils/http.ts'
+import { httpFetch } from '#lib/services/http/index.ts'
 
 /** Redirects followed before giving up; each hop is checked against `isPublicHttpUrl`. */
 const MAX_REDIRECTS = 3

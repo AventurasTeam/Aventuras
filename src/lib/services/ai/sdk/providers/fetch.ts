@@ -9,7 +9,7 @@ import { LLM_TIMEOUT_DEFAULT } from '#lib/constants/timeout.ts'
 import { parseManualBody } from './manualBody'
 import { debug } from '#lib/stores/debug.svelte.ts'
 import { createRequestGuard } from '#lib/utils/idleTimeout.ts'
-import { httpFetch } from '#lib/utils/http.ts'
+import { httpFetch } from '#lib/services/http/index.ts'
 import { logErrorResponse, logStreamResponse, providerMetadataOf, redactHeaders } from './debugLog'
 
 interface Usage {
