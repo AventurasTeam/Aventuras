@@ -1,6 +1,6 @@
 import { and, asc, desc, eq, gt, inArray, type SQL } from 'drizzle-orm'
 
-import type { GuardRow } from '@/lib/actions/types'
+import type { GroupOutcome, GuardRow, PipelineAction } from '@/lib/actions/types'
 import type { PromptHalves } from '@/lib/ai'
 import {
   chapters,
@@ -10,6 +10,7 @@ import {
   happenings,
   type StoryMode,
 } from '@/lib/db'
+import { logger } from '@/lib/diagnostics'
 import { compareId } from '@/lib/list-modules'
 import { renderTemplate, TEMPLATE_IDS } from '@/lib/prompts'
 
@@ -17,8 +18,11 @@ import { setPinTool } from './awareness-tools'
 import { TURN_PREFIX } from './ids'
 import { refsIn } from './read-tools'
 import { readTurnsTool } from './read-turns'
+import type { CodeStep, CodeStepContext } from './slots'
 import type { CloseTaskDef, TaskPromptContext, TaskStart } from './task'
 import { storyModeOf } from './turns'
+import { emitDeltaGroup } from '../../runtime/emit-group'
+import type { PhaseEmittedEvent, PhaseResult } from '../../types'
 import { closeRangeOf } from '../close-intermediates'
 
 /** chapter-close.md → 3d: the high-frequency set's size; tuning's to move. */
@@ -220,3 +224,52 @@ export const awarenessTask: CloseTaskDef<AwarenessShow> & { task: 'awareness' } 
   start: startAwareness,
   render: renderAwareness,
 }
+
+/**
+ * memory/chapter-close.md → 3d: after Awareness, stopped or not, every count on the branch goes
+ * back to 0, one resetAwarenessRetrieval a row as one group on E. No ledger entry: resets stay out
+ * of the review (C4), and C12 exempts them.
+ */
+async function* resetRetrieval(
+  ctx: CodeStepContext,
+): AsyncGenerator<PhaseEmittedEvent, PhaseResult, GroupOutcome | undefined> {
+  const counted = await ctx.db
+    .select({ id: happeningAwareness.id, retrievalCount: happeningAwareness.retrievalCount })
+    .from(happeningAwareness)
+    .where(
+      and(eq(happeningAwareness.branchId, ctx.branchId), gt(happeningAwareness.retrievalCount, 0)),
+    )
+    .orderBy(asc(happeningAwareness.id))
+  if (ctx.phase.abortSignal.aborted) return { status: 'aborted' }
+  if (counted.length === 0) return { status: 'completed' }
+  const actions = counted.map(
+    ({ id, retrievalCount }): PipelineAction => ({
+      kind: 'resetAwarenessRetrieval',
+      source: 'chapter_close',
+      payload: { branchId: ctx.branchId, id, priorCount: retrievalCount },
+    }),
+  )
+  const startedAt = performance.now()
+  const outcome = yield* emitDeltaGroup(actions, ctx.endEntryId)
+  logger.debug(
+    'memory.close_retrieval_reset',
+    {
+      rows: actions.length,
+      status: outcome.status,
+      ms: Math.round(performance.now() - startedAt),
+    },
+    { actionId: ctx.phase.actionId },
+  )
+  if (outcome.status === 'rejected')
+    return {
+      status: 'failed',
+      error: {
+        kind: 'action-layer',
+        detail: `retrieval reset refused: ${outcome.reason}`,
+        tableName: 'happening_awareness',
+      },
+    }
+  return { status: 'completed' }
+}
+
+export const resetRetrievalStep: CodeStep = { name: 'retrieval-reset', run: resetRetrieval }
