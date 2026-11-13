@@ -433,7 +433,7 @@ describe('normalizeStackablesStep', () => {
   it('reads a stackables column that is no object as none, normalizing the others', async () => {
     await seedCharacter(f, WREN, 'Wren')
     await seedCharacter(f, MARA, 'Mara', { Arrows: 1, arrows: 2 })
-    await setStackablesColumn(WREN, 'lots')
+    await setStackablesColumn(WREN, [0, 2])
 
     const { groups } = await drain(phaseFor(f), f)
 

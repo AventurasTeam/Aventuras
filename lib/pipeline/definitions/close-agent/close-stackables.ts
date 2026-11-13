@@ -23,7 +23,7 @@ function storedStackables(state: unknown): Record<string, number> | undefined {
 }
 
 // Folding can lengthen a key past the schema's bound, and a stackables write is not checked
-// against it: the row would land, then every later state write for the character would be refused.
+// against it: the row would land, then every later full-state write for the character is refused.
 const stackablesSchema = entityStateSchemaForKind('character').shape.stackables
 
 /**
