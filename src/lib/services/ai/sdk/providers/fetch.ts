@@ -7,7 +7,7 @@
 
 import { LLM_TIMEOUT_DEFAULT } from '#lib/constants/timeout.ts'
 import { parseManualBody } from './manualBody'
-import { debug } from '#lib/stores/debug.svelte.ts'
+import { debugLog } from '#lib/stores/debugLog.ts'
 import { createRequestGuard } from '#lib/utils/idleTimeout.ts'
 import { httpFetch } from '#lib/services/http/index.ts'
 import { logErrorResponse, logStreamResponse, providerMetadataOf, redactHeaders } from './debugLog'
@@ -58,7 +58,7 @@ export function createTimeoutFetch(
     const merged = { ...requestBody, ...Object.fromEntries(manualEntries) }
     const parsedBody = Object.keys(merged).length > 0 ? merged : undefined
 
-    const debugId = debug.addDebugRequest(
+    const debugId = debugLog.addRequest(
       serviceId,
       {
         url: input.toString(),
@@ -90,7 +90,7 @@ export function createTimeoutFetch(
       if (!response.ok) {
         // Only buffer the body when debug logging is active — otherwise reading a clone
         // of every error response just wastes memory.
-        if (debug.isActive) {
+        if (debugLog.active) {
           void logErrorResponse(response.clone(), debugId, serviceId, startTime)
         }
         return response
@@ -99,7 +99,7 @@ export function createTimeoutFetch(
       // Path B: Non-JSON Success Response (mostly Streams)
       if (!isJson) {
         // Stream/non-JSON success — only buffer the full body for the debug panel when active.
-        if (debug.isActive) {
+        if (debugLog.active) {
           void logStreamResponse(response.clone(), debugId, serviceId, startTime)
         }
         return response
@@ -114,7 +114,7 @@ export function createTimeoutFetch(
         responsePayload = text
       }
 
-      debug.addDebugResponse(
+      debugLog.addResponse(
         debugId,
         serviceId,
         { body: responsePayload, providerMetadata: providerMetadataOf(responsePayload) },

@@ -1,7 +1,7 @@
 // Transport for SDK image providers: Tauri HTTP, a request guard, and debug logging. Responses come
 // back unthrown so the SDK builds its own errors. `createTimeoutFetch` is the text-model transport.
 
-import { debug } from '#lib/stores/debug.svelte.ts'
+import { debugLog } from '#lib/stores/debugLog.ts'
 import { errMessage } from '#lib/utils/error.ts'
 import { createRequestGuard } from '#lib/utils/idleTimeout.ts'
 import { httpFetch } from '#lib/services/http/index.ts'
@@ -61,9 +61,9 @@ export function createSdkFetch(options: SdkFetchOptions): Fetch {
     const url = requestUrl(input)
     const method = init?.method ?? 'GET'
 
-    const logging = log && debug.isActive
+    const logging = log && debugLog.active
     const debugId = logging
-      ? debug.addDebugRequest(
+      ? debugLog.addRequest(
           serviceId,
           {
             url,
@@ -136,7 +136,7 @@ export function createPollSdkFetch(options: Omit<SdkFetchOptions, 'log' | 'debug
 
   const write = (id: string, count: number, last: PollRequest, failure?: PollFailure) => {
     if (failure) failures = [...failures, failure].slice(-MAX_FAILURES_KEPT)
-    debug.addDebugResponse(
+    debugLog.addResponse(
       id,
       serviceId,
       { requests: count, last, ...(failures.length > 0 && { failures }) },
@@ -145,13 +145,13 @@ export function createPollSdkFetch(options: Omit<SdkFetchOptions, 'log' | 'debug
   }
 
   return async (input, init) => {
-    if (!debug.isActive) return inner(input, init)
+    if (!debugLog.active) return inner(input, init)
 
     const url = requestUrl(input)
     const method = init?.method ?? 'GET'
     if (debugId === undefined) {
       startTime = Date.now()
-      debugId = debug.addDebugRequest(serviceId, {
+      debugId = debugLog.addRequest(serviceId, {
         url,
         method,
         headers: redactHeaders(init?.headers),

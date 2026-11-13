@@ -27,7 +27,7 @@ import {
   type AgenticWorldState,
 } from '../sdk/tools'
 import { ContextBuilder } from '#lib/services/context/index.ts'
-import { debug } from '#lib/stores/debug.svelte.ts'
+import { debugLog } from '#lib/stores/debugLog.ts'
 import { activity } from '#lib/stores/activity.svelte.ts'
 import { describeActivityError } from '#lib/services/activity/index.ts'
 import { retrievalStep, retrievalStepStatus } from './retrievalSteps'
@@ -404,13 +404,13 @@ export class AgenticRetrievalService extends BaseAIService {
     // exist nowhere. Debug mode is where a user goes to find out what a turn actually
     // did, so put it there too -- as a request/response pair, which is the shape
     // DebugLogView already renders.
-    const debugId = debug.addDebugRequest('agentic-retrieval', {
+    const debugId = debugLog.addRequest('agentic-retrieval', {
       userInput: context.userInput,
       chapters: availableChapters.length,
       entries: availableEntries.length,
     })
     if (debugId) {
-      debug.addDebugResponse(debugId, 'agentic-retrieval', { transcript, ...metrics }, startedAt)
+      debugLog.addResponse(debugId, 'agentic-retrieval', { transcript, ...metrics }, startedAt)
     }
 
     // Build reasoning from terminal result

@@ -1,6 +1,6 @@
 // Debug-panel logging shared by the SDK `fetch` adapters.
 
-import { debug } from '#lib/stores/debug.svelte.ts'
+import { debugLog } from '#lib/stores/debugLog.ts'
 
 const SENSITIVE_HEADERS = new Set(['authorization', 'x-api-key', 'api-key', 'x-goog-api-key'])
 const BINARY_CONTENT_TYPE = /^(image|audio)\/|octet-stream/
@@ -96,7 +96,7 @@ export async function logErrorResponse(
     } catch {
       errorPayload = text
     }
-    debug.addDebugResponse(
+    debugLog.addResponse(
       debugId,
       serviceId,
       { status: response.status, statusText: response.statusText, error: errorPayload },
@@ -122,7 +122,7 @@ export async function logJsonResponse(
     } catch {
       body = scrubBase64(text)
     }
-    debug.addDebugResponse(
+    debugLog.addResponse(
       debugId,
       serviceId,
       { body, providerMetadata: providerMetadataOf(body) },
@@ -141,7 +141,7 @@ export function logBinaryResponse(
   startTime: number,
 ): void {
   const length = response.headers.get('content-length')
-  debug.addDebugResponse(
+  debugLog.addResponse(
     debugId,
     serviceId,
     {
@@ -302,7 +302,7 @@ export async function logStreamResponse(
       }
     } catch {}
 
-    debug.addDebugResponse(
+    debugLog.addResponse(
       debugId,
       serviceId,
       {

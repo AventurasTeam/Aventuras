@@ -3,14 +3,14 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 vi.mock('@tauri-apps/plugin-http', () => ({ fetch: vi.fn() }))
 
 // The real store is a rune module, which this suite cannot import.
-vi.mock('#lib/stores/debug.svelte.ts', () => ({
-  debug: { isActive: false, addDebugRequest: vi.fn(), addDebugResponse: vi.fn() },
+vi.mock('#lib/stores/debugLog.ts', () => ({
+  debugLog: { active: false, addRequest: vi.fn(), addResponse: vi.fn() },
 }))
 
 import { APICallError } from 'ai'
 import { fetch as tauriHttpFetch } from '@tauri-apps/plugin-http'
 import { isAbortError } from '#lib/services/activity/describeError.ts'
-import { debug } from '#lib/stores/debug.svelte.ts'
+import { debugLog } from '#lib/stores/debugLog.ts'
 import { RequestTimeoutError } from '#lib/utils/error.ts'
 import { fetchPublicImageBase64, imageGetFetch } from './fetchAdapter'
 
@@ -166,7 +166,7 @@ describe('imageGetFetch abort handling', () => {
 })
 
 describe('imageGetFetch debug log', () => {
-  const logged = () => vi.mocked(debug.addDebugResponse)
+  const logged = () => vi.mocked(debugLog.addResponse)
 
   beforeEach(() => {
     mockFetch.mockReset()

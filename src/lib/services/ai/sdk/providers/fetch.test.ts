@@ -3,8 +3,8 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 vi.mock('@tauri-apps/plugin-http', () => ({ fetch: vi.fn() }))
 
 // The real store is a rune module, which this suite cannot import.
-vi.mock('#lib/stores/debug.svelte.ts', () => ({
-  debug: { isActive: false, addDebugRequest: vi.fn(), addDebugResponse: vi.fn() },
+vi.mock('#lib/stores/debugLog.ts', () => ({
+  debugLog: { active: false, addRequest: vi.fn(), addResponse: vi.fn() },
 }))
 
 import { fetch as tauriHttpFetch } from '@tauri-apps/plugin-http'

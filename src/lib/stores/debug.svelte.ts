@@ -1,34 +1,43 @@
 import { emit, listen, type UnlistenFn } from '@tauri-apps/api/event'
 import { WebviewWindow } from '@tauri-apps/api/webviewWindow'
+import { debugLog, type DebugLogEntry } from '#lib/stores/debugLog.ts'
 
-// Entries are replaced, never mutated: the log viewer's JSON cache is keyed on identity.
-export type DebugLogEntry = {
-  readonly id: string
-  readonly timestamp: number
-  readonly type: 'request' | 'response'
-  readonly serviceName: string
-  readonly data: Record<string, unknown>
-  readonly duration?: number // For responses, time taken in ms
-  readonly error?: string // For error responses
-}
+export type { DebugLogEntry }
 
+// The entries live in `debugLog`, which writers import directly; this store adds reactivity and
+// the pop-out window on top.
 class DebugStore {
-  // Debug mode state - session-only request/response logging
-  isActive = $state(false)
-  // Non-reactive storage - UI pulls updates via getSnapshot()
-  private debugLogs: DebugLogEntry[] = []
+  #active = $state(false)
   // Reactive signal that increments when logs change - UI can track this
   logsVersion = $state(0)
   debugModalOpen = $state(false)
   debugWindowActive = $state(false)
   debugRenderNewlines = $state(false)
-  private debugLogIdCounter = 0
   private unlistenPopIn: UnlistenFn | null = null
   private unlistenRequestLogs: UnlistenFn | null = null
   private unlistenClearLogs: UnlistenFn | null = null
   private unlistenToggleRenderNewlines: UnlistenFn | null = null
   /** See emitToDebugWindow: false from window creation until the window reports ready. */
   private debugWindowReady = false
+
+  constructor() {
+    debugLog.onChange((change) => {
+      this.logsVersion++
+      if (change.kind === 'entry') {
+        this.emitToDebugWindow('debug-log-added', this.safeIpcEntry(change.entry))
+      }
+    })
+  }
+
+  /** Session-only request/response logging; writers check `debugLog.active`. */
+  get isActive(): boolean {
+    return this.#active
+  }
+
+  set isActive(value: boolean) {
+    this.#active = value
+    debugLog.active = value
+  }
 
   /**
    * Send an event to the pop-out window, but only once that window is ready.
@@ -40,7 +49,7 @@ class DebugStore {
    * event loop stops, and every window freezes with the CPU at zero.
    *
    * Events sent before then are dropped rather than queued: every one of them is already
-   * reflected in `debugLogs`, which `initial-debug-logs` hands over in full.
+   * reflected in `debugLog`, which `initial-debug-logs` hands over in full.
    */
   private emitToDebugWindow(event: string, payload: unknown) {
     // `debugWindowReady` alone, deliberately: it is set by the window announcing itself, so
@@ -59,7 +68,7 @@ class DebugStore {
    * Get a snapshot of current logs. UI should call this when logsVersion changes.
    */
   getSnapshot(): DebugLogEntry[] {
-    return [...this.debugLogs]
+    return debugLog.snapshot()
   }
 
   /**
@@ -68,39 +77,12 @@ class DebugStore {
   get requestCount(): number {
     // touch logsVersion to make this reactive
     void this.logsVersion
-    return this.debugLogs.filter((e) => e.type === 'request').length
+    return debugLog.requestCount
   }
 
   /** Not reactive; callers already track `logsVersion`. */
   get logCount(): number {
-    return this.debugLogs.length
-  }
-
-  // Debug log methods
-  private appendLogEntry(entry: DebugLogEntry) {
-    // Keep only last 100 entries to prevent memory issues
-    if (this.debugLogs.push(entry) > 100) {
-      this.debugLogs = this.debugLogs.slice(-100)
-    }
-
-    // Signal that logs have changed
-    this.logsVersion++
-  }
-
-  /** Replaces the entry with the same id, else appends. */
-  private upsertEntry(entry: DebugLogEntry) {
-    const index = this.debugLogs.findIndex((l) => l.id === entry.id)
-    if (index === -1) {
-      this.appendLogEntry(entry)
-      return
-    }
-    this.debugLogs[index] = entry
-    this.logsVersion++
-  }
-
-  private resetLogs(logs: DebugLogEntry[] = []) {
-    this.debugLogs = logs
-    this.logsVersion++
+    return debugLog.count
   }
 
   /** Max IPC payload size for external window events (~500KB). */
@@ -124,71 +106,10 @@ class DebugStore {
   }
 
   /**
-   * Add a request log entry. Returns the entry ID for pairing with response.
-   */
-  addDebugRequest(serviceName: string, data: Record<string, unknown>, debugId?: string): string {
-    if (!this.isActive) return ''
-    let id = debugId || `debug-${++this.debugLogIdCounter}-${Date.now()}`
-    // Multi-step streamText reuses the same debugId for each fetch call — deduplicate
-    if (debugId && this.debugLogs.some((e) => e.id === id || e.id === `${id}-response`)) {
-      id = `${debugId}-${++this.debugLogIdCounter}`
-    }
-    const entry: DebugLogEntry = {
-      id,
-      timestamp: Date.now(),
-      type: 'request',
-      serviceName,
-      data,
-    }
-
-    this.appendLogEntry(entry)
-
-    this.emitToDebugWindow('debug-log-added', this.safeIpcEntry(entry))
-
-    return id
-  }
-
-  /**
-   * Add a response log entry paired with a request.
-   */
-  addDebugResponse(
-    requestId: string,
-    serviceName: string,
-    data: Record<string, unknown>,
-    startTime: number,
-    error?: string,
-  ) {
-    if (!this.isActive) return
-
-    const entryId = `${requestId}-response`
-    const existing = this.debugLogs.find((l) => l.id === entryId)
-
-    const entry: DebugLogEntry = existing
-      ? {
-          ...existing,
-          data: { ...existing.data, ...data },
-          duration: Date.now() - startTime,
-          error: error || existing.error,
-        }
-      : {
-          id: entryId,
-          timestamp: Date.now(),
-          type: 'response',
-          serviceName,
-          data,
-          duration: Date.now() - startTime,
-          error,
-        }
-
-    this.upsertEntry(entry)
-    this.emitToDebugWindow('debug-log-added', this.safeIpcEntry(entry))
-  }
-
-  /**
    * Clear all debug logs (session clear).
    */
   clearDebugLogs() {
-    this.resetLogs()
+    debugLog.reset()
     this.emitToDebugWindow('debug-logs-cleared', {})
   }
 
@@ -202,18 +123,18 @@ class DebugStore {
         'initial-debug-logs',
         ({ payload }) => {
           console.log('[DebugWin] Received initial-debug-logs', payload.logs.length)
-          this.resetLogs(payload.logs)
+          debugLog.reset(payload.logs)
           this.debugRenderNewlines = payload.renderNewlines
         },
       ),
       // The main window re-emits an entry each time it merges into it.
       listen<DebugLogEntry>('debug-log-added', ({ payload }) => {
         console.log('[DebugWin] Received debug-log-added', payload.id)
-        this.upsertEntry(payload)
+        debugLog.upsert(payload)
       }),
       listen('debug-logs-cleared', () => {
         console.log('[DebugWin] Received debug-logs-cleared')
-        this.resetLogs()
+        debugLog.reset()
       }),
       listen<boolean>('debug-render-newlines-changed', ({ payload }) => {
         console.log('[DebugWin] Received debug-render-newlines-changed', payload)
@@ -282,7 +203,7 @@ class DebugStore {
       console.log('[UI] Received request-initial-debug-logs')
       this.debugWindowReady = true
       this.emitToDebugWindow('initial-debug-logs', {
-        logs: this.debugLogs.map((e) => this.safeIpcEntry(e) as DebugLogEntry),
+        logs: debugLog.snapshot().map((e) => this.safeIpcEntry(e) as DebugLogEntry),
         renderNewlines: this.debugRenderNewlines,
       })
     })
