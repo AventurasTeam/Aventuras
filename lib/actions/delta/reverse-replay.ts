@@ -29,7 +29,13 @@ import {
   type ReversalSet,
   type RowRef,
 } from './row-closure'
-import { PLACEMENT_PATHS, userEditsOutliving, wroteColumn, wroteField } from './user-precedence'
+import {
+  PLACEMENT_PATHS,
+  userEditsOutliving,
+  wroteColumn,
+  wroteField,
+  wrotePath,
+} from './user-precedence'
 
 export {
   DeltaReplayError,
@@ -551,13 +557,29 @@ function undoDelete(walk: UndoWalk, target: UndoTarget, liveLinks: LiveLinkFilte
   }
 }
 
+// A close's normalization rewrites a record's keys, and a later user write of the record logs only
+// the keys it saw: restored key by key, an old spelling would come back beside the user's record.
+function yieldsStackablesWhole(
+  entry: TableEntry,
+  delta: Delta,
+  userEdits: readonly Delta[],
+): boolean {
+  return (
+    entry.table === 'entities' &&
+    delta.source === 'chapter_close' &&
+    wrotePath(userEdits, 'state', ['stackables'])
+  )
+}
+
 // A schema-backed column yields sub-field by sub-field, as its undo payload records them; the
-// column groups `wroteField` counts as one field yield together.
+// column groups `wroteField` counts as one field yield together, and so does a close's record.
 function restorablePayload(
   entry: TableEntry,
   payload: Record<string, unknown>,
   userEdits: readonly Delta[],
+  delta: Delta,
 ): Record<string, unknown> {
+  const stackablesWhole = yieldsStackablesWhole(entry, delta, userEdits)
   const restorable: Record<string, unknown> = {}
   for (const [col, partial] of Object.entries(payload)) {
     if (isPayloadMetaKey(col)) continue
@@ -565,8 +587,12 @@ function restorablePayload(
       if (!wroteField(userEdits, entry.table, col, [])) restorable[col] = partial
       continue
     }
-    const kept = pruneUndoPartial(entry.columnSchemas[col], partial, (path) =>
-      wroteField(userEdits, entry.table, col, path),
+    const kept = pruneUndoPartial(
+      entry.columnSchemas[col],
+      partial,
+      (path) =>
+        (stackablesWhole && col === 'state' && path[0] === 'stackables') ||
+        wroteField(userEdits, entry.table, col, path),
     )
     if (kept !== undefined) restorable[col] = kept
   }
@@ -583,6 +609,7 @@ async function undoUpdate(
     entry,
     (delta.undoPayload ?? {}) as Record<string, unknown>,
     userEdits,
+    delta,
   )
   const columns = Object.keys(payload)
   if (columns.length === 0) return
