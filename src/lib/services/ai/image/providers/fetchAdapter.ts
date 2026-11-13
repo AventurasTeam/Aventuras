@@ -7,13 +7,10 @@
  */
 
 import { IMAGE_TIMEOUT_DEFAULT } from '#lib/constants/timeout.ts'
-import { isAbortError } from '#lib/services/activity/index.ts'
-import { debugLog } from '#lib/stores/debugLog.ts'
-import { errMessage, HttpStatusError } from '#lib/utils/error.ts'
-import { createRequestGuard } from '#lib/utils/idleTimeout.ts'
+import { loggedFetch, logResponse, logStatus } from '#lib/services/http/index.ts'
+import { HttpStatusError } from '#lib/utils/error.ts'
 import { bytesToBase64 } from '#lib/utils/image.ts'
 import { isPublicHttpUrl } from '#lib/utils/url.ts'
-import { httpFetch } from '#lib/services/http/index.ts'
 
 /** Redirects followed before giving up; each hop is checked against `isPublicHttpUrl`. */
 const MAX_REDIRECTS = 3
@@ -65,47 +62,27 @@ export async function imageGetFetch(
     allowStatuses = [],
   } = options ?? {}
 
-  const guard = createRequestGuard({ timeoutMs, what: 'Image fetch', callerSignal: signal })
-  const startTime = Date.now()
-  const debugId = debugLog.addRequest(serviceId, { url, method: 'GET', body: {} })
-  let statusLogged = false
+  // The caller reads or cancels these bodies, so they are logged by status alone: a clone would
+  // keep the plugin's body open after a cancel.
+  const isExpected = (response: Response) =>
+    !response.ok &&
+    ((response.status >= 300 && response.status < 400 && !followRedirects) ||
+      allowStatuses.includes(response.status))
 
-  try {
-    const response = await httpFetch(url, {
-      method: 'GET',
-      headers,
-      signal: guard.signal,
-      ...(followRedirects ? {} : { maxRedirections: 0 }),
-    })
+  const response = await loggedFetch(
+    url,
+    { method: 'GET', headers, ...(followRedirects ? {} : { maxRedirections: 0 }) },
+    {
+      serviceId,
+      timeoutMs,
+      what: 'Image fetch',
+      signal,
+      logResponse: (res, entry) => (isExpected(res) ? logStatus : logResponse)(res, entry),
+    },
+  )
 
-    const isRedirect = response.status >= 300 && response.status < 400
-    if (
-      !response.ok &&
-      !(isRedirect && !followRedirects) &&
-      !allowStatuses.includes(response.status)
-    ) {
-      const errorText = await response.text()
-      debugLog.addResponse(
-        debugId,
-        serviceId,
-        { status: response.status, error: errorText },
-        startTime,
-        errorText,
-      )
-      statusLogged = true
-      throw new HttpStatusError(response.status, errorText, 'Image API')
-    }
-
-    debugLog.addResponse(debugId, serviceId, { status: response.status }, startTime)
-    return guard.wrapBody(response)
-  } catch (error) {
-    const mapped = guard.mapError(error)
-    if (!statusLogged) {
-      const reason = isAbortError(mapped) ? 'aborted' : errMessage(mapped)
-      debugLog.addResponse(debugId, serviceId, { error: reason }, startTime, reason)
-    }
-    throw mapped
-  } finally {
-    guard.dispose()
+  if (!response.ok && !isExpected(response)) {
+    throw new HttpStatusError(response.status, await response.text(), 'Image API')
   }
+  return response
 }

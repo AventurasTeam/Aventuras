@@ -2,11 +2,6 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 
 vi.mock('@tauri-apps/plugin-http', () => ({ fetch: vi.fn() }))
 
-// The real store is a rune module, which this suite cannot import.
-vi.mock('#lib/stores/debugLog.ts', () => ({
-  debugLog: { active: false, addRequest: vi.fn(), addResponse: vi.fn() },
-}))
-
 import { APICallError } from 'ai'
 import { fetch as tauriHttpFetch } from '@tauri-apps/plugin-http'
 import { isAbortError } from '#lib/services/activity/describeError.ts'
@@ -166,11 +161,19 @@ describe('imageGetFetch abort handling', () => {
 })
 
 describe('imageGetFetch debug log', () => {
-  const logged = () => vi.mocked(debugLog.addResponse)
+  const responses = () => debugLog.snapshot().filter((e) => e.type === 'response')
+  const json = (body: unknown, type = 'application/json') =>
+    new Response(JSON.stringify(body), { status: 200, headers: { 'content-type': type } })
 
   beforeEach(() => {
     mockFetch.mockReset()
-    logged().mockClear()
+    debugLog.reset()
+    debugLog.active = true
+  })
+
+  afterEach(() => {
+    debugLog.active = false
+    debugLog.reset()
   })
 
   it('logs a cancelled request as aborted', async () => {
@@ -183,8 +186,8 @@ describe('imageGetFetch debug log', () => {
     caller.abort()
     await request
 
-    expect(logged()).toHaveBeenCalledTimes(1)
-    expect(logged().mock.calls[0][2]).toEqual({ error: 'aborted' })
+    expect(responses()).toHaveLength(1)
+    expect(responses()[0].data).toEqual({ error: 'aborted' })
   })
 
   it('logs a failure that never got a response', async () => {
@@ -192,17 +195,93 @@ describe('imageGetFetch debug log', () => {
 
     await expect(imageGetFetch('https://img.test/a')).rejects.toThrow('Failed to fetch')
 
-    expect(logged()).toHaveBeenCalledTimes(1)
-    expect(logged().mock.calls[0][2]).toEqual({ error: 'Failed to fetch' })
+    expect(responses()).toHaveLength(1)
+    expect(responses()[0].data).toEqual({ error: 'Failed to fetch' })
   })
 
-  it('logs an error status once', async () => {
+  it('logs an error status once, with its body', async () => {
     mockFetch.mockImplementation(async () => new Response('nope', { status: 500 }))
 
     await expect(imageGetFetch('https://img.test/a')).rejects.toThrow('Image API error 500')
 
-    expect(logged()).toHaveBeenCalledTimes(1)
-    expect(logged().mock.calls[0][2]).toMatchObject({ status: 500 })
+    await vi.waitFor(() => expect(responses()).toHaveLength(1))
+    expect(responses()[0].data).toMatchObject({ status: 500, error: 'nope' })
+  })
+
+  it('logs a JSON body with its status, and still hands the caller the whole body', async () => {
+    mockFetch.mockImplementation(async () => json({ models: ['a', 'b'] }))
+
+    const response = await imageGetFetch('https://img.test/models')
+
+    await expect(response.json()).resolves.toEqual({ models: ['a', 'b'] })
+    await vi.waitFor(() => expect(responses()).toHaveLength(1))
+    expect(responses()[0].data).toMatchObject({ status: 200, body: { models: ['a', 'b'] } })
+  })
+
+  it('logs a text body that is not JSON as scrubbed text', async () => {
+    mockFetch.mockImplementation(async () => new Response('plain list', { status: 200 }))
+
+    await imageGetFetch('https://img.test/models')
+
+    await vi.waitFor(() => expect(responses()).toHaveLength(1))
+    expect(responses()[0].data).toMatchObject({ status: 200, body: 'plain list' })
+  })
+
+  it('logs an image by type and size, without a body', async () => {
+    mockFetch.mockImplementation(
+      async () =>
+        new Response(new Uint8Array([1, 2, 3]), {
+          status: 200,
+          headers: { 'content-type': 'image/png', 'content-length': '3' },
+        }),
+    )
+
+    await imageGetFetch('https://img.test/a.png')
+
+    expect(responses()).toHaveLength(1)
+    expect(responses()[0].data).toEqual({ status: 200, contentType: 'image/png', size: 3 })
+  })
+
+  it('logs an untyped body as binary rather than reading it', async () => {
+    mockFetch.mockImplementation(async () => image([1, 2, 3]))
+
+    const response = await imageGetFetch('https://img.test/a')
+
+    expect(responses()).toHaveLength(1)
+    expect(responses()[0].data).not.toHaveProperty('body')
+    expect(responses()[0].data).toMatchObject({ status: 200 })
+    await response.body?.cancel()
+  })
+
+  it('logs only the status of a reply the caller will cancel', async () => {
+    mockFetch.mockImplementation(async () => new Response('missing', { status: 404 }))
+
+    const response = await imageGetFetch('https://img.test/a', undefined, { allowStatuses: [404] })
+    await response.body?.cancel()
+
+    expect(responses()).toHaveLength(1)
+    expect(responses()[0].data).toEqual({ status: 404 })
+  })
+
+  it('logs only the status of a redirect it was told not to follow', async () => {
+    mockFetch.mockImplementation(async () => redirect('https://img.test/b'))
+
+    const response = await imageGetFetch('https://img.test/a', undefined, {
+      followRedirects: false,
+    })
+    await response.body?.cancel()
+
+    expect(responses()).toHaveLength(1)
+    expect(responses()[0].data).toEqual({ status: 302 })
+  })
+
+  it('shows the request headers with the key redacted', async () => {
+    mockFetch.mockImplementation(async () => json({}))
+
+    await imageGetFetch('https://img.test/a', { Authorization: 'Bearer sk-1234567890' })
+
+    const request = debugLog.snapshot().find((e) => e.type === 'request')
+    expect(request?.data.headers).toEqual({ Authorization: 'Bear...7890' })
   })
 })
 
