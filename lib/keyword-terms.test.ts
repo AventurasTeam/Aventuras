@@ -121,6 +121,11 @@ describe('normalizeStackables', () => {
     expect(normalize({ char_a: { buses: 2, bus: 1, bu: 4 } })).toEqual({
       char_a: { bus: 3, bu: 4 },
     })
+    // The receiver is on another record: the rule is branch-wide, not per record.
+    expect(normalize({ char_a: { bus: 1, bu: 4 }, char_b: { buses: 2 } })).toEqual({
+      char_a: { bus: 1, bu: 4 },
+      char_b: { bus: 2 },
+    })
   })
 
   it('drops blank keys and empty counts, and a dropped key is no fold target', () => {
@@ -131,6 +136,15 @@ describe('normalizeStackables', () => {
 
   it('returns a record for every character, an absent one empty', () => {
     expect(normalize({ char_a: undefined, char_b: {} })).toEqual({ char_a: {}, char_b: {} })
+  })
+
+  it('keeps a key spelled __proto__ as an own key', () => {
+    const record: Record<string, number> = JSON.parse('{"__proto__": 3, "gold": 1}')
+    const out = normalizeStackables(new Map([['char_a', record]]))
+    expect(Object.entries(out.get('char_a')!)).toEqual([
+      ['__proto__', 3],
+      ['gold', 1],
+    ])
   })
 
   it('returns an already-normal record equal to its input', () => {

@@ -64,9 +64,10 @@ function heldSingular(key: string, held: ReadonlySet<string>): string | undefine
 }
 
 /**
- * chapter-close.md → 3c: every record folded by `foldStackableKey`, then each plural key moved one
- * step onto the singular some record on the branch holds, counts summed; a key another key folds
- * onto stays put. Every input id gets a record; an absent one comes back empty.
+ * chapter-close.md → 3c: every record folded by `foldStackables` (a blank key or a count <= 0 is
+ * dropped, so a stored `{ gold: 0 }` comes back `{}`), then each plural key moved one step onto
+ * the singular some record on the branch holds, counts summed; a key another key folds onto stays
+ * put. Every input id gets a record; an absent one comes back empty.
  */
 export function normalizeStackables(
   records: ReadonlyMap<string, Readonly<Record<string, number>> | undefined>,
