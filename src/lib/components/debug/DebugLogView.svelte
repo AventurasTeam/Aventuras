@@ -92,22 +92,22 @@
     const following = currentPage === 1 && !userScrolledAway
     // Ids, not lengths or identities: the log is capped, and a merge replaces the newest entry.
     const hasNewer = next.at(-1)?.id !== logs.at(-1)?.id
-    // Stable row keys let engines with scroll anchoring keep the reader's place.
-    const anchor =
-      container && !following && !CSS.supports('overflow-anchor', 'auto')
-        ? findAnchor(container)
-        : null
+    const anchor = container && !following ? findAnchor(container) : null
+    // Stable row keys let engines with scroll anchoring keep the reader's place within a page.
+    const nativeAnchoring = CSS.supports('overflow-anchor', 'auto')
 
     logs = next
-    // A list that shrank may have clamped the view; keep it from drifting back on regrowth.
-    requestedPage = currentPage
+    // New groups push older ones to later pages, so follow the row being read; failing that, keep
+    // the page, which a shrunken list may have clamped, from drifting back on regrowth.
+    const anchorIndex = anchor ? groupedLogs.findIndex((group) => group.id === anchor.id) : -1
+    requestedPage = anchorIndex === -1 ? currentPage : Math.floor(anchorIndex / pageSize) + 1
 
     if (!container) return
     if (following) {
       if (!hasNewer) return
       await tick()
       container.scrollTop = 0
-    } else if (anchor) {
+    } else if (anchor && !nativeAnchoring) {
       await tick()
       restoreAnchor(container, anchor)
     }
