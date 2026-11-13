@@ -1782,10 +1782,12 @@ Where:
   - **Characters** age from `state.lastSeenAt`. One on stage sits in
     the structural floor, so only off-stage characters decay, and one
     never seen reads 0. Places, items and factions read 0.
-  - **Threads** age from `resolved_at_entry_id`, so a thread a pass
-    resolved or failed decays. One with no ref reads 0: a pending or
-    active thread, and one the user resolved or failed, since a user's
-    status change clears the ref.
+  - **Threads** age from `resolved_at_entry_id`. Only a thread the
+    classifier created carries one, set when the classifier or chapter
+    close resolves or fails it, and a user's status change clears it
+    ([`data-model.md → Authorship contract`](../data-model.md#authorship-contract));
+    with none, the thread reads 0. A pending thread reads 0 whatever ref
+    it still holds, since reopening keeps the old one.
   - **Lore and chapter summaries** read 0: neither decays.
 - **`kw_boost(c)`** — additive bonus when the keyword index hits
   (lore keywords, entity name and `entities.keywords`, awareness
