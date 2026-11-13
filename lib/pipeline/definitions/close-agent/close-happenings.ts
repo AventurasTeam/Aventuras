@@ -15,7 +15,12 @@ import {
 } from '@/lib/db'
 import { embedderReadDim } from '@/lib/embedder'
 import { composeRetrievalEmbedDeps, resolveStorySwapConfig } from '@/lib/embedder-swap'
-import { runSyncStage, type SyncStageDeps, type SyncStageResult } from '@/lib/retrieval'
+import {
+  runSyncStage,
+  VectorInvariantError,
+  type SyncStageDeps,
+  type SyncStageResult,
+} from '@/lib/retrieval'
 import { storiesStore } from '@/lib/stores'
 
 import { findClusters, type ClusterInput } from './close-clusters'
@@ -100,6 +105,15 @@ function staleInRange(
   }
 }
 
+// unpackFloat32's blob-length throw means what cosine's guards mean, so it joins their family.
+function decodeVector(blob: unknown): Float32Array {
+  try {
+    return unpackFloat32(blob as Uint8Array)
+  } catch (error) {
+    throw new VectorInvariantError(error instanceof Error ? error.message : String(error))
+  }
+}
+
 async function readVectors(
   deps: CloseEmbedDeps,
   branchId: string,
@@ -113,7 +127,7 @@ async function readVectors(
       ids: chunk,
     })
     for (const [id, embedding] of await deps.queryAll(sql, params))
-      vectors.set(String(id), unpackFloat32(embedding as Uint8Array))
+      vectors.set(String(id), decodeVector(embedding))
   }
   return vectors
 }
@@ -206,21 +220,31 @@ async function* embedRange(
   if (phase.abortSignal.aborted) return { status: 'aborted' }
   if (!sync.ok) return syncFailure(sync, bounded.expired())
 
-  const vectors = await readVectors(deps, branchId, ids)
-  const casts = await readCasts(ctx, ids)
-  const inputs = range.flatMap(({ id, anchorIndex }): ClusterInput[] => {
-    const vector = vectors.get(id)
-    return vector === undefined
-      ? []
-      : [{ id, vector, cast: casts.get(id) ?? new Set<string>(), anchorIndex }]
-  })
-  const clusters = findClusters(inputs)
+  let clusters: string[][]
+  let unembedded: number
+  try {
+    const vectors = await readVectors(deps, branchId, ids)
+    const casts = await readCasts(ctx, ids)
+    const inputs = range.flatMap(({ id, anchorIndex }): ClusterInput[] => {
+      const vector = vectors.get(id)
+      return vector === undefined
+        ? []
+        : [{ id, vector, cast: casts.get(id) ?? new Set<string>(), anchorIndex }]
+    })
+    unembedded = range.length - inputs.length
+    clusters = findClusters(inputs)
+  } catch (error) {
+    // As per-turn retrieval routes it: stored vectors this model can't read take the embedder
+    // surface (Switch embedder); anything else is no embedder fault and escapes.
+    if (!(error instanceof VectorInvariantError)) throw error
+    return embedderInitFailure(error.message)
+  }
   setCloseClusters(phase.intermediates, clusters)
   phase.log.debug('memory.close_range_embed', {
     happenings: range.length,
     embedded: sync.embedded,
     revalidated: sync.revalidated,
-    unembedded: range.length - inputs.length,
+    unembedded,
     clusters: clusters.length,
   })
   return { status: 'completed' }

@@ -150,11 +150,14 @@ async function seedPair(over: { h1?: Partial<Seed>; h2?: Partial<Seed> } = {}): 
 type Embed = (rows: EmbeddedFieldRow[], signal?: AbortSignal) => Promise<SqlOp[]>
 
 /** Installs scripted embed deps on the fixture db; records each call's row ids. */
-function script(embed: Embed = async (rows) => embedOps(rows)) {
+function script(
+  embed: Embed = async (rows) => embedOps(rows),
+  queryAll: CloseEmbedDeps['queryAll'] = queryAllOn(fx.ctx.db),
+) {
   const embedded: string[][] = []
   const revalidated: string[][] = []
   const deps: CloseEmbedDeps = {
-    queryAll: queryAllOn(fx.ctx.db),
+    queryAll,
     modelId: MODEL,
     dim: DIM,
     revalidateRows: async (rows) => {
@@ -520,6 +523,59 @@ describe('the range embed bound', () => {
 
     expect(armed).toBe(1)
     expect(vi.getTimerCount()).toBe(0)
+  })
+})
+
+describe('a stored vector the model cannot use', () => {
+  it('fails the close as an embedder failure on a stored vector that is not unit-norm', async () => {
+    const doubled = unitAt(0).map((x) => x * 2)
+    await seedPair({ h1: { embedded: true, vector: doubled } })
+    script()
+    const phase = phaseOf()
+
+    expect(await runStep(phase)).toEqual({
+      status: 'failed',
+      error: {
+        kind: 'embedder',
+        reason: 'init',
+        detail: expect.stringContaining('not unit-norm'),
+        staleCount: null,
+      },
+    })
+
+    expect(closeClustersOf(phase.intermediates)).toEqual([])
+  })
+
+  it('fails the close as an embedder failure on a stored blob that is no vector', async () => {
+    await seedPair()
+    const read = queryAllOn(fx.ctx.db)
+    script(undefined, async (query, params) => {
+      const rows = await read(query, params)
+      return query.startsWith('SELECT id, embedding')
+        ? rows.map(([id]) => [id, new Uint8Array(3)])
+        : rows
+    })
+
+    expect(await runStep(phaseOf())).toEqual({
+      status: 'failed',
+      error: {
+        kind: 'embedder',
+        reason: 'init',
+        detail: 'Invalid vector blob length: 3',
+        staleCount: null,
+      },
+    })
+  })
+
+  it('lets a fault outside that family escape, never offering an embedder switch for it', async () => {
+    await seedPair()
+    const read = queryAllOn(fx.ctx.db)
+    script(undefined, async (query, params) => {
+      if (query.startsWith('SELECT id, embedding')) throw new Error('database is locked')
+      return read(query, params)
+    })
+
+    await expect(runStep(phaseOf())).rejects.toThrow('database is locked')
   })
 })
 
