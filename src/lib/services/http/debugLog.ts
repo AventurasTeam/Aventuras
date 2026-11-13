@@ -59,6 +59,21 @@ export function parseLoggedBody(text: string): unknown {
   }
 }
 
+/** Every value is a string or a file; repeated keys (several reference images) stay an array. */
+function describeFormData(form: FormData): Record<string, unknown> {
+  const fields = new Map<string, unknown[]>()
+  for (const [key, value] of form) {
+    const shown =
+      typeof value === 'string'
+        ? scrubBase64(value)
+        : `[file ${value.name}, ${value.type || 'unknown type'}, ${value.size} bytes]`
+    fields.set(key, [...(fields.get(key) ?? []), shown])
+  }
+  return Object.fromEntries(
+    Array.from(fields, ([key, values]) => [key, values.length === 1 ? values[0] : values]),
+  )
+}
+
 export function describeRequestBody(body: RequestInit['body']): unknown {
   if (typeof body === 'string') {
     try {
@@ -67,7 +82,7 @@ export function describeRequestBody(body: RequestInit['body']): unknown {
       return { raw: body.slice(0, 200) }
     }
   }
-  if (body instanceof FormData) return { formData: [...body.keys()] }
+  if (body instanceof FormData) return { formData: describeFormData(body) }
   return undefined
 }
 

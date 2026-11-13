@@ -54,10 +54,35 @@ describe('describeRequestBody', () => {
     expect(describeRequestBody('not json')).toEqual({ raw: 'not json' })
   })
 
-  it('lists the field names of a FormData', () => {
+  it('shows the fields of a FormData, with files reduced to name, type and size', () => {
     const form = new FormData()
     form.append('prompt', 'a castle')
-    expect(describeRequestBody(form)).toEqual({ formData: ['prompt'] })
+    form.append('model', 'flux')
+    form.append('image', new File([new Uint8Array(4)], 'ref.png', { type: 'image/png' }))
+    expect(describeRequestBody(form)).toEqual({
+      formData: { prompt: 'a castle', model: 'flux', image: '[file ref.png, image/png, 4 bytes]' },
+    })
+  })
+
+  it('keeps a repeated FormData key as an array and scrubs long base64', () => {
+    const form = new FormData()
+    form.append('image[]', new File([new Uint8Array(1)], 'a.png', { type: 'image/png' }))
+    form.append('image[]', new File([new Uint8Array(2)], 'b.png', { type: 'image/png' }))
+    form.append('mask', 'A'.repeat(2048))
+    expect(describeRequestBody(form)).toEqual({
+      formData: {
+        'image[]': ['[file a.png, image/png, 1 bytes]', '[file b.png, image/png, 2 bytes]'],
+        mask: '[base64, 2048 chars]',
+      },
+    })
+  })
+
+  it('shows an appended Blob as a file named blob', () => {
+    const form = new FormData()
+    form.append('image', new Blob([new Uint8Array(3)], { type: 'image/webp' }))
+    expect(describeRequestBody(form)).toEqual({
+      formData: { image: '[file blob, image/webp, 3 bytes]' },
+    })
   })
 })
 

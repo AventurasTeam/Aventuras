@@ -179,7 +179,7 @@ describe('debug logging', () => {
     debugLog.active = true
   })
 
-  it('redacts the key and lists FormData field names', async () => {
+  it('redacts the key and shows FormData fields', async () => {
     mockFetch.mockResolvedValueOnce(new Response('{}', { status: 200 }))
     const form = new FormData()
     form.append('prompt', 'a castle')
@@ -195,7 +195,7 @@ describe('debug logging', () => {
       'google-image',
       expect.objectContaining({
         headers: { Authorization: 'Bear...cdef' },
-        body: { formData: ['prompt', 'image'] },
+        body: { formData: { prompt: 'a castle', image: '[file a.png, unknown type, 1 bytes]' } },
       }),
       undefined,
     )
