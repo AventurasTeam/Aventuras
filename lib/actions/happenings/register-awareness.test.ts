@@ -8,7 +8,7 @@ import { happeningAwarenessStore } from '@/lib/stores'
 
 import { registerHappeningAwareness } from './register-awareness'
 import { registerHappenings } from './register-happenings'
-import { applyDeltaAction } from '../delta/apply-delta-action'
+import { applyDeltaAction, applyDeltaActionGroupWithOutcomes } from '../delta/apply-delta-action'
 import { __resetRegistry } from '../delta/registry'
 import { reverseReplayDeltas } from '../delta/reverse-replay'
 import { USER_EDITED_SINCE_PROSE } from '../delta/user-precedence'
@@ -779,6 +779,198 @@ describe('upsertHappeningAwareness retrievalCount', () => {
   )
 })
 
+// chapter-close.md → 3e: a merge folds awareness per character, moving the earliest learned_at and
+// the summed count onto the kept row's pair.
+describe("upsertHappeningAwareness from a close's merge", () => {
+  type Db = Awaited<ReturnType<typeof setup>>['db']
+
+  const STANDING: HappeningAwareness = {
+    id: 'haw_1',
+    branchId: BRANCH,
+    happeningId: 'hap_1',
+    characterId: 'char_a',
+    learnedAtEntryId: 'entry_3',
+    decayResistance: 0.2,
+    retrievalCount: 4,
+    source: 'told',
+  }
+
+  const upsert = (
+    source: DeltaSource,
+    fields: {
+      learnedAtEntryId?: string | null
+      retrievalCount?: number
+      decayResistance?: number
+      source?: string
+    },
+    happeningId = 'hap_1',
+  ): PipelineAction => ({
+    kind: 'upsertHappeningAwareness',
+    source,
+    payload: {
+      branchId: BRANCH,
+      characterId: 'char_a',
+      happeningId,
+      proseEntryId: null,
+      ...fields,
+    },
+  })
+
+  const run = (ctx: Ctx, action: PipelineAction, actionId = 'act_m') =>
+    applyDeltaAction({ action, actionId, branchId: BRANCH }, ctx)
+
+  // lessons-learned → Drizzle drops unknown keys: the store patch is where a leaked key shows.
+  async function storeMatchesDb(db: Db, id: string): Promise<HappeningAwareness> {
+    const [row] = await db.select().from(happeningAwareness).where(eq(happeningAwareness.id, id))
+    expect(happeningAwarenessStore.getById(id)).toEqual(row)
+    return row
+  }
+
+  const addFlood = (db: Db) =>
+    db
+      .insert(happenings)
+      .values({ id: 'hap_2', branchId: BRANCH, title: 'The flood', createdAt: 1, updatedAt: 1 })
+
+  it('moves learned_at and the count on a standing pair, and reverse-replay restores both', async () => {
+    const { db, ctx } = await setup([STANDING])
+
+    expect(
+      await run(ctx, upsert('chapter_close', { learnedAtEntryId: 'entry_1', retrievalCount: 9 })),
+    ).toMatchObject({ status: 'ok' })
+
+    expect(await storeMatchesDb(db, 'haw_1')).toMatchObject({
+      learnedAtEntryId: 'entry_1',
+      retrievalCount: 9,
+      decayResistance: 0.2,
+      source: 'told',
+    })
+    const [delta] = (await db.select().from(deltas)) as Delta[]
+    expect(delta.undoPayload).toEqual({ learnedAtEntryId: 'entry_3', retrievalCount: 4 })
+
+    expect(await reverseReplayDeltas('act_m', ctx)).toBe(1)
+    expect(await storeMatchesDb(db, 'haw_1')).toMatchObject({
+      learnedAtEntryId: 'entry_3',
+      retrievalCount: 4,
+    })
+  })
+
+  it('takes learned_at and the count on a create', async () => {
+    const { db, ctx } = await setup()
+
+    await run(
+      ctx,
+      upsert('chapter_close', {
+        learnedAtEntryId: 'entry_2',
+        retrievalCount: 6,
+        decayResistance: 0.4,
+        source: 'told; overheard',
+      }),
+    )
+
+    const [row] = await awarenessRows(db, 'char_a', 'hap_1')
+    expect(row).toMatchObject({
+      learnedAtEntryId: 'entry_2',
+      retrievalCount: 6,
+      decayResistance: 0.4,
+      source: 'told; overheard',
+    })
+    expect(happeningAwarenessStore.getById(row.id)).toEqual(row)
+  })
+
+  it('leaves learned_at and the count as they stand when a close write names neither', async () => {
+    const { db, ctx } = await setup([STANDING])
+
+    await run(ctx, upsert('chapter_close', { decayResistance: 0.9 }))
+
+    expect(await storeMatchesDb(db, 'haw_1')).toMatchObject({
+      learnedAtEntryId: 'entry_3',
+      retrievalCount: 4,
+      decayResistance: 0.9,
+    })
+    const [delta] = (await db.select().from(deltas)) as Delta[]
+    expect(delta.undoPayload).toEqual({ decayResistance: 0.2 })
+  })
+
+  it('moves neither for a periodic classifier, on a standing pair or a new one', async () => {
+    const { db, ctx } = await setup([STANDING])
+
+    expect(
+      await run(
+        ctx,
+        upsert('periodic_classifier', {
+          learnedAtEntryId: 'entry_1',
+          retrievalCount: 9,
+          source: 'heard',
+        }),
+      ),
+    ).toMatchObject({ status: 'ok' })
+
+    expect(await storeMatchesDb(db, 'haw_1')).toMatchObject({
+      learnedAtEntryId: 'entry_3',
+      retrievalCount: 4,
+      source: 'heard',
+    })
+    const [delta] = (await db.select().from(deltas)) as Delta[]
+    expect(delta.undoPayload).toEqual({ source: 'told' })
+
+    await addFlood(db)
+    await run(ctx, upsert('periodic_classifier', { retrievalCount: 9 }, 'hap_2'), 'act_p2')
+    expect((await awarenessRows(db, 'char_a', 'hap_2'))[0].retrievalCount).toBe(0)
+  })
+
+  it('still refuses a count-only update from a periodic classifier', async () => {
+    const { ctx } = await setup([STANDING])
+
+    expect(await run(ctx, upsert('periodic_classifier', { retrievalCount: 9 }))).toEqual({
+      status: 'rejected',
+      reason: 'no awareness fields to merge',
+    })
+  })
+
+  it('lands a count-only pair inside a group without refusing the group', async () => {
+    const { db, ctx } = await setup([STANDING])
+    await addFlood(db)
+
+    const result = await applyDeltaActionGroupWithOutcomes(
+      [
+        upsert('chapter_close', { retrievalCount: 9 }),
+        upsert('chapter_close', { retrievalCount: 2, learnedAtEntryId: 'entry_5' }, 'hap_2'),
+      ],
+      { actionId: 'act_m', branchId: BRANCH },
+      ctx,
+    )
+
+    expect(result).toEqual({
+      status: 'ok',
+      outcomes: [{ status: 'landed' }, { status: 'landed' }],
+    })
+    expect(await storeMatchesDb(db, 'haw_1')).toMatchObject({
+      retrievalCount: 9,
+      learnedAtEntryId: 'entry_3',
+    })
+    expect((await awarenessRows(db, 'char_a', 'hap_2'))[0]).toMatchObject({
+      retrievalCount: 2,
+      learnedAtEntryId: 'entry_5',
+    })
+  })
+
+  it('no-ops a count-only pair whose count already stands, and its group still lands', async () => {
+    const { db, ctx } = await setup([STANDING])
+
+    const result = await applyDeltaActionGroupWithOutcomes(
+      [upsert('chapter_close', { retrievalCount: 4 })],
+      { actionId: 'act_m', branchId: BRANCH },
+      ctx,
+    )
+
+    expect(result).toEqual({
+      status: 'ok',
+      outcomes: [{ status: 'noop', reason: 'awareness unchanged', mark: 'restated' }],
+    })
+    expect(await db.select().from(deltas)).toEqual([])
+  })
+})
+
 // cadence.md → User edits and classifier writes: what the user wrote after the prose stands.
 describe('upsertHappeningAwareness under user precedence', () => {
   const PROSE = 'e_prose'
@@ -826,7 +1018,13 @@ describe('upsertHappeningAwareness under user precedence', () => {
     )
   const upsert = (
     source: DeltaSource,
-    fields: { source?: string; decayResistance?: number; proseEntryId?: string | null },
+    fields: {
+      source?: string
+      decayResistance?: number
+      learnedAtEntryId?: string | null
+      retrievalCount?: number
+      proseEntryId?: string | null
+    },
     characterId = 'char_a',
   ): PipelineAction => ({
     kind: 'upsertHappeningAwareness',
@@ -985,5 +1183,45 @@ describe('upsertHappeningAwareness under user precedence', () => {
       ).status,
     ).toBe('ok')
     expect(await pair(db)).toMatchObject({ source: 'told by Jorin', decayResistance: 0.8 })
+  })
+
+  // chapter-close.md → 3e: a value the user wrote on the kept row's pair stands; the merge lands.
+  it("keeps a learned-at the user wrote after the prose under a close's merge, and lands the count", async () => {
+    const { db, ctx } = await setupWithProse([PASS_ROW])
+    await writeProse(ctx)
+    await run(ctx, upsert('user_edit', { learnedAtEntryId: 'e_user' }), 'act_u')
+
+    const merge = upsert('chapter_close', {
+      learnedAtEntryId: PROSE,
+      retrievalCount: 5,
+      proseEntryId: PROSE,
+    })
+    expect((await run(ctx, merge, 'act_m')).status).toBe('ok')
+
+    expect(await pair(db)).toMatchObject({ learnedAtEntryId: 'e_user', retrievalCount: 5 })
+    const [logged] = await db.select().from(deltas).where(eq(deltas.actionId, 'act_m'))
+    expect(logged.undoPayload).toEqual({ retrievalCount: 0 })
+  })
+
+  it('writes nothing, the count included, into a pair the user created after the prose', async () => {
+    const { db, ctx } = await setupWithProse()
+    await writeProse(ctx)
+    await run(ctx, upsert('user_edit', { source: 'saw the smoke' }), 'act_u')
+
+    const merge = upsert('chapter_close', {
+      learnedAtEntryId: PROSE,
+      retrievalCount: 5,
+      decayResistance: 0.9,
+      proseEntryId: PROSE,
+    })
+    expect(await run(ctx, merge, 'act_m')).toEqual(userWon)
+
+    expect(await pair(db)).toMatchObject({
+      learnedAtEntryId: null,
+      retrievalCount: 0,
+      decayResistance: null,
+      source: 'saw the smoke',
+    })
+    expect(await db.select().from(deltas).where(eq(deltas.actionId, 'act_m'))).toEqual([])
   })
 })
