@@ -196,7 +196,8 @@ export const OpensSheetAfterDismissPhone: Story = {
     // The press has closed the menu (its own state), and the Sheet is still on its way out.
     await waitFor(() => expect(trigger).toHaveAttribute('aria-expanded', 'false'))
     expect(onPress).not.toHaveBeenCalled()
-    // The exit animation outlasts this wait: the entry follows the dismissal, not a timer.
+    // The exit animation outlasts this wait (reduced motion would jump the springs to rest): the
+    // entry follows the dismissal, not a timer.
     await new Promise((resolve) => setTimeout(resolve, 80))
     expect(onPress).not.toHaveBeenCalled()
 
@@ -204,7 +205,7 @@ export const OpensSheetAfterDismissPhone: Story = {
   },
 }
 
-/** Opening the menu again while it leaves cancels the pending entry: nothing opens under it. */
+/** Opening the menu again before its dismissal is reported cancels the pending entry. */
 export const ReopeningCancelsPendingEntryPhone: Story = {
   globals: { viewport: { value: 'mobile1' } },
   args: { entries: OPENS_SHEET_ENTRIES.map((entry) => ({ ...entry, onPress: fn() })) },
@@ -225,7 +226,10 @@ export const ReopeningCancelsPendingEntryPhone: Story = {
     await userEvent.keyboard('{Escape}')
     await waitFor(() => expect(trigger).toHaveAttribute('aria-expanded', 'false'))
 
-    await new Promise((resolve) => setTimeout(resolve, 1500))
+    // gorhom reports the dismissal before it removes the Sheet, so a stale entry would have run.
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: 'More actions' })).toBeNull(), {
+      timeout: 5000,
+    })
     expect(onPress).not.toHaveBeenCalled()
   },
 }

@@ -535,7 +535,19 @@ function quickClose(closeAfterMs: number): Story {
 export const CloseBeforeMounting = quickClose(5)
 
 const dismissedSpy = fn()
-const SETTLE_MS = 800
+
+// The spring moves every frame until it rests, so five unchanged frames on screen mean settled.
+async function waitForSheetAtRest(el: HTMLElement) {
+  let last = Number.NaN
+  let steady = 0
+  for (let frame = 0; frame < 300 && steady < 5; frame++) {
+    await new Promise((resolve) => requestAnimationFrame(resolve))
+    const rect = el.getBoundingClientRect()
+    steady = rect.top === last && rect.bottom <= window.innerHeight ? steady + 1 : 0
+    last = rect.top
+  }
+  expect(steady).toBeGreaterThanOrEqual(5)
+}
 const EXIT_HEAD_START_MS = 80
 
 function DismissedHarness() {
@@ -567,13 +579,15 @@ export const OnDismissedAfterProgrammaticClose: Story = {
   play: async () => {
     dismissedSpy.mockClear()
     await userEvent.click(screen.getByRole('button', { name: 'Open' }))
-    expect(await screen.findByText('Dismissed sheet body', {}, BACKDROP_WAIT)).toBeVisible()
+    const body = await screen.findByText('Dismissed sheet body', {}, BACKDROP_WAIT)
+    expect(body).toBeVisible()
     expect(dismissedSpy).not.toHaveBeenCalled()
     // A close sent before the sheet settles is held until it does, which would hide an early report.
-    await new Promise((resolve) => setTimeout(resolve, SETTLE_MS))
+    await waitForSheetAtRest(body)
 
     await userEvent.click(screen.getByRole('button', { name: 'Close from code' }))
-    // The exit animation outlasts this wait: the report follows it, not the request.
+    // The exit animation outlasts this wait (reduced motion would jump the springs to rest): the
+    // report follows it, not the request.
     await new Promise((resolve) => setTimeout(resolve, EXIT_HEAD_START_MS))
     expect(dismissedSpy).not.toHaveBeenCalled()
     await waitFor(() => expect(dismissedSpy).toHaveBeenCalledTimes(1), BACKDROP_WAIT)
