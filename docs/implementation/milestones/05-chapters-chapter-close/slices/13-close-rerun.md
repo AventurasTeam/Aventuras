@@ -1039,6 +1039,13 @@ change amends the scope above.
   transaction and then a sweep from below the re-run before the next boot.
   The other option keeps a dropped journal as a void row, which keeps the
   group recognisable at the cost of a canon change to "drops".
+- **Where does the reversal plumbing live once the re-run calls it?**
+  `lib/actions/chapters` imports `commitNewAction` and
+  `logReversalRefused` from `../story-entries/operational`, and the
+  re-run's reversal would be their third caller. Both are generic
+  reversal plumbing. Default: move them under `lib/actions/delta/` in
+  this slice, which drops the chapters-on-story-entries dependency.
+  Raised in Slice 5.12's final review.
 
 ## Implementation notes
 

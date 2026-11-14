@@ -613,7 +613,7 @@ patch`, which 5.5a marks `restated`, so a close tool's write of it
   search debounce outlasts `waitFor`'s default timeout or the test reads
   the call count before a pending search load lands. Raised in 5.9's
   slice review.
-- **The reversal planner's source filters and lock window have four
+- **The reversal planner's source filters and lock window have three
   loose ends.** First, user mode reads later writes with
   `source = 'user_edit'` (`rowDeltasAfter`, `lib/actions/delta/user-precedence.ts`),
   while the same file's user-delta exclusion uses
@@ -628,19 +628,9 @@ patch`, which 5.5a marks `restated`, so a close tool's write of it
   Third, 5.9's #732 has landed, so `userEditsOutliving` and the
   walk's `userEdits` parameters carry any source in `'any'` mode and
   the name is now wrong; a rename to the later-writes sense would fit.
-  Fourth, `lib/actions/chapters` imports `commitNewAction` and
-  `logReversalRefused` from `../story-entries/operational`; both are
-  generic reversal plumbing, and a home under `lib/actions/delta/` would
-  drop the chapters-on-story-entries dependency before Slice 5.13 adds a
-  third caller. Raised in Slice 5.12's review of Task 1 and its final
-  review.
-- **Chapter-delete reads have no second-branch test, and their
-  refusals log unevenly.** Nothing pins the branch filters of
-  `resolveChapterDeleteSet`, the preview's own-entry token read or its
-  `pendingClose.has(branchId)`: no test in
-  `lib/actions/chapters/remove-chapter.test.ts` builds a second branch,
-  so dropping any filter stays green, and it matters once forks ship
-  (composite `(branch_id, id)` keys). `getChapterDeletePreview` takes
+  Raised in Slice 5.12's review of Task 1.
+- **The chapter-delete preview has an unused input, and its refusals
+  log unevenly.** `getChapterDeletePreview` takes
   `story: Pick<OpenStory, 'branchId' | 'settings'>` and never reads
   `branchId`. `resolveChapterDeleteSet` logs
   `action_layer.reversal_refused` at error on every read of an
@@ -672,7 +662,12 @@ patch`, which 5.5a marks `restated`, so a close tool's write of it
   that closed its confirm first, does nothing visible.
   `handleRequestRegenerate` returns early on `dispatchInFlightRef`, but
   `openRollback` doesn't check it, so a rollback confirm can open over
-  an in-flight dispatch. Raised in Slice 5.12's review of Task 9.
+  an in-flight dispatch. If that dispatch is a ↻ tap whose regenerate
+  then refuses `counts-changed`, the tap shows nothing: a tap raises no
+  toast for that refusal, since it opens the regenerate confirm instead,
+  and `confirmAfterImmediateRefusal` keeps the rollback confirm already
+  open, so only `pipeline.regenerate_rejected` logs it (read, not run).
+  Raised in Slice 5.12's review of Task 9 and its slice review.
 - **A dialog whose actions and Cancel all disable while saving
   probably drops focus on web.** `UnsavedChangesDialog`
   (`components/compounds/unsaved-changes-dialog.tsx`) disables Cancel,
@@ -710,20 +705,19 @@ patch`, which 5.5a marks `restated`, so a close tool's write of it
   the same contract for native. Raised in Slice 5.12's review of Task 14.
 - **`docs/ui/component-inventory.md` has no row for
   `RollbackConfirmModal`.** The shipped modal
-  (`components/reader/rollback-confirm.tsx`) now carries four copy
-  kinds, rollback, regenerate, and the two regenerate-with-close
-  variants, and no row names it or its props. Raised in Slice 5.12's
+  (`components/reader/rollback-confirm.tsx`) now carries five copy
+  kinds, rollback, regenerate, regenerate with nothing after the reply,
+  and the two regenerate-with-close variants, and no row names it or its
+  props. Raised in Slice 5.12's
   review of Task 15.
-- **A trigger-less AlertDialog drops keyboard focus when it closes.**
-  On web, Radix's dialog content returns focus to its trigger on close,
-  and a dialog opened from state has no trigger, so focus lands on
-  `<body>` after Cancel or a confirm. That covers
-  `RollbackConfirmModal` (`components/reader/rollback-confirm.tsx`),
-  `components/story/crash-recovery-modal.tsx`,
-  `components/story/story-config-recovery-dialog.tsx`, the wizard's
-  dialogs (`ai-assist-discard-dialog.tsx`, `step-world.tsx`) and
-  `ChapterDeleteConfirm`. The fix belongs in the primitive
-  (`components/ui/alert-dialog.tsx`): remember the focused element when
-  the content opens and, when no trigger takes focus back, restore it on
-  close if it's still connected, else hand focus to a stable container.
-  Raised by CodeRabbit on PR #742 (Slice 5.12).
+- **`regenerateTurn` takes its expected counts as optional.**
+  `regenerateTurn(…, opts?: { expectedCounts?: RollbackCounts })`
+  (`lib/actions/turns/regenerate-turn.ts`) predates Slice 5.12, which
+  made the reader route pass counts on every call (`runRegenerate`'s
+  `expectedCounts` is required), so a close committing as the
+  interrupt lands is refused rather than reversed unconfirmed. A new
+  caller that leaves them out still compiles and sweeps with no
+  consent check. Requiring them on the action fits
+  [Type design](../code-conventions.md#type-design); the internal
+  follow-up sweep (`sweepFrom(…, origin.id, ctx)`) legitimately has
+  none. Raised in Slice 5.12's slice review.

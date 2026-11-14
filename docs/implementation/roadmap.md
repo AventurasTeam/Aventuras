@@ -274,7 +274,13 @@ verified against the code first. Resolve with the slice each names.
   delete and stamp (`lib/actions/story-entries/register.test.ts`,
   `branch scope`). **When M6.1 lands fork, give each register the same
   pair of tests.** Unverified beyond story entries: the mutation run
-  covered only their handlers. Routed from triage 2026-11-07.
+  covered only their handlers. Routed from triage 2026-11-07. The
+  chapter delete's reads have the same gap: no test in
+  `lib/actions/chapters/remove-chapter.test.ts` or
+  `chapter-delete-preview.test.ts` builds a second branch, so dropping a
+  branch filter from `resolveChapterDeleteSet`, the preview's own-entry
+  token read or its `pendingClose.has(branchId)` stays green. Raised in
+  Slice 5.12's review of Task 5.
 - **M6.1 — The dev seed's fork is no branch copy.** `br_hero_fork`
   (`lib/db/devtools/seed-dataset.ts`, forked at `entry_hero_0040`) holds
   its own twelve entries, opening at position 1, and no entity, lore,
@@ -2113,7 +2119,17 @@ own.
   detail's "View JSON" Sheet, is right-anchored and trigger-less, so
   closing it on desktop drops focus to `<body>` today. Trigger-less
   `Dialog` and `AlertDialog` take the same Radix path (inferred, not
-  run). Routed from triage 2026-10-09.
+  run). Routed from triage 2026-10-09. The trigger-less `AlertDialog`s
+  are `RollbackConfirmModal` (`components/reader/rollback-confirm.tsx`),
+  `components/story/crash-recovery-modal.tsx`,
+  `components/story/story-config-recovery-dialog.tsx`, the wizard's
+  dialogs (`ai-assist-discard-dialog.tsx`, `step-world.tsx`) and
+  `ChapterDeleteConfirm`, so after Cancel or a confirm focus lands on
+  `<body>`. The same remember-and-restore fits
+  `components/ui/alert-dialog.tsx`: remember the focused element when
+  the content opens and, when no trigger takes focus back, restore it on
+  close if it's still connected, else hand focus to a stable container.
+  Raised by CodeRabbit on PR #742 (Slice 5.12).
 
 **Gates.** M8 (every user-facing surface must exist before the
 visual audit, and translation must round-trip cleanly through
