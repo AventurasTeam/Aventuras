@@ -95,7 +95,6 @@ const LOCK_KEY: { [K in ProductionKind]: LockKey<K> } = {
   bumpAwarenessRetrieval: happeningLinks,
   createChapter: null,
   updateChapter: null,
-  deleteChapter: null,
   createBranchEraFlip: null,
   updateBranchEraFlip: null,
   deleteBranchEraFlip: null,
