@@ -65,6 +65,23 @@
     "close": "Close chapter…"
   },
   "review": {
+    "title": "Review — Chapter {{number}}: {{title}}",
+    "done": "Done",
+    "stoppedEarly": "Stopped early",
+    "notApplied": "Not applied ({{count}})",
+    "area": {
+      "lore": "Lore",
+      "charactersAndFactions": "Characters and factions",
+      "placesAndItems": "Places and items",
+      "threads": "Threads",
+      "happenings": "Happenings",
+      "awareness": "Awareness"
+    },
+    "entryLink": "{{entry}} →",
+    "loading": "Reading the close's changes…",
+    "failed": "The close's changes couldn't be read.",
+    "retry": "Retry",
+    "empty": "This close changed nothing.",
     "mergedInto": "Merged into {{name}}",
     "none": "none",
     "yes": "Yes",
