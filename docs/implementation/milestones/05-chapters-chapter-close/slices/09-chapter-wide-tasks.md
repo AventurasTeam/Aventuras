@@ -579,9 +579,16 @@ None open: Implementation notes record each answer.
   frequent row's floor is its start pin, this chapter's rows may go to 0,
   and a row with no start pin is refused. The frequent set leaves out
   rows a later turn created, since they were learned after E, and retired
-  characters' rows stay listed. `set_pin` answers `skipped` for a pin the
-  user set after the cited turn, ahead of the one-way rule. 0.2 is
-  recorded in the decay tuning followup.
+  characters' rows stay listed. 0.2 is recorded in the decay tuning
+  followup.
+- **A user's pin stays theirs (coordinator, by canon, 2026-11-14).**
+  `set_pin` answers `skipped` for any row whose `decay_resistance` the
+  user ever wrote, whatever turn the call cites, raise or lower:
+  [`retrieval.md → Sources`](../../../../memory/retrieval.md#sources)
+  keeps a user's pin until the user changes it, and that rule beats the
+  close's after-the-prose precedence, which is about facts the prose can
+  overturn. The row guard gained `userEverWrote` for it; a row the user
+  created counts as written.
 - **A count bump's undo edge (developer decision, 2026-11-14).** The undo
   restores the prior count by assignment, so rolling back turns past the
   chapter's end that ran before the close (the close stands) puts their
