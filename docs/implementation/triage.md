@@ -613,3 +613,91 @@ patch`, which 5.5a marks `restated`, so a close tool's write of it
   search debounce outlasts `waitFor`'s default timeout or the test reads
   the call count before a pending search load lands. Raised in 5.9's
   slice review.
+- **The reversal planner's source filters and lock window have three
+  loose ends.** First, user mode reads later writes with
+  `source = 'user_edit'` (`rowDeltasAfter`, `lib/actions/delta/user-precedence.ts`),
+  while the same file's user-delta exclusion uses
+  `isUserOriginatedSource`; no source outside `user_edit` is user
+  originated today, so nothing differs yet, and a second user-originated
+  source would split the two. Second, `refClearsOf`
+  (`lib/actions/delta/row-closure.ts`) reads later writes at selection,
+  and `reverseReplayDeltas` selects before it takes `withKeyLocks`,
+  while the walk re-reads them inside the lock
+  (`lib/actions/delta/reverse-replay.ts`); a write landing between the
+  two leaves the clears planned from a read the walk no longer shares.
+  Third, 5.9's #732 has landed, so `userEditsOutliving` and the
+  walk's `userEdits` parameters carry any source in `'any'` mode and
+  the name is now wrong; a rename to the later-writes sense would fit.
+  Raised in Slice 5.12's review of Task 1.
+- **Chapter-delete reads have no second-branch test, and their
+  refusals log unevenly.** Nothing pins the branch filters of
+  `resolveChapterDeleteSet`, the preview's own-entry token read or its
+  `pendingClose.has(branchId)`: no test in
+  `lib/actions/chapters/remove-chapter.test.ts` builds a second branch,
+  so dropping any filter stays green, and it matters once forks ship
+  (composite `(branch_id, id)` keys). `getChapterDeletePreview` takes
+  `story: Pick<OpenStory, 'branchId' | 'settings'>` and never reads
+  `branchId`. `resolveChapterDeleteSet` logs
+  `action_layer.reversal_refused` at error on every read of an
+  integrity-refused chapter, so each settle re-read of an open confirm
+  logs it again; `getRollbackCounts` does the same through
+  `resolveSweep`. The preview's `no-close` and `not-found` refusals
+  toast the generic failure with no log event at all
+  (`components/chapters/use-chapter-delete-confirm.ts`, the open path),
+  where only `integrity` is logged. Raised in Slice 5.12's review of
+  Tasks 5 and 13.
+- **`useChapterDeleteConfirm` has three small edges.** `open` doesn't
+  read `pendingRef`: while a committed delete's resync runs, a stale
+  card can open a confirm whose actions are all disabled. An `open`
+  still awaiting its preview can toast after the route unmounts, since
+  only `dismiss` and a newer `open` bump the request counter. And
+  `app.chapter_delete_resynced` is logged before the resync runs, so
+  its name claims a success that `app.chapter_delete_resync_failed` can
+  then contradict. Raised in Slice 5.12's review of Task 12.
+- **A refused regenerate dispatch gives no feedback, and
+  `openRollback` skips the dispatch guard.** `runRegenerate` in
+  `app/reader-composer/[branchId].tsx` returns null with only a
+  `logger.warn` when `beginDispatch()` refuses, so a ↻ tap whose
+  dispatch started during the counts read, or a confirmed regenerate
+  that closed its confirm first, does nothing visible.
+  `handleRequestRegenerate` returns early on `dispatchInFlightRef`, but
+  `openRollback` doesn't check it, so a rollback confirm can open over
+  an in-flight dispatch. Raised in Slice 5.12's review of Task 9.
+- **A dialog whose actions and Cancel all disable while saving
+  probably drops focus on web.** `UnsavedChangesDialog`
+  (`components/compounds/unsaved-changes-dialog.tsx`) disables Cancel,
+  Discard and Save together while `saving`, the shape of
+  [a control that disables under focus drops focus on web](lessons-learned/rnweb-disabled-under-focus-blurs.md).
+  Inferred from the structure, not probed in a browser. The lesson
+  names buttons that disable while loading; adding the dialog shape,
+  where the focused action and every other control disable at once so
+  there is nothing to hand focus to but the dialog, would cover this
+  second consumer. Raised in Slice 5.12's review of Task 11.
+- **Test and story helpers are duplicated.** `appendTurnEntry` in
+  `lib/pipeline/definitions/close-agent/upkeep-tools.test.ts` and
+  `lifecycle-tools.test.ts`, and `writeLaterTurn` in
+  `lib/actions/chapters/remove-chapter.test.ts`, each write a later turn
+  through `createStoryEntry`; one `writeTurn` in
+  `lib/pipeline/definitions/__tests__/close-fixture.ts`, beside its
+  `writeTurnEntry`, would serve all three. `chapterByTitle` is written
+  out in `chapter-delete.spec.ts`, `reader-rollback.spec.ts`,
+  `reader-chapters.spec.ts` and `chapter-timeline.spec.ts`; it belongs
+  in `e2e/harness/db.ts`. `components/story-settings/external-cell.ts`
+  says it is for save-session story harnesses, but
+  `chapter-card.stories.tsx` and `rollback-confirm.stories.tsx` use it
+  too, so the comment is stale or the helper belongs outside a domain
+  folder. Raised in Slice 5.12's review of Tasks 4, 10 and 14.
+- **A same-named column pair silently collapses on the desktop DB
+  bridge.** `query` in `electron/db/service.ts` turns each node:sqlite
+  row into an array with `Object.values`, so a SELECT returning two
+  columns of one name (a join's `a.id, b.id`) loses one: on Node 24.14
+  `Object.values` gives `[3]` where `StatementSync.setReturnArrays(true)`
+  gives `[1, 3]`. The comment on `queryApp` in `e2e/harness/db.ts`
+  doesn't warn about it, though `lib/db/runtime/exec.native.ts` documents
+  the same contract for native. Raised in Slice 5.12's review of Task 14.
+- **`docs/ui/component-inventory.md` has no row for
+  `RollbackConfirmModal`.** The shipped modal
+  (`components/reader/rollback-confirm.tsx`) now carries four copy
+  kinds, rollback, regenerate, and the two regenerate-with-close
+  variants, and no row names it or its props. Raised in Slice 5.12's
+  review of Task 15.

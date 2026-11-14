@@ -468,8 +468,8 @@ with two, each bold and each omitted when empty:
 **Cleanup.**
 
 - `grep -rn deleteChapter lib app components` finds nothing.
-- `grep -n "M5.2" components/reader/regenerate-gate.ts components/reader/regenerate-gate.test.ts`
-  finds nothing, and the same for `app/reader-composer/[branchId].tsx`.
+- `grep -n 'M5\.12' components/reader/regenerate-gate.ts components/reader/regenerate-gate.test.ts 'app/reader-composer/[branchId].tsx'`
+  finds nothing.
 
 **Gates.**
 
