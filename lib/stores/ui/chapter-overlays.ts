@@ -9,7 +9,7 @@ export type OverlaySurface = {
 
 export type CloseModalRequest = { branchId: string; endEntryId?: string }
 
-/** A committed close, held for the banner's done state until it is dismissed or reviewed. */
+/** A committed close, held for the commit banner's done state. */
 export type CloseResult = { branchId: string; chapterId: string; stoppedTasks: number }
 
 export type ChapterOverlaysState = {
@@ -24,14 +24,13 @@ const INITIAL: ChapterOverlaysState = { review: null, closeModal: null, closeRes
 const store = createStore<ChapterOverlaysState>()(() => INITIAL)
 
 // Functions, never rendered, so kept outside the zustand state: a registration re-renders nothing.
-// The token lets only the registration that holds the slot clear it.
 let surfaceSlot: { token: object; surface: OverlaySurface } | null = null
 
 export const chapterOverlaysStore = {
   useOverlays: <T>(selector: (s: ChapterOverlaysState) => T): T => useStore(store, selector),
   getState: (): ChapterOverlaysState => store.getState(),
-  openReviewWindow: ({ chapterId }: { chapterId: string }): void =>
-    store.setState({ review: { chapterId } }),
+  openReviewWindow: (input: { chapterId: string }): void =>
+    store.setState({ review: { ...input } }),
   closeReviewWindow: (): void => store.setState({ review: null }),
   /** Runs the current surface's guard before holding the request, so no trigger skips it. */
   openCloseModal: ({ branchId, endEntryId }: CloseModalRequest): void => {
@@ -52,8 +51,7 @@ export const chapterOverlaysStore = {
   },
   currentSurface: (): OverlaySurface | null => surfaceSlot?.surface ?? null,
   /** A newer close's result replaces the one held. */
-  showCloseResult: ({ branchId, chapterId, stoppedTasks }: CloseResult): void =>
-    store.setState({ closeResult: { branchId, chapterId, stoppedTasks } }),
+  showCloseResult: (result: CloseResult): void => store.setState({ closeResult: { ...result } }),
   clearCloseResult: (): void => store.setState({ closeResult: null }),
   __reset: (): void => {
     surfaceSlot = null

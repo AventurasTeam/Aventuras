@@ -105,6 +105,20 @@ describe('chapterOverlaysStore', () => {
     expect(chapterOverlaysStore.getState().closeResult).toBeNull()
   })
 
+  it("holds a copy of a caller's input, never the caller's object", () => {
+    const review = { chapterId: 'chap_hero_2' }
+    chapterOverlaysStore.openReviewWindow(review)
+    expect(chapterOverlaysStore.getState().review).not.toBe(review)
+
+    const request = { branchId: 'br_hero', endEntryId: 'ent_47' }
+    chapterOverlaysStore.openCloseModal(request)
+    expect(chapterOverlaysStore.getState().closeModal).not.toBe(request)
+
+    const result = { branchId: 'br_hero', chapterId: 'chap_hero_2', stoppedTasks: 0 }
+    chapterOverlaysStore.showCloseResult(result)
+    expect(chapterOverlaysStore.getState().closeResult).not.toBe(result)
+  })
+
   it('__reset clears the state and the surface slot', () => {
     chapterOverlaysStore.openReviewWindow({ chapterId: 'chap_hero_2' })
     chapterOverlaysStore.openCloseModal({ branchId: 'br_hero' })
