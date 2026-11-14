@@ -285,6 +285,14 @@ describe('closeReviewChanges', () => {
     ])
   })
 
+  it('reads an empty value as none when no old value pairs with it', () => {
+    const calls = [call({ tool: 'set_keywords', rows: [KAEL], values: { keywords: '' } })]
+
+    expect(summaries(closeReviewChanges(report(calls), [], LOOKUP))).toEqual([
+      ['charactersAndFactions', 'Kael', 'none'],
+    ])
+  })
+
   it('names only the move on a top mark, not the unplaced flag it cleared', () => {
     const calls = [
       call({ tool: 'update_place', rows: [QUAY], values: { 'state.unplaced': 'top level' } }),
