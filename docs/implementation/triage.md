@@ -309,13 +309,6 @@ patch`, which 5.5a marks `restated`, so a close tool's write of it
   the close, and the next run cuts afresh. Resolving the target once and
   storing it beside the parts would close both. Raised in 5.8's task
   review; the timing in its slice review.
-- **A new mock shape answers `{}` from an older `state.json`.** In
-  `scripts/mock-llm/state.ts`, `loadState` gives a shape the saved file
-  lacks an empty lane, not its shipped default. So every shape added
-  after a developer's `state.json` was written answers `{}` until the
-  file is deleted; 5.8's chapter metadata part and merge lanes are the
-  latest case, and a multi-part close then fails to parse in the dev
-  mock. Raised in 5.8's task review.
 - **No test pins a prose task's token count into its render.** In
   the close's Identity, Threads, Lore and Upkeep tasks, passing 0 for
   `proseTokens` to `renderClosePrompt` still passes every task test.

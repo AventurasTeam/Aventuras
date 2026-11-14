@@ -2,7 +2,14 @@ import { describe, expect, it } from 'vitest'
 
 import { NARRATIVE_LANE } from './routing'
 import { STRUCTURED_SHAPES } from './shapes'
-import { defaultState, emptyLane, nextResponse, takeFailure, type Lane } from './state'
+import {
+  defaultState,
+  emptyLane,
+  nextResponse,
+  takeFailure,
+  withShippedLanes,
+  type Lane,
+} from './state'
 import { validateLaneValue } from './validate'
 
 function laneWith(names: string[], overrides: Partial<Lane> = {}): Lane {
@@ -134,5 +141,19 @@ describe('shipped defaults', () => {
     for (const response of lane?.responses ?? []) {
       expect((response.value as { suggestions: unknown[] }).suggestions.length).toBeGreaterThan(0)
     }
+  })
+})
+
+describe('withShippedLanes', () => {
+  it('gives a shape an older state file lacks the lane it ships with, keeping the saved ones', () => {
+    const shipped = defaultState().lanes
+    const saved = laneWith(['mine'])
+    const [kept, missing] = STRUCTURED_SHAPES.filter((s) => shipped[s.name]!.responses.length > 0)
+    const lanes = withShippedLanes({ [kept!.name]: saved })
+
+    expect(lanes[kept!.name]).toBe(saved)
+    expect(lanes[missing!.name]).toEqual(shipped[missing!.name])
+    expect(lanes[missing!.name]!.responses.length).toBeGreaterThan(0)
+    expect(lanes[NARRATIVE_LANE]).toEqual(shipped[NARRATIVE_LANE] ?? emptyLane())
   })
 })
