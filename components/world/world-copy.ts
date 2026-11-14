@@ -313,7 +313,7 @@ export function entityMenuEntries(
   return [
     ...leadEntries,
     { key: 'export', label: t('world:detail.menu.exportEntity'), onPress: onExport },
-    { key: 'json', label: t('world:detail.menu.viewJson'), onPress: onViewJson },
+    { key: 'json', label: t('world:detail.menu.viewJson'), opensSheet: true, onPress: onViewJson },
     ...deleteEntry(t('world:detail.menu.deleteEntity'), remove),
   ]
 }
@@ -330,7 +330,7 @@ export function loreMenuEntries({
 }): OverflowMenuEntry[] {
   return [
     { key: 'export', label: t('world:detail.menu.exportLore'), onPress: onExport },
-    { key: 'json', label: t('world:detail.menu.viewJson'), onPress: onViewJson },
+    { key: 'json', label: t('world:detail.menu.viewJson'), opensSheet: true, onPress: onViewJson },
     ...deleteEntry(t('world:detail.menu.deleteLore'), remove),
   ]
 }
