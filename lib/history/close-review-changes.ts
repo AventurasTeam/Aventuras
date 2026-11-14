@@ -174,20 +174,24 @@ const COMMON_KNOWLEDGE_PATH = 'commonKnowledge'
 const flagText = (value: unknown): string =>
   Number(value) === 1 ? t('chapters:review.yes') : t('chapters:review.no')
 
-// Each path's display rule in one place: the top mark names only its move (its old value is the
-// unplaced flag), a flag reads yes or no, and a cleared value reads none.
+/** A recorded new or proposed value as the review shows it: a flag reads yes or no, '' reads none. */
+export function reviewValueText(path: string, value: string): string {
+  if (path === COMMON_KNOWLEDGE_PATH) return flagText(value)
+  return value === '' ? t('chapters:review.none') : value
+}
+
+// The top mark names only its move, since its old value is the unplaced flag.
 function updateSummary(
   path: string,
   old: unknown,
   value: string,
   lookup: CloseReviewLookup,
 ): string {
-  if (path === UNPLACED_PATH) return value
-  if (path === COMMON_KNOWLEDGE_PATH)
-    return old == null ? flagText(value) : `${flagText(old)}${VALUE_ARROW}${flagText(value)}`
-  const before = shownValue(old, lookup)
-  if (before === '') return value
-  return `${before}${VALUE_ARROW}${value === '' ? t('chapters:review.none') : value}`
+  const after = reviewValueText(path, value)
+  if (path === UNPLACED_PATH) return after
+  const before =
+    path === COMMON_KNOWLEDGE_PATH ? (old == null ? '' : flagText(old)) : shownValue(old, lookup)
+  return before === '' ? after : `${before}${VALUE_ARROW}${after}`
 }
 
 function summaryOf(write: Planned, old: unknown, lookup: CloseReviewLookup): string {

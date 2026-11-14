@@ -50,7 +50,7 @@ export type CloseReviewNotApplied = {
   target: CloseReviewTarget | null
   fieldPath: string | null
   fieldLabel: string | null
-  /** The proposed value, a refused merge's text, a refused create's title, or ''. */
+  /** The proposed value as shown, a refused merge's text, a refused create's body, or ''. */
   summary: string
   reasonKey: CloseReasonKey
   /** `t('chapters:review.reason.<key>')`. */

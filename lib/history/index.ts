@@ -4,6 +4,7 @@ export {
   readDeletedEntityKinds,
   readLatestCloseReport,
 } from './close-read'
+export { buildCloseReview } from './close-review'
 export { CLOSE_REVIEW_AREAS } from './close-review-types'
 export type {
   CloseReview,
