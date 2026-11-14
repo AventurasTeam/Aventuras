@@ -5,6 +5,7 @@ import { generateId } from '@/lib/ids'
 
 import { commonChecks, createReadSet } from './common-checks'
 import { CloseIds } from './ids'
+import type { ToolContext } from './tool'
 
 const ENTRY_1 = 'entry_11111111-1111-4111-8111-111111111111'
 const ENTRY_2 = 'entry_22222222-2222-4222-8222-222222222222'
@@ -19,7 +20,7 @@ const FERRY_RULE: GuardRow = { table: 'lore', id: 'lore_77777777-7777-4777-8777-
 const WREN: GuardRow = { table: 'entities', id: CHAR_A }
 const TOLL_LAW: GuardRow = { table: 'lore', id: LORE_A }
 
-type SurvivorOf = (table: string, id: string) => { table: string; id: string } | undefined
+type SurvivorOf = ToolContext['survivorOf']
 
 // The chapter is t1…t3, all shown to the task; t4 is a turn past it. Wren (c1) is seeded as read,
 // the toll law (lo1) isn't. No merge has landed unless `survivorOf` says one has.

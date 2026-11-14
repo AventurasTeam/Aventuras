@@ -1,7 +1,7 @@
 import type { GuardRow } from '@/lib/actions/types'
 
 import { TURN_PREFIX, type CloseIds } from './ids'
-import { FULL_ID_SHAPE } from './tool'
+import { FULL_ID_SHAPE, type ToolContext } from './tool'
 
 /** Rows a task and part has read: seeded by its start, then read_row and landed creates (C11). */
 export type ReadSet = {
@@ -31,7 +31,7 @@ type CheckContext = {
   ids: CloseIds
   taskEntryIds: readonly string[]
   readSet: ReadSet
-  survivorOf: (table: string, id: string) => { table: string; id: string } | undefined
+  survivorOf: ToolContext['survivorOf']
 }
 
 const TURN_HINT = 'cite the turns this task was shown, by their handles'
