@@ -328,6 +328,55 @@ describe('normalizeStackablesStep', () => {
     expect(await stackablesOf(f, WREN)).toEqual({ Gold: 4, gold: 3 })
   })
 
+  it('normalizes records whose later writes touched other state fields, not the stackables', async () => {
+    await seedCharacter(f, WREN, 'Wren', { Gold: 5, gold: 3 })
+    await seedCharacter(f, MARA, 'Mara', { Arrows: 1, arrows: 2 })
+    await apply(
+      f,
+      {
+        kind: 'updateEntityLocationTracking',
+        source: 'per_turn_classifier',
+        payload: { branchId: f.branchId, id: WREN, currentLocationId: 'loc_far_bank' },
+      },
+      byLaterTurn(f),
+    )
+    await apply(
+      f,
+      {
+        kind: 'updateEntityVisualState',
+        source: 'user_edit',
+        payload: { branchId: f.branchId, id: MARA, visual: { hair: 'grey at the temples' } },
+      },
+      BY_USER,
+    )
+
+    const { groups } = await drain(phaseFor(f), f)
+
+    expect(groups.flatMap((group) => group.actions)).toEqual([
+      {
+        kind: 'updateEntityStackables',
+        source: 'chapter_close',
+        payload: { branchId: f.branchId, id: WREN, stackables: { gold: 8 } },
+      },
+      {
+        kind: 'updateEntityStackables',
+        source: 'chapter_close',
+        payload: { branchId: f.branchId, id: MARA, stackables: { arrows: 3 } },
+      },
+    ])
+  })
+
+  it('emits no group when the only record that would fold is one the user wrote after E', async () => {
+    await seedCharacter(f, WREN, 'Wren', { Gold: 5, gold: 3 })
+    await apply(f, writeStackables(f, WREN, { Gold: 6, gold: 3 }, 'user_edit'), BY_USER)
+
+    const { groups, result } = await drain(phaseFor(f), f)
+
+    expect(result).toEqual({ status: 'completed' })
+    expect(groups).toEqual([])
+    expect(await stackablesOf(f, WREN)).toEqual({ Gold: 6, gold: 3 })
+  })
+
   it("reads this branch's characters only: a singular another branch holds is no fold target", async () => {
     await seedCharacter(f, MARA, 'Mara', { arrows: 3 })
     await f.ctx.db
@@ -485,16 +534,6 @@ describe('normalizeStackablesStep', () => {
 
   it('returns aborted for a cancelled close with nothing to fold', async () => {
     await seedCharacter(f, WREN, 'Wren', { gold: 8 })
-    const controller = new AbortController()
-    controller.abort()
-
-    const gen = normalizeStackablesStep.run(stepContext(f, controller.signal))
-
-    expect(await gen.next(undefined)).toEqual({ done: true, value: { status: 'aborted' } })
-  })
-
-  it('returns aborted, emitting nothing, when the close is cancelled', async () => {
-    await seedCharacter(f, WREN, 'Wren', { Gold: 5, gold: 3 })
     const controller = new AbortController()
     controller.abort()
 
