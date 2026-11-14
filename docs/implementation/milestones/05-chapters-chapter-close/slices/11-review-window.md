@@ -16,7 +16,7 @@
 ## Goal
 
 The user sees what a close changed. This slice ships the review window,
-the root host and overlay store it opens through, the commit toasts
+the root host and overlay store it opens through, the commit banner
 with `Review`, and `Review changes` on the Timeline's card. It should
 run beside [Slice 5.8](./08-prose-tasks.md) and
 [Slice 5.9](./09-chapter-wide-tasks.md), so `close_report` meets its
@@ -32,7 +32,7 @@ sources: `chapters.close_report` holds each tool call's rows, `why`,
 entry, so a row's cited entry comes from the report, never from
 `delta.entryId`. The report stays out of `chaptersStore`, which holds
 only `hasCloseReport`, so the window reads it when it opens. The host
-sits above the router, because a toast's `Review` fires on whichever
+sits above the router, because the banner's `Review` fires on whichever
 screen is up.
 
 ## Required reading
@@ -54,7 +54,7 @@ screen is up.
   — why every delta names the same entry.
 - [`reader-composer.md → During a memory update`](../../../../ui/screens/reader-composer/reader-composer.md#during-a-memory-update)
   and [`toast.md → Action button`](../../../../ui/patterns/toast.md#action-button)
-  — the commit toasts.
+  — the commit notice, which shipped as a banner, not a toast.
 - [`delta-log-row.md → Compound API`](../../../../ui/patterns/delta-log-row.md#compound-api)
   and
   [`Click behavior`](../../../../ui/patterns/delta-log-row.md#click-behavior)
@@ -168,7 +168,8 @@ lookup of names and kinds the host passes.
   `skippedFields`, which a `rejected` or `skipped` call carries only
   when its fields were lost for different reasons (C4), or else the
   call's: `USER_EDITED_SINCE_PROSE`, `later-turn` and `row-gone` through
-  `t()` keys, and a rule refusal's handler string as stored.
+  `t()` keys, and every refusal through its stable key's label. A stored
+  reason that isn't a key reads `other`.
 - **Stopped early.** One line per `stopped` entry: the task's label, its
   part unless the part is 0, and the reason, for `budget`, `window` and
   `cut-off`. `noToolCalls` adds canon's note there.
@@ -221,7 +222,7 @@ shape as it is:
 | A landed merge's row  | An absorbed row presses to its `survivor`         |
 
 A Changes row and a Not applied row press by the same rules (see
-[Open questions](#open-questions)). A target absent from its store
+[Implementation notes](#implementation-notes)). A target absent from its store
 doesn't press, whichever row names it: a row since deleted, a survivor
 since deleted, or a refused `create_lore`, which has no row. A later
 merge's survivor isn't followed. Liveness reads the stores reactively, so a row
@@ -243,7 +244,7 @@ that goes under an open window stops pressing. The entry link is
   mounted beside `<MemoryRunToasts />` (`app/_layout.tsx:116-117`), inside
   `BottomSheetModalProvider`. This slice renders the review; 5.10 adds the
   modal.
-- **One derived rule covers a reversal and a stale toast.** The host
+- **One derived rule covers a reversal and a stale banner.** The host
   selects the chapter by the open id from `chaptersStore`. When that row
   is absent or `hasCloseReport` is false, it clears the id in an effect
   and renders nothing. The id is pruned, not hidden: a redo restores the
@@ -274,26 +275,32 @@ that goes under an open window stops pressing. The entry link is
 - With no surface registered (App Settings, Diagnostics), the host's own
   `useSurfaceNavigate` pushes.
 
-**Commit toasts,** in `hooks/use-memory-run-toasts.ts`.
+**Commit banner,** its result held by `hooks/use-memory-run-toasts.ts`.
 
 - A `run_complete` for `CHAPTER_CLOSE_KIND` with `outcome: 'completed'`.
   The event names no chapter or branch (`lib/pipeline/types.ts:72-81`),
   so the handler takes the highest `sequenceNumber` in `chaptersStore`,
   reads its report, and goes on only when `report.actionId` equals the
-  event's.
-- `report.stopped` empty: `toast.info`, `Chapter closed: <title>`. Else
-  `toast.warning`, `Chapter closed, but <n> tasks stopped early`, with
+  event's. It holds the result in `chapterOverlaysStore.closeResult`.
+- The close's progress banner turns into the done state, `Chapter
+closed: <title>` at the info tone. With stopped tasks it takes the
+  warning tone, `Chapter closed, but <n> tasks stopped early`, with
   singular and plural keys. Both carry `Review`, calling
-  `openReviewWindow({ chapterId })`.
-- A failed report read logs and shows the info toast.
-- `beforeTurn` isn't read. Canon gives the commit toast no before-turn
-  arm, so a close that commits under Send toasts as any other. The
+  `openReviewWindow({ chapterId })` and clearing the result, and ×.
+- It stays until ×, `Review`, the chapter reversing, a newer close
+  committing, or the story closing or switching branch. A later run's
+  progress takes the slot while it runs, and the done state returns
+  after.
+- A failed report read logs and holds the info state.
+- `beforeTurn` isn't read. Canon gives the commit notice no before-turn
+  arm, so a close that commits under Send shows as any other. The
   failure toast's arm on it is [Slice 5.6](./06-close-owed.md)'s.
 
 **`Review changes`,** flipped from hidden per C16. `ChapterCard` is
 props-in, so the route's card data takes `hasCloseReport`, and the card's
 one list of action entries gains the entry, behind `⋯` on phone, calling
-`openReviewWindow({ chapterId })`. A running pipeline doesn't disable it:
+`openReviewWindow({ chapterId })`, which on phone waits for the menu's Sheet
+to finish dismissing. A running pipeline doesn't disable it:
 the window writes nothing.
 
 **Seed.** `chap_hero_2` gains a `closeReport` that parses by its schema,
@@ -307,7 +314,7 @@ stays covered. Ids, titles and positions don't move (C8).
 
 - Every new string routes through `t()`: the window in the `chapters`
   namespace [Slice 5.3](./03-reader-chapters.md) or
-  [Slice 5.7](./07-chapter-timeline.md) registers, and the toasts beside
+  [Slice 5.7](./07-chapter-timeline.md) registers, and the banner's copy beside
   `chrome.memoryUpdateFailed` in `locales/en/common.json`.
 - `chapter-close.md → Review` says that a refused create matches a later
   landed create by the same task with the same title, trimmed and
@@ -326,7 +333,9 @@ stays covered. Ids, titles and positions don't move (C8).
   the log.
 - The `close_report` column, schema, writer and store projection
   ([Slice 5.2](./02-first-chapter.md)), and the ledger that fills it
-  ([Slice 5.5a](./05a-task-runner.md)).
+  ([Slice 5.5a](./05a-task-runner.md)), except that the ledger now
+  records a stable key for every refusal (see
+  [Implementation notes](#implementation-notes)).
 - Sizing `CLOSE_REPORT_VALUE_BOUND`
   ([Slice 5.5b](./05b-identity-threads.md)).
 - The entry jump itself ([Slice 5.3](./03-reader-chapters.md)).
@@ -365,7 +374,7 @@ stays covered. Ids, titles and positions don't move (C8).
 - Not applied holds a refused write, drops one the same task later landed
   on that row and field, keeps one a different task landed, and lists a
   partly landed call under both sections. A known reason reads through its
-  key, and an unknown one as stored. A `skipped` call whose fields were
+  key, and a stored reason that isn't a key reads `other`. A `skipped` call whose fields were
   lost for different reasons shows each with its own (same file).
 - A refused call with no `values` drops once its task lands the same
   tool on a shared row, or anywhere when it has no rows. An
@@ -401,17 +410,21 @@ stays covered. Ids, titles and positions don't move (C8).
   re-registers when `guard` changes
   (`hooks/use-overlay-surface.test.tsx`).
 
-**Reversal and toasts.**
+**Reversal and the banner.**
 
 - A chapter leaving the store closes the window, a redo of it doesn't
   reopen it, and `openReviewWindow` on an absent chapter renders nothing
   and leaves no id
   (`components/chapters/chapter-overlays-host.test.tsx`).
-- A committed close toasts `Chapter closed: <title>` at info with no
-  stopped task, and the warning with its count otherwise, each with
-  `Review` calling `openReviewWindow`. It toasts with `beforeTurn` true
-  and false, and an aborted or failed close, or a report whose `actionId`
-  differs, toasts nothing (`hooks/use-memory-run-toasts.test.tsx`).
+- A committed close holds its result, so the banner reads `Chapter
+closed: <title>` at info with no stopped task, and the warning tone
+  with its count otherwise, each with `Review` calling `openReviewWindow`.
+  It holds with `beforeTurn` true and false, and an aborted or failed
+  close, or a report whose `actionId` differs, holds nothing
+  (`hooks/use-memory-run-toasts.test.tsx`). The banner shows a held
+  result only while its chapter is the open branch's highest, and
+  progress takes the slot while a run is live
+  (`components/compounds/memory-run-banner.test.tsx`).
 
 **Surfaces.**
 
@@ -432,7 +445,7 @@ stays covered. Ids, titles and positions don't move (C8).
 - `components/chapters/review-window.stories.tsx` covers the full report,
   `noToolCalls`, the empty, loading and failed states, a long value, an
   unpressable row, and the phone Sheet at 390 px.
-- On Android, the window opens as a tall Sheet from the toast and from the
+- On Android, the window opens as a tall Sheet from the banner and from the
   `⋯` overflow, its list scrolls under the pinned head, and a row press
   dismisses it before the route moves. Run on the device loop.
 
@@ -476,35 +489,12 @@ stays covered. Ids, titles and positions don't move (C8).
   once and see its test fail. Write expected text as literals, never from
   the constant under test.
 - **Manual:** the Android pass above, and a desktop smoke through the
-  `electron-app` MCP of a toast's `Review` from World and from the reader.
-  A real run behind the toast first happens in
+  `electron-app` MCP of the banner's `Review` from World and from the reader.
+  A real run behind the banner first happens in
   [Slice 5.10](./10-two-starts.md)'s end-to-end close; the hook test holds
   it until then.
 
 ## Open questions
-
-- **Do Not applied rows press?** The wireframe draws them unpressable,
-  `chapter-timeline.md` doesn't say, and `chapter-close.md → Review` keeps
-  the proposed value "so the user can apply it by hand". This doc presses
-  them when their row is live, which gives a refused `create_lore` no
-  press. Confirm at planning; the wireframe changes with it.
-- **What does a toast's `Review` do with another overlay up?** A rail
-  Sheet can be open on phone when a close commits, and Sheet over Sheet
-  isn't allowed. Check gorhom's stacking behaviour on the device before
-  choosing to replace it, or to hold the window until the Sheet dismisses.
-- **Is a rule refusal fit to show?** Its `reason` is the handler's string,
-  such as `not-a-faction`, which reaches the user unlocalized. It reads
-  to the model first, so a label for the review would be a second map.
-- **How long does the list get?** Report size is a guess until 5.5b's run.
-  The list is a plain scroller; if that number reaches the hundreds, check
-  it on Android before shipping it unvirtualized.
-- **Does a Changes row's name carry its entry?** Since 5.3 a pressable
-  `DeltaLogRow` is named `<op> <target>, entry #n` whatever its press
-  opens. Here the press opens World or Plot, the meta line is off, and
-  the footer's `entry #n →` link names the entry again, so a screen
-  reader hears it twice and the row's name points where its press
-  doesn't. Default: the host chooses, through a prop on the extension
-  above.
 
 - **How does a rollback count a review edit it sweeps?** Routed to
   [Slice 5.12](./12-chapter-delete-rollback.md#open-questions), as
@@ -514,12 +504,6 @@ stays covered. Ids, titles and positions don't move (C8).
   Until it lands, a review edit to a chapter's title, summary or theme,
   anchored on no entry, on a chapter the rollback spares is reverted by
   its log position and counted nowhere.
-- **Are refusal reasons from the common checks stable keys?** A reason
-  from an unresolved id or a failed common check is an instruction to
-  the model, with handles, stored as the ledger call's `reason`, and C4
-  defines `reason` as a stable key or a handler's own refusal. Give them
-  stable keys (`unread`, `no-cite`, `unknown-id`), or translate them in
-  the review? Surfaced by 5.5a.
 - **Should C4's `values` and `skippedFields` carry their row?** In a
   multi-row call, Changes' `rows[0]` rule has no row for a `values` key,
   and Not applied's same-row match has none for a `skippedFields` entry. A path landed
@@ -528,17 +512,138 @@ stays covered. Ids, titles and positions don't move (C8).
   applied, a rule refusal included, which narrows canon's not-applied
   rule ([`chapter-close.md → Review`](../../../../memory/chapter-close.md#review)).
   Where nothing landed, a path lost on two rows for different reasons
-  shows only its first loss's reason. Surfaced by 5.5a.
-
-- **Keep the fallback toast when the commit notice moves to the banner.**
-  `toast.md`'s Reader entry gained, at `836720bf1`, a clause for a
-  chapter close re-run undone with no journal to write back, warning
-  severity, saying the earlier close couldn't be restored
-  ([`chapter-close.md → Re-running a close`](../../../../memory/chapter-close.md#re-running-a-close)).
-  It stays a toast, since nothing runs then to hold a banner, so this
-  slice's edit of that entry keeps it. Raised 2026-11-14 by 5.13's
-  planning.
+  shows only its first loss's reason. A landed merge's link-row losses
+  hit the same limit (gap C in Implementation notes): one is dropped when
+  another link lands its path, and two characters' losses on one path
+  collapse. Triage:
+  [A landed merge's link-row losses can't name their row](../../../triage.md).
+  Surfaced by 5.5a.
 
 ## Implementation notes
 
-_Populated at finish: notable deviations from the plan and resolved developer decisions._
+**Developer decisions** (planning, 2026-11-13).
+
+1. **Re-run is Slice 5.13's.** It needs 5.12's delete set and 5.10's
+   whole close. 5.13 owns how the review reads a re-run's group, the
+   host closing the window when a re-run replaces the report, the
+   `Re-run…` footer button and the re-run's banner copy. A re-run's
+   commit shows in the banner too (`Chapter <N>'s close re-ran [Review]
+[×]`, warning tone when tasks stopped early), one durable notice for
+   the one window; its cancel and failure stay toasts with no action, as
+   does the fallback toast for a re-run undone with no journal to write
+   back. Until 5.13, the commit handler shows a re-run's commit as a
+   close's.
+2. **Every refusal's reason is a stable key.** The ledger records the key
+   and the model's tool result keeps its instruction text. C4 already
+   defines `reason` as a key; the shipped ledger stored instructions with
+   per-close handles (`c2`, `t12`) and a raw lore id. `keyedReason`
+   writes `<key>: <instruction>` for every close-built free-text reason,
+   and `CLOSE_REASON_KEYS` sits beside the report schema in
+   `lib/db/story-entries/close-report.ts`. This deviates from Scope:
+   out ("the ledger that fills it"), so 5.11 grew into the writer.
+3. **Not applied rows press** to their row (the call's first, a refused
+   merge's keep) when it is live, by Changes' routing and guard. Canon
+   keeps the proposed value so the user can apply it by hand;
+   `chapter-timeline.md → Review window` and the wireframe gained it.
+4. **Multi-row calls keep C4's shape.** Changes attaches fields to
+   `rows[0]`, and a Not applied field counts as corrected when a later
+   landed call by the same task and tool shares any row. It handles
+   `flag_duplicate`'s landed row order without a schema change, at the
+   cost of the known gaps below.
+5. **The commit toast became a persistent banner.** On commit the close's
+   `MemoryRunBanner` turns into `Chapter closed: <title> [Review] [×]`.
+   A toast's `Review` raced its auto-dismiss, and on phone it opened over
+   Sheets: gorhom's default `switch` stacking restores a covered Sheet,
+   and replacing a Sheet that holds a draft drops it silently. The banner
+   sits under every Sheet and scrim.
+6. **A stored reason that isn't a key reads `other`**, with a
+   `logger.warn`, not "an unknown one as stored". It follows from keys
+   everywhere. The schema keeps `reason` a string, so an older report
+   still parses.
+
+**Deviations from the brief.**
+
+- **The review passes no entry to `DeltaLogRow`**, so a Changes row is
+  named `update Kael`, not `update Kael, entry #n`, and the footer link
+  carries the entry. No fourth prop; `delta-log-row.md → Click behavior`
+  gained a sentence.
+- **`SheetContent.onDismissed`** runs once after a presented sheet's exit
+  animation, whatever closed it. The plan relied on the late
+  `onOpenChange(false)`, but rn-primitives' controlled
+  `useControllableState` drops it after a programmatic close on web.
+  `OverflowMenuEntry.opensSheet` runs from it, so `⋯` opens the review
+  only after the menu's Sheet has gone; gorhom's `onDismiss` fires on
+  Android, checked on the slot AVD.
+- **The banner shows a held result only while its chapter is the open
+  branch's highest-sequence chapter.** Without it, a stale run-to-done
+  handoff showed and announced the previous close's result.
+- **The review shows `loading` until the entry index has read**, else old
+  values show raw entry ids. A failed index read falls through to `ready`.
+- **Value display.** A cleared value reads `old → none`; `state.unplaced`
+  (a top mark) shows the new value alone; `commonKnowledge` reads
+  `No → Yes`; a known `entry_` id reads `entry #n` on every value side;
+  entity and thread statuses read through the `world:` and `plot:`
+  status labels, and the top mark through `chapters:review.topLevel`
+  (the stored literal is `CLOSE_TOP_LEVEL_VALUE`). Not applied rows
+  render proposed values the same way (`reviewValueText`).
+- **An untargeted Not applied row** (a refused call that resolved no row)
+  is named by a per-tool label (`chapters:review.tool.*`), falling back
+  to `history:unknownTarget`, never a raw tool id. A test ties the labels
+  to the close's write tools. An empty `rows[].name` (a `set_pin` refused
+  by the common checks) takes the live store's name, else the table's
+  label.
+- **The 5.9 merge.** `merge_happenings` and `set_pin`'s refusals gained
+  keys and labels: five merge refusals reuse the thread-merge keys, with
+  labels worded to fit both, and `set_pin`'s labels say "decay
+  resistance", not "pin". A landed or skipped happening merge records
+  keep's derived writes (`occurredAtEntryId`, `commonKnowledge`) in
+  `values`, since C4 takes new values from `values`. That also changes
+  later tasks' writes-so-far line (`description, occurredAtEntryId,
+commonKnowledge; kept hp1`), pinned by a test. A happening's link-row
+  losses are labelled through the link tables' labels.
+- **List length.** Unvirtualized. A 22-row report scrolled on the slot
+  AVD with no review-specific jank (5.63% janky frames against the
+  Timeline's own 8.16%, software emulator).
+- **Smaller picks.** `update_place`'s `state.parent_location_id` and
+  `state.unplaced` count as one Not applied field; a value-less refusal
+  is corrected by any later `ok` call of its task and tool sharing a row;
+  a refused merge's summary is `values.description ?? values.title ?? ''`.
+  Story Settings registers its surface inside `StorySettingsSurface`,
+  where `useStorySettingsSaveSession()` is reachable.
+
+**Known gaps.**
+
+- A mutual `flag_duplicate`'s second row is unlisted (Decision 4).
+- A landed merge's link-row losses show under the kept happening with no
+  character named (Decision 4), and C4's path-keyed `skippedFields` drops one when
+  another link on the merge lands that path and collapses two
+  characters' losses on one path. Fixing it needs `skippedFields` to
+  carry a row, a C4 v1 shape change; see Open questions.
+- A fork that copies chapter ids keeps the window open on a branch
+  switch. Unreachable until fork ships (M6.1).
+- The guard C7 records as inferred is E2E-run on the Timeline only; a
+  press over a dirty World pane is unit-covered.
+- The review window has no exit animation: the host unmounts it as the id
+  clears (triage).
+
+**What constrains 5.10, 5.12 and 5.13.**
+
+- **C7's store is the one door.** `chapterOverlaysStore` holds the review
+  id, the close modal request (5.10 reads it), the banner's `closeResult`
+  and the registered surface. `openCloseModal` runs the surface's guard
+  before it holds its input, so a trigger can't skip it, and a guard that
+  doesn't proceed holds nothing. 5.10 builds its modal on it.
+- **One hold rule.** `overlayChapterHolds` and `closeResultHolds`, in the
+  store file, are shared by the host and the banner: a chapter holds
+  while it has a report on the open branch. Reversal, a re-run replacing
+  the report (5.13) and a delete (5.12) all clear through it, so a change
+  there changes both. The id is pruned, not hidden, because a redo
+  restores the chapter id.
+- **Every new refusal adds a key and a label.** A close-built reason goes
+  through `keyedReason` with a `CLOSE_REASON_KEYS` member and a `t()`
+  label under `chapters:review.reason`, or it reads `other` and logs a
+  warning. 5.12 and 5.13 follow that for anything they refuse.
+- **5.13 owns the re-run's footprint:** its group writes no `chapters`
+  create, so `loadCloseDeltas`' range rule (create to report update) is a
+  close's only. A rollback's count of a review edit is 5.12's (Open
+  questions).
