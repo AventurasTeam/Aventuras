@@ -278,10 +278,11 @@ that goes under an open window stops pressing. The entry link is
 **Commit banner,** its result held by `hooks/use-memory-run-toasts.ts`.
 
 - A `run_complete` for `CHAPTER_CLOSE_KIND` with `outcome: 'completed'`.
-  The event names no chapter or branch (`lib/pipeline/types.ts:72-81`),
-  so the handler takes the highest `sequenceNumber` in `chaptersStore`,
-  reads its report, and goes on only when `report.actionId` equals the
-  event's. It holds the result in `chapterOverlaysStore.closeResult`.
+  The event names no chapter or branch (`lib/pipeline/types.ts:76-85`),
+  so the handler reads the open branch's latest close report
+  (`readLatestCloseReport`) and goes on only when `report.actionId`
+  equals the event's. It holds the result in
+  `chapterOverlaysStore.closeResult`.
 - The close's progress banner turns into the done state, `Chapter
 closed: <title>` at the info tone. With stopped tasks it takes the
   warning tone, `Chapter closed, but <n> tasks stopped early`, with
@@ -589,18 +590,20 @@ closed: <title>` at info with no stopped task, and the warning tone
 - **An untargeted Not applied row** (a refused call that resolved no row)
   is named by a per-tool label (`chapters:review.tool.*`), falling back
   to `history:unknownTarget`, never a raw tool id. A test ties the labels
-  to the close's write tools. An empty `rows[].name` (a `set_pin` refused
-  by the common checks) takes the live store's name, else the table's
-  label.
+  to the close's write tools. An empty `rows[].name` (an id the close
+  couldn't name, such as a `set_pin` refused by the common checks) takes
+  the live store's name, else `history:unknownTarget`; an awareness row,
+  which has no name of its own, takes its table's label.
 - **The 5.9 merge.** `merge_happenings` and `set_pin`'s refusals gained
   keys and labels: five merge refusals reuse the thread-merge keys, with
   labels worded to fit both, and `set_pin`'s labels say "decay
   resistance", not "pin". A landed or skipped happening merge records
   keep's derived writes (`occurredAtEntryId`, `commonKnowledge`) in
-  `values`, since C4 takes new values from `values`. That also changes
+  `values`, since C4 takes new values from `values` (developer decision,
+  2026-11-14). That also changes
   later tasks' writes-so-far line, which now lists the anchor and the
   flag after the description, pinned by a test. A happening's link-row
-  losses are labelled through the link tables' labels.
+  losses are labelled through the link tables' labels (same decision).
 - **List length.** Unvirtualized. A 22-row report scrolled on the slot
   AVD with no review-specific jank (5.63% janky frames against the
   Timeline's own 8.16%, software emulator).
@@ -617,12 +620,15 @@ closed: <title>` at info with no stopped task, and the warning tone
 - A landed merge's link-row losses show under the kept happening with no
   character named (Decision 4), and C4's path-keyed `skippedFields` drops one when
   another link on the merge lands that path and collapses two
-  characters' losses on one path. Fixing it needs `skippedFields` to
-  carry a row, a C4 v1 shape change; see Open questions.
+  characters' losses on one path, kept as C4 states it (developer
+  decision, 2026-11-14). Fixing it needs `skippedFields` to carry a row,
+  a C4 v1 shape change; see Open questions.
 - A fork that copies chapter ids keeps the window open on a branch
-  switch. Unreachable until fork ships (M6.1).
-- The guard C7 records as inferred is E2E-run on the Timeline only; a
-  press over a dirty World pane is unit-covered.
+  switch: the review keys only `chapterId`, C7's signature (developer
+  decision, 2026-11-14). Unreachable until fork ships (M6.1).
+- The guard C7 records as inferred is E2E-run on the Timeline only. A
+  press over a dirty World pane is covered by the registration unit test
+  and was checked by hand; no test mounts World's own wiring.
 - The review window has no exit animation: the host unmounts it as the id
   clears (triage).
 
@@ -642,7 +648,8 @@ closed: <title>` at info with no stopped task, and the warning tone
 - **Every new refusal adds a key and a label.** A close-built reason goes
   through `keyedReason` with a `CLOSE_REASON_KEYS` member and a `t()`
   label under `chapters:review.reason`, or it reads `other` and logs a
-  warning. 5.12 and 5.13 follow that for anything they refuse.
+  warning. 5.12 and 5.13 follow that for any refusal a close records;
+  a refusal the action layer toasts never reaches the report.
 - **5.13 owns the re-run's footprint:** its group writes no `chapters`
   create, so `loadCloseDeltas`' range rule (create to report update) is a
   close's only. A rollback's count of a review edit is 5.12's (Open
