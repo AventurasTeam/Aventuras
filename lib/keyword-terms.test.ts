@@ -4,6 +4,7 @@ import {
   dedupeTerms,
   foldStackables,
   newTerms,
+  normalizeTerm,
   normalizeStackables,
   sameStackables,
 } from './keyword-terms'
@@ -24,6 +25,13 @@ describe('dedupeTerms', () => {
       'the innkeeper',
       'your brother',
     ])
+  })
+})
+
+describe('normalizeTerm', () => {
+  it('single-spaces, lowercases and composes', () => {
+    expect(normalizeTerm('  Grey \t\n Wolf ')).toBe('grey wolf')
+    expect(normalizeTerm('Zoe\u0308')).toBe('zoë')
   })
 })
 

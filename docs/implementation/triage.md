@@ -229,17 +229,6 @@ patch`, which 5.5a marks `restated`, so a close tool's write of it
   (`close-agent/read-tools.ts`), which `identity.ts` and
   `lib/retrieval/injection.ts` avoid with a code-unit compare. Raised in
   5.5b's review.
-- **Katakana with the long-vowel mark loses substring matching.**
-  `usesSubstringMatch` (`lib/retrieval/name-index.ts`) tests
-  `\p{Script=Katakana}`, but ー (U+30FC) is Script=Common and a letter,
-  so a term such as シルバー falls back to word-boundary anchoring:
-  `matchTerms('シルバーは笑った。', ['シルバー'])` returns nothing. That
-  contradicts
-  [`retrieval.md`](../memory/retrieval.md)'s rule that kana terms match
-  by substring, and it reaches the keyword scan and name suppression in
-  Japanese stories. A likely fix is `Script_Extensions=Katakana`.
-  Separately, `normalizeTerm` doesn't collapse internal whitespace, so a
-  query with a doubled space matches nothing. Raised in 5.5b's review.
 - **`code-conventions.md` doesn't name the pipeline's two import
   exceptions.** `eslint.config.js` lets `lib/pipeline` deep-import
   `actions/types.ts` and, since 5.5b, forbids a value import of the
