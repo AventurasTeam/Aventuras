@@ -766,11 +766,9 @@ function assembleCandidates(
     return vector
   }
 
-  const shared = () => ({
-    // Stale rows keep their old vector in vec0 and stay reachable by KNN, so
-    // each pool below drops them; everything that survives is fresh.
-    embeddingStale: false,
-  })
+  // Stale rows keep their old vector in vec0 and stay reachable by KNN, so
+  // each pool below drops them; everything that survives is fresh.
+  const embeddingStale = false
 
   switch (ctx.kind) {
     case 'entity': {
@@ -783,7 +781,7 @@ function assembleCandidates(
         const vector = vectorFor(r.id)
         const entity = measuredEntity(r, floor.views)
         return {
-          ...shared(),
+          embeddingStale,
           kind: 'entity' as const,
           id: r.id,
           displayName: r.name,
@@ -803,7 +801,7 @@ function assembleCandidates(
       return inPool(pool).map((r) => {
         const vector = vectorFor(r.id)
         return {
-          ...shared(),
+          embeddingStale,
           kind: 'lore' as const,
           id: r.id,
           displayName: r.title,
@@ -838,7 +836,7 @@ function assembleCandidates(
           ? { chaptersOld: 0, pinSignal: 0 }
           : happeningAge(rows, r.occurredAtEntryId, chapterAges)
         return {
-          ...shared(),
+          embeddingStale,
           kind: 'happening' as const,
           id: r.id,
           displayName: r.title,
@@ -869,7 +867,7 @@ function assembleCandidates(
       return inPool(pool).map((r) => {
         const vector = vectorFor(r.id)
         return {
-          ...shared(),
+          embeddingStale,
           kind: 'thread' as const,
           id: r.id,
           displayName: r.title,
@@ -893,7 +891,7 @@ function assembleCandidates(
       return inPool(fresh(sourceRows.chapters)).map((r) => {
         const vector = vectorFor(r.id)
         return {
-          ...shared(),
+          embeddingStale,
           kind: 'chapter' as const,
           id: r.id,
           displayName: r.title,
