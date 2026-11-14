@@ -89,7 +89,7 @@ describe('closeReviewNotApplied', () => {
         fieldLabel: 'Voice',
         summary: 'Flat',
         reasonKey: 'user-edited-since-prose',
-        reasonText: 'You changed this after the cited entry.',
+        reasonText: 'You changed this yourself, so the close left it.',
         pressTo: { table: 'entities', id: 'char_kael' },
       },
       {
@@ -101,7 +101,7 @@ describe('closeReviewNotApplied', () => {
         fieldLabel: 'Description',
         summary: 'A ranger.',
         reasonKey: 'user-edited-since-prose',
-        reasonText: 'You changed this after the cited entry.',
+        reasonText: 'You changed this yourself, so the close left it.',
         pressTo: { table: 'entities', id: 'char_kael' },
       },
     ])
