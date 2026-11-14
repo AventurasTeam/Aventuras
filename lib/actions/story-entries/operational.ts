@@ -310,7 +310,7 @@ async function resolveRollbackWindow(
 
 export type ResolvedSweep = {
   set: ReversalSet
-  clampOps: SqlOp[]
+  clampOps: readonly SqlOp[]
   /** The rollback window before the closure, newest first. */
   window: readonly Delta[]
   /** The pass or close holding the branch as the sweep resolved; its rows count nowhere. */
