@@ -433,7 +433,9 @@ describe('ChapterOverlaysHost — the review', () => {
     entryIndex.set(entryIndex.FAILED)
     renderHost()
     openWindow()
-    await waitFor(() => expect(view.props?.state.status).toBe('failed'))
+    await waitFor(() => expect(reads.kinds).toHaveBeenCalled())
+    await act(() => new Promise((resolve) => setTimeout(resolve, 0)))
+    expect(shown().state.status).toBe('failed')
     expect(reads.build).not.toHaveBeenCalled()
 
     const state = shown().state
