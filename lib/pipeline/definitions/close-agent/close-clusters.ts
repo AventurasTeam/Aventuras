@@ -12,11 +12,9 @@ export type ClusterInput = {
   /** Unit-norm, one dimension across all rows: `cosine` throws otherwise. */
   vector: Float32Array
   cast: ReadonlySet<string>
-  /** Index of its occurred_at entry among the range's non-system entries; null never clusters. */
-  anchorIndex: number | null
+  /** Index of its occurred_at entry among the range's non-system entries. */
+  anchorIndex: number
 }
-
-type Anchored = ClusterInput & { anchorIndex: number }
 
 // An empty cast shares nothing, so a row with no involvements clusters with nothing.
 function castOverlap(a: ReadonlySet<string>, b: ReadonlySet<string>): number {
@@ -29,14 +27,14 @@ function castOverlap(a: ReadonlySet<string>, b: ReadonlySet<string>): number {
 
 // The pair's cosine when it meets all three criteria, else null. Cheapest first: the cosine reads
 // every dim.
-function qualifyingCosine(a: Anchored, b: Anchored): number | null {
+function qualifyingCosine(a: ClusterInput, b: ClusterInput): number | null {
   if (Math.abs(a.anchorIndex - b.anchorIndex) > CLUSTER_ENTRY_SPAN_MAX) return null
   if (castOverlap(a.cast, b.cast) < CLUSTER_CAST_OVERLAP_MIN) return null
   const similarity = cosine(a.vector, b.vector)
   return similarity >= CLUSTER_COSINE_MIN ? similarity : null
 }
 
-const byAnchorThenId = (a: Anchored, b: Anchored): number =>
+const byAnchorThenId = (a: ClusterInput, b: ClusterInput): number =>
   a.anchorIndex - b.anchorIndex || (a.id < b.id ? -1 : a.id > b.id ? 1 : 0)
 
 type Pair = { first: number; second: number; similarity: number }
@@ -53,22 +51,20 @@ const strongestFirst = (a: Pair, b: Pair): number =>
  * first row.
  */
 export function findClusters(rows: readonly ClusterInput[]): string[][] {
-  const anchored = rows
-    .filter((row): row is Anchored => row.anchorIndex !== null)
-    .sort(byAnchorThenId)
+  const ordered = [...rows].sort(byAnchorThenId)
   const pairs: Pair[] = []
   const qualifying = new Set<number>()
-  const pairKey = (first: number, second: number): number => first * anchored.length + second
-  for (let first = 0; first < anchored.length; first++) {
-    for (let second = first + 1; second < anchored.length; second++) {
-      const similarity = qualifyingCosine(anchored[first], anchored[second])
+  const pairKey = (first: number, second: number): number => first * ordered.length + second
+  for (let first = 0; first < ordered.length; first++) {
+    for (let second = first + 1; second < ordered.length; second++) {
+      const similarity = qualifyingCosine(ordered[first], ordered[second])
       if (similarity === null) continue
       pairs.push({ first, second, similarity })
       qualifying.add(pairKey(first, second))
     }
   }
 
-  const clusterOf = anchored.map((_, index) => [index])
+  const clusterOf = ordered.map((_, index) => [index])
   for (const { first, second } of pairs.sort(strongestFirst)) {
     const left = clusterOf[first]
     const right = clusterOf[second]
@@ -85,5 +81,5 @@ export function findClusters(rows: readonly ClusterInput[]): string[][] {
     .filter((members) => members.length >= 2)
     .map((members) => [...members].sort((a, b) => a - b))
     .sort((a, b) => a[0] - b[0])
-    .map((members) => members.map((index) => anchored[index].id))
+    .map((members) => members.map((index) => ordered[index].id))
 }

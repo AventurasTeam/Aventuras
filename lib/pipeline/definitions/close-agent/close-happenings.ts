@@ -36,7 +36,7 @@ export type CloseEmbedDeps = Pick<SyncStageDeps, 'revalidateRows' | 'embedRows'>
   dim: number
 }
 
-type RangeHappening = { id: string; anchorIndex: number | null }
+type RangeHappening = { id: string; anchorIndex: number }
 
 let testDeps: CloseEmbedDeps | undefined
 
@@ -82,11 +82,13 @@ async function readRangeHappenings(ctx: CodeStepContext): Promise<RangeHappening
       .select({ id: happenings.id, occurredAtEntryId: happenings.occurredAtEntryId })
       .from(happenings)
       .where(and(eq(happenings.branchId, ctx.branchId), inArray(happenings.occurredAtEntryId, ids)))
-    for (const { id, occurredAtEntryId } of found)
-      rows.push({
-        id,
-        anchorIndex: occurredAtEntryId === null ? null : (indexOf.get(occurredAtEntryId) ?? null),
-      })
+    for (const { id, occurredAtEntryId } of found) {
+      // NULL matches no IN list, so a row with no anchor never reaches the clusters.
+      const anchorIndex = occurredAtEntryId === null ? undefined : indexOf.get(occurredAtEntryId)
+      if (anchorIndex === undefined)
+        throw new Error(`range embed: happening ${id} has no anchor in the range`)
+      rows.push({ id, anchorIndex })
+    }
   }
   return rows
 }

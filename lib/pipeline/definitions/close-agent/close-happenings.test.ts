@@ -120,6 +120,7 @@ async function seedHappening({
     title,
     description,
     occurredAtEntryId: at,
+    temporal: at === null ? 'Before the river froze' : null,
     createdAt: 1,
     updatedAt: 1,
     embeddingStale: embedded ? 0 : 1,
@@ -359,6 +360,26 @@ describe('the range embed', () => {
       'memory.close_range_embed',
       expect.objectContaining({ happenings: 2, unembedded: 1, clusters: 0 }),
     )
+  })
+
+  it('neither embeds nor clusters a temporal row, which has no anchor in the range', async () => {
+    await seedPair()
+    // The pair's cast, and a vector between theirs: only its missing anchor keeps it out.
+    await seedHappening({
+      id: H3,
+      title: 'The ferry runs at dusk',
+      at: null,
+      cast: [WREN, TOBIN],
+      vector: unitAt(0.1),
+    })
+    const { embedded } = script()
+    const phase = phaseOf()
+
+    expect(await runStep(phase)).toEqual({ status: 'completed' })
+
+    expect(embedded.map((ids) => [...ids].sort())).toEqual([[H1, H2]])
+    expect(closeClustersOf(phase.intermediates)).toEqual([[H1, H2]])
+    expect(await staleOf()).toEqual({ [H1]: 0, [H2]: 0, [H3]: 1 })
   })
 
   it.each([
