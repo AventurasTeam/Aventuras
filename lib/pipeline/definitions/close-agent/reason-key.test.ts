@@ -36,14 +36,14 @@ function shown() {
   ids.show(LORE_A, 'The toll law')
   const readSet = createReadSet()
   readSet.add([{ table: 'entities', id: CHAR_A }])
-  return { ids, taskEntryIds: [ENTRY_1], readSet }
+  return { ids, taskEntryIds: [ENTRY_1], readSet, survivorOf: () => undefined }
 }
 
 function checkReason(turns: unknown, why: unknown, unread = false): string {
   const ctx = shown()
   const named: GuardRow[] = unread ? [{ table: 'lore', id: LORE_A }] : []
   const check = commonChecks({ turns, why }, named, ctx)
-  if (check.ok) throw new Error('commonChecks passed')
+  if (check.ok || check.reason === undefined) throw new Error('commonChecks gave no reason')
   return check.reason
 }
 

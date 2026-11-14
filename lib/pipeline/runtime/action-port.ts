@@ -21,6 +21,11 @@ export type DeltaActionPort = {
   ) => Promise<GroupOutcome>
   /** C12 and user precedence for the listed rows, read once. */
   readRowGuard: (args: RowGuardArgs, ctx: DbCtx) => Promise<RowGuard>
+  /** Whether the user deleted any of the happening's link rows after the prose. */
+  userDeletedHappeningLink: (
+    args: { branchId: string; happeningId: string; proseEntryId: string },
+    ctx: Pick<DbCtx, 'db'>,
+  ) => Promise<boolean>
   reverseReplayDeltas: (
     actionId: string,
     ctx: DbCtx,
@@ -74,6 +79,12 @@ export function readRowGuard(
   ...args: Parameters<DeltaActionPort['readRowGuard']>
 ): ReturnType<DeltaActionPort['readRowGuard']> {
   return requirePort().readRowGuard(...args)
+}
+
+export function userDeletedHappeningLink(
+  ...args: Parameters<DeltaActionPort['userDeletedHappeningLink']>
+): ReturnType<DeltaActionPort['userDeletedHappeningLink']> {
+  return requirePort().userDeletedHappeningLink(...args)
 }
 
 export function reverseReplayDeltas(

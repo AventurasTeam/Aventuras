@@ -9,6 +9,7 @@ const RANGE_KEY = 'closeRange'
 const PARTS_KEY = 'closeParts'
 const LEDGER_KEY = 'closeLedger'
 const IDS_KEY = 'closeIds'
+const CLUSTERS_KEY = 'closeClusters'
 
 export function setCloseRange(intermediates: Record<string, unknown>, range: CloseRange): void {
   intermediates[RANGE_KEY] = range
@@ -81,4 +82,27 @@ export function closeIdsOf(intermediates: Record<string, unknown>): CloseIds {
   const ids = new CloseIds()
   intermediates[IDS_KEY] = ids
   return ids
+}
+
+/** chapter-close.md → 3e: the clusters the range embed found, for the Happenings task's start. */
+export function setCloseClusters(
+  intermediates: Record<string, unknown>,
+  clusters: readonly (readonly string[])[],
+): void {
+  intermediates[CLUSTERS_KEY] = clusters
+}
+
+/** Happening id clusters the range embed found; [] when none or not run. */
+export function closeClustersOf(
+  intermediates: Record<string, unknown>,
+): readonly (readonly string[])[] {
+  return (intermediates[CLUSTERS_KEY] as readonly (readonly string[])[] | undefined) ?? []
+}
+
+/** The cluster the range embed put `happeningId` in; undefined when none. */
+export function closeClusterOf(
+  intermediates: Record<string, unknown>,
+  happeningId: string,
+): readonly string[] | undefined {
+  return closeClustersOf(intermediates).find((cluster) => cluster.includes(happeningId))
 }

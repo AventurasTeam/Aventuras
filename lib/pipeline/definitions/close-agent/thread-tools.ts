@@ -9,6 +9,7 @@ import { keyedReason } from './reason-key'
 import { turnHandleIn, turnInTextReason } from './text-checks'
 import {
   DELETE_PATH,
+  protectedField,
   writeToolSchema,
   type LostField,
   type PlannedAction,
@@ -119,13 +120,6 @@ function threadRows(
     name: stored.get(id)?.title ?? ctx.ids.nameOfId(id) ?? '',
   }))
 }
-
-const protectedField = (field: string, row: string, reason: ProtectionReason): LostField => ({
-  field,
-  row,
-  kind: 'protected',
-  reason,
-})
 
 /**
  * A status change can't precede its thread: a cited turn before the opening stores the opening
@@ -316,7 +310,7 @@ async function planMergeThreads(args: MergeArgs, ctx: WriteContext): Promise<Wri
       ? {}
       : { description: description.bounded }),
   }
-  // Each of the threads tried as keep, so a refusal's advice names only a merge that would land.
+  // Advice names the keeps keepFault and the close-wrote rule allow; the row guard may skip one.
   const merged = [kept, ...absorbed]
   const held = mergedThreads(merged)
   const fitting = merged.filter((row) => keepFault(row, held) === undefined)

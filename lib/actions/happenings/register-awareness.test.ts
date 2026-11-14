@@ -4,11 +4,13 @@ import { describe, expect, it, vi } from 'vitest'
 import type { Delta, HappeningAwareness } from '@/lib/db'
 import { branches, deltas, entities, happeningAwareness, happenings, stories } from '@/lib/db'
 import { createTestDb } from '@/lib/db/__tests__/test-db'
+import { loadHistoryChunk } from '@/lib/history'
+import { isRetrievalBumpOnly } from '@/lib/row-signals'
 import { happeningAwarenessStore } from '@/lib/stores'
 
 import { registerHappeningAwareness } from './register-awareness'
 import { registerHappenings } from './register-happenings'
-import { applyDeltaAction } from '../delta/apply-delta-action'
+import { applyDeltaAction, applyDeltaActionGroupWithOutcomes } from '../delta/apply-delta-action'
 import { __resetRegistry } from '../delta/registry'
 import { reverseReplayDeltas } from '../delta/reverse-replay'
 import { USER_EDITED_SINCE_PROSE } from '../delta/user-precedence'
@@ -637,6 +639,188 @@ describe('bumpAwarenessRetrieval', () => {
   })
 })
 
+function reset(
+  id: string,
+  priorCount: number,
+  opts: { payloadBranchId?: string; actionId?: string } = {},
+) {
+  return {
+    action: {
+      kind: 'resetAwarenessRetrieval' as const,
+      source: 'chapter_close' as const,
+      payload: { branchId: opts.payloadBranchId ?? BRANCH, id, priorCount },
+    },
+    actionId: opts.actionId ?? 'act_reset',
+    branchId: BRANCH,
+  }
+}
+
+// chapter-close.md → 3d: counts are per chapter, so the close zeroes them after its last task.
+describe('resetAwarenessRetrieval', () => {
+  it('zeroes the count and mirrors it into the working-set store', async () => {
+    const { ctx } = await setup([awarenessRow('haw_1', 6)])
+
+    expect(await applyDeltaAction(reset('haw_1', 6), ctx)).toMatchObject({ status: 'ok' })
+
+    expect(await countOf(ctx, 'haw_1')).toBe(0)
+    expect(happeningAwarenessStore.getById('haw_1')?.retrievalCount).toBe(0)
+  })
+
+  it('logs one update whose undo payload is the prior count alone, which reads as a bump', async () => {
+    const { ctx } = await setup([awarenessRow('haw_1', 6)])
+
+    await applyDeltaAction(reset('haw_1', 6), ctx)
+
+    const rows = await deltaRows(ctx)
+    expect(rows).toHaveLength(1)
+    expect(rows[0]).toMatchObject({
+      targetTable: 'happening_awareness',
+      targetId: 'haw_1',
+      op: 'update',
+      source: 'chapter_close',
+      actionId: 'act_reset',
+    })
+    expect(rows[0].undoPayload).toEqual({ retrievalCount: 6 })
+    expect(isRetrievalBumpOnly(rows[0].op, rows[0].undoPayload)).toBe(true)
+  })
+
+  it('reverse-replay restores the prior count', async () => {
+    const { ctx } = await setup([awarenessRow('haw_1', 6)])
+    await applyDeltaAction(reset('haw_1', 6), ctx)
+
+    expect(await reverseReplayDeltas('act_reset', ctx)).toBe(1)
+
+    expect(await countOf(ctx, 'haw_1')).toBe(6)
+    expect(happeningAwarenessStore.getById('haw_1')?.retrievalCount).toBe(6)
+  })
+
+  it('no-ops a count already at zero, logging nothing', async () => {
+    const { ctx } = await setup([awarenessRow('haw_1', 0)])
+
+    const result = await applyDeltaActionGroupWithOutcomes(
+      [reset('haw_1', 0).action],
+      { actionId: 'act_reset', branchId: BRANCH },
+      ctx,
+    )
+
+    expect(result).toEqual({
+      status: 'ok',
+      outcomes: [{ status: 'noop', reason: 'retrieval count already zero', mark: 'restated' }],
+    })
+    expect(await deltaRows(ctx)).toEqual([])
+  })
+
+  it('rejects a branch mismatch and leaves the count alone', async () => {
+    const { ctx } = await setup([awarenessRow('haw_1', 6)])
+
+    const result = await applyDeltaAction(reset('haw_1', 6, { payloadBranchId: 'br_other' }), ctx)
+
+    expect(result).toEqual({
+      status: 'rejected',
+      reason: `branch mismatch: delta ${BRANCH} vs target br_other`,
+    })
+    expect(await countOf(ctx, 'haw_1')).toBe(6)
+    expect(await deltaRows(ctx)).toEqual([])
+  })
+
+  // The reset refuses an invalid priorCount before any write or delta.
+  it.each([NaN, -3, 2.5])(
+    'rejects a priorCount of %s without writing or logging',
+    async (prior) => {
+      const { ctx } = await setup([awarenessRow('haw_1', 6)])
+
+      const result = await applyDeltaAction(reset('haw_1', prior), ctx)
+
+      expect(result).toEqual({
+        status: 'rejected',
+        reason: 'invalid reset: priorCount must be a non-negative integer',
+      })
+      expect(await countOf(ctx, 'haw_1')).toBe(6)
+      expect(await deltaRows(ctx)).toEqual([])
+    },
+  )
+
+  // The branch check runs first: a zero count on a foreign branch is a mismatch, not a restatement.
+  it('checks the branch before the zero-count noop', async () => {
+    const { ctx } = await setup([awarenessRow('haw_1', 0)])
+
+    const result = await applyDeltaAction(reset('haw_1', 0, { payloadBranchId: 'br_other' }), ctx)
+
+    expect(result).toEqual({
+      status: 'rejected',
+      reason: `branch mismatch: delta ${BRANCH} vs target br_other`,
+    })
+  })
+
+  it('reads nothing, so its cost does not scale with the rows it resets', async () => {
+    const { ctx } = await setup([
+      awarenessRow('haw_1', 2),
+      awarenessRow('haw_2', 3),
+      awarenessRow('haw_3', 4),
+    ])
+    const select = vi.spyOn(ctx.db, 'select')
+
+    await applyDeltaAction(reset('haw_1', 2), ctx)
+    const afterOne = select.mock.calls.length
+    await applyDeltaAction(reset('haw_2', 3), ctx)
+    await applyDeltaAction(reset('haw_3', 4), ctx)
+
+    // applyDeltaAction's own readback is the one read; the handler adds none.
+    const READS_PER_RESET = 1
+    expect(afterOne).toBe(READS_PER_RESET)
+    expect(select.mock.calls.length).toBe(READS_PER_RESET * 3)
+    expect(await countOf(ctx, 'haw_3')).toBe(0)
+  })
+
+  it('resets only the run branch when both branches carry the id', async () => {
+    const { ctx } = await setup([
+      awarenessRow('haw_1', 9, { branchId: OTHER_BRANCH }),
+      awarenessRow('haw_1', 4),
+    ])
+
+    await applyDeltaAction(reset('haw_1', 4), ctx)
+
+    expect(await countOf(ctx, 'haw_1')).toBe(0)
+    expect(await countOf(ctx, 'haw_1', OTHER_BRANCH)).toBe(9)
+  })
+
+  it("stays out of the happening's History while the pair's edits show", async () => {
+    const { db, ctx } = await setup()
+    const write = (action: PipelineAction, actionId: string) =>
+      applyDeltaAction({ action, actionId, branchId: BRANCH }, ctx)
+    const userUpsert = (fields: { retrievalCount?: number; source?: string }): PipelineAction => ({
+      kind: 'upsertHappeningAwareness',
+      source: 'user_edit',
+      payload: {
+        branchId: BRANCH,
+        characterId: 'char_a',
+        happeningId: 'hap_1',
+        proseEntryId: null,
+        ...fields,
+      },
+    })
+    await write(userUpsert({ retrievalCount: 6 }), 'act_create')
+    const [row] = await awarenessRows(db, 'char_a', 'hap_1')
+    expect((await applyDeltaAction(reset(row.id, 6), ctx)).status).toBe('ok')
+    await write(userUpsert({ source: 'told' }), 'act_source')
+
+    const chunk = await loadHistoryChunk(db, {
+      branchId: BRANCH,
+      targetTable: 'happenings',
+      targetId: 'hap_1',
+      sort: 'newest',
+      cursor: null,
+    })
+
+    expect(chunk.rows.map((r) => r.delta.actionId)).toEqual(['act_source', 'act_create'])
+    expect((await deltaRows(ctx)).map((d) => d.actionId)).toEqual([
+      'act_create',
+      'act_reset',
+      'act_source',
+    ])
+  })
+})
+
 describe('upsertHappeningAwareness retrievalCount', () => {
   const upsert = (
     source: 'user_edit' | 'ai_classifier',
@@ -779,6 +963,198 @@ describe('upsertHappeningAwareness retrievalCount', () => {
   )
 })
 
+// chapter-close.md → 3e: a merge folds awareness per character, moving the earliest learned_at and
+// the summed count onto the kept row's pair.
+describe("upsertHappeningAwareness from a close's merge", () => {
+  type Db = Awaited<ReturnType<typeof setup>>['db']
+
+  const STANDING: HappeningAwareness = {
+    id: 'haw_1',
+    branchId: BRANCH,
+    happeningId: 'hap_1',
+    characterId: 'char_a',
+    learnedAtEntryId: 'entry_3',
+    decayResistance: 0.2,
+    retrievalCount: 4,
+    source: 'told',
+  }
+
+  const upsert = (
+    source: DeltaSource,
+    fields: {
+      learnedAtEntryId?: string | null
+      retrievalCount?: number
+      decayResistance?: number
+      source?: string
+    },
+    happeningId = 'hap_1',
+  ): PipelineAction => ({
+    kind: 'upsertHappeningAwareness',
+    source,
+    payload: {
+      branchId: BRANCH,
+      characterId: 'char_a',
+      happeningId,
+      proseEntryId: null,
+      ...fields,
+    },
+  })
+
+  const run = (ctx: Ctx, action: PipelineAction, actionId = 'act_m') =>
+    applyDeltaAction({ action, actionId, branchId: BRANCH }, ctx)
+
+  // lessons-learned → Drizzle drops unknown keys: the store patch is where a leaked key shows.
+  async function storeMatchesDb(db: Db, id: string): Promise<HappeningAwareness> {
+    const [row] = await db.select().from(happeningAwareness).where(eq(happeningAwareness.id, id))
+    expect(happeningAwarenessStore.getById(id)).toEqual(row)
+    return row
+  }
+
+  const addFlood = (db: Db) =>
+    db
+      .insert(happenings)
+      .values({ id: 'hap_2', branchId: BRANCH, title: 'The flood', createdAt: 1, updatedAt: 1 })
+
+  it('moves learned_at and the count on a standing pair, and reverse-replay restores both', async () => {
+    const { db, ctx } = await setup([STANDING])
+
+    expect(
+      await run(ctx, upsert('chapter_close', { learnedAtEntryId: 'entry_1', retrievalCount: 9 })),
+    ).toMatchObject({ status: 'ok' })
+
+    expect(await storeMatchesDb(db, 'haw_1')).toMatchObject({
+      learnedAtEntryId: 'entry_1',
+      retrievalCount: 9,
+      decayResistance: 0.2,
+      source: 'told',
+    })
+    const [delta] = (await db.select().from(deltas)) as Delta[]
+    expect(delta.undoPayload).toEqual({ learnedAtEntryId: 'entry_3', retrievalCount: 4 })
+
+    expect(await reverseReplayDeltas('act_m', ctx)).toBe(1)
+    expect(await storeMatchesDb(db, 'haw_1')).toMatchObject({
+      learnedAtEntryId: 'entry_3',
+      retrievalCount: 4,
+    })
+  })
+
+  it('takes learned_at and the count on a create', async () => {
+    const { db, ctx } = await setup()
+
+    await run(
+      ctx,
+      upsert('chapter_close', {
+        learnedAtEntryId: 'entry_2',
+        retrievalCount: 6,
+        decayResistance: 0.4,
+        source: 'told; overheard',
+      }),
+    )
+
+    const [row] = await awarenessRows(db, 'char_a', 'hap_1')
+    expect(row).toMatchObject({
+      learnedAtEntryId: 'entry_2',
+      retrievalCount: 6,
+      decayResistance: 0.4,
+      source: 'told; overheard',
+    })
+    expect(happeningAwarenessStore.getById(row.id)).toEqual(row)
+  })
+
+  it('leaves learned_at and the count as they stand when a close write names neither', async () => {
+    const { db, ctx } = await setup([STANDING])
+
+    await run(ctx, upsert('chapter_close', { decayResistance: 0.9 }))
+
+    expect(await storeMatchesDb(db, 'haw_1')).toMatchObject({
+      learnedAtEntryId: 'entry_3',
+      retrievalCount: 4,
+      decayResistance: 0.9,
+    })
+    const [delta] = (await db.select().from(deltas)) as Delta[]
+    expect(delta.undoPayload).toEqual({ decayResistance: 0.2 })
+  })
+
+  it('moves neither for a periodic classifier, on a standing pair or a new one', async () => {
+    const { db, ctx } = await setup([STANDING])
+
+    expect(
+      await run(
+        ctx,
+        upsert('periodic_classifier', {
+          learnedAtEntryId: 'entry_1',
+          retrievalCount: 9,
+          source: 'heard',
+        }),
+      ),
+    ).toMatchObject({ status: 'ok' })
+
+    expect(await storeMatchesDb(db, 'haw_1')).toMatchObject({
+      learnedAtEntryId: 'entry_3',
+      retrievalCount: 4,
+      source: 'heard',
+    })
+    const [delta] = (await db.select().from(deltas)) as Delta[]
+    expect(delta.undoPayload).toEqual({ source: 'told' })
+
+    await addFlood(db)
+    await run(ctx, upsert('periodic_classifier', { retrievalCount: 9 }, 'hap_2'), 'act_p2')
+    expect((await awarenessRows(db, 'char_a', 'hap_2'))[0].retrievalCount).toBe(0)
+  })
+
+  it('still refuses a count-only update from a periodic classifier', async () => {
+    const { ctx } = await setup([STANDING])
+
+    expect(await run(ctx, upsert('periodic_classifier', { retrievalCount: 9 }))).toEqual({
+      status: 'rejected',
+      reason: 'no awareness fields to merge',
+    })
+  })
+
+  it('lands a count-only pair inside a group without refusing the group', async () => {
+    const { db, ctx } = await setup([STANDING])
+    await addFlood(db)
+
+    const result = await applyDeltaActionGroupWithOutcomes(
+      [
+        upsert('chapter_close', { retrievalCount: 9 }),
+        upsert('chapter_close', { retrievalCount: 2, learnedAtEntryId: 'entry_5' }, 'hap_2'),
+      ],
+      { actionId: 'act_m', branchId: BRANCH },
+      ctx,
+    )
+
+    expect(result).toEqual({
+      status: 'ok',
+      outcomes: [{ status: 'landed' }, { status: 'landed' }],
+    })
+    expect(await storeMatchesDb(db, 'haw_1')).toMatchObject({
+      retrievalCount: 9,
+      learnedAtEntryId: 'entry_3',
+    })
+    expect((await awarenessRows(db, 'char_a', 'hap_2'))[0]).toMatchObject({
+      retrievalCount: 2,
+      learnedAtEntryId: 'entry_5',
+    })
+  })
+
+  it('no-ops a count-only pair whose count already stands, and its group still lands', async () => {
+    const { db, ctx } = await setup([STANDING])
+
+    const result = await applyDeltaActionGroupWithOutcomes(
+      [upsert('chapter_close', { retrievalCount: 4 })],
+      { actionId: 'act_m', branchId: BRANCH },
+      ctx,
+    )
+
+    expect(result).toEqual({
+      status: 'ok',
+      outcomes: [{ status: 'noop', reason: 'awareness unchanged', mark: 'restated' }],
+    })
+    expect(await db.select().from(deltas)).toEqual([])
+  })
+})
+
 // cadence.md → User edits and classifier writes: what the user wrote after the prose stands.
 describe('upsertHappeningAwareness under user precedence', () => {
   const PROSE = 'e_prose'
@@ -826,7 +1202,13 @@ describe('upsertHappeningAwareness under user precedence', () => {
     )
   const upsert = (
     source: DeltaSource,
-    fields: { source?: string; decayResistance?: number; proseEntryId?: string | null },
+    fields: {
+      source?: string
+      decayResistance?: number
+      learnedAtEntryId?: string | null
+      retrievalCount?: number
+      proseEntryId?: string | null
+    },
     characterId = 'char_a',
   ): PipelineAction => ({
     kind: 'upsertHappeningAwareness',
@@ -985,5 +1367,45 @@ describe('upsertHappeningAwareness under user precedence', () => {
       ).status,
     ).toBe('ok')
     expect(await pair(db)).toMatchObject({ source: 'told by Jorin', decayResistance: 0.8 })
+  })
+
+  // chapter-close.md → 3e: a value the user wrote on the kept row's pair stands; the merge lands.
+  it("keeps a learned-at the user wrote after the prose under a close's merge, and lands the count", async () => {
+    const { db, ctx } = await setupWithProse([PASS_ROW])
+    await writeProse(ctx)
+    await run(ctx, upsert('user_edit', { learnedAtEntryId: 'e_user' }), 'act_u')
+
+    const merge = upsert('chapter_close', {
+      learnedAtEntryId: PROSE,
+      retrievalCount: 5,
+      proseEntryId: PROSE,
+    })
+    expect((await run(ctx, merge, 'act_m')).status).toBe('ok')
+
+    expect(await pair(db)).toMatchObject({ learnedAtEntryId: 'e_user', retrievalCount: 5 })
+    const [logged] = await db.select().from(deltas).where(eq(deltas.actionId, 'act_m'))
+    expect(logged.undoPayload).toEqual({ retrievalCount: 0 })
+  })
+
+  it('writes nothing, the count included, into a pair the user created after the prose', async () => {
+    const { db, ctx } = await setupWithProse()
+    await writeProse(ctx)
+    await run(ctx, upsert('user_edit', { source: 'saw the smoke' }), 'act_u')
+
+    const merge = upsert('chapter_close', {
+      learnedAtEntryId: PROSE,
+      retrievalCount: 5,
+      decayResistance: 0.9,
+      proseEntryId: PROSE,
+    })
+    expect(await run(ctx, merge, 'act_m')).toEqual(userWon)
+
+    expect(await pair(db)).toMatchObject({
+      learnedAtEntryId: null,
+      retrievalCount: 0,
+      decayResistance: null,
+      source: 'saw the smoke',
+    })
+    expect(await db.select().from(deltas).where(eq(deltas.actionId, 'act_m'))).toEqual([])
   })
 })

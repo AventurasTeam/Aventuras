@@ -44,6 +44,8 @@ export type ToolContext = {
   readonly readFields: ReadFields
   /** A landed merge's kept row for a row this close absorbed. */
   readonly survivorOf: (table: string, id: string) => { table: string; id: string } | undefined
+  /** The cluster the range embed put this happening in; undefined when none. */
+  readonly clusterOf: (happeningId: string) => readonly string[] | undefined
   /** The ledger's landed (`ok`) calls of `tool` so far, across tasks and parts. */
   readonly landedCalls: (tool: Pick<CloseTool, 'name'>) => number
 }
@@ -72,8 +74,9 @@ export type PlannedAction = {
    * - A create's action and its LostFields: the table name, since a minted id has no handle unless
    *   the create lands.
    * - A link row (involvement, awareness): the character it links, as
-   *   `${characterId} on ${happeningId}` only when the call spans several happenings. Never the
-   *   link row's own id: `hinv_` has no handle, and a character tells the model more than an `aw`.
+   *   `${characterId} on ${happeningId}` only when the call's link writes span several happenings.
+   *   Never the link row's own id: `hinv_` has no handle, and a character tells the model more than
+   *   an `aw`.
    * - Else the row's table name.
    */
   readonly row: string
@@ -88,6 +91,16 @@ export type LostField = {
   | { readonly kind: 'protected'; readonly reason: ProtectionReason }
   | { readonly kind: 'refused'; readonly reason: string }
 )
+export const protectedField = (
+  field: string,
+  row: string,
+  reason: ProtectionReason,
+): LostField => ({
+  field,
+  row,
+  kind: 'protected',
+  reason,
+})
 export type WritePlan =
   | {
       kind: 'refused'

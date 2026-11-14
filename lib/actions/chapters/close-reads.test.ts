@@ -1,17 +1,18 @@
-import { eq, sql } from 'drizzle-orm'
+import { eq } from 'drizzle-orm'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import type { generateStructured } from '@/lib/ai'
-import { chapters, type DbCtx } from '@/lib/db'
+import { chapters } from '@/lib/db'
 import { expectRan, resetSingletons } from '@/lib/pipeline/__tests__/harness'
 import {
   metadataReplyResult,
   openCloseFixture,
+  queryAllOn,
   type CloseFixture,
 } from '@/lib/pipeline/definitions/__tests__/close-fixture'
 import { __setCloseAgentSlots, NO_CLOSE_TASKS } from '@/lib/pipeline/definitions/close-agent/slots'
 import { readRecentEntryIds } from '@/lib/pipeline/definitions/entry-reads'
-import { readPromptBuffer, type BufferSettings, type QueryAll } from '@/lib/retrieval'
+import { readPromptBuffer, type BufferSettings } from '@/lib/retrieval'
 import { loadChapterRanges } from '@/lib/retrieval/source-rows'
 
 import { startManualClose } from './start-manual-close'
@@ -56,18 +57,6 @@ async function buffer(fx: CloseFixture, settings: BufferSettings): Promise<strin
   return (await readPromptBuffer(fx.ctx.db, fx.branchId, settings)).map((row) => row.id)
 }
 
-// The app's positional query seam over the fixture's db, binding each `?` in order.
-function queryAllOn(db: DbCtx['db']): QueryAll {
-  return async (query, params) => {
-    const [head, ...rest] = query.split('?')
-    const statement = sql.join([
-      sql.raw(head),
-      ...rest.flatMap((piece, i) => [sql`${params[i]}`, sql.raw(piece)]),
-    ])
-    return db.all<unknown[]>(statement)
-  }
-}
-
 describe('reads after a close', () => {
   it('readPromptBuffer follows the Composition rule from the new boundary', async () => {
     const fx = await openCloseFixture({ turns: TURNS })
@@ -106,7 +95,7 @@ describe('reads after a close', () => {
     expect(await readRecentEntryIds(fx.ctx.db, fx.branchId, bounds)).toEqual(new Set(current))
   })
 
-  it('loadChapterRanges returns every stamped entry of the range', async () => {
+  it('loadChapterRanges returns every stamped entry of the range, each in chapter 1 of 2', async () => {
     const fx = await openCloseFixture({ turns: TURNS })
     const { closed } = await close(fx)
     const [chapter] = await fx.ctx.db
@@ -114,8 +103,9 @@ describe('reads after a close', () => {
       .from(chapters)
       .where(eq(chapters.branchId, fx.branchId))
 
-    const ranges = await loadChapterRanges(queryAllOn(fx.ctx.db), fx.branchId)
+    const { ranges, ages } = await loadChapterRanges(queryAllOn(fx.ctx.db), fx.branchId)
 
     expect(ranges).toEqual(new Map([[chapter.id, new Set(closed)]]))
+    expect(ages).toEqual({ sequenceOf: new Map(closed.map((id) => [id, 1])), current: 2 })
   })
 })

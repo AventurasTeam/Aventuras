@@ -30,7 +30,7 @@ export function applyMigration(sqlite: DatabaseSync, tag: string): void {
 // must return rows as arrays-of-values, not as objects. Mirrors the desktop
 // (Electron main) adapter: 'get' returns the single row directly so drizzle
 // decodes it as a row rather than an array-of-rows.
-function makeCallback(sqlite: DatabaseSync) {
+export function makeCallback(sqlite: DatabaseSync) {
   return async (
     sql: string,
     params: unknown[],

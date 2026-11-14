@@ -10,6 +10,7 @@ import {
 } from '@/lib/actions/delta/branch-write-lock'
 import { describeDeltaReplayError, reverseReplayDeltas } from '@/lib/actions/delta/reverse-replay'
 import { readRowGuard } from '@/lib/actions/delta/row-guard'
+import { userDeletedHappeningLink } from '@/lib/actions/delta/user-precedence'
 import { __resetBranchQueues } from '@/lib/actions/turns/branch-queue'
 import { branches, stories } from '@/lib/db'
 import { createTestDb } from '@/lib/db/__tests__/test-db'
@@ -58,6 +59,7 @@ export function realDeltaActionPort(): DeltaActionPort {
     applyDeltaAction,
     applyDeltaActionGroupWithOutcomes,
     readRowGuard,
+    userDeletedHappeningLink,
     reverseReplayDeltas,
     describeReplayError: describeDeltaReplayError,
     settleUserWrites,

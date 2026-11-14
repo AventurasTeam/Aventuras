@@ -3,28 +3,26 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 
 import { applyDeltaAction } from '@/lib/actions/delta/apply-delta-action'
 import { readRowGuard } from '@/lib/actions/delta/row-guard'
-import { USER_EDITED_SINCE_PROSE, type GroupOutcome, type GuardRow } from '@/lib/actions/types'
+import { USER_EDITED_SINCE_PROSE, type GuardRow } from '@/lib/actions/types'
 import { clampEmbeddedText } from '@/lib/classifier'
 import { branches, deltas, lore, type Lore } from '@/lib/db'
 import { resetAllStores } from '@/lib/stores'
 
-import { createReadSet } from './common-checks'
-import { dispatchToolCall, type DispatchContext } from './dispatch'
 import { CloseIds } from './ids'
-import { CloseLedgerWriter } from './ledger'
+import type { CloseLedgerWriter } from './ledger'
 import { createLoreTool, LORE_BODY_LIMIT, updateLoreTool } from './lore-tools'
 import { readRowTool } from './read-tools'
 import { turnInTextReason } from './text-checks'
 import { assertReplaySafe, type CloseTool, type ReadFields, type WriteContext } from './tool'
 import { CLOSE_REASON } from './verdict'
-import { expectRan } from '../../__tests__/harness'
-import { definePipeline } from '../../authoring/define'
-import { getPipelineSafe } from '../../authoring/registry'
-import { runPipeline } from '../../runtime/orchestrator'
-import type { PhaseContext, PhaseEmittedEvent, PhaseResult, TxResult } from '../../types'
+import {
+  runDispatchCalls,
+  shownOf,
+  type DispatchRun,
+  type DispatchSetup,
+  type ScriptedCall,
+} from '../__tests__/close-dispatch'
 import { openCloseFixture, type CloseFixture } from '../__tests__/close-fixture'
-import { closeIdsOf, seedCloseLedger } from '../close-intermediates'
-import type { CloseLedger } from '../intermediates'
 
 // ---- Fixture helpers: lore rows on openCloseFixture and a scripted Lore-task dispatch. ----
 
@@ -127,129 +125,43 @@ const cite = (turns: readonly string[] = ['t7'], why = 'The ferryman names the t
   why,
 })
 
-/** `part`: the part the call runs in, the run's by default; one run is one close, whatever the part. */
-type ScriptedCall = { toolName: string; input: Record<string, unknown>; part?: number }
-type ShownRow = { id: string; name: string }
-type LoreRun = {
-  result: TxResult
-  /** What each call answered the model, in order. */
-  answers: readonly unknown[]
-  /** The ledger: what `setup` recorded, then each scripted call. */
-  calls: CloseLedger['calls']
-  writer: CloseLedgerWriter
-}
-type Pending = {
-  fixture: CloseFixture
-  calls: readonly ScriptedCall[]
-  shown: readonly ShownRow[]
-  seeds: readonly GuardRow[]
-  part: number
-  setup?: (ids: CloseIds, writer: CloseLedgerWriter) => void
-  answers: unknown[]
-  ledger?: CloseLedger
-  writer?: CloseLedgerWriter
-}
+type ShownLore = { id: string; name: string }
+/** The ledger's writer rides along, so a case can read its counts after the run. */
+type LoreRun = DispatchRun & { writer: CloseLedgerWriter }
 
-const SCRIPTED_KIND = 'close-lore-tools-test'
 const LORE_TOOLS: Readonly<Record<string, CloseTool>> = {
   create_lore: createLoreTool,
   update_lore: updateLoreTool,
   read_row: readRowTool,
 }
 
-let pending: Pending | undefined
-
-// Stands where the Lore task will: the run's ids and ledger, the shown rows' handles, and a read set
-// holding only `seeds`, since Lore's start shows titles and seeds nothing (C11).
-async function* scriptedPhase(
-  phase: PhaseContext,
-): AsyncGenerator<PhaseEmittedEvent, PhaseResult, GroupOutcome | undefined> {
-  const run = pending
-  if (run === undefined) throw new Error('no scripted lore calls')
-  const f = run.fixture
-  const ids = closeIdsOf(phase.intermediates)
-  ids.showTurns(chapterEntryIds(f))
-  for (const { id, name } of run.shown) ids.show(id, name)
-  const ledger = seedCloseLedger(phase.intermediates)
-  run.ledger = ledger
-  const writer = new CloseLedgerWriter(ledger, (id) => ids.nameOfId(id), phase.actionId)
-  run.writer = writer
-  run.setup?.(ids, writer)
-  const readSet = createReadSet()
-  readSet.add(run.seeds)
-  const ctx: DispatchContext = {
-    db: phase.db,
-    branchId: phase.branchId,
-    endEntryId: endEntryId(f),
-    task: 'lore',
-    part: run.part,
-    ids,
-    readFields: LORE_FIELDS,
-    survivorOf: (table, id) => writer.survivorOf(table, id),
-    landedCalls: (tool) => writer.landedCalls(tool),
-    phase,
-    taskEntryIds: chapterEntryIds(f),
-    readSet,
-    ledger: writer,
-  }
-  for (const [index, { toolName, input, part }] of run.calls.entries()) {
-    const tool = LORE_TOOLS[toolName]
-    if (tool === undefined) throw new Error(`no lore test tool ${toolName}`)
-    const answer = yield* dispatchToolCall(
-      { toolCallId: `call_${index + 1}`, toolName, input },
-      tool,
-      part === undefined ? ctx : { ...ctx, part },
-    )
-    run.answers.push(answer.output)
-  }
-  return { status: 'completed' }
-}
-
-/** Runs `calls` through dispatchToolCall in one close-like run, as the Lore task of `part`. */
+/** Runs `calls` as the Lore task of `part`; the read set holds only `seeds` (C11). */
 async function dispatchScripted(
   f: CloseFixture,
   calls: readonly ScriptedCall[],
   opts: {
-    shown?: readonly ShownRow[]
+    shown?: readonly ShownLore[]
     seeds?: readonly GuardRow[]
     part?: number
-    setup?: Pending['setup']
+    setup?: DispatchSetup
   } = {},
 ): Promise<LoreRun> {
-  if (getPipelineSafe(SCRIPTED_KIND) === undefined)
-    definePipeline({
-      kind: SCRIPTED_KIND,
-      phases: [{ name: 'agent', run: scriptedPhase }],
-      affordance: 'invisible',
-      gateBehavior: 'hard-gate',
-      concurrencyPolicy: {},
-    })
-  const run: Pending = {
-    fixture: f,
-    calls,
-    shown: opts.shown ?? [],
+  let writer: CloseLedgerWriter | undefined
+  const run = await runDispatchCalls(f, {
+    task: 'lore',
+    tools: LORE_TOOLS,
+    shown: shownOf(opts.shown ?? []),
     seeds: opts.seeds ?? [],
-    part: opts.part ?? 1,
-    ...(opts.setup === undefined ? {} : { setup: opts.setup }),
-    answers: [],
-  }
-  pending = run
-  try {
-    const result = expectRan(
-      await runPipeline(SCRIPTED_KIND, {
-        storyId: f.storyId,
-        branchId: f.branchId,
-        db: f.ctx.db,
-        runInTransaction: f.ctx.runInTransaction,
-      }),
-    )
-    expect(result.outcome).toBe('completed')
-    if (run.ledger === undefined || run.writer === undefined)
-      throw new Error('the scripted phase never ran')
-    return { result, answers: run.answers, calls: run.ledger.calls, writer: run.writer }
-  } finally {
-    pending = undefined
-  }
+    calls,
+    turns: { endEntryId: endEntryId(f), taskEntryIds: chapterEntryIds(f), part: opts.part ?? 1 },
+    readFields: LORE_FIELDS,
+    setup: (ids, ledger) => {
+      writer = ledger
+      opts.setup?.(ids, ledger)
+    },
+  })
+  if (writer === undefined) throw new Error('the scripted phase never ran')
+  return { ...run, writer }
 }
 
 afterEach(() => {
@@ -727,7 +639,7 @@ describe('update_lore', () => {
     })
   })
 
-  const SHOWN: readonly ShownRow[] = [{ id: TOLL, name: 'The Ferry Toll' }]
+  const SHOWN: readonly ShownLore[] = [{ id: TOLL, name: 'The Ferry Toll' }]
   const read: ScriptedCall = { toolName: 'read_row', input: { id: 'lo1' } }
   const update = (input: Record<string, unknown>): ScriptedCall => ({
     toolName: 'update_lore',
@@ -1291,6 +1203,7 @@ describe('update_lore', () => {
       ids: new CloseIds(),
       readFields: LORE_FIELDS,
       survivorOf: () => undefined,
+      clusterOf: () => undefined,
       landedCalls: () => 0,
       turns: [t5],
       proseEntryId: t5,

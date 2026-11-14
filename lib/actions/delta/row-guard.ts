@@ -16,12 +16,15 @@ export async function readRowGuard(args: RowGuardArgs, ctx: DbCtx): Promise<RowG
   for (const { table, id } of rows) {
     const key = rowKey(table, id)
     if (verdicts.has(key)) continue
-    const user = await userEditsSince(ctx, branchId, table, id, since)
+    // One read of the row's user edits: those after the prose are the cited turn's, all are ever.
+    const everUser = await userEditsSince(ctx, branchId, table, id, 0)
+    const user = everUser.filter((d) => d.logPosition > since)
     const laterOnRow = later.filter((d) => d.targetTable === table && d.targetId === id)
     verdicts.set(key, {
       laterTurnWrote: (column, path = []) => wroteField(laterOnRow, table, column, path),
       userWrote: (column, path = []) => wroteField(user, table, column, path),
       laterTurnTouched: () => laterOnRow.length > 0,
+      userEverWrote: (column, path = []) => wroteField(everUser, table, column, path),
       userTouched: () => user.length > 0,
     })
   }

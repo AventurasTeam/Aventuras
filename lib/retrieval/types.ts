@@ -45,7 +45,7 @@ type CandidateBase = {
   sims: readonly (number | null)[]
   /** Unit-norm, same space as the queries. MMR's pairwise similarity input. */
   vector: Float32Array
-  /** Chapters since the row became relevant. 0 for every row until M5 closes one. */
+  /** Chapters since the row became relevant, as retrieval.md → Scoring function ages each kind. */
   chaptersOld: number
   /** decay_resistance for awareness, priority/100 for lore, 0 for the rest. */
   pinSignal: number

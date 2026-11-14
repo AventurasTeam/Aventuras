@@ -115,6 +115,7 @@ async function setup(): Promise<QueryAll> {
       description: 'Who holds it?',
       status: 'resolved',
       injectionMode: 'auto',
+      resolvedAtEntryId: 'ent_b',
       ...TS,
     },
     {
@@ -197,7 +198,8 @@ async function setup(): Promise<QueryAll> {
     {
       id: 'chap_other',
       branchId: 'br_2',
-      sequenceNumber: 1,
+      // Apart from br_1's numbers, so a sequence read can't pass on a constant.
+      sequenceNumber: 4,
       title: 'Offbranch',
       summary: 'x',
       theme: 'x',
@@ -247,6 +249,7 @@ describe('loadSourceRows against a real DB', () => {
         injectionMode: 'auto',
         title: 'The Amulet',
         description: 'Who holds it?',
+        resolvedAtEntryId: 'ent_b',
         embeddingStale: false,
       },
     ])
@@ -431,7 +434,7 @@ describe('loadHappeningRows', () => {
 
 describe('loadChapterRanges against a real DB', () => {
   it('keys the map by chapter id, not by entry id', async () => {
-    const ranges = await loadChapterRanges(await setup(), 'br_1')
+    const { ranges } = await loadChapterRanges(await setup(), 'br_1')
 
     expect([...ranges.keys()]).toEqual(['chap_1'])
     expect(ranges.get('chap_1')).toEqual(new Set(['ent_a', 'ent_b']))
@@ -443,11 +446,29 @@ describe('loadChapterRanges against a real DB', () => {
 
   it('omits a chapter no entry points at, and every other branch', async () => {
     const queryAll = await setup()
-    expect((await loadChapterRanges(queryAll, 'br_1')).has('chap_empty')).toBe(false)
-    expect((await loadChapterRanges(queryAll, 'br_1')).has('chap_other')).toBe(false)
+    expect((await loadChapterRanges(queryAll, 'br_1')).ranges.has('chap_empty')).toBe(false)
+    expect((await loadChapterRanges(queryAll, 'br_1')).ranges.has('chap_other')).toBe(false)
     // Positive control: chap_other is a real chapter with a real entry on br_2.
-    expect(await loadChapterRanges(queryAll, 'br_2')).toEqual(
+    expect((await loadChapterRanges(queryAll, 'br_2')).ranges).toEqual(
       new Map([['chap_other', new Set(['ent_z'])]]),
     )
+  })
+
+  // The same statement's sequence_number: a stamped entry carries its chapter's number, and the
+  // open chapter is one past the highest that stamps one.
+  it("maps each stamped entry to its chapter's sequence number", async () => {
+    const queryAll = await setup()
+
+    expect((await loadChapterRanges(queryAll, 'br_1')).ages).toEqual({
+      sequenceOf: new Map([
+        ['ent_a', 1],
+        ['ent_b', 1],
+      ]),
+      current: 2,
+    })
+    expect((await loadChapterRanges(queryAll, 'br_2')).ages).toEqual({
+      sequenceOf: new Map([['ent_z', 4]]),
+      current: 5,
+    })
   })
 })

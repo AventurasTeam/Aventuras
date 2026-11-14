@@ -9,7 +9,7 @@ export { USER_EDITED_SINCE_PROSE } from '../types'
 
 /** The source entry's latest create/content-edit delta position, 0 when it has none. */
 export async function proseLogPosition(
-  ctx: DbCtx,
+  ctx: Pick<DbCtx, 'db'>,
   branchId: string,
   entryId: string,
 ): Promise<number> {
@@ -238,9 +238,9 @@ export function wroteField(
 // By natural key, not row id: a pair re-created after the delete is a new row. A delete's undo
 // payload is the whole row, so it still names the key.
 async function userDeletedRowSince(
-  ctx: DbCtx,
+  ctx: Pick<DbCtx, 'db'>,
   branchId: string,
-  table: 'character_relationships' | 'happening_awareness',
+  table: 'character_relationships' | 'happening_awareness' | 'happening_involvements',
   key: Readonly<Record<string, string>>,
   since: number,
 ): Promise<boolean> {
@@ -288,6 +288,58 @@ export function userDeletedAwarenessSince(
     branchId,
     'happening_awareness',
     { characterId, happeningId },
+    since,
+  )
+}
+
+/**
+ * Whether the user deleted any involvement or awareness row of the happening after the prose, by
+ * itself or with its entity: an entity's delete logs its link rows only in its undo payload.
+ */
+export async function userDeletedHappeningLink(
+  args: { branchId: string; happeningId: string; proseEntryId: string },
+  ctx: Pick<DbCtx, 'db'>,
+): Promise<boolean> {
+  const { branchId, happeningId, proseEntryId } = args
+  const since = await proseLogPosition(ctx, branchId, proseEntryId)
+  const heldBy = (key: 'involvements' | 'awareness') =>
+    sql`EXISTS (SELECT 1 FROM json_each(${deltas.undoPayload}, ${`$.${key}`}) AS held
+      WHERE json_extract(held.value, '$.happeningId') = ${happeningId})`
+  const [hit] = await ctx.db
+    .select({ id: deltas.id })
+    .from(deltas)
+    .where(
+      and(
+        eq(deltas.branchId, branchId),
+        gt(deltas.logPosition, since),
+        eq(deltas.op, 'delete'),
+        eq(deltas.source, 'user_edit'),
+        or(
+          and(
+            inArray(deltas.targetTable, ['happening_involvements', 'happening_awareness']),
+            sql`json_extract(${deltas.undoPayload}, '$.happeningId') = ${happeningId}`,
+          ),
+          and(eq(deltas.targetTable, 'entities'), or(heldBy('involvements'), heldBy('awareness'))),
+        ),
+      ),
+    )
+    .limit(1)
+  return hit !== undefined
+}
+
+/** Whether the user deleted an involvement of the entity in the happening after `since`. */
+export function userDeletedInvolvementSince(
+  ctx: DbCtx,
+  branchId: string,
+  entityId: string,
+  happeningId: string,
+  since: number,
+): Promise<boolean> {
+  return userDeletedRowSince(
+    ctx,
+    branchId,
+    'happening_involvements',
+    { happeningId, entityId },
     since,
   )
 }

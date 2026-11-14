@@ -1,6 +1,10 @@
 import type { GroupOutcome } from '@/lib/actions/types'
 import type { CloseTask } from '@/lib/db'
 
+import { awarenessTask, resetRetrievalStep } from './close-awareness'
+import { embedRangeStep } from './close-happenings'
+import { normalizeStackablesStep } from './close-stackables'
+import { happeningsTask } from './happenings'
 import { identityTask } from './identity'
 import { lifecycleTask } from './lifecycle'
 import { loreTask } from './lore'
@@ -35,7 +39,13 @@ export type CloseAgentSlots = {
 
 export type SlotName = keyof CloseAgentSlots
 
-// Typed here: inside the freeze below, `kind: 'task'` would widen to string.
+// Typed here: inside the freezes below, `kind: 'task'` would widen to string.
+const BEFORE: readonly SlotEntry<'happenings'>[] = Object.freeze([
+  { kind: 'code', step: normalizeStackablesStep },
+  { kind: 'code', step: embedRangeStep },
+  { kind: 'task', def: happeningsTask },
+])
+
 const PER_PART: readonly SlotEntry<PartTask>[] = Object.freeze([
   { kind: 'task', def: loreTask },
   { kind: 'task', def: identityTask },
@@ -44,11 +54,16 @@ const PER_PART: readonly SlotEntry<PartTask>[] = Object.freeze([
   { kind: 'task', def: lifecycleTask },
 ])
 
-/** C2: the five prose tasks per part, in canon's run order; Happenings and Awareness land with 5.9. */
+const AFTER: readonly SlotEntry<'awareness'>[] = Object.freeze([
+  { kind: 'task', def: awarenessTask },
+  { kind: 'code', step: resetRetrievalStep },
+])
+
+/** C2: canon's run order (memory/chapter-close.md → Run order). */
 export const PRODUCTION_CLOSE_SLOTS: CloseAgentSlots = Object.freeze({
-  before: Object.freeze([]),
+  before: BEFORE,
   perPart: PER_PART,
-  after: Object.freeze([]),
+  after: AFTER,
 })
 
 /** No task in any slot: for a close test that isn't about the tasks. */

@@ -3,7 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { applyDeltaAction } from '@/lib/actions/delta/apply-delta-action'
 import { loadOpenStory } from '@/lib/actions/stories/operational'
-import { USER_EDITED_SINCE_PROSE, type GroupOutcome, type GuardRow } from '@/lib/actions/types'
+import { USER_EDITED_SINCE_PROSE } from '@/lib/actions/types'
 import { generateToolStep, type ResolveModelConfig, type ToolStepResult } from '@/lib/ai'
 import {
   branches,
@@ -21,11 +21,8 @@ import { makeLogger } from '@/lib/diagnostics'
 import { buildStructuralFloor } from '@/lib/retrieval'
 import { resetAllStores } from '@/lib/stores'
 
-import { createReadSet } from './common-checks'
-import { dispatchToolCall, type DispatchContext } from './dispatch'
 import { IDENTITY_READ_FIELDS, identityTask } from './identity'
 import { CloseIds, nameCloseProse } from './ids'
-import { CloseLedgerWriter } from './ledger'
 import { readRowTool } from './read-tools'
 import { __setCloseAgentSlots } from './slots'
 import type { TaskPromptContext } from './task'
@@ -34,29 +31,18 @@ import { mergeThreadsTool, updateThreadTool } from './thread-tools'
 import { THREADS_READ_FIELDS, threadsTask } from './threads'
 import { assertReplaySafe, DELETE_PATH, type CloseTool } from './tool'
 import { CLOSE_REASON } from './verdict'
-import { expectRan } from '../../__tests__/harness'
-import { definePipeline } from '../../authoring/define'
 import { __resetRegistry } from '../../authoring/registry'
-import { __resetBus, pipelineEventBus } from '../../runtime/event-bus'
-import { runPipeline } from '../../runtime/orchestrator'
-import type {
-  PhaseContext,
-  PhaseEmittedEvent,
-  PhaseResult,
-  PipelineEvent,
-  TxResult,
-} from '../../types'
+import { __resetBus } from '../../runtime/event-bus'
+import type { PhaseContext, PhaseEmittedEvent, PhaseResult, PipelineEvent } from '../../types'
+import { runDispatchCalls, type DispatchRun, type ScriptedCall } from '../__tests__/close-dispatch'
 import { openCloseFixture, type CloseFixture } from '../__tests__/close-fixture'
 import { closeAgentPhase } from '../chapter-close-agent'
-import { closeIdsOf, seedCloseLedger, setCloseParts, setCloseRange } from '../close-intermediates'
-import type { CloseLedger } from '../intermediates'
+import { setCloseParts, setCloseRange } from '../close-intermediates'
 
 vi.mock('@/lib/ai', async (importOriginal) => ({
   ...(await importOriginal<Record<string, unknown>>()),
   generateToolStep: vi.fn(),
 }))
-
-const KIND = 'close-threads-test'
 
 let f: CloseFixture
 
@@ -247,120 +233,34 @@ type GroupEvent = Extract<PipelineEvent, { type: 'delta_group_emitted' }>
 const groupEvents = (events: readonly PipelineEvent[]): GroupEvent[] =>
   events.filter((event): event is GroupEvent => event.type === 'delta_group_emitted')
 
-type ThreadCall = { toolName: string; input: Record<string, unknown> }
-type ThreadRun = {
-  result: TxResult
-  events: PipelineEvent[]
-  /** What each call answered the model, in order. */
-  answers: unknown[]
-  calls: CloseLedger['calls']
-  ids: CloseIds
-}
-type StagedRun = {
-  fx: CloseFixture
-  shown: readonly SeedThread[]
-  calls: readonly ThreadCall[]
-  answers: unknown[]
-  ledger?: CloseLedger
-  ids?: CloseIds
-}
-
 const THREAD_TOOLS: Readonly<Record<string, CloseTool>> = {
   update_thread: updateThreadTool,
   merge_threads: mergeThreadsTool,
 }
 
-let staged: StagedRun | undefined
-
-// Stands where the Threads task will: the run's ids and ledger, its start's rows shown and read.
-async function* threadCallsPhase(
-  phase: PhaseContext,
-): AsyncGenerator<PhaseEmittedEvent, PhaseResult, GroupOutcome | undefined> {
-  const run = staged
-  if (run === undefined) throw new Error('threadCallsPhase: no run staged')
-  const chapterEntryIds = chapterEntryIdsOf(run.fx)
-  const ids = closeIdsOf(phase.intermediates)
-  ids.showTurns(chapterEntryIds)
-  for (const { id, title } of run.shown) ids.show(id, title)
-  const ledger = seedCloseLedger(phase.intermediates)
-  const writer = new CloseLedgerWriter(ledger, (id) => ids.nameOfId(id), phase.actionId)
-  const readSet = createReadSet()
-  readSet.add(run.shown.map(({ id }): GuardRow => ({ table: 'threads', id })))
-  const ctx: DispatchContext = {
-    db: phase.db,
-    branchId: phase.branchId,
-    endEntryId: endEntryIdOf(run.fx),
-    task: 'threads',
-    part: 1,
-    ids,
-    readFields: { thread: ['title', 'description', 'status'] },
-    survivorOf: (table, id) => writer.survivorOf(table, id),
-    landedCalls: (tool) => writer.landedCalls(tool),
-    phase,
-    taskEntryIds: chapterEntryIds,
-    readSet,
-    ledger: writer,
-  }
-  for (const [index, { toolName, input }] of run.calls.entries()) {
-    const tool = THREAD_TOOLS[toolName]
-    if (tool === undefined) throw new Error(`no thread tool ${toolName}`)
-    const answer = yield* dispatchToolCall(
-      { toolCallId: `call_${index + 1}`, toolName, input },
-      tool,
-      ctx,
-    )
-    run.answers.push(answer.output)
-  }
-  run.ledger = ledger
-  run.ids = ids
-  return { status: 'completed' }
-}
-
-/** A fresh registry and bus, the harness pipeline, and the fixture with THREADS_SHOWN seeded. */
+/** A fresh registry and bus, and the fixture with THREADS_SHOWN seeded. */
 async function openThreadsFixture(): Promise<CloseFixture> {
   __resetRegistry()
   __resetBus()
-  definePipeline({
-    kind: KIND,
-    phases: [{ name: 'agent', run: threadCallsPhase }],
-    affordance: 'invisible',
-    gateBehavior: 'hard-gate',
-    concurrencyPolicy: {},
-  })
   const fx = await openCloseFixture()
   await seedThreads(fx)
   return fx
 }
 
 /** Runs `calls` in order through dispatch, as a Threads task whose start showed `shown`. */
-async function runThreadCalls(
+function runThreadCalls(
   fx: CloseFixture,
   shown: readonly SeedThread[],
-  calls: readonly ThreadCall[],
-): Promise<ThreadRun> {
-  const events: PipelineEvent[] = []
-  const unsubscribe = pipelineEventBus.subscribeAll((event) => {
-    events.push(event)
+  calls: readonly ScriptedCall[],
+): Promise<DispatchRun> {
+  return runDispatchCalls(fx, {
+    task: 'threads',
+    tools: THREAD_TOOLS,
+    shown: shown.map(({ id, title }) => ({ table: 'threads', id, name: title })),
+    calls,
+    turns: { endEntryId: endEntryIdOf(fx), taskEntryIds: chapterEntryIdsOf(fx) },
+    readFields: { thread: ['title', 'description', 'status'] },
   })
-  const run: StagedRun = { fx, shown, calls, answers: [] }
-  staged = run
-  try {
-    const result = expectRan(
-      await runPipeline(KIND, {
-        storyId: fx.storyId,
-        branchId: fx.branchId,
-        db: fx.ctx.db,
-        runInTransaction: fx.ctx.runInTransaction,
-      }),
-    )
-    if (result.outcome !== 'completed')
-      throw new Error(`the run ${result.outcome}: ${JSON.stringify(result.error)}`)
-    if (run.ledger === undefined || run.ids === undefined) throw new Error('the phase never ran')
-    return { result, events, answers: run.answers, calls: run.ledger.calls, ids: run.ids }
-  } finally {
-    unsubscribe()
-    staged = undefined
-  }
 }
 
 const cite = (
@@ -844,7 +744,7 @@ describe('merge_threads', () => {
     f = await openThreadsFixture()
   })
 
-  const merge = (input: Record<string, unknown>): ThreadCall => ({
+  const merge = (input: Record<string, unknown>): ScriptedCall => ({
     toolName: 'merge_threads',
     input: { ...input, ...cite(['t7'], 'The two threads are one errand.') },
   })
@@ -1488,7 +1388,7 @@ describe('merge_threads', () => {
     const IN_THIS_CLOSE = 'merge-close-wrote-no-keep'
 
     /** Seeds `extra` after THREADS_SHOWN, shown in order as th5, th6…, then runs `calls`. */
-    async function runBeside(extra: readonly SeedThread[], calls: readonly ThreadCall[]) {
+    async function runBeside(extra: readonly SeedThread[], calls: readonly ScriptedCall[]) {
       for (const thread of extra) await seedPassThread(f, thread, 3)
       return runThreadCalls(f, [...THREADS_SHOWN, ...extra], calls)
     }
@@ -1986,6 +1886,7 @@ function threadsPromptContext(fx: CloseFixture, ids: CloseIds): TaskPromptContex
     ids,
     readFields: THREADS_READ_FIELDS,
     survivorOf: () => undefined,
+    clusterOf: () => undefined,
     landedCalls: () => 0,
     phase: {
       actionId,
@@ -2412,11 +2313,13 @@ async function drainThreadsAgent(
 describe('Threads in the production close', () => {
   let fx: CloseFixture
   const starts = [
+    { type: 'close_task_start', task: 'happenings', part: 0, index: 1, total: 7 },
     { type: 'close_task_start', task: 'lore', part: 1, index: 2, total: 7 },
     { type: 'close_task_start', task: 'identity', part: 1, index: 3, total: 7 },
     { type: 'close_task_start', task: 'threads', part: 1, index: 4, total: 7 },
     { type: 'close_task_start', task: 'upkeep', part: 1, index: 5, total: 7 },
     { type: 'close_task_start', task: 'lifecycle', part: 1, index: 6, total: 7 },
+    { type: 'close_task_start', task: 'awareness', part: 0, index: 7, total: 7 },
   ]
   const startsIn = (events: readonly PhaseEmittedEvent[]) =>
     events.filter((event) => event.type === 'close_task_start')

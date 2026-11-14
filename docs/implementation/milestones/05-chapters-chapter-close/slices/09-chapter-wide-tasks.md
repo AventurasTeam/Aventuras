@@ -87,9 +87,10 @@ since `entriesStore` holds a window
 (`lib/pipeline/definitions/periodic-classifier.ts:73-75`), and returns
 each turn's `promptProse` in position order, with no `system` row. A
 call returns at most ten turns (`READ_TURNS_MAX`) and names the rest as
-unread. An unknown handle, or one outside the range the open question
-settles, is an answer saying so, as `read_row`'s missing row is. A read
-writes nothing and can't fail a task.
+unread. An unknown handle, or one outside the range
+[Implementation notes](#implementation-notes) settle, is an answer
+saying so, as `read_row`'s missing row is. A read writes nothing and
+can't fail a task.
 
 **The range embed,** a code step in `before`, after normalization and
 ahead of the Happenings task, in `close-happenings.ts`.
@@ -104,7 +105,7 @@ ahead of the Happenings task, in `close-happenings.ts`.
   `{ status: 'aborted' }`. Any other failure, an unconfigured embedder
   and an unknown dim included, returns `{ status: 'failed', error }` in
   the shape `embedderInitFailure` uses
-  (`per-turn-retrieval.ts:36-38`), which fails the close.
+  (`lib/pipeline/definitions/blocking-embed.ts`), which fails the close.
 - It writes through `ctx.runInTransaction` under the carve-out, and
   fewer than two rows in the range makes no embedder call.
 - It needs no swap admission of its own: `runUserEmbedderAction` refuses
@@ -121,7 +122,7 @@ overlap thresholds as constants (`0.8`, `0.5`). Only rows with an
 `happenings_mutual_excl` true through a merge. A cluster has at least two
 rows. It runs in the embed's code step, and the task's start read takes
 the clusters from a new accessor in `close-intermediates.ts`. The terms
-canon leaves open are in Open questions.
+canon leaves open are in [Implementation notes](#implementation-notes).
 
 **`merge_happenings`** takes `keep`, `absorb` (ids), an optional `title`
 and `description`, `turns` and `why`, so a redundant row merges with the
@@ -152,9 +153,10 @@ that stops the call writes nothing:
 The group, anchored on E under the run's `actionId`:
 
 - One `updateHappening` on the kept row, with its precedence from 5.5b:
-  the composite text when given, under the bound the open question
-  settles, and the earliest `occurred_at_entry_id` by entry position. A
-  redundant-row merge can leave it a noop, and the deletes still land.
+  the composite text when given, under the bound
+  [Implementation notes](#implementation-notes) settle, and the earliest
+  `occurred_at_entry_id` by entry position. A redundant-row merge can
+  leave it a noop, and the deletes still land.
 - One `createHappeningInvolvement` per character the kept row lacks,
   built ahead of the group, since `happening_involvements` has no unique
   index. The action takes an optional `proseEntryId`, as the awareness
@@ -273,9 +275,10 @@ above 0, read from SQL, through `delta_emitted` anchored on E, polling
   entry-to-sequence map. It holds no derived state, so a chapter reversed
   or deleted reads right on the next pass.
 - A happening reads from its in-scene awareness rows'
-  `learned_at_entry_id`, as canon says, under the rule the open question
-  settles. Entities and threads read from the source planning settles,
-  and lore and chapters stay 0.
+  `learned_at_entry_id`, as canon says, under the rule
+  [Implementation notes](#implementation-notes) settle. Entities and
+  threads read from the source planning settles, and lore and chapters
+  stay 0.
 - `assembleCandidates`' `shared()` loses its literal 0
   (`lib/retrieval/run.ts:764-772`), and `lib/retrieval/types.ts:48` and
   the comment at `run.ts:770-771` flip.
@@ -301,7 +304,8 @@ retrieval phase's sync is the only carve-out writer. `→ Reverse-replay`
 calls a close's merge "the one machine update of a happening", which
 `mark_common_knowledge` isn't. `chapter-close.md → 3c` gives `gold pieces`
 and `gp` to `gold` as examples the algorithm can't reach. Each flips with
-the work, as does whatever the open questions settle.
+the work, as does whatever [Implementation notes](#implementation-notes)
+settle.
 
 **The dataset seed.**
 [Slice 5.2](./02-first-chapter.md#implementation-notes)'s dataset
@@ -325,8 +329,8 @@ would drop one slice's rows.
 
 - **Tuning the defaults,** `λ_type`, thresholds and top-N once chosen:
   [`followups.md → Tuning and play testing`](../../../../followups.md#tuning-and-play-testing).
-- **Growing 3d's scope,** unless the contradicted-pin question below
-  says so.
+- **Growing 3d's scope,** unless the contradicted-pin note in
+  [Implementation notes](#implementation-notes) says so.
 - **The full seven-task close, its E2E and a full group's reversal cost:**
   [Slice 5.10](./10-two-starts.md).
 - **The driver, `close_task_start`, citation checks, the read gate, the
@@ -344,8 +348,8 @@ would drop one slice's rows.
   a closed range; that residue is 5.12's question too.
 - **Semantic stackable merging,** `gold` against `coin`: parked by canon
   in 3c.
-- **An embed timeout:** M7.1. Like the two embeds its entry names, this
-  one ends on a cancel and has no bound of its own.
+- **Reconcile's embed timeout:** M7.1. The close's range embed is
+  bounded here, by `EMBED_TIMEOUT_MS`, as per-turn retrieval's embed is.
 - **A close's display translation:** M8.1.
 
 ## Acceptance criteria
@@ -373,14 +377,14 @@ Each test file runs under `pnpm vitest run --project unit <file>`.
   edit of the kept row's `icon` doesn't stop a merge writing only
   `description`, and a user's value on the kept row's own awareness row
   stands while the merge lands, the model's list naming its character
-  (`close-agent/close-happenings.test.ts`).
+  (`close-agent/happening-tools.test.ts`).
 - **Merge shape:** the survivor holds the composite and the earliest
   anchor; two absorbed rows naming one character give one upsert with max,
   earliest and sum; two naming one involvement give one create; a
   user-removed involvement stays removed, the model's list naming its
   character; a composite past the bound
   lands bounded; the ledger entry of a landed merge lists every row and
-  has `survivor` (`close-agent/close-happenings.test.ts`).
+  has `survivor` (`close-agent/happening-tools.test.ts`).
 - **Awareness arm:** a `chapter_close` upsert moves `learned_at_entry_id`
   and `retrieval_count` on both arms, asserted on the store patch; a
   `periodic_classifier` upsert moves neither; a count-only pair doesn't
@@ -405,25 +409,27 @@ Each test file runs under `pnpm vitest run --project unit <file>`.
 - **`set_pin`:** landed, restated, user-won, later-turn and one-way
   refused cases each return C11's result, and a citation outside the
   chapter is `rejected` on a high-frequency row
-  (`close-agent/close-awareness.test.ts`).
+  (`close-agent/awareness-tools.test.ts`).
 - **Reset:** every count on the branch reads 0 after the phase, each row
   has one `chapter_close` delta anchored on E, no count-only delta reaches
   History, and a task stopped at its budget still resets
-  (`close-agent/close-awareness.test.ts`).
+  (`close-agent/close-retrieval-reset.test.ts`).
 - **Report:** `part` is 0 for both tasks' calls and `stopped` rows, and
   neither normalization nor the reset appears in `calls`
-  (`lib/pipeline/definitions/chapter-close-agent.test.ts`).
+  (`close-agent/driver.test.ts`).
 - **Order:** as Canon's order states, and a chapter with no cluster or
   no awareness row makes no call for that task while its
-  `close_task_start` still fires (`chapter-close-agent.test.ts`).
+  `close_task_start` still fires (`close-agent/driver.test.ts`).
 - **Decay:** with 59 closed chapters and an awareness row learned in
   chapter 3 at `decay_resistance` 0.3, the candidate's `chaptersOld` is 57
   and its captured `recency_factor` is within 0.001 of
   `exp(-0.07 × 57 × 0.7)`; a row in the open region reads 0, and one in the
   newest closed chapter reads 1 (`lib/retrieval/chapters-old.test.ts`).
-- **A pin moves a score:** on that fixture, a `set_pin` to 0.9 through the
+- **A pin moves a score:** on that fixture, a `set_pin` to 0.5 through the
   real action raises the next pass's `recency_factor` to within 0.001 of
-  `exp(-0.07 × 57 × 0.1)` (`close-agent/close-awareness.test.ts`).
+  `exp(-0.07 × 57 × 0.5)` (`close-agent/awareness-tools.test.ts`). A close
+  raises a pin by at most 0.2 over the pin its start showed, so a row at
+  0.3 can't go to 0.9 at once.
 - **No chapters, no change:** on a story with no closed chapter every
   candidate reads `chaptersOld` 0 (`lib/retrieval/run.test.ts`).
 - **Entities and threads:** each reads the value planning settled, one
@@ -460,94 +466,214 @@ Each test file runs under `pnpm vitest run --project unit <file>`.
 
 ## Open questions
 
-- **Where does `chaptersOld` read from?** This needs the developer at
-  planning, with the `aventuras-design` route offered: landing it shifts
-  every chaptered story's ranking, and canon and
-  [M3.4's decision](../../03-memory-floor/slices/04-retrieval.md#open-questions)
-  disagree.
-  - _Happenings._ Canon says `learned_at_entry_id`, and M3.4 said
-    `occurred_at_entry_id`. Recommendation: canon, as
-    [M4.3's note](../../04-world-plot-read-surfaces/slices/03-plot-panel.md#implementation-notes)
-    also took. A candidate stands for the in-scene union, and canon has no
-    multi-POV rule. Recommendation: the smallest age among its rows, which
-    pairs with `pinSignal`'s max. It can overstate a row whose pin and
-    youngest anchor sit on different characters, which per-row scoring
-    would fix at the cost of the probe's single pair. A null anchor falls
-    back to the happening's `occurred_at_entry_id`, else 0, and a dangling
-    one reads 0.
-    A common-knowledge row's value reaches only the probe, since the ranker
-    ignores it, so canon's `created_at` arm can go.
-  - _Entities and threads._ Canon says `updated_at`, which no handler
-    advances, and advancing it brings a write at every handler, no undo,
-    and a close refreshing what it only compacted. A created-at anchor
-    column, M3.4's shape, is safe under reversal but ages a protagonist who
-    was on stage last chapter. With no schema, threads could read
-    `resolved_at_entry_id` or `triggered_at_entry_id`, and characters
-    `lastSeenAt` against chapter time ranges, leaving other kinds at 0.
-    Or both stay 0, with canon narrowed and a tuning followup.
-    Recommendation: stay at 0. Neither type has a pin, nothing in M5 reads
-    their decay, and their `λ` is a guess, so real stories should say
-    whether it earns a column. A new column follows C5's migration rule.
-  - _Which chapter is "at chapter 60"?_ The open one, as written above,
-    is the only reading that gives canon's 57.
-- **How far does `read_turns` reach?** High-frequency rows come from any
-  chapter, and a citation outside the chapter is refused. Recommendation:
-  any non-system entry at or before E can be read, for a row's origin,
-  and citations stay inside the chapter. 5.5a's handles cover the chapter
-  only, so a row from elsewhere takes one through `registerHandle` when
-  it's listed.
-- **What of the fields 3e doesn't name?** `common_knowledge` when one row
-  has it, `category`, `icon`, a null `learned_at_entry_id`, the source
-  separator, and whether embedded-text bounds apply to a composite.
-  Recommendation: `common_knowledge` survives, since dropping it hides a
-  happening from everyone it reached; the kept row's `category` and `icon`
-  stand; null loses to any anchor; sources join with `; `, deduped; and
-  a composite is clamped as the classifier clamps, since canon says the
-  app's own writers are bounded.
-- **What are clustering's terms?** The denominator of "overlap ≥ 50%",
-  pairwise or transitive membership, zero involvements, what "~3 entries"
-  measures given gapped positions, and a size limit. Recommendation: the
-  smaller cast as denominator, every pair meeting all three criteria so
-  no chain can drift, a row with no involvements clustering with nothing,
-  counting non-system entries between anchors, and no size limit yet.
-- **What is N?** No value exists in canon or code. Recommendation: a
-  constant of 20, with its value left to tuning.
-- **What is 3c's rule, and which writes stop it?** A bare `-s` strip turns
-  `glass` to `glas`. Recommendation: a plural folds only onto a singular
-  that exists on the branch, so `arrows` joins `arrow`, and `glass`,
-  alone, stays. 3c cites no turn, so E's prose is its anchor, and a user
-  edit after it or a later turn's write skips the whole record. A
-  by-key skip would let `Gold` return beside a user's `gold`, which is
-  also why the guard above is by record.
-- **Does lore-mgmt catch a contradicted pin?**
-  [`retrieval.md → Pin contradiction reconciliation`](../../../../memory/retrieval.md#pin-contradiction-reconciliation)
-  and [`edge-cases.md → v1 limitations`](../../../../memory/edge-cases.md#v1-limitations)
-  promise it, and 3d reviews only the chapter's rows and frequency rows
-  it can't demote, so a death pinned in chapter 3 and undone in chapter 25
-  is neither. Recommendation: drop the sentence from both and keep 3d's
-  scope.
-- **What bounds the two start lists?** Neither task has parts, and canon
-  projects 250 to 1000 awareness rows a chapter, so a long chapter's list
-  can fill the window, and a first call that doesn't fit fails the close,
-  every retry included. Recommendation: list rows under their happening,
-  and past the prose tasks' read limit keep the highest `decay_resistance`
-  and log how many were left out. The dataset chapter's measure tests this.
-- **How does the round-trip suite tell a code step's group from a
-  tool's?** A code step that emits a landed group (normalization, the
-  retrieval reset) is indistinguishable from a tool group to the
-  suite's abort arm. When 5.9 adds one, the case should declare its
-  tool's action kinds. Surfaced by 5.5a.
-
-- **Is a happening's time one field for user precedence?**
-  `updateHappening` (5.5b) drops a column the user wrote after the
-  prose, but it reads `temporal` and `occurred_at_entry_id` as two
-  fields. A write sending both, when the user moved only the anchor,
-  keeps the user's anchor, lands the temporal, and then fails the
-  pair's exclusivity check as a plain rejection that aborts the group.
-  `merge_happenings` is the first caller that could send both.
-  Suggested: treat the pair as one field, or send only the anchor.
-  Raised in 5.5b's review.
+None open: Implementation notes record each answer.
 
 ## Implementation notes
 
-_Populated at finish: notable deviations from the plan and resolved developer decisions._
+- **`chaptersOld` reads per awareness row (developer decision,
+  2026-11-13).** A happening scores per in-scene awareness row: a row's
+  age is its `learned_at_entry_id`'s chapter distance, a null anchor
+  falls back to the happening's `occurred_at_entry_id`, and an anchor in
+  the open region, a dangling one or none reads 0. The candidate takes
+  the row minimising `age × (1 − pin)`, ties to the larger pin, then
+  the smaller age, and captures that row's pair, so the probe's one pair
+  replays the score for any λ. A common-knowledge candidate reads 0 and
+  0, and canon's `created_at` arm went. A character ages from
+  `state.lastSeenAt`, a thread from `resolved_at_entry_id`; other kinds,
+  lore and chapters stay 0. "At chapter 60" is the open chapter. No
+  schema change. Known edge, accepted: a user-added awareness row with
+  no anchor on a `temporal` happening never decays while that character
+  is in scene.
+- **A user's thread never decays (developer decision, 2026-11-14).** A
+  thread the user created, or one the user resolved or failed, carries no
+  `resolved_at_entry_id`, since entry refs stay AI-only, and reads
+  `chaptersOld` 0; canon states it. The route to age them is a
+  delta-log read per thread candidate per turn, in
+  [`followups.md → Tuning and play testing`](../../../../followups.md#tuning-and-play-testing).
+- **`chaptersOld`'s `current` is ratified (developer decision,
+  2026-11-14).** It is one past the highest `sequence_number` among
+  closed chapters that still hold a stamped entry. No app path leaves a
+  closed chapter's row with none: a reader delete is a rollback, a
+  chapter delete takes the row and its stamps, `deleteStoryEntry` has no
+  app caller, and a fork copies only chapters closed before its point.
+- **Decay against the chapter-match boost is a tuning question
+  (developer decision, 2026-11-13).** The ×1.3 boost applies after
+  decay, so an unpinned row alone in its pool seats through a matched
+  chapter only up to about 9, 13 and 16 chapters old at similarity 0.3,
+  0.4 and 0.5; the entry is in
+  [`followups.md → Tuning and play testing`](../../../../followups.md#tuning-and-play-testing).
+- **The code steps land as groups.** Normalization and the reset each
+  land as one `delta_group_emitted` anchored on E under the run's
+  action, not through `delta_emitted` as Scope: in has it: the abort
+  path and the driver's drain see groups, and a per-delta burst is the
+  shape Slice 5.2 measured stalling Android. A refused group fails the
+  close, since a code step has no model to tell. The round-trip suite
+  tells a code step's group from a tool's by the action kinds each case
+  declares its abort arm fires on (`abortOn`).
+- **The range embed is bounded.** It takes per-turn retrieval's 300 s
+  bound (`EMBED_TIMEOUT_MS`, moved to a shared module), and an expiry
+  fails the close as any embedder failure does, a
+  `VectorInvariantError` included, so the Switch-embedder fix shows.
+  The roadmap's M7.1 entry now names only reconcile's embeds.
+- **`pnpm probe:close` embeds in Node.** The probe stands in for the
+  preload's embedder and raw-database bridges, over the main process's
+  embedder service (onnxruntime-node) and its own copy, reading models
+  from the slot's userData `embedders/` or `PROBE_EMBEDDERS_DIR`, and
+  prints the range embed's embedded and cluster counts.
+- **A merged row's survivor at the read gate.** An unread named row the
+  ledger shows a survivor for is refused `row-gone`, so the answer names
+  the survivor ("The row was merged into hp2; write to hp2 instead");
+  the read gate's own refusal used to come first. The gate passes only
+  the judged row to `rejectedWhole`, so the answer names that row's
+  survivor, not an earlier read row's. The round-trip suite checks it on
+  `mark_common_knowledge`.
+- **The start lists are unbounded.** Neither start has a read limit to
+  keep under, since the prose tasks' starts have none either. Awareness
+  rows list under their happening, every chapter row,
+  with the frequent rows from earlier chapters capped at `AWARENESS_TOP_N`;
+  the measure is below and in the part followup.
+- **3c's rule (developer decision, 2026-11-14).** Keys fold by
+  `foldStackableKey`, then a plural folds onto a singular some record on
+  the branch holds, in the order `-ies` to `-y`, `-es`, `-s` (never
+  `-ss`), the first held key winning, one step only, counts summed. The
+  `-es` ending folds onto its stem only when the stem ends in s, x, z,
+  ch, sh or o; `glass` alone stays. Known edge kept: a singular ending
+  in s folds onto a held key one `s` shorter (`bus` onto `bu`). A record
+  the user or a later turn wrote is skipped whole, the reversal guard
+  yields the whole record, and a character whose normalized record would
+  break the schema's stackables bound is skipped too (a lowercased key
+  can lengthen past 40, and `updateEntityStackables` doesn't check).
+- **3e's unnamed fields and clustering's terms.** `common_knowledge`
+  survives when any merged row has it; the kept row's `category` and
+  `icon` stand; a null `learned_at_entry_id` loses to any anchor. Sources
+  join with `; `, deduped in first-seen order: the first stands whole and
+  a later one joins only if the joined text stays within 120 characters,
+  so no stored source is ever cut. The composite texts are cut, never
+  refused. Cast overlap is shared characters over the smaller cast, every
+  pair of a cluster meets all three criteria, a row with no character
+  among its involvements clusters with nothing, and "~3 entries" counts
+  non-system entries by position.
+- **Clusters form strongest pair first (developer decision,
+  2026-11-14).** Every pair meeting all three criteria is taken in
+  descending cosine, ties by anchor then id; two clusters merge only when
+  every cross pair qualifies, and a row sits in at most one cluster, with
+  no size cap. This replaces "greedily in anchor order", which could
+  leave the closest pair apart for good.
+- **The Happenings start shows who knows each row (developer decision,
+  2026-11-14).** Each row carries `knownBy`: the live awareness rows on
+  the branch, and a common-knowledge row reads "every character". A merge
+  tells everyone who knows any merged happening about all of them, every
+  character if one is common knowledge, so the prompt's keep-apart rule
+  has the happening fewer characters know add nothing to the one more
+  know, and when neither list holds the other, only a duplicate adding
+  nothing either way merges. The prompt also says "reverses or
+  contradicts", "a beat that matters to the story on its own" and "one
+  call per event", keeps the happening whose title covers the others
+  best, and cites the turns the merged happenings occurred at.
+- **A deleted link row protects an absorbed happening.** Canon 3e
+  protects a row by a user edit of it or its link rows, so a link row the
+  user deleted after the cited prose counts too, which the plan's check,
+  reading only live link rows, missed. It reaches the action layer
+  through `userDeletedHappeningLink` on the action port.
+- **The Awareness raise step (developer decision, 2026-11-14).** A pin
+  rises by at most 0.2 a close, measured from the pin the start showed
+  (`pin-raise-too-large`, its note naming the close's ceiling). Within
+  one close a pin moves freely between its floor and that ceiling; a
+  frequent row's floor is its start pin, this chapter's rows may go to 0,
+  and a row with no start pin is refused. The frequent set leaves out
+  rows a later turn created, since they were learned after E, and retired
+  characters' rows stay listed. 0.2 is recorded in
+  [`followups.md → Tuning and play testing`](../../../../followups.md#tuning-and-play-testing).
+- **A user's pin stays theirs (coordinator, by canon, 2026-11-14).**
+  `set_pin` answers `skipped` for any row whose `decay_resistance` the
+  user ever wrote, whatever turn the call cites, raise or lower:
+  [`retrieval.md → Sources`](../../../../memory/retrieval.md#sources)
+  keeps a user's pin until the user changes it, and that rule beats the
+  close's after-the-prose precedence, which is about facts the prose can
+  overturn. The row guard gained `userEverWrote` for it; a row the user
+  created counts as written.
+- **A merge leaves a user's pin theirs too (developer decision R1,
+  2026-11-14).** `merge_happenings` follows the rule above: on the kept
+  row a pin the user ever wrote isn't sent and is listed as not written,
+  and an absorbed awareness row holding one skips the merge whole, since
+  merged the pin would move to a row the close writes or give way to the
+  kept row's higher one. Canon 3e states it.
+- **The frequent set leaves out the user's rows (developer decisions R2
+  and Q13, 2026-11-14).** A row whose pin the user ever wrote, or one
+  they created, takes no place in the top 20, which refills by count,
+  as for rows a later turn created. A row World's character merge moved
+  counts as the user's, since the merge re-creates it as a `user_edit`,
+  so with R1 a close can't absorb a happening a merged character knows;
+  3d and 3e state the edge, and re-pointing the moved rows instead is a
+  triage entry with what it would take.
+- **The frequency counter runs up to the close (developer decision R3,
+  2026-11-14).** Turns past the chapter's end that ran before the close
+  count toward its frequent set, and the next chapter counts from the
+  close; canon 3d states it. No code.
+- **The probe runs main's embedder handlers (developer decision R4,
+  2026-11-14).** The slice review moved Electron main's embedder IPC
+  handlers into `electron/embedder/handlers.ts` so `pnpm probe:close`
+  registers the same ones; ratified as built.
+- **A count bump's undo edge (developer decision, 2026-11-14).** The undo
+  restores the prior count by assignment, so rolling back turns past the
+  chapter's end that ran before the close (the close stands) puts their
+  pre-bump count back over the reset's 0, and undoing the close can give
+  a merge's kept row a count holding a later turn's bump. It costs one
+  chapter's frequency signal and loses no data; canon 3d records it, and
+  the fix (a relative undo, or a reverse replay rebasing the held count)
+  is a triage entry. `resetAwarenessRetrieval` refuses a prior count that
+  isn't a non-negative integer, since an invalid one would leave an undo
+  that can't replay.
+- **A happening's time pair.** `merge_happenings` sends only
+  `occurredAtEntryId`, and only when it moves; `updateHappening` keeps
+  reading `temporal` and `occurred_at_entry_id` as two fields.
+- **`read_turns`' reach.** Any non-system entry at or before E;
+  citations stay inside the chapter. An entry outside the chapter takes
+  its handle through `CloseIds.showTurn` when a start lists a row
+  naming it.
+- **N is 20** (`AWARENESS_TOP_N`), tuning's to move.
+- **A contradicted pin.** The sentence promising lore-mgmt catches one
+  went from `retrieval.md` and `edge-cases.md`; 3d keeps its scope.
+- **The awareness update arm's count (developer, 2026-11-13).** Only a
+  `chapter_close` source writes `retrieval_count` on the update arm and
+  moves `learned_at_entry_id` there beside the user; the create arm
+  takes the count from `chapter_close` beside the user. A user update
+  keeps its old behaviour, so World's entity merge doesn't start
+  overwriting a canonical row's count.
+- **Implementer choices.** `createHappeningInvolvement` takes an
+  optional `proseEntryId`; check 3 reads the happenings this close wrote
+  through `closeWroteHappenings`; tools see the clusters through
+  `ToolContext.clusterOf`; both templates include only the close
+  instructions in their system half and join the `chapter` group; both
+  Awareness lists leave out common-knowledge happenings' rows; the
+  close's six copies of the dispatch test harness became one helper,
+  `__tests__/close-dispatch.ts`; the merge's pure fold lives in
+  `close-agent/happening-fold.ts`, and `decodeVector` is shared in
+  `lib/retrieval/decode-vector.ts`.
+- **Measures (no bar).** On the dataset chapter with the dev embedder
+  (`Xenova/all-MiniLM-L6-v2`), the range embed embedded 36 happenings
+  and the terms gave 0 clusters. The Awareness start listed 72 rows in a
+  3334-token user half. The seed's close reset 53 rows; a reset group
+  over the 53 rows counted before it took 4.9, 3.3 and 3.1 ms on
+  node:sqlite in-process, the action layer desktop main runs, before its
+  IPC hop and store patches. No Android number was taken.
+- **3e doesn't fire on MiniLM (developer decision, 2026-11-14).** The
+  thresholds ship as canon has them, and
+  [`followups.md → Tuning and play testing`](../../../../followups.md#tuning-and-play-testing)
+  holds the revisit and the numbers. A scratch probe with the cosine bar
+  lowered to 0.55 (never committed) found one cluster, which the dev
+  model merged with one `merge_happenings` call that landed; the
+  keep-apart rule for differing knowers met no real case.
+- **The dataset seed holds this slice's close.** Its close was undone
+  and run again from the dev route on `Gemma4-26B-A4B-QAT-MTP` through
+  `pnpm mock`'s passthrough, without the overlay, as one part: 41 model
+  requests, nothing stopped. The report holds 43 calls, 42 ok: Happenings
+  made none, having no cluster, and `create_lore` 1, `update_character` 8,
+  `update_faction` 2, `update_thread` 6, `set_keywords` 15 (14 ok),
+  `update_place` 1, `flag_duplicate` 3, `read_turns` 3 and `set_pin` 4
+  make up the rest. The chapter's title is now "The Treasure Map and the
+  Hispaniola".
+- **The E2E regression.** `first-chapter.spec.ts`'s close log gains the
+  reset's update of each counted awareness row, read from the DB before
+  the close. `chapter-close-owed`'s seven cases pass unchanged, since
+  the reset and normalization touch no delta count it pins.

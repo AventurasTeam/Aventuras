@@ -326,6 +326,102 @@ const CLOSE_B: Record<string, unknown> = {
   threads: [],
 }
 
+// Two Happenings calls of one story: the clusters and the writes so far differ; the mode doesn't.
+const HAPPENINGS_A: Record<string, unknown> = {
+  closeHappeningClusters: [
+    [
+      {
+        id: 'hp1',
+        title: 'The ford gives way',
+        description: 'The stones shift under Kael.',
+        cast: [{ id: 'c1', name: 'Kael' }],
+        knownBy: [{ id: 'c1', name: 'Kael' }],
+        turn: 't2',
+        commonKnowledge: false,
+      },
+      {
+        id: 'hp2',
+        title: 'Kael falls in the ford',
+        description: 'Kael goes under and loses the sigil.',
+        cast: [{ id: 'c1', name: 'Kael' }],
+        knownBy: [],
+        turn: 't3',
+        commonKnowledge: false,
+      },
+    ],
+  ],
+  closeWritesSoFar: '',
+}
+
+const HAPPENINGS_B: Record<string, unknown> = {
+  closeHappeningClusters: [
+    [
+      {
+        id: 'hp4',
+        title: 'Mora lights a lantern',
+        description: 'Mora waits at the ford with a lantern.',
+        cast: [{ id: 'c2', name: 'Mora' }],
+        knownBy: [{ id: 'c2', name: 'Mora' }],
+        turn: 't7',
+        commonKnowledge: false,
+      },
+      {
+        id: 'hp5',
+        title: 'A lantern at the ford',
+        description: '',
+        cast: [{ id: 'c2', name: 'Mora' }],
+        knownBy: [],
+        turn: 't7',
+        commonKnowledge: true,
+      },
+    ],
+  ],
+  closeWritesSoFar: '- merge_happenings The ford gives way (hp1): kept hp1',
+}
+
+// Two closes' Awareness tasks: rows, summary, turns and writes so far all differ.
+const AWARENESS_A: Record<string, unknown> = {
+  closeAwarenessRows: [
+    {
+      happening: { id: 'hp1', title: 'The siege' },
+      rows: [
+        {
+          id: 'aw1',
+          character: { id: 'c1', name: 'Kael' },
+          decayResistance: 0.4,
+          source: 'saw the gate fall',
+          learnedAt: 't3',
+          list: 'chapter',
+        },
+      ],
+    },
+  ],
+  closeChapterSummary: 'Kael crossed the marsh and lost the sigil to the water.',
+  closeChapterTurns: { first: 't1', last: 't9' },
+  closeWritesSoFar: '- merge_happenings The siege (hp1): kept hp1',
+}
+
+const AWARENESS_B: Record<string, unknown> = {
+  closeAwarenessRows: [
+    {
+      happening: { id: 'hp2', title: 'The debt' },
+      rows: [
+        {
+          id: 'aw2',
+          character: { id: 'c3', name: 'Mora' },
+          decayResistance: null,
+          source: '',
+          learnedAt: '',
+          list: 'frequent',
+        },
+      ],
+    },
+  ],
+  closeChapterSummary: 'Mora waited at the ford with a lantern.',
+  closeChapterTurns: { first: 't10', last: 't14' },
+  closeWritesSoFar: '',
+}
+
 type RenderCase = {
   templateId: TemplateId
   first: Record<string, unknown>
@@ -383,6 +479,19 @@ const RENDER_CASES: RenderCase[] = [
       'Each is what the lead does, says or attempts',
     ],
   },
+  // C3: Happenings reads no prose, so its system half is the shared instructions alone.
+  {
+    templateId: TEMPLATE_IDS.closeHappenings,
+    first: HAPPENINGS_A,
+    second: HAPPENINGS_B,
+    systemShows: ['This is an automated system.', 'Each is what the lead does, says or attempts'],
+  },
+  {
+    templateId: TEMPLATE_IDS.closeAwareness,
+    first: AWARENESS_A,
+    second: AWARENESS_B,
+    systemShows: ['This is an automated system.', 'Each is what the lead does, says or attempts'],
+  },
 ]
 
 // Stands in, on the bundled pack, for the deferred pack validator's system-half warning
@@ -414,8 +523,12 @@ describe('bundled system halves read only what the story fixes', () => {
       },
     })
     expect(unallowedSystemReads(probed, probe, CLOSE_SYSTEM_VARIABLES)).toEqual([
+      'closeAwarenessRows',
+      'closeChapterSummary',
+      'closeChapterTurns',
       'closeCharacters',
       'closeFactions',
+      'closeHappeningClusters',
       'closeLifecycleRows',
       'closeLore',
       'closeLoreLimits',
@@ -427,8 +540,12 @@ describe('bundled system halves read only what the story fixes', () => {
       'entries',
     ])
     expect(unallowedSystemReads(probed, probe, [])).toEqual([
+      'closeAwarenessRows',
+      'closeChapterSummary',
+      'closeChapterTurns',
       'closeCharacters',
       'closeFactions',
+      'closeHappeningClusters',
       'closeLifecycleRows',
       'closeLore',
       'closeLoreLimits',

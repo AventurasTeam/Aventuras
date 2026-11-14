@@ -24,7 +24,10 @@ type AwarenessUpsertPayload = {
   learnedAtEntryId?: string | null
   decayResistance?: number | null
   source?: string | null
-  /** Honored only on a user-source create; an invalid value rejects the action regardless. */
+  /**
+   * Honoured on a user-source create and on a chapter_close write; an invalid value rejects the
+   * action regardless.
+   */
   retrievalCount?: number
   /**
    * A pass's source entry (cadence.md → User edits and classifier writes): user writes after it
@@ -41,10 +44,18 @@ declare module '@/lib/actions/action-map' {
       source: DeltaSource
       payload: { branchId: string; id: string; priorCount: number }
     }
+    resetAwarenessRetrieval: {
+      source: DeltaSource
+      payload: { branchId: string; id: string; priorCount: number }
+    }
   }
 }
 
 const USER_WON = noopRefusal(USER_EDITED_SINCE_PROSE, null)
+
+// Any chapter_close write may move learned_at and the count, so close callers send only folded
+// values (the merge) or neither (set_pin).
+const isCloseMerge = (source: DeltaSource): boolean => source === 'chapter_close'
 
 const upsertHandler: ActionHandler = async (action, branchId, ctx, group) => {
   if (action.kind !== 'upsertHappeningAwareness')
@@ -93,14 +104,24 @@ const upsertHandler: ActionHandler = async (action, branchId, ctx, group) => {
   // A delete arm cascades the link under this lock, so an existing one skips the ref check;
   // a create's reversal can still orphan it.
   if (current) {
-    // Only a user edit re-anchors learned_at; a classifier re-emit must not drift the decay anchor.
+    // A classifier re-emit must not drift the decay anchor; a user edit and a close's merge, which
+    // carries the merged rows' earliest anchor, re-anchor it.
     const learnedAt =
-      learnedAtEntryId !== undefined && isUserOriginatedSource(action.source)
+      learnedAtEntryId !== undefined &&
+      (isUserOriginatedSource(action.source) || isCloseMerge(action.source))
         ? nullifyRef(learnedAtEntryId)
         : undefined
+    // Only a close's merge writes the count it sends (its folded total); a user update's count is
+    // dropped, so a moved row's count never overwrites the one standing.
+    const count = isCloseMerge(action.source) ? retrievalCount : undefined
     // Update-only reject: a create with no authored fields is a valid awareness-only
     // record (the character knows the happening; source/decay simply unrecorded).
-    if (source === undefined && decayResistance === undefined && learnedAt === undefined)
+    if (
+      source === undefined &&
+      decayResistance === undefined &&
+      learnedAt === undefined &&
+      count === undefined
+    )
       return { status: 'rejected', reason: 'no awareness fields to merge' }
     // Unchanged fields are dropped, and an all-unchanged upsert is a noop: History reads an
     // undo payload's keys as fields that changed.
@@ -117,6 +138,10 @@ const upsertHandler: ActionHandler = async (action, branchId, ctx, group) => {
     if (learnedAt !== undefined && learnedAt !== current.learnedAtEntryId) {
       set.learnedAtEntryId = learnedAt
       undoPayload.learnedAtEntryId = current.learnedAtEntryId
+    }
+    if (count !== undefined && count !== current.retrievalCount) {
+      set.retrievalCount = count
+      undoPayload.retrievalCount = current.retrievalCount
     }
     if (Object.keys(set).length === 0) return noopRefusal('awareness unchanged', 'restated')
     // A field the user wrote after the prose keeps its value; a pair the user created since counts
@@ -177,9 +202,12 @@ const upsertHandler: ActionHandler = async (action, branchId, ctx, group) => {
     characterId,
     learnedAtEntryId: nullifyRef(learnedAtEntryId),
     decayResistance: decayResistance ?? null,
-    // A merge's moved row keeps its count; a pipeline create starts at 0, since only
+    // A moved or merged row keeps its count; any other pipeline create starts at 0, since only
     // bumpAwarenessRetrieval counts retrievals.
-    retrievalCount: isUserOriginatedSource(action.source) ? (retrievalCount ?? 0) : 0,
+    retrievalCount:
+      isUserOriginatedSource(action.source) || isCloseMerge(action.source)
+        ? (retrievalCount ?? 0)
+        : 0,
     source: source ?? null,
   }
   return {
@@ -257,6 +285,40 @@ const bumpRetrievalHandler: ActionHandler = (action, branchId, ctx) => {
   }
 }
 
+// chapter-close.md → 3d: counts are per chapter. The undo key is a bump's, so History and row
+// signals pass over a reset as they pass over a bump.
+const resetRetrievalHandler: ActionHandler = (action, branchId, ctx) => {
+  if (action.kind !== 'resetAwarenessRetrieval')
+    throw new Error(`handler/kind mismatch: ${action.kind}`)
+  const { branchId: bid, id, priorCount } = action.payload
+  if (bid !== branchId)
+    return { status: 'rejected', reason: `branch mismatch: delta ${branchId} vs target ${bid}` }
+  // An invalid count (NaN stores as null) leaves an undo that can't replay, or writes a bad count
+  // back; refuse it before the noop.
+  if (!(Number.isSafeInteger(priorCount) && priorCount >= 0))
+    return {
+      status: 'rejected',
+      reason: 'invalid reset: priorCount must be a non-negative integer',
+    }
+  // No read of its own, as a bump: the close read every count in one statement.
+  if (priorCount === 0) return noopRefusal('retrieval count already zero', 'restated')
+  return {
+    status: 'ok',
+    targetTable: 'happening_awareness',
+    targetId: id,
+    op: 'update',
+    undoPayload: { retrievalCount: priorCount },
+    ops: [
+      ctx.db
+        .update(happeningAwareness)
+        .set({ retrievalCount: 0 })
+        .where(and(eq(happeningAwareness.branchId, bid), eq(happeningAwareness.id, id)))
+        .toSQL(),
+    ],
+    patch: { op: 'update', id, columns: { retrievalCount: 0 } },
+  }
+}
+
 export function registerHappeningAwareness(): void {
   register({
     table: 'happening_awareness',
@@ -270,6 +332,7 @@ export function registerHappeningAwareness(): void {
       upsertHappeningAwareness: upsertHandler,
       deleteHappeningAwareness: deleteHandler,
       bumpAwarenessRetrieval: bumpRetrievalHandler,
+      resetAwarenessRetrieval: resetRetrievalHandler,
     },
     patcher: (branchId, p) => happeningAwarenessStore.patch(branchId, p),
   })

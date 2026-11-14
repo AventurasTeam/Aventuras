@@ -3,11 +3,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 
 import { applyDeltaAction } from '@/lib/actions/delta/apply-delta-action'
 import { undoLastAction } from '@/lib/actions/story-entries/undo'
-import {
-  USER_EDITED_SINCE_PROSE,
-  type GroupOutcome,
-  type PipelineAction,
-} from '@/lib/actions/types'
+import { USER_EDITED_SINCE_PROSE, type PipelineAction } from '@/lib/actions/types'
 import {
   branches,
   deltas,
@@ -23,21 +19,17 @@ import { changedPaths } from '@/lib/history/humanize'
 import { resetAllStores } from '@/lib/stores'
 import { collisionPairOf, entityKeepActions, flagStillHolds } from '@/lib/world'
 
-import { createReadSet } from './common-checks'
-import { dispatchToolCall, type DispatchContext, type ToolAnswer } from './dispatch'
-import { CloseLedgerWriter } from './ledger'
 import { type FLAG_DUPLICATE_SHAPE, flagDuplicateTool, retireEntityTool } from './lifecycle-tools'
 import { turnInTextReason } from './text-checks'
 import { assertReplaySafe, type CloseTool, type WriteTool } from './tool'
 import { CLOSE_REASON } from './verdict'
-import { expectRan } from '../../__tests__/harness'
-import { definePipeline } from '../../authoring/define'
-import { getPipelineSafe } from '../../authoring/registry'
-import { runPipeline } from '../../runtime/orchestrator'
-import type { PhaseContext, PhaseEmittedEvent, PhaseResult, TxResult } from '../../types'
+import {
+  runDispatchCalls,
+  shownOf,
+  type DispatchRun,
+  type ScriptedCall,
+} from '../__tests__/close-dispatch'
 import { openCloseFixture, type CloseFixture } from '../__tests__/close-fixture'
-import { closeIdsOf, seedCloseLedger } from '../close-intermediates'
-import type { CloseLedger } from '../intermediates'
 
 // ---- Fixture helpers ----
 
@@ -215,16 +207,7 @@ const cite = (turns: readonly string[] = ['t7'], why = WHY) => ({ turns: [...tur
 
 // ---- A scripted dispatch: the calls run as the agent phase runs them ----
 
-type ShownRow = { id: string; name: string }
-type ScriptedCall = { toolName: string; input: Record<string, unknown> }
-type DispatchRun = {
-  result: TxResult
-  /** Each scripted call's answer, in order. */
-  answers: readonly ToolAnswer[]
-  calls: CloseLedger['calls']
-}
-
-const SCRIPTED_KIND = 'close-lifecycle-tools-test'
+type ShownEntity = { id: string; name: string }
 
 /** flag_duplicate whose partner takes a live flag naming Tobin after the plan reads. */
 const flagDuplicateRaced: WriteTool<typeof FLAG_DUPLICATE_SHAPE> = {
@@ -245,95 +228,23 @@ const LIFECYCLE_TOOLS: Readonly<Record<string, CloseTool>> = {
   flag_duplicate_raced: flagDuplicateRaced,
 }
 
-type PendingRun = {
-  calls: readonly ScriptedCall[]
-  shown: readonly ShownRow[]
-  endEntryId: string
-  taskEntryIds: readonly string[]
-  answers: ToolAnswer[]
-  ledger?: CloseLedger
-}
-let pending: PendingRun | undefined
-
-// Stands where the agent phase will: the task's turns, the shown rows, all of them read.
-async function* scriptedPhase(
-  phase: PhaseContext,
-): AsyncGenerator<PhaseEmittedEvent, PhaseResult, GroupOutcome | undefined> {
-  const run = pending
-  if (run === undefined) throw new Error('no scripted calls')
-  const ids = closeIdsOf(phase.intermediates)
-  ids.showTurns(run.taskEntryIds)
-  for (const { id, name } of run.shown) ids.show(id, name)
-  const ledger = seedCloseLedger(phase.intermediates)
-  run.ledger = ledger
-  const writer = new CloseLedgerWriter(ledger, (id) => ids.nameOfId(id), phase.actionId)
-  const readSet = createReadSet()
-  readSet.add(run.shown.map(({ id }) => ({ table: 'entities' as const, id })))
-  const ctx: DispatchContext = {
-    db: phase.db,
-    branchId: phase.branchId,
-    endEntryId: run.endEntryId,
-    task: 'lifecycle',
-    part: 1,
-    ids,
-    readFields: {},
-    survivorOf: (table, id) => writer.survivorOf(table, id),
-    landedCalls: (tool) => writer.landedCalls(tool),
-    phase,
-    taskEntryIds: run.taskEntryIds,
-    readSet,
-    ledger: writer,
-  }
-  for (const [index, { toolName, input }] of run.calls.entries()) {
-    const tool = LIFECYCLE_TOOLS[toolName]
-    if (tool === undefined) throw new Error(`no lifecycle tool ${toolName}`)
-    run.answers.push(
-      yield* dispatchToolCall({ toolCallId: `call_${index + 1}`, toolName, input }, tool, ctx),
-    )
-  }
-  return { status: 'completed' }
-}
-
 /** Runs `calls` in one close-like run; `shown` shown and read in order, the chapter by default. */
-async function dispatchScripted(
+function dispatchScripted(
   f: CloseFixture,
   calls: readonly ScriptedCall[],
-  opts: { shown: readonly ShownRow[]; endEntryId?: string; taskEntryIds?: readonly string[] },
+  opts: { shown: readonly ShownEntity[]; endEntryId?: string; taskEntryIds?: readonly string[] },
 ): Promise<DispatchRun> {
-  if (getPipelineSafe(SCRIPTED_KIND) === undefined)
-    definePipeline({
-      kind: SCRIPTED_KIND,
-      phases: [{ name: 'agent', run: scriptedPhase }],
-      affordance: 'invisible',
-      gateBehavior: 'hard-gate',
-      concurrencyPolicy: {},
-    })
-  const run: PendingRun = {
+  return runDispatchCalls(f, {
+    task: 'lifecycle',
+    tools: LIFECYCLE_TOOLS,
+    shown: shownOf(opts.shown),
     calls,
-    shown: opts.shown,
-    endEntryId: opts.endEntryId ?? endEntryId(f),
-    taskEntryIds: opts.taskEntryIds ?? chapterIds(f),
-    answers: [],
-  }
-  pending = run
-  try {
-    const result = expectRan(
-      await runPipeline(SCRIPTED_KIND, {
-        storyId: f.storyId,
-        branchId: f.branchId,
-        db: f.ctx.db,
-        runInTransaction: f.ctx.runInTransaction,
-      }),
-    )
-    expect(result.outcome).toBe('completed')
-    if (run.ledger === undefined) throw new Error('the scripted phase never ran')
-    return { result, answers: run.answers, calls: run.ledger.calls }
-  } finally {
-    pending = undefined
-  }
+    turns: {
+      endEntryId: opts.endEntryId ?? endEntryId(f),
+      taskEntryIds: opts.taskEntryIds ?? chapterIds(f),
+    },
+  })
 }
-
-const outputs = (answers: readonly ToolAnswer[]) => answers.map(({ output }) => output)
 
 afterEach(() => {
   resetAllStores()
@@ -399,7 +310,7 @@ describe('retire_entity', () => {
         { shown: [{ id, name }] },
       )
 
-      expect(outputs(answers)).toEqual([{ result: 'ok' }])
+      expect(answers).toEqual([{ result: 'ok' }])
       expect(await storedEntity(f, id)).toMatchObject({ status: 'retired', retiredReason: WHY })
       const log = await runDeltas(f, result.actionId)
       expect(log.map((d) => [d.targetTable, d.targetId, d.op, d.source, d.entryId])).toEqual([
@@ -452,7 +363,7 @@ describe('retire_entity', () => {
       { shown: [{ id: TOBIN, name: 'Tobin' }] },
     )
 
-    expect(outputs(answers)).toEqual([{ result: 'ok' }])
+    expect(answers).toEqual([{ result: 'ok' }])
     expect(await storedEntity(f, TOBIN)).toMatchObject({ status: 'retired', retiredReason: WHY })
     const [forkRow] = await f.ctx.db
       .select()
@@ -497,7 +408,7 @@ describe('retire_entity', () => {
         { shown: [{ id: HARROW, name: 'Harrow' }] },
       )
 
-      expect(outputs(answers)).toEqual([
+      expect(answers).toEqual([
         { result: 'rejected', reason: 'location', note: expect.stringContaining('Only the user') },
       ])
       expect(await runDeltas(f, result.actionId)).toEqual([])
@@ -519,7 +430,7 @@ describe('retire_entity', () => {
       { shown: [{ id: TOBIN, name: 'Tobin' }] },
     )
 
-    expect(outputs(answers)).toEqual([{ result: 'ok' }])
+    expect(answers).toEqual([{ result: 'ok' }])
     expect(await runDeltas(f, result.actionId)).toEqual([])
     expect((await storedEntity(f, TOBIN)).retiredReason).toBe('Left the story.')
     expect(calls[0]).toMatchObject({ result: 'ok' })
@@ -535,7 +446,7 @@ describe('retire_entity', () => {
       { shown: [{ id: TOBIN, name: 'Tobin' }] },
     )
 
-    expect(outputs(answers)).toEqual([
+    expect(answers).toEqual([
       { result: 'rejected', reason: 'not-active', note: expect.any(String) },
     ])
     expect(await runDeltas(f, result.actionId)).toEqual([])
@@ -552,7 +463,7 @@ describe('retire_entity', () => {
       { shown: [{ id: TOBIN, name: 'Tobin' }] },
     )
 
-    expect(outputs(answers)).toEqual([
+    expect(answers).toEqual([
       { result: 'rejected', reason: 'in-scene-later', note: expect.any(String) },
     ])
     expect(await runDeltas(f, result.actionId)).toEqual([])
@@ -569,7 +480,7 @@ describe('retire_entity', () => {
       { shown: [{ id: TOBIN, name: 'Tobin' }], taskEntryIds: chapterIds(f).slice(0, 5) },
     )
 
-    expect(outputs(answers)).toEqual([
+    expect(answers).toEqual([
       { result: 'rejected', reason: 'in-scene-later', note: expect.any(String) },
     ])
     expect(await runDeltas(f, result.actionId)).toEqual([])
@@ -586,7 +497,7 @@ describe('retire_entity', () => {
       { shown: [{ id: TOBIN, name: 'Tobin' }] },
     )
 
-    expect(outputs(answers)).toEqual([{ result: 'ok' }])
+    expect(answers).toEqual([{ result: 'ok' }])
     expect((await storedEntity(f, TOBIN)).status).toBe('retired')
   })
 
@@ -600,7 +511,7 @@ describe('retire_entity', () => {
       { shown: [{ id: LANTERN, name: 'Lantern' }] },
     )
 
-    expect(outputs(answers)).toEqual([{ result: 'ok' }])
+    expect(answers).toEqual([{ result: 'ok' }])
   })
 
   it.each(['As t5 shows, he drowns at the landing.', 'He drowns at the landing [t5].'])(
@@ -614,7 +525,7 @@ describe('retire_entity', () => {
         { shown: [{ id: TOBIN, name: 'Tobin' }] },
       )
 
-      expect(outputs(answers)).toEqual([
+      expect(answers).toEqual([
         { result: 'rejected', reason: turnInTextReason('t5'), note: expect.any(String) },
       ])
       expect(await runDeltas(f, result.actionId)).toEqual([])
@@ -635,7 +546,7 @@ describe('retire_entity', () => {
       { shown: [{ id: TOBIN, name: 'Tobin' }] },
     )
 
-    expect(outputs(answers)).toEqual([{ result: 'ok' }])
+    expect(answers).toEqual([{ result: 'ok' }])
     expect((await storedEntity(f, TOBIN)).retiredReason).toBe('He drowns past mile t99.')
   })
 
@@ -658,7 +569,7 @@ describe('retire_entity', () => {
       { shown: [{ id: TOBIN, name: 'Tobin' }] },
     )
 
-    expect(outputs(answers)).toEqual([
+    expect(answers).toEqual([
       { result: 'skipped', reason: CLOSE_REASON.laterTurn, note: expect.any(String) },
     ])
     expect(await runDeltas(f, result.actionId)).toEqual([])
@@ -685,7 +596,7 @@ describe('retire_entity', () => {
       { shown: [{ id: TOBIN, name: 'Tobin' }] },
     )
 
-    expect(outputs(answers)).toEqual([
+    expect(answers).toEqual([
       { result: 'skipped', reason: CLOSE_REASON.laterTurn, note: expect.any(String) },
     ])
   })
@@ -713,7 +624,7 @@ describe('retire_entity', () => {
       { shown: [{ id: TOBIN, name: 'Tobin' }] },
     )
 
-    expect(outputs(answers)).toEqual([
+    expect(answers).toEqual([
       { result: 'skipped', reason: USER_EDITED_SINCE_PROSE, note: expect.any(String) },
     ])
     expect(await runDeltas(f, result.actionId)).toEqual([])
@@ -742,7 +653,7 @@ describe('retire_entity', () => {
       { shown: [{ id: TOBIN, name: 'Tobin' }] },
     )
 
-    expect(outputs(answers)).toEqual([
+    expect(answers).toEqual([
       { result: 'skipped', reason: USER_EDITED_SINCE_PROSE, note: expect.any(String) },
     ])
     expect(await runDeltas(f, result.actionId)).toEqual([])
@@ -774,7 +685,7 @@ describe('retire_entity', () => {
       { shown: [{ id: TOBIN, name: 'Tobin' }], ...late },
     )
 
-    expect(outputs(answers)).toEqual([
+    expect(answers).toEqual([
       { result: 'skipped', reason: USER_EDITED_SINCE_PROSE, note: expect.any(String) },
     ])
     expect(await runDeltas(f, result.actionId)).toEqual([])
@@ -788,7 +699,7 @@ describe('retire_entity', () => {
       { shown: [{ id: GONE, name: 'Ansel' }] },
     )
 
-    expect(outputs(answers)).toEqual([
+    expect(answers).toEqual([
       { result: 'rejected', reason: CLOSE_REASON.rowGone, note: expect.any(String) },
     ])
     expect(calls[0]).toMatchObject({
@@ -826,7 +737,7 @@ describe('flag_duplicate', () => {
 
     const { result, answers, calls } = await dispatchScripted(f, [flagCall()], { shown: SHOWN })
 
-    expect(outputs(answers)).toEqual([{ result: 'ok' }])
+    expect(answers).toEqual([{ result: 'ok' }])
     const tobin = await storedEntity(f, TOBIN)
     const stranger = await storedEntity(f, STRANGER)
     expect(flagOf(tobin)).toEqual([1, STRANGER, 'duplicate'])
@@ -874,7 +785,7 @@ describe('flag_duplicate', () => {
 
       const { result, answers, calls } = await dispatchScripted(f, [flagCall()], { shown: SHOWN })
 
-      expect(outputs(answers)).toEqual([{ result: 'ok' }])
+      expect(answers).toEqual([{ result: 'ok' }])
       expect(await runDeltas(f, result.actionId)).toEqual([])
       expect(calls[0]).toMatchObject({ result: 'ok' })
       expect(calls[0]).not.toHaveProperty('values')
@@ -909,7 +820,7 @@ describe('flag_duplicate', () => {
 
       const { result, answers, calls } = await dispatchScripted(f, [flagCall()], { shown: SHOWN })
 
-      expect(outputs(answers)).toEqual([{ result: 'ok' }])
+      expect(answers).toEqual([{ result: 'ok' }])
       expect(flagOf(await storedEntity(f, holder))).toEqual([1, other, 'duplicate'])
       expect(flagOf(await storedEntity(f, other))).toEqual([0, null, null])
       const [delta] = await runDeltas(f, result.actionId)
@@ -944,7 +855,7 @@ describe('flag_duplicate', () => {
 
     const { result, answers, calls } = await dispatchScripted(f, [flagCall()], { shown: SHOWN })
 
-    expect(outputs(answers)).toEqual([{ result: 'ok' }])
+    expect(answers).toEqual([{ result: 'ok' }])
     expect(flagOf(await storedEntity(f, STRANGER))).toEqual([1, TOBIN, 'duplicate'])
     expect(flagOf(await storedEntity(f, TOBIN))).toEqual([1, CLERK, 'duplicate'])
     const log = await runDeltas(f, result.actionId)
@@ -978,7 +889,7 @@ describe('flag_duplicate', () => {
         shown: SHOWN,
       })
 
-      expect(outputs(answers)).toEqual([{ result: 'ok' }])
+      expect(answers).toEqual([{ result: 'ok' }])
       expect(flagOf(await storedEntity(f, STRANGER))).toEqual([1, TOBIN, 'duplicate'])
       expect(flagOf(await storedEntity(f, TOBIN))).toEqual([1, CLERK, 'duplicate'])
       const log = await runDeltas(f, result.actionId)
@@ -1019,7 +930,7 @@ describe('flag_duplicate', () => {
 
       const { result, answers } = await dispatchScripted(f, [flagCall(input)], { shown: SHOWN })
 
-      expect(outputs(answers)).toEqual([
+      expect(answers).toEqual([
         {
           result: 'rejected',
           reason: 'already-flagged',
@@ -1045,7 +956,7 @@ describe('flag_duplicate', () => {
 
     const { answers } = await dispatchScripted(f, [flagCall()], { shown: SHOWN })
 
-    expect(outputs(answers)).toEqual([{ result: 'ok' }])
+    expect(answers).toEqual([{ result: 'ok' }])
     expect(flagOf(await storedEntity(f, TOBIN))).toEqual([1, STRANGER, 'duplicate'])
     expect(flagOf(await storedEntity(f, STRANGER))).toEqual([0, null, null])
   })
@@ -1073,7 +984,7 @@ describe('flag_duplicate', () => {
 
     const { result, answers, calls } = await dispatchScripted(f, [flagCall()], { shown: SHOWN })
 
-    expect(outputs(answers)).toEqual([{ result: 'ok' }])
+    expect(answers).toEqual([{ result: 'ok' }])
     expect(flagOf(await storedEntity(f, STRANGER))).toEqual([1, TOBIN, 'duplicate'])
     expect(flagOf(await storedEntity(f, TOBIN))).toEqual([1, NAMESAKE, 'name-taken'])
     const log = await runDeltas(f, result.actionId)
@@ -1120,7 +1031,7 @@ describe('flag_duplicate', () => {
 
     const { result, answers, calls } = await dispatchScripted(f, [flagCall()], { shown: SHOWN })
 
-    expect(outputs(answers)).toEqual([
+    expect(answers).toEqual([
       { result: 'skipped', reason: CLOSE_REASON.laterTurn, note: expect.any(String) },
     ])
     expect(await runDeltas(f, result.actionId)).toEqual([])
@@ -1153,7 +1064,7 @@ describe('flag_duplicate', () => {
       const { result, answers } = await dispatchScripted(f, [flagCall()], { shown: SHOWN })
 
       // Not skipped: the user's clear answers the question, whenever it came.
-      expect(outputs(answers)).toEqual([
+      expect(answers).toEqual([
         {
           result: 'rejected',
           reason: 'pair-resolved',
@@ -1194,7 +1105,7 @@ describe('flag_duplicate', () => {
       taskEntryIds: [...f.entries.map((entry) => entry.id), 'entry_late_006', 'entry_late_007'],
     })
 
-    expect(outputs(answers)).toEqual([
+    expect(answers).toEqual([
       {
         result: 'rejected',
         reason: 'pair-resolved',
@@ -1220,7 +1131,7 @@ describe('flag_duplicate', () => {
       { shown: SHOWN },
     )
 
-    expect(outputs(answers)).toEqual([
+    expect(answers).toEqual([
       {
         result: 'rejected',
         reason: 'flag-held-by-partner',
@@ -1262,7 +1173,7 @@ describe('flag_duplicate', () => {
     const { result, answers } = await dispatchScripted(f, [flagCall()], { shown: SHOWN })
 
     // With no precedence check here the handler would answer already-flagged, rejected.
-    expect(outputs(answers)).toEqual([
+    expect(answers).toEqual([
       { result: 'skipped', reason: CLOSE_REASON.laterTurn, note: expect.any(String) },
     ])
     expect(await runDeltas(f, result.actionId)).toEqual([])
@@ -1281,7 +1192,7 @@ describe('flag_duplicate', () => {
 
     const { result, answers } = await dispatchScripted(f, [flagCall()], { shown: SHOWN })
 
-    expect(outputs(answers)).toEqual([
+    expect(answers).toEqual([
       { result: 'skipped', reason: USER_EDITED_SINCE_PROSE, note: expect.any(String) },
     ])
     expect(await runDeltas(f, result.actionId)).toEqual([])
@@ -1305,7 +1216,7 @@ describe('flag_duplicate', () => {
       ...late,
     })
 
-    expect(outputs(answers)).toEqual([
+    expect(answers).toEqual([
       { result: 'skipped', reason: USER_EDITED_SINCE_PROSE, note: expect.any(String) },
     ])
     expect(await runDeltas(f, result.actionId)).toEqual([])
@@ -1319,7 +1230,7 @@ describe('flag_duplicate', () => {
       shown: SHOWN,
     })
 
-    expect(outputs(answers)).toEqual([
+    expect(answers).toEqual([
       { result: 'rejected', reason: 'partner-is-self', note: expect.any(String) },
     ])
     expect(await runDeltas(f, result.actionId)).toEqual([])
@@ -1337,7 +1248,7 @@ describe('flag_duplicate', () => {
       ],
     })
 
-    expect(outputs(answers)).toEqual([
+    expect(answers).toEqual([
       { result: 'rejected', reason: 'partner-not-of-kind', note: expect.any(String) },
     ])
     expect(await runDeltas(f, result.actionId)).toEqual([])
@@ -1353,7 +1264,7 @@ describe('flag_duplicate', () => {
       ],
     })
 
-    expect(outputs(answers)).toEqual([
+    expect(answers).toEqual([
       { result: 'rejected', reason: CLOSE_REASON.rowGone, note: expect.any(String) },
     ])
     expect(calls[0]).toMatchObject({
@@ -1417,7 +1328,7 @@ describe('flag_duplicate', () => {
           shown: SHOWN,
         })
 
-        expect(outputs(answers)).toEqual([{ result: 'ok' }])
+        expect(answers).toEqual([{ result: 'ok' }])
         expect(flagOf(await storedEntity(f, TOBIN))).toEqual([1, STRANGER, 'duplicate'])
         expect(flagOf(await storedEntity(f, STRANGER))).toEqual([1, TOBIN, 'duplicate'])
         const log = await runDeltas(f, result.actionId)
@@ -1460,7 +1371,7 @@ describe('flag_duplicate', () => {
 
       const { answers } = await dispatchScripted(f, [flagCall()], { shown: SHOWN })
 
-      expect(outputs(answers)).toEqual([
+      expect(answers).toEqual([
         {
           result: 'ok',
           notWritten: ['nameCollisionFlag', 'nameCollisionPartnerId', 'nameCollisionReason'].map(
@@ -1494,7 +1405,7 @@ describe('flag_duplicate', () => {
 
         const { answers } = await dispatchScripted(f, [flagCall(input)], { shown: SHOWN })
 
-        expect(outputs(answers)).toEqual([
+        expect(answers).toEqual([
           {
             result: 'ok',
             notWritten: [
@@ -1527,7 +1438,7 @@ describe('flag_duplicate', () => {
         { shown: SHOWN },
       )
 
-      expect(outputs(answers)).toEqual([{ result: 'ok' }, { result: 'ok' }])
+      expect(answers).toEqual([{ result: 'ok' }, { result: 'ok' }])
       expect(flagOf(await storedEntity(f, TOBIN))).toEqual([1, STRANGER, 'duplicate'])
       expect(flagOf(await storedEntity(f, STRANGER))).toEqual([1, TOBIN, 'duplicate'])
       const log = await runDeltas(f, result.actionId)
