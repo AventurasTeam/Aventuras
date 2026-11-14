@@ -1711,8 +1711,8 @@ place's parent is null.
 `happenings_mutual_excl` holds through a close's two machine updates
 of a happening. A merge clusters only rows with an
 `occurred_at_entry_id` and, of the time pair, sends only that column,
-when the kept row's anchor moves; `mark_common_knowledge` writes `common_knowledge` alone;
-and a user edit writes both columns.
+when the kept row's anchor moves; `mark_common_knowledge` writes
+`common_knowledge` alone; and a user edit writes both columns.
 
 **A chapter delete keeps later writes from any source.** It reverses a
 close's group with turns above it, the one reversal that does

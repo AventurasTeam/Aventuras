@@ -53,15 +53,14 @@ and metadata calls stay single structured replies.
 3. Metadata, which writes the `chapters` row and each entry's
    `chapter_id`.
 4. Stackable normalization, in code.
-5. The range embed and clustering, in code
-   ([3e](#3e--happenings-consolidation)).
-6. The Happenings task.
-7. For each [part](#parts) of the chapter, the Lore, Identity, Threads,
+5. The Happenings task, after the range embed and clustering, in code,
+   find its clusters ([3e](#3e--happenings-consolidation)).
+6. For each [part](#parts) of the chapter, the Lore, Identity, Threads,
    Upkeep and Lifecycle tasks.
-8. The Awareness task.
-9. The `retrieval_count` reset, in code, then `close_report`
+7. The Awareness task.
+8. The `retrieval_count` reset, in code, then `close_report`
    ([Review](#review)).
-10. Display translation of what the close changed.
+9. Display translation of what the close changed.
 
 Embedding isn't a close step: writes flag rows stale, and the sync stage
 before the next turn's retrieval embeds them
@@ -696,16 +695,16 @@ clusters happenings within the closed chapter range by:
   position, counting the range's entries other than `system` rows.
 
 All three criteria must hold between every two rows of a cluster, so
-no chain drifts. A row with no character among its
-involvements, or no `occurred_at_entry_id`, clusters with nothing. Clusters form by
+no chain drifts. A row with no character among its involvements, or no
+`occurred_at_entry_id`, clusters with nothing. Clusters form by
 strongest-pair-first complete linkage: every pair meeting all three
 criteria is considered in descending cosine, ties by anchor then id,
 and the clusters holding a pair's two rows merge only when every cross
-pair meets all three too. Each row ends in at most one cluster, with no size limit; a
-cluster of ≥ 2 rows is passed to the LLM for judgment. The start shows
-each row with its cast and who knows it (a common-knowledge row reads
-as known by every character), and the prompt keeps apart happenings
-whose merge would tell someone something new.
+pair meets all three too. Each row ends in at most one cluster, with no
+size limit; a cluster of ≥ 2 rows is passed to the LLM for judgment.
+The start shows each row with its cast and who knows it (a
+common-knowledge row reads as known by every character), and the prompt
+keeps apart happenings whose merge would tell someone something new.
 
 **LLM judgment per cluster:**
 
@@ -745,8 +744,9 @@ row is a merge that keeps the kept row's text. Keep distinct is no call.
   source strings joined with `; `, each once in the order first seen,
   the kept row's first. The first source stands whole and a later one
   joins only if the joined text stays within 120 characters, else it is
-  skipped and the next is tried, so no stored source is ever cut. A user-written row's values stand when the
-  user wrote them after the cited prose.
+  skipped and the next is tried, so no stored source is ever cut. A
+  user-written row's values stand when the user wrote them after the
+  cited prose.
 - Deleted rows are delta-logged for rollback.
 
 **A merge lands whole, once per row.** Code checks user precedence on
