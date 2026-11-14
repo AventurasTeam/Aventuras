@@ -103,7 +103,7 @@ export type YieldTo = 'user' | 'any'
  * that `rows` doesn't also reverse, oldest first: `user_edit` ones, or with `'any'` every source
  * except a `retrievalCount`-only update. A user delta has none.
  */
-export async function userEditsOutliving(
+export async function writesOutliving(
   ctx: DbCtx,
   rows: readonly Delta[],
   wanted: (delta: Delta) => boolean,

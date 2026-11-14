@@ -439,22 +439,6 @@ patch`, which 5.5a marks `restated`, so a close tool's write of it
   again. Leaving it out needs a later-turn read on the start's
   candidates, which the row guard does per row. Raised in the slice
   review fixes for 5.9's R2.
-- **The reversal planner's source filters and lock window have three
-  loose ends.** First, user mode reads later writes with
-  `source = 'user_edit'` (`rowDeltasAfter`, `lib/actions/delta/user-precedence.ts`),
-  while the same file's user-delta exclusion uses
-  `isUserOriginatedSource`; no source outside `user_edit` is user
-  originated today, so nothing differs yet, and a second user-originated
-  source would split the two. Second, `refClearsOf`
-  (`lib/actions/delta/row-closure.ts`) reads later writes at selection,
-  and `reverseReplayDeltas` selects before it takes `withKeyLocks`,
-  while the walk re-reads them inside the lock
-  (`lib/actions/delta/reverse-replay.ts`); a write landing between the
-  two leaves the clears planned from a read the walk no longer shares.
-  Third, 5.9's #732 has landed, so `userEditsOutliving` and the
-  walk's `userEdits` parameters carry any source in `'any'` mode and
-  the name is now wrong; a rename to the later-writes sense would fit.
-  Raised in Slice 5.12's review of Task 1.
 - **The chapter-delete preview has an unused input, and its refusals
   log unevenly.** `getChapterDeletePreview` takes
   `story: Pick<OpenStory, 'branchId' | 'settings'>` and never reads

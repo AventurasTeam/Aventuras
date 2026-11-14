@@ -26,7 +26,7 @@ import {
 import { resolveByTable } from './registry'
 import { ReversalIntegrityError } from './replay-errors'
 import { deltaLockKeys, type RowLockKey } from './row-locks'
-import { userEditsOutliving, wroteColumn, wroteField, type YieldTo } from './user-precedence'
+import { writesOutliving, wroteColumn, wroteField, type YieldTo } from './user-precedence'
 
 type ReversalSetFields = Pick<
   ReversalSet,
@@ -366,7 +366,7 @@ async function refClearsOf(
   held: HeldRowIndex,
   yieldTo: YieldTo,
 ): Promise<RefClear[]> {
-  const laterEdits = await userEditsOutliving(ctx, rows, (d) => pathUndos(d).length > 0, yieldTo)
+  const laterEdits = await writesOutliving(ctx, rows, (d) => pathUndos(d).length > 0, yieldTo)
   const restored = restoredRefs(rows, laterEdits)
   const unmoved = (row: RowRef, ref: RefPath) => !restored.has(restoredKey(row, ref))
   // What the set's undos write: each moved ref's restored value, and each re-inserted row's refs.
