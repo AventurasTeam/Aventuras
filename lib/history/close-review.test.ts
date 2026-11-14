@@ -91,7 +91,7 @@ describe('closeReviewNotApplied', () => {
         fieldLabel: 'Voice',
         summary: 'Flat',
         reasonKey: 'user-edited-since-prose',
-        reasonText: 'You changed this field after the cited entry.',
+        reasonText: 'You changed this after the cited entry.',
         pressTo: { table: 'entities', id: 'char_kael' },
       },
       {
@@ -103,7 +103,7 @@ describe('closeReviewNotApplied', () => {
         fieldLabel: 'Description',
         summary: 'A ranger.',
         reasonKey: 'user-edited-since-prose',
-        reasonText: 'You changed this field after the cited entry.',
+        reasonText: 'You changed this after the cited entry.',
         pressTo: { table: 'entities', id: 'char_kael' },
       },
     ])
@@ -205,6 +205,7 @@ describe('closeReviewNotApplied', () => {
     expect(review.notApplied.map((row) => [row.fieldPath, row.summary, row.reasonText])).toEqual([
       ['state.traits', 'a, b, c, d, e, f, g, h, i', 'The list is over its cap.'],
     ])
+    expect(review.noToolCalls).toBe(false)
   })
 
   it("gives each field of a skipped call its own reason when they differ, else the call's", () => {
@@ -555,6 +556,157 @@ describe('closeReviewNotApplied', () => {
     expect(review.notApplied.map((row) => row.summary)).toEqual(['Yes'])
   })
 
+  it('keeps a value-less refusal when the same tool landed only on another row', () => {
+    expect(
+      notApplied([
+        call({
+          task: 'upkeep',
+          tool: 'update_place',
+          rows: [QUAY],
+          result: 'rejected',
+          reason: 'unread',
+        }),
+        call({
+          task: 'upkeep',
+          tool: 'update_place',
+          rows: [HARBOUR],
+          values: { 'state.condition': 'Flooded' },
+        }),
+      ]),
+    ).toEqual([['The Quay', null, '', 'unread']])
+  })
+
+  it('keeps a refused merge when the same task merged two other threads', () => {
+    const FERRY = { table: 'threads', id: 'thr_ferry', name: 'The ferry' }
+    const TOLLS = { table: 'threads', id: 'thr_tolls', name: 'The tolls' }
+
+    expect(
+      notApplied([
+        call({
+          task: 'threads',
+          tool: 'merge_threads',
+          rows: [LETTER, SEAL],
+          values: { title: 'The sealed letter' },
+          result: 'rejected',
+          reason: 'merge-close-wrote',
+        }),
+        call({
+          task: 'threads',
+          tool: 'merge_threads',
+          rows: [FERRY, TOLLS],
+          survivor: { table: 'threads', id: 'thr_ferry' },
+        }),
+      ]),
+    ).toEqual([['The letter', null, 'The sealed letter', 'merge-close-wrote']])
+  })
+
+  it('gives a refused happening merge one row with its text', () => {
+    const HUNT = { table: 'happenings', id: 'hap_hunt', name: 'The hunt' }
+
+    expect(
+      notApplied([
+        call({
+          task: 'happenings',
+          tool: 'merge_happenings',
+          rows: [FIRE, HUNT],
+          values: { title: 'The fire', description: 'The quay burned.' },
+          result: 'skipped',
+          reason: 'later-turn',
+        }),
+      ]),
+    ).toEqual([['The fire', null, 'The quay burned.', 'later-turn']])
+  })
+
+  it("matches a refused create_lore's title by its row name when it sent no title", () => {
+    expect(
+      notApplied([
+        call({
+          task: 'lore',
+          tool: 'create_lore',
+          rows: [{ table: 'lore', id: 'lore_minted', name: 'The Tithe' }],
+          values: { body: 'An hour a year.' },
+          result: 'rejected',
+          reason: 'lore-cap',
+        }),
+        call({
+          task: 'lore',
+          tool: 'create_lore',
+          rows: [{ table: 'lore', id: 'lore_landed', name: 'The Tithe' }],
+          values: { title: 'The Tithe', body: 'An hour a year.' },
+        }),
+      ]),
+    ).toEqual([])
+  })
+
+  it('presses a lost field of a landed create_lore to the row it made', () => {
+    const [row] = closeReviewNotApplied(
+      report([
+        call({
+          task: 'lore',
+          tool: 'create_lore',
+          rows: [{ table: 'lore', id: 'lore_tithe', name: 'The Tithe' }],
+          values: { title: 'The Tithe', body: 'An hour a year.', category: 'temple law' },
+          skippedFields: [{ field: 'category', reason: 'turn-in-text' }],
+        }),
+      ]),
+      LOOKUP,
+    )
+
+    expect(row).toMatchObject({
+      op: 'create',
+      fieldPath: 'category',
+      summary: 'temple law',
+      pressTo: { table: 'lore', id: 'lore_tithe' },
+    })
+  })
+
+  it("shows a landed call's lost flag and empty value as Changes would, and no value as empty", () => {
+    expect(
+      notApplied([
+        call({
+          task: 'upkeep',
+          tool: 'mark_common_knowledge',
+          rows: [FIRE],
+          values: { commonKnowledge: '1' },
+          skippedFields: [{ field: 'commonKnowledge', reason: 'later-turn' }],
+        }),
+        call({
+          task: 'upkeep',
+          tool: 'update_place',
+          rows: [QUAY],
+          values: { 'state.condition': 'Flooded', 'state.traits': '' },
+          skippedFields: [
+            { field: 'state.traits', reason: 'over-soft-cap' },
+            { field: 'state.features', reason: 'over-soft-cap' },
+          ],
+        }),
+      ]),
+    ).toEqual([
+      ['The fire', 'commonKnowledge', 'Yes', 'later-turn'],
+      ['The Quay', 'state.traits', 'none', 'over-soft-cap'],
+      ['The Quay', 'state.features', '', 'over-soft-cap'],
+    ])
+  })
+
+  it('logs nothing when every stored reason is a key', () => {
+    const warn = vi.spyOn(logger, 'warn')
+
+    closeReviewNotApplied(
+      report([
+        call({
+          tool: 'update_faction',
+          rows: [ORDER],
+          values: { description: 'A.' },
+          result: 'rejected',
+          reason: 'turn-in-text',
+        }),
+      ]),
+      LOOKUP,
+    )
+
+    expect(warn).not.toHaveBeenCalled()
+  })
+
   it('labels every reason key', () => {
     for (const key of CLOSE_REASON_KEYS) expect(hasCopy(`chapters:review.reason.${key}`)).toBe(true)
   })
@@ -575,7 +727,7 @@ describe('closeReviewStopped and the no-tool note', () => {
     expect(stopped.map(({ text }) => text)).toEqual([
       'Identity, part 2 — reached its step limit',
       'Happenings — outgrew the context window',
-      'Lore, part 1 — a reply was cut off twice',
+      'Lore, part 1 — a reply was cut off or filtered twice',
     ])
     expect(stopped[0]).toMatchObject({ task: 'identity', part: 2, reason: 'budget' })
   })

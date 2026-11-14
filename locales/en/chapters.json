@@ -70,17 +70,17 @@
     "yes": "Yes",
     "no": "No",
     "reason": {
-      "user-edited-since-prose": "You changed this field after the cited entry.",
-      "later-turn": "A later turn already changed this field.",
+      "user-edited-since-prose": "You changed this after the cited entry.",
+      "later-turn": "A later entry already changed this.",
       "row-gone": "The row no longer exists.",
       "turns-empty": "The write cited no entry.",
-      "turns-full-id": "The write cited an entry by an id it wasn't given.",
+      "turns-full-id": "The write cited an entry by its full id instead of the short reference it was shown.",
       "not-a-turn": "The write cited something that isn't an entry.",
       "turn-not-shown": "The write cited an entry the task wasn't shown.",
       "why-empty": "The write gave no reason.",
       "unread": "The write came before the row was read.",
       "id-shape": "The write named its rows the wrong way.",
-      "id-full": "The write named a row by an id it wasn't given.",
+      "id-full": "The write named a row by its full id instead of the short reference it was shown.",
       "id-unknown": "The write named a row it wasn't shown.",
       "id-wrong-kind": "The write named the wrong kind of row.",
       "turn-in-text": "The text named an entry by its id.",
@@ -133,7 +133,7 @@
       "lineNoPart": "{{task}} — {{reason}}",
       "budget": "reached its step limit",
       "window": "outgrew the context window",
-      "cut-off": "a reply was cut off twice"
+      "cut-off": "a reply was cut off or filtered twice"
     },
     "noToolCalls": "No task called a tool, so this close wrote only the chapter itself. The model may not support tool calling."
   }

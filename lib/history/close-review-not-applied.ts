@@ -133,13 +133,16 @@ function refusalsOf(call: CloseReportCall, index: number): Refusal[] {
   const ownReason = (path: string): string | undefined =>
     call.skippedFields?.find(({ field }) => field === path)?.reason ?? call.reason
   if (call.result === 'ok')
-    return (call.skippedFields ?? []).map(({ field, reason }) => ({
-      index,
-      call,
-      path: field,
-      summary: reviewValueText(field, call.values?.[field] ?? ''),
-      reason,
-    }))
+    return (call.skippedFields ?? []).map(({ field, reason }) => {
+      const value = call.values?.[field]
+      return {
+        index,
+        call,
+        path: field,
+        summary: value === undefined ? '' : reviewValueText(field, value),
+        reason,
+      }
+    })
   if (MERGE_TOOLS.has(call.tool))
     return [
       {
