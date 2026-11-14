@@ -61,22 +61,6 @@ slice-planning gate forces its resolution before that slice is planned.
   did not re-run the suite serially — the evidence above is still as of
   `edce17b8`.
 
-- **C11 names four handlers with a hard `not-found`; more have one.**
-  [C11](./milestones/05-chapters-chapter-close/milestone.md#c11--tool-results)
-  lists `updateEntity`, `updateLore`, `updateThread` and
-  `updateHappening` as returning a hard `not-found` that aborts a group.
-  `updateEntityVisualState`, `updateEntityInventory`,
-  `updateEntityStackables`, `updateItemPosition` and
-  `updateEntityLocationTracking`
-  (`lib/actions/entities/state-patch-actions.ts`) and `updateInvolvement`
-  (`lib/actions/happenings/register-involvements.ts`) do too, so a close
-  tool over one of them gets a whole-group refusal where C11's table
-  reads as a per-action verdict. Those carry no code, and neither do
-  `deleteInvolvement`'s and `deleteAwareness`'s
-  (`register-involvements.ts`, `register-awareness.ts`); the delete
-  handlers of entities, lore, threads and happenings, and the chapters
-  update, return the coded `not-found` C11 names but doesn't list them.
-  Raised in 5.5a's review.
 - **A parallel group's failing branch outlives the reversal.**
   `runParallelGroup` (`lib/pipeline/runtime/orchestrator.ts`) awaits
   `Promise.all`, so one branch's throw reverses and fails the run while

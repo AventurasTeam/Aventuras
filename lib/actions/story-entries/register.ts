@@ -7,7 +7,7 @@ import { countTokens } from '@/lib/tokens'
 import { PLACE_REFUSAL } from '@/lib/world'
 
 import { computeUndoPayload } from '../delta/delta-encoding'
-import { register, type ActionHandler } from '../delta/registry'
+import { register, type ActionHandler, TARGET_NOT_FOUND } from '../delta/registry'
 import type { DeltaSource } from '../types'
 
 export const STORY_ENTRY_REJECTION = {
@@ -107,7 +107,11 @@ const updateHandler: ActionHandler = async (action, branchId, ctx) => {
     .from(storyEntries)
     .where(and(eq(storyEntries.branchId, bid), eq(storyEntries.id, id)))
   if (!current)
-    return { status: 'rejected', reason: `update target story_entries ${bid}:${id} not found` }
+    return {
+      status: 'rejected',
+      reason: `update target story_entries ${bid}:${id} not found`,
+      code: TARGET_NOT_FOUND,
+    }
   // The column is nullable, so a partial writer onto a NULL row would otherwise persist
   // a blob missing the three non-optional scene fields — the cast alone made that look
   // sound. The floor keeps the merged result a complete EntryMetadata for every caller.
