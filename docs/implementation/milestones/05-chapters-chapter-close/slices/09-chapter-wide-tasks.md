@@ -494,9 +494,9 @@ None open: Implementation notes record each answer.
   app caller, and a fork copies only chapters closed before its point.
 - **Decay against the chapter-match boost is a tuning question
   (developer decision, 2026-11-13).** The ×1.3 boost applies after
-  decay, so an unpinned row older than about 15 to 20 chapters can't be
-  seated through a matched chapter at similarity 0.3 to 0.5; the entry
-  is in
+  decay, so an unpinned row alone in its pool seats through a matched
+  chapter only up to about 9, 13 and 16 chapters old at similarity 0.3,
+  0.4 and 0.5; the entry is in
   [`followups.md → Tuning and play testing`](../../../../followups.md#tuning-and-play-testing).
 - **The code steps land as groups.** Normalization and the reset each
   land as one `delta_group_emitted` anchored on E under the run's
