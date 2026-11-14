@@ -1410,7 +1410,7 @@ const MERGE_REDUNDANT = { keep: 'hp1', absorb: ['hp2'], turns: ['t5'], why: MERG
 
 const SET_PIN = {
   id: 'aw1',
-  value: 0.9,
+  value: 0.5,
   turns: ['t5'],
   why: 'Tobin’s word decides every crossing Wren makes from here.',
 }
@@ -2004,11 +2004,11 @@ describe('each new case lands what it names', () => {
     ])
   })
 
-  it('set_pin: Tobin’s row on TOLD pinned at 0.9, one upsert', async () => {
+  it('set_pin: Tobin’s row on TOLD pinned at 0.5, one upsert', async () => {
     const { h, groups } = await closedWithGroups(SET_PIN_CASE)
 
     expect(groups).toEqual([['upsertHappeningAwareness']])
-    expect(await awarenessRow(h.fx, TOLD.id, TOBIN.id)).toMatchObject({ decayResistance: 0.9 })
+    expect(await awarenessRow(h.fx, TOLD.id, TOBIN.id)).toMatchObject({ decayResistance: 0.5 })
     expect(await writeCalls(h)).toMatchObject([
       { task: 'awareness', part: 0, tool: 'set_pin', result: 'ok' },
     ])
