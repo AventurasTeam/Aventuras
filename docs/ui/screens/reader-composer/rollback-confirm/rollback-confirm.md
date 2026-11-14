@@ -63,7 +63,8 @@ the modal carries the consequence in numeric form, not visual:
 │  entry 47. The following are removed:        │
 │                                              │
 │  • 12 entries (47–58)                        │
-│  • 1 chapter re-opened — chapter 5 will…     │  (only when cross-chapter)
+│  • 1 chapter re-opened — chapter 4 will…     │  (when the target is inside one)
+│  • 1 chapter removed — chapter 5 goes…       │  (when one starts in range)
 │  • 23 world-state changes                    │
 │                                              │
 │  **This cannot be undone.**                  │
@@ -90,11 +91,26 @@ the modal carries the consequence in numeric form, not visual:
 
 Three buckets, in commit order:
 
-| Count                     | Source                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                |
-| ------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **N entries**             | `op=create` deltas on `story_entries` in range                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        |
-| **M chapters re-opened**  | `op=create` deltas on `chapters` in range (line omitted when `M = 0`)                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 |
-| **K world-state changes** | All other narrative deltas in range (entities, lore, threads, happenings, entry_assets). Every `story_entries` delta is excluded, not just the creates: a non-create one either amends an entry the sweep is deleting, which the entries line already reports, or is a chapter close's stamp, reversed with its chapter, which the chapters line's re-open stands for. A non-create `chapters` delta counts nowhere either: a close's `close_report` update goes with the create the chapters line counts. The discriminator is the target table, not `entry_id` — a delta on another table stays counted whether or not it carries an anchor. The range is the closed set the sweep reverses, so it also counts a fact anchored to a surviving turn that names a row the sweep removes ([`generation-pipeline.md → Reverse-replay`](../../../../generation-pipeline.md#reverse-replay)). A place whose parent the sweep removes counts once too: it stays, and the reversal leaves it unplaced without a delta. So does a character whose faction the sweep removes, left with none. |
+| Count                              | Source                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                               |
+| ---------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| **N entries**                      | `op=create` deltas on `story_entries` in range                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                       |
+| **Chapters re-opened and removed** | `op=create` deltas on `chapters` in range, one line per fate ([Cross-chapter case](#cross-chapter-case)); each line omitted when no chapter takes it                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 |
+| **K world-state changes**          | All other deltas in range: entities, lore, threads, happenings, entry_assets, `character_relationships`, `translations` and `branch_era_flips`. Every `story_entries` delta is excluded, not just the creates: a non-create one either amends an entry the sweep is deleting, which the entries line already reports, or is a chapter close's stamp, reversed with its chapter, which a chapter line stands for. A non-create `chapters` delta counts here only when its chapter's create isn't in range: a close's `close_report` update goes with the create a chapter line counts, while a user's own edit of a chapter the rollback spares, a Timeline save or a review edit, is reverted and counts. The discriminator is the target table, not `entry_id` — a delta on another table stays counted whether or not it carries an anchor. The range is the closed set the sweep reverses, so it also counts a fact anchored to a surviving turn that names a row the sweep removes ([`generation-pipeline.md → Reverse-replay`](../../../../generation-pipeline.md#reverse-replay)). A place whose parent the sweep removes counts once too: it stays, and the reversal leaves it unplaced without a delta. So does a character whose faction the sweep removes, left with none. |
+
+Two kinds of delta count in no bucket. A `retrieval_count`-only
+update, a close's reset or a turn's bump, changes nothing a user sees,
+and History and row signals hide it too. And the rows of a pass or a
+close running as the counts are read count nowhere: confirming
+interrupts that run, and its abort reverses them before the sweep does.
+The set the commit resolves still holds them, so a run that commits as
+the interrupt lands changes the counts, and the commit refuses
+`counts-changed` (below).
+
+A regenerate reads one more number from the same range, a close's own
+writes: its `chapter_close` deltas, less those two kinds. It picks the
+regenerate confirm's copy
+([`reader-composer.md → Regenerate confirmation`](../reader-composer.md#regenerate-confirmation)),
+and the modal shows no line for it.
 
 Buckets are coarse-grained on purpose. Per-table breakdown reads as
 pedantic in a consent modal; "world-state changes" is the
@@ -124,31 +140,33 @@ A regenerate confirm does the same through `regenerateTurn`
 
 ## Cross-chapter case
 
-When the rollback range crosses one or more chapter boundaries —
-i.e. at least one chapter ends past the target entry — the
-chapter line surfaces with the **re-open** consequence bolded in the
-copy:
+When the rollback range reaches into a closed chapter, the chapters
+bucket shows as up to two lines, each bold, each omitted when no
+chapter takes it:
 
-> **1 chapter re-opened** — chapter 5 will return to in-progress.
+> **1 chapter re-opened** — chapter 4 will return to in-progress
+>
+> **1 chapter removed** — chapter 5 goes with its entries
+
+- **Re-opened** is the chapter the target falls inside. Its first entry
+  sits below the target, so its earlier entries stay and return to the
+  open region. At most one chapter re-opens.
+- **Removed** is every chapter whose first entry is the target or
+  later: every entry it holds goes, and the chapter with them. Two read
+  `2 chapters removed — chapters 5 and 6 go with their entries`, and
+  three or more a span, `chapters 5–7`. The numbers are always
+  consecutive, since only the latest chapter can be deleted
+  ([`chapter-timeline.md → Delete a chapter`](../../chapter-timeline/chapter-timeline.md#delete-a-chapter)).
 
 Why bold: chapter close fires lore-mgmt writes (its six sub-jobs);
-those reverse along with the chapter row itself. The re-open is the
-load-bearing consequence the user needs to see, not just the count.
+those reverse along with the chapter row itself. Which chapter returns
+and which goes is the load-bearing consequence the user needs to see,
+not just the count.
 
-When `M = 0` (single-chapter rollback — the common case), the
-chapter line is omitted entirely. When `M > 1`, the count
-pluralises and lists the range (`2 chapters re-opened — chapters 4
-and 5 will return to in-progress`).
+A rollback inside the open region, the common case, shows neither line.
 
 ## What the modal deliberately does NOT surface
 
-- **CTRL-Z reversibility.** Rollback is reversible via CTRL-Z **only
-  until the next user action**, per
-  [data-model → action_id grouping](../../../../data-model.md#entry-mutability--rollback).
-  Surfacing "reversible" would over-promise; surfacing the
-  conditional ("…until your next turn") inflates the modal. The
-  modal stays informational; users who want to undo can press
-  CTRL-Z themselves.
 - **Per-table breakdown.** The world-state-changes bucket is one
   number on purpose. Splitting into entities / lore / threads /
   happenings columns turns a consent modal into a debug surface.
@@ -202,6 +220,8 @@ mechanism rather than the hover-preview.
   no modal opens. A memory pass or a chapter close is the exception:
   the `×` stays enabled and the modal opens as usual. While it is open
   it recounts each time a run settles under it, per [Counts](#counts).
+  Its counts leave out the running pass's or close's own rows, which
+  the interrupt reverses first.
   Confirming interrupts the pass or close and moves it to the next
   turn, with its deferral toast; a close's re-run moves nothing and
   shows its cancelled toast. A rollback into a re-run's chapter is held
@@ -219,7 +239,3 @@ mechanism rather than the hover-preview.
 - **Count performance for deep rollbacks.** Hundreds of entries
   spanning thousands of deltas means a wide log scan. Likely
   non-issue at v1 scale; revisit if a real story hits the wall.
-- **Multi-chapter copy specifics.** Wording for `M > 2` ("chapters
-  4, 5, and 6") gets long. May want to truncate
-  (`chapters 4–6 will return to in-progress`). Decide when a real
-  rollback that wide shows up.

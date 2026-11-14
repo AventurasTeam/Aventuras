@@ -335,7 +335,17 @@ convention, and the expectation that subsystems route through
   (`components/world/use-lore-row-session.ts` — the lore pane's
   twin), `chapter_saved_handler_failed`
   (`components/chapters/use-chapter-row-session.ts` — the Timeline
-  card's twin), `world_set_lead_failed` (`app/world/[branchId].tsx`
+  card's twin), the Timeline's delete confirm
+  (`components/chapters/use-chapter-delete-confirm.ts`):
+  `chapter_delete_preview_threw` (the read behind `Delete…` threw; the
+  confirm stays shut and the user sees `Couldn't delete the chapter.`),
+  `chapter_delete_recount_failed` (a re-read after a run settled threw;
+  the confirm keeps the preview it shows), `chapter_delete_threw`
+  (`removeChapter` threw rather than refused; the confirm closes with
+  the failure toast), `chapter_delete_resynced` (warn: the delete
+  committed but the store sync after it failed; the branch re-hydrates,
+  with no failure toast) and `chapter_delete_resync_failed` (that
+  re-hydration failed too), `world_set_lead_failed` (`app/world/[branchId].tsx`
   — a `⋯ → Set as lead` whose `setStoryLead` threw rather than
   refused), `world_collision_resolve_failed`
   (`components/world/use-collision-resolve.ts` — a resolve dialog's

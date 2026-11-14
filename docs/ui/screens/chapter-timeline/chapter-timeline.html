@@ -172,6 +172,11 @@
   /* The re-run confirm stacks over the review window it was opened from (layout.md → Stacking). */
   #rerun-backdrop { z-index: 7; }
   body[data-rerun-turns="none"] .rerun-rollback { display: none; }
+  /* The delete confirm's line after the list, by what follows a delete; the divider line shows
+     only when a close runs before the next turn (chapter-timeline.md → Delete a chapter). */
+  body:not([data-delete-after="closes"]) .delete-after-closes,
+  body:not([data-delete-after="waits"]) .delete-after-waits,
+  body:not([data-delete-after="open"]) .delete-after-open { display: none; }
   /* A close owed disables both re-run entry points (chapter-timeline.md → Per-card actions). */
   body[data-close-owed="yes"] .card-action-rerun,
   body[data-close-owed="yes"] #review-rerun { opacity: 0.4; cursor: not-allowed; }
@@ -309,7 +314,7 @@
   }
 </style>
 </head>
-<body data-close-owed="no" data-rerun-turns="none" data-card-state="expanded" data-empty="no" data-modal="hidden" data-not-applied="collapsed" data-progress="safe" data-picker="closed" data-gen-state="idle">
+<body data-close-owed="no" data-rerun-turns="none" data-delete-after="closes" data-card-state="expanded" data-empty="no" data-modal="hidden" data-not-applied="collapsed" data-progress="safe" data-picker="closed" data-gen-state="idle">
 
 <div class="screen-label"><strong>Wireframe:</strong> Chapter Timeline &mdash; responsive across phone / tablet / desktop &mdash; low-fi, interactive</div>
 
@@ -353,6 +358,12 @@
     <span class="gl">re-run, turns since close:</span>
     <button class="rb-btn active" data-rerun-turns="none">none</button>
     <button class="rb-btn" data-rerun-turns="some">3 turns</button>
+  </div>
+  <div class="rb-group">
+    <span class="gl">delete, after it:</span>
+    <button class="rb-btn active" data-delete-after="closes">a close runs next</button>
+    <button class="rb-btn" data-delete-after="waits">under threshold</button>
+    <button class="rb-btn" data-delete-after="open">auto-close off</button>
   </div>
   <div class="rb-group">
     <span class="gl">not applied:</span>
@@ -645,9 +656,12 @@
       <ul class="delete-impact">
         <li>2 lore rows removed, your edits included</li>
         <li>31 other changes reversed</li>
-        <li>14 turns since stay as written, and can still reflect what it added</li>
+        <li>14 turns since stay as written, and can still reflect what it added. Undoing one can bring back a value this removes.</li>
       </ul>
-      <p class="modal-context">A close runs again before your next turn.</p>
+      <p class="modal-context delete-after-closes">A close runs again before your next turn.</p>
+      <p class="modal-context delete-after-closes">Removing only the divider closes the same prose again, on top of the kept work.</p>
+      <p class="modal-context delete-after-waits">A close waits until the chapter grows past the threshold.</p>
+      <p class="modal-context delete-after-open">The chapter stays open until you close it.</p>
       <p class="modal-context"><b>This cannot be undone.</b></p>
     </div>
     <div class="modal-foot">
@@ -913,6 +927,13 @@
     b.addEventListener('click', () => {
       body.dataset.rerunTurns = b.dataset.rerunTurns;
       document.querySelectorAll('.rb-btn[data-rerun-turns]').forEach(o =>
+        o.classList.toggle('active', o === b));
+    });
+  });
+  document.querySelectorAll('.rb-btn[data-delete-after]').forEach(b => {
+    b.addEventListener('click', () => {
+      body.dataset.deleteAfter = b.dataset.deleteAfter;
+      document.querySelectorAll('.rb-btn[data-delete-after]').forEach(o =>
         o.classList.toggle('active', o === b));
     });
   });
