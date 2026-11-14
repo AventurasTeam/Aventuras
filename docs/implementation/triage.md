@@ -191,8 +191,11 @@ patch`, which 5.5a marks `restated`, so a close tool's write of it
   `putEntityRow` in two (`identity`, `upkeep`), and a story-mode write in
   five. The scripted-dispatch harness they also repeated now lives in
   `__tests__/close-dispatch.ts`; these helpers stayed per file, and one
-  module beside `__tests__/close-fixture.ts` would serve them. Raised in
-  5.5b's review.
+  module beside `__tests__/close-fixture.ts` would serve them. 5.9 added
+  more of the same: a `seedHappening` now sits in five close test files,
+  and `upkeep`, `driver`, `happenings`, `close-happenings`,
+  `awareness-tools` and `close-awareness` each insert entity, happening
+  and awareness rows directly. Raised in 5.5b's review, widened in 5.9's.
 - **`setThreadStatus` and `updateThread` read "carries refs"
   differently.** `setThreadStatus` writes the resolved ref only when
   `triggeredAtEntryId` is set, while `updateThread` asks whether either
@@ -457,19 +460,56 @@ patch`, which 5.5a marks `restated`, so a close tool's write of it
   boost loop in `lib/retrieval/run.ts` keeps all its cases green,
   including the one named for that admission. Raised in 5.9's Task 2
   review.
-- **The open chapter's number and retrieval's `current` can disagree.**
-  Retrieval numbers the open chapter one past the highest closed
-  chapter that still holds a stamped entry (the stamp join in
-  `loadChapterRanges`), while the story card's open chapter
-  (`openChapterNumber`) is one past the highest closed chapter whatever
-  it holds. Deleting every entry of the newest closed chapter, which
-  `deleteStoryEntry` allows, splits them, so ages run one short of the
-  number the user sees. Raised in 5.9's Task 3 review.
 - **A folded stackable key can outgrow its schema bound.**
   `foldStackableKey` lowercases, and some letters lengthen when
   lowercased (`İ` becomes two code units), so a 40-character key can
-  fold past the character schema's 40-character bound and the write is
-  refused. The per-turn transfer path has this today; 5.9's
-  normalization step inherits it, where a refused group fails the close
-  on every close until the key is edited. Rare input. Raised in 5.9's
-  Task 7 review.
+  fold past the character schema's 40-character bound.
+  `updateEntityStackables` doesn't check the schema, so such a key
+  lands, and every later `updateEntity` carrying that character's
+  `state` is refused until the key is shortened. 5.9's normalization
+  step skips a record that would fold past the bound; the per-turn
+  transfer writer goes through the same unchecked action. Rare input.
+  Raised in 5.9's Task 7 and Task 16 reviews.
+- **A count bump's undo can bring back a pre-reset count.**
+  `bumpAwarenessRetrieval`'s undo restores the prior `retrieval_count` by
+  assignment (`lib/actions/happenings/register-awareness.ts`), and
+  reverse-replay rewrites only the copies a delete holds. So a rollback
+  past a close puts a later turn's pre-reset count back over the close's
+  reset, and CTRL-Z of the close can restore a kept row's count with a
+  later turn's bump in it. One chapter's frequency signal is off; no
+  data is lost. Candidate fixes: a relative undo for count bumps, or
+  reverse-replay rebasing the held count. The later-bump case in
+  `lib/pipeline/__tests__/close-round-trip.test.ts` pins today's
+  behaviour. Developer decision 2026-11-14 (5.9): record the edge in
+  canon, fix later.
+- **A row-gone refusal never says which row went.** When a write names
+  several rows, the note reads "The row was merged into c3" without
+  naming the absorbed row, on the read gate's path and the plan's path
+  alike (`survivorAmong` in `close-agent/verdict.ts`), so the model has to
+  guess which named row to replace. Raised in 5.9's Task 9 review.
+- **The row guard reads user edits once per row.** `readRowGuard`
+  (`lib/actions/delta/row-guard.ts`) runs `userEditsSince` per guarded
+  row, so a merge over many link rows makes one query each. Raised in
+  5.9's `merge_happenings` review.
+- **Per-turn retrieval reads a cancel before the embed bound.** In
+  `lib/pipeline/definitions/per-turn-retrieval.ts`, a cancelled outcome
+  returns `aborted` before the bound's expiry is checked, so a cancel that
+  arrived after the bound expired reads as a user stop. The close's range
+  embed checks the bound first. Latent today: both embed paths report an
+  expiry as a call error. Raised in 5.9's Task 12 review.
+- **The close's embed leaves the embedding-status count stale.** The range
+  embed clears stale flags without the `refreshEmbeddingStatus` per-turn
+  retrieval runs, so a memory panel open during a close shows an old
+  pending count until it reopens. Raised in 5.9's Task 12 review.
+- **No lint stops a builtin Hermes lacks.** 5.9 shipped
+  `Array.prototype.toSorted` into close code that runs on Android; the
+  Hermes VM appears to lack it (inferred from the binary, not a device),
+  and only review caught it. An eslint `no-restricted-properties` entry
+  for such builtins outside tests, or a lessons-learned entry, would
+  stop the next one. Raised in 5.9's clustering review.
+- **`set_pin`'s user-pin refusal gives the wrong reason.** A pin the user
+  set before the cited turn is skipped under `USER_EDITED_SINCE_PROSE`,
+  whose note tells the model "The user edited this after the cited
+  turns", which is false for that case; the instruction not to write it
+  again stands. A reason of its own (with 5.11's stable keys) would make
+  the answer and the review accurate. Raised in 5.9's final review.

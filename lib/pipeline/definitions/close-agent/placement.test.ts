@@ -155,6 +155,7 @@ function writeContextFor(fx: CloseFixture): WriteContext {
     ids: new CloseIds(),
     readFields: {},
     survivorOf: () => undefined,
+    clusterOf: () => undefined,
     landedCalls: () => 0,
     turns: [endEntryId],
     proseEntryId: endEntryId,

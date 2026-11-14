@@ -16,6 +16,7 @@ import {
 } from './close-agent/slots'
 import type { CloseTaskDef } from './close-agent/task'
 import {
+  closeClusterOf,
   closeIdsOf,
   requireCloseParts,
   requireCloseRange,
@@ -149,6 +150,8 @@ export async function* closeAgentPhase(
     endEntryId: range.endEntryId,
     ids,
     survivorOf: (table, id) => ledger.survivorOf(table, id),
+    // Read on each call: the range embed, a code step in `before`, parks the clusters after this.
+    clusterOf: (happeningId) => closeClusterOf(ctx.intermediates, happeningId),
     landedCalls: (tool) => ledger.landedCalls(tool),
     phase: ctx,
     ledger,

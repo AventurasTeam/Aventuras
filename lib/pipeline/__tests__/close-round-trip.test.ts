@@ -35,8 +35,15 @@ import {
   threads,
   type Delta,
   type EntityState,
+  type HappeningAwareness,
 } from '@/lib/db'
-import { configureDeltaActionPort, pipelineEventBus, type TxResult } from '@/lib/pipeline'
+import {
+  configureDeltaActionPort,
+  pipelineEventBus,
+  type PhaseEmittedEvent,
+  type PhaseResult,
+  type TxResult,
+} from '@/lib/pipeline'
 import { interruptMemoryRuns } from '@/lib/stores'
 
 import { standInSlots, standInTool } from './close-stand-in'
@@ -48,6 +55,10 @@ import {
   type CloseFixture,
 } from '../definitions/__tests__/close-fixture'
 import { chapterPartSummarySchema } from '../definitions/chapter-metadata-schema'
+import { awarenessTask, resetRetrievalStep } from '../definitions/close-agent/close-awareness'
+import { embedRangeStep } from '../definitions/close-agent/close-happenings'
+import { normalizeStackablesStep } from '../definitions/close-agent/close-stackables'
+import { happeningsTask } from '../definitions/close-agent/happenings'
 import { identityTask } from '../definitions/close-agent/identity'
 import { lifecycleTask } from '../definitions/close-agent/lifecycle'
 import { loreTask } from '../definitions/close-agent/lore'
@@ -56,11 +67,13 @@ import {
   __setCloseAgentSlots,
   PRODUCTION_CLOSE_SLOTS,
   type CloseAgentSlots,
+  type SlotEntry,
 } from '../definitions/close-agent/slots'
 import type { CloseTaskDef } from '../definitions/close-agent/task'
 import { threadsTask } from '../definitions/close-agent/threads'
 import { assertReplaySafe } from '../definitions/close-agent/tool'
 import { upkeepTask } from '../definitions/close-agent/upkeep'
+import { setCloseClusters } from '../definitions/close-intermediates'
 
 const { generateStructuredMock, generateToolStepMock } = vi.hoisted(() => ({
   generateStructuredMock: vi.fn<typeof generateStructured>(),
@@ -407,9 +420,12 @@ type CloseHarness = {
   readonly before: WorldState
   /** The branch's whole delta log before the close ran: other actions' deltas only. */
   readonly beforeLog: readonly Delta[]
-  /** Runs the close to completion; a case must land at least one tool group. */
+  /** Runs the close to completion; a case must land at least one group past the metadata's. */
   close: () => Promise<void>
-  /** Starts the close and calls `act` once its first tool group has landed; resolves with the run. */
+  /**
+   * Starts the close and calls `act` once the first group its case's `abortOn` admits lands;
+   * resolves with the run.
+   */
   closeActingOnToolGroup: (act: () => void) => Promise<TxResult>
   /** The group `act` ran on, if it ran. */
   actedOn: () => ToolGroup | undefined
@@ -432,6 +448,10 @@ function defined<T>(value: T | undefined, what: string): T {
   if (value === undefined) throw new Error(`round trip: ${what}`)
   return value
 }
+
+// A code step's group reads to the bus as a tool's, so a case with one names the kinds to act on.
+const firesAbort = (c: RoundTripCase, group: ToolGroup): boolean =>
+  c.abortOn === undefined || group.kinds.some((kind) => c.abortOn?.includes(kind) === true)
 
 async function openHarness(c: RoundTripCase): Promise<CloseHarness> {
   const fx = await openCloseFixture(
@@ -466,7 +486,7 @@ async function openHarness(c: RoundTripCase): Promise<CloseHarness> {
     if (group.kinds.includes('createChapter')) return
     toolGroups.push(group)
     const act = onToolGroup
-    if (act === undefined || !group.landed) return
+    if (act === undefined || !group.landed || !firesAbort(c, group)) return
     onToolGroup = undefined
     actedOn = group
     act()
@@ -552,8 +572,12 @@ type RoundTripCase = {
   merge: boolean
   /** lore-mgmt's window for this case, so the fixture's range cuts into parts. */
   partWindow?: number
+  /** Kinds whose landed group the abort arm fires on; absent: any landed non-metadata group. */
+  abortOn?: readonly PipelineAction['kind'][]
   /** An arm's own expected world, in place of the shared before/closed comparison. */
   armExpect?: Partial<Record<string, (h: CloseHarness) => Promise<void>>>
+  /** An arm's own expected log of the close, in place of the shared one. */
+  armLog?: Partial<Record<string, (h: CloseHarness) => readonly Delta[]>>
 }
 
 type RoundTripArm = {
@@ -693,6 +717,65 @@ function withoutEntity(state: WorldState, id: string): WorldState {
     ...state,
     rows: { ...state.rows, entities: state.rows.entities.filter((row) => row.id !== id) },
   }
+}
+
+function withAwarenessCount(
+  state: WorldState,
+  happeningId: string,
+  characterId: string,
+  count: number,
+): WorldState {
+  const rows = state.rows.happening_awareness as readonly HappeningAwareness[]
+  const matches = (row: HappeningAwareness): boolean =>
+    row.happeningId === happeningId && row.characterId === characterId
+  if (!rows.some(matches))
+    throw new Error(`round trip: no awareness of ${happeningId} for ${characterId}`)
+  return {
+    ...state,
+    rows: {
+      ...state.rows,
+      happening_awareness: rows.map((row) =>
+        matches(row) ? { ...row, retrievalCount: count } : row,
+      ),
+    },
+  }
+}
+
+type HeldAwareness = { characterId: string; retrievalCount: number }
+
+/** The close's log with one held awareness copy, in its delete of `happeningId`, at `count`. */
+function withHeldCount(
+  log: readonly Delta[],
+  happeningId: string,
+  characterId: string,
+  count: number,
+): Delta[] {
+  let found = false
+  const patched = log.map((delta) => {
+    if (
+      delta.op !== 'delete' ||
+      delta.targetTable !== 'happenings' ||
+      delta.targetId !== happeningId
+    )
+      return delta
+    found = true
+    const payload = defined(
+      delta.undoPayload ?? undefined,
+      `the delete of ${happeningId} holds nothing`,
+    )
+    const copies = payload.awareness as readonly HeldAwareness[]
+    return {
+      ...delta,
+      undoPayload: {
+        ...payload,
+        awareness: copies.map((row) =>
+          row.characterId === characterId ? { ...row, retrievalCount: count } : row,
+        ),
+      },
+    }
+  })
+  if (!found) throw new Error(`round trip: the close deleted no ${happeningId}`)
+  return patched
 }
 
 // Named in the opening ("the ferry town of Harrow"), unplaced: Upkeep shows it as l1.
@@ -1014,7 +1097,478 @@ const THREADS_ACROSS_PARTS_CASE: RoundTripCase = {
   merge: false,
 }
 
-/** C9: every tool's landed group joins this table. */
+// Named in the opening ("Rain had followed Wren"): the courier, in ASKED's cast only.
+const WREN: SeedEntity = {
+  id: 'char_7384950a-c1d2-4e3f-a4b5-c6d7e8f90a1b',
+  kind: 'character',
+  name: 'Wren',
+  description: 'A courier carrying a sealed letter.',
+  status: 'active',
+}
+
+type SeedHappening = { id: string; title: string; description: string; createdAt: number }
+
+// The inn pair sorts the same by anchor, id, title, text and creation: Happenings shows ASKED as
+// hp1 and TOLD as hp2 whichever its start reads by.
+const ASKED: SeedHappening = {
+  id: 'hap_84950a1b-d2e3-4f40-b5c6-d7e8f90a1b2c',
+  title: 'Asking after the night ferry',
+  description: 'At the inn, Wren asks the innkeeper whether the ferry still runs at night.',
+  createdAt: 1_767_225_700_500,
+}
+
+const TOLD: SeedHappening = {
+  id: 'hap_950a1b2c-e3f4-4051-86d7-e8f90a1b2c3d',
+  title: 'The ferry runs on Tobin’s word',
+  description: 'The innkeeper tells Wren the night ferry runs only when old Tobin says it runs.',
+  createdAt: 1_767_225_700_600,
+}
+
+const INN_PAIR: readonly string[] = [ASKED.id, TOLD.id]
+
+// Retrievals before the close, as turns' retrieval phases count them.
+const ASKED_TOBIN_COUNT = 2
+const TOLD_TOBIN_COUNT = 1
+
+async function seedHappening(
+  fx: CloseFixture,
+  seed: SeedHappening,
+  occurredAtEntryId: string,
+): Promise<void> {
+  await seedPassWrite(fx, `act_close_seed_${seed.id}`, {
+    kind: 'createHappening',
+    source: 'periodic_classifier',
+    payload: {
+      entry: {
+        id: seed.id,
+        title: seed.title,
+        description: seed.description,
+        branchId: fx.branchId,
+        occurredAtEntryId,
+        commonKnowledge: 0,
+        createdAt: seed.createdAt,
+        updatedAt: seed.createdAt,
+      },
+    },
+  })
+}
+
+async function seedInvolvement(
+  fx: CloseFixture,
+  entry: { id: string; happeningId: string; entityId: string; role: string },
+): Promise<void> {
+  await seedPassWrite(fx, `act_close_seed_${entry.id}`, {
+    kind: 'createHappeningInvolvement',
+    source: 'periodic_classifier',
+    payload: { entry: { ...entry, branchId: fx.branchId } },
+  })
+}
+
+type SeedAwareness = {
+  happeningId: string
+  characterId: string
+  learnedAtEntryId: string
+  decayResistance: number
+  source: string
+}
+
+async function awarenessRow(fx: CloseFixture, happeningId: string, characterId: string) {
+  const [row] = await fx.ctx.db
+    .select()
+    .from(happeningAwareness)
+    .where(
+      and(
+        eq(happeningAwareness.branchId, fx.branchId),
+        eq(happeningAwareness.happeningId, happeningId),
+        eq(happeningAwareness.characterId, characterId),
+      ),
+    )
+  return defined(row, `no awareness of ${happeningId} for ${characterId}`)
+}
+
+// A pass's row; the handler generates its id, so it is read back.
+async function seedAwareness(fx: CloseFixture, seed: SeedAwareness): Promise<string> {
+  await seedPassWrite(fx, `act_close_seed_aw_${seed.happeningId}_${seed.characterId}`, {
+    kind: 'upsertHappeningAwareness',
+    source: 'periodic_classifier',
+    payload: { ...seed, branchId: fx.branchId, proseEntryId: null },
+  })
+  return (await awarenessRow(fx, seed.happeningId, seed.characterId)).id
+}
+
+// As per-turn retrieval logs them: each bump from the count before it.
+async function seedRetrievals(fx: CloseFixture, id: string, times: number): Promise<void> {
+  for (let prior = 0; prior < times; prior++)
+    await seedPassWrite(fx, `act_close_seed_bump_${id}_${prior}`, {
+      kind: 'bumpAwarenessRetrieval',
+      source: 'ai_classifier',
+      payload: { branchId: fx.branchId, id, priorCount: prior },
+    })
+}
+
+/** ASKED at the first reply, TOLD at the second: Tobin in both casts, Wren in ASKED's alone. */
+async function seedInnRows(fx: CloseFixture): Promise<void> {
+  await seedHappening(fx, ASKED, fx.replyIds[0]!)
+  await seedHappening(fx, TOLD, fx.replyIds[1]!)
+  await seedInvolvement(fx, {
+    id: 'hinv_0a1b2c3d-0001-4a5b-8c6d-7e8f9a0b1c2d',
+    happeningId: ASKED.id,
+    entityId: TOBIN.id,
+    role: 'ferryman',
+  })
+  await seedInvolvement(fx, {
+    id: 'hinv_0a1b2c3d-0002-4a5b-8c6d-7e8f9a0b1c2d',
+    happeningId: ASKED.id,
+    entityId: WREN.id,
+    role: 'asks',
+  })
+  await seedInvolvement(fx, {
+    id: 'hinv_0a1b2c3d-0003-4a5b-8c6d-7e8f9a0b1c2d',
+    happeningId: TOLD.id,
+    entityId: TOBIN.id,
+    role: 'ferryman',
+  })
+  const askedTobin = await seedAwareness(fx, {
+    happeningId: ASKED.id,
+    characterId: TOBIN.id,
+    learnedAtEntryId: fx.replyIds[0]!,
+    decayResistance: 0.4,
+    source: 'overheard at the inn',
+  })
+  await seedRetrievals(fx, askedTobin, ASKED_TOBIN_COUNT)
+  await seedAwareness(fx, {
+    happeningId: ASKED.id,
+    characterId: WREN.id,
+    learnedAtEntryId: fx.replyIds[0]!,
+    decayResistance: 0.5,
+    source: 'asked it herself',
+  })
+  const toldTobin = await seedAwareness(fx, {
+    happeningId: TOLD.id,
+    characterId: TOBIN.id,
+    learnedAtEntryId: fx.replyIds[1]!,
+    decayResistance: 0.6,
+    source: 'told by the innkeeper',
+  })
+  await seedRetrievals(fx, toldTobin, TOLD_TOBIN_COUNT)
+}
+
+async function seedInnPair(fx: CloseFixture): Promise<void> {
+  await seedEntity(fx, WREN)
+  await seedInnRows(fx)
+}
+
+// Turn 6 (head) bumps both of Tobin's rows, so CTRL-Z reaches it once the close is undone. Anchored
+// on its reply, not null: the rollback arms place every seeded delta by anchor (keptByRollback).
+async function seedInnPairWithLaterBump(fx: CloseFixture): Promise<void> {
+  await seedInnPair(fx)
+  for (const [happeningId, priorCount] of [
+    [ASKED.id, ASKED_TOBIN_COUNT],
+    [TOLD.id, TOLD_TOBIN_COUNT],
+  ] as const) {
+    const { id } = await awarenessRow(fx, happeningId, TOBIN.id)
+    const result = await applyDeltaAction(
+      {
+        action: {
+          kind: 'bumpAwarenessRetrieval',
+          source: 'ai_classifier',
+          payload: { branchId: fx.branchId, id, priorCount },
+        },
+        actionId: 'act_close_turn_6',
+        branchId: fx.branchId,
+        entryId: fx.replyIds[5]!,
+      },
+      fx.ctx,
+    )
+    if (result.status !== 'ok') throw new Error(`round trip: later bump refused: ${result.reason}`)
+  }
+}
+
+// Tobin's purse spelled two ways and a plural that folds only because Wren holds `arrow`.
+async function seedPurseRecords(fx: CloseFixture): Promise<void> {
+  await seedPassWrite(fx, 'act_close_seed_purse_tobin', {
+    kind: 'updateEntityStackables',
+    source: 'periodic_classifier',
+    payload: { branchId: fx.branchId, id: TOBIN.id, stackables: { Gold: 5, gold: 3, arrows: 3 } },
+  })
+  await seedPassWrite(fx, 'act_close_seed_purse_wren', {
+    kind: 'updateEntityStackables',
+    source: 'periodic_classifier',
+    payload: { branchId: fx.branchId, id: WREN.id, stackables: { Arrow: 2 } },
+  })
+}
+
+async function seedPurses(fx: CloseFixture): Promise<void> {
+  await seedEntity(fx, WREN)
+  await seedPurseRecords(fx)
+}
+
+async function seedChapterWide(fx: CloseFixture): Promise<void> {
+  await seedEntity(fx, WREN)
+  await seedPurseRecords(fx)
+  await seedInnRows(fx)
+}
+
+// One awareness row, Tobin's, learned in the chapter: Awareness lists it as aw1.
+async function seedPinnable(fx: CloseFixture): Promise<void> {
+  await seedHappening(fx, TOLD, fx.replyIds[1]!)
+  await seedAwareness(fx, {
+    happeningId: TOLD.id,
+    characterId: TOBIN.id,
+    learnedAtEntryId: fx.replyIds[1]!,
+    decayResistance: 0.3,
+    source: 'told by the innkeeper',
+  })
+}
+
+// Two counted rows; the reset reads them from SQL, so no task lists them.
+async function seedCounted(fx: CloseFixture): Promise<void> {
+  await seedEntity(fx, WREN)
+  await seedHappening(fx, TOLD, fx.replyIds[1]!)
+  const tobin = await seedAwareness(fx, {
+    happeningId: TOLD.id,
+    characterId: TOBIN.id,
+    learnedAtEntryId: fx.replyIds[1]!,
+    decayResistance: 0.3,
+    source: 'told by the innkeeper',
+  })
+  await seedRetrievals(fx, tobin, 2)
+  const wren = await seedAwareness(fx, {
+    happeningId: TOLD.id,
+    characterId: WREN.id,
+    learnedAtEntryId: fx.replyIds[1]!,
+    decayResistance: 0.5,
+    source: 'overheard at the inn',
+  })
+  await seedRetrievals(fx, wren, 1)
+}
+
+// No embedder runs in the suite: this stands in for the range embed with the seeded cluster.
+function clustered(ids: readonly string[]): SlotEntry<'happenings'> {
+  return {
+    kind: 'code',
+    step: {
+      name: 'happenings-embed-stand-in',
+      run: async function* (
+        ctx,
+      ): AsyncGenerator<PhaseEmittedEvent, PhaseResult, GroupOutcome | undefined> {
+        setCloseClusters(ctx.phase.intermediates, [ids])
+        return { status: 'completed' }
+      },
+    },
+  }
+}
+
+const HAPPENINGS_TASK: SlotEntry<'happenings'> = { kind: 'task', def: happeningsTask }
+
+function mergeSlots(perPart: readonly SlotEntry<PartTask>[] = []): () => CloseAgentSlots {
+  return () => ({ before: [clustered(INN_PAIR), HAPPENINGS_TASK], perPart, after: [] })
+}
+
+const mergeThenResetSlots = (): CloseAgentSlots => ({
+  before: [clustered(INN_PAIR), HAPPENINGS_TASK],
+  perPart: [],
+  after: [{ kind: 'code', step: resetRetrievalStep }],
+})
+
+const awarenessSlots = (): CloseAgentSlots => ({
+  before: [],
+  perPart: [],
+  after: [{ kind: 'task', def: awarenessTask }],
+})
+
+const normalizationSlots = (): CloseAgentSlots => ({
+  before: [{ kind: 'code', step: normalizeStackablesStep }],
+  perPart: [],
+  after: [],
+})
+
+const resetSlots = (): CloseAgentSlots => ({
+  before: [],
+  perPart: [],
+  after: [{ kind: 'code', step: resetRetrievalStep }],
+})
+
+// Canon's run order around the merge, Awareness left out: it would make no write here.
+const chapterWideSlots = (): CloseAgentSlots => ({
+  before: [{ kind: 'code', step: normalizeStackablesStep }, clustered(INN_PAIR), HAPPENINGS_TASK],
+  perPart: [],
+  after: [{ kind: 'code', step: resetRetrievalStep }],
+})
+
+// Canon's whole order, Awareness and the reset after the merge.
+const fullOrderSlots = (): CloseAgentSlots => ({
+  before: [{ kind: 'code', step: normalizeStackablesStep }, clustered(INN_PAIR), HAPPENINGS_TASK],
+  perPart: [],
+  after: [
+    { kind: 'task', def: awarenessTask },
+    { kind: 'code', step: resetRetrievalStep },
+  ],
+})
+
+const MERGE_WHY = 'Both rows are the one exchange at the inn about the night ferry.'
+
+// Keeps TOLD (hp2) and absorbs ASKED (hp1): the composite takes ASKED's earlier anchor.
+const MERGE_COMPOSITE = {
+  keep: 'hp2',
+  absorb: ['hp1'],
+  title: 'The night ferry runs on Tobin’s word',
+  description:
+    'Wren asks the innkeeper whether the ferry runs at night, and learns it runs only when old Tobin says it runs.',
+  turns: ['t5'],
+  why: MERGE_WHY,
+}
+
+// Keeps ASKED (hp1) as it stands: its anchor is already the earliest, so no updateHappening.
+const MERGE_REDUNDANT = { keep: 'hp1', absorb: ['hp2'], turns: ['t5'], why: MERGE_WHY }
+
+const SET_PIN = {
+  id: 'aw1',
+  value: 0.5,
+  turns: ['t5'],
+  why: 'Tobin’s word decides every crossing Wren makes from here.',
+}
+
+// After the merge Awareness lists TOLD's rows: Tobin's (updated) as aw1 at 0.6, Wren's (created)
+// as aw2 at 0.5; each raise stays within 0.2.
+const PIN_MERGE_UPDATED = {
+  id: 'aw1',
+  value: 0.8,
+  turns: ['t5'],
+  why: 'Tobin’s word decides every crossing Wren makes from here.',
+}
+
+const PIN_MERGE_CREATED = {
+  id: 'aw2',
+  value: 0.7,
+  turns: ['t5'],
+  why: 'Wren has staked her letter on the night ferry.',
+}
+
+const MERGE_COMPOSITE_CASE: RoundTripCase = {
+  name: 'merge_happenings as a composite',
+  slots: mergeSlots(),
+  seed: seedInnPair,
+  steps: [{ calls: [{ toolName: 'merge_happenings', input: MERGE_COMPOSITE }] }],
+  merge: true,
+  abortOn: ['deleteHappening'],
+}
+
+const MERGE_REDUNDANT_CASE: RoundTripCase = {
+  name: 'merge_happenings of a redundant row, the kept text standing',
+  slots: mergeSlots(),
+  seed: seedInnPair,
+  steps: [{ calls: [{ toolName: 'merge_happenings', input: MERGE_REDUNDANT }] }],
+  merge: true,
+  abortOn: ['deleteHappening'],
+}
+
+const SET_PIN_CASE: RoundTripCase = {
+  name: 'set_pin',
+  slots: awarenessSlots,
+  seed: seedPinnable,
+  steps: [{ calls: [{ toolName: 'set_pin', input: SET_PIN }] }],
+  merge: false,
+}
+
+const NORMALIZATION_CASE: RoundTripCase = {
+  name: 'stackable normalization alone',
+  slots: normalizationSlots,
+  seed: seedPurses,
+  steps: [],
+  merge: false,
+  abortOn: ['updateEntityStackables'],
+}
+
+const RESET_CASE: RoundTripCase = {
+  name: 'the retrieval_count reset alone',
+  slots: resetSlots,
+  seed: seedCounted,
+  steps: [],
+  merge: false,
+  abortOn: ['resetAwarenessRetrieval'],
+}
+
+const CHAPTER_WIDE_CASE: RoundTripCase = {
+  name: 'normalization, merge_happenings and the reset in canon’s order',
+  slots: chapterWideSlots,
+  seed: seedChapterWide,
+  steps: [{ calls: [{ toolName: 'merge_happenings', input: MERGE_COMPOSITE }] }],
+  merge: true,
+  // Normalization's group lands first; without this the abort would never reach the merge's.
+  abortOn: ['deleteHappening'],
+}
+
+const LATER_BUMP_CASE: RoundTripCase = {
+  name: 'merge_happenings and the reset over rows a later turn’s retrieval bumped',
+  slots: mergeThenResetSlots,
+  seed: seedInnPairWithLaterBump,
+  steps: [{ calls: [{ toolName: 'merge_happenings', input: MERGE_COMPOSITE }] }],
+  merge: true,
+  abortOn: ['deleteHappening'],
+  armExpect: {
+    // The bump's undo restores by assignment, so TOLD's row reads its pre-bump count over the
+    // reset's 0. Canon records the edge (chapter-close.md → 3d).
+    'a rollback past E': async (h) => {
+      expect(await worldState(h.fx)).toEqual(
+        withAwarenessCount(h.closed().state, TOLD.id, TOBIN.id, TOLD_TOBIN_COUNT),
+      )
+    },
+    // The close's undo puts ASKED's row back, then the bumps go with the turns past E.
+    'a rollback to E': async (h) => {
+      expect(await worldState(h.fx)).toEqual(
+        withAwarenessCount(
+          withAwarenessCount(h.before, ASKED.id, TOBIN.id, ASKED_TOBIN_COUNT),
+          TOLD.id,
+          TOBIN.id,
+          TOLD_TOBIN_COUNT,
+        ),
+      )
+    },
+  },
+  armLog: {
+    // The close stands, so the bump's undo lands on the copy of the row its delete of ASKED holds.
+    'a rollback past E': (h) =>
+      withHeldCount(h.closed().log, ASKED.id, TOBIN.id, ASKED_TOBIN_COUNT),
+  },
+}
+
+const FULL_ORDER_CASE: RoundTripCase = {
+  name: 'normalization, merge_happenings, set_pin on the merged rows and the reset',
+  slots: fullOrderSlots,
+  seed: seedChapterWide,
+  steps: [
+    { calls: [{ toolName: 'merge_happenings', input: MERGE_COMPOSITE }] },
+    // Ends Happenings; the next step is Awareness's.
+    { calls: [] },
+    {
+      calls: [
+        { toolName: 'set_pin', input: PIN_MERGE_UPDATED },
+        { toolName: 'set_pin', input: PIN_MERGE_CREATED },
+      ],
+    },
+  ],
+  merge: true,
+  // The last group: the abort then reverses every group before it.
+  abortOn: ['resetAwarenessRetrieval'],
+}
+
+const MARK_MERGED_CASE: RoundTripCase = {
+  name: 'mark_common_knowledge on a row merge_happenings absorbed, then on its survivor',
+  slots: mergeSlots([{ kind: 'task', def: upkeepTask }]),
+  seed: seedInnPair,
+  steps: [
+    { calls: [{ toolName: 'merge_happenings', input: MERGE_COMPOSITE }] },
+    // Ends Happenings; the next step is Upkeep's.
+    { calls: [] },
+    { calls: [{ toolName: 'mark_common_knowledge', input: { ...MARK_COMMON, id: 'hp1' } }] },
+    { calls: [{ toolName: 'mark_common_knowledge', input: { ...MARK_COMMON, id: 'hp2' } }] },
+  ],
+  merge: true,
+  abortOn: ['deleteHappening'],
+}
+
+/** C9: every tool's landed group, and every code step's, joins this table. */
 const CASES: readonly RoundTripCase[] = [
   STAND_IN_CASE,
   {
@@ -1066,6 +1620,15 @@ const CASES: readonly RoundTripCase[] = [
   FLAG_CASE,
   FLAG_ON_PARTNER_CASE,
   THREADS_ACROSS_PARTS_CASE,
+  MERGE_COMPOSITE_CASE,
+  MERGE_REDUNDANT_CASE,
+  SET_PIN_CASE,
+  NORMALIZATION_CASE,
+  RESET_CASE,
+  CHAPTER_WIDE_CASE,
+  LATER_BUMP_CASE,
+  MARK_MERGED_CASE,
+  FULL_ORDER_CASE,
 ]
 
 /** C9's arms; chapter delete's two modes join here (5.12). */
@@ -1094,7 +1657,7 @@ const ARMS: readonly RoundTripArm[] = [
       const tx = await h.closeActingOnToolGroup(() => {
         void interruptMemoryRuns(h.fx.branchId)
       })
-      const group = defined(h.actedOn(), 'the abort never fired: no tool group landed')
+      const group = defined(h.actedOn(), 'the abort never fired: no group abortOn admits landed')
       expect(group.kinds, 'the group the abort fired on').not.toContain('createChapter')
       expect(tx.outcome).toBe('aborted')
     },
@@ -1118,7 +1681,8 @@ const ARMS: readonly RoundTripArm[] = [
   },
 ]
 
-describe.each(CASES)('the round trip of $name', (c) => {
+// Tuples: a `$name` title is cut at about 40 characters, out of `-t`'s reach.
+describe.each(CASES.map((c) => [c.name, c] as const))('the round trip of %s', (_name, c) => {
   it.each(ARMS)('$name leaves the database $expect', async (arm) => {
     const h = await openHarness(c)
 
@@ -1128,7 +1692,10 @@ describe.each(CASES)('the round trip of $name', (c) => {
     const own = c.armExpect?.[arm.name]
     if (own === undefined) expect(await worldState(h.fx)).toEqual(expected.state)
     else await own(h)
-    expect(await deltasOf(h.fx, h.actionId())).toEqual(expected.log)
+    const ownLog = c.armLog?.[arm.name]
+    expect(await deltasOf(h.fx, h.actionId())).toEqual(
+      ownLog === undefined ? expected.log : ownLog(h),
+    )
     const target = h.rolledBackTo()
     const others = (await branchLog(h.fx)).filter((d) => d.actionId !== h.actionId())
     expect(others, "other actions' deltas").toEqual(
@@ -1301,6 +1868,8 @@ describe('the round trip table', () => {
         'mark_common_knowledge',
         'retire_entity',
         'flag_duplicate',
+        'merge_happenings',
+        'set_pin',
       ]),
     )
     const scripted = new Set(
@@ -1312,9 +1881,26 @@ describe('the round trip table', () => {
   it("names only real arms in a case's own expectations", () => {
     const arms = new Set(ARMS.map((arm) => arm.name))
     for (const c of CASES)
-      for (const name of Object.keys(c.armExpect ?? {}))
+      for (const name of [...Object.keys(c.armExpect ?? {}), ...Object.keys(c.armLog ?? {})])
         expect(arms.has(name), `${c.name}: ${name}`).toBe(true)
     expect(Object.keys(FLAG_CASE.armExpect ?? {})).toEqual(['a rollback past E', 'a rollback to E'])
+    expect(Object.keys(LATER_BUMP_CASE.armExpect ?? {})).toEqual([
+      'a rollback past E',
+      'a rollback to E',
+    ])
+    expect(Object.keys(LATER_BUMP_CASE.armLog ?? {})).toEqual(['a rollback past E'])
+  })
+
+  it('runs every production code step that writes deltas in some case (C9)', () => {
+    const stepsOf = (slots: CloseAgentSlots) =>
+      [...slots.before, ...slots.perPart, ...slots.after].flatMap((entry) =>
+        entry.kind === 'code' ? [entry.step] : [],
+      )
+    // The range embed writes vectors, never a delta; the merge cases stand a cluster step in for it.
+    const writing = stepsOf(PRODUCTION_CLOSE_SLOTS).filter((step) => step !== embedRangeStep)
+    expect(writing.map((step) => step.name)).toEqual(['stackables', 'retrieval-reset'])
+    const run = new Set(CASES.flatMap((c) => stepsOf(c.slots())))
+    expect(writing.filter((step) => !run.has(step)).map((step) => step.name)).toEqual([])
   })
 })
 
@@ -1344,6 +1930,302 @@ describe('each new case lands what it names', () => {
       .where(and(eq(entities.branchId, h.fx.branchId), eq(entities.id, id)))
     return defined(row, `no entity ${id}`)
   }
+
+  it('normalization, the merge and the reset: the abort acts on the merge’s group, past normalization’s', async () => {
+    const h = await openHarness(CHAPTER_WIDE_CASE)
+
+    const tx = await h.closeActingOnToolGroup(() => {
+      void interruptMemoryRuns(h.fx.branchId)
+    })
+
+    expect(tx.outcome).toBe('aborted')
+    const group = defined(h.actedOn(), 'the abort never fired')
+    expect(group.kinds).toContain('deleteHappening')
+    expect(group.kinds).not.toContain('updateEntityStackables')
+  })
+
+  it('the full order: the abort acts on the reset’s group, after every other group landed', async () => {
+    const h = await openHarness(FULL_ORDER_CASE)
+
+    const tx = await h.closeActingOnToolGroup(() => {
+      void interruptMemoryRuns(h.fx.branchId)
+    })
+
+    expect(tx.outcome).toBe('aborted')
+    expect(defined(h.actedOn(), 'the abort never fired').kinds).toEqual(['resetAwarenessRetrieval'])
+  })
+
+  // Each group the close emitted past its metadata's, its kinds sorted.
+  async function closedWithGroups(
+    c: RoundTripCase,
+  ): Promise<{ h: CloseHarness; groups: string[][] }> {
+    const h = await openHarness(c)
+    const groups: string[][] = []
+    pipelineEventBus.subscribe('delta_group_emitted', (event) => {
+      if (event.actions.some((a) => a.kind === 'createChapter')) return
+      groups.push(event.actions.map((a) => a.kind).toSorted())
+    })
+    await h.close()
+    return { h, groups }
+  }
+
+  async function happeningRow(h: CloseHarness, id: string) {
+    const [row] = await h.fx.ctx.db
+      .select()
+      .from(happenings)
+      .where(and(eq(happenings.branchId, h.fx.branchId), eq(happenings.id, id)))
+    return row
+  }
+
+  async function involvedIn(h: CloseHarness, happeningId: string): Promise<string[]> {
+    const rows = await h.fx.ctx.db
+      .select({ entityId: happeningInvolvements.entityId })
+      .from(happeningInvolvements)
+      .where(
+        and(
+          eq(happeningInvolvements.branchId, h.fx.branchId),
+          eq(happeningInvolvements.happeningId, happeningId),
+        ),
+      )
+    return rows.map((row) => row.entityId).toSorted()
+  }
+
+  // The reset's delta: the newest of the close's `writes` deltas on the row.
+  async function resetOf(h: CloseHarness, rowId: string, writes = 2): Promise<Delta> {
+    const written = (await deltasOf(h.fx, h.actionId())).filter((d) => d.targetId === rowId)
+    expect(written, `the close's deltas on ${rowId}`).toHaveLength(writes)
+    // deltasOf lists newest first.
+    return written[0]!
+  }
+
+  const stackablesOf = (row: { state: unknown }): unknown =>
+    (row.state as { stackables?: unknown } | null)?.stackables
+
+  const MERGE_KINDS = [
+    'createHappeningInvolvement',
+    'deleteHappening',
+    'updateHappening',
+    'upsertHappeningAwareness',
+    'upsertHappeningAwareness',
+  ]
+
+  it('merge_happenings as a composite: TOLD takes the text, ASKED’s anchor, Wren and the folded rows', async () => {
+    const { h, groups } = await closedWithGroups(MERGE_COMPOSITE_CASE)
+
+    expect(groups).toEqual([MERGE_KINDS])
+    expect(await happeningRow(h, ASKED.id)).toBeUndefined()
+    expect(await happeningRow(h, TOLD.id)).toMatchObject({
+      title: MERGE_COMPOSITE.title,
+      description: MERGE_COMPOSITE.description,
+      occurredAtEntryId: h.fx.replyIds[0],
+    })
+    expect(await involvedIn(h, TOLD.id)).toEqual([TOBIN.id, WREN.id].toSorted())
+    // Max 0.6 over 0.4, ASKED's earlier anchor, 1 + 2 retrievals, keep's source first.
+    expect(await awarenessRow(h.fx, TOLD.id, TOBIN.id)).toMatchObject({
+      learnedAtEntryId: h.fx.replyIds[0],
+      decayResistance: 0.6,
+      retrievalCount: 3,
+      source: 'told by the innkeeper; overheard at the inn',
+    })
+    expect(await awarenessRow(h.fx, TOLD.id, WREN.id)).toMatchObject({
+      learnedAtEntryId: h.fx.replyIds[0],
+      decayResistance: 0.5,
+      retrievalCount: 0,
+      source: 'asked it herself',
+    })
+    const calls = await writeCalls(h)
+    expect(calls).toMatchObject([
+      {
+        task: 'happenings',
+        part: 0,
+        tool: 'merge_happenings',
+        result: 'ok',
+        survivor: { table: 'happenings', id: TOLD.id },
+        values: { title: MERGE_COMPOSITE.title, description: MERGE_COMPOSITE.description },
+      },
+    ])
+    expect(calls[0]!.rows).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ table: 'happenings', id: ASKED.id }),
+        expect.objectContaining({ table: 'happenings', id: TOLD.id }),
+      ]),
+    )
+  })
+
+  it('merge_happenings of a redundant row: ASKED keeps its text and anchor, TOLD’s count folds in', async () => {
+    const { h, groups } = await closedWithGroups(MERGE_REDUNDANT_CASE)
+
+    expect(groups).toEqual([['deleteHappening', 'upsertHappeningAwareness']])
+    expect(await happeningRow(h, TOLD.id)).toBeUndefined()
+    expect(await happeningRow(h, ASKED.id)).toMatchObject({
+      title: ASKED.title,
+      description: ASKED.description,
+      occurredAtEntryId: h.fx.replyIds[0],
+    })
+    expect(await involvedIn(h, ASKED.id)).toEqual([TOBIN.id, WREN.id].toSorted())
+    expect(await awarenessRow(h.fx, ASKED.id, TOBIN.id)).toMatchObject({
+      learnedAtEntryId: h.fx.replyIds[0],
+      decayResistance: 0.6,
+      retrievalCount: 3,
+      source: 'overheard at the inn; told by the innkeeper',
+    })
+    expect(await writeCalls(h)).toMatchObject([
+      { tool: 'merge_happenings', result: 'ok', survivor: { table: 'happenings', id: ASKED.id } },
+    ])
+  })
+
+  it('set_pin: Tobin’s row on TOLD pinned at 0.5, one upsert', async () => {
+    const { h, groups } = await closedWithGroups(SET_PIN_CASE)
+
+    expect(groups).toEqual([['upsertHappeningAwareness']])
+    expect(await awarenessRow(h.fx, TOLD.id, TOBIN.id)).toMatchObject({ decayResistance: 0.5 })
+    expect(await writeCalls(h)).toMatchObject([
+      { task: 'awareness', part: 0, tool: 'set_pin', result: 'ok' },
+    ])
+  })
+
+  it('stackable normalization: Gold and gold summed, arrows folded onto Wren’s arrow, one group on E', async () => {
+    const { h, groups } = await closedWithGroups(NORMALIZATION_CASE)
+
+    expect(groups).toEqual([['updateEntityStackables', 'updateEntityStackables']])
+    expect(stackablesOf(await entityRow(h, TOBIN.id))).toEqual({ gold: 8, arrow: 3 })
+    expect(stackablesOf(await entityRow(h, WREN.id))).toEqual({ arrow: 2 })
+    const written = (await deltasOf(h.fx, h.actionId()))
+      .filter((d) => d.targetTable === 'entities')
+      .map((d) => `${d.op} ${d.targetId} ${d.entryId} ${d.source}`)
+    expect(written.toSorted()).toEqual(
+      [
+        `update ${TOBIN.id} ${h.endEntryId} chapter_close`,
+        `update ${WREN.id} ${h.endEntryId} chapter_close`,
+      ].toSorted(),
+    )
+    expect(await writeCalls(h)).toEqual([])
+  })
+
+  it('the reset: both counts read 0, one chapter_close delta per row on E, one group', async () => {
+    const { h, groups } = await closedWithGroups(RESET_CASE)
+
+    expect(groups).toEqual([['resetAwarenessRetrieval', 'resetAwarenessRetrieval']])
+    expect((await awarenessRow(h.fx, TOLD.id, TOBIN.id)).retrievalCount).toBe(0)
+    expect((await awarenessRow(h.fx, TOLD.id, WREN.id)).retrievalCount).toBe(0)
+    const resets = (await deltasOf(h.fx, h.actionId()))
+      .filter((d) => d.targetTable === 'happening_awareness')
+      .map((d) => `${d.op} ${d.entryId} ${d.source} ${JSON.stringify(d.undoPayload)}`)
+    expect(resets.toSorted()).toEqual(
+      [
+        `update ${h.endEntryId} chapter_close {"retrievalCount":1}`,
+        `update ${h.endEntryId} chapter_close {"retrievalCount":2}`,
+      ].toSorted(),
+    )
+    expect(await writeCalls(h)).toEqual([])
+  })
+
+  it('normalization, the merge and the reset land as three groups in canon’s order', async () => {
+    const { h, groups } = await closedWithGroups(CHAPTER_WIDE_CASE)
+
+    expect(groups).toEqual([
+      ['updateEntityStackables', 'updateEntityStackables'],
+      MERGE_KINDS,
+      ['resetAwarenessRetrieval'],
+    ])
+    // The merge's summed count is the one row left counting; the reset clears it.
+    const kept = await awarenessRow(h.fx, TOLD.id, TOBIN.id)
+    expect(kept.retrievalCount).toBe(0)
+    expect((await resetOf(h, kept.id)).undoPayload, 'the reset undoes to the summed count').toEqual(
+      { retrievalCount: ASKED_TOBIN_COUNT + TOLD_TOBIN_COUNT },
+    )
+  })
+
+  it('a merge and the reset beside a later turn’s retrieval bumps land, then CTRL-Z of the close and of the turn both succeed', async () => {
+    const h = await closedHarness(LATER_BUMP_CASE)
+    expect(await writeCalls(h)).toMatchObject([
+      { tool: 'merge_happenings', result: 'ok', survivor: { table: 'happenings', id: TOLD.id } },
+    ])
+    // C12: neither bump reads as a later turn's write, so both counts, each bumped once, fold in.
+    const kept = await awarenessRow(h.fx, TOLD.id, TOBIN.id)
+    expect(kept.retrievalCount).toBe(0)
+    expect((await resetOf(h, kept.id)).undoPayload).toEqual({
+      retrievalCount: ASKED_TOBIN_COUNT + 1 + (TOLD_TOBIN_COUNT + 1),
+    })
+
+    await undoClose(h)
+    expect(await undoLastAction(h.fx.branchId, h.fx.ctx)).toEqual({ status: 'ok' })
+
+    // Turn 6 went whole: its entries and its bumps of both of Tobin's rows.
+    expect((await awarenessRow(h.fx, ASKED.id, TOBIN.id)).retrievalCount).toBe(2)
+    expect((await awarenessRow(h.fx, TOLD.id, TOBIN.id)).retrievalCount).toBe(1)
+    const left = await h.fx.ctx.db
+      .select({ id: storyEntries.id })
+      .from(storyEntries)
+      .where(eq(storyEntries.branchId, h.fx.branchId))
+    expect(left.map((entry) => entry.id)).not.toContain(h.fx.replyIds[5])
+    expect(await deltasOf(h.fx, 'act_close_turn_6')).toEqual([])
+  })
+
+  it('normalization, the merge, set_pin on a row it updated and on one it created, and the reset land in canon’s order', async () => {
+    const { h, groups } = await closedWithGroups(FULL_ORDER_CASE)
+
+    expect(groups).toEqual([
+      ['updateEntityStackables', 'updateEntityStackables'],
+      MERGE_KINDS,
+      ['upsertHappeningAwareness'],
+      ['upsertHappeningAwareness'],
+      ['resetAwarenessRetrieval'],
+    ])
+    expect((await writeCalls(h)).map((call) => [call.task, call.tool, call.result])).toEqual([
+      ['happenings', 'merge_happenings', 'ok'],
+      ['awareness', 'set_pin', 'ok'],
+      ['awareness', 'set_pin', 'ok'],
+    ])
+    const updated = await awarenessRow(h.fx, TOLD.id, TOBIN.id)
+    expect(updated).toMatchObject({ decayResistance: 0.8, retrievalCount: 0 })
+    expect(await awarenessRow(h.fx, TOLD.id, WREN.id)).toMatchObject({
+      decayResistance: 0.7,
+      retrievalCount: 0,
+    })
+    // The merge's upsert, the pin's and the reset, which undoes to the summed count.
+    expect((await resetOf(h, updated.id, 3)).undoPayload).toEqual({
+      retrievalCount: ASKED_TOBIN_COUNT + TOLD_TOBIN_COUNT,
+    })
+  })
+
+  it('mark_common_knowledge on ASKED after the merge is refused naming TOLD, which takes the write', async () => {
+    const h = await closedHarness(MARK_MERGED_CASE)
+
+    const calls = await writeCalls(h)
+    expect(calls).toMatchObject([
+      {
+        task: 'happenings',
+        tool: 'merge_happenings',
+        result: 'ok',
+        survivor: { table: 'happenings', id: TOLD.id },
+      },
+      {
+        task: 'upkeep',
+        tool: 'mark_common_knowledge',
+        result: 'rejected',
+        reason: 'row-gone',
+        rows: [{ table: 'happenings', id: ASKED.id }],
+      },
+      {
+        task: 'upkeep',
+        tool: 'mark_common_knowledge',
+        result: 'ok',
+        rows: [{ table: 'happenings', id: TOLD.id }],
+      },
+    ])
+    expect(calls[1], 'C4: a refusal carries no survivor').not.toHaveProperty('survivor')
+    const sent = generateToolStepMock.mock.calls.map(([, request]) =>
+      JSON.stringify(request.messages),
+    )
+    expect(
+      sent.some((messages) =>
+        messages.includes('The row was merged into hp2; write to hp2 instead.'),
+      ),
+      'the answer names the survivor',
+    ).toBe(true)
+    expect(await happeningRow(h, TOLD.id)).toMatchObject({ commonKnowledge: 1 })
+  })
 
   it('create_lore in part 1, then update_lore of that row in part 2', async () => {
     const h = await closedHarness(LORE_ACROSS_PARTS_CASE)

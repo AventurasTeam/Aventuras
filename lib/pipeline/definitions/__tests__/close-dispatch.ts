@@ -19,11 +19,20 @@ import { dispatchToolCall, type DispatchContext } from '../close-agent/dispatch'
 import type { CloseIds } from '../close-agent/ids'
 import { CloseLedgerWriter } from '../close-agent/ledger'
 import { tableOfId, type CloseTool, type ReadFields } from '../close-agent/tool'
-import { closeIdsOf, seedCloseLedger } from '../close-intermediates'
+import {
+  closeClusterOf,
+  closeIdsOf,
+  seedCloseLedger,
+  setCloseClusters,
+} from '../close-intermediates'
 import type { CloseLedger } from '../intermediates'
 
 /** A row the task's start showed: handed its handle in order, and read unless `seeds` is given. */
-export type ShownRow = GuardRow & { name: string }
+export type ShownRow = GuardRow & {
+  name: string
+  /** A shown awareness row's pin as the start read it: null for none; absent shows no pin. */
+  startPin?: number | null
+}
 /** One model call; `part` runs it as that part of the task, the run's own when absent. */
 export type ScriptedCall = { toolName: string; input: Record<string, unknown>; part?: number }
 export type DispatchTurns = {
@@ -59,6 +68,8 @@ type DispatchSpec = {
   setup?: DispatchSetup
   /** The run's expected outcome; `completed` when absent. */
   outcome?: TxResult['outcome']
+  /** The range embed's clusters (happening ids), parked as the close parks them; none by default. */
+  clusters?: readonly (readonly string[])[]
 }
 
 const KIND = 'close-dispatch-test'
@@ -84,8 +95,8 @@ async function* dispatchPhase(
   const ids = closeIdsOf(phase.intermediates)
   ids.showTurns(turns.chapterEntryIds ?? turns.taskEntryIds)
   // An awareness row's handle is an aw one, which takes no name.
-  for (const { table, id, name } of spec.shown)
-    if (table === 'happening_awareness') ids.showAwareness(id)
+  for (const { table, id, name, startPin } of spec.shown)
+    if (table === 'happening_awareness') ids.showAwareness(id, startPin)
     else ids.show(id, name)
   const ledger = seedCloseLedger(phase.intermediates)
   const writer = new CloseLedgerWriter(ledger, (id) => ids.nameOfId(id), phase.actionId)
@@ -95,6 +106,7 @@ async function* dispatchPhase(
   run.ledger = ledger
   run.ids = ids
   run.readSet = readSet
+  if (spec.clusters !== undefined) setCloseClusters(phase.intermediates, spec.clusters)
   const ctx: DispatchContext = {
     db: phase.db,
     branchId: phase.branchId,
@@ -104,6 +116,7 @@ async function* dispatchPhase(
     ids,
     readFields: spec.readFields ?? {},
     survivorOf: (table, id) => writer.survivorOf(table, id),
+    clusterOf: (happeningId) => closeClusterOf(phase.intermediates, happeningId),
     landedCalls: (tool) => writer.landedCalls(tool),
     phase,
     taskEntryIds: turns.taskEntryIds,

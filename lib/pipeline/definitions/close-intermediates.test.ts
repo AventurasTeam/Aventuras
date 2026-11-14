@@ -3,12 +3,15 @@ import { describe, expect, it } from 'vitest'
 import type { ChapterPartCut } from '@/lib/chapters'
 
 import {
+  closeClusterOf,
+  closeClustersOf,
   closeLedgerOf,
   closePartsOf,
   closeRangeOf,
   requireCloseParts,
   requireCloseRange,
   seedCloseLedger,
+  setCloseClusters,
   setCloseParts,
   setCloseRange,
 } from './close-intermediates'
@@ -84,5 +87,39 @@ describe('the close parts', () => {
       status: 'failed',
       error: { kind: 'orchestrator', detail: 'chapter-close: no close parts' },
     })
+  })
+})
+
+describe('the close clusters', () => {
+  it('reads none until the range embed parks them, then those, under their own key', () => {
+    const intermediates: Record<string, unknown> = {}
+    expect(closeClustersOf(intermediates)).toEqual([])
+
+    setCloseClusters(intermediates, [
+      ['hap_a', 'hap_b'],
+      ['hap_c', 'hap_d', 'hap_e'],
+    ])
+
+    expect(closeClustersOf(intermediates)).toEqual([
+      ['hap_a', 'hap_b'],
+      ['hap_c', 'hap_d', 'hap_e'],
+    ])
+    expect(closeRangeOf(intermediates)).toBeUndefined()
+    expect(closePartsOf(intermediates)).toBeUndefined()
+    expect(closeLedgerOf(intermediates)).toBeUndefined()
+  })
+
+  it("names a happening's cluster, and none for a happening the clusters leave out", () => {
+    const intermediates: Record<string, unknown> = {}
+    expect(closeClusterOf(intermediates, 'hap_a')).toBeUndefined()
+
+    setCloseClusters(intermediates, [
+      ['hap_a', 'hap_b'],
+      ['hap_c', 'hap_d', 'hap_e'],
+    ])
+
+    expect(closeClusterOf(intermediates, 'hap_d')).toEqual(['hap_c', 'hap_d', 'hap_e'])
+    expect(closeClusterOf(intermediates, 'hap_b')).toEqual(['hap_a', 'hap_b'])
+    expect(closeClusterOf(intermediates, 'hap_f')).toBeUndefined()
   })
 })

@@ -1,7 +1,6 @@
 import {
   chunked,
   knnQuery,
-  unpackFloat32,
   vecTableName,
   vectorsByIdQuery,
   type Entity,
@@ -20,6 +19,7 @@ import {
   type ChapterAgeIndex,
 } from './chapters-old'
 import { KNN_K, RANKER_DEFAULTS, REDUNDANCY_K } from './constants'
+import { decodeVector } from './decode-vector'
 import { buildKeywordInjections, type KeywordRetrievalSettings } from './injection'
 import { entityNameIndexFrom, matchTerms, normalizeTerm, type EntityNameIndex } from './name-index'
 import {
@@ -727,17 +727,6 @@ async function buildHappeningsPool(
   const ids = new Set(knn.ids)
   for (const id of admitted) if (knn.vectorById.has(id)) ids.add(id)
   return ids.size === 0 ? [] : assembleCandidates({ ...ctx, happenings: rows }, ids, knn.vectorById)
-}
-
-// unpackFloat32 lives in lib/db, so its blob-length throw arrives untyped. It
-// carries the same meaning as cosine's guards, so it is renamed into the family
-// rather than escaping as a generic fault.
-function decodeVector(blob: unknown): Float32Array {
-  try {
-    return unpackFloat32(blob as Uint8Array)
-  } catch (error) {
-    throw new VectorInvariantError(error instanceof Error ? error.message : String(error))
-  }
 }
 
 const fresh = <T extends Stale>(rows: readonly T[]): T[] => rows.filter((r) => !r.embeddingStale)

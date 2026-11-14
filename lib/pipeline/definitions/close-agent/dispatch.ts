@@ -52,6 +52,7 @@ function toolContextOf(ctx: DispatchContext): ToolContext {
     ids: ctx.ids,
     readFields: ctx.readFields,
     survivorOf: ctx.survivorOf,
+    clusterOf: ctx.clusterOf,
     landedCalls: ctx.landedCalls,
   }
 }
@@ -236,14 +237,14 @@ async function* writeCall(
     ids: ctx.ids,
     taskEntryIds: ctx.taskEntryIds,
     readSet: ctx.readSet,
+    survivorOf: ctx.survivorOf,
   })
   if (!check.ok) {
-    const verdict = rejectedWhole(check.reason, [], ctx)
-    recordWrite(ctx, tool.name, args, {
-      rows: rowsNamed(named, ctx.ids),
-      turns: turnsShown(args.turns, ctx),
-      verdict,
-    })
+    const rows = rowsNamed(named, ctx.ids)
+    // Only the judged row goes to rejectedWhole: a row-gone names its survivor, the ledger none.
+    const gone = check.gone === undefined ? [] : rowsNamed([check.gone], ctx.ids)
+    const verdict = rejectedWhole(check.reason, gone, ctx)
+    recordWrite(ctx, tool.name, args, { rows, turns: turnsShown(args.turns, ctx), verdict })
     return modelAnswer(verdict, {}, ctx.ids)
   }
 

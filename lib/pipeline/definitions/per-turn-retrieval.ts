@@ -24,6 +24,7 @@ import {
 import { appSettingsStore } from '@/lib/stores'
 import { resolveLead } from '@/lib/world'
 
+import { EMBED_TIMEOUT_MS } from './embed-bound'
 import { readSceneSource } from './entry-reads'
 import { RETRIEVAL_INTERMEDIATE_KEY } from './intermediates'
 import { loadPerTurnWorkingSet } from './working-set'
@@ -36,10 +37,6 @@ export const RETRIEVAL_PHASE_NAME = 'retrieval'
 function embedderInitFailure(detail: string): PhaseResult {
   return { status: 'failed', error: { kind: 'embedder', reason: 'init', detail, staleCount: null } }
 }
-
-// Matches the periodic classifier's call budget: both bound one blocking
-// provider call, and a turn already tolerates a narrative stream of this order.
-const EMBED_TIMEOUT_MS = 300_000
 
 export async function* retrievalPhase(
   ctx: PhaseContext,

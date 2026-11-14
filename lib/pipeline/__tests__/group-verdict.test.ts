@@ -261,6 +261,7 @@ describe('readRowGuard', () => {
       row: () => ({
         laterTurnWrote: () => false,
         userWrote: () => true,
+        userEverWrote: () => true,
         laterTurnTouched: () => false,
         userTouched: () => true,
       }),

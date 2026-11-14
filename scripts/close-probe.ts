@@ -20,6 +20,7 @@ import {
   registerAllDomains,
   resetStuckClassifierRunState,
   startManualClose,
+  type GroupOutcome,
 } from '@/lib/actions'
 import { canEndChapter, partTokenLimit } from '@/lib/chapters'
 import {
@@ -46,14 +47,29 @@ import {
   readClassifierStatus,
   recoverInFlightRuns,
   unprocessedEntryCount,
+  type PhaseEmittedEvent,
+  type PhaseResult,
   type PipelineError,
   type RejectedStart,
   type TxResult,
 } from '@/lib/pipeline'
 import { standInSlots } from '@/lib/pipeline/__tests__/close-stand-in'
 import { realDeltaActionPort } from '@/lib/pipeline/__tests__/harness'
-import { __setCloseAgentSlots } from '@/lib/pipeline/definitions/close-agent/slots'
-import { appSettingsStore, hydrateAppSettings, resetAllStores } from '@/lib/stores'
+import { embedRangeStep } from '@/lib/pipeline/definitions/close-agent/close-happenings'
+import {
+  __setCloseAgentSlots,
+  PRODUCTION_CLOSE_SLOTS,
+  type CloseAgentSlots,
+  type CodeStep,
+  type SlotEntry,
+} from '@/lib/pipeline/definitions/close-agent/slots'
+import { closeClustersOf } from '@/lib/pipeline/definitions/close-intermediates'
+import {
+  appSettingsStore,
+  hydrateAppSettings,
+  rehydrateStories,
+  resetAllStores,
+} from '@/lib/stores'
 
 import {
   attemptOf,
@@ -67,6 +83,7 @@ import {
   type RunTally,
   type StepAttempt,
 } from './close-probe-bar'
+import { installProbeBridges, probeEmbedderBridge } from './close-probe-embedder'
 import { rejudgeSaved } from './close-probe-rejudge'
 import {
   applyDatasetOverlay,
@@ -84,10 +101,11 @@ import { resolveDevSlot } from './dev-slot/resolve'
 // seed's test overlay on each run's copy, and the bar over the runs), PROBE_WINDOW (none; the
 // model's window in tokens, set on the probe's provider as App Settings' override is, so a close
 // cuts its chapter into parts at half of it), AVENTURAS_DB_PATH (the dev slot's database; only
-// ever read, through a VACUUM INTO copy), PROBE_REJUDGE (a saved PROBE_OUT directory: judges its
-// runs by the bar as it stands, from the saved files, with no model call, and writes
-// bar-rejudged.json beside them). Close the app first: a live write moves the source's hash, and
-// a held write lock fails the copy.
+// ever read, through a VACUUM INTO copy), PROBE_EMBEDDERS_DIR (the dev slot's userData embedders/;
+// where the range embed loads the story's local model, through onnxruntime-node in this process),
+// PROBE_REJUDGE (a saved PROBE_OUT directory: judges its runs by the bar as it stands, from the
+// saved files, with no model call, and writes bar-rejudged.json beside them). Close the app
+// first: a live write moves the source's hash, and a held write lock fails the copy.
 // A PROBE_OUT that already holds files is refused, so each invocation saves to its own directory.
 const LLM_URL = process.env.SMOKE_LLM_URL
 const LLM_MODEL = process.env.SMOKE_LLM_MODEL
@@ -113,6 +131,54 @@ type Server = { url: string; model: string }
 function resolveDbPath(): string {
   if (process.env.AVENTURAS_DB_PATH) return resolve(process.env.AVENTURAS_DB_PATH)
   return join(resolveDevSlot().dataDir, 'aventuras.db')
+}
+
+function resolveEmbeddersRoot(): string {
+  if (process.env.PROBE_EMBEDDERS_DIR) return resolve(process.env.PROBE_EMBEDDERS_DIR)
+  return join(resolveDevSlot().dataDir, 'embedders')
+}
+
+// The current run's range-embed clusters, once it completed; its counts are its own log entry.
+let rangeClusters: readonly (readonly string[])[] | null = null
+
+const measuredEmbedStep: CodeStep = {
+  name: embedRangeStep.name,
+  run: async function* (
+    ctx,
+  ): AsyncGenerator<PhaseEmittedEvent, PhaseResult, GroupOutcome | undefined> {
+    const result = yield* embedRangeStep.run(ctx)
+    if (result.status === 'completed') rangeClusters = closeClustersOf(ctx.phase.intermediates)
+    return result
+  },
+}
+
+// The shipped slots with the range embed measured in its place.
+function measuredSlots(): CloseAgentSlots {
+  const isEmbed = (entry: SlotEntry<'happenings'>): boolean =>
+    entry.kind === 'code' && entry.step === embedRangeStep
+  if (!PRODUCTION_CLOSE_SLOTS.before.some(isEmbed))
+    throw new Error('[probe:close] the shipped slots hold no range embed to measure')
+  return {
+    ...PRODUCTION_CLOSE_SLOTS,
+    before: PRODUCTION_CLOSE_SLOTS.before.map(
+      (entry): SlotEntry<'happenings'> =>
+        isEmbed(entry) ? { kind: 'code', step: measuredEmbedStep } : entry,
+    ),
+  }
+}
+
+function printRangeEmbed(k: number): void {
+  const counts = capture.log.findLast(({ entry }) => entry.kind === 'memory.close_range_embed')
+  if (counts === undefined || rangeClusters === null) {
+    console.log(`[probe:close]   run ${k} range embed: did not complete`)
+    return
+  }
+  const { embedded, happenings, clusters } = counts.entry.fields
+  const sizes = rangeClusters.map((cluster) => cluster.length)
+  const rows = sizes.length === 0 ? '' : ` of ${sizes.join(', ')} rows`
+  console.log(
+    `[probe:close]   run ${k} range embed: ${String(embedded)} of ${String(happenings)} range happenings embedded, ${String(clusters)} clusters${rows}`,
+  )
 }
 
 function sha256(path: string): string {
@@ -493,13 +559,21 @@ type RunResult = {
   reportBytes: number | null
 }
 
-async function probeRun(k: number, source: string, server: Server): Promise<RunResult> {
+async function probeRun(
+  k: number,
+  source: string,
+  server: Server,
+  embedders: string,
+): Promise<RunResult> {
   const scratch = mkdtempSync(join(tmpdir(), 'aventuras-close-probe-'))
   let sqlite: DatabaseSync | null = null
+  let uninstall: (() => void) | null = null
   const cleanUp = (): void => {
     try {
+      uninstall?.()
       sqlite?.close()
     } finally {
+      uninstall = null
       sqlite = null
       rmSync(scratch, { recursive: true, force: true })
     }
@@ -513,6 +587,7 @@ async function probeRun(k: number, source: string, server: Server): Promise<RunR
   capture.retries = []
   capture.attempts = []
   capture.log = []
+  rangeClusters = null
   clearBuffers()
   const unsubscribe = [
     pipelineEventBus.subscribe('phase_start', (event) => {
@@ -537,6 +612,7 @@ async function probeRun(k: number, source: string, server: Server): Promise<RunR
     copyDatabase(source, copy)
     const opened = await openTestDb(copy)
     sqlite = opened.sqlite
+    uninstall = installProbeBridges(probeEmbedderBridge(embedders), opened)
     clearLoreMgmtOverride(opened.sqlite)
     const ctx: DbCtx = { db: opened.db, runInTransaction: opened.runInTransaction }
     if (capture.dir !== null) mkdirSync(capture.dir, { recursive: true })
@@ -559,6 +635,9 @@ async function probeRun(k: number, source: string, server: Server): Promise<RunR
     const story = await loadOpenStory(BRANCH_ID, ctx)
     if (story.status !== 'ok')
       throw new Error(`[probe:close] branch ${BRANCH_ID} did not open: ${story.status}`)
+    // The range embed reads the story's embedder from the stories store, which boot fills.
+    if (!(await rehydrateStories(ctx.db)))
+      throw new Error('[probe:close] the stories store did not load')
     const end = END_ENTRY ?? latestReply(await openRegionSeries(BRANCH_ID, ctx))
     const started = Date.now()
     const result = await startManualClose(BRANCH_ID, end, ctx)
@@ -570,6 +649,7 @@ async function probeRun(k: number, source: string, server: Server): Promise<RunR
     if (report !== null && capture.dir !== null)
       writeFileSync(join(capture.dir, 'report.json'), `${JSON.stringify(report, null, 2)}\n`)
     printRun(k, result, ms, report)
+    if (!STAND_IN) printRangeEmbed(k)
     const tally = tallyRun({
       report,
       attempts: capture.attempts,
@@ -639,6 +719,12 @@ async function main(): Promise<void> {
   const source = resolveDbPath()
   if (!existsSync(source)) throw new Error(`[probe:close] no database at ${source}`)
   refuseUsedOutput()
+  const embedders = resolveEmbeddersRoot()
+  if (!STAND_IN && !existsSync(embedders))
+    throw new Error(
+      `[probe:close] no embedders folder at ${embedders}: the range embed loads the story's local model from it; set PROBE_EMBEDDERS_DIR to a folder that holds it`,
+    )
+  console.log(`[probe:close] embedders ${embedders}`)
   stopOn('SIGINT', 130)
   stopOn('SIGTERM', 143)
   const before = sha256(source)
@@ -651,7 +737,7 @@ async function main(): Promise<void> {
   registerAllDomains()
   configureDeltaActionPort(realDeltaActionPort())
   ensureChapterClosePipelineRegistered()
-  if (STAND_IN) __setCloseAgentSlots(standInSlots())
+  __setCloseAgentSlots(STAND_IN ? standInSlots() : measuredSlots())
   // The logger mirrors each debug entry to console.debug; the buffer the probe drains still fills.
   console.debug = () => {}
   enableDiagnosticsGate()
@@ -659,7 +745,7 @@ async function main(): Promise<void> {
   try {
     const results: RunResult[] = []
     for (let k = 1; k <= RUNS; k++)
-      results.push(await probeRun(k, source, { url: LLM_URL, model: LLM_MODEL }))
+      results.push(await probeRun(k, source, { url: LLM_URL, model: LLM_MODEL }, embedders))
     if (
       failedRunsExit(
         OVERLAY,

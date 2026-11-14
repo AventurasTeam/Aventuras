@@ -249,6 +249,7 @@ function writeContext(proseEntryId = endEntryId()): WriteContext {
     ids: new CloseIds(),
     readFields: {},
     survivorOf: () => undefined,
+    clusterOf: () => undefined,
     landedCalls: () => 0,
     turns: [proseEntryId],
     proseEntryId,
@@ -365,6 +366,7 @@ function stubVerdicts(written: { user?: readonly string[]; later?: readonly stri
       asked.push(key(column, path))
       return (written.user ?? []).includes(key(column, path))
     },
+    userEverWrote: (column, path) => (written.user ?? []).includes(key(column, path)),
     laterTurnWrote: (column, path) => {
       askedLater.push(key(column, path))
       return (written.later ?? []).includes(key(column, path))
@@ -2014,5 +2016,246 @@ describe('dispatchToolCall in a close phase', () => {
     expect(groupEvents(events)).toEqual([])
     expect(await runDeltas(result.actionId)).toEqual([])
     expect((await row(WREN)).description).toBe('A courier.')
+  })
+})
+
+// A landed merge as an earlier task leaves it: Old Wren folded into `id`, never read by this task.
+const ABSORB_SHAPE = { id: z.string() }
+const absorbOldWrenTool: WriteTool<typeof ABSORB_SHAPE> = {
+  kind: 'write',
+  name: 'absorb_old_wren',
+  description: 'Fold Old Wren into a character.',
+  schema: writeToolSchema(ABSORB_SHAPE),
+  ids: { id: { shape: 'single', prefixes: ['char'] } },
+  plan: async ({ id }, ctx) => ({
+    kind: 'write',
+    actions: [
+      {
+        action: {
+          kind: 'updateEntity',
+          source: 'chapter_close',
+          payload: {
+            branchId: ctx.branchId,
+            id,
+            patch: { description: 'Both couriers, one name.' },
+          },
+        },
+        fields: ['description'],
+        row: id,
+      },
+    ],
+    lost: [],
+    rows: [
+      { table: 'entities', id, name: ctx.ids.nameOfId(id) ?? '' },
+      { table: 'entities', id: GONE, name: 'Old Wren' },
+    ],
+    values: { description: 'Both couriers, one name.' },
+    survivor: { table: 'entities', id },
+  }),
+}
+
+// Shows a row's handle without reading it, as search_world does.
+const FIND_SCHEMA = readToolSchema({ name: z.string() })
+const FOUND_BY_NAME: Readonly<Record<string, string>> = { 'Old Wren': GONE, Bram: BRAM }
+const findByNameTool: ReadTool<typeof FIND_SCHEMA> = {
+  kind: 'read',
+  name: 'find_by_name',
+  description: 'Find a character by name.',
+  schema: FIND_SCHEMA,
+  ids: {},
+  read: async ({ name }, ctx) => {
+    const id = FOUND_BY_NAME[name]
+    if (id === undefined) throw new Error(`find_by_name: no ${name}`)
+    return { output: { found: ctx.ids.show(id, name) }, rows: [], read: [] }
+  },
+}
+
+describe('the read gate on a row a landed merge absorbed', () => {
+  beforeEach(async () => {
+    f = await openCloseFixture()
+    await seedCharacter(WREN, 'Wren')
+    await seedCharacter(BRAM, 'Bram')
+  })
+
+  it('answers an unread absorbed row as gone, naming the row it went to, never in the ledger', async () => {
+    const { result, answers, calls } = await runDispatchCalls(f, {
+      task: 'identity',
+      tools: {
+        absorb_old_wren: absorbOldWrenTool,
+        find_by_name: findByNameTool,
+        set_fields: setFieldsTool,
+      },
+      shown: [{ table: 'entities', id: WREN, name: 'Wren' }],
+      calls: [
+        { toolName: 'absorb_old_wren', input: { id: 'c1', turns: ['t7'], why: 'One courier.' } },
+        { toolName: 'find_by_name', input: { name: 'Old Wren' } },
+        {
+          toolName: 'set_fields',
+          input: { id: 'c2', description: 'Older.', turns: ['t7'], why: 'She was older.' },
+        },
+      ],
+      turns: { endEntryId: endEntryId(), taskEntryIds: chapterEntryIds() },
+    })
+
+    expect(answers[1]).toEqual({ found: 'c2' })
+    expect(answers[2]).toEqual({
+      result: 'rejected',
+      reason: CLOSE_REASON.rowGone,
+      note: 'The row was merged into c1; write to c1 instead.',
+      survivor: 'c1',
+    })
+    expect(calls[2]).toEqual({
+      task: 'identity',
+      part: 1,
+      tool: 'set_fields',
+      rows: [{ table: 'entities', id: GONE, name: 'Old Wren' }],
+      why: 'She was older.',
+      turns: [endEntryId()],
+      result: 'rejected',
+      reason: CLOSE_REASON.rowGone,
+    })
+    // The merge's update is the run's one write.
+    expect(
+      await f.ctx.db.select().from(deltas).where(eq(deltas.actionId, result.actionId)),
+    ).toHaveLength(1)
+  })
+
+  it('keeps the read refusal for an unread row no merge took', async () => {
+    const { answers } = await runDispatchCalls(f, {
+      task: 'identity',
+      tools: { find_by_name: findByNameTool, set_fields: setFieldsTool },
+      shown: [{ table: 'entities', id: WREN, name: 'Wren' }],
+      calls: [
+        { toolName: 'find_by_name', input: { name: 'Bram' } },
+        {
+          toolName: 'set_fields',
+          input: { id: 'c2', description: 'Bram, at the toll.', turns: ['t7'], why: 'He waits.' },
+        },
+      ],
+      turns: { endEntryId: endEntryId(), taskEntryIds: chapterEntryIds() },
+    })
+
+    expect(answers[1]).toEqual({
+      result: 'rejected',
+      reason: "c2 hasn't been read in this task: call read_row on it, then write it",
+    })
+  })
+})
+
+describe('the read gate names the survivor of the row it judged', () => {
+  const KEPT_WREN = 'char_00000000-0000-4000-8000-000000000004'
+  const KEEP_SHAPE = { id: z.string(), other: z.string(), description: z.string() }
+  const keepRowTool: WriteTool<typeof KEEP_SHAPE> = {
+    kind: 'write',
+    name: 'keep_row',
+    description: 'Write two characters as one.',
+    schema: writeToolSchema(KEEP_SHAPE),
+    ids: {
+      id: { shape: 'single', prefixes: ['char'] },
+      other: { shape: 'single', prefixes: ['char'] },
+    },
+    // The gate refuses before a plan runs; a plan that ran would fail the test.
+    plan: async () => {
+      throw new Error('keep_row: the plan ran for a refused write')
+    },
+  }
+
+  beforeEach(async () => {
+    f = await openCloseFixture()
+    await seedCharacter(WREN, 'Wren')
+    await seedCharacter(BRAM, 'Bram')
+  })
+
+  it("names the unread row's survivor, not a read row's named before it", async () => {
+    const { answers } = await runDispatchCalls(f, {
+      task: 'identity',
+      tools: { keep_row: keepRowTool },
+      shown: [
+        { table: 'entities', id: WREN, name: 'Wren' },
+        { table: 'entities', id: KEPT_WREN, name: 'Wren the elder' },
+        { table: 'entities', id: BRAM, name: 'Bram' },
+        { table: 'entities', id: GONE, name: 'Old Wren' },
+      ],
+      // Wren was read, then a merge took her into KEPT_WREN; Old Wren went into Bram, never read.
+      seeds: [{ table: 'entities', id: WREN }],
+      setup: (_ids, ledger) => {
+        for (const [kept, absorbed] of [
+          [KEPT_WREN, WREN],
+          [BRAM, GONE],
+        ] as const)
+          ledger.record({
+            task: 'identity',
+            part: 1,
+            tool: 'keep_row',
+            rows: [
+              { table: 'entities', id: kept, name: '' },
+              { table: 'entities', id: absorbed, name: '' },
+            ],
+            why: 'One courier.',
+            turns: [],
+            result: 'ok',
+            survivor: { table: 'entities', id: kept },
+          })
+      },
+      calls: [
+        {
+          toolName: 'keep_row',
+          input: { id: 'c1', other: 'c4', description: 'x', turns: ['t7'], why: 'w' },
+        },
+      ],
+      turns: { endEntryId: endEntryId(), taskEntryIds: chapterEntryIds() },
+    })
+
+    expect(answers[0]).toEqual({
+      result: 'rejected',
+      reason: CLOSE_REASON.rowGone,
+      note: 'The row was merged into c3; write to c3 instead.',
+      survivor: 'c3',
+    })
+  })
+})
+
+const CROSSING = 'hap_00000000-0000-4000-8000-0000000000a1'
+const FARE = 'hap_00000000-0000-4000-8000-0000000000a2'
+const STORM = 'hap_00000000-0000-4000-8000-0000000000a3'
+
+// Answers the cluster dispatch hands a tool for one happening.
+const CLUSTER_OF_SCHEMA = readToolSchema({ id: z.string() })
+const clusterOfTool: ReadTool<typeof CLUSTER_OF_SCHEMA> = {
+  kind: 'read',
+  name: 'cluster_of',
+  description: "Name a happening's cluster.",
+  schema: CLUSTER_OF_SCHEMA,
+  ids: { id: { shape: 'single', prefixes: ['hap'] } },
+  read: async ({ id }, ctx) => ({
+    output: { cluster: ctx.clusterOf(id) ?? null },
+    rows: [],
+    read: [],
+  }),
+}
+
+describe('clusterOf through dispatch', () => {
+  beforeEach(async () => {
+    f = await openCloseFixture()
+  })
+
+  it("hands a tool the range embed's cluster of a happening, and none for one it left out", async () => {
+    const { answers } = await runDispatchCalls(f, {
+      task: 'happenings',
+      tools: { cluster_of: clusterOfTool },
+      shown: [
+        { table: 'happenings', id: CROSSING, name: 'The night crossing' },
+        { table: 'happenings', id: FARE, name: 'The fare' },
+        { table: 'happenings', id: STORM, name: 'The storm' },
+      ],
+      calls: [
+        { toolName: 'cluster_of', input: { id: 'hp1' } },
+        { toolName: 'cluster_of', input: { id: 'hp3' } },
+      ],
+      turns: { endEntryId: endEntryId(), taskEntryIds: chapterEntryIds(), part: 0 },
+      clusters: [[CROSSING, FARE]],
+    })
+
+    expect(answers).toEqual([{ cluster: ['hp1', 'hp2'] }, { cluster: null }])
   })
 })

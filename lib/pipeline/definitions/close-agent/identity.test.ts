@@ -1304,6 +1304,7 @@ function promptContextFor(
     ids,
     readFields: IDENTITY_READ_FIELDS,
     survivorOf: () => undefined,
+    clusterOf: () => undefined,
     landedCalls: () => 0,
     phase: {
       actionId,
@@ -1974,13 +1975,16 @@ async function drainAgent(
 const taskStartsIn = (events: readonly PhaseEmittedEvent[]): PhaseEmittedEvent[] =>
   events.filter((event) => event.type === 'close_task_start')
 
-// C6: the five prose tasks start, those with nothing to show included, in a one-part chapter of 7.
+// C6: Happenings, the five prose tasks and Awareness start, those with nothing to show included,
+// in a one-part chapter of 7.
 const PART_ONE_STARTS = [
+  { type: 'close_task_start', task: 'happenings', part: 0, index: 1, total: 7 },
   { type: 'close_task_start', task: 'lore', part: 1, index: 2, total: 7 },
   { type: 'close_task_start', task: 'identity', part: 1, index: 3, total: 7 },
   { type: 'close_task_start', task: 'threads', part: 1, index: 4, total: 7 },
   { type: 'close_task_start', task: 'upkeep', part: 1, index: 5, total: 7 },
   { type: 'close_task_start', task: 'lifecycle', part: 1, index: 6, total: 7 },
+  { type: 'close_task_start', task: 'awareness', part: 0, index: 7, total: 7 },
 ]
 
 describe('Identity in the production close', () => {

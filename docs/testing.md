@@ -718,6 +718,14 @@ App Settings' override does, so a close cuts the chapter into parts at
 half of it, and the pre-send check reads the same figure. The probe
 prints the part limit, and refuses a value that isn't a positive
 integer.
+A close's range embed loads the story's local embedder in the probe's
+own process, through the main process's embedder service and
+onnxruntime-node, from the dev slot's `userData/embedders/` or
+`PROBE_EMBEDDERS_DIR`: the probe stands in for the preload's embedder
+and raw-database bridges over its copy, and prints, from the embed
+step's own log entry, how many of the range's happenings it embedded and
+the clusters it found. A run that is not a stand-in refuses a missing
+embedders folder before it opens a database.
 
 `PROBE_OVERLAY=1` runs the probe on [the dataset seed](#the-dataset-seed)
 with its overlay, applied to each run's copy after the boot's recovery

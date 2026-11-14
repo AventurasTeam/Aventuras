@@ -1523,7 +1523,7 @@ floor; rare in practice.
 
 | Source                                | Cadence                    | Signal                                                                                                                                                                     |
 | ------------------------------------- | -------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **User explicit toggle**              | Any time                   | UI affordance on awareness rows in Plot / World panels. Sets `decay_resistance = 1`. Permanent until user toggles off.                                                     |
+| **User pin**                          | Any time                   | The `decay_resistance` field, 0 to 1, on awareness rows in the Plot panel. A pin the user sets stays theirs until they change it: a close's `set_pin` skips it.            |
 | **Classifier severity at extraction** | Periodic classifier writes | When emitting an awareness row, classifier judges severity ∈ `[0, 1]` from prose context. Subjective, model-judged. Becomes the default `decay_resistance` on the new row. |
 | **Lore-mgmt housekeeping**            | Chapter close              | Reviews closed-chapter awareness rows; can adjust `decay_resistance` upward (recognized structural) or downward (turned out incidental). Conservative bias.                |
 

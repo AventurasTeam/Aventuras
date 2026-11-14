@@ -9,7 +9,7 @@ export { USER_EDITED_SINCE_PROSE } from '../types'
 
 /** The source entry's latest create/content-edit delta position, 0 when it has none. */
 export async function proseLogPosition(
-  ctx: DbCtx,
+  ctx: Pick<DbCtx, 'db'>,
   branchId: string,
   entryId: string,
 ): Promise<number> {
@@ -238,7 +238,7 @@ export function wroteField(
 // By natural key, not row id: a pair re-created after the delete is a new row. A delete's undo
 // payload is the whole row, so it still names the key.
 async function userDeletedRowSince(
-  ctx: DbCtx,
+  ctx: Pick<DbCtx, 'db'>,
   branchId: string,
   table: 'character_relationships' | 'happening_awareness' | 'happening_involvements',
   key: Readonly<Record<string, string>>,
@@ -290,6 +290,18 @@ export function userDeletedAwarenessSince(
     { characterId, happeningId },
     since,
   )
+}
+
+/** Whether the user deleted any involvement or awareness row of the happening after the prose. */
+export async function userDeletedHappeningLink(
+  args: { branchId: string; happeningId: string; proseEntryId: string },
+  ctx: Pick<DbCtx, 'db'>,
+): Promise<boolean> {
+  const { branchId, happeningId, proseEntryId } = args
+  const since = await proseLogPosition(ctx, branchId, proseEntryId)
+  for (const table of ['happening_involvements', 'happening_awareness'] as const)
+    if (await userDeletedRowSince(ctx, branchId, table, { happeningId }, since)) return true
+  return false
 }
 
 /** Whether the user deleted an involvement of the entity in the happening after `since`. */

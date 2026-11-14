@@ -36,6 +36,10 @@ import { closeBoundaryPhase } from './chapter-close-boundary'
 import { closeMetadataPhase } from './chapter-close-metadata'
 import { readCloseRangeEntries } from './chapter-close-metadata-call'
 import { closeReportPhase } from './chapter-close-report'
+import { awarenessTask, resetRetrievalStep } from './close-agent/close-awareness'
+import { embedRangeStep } from './close-agent/close-happenings'
+import { normalizeStackablesStep } from './close-agent/close-stackables'
+import { happeningsTask } from './close-agent/happenings'
 import { identityTask } from './close-agent/identity'
 import { lifecycleTask } from './close-agent/lifecycle'
 import { loreTask } from './close-agent/lore'
@@ -697,10 +701,13 @@ describe('the agent phase with the production slots', () => {
     vi.mocked(generateToolStep).mockResolvedValue(NO_CALL_STEP)
   })
 
-  it('runs Lore, Identity, Threads, Upkeep and Lifecycle in each part, and nothing before or after', () => {
+  it('runs normalization, the range embed and Happenings before the parts, the five prose tasks in each part, then Awareness and the reset', () => {
     expect(closeAgentSlots()).toBe(PRODUCTION_CLOSE_SLOTS)
-    expect(PRODUCTION_CLOSE_SLOTS.before).toEqual([])
-    expect(PRODUCTION_CLOSE_SLOTS.after).toEqual([])
+    const [stackables, embed, consolidation, ...beforeRest] = PRODUCTION_CLOSE_SLOTS.before
+    expect(stackables?.kind === 'code' && stackables.step).toBe(normalizeStackablesStep)
+    expect(embed?.kind === 'code' && embed.step).toBe(embedRangeStep)
+    expect(consolidation?.kind === 'task' && consolidation.def).toBe(happeningsTask)
+    expect(beforeRest).toEqual([])
     const [lore, identity, threads, upkeep, lifecycle, ...rest] = PRODUCTION_CLOSE_SLOTS.perPart
     expect(lore?.kind === 'task' && lore.def).toBe(loreTask)
     expect(identity?.kind === 'task' && identity.def).toBe(identityTask)
@@ -708,6 +715,10 @@ describe('the agent phase with the production slots', () => {
     expect(upkeep?.kind === 'task' && upkeep.def).toBe(upkeepTask)
     expect(lifecycle?.kind === 'task' && lifecycle.def).toBe(lifecycleTask)
     expect(rest).toEqual([])
+    const [awareness, reset, ...afterRest] = PRODUCTION_CLOSE_SLOTS.after
+    expect(awareness?.kind === 'task' && awareness.def).toBe(awarenessTask)
+    expect(reset?.kind === 'code' && reset.step).toBe(resetRetrievalStep)
+    expect(afterRest).toEqual([])
   })
 
   it('freezes both slot tables and each slot', () => {
@@ -718,7 +729,9 @@ describe('the agent phase with the production slots', () => {
     expect(NO_CLOSE_TASKS).toEqual({ before: [], perPart: [], after: [] })
   })
 
-  // The fixture holds no row: Lore reads the turns and calls no tool; the other four make no call.
+  // The fixture holds no row: Lore reads the turns and calls no tool; the other six tasks make no
+  // call, and the code steps find nothing to write. The range embed resolves no embedder here (the
+  // fixture has none), so this test guards the empty-chapter no-embedder claim.
   it('ends a close that touches no row with the row, its stamps and a report of no tool calls', async () => {
     const end = f.replyIds[2]!
     const events = recordEvents()
@@ -732,11 +745,13 @@ describe('the agent phase with the production slots', () => {
 
     expect(run.outcome).toBe('completed')
     expect(events.filter((event) => event.type === 'close_task_start')).toEqual([
+      { type: 'close_task_start', task: 'happenings', part: 0, index: 1, total: 7 },
       { type: 'close_task_start', task: 'lore', part: 1, index: 2, total: 7 },
       { type: 'close_task_start', task: 'identity', part: 1, index: 3, total: 7 },
       { type: 'close_task_start', task: 'threads', part: 1, index: 4, total: 7 },
       { type: 'close_task_start', task: 'upkeep', part: 1, index: 5, total: 7 },
       { type: 'close_task_start', task: 'lifecycle', part: 1, index: 6, total: 7 },
+      { type: 'close_task_start', task: 'awareness', part: 0, index: 7, total: 7 },
     ])
     expect(generateToolStep).toHaveBeenCalledTimes(1)
     expect(Object.keys(vi.mocked(generateToolStep).mock.calls[0]![1].tools)).toEqual([
