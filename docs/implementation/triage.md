@@ -369,14 +369,6 @@ patch`, which 5.5a marks `restated`, so a close tool's write of it
   `components/reader/chapter-list-label.ts`'s pair and span copy, so a
   wording change in one won't reach the other. Raised in Slice 5.12's
   review of Tasks 4, 10 and 14 and its final review.
-- **A same-named column pair silently collapses on the desktop DB
-  bridge.** `query` in `electron/db/service.ts` turns each node:sqlite
-  row into an array with `Object.values`, so a SELECT returning two
-  columns of one name (a join's `a.id, b.id`) loses one: on Node 24.14
-  `Object.values` gives `[3]` where `StatementSync.setReturnArrays(true)`
-  gives `[1, 3]`. The comment on `queryApp` in `e2e/harness/db.ts`
-  doesn't warn about it, though `lib/db/runtime/exec.native.ts` documents
-  the same contract for native. Raised in Slice 5.12's review of Task 14.
 - **`docs/ui/component-inventory.md` has no row for
   `RollbackConfirmModal`.** The shipped modal
   (`components/reader/rollback-confirm.tsx`) now carries five copy
