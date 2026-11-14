@@ -38,6 +38,7 @@ export {
   settleUserWrites,
   type DeltaGroupResult,
 } from './delta/apply-delta-action'
+export { deltaActionPort } from './delta/action-port'
 export { holdBranchWriteExclusive, releaseBranchWriteExclusive } from './delta/branch-write-lock'
 export {
   applyUndoPayload,

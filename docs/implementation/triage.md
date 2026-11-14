@@ -111,16 +111,6 @@ patch`, which 5.5a marks `restated`, so a close tool's write of it
   (`reviewValueText` and `entryRefText` in
   `lib/history/close-review-changes.ts`), and shows the raw id once the
   entry is gone. Raised in 5.5a's review.
-- **The real delta action port is assembled in three places.**
-  `lib/boot/bootstrap.ts`, `vitest.setup.ts` and
-  `realDeltaActionPort()` in `lib/pipeline/__tests__/harness.ts` each
-  list every `DeltaActionPort` member, and `scripts/close-probe.ts` now
-  borrows the test harness's. The type makes a missing member a compile
-  error, so nothing drifts silently; the cost is three edits per new
-  port method. One builder in the action layer would serve all of them,
-  but `vitest.setup.ts` must not load the `@/lib/pipeline` barrel before
-  a test's mocks, and `bootstrap.ts` pulls in UI modules a script can't
-  load. Raised in 5.5a's review.
 - **The close's task test files repeat their fixture helpers.** Under
   `lib/pipeline/definitions/close-agent/`, a `setSceneOf` is written in
   five test files (`identity`, `upkeep`, `lifecycle`, `lifecycle-tools`

@@ -1,17 +1,9 @@
 import {
-  applyDeltaAction,
-  applyDeltaActionGroupWithOutcomes,
-  describeDeltaReplayError,
-  holdBranchWriteExclusive,
+  deltaActionPort,
   normalizeAppSettingsRow,
   readHeldClassifierStoryIds,
-  readRowGuard,
   registerAllDomains,
-  releaseBranchWriteExclusive,
   resetStuckClassifierRunState,
-  reverseReplayDeltas,
-  settleUserWrites,
-  userDeletedHappeningLink,
 } from '@/lib/actions'
 import { configureTruncationNotice, displayEstimate } from '@/lib/ai'
 import type { DbCtx } from '@/lib/db'
@@ -66,20 +58,8 @@ export function ensureTruncationNotice(): void {
   })
 }
 
-// lib/pipeline can't import @/lib/actions directly (require cycle through
-// submit-turn.ts), so the real delta-action functions are wired in here.
 export function ensureDeltaActionPort(): void {
-  configureDeltaActionPort({
-    applyDeltaAction,
-    applyDeltaActionGroupWithOutcomes,
-    readRowGuard,
-    userDeletedHappeningLink,
-    reverseReplayDeltas,
-    describeReplayError: describeDeltaReplayError,
-    settleUserWrites,
-    holdBranchWriteExclusive,
-    releaseBranchWriteExclusive,
-  })
+  configureDeltaActionPort(deltaActionPort())
 }
 
 let teardownDrainWorker: (() => void) | null = null
