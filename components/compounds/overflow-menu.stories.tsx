@@ -170,3 +170,45 @@ export const ClosesWhenDisabledPhone: Story = {
     await waitFor(() => expect(trigger).toHaveAttribute('aria-expanded', 'true'))
   },
 }
+
+const OPENS_SHEET_ENTRIES: OverflowMenuEntry[] = [
+  { key: 'review', label: 'Review changes', opensSheet: true, onPress: fn() },
+  { key: 'json', label: 'View raw JSON', onPress: fn() },
+]
+
+/**
+ * gorhom restores a Sheet another one covered, so an entry that opens its own waits for the
+ * menu's Sheet to report dismissal instead of opening under it.
+ */
+export const OpensSheetAfterDismissPhone: Story = {
+  globals: { viewport: { value: 'mobile1' } },
+  args: { entries: OPENS_SHEET_ENTRIES.map((entry) => ({ ...entry, onPress: fn() })) },
+  play: async ({ args }) => {
+    const onPress = args.entries[0].onPress
+    await waitFor(() => expect(screen.queryByTitle('More actions')).toBeNull())
+    const trigger = screen.getByRole('button', { name: 'More actions' })
+
+    await userEvent.click(trigger)
+    const review = await waitFor(() => screen.getByRole('menuitem', { name: 'Review changes' }))
+    await waitFor(() => expect(review).toBeVisible())
+
+    await userEvent.click(review)
+    // The press has closed the menu (its own state), and the Sheet is still on its way out.
+    await waitFor(() => expect(trigger).toHaveAttribute('aria-expanded', 'false'))
+    expect(onPress).not.toHaveBeenCalled()
+
+    await waitFor(() => expect(onPress).toHaveBeenCalledTimes(1), { timeout: 3000 })
+  },
+}
+
+/** The Popover has no stacking to wait out: the same entry runs at once there. */
+export const OpensSheetRunsAtOnceDesktop: Story = {
+  args: { entries: OPENS_SHEET_ENTRIES.map((entry) => ({ ...entry, onPress: fn() })) },
+  play: async ({ args }) => {
+    await userEvent.click(screen.getByRole('button', { name: 'More actions' }))
+    const review = await screen.findByRole('menuitem', { name: 'Review changes' })
+    await waitFor(() => expect(review).toBeVisible())
+    await userEvent.click(review)
+    await waitFor(() => expect(args.entries[0].onPress).toHaveBeenCalledTimes(1))
+  },
+}

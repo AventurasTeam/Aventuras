@@ -533,3 +533,45 @@ function quickClose(closeAfterMs: number): Story {
 
 // Lands before gorhom mounts the modal; without the hold, the next open showed nothing too.
 export const CloseBeforeMounting = quickClose(5)
+
+const dismissedSpy = fn()
+
+function DismissedHarness() {
+  const [open, setOpen] = useState(false)
+  return (
+    <View className="items-start gap-4 p-4" style={{ minHeight: 640 }}>
+      <Button onPress={() => setOpen(true)}>
+        <Text>Open</Text>
+      </Button>
+      <Button onPress={() => setOpen(false)}>
+        <Text>Close from code</Text>
+      </Button>
+      <Sheet open={open} onOpenChange={setOpen} ariaLabel="Dismissed sheet">
+        <SheetContent anchor="bottom" size="short" onDismissed={dismissedSpy}>
+          <Text>Dismissed sheet body</Text>
+        </SheetContent>
+      </Sheet>
+    </View>
+  )
+}
+
+/**
+ * A programmatic close reaches no `onOpenChange` (the open state already changed), so
+ * `onDismissed` is the only report that the exit animation ended.
+ */
+export const OnDismissedAfterProgrammaticClose: Story = {
+  parameters: { layout: 'fullscreen' },
+  render: () => <DismissedHarness />,
+  play: async () => {
+    dismissedSpy.mockClear()
+    await userEvent.click(screen.getByRole('button', { name: 'Open' }))
+    expect(await screen.findByText('Dismissed sheet body', {}, BACKDROP_WAIT)).toBeVisible()
+    expect(dismissedSpy).not.toHaveBeenCalled()
+
+    await userEvent.click(screen.getByRole('button', { name: 'Close from code' }))
+    await waitFor(() => expect(dismissedSpy).toHaveBeenCalledTimes(1), BACKDROP_WAIT)
+    // Once per dismissal: a second report would run a deferred action twice.
+    await new Promise((resolve) => setTimeout(resolve, 500))
+    expect(dismissedSpy).toHaveBeenCalledTimes(1)
+  },
+}
