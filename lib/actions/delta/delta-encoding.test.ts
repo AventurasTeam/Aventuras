@@ -116,31 +116,21 @@ describe('record keys named like Object.prototype members', () => {
     expect(applyUndoPayload(fixture, next, undo)).toEqual(cur)
   })
 
-  it('encodes an own __proto__ key: an added one marked for delete, a changed one its prior count', () => {
-    const own = (count: number) => JSON.parse(`{"__proto__":${count}}`) as Record<string, number>
+  // Reversal can't restore an own __proto__ key, so a write of one must stay a refused noop.
+  it.each([
+    ['added', '{}', '{"__proto__":2}'],
+    ['changed', '{"__proto__":1}', '{"__proto__":3}'],
+    ['removed', '{"__proto__":1}', '{}'],
+  ])('leaves out an own __proto__ key %s, so its write records nothing', (_, cur, next) => {
+    const stack = (json: string) => JSON.parse(json) as Record<string, number>
 
-    const added = computeUndoPayload(
+    const undo = computeUndoPayload(
       fixture,
-      { name: 'k', stack: {} },
-      { name: 'k', stack: own(2) },
-    )
-    const changed = computeUndoPayload(
-      fixture,
-      { name: 'k', stack: own(1) },
-      { name: 'k', stack: own(3) },
+      { name: 'k', stack: stack(cur) },
+      { name: 'k', stack: stack(next) },
     )
 
-    expect(JSON.stringify(added)).toBe('{"stack":{"__proto__":null}}')
-    expect(JSON.stringify(changed)).toBe('{"stack":{"__proto__":1}}')
-  })
-
-  it('restores a removed __proto__ key whose value reads like the inherited prototype', () => {
-    const vars = z.object({ vars: z.record(z.string(), z.unknown()) })
-    const cur = { vars: JSON.parse('{"__proto__":{}}') as Record<string, unknown> }
-
-    const undo = computeUndoPayload(vars, cur, { vars: {} })
-
-    expect(JSON.stringify(undo)).toBe('{"vars":{"__proto__":{}}}')
+    expect(undo).toEqual({})
   })
 })
 
