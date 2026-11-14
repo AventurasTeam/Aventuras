@@ -6,6 +6,8 @@ export type OverflowMenuEntry = {
   /** Web title tooltip, native inline hint, while disabled. */
   disabledReason?: string
   destructive?: boolean
+  /** Opens a Sheet of its own: on phone it runs once the menu's Sheet has dismissed. */
+  opensSheet?: boolean
   onPress: () => void
 }
 

@@ -3,6 +3,9 @@ import type { CloseTask } from '@/lib/db'
 import { t } from '@/lib/i18n'
 import { CHAPTER_CLOSE_KIND, CLOSE_PHASE } from '@/lib/pipeline'
 import {
+  chapterOverlaysStore,
+  chaptersStore,
+  closeResultChapter,
   currentStoryStore,
   generationStore,
   interruptMemoryRuns,
@@ -10,7 +13,15 @@ import {
   type RunState,
 } from '@/lib/stores'
 
-export type MemoryRunBannerState = { label: string; onCancel: () => void }
+export type MemoryRunBannerState =
+  | { kind: 'run'; label: string; onCancel: () => void }
+  | {
+      kind: 'closed'
+      tone: 'info' | 'warning'
+      label: string
+      onReview: () => void
+      onDismiss: () => void
+    }
 
 const CLOSE_TASK_COPY = {
   happenings: 'chrome.memoryBanner.closeTask.happenings',
@@ -67,8 +78,10 @@ function bannerLabel(run: RunState): string | null {
 }
 
 /**
- * The open branch's pass or close banner: its label and a Cancel that interrupts the run
- * (deferring it to the next Send). Null while neither runs there.
+ * The open branch's pass or close while one runs, its Cancel interrupting the run (deferring it to
+ * the next Send); else the close it last committed there, until reviewed, dismissed or reversed.
+ * The result shows only while its chapter is the branch's latest, so an older close never reads as
+ * current.
  */
 export function useMemoryRunBanner(): MemoryRunBannerState | null {
   const branchId = currentStoryStore.useCurrentStory((open) => open?.branchId ?? null)
@@ -76,9 +89,33 @@ export function useMemoryRunBanner(): MemoryRunBannerState | null {
   const run = generationStore.useGeneration((s) =>
     branchId == null ? undefined : selectMemoryRun(s.txState, { branchId }),
   )
-  if (run == null) return null
-  const label = bannerLabel(run)
-  if (label == null) return null
-  const runBranchId = run.branchId
-  return { label, onCancel: () => void interruptMemoryRuns(runBranchId) }
+  const result = chapterOverlaysStore.useOverlays((s) => s.closeResult)
+  const chapter = chaptersStore.useChapters((rows) =>
+    result == null ? undefined : rows.get(result.chapterId),
+  )
+  const latestChapter = chaptersStore.useChapters(chaptersStore.selectLatest)
+
+  const label = run == null ? null : bannerLabel(run)
+  if (run != null && label != null) {
+    const runBranchId = run.branchId
+    return { kind: 'run', label, onCancel: () => void interruptMemoryRuns(runBranchId) }
+  }
+
+  const held = closeResultChapter(result, chapter, branchId)
+  if (result == null || held == null || held.id !== latestChapter?.id) return null
+  const { chapterId, stoppedTasks } = result
+  const clear = () => chapterOverlaysStore.clearCloseResult()
+  return {
+    kind: 'closed',
+    tone: stoppedTasks === 0 ? 'info' : 'warning',
+    label:
+      stoppedTasks === 0
+        ? t('chrome.closeResult.closed', { title: held.title })
+        : t('chrome.closeResult.stopped', { count: stoppedTasks }),
+    onReview: () => {
+      chapterOverlaysStore.openReviewWindow({ chapterId })
+      clear()
+    },
+    onDismiss: clear,
+  }
 }

@@ -171,9 +171,13 @@ patch`, which 5.5a marks `restated`, so a close tool's write of it
   registers only `t` and `aw` handles, which aren't placeholder
   prefixes. Raised in 5.5a's review.
 - **A landed entry ref in a close's `values` is stored raw.**
-  `ID_PATTERN` doesn't cover `entry_` ids, so the ledger keeps one as
-  its id, such as a merge's earliest `occurred_at_entry_id`, and 5.11
-  shows new values as the report holds them. Raised in 5.5a's review.
+  `ID_PATTERN` has no `entry` prefix, so the ledger keeps the raw
+  `entry_` id, as `merge_happenings` records `occurredAtEntryId`. The
+  review formats a value, on either side and in Not applied too, as
+  `entry #n` while `lookup.entryPosition` knows the entry
+  (`reviewValueText` and `entryRefText` in
+  `lib/history/close-review-changes.ts`), and shows the raw id once the
+  entry is gone. Raised in 5.5a's review.
 - **The real delta action port is assembled in three places.**
   `lib/boot/bootstrap.ts`, `vitest.setup.ts` and
   `realDeltaActionPort()` in `lib/pipeline/__tests__/harness.ts` each
@@ -414,14 +418,6 @@ patch`, which 5.5a marks `restated`, so a close tool's write of it
   refuses such a field
   ([`chapter-close.md → Tools and writes`](../memory/chapter-close.md#tools-and-writes));
   the periodic classifier has no such check. Surfaced by 5.5a's review.
-- **A close's stored refusal reasons carry raw ids and per-close
-  handles.** `update_lore`'s title refusal stores the holder's full
-  lore id twice in the ledger (`close-agent/lore-tools.ts`), while
-  `create_lore`'s stores the bare `title-taken`; and the turn-handle and
-  keyword-handle reasons store per-close handles (`t3`, `c1`) that mean
-  nothing once the close ends. The `why` is named at record time; the
-  reasons aren't, so a review UI (5.11) would show a UUID and two
-  spellings of one rule. Raised in 5.8's final review.
 - **Same-name items carry no namesake flag.** The dataset seed held two
   active items both named "the black spot" with no collision flag
   until 5.8's close flagged them `duplicate`. Unverified whether the
@@ -529,7 +525,7 @@ patch`, which 5.5a marks `restated`, so a close tool's write of it
   turns", which is false for that case; the instruction not to write it
   again stands. `merge_happenings` gives the same reason for such a pin
   on the kept row or an absorbed one, since the slice review's R1. A
-  reason of its own (with 5.11's stable keys) would make the answer and
+  key of its own (5.11 keyed every reason) would make the answer and
   the review accurate. Raised in 5.9's final review.
 - **5.13's re-run meets three things 5.9 shipped.** Slice 5.13 (re-running
   a close) is planned on main; its doc isn't on this branch, so these wait
@@ -613,3 +609,95 @@ patch`, which 5.5a marks `restated`, so a close tool's write of it
   search debounce outlasts `waitFor`'s default timeout or the test reads
   the call count before a pending search load lands. Raised in 5.9's
   slice review.
+- **Upkeep's not-of-kind refusal has no test.**
+  `lib/pipeline/definitions/close-agent/upkeep-tools.ts:97-100` and
+  `:150` refuse a row of the wrong kind with `not-a-place` or
+  `not-an-item`. A rename is now a type error, but the behaviour is
+  unpinned. Raised in 5.11's review.
+- **`set_keywords` records the planned list as its new value.**
+  `upkeep-tools.ts:291` and `:332`. The handler can land a different
+  list, because `planKeywordAdds` drops re-adds of terms the user
+  removed (`lib/actions/delta/keyword-authors.ts:174-188`), so the review
+  could name a keyword that was never written. Read, not run. Raised in
+  5.11's review.
+- **A `create_lore` refused for `title-blank` can never drop out of
+  Not applied.** The review matches a refused create to a landed one by
+  title, and a blank title matches nothing, so a retry with a title
+  lists both a Not applied row and a Changes row. A refused create
+  always keeps its minted row (`lore-tools.ts:109,115`), so a
+  value-less branch would never drop it. The choice: match a blank-title
+  refusal to any later `create_lore` the same task lands, or accept the
+  double listing. Raised in 5.11's review.
+- **`delta-log-row.md` and its component differ on three points.**
+  `docs/ui/patterns/delta-log-row.md:95-100`: the Visual shape diagram
+  shows the summary and meta flush left, while the code indents them.
+  `:105` says "~10-12 px dot or short pill", but the code renders a text
+  pill. And `components/compounds/delta-log-row.tsx` `metaParts` filters
+  only `null`, so `createdAtRelative: ''` leaves a trailing `·`.
+  Raised in 5.11's review.
+- **The reader's in-place prose edit has no leave guard.**
+  `components/reader/reader-surface.tsx:~330` (`editingId`, `editDraft`):
+  any navigation that pops the reader drops the draft, including the
+  reader's own Return, and a review-row press from the reader adds one
+  more path. [`save-sessions.md → Where applied`](../ui/patterns/save-sessions.md#where-applied)
+  doesn't classify it. Raised in 5.11's review.
+- **Keyboard-dead `Pressable accessibilityRole="link"` with no `href` or
+  Enter handler.** RN-web's PressResponder doesn't press a role-link on
+  Enter. Read, not run. Places:
+  `components/reader/peek/peek-foot.tsx:21`,
+  `components/world/overview/overview-parts.tsx:113`,
+  `components/compounds/collision-list-row.tsx:42`,
+  `components/compounds/breadcrumb.tsx:74`,
+  `components/ui/select.tsx:376`,
+  `components/compounds/calendar-picker.tsx:149` and `:376`,
+  `components/compounds/embedder-download-dialog.tsx:388`.
+  `components/chapters/review-window.tsx`'s `webEnterProps` is a
+  template. Raised in 5.11's review.
+- **`components/ui/dialog.tsx` has three gaps.** `:162` `DialogTitle` has
+  no heading semantics on web; `:128` the × label is a raw "Close", not
+  `t()`; `:68` a `DialogContent` without a description raises Radix's
+  "Missing Description" warning throughout. Raised in 5.11's review.
+- **The commit banner's Review and × unmount the focused button.** Focus
+  is lost when the review dialog closes (cf. the
+  rnweb-disabled-under-focus-blurs lesson). Raised in 5.11's review.
+- **`overlays.md`'s `onDismissRefused` bullet ends in an unrelated
+  sentence.** `docs/ui/patterns/overlays.md:171-175`: the one about
+  `portalHost={ABOVE_SHEETS_PORTAL_HOST}` belongs under Stacking or
+  `portalHost`. Raised in 5.11's review.
+- **`lib/actions/delta/reverse-replay.ts` has two cases nobody has
+  confirmed as deliberate.** `:380-393` and `:589-610`: reversing an
+  update whose target row is missing runs an UPDATE that matches nothing
+  and returns `ok`. `:555-570`: an undo partial that breaks the state
+  schema is restored without validation. Raised in 5.11's review.
+- **An E2E `getByRole` absence check made while a modal is open passes
+  regardless.** The modal hides everything behind it from the
+  accessibility tree (`e2e/locators/save-session.ts:9` notes the hiding).
+  Worth a
+  [`testing.md → Selector strategy`](../testing.md#selector-strategy)
+  note or a lessons-learned entry. Separately, `e2e/flows/navigation.ts`
+  has no `goToReader` flow, and about 15 specs inline it. Raised in
+  5.11's review.
+- **A landed merge's link-row losses can't name their row.**
+  `settleLosses` (`lib/pipeline/definitions/close-agent/verdict.ts`)
+  keys a merge's losses by path across all its actions, as C4 states, so
+  a link loss drops from the ledger when another link on the same merge
+  lands that path, and two characters' losses on one path collapse into
+  one row. The review names no character for a link-row loss under the
+  kept happening (Developer decision 4's known gap). The model's answer
+  names them all; only the ledger loses them. A fix needs `skippedFields`
+  to carry a row, which is a C4 v1 shape change (versioned
+  `close_report`). A probe with Tobin's pin landing on keep and Wren's
+  user-kept: the model was told `notWritten: decayResistance (c1)`,
+  `skippedFields` was empty, and Not applied was `[]`. Raised in 5.11's
+  review.
+- **`useMemoryRunToasts` no longer only toasts.**
+  `hooks/use-memory-run-toasts.ts` also holds a committed close's result
+  for the commit banner's done state, so neither its name nor its file
+  says what it does. Raised in 5.11's review.
+- **The review window closes without an exit animation.**
+  `ChapterOverlaysHost` unmounts `ReviewWindow` as soon as the review id
+  clears, so the Dialog on desktop and the Sheet on phone vanish in one
+  frame (seen on the slot AVD and in the desktop smoke). A fix keeps the
+  window mounted with `open={false}` through its exit, which has to
+  agree with the host's prune of a chapter that no longer holds. Raised
+  in 5.11's review.

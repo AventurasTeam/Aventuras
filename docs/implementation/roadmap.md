@@ -246,6 +246,13 @@ verified against the code first. Resolve with the slice each names.
   milestone
   ([`parked.md → Re-running a close on a fork`](../parked.md#re-running-a-close-on-a-fork)).
   Raised 2026-11-13 by the re-run design.
+- **M6.1 — A branch switch to a fork whose chapter rows copy the same ids
+  keeps the review window open.** `chapterOverlaysStore`'s `review` holds
+  only `chapterId`, and `overlayChapter` compares the store row's branch,
+  so a fork that copies a chapter's id keeps the window open over the
+  other branch. Unreachable today, since no fork action exists; **fix it
+  when M6.1 lands fork**, e.g. the store records the open branch at
+  `openReviewWindow`. Raised in 5.11's review.
 - **M6.1 — steps 2 and 3 of the fork partition use different predicates,
   so a foreground edit about a kept entry falls between them.** Step 2
   copies deltas below `L` plus, above `L`, only background

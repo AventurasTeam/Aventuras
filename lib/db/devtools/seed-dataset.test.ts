@@ -5,8 +5,19 @@ import { getRollbackCounts, undoLastAction } from '@/lib/actions'
 import { REF_COLUMNS, rowRefs } from '@/lib/actions/delta/live-refs'
 import { isContentEditDelta } from '@/lib/actions/story-entries/classifier-facts'
 import { ENTRIES_WINDOW_SIZE } from '@/lib/actions/story-entries/recent-window'
-import { deltas, storyEntries, type Delta, type NewStoryEntry, type StorySettings } from '@/lib/db'
+import {
+  closeReportSchema,
+  deltas,
+  entities,
+  isCloseReasonKey,
+  storyEntries,
+  type Delta,
+  type EntityKind,
+  type NewStoryEntry,
+  type StorySettings,
+} from '@/lib/db'
 import { createTestDb } from '@/lib/db/__tests__/test-db'
+import { buildCloseReview, loadCloseDeltas } from '@/lib/history'
 import { ID_PATTERN, IdBiMap, SUBSTITUTABLE_PREFIXES } from '@/lib/ids'
 import { detectRichEntryHtml, parseMarkdownToHtml } from '@/lib/markdown'
 import {
@@ -377,11 +388,23 @@ describe('seeded rollback', () => {
           .orderBy(desc(deltas.logPosition))) as Delta[],
       )
 
+    const vorneId = rowsOf('entities').find((r) => r.name === 'Vorne')!.id as string
+    const vorneState = async () => {
+      const [row] = await ctx.db.select().from(entities).where(eq(entities.id, vorneId))
+      return row!.state as { traits?: string[]; drives?: string[] }
+    }
+
     const selected: string[] = []
     let target = await nextTarget()
     for (let press = 0; target != null && press < 200; press++) {
       selected.push(target.actionId)
+      const before = target.actionId === 'act_chapter_2' ? await vorneState() : null
       expect(await undoLastAction(HERO_MAIN, ctx), target.actionId).toEqual({ status: 'ok' })
+      if (before !== null) {
+        const after = await vorneState()
+        expect(after.traits, 'the close takes back its traits write').toEqual(['patient'])
+        expect(after.drives, 'and only that field').toEqual(before.drives)
+      }
       target = await nextTarget()
     }
 
@@ -399,6 +422,7 @@ describe('seeded chapter closes', () => {
     sequenceNumber: number
     startEntryId: string
     endEntryId: string
+    closeReport?: unknown
   }
   type EntryRow = {
     id: string
@@ -428,6 +452,10 @@ describe('seeded chapter closes', () => {
     (rowsOf('story_entries') as unknown as EntryRow[])
       .filter((e) => e.branchId === HERO_MAIN)
       .sort((a, b) => a.position - b.position)
+  const heroLog = (): DeltaRow[] =>
+    (rowsOf('deltas') as unknown as DeltaRow[])
+      .filter((d) => d.branchId === HERO_MAIN)
+      .sort((a, b) => a.logPosition - b.logPosition)
 
   afterEach(() => {
     resetAllStores()
@@ -446,11 +474,10 @@ describe('seeded chapter closes', () => {
     }
   })
 
-  it('logs each close as its create, then a stamp per entry, anchored on its end', () => {
-    const log = (rowsOf('deltas') as unknown as DeltaRow[])
-      .filter((d) => d.branchId === HERO_MAIN)
-      .sort((a, b) => a.logPosition - b.logPosition)
+  it('logs each close as its create, a stamp per entry, then any agent writes and its report', () => {
+    const log = heroLog()
     const entries = heroEntries()
+    const tails: DeltaRow[][] = []
     for (const chapter of heroChapters()) {
       const create = log.find(
         (d) => d.targetTable === 'chapters' && d.op === 'create' && d.targetId === chapter.id,
@@ -459,18 +486,111 @@ describe('seeded chapter closes', () => {
       const group = log.filter((d) => d.actionId === create!.actionId)
       const stamped = entries.filter((e) => e.chapterId === chapter.id)
       expect(stamped.length, chapter.id).toBeGreaterThan(0)
-      expect(group.map((d) => [d.targetTable, d.op, d.targetId])).toEqual([
+      const head = group.slice(0, stamped.length + 1)
+      expect(head.map((d) => [d.targetTable, d.op, d.targetId])).toEqual([
         ['chapters', 'create', chapter.id],
         ...stamped.map((e) => ['story_entries', 'update', e.id]),
       ])
+      for (const delta of head.slice(1))
+        expect(delta.undoPayload, delta.targetId).toEqual({ chapterId: null })
       for (const delta of group) {
         expect(delta.entryId, delta.targetId).toBe(chapter.endEntryId)
         expect(delta.source, delta.targetId).toBe('chapter_close')
       }
-      for (const delta of group.slice(1))
-        expect(delta.undoPayload, delta.targetId).toEqual({ chapterId: null })
       expect(group.at(-1)!.logPosition - group[0]!.logPosition, chapter.id).toBe(group.length - 1)
+      tails.push(group.slice(stamped.length + 1))
     }
+    // C1: a close that wrote its report ends on its agent writes, then the report update.
+    expect(tails[0], 'chapter 1, which no close wrote a report for').toEqual([])
+    expect(tails[1]!.map((d) => [d.targetTable, d.op])).toEqual([
+      ['entities', 'update'],
+      ['chapters', 'update'],
+    ])
+    expect(tails[1]!.at(-1)).toMatchObject({
+      targetId: heroChapters()[1]!.id,
+      undoPayload: { closeReport: null },
+    })
+  })
+
+  it("gives chapter 2 a report its close's action wrote, and chapter 1 none", () => {
+    const [first, second] = heroChapters()
+    expect(first!.closeReport ?? null, first!.id).toBeNull()
+    const report = closeReportSchema.parse(second!.closeReport)
+    const create = heroLog().find(
+      (d) => d.targetTable === 'chapters' && d.op === 'create' && d.targetId === second!.id,
+    )
+    expect(report.actionId).toBe('act_chapter_2')
+    expect(create?.actionId).toBe('act_chapter_2')
+    expect(report.calls.map((c) => [c.task, c.tool, c.result])).toEqual([
+      ['identity', 'update_character', 'skipped'],
+      ['identity', 'update_character', 'ok'],
+    ])
+    expect(report.stopped).toEqual([{ task: 'identity', part: 1, reason: 'budget' }])
+    expect(report.noToolCalls).toBe(false)
+
+    const reasons = report.calls.flatMap((c) => [
+      ...(c.reason === undefined ? [] : [c.reason]),
+      ...(c.skippedFields ?? []).map((f) => f.reason),
+    ])
+    expect(reasons).toEqual(['user-edited-since-prose'])
+    for (const reason of reasons) expect(isCloseReasonKey(reason), reason).toBe(true)
+
+    // The review cites from turns, never from a delta's anchor: each is a chapter 2 entry.
+    const inChapter = new Set(
+      heroEntries()
+        .filter((e) => e.chapterId === second!.id)
+        .map((e) => e.id),
+    )
+    for (const call of report.calls) {
+      expect(call.turns.length, call.tool).toBeGreaterThan(0)
+      for (const turn of call.turns) expect(inChapter.has(turn), turn).toBe(true)
+    }
+    const nameOf = new Map(rowsOf('entities').map((r) => [r.id, r.name]))
+    for (const call of report.calls)
+      for (const row of call.rows) expect(nameOf.get(row.id), row.id).toBe(row.name)
+  })
+
+  it("reads chapter 2's seeded close as one change, one refusal and one stopped task", async () => {
+    const { db } = await seededDb()
+    const second = heroChapters()[1]!
+    const report = closeReportSchema.parse(second.closeReport)
+    const closeDeltas = await loadCloseDeltas(db, HERO_MAIN, second.id, report.actionId)
+    const names = new Map(rowsOf('entities').map((r) => [r.id as string, r.name as string]))
+    const kinds = new Map(rowsOf('entities').map((r) => [r.id as string, r.kind as EntityKind]))
+    const positions = new Map(heroEntries().map((e) => [e.id, e.position]))
+    const review = buildCloseReview(report, closeDeltas, {
+      entityKind: (id) => kinds.get(id),
+      nameOf: (id) => names.get(id),
+      entryPosition: (id) => positions.get(id),
+    })
+
+    expect(review.stopped).toHaveLength(1)
+    expect(review.notApplied.map((n) => [n.target?.name, n.fieldPath, n.reasonKey])).toEqual([
+      ['Mira', 'state.drives', 'user-edited-since-prose'],
+    ])
+    const changes = review.changes.flatMap((area) => area.rows)
+    expect(changes.map((c) => [c.target.name, c.fieldLabel, c.summary])).toEqual([
+      ['Vorne', 'Traits', 'patient → patient, merciless'],
+    ])
+  })
+
+  // The review takes a landed field's old value from its delta and the new one from the report.
+  it("pairs chapter 2's landed write with its agent delta and the row it left", () => {
+    const report = closeReportSchema.parse(heroChapters()[1]!.closeReport)
+    const landed = report.calls.filter((c) => c.result === 'ok')
+    expect(landed).toHaveLength(1)
+    expect(landed[0]!.values).toEqual({ 'state.traits': 'patient, merciless' })
+    const agent = heroLog().filter(
+      (d) => d.actionId === report.actionId && d.targetTable === 'entities',
+    )
+    expect(agent).toHaveLength(1)
+    expect(agent[0]!.targetId).toBe(landed[0]!.rows[0]!.id)
+    expect(agent[0]!.undoPayload).toEqual({ state: { traits: ['patient'] } })
+    const row = rowsOf('entities').find((r) => r.id === agent[0]!.targetId)
+    expect((row?.state as { traits?: string[] } | undefined)?.traits).toEqual([
+      'patient',
+      'merciless',
+    ])
   })
 
   // C5: token_count is the closed range's content_tokens, summed at close.

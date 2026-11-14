@@ -1831,7 +1831,7 @@ describe('a merge of a row this close already wrote', () => {
           task: 'threads',
           tool: 'merge_threads',
           result: 'rejected',
-          reason: expect.stringContaining('this close already wrote a thread in absorb'),
+          reason: 'merge-close-wrote',
         },
       ],
     })
@@ -2248,7 +2248,7 @@ describe('each new case lands what it names', () => {
       [1, 'update_thread', 'ok'],
       [2, 'merge_threads', 'rejected'],
     ])
-    expect(calls[1]!.reason).toContain('this close already wrote a thread in absorb')
+    expect(calls[1]!.reason).toBe('merge-close-wrote')
     const threadDeltas = (await deltasOf(h.fx, h.actionId())).filter(
       (d) => d.targetTable === 'threads',
     )

@@ -3,6 +3,7 @@ import { dedupeTerms } from '@/lib/keyword-terms'
 import { boundStateText } from '@/lib/piggyback'
 import { CAST_SOFT_CAPS } from '@/lib/wizard'
 
+import { keyedReason } from './reason-key'
 import { sameValue } from './tool'
 
 /** A text field as the model sent it, and as it would be stored. */
@@ -131,7 +132,11 @@ export function overSoftCap(sent: readonly string[], stored: unknown, cap: numbe
 
 /** A rule refusal's reason: the cap, and to replace rather than add. */
 export function softCapReason(list: CappedList, sent?: SentList): string {
-  const reason = `${list} is over its soft cap of ${CAST_SOFT_CAPS[list]}: replace an entry rather than add one`
-  if (sent === undefined || sent.entries.length <= sent.deduped.length) return reason
-  return `${reason} (read as ${sent.entries.length} entries: a list joined into one string holds one entry per item)`
+  const text = `${list} is over its soft cap of ${CAST_SOFT_CAPS[list]}: replace an entry rather than add one`
+  if (sent === undefined || sent.entries.length <= sent.deduped.length)
+    return keyedReason('over-soft-cap', text)
+  return keyedReason(
+    'over-soft-cap',
+    `${text} (read as ${sent.entries.length} entries: a list joined into one string holds one entry per item)`,
+  )
 }

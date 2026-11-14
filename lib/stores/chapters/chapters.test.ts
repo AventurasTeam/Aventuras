@@ -32,6 +32,18 @@ describe('chaptersStore', () => {
     expect(chaptersStore.getChapters().size).toBe(2)
   })
 
+  it('reads the highest-numbered chapter whatever order the rows were stored in', () => {
+    chaptersStore.__reset()
+    expect(chaptersStore.getLatest()).toBeUndefined()
+    chaptersStore.hydrate('br_1', [
+      chapterRow('chap_1', 1, 'One'),
+      chapterRow('chap_3', 3, 'Three'),
+      chapterRow('chap_0', 0, 'Zero'),
+    ])
+    expect(chaptersStore.getLatest()?.id).toBe('chap_3')
+    expect(chaptersStore.selectLatest(chaptersStore.getChapters())?.id).toBe('chap_3')
+  })
+
   it("projects a direct caller's row-shaped create to its report flag, never the report", () => {
     chaptersStore.__reset()
     chaptersStore.hydrate('br_1', [])

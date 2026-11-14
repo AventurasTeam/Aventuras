@@ -1,6 +1,6 @@
 import { z } from 'zod'
 
-import type { Entity } from '@/lib/db'
+import type { CloseReasonKey, Entity } from '@/lib/db'
 import { CAST_SOFT_CAPS } from '@/lib/wizard'
 
 import {
@@ -22,6 +22,7 @@ import {
   type SentList,
   type SentText,
 } from './fields'
+import { keyedReason } from './reason-key'
 import { turnHandleIn, turnInTextReason } from './text-checks'
 import {
   writeToolSchema,
@@ -113,13 +114,15 @@ export const IDENTITY_WRITE_PATHS: Readonly<Record<IdentityKind, readonly string
   faction: FACTION_FIELDS.map(({ path }) => path),
 }
 
-const NOT_OF_KIND: Readonly<Record<IdentityKind, string>> = {
+const NOT_OF_KIND: Readonly<Record<IdentityKind, CloseReasonKey>> = {
   character: 'not-a-character',
   faction: 'not-a-faction',
 }
 
-const NOTHING_SENT =
-  'every field is blank or empty: send only the fields you change, each with its whole new value'
+const NOTHING_SENT = keyedReason(
+  'nothing-sent',
+  'every field is blank or empty: send only the fields you change, each with its whole new value',
+)
 
 const landingValue = (field: SentField): unknown =>
   field.kind === 'list' ? field.list.entries : field.text.bounded

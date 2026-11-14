@@ -285,7 +285,7 @@ generation pipeline is in flight:
   the turns go.
 
 While it runs, the reader's banner shows a close's progress, and its
-toasts are
+commit banner and toasts are
 [`reader-composer.md → During a memory update`](../reader-composer/reader-composer.md#during-a-memory-update)'s.
 
 ## In-progress chapter card
@@ -469,7 +469,8 @@ flow. A shared modal:
 
 ## Review window
 
-What a chapter close changed, opened from the close's toast or a card's
+What a chapter close changed, opened from the `Review` on the close's
+[commit banner](../../principles.md#affordance-loci) or a card's
 `Review changes`. It doesn't open by itself: a close ends while the user
 reads, and a window would interrupt that. A
 [Modal](../../foundations/mobile/layout.md#surface-bindings--existing-app-surfaces),
@@ -499,7 +500,7 @@ close stands.
 ```
 
 - **Stopped early** comes first when a task stopped, naming the task, the
-  part and why: its step limit, the window, or a reply cut off twice. The
+  part and why: its step limit, the window, or a reply cut off or filtered twice. The
   work is partial, so it isn't folded away. The note that no task called
   a tool sits here too.
 - **Not applied** is a collapsed
@@ -519,7 +520,11 @@ close stands.
 - **Pressing a row** opens it in World or Plot, where any edit is an
   ordinary user edit that user precedence protects from then on. A merged
   happening's row opens the one that survived, and a row since deleted
-  doesn't press.
+  doesn't press. A Not applied row presses the same way, to the row it
+  names or a refused merge's kept row, so the proposed value can be
+  applied by hand; a refused create names no row and doesn't press. The
+  window closes first, then the screen's unsaved-changes guard runs
+  before the route moves.
 - **No per-change revert.** Reverting a merge or a delete isn't simple,
   and the old value is on screen. CTRL-Z undoes the whole close while it
   is the latest action, or after a re-run brings back the close it
@@ -531,8 +536,9 @@ close stands.
 - **After a re-run** the window shows the re-run's report, its changes
   against the chapter before any close, as a close's are.
 - **If the close reverses while the window is open,** the window closes,
-  since its chapter is gone. A toast's `Review` does nothing by then. A
-  re-run's commit, or its undo, closes it too: its report is replaced.
+  since its chapter is gone. The commit banner's done state goes with
+  the chapter, so its `Review` never opens one that's gone. A re-run's
+  commit, or its undo, closes it too: its report is replaced.
 
 ## Empty state
 

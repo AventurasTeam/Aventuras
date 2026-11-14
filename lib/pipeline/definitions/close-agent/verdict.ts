@@ -4,12 +4,16 @@ import {
   type ActionOutcome,
   type GroupOutcome,
 } from '@/lib/actions/types'
+import type { CloseReasonKey } from '@/lib/db'
 
 import type { CloseIds } from './ids'
 import type { PlannedAction, ReportRow, ToolContext, WritePlan } from './tool'
 
 /** C4's stable reasons a close adds beside USER_EDITED_SINCE_PROSE. */
-export const CLOSE_REASON = { laterTurn: 'later-turn', rowGone: 'row-gone' } as const
+export const CLOSE_REASON = {
+  laterTurn: 'later-turn',
+  rowGone: 'row-gone',
+} as const satisfies Record<string, CloseReasonKey>
 
 type NotWritten = { field: string; row: string; reason: string }
 type Skipped = { field: string; reason: string }

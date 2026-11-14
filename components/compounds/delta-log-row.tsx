@@ -1,4 +1,4 @@
-import { useId } from 'react'
+import { useId, type ReactElement } from 'react'
 import { Platform, Pressable, View } from 'react-native'
 
 import { describedBy } from '@/components/ui/accessible-description'
@@ -47,7 +47,18 @@ type DeltaLogRowProps = {
    * (no hover, no press affordance).
    */
   onPress?: () => void
+  /** On the outermost element: the row, or the row and its footer. */
   className?: string
+  /**
+   * Under the row and outside its button, aligned to the summary column, so a control in it is
+   * never nested in the row's. Keep it present or absent for the row's life: adding one
+   * re-parents the row.
+   */
+  footer?: ReactElement
+  /** Default true; false drops the meta line from view and from the row's description. */
+  showMeta?: boolean
+  /** The summary's line clamp. Default 2; null for none. */
+  summaryLines?: number | null
 }
 
 const OP_STYLES: Record<DeltaOp, { container: string; label: string }> = {
@@ -56,10 +67,33 @@ const OP_STYLES: Record<DeltaOp, { container: string; label: string }> = {
   delete: { container: 'bg-danger', label: 'text-danger-fg' },
 }
 
-export function DeltaLogRow({ delta, onPress, className }: DeltaLogRowProps) {
+/** `spacer`: an unannounced copy with no height, holding the badge's width on the footer line. */
+function OpBadge({ op, label, spacer = false }: { op: DeltaOp; label: string; spacer?: boolean }) {
+  const style = OP_STYLES[op]
+  return (
+    <View
+      aria-hidden={spacer ? true : undefined}
+      className={
+        spacer
+          ? 'h-0 shrink-0 overflow-hidden rounded-full px-2'
+          : cn('mt-0.5 shrink-0 rounded-full px-2 py-0.5', style.container)
+      }
+    >
+      <Text className={cn('text-xs font-medium', style.label)}>{label}</Text>
+    </View>
+  )
+}
+
+export function DeltaLogRow({
+  delta,
+  onPress,
+  className,
+  footer,
+  showMeta = true,
+  summaryLines = 2,
+}: DeltaLogRowProps) {
   const interactive = onPress != null
   const id = useId()
-  const op = OP_STYLES[delta.op]
   const opLabel = t(`history:op.${delta.op}`)
   // Rows of one target read alike, so a pressable row's name carries its entry.
   const rowLabel =
@@ -80,12 +114,15 @@ export function DeltaLogRow({ delta, onPress, className }: DeltaLogRowProps) {
   const fieldId = `${id}-field`
   const summaryId = `${id}-summary`
   const metaId = `${id}-meta`
+  const description = [
+    ...(delta.fieldPath != null ? [{ id: fieldId, text: delta.fieldPath }] : []),
+    { id: summaryId, text: delta.summary },
+    ...(showMeta ? [{ id: metaId, text: meta }] : []),
+  ]
 
   const content = (
     <>
-      <View className={cn('mt-0.5 shrink-0 rounded-full px-2 py-0.5', op.container)}>
-        <Text className={cn('text-xs font-medium', op.label)}>{opLabel}</Text>
-      </View>
+      <OpBadge op={delta.op} label={opLabel} />
 
       <View className="min-w-0 flex-1 gap-0.5">
         <View className="flex-row items-center gap-1.5">
@@ -110,27 +147,32 @@ export function DeltaLogRow({ delta, onPress, className }: DeltaLogRowProps) {
           ) : null}
         </View>
 
-        <Text nativeID={summaryId} size="sm" numberOfLines={2}>
+        <Text nativeID={summaryId} size="sm" numberOfLines={summaryLines ?? undefined}>
           {delta.summary}
         </Text>
 
-        <Text nativeID={metaId} variant="muted" size="xs" numberOfLines={1}>
-          {meta}
-        </Text>
+        {showMeta ? (
+          <Text nativeID={metaId} variant="muted" size="xs" numberOfLines={1}>
+            {meta}
+          </Text>
+        ) : null}
       </View>
     </>
   )
 
-  const rowClassName = 'flex-row items-start gap-2.5 px-row-x-md py-row-y-md'
+  const hasFooter = footer != null
+  const rowClassName = cn(
+    'flex-row items-start gap-2.5 px-row-x-md',
+    // The footer reads as the content column's next line, at its line gap.
+    hasFooter ? 'pt-row-y-md pb-0.5' : 'py-row-y-md',
+  )
+  const outerClassName = hasFooter ? undefined : className
   // Not a control, so nothing to name or disable: its text reads as it shows.
-  if (!interactive) {
-    return (
-      <View testID="delta-log-row" className={cn(rowClassName, className)}>
-        {content}
-      </View>
-    )
-  }
-  return (
+  const row = !interactive ? (
+    <View testID="delta-log-row" className={cn(rowClassName, outerClassName)}>
+      {content}
+    </View>
+  ) : (
     <Pressable
       onPress={onPress}
       accessibilityRole="button"
@@ -138,8 +180,8 @@ export function DeltaLogRow({ delta, onPress, className }: DeltaLogRowProps) {
       aria-label={rowLabel}
       // A button's name stands for its content, so the change itself rides as its description.
       {...describedBy(
-        delta.fieldPath != null ? [fieldId, summaryId, metaId] : [summaryId, metaId],
-        [delta.fieldPath, delta.summary, meta].filter((part) => part != null).join(', '),
+        description.map((part) => part.id),
+        description.map((part) => part.text).join(', '),
       )}
       className={cn(
         rowClassName,
@@ -148,11 +190,21 @@ export function DeltaLogRow({ delta, onPress, className }: DeltaLogRowProps) {
         Platform.select({
           web: 'cursor-pointer outline-none hover:bg-tint-hover focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-focus-ring',
         }),
-        className,
+        outerClassName,
       )}
     >
       {content}
     </Pressable>
+  )
+  if (!hasFooter) return row
+  return (
+    <View className={className}>
+      {row}
+      <View className="flex-row gap-2.5 px-row-x-md pb-row-y-md">
+        <OpBadge op={delta.op} label={opLabel} spacer />
+        <View className="min-w-0 flex-1">{footer}</View>
+      </View>
+    </View>
   )
 }
 

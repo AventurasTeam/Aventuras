@@ -45,6 +45,8 @@ export type ChapterCardProps = {
   /** Route focus, for Cmd/Ctrl-S on the in-card bar. */
   hotkeysEnabled: boolean
   onJump: () => void
+  /** `Review changes`, shown when the row has a close report. */
+  onReview: () => void
 }
 
 type Gate = { blockedReason?: string }
@@ -58,7 +60,11 @@ function issueText(message: string | undefined): string | undefined {
 }
 
 /** The actions after `Jump to chapter →`, one list: inline at tablet and desktop, `⋯` on phone. */
-function moreActions(latest: boolean): OverflowMenuEntry[] {
+function moreActions(
+  latest: boolean,
+  hasCloseReport: boolean,
+  onReview: () => void,
+): OverflowMenuEntry[] {
   return [
     {
       key: 'regenerate',
@@ -67,6 +73,17 @@ function moreActions(latest: boolean): OverflowMenuEntry[] {
       disabledReason: t('chapters:actions.regenerateLandsLater'),
       onPress: NO_ACTION,
     },
+    // Hidden on a chapter no close wrote; never disabled, since the window writes nothing.
+    ...(hasCloseReport
+      ? [
+          {
+            key: 'review',
+            label: t('chapters:actions.review'),
+            opensSheet: true,
+            onPress: onReview,
+          },
+        ]
+      : []),
     ...(latest
       ? destructiveEntry('delete', t('chapters:actions.delete'), {
           onPress: NO_ACTION,
@@ -84,6 +101,7 @@ export function ChapterCard({
   blockedReason,
   hotkeysEnabled,
   onJump,
+  onReview,
 }: ChapterCardProps): ReactElement {
   const isPhone = useTier() === 'phone'
   const padding = isPhone ? 'px-3' : 'px-5'
@@ -119,7 +137,13 @@ export function ChapterCard({
               />
               <KeywordsField control={editing.form.control} blockedReason={blockedReason} />
             </View>
-            <ActionRow latest={data.latest} isPhone={isPhone} onJump={onJump} />
+            <ActionRow
+              latest={data.latest}
+              hasCloseReport={data.row.hasCloseReport}
+              isPhone={isPhone}
+              onJump={onJump}
+              onReview={onReview}
+            />
           </View>
           {/* touch.md → Save bar on phone: there the route holds it at the surface's bottom edge. */}
           {isPhone ? null : (
@@ -264,14 +288,18 @@ function KeywordsField({ control, blockedReason }: Gate & { control: Control<Cha
 
 function ActionRow({
   latest,
+  hasCloseReport,
   isPhone,
   onJump,
+  onReview,
 }: {
   latest: boolean
+  hasCloseReport: boolean
   isPhone: boolean
   onJump: () => void
+  onReview: () => void
 }) {
-  const more = moreActions(latest)
+  const more = moreActions(latest, hasCloseReport, onReview)
   return (
     <View className="flex-row flex-wrap items-center gap-2">
       <Button

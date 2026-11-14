@@ -1,3 +1,21 @@
+export {
+  loadCloseDeltas,
+  readCloseReport,
+  readDeletedEntityKinds,
+  readLatestCloseReport,
+} from './close-read'
+export { buildCloseReview } from './close-review'
+export { CLOSE_REVIEW_AREAS } from './close-review-types'
+export type {
+  CloseReview,
+  CloseReviewArea,
+  CloseReviewChange,
+  CloseReviewLookup,
+  CloseReviewNotApplied,
+  CloseReviewRowRef,
+  CloseReviewStopped,
+  CloseReviewTarget,
+} from './close-review-types'
 export { HISTORY_OPS } from './field-labels'
 export type { HistoryTable } from './field-labels'
 export { humanizeDelta } from './humanize'

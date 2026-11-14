@@ -6,14 +6,21 @@ import { PERIODIC_CLASSIFIER_KIND } from '@/lib/classifier'
 import { STORY_SETTINGS_DEFAULTS, storyDefinitionSchema } from '@/lib/db'
 import { CHAPTER_CLOSE_KIND, SUGGESTION_REFRESH_KIND } from '@/lib/pipeline'
 import {
+  chapterOverlaysStore,
+  chaptersStore,
   currentStoryStore,
   generationStore,
   resetAllStores,
   type CloseProgress,
   type RunState,
+  type StoreChapter,
 } from '@/lib/stores'
 
-import { closeBannerLabel, useMemoryRunBanner } from './use-memory-run-banner'
+import {
+  closeBannerLabel,
+  useMemoryRunBanner,
+  type MemoryRunBannerState,
+} from './use-memory-run-banner'
 
 function run(kind: string, over: Partial<RunState> = {}): RunState {
   return {
@@ -61,6 +68,42 @@ function openStory(branchId = 'branch-1'): void {
   })
 }
 
+function runBanner(state: MemoryRunBannerState | null) {
+  if (state?.kind !== 'run') throw new Error(`expected a run banner, got ${state?.kind ?? 'none'}`)
+  return state
+}
+
+function closedBanner(state: MemoryRunBannerState | null) {
+  if (state?.kind !== 'closed')
+    throw new Error(`expected a done banner, got ${state?.kind ?? 'none'}`)
+  return state
+}
+
+function chapter(over: Partial<StoreChapter> = {}): StoreChapter {
+  return {
+    id: 'chap_2',
+    branchId: 'branch-1',
+    sequenceNumber: 2,
+    title: 'The Keep Leans Closer',
+    summary: '',
+    theme: '',
+    keywords: [],
+    startEntryId: 'entry_40',
+    endEntryId: 'entry_58',
+    tokenCount: 0,
+    closedAt: 1,
+    embeddingStale: 0,
+    createdAt: 1,
+    updatedAt: 1,
+    hasCloseReport: true,
+    ...over,
+  }
+}
+
+function holdResult(stoppedTasks = 0, branchId = 'branch-1'): void {
+  chapterOverlaysStore.showCloseResult({ branchId, chapterId: 'chap_2', stoppedTasks })
+}
+
 afterEach(() => {
   cleanup()
   resetAllStores()
@@ -78,6 +121,7 @@ describe('useMemoryRunBanner', () => {
     generationStore.startRun(pass())
     const { result } = renderHook(() => useMemoryRunBanner())
     expect(result.current?.label).toBe('Updating memory…')
+    expect(result.current?.kind).toBe('run')
   })
 
   it('labels the pass Send runs before the turn', () => {
@@ -135,7 +179,7 @@ describe('useMemoryRunBanner', () => {
     generationStore.startRun(closing)
     const { result } = renderHook(() => useMemoryRunBanner())
 
-    result.current?.onCancel()
+    runBanner(result.current).onCancel()
 
     await vi.waitFor(() => expect(closing.abortController.signal.aborted).toBe(true))
   })
@@ -185,7 +229,7 @@ describe('useMemoryRunBanner', () => {
     generationStore.startRun(memory)
     const { result } = renderHook(() => useMemoryRunBanner())
 
-    result.current?.onCancel()
+    runBanner(result.current).onCancel()
 
     await vi.waitFor(() => expect(memory.abortController.signal.aborted).toBe(true))
     expect(refresh.abortController.signal.aborted).toBe(false)
@@ -201,6 +245,219 @@ describe('useMemoryRunBanner', () => {
     act(() => {
       generationStore.finishRun(memory.runId)
     })
+    expect(result.current).toBeNull()
+  })
+})
+
+describe("useMemoryRunBanner — a committed close's done state", () => {
+  it("shows the chapter's live title in the info tone", () => {
+    openStory()
+    chaptersStore.hydrate('branch-1', [chapter()])
+    holdResult()
+    const { result } = renderHook(() => useMemoryRunBanner())
+    expect(closedBanner(result.current)).toMatchObject({
+      tone: 'info',
+      label: 'Chapter closed: The Keep Leans Closer',
+    })
+
+    act(() => {
+      chaptersStore.patch('branch-1', {
+        op: 'update',
+        id: 'chap_2',
+        columns: { title: 'The Keep Holds' },
+      })
+    })
+    expect(closedBanner(result.current).label).toBe('Chapter closed: The Keep Holds')
+  })
+
+  it('counts stopped tasks in the warning tone, singular and plural', () => {
+    openStory()
+    chaptersStore.hydrate('branch-1', [chapter()])
+    holdResult(1)
+    const { result } = renderHook(() => useMemoryRunBanner())
+    expect(closedBanner(result.current)).toMatchObject({
+      tone: 'warning',
+      label: 'Chapter closed, but 1 task stopped early',
+    })
+
+    act(() => holdResult(3))
+    expect(closedBanner(result.current).label).toBe('Chapter closed, but 3 tasks stopped early')
+  })
+
+  it("a running close's label wins, and the done state returns once the run ends", () => {
+    openStory()
+    chaptersStore.hydrate('branch-1', [chapter()])
+    holdResult()
+    const closing = close()
+    generationStore.startRun(closing)
+    const { result } = renderHook(() => useMemoryRunBanner())
+    expect(runBanner(result.current).label).toBe('Closing chapter…')
+
+    act(() => {
+      generationStore.finishRun(closing.runId)
+    })
+    expect(closedBanner(result.current).label).toBe('Chapter closed: The Keep Leans Closer')
+  })
+
+  it('Review opens the window on the chapter and clears the result', () => {
+    openStory()
+    chaptersStore.hydrate('branch-1', [chapter()])
+    holdResult()
+    const { result } = renderHook(() => useMemoryRunBanner())
+
+    act(() => closedBanner(result.current).onReview())
+
+    expect(chapterOverlaysStore.getState().review).toEqual({ chapterId: 'chap_2' })
+    expect(chapterOverlaysStore.getState().closeResult).toBeNull()
+    expect(result.current).toBeNull()
+  })
+
+  it('× clears the result and opens nothing', () => {
+    openStory()
+    chaptersStore.hydrate('branch-1', [chapter()])
+    holdResult()
+    const { result } = renderHook(() => useMemoryRunBanner())
+
+    act(() => closedBanner(result.current).onDismiss())
+
+    expect(chapterOverlaysStore.getState().closeResult).toBeNull()
+    expect(chapterOverlaysStore.getState().review).toBeNull()
+    expect(result.current).toBeNull()
+  })
+
+  it("shows nothing for another branch's result", () => {
+    openStory()
+    chaptersStore.hydrate('branch-1', [chapter()])
+    holdResult(0, 'branch-2')
+    const { result } = renderHook(() => useMemoryRunBanner())
+    expect(result.current).toBeNull()
+  })
+
+  it('shows nothing once the chapter leaves the store or loses its report', () => {
+    openStory()
+    chaptersStore.hydrate('branch-1', [chapter()])
+    holdResult()
+    const { result } = renderHook(() => useMemoryRunBanner())
+    expect(result.current?.kind).toBe('closed')
+
+    act(() => {
+      chaptersStore.patch('branch-1', {
+        op: 'update',
+        id: 'chap_2',
+        columns: { closeReport: null },
+      })
+    })
+    expect(result.current).toBeNull()
+
+    act(() => {
+      chaptersStore.patch('branch-1', { op: 'delete', id: 'chap_2' })
+    })
+    expect(result.current).toBeNull()
+  })
+})
+
+describe('useMemoryRunBanner — an older close result beside a newer close', () => {
+  const OLD = 'Chapter closed: Old Chapter'
+
+  function holdOld(): void {
+    chaptersStore.hydrate('branch-1', [
+      chapter({ id: 'chap_1', sequenceNumber: 1, title: 'Old Chapter' }),
+    ])
+    chapterOverlaysStore.showCloseResult({
+      branchId: 'branch-1',
+      chapterId: 'chap_1',
+      stoppedTasks: 0,
+    })
+  }
+
+  // The new close's row lands at its metadata phase, before the report that marks it closed.
+  function createNewRow(): void {
+    chaptersStore.patch('branch-1', {
+      op: 'create',
+      id: 'chap_2',
+      row: chapter({
+        id: 'chap_2',
+        sequenceNumber: 2,
+        title: 'New Chapter',
+        hasCloseReport: false,
+      }),
+    })
+  }
+
+  const seen = (state: MemoryRunBannerState | null) =>
+    state == null ? 'none' : `${state.kind}:${state.label}`
+
+  it('never shows the older result while the newer close runs, nor in the gap before its own', () => {
+    openStory()
+    holdOld()
+    const { result } = renderHook(() => useMemoryRunBanner())
+    const labels = [seen(result.current)]
+    const record = () => labels.push(seen(result.current))
+
+    const closing = close({ currentPhase: 'metadata' })
+    act(() => generationStore.startRun(closing))
+    record()
+    act(() => createNewRow())
+    act(() => generationStore.setCurrentPhase(closing.runId, 'report'))
+    record()
+    act(() => {
+      chaptersStore.patch('branch-1', {
+        op: 'update',
+        id: 'chap_2',
+        columns: {
+          closeReport: { version: 1, actionId: 'a', calls: [], stopped: [], noToolCalls: true },
+        },
+      })
+    })
+    act(() => generationStore.finishRun(closing.runId))
+    record()
+    act(() =>
+      chapterOverlaysStore.showCloseResult({
+        branchId: 'branch-1',
+        chapterId: 'chap_2',
+        stoppedTasks: 1,
+      }),
+    )
+    record()
+
+    expect(labels).toEqual([
+      `closed:${OLD}`,
+      'run:Closing chapter: writing its summary…',
+      'run:Closing chapter: finishing up…',
+      'none',
+      'closed:Chapter closed, but 1 task stopped early',
+    ])
+  })
+
+  it('shows the result of the highest-numbered chapter whatever order the store holds them', () => {
+    openStory()
+    chaptersStore.hydrate('branch-1', [
+      chapter({ id: 'chap_2', sequenceNumber: 2 }),
+      chapter({ id: 'chap_1', sequenceNumber: 1, title: 'Old Chapter' }),
+    ])
+    holdResult()
+    const { result } = renderHook(() => useMemoryRunBanner())
+    expect(closedBanner(result.current).label).toBe('Chapter closed: The Keep Leans Closer')
+  })
+
+  it('brings the older result back when the newer close is reversed', () => {
+    openStory()
+    holdOld()
+    const { result } = renderHook(() => useMemoryRunBanner())
+    act(() => createNewRow())
+    expect(result.current).toBeNull()
+
+    act(() => {
+      chaptersStore.patch('branch-1', { op: 'delete', id: 'chap_2' })
+    })
+    expect(closedBanner(result.current).label).toBe(OLD)
+  })
+
+  it("shows nothing for a chapter held in the store under another branch's id", () => {
+    openStory()
+    chaptersStore.hydrate('branch-2', [chapter({ branchId: 'branch-2' })])
+    holdResult(0, 'branch-1')
+    const { result } = renderHook(() => useMemoryRunBanner())
     expect(result.current).toBeNull()
   })
 })

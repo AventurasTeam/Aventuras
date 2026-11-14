@@ -2,7 +2,13 @@ import { and, eq } from 'drizzle-orm'
 import { z } from 'zod'
 
 import { USER_EDITED_SINCE_PROSE, type PipelineAction } from '@/lib/actions/types'
-import { entities, happeningAwareness, happenings, type HappeningAwareness } from '@/lib/db'
+import {
+  entities,
+  happeningAwareness,
+  happenings,
+  type CloseReasonKey,
+  type HappeningAwareness,
+} from '@/lib/db'
 
 import {
   protectedField,
@@ -36,9 +42,9 @@ type PinPayload = Omit<
 // decay_resistance: the delta path the report shows and the column the guard reads.
 const PIN_PATH = 'decayResistance'
 // chapter-close.md → 3d's one-way frequency signal: a row listed for coming up often only rises.
-const FREQUENT_PIN_LOWERED = 'frequent-pin-lowered'
-const PIN_RAISE_TOO_LARGE = 'pin-raise-too-large'
-const NO_START_PIN = 'no-start-pin'
+export const FREQUENT_PIN_LOWERED: CloseReasonKey = 'frequent-pin-lowered'
+export const PIN_RAISE_TOO_LARGE: CloseReasonKey = 'pin-raise-too-large'
+export const NO_START_PIN: CloseReasonKey = 'no-start-pin'
 // A pin climbs at most this far above its start pin in one close.
 const PIN_STEP = 0.2
 // Float slack: 0.7 + 0.2 comes to a hair under 0.9, which must land.

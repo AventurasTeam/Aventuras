@@ -30,6 +30,7 @@ import {
   type MergeFold,
   type PositionOf,
 } from './happening-fold'
+import { keyedReason } from './reason-key'
 import { turnHandleIn, turnInTextReason } from './text-checks'
 import {
   DELETE_PATH,
@@ -77,16 +78,31 @@ type FoldedAwareness = MergeFold['awareness'][number]
 
 const NO_LINKS: LinkRows = { involvements: [], awareness: [] }
 
-const MERGE_REFUSAL = {
-  emptyAbsorb: 'absorb is empty: name the happenings to fold into keep',
-  keepAbsorbed: 'keep is also in absorb: keep one happening and absorb the others',
-  repeated: 'absorb names a happening twice: name each happening once',
-  outsideCluster:
+export const MERGE_REFUSAL = {
+  emptyAbsorb: keyedReason(
+    'merge-absorb-empty',
+    'absorb is empty: name the happenings to fold into keep',
+  ),
+  keepAbsorbed: keyedReason(
+    'merge-keep-absorbed',
+    'keep is also in absorb: keep one happening and absorb the others',
+  ),
+  repeated: keyedReason(
+    'merge-repeated',
+    'absorb names a happening twice: name each happening once',
+  ),
+  outsideCluster: keyedReason(
+    'merge-outside-cluster',
     "absorb names a happening outside keep's cluster: merge only happenings listed in one cluster",
-  closeWrote:
+  ),
+  closeWrote: keyedReason(
+    'merge-close-wrote',
     'this close already wrote a happening in absorb, and absorbing it would block undoing the close: keep that happening instead',
-  closeWroteNoKeep:
+  ),
+  closeWroteNoKeep: keyedReason(
+    'merge-close-wrote-no-keep',
     'this close already wrote more than one of these happenings, so they cannot be merged in this close: leave them apart',
+  ),
 } as const
 
 // 3e: candidates come only from one cluster the range embed found, so a merge never reaches across.
@@ -490,7 +506,7 @@ async function planMergeHappenings(args: MergeArgs, ctx: WriteContext): Promise<
         ...absorb.map((id) => protectedField(DELETE_PATH, id, protection)),
       ],
       rows,
-      values: wanted,
+      values: patch,
     }
   // Refused whole, not dropped: once the merge lands, no tool could resend keep's new text.
   const handle = [wanted.title, wanted.description]
@@ -537,7 +553,8 @@ async function planMergeHappenings(args: MergeArgs, ctx: WriteContext): Promise<
     actions,
     lost: carried.lost,
     rows,
-    values: wanted,
+    // C4: keep's derived anchor and common knowledge are new values too, beside its text.
+    values: patch,
     survivor: { table: 'happenings', id: keep },
   }
 }

@@ -120,8 +120,8 @@ describe('CloseLedgerWriter', () => {
     writer.record(input)
     input.rows[0]!.name = 'Changed'
     input.turns.push('entry_close_999')
-    input.skippedFields![0]!.reason = 'changed'
-    input.skippedFields!.push({ field: 'body', reason: 'changed' })
+    input.skippedFields![0]!.reason = 'other'
+    input.skippedFields!.push({ field: 'body', reason: 'other' })
     input.survivor!.id = OLD_TOLL
 
     expect(ledger.calls[0]).toMatchObject({
@@ -216,7 +216,7 @@ describe('CloseLedgerWriter', () => {
     writer.record(
       call({
         result: 'rejected',
-        reason: 'over the soft cap',
+        reason: 'over-soft-cap',
         values: {
           description: 'x'.repeat(2_500),
           'state.traits': ['patient', 'wary'],
@@ -260,7 +260,7 @@ describe('CloseLedgerWriter', () => {
         tool: 'create_lore',
         rows: [{ table: 'lore', id: OLD_TOLL, name: 'The Old Toll' }],
         result: 'rejected',
-        reason: 'over-lore-cap',
+        reason: 'lore-cap',
         values: { title: 'The Old Toll', body: 'Paid at the ford.' },
       }),
     )
@@ -274,7 +274,7 @@ describe('CloseLedgerWriter', () => {
         why: 'She says so at the toll house.',
         turns: [ENTRY],
         result: 'rejected',
-        reason: 'over-lore-cap',
+        reason: 'lore-cap',
         values: { title: 'The Old Toll', body: 'Paid at the ford.' },
       },
     ])
@@ -365,7 +365,7 @@ describe('CloseLedgerWriter', () => {
       call({
         rows: [{ table: 'entities', id: TOBIN, name: 'Tobin' }],
         result: 'rejected',
-        reason: 'not-read',
+        reason: 'unread',
         values: { description: 'Drunk at noon.' },
       }),
     )
