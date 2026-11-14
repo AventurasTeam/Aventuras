@@ -16,8 +16,10 @@ import { launchApp, type LaunchedApp } from '../harness/launch'
 import { promptOf, startMockLlm, type MockLlm } from '../harness/mock-llm'
 import { createSeededUserDataDir, removeUserDataDir, setProviderEndpoint } from '../harness/seed'
 import { devChapterClose } from '../locators/dev-chapter-close'
+import { memoryBanner } from '../locators/memory-banner'
 import { plot } from '../locators/plot'
 import { reader } from '../locators/reader'
+import { reviewWindow } from '../locators/review-window'
 
 const HERO_STORY = 'story_hero'
 const PACT = 'Vorne’s pact'
@@ -245,11 +247,27 @@ test.describe('first chapter — a close from the dev route', () => {
       ).toBe(1)
     })
 
-    await test.step('the next turn’s prompt carries the title under Earlier chapters', async () => {
+    await test.step('the banner holds the close, and its Review opens the window', async () => {
       // Back to the dev route, the screen Plot was pushed from.
       await page.goBack()
       await devChapterClose.openReader(page).click()
       await expect(reader.composer(page)).toBeVisible({ timeout: 20_000 })
+      // No task called a tool and none stopped, so the done state is the info one.
+      await expect(memoryBanner.closed(page, CHAPTER.title)).toBeVisible()
+      await memoryBanner.review(page).click()
+      await expect(reviewWindow.window(page)).toHaveAccessibleName(
+        t('chapters:review.title', { number: chaptersBefore + 1, title: CHAPTER.title }),
+      )
+      await expect(
+        reviewWindow.window(page).getByText(t('chapters:review.noToolCalls'), { exact: true }),
+      ).toBeVisible()
+      await reviewWindow.done(page).click()
+      await expect(reviewWindow.window(page)).toHaveCount(0)
+      // Review ended the done state.
+      await expect(memoryBanner.banner(page)).toHaveCount(0)
+    })
+
+    await test.step('the next turn’s prompt carries the title under Earlier chapters', async () => {
       await takeTurn(page, ACTION, REPLY_MARKER)
       const narrative = mock.requests.findLast((request) => request.streamed)
       expect(narrative, 'the turn reached the provider').toBeDefined()
