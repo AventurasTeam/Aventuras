@@ -1564,7 +1564,10 @@ describe('rollback confirm counts', () => {
     const shown = await shownCounts('b1', 't2', ctx)
     const pass = registerStandInPass({ anchorEntryId: 't3' })
     const start = startStandInPass(ctx)
-    await pass.nextHeld()
+    const held = await pass.nextHeld()
+    const swept = await resolveSweep('b1', 't2', ctx)
+    if ('status' in swept) throw new Error(`sweep refused: ${swept.reason}`)
+    expect(swept.set.rows.map((d) => d.actionId)).toContain(held.actionId)
     // The running pass's write counts nowhere: confirming interrupts it, so no commit takes it.
     expect(await shownCounts('b1', 't2', ctx)).toEqual(shown)
 
@@ -1863,7 +1866,8 @@ describe('rollback counts and chapters', () => {
     const { db, runInTransaction } = await createTestDb()
     const ctx = { db, runInTransaction }
     await seedBranchWithTurns(db, ctx)
-    // Chapter 1 ends on the opening, so a rollback to t1 spares it; chapters 2 and 3 both go.
+    // Chapter 1 ends on the opening, so a rollback to t1 spares it; chapters 2 and 3 both go. Their
+    // ids sort against their sequence numbers, as random ones may.
     await applyOk(
       ctx,
       createChapter({ id: 'chap_1', sequenceNumber: 1, startEntryId: 'op', endEntryId: 'op' }),
@@ -1872,13 +1876,13 @@ describe('rollback counts and chapters', () => {
     )
     await applyOk(
       ctx,
-      createChapter({ id: 'chap_2', sequenceNumber: 2, startEntryId: 't1', endEntryId: 't2' }),
+      createChapter({ id: 'chap_z', sequenceNumber: 2, startEntryId: 't1', endEntryId: 't2' }),
       'close2',
       't2',
     )
     await applyOk(
       ctx,
-      createChapter({ id: 'chap_3', sequenceNumber: 3, startEntryId: 't3', endEntryId: 't3' }),
+      createChapter({ id: 'chap_a', sequenceNumber: 3, startEntryId: 't3', endEntryId: 't3' }),
       'close3',
       't3',
     )

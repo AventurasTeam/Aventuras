@@ -371,6 +371,7 @@ export async function rollbackCountsOf(
   let entries = 0
   let worldStateChanges = set.refClears.length
   const chapterIds: string[] = []
+  // The closed set: a fact on a surviving turn naming a row the sweep removes goes too.
   for (const d of set.rows) {
     if (!counted(d)) continue
     if (d.targetTable === 'story_entries') {
@@ -441,11 +442,8 @@ export async function getRollbackCounts(
   targetId: string,
   ctx: DbCtx,
 ): Promise<RollbackCounts | StoryEntryRejection> {
-  // The closed set, not the window: a fact on a surviving turn naming a row the sweep
-  // removes goes too (rollback-confirm.md → Counts).
-  // Held shared through the fate read: a prose reversal or interruptible-run abort reversal landing
-  // mid-read refuses it, and one landing before the fates would leave them disagreeing with
-  // `chapters`.
+  // Held shared through the fate read: a reversal landing mid-read refuses the preview, and none
+  // can land between the chapter count and the fates.
   return withBranchWriteShared(branchId, ROLLBACK_PREVIEW_LOCK_ID, async () => {
     const swept = await resolveSweep(branchId, targetId, ctx)
     if ('status' in swept) return swept

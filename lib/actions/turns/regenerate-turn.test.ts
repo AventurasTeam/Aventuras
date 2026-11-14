@@ -52,6 +52,7 @@ import {
 } from '../delta/reverse-replay'
 import {
   getRollbackCounts,
+  resolveSweep,
   updateStoryEntryContent,
   type RollbackCounts,
 } from '../story-entries/operational'
@@ -1135,7 +1136,10 @@ describe('regenerateTurn', () => {
     const shown = await shownCounts(ctx, 'e_r2')
     const pass = registerStandInPass({ anchorEntryId: 'e_r2' })
     const start = startPipeline(PERIODIC_CLASSIFIER_KIND, ctx)
-    await pass.nextHeld()
+    const held = await pass.nextHeld()
+    const swept = await resolveSweep('b1', 'e_r2', ctx)
+    if ('status' in swept) throw new Error(`sweep refused: ${swept.reason}`)
+    expect(swept.set.rows.map((d) => d.actionId)).toContain(held.actionId)
     // The running pass's write counts nowhere: confirming interrupts it, so no sweep takes it.
     expect(await shownCounts(ctx, 'e_r2')).toEqual(shown)
 
