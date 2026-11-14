@@ -173,10 +173,11 @@ patch`, which 5.5a marks `restated`, so a close tool's write of it
 - **A landed entry ref in a close's `values` is stored raw.**
   `ID_PATTERN` has no `entry` prefix, so the ledger keeps the raw
   `entry_` id, as `merge_happenings` records `occurredAtEntryId`. The
-  review formats a new value as `entry #n` while `lookup.entryPosition`
-  knows the entry (`lib/history/close-review-changes.ts`
-  `updateSummary`), and shows the raw id once the entry is gone. Raised
-  in 5.5a's review.
+  review formats a value, on either side and in Not applied too, as
+  `entry #n` while `lookup.entryPosition` knows the entry
+  (`reviewValueText` and `entryRefText` in
+  `lib/history/close-review-changes.ts`), and shows the raw id once the
+  entry is gone. Raised in 5.5a's review.
 - **The real delta action port is assembled in three places.**
   `lib/boot/bootstrap.ts`, `vitest.setup.ts` and
   `realDeltaActionPort()` in `lib/pipeline/__tests__/harness.ts` each
@@ -622,8 +623,11 @@ patch`, which 5.5a marks `restated`, so a close tool's write of it
 - **A `create_lore` refused for `title-blank` can never drop out of
   Not applied.** The review matches a refused create to a landed one by
   title, and a blank title matches nothing, so a retry with a title
-  lists both a Not applied row and a Changes row. Option: treat a blank
-  refused title like a value-less refusal. Raised in 5.11's review.
+  lists both a Not applied row and a Changes row. A refused create
+  always keeps its minted row (`lore-tools.ts:109,115`), so a
+  value-less branch would never drop it. The choice: match a blank-title
+  refusal to any later `create_lore` the same task lands, or accept the
+  double listing. Raised in 5.11's review.
 - **`delta-log-row.md` and its component differ on three points.**
   `docs/ui/patterns/delta-log-row.md:95-100`: the Visual shape diagram
   shows the summary and meta flush left, while the code indents them.
@@ -653,29 +657,9 @@ patch`, which 5.5a marks `restated`, so a close tool's write of it
   no heading semantics on web; `:128` the × label is a raw "Close", not
   `t()`; `:68` a `DialogContent` without a description raises Radix's
   "Missing Description" warning throughout. Raised in 5.11's review.
-- **A branch switch to a fork whose chapter rows copy the same ids keeps
-  the review window open.** `chapterOverlaysStore`'s `review` holds only
-  `chapterId`, and `overlayChapter` compares the store row's branch.
-  Unreachable today, since no fork action exists; fix it when fork lands,
-  e.g. the store records the open branch at `openReviewWindow`. Raised in
-  5.11's review.
-- **Hold the close result at the report phase's `delta_emitted` instead
-  of re-reading on `run_complete`.** That event carries `branchId`, the
-  chapter id and the report, and arrives after the store patch while the
-  run is still registered. One change removes the run, nothing, done gap
-  on the banner (about two DB round trips, during which the bar
-  collapses), the failed-read fallback's guess, and the open-branch
-  guess (`run_complete` carries no `branchId`, `lib/pipeline/types.ts:76-85`).
-  Costs: it relies on C4's `close_report`-last write; it replaces the
-  old result just before commit; the `actionId` and failed-read tests
-  are rewritten; undo and redo don't emit on that bus. Raised in 5.11's
-  review.
 - **The commit banner's Review and × unmount the focused button.** Focus
   is lost when the review dialog closes (cf. the
-  rnweb-disabled-under-focus-blurs lesson). Separately, a Stack keeps
-  lower screens' banners mounted, and whether each `role="status"` change
-  is announced once per mounted screen is unchecked. Raised in 5.11's
-  review.
+  rnweb-disabled-under-focus-blurs lesson). Raised in 5.11's review.
 - **`overlays.md`'s `onDismissRefused` bullet ends in an unrelated
   sentence.** `docs/ui/patterns/overlays.md:171-175`: the one about
   `portalHost={ABOVE_SHEETS_PORTAL_HOST}` belongs under Stacking or
