@@ -34,6 +34,8 @@ export type ReviewWindowState =
   | { status: 'failed'; onRetry: () => void }
   | { status: 'ready'; review: CloseReview }
 
+export type EntryLink = { label: string; onPress: () => void }
+
 export type ReviewWindowProps = {
   open: boolean
   onOpenChange: (open: boolean) => void
@@ -43,10 +45,8 @@ export type ReviewWindowProps = {
   /** A row's press, or undefined for an unpressable row. */
   pressOf: (row: CloseReviewChange | CloseReviewNotApplied) => (() => void) | undefined
   /** A Changes row's entry link, or undefined when its entry isn't on the branch. */
-  entryLinkOf: (row: CloseReviewChange) => { label: string; onPress: () => void } | undefined
+  entryLinkOf: (row: CloseReviewChange) => EntryLink | undefined
 }
-
-type EntryLink = { label: string; onPress: () => void }
 type RowCallbacks = Pick<ReviewWindowProps, 'pressOf' | 'entryLinkOf'> & { isPhone: boolean }
 
 /**
@@ -92,7 +92,9 @@ export function ReviewWindow({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent scrollable={false} className="sm:max-w-xl">
         <DialogHeader>
-          <DialogTitle>{title}</DialogTitle>
+          <DialogTitle asChild>
+            <Heading level={2}>{title}</Heading>
+          </DialogTitle>
         </DialogHeader>
         {list}
         <DialogFooter>{done}</DialogFooter>
@@ -213,7 +215,7 @@ function NotApplied({
 }): ReactElement | null {
   if (rows.length === 0) return null
   return (
-    <Accordion type="single" collapsible>
+    <Accordion type="single" collapsible defaultValue="">
       <AccordionItem value="not-applied" className="rounded-md border border-border px-3">
         <AccordionTrigger>
           <Text>{t('chapters:review.notApplied', { count: rows.length })}</Text>
@@ -225,7 +227,7 @@ function NotApplied({
               delta={rowDelta(
                 row.key,
                 row.op,
-                row.target ?? { table: '', name: row.tool },
+                row.target ?? { table: '', name: toolLabel(row.tool) },
                 row.fieldLabel,
                 row.summary,
               )}
@@ -261,6 +263,7 @@ function RowFooter({
         <Pressable
           accessibilityRole="link"
           onPress={link.onPress}
+          {...webEnterProps(link.onPress)}
           className={cn(
             'rounded-sm',
             // touch.md → Touch-target floor.
@@ -299,4 +302,41 @@ function rowDelta(
     createdAtRelative: '',
     actionId: '',
   }
+}
+
+// RN-Web's PressResponder presses a role=link element on click only, never on Enter.
+// Cast: RN's Pressable types omit onKeyDown.
+function webEnterProps(onPress: () => void): object | undefined {
+  if (Platform.OS !== 'web') return undefined
+  return {
+    onKeyDown: (event: { key: string; preventDefault(): void }) => {
+      if (event.key !== 'Enter') return
+      event.preventDefault()
+      onPress()
+    },
+  }
+}
+
+const TOOL_LABEL_KEYS = {
+  create_lore: 'chapters:review.tool.create_lore',
+  flag_duplicate: 'chapters:review.tool.flag_duplicate',
+  mark_common_knowledge: 'chapters:review.tool.mark_common_knowledge',
+  merge_threads: 'chapters:review.tool.merge_threads',
+  retire_entity: 'chapters:review.tool.retire_entity',
+  set_keywords: 'chapters:review.tool.set_keywords',
+  update_character: 'chapters:review.tool.update_character',
+  update_faction: 'chapters:review.tool.update_faction',
+  update_item: 'chapters:review.tool.update_item',
+  update_lore: 'chapters:review.tool.update_lore',
+  update_place: 'chapters:review.tool.update_place',
+  update_thread: 'chapters:review.tool.update_thread',
+} as const
+
+function isLabelledTool(tool: string): tool is keyof typeof TOOL_LABEL_KEYS {
+  return Object.hasOwn(TOOL_LABEL_KEYS, tool)
+}
+
+/** What a refusal that resolved no row names: what the tool writes, never its id. */
+function toolLabel(tool: string): string {
+  return isLabelledTool(tool) ? t(TOOL_LABEL_KEYS[tool]) : t('history:unknownTarget')
 }

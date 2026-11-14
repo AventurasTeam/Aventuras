@@ -270,6 +270,24 @@ async function settledTop(el: HTMLElement): Promise<number> {
   return settled
 }
 
+/** The list scrolls between a head and a foot that stay put. */
+async function expectPinnedChrome(
+  dialog: HTMLElement,
+  head: HTMLElement,
+  done: HTMLElement,
+): Promise<void> {
+  const list = within(dialog).getByTestId('review-window-list')
+  await waitFor(() => expect(list.scrollHeight).toBeGreaterThan(list.clientHeight), WAIT)
+  const headTop = await settledTop(head)
+  const doneTop = await settledTop(done)
+  list.scrollTop = list.scrollHeight
+  await twoFrames()
+  expect(list.scrollTop).toBeGreaterThan(0)
+  expect(Math.abs(head.getBoundingClientRect().top - headTop)).toBeLessThanOrEqual(1)
+  expect(Math.abs(done.getBoundingClientRect().top - doneTop)).toBeLessThanOrEqual(1)
+  expect(done.getBoundingClientRect().bottom).toBeLessThanOrEqual(window.innerHeight + 1)
+}
+
 function expectInOrder(elements: readonly HTMLElement[]) {
   for (let i = 1; i < elements.length; i += 1) {
     expect(
@@ -282,7 +300,8 @@ function expectInOrder(elements: readonly HTMLElement[]) {
 export const Full: Story = {
   play: async ({ args }) => {
     const dialog = await findWindow()
-    const stopped = within(dialog).getByRole('heading', { name: 'Stopped early' })
+    expect(within(dialog).getByRole('heading', { name: TITLE, level: 2 })).toBeVisible()
+    const stopped = within(dialog).getByRole('heading', { name: 'Stopped early', level: 3 })
     expect(within(dialog).getByText('Identity, part 2 — reached its step limit')).toBeVisible()
     const notApplied = within(dialog).getByRole('button', { name: 'Not applied (4)' })
     expect(notApplied).toHaveAttribute('aria-expanded', 'false')
@@ -290,8 +309,8 @@ export const Full: Story = {
     expectInOrder([
       stopped,
       notApplied,
-      within(dialog).getByRole('heading', { name: 'Lore' }),
-      within(dialog).getByRole('heading', { name: 'Characters and factions' }),
+      within(dialog).getByRole('heading', { name: 'Lore', level: 3 }),
+      within(dialog).getByRole('heading', { name: 'Characters and factions', level: 3 }),
     ])
 
     // A row shows old → new, its why and its entry link; the meta line is off.
@@ -319,7 +338,8 @@ export const NotAppliedOpens: Story = {
     expect(within(dialog).getByText('measured, guarded')).toBeVisible()
     expect(within(dialog).getByText('You changed this field after the cited entry.')).toBeVisible()
     expect(within(dialog).getByText('A later turn wrote this field.')).toBeVisible()
-    expect(within(dialog).getByText('merge_threads')).toBeVisible()
+    expect(within(dialog).getByText('Thread merge')).toBeVisible()
+    expect(within(dialog).queryByText('merge_threads')).toBeNull()
     expect(within(dialog).getByRole('button', { name: 'update Aria' })).toBeVisible()
     expect(within(dialog).getByRole('button', { name: 'update Tolfden' })).toBeVisible()
     // A refused create has no row to open.
@@ -359,6 +379,20 @@ export const EntryLinkPress: Story = {
   },
 }
 
+/** RN-Web presses a role=link element on click only; Enter on the focused link must press it. */
+export const EntryLinkEnter: Story = {
+  play: async ({ args }) => {
+    const dialog = await findWindow()
+    const link = within(dialog).getByRole('link', { name: 'entry #47 →' })
+    link.focus()
+    await waitFor(() => expect(link).toHaveFocus(), WAIT)
+    await userEvent.keyboard('{Enter}')
+    await waitFor(() => expect(args.onEntryLink).toHaveBeenCalledWith(KAEL_VOICE.key), WAIT)
+    expect(args.onEntryLink).toHaveBeenCalledTimes(1)
+    expect(args.onRowPress).not.toHaveBeenCalled()
+  },
+}
+
 /** A target the host found gone doesn't press; its entry link still does. */
 export const UnpressableRow: Story = {
   args: { unpressable: [KAEL_VOICE.key] },
@@ -383,6 +417,26 @@ export const LongValue: Story = {
   },
 }
 
+/** A refusal with no row names what its tool writes; a tool this list doesn't know reads as unknown. */
+export const NoRowRefusals: Story = {
+  args: {
+    review: {
+      ...NOTHING,
+      notApplied: [
+        { ...NO_KEEP, key: '7', tool: 'update_character' },
+        { ...NO_KEEP, key: '8', tool: 'future_write_tool' },
+      ],
+    },
+  },
+  play: async () => {
+    const dialog = await findWindow()
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Not applied (2)' }))
+    expect(await within(dialog).findByText('Character', {}, WAIT)).toBeVisible()
+    expect(within(dialog).getByText('Unknown row')).toBeVisible()
+    expect(within(dialog).queryByText(/update_character|future_write_tool/)).toBeNull()
+  },
+}
+
 /** No task called a tool: the note shows, with no Stopped early heading and no empty line. */
 export const NoToolCalls: Story = {
   args: { review: { ...NOTHING, noToolCalls: true } },
@@ -390,7 +444,7 @@ export const NoToolCalls: Story = {
     const dialog = await findWindow()
     // Task 4 owns this copy; the play pins that the note renders, not its wording.
     expect(within(dialog).getByText(t('chapters:review.noToolCalls'))).toBeVisible()
-    expect(within(dialog).queryByRole('heading', { name: 'Stopped early' })).toBeNull()
+    expect(within(dialog).queryByRole('heading', { name: 'Stopped early', level: 3 })).toBeNull()
     expect(within(dialog).queryByText('This close changed nothing.')).toBeNull()
   },
 }
@@ -402,7 +456,7 @@ export const Empty: Story = {
     const dialog = await findWindow()
     expect(within(dialog).getByText('This close changed nothing.')).toBeVisible()
     expect(within(dialog).queryByRole('button', { name: /^Not applied/ })).toBeNull()
-    expect(within(dialog).queryByRole('heading', { name: 'Stopped early' })).toBeNull()
+    expect(within(dialog).queryByRole('heading', { name: 'Stopped early', level: 3 })).toBeNull()
   },
 }
 
@@ -425,6 +479,20 @@ export const Failed: Story = {
   },
 }
 
+/** Desktop: a long report scrolls inside the Dialog, its head and Done in place. */
+export const LongList: Story = {
+  args: { review: LONG_LIST },
+  play: async ({ args }) => {
+    const dialog = await findWindow()
+    const heading = within(dialog).getByRole('heading', { name: TITLE, level: 2 })
+    const done = within(dialog).getByRole('button', { name: 'Done' })
+    await expectPinnedChrome(dialog, heading, done)
+
+    await userEvent.click(done)
+    await waitFor(() => expect(args.onOpenChange).toHaveBeenCalledWith(false), WAIT)
+  },
+}
+
 /** Phone: a tall Sheet, no ×, its list scrolling between the pinned head and Done. */
 export const Phone390Sheet: Story = {
   globals: PHONE,
@@ -432,23 +500,16 @@ export const Phone390Sheet: Story = {
   play: async ({ args }) => {
     const dialog = await findWindow()
     expect(within(dialog).queryByRole('button', { name: 'Close' })).toBeNull()
-    const heading = within(dialog).getByRole('heading', { name: TITLE })
+    const heading = within(dialog).getByRole('heading', { name: TITLE, level: 2 })
     const done = within(dialog).getByRole('button', { name: 'Done' })
     // touch.md → Touch-target floor.
     for (const link of within(dialog).getAllByRole('link')) {
       expect(link.getBoundingClientRect().height).toBeGreaterThanOrEqual(44)
     }
 
-    const list = within(dialog).getByTestId('review-window-list')
-    await waitFor(() => expect(list.scrollHeight).toBeGreaterThan(list.clientHeight), WAIT)
-    const top = await settledTop(heading)
     // A tall detent puts the head near the window's top; a short or medium one sits far lower.
-    expect(top).toBeLessThan(window.innerHeight * 0.2)
-    list.scrollTop = list.scrollHeight
-    await twoFrames()
-    expect(list.scrollTop).toBeGreaterThan(0)
-    expect(Math.abs(heading.getBoundingClientRect().top - top)).toBeLessThanOrEqual(1)
-    expect(done.getBoundingClientRect().bottom).toBeLessThanOrEqual(window.innerHeight + 1)
+    expect(await settledTop(heading)).toBeLessThan(window.innerHeight * 0.2)
+    await expectPinnedChrome(dialog, heading, done)
 
     await userEvent.click(done)
     await waitFor(() => expect(args.onOpenChange).toHaveBeenCalledWith(false), WAIT)
