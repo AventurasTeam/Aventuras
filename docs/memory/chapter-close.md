@@ -609,8 +609,9 @@ handle. Its bounds hold from the pin the Awareness start showed:
   by the one-way rule below; this chapter's rows may go down to 0.
 - A pin the user ever set is left as they set it: `skipped`, raise or
   lower, whatever turn the call cites, since a pin is the user's
-  preference, not a fact about the prose. Other fields give way only
-  to a user edit after the cited turn
+  preference, not a fact about the prose. A row the user created counts
+  as one whose pin they set. Other fields give way only to a user edit
+  after the cited turn
   ([Tools and writes](#tools-and-writes)).
 
 **One-way frequency signal.** The frequency-driven candidate set

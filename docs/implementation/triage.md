@@ -507,3 +507,9 @@ patch`, which 5.5a marks `restated`, so a close tool's write of it
   and only review caught it. An eslint `no-restricted-properties` entry
   for such builtins outside tests, or a lessons-learned entry, would
   stop the next one. Raised in 5.9's clustering review.
+- **`set_pin`'s user-pin refusal gives the wrong reason.** A pin the user
+  set before the cited turn is skipped under `USER_EDITED_SINCE_PROSE`,
+  whose note tells the model "The user edited this after the cited
+  turns", which is false for that case; the instruction not to write it
+  again stands. A reason of its own (with 5.11's stable keys) would make
+  the answer and the review accurate. Raised in 5.9's final review.
