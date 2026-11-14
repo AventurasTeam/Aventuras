@@ -324,12 +324,6 @@ patch`, which 5.5a marks `restated`, so a close tool's write of it
   `lib/pipeline/__tests__/close-round-trip.test.ts` pins today's
   behaviour. Developer decision 2026-11-14 (5.9): record the edge in
   canon, fix later.
-- **Per-turn retrieval reads a cancel before the embed bound.** In
-  `lib/pipeline/definitions/per-turn-retrieval.ts`, a cancelled outcome
-  returns `aborted` before the bound's expiry is checked, so a cancel that
-  arrived after the bound expired reads as a user stop. The close's range
-  embed checks the bound first. Latent today: both embed paths report an
-  expiry as a call error. Raised in 5.9's Task 12 review.
 - **No lint stops a builtin Hermes lacks.** 5.9 shipped
   `Array.prototype.toSorted` into close code that runs on Android; the
   Hermes VM appears to lack it (inferred from the binary, not a device),

@@ -708,6 +708,23 @@ describe('retrieval phase — abort', () => {
     })
   })
 
+  it('reports an embed the expired bound cancelled as its timeout, not as a stop', async () => {
+    seedOpenStory()
+    vi.useFakeTimers()
+    runRetrievalMock.mockImplementation(async () => {
+      vi.advanceTimersByTime(300_000)
+      const { partial } = retrievalFailure({ reason: 'call', detail: 'x', staleCount: null })
+      return { ok: false, cancelled: true, partial }
+    })
+
+    const { result } = await runRetrievalPhase()
+
+    expect(result).toMatchObject({
+      status: 'failed',
+      error: { kind: 'embedder', reason: 'call', detail: 'embed timed out after 300000ms' },
+    })
+  })
+
   it('aborts after a pass the cancel landed mid-way through, stashing nothing', async () => {
     seedOpenStory()
     const controller = new AbortController()
