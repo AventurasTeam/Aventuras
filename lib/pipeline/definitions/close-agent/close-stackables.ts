@@ -2,6 +2,7 @@ import { and, asc, eq } from 'drizzle-orm'
 
 import type { GroupOutcome, GuardRow, PipelineAction } from '@/lib/actions/types'
 import { entities, entityStateSchemaForKind } from '@/lib/db'
+import { logger } from '@/lib/diagnostics'
 import { isJsonObject } from '@/lib/json-object'
 import { normalizeStackables, sameStackables } from '@/lib/keyword-terms'
 
@@ -44,12 +45,27 @@ async function* normalizeRun(
   const stored = new Map(characters.map((row) => [row.id, storedStackables(row.state)]))
   // A plural folds only onto a singular some record on the branch holds, so every record goes in.
   const normalized = normalizeStackables(stored)
-  const changed = characters.flatMap(({ id }) => {
+  const folds = characters.flatMap(({ id }) => {
     const next = normalized.get(id)
-    if (next === undefined || sameStackables(stored.get(id), next)) return []
-    return stackablesSchema.safeParse(next).success ? [{ id, next }] : []
+    return next === undefined || sameStackables(stored.get(id), next) ? [] : [{ id, next }]
   })
-  if (changed.length === 0) return { status: 'completed' }
+  if (folds.length === 0) return { status: 'completed' }
+  const changed = folds.filter(({ next }) => stackablesSchema.safeParse(next).success)
+  const logRun = (rows: number, status: GroupOutcome['status'] | 'none') =>
+    logger.debug(
+      'memory.close_stackables',
+      {
+        rows,
+        skippedProtected: changed.length - rows,
+        skippedBound: folds.length - changed.length,
+        status,
+      },
+      { actionId: ctx.phase.actionId },
+    )
+  if (changed.length === 0) {
+    logRun(0, 'none')
+    return { status: 'completed' }
+  }
 
   const guard = await readRowGuard(
     {
@@ -75,10 +91,14 @@ async function* normalizeRun(
       payload: { branchId: ctx.branchId, id, stackables: next },
     })
   }
-  if (actions.length === 0) return { status: 'completed' }
+  if (actions.length === 0) {
+    logRun(0, 'none')
+    return { status: 'completed' }
+  }
   if (abortSignal.aborted) return { status: 'aborted' }
   // C1: anchored on E. A code step has no model to tell, so a refusal fails the close.
   const outcome = yield* emitDeltaGroup(actions, ctx.endEntryId)
+  logRun(actions.length, outcome.status)
   if (outcome.status === 'rejected')
     return {
       status: 'failed',
