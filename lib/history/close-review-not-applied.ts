@@ -1,10 +1,9 @@
-import type { CloseReasonKey, CloseReport, CloseReportCall } from '@/lib/db'
+import { landedPaths, type CloseReasonKey, type CloseReport, type CloseReportCall } from '@/lib/db'
 import { t } from '@/lib/i18n'
 import { normalizeTerm } from '@/lib/keyword-terms'
 
 import {
   CREATE_LORE_TOOL,
-  landedPaths,
   reviewFieldLabel,
   reviewRowKey,
   reviewTarget,

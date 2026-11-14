@@ -127,6 +127,12 @@ export type CloseReportCall = Omit<StoredCall, 'reason' | 'skippedFields'> & {
   skippedFields?: { field: string; reason: CloseReasonKey }[]
 }
 
+/** C4: a call's landed paths, the keys of `values` less its `skippedFields`. */
+export function landedPaths(call: CloseReportCall): string[] {
+  const lost = new Set((call.skippedFields ?? []).map(({ field }) => field))
+  return Object.keys(call.values ?? {}).filter((path) => !lost.has(path))
+}
+
 const storedReportSchema = z.object({
   version: z.literal(1),
   actionId: z.string(),

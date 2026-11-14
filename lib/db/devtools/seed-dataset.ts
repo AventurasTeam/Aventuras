@@ -37,7 +37,7 @@ import { DEFAULT_SUGGESTION_CATEGORIES } from '../stories/default-suggestion-cat
 import { storyDefinitionSchema, storySettingsSchema } from '../stories/story-config-schema'
 import type { StoryDefinition, StorySettings } from '../stories/story-config-schema'
 import { closeReportSchema } from '../story-entries/close-report'
-import type { CloseReasonKey, CloseReport } from '../story-entries/close-report'
+import type { CloseReport } from '../story-entries/close-report'
 import { entryMetadataSchema } from '../story-entries/entry-metadata'
 import type { EntryMetadata } from '../story-entries/entry-metadata'
 import type {
@@ -320,7 +320,6 @@ function forkEntries(): NewStoryEntry[] {
 const CHAP2_ACTION = 'act_chapter_2'
 const VORNE_TRAITS = ['patient', 'merciless']
 const VORNE_TRAITS_BEFORE_CLOSE = ['patient']
-const OVER_SOFT_CAP: CloseReasonKey = 'over-soft-cap'
 
 const chapter2Report: CloseReport = closeReportSchema.parse({
   version: 1,
@@ -334,7 +333,7 @@ const chapter2Report: CloseReport = closeReportSchema.parse({
       why: 'Mira stops hiding the debt and starts bargaining it down.',
       turns: [entryId('hero', 41)],
       result: 'rejected',
-      reason: OVER_SOFT_CAP,
+      reason: 'over-soft-cap',
       // Past the drives soft cap and longer than her stored list: what over-soft-cap refuses.
       values: {
         'state.drives': [

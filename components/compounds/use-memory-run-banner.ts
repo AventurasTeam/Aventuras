@@ -1,5 +1,5 @@
 import { PERIODIC_CLASSIFIER_KIND } from '@/lib/classifier'
-import type { CloseTask } from '@/lib/db'
+import { closeTaskLabel } from '@/lib/history'
 import { t } from '@/lib/i18n'
 import { CHAPTER_CLOSE_KIND, CLOSE_PHASE } from '@/lib/pipeline'
 import {
@@ -22,16 +22,6 @@ export type MemoryRunBannerState =
       onReview: () => void
       onDismiss: () => void
     }
-
-const CLOSE_TASK_COPY = {
-  happenings: 'chrome.memoryBanner.closeTask.happenings',
-  lore: 'chrome.memoryBanner.closeTask.lore',
-  identity: 'chrome.memoryBanner.closeTask.identity',
-  threads: 'chrome.memoryBanner.closeTask.threads',
-  upkeep: 'chrome.memoryBanner.closeTask.upkeep',
-  lifecycle: 'chrome.memoryBanner.closeTask.lifecycle',
-  awareness: 'chrome.memoryBanner.closeTask.awareness',
-} as const satisfies Record<CloseTask, string>
 
 /**
  * C6: a close's banner label; in `agent` it names the task last started. The run keeps
@@ -58,7 +48,7 @@ export function closeBannerLabel(
       return t(turn ? 'chrome.memoryBanner.beforeTurnTask' : 'chrome.memoryBanner.closingTask', {
         index: progress.index,
         total: progress.total,
-        task: t(CLOSE_TASK_COPY[progress.task]),
+        task: closeTaskLabel(progress.task),
       })
     }
     case CLOSE_PHASE.report:

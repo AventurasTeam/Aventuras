@@ -1,5 +1,6 @@
 import {
   CLOSE_TOP_LEVEL_VALUE,
+  landedPaths,
   type CloseReport,
   type CloseReportCall,
   type Delta,
@@ -46,12 +47,6 @@ const AREA_BY_TABLE: ReadonlyMap<string, CloseReviewArea> = new Map([
 
 export const sameRow = (a: CloseReviewRowRef, b: CloseReviewRowRef): boolean =>
   a.table === b.table && a.id === b.id
-
-/** C4: a call's landed paths, the keys of `values` less its `skippedFields`. */
-export function landedPaths(call: CloseReportCall): string[] {
-  const lost = new Set((call.skippedFields ?? []).map(({ field }) => field))
-  return Object.keys(call.values ?? {}).filter((path) => !lost.has(path))
-}
 
 /**
  * A report row as the review names it: the report's name, else the live row's, else an awareness
@@ -277,11 +272,7 @@ function updateSummary(
   const after = reviewValueText(at, value, lookup)
   if (at.path === UNPLACED_PATH) return after
   const before =
-    at.path === COMMON_KNOWLEDGE_PATH
-      ? old == null
-        ? ''
-        : flagText(old)
-      : shownValue(old, at, lookup)
+    at.path === COMMON_KNOWLEDGE_PATH && old != null ? flagText(old) : shownValue(old, at, lookup)
   return before === '' ? after : `${before}${VALUE_ARROW}${after}`
 }
 

@@ -43,6 +43,7 @@ export {
   CLOSE_TOP_LEVEL_VALUE,
   closeReportSchema,
   isCloseReasonKey,
+  landedPaths,
 } from './story-entries/close-report'
 export type {
   CloseReasonKey,

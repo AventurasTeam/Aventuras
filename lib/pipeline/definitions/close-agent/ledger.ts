@@ -1,4 +1,4 @@
-import type { CloseReportCall } from '@/lib/db'
+import { landedPaths, type CloseReportCall } from '@/lib/db'
 import { logger } from '@/lib/diagnostics'
 import { ID_PATTERN } from '@/lib/ids'
 import { oneLine } from '@/lib/text'
@@ -100,8 +100,7 @@ export class CloseLedgerWriter {
     return this.ledger.calls
       .flatMap((call) => {
         if (call.result !== 'ok') return []
-        const skipped = new Set((call.skippedFields ?? []).map(({ field }) => field))
-        const fields = Object.keys(call.values ?? {}).filter((field) => !skipped.has(field))
+        const fields = landedPaths(call)
         if (fields.length === 0 && call.survivor === undefined) return []
         // A name goes into the next task's prompt: a line break would forge a line, a full id leak.
         const rows = call.rows

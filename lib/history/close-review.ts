@@ -1,4 +1,4 @@
-import type { CloseReport, Delta } from '@/lib/db'
+import type { CloseReport, CloseTask, Delta } from '@/lib/db'
 import { t } from '@/lib/i18n'
 
 import { closeReviewChanges } from './close-review-changes'
@@ -13,7 +13,11 @@ const TASK_COPY = {
   upkeep: 'chrome.memoryBanner.closeTask.upkeep',
   lifecycle: 'chrome.memoryBanner.closeTask.lifecycle',
   awareness: 'chrome.memoryBanner.closeTask.awareness',
-} as const satisfies Record<CloseReviewStopped['task'], string>
+} as const satisfies Record<CloseTask, string>
+
+export function closeTaskLabel(task: CloseTask): string {
+  return t(TASK_COPY[task])
+}
 
 const STOP_COPY = {
   budget: 'chapters:review.stopped.budget',
@@ -24,7 +28,7 @@ const STOP_COPY = {
 /** chapter-close.md → When a task stops: one line per stopped task, its part unless chapter-wide. */
 export function closeReviewStopped(report: CloseReport): CloseReview['stopped'] {
   return report.stopped.map(({ task, part, reason }) => {
-    const copy = { task: t(TASK_COPY[task]), reason: t(STOP_COPY[reason]) }
+    const copy = { task: closeTaskLabel(task), reason: t(STOP_COPY[reason]) }
     return {
       task,
       part,
