@@ -43,9 +43,9 @@ export async function readCloseReport(
 }
 
 /**
- * C1: the close's deltas but its stamps, in log order. `deltas` has no `action_id` index, so the
- * chapter row's first and last deltas under the action (its create and its report update) bound a
- * range read off `deltas_log_position_uniq`; redo re-inserts at the same positions.
+ * C1: the close's deltas but its stamps, in log order. No `action_id` index, so the chapter row's
+ * first and last deltas under the action bound a `deltas_log_position_uniq` range read; redo keeps
+ * positions.
  */
 export async function loadCloseDeltas(
   db: Db,

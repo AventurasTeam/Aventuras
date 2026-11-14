@@ -91,7 +91,6 @@ describe('ledgerReasonKey', () => {
   })
 })
 
-// Every reason the close builds or a handler returns to it, by the key the ledger records.
 describe('the reasons a close records', () => {
   it.each<[string, () => string, string]>([
     ['an empty turns', () => checkReason([], 'w'), 'turns-empty'],

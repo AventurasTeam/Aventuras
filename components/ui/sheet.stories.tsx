@@ -569,10 +569,7 @@ function DismissedHarness() {
   )
 }
 
-/**
- * A programmatic close reaches no `onOpenChange` (the open state already changed), so
- * `onDismissed` is the only report that the exit animation ended.
- */
+/** A programmatic close skips `onOpenChange`: `onDismissed` alone reports the exit ended. */
 export const OnDismissedAfterProgrammaticClose: Story = {
   parameters: { layout: 'fullscreen' },
   render: () => <DismissedHarness />,

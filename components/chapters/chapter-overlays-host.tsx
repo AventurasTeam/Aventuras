@@ -79,8 +79,8 @@ async function readReviewSources(branchId: string, chapterId: string): Promise<R
 }
 
 /**
- * C7's one root host: the review window; the close modal joins it in M5.10. A row press closes
- * the window, then runs the current surface's guard, so it never bypasses a dirty pane.
+ * C7's root host (the close modal joins in M5.10): a row press closes the window, then runs the
+ * guard, so a dirty pane is never bypassed.
  */
 export function ChapterOverlaysHost(): ReactElement | null {
   const review = chapterOverlaysStore.useOverlays((s) => s.review)

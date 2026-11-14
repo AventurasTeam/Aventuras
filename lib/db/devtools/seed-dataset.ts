@@ -315,9 +315,8 @@ function forkEntries(): NewStoryEntry[] {
   return rows
 }
 
-// Chapter 2's close as its review window reads it (milestone C4): a landed change, a write the
-// user's edit kept from landing, and a task that ran out of steps. Chapter 1 stays a chapter no
-// close wrote.
+// Chapter 2's close as its review window reads it (C4): a landed change, a write the user's edit
+// blocked, a task out of steps. Chapter 1 has no close report.
 const CHAP2_ACTION = 'act_chapter_2'
 const VORNE_TRAITS = ['patient', 'merciless']
 const VORNE_TRAITS_BEFORE_CLOSE = ['patient']
@@ -1133,9 +1132,8 @@ const heroEntryAssets: NewEntryAsset[] = [
 // really have landed: the rollback window and CTRL-Z both read log positions.
 type SlottedDelta = Omit<NewDelta, 'logPosition'> & { after: number }
 
-// C1: a close's create, then one stamp per entry of its range in position order, then, for a
-// close that wrote its report, its agent writes and the report update; all under its action and
-// anchored on the chapter's end entry.
+// C1: a close's create, one stamp per entry in position order, then (if it wrote a report) its
+// agent writes and the report update; all under its action, anchored on the end entry.
 function seededClose(close: {
   deltaId: string
   actionId: string
@@ -1144,7 +1142,6 @@ function seededClose(close: {
   start: number
   end: number
   createdAt: number
-  /** Agent writes then the report update, after the stamps (C1). */
   agentWrites?: readonly Omit<
     SlottedDelta,
     'branchId' | 'entryId' | 'actionId' | 'after' | 'source' | 'encodingVersion' | 'createdAt'

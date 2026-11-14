@@ -176,10 +176,7 @@ const OPENS_SHEET_ENTRIES: OverflowMenuEntry[] = [
   { key: 'json', label: 'View raw JSON', onPress: fn() },
 ]
 
-/**
- * gorhom restores a Sheet another one covered, so an entry that opens its own waits for the
- * menu's Sheet to report dismissal instead of opening under it.
- */
+/** gorhom restores a covered Sheet, so a sheet-opening entry waits for the menu's dismissal. */
 export const OpensSheetAfterDismissPhone: Story = {
   globals: { viewport: { value: 'mobile1' } },
   args: { entries: OPENS_SHEET_ENTRIES.map((entry) => ({ ...entry, onPress: fn() })) },

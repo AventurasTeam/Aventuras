@@ -51,10 +51,7 @@ export type ReviewWindowProps = {
 }
 type RowCallbacks = Pick<ReviewWindowProps, 'pressOf' | 'entryLinkOf'> & { isPhone: boolean }
 
-/**
- * chapter-timeline.md → Review window: read-only, a Dialog above phone and a tall Sheet on phone,
- * the list scrolling between a pinned head and foot. Props in: the host resolves every read.
- */
+/** chapter-timeline.md → Review window: read-only; the host resolves every read, props in. */
 export function ReviewWindow({
   open,
   onOpenChange,

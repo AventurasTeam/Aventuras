@@ -215,9 +215,8 @@ const writeKey = (row: CloseReviewRowRef, path: string): string =>
   JSON.stringify([row.table, row.id, path])
 
 /**
- * Each landed write's old value: the kth-from-last write of a path on a row takes the
- * kth-from-last delta naming it there, so an earlier writer's delta (a merge's upsert of a link
- * row) drops as a leading extra. A write no delta pairs with has none.
+ * Old value per landed write: the kth-from-last write of a path on a row pairs with the
+ * kth-from-last delta naming it, so an earlier writer's delta (a merge's link upsert) drops off.
  */
 function oldValues(planned: readonly Planned[], deltas: readonly Delta[]): Map<Planned, unknown> {
   const logged = new Map<string, Delta[]>()
@@ -248,10 +247,7 @@ const COMMON_KNOWLEDGE_PATH = 'commonKnowledge'
 const flagText = (value: unknown): string =>
   Number(value) === 1 ? t('chapters:review.yes') : t('chapters:review.no')
 
-/**
- * A recorded new or proposed value as the review shows it: a flag reads yes or no, '' reads none, a
- * status or the top mark reads in words, an entry id the branch knows reads as its ref.
- */
+/** A new or proposed value as shown: flag as yes/no, '' as none, status or top mark in words. */
 export function reviewValueText(at: ValueAt, value: string, lookup: CloseReviewLookup): string {
   if (at.path === COMMON_KNOWLEDGE_PATH) return flagText(value)
   if (value === '') return t('chapters:review.none')
@@ -285,9 +281,8 @@ function summaryOf(write: Planned, old: unknown, lookup: CloseReviewLookup): str
 }
 
 /**
- * chapter-close.md → Review: one row per landed field (create, absorbed row), its old value from
- * the deltas and its new one from the report, grouped by area in canon's order. `deltas` are the
- * close's in log order, as `loadCloseDeltas` returns them.
+ * chapter-close.md → Review: one row per landed field (create, absorbed row), grouped by area.
+ * `deltas` are the close's, in log order, as `loadCloseDeltas` returns them.
  */
 export function closeReviewChanges(
   report: CloseReport,

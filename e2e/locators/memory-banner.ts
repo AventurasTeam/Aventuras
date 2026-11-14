@@ -20,7 +20,7 @@ export const memoryBanner = {
     banner(page).getByText(t('chrome.memoryBanner.beforeTurnMetadata'), { exact: true }),
   cancel: (page: Page): Locator =>
     banner(page).getByRole('button', { name: t('cancel'), exact: true }),
-  // A committed close's done state, in the same bar: its label, Review and the icon-only dismiss.
+  // A committed close's done state, in the same bar; dismiss is icon-only.
   closed: (page: Page, title: string): Locator =>
     banner(page).getByText(t('chrome.closeResult.closed', { title }), { exact: true }),
   review: (page: Page): Locator =>

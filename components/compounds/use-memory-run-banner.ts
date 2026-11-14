@@ -80,8 +80,8 @@ function bannerLabel(run: RunState): string | null {
 /**
  * The open branch's pass or close while one runs, its Cancel interrupting the run (deferring it to
  * the next Send); else the close it last committed there, until reviewed, dismissed or reversed.
- * The result shows only while its chapter is the branch's latest, so an older one never reads as
- * current beside a newer close that is running or has just committed.
+ * The result shows only while its chapter is the branch's latest, so an older close never reads as
+ * current.
  */
 export function useMemoryRunBanner(): MemoryRunBannerState | null {
   const branchId = currentStoryStore.useCurrentStory((open) => open?.branchId ?? null)
