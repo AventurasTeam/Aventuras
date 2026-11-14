@@ -202,6 +202,14 @@ export function useChapterDeleteConfirm({
   useEffect(() => {
     if (!active || reviewOpen) dismiss()
   }, [active, reviewOpen, dismiss])
+  // An unmount renders no `active` false first, so it drops a pending read here; a removal's
+  // continuation outlives the screen by design.
+  useEffect(
+    () => () => {
+      openRequest.current += 1
+    },
+    [],
+  )
 
   return { target, pending, open, dismiss, confirm }
 }

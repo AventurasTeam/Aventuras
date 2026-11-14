@@ -51,10 +51,12 @@ function storeSyncFailed(): DeltaReplayError {
 
 function deferred<T>() {
   let resolve!: (value: T) => void
-  const promise = new Promise<T>((res) => {
+  let reject!: (error: unknown) => void
+  const promise = new Promise<T>((res, rej) => {
     resolve = res
+    reject = rej
   })
-  return { promise, resolve }
+  return { promise, resolve, reject }
 }
 
 // A falling reversal flag is one of the points settleCount bumps at; it needs no run fixture.
@@ -69,12 +71,12 @@ function setup() {
   const loadPreview = vi.fn<LoadPreview>(async () => PREVIEW)
   const remove = vi.fn<Remove>(async () => ({ status: 'ok' }))
   const resync = vi.fn(async (): Promise<unknown> => undefined)
-  const { result, rerender } = renderHook(
+  const { result, rerender, unmount } = renderHook(
     ({ active }: { active: boolean }) =>
       useChapterDeleteConfirm({ branchId: 'br_1', active, loadPreview, remove, resync }),
     { initialProps: { active: true } },
   )
-  return { result, rerender, loadPreview, remove, resync }
+  return { result, rerender, unmount, loadPreview, remove, resync }
 }
 
 async function openOn(result: { current: Hook }, chapterId = 'chap_2') {
@@ -289,6 +291,25 @@ describe('useChapterDeleteConfirm: opening and staying true', () => {
     })
 
     expect(toast.error).not.toHaveBeenCalled()
+  })
+
+  it('raises no toast for an opening read that fails after the screen unmounted', async () => {
+    const { result, unmount, loadPreview } = setup()
+    const opening = deferred<ChapterDeletePreview>()
+    loadPreview.mockReturnValueOnce(opening.promise)
+    let pendingOpen!: Promise<void>
+    act(() => {
+      pendingOpen = result.current.open('chap_2')
+    })
+
+    unmount()
+    await act(async () => {
+      opening.reject(new Error('read failed'))
+      await pendingOpen
+    })
+
+    expect(toast.error).not.toHaveBeenCalled()
+    expect(logger.error).not.toHaveBeenCalled()
   })
 
   it('opens nothing and toasts when the opening read is refused', async () => {
@@ -518,6 +539,25 @@ describe('useChapterDeleteConfirm: the removal', () => {
         error: expect.stringContaining('stale store'),
       }),
     )
+  })
+
+  it('still resyncs a committed delete whose store sync fails after the screen unmounted', async () => {
+    const { result, unmount, remove, resync } = setup()
+    await openOn(result)
+    const removing = deferred<RemoveChapterResult>()
+    remove.mockReturnValueOnce(removing.promise)
+    let confirming!: Promise<void>
+    act(() => {
+      confirming = result.current.confirm('whole')
+    })
+
+    unmount()
+    await act(async () => {
+      removing.reject(storeSyncFailed())
+      await confirming
+    })
+
+    expect(resync).toHaveBeenCalledTimes(1)
   })
 
   it('logs a resync that fails after a committed delete, and toasts that the delete landed', async () => {
