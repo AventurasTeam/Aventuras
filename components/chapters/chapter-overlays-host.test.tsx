@@ -61,6 +61,7 @@ vi.mock('@/hooks/use-surface-navigate', () => ({ useSurfaceNavigate: () => hostN
 
 // An external store, so a test can resolve the index under a mounted host.
 const entryIndex = vi.hoisted(() => {
+  const retry = vi.fn<() => void>()
   const READY = {
     entries: [],
     index: new Map([
@@ -78,12 +79,13 @@ const entryIndex = vi.hoisted(() => {
     ready: true,
     failed: false,
     updating: false,
-    retry: () => {},
+    retry,
   }
   type Snapshot = typeof READY
   const listeners = new Set<() => void>()
   let snapshot: Snapshot = READY
   return {
+    retry,
     READY,
     PENDING: { ...READY, index: new Map(), ready: false } satisfies Snapshot,
     FAILED: { ...READY, index: new Map(), ready: false, failed: true } satisfies Snapshot,
@@ -301,6 +303,7 @@ beforeEach(() => {
   view.renders = 0
   hostNavigate.mockReset()
   entryIndex.set(entryIndex.READY)
+  entryIndex.retry.mockReset()
   reads.report.mockReset().mockResolvedValue(REPORT)
   reads.deltas.mockReset().mockResolvedValue(DELTAS)
   reads.kinds.mockReset().mockResolvedValue(new Map([['loc_mill', 'location']]))
@@ -426,12 +429,41 @@ describe('ChapterOverlaysHost — the review', () => {
     expect(shown().entryLinkOf(KAEL)?.label).toBe('entry #47 →')
   })
 
-  it("shows the review when the entry index's read failed, rather than hang", async () => {
+  it("fails when the entry index's read failed, and Retry re-reads the index alone", async () => {
     entryIndex.set(entryIndex.FAILED)
     renderHost()
     openWindow()
+    await waitFor(() => expect(view.props?.state.status).toBe('failed'))
+    expect(reads.build).not.toHaveBeenCalled()
+
+    const state = shown().state
+    if (state.status !== 'failed') throw new Error('expected the failed state')
+    act(() => state.onRetry())
+    expect(entryIndex.retry).toHaveBeenCalledTimes(1)
+
+    act(() => entryIndex.set(entryIndex.READY))
     await waitFor(() => expect(view.props?.state.status).toBe('ready'))
-    expect(shown().entryLinkOf(KAEL)).toBeUndefined()
+    expect(shown().entryLinkOf(KAEL)?.label).toBe('entry #47 →')
+    expect(reads.report).toHaveBeenCalledTimes(1)
+  })
+
+  it('re-reads the index and the report on Retry when both failed', async () => {
+    vi.spyOn(logger, 'error').mockImplementation(() => {})
+    entryIndex.set(entryIndex.FAILED)
+    reads.report.mockRejectedValueOnce(new Error('disk'))
+    renderHost()
+    openWindow()
+    await waitFor(() => expect(reads.report).toHaveBeenCalledTimes(1))
+    await act(() => new Promise((resolve) => setTimeout(resolve, 0)))
+
+    const state = shown().state
+    if (state.status !== 'failed') throw new Error('expected the failed state')
+    act(() => state.onRetry())
+    expect(entryIndex.retry).toHaveBeenCalledTimes(1)
+    await waitFor(() => expect(reads.report).toHaveBeenCalledTimes(2))
+
+    act(() => entryIndex.set(entryIndex.READY))
+    await waitFor(() => expect(view.props?.state.status).toBe('ready'))
   })
 
   // Drizzle's JSON column parse throws a SyntaxError on corrupt text, not a ZodError.

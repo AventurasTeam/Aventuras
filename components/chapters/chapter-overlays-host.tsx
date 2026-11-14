@@ -113,8 +113,8 @@ function ReviewHost({ chapter }: { chapter: StoreChapter }): ReactElement {
   const settleCount = generationStore.useGeneration((s) => s.settleCount)
   const entryIndexRead = useEntryIndex(branchId)
   const entryIndex = entryIndexRead.index
-  // Built before the index reads, a review cites raw entry ids; a failed read shows it anyway.
-  const indexPending = !entryIndexRead.ready && !entryIndexRead.failed
+  // Built before the index reads, a review cites raw entry ids and links no entry.
+  const indexReady = entryIndexRead.ready
   const entities = entitiesStore.useEntities((rows) => rows)
   const lore = loreStore.useLore((rows) => rows)
   const threads = threadsStore.useThreads((rows) => rows)
@@ -168,9 +168,8 @@ function ReviewHost({ chapter }: { chapter: StoreChapter }): ReactElement {
   )
 
   const review = useMemo(
-    () =>
-      data == null || indexPending ? null : buildCloseReview(data.report, data.deltas, lookup),
-    [data, indexPending, lookup],
+    () => (data == null || !indexReady ? null : buildCloseReview(data.report, data.deltas, lookup)),
+    [data, indexReady, lookup],
   )
 
   const press = useCallback(
@@ -201,11 +200,16 @@ function ReviewHost({ chapter }: { chapter: StoreChapter }): ReactElement {
     }
   }
 
+  const sourcesFailed = sources.isError && !sources.isFetching
+  const retry = () => {
+    if (entryIndexRead.failed) entryIndexRead.retry()
+    if (sourcesFailed) void sources.refetch()
+  }
   const state: ReviewWindowState =
     review != null
       ? { status: 'ready', review }
-      : sources.isError && !sources.isFetching
-        ? { status: 'failed', onRetry: () => void sources.refetch() }
+      : sourcesFailed || entryIndexRead.failed
+        ? { status: 'failed', onRetry: retry }
         : { status: 'loading' }
 
   return (
