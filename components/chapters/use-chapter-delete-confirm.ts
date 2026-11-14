@@ -3,6 +3,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import {
   CHAPTER_DELETE_REFUSAL,
   DeltaReplayError,
+  describeDeltaReplayError,
   type ChapterDeleteMode,
   type ChapterDeletePreview,
   type ChapterDeleteRefusal,
@@ -41,6 +42,11 @@ async function attempt<T>(run: () => Promise<T>): Promise<Attempt<T>> {
 
 function messageOf(error: unknown): string {
   return error instanceof Error ? error.message : String(error)
+}
+
+// A replay failure's message is fixed; what went wrong is in its cause.
+function failureOf(error: unknown): string {
+  return describeDeltaReplayError(error)?.detail ?? messageOf(error)
 }
 
 /**
@@ -152,7 +158,7 @@ export function useChapterDeleteConfirm({
         logger.warn('app.chapter_delete_resynced', {
           branchId,
           chapterId,
-          error: messageOf(removal.error),
+          error: failureOf(removal.error),
         })
         const resynced = await attempt(() => latest.current.resync())
         if (!resynced.ok)
@@ -166,7 +172,7 @@ export function useChapterDeleteConfirm({
           branchId,
           chapterId,
           mode,
-          error: messageOf(removal.error),
+          error: failureOf(removal.error),
         })
         toast.error(t('chapters:deleteConfirm.failed'))
       }

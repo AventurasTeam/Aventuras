@@ -429,7 +429,10 @@ describe('useChapterDeleteConfirm: the removal', () => {
     expect(toast.error).not.toHaveBeenCalled()
     expect(logger.warn).toHaveBeenCalledWith(
       'app.chapter_delete_resynced',
-      expect.objectContaining({ chapterId: 'chap_2' }),
+      expect.objectContaining({
+        chapterId: 'chap_2',
+        error: expect.stringContaining('stale store'),
+      }),
     )
   })
 
@@ -477,7 +480,27 @@ describe('useChapterDeleteConfirm: the removal', () => {
     expect(toast.error).toHaveBeenCalledWith(FAILED)
     expect(logger.error).toHaveBeenCalledWith(
       'app.chapter_delete_threw',
-      expect.objectContaining({ chapterId: 'chap_2', mode: 'divider-only' }),
+      expect.objectContaining({
+        chapterId: 'chap_2',
+        mode: 'divider-only',
+        error: expect.stringContaining('database is locked'),
+      }),
+    )
+  })
+
+  it('logs the message of a removal that threw something other than a replay failure', async () => {
+    const { result, remove } = setup()
+    await openOn(result)
+    remove.mockRejectedValueOnce(new Error('bracket failed'))
+
+    await act(async () => {
+      await result.current.confirm('whole')
+    })
+
+    expect(toast.error).toHaveBeenCalledWith(FAILED)
+    expect(logger.error).toHaveBeenCalledWith(
+      'app.chapter_delete_threw',
+      expect.objectContaining({ chapterId: 'chap_2', error: 'bracket failed' }),
     )
   })
 })
