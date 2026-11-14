@@ -689,9 +689,14 @@ async function buildUndoOps(
     swept: new Map(),
   }
   const listVecTables = vecTableLister(ctx)
-  const laterUserEdits = await userEditsOutliving(ctx, set.rows, readsUserEdits, 'user')
   // A create keeps its row only for the user's writes, whatever the set's mode.
-  const fieldEdits = set.yieldTo === 'any' ? await fieldEditsOutliving(set, ctx) : laterUserEdits
+  const laterUserEdits = await userEditsOutliving(
+    ctx,
+    set.rows,
+    set.yieldTo === 'user' ? readsUserEdits : isRowKeepingCreate,
+    'user',
+  )
+  const fieldEdits = set.yieldTo === 'user' ? laterUserEdits : await fieldEditsOutliving(set, ctx)
   const liveLinks = await liveLinkFilter(set.rows, ctx)
 
   for (const delta of set.rows) {
@@ -760,7 +765,10 @@ function oldestKeepingWrite(edits: readonly Delta[], columns: readonly string[])
 
 // A delete's undo re-inserts the whole row whatever came after, so it reads no user edits.
 function readsUserEdits(delta: Delta): boolean {
-  if (delta.op === 'update') return true
+  return delta.op === 'update' || isRowKeepingCreate(delta)
+}
+
+function isRowKeepingCreate(delta: Delta): boolean {
   return delta.op === 'create' && resolveByTable(delta.targetTable)?.rowKeepingColumns != null
 }
 
