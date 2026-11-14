@@ -545,20 +545,6 @@ patch`, which 5.5a marks `restated`, so a close tool's write of it
   blocked-while-generating copy, or keeping the confirm open, would say
   what happened. Raised in Slice 5.12's review of Task 12 and its final
   review.
-- **A refused regenerate dispatch gives no feedback, and
-  `openRollback` skips the dispatch guard.** `runRegenerate` in
-  `app/reader-composer/[branchId].tsx` returns null with only a
-  `logger.warn` when `beginDispatch()` refuses, so a ↻ tap whose
-  dispatch started during the counts read, or a confirmed regenerate
-  that closed its confirm first, does nothing visible.
-  `handleRequestRegenerate` returns early on `dispatchInFlightRef`, but
-  `openRollback` doesn't check it, so a rollback confirm can open over
-  an in-flight dispatch. If that dispatch is a ↻ tap whose regenerate
-  then refuses `counts-changed`, the tap shows nothing: a tap raises no
-  toast for that refusal, since it opens the regenerate confirm instead,
-  and `confirmAfterImmediateRefusal` keeps the rollback confirm already
-  open, so only `pipeline.regenerate_rejected` logs it (read, not run).
-  Raised in Slice 5.12's review of Task 9 and its slice review.
 - **A dialog whose actions and Cancel all disable while saving
   probably drops focus on web.** `UnsavedChangesDialog`
   (`components/compounds/unsaved-changes-dialog.tsx`) disables Cancel,

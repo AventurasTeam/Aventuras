@@ -44,6 +44,7 @@ import { ReaderSurface } from '@/components/reader/reader-surface'
 import {
   classifyRegenerateGate,
   loadRegenerateCountsIfCurrent,
+  loadRollbackCountsIfCurrent,
 } from '@/components/reader/regenerate-gate'
 import {
   latestReplyOf,
@@ -1196,12 +1197,22 @@ export default function ReaderComposerRoute() {
 
   const openRollback = useCallback(
     async (targetId: string) => {
+      // As ↻'s: the dispatch's streaming card says why the tap opened nothing.
+      if (dispatchInFlightRef.current) return
       // A tapped delete silently doing nothing reads as broken — and the count
       // read is a DB round trip that can reject as well as refuse.
-      let counts: RollbackCounts | StoryEntryRejection
+      let counts: RollbackCounts | StoryEntryRejection | null
       const countedAtSettle = generationStore.getSettleCount()
       try {
-        counts = await getRollbackCounts(branchId, targetId, ctx)
+        counts = await loadRollbackCountsIfCurrent(
+          () => getRollbackCounts(branchId, targetId, ctx),
+          () => ({
+            startedBranchId: branchId,
+            currentBranchId: branchIdRef.current,
+            loadedBranchId: entriesStore.getLoadedBranch(),
+            dispatchInFlight: dispatchInFlightRef.current,
+          }),
+        )
       } catch (err) {
         logger.error('action_layer.rollback_counts_threw', {
           branchId,
@@ -1211,6 +1222,7 @@ export default function ReaderComposerRoute() {
         toast.error(t('reader:rollbackFailed'))
         return
       }
+      if (counts == null) return
       if ('status' in counts) {
         toast.error(t('reader:rollbackFailed'))
         return

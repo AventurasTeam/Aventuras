@@ -6,6 +6,7 @@ import {
   canContinueRegeneratePreflight,
   classifyRegenerateGate,
   loadRegenerateCountsIfCurrent,
+  loadRollbackCountsIfCurrent,
 } from './regenerate-gate'
 
 describe('classifyRegenerateGate', () => {
@@ -111,5 +112,47 @@ describe('regenerate dispatch preflight', () => {
         () => current,
       ),
     ).resolves.toBe(counts)
+  })
+})
+
+describe('rollback confirm preflight', () => {
+  const COUNTS: RollbackCounts = {
+    entries: 2,
+    chapters: 0,
+    worldStateChanges: 1,
+    closeWrites: 0,
+    reopenedChapter: null,
+    removedChapters: [],
+  }
+  const current = {
+    startedBranchId: 'br_1',
+    currentBranchId: 'br_1',
+    loadedBranchId: 'br_1',
+    dispatchInFlight: false,
+  }
+
+  it('discards counts when a dispatch starts or the branch moves while they load', async () => {
+    for (const moved of [
+      { dispatchInFlight: true },
+      { currentBranchId: 'br_2' },
+      { loadedBranchId: 'br_2' },
+    ]) {
+      let state = current
+      const result = loadRollbackCountsIfCurrent(
+        async () => COUNTS,
+        () => state,
+      )
+      state = { ...current, ...moved }
+      expect(await result).toBeNull()
+    }
+  })
+
+  it('returns counts when nothing moved', async () => {
+    await expect(
+      loadRollbackCountsIfCurrent(
+        async () => COUNTS,
+        () => current,
+      ),
+    ).resolves.toBe(COUNTS)
   })
 })
