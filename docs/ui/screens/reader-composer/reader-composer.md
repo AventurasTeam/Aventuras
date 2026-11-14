@@ -279,9 +279,9 @@ re-run. The pass or close moves to the next turn, and a toast says so
 exception: the close it replaces has committed, so a regenerate reaching
 that chapter is held until the re-run ends; Cancel stops it first.
 
-A pass or close can still commit as the interrupt lands, since the
-counts leave out its rows and the set the regenerate resolves holds
-them. The regenerate then refuses `counts-changed` and
+A pass or close can still commit as the interrupt lands; the counts
+left out its rows, and the set the regenerate resolves now holds them.
+The regenerate then refuses `counts-changed` and
 the reader opens the regenerate confirm on the fresh counts, with no
 toast, since the ↻ tap has no open confirm for the toast to refer to.
 
