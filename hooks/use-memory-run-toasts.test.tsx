@@ -20,6 +20,7 @@ import { openCloseFixture } from '@/lib/pipeline/definitions/__tests__/close-fix
 import {
   chapterOverlaysStore,
   chaptersStore,
+  closeResultChapter,
   currentStoryStore,
   resetAllStores,
   type DeferredWorkKind,
@@ -89,8 +90,9 @@ function report(actionId: string, stopped: CloseReport['stopped'] = []): CloseRe
   return { version: 1, actionId, calls: [], stopped, noToolCalls: true }
 }
 
+// An explicit open from the story list, as each one bumps openSeq.
 function openStory(branchId = 'br_1'): void {
-  currentStoryStore.set({
+  currentStoryStore.open({
     storyId: 's1',
     branchId,
     definition: storyDefinitionSchema.parse({
@@ -263,7 +265,12 @@ describe('useMemoryRunToasts', () => {
       render(<Probe />)
       committed('act_close')
       await vi.waitFor(() =>
-        expect(held()).toEqual({ branchId: 'br_1', chapterId: 'chap_2', stoppedTasks: 0 }),
+        expect(held()).toEqual({
+          branchId: 'br_1',
+          openSeq: 1,
+          chapterId: 'chap_2',
+          stoppedTasks: 0,
+        }),
       )
       expect(reads.latest).toHaveBeenCalledWith(expect.anything(), 'br_1')
       expect(shown).toEqual([])
@@ -357,7 +364,12 @@ describe('useMemoryRunToasts', () => {
       render(<Probe />)
       committed('act_close')
       await vi.waitFor(() =>
-        expect(held()).toEqual({ branchId: 'br_1', chapterId: 'chap_2', stoppedTasks: 0 }),
+        expect(held()).toEqual({
+          branchId: 'br_1',
+          openSeq: 1,
+          chapterId: 'chap_2',
+          stoppedTasks: 0,
+        }),
       )
       expect(warn).toHaveBeenCalledWith('app.close_result_read_failed', {
         branchId: 'br_1',
@@ -388,6 +400,28 @@ describe('useMemoryRunToasts', () => {
       await vi.waitFor(() => expect(held()?.chapterId).toBe('chap_2'))
       committed('act_close_3')
       await vi.waitFor(() => expect(held()?.chapterId).toBe('chap_3'))
+    })
+
+    // A reopen keeps the branch id, so only the open it committed in tells the result is stale.
+    it('stamps the open the close committed in, so a read that lands after a reopen holds nothing', async () => {
+      openStory()
+      chaptersStore.hydrate('br_1', [chapter('chap_2', 2)])
+      let resolveRead!: (value: { chapterId: string; report: CloseReport }) => void
+      reads.latest.mockReturnValue(
+        new Promise((resolve) => {
+          resolveRead = resolve
+        }),
+      )
+      render(<Probe />)
+      committed('act_close')
+      await vi.waitFor(() => expect(reads.latest).toHaveBeenCalledTimes(1))
+      openStory()
+      resolveRead({ chapterId: 'chap_2', report: report('act_close') })
+      await vi.waitFor(() => expect(held()?.openSeq).toBe(1))
+
+      const rows = chaptersStore.getChapters()
+      expect(closeResultChapter(held(), rows, { branchId: 'br_1', openSeq: 2 })).toBeNull()
+      expect(closeResultChapter(held(), rows, { branchId: 'br_1', openSeq: 1 })?.id).toBe('chap_2')
     })
 
     it('holds nothing when it unmounts with the read in flight', async () => {
@@ -493,6 +527,7 @@ describe('useMemoryRunToasts', () => {
       await vi.waitFor(() =>
         expect(chapterOverlaysStore.getState().closeResult).toEqual({
           branchId: 'b1',
+          openSeq: 1,
           chapterId: 'chap_2',
           stoppedTasks: 0,
         }),
@@ -580,7 +615,7 @@ describe('useMemoryRunToasts', () => {
       }).chain
 
       await vi.waitFor(() =>
-        expect(held()).toEqual({ branchId: fx.branchId, chapterId, stoppedTasks: 1 }),
+        expect(held()).toEqual({ branchId: fx.branchId, openSeq: 0, chapterId, stoppedTasks: 1 }),
       )
       expect(storeHadReport).toEqual([true])
       expect(chaptersStore.getById(chapterId)?.hasCloseReport).toBe(true)

@@ -12,6 +12,7 @@ import {
   generationStore,
   resetAllStores,
   type CloseProgress,
+  type OpenStory,
   type RunState,
   type StoreChapter,
 } from '@/lib/stores'
@@ -50,8 +51,8 @@ function close(over: Partial<RunState> = {}): RunState {
   return run(CHAPTER_CLOSE_KIND, { interruptible: 'close', currentPhase: '', ...over })
 }
 
-function openStory(branchId = 'branch-1'): void {
-  currentStoryStore.set({
+function story(branchId: string): OpenStory {
+  return {
     storyId: 'story-1',
     branchId,
     definition: storyDefinitionSchema.parse({
@@ -65,7 +66,16 @@ function openStory(branchId = 'branch-1'): void {
       worldTimeOrigin: { year: 0 },
     }),
     settings: STORY_SETTINGS_DEFAULTS,
-  })
+  }
+}
+
+function openStory(branchId = 'branch-1'): void {
+  currentStoryStore.set(story(branchId))
+}
+
+// Back to the story list and into the same story again.
+function reopenStory(branchId = 'branch-1'): void {
+  currentStoryStore.open(story(branchId))
 }
 
 function runBanner(state: MemoryRunBannerState | null) {
@@ -100,8 +110,9 @@ function chapter(over: Partial<StoreChapter> = {}): StoreChapter {
   }
 }
 
-function holdResult(stoppedTasks = 0, branchId = 'branch-1'): void {
-  chapterOverlaysStore.showCloseResult({ branchId, chapterId: 'chap_2', stoppedTasks })
+function holdResult(stoppedTasks = 0, branchId = 'branch-1', chapterId = 'chap_2'): void {
+  const openSeq = currentStoryStore.getOpenSeq()
+  chapterOverlaysStore.showCloseResult({ branchId, openSeq, chapterId, stoppedTasks })
 }
 
 afterEach(() => {
@@ -333,6 +344,17 @@ describe("useMemoryRunBanner — a committed close's done state", () => {
     expect(result.current).toBeNull()
   })
 
+  it('shows nothing once the story is left and opened again, though the branch is the same', () => {
+    reopenStory()
+    chaptersStore.hydrate('branch-1', [chapter()])
+    holdResult()
+    const { result } = renderHook(() => useMemoryRunBanner())
+    expect(result.current?.kind).toBe('closed')
+
+    act(() => reopenStory())
+    expect(result.current).toBeNull()
+  })
+
   it('shows nothing once the chapter leaves the store or loses its report', () => {
     openStory()
     chaptersStore.hydrate('branch-1', [chapter()])
@@ -363,11 +385,7 @@ describe('useMemoryRunBanner — an older close result beside a newer close', ()
     chaptersStore.hydrate('branch-1', [
       chapter({ id: 'chap_1', sequenceNumber: 1, title: 'Old Chapter' }),
     ])
-    chapterOverlaysStore.showCloseResult({
-      branchId: 'branch-1',
-      chapterId: 'chap_1',
-      stoppedTasks: 0,
-    })
+    holdResult(0, 'branch-1', 'chap_1')
   }
 
   // The new close's row lands at its metadata phase, before the report that marks it closed.
@@ -411,13 +429,7 @@ describe('useMemoryRunBanner — an older close result beside a newer close', ()
     })
     act(() => generationStore.finishRun(closing.runId))
     record()
-    act(() =>
-      chapterOverlaysStore.showCloseResult({
-        branchId: 'branch-1',
-        chapterId: 'chap_2',
-        stoppedTasks: 1,
-      }),
-    )
+    act(() => holdResult(1))
     record()
 
     expect(labels).toEqual([

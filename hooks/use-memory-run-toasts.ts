@@ -37,11 +37,13 @@ function latestStoreChapter(branchId: string): StoreChapter | undefined {
 async function committedClose(actionId: string): Promise<CloseResult | null> {
   const branchId = currentStoryStore.getCurrentStory()?.branchId
   if (branchId == null) return null
+  // Read before the await, so a read that lands after a reopen holds a result for the earlier open.
+  const openSeq = currentStoryStore.getOpenSeq()
   try {
     const latest = await readLatestCloseReport(db, branchId)
     const report = latest?.report
     if (latest == null || report == null || report.actionId !== actionId) return null
-    return { branchId, chapterId: latest.chapterId, stoppedTasks: report.stopped.length }
+    return { branchId, openSeq, chapterId: latest.chapterId, stoppedTasks: report.stopped.length }
   } catch (error) {
     logger.warn('app.close_result_read_failed', {
       branchId,
@@ -49,7 +51,7 @@ async function committedClose(actionId: string): Promise<CloseResult | null> {
       error: error instanceof Error ? error.message : String(error),
     })
     const chapter = latestStoreChapter(branchId)
-    return chapter == null ? null : { branchId, chapterId: chapter.id, stoppedTasks: 0 }
+    return chapter == null ? null : { branchId, openSeq, chapterId: chapter.id, stoppedTasks: 0 }
   }
 }
 

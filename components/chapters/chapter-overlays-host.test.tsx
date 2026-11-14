@@ -27,6 +27,7 @@ import {
   loreStore,
   resetAllStores,
   threadsStore,
+  type OpenStory,
   type RunState,
   type StoreChapter,
 } from '@/lib/stores'
@@ -210,8 +211,8 @@ function chapter(over: Partial<StoreChapter> = {}): StoreChapter {
   }
 }
 
-function openStory(branchId = 'br_1'): void {
-  currentStoryStore.set({
+function story(branchId: string): OpenStory {
+  return {
     storyId: 'story_1',
     branchId,
     definition: storyDefinitionSchema.parse({
@@ -225,7 +226,17 @@ function openStory(branchId = 'br_1'): void {
       worldTimeOrigin: { year: 0 },
     }),
     settings: STORY_SETTINGS_DEFAULTS,
-  })
+  }
+}
+
+// A branch switch or reload republishes the open; it isn't a new open of the story.
+function openStory(branchId = 'br_1'): void {
+  currentStoryStore.set(story(branchId))
+}
+
+// Back to the story list and into the same story again.
+function reopenStory(branchId = 'br_1'): void {
+  currentStoryStore.open(story(branchId))
 }
 
 function settleRun(): void {
@@ -279,8 +290,9 @@ async function openReady(): Promise<ReviewWindowProps> {
   return shown()
 }
 
-function holdResult(branchId: string, stoppedTasks = 0): void {
-  chapterOverlaysStore.showCloseResult({ branchId, chapterId: 'chap_2', stoppedTasks })
+function holdResult(branchId: string, stoppedTasks = 0, chapterId = 'chap_2'): void {
+  const openSeq = currentStoryStore.getOpenSeq()
+  chapterOverlaysStore.showCloseResult({ branchId, openSeq, chapterId, stoppedTasks })
 }
 
 beforeEach(() => {
@@ -605,6 +617,7 @@ describe('ChapterOverlaysHost — the derived rule', () => {
     act(() => holdResult('br_1'))
     expect(chapterOverlaysStore.getState().closeResult).toEqual({
       branchId: 'br_1',
+      openSeq: 0,
       chapterId: 'chap_2',
       stoppedTasks: 0,
     })
@@ -620,10 +633,39 @@ describe('ChapterOverlaysHost — the derived rule', () => {
     expect(chapterOverlaysStore.getState().closeResult).toBeNull()
   })
 
-  it('clears a held close result when the story closes', () => {
+  it('clears a held close result when another branch opens', () => {
     renderHost()
     act(() => holdResult('br_1'))
-    act(() => currentStoryStore.clear())
+    act(() => openStory('br_2'))
     expect(chapterOverlaysStore.getState().closeResult).toBeNull()
+  })
+
+  it('clears a held close result when the story is left and opened again on the same branch', () => {
+    act(() => reopenStory())
+    renderHost()
+    act(() => holdResult('br_1'))
+    expect(chapterOverlaysStore.getState().closeResult).not.toBeNull()
+
+    act(() => reopenStory())
+    expect(chapterOverlaysStore.getState().closeResult).toBeNull()
+  })
+
+  it("keeps a newer close's result in the same open", () => {
+    renderHost()
+    act(() => holdResult('br_1'))
+    act(() =>
+      chaptersStore.patch('br_1', {
+        op: 'create',
+        id: 'chap_3',
+        row: chapter({ id: 'chap_3', sequenceNumber: 3 }),
+      }),
+    )
+    act(() => holdResult('br_1', 1, 'chap_3'))
+    expect(chapterOverlaysStore.getState().closeResult).toEqual({
+      branchId: 'br_1',
+      openSeq: 0,
+      chapterId: 'chap_3',
+      stoppedTasks: 1,
+    })
   })
 })

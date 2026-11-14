@@ -79,7 +79,8 @@ function bannerLabel(run: RunState): string | null {
 
 /**
  * The open branch's pass or close while one runs, its Cancel interrupting the run (deferring it to
- * the next Send); else the close it last committed there, until reviewed, dismissed or reversed.
+ * the next Send); else the close it last committed in this open, until reviewed, dismissed or
+ * reversed.
  * The result shows only while its chapter is the branch's latest, so an older close never reads as
  * current.
  */
@@ -89,9 +90,10 @@ export function useMemoryRunBanner(): MemoryRunBannerState | null {
   const run = generationStore.useGeneration((s) =>
     branchId == null ? undefined : selectMemoryRun(s.txState, { branchId }),
   )
+  const openSeq = currentStoryStore.useOpenSeq()
   const result = chapterOverlaysStore.useOverlays((s) => s.closeResult)
-  const chapter = chaptersStore.useChapters((rows) =>
-    result == null ? undefined : rows.get(result.chapterId),
+  const held = chaptersStore.useChapters((rows) =>
+    closeResultChapter(result, rows, { branchId, openSeq }),
   )
   const latestChapter = chaptersStore.useChapters(chaptersStore.selectLatest)
 
@@ -101,7 +103,6 @@ export function useMemoryRunBanner(): MemoryRunBannerState | null {
     return { kind: 'run', label, onCancel: () => void interruptMemoryRuns(runBranchId) }
   }
 
-  const held = closeResultChapter(result, chapter, branchId)
   if (result == null || held == null || held.id !== latestChapter?.id) return null
   const { chapterId, stoppedTasks } = result
   const clear = () => chapterOverlaysStore.clearCloseResult()

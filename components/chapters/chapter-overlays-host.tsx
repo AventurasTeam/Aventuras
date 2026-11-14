@@ -86,16 +86,12 @@ export function ChapterOverlaysHost(): ReactElement | null {
   const review = chapterOverlaysStore.useOverlays((s) => s.review)
   const closeResult = chapterOverlaysStore.useOverlays((s) => s.closeResult)
   const openBranchId = currentStoryStore.useCurrentStory((open) => open?.branchId ?? null)
+  const openSeq = currentStoryStore.useOpenSeq()
   const reviewChapter = chaptersStore.useChapters((rows) =>
     overlayChapter(review == null ? undefined : rows.get(review.chapterId), openBranchId),
   )
   const resultHolds = chaptersStore.useChapters(
-    (rows) =>
-      closeResultChapter(
-        closeResult,
-        closeResult == null ? undefined : rows.get(closeResult.chapterId),
-        openBranchId,
-      ) != null,
+    (rows) => closeResultChapter(closeResult, rows, { branchId: openBranchId, openSeq }) != null,
   )
 
   // Pruned, not hidden: a redo restores the same chapter id, and nothing may reopen by itself.

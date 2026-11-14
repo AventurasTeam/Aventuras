@@ -12,7 +12,13 @@ export type OverlaySurface = {
 export type CloseModalRequest = { branchId: string; endEntryId?: string }
 
 /** A committed close, held for the commit banner's done state. */
-export type CloseResult = { branchId: string; chapterId: string; stoppedTasks: number }
+export type CloseResult = {
+  branchId: string
+  /** The story open it committed in: a reopen keeps the branch id, so only this tells them apart. */
+  openSeq: number
+  chapterId: string
+  stoppedTasks: number
+}
 
 export type ChapterOverlaysState = {
   review: { chapterId: string } | null
@@ -33,15 +39,15 @@ export function overlayChapter<C extends HeldChapter>(
     : null
 }
 
-/** C7: a committed close's chapter while its result is the open branch's and it stands; else null. */
+/** C7: a committed close's chapter while its result is the current open's and it stands; else null. */
 export function closeResultChapter<C extends HeldChapter>(
   result: CloseResult | null,
-  chapter: C | undefined,
-  openBranchId: string | null,
+  chapters: ReadonlyMap<string, C>,
+  open: { branchId: string | null; openSeq: number },
 ): C | null {
-  return result != null && result.branchId === openBranchId
-    ? overlayChapter(chapter, openBranchId)
-    : null
+  if (result == null || result.branchId !== open.branchId || result.openSeq !== open.openSeq)
+    return null
+  return overlayChapter(chapters.get(result.chapterId), open.branchId)
 }
 
 const INITIAL: ChapterOverlaysState = { review: null, closeModal: null, closeResult: null }

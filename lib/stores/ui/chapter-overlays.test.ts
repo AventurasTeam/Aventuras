@@ -93,16 +93,19 @@ describe('chapterOverlaysStore', () => {
   it("replaces a held close result with a newer close's", () => {
     chapterOverlaysStore.showCloseResult({
       branchId: 'br_hero',
+      openSeq: 1,
       chapterId: 'chap_hero_2',
       stoppedTasks: 1,
     })
     chapterOverlaysStore.showCloseResult({
       branchId: 'br_hero',
+      openSeq: 1,
       chapterId: 'chap_hero_3',
       stoppedTasks: 0,
     })
     expect(chapterOverlaysStore.getState().closeResult).toStrictEqual({
       branchId: 'br_hero',
+      openSeq: 1,
       chapterId: 'chap_hero_3',
       stoppedTasks: 0,
     })
@@ -119,7 +122,7 @@ describe('chapterOverlaysStore', () => {
     chapterOverlaysStore.openCloseModal(request)
     expect(chapterOverlaysStore.getState().closeModal).not.toBe(request)
 
-    const result = { branchId: 'br_hero', chapterId: 'chap_hero_2', stoppedTasks: 0 }
+    const result = { branchId: 'br_hero', openSeq: 1, chapterId: 'chap_hero_2', stoppedTasks: 0 }
     chapterOverlaysStore.showCloseResult(result)
     expect(chapterOverlaysStore.getState().closeResult).not.toBe(result)
   })
@@ -129,6 +132,7 @@ describe('chapterOverlaysStore', () => {
     chapterOverlaysStore.openCloseModal({ branchId: 'br_hero' })
     chapterOverlaysStore.showCloseResult({
       branchId: 'br_hero',
+      openSeq: 1,
       chapterId: 'chap_hero_2',
       stoppedTasks: 0,
     })
@@ -153,7 +157,13 @@ describe('chapterOverlaysStore', () => {
 
 describe('the overlays hold rule', () => {
   const held = { branchId: 'br_1', hasCloseReport: true }
-  const result = { branchId: 'br_1', chapterId: 'chap_1', stoppedTasks: 0 }
+  const other = { branchId: 'br_1', hasCloseReport: true }
+  const chapters = new Map([
+    ['chap_1', held],
+    ['chap_2', other],
+  ])
+  const result = { branchId: 'br_1', openSeq: 3, chapterId: 'chap_1', stoppedTasks: 0 }
+  const open = { branchId: 'br_1', openSeq: 3 }
 
   it('gives back a chapter with a report on the open branch, and null for any other', () => {
     expect(overlayChapter(held, 'br_1')).toBe(held)
@@ -163,11 +173,20 @@ describe('the overlays hold rule', () => {
     expect(overlayChapter(held, null)).toBeNull()
   })
 
-  it("gives back a close result's chapter while the result is the open branch's and it stands", () => {
-    expect(closeResultChapter(result, held, 'br_1')).toBe(held)
-    expect(closeResultChapter(null, held, 'br_1')).toBeNull()
-    expect(closeResultChapter({ ...result, branchId: 'br_2' }, held, 'br_1')).toBeNull()
-    expect(closeResultChapter(result, { ...held, hasCloseReport: false }, 'br_1')).toBeNull()
-    expect(closeResultChapter(result, undefined, 'br_1')).toBeNull()
+  it("gives back a close result's own chapter while the result is the open's and it stands", () => {
+    expect(closeResultChapter(result, chapters, open)).toBe(held)
+    expect(closeResultChapter({ ...result, chapterId: 'chap_2' }, chapters, open)).toBe(other)
+    expect(closeResultChapter(null, chapters, open)).toBeNull()
+    expect(closeResultChapter({ ...result, branchId: 'br_2' }, chapters, open)).toBeNull()
+    expect(closeResultChapter(result, chapters, { ...open, branchId: null })).toBeNull()
+    expect(
+      closeResultChapter(result, new Map([['chap_1', { ...held, hasCloseReport: false }]]), open),
+    ).toBeNull()
+    expect(closeResultChapter(result, new Map(), open)).toBeNull()
+  })
+
+  // A reopen of the same story keeps its branch id; only the open's sequence tells them apart.
+  it('gives back null for a result held from an earlier open of the same branch', () => {
+    expect(closeResultChapter(result, chapters, { ...open, openSeq: 4 })).toBeNull()
   })
 })
