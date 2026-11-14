@@ -2698,8 +2698,13 @@ its sweep, once the interrupt has ended any pass or close, and an
 orchestrator holds under the run's `actionId` through the action port
 (`holdBranchWriteExclusive` / `releaseBranchWriteExclusive`). Boot
 recovery runs before any branch loads. The rollback preview writes
-nothing but takes the lock shared around its set selection, so
-neither reversal can land between the closure's reads. A pass's burst
+nothing but takes the lock shared around its set selection and the
+counts it reads from that set, so neither reversal can land between
+those reads; the chapter delete preview holds it the same way. The
+rollback preview leaves a running pass's or close's own rows out of
+every count, since confirming interrupts that run and its abort
+reverses them before the sweep; the set keeps them, so a run that
+commits as the interrupt lands changes the counts. A pass's burst
 takes no hold across its writes, so a preview may see part of one; the
 confirm-time count check (`counts-changed`) keeps the confirm exact. A
 write arriving meanwhile waits a few milliseconds; nothing is disabled

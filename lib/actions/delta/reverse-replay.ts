@@ -670,7 +670,8 @@ async function clearRef(walk: UndoWalk, { row, ref }: RefClear): Promise<void> {
   if (copy && !copy.removed) copy.row[ref.column] = cleared(copy.row[ref.column])
 }
 
-// Machine undos yield to later user edits: generation-pipeline.md → Reverse-replay.
+// Machine undos yield to later user edits; a chapter delete's field restores yield to any later
+// write but a retrieval bump (generation-pipeline.md → Reverse-replay).
 async function buildUndoOps(
   set: ReversalSet,
   ctx: DbCtx,
@@ -688,15 +689,21 @@ async function buildUndoOps(
     swept: new Map(),
   }
   const listVecTables = vecTableLister(ctx)
-  const laterUserEdits = await userEditsOutliving(ctx, set.rows, readsUserEdits)
+  // A create keeps its row only for the user's writes, whatever the set's mode.
+  const laterUserEdits = await userEditsOutliving(
+    ctx,
+    set.rows,
+    set.yieldTo === 'user' ? readsUserEdits : isRowKeepingCreate,
+    'user',
+  )
+  const fieldEdits = set.yieldTo === 'user' ? laterUserEdits : await fieldEditsOutliving(set, ctx)
   const liveLinks = await liveLinkFilter(set.rows, ctx)
 
   for (const delta of set.rows) {
     const target = undoTargetOf(delta)
-    const userEdits = laterUserEdits.get(delta.id) ?? []
-    if (delta.op === 'create') await undoCreate(walk, target, userEdits)
+    if (delta.op === 'create') await undoCreate(walk, target, laterUserEdits.get(delta.id) ?? [])
     else if (delta.op === 'delete') undoDelete(walk, target, liveLinks)
-    else await undoUpdate(walk, target, userEdits)
+    else await undoUpdate(walk, target, fieldEdits.get(delta.id) ?? [])
   }
   // After the walk, so a clear lands on the row as every undo of it leaves it.
   for (const clear of set.refClears) await clearRef(walk, clear)
@@ -727,6 +734,30 @@ async function buildUndoOps(
   }
 }
 
+function fieldEditsOutliving(set: ReversalSet, ctx: DbCtx): Promise<ReadonlyMap<string, Delta[]>> {
+  return userEditsOutliving(ctx, set.rows, (d) => d.op === 'update', set.yieldTo)
+}
+
+/**
+ * The ids of the set's `update` deltas whose undo restores some field under the set's yield mode,
+ * read as the walk reads them; one a later write replaced in every field restores nothing.
+ */
+export async function restoringUpdates(set: ReversalSet, ctx: DbCtx): Promise<ReadonlySet<string>> {
+  const fieldEdits = await fieldEditsOutliving(set, ctx)
+  const restoring = new Set<string>()
+  for (const delta of set.rows) {
+    if (delta.op !== 'update') continue
+    const payload = restorablePayload(
+      undoTargetOf(delta).entry,
+      (delta.undoPayload ?? {}) as Record<string, unknown>,
+      fieldEdits.get(delta.id) ?? [],
+      delta,
+    )
+    if (Object.keys(payload).length > 0) restoring.add(delta.id)
+  }
+  return restoring
+}
+
 function oldestKeepingWrite(edits: readonly Delta[], columns: readonly string[]): Delta {
   const keeping = edits.filter((e) => columns.some((col) => wroteColumn([e], col)))
   return keeping.reduce((oldest, e) => (e.logPosition < oldest.logPosition ? e : oldest))
@@ -734,7 +765,10 @@ function oldestKeepingWrite(edits: readonly Delta[], columns: readonly string[])
 
 // A delete's undo re-inserts the whole row whatever came after, so it reads no user edits.
 function readsUserEdits(delta: Delta): boolean {
-  if (delta.op === 'update') return true
+  return delta.op === 'update' || isRowKeepingCreate(delta)
+}
+
+function isRowKeepingCreate(delta: Delta): boolean {
   return delta.op === 'create' && resolveByTable(delta.targetTable)?.rowKeepingColumns != null
 }
 

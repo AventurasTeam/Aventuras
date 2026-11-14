@@ -30,7 +30,6 @@ const COPY = {
   regenerate: 'Regenerate summary',
   regenerateLater: 'Regenerating a summary lands in a later milestone',
   delete: 'Delete…',
-  deleteLater: 'Deleting a chapter lands in a later milestone',
   review: 'Review changes',
   more: 'More chapter actions',
   title: 'Title',
@@ -102,6 +101,8 @@ type HarnessProps = {
   onSave: (draft: ChapterDraft) => Promise<ChapterSaveResult>
   onJump: () => void
   onReview: () => void
+  /** The latest card's `Delete…`; in the route, its guard and the confirm stand behind it. */
+  onDelete: () => void
   /** The route's focus, forwarded to the in-card bar's Ctrl-S. */
   hotkeysEnabled: boolean
 }
@@ -113,6 +114,7 @@ function CardHarness({
   onSave,
   onJump,
   onReview,
+  onDelete,
   hotkeysEnabled,
 }: HarnessProps) {
   const [cell] = useState(() => externalCell(data.row))
@@ -160,6 +162,7 @@ function CardHarness({
         hotkeysEnabled={hotkeysEnabled}
         onJump={onJump}
         onReview={onReview}
+        onDelete={onDelete}
       />
       {/* The route's phone bar: a sibling of the scroller, outside every card. */}
       {isPhone ? (
@@ -191,6 +194,7 @@ const meta: Meta<typeof CardHarness> = {
     onSave: fn(async (): Promise<ChapterSaveResult> => ({ status: 'ok', id: TRAIL.id })),
     onJump: fn(),
     onReview: fn(),
+    onDelete: fn(),
     hotkeysEnabled: true,
   },
   decorators: [
@@ -230,7 +234,7 @@ function expectInOrder(elements: readonly HTMLElement[]) {
   }
 }
 
-/** The latest card: Jump and Review live, Regenerate and Delete… disabled with their reasons. */
+/** The latest card: Jump, Review changes and Delete… live, Regenerate disabled with its reason. */
 export const Latest: Story = {
   play: async ({ args }) => {
     const card = await findCard()
@@ -244,14 +248,17 @@ export const Latest: Story = {
     expect(regenerate).toHaveAttribute('aria-disabled', 'true')
     expect(screen.getByTitle(COPY.regenerateLater)).toContainElement(regenerate)
     const remove = within(card).getByRole('button', { name: COPY.delete })
-    expect(remove).toHaveAttribute('aria-disabled', 'true')
-    expect(screen.getByTitle(COPY.deleteLater)).toContainElement(remove)
+    expect(remove).not.toHaveAttribute('aria-disabled', 'true')
     const review = within(card).getByRole('button', { name: COPY.review })
     expect(review).not.toHaveAttribute('aria-disabled', 'true')
     // Canon's order: Regenerate summary, Review changes, Delete….
     expectInOrder([regenerate, review, remove])
     await userEvent.click(review)
     await waitFor(() => expect(args.onReview).toHaveBeenCalledTimes(1), WAIT)
+    expect(args.onDelete).not.toHaveBeenCalled()
+    await userEvent.click(remove)
+    await waitFor(() => expect(args.onDelete).toHaveBeenCalledTimes(1), WAIT)
+    expect(args.onReview).toHaveBeenCalledTimes(1)
 
     expect(within(card).getByText('Day 2 → Day 3')).toBeVisible()
     expect(within(card).getByText('12,400 tok')).toBeVisible()
@@ -304,6 +311,7 @@ export const Collapsed: Story = {
         hotkeysEnabled
         onJump={NOOP}
         onReview={NOOP}
+        onDelete={NOOP}
       />
       <ChapterCard
         data={EARLIER}
@@ -312,6 +320,7 @@ export const Collapsed: Story = {
         hotkeysEnabled
         onJump={NOOP}
         onReview={NOOP}
+        onDelete={NOOP}
       />
     </View>
   ),
@@ -374,6 +383,7 @@ function LaggingFormHarness() {
       hotkeysEnabled
       onJump={NOOP}
       onReview={NOOP}
+      onDelete={NOOP}
     />
   )
 }
@@ -469,7 +479,7 @@ export const InvalidDraft: Story = {
   },
 }
 
-/** A run starts mid-edit: fields and Save disable with its reason; Discard, Jump, the head don't. */
+/** A run starts mid-edit: fields, Save and Delete… disable with its reason; Discard, Jump, the head don't. */
 export const Blocked: Story = {
   play: async ({ args }) => {
     const card = await findCard()
@@ -489,6 +499,9 @@ export const Blocked: Story = {
     const save = within(bar).getByRole('button', { name: /^Save/ })
     expect(save).toHaveAttribute('aria-disabled', 'true')
     expect(save.closest('[title]')).toHaveAttribute('title', BLOCKED_REASON)
+    const remove = within(card).getByRole('button', { name: COPY.delete })
+    expect(remove).toHaveAttribute('aria-disabled', 'true')
+    expect(remove.closest('[title]')).toHaveAttribute('title', BLOCKED_REASON)
 
     expect(within(card).getByRole('button', { name: HEADING })).not.toHaveAttribute(
       'aria-disabled',
@@ -539,8 +552,9 @@ export const Phone390Actions: Story = {
     )
     await waitFor(() => expect(regenerate).toBeVisible(), WAIT)
     expect(regenerate).toHaveAttribute('aria-disabled', 'true')
-    const remove = screen.getByRole('menuitem', { name: `${COPY.delete}, ${COPY.deleteLater}` })
-    expect(remove).toHaveAttribute('aria-disabled', 'true')
+    // A live entry's accessible name is its label alone; a disabled one appends its reason.
+    const remove = screen.getByRole('menuitem', { name: COPY.delete })
+    expect(remove).not.toHaveAttribute('aria-disabled', 'true')
     const review = screen.getByRole('menuitem', { name: COPY.review })
     expect(review).not.toHaveAttribute('aria-disabled', 'true')
     expectInOrder([regenerate, review, remove])
@@ -550,6 +564,21 @@ export const Phone390Actions: Story = {
     await waitFor(() => expect(more).toHaveAttribute('aria-expanded', 'false'), WAIT)
     expect(args.onReview).not.toHaveBeenCalled()
     await waitFor(() => expect(args.onReview).toHaveBeenCalledTimes(1), WAIT)
+  },
+}
+
+/** Phone: the latest card's `Delete…` behind `⋯` runs its press, and only its own. */
+export const Phone390Delete: Story = {
+  globals: PHONE,
+  play: async ({ args }) => {
+    const card = await findCard()
+    await userEvent.click(await waitForPhoneActions(card))
+    const remove = await waitFor(() => screen.getByRole('menuitem', { name: COPY.delete }), WAIT)
+    await waitFor(() => expect(remove).toBeVisible(), WAIT)
+
+    await userEvent.click(remove)
+    await waitFor(() => expect(args.onDelete).toHaveBeenCalledTimes(1), WAIT)
+    expect(args.onReview).not.toHaveBeenCalled()
   },
 }
 

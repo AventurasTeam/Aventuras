@@ -97,7 +97,7 @@ async function sweepFrom(
   if ('status' in swept) return swept
   // Compared with the set this sweep reverses, so the consent covers exactly what goes.
   if (expectedCounts) {
-    const counts = rollbackCountsOf(swept.set)
+    const counts = await rollbackCountsOf(swept, ctx)
     if (!sameRollbackCounts(counts, expectedCounts))
       return {
         status: 'rejected',

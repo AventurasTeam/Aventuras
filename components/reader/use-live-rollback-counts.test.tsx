@@ -12,10 +12,11 @@ import { useLiveRollbackCounts } from './use-live-rollback-counts'
 
 type Load = (branchId: string, targetId: string) => Promise<RollbackCounts | StoryEntryRejection>
 
-const OPENED: RollbackCounts = { entries: 3, chapters: 0, worldStateChanges: 2 }
-const REFUSED_FRESH: RollbackCounts = { entries: 3, chapters: 0, worldStateChanges: 5 }
-const AFTER_PASS: RollbackCounts = { entries: 3, chapters: 0, worldStateChanges: 7 }
-const LATER: RollbackCounts = { entries: 3, chapters: 0, worldStateChanges: 9 }
+const AT_REST = { chapters: 0, closeWrites: 0, reopenedChapter: null, removedChapters: [] } as const
+const OPENED: RollbackCounts = { ...AT_REST, entries: 3, worldStateChanges: 2 }
+const REFUSED_FRESH: RollbackCounts = { ...AT_REST, entries: 3, worldStateChanges: 5 }
+const AFTER_PASS: RollbackCounts = { ...AT_REST, entries: 3, worldStateChanges: 7 }
+const LATER: RollbackCounts = { ...AT_REST, entries: 3, worldStateChanges: 9 }
 
 function refused<C extends string>(code: C) {
   return { status: 'rejected', code, reason: `refused: ${code}` } as const

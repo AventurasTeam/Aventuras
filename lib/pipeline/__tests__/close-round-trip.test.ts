@@ -2,6 +2,8 @@ import type { AssistantModelMessage, ToolCallPart } from 'ai'
 import { and, asc, desc, eq, isNotNull, lte } from 'drizzle-orm'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
+import type { ChapterDeleteMode } from '@/lib/actions/chapters/chapter-delete-set'
+import { removeChapter } from '@/lib/actions/chapters/remove-chapter'
 import { startManualClose } from '@/lib/actions/chapters/start-manual-close'
 import {
   applyDeltaAction,
@@ -563,6 +565,49 @@ function keptByRollback(h: CloseHarness, targetId: string): Delta[] {
   )
 }
 
+// C13: the close made one chapter, which each delete mode removes.
+async function removeTheChapter(h: CloseHarness, mode: ChapterDeleteMode): Promise<void> {
+  const [chapter, ...more] = h.closed().state.rows.chapters
+  expect(more, 'the close made one chapter').toEqual([])
+  const id = defined(chapter, 'the close made no chapter').id
+  expect(await removeChapter(h.fx.branchId, id, mode, h.fx.ctx)).toEqual({ status: 'ok' })
+}
+
+// C13: removing the divider reverses the chapter row, its report and its stamps; the rest stands.
+function dividerRemoved(closed: { state: WorldState; log: Delta[] }): {
+  state: WorldState
+  log: Delta[]
+} {
+  const removed = new Set(closed.state.rows.chapters.map((c) => c.id))
+  return {
+    state: {
+      rows: { ...closed.state.rows, chapters: [] },
+      // worldState lists stamped entries only, so a cleared stamp leaves the list.
+      stamped: closed.state.stamped.filter(
+        (e) => e.chapterId === null || !removed.has(e.chapterId),
+      ),
+    },
+    log: closed.log.filter(
+      (d) => d.targetTable !== 'chapters' && d.targetTable !== 'story_entries',
+    ),
+  }
+}
+
+function expectedAfter(h: CloseHarness, arm: RoundTripArm): { state: WorldState; log: Delta[] } {
+  switch (arm.expect) {
+    case 'before-close':
+      return { state: h.before, log: [] }
+    case 'after-close':
+      return h.closed()
+    case 'divider-removed':
+      return dividerRemoved(h.closed())
+    default: {
+      const _exhaustive: never = arm.expect
+      return _exhaustive
+    }
+  }
+}
+
 type RoundTripCase = {
   name: string
   slots: () => CloseAgentSlots
@@ -583,7 +628,7 @@ type RoundTripCase = {
 type RoundTripArm = {
   name: string
   run: (h: CloseHarness) => Promise<void>
-  expect: 'before-close' | 'after-close'
+  expect: 'before-close' | 'after-close' | 'divider-removed'
 }
 
 const STAND_IN_CASE: RoundTripCase = {
@@ -1631,7 +1676,7 @@ const CASES: readonly RoundTripCase[] = [
   FULL_ORDER_CASE,
 ]
 
-/** C9's arms; chapter delete's two modes join here (5.12). */
+/** C9's arms, both chapter delete modes among them. */
 const ARMS: readonly RoundTripArm[] = [
   {
     name: 'CTRL-Z',
@@ -1679,6 +1724,43 @@ const ARMS: readonly RoundTripArm[] = [
       await h.rollBack(h.endEntryId)
     },
   },
+  {
+    name: 'delete the chapter',
+    expect: 'before-close',
+    run: async (h) => {
+      await h.close()
+      await removeTheChapter(h, 'whole')
+    },
+  },
+  {
+    name: 'remove the divider only',
+    expect: 'divider-removed',
+    run: async (h) => {
+      await h.close()
+      await removeTheChapter(h, 'divider-only')
+    },
+  },
+  {
+    name: 'remove the divider only, then CTRL-Z',
+    expect: 'before-close',
+    run: async (h) => {
+      await h.close()
+      await removeTheChapter(h, 'divider-only')
+      expect(await worldState(h.fx), 'the divider went').toEqual(dividerRemoved(h.closed()).state)
+      // The kept work is the newest action, so CTRL-Z reverses it (C13).
+      await undoClose(h)
+    },
+  },
+  {
+    name: 'remove the divider only, then CTRL-Z and redo',
+    expect: 'divider-removed',
+    run: async (h) => {
+      await h.close()
+      await removeTheChapter(h, 'divider-only')
+      await undoClose(h)
+      expect(await redoLastAction(h.fx.branchId, h.fx.ctx)).toEqual({ status: 'ok' })
+    },
+  },
 ]
 
 // Tuples: a `$name` title is cut at about 40 characters, out of `-t`'s reach.
@@ -1688,7 +1770,7 @@ describe.each(CASES.map((c) => [c.name, c] as const))('the round trip of %s', (_
 
     await arm.run(h)
 
-    const expected = arm.expect === 'before-close' ? { state: h.before, log: [] } : h.closed()
+    const expected = expectedAfter(h, arm)
     const own = c.armExpect?.[arm.name]
     if (own === undefined) expect(await worldState(h.fx)).toEqual(expected.state)
     else await own(h)
@@ -1701,6 +1783,36 @@ describe.each(CASES.map((c) => [c.name, c] as const))('the round trip of %s', (_
     expect(others, "other actions' deltas").toEqual(
       target === undefined ? h.beforeLog : keptByRollback(h, target),
     )
+  })
+})
+
+describe('a chapter delete over a record the close normalized', () => {
+  it("keeps a later pass's write to the record whole", async () => {
+    const h = await openHarness(NORMALIZATION_CASE)
+    await h.close()
+    const later = { gold: 2, arrow: 1 }
+    const written = await applyDeltaAction(
+      {
+        action: {
+          kind: 'updateEntityStackables',
+          source: 'periodic_classifier',
+          payload: { branchId: h.fx.branchId, id: TOBIN.id, stackables: later },
+        },
+        actionId: 'act_close_later_purse',
+        branchId: h.fx.branchId,
+        entryId: h.fx.replyIds[5],
+      },
+      h.fx.ctx,
+    )
+    expect(written.status).toBe('ok')
+
+    await removeTheChapter(h, 'whole')
+
+    const [tobin] = await h.fx.ctx.db
+      .select()
+      .from(entities)
+      .where(and(eq(entities.branchId, h.fx.branchId), eq(entities.id, TOBIN.id)))
+    expect((tobin?.state as { stackables?: unknown } | null)?.stackables).toEqual(later)
   })
 })
 

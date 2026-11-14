@@ -2,6 +2,7 @@ import { and, asc, desc, eq, gt, inArray, or, sql } from 'drizzle-orm'
 
 import { chunked, deltas, type Delta, type Entity, type LocationState, type Thread } from '@/lib/db'
 import { isJsonObject } from '@/lib/json-object'
+import { isRetrievalBumpOnly } from '@/lib/row-signals'
 
 import { isUserOriginatedSource, type DbCtx, type PrecedenceTable } from '../types'
 
@@ -94,14 +95,19 @@ function groupBy(items: readonly Delta[], key: (d: Delta) => string): Map<string
   return groups
 }
 
+/** Whose later writes a reversed machine field yields to (generation-pipeline.md → Reverse-replay). */
+export type YieldTo = 'user' | 'any'
+
 /**
- * Maps each machine delta in `rows` that `wanted` accepts to the `user_edit` deltas on its
- * row logged after it that `rows` doesn't also reverse, oldest first. A user delta has none.
+ * Maps each machine delta in `rows` that `wanted` accepts to the deltas on its row logged after it
+ * that `rows` doesn't also reverse, oldest first: `user_edit` ones, or with `'any'` every source
+ * except a `retrievalCount`-only update. A user delta has none.
  */
 export async function userEditsOutliving(
   ctx: DbCtx,
   rows: readonly Delta[],
   wanted: (delta: Delta) => boolean,
+  yieldTo: YieldTo,
 ): Promise<ReadonlyMap<string, Delta[]>> {
   const reversed = new Set(rows.map((r) => r.id))
   const machine = rows.filter((d) => !isUserOriginatedSource(d.source) && wanted(d))
@@ -112,9 +118,14 @@ export async function userEditsOutliving(
     const since = group.reduce((min, d) => Math.min(min, d.logPosition), Infinity)
     const ids = [...new Set(group.map((d) => d.targetId))]
     for (const chunk of chunked(ids))
-      edits.push(...(await rowDeltasAfter(ctx, branchId, targetTable, chunk, since, true)))
+      edits.push(
+        ...(await rowDeltasAfter(ctx, branchId, targetTable, chunk, since, yieldTo === 'user')),
+      )
   }
-  const outliving = edits.filter((e) => !reversed.has(e.id))
+  // A count retrieval bumps every turn is nothing a field yields to (C13).
+  const outliving = edits.filter(
+    (e) => !reversed.has(e.id) && (yieldTo === 'user' || !isRetrievalBumpOnly(e.op, e.undoPayload)),
+  )
   const editsByRow = groupBy(outliving, rowKey)
   return new Map(
     machine.map((d) => [

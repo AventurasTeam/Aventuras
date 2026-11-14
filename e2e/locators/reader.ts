@@ -44,6 +44,23 @@ export function worldStateCountOf(text: string): number | null {
   return match == null ? null : Number(match[1])
 }
 
+function regenerateDialog(page: Page): Locator {
+  return page.getByRole('alertdialog').filter({ has: reader.regenerateConfirm(page) })
+}
+
+// The modal's list of ascending, consecutive chapter numbers, from the keys
+// components/reader/chapter-list-label.ts reads: `5`, `5 and 6`, `5–7`.
+function chapterListCopy(numbers: readonly number[]): string {
+  const first = numbers[0]
+  const last = numbers[numbers.length - 1]
+  if (first === undefined || last === undefined) throw new Error('a chapter list names no chapter')
+  if (numbers.length === 1) return String(first)
+  if (numbers.length === 2) {
+    return t('reader:rollbackConfirm.chapterPair', { first, second: last })
+  }
+  return t('reader:rollbackConfirm.chapterSpan', { first, last })
+}
+
 export const reader = {
   composer: (page: Page): Locator => page.getByPlaceholder(t('reader:composerPlaceholder')),
   send: (page: Page): Locator => page.getByRole('button', { name: t('reader:send') }),
@@ -206,10 +223,35 @@ export const reader = {
       .getByText(new RegExp(`${WORLD_STATE_OTHER}\\s*$`))
       .or(rollbackDialog(page).getByText(WORLD_STATE_ONE, { exact: true })),
 
+  // Each chapter line is omitted when empty; a substring of its raw text, whatever bullet leads it.
+  rollbackChapterReopened: (page: Page, number: number): Locator =>
+    rollbackDialog(page).getByText(t('reader:rollbackConfirm.chapterReopened', { number }), {
+      exact: false,
+    }),
+  rollbackChaptersRemoved: (page: Page, numbers: readonly number[]): Locator =>
+    rollbackDialog(page).getByText(
+      t('reader:rollbackConfirm.chaptersRemoved', {
+        count: numbers.length,
+        list: chapterListCopy(numbers),
+      }),
+      { exact: false },
+    ),
+
   // Regenerate cascade confirm modal (RollbackConfirmModal variant="regenerate").
   // exact:true — see regenEntry's comment; the copy contains "regenerate" too.
   regenerateConfirm: (page: Page): Locator =>
     page.getByRole('button', { name: t('reader:regenerateConfirm.confirm'), exact: true }),
+
+  // The regenerate confirm derives its kind from the counts (rollback-confirm.tsx): the close
+  // copy names the chapter that returns, the kept-work copy replaces the body.
+  regenerateCloseReturns: (page: Page, number: number): Locator =>
+    regenerateDialog(page).getByText(t('reader:regenerateConfirm.closeReturns', { number }), {
+      exact: false,
+    }),
+  regenerateKeptWorkBody: (page: Page, entryNumber: number): Locator =>
+    regenerateDialog(page).getByText(t('reader:regenerateConfirm.keptWorkBody', { entryNumber }), {
+      exact: false,
+    }),
 
   // Next-turn suggestion strip (components/reader/suggestion-strip.tsx). The
   // chip's accessible name is the interpolated chipLabel ("Category: text"),

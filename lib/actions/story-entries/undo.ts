@@ -117,7 +117,7 @@ async function undoBracketed(
   if (throughInterrupt && target.kind !== 'turn') return GATED
 
   let set: ReversalSet
-  let clampOps: SqlOp[]
+  let clampOps: readonly SqlOp[]
   if (target.kind === 'turn') {
     const swept = await resolveSweep(branchId, target.entryId, ctx)
     // A missing entry or create delta, or a refused closure (the only one logged): unreversible.

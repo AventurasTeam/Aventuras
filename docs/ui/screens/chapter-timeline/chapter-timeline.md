@@ -108,7 +108,8 @@ already-expanded card → collapse.
 The full editor. **One card expanded at a time** — expanding
 another card with the current one dirty fires the
 [navigate-away guard](../../patterns/save-sessions.md#navigate-away-guard--global-intercept)
-(Save / Discard / Cancel), and so does collapsing the dirty card.
+(Save / Discard / Cancel), and so do collapsing the dirty card and its
+`Delete…`, since a draft on a chapter about to go has nowhere to land.
 
 Editable fields (zod-validated; types per
 [data-model → chapters](../../../data-model.md)):
@@ -200,9 +201,12 @@ generation pipeline is in flight:
 │  • 2 lore rows removed, your edits included      │
 │  • 31 other changes reversed                     │
 │  • 14 turns since stay as written, and can still │
-│    reflect what it added                         │
+│    reflect what it added. Undoing one can bring  │
+│    back a value this removes.                    │
 │                                                  │
 │  A close runs again before your next turn.       │
+│  Removing only the divider closes the same       │
+│  prose again, on top of the kept work.           │
 │                                                  │
 │  **This cannot be undone.**                      │
 │                                                  │
@@ -211,18 +215,35 @@ generation pipeline is in flight:
 └──────────────────────────────────────────────────┘
 ```
 
-- **Counts.** Rows the close created, then the other changes it made.
-  The third line is omitted when no turn followed the chapter.
+- **Counts.** Rows the close created that still stand, then the other
+  changes it made.
+  A change a later write replaced in every field isn't counted, since
+  the delete leaves that later value standing. Each count line is
+  omitted at zero, since a close can land with no writes. The turns line's second sentence states the residue a delete
+  accepts: a later
+  turn's own undo can write back a value the delete removed
+  ([`chapter-close.md → Deleting a chapter`](../../../memory/chapter-close.md#deleting-a-chapter)).
 - **The line after the list** reads the open region as the delete would
-  leave it. With auto-close on and the region at the threshold, it's the
-  line above. Under the threshold, `A close waits until the chapter grows
-past the threshold.` With auto-close off,
-  `The chapter stays open until you close it.`
+  leave it:
+  - with a manual close pending, or auto-close on and the region at the
+    threshold, the line above;
+  - with auto-close on and the region under the threshold,
+    `A close waits until the chapter grows past the threshold.`;
+  - with auto-close off, `The chapter stays open until you close it.`
 - **`Remove divider only`** keeps everything else the close did and takes
-  only the chapter and its review. With auto-close on at the threshold,
-  the confirm says the same prose closes again on top of the kept work.
+  only the chapter and its review. When a close runs before the next
+  turn, one more line follows the line above:
+  `Removing only the divider closes the same prose again, on top of the kept work.`
 - **If a close landed while the confirm was open,** this is no longer the
   latest chapter, and the delete is refused with a toast.
+- **The open confirm re-reads its preview** each time a run settles
+  under it. A re-read the delete refuses closes the confirm with that
+  refusal's toast; one that fails keeps the preview on screen.
+- **Leaving the Timeline closes the confirm,** and a preview still being
+  read when it goes opens nothing.
+- **A delete that lands but leaves the screen stale** re-reads the
+  branch. If that fails too, a toast says so:
+  `The chapter was deleted, but the Timeline couldn't refresh. Reopen the story.`
 
 The reader beneath stays where it is, and the chapter's inline break
 goes.

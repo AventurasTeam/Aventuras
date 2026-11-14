@@ -6,6 +6,18 @@ export {
   type ImportRejectionCode,
   type ImportRowResult,
 } from './avts/import-rows'
+export {
+  getChapterDeletePreview,
+  type ChapterDeletePreview,
+} from './chapters/chapter-delete-preview'
+export {
+  CHAPTER_DELETE_REFUSAL,
+  type ChapterDeleteMode,
+  type ChapterDeleteReadRefusal,
+  type ChapterDeleteRefusal,
+  type ChapterDeleteRefusalCode,
+} from './chapters/chapter-delete-set'
+export { removeChapter, type RemoveChapterResult } from './chapters/remove-chapter'
 export { runOwedClose, type OwedCloseRun } from './chapters/run-owed-close'
 export {
   saveChapter,
