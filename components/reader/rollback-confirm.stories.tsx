@@ -267,7 +267,7 @@ export const RegenerateClose: Story = {
   },
 }
 
-/** The close's chapter starts on the reply, so it goes whole and the line names it. */
+/** Counts naming the close's chapter only as removed still name it on the returns line. */
 export const RegenerateCloseRemoved: Story = {
   args: {
     open: true,

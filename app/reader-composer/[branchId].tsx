@@ -1308,8 +1308,8 @@ export default function ReaderComposerRoute() {
       if (classifyRegenerateGate(counts) === 'immediate') {
         // The confirm path runs this through runAction; the ↻ tap fires it unhandled.
         try {
-          // With the counts, a close committing as the interrupt lands is refused, not reversed
-          // unconfirmed, and its fresh counts open the confirm.
+          // With the counts, the regenerate refuses when a close commits as the interrupt lands,
+          // rather than reversing it unconfirmed; the fresh counts open the confirm.
           const refusal = await runRegenerate(entryId, counts, 'tap')
           if (refusal != null) {
             const stillOnBranch = branchUnchanged(startedBranchId)

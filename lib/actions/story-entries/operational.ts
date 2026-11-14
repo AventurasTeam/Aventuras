@@ -441,8 +441,8 @@ export async function getRollbackCounts(
   targetId: string,
   ctx: DbCtx,
 ): Promise<RollbackCounts | StoryEntryRejection> {
-  // Held shared through the fate read: a reversal landing mid-read refuses the preview, and none
-  // can land between the chapter count and the fates.
+  // Held shared through the fate read, so no reversal lands between the set, the chapter count and
+  // the fates.
   return withBranchWriteShared(branchId, ROLLBACK_PREVIEW_LOCK_ID, async () => {
     const swept = await resolveSweep(branchId, targetId, ctx)
     if ('status' in swept) return swept
