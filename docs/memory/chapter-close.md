@@ -738,8 +738,8 @@ row is a merge that keeps the kept row's text. Keep distinct is no call.
 - `common_knowledge` — kept when any merged row has it: dropping it
   would hide a happening from everyone it reached.
 - `category` and `icon` — the kept row's stand.
-- Involvements carry over to the kept row, one per character; one the
-  user removed from the kept row after the cited prose stays removed.
+- Involvements carry over to the kept row, one per involved entity; one
+  the user removed from the kept row after the cited prose stays removed.
 - Awareness rows merge per-character via the
   `UNIQUE(branch_id, character_id, happening_id)` upsert: max
   `decay_resistance`, earliest `learned_at_entry_id` (by entry position,

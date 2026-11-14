@@ -550,6 +550,18 @@ describe('happeningsTask', () => {
     expect(creative).not.toContain('Each is what the lead does, says or attempts')
   })
 
+  it("states the cast check as the clustering applies it: half of the smaller cast's characters", async () => {
+    await seedClusters(f)
+    const ctx = promptContextFor(f, idsWithTurns(f), clustered(CLUSTERS))
+    const start = await happeningsTask.start(ctx)
+
+    const { user } = happeningsTask.render(start!, { ...ctx, writesSoFar: '' })
+
+    expect(user).toContain(
+      "at least half of the smaller cast's characters shared, occurred within a few turns",
+    )
+  })
+
   it('renders the clusters and the writes so far in the user half, and no chapter text anywhere', async () => {
     await seedClusters(f)
     const ctx = promptContextFor(f, idsWithTurns(f), clustered(CLUSTERS))
