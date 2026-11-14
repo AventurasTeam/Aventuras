@@ -36,6 +36,8 @@ import {
 import { DEFAULT_SUGGESTION_CATEGORIES } from '../stories/default-suggestion-categories'
 import { storyDefinitionSchema, storySettingsSchema } from '../stories/story-config-schema'
 import type { StoryDefinition, StorySettings } from '../stories/story-config-schema'
+import { closeReportSchema } from '../story-entries/close-report'
+import type { CloseReasonKey, CloseReport } from '../story-entries/close-report'
 import { entryMetadataSchema } from '../story-entries/entry-metadata'
 import type { EntryMetadata } from '../story-entries/entry-metadata'
 import type {
@@ -313,6 +315,44 @@ function forkEntries(): NewStoryEntry[] {
   return rows
 }
 
+// Chapter 2's close as its review window reads it (milestone C4): a landed change, a write the
+// user's edit kept from landing, and a task that ran out of steps. Chapter 1 stays a chapter no
+// close wrote.
+const CHAP2_ACTION = 'act_chapter_2'
+const VORNE_TRAITS = ['patient', 'merciless']
+const VORNE_TRAITS_BEFORE_CLOSE = ['patient']
+const USER_EDIT_STOOD: CloseReasonKey = 'user-edited-since-prose'
+
+const chapter2Report: CloseReport = closeReportSchema.parse({
+  version: 1,
+  actionId: CHAP2_ACTION,
+  calls: [
+    {
+      task: 'identity',
+      part: 1,
+      tool: 'update_character',
+      rows: [{ table: 'entities', id: ID.mira, name: 'Mira' }],
+      why: 'Mira stops hiding the debt and starts bargaining it down.',
+      turns: [entryId('hero', 41)],
+      result: 'skipped',
+      reason: USER_EDIT_STOOD,
+      values: { 'state.drives': 'protect her network, buy back her debt to Vorne' },
+    },
+    {
+      task: 'identity',
+      part: 1,
+      tool: 'update_character',
+      rows: [{ table: 'entities', id: ID.vorne, name: 'Vorne' }],
+      why: 'Vorne lets the pact’s penalty fall on the courier without a flicker.',
+      turns: [entryId('hero', 33), entryId('hero', 35)],
+      result: 'ok',
+      values: { 'state.traits': VORNE_TRAITS.join(', ') },
+    },
+  ],
+  stopped: [{ task: 'identity', part: 1, reason: 'budget' }],
+  noToolCalls: false,
+})
+
 const heroChapters: Omit<NewChapter, 'tokenCount'>[] = [
   {
     id: 'chap_hero_1',
@@ -341,6 +381,7 @@ const heroChapters: Omit<NewChapter, 'tokenCount'>[] = [
     keywords: ['watch', 'fire', 'vorne', 'keep'],
     startEntryId: entryId('hero', CHAP1_END + 1),
     endEntryId: entryId('hero', CHAP2_END),
+    closeReport: chapter2Report,
     closedAt: BASE + 12 * DAY,
     embeddingStale: 1,
     createdAt: BASE + 12 * DAY,
@@ -421,7 +462,7 @@ const heroEntities: NewEntity[] = [
     priority: 25,
     state: validState('character', {
       visual: { attire: 'immaculate, out of place in the rain' },
-      traits: ['patient', 'merciless'],
+      traits: [...VORNE_TRAITS],
       drives: ['seize the amulet', 'rule the Veil through fear'],
       current_location_id: ID.keep,
       equipped_items: [],
@@ -1092,8 +1133,9 @@ const heroEntryAssets: NewEntryAsset[] = [
 // really have landed: the rollback window and CTRL-Z both read log positions.
 type SlottedDelta = Omit<NewDelta, 'logPosition'> & { after: number }
 
-// C1: a close's create, then one stamp per entry of its range in position order, all under its
-// action and anchored on the chapter's end entry.
+// C1: a close's create, then one stamp per entry of its range in position order, then, for a
+// close that wrote its report, its agent writes and the report update; all under its action and
+// anchored on the chapter's end entry.
 function seededClose(close: {
   deltaId: string
   actionId: string
@@ -1102,6 +1144,11 @@ function seededClose(close: {
   start: number
   end: number
   createdAt: number
+  /** Agent writes then the report update, after the stamps (C1). */
+  agentWrites?: readonly Omit<
+    SlottedDelta,
+    'branchId' | 'entryId' | 'actionId' | 'after' | 'source' | 'encodingVersion' | 'createdAt'
+  >[]
 }): SlottedDelta[] {
   const shared = {
     branchId: MAIN,
@@ -1124,6 +1171,20 @@ function seededClose(close: {
       undoPayload: { chapterId: null },
     })
   }
+  const report: SlottedDelta[] =
+    close.agentWrites === undefined
+      ? []
+      : [
+          ...close.agentWrites.map((write) => ({ ...shared, ...write })),
+          {
+            ...shared,
+            id: `delta_hero_report_${close.sequence}`,
+            targetTable: 'chapters',
+            targetId: close.chapterId,
+            op: 'update',
+            undoPayload: { closeReport: null },
+          },
+        ]
   return [
     {
       ...shared,
@@ -1134,6 +1195,7 @@ function seededClose(close: {
       undoPayload: null,
     },
     ...stamps,
+    ...report,
   ]
 }
 
@@ -1239,12 +1301,21 @@ const heroDeltas: SlottedDelta[] = [
   }),
   ...seededClose({
     deltaId: 'delta_hero_9',
-    actionId: 'act_chapter_2',
+    actionId: CHAP2_ACTION,
     chapterId: 'chap_hero_2',
     sequence: 2,
     start: CHAP1_END + 1,
     end: CHAP2_END,
     createdAt: BASE + 12 * DAY,
+    agentWrites: [
+      {
+        id: 'delta_hero_10',
+        targetTable: 'entities',
+        targetId: ID.vorne,
+        op: 'update',
+        undoPayload: { state: { traits: [...VORNE_TRAITS_BEFORE_CLOSE] } },
+      },
+    ],
   }),
   // Flagged row's create (periodic classifier): slotted past every entry create, so it lands
   // after the last reply's boundary and renders `fresh` at boot.
