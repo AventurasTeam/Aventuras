@@ -32,7 +32,7 @@ import type { ChapterDraft, ChapterDraftRow } from '@/lib/chapters'
 import { db, runInTransaction } from '@/lib/db'
 import { t } from '@/lib/i18n'
 import { singleParam } from '@/lib/route-param'
-import { chaptersStore, storiesStore } from '@/lib/stores'
+import { chaptersStore, currentStoryStore, storiesStore } from '@/lib/stores'
 import { toast } from '@/lib/toast'
 
 const ctx = { db, runInTransaction }
@@ -102,11 +102,16 @@ export default function ChapterTimelineRoute(): ReactElement {
       return getChapterDeletePreview(branchId, chapterId, open, ctx)
     },
     remove: (chapterId, mode) => removeChapter(branchId, chapterId, mode, ctx),
-    // A delete whose store sync failed re-hydrates the branch's stores, as a cold open does.
-    // loadOpenStory reports failure as a result; throw so the hook logs it.
+    // A delete whose store sync failed re-hydrates the branch, as a cold open does. The confirm
+    // continuation outlives this screen, so a resync must not re-publish a branch the user has left.
     resync: async () => {
-      const result = await loadOpenStory(branchId, ctx)
-      if (result.status !== 'ok') throw new Error(`branch re-hydration ${result.status}`)
+      const result = await loadOpenStory(
+        branchId,
+        ctx,
+        () => currentStoryStore.getCurrentStory()?.branchId === branchId,
+      )
+      if (result.status !== 'ok' && result.status !== 'cancelled')
+        throw new Error(`branch re-hydration ${result.status}`)
     },
   })
 
