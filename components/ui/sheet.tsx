@@ -241,7 +241,10 @@ type BottomSheetContentProps = SheetContentShared & {
    * unsaved-changes guard. Drag-down has no refusal to report: the sheet snaps back.
    */
   onDismissRefused?: () => void
-  /** Runs once after the exit animation, for any close, a programmatic one included. */
+  /**
+   * Runs once after a presented sheet's exit animation, whatever closed it, while this content is
+   * still mounted.
+   */
   onDismissed?: () => void
   /**
    * Replaces the keyboard behavior `size` picks. Pin it when size crosses 'tall' while open: the

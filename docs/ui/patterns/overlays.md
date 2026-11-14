@@ -173,9 +173,10 @@ the other anchor reads fails typecheck rather than doing nothing:
   open bottom Sheet passes `portalHost={ABOVE_SHEETS_PORTAL_HOST}`:
   gorhom mounts its sheets after the app's default `PortalHost`, and
   the root layout mounts this host after gorhom's provider.
-- `onDismissed?: () => void` — bottom only. Runs once after the exit
-  animation, for any close, a programmatic one included, where
-  `onOpenChange(false)` is silent when `open` was already set false.
+- `onDismissed?: () => void` — bottom only. Runs once after a
+  presented sheet's exit animation, whatever closed it, while this
+  content is still mounted. A programmatic close is included, where
+  `onOpenChange(false)` is silent as `open` was already set false.
   For an action that opens another Sheet: gorhom restores a Sheet that
   another covered, so the action waits for this one to be gone.
 - `keyboardBehavior?: 'interactive' | 'extend'` — bottom only;

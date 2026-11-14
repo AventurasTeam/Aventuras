@@ -535,6 +535,8 @@ function quickClose(closeAfterMs: number): Story {
 export const CloseBeforeMounting = quickClose(5)
 
 const dismissedSpy = fn()
+const SETTLE_MS = 800
+const EXIT_HEAD_START_MS = 80
 
 function DismissedHarness() {
   const [open, setOpen] = useState(false)
@@ -567,8 +569,13 @@ export const OnDismissedAfterProgrammaticClose: Story = {
     await userEvent.click(screen.getByRole('button', { name: 'Open' }))
     expect(await screen.findByText('Dismissed sheet body', {}, BACKDROP_WAIT)).toBeVisible()
     expect(dismissedSpy).not.toHaveBeenCalled()
+    // A close sent before the sheet settles is held until it does, which would hide an early report.
+    await new Promise((resolve) => setTimeout(resolve, SETTLE_MS))
 
     await userEvent.click(screen.getByRole('button', { name: 'Close from code' }))
+    // The exit animation outlasts this wait: the report follows it, not the request.
+    await new Promise((resolve) => setTimeout(resolve, EXIT_HEAD_START_MS))
+    expect(dismissedSpy).not.toHaveBeenCalled()
     await waitFor(() => expect(dismissedSpy).toHaveBeenCalledTimes(1), BACKDROP_WAIT)
     // Once per dismissal: a second report would run a deferred action twice.
     await new Promise((resolve) => setTimeout(resolve, 500))

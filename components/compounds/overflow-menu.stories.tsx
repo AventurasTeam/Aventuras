@@ -196,8 +196,37 @@ export const OpensSheetAfterDismissPhone: Story = {
     // The press has closed the menu (its own state), and the Sheet is still on its way out.
     await waitFor(() => expect(trigger).toHaveAttribute('aria-expanded', 'false'))
     expect(onPress).not.toHaveBeenCalled()
+    // The exit animation outlasts this wait: the entry follows the dismissal, not a timer.
+    await new Promise((resolve) => setTimeout(resolve, 80))
+    expect(onPress).not.toHaveBeenCalled()
 
     await waitFor(() => expect(onPress).toHaveBeenCalledTimes(1), { timeout: 3000 })
+  },
+}
+
+/** Opening the menu again while it leaves cancels the pending entry: nothing opens under it. */
+export const ReopeningCancelsPendingEntryPhone: Story = {
+  globals: { viewport: { value: 'mobile1' } },
+  args: { entries: OPENS_SHEET_ENTRIES.map((entry) => ({ ...entry, onPress: fn() })) },
+  play: async ({ args }) => {
+    const onPress = args.entries[0].onPress
+    await waitFor(() => expect(screen.queryByTitle('More actions')).toBeNull())
+    const trigger = screen.getByRole('button', { name: 'More actions' })
+
+    await userEvent.click(trigger)
+    const review = await waitFor(() => screen.getByRole('menuitem', { name: 'Review changes' }))
+    await waitFor(() => expect(review).toBeVisible())
+    await userEvent.click(review)
+    await waitFor(() => expect(trigger).toHaveAttribute('aria-expanded', 'false'))
+
+    // The scrim covers the trigger while the menu is up, so the reopen is a direct click.
+    fireEvent.click(trigger)
+    await waitFor(() => expect(trigger).toHaveAttribute('aria-expanded', 'true'))
+    await userEvent.keyboard('{Escape}')
+    await waitFor(() => expect(trigger).toHaveAttribute('aria-expanded', 'false'))
+
+    await new Promise((resolve) => setTimeout(resolve, 1500))
+    expect(onPress).not.toHaveBeenCalled()
   },
 }
 
