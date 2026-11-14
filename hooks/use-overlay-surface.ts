@@ -1,11 +1,11 @@
 import { useFocusEffect } from 'expo-router'
 import { useCallback } from 'react'
 
-import { chapterOverlaysStore } from '@/lib/stores'
+import { chapterOverlaysStore, type OverlaySurface } from '@/lib/stores'
 
 import { useSurfaceNavigate } from './use-surface-navigate'
 
-type LeaveGuard = (proceed: () => void) => void
+type LeaveGuard = OverlaySurface['guard']
 
 // A module constant, so a route with nothing to guard doesn't re-register on every render.
 const PROCEED_AT_ONCE: LeaveGuard = (proceed) => proceed()
