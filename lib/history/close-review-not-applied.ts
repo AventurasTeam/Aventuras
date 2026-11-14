@@ -81,10 +81,13 @@ const REASON_COPY = {
   other: 'chapters:review.reason.other',
 } as const satisfies Record<CloseReasonKey, string>
 
-const MERGE_TOOLS: ReadonlySet<string> = new Set(['merge_threads', 'merge_happenings'])
+export const MERGE_TOOLS: ReadonlySet<string> = new Set(['merge_threads', 'merge_happenings'])
 
 // data-model.md → LocationState shape: a place's parent and its unplaced mark are one field.
-const PLACEMENT_PATHS: ReadonlySet<string> = new Set(['state.parent_location_id', 'state.unplaced'])
+export const PLACEMENT_PATHS: ReadonlySet<string> = new Set([
+  'state.parent_location_id',
+  'state.unplaced',
+])
 const fieldOf = (path: string): string => (PLACEMENT_PATHS.has(path) ? 'placement' : path)
 
 const titleKey = (title: string): string => title.trim().toLowerCase()
