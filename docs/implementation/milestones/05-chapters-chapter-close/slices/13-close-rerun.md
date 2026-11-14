@@ -456,8 +456,8 @@ and
 [`principles.md → Affordance loci`](../../../../ui/principles.md#affordance-loci)
 give a close's commit, and a re-run's, the memory banner's done state
 instead of a toast, and keep the re-run's cancel and failure as toasts.
-As 5.11 ships it, the commit handler lives in `useMemoryRunToasts`
-(`hooks/use-memory-run-toasts.ts`): on a completed `chapter-close`
+As 5.11 ships it (as `useMemoryRunToasts`, renamed in the 2026-11-14 triage pass), the commit handler lives in `useMemoryRunOutcomes`
+(`hooks/use-memory-run-outcomes.ts`): on a completed `chapter-close`
 `run_complete` it reads the branch's latest report and, when its
 `actionId` is the event's, calls `showCloseResult`, so the banner reads
 `Chapter closed: <title> [Review] [×]`. It shows a re-run's commit as a
@@ -851,7 +851,7 @@ Unit paths run with `pnpm vitest run --project unit <path>`.
     the close also wrote, `loadCloseDeltas` for the re-run returns that
     field's delta with the value from before any close, and none of the
     close's.
-28. `hooks/use-memory-run-toasts.test.tsx`: a completed `rerun` event whose
+28. `hooks/use-memory-run-outcomes.test.tsx`: a completed `rerun` event whose
     latest report's `actionId` matches holds a `closeResult` with that
     `actionId` and `rerun: true`; a failed `rerun` event holds nothing and
     toasts nothing.

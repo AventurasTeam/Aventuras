@@ -17,7 +17,7 @@ import { CrashRecoveryModalHost } from '@/components/story/crash-recovery-modal-
 import { ABOVE_SHEETS_PORTAL_HOST } from '@/components/ui/sheet'
 import { Toaster } from '@/components/ui/toast'
 import '@/global.css'
-import { useMemoryRunToasts } from '@/hooks/use-memory-run-toasts'
+import { useMemoryRunOutcomes } from '@/hooks/use-memory-run-outcomes'
 import { setAppearanceThemeId } from '@/lib/actions'
 import { registerRejectionHandler, useBootstrap } from '@/lib/boot'
 import { queryClient } from '@/lib/cache'
@@ -48,7 +48,7 @@ function AndroidResizeMode() {
 }
 
 function MemoryRunToasts() {
-  useMemoryRunToasts()
+  useMemoryRunOutcomes()
   return null
 }
 

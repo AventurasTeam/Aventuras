@@ -28,7 +28,7 @@ import {
 } from '@/lib/stores'
 import { toastStore, type ToastItem } from '@/lib/toast'
 
-import { useMemoryRunToasts } from './use-memory-run-toasts'
+import { useMemoryRunOutcomes } from './use-memory-run-outcomes'
 
 type LatestReport = { chapterId: string; report: CloseReport | null } | null
 
@@ -44,7 +44,7 @@ vi.mock('@/lib/history', async (importOriginal) => {
 })
 
 function Probe() {
-  useMemoryRunToasts()
+  useMemoryRunOutcomes()
   return null
 }
 
@@ -134,7 +134,7 @@ const flush = () => new Promise((resolve) => setTimeout(resolve, 0))
 
 const held = () => chapterOverlaysStore.getState().closeResult
 
-describe('useMemoryRunToasts', () => {
+describe('useMemoryRunOutcomes', () => {
   let shown: ToastItem[] = []
 
   beforeEach(() => {

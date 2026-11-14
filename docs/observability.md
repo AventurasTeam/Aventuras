@@ -322,7 +322,7 @@ convention, and the expectation that subsystems route through
   `components/chapters/chapter-overlays-host.tsx`: the review window's
   read failed, with `branchId`, `chapterId` and `error`; the window
   shows `failed`), `close_result_read_failed` (warn,
-  `hooks/use-memory-run-toasts.ts`: the commit banner's report read
+  `hooks/use-memory-run-outcomes.ts`: the commit banner's report read
   failed, with `branchId`, `actionId` and `error`; the banner holds the
   latest chapter with no count),
   `history_load_failed` / `history_load_more_failed`

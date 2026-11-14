@@ -1163,7 +1163,7 @@ code before it moved; resolve with the slice it names.
   The status block's Failed line
   ([`classifier.md → Status block`](../memory/classifier.md#status-block))
   and the failure toast (`chrome.memoryUpdateFailed`, which
-  `hooks/use-memory-run-toasts.ts` raises for a pass that fails outside
+  `hooks/use-memory-run-outcomes.ts` raises for a pass that fails outside
   a Send) both promise it. It is false when nothing is owed: a failed
   `[Run classifier now]` with the cadence not due, or a chained pass
   that failed before a reversal (CTRL-Z of the head turn) took the
