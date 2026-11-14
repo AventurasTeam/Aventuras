@@ -224,11 +224,6 @@ patch`, which 5.5a marks `restated`, so a close tool's write of it
   `CLOSE_TASK_SYSTEM` text instead of importing the constant, so the
   macros test checks a copy rather than the half that ships. Raised in
   5.5b's review.
-- **`search_world` breaks ties with `localeCompare`.** Its result order
-  then depends on the device's locale
-  (`close-agent/read-tools.ts`), which `identity.ts` and
-  `lib/retrieval/injection.ts` avoid with a code-unit compare. Raised in
-  5.5b's review.
 - **`code-conventions.md` doesn't name the pipeline's two import
   exceptions.** `eslint.config.js` lets `lib/pipeline` deep-import
   `actions/types.ts` and, since 5.5b, forbids a value import of the

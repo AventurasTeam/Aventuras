@@ -6,6 +6,7 @@ import { entities, happenings, lore, threads, type Entity } from '@/lib/db'
 import { SUBSTITUTABLE_PREFIXES } from '@/lib/ids'
 import { isJsonObject } from '@/lib/json-object'
 import { normalizeTerm } from '@/lib/keyword-terms'
+import { compareId } from '@/lib/list-modules'
 import { matchTerms } from '@/lib/retrieval'
 import { excerpt, oneLine } from '@/lib/text'
 import { flagStillHolds } from '@/lib/world'
@@ -300,7 +301,8 @@ async function searchWorld(
     })
   }
 
-  found.sort((a, b) => a.rank - b.rank || a.name.localeCompare(b.name))
+  // Code units, never localeCompare: the 20-row cut and the handles minted follow this order.
+  found.sort((a, b) => a.rank - b.rank || compareId(a.name, b.name) || compareId(a.id, b.id))
   const matches: { id: string; line: string }[] = []
   for (const match of found.slice(0, SEARCH_WORLD_LIMIT)) {
     const id = ctx.ids.show(match.id, match.name)

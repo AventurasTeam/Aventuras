@@ -275,6 +275,29 @@ describe('search_world', () => {
     expect(matchedIds(out)).toEqual([aldous, HARROW, FERRYHOUSE, TOBIN])
   })
 
+  // localeCompare would put ferrygate first, case aside. Happenings are read after entities,
+  // so only the id key puts the happening ahead of its same-named place.
+  it('orders a tier by code units, then by id, whatever the device locale', async () => {
+    const gate = rowId('loc', 61)
+    const twinPlace = rowId('loc', 62)
+    const twinBeat = rowId('hap', 63)
+    await db
+      .insert(entities)
+      .values([entity(gate, 'location', 'ferrygate'), entity(twinPlace, 'location', 'Ferrytwin')])
+    await db.insert(happenings).values({
+      id: twinBeat,
+      branchId: BRANCH,
+      title: 'Ferrytwin',
+      description: 'The twin boats cross.',
+      createdAt: 1,
+      updatedAt: 1,
+    })
+
+    const { out } = await search('ferry')
+
+    expect(matchedIds(out)).toEqual([HARROW, FERRYHOUSE, twinBeat, twinPlace, gate, TOBIN])
+  })
+
   it('ranks the exact name, then a whole name either way, a whole keyword either way, part of a name, part of a keyword', async () => {
     // Each tier's names sort before the tier above it, so ordering by name alone reverses the tiers.
     const exactName = rowId('char', 400)
