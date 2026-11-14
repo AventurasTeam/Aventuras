@@ -147,10 +147,6 @@ patch`, which 5.5a marks `restated`, so a close tool's write of it
   full-row compare can't hold for an embedded row (a reversal marks it
   stale), so every fixture row is one that was never embedded. Worth
   fixing before M8 writes thread translations. Raised in 5.5b's review.
-- **The dataset seed test keeps its own copy of the branch id.**
-  `scripts/dataset-chapter/treasure-island.seed.test.ts` spells the
-  dataset branch out instead of importing `DATASET_BRANCH_ID`. Raised in
-  5.5b's review.
 - **"Every history marks the user's turns" leaves three histories out.**
   [`architecture.md`](../architecture.md#system-and-user-halves) names
   the narrator's histories and the close's turns, but the
