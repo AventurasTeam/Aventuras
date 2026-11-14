@@ -400,13 +400,6 @@ patch`, which 5.5a marks `restated`, so a close tool's write of it
   create refused `turn-in-text` for a turn handle in its title, retried
   without it, lists both too, and the blank-title match wouldn't cover
   it. Raised in 5.11's review.
-- **`delta-log-row.md` and its component differ on three points.**
-  `docs/ui/patterns/delta-log-row.md:95-100`: the Visual shape diagram
-  shows the summary and meta flush left, while the code indents them.
-  `:105` says "~10-12 px dot or short pill", but the code renders a text
-  pill. And `components/compounds/delta-log-row.tsx` `metaParts` filters
-  only `null`, so `createdAtRelative: ''` leaves a trailing `·`.
-  Raised in 5.11's review.
 - **The reader's in-place prose edit has no leave guard.**
   `components/reader/reader-surface.tsx:~330` (`editingId`, `editDraft`):
   any navigation that pops the reader drops the draft, including the

@@ -94,15 +94,16 @@ focus holds.
 
 ```
 ┌──────────────────────────────────────────────────┐
-│ [● update]  Kael · state.traits                   │
-│ Added "former soldier"; was ["brave", "loyal"]    │
-│ classifier · entry #47 · 2h ago                   │
+│ (update)  Kael · state.traits                     │
+│           Added "former soldier"; was ["brave",…] │
+│           classifier · entry #47 · 2h ago         │
 └──────────────────────────────────────────────────┘
 ```
 
 ### Op badge
 
-Left-anchored, ~10-12 px dot or short pill. Color-keyed:
+A left-anchored text pill in a column of its own, so the target,
+summary and meta lines align to its right. Color-keyed:
 
 | op       | Color slot                   |
 | -------- | ---------------------------- |
