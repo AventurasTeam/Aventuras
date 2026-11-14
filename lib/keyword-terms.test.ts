@@ -178,7 +178,7 @@ describe('normalizeStackables', () => {
   })
 
   it('folds each key one step, and a key another key folds onto stays put', () => {
-    // bus receives buses, so it never folds on to bu: no chain, no singular moved off.
+    // bus receives buses, so this pass leaves it beside bu: no chain within one pass.
     expect(normalize({ char_a: { buses: 2, bus: 1, bu: 4 } })).toEqual({
       char_a: { bus: 3, bu: 4 },
     })
