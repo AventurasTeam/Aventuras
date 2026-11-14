@@ -75,7 +75,8 @@ async function ownEntryTokens(
 }
 
 // A created lore row has its own line, the user's later edits of it included, so no write to it
-// counts again; the stamps and the chapter row are the delete itself.
+// counts again; the stamps and the chapter row are the delete itself, and a retrieval count bump
+// is no change worth showing.
 function changesOf({
   set,
   groups,
@@ -88,12 +89,12 @@ function changesOf({
   for (const d of set.rows) {
     if (d.targetTable === 'lore' && createdLore.has(d.targetId)) {
       if (d.source === 'user_edit') userEdited = true
-    } else if (!isTheDeleteItself(d)) otherChanges++
+    } else if (!countsNowhere(d)) otherChanges++
   }
   return { createdLore: { count: createdLore.size, userEdited }, otherChanges }
 }
 
-function isTheDeleteItself(d: Delta): boolean {
+function countsNowhere(d: Delta): boolean {
   return (
     d.targetTable === 'story_entries' ||
     d.targetTable === 'chapters' ||

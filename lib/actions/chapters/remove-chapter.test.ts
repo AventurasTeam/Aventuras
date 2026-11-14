@@ -1267,8 +1267,58 @@ describe('getChapterDeletePreview', () => {
     ).toMatchObject({ createdLore: { count: 0, userEdited: false }, otherChanges: 2 })
   })
 
+  // A pass's later edit of created lore isn't the user's, and the user's edit of a created place
+  // isn't an edit of lore: the place's create and that edit are the 2.
+  it("counts only a user's edit of created lore as an edit, and every other write as a change", async () => {
+    const fx = await openSeeded()
+    await seedPlaces(fx)
+    const c = await closeOn(fx, fx.replyIds[PREVIEW_END])
+    await writeUnderClose(c, [
+      loreCreate(fx.branchId, CLOSE_LORE_ID, 'The Harrow ferry'),
+      {
+        kind: 'createEntity',
+        source: 'chapter_close',
+        payload: {
+          entry: {
+            id: 'loc_ford',
+            branchId: fx.branchId,
+            kind: 'location',
+            name: 'The Ford',
+            status: 'active',
+            injectionMode: 'auto',
+            state: { parent_location_id: null },
+            createdAt: CLOSED_AT,
+            updatedAt: CLOSED_AT,
+          },
+        },
+      },
+    ])
+    await writeLater(fx, editLore(fx.branchId, CLOSE_LORE_ID, 'later', 'periodic_classifier'), {
+      actionId: 'act_pass_lore',
+      entryId: fx.replyIds[PREVIEW_END + 1],
+    })
+    await writeLater(
+      fx,
+      {
+        kind: 'updateEntity',
+        source: 'user_edit',
+        payload: {
+          branchId: fx.branchId,
+          id: 'loc_ford',
+          patch: { description: 'A shallow ford.' },
+        },
+      },
+      { actionId: 'act_user_ford', entryId: null },
+    )
+
+    expect(
+      await getChapterDeletePreview(fx.branchId, c.chapter.id, previewStory(fx), fx.ctx),
+    ).toMatchObject({ createdLore: { count: 1, userEdited: false }, otherChanges: 2 })
+  })
+
   it('reads what follows a delete from the region it leaves', async () => {
     const fx = await openCloseFixture()
+    const first = await closeOn(fx, fx.replyIds[0])
     const { chapter } = await closeOn(fx, fx.replyIds[PREVIEW_END])
     // Neither the token snapshot nor a system row stamped with the chapter is an input.
     await fx.ctx.db
@@ -1285,19 +1335,28 @@ describe('getChapterDeletePreview', () => {
       chapterId: chapter.id,
       createdAt: 1,
     })
-    // Every non-system row is the chapter's or the open region's: the region after the delete.
+    // The earlier chapter stays closed: only the rows past its end rejoin the region.
     const rows = await fx.ctx.db
-      .select({ kind: storyEntries.kind, tokens: storyEntries.contentTokens })
+      .select({
+        position: storyEntries.position,
+        kind: storyEntries.kind,
+        tokens: storyEntries.contentTokens,
+      })
       .from(storyEntries)
       .where(eq(storyEntries.branchId, fx.branchId))
-    const tokensAfter = rows
-      .filter((row) => row.kind !== 'system')
-      .reduce((sum, row) => sum + (row.tokens ?? 0), 0)
+    const firstEnd = fx.entries.find((entry) => entry.id === first.chapter.endEntryId)
+    if (!firstEnd) throw new Error('no entry ends chapter 1')
+    const tokensOf = (keep: (position: number) => boolean) =>
+      rows
+        .filter((row) => row.kind !== 'system' && keep(row.position))
+        .reduce((sum, row) => sum + (row.tokens ?? 0), 0)
+    const tokensAfter = tokensOf((position) => position > firstEnd.position)
+    expect(tokensOf((position) => position <= firstEnd.position)).toBeGreaterThan(0)
     const preview = (settings: Partial<StorySettings>) =>
       getChapterDeletePreview(fx.branchId, chapter.id, previewStory(fx, settings), fx.ctx)
 
     expect(await preview({ chapterTokenThreshold: tokensAfter })).toEqual({
-      chapterNumber: 1,
+      chapterNumber: 2,
       createdLore: { count: 0, userEdited: false },
       otherChanges: 0,
       turnsSince: 3,
@@ -1407,7 +1466,7 @@ describe('getChapterDeletePreview', () => {
     expect(await logRows(fx)).toEqual(log)
   })
 
-  it('reads while a run holds the gate, which the confirm shows disabled', async () => {
+  it('reads while a run holds the gate', async () => {
     const fx = await openCloseFixture()
     const { chapter } = await closeOn(fx, fx.replyIds[PREVIEW_END])
     registerStoreOnlyRun('turn-stand-in', fx.branchId)
