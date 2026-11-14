@@ -9,7 +9,7 @@ import {
   writeFileSync,
 } from 'node:fs'
 import { tmpdir } from 'node:os'
-import { join, resolve } from 'node:path'
+import { dirname, join, resolve } from 'node:path'
 import { DatabaseSync } from 'node:sqlite'
 
 import { and, eq } from 'drizzle-orm'
@@ -101,7 +101,7 @@ import { resolveDevSlot } from './dev-slot/resolve'
 // seed's test overlay on each run's copy, and the bar over the runs), PROBE_WINDOW (none; the
 // model's window in tokens, set on the probe's provider as App Settings' override is, so a close
 // cuts its chapter into parts at half of it), AVENTURAS_DB_PATH (the dev slot's database; only
-// ever read, through a VACUUM INTO copy), PROBE_EMBEDDERS_DIR (the dev slot's userData embedders/;
+// ever read, through a VACUUM INTO copy), PROBE_EMBEDDERS_DIR (the embedders/ beside the database;
 // where the range embed loads the story's local model, through onnxruntime-node in this process),
 // PROBE_REJUDGE (a saved PROBE_OUT directory: judges its runs by the bar as it stands, from the
 // saved files, with no model call, and writes bar-rejudged.json beside them). Close the app
@@ -133,9 +133,10 @@ function resolveDbPath(): string {
   return join(resolveDevSlot().dataDir, 'aventuras.db')
 }
 
-function resolveEmbeddersRoot(): string {
+// A slot's userData holds both, and AVENTURAS_DB_PATH may name another slot's database.
+function resolveEmbeddersRoot(source: string): string {
   if (process.env.PROBE_EMBEDDERS_DIR) return resolve(process.env.PROBE_EMBEDDERS_DIR)
-  return join(resolveDevSlot().dataDir, 'embedders')
+  return join(dirname(source), 'embedders')
 }
 
 // The current run's range-embed clusters, once it completed; its counts are its own log entry.
@@ -726,7 +727,7 @@ async function main(): Promise<void> {
   const source = resolveDbPath()
   if (!existsSync(source)) throw new Error(`[probe:close] no database at ${source}`)
   refuseUsedOutput()
-  const embedders = resolveEmbeddersRoot()
+  const embedders = resolveEmbeddersRoot(source)
   if (!STAND_IN && !existsSync(embedders))
     throw new Error(
       `[probe:close] no embedders folder at ${embedders}: the range embed loads the story's local model from it; set PROBE_EMBEDDERS_DIR to a folder that holds it`,

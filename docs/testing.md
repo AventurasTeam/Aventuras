@@ -720,9 +720,11 @@ prints the part limit, and refuses a value that isn't a positive
 integer.
 A close's range embed loads the story's local embedder in the probe's
 own process, through the main process's embedder service and
-onnxruntime-node, from the dev slot's `userData/embedders/` or
-`PROBE_EMBEDDERS_DIR`: the probe stands in for the preload's embedder
-and raw-database bridges over its copy, and prints, from the embed
+onnxruntime-node, from `PROBE_EMBEDDERS_DIR`, by default the
+`embedders/` folder beside the database it copies: the dev slot's
+`userData/embedders/`, or another slot's where `AVENTURAS_DB_PATH`
+names that slot's database. The probe stands in for the preload's
+embedder and raw-database bridges over its copy, and prints, from the embed
 step's own log entry, how many of the range's happenings it embedded and
 the clusters it found. A run that is not a stand-in refuses a missing
 embedders folder before it opens a database.
