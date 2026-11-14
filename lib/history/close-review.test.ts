@@ -697,6 +697,50 @@ describe('closeReviewNotApplied', () => {
     }
   })
 
+  it.each([
+    ['no values', {}],
+    ['an empty values', { values: {} }],
+  ])('keeps a refusal with %s as one row by its tool', (_label, values) => {
+    expect(
+      notApplied([
+        call({
+          task: 'threads',
+          tool: 'update_thread',
+          rows: [LETTER],
+          ...values,
+          result: 'rejected',
+          reason: 'nothing-sent',
+        }),
+      ]),
+    ).toEqual([['The letter', null, '', 'nothing-sent']])
+  })
+
+  it('keeps a refused merge and a refused create with an empty values', () => {
+    expect(
+      notApplied([
+        call({
+          task: 'threads',
+          tool: 'merge_threads',
+          rows: [LETTER, SEAL],
+          values: {},
+          result: 'rejected',
+          reason: 'merge-repeated',
+        }),
+        call({
+          task: 'lore',
+          tool: 'create_lore',
+          rows: [TOLL],
+          values: {},
+          result: 'rejected',
+          reason: 'lore-cap',
+        }),
+      ]),
+    ).toEqual([
+      ['The letter', null, '', 'merge-repeated'],
+      ['The Ferry Toll', null, 'The Ferry Toll', 'lore-cap'],
+    ])
+  })
+
   it("matches a refused create_lore's title by its row name when it sent no title", () => {
     expect(
       notApplied([

@@ -168,9 +168,10 @@ function refusalsOf(call: CloseReportCall, index: number, lookup: CloseReviewLoo
         reason: call.reason,
       },
     ]
-  const { values } = call
-  if (values === undefined) return [{ index, call, path: null, summary: '', reason: call.reason }]
-  return Object.entries(values).map(([path, value]) => ({
+  // An empty record is as good as none: the refusal still shows, by its tool.
+  const proposed = Object.entries(call.values ?? {})
+  if (proposed.length === 0) return [{ index, call, path: null, summary: '', reason: call.reason }]
+  return proposed.map(([path, value]) => ({
     index,
     call,
     path,
