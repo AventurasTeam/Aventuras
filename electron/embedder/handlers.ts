@@ -10,14 +10,12 @@ export type EmbedderCallHandlers = Pick<
 
 /** The calls over the models under `root`, userData's embedders/ by default. */
 export function embedderCallHandlers(root?: string): EmbedderCallHandlers {
-  // Abort handles for in-flight embeds, keyed by the renderer's per-call requestId
-  // so a cancel can land on the service's next chunk boundary.
+  // Keyed by the renderer's requestId; a cancel lands on the service's next chunk boundary.
   const embedAborts = new Map<string, AbortController>()
   return {
     async embed({ modelId, texts, requestId }) {
       const controller = new AbortController()
-      // Registered before the first await, so a cancel that follows this call on
-      // the renderer's ordered IPC channel always finds the controller.
+      // Set before any await: a cancel sent after this call on the ordered IPC channel finds it.
       if (requestId != null) embedAborts.set(requestId, controller)
       try {
         return await embed({
@@ -26,8 +24,7 @@ export function embedderCallHandlers(root?: string): EmbedderCallHandlers {
           signal: controller.signal,
         })
       } finally {
-        // Identity-checked: a renderer that reused a requestId must not have the
-        // live entry torn down by the earlier call's exit.
+        // Identity check: a reused requestId's live entry must outlive the earlier call's exit.
         if (requestId != null && embedAborts.get(requestId) === controller) {
           embedAborts.delete(requestId)
         }

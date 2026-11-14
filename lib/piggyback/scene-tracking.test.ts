@@ -213,9 +213,8 @@ describe('sceneTrackingActions', () => {
     ).toBe(true)
   })
 
-  // Retrieval ages a character from lastSeenAt.entryId: a skipped write leaves an older anchor
-  // that over-ages them, or none, so they never decay. The fold moved them to this entry's place,
-  // which the edit says they were never in, so that place is cleared too.
+  // A skipped write mis-ages them: retrieval ages a character from lastSeenAt.entryId. The fold
+  // put them at this entry's place, which the edit says they were never in, so it clears too.
   it('closes a character out at a previous entry with no location, clearing the place they left', () => {
     const actions = sceneTrackingActions({
       branchId,

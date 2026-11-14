@@ -127,9 +127,8 @@ export function sceneTrackingActions(args: Args): PipelineAction[] {
         payload: {
           branchId,
           id: character.id,
-          // Out of scene, current_location_id tracks the lastSeenAt anchor. Written
-          // rather than left alone because the fold may already have moved them with
-          // a scene this edit says they were never in.
+          // Out of scene, current_location_id follows the lastSeenAt anchor: the fold may have
+          // moved them with a scene this edit says they were never in.
           ...(placeKnown ? { currentLocationId: previous.currentLocationId } : {}),
           lastSeenAt: {
             entryId: previous.entryId,

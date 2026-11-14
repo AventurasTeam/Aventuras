@@ -46,7 +46,7 @@ export function modelDir(id: string): string {
   return resolveModelDir(embeddersRoot(), id)
 }
 
-/** The model folder for `id` under `root`, userData's embedders/ by default; a refused id throws, naming it. */
+/** `id`'s folder under `root`, userData's embedders/ by default; a refused id throws, naming it. */
 export function requireModelDir(id: string, root?: string): string {
   try {
     return resolveModelDir(root ?? embeddersRoot(), id)

@@ -7,8 +7,7 @@ import type { PhaseFailure } from '../types'
 // One bound for a blocking embed: per-turn retrieval's and the close's range embed.
 export const EMBED_TIMEOUT_MS = 300_000
 
-// The ways a run can find no usable embedder: unconfigured, and configured but never probed for
-// its dim. Same tier, same envelope.
+// No usable embedder (unconfigured, or never probed for its dim): one tier, one envelope.
 export function embedderInitFailure(detail: string): PhaseFailure {
   return { status: 'failed', error: { kind: 'embedder', reason: 'init', detail, staleCount: null } }
 }

@@ -78,9 +78,8 @@ async function linkNames(
 }
 
 /**
- * chapter-close.md → 3d: one row's pin, one upsertHappeningAwareness. Read by id first, since the
- * upsert finds its row by character and happening. A pin the user ever wrote is skipped here; the
- * action's precedence covers only edits after the prose.
+ * chapter-close.md → 3d. Read by id first: the upsert finds its row by character and happening.
+ * A pin the user ever wrote is skipped here; the action's precedence covers only post-prose edits.
  */
 async function planSetPin(args: SetPinArgs, ctx: WriteContext): Promise<WritePlan> {
   const { id, value } = args

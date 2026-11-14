@@ -113,9 +113,8 @@ export type PhaseContext = {
   // The run's db handle, so a phase can resolve tail positions (MAX(position)+1)
   // against committed rows rather than a possibly-gappy in-memory store.
   db: DbCtx['db']
-  // The run's transaction runner. The vec0 embeds write outside the delta log
-  // (generation-pipeline.md → Writes) on the run's handle rather than the module
-  // global, so a test's db and its writes cannot diverge.
+  // vec0 embeds write outside the delta log (generation-pipeline.md → Writes) on
+  // the run's handle, not the module global, so a test's db and writes can't diverge.
   runInTransaction: DbCtx['runInTransaction']
   // Run identity, so a per-turn phase can read the open story / branch stores
   // without the generationStore self-lookup the interim narrative phase used.

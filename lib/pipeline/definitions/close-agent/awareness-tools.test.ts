@@ -201,8 +201,7 @@ const pin = (
   why = WHY,
 ): ScriptedCall => ({ toolName: 'set_pin', input: { id, value, turns: [...turns], why } })
 
-// The Awareness start hands each listed row's pin as the model reads it, no pin as 0; a row gone
-// has none.
+// As the Awareness start shows them: each listed row's pin, no pin as 0; a gone row has none.
 async function startPinned(fx: CloseFixture, rows: readonly ShownRow[]): Promise<ShownRow[]> {
   const pins = new Map(
     (
@@ -575,8 +574,7 @@ describe('set_pin', () => {
     const CITED = `entry_${uuid(900)}`
     let userCreated: string
 
-    // The user pins Lena on the fight and makes her row of the crossing with no pin, then the
-    // chapter's one turn is written, so its prose is the latest.
+    // User writes (Lena's fight pin, her unpinned crossing row) precede the chapter's one turn.
     beforeEach(async () => {
       await putCharacter(f, LENA, 'Lena')
       for (const [id, happeningId] of [
@@ -788,8 +786,7 @@ describe('set_pin', () => {
       ])
     })
 
-    // A note's ceiling comes back as it reads, so it names no more than the step: 0.32345678916 is
-    // cut, not rounded up.
+    // A noted ceiling must land when sent back, so 0.32345678916 is cut, not rounded up.
     it.each([
       [0.565, '0.765'],
       [0.145, '0.345'],
