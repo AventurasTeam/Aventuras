@@ -400,6 +400,16 @@ describe("removeChapter 'whole'", () => {
   })
 })
 
+// The close work's deltas, newest first: what 'divider-only' leaves in the group.
+const KEPT_WORK = [
+  'delete threads:thr_seal',
+  'update threads:thr_letter',
+  'update entities:char_tobin',
+  'create lore:lore_harrow_ferry',
+]
+
+const shapeOf = (d: Delta): string => `${d.op} ${d.targetTable}:${d.targetId}`
+
 describe("removeChapter 'divider-only'", () => {
   it('reverses the row, its report and its stamps, and leaves the rest of the group standing', async () => {
     const c = await openClosed()
@@ -409,12 +419,7 @@ describe("removeChapter 'divider-only'", () => {
     const kept = (await deltasOf(c.fx, c.actionId)).filter(
       (d) => d.targetTable !== 'chapters' && d.targetTable !== 'story_entries',
     )
-    expect(kept.map((d) => `${d.op} ${d.targetTable}:${d.targetId}`)).toEqual([
-      'delete threads:thr_seal',
-      'update threads:thr_letter',
-      'update entities:char_tobin',
-      'create lore:lore_harrow_ferry',
-    ])
+    expect(kept.map(shapeOf)).toEqual(KEPT_WORK)
     expect(kept.every((d) => d.source === 'chapter_close' && d.entryId === c.endEntryId)).toBe(true)
 
     expect(await removeChapter(c.fx.branchId, c.chapter.id, 'divider-only', c.fx.ctx)).toEqual({
@@ -434,7 +439,9 @@ describe("removeChapter 'divider-only'", () => {
     expect(await removeChapter(c.fx.branchId, c.chapter.id, 'divider-only', c.fx.ctx)).toEqual({
       status: 'ok',
     })
+    expect(await chapterRows(c.fx)).toEqual([])
     const kept = await deltasOf(c.fx, c.actionId)
+    expect(kept.map(shapeOf)).toEqual(KEPT_WORK)
 
     expect(await undoLastAction(c.fx.branchId, c.fx.ctx)).toEqual({ status: 'ok' })
     expect(await worldRows(c.fx)).toEqual(c.before)
@@ -443,6 +450,8 @@ describe("removeChapter 'divider-only'", () => {
     expect(await redoLastAction(c.fx.branchId, c.fx.ctx)).toEqual({ status: 'ok' })
     expect(await worldRows(c.fx)).toEqual(worked)
     expect(await deltasOf(c.fx, c.actionId)).toEqual(kept)
+    // The divider's deltas were pruned, so redo has nothing to bring it back from.
+    expect(await chapterRows(c.fx)).toEqual([])
   })
 
   it('leaves the kept writes to a rollback to the end entry', async () => {
@@ -451,6 +460,8 @@ describe("removeChapter 'divider-only'", () => {
     expect(await removeChapter(c.fx.branchId, c.chapter.id, 'divider-only', c.fx.ctx)).toEqual({
       status: 'ok',
     })
+    expect(await chapterRows(c.fx)).toEqual([])
+    expect((await deltasOf(c.fx, c.actionId)).map(shapeOf)).toEqual(KEPT_WORK)
 
     const counts = await shownCounts(c.fx.branchId, c.endEntryId, c.fx.ctx)
     expect(
@@ -458,6 +469,7 @@ describe("removeChapter 'divider-only'", () => {
     ).toEqual({ status: 'ok', counts })
 
     expect(await deltasOf(c.fx, c.actionId)).toEqual([])
+    expect(await chapterRows(c.fx)).toEqual([])
     expect(await worldRows(c.fx)).toEqual(c.before)
     expect((await entryRows(c.fx)).map((e) => e.position)).toEqual([1, 2, 3, 4, 5, 6])
   })
