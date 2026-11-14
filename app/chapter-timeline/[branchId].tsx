@@ -22,6 +22,7 @@ import { useColdOpenStory } from '@/hooks/use-cold-open-story'
 import { useEntryIndex } from '@/hooks/use-entry-index'
 import { useIsRouteFocused } from '@/hooks/use-is-route-focused'
 import { useMasterDetailBack } from '@/hooks/use-master-detail-back'
+import { useOverlaySurface } from '@/hooks/use-overlay-surface'
 import { useStoryLeaveGuard } from '@/hooks/use-story-leave-guard'
 import { useTier } from '@/hooks/use-tier'
 import { saveChapter } from '@/lib/actions'
@@ -91,6 +92,7 @@ export default function ChapterTimelineRoute(): ReactElement {
     // The save bar's notice is an icon with no visible text, so a refused save also toasts.
     onRejected: toast.error,
   })
+  useOverlaySurface(guard)
 
   const jump = useCallback(
     (startEntryId: string) => navigateGuarded(readerHref(branchId, startEntryId)),

@@ -40,6 +40,7 @@ import {
 import { EmptyState } from '@/components/ui/empty-state'
 import { useChapterProgress } from '@/hooks/use-chapter-progress'
 import { useMasterDetailBack } from '@/hooks/use-master-detail-back'
+import { useOverlaySurface } from '@/hooks/use-overlay-surface'
 import { useStoryLeaveGuard } from '@/hooks/use-story-leave-guard'
 import { useSurfaceNavigate } from '@/hooks/use-surface-navigate'
 import { useTier } from '@/hooks/use-tier'
@@ -151,6 +152,7 @@ function StorySettingsSurface({ storyId }: { storyId: string | undefined }) {
   const params = useLocalSearchParams<{ tab?: string | string[] }>()
   const tab = singleParam(params.tab)
   const session = useStorySettingsSaveSession()
+  useOverlaySurface(session.requestLeave)
 
   // A navigation here with `?tab=` reuses this mounted screen, so the selection
   // follows the param as it changes, not just at mount.

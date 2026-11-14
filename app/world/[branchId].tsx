@@ -54,6 +54,7 @@ import { useColdOpenStory } from '@/hooks/use-cold-open-story'
 import { useEntryIndex } from '@/hooks/use-entry-index'
 import { useIsRouteFocused } from '@/hooks/use-is-route-focused'
 import { useMasterDetailBack } from '@/hooks/use-master-detail-back'
+import { useOverlaySurface } from '@/hooks/use-overlay-surface'
 import { useRouteLink } from '@/hooks/use-route-link'
 import { useRowImport } from '@/hooks/use-row-import'
 import { useRowSessionGuard } from '@/hooks/use-row-session-guard'
@@ -223,6 +224,7 @@ export default function WorldRoute() {
   const chapterProgress = useChapterProgress(storyId)
 
   const { onSession, guard, navigateGuarded } = useRowSessionGuard()
+  useOverlaySurface(guard)
   const worldDelete = useWorldDelete(branchId, ctx, guard)
   const cancelDelete = worldDelete.cancel
   // A pending confirm's counts go stale off-screen (another surface can delete/rename the row).
