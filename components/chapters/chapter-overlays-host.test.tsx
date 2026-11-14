@@ -351,6 +351,36 @@ describe('ChapterOverlaysHost — the review', () => {
     expect(reads.build).toHaveBeenLastCalledWith(REPORT, DELTAS, expect.any(Object))
   })
 
+  it('reads the deleted kinds beside the deltas, not after them', async () => {
+    let release = () => {}
+    reads.deltas.mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          release = () => resolve(DELTAS)
+        }),
+    )
+    renderHost()
+    openWindow()
+    await waitFor(() => expect(reads.kinds).toHaveBeenCalledWith({}, 'br_1', ['loc_mill']))
+    expect(shown().state.status).toBe('loading')
+
+    act(() => release())
+    await waitFor(() => expect(view.props?.state.status).toBe('ready'))
+  })
+
+  it('logs a failed deleted-kinds read and shows failed', async () => {
+    const error = vi.spyOn(logger, 'error').mockImplementation(() => {})
+    reads.kinds.mockRejectedValueOnce(new Error('kinds'))
+    renderHost()
+    openWindow()
+    await waitFor(() => expect(view.props?.state.status).toBe('failed'))
+    expect(error).toHaveBeenCalledWith('app.close_review_read_failed', {
+      branchId: 'br_1',
+      chapterId: 'chap_2',
+      error: 'kinds',
+    })
+  })
+
   it('builds the lookup from the stores, the deleted kinds and the entry index', async () => {
     await openReady()
     const lookup = reads.build.mock.lastCall?.[2] as CloseReviewLookup

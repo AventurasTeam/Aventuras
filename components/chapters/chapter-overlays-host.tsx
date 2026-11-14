@@ -55,7 +55,6 @@ async function readReviewSources(branchId: string, chapterId: string): Promise<R
   try {
     const report = await readCloseReport(db, branchId, chapterId)
     if (report == null) throw new Error('close report missing')
-    const deltas = await loadCloseDeltas(db, branchId, chapterId, report.actionId)
     const kinds = new Map<string, EntityKind>()
     const absent: string[] = []
     for (const id of reportEntityIds(report)) {
@@ -63,10 +62,11 @@ async function readReviewSources(branchId: string, chapterId: string): Promise<R
       if (kind == null) absent.push(id)
       else kinds.set(id, kind)
     }
-    if (absent.length > 0) {
-      const deleted = await readDeletedEntityKinds(db, branchId, absent)
-      for (const [id, kind] of deleted) kinds.set(id, kind)
-    }
+    const [deltas, deleted] = await Promise.all([
+      loadCloseDeltas(db, branchId, chapterId, report.actionId),
+      absent.length > 0 ? readDeletedEntityKinds(db, branchId, absent) : null,
+    ])
+    if (deleted != null) for (const [id, kind] of deleted) kinds.set(id, kind)
     return { report, deltas, kinds }
   } catch (error) {
     logger.error('app.close_review_read_failed', {
