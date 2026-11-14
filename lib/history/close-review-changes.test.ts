@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest'
 
 import type { CloseReport, CloseReportCall, Delta, EntityKind } from '@/lib/db'
 
-import { closeReviewChanges } from './close-review-changes'
+import { closeReviewChanges, reviewFieldLabel } from './close-review-changes'
 import type { CloseReviewLookup } from './close-review-types'
 
 const KAEL = { table: 'entities', id: 'char_kael', name: 'Kael' }
@@ -574,5 +574,14 @@ describe('closeReviewChanges', () => {
       'Kael today',
       'Unknown row',
     ])
+  })
+})
+
+describe('reviewFieldLabel', () => {
+  it("gives a link table's labels only to a happening's paths, leaving another table's own", () => {
+    expect(reviewFieldLabel('happenings', 'source')).toBe('Source')
+    expect(reviewFieldLabel('lore', 'source')).toBe('source')
+    expect(reviewFieldLabel('threads', 'role')).toBe('role')
+    expect(reviewFieldLabel('entities', 'characterId')).toBe('characterId')
   })
 })
