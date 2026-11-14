@@ -484,12 +484,12 @@ describe('set_pin', () => {
         {
           result: 'skipped',
           reason: USER_EDITED_SINCE_PROSE,
-          note: 'The user edited this after the cited turns; their value stands. Do not write it again.',
+          note: 'The user set this value themselves; it stands. Do not write it again.',
         },
         {
           result: 'skipped',
           reason: USER_EDITED_SINCE_PROSE,
-          note: 'The user edited this after the cited turns; their value stands. Do not write it again.',
+          note: 'The user set this value themselves; it stands. Do not write it again.',
         },
       ])
       expect(await runDeltas(f, result.actionId)).toEqual([])

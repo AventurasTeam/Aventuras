@@ -451,14 +451,6 @@ patch`, which 5.5a marks `restated`, so a close tool's write of it
   and only review caught it. An eslint `no-restricted-properties` entry
   for such builtins outside tests, or a lessons-learned entry, would
   stop the next one. Raised in 5.9's clustering review.
-- **`set_pin`'s user-pin skip gives the wrong reason.** A pin the user
-  set before the cited turn is skipped under `USER_EDITED_SINCE_PROSE`,
-  whose note tells the model "The user edited this after the cited
-  turns", which is false for that case; the instruction not to write it
-  again stands. `merge_happenings` gives the same reason for such a pin
-  on the kept row or an absorbed one, since the slice review's R1. A
-  key of its own (5.11 keyed every reason) would make the answer and
-  the review accurate. Raised in 5.9's final review.
 - **5.13's re-run meets three things 5.9 shipped.** Slice 5.13 (re-running
   a close) is planned on main; its doc isn't on this branch, so these wait
   for its Open questions. First, the later-bump case in

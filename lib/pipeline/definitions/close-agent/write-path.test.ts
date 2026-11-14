@@ -1321,7 +1321,7 @@ describe('dispatchToolCall in a close phase', () => {
           field: 'state.voice',
           row: 'c1',
           reason: USER_EDITED_SINCE_PROSE,
-          note: expect.stringContaining('The user edited this'),
+          note: expect.stringContaining('The user set this value'),
         },
       ],
     })
@@ -1360,7 +1360,7 @@ describe('dispatchToolCall in a close phase', () => {
           field: 'state.voice',
           row: 'c1',
           reason: USER_EDITED_SINCE_PROSE,
-          note: expect.stringContaining('The user edited this'),
+          note: expect.stringContaining('The user set this value'),
         },
         { field: 'state.traits', row: 'c1', reason: TEST_CAP },
       ],
@@ -1392,7 +1392,7 @@ describe('dispatchToolCall in a close phase', () => {
       {
         result: 'skipped',
         reason: USER_EDITED_SINCE_PROSE,
-        note: expect.stringContaining('The user edited this'),
+        note: expect.stringContaining('The user set this value'),
       },
       {
         result: 'skipped',

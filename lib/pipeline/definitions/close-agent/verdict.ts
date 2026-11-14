@@ -204,9 +204,10 @@ export function verdictOf(
 }
 
 const NOTES = new Map<string, string>([
+  // Also a pin the user set before the cited turns (set_pin, merge_happenings), so no "after".
   [
     USER_EDITED_SINCE_PROSE,
-    'The user edited this after the cited turns; their value stands. Do not write it again.',
+    'The user set this value themselves; it stands. Do not write it again.',
   ],
   [CLOSE_REASON.laterTurn, 'A later turn wrote this; its value stands. Do not write it again.'],
   [CLOSE_REASON.rowGone, 'The row is gone; do not write to it again.'],
