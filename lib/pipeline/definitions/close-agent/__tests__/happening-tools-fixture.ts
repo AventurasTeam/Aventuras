@@ -27,7 +27,7 @@ export const LIGHT = hapId(12)
 export const PRICE = hapId(13)
 export const TOLL = hapId(14)
 
-// hp1…hp4, then c1…c3, in this order: as the Happenings start shows a cluster, then its cast.
+// hp1…hp4, then c1…c3: the tests' own order, happenings then cast.
 const SHOWN: readonly ShownRow[] = [
   { table: 'happenings', id: CROSSING, name: 'Tobin poles Wren across' },
   { table: 'happenings', id: LIGHT, name: 'A light on the far bank' },
