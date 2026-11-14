@@ -1169,6 +1169,8 @@ describe('update_lore', () => {
       skippedFields: [{ field: 'title', reason: 'title-taken' }],
     })
     expect(JSON.stringify(run.calls[1])).not.toContain(FERRY)
+    expect(run.calls[2]).toMatchObject({ result: 'rejected', reason: 'title-taken' })
+    expect(JSON.stringify(run.calls[2])).not.toContain(FERRY)
     expect(await storedLore(f, TOLL)).toMatchObject({ title: 'The Ferry Toll', category: 'tolls' })
     // Shown by name, so prose naming lo2 stores the holder's title.
     expect(runIds?.nameOfId(FERRY)).toBe('The Night Ferry')

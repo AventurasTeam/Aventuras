@@ -1,7 +1,7 @@
 import { and, eq } from 'drizzle-orm'
 import { z } from 'zod'
 
-import { happenings, type Happening } from '@/lib/db'
+import { happenings, type CloseReasonKey, type Happening } from '@/lib/db'
 import { dedupeTerms } from '@/lib/keyword-terms'
 
 import {
@@ -94,7 +94,7 @@ const UPKEEP_TEXT: readonly TextSpec<PlaceArgs | ItemArgs>[] = [
   { of: (args) => args.description, path: 'description', bound: 'description' },
 ]
 
-const NOT_OF_KIND: Readonly<Record<UpkeepKind, string>> = {
+const NOT_OF_KIND: Readonly<Record<UpkeepKind, CloseReasonKey>> = {
   location: 'not-a-place',
   item: 'not-an-item',
 }

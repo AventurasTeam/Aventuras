@@ -1,7 +1,7 @@
 import { z } from 'zod'
 
 import { USER_EDITED_SINCE_PROSE } from '@/lib/actions/types'
-import type { Entity } from '@/lib/db'
+import type { CloseReasonKey, Entity } from '@/lib/db'
 import { flaggedSideOf, flagStillHolds } from '@/lib/world'
 
 import { entityReportRow, readEntity } from './entity-write'
@@ -46,7 +46,7 @@ const REFUSAL = {
   inSceneLater: 'in-scene-later',
   self: 'partner-is-self',
   otherKind: 'partner-not-of-kind',
-} as const
+} as const satisfies Record<string, CloseReasonKey>
 
 const NOTE = {
   location: 'Only the user retires a place: leave it active.',

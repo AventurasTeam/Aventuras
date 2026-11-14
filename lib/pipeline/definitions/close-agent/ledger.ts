@@ -1,4 +1,4 @@
-import type { CloseReportCall } from '@/lib/db'
+import type { CloseReasonKey, CloseReportCall } from '@/lib/db'
 import { logger } from '@/lib/diagnostics'
 import { ID_PATTERN } from '@/lib/ids'
 import { oneLine } from '@/lib/text'
@@ -13,6 +13,12 @@ export const CLOSE_REPORT_VALUE_BOUND = 2_000
 type NameOfId = (id: string) => string | undefined
 type Survivor = NonNullable<CloseReportCall['survivor']>
 type RowRef = { table: string; id: string }
+/** What a close records of one call: its reasons as keys, its values as the tool gave them. */
+type RecordedCall = Omit<CloseReportCall, 'values' | 'reason' | 'skippedFields'> & {
+  reason?: CloseReasonKey
+  skippedFields?: { field: string; reason: CloseReasonKey }[]
+  values?: Readonly<Record<string, unknown>>
+}
 
 function formatted(value: unknown, nameOfId: NameOfId): string {
   if (value === null || value === undefined) return ''
@@ -41,9 +47,7 @@ export class CloseLedgerWriter {
   }
 
   /** C4: a list joins with ", ", a ref (a whole id) is its row's name, every value cut to the bound. */
-  record(
-    call: Omit<CloseReportCall, 'values'> & { values?: Readonly<Record<string, unknown>> },
-  ): void {
+  record(call: RecordedCall): void {
     const { values, ...rest } = call
     const shown = Object.entries(values ?? {})
       .filter(([, value]) => value !== undefined)

@@ -1,7 +1,7 @@
 import { and, asc, eq } from 'drizzle-orm'
 import { z } from 'zod'
 
-import { deltas, lore, type Lore, type NewLore } from '@/lib/db'
+import { deltas, lore, type CloseReasonKey, type Lore, type NewLore } from '@/lib/db'
 import { generateId } from '@/lib/ids'
 import { dedupeTerms, normalizeTerm } from '@/lib/keyword-terms'
 
@@ -40,7 +40,7 @@ export const LORE_REFUSAL = {
   bodyBlank: 'body-blank',
   cap: 'lore-cap',
   titleTaken: 'title-taken',
-} as const
+} as const satisfies Record<string, CloseReasonKey>
 
 const NOTE = {
   titleBlank: 'Give the row a title: the name the story uses for the rule or thing.',

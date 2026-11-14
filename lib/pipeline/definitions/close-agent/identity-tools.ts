@@ -1,6 +1,6 @@
 import { z } from 'zod'
 
-import type { Entity } from '@/lib/db'
+import type { CloseReasonKey, Entity } from '@/lib/db'
 import { CAST_SOFT_CAPS } from '@/lib/wizard'
 
 import {
@@ -114,7 +114,7 @@ export const IDENTITY_WRITE_PATHS: Readonly<Record<IdentityKind, readonly string
   faction: FACTION_FIELDS.map(({ path }) => path),
 }
 
-const NOT_OF_KIND: Readonly<Record<IdentityKind, string>> = {
+const NOT_OF_KIND: Readonly<Record<IdentityKind, CloseReasonKey>> = {
   character: 'not-a-character',
   faction: 'not-a-faction',
 }

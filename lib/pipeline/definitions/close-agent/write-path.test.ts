@@ -1962,7 +1962,7 @@ describe('dispatchToolCall in a close phase', () => {
     configurePort({
       applyDeltaActionGroupWithOutcomes: async () => ({
         status: 'ok',
-        outcomes: [{ status: 'noop', reason: 'not-created' }],
+        outcomes: [{ status: 'noop', reason: TEST_CAP }],
       }),
     })
 

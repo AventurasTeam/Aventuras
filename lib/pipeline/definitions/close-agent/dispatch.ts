@@ -89,6 +89,13 @@ function recordWrite(
   entry: CallRecord,
 ): void {
   const { verdict } = entry
+  const reason = verdict.reason === undefined ? undefined : ledgerReasonKey(verdict.reason)
+  const skippedFields = verdict.skippedFields.map((skipped) => ({
+    field: skipped.field,
+    reason: ledgerReasonKey(skipped.reason),
+  }))
+  // C4: a call that landed nothing lists its fields only when their keys differ from its own.
+  const ownKeys = reason === undefined || skippedFields.some((skipped) => skipped.reason !== reason)
   ctx.ledger.record({
     task: ctx.task,
     part: ctx.part,
@@ -97,16 +104,9 @@ function recordWrite(
     why: namedWhy(args, ctx.ids),
     turns: [...entry.turns],
     result: verdict.result,
-    ...(verdict.reason === undefined ? {} : { reason: ledgerReasonKey(verdict.reason) }),
+    ...(reason === undefined ? {} : { reason }),
     ...(entry.values === undefined ? {} : { values: entry.values }),
-    ...(verdict.skippedFields.length === 0
-      ? {}
-      : {
-          skippedFields: verdict.skippedFields.map(({ field, reason }) => ({
-            field,
-            reason: ledgerReasonKey(reason),
-          })),
-        }),
+    ...(skippedFields.length === 0 || !ownKeys ? {} : { skippedFields }),
     ...(entry.survivor === undefined ? {} : { survivor: entry.survivor }),
   })
 }

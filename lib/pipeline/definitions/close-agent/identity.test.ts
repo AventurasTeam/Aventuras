@@ -808,6 +808,30 @@ describe('update_character and update_faction', () => {
     expect((await storedEntity(f, WREN)).state).toMatchObject(WREN_STATE)
   })
 
+  it('records one key for a call whose two lists are each over their cap, naming no field', async () => {
+    const { result, answers, calls } = await dispatchScripted(
+      f,
+      [
+        {
+          toolName: 'update_character',
+          input: { id: 'c1', traits: terms('trait', 9), drives: terms('drive', 7), ...cite() },
+        },
+      ],
+      { shown: CAST },
+    )
+
+    expect(calls[0]).toMatchObject({ result: 'rejected', reason: 'over-soft-cap' })
+    expect(calls[0]).not.toHaveProperty('skippedFields')
+    expect(answers[0]!.output).toMatchObject({
+      result: 'rejected',
+      notWritten: [
+        { field: 'state.traits', reason: softCapReason('traits') },
+        { field: 'state.drives', reason: softCapReason('drives') },
+      ],
+    })
+    expect(await runDeltas(f, result.actionId)).toEqual([])
+  })
+
   it.each([['[]'], ['[ ]'], ['""'], ['[""]']])(
     'reads traits sent as %j as not sent, the row unchanged',
     async (empty) => {
