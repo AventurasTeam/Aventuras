@@ -369,13 +369,6 @@ patch`, which 5.5a marks `restated`, so a close tool's write of it
   `components/reader/chapter-list-label.ts`'s pair and span copy, so a
   wording change in one won't reach the other. Raised in Slice 5.12's
   review of Tasks 4, 10 and 14 and its final review.
-- **`docs/ui/component-inventory.md` has no row for
-  `RollbackConfirmModal`.** The shipped modal
-  (`components/reader/rollback-confirm.tsx`) now carries five copy
-  kinds, rollback, regenerate, regenerate with nothing after the reply,
-  and the two regenerate-with-close variants, and no row names it or its
-  props. Raised in Slice 5.12's
-  review of Task 15.
 - **`regenerateTurn` takes its expected counts as optional.**
   `regenerateTurn(…, opts?: { expectedCounts?: RollbackCounts })`
   (`lib/actions/turns/regenerate-turn.ts`) predates Slice 5.12, which
