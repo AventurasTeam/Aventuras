@@ -1,10 +1,11 @@
 import type { Meta, StoryObj } from '@storybook/react-native-web-vite'
+import { useState } from 'react'
 import { expect, fn, screen, userEvent, waitFor } from 'storybook/test'
 
 import type { ChapterDeletePreview } from '@/lib/actions'
 import { t } from '@/lib/i18n'
 
-import { ChapterDeleteConfirm } from './chapter-delete-confirm'
+import { ChapterDeleteConfirm, type ChapterDeleteConfirmProps } from './chapter-delete-confirm'
 
 // CI runs plays several times slower than local; every wait uses this.
 const WAIT = { timeout: 5000 }
@@ -82,6 +83,11 @@ export const ClosesNextSend: Story = {
       COPY.divider,
       COPY.irreversible,
     ])
+    // The order: lore, other changes, turns since.
+    const description = dialog.getAttribute('aria-describedby')
+    const text = document.getElementById(description ?? '')?.textContent ?? ''
+    expect(text.indexOf(COPY.loreEdited)).toBeLessThan(text.indexOf(COPY.otherChanges))
+    expect(text.indexOf(COPY.otherChanges)).toBeLessThan(text.indexOf(COPY.turnsSince))
   },
 }
 
@@ -215,5 +221,40 @@ export const Pending: Story = {
     for (const name of [COPY.cancel, COPY.removeDivider, COPY.confirm])
       expect(screen.getByRole('button', { name })).toHaveAttribute('aria-disabled', 'true')
     expect(args.onDelete).not.toHaveBeenCalled()
+  },
+}
+
+const settle = () => new Promise((resolve) => setTimeout(resolve, 600))
+
+/** The owner flips `pending` on the press, as `useChapterDeleteConfirm` does. */
+function PendingOnDelete(props: ChapterDeleteConfirmProps) {
+  const [pending, setPending] = useState(false)
+  return (
+    <ChapterDeleteConfirm
+      {...props}
+      pending={pending}
+      onDelete={(mode) => {
+        props.onDelete(mode)
+        setPending(true)
+      }}
+    />
+  )
+}
+
+/** The focused action disabling drops focus to the page; the dialog takes it back. */
+export const FocusStaysWhenActionsDisable: Story = {
+  render: (args) => <PendingOnDelete {...args} />,
+  play: async ({ args }) => {
+    const dialog = await findDialog()
+    const confirm = screen.getByRole('button', { name: COPY.confirm })
+    confirm.focus()
+    await expect(confirm).toHaveFocus()
+    await userEvent.keyboard('{Enter}')
+    await waitFor(() => expect(args.onDelete).toHaveBeenCalledWith('whole'), WAIT)
+    await waitFor(() => expect(confirm).toHaveAttribute('aria-disabled', 'true'), WAIT)
+    await settle()
+    expect(dialog.contains(document.activeElement)).toBe(true)
+    await userEvent.tab()
+    expect(dialog.contains(document.activeElement)).toBe(true)
   },
 }

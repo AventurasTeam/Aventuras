@@ -1,4 +1,5 @@
-import type { ReactElement } from 'react'
+import { useEffect, useRef, type ReactElement } from 'react'
+import { Platform, type View } from 'react-native'
 
 import {
   AlertDialog,
@@ -56,9 +57,16 @@ export function ChapterDeleteConfirm({
   onDelete,
 }: ChapterDeleteConfirmProps): ReactElement {
   const actionsDisabled = pending || blockedReason != null
+  const contentRef = useRef<View>(null)
+  // Chromium blurs a button the moment it disables; the dialog takes focus so Tab stays inside.
+  useEffect(() => {
+    if (Platform.OS !== 'web' || !open || !actionsDisabled) return
+    const content = contentRef.current as unknown as HTMLElement | null
+    if (content != null && !content.contains(document.activeElement)) content.focus()
+  }, [open, actionsDisabled])
   return (
     <AlertDialog open={open} onOpenChange={onOpenChange}>
-      <AlertDialogContent>
+      <AlertDialogContent ref={contentRef}>
         <AlertDialogHeader>
           <AlertDialogTitle>
             {t('chapters:deleteConfirm.title', { number: preview.chapterNumber })}
