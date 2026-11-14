@@ -592,6 +592,28 @@ None open: Implementation notes record each answer.
   close's after-the-prose precedence, which is about facts the prose can
   overturn. The row guard gained `userEverWrote` for it; a row the user
   created counts as written.
+- **A merge leaves a user's pin theirs too (developer decision R1,
+  2026-11-14).** `merge_happenings` follows the rule above: on the kept
+  row a pin the user ever wrote isn't sent and is listed as not written,
+  and an absorbed awareness row holding one skips the merge whole, since
+  merged the pin would move to a row the close writes or give way to the
+  kept row's higher one. Canon 3e states it.
+- **The frequent set leaves out the user's rows (developer decisions R2
+  and Q13, 2026-11-14).** A row whose pin the user ever wrote, or one
+  they created, takes no place in the top 20, which refills by count,
+  as for rows a later turn created. A row World's character merge moved
+  counts as the user's, since the merge re-creates it as a `user_edit`,
+  so with R1 a close can't absorb a happening a merged character knows;
+  3d and 3e state the edge, and re-pointing the moved rows instead is a
+  triage entry with what it would take.
+- **The frequency counter runs up to the close (developer decision R3,
+  2026-11-14).** Turns past the chapter's end that ran before the close
+  count toward its frequent set, and the next chapter counts from the
+  close; canon 3d states it. No code.
+- **The probe runs main's embedder handlers (developer decision R4,
+  2026-11-14).** The slice review moved Electron main's embedder IPC
+  handlers into `electron/embedder/handlers.ts` so `pnpm probe:close`
+  registers the same ones; ratified as built.
 - **A count bump's undo edge (developer decision, 2026-11-14).** The undo
   restores the prior count by assignment, so rolling back turns past the
   chapter's end that ran before the close (the close stands) puts their
