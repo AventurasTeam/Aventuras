@@ -5,7 +5,7 @@ import { PRODUCTION_CLOSE_SLOTS } from '@/lib/pipeline/definitions/close-agent/s
 import type { WriteTool } from '@/lib/pipeline/definitions/close-agent/tool'
 
 import { CREATE_LORE_TOOL } from './close-review-changes'
-import { MERGE_TOOLS, PLACEMENT_PATHS } from './close-review-not-applied'
+import { FLAG_DUPLICATE_TOOL, MERGE_TOOLS, PLACEMENT_PATHS } from './close-review-not-applied'
 
 const closeWriteTools = (): WriteTool[] =>
   [
@@ -25,6 +25,14 @@ describe("the review's names for the close's tools and paths", () => {
 
     expect(merges.length).toBeGreaterThan(0)
     expect([...MERGE_TOOLS].sort()).toEqual(merges.sort())
+  })
+
+  it('names as the duplicate flag the one write tool that takes a row and its partner', () => {
+    const pairs = closeWriteTools()
+      .filter((tool) => Object.hasOwn(tool.ids, 'id') && Object.hasOwn(tool.ids, 'partner'))
+      .map((tool) => tool.name)
+
+    expect(pairs).toEqual([FLAG_DUPLICATE_TOOL])
   })
 
   it('names as the create the one write tool that names no row, minting its own', () => {

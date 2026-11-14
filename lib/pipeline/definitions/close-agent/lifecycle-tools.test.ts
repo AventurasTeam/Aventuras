@@ -15,6 +15,7 @@ import {
   type EntityState,
   type NewEntity,
 } from '@/lib/db'
+import { buildCloseReview } from '@/lib/history'
 import { changedPaths } from '@/lib/history/humanize'
 import { resetAllStores } from '@/lib/stores'
 import { collisionPairOf, entityKeepActions, flagStillHolds } from '@/lib/world'
@@ -44,6 +45,7 @@ const SYNDICATE = 'fact_00000000-0000-4000-8000-00000000e007'
 const HARROW = 'loc_00000000-0000-4000-8000-00000000e008'
 // Shown to the model, never seeded: a row that is gone.
 const GONE = 'char_00000000-0000-4000-8000-00000000e009'
+const BRAM = 'char_00000000-0000-4000-8000-00000000e00a'
 
 /** The chapter: the opening to the third reply, t1…t7. E is that reply. */
 const chapterIds = (f: CloseFixture): string[] => f.entries.slice(0, 7).map((entry) => entry.id)
@@ -942,6 +944,44 @@ describe('flag_duplicate', () => {
       expect(flagOf(await storedEntity(f, STRANGER))).toEqual([1, WREN, 'duplicate'])
     },
   )
+
+  it("keeps a refused pair in the review's Not applied after the task flags another pair sharing a row", async () => {
+    await seedRow(f, { id: CLERK, kind: 'character', name: 'the toll clerk' })
+    await seedRow(f, { id: WREN, kind: 'character', name: 'Wren' })
+    await seedRow(f, { id: BRAM, kind: 'character', name: 'Bram' })
+    await seedRow(f, {
+      id: TOBIN,
+      kind: 'character',
+      name: 'Tobin',
+      flag: { partnerId: CLERK, reason: 'duplicate' },
+    })
+    await seedRow(f, {
+      id: STRANGER,
+      kind: 'character',
+      name: 'the hooded stranger',
+      flag: { partnerId: WREN, reason: 'duplicate' },
+    })
+
+    const { result, answers, calls } = await dispatchScripted(
+      f,
+      [flagCall(), flagCall({ partner: 'c3' })],
+      { shown: [...SHOWN, { id: BRAM, name: 'Bram' }] },
+    )
+    const review = buildCloseReview(
+      { version: 1, actionId: result.actionId, calls, stopped: [], noToolCalls: false },
+      [],
+      { entityKind: () => 'character', nameOf: () => undefined, entryPosition: () => undefined },
+    )
+
+    expect(answers.map((answer) => (answer as { result: string }).result)).toEqual([
+      'rejected',
+      'ok',
+    ])
+    expect(calls[1]!.rows.map(({ id }) => id).sort()).toEqual([BRAM, TOBIN].sort())
+    expect(
+      review.notApplied.map((row) => [row.target?.name, row.fieldPath, row.reasonKey]),
+    ).toEqual([['Tobin', 'nameCollisionPartnerId', 'already-flagged']])
+  })
 
   it('flags the row named first over a dormant flag of its own, which counts as none', async () => {
     // Tobin's name-taken flag on Wren no longer holds: the two share no name.

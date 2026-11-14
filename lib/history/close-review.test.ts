@@ -465,7 +465,7 @@ describe('closeReviewNotApplied', () => {
     ])
   })
 
-  it('drops a refused merge once the same task lands a merge over a row they share', () => {
+  it('drops a refused merge once the same task lands a merge over the same rows, in another order', () => {
     expect(
       notApplied([
         call({
@@ -502,6 +502,185 @@ describe('closeReviewNotApplied', () => {
           tool: 'flag_duplicate',
           rows: [OSS, KAEL],
           values: { nameCollisionPartnerId: 'Kael' },
+        }),
+      ]),
+    ).toEqual([])
+  })
+
+  it('keeps a flag_duplicate refused on a pair when the same task lands another pair sharing a row', () => {
+    const TOBIN = { table: 'entities', id: 'char_tobin', name: 'Tobin' }
+    const STRANGER = { table: 'entities', id: 'char_stranger', name: 'The hooded stranger' }
+    const BRAM = { table: 'entities', id: 'char_bram', name: 'Bram' }
+
+    expect(
+      notApplied([
+        call({
+          task: 'lifecycle',
+          tool: 'flag_duplicate',
+          rows: [TOBIN, STRANGER],
+          values: { nameCollisionPartnerId: 'The hooded stranger' },
+          result: 'rejected',
+          reason: 'already-flagged',
+        }),
+        call({
+          task: 'lifecycle',
+          tool: 'flag_duplicate',
+          rows: [BRAM, TOBIN],
+          values: { nameCollisionPartnerId: 'Tobin' },
+        }),
+      ]),
+    ).toEqual([['Tobin', 'nameCollisionPartnerId', 'The hooded stranger', 'already-flagged']])
+  })
+
+  it('drops a flag_duplicate refused for naming one row twice once the same task flags that row', () => {
+    expect(
+      notApplied([
+        call({
+          task: 'lifecycle',
+          tool: 'flag_duplicate',
+          rows: [KAEL],
+          result: 'rejected',
+          reason: 'partner-is-self',
+        }),
+        call({
+          task: 'lifecycle',
+          tool: 'flag_duplicate',
+          rows: [OSS, KAEL],
+          values: { nameCollisionPartnerId: 'Kael' },
+        }),
+      ]),
+    ).toEqual([])
+  })
+
+  it('keeps a refused merge of three threads when the same task lands a merge of two of them', () => {
+    const FERRY = { table: 'threads', id: 'thr_ferry', name: 'The ferry' }
+
+    expect(
+      notApplied([
+        call({
+          task: 'threads',
+          tool: 'merge_threads',
+          rows: [LETTER, SEAL, FERRY],
+          values: { title: 'The sealed letter' },
+          result: 'rejected',
+          reason: 'merge-mode-into-other',
+        }),
+        call({
+          task: 'threads',
+          tool: 'merge_threads',
+          rows: [LETTER, SEAL],
+          survivor: { table: 'threads', id: 'thr_letter' },
+        }),
+      ]),
+    ).toEqual([['The letter', null, 'The sealed letter', 'merge-mode-into-other']])
+  })
+
+  it('keeps a refused merge of two threads when the same task lands a merge of those two and a third', () => {
+    const FERRY = { table: 'threads', id: 'thr_ferry', name: 'The ferry' }
+
+    expect(
+      notApplied([
+        call({
+          task: 'threads',
+          tool: 'merge_threads',
+          rows: [LETTER, SEAL],
+          values: { title: 'The sealed letter' },
+          result: 'rejected',
+          reason: 'merge-active-into-inactive',
+        }),
+        call({
+          task: 'threads',
+          tool: 'merge_threads',
+          rows: [LETTER, SEAL, FERRY],
+          survivor: { table: 'threads', id: 'thr_letter' },
+        }),
+      ]),
+    ).toEqual([['The letter', null, 'The sealed letter', 'merge-active-into-inactive']])
+  })
+
+  it('keeps a refused happening merge when the same task merges one of its rows with another', () => {
+    const HUNT = { table: 'happenings', id: 'hap_hunt', name: 'The hunt' }
+
+    expect(
+      notApplied([
+        call({
+          task: 'happenings',
+          tool: 'merge_happenings',
+          rows: [FIRE, STORM],
+          values: { description: 'The storm fanned the fire.' },
+          result: 'skipped',
+          reason: 'later-turn',
+        }),
+        call({
+          task: 'happenings',
+          tool: 'merge_happenings',
+          rows: [FIRE, HUNT],
+          survivor: { table: 'happenings', id: 'hap_fire' },
+        }),
+      ]),
+    ).toEqual([['The fire', null, 'The storm fanned the fire.', 'later-turn']])
+  })
+
+  it('drops a refused happening merge of three once the same task lands those three in another order', () => {
+    const HUNT = { table: 'happenings', id: 'hap_hunt', name: 'The hunt' }
+
+    expect(
+      notApplied([
+        call({
+          task: 'happenings',
+          tool: 'merge_happenings',
+          rows: [FIRE, STORM, HUNT],
+          values: { title: 'The fire' },
+          result: 'rejected',
+          reason: 'merge-close-wrote',
+        }),
+        call({
+          task: 'happenings',
+          tool: 'merge_happenings',
+          rows: [STORM, HUNT, FIRE],
+          survivor: { table: 'happenings', id: 'hap_storm' },
+        }),
+      ]),
+    ).toEqual([])
+  })
+
+  it('drops a merge refused with nothing to absorb once the same task merges its keep', () => {
+    expect(
+      notApplied([
+        call({
+          task: 'threads',
+          tool: 'merge_threads',
+          rows: [LETTER],
+          values: { title: 'The sealed letter' },
+          result: 'rejected',
+          reason: 'merge-absorb-empty',
+        }),
+        call({
+          task: 'threads',
+          tool: 'merge_threads',
+          rows: [LETTER, SEAL],
+          survivor: { table: 'threads', id: 'thr_letter' },
+        }),
+      ]),
+    ).toEqual([])
+  })
+
+  it('drops a refused field naming a written row and a reference once the same tool lands it on the written row', () => {
+    expect(
+      notApplied([
+        call({
+          task: 'upkeep',
+          tool: 'update_place',
+          rows: [QUAY, HARBOUR],
+          values: { 'state.parent_location_id': 'The Harbour' },
+          result: 'rejected',
+          reason: 'retired-parent',
+        }),
+        call({
+          task: 'upkeep',
+          tool: 'update_place',
+          rows: [QUAY],
+          values: { 'state.parent_location_id': 'The Harbour' },
         }),
       ]),
     ).toEqual([])

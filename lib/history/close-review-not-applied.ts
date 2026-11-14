@@ -82,6 +82,9 @@ const REASON_COPY = {
 } as const satisfies Record<CloseReasonKey, string>
 
 export const MERGE_TOOLS: ReadonlySet<string> = new Set(['merge_threads', 'merge_happenings'])
+export const FLAG_DUPLICATE_TOOL = 'flag_duplicate'
+// A duplicate flag or a merge proposes its rows together, so only those rows correct it.
+const ROW_SET_TOOLS: ReadonlySet<string> = new Set([FLAG_DUPLICATE_TOOL, ...MERGE_TOOLS])
 
 // data-model.md → LocationState shape: a place's parent and its unplaced mark are one field.
 export const PLACEMENT_PATHS: ReadonlySet<string> = new Set([
@@ -102,6 +105,15 @@ type Refusal = {
 
 const sharesRow = (a: readonly Row[], b: readonly Row[]): boolean =>
   a.some((row) => b.some((other) => sameRow(row, other)))
+const within = (a: readonly Row[], b: readonly Row[]): boolean =>
+  a.every((row) => b.some((other) => sameRow(row, other)))
+
+// A flag or merge refused for naming one row proposed no pair or set: a shared row corrects it.
+function sameProposal(call: CloseReportCall, later: CloseReportCall): boolean {
+  if (ROW_SET_TOOLS.has(call.tool) && call.rows.length > 1)
+    return within(call.rows, later.rows) && within(later.rows, call.rows)
+  return sharesRow(call.rows, later.rows)
+}
 
 // Compared as the close's title rule compares a lore title (loreTitled).
 function createdTitle(call: CloseReportCall): string {
@@ -109,15 +121,15 @@ function createdTitle(call: CloseReportCall): string {
 }
 
 // A row by tool, with no field: a refused create that recorded values matches by title, since its
-// minted id is one no retry shares; any other matches a landing on a row they share, or any landing
+// minted id is one no retry shares; any other matches a landing sameProposal accepts, or any landing
 // of the tool when it named none: its rows are every id argument, a landed call's the tool's own.
 function corrected({ call, path }: Refusal, later: CloseReportCall): boolean {
   if (path === null) {
     if (call.tool === CREATE_LORE_TOOL && call.values !== undefined)
       return createdTitle(later) === createdTitle(call)
-    return call.rows.length === 0 || sharesRow(call.rows, later.rows)
+    return call.rows.length === 0 || sameProposal(call, later)
   }
-  if (!sharesRow(call.rows, later.rows)) return false
+  if (!sameProposal(call, later)) return false
   const field = fieldOf(path)
   return landedPaths(later).some((landed) => fieldOf(landed) === field)
 }
