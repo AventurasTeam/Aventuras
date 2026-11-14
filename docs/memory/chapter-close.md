@@ -1006,7 +1006,10 @@ the loss.
 
 A refused create mints an id no retry shares, so it counts as corrected
 once the same task lands a create with the same title, trimmed and
-case-folded. Every refusal's reason is recorded as a stable key, which
+case-folded. A create refused for its title itself, blank or holding a
+turn handle, matches no retry's title, so it stays listed beside the
+retry that landed, as a merge retried without a row does. Every
+refusal's reason is recorded as a stable key, which
 the review shows as a sentence of its own; the model's tool result
 keeps the instruction it acts on, with the short ids and turn handles
 that mean something only inside the close.

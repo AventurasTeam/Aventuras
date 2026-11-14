@@ -383,17 +383,6 @@ patch`, which 5.5a marks `restated`, so a close tool's write of it
   or keep and log) and in their log events, so a shared hook would take
   each as a parameter; it would also need a home outside both domain
   folders. Raised in Slice 5.12's slice review (the simplifier pass).
-- **A `create_lore` refused for `title-blank` can never drop out of
-  Not applied.** The review matches a refused create to a landed one by
-  title, and a blank title matches nothing, so a retry with a title
-  lists both a Not applied row and a Changes row. A refused create
-  always keeps its minted row (`lore-tools.ts:109,115`), so a
-  value-less branch would never drop it. The choice: match a blank-title
-  refusal to any later `create_lore` the same task lands, or accept the
-  double listing. The same holds for any refusal of the title itself: a
-  create refused `turn-in-text` for a turn handle in its title, retried
-  without it, lists both too, and the blank-title match wouldn't cover
-  it. Raised in 5.11's review.
 - **The reader's in-place prose edit has no leave guard.**
   `components/reader/reader-surface.tsx:~330` (`editingId`, `editDraft`):
   any navigation that pops the reader drops the draft, including the
