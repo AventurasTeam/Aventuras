@@ -211,6 +211,35 @@ describe('useChapterDeleteConfirm: opening and staying true', () => {
     expect(toast.error).toHaveBeenCalledWith(FAILED)
   })
 
+  it('names a chapter that is no longer the latest when the opening read is refused', async () => {
+    const { result, loadPreview } = setup()
+    loadPreview.mockResolvedValueOnce(refusal('not-latest'))
+
+    await openOn(result)
+
+    expect(result.current.target).toBeNull()
+    expect(toast.error).toHaveBeenCalledWith(NOT_LATEST)
+  })
+
+  it('re-reads when a run settles during the opening read', async () => {
+    const { result, loadPreview } = setup()
+    const opening = deferred<ChapterDeletePreview>()
+    loadPreview.mockReturnValueOnce(opening.promise).mockResolvedValueOnce(RECOUNTED)
+    let pendingOpen!: Promise<void>
+    act(() => {
+      pendingOpen = result.current.open('chap_2')
+    })
+
+    settleARun()
+    await act(async () => {
+      opening.resolve(PREVIEW)
+      await pendingOpen
+    })
+
+    await waitFor(() => expect(result.current.target?.preview).toEqual(RECOUNTED))
+    expect(loadPreview).toHaveBeenCalledTimes(2)
+  })
+
   it('opens nothing, logs and toasts when the opening read throws', async () => {
     const { result, loadPreview } = setup()
     loadPreview.mockRejectedValueOnce(new Error('database is locked'))
@@ -359,6 +388,25 @@ describe('useChapterDeleteConfirm: the removal', () => {
     expect(result.current.target).toBeNull()
     expect(result.current.pending).toBe(false)
     expect(toast.error).toHaveBeenCalledWith(NOT_LATEST)
+  })
+
+  it('dismisses and confirms again after a refused removal', async () => {
+    const { result, remove } = setup()
+    await openOn(result)
+    remove.mockResolvedValueOnce(refusal('not-latest'))
+    await act(async () => {
+      await result.current.confirm('whole')
+    })
+
+    await openOn(result, 'chap_3')
+    act(() => result.current.dismiss())
+    expect(result.current.target).toBeNull()
+    await openOn(result, 'chap_3')
+    await act(async () => {
+      await result.current.confirm('whole')
+    })
+
+    expect(remove).toHaveBeenCalledTimes(2)
   })
 
   it('closes with no toast and resyncs once when the delete committed but its store sync failed', async () => {
