@@ -720,3 +720,12 @@ patch`, which 5.5a marks `restated`, so a close tool's write of it
   [Type design](../code-conventions.md#type-design); the internal
   follow-up sweep (`sweepFrom(…, origin.id, ctx)`) legitimately has
   none. Raised in Slice 5.12's slice review.
+- **Two confirm hooks copy one settle re-read.** The re-read effect in
+  `components/chapters/use-chapter-delete-confirm.ts` repeats
+  `components/reader/use-live-rollback-counts.ts`'s shape: a
+  `settleCount` subscription, a ref holding the host's callbacks, a
+  guard on the counted settle and a `live` flag. They differ in the
+  skip while a removal runs, in how a refusal lands (close with a toast,
+  or keep and log) and in their log events, so a shared hook would take
+  each as a parameter; it would also need a home outside both domain
+  folders. Raised in Slice 5.12's slice review (the simplifier pass).
