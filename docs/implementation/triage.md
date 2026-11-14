@@ -610,16 +610,10 @@ patch`, which 5.5a marks `restated`, so a close tool's write of it
   the call count before a pending search load lands. Raised in 5.9's
   slice review.
 - **Upkeep's not-of-kind refusal has no test.**
-  `lib/pipeline/definitions/close-agent/upkeep-tools.ts:97-100` and
-  `:150` refuse a row of the wrong kind with `not-a-place` or
+  `lib/pipeline/definitions/close-agent/upkeep-tools.ts:95-98` and
+  `:148` refuse a row of the wrong kind with `not-a-place` or
   `not-an-item`. A rename is now a type error, but the behaviour is
   unpinned. Raised in 5.11's review.
-- **`set_keywords` records the planned list as its new value.**
-  `upkeep-tools.ts:291` and `:332`. The handler can land a different
-  list, because `planKeywordAdds` drops re-adds of terms the user
-  removed (`lib/actions/delta/keyword-authors.ts:174-188`), so the review
-  could name a keyword that was never written. Read, not run. Raised in
-  5.11's review.
 - **A `create_lore` refused for `title-blank` can never drop out of
   Not applied.** The review matches a refused create to a landed one by
   title, and a blank title matches nothing, so a retry with a title
@@ -627,7 +621,10 @@ patch`, which 5.5a marks `restated`, so a close tool's write of it
   always keeps its minted row (`lore-tools.ts:109,115`), so a
   value-less branch would never drop it. The choice: match a blank-title
   refusal to any later `create_lore` the same task lands, or accept the
-  double listing. Raised in 5.11's review.
+  double listing. The same holds for any refusal of the title itself: a
+  create refused `turn-in-text` for a turn handle in its title, retried
+  without it, lists both too, and the blank-title match wouldn't cover
+  it. Raised in 5.11's review.
 - **`delta-log-row.md` and its component differ on three points.**
   `docs/ui/patterns/delta-log-row.md:95-100`: the Visual shape diagram
   shows the summary and meta flush left, while the code indents them.
@@ -665,9 +662,9 @@ patch`, which 5.5a marks `restated`, so a close tool's write of it
   `portalHost={ABOVE_SHEETS_PORTAL_HOST}` belongs under Stacking or
   `portalHost`. Raised in 5.11's review.
 - **`lib/actions/delta/reverse-replay.ts` has two cases nobody has
-  confirmed as deliberate.** `:380-393` and `:589-610`: reversing an
+  confirmed as deliberate.** `:386-400` and `:602-638`: reversing an
   update whose target row is missing runs an UPDATE that matches nothing
-  and returns `ok`. `:555-570`: an undo partial that breaks the state
+  and returns `ok`. `:576-600`: an undo partial that breaks the state
   schema is restored without validation. Raised in 5.11's review.
 - **An E2E `getByRole` absence check made while a modal is open passes
   regardless.** The modal hides everything behind it from the
@@ -701,3 +698,18 @@ patch`, which 5.5a marks `restated`, so a close tool's write of it
   window mounted with `open={false}` through its exit, which has to
   agree with the host's prune of a chapter that no longer holds. Raised
   in 5.11's review.
+- **A close tool's `name` is a plain string.**
+  `lib/pipeline/definitions/close-agent/tool.ts` types `WriteTool.name`
+  as `string`, so the close's write tools form no union, and the review's
+  tool lists (`MERGE_TOOLS`, `CREATE_LORE_TOOL`, `TOOL_LABEL_KEYS`) are
+  tied to them only by tests that walk `PRODUCTION_CLOSE_SLOTS`. Typing
+  the names would let those lists be checked at compile time. Older
+  code: raised in 5.11's slice review, not fixed in passing.
+- **A refusal's key travels inside its text.** The action layer's
+  handler reasons are strings, some already shaped `<key>: <text>`
+  (`keywordUserAddedReason` in `lib/actions/delta/keyword-authors.ts`),
+  so the close writes its own the same way (`keyedReason`) and the
+  ledger parses the key back out (`ledgerReasonKey` in
+  `lib/pipeline/definitions/close-agent/reason-key.ts`). A structured
+  `{ key, text }` reason from the handlers up would drop the parse.
+  Older code: raised in 5.11's slice review.
