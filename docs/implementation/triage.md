@@ -99,28 +99,6 @@ slice-planning gate forces its resolution before that slice is planned.
   orchestrator forwards every event. No production code subscribes to
   delta events yet; one rule for both paths is wanted before one does.
   Raised in 5.5a's review.
-- **`promoteStagedEntity`'s store-only guard can still refuse a
-  legitimate promotion while a story opens.** `loadOpenStory` reads
-  `entities`, then hydrates after eight more reads, so a write or
-  reversal landing in between leaves the store copy active over a
-  DB-staged row, and `promoteStagedEntityHandler` refuses `not-staged`;
-  since 5.5a that reads `rejected`, not `ok`. The row lock may make the guard
-  redundant: `promoteStagedEntity` takes the row's lock key, so two
-  promotes through the action layer serialise and the second reads the
-  DB already active. The lock did not come later: `ae48d4513` (M3.2)
-  added both, `a6d81c572` (M4.2a) only widened the key. The stale store
-  itself is the next entry. Raised in 5.5a's review.
-- **A write that commits while a story opens is lost from its stores.**
-  `loadOpenStory` (`lib/actions/stories/operational.ts`) reads every
-  working-set table one after another, then hydrates them all together,
-  so a write committing in between is lost from the store, either way:
-  if the store already holds that branch, the write's patch applies and
-  the hydrate overwrites it; if not, the patch is dropped
-  (`lib/stores/factory/working-set-store.ts`, a branch the store doesn't
-  hold) and the hydrate brings the older rows. World and the other store
-  readers show the old row until the next open. The writers that can
-  land in that window are background runs on that branch: a pass, or a
-  close. Raised in 5.5a's review.
 - **`set.state` in `updateEntity` stores a patch's keys the schema
   doesn't know, with no undo record.** `set.state` takes the raw
   patch while `computeUndoPayload` walks only `entityStateColumnSchema`

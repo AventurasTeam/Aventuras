@@ -544,12 +544,16 @@ describe('noopRefusal marks: sample handlers (C11)', () => {
   describe('promoteStagedEntity on a staged row the store holds active', () => {
     afterEach(() => entitiesStore.__reset())
 
-    it('stays a rule refusal, since a stale store proves no write landed', async () => {
+    // A store read while a story opens can lag the row; the row decides.
+    it('lands, since the row is still staged', async () => {
       const ctx = await setup()
       entitiesStore.hydrate(BRANCH, [
         { ...entity('char_staged', 'character'), status: 'active' } as Entity,
       ])
-      expect(await outcomeOf(ctx, promote('char_staged'))).toStrictEqual(noop('not-staged'))
+      expect(await outcomeOf(ctx, promote('char_staged'))).toMatchObject({
+        status: 'ok',
+        targetId: 'char_staged',
+      })
     })
   })
 

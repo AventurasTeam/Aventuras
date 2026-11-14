@@ -1118,6 +1118,28 @@ gaining a synchronous subscriber or patch logic that can throw
 (validation, a must-exist invariant), or anything starting to read
 `pipeline_runs.outcome`, is the signal to revisit.
 
+#### A write that commits while a story opens is lost from its stores
+
+`loadOpenStory` (`lib/actions/stories/operational.ts`) reads every
+working-set table one after another, then hydrates them all together,
+so a write committing in between is lost from the store, either way: if
+the store already holds that branch, the write's patch applies and the
+hydrate overwrites it; if not, the patch is dropped
+(`lib/stores/factory/working-set-store.ts`, a branch the store doesn't
+hold) and the hydrate brings the older rows. World and the other store
+readers show the old row until the next open. The 2026-11-14 triage
+pass found no writer that lands in that window today: leaving a story
+cancels its runs and waits for idle, boot waits for crash recovery, a
+reload ends every run, and M6.3's branch switch is settled to wait on
+the gate. The one store guard that let the stale copy change a write,
+`promoteStagedEntity`'s, went in the same pass. One path is open and
+unverified: a deep link into another story while one is busy, which
+skips the story-leave guard
+([Slice 5.10's Open questions](./implementation/milestones/05-chapters-chapter-close/slices/10-two-starts.md#open-questions)).
+**Revisit signal:** an open or re-hydrate path that can run while a
+write on that branch commits. Raised in 5.5a's review; routed from
+triage 2026-11-14.
+
 #### The reversal closure doesn't follow ids inside JSON columns
 
 `REF_COLUMNS` in `lib/actions/delta/live-refs.ts` registers link-table
