@@ -265,12 +265,9 @@ Sheet size auto-derives from option shape:
   branch on phone.
 - **Sheet (medium)** for grouped lists or option counts where short
   feels cramped (~7+ options, or any options carrying a `group`
-  field). Auto-applied; `sheetSize` prop overrides. The
-  [calendar picker pattern](./calendar-picker.md) is the canonical
-  Sheet (medium) consumer — its richer rows and tail action go
-  beyond Select's contract via the `renderRow` / `renderTrigger` /
-  `tailAction` extension points, resolved during the calendar
-  picker build pass.
+  field). Auto-applied; `sheetSize` prop overrides. A richer row or
+  trigger goes through Select's `renderRow` / `renderTrigger`
+  extension points.
 
 Tablet keeps the desktop anchored Popover — no edge-clipping risk
 at tablet widths. Segment and radio render modes are unchanged at
@@ -289,7 +286,8 @@ rn-primitives mapping, slot reshape) live in
 [`overlays.md`](./overlays.md). The phone-tier Sheet bridge is
 implemented in-Select via `useTier()`. The shared per-tier dispatch
 for the overlay consumers that build on our Popover primitive
-(Autocomplete, provider-model-picker, Actions menu) lives in
+(Autocomplete, provider-model-picker, the calendar picker, Actions
+menu) lives in
 [`SearchableOverlayList`](./searchable-overlay-list.md); Select
 cannot share it — Select's popover branch uses
 `@rn-primitives/select`'s own machinery, not our Popover. See

@@ -2602,10 +2602,9 @@ threshold (rough lean: ≥ 8). Pick the actual number once we have
 real preset catalogs to test against — speculative until the
 catalog size is concrete enough to validate against. The picker's
 open-shape question (Select-extension vs Picker-fork) was
-resolved during the calendar-picker build pass — picker extends
-Select via the `renderRow` / `renderTrigger` / `tailAction` hooks
-documented in
-[`forms.md → Select primitive`](./ui/patterns/forms.md#select-primitive).
+resolved during the calendar-picker build pass — the picker builds on
+[`SearchableOverlayList`](./ui/patterns/searchable-overlay-list.md)
+via its `renderTrigger` / `renderRow` / `renderFooter` hooks.
 
 #### Chip input vs comma-separated string
 

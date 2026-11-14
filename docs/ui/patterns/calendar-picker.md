@@ -6,11 +6,11 @@ wizard. Same primitive across all three; differences are
 wrapper-level (framing copy, summary placement, swap warnings,
 edit-restrictions gating).
 
-Built on the [Select primitive](./forms.md#select-primitive) via
-its `renderRow` / `renderTrigger` / `tailAction` extension points
-— Select gained these specifically so calendar picker (and future
-rich-row pickers) could ride its tier-adapted Popover↔Sheet
-dispatch + selection + a11y semantics without forking. The
+Built on [`SearchableOverlayList`](./searchable-overlay-list.md) via
+its `renderTrigger` / `renderRow` / `renderFooter` hooks, which carry
+the chip trigger, the rich rows and the `Manage calendars in Vault →` tail, so the
+picker rides its tier-adapted Popover↔Sheet dispatch, selection and
+a11y semantics without forking. The
 calendar definition shape the picker reads is in
 [`calendar-systems/`](../../calendar-systems/README.md); the
 upstream editor is the
@@ -371,9 +371,9 @@ primitive's gate is a direct consequence of that principle.
   the phone sheet lifts with the keyboard per
   [`overlays.md → Sheet — Keyboard handling`](./overlays.md#sheet--keyboard-handling).
 
-Resolved during the implementation pass: the picker rides Select
-via the `renderRow` / `renderTrigger` / `tailAction` extension
-points; no sibling `Picker` primitive was needed. The
+Resolved during the implementation pass: the picker rides
+`SearchableOverlayList` via its `renderTrigger` / `renderRow` /
+`renderFooter` hooks; no sibling `Picker` primitive was needed. The
 option-count search-bar threshold is parked until the second
 rich-row picker emerges — see
 [`parked.md → Calendar picker search-bar threshold`](../../parked.md#calendar-picker-search-bar-threshold).
