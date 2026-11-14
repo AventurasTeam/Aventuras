@@ -385,6 +385,30 @@ describe('closeReviewNotApplied', () => {
     ])
   })
 
+  it("matches a refused create_lore's title as the close's own title rule does, by its NFC form", () => {
+    const decomposed = 'Café Law'
+    const composed = 'café law'
+
+    expect(
+      notApplied([
+        call({
+          task: 'lore',
+          tool: 'create_lore',
+          rows: [{ table: 'lore', id: 'lore_minted', name: decomposed }],
+          values: { title: decomposed, body: 'No credit.' },
+          result: 'rejected',
+          reason: 'lore-cap',
+        }),
+        call({
+          task: 'lore',
+          tool: 'create_lore',
+          rows: [{ table: 'lore', id: 'lore_landed', name: composed }],
+          values: { title: composed, body: 'No credit.' },
+        }),
+      ]),
+    ).toEqual([])
+  })
+
   it('gives a refused create_lore its proposed body, the create badge and no press', () => {
     const [row] = closeReviewNotApplied(
       report([

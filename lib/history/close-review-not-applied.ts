@@ -1,5 +1,6 @@
 import type { CloseReasonKey, CloseReport, CloseReportCall } from '@/lib/db'
 import { t } from '@/lib/i18n'
+import { normalizeTerm } from '@/lib/keyword-terms'
 
 import {
   CREATE_LORE_TOOL,
@@ -90,8 +91,6 @@ export const PLACEMENT_PATHS: ReadonlySet<string> = new Set([
 ])
 const fieldOf = (path: string): string => (PLACEMENT_PATHS.has(path) ? 'placement' : path)
 
-const titleKey = (title: string): string => title.trim().toLowerCase()
-
 type Row = CloseReportCall['rows'][number]
 type Refusal = {
   index: number
@@ -105,8 +104,9 @@ type Refusal = {
 const sharesRow = (a: readonly Row[], b: readonly Row[]): boolean =>
   a.some((row) => b.some((other) => sameRow(row, other)))
 
+// Compared as the close's title rule compares a lore title (loreTitled).
 function createdTitle(call: CloseReportCall): string {
-  return titleKey(call.values?.title ?? call.rows[0]?.name ?? '')
+  return normalizeTerm(call.values?.title ?? call.rows[0]?.name ?? '')
 }
 
 // A refused create's minted id is one no retry shares, so it matches by title. A row with no
