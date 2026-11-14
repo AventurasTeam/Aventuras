@@ -856,7 +856,10 @@ on a chapter no close wrote, so it ships hidden.
   happening several in-scene characters know is unstated. Landing it runs
   decay for the first time, so every chaptered story's ranking shifts on
   untuned defaults. Slice 5.9's planning offers the design route. A new
-  column there follows C5's migration rule.
+  column there follows C5's migration rule. Answered: a happening reads
+  each in-scene awareness row's age from its `learned_at_entry_id`'s
+  chapter and takes the row that decays least, with no new column
+  ([5.9's Implementation notes](./slices/09-chapter-wide-tasks.md#implementation-notes)).
 - **The chapter behind `pnpm probe:close`.** No realistic 24k chapter
   exists. Slice 5.2 builds it from a narration or story dataset, shaped
   into turns and run through both the per-turn classifier and the

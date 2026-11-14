@@ -87,9 +87,10 @@ since `entriesStore` holds a window
 (`lib/pipeline/definitions/periodic-classifier.ts:73-75`), and returns
 each turn's `promptProse` in position order, with no `system` row. A
 call returns at most ten turns (`READ_TURNS_MAX`) and names the rest as
-unread. An unknown handle, or one outside the range the open question
-settles, is an answer saying so, as `read_row`'s missing row is. A read
-writes nothing and can't fail a task.
+unread. An unknown handle, or one outside the range
+[Implementation notes](#implementation-notes) settle, is an answer
+saying so, as `read_row`'s missing row is. A read writes nothing and
+can't fail a task.
 
 **The range embed,** a code step in `before`, after normalization and
 ahead of the Happenings task, in `close-happenings.ts`.
@@ -121,7 +122,7 @@ overlap thresholds as constants (`0.8`, `0.5`). Only rows with an
 `happenings_mutual_excl` true through a merge. A cluster has at least two
 rows. It runs in the embed's code step, and the task's start read takes
 the clusters from a new accessor in `close-intermediates.ts`. The terms
-canon leaves open are in Open questions.
+canon leaves open are in [Implementation notes](#implementation-notes).
 
 **`merge_happenings`** takes `keep`, `absorb` (ids), an optional `title`
 and `description`, `turns` and `why`, so a redundant row merges with the
@@ -152,9 +153,10 @@ that stops the call writes nothing:
 The group, anchored on E under the run's `actionId`:
 
 - One `updateHappening` on the kept row, with its precedence from 5.5b:
-  the composite text when given, under the bound the open question
-  settles, and the earliest `occurred_at_entry_id` by entry position. A
-  redundant-row merge can leave it a noop, and the deletes still land.
+  the composite text when given, under the bound
+  [Implementation notes](#implementation-notes) settle, and the earliest
+  `occurred_at_entry_id` by entry position. A redundant-row merge can
+  leave it a noop, and the deletes still land.
 - One `createHappeningInvolvement` per character the kept row lacks,
   built ahead of the group, since `happening_involvements` has no unique
   index. The action takes an optional `proseEntryId`, as the awareness
@@ -273,9 +275,10 @@ above 0, read from SQL, through `delta_emitted` anchored on E, polling
   entry-to-sequence map. It holds no derived state, so a chapter reversed
   or deleted reads right on the next pass.
 - A happening reads from its in-scene awareness rows'
-  `learned_at_entry_id`, as canon says, under the rule the open question
-  settles. Entities and threads read from the source planning settles,
-  and lore and chapters stay 0.
+  `learned_at_entry_id`, as canon says, under the rule
+  [Implementation notes](#implementation-notes) settle. Entities and
+  threads read from the source planning settles, and lore and chapters
+  stay 0.
 - `assembleCandidates`' `shared()` loses its literal 0
   (`lib/retrieval/run.ts:764-772`), and `lib/retrieval/types.ts:48` and
   the comment at `run.ts:770-771` flip.
@@ -301,7 +304,8 @@ retrieval phase's sync is the only carve-out writer. `→ Reverse-replay`
 calls a close's merge "the one machine update of a happening", which
 `mark_common_knowledge` isn't. `chapter-close.md → 3c` gives `gold pieces`
 and `gp` to `gold` as examples the algorithm can't reach. Each flips with
-the work, as does whatever the open questions settle.
+the work, as does whatever [Implementation notes](#implementation-notes)
+settle.
 
 **The dataset seed.**
 [Slice 5.2](./02-first-chapter.md#implementation-notes)'s dataset
@@ -325,8 +329,8 @@ would drop one slice's rows.
 
 - **Tuning the defaults,** `λ_type`, thresholds and top-N once chosen:
   [`followups.md → Tuning and play testing`](../../../../followups.md#tuning-and-play-testing).
-- **Growing 3d's scope,** unless the contradicted-pin question below
-  says so.
+- **Growing 3d's scope,** unless the contradicted-pin note in
+  [Implementation notes](#implementation-notes) says so.
 - **The full seven-task close, its E2E and a full group's reversal cost:**
   [Slice 5.10](./10-two-starts.md).
 - **The driver, `close_task_start`, citation checks, the read gate, the
@@ -373,14 +377,14 @@ Each test file runs under `pnpm vitest run --project unit <file>`.
   edit of the kept row's `icon` doesn't stop a merge writing only
   `description`, and a user's value on the kept row's own awareness row
   stands while the merge lands, the model's list naming its character
-  (`close-agent/close-happenings.test.ts`).
+  (`close-agent/happening-tools.test.ts`).
 - **Merge shape:** the survivor holds the composite and the earliest
   anchor; two absorbed rows naming one character give one upsert with max,
   earliest and sum; two naming one involvement give one create; a
   user-removed involvement stays removed, the model's list naming its
   character; a composite past the bound
   lands bounded; the ledger entry of a landed merge lists every row and
-  has `survivor` (`close-agent/close-happenings.test.ts`).
+  has `survivor` (`close-agent/happening-tools.test.ts`).
 - **Awareness arm:** a `chapter_close` upsert moves `learned_at_entry_id`
   and `retrieval_count` on both arms, asserted on the store patch; a
   `periodic_classifier` upsert moves neither; a count-only pair doesn't
@@ -409,7 +413,7 @@ Each test file runs under `pnpm vitest run --project unit <file>`.
 - **Reset:** every count on the branch reads 0 after the phase, each row
   has one `chapter_close` delta anchored on E, no count-only delta reaches
   History, and a task stopped at its budget still resets
-  (`close-agent/close-awareness.test.ts`).
+  (`close-agent/close-retrieval-reset.test.ts`).
 - **Report:** `part` is 0 for both tasks' calls and `stopped` rows, and
   neither normalization nor the reset appears in `calls`
   (`close-agent/driver.test.ts`).
@@ -510,8 +514,7 @@ None open: Implementation notes record each answer.
   bound (`EMBED_TIMEOUT_MS`, moved to a shared module), and an expiry
   fails the close as any embedder failure does, a
   `VectorInvariantError` included, so the Switch-embedder fix shows.
-  Scope: out's M7.1 line missed that retrieval was already bounded; the
-  roadmap's M7.1 entry now names only reconcile's embeds.
+  The roadmap's M7.1 entry now names only reconcile's embeds.
 - **`pnpm probe:close` embeds in Node.** The probe stands in for the
   preload's embedder and raw-database bridges, over the main process's
   embedder service (onnxruntime-node) and its own copy, reading models
@@ -525,8 +528,8 @@ None open: Implementation notes record each answer.
   survivor, not an earlier read row's. The round-trip suite checks it on
   `mark_common_knowledge`.
 - **The start lists are unbounded.** Neither start has a read limit to
-  keep under: Open questions assumed the prose tasks have one, and they
-  don't. Awareness rows list under their happening, every chapter row,
+  keep under, since the prose tasks' starts have none either. Awareness
+  rows list under their happening, every chapter row,
   with the frequent rows from earlier chapters capped at `AWARENESS_TOP_N`;
   the measure is below and in the part followup.
 - **3c's rule (developer decision, 2026-11-14).** Keys fold by
@@ -605,7 +608,7 @@ None open: Implementation notes record each answer.
 - **`read_turns`' reach.** Any non-system entry at or before E;
   citations stay inside the chapter. An entry outside the chapter takes
   its handle through `CloseIds.showTurn` when a start lists a row
-  naming it, not the `registerHandle` Open questions names.
+  naming it.
 - **N is 20** (`AWARENESS_TOP_N`), tuning's to move.
 - **A contradicted pin.** The sentence promising lore-mgmt catches one
   went from `retrieval.md` and `edge-cases.md`; 3d keeps its scope.
