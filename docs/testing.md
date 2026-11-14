@@ -727,8 +727,12 @@ names that slot's database. An `AVENTURAS_DB_PATH` database with no
 such folder beside it, as `pnpm dataset:chapter` writes one, falls back
 to the dev slot's. The probe stands in for the preload's
 embedder and raw-database bridges over its copy, and prints, from the embed
-step's own log entry, how many of the range's happenings it embedded and
-the clusters it found. A run that is not a stand-in refuses, naming each
+step's own log entry, its coverage (how many of the range's happenings
+hold a current vector, out of all of them, whether this close embedded
+them or an earlier sync did) and the clusters it found. A range of fewer than two
+happenings has nothing to cluster: the step completes without embedding
+or logging, and the probe prints that the range held fewer than two
+happenings. A run that is not a stand-in refuses, naming each
 folder it looked in, when none exists, before it opens a database.
 
 `PROBE_OVERLAY=1` runs the probe on [the dataset seed](#the-dataset-seed)
