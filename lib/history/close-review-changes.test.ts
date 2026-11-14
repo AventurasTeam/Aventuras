@@ -14,6 +14,7 @@ const TITHE = { table: 'lore', id: 'lore_tithe', name: 'The Tithe of Hours' }
 const LETTER = { table: 'threads', id: 'thr_letter', name: 'The letter' }
 const SEAL = { table: 'threads', id: 'thr_seal', name: 'The seal' }
 const FIRE = { table: 'happenings', id: 'hap_fire', name: 'The fire' }
+const BLAZE = { table: 'happenings', id: 'hap_blaze', name: 'The blaze' }
 const AWARE = { table: 'happening_awareness', id: 'haw_kael_fire', name: '' }
 
 const KINDS = new Map<string, EntityKind>([
@@ -460,6 +461,33 @@ describe('closeReviewChanges', () => {
       [
         ['delete', 'The seal', null, 'Merged into The letter'],
         ['update', 'The letter', 'Title', 'The letter → The sealed letter'],
+      ],
+    )
+  })
+
+  it("gives a landed happening merge's earliest anchor and common knowledge on keep as refs and flags", () => {
+    const calls = [
+      call({
+        task: 'happenings',
+        part: 0,
+        tool: 'merge_happenings',
+        rows: [FIRE, BLAZE],
+        values: { occurredAtEntryId: 'entry_110', commonKnowledge: '1' },
+        survivor: { table: 'happenings', id: 'hap_fire' },
+      }),
+    ]
+    const deltas = [
+      delta(FIRE, { occurredAtEntryId: 'entry_112', commonKnowledge: 0 }),
+      delta(BLAZE, { id: 'hap_blaze' }, 'delete'),
+    ]
+
+    const [area] = closeReviewChanges(report(calls), deltas, LOOKUP)
+
+    expect(area!.rows.map((row) => [row.op, row.target.name, row.fieldLabel, row.summary])).toEqual(
+      [
+        ['delete', 'The blaze', null, 'Merged into The fire'],
+        ['update', 'The fire', 'Occurred at', 'entry #112 → entry #110'],
+        ['update', 'The fire', 'Common knowledge', 'No → Yes'],
       ],
     )
   })

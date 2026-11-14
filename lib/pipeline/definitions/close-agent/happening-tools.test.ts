@@ -1,6 +1,7 @@
-import { afterEach, beforeEach, describe, expect, it } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { USER_EDITED_SINCE_PROSE, type PipelineAction } from '@/lib/actions/types'
+import { logger } from '@/lib/diagnostics'
 import { generateId } from '@/lib/ids'
 import { resetAllStores } from '@/lib/stores'
 
@@ -722,5 +723,71 @@ describe('merge_happenings refusals', () => {
     const run = await runCalls(f, [merge({ keep: 'hp1', absorb: ['hp2'] })])
 
     expect(run.answers).toEqual([{ result: 'skipped', reason: 'later-turn', note: NOTE.laterTurn }])
+  })
+})
+
+describe('merge_happenings values', () => {
+  let f: CloseFixture
+
+  beforeEach(async () => {
+    f = await openCloseFixture()
+    await seedWorld(f)
+    // LIGHT, at t3 ahead of CROSSING's t5, is common knowledge; CROSSING isn't.
+    await apply(f, {
+      kind: 'updateHappening',
+      source: 'periodic_classifier',
+      payload: {
+        branchId: f.branchId,
+        id: LIGHT,
+        patch: { commonKnowledge: 1 },
+        proseEntryId: null,
+      },
+    })
+  })
+
+  afterEach(() => {
+    resetAllStores()
+    vi.restoreAllMocks()
+  })
+
+  it('records the anchor and common knowledge a merge lands on keep beside its text, each logged', async () => {
+    const debug = vi.spyOn(logger, 'debug')
+
+    const run = await runCalls(f, [merge({ keep: 'hp1', absorb: ['hp2'], description: COMPOSITE })])
+
+    expect(run.answers).toEqual([{ result: 'ok', survivor: 'hp1' }])
+    expect(await happeningRow(f, CROSSING)).toMatchObject({
+      occurredAtEntryId: f.entries[2]!.id,
+      commonKnowledge: 1,
+    })
+    expect(run.calls[0]!.values).toEqual({
+      description: COMPOSITE,
+      occurredAtEntryId: f.entries[2]!.id,
+      commonKnowledge: '1',
+    })
+    const logged = debug.mock.calls
+      .filter(([event]) => event === 'memory.close_report_value')
+      .map(([, data]) => (data as { path: string }).path)
+    expect(logged).toEqual(['description', 'occurredAtEntryId', 'commonKnowledge'])
+  })
+
+  it('records them as proposed on a merge the user skipped', async () => {
+    await apply(
+      f,
+      {
+        kind: 'updateHappening',
+        source: 'user_edit',
+        payload: { branchId: f.branchId, id: LIGHT, patch: { icon: 'lamp' }, proseEntryId: null },
+      },
+      BY_USER,
+    )
+
+    const run = await runCalls(f, [merge({ keep: 'hp1', absorb: ['hp2'] })])
+
+    expect(run.calls[0]).toMatchObject({ result: 'skipped', reason: USER_EDITED_SINCE_PROSE })
+    expect(run.calls[0]!.values).toEqual({
+      occurredAtEntryId: f.entries[2]!.id,
+      commonKnowledge: '1',
+    })
   })
 })

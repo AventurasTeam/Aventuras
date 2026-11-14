@@ -506,7 +506,7 @@ async function planMergeHappenings(args: MergeArgs, ctx: WriteContext): Promise<
         ...absorb.map((id) => protectedField(DELETE_PATH, id, protection)),
       ],
       rows,
-      values: wanted,
+      values: patch,
     }
   // Refused whole, not dropped: once the merge lands, no tool could resend keep's new text.
   const handle = [wanted.title, wanted.description]
@@ -553,7 +553,8 @@ async function planMergeHappenings(args: MergeArgs, ctx: WriteContext): Promise<
     actions,
     lost: carried.lost,
     rows,
-    values: wanted,
+    // C4: keep's derived anchor and common knowledge are new values too, beside its text.
+    values: patch,
     survivor: { table: 'happenings', id: keep },
   }
 }

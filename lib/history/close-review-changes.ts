@@ -187,7 +187,9 @@ function updateSummary(
   value: string,
   lookup: CloseReviewLookup,
 ): string {
-  const after = reviewValueText(path, value)
+  // A ledger keeps an entry ref as its id (ID_PATTERN has no entry prefix): shown as its ref.
+  const position = lookup.entryPosition(value)
+  const after = position === undefined ? reviewValueText(path, value) : formatEntryRef(position)
   if (path === UNPLACED_PATH) return after
   const before =
     path === COMMON_KNOWLEDGE_PATH ? (old == null ? '' : flagText(old)) : shownValue(old, lookup)
