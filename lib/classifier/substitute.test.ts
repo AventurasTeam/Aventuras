@@ -146,6 +146,18 @@ describe('nameIdsInProse', () => {
     })
   })
 
+  it('names each ID in a bracket of several, keeping the bracket', () => {
+    expect(
+      nameIdsInProse({ description: 'At [c1,c2] and [c1-c2], with [new:hask,c9]' }, nameOf),
+    ).toEqual({ description: 'At [Pell,Tobin Ash] and [Pell-Tobin Ash], with [Dov Hask,c9]' })
+  })
+
+  it('keeps two adjacent bracketed names apart', () => {
+    expect(nameIdsInProse({ description: '[c1][c2] crossed; [c1][t2] waited' }, nameOf)).toEqual({
+      description: 'Pell, Tobin Ash crossed; Pell, [t2] waited',
+    })
+  })
+
   it('leaves a token it names nothing for as written', () => {
     const prose = { description: '[c9] and c9 at [t2], in v2 of the map, by new:nobody' }
     expect(nameIdsInProse(prose, nameOf)).toEqual(prose)

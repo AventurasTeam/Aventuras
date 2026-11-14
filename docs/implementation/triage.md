@@ -316,13 +316,6 @@ patch`, which 5.5a marks `restated`, so a close tool's write of it
   file is deleted; 5.8's chapter metadata part and merge lanes are the
   latest case, and a multi-part close then fails to parse in the dev
   mock. Raised in 5.8's task review.
-- **A bracket of several handles hides them from prose naming.**
-  `PROSE_TOKEN` in `lib/classifier/substitute.ts` takes a whole
-  bracket as one token, so `nameIdsInProse` and the close's
-  `nameCloseProse` leave `[c1,c2]`, `[c1-c3]` or `[c1,t3]` unnamed,
-  and a stored row handle survives in a pass's and a close's prose.
-  The close's turn-handle check scans bare tokens instead. Raised in
-  5.8's task review.
 - **No test pins a prose task's token count into its render.** In
   the close's Identity, Threads, Lore and Upkeep tasks, passing 0 for
   `proseTokens` to `renderClosePrompt` still passes every task test.
