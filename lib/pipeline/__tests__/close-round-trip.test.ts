@@ -1253,26 +1253,31 @@ async function seedInnPair(fx: CloseFixture): Promise<void> {
   await seedInnRows(fx)
 }
 
-// Turn 6, the head turn, bumps ASKED's row for Tobin, so CTRL-Z reaches that turn once the close
+// Turn 6, the head turn, bumps both of Tobin's rows, so CTRL-Z reaches that turn once the close
 // is undone. Anchored on its reply, not null as a turn logs it: the rollback arms place every
 // seeded delta by its anchor (keptByRollback).
 async function seedInnPairWithLaterBump(fx: CloseFixture): Promise<void> {
   await seedInnPair(fx)
-  const id = (await awarenessRow(fx, ASKED.id, TOBIN.id)).id
-  const result = await applyDeltaAction(
-    {
-      action: {
-        kind: 'bumpAwarenessRetrieval',
-        source: 'ai_classifier',
-        payload: { branchId: fx.branchId, id, priorCount: ASKED_TOBIN_COUNT },
+  for (const [happeningId, priorCount] of [
+    [ASKED.id, ASKED_TOBIN_COUNT],
+    [TOLD.id, TOLD_TOBIN_COUNT],
+  ] as const) {
+    const { id } = await awarenessRow(fx, happeningId, TOBIN.id)
+    const result = await applyDeltaAction(
+      {
+        action: {
+          kind: 'bumpAwarenessRetrieval',
+          source: 'ai_classifier',
+          payload: { branchId: fx.branchId, id, priorCount },
+        },
+        actionId: 'act_close_turn_6',
+        branchId: fx.branchId,
+        entryId: fx.replyIds[5]!,
       },
-      actionId: 'act_close_turn_6',
-      branchId: fx.branchId,
-      entryId: fx.replyIds[5]!,
-    },
-    fx.ctx,
-  )
-  if (result.status !== 'ok') throw new Error(`round trip: later bump refused: ${result.reason}`)
+      fx.ctx,
+    )
+    if (result.status !== 'ok') throw new Error(`round trip: later bump refused: ${result.reason}`)
+  }
 }
 
 // Tobin's purse spelled two ways and a plural that folds only because Wren holds `arrow`.
@@ -1355,6 +1360,12 @@ const HAPPENINGS_TASK: SlotEntry<'happenings'> = { kind: 'task', def: happenings
 function mergeSlots(perPart: readonly SlotEntry<PartTask>[] = []): () => CloseAgentSlots {
   return () => ({ before: [clustered(INN_PAIR), HAPPENINGS_TASK], perPart, after: [] })
 }
+
+const mergeThenResetSlots = (): CloseAgentSlots => ({
+  before: [clustered(INN_PAIR), HAPPENINGS_TASK],
+  perPart: [],
+  after: [{ kind: 'code', step: resetRetrievalStep }],
+})
 
 const awarenessSlots = (): CloseAgentSlots => ({
   before: [],
@@ -1459,17 +1470,30 @@ const CHAPTER_WIDE_CASE: RoundTripCase = {
 }
 
 const LATER_BUMP_CASE: RoundTripCase = {
-  name: 'merge_happenings absorbing a row a later turn’s retrieval bumped',
-  slots: mergeSlots(),
+  name: 'merge_happenings and the reset over rows a later turn’s retrieval bumped',
+  slots: mergeThenResetSlots,
   seed: seedInnPairWithLaterBump,
   steps: [{ calls: [{ toolName: 'merge_happenings', input: MERGE_COMPOSITE }] }],
   merge: true,
   abortOn: ['deleteHappening'],
   armExpect: {
-    // The close's undo puts ASKED's row back, then the bump goes with the turns past E.
+    // The bump's undo restores by assignment, so TOLD's row reads its pre-bump count over the
+    // reset's 0. Canon lets it stand: a stale counter does no harm (chapter-close.md → Tools and
+    // writes).
+    'a rollback past E': async (h) => {
+      expect(await worldState(h.fx)).toEqual(
+        withAwarenessCount(h.closed().state, TOLD.id, TOBIN.id, TOLD_TOBIN_COUNT),
+      )
+    },
+    // The close's undo puts ASKED's row back, then the bumps go with the turns past E.
     'a rollback to E': async (h) => {
       expect(await worldState(h.fx)).toEqual(
-        withAwarenessCount(h.before, ASKED.id, TOBIN.id, ASKED_TOBIN_COUNT),
+        withAwarenessCount(
+          withAwarenessCount(h.before, ASKED.id, TOBIN.id, ASKED_TOBIN_COUNT),
+          TOLD.id,
+          TOBIN.id,
+          TOLD_TOBIN_COUNT,
+        ),
       )
     },
   },
@@ -1809,7 +1833,10 @@ describe('the round trip table', () => {
       for (const name of [...Object.keys(c.armExpect ?? {}), ...Object.keys(c.armLog ?? {})])
         expect(arms.has(name), `${c.name}: ${name}`).toBe(true)
     expect(Object.keys(FLAG_CASE.armExpect ?? {})).toEqual(['a rollback past E', 'a rollback to E'])
-    expect(Object.keys(LATER_BUMP_CASE.armExpect ?? {})).toEqual(['a rollback to E'])
+    expect(Object.keys(LATER_BUMP_CASE.armExpect ?? {})).toEqual([
+      'a rollback past E',
+      'a rollback to E',
+    ])
     expect(Object.keys(LATER_BUMP_CASE.armLog ?? {})).toEqual(['a rollback past E'])
   })
 
@@ -2032,20 +2059,31 @@ describe('each new case lands what it names', () => {
       ['resetAwarenessRetrieval'],
     ])
     // The merge's summed count is the one row left counting; the reset clears it.
-    expect((await awarenessRow(h.fx, TOLD.id, TOBIN.id)).retrievalCount).toBe(0)
+    const kept = await awarenessRow(h.fx, TOLD.id, TOBIN.id)
+    expect(kept.retrievalCount).toBe(0)
+    const [reset] = (await deltasOf(h.fx, h.actionId())).filter((d) => d.targetId === kept.id)
+    expect(reset?.undoPayload, 'the reset undoes to the summed count').toEqual({
+      retrievalCount: ASKED_TOBIN_COUNT + TOLD_TOBIN_COUNT,
+    })
   })
 
-  it('a merge beside a later turn’s retrieval bump lands, then CTRL-Z of the close and of the turn both succeed', async () => {
+  it('a merge and the reset beside a later turn’s retrieval bumps land, then CTRL-Z of the close and of the turn both succeed', async () => {
     const h = await closedHarness(LATER_BUMP_CASE)
     expect(await writeCalls(h)).toMatchObject([
       { tool: 'merge_happenings', result: 'ok', survivor: { table: 'happenings', id: TOLD.id } },
     ])
+    // C12: neither bump reads as a later turn's write, so both bumped counts, 3 and 2, fold into TOLD's.
+    const kept = await awarenessRow(h.fx, TOLD.id, TOBIN.id)
+    expect(kept.retrievalCount).toBe(0)
+    const [reset] = (await deltasOf(h.fx, h.actionId())).filter((d) => d.targetId === kept.id)
+    expect(reset?.undoPayload).toEqual({ retrievalCount: 5 })
 
     await undoClose(h)
     expect(await undoLastAction(h.fx.branchId, h.fx.ctx)).toEqual({ status: 'ok' })
 
-    // Turn 6 went whole: its entries and its bump of ASKED's row for Tobin.
+    // Turn 6 went whole: its entries and its bumps of both of Tobin's rows.
     expect((await awarenessRow(h.fx, ASKED.id, TOBIN.id)).retrievalCount).toBe(2)
+    expect((await awarenessRow(h.fx, TOLD.id, TOBIN.id)).retrievalCount).toBe(1)
     const left = await h.fx.ctx.db
       .select({ id: storyEntries.id })
       .from(storyEntries)
