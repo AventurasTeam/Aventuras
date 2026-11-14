@@ -643,7 +643,8 @@ async function clearRef(walk: UndoWalk, { row, ref }: RefClear): Promise<void> {
   if (copy && !copy.removed) copy.row[ref.column] = cleared(copy.row[ref.column])
 }
 
-// Machine undos yield to later user edits: generation-pipeline.md → Reverse-replay.
+// Machine undos yield to later user edits, and a chapter delete's field restores to any later
+// write: generation-pipeline.md → Reverse-replay.
 async function buildUndoOps(
   set: ReversalSet,
   ctx: DbCtx,
@@ -662,14 +663,18 @@ async function buildUndoOps(
   }
   const listVecTables = vecTableLister(ctx)
   const laterUserEdits = await userEditsOutliving(ctx, set.rows, readsUserEdits)
+  // A create keeps its row only for the user's writes, whatever the set's mode.
+  const fieldEdits =
+    set.yieldTo === 'any'
+      ? await userEditsOutliving(ctx, set.rows, (d) => d.op === 'update', 'any')
+      : laterUserEdits
   const liveLinks = await liveLinkFilter(set.rows, ctx)
 
   for (const delta of set.rows) {
     const target = undoTargetOf(delta)
-    const userEdits = laterUserEdits.get(delta.id) ?? []
-    if (delta.op === 'create') await undoCreate(walk, target, userEdits)
+    if (delta.op === 'create') await undoCreate(walk, target, laterUserEdits.get(delta.id) ?? [])
     else if (delta.op === 'delete') undoDelete(walk, target, liveLinks)
-    else await undoUpdate(walk, target, userEdits)
+    else await undoUpdate(walk, target, fieldEdits.get(delta.id) ?? [])
   }
   // After the walk, so a clear lands on the row as every undo of it leaves it.
   for (const clear of set.refClears) await clearRef(walk, clear)

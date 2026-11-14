@@ -6,6 +6,8 @@ import {
   characterRelationships,
   deltas,
   entities,
+  happeningAwareness,
+  happenings,
   stories,
   storyEntries,
   type CharacterState,
@@ -32,7 +34,7 @@ import { USER_EDITED_SINCE_PROSE } from './user-precedence'
 import { shownCounts } from '../story-entries/__tests__/shown-counts'
 import { rollbackToEntry, updateStoryEntryContent } from '../story-entries/operational'
 import { redoLastAction, undoLastAction } from '../story-entries/undo'
-import type { PipelineAction } from '../types'
+import type { DeltaSource, PipelineAction } from '../types'
 
 afterEach(() => {
   entitiesStore.__reset()
@@ -1259,5 +1261,149 @@ describe('reversing a machine write after an undo and redo of the user write bef
     await reverseReplayDeltas('act_c', ctx)
 
     expect((await kael(db)).keywords).toEqual(['ser kael'])
+  })
+})
+
+// C13: a chapter delete yields a reversed machine field to a later write from any source, except a
+// retrieval-count bump; a machine create still keeps its row only for the user's writes.
+describe('reversing a machine write that yields to any later writer', () => {
+  const reverseYieldingToAny = async (rows: readonly Delta[], ctx: Ctx) =>
+    reverseAndPruneDeltaRows(
+      await selectReversalSet(ctx, { branchId: 'b1', target: rows, yieldTo: 'any' }),
+      ctx,
+      { keepRedoExact: false },
+    )
+
+  const machinePatch = (source: DeltaSource, patch: Record<string, unknown>): PipelineAction => ({
+    kind: 'updateEntity',
+    source,
+    payload: { branchId: 'b1', id: 'char_kael', patch },
+  })
+
+  const SWORN = 'a knight sworn to the toll'
+  const BROKEN = 'a knight who broke his oath'
+
+  // The reversed write changes two columns; a later per-turn write changes one of them.
+  async function describeTwice(ctx: Ctx): Promise<void> {
+    await createKael(ctx)
+    await apply(
+      ctx,
+      machinePatch('periodic_classifier', {
+        description: SWORN,
+        keywords: ['the knight', 'the toll'],
+      }),
+      'act_c',
+    )
+    await apply(ctx, machinePatch('per_turn_classifier', { description: BROKEN }), 'act_t')
+  }
+
+  const bump = (source: DeltaSource, priorCount: number): PipelineAction => ({
+    kind: 'bumpAwarenessRetrieval',
+    source,
+    payload: { branchId: 'b1', id: 'haw_kael', priorCount },
+  })
+
+  async function retrievalCount(db: Db): Promise<number> {
+    const [row] = await db
+      .select({ count: happeningAwareness.retrievalCount })
+      .from(happeningAwareness)
+      .where(eq(happeningAwareness.id, 'haw_kael'))
+    return row.count
+  }
+
+  it('carries the seed mode on the set, the empty set included', async () => {
+    const { db, ctx } = await setup()
+    expect((await selectReversalSet(ctx, { branchId: 'b1', target: [] })).yieldTo).toBe('user')
+    expect(
+      (await selectReversalSet(ctx, { branchId: 'b1', target: [], yieldTo: 'any' })).yieldTo,
+    ).toBe('any')
+    await createKael(ctx)
+    const target = await deltasOf(db, 'act_0')
+    expect((await selectReversalSet(ctx, { branchId: 'b1', target })).yieldTo).toBe('user')
+    expect((await selectReversalSet(ctx, { branchId: 'b1', target, yieldTo: 'any' })).yieldTo).toBe(
+      'any',
+    )
+  })
+
+  it('keeps a column a later per-turn write changed and restores the one it left', async () => {
+    const { db, ctx } = await setup()
+    await describeTwice(ctx)
+
+    await reverseYieldingToAny(await deltasOf(db, 'act_c'), ctx)
+
+    expect(await kael(db)).toMatchObject({ description: BROKEN, keywords: ['the knight'] })
+    expect(await actionIds(db)).toEqual(['act_0', 'act_t'])
+  })
+
+  it('on the default, restores both columns over the same later per-turn write', async () => {
+    const { db, ctx } = await setup()
+    await describeTwice(ctx)
+
+    await reverseRows(await deltasOf(db, 'act_c'), ctx)
+
+    expect(await kael(db)).toMatchObject({
+      description: 'a wandering knight',
+      keywords: ['the knight'],
+    })
+  })
+
+  it('restores a count over a later update that only moved the count', async () => {
+    const { db, ctx } = await setup()
+    await db
+      .insert(happenings)
+      .values({ id: 'hap_fire', branchId: 'b1', title: 'The fire', createdAt: 1, updatedAt: 1 })
+    await db.insert(happeningAwareness).values({
+      id: 'haw_kael',
+      branchId: 'b1',
+      characterId: 'char_kael',
+      happeningId: 'hap_fire',
+      retrievalCount: 2,
+    })
+    await apply(ctx, bump('chapter_close', 2), 'act_c')
+    await apply(ctx, bump('ai_classifier', 3), 'act_t')
+    expect(await retrievalCount(db)).toBe(4)
+
+    await reverseYieldingToAny(await deltasOf(db, 'act_c'), ctx)
+
+    expect(await retrievalCount(db)).toBe(2)
+  })
+
+  // Holds through the closure alone: the later machine write joins the set with the row.
+  it('deletes a pair its create made though a later machine write set a view', async () => {
+    const { db, ctx } = await setup()
+    await seedChars(db)
+    await apply(ctx, classifyView('ally'), 'act_c')
+    await apply(ctx, classifyMiraView('wary'), 'act_t')
+
+    await reverseYieldingToAny(await deltasOf(db, 'act_c'), ctx)
+
+    expect(await pair(db)).toHaveLength(0)
+    expect(await relationshipDeltas(db)).toEqual([])
+  })
+
+  // The create arm reads only user writes: with the widened map the machine write, older than the
+  // user's, would take the re-owned create.
+  it("re-owns a kept pair's create to the user write, not the machine write before it", async () => {
+    const { db, ctx } = await setup()
+    await seedChars(db)
+    await apply(ctx, classifyView('ally'), 'act_c')
+    await apply(ctx, classifyView('enemy'), 'act_m')
+    await apply(ctx, userViews('rival', null), 'act_u')
+    const [machineView] = await deltasOf(db, 'act_m')
+
+    const set = await selectReversalSet(ctx, {
+      branchId: 'b1',
+      target: await deltasOf(db, 'act_c'),
+      yieldTo: 'any',
+    })
+    // It wrote the view the user kept, not only the view the reversal nulls.
+    expect(set.rows.map((d) => d.id)).not.toContain(machineView.id)
+    await reverseAndPruneDeltaRows(set, ctx, { keepRedoExact: false })
+
+    expect((await pair(db))[0]).toMatchObject({ kind: 'rival', inverseKind: null })
+    expect(await relationshipCreates(db)).toEqual([
+      expect.objectContaining({ source: 'user_edit', entryId: null, actionId: 'act_u' }),
+    ])
+    expect(await deltasOf(db, 'act_m')).toEqual([machineView])
   })
 })
