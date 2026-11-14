@@ -53,13 +53,15 @@ and metadata calls stay single structured replies.
 3. Metadata, which writes the `chapters` row and each entry's
    `chapter_id`.
 4. Stackable normalization, in code.
-5. The Happenings task.
-6. For each [part](#parts) of the chapter, the Lore, Identity, Threads,
+5. The range embed and clustering, in code
+   ([3e](#3e--happenings-consolidation)).
+6. The Happenings task.
+7. For each [part](#parts) of the chapter, the Lore, Identity, Threads,
    Upkeep and Lifecycle tasks.
-7. The Awareness task.
-8. The `retrieval_count` reset, in code, then `close_report`
+8. The Awareness task.
+9. The `retrieval_count` reset, in code, then `close_report`
    ([Review](#review)).
-9. Display translation of what the close changed.
+10. Display translation of what the close changed.
 
 Embedding isn't a close step: writes flag rows stale, and the sync stage
 before the next turn's retrieval embeds them
@@ -158,7 +160,9 @@ the review shows. Only chapters too big to send whole pay this.
   any turn of the branch up to the end entry, `system` rows aside, as
   the prompt shows it, at most ten a call, and names the rest as
   unread: a high-frequency awareness row can come from any chapter.
-  Citations stay inside the chapter.
+  Citations stay inside the chapter. A turn of an earlier chapter is
+  readable once a listed row's learned-at turn names it, which gives
+  it a handle.
 
 Every write carries `turns`, the cited turn ids, and `why`, one sentence
 the review shows. The latest cited turn anchors the write's
@@ -203,8 +207,8 @@ A write counts as a later turn's when it anchors past the task's last
 turn, the end entry for the last part and a chapter-wide task, or has
 no anchor and belongs to a turn past it. A `retrieval_count` bump
 doesn't count, or most merges of recently retrieved rows would be
-refused, and the reset is exempt on the same grounds: a count is a
-frequency signal, and the edge a stale one leaves is recorded in
+refused. The reset is exempt too: a count is a frequency signal, and
+the edge a stale one leaves is recorded in
 [3d](#3d--awareness-pin-tuning). A `chapter_close` delta doesn't count
 either, so this close's earlier writes, which anchor on the end entry,
 never read as a later part's, and work a divider-only removal kept
@@ -554,8 +558,8 @@ folds variant spellings of one fungible onto one key, per
   ch, sh or o, so `torches` joins `torch` and `capes` never reads as
   `cap`. One step only, and a key another key folds onto stays put:
   `{ buses, bus, bu }` becomes `{ bus, bu }`. A singular ending in
-  `s` therefore folds onto a held key one `s` shorter: `{ bus, bu }`
-  becomes `{ bu }`.
+  `s` also folds onto a held key one `s` shorter, `{ bus, bu }`
+  becoming `{ bu }`: a false fold, accepted as rare.
 - A record the user wrote after the end entry, or a later turn wrote,
   is left whole: folding some of its keys would bring an old spelling
   back beside the user's. A record whose folded form would break the
@@ -576,8 +580,8 @@ The agent reviews awareness rows from two sources:
 - **Closed-chapter rows** — awareness extracted during the just-
   closed range. Standard review.
 - **High-frequency rows from across the story** — awareness rows
-  from any chapter whose `retrieval_count` puts them in the top-N
-  retrieved across the story so far. Surfaces rows that the
+  from any chapter whose `retrieval_count`, the retrievals since the
+  last close, puts them among the top N. Surfaces rows that the
   classifier originally severity-judged conservatively but that
   retrieval has been picking up consistently.
 
@@ -618,18 +622,24 @@ path; frequency-driven auto-demotion is not a v1 feature.
 counter, reset at chapter close after phase 3d commits**. Counts
 accumulate during a chapter via ranker-side increments (each
 injected row gets its `retrieval_count` bumped, delta-logged under
-the turn's `action_id` for rollback correctness). A count bump's undo
-restores the prior count by assignment, though, so a rollback past a
-close can bring a turn's pre-reset count back over the reset's 0, and
-CTRL-Z of the close can restore a kept row's count with a later turn's
-bump in it: one chapter's frequency signal is off, and no data is lost
+the turn's `action_id` for rollback correctness). At chapter close,
+the top 20 by the chapter's accumulated counts form the set, a constant
+tuning will move; the agent reviews them. After the Awareness task, the
+last one, all counts reset to 0, whether or not the task stopped early:
+the reset is a delta per row under the chapter-close `action_id`, all
+landing as one group that
+[History](../ui/screens/world/world.md#history-tab) doesn't show. Next
+chapter starts fresh.
+
+The log doesn't make the counter exact across a close, since a count
+bump's undo restores the prior count by assignment. Rolling back turns
+past the chapter's end that ran before the close (the close stands)
+puts their pre-bump count back over the reset's 0, and CTRL-Z of the
+close can give a merge's kept row ([3e](#3e--happenings-consolidation)'s
+survivor) a count holding a later turn's bump. One chapter's frequency
+signal is off, and no data is lost
 ([`triage.md`](../implementation/triage.md), "A count bump's undo can
-bring back a pre-reset count."). At chapter close, the top 20 by the
-chapter's accumulated counts form the set, a constant tuning will
-move; the agent reviews them. After the Awareness task, the last one,
-all counts reset to 0, whether or not the task stopped early: the reset
-is a delta per row under the chapter-close `action_id`, all landing as
-one group that History doesn't show. Next chapter starts fresh.
+bring back a pre-reset count.").
 
 **Why per-chapter reset, not lifetime accumulation.** Lifetime
 counts create a Matthew-effect feedback loop — early-popular rows
@@ -686,12 +696,12 @@ clusters happenings within the closed chapter range by:
   position, counting the range's entries other than `system` rows.
 
 All three criteria must hold between every two rows of a cluster, so
-no chain drifts. A row with no involvements, or no
-`occurred_at_entry_id`, clusters with nothing. Clusters form by
+no chain drifts. A row with no character among its
+involvements, or no `occurred_at_entry_id`, clusters with nothing. Clusters form by
 strongest-pair-first complete linkage: every pair meeting all three
 criteria is considered in descending cosine, ties by anchor then id,
-and two pairs' clusters merge only when every cross pair meets all
-three too. Each row ends in at most one cluster, with no size limit; a
+and the clusters holding a pair's two rows merge only when every cross
+pair meets all three too. Each row ends in at most one cluster, with no size limit; a
 cluster of ≥ 2 rows is passed to the LLM for judgment. The start shows
 each row with its cast and who knows it (a common-knowledge row reads
 as known by every character), and the prompt keeps apart happenings
@@ -720,9 +730,9 @@ row is a merge that keeps the kept row's text. Keep distinct is no call.
 - `title` — pick the more general, or LLM-authored composite. Both
   texts are cut to the bounds the app's writers keep, never refused.
 - `occurred_at_entry_id` — earliest of the cluster by entry position (the
-  later events' precise timing is lost; acceptable v1 trade). The merge
-  sends that column alone, and only when it moves: every clustered row
-  has an anchor, so `temporal` stays null.
+  later events' precise timing is lost; acceptable v1 trade). Of the time
+  pair the merge sends only `occurred_at_entry_id`, and only when it
+  moves: every clustered row has an anchor, so `temporal` stays null.
 - `common_knowledge` — kept when any merged row has it: dropping it
   would hide a happening from everyone it reached.
 - `category` and `icon` — the kept row's stand.
@@ -734,8 +744,8 @@ row is a merge that keeps the kept row's text. Keep distinct is no call.
   a missing anchor losing to any), summed `retrieval_count`, and the
   source strings joined with `; `, each once in the order first seen,
   the kept row's first. The first source stands whole and a later one
-  joins only while the joined text stays within 120 characters, so no
-  stored source is ever cut. A user-written row's values stand when the
+  joins only if the joined text stays within 120 characters, else it is
+  skipped and the next is tried, so no stored source is ever cut. A user-written row's values stand when the
   user wrote them after the cited prose.
 - Deleted rows are delta-logged for rollback.
 

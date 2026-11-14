@@ -442,8 +442,8 @@ emission from the LLM is a prompt bug, not a runtime case to handle.
 **Via events the orchestrator dispatches:**
 
 - `delta_emitted` — every persisted write but a close's grouped ones:
-  its tool calls, its code steps' writes, and its `chapters` create
-  with the stamps. The
+  its tool calls, its normalization and reset, and its `chapters`
+  create with the stamps. The
   orchestrator routes it through the action layer under the run's
   `actionId`, with the event's `entryId` (the entry the write belongs
   to, `null` when none) onto the delta row. The delta takes the
@@ -1710,8 +1710,8 @@ the place back top-level, since the mark alone changed and an unplaced
 place's parent is null.
 `happenings_mutual_excl` holds through a close's two machine updates
 of a happening. A merge clusters only rows with an
-`occurred_at_entry_id` and sends only that column, when the kept row's
-anchor moves; `mark_common_knowledge` writes `common_knowledge` alone;
+`occurred_at_entry_id` and, of the time pair, sends only that column,
+when the kept row's anchor moves; `mark_common_knowledge` writes `common_knowledge` alone;
 and a user edit writes both columns.
 
 **A chapter delete keeps later writes from any source.** It reverses a
