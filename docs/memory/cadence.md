@@ -315,6 +315,11 @@ since. This is how the authoring contract, where the classifier
 updates a view on subsequent contradicting prose, is enforced
 ([`data-model.md → Character-to-character relationships`](../data-model.md#character-to-character-relationships)).
 
+**Happening links.** An awareness pair the user deleted after the
+prose stays deleted, as a relationship pair does: the upsert doesn't
+re-create it. So does an involvement a chapter close carries over to
+the kept row of a merge; a pass's involvement create checks nothing.
+
 **Reversals.** Reversing a classifier fact for a prose edit, its undo
 or redo, or a failed or interrupted pass keeps each field the user
 wrote after the fact on a row the reversal leaves standing, field by

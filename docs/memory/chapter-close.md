@@ -68,7 +68,7 @@ The one exception is 3e's clustering, which embeds first.
 
 | Task       | Sub-jobs                                  | Reads the prose | Starts with                                                                                                                                                                                                                                    | Tools                                                                                              |
 | ---------- | ----------------------------------------- | --------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------- |
-| Happenings | [3e](#3e--happenings-consolidation)       | No              | The clusters code found                                                                                                                                                                                                                        | `read_row`, `read_turns`, `merge_happenings`                                                       |
+| Happenings | [3e](#3e--happenings-consolidation)       | No              | The clusters code found, each row with its cast and who knows it                                                                                                                                                                               | `read_row`, `read_turns`, `merge_happenings`                                                       |
 | Lore       | [3a](#3a--lore-creation)                  | Yes             | Lore titles, and the writes so far                                                                                                                                                                                                             | `read_row`, `create_lore`, `update_lore`                                                           |
 | Identity   | [3b](#3b--identity-compaction)            | Yes             | Slow fields of the entities the part touches                                                                                                                                                                                                   | `search_world`, `read_row`, `update_character`, `update_faction`                                   |
 | Threads    | [3f](#3f--world-upkeep)                   | Yes             | Open threads                                                                                                                                                                                                                                   | `read_row`, `update_thread`, `merge_threads`                                                       |
@@ -85,7 +85,9 @@ tasks; the bound to keep is six tools a task.
 
 Each task is its own conversation. The system half holds the
 instructions every task shares, including that this is an automated
-system no one answers, and the chapter or part; the user half holds the
+system no one answers, and for a prose task the chapter or part (the
+Happenings and Awareness tasks, which don't read the prose, hold the
+instructions alone); the user half holds the
 task's instructions, its starting rows and a code-built list of the
 writes so far. Nothing task-specific goes in the system half: a prompt
 is reused up to its first difference, so that would cost the chapter's
@@ -152,7 +154,11 @@ the review shows. Only chapters too big to send whole pay this.
   task's tools write on it, and so does a row it creates. Lore's start
   shows titles alone, so a lore row takes a `read_row` before
   `update_lore`.
-- **`read_turns`** is for the two tasks without the prose.
+- **`read_turns`** is for the two tasks without the prose. It returns
+  any turn of the branch up to the end entry, `system` rows aside, as
+  the prompt shows it, at most ten a call, and names the rest as
+  unread: a high-frequency awareness row can come from any chapter.
+  Citations stay inside the chapter.
 
 Every write carries `turns`, the cited turn ids, and `why`, one sentence
 the review shows. The latest cited turn anchors the write's
@@ -197,8 +203,9 @@ A write counts as a later turn's when it anchors past the task's last
 turn, the end entry for the last part and a chapter-wide task, or has
 no anchor and belongs to a turn past it. A `retrieval_count` bump
 doesn't count, or most merges of recently retrieved rows would be
-refused, and the reset is exempt on the same grounds: a stale counter
-does no harm. A `chapter_close` delta doesn't count either, so this
+refused, and the reset is exempt on the same grounds: a count is a
+frequency signal, and the edge a stale one leaves is recorded in
+[3d](#3d--awareness-pin-tuning). A `chapter_close` delta doesn't count either, so this
 close's earlier writes, which anchor on the end entry, never read as a
 later part's, and work a divider-only removal kept
 ([Deleting a chapter](#deleting-a-chapter)) doesn't read as a later
@@ -533,14 +540,33 @@ An uncited write is rejected and handed back.
 
 ### 3c — stackable normalization
 
-Across all character `state.stackables` records, find variant
-spellings of the same fungible: `gold` / `Gold` / `gold pieces` /
-`gp` → canonical lowercase `gold`. Per
-[`data-model.md → Soft caps`](../data-model.md#soft-caps--compaction-discipline).
+Across every character's `state.stackables` record on the branch, code
+folds variant spellings of one fungible onto one key, per
+[`data-model.md → Soft caps`](../data-model.md#soft-caps--compaction-discipline):
 
-Mostly **algorithmic** — lowercase, strip pluralization suffix,
-deduplicate by canonical form. LLM-driven semantic merging
-(`gold` vs. `gold coins` vs. `coin`) is parked; if real usage shows
+- Each key folds as the stackable writers fold one, by case and
+  spacing, counts summed: `Gold` and `gold` become `gold`.
+- A plural then folds onto a singular some record on the branch holds.
+  The key's last word tries `-ies` to `-y`, then `-es`, then `-s` but
+  never `-ss`, and the first form a record holds wins: `arrows` joins
+  `arrow` when someone holds `arrow`, and `glass` alone stays. The
+  `-es` ending folds onto its stem only when the stem ends in s, x, z,
+  ch, sh or o, so `torches` joins `torch` and `capes` never reads as
+  `cap`. One step only, and a key another key folds onto stays put:
+  `{ buses, bus, bu }` becomes `{ bus, bu }`. A singular ending in
+  `s` therefore folds onto a held key one `s` shorter: `{ bus, bu }`
+  becomes `{ bu }`.
+- A record the user wrote after the end entry, or a later turn wrote,
+  is left whole: folding some of its keys would bring an old spelling
+  back beside the user's. A record whose folded form would break the
+  schema's bound on a stackables key, which lowercasing can lengthen
+  past 40 characters, is left as stored.
+
+Every record that changes lands in one group anchored on the end entry,
+and its undo yields whole to a later write of the record
+([`generation-pipeline.md → Reverse-replay`](../generation-pipeline.md#reverse-replay)).
+Abbreviations and synonyms, such as `gp` or `coin` beside `gold`, are
+beyond it: LLM-driven semantic merging is parked; if real usage shows
 the algorithmic floor isn't enough, escalate.
 
 ### 3d — awareness pin tuning
@@ -569,6 +595,18 @@ for the current arc?") rather than data-analytical.
 - **Bump down** (toward 0) — for closed-chapter rows that the
   classifier severity-judged high but turned out incidental.
 
+`set_pin` writes `decay_resistance` alone, on a listed row by its
+handle. Its bounds hold from the pin the Awareness start showed:
+
+- A close raises a pin by at most 0.2 over that pin, and refuses a
+  bigger raise as `pin-raise-too-large`. Within one close a pin moves
+  freely between its floor and that ceiling, so a row can be tried
+  again.
+- A row listed only for its frequency has the shown pin as its floor,
+  by the one-way rule below; this chapter's rows may go down to 0.
+- A pin the user set after the cited turn is `skipped`, as on any
+  field ([Tools and writes](#tools-and-writes)).
+
 **One-way frequency signal.** The frequency-driven candidate set
 only triggers consider-bump decisions, never demote-on-frequency.
 Demoting "frequent but irrelevant" rows revives the feedback-loop
@@ -580,11 +618,18 @@ path; frequency-driven auto-demotion is not a v1 feature.
 counter, reset at chapter close after phase 3d commits**. Counts
 accumulate during a chapter via ranker-side increments (each
 injected row gets its `retrieval_count` bumped, delta-logged under
-the turn's `action_id` for rollback correctness). At chapter close,
-top-N is selected from the chapter's accumulated counts; agent
-reviews. After the Awareness task, the last one, all counts reset to 0
-(the reset is itself a delta per row under the chapter-close
-`action_id`). Next chapter starts fresh.
+the turn's `action_id` for rollback correctness). A count bump's undo
+restores the prior count by assignment, though, so a rollback past a
+close can bring a turn's pre-reset count back over the reset's 0, and
+CTRL-Z of the close can restore a kept row's count with a later turn's
+bump in it: one chapter's frequency signal is off, and no data is lost
+([`triage.md`](../implementation/triage.md), "A count bump's undo can
+bring back a pre-reset count."). At chapter close, the top 20 by the
+chapter's accumulated counts form the set, a constant tuning will
+move; the agent reviews them. After the Awareness task, the last one,
+all counts reset to 0, whether or not the task stopped early: the reset
+is a delta per row under the chapter-close `action_id`, all landing as
+one group that History doesn't show. Next chapter starts fresh.
 
 **Why per-chapter reset, not lifetime accumulation.** Lifetime
 counts create a Matthew-effect feedback loop — early-popular rows
@@ -605,6 +650,19 @@ Conservative bias on closed-chapter rows — don't touch most.
 Only adjust when chapter context makes the original
 `decay_resistance` clearly wrong.
 
+**The start.** Rows list under their happening, each with its
+character, `decay_resistance`, source, the turn it was learned at and
+the list it came from; a row in both lists shows as a closed-chapter
+row. The high-frequency set is every row with a count above 0, highest
+first, ties by id, at most 20, read after the Happenings task so a
+merge's summed counts count. It leaves out a row a later turn created,
+learned after the chapter's end, but keeps the rows of retired
+characters. Both lists leave out the rows of a common-knowledge
+happening, where a pin reaches nothing. The chapter's summary comes
+with the lists. The chapter's rows are not bounded; the size the start
+reaches on the dataset chapter is measured in
+[`followups.md → Tuning and play testing`](../followups.md#tuning-and-play-testing).
+
 ### 3e — happenings consolidation
 
 Happenings can drift toward over-granularity at scale (3-6k
@@ -616,17 +674,28 @@ Sub-job 3e identifies clusters that should merge.
 
 The close first embeds the happenings in its range: the catch-up passes'
 rows have no vectors until the next sync stage, and 3e never revisits a
-closed range, so their duplicates would stay for good. An embedder
-failure fails the close. It then clusters happenings within the closed
-chapter range by:
+closed range, so their duplicates would stay for good. The embed takes
+the 300 s bound per-turn retrieval's embeds take, and an embedder
+failure, the bound's expiry included, fails the close. It then
+clusters happenings within the closed chapter range by:
 
 - Embedding similarity ≥ 0.80 (cosine).
-- `happening_involvements` overlap ≥ 50% (same cast).
-- `occurred_at_entry_id` proximity within ~3 entries (by the referenced
-  entries' positions).
+- `happening_involvements` overlap ≥ 50%: the characters two rows
+  share, over the smaller cast.
+- `occurred_at_entry_id` proximity: anchors at most 3 entries apart by
+  position, counting the range's entries other than `system` rows.
 
-All three criteria must hold for cluster membership. Clusters of
-≥ 2 rows are passed to the LLM for judgment.
+All three criteria must hold between every two rows of a cluster, so
+no chain drifts. A row with no involvements, or no
+`occurred_at_entry_id`, clusters with nothing. Clusters form by
+strongest-pair-first complete linkage: every pair meeting all three
+criteria is considered in descending cosine, ties by anchor then id,
+and two pairs' clusters merge only when every cross pair meets all
+three too. Each row ends in at most one cluster, with no size limit; a
+cluster of ≥ 2 rows is passed to the LLM for judgment. The start shows
+each row with its cast and who knows it (a common-knowledge row reads
+as known by every character), and the prompt keeps apart happenings
+whose merge would tell someone something new.
 
 **LLM judgment per cluster:**
 
@@ -648,16 +717,26 @@ row is a merge that keeps the kept row's text. Keep distinct is no call.
 **Mechanical merge:**
 
 - `description` — composite, LLM-authored ("X happened, then Y").
-- `title` — pick the more general, or LLM-authored composite.
+- `title` — pick the more general, or LLM-authored composite. Both
+  texts are cut to the bounds the app's writers keep, never refused.
 - `occurred_at_entry_id` — earliest of the cluster by entry position (the
-  later events' precise timing is lost; acceptable v1 trade).
-- Involvements carry over to the kept row, one per character.
+  later events' precise timing is lost; acceptable v1 trade). The merge
+  sends that column alone, and only when it moves: every clustered row
+  has an anchor, so `temporal` stays null.
+- `common_knowledge` — kept when any merged row has it: dropping it
+  would hide a happening from everyone it reached.
+- `category` and `icon` — the kept row's stand.
+- Involvements carry over to the kept row, one per character; one the
+  user removed from the kept row after the cited prose stays removed.
 - Awareness rows merge per-character via the
   `UNIQUE(branch_id, character_id, happening_id)` upsert: max
-  `decay_resistance`, earliest `learned_at_entry_id` (by entry position),
-  summed `retrieval_count`, source strings concatenated where they
-  differ. A user-written row's values stand when the user wrote them
-  after the cited prose.
+  `decay_resistance`, earliest `learned_at_entry_id` (by entry position,
+  a missing anchor losing to any), summed `retrieval_count`, and the
+  source strings joined with `; `, each once in the order first seen,
+  the kept row's first. The first source stands whole and a later one
+  joins only while the joined text stays within 120 characters, so no
+  stored source is ever cut. A user-written row's values stand when the
+  user wrote them after the cited prose.
 - Deleted rows are delta-logged for rollback.
 
 **A merge lands whole, once per row.** Code checks user precedence on

@@ -259,12 +259,13 @@ system half that reads a per-call variable. A block that points at
 user-half content by position ("the LAST entry above") stays in the
 user half beside it.
 
-A close's task templates are the one exception. They hold the chapter or
-part in the system half, so it stays cached across tasks whose tool lists
-differ
+A close's prose tasks' templates are the one exception. They hold the
+chapter or part in the system half, so it stays cached across tasks
+whose tool lists differ
 ([`memory/chapter-close.md → Conversations`](./memory/chapter-close.md#conversations)),
 and that half is stable across a part's tasks, not across the story. A
-close's boundary and metadata calls follow the rule.
+close's boundary and metadata calls follow the rule, and so do the
+Happenings and Awareness tasks, which don't read the prose.
 
 **The cache marker.** OpenAI-compatible servers generally reuse a
 request's longest matching token prefix on their own, so for them the
@@ -295,6 +296,7 @@ The bundled pack splits its templates this way:
 | Chapter metadata (a part)                                | The instructions, the mode rule                                                   | The previous chapter's summary, the open threads, the part's entries                                                                                                                                         |
 | Chapter metadata (merge)                                 | The instructions                                                                  | The previous chapter's summary, the open threads, the part summaries in order                                                                                                                                |
 | Close tasks (Lore, Identity, Threads, Upkeep, Lifecycle) | The close instructions, the mode rule among them, then the part's turns           | The task's instructions, its starting rows and the writes so far                                                                                                                                             |
+| Close tasks (Happenings, Awareness)                      | The close instructions, the mode rule among them                                  | The task's instructions, its starting rows (Happenings' clusters; Awareness's rows and the chapter's summary) and the writes so far                                                                          |
 | Wizard templates                                         | Empty; on the prompt-injection path the structured-output contract supplies one   | Everything                                                                                                                                                                                                   |
 
 **The standing instructions are shared macros.** One holds the

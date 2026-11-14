@@ -1509,8 +1509,7 @@ const LATER_BUMP_CASE: RoundTripCase = {
   abortOn: ['deleteHappening'],
   armExpect: {
     // The bump's undo restores by assignment, so TOLD's row reads its pre-bump count over the
-    // reset's 0. Canon lets it stand: a stale counter does no harm (chapter-close.md → Tools and
-    // writes).
+    // reset's 0. Canon records the edge (chapter-close.md → 3d).
     'a rollback past E': async (h) => {
       expect(await worldState(h.fx)).toEqual(
         withAwarenessCount(h.closed().state, TOLD.id, TOBIN.id, TOLD_TOBIN_COUNT),
