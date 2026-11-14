@@ -411,7 +411,11 @@ breakdown under [UX](#ux).
   composite description, and the merge landed. So `merge_happenings` and
   the Happenings prompt work on the dev model, but the keep-apart rule
   for differing knowers has met no real case yet. Developer decision
-  2026-11-14, from Slice 5.9's probes.
+  2026-11-14, from Slice 5.9's probes. Once 3e fires, World-merged
+  awareness rows start to block merges: each counts as a pin the user
+  set, so a merge that would absorb a happening a merged character knows
+  is skipped ([`triage.md`](./implementation/triage.md), "World merge
+  re-creates awareness rows as the user's.").
 
 - **User threads never decay.** A thread the user created, or one the
   user resolved or failed, carries no `resolved_at_entry_id` and never

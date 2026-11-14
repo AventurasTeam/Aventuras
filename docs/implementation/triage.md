@@ -556,6 +556,41 @@ patch`, which 5.5a marks `restated`, so a close tool's write of it
   as `embedded` in `memory.close_range_embed`, which can overstate,
   though that log's `unembedded` comes from the range embed's own re-read
   of staleness. Raised in 5.9's slice review.
+- **World merge re-creates awareness rows as the user's.** World's
+  character merge (`lib/world/entity-merge.ts`, `merge-links.ts`) moves
+  each awareness row the kept character lacks by re-creating it as a
+  `user_edit` while `deleteEntity` cascades the original. The row guard
+  reads a user create as a pin the user set, so `set_pin` skips the row
+  at every close, the Awareness start leaves it out of the frequent set,
+  a happenings merge keeps its pin on the kept row, and a merge that
+  would absorb a happening a merged character knows is skipped
+  ([`chapter-close.md → 3e`](../memory/chapter-close.md#3e--happenings-consolidation)).
+  Re-pointing the row (an update of `character_id`) keeps its history,
+  so only a pin the user set counts. Read from the code, not built, a
+  re-point needs four things. First, a re-point arm on
+  `happening_awareness`, its undo `{characterId}`. Second, the group's
+  `deleteEntity` cascade has to skip the rows the group re-points:
+  handlers read pre-group state, so the cascade still captures them and
+  `groupConflict` refuses the group ("the group writes …, which a
+  delete in it cascades", `lib/actions/delta/apply-delta-action.ts`);
+  a widened `deleteEntity` payload or a `GroupScope` field. Third, redo
+  has to skip them too: its delete arm (`applyRedoLocked`,
+  `lib/actions/delta/redo.ts`) re-runs the cascade against the post-undo
+  database, where the rows are back on the loser, and would delete them
+  with no record, so every cascade's `run` likely takes an exclusion
+  set. Fourth, History lists an awareness update only by its labelled
+  columns (`lib/history/field-labels.ts`), so a re-point shows nowhere,
+  where today's re-create lists. Reverse-replay needs no change by that
+  reading: an undo restores the entity first, then points the row back.
+  Involvements need nothing: their re-create trips Q5's deleted-link
+  check and `userTouched` only in a close whose cited prose predates the
+  World merge, and a re-point would be a user edit after that prose too.
+  A cheaper alternative to weigh first, unverified: the re-create marks
+  each row as carried from the loser's row, and user precedence reads
+  the pin's ownership from the original row's history. It matters once
+  3e fires
+  ([`followups.md → Tuning and play testing`](../followups.md#tuning-and-play-testing)).
+  Developer decision 2026-11-14 (Q13), from 5.9's slice review.
 - **A History tab test fails under a loaded box.**
   `components/history/history-tab.test.tsx`'s "refetches for an unshown
   link end's rename only while a search is set" timed out once in a full

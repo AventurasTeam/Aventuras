@@ -613,9 +613,12 @@ handle. Its bounds hold from the pin the Awareness start showed:
 - A pin the user ever set is left as they set it: `skipped`, raise or
   lower, whatever turn the call cites, since a pin is the user's
   preference, not a fact about the prose. A row the user created counts
-  as one whose pin they set. Other fields give way only to a user edit
-  after the cited turn
-  ([Tools and writes](#tools-and-writes)).
+  as one whose pin they set, and so does a row a World
+  [merge](../ui/screens/world/world.md#merge) moved to the kept
+  character, since the merge re-creates it as the user's
+  ([`triage.md`](../implementation/triage.md), "World merge re-creates
+  awareness rows as the user's."). Other fields give way only to a user
+  edit after the cited turn ([Tools and writes](#tools-and-writes)).
 
 **One-way frequency signal.** The frequency-driven candidate set
 only triggers consider-bump decisions, never demote-on-frequency.
@@ -765,7 +768,12 @@ row is a merge that keeps the kept row's text. Keep distinct is no call.
   user-written row's values stand when the user wrote them after the
   cited prose, and a pin the user ever set stands whatever turn is
   cited, as in [3d](#3d--awareness-pin-tuning): the kept row's isn't
-  sent, and an absorbed row's protects the merge (below).
+  sent, and an absorbed row's protects the merge (below). A known edge:
+  a row a World merge moved counts as user-pinned (3d), so its pin stays
+  on the kept row, and a merge that would absorb a happening a merged
+  character knows is skipped at every close
+  ([`triage.md`](../implementation/triage.md), "World merge re-creates
+  awareness rows as the user's.").
 - Deleted rows are delta-logged for rollback.
 
 **A merge lands whole, once per row.** Code checks user precedence on
