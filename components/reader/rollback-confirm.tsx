@@ -25,13 +25,21 @@ type RollbackConfirmModalProps = {
   variant?: 'rollback' | 'regenerate'
 }
 
-type CopyKind = 'rollback' | 'regenerate' | 'regenerate-close' | 'regenerate-kept-work'
+type CopyKind =
+  | 'rollback'
+  | 'regenerate'
+  | 'regenerate-terminal'
+  | 'regenerate-close'
+  | 'regenerate-kept-work'
 
 // Read from the counts at each render, never stored: a recount can move an open regenerate confirm
-// between kinds, and one that now reads `immediate` keeps the cascade copy, since it is open.
+// between kinds, and one that reads `immediate` has nothing after the reply, so it drops "and
+// everything after it".
 function copyKindOf(variant: 'rollback' | 'regenerate', counts: RollbackCounts): CopyKind {
   if (variant === 'rollback') return 'rollback'
-  if (classifyRegenerateGate(counts) !== 'chapter-close-confirm') return 'regenerate'
+  const gate = classifyRegenerateGate(counts)
+  if (gate === 'immediate') return 'regenerate-terminal'
+  if (gate === 'cascade-confirm') return 'regenerate'
   return counts.chapters > 0 ? 'regenerate-close' : 'regenerate-kept-work'
 }
 
@@ -41,6 +49,8 @@ function bodyOf(kind: CopyKind, entryNumber: number): string {
       return t('reader:rollbackConfirm.body', { entryNumber })
     case 'regenerate':
       return t('reader:regenerateConfirm.body', { entryNumber })
+    case 'regenerate-terminal':
+      return t('reader:regenerateConfirm.terminalBody', { entryNumber })
     case 'regenerate-close':
       return t('reader:regenerateConfirm.closeBody', { entryNumber })
     case 'regenerate-kept-work':

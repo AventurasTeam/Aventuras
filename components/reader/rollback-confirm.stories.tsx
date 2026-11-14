@@ -16,6 +16,8 @@ const COPY = {
   rollbackBody: 'This rolls the story back to before entry 47. The following are removed:',
   cascadeBody:
     'This discards entry 47 and everything after it, then generates a new reply from your last action. The following are removed:',
+  terminalBody:
+    'This discards entry 47, then generates a new reply from your last action. The following are removed:',
   closeBody:
     'This discards entry 47 and reverses the chapter close that ends on it, then generates a new reply from your last action. The following are removed:',
   keptWorkBody:
@@ -210,6 +212,30 @@ export const RegenerateCascade: Story = {
   },
 }
 
+/** Counts a confirm opens on when a pass commits as the tap lands: nothing follows the reply. */
+export const RegenerateTerminal: Story = {
+  args: {
+    open: true,
+    variant: 'regenerate',
+    targetEntryNumber: 47,
+    counts: counts({ entries: 1, worldStateChanges: 2 }),
+  },
+  play: async () => {
+    const dialog = await findDialog(COPY.regenerateTitle)
+    await expectDescription(
+      dialog,
+      [COPY.terminalBody, '1 entry', '2 world-state changes', COPY.regenerateIrreversible],
+      [
+        'and everything after it',
+        COPY.closeReturns,
+        COPY.closeRunsAgain,
+        REOPENED_LINE,
+        REMOVED_LINE,
+      ],
+    )
+  },
+}
+
 /** A committed close ends on the reply: the chapter returns to in-progress. */
 export const RegenerateClose: Story = {
   args: {
@@ -327,12 +353,12 @@ export const RegenerateRecount: Story = {
     )
     await expectDescription(dialog, [COPY.closeReturns, COPY.closeRunsAgain])
 
-    // Counts that would fire a tap with no confirm keep the open confirm on the cascade copy.
+    // Counts that would fire a tap with no confirm read the terminal body: nothing follows the reply.
     recount.set(TERMINAL)
     await waitFor(
-      () => expect(dialog).toHaveAccessibleDescription(expect.stringContaining(COPY.cascadeBody)),
+      () => expect(dialog).toHaveAccessibleDescription(expect.stringContaining(COPY.terminalBody)),
       WAIT,
     )
-    await expectDescription(dialog, [], [COPY.closeReturns])
+    await expectDescription(dialog, [], [COPY.closeReturns, 'and everything after it'])
   },
 }

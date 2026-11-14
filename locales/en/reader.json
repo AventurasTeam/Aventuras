@@ -174,6 +174,7 @@
   "regenerateConfirm": {
     "title": "Regenerate from entry {{entryNumber}}?",
     "body": "This discards entry {{entryNumber}} and everything after it, then generates a new reply from your last action. The following are removed:",
+    "terminalBody": "This discards entry {{entryNumber}}, then generates a new reply from your last action. The following are removed:",
     "closeBody": "This discards entry {{entryNumber}} and reverses the chapter close that ends on it, then generates a new reply from your last action. The following are removed:",
     "closeReturns": "Chapter {{number}} will return to in-progress.",
     "closeRunsAgain": "Its close runs again only when one is next due, or when you start it.",
