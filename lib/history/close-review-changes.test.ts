@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 
 import type { CloseReport, CloseReportCall, Delta, EntityKind } from '@/lib/db'
 import { i18n } from '@/lib/i18n'
@@ -588,15 +588,18 @@ describe('reviewFieldLabel', () => {
 })
 
 describe('closeReviewChanges in another locale', () => {
-  afterEach(async () => {
-    await i18n.changeLanguage('en')
-  })
-
-  it("shows a status and the top mark in the locale's words, an unknown status as stored", async () => {
+  beforeEach(async () => {
     i18n.addResourceBundle('xx', 'world', { status: { active: 'activo', retired: 'retirado' } })
     i18n.addResourceBundle('xx', 'plot', { status: { active: 'abierto', resolved: 'resuelto' } })
     i18n.addResourceBundle('xx', 'chapters', { review: { topLevel: 'nivel superior' } })
     await i18n.changeLanguage('xx')
+  })
+
+  afterEach(async () => {
+    await i18n.changeLanguage('en')
+  })
+
+  it("shows a status and the top mark in the locale's words, an unknown status as stored", () => {
     const calls = [
       call({ tool: 'retire_entity', rows: [KAEL], values: { status: 'retired' } }),
       call({ tool: 'update_thread', rows: [LETTER], values: { status: 'resolved' } }),
@@ -615,6 +618,25 @@ describe('closeReviewChanges in another locale', () => {
       ['placesAndItems', 'The Quay', 'nivel superior'],
       ['threads', 'The letter', 'abierto → resuelto'],
       ['threads', 'The seal', 'dormant → archived'],
+    ])
+  })
+
+  it('keeps a status word or the top mark as stored on any other path', () => {
+    const calls = [
+      call({ tool: 'update_character', rows: [KAEL], values: { 'state.voice': 'retired' } }),
+      call({ tool: 'update_thread', rows: [LETTER], values: { description: 'active' } }),
+      call({ tool: 'update_place', rows: [QUAY], values: { description: 'top level' } }),
+    ]
+    const deltas = [
+      delta(KAEL, { state: { voice: 'active' } }),
+      delta(LETTER, { description: 'resolved' }),
+      delta(QUAY, { description: 'top level' }),
+    ]
+
+    expect(summaries(closeReviewChanges(report(calls), deltas, LOOKUP))).toEqual([
+      ['charactersAndFactions', 'Kael', 'active → retired'],
+      ['placesAndItems', 'The Quay', 'top level → top level'],
+      ['threads', 'The letter', 'resolved → active'],
     ])
   })
 })
