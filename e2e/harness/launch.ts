@@ -83,13 +83,27 @@ async function selectAppWindow(app: ElectronApplication, originPrefix: string): 
     const page = await app.waitForEvent('window', { timeout: 30_000 })
     if (isApp(page)) window = page
   }
-  await window.waitForLoadState('domcontentloaded')
+  // Bounded: the config sets no navigationTimeout, so a window that never loads would hang the
+  // test to its own timeout instead of failing the launch.
+  await window.waitForLoadState('domcontentloaded', { timeout: 30_000 })
   return window
 }
 
 // A dirty pane arms main's close guard, which cancels Playwright's quit, so close() would wait
 // out the hook timeout and leak the temp userData. Past this, the app exits from main instead.
 const CLOSE_GRACE_MS = 10_000
+// main.exit can take the connection down before the evaluate answers; the kill below must run.
+const EXIT_EVALUATE_MS = 5_000
+
+/** Waits for `promise` to settle, or `ms`, whichever comes first. */
+async function settledWithin(promise: Promise<unknown>, ms: number): Promise<void> {
+  let timer: ReturnType<typeof setTimeout> | undefined
+  const elapsed = new Promise<void>((resolve) => {
+    timer = setTimeout(resolve, ms)
+  })
+  await Promise.race([promise.then(() => undefined), elapsed])
+  clearTimeout(timer)
+}
 
 // `proc` is taken at launch: process() throws once Playwright has dropped the app.
 async function closeApp(app: ElectronApplication, proc: ChildProcess): Promise<void> {
@@ -106,7 +120,10 @@ async function closeApp(app: ElectronApplication, proc: ChildProcess): Promise<v
   clearTimeout(timer)
   if (closed) return
   // app.exit skips the window close handlers, the guard among them.
-  await app.evaluate(({ app: main }) => main.exit(0)).catch(() => {})
+  await settledWithin(
+    app.evaluate(({ app: main }) => main.exit(0)).catch(() => {}),
+    EXIT_EVALUATE_MS,
+  )
   await stopAppProcess(proc)
   await closing
 }

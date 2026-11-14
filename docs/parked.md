@@ -3907,6 +3907,22 @@ Playwright detached and relay SIGTERM, SIGHUP and SIGINT to its group.
 **Revisit signal:** an orphaned run seen colliding with a later one.
 Routed from triage 2026-11-07.
 
+#### The teardown spec's rejected-close hang has no cause yet
+
+`teardown.spec.ts`'s "a rejected close still ends the app before its
+userData goes" timed out at its 120 s twice on E2E shard 3/3 (run
+`42462233487`, 2026-11-08, and run `42665576759`, 2026-11-09), the
+worker's teardown then overrunning Playwright's 90 s; each retry passed
+in about 4 s. It has not recurred in the 27 CI runs since. The
+2026-11-14 triage pass bounded the two waits on that path that had no
+limit (`closeApp`'s `main.exit` evaluate, which ran ahead of the kill
+fallback, and the app window's load wait), which fit the overrun
+without showing the cause. CI keeps no trace: Playwright's `use.trace`
+covers its own browser context, not an app from `_electron.launch`, so
+tracing one means starting `app.context().tracing` in the harness and
+uploading `test-results/` on failure. **Revisit signal:** a third
+hang. Routed from triage 2026-11-14.
+
 #### Gated row fields are written out per surface
 
 World's `components/world/detail/fields.tsx`, Plot's inline Controllers
