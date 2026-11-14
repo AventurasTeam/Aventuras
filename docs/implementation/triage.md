@@ -613,7 +613,7 @@ patch`, which 5.5a marks `restated`, so a close tool's write of it
   search debounce outlasts `waitFor`'s default timeout or the test reads
   the call count before a pending search load lands. Raised in 5.9's
   slice review.
-- **The reversal planner's source filters and lock window have three
+- **The reversal planner's source filters and lock window have four
   loose ends.** First, user mode reads later writes with
   `source = 'user_edit'` (`rowDeltasAfter`, `lib/actions/delta/user-precedence.ts`),
   while the same file's user-delta exclusion uses
@@ -628,7 +628,12 @@ patch`, which 5.5a marks `restated`, so a close tool's write of it
   Third, 5.9's #732 has landed, so `userEditsOutliving` and the
   walk's `userEdits` parameters carry any source in `'any'` mode and
   the name is now wrong; a rename to the later-writes sense would fit.
-  Raised in Slice 5.12's review of Task 1.
+  Fourth, `lib/actions/chapters` imports `commitNewAction` and
+  `logReversalRefused` from `../story-entries/operational`; both are
+  generic reversal plumbing, and a home under `lib/actions/delta/` would
+  drop the chapters-on-story-entries dependency before Slice 5.13 adds a
+  third caller. Raised in Slice 5.12's review of Task 1 and its final
+  review.
 - **Chapter-delete reads have no second-branch test, and their
   refusals log unevenly.** Nothing pins the branch filters of
   `resolveChapterDeleteSet`, the preview's own-entry token read or its
@@ -653,7 +658,12 @@ patch`, which 5.5a marks `restated`, so a close tool's write of it
   only `dismiss` and a newer `open` bump the request counter. And
   `app.chapter_delete_resynced` is logged before the resync runs, so
   its name claims a success that `app.chapter_delete_resync_failed` can
-  then contradict. Raised in Slice 5.12's review of Task 12.
+  then contradict. An `in-flight` refusal from `removeChapter` (a run
+  started between the last enabled render and the press) closes the
+  confirm with the generic `Couldn't delete the chapter.`, where a
+  blocked-while-generating copy, or keeping the confirm open, would say
+  what happened. Raised in Slice 5.12's review of Task 12 and its final
+  review.
 - **A refused regenerate dispatch gives no feedback, and
   `openRollback` skips the dispatch guard.** `runRegenerate` in
   `app/reader-composer/[branchId].tsx` returns null with only a
@@ -686,7 +696,10 @@ patch`, which 5.5a marks `restated`, so a close tool's write of it
   says it is for save-session story harnesses, but
   `chapter-card.stories.tsx` and `rollback-confirm.stories.tsx` use it
   too, so the comment is stale or the helper belongs outside a domain
-  folder. Raised in Slice 5.12's review of Tasks 4, 10 and 14.
+  folder. `chapterListCopy` in `e2e/locators/reader.ts` rewrites
+  `components/reader/chapter-list-label.ts`'s pair and span copy, so a
+  wording change in one won't reach the other. Raised in Slice 5.12's
+  review of Tasks 4, 10 and 14 and its final review.
 - **A same-named column pair silently collapses on the desktop DB
   bridge.** `query` in `electron/db/service.ts` turns each node:sqlite
   row into an array with `Object.values`, so a SELECT returning two
