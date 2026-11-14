@@ -423,10 +423,6 @@ patch`, which 5.5a marks `restated`, so a close tool's write of it
 - **The commit banner's Review and × unmount the focused button.** Focus
   is lost when the review dialog closes (cf. the
   rnweb-disabled-under-focus-blurs lesson). Raised in 5.11's review.
-- **`overlays.md`'s `onDismissRefused` bullet ends in an unrelated
-  sentence.** `docs/ui/patterns/overlays.md:171-175`: the one about
-  `portalHost={ABOVE_SHEETS_PORTAL_HOST}` belongs under Stacking or
-  `portalHost`. Raised in 5.11's review.
 - **`lib/actions/delta/reverse-replay.ts` has two cases nobody has
   confirmed as deliberate.** `:386-400` and `:602-638`: reversing an
   update whose target row is missing runs an UPDATE that matches nothing

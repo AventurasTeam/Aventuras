@@ -169,10 +169,7 @@ the other anchor reads fails typecheck rather than doing nothing:
   sheet refuses a scrim tap, Android back or Escape on web, so an
   editor can raise
   the [in-edit guard](../foundations/mobile/layout.md#sheet-behavior--additional-rules).
-  Drag-down reports nothing; it snaps back. A modal raised over an
-  open bottom Sheet passes `portalHost={ABOVE_SHEETS_PORTAL_HOST}`:
-  gorhom mounts its sheets after the app's default `PortalHost`, and
-  the root layout mounts this host after gorhom's provider.
+  Drag-down reports nothing; it snaps back.
 - `onDismissed?: () => void` — bottom only. Runs once after a
   presented sheet's exit animation, whatever closed it, while this
   content is still mounted. A programmatic close is included, where
@@ -186,6 +183,12 @@ the other anchor reads fails typecheck rather than doing nothing:
   to render into.
 - `suppressOverlayRegistration?: boolean` — opts out of claiming the
   surface as a blocking overlay, for the Actions menu's own sheet.
+
+**A modal over a bottom Sheet** ([`layout.md → Stacking`](../foundations/mobile/layout.md#stacking)),
+the in-edit guard `onDismissRefused` raises among them, passes
+`portalHost={ABOVE_SHEETS_PORTAL_HOST}`: gorhom mounts its sheets
+after the app's default `PortalHost`, and the root layout mounts this
+host after gorhom's provider.
 
 **Anatomy:**
 
