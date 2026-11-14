@@ -153,7 +153,6 @@ const measuredEmbedStep: CodeStep = {
   },
 }
 
-// The shipped slots with the range embed measured in its place.
 function measuredSlots(): CloseAgentSlots {
   const isEmbed = (entry: SlotEntry<'happenings'>): boolean =>
     entry.kind === 'code' && entry.step === embedRangeStep
