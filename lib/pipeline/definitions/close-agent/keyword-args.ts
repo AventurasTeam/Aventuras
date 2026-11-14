@@ -1,6 +1,7 @@
 import { newTerms, normalizeTerm } from '@/lib/keyword-terms'
 
 import type { CloseIds } from './ids'
+import { keyedReason } from './reason-key'
 import { handleInTerm } from './text-checks'
 
 /** A keyword write's two lists, each already through `dedupeTerms`. */
@@ -8,10 +9,13 @@ export type SentKeywords = { add: readonly string[]; remove: readonly string[] }
 
 /** A keyword holding a handle, which names nothing past this close. */
 export const termHandleReason = (term: string, handle: string): string =>
-  `the keyword "${term}" holds ${handle}, an id: a keyword is a word the prose uses, never an id`
+  keyedReason(
+    'keyword-holds-id',
+    `the keyword "${term}" holds ${handle}, an id: a keyword is a word the prose uses, never an id`,
+  )
 
 const keywordInBothReason = (term: string): string =>
-  `"${term}" is in both add and remove: send each term in one list`
+  keyedReason('keyword-in-both', `"${term}" is in both add and remove: send each term in one list`)
 
 export function firstTermHandle(
   terms: readonly string[],

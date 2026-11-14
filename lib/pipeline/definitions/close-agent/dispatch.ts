@@ -6,6 +6,7 @@ import { isJsonObject } from '@/lib/json-object'
 import { commonChecks, type ReadSet } from './common-checks'
 import { nameCloseProse, withHandlesDeep, type CloseIds } from './ids'
 import type { CloseLedgerWriter } from './ledger'
+import { ledgerReasonKey } from './reason-key'
 import {
   lastTaskTurn,
   resolveIdArgs,
@@ -96,6 +97,14 @@ function recordWrite(
   entry: CallRecord,
 ): void {
   const { verdict } = entry
+  const call = { actionId: ctx.phase.actionId, task: ctx.task, tool: toolName }
+  const reason = verdict.reason === undefined ? undefined : ledgerReasonKey(verdict.reason, call)
+  const skippedFields = verdict.skippedFields.map((skipped) => ({
+    field: skipped.field,
+    reason: ledgerReasonKey(skipped.reason, call),
+  }))
+  // C4: fields only when one's key differs from the call's, since keying can merge two reasons.
+  const ownKeys = reason === undefined || skippedFields.some((skipped) => skipped.reason !== reason)
   ctx.ledger.record({
     task: ctx.task,
     part: ctx.part,
@@ -104,11 +113,9 @@ function recordWrite(
     why: namedWhy(args, ctx.ids),
     turns: [...entry.turns],
     result: verdict.result,
-    ...(verdict.reason === undefined ? {} : { reason: verdict.reason }),
+    ...(reason === undefined ? {} : { reason }),
     ...(entry.values === undefined ? {} : { values: entry.values }),
-    ...(verdict.skippedFields.length === 0
-      ? {}
-      : { skippedFields: verdict.skippedFields.map((skipped) => ({ ...skipped })) }),
+    ...(skippedFields.length === 0 || !ownKeys ? {} : { skippedFields }),
     ...(entry.survivor === undefined ? {} : { survivor: entry.survivor }),
   })
 }

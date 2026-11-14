@@ -12,7 +12,7 @@ import {
 } from '@/lib/actions'
 import { logger } from '@/lib/diagnostics'
 import { t } from '@/lib/i18n'
-import { generationStore } from '@/lib/stores'
+import { chapterOverlaysStore, generationStore } from '@/lib/stores'
 import { toast } from '@/lib/toast'
 
 export type ChapterDeleteConfirmTarget = {
@@ -81,6 +81,7 @@ export function useChapterDeleteConfirm({
   const pendingRef = useRef(false)
   const openRequest = useRef(0)
   const settleCount = generationStore.useGeneration((s) => s.settleCount)
+  const reviewOpen = chapterOverlaysStore.useOverlays((s) => s.review != null)
   // The re-read effect's cleanup is what drops a stale read, so the host's fresh callbacks each
   // render must not re-run it: they ride in a ref.
   const latest = useRef({ loadPreview, remove, resync })
@@ -196,10 +197,11 @@ export function useChapterDeleteConfirm({
   }, [])
 
   // A Stack keeps the Timeline mounted under a pushed screen: its reads would toast over that
-  // screen, and the confirm would reopen on return with a preview nothing kept current.
+  // screen, and the confirm would reopen on return with a preview nothing kept current. The
+  // review window takes the screen the same way, and on phone its Sheet would cover the confirm.
   useEffect(() => {
-    if (!active) dismiss()
-  }, [active, dismiss])
+    if (!active || reviewOpen) dismiss()
+  }, [active, reviewOpen, dismiss])
 
   return { target, pending, open, dismiss, confirm }
 }

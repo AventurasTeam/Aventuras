@@ -35,9 +35,10 @@ Used by:
   user-edit deltas), turn- or run-scoped; `source`-labeled per row,
   `onPress` routes to the Delta log tab focused on the row.
 - [Chapter Timeline · Review window](../screens/chapter-timeline/chapter-timeline.md#review-window)
-  — the deltas of one chapter close, grouped by area by the host, with
-  the write's reason under each row; `onPress` opens the row in World or
-  Plot.
+  — the changes of one chapter close, grouped by area by the host. Each
+  row carries the write's `why` and its entry link in a
+  [footer](#footer), with the meta line off and the summary unclamped;
+  `onPress` opens the row in World or Plot.
 
 ## Compound API
 
@@ -57,13 +58,16 @@ type DeltaLogRowProps = {
     targetTable: string // host's resolution call; compound uses it as fallback label only
     targetDisplayName: string // pre-resolved by host
     fieldPath: string | null // op=update: "state.traits[2]"; op=create/delete: null
-    summary: string // pre-rendered diff prose, host-formatted
+    summary: string // pre-rendered diff prose, host-formatted; '' for none
     entryId: string | null // null for non-entry-triggered events
     createdAtRelative: string // pre-formatted "2h ago" / "12 Apr, 14:33"
     actionId: string // included for future grouping cue; v1 renders flat
   }
   onPress?: () => void // host wires navigation
-  className?: string
+  className?: string // the outermost element, around the row and its footer
+  footer?: ReactElement // under the row, outside its button, aligned to the summary
+  showMeta?: boolean // default true; false drops the meta line
+  summaryLines?: number | null // default 2; null for no clamp
 }
 ```
 
@@ -76,6 +80,15 @@ Per-target resolution (querying the target table for a display
 name) and diff humanization (translating `undo_payload` JSON to
 prose) live in the host where the domain knowledge already
 lives.
+
+Three optional props reshape the row for a host that shows more than a
+log line, and leave the default row as it is. `footer` renders a line
+of the host's under the row and outside its button (see
+[Footer](#footer)). `showMeta={false}` drops the
+[meta line](#meta-line) from view and from the row's description.
+`summaryLines` sets the [summary](#summary)'s clamp, and null lifts it.
+Adding or removing a footer leaves the row's button in place, so its
+focus holds.
 
 ## Visual shape
 
@@ -118,7 +131,11 @@ the link label alone ("Relationship"). See
 
 ### Summary
 
-The host's pre-rendered diff prose. 2-line ellipsis bound.
+The host's pre-rendered diff prose. 2-line ellipsis bound by default;
+`summaryLines` sets another bound, or none at null. The review window
+lifts it, since a clamp on `old → new` hides the new value. An empty
+summary drops the line and its part of the row's description; a Not
+applied refusal that proposed no value has none.
 Host owns rendering — for an entity update, this humanizes the
 `undo_payload` JSON; for create / delete, this can be a one-liner
 (`Created`, `Deleted`).
@@ -161,6 +178,28 @@ Muted foreground (`text-fg-muted text-xs`), middle-dot separators:
   time follows the same rule
   ([story-card.md → Compound API](./story-card.md#compound-api)).
 
+`showMeta={false}` drops the line, and its text leaves the row's
+description with it. The review window drops it: every row there comes
+from one close, so the source and the time repeat, and the entry rides
+in the footer's link.
+
+### Footer
+
+`footer` is the host's line under the row. It sits outside the row's
+button and starts at the summary column, past the op badge and its gap.
+An invisible, unannounced copy of the badge holds that width, so the
+footer lines up in any locale. A control in it is a control of its own,
+never nested in the row's. The review window puts the write's `why` and
+its entry link there:
+
+```
+┌──────────────────────────────────────────────────┐
+│ [● update]  Kael · voice                         │
+│             wry, joking → short, flat sentences  │
+│             He stops joking. entry #47 →         │
+└──────────────────────────────────────────────────┘
+```
+
 ## Click behavior
 
 `onPress?: () => void` — host wires what tap does:
@@ -192,13 +231,24 @@ description, read after the name. A non-interactive row isn't a
 control: it has no name and isn't announced as disabled, and its text
 reads as it shows.
 
+A link in a [footer](#footer) sits outside the row's button, so it is
+announced and pressed as a control of its own and never fires the row's
+`onPress`. A host whose footer carries the row's entry link passes
+`entryId: null`: the link names the entry, so the row's name stays
+`<op> <target>` rather than naming an entry its press doesn't open. The
+review window's rows do this.
+
 ## Storybook (DeltaLogRow)
 
 Live demos: each op color (create / update / delete), 5 of the 7
 source labels, with-and-without `entryId`, with-and-without
 `fieldPath`, very long target name (truncation), very long
 summary (2-line ellipsis), non-interactive variant
-(`onPress` undefined). Lives at `Compounds/DeltaLogRow`.
+(`onPress` undefined), a `footer` holding an entry link whose press
+fires its own handler and not the row's, `showMeta={false}`, and
+`summaryLines={null}` beside a clamped twin, a footer toggled under
+focus, and an empty summary. Lives at
+`Compounds/DeltaLogRow`.
 
 ## What this design defers
 
@@ -206,8 +256,8 @@ summary (2-line ellipsis), non-interactive variant
   delta; clustering deltas that share an action is a future
   affordance. The data is present; the rendering is not. The review
   window scopes its list to one close and groups it itself.
-- **Inline diff expansion.** v1 truncates summary to 2 lines;
-  full-detail expansion via the
+- **Inline diff expansion.** v1 truncates the summary to 2 lines by
+  default; full-detail expansion via the
   [JSONViewer pattern](./data.md#raw-json-viewer--shared-modal-pattern)
   showing the raw `undo_payload` is a future enhancement.
 - **Bulk rollback affordances** — history is read-only in v1;

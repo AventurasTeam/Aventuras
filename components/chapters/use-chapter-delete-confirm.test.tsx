@@ -10,7 +10,7 @@ import {
   type RemoveChapterResult,
 } from '@/lib/actions'
 import { logger } from '@/lib/diagnostics'
-import { generationStore } from '@/lib/stores'
+import { chapterOverlaysStore, generationStore } from '@/lib/stores'
 import { toast } from '@/lib/toast'
 
 import { chapterDeleteRefusalCopy, useChapterDeleteConfirm } from './use-chapter-delete-confirm'
@@ -85,6 +85,7 @@ async function openOn(result: { current: Hook }, chapterId = 'chap_2') {
 
 beforeEach(() => {
   generationStore.__reset()
+  chapterOverlaysStore.__reset()
   vi.mocked(toast.error).mockClear()
   vi.spyOn(logger, 'warn').mockImplementation(() => {})
   vi.spyOn(logger, 'error').mockImplementation(() => {})
@@ -238,6 +239,36 @@ describe('useChapterDeleteConfirm: opening and staying true', () => {
       opening.resolve(PREVIEW)
       await pendingOpen
     })
+
+    expect(result.current.target).toBeNull()
+  })
+
+  it('opens nothing for an opening read that resolves after the review window opened', async () => {
+    const { result, loadPreview } = setup()
+    const opening = deferred<ChapterDeletePreview>()
+    loadPreview.mockReturnValueOnce(opening.promise)
+    let pendingOpen!: Promise<void>
+    act(() => {
+      pendingOpen = result.current.open('chap_2')
+    })
+
+    act(() => chapterOverlaysStore.openReviewWindow({ chapterId: 'chap_2' }))
+    await act(async () => {
+      opening.resolve(PREVIEW)
+      await pendingOpen
+    })
+
+    expect(result.current.target).toBeNull()
+    expect(chapterOverlaysStore.getState().review).toEqual({ chapterId: 'chap_2' })
+  })
+
+  it('closes when the review window opens over it, and stays closed after the window goes', async () => {
+    const { result } = setup()
+    await openOn(result)
+
+    act(() => chapterOverlaysStore.openReviewWindow({ chapterId: 'chap_2' }))
+    expect(result.current.target).toBeNull()
+    act(() => chapterOverlaysStore.closeReviewWindow())
 
     expect(result.current.target).toBeNull()
   })

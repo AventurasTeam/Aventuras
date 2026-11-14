@@ -144,7 +144,7 @@ Slice 5.5b answers whether the agent holds, not whether it is good.
   close: close modal, `STORY TOOLS`, `Close chapter here`, Phase 1,
   `toolCalling`, the end-to-end close (C7, C10)
 - [Slice 5.11](./slices/11-review-window.md) — review window: by-action
-  read, grouped rows, Not applied, press routing, commit toasts (C4, C7)
+  read, grouped rows, Not applied, press routing, the commit banner (C4, C7)
 - [Slice 5.12](./slices/12-chapter-delete-rollback.md) — chapter delete
   and rollback: delete, divider-only removal, the regenerate arm, copy,
   the preview under a running close (C13)
@@ -368,9 +368,9 @@ type CloseReportCall = {
   why: string
   turns: string[] // entry ids
   result: 'ok' | 'rejected' | 'skipped'
-  reason?: string // why it didn't land: the first refusal's, else protection's
+  reason?: CloseReasonKey // why it didn't land: the first refusal's, else protection's
   values?: Record<string, string> // delta path to new or proposed value, cut to the bound
-  skippedFields?: { field: string; reason: string }[] // lost fields' own reasons (C11)
+  skippedFields?: { field: string; reason: CloseReasonKey }[] // lost fields' own reasons (C11)
   survivor?: { table: string; id: string } // a landed merge's kept row
 }
 ```
@@ -393,9 +393,16 @@ type CloseReportCall = {
   carries only `reason`. The review omits an `ok` call with no field and
   no `survivor`. A tool writing a single field, such as `retire_entity`,
   records it here.
-- **A `reason` is a stable key** for the three shared classes,
-  `USER_EDITED_SINCE_PROSE`, `later-turn` and `row-gone`, and the
-  handler's own string for a rule refusal.
+- **A `reason` is a stable key** for every refusal, a member of
+  `CLOSE_REASON_KEYS` beside the schema: the three shared classes,
+  `user-edited-since-prose`, `later-turn` and `row-gone`, each handler's
+  own code, and one key for each refusal the close builds itself, from
+  the common checks to a tool's own rules. The model's tool result keeps
+  its instruction, written `<key>: <text>`, and the ledger records the
+  key alone, so no stored reason holds a row id or a per-close handle.
+  A reason no key covers records `other`. The schema still accepts any
+  stored string, so an older report parses, and parsing reads one that
+  isn't a key as `other`, logged. Every key has a `t()` label.
 - **The ledger**, behind an accessor in `close-intermediates.ts`, is
   `Pick<CloseReport, 'calls' | 'stopped' | 'noToolCalls'>`. A close with
   no ledger reads as none, with `noToolCalls: true`. The driver clears the
@@ -410,9 +417,11 @@ type CloseReportCall = {
   tool on a row the two calls share, or that tool at all if it has no
   `rows`: its `rows` are every id argument, a landed call's the tool's
   own. A value-less slip never retried then hides behind a landing for
-  something else, but it held nothing to apply. A refused create mints
-  an id no retry shares, so it matches a later landed create by that
-  task with the same title, trimmed and case-folded.
+  something else, but it held nothing to apply. A `flag_duplicate` or a
+  merge naming two or more rows drops only on a landing over the same
+  rows, in any order: the pair or set is the proposal. A refused create
+  mints an id no retry shares, so it matches a later landed create by
+  that task with the same title, trimmed and case-folded.
 - **Stamps, `retrieval_count` resets and stackable normalization stay
   out of the review.** Normalization is code with no `why` or `turns`,
   and its keys are a spelling cleanup.
@@ -549,12 +558,14 @@ builds on it. Consumers: 5.3, 5.7, 5.13.
 `openReviewWindow({ chapterId })`, and from 5.13, which provides it,
 `openRerunConfirm({ branchId, chapterId })`, and one host for all,
 `ChapterOverlaysHost` in `components/chapters/chapter-overlays-host.tsx`,
-mounts at the app root beside `MemoryRunToasts` (`app/_layout.tsx:115`).
-The toast's `Review` fires from there, and the modal has four triggers
-on five routes, so a per-route mount would touch every in-story route.
+mounts at the app root beside `MemoryRunToasts` (`app/_layout.tsx:116-117`).
+The commit banner's `Review` opens the window from whichever in-story
+screen is up, and the modal has four triggers on five routes, so a
+per-route mount would touch every in-story route.
 
 - If the close reverses while the review window is open, it closes
-  itself. A stale toast's `Review` does nothing. A re-run's commit, or
+  itself, and the commit banner's done state goes with its chapter by
+  the same rule, so a stale `Review` opens nothing. A re-run's commit, or
   its undo, changes the row's `closeReportActionId`, and the window
   closes the same way. The re-run confirm stacks over the window.
 - A row press goes through the current surface's guard. A root host
@@ -565,7 +576,11 @@ on five routes, so a per-route mount would touch every in-story route.
   `registerSurface({ guard, navigate })`, through `useOverlaySurface` on
   focus, in 5.11, with a surface that has nothing to guard defaulting to
   `(proceed) => proceed()`. `openCloseModal` runs that guard, so no
-  trigger can skip it. Inferred from the code, not run.
+  trigger can skip it. A row press's guard is run on the Timeline, where
+  a press over a dirty card asks first
+  (`e2e/tests/chapter-review.spec.ts`); over a dirty World pane it is
+  covered only by the registration unit test, inferred from the code,
+  not run.
 
 ### C8 — Seed stability
 

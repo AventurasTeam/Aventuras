@@ -1,8 +1,11 @@
 import { PERIODIC_CLASSIFIER_KIND } from '@/lib/classifier'
-import type { CloseTask } from '@/lib/db'
+import { closeTaskLabel } from '@/lib/history'
 import { t } from '@/lib/i18n'
 import { CHAPTER_CLOSE_KIND, CLOSE_PHASE } from '@/lib/pipeline'
 import {
+  chapterOverlaysStore,
+  chaptersStore,
+  closeResultChapter,
   currentStoryStore,
   generationStore,
   interruptMemoryRuns,
@@ -10,17 +13,15 @@ import {
   type RunState,
 } from '@/lib/stores'
 
-export type MemoryRunBannerState = { label: string; onCancel: () => void }
-
-const CLOSE_TASK_COPY = {
-  happenings: 'chrome.memoryBanner.closeTask.happenings',
-  lore: 'chrome.memoryBanner.closeTask.lore',
-  identity: 'chrome.memoryBanner.closeTask.identity',
-  threads: 'chrome.memoryBanner.closeTask.threads',
-  upkeep: 'chrome.memoryBanner.closeTask.upkeep',
-  lifecycle: 'chrome.memoryBanner.closeTask.lifecycle',
-  awareness: 'chrome.memoryBanner.closeTask.awareness',
-} as const satisfies Record<CloseTask, string>
+export type MemoryRunBannerState =
+  | { kind: 'run'; label: string; onCancel: () => void }
+  | {
+      kind: 'closed'
+      tone: 'info' | 'warning'
+      label: string
+      onReview: () => void
+      onDismiss: () => void
+    }
 
 /**
  * C6: a close's banner label; in `agent` it names the task last started. The run keeps
@@ -47,7 +48,7 @@ export function closeBannerLabel(
       return t(turn ? 'chrome.memoryBanner.beforeTurnTask' : 'chrome.memoryBanner.closingTask', {
         index: progress.index,
         total: progress.total,
-        task: t(CLOSE_TASK_COPY[progress.task]),
+        task: closeTaskLabel(progress.task),
       })
     }
     case CLOSE_PHASE.report:
@@ -67,8 +68,8 @@ function bannerLabel(run: RunState): string | null {
 }
 
 /**
- * The open branch's pass or close banner: its label and a Cancel that interrupts the run
- * (deferring it to the next Send). Null while neither runs there.
+ * The open branch's running pass or close (Cancel defers it to the next Send); else its last close
+ * of this open until reviewed, dismissed or reversed, only while that chapter is the latest.
  */
 export function useMemoryRunBanner(): MemoryRunBannerState | null {
   const branchId = currentStoryStore.useCurrentStory((open) => open?.branchId ?? null)
@@ -76,9 +77,33 @@ export function useMemoryRunBanner(): MemoryRunBannerState | null {
   const run = generationStore.useGeneration((s) =>
     branchId == null ? undefined : selectMemoryRun(s.txState, { branchId }),
   )
-  if (run == null) return null
-  const label = bannerLabel(run)
-  if (label == null) return null
-  const runBranchId = run.branchId
-  return { label, onCancel: () => void interruptMemoryRuns(runBranchId) }
+  const openSeq = currentStoryStore.useOpenSeq()
+  const result = chapterOverlaysStore.useOverlays((s) => s.closeResult)
+  const held = chaptersStore.useChapters((rows) =>
+    closeResultChapter(result, rows, { branchId, openSeq }),
+  )
+  const latestChapter = chaptersStore.useChapters(chaptersStore.selectLatest)
+
+  const label = run == null ? null : bannerLabel(run)
+  if (run != null && label != null) {
+    const runBranchId = run.branchId
+    return { kind: 'run', label, onCancel: () => void interruptMemoryRuns(runBranchId) }
+  }
+
+  if (result == null || held == null || held.id !== latestChapter?.id) return null
+  const { chapterId, stoppedTasks } = result
+  const clear = () => chapterOverlaysStore.clearCloseResult()
+  return {
+    kind: 'closed',
+    tone: stoppedTasks === 0 ? 'info' : 'warning',
+    label:
+      stoppedTasks === 0
+        ? t('chrome.closeResult.closed', { title: held.title })
+        : t('chrome.closeResult.stopped', { count: stoppedTasks }),
+    onReview: () => {
+      chapterOverlaysStore.openReviewWindow({ chapterId })
+      clear()
+    },
+    onDismiss: clear,
+  }
 }

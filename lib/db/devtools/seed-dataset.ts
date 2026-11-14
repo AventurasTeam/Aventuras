@@ -36,6 +36,8 @@ import {
 import { DEFAULT_SUGGESTION_CATEGORIES } from '../stories/default-suggestion-categories'
 import { storyDefinitionSchema, storySettingsSchema } from '../stories/story-config-schema'
 import type { StoryDefinition, StorySettings } from '../stories/story-config-schema'
+import { closeReportSchema } from '../story-entries/close-report'
+import type { CloseReport } from '../story-entries/close-report'
 import { entryMetadataSchema } from '../story-entries/entry-metadata'
 import type { EntryMetadata } from '../story-entries/entry-metadata'
 import type {
@@ -313,38 +315,135 @@ function forkEntries(): NewStoryEntry[] {
   return rows
 }
 
+// Chapter 2's close as its review window reads it (C4): a landed change, a list refused over its
+// soft cap, a task out of steps. Chapter 1 has no close report.
+const CHAP2_ACTION = 'act_chapter_2'
+const VORNE_TRAITS = ['patient', 'merciless']
+const VORNE_TRAITS_BEFORE_CLOSE = ['patient']
+
+const chapter2Report: CloseReport = closeReportSchema.parse({
+  version: 1,
+  actionId: CHAP2_ACTION,
+  calls: [
+    {
+      task: 'identity',
+      part: 1,
+      tool: 'update_character',
+      rows: [{ table: 'entities', id: ID.mira, name: 'Mira' }],
+      why: 'Mira stops hiding the debt and starts bargaining it down.',
+      turns: [entryId('hero', 41)],
+      result: 'rejected',
+      reason: 'over-soft-cap',
+      // Past the drives soft cap and longer than her stored list: what over-soft-cap refuses.
+      values: {
+        'state.drives': [
+          'protect her network',
+          'buy back her debt to Vorne',
+          'keep Kael close',
+          'learn what the amulet is',
+          'stay ahead of the Watch',
+          'find who set the market fire',
+          'keep the broker guessing',
+        ].join(', '),
+      },
+    },
+    {
+      task: 'identity',
+      part: 1,
+      tool: 'update_character',
+      rows: [{ table: 'entities', id: ID.vorne, name: 'Vorne' }],
+      why: 'Vorne lets the pact’s penalty fall on the courier without a flicker.',
+      turns: [entryId('hero', 33), entryId('hero', 35)],
+      result: 'ok',
+      values: { 'state.traits': VORNE_TRAITS.join(', ') },
+    },
+  ],
+  stopped: [{ task: 'identity', part: 1, reason: 'budget' }],
+  noToolCalls: false,
+} satisfies CloseReport)
+
+type AgentWrite = Omit<
+  SlottedDelta,
+  'branchId' | 'entryId' | 'actionId' | 'after' | 'source' | 'encodingVersion' | 'createdAt'
+>
+
+// A seeded close, read by both its chapter row and its deltas: a report is the row's only when its
+// agent writes and report update are logged too.
+type SeededClose = {
+  chapterId: string
+  deltaId: string
+  actionId: string
+  sequence: number
+  start: number
+  end: number
+  closedAt: number
+  report?: { value: CloseReport; agentWrites: readonly AgentWrite[] }
+}
+
+const CHAP1_CLOSE: SeededClose = {
+  chapterId: 'chap_hero_1',
+  deltaId: 'delta_hero_3',
+  actionId: 'act_chapter_1',
+  sequence: 1,
+  start: 1,
+  end: CHAP1_END,
+  closedAt: BASE + 6 * DAY,
+}
+
+const CHAP2_CLOSE: SeededClose = {
+  chapterId: 'chap_hero_2',
+  deltaId: 'delta_hero_9',
+  actionId: CHAP2_ACTION,
+  sequence: 2,
+  start: CHAP1_END + 1,
+  end: CHAP2_END,
+  closedAt: BASE + 12 * DAY,
+  report: {
+    value: chapter2Report,
+    agentWrites: [
+      {
+        id: 'delta_hero_10',
+        targetTable: 'entities',
+        targetId: ID.vorne,
+        op: 'update',
+        undoPayload: { state: { traits: [...VORNE_TRAITS_BEFORE_CLOSE] } },
+      },
+    ],
+  },
+}
+
+function closedChapter(close: SeededClose) {
+  return {
+    id: close.chapterId,
+    branchId: MAIN,
+    sequenceNumber: close.sequence,
+    startEntryId: entryId('hero', close.start),
+    endEntryId: entryId('hero', close.end),
+    closeReport: close.report?.value ?? null,
+    closedAt: close.closedAt,
+    createdAt: close.closedAt,
+    updatedAt: close.closedAt,
+  } satisfies Partial<NewChapter>
+}
+
 const heroChapters: Omit<NewChapter, 'tokenCount'>[] = [
   {
-    id: 'chap_hero_1',
-    branchId: MAIN,
-    sequenceNumber: 1,
+    ...closedChapter(CHAP1_CLOSE),
     title: 'Nine Days of Rain',
     summary:
       'Kael reaches Veil’s Hollow, draws the Syndicate’s notice, and meets Mira amid the market crowd.',
     theme: 'arrival and suspicion',
     keywords: ['hollow', 'amulet', 'syndicate', 'mira'],
-    startEntryId: entryId('hero', 1),
-    endEntryId: entryId('hero', CHAP1_END),
-    closedAt: BASE + 6 * DAY,
     embeddingStale: 1,
-    createdAt: BASE + 6 * DAY,
-    updatedAt: BASE + 6 * DAY,
   },
   {
-    id: 'chap_hero_2',
-    branchId: MAIN,
-    sequenceNumber: 2,
+    ...closedChapter(CHAP2_CLOSE),
     title: 'The Keep Leans Closer',
     summary:
       'The market fire pulls the Watch into the open while Vorne presses a pact Kael cannot afford to refuse.',
     theme: 'pressure and pacts',
     keywords: ['watch', 'fire', 'vorne', 'keep'],
-    startEntryId: entryId('hero', CHAP1_END + 1),
-    endEntryId: entryId('hero', CHAP2_END),
-    closedAt: BASE + 12 * DAY,
     embeddingStale: 1,
-    createdAt: BASE + 12 * DAY,
-    updatedAt: BASE + 12 * DAY,
   },
 ]
 
@@ -421,7 +520,7 @@ const heroEntities: NewEntity[] = [
     priority: 25,
     state: validState('character', {
       visual: { attire: 'immaculate, out of place in the rain' },
-      traits: ['patient', 'merciless'],
+      traits: [...VORNE_TRAITS],
       drives: ['seize the amulet', 'rule the Veil through fear'],
       current_location_id: ID.keep,
       equipped_items: [],
@@ -1092,17 +1191,9 @@ const heroEntryAssets: NewEntryAsset[] = [
 // really have landed: the rollback window and CTRL-Z both read log positions.
 type SlottedDelta = Omit<NewDelta, 'logPosition'> & { after: number }
 
-// C1: a close's create, then one stamp per entry of its range in position order, all under its
-// action and anchored on the chapter's end entry.
-function seededClose(close: {
-  deltaId: string
-  actionId: string
-  chapterId: string
-  sequence: number
-  start: number
-  end: number
-  createdAt: number
-}): SlottedDelta[] {
+// C1: a close's create, one stamp per entry in position order, then (if it wrote a report) its
+// agent writes and the report update; all under its action, anchored on the end entry.
+function seededClose(close: SeededClose): SlottedDelta[] {
   const shared = {
     branchId: MAIN,
     entryId: entryId('hero', close.end),
@@ -1110,7 +1201,7 @@ function seededClose(close: {
     after: close.end + 1,
     source: 'chapter_close' as const,
     encodingVersion: 1,
-    createdAt: close.createdAt,
+    createdAt: close.closedAt,
   }
   const stamps: SlottedDelta[] = []
   for (let i = close.start; i <= close.end; i++) {
@@ -1124,6 +1215,20 @@ function seededClose(close: {
       undoPayload: { chapterId: null },
     })
   }
+  const report: SlottedDelta[] =
+    close.report === undefined
+      ? []
+      : [
+          ...close.report.agentWrites.map((write) => ({ ...shared, ...write })),
+          {
+            ...shared,
+            id: `delta_hero_report_${close.sequence}`,
+            targetTable: 'chapters',
+            targetId: close.chapterId,
+            op: 'update',
+            undoPayload: { closeReport: null },
+          },
+        ]
   return [
     {
       ...shared,
@@ -1134,6 +1239,7 @@ function seededClose(close: {
       undoPayload: null,
     },
     ...stamps,
+    ...report,
   ]
 }
 
@@ -1228,24 +1334,8 @@ const heroDeltas: SlottedDelta[] = [
     createdAt: BASE + 25 * MIN,
   },
   // A close commits with the head at or past its chapter's end entry; the seed puts it one past.
-  ...seededClose({
-    deltaId: 'delta_hero_3',
-    actionId: 'act_chapter_1',
-    chapterId: 'chap_hero_1',
-    sequence: 1,
-    start: 1,
-    end: CHAP1_END,
-    createdAt: BASE + 6 * DAY,
-  }),
-  ...seededClose({
-    deltaId: 'delta_hero_9',
-    actionId: 'act_chapter_2',
-    chapterId: 'chap_hero_2',
-    sequence: 2,
-    start: CHAP1_END + 1,
-    end: CHAP2_END,
-    createdAt: BASE + 12 * DAY,
-  }),
+  ...seededClose(CHAP1_CLOSE),
+  ...seededClose(CHAP2_CLOSE),
   // Flagged row's create (periodic classifier): slotted past every entry create, so it lands
   // after the last reply's boundary and renders `fresh` at boot.
   {

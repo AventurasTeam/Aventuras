@@ -32,14 +32,10 @@ Used by:
   on Android 13 and later, which confirm a copy themselves), or error
   when the clipboard write fails
   ([`entry-card.md → System entry`](./entry-card.md#system-entry)).
-  A chapter close that commits, info severity, or warning when a task
-  stopped early, with a `Review` action opening the
-  [review window](../screens/chapter-timeline/chapter-timeline.md#review-window).
-  A chapter close's re-run that commits, the same with `Review`; one
-  cancelled, info severity, or failed, warning severity, with no
-  action, both saying the close is as it was; and a re-run undone with
-  no journal to write back, warning severity, saying the earlier close
-  couldn't be restored.
+  A chapter close's re-run cancelled, info severity, or failed, warning
+  severity, with no action, both saying the close is as it was; and a
+  re-run undone with no journal to write back, warning severity, saying
+  the earlier close couldn't be restored.
 - Any surface whose generation call came back with far fewer input
   tokens than were sent
   ([`architecture.md → Truncation cross-check`](../../architecture.md#truncation-cross-check))
@@ -51,6 +47,10 @@ Toasts deliberately do **not** cover:
 - **Reader peek lead change** — re-anchored narration is the
   feedback ([reader-composer.md](../screens/reader-composer/reader-composer.md)).
 - **Persistent errors** — banners.
+- **A chapter close's commit, or a re-run's** — the memory banner holds
+  it with `Review`
+  ([`principles.md → Affordance loci`](../principles.md#affordance-loci)),
+  since an action on a toast races its auto-dismiss.
 - **Undo affordance** — not a v1 UI pattern; rollback happens in
   the reader. History is read-only.
 

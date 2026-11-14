@@ -1,7 +1,7 @@
 import { and, eq } from 'drizzle-orm'
 import { z } from 'zod'
 
-import { happenings, type Happening } from '@/lib/db'
+import { CLOSE_TOP_LEVEL_VALUE, happenings, type CloseReasonKey, type Happening } from '@/lib/db'
 import { dedupeTerms } from '@/lib/keyword-terms'
 
 import {
@@ -15,6 +15,7 @@ import {
 import { restatedText, sentText, type BoundedField, type SentText } from './fields'
 import { keywordsRefusal, plannedKeywords, type SentKeywords } from './keyword-args'
 import { planPlacement, type PlacementArg } from './placement'
+import { keyedReason } from './reason-key'
 import { strings } from './row-values'
 import { turnHandleIn, turnInTextReason } from './text-checks'
 import {
@@ -85,23 +86,25 @@ type SentPlacement = { arg: PlacementArg; path: string; value: unknown }
 
 const PARENT_PATH = 'state.parent_location_id'
 const UNPLACED_PATH = 'state.unplaced'
-// C4: the top mark changes only state.unplaced, so its value names the move.
-const TOP_LEVEL_VALUE = 'top level'
 
 const UPKEEP_TEXT: readonly TextSpec<PlaceArgs | ItemArgs>[] = [
   { of: (args) => args.condition, path: 'state.condition', bound: 'condition' },
   { of: (args) => args.description, path: 'description', bound: 'description' },
 ]
 
-const NOT_OF_KIND: Readonly<Record<UpkeepKind, string>> = {
+const NOT_OF_KIND: Readonly<Record<UpkeepKind, CloseReasonKey>> = {
   location: 'not-a-place',
   item: 'not-an-item',
 }
 
-const NOTHING_SENT =
-  'every field is blank or left out: send only the fields you change, each with its whole new value'
-const PARENT_AND_TOP =
-  'parent and top are both sent: send a parent to place the place under it, or top: true to mark an unplaced place top level, not both'
+const NOTHING_SENT = keyedReason(
+  'nothing-sent',
+  'every field is blank or left out: send only the fields you change, each with its whole new value',
+)
+const PARENT_AND_TOP = keyedReason(
+  'parent-and-top',
+  'parent and top are both sent: send a parent to place the place under it, or top: true to mark an unplaced place top level, not both',
+)
 
 function sentTexts<A>(args: A, specs: readonly TextSpec<A>[]): SentField[] {
   return specs.flatMap((spec) => {
@@ -115,7 +118,7 @@ function sentPlacement(args: PlaceArgs): SentPlacement | undefined {
   if (args.parent !== undefined)
     return { arg: { kind: 'under', parentId: args.parent }, path: PARENT_PATH, value: args.parent }
   if (args.top === true)
-    return { arg: { kind: 'top' }, path: UNPLACED_PATH, value: TOP_LEVEL_VALUE }
+    return { arg: { kind: 'top' }, path: UNPLACED_PATH, value: CLOSE_TOP_LEVEL_VALUE }
   return undefined
 }
 
@@ -264,7 +267,10 @@ export const MARK_COMMON_KNOWLEDGE_SHAPE = {
 type KeywordArgs = z.output<WriteToolSchema<typeof SET_KEYWORDS_SHAPE>>
 type MarkArgs = z.output<WriteToolSchema<typeof MARK_COMMON_KNOWLEDGE_SHAPE>>
 
-const NO_TERMS = 'add and remove are both empty: send the terms to add, to remove, or both'
+const NO_TERMS = keyedReason(
+  'nothing-sent',
+  'add and remove are both empty: send the terms to add, to remove, or both',
+)
 
 /**
  * chapter-close.md → 3f Keywords: one keywords write; the action judges authorship and user

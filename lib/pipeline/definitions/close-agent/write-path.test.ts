@@ -20,6 +20,7 @@ import {
   emptyEntityState,
   entities,
   lore,
+  type CloseReasonKey,
   type Entity,
   type EntityState,
   type LocationState,
@@ -32,6 +33,7 @@ import type { ReadSet } from './common-checks'
 import { entityWriteAction, fieldVerdicts, restatedFields } from './entity-write'
 import { CloseIds } from './ids'
 import type { CloseLedgerWriter } from './ledger'
+import { keyedReason } from './reason-key'
 import {
   DELETE_PATH,
   readToolSchema,
@@ -64,7 +66,7 @@ import type { CloseLedger } from '../intermediates'
 // Substitutable ids must be real uuids: CloseIds.show allocates only those (lib/ids/prefixes.ts).
 const WREN = 'char_00000000-0000-4000-8000-000000000001'
 const GROUP_ACTION = 'act_close_group'
-const TEST_CAP = 'over-test-cap'
+const TEST_CAP: CloseReasonKey = 'over-soft-cap'
 const NO_SURVIVOR = { survivorOf: () => undefined }
 
 function deepFreeze<T>(value: T): T {
@@ -861,7 +863,7 @@ const refuseNoteTool: WriteTool<typeof REFUSE_NOTE_SHAPE> = {
   ids: { other: { shape: 'single', prefixes: ['char'] } },
   plan: async ({ title, body, other }, ctx) => ({
     kind: 'refused',
-    reason: `the note clashes with ${other}`,
+    reason: keyedReason('title-taken', `the note clashes with ${other}`),
     rows: [{ table: 'entities', id: other, name: ctx.ids.nameOfId(other) ?? '' }],
     values: { title, body },
   }),
@@ -1103,10 +1105,11 @@ describe('dispatchToolCall in a close phase', () => {
       expect.objectContaining({
         result: 'rejected',
         rows: [],
-        reason: expect.stringContaining('c9'),
+        reason: 'id-unknown',
         turns: [f.entries[2]!.id, f.entries[4]!.id],
       }),
     ])
+    expect(answers[0]).toMatchObject({ reason: expect.stringContaining('c9 in id') })
   })
 
   it('answers a read naming a handle it never showed, recording nothing', async () => {
@@ -1426,7 +1429,7 @@ describe('dispatchToolCall in a close phase', () => {
       why: 'He waits.',
       turns: [endEntryId()],
       result: 'rejected',
-      reason: expect.stringContaining("c2 hasn't been read"),
+      reason: 'unread',
     })
     expect(retried).toMatchObject({
       tool: 'set_fields',
@@ -1442,7 +1445,7 @@ describe('dispatchToolCall in a close phase', () => {
       why: '',
       turns: [endEntryId()],
       result: 'rejected',
-      reason: expect.stringContaining('why is empty'),
+      reason: 'why-empty',
     })
     expect(created).toMatchObject({
       tool: 'create_note',
@@ -1538,7 +1541,7 @@ describe('dispatchToolCall in a close phase', () => {
     expect(note).toMatchObject({ title: 'The Toll', body: 'Paid at the river.' })
   })
 
-  it('never lets a full id reach the model; the ledger keeps the original reason', async () => {
+  it("never lets a full id reach the model, nor the ledger, which keeps the reason's key", async () => {
     await runDispatch([
       {
         toolName: 'refuse_note',
@@ -1549,9 +1552,10 @@ describe('dispatchToolCall in a close phase', () => {
 
     expect(recorded()[0]).toMatchObject({
       result: 'rejected',
-      reason: `the note clashes with ${WREN}`,
+      reason: 'title-taken',
       values: { title: 'The Toll', body: 'Paid.' },
     })
+    expect(JSON.stringify(recorded()[0])).not.toContain('clashes')
     const told = JSON.stringify(answers[0])
     expect(told).toContain('clashes with c1')
     expect(told).not.toMatch(FULL_ID)
@@ -1636,10 +1640,7 @@ describe('dispatchToolCall in a close phase', () => {
       },
     ])
 
-    expect(recorded()[1]).toMatchObject({
-      result: 'rejected',
-      reason: `the note clashes with ${GONE}`,
-    })
+    expect(recorded()[1]).toMatchObject({ result: 'rejected', reason: 'title-taken' })
     expect(answers[0]).not.toHaveProperty('survivor')
   })
 
@@ -1913,7 +1914,7 @@ describe('dispatchToolCall in a close phase', () => {
     configurePort({
       applyDeltaActionGroupWithOutcomes: async () => ({
         status: 'ok',
-        outcomes: [{ status: 'noop', reason: 'not-created' }],
+        outcomes: [{ status: 'noop', reason: TEST_CAP }],
       }),
     })
 
@@ -1956,15 +1957,19 @@ describe('dispatchToolCall in a close phase', () => {
       createdId: minted,
     })
 
-    await runDispatch([
+    const warn = vi.spyOn(logger, 'warn')
+
+    const { result } = await runDispatch([
       { toolName: 'scripted', input: { rows: [], ...cite(['t7']) } },
       { toolName: 'set_fields', input: { id: 'c1', description: 'Soaked.', ...cite(['t7']) } },
     ])
 
-    expect(recorded()[0]).toMatchObject({
-      result: 'rejected',
-      reason: expect.stringContaining('branch mismatch'),
-    })
+    expect(recorded()[0]).toMatchObject({ result: 'rejected', reason: 'other' })
+    expect(warn).toHaveBeenCalledWith(
+      'memory.close_reason_unkeyed',
+      { reason: expect.stringContaining('branch mismatch'), task: 'identity', tool: 'scripted' },
+      { actionId: result.actionId },
+    )
     expect(answers[0]).toMatchObject({ result: 'rejected' })
     expect(answers[0]).not.toHaveProperty('id')
     expect(shown!.handleOf(minted)).toBeUndefined()
@@ -2137,7 +2142,7 @@ describe('the read gate on a row a landed merge absorbed', () => {
 
     expect(answers[1]).toEqual({
       result: 'rejected',
-      reason: "c2 hasn't been read in this task: call read_row on it, then write it",
+      reason: "unread: c2 hasn't been read in this task: call read_row on it, then write it",
     })
   })
 })

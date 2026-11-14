@@ -106,6 +106,7 @@ import { useChapterProgress } from '@/hooks/use-chapter-progress'
 import { useGlobalHotkey } from '@/hooks/use-global-hotkey'
 import { useLeaveFailedStoryOpen } from '@/hooks/use-leave-failed-story-open'
 import { useSwapState } from '@/hooks/use-memory-health'
+import { useOverlaySurface } from '@/hooks/use-overlay-surface'
 import { useRouteLink } from '@/hooks/use-route-link'
 import { useStoryLeaveGuard } from '@/hooks/use-story-leave-guard'
 import { useSurfaceNavigate } from '@/hooks/use-surface-navigate'
@@ -229,6 +230,8 @@ function readerPlaceholder(state: {
 export default function ReaderComposerRoute() {
   const router = useRouter()
   const surfaceNavigate = useSurfaceNavigate()
+  // No pane to guard, so the default guard (C7).
+  useOverlaySurface()
   const tier = useTier()
   const showRail = tier !== 'phone'
   const isFocused = useIsFocused()

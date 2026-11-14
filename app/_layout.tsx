@@ -8,6 +8,7 @@ import { GestureHandlerRootView } from 'react-native-gesture-handler'
 import { KeyboardProvider, useResizeMode } from 'react-native-keyboard-controller'
 import { SafeAreaProvider, initialWindowMetrics } from 'react-native-safe-area-context'
 
+import { ChapterOverlaysHost } from '@/components/chapters/chapter-overlays-host'
 import { EmbeddingUpgradeHost } from '@/components/embedder/embedding-upgrade-host'
 import { SwapResumeHost } from '@/components/embedder/swap-resume-host'
 import { RailViewportWatcher } from '@/components/reader/rail/rail-viewport-watcher'
@@ -113,6 +114,7 @@ export default function RootLayout() {
                     <EmbeddingUpgradeHost />
                     <Toaster />
                     <MemoryRunToasts />
+                    <ChapterOverlaysHost />
                     <PortalHost />
                     <DrizzleStudioDevTools />
                   </BottomSheetModalProvider>

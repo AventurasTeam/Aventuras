@@ -417,6 +417,18 @@ describe('overflow menu', () => {
     ).toEqual(['export', 'json'])
   })
 
+  it('marks View raw JSON, and no other entry, as opening a Sheet of its own', () => {
+    const entity = entityMenuEntries('character', {
+      onViewJson: noop,
+      onExport: noop,
+      lead: { onSetLead: noop },
+      remove: { onDelete: noop },
+    })
+    expect(entity.filter((e) => e.opensSheet === true).map((e) => e.key)).toEqual(['json'])
+    const lore = loreMenuEntries({ onViewJson: noop, onExport: noop, remove: { onDelete: noop } })
+    expect(lore.filter((e) => e.opensSheet === true).map((e) => e.key)).toEqual(['json'])
+  })
+
   it('disables delete with its reason when the row is the lead', () => {
     const entries = entityMenuEntries('character', {
       onViewJson: noop,

@@ -1,4 +1,4 @@
-import type { CloseReportCall } from '@/lib/db'
+import { landedPaths, type CloseReportCall } from '@/lib/db'
 import { logger } from '@/lib/diagnostics'
 import { ID_PATTERN } from '@/lib/ids'
 import { oneLine } from '@/lib/text'
@@ -13,6 +13,10 @@ export const CLOSE_REPORT_VALUE_BOUND = 2_000
 type NameOfId = (id: string) => string | undefined
 type Survivor = NonNullable<CloseReportCall['survivor']>
 type RowRef = { table: string; id: string }
+/** What a close records of one call, its values as the tool gave them. */
+type RecordedCall = Omit<CloseReportCall, 'values'> & {
+  values?: Readonly<Record<string, unknown>>
+}
 
 function formatted(value: unknown, nameOfId: NameOfId): string {
   if (value === null || value === undefined) return ''
@@ -41,9 +45,7 @@ export class CloseLedgerWriter {
   }
 
   /** C4: a list joins with ", ", a ref (a whole id) is its row's name, every value cut to the bound. */
-  record(
-    call: Omit<CloseReportCall, 'values'> & { values?: Readonly<Record<string, unknown>> },
-  ): void {
+  record(call: RecordedCall): void {
     const { values, ...rest } = call
     const shown = Object.entries(values ?? {})
       .filter(([, value]) => value !== undefined)
@@ -98,8 +100,7 @@ export class CloseLedgerWriter {
     return this.ledger.calls
       .flatMap((call) => {
         if (call.result !== 'ok') return []
-        const skipped = new Set((call.skippedFields ?? []).map(({ field }) => field))
-        const fields = Object.keys(call.values ?? {}).filter((field) => !skipped.has(field))
+        const fields = landedPaths(call)
         if (fields.length === 0 && call.survivor === undefined) return []
         // A name goes into the next task's prompt: a line break would forge a line, a full id leak.
         const rows = call.rows

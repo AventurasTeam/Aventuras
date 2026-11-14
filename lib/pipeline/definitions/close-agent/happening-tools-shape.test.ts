@@ -119,7 +119,11 @@ describe('merge_happenings shape', () => {
         why: 'The turns tell one crossing.',
         turns: [endEntryIdOf(f)],
         result: 'ok',
-        values: { title: 'The night crossing', description: COMPOSITE },
+        values: {
+          title: 'The night crossing',
+          description: COMPOSITE,
+          occurredAtEntryId: f.entries[2]!.id,
+        },
         survivor: { table: 'happenings', id: CROSSING },
       },
     ])

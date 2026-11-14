@@ -994,9 +994,22 @@ write to a row the task hadn't read, counts as corrected once that task
 later lands the same tool on a row the two calls share, or lands that
 tool at all if the refusal named no row. That can hide a slip the model
 never retried behind a landing for something else, but such a slip held
-nothing to apply. A field one call landed on one row and lost on another
-counts as landed: it appears once, as a change, and only the model's
-tool result names the loss.
+nothing to apply. A duplicate flag or a merge proposes its rows
+together, so it counts as corrected only when that task later lands the
+same tool over the same rows, in any order. Another pair or set that
+shares a row leaves it listed, and a merge retried without one of its
+rows appears under both. One that named a single row, such as a flag
+naming one row twice, proposed no pair, so a shared row corrects it. A
+field one call landed on one row and lost on another counts as landed:
+it appears once, as a change, and only the model's tool result names
+the loss.
+
+A refused create mints an id no retry shares, so it counts as corrected
+once the same task lands a create with the same title, trimmed and
+case-folded. Every refusal's reason is recorded as a stable key, which
+the review shows as a sentence of its own; the model's tool result
+keeps the instruction it acts on, with the short ids and turn handles
+that mean something only inside the close.
 
 ## Manual user-triggered close
 

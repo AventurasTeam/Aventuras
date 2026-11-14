@@ -399,6 +399,8 @@ export const NOTE = {
   gone: 'The row is gone; do not write to it again.',
 } as const
 export const CLOSE_WROTE =
-  'this close already wrote a happening in absorb, and absorbing it would block undoing the close: keep that happening instead'
+  'merge-close-wrote: this close already wrote a happening in absorb, and absorbing it would block undoing the close: keep that happening instead'
 export const NO_KEEP =
-  'this close already wrote more than one of these happenings, so they cannot be merged in this close: leave them apart'
+  'merge-close-wrote-no-keep: this close already wrote more than one of these happenings, so they cannot be merged in this close: leave them apart'
+export const OUTSIDE_CLUSTER =
+  "merge-outside-cluster: absorb names a happening outside keep's cluster: merge only happenings listed in one cluster"

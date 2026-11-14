@@ -2119,6 +2119,11 @@ don't say whether that rate is wanted. **Revisit signal:** a deliberate
 a11y pass, or a report from real assistive-technology use. Routed from
 triage 2026-11-07.
 
+Evidence, from 5.11's review: the commit banner's done state is a
+`role="status"` change too, and a Stack keeps lower screens' banners
+mounted, so whether one change is announced once per mounted screen is
+unchecked.
+
 #### A Save of whitespace alone keeps the padding as the clean form
 
 The chapter, lore and Plot drafts compare trimmed values, so a

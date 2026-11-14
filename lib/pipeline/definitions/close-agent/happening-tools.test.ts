@@ -1,10 +1,12 @@
-import { afterEach, beforeEach, describe, expect, it } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { USER_EDITED_SINCE_PROSE, type PipelineAction } from '@/lib/actions/types'
+import { logger } from '@/lib/diagnostics'
 import { generateId } from '@/lib/ids'
 import { resetAllStores } from '@/lib/stores'
 
 import { mergeHappeningsTool } from './happening-tools'
+import { CloseLedgerWriter } from './ledger'
 import { assertReplaySafe } from './tool'
 import { markCommonKnowledgeTool } from './upkeep-tools'
 import { openCloseFixture, type CloseFixture } from '../__tests__/close-fixture'
@@ -35,6 +37,7 @@ import {
   NOTE,
   CLOSE_WROTE,
   NO_KEEP,
+  OUTSIDE_CLUSTER,
   pinByUser,
   rewriteCitedProse,
 } from './__tests__/happening-tools-fixture'
@@ -78,34 +81,38 @@ describe('merge_happenings refusals', () => {
     resetAllStores()
   })
 
-  it.each<{ name: string; args: MergeInput; reason: string }>([
+  it.each<{ name: string; args: MergeInput; key: string; reason: string }>([
     {
       name: 'an empty absorb',
       args: { keep: 'hp1', absorb: [] },
-      reason: 'absorb is empty: name the happenings to fold into keep',
+      key: 'merge-absorb-empty',
+      reason: 'merge-absorb-empty: absorb is empty: name the happenings to fold into keep',
     },
     {
       name: 'keep inside absorb',
       args: { keep: 'hp1', absorb: ['hp1', 'hp2'] },
-      reason: 'keep is also in absorb: keep one happening and absorb the others',
+      key: 'merge-keep-absorbed',
+      reason:
+        'merge-keep-absorbed: keep is also in absorb: keep one happening and absorb the others',
     },
     {
       name: 'a repeated id',
       args: { keep: 'hp1', absorb: ['hp2', 'hp2'] },
-      reason: 'absorb names a happening twice: name each happening once',
+      key: 'merge-repeated',
+      reason: 'merge-repeated: absorb names a happening twice: name each happening once',
     },
     {
       name: "a row outside keep's cluster",
       args: { keep: 'hp1', absorb: ['hp4'] },
-      reason:
-        "absorb names a happening outside keep's cluster: merge only happenings listed in one cluster",
+      key: 'merge-outside-cluster',
+      reason: OUTSIDE_CLUSTER,
     },
-  ])('rejects $name, writing nothing', async ({ args, reason }) => {
+  ])('rejects $name, writing nothing', async ({ args, key, reason }) => {
     const run = await runCalls(f, [merge(args)])
 
     expect(run.answers).toEqual([{ result: 'rejected', reason }])
     expect(run.calls).toHaveLength(1)
-    expect(run.calls[0]).toMatchObject({ result: 'rejected', reason })
+    expect(run.calls[0]).toMatchObject({ result: 'rejected', reason: key })
     expect(run.calls[0]).not.toHaveProperty('survivor')
     expect(await runDeltas(f, run.result.actionId)).toEqual([])
   })
@@ -175,7 +182,7 @@ describe('merge_happenings refusals', () => {
       reason: CLOSE_WROTE,
       note: 'Send hp1 as keep.',
     })
-    expect(run.calls[1]).toMatchObject({ result: 'rejected', reason: CLOSE_WROTE })
+    expect(run.calls[1]).toMatchObject({ result: 'rejected', reason: 'merge-close-wrote' })
     expect(run.calls[1]).not.toHaveProperty('survivor')
     expect(written.filter(({ targetId }) => targetId === LIGHT)).toEqual([])
     expect(await happeningRow(f, LIGHT)).toBeDefined()
@@ -212,6 +219,7 @@ describe('merge_happenings refusals', () => {
 
     expect(run.answers[1]).toEqual({ result: 'ok' })
     expect(run.answers[2]).toEqual({ result: 'rejected', reason: NO_KEEP })
+    expect(run.calls[2]).toMatchObject({ result: 'rejected', reason: 'merge-close-wrote-no-keep' })
     expect(run.calls[2]).not.toHaveProperty('survivor')
     expect(await happeningRow(f, LIGHT)).toBeDefined()
   })
@@ -462,7 +470,10 @@ describe('merge_happenings refusals', () => {
     ])
 
     expect(run.answers).toEqual([
-      { result: 'rejected', reason: 't3 is a turn: cite turns in turns, never in the text' },
+      {
+        result: 'rejected',
+        reason: 'turn-in-text: t3 is a turn: cite turns in turns, never in the text',
+      },
     ])
     expect(run.calls[0]).not.toHaveProperty('survivor')
     expect(await runDeltas(f, run.result.actionId)).toEqual([])
@@ -537,8 +548,7 @@ describe('merge_happenings refusals', () => {
     expect(run.answers).toEqual([
       {
         result: 'rejected',
-        reason:
-          "absorb names a happening outside keep's cluster: merge only happenings listed in one cluster",
+        reason: OUTSIDE_CLUSTER,
       },
     ])
     expect(await happeningRow(f, CROSSING)).toBeDefined()
@@ -600,7 +610,10 @@ describe('merge_happenings refusals', () => {
     ])
 
     expect(run.answers).toEqual([
-      { result: 'rejected', reason: 't3 is a turn: cite turns in turns, never in the text' },
+      {
+        result: 'rejected',
+        reason: 'turn-in-text: t3 is a turn: cite turns in turns, never in the text',
+      },
     ])
     expect(await runDeltas(f, run.result.actionId)).toEqual([])
   })
@@ -617,8 +630,7 @@ describe('merge_happenings refusals', () => {
     expect(run.answers).toEqual([
       {
         result: 'rejected',
-        reason:
-          "absorb names a happening outside keep's cluster: merge only happenings listed in one cluster",
+        reason: OUTSIDE_CLUSTER,
       },
     ])
   })
@@ -712,5 +724,81 @@ describe('merge_happenings refusals', () => {
     const run = await runCalls(f, [merge({ keep: 'hp1', absorb: ['hp2'] })])
 
     expect(run.answers).toEqual([{ result: 'skipped', reason: 'later-turn', note: NOTE.laterTurn }])
+  })
+})
+
+describe('merge_happenings values', () => {
+  let f: CloseFixture
+
+  beforeEach(async () => {
+    f = await openCloseFixture()
+    await seedWorld(f)
+    // LIGHT, at t3 ahead of CROSSING's t5, is common knowledge; CROSSING isn't.
+    await apply(f, {
+      kind: 'updateHappening',
+      source: 'periodic_classifier',
+      payload: {
+        branchId: f.branchId,
+        id: LIGHT,
+        patch: { commonKnowledge: 1 },
+        proseEntryId: null,
+      },
+    })
+  })
+
+  afterEach(() => {
+    resetAllStores()
+    vi.restoreAllMocks()
+  })
+
+  it('records the anchor and common knowledge a merge lands on keep beside its text, each logged', async () => {
+    const debug = vi.spyOn(logger, 'debug')
+
+    const run = await runCalls(f, [merge({ keep: 'hp1', absorb: ['hp2'], description: COMPOSITE })])
+
+    expect(run.answers).toEqual([{ result: 'ok', survivor: 'hp1' }])
+    expect(await happeningRow(f, CROSSING)).toMatchObject({
+      occurredAtEntryId: f.entries[2]!.id,
+      commonKnowledge: 1,
+    })
+    expect(run.calls[0]!.values).toEqual({
+      description: COMPOSITE,
+      occurredAtEntryId: f.entries[2]!.id,
+      commonKnowledge: '1',
+    })
+    const logged = debug.mock.calls
+      .filter(([event]) => event === 'memory.close_report_value')
+      .map(([, data]) => (data as { path: string }).path)
+    expect(logged).toEqual(['description', 'occurredAtEntryId', 'commonKnowledge'])
+  })
+
+  it("lists the derived fields in a later task's writes so far", async () => {
+    const run = await runCalls(f, [merge({ keep: 'hp1', absorb: ['hp2'], description: COMPOSITE })])
+    const ledger = { calls: run.calls, stopped: [], noToolCalls: false }
+    const writer = new CloseLedgerWriter(ledger, (id) => run.ids.nameOfId(id), run.result.actionId)
+
+    expect(writer.writesSoFar(run.ids)).toBe(
+      '- merge_happenings Tobin poles Wren across (hp1), A light on the far bank (hp2): description, occurredAtEntryId, commonKnowledge; kept hp1',
+    )
+  })
+
+  it('records them as proposed on a merge the user skipped', async () => {
+    await apply(
+      f,
+      {
+        kind: 'updateHappening',
+        source: 'user_edit',
+        payload: { branchId: f.branchId, id: LIGHT, patch: { icon: 'lamp' }, proseEntryId: null },
+      },
+      BY_USER,
+    )
+
+    const run = await runCalls(f, [merge({ keep: 'hp1', absorb: ['hp2'] })])
+
+    expect(run.calls[0]).toMatchObject({ result: 'skipped', reason: USER_EDITED_SINCE_PROSE })
+    expect(run.calls[0]!.values).toEqual({
+      occurredAtEntryId: f.entries[2]!.id,
+      commonKnowledge: '1',
+    })
   })
 })

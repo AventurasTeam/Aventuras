@@ -12,6 +12,7 @@ import type { CloseReportCall, CloseTask, DbCtx } from '@/lib/db'
 import type { SubstitutablePrefix } from '@/lib/ids'
 
 import type { CloseIds } from './ids'
+import { keyedReason } from './reason-key'
 import type { CLOSE_REASON } from './verdict'
 
 export type RowKind =
@@ -270,25 +271,40 @@ export function resolveIdArgs(
     if ((arg.shape === 'array') !== Array.isArray(value))
       return {
         ok: false,
-        reason: `${key} takes ${arg.shape === 'array' ? 'a list of ids' : 'one id'}`,
+        reason: keyedReason(
+          'id-shape',
+          `${key} takes ${arg.shape === 'array' ? 'a list of ids' : 'one id'}`,
+        ),
       }
     const handles: unknown[] = Array.isArray(value) ? value : [value]
     const resolved: string[] = []
     for (const handle of handles) {
       const id = typeof handle === 'string' ? ids.idOf(handle) : undefined
       if (id === undefined && typeof handle === 'string' && FULL_ID_SHAPE.test(handle))
-        return { ok: false, reason: `${key} takes a short id as shown (c1, lo2…), not a full id` }
+        return {
+          ok: false,
+          reason: keyedReason(
+            'id-full',
+            `${key} takes a short id as shown (c1, lo2…), not a full id`,
+          ),
+        }
       if (id === undefined)
         return {
           ok: false,
-          reason: `${String(handle)} in ${key} is not a known id; use an id this task showed you`,
+          reason: keyedReason(
+            'id-unknown',
+            `${String(handle)} in ${key} is not a known id; use an id this task showed you`,
+          ),
         }
       const prefix = prefixOf(id)
       if (!arg.prefixes.some((p) => asPrefix(p) === prefix)) {
         const takes = arg.prefixes.map((p) => kindOf(asPrefix(p))).join(' or ')
         return {
           ok: false,
-          reason: `${String(handle)} in ${key} is ${kindOf(prefix)}; ${key} takes ${takes}`,
+          reason: keyedReason(
+            'id-wrong-kind',
+            `${String(handle)} in ${key} is ${kindOf(prefix)}; ${key} takes ${takes}`,
+          ),
         }
       }
       resolved.push(id)

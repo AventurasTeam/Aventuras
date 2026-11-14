@@ -1,6 +1,6 @@
 import { and, eq } from 'drizzle-orm'
 
-import { entities, type Entity } from '@/lib/db'
+import { entities, type CloseReasonKey, type Entity } from '@/lib/db'
 import {
   PARENT_CHAIN_BROKEN,
   PARENT_CYCLE,
@@ -39,10 +39,10 @@ export type PlacementPlan =
   | { ok: false; reason: string }
 
 // placeLocation's own refusal strings; lib/pipeline can't import the handler.
-const NOT_UNPLACED = 'not-unplaced'
-const PARENT_NOT_A_PLACE = 'parent-not-a-place'
+const NOT_UNPLACED: CloseReasonKey = 'not-unplaced'
+const PARENT_NOT_A_PLACE: CloseReasonKey = 'parent-not-a-place'
 
-const DROP_REASON: Readonly<Record<PlacementDrop['cause'], string>> = {
+const DROP_REASON: Readonly<Record<PlacementDrop['cause'], CloseReasonKey>> = {
   cycle: PARENT_CYCLE,
   'chain-broken': PARENT_CHAIN_BROKEN,
   [PLACE_REFUSAL.storyInside]: PLACE_REFUSAL.storyInside,

@@ -198,7 +198,14 @@
       "close": "Chapter close moved to your next turn."
     },
     "memoryUpdateFailed": "Memory update failed. It runs again before your next turn.",
-    "chapterCloseFailed": "Chapter close failed. It runs again before your next turn."
+    "chapterCloseFailed": "Chapter close failed. It runs again before your next turn.",
+    "closeResult": {
+      "closed": "Chapter closed: {{title}}",
+      "stopped_one": "Chapter closed, but {{count}} task stopped early",
+      "stopped_other": "Chapter closed, but {{count}} tasks stopped early",
+      "review": "Review",
+      "dismiss": "Dismiss"
+    }
   },
   "collisionRow": {
     "collidesWith": "⚠ Collides with {{name}}",

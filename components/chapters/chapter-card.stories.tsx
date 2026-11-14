@@ -69,6 +69,7 @@ const TRAIL = chapter({
   summary: 'Aria leaves the tavern with the courier and takes the north road.',
   keywords: ['north road', 'courier'],
   tokenCount: 12_400,
+  hasCloseReport: true,
 })
 const TAVERN = chapter({
   id: 'chap_tavern',
@@ -76,6 +77,7 @@ const TAVERN = chapter({
   title: 'The Tavern Encounter',
   summary: 'A stranger hands Aria a sealed letter.',
   tokenCount: 8_400,
+  hasCloseReport: true,
 })
 
 const LATEST: ChapterCardData = {
@@ -98,6 +100,7 @@ type HarnessProps = {
   initiallyExpanded: boolean
   onSave: (draft: ChapterDraft) => Promise<ChapterSaveResult>
   onJump: () => void
+  onReview: () => void
   /** The latest card's `Delete…`; in the route, its guard and the confirm stand behind it. */
   onDelete: () => void
   /** The route's focus, forwarded to the in-card bar's Ctrl-S. */
@@ -110,6 +113,7 @@ function CardHarness({
   initiallyExpanded,
   onSave,
   onJump,
+  onReview,
   onDelete,
   hotkeysEnabled,
 }: HarnessProps) {
@@ -157,6 +161,7 @@ function CardHarness({
         blockedReason={blocked ? BLOCKED_REASON : undefined}
         hotkeysEnabled={hotkeysEnabled}
         onJump={onJump}
+        onReview={onReview}
         onDelete={onDelete}
       />
       {/* The route's phone bar: a sibling of the scroller, outside every card. */}
@@ -188,6 +193,7 @@ const meta: Meta<typeof CardHarness> = {
     initiallyExpanded: true,
     onSave: fn(async (): Promise<ChapterSaveResult> => ({ status: 'ok', id: TRAIL.id })),
     onJump: fn(),
+    onReview: fn(),
     onDelete: fn(),
     hotkeysEnabled: true,
   },
@@ -220,7 +226,15 @@ async function waitForPhoneActions(card: HTMLElement): Promise<HTMLElement> {
   return waitFor(() => within(card).getByRole('button', { name: COPY.more }), WAIT)
 }
 
-/** The latest card: Jump and Delete… live, Regenerate disabled with its reason, no review. */
+function expectInOrder(elements: readonly HTMLElement[]) {
+  for (let i = 1; i < elements.length; i += 1) {
+    expect(
+      elements[i - 1].compareDocumentPosition(elements[i]) & Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBe(Node.DOCUMENT_POSITION_FOLLOWING)
+  }
+}
+
+/** The latest card: Jump, Review changes and Delete… live, Regenerate disabled with its reason. */
 export const Latest: Story = {
   play: async ({ args }) => {
     const card = await findCard()
@@ -235,9 +249,16 @@ export const Latest: Story = {
     expect(screen.getByTitle(COPY.regenerateLater)).toContainElement(regenerate)
     const remove = within(card).getByRole('button', { name: COPY.delete })
     expect(remove).not.toHaveAttribute('aria-disabled', 'true')
+    const review = within(card).getByRole('button', { name: COPY.review })
+    expect(review).not.toHaveAttribute('aria-disabled', 'true')
+    // Canon's order: Regenerate summary, Review changes, Delete….
+    expectInOrder([regenerate, review, remove])
+    await userEvent.click(review)
+    await waitFor(() => expect(args.onReview).toHaveBeenCalledTimes(1), WAIT)
+    expect(args.onDelete).not.toHaveBeenCalled()
     await userEvent.click(remove)
-    expect(args.onDelete).toHaveBeenCalledTimes(1)
-    expect(within(card).queryByText(COPY.review)).toBeNull()
+    await waitFor(() => expect(args.onDelete).toHaveBeenCalledTimes(1), WAIT)
+    expect(args.onReview).toHaveBeenCalledTimes(1)
 
     expect(within(card).getByText('Day 2 → Day 3')).toBeVisible()
     expect(within(card).getByText('12,400 tok')).toBeVisible()
@@ -250,7 +271,7 @@ export const Latest: Story = {
   },
 }
 
-/** An earlier card has no Delete…, and no fact it has no data for. */
+/** An earlier card has no Delete…, keeps Review changes, and shows no fact it has no data for. */
 export const Earlier: Story = {
   args: { data: EARLIER },
   play: async () => {
@@ -259,9 +280,23 @@ export const Earlier: Story = {
 
     expect(within(card).getByRole('button', { name: COPY.jump })).toBeVisible()
     expect(within(card).queryByRole('button', { name: COPY.delete })).toBeNull()
-    expect(within(card).queryByText(COPY.review)).toBeNull()
+    expect(within(card).getByRole('button', { name: COPY.review })).not.toHaveAttribute(
+      'aria-disabled',
+      'true',
+    )
     expect(within(card).getByText('8,400 tok')).toBeVisible()
     expect(within(card).queryByText(/^entries /)).toBeNull()
+  },
+}
+
+/** C16: hidden, not disabled, on a chapter no close wrote. */
+export const NoCloseReport: Story = {
+  args: { data: { ...LATEST, row: { ...TRAIL, hasCloseReport: false } } },
+  play: async () => {
+    const card = await findCard()
+    await waitForInlineActions(card)
+    expect(within(card).queryByRole('button', { name: COPY.review })).toBeNull()
+    expect(within(card).queryByText(COPY.review)).toBeNull()
   },
 }
 
@@ -275,6 +310,7 @@ export const Collapsed: Story = {
         session={null}
         hotkeysEnabled
         onJump={NOOP}
+        onReview={NOOP}
         onDelete={NOOP}
       />
       <ChapterCard
@@ -283,6 +319,7 @@ export const Collapsed: Story = {
         session={null}
         hotkeysEnabled
         onJump={NOOP}
+        onReview={NOOP}
         onDelete={NOOP}
       />
     </View>
@@ -345,6 +382,7 @@ function LaggingFormHarness() {
       session={session}
       hotkeysEnabled
       onJump={NOOP}
+      onReview={NOOP}
       onDelete={NOOP}
     />
   )
@@ -473,6 +511,11 @@ export const Blocked: Story = {
     expect(jump).not.toHaveAttribute('aria-disabled', 'true')
     await userEvent.click(jump)
     expect(args.onJump).toHaveBeenCalledTimes(1)
+    // The window writes nothing, so a run in flight leaves Review changes live.
+    const review = within(card).getByRole('button', { name: COPY.review })
+    expect(review).not.toHaveAttribute('aria-disabled', 'true')
+    await userEvent.click(review)
+    await waitFor(() => expect(args.onReview).toHaveBeenCalledTimes(1), WAIT)
 
     const discard = within(bar).getByRole('button', { name: COPY.discard })
     expect(discard).not.toHaveAttribute('aria-disabled', 'true')
@@ -490,7 +533,7 @@ export const Blocked: Story = {
   },
 }
 
-/** Phone: `Jump to chapter →` keeps its label; `⋯` lists the rest, Regenerate disabled, Delete… live. */
+/** Phone: `Jump to chapter →` keeps its label; `⋯` lists the rest, Review running once it closes. */
 export const Phone390Actions: Story = {
   globals: PHONE,
   play: async ({ args }) => {
@@ -499,6 +542,7 @@ export const Phone390Actions: Story = {
     expect(within(card).getByRole('button', { name: COPY.jump })).toBeVisible()
     expect(within(card).queryByRole('button', { name: COPY.regenerate })).toBeNull()
     expect(within(card).queryByRole('button', { name: COPY.delete })).toBeNull()
+    expect(within(card).queryByRole('button', { name: COPY.review })).toBeNull()
 
     await userEvent.click(more)
     // The bottom Sheet presents a tick past the click.
@@ -511,10 +555,45 @@ export const Phone390Actions: Story = {
     // A live entry's accessible name is its label alone; a disabled one appends its reason.
     const remove = screen.getByRole('menuitem', { name: COPY.delete })
     expect(remove).not.toHaveAttribute('aria-disabled', 'true')
-    expect(screen.queryByRole('menuitem', { name: /^Review changes/ })).toBeNull()
+    const review = screen.getByRole('menuitem', { name: COPY.review })
+    expect(review).not.toHaveAttribute('aria-disabled', 'true')
+    expectInOrder([regenerate, review, remove])
+
+    await userEvent.click(review)
+    // opensSheet: the menu's Sheet goes first, then the review opens.
+    await waitFor(() => expect(more).toHaveAttribute('aria-expanded', 'false'), WAIT)
+    expect(args.onReview).not.toHaveBeenCalled()
+    await waitFor(() => expect(args.onReview).toHaveBeenCalledTimes(1), WAIT)
+  },
+}
+
+/** Phone: the latest card's `Delete…` behind `⋯` runs its press, and only its own. */
+export const Phone390Delete: Story = {
+  globals: PHONE,
+  play: async ({ args }) => {
+    const card = await findCard()
+    await userEvent.click(await waitForPhoneActions(card))
+    const remove = await waitFor(() => screen.getByRole('menuitem', { name: COPY.delete }), WAIT)
+    await waitFor(() => expect(remove).toBeVisible(), WAIT)
 
     await userEvent.click(remove)
     await waitFor(() => expect(args.onDelete).toHaveBeenCalledTimes(1), WAIT)
+    expect(args.onReview).not.toHaveBeenCalled()
+  },
+}
+
+/** Phone: no close report, no Review changes behind `⋯` either. */
+export const Phone390NoCloseReport: Story = {
+  globals: PHONE,
+  args: { data: { ...LATEST, row: { ...TRAIL, hasCloseReport: false } } },
+  play: async () => {
+    const card = await findCard()
+    await userEvent.click(await waitForPhoneActions(card))
+    await waitFor(
+      () => screen.getByRole('menuitem', { name: `${COPY.regenerate}, ${COPY.regenerateLater}` }),
+      WAIT,
+    )
+    expect(screen.queryByRole('menuitem', { name: COPY.review })).toBeNull()
   },
 }
 

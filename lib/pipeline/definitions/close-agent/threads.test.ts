@@ -435,8 +435,8 @@ describe('update_thread', () => {
     ])
 
     expect(run.calls.map(({ result, reason }) => [result, reason])).toEqual([
-      ['rejected', expect.stringContaining('nothing to write')],
-      ['rejected', expect.stringContaining('nothing to write')],
+      ['rejected', 'nothing-sent'],
+      ['rejected', 'nothing-sent'],
     ])
     for (const call of run.calls) expect(call).not.toHaveProperty('values')
     expect(groupEvents(run.events)).toEqual([])
@@ -672,7 +672,7 @@ describe('update_thread', () => {
       { result: 'rejected', reason: turnInTextReason('t5') },
     ])
     expect(run.calls.map(({ result, skippedFields }) => [result, skippedFields])).toEqual([
-      ['ok', [{ field: 'description', reason: turnInTextReason('t7') }]],
+      ['ok', [{ field: 'description', reason: 'turn-in-text' }]],
       ['rejected', undefined],
     ])
     expect(await threadRow(f, LETTER.id)).toMatchObject({
@@ -759,9 +759,9 @@ describe('merge_threads', () => {
     ])
 
     expect(run.calls.map(({ result, reason }) => [result, reason])).toEqual([
-      ['rejected', expect.stringContaining('keep is also in absorb')],
-      ['rejected', expect.stringContaining('absorb names a thread twice')],
-      ['rejected', expect.stringContaining('absorb is empty')],
+      ['rejected', 'merge-keep-absorbed'],
+      ['rejected', 'merge-repeated'],
+      ['rejected', 'merge-absorb-empty'],
     ])
     const letterRow = { table: 'threads', id: LETTER.id, name: LETTER.title }
     const sealedRow = { table: 'threads', id: SEALED.id, name: SEALED.title }
@@ -971,7 +971,10 @@ describe('merge_threads', () => {
     ])
 
     expect(run.calls.map(({ result }) => result)).toEqual(['ok', 'rejected'])
-    expect(run.calls[1]!.reason).toContain('keep that thread instead')
+    expect(run.calls[1]!.reason).toBe('merge-close-wrote')
+    expect(run.answers[1]).toMatchObject({
+      reason: expect.stringContaining('keep that thread instead'),
+    })
     expect(run.calls[1]).not.toHaveProperty('survivor')
     expect(await threadRow(f, SEALED.id)).toMatchObject({
       description: 'The seal is cracked but holds.',
@@ -988,11 +991,7 @@ describe('merge_threads', () => {
       merge({ keep: 'th1', absorb: ['th3', 'th2'] }),
     ])
 
-    expect(run.calls[1]).toMatchObject({
-      result: 'rejected',
-      reason:
-        'this close already wrote a thread in absorb, and absorbing it would block undoing the close: keep that thread instead',
-    })
+    expect(run.calls[1]).toMatchObject({ result: 'rejected', reason: 'merge-close-wrote' })
     expect(JSON.stringify(run.calls[1])).not.toContain('th2')
     expect(run.answers[1]).toMatchObject({
       result: 'rejected',
@@ -1022,7 +1021,7 @@ describe('merge_threads', () => {
 
       expect(run.calls[2]).toMatchObject({
         result: 'rejected',
-        reason: expect.stringContaining('cannot be merged in this close'),
+        reason: 'merge-close-wrote-no-keep',
       })
       expect(run.calls[2]!.values).toEqual({ description })
       expect(run.answers[2]).not.toHaveProperty('note')
@@ -1044,7 +1043,7 @@ describe('merge_threads', () => {
 
     expect(run.calls[1]).toMatchObject({
       result: 'rejected',
-      reason: expect.stringContaining('cannot be merged in this close'),
+      reason: 'merge-close-wrote-no-keep',
     })
     expect(run.answers[1]).not.toHaveProperty('note')
     expect(opsOf(await runDeltas(f, run.result.actionId))).toEqual([['update', FAR_BANK.id]])
@@ -1060,7 +1059,7 @@ describe('merge_threads', () => {
 
       expect(run.calls[1]).toMatchObject({
         result: 'rejected',
-        reason: expect.stringContaining('cannot be merged in this close'),
+        reason: 'merge-close-wrote-no-keep',
       })
       expect(run.answers[1]).not.toHaveProperty('note')
       expect(opsOf(await runDeltas(f, run.result.actionId))).toEqual([['update', SEALED.id]])
@@ -1077,7 +1076,7 @@ describe('merge_threads', () => {
 
       expect(run.calls[1]).toMatchObject({
         result: 'rejected',
-        reason: expect.stringContaining('cannot be merged in this close'),
+        reason: 'merge-close-wrote-no-keep',
       })
       expect(run.answers[1]).not.toHaveProperty('note')
       expect(opsOf(await runDeltas(f, run.result.actionId))).toEqual([['update', SEALED.id]])
@@ -1134,11 +1133,11 @@ describe('merge_threads', () => {
       merge({ keep: 'th3', absorb: ['th1'], title: 'The light and the letter' }),
     ])
 
-    expect(run.calls[0]).toMatchObject({
-      result: 'rejected',
+    expect(run.calls[0]).toMatchObject({ result: 'rejected', reason: 'merge-active-into-inactive' })
+    expect(run.answers[0]).toMatchObject({
       reason: expect.stringContaining('keep an active one'),
+      note: 'Send th1 as keep.',
     })
-    expect(run.answers[0]).toMatchObject({ note: 'Send th1 as keep.' })
     expect(run.calls[0]!.values).toEqual({ title: 'The light and the letter' })
     expect(run.calls[0]).not.toHaveProperty('survivor')
     expect(groupEvents(run.events)).toEqual([])
@@ -1157,7 +1156,7 @@ describe('merge_threads', () => {
 
     expect(run.calls[1]).toMatchObject({
       result: 'rejected',
-      reason: expect.stringContaining('keep an active one'),
+      reason: 'merge-active-into-inactive',
     })
     expect(run.answers[1]).toMatchObject({ note: 'Send th1 as keep.' })
     expect(opsOf(await runDeltas(f, run.result.actionId))).toEqual([['update', LETTER.id]])
@@ -1174,7 +1173,7 @@ describe('merge_threads', () => {
 
     expect(run.calls[0]).toMatchObject({
       result: 'rejected',
-      reason: expect.stringContaining('keep an active one'),
+      reason: 'merge-active-into-inactive',
     })
     expect(await runDeltas(f, run.result.actionId)).toEqual([])
   })
@@ -1193,9 +1192,11 @@ describe('merge_threads', () => {
 
       expect(run.calls[0]).toMatchObject({
         result: 'rejected',
-        reason: expect.stringContaining('keep an active one'),
+        reason: 'merge-active-into-inactive',
       })
-      expect(run.calls[0]!.reason).toContain('settle it with update_thread')
+      expect(run.answers[0]).toMatchObject({
+        reason: expect.stringContaining('settle it with update_thread'),
+      })
       expect(run.calls[0]).not.toHaveProperty('survivor')
       expect(await runDeltas(f, run.result.actionId)).toEqual([])
       expect(await threadRow(f, LETTER.id)).toMatchObject({ status: 'active' })
@@ -1382,9 +1383,9 @@ describe('merge_threads', () => {
   })
 
   describe('beside a thread the user set to always or disabled', () => {
-    const MODE_RULE = 'can be absorbed only into one with the same mode'
-    const NO_KEEP = 'no choice of keep can land without dropping an active thread'
-    const IN_THIS_CLOSE = 'cannot be merged in this close'
+    const MODE_RULE = 'merge-mode-into-other'
+    const NO_KEEP = 'merge-no-keep'
+    const IN_THIS_CLOSE = 'merge-close-wrote-no-keep'
 
     /** Seeds `extra` after THREADS_SHOWN, shown in order as th5, th6…, then runs `calls`. */
     async function runBeside(extra: readonly SeedThread[], calls: readonly ScriptedCall[]) {
@@ -1419,7 +1420,7 @@ describe('merge_threads', () => {
 
       expect(run.calls[0]).toMatchObject({
         result: 'rejected',
-        reason: expect.stringContaining(MODE_RULE),
+        reason: MODE_RULE,
       })
       expect(run.calls[0]).not.toHaveProperty('survivor')
       expect(run.answers[0]).toMatchObject({ result: 'rejected', note: 'Send th5 as keep.' })
@@ -1438,7 +1439,7 @@ describe('merge_threads', () => {
 
       expect(run.calls[0]).toMatchObject({
         result: 'rejected',
-        reason: expect.stringContaining(MODE_RULE),
+        reason: MODE_RULE,
       })
       expect(run.answers[0]).toMatchObject({ note: 'Send th5 as keep.' })
       expect(await runDeltas(f, run.result.actionId)).toEqual([])
@@ -1486,9 +1487,11 @@ describe('merge_threads', () => {
 
         expect(run.calls[0]).toMatchObject({
           result: 'rejected',
-          reason: expect.stringContaining(NO_KEEP),
+          reason: NO_KEEP,
         })
-        expect(run.calls[0]!.reason).toContain('leave them apart')
+        expect(run.answers[0]).toMatchObject({
+          reason: expect.stringContaining('leave them apart'),
+        })
         expect(run.answers[0]).not.toHaveProperty('note')
         expect(await runDeltas(f, run.result.actionId)).toEqual([])
       },
@@ -1504,7 +1507,7 @@ describe('merge_threads', () => {
 
         expect(run.calls[0]).toMatchObject({
           result: 'rejected',
-          reason: expect.stringContaining(NO_KEEP),
+          reason: NO_KEEP,
         })
         expect(run.answers[0]).not.toHaveProperty('note')
         expect(await runDeltas(f, run.result.actionId)).toEqual([])
@@ -1520,7 +1523,7 @@ describe('merge_threads', () => {
       )
 
       expect(run.calls.map(({ result }) => result)).toEqual(['rejected', 'ok'])
-      expect(run.calls[0]!.reason).toContain('keep an active one')
+      expect(run.calls[0]!.reason).toBe('merge-active-into-inactive')
       expect(run.answers[0]).toMatchObject({ note: 'Send th5 as keep.' })
       expect(await threadRow(f, active.id)).toMatchObject({
         status: 'active',
@@ -1540,7 +1543,7 @@ describe('merge_threads', () => {
       )
 
       expect(run.calls.map(({ result }) => result)).toEqual(['rejected', 'ok'])
-      expect(run.calls[0]!.reason).toContain('keep an active one')
+      expect(run.calls[0]!.reason).toBe('merge-active-into-inactive')
       expect(run.answers[0]).toMatchObject({ note: 'Send th5 as keep.' })
       expect(await threadRow(f, LETTER.id)).toBeUndefined()
       expect(await threadRow(f, FAR_BANK.id)).toBeUndefined()
@@ -1552,7 +1555,7 @@ describe('merge_threads', () => {
         [merge({ keep: 'th3', absorb: ['th5', 'th6'] })],
       )
 
-      expect(run.calls[0]!.reason).toContain(MODE_RULE)
+      expect(run.calls[0]!.reason).toBe(MODE_RULE)
       expect(run.answers[0]).toMatchObject({ note: 'Send th5 or th6 as keep.' })
     })
 
@@ -1574,7 +1577,7 @@ describe('merge_threads', () => {
 
       expect(run.calls[1]).toMatchObject({
         result: 'rejected',
-        reason: expect.stringContaining(IN_THIS_CLOSE),
+        reason: IN_THIS_CLOSE,
       })
       expect(run.answers[1]).not.toHaveProperty('note')
       expect(opsOf(await runDeltas(f, run.result.actionId))).toEqual([['update', FAR_BANK.id]])
@@ -1598,7 +1601,7 @@ describe('merge_threads', () => {
 
       expect(run.calls[1]).toMatchObject({
         result: 'rejected',
-        reason: expect.stringContaining(IN_THIS_CLOSE),
+        reason: IN_THIS_CLOSE,
       })
       expect(run.answers[1]).not.toHaveProperty('note')
     })
@@ -1619,7 +1622,7 @@ describe('merge_threads', () => {
       )
 
       expect(run.calls.map(({ result }) => result)).toEqual(['ok', 'rejected', 'ok'])
-      expect(run.calls[1]!.reason).toContain(MODE_RULE)
+      expect(run.calls[1]!.reason).toBe(MODE_RULE)
       expect(run.answers[1]).toMatchObject({ note: 'Send th5 as keep.' })
       expect(await threadRow(f, FAR_BANK.id)).toBeUndefined()
       expect(await threadRow(f, lantern.id)).toMatchObject({ injectionMode: 'always' })
@@ -1639,7 +1642,7 @@ describe('merge_threads', () => {
 
       expect(run.calls[1]).toMatchObject({
         result: 'rejected',
-        reason: expect.stringContaining(NO_KEEP),
+        reason: NO_KEEP,
       })
       expect(run.answers[1]).not.toHaveProperty('note')
     })

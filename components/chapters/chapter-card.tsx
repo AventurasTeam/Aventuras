@@ -45,6 +45,8 @@ export type ChapterCardProps = {
   /** Route focus, for Cmd/Ctrl-S on the in-card bar. */
   hotkeysEnabled: boolean
   onJump: () => void
+  /** `Review changes`, shown when the row has a close report. */
+  onReview: () => void
   /** The latest card's `Delete…`; the route guards it and opens the confirm. */
   onDelete: () => void
 }
@@ -60,11 +62,18 @@ function issueText(message: string | undefined): string | undefined {
 }
 
 /** The actions after `Jump to chapter →`, one list: inline at tablet and desktop, `⋯` on phone. */
-function moreActions(
-  latest: boolean,
-  onDelete: () => void,
-  blockedReason: string | undefined,
-): OverflowMenuEntry[] {
+function moreActions({
+  latest,
+  hasCloseReport,
+  onReview,
+  onDelete,
+  blockedReason,
+}: Gate & {
+  latest: boolean
+  hasCloseReport: boolean
+  onReview: () => void
+  onDelete: () => void
+}): OverflowMenuEntry[] {
   return [
     {
       key: 'regenerate',
@@ -73,6 +82,17 @@ function moreActions(
       disabledReason: t('chapters:actions.regenerateLandsLater'),
       onPress: NO_ACTION,
     },
+    // Hidden on a chapter no close wrote; never disabled, since the window writes nothing.
+    ...(hasCloseReport
+      ? [
+          {
+            key: 'review',
+            label: t('chapters:actions.review'),
+            opensSheet: true,
+            onPress: onReview,
+          },
+        ]
+      : []),
     ...(latest
       ? destructiveEntry('delete', t('chapters:actions.delete'), {
           onPress: onDelete,
@@ -90,6 +110,7 @@ export function ChapterCard({
   blockedReason,
   hotkeysEnabled,
   onJump,
+  onReview,
   onDelete,
 }: ChapterCardProps): ReactElement {
   const isPhone = useTier() === 'phone'
@@ -128,8 +149,10 @@ export function ChapterCard({
             </View>
             <ActionRow
               latest={data.latest}
+              hasCloseReport={data.row.hasCloseReport}
               isPhone={isPhone}
               onJump={onJump}
+              onReview={onReview}
               onDelete={onDelete}
               blockedReason={blockedReason}
             />
@@ -277,17 +300,21 @@ function KeywordsField({ control, blockedReason }: Gate & { control: Control<Cha
 
 function ActionRow({
   latest,
+  hasCloseReport,
   isPhone,
   onJump,
+  onReview,
   onDelete,
   blockedReason,
 }: Gate & {
   latest: boolean
+  hasCloseReport: boolean
   isPhone: boolean
   onJump: () => void
+  onReview: () => void
   onDelete: () => void
 }) {
-  const more = moreActions(latest, onDelete, blockedReason)
+  const more = moreActions({ latest, hasCloseReport, onReview, onDelete, blockedReason })
   return (
     <View className="flex-row flex-wrap items-center gap-2">
       <Button

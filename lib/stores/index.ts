@@ -17,6 +17,7 @@ import { readStoryChapterNumbers, rehydrateStories, storiesStore } from './stori
 import { threadsStore } from './threads/threads'
 import { translationsStore } from './translations/translations'
 import { blockingOverlaysStore, useRegisteredOverlay } from './ui/blocking-overlays'
+import { chapterOverlaysStore, closeResultChapter, overlayChapter } from './ui/chapter-overlays'
 import { embedderSwapStore } from './ui/embedder-swap'
 import { embeddingStatusStore } from './ui/embedding-status'
 import { listCollapseStore } from './ui/list-collapse'
@@ -47,6 +48,7 @@ export function resetAllStores(): void {
   embedderSwapStore.__reset()
   embeddingStatusStore.__reset()
   blockingOverlaysStore.__reset()
+  chapterOverlaysStore.__reset()
   listCollapseStore.__reset()
   readerRailStore.__reset()
   recoveryReportStore.__reset()
@@ -58,8 +60,10 @@ export {
   appSettingsStore,
   blockingOverlaysStore,
   CAST_ID_PREFIX,
+  chapterOverlaysStore,
   chaptersStore,
   characterRelationshipsStore,
+  closeResultChapter,
   currentStoryStore,
   embedderSwapStore,
   embeddingStatusStore,
@@ -75,6 +79,7 @@ export {
   listCollapseStore,
   loreStore,
   navigationStore,
+  overlayChapter,
   readerRailStore,
   readStoryChapterNumbers,
   recoveryReportStore,
@@ -119,6 +124,12 @@ export type {
 export type { NavigationSnapshot } from './navigation/navigation'
 export type { OpenFailure, OpenFailureKind, StoriesSnapshot } from './stories/stories'
 export type { RecoveryReportSnapshot } from './ui/recovery-report'
+export type {
+  ChapterOverlaysState,
+  CloseModalRequest,
+  CloseResult,
+  OverlaySurface,
+} from './ui/chapter-overlays'
 export type { StoryCardData } from './stories/view-model'
 export type { StoryFilter, StoryListQuery, StorySort } from './stories/selectors'
 export { selectStoryCards } from './stories/selectors'

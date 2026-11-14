@@ -1047,6 +1047,19 @@ change amends the scope above.
   reversal plumbing. Default: move them under `lib/actions/delta/` in
   this slice, which drops the chapters-on-story-entries dependency.
   Raised in Slice 5.12's final review.
+- **Does the commit arm hold the result at `delta_emitted`, not re-read on
+  `run_complete`?** 5.11 re-reads the branch's latest report on
+  `run_complete`. The report phase's `delta_emitted` carries `branchId`,
+  the chapter id and the report, and arrives after the store patch while
+  the run is still registered. Default: keep 5.11's re-read, which the
+  arms above build on. The other option holds the result at
+  `delta_emitted`. It removes the run, nothing, done gap on the banner
+  (about two DB round trips, during which the bar collapses), the
+  failed-read fallback's guess and the open-branch guess (`run_complete`
+  carries no `branchId`, `lib/pipeline/types.ts:76-85`), at a cost: it
+  relies on C4's `close_report`-last write, it replaces the old result
+  just before commit, the `actionId` and failed-read tests are rewritten,
+  and undo and redo don't emit on that bus. Raised in 5.11's review.
 
 ## Implementation notes
 

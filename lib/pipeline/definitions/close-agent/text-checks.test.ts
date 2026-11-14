@@ -93,6 +93,8 @@ describe('handleInTerm', () => {
 
 describe('turnInTextReason', () => {
   it('names the handle and where a turn goes', () => {
-    expect(turnInTextReason('t3')).toBe('t3 is a turn: cite turns in turns, never in the text')
+    expect(turnInTextReason('t3')).toBe(
+      'turn-in-text: t3 is a turn: cite turns in turns, never in the text',
+    )
   })
 })

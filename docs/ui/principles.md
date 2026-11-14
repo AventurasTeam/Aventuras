@@ -387,7 +387,7 @@ transaction start / end.
 
 **Banner (below chrome — memory runs).** A sticky banner appears
 below the top bar for the duration of a pass or a chapter-close
-transaction; dismissed on commit / abort. **Rendered on every
+transaction; dismissed on abort and on a pass's commit. **Rendered on every
 in-story surface** (reader-composer, world, plot, story-settings,
 chapter-timeline) — the banner is universal in-story chrome that
 the surface itself doesn't have to opt into; whatever screen the
@@ -396,6 +396,8 @@ user is on when the run starts shows it.
 ```
 Updating memory… [Cancel]
 Closing chapter: 3 of 7 — Identity… [Cancel]
+Chapter closed: The Tithe of Hours [Review] [×]
+⚠ Chapter closed, but 2 tasks stopped early [Review] [×]
 ```
 
 A close's `N of M` counts the agent's tasks, so a one-part chapter is
@@ -407,6 +409,18 @@ label leads with `Before your turn:` instead
 shows only a spinner, the banner is the one place that names the wait; a
 close that hasn't reached a step yet reads `Closing chapter before your
 turn…`.
+
+A close's commit, or its re-run's, leaves the banner in a done state
+instead of dismissing it: `Chapter closed: <title>`, or
+`Chapter <N>'s close re-ran` for a re-run, a warning when a task stopped
+early, with `Review`, which opens the
+[review window](./screens/chapter-timeline/chapter-timeline.md#review-window),
+and ×. Pressing either ends it, and so do its chapter stopping being
+current (the chapter reversing, or another branch opening), a newer
+close committing, and the story closing. A
+later pass's or close's progress takes the banner while it runs, and
+the done state comes back after. The banner sits under every Sheet and
+scrim, so its `Review` never opens the review over another surface.
 
 Per-turn pipelines do not use the banner — the streaming narrative
 is the ambient progress indicator and the composer's send/cancel

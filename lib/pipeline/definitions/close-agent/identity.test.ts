@@ -20,7 +20,7 @@ import { makeLogger } from '@/lib/diagnostics'
 import { resetAllStores } from '@/lib/stores'
 
 import { storedValue } from './entity-write'
-import { softCapReason } from './fields'
+import { sentList, softCapReason } from './fields'
 import { IDENTITY_READ_FIELDS, identityTask } from './identity'
 import { updateCharacterTool, updateFactionTool } from './identity-tools'
 import { CloseIds, nameCloseProse } from './ids'
@@ -383,7 +383,7 @@ describe('update_character and update_faction', () => {
     for (const call of calls) {
       expect(call).toMatchObject({
         result: 'rejected',
-        reason: expect.stringContaining('blank or empty'),
+        reason: 'nothing-sent',
       })
       expect(call).not.toHaveProperty('values')
     }
@@ -688,7 +688,7 @@ describe('update_character and update_faction', () => {
   })
 
   it('refuses 9 traits, 7 drives or 5 agenda sent alone, writing nothing', async () => {
-    const { result, calls } = await dispatchScripted(
+    const { result, answers, calls } = await dispatchScripted(
       f,
       [
         { toolName: 'update_character', input: { id: 'c1', traits: terms('trait', 9), ...cite() } },
@@ -699,13 +699,42 @@ describe('update_character and update_faction', () => {
     )
 
     expect(calls.map(({ result: outcome, reason }) => [outcome, reason])).toEqual([
-      ['rejected', softCapReason('traits')],
-      ['rejected', softCapReason('drives')],
-      ['rejected', softCapReason('agenda')],
+      ['rejected', 'over-soft-cap'],
+      ['rejected', 'over-soft-cap'],
+      ['rejected', 'over-soft-cap'],
+    ])
+    expect(answers).toEqual([
+      { result: 'rejected', reason: softCapReason('traits') },
+      { result: 'rejected', reason: softCapReason('drives') },
+      { result: 'rejected', reason: softCapReason('agenda') },
     ])
     for (const call of calls) expect(call).not.toHaveProperty('skippedFields')
     expect(await runDeltas(f, result.actionId)).toEqual([])
     expect((await storedEntity(f, WREN)).state).toMatchObject(WREN_STATE)
+  })
+
+  it('records one key for a call whose two lists are each over their cap, naming no field', async () => {
+    const { result, answers, calls } = await dispatchScripted(
+      f,
+      [
+        {
+          toolName: 'update_character',
+          input: { id: 'c1', traits: terms('trait', 9), drives: terms('drive', 7), ...cite() },
+        },
+      ],
+      { shown: CAST },
+    )
+
+    expect(calls[0]).toMatchObject({ result: 'rejected', reason: 'over-soft-cap' })
+    expect(calls[0]).not.toHaveProperty('skippedFields')
+    expect(answers[0]).toMatchObject({
+      result: 'rejected',
+      notWritten: [
+        { field: 'state.traits', reason: softCapReason('traits') },
+        { field: 'state.drives', reason: softCapReason('drives') },
+      ],
+    })
+    expect(await runDeltas(f, result.actionId)).toEqual([])
   })
 
   it.each([['[]'], ['[ ]'], ['""'], ['[""]']])(
@@ -717,10 +746,7 @@ describe('update_character and update_faction', () => {
         { shown: CAST },
       )
 
-      expect(calls[0]).toMatchObject({
-        result: 'rejected',
-        reason: expect.stringContaining('blank or empty'),
-      })
+      expect(calls[0]).toMatchObject({ result: 'rejected', reason: 'nothing-sent' })
       expect(calls[0]).not.toHaveProperty('values')
       expect(await runDeltas(f, result.actionId)).toEqual([])
       expect((await storedEntity(f, WREN)).state).toMatchObject(WREN_STATE)
@@ -745,12 +771,12 @@ describe('update_character and update_faction', () => {
 
     expect(calls[0]).toMatchObject({
       result: 'ok',
-      skippedFields: [{ field: 'state.traits', reason: softCapReason('traits') }],
+      skippedFields: [{ field: 'state.traits', reason: 'over-soft-cap' }],
     })
     expect(Object.keys(calls[0]!.values ?? {}).sort()).toEqual(['state.traits', 'state.voice'])
     expect(calls[1]).toMatchObject({
       result: 'ok',
-      skippedFields: [{ field: 'state.agenda', reason: softCapReason('agenda') }],
+      skippedFields: [{ field: 'state.agenda', reason: 'over-soft-cap' }],
     })
     expect((await storedEntity(f, WREN)).state).toMatchObject({
       traits: ['patient'],
@@ -771,15 +797,18 @@ describe('update_character and update_faction', () => {
       await editEntity(f, WREN, 'earlier-close', { state: { traits: terms('trait', 8) } })
       const joined = [terms('sailor', 12).join(join)]
 
-      const { result, calls } = await dispatchScripted(
+      const { result, answers, calls } = await dispatchScripted(
         f,
         [{ toolName: 'update_character', input: { id: 'c1', traits: joined, ...cite() } }],
         { shown: CAST },
       )
 
-      expect(calls[0]).toMatchObject({ result: 'rejected' })
-      expect(calls[0]!.reason).toContain(softCapReason('traits'))
-      expect(calls[0]!.reason).toContain('read as 12 entries')
+      expect(calls[0]).toMatchObject({ result: 'rejected', reason: 'over-soft-cap' })
+      expect(answers[0]).toEqual({
+        result: 'rejected',
+        reason: softCapReason('traits', sentList(joined)),
+      })
+      expect(JSON.stringify(answers[0])).toContain('read as 12 entries')
       expect(await runDeltas(f, result.actionId)).toEqual([])
       expect((await storedEntity(f, WREN)).state).toMatchObject({ traits: terms('trait', 8) })
     },
@@ -918,7 +947,7 @@ describe('update_character and update_faction', () => {
 
     expect(calls.map(({ result, reason }) => [result, reason])).toEqual([
       ['ok', undefined],
-      ['rejected', softCapReason('traits')],
+      ['rejected', 'over-soft-cap'],
       ['ok', undefined],
     ])
     expect((await storedEntity(f, TOBIN)).state).toMatchObject({ traits: shorter })
@@ -1100,7 +1129,7 @@ describe('update_character and update_faction: a turn handle in a text or list f
       expect(answers).toEqual([
         { result: 'ok', notWritten: [{ field: path, row: id, reason: turnInTextReason('t7') }] },
       ])
-      expect(calls[0]!.skippedFields).toEqual([{ field: path, reason: turnInTextReason('t7') }])
+      expect(calls[0]!.skippedFields).toEqual([{ field: path, reason: 'turn-in-text' }])
       const after = await storedEntity(f, rowOf(id))
       expect(storedValue(after, path)).toEqual(storedValue(before, path))
       expect(storedValue(after, otherPath)).toEqual(value)
@@ -1130,7 +1159,7 @@ describe('update_character and update_faction: a turn handle in a text or list f
       expect(answers).toEqual([
         { result: 'ok', notWritten: [{ field: path, row: id, reason: turnInTextReason('t3') }] },
       ])
-      expect(calls[0]!.skippedFields).toEqual([{ field: path, reason: turnInTextReason('t3') }])
+      expect(calls[0]!.skippedFields).toEqual([{ field: path, reason: 'turn-in-text' }])
       const after = await storedEntity(f, rowOf(id))
       expect(storedValue(after, path)).toEqual(storedValue(before, path))
       expect(storedValue(after, TEXT_PATH[other]!)).toEqual(value)

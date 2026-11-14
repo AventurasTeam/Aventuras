@@ -242,6 +242,11 @@ type BottomSheetContentProps = SheetContentShared & {
    */
   onDismissRefused?: () => void
   /**
+   * Runs once after a presented sheet's exit animation, whatever closed it, while this content is
+   * still mounted.
+   */
+  onDismissed?: () => void
+  /**
    * Replaces the keyboard behavior `size` picks. Pin it when size crosses 'tall' while open: the
    * flip kills gorhom's content scroll on native.
    */
@@ -276,6 +281,7 @@ function BottomSheetContent({
   style,
   dismissable = true,
   onDismissRefused,
+  onDismissed,
   keyboardBehavior,
   suppressOverlayRegistration = false,
   ...contentProps
@@ -288,9 +294,9 @@ function BottomSheetContent({
 
   // Latest-ref: the back listener must not re-subscribe on a render. Android calls the newest
   // listener first, so a re-subscribe would put it above a guard dialog opened from it.
-  const latest = useRef({ dismissable, onOpenChange, onDismissRefused })
+  const latest = useRef({ dismissable, onOpenChange, onDismissRefused, onDismissed })
   useLayoutEffect(() => {
-    latest.current = { dismissable, onOpenChange, onDismissRefused }
+    latest.current = { dismissable, onOpenChange, onDismissRefused, onDismissed }
   })
   const reportRefused = useCallback(() => latest.current.onDismissRefused?.(), [])
   const dismissal = useSheetDismissal(dismissable, reportRefused)
@@ -464,6 +470,7 @@ function BottomSheetContent({
         isSettledRef.current = false
         isDismissHeldRef.current = false
         onOpenChange(false)
+        latest.current.onDismissed?.()
       }}
     >
       <TextClassContext.Provider value="text-fg-primary">

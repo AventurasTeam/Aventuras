@@ -393,6 +393,24 @@ breakdown under [UX](#ux).
   is skipped ([`triage.md`](./implementation/triage.md), "World merge
   re-creates awareness rows as the user's.").
 
+- **Which embedders are the floor and the standard.** The dev
+  embedder, `Xenova/all-MiniLM-L6-v2`, is today's mobile default
+  ([`model-management.md`](./memory/model-management.md)), and on it 3e
+  finds no clusters (the entry above). The developer is considering
+  treating that tier as the absolute floor, the way the dev model is
+  the classifier's floor, with EmbeddingGemma as the standard, and
+  possibly replacing MiniLM with another small embedder. Thresholds stay
+  per embedder whichever way it goes, since each model spreads cosines
+  differently, and the floor has to separate clear duplicates at some
+  threshold or 3e stays off there. A first measure costs little: the
+  dataset chapter's three near-duplicate pairs (the two halves of
+  Captain Smollett's cabin meeting, the Spy-glass pair, Dr. Livesey) and
+  the distinct pairs near them, embedded by EmbeddingGemma and two or
+  three small candidates, show how cleanly each model separates them. A
+  swap also re-embeds every story on the new model, and a larger model
+  costs Android download size and memory. Raised 2026-11-14 by the
+  developer, after Slice 5.9's 3e probes.
+
 - **User threads never decay.** A thread the user created, or one the
   user resolved or failed, carries no `resolved_at_entry_id` and never
   decays: the [authorship contract](./data-model.md#authorship-contract)

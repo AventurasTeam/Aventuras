@@ -356,19 +356,26 @@ A pass that fails shows a warning toast,
 `Memory update failed. It runs again before your next turn.` A close
 that fails shows the same with `Chapter close failed.`
 
-A close that commits shows `Chapter closed: <title>`, or
-`Chapter closed, but 2 tasks stopped early` as a warning, with a
-`Review` button opening the
-[review window](../chapter-timeline/chapter-timeline.md#review-window).
+A close that commits turns the banner into its done state,
+`Chapter closed: <title> [Review] [×]`, or the warning
+`Chapter closed, but 2 tasks stopped early [Review] [×]`. `Review`
+opens the
+[review window](../chapter-timeline/chapter-timeline.md#review-window)
+and × dismisses the banner. What ends it, and how a later run takes the
+bar, is in
+[`principles.md → Affordance loci`](../../principles.md#affordance-loci).
+It isn't a toast: a toast's `Review` would race its own dismissal, and
+on phone it would open the review over a Sheet.
 
 A close's
 [re-run](../chapter-timeline/chapter-timeline.md#re-run-a-close) shows
 a close's progress and moves nothing to the next turn, since the close
-it replaces stands. An interrupt or Cancel shows
-`Re-run cancelled. Chapter 5's close is as it was.`, a failure the
+it replaces stands. An interrupt or Cancel toasts
+`Re-run cancelled. Chapter 5's close is as it was.`, and a failure the
 warning `Re-run failed. Chapter 5's close is as it was.` with its
-reason, and a commit `Chapter 5's close re-ran`, with `Review`, a
-warning when tasks stopped early. CTRL-Z is refused while it runs, and
+reason. A commit leaves the banner's done state as a close's does,
+`Chapter 5's close re-ran [Review] [×]`, a warning when tasks stopped
+early. CTRL-Z is refused while it runs, and
 Cancel stops it.
 
 At the next Send the deferred or failed work runs first, the banner
