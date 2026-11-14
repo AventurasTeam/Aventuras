@@ -1,6 +1,6 @@
 import type { Meta, StoryObj } from '@storybook/react-native-web-vite'
 import { useWindowDimensions, View } from 'react-native'
-import { expect, fn, screen, userEvent, waitFor, within } from 'storybook/test'
+import { expect, fn, screen, spyOn, userEvent, waitFor, within } from 'storybook/test'
 
 import { formatEntryRef } from '@/lib/entry-refs'
 import type { CloseReview, CloseReviewChange, CloseReviewNotApplied } from '@/lib/history'
@@ -329,6 +329,7 @@ export const Full: Story = {
 /** Not applied opens to each refused write: its value and reason, pressable when its row is live. */
 export const NotAppliedOpens: Story = {
   play: async () => {
+    const warn = spyOn(console, 'warn')
     const dialog = await findWindow()
     const trigger = within(dialog).getByRole('button', { name: 'Not applied (4)' })
     await userEvent.click(trigger)
@@ -350,6 +351,9 @@ export const NotAppliedOpens: Story = {
         .getAllByRole('link')
         .map((link) => link.textContent),
     ).toEqual(['entry #31 →', 'entry #47 →'])
+    // The Accordion needs a defaultValue, or its first expand flips it to controlled.
+    expect(warn).not.toHaveBeenCalledWith(expect.stringMatching(/uncontrolled to controlled/))
+    warn.mockRestore()
   },
 }
 

@@ -92,8 +92,8 @@ export function ReviewWindow({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent scrollable={false} className="sm:max-w-xl">
         <DialogHeader>
-          <DialogTitle asChild>
-            <Heading level={2}>{title}</Heading>
+          <DialogTitle role="heading" aria-level="2">
+            {title}
           </DialogTitle>
         </DialogHeader>
         {list}
