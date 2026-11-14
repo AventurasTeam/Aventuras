@@ -207,6 +207,10 @@ test.describe('chapter delete — the latest card only, the guard, the whole cha
   })
 
   test('a dirty card’s Delete… raises Unsaved changes; Discard opens the confirm, Cancel changes nothing', async () => {
+    const { seeded } = hero()
+    const groupBefore = await groupDeltaCount(page(), seeded.closeActionId)
+    expect(groupBefore).toBeGreaterThan(0)
+    const loreBefore = await loreRowCount(page(), seeded.loreId)
     await chapterTimeline.field(page(), keep.id, 'title').fill(DRAFT)
     await chapterDelete.action(page(), keep.id).click()
     await expect(saveSession.unsavedDialog(page())).toBeVisible()
@@ -223,7 +227,8 @@ test.describe('chapter delete — the latest card only, the guard, the whole cha
     // The open dialog hides the card from the a11y tree, so the field is read after it closes.
     await expect(chapterTimeline.field(page(), keep.id, 'title')).toHaveValue(SECOND_CHAPTER)
     expect(await chapterCount(page())).toBe(2)
-    expect(await groupDeltaCount(page(), hero().seeded.closeActionId)).toBeGreaterThan(0)
+    expect(await groupDeltaCount(page(), seeded.closeActionId)).toBe(groupBefore)
+    expect(await loreRowCount(page(), seeded.loreId)).toBe(loreBefore)
   })
 
   test('Delete chapter reverses the close: entries stay, stamps and lore go, the later write stands', async () => {
@@ -346,5 +351,7 @@ test.describe('chapter delete — a close’s end reply regenerated', () => {
     await expect.poll(() => chapterRowCount(page(), keep.id), { timeout: 15_000 }).toBe(0)
     expect(await stampedInRange(page(), keep)).toBe(0)
     expect(await loreRowCount(page(), hero().seeded.loreId)).toBe(0)
+    // Only the latest chapter went: the first stays.
+    expect(await chapterCount(page())).toBe(1)
   })
 })

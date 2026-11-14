@@ -177,6 +177,8 @@ test.describe('reader — roll back into a closed chapter', () => {
         middle,
       ]),
     ).toBe(0)
+    // The earlier chapter is untouched: only the one the target fell inside went.
+    expect(await count(`SELECT count(*) FROM chapters WHERE branch_id = ?`, [branchId])).toBe(1)
     expect(await count(`SELECT count(*) ${below}`, belowParams)).toBe(entriesBelow)
     expect(await count(`SELECT count(*) ${below} AND chapter_id IS NOT NULL`, belowParams)).toBe(0)
   })

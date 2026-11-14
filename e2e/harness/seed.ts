@@ -457,10 +457,10 @@ export function seedCloseWrites(dbPath: string, branchId: string): SeededCloseWr
     const { actionId: closeActionId, createdAt: closedAt } = creates[0]
     const lastReply = db
       .prepare(
-        `SELECT id FROM story_entries WHERE branch_id = ? AND kind = 'ai_reply'
+        `SELECT id, position FROM story_entries WHERE branch_id = ? AND kind = 'ai_reply'
           ORDER BY position DESC LIMIT 1`,
       )
-      .get(branchId) as { id: string } | undefined
+      .get(branchId) as { id: string; position: number } | undefined
     if (!lastReply) throw new Error(`cannot seed close writes: ${branchId} has no ai_reply`)
     const characters = db
       .prepare(
@@ -548,18 +548,18 @@ export function seedCloseWrites(dbPath: string, branchId: string): SeededCloseWr
       throw err
     }
 
-    // A later write logged below the close's update would reverse with it, and a group delta
-    // anchored off the end entry would leave with a rollback to the entry after it.
-    const loggedAt = (id: string): number | undefined =>
-      (
-        db
-          .prepare(`SELECT log_position AS p FROM deltas WHERE branch_id = ? AND id = ?`)
-          .get(branchId, id) as { p: number } | undefined
-      )?.p
-    const closeAt = loggedAt(entityDeltaId)
-    const laterAt = loggedAt(laterDeltaId)
-    if (closeAt === undefined || laterAt === undefined || laterAt <= closeAt) {
-      throw new Error(`the later write must log above the close's update: ${closeAt}, ${laterAt}`)
+    // The later write anchors on the last reply: a rollback to the entry after the chapter's end
+    // sweeps it only when that reply sits past the end. A group delta anchored off the end entry
+    // would leave with the same rollback.
+    const endPosition = (
+      db
+        .prepare(`SELECT position FROM story_entries WHERE branch_id = ? AND id = ?`)
+        .get(branchId, chapter.endEntryId) as { position: number } | undefined
+    )?.position
+    if (endPosition === undefined || Number(lastReply.position) <= Number(endPosition)) {
+      throw new Error(
+        `the last ai_reply (${lastReply.position}) must sit after chapter end ${chapter.endEntryId} (${endPosition})`,
+      )
     }
     const stray = db
       .prepare(
