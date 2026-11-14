@@ -168,9 +168,16 @@ function measuredSlots(): CloseAgentSlots {
 }
 
 function printRangeEmbed(k: number): void {
-  const counts = capture.log.findLast(({ entry }) => entry.kind === 'memory.close_range_embed')
-  if (counts === undefined || rangeClusters === null) {
+  if (rangeClusters === null) {
     console.log(`[probe:close]   run ${k} range embed: did not complete`)
+    return
+  }
+  const counts = capture.log.findLast(({ entry }) => entry.kind === 'memory.close_range_embed')
+  // embedRange's one completion with no log entry: a range of under two happenings.
+  if (counts === undefined) {
+    console.log(
+      `[probe:close]   run ${k} range embed: skipped, the range held fewer than two happenings`,
+    )
     return
   }
   const { embedded, happenings, clusters } = counts.entry.fields
