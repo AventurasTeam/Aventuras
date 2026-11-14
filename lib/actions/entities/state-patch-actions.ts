@@ -520,14 +520,15 @@ export const retireEntityHandler: ActionHandler = async (action, branchId, ctx) 
   )
 }
 
-/** The membership target's kind, undefined if gone; a row this group creates is a faction. */
+/** The membership target's kind, undefined if gone; a row this group creates by its own kind. */
 async function membershipKind(
   ctx: DbCtx,
   branchId: string,
   id: string,
   group: GroupScope | undefined,
 ): Promise<Entity['kind'] | undefined> {
-  if (group?.created.has(createdKey('entities', id))) return 'faction'
+  const key = createdKey('entities', id)
+  if (group?.created.has(key)) return group.created.get(key)?.kind as Entity['kind'] | undefined
   const [row] = await ctx.db
     .select({ kind: entities.kind })
     .from(entities)

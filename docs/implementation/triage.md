@@ -77,25 +77,6 @@ slice-planning gate forces its resolution before that slice is planned.
   handlers of entities, lore, threads and happenings, and the chapters
   update, return the coded `not-found` C11 names but doesn't list them.
   Raised in 5.5a's review.
-- **Handlers read committed rows, so a row created earlier in the same
-  group reads as missing.** `placeLocationHandler` takes no `GroupScope`
-  (`lib/actions/entities/state-patch-actions.ts`), and the
-  `partner-not-found` and each target's `... not found` refusals read the
-  same way. 5.5a marks all of them `gone`, so once the close's
-  verdict mapping reads marks the model would hear that a row it just
-  created is gone. The fix is reading the group's created rows through
-  `GroupScope`, not a mark special case. Nothing groups a create with
-  such a write yet; a close tool that does needs it. Raised in 5.5a's
-  review.
-- **A row the group creates passes as a faction.** `membershipKind`
-  (`lib/actions/entities/state-patch-actions.ts`) reads any row in
-  `GroupScope.created` as a faction, since the scope holds keys only, so
-  a `setCharacterFaction` naming a character or place the same group
-  creates would land. `GroupScope.created` should carry each created
-  row's kind, so that write is refused `not-a-faction`. No writer
-  reaches it today: the classifier resolves its faction ref by kind and
-  writes through `delta_emitted`, outside a group. A close tool that
-  groups a create with a membership would. Raised in 5.5a's review.
 - **A parallel group's failing branch outlives the reversal.**
   `runParallelGroup` (`lib/pipeline/runtime/orchestrator.ts`) awaits
   `Promise.all`, so one branch's throw reverses and fails the run while

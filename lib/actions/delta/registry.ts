@@ -34,8 +34,13 @@ export type Cascade<T extends string = string> = {
   run: CascadeRun<Record<T, Rows>>
 }
 
-/** Rows the same action group creates, as `createdKey`s — handlers read pre-group state. */
-export type GroupScope = { readonly created: ReadonlySet<string> }
+/**
+ * Rows the same action group creates, by `createdKey`, each with the row its create wrote (null when
+ * the outcome carried no store patch) — handlers read pre-group state.
+ */
+export type GroupScope = {
+  readonly created: ReadonlyMap<string, Readonly<Record<string, unknown>> | null>
+}
 
 export function createdKey(table: string, id: string): string {
   return `${table}:${id}`

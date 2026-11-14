@@ -1021,6 +1021,26 @@ describe('setCharacterFaction', () => {
     expect(await factionOf(db)).toBe('fact_new')
   })
 
+  it('refuses a character the same group creates, as it does a stored one', async () => {
+    const { db, ctx } = await setup()
+    await seed(ctx, db)
+    const result = await applyDeltaActionGroup(
+      [
+        join('char_new'),
+        {
+          kind: 'createEntity',
+          source: 'periodic_classifier',
+          payload: { entry: { ...ACTIVE, id: 'char_new', name: 'Cato' } },
+        },
+      ],
+      { actionId: 'act_g', branchId: 'br_1' },
+      ctx,
+    )
+    expect(result).toEqual({ status: 'ok' })
+    expect(await factionOf(db)).toBeNull()
+    expect((await rowFor(db, 'char_new')).kind).toBe('character')
+  })
+
   it('keeps a faction the user set after the prose', async () => {
     const { db, ctx } = await setup()
     await seed(ctx, db)

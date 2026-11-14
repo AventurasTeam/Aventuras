@@ -1266,6 +1266,26 @@ Parked 2026-10-05; the signal to revisit is a non-periodic machine
 source writing a table with row-keeping columns, or a user write to
 one gaining an entry anchor.
 
+#### A write grouped after its row's create reads the row as missing
+
+Handlers read committed rows, so a row created earlier in the same
+group reads as missing. `placeLocationHandler` takes no `GroupScope`
+(`lib/actions/entities/state-patch-actions.ts`), and the
+`partner-not-found` and each target's `... not found` refusals read the
+same way. 5.5a marks all of them `gone`, so once the close's verdict
+mapping reads marks the model would hear that a row it just created is
+gone. The fix is reading the group's created rows through `GroupScope`,
+not a mark special case. Nothing groups a create with such a write yet;
+a close tool that does needs it. Wider than first raised (verified by
+reading in the 2026-11-14 triage pass): any handler targeting a row
+created earlier in the same group reads it as missing, and for
+`updateEntity`, `updateLore`, `updateThread` and `updateHappening` that
+rejects the whole group rather than marking the row gone. The same pass
+gave `GroupScope.created` each created row, which a read-through would
+start from. **Revisit signal:** a writer that groups a create with a
+non-link write naming the created row. Raised in 5.5a's review; routed
+from triage 2026-11-14.
+
 #### Prompt-cache optimization
 
 The [system and user halves](./architecture.md#system-and-user-halves)
