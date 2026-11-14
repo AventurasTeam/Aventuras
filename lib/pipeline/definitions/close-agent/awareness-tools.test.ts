@@ -890,8 +890,8 @@ describe('set_pin', () => {
   })
 })
 
-// The slice's Decay fixture: 59 closed chapters, a row learned in chapter 3 at 0.3, read at
-// chapter 60, the open one. The pin reaches the score only through the decay exponent.
+// 59 closed chapters, a row learned in chapter 3 at 0.3, read at chapter 60, the open one. The pin
+// reaches the score only through the decay exponent.
 describe('a pin moves a score', () => {
   const DIM = 4
   const MODEL = 'pin-score-embed'
