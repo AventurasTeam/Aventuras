@@ -41,7 +41,6 @@ export {
   CLOSE_REASON_KEYS,
   CLOSE_TASKS,
   CLOSE_TOP_LEVEL_VALUE,
-  closeReportCallSchema,
   closeReportSchema,
   isCloseReasonKey,
 } from './story-entries/close-report'

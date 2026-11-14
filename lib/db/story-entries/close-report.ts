@@ -1,5 +1,7 @@
 import { z } from 'zod'
 
+import { logger } from '@/lib/diagnostics'
+
 export const CLOSE_TASKS = [
   'happenings',
   'lore',
@@ -92,7 +94,7 @@ const closeTaskSchema = z.enum(CLOSE_TASKS)
 const partSchema = z.number().int().min(0)
 
 // Not strict: v1 may gain a field (milestone C4), and a reader built before it must still parse.
-export const closeReportCallSchema = z.object({
+const storedCallSchema = z.object({
   task: closeTaskSchema,
   /** From 1; 0 for the chapter-wide Happenings and Awareness. */
   part: partSchema,
@@ -103,26 +105,32 @@ export const closeReportCallSchema = z.object({
   /** Entry ids. */
   turns: z.array(z.string()),
   result: z.enum(['ok', 'rejected', 'skipped']),
-  /** Why it didn't land: the first refusal's, else the first protection's. */
+  // Any string: a report stored before reasons were keys must still parse, its reason as other.
   reason: z.string().optional(),
   /** Delta path to the new or proposed value. */
   values: z.record(z.string(), z.string()).optional(),
-  /**
-   * Lost paths with their first loss's reason: an ok call's that landed on no row, and a call's
-   * where nothing landed when they don't all share its reason (C4).
-   */
   skippedFields: z.array(z.object({ field: z.string(), reason: z.string() })).optional(),
   /** A landed merge's kept row. */
   survivor: z.object({ table: z.string(), id: z.string() }).optional(),
 })
 
-/** One tool call of a close, in run order (milestone C4). */
-export type CloseReportCall = z.infer<typeof closeReportCallSchema>
+type StoredCall = z.infer<typeof storedCallSchema>
 
-export const closeReportSchema = z.object({
+/** One tool call of a close, in run order (milestone C4). */
+export type CloseReportCall = Omit<StoredCall, 'reason' | 'skippedFields'> & {
+  /** Why it didn't land: the first refusal's, else the first protection's. */
+  reason?: CloseReasonKey
+  /**
+   * Lost paths with their first loss's reason: an ok call's that landed on no row, and a call's
+   * where nothing landed when they don't all share its reason (C4).
+   */
+  skippedFields?: { field: string; reason: CloseReasonKey }[]
+}
+
+const storedReportSchema = z.object({
   version: z.literal(1),
   actionId: z.string(),
-  calls: z.array(closeReportCallSchema),
+  calls: z.array(storedCallSchema),
   stopped: z.array(
     z.object({
       task: closeTaskSchema,
@@ -135,4 +143,43 @@ export const closeReportSchema = z.object({
 })
 
 /** `chapters.close_report`: what a close's deltas don't hold (milestone C4). */
-export type CloseReport = z.infer<typeof closeReportSchema>
+export type CloseReport = Omit<z.infer<typeof storedReportSchema>, 'calls'> & {
+  calls: CloseReportCall[]
+}
+
+/** Each call's reasons as keys; `unknown` gathers the strings no key matched, null a refusal's missing one. */
+function keyedCalls(calls: readonly StoredCall[], unknown: Set<string | null>): CloseReportCall[] {
+  const keyOf = (reason: string): CloseReasonKey => {
+    if (isCloseReasonKey(reason)) return reason
+    unknown.add(reason)
+    return 'other'
+  }
+  return calls.map(({ reason, skippedFields, ...call }) => {
+    if (reason === undefined && call.result !== 'ok') unknown.add(null)
+    return {
+      ...call,
+      ...(reason === undefined ? {} : { reason: keyOf(reason) }),
+      ...(skippedFields === undefined
+        ? {}
+        : {
+            skippedFields: skippedFields.map((skipped) => ({
+              field: skipped.field,
+              reason: keyOf(skipped.reason),
+            })),
+          }),
+    }
+  })
+}
+
+/** C4: a stored report, each reason a key; one no key matches reads as `other`, logged once. */
+export const closeReportSchema = storedReportSchema.transform((stored): CloseReport => {
+  const unknown = new Set<string | null>()
+  const report = { ...stored, calls: keyedCalls(stored.calls, unknown) }
+  if (unknown.size > 0)
+    logger.warn(
+      'memory.close_report_unknown_reason',
+      { reasons: [...unknown] },
+      { actionId: stored.actionId },
+    )
+  return report
+})

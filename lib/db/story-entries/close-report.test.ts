@@ -1,7 +1,13 @@
-import { describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
+
+import { logger } from '@/lib/diagnostics'
 
 import { chapterWriteSchema } from './chapter-schema'
 import { closeReportSchema, type CloseReport } from './close-report'
+
+afterEach(() => {
+  vi.restoreAllMocks()
+})
 
 // Every optional field of a call present, on a landed merge and a partly landed write.
 const FULL: CloseReport = {
@@ -28,7 +34,7 @@ const FULL: CloseReport = {
       why: 'Pew delivers the black spot.',
       turns: ['entry_20'],
       result: 'rejected',
-      reason: 'USER_EDITED_SINCE_PROSE',
+      reason: 'user-edited-since-prose',
     },
   ],
   stopped: [{ task: 'threads', part: 2, reason: 'cut-off' }],
@@ -119,6 +125,81 @@ describe('closeReportSchema', () => {
   it('refuses a call missing its why', () => {
     const { why: _why, ...call } = FULL.calls[0]!
     expect(closeReportSchema.safeParse({ ...FULL, calls: [call] }).success).toBe(false)
+  })
+
+  it('refuses a reason that is no string', () => {
+    const call = { ...FULL.calls[1], reason: 7 }
+    expect(closeReportSchema.safeParse({ ...FULL, calls: [call] }).success).toBe(false)
+  })
+})
+
+describe('closeReportSchema on a stored reason that is no key', () => {
+  const refused = (fields: Record<string, unknown>) => ({
+    ...FULL.calls[1],
+    ...fields,
+  })
+
+  it('reads it as other, in the call and in its lost fields, and warns once with the raw reasons', () => {
+    const warn = vi.spyOn(logger, 'warn')
+
+    const parsed = closeReportSchema.parse({
+      ...FULL,
+      calls: [
+        refused({ reason: 'USER_EDITED_SINCE_PROSE' }),
+        refused({
+          reason: 'later-turn',
+          skippedFields: [
+            { field: 'description', reason: 'row gone' },
+            { field: 'title', reason: 'USER_EDITED_SINCE_PROSE' },
+            { field: 'state.voice', reason: 'later-turn' },
+          ],
+        }),
+      ],
+    })
+
+    expect(parsed.calls.map(({ reason, skippedFields }) => [reason, skippedFields])).toEqual([
+      ['other', undefined],
+      [
+        'later-turn',
+        [
+          { field: 'description', reason: 'other' },
+          { field: 'title', reason: 'other' },
+          { field: 'state.voice', reason: 'later-turn' },
+        ],
+      ],
+    ])
+    expect(warn).toHaveBeenCalledTimes(1)
+    expect(warn).toHaveBeenCalledWith(
+      'memory.close_report_unknown_reason',
+      { reasons: ['USER_EDITED_SINCE_PROSE', 'row gone'] },
+      { actionId: 'act_close_1' },
+    )
+  })
+
+  it("counts a refused call's missing reason as null, leaving it absent", () => {
+    const warn = vi.spyOn(logger, 'warn')
+    const { reason: _reason, ...noReason } = FULL.calls[1]!
+
+    const parsed = closeReportSchema.parse({
+      ...FULL,
+      calls: [noReason, { ...noReason, result: 'skipped' }],
+    })
+
+    expect(parsed.calls.map((call) => call.reason)).toEqual([undefined, undefined])
+    expect(warn).toHaveBeenCalledTimes(1)
+    expect(warn).toHaveBeenCalledWith(
+      'memory.close_report_unknown_reason',
+      { reasons: [null] },
+      { actionId: 'act_close_1' },
+    )
+  })
+
+  it('warns nothing when every reason is a key and a landed call has none', () => {
+    const warn = vi.spyOn(logger, 'warn')
+
+    closeReportSchema.parse(FULL)
+
+    expect(warn).not.toHaveBeenCalled()
   })
 })
 

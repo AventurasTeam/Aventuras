@@ -1,10 +1,4 @@
-import {
-  isCloseReasonKey,
-  type CloseReasonKey,
-  type CloseReport,
-  type CloseReportCall,
-} from '@/lib/db'
-import { logger } from '@/lib/diagnostics'
+import type { CloseReasonKey, CloseReport, CloseReportCall } from '@/lib/db'
 import { t } from '@/lib/i18n'
 
 import {
@@ -97,7 +91,7 @@ type Refusal = {
   /** A field row's path; null for a row by tool and rows. */
   path: string | null
   summary: string
-  reason: string | undefined
+  reason: CloseReasonKey | undefined
 }
 
 const sharesRow = (a: readonly Row[], b: readonly Row[]): boolean =>
@@ -135,7 +129,7 @@ function correctedLater(refusal: Refusal, calls: readonly CloseReportCall[]): bo
 
 function refusalsOf(call: CloseReportCall, index: number, lookup: CloseReviewLookup): Refusal[] {
   const table = call.rows[0]?.table ?? ''
-  const ownReason = (path: string): string | undefined =>
+  const ownReason = (path: string): CloseReasonKey | undefined =>
     call.skippedFields?.find(({ field }) => field === path)?.reason ?? call.reason
   if (call.result === 'ok')
     return (call.skippedFields ?? []).map(({ field, reason }) => {
@@ -188,20 +182,15 @@ export function closeReviewNotApplied(
   report: CloseReport,
   lookup: CloseReviewLookup,
 ): CloseReview['notApplied'] {
-  const unknown = new Set<string>()
-  const keyOf = (reason: string | undefined): CloseReasonKey => {
-    if (reason !== undefined && isCloseReasonKey(reason)) return reason
-    unknown.add(reason ?? '')
-    return 'other'
-  }
-  const rows = report.calls
+  return report.calls
     .flatMap((call, index) => refusalsOf(call, index, lookup))
     .filter((refusal) => !correctedLater(refusal, report.calls))
     .map((refusal): CloseReviewNotApplied => {
       const { call, path } = refusal
       const [first] = call.rows
       const created = call.tool === CREATE_LORE_TOOL
-      const reasonKey = keyOf(refusal.reason)
+      // A refusal stored with no reason, which closeReportSchema logged.
+      const reasonKey = refusal.reason ?? 'other'
       return {
         key: reviewRowKey(refusal.index, first ?? { table: '', id: '' }, path ?? call.tool),
         op: created ? 'create' : 'update',
@@ -218,7 +207,4 @@ export function closeReviewNotApplied(
             : { table: first.table, id: first.id },
       }
     })
-  // A report written before reasons were keys; the review reads each as other.
-  if (unknown.size > 0) logger.warn('memory.close_review_unknown_reason', { reasons: [...unknown] })
-  return rows
 }

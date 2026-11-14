@@ -1,12 +1,12 @@
-import { afterEach, describe, expect, it, vi } from 'vitest'
+import { describe, expect, it } from 'vitest'
 
 import {
   CLOSE_REASON_KEYS,
+  closeReportSchema,
   type CloseReport,
   type CloseReportCall,
   type EntityKind,
 } from '@/lib/db'
-import { logger } from '@/lib/diagnostics'
 import { i18n } from '@/lib/i18n'
 import { hasCopy } from '@/lib/i18n/__tests__/locale-keys'
 
@@ -38,10 +38,6 @@ const LOOKUP: CloseReviewLookup = {
   nameOf: () => undefined,
   entryPosition: () => undefined,
 }
-
-afterEach(() => {
-  vi.restoreAllMocks()
-})
 
 function call(fields: Partial<CloseReportCall> & Pick<CloseReportCall, 'tool'>): CloseReportCall {
   return {
@@ -463,37 +459,34 @@ describe('closeReviewNotApplied', () => {
     ).toEqual([])
   })
 
-  it('reads a stored reason that is no key as other, and logs it once', () => {
-    const warn = vi.spyOn(logger, 'warn')
-
-    const rows = closeReviewNotApplied(
-      report([
-        call({
-          tool: 'update_faction',
-          rows: [ORDER],
-          values: { description: 'A.' },
-          result: 'rejected',
-          reason: 'not a key',
-        }),
-        call({
-          tool: 'update_faction',
-          rows: [ORDER],
-          values: { 'state.standing': 'B.' },
-          result: 'rejected',
-          reason: 'not a key',
-        }),
-      ]),
-      LOOKUP,
-    )
-
-    expect(rows.map(({ reasonKey, reasonText }) => [reasonKey, reasonText])).toEqual([
-      ['other', 'Not applied for another reason.'],
-      ['other', 'Not applied for another reason.'],
-    ])
-    expect(warn).toHaveBeenCalledTimes(1)
-    expect(warn).toHaveBeenCalledWith('memory.close_review_unknown_reason', {
-      reasons: ['not a key'],
+  it('reads a stored reason that is no key as other, and a refusal stored with none', () => {
+    const refused = (fields: Record<string, unknown>) => ({
+      ...call({ tool: 'update_faction', rows: [ORDER], result: 'rejected' }),
+      ...fields,
     })
+    const stored = closeReportSchema.parse({
+      ...report([]),
+      calls: [
+        refused({ values: { description: 'A.' }, reason: 'not a key' }),
+        refused({
+          values: { 'state.standing': 'B.', 'state.agenda': 'C.' },
+          reason: 'later-turn',
+          skippedFields: [{ field: 'state.agenda', reason: 'not a key either' }],
+        }),
+        refused({ values: { title: 'D.' } }),
+      ],
+    })
+
+    const rows = closeReviewNotApplied(stored, LOOKUP)
+
+    expect(
+      rows.map(({ fieldPath, reasonKey, reasonText }) => [fieldPath, reasonKey, reasonText]),
+    ).toEqual([
+      ['description', 'other', 'Not applied for another reason.'],
+      ['state.standing', 'later-turn', 'A later entry already changed this.'],
+      ['state.agenda', 'other', 'Not applied for another reason.'],
+      ['title', 'other', 'Not applied for another reason.'],
+    ])
   })
 
   it('shows a proposed flag as yes or no, an empty value as none, and the top mark in words', () => {
@@ -801,25 +794,6 @@ describe('closeReviewNotApplied', () => {
       ['Kael', 'state.drives', 'none', 'user-edited-since-prose'],
       ['Kael', 'state.traits', '', 'user-edited-since-prose'],
     ])
-  })
-
-  it('logs nothing when every stored reason is a key', () => {
-    const warn = vi.spyOn(logger, 'warn')
-
-    closeReviewNotApplied(
-      report([
-        call({
-          tool: 'update_faction',
-          rows: [ORDER],
-          values: { description: 'A.' },
-          result: 'rejected',
-          reason: 'turn-in-text',
-        }),
-      ]),
-      LOOKUP,
-    )
-
-    expect(warn).not.toHaveBeenCalled()
   })
 
   it('labels every reason key', () => {

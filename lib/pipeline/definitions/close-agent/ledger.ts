@@ -1,4 +1,4 @@
-import type { CloseReasonKey, CloseReportCall } from '@/lib/db'
+import type { CloseReportCall } from '@/lib/db'
 import { logger } from '@/lib/diagnostics'
 import { ID_PATTERN } from '@/lib/ids'
 import { oneLine } from '@/lib/text'
@@ -13,10 +13,8 @@ export const CLOSE_REPORT_VALUE_BOUND = 2_000
 type NameOfId = (id: string) => string | undefined
 type Survivor = NonNullable<CloseReportCall['survivor']>
 type RowRef = { table: string; id: string }
-/** What a close records of one call: its reasons as keys, its values as the tool gave them. */
-type RecordedCall = Omit<CloseReportCall, 'values' | 'reason' | 'skippedFields'> & {
-  reason?: CloseReasonKey
-  skippedFields?: { field: string; reason: CloseReasonKey }[]
+/** What a close records of one call, its values as the tool gave them. */
+type RecordedCall = Omit<CloseReportCall, 'values'> & {
   values?: Readonly<Record<string, unknown>>
 }
 
