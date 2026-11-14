@@ -115,7 +115,7 @@ describe('closeReviewChanges', () => {
       ['placesAndItems', 'The Lamp', 'Cracked'],
       ['placesAndItems', 'The Quay', 'Flooded'],
       ['threads', 'The letter', 'resolved'],
-      ['happenings', 'The fire', '1'],
+      ['happenings', 'The fire', 'Yes'],
       ['awareness', 'Awareness', '0.9'],
     ])
   })
@@ -267,6 +267,48 @@ describe('closeReviewChanges', () => {
     ])
   })
 
+  it('renders an old object as stored', () => {
+    const calls = [call({ tool: 'update_happening', rows: [FIRE], values: { temporal: 'Dusk' } })]
+    const deltas = [delta(FIRE, { temporal: { start: 1 } })]
+
+    expect(summaries(closeReviewChanges(report(calls), deltas, LOOKUP))).toEqual([
+      ['happenings', 'The fire', '{"start":1} → Dusk'],
+    ])
+  })
+
+  it('reads a cleared value as none', () => {
+    const calls = [call({ tool: 'set_keywords', rows: [KAEL], values: { keywords: '' } })]
+    const deltas = [delta(KAEL, { keywords: ['harbour', 'quay'] })]
+
+    expect(summaries(closeReviewChanges(report(calls), deltas, LOOKUP))).toEqual([
+      ['charactersAndFactions', 'Kael', 'harbour, quay → none'],
+    ])
+  })
+
+  it('names only the move on a top mark, not the unplaced flag it cleared', () => {
+    const calls = [
+      call({ tool: 'update_place', rows: [QUAY], values: { 'state.unplaced': 'top level' } }),
+    ]
+    const deltas = [delta(QUAY, { state: { unplaced: true } })]
+
+    expect(summaries(closeReviewChanges(report(calls), deltas, LOOKUP))).toEqual([
+      ['placesAndItems', 'The Quay', 'top level'],
+    ])
+  })
+
+  it('reads common knowledge as no or yes, and keeps a zero old value elsewhere', () => {
+    const calls = [
+      call({ tool: 'mark_common_knowledge', rows: [FIRE], values: { commonKnowledge: '1' } }),
+      call({ tool: 'set_pin', rows: [AWARE], values: { decayResistance: '0.9' } }),
+    ]
+    const deltas = [delta(FIRE, { commonKnowledge: 0 }), delta(AWARE, { decayResistance: 0 })]
+
+    expect(summaries(closeReviewChanges(report(calls), deltas, LOOKUP))).toEqual([
+      ['happenings', 'The fire', 'No → Yes'],
+      ['awareness', 'Awareness', '0 → 0.9'],
+    ])
+  })
+
   it('reads 0.6 → 0.9 on an awareness row a merge took from 0.2 to 0.6 before set_pin', () => {
     const calls = [
       call({
@@ -332,14 +374,14 @@ describe('closeReviewChanges', () => {
         rows: [KAEL],
         values: { 'state.voice': 'Flat' },
         result: 'rejected',
-        reason: 'user-edited-since-prose',
+        reason: 'row-gone',
       }),
       call({
         tool: 'update_place',
         rows: [QUAY],
         values: { 'state.condition': 'Flooded' },
         result: 'skipped',
-        reason: 'later-turn',
+        reason: 'user-edited-since-prose',
       }),
       call({ tool: 'update_item', rows: [LAMP], values: { 'state.condition': 'Cracked' } }),
     ]
@@ -377,12 +419,24 @@ describe('closeReviewChanges', () => {
     ])
   })
 
+  it('names and presses to a survivor the merge left out of its rows', () => {
+    const calls = [
+      call({ tool: 'merge_threads', rows: [SEAL], survivor: { table: 'threads', id: 'thr_kept' } }),
+    ]
+
+    const [area] = closeReviewChanges(report(calls), [], LOOKUP)
+
+    expect(area!.rows.map(({ summary, pressTo }) => [summary, pressTo])).toEqual([
+      ['Merged into Unknown row', { table: 'threads', id: 'thr_kept' }],
+    ])
+  })
+
   it("gives a landed merge's fields on the survivor beside its delete rows", () => {
     const calls = [
       call({
         task: 'threads',
         tool: 'merge_threads',
-        rows: [LETTER, SEAL],
+        rows: [SEAL, LETTER],
         values: { title: 'The sealed letter' },
         survivor: { table: 'threads', id: 'thr_letter' },
       }),

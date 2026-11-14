@@ -65,6 +65,9 @@
     "close": "Close chapter…"
   },
   "review": {
-    "mergedInto": "Merged into {{name}}"
+    "mergedInto": "Merged into {{name}}",
+    "none": "none",
+    "yes": "Yes",
+    "no": "No"
   }
 }

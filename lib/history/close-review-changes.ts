@@ -168,18 +168,39 @@ function oldValues(planned: readonly Planned[], deltas: readonly Delta[]): Map<P
   return old
 }
 
+const UNPLACED_PATH = 'state.unplaced'
+const COMMON_KNOWLEDGE_PATH = 'commonKnowledge'
+
+const flagText = (value: unknown): string =>
+  Number(value) === 1 ? t('chapters:review.yes') : t('chapters:review.no')
+
+// Each path's display rule in one place: the top mark names only its move (its old value is the
+// unplaced flag), a flag reads yes or no, and a cleared value reads none.
+function updateSummary(
+  path: string,
+  old: unknown,
+  value: string,
+  lookup: CloseReviewLookup,
+): string {
+  if (path === UNPLACED_PATH) return value
+  if (path === COMMON_KNOWLEDGE_PATH)
+    return old == null ? flagText(value) : `${flagText(old)}${VALUE_ARROW}${flagText(value)}`
+  const before = shownValue(old, lookup)
+  if (before === '') return value
+  return `${before}${VALUE_ARROW}${value === '' ? t('chapters:review.none') : value}`
+}
+
 function summaryOf(write: Planned, old: unknown, lookup: CloseReviewLookup): string {
   if (write.op === 'create') return write.call.values?.body ?? ''
   if (write.op === 'delete')
     return t('chapters:review.mergedInto', { name: reviewTarget(write.kept, lookup).name })
-  const value = write.call.values?.[write.path] ?? ''
-  const before = shownValue(old, lookup)
-  return before === '' ? value : `${before}${VALUE_ARROW}${value}`
+  return updateSummary(write.path, old, write.call.values?.[write.path] ?? '', lookup)
 }
 
 /**
  * chapter-close.md → Review: one row per landed field (create, absorbed row), its old value from
- * the deltas and its new one from the report, grouped by area in canon's order.
+ * the deltas and its new one from the report, grouped by area in canon's order. `deltas` are the
+ * close's in log order, as `loadCloseDeltas` returns them.
  */
 export function closeReviewChanges(
   report: CloseReport,
