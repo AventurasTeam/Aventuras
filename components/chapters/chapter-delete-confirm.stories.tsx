@@ -124,7 +124,7 @@ export const NoTurnsSince: Story = {
   },
 }
 
-/** A close that landed with no agent writes: no count line shows. */
+/** A close that landed with no agent writes: the lore and other-changes lines go, turns stay. */
 export const NoCountLines: Story = {
   args: {
     preview: {
@@ -200,8 +200,13 @@ export const Blocked: Story = {
   args: { blockedReason: BLOCKED_REASON },
   play: async ({ args }) => {
     await findDialog()
-    for (const name of [COPY.removeDivider, COPY.confirm]) {
-      const button = screen.getByRole('button', { name })
+    const actions = [COPY.removeDivider, COPY.confirm].map((name) =>
+      screen.getByRole('button', { name }),
+    )
+    // Past user-event's pointer-events check, so only the disabled wiring stops the press.
+    for (const button of actions) await userEvent.click(button, { pointerEventsCheck: 0 })
+    expect(args.onDelete).not.toHaveBeenCalled()
+    for (const button of actions) {
       expect(button).toHaveAttribute('aria-disabled', 'true')
       expect(button.closest('[title]')).toHaveAttribute('title', BLOCKED_REASON)
     }
@@ -209,7 +214,6 @@ export const Blocked: Story = {
       'aria-disabled',
       'true',
     )
-    expect(args.onDelete).not.toHaveBeenCalled()
   },
 }
 
@@ -218,9 +222,13 @@ export const Pending: Story = {
   args: { pending: true },
   play: async ({ args }) => {
     await findDialog()
-    for (const name of [COPY.cancel, COPY.removeDivider, COPY.confirm])
-      expect(screen.getByRole('button', { name })).toHaveAttribute('aria-disabled', 'true')
+    const buttons = [COPY.cancel, COPY.removeDivider, COPY.confirm].map((name) =>
+      screen.getByRole('button', { name }),
+    )
+    for (const button of buttons) await userEvent.click(button, { pointerEventsCheck: 0 })
     expect(args.onDelete).not.toHaveBeenCalled()
+    expect(args.onOpenChange).not.toHaveBeenCalled()
+    for (const button of buttons) expect(button).toHaveAttribute('aria-disabled', 'true')
   },
 }
 
