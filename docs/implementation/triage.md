@@ -690,3 +690,14 @@ patch`, which 5.5a marks `restated`, so a close tool's write of it
   user-kept: the model was told `notWritten: decayResistance (c1)`,
   `skippedFields` was empty, and Not applied was `[]`. Raised in 5.11's
   review.
+- **`useMemoryRunToasts` no longer only toasts.**
+  `hooks/use-memory-run-toasts.ts` also holds a committed close's result
+  for the commit banner's done state, so neither its name nor its file
+  says what it does. Raised in 5.11's review.
+- **The review window closes without an exit animation.**
+  `ChapterOverlaysHost` unmounts `ReviewWindow` as soon as the review id
+  clears, so the Dialog on desktop and the Sheet on phone vanish in one
+  frame (seen on the slot AVD and in the desktop smoke). A fix keeps the
+  window mounted with `open={false}` through its exit, which has to
+  agree with the host's prune of a chapter that no longer holds. Raised
+  in 5.11's review.
