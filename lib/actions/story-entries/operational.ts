@@ -43,7 +43,7 @@ export function reversalRefused(branchId: string, e: ReversalIntegrityError): St
 
 // A second unrelated action clears the redo stack (data-model.md). That holds when only the store
 // sync after the commit throws too: the action landed all the same. A refusal is not committed.
-async function commitNewAction(
+export async function commitNewAction(
   set: ReversalSet,
   ctx: DbCtx,
   extraOps: readonly SqlOp[],
