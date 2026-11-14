@@ -211,6 +211,12 @@ function plannedRows(call: CloseReportCall, index: number): Planned[] {
   return paths.map((path): Planned => ({ op: 'update', index, call, row, path }))
 }
 
+function appendTo<K, V>(buckets: Map<K, V[]>, key: K, value: V): void {
+  const bucket = buckets.get(key)
+  if (bucket === undefined) buckets.set(key, [value])
+  else bucket.push(value)
+}
+
 const writeKey = (row: CloseReviewRowRef, path: string): string =>
   JSON.stringify([row.table, row.id, path])
 
@@ -223,13 +229,13 @@ function oldValues(planned: readonly Planned[], deltas: readonly Delta[]): Map<P
   for (const delta of deltas)
     for (const path of changedPaths(delta)) {
       const key = writeKey({ table: delta.targetTable, id: delta.targetId }, path)
-      logged.set(key, [...(logged.get(key) ?? []), delta])
+      appendTo(logged, key, delta)
     }
   const writes = new Map<string, UpdateWrite[]>()
   for (const write of planned)
     if (write.op === 'update') {
       const key = writeKey(write.row, write.path)
-      writes.set(key, [...(writes.get(key) ?? []), write])
+      appendTo(writes, key, write)
     }
   const old = new Map<Planned, unknown>()
   for (const [key, list] of writes) {
@@ -310,7 +316,7 @@ export function closeReviewChanges(
       entryId: citedEntry(write.call.turns, lookup),
       pressTo: { table: pressTo.table, id: pressTo.id },
     }
-    byArea.set(area, [...(byArea.get(area) ?? []), row])
+    appendTo(byArea, area, row)
   }
   return CLOSE_REVIEW_AREAS.flatMap((area) => {
     const rows = byArea.get(area)
