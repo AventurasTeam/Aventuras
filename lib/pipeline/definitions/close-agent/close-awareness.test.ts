@@ -816,6 +816,20 @@ describe('the Awareness start', () => {
     ).rejects.toThrow('awareness: the close holds no range')
   })
 
+  it("keeps each listed row's pin as the baseline set_pin holds the close to", async () => {
+    await seedAwarenessWorld(fx)
+    const ctx = promptContextFor(fx)
+
+    await awarenessTask.start(ctx)
+
+    expect([A_CHAPTER, A_BOTH, A_FREQUENT].map((id) => ctx.ids.startPinOf(id))).toEqual([
+      0.6,
+      0,
+      null,
+    ])
+    expect(ctx.ids.startPinOf(A_COMMON)).toBeUndefined()
+  })
+
   // The start lists the chapter's rows by the same entries set_pin's one-way rule tests.
   it("lists a row as the chapter's exactly when set_pin lets its pin fall", async () => {
     await seedAwarenessWorld(fx)
@@ -830,11 +844,10 @@ describe('the Awareness start', () => {
     const { answers } = await runDispatchCalls(fx, {
       task: 'awareness',
       tools: { set_pin: setPinTool },
-      shown: [A_CHAPTER, A_FREQUENT].map((id) => ({
-        table: 'happening_awareness' as const,
-        id,
-        name: '',
-      })),
+      shown: [
+        { table: 'happening_awareness', id: A_CHAPTER, name: '', startPin: 0.6 },
+        { table: 'happening_awareness', id: A_FREQUENT, name: '', startPin: 0.8 },
+      ],
       calls: [
         {
           toolName: 'set_pin',
@@ -995,7 +1008,7 @@ describe('the Awareness start', () => {
     )
   })
 
-  it('tells the model a raise is at most 0.2 a call, never straight to 1', async () => {
+  it('tells the model a raise is at most 0.2 above the shown pin a close, never straight to 1', async () => {
     await seedAwarenessWorld(fx)
     const ctx = promptContextFor(fx)
     const start = await awarenessTask.start(ctx)
@@ -1004,7 +1017,7 @@ describe('the Awareness start', () => {
     const { user } = awarenessTask.render(start, { ...ctx, writesSoFar: '' })
 
     expect(user).toContain(
-      'Raise a pin by at most 0.2 in one call, never straight to 1: a bigger raise is refused, and a row that stays load-bearing climbs again at a later close.',
+      'Raise a pin by at most 0.2 above the pin shown, in one close, never straight to 1: a bigger raise is refused, and a row that stays load-bearing climbs again at a later close.',
     )
   })
 

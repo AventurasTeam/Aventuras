@@ -199,11 +199,24 @@ const pin = (
   why = WHY,
 ): ScriptedCall => ({ toolName: 'set_pin', input: { id, value, turns: [...turns], why } })
 
-function pinCalls(fx: CloseFixture, calls: readonly ScriptedCall[]): Promise<DispatchRun> {
+// The Awareness start hands each listed row's pin as the model reads it; a row gone has none.
+async function startPinned(fx: CloseFixture, rows: readonly ShownRow[]): Promise<ShownRow[]> {
+  const pins = new Map(
+    (
+      await fx.ctx.db
+        .select({ id: happeningAwareness.id, pin: happeningAwareness.decayResistance })
+        .from(happeningAwareness)
+        .where(eq(happeningAwareness.branchId, fx.branchId))
+    ).map(({ id, pin }) => [id, pin]),
+  )
+  return rows.map((row) => (pins.has(row.id) ? { ...row, startPin: pins.get(row.id) } : row))
+}
+
+async function pinCalls(fx: CloseFixture, calls: readonly ScriptedCall[]): Promise<DispatchRun> {
   return runDispatchCalls(fx, {
     task: 'awareness',
     tools: { set_pin: setPinTool },
-    shown: SHOWN,
+    shown: await startPinned(fx, SHOWN),
     calls,
     turns: awarenessTurns(fx),
   })
@@ -433,7 +446,7 @@ describe('set_pin', () => {
     const { calls } = await runDispatchCalls(f, {
       task: 'awareness',
       tools: { set_pin: setPinTool },
-      shown: [{ table: 'entities', id: ARIA, name: '' }, ...SHOWN],
+      shown: await startPinned(f, [{ table: 'entities', id: ARIA, name: '' }, ...SHOWN]),
       calls: [pin('aw1', 0.2), pin('aw1', 0.2, ['t2'], 'c1 keeps the fight in mind.')],
       turns: awarenessTurns(f),
     })
@@ -561,7 +574,7 @@ describe('set_pin', () => {
     }
 
     const note = (ceiling: number): string =>
-      `A pin rises by at most 0.2 in one call: send ${ceiling} or less, or leave it.`
+      `This close can raise it to ${ceiling} at most: send ${ceiling} or less, or leave it.`
 
     it.each([
       ['a chapter row', 'aw1', PINNED, 0.6, 0.9, 0.8],
@@ -612,6 +625,70 @@ describe('set_pin', () => {
       expect(answers).toEqual([{ result: 'ok' }, { result: 'ok' }])
       expect(await storedPin(f, PINNED)).toBe(value)
       expect(await storedPin(f, FREQUENT)).toBe(value)
+    })
+
+    // The step and the floor hold from the pin the start showed, not the one a call left.
+    it('refuses a second raise past the start pin plus 0.2, though each step is within 0.2', async () => {
+      const { answers } = await pinCalls(f, [pin('aw2', 0.7), pin('aw2', 0.9), pin('aw2', 1)])
+
+      expect(answers).toEqual([
+        { result: 'ok' },
+        { result: 'rejected', reason: 'pin-raise-too-large', note: note(0.7) },
+        { result: 'rejected', reason: 'pin-raise-too-large', note: note(0.7) },
+      ])
+      expect(await storedPin(f, FREQUENT)).toBe(0.7)
+    })
+
+    it('restores a chapter row lowered by mistake, and raises it to the start pin plus 0.2', async () => {
+      const { answers } = await pinCalls(f, [
+        pin('aw1', 0.2),
+        pin('aw1', 0.6),
+        pin('aw1', 0.8),
+        pin('aw1', 0.81),
+      ])
+
+      expect(answers).toEqual([
+        { result: 'ok' },
+        { result: 'ok' },
+        { result: 'ok' },
+        { result: 'rejected', reason: 'pin-raise-too-large', note: note(0.8) },
+      ])
+      expect(await storedPin(f, PINNED)).toBe(0.8)
+    })
+
+    it('refuses a frequent row lowered below its start pin after a raise, and lets it back to it', async () => {
+      const { answers } = await pinCalls(f, [pin('aw2', 0.7), pin('aw2', 0.4), pin('aw2', 0.5)])
+
+      expect(answers).toEqual([
+        { result: 'ok' },
+        {
+          result: 'rejected',
+          reason: 'frequent-pin-lowered',
+          note: 'This row is listed because it keeps coming up, not for this chapter, so its pin only rises: send 0.5 or more, or leave it.',
+        },
+        { result: 'ok' },
+      ])
+      expect(await storedPin(f, FREQUENT)).toBe(0.5)
+    })
+
+    it('refuses a row the start showed no pin for, rather than reading its live pin', async () => {
+      const { result, answers, calls } = await runDispatchCalls(f, {
+        task: 'awareness',
+        tools: { set_pin: setPinTool },
+        shown: SHOWN,
+        calls: [pin('aw1', 0.7)],
+        turns: awarenessTurns(f),
+      })
+
+      expect(answers).toEqual([
+        {
+          result: 'rejected',
+          reason: 'no-start-pin',
+          note: 'The task showed no pin for this row, so it cannot be pinned: leave it.',
+        },
+      ])
+      expect(calls[0]).toMatchObject({ result: 'rejected', reason: 'no-start-pin' })
+      expect(await runDeltas(f, result.actionId)).toEqual([])
     })
 
     it('reads no pin as 0, so a first pin of 0.2 lands', async () => {
@@ -801,7 +878,7 @@ describe('a pin moves a score', () => {
     const { answers } = await runDispatchCalls(fx, {
       task: 'awareness',
       tools: { set_pin: setPinTool },
-      shown: [{ table: 'happening_awareness', id: OATH_KNOWN, name: '' }],
+      shown: await startPinned(fx, [{ table: 'happening_awareness', id: OATH_KNOWN, name: '' }]),
       calls: [
         {
           toolName: 'set_pin',

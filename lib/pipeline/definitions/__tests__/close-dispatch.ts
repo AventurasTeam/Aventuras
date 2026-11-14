@@ -28,7 +28,11 @@ import {
 import type { CloseLedger } from '../intermediates'
 
 /** A row the task's start showed: handed its handle in order, and read unless `seeds` is given. */
-export type ShownRow = GuardRow & { name: string }
+export type ShownRow = GuardRow & {
+  name: string
+  /** A shown awareness row's pin as the start read it: null for none; absent shows no pin. */
+  startPin?: number | null
+}
 /** One model call; `part` runs it as that part of the task, the run's own when absent. */
 export type ScriptedCall = { toolName: string; input: Record<string, unknown>; part?: number }
 export type DispatchTurns = {
@@ -91,8 +95,8 @@ async function* dispatchPhase(
   const ids = closeIdsOf(phase.intermediates)
   ids.showTurns(turns.chapterEntryIds ?? turns.taskEntryIds)
   // An awareness row's handle is an aw one, which takes no name.
-  for (const { table, id, name } of spec.shown)
-    if (table === 'happening_awareness') ids.showAwareness(id)
+  for (const { table, id, name, startPin } of spec.shown)
+    if (table === 'happening_awareness') ids.showAwareness(id, startPin)
     else ids.show(id, name)
   const ledger = seedCloseLedger(phase.intermediates)
   const writer = new CloseLedgerWriter(ledger, (id) => ids.nameOfId(id), phase.actionId)

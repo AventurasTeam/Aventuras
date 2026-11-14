@@ -33,7 +33,8 @@ const PIN_PATH = 'decayResistance'
 // chapter-close.md → 3d's one-way frequency signal: a row listed for coming up often only rises.
 const FREQUENT_PIN_LOWERED = 'frequent-pin-lowered'
 const PIN_RAISE_TOO_LARGE = 'pin-raise-too-large'
-// A raise climbs at most this far per call, in hundredths: whole numbers keep 0.7 to 0.9 a step.
+const NO_START_PIN = 'no-start-pin'
+// A pin climbs at most this far above its start pin in one close, in hundredths: whole numbers keep 0.7 to 0.9 a step.
 const PIN_STEP_HUNDREDTHS = 20
 const hundredths = (pin: number): number => Math.round(pin * 100)
 
@@ -112,26 +113,36 @@ async function planSetPin(args: SetPinArgs, ctx: WriteContext): Promise<WritePla
       rows,
       values: proposed,
     }
+  // The bounds hold from the pin the start showed, so a pin moves freely inside them in one close.
+  const start = ctx.ids.startPinOf(id)
+  if (start === undefined)
+    return {
+      kind: 'refused',
+      reason: NO_START_PIN,
+      rows,
+      values: proposed,
+      note: 'The task showed no pin for this row, so it cannot be pinned: leave it.',
+    }
+  const startPin = start ?? 0
   // The read gate admits only rows the start listed, so a row not learned in the chapter is a
   // frequent one.
   const ofChapter = row.learnedAtEntryId !== null && ctx.taskEntryIds.includes(row.learnedAtEntryId)
-  const stored = row.decayResistance ?? 0
-  const lowered = !ofChapter && value < stored
-  if (lowered)
+  if (!ofChapter && value < startPin)
     return {
       kind: 'refused',
       reason: FREQUENT_PIN_LOWERED,
       rows,
       values: proposed,
-      note: `This row is listed because it keeps coming up, not for this chapter, so its pin only rises: send ${stored} or more, or leave it.`,
+      note: `This row is listed because it keeps coming up, not for this chapter, so its pin only rises: send ${startPin} or more, or leave it.`,
     }
-  if (hundredths(value) - hundredths(stored) > PIN_STEP_HUNDREDTHS)
+  const ceiling = hundredths(startPin) + PIN_STEP_HUNDREDTHS
+  if (hundredths(value) > ceiling)
     return {
       kind: 'refused',
       reason: PIN_RAISE_TOO_LARGE,
       rows,
       values: proposed,
-      note: `A pin rises by at most 0.2 in one call: send ${(hundredths(stored) + PIN_STEP_HUNDREDTHS) / 100} or less, or leave it.`,
+      note: `This close can raise it to ${ceiling / 100} at most: send ${ceiling / 100} or less, or leave it.`,
     }
   return {
     kind: 'write',
@@ -163,7 +174,7 @@ export const setPinTool: WriteTool<typeof SET_PIN_SHAPE> = {
   kind: 'write',
   name: 'set_pin',
   description:
-    "Sets an awareness row's pin, decay_resistance, from 0 to 1: how slowly the character forgets the happening as chapters pass. Raise it for a happening the character's story now turns on; lower it only on a row learned this chapter that was pinned high and proved incidental. A raise is at most 0.2 above the stored pin; a bigger one is refused. A row listed because it keeps coming up only rises: a lower value is refused.",
+    "Sets an awareness row's pin, decay_resistance, from 0 to 1: how slowly the character forgets the happening as chapters pass. Raise it for a happening the character's story now turns on; lower it only on a row learned this chapter that was pinned high and proved incidental. A close raises a pin at most 0.2 above the pin it was shown with; a bigger raise is refused, and a pin moves freely up to that in the same close. A row listed because it keeps coming up never goes below the pin it was shown with: a lower value is refused.",
   schema: writeToolSchema(SET_PIN_SHAPE),
   ids: { id: { shape: 'single', prefixes: ['haw_'] } },
   plan: planSetPin,

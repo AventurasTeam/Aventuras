@@ -30,6 +30,7 @@ export class CloseIds {
   private readonly names = new Map<string, string>()
   private turnCount = 0
   private awarenessCount = 0
+  private readonly startPins = new Map<string, number | null>()
   // Registered ids FULL_ID_IN_TEXT can't see, such as a seeded `entry_long_20_0001`.
   private readonly unpatterned = new Map<string, string>()
   private unpatternedInText: RegExp | null = null
@@ -57,13 +58,22 @@ export class CloseIds {
     return this.register(`t${this.turnCount}`, entryId, TURN_PREFIX)
   }
 
-  /** A happening_awareness row: aw1…, the same handle each time. */
-  showAwareness(id: string): string {
+  /**
+   * A happening_awareness row: aw1…, the same handle each time. `startPin` is the pin the model was
+   * shown (null for none), the baseline set_pin's bounds hold for the whole close.
+   */
+  showAwareness(id: string, startPin?: number | null): string {
     requirePrefix(id, AWARENESS_PREFIX)
+    if (startPin !== undefined) this.startPins.set(id, startPin)
     const held = this.map.getPlaceholderFor(id)
     if (held !== undefined) return held
     this.awarenessCount += 1
     return this.register(`aw${this.awarenessCount}`, id, AWARENESS_PREFIX)
+  }
+
+  /** The pin an awareness row was shown with; undefined for a row no start showed a pin for. */
+  startPinOf(id: string): number | null | undefined {
+    return this.startPins.get(id)
   }
 
   handleOf(id: string): string | undefined {

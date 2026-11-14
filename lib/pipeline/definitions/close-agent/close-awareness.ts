@@ -183,7 +183,7 @@ async function startAwareness(ctx: TaskPromptContext): Promise<TaskStart<Awarene
   for (const group of groups) {
     ctx.ids.show(group.id, group.title)
     for (const { row } of group.listed) {
-      ctx.ids.showAwareness(row.id)
+      ctx.ids.showAwareness(row.id, row.decayResistance)
       ctx.ids.show(row.characterId, row.name)
       learnedAtHandle(ctx, row.learnedAtEntryId)
     }
