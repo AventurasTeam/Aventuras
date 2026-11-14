@@ -256,8 +256,8 @@
   })
 
   function scrollToTop() {
-    if (!scrollContainer) return
-    scrollContainer.scrollTo({ top: 0, behavior: 'smooth' })
+    requestedPage = 1
+    scrollContainer?.scrollTo({ top: 0, behavior: 'smooth' })
   }
 
   function isNearTop(): boolean {
@@ -499,7 +499,7 @@
     {/if}
 
     <!-- Scroll to latest button -->
-    {#if userScrolledAway}
+    {#if userScrolledAway || currentPage > 1}
       <div class="pointer-events-none sticky top-2 flex w-full justify-center">
         <Button
           variant="outline"
