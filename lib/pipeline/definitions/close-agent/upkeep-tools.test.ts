@@ -1217,7 +1217,7 @@ describe('set_keywords', () => {
   })
 
   it("refuses a term holding a short id, a row's or a turn's, writing nothing", async () => {
-    const { result, calls } = await runUpkeepCalls(f, KEYWORD_SHOWN, [
+    const { result, answers, calls } = await runUpkeepCalls(f, KEYWORD_SHOWN, [
       { toolName: 'set_keywords', input: { id: 'l1', add: ['c1'], ...cite() } },
       { toolName: 'set_keywords', input: { id: 'l1', add: ['the road from t3'], ...cite() } },
     ])
@@ -1226,6 +1226,10 @@ describe('set_keywords', () => {
       ['rejected', 'keyword-holds-id'],
       ['rejected', 'keyword-holds-id'],
     ])
+    expect(answers[1]).toMatchObject({
+      result: 'rejected',
+      reason: expect.stringContaining('the keyword "the road from t3" holds t3, an id'),
+    })
     expect(await runDeltas(f, result.actionId)).toEqual([])
   })
 
