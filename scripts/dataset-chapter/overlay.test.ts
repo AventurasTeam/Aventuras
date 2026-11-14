@@ -150,6 +150,9 @@ const entityRows = (ctx: DbCtx, ids: readonly string[]) =>
     .where(and(eq(entities.branchId, B), inArray(entities.id, [...ids])))
     .orderBy(asc(entities.id))
 
+const branchEntities = (ctx: DbCtx) =>
+  ctx.db.select().from(entities).where(eq(entities.branchId, B)).orderBy(asc(entities.id))
+
 const byId = (rows: readonly Entity[]) => new Map(rows.map((row) => [row.id, row]))
 
 async function overlaidState(ctx: DbCtx) {
@@ -518,13 +521,12 @@ describe('the dataset overlay', () => {
     await ctx.db
       .insert(chapters)
       .values({ ...closed!, id: generateId('chap'), sequenceNumber: closed!.sequenceNumber + 1 })
+    const before = await branchEntities(ctx)
 
     await expect(applyDatasetOverlay(ctx)).rejects.toThrow(/holds 2 chapters/)
 
     expect(await chapterCount(ctx)).toBe(2)
-    expect(byId(await entityRows(ctx, [JIM])).get(JIM)?.state).toMatchObject({
-      traits: ['observant'],
-    })
+    expect(await branchEntities(ctx)).toEqual(before)
   })
 
   it('throws on a seed row of another kind than the overlay names, before writing', async () => {
