@@ -53,6 +53,13 @@ function failureOf(error: unknown): string {
  * The Timeline's delete confirm (chapter-timeline.md → Delete a chapter): the open chapter and
  * its preview, re-read whenever a run settles under it, as `useLiveRollbackCounts` recounts.
  */
+// A missing close or chapter means a broken log or a stale card: logged, where `not-latest` is the
+// documented race with its own copy and `integrity` logs where the set resolves.
+function logReadRefusal(branchId: string, chapterId: string, code: ChapterDeleteRefusalCode): void {
+  if (code === 'no-close' || code === 'not-found')
+    logger.warn('app.chapter_delete_preview_refused', { branchId, chapterId, code })
+}
+
 export function useChapterDeleteConfirm({
   branchId,
   active,
@@ -112,6 +119,7 @@ export function useChapterDeleteConfirm({
       }
       const result = read.value
       if ('status' in result) {
+        logReadRefusal(branchId, opening, result.code)
         toast.error(t(chapterDeleteRefusalCopy(result.code)))
         return
       }
@@ -138,6 +146,7 @@ export function useChapterDeleteConfirm({
       }
       const result = read.value
       if ('status' in result) {
+        logReadRefusal(branchId, chapterId, result.code)
         setTarget(null)
         toast.error(t(chapterDeleteRefusalCopy(result.code)))
         return
@@ -161,7 +170,7 @@ export function useChapterDeleteConfirm({
         if (result.status === 'rejected') toast.error(t(chapterDeleteRefusalCopy(result.code)))
       } else if (removal.error instanceof DeltaReplayError && removal.error.committed) {
         // The delete landed and only its store sync failed: a re-hydrate drops the stale card.
-        logger.warn('app.chapter_delete_resynced', {
+        logger.warn('app.chapter_delete_sync_failed', {
           branchId,
           chapterId,
           error: failureOf(removal.error),

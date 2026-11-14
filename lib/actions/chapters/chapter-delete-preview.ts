@@ -29,7 +29,7 @@ export type ChapterDeletePreview = {
 export async function getChapterDeletePreview(
   branchId: string,
   chapterId: string,
-  story: Pick<OpenStory, 'branchId' | 'settings'>,
+  story: Pick<OpenStory, 'settings'>,
   ctx: DbCtx,
 ): Promise<ChapterDeletePreview | ChapterDeleteReadRefusal> {
   return withBranchWriteShared(branchId, CHAPTER_DELETE_PREVIEW_LOCK_ID, async () => {

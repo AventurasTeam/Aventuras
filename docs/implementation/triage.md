@@ -372,18 +372,6 @@ patch`, which 5.5a marks `restated`, so a close tool's write of it
   again. Leaving it out needs a later-turn read on the start's
   candidates, which the row guard does per row. Raised in the slice
   review fixes for 5.9's R2.
-- **The chapter-delete preview has an unused input, and its refusals
-  log unevenly.** `getChapterDeletePreview` takes
-  `story: Pick<OpenStory, 'branchId' | 'settings'>` and never reads
-  `branchId`. `resolveChapterDeleteSet` logs
-  `action_layer.reversal_refused` at error on every read of an
-  integrity-refused chapter, so each settle re-read of an open confirm
-  logs it again; `getRollbackCounts` does the same through
-  `resolveSweep`. The preview's `no-close` and `not-found` refusals
-  toast the generic failure with no log event at all
-  (`components/chapters/use-chapter-delete-confirm.ts`, the open path),
-  where only `integrity` is logged. Raised in Slice 5.12's review of
-  Tasks 5 and 13.
 - **`useChapterDeleteConfirm` has two small edges.**
   `app.chapter_delete_resynced` is logged before the resync runs, so
   its name claims a success that `app.chapter_delete_resync_failed` can

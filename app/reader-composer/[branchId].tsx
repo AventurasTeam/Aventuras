@@ -1224,6 +1224,11 @@ export default function ReaderComposerRoute() {
       }
       if (counts == null) return
       if ('status' in counts) {
+        logger.debug('reader.rollback_counts_rejected', {
+          branchId,
+          entryId: targetId,
+          code: counts.code,
+        })
         toast.error(t('reader:rollbackFailed'))
         return
       }

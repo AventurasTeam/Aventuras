@@ -356,15 +356,20 @@ convention, and the expectation that subsystems route through
   (`components/chapters/use-chapter-delete-confirm.ts`):
   `chapter_delete_preview_threw` (the read behind `Delete…` threw; the
   confirm stays shut and the user sees `Couldn't delete the chapter.`),
+  `chapter_delete_preview_refused` (warn: that read, or a re-read, was
+  refused `no-close` or `not-found`, a broken log or a stale card; the
+  confirm closes with the failure toast. `not-latest`, the documented
+  race, toasts its own copy unlogged, and `integrity` logs as
+  `action_layer.reversal_refused`),
   `chapter_delete_recount_failed` (a re-read after a run settled threw;
   the confirm keeps the preview it shows), `chapter_delete_threw`
   (`removeChapter` threw rather than refused; the confirm closes with
-  the failure toast), `chapter_delete_resynced` (warn: the delete
-  committed but the store sync after it failed; the branch re-hydrates,
-  with no failure toast) and `chapter_delete_resync_failed` (that
+  the failure toast), `chapter_delete_sync_failed` (warn: the delete
+  committed but the store sync after it failed; the branch re-hydrates
+  next, with no failure toast) and `chapter_delete_resync_failed` (that
   re-hydration failed too; the user sees
   `The chapter was deleted, but the Timeline couldn't refresh. Reopen the story.`);
-  `chapter_delete_threw` and `chapter_delete_resynced` log a replay
+  `chapter_delete_threw` and `chapter_delete_sync_failed` log a replay
   failure's cause, not its wrapper's message, `world_set_lead_failed` (`app/world/[branchId].tsx`
   — a `⋯ → Set as lead` whose `setStoryLead` threw rather than
   refused), `world_collision_resolve_failed`
@@ -409,7 +414,9 @@ convention, and the expectation that subsystems route through
   `pass_retry_rejected` / `close_retry_rejected` at debug, logged with
   their `blockedBy` because the toast names only the remedy
   — plus `undo_rejected` / `redo_rejected` at debug for the refusals
-  that are routine (gated, nothing to apply, branch mid-switch), where
+  that are routine (gated, nothing to apply, branch mid-switch), and
+  `rollback_counts_rejected` at debug for a refused read behind a delete
+  (a stale card, the rollback floor), where
   `undo_failed` / `redo_failed` carry the ones that mean the delta log
   cannot produce the reversal it should
   (the rollback-confirm modal's regenerate variant, distinct from the
