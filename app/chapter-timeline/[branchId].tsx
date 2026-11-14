@@ -96,6 +96,7 @@ export default function ChapterTimelineRoute(): ReactElement {
 
   const deleteConfirm = useChapterDeleteConfirm({
     branchId,
+    active: focused,
     loadPreview: async (chapterId) => {
       // Cards, and so their Delete…, render only once the story is open.
       if (open == null) throw new Error(`no open story on ${branchId} to preview a delete with`)

@@ -55,11 +55,14 @@ function failureOf(error: unknown): string {
  */
 export function useChapterDeleteConfirm({
   branchId,
+  active,
   loadPreview,
   remove,
   resync,
 }: {
   branchId: string
+  /** The host screen has focus; losing it dismisses the confirm as `dismiss` does. */
+  active: boolean
   loadPreview: (chapterId: string) => Promise<ChapterDeletePreview | ChapterDeleteRefusal>
   remove: (chapterId: string, mode: ChapterDeleteMode) => Promise<RemoveChapterResult>
   /** Re-hydrates the branch after a delete committed but its store sync failed. */
@@ -191,6 +194,12 @@ export function useChapterDeleteConfirm({
     openRequest.current += 1
     setTarget(null)
   }, [])
+
+  // A Stack keeps the Timeline mounted under a pushed screen: its reads would toast over that
+  // screen, and the confirm would reopen on return with a preview nothing kept current.
+  useEffect(() => {
+    if (!active) dismiss()
+  }, [active, dismiss])
 
   return { target, pending, open, dismiss, confirm }
 }

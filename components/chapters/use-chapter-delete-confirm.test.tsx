@@ -61,10 +61,12 @@ function setup() {
   const loadPreview = vi.fn<LoadPreview>(async () => PREVIEW)
   const remove = vi.fn<Remove>(async () => ({ status: 'ok' }))
   const resync = vi.fn(async (): Promise<unknown> => undefined)
-  const { result } = renderHook(() =>
-    useChapterDeleteConfirm({ branchId: 'br_1', loadPreview, remove, resync }),
+  const { result, rerender } = renderHook(
+    ({ active }: { active: boolean }) =>
+      useChapterDeleteConfirm({ branchId: 'br_1', active, loadPreview, remove, resync }),
+    { initialProps: { active: true } },
   )
-  return { result, loadPreview, remove, resync }
+  return { result, rerender, loadPreview, remove, resync }
 }
 
 async function openOn(result: { current: Hook }, chapterId = 'chap_2') {
@@ -195,6 +197,53 @@ describe('useChapterDeleteConfirm: opening and staying true', () => {
     })
 
     act(() => result.current.dismiss())
+    await act(async () => {
+      opening.resolve(refusal('not-latest'))
+      await pendingOpen
+    })
+
+    expect(toast.error).not.toHaveBeenCalled()
+  })
+
+  it('closes when the screen loses focus, and stays closed when it returns', async () => {
+    const { result, rerender } = setup()
+    await openOn(result)
+
+    rerender({ active: false })
+    expect(result.current.target).toBeNull()
+    rerender({ active: true })
+
+    expect(result.current.target).toBeNull()
+  })
+
+  it('opens nothing for an opening read that resolves after the screen lost focus', async () => {
+    const { result, rerender, loadPreview } = setup()
+    const opening = deferred<ChapterDeletePreview>()
+    loadPreview.mockReturnValueOnce(opening.promise)
+    let pendingOpen!: Promise<void>
+    act(() => {
+      pendingOpen = result.current.open('chap_2')
+    })
+
+    rerender({ active: false })
+    await act(async () => {
+      opening.resolve(PREVIEW)
+      await pendingOpen
+    })
+
+    expect(result.current.target).toBeNull()
+  })
+
+  it('raises no toast for an opening read refused after the screen lost focus', async () => {
+    const { result, rerender, loadPreview } = setup()
+    const opening = deferred<ChapterDeleteRefusal>()
+    loadPreview.mockReturnValueOnce(opening.promise)
+    let pendingOpen!: Promise<void>
+    act(() => {
+      pendingOpen = result.current.open('chap_2')
+    })
+
+    rerender({ active: false })
     await act(async () => {
       opening.resolve(refusal('not-latest'))
       await pendingOpen
