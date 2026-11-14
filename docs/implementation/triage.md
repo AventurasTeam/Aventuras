@@ -61,24 +61,6 @@ slice-planning gate forces its resolution before that slice is planned.
   did not re-run the suite serially — the evidence above is still as of
   `edce17b8`.
 
-- **A parallel group's failing branch outlives the reversal.**
-  `runParallelGroup` (`lib/pipeline/runtime/orchestrator.ts`) awaits
-  `Promise.all`, so one branch's throw reverses and fails the run while
-  its sibling keeps going; the sibling's next write lands under the
-  run's `actionId` after the reversal and is never reversed. Canon says
-  to drain the streams and wait for every branch
-  ([Parallel-group event coordination](../generation-pipeline.md#parallel-group-event-coordination)).
-  Shown by probe on both write paths in 5.5a's review; latent, since no
-  production pipeline declares a parallel group.
-- **`set.state` in `updateEntity` stores a patch's keys the schema
-  doesn't know, with no undo record.** `set.state` takes the raw
-  patch while `computeUndoPayload` walks only `entityStateColumnSchema`
-  (`lib/actions/entities/register.ts`), so a `state` key outside the
-  schema lands and a reversal can't remove it. When such a key is the
-  only change, nothing is written and the handler returns `no-op entity
-patch`, which 5.5a marks `restated`, so a close tool's write of it
-  reads `ok` with nothing written and leaves no trace in the review.
-  Raised in 5.5a's review.
 - **A landed entry ref in a close's `values` is stored raw.**
   `ID_PATTERN` has no `entry` prefix, so the ledger keeps the raw
   `entry_` id, as `merge_happenings` records `occurredAtEntryId`. The
@@ -106,17 +88,6 @@ patch`, which 5.5a marks `restated`, so a close tool's write of it
   merge's kept-row rule, `search_world`'s limit and ranking,
   `architecture.md`'s halves-table row and count-cache paragraph,
   `observability.md` and `testing.md`. Raised in 5.5b's slice review.
-- **The close's placement plan copies two handler details.** The
-  `not-unplaced` and `parent-not-a-place` refusals are inline strings
-  in `state-patch-actions.ts`, outside `PLACE_REFUSAL`, and
-  `branchPlaces` (`parent-chain-check.ts`) isn't exported, so
-  `close-agent/placement.ts` copies both and can drift from the
-  handler. `close-agent/lifecycle-tools.ts`'s `REFUSAL` copies four
-  more inline handler strings the same way: `location` and `not-active`
-  (`retireEntityHandler`), `partner-is-self` and `partner-not-of-kind`
-  (`raiseCollisionFlagHandler`). An exported constant, as `lib/world`'s
-  `PLACE_REFUSAL` is, would tie each pair. Raised in 5.8's task review;
-  the lifecycle copies in its slice review.
 - **Undoing a user's keyword edit wipes a later pass's term.** CTRL-Z
   or a rollback window of a user's keyword edit under a later
   periodic keyword write restores the whole list from the undo
@@ -133,15 +104,6 @@ patch`, which 5.5a marks `restated`, so a close tool's write of it
   schema section of `retrieval.md` links this item, so a triage pass
   updates that link when routing it. Raised in 5.8's execution,
   developer decision 2026-11-10.
-- **A pass stores a turn handle written into prose.**
-  [classifier.md's ID handling](../memory/classifier.md#id-handling-in-classifier-output)
-  names each id a pass's reply writes into prose before it lands, and
-  keeps a token that names nothing as written. A turn handle names no
-  row, so a reply that writes "as t3 shows" into a description stores
-  `t3`, which a later prompt reads as its own turn. Chapter close
-  refuses such a field
-  ([`chapter-close.md → Tools and writes`](../memory/chapter-close.md#tools-and-writes));
-  the periodic classifier has no such check. Surfaced by 5.5a's review.
 - **Same-name items carry no namesake flag.** The dataset seed held two
   active items both named "the black spot" with no collision flag
   until 5.8's close flagged them `duplicate`. Unverified whether the
@@ -152,16 +114,6 @@ patch`, which 5.5a marks `restated`, so a close tool's write of it
   `create_lore`, land whatever terms the model sends, while chapter
   metadata caps its keywords (`CHAPTER_KEYWORDS_MAX`). Each term feeds
   keyword injection on later turns. Raised in 5.8's reviews.
-- **A folded stackable key can outgrow its schema bound.**
-  `foldStackableKey` lowercases, and some letters lengthen when
-  lowercased (`İ` becomes two code units), so a 40-character key can
-  fold past the character schema's 40-character bound.
-  `updateEntityStackables` doesn't check the schema, so such a key
-  lands, and every later `updateEntity` carrying that character's
-  `state` is refused until the key is shortened. 5.9's normalization
-  step skips a record that would fold past the bound; the per-turn
-  transfer writer goes through the same unchecked action. Rare input.
-  Raised in 5.9's Task 7 and Task 16 reviews.
 - **A count bump's undo can bring back a pre-reset count.**
   `bumpAwarenessRetrieval`'s undo restores the prior `retrieval_count` by
   assignment (`lib/actions/happenings/register-awareness.ts`), and
@@ -226,19 +178,6 @@ patch`, which 5.5a marks `restated`, so a close tool's write of it
   reader's own Return, and a review-row press from the reader adds one
   more path. [`save-sessions.md → Where applied`](../ui/patterns/save-sessions.md#where-applied)
   doesn't classify it. Raised in 5.11's review.
-- **A landed merge's link-row losses can't name their row.**
-  `settleLosses` (`lib/pipeline/definitions/close-agent/verdict.ts`)
-  keys a merge's losses by path across all its actions, as C4 states, so
-  a link loss drops from the ledger when another link on the same merge
-  lands that path, and two characters' losses on one path collapse into
-  one row. The review names no character for a link-row loss under the
-  kept happening (Developer decision 4's known gap). The model's answer
-  names them all; only the ledger loses them. A fix needs `skippedFields`
-  to carry a row, which is a C4 v1 shape change (versioned
-  `close_report`). A probe with Tobin's pin landing on keep and Wren's
-  user-kept: the model was told `notWritten: decayResistance (c1)`,
-  `skippedFields` was empty, and Not applied was `[]`. Raised in 5.11's
-  review.
 - **A close tool's `name` is a plain string.**
   `lib/pipeline/definitions/close-agent/tool.ts` types `WriteTool.name`
   as `string`, so the close's write tools form no union, and the review's
