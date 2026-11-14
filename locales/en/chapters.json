@@ -161,9 +161,9 @@
       "merge-no-keep": "No thread to keep fits the merge.",
       "merge-close-wrote-no-keep": "This close already wrote among these rows, so the merge had no row it could keep.",
       "merge-outside-cluster": "The merge named a happening that wasn't among the likely duplicates.",
-      "no-start-pin": "The close wasn't shown this pin, so it couldn't change it.",
-      "frequent-pin-lowered": "This keeps coming up, so its pin can only rise.",
-      "pin-raise-too-large": "The close tried to raise the pin further than one close may.",
+      "no-start-pin": "The close wasn't shown this decay resistance, so it couldn't change it.",
+      "frequent-pin-lowered": "This keeps coming up, so its decay resistance can only rise.",
+      "pin-raise-too-large": "The close tried to raise decay resistance further than one close may.",
       "other": "Not applied for another reason."
     },
     "stopped": {
