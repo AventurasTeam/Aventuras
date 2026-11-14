@@ -213,23 +213,30 @@ describe('sceneTrackingActions', () => {
     ).toBe(true)
   })
 
-  // A null previous location yields a delta the handler rejects (piggyback creates
-  // no rows), so the emission is skipped rather than written and dropped.
-  it('skips the lastSeenAt write when the previous location is unknown', () => {
+  // Retrieval ages a character from lastSeenAt.entryId: a skipped write leaves an older anchor
+  // that over-ages them, or none, so they never decay.
+  it('closes a character out at the previous entry when its scene had no location', () => {
     const actions = sceneTrackingActions({
       branchId,
-      source: 'user_edit',
+      source: 'ai_classifier',
       entities,
       previous: {
         entryId: 'ent_0',
         currentLocationId: null,
-        worldTime: 0,
+        worldTime: 30,
         sceneEntities: ['char_b'],
       },
       before: { sceneEntities: ['char_b'], currentLocationId: null },
       after: { sceneEntities: [], currentLocationId: null },
     })
-    expect(payloadsFor(actions, 'char_b')).toEqual([])
+    expect(payloadsFor(actions, 'char_b')).toEqual([
+      {
+        branchId,
+        id: 'char_b',
+        currentLocationId: null,
+        lastSeenAt: { entryId: 'ent_0', locationId: null, worldTime: 30 },
+      },
+    ])
   })
 
   // sceneEntities carries items as well as characters, but only characters have

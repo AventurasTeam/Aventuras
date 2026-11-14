@@ -118,26 +118,24 @@ export function sceneTrackingActions(args: Args): PipelineAction[] {
           })
         continue
       }
-      // A lastSeenAt anchored at an unknown location records nothing useful.
-      if (previous.currentLocationId !== null) {
-        actions.push({
-          kind: 'updateEntityLocationTracking',
-          source,
-          payload: {
-            branchId,
-            id: character.id,
-            // Out of scene, current_location_id tracks the lastSeenAt anchor. Written
-            // rather than left alone because the fold may already have moved them with
-            // a scene this edit says they were never in.
-            currentLocationId: previous.currentLocationId,
-            lastSeenAt: {
-              entryId: previous.entryId,
-              locationId: previous.currentLocationId,
-              worldTime: previous.worldTime,
-            },
+      // Written even with no place: retrieval ages a character from lastSeenAt.entryId.
+      actions.push({
+        kind: 'updateEntityLocationTracking',
+        source,
+        payload: {
+          branchId,
+          id: character.id,
+          // Out of scene, current_location_id tracks the lastSeenAt anchor. Written
+          // rather than left alone because the fold may already have moved them with
+          // a scene this edit says they were never in.
+          currentLocationId: previous.currentLocationId,
+          lastSeenAt: {
+            entryId: previous.entryId,
+            locationId: previous.currentLocationId,
+            worldTime: previous.worldTime,
           },
-        })
-      }
+        },
+      })
     }
   }
   return actions
