@@ -70,4 +70,15 @@ describe('closeAfterDelete', () => {
       }),
     ).toBe('closes-next-send')
   })
+
+  it('closes at the next Send with a manual close pending at the threshold and auto-close off', () => {
+    expect(
+      closeAfterDelete({
+        tokensAfter: 16_000,
+        threshold: THRESHOLD,
+        autoClose: false,
+        manualPending: true,
+      }),
+    ).toBe('closes-next-send')
+  })
 })
