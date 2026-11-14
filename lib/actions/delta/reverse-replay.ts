@@ -691,10 +691,7 @@ async function buildUndoOps(
   const listVecTables = vecTableLister(ctx)
   const laterUserEdits = await userEditsOutliving(ctx, set.rows, readsUserEdits)
   // A create keeps its row only for the user's writes, whatever the set's mode.
-  const fieldEdits =
-    set.yieldTo === 'any'
-      ? await userEditsOutliving(ctx, set.rows, (d) => d.op === 'update', 'any')
-      : laterUserEdits
+  const fieldEdits = set.yieldTo === 'any' ? await fieldEditsOutliving(set, ctx) : laterUserEdits
   const liveLinks = await liveLinkFilter(set.rows, ctx)
 
   for (const delta of set.rows) {
@@ -730,6 +727,30 @@ async function buildUndoOps(
     prunedHolders: pruned,
     strandedWrites,
   }
+}
+
+function fieldEditsOutliving(set: ReversalSet, ctx: DbCtx): Promise<ReadonlyMap<string, Delta[]>> {
+  return userEditsOutliving(ctx, set.rows, (d) => d.op === 'update', set.yieldTo)
+}
+
+/**
+ * The ids of the set's `update` deltas whose undo restores some field under the set's yield mode,
+ * read as the walk reads them; one a later write replaced in every field restores nothing.
+ */
+export async function restoringUpdates(set: ReversalSet, ctx: DbCtx): Promise<ReadonlySet<string>> {
+  const fieldEdits = await fieldEditsOutliving(set, ctx)
+  const restoring = new Set<string>()
+  for (const delta of set.rows) {
+    if (delta.op !== 'update') continue
+    const payload = restorablePayload(
+      undoTargetOf(delta).entry,
+      (delta.undoPayload ?? {}) as Record<string, unknown>,
+      fieldEdits.get(delta.id) ?? [],
+      delta,
+    )
+    if (Object.keys(payload).length > 0) restoring.add(delta.id)
+  }
+  return restoring
 }
 
 function oldestKeepingWrite(edits: readonly Delta[], columns: readonly string[]): Delta {

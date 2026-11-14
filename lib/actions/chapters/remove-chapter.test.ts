@@ -1342,6 +1342,105 @@ describe('getChapterDeletePreview', () => {
     ).toMatchObject({ createdLore: { count: 1, userEdited: false }, otherChanges: 2 })
   })
 
+  // The close's three changes: Tobin's description, the kept thread's merge and the absorbed
+  // thread's delete. A later write replaces the description, so the delete leaves it standing.
+  it('leaves out a close update a later write replaced in every field', async () => {
+    const c = await openClosed()
+    await writeCloseWork(c)
+    const preview = () =>
+      getChapterDeletePreview(c.fx.branchId, c.chapter.id, previewStory(c.fx), c.fx.ctx)
+    expect(await preview()).toMatchObject({ otherChanges: 3 })
+    await writeLater(c.fx, describeTobin(c.fx.branchId, LATER_DESCRIPTION, 'per_turn_classifier'), {
+      actionId: 'act_turn_fold',
+      entryId: null,
+    })
+
+    expect(await preview()).toMatchObject({ otherChanges: 2 })
+
+    expect(await removeChapter(c.fx.branchId, c.chapter.id, 'whole', c.fx.ctx)).toEqual({
+      status: 'ok',
+    })
+    expect((await entityOf(c.fx, TOBIN.id))?.description).toBe(LATER_DESCRIPTION)
+    expect((await worldRows(c.fx)).threads.map((t) => [t.id, t.description])).toEqual([
+      [THREAD_KEPT.id, THREAD_KEPT.description],
+      [THREAD_ABSORBED.id, THREAD_ABSORBED.description],
+    ])
+  })
+
+  it('counts a close update a later write replaced in part', async () => {
+    const c = await openClosed()
+    await writeUnderClose(c, [
+      {
+        kind: 'updateEntity',
+        source: 'chapter_close',
+        payload: {
+          branchId: c.fx.branchId,
+          id: TOBIN.id,
+          patch: {
+            state: {
+              ...TOBIN_STATE,
+              visual: { attire: 'an oilskin' },
+              traits: ['taciturn', 'greedy'],
+            },
+          },
+        },
+      },
+    ])
+    await writeLater(
+      c.fx,
+      {
+        kind: 'updateEntityVisualState',
+        source: 'per_turn_classifier',
+        payload: {
+          branchId: c.fx.branchId,
+          id: TOBIN.id,
+          visual: { attire: 'a salt-stained oilskin' },
+        },
+      },
+      { actionId: 'act_turn_fold', entryId: null },
+    )
+
+    expect(
+      await getChapterDeletePreview(c.fx.branchId, c.chapter.id, previewStory(c.fx), c.fx.ctx),
+    ).toMatchObject({ otherChanges: 1 })
+
+    expect(await removeChapter(c.fx.branchId, c.chapter.id, 'whole', c.fx.ctx)).toEqual({
+      status: 'ok',
+    })
+    const state = (await entityOf(c.fx, TOBIN.id))?.state as CharacterState
+    expect(state.visual).toEqual({ attire: 'a salt-stained oilskin' })
+    expect(state.traits).toEqual(['taciturn'])
+  })
+
+  // The close normalized the record, so a later write of it yields the whole record, not its keys.
+  it('leaves out a close update of a record a later write replaced', async () => {
+    const fx = await openSeeded()
+    const stackables = (counts: Record<string, number>, source: DeltaSource): PipelineAction => ({
+      kind: 'updateEntityStackables',
+      source,
+      payload: { branchId: fx.branchId, id: TOBIN.id, stackables: counts },
+    })
+    await seedPassWrite(fx, stackables({ gold: 5, 'gold coins': 2 }, 'periodic_classifier'))
+    const c = await closeOn(fx, fx.replyIds[PREVIEW_END])
+    await writeUnderClose(c, [stackables({ gold: 7 }, 'chapter_close')])
+    const preview = () =>
+      getChapterDeletePreview(fx.branchId, c.chapter.id, previewStory(fx), fx.ctx)
+    expect(await preview()).toMatchObject({ otherChanges: 1 })
+    await writeLater(fx, stackables({ gold: 9 }, 'periodic_classifier'), {
+      actionId: 'act_pass_later',
+      entryId: fx.replyIds[PREVIEW_END + 1],
+    })
+
+    expect(await preview()).toMatchObject({ otherChanges: 0 })
+
+    expect(await removeChapter(fx.branchId, c.chapter.id, 'whole', fx.ctx)).toEqual({
+      status: 'ok',
+    })
+    expect(((await entityOf(fx, TOBIN.id))?.state as CharacterState).stackables).toEqual({
+      gold: 9,
+    })
+  })
+
   it('reads what follows a delete from the region it leaves', async () => {
     const fx = await openCloseFixture()
     const first = await closeOn(fx, fx.replyIds[0])

@@ -11,6 +11,7 @@ import {
   type ChapterDeleteSet,
 } from './chapter-delete-set'
 import { withBranchWriteShared } from '../delta/branch-write-lock'
+import { restoringUpdates } from '../delta/reverse-replay'
 import type { DbCtx } from '../types'
 
 const CHAPTER_DELETE_PREVIEW_LOCK_ID = 'chapter-delete-preview'
@@ -42,7 +43,7 @@ export async function getChapterDeletePreview(
     const chapterTokens = await ownEntryTokens(branchId, resolved.chapter.id, ctx)
     return {
       chapterNumber: resolved.chapter.sequenceNumber,
-      ...changesOf(resolved),
+      ...changesOf(resolved, await restoringUpdates(resolved.set, ctx)),
       turnsSince: series.filter((row) => row.kind === 'ai_reply').length,
       after: closeAfterDelete({
         tokensAfter: regionTokens + chapterTokens,
@@ -75,10 +76,10 @@ async function ownEntryTokens(
 
 // A created lore row has its own line (user edits included), so no write to it counts again; the
 // stamps and chapter row are the delete itself, and a retrieval bump is no change worth showing.
-function changesOf({
-  set,
-  groups,
-}: ChapterDeleteSet): Pick<ChapterDeletePreview, 'createdLore' | 'otherChanges'> {
+function changesOf(
+  { set, groups }: ChapterDeleteSet,
+  restoring: ReadonlySet<string>,
+): Pick<ChapterDeletePreview, 'createdLore' | 'otherChanges'> {
   const createdLore = new Set(
     groups.filter((d) => d.op === 'create' && d.targetTable === 'lore').map((d) => d.targetId),
   )
@@ -87,15 +88,17 @@ function changesOf({
   for (const d of set.rows) {
     if (d.targetTable === 'lore' && createdLore.has(d.targetId)) {
       if (d.source === 'user_edit') userEdited = true
-    } else if (!countsNowhere(d)) otherChanges++
+    } else if (!countsNowhere(d, restoring)) otherChanges++
   }
   return { createdLore: { count: createdLore.size, userEdited }, otherChanges }
 }
 
-function countsNowhere(d: Delta): boolean {
+// An update a later write replaced in every field restores nothing, so the delete leaves it standing.
+function countsNowhere(d: Delta, restoring: ReadonlySet<string>): boolean {
   return (
     d.targetTable === 'story_entries' ||
     d.targetTable === 'chapters' ||
-    isRetrievalBumpOnly(d.op, d.undoPayload)
+    isRetrievalBumpOnly(d.op, d.undoPayload) ||
+    (d.op === 'update' && !restoring.has(d.id))
   )
 }
