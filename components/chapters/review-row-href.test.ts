@@ -19,12 +19,13 @@ const LIVE = new Set([
 const KINDS = new Map<string, EntityKind>([
   ['ent_kael', 'character'],
   ['ent_gate', 'location'],
-  // A deleted entity keeps its kind through its delete delta; only liveness stops its press.
+  // A kind lookup that outlives its row: liveness alone keeps this deleted entity from pressing.
   ['ent_deleted', 'faction'],
 ])
 const AWARENESS_HAPPENING = new Map([
   ['aw_kael_fire', 'hap_fire'],
   ['aw_orphan', 'hap_deleted'],
+  ['aw_deleted', 'hap_fire'],
 ])
 
 const live: ReviewRowLiveness = {
@@ -61,7 +62,7 @@ describe('reviewRowHref', () => {
     )
   })
 
-  it("sends a merge's absorbed row to its survivor through pressTo", () => {
+  it('routes whatever pressTo names, never the absorbed target', () => {
     // closeReviewChanges gives an absorbed row the survivor as pressTo; the absorbed row is gone.
     const absorbed = {
       target: { table: 'threads', id: 'thr_absorbed' },

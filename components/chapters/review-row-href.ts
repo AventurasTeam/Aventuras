@@ -3,7 +3,7 @@ import { railRowHref } from '@/components/reader/rail/rail-row-href'
 import type { EntityKind } from '@/lib/db'
 import type { CloseReviewRowRef } from '@/lib/history'
 
-/** Read from the live stores by the host, so a row deleted under an open window stops pressing. */
+/** Liveness, kinds and awareness links the host supplies; `isLive` decides whether a row presses. */
 export type ReviewRowLiveness = {
   isLive: (table: string, id: string) => boolean
   entityKind: (id: string) => EntityKind | undefined
