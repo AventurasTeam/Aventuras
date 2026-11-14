@@ -351,7 +351,7 @@ const chapter2Report: CloseReport = closeReportSchema.parse({
   ],
   stopped: [{ task: 'identity', part: 1, reason: 'budget' }],
   noToolCalls: false,
-})
+} satisfies CloseReport)
 
 const heroChapters: Omit<NewChapter, 'tokenCount'>[] = [
   {

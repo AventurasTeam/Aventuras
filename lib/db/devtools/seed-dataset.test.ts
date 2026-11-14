@@ -8,13 +8,16 @@ import { ENTRIES_WINDOW_SIZE } from '@/lib/actions/story-entries/recent-window'
 import {
   closeReportSchema,
   deltas,
+  entities,
   isCloseReasonKey,
   storyEntries,
   type Delta,
+  type EntityKind,
   type NewStoryEntry,
   type StorySettings,
 } from '@/lib/db'
 import { createTestDb } from '@/lib/db/__tests__/test-db'
+import { buildCloseReview, loadCloseDeltas } from '@/lib/history'
 import { ID_PATTERN, IdBiMap, SUBSTITUTABLE_PREFIXES } from '@/lib/ids'
 import { detectRichEntryHtml, parseMarkdownToHtml } from '@/lib/markdown'
 import {
@@ -385,11 +388,23 @@ describe('seeded rollback', () => {
           .orderBy(desc(deltas.logPosition))) as Delta[],
       )
 
+    const vorneId = rowsOf('entities').find((r) => r.name === 'Vorne')!.id as string
+    const vorneState = async () => {
+      const [row] = await ctx.db.select().from(entities).where(eq(entities.id, vorneId))
+      return row!.state as { traits?: string[]; drives?: string[] }
+    }
+
     const selected: string[] = []
     let target = await nextTarget()
     for (let press = 0; target != null && press < 200; press++) {
       selected.push(target.actionId)
+      const before = target.actionId === 'act_chapter_2' ? await vorneState() : null
       expect(await undoLastAction(HERO_MAIN, ctx), target.actionId).toEqual({ status: 'ok' })
+      if (before !== null) {
+        const after = await vorneState()
+        expect(after.traits, 'the close takes back its traits write').toEqual(['patient'])
+        expect(after.drives, 'and only that field').toEqual(before.drives)
+      }
       target = await nextTarget()
     }
 
@@ -533,6 +548,30 @@ describe('seeded chapter closes', () => {
     const nameOf = new Map(rowsOf('entities').map((r) => [r.id, r.name]))
     for (const call of report.calls)
       for (const row of call.rows) expect(nameOf.get(row.id), row.id).toBe(row.name)
+  })
+
+  it("reads chapter 2's seeded close as one change, one refusal and one stopped task", async () => {
+    const { db } = await seededDb()
+    const second = heroChapters()[1]!
+    const report = closeReportSchema.parse(second.closeReport)
+    const closeDeltas = await loadCloseDeltas(db, HERO_MAIN, second.id, report.actionId)
+    const names = new Map(rowsOf('entities').map((r) => [r.id as string, r.name as string]))
+    const kinds = new Map(rowsOf('entities').map((r) => [r.id as string, r.kind as EntityKind]))
+    const positions = new Map(heroEntries().map((e) => [e.id, e.position]))
+    const review = buildCloseReview(report, closeDeltas, {
+      entityKind: (id) => kinds.get(id),
+      nameOf: (id) => names.get(id),
+      entryPosition: (id) => positions.get(id),
+    })
+
+    expect(review.stopped).toHaveLength(1)
+    expect(review.notApplied.map((n) => [n.target?.name, n.fieldPath, n.reasonKey])).toEqual([
+      ['Mira', 'state.drives', 'user-edited-since-prose'],
+    ])
+    const changes = review.changes.flatMap((area) => area.rows)
+    expect(changes.map((c) => [c.target.name, c.fieldLabel, c.summary])).toEqual([
+      ['Vorne', 'Traits', 'patient → patient, merciless'],
+    ])
   })
 
   // The review takes a landed field's old value from its delta and the new one from the report.
