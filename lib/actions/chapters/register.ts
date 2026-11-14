@@ -4,11 +4,8 @@ import type { Chapter, NewChapter } from '@/lib/db'
 import { chapterWriteSchema, chapters, KIND_FIELDS } from '@/lib/db'
 import { chaptersStore } from '@/lib/stores'
 
-import { cascadedDelete, rowCascade } from '../delta/delete-cascade'
 import { register, TARGET_NOT_FOUND, undefinedColumn, type ActionHandler } from '../delta/registry'
 import type { DeltaSource } from '../types'
-
-const cascade = rowCascade('chapter')
 
 // What a write after the close may change: its number, range and token snapshot are fixed there.
 const UPDATABLE = ['title', 'summary', 'theme', 'keywords', 'closeReport'] as const
@@ -22,7 +19,6 @@ declare module '@/lib/actions/action-map' {
       source: DeltaSource
       payload: { branchId: string; id: string; patch: ChapterUpdatePatch }
     }
-    deleteChapter: { source: DeltaSource; payload: { branchId: string; id: string } }
   }
 }
 
@@ -136,28 +132,6 @@ const updateHandler: ActionHandler = async (action, branchId, ctx) => {
   }
 }
 
-const deleteHandler: ActionHandler = async (action, branchId, ctx) => {
-  if (action.kind !== 'deleteChapter')
-    throw new Error(`handler/kind mismatch: expected 'deleteChapter', got '${action.kind}'`)
-  const { branchId: bid, id } = action.payload
-  if (bid !== branchId)
-    return { status: 'rejected', reason: `branch mismatch: delta ${branchId} vs target ${bid}` }
-  const [current] = await ctx.db
-    .select()
-    .from(chapters)
-    .where(and(eq(chapters.branchId, bid), eq(chapters.id, id)))
-  if (!current)
-    return { status: 'rejected', reason: `delete target chapters ${bid}:${id} not found` }
-  return cascadedDelete(ctx, cascade, {
-    table: 'chapters',
-    row: current,
-    deleteOp: ctx.db
-      .delete(chapters)
-      .where(and(eq(chapters.branchId, bid), eq(chapters.id, id)))
-      .toSQL(),
-  })
-}
-
 export function registerChapters(): void {
   register({
     table: 'chapters',
@@ -166,9 +140,7 @@ export function registerChapters(): void {
     handlers: {
       createChapter: createHandler,
       updateChapter: updateHandler,
-      deleteChapter: deleteHandler,
     },
     patcher: chaptersStore.patch,
-    cascade,
   })
 }

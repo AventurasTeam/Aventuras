@@ -3,15 +3,31 @@ import { describe, expect, it } from 'vitest'
 import { STORY_ENTRY_REJECTION, type RollbackCounts } from '@/lib/actions'
 
 import {
+  confirmAfterImmediateRefusal,
   countsAfterRefusal,
   regenerateRefusalCopy,
+  regenerateRefusalToast,
   reopenAfterRefusal,
   rollbackRefusalCopy,
   type ConfirmState,
 } from './confirm-refusal'
 
-const OPENED: RollbackCounts = { entries: 3, chapters: 0, worldStateChanges: 2 }
-const FRESH: RollbackCounts = { entries: 3, chapters: 0, worldStateChanges: 5 }
+const OPENED: RollbackCounts = {
+  entries: 3,
+  chapters: 0,
+  worldStateChanges: 2,
+  closeWrites: 0,
+  reopenedChapter: null,
+  removedChapters: [],
+}
+const FRESH: RollbackCounts = {
+  entries: 3,
+  chapters: 0,
+  worldStateChanges: 5,
+  closeWrites: 0,
+  reopenedChapter: null,
+  removedChapters: [],
+}
 
 function refused<C extends string>(code: C) {
   return { status: 'rejected', code, reason: `refused: ${code}` } as const
@@ -67,6 +83,32 @@ describe('regenerateRefusalCopy', () => {
 
   it('offers no retry for a regenerate that cannot succeed', () => {
     expect(regenerateRefusalCopy(refused('sweep-refused'))).toBe('reader:regenerateUnavailable')
+  })
+})
+
+describe('regenerateRefusalToast', () => {
+  const COUNTS_CHANGED_REFUSAL = {
+    status: 'rejected',
+    code: STORY_ENTRY_REJECTION.countsChanged,
+    reason: 'counts changed',
+    counts: FRESH,
+  } as const
+
+  it('stays silent for a tap whose counts changed, the caller opens a confirm', () => {
+    expect(regenerateRefusalToast(COUNTS_CHANGED_REFUSAL, 'tap')).toBeNull()
+  })
+
+  it('tells a confirm that its counts changed', () => {
+    expect(regenerateRefusalToast(COUNTS_CHANGED_REFUSAL, 'confirm')).toBe(
+      'reader:rollbackCountsChanged',
+    )
+  })
+
+  it('tells either origin about any other refusal', () => {
+    expect(regenerateRefusalToast(refused('classifier-held'), 'tap')).toBe('reader:regenerateHeld')
+    expect(regenerateRefusalToast(refused('classifier-held'), 'confirm')).toBe(
+      'reader:regenerateHeld',
+    )
   })
 })
 
@@ -140,6 +182,82 @@ describe('reopenAfterRefusal', () => {
         current: null,
         confirmed: CONFIRMED,
         refusal: COUNTS_CHANGED,
+        stillOnBranch: false,
+      }),
+    ).toBeNull()
+  })
+})
+
+describe('confirmAfterImmediateRefusal', () => {
+  // A ↻ tap read its counts beside a running close; the close committed as the interrupt landed.
+  const CLOSE_LANDED = {
+    status: 'rejected',
+    code: STORY_ENTRY_REJECTION.countsChanged,
+    reason: 'counts changed',
+    counts: {
+      entries: 1,
+      chapters: 1,
+      worldStateChanges: 1,
+      closeWrites: 6,
+      reopenedChapter: 1,
+      removedChapters: [],
+    },
+  } as const
+  const TAPPED = { targetId: 'e5', targetNumber: 5, countedAtSettle: 7 }
+
+  it('opens a regenerate confirm on the fresh counts a counts-changed refusal carries', () => {
+    expect(
+      confirmAfterImmediateRefusal({
+        current: null,
+        refusal: CLOSE_LANDED,
+        opened: TAPPED,
+        stillOnBranch: true,
+      }),
+    ).toEqual({
+      mode: 'regenerate',
+      targetId: 'e5',
+      targetNumber: 5,
+      countedAtSettle: 7,
+      counts: {
+        entries: 1,
+        chapters: 1,
+        worldStateChanges: 1,
+        closeWrites: 6,
+        reopenedChapter: 1,
+        removedChapters: [],
+      },
+    })
+  })
+
+  it('opens nothing for any other refusal', () => {
+    for (const code of ['generation-in-flight', 'sweep-refused', 'classifier-held'] as const)
+      expect(
+        confirmAfterImmediateRefusal({
+          current: null,
+          refusal: refused(code),
+          opened: TAPPED,
+          stillOnBranch: true,
+        }),
+      ).toBeNull()
+  })
+
+  it('keeps a confirm the user opened since', () => {
+    expect(
+      confirmAfterImmediateRefusal({
+        current: CONFIRMED,
+        refusal: CLOSE_LANDED,
+        opened: TAPPED,
+        stillOnBranch: true,
+      }),
+    ).toBe(CONFIRMED)
+  })
+
+  it('opens nothing once the user left the branch', () => {
+    expect(
+      confirmAfterImmediateRefusal({
+        current: null,
+        refusal: CLOSE_LANDED,
+        opened: TAPPED,
         stillOnBranch: false,
       }),
     ).toBeNull()

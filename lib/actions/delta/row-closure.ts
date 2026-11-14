@@ -26,9 +26,12 @@ import {
 import { resolveByTable } from './registry'
 import { ReversalIntegrityError } from './replay-errors'
 import { deltaLockKeys, type RowLockKey } from './row-locks'
-import { userEditsOutliving, wroteColumn, wroteField } from './user-precedence'
+import { userEditsOutliving, wroteColumn, wroteField, type YieldTo } from './user-precedence'
 
-type ReversalSetFields = Pick<ReversalSet, 'branchId' | 'rows' | 'redoRows' | 'held' | 'refClears'>
+type ReversalSetFields = Pick<
+  ReversalSet,
+  'branchId' | 'rows' | 'redoRows' | 'held' | 'refClears' | 'yieldTo'
+>
 
 /**
  * A JSON-path ref of a row the reversal keeps that, once the set's undos run, names a row the
@@ -54,6 +57,8 @@ class ReversalSet {
   readonly held: HeldRowIndex
   /** The refs the planner nulls, in a live row or a held copy, writing no delta. */
   readonly refClears: readonly RefClear[]
+  /** Read by the planner's field restores and by the ref clears, never by a create. */
+  readonly yieldTo: YieldTo
 
   constructor(fields: ReversalSetFields) {
     this.branchId = fields.branchId
@@ -61,11 +66,13 @@ class ReversalSet {
     this.redoRows = fields.redoRows
     this.held = fields.held
     this.refClears = fields.refClears
+    this.yieldTo = fields.yieldTo
   }
 }
 
 // Type-only: a value export would let another module construct an unclosed set.
 export type { ReversalSet }
+export type { YieldTo } from './user-precedence'
 
 export type ReversalSeed = {
   readonly branchId: string
@@ -73,6 +80,8 @@ export type ReversalSeed = {
   readonly target: readonly Delta[]
   /** Rows reversed because prose moved; redo leaves them and what only they reach to re-derive. */
   readonly sweep?: readonly Delta[]
+  /** Default `'user'`; `'any'` only for a chapter delete (C13). */
+  readonly yieldTo?: YieldTo
 }
 
 export type RowRef = { readonly table: string; readonly id: string }
@@ -157,7 +166,7 @@ async function liveReferrers(
 
 /**
  * A JSON-path ref's id once the set's undos have run, from the oldest set update that changed it
- * and no later user write overrode.
+ * and no later write the set yields to overrode.
  */
 type RestoredRef = {
   readonly row: RowRef
@@ -180,15 +189,15 @@ function pathUndos(d: Delta): { ref: RefPath; id: string | null }[] {
   })
 }
 
-// The newest-first walk applies the oldest update's undo last, unless a later user write changed
-// that field (generation-pipeline.md → Reverse-replay).
+// The newest-first walk applies the oldest update's undo last, unless a later write the set yields
+// to changed that field (generation-pipeline.md → Reverse-replay).
 function restoredRefs(
   set: Iterable<Delta>,
-  laterUserEdits: ReadonlyMap<string, readonly Delta[]>,
+  laterEdits: ReadonlyMap<string, readonly Delta[]>,
 ): Map<string, RestoredRef> {
   const restored = new Map<string, RestoredRef>()
   for (const d of set) {
-    const edits = laterUserEdits.get(d.id) ?? []
+    const edits = laterEdits.get(d.id) ?? []
     for (const { ref, id } of pathUndos(d)) {
       if (wroteField(edits, d.targetTable, ref.column, [ref.path])) continue
       const row = { table: d.targetTable, id: d.targetId }
@@ -348,15 +357,17 @@ async function goneRows(
   return new Set(absent.map(({ table, id }) => heldKey(table, id)))
 }
 
-// Entities go only through their own create, so the fixed point never waits on a clear.
+// Entities go only through their own create, so the fixed point never waits on a clear. Later
+// writes are read with the set's mode, so a clear never undoes a move the walk keeps.
 async function refClearsOf(
   ctx: DbCtx,
   branchId: string,
   { rows, removed }: Closure,
   held: HeldRowIndex,
+  yieldTo: YieldTo,
 ): Promise<RefClear[]> {
-  const laterUserEdits = await userEditsOutliving(ctx, rows, (d) => pathUndos(d).length > 0)
-  const restored = restoredRefs(rows, laterUserEdits)
+  const laterEdits = await userEditsOutliving(ctx, rows, (d) => pathUndos(d).length > 0, yieldTo)
+  const restored = restoredRefs(rows, laterEdits)
   const unmoved = (row: RowRef, ref: RefPath) => !restored.has(restoredKey(row, ref))
   // What the set's undos write: each moved ref's restored value, and each re-inserted row's refs.
   const written: PathRefValue[] = [
@@ -398,6 +409,7 @@ async function refClearsOf(
 export async function selectReversalSet(ctx: DbCtx, seed: ReversalSeed): Promise<ReversalSet> {
   const { branchId, target } = seed
   const sweep = seed.sweep ?? []
+  const yieldTo = seed.yieldTo ?? 'user'
   const all = [...target, ...sweep]
   const stray = all.find((d) => d.branchId !== branchId)
   if (stray)
@@ -411,6 +423,7 @@ export async function selectReversalSet(ctx: DbCtx, seed: ReversalSeed): Promise
       redoRows: [],
       held: EMPTY_HELD_ROWS,
       refClears: [],
+      yieldTo,
     })
 
   const held = await loadHeldRows(ctx, branchId)
@@ -421,8 +434,15 @@ export async function selectReversalSet(ctx: DbCtx, seed: ReversalSeed): Promise
     sweep.length > 0
       ? await closeOver(ctx, branchId, [...redo.rows, ...sweep], held, actionId)
       : redo
-  const refClears = await refClearsOf(ctx, branchId, closure, held)
-  return new ReversalSet({ branchId, rows: closure.rows, redoRows: redo.rows, held, refClears })
+  const refClears = await refClearsOf(ctx, branchId, closure, held, yieldTo)
+  return new ReversalSet({
+    branchId,
+    rows: closure.rows,
+    redoRows: redo.rows,
+    held,
+    refClears,
+    yieldTo,
+  })
 }
 
 /** Row keys for the rows the set writes or clears a ref in, and for every delete holding one. */

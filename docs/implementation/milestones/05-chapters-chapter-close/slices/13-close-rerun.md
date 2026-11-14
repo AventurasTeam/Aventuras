@@ -516,7 +516,8 @@ close's until this slice.
   (C13), not the group holding the `create`: after a re-run every lore
   create still in the log sits in the re-run's group, since its reversal
   pruned the close's into the journal. So a delete after a re-run, and a
-  second re-run, count the re-run's lore creates.
+  second re-run, count the re-run's lore creates whose rows still
+  stand.
 - `startCloseRerun(branchId, chapterId, expected, story, ctx)`, nothing
   committed before step 4:
   1. The manual close's start refusals, read up front: the gate
@@ -1039,6 +1040,13 @@ change amends the scope above.
   transaction and then a sweep from below the re-run before the next boot.
   The other option keeps a dropped journal as a void row, which keeps the
   group recognisable at the cost of a canon change to "drops".
+- **Where does the reversal plumbing live once the re-run calls it?**
+  `lib/actions/chapters` imports `commitNewAction` and
+  `logReversalRefused` from `../story-entries/operational`, and the
+  re-run's reversal would be their third caller. Both are generic
+  reversal plumbing. Default: move them under `lib/actions/delta/` in
+  this slice, which drops the chapters-on-story-entries dependency.
+  Raised in Slice 5.12's final review.
 - **Does the commit arm hold the result at `delta_emitted`, not re-read on
   `run_complete`?** 5.11 re-reads the branch's latest report on
   `run_complete`. The report phase's `delta_emitted` carries `branchId`,

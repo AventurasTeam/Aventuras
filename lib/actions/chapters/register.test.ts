@@ -256,36 +256,6 @@ describe('chapters CRUD arms', () => {
     expect(chaptersStore.getById('chap_1')?.keywords).toEqual(['war', 'omen'])
   })
 
-  it('delete captures the full row; reverse-replay re-inserts + store create-patch', async () => {
-    const { db, ctx } = await setup()
-    await applyDeltaAction(
-      {
-        action: { kind: 'createChapter', source: 'chapter_close', payload: { entry: CHAPTER } },
-        actionId: 'act_c',
-        branchId: 'br_1',
-      },
-      ctx,
-    )
-    await applyDeltaAction(
-      {
-        action: {
-          kind: 'deleteChapter',
-          source: 'user_edit',
-          payload: { branchId: 'br_1', id: 'chap_1' },
-        },
-        actionId: 'act_d',
-        branchId: 'br_1',
-      },
-      ctx,
-    )
-    expect(await rowFor(db, 'chap_1')).toBeUndefined()
-    expect(chaptersStore.getById('chap_1')).toBeUndefined()
-
-    expect(await reverseReplayDeltas('act_d', ctx)).toBe(1)
-    expect((await rowFor(db, 'chap_1')).title).toBe('The Gathering Storm')
-    expect(chaptersStore.getById('chap_1')?.title).toBe('The Gathering Storm')
-  })
-
   it('defaults embedding_stale to 1 on create', async () => {
     const { db, ctx } = await setup()
     await applyDeltaAction(

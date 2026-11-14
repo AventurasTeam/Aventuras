@@ -405,6 +405,181 @@ export function seedUnplacedPlace(dbPath: string, branchId: string, name: string
   return id
 }
 
+export type SeededCloseWrites = {
+  closeActionId: string
+  endEntryId: string
+  loreId: string
+  entityId: string
+  /** The entity column the close wrote and the later pass overwrote. */
+  column: typeof CLOSE_WRITES_COLUMN
+  laterValue: string
+}
+
+// The character whose description both the seeded close and the later pass write.
+const CLOSE_WRITES_CHARACTER = 'Kael'
+const CLOSE_WRITES_COLUMN = 'description'
+const CLOSE_WRITES_CLOSE_VALUE = 'E2E-CLOSE-WRITE A courier the Keep has marked as its own.'
+const CLOSE_WRITES_LATER_VALUE = 'E2E-LATER-WRITE A courier who stopped running from the Keep.'
+
+/**
+ * Seeds the latest chapter's close with a lore create and a character-description update (close
+ * action, anchored on its end entry), then a later classifier update of that description (own
+ * action, anchored on the last reply). Logged above every existing delta; runs before launch.
+ */
+export function seedCloseWrites(dbPath: string, branchId: string): SeededCloseWrites {
+  const db = new DatabaseSync(dbPath)
+  try {
+    db.exec('PRAGMA busy_timeout = 10000')
+    const chapter = db
+      .prepare(
+        `SELECT id, end_entry_id AS endEntryId FROM chapters
+          WHERE branch_id = ? ORDER BY sequence_number DESC LIMIT 1`,
+      )
+      .get(branchId) as { id: string; endEntryId: string } | undefined
+    if (!chapter) throw new Error(`cannot seed close writes: ${branchId} has no closed chapter`)
+    const creates = db
+      .prepare(
+        `SELECT action_id AS actionId, entry_id AS entryId, created_at AS createdAt FROM deltas
+          WHERE branch_id = ? AND source = 'chapter_close' AND target_table = 'chapters'
+            AND target_id = ? AND op = 'create'`,
+      )
+      .all(branchId, chapter.id) as {
+      actionId: string
+      entryId: string | null
+      createdAt: number
+    }[]
+    // C1: one close group creates the chapter, anchored on its end entry.
+    if (creates.length !== 1 || creates[0].entryId !== chapter.endEntryId) {
+      throw new Error(`cannot seed close writes: ${chapter.id} has no close anchored on its end`)
+    }
+    const { actionId: closeActionId, createdAt: closedAt } = creates[0]
+    const lastReply = db
+      .prepare(
+        `SELECT id, position FROM story_entries WHERE branch_id = ? AND kind = 'ai_reply'
+          ORDER BY position DESC LIMIT 1`,
+      )
+      .get(branchId) as { id: string; position: number } | undefined
+    if (!lastReply) throw new Error(`cannot seed close writes: ${branchId} has no ai_reply`)
+    const characters = db
+      .prepare(
+        `SELECT id, description FROM entities WHERE branch_id = ? AND kind = 'character' AND name = ?`,
+      )
+      .all(branchId, CLOSE_WRITES_CHARACTER) as { id: string; description: string | null }[]
+    if (characters.length !== 1) {
+      throw new Error(`expected one ${CLOSE_WRITES_CHARACTER} on ${branchId}: ${characters.length}`)
+    }
+    const entity = characters[0]
+    const head = db
+      .prepare(
+        `SELECT COALESCE(MAX(log_position), 0) AS p, COALESCE(MAX(created_at), 0) AS t
+           FROM deltas WHERE branch_id = ?`,
+      )
+      .get(branchId) as { p: number; t: number }
+
+    const loreId = `lore_${seedUuid('lore:close-writes')}`
+    const entityDeltaId = `delta_${seedUuid('delta:close-writes:entity')}`
+    const laterDeltaId = `delta_${seedUuid('delta:close-writes:later')}`
+    const insertDelta = db.prepare(
+      `INSERT INTO deltas (id, branch_id, entry_id, action_id, log_position, source, target_table, target_id, op, undo_payload, encoding_version, created_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?)`,
+    )
+    db.exec('BEGIN IMMEDIATE')
+    try {
+      db.prepare(
+        `INSERT INTO lore (id, branch_id, title, body, tags, keywords, injection_mode, priority, embedding_stale, created_at, updated_at)
+         VALUES (?, ?, ?, ?, '[]', '[]', 'auto', 0, 1, ?, ?)`,
+      ).run(
+        loreId,
+        branchId,
+        'The Keep’s Night Ledger',
+        'Every courier the Keep lets through the gate is written down here.',
+        closedAt,
+        closedAt,
+      )
+      insertDelta.run(
+        `delta_${seedUuid('delta:close-writes:lore')}`,
+        branchId,
+        chapter.endEntryId,
+        closeActionId,
+        Number(head.p) + 1,
+        'chapter_close',
+        'lore',
+        loreId,
+        'create',
+        null,
+        closedAt,
+      )
+      insertDelta.run(
+        entityDeltaId,
+        branchId,
+        chapter.endEntryId,
+        closeActionId,
+        Number(head.p) + 2,
+        'chapter_close',
+        'entities',
+        entity.id,
+        'update',
+        JSON.stringify({ [CLOSE_WRITES_COLUMN]: entity.description }),
+        closedAt,
+      )
+      insertDelta.run(
+        laterDeltaId,
+        branchId,
+        lastReply.id,
+        `act_${seedUuid('act:close-writes:later')}`,
+        Number(head.p) + 3,
+        'periodic_classifier',
+        'entities',
+        entity.id,
+        'update',
+        JSON.stringify({ [CLOSE_WRITES_COLUMN]: CLOSE_WRITES_CLOSE_VALUE }),
+        Number(head.t) + 1,
+      )
+      db.prepare(`UPDATE entities SET description = ? WHERE branch_id = ? AND id = ?`).run(
+        CLOSE_WRITES_LATER_VALUE,
+        branchId,
+        entity.id,
+      )
+      db.exec('COMMIT')
+    } catch (err) {
+      db.exec('ROLLBACK')
+      throw err
+    }
+
+    // A rollback to the entry after the chapter's end sweeps the later write only when its anchor
+    // (the last reply) sits past the end.
+    const endPosition = (
+      db
+        .prepare(`SELECT position FROM story_entries WHERE branch_id = ? AND id = ?`)
+        .get(branchId, chapter.endEntryId) as { position: number } | undefined
+    )?.position
+    if (endPosition === undefined || Number(lastReply.position) <= Number(endPosition)) {
+      throw new Error(
+        `the last ai_reply (${lastReply.position}) must sit after chapter end ${chapter.endEntryId} (${endPosition})`,
+      )
+    }
+    const stray = db
+      .prepare(
+        `SELECT count(*) AS n FROM deltas
+          WHERE branch_id = ? AND action_id = ? AND (entry_id IS NULL OR entry_id <> ?)`,
+      )
+      .get(branchId, closeActionId, chapter.endEntryId) as { n: number }
+    if (Number(stray.n) !== 0) {
+      throw new Error(`${stray.n} deltas of ${closeActionId} anchor off its end entry`)
+    }
+    return {
+      closeActionId,
+      endEntryId: chapter.endEntryId,
+      loreId,
+      entityId: entity.id,
+      column: CLOSE_WRITES_COLUMN,
+      laterValue: CLOSE_WRITES_LATER_VALUE,
+    }
+  } finally {
+    db.close()
+  }
+}
+
 /**
  * Retire a seeded character before launch, as a fixture row rather than a user edit: no delta
  * records it, so no write a pass makes later is weighed against it. The fixture retires nobody.

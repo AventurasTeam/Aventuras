@@ -40,13 +40,15 @@ export type ChapterCardProps = {
   onToggle: () => void
   /** The route's session while open, else null; the body waits for its form to hold this row. */
   session: ChapterRowSession | null
-  /** Set while a run blocks edits (`generationGateReason`): fields and Save disable with it. */
+  /** Set while a run blocks edits (`generationGateReason`): fields, Save and Delete… disable with it. */
   blockedReason?: string
   /** Route focus, for Cmd/Ctrl-S on the in-card bar. */
   hotkeysEnabled: boolean
   onJump: () => void
   /** `Review changes`, shown when the row has a close report. */
   onReview: () => void
+  /** The latest card's `Delete…`; the route guards it and opens the confirm. */
+  onDelete: () => void
 }
 
 type Gate = { blockedReason?: string }
@@ -60,11 +62,18 @@ function issueText(message: string | undefined): string | undefined {
 }
 
 /** The actions after `Jump to chapter →`, one list: inline at tablet and desktop, `⋯` on phone. */
-function moreActions(
-  latest: boolean,
-  hasCloseReport: boolean,
-  onReview: () => void,
-): OverflowMenuEntry[] {
+function moreActions({
+  latest,
+  hasCloseReport,
+  onReview,
+  onDelete,
+  blockedReason,
+}: Gate & {
+  latest: boolean
+  hasCloseReport: boolean
+  onReview: () => void
+  onDelete: () => void
+}): OverflowMenuEntry[] {
   return [
     {
       key: 'regenerate',
@@ -86,8 +95,8 @@ function moreActions(
       : []),
     ...(latest
       ? destructiveEntry('delete', t('chapters:actions.delete'), {
-          onPress: NO_ACTION,
-          disabledReason: t('chapters:actions.deleteLandsLater'),
+          onPress: onDelete,
+          disabledReason: blockedReason,
         })
       : []),
   ]
@@ -102,6 +111,7 @@ export function ChapterCard({
   hotkeysEnabled,
   onJump,
   onReview,
+  onDelete,
 }: ChapterCardProps): ReactElement {
   const isPhone = useTier() === 'phone'
   const padding = isPhone ? 'px-3' : 'px-5'
@@ -143,6 +153,8 @@ export function ChapterCard({
               isPhone={isPhone}
               onJump={onJump}
               onReview={onReview}
+              onDelete={onDelete}
+              blockedReason={blockedReason}
             />
           </View>
           {/* touch.md → Save bar on phone: there the route holds it at the surface's bottom edge. */}
@@ -292,14 +304,17 @@ function ActionRow({
   isPhone,
   onJump,
   onReview,
-}: {
+  onDelete,
+  blockedReason,
+}: Gate & {
   latest: boolean
   hasCloseReport: boolean
   isPhone: boolean
   onJump: () => void
   onReview: () => void
+  onDelete: () => void
 }) {
-  const more = moreActions(latest, hasCloseReport, onReview)
+  const more = moreActions({ latest, hasCloseReport, onReview, onDelete, blockedReason })
   return (
     <View className="flex-row flex-wrap items-center gap-2">
       <Button

@@ -155,7 +155,8 @@ without a database. Copy goes in the `chapters` namespace 5.7 creates.
     lore creates and `retrievalCount`-only updates, plus
     `set.refClears.length`, as `rollbackCountsOf` counts a clear. A delta
     whose every field yields still counts, since telling needs the
-    planner; the number is a slight overstatement in that rare case.
+    planner; the number is a slight overstatement in that rare case
+    (superseded: see Implementation notes, Q16).
   - `turnsSince`: the `ai_reply` rows in `openRegionSeries`.
   - `after`, below.
 - **The after-delete line.** A pure `closeAfterDelete` in `lib/chapters`
@@ -265,7 +266,8 @@ go from `register.ts` too, since only a delete reads a cascade.
 - **The confirm's kind is derived, never stored.** `ConfirmState.mode` keeps
   its two values. `RollbackConfirmModal` reads `classifyRegenerateGate(counts)`
   at render, so a live recount can't leave it stale. `immediate` at render
-  uses the cascade copy: the confirm is already open.
+  uses the cascade copy: the confirm is already open (superseded: see
+  Implementation notes, Q18).
 - **The route.** `:1206` stays the branch point. `:1209` passes `counts`, so
   a close committing as the interrupt lands can't be reversed unconfirmed.
   A `counts-changed` there opens the confirm on the fresh counts, through a
@@ -468,15 +470,15 @@ with two, each bold and each omitted when empty:
 **Cleanup.**
 
 - `grep -rn deleteChapter lib app components` finds nothing.
-- `grep -n "M5.2" components/reader/regenerate-gate.ts components/reader/regenerate-gate.test.ts`
-  finds nothing, and the same for `app/reader-composer/[branchId].tsx`.
+- `grep -n 'M5\.12' components/reader/regenerate-gate.ts components/reader/regenerate-gate.test.ts 'app/reader-composer/[branchId].tsx'`
+  finds nothing.
 
 **Gates.**
 
 - `pnpm lint`, `pnpm typecheck`, `pnpm lint:docs`, `pnpm format:check`,
   `pnpm compiler:check` and `pnpm test:run` pass, and
-  `pnpm test:e2e -- chapter-delete reader-rollback` passes after
-  `pnpm build:web`.
+  `pnpm test:e2e e2e/tests/chapter-delete.spec.ts e2e/tests/reader-rollback.spec.ts`
+  passes after `pnpm build:web`.
 - Manual on the Android dev client at phone width: `⋯`, `Delete…`, the confirm
   and both modes on a seeded story. Desktop smoke through the `electron-app`
   MCP.
@@ -609,4 +611,174 @@ change amends the scope above.
 
 ## Implementation notes
 
-_Populated at finish: notable deviations from the plan and resolved developer decisions._
+- **Regenerate promises no re-run (developer decision at slice
+  planning, Open question 1).** The close copy says
+  `Its close runs again only when one is next due, or when you start it.`
+  Nothing re-marks a close a regenerate reverses: `pendingClose` was
+  consumed at its commit.
+- **An older reply with a close in its cascade takes the cascade
+  confirm with rollback's chapter lines (Open question 2),** and
+  `reader-composer.md → Regenerate confirmation` gained that arm.
+- **Rollback's chapter lines read `re-opened` and `removed` (Open
+  question 3).** That closes `rollback-confirm.md`'s multi-chapter
+  question: two removed chapters read `5 and 6`, three or more `5–7`.
+- **A soft `counts-changed` under a running run is accepted (Open
+  question 4).** The counts skip the run's rows and leave the set
+  alone, and a `RefClear` carries no action id, so a clear only the
+  run's rows cause still refuses once and re-opens the confirm on fresh
+  counts. A ↻ tap whose chained pass or close commits as the interrupt
+  lands takes the same refusal and opens the regenerate confirm on the
+  fresh counts with no toast, which canon says in
+  `reader-composer.md → Regenerate confirmation`.
+- **Count-only updates count nowhere (Open question 5):** a
+  `retrievalCount`-only update is in no bucket and not in
+  `closeWrites`.
+- **World state keeps today's tables (Open question 6),** and
+  `rollback-confirm.md → Counts` names `translations`,
+  `branch_era_flips` and `character_relationships`. The first two have
+  no production delta writer, so a translation's double count is
+  unreachable today.
+- **A user's swept chapter edit counts in K (Open question 7):** a
+  non-create `chapters` delta counts when its chapter's create isn't in
+  the set, so a swept close's report stays silent.
+- **`deleteChapter`'s not-found code (Open question 8) went with the
+  handler,** which this slice removed.
+- **The four residues are accepted with no code (Open question 9).**
+  `chapter-close.md → Failure modes and atomic rollback` names them in
+  place of "a partial close, not broken state".
+- **The delete confirm's third line carries C13's residue (Open
+  question 11):** `Undoing one can bring back a value this removes.`,
+  on the line shown exactly when a later turn exists to undo.
+- **Stackables (Open question 10).** 5.9's guard met C13's rule with
+  no code: `remove-chapter.test.ts` pins a later `periodic_classifier`
+  write of `state.stackables` standing whole after a delete.
+- **`otherChanges` leaves out every delta on a lore row the close
+  groups create (developer decision at slice planning).** A deviation
+  from the brief, which subtracted only the creates: the closure pulls
+  every later write to a created row into the set, the user's edits
+  included, and the lore line already reports them
+  (`, your edits included`).
+- **`otherChanges` counts only updates the delete restores (developer
+  decision after review, Q16: B).** A corrected criterion: the Scope's
+  "a delta whose every field yields still counts", with its slight
+  overstatement, no longer holds. The planner's `restoringUpdates` reads
+  each update as the walk does, with the same later-write map under the
+  set's yield mode and the same `restorablePayload`, so a close update a
+  later write replaced in every field counts nothing, and the count and
+  the delete can't disagree.
+- **An open regenerate confirm that reads `immediate` shows a terminal
+  body (developer decision after review, Q18: B).** It replaces the
+  Scope's "`immediate` at render uses the cascade copy: the confirm is
+  already open": a pass committing as a ↻ tap's interrupt lands opens
+  the confirm on counts with one entry and no close, and "and everything
+  after it" is false of the newest reply. The body is
+  `reader:regenerateConfirm.terminalBody`, and the bullets, chapter lines
+  and irreversible line are the cascade kind's.
+- **The residue criterion split in two (developer decision after plan
+  review).** A created lore row goes with every later delta on it, so
+  one row can't show both the delete and the residue. The residue is
+  pinned on an entity field the close updated and a later turn
+  overwrote, whose undo after the delete writes the close's value back.
+- **The cleanup grep reads `M5\.12`.** The brief's `M5.2` never matched
+  the comments it meant, in `regenerate-gate.ts` and the reader route,
+  so it passed vacuously. The grep also covers `lib` and `e2e`, which
+  caught the round-trip suite's `ARMS` comment, a pointer at this slice
+  that `.claude/rules/code.md` bans; Task 7 rewrote it to name no slice.
+- **One read of a chapter's close groups.**
+  `lib/actions/chapters/chapter-delete-set.ts` holds the refusal codes,
+  the mode and `resolveChapterDeleteSet`, which `removeChapter` and
+  `getChapterDeletePreview` both call, and which Slice 5.13 builds on.
+  The preview refuses `not-found`, `not-latest`, `no-close` and
+  `integrity`, never `in-flight`, and always selects the whole set.
+- **The immediate regenerate passes its counts.** `runRegenerate`
+  takes an `origin`, and a tap whose commit refuses `counts-changed`
+  opens the confirm on the fresh counts with no toast. The route's toast
+  decision is a pure `regenerateRefusalToast(refusal, origin)` beside
+  `regenerateRefusalCopy`, so the rule is unit-tested.
+- **The preview's lock test asks for the exclusive hold directly.** The
+  skeleton had it go through a prose-reversal bracket, which awaits an
+  interrupt and `settleUserWrites` before asking for the lock, so its
+  request time isn't deterministic. The preview and removal tests reuse
+  the file's `closeOn`, `logRows`, `chapterRows` and `retrievalWrite`
+  helpers instead of preview-prefixed copies.
+- **The round-trip's `divider-removed` expectation filters the removed
+  chapter's stamps out of `stamped`.** The skeleton had the entries'
+  `chapterId` read null, but `worldState` selects stamped entries only,
+  so a cleared stamp drops out of `stamped` and, with one chapter, the
+  DB reads it empty.
+- **`close-reversal.test.ts` is in Task 8's files, and the
+  `closeWrites` case writes a reset and an entity update.** The file's
+  `{ ...before, chapters: 1 }` compares a preview after a close with one
+  before it, and a rollback into the chapter now also reads the close's
+  writes. A reset alone is `retrievalCount`-only, which the bump filter
+  skips everywhere, so the entity update is what fails if `closeWrites`
+  reads the set instead of the window.
+- **`ChapterDeleteConfirm` sets no inline `pointerEvents: 'none'`, and
+  `Cancel` disables while `pending`.** Its actions are React Native
+  `Pressable`s, which React Native Web already styles `box-none` when
+  disabled, unlike the rn-primitives elements that style is for. A live
+  `Cancel` would press and do nothing, because the hook ignores a
+  dismiss mid-removal.
+- **The confirm takes focus when its actions disable under it.**
+  Chromium blurs a button as it disables, so focus could leave the
+  `AlertDialog` for the page behind; the dialog now takes it in the same
+  commit the state flips
+  ([a control that disables under focus drops focus on web](../../../lessons-learned/rnweb-disabled-under-focus-blurs.md)).
+- **The delete hook's log events are `app.chapter_delete_*`, not
+  `chapters.delete_*`.** `LogKind` is a closed union of subsystems with
+  no `chapters` member, so the skeleton's names don't compile, and the
+  Timeline's own events already sit under `app.*`.
+  `docs/observability.md` lists them.
+- **The hook starts no re-read while a removal runs and drops one that
+  resolves during it.** The removal's own prose-reversal bracket bumps
+  `settleCount`, and that settle re-read a chapter mid-delete, got
+  `not-found` and closed the confirm with `Couldn't delete the chapter.`
+  over a delete that succeeded. For the same reason `open` returns while
+  a removal or its resync runs: the stale card's `Delete…` stays live
+  until the resync lands.
+- **The hook's `try`/`catch` lives in a module-level `attempt` helper.**
+  React Compiler won't lower a `try` with a `finally`, or one holding
+  value blocks, and the hook body would join the bail-out baseline.
+- **The route renders `ChapterDeleteConfirm` only while a target
+  exists, and only while the screen is focused.** `preview` is required
+  and a null target has none; an `AlertDialog` portals to the app root
+  and would otherwise paint over a screen pushed on top. `loadPreview`
+  throws on a null `open`, which the hook already logs and toasts. The
+  hook also takes the focus as `active` and dismisses when it goes
+  false, dropping a preview still being read (provisional, from the
+  slice review; the other option keeps the confirm hidden and re-shows
+  it, as the reader's rollback confirm does). The render gate covers the
+  commit before that dismissal lands.
+- **The route's `resync` re-hydrates only while the branch is still
+  open.** The hook's confirm continuation outlives the screen, so an
+  always-current `loadOpenStory` could overwrite the story the user
+  opened next; it passes `isCurrentRequest` and treats `'cancelled'` as
+  success. `ChapterDeleteConfirm` shows no `blockedReason` while
+  `pending`, since the removal's bracket trips the edit gate and the
+  reason would read as a run in flight; the route passes the gate's
+  reason as is. If the resync fails too, a toast says the chapter was
+  deleted but the Timeline couldn't refresh (provisional, from the slice
+  review; the other option logs it only).
+- **`createdLore` counts only close-created rows still live on the
+  branch (slice review).** A row the user deleted after the close isn't
+  one the delete removes, and its edits no longer mark
+  `, your edits included`.
+- **A swept chapter whose start row is missing reads removed
+  (provisional, from the slice review).** `chapterFates` left-joins the
+  start entry, so `chapters` always equals the fates; the other option
+  guards the close copy's `<n>` instead.
+- **5.9 merged into `main` mid-slice, and its arms came after the
+  merge.** Tasks 4 and 7 ran before it landed and skipped their
+  conditional arms; once `origin/main` was merged in (no textual
+  conflicts, `reverse-replay.ts` keeps 5.9's `yieldsStackablesWhole`
+  guard beside `fieldEdits`), the stackables case and the
+  normalized-record round-trip case were added, since 5.9 merged
+  without them.
+- **The E2E `chapterByTitle` query aliases `startPosition` and
+  `endPosition`.** The `aventurasDb` bridge maps rows by
+  `Object.values`, so two columns named `position` collapsed into one.
+- **The E2E gate names the spec files.** `pnpm test:e2e --
+chapter-delete reader-rollback` matches an Orca worktree's absolute
+  path and runs the whole suite, so the gate and the runs use
+  `e2e/tests/chapter-delete.spec.ts` and
+  `e2e/tests/reader-rollback.spec.ts`.

@@ -1,11 +1,12 @@
-import { and, desc, eq, sql, type SQL } from 'drizzle-orm'
+import { and, desc, eq, inArray, sql, type SQL } from 'drizzle-orm'
 
 import type { Delta, EntryMetadata, SqlOp } from '@/lib/db'
-import { deltas, entryMetadataSchema, storyEntries } from '@/lib/db'
+import { chapters, chunked, deltas, entryMetadataSchema, storyEntries } from '@/lib/db'
 import { logger } from '@/lib/diagnostics'
 import { headTurnEntries } from '@/lib/head-turn'
 import { generateId } from '@/lib/ids'
-import { entriesStore, generationStore, undoRedoStore } from '@/lib/stores'
+import { isRetrievalBumpOnly } from '@/lib/row-signals'
+import { entriesStore, generationStore, selectMemoryRun, undoRedoStore } from '@/lib/stores'
 import { countTokens } from '@/lib/tokens'
 
 import { withBranchWriteShared } from '../delta/branch-write-lock'
@@ -43,7 +44,7 @@ export function reversalRefused(branchId: string, e: ReversalIntegrityError): St
 
 // A second unrelated action clears the redo stack (data-model.md). That holds when only the store
 // sync after the commit throws too: the action landed all the same. A refusal is not committed.
-async function commitNewAction(
+export async function commitNewAction(
   set: ReversalSet,
   ctx: DbCtx,
   extraOps: readonly SqlOp[],
@@ -229,7 +230,17 @@ async function updateStoryEntryContentBracketed(
   return { status: 'ok' }
 }
 
-export type RollbackCounts = { entries: number; chapters: number; worldStateChanges: number }
+export type RollbackCounts = {
+  entries: number
+  chapters: number
+  worldStateChanges: number
+  /** `chapter_close` deltas in the window, less a running run's and `retrievalCount`-only ones. */
+  closeWrites: number
+  /** The `sequence_number` of the chapter the target falls inside, whose earlier entries stay. */
+  reopenedChapter: number | null
+  /** The `sequence_number`s of chapters whose every entry goes, oldest first. */
+  removedChapters: readonly number[]
+}
 
 /** The set moved since the confirm showed its counts; `counts` is the set as it stands now. */
 export type CountsChangedRejection = {
@@ -297,6 +308,16 @@ async function resolveRollbackWindow(
   }
 }
 
+export type ResolvedSweep = {
+  set: ReversalSet
+  clampOps: readonly SqlOp[]
+  /** The rollback window before the closure, newest first. */
+  window: readonly Delta[]
+  /** The pass or close holding the branch as the sweep resolved; its rows count nowhere. */
+  runningActionId: string | null
+  targetPosition: number
+}
+
 /**
  * The rollback window materialized and closed: the set the sweep reverses, plus the watermark
  * clamp that must ride in its transaction. Writes nothing (a refusal only logs); each caller owns
@@ -306,7 +327,7 @@ export async function resolveSweep(
   branchId: string,
   targetId: string,
   ctx: DbCtx,
-): Promise<{ set: ReversalSet; clampOps: SqlOp[] } | StoryEntryRejection> {
+): Promise<ResolvedSweep | StoryEntryRejection> {
   const win = await resolveRollbackWindow(branchId, targetId, ctx)
   if ('status' in win) return win
   const rows = (await ctx.db
@@ -314,6 +335,8 @@ export async function resolveSweep(
     .from(deltas)
     .where(win.where)
     .orderBy(desc(deltas.logPosition))) as Delta[]
+  const runningActionId =
+    selectMemoryRun(generationStore.getTxState(), { branchId })?.actionId ?? null
   let set: ReversalSet
   try {
     set = await selectReversalSet(ctx, { branchId, target: rows })
@@ -321,30 +344,93 @@ export async function resolveSweep(
     if (e instanceof ReversalIntegrityError) return reversalRefused(branchId, e)
     throw e
   }
-  return { set, clampOps: classifierWatermarkClampOps(branchId, win.earliestRemovedPosition) }
+  return {
+    set,
+    clampOps: classifierWatermarkClampOps(branchId, win.earliestRemovedPosition),
+    window: rows,
+    runningActionId,
+    targetPosition: win.earliestRemovedPosition,
+  }
 }
 
-// Buckets per rollback-confirm.md → Counts. A non-create entry or chapter delta counts nowhere;
-// a cleared parent logs no delta but still moves a place, so it counts as a change.
-export function rollbackCountsOf({ rows, refClears }: ReversalSet): RollbackCounts {
+// rollback-confirm.md → Counts. A running pass's or close's rows count nowhere: its abort reverses
+// them before the commit counts. A cleared parent logs no delta but still counts as a change.
+export async function rollbackCountsOf(
+  swept: ResolvedSweep,
+  ctx: Pick<DbCtx, 'db'>,
+): Promise<RollbackCounts> {
+  const { set, window, runningActionId } = swept
+  const counted = (d: Delta) =>
+    d.actionId !== runningActionId && !isRetrievalBumpOnly(d.op, d.undoPayload)
+  const sweptChapters = new Set(
+    set.rows
+      .filter((d) => d.targetTable === 'chapters' && d.op === 'create')
+      .map((d) => d.targetId),
+  )
   let entries = 0
-  let chapters = 0
-  let worldStateChanges = refClears.length
-  for (const r of rows) {
-    if (r.targetTable === 'story_entries') {
-      if (r.op === 'create') entries++
-    } else if (r.targetTable === 'chapters') {
-      if (r.op === 'create') chapters++
+  let worldStateChanges = set.refClears.length
+  const chapterIds: string[] = []
+  // The closed set: a fact on a surviving turn naming a row the sweep removes goes too.
+  for (const d of set.rows) {
+    if (!counted(d)) continue
+    if (d.targetTable === 'story_entries') {
+      if (d.op === 'create') entries++
+    } else if (d.targetTable === 'chapters') {
+      if (d.op === 'create') chapterIds.push(d.targetId)
+      // A swept close's report goes with its create; a user's edit of a spared chapter doesn't.
+      else if (!sweptChapters.has(d.targetId)) worldStateChanges++
     } else worldStateChanges++
   }
-  return { entries, chapters, worldStateChanges }
+  // The window, not the set: the closure adds a close's write on a row a later turn created, for
+  // a chapter that stands.
+  const closeWrites = window.filter((d) => d.source === 'chapter_close' && counted(d)).length
+  return {
+    entries,
+    chapters: chapterIds.length,
+    worldStateChanges,
+    closeWrites,
+    ...(await chapterFates(set.branchId, chapterIds, swept.targetPosition, ctx)),
+  }
 }
 
+// rollback-confirm.md → Cross-chapter case: a chapter starting below the target keeps its earlier
+// entries, so it re-opens; every other chapter, one with no start row among them, goes whole.
+async function chapterFates(
+  branchId: string,
+  chapterIds: readonly string[],
+  targetPosition: number,
+  ctx: Pick<DbCtx, 'db'>,
+): Promise<Pick<RollbackCounts, 'reopenedChapter' | 'removedChapters'>> {
+  const starts: { sequenceNumber: number; startPosition: number | null }[] = []
+  for (const ids of chunked(chapterIds))
+    starts.push(
+      ...(await ctx.db
+        .select({ sequenceNumber: chapters.sequenceNumber, startPosition: storyEntries.position })
+        .from(chapters)
+        .leftJoin(
+          storyEntries,
+          and(
+            eq(storyEntries.branchId, chapters.branchId),
+            eq(storyEntries.id, chapters.startEntryId),
+          ),
+        )
+        .where(and(eq(chapters.branchId, branchId), inArray(chapters.id, ids)))),
+    )
+  starts.sort((a, b) => a.sequenceNumber - b.sequenceNumber)
+  const reopened = starts.find((c) => c.startPosition != null && c.startPosition < targetPosition)
+  return {
+    reopenedChapter: reopened?.sequenceNumber ?? null,
+    removedChapters: starts.filter((c) => c !== reopened).map((c) => c.sequenceNumber),
+  }
+}
+
+// Neither fate needs comparing: for one target, the same `chapters` count means the same chapters.
 export function sameRollbackCounts(a: RollbackCounts, b: RollbackCounts): boolean {
   return (
     a.entries === b.entries &&
     a.chapters === b.chapters &&
-    a.worldStateChanges === b.worldStateChanges
+    a.worldStateChanges === b.worldStateChanges &&
+    a.closeWrites === b.closeWrites
   )
 }
 
@@ -355,14 +441,13 @@ export async function getRollbackCounts(
   targetId: string,
   ctx: DbCtx,
 ): Promise<RollbackCounts | StoryEntryRejection> {
-  // The closed set, not the window: a fact on a surviving turn naming a row the sweep
-  // removes goes too (rollback-confirm.md → Counts).
-  // Held shared: a prose reversal or interruptible-run abort reversal landing mid-read refuses it.
-  const swept = await withBranchWriteShared(branchId, ROLLBACK_PREVIEW_LOCK_ID, () =>
-    resolveSweep(branchId, targetId, ctx),
-  )
-  if ('status' in swept) return swept
-  return rollbackCountsOf(swept.set)
+  // Held shared through the fate read, so no reversal lands between the set, the chapter count and
+  // the fates.
+  return withBranchWriteShared(branchId, ROLLBACK_PREVIEW_LOCK_ID, async () => {
+    const swept = await resolveSweep(branchId, targetId, ctx)
+    if ('status' in swept) return swept
+    return rollbackCountsOf(swept, ctx)
+  })
 }
 
 export async function rollbackToEntry(
@@ -379,7 +464,7 @@ export async function rollbackToEntry(
   return bracketProseReversal(branchId, ctx, async () => {
     const swept = await resolveSweep(branchId, targetId, ctx)
     if ('status' in swept) return swept
-    const counts = rollbackCountsOf(swept.set)
+    const counts = await rollbackCountsOf(swept, ctx)
     // Compared with the set the commit reverses, so the consent covers exactly what goes.
     if (!sameRollbackCounts(counts, expectedCounts))
       return {

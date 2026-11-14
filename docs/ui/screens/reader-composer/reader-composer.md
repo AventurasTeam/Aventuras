@@ -279,21 +279,46 @@ re-run. The pass or close moves to the next turn, and a toast says so
 exception: the close it replaces has committed, so a regenerate reaching
 that chapter is held until the re-run ends; Cancel stops it first.
 
+A pass or close can still commit as the interrupt lands; the counts
+left out its rows, and the set the regenerate resolves now holds them.
+The regenerate then refuses `counts-changed` and
+the reader opens the regenerate confirm on the fresh counts, with no
+toast, since the ↻ tap has no open confirm for the toast to refer to.
+When a confirm's counts show nothing after the reply and no close in
+range, as they do when a pass commits that way or a recount gets there,
+its body drops `and everything after it`; a close committing that way
+opens the close copy below instead:
+`This discards entry <N>, then generates a new reply from your last action. The following are removed:`.
+
 **Confirm when the turn closed a chapter.** If a committed chapter
-close ends on this turn, as a manual close may, its
-lore-management writes (the chapter-close sub-jobs) reverse and re-run. The gate is cost, not data loss —
-regenerate owns the loss of the prior take intrinsically; what
-warrants consent is re-running the expensive sub-jobs, a boundary
-rare enough that the confirm never turns routine. It reuses the
-[rollback confirmation](./rollback-confirm/rollback-confirm.md#cross-chapter-case)
-cross-chapter copy, reframed as re-run rather than re-open: the
-chapter returns to in-progress and regenerates.
+close ends on this turn, as a manual close may, the regenerate reverses
+it: the chapter returns to in-progress and its lore-management writes
+(the chapter-close sub-jobs) go. Nothing runs them again at once, so the
+confirm promises no re-run. It names the chapter,
+`Chapter <n> will return to in-progress.`, then says
+`Its close runs again only when one is next due, or when you start it.`
+The gate is cost, not data loss — regenerate owns the loss of the prior
+take intrinsically; what warrants consent is throwing away the expensive
+sub-jobs' work, a boundary rare enough that the confirm never turns
+routine. Its body is
+`This discards entry <N> and reverses the chapter close that ends on it, then generates a new reply from your last action. The following are removed:`,
+and it shows this named-chapter line in place of the rollback
+confirmation's chapter lines. `<n>` is the chapter the reply falls
+inside, else the one chapter removed.
 
 The same confirm fires when a close's work is all that's left on this
 turn, after its divider was
 [removed](../chapter-timeline/chapter-timeline.md#delete-a-chapter): the
 regenerate reverses that work, and no close re-runs it, so the copy says
 it goes.
+
+**An older reply** reverses every later turn with it, so it always
+confirms, on the cascade copy
+(`This discards entry <N> and everything after it…`). A close in that
+cascade adds no close copy: the confirm shows the
+[rollback confirmation's chapter lines](./rollback-confirm/rollback-confirm.md#cross-chapter-case),
+the chapter the reply falls inside re-opened and any chapter whose
+entries all go removed.
 
 **Its counts stay true while it is open**, as the rollback modal's do
 ([`rollback-confirm.md → Counts`](./rollback-confirm/rollback-confirm.md#counts)):

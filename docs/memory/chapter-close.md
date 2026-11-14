@@ -940,8 +940,31 @@ abort.
 in-flight transaction — see
 [`generation-pipeline.md → Crash recovery via pipeline_runs marker table`](../generation-pipeline.md#crash-recovery-via-pipeline_runs-marker-table).
 A reversal that can't commit holds nothing back: each of a close's writes
-is cited and stands alone, so what's left is a partial close, not broken
-state, and the next pass reading it is benign.
+is cited and stands alone, so until a later boot reverses it what's left
+is a partial close, and the next pass reading it is benign.
+
+**Accepted residue.** Four narrow cases leave state that no code
+repairs, though a restart ends the fourth's overlap. Each needs a close
+that ends on the newest reply or a failed transaction, the last only the
+failed transaction. A manual close can end there; an automatic one does
+only when the open region holds a single reply
+([Phase 1](#phase-1--boundary-selection)), which a low threshold makes
+routine:
+
+- A redo under a manual close at the head can leave duplicates in its
+  closed range, which [3e](#3e--happenings-consolidation) never revisits.
+- An edit of the head entry under a committed close keeps the writes the
+  close derived from the replaced prose.
+- A reversal of an earlier close, under a later closed chapter, whose
+  commit fails and that a later boot completes, leaves the entries
+  before that closed chapter unstamped.
+  The next close starts its range at the first of them, so its chapter
+  spans the closed one after it, and two chapters overlap.
+- A close stopped before its stamps whose own reversal fails keeps its
+  chapter row until a boot reverses it, while a close is still owed. The
+  next Send, a close-failure entry's Retry or the turn's chain closes the
+  same entries again at once, so two chapters cover them until a
+  restart, and a gap in the numbering follows.
 
 ## Review
 
@@ -994,7 +1017,7 @@ User can manually trigger chapter close at any time, regardless of
 threshold. The user picks the end among the open region's replies
 (Phase 1 skipped), the newest included: that's often where the user
 means the chapter to stop, and regenerating it confirms first that the close
-will re-run
+is reversed, to run again only when one is next due or the user starts it
 ([`reader-composer.md → Regenerate confirmation`](../ui/screens/reader-composer/reader-composer.md#regenerate-confirmation)).
 Phases 0, 2-4 run normally, under the same gate and interrupt rule as an
 auto close.
@@ -1038,13 +1061,15 @@ close's, so rolling that turn back after a delete writes it again, and
 the value before it isn't in the log. That's accepted: the order is rare,
 the state stays valid, and the next pass or close corrects it.
 
-**What follows.** The chapter's tokens return to the open region. With
-auto-close on and the region at the threshold, the next Send closes
-again, which re-derives the memory the delete removed. Under it, a close
-waits for the region to grow. With auto-close off the chapter stays open,
-and "Ready to close" shows once the threshold is met. A threshold changed
-first simply applies. After a divider-only removal the same close runs
-on top of the kept work, at full cost.
+**What follows.** The chapter's tokens return to the open region. With a
+manual close pending, the next Send runs it, whatever the region's size
+or the auto-close setting. Otherwise, with auto-close on and the region
+at the threshold, the next Send closes again, which re-derives the
+memory the delete removed. Under it, a close waits for the region to
+grow. With auto-close off the chapter stays open, and "Ready to close"
+shows once the threshold is met. A threshold changed first simply
+applies. After a divider-only removal the same close runs on top of the
+kept work, at full cost.
 
 **Prose stays.** Turns since the chapter stay as written and can still
 reflect what the close added. Full coherence is a rollback to the
@@ -1131,7 +1156,10 @@ close, as a close's review does.
 | Crash                           | Boot recovery reverses the group and restores the journal, else undoes the close |
 
 **Head reversals.** Regenerate interrupts a running close with no
-confirm because nothing of it has committed. Under a re-run the close
+confirm because nothing of it has committed; if it commits as the
+interrupt lands, the regenerate refuses and confirms on the fresh counts
+([`reader-composer.md → Regenerate confirmation`](../ui/screens/reader-composer/reader-composer.md#regenerate-confirmation)).
+Under a re-run the close
 it replaces has, and once the reversal commits its lore sits in the
 journal, where no confirm can count it. So a head reversal reaching
 that chapter, a rollback into it or a regenerate of its end reply after

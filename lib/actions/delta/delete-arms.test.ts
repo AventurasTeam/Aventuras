@@ -5,7 +5,6 @@ import { beforeEach, describe, expect, it } from 'vitest'
 
 import {
   branches,
-  chapters,
   deltas,
   ensureVecTablesSql,
   entities,
@@ -77,32 +76,6 @@ const CASES = [
       }),
     remove: { kind: 'deleteThread', source: 'user_edit', payload: { branchId: 'b1', id: 'row_1' } },
     select: () => ctx.db.select().from(threads),
-  },
-  {
-    kind: 'chapter',
-    translationKind: 'chapter',
-    insert: () =>
-      ctx.db.insert(chapters).values({
-        id: 'row_1',
-        branchId: 'b1',
-        sequenceNumber: 1,
-        title: 'I',
-        summary: 's',
-        theme: 't',
-        startEntryId: 'e1',
-        endEntryId: 'e2',
-        tokenCount: 1,
-        closedAt: 1,
-        embeddingStale: 0,
-        createdAt: 1,
-        updatedAt: 1,
-      }),
-    remove: {
-      kind: 'deleteChapter',
-      source: 'user_edit',
-      payload: { branchId: 'b1', id: 'row_1' },
-    },
-    select: () => ctx.db.select().from(chapters),
   },
   {
     kind: 'happening',

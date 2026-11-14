@@ -714,6 +714,19 @@ amends the scope above.
   button does the same belongs to
   [M9's `disabledReason` pass](../../../roadmap.md#m9--storybook--per-surface-visual-polish--ship-gate).
   Surfaced by Slice 5.7's slice review; routed from triage 2026-11-07.
+- **May an automatic close end on the newest reply?** Phase 1 keeps the newest
+  reply out of the candidates, since regenerating it would reverse the whole close.
+  But with no candidate it falls back to the head when the open region holds a
+  single reply (`fallbackChapterEnd` in `lib/chapters/fallback-chapter-end.ts`,
+  from `closeBoundaryPhase`), and a low threshold makes that routine. It also
+  makes the first two Accepted residue cases in
+  [`chapter-close.md → Failure modes and atomic rollback`](../../../../memory/chapter-close.md#failure-modes-and-atomic-rollback)
+  routine. A redo under a close at the head can leave duplicates in its closed
+  range that 3e never revisits. An edit of the head entry under a committed close
+  keeps the writes the close derived from the replaced prose. Default: as shipped,
+  with the residue accepted. The other option owes no automatic close until the
+  open region holds a second reply, so the close waits a turn and ends before the
+  newest reply. Routed from Slice 5.12's slice review.
 - **A fact for the planner, not a question.** If the host ever reads a run's result:
   `completed` can be the catch-up pass alone (a late Cancel after its last phase, or
   the open story leaving the branch), with no close run and the pick still owed.

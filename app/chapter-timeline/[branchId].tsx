@@ -3,9 +3,11 @@ import { useCallback, useMemo, type ReactElement } from 'react'
 import { ScrollView, View } from 'react-native'
 
 import { ChapterCard } from '@/components/chapters/chapter-card'
+import { ChapterDeleteConfirm } from '@/components/chapters/chapter-delete-confirm'
 import { ChapterInProgressCard } from '@/components/chapters/chapter-in-progress-card'
 import { chapterTimelineData } from '@/components/chapters/chapter-timeline-data'
 import { ChapterTimelineHeader } from '@/components/chapters/chapter-timeline-header'
+import { useChapterDeleteConfirm } from '@/components/chapters/use-chapter-delete-confirm'
 import { useTimelineEditing } from '@/components/chapters/use-timeline-editing'
 import { useTimelineTimeRanges } from '@/components/chapters/use-timeline-time-ranges'
 import { AppActionsMenu } from '@/components/compounds/app-actions-menu'
@@ -25,13 +27,13 @@ import { useMasterDetailBack } from '@/hooks/use-master-detail-back'
 import { useOverlaySurface } from '@/hooks/use-overlay-surface'
 import { useStoryLeaveGuard } from '@/hooks/use-story-leave-guard'
 import { useTier } from '@/hooks/use-tier'
-import { saveChapter } from '@/lib/actions'
+import { getChapterDeletePreview, loadOpenStory, removeChapter, saveChapter } from '@/lib/actions'
 import { resolveCalendar, type CalendarFrame } from '@/lib/calendar'
 import type { ChapterDraft, ChapterDraftRow } from '@/lib/chapters'
 import { db, runInTransaction } from '@/lib/db'
 import { t } from '@/lib/i18n'
 import { singleParam } from '@/lib/route-param'
-import { chapterOverlaysStore, chaptersStore, storiesStore } from '@/lib/stores'
+import { chapterOverlaysStore, chaptersStore, currentStoryStore, storiesStore } from '@/lib/stores'
 import { toast } from '@/lib/toast'
 
 const ctx = { db, runInTransaction }
@@ -93,6 +95,28 @@ export default function ChapterTimelineRoute(): ReactElement {
     onRejected: toast.error,
   })
   useOverlaySurface(guard)
+
+  const deleteConfirm = useChapterDeleteConfirm({
+    branchId,
+    active: focused,
+    loadPreview: async (chapterId) => {
+      // Cards, and so their Delete…, render only once the story is open.
+      if (open == null) throw new Error(`no open story on ${branchId} to preview a delete with`)
+      return getChapterDeletePreview(branchId, chapterId, open, ctx)
+    },
+    remove: (chapterId, mode) => removeChapter(branchId, chapterId, mode, ctx),
+    // A delete whose store sync failed re-hydrates the branch, as a cold open does. The confirm
+    // continuation outlives this screen, so a resync must not re-publish a branch the user has left.
+    resync: async () => {
+      const result = await loadOpenStory(
+        branchId,
+        ctx,
+        () => currentStoryStore.getCurrentStory()?.branchId === branchId,
+      )
+      if (result.status !== 'ok' && result.status !== 'cancelled')
+        throw new Error(`branch re-hydration ${result.status}`)
+    },
+  })
 
   const jump = useCallback(
     (startEntryId: string) => navigateGuarded(readerHref(branchId, startEntryId)),
@@ -165,6 +189,7 @@ export default function ChapterTimelineRoute(): ReactElement {
                   hotkeysEnabled={focused}
                   onJump={() => jump(card.row.startEntryId)}
                   onReview={() => chapterOverlaysStore.openReviewWindow({ chapterId: card.row.id })}
+                  onDelete={() => guard(() => void deleteConfirm.open(card.row.id))}
                 />
               ))}
               <ChapterInProgressCard progress={chapterProgress} sinceLabel={timeline.sinceLabel} />
@@ -181,6 +206,19 @@ export default function ChapterTimelineRoute(): ReactElement {
         </KeyboardInsetColumn>
       )}
       <RowLeaveDialog session={session} blocked={editBlocked} blockedReason={gateReason} />
+      {/* Focus-gated: the portaled confirm would otherwise paint over a screen pushed on top. */}
+      {deleteConfirm.target != null && focused ? (
+        <ChapterDeleteConfirm
+          open
+          onOpenChange={(next) => {
+            if (!next) deleteConfirm.dismiss()
+          }}
+          preview={deleteConfirm.target.preview}
+          blockedReason={gateReason}
+          pending={deleteConfirm.pending}
+          onDelete={(mode) => void deleteConfirm.confirm(mode)}
+        />
+      ) : null}
       {storyLeaveDialog}
     </ScreenShell>
   )
