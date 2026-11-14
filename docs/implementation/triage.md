@@ -545,16 +545,6 @@ patch`, which 5.5a marks `restated`, so a close tool's write of it
   blocked-while-generating copy, or keeping the confirm open, would say
   what happened. Raised in Slice 5.12's review of Task 12 and its final
   review.
-- **A dialog whose actions and Cancel all disable while saving
-  probably drops focus on web.** `UnsavedChangesDialog`
-  (`components/compounds/unsaved-changes-dialog.tsx`) disables Cancel,
-  Discard and Save together while `saving`, the shape of
-  [a control that disables under focus drops focus on web](lessons-learned/rnweb-disabled-under-focus-blurs.md).
-  Inferred from the structure, not probed in a browser. The lesson
-  names buttons that disable while loading; adding the dialog shape,
-  where the focused action and every other control disable at once so
-  there is nothing to hand focus to but the dialog, would cover this
-  second consumer. Raised in Slice 5.12's review of Task 11.
 - **Test and story helpers are duplicated.** `appendTurnEntry` in
   `lib/pipeline/definitions/close-agent/upkeep-tools.test.ts` and
   `lifecycle-tools.test.ts`, and `writeLaterTurn` in

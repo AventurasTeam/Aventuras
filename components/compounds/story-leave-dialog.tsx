@@ -36,7 +36,7 @@ export function StoryLeaveDialog({
 
   return (
     <AlertDialog open={open} onOpenChange={handleOpenChange}>
-      <AlertDialogContent>
+      <AlertDialogContent busy={leaving}>
         <AlertDialogHeader>
           <AlertDialogTitle>{t('storyLeave.title')}</AlertDialogTitle>
           <AlertDialogDescription>{t('storyLeave.body')}</AlertDialogDescription>

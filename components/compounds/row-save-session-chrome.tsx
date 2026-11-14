@@ -95,7 +95,7 @@ function ConfirmDialog({
         if (!next && !saving) onAnswer('cancel')
       }}
     >
-      <AlertDialogContent>
+      <AlertDialogContent busy={saving}>
         <AlertDialogHeader>
           <AlertDialogTitle>{ask.title}</AlertDialogTitle>
           {/* Lines and items inside the description, so a screen reader announces them. */}

@@ -60,7 +60,7 @@ export function UnsavedChangesDialog({
 
   return (
     <AlertDialog open={open} onOpenChange={handleOpenChange}>
-      <AlertDialogContent portalHost={portalHost}>
+      <AlertDialogContent portalHost={portalHost} busy={saving}>
         <AlertDialogHeader>
           <AlertDialogTitle>{t('unsavedChanges.title')}</AlertDialogTitle>
           <AlertDialogDescription>
