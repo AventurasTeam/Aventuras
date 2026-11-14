@@ -63,5 +63,28 @@
     "since": "In progress · since {{time}}",
     "placeholder": "Summary, theme, and keywords generate on close.",
     "close": "Close chapter…"
+  },
+  "deleteConfirm": {
+    "title": "Delete chapter {{number}}?",
+    "body": "This undoes what the chapter's close did. Its entries stay.",
+    "lore": "{{count}} lore row removed",
+    "lore_other": "{{count}} lore rows removed",
+    "loreEdited": "{{count}} lore row removed, your edits included",
+    "loreEdited_other": "{{count}} lore rows removed, your edits included",
+    "otherChanges": "{{count}} other change reversed",
+    "otherChanges_other": "{{count}} other changes reversed",
+    "turnsSince": "{{count}} turn since stays as written, and can still reflect what it added. Undoing one can bring back a value this removes.",
+    "turnsSince_other": "{{count}} turns since stay as written, and can still reflect what it added. Undoing one can bring back a value this removes.",
+    "after": {
+      "closesNextSend": "A close runs again before your next turn.",
+      "waits": "A close waits until the chapter grows past the threshold.",
+      "staysOpen": "The chapter stays open until you close it."
+    },
+    "dividerLine": "Removing only the divider closes the same prose again, on top of the kept work.",
+    "irreversible": "This cannot be undone.",
+    "removeDivider": "Remove divider only",
+    "confirm": "Delete chapter",
+    "notLatest": "This is no longer the latest chapter.",
+    "failed": "Couldn't delete the chapter."
   }
 }
