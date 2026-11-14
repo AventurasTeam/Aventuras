@@ -429,15 +429,21 @@ export const NoRowRefusals: Story = {
       notApplied: [
         { ...NO_KEEP, key: '7', tool: 'update_character' },
         { ...NO_KEEP, key: '8', tool: 'future_write_tool' },
+        { ...NO_KEEP, key: '9', tool: 'merge_happenings' },
+        { ...NO_KEEP, key: '10', tool: 'set_pin' },
       ],
     },
   },
   play: async () => {
     const dialog = await findWindow()
-    await userEvent.click(within(dialog).getByRole('button', { name: 'Not applied (2)' }))
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Not applied (4)' }))
     expect(await within(dialog).findByText('Character', {}, WAIT)).toBeVisible()
     expect(within(dialog).getByText('Unknown row')).toBeVisible()
-    expect(within(dialog).queryByText(/update_character|future_write_tool/)).toBeNull()
+    expect(within(dialog).getByText('Happening merge')).toBeVisible()
+    expect(within(dialog).getByText('Decay resistance')).toBeVisible()
+    expect(
+      within(dialog).queryByText(/update_character|future_write_tool|merge_happenings|set_pin/),
+    ).toBeNull()
   },
 }
 
