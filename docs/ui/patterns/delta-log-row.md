@@ -65,7 +65,7 @@ type DeltaLogRowProps = {
   }
   onPress?: () => void // host wires navigation
   className?: string // the outermost element: the row, or the row and its footer
-  footer?: ReactNode // under the row, outside its button, aligned to the summary
+  footer?: ReactElement // under the row, outside its button, aligned to the summary
   showMeta?: boolean // default true; false drops the meta line
   summaryLines?: number | null // default 2; null for no clamp
 }

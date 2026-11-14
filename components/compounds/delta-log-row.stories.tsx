@@ -1,8 +1,7 @@
 import type { Meta, StoryObj } from '@storybook/react-native-web-vite'
-import { View } from 'react-native'
+import { Pressable, View } from 'react-native'
 import { expect, fn, screen, userEvent, waitFor } from 'storybook/test'
 
-import { Button } from '@/components/ui/button'
 import { expectInsetFocusRing } from '@/components/ui/focus-ring-probe'
 import { Text } from '@/components/ui/text'
 import { t } from '@/lib/i18n'
@@ -45,9 +44,9 @@ function ReviewFooter() {
       <Text variant="muted" size="sm">
         He stops joking after Oss.
       </Text>
-      <Button variant="ghost" size="sm" onPress={openEntry}>
+      <Pressable accessibilityRole="link" aria-label="entry #47 →" onPress={openEntry}>
         <Text>entry #47 →</Text>
-      </Button>
+      </Pressable>
     </View>
   )
 }
@@ -72,7 +71,12 @@ type Story = StoryObj<typeof DeltaLogRow>
 export const UpdateOp: Story = {
   args: { delta: baseDelta, onPress: fn() },
   play: async () => {
-    await expectInsetFocusRing(await screen.findByTestId('delta-log-row'))
+    const row = await screen.findByTestId('delta-log-row')
+    // Without a footer the row is the whole element: no wrapper, and even vertical padding.
+    expect(row.parentElement?.childElementCount).toBe(1)
+    const style = getComputedStyle(row)
+    expect(style.paddingBottom).toBe(style.paddingTop)
+    await expectInsetFocusRing(row)
   },
 }
 
@@ -212,13 +216,29 @@ export const NonInteractiveIsNotAControl: Story = {
 }
 
 export const WithFooter: Story = {
-  args: { delta: reviewDelta, onPress: fn(), showMeta: false },
+  args: {
+    delta: reviewDelta,
+    onPress: fn(),
+    showMeta: false,
+    className: 'border-b border-border',
+  },
   render: (args) => <DeltaLogRow {...args} footer={<ReviewFooter />} />,
   play: async ({ args }) => {
     openEntry.mockClear()
-    const link = screen.getByRole('button', { name: 'entry #47 →' })
+    const link = screen.getByRole('link', { name: 'entry #47 →' })
     // A control of its own: no button around it, the row's included.
     expect(link.parentElement?.closest('[role="button"]')).toBeNull()
+    // The badge's twin that holds the indent is hidden from readers and takes no height.
+    const spacers = screen
+      .getAllByText(t('history:op.update'))
+      .map((el) => el.closest('[aria-hidden="true"]'))
+      .filter((el) => el != null)
+    expect(spacers).toHaveLength(1)
+    expect(spacers[0].getBoundingClientRect().height).toBe(0)
+    // The host's className sits on the outermost element, the wrapper.
+    const row = screen.getByTestId('delta-log-row')
+    expect(row).not.toHaveClass('border-b')
+    expect(row.parentElement).toHaveClass('border-b')
     // Indented to the summary column, past the op badge.
     const why = screen.getByText('He stops joking after Oss.')
     const summary = screen.getByText('wry, joking → short, flat sentences')

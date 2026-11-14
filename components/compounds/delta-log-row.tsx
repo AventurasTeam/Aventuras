@@ -1,4 +1,4 @@
-import { useId, type ReactNode } from 'react'
+import { useId, type ReactElement } from 'react'
 import { Platform, Pressable, View } from 'react-native'
 
 import { describedBy } from '@/components/ui/accessible-description'
@@ -54,7 +54,7 @@ type DeltaLogRowProps = {
    * never nested in the row's. Keep it present or absent for the row's life: adding one
    * re-parents the row.
    */
-  footer?: ReactNode
+  footer?: ReactElement
   /** Default true; false drops the meta line from view and from the row's description. */
   showMeta?: boolean
   /** The summary's line clamp. Default 2; null for none. */
