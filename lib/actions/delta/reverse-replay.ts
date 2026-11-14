@@ -670,8 +670,8 @@ async function clearRef(walk: UndoWalk, { row, ref }: RefClear): Promise<void> {
   if (copy && !copy.removed) copy.row[ref.column] = cleared(copy.row[ref.column])
 }
 
-// Machine undos yield to later user edits, and a chapter delete's field restores to any later
-// write: generation-pipeline.md → Reverse-replay.
+// Machine undos yield to later user edits; a chapter delete's field restores yield to any later
+// write but a retrieval bump (generation-pipeline.md → Reverse-replay).
 async function buildUndoOps(
   set: ReversalSet,
   ctx: DbCtx,
