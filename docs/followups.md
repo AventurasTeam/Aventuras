@@ -384,6 +384,14 @@ breakdown under [UX](#ux).
   boosting before decay or by a larger factor. Raised 2026-11-13 by
   Slice 5.9's planning, when `chapters_old` came live.
 
+  The Awareness task raises a pin in a step of about 0.2, never
+  straight to 1
+  ([3d](./memory/chapter-close.md#3d--awareness-pin-tuning)): the
+  prompt asks for it, and `set_pin` doesn't enforce it. No later close
+  can lower a frequent row's pin, so play tells whether 0.2 lets a
+  load-bearing row climb fast enough while a one-chapter spike fades.
+  Developer decision 2026-11-14, from 5.9's Awareness review.
+
 - **User threads never decay.** A thread the user created, or one the
   user resolved or failed, carries no `resolved_at_entry_id` and never
   decays: the [authorship contract](./data-model.md#authorship-contract)
