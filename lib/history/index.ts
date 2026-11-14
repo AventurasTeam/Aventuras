@@ -1,3 +1,9 @@
+export {
+  loadCloseDeltas,
+  readCloseReport,
+  readDeletedEntityKinds,
+  readLatestCloseReport,
+} from './close-read'
 export { HISTORY_OPS } from './field-labels'
 export type { HistoryTable } from './field-labels'
 export { humanizeDelta } from './humanize'
