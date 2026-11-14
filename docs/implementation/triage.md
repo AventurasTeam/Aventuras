@@ -86,14 +86,6 @@ slice-planning gate forces its resolution before that slice is planned.
   ([Parallel-group event coordination](../generation-pipeline.md#parallel-group-event-coordination)).
   Shown by probe on both write paths in 5.5a's review; latent, since no
   production pipeline declares a parallel group.
-- **The two write paths disagree on what a bus event means.** A
-  `delta_emitted` noop or refusal never reaches the bus, while a
-  `delta_group_emitted` reaches it whether the group landed, no-oped or
-  was refused whole (`handleEvent`, `lib/pipeline/runtime/orchestrator.ts`).
-  [Phase iteration](../generation-pipeline.md#phase-iteration) says the
-  orchestrator forwards every event. No production code subscribes to
-  delta events yet; one rule for both paths is wanted before one does.
-  Raised in 5.5a's review.
 - **`set.state` in `updateEntity` stores a patch's keys the schema
   doesn't know, with no undo record.** `set.state` takes the raw
   patch while `computeUndoPayload` walks only `entityStateColumnSchema`
