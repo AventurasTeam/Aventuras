@@ -10,7 +10,12 @@ import {
   reviewValueText,
   sameRow,
 } from './close-review-changes'
-import type { CloseReview, CloseReviewLookup, CloseReviewNotApplied } from './close-review-types'
+import type {
+  CloseReview,
+  CloseReviewField,
+  CloseReviewLookup,
+  CloseReviewNotApplied,
+} from './close-review-types'
 
 const REASON_COPY = {
   'user-edited-since-prose': 'chapters:review.reason.user-edited-since-prose',
@@ -191,13 +196,16 @@ export function closeReviewNotApplied(
       const created = call.tool === CREATE_LORE_TOOL
       // A refusal stored with no reason, which closeReportSchema logged.
       const reasonKey = refusal.reason ?? 'other'
+      const field: CloseReviewField =
+        path === null
+          ? { fieldPath: null, fieldLabel: null }
+          : { fieldPath: path, fieldLabel: reviewFieldLabel(first?.table ?? '', path) }
       return {
         key: reviewRowKey(refusal.index, first ?? { table: '', id: '' }, path ?? call.tool),
         op: created ? 'create' : 'update',
         tool: call.tool,
         target: first === undefined ? null : reviewTarget(first, lookup),
-        fieldPath: path,
-        fieldLabel: path === null ? null : reviewFieldLabel(first?.table ?? '', path),
+        ...field,
         summary: refusal.summary,
         reasonKey,
         reasonText: t(REASON_COPY[reasonKey]),

@@ -304,21 +304,31 @@ export function closeReviewChanges(
   for (const write of planned) {
     const area = areaOf(write.row, lookup)
     if (area === null) continue
-    const target = reviewTarget(write.row, lookup)
-    const path = write.op === 'update' ? write.path : null
     const pressTo = write.op === 'delete' ? write.kept : write.row
-    const row: CloseReviewChange = {
-      key: reviewRowKey(write.index, write.row, path ?? write.op),
-      op: write.op,
+    const shared = {
       area,
-      target,
-      fieldPath: path,
-      fieldLabel: path === null ? null : reviewFieldLabel(write.row.table, path),
+      target: reviewTarget(write.row, lookup),
       summary: summaryOf(write, old.get(write), lookup),
       why: write.call.why,
       entryId: citedEntry(write.call.turns, lookup),
       pressTo: { table: pressTo.table, id: pressTo.id },
     }
+    const row: CloseReviewChange =
+      write.op === 'update'
+        ? {
+            ...shared,
+            key: reviewRowKey(write.index, write.row, write.path),
+            op: 'update',
+            fieldPath: write.path,
+            fieldLabel: reviewFieldLabel(write.row.table, write.path),
+          }
+        : {
+            ...shared,
+            key: reviewRowKey(write.index, write.row, write.op),
+            op: write.op,
+            fieldPath: null,
+            fieldLabel: null,
+          }
     appendTo(byArea, area, row)
   }
   return CLOSE_REVIEW_AREAS.flatMap((area) => {

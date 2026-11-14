@@ -4,7 +4,7 @@ import type { CloseReport, CloseReportCall, Delta, EntityKind } from '@/lib/db'
 import { i18n } from '@/lib/i18n'
 
 import { closeReviewChanges, reviewFieldLabel } from './close-review-changes'
-import type { CloseReviewLookup } from './close-review-types'
+import type { CloseReviewChange, CloseReviewField, CloseReviewLookup } from './close-review-types'
 
 const KAEL = { table: 'entities', id: 'char_kael', name: 'Kael' }
 const ORDER = { table: 'entities', id: 'fact_order', name: 'The Order' }
@@ -591,6 +591,37 @@ describe('closeReviewChanges', () => {
       'Kael today',
       'Unknown row',
     ])
+  })
+})
+
+describe('the review row types', () => {
+  it('pairs a path with its label, and gives a Changes row one exactly when it updates', () => {
+    const row = {
+      key: 'k',
+      area: 'lore',
+      target: TITHE,
+      summary: '',
+      why: '',
+      entryId: null,
+      pressTo: TITHE,
+    } as const
+    const fields = (): CloseReviewField[] => [
+      { fieldPath: 'title', fieldLabel: 'Title' },
+      { fieldPath: null, fieldLabel: null },
+      // @ts-expect-error a label comes with its path
+      { fieldPath: null, fieldLabel: 'Title' },
+    ]
+    const changes = (): CloseReviewChange[] => [
+      { ...row, op: 'update', fieldPath: 'title', fieldLabel: 'Title' },
+      { ...row, op: 'delete', fieldPath: null, fieldLabel: null },
+      // @ts-expect-error a create names no field
+      { ...row, op: 'create', fieldPath: 'title', fieldLabel: 'Title' },
+      // @ts-expect-error an update names its field
+      { ...row, op: 'update', fieldPath: null, fieldLabel: null },
+    ]
+
+    expect(fields).toBeTypeOf('function')
+    expect(changes).toBeTypeOf('function')
   })
 })
 
