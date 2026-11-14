@@ -329,6 +329,14 @@ describe('merge_happenings refusals', () => {
         payload: { branchId: fx.branchId, id: await involvementId(fx, LIGHT, MARA) },
       }),
     },
+    {
+      name: 'Mara with her links',
+      removed: async (fx) => ({
+        kind: 'deleteEntity',
+        source: 'user_edit',
+        payload: { branchId: fx.branchId, id: MARA },
+      }),
+    },
   ])(
     'skips the whole merge when the user deleted $name on an absorbed row',
     async ({ removed }) => {

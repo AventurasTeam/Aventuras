@@ -292,16 +292,39 @@ export function userDeletedAwarenessSince(
   )
 }
 
-/** Whether the user deleted any involvement or awareness row of the happening after the prose. */
+/**
+ * Whether the user deleted any involvement or awareness row of the happening after the prose, by
+ * itself or with its entity: an entity's delete logs its link rows only in its undo payload.
+ */
 export async function userDeletedHappeningLink(
   args: { branchId: string; happeningId: string; proseEntryId: string },
   ctx: Pick<DbCtx, 'db'>,
 ): Promise<boolean> {
   const { branchId, happeningId, proseEntryId } = args
   const since = await proseLogPosition(ctx, branchId, proseEntryId)
-  for (const table of ['happening_involvements', 'happening_awareness'] as const)
-    if (await userDeletedRowSince(ctx, branchId, table, { happeningId }, since)) return true
-  return false
+  const heldBy = (key: 'involvements' | 'awareness') =>
+    sql`EXISTS (SELECT 1 FROM json_each(${deltas.undoPayload}, ${`$.${key}`}) AS held
+      WHERE json_extract(held.value, '$.happeningId') = ${happeningId})`
+  const [hit] = await ctx.db
+    .select({ id: deltas.id })
+    .from(deltas)
+    .where(
+      and(
+        eq(deltas.branchId, branchId),
+        gt(deltas.logPosition, since),
+        eq(deltas.op, 'delete'),
+        eq(deltas.source, 'user_edit'),
+        or(
+          and(
+            inArray(deltas.targetTable, ['happening_involvements', 'happening_awareness']),
+            sql`json_extract(${deltas.undoPayload}, '$.happeningId') = ${happeningId}`,
+          ),
+          and(eq(deltas.targetTable, 'entities'), or(heldBy('involvements'), heldBy('awareness'))),
+        ),
+      ),
+    )
+    .limit(1)
+  return hit !== undefined
 }
 
 /** Whether the user deleted an involvement of the entity in the happening after `since`. */
