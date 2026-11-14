@@ -191,8 +191,11 @@ patch`, which 5.5a marks `restated`, so a close tool's write of it
   `putEntityRow` in two (`identity`, `upkeep`), and a story-mode write in
   five. The scripted-dispatch harness they also repeated now lives in
   `__tests__/close-dispatch.ts`; these helpers stayed per file, and one
-  module beside `__tests__/close-fixture.ts` would serve them. Raised in
-  5.5b's review.
+  module beside `__tests__/close-fixture.ts` would serve them. 5.9 added
+  more of the same: a `seedHappening` now sits in five close test files,
+  and `upkeep`, `driver`, `happenings`, `close-happenings`,
+  `awareness-tools` and `close-awareness` each insert entity, happening
+  and awareness rows directly. Raised in 5.5b's review, widened in 5.9's.
 - **`setThreadStatus` and `updateThread` read "carries refs"
   differently.** `setThreadStatus` writes the resolved ref only when
   `triggeredAtEntryId` is set, while `updateThread` asks whether either
@@ -467,3 +470,47 @@ patch`, which 5.5a marks `restated`, so a close tool's write of it
   step skips a record that would fold past the bound; the per-turn
   transfer writer goes through the same unchecked action. Rare input.
   Raised in 5.9's Task 7 and Task 16 reviews.
+- **A count bump's undo can bring back a pre-reset count.**
+  `bumpAwarenessRetrieval`'s undo restores the prior `retrieval_count` by
+  assignment (`lib/actions/happenings/register-awareness.ts`), and
+  reverse-replay rewrites only the copies a delete holds. So a rollback
+  past a close puts a later turn's pre-reset count back over the close's
+  reset, and CTRL-Z of the close can restore a kept row's count with a
+  later turn's bump in it. One chapter's frequency signal is off; no
+  data is lost. Candidate fixes: a relative undo for count bumps, or
+  reverse-replay rebasing the held count. The later-bump case in
+  `lib/pipeline/__tests__/close-round-trip.test.ts` pins today's
+  behaviour. Developer decision 2026-11-14 (5.9): record the edge in
+  canon, fix later.
+- **A user's pin is not permanent against a close.**
+  [`retrieval.md → Sources`](../memory/retrieval.md#sources) says a
+  user's pin stands until the user toggles it off, but a close's
+  `set_pin` honours only user edits made after the prose it cites
+  ([`cadence.md`](../memory/cadence.md#user-edits-and-classifier-writes)),
+  so it can lower a pin the user set earlier. Canon disagrees with itself;
+  the code follows the close's rule. Raised in 5.9's `set_pin` review.
+- **A row-gone refusal never says which row went.** When a write names
+  several rows, the note reads "The row was merged into c3" without
+  naming the absorbed row, on the read gate's path and the plan's path
+  alike (`survivorAmong` in `close-agent/verdict.ts`), so the model has to
+  guess which named row to replace. Raised in 5.9's Task 9 review.
+- **The row guard reads user edits once per row.** `readRowGuard`
+  (`lib/actions/delta/row-guard.ts`) runs `userEditsSince` per guarded
+  row, so a merge over many link rows makes one query each. Raised in
+  5.9's `merge_happenings` review.
+- **Per-turn retrieval reads a cancel before the embed bound.** In
+  `lib/pipeline/definitions/per-turn-retrieval.ts`, a cancelled outcome
+  returns `aborted` before the bound's expiry is checked, so a cancel that
+  arrived after the bound expired reads as a user stop. The close's range
+  embed checks the bound first. Latent today: both embed paths report an
+  expiry as a call error. Raised in 5.9's Task 12 review.
+- **The close's embed leaves the embedding-status count stale.** The range
+  embed clears stale flags without the `refreshEmbeddingStatus` per-turn
+  retrieval runs, so a memory panel open during a close shows an old
+  pending count until it reopens. Raised in 5.9's Task 12 review.
+- **No lint stops a builtin Hermes lacks.** 5.9 shipped
+  `Array.prototype.toSorted` into close code that runs on Android; the
+  Hermes VM appears to lack it (inferred from the binary, not a device),
+  and only review caught it. An eslint `no-restricted-properties` entry
+  for such builtins outside tests, or a lessons-learned entry, would
+  stop the next one. Raised in 5.9's clustering review.
