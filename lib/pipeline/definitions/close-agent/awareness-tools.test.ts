@@ -4,6 +4,7 @@ import { beforeEach, describe, expect, it } from 'vitest'
 import { applyDeltaAction } from '@/lib/actions/delta/apply-delta-action'
 import { USER_EDITED_SINCE_PROSE, type PipelineAction } from '@/lib/actions/types'
 import {
+  branches,
   chapters,
   deltas,
   emptyEntityState,
@@ -906,6 +907,60 @@ describe('set_pin', () => {
 
       expect(answers[0]).toMatchObject({ result: 'skipped', reason: USER_EDITED_SINCE_PROSE })
     })
+  })
+
+  // A sibling branch of the story holds aw1's row, Aria and the fight under the same ids, ahead of
+  // this branch's in a table scan, with a pin the call restates and other names.
+  it('reads the row and its names on this branch when a sibling branch holds rows under the same ids', async () => {
+    const OTHER_BRANCH = 'br_other'
+    const sibling = f.ctx.db
+    await sibling
+      .insert(branches)
+      .values({ id: OTHER_BRANCH, storyId: f.storyId, name: 'other', createdAt: 1 })
+    await sibling.insert(entities).values({
+      id: ARIA,
+      branchId: OTHER_BRANCH,
+      kind: 'character',
+      name: 'Sibling Aria',
+      status: 'active',
+      injectionMode: 'auto',
+      state: emptyEntityState('character'),
+      keywords: [],
+      createdAt: 1,
+      updatedAt: 1,
+    })
+    await sibling.insert(happenings).values({
+      id: FIGHT,
+      branchId: OTHER_BRANCH,
+      title: 'Sibling fight',
+      occurredAtEntryId: earlierReplyOf(f),
+      commonKnowledge: 0,
+      embeddingStale: 0,
+      createdAt: 1,
+      updatedAt: 1,
+    })
+    await sibling.insert(happeningAwareness).values({
+      id: PINNED,
+      branchId: OTHER_BRANCH,
+      happeningId: FIGHT,
+      characterId: ARIA,
+      learnedAtEntryId: earlierReplyOf(f),
+      decayResistance: 0.2,
+      retrievalCount: 0,
+    })
+    for (const table of ['entities', 'happenings', 'happening_awareness'])
+      await sibling.run(
+        sql`UPDATE ${sql.identifier(table)} SET rowid = -1 WHERE branch_id = ${OTHER_BRANCH}`,
+      )
+
+    const { result, answers, calls } = await pinCalls(f, [pin('aw1', 0.2)])
+
+    expect(answers).toEqual([{ result: 'ok' }])
+    expect(calls[0]).toMatchObject({
+      rows: [{ table: 'happening_awareness', id: PINNED, name: 'Aria on A fight at the ferry' }],
+    })
+    expect(await runDeltas(f, result.actionId)).toHaveLength(1)
+    expect(await storedPin(f, PINNED)).toBe(0.2)
   })
 
   it('refuses a gone row as row-gone', async () => {
