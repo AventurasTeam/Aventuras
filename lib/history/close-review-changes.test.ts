@@ -269,6 +269,22 @@ describe('closeReviewChanges', () => {
     ])
   })
 
+  it('renders a new row id the report kept raw as its live name, an unknown one as stored', () => {
+    const calls = [
+      call({
+        tool: 'update_place',
+        rows: [QUAY],
+        values: { 'state.parent_location_id': 'loc_harbour' },
+      }),
+      call({ tool: 'update_item', rows: [LAMP], values: { 'state.at_location_id': 'loc_lost' } }),
+    ]
+
+    expect(summaries(closeReviewChanges(report(calls), [], LOOKUP))).toEqual([
+      ['placesAndItems', 'The Quay', 'The Harbour'],
+      ['placesAndItems', 'The Lamp', 'loc_lost'],
+    ])
+  })
+
   it('renders an old object as stored', () => {
     const calls = [call({ tool: 'update_happening', rows: [FIRE], values: { temporal: 'Dusk' } })]
     const deltas = [delta(FIRE, { temporal: { start: 1 } })]

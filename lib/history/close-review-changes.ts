@@ -253,11 +253,14 @@ const COMMON_KNOWLEDGE_PATH = 'commonKnowledge'
 const flagText = (value: unknown): string =>
   Number(value) === 1 ? t('chapters:review.yes') : t('chapters:review.no')
 
-/** A new or proposed value as shown: flag as yes/no, '' as none, status or top mark in words. */
+/**
+ * A new or proposed value as shown: flag as yes/no, '' as none, status or top mark in words, an
+ * entry id as its ref, a row id the ledger couldn't name as its live name.
+ */
 export function reviewValueText(at: ValueAt, value: string, lookup: CloseReviewLookup): string {
   if (at.path === COMMON_KNOWLEDGE_PATH) return flagText(value)
   if (value === '') return t('chapters:review.none')
-  return enumText(at, value) ?? entryRefText(value, lookup) ?? value
+  return enumText(at, value) ?? entryRefText(value, lookup) ?? lookup.nameOf(value) ?? value
 }
 
 // The top mark names only its move, since its old value is the unplaced flag.

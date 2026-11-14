@@ -693,6 +693,26 @@ describe('closeReviewNotApplied', () => {
     ])
   })
 
+  it('shows a proposed row id the report kept raw as its live name', () => {
+    const rows = closeReviewNotApplied(
+      report([
+        call({
+          task: 'upkeep',
+          tool: 'update_place',
+          rows: [QUAY],
+          values: { 'state.parent_location_id': 'loc_harbour' },
+          result: 'rejected',
+          reason: 'parent-cycle',
+        }),
+      ]),
+      { ...LOOKUP, nameOf: (id) => (id === 'loc_harbour' ? 'The Harbour' : undefined) },
+    )
+
+    expect(rows.map((row) => [row.fieldPath, row.summary])).toEqual([
+      ['state.parent_location_id', 'The Harbour'],
+    ])
+  })
+
   it("shows a refused retirement's status in the locale's words", async () => {
     i18n.addResourceBundle('xx', 'world', { status: { retired: 'retirado' } })
     await i18n.changeLanguage('xx')
