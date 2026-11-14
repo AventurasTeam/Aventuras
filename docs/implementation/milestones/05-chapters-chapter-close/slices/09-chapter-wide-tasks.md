@@ -105,7 +105,7 @@ ahead of the Happenings task, in `close-happenings.ts`.
   `{ status: 'aborted' }`. Any other failure, an unconfigured embedder
   and an unknown dim included, returns `{ status: 'failed', error }` in
   the shape `embedderInitFailure` uses
-  (`per-turn-retrieval.ts:36-38`), which fails the close.
+  (`lib/pipeline/definitions/blocking-embed.ts`), which fails the close.
 - It writes through `ctx.runInTransaction` under the carve-out, and
   fewer than two rows in the range makes no embedder call.
 - It needs no swap admission of its own: `runUserEmbedderAction` refuses
