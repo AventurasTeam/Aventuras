@@ -626,10 +626,6 @@ patch`, which 5.5a marks `restated`, so a close tool's write of it
   reader's own Return, and a review-row press from the reader adds one
   more path. [`save-sessions.md → Where applied`](../ui/patterns/save-sessions.md#where-applied)
   doesn't classify it. Raised in 5.11's review.
-- **`components/ui/dialog.tsx` has three gaps.** `:162` `DialogTitle` has
-  no heading semantics on web; `:128` the × label is a raw "Close", not
-  `t()`; `:68` a `DialogContent` without a description raises Radix's
-  "Missing Description" warning throughout. Raised in 5.11's review.
 - **The commit banner's Review and × unmount the focused button.** Focus
   is lost when the review dialog closes (cf. the
   rnweb-disabled-under-focus-blurs lesson). Raised in 5.11's review.

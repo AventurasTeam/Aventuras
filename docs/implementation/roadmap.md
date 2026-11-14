@@ -1821,6 +1821,21 @@ own.
   screen, panel or section title takes; settle that with the landmark
   entry above, then sweep. Raised 2026-09-14 for Story Settings;
   widened 2026-09-23.
+- **M9.5 — Dialog titles aren't headings, and a dialog with no
+  description warns.** `components/ui/dialog.tsx`'s `DialogTitle` has no
+  heading semantics on web: rn-primitives renders `Title` as `Text`
+  through `asChild`, and `AlertDialogTitle` is the same; `ReviewWindow`
+  works around it locally. Settle the level with
+  [Titles outside Story Settings](#m9--storybook--per-surface-visual-polish--ship-gate)
+  above. Separately, a `DialogContent` with no `DialogDescription` raises
+  Radix's "Missing `Description`" warning, ungated by `NODE_ENV`: the
+  review window, the import and embedder-download dialogs, and the
+  world-time and scene dialogs in `entry-card`. Radix's opt-out,
+  `aria-describedby={undefined}` on its Content, can't be reached:
+  rn-primitives' web `Content` hands Radix's element only its focus and
+  dismiss props. The choice is a real description per dialog or a
+  hidden empty one. Raised in 5.11's review; routed from triage
+  2026-11-14, whose pass fixed the same entry's raw × label.
 - **M9.5 — A removable `Tag`'s × likely misses the phone tap floor on
   Android.** [`chips.md → Tag`](../ui/patterns/chips.md#tag--pill-labeled-content)
   promises the × its own 44 px target. It is a 20 px circle with

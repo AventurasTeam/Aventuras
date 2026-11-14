@@ -9,6 +9,7 @@ import { Icon } from '@/components/ui/icon'
 import { NativeOnlyAnimatedView } from '@/components/ui/native-only-animated-view'
 import { useScrimClass } from '@/components/ui/scrim'
 import { Text } from '@/components/ui/text'
+import { t } from '@/lib/i18n'
 import { useRegisteredOverlay } from '@/lib/stores'
 import { cn } from '@/lib/utils'
 
@@ -125,7 +126,7 @@ function DialogContent({
               hitSlop={12}
             >
               <Icon as={X} className="size-4 shrink-0 text-fg-primary web:pointer-events-none" />
-              <Text className="sr-only">Close</Text>
+              <Text className="sr-only">{t('close')}</Text>
             </DialogPrimitive.Close>
           )}
         </DialogPrimitive.Content>
