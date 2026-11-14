@@ -136,12 +136,16 @@ export const PhoneClosingTask: Story = {
   },
 }
 
+const CLOSED_TITLE = 'The Keep Leans Closer'
+const CLOSED_LABEL = t('chrome.closeResult.closed', { title: CLOSED_TITLE })
+const STOPPED_LABEL = t('chrome.closeResult.stopped', { count: 2 })
+
 /** A close that committed: its title, Review and an icon-only dismiss; no Cancel. */
 export const ClosedInfo: Story = {
   args: {
     kind: 'closed',
     tone: 'info',
-    label: 'Chapter closed: The Keep Leans Closer',
+    label: CLOSED_LABEL,
     onReview: fn(),
     onDismiss: fn(),
   },
@@ -150,13 +154,17 @@ export const ClosedInfo: Story = {
     const banner = screen.getByTestId('memory-run-banner')
     expect(banner).toHaveClass('border-info')
     const region = within(banner).getByRole('status')
-    expect(region).toHaveTextContent('Chapter closed: The Keep Leans Closer')
+    expect(region).toHaveTextContent(CLOSED_LABEL)
     expect(within(region).queryAllByRole('button')).toEqual([])
-    expect(within(banner).queryByRole('button', { name: 'Cancel' })).toBeNull()
+    expect(within(banner).queryByRole('button', { name: t('cancel') })).toBeNull()
 
-    await userEvent.click(within(banner).getByRole('button', { name: 'Review' }))
+    await userEvent.click(
+      within(banner).getByRole('button', { name: t('chrome.closeResult.review') }),
+    )
     await waitFor(() => expect(done.onReview).toHaveBeenCalledTimes(1))
-    await userEvent.click(within(banner).getByRole('button', { name: 'Dismiss' }))
+    await userEvent.click(
+      within(banner).getByRole('button', { name: t('chrome.closeResult.dismiss') }),
+    )
     await waitFor(() => expect(done.onDismiss).toHaveBeenCalledTimes(1))
     expect(done.onReview).toHaveBeenCalledTimes(1)
   },
@@ -167,7 +175,7 @@ export const ClosedWarning: Story = {
   args: {
     kind: 'closed',
     tone: 'warning',
-    label: 'Chapter closed, but 2 tasks stopped early',
+    label: STOPPED_LABEL,
     onReview: fn(),
     onDismiss: fn(),
   },
@@ -175,11 +183,13 @@ export const ClosedWarning: Story = {
     const banner = screen.getByTestId('memory-run-banner')
     expect(banner).toHaveClass('border-warning')
     expect(banner).not.toHaveClass('border-info')
-    expect(within(banner).getByRole('status')).toHaveTextContent(
-      'Chapter closed, but 2 tasks stopped early',
-    )
-    expect(within(banner).getByRole('button', { name: 'Review' })).toBeVisible()
-    expect(within(banner).getByRole('button', { name: 'Dismiss' })).toBeVisible()
+    expect(within(banner).getByRole('status')).toHaveTextContent(STOPPED_LABEL)
+    expect(
+      within(banner).getByRole('button', { name: t('chrome.closeResult.review') }),
+    ).toBeVisible()
+    expect(
+      within(banner).getByRole('button', { name: t('chrome.closeResult.dismiss') }),
+    ).toBeVisible()
   },
 }
 
@@ -188,19 +198,19 @@ export const PhoneClosedWarning: Story = {
   args: {
     kind: 'closed',
     tone: 'warning',
-    label: 'Chapter closed, but 2 tasks stopped early',
+    label: STOPPED_LABEL,
     onReview: fn(),
     onDismiss: fn(),
   },
   globals: { viewport: { value: 'mobile1' } },
   play: async () => {
-    const dismiss = screen.getByRole('button', { name: 'Dismiss' })
+    const dismiss = screen.getByRole('button', { name: t('chrome.closeResult.dismiss') })
     await waitFor(() =>
       expect(dismiss.getBoundingClientRect().right).toBeLessThanOrEqual(
         document.documentElement.clientWidth,
       ),
     )
-    expect(screen.getByRole('button', { name: 'Review' })).toBeVisible()
-    expect(screen.getByText('Chapter closed, but 2 tasks stopped early')).toBeVisible()
+    expect(screen.getByRole('button', { name: t('chrome.closeResult.review') })).toBeVisible()
+    expect(screen.getByText(STOPPED_LABEL)).toBeVisible()
   },
 }
