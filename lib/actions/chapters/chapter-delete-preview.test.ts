@@ -224,9 +224,8 @@ describe('getChapterDeletePreview', () => {
     ).toMatchObject({ createdLore: { count: 1, userEdited: false } })
   })
 
-  // The user edits the toll, then deletes it: the delete removes only the ferry, which they left
-  // alone, and a write to the gone toll changes nothing. A fork's toll, under the same id, isn't
-  // this branch's.
+  // The user edits, then deletes the toll: only the untouched ferry goes, and the gone toll's
+  // write counts nothing. A fork's toll under the same id isn't this branch's.
   it('counts only created lore still live on the branch, and only edits of it', async () => {
     const c = await openClosed()
     const { branchId } = c.fx
