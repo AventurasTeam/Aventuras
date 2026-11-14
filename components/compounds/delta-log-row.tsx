@@ -30,7 +30,7 @@ type Delta = {
   targetDisplayName: string
   /** `op=update`: e.g. "state.traits[2]". `op=create`/`delete`: null. */
   fieldPath: string | null
-  /** Pre-rendered diff prose, host-formatted. */
+  /** Pre-rendered diff prose, host-formatted. Empty drops the line and its description part. */
   summary: string
   /** Pre-formatted "entry #47"-style label; null for non-entry events. */
   entryId: string | null
@@ -114,9 +114,10 @@ export function DeltaLogRow({
   const fieldId = `${id}-field`
   const summaryId = `${id}-summary`
   const metaId = `${id}-meta`
+  const hasSummary = delta.summary !== ''
   const description = [
     ...(delta.fieldPath != null ? [{ id: fieldId, text: delta.fieldPath }] : []),
-    { id: summaryId, text: delta.summary },
+    ...(hasSummary ? [{ id: summaryId, text: delta.summary }] : []),
     ...(showMeta ? [{ id: metaId, text: meta }] : []),
   ]
 
@@ -147,9 +148,11 @@ export function DeltaLogRow({
           ) : null}
         </View>
 
-        <Text nativeID={summaryId} size="sm" numberOfLines={summaryLines ?? undefined}>
-          {delta.summary}
-        </Text>
+        {hasSummary ? (
+          <Text nativeID={summaryId} size="sm" numberOfLines={summaryLines ?? undefined}>
+            {delta.summary}
+          </Text>
+        ) : null}
 
         {showMeta ? (
           <Text nativeID={metaId} variant="muted" size="xs" numberOfLines={1}>

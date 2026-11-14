@@ -310,6 +310,18 @@ export const WithoutMeta: Story = {
   },
 }
 
+/** A refusal that proposed no value has no summary: no empty line, and no empty description part. */
+export const EmptySummary: Story = {
+  args: { delta: { ...reviewDelta, summary: '' }, onPress: fn(), showMeta: false },
+  play: async () => {
+    const button = screen.getByRole('button', { name: 'update Kael' })
+    expect(button).toHaveAccessibleDescription('Voice')
+    // Native joins the same parts into its hint, so an empty one would read "Voice, ".
+    expect(button.getAttribute('aria-describedby')?.split(' ')).toHaveLength(1)
+    expect(button.querySelectorAll('[id]')).toHaveLength(1)
+  },
+}
+
 export const UnclampedSummary: Story = {
   render: () => (
     <View>
