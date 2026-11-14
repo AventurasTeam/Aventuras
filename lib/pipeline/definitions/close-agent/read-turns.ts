@@ -97,7 +97,7 @@ async function readTurns(
   for (const { handle, id } of asked) {
     const verdict = judge(handle, id, rows, end.position)
     if ('notRead' in verdict) notRead.set(verdict.notRead.id, verdict.notRead)
-    else if (!readable.has(verdict.row.id))
+    else
       readable.set(verdict.row.id, {
         row: verdict.row,
         handle: ctx.ids.handleOf(verdict.row.id) ?? handle,
