@@ -188,12 +188,6 @@ patch`, which 5.5a marks `restated`, so a close tool's write of it
   merge's kept-row rule, `search_world`'s limit and ranking,
   `architecture.md`'s halves-table row and count-cache paragraph,
   `observability.md` and `testing.md`. Raised in 5.5b's slice review.
-- **No test pins a prose task's token count into its render.** In
-  the close's Identity, Threads, Lore and Upkeep tasks, passing 0 for
-  `proseTokens` to `renderClosePrompt` still passes every task test.
-  The count primes the system half's token total, so losing it would
-  undercount the window check. One shared pin would cover every prose
-  task. Raised in 5.8's task review.
 - **The close's placement plan copies two handler details.** The
   `not-unplaced` and `parent-not-a-place` refusals are inline strings
   in `state-patch-actions.ts`, outside `PLACE_REFUSAL`, and

@@ -10,6 +10,8 @@ import { countTokens } from '@/lib/tokens'
 
 import { IDENTITY_READ_FIELDS, identityTask } from './identity'
 import { CloseIds } from './ids'
+import { lifecycleTask } from './lifecycle'
+import { loreTask } from './lore'
 import type { CloseTaskDef, TaskPromptContext } from './task'
 import { threadsTask } from './threads'
 import {
@@ -19,6 +21,7 @@ import {
   readTaskTurns,
   renderClosePrompt,
 } from './turns'
+import { upkeepTask } from './upkeep'
 import { openCloseFixture, type CloseFixture } from '../__tests__/close-fixture'
 
 const { countTokensSpy } = vi.hoisted(() => ({
@@ -99,6 +102,18 @@ async function seedStartRows(fx: CloseFixture): Promise<void> {
     createdAt: 1,
     updatedAt: 1,
   })
+  // A bare place in the scene, so Upkeep has a row to show.
+  const ford = 'loc_00000000-0000-4000-8000-00000000c002'
+  await fx.ctx.db.insert(entities).values({
+    id: ford,
+    branchId: fx.branchId,
+    kind: 'location',
+    name: 'The ford',
+    status: 'active',
+    injectionMode: 'auto',
+    createdAt: 1,
+    updatedAt: 1,
+  })
   await fx.ctx.db.insert(threads).values({
     id: 'thr_00000000-0000-4000-8000-000000000001',
     branchId: fx.branchId,
@@ -122,7 +137,7 @@ async function seedStartRows(fx: CloseFixture): Promise<void> {
     .where(where)
   await fx.ctx.db
     .update(storyEntries)
-    .set({ metadata: { ...row!.metadata!, sceneEntities: [wren] } })
+    .set({ metadata: { ...row!.metadata!, sceneEntities: [wren, ford] } })
     .where(where)
 }
 
@@ -222,4 +237,10 @@ describe("the close tasks' starts and renders", () => {
     expectSystemHalfPrimed(identityTask))
   it("prime Threads' system half at its encoded count, so counting its prompt encodes no turn", () =>
     expectSystemHalfPrimed(threadsTask))
+  it("prime Lore's system half at its encoded count, so counting its prompt encodes no turn", () =>
+    expectSystemHalfPrimed(loreTask))
+  it("prime Upkeep's system half at its encoded count, so counting its prompt encodes no turn", () =>
+    expectSystemHalfPrimed(upkeepTask))
+  it("prime Lifecycle's system half at its encoded count, so counting its prompt encodes no turn", () =>
+    expectSystemHalfPrimed(lifecycleTask))
 })
