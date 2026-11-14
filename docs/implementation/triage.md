@@ -414,11 +414,6 @@ patch`, which 5.5a marks `restated`, so a close tool's write of it
   or keep and log) and in their log events, so a shared hook would take
   each as a parameter; it would also need a home outside both domain
   folders. Raised in Slice 5.12's slice review (the simplifier pass).
-- **Upkeep's not-of-kind refusal has no test.**
-  `lib/pipeline/definitions/close-agent/upkeep-tools.ts:95-98` and
-  `:148` refuse a row of the wrong kind with `not-a-place` or
-  `not-an-item`. A rename is now a type error, but the behaviour is
-  unpinned. Raised in 5.11's review.
 - **A `create_lore` refused for `title-blank` can never drop out of
   Not applied.** The review matches a refused create to a landed one by
   title, and a blank title matches nothing, so a retry with a title

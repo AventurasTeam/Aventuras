@@ -399,6 +399,36 @@ describe('update_place and update_item: the tools', () => {
   })
 })
 
+// Reachable only where a row's id prefix and kind disagree: the id check refuses a wrong-kind
+// handle first.
+describe('update_place and update_item on a row of the other kind', () => {
+  it('refuses it not-a-place or not-an-item, writing nothing', async () => {
+    const f = await openCloseFixture()
+    const itemUnderLoc = 'loc_00000000-0000-4000-8000-00000000e001'
+    const placeUnderItem = 'item_00000000-0000-4000-8000-00000000e002'
+    await seedEntity(f, { id: itemUnderLoc, kind: 'item', name: 'The lantern' })
+    await seedEntity(f, { id: placeUnderItem, kind: 'location', name: 'The quay' })
+
+    const { result, calls } = await runUpkeepCalls(
+      f,
+      [
+        { table: 'entities', id: itemUnderLoc, name: 'The lantern' },
+        { table: 'entities', id: placeUnderItem, name: 'The quay' },
+      ],
+      [
+        { toolName: 'update_place', input: { id: 'l1', condition: 'Flooded', ...cite() } },
+        { toolName: 'update_item', input: { id: 'i1', condition: 'Rusted', ...cite() } },
+      ],
+    )
+
+    expect(calls.map(({ result: outcome, reason }) => [outcome, reason])).toEqual([
+      ['rejected', 'not-a-place'],
+      ['rejected', 'not-an-item'],
+    ])
+    expect(await runDeltas(f, result.actionId)).toEqual([])
+  })
+})
+
 describe('update_place', () => {
   let f: CloseFixture
 
