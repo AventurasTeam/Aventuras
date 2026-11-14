@@ -34,10 +34,12 @@ const PIN_PATH = 'decayResistance'
 const FREQUENT_PIN_LOWERED = 'frequent-pin-lowered'
 const PIN_RAISE_TOO_LARGE = 'pin-raise-too-large'
 const NO_START_PIN = 'no-start-pin'
-// A pin climbs at most this far above its start pin in one close, in hundredths: whole numbers
-// keep 0.7 to 0.9 a step.
-const PIN_STEP_HUNDREDTHS = 20
-const hundredths = (pin: number): number => Math.round(pin * 100)
+// A pin climbs at most this far above its start pin in one close.
+const PIN_STEP = 0.2
+// Float slack: 0.7 + 0.2 comes to a hair under 0.9, which must land.
+const PIN_SLACK = 1e-9
+// Float noise rounded off at 12 places, then cut to 10: within the slack, so the ceiling lands.
+const notedCeiling = (ceiling: number): string => String(Number(ceiling.toFixed(12).slice(0, -2)))
 
 async function readAwareness(
   ctx: WriteContext,
@@ -138,15 +140,17 @@ async function planSetPin(args: SetPinArgs, ctx: WriteContext): Promise<WritePla
       values: proposed,
       note: `This row is listed because it keeps coming up, not for this chapter, so its pin only rises: send ${startPin} or more, or leave it.`,
     }
-  const ceiling = hundredths(startPin) + PIN_STEP_HUNDREDTHS
-  if (hundredths(value) > ceiling)
+  const ceiling = startPin + PIN_STEP
+  if (value > ceiling + PIN_SLACK) {
+    const noted = notedCeiling(ceiling)
     return {
       kind: 'refused',
       reason: PIN_RAISE_TOO_LARGE,
       rows,
       values: proposed,
-      note: `This close can raise it to ${ceiling / 100} at most: send ${ceiling / 100} or less, or leave it.`,
+      note: `This close can raise it to ${noted} at most: send ${noted} or less, or leave it.`,
     }
+  }
   return {
     kind: 'write',
     actions: [

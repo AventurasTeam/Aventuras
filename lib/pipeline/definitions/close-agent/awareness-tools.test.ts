@@ -708,7 +708,56 @@ describe('set_pin', () => {
       ])
     })
 
-    // In floating point 0.9 - 0.7 and 0.55 - 0.35 come to a hair over 0.2, as do their hundredths.
+    // Each passes 0.2 by under half a hundredth: the step is measured exactly.
+    it.each([
+      [0.4, 0.6049, 0.6],
+      [0.675, 0.884, 0.875],
+    ])('refuses a raise from %s to %s, past 0.2, naming %s', async (stored, value, ceiling) => {
+      await setStored(PINNED, stored)
+
+      const { answers } = await pinCalls(f, [pin('aw1', value)])
+
+      expect(answers).toEqual([
+        { result: 'rejected', reason: 'pin-raise-too-large', note: note(ceiling) },
+      ])
+    })
+
+    // A note's ceiling comes back as it reads, so it names no more than the step: 0.32345678916 is
+    // cut, not rounded up.
+    it.each([
+      [0.565, '0.765'],
+      [0.145, '0.345'],
+      [0.12345678916, '0.3234567891'],
+    ])('names a ceiling from %s that lands when sent: %s', async (stored, ceiling) => {
+      await setStored(PINNED, stored)
+
+      const { answers } = await pinCalls(f, [pin('aw1', 1), pin('aw1', Number(ceiling))])
+
+      expect(answers).toEqual([
+        {
+          result: 'rejected',
+          reason: 'pin-raise-too-large',
+          note: `This close can raise it to ${ceiling} at most: send ${ceiling} or less, or leave it.`,
+        },
+        { result: 'ok' },
+      ])
+      expect(await storedPin(f, PINNED)).toBe(Number(ceiling))
+    })
+
+    // 0.3 + 0.2 lands on 0.5 exactly, so the slack's edge is a billionth past it.
+    it('lands a raise inside the float slack past the step, and refuses one past the slack', async () => {
+      await setStored(PINNED, 0.3)
+
+      const { answers } = await pinCalls(f, [pin('aw1', 0.500000002), pin('aw1', 0.500000001)])
+
+      expect(answers).toEqual([
+        { result: 'rejected', reason: 'pin-raise-too-large', note: note(0.5) },
+        { result: 'ok' },
+      ])
+    })
+
+    // In floating point 0.9 - 0.7 and 0.55 - 0.35 come to a hair over 0.2, and 0.565 + 0.2 to a
+    // hair under 0.765; 0.565 and 0.145 sit on a half hundredth.
     it.each([
       [0.4, 0.6],
       [0.1, 0.3],
@@ -716,6 +765,8 @@ describe('set_pin', () => {
       [0.35, 0.55],
       [0.57, 0.77],
       [0.9, 1],
+      [0.565, 0.765],
+      [0.145, 0.345],
     ])('lands a raise from %s to %s, a step of at most 0.2', async (stored, value) => {
       await setStored(PINNED, stored)
       await setStored(FREQUENT, stored)
