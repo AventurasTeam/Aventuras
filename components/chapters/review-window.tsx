@@ -27,6 +27,7 @@ import { POINTER_EVENTS_NONE } from '@/constants/styles'
 import { useTier } from '@/hooks/use-tier'
 import type { CloseReview, CloseReviewChange, CloseReviewNotApplied } from '@/lib/history'
 import { t } from '@/lib/i18n'
+import { webEnterProps } from '@/lib/keyboard'
 import { cn } from '@/lib/utils'
 
 import { toolLabel } from './review-tool-label'
@@ -301,18 +302,5 @@ function rowDelta(
     entryId: null,
     createdAtRelative: '',
     actionId: '',
-  }
-}
-
-// RN-Web's PressResponder presses a role=link element on click only, never on Enter.
-// Typed `object` to spread past RN's Pressable types, which omit onKeyDown.
-function webEnterProps(onPress: () => void): object | undefined {
-  if (Platform.OS !== 'web') return undefined
-  return {
-    onKeyDown: (event: { key: string; preventDefault(): void }) => {
-      if (event.key !== 'Enter') return
-      event.preventDefault()
-      onPress()
-    },
   }
 }

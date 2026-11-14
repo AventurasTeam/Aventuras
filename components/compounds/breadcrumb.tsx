@@ -4,6 +4,7 @@ import { Platform, Pressable, View } from 'react-native'
 import { TruncatedText } from '@/components/compounds/truncated-text'
 import { Text } from '@/components/ui/text'
 import { useTier } from '@/hooks/use-tier'
+import { webEnterProps } from '@/lib/keyboard'
 import { cn } from '@/lib/utils'
 
 type BreadcrumbSegment = {
@@ -73,6 +74,7 @@ export function Breadcrumb({ segments, className, testID, size = 'base' }: Bread
               <Pressable
                 accessibilityRole="link"
                 onPress={segment.onPress}
+                {...webEnterProps(segment.onPress)}
                 className={cn(
                   index === 0 ? 'min-w-0 shrink' : 'shrink-0',
                   Platform.select({

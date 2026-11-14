@@ -42,6 +42,21 @@ export const SubHeader: Story = {
   },
 }
 
+/** Enter on a focused link presses it once, as a click does. */
+export const EnterPressesALink: Story = {
+  args: {
+    segments: [
+      { key: 'category', label: 'Characters', onPress: fn() },
+      { key: 'row', label: 'Kael' },
+    ],
+  },
+  play: async ({ args }) => {
+    screen.getByRole('link', { name: 'Characters' }).focus()
+    await userEvent.keyboard('{Enter}')
+    await waitFor(() => expect(args.segments[0].onPress).toHaveBeenCalledTimes(1))
+  },
+}
+
 /** Top-bar shape: story title is a link, current surface segment is inert. */
 export const TopBar: Story = {
   args: {

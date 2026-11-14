@@ -4,6 +4,7 @@ import { Button } from '@/components/ui/button'
 import { Text } from '@/components/ui/text'
 import { POINTER_EVENTS_NONE } from '@/constants/styles'
 import { t } from '@/lib/i18n'
+import { webEnterProps } from '@/lib/keyboard'
 import { cn } from '@/lib/utils'
 
 import { ListRow, type ListRowProps } from './list-row'
@@ -40,6 +41,7 @@ export function CollisionListRow({ row, collision }: CollisionListRowProps) {
         <Pressable
           onPress={collision.onJumpToOther}
           accessibilityRole="link"
+          {...webEnterProps(collision.onJumpToOther)}
           className={cn('shrink', Platform.select({ web: 'cursor-pointer' }))}
         >
           <Text size="sm" className="underline">

@@ -7,6 +7,7 @@ import { Text } from '@/components/ui/text'
 import { POINTER_EVENTS_NONE } from '@/constants/styles'
 import { useTier } from '@/hooks/use-tier'
 import { t } from '@/lib/i18n'
+import { webEnterProps } from '@/lib/keyboard'
 import { cn } from '@/lib/utils'
 
 type CalendarType = 'built-in' | 'custom'
@@ -142,22 +143,26 @@ export function CalendarPicker({
   const renderFooter = useMemo(
     () =>
       showVaultTail
-        ? (close: () => void) => (
-            <Pressable
-              // Navigates out of the picker rather than acting on it, so it
-              // dismisses first — same close-before-act order as row activation.
-              accessibilityRole="link"
-              onPress={() => {
-                close()
-                onManageInVault?.()
-              }}
-              className="px-row-x-md py-row-y-md hover:bg-tint-hover active:bg-tint-press"
-            >
-              <Text size="sm" className="font-medium">
-                {t('common:calendarPicker.manageInVault')}
-              </Text>
-            </Pressable>
-          )
+        ? (close: () => void) => {
+            // Navigates out of the picker rather than acting on it, so it
+            // dismisses first — same close-before-act order as row activation.
+            const manage = () => {
+              close()
+              onManageInVault?.()
+            }
+            return (
+              <Pressable
+                accessibilityRole="link"
+                onPress={manage}
+                {...webEnterProps(manage)}
+                className="px-row-x-md py-row-y-md hover:bg-tint-hover active:bg-tint-press"
+              >
+                <Text size="sm" className="font-medium">
+                  {t('common:calendarPicker.manageInVault')}
+                </Text>
+              </Pressable>
+            )
+          }
         : undefined,
     [showVaultTail, onManageInVault],
   )
@@ -375,6 +380,7 @@ function EditAction({
     <Pressable
       accessibilityRole="link"
       onPress={onPress}
+      {...webEnterProps(disabled ? undefined : onPress)}
       disabled={disabled}
       // className-only disabled styling still takes a web click; the style gates it.
       style={disabled ? POINTER_EVENTS_NONE : undefined}

@@ -16,6 +16,7 @@ import { Text } from '@/components/ui/text'
 import { logger } from '@/lib/diagnostics'
 import { downloadFailureCode } from '@/lib/embedder'
 import { t } from '@/lib/i18n'
+import { webEnterProps } from '@/lib/keyboard'
 import { useTheme } from '@/lib/themes'
 import { cn } from '@/lib/utils'
 
@@ -387,6 +388,7 @@ function LicenseBody({
                 className="text-accent underline"
                 accessibilityRole="link"
                 onPress={() => openExternalUrl(licenseLink)}
+                {...webEnterProps(() => openExternalUrl(licenseLink))}
               >
                 {t('embedder:license.viewTerms')}
               </Text>

@@ -636,18 +636,6 @@ patch`, which 5.5a marks `restated`, so a close tool's write of it
   reader's own Return, and a review-row press from the reader adds one
   more path. [`save-sessions.md → Where applied`](../ui/patterns/save-sessions.md#where-applied)
   doesn't classify it. Raised in 5.11's review.
-- **Keyboard-dead `Pressable accessibilityRole="link"` with no `href` or
-  Enter handler.** RN-web's PressResponder doesn't press a role-link on
-  Enter. Read, not run. Places:
-  `components/reader/peek/peek-foot.tsx:21`,
-  `components/world/overview/overview-parts.tsx:113`,
-  `components/compounds/collision-list-row.tsx:42`,
-  `components/compounds/breadcrumb.tsx:74`,
-  `components/ui/select.tsx:376`,
-  `components/compounds/calendar-picker.tsx:149` and `:376`,
-  `components/compounds/embedder-download-dialog.tsx:388`.
-  `components/chapters/review-window.tsx`'s `webEnterProps` is a
-  template. Raised in 5.11's review.
 - **`components/ui/dialog.tsx` has three gaps.** `:162` `DialogTitle` has
   no heading semantics on web; `:128` the × label is a raw "Close", not
   `t()`; `:68` a `DialogContent` without a description raises Radix's
