@@ -12,7 +12,7 @@ Each row below is what one character knows of a happening, with its pin: decay_r
 
 - This chapter's rows: what a character learned during this chapter. Raise a pin toward 1 when the happening turned out to carry the chapter, something that character's story now turns on. Lower it toward 0 when it was pinned high but proved incidental.
 - Rows that keep coming up: from any chapter, recalled often while this chapter was played. Raise a pin when the happening still carries that character's story; otherwise leave it. Never lower one of these: a lower value is refused.
-- Raise a pin in a step of about 0.2, never straight to 1: a row that stays load-bearing climbs again at a later close.
+- Raise a pin by at most 0.2 in one call, never straight to 1: a bigger raise is refused, and a row that stays load-bearing climbs again at a later close.
 - A row already pinned where it belongs needs no call: one near 1 that keeps coming up is already doing its job.
 - Turns. No turn is shown here. Read the ones you need with read_turns: a row's "at" turn, or this chapter's turns, {{ closeChapterTurns.first }} to {{ closeChapterTurns.last }}. Cite only this chapter's turns in "turns". A row's "at" turn outside that range is from an earlier chapter: read it with read_turns, never cite it.
 {%- if closeChapterSummary != blank %}

@@ -626,7 +626,7 @@ describe('the Awareness start', () => {
           {
             toolCallId: 'p1',
             toolName: 'set_pin',
-            input: { id: 'aw3', value: 0.5, turns: ['t2'], why: 'Jorin still pays the toll.' },
+            input: { id: 'aw3', value: 0.2, turns: ['t2'], why: 'Jorin still pays the toll.' },
           },
         ]),
       )
@@ -649,7 +649,7 @@ describe('the Awareness start', () => {
         part: 0,
         tool: 'set_pin',
         result: 'ok',
-        values: { decayResistance: '0.5' },
+        values: { decayResistance: '0.2' },
       }),
     ])
     const [row] = await fx.ctx.db
@@ -658,7 +658,7 @@ describe('the Awareness start', () => {
       .where(
         and(eq(happeningAwareness.branchId, fx.branchId), eq(happeningAwareness.id, A_FREQUENT)),
       )
-    expect(row?.pin).toBe(0.5)
+    expect(row?.pin).toBe(0.2)
   })
 
   // Ids run against every order: Alpha has the highest id, the two Sams' rows sort against their
@@ -995,7 +995,7 @@ describe('the Awareness start', () => {
     )
   })
 
-  it('tells the model to raise a pin in steps of about 0.2, never straight to 1', async () => {
+  it('tells the model a raise is at most 0.2 a call, never straight to 1', async () => {
     await seedAwarenessWorld(fx)
     const ctx = promptContextFor(fx)
     const start = await awarenessTask.start(ctx)
@@ -1004,7 +1004,7 @@ describe('the Awareness start', () => {
     const { user } = awarenessTask.render(start, { ...ctx, writesSoFar: '' })
 
     expect(user).toContain(
-      'Raise a pin in a step of about 0.2, never straight to 1: a row that stays load-bearing climbs again at a later close.',
+      'Raise a pin by at most 0.2 in one call, never straight to 1: a bigger raise is refused, and a row that stays load-bearing climbs again at a later close.',
     )
   })
 

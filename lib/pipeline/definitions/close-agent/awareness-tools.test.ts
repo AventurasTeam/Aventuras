@@ -458,7 +458,7 @@ describe('set_pin', () => {
   })
 
   it('refuses a lower pin on a row listed only for coming up often, and lands a higher one', async () => {
-    const { result, answers, calls } = await pinCalls(f, [pin('aw2', 0.2), pin('aw2', 0.8)])
+    const { result, answers, calls } = await pinCalls(f, [pin('aw2', 0.2), pin('aw2', 0.7)])
 
     expect(answers[0]).toEqual({
       result: 'rejected',
@@ -476,14 +476,14 @@ describe('set_pin', () => {
     expect(written.map(({ targetId, undoPayload }) => [targetId, undoPayload])).toEqual([
       [FREQUENT, { decayResistance: 0.5 }],
     ])
-    expect(await storedPin(f, FREQUENT)).toBe(0.8)
+    expect(await storedPin(f, FREQUENT)).toBe(0.7)
   })
 
   it('lands a pin of 0 on a frequent row with no pin, which reads 0', async () => {
-    const { answers } = await pinCalls(f, [pin('aw8', 0), pin('aw8', 0.3)])
+    const { answers } = await pinCalls(f, [pin('aw8', 0), pin('aw8', 0.2)])
 
     expect(answers).toEqual([{ result: 'ok' }, { result: 'ok' }])
-    expect(await storedPin(f, UNPINNED_FREQUENT)).toBe(0.3)
+    expect(await storedPin(f, UNPINNED_FREQUENT)).toBe(0.2)
   })
 
   it('answers skipped, not frequent-pin-lowered, for a lower pin over a later turn on a frequent row', async () => {
@@ -545,11 +545,100 @@ describe('set_pin', () => {
 
   // C12: a later turn's write to another field does not protect the pin.
   it('lands over a later turn that wrote another field and bumped the count', async () => {
-    const { result, answers } = await pinCalls(f, [pin('aw5', 0.8)])
+    const { result, answers } = await pinCalls(f, [pin('aw5', 0.5)])
 
     expect(answers).toEqual([{ result: 'ok' }])
     expect(await runDeltas(f, result.actionId)).toHaveLength(1)
-    expect(await storedPin(f, LATER_SOURCED)).toBe(0.8)
+    expect(await storedPin(f, LATER_SOURCED)).toBe(0.5)
+  })
+
+  describe('the raise step', () => {
+    async function setStored(id: string, pin: number): Promise<void> {
+      await f.ctx.db
+        .update(happeningAwareness)
+        .set({ decayResistance: pin })
+        .where(and(eq(happeningAwareness.branchId, f.branchId), eq(happeningAwareness.id, id)))
+    }
+
+    const note = (ceiling: number): string =>
+      `A pin rises by at most 0.2 in one call: send ${ceiling} or less, or leave it.`
+
+    it.each([
+      ['a chapter row', 'aw1', PINNED, 0.6, 0.9, 0.8],
+      ['a frequent row', 'aw2', FREQUENT, 0.5, 0.9, 0.7],
+      ['a frequent row with no pin', 'aw8', UNPINNED_FREQUENT, null, 0.5, 0.2],
+    ] as const)(
+      'refuses a raise past the step on %s, naming the highest value',
+      async (_, handle, id, stored, value, ceiling) => {
+        const { result, answers, calls } = await pinCalls(f, [pin(handle, value)])
+
+        expect(answers).toEqual([
+          { result: 'rejected', reason: 'pin-raise-too-large', note: note(ceiling) },
+        ])
+        expect(calls[0]).toMatchObject({
+          result: 'rejected',
+          reason: 'pin-raise-too-large',
+          values: { decayResistance: String(value) },
+        })
+        expect(await runDeltas(f, result.actionId)).toEqual([])
+        expect(await storedPin(f, id)).toBe(stored)
+      },
+    )
+
+    it('refuses a raise a hundredth past the step', async () => {
+      await setStored(PINNED, 0.4)
+
+      const { answers } = await pinCalls(f, [pin('aw1', 0.61)])
+
+      expect(answers).toEqual([
+        { result: 'rejected', reason: 'pin-raise-too-large', note: note(0.6) },
+      ])
+    })
+
+    // In floating point 0.9 - 0.7 and 0.55 - 0.35 come to a hair over 0.2, as do their hundredths.
+    it.each([
+      [0.4, 0.6],
+      [0.1, 0.3],
+      [0.7, 0.9],
+      [0.35, 0.55],
+      [0.57, 0.77],
+      [0.9, 1],
+    ])('lands a raise from %s to %s, a step of at most 0.2', async (stored, value) => {
+      await setStored(PINNED, stored)
+      await setStored(FREQUENT, stored)
+
+      const { answers } = await pinCalls(f, [pin('aw1', value), pin('aw2', value)])
+
+      expect(answers).toEqual([{ result: 'ok' }, { result: 'ok' }])
+      expect(await storedPin(f, PINNED)).toBe(value)
+      expect(await storedPin(f, FREQUENT)).toBe(value)
+    })
+
+    it('reads no pin as 0, so a first pin of 0.2 lands', async () => {
+      const { answers } = await pinCalls(f, [pin('aw8', 0.2)])
+
+      expect(answers).toEqual([{ result: 'ok' }])
+      expect(await storedPin(f, UNPINNED_FREQUENT)).toBe(0.2)
+    })
+
+    it('answers skipped, not the step refusal, for a pin a later turn wrote', async () => {
+      const { answers } = await pinCalls(f, [pin('aw4', 0.9)])
+
+      expect(answers[0]).toMatchObject({ result: 'skipped', reason: CLOSE_REASON.laterTurn })
+    })
+
+    it('answers skipped, not the step refusal, for a pin the user wrote', async () => {
+      await editAwareness(
+        f,
+        'user',
+        { characterId: ARIA, happeningId: CROSSING },
+        { decayResistance: 0.1 },
+      )
+
+      const { answers } = await pinCalls(f, [pin('aw5', 0.9)])
+
+      expect(answers[0]).toMatchObject({ result: 'skipped', reason: USER_EDITED_SINCE_PROSE })
+    })
   })
 
   it('refuses a gone row as row-gone', async () => {
@@ -716,7 +805,7 @@ describe('a pin moves a score', () => {
       calls: [
         {
           toolName: 'set_pin',
-          input: { id: 'aw1', value: 0.9, turns: ['t1'], why: 'The oath still binds her.' },
+          input: { id: 'aw1', value: 0.5, turns: ['t1'], why: 'The oath still binds her.' },
         },
       ],
       turns: { endEntryId, taskEntryIds: [endEntryId], part: 0 },
@@ -724,7 +813,7 @@ describe('a pin moves a score', () => {
     expect(answers).toEqual([{ result: 'ok' }])
 
     const after = await capturedOath()
-    expect(after).toMatchObject({ chapters_old: 57, pin_signal: 0.9 })
-    expect(Math.abs(after.recency_factor - Math.exp(-0.07 * 57 * 0.1))).toBeLessThan(0.001)
+    expect(after).toMatchObject({ chapters_old: 57, pin_signal: 0.5 })
+    expect(Math.abs(after.recency_factor - Math.exp(-0.07 * 57 * 0.5))).toBeLessThan(0.001)
   }, 30_000)
 })

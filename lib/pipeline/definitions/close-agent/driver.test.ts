@@ -2539,7 +2539,7 @@ describe('closeAgentPhase with the production slots: the chapter-wide entries', 
                 toolName: 'set_pin',
                 input: {
                   id: 'aw1',
-                  value: 0.9,
+                  value: 0.6,
                   turns: ['t5'],
                   why: 'Wren rides the crossing again.',
                 },
