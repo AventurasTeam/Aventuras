@@ -61,33 +61,6 @@ slice-planning gate forces its resolution before that slice is planned.
   did not re-run the suite serially — the evidence above is still as of
   `edce17b8`.
 
-- **A landed entry ref in a close's `values` is stored raw.**
-  `ID_PATTERN` has no `entry` prefix, so the ledger keeps the raw
-  `entry_` id, as `merge_happenings` records `occurredAtEntryId`. The
-  review formats a value, on either side and in Not applied too, as
-  `entry #n` while `lookup.entryPosition` knows the entry
-  (`reviewValueText` and `entryRefText` in
-  `lib/history/close-review-changes.ts`), and shows the raw id once the
-  entry is gone. Raised in 5.5a's review.
-- **5.5b's slice doc has stale passages.** The slice review couldn't
-  edit
-  [the slice doc](./milestones/05-chapters-chapter-close/slices/05b-identity-threads.md).
-  Scope's refs point at moved lines: `lib/classifier/plan-creates.ts:55-57`
-  (now `boundVoice`, with `stateList` moved), and
-  `lib/actions/threads/register.ts:135-142`, `:145-154` and `:152`.
-  [The test overlay](./milestones/05-chapters-chapter-close/slices/05b-identity-threads.md#the-test-overlay)'s
-  dataset facts ("the most traits on a live one is 4", "8 have no
-  description, Jim Hawkins among them", the faction's state `{}`) are the
-  seed before its refresh, in the present tense, where
-  [`followups.md`](../followups.md#tuning-and-play-testing) says "before
-  Slice 5.5b's refresh". The seed-refresh note, "27 calls, 16 landed (11
-  entity updates, 4 thread updates and the merge) and 1 merge", counts
-  the merge twice: all 27 calls were `ok`, 16 wrote and 11 restated.
-  [Canon edits](./milestones/05-chapters-chapter-close/slices/05b-identity-threads.md#canon-edits)
-  leaves out 3b's start and empty-list sentence, 3f's ref clamp, the
-  merge's kept-row rule, `search_world`'s limit and ranking,
-  `architecture.md`'s halves-table row and count-cache paragraph,
-  `observability.md` and `testing.md`. Raised in 5.5b's slice review.
 - **Undoing a user's keyword edit wipes a later pass's term.** CTRL-Z
   or a rollback window of a user's keyword edit under a later
   periodic keyword write restores the whole list from the undo
@@ -104,11 +77,6 @@ slice-planning gate forces its resolution before that slice is planned.
   schema section of `retrieval.md` links this item, so a triage pass
   updates that link when routing it. Raised in 5.8's execution,
   developer decision 2026-11-10.
-- **Same-name items carry no namesake flag.** The dataset seed held two
-  active items both named "the black spot" with no collision flag
-  until 5.8's close flagged them `duplicate`. Unverified whether the
-  per-turn writer or the classifier skips same-name items by design.
-  Raised in 5.8's final review.
 - **Keyword lists have no count or term-length bound.**
   `appendEntityKeywords`, and now the close's `set_keywords` and
   `create_lore`, land whatever terms the model sends, while chapter
@@ -161,35 +129,9 @@ slice-planning gate forces its resolution before that slice is planned.
   3e fires
   ([`followups.md → Tuning and play testing`](../followups.md#tuning-and-play-testing)).
   Developer decision 2026-11-14 (Q13), from 5.9's slice review.
-- **A frequent row whose pin a later turn wrote still takes a place.**
-  The Awareness start leaves out rows a later turn created and rows the
-  user pinned, but not a row learned before the chapter's end whose
-  `decay_resistance` a turn past the end rewrote: the upsert's update
-  arm takes a pass's new pin for a known pair (whether the classifier
-  sends one is unchecked). `set_pin` skips that row (`laterTurnWrote`),
-  so it holds one of the 20 places for nothing; at the next close the
-  turn falls inside the chapter, and the row can be tuned if it comes up
-  again. Leaving it out needs a later-turn read on the start's
-  candidates, which the row guard does per row. Raised in the slice
-  review fixes for 5.9's R2.
 - **The reader's in-place prose edit has no leave guard.**
   `components/reader/reader-surface.tsx:~330` (`editingId`, `editDraft`):
   any navigation that pops the reader drops the draft, including the
   reader's own Return, and a review-row press from the reader adds one
   more path. [`save-sessions.md → Where applied`](../ui/patterns/save-sessions.md#where-applied)
   doesn't classify it. Raised in 5.11's review.
-- **A close tool's `name` is a plain string.**
-  `lib/pipeline/definitions/close-agent/tool.ts` types `WriteTool.name`
-  as `string`, so the close's write tools form no union, and the review's
-  tool lists (`MERGE_TOOLS`, `CREATE_LORE_TOOL`, `TOOL_LABEL_KEYS`) are
-  tied to them only by tests that walk `PRODUCTION_CLOSE_SLOTS`. Typing
-  the names would let those lists be checked at compile time. Older
-  code: raised in 5.11's slice review, not fixed in passing.
-- **A refusal's key travels inside its text.** The action layer's
-  handler reasons are strings, some already shaped `<key>: <text>`
-  (`keywordUserAddedReason` in `lib/actions/delta/keyword-authors.ts`),
-  so the close writes its own the same way (`keyedReason`) and the
-  ledger parses the key back out (`ledgerReasonKey` in
-  `lib/pipeline/definitions/close-agent/reason-key.ts`). A structured
-  `{ key, text }` reason from the handlers up would drop the parse.
-  Older code: raised in 5.11's slice review.
