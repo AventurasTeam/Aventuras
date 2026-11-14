@@ -115,7 +115,7 @@
       "in-scene-later": "A later entry still has this character in the scene.",
       "partner-is-self": "A row can't be a duplicate of itself.",
       "partner-not-of-kind": "The two rows are different kinds.",
-      "already-flagged": "The row or this pair is already flagged.",
+      "already-flagged": "Both rows already hold other flags.",
       "flag-held-by-partner": "The other row already holds a flag for this pair.",
       "pair-resolved": "You already kept these two rows apart.",
       "merge-absorb-empty": "The merge named no thread to fold in.",
