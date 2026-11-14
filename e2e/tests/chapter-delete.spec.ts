@@ -1,7 +1,13 @@
 import { expect, test, type Page } from '@playwright/test'
 
 import { goToChapterTimeline, openStory } from '../flows/navigation'
-import { pollEntryIdOf, queryApp, queryScalar } from '../harness/db'
+import {
+  chapterByTitle,
+  type ChapterRow,
+  pollEntryIdOf,
+  queryApp,
+  queryScalar,
+} from '../harness/db'
 import { installEmbedderModel } from '../harness/embedder'
 import { t } from '../harness/i18n'
 import { launchApp, type LaunchedApp } from '../harness/launch'
@@ -31,14 +37,6 @@ const SECOND_CHAPTER = 'The Keep Leans Closer'
 const DRAFT = 'E2E delete draft'
 const KEPT_WORK_MARKER = 'E2E-DELETE-R1'
 const CLOSE_MARKER = 'E2E-DELETE-R2'
-
-type Chapter = {
-  id: string
-  sequenceNumber: number
-  endEntryId: string
-  startPosition: number
-  endPosition: number
-}
 
 type Hero = { readonly app: LaunchedApp; readonly seeded: SeededCloseWrites }
 
@@ -79,27 +77,6 @@ function launchesHero(narrative?: string): () => Hero {
 }
 
 // A renamed chapter throws: an undefined id would scope every card locator to nothing.
-async function chapterByTitle(page: Page, title: string): Promise<Chapter> {
-  const rows = await queryApp(
-    page,
-    `SELECT c.id, c.sequence_number, c.end_entry_id, s.position AS startPosition, e.position AS endPosition
-       FROM chapters c
-       JOIN story_entries s ON s.branch_id = c.branch_id AND s.id = c.start_entry_id
-       JOIN story_entries e ON e.branch_id = c.branch_id AND e.id = c.end_entry_id
-      WHERE c.branch_id = ? AND c.title = ?`,
-    [HERO_BRANCH, title],
-  )
-  if (rows.length !== 1) throw new Error(`expected one chapter titled ${title}: ${rows.length}`)
-  const [id, sequenceNumber, endEntryId, startPosition, endPosition] = rows[0]
-  return {
-    id: id as string,
-    sequenceNumber: Number(sequenceNumber),
-    endEntryId: endEntryId as string,
-    startPosition: Number(startPosition),
-    endPosition: Number(endPosition),
-  }
-}
-
 const chapterCount = (page: Page): Promise<number> =>
   queryScalar(page, `SELECT count(*) FROM chapters WHERE branch_id = ?`, [HERO_BRANCH])
 
@@ -125,7 +102,7 @@ const groupDeltaCount = (page: Page, actionId: string): Promise<number> =>
   ])
 
 // Entries across the chapter's range that still carry a chapter.
-const stampedInRange = (page: Page, chapter: Chapter): Promise<number> =>
+const stampedInRange = (page: Page, chapter: ChapterRow): Promise<number> =>
   queryScalar(
     page,
     `SELECT count(*) FROM story_entries
@@ -160,7 +137,7 @@ async function expandCard(page: Page, chapterId: string): Promise<void> {
 }
 
 // Rolls back to the entry after the chapter's end, read from the DB: the end reply becomes the head.
-async function rollBackPastEnd(page: Page, chapter: Chapter): Promise<void> {
+async function rollBackPastEnd(page: Page, chapter: ChapterRow): Promise<void> {
   const rows = await queryApp(
     page,
     `SELECT id FROM story_entries WHERE branch_id = ? AND position > ? ORDER BY position LIMIT 1`,
@@ -178,14 +155,14 @@ test.describe('chapter delete — the latest card only, the guard, the whole cha
   test.describe.configure({ mode: 'serial' })
   const hero = launchesHero()
   const page = (): Page => hero().app.window
-  let nine: Chapter
-  let keep: Chapter
+  let nine: ChapterRow
+  let keep: ChapterRow
   let entriesBefore: number
 
   test('Delete… shows on the latest chapter’s card and not on the earlier one', async () => {
     await openStory(page(), HERO_TITLE)
-    nine = await chapterByTitle(page(), FIRST_CHAPTER)
-    keep = await chapterByTitle(page(), SECOND_CHAPTER)
+    nine = await chapterByTitle(page(), HERO_BRANCH, FIRST_CHAPTER)
+    keep = await chapterByTitle(page(), HERO_BRANCH, SECOND_CHAPTER)
     const { seeded } = hero()
     // The helper wrote into the latest chapter's close: this one.
     expect(seeded.endEntryId).toBe(keep.endEntryId)
@@ -260,11 +237,11 @@ test.describe('chapter delete — the divider alone, then its kept work regenera
   test.describe.configure({ mode: 'serial' })
   const hero = launchesHero(`${KEPT_WORK_MARKER} the ledger burns before the Keep wakes.`)
   const page = (): Page => hero().app.window
-  let keep: Chapter
+  let keep: ChapterRow
 
   test('Remove divider only keeps the close’s other writes, anchored on the end entry', async () => {
     await openStory(page(), HERO_TITLE)
-    keep = await chapterByTitle(page(), SECOND_CHAPTER)
+    keep = await chapterByTitle(page(), HERO_BRANCH, SECOND_CHAPTER)
     const { seeded } = hero()
     expect(seeded.endEntryId).toBe(keep.endEntryId)
 
@@ -328,11 +305,11 @@ test.describe('chapter delete — a close’s end reply regenerated', () => {
   test.describe.configure({ mode: 'serial' })
   const hero = launchesHero(`${CLOSE_MARKER} the Keep lets the courier pass unmarked.`)
   const page = (): Page => hero().app.window
-  let keep: Chapter
+  let keep: ChapterRow
 
   test('a rollback to the entry after the end leaves the end reply at the head', async () => {
     await openStory(page(), HERO_TITLE)
-    keep = await chapterByTitle(page(), SECOND_CHAPTER)
+    keep = await chapterByTitle(page(), HERO_BRANCH, SECOND_CHAPTER)
     expect(hero().seeded.endEntryId).toBe(keep.endEntryId)
     await rollBackPastEnd(page(), keep)
     expect(await chapterRowCount(page(), keep.id)).toBe(1)

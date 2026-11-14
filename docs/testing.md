@@ -796,6 +796,13 @@ free, and a renamed key fails loudly. Note `locales/` uses plurals
 (`entries_other`, `unsavedChanges_one`), so the harness boots real
 i18next rather than reading JSON naively.
 
+**An absence check under an open modal reads hidden nodes.** A Radix
+modal hides everything behind it from the accessibility tree, so
+`getByRole(…)` with `toHaveCount(0)` passes there whether the element is
+mounted or not. Assert absence under a modal with
+`includeHidden: true` (`reviewWindow.mounted`,
+`world.collisionModeMounted`).
+
 ### Tier 3 — testID, only where roles can't reach
 
 `testID` maps to `data-testid` and `dataSet={{ storyId }}` to

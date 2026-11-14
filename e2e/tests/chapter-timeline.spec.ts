@@ -1,7 +1,7 @@
 import { expect, test, type Page } from '@playwright/test'
 
-import { goToChapterTimeline, openStory } from '../flows/navigation'
-import { currentBranchId, queryApp } from '../harness/db'
+import { goToChapterTimeline, goToReader, openStory } from '../flows/navigation'
+import { chapterByTitle, type ChapterRow, currentBranchId, queryApp } from '../harness/db'
 import { escapeRegExp } from '../harness/i18n'
 import { launchApp, type LaunchedApp } from '../harness/launch'
 import { suppressNativeUnloadDialogRace } from '../harness/reload'
@@ -20,7 +20,6 @@ const EDITED_TITLE = 'The Keep Leans Closer, retold'
 const ADDED_KEYWORD = 'e2e ledger'
 const DRAFT = 'E2E dirty draft'
 
-type Chapter = { id: string; startEntryId: string }
 type Columns = { title: string; keywords: string[] }
 
 // Serial suite, one shared app: each test starts where the last one left it. Tests 1, 2 and 4
@@ -30,8 +29,8 @@ test.describe.serial('Chapter Timeline', () => {
   let userDataDir: string
   let branchId: string
   let closed: number
-  let nine: Chapter
-  let keep: Chapter
+  let nine: ChapterRow
+  let keep: ChapterRow
   let keepSeeded: Columns
   let nineSeeded: Columns
 
@@ -47,17 +46,6 @@ test.describe.serial('Chapter Timeline', () => {
   })
 
   // A renamed chapter throws: an undefined id would scope every card locator to nothing.
-  async function chapterByTitle(page: Page, title: string): Promise<Chapter> {
-    const rows = await queryApp(
-      page,
-      `SELECT id, start_entry_id FROM chapters WHERE branch_id = ? AND title = ?`,
-      [branchId, title],
-    )
-    if (rows.length !== 1) throw new Error(`expected one chapter titled ${title}: ${rows.length}`)
-    const [id, startEntryId] = rows[0]
-    return { id: id as string, startEntryId: startEntryId as string }
-  }
-
   async function columnsOf(page: Page, chapterId: string): Promise<Columns> {
     const [[title, keywords]] = await queryApp(
       page,
@@ -100,8 +88,8 @@ test.describe.serial('Chapter Timeline', () => {
     const page = app.window
     await openStory(page, HERO_TITLE)
     branchId = await currentBranchId(page, HERO_STORY)
-    nine = await chapterByTitle(page, FIRST_CHAPTER)
-    keep = await chapterByTitle(page, SECOND_CHAPTER)
+    nine = await chapterByTitle(page, branchId, FIRST_CHAPTER)
+    keep = await chapterByTitle(page, branchId, SECOND_CHAPTER)
     const [[count]] = await queryApp(page, `SELECT count(*) FROM chapters WHERE branch_id = ?`, [
       branchId,
     ])
@@ -169,9 +157,7 @@ test.describe.serial('Chapter Timeline', () => {
       op: 'update',
     })
 
-    await chrome.actionsTrigger(page).click()
-    await chrome.goToReaderRow(page).click()
-    await page.waitForURL(/\/reader-composer\//)
+    await goToReader(page)
     await expect(reader.composer(page)).toBeVisible()
     // The shortcut ignores editable targets, and the composer can hold focus on return.
     await page.evaluate(() => (document.activeElement as HTMLElement | null)?.blur())

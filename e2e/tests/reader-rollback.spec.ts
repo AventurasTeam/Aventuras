@@ -1,6 +1,12 @@
-import { expect, test, type Page } from '@playwright/test'
+import { expect, test } from '@playwright/test'
 
-import { currentBranchId, queryApp, queryScalar } from '../harness/db'
+import {
+  chapterByTitle,
+  type ChapterRow,
+  currentBranchId,
+  queryApp,
+  queryScalar,
+} from '../harness/db'
 import { launchApp, type LaunchedApp } from '../harness/launch'
 import { createSeededUserDataDir, removeUserDataDir } from '../harness/seed'
 import { home } from '../locators/home'
@@ -64,14 +70,6 @@ test.describe('reader — roll back to an entry', () => {
 // By title, never by position: a seed change moves chapter ends (milestone C8).
 const SECOND_CHAPTER = 'The Keep Leans Closer'
 
-type Chapter = {
-  id: string
-  sequenceNumber: number
-  startEntryId: string
-  startPosition: number
-  endPosition: number
-}
-
 // A rollback into a closed chapter: the one the target falls inside re-opens, one starting at
 // or past it goes (rollback-confirm.md → Cross-chapter case). Positions come from the DB.
 test.describe('reader — roll back into a closed chapter', () => {
@@ -79,7 +77,7 @@ test.describe('reader — roll back into a closed chapter', () => {
   let app: LaunchedApp
   let userDataDir: string | undefined
   let branchId: string
-  let keep: Chapter
+  let keep: ChapterRow
 
   test.beforeAll(async () => {
     ;({ userDataDir } = createSeededUserDataDir())
@@ -91,27 +89,6 @@ test.describe('reader — roll back into a closed chapter', () => {
     removeUserDataDir(userDataDir)
   })
 
-  async function chapterByTitle(page: Page, title: string): Promise<Chapter> {
-    const rows = await queryApp(
-      page,
-      `SELECT c.id, c.sequence_number, c.start_entry_id, s.position AS startPosition, e.position AS endPosition
-         FROM chapters c
-         JOIN story_entries s ON s.branch_id = c.branch_id AND s.id = c.start_entry_id
-         JOIN story_entries e ON e.branch_id = c.branch_id AND e.id = c.end_entry_id
-        WHERE c.branch_id = ? AND c.title = ?`,
-      [branchId, title],
-    )
-    if (rows.length !== 1) throw new Error(`expected one chapter titled ${title}: ${rows.length}`)
-    const [id, sequenceNumber, startEntryId, startPosition, endPosition] = rows[0]
-    return {
-      id: id as string,
-      sequenceNumber: Number(sequenceNumber),
-      startEntryId: startEntryId as string,
-      startPosition: Number(startPosition),
-      endPosition: Number(endPosition),
-    }
-  }
-
   const count = (sql: string, params: unknown[]): Promise<number> =>
     queryScalar(app.window, sql, params)
 
@@ -119,7 +96,7 @@ test.describe('reader — roll back into a closed chapter', () => {
     await home.openStory(app.window, 'The Veilstone Courier').click()
     await expect(reader.composer(app.window)).toBeVisible({ timeout: 20_000 })
     branchId = await currentBranchId(app.window, 'story_hero')
-    keep = await chapterByTitle(app.window, SECOND_CHAPTER)
+    keep = await chapterByTitle(app.window, branchId, SECOND_CHAPTER)
     const entriesBefore = await count(`SELECT count(*) FROM story_entries WHERE branch_id = ?`, [
       branchId,
     ])

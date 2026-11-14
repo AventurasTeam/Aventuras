@@ -33,11 +33,16 @@ export async function goToStorySettings(page: Page): Promise<void> {
   await page.waitForURL(/\/story-settings\//)
 }
 
-// World → Reader over GO TO, then the Actions menu's Undo row (CTRL-Z's touch-tier twin).
-export async function undoFromReader(page: Page): Promise<void> {
+// Any in-story screen → the reader over GO TO.
+export async function goToReader(page: Page): Promise<void> {
   await chrome.actionsTrigger(page).click()
   await chrome.goToReaderRow(page).click()
   await page.waitForURL(/\/reader-composer\//)
+}
+
+// World → Reader over GO TO, then the Actions menu's Undo row (CTRL-Z's touch-tier twin).
+export async function undoFromReader(page: Page): Promise<void> {
+  await goToReader(page)
   await chrome.actionsTrigger(page).click()
   await reader.undoRow(page).click()
 }

@@ -40,6 +40,13 @@ export const world = {
     world
       .collisionDialog(page)
       .getByRole('radio', { name: t(`collisionDialog.mode.${mode}`), exact: true }),
+  // A modal over the dialog hides it from the accessibility tree, so absence is read with hidden nodes.
+  collisionModeMounted: (page: Page, mode: 'merge' | 'rename' | 'keep'): Locator =>
+    page.getByRole('radio', {
+      name: t(`collisionDialog.mode.${mode}`),
+      exact: true,
+      includeHidden: true,
+    }),
   // The reason line under the title; the seeded Brannoc flag's stored reason is 'distinct'.
   collisionReason: (page: Page, reason: 'distinct'): Locator =>
     world.collisionDialog(page).getByText(t(`collisionDialog.reason.${reason}`), { exact: true }),

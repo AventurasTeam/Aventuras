@@ -1,6 +1,7 @@
 import { expect, test, type Locator } from '@playwright/test'
 
 import { gatedPassReply, passProbe } from '../flows/classifier-pass'
+import { goToReader } from '../flows/navigation'
 import { queryApp } from '../harness/db'
 import { installEmbedderModel } from '../harness/embedder'
 import { t } from '../harness/i18n'
@@ -182,9 +183,7 @@ test.describe('periodic classifier — the gated pass', () => {
     await expect(storyLeave.dialog(page)).toBeHidden()
     expect(page.url()).toMatch(/\/world\//)
     expect(await runOutcome(pass)).toBeNull()
-    await chrome.actionsTrigger(page).click()
-    await chrome.goToReaderRow(page).click()
-    await page.waitForURL(/\/reader-composer\//)
+    await goToReader(page)
 
     mock.releaseStructured()
     await expect.poll(() => runOutcome(pass), { timeout: 20_000 }).toBe('completed')

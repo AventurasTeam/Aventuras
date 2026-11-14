@@ -432,14 +432,6 @@ patch`, which 5.5a marks `restated`, so a close tool's write of it
   update whose target row is missing runs an UPDATE that matches nothing
   and returns `ok`. `:576-600`: an undo partial that breaks the state
   schema is restored without validation. Raised in 5.11's review.
-- **An E2E `getByRole` absence check made while a modal is open passes
-  regardless.** The modal hides everything behind it from the
-  accessibility tree (`e2e/locators/save-session.ts:9` notes the hiding).
-  Worth a
-  [`testing.md → Selector strategy`](../testing.md#selector-strategy)
-  note or a lessons-learned entry. Separately, `e2e/flows/navigation.ts`
-  has no `goToReader` flow, and about 15 specs inline it. Raised in
-  5.11's review.
 - **A landed merge's link-row losses can't name their row.**
   `settleLosses` (`lib/pipeline/definitions/close-agent/verdict.ts`)
   keys a merge's losses by path across all its actions, as C4 states, so

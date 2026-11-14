@@ -20,8 +20,8 @@ export const OPEN_REGION_FROM = `FROM story_entries
 // (window.aventurasDb): the one connection with sqlite-vec loaded, the only one a
 // spec may write through, and one that never waits on the app's writer for the
 // database lock, which a second handle meets as `database is locked`.
-// sqlite-proxy hands rows back as arrays-of-values. See docs/testing.md →
-// Selector strategy, Tier 1.
+// sqlite-proxy hands rows back as arrays-of-values, read as arrays in main, so two
+// columns of one name both come back. See docs/testing.md → Selector strategy, Tier 1.
 export async function queryApp(
   page: Page,
   sql: string,
@@ -39,6 +39,44 @@ export async function queryApp(
     { sql, params },
   )
   return result.rows
+}
+
+/** A closed chapter as the chapter specs read it: its range by entry id and by position. */
+export type ChapterRow = {
+  id: string
+  sequenceNumber: number
+  startEntryId: string
+  endEntryId: string
+  startPosition: number
+  endPosition: number
+}
+
+/** The one chapter on the branch with this title; none or several fails the read. */
+export async function chapterByTitle(
+  page: Page,
+  branchId: string,
+  title: string,
+): Promise<ChapterRow> {
+  const rows = await queryApp(
+    page,
+    `SELECT c.id, c.sequence_number, c.start_entry_id, c.end_entry_id,
+            s.position AS start_position, e.position AS end_position
+       FROM chapters c
+       JOIN story_entries s ON s.branch_id = c.branch_id AND s.id = c.start_entry_id
+       JOIN story_entries e ON e.branch_id = c.branch_id AND e.id = c.end_entry_id
+      WHERE c.branch_id = ? AND c.title = ?`,
+    [branchId, title],
+  )
+  if (rows.length !== 1) throw new Error(`expected one chapter titled ${title}: ${rows.length}`)
+  const [id, sequenceNumber, startEntryId, endEntryId, startPosition, endPosition] = rows[0]
+  return {
+    id: id as string,
+    sequenceNumber: Number(sequenceNumber),
+    startEntryId: startEntryId as string,
+    endEntryId: endEntryId as string,
+    startPosition: Number(startPosition),
+    endPosition: Number(endPosition),
+  }
 }
 
 /** The first column of the first row, as a number; no row fails the read rather than reading NaN. */
