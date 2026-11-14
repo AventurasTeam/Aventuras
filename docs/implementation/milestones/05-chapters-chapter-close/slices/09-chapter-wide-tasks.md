@@ -405,17 +405,17 @@ Each test file runs under `pnpm vitest run --project unit <file>`.
 - **`set_pin`:** landed, restated, user-won, later-turn and one-way
   refused cases each return C11's result, and a citation outside the
   chapter is `rejected` on a high-frequency row
-  (`close-agent/close-awareness.test.ts`).
+  (`close-agent/awareness-tools.test.ts`).
 - **Reset:** every count on the branch reads 0 after the phase, each row
   has one `chapter_close` delta anchored on E, no count-only delta reaches
   History, and a task stopped at its budget still resets
   (`close-agent/close-awareness.test.ts`).
 - **Report:** `part` is 0 for both tasks' calls and `stopped` rows, and
   neither normalization nor the reset appears in `calls`
-  (`lib/pipeline/definitions/chapter-close-agent.test.ts`).
+  (`close-agent/driver.test.ts`).
 - **Order:** as Canon's order states, and a chapter with no cluster or
   no awareness row makes no call for that task while its
-  `close_task_start` still fires (`chapter-close-agent.test.ts`).
+  `close_task_start` still fires (`close-agent/driver.test.ts`).
 - **Decay:** with 59 closed chapters and an awareness row learned in
   chapter 3 at `decay_resistance` 0.3, the candidate's `chaptersOld` is 57
   and its captured `recency_factor` is within 0.001 of
@@ -526,8 +526,9 @@ None open: Implementation notes record each answer.
   `mark_common_knowledge`.
 - **The start lists are unbounded.** Neither start has a read limit to
   keep under: Open questions assumed the prose tasks have one, and they
-  don't. Awareness rows list under their happening, every one; the
-  measure is below and in the part followup.
+  don't. Awareness rows list under their happening, every chapter row,
+  with the frequent rows from earlier chapters capped at `AWARENESS_TOP_N`;
+  the measure is below and in the part followup.
 - **3c's rule (developer decision, 2026-11-14).** Keys fold by
   `foldStackableKey`, then a plural folds onto a singular some record on
   the branch holds, in the order `-ies` to `-y`, `-es`, `-s` (never
@@ -541,15 +542,14 @@ None open: Implementation notes record each answer.
   can lengthen past 40, and `updateEntityStackables` doesn't check).
 - **3e's unnamed fields and clustering's terms.** `common_knowledge`
   survives when any merged row has it; the kept row's `category` and
-  `icon` stand; a null `learned_at_entry_id` loses to any anchor;
-  sources join with `; `, deduped in first-seen order, the first standing
-  whole and a later one joining only if the joined text stays within 120
-  characters, so no stored source is ever cut; the composite texts are
-  cut, never refused. Cast overlap
-  is shared characters over the smaller cast, every pair of a cluster
-  meets all three criteria, a row with no character among its
-  involvements clusters with nothing, and "~3 entries" counts non-system
-  entries by position.
+  `icon` stand; a null `learned_at_entry_id` loses to any anchor. Sources
+  join with `; `, deduped in first-seen order: the first stands whole and
+  a later one joins only if the joined text stays within 120 characters,
+  so no stored source is ever cut. The composite texts are cut, never
+  refused. Cast overlap is shared characters over the smaller cast, every
+  pair of a cluster meets all three criteria, a row with no character
+  among its involvements clusters with nothing, and "~3 entries" counts
+  non-system entries by position.
 - **Clusters form strongest pair first (developer decision,
   2026-11-14).** Every pair meeting all three criteria is taken in
   descending cosine, ties by anchor then id; two clusters merge only when
@@ -618,10 +618,6 @@ None open: Implementation notes record each answer.
   `__tests__/close-dispatch.ts`; the merge's pure fold lives in
   `close-agent/happening-fold.ts`, and `decodeVector` is shared in
   `lib/retrieval/decode-vector.ts`.
-- **Test files.** There is no `chapter-close-agent.test.ts`: the order
-  and report tests are in `close-agent/driver.test.ts`, the merge's in
-  `close-agent/happening-tools.test.ts`, and `set_pin`'s and "a pin
-  moves a score" in `close-agent/awareness-tools.test.ts`.
 - **Measures (no bar).** On the dataset chapter with the dev embedder
   (`Xenova/all-MiniLM-L6-v2`), the range embed embedded 36 happenings
   and the terms gave 0 clusters. The Awareness start listed 72 rows in a
@@ -629,25 +625,23 @@ None open: Implementation notes record each answer.
   over the 53 rows counted before it took 4.9, 3.3 and 3.1 ms on
   node:sqlite in-process, the action layer desktop main runs, before its
   IPC hop and store patches. No Android number was taken.
-- **3e doesn't fire on MiniLM (developer decision, 2026-11-14).** Of the
-  630 pairs the highest cosine was 0.732, none reached canon's 0.80, and
-  the 15 pairs inside the distance and cast gates top out at 0.701, so
-  the thresholds ship as canon has them and
+- **3e doesn't fire on MiniLM (developer decision, 2026-11-14).** The
+  thresholds ship as canon has them, and
   [`followups.md → Tuning and play testing`](../../../../followups.md#tuning-and-play-testing)
-  holds the revisit: a per-embedder threshold, EmbeddingGemma measured on
-  the same chapter, and both gates re-tuned on real stories. The two
-  near-duplicates on the chapter sit 6 entries apart, so the distance
-  gate drops them whatever the cosine bar.
+  holds the revisit and the numbers. No Happenings merge has run on a
+  real model in this slice, since the probe and the re-close both found 0
+  clusters, so `merge_happenings` and the Happenings prompt have only met
+  scripted steps.
 - **The dataset seed holds this slice's close.** Its close was undone
   and run again from the dev route on `Gemma4-26B-A4B-QAT-MTP` through
   `pnpm mock`'s passthrough, without the overlay, as one part: 41 model
-  calls, all ok, nothing stopped. Happenings made no call, having no
-  cluster. The report holds `create_lore` 1, `update_character` 8,
+  requests, nothing stopped. The report holds 43 calls, 42 ok: Happenings
+  made none, having no cluster, and `create_lore` 1, `update_character` 8,
   `update_faction` 2, `update_thread` 6, `set_keywords` 15 (14 ok),
-  `update_place` 1, `flag_duplicate` 3, `read_turns` 3 and `set_pin` 4,
-  and the chapter's title is now "The Treasure Map and the Hispaniola".
-  The re-close left Jim's `traits` at `observant`, which
-  `overlay.test.ts`'s before-writing pin follows.
+  `update_place` 1, `flag_duplicate` 3, `read_turns` 3 and `set_pin` 4
+  make up the rest. The chapter's title is now "The Treasure Map and the
+  Hispaniola".
 - **The E2E regression.** `first-chapter.spec.ts`'s close log gains the
   reset's update of each counted awareness row, read from the DB before
-  the close; chapter-close-owed's seven cases pass unchanged: the reset and normalization touch no delta count it pins.
+  the close. `chapter-close-owed`'s seven cases pass unchanged, since
+  the reset and normalization touch no delta count it pins.

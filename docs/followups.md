@@ -395,17 +395,19 @@ breakdown under [UX](#ux).
 - **3e's thresholds don't fit every embedder.** On the dataset chapter
   with `Xenova/all-MiniLM-L6-v2`, which
   [`retrieval.md`](./memory/retrieval.md) names the mobile default, 3e
-  found 0 clusters: 36 happenings, 630 pairs, highest cosine 0.732 and
-  none at 0.75 or above, short of the 0.80 bar canon sets. The best pair inside
-  the distance and cast gates reads 0.701. The Spy-glass (0.709) and
+  found 0 clusters: 36 happenings, 630 pairs, and a highest cosine of
+  0.732, short of the 0.80 bar canon sets. The best pair inside the
+  distance and cast gates reads 0.701. The Spy-glass (0.709) and
   Dr. Livesey (0.697) near-duplicates sit 6 entries apart, so the
   distance gate drops them too, and the next in-gate pair, 0.590, is
   likely distinct. So 3e doesn't fire on MiniLM today. One global cosine
   can't fit every embedder; a per-embedder threshold, for instance one
-  the embedder's registry entry carries, is the likely shape. Play measures
-  EmbeddingGemma on the same chapter and re-tunes both gates (cosine and
-  distance) on real stories. Developer decision 2026-11-14, from Slice
-  5.9's probe.
+  the embedder's registry entry carries, is the likely shape. Play
+  measures EmbeddingGemma on the same chapter and re-tunes both gates
+  (cosine and distance) on real stories. No Happenings merge has run on
+  a real model: the probe and the re-close both found 0 clusters, so
+  `merge_happenings` and the Happenings prompt have only met scripted
+  steps. Developer decision 2026-11-14, from Slice 5.9's probe.
 
 - **User threads never decay.** A thread the user created, or one the
   user resolved or failed, carries no `resolved_at_entry_id` and never
