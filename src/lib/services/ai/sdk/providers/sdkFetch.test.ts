@@ -428,11 +428,31 @@ describe('logStreamResponse', () => {
       'test',
       {
         status: 200,
-        error: 'stream summary failed: boom',
+        error: 'stream logging failed: boom',
         body: [{ choices: [{ index: 0, delta: { content: 'hi' } }] }],
       },
       0,
-      'stream summary failed: boom',
+      'stream logging failed: boom',
+    )
+  })
+
+  it('records an entry when the body cannot be read', async () => {
+    const response = sse({ choices: [{ index: 0, delta: { content: 'hi' } }] })
+    response.body?.getReader()
+
+    await expect(
+      logStreamResponse(response, { debugId: 'dbg', serviceId: 'test', startTime: 0 }),
+    ).resolves.toBeUndefined()
+
+    expect(addResponse).toHaveBeenCalledWith(
+      'dbg',
+      'test',
+      expect.objectContaining({
+        status: 200,
+        error: expect.stringContaining('stream logging failed'),
+      }),
+      0,
+      expect.stringContaining('stream logging failed'),
     )
   })
 

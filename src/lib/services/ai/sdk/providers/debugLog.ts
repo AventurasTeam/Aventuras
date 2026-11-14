@@ -52,15 +52,18 @@ export const logSdkResponse = createResponseLogger({
   logOther: (response, entry) => void logStreamResponse(response.clone(), entry),
 })
 
-/** Never rejects: it runs unawaited, so a summary that throws is logged as what arrived instead. */
+/** Never rejects: it runs unawaited, so a failure is logged as what arrived instead. */
 export async function logStreamResponse(response: Response, entry: DebugEntry): Promise<void> {
   const { debugId, serviceId, startTime } = entry
-  const read = await readLoggedBody(response)
-  const events = parseStreamEvents(read.text)
+  let text = ''
+  let events: StreamEvent[] = []
   try {
+    const read = await readLoggedBody(response)
+    text = read.text
+    events = parseStreamEvents(text)
     logSummary(response, entry, read, events)
   } catch (err) {
-    const error = `stream summary failed: ${errMessage(err)}`
+    const error = `stream logging failed: ${errMessage(err)}`
     debugLog.addResponse(
       debugId,
       serviceId,
@@ -68,7 +71,7 @@ export async function logStreamResponse(response: Response, entry: DebugEntry): 
         status: response.status,
         error,
         // Not `parseLoggedBody(read.text)`: SSE text starts with `data:`, which reads as base64.
-        body: events.length > 0 ? events.map((e) => e.payload) : parseLoggedBody(read.text),
+        body: events.length > 0 ? events.map((e) => e.payload) : parseLoggedBody(text),
       },
       startTime,
       error,
