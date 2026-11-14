@@ -660,31 +660,22 @@ describe('closeReviewNotApplied', () => {
     })
   })
 
-  it("shows a landed call's lost flag and empty value as Changes would, and no value as empty", () => {
+  it("shows a landed call's lost empty value as none, and a lost field with no value as empty", () => {
     expect(
       notApplied([
         call({
-          task: 'upkeep',
-          tool: 'mark_common_knowledge',
-          rows: [FIRE],
-          values: { commonKnowledge: '1' },
-          skippedFields: [{ field: 'commonKnowledge', reason: 'later-turn' }],
-        }),
-        call({
-          task: 'upkeep',
-          tool: 'update_place',
-          rows: [QUAY],
-          values: { 'state.condition': 'Flooded', 'state.traits': '' },
+          tool: 'update_character',
+          rows: [KAEL],
+          values: { 'state.voice': 'Flat', 'state.drives': '' },
           skippedFields: [
-            { field: 'state.traits', reason: 'over-soft-cap' },
-            { field: 'state.features', reason: 'over-soft-cap' },
+            { field: 'state.drives', reason: 'user-edited-since-prose' },
+            { field: 'state.traits', reason: 'user-edited-since-prose' },
           ],
         }),
       ]),
     ).toEqual([
-      ['The fire', 'commonKnowledge', 'Yes', 'later-turn'],
-      ['The Quay', 'state.traits', 'none', 'over-soft-cap'],
-      ['The Quay', 'state.features', '', 'over-soft-cap'],
+      ['Kael', 'state.drives', 'none', 'user-edited-since-prose'],
+      ['Kael', 'state.traits', '', 'user-edited-since-prose'],
     ])
   })
 
