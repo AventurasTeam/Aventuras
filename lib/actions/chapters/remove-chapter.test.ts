@@ -374,6 +374,25 @@ function holdGate(fx: CloseFixture): void {
   })
 }
 
+// A pass on the branch holding the gate: a head reversal may interrupt it, a chapter delete may not.
+function holdPass(fx: CloseFixture): void {
+  generationStore.startRun({
+    runId: 'run_pass',
+    kind: 'periodic-classifier',
+    gateBehavior: 'hard-gate',
+    interruptible: 'pass',
+    beforeTurn: false,
+    actionId: 'act_pass',
+    storyId: fx.storyId,
+    branchId: fx.branchId,
+    abortController: new AbortController(),
+    currentPhase: 'classify',
+    intermediates: {},
+    terminal: Promise.resolve(),
+    resolveTerminal: () => {},
+  })
+}
+
 describe("removeChapter 'whole'", () => {
   it('reverses the close groups and leaves every entry in place', async () => {
     const c = await openClosed()
@@ -475,11 +494,44 @@ describe("removeChapter 'divider-only'", () => {
   })
 })
 
+describe('removeChapter scope', () => {
+  it.each(['whole', 'divider-only'] as const)(
+    "reverses only the latest chapter's groups, leaving an earlier close whole (%s)",
+    async (mode) => {
+      const fx = await openSeeded()
+      const first = await closeOn(fx, fx.replyIds[1])
+      const second = await closeOn(fx, fx.replyIds[3])
+      const firstDeltas = await deltasOf(fx, first.actionId)
+
+      expect(await removeChapter(fx.branchId, second.chapter.id, mode, fx.ctx)).toEqual({
+        status: 'ok',
+      })
+
+      expect(await chapterRows(fx)).toEqual([first.chapter])
+      expect(await deltasOf(fx, first.actionId)).toEqual(firstDeltas)
+    },
+  )
+})
+
 describe('removeChapter refusals', () => {
   it('refuses in-flight while a run holds the gate, writing nothing', async () => {
     const c = await openClosed()
     const log = await logRows(c.fx)
     holdGate(c.fx)
+
+    expect(await removeChapter(c.fx.branchId, c.chapter.id, 'whole', c.fx.ctx)).toMatchObject({
+      status: 'rejected',
+      code: CHAPTER_DELETE_REFUSAL.inFlight,
+    })
+
+    expect(await logRows(c.fx)).toEqual(log)
+    expect(await chapterRows(c.fx)).toEqual([c.chapter])
+  })
+
+  it('refuses in-flight while an interruptible pass on the branch holds the gate', async () => {
+    const c = await openClosed()
+    const log = await logRows(c.fx)
+    holdPass(c.fx)
 
     expect(await removeChapter(c.fx.branchId, c.chapter.id, 'whole', c.fx.ctx)).toMatchObject({
       status: 'rejected',

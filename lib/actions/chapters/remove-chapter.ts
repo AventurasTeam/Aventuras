@@ -15,7 +15,7 @@ export type RemoveChapterResult = { status: 'ok' } | ChapterDeleteRefusal
 
 /**
  * C13: reverses the latest chapter's close groups whole, or only its row, report and stamps; every
- * entry stays. Not undoable: the commit clears redo.
+ * entry stays. Not undoable, and clears redo.
  */
 export async function removeChapter(
   branchId: string,
