@@ -45,6 +45,8 @@ export type ChapterCardProps = {
   /** Route focus, for Cmd/Ctrl-S on the in-card bar. */
   hotkeysEnabled: boolean
   onJump: () => void
+  /** The latest card's `Delete…`; the route guards it and opens the confirm. */
+  onDelete: () => void
 }
 
 type Gate = { blockedReason?: string }
@@ -58,7 +60,11 @@ function issueText(message: string | undefined): string | undefined {
 }
 
 /** The actions after `Jump to chapter →`, one list: inline at tablet and desktop, `⋯` on phone. */
-function moreActions(latest: boolean): OverflowMenuEntry[] {
+function moreActions(
+  latest: boolean,
+  onDelete: () => void,
+  blockedReason: string | undefined,
+): OverflowMenuEntry[] {
   return [
     {
       key: 'regenerate',
@@ -69,8 +75,8 @@ function moreActions(latest: boolean): OverflowMenuEntry[] {
     },
     ...(latest
       ? destructiveEntry('delete', t('chapters:actions.delete'), {
-          onPress: NO_ACTION,
-          disabledReason: t('chapters:actions.deleteLandsLater'),
+          onPress: onDelete,
+          disabledReason: blockedReason,
         })
       : []),
   ]
@@ -84,6 +90,7 @@ export function ChapterCard({
   blockedReason,
   hotkeysEnabled,
   onJump,
+  onDelete,
 }: ChapterCardProps): ReactElement {
   const isPhone = useTier() === 'phone'
   const padding = isPhone ? 'px-3' : 'px-5'
@@ -119,7 +126,13 @@ export function ChapterCard({
               />
               <KeywordsField control={editing.form.control} blockedReason={blockedReason} />
             </View>
-            <ActionRow latest={data.latest} isPhone={isPhone} onJump={onJump} />
+            <ActionRow
+              latest={data.latest}
+              isPhone={isPhone}
+              onJump={onJump}
+              onDelete={onDelete}
+              blockedReason={blockedReason}
+            />
           </View>
           {/* touch.md → Save bar on phone: there the route holds it at the surface's bottom edge. */}
           {isPhone ? null : (
@@ -266,12 +279,15 @@ function ActionRow({
   latest,
   isPhone,
   onJump,
-}: {
+  onDelete,
+  blockedReason,
+}: Gate & {
   latest: boolean
   isPhone: boolean
   onJump: () => void
+  onDelete: () => void
 }) {
-  const more = moreActions(latest)
+  const more = moreActions(latest, onDelete, blockedReason)
   return (
     <View className="flex-row flex-wrap items-center gap-2">
       <Button

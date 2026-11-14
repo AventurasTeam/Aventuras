@@ -30,7 +30,6 @@ const COPY = {
   regenerate: 'Regenerate summary',
   regenerateLater: 'Regenerating a summary lands in a later milestone',
   delete: 'Delete…',
-  deleteLater: 'Deleting a chapter lands in a later milestone',
   review: 'Review changes',
   more: 'More chapter actions',
   title: 'Title',
@@ -99,12 +98,21 @@ type HarnessProps = {
   initiallyExpanded: boolean
   onSave: (draft: ChapterDraft) => Promise<ChapterSaveResult>
   onJump: () => void
+  /** The latest card's `Delete…`; in the route, its guard and the confirm stand behind it. */
+  onDelete: () => void
   /** The route's focus, forwarded to the in-card bar's Ctrl-S. */
   hotkeysEnabled: boolean
 }
 
 /** The route's wiring for one card: expansion keys the session, a save rewrites the row. */
-function CardHarness({ data, initiallyExpanded, onSave, onJump, hotkeysEnabled }: HarnessProps) {
+function CardHarness({
+  data,
+  initiallyExpanded,
+  onSave,
+  onJump,
+  onDelete,
+  hotkeysEnabled,
+}: HarnessProps) {
   const [cell] = useState(() => externalCell(data.row))
   const row = useSyncExternalStore(cell.subscribe, cell.get)
   const [expanded, setExpanded] = useState(initiallyExpanded)
@@ -149,6 +157,7 @@ function CardHarness({ data, initiallyExpanded, onSave, onJump, hotkeysEnabled }
         blockedReason={blocked ? BLOCKED_REASON : undefined}
         hotkeysEnabled={hotkeysEnabled}
         onJump={onJump}
+        onDelete={onDelete}
       />
       {/* The route's phone bar: a sibling of the scroller, outside every card. */}
       {isPhone ? (
@@ -179,6 +188,7 @@ const meta: Meta<typeof CardHarness> = {
     initiallyExpanded: true,
     onSave: fn(async (): Promise<ChapterSaveResult> => ({ status: 'ok', id: TRAIL.id })),
     onJump: fn(),
+    onDelete: fn(),
     hotkeysEnabled: true,
   },
   decorators: [
@@ -210,9 +220,9 @@ async function waitForPhoneActions(card: HTMLElement): Promise<HTMLElement> {
   return waitFor(() => within(card).getByRole('button', { name: COPY.more }), WAIT)
 }
 
-/** The latest card: Jump live, Regenerate and Delete… disabled with their reasons, no review. */
+/** The latest card: Jump and Delete… live, Regenerate disabled with its reason, no review. */
 export const Latest: Story = {
-  play: async () => {
+  play: async ({ args }) => {
     const card = await findCard()
     await waitForInlineActions(card)
 
@@ -224,8 +234,9 @@ export const Latest: Story = {
     expect(regenerate).toHaveAttribute('aria-disabled', 'true')
     expect(screen.getByTitle(COPY.regenerateLater)).toContainElement(regenerate)
     const remove = within(card).getByRole('button', { name: COPY.delete })
-    expect(remove).toHaveAttribute('aria-disabled', 'true')
-    expect(screen.getByTitle(COPY.deleteLater)).toContainElement(remove)
+    expect(remove).not.toHaveAttribute('aria-disabled', 'true')
+    await userEvent.click(remove)
+    expect(args.onDelete).toHaveBeenCalledTimes(1)
     expect(within(card).queryByText(COPY.review)).toBeNull()
 
     expect(within(card).getByText('Day 2 → Day 3')).toBeVisible()
@@ -258,8 +269,22 @@ export const Earlier: Story = {
 export const Collapsed: Story = {
   render: () => (
     <View className="gap-3">
-      <ChapterCard data={LATEST} onToggle={NOOP} session={null} hotkeysEnabled onJump={NOOP} />
-      <ChapterCard data={EARLIER} onToggle={NOOP} session={null} hotkeysEnabled onJump={NOOP} />
+      <ChapterCard
+        data={LATEST}
+        onToggle={NOOP}
+        session={null}
+        hotkeysEnabled
+        onJump={NOOP}
+        onDelete={NOOP}
+      />
+      <ChapterCard
+        data={EARLIER}
+        onToggle={NOOP}
+        session={null}
+        hotkeysEnabled
+        onJump={NOOP}
+        onDelete={NOOP}
+      />
     </View>
   ),
   play: async () => {
@@ -314,7 +339,14 @@ function LaggingFormHarness() {
     onSession: NOOP,
   })
   return (
-    <ChapterCard data={LATEST} onToggle={NOOP} session={session} hotkeysEnabled onJump={NOOP} />
+    <ChapterCard
+      data={LATEST}
+      onToggle={NOOP}
+      session={session}
+      hotkeysEnabled
+      onJump={NOOP}
+      onDelete={NOOP}
+    />
   )
 }
 
@@ -409,7 +441,7 @@ export const InvalidDraft: Story = {
   },
 }
 
-/** A run starts mid-edit: fields and Save disable with its reason; Discard, Jump, the head don't. */
+/** A run starts mid-edit: fields, Save and Delete… disable with its reason; Discard, Jump, the head don't. */
 export const Blocked: Story = {
   play: async ({ args }) => {
     const card = await findCard()
@@ -429,6 +461,9 @@ export const Blocked: Story = {
     const save = within(bar).getByRole('button', { name: /^Save/ })
     expect(save).toHaveAttribute('aria-disabled', 'true')
     expect(save.closest('[title]')).toHaveAttribute('title', BLOCKED_REASON)
+    const remove = within(card).getByRole('button', { name: COPY.delete })
+    expect(remove).toHaveAttribute('aria-disabled', 'true')
+    expect(remove.closest('[title]')).toHaveAttribute('title', BLOCKED_REASON)
 
     expect(within(card).getByRole('button', { name: HEADING })).not.toHaveAttribute(
       'aria-disabled',
@@ -455,10 +490,10 @@ export const Blocked: Story = {
   },
 }
 
-/** Phone: `Jump to chapter →` keeps its label; `⋯` lists the rest, disabled with their reasons. */
+/** Phone: `Jump to chapter →` keeps its label; `⋯` lists the rest, Regenerate disabled, Delete… live. */
 export const Phone390Actions: Story = {
   globals: PHONE,
-  play: async () => {
+  play: async ({ args }) => {
     const card = await findCard()
     const more = await waitForPhoneActions(card)
     expect(within(card).getByRole('button', { name: COPY.jump })).toBeVisible()
@@ -473,9 +508,13 @@ export const Phone390Actions: Story = {
     )
     await waitFor(() => expect(regenerate).toBeVisible(), WAIT)
     expect(regenerate).toHaveAttribute('aria-disabled', 'true')
-    const remove = screen.getByRole('menuitem', { name: `${COPY.delete}, ${COPY.deleteLater}` })
-    expect(remove).toHaveAttribute('aria-disabled', 'true')
+    // A live entry's accessible name is its label alone; a disabled one appends its reason.
+    const remove = screen.getByRole('menuitem', { name: COPY.delete })
+    expect(remove).not.toHaveAttribute('aria-disabled', 'true')
     expect(screen.queryByRole('menuitem', { name: /^Review changes/ })).toBeNull()
+
+    await userEvent.click(remove)
+    await waitFor(() => expect(args.onDelete).toHaveBeenCalledTimes(1), WAIT)
   },
 }
 
