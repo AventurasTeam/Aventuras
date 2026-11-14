@@ -155,7 +155,8 @@ without a database. Copy goes in the `chapters` namespace 5.7 creates.
     lore creates and `retrievalCount`-only updates, plus
     `set.refClears.length`, as `rollbackCountsOf` counts a clear. A delta
     whose every field yields still counts, since telling needs the
-    planner; the number is a slight overstatement in that rare case.
+    planner; the number is a slight overstatement in that rare case
+    (superseded: see Implementation notes, Q16).
   - `turnsSince`: the `ai_reply` rows in `openRegionSeries`.
   - `after`, below.
 - **The after-delete line.** A pure `closeAfterDelete` in `lib/chapters`
@@ -265,7 +266,8 @@ go from `register.ts` too, since only a delete reads a cascade.
 - **The confirm's kind is derived, never stored.** `ConfirmState.mode` keeps
   its two values. `RollbackConfirmModal` reads `classifyRegenerateGate(counts)`
   at render, so a live recount can't leave it stale. `immediate` at render
-  uses the cascade copy: the confirm is already open.
+  uses the cascade copy: the confirm is already open (superseded: see
+  Implementation notes, Q18).
 - **The route.** `:1206` stays the branch point. `:1209` passes `counts`, so
   a close committing as the interrupt lands can't be reversed unconfirmed.
   A `counts-changed` there opens the confirm on the fresh counts, through a

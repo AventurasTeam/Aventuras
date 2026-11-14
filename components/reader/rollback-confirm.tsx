@@ -33,8 +33,7 @@ type CopyKind =
   | 'regenerate-kept-work'
 
 // Read from the counts at each render, never stored: a recount can move an open regenerate confirm
-// between kinds, and one that reads `immediate` has nothing after the reply, so it drops "and
-// everything after it".
+// between kinds, and an `immediate` one has nothing after the reply.
 function copyKindOf(variant: 'rollback' | 'regenerate', counts: RollbackCounts): CopyKind {
   if (variant === 'rollback') return 'rollback'
   const gate = classifyRegenerateGate(counts)
