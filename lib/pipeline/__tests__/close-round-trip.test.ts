@@ -1786,6 +1786,36 @@ describe.each(CASES.map((c) => [c.name, c] as const))('the round trip of %s', (_
   })
 })
 
+describe('a chapter delete over a record the close normalized', () => {
+  it("keeps a later pass's write to the record whole", async () => {
+    const h = await openHarness(NORMALIZATION_CASE)
+    await h.close()
+    const later = { gold: 2, arrow: 1 }
+    const written = await applyDeltaAction(
+      {
+        action: {
+          kind: 'updateEntityStackables',
+          source: 'periodic_classifier',
+          payload: { branchId: h.fx.branchId, id: TOBIN.id, stackables: later },
+        },
+        actionId: 'act_close_later_purse',
+        branchId: h.fx.branchId,
+        entryId: h.fx.replyIds[5],
+      },
+      h.fx.ctx,
+    )
+    expect(written.status).toBe('ok')
+
+    await removeTheChapter(h, 'whole')
+
+    const [tobin] = await h.fx.ctx.db
+      .select()
+      .from(entities)
+      .where(and(eq(entities.branchId, h.fx.branchId), eq(entities.id, TOBIN.id)))
+    expect((tobin?.state as { stackables?: unknown } | null)?.stackables).toEqual(later)
+  })
+})
+
 describe('the stand-in task', () => {
   it('lands its create and its update as one group on E, and the report records the call', async () => {
     const h = await openHarness(STAND_IN_CASE)

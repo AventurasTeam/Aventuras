@@ -1070,6 +1070,32 @@ describe('later writes win over a whole delete (C13)', () => {
     expect((await entityOf(c.fx, TOBIN.id))?.description).toBe(TOBIN_CLOSE_DESCRIPTION)
     expect((await entryRows(c.fx)).map((e) => e.id)).not.toContain('entry_later_action')
   })
+
+  // A normalized record a later write touched yields whole: restored key by key, a merged-away key
+  // would come back beside the later record and double-count.
+  it('keeps a later write of a record the close normalized, whole', async () => {
+    const fx = await openSeeded()
+    const stackables = (counts: Record<string, number>, source: DeltaSource): PipelineAction => ({
+      kind: 'updateEntityStackables',
+      source,
+      payload: { branchId: fx.branchId, id: TOBIN.id, stackables: counts },
+    })
+    await seedPassWrite(fx, stackables({ gold: 5, 'gold coins': 2 }, 'periodic_classifier'))
+    const c = await closeOn(fx, fx.replyIds[END_REPLY])
+    await writeUnderClose(c, [stackables({ gold: 7 }, 'chapter_close')])
+    await writeLater(fx, stackables({ gold: 9 }, 'periodic_classifier'), {
+      actionId: 'act_pass_later',
+      entryId: fx.replyIds[END_REPLY + 1],
+    })
+
+    expect(await removeChapter(fx.branchId, c.chapter.id, 'whole', fx.ctx)).toEqual({
+      status: 'ok',
+    })
+
+    expect(((await entityOf(fx, TOBIN.id))?.state as CharacterState).stackables).toEqual({
+      gold: 9,
+    })
+  })
 })
 
 describe('getChapterDeletePreview', () => {
