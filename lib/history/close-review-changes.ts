@@ -6,6 +6,7 @@ import {
   type Entity,
   type ThreadStatus,
 } from '@/lib/db'
+import { logger } from '@/lib/diagnostics'
 import { formatEntryRef } from '@/lib/entry-refs'
 import { t } from '@/lib/i18n'
 import { isJsonObject } from '@/lib/json-object'
@@ -301,9 +302,13 @@ export function closeReviewChanges(
   const planned = report.calls.flatMap((call, index) => plannedRows(call, index))
   const old = oldValues(planned, deltas)
   const byArea = new Map<CloseReviewArea, CloseReviewChange[]>()
+  const unplaced = new Set<string>()
   for (const write of planned) {
     const area = areaOf(write.row, lookup)
-    if (area === null) continue
+    if (area === null) {
+      unplaced.add(write.row.table)
+      continue
+    }
     const pressTo = write.op === 'delete' ? write.kept : write.row
     const shared = {
       area,
@@ -331,6 +336,13 @@ export function closeReviewChanges(
           }
     appendTo(byArea, area, row)
   }
+  // A close tool writing a table the review has no area for: its writes don't show.
+  if (unplaced.size > 0)
+    logger.warn(
+      'memory.close_review_unknown_table',
+      { tables: [...unplaced] },
+      { actionId: report.actionId },
+    )
   return CLOSE_REVIEW_AREAS.flatMap((area) => {
     const rows = byArea.get(area)
     return rows === undefined ? [] : [{ area, rows }]

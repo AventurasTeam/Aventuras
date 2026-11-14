@@ -1,6 +1,7 @@
-import { afterEach, beforeEach, describe, expect, it } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import type { CloseReport, CloseReportCall, Delta, EntityKind } from '@/lib/db'
+import { logger } from '@/lib/diagnostics'
 import { i18n } from '@/lib/i18n'
 
 import { closeReviewChanges, reviewFieldLabel } from './close-review-changes'
@@ -40,6 +41,10 @@ const LOOKUP: CloseReviewLookup = {
   nameOf: (id) => NAMES.get(id),
   entryPosition: (id) => POSITIONS.get(id),
 }
+
+afterEach(() => {
+  vi.restoreAllMocks()
+})
 
 function call(fields: Partial<CloseReportCall> & Pick<CloseReportCall, 'tool'>): CloseReportCall {
   return {
@@ -153,6 +158,35 @@ describe('closeReviewChanges', () => {
     expect(closeReviewChanges(report(calls), [], LOOKUP).map(({ area }) => area)).toEqual([
       'charactersAndFactions',
     ])
+  })
+
+  it('logs the tables of the landed writes no area holds, once, and nothing when each has one', () => {
+    const warn = vi.spyOn(logger, 'warn')
+    const linkCall = (table: string, id: string) =>
+      call({ tool: 'set_role', rows: [{ table, id, name: 'Kael' }], values: { role: 'witness' } })
+
+    closeReviewChanges(
+      report([call({ tool: 'update_character', rows: [KAEL], values: { 'state.voice': 'Flat' } })]),
+      [],
+      LOOKUP,
+    )
+    expect(warn).not.toHaveBeenCalled()
+
+    closeReviewChanges(
+      report([
+        linkCall('happening_involvements', 'hinv_1'),
+        linkCall('happening_involvements', 'hinv_2'),
+        linkCall('character_relationships', 'rel_1'),
+      ]),
+      [],
+      LOOKUP,
+    )
+    expect(warn).toHaveBeenCalledTimes(1)
+    expect(warn).toHaveBeenCalledWith(
+      'memory.close_review_unknown_table',
+      { tables: ['happening_involvements', 'character_relationships'] },
+      { actionId: 'act_close' },
+    )
   })
 
   it('reads the old value from the delta and the new one from the report, field by field', () => {
