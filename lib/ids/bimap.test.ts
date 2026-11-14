@@ -57,6 +57,13 @@ describe('IdBiMap', () => {
     expect(m.allocate(charA)).toBe('newHero')
   })
 
+  it('never allocates a handle registerHandle took under a placeholder prefix', () => {
+    const m = new IdBiMap()
+    m.registerHandle('c1', charA)
+    expect(m.allocate(charB)).toBe('c2')
+    expect(m.getUuidFor('c1')).toBe(charA)
+  })
+
   it('allows idempotent handle registration but rejects a conflicting one', () => {
     const m = new IdBiMap()
     m.registerHandle('newHero', charA)

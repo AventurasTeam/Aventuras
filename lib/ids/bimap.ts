@@ -13,7 +13,10 @@ export class IdBiMap {
     if (existing) return existing
     const kindPrefix = uuid.split('_')[0] as SubstitutablePrefix
     const placeholderPrefix = PLACEHOLDER_PREFIX_BY_KIND[kindPrefix]
-    const n = (this.counters[placeholderPrefix] ?? 0) + 1
+    // A handle registerHandle took under this prefix is never handed to another id.
+    let n = this.counters[placeholderPrefix] ?? 0
+    do n += 1
+    while (this.placeholderToUuid.has(`${placeholderPrefix}${n}`))
     this.counters[placeholderPrefix] = n
     const placeholder = `${placeholderPrefix}${n}`
     this.uuidToPlaceholder.set(uuid, placeholder)

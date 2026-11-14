@@ -149,12 +149,6 @@ slice-planning gate forces its resolution before that slice is planned.
 patch`, which 5.5a marks `restated`, so a close tool's write of it
   reads `ok` with nothing written and leaves no trace in the review.
   Raised in 5.5a's review.
-- **`IdBiMap.allocate` ignores handles `registerHandle` set.**
-  `lib/ids/bimap.ts` counts per placeholder prefix and never checks the
-  counter against a registered handle, so a registered `c5` could later
-  be handed to another id. Nothing triggers it today: the close
-  registers only `t` and `aw` handles, which aren't placeholder
-  prefixes. Raised in 5.5a's review.
 - **A landed entry ref in a close's `values` is stored raw.**
   `ID_PATTERN` has no `entry` prefix, so the ledger keeps the raw
   `entry_` id, as `merge_happenings` records `occurredAtEntryId`. The
