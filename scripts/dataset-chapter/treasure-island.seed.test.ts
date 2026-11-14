@@ -105,7 +105,7 @@ describe('the Treasure Island seed', () => {
       happening_involvements: 134,
       happening_awareness: 72,
       character_relationships: 6,
-      deltas: 1052,
+      deltas: 1106,
     })
     const storyIds = (await ctx.db.select({ id: stories.id }).from(stories)).map((r) => r.id)
     const defaultStories = buildSeedSteps()
@@ -121,7 +121,7 @@ describe('the Treasure Island seed', () => {
     expect(entitiesStore.getLoadedBranch()).toBe(BRANCH)
     expect(entitiesStore.getEntities().size).toBe(56)
     expect([...chaptersStore.getChapters().values()].map((c) => c.title)).toEqual([
-      'The Discovery of the Map',
+      'The Treasure Map and the Hispaniola',
     ])
   })
 
@@ -135,13 +135,13 @@ describe('the Treasure Island seed', () => {
       .orderBy(desc(deltas.logPosition))) as Delta[]
     const close = log.filter((d) => d.source === 'chapter_close')
     expect(selectUndoTarget(log)).toEqual({ actionId: close[0]!.actionId, kind: 'group' })
-    expect(close).toHaveLength(170)
+    expect(close).toHaveLength(224)
     const closed = await chapterRows(ctx)
 
     expect(await undoLastAction(BRANCH, ctx)).toEqual({ status: 'ok' })
     expect(await chapterRows(ctx)).toEqual([])
     expect(await openRegion(ctx)).toBe(133)
-    expect(await branchCount(ctx, deltas)).toBe(1052 - 170)
+    expect(await branchCount(ctx, deltas)).toBe(1106 - 224)
     expect(await branchCount(ctx, threads)).toBe(8)
 
     expect(await redoLastAction(BRANCH, ctx)).toEqual({ status: 'ok' })
@@ -153,7 +153,7 @@ describe('the Treasure Island seed', () => {
       .where(eq(storyEntries.branchId, BRANCH))
       .orderBy(asc(storyEntries.chapterId))
     expect(chapterOf).toEqual([{ chapterId: closed[0]!.id }])
-    expect(await branchCount(ctx, deltas)).toBe(1052)
+    expect(await branchCount(ctx, deltas)).toBe(1106)
     expect(await branchCount(ctx, threads)).toBe(8)
   })
 

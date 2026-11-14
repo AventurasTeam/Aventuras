@@ -522,7 +522,9 @@ describe('the dataset overlay', () => {
     await expect(applyDatasetOverlay(ctx)).rejects.toThrow(/holds 2 chapters/)
 
     expect(await chapterCount(ctx)).toBe(2)
-    expect(byId(await entityRows(ctx, [JIM])).get(JIM)?.state).toMatchObject({ traits: [] })
+    expect(byId(await entityRows(ctx, [JIM])).get(JIM)?.state).toMatchObject({
+      traits: ['observant'],
+    })
   })
 
   it('throws on a seed row of another kind than the overlay names, before writing', async () => {
