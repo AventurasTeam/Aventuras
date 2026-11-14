@@ -51,12 +51,12 @@ function launchesHero(narrative?: string): () => Hero {
   let userDataDir: string | undefined
 
   test.beforeAll(async () => {
-    // Retrieval blocks narrative: no installed embedder, no reply.
     test.setTimeout(180_000)
     const dir = createSeededUserDataDir()
     userDataDir = dir.userDataDir
     seeded = seedCloseWrites(dir.dbPath, HERO_BRANCH)
     if (narrative !== undefined) {
+      // Retrieval blocks narrative: no installed embedder, no reply.
       await installEmbedderModel(userDataDir)
       mock = await startMockLlm()
       mock.setNarrative(narrative)

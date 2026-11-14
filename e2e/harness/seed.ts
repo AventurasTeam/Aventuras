@@ -411,7 +411,7 @@ export type SeededCloseWrites = {
   loreId: string
   entityId: string
   /** The entity column the close wrote and the later pass overwrote. */
-  column: string
+  column: typeof CLOSE_WRITES_COLUMN
   laterValue: string
 }
 
