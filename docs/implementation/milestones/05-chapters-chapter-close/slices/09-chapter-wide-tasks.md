@@ -635,10 +635,10 @@ None open: Implementation notes record each answer.
 - **3e doesn't fire on MiniLM (developer decision, 2026-11-14).** The
   thresholds ship as canon has them, and
   [`followups.md → Tuning and play testing`](../../../../followups.md#tuning-and-play-testing)
-  holds the revisit and the numbers. No Happenings merge has run on a
-  real model in this slice, since the probe and the re-close both found 0
-  clusters, so `merge_happenings` and the Happenings prompt have only met
-  scripted steps.
+  holds the revisit and the numbers. A scratch probe with the cosine bar
+  lowered to 0.55 (never committed) found one cluster, which the dev
+  model merged with one `merge_happenings` call that landed; the
+  keep-apart rule for differing knowers met no real case.
 - **The dataset seed holds this slice's close.** Its close was undone
   and run again from the dev route on `Gemma4-26B-A4B-QAT-MTP` through
   `pnpm mock`'s passthrough, without the overlay, as one part: 41 model

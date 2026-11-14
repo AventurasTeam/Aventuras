@@ -404,10 +404,14 @@ breakdown under [UX](#ux).
   can't fit every embedder; a per-embedder threshold, for instance one
   the embedder's registry entry carries, is the likely shape. Play
   measures EmbeddingGemma on the same chapter and re-tunes both gates
-  (cosine and distance) on real stories. No Happenings merge has run on
-  a real model: the probe and the re-close both found 0 clusters, so
-  `merge_happenings` and the Happenings prompt have only met scripted
-  steps. Developer decision 2026-11-14, from Slice 5.9's probe.
+  (cosine and distance) on real stories. One scratch probe with the
+  cosine bar lowered to 0.55 found a single cluster, the two halves of
+  Captain Smollett's cabin meeting (same cast and knowers, neither common
+  knowledge); the dev model read both turns and merged them with a
+  composite description, and the merge landed. So `merge_happenings` and
+  the Happenings prompt work on the dev model, but the keep-apart rule
+  for differing knowers has met no real case yet. Developer decision
+  2026-11-14, from Slice 5.9's probes.
 
 - **User threads never decay.** A thread the user created, or one the
   user resolved or failed, carries no `resolved_at_entry_id` and never
