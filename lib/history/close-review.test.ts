@@ -1,7 +1,8 @@
-import { describe, expect, it } from 'vitest'
+import { afterEach, beforeAll, beforeEach, describe, expect, it } from 'vitest'
 
 import {
   CLOSE_REASON_KEYS,
+  CLOSE_TASKS,
   closeReportSchema,
   type CloseReport,
   type CloseReportCall,
@@ -849,5 +850,71 @@ describe('closeReviewStopped and the no-tool note', () => {
 
     expect(review).toEqual({ stopped: [], noToolCalls: true, notApplied: [], changes: [] })
     expect(hasCopy('chapters:review.noToolCalls')).toBe(true)
+  })
+})
+
+// Every label unique, so a key that borrows another's copy shows, even where English repeats one.
+describe('the review copy, in a locale that names every key apart', () => {
+  const LANG = 'xk'
+
+  beforeAll(() => {
+    i18n.addResourceBundle(
+      LANG,
+      'chapters',
+      {
+        review: {
+          reason: Object.fromEntries(CLOSE_REASON_KEYS.map((key) => [key, `reason:${key}`])),
+          stopped: { lineNoPart: '{{task}} | {{reason}}', budget: 'stop:budget' },
+        },
+      },
+      true,
+      true,
+    )
+    i18n.addResourceBundle(
+      LANG,
+      'common',
+      {
+        chrome: {
+          memoryBanner: {
+            closeTask: Object.fromEntries(CLOSE_TASKS.map((task) => [task, `task:${task}`])),
+          },
+        },
+      },
+      true,
+      true,
+    )
+  })
+
+  beforeEach(async () => {
+    await i18n.changeLanguage(LANG)
+  })
+
+  afterEach(async () => {
+    await i18n.changeLanguage('en')
+  })
+
+  it('labels each refusal by its own reason', () => {
+    const rows = closeReviewNotApplied(
+      report(
+        CLOSE_REASON_KEYS.map((reason) =>
+          call({ tool: 'update_character', rows: [KAEL], result: 'rejected', reason }),
+        ),
+      ),
+      LOOKUP,
+    )
+
+    expect(rows.map(({ reasonKey, reasonText }) => [reasonKey, reasonText])).toEqual(
+      CLOSE_REASON_KEYS.map((key) => [key, `reason:${key}`]),
+    )
+  })
+
+  it('names each stopped task by its own label', () => {
+    const stopped = closeReviewStopped(
+      report([], { stopped: CLOSE_TASKS.map((task) => ({ task, part: 0, reason: 'budget' })) }),
+    )
+
+    expect(stopped.map(({ text }) => text)).toEqual(
+      CLOSE_TASKS.map((task) => `task:${task} | stop:budget`),
+    )
   })
 })
