@@ -53,7 +53,10 @@ export function landedPaths(call: CloseReportCall): string[] {
   return Object.keys(call.values ?? {}).filter((path) => !lost.has(path))
 }
 
-/** A report row as the review names it: the report's name, else the live row's, else its table's. */
+/**
+ * A report row as the review names it: the report's name, else the live row's, else an awareness
+ * row's table label, else "Unknown row".
+ */
 export function reviewTarget(row: ReportRow, lookup: CloseReviewLookup): CloseReviewTarget {
   const name =
     row.name !== ''

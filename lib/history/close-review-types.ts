@@ -47,7 +47,7 @@ export type CloseReviewChange = {
 
 export type CloseReviewNotApplied = CloseReviewField & {
   key: string
-  /** `create` for a refused `create_lore`, else `update`: the row's op badge. */
+  /** The row's op badge: `create` on any `create_lore` row, a landed one's too, else `update`. */
   op: 'create' | 'update'
   tool: string
   /** The call's first row; null when it recorded none. */

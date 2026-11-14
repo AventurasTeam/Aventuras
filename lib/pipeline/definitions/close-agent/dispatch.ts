@@ -103,7 +103,7 @@ function recordWrite(
     field: skipped.field,
     reason: ledgerReasonKey(skipped.reason, call),
   }))
-  // C4: a call that landed nothing lists its fields only when their keys differ from its own.
+  // C4: fields only when one's key differs from the call's, since keying can merge two reasons.
   const ownKeys = reason === undefined || skippedFields.some((skipped) => skipped.reason !== reason)
   ctx.ledger.record({
     task: ctx.task,

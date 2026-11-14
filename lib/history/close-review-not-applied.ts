@@ -109,9 +109,9 @@ function createdTitle(call: CloseReportCall): string {
   return normalizeTerm(call.values?.title ?? call.rows[0]?.name ?? '')
 }
 
-// A refused create's minted id is one no retry shares, so it matches by title. A row with no
-// `values` matches a landing on a row they share, or any landing of the tool when it named none:
-// its rows are every id argument, a landed call's the tool's own.
+// A row by tool, with no field: a refused create that recorded values matches by title, since its
+// minted id is one no retry shares; any other matches a landing on a row they share, or any landing
+// of the tool when it named none: its rows are every id argument, a landed call's the tool's own.
 function corrected({ call, path }: Refusal, later: CloseReportCall): boolean {
   if (path === null) {
     if (call.tool === CREATE_LORE_TOOL && call.values !== undefined)
