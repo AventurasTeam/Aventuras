@@ -159,11 +159,11 @@
       "merge-mode-into-other": "A thread you set to always or disabled can fold only into one with the same setting.",
       "merge-close-wrote": "This close already wrote a row the merge would fold away.",
       "merge-no-keep": "No thread to keep fits the merge.",
-      "merge-close-wrote-no-keep": "This close already wrote among these rows, and no row to keep fits the merge.",
+      "merge-close-wrote-no-keep": "This close already wrote among these rows, so the merge had no row it could keep.",
       "merge-outside-cluster": "The merge named a happening that wasn't among the likely duplicates.",
       "no-start-pin": "The close wasn't shown this pin, so it couldn't change it.",
       "frequent-pin-lowered": "This keeps coming up, so its pin can only rise.",
-      "pin-raise-too-large": "The pin rose more than a close may raise it.",
+      "pin-raise-too-large": "The close tried to raise the pin further than one close may.",
       "other": "Not applied for another reason."
     },
     "stopped": {
