@@ -218,24 +218,6 @@ patch`, which 5.5a marks `restated`, so a close tool's write of it
   `lib/pipeline/__tests__/close-round-trip.test.ts` pins today's
   behaviour. Developer decision 2026-11-14 (5.9): record the edge in
   canon, fix later.
-- **5.13's re-run meets three things 5.9 shipped.** Slice 5.13 (re-running
-  a close) is planned on main; its doc isn't on this branch, so these wait
-  for its Open questions. First, the later-bump case in
-  `lib/pipeline/__tests__/close-round-trip.test.ts` overrides `armExpect`
-  and `armLog` for its rollback arms, since a count bump's undo restores by
-  assignment, and 5.13's re-run arms on that case need overrides of their
-  own: after a rollback past E, TOLD's row reads its pre-bump count over
-  the re-run's reset 0; after a rollback of a turn between E and the
-  re-run, then CTRL-Z, TOLD's row ends at its pre-merge count holding the
-  rolled-back bump. The test's key-list pins widen with them. Second,
-  the phase-writes rule in
-  [`generation-pipeline.md → Writes`](../generation-pipeline.md#writes)
-  ("Never: delta-loggable writes outside those two events, delta-log
-  appends, …") has no exception for 5.13's reversal phase, which prunes
-  deltas and writes `reversal_journals`. Third, 3d's count-bump
-  edge ([`chapter-close.md`](../memory/chapter-close.md#3d--awareness-pin-tuning))
-  names CTRL-Z of the close; a re-run's CTRL-Z that undoes the close
-  altogether is a second path to it. Raised in 5.9's slice review.
 - **World merge re-creates awareness rows as the user's.** World's
   character merge (`lib/world/entity-merge.ts`, `merge-links.ts`) moves
   each awareness row the kept character lacks by re-creating it as a
@@ -282,35 +264,6 @@ patch`, which 5.5a marks `restated`, so a close tool's write of it
   again. Leaving it out needs a later-turn read on the start's
   candidates, which the row guard does per row. Raised in the slice
   review fixes for 5.9's R2.
-- **`useChapterDeleteConfirm` has two small edges.**
-  `app.chapter_delete_resynced` is logged before the resync runs, so
-  its name claims a success that `app.chapter_delete_resync_failed` can
-  then contradict. An `in-flight` refusal from `removeChapter` (a run
-  started between the last enabled render and the press) closes the
-  confirm with the generic `Couldn't delete the chapter.`, where a
-  blocked-while-generating copy, or keeping the confirm open, would say
-  what happened. Raised in Slice 5.12's review of Task 12 and its final
-  review.
-- **`regenerateTurn` takes its expected counts as optional.**
-  `regenerateTurn(…, opts?: { expectedCounts?: RollbackCounts })`
-  (`lib/actions/turns/regenerate-turn.ts`) predates Slice 5.12, which
-  made the reader route pass counts on every call (`runRegenerate`'s
-  `expectedCounts` is required), so a close committing as the
-  interrupt lands is refused rather than reversed unconfirmed. A new
-  caller that leaves them out still compiles and sweeps with no
-  consent check. Requiring them on the action fits
-  [Type design](../code-conventions.md#type-design); the internal
-  follow-up sweep (`sweepFrom(…, origin.id, ctx)`) legitimately has
-  none. Raised in Slice 5.12's slice review.
-- **Two confirm hooks copy one settle re-read.** The re-read effect in
-  `components/chapters/use-chapter-delete-confirm.ts` repeats
-  `components/reader/use-live-rollback-counts.ts`'s shape: a
-  `settleCount` subscription, a ref holding the host's callbacks, a
-  guard on the counted settle and a `live` flag. They differ in the
-  skip while a removal runs, in how a refusal lands (close with a toast,
-  or keep and log) and in their log events, so a shared hook would take
-  each as a parameter; it would also need a home outside both domain
-  folders. Raised in Slice 5.12's slice review (the simplifier pass).
 - **The reader's in-place prose edit has no leave guard.**
   `components/reader/reader-surface.tsx:~330` (`editingId`, `editDraft`):
   any navigation that pops the reader drops the draft, including the
@@ -333,13 +286,6 @@ patch`, which 5.5a marks `restated`, so a close tool's write of it
   user-kept: the model was told `notWritten: decayResistance (c1)`,
   `skippedFields` was empty, and Not applied was `[]`. Raised in 5.11's
   review.
-- **The review window closes without an exit animation.**
-  `ChapterOverlaysHost` unmounts `ReviewWindow` as soon as the review id
-  clears, so the Dialog on desktop and the Sheet on phone vanish in one
-  frame (seen on the slot AVD and in the desktop smoke). A fix keeps the
-  window mounted with `open={false}` through its exit, which has to
-  agree with the host's prune of a chapter that no longer holds. Raised
-  in 5.11's review.
 - **A close tool's `name` is a plain string.**
   `lib/pipeline/definitions/close-agent/tool.ts` types `WriteTool.name`
   as `string`, so the close's write tools form no union, and the review's
