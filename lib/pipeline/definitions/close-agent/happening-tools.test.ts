@@ -6,6 +6,7 @@ import { generateId } from '@/lib/ids'
 import { resetAllStores } from '@/lib/stores'
 
 import { mergeHappeningsTool } from './happening-tools'
+import { CloseLedgerWriter } from './ledger'
 import { assertReplaySafe } from './tool'
 import { markCommonKnowledgeTool } from './upkeep-tools'
 import { openCloseFixture, type CloseFixture } from '../__tests__/close-fixture'
@@ -769,6 +770,16 @@ describe('merge_happenings values', () => {
       .filter(([event]) => event === 'memory.close_report_value')
       .map(([, data]) => (data as { path: string }).path)
     expect(logged).toEqual(['description', 'occurredAtEntryId', 'commonKnowledge'])
+  })
+
+  it("lists the derived fields in a later task's writes so far", async () => {
+    const run = await runCalls(f, [merge({ keep: 'hp1', absorb: ['hp2'], description: COMPOSITE })])
+    const ledger = { calls: run.calls, stopped: [], noToolCalls: false }
+    const writer = new CloseLedgerWriter(ledger, (id) => run.ids.nameOfId(id), run.result.actionId)
+
+    expect(writer.writesSoFar(run.ids)).toBe(
+      '- merge_happenings Tobin poles Wren across (hp1), A light on the far bank (hp2): description, occurredAtEntryId, commonKnowledge; kept hp1',
+    )
   })
 
   it('records them as proposed on a merge the user skipped', async () => {
