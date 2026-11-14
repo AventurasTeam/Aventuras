@@ -133,7 +133,7 @@ export function plotMenuEntries(
           : t('plot:detail.menu.exportHappening'),
       onPress: onExport,
     },
-    { key: 'json', label: t('plot:detail.menu.viewJson'), onPress: onViewJson },
+    { key: 'json', label: t('plot:detail.menu.viewJson'), opensSheet: true, onPress: onViewJson },
     ...deleteEntry(
       kind === 'thread'
         ? t('plot:detail.menu.deleteThread')

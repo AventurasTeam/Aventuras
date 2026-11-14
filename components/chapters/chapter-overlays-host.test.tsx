@@ -27,6 +27,7 @@ import {
   loreStore,
   resetAllStores,
   threadsStore,
+  type OpenStory,
   type RunState,
   type StoreChapter,
 } from '@/lib/stores'
@@ -60,6 +61,7 @@ vi.mock('@/hooks/use-surface-navigate', () => ({ useSurfaceNavigate: () => hostN
 
 // An external store, so a test can resolve the index under a mounted host.
 const entryIndex = vi.hoisted(() => {
+  const retry = vi.fn<() => void>()
   const READY = {
     entries: [],
     index: new Map([
@@ -77,12 +79,13 @@ const entryIndex = vi.hoisted(() => {
     ready: true,
     failed: false,
     updating: false,
-    retry: () => {},
+    retry,
   }
   type Snapshot = typeof READY
   const listeners = new Set<() => void>()
   let snapshot: Snapshot = READY
   return {
+    retry,
     READY,
     PENDING: { ...READY, index: new Map(), ready: false } satisfies Snapshot,
     FAILED: { ...READY, index: new Map(), ready: false, failed: true } satisfies Snapshot,
@@ -210,8 +213,8 @@ function chapter(over: Partial<StoreChapter> = {}): StoreChapter {
   }
 }
 
-function openStory(branchId = 'br_1'): void {
-  currentStoryStore.set({
+function story(branchId: string): OpenStory {
+  return {
     storyId: 'story_1',
     branchId,
     definition: storyDefinitionSchema.parse({
@@ -225,7 +228,17 @@ function openStory(branchId = 'br_1'): void {
       worldTimeOrigin: { year: 0 },
     }),
     settings: STORY_SETTINGS_DEFAULTS,
-  })
+  }
+}
+
+// A branch switch or reload republishes the open; it isn't a new open of the story.
+function openStory(branchId = 'br_1'): void {
+  currentStoryStore.set(story(branchId))
+}
+
+// Back to the story list and into the same story again.
+function reopenStory(branchId = 'br_1'): void {
+  currentStoryStore.open(story(branchId))
 }
 
 function settleRun(): void {
@@ -279,8 +292,9 @@ async function openReady(): Promise<ReviewWindowProps> {
   return shown()
 }
 
-function holdResult(branchId: string, stoppedTasks = 0): void {
-  chapterOverlaysStore.showCloseResult({ branchId, chapterId: 'chap_2', stoppedTasks })
+function holdResult(branchId: string, stoppedTasks = 0, chapterId = 'chap_2'): void {
+  const openSeq = currentStoryStore.getOpenSeq()
+  chapterOverlaysStore.showCloseResult({ branchId, openSeq, chapterId, stoppedTasks })
 }
 
 beforeEach(() => {
@@ -289,6 +303,7 @@ beforeEach(() => {
   view.renders = 0
   hostNavigate.mockReset()
   entryIndex.set(entryIndex.READY)
+  entryIndex.retry.mockReset()
   reads.report.mockReset().mockResolvedValue(REPORT)
   reads.deltas.mockReset().mockResolvedValue(DELTAS)
   reads.kinds.mockReset().mockResolvedValue(new Map([['loc_mill', 'location']]))
@@ -334,6 +349,36 @@ describe('ChapterOverlaysHost — the review', () => {
     expect(reads.deltas).toHaveBeenCalledWith({}, 'br_1', 'chap_2', 'act_close_2')
     expect(reads.kinds).toHaveBeenCalledWith({}, 'br_1', ['loc_mill'])
     expect(reads.build).toHaveBeenLastCalledWith(REPORT, DELTAS, expect.any(Object))
+  })
+
+  it('reads the deleted kinds beside the deltas, not after them', async () => {
+    let release = () => {}
+    reads.deltas.mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          release = () => resolve(DELTAS)
+        }),
+    )
+    renderHost()
+    openWindow()
+    await waitFor(() => expect(reads.kinds).toHaveBeenCalledWith({}, 'br_1', ['loc_mill']))
+    expect(shown().state.status).toBe('loading')
+
+    act(() => release())
+    await waitFor(() => expect(view.props?.state.status).toBe('ready'))
+  })
+
+  it('logs a failed deleted-kinds read and shows failed', async () => {
+    const error = vi.spyOn(logger, 'error').mockImplementation(() => {})
+    reads.kinds.mockRejectedValueOnce(new Error('kinds'))
+    renderHost()
+    openWindow()
+    await waitFor(() => expect(view.props?.state.status).toBe('failed'))
+    expect(error).toHaveBeenCalledWith('app.close_review_read_failed', {
+      branchId: 'br_1',
+      chapterId: 'chap_2',
+      error: 'kinds',
+    })
   })
 
   it('builds the lookup from the stores, the deleted kinds and the entry index', async () => {
@@ -414,12 +459,43 @@ describe('ChapterOverlaysHost — the review', () => {
     expect(shown().entryLinkOf(KAEL)?.label).toBe('entry #47 →')
   })
 
-  it("shows the review when the entry index's read failed, rather than hang", async () => {
+  it("fails when the entry index's read failed, and Retry re-reads the index alone", async () => {
     entryIndex.set(entryIndex.FAILED)
     renderHost()
     openWindow()
+    await waitFor(() => expect(reads.kinds).toHaveBeenCalled())
+    await act(() => new Promise((resolve) => setTimeout(resolve, 0)))
+    expect(shown().state.status).toBe('failed')
+    expect(reads.build).not.toHaveBeenCalled()
+
+    const state = shown().state
+    if (state.status !== 'failed') throw new Error('expected the failed state')
+    act(() => state.onRetry())
+    expect(entryIndex.retry).toHaveBeenCalledTimes(1)
+
+    act(() => entryIndex.set(entryIndex.READY))
     await waitFor(() => expect(view.props?.state.status).toBe('ready'))
-    expect(shown().entryLinkOf(KAEL)).toBeUndefined()
+    expect(shown().entryLinkOf(KAEL)?.label).toBe('entry #47 →')
+    expect(reads.report).toHaveBeenCalledTimes(1)
+  })
+
+  it('re-reads the index and the report on Retry when both failed', async () => {
+    vi.spyOn(logger, 'error').mockImplementation(() => {})
+    entryIndex.set(entryIndex.FAILED)
+    reads.report.mockRejectedValueOnce(new Error('disk'))
+    renderHost()
+    openWindow()
+    await waitFor(() => expect(reads.report).toHaveBeenCalledTimes(1))
+    await act(() => new Promise((resolve) => setTimeout(resolve, 0)))
+
+    const state = shown().state
+    if (state.status !== 'failed') throw new Error('expected the failed state')
+    act(() => state.onRetry())
+    expect(entryIndex.retry).toHaveBeenCalledTimes(1)
+    await waitFor(() => expect(reads.report).toHaveBeenCalledTimes(2))
+
+    act(() => entryIndex.set(entryIndex.READY))
+    await waitFor(() => expect(view.props?.state.status).toBe('ready'))
   })
 
   // Drizzle's JSON column parse throws a SyntaxError on corrupt text, not a ZodError.
@@ -605,6 +681,7 @@ describe('ChapterOverlaysHost — the derived rule', () => {
     act(() => holdResult('br_1'))
     expect(chapterOverlaysStore.getState().closeResult).toEqual({
       branchId: 'br_1',
+      openSeq: 0,
       chapterId: 'chap_2',
       stoppedTasks: 0,
     })
@@ -620,10 +697,39 @@ describe('ChapterOverlaysHost — the derived rule', () => {
     expect(chapterOverlaysStore.getState().closeResult).toBeNull()
   })
 
-  it('clears a held close result when the story closes', () => {
+  it('clears a held close result when another branch opens', () => {
     renderHost()
     act(() => holdResult('br_1'))
-    act(() => currentStoryStore.clear())
+    act(() => openStory('br_2'))
     expect(chapterOverlaysStore.getState().closeResult).toBeNull()
+  })
+
+  it('clears a held close result when the story is left and opened again on the same branch', () => {
+    act(() => reopenStory())
+    renderHost()
+    act(() => holdResult('br_1'))
+    expect(chapterOverlaysStore.getState().closeResult).not.toBeNull()
+
+    act(() => reopenStory())
+    expect(chapterOverlaysStore.getState().closeResult).toBeNull()
+  })
+
+  it("keeps a newer close's result in the same open", () => {
+    renderHost()
+    act(() => holdResult('br_1'))
+    act(() =>
+      chaptersStore.patch('br_1', {
+        op: 'create',
+        id: 'chap_3',
+        row: chapter({ id: 'chap_3', sequenceNumber: 3 }),
+      }),
+    )
+    act(() => holdResult('br_1', 1, 'chap_3'))
+    expect(chapterOverlaysStore.getState().closeResult).toEqual({
+      branchId: 'br_1',
+      openSeq: 0,
+      chapterId: 'chap_3',
+      stoppedTasks: 1,
+    })
   })
 })

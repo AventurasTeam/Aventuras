@@ -1,4 +1,4 @@
-import type { CloseReasonKey, CloseTask, EntityKind } from '@/lib/db'
+import type { CloseReasonKey, CloseReport, CloseTask, EntityKind } from '@/lib/db'
 
 /** chapter-timeline.md → Review window: the Changes areas, in canon's order. */
 export const CLOSE_REVIEW_AREAS = [
@@ -25,31 +25,33 @@ export type CloseReviewLookup = {
   entryPosition: (id: string) => number | undefined
 }
 
+/** A row's field by its delta path and label, or a row with no field: both null. */
+export type CloseReviewField =
+  | { fieldPath: string; fieldLabel: string }
+  | { fieldPath: null; fieldLabel: null }
+
 export type CloseReviewChange = {
   key: string
-  op: 'create' | 'update' | 'delete'
   area: CloseReviewArea
   target: CloseReviewTarget
-  /** The delta path; null on a create or delete. */
-  fieldPath: string | null
-  fieldLabel: string | null
   summary: string
   why: string
   /** The call's latest cited turn, or null. */
   entryId: string | null
   /** An absorbed row's survivor, else the target. */
   pressTo: CloseReviewRowRef
-}
+} & (
+  | ({ op: 'update' } & Extract<CloseReviewField, { fieldPath: string }>)
+  | ({ op: 'create' | 'delete' } & Extract<CloseReviewField, { fieldPath: null }>)
+)
 
-export type CloseReviewNotApplied = {
+export type CloseReviewNotApplied = CloseReviewField & {
   key: string
-  /** `create` for a refused `create_lore`, else `update`: the row's op badge. */
+  /** The row's op badge: `create` on any `create_lore` row, a landed one's too, else `update`. */
   op: 'create' | 'update'
   tool: string
   /** The call's first row; null when it recorded none. */
   target: CloseReviewTarget | null
-  fieldPath: string | null
-  fieldLabel: string | null
   /** The proposed value as shown, a refused merge's text, a refused create's body, or ''. */
   summary: string
   reasonKey: CloseReasonKey
@@ -62,7 +64,7 @@ export type CloseReviewNotApplied = {
 export type CloseReviewStopped = {
   task: CloseTask
   part: number
-  reason: 'budget' | 'window' | 'cut-off'
+  reason: CloseReport['stopped'][number]['reason']
   /** The line as shown: task, part unless 0, reason. */
   text: string
 }

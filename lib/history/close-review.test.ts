@@ -1,12 +1,13 @@
-import { afterEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeAll, beforeEach, describe, expect, it } from 'vitest'
 
 import {
   CLOSE_REASON_KEYS,
+  CLOSE_TASKS,
+  closeReportSchema,
   type CloseReport,
   type CloseReportCall,
   type EntityKind,
 } from '@/lib/db'
-import { logger } from '@/lib/diagnostics'
 import { i18n } from '@/lib/i18n'
 import { hasCopy } from '@/lib/i18n/__tests__/locale-keys'
 
@@ -38,10 +39,6 @@ const LOOKUP: CloseReviewLookup = {
   nameOf: () => undefined,
   entryPosition: () => undefined,
 }
-
-afterEach(() => {
-  vi.restoreAllMocks()
-})
 
 function call(fields: Partial<CloseReportCall> & Pick<CloseReportCall, 'tool'>): CloseReportCall {
   return {
@@ -92,7 +89,7 @@ describe('closeReviewNotApplied', () => {
         fieldLabel: 'Voice',
         summary: 'Flat',
         reasonKey: 'user-edited-since-prose',
-        reasonText: 'You changed this after the cited entry.',
+        reasonText: 'You changed this yourself, so the close left it.',
         pressTo: { table: 'entities', id: 'char_kael' },
       },
       {
@@ -104,7 +101,7 @@ describe('closeReviewNotApplied', () => {
         fieldLabel: 'Description',
         summary: 'A ranger.',
         reasonKey: 'user-edited-since-prose',
-        reasonText: 'You changed this after the cited entry.',
+        reasonText: 'You changed this yourself, so the close left it.',
         pressTo: { table: 'entities', id: 'char_kael' },
       },
     ])
@@ -183,6 +180,29 @@ describe('closeReviewNotApplied', () => {
     ).toEqual([
       ['Kael', 'state.voice', 'Flat', 'turn-in-text'],
       ['Kael', 'state.voice', 'Flat', 'later-turn'],
+    ])
+  })
+
+  it('keeps a refused field a later landed call lost again, listing both', () => {
+    expect(
+      notApplied([
+        call({
+          tool: 'update_character',
+          rows: [KAEL],
+          values: { 'state.voice': 'Flat' },
+          result: 'rejected',
+          reason: 'turn-in-text',
+        }),
+        call({
+          tool: 'update_character',
+          rows: [KAEL],
+          values: { description: 'A ranger.', 'state.voice': 'Hoarse' },
+          skippedFields: [{ field: 'state.voice', reason: 'user-edited-since-prose' }],
+        }),
+      ]),
+    ).toEqual([
+      ['Kael', 'state.voice', 'Flat', 'turn-in-text'],
+      ['Kael', 'state.voice', 'Hoarse', 'user-edited-since-prose'],
     ])
   })
 
@@ -365,6 +385,30 @@ describe('closeReviewNotApplied', () => {
     ])
   })
 
+  it("matches a refused create_lore's title as the close's own title rule does, by its NFC form", () => {
+    const decomposed = 'Café Law'
+    const composed = 'café law'
+
+    expect(
+      notApplied([
+        call({
+          task: 'lore',
+          tool: 'create_lore',
+          rows: [{ table: 'lore', id: 'lore_minted', name: decomposed }],
+          values: { title: decomposed, body: 'No credit.' },
+          result: 'rejected',
+          reason: 'lore-cap',
+        }),
+        call({
+          task: 'lore',
+          tool: 'create_lore',
+          rows: [{ table: 'lore', id: 'lore_landed', name: composed }],
+          values: { title: composed, body: 'No credit.' },
+        }),
+      ]),
+    ).toEqual([])
+  })
+
   it('gives a refused create_lore its proposed body, the create badge and no press', () => {
     const [row] = closeReviewNotApplied(
       report([
@@ -421,7 +465,7 @@ describe('closeReviewNotApplied', () => {
     ])
   })
 
-  it('drops a refused merge once the same task lands a merge over a row they share', () => {
+  it('drops a refused merge once the same task lands a merge over the same rows, in another order', () => {
     expect(
       notApplied([
         call({
@@ -463,37 +507,213 @@ describe('closeReviewNotApplied', () => {
     ).toEqual([])
   })
 
-  it('reads a stored reason that is no key as other, and logs it once', () => {
-    const warn = vi.spyOn(logger, 'warn')
+  it('keeps a flag_duplicate refused on a pair when the same task lands another pair sharing a row', () => {
+    const TOBIN = { table: 'entities', id: 'char_tobin', name: 'Tobin' }
+    const STRANGER = { table: 'entities', id: 'char_stranger', name: 'The hooded stranger' }
+    const BRAM = { table: 'entities', id: 'char_bram', name: 'Bram' }
 
-    const rows = closeReviewNotApplied(
-      report([
+    expect(
+      notApplied([
         call({
-          tool: 'update_faction',
-          rows: [ORDER],
-          values: { description: 'A.' },
+          task: 'lifecycle',
+          tool: 'flag_duplicate',
+          rows: [TOBIN, STRANGER],
+          values: { nameCollisionPartnerId: 'The hooded stranger' },
           result: 'rejected',
-          reason: 'not a key',
+          reason: 'already-flagged',
         }),
         call({
-          tool: 'update_faction',
-          rows: [ORDER],
-          values: { 'state.standing': 'B.' },
-          result: 'rejected',
-          reason: 'not a key',
+          task: 'lifecycle',
+          tool: 'flag_duplicate',
+          rows: [BRAM, TOBIN],
+          values: { nameCollisionPartnerId: 'Tobin' },
         }),
       ]),
-      LOOKUP,
-    )
+    ).toEqual([['Tobin', 'nameCollisionPartnerId', 'The hooded stranger', 'already-flagged']])
+  })
 
-    expect(rows.map(({ reasonKey, reasonText }) => [reasonKey, reasonText])).toEqual([
-      ['other', 'Not applied for another reason.'],
-      ['other', 'Not applied for another reason.'],
-    ])
-    expect(warn).toHaveBeenCalledTimes(1)
-    expect(warn).toHaveBeenCalledWith('memory.close_review_unknown_reason', {
-      reasons: ['not a key'],
+  it('drops a flag_duplicate refused for naming one row twice once the same task flags that row', () => {
+    expect(
+      notApplied([
+        call({
+          task: 'lifecycle',
+          tool: 'flag_duplicate',
+          rows: [KAEL],
+          result: 'rejected',
+          reason: 'partner-is-self',
+        }),
+        call({
+          task: 'lifecycle',
+          tool: 'flag_duplicate',
+          rows: [OSS, KAEL],
+          values: { nameCollisionPartnerId: 'Kael' },
+        }),
+      ]),
+    ).toEqual([])
+  })
+
+  it('keeps a refused merge of three threads when the same task lands a merge of two of them', () => {
+    const FERRY = { table: 'threads', id: 'thr_ferry', name: 'The ferry' }
+
+    expect(
+      notApplied([
+        call({
+          task: 'threads',
+          tool: 'merge_threads',
+          rows: [LETTER, SEAL, FERRY],
+          values: { title: 'The sealed letter' },
+          result: 'rejected',
+          reason: 'merge-mode-into-other',
+        }),
+        call({
+          task: 'threads',
+          tool: 'merge_threads',
+          rows: [LETTER, SEAL],
+          survivor: { table: 'threads', id: 'thr_letter' },
+        }),
+      ]),
+    ).toEqual([['The letter', null, 'The sealed letter', 'merge-mode-into-other']])
+  })
+
+  it('keeps a refused merge of two threads when the same task lands a merge of those two and a third', () => {
+    const FERRY = { table: 'threads', id: 'thr_ferry', name: 'The ferry' }
+
+    expect(
+      notApplied([
+        call({
+          task: 'threads',
+          tool: 'merge_threads',
+          rows: [LETTER, SEAL],
+          values: { title: 'The sealed letter' },
+          result: 'rejected',
+          reason: 'merge-active-into-inactive',
+        }),
+        call({
+          task: 'threads',
+          tool: 'merge_threads',
+          rows: [LETTER, SEAL, FERRY],
+          survivor: { table: 'threads', id: 'thr_letter' },
+        }),
+      ]),
+    ).toEqual([['The letter', null, 'The sealed letter', 'merge-active-into-inactive']])
+  })
+
+  it('keeps a refused happening merge when the same task merges one of its rows with another', () => {
+    const HUNT = { table: 'happenings', id: 'hap_hunt', name: 'The hunt' }
+
+    expect(
+      notApplied([
+        call({
+          task: 'happenings',
+          tool: 'merge_happenings',
+          rows: [FIRE, STORM],
+          values: { description: 'The storm fanned the fire.' },
+          result: 'skipped',
+          reason: 'later-turn',
+        }),
+        call({
+          task: 'happenings',
+          tool: 'merge_happenings',
+          rows: [FIRE, HUNT],
+          survivor: { table: 'happenings', id: 'hap_fire' },
+        }),
+      ]),
+    ).toEqual([['The fire', null, 'The storm fanned the fire.', 'later-turn']])
+  })
+
+  it('drops a refused happening merge of three once the same task lands those three in another order', () => {
+    const HUNT = { table: 'happenings', id: 'hap_hunt', name: 'The hunt' }
+
+    expect(
+      notApplied([
+        call({
+          task: 'happenings',
+          tool: 'merge_happenings',
+          rows: [FIRE, STORM, HUNT],
+          values: { title: 'The fire' },
+          result: 'rejected',
+          reason: 'merge-close-wrote',
+        }),
+        call({
+          task: 'happenings',
+          tool: 'merge_happenings',
+          rows: [STORM, HUNT, FIRE],
+          survivor: { table: 'happenings', id: 'hap_storm' },
+        }),
+      ]),
+    ).toEqual([])
+  })
+
+  it('drops a merge refused with nothing to absorb once the same task merges its keep', () => {
+    expect(
+      notApplied([
+        call({
+          task: 'threads',
+          tool: 'merge_threads',
+          rows: [LETTER],
+          values: { title: 'The sealed letter' },
+          result: 'rejected',
+          reason: 'merge-absorb-empty',
+        }),
+        call({
+          task: 'threads',
+          tool: 'merge_threads',
+          rows: [LETTER, SEAL],
+          survivor: { table: 'threads', id: 'thr_letter' },
+        }),
+      ]),
+    ).toEqual([])
+  })
+
+  it('drops a refused field naming a written row and a reference once the same tool lands it on the written row', () => {
+    expect(
+      notApplied([
+        call({
+          task: 'upkeep',
+          tool: 'update_place',
+          rows: [QUAY, HARBOUR],
+          values: { 'state.parent_location_id': 'The Harbour' },
+          result: 'rejected',
+          reason: 'retired-parent',
+        }),
+        call({
+          task: 'upkeep',
+          tool: 'update_place',
+          rows: [QUAY],
+          values: { 'state.parent_location_id': 'The Harbour' },
+        }),
+      ]),
+    ).toEqual([])
+  })
+
+  it('reads a stored reason that is no key as other, and a refusal stored with none', () => {
+    const refused = (fields: Record<string, unknown>) => ({
+      ...call({ tool: 'update_faction', rows: [ORDER], result: 'rejected' }),
+      ...fields,
     })
+    const stored = closeReportSchema.parse({
+      ...report([]),
+      calls: [
+        refused({ values: { description: 'A.' }, reason: 'not a key' }),
+        refused({
+          values: { 'state.standing': 'B.', 'state.agenda': 'C.' },
+          reason: 'later-turn',
+          skippedFields: [{ field: 'state.agenda', reason: 'not a key either' }],
+        }),
+        refused({ values: { title: 'D.' } }),
+      ],
+    })
+
+    const rows = closeReviewNotApplied(stored, LOOKUP)
+
+    expect(
+      rows.map(({ fieldPath, reasonKey, reasonText }) => [fieldPath, reasonKey, reasonText]),
+    ).toEqual([
+      ['description', 'other', 'Not applied for another reason.'],
+      ['state.standing', 'later-turn', 'A later entry already changed this.'],
+      ['state.agenda', 'other', 'Not applied for another reason.'],
+      ['title', 'other', 'Not applied for another reason.'],
+    ])
   })
 
   it('shows a proposed flag as yes or no, an empty value as none, and the top mark in words', () => {
@@ -676,6 +896,26 @@ describe('closeReviewNotApplied', () => {
     ])
   })
 
+  it('shows a proposed row id the report kept raw as its live name', () => {
+    const rows = closeReviewNotApplied(
+      report([
+        call({
+          task: 'upkeep',
+          tool: 'update_place',
+          rows: [QUAY],
+          values: { 'state.parent_location_id': 'loc_harbour' },
+          result: 'rejected',
+          reason: 'parent-cycle',
+        }),
+      ]),
+      { ...LOOKUP, nameOf: (id) => (id === 'loc_harbour' ? 'The Harbour' : undefined) },
+    )
+
+    expect(rows.map((row) => [row.fieldPath, row.summary])).toEqual([
+      ['state.parent_location_id', 'The Harbour'],
+    ])
+  })
+
   it("shows a refused retirement's status in the locale's words", async () => {
     i18n.addResourceBundle('xx', 'world', { status: { retired: 'retirado' } })
     await i18n.changeLanguage('xx')
@@ -803,25 +1043,6 @@ describe('closeReviewNotApplied', () => {
     ])
   })
 
-  it('logs nothing when every stored reason is a key', () => {
-    const warn = vi.spyOn(logger, 'warn')
-
-    closeReviewNotApplied(
-      report([
-        call({
-          tool: 'update_faction',
-          rows: [ORDER],
-          values: { description: 'A.' },
-          result: 'rejected',
-          reason: 'turn-in-text',
-        }),
-      ]),
-      LOOKUP,
-    )
-
-    expect(warn).not.toHaveBeenCalled()
-  })
-
   it('labels every reason key', () => {
     for (const key of CLOSE_REASON_KEYS) expect(hasCopy(`chapters:review.reason.${key}`)).toBe(true)
   })
@@ -852,5 +1073,71 @@ describe('closeReviewStopped and the no-tool note', () => {
 
     expect(review).toEqual({ stopped: [], noToolCalls: true, notApplied: [], changes: [] })
     expect(hasCopy('chapters:review.noToolCalls')).toBe(true)
+  })
+})
+
+// Every label unique, so a key that borrows another's copy shows, even where English repeats one.
+describe('the review copy, in a locale that names every key apart', () => {
+  const LANG = 'xk'
+
+  beforeAll(() => {
+    i18n.addResourceBundle(
+      LANG,
+      'chapters',
+      {
+        review: {
+          reason: Object.fromEntries(CLOSE_REASON_KEYS.map((key) => [key, `reason:${key}`])),
+          stopped: { lineNoPart: '{{task}} | {{reason}}', budget: 'stop:budget' },
+        },
+      },
+      true,
+      true,
+    )
+    i18n.addResourceBundle(
+      LANG,
+      'common',
+      {
+        chrome: {
+          memoryBanner: {
+            closeTask: Object.fromEntries(CLOSE_TASKS.map((task) => [task, `task:${task}`])),
+          },
+        },
+      },
+      true,
+      true,
+    )
+  })
+
+  beforeEach(async () => {
+    await i18n.changeLanguage(LANG)
+  })
+
+  afterEach(async () => {
+    await i18n.changeLanguage('en')
+  })
+
+  it('labels each refusal by its own reason', () => {
+    const rows = closeReviewNotApplied(
+      report(
+        CLOSE_REASON_KEYS.map((reason) =>
+          call({ tool: 'update_character', rows: [KAEL], result: 'rejected', reason }),
+        ),
+      ),
+      LOOKUP,
+    )
+
+    expect(rows.map(({ reasonKey, reasonText }) => [reasonKey, reasonText])).toEqual(
+      CLOSE_REASON_KEYS.map((key) => [key, `reason:${key}`]),
+    )
+  })
+
+  it('names each stopped task by its own label', () => {
+    const stopped = closeReviewStopped(
+      report([], { stopped: CLOSE_TASKS.map((task) => ({ task, part: 0, reason: 'budget' })) }),
+    )
+
+    expect(stopped.map(({ text }) => text)).toEqual(
+      CLOSE_TASKS.map((task) => `task:${task} | stop:budget`),
+    )
   })
 })

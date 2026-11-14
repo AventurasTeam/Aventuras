@@ -283,9 +283,14 @@ convention, and the expectation that subsystems route through
   reset's group: its rows, its status and the round trip in `ms`),
   `close_reason_unkeyed` (warn: a ledger reason that isn't a
   `CLOSE_REASON_KEYS` member, recorded as `other`, with the raw
-  `reason`) and `close_review_unknown_reason` (warn, once per review
-  build: stored reasons that aren't keys, with the distinct raw
-  `reasons`)
+  `reason`, its call's `task` and `tool`, under the close's `actionId`),
+  `close_report_unknown_reason` (warn, once per parsed report: its
+  stored reasons that aren't keys, read as `other`, with the distinct
+  raw `reasons`, `null` for a refused call stored without one, under the
+  report's `actionId`) and `close_review_unknown_table` (warn, once per
+  review build: landed writes on a table no review area holds, which
+  Changes leaves out, with the distinct `tables`, under the close's
+  `actionId`)
 - `bootstrap.*` — boot-time hydration failures (e.g.
   `app_settings_hydrate_failed`)
 - `calendar.*` — `format_miss` (a `displayFormat` that fails or

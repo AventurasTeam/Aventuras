@@ -1,11 +1,13 @@
 import {
   CLOSE_TOP_LEVEL_VALUE,
+  landedPaths,
   type CloseReport,
   type CloseReportCall,
   type Delta,
   type Entity,
   type ThreadStatus,
 } from '@/lib/db'
+import { logger } from '@/lib/diagnostics'
 import { formatEntryRef } from '@/lib/entry-refs'
 import { t } from '@/lib/i18n'
 import { isJsonObject } from '@/lib/json-object'
@@ -46,13 +48,10 @@ const AREA_BY_TABLE: ReadonlyMap<string, CloseReviewArea> = new Map([
 export const sameRow = (a: CloseReviewRowRef, b: CloseReviewRowRef): boolean =>
   a.table === b.table && a.id === b.id
 
-/** C4: a call's landed paths, the keys of `values` less its `skippedFields`. */
-export function landedPaths(call: CloseReportCall): string[] {
-  const lost = new Set((call.skippedFields ?? []).map(({ field }) => field))
-  return Object.keys(call.values ?? {}).filter((path) => !lost.has(path))
-}
-
-/** A report row as the review names it: the report's name, else the live row's, else its table's. */
+/**
+ * A report row as the review names it: the report's name, else the live row's, else an awareness
+ * row's table label, else "Unknown row".
+ */
 export function reviewTarget(row: ReportRow, lookup: CloseReviewLookup): CloseReviewTarget {
   const name =
     row.name !== ''
@@ -253,11 +252,14 @@ const COMMON_KNOWLEDGE_PATH = 'commonKnowledge'
 const flagText = (value: unknown): string =>
   Number(value) === 1 ? t('chapters:review.yes') : t('chapters:review.no')
 
-/** A new or proposed value as shown: flag as yes/no, '' as none, status or top mark in words. */
+/**
+ * A new or proposed value as shown: flag as yes/no, '' as none, status or top mark in words, an
+ * entry id as its ref, a row id the ledger couldn't name as its live name.
+ */
 export function reviewValueText(at: ValueAt, value: string, lookup: CloseReviewLookup): string {
   if (at.path === COMMON_KNOWLEDGE_PATH) return flagText(value)
   if (value === '') return t('chapters:review.none')
-  return enumText(at, value) ?? entryRefText(value, lookup) ?? value
+  return enumText(at, value) ?? entryRefText(value, lookup) ?? lookup.nameOf(value) ?? value
 }
 
 // The top mark names only its move, since its old value is the unplaced flag.
@@ -270,11 +272,7 @@ function updateSummary(
   const after = reviewValueText(at, value, lookup)
   if (at.path === UNPLACED_PATH) return after
   const before =
-    at.path === COMMON_KNOWLEDGE_PATH
-      ? old == null
-        ? ''
-        : flagText(old)
-      : shownValue(old, at, lookup)
+    at.path === COMMON_KNOWLEDGE_PATH && old != null ? flagText(old) : shownValue(old, at, lookup)
   return before === '' ? after : `${before}${VALUE_ARROW}${after}`
 }
 
@@ -298,26 +296,47 @@ export function closeReviewChanges(
   const planned = report.calls.flatMap((call, index) => plannedRows(call, index))
   const old = oldValues(planned, deltas)
   const byArea = new Map<CloseReviewArea, CloseReviewChange[]>()
+  const unplaced = new Set<string>()
   for (const write of planned) {
     const area = areaOf(write.row, lookup)
-    if (area === null) continue
-    const target = reviewTarget(write.row, lookup)
-    const path = write.op === 'update' ? write.path : null
+    if (area === null) {
+      unplaced.add(write.row.table)
+      continue
+    }
     const pressTo = write.op === 'delete' ? write.kept : write.row
-    const row: CloseReviewChange = {
-      key: reviewRowKey(write.index, write.row, path ?? write.op),
-      op: write.op,
+    const shared = {
       area,
-      target,
-      fieldPath: path,
-      fieldLabel: path === null ? null : reviewFieldLabel(write.row.table, path),
+      target: reviewTarget(write.row, lookup),
       summary: summaryOf(write, old.get(write), lookup),
       why: write.call.why,
       entryId: citedEntry(write.call.turns, lookup),
       pressTo: { table: pressTo.table, id: pressTo.id },
     }
+    const row: CloseReviewChange =
+      write.op === 'update'
+        ? {
+            ...shared,
+            key: reviewRowKey(write.index, write.row, write.path),
+            op: 'update',
+            fieldPath: write.path,
+            fieldLabel: reviewFieldLabel(write.row.table, write.path),
+          }
+        : {
+            ...shared,
+            key: reviewRowKey(write.index, write.row, write.op),
+            op: write.op,
+            fieldPath: null,
+            fieldLabel: null,
+          }
     appendTo(byArea, area, row)
   }
+  // A close tool writing a table the review has no area for: its writes don't show.
+  if (unplaced.size > 0)
+    logger.warn(
+      'memory.close_review_unknown_table',
+      { tables: [...unplaced] },
+      { actionId: report.actionId },
+    )
   return CLOSE_REVIEW_AREAS.flatMap((area) => {
     const rows = byArea.get(area)
     return rows === undefined ? [] : [{ area, rows }]

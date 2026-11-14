@@ -1,10 +1,11 @@
-import { afterEach, describe, expect, it } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import type { CloseReport, CloseReportCall, Delta, EntityKind } from '@/lib/db'
+import { logger } from '@/lib/diagnostics'
 import { i18n } from '@/lib/i18n'
 
 import { closeReviewChanges, reviewFieldLabel } from './close-review-changes'
-import type { CloseReviewLookup } from './close-review-types'
+import type { CloseReviewChange, CloseReviewField, CloseReviewLookup } from './close-review-types'
 
 const KAEL = { table: 'entities', id: 'char_kael', name: 'Kael' }
 const ORDER = { table: 'entities', id: 'fact_order', name: 'The Order' }
@@ -40,6 +41,10 @@ const LOOKUP: CloseReviewLookup = {
   nameOf: (id) => NAMES.get(id),
   entryPosition: (id) => POSITIONS.get(id),
 }
+
+afterEach(() => {
+  vi.restoreAllMocks()
+})
 
 function call(fields: Partial<CloseReportCall> & Pick<CloseReportCall, 'tool'>): CloseReportCall {
   return {
@@ -155,6 +160,35 @@ describe('closeReviewChanges', () => {
     ])
   })
 
+  it('logs the tables of the landed writes no area holds, once, and nothing when each has one', () => {
+    const warn = vi.spyOn(logger, 'warn')
+    const linkCall = (table: string, id: string) =>
+      call({ tool: 'set_role', rows: [{ table, id, name: 'Kael' }], values: { role: 'witness' } })
+
+    closeReviewChanges(
+      report([call({ tool: 'update_character', rows: [KAEL], values: { 'state.voice': 'Flat' } })]),
+      [],
+      LOOKUP,
+    )
+    expect(warn).not.toHaveBeenCalled()
+
+    closeReviewChanges(
+      report([
+        linkCall('happening_involvements', 'hinv_1'),
+        linkCall('happening_involvements', 'hinv_2'),
+        linkCall('character_relationships', 'rel_1'),
+      ]),
+      [],
+      LOOKUP,
+    )
+    expect(warn).toHaveBeenCalledTimes(1)
+    expect(warn).toHaveBeenCalledWith(
+      'memory.close_review_unknown_table',
+      { tables: ['happening_involvements', 'character_relationships'] },
+      { actionId: 'act_close' },
+    )
+  })
+
   it('reads the old value from the delta and the new one from the report, field by field', () => {
     const calls = [
       call({
@@ -266,6 +300,22 @@ describe('closeReviewChanges', () => {
       'wary, proud → patient',
       'The Harbour → The Market',
       'entry #110 → entry #118',
+    ])
+  })
+
+  it('renders a new row id the report kept raw as its live name, an unknown one as stored', () => {
+    const calls = [
+      call({
+        tool: 'update_place',
+        rows: [QUAY],
+        values: { 'state.parent_location_id': 'loc_harbour' },
+      }),
+      call({ tool: 'update_item', rows: [LAMP], values: { 'state.at_location_id': 'loc_lost' } }),
+    ]
+
+    expect(summaries(closeReviewChanges(report(calls), [], LOOKUP))).toEqual([
+      ['placesAndItems', 'The Quay', 'The Harbour'],
+      ['placesAndItems', 'The Lamp', 'loc_lost'],
     ])
   })
 
@@ -578,6 +628,37 @@ describe('closeReviewChanges', () => {
   })
 })
 
+describe('the review row types', () => {
+  it('pairs a path with its label, and gives a Changes row one exactly when it updates', () => {
+    const row = {
+      key: 'k',
+      area: 'lore',
+      target: TITHE,
+      summary: '',
+      why: '',
+      entryId: null,
+      pressTo: TITHE,
+    } as const
+    const fields = (): CloseReviewField[] => [
+      { fieldPath: 'title', fieldLabel: 'Title' },
+      { fieldPath: null, fieldLabel: null },
+      // @ts-expect-error a label comes with its path
+      { fieldPath: null, fieldLabel: 'Title' },
+    ]
+    const changes = (): CloseReviewChange[] => [
+      { ...row, op: 'update', fieldPath: 'title', fieldLabel: 'Title' },
+      { ...row, op: 'delete', fieldPath: null, fieldLabel: null },
+      // @ts-expect-error a create names no field
+      { ...row, op: 'create', fieldPath: 'title', fieldLabel: 'Title' },
+      // @ts-expect-error an update names its field
+      { ...row, op: 'update', fieldPath: null, fieldLabel: null },
+    ]
+
+    expect(fields).toBeTypeOf('function')
+    expect(changes).toBeTypeOf('function')
+  })
+})
+
 describe('reviewFieldLabel', () => {
   it("gives a link table's labels only to a happening's paths, leaving another table's own", () => {
     expect(reviewFieldLabel('happenings', 'source')).toBe('Source')
@@ -588,15 +669,18 @@ describe('reviewFieldLabel', () => {
 })
 
 describe('closeReviewChanges in another locale', () => {
-  afterEach(async () => {
-    await i18n.changeLanguage('en')
-  })
-
-  it("shows a status and the top mark in the locale's words, an unknown status as stored", async () => {
+  beforeEach(async () => {
     i18n.addResourceBundle('xx', 'world', { status: { active: 'activo', retired: 'retirado' } })
     i18n.addResourceBundle('xx', 'plot', { status: { active: 'abierto', resolved: 'resuelto' } })
     i18n.addResourceBundle('xx', 'chapters', { review: { topLevel: 'nivel superior' } })
     await i18n.changeLanguage('xx')
+  })
+
+  afterEach(async () => {
+    await i18n.changeLanguage('en')
+  })
+
+  it("shows a status and the top mark in the locale's words, an unknown status as stored", () => {
     const calls = [
       call({ tool: 'retire_entity', rows: [KAEL], values: { status: 'retired' } }),
       call({ tool: 'update_thread', rows: [LETTER], values: { status: 'resolved' } }),
@@ -615,6 +699,25 @@ describe('closeReviewChanges in another locale', () => {
       ['placesAndItems', 'The Quay', 'nivel superior'],
       ['threads', 'The letter', 'abierto → resuelto'],
       ['threads', 'The seal', 'dormant → archived'],
+    ])
+  })
+
+  it('keeps a status word or the top mark as stored on any other path', () => {
+    const calls = [
+      call({ tool: 'update_character', rows: [KAEL], values: { 'state.voice': 'retired' } }),
+      call({ tool: 'update_thread', rows: [LETTER], values: { description: 'active' } }),
+      call({ tool: 'update_place', rows: [QUAY], values: { description: 'top level' } }),
+    ]
+    const deltas = [
+      delta(KAEL, { state: { voice: 'active' } }),
+      delta(LETTER, { description: 'resolved' }),
+      delta(QUAY, { description: 'top level' }),
+    ]
+
+    expect(summaries(closeReviewChanges(report(calls), deltas, LOOKUP))).toEqual([
+      ['charactersAndFactions', 'Kael', 'active → retired'],
+      ['placesAndItems', 'The Quay', 'top level → top level'],
+      ['threads', 'The letter', 'resolved → active'],
     ])
   })
 })

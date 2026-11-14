@@ -368,9 +368,9 @@ type CloseReportCall = {
   why: string
   turns: string[] // entry ids
   result: 'ok' | 'rejected' | 'skipped'
-  reason?: string // why it didn't land: the first refusal's, else protection's
+  reason?: CloseReasonKey // why it didn't land: the first refusal's, else protection's
   values?: Record<string, string> // delta path to new or proposed value, cut to the bound
-  skippedFields?: { field: string; reason: string }[] // lost fields' own reasons (C11)
+  skippedFields?: { field: string; reason: CloseReasonKey }[] // lost fields' own reasons (C11)
   survivor?: { table: string; id: string } // a landed merge's kept row
 }
 ```
@@ -400,8 +400,9 @@ type CloseReportCall = {
   the common checks to a tool's own rules. The model's tool result keeps
   its instruction, written `<key>: <text>`, and the ledger records the
   key alone, so no stored reason holds a row id or a per-close handle.
-  A reason no key covers records `other`, and the review reads a stored
-  string that isn't a key as `other`. Every key has a `t()` label.
+  A reason no key covers records `other`. The schema still accepts any
+  stored string, so an older report parses, and parsing reads one that
+  isn't a key as `other`, logged. Every key has a `t()` label.
 - **The ledger**, behind an accessor in `close-intermediates.ts`, is
   `Pick<CloseReport, 'calls' | 'stopped' | 'noToolCalls'>`. A close with
   no ledger reads as none, with `noToolCalls: true`. The driver clears the
@@ -416,9 +417,11 @@ type CloseReportCall = {
   tool on a row the two calls share, or that tool at all if it has no
   `rows`: its `rows` are every id argument, a landed call's the tool's
   own. A value-less slip never retried then hides behind a landing for
-  something else, but it held nothing to apply. A refused create mints
-  an id no retry shares, so it matches a later landed create by that
-  task with the same title, trimmed and case-folded.
+  something else, but it held nothing to apply. A `flag_duplicate` or a
+  merge naming two or more rows drops only on a landing over the same
+  rows, in any order: the pair or set is the proposal. A refused create
+  mints an id no retry shares, so it matches a later landed create by
+  that task with the same title, trimmed and case-folded.
 - **Stamps, `retrieval_count` resets and stackable normalization stay
   out of the review.** Normalization is code with no `why` or `turns`,
   and its keys are a spelling cleanup.

@@ -1,22 +1,21 @@
-import {
-  isCloseReasonKey,
-  type CloseReasonKey,
-  type CloseReport,
-  type CloseReportCall,
-} from '@/lib/db'
-import { logger } from '@/lib/diagnostics'
+import { landedPaths, type CloseReasonKey, type CloseReport, type CloseReportCall } from '@/lib/db'
 import { t } from '@/lib/i18n'
+import { normalizeTerm } from '@/lib/keyword-terms'
 
 import {
   CREATE_LORE_TOOL,
-  landedPaths,
   reviewFieldLabel,
   reviewRowKey,
   reviewTarget,
   reviewValueText,
   sameRow,
 } from './close-review-changes'
-import type { CloseReview, CloseReviewLookup, CloseReviewNotApplied } from './close-review-types'
+import type {
+  CloseReview,
+  CloseReviewField,
+  CloseReviewLookup,
+  CloseReviewNotApplied,
+} from './close-review-types'
 
 const REASON_COPY = {
   'user-edited-since-prose': 'chapters:review.reason.user-edited-since-prose',
@@ -82,13 +81,17 @@ const REASON_COPY = {
   other: 'chapters:review.reason.other',
 } as const satisfies Record<CloseReasonKey, string>
 
-const MERGE_TOOLS: ReadonlySet<string> = new Set(['merge_threads', 'merge_happenings'])
+export const MERGE_TOOLS: ReadonlySet<string> = new Set(['merge_threads', 'merge_happenings'])
+export const FLAG_DUPLICATE_TOOL = 'flag_duplicate'
+// A duplicate flag or a merge proposes its rows together, so only those rows correct it.
+const ROW_SET_TOOLS: ReadonlySet<string> = new Set([FLAG_DUPLICATE_TOOL, ...MERGE_TOOLS])
 
 // data-model.md → LocationState shape: a place's parent and its unplaced mark are one field.
-const PLACEMENT_PATHS: ReadonlySet<string> = new Set(['state.parent_location_id', 'state.unplaced'])
+export const PLACEMENT_PATHS: ReadonlySet<string> = new Set([
+  'state.parent_location_id',
+  'state.unplaced',
+])
 const fieldOf = (path: string): string => (PLACEMENT_PATHS.has(path) ? 'placement' : path)
-
-const titleKey = (title: string): string => title.trim().toLowerCase()
 
 type Row = CloseReportCall['rows'][number]
 type Refusal = {
@@ -97,26 +100,36 @@ type Refusal = {
   /** A field row's path; null for a row by tool and rows. */
   path: string | null
   summary: string
-  reason: string | undefined
+  reason: CloseReasonKey | undefined
 }
 
 const sharesRow = (a: readonly Row[], b: readonly Row[]): boolean =>
   a.some((row) => b.some((other) => sameRow(row, other)))
+const within = (a: readonly Row[], b: readonly Row[]): boolean =>
+  a.every((row) => b.some((other) => sameRow(row, other)))
 
-function createdTitle(call: CloseReportCall): string {
-  return titleKey(call.values?.title ?? call.rows[0]?.name ?? '')
+// A flag or merge refused for naming one row proposed no pair or set: a shared row corrects it.
+function sameProposal(call: CloseReportCall, later: CloseReportCall): boolean {
+  if (ROW_SET_TOOLS.has(call.tool) && call.rows.length > 1)
+    return within(call.rows, later.rows) && within(later.rows, call.rows)
+  return sharesRow(call.rows, later.rows)
 }
 
-// A refused create's minted id is one no retry shares, so it matches by title. A row with no
-// `values` matches a landing on a row they share, or any landing of the tool when it named none:
-// its rows are every id argument, a landed call's the tool's own.
+// Compared as the close's title rule compares a lore title (loreTitled).
+function createdTitle(call: CloseReportCall): string {
+  return normalizeTerm(call.values?.title ?? call.rows[0]?.name ?? '')
+}
+
+// A row by tool, with no field: a refused create that recorded values matches by title, since its
+// minted id is one no retry shares; any other matches a landing sameProposal accepts, or any landing
+// of the tool when it named none: its rows are every id argument, a landed call's the tool's own.
 function corrected({ call, path }: Refusal, later: CloseReportCall): boolean {
   if (path === null) {
     if (call.tool === CREATE_LORE_TOOL && call.values !== undefined)
       return createdTitle(later) === createdTitle(call)
-    return call.rows.length === 0 || sharesRow(call.rows, later.rows)
+    return call.rows.length === 0 || sameProposal(call, later)
   }
-  if (!sharesRow(call.rows, later.rows)) return false
+  if (!sameProposal(call, later)) return false
   const field = fieldOf(path)
   return landedPaths(later).some((landed) => fieldOf(landed) === field)
 }
@@ -135,7 +148,7 @@ function correctedLater(refusal: Refusal, calls: readonly CloseReportCall[]): bo
 
 function refusalsOf(call: CloseReportCall, index: number, lookup: CloseReviewLookup): Refusal[] {
   const table = call.rows[0]?.table ?? ''
-  const ownReason = (path: string): string | undefined =>
+  const ownReason = (path: string): CloseReasonKey | undefined =>
     call.skippedFields?.find(({ field }) => field === path)?.reason ?? call.reason
   if (call.result === 'ok')
     return (call.skippedFields ?? []).map(({ field, reason }) => {
@@ -188,27 +201,25 @@ export function closeReviewNotApplied(
   report: CloseReport,
   lookup: CloseReviewLookup,
 ): CloseReview['notApplied'] {
-  const unknown = new Set<string>()
-  const keyOf = (reason: string | undefined): CloseReasonKey => {
-    if (reason !== undefined && isCloseReasonKey(reason)) return reason
-    unknown.add(reason ?? '')
-    return 'other'
-  }
-  const rows = report.calls
+  return report.calls
     .flatMap((call, index) => refusalsOf(call, index, lookup))
     .filter((refusal) => !correctedLater(refusal, report.calls))
     .map((refusal): CloseReviewNotApplied => {
       const { call, path } = refusal
       const [first] = call.rows
       const created = call.tool === CREATE_LORE_TOOL
-      const reasonKey = keyOf(refusal.reason)
+      // A refusal stored with no reason, which closeReportSchema logged.
+      const reasonKey = refusal.reason ?? 'other'
+      const field: CloseReviewField =
+        path === null
+          ? { fieldPath: null, fieldLabel: null }
+          : { fieldPath: path, fieldLabel: reviewFieldLabel(first?.table ?? '', path) }
       return {
         key: reviewRowKey(refusal.index, first ?? { table: '', id: '' }, path ?? call.tool),
         op: created ? 'create' : 'update',
         tool: call.tool,
         target: first === undefined ? null : reviewTarget(first, lookup),
-        fieldPath: path,
-        fieldLabel: path === null ? null : reviewFieldLabel(first?.table ?? '', path),
+        ...field,
         summary: refusal.summary,
         reasonKey,
         reasonText: t(REASON_COPY[reasonKey]),
@@ -218,7 +229,4 @@ export function closeReviewNotApplied(
             : { table: first.table, id: first.id },
       }
     })
-  // A report written before reasons were keys; the review reads each as other.
-  if (unknown.size > 0) logger.warn('memory.close_review_unknown_reason', { reasons: [...unknown] })
-  return rows
 }

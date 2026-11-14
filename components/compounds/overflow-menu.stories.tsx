@@ -13,7 +13,7 @@ const ENTRIES: OverflowMenuEntry[] = [
     disabledReason: 'Export not available yet',
     onPress: fn(),
   },
-  { key: 'json', label: 'View raw JSON', onPress: fn() },
+  { key: 'json', label: 'View raw JSON', opensSheet: true, onPress: fn() },
   {
     key: 'delete',
     label: 'Delete thread',
@@ -173,7 +173,7 @@ export const ClosesWhenDisabledPhone: Story = {
 
 const OPENS_SHEET_ENTRIES: OverflowMenuEntry[] = [
   { key: 'review', label: 'Review changes', opensSheet: true, onPress: fn() },
-  { key: 'json', label: 'View raw JSON', onPress: fn() },
+  { key: 'lead', label: 'Set as lead', onPress: fn() },
 ]
 
 /** gorhom restores a covered Sheet, so a sheet-opening entry waits for the menu's dismissal. */

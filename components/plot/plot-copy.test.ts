@@ -102,6 +102,13 @@ describe('plotMenuEntries', () => {
     expect(handlers.onExport).toHaveBeenCalledTimes(1)
   })
 
+  it('marks View raw JSON, and no other entry, as opening a Sheet of its own', () => {
+    for (const kind of ['thread', 'happening'] as const) {
+      const entries = plotMenuEntries(kind, { ...actions(), remove: { onDelete: vi.fn() } })
+      expect(entries.filter((e) => e.opensSheet === true).map((e) => e.key)).toEqual(['json'])
+    }
+  })
+
   it('disables the delete entry with the given reason', () => {
     const entries = plotMenuEntries('happening', {
       ...actions(),

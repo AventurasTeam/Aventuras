@@ -214,6 +214,7 @@ function NotApplied({
 }): ReactElement | null {
   if (rows.length === 0) return null
   return (
+    // Without a defaultValue, the first expand flips Radix from uncontrolled to controlled.
     <Accordion type="single" collapsible defaultValue="">
       <AccordionItem value="not-applied" className="rounded-md border border-border px-3">
         <AccordionTrigger>
@@ -304,7 +305,7 @@ function rowDelta(
 }
 
 // RN-Web's PressResponder presses a role=link element on click only, never on Enter.
-// Cast: RN's Pressable types omit onKeyDown.
+// Typed `object` to spread past RN's Pressable types, which omit onKeyDown.
 function webEnterProps(onPress: () => void): object | undefined {
   if (Platform.OS !== 'web') return undefined
   return {

@@ -55,7 +55,6 @@ async function readReviewSources(branchId: string, chapterId: string): Promise<R
   try {
     const report = await readCloseReport(db, branchId, chapterId)
     if (report == null) throw new Error('close report missing')
-    const deltas = await loadCloseDeltas(db, branchId, chapterId, report.actionId)
     const kinds = new Map<string, EntityKind>()
     const absent: string[] = []
     for (const id of reportEntityIds(report)) {
@@ -63,10 +62,11 @@ async function readReviewSources(branchId: string, chapterId: string): Promise<R
       if (kind == null) absent.push(id)
       else kinds.set(id, kind)
     }
-    if (absent.length > 0) {
-      const deleted = await readDeletedEntityKinds(db, branchId, absent)
-      for (const [id, kind] of deleted) kinds.set(id, kind)
-    }
+    const [deltas, deleted] = await Promise.all([
+      loadCloseDeltas(db, branchId, chapterId, report.actionId),
+      absent.length > 0 ? readDeletedEntityKinds(db, branchId, absent) : null,
+    ])
+    if (deleted != null) for (const [id, kind] of deleted) kinds.set(id, kind)
     return { report, deltas, kinds }
   } catch (error) {
     logger.error('app.close_review_read_failed', {
@@ -86,16 +86,12 @@ export function ChapterOverlaysHost(): ReactElement | null {
   const review = chapterOverlaysStore.useOverlays((s) => s.review)
   const closeResult = chapterOverlaysStore.useOverlays((s) => s.closeResult)
   const openBranchId = currentStoryStore.useCurrentStory((open) => open?.branchId ?? null)
+  const openSeq = currentStoryStore.useOpenSeq()
   const reviewChapter = chaptersStore.useChapters((rows) =>
     overlayChapter(review == null ? undefined : rows.get(review.chapterId), openBranchId),
   )
   const resultHolds = chaptersStore.useChapters(
-    (rows) =>
-      closeResultChapter(
-        closeResult,
-        closeResult == null ? undefined : rows.get(closeResult.chapterId),
-        openBranchId,
-      ) != null,
+    (rows) => closeResultChapter(closeResult, rows, { branchId: openBranchId, openSeq }) != null,
   )
 
   // Pruned, not hidden: a redo restores the same chapter id, and nothing may reopen by itself.
@@ -117,8 +113,8 @@ function ReviewHost({ chapter }: { chapter: StoreChapter }): ReactElement {
   const settleCount = generationStore.useGeneration((s) => s.settleCount)
   const entryIndexRead = useEntryIndex(branchId)
   const entryIndex = entryIndexRead.index
-  // Built before the index reads, a review cites raw entry ids; a failed read shows it anyway.
-  const indexPending = !entryIndexRead.ready && !entryIndexRead.failed
+  // Built before the index reads, a review cites raw entry ids and links no entry.
+  const indexReady = entryIndexRead.ready
   const entities = entitiesStore.useEntities((rows) => rows)
   const lore = loreStore.useLore((rows) => rows)
   const threads = threadsStore.useThreads((rows) => rows)
@@ -172,9 +168,8 @@ function ReviewHost({ chapter }: { chapter: StoreChapter }): ReactElement {
   )
 
   const review = useMemo(
-    () =>
-      data == null || indexPending ? null : buildCloseReview(data.report, data.deltas, lookup),
-    [data, indexPending, lookup],
+    () => (data == null || !indexReady ? null : buildCloseReview(data.report, data.deltas, lookup)),
+    [data, indexReady, lookup],
   )
 
   const press = useCallback(
@@ -205,11 +200,16 @@ function ReviewHost({ chapter }: { chapter: StoreChapter }): ReactElement {
     }
   }
 
+  const sourcesFailed = sources.isError && !sources.isFetching
+  const retry = () => {
+    if (entryIndexRead.failed) entryIndexRead.retry()
+    if (sourcesFailed) void sources.refetch()
+  }
   const state: ReviewWindowState =
     review != null
       ? { status: 'ready', review }
-      : sources.isError && !sources.isFetching
-        ? { status: 'failed', onRetry: () => void sources.refetch() }
+      : sourcesFailed || entryIndexRead.failed
+        ? { status: 'failed', onRetry: retry }
         : { status: 'loading' }
 
   return (

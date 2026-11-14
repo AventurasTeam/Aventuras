@@ -1,7 +1,7 @@
 import { desc, eq } from 'drizzle-orm'
 import { afterEach, describe, expect, it } from 'vitest'
 
-import { getRollbackCounts, undoLastAction } from '@/lib/actions'
+import { getRollbackCounts, readRowGuard, undoLastAction } from '@/lib/actions'
 import { REF_COLUMNS, rowRefs } from '@/lib/actions/delta/live-refs'
 import { isContentEditDelta } from '@/lib/actions/story-entries/classifier-facts'
 import { ENTRIES_WINDOW_SIZE } from '@/lib/actions/story-entries/recent-window'
@@ -25,6 +25,8 @@ import {
   ensureChapterClosePipelineRegistered,
   getPipeline,
 } from '@/lib/pipeline'
+import { fieldVerdicts, storedValue } from '@/lib/pipeline/definitions/close-agent/entity-write'
+import { overSoftCap } from '@/lib/pipeline/definitions/close-agent/fields'
 import { runPreflight } from '@/lib/pipeline/runtime/preflight'
 import { entriesStore, resetAllStores, type AppSettingsSnapshot } from '@/lib/stores'
 import { countTokens } from '@/lib/tokens'
@@ -33,6 +35,7 @@ import {
   stopCountingEncoderBuilds,
 } from '@/lib/tokens/__tests__/count-encoder-builds'
 import { selectUndoTarget } from '@/lib/undo'
+import { CAST_SOFT_CAPS } from '@/lib/wizard'
 
 import { buildSeedSteps } from './seed-dataset'
 
@@ -522,7 +525,7 @@ describe('seeded chapter closes', () => {
     expect(report.actionId).toBe('act_chapter_2')
     expect(create?.actionId).toBe('act_chapter_2')
     expect(report.calls.map((c) => [c.task, c.tool, c.result])).toEqual([
-      ['identity', 'update_character', 'skipped'],
+      ['identity', 'update_character', 'rejected'],
       ['identity', 'update_character', 'ok'],
     ])
     expect(report.stopped).toEqual([{ task: 'identity', part: 1, reason: 'budget' }])
@@ -532,7 +535,7 @@ describe('seeded chapter closes', () => {
       ...(c.reason === undefined ? [] : [c.reason]),
       ...(c.skippedFields ?? []).map((f) => f.reason),
     ])
-    expect(reasons).toEqual(['user-edited-since-prose'])
+    expect(reasons).toEqual(['over-soft-cap'])
     for (const reason of reasons) expect(isCloseReasonKey(reason), reason).toBe(true)
 
     // The review cites from turns, never from a delta's anchor: each is a chapter 2 entry.
@@ -566,12 +569,63 @@ describe('seeded chapter closes', () => {
 
     expect(review.stopped).toHaveLength(1)
     expect(review.notApplied.map((n) => [n.target?.name, n.fieldPath, n.reasonKey])).toEqual([
-      ['Mira', 'state.drives', 'user-edited-since-prose'],
+      ['Mira', 'state.drives', 'over-soft-cap'],
     ])
     const changes = review.changes.flatMap((area) => area.rows)
     expect(changes.map((c) => [c.target.name, c.fieldLabel, c.summary])).toEqual([
       ['Vorne', 'Traits', 'patient → patient, merciless'],
     ])
+  })
+
+  // A close refuses a field from what it reads, in planIdentityWrite's order: a restated value
+  // lands as nothing, a user edit or a later turn from the log protects it, a soft cap is the row's.
+  it("records each of chapter 2's lost fields for the reason the seeded rows give", async () => {
+    const ctx = await seededDb()
+    const chapter = heroChapters()[1]!
+    const report = closeReportSchema.parse(chapter.closeReport)
+    const positions = new Map(heroEntries().map((e) => [e.id, e.position]))
+    const checked: string[] = []
+    for (const call of report.calls) {
+      const lost =
+        call.result === 'ok'
+          ? (call.skippedFields ?? []).map((f) => f.field)
+          : Object.keys(call.values ?? {})
+      if (lost.length === 0) continue
+      const [target] = call.rows
+      expect(target?.table, 'this check reads entity rows only').toBe('entities')
+      const [row] = await ctx.db.select().from(entities).where(eq(entities.id, target!.id))
+      const prose = call.turns.reduce((a, b) => (positions.get(b)! > positions.get(a)! ? b : a))
+      const guard = await readRowGuard(
+        {
+          branchId: HERO_MAIN,
+          endEntryId: chapter.endEntryId,
+          proseEntryId: prose,
+          rows: [{ table: 'entities', id: target!.id }],
+        },
+        ctx,
+      )
+      for (const field of lost) {
+        const value = call.values?.[field] ?? ''
+        const stored = storedValue(row!, field)
+        const [verdict] = fieldVerdicts(guard.row('entities', target!.id), [field])
+        const list = field.replace(/^state\./, '')
+        const cap = Object.hasOwn(CAST_SOFT_CAPS, list)
+          ? CAST_SOFT_CAPS[list as keyof typeof CAST_SOFT_CAPS]
+          : undefined
+        const fromRows =
+          (Array.isArray(stored) ? stored.join(', ') : stored) === value
+            ? 'restated'
+            : !verdict!.free
+              ? verdict!.reason
+              : cap !== undefined && overSoftCap(value.split(', '), stored, cap)
+                ? 'over-soft-cap'
+                : 'lands'
+        const recorded = call.skippedFields?.find((f) => f.field === field)?.reason ?? call.reason
+        expect(recorded, `${target!.name} ${field}`).toBe(fromRows)
+        checked.push(`${target!.name} ${field}`)
+      }
+    }
+    expect(checked).toEqual(['Mira state.drives'])
   })
 
   // The review takes a landed field's old value from its delta and the new one from the report.

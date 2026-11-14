@@ -21,7 +21,7 @@ const HERO_TITLE = 'The Veilstone Courier'
 const REVIEWED = 'The Keep Leans Closer'
 const UNREVIEWED = 'Nine Days of Rain'
 const DRAFT = 'E2E dirty review draft'
-// The seeded report's one skipped write (lib/db/devtools/seed-dataset.ts).
+// The seeded report's one refused write (lib/db/devtools/seed-dataset.ts).
 const NOT_APPLIED = 1
 
 type Chapter = { id: string; number: number }

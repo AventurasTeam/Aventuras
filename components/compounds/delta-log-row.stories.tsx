@@ -1,4 +1,5 @@
 import type { Meta, StoryObj } from '@storybook/react-native-web-vite'
+import { useState } from 'react'
 import { Pressable, View } from 'react-native'
 import { expect, fn, screen, userEvent, waitFor } from 'storybook/test'
 
@@ -72,7 +73,7 @@ export const UpdateOp: Story = {
   args: { delta: baseDelta, onPress: fn() },
   play: async () => {
     const row = await screen.findByTestId('delta-log-row')
-    // Without a footer the row is the whole element: no wrapper, and even vertical padding.
+    // Without a footer the outer element holds the row alone, at even vertical padding.
     expect(row.parentElement?.childElementCount).toBe(1)
     const style = getComputedStyle(row)
     expect(style.paddingBottom).toBe(style.paddingTop)
@@ -256,6 +257,43 @@ export const WithFooter: Story = {
   },
 }
 
+function FooterToggleHarness() {
+  const [withFooter, setWithFooter] = useState(false)
+  return (
+    <DeltaLogRow
+      delta={reviewDelta}
+      onPress={() => setWithFooter((on) => !on)}
+      showMeta={false}
+      className="border-b border-border"
+      footer={withFooter ? <ReviewFooter /> : undefined}
+    />
+  )
+}
+
+/** A footer that comes and goes leaves the row's button where it was, and its focus with it. */
+export const FooterToggleKeepsFocus: Story = {
+  render: () => <FooterToggleHarness />,
+  play: async () => {
+    const button = screen.getByRole('button', { name: 'update Kael' })
+    const outer = button.parentElement
+    button.focus()
+
+    await userEvent.keyboard('{Enter}')
+    await screen.findByRole('link', { name: 'entry #47 →' })
+    expect(button).toHaveFocus()
+    expect(screen.getByRole('button', { name: 'update Kael' })).toBe(button)
+    // One outermost element in both shapes, carrying the host's className.
+    expect(button.parentElement).toBe(outer)
+    expect(outer).toHaveClass('border-b')
+
+    await userEvent.keyboard('{Enter}')
+    await waitFor(() => expect(screen.queryByRole('link', { name: 'entry #47 →' })).toBeNull())
+    expect(button).toHaveFocus()
+    expect(screen.getByRole('button', { name: 'update Kael' })).toBe(button)
+    expect(button.parentElement).toBe(outer)
+  },
+}
+
 export const WithoutMeta: Story = {
   args: { delta: baseDelta, onPress: fn(), showMeta: false },
   play: async () => {
@@ -269,6 +307,18 @@ export const WithoutMeta: Story = {
     const ids = button.getAttribute('aria-describedby')?.split(' ') ?? []
     expect(ids).toHaveLength(2)
     for (const id of ids) expect(document.getElementById(id)).not.toBeNull()
+  },
+}
+
+/** A refusal that proposed no value has no summary: no empty line, and no empty description part. */
+export const EmptySummary: Story = {
+  args: { delta: { ...reviewDelta, summary: '' }, onPress: fn(), showMeta: false },
+  play: async () => {
+    const button = screen.getByRole('button', { name: 'update Kael' })
+    expect(button).toHaveAccessibleDescription('Voice')
+    // Native joins the same parts into its hint, so an empty one would read "Voice, ".
+    expect(button.getAttribute('aria-describedby')?.split(' ')).toHaveLength(1)
+    expect(button.querySelectorAll('[id]')).toHaveLength(1)
   },
 }
 

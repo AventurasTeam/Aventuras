@@ -97,12 +97,13 @@ function recordWrite(
   entry: CallRecord,
 ): void {
   const { verdict } = entry
-  const reason = verdict.reason === undefined ? undefined : ledgerReasonKey(verdict.reason)
+  const call = { actionId: ctx.phase.actionId, task: ctx.task, tool: toolName }
+  const reason = verdict.reason === undefined ? undefined : ledgerReasonKey(verdict.reason, call)
   const skippedFields = verdict.skippedFields.map((skipped) => ({
     field: skipped.field,
-    reason: ledgerReasonKey(skipped.reason),
+    reason: ledgerReasonKey(skipped.reason, call),
   }))
-  // C4: a call that landed nothing lists its fields only when their keys differ from its own.
+  // C4: fields only when one's key differs from the call's, since keying can merge two reasons.
   const ownKeys = reason === undefined || skippedFields.some((skipped) => skipped.reason !== reason)
   ctx.ledger.record({
     task: ctx.task,

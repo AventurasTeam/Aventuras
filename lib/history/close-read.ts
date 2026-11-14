@@ -4,6 +4,7 @@ import {
   chapters,
   closeReportSchema,
   deltas,
+  entities,
   type CloseReport,
   type DbCtx,
   type Delta,
@@ -14,15 +15,10 @@ import { latestDeletedValues } from './link-ends'
 
 type Db = DbCtx['db']
 
-const ENTITY_KINDS = {
-  character: true,
-  location: true,
-  item: true,
-  faction: true,
-} as const satisfies Record<EntityKind, true>
+const ENTITY_KINDS: ReadonlySet<string> = new Set<EntityKind>(entities.kind.enumValues)
 
 const isEntityKind = (value: unknown): value is EntityKind =>
-  typeof value === 'string' && Object.hasOwn(ENTITY_KINDS, value)
+  typeof value === 'string' && ENTITY_KINDS.has(value)
 
 function parsedReport(stored: unknown): CloseReport | null {
   return stored == null ? null : closeReportSchema.parse(stored)

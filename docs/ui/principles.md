@@ -411,8 +411,9 @@ close that hasn't reached a step yet reads `Closing chapter before your
 turn…`.
 
 A close's commit, or its re-run's, leaves the banner in a done state
-instead of dismissing it: `Chapter closed: <title>`, a warning when a
-task stopped early, with `Review`, which opens the
+instead of dismissing it: `Chapter closed: <title>`, or
+`Chapter <N>'s close re-ran` for a re-run, a warning when a task stopped
+early, with `Review`, which opens the
 [review window](./screens/chapter-timeline/chapter-timeline.md#review-window),
 and ×. Pressing either ends it, and so do its chapter stopping being
 current (the chapter reversing, or another branch opening), a newer

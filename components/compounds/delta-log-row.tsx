@@ -30,7 +30,7 @@ type Delta = {
   targetDisplayName: string
   /** `op=update`: e.g. "state.traits[2]". `op=create`/`delete`: null. */
   fieldPath: string | null
-  /** Pre-rendered diff prose, host-formatted. */
+  /** Pre-rendered diff prose, host-formatted. Empty drops the line and its description part. */
   summary: string
   /** Pre-formatted "entry #47"-style label; null for non-entry events. */
   entryId: string | null
@@ -47,13 +47,9 @@ type DeltaLogRowProps = {
    * (no hover, no press affordance).
    */
   onPress?: () => void
-  /** On the outermost element: the row, or the row and its footer. */
+  /** On the outermost element, around the row and its footer. */
   className?: string
-  /**
-   * Under the row and outside its button, aligned to the summary column, so a control in it is
-   * never nested in the row's. Keep it present or absent for the row's life: adding one
-   * re-parents the row.
-   */
+  /** Under the row, outside its button: a control here never nests in the row's. */
   footer?: ReactElement
   /** Default true; false drops the meta line from view and from the row's description. */
   showMeta?: boolean
@@ -114,9 +110,10 @@ export function DeltaLogRow({
   const fieldId = `${id}-field`
   const summaryId = `${id}-summary`
   const metaId = `${id}-meta`
+  const hasSummary = delta.summary !== ''
   const description = [
     ...(delta.fieldPath != null ? [{ id: fieldId, text: delta.fieldPath }] : []),
-    { id: summaryId, text: delta.summary },
+    ...(hasSummary ? [{ id: summaryId, text: delta.summary }] : []),
     ...(showMeta ? [{ id: metaId, text: meta }] : []),
   ]
 
@@ -147,9 +144,11 @@ export function DeltaLogRow({
           ) : null}
         </View>
 
-        <Text nativeID={summaryId} size="sm" numberOfLines={summaryLines ?? undefined}>
-          {delta.summary}
-        </Text>
+        {hasSummary ? (
+          <Text nativeID={summaryId} size="sm" numberOfLines={summaryLines ?? undefined}>
+            {delta.summary}
+          </Text>
+        ) : null}
 
         {showMeta ? (
           <Text nativeID={metaId} variant="muted" size="xs" numberOfLines={1}>
@@ -166,10 +165,9 @@ export function DeltaLogRow({
     // The footer reads as the content column's next line, at its line gap.
     hasFooter ? 'pt-row-y-md pb-0.5' : 'py-row-y-md',
   )
-  const outerClassName = hasFooter ? undefined : className
   // Not a control, so nothing to name or disable: its text reads as it shows.
   const row = !interactive ? (
-    <View testID="delta-log-row" className={cn(rowClassName, outerClassName)}>
+    <View testID="delta-log-row" className={rowClassName}>
       {content}
     </View>
   ) : (
@@ -190,20 +188,21 @@ export function DeltaLogRow({
         Platform.select({
           web: 'cursor-pointer outline-none hover:bg-tint-hover focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-focus-ring',
         }),
-        outerClassName,
       )}
     >
       {content}
     </Pressable>
   )
-  if (!hasFooter) return row
+  // One tree with or without a footer: re-parenting would remount the button and drop focus.
   return (
     <View className={className}>
       {row}
-      <View className="flex-row gap-2.5 px-row-x-md pb-row-y-md">
-        <OpBadge op={delta.op} label={opLabel} spacer />
-        <View className="min-w-0 flex-1">{footer}</View>
-      </View>
+      {hasFooter ? (
+        <View className="flex-row gap-2.5 px-row-x-md pb-row-y-md">
+          <OpBadge op={delta.op} label={opLabel} spacer />
+          <View className="min-w-0 flex-1">{footer}</View>
+        </View>
+      ) : null}
     </View>
   )
 }

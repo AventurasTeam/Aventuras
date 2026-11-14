@@ -507,7 +507,8 @@ close stands.
   [Accordion](../../patterns/accordion.md): each write that was refused
   or skipped with its proposed value and reason, such as the lore cap or
   a field the user changed. A write the same task later landed on that
-  field is left out, being a slip the model corrected
+  field, or a duplicate flag or merge it later landed over the same rows,
+  is left out, being a slip the model corrected
   ([`chapter-close.md → Review`](../../../memory/chapter-close.md#review)).
   A call that landed in part appears under both.
 - **Changes** are grouped by area (Lore, Characters and factions, Places

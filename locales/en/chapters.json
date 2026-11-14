@@ -105,7 +105,7 @@
     "no": "No",
     "topLevel": "Top level",
     "reason": {
-      "user-edited-since-prose": "You changed this after the cited entry.",
+      "user-edited-since-prose": "You changed this yourself, so the close left it.",
       "later-turn": "A later entry already changed this.",
       "row-gone": "The row no longer exists.",
       "turns-empty": "The write cited no entry.",

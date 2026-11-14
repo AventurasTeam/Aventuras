@@ -61,11 +61,13 @@ describe('keyedReason', () => {
   })
 })
 
+const CALL = { actionId: 'act_close_reasons', task: 'lore', tool: 'create_lore' } as const
+
 describe('ledgerReasonKey', () => {
   it('reads a bare key, and a keyed text, as its key', () => {
     const warn = vi.spyOn(logger, 'warn')
-    expect(ledgerReasonKey('not-a-faction')).toBe('not-a-faction')
-    expect(ledgerReasonKey('title-taken: lo2 already holds this title: keep it')).toBe(
+    expect(ledgerReasonKey('not-a-faction', CALL)).toBe('not-a-faction')
+    expect(ledgerReasonKey('title-taken: lo2 already holds this title: keep it', CALL)).toBe(
       'title-taken',
     )
     expect(warn).not.toHaveBeenCalled()
@@ -75,17 +77,21 @@ describe('ledgerReasonKey', () => {
     ['a group rejection', 'branch mismatch: delta br_1 vs target br_2'],
     ['a text whose head is no key', 't3 is a turn: cite turns in turns, never in the text'],
     ['an unknown bare code', 'over-test-cap'],
-  ])('reads %s as other and logs it raw', (_label, reason) => {
+  ])('reads %s as other and logs it raw, with its call', (_label, reason) => {
     const warn = vi.spyOn(logger, 'warn')
-    expect(ledgerReasonKey(reason)).toBe('other')
-    expect(warn).toHaveBeenCalledWith('memory.close_reason_unkeyed', { reason })
+    expect(ledgerReasonKey(reason, CALL)).toBe('other')
+    expect(warn).toHaveBeenCalledWith(
+      'memory.close_reason_unkeyed',
+      { reason, task: 'lore', tool: 'create_lore' },
+      { actionId: 'act_close_reasons' },
+    )
   })
 
   it('reads every key, bare or keyed, as itself', () => {
     const warn = vi.spyOn(logger, 'warn')
     for (const key of CLOSE_REASON_KEYS) {
-      expect(ledgerReasonKey(key)).toBe(key)
-      expect(ledgerReasonKey(keyedReason(key, 'some text: with a colon'))).toBe(key)
+      expect(ledgerReasonKey(key, CALL)).toBe(key)
+      expect(ledgerReasonKey(keyedReason(key, 'some text: with a colon'), CALL)).toBe(key)
     }
     expect(warn).not.toHaveBeenCalled()
   })
@@ -165,7 +171,7 @@ describe('the reasons a close records', () => {
     ['a pin the start never showed', () => NO_START_PIN, 'no-start-pin'],
   ])('records %s as its key', (_label, reason, key) => {
     const warn = vi.spyOn(logger, 'warn')
-    expect(ledgerReasonKey(reason())).toBe(key)
+    expect(ledgerReasonKey(reason(), CALL)).toBe(key)
     expect(warn).not.toHaveBeenCalled()
   })
 })
