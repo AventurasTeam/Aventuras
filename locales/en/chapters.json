@@ -63,5 +63,8 @@
     "since": "In progress · since {{time}}",
     "placeholder": "Summary, theme, and keywords generate on close.",
     "close": "Close chapter…"
+  },
+  "review": {
+    "mergedInto": "Merged into {{name}}"
   }
 }
