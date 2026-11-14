@@ -714,3 +714,16 @@ patch`, which 5.5a marks `restated`, so a close tool's write of it
   kinds, rollback, regenerate, and the two regenerate-with-close
   variants, and no row names it or its props. Raised in Slice 5.12's
   review of Task 15.
+- **A trigger-less AlertDialog drops keyboard focus when it closes.**
+  On web, Radix's dialog content returns focus to its trigger on close,
+  and a dialog opened from state has no trigger, so focus lands on
+  `<body>` after Cancel or a confirm. That covers
+  `RollbackConfirmModal` (`components/reader/rollback-confirm.tsx`),
+  `components/story/crash-recovery-modal.tsx`,
+  `components/story/story-config-recovery-dialog.tsx`, the wizard's
+  dialogs (`ai-assist-discard-dialog.tsx`, `step-world.tsx`) and
+  `ChapterDeleteConfirm`. The fix belongs in the primitive
+  (`components/ui/alert-dialog.tsx`): remember the focused element when
+  the content opens and, when no trigger takes focus back, restore it on
+  close if it's still connected, else hand focus to a stable container.
+  Raised by CodeRabbit on PR #742 (Slice 5.12).
