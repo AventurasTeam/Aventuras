@@ -28,9 +28,8 @@ export async function loadRegenerateCountsIfCurrent(
   return canContinueRegeneratePreflight(readPreflight()) ? counts : null
 }
 
-// counts.entries > 1 ⇔ the reply isn't terminal: system entries and the opening carry no create
-// deltas, so only later non-system entries raise the count. With one entry in range, a chapter in
-// range ends on that reply (C10).
+// entries > 1 ⇔ the reply isn't terminal (system entries and the opening carry no create deltas);
+// with one entry in range, a chapter in range ends on that reply (C10).
 export function classifyRegenerateGate(
   counts: Pick<RollbackCounts, 'entries' | 'chapters' | 'closeWrites'>,
 ): RegenerateGate {

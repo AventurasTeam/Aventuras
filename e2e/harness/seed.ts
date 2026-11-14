@@ -422,11 +422,9 @@ const CLOSE_WRITES_CLOSE_VALUE = 'E2E-CLOSE-WRITE A courier the Keep has marked 
 const CLOSE_WRITES_LATER_VALUE = 'E2E-LATER-WRITE A courier who stopped running from the Keep.'
 
 /**
- * Gives the branch's latest chapter's close the writes a delete spec asserts on: a lore create and
- * an update of one character's description, under the close's action and anchored on its end
- * entry, then a later periodic-classifier update of that description under its own action,
- * anchored on the last reply. All log above every existing delta, and the character is left
- * holding the later value. Runs before launch.
+ * Seeds the latest chapter's close with a lore create and a character-description update (close
+ * action, anchored on its end entry), then a later classifier update of that description (own
+ * action, anchored on the last reply). Logged above every existing delta; runs before launch.
  */
 export function seedCloseWrites(dbPath: string, branchId: string): SeededCloseWrites {
   const db = new DatabaseSync(dbPath)
@@ -548,9 +546,8 @@ export function seedCloseWrites(dbPath: string, branchId: string): SeededCloseWr
       throw err
     }
 
-    // The later write anchors on the last reply: a rollback to the entry after the chapter's end
-    // sweeps it only when that reply sits past the end. A group delta anchored off the end entry
-    // would leave with the same rollback.
+    // A rollback to the entry after the chapter's end sweeps the later write only when its anchor
+    // (the last reply) sits past the end.
     const endPosition = (
       db
         .prepare(`SELECT position FROM story_entries WHERE branch_id = ? AND id = ?`)

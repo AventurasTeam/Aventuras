@@ -20,9 +20,8 @@ import { chrome } from '../locators/chrome'
 import { reader } from '../locators/reader'
 import { saveSession } from '../locators/save-session'
 
-// Chapter delete (C13) from the Timeline's latest card, then a regenerate over what a close left:
-// driven through the UI, asserted in the DB. See docs/testing.md → Coverage. Each describe runs on
-// its own seeded launch, its tests in order on one app.
+// Chapter delete (C13) then a regenerate over what a close left; UI-driven, DB-asserted
+// (docs/testing.md → Coverage). Each describe has its own seeded launch, tests in order on one app.
 const HERO_TITLE = 'The Veilstone Courier'
 // The hero story's current branch in the fixture, read from the file before launch.
 const HERO_BRANCH = 'br_hero_main'

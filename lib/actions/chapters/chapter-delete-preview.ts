@@ -25,9 +25,8 @@ export type ChapterDeletePreview = {
 }
 
 /**
- * The delete confirm's lines (chapter-timeline.md → Delete a chapter), from the `'whole'` set the
- * action reverses. Writes nothing; held shared, as the rollback preview is, so no reversal lands
- * between the set and the region it reads.
+ * The delete confirm's lines (chapter-timeline.md → Delete a chapter), from the `'whole'` set.
+ * Writes nothing; held shared so no reversal lands between the set and the region it reads.
  */
 export async function getChapterDeletePreview(
   branchId: string,
@@ -74,9 +73,8 @@ async function ownEntryTokens(
   return row?.tokens ?? 0
 }
 
-// A created lore row has its own line, the user's later edits of it included, so no write to it
-// counts again; the stamps and the chapter row are the delete itself, and a retrieval count bump
-// is no change worth showing.
+// A created lore row has its own line (user edits included), so no write to it counts again; the
+// stamps and chapter row are the delete itself, and a retrieval bump is no change worth showing.
 function changesOf({
   set,
   groups,

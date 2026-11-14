@@ -867,9 +867,8 @@ export default function ReaderComposerRoute() {
     ],
   )
 
-  // Guarded here, not at the callers: the immediate tap and the confirm both funnel through it.
-  // Resolves to the action's refusal: a confirmed regenerate re-opens its confirm on it, and a
-  // tap's counts-changed opens one.
+  // Guarded here, not at the callers: the tap and the confirm both funnel through it.
+  // Resolves to the refusal: a confirm re-opens on it, a tap's counts-changed opens one.
   const runRegenerate = useCallback(
     async (
       targetId: string,
@@ -931,8 +930,7 @@ export default function ReaderComposerRoute() {
             entryId: targetId,
             reason: regen.reason,
           })
-          // Every rejection fires before the first sweep, so nothing else moved
-          // and putting the failure entry back is an exact undo of the drop.
+          // Rejections fire before the first sweep: restoring the failure entry is an exact undo.
           await restoreSystemTail(dropped)
           const toastCopy = regenerateRefusalToast(regen, origin)
           if (toastCopy != null) toast.error(t(toastCopy))
@@ -1334,7 +1332,7 @@ export default function ReaderComposerRoute() {
         }
         return
       }
-      // Both confirm kinds open as a regenerate confirm: the modal derives its copy from the counts.
+      // Both confirm kinds open as a regenerate confirm; the modal derives copy from the counts.
       setRollback({ mode: 'regenerate', targetId: entryId, targetNumber, counts, countedAtSettle })
     },
     [branchId, runRegenerate, branchUnchanged],

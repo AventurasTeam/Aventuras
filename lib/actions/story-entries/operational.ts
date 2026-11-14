@@ -353,9 +353,8 @@ export async function resolveSweep(
   }
 }
 
-// Buckets per rollback-confirm.md → Counts. A running pass's or close's rows count nowhere: the
-// confirm interrupts it, and its abort reverses them before the commit counts. A cleared parent
-// logs no delta but still moves a place, so it counts as a change.
+// rollback-confirm.md → Counts. A running pass's or close's rows count nowhere: its abort reverses
+// them before the commit counts. A cleared parent logs no delta but still counts as a change.
 export async function rollbackCountsOf(
   swept: ResolvedSweep,
   ctx: Pick<DbCtx, 'db'>,

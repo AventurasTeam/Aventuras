@@ -1676,7 +1676,7 @@ const CASES: readonly RoundTripCase[] = [
   FULL_ORDER_CASE,
 ]
 
-/** C9's arms: CTRL-Z, redo, an abort, a rollback on each side of E, and both delete modes. */
+/** C9's arms, both chapter delete modes among them. */
 const ARMS: readonly RoundTripArm[] = [
   {
     name: 'CTRL-Z',
