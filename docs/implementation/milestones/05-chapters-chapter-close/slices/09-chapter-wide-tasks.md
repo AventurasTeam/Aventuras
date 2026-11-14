@@ -503,7 +503,9 @@ None open: Implementation notes record each answer.
   action, not through `delta_emitted` as Scope: in has it: the abort
   path and the driver's drain see groups, and a per-delta burst is the
   shape Slice 5.2 measured stalling Android. A refused group fails the
-  close, since a code step has no model to tell.
+  close, since a code step has no model to tell. The round-trip suite
+  tells a code step's group from a tool's by the action kinds each case
+  declares its abort arm fires on (`abortOn`).
 - **The range embed is bounded.** It takes per-turn retrieval's 300 s
   bound (`EMBED_TIMEOUT_MS`, moved to a shared module), and an expiry
   fails the close as any embedder failure does, a
@@ -540,8 +542,10 @@ None open: Implementation notes record each answer.
 - **3e's unnamed fields and clustering's terms.** `common_knowledge`
   survives when any merged row has it; the kept row's `category` and
   `icon` stand; a null `learned_at_entry_id` loses to any anchor;
-  sources join with `; `, deduped in first-seen order and cut at 120
-  characters; the composite texts are cut, never refused. Cast overlap
+  sources join with `; `, deduped in first-seen order, the first standing
+  whole and a later one joining only if the joined text stays within 120
+  characters, so no stored source is ever cut; the composite texts are
+  cut, never refused. Cast overlap
   is shared characters over the smaller cast, every pair of a cluster
   meets all three criteria, a row with no character among its
   involvements clusters with nothing, and "~3 entries" counts non-system

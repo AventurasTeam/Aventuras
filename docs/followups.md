@@ -401,8 +401,8 @@ breakdown under [UX](#ux).
   Dr. Livesey (0.697) near-duplicates sit 6 entries apart, so the
   distance gate drops them too, and the next in-gate pair, 0.590, is
   likely distinct. So 3e doesn't fire on MiniLM today. One global cosine
-  can't fit every embedder; a per-embedder threshold, carried by the
-  embedder's registry entry, is the likely shape. Play measures
+  can't fit every embedder; a per-embedder threshold, for instance one
+  the embedder's registry entry carries, is the likely shape. Play measures
   EmbeddingGemma on the same chapter and re-tunes both gates (cosine and
   distance) on real stories. Developer decision 2026-11-14, from Slice
   5.9's probe.
