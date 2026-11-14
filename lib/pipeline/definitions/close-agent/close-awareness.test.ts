@@ -1265,6 +1265,9 @@ describe('the retrieval reset', () => {
   })
 
   it('fails the close when its group is refused: a code step has no model to tell', async () => {
+    const debug = vi.spyOn(logger, 'debug')
+    onTestFinished(() => debug.mockRestore())
+
     const { events, result } = await runReset(stepContextFor(fx), async () => ({
       status: 'rejected',
       reason: 'scripted refusal',
@@ -1279,6 +1282,13 @@ describe('the retrieval reset', () => {
         tableName: 'happening_awareness',
       },
     })
+    expect(debug.mock.calls.filter(([kind]) => kind === 'memory.close_retrieval_reset')).toEqual([
+      [
+        'memory.close_retrieval_reset',
+        { rows: 3, status: 'rejected', ms: expect.any(Number) },
+        { actionId: 'act_awareness_start' },
+      ],
+    ])
   })
 
   it('logs the group as memory.close_retrieval_reset with its rows, status and round trip', async () => {
