@@ -2,6 +2,7 @@ import { eq } from 'drizzle-orm'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
 import type { generateStructured } from '@/lib/ai'
+import { chapterDraftFrom } from '@/lib/chapters'
 import { branches, chapters, type Delta } from '@/lib/db'
 import { logger } from '@/lib/diagnostics'
 import { type CloseFixture } from '@/lib/pipeline/definitions/__tests__/close-fixture'
@@ -9,6 +10,7 @@ import { entriesStore, generationStore, undoRedoStore } from '@/lib/stores'
 
 import { CHAPTER_DELETE_REFUSAL, resolveChapterDeleteSet } from './chapter-delete-set'
 import { removeChapter } from './remove-chapter'
+import { saveChapter } from './save-chapter'
 import { __redoGroupForTest } from '../delta/redo'
 import {
   DeltaReplayError,
@@ -250,6 +252,29 @@ describe('removeChapter scope', () => {
 
       expect(await chapterRows(fx)).toEqual([first.chapter])
       expect(await deltasOf(fx, first.actionId)).toEqual(firstDeltas)
+    },
+  )
+})
+
+describe('removeChapter after a Timeline save', () => {
+  it.each(['whole', 'divider-only'] as const)(
+    "takes the user's rename with the chapter (%s)",
+    async (mode) => {
+      const c = await openClosed()
+      const draft = { ...chapterDraftFrom(c.chapter), title: 'The Ferry at Night' }
+      expect(await saveChapter({ row: c.chapter, draft }, c.fx.ctx)).toEqual({
+        status: 'ok',
+        id: c.chapter.id,
+      })
+      const [rename] = (await logRows(c.fx)).filter((d) => d.source === 'user_edit')
+      expect(shapeOf(rename)).toBe(`update chapters:${c.chapter.id}`)
+
+      expect(await removeChapter(c.fx.branchId, c.chapter.id, mode, c.fx.ctx)).toEqual({
+        status: 'ok',
+      })
+
+      expect(await chapterRows(c.fx)).toEqual([])
+      expect(await deltasOf(c.fx, rename.actionId)).toEqual([])
     },
   )
 })
