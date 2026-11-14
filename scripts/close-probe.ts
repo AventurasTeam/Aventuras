@@ -180,11 +180,11 @@ function printRangeEmbed(k: number): void {
     )
     return
   }
-  const { embedded, happenings, clusters } = counts.entry.fields
+  const { happenings, unembedded, clusters } = counts.entry.fields
   const sizes = rangeClusters.map((cluster) => cluster.length)
   const rows = sizes.length === 0 ? '' : ` of ${sizes.join(', ')} rows`
   console.log(
-    `[probe:close]   run ${k} range embed: ${String(embedded)} of ${String(happenings)} range happenings embedded, ${String(clusters)} clusters${rows}`,
+    `[probe:close]   run ${k} range embed: ${Number(happenings) - Number(unembedded)} of ${String(happenings)} range happenings embedded, ${String(clusters)} clusters${rows}`,
   )
 }
 
