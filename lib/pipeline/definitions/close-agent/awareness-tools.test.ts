@@ -335,10 +335,11 @@ describe('set_pin', () => {
     expect(answers).toEqual([
       {
         result: 'rejected',
-        reason: 't5 is not one of the turns this task was shown: cite only those turns',
+        reason:
+          'turn-not-shown: t5 is not one of the turns this task was shown: cite only those turns',
       },
     ])
-    expect(calls[0]).toMatchObject({ result: 'rejected', turns: [] })
+    expect(calls[0]).toMatchObject({ result: 'rejected', reason: 'turn-not-shown', turns: [] })
     expect(await runDeltas(f, result.actionId)).toEqual([])
     expect(await storedPin(f, FREQUENT)).toBe(0.5)
   })

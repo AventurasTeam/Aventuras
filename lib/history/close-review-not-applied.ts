@@ -75,6 +75,10 @@ const REASON_COPY = {
   'merge-close-wrote': 'chapters:review.reason.merge-close-wrote',
   'merge-no-keep': 'chapters:review.reason.merge-no-keep',
   'merge-close-wrote-no-keep': 'chapters:review.reason.merge-close-wrote-no-keep',
+  'merge-outside-cluster': 'chapters:review.reason.merge-outside-cluster',
+  'no-start-pin': 'chapters:review.reason.no-start-pin',
+  'frequent-pin-lowered': 'chapters:review.reason.frequent-pin-lowered',
+  'pin-raise-too-large': 'chapters:review.reason.pin-raise-too-large',
   other: 'chapters:review.reason.other',
 } as const satisfies Record<CloseReasonKey, string>
 

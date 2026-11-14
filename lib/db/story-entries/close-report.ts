@@ -70,6 +70,10 @@ export const CLOSE_REASON_KEYS = [
   'merge-close-wrote',
   'merge-no-keep',
   'merge-close-wrote-no-keep',
+  'merge-outside-cluster',
+  'no-start-pin',
+  'frequent-pin-lowered',
+  'pin-raise-too-large',
   'other',
 ] as const
 

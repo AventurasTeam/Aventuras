@@ -35,6 +35,7 @@ import {
   NOTE,
   CLOSE_WROTE,
   NO_KEEP,
+  OUTSIDE_CLUSTER,
   pinByUser,
   rewriteCitedProse,
 } from './__tests__/happening-tools-fixture'
@@ -78,34 +79,38 @@ describe('merge_happenings refusals', () => {
     resetAllStores()
   })
 
-  it.each<{ name: string; args: MergeInput; reason: string }>([
+  it.each<{ name: string; args: MergeInput; key: string; reason: string }>([
     {
       name: 'an empty absorb',
       args: { keep: 'hp1', absorb: [] },
-      reason: 'absorb is empty: name the happenings to fold into keep',
+      key: 'merge-absorb-empty',
+      reason: 'merge-absorb-empty: absorb is empty: name the happenings to fold into keep',
     },
     {
       name: 'keep inside absorb',
       args: { keep: 'hp1', absorb: ['hp1', 'hp2'] },
-      reason: 'keep is also in absorb: keep one happening and absorb the others',
+      key: 'merge-keep-absorbed',
+      reason:
+        'merge-keep-absorbed: keep is also in absorb: keep one happening and absorb the others',
     },
     {
       name: 'a repeated id',
       args: { keep: 'hp1', absorb: ['hp2', 'hp2'] },
-      reason: 'absorb names a happening twice: name each happening once',
+      key: 'merge-repeated',
+      reason: 'merge-repeated: absorb names a happening twice: name each happening once',
     },
     {
       name: "a row outside keep's cluster",
       args: { keep: 'hp1', absorb: ['hp4'] },
-      reason:
-        "absorb names a happening outside keep's cluster: merge only happenings listed in one cluster",
+      key: 'merge-outside-cluster',
+      reason: OUTSIDE_CLUSTER,
     },
-  ])('rejects $name, writing nothing', async ({ args, reason }) => {
+  ])('rejects $name, writing nothing', async ({ args, key, reason }) => {
     const run = await runCalls(f, [merge(args)])
 
     expect(run.answers).toEqual([{ result: 'rejected', reason }])
     expect(run.calls).toHaveLength(1)
-    expect(run.calls[0]).toMatchObject({ result: 'rejected', reason })
+    expect(run.calls[0]).toMatchObject({ result: 'rejected', reason: key })
     expect(run.calls[0]).not.toHaveProperty('survivor')
     expect(await runDeltas(f, run.result.actionId)).toEqual([])
   })
@@ -175,7 +180,7 @@ describe('merge_happenings refusals', () => {
       reason: CLOSE_WROTE,
       note: 'Send hp1 as keep.',
     })
-    expect(run.calls[1]).toMatchObject({ result: 'rejected', reason: CLOSE_WROTE })
+    expect(run.calls[1]).toMatchObject({ result: 'rejected', reason: 'merge-close-wrote' })
     expect(run.calls[1]).not.toHaveProperty('survivor')
     expect(written.filter(({ targetId }) => targetId === LIGHT)).toEqual([])
     expect(await happeningRow(f, LIGHT)).toBeDefined()
@@ -212,6 +217,7 @@ describe('merge_happenings refusals', () => {
 
     expect(run.answers[1]).toEqual({ result: 'ok' })
     expect(run.answers[2]).toEqual({ result: 'rejected', reason: NO_KEEP })
+    expect(run.calls[2]).toMatchObject({ result: 'rejected', reason: 'merge-close-wrote-no-keep' })
     expect(run.calls[2]).not.toHaveProperty('survivor')
     expect(await happeningRow(f, LIGHT)).toBeDefined()
   })
@@ -462,7 +468,10 @@ describe('merge_happenings refusals', () => {
     ])
 
     expect(run.answers).toEqual([
-      { result: 'rejected', reason: 't3 is a turn: cite turns in turns, never in the text' },
+      {
+        result: 'rejected',
+        reason: 'turn-in-text: t3 is a turn: cite turns in turns, never in the text',
+      },
     ])
     expect(run.calls[0]).not.toHaveProperty('survivor')
     expect(await runDeltas(f, run.result.actionId)).toEqual([])
@@ -537,8 +546,7 @@ describe('merge_happenings refusals', () => {
     expect(run.answers).toEqual([
       {
         result: 'rejected',
-        reason:
-          "absorb names a happening outside keep's cluster: merge only happenings listed in one cluster",
+        reason: OUTSIDE_CLUSTER,
       },
     ])
     expect(await happeningRow(f, CROSSING)).toBeDefined()
@@ -600,7 +608,10 @@ describe('merge_happenings refusals', () => {
     ])
 
     expect(run.answers).toEqual([
-      { result: 'rejected', reason: 't3 is a turn: cite turns in turns, never in the text' },
+      {
+        result: 'rejected',
+        reason: 'turn-in-text: t3 is a turn: cite turns in turns, never in the text',
+      },
     ])
     expect(await runDeltas(f, run.result.actionId)).toEqual([])
   })
@@ -617,8 +628,7 @@ describe('merge_happenings refusals', () => {
     expect(run.answers).toEqual([
       {
         result: 'rejected',
-        reason:
-          "absorb names a happening outside keep's cluster: merge only happenings listed in one cluster",
+        reason: OUTSIDE_CLUSTER,
       },
     ])
   })

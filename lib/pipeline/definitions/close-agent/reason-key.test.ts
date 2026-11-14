@@ -6,8 +6,10 @@ import { CLOSE_REASON_KEYS } from '@/lib/db'
 import { logger } from '@/lib/diagnostics'
 import { PARENT_CHAIN_BROKEN, PARENT_CYCLE, PLACE_REFUSAL } from '@/lib/world'
 
+import { FREQUENT_PIN_LOWERED, NO_START_PIN, PIN_RAISE_TOO_LARGE } from './awareness-tools'
 import { commonChecks, createReadSet } from './common-checks'
 import { sentList, softCapReason } from './fields'
+import { MERGE_REFUSAL as HAPPENING_MERGE_REFUSAL } from './happening-tools'
 import { CloseIds } from './ids'
 import { keywordsRefusal, termHandleReason } from './keyword-args'
 import { LORE_REFUSAL } from './lore-tools'
@@ -129,6 +131,39 @@ describe('the reasons a close records', () => {
     ['a story hidden inside', () => PLACE_REFUSAL.storyInside, 'story-inside'],
     ['a parent cycle', () => PARENT_CYCLE, 'parent-cycle'],
     ['a broken parent chain', () => PARENT_CHAIN_BROKEN, 'parent-chain-broken'],
+    [
+      'a happening merge absorbing nothing',
+      () => HAPPENING_MERGE_REFUSAL.emptyAbsorb,
+      'merge-absorb-empty',
+    ],
+    [
+      'a happening merge absorbing its keep',
+      () => HAPPENING_MERGE_REFUSAL.keepAbsorbed,
+      'merge-keep-absorbed',
+    ],
+    [
+      'a happening merge naming one twice',
+      () => HAPPENING_MERGE_REFUSAL.repeated,
+      'merge-repeated',
+    ],
+    [
+      "a happening merge reaching outside keep's cluster",
+      () => HAPPENING_MERGE_REFUSAL.outsideCluster,
+      'merge-outside-cluster',
+    ],
+    [
+      'a happening merge absorbing one the close wrote',
+      () => HAPPENING_MERGE_REFUSAL.closeWrote,
+      'merge-close-wrote',
+    ],
+    [
+      'a happening merge among several the close wrote',
+      () => HAPPENING_MERGE_REFUSAL.closeWroteNoKeep,
+      'merge-close-wrote-no-keep',
+    ],
+    ['a pin lowered on a frequent row', () => FREQUENT_PIN_LOWERED, 'frequent-pin-lowered'],
+    ['a pin raised past the step', () => PIN_RAISE_TOO_LARGE, 'pin-raise-too-large'],
+    ['a pin the start never showed', () => NO_START_PIN, 'no-start-pin'],
   ])('records %s as its key', (_label, reason, key) => {
     const warn = vi.spyOn(logger, 'warn')
     expect(ledgerReasonKey(reason())).toBe(key)
