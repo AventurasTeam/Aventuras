@@ -574,9 +574,18 @@ function dividerRemoved(closed: { state: WorldState; log: Delta[] }): {
 }
 
 function expectedAfter(h: CloseHarness, arm: RoundTripArm): { state: WorldState; log: Delta[] } {
-  if (arm.expect === 'before-close') return { state: h.before, log: [] }
-  if (arm.expect === 'after-close') return h.closed()
-  return dividerRemoved(h.closed())
+  switch (arm.expect) {
+    case 'before-close':
+      return { state: h.before, log: [] }
+    case 'after-close':
+      return h.closed()
+    case 'divider-removed':
+      return dividerRemoved(h.closed())
+    default: {
+      const _exhaustive: never = arm.expect
+      return _exhaustive
+    }
+  }
 }
 
 type RoundTripCase = {
@@ -1174,6 +1183,7 @@ const ARMS: readonly RoundTripArm[] = [
     run: async (h) => {
       await h.close()
       await removeTheChapter(h, 'divider-only')
+      expect(await worldState(h.fx), 'the divider went').toEqual(dividerRemoved(h.closed()).state)
       // The kept work is the newest action, so CTRL-Z reverses it (C13).
       await undoClose(h)
     },
