@@ -274,8 +274,9 @@ convention, and the expectation that subsystems route through
   `length` in characters before `CLOSE_REPORT_VALUE_BOUND` cuts it),
   `close_stackables` (stackable normalization's run, when any record
   would fold: the `rows` its group carried, the records it left as
-  written after the end entry and as past the key bound, and the
-  group's status, `none` when no group went out), `close_range_embed`
+  written after the end entry and as unsafe to write (a key past the
+  bound, or a `__proto__` key), and the group's status, `none` when no
+  group went out), `close_range_embed`
   (the happenings embed over the range: the happenings in it, those
   embedded and revalidated, those left without a vector, and the
   clusters found) and `close_retrieval_reset` (the `retrieval_count`

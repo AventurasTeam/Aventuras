@@ -564,7 +564,8 @@ folds variant spellings of one fungible onto one key, per
   is left whole: folding some of its keys would bring an old spelling
   back beside the user's. A record whose folded form would break the
   schema's bound on a stackables key, which lowercasing can lengthen
-  past 40 characters, is left as stored.
+  past 40 characters, is left as stored, and so is one holding a
+  `__proto__` key before or after folding, which an undo can't restore.
 
 Every record that changes lands in one group anchored on the end entry,
 and its undo yields whole to a later write of the record
