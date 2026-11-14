@@ -33,6 +33,7 @@ import {
   CLOSED_AT,
   TOBIN_STATE,
   TOBIN,
+  TOBIN_CLOSE_DESCRIPTION,
   THREAD_KEPT,
   THREAD_ABSORBED,
   CLOSE_LORE_ID,
@@ -424,6 +425,37 @@ describe('getChapterDeletePreview', () => {
     const state = (await entityOf(c.fx, TOBIN.id))?.state as CharacterState
     expect(state.visual).toEqual({ attire: 'a salt-stained oilskin' })
     expect(state.traits).toEqual(['taciturn'])
+  })
+
+  it('counts a close update of two columns a later write replaced one of', async () => {
+    const c = await openClosed()
+    await writeUnderClose(c, [
+      {
+        kind: 'updateEntity',
+        source: 'chapter_close',
+        payload: {
+          branchId: c.fx.branchId,
+          id: TOBIN.id,
+          patch: { description: TOBIN_CLOSE_DESCRIPTION, keywords: ['ferryman'] },
+        },
+      },
+    ])
+    await writeLater(c.fx, describeTobin(c.fx.branchId, LATER_DESCRIPTION, 'per_turn_classifier'), {
+      actionId: 'act_turn_fold',
+      entryId: null,
+    })
+
+    expect(
+      await getChapterDeletePreview(c.fx.branchId, c.chapter.id, previewStory(c.fx), c.fx.ctx),
+    ).toMatchObject({ otherChanges: 1 })
+
+    expect(await removeChapter(c.fx.branchId, c.chapter.id, 'whole', c.fx.ctx)).toEqual({
+      status: 'ok',
+    })
+    expect(await entityOf(c.fx, TOBIN.id)).toMatchObject({
+      description: LATER_DESCRIPTION,
+      keywords: [],
+    })
   })
 
   // The close normalized the record, so a later write of it yields the whole record, not its keys.
