@@ -3917,11 +3917,26 @@ in about 4 s. It has not recurred in the 27 CI runs since. The
 2026-11-14 triage pass bounded the two waits on that path that had no
 limit (`closeApp`'s `main.exit` evaluate, which ran ahead of the kill
 fallback, and the app window's load wait), which fit the overrun
-without showing the cause. CI keeps no trace: Playwright's `use.trace`
-covers its own browser context, not an app from `_electron.launch`, so
-tracing one means starting `app.context().tracing` in the harness and
-uploading `test-results/` on failure. **Revisit signal:** a third
+without showing the cause. CI now keeps each failed attempt's
+`test-results/`, its error context among them, but no trace:
+Playwright's `use.trace` covers its own browser context, not an app
+from `_electron.launch`, so tracing one means starting
+`app.context().tracing` in the harness. **Revisit signal:** a third
 hang. Routed from triage 2026-11-14.
+
+#### Undo in the reader's undo/redo spec sometimes reverses nothing
+
+`reader-undo-redo.spec.ts`'s "undo reverses the committed turn; redo
+re-applies it" failed its first attempt three times on E2E shard 2/3
+(run `42531873796` on main, 2026-11-08; `42799606042`, 2026-11-10;
+`43561357510`, 2026-11-14): after the Undo row's click the reply count
+stayed 1 for the 15 s poll, and each retry passed. A flaky attempt
+fails no shard, so it showed only as "1 flaky". It didn't reproduce in
+20 runs on the dev project and 10 on the packaged one (2026-11-14).
+Unread: whether the undo was refused (its toast would say
+`blockedWhileGenerating` or `nothingToUndo`) or the click missed the
+row. **Revisit signal:** a fourth failure, now with its uploaded error
+context. Raised in the 2026-11-14 triage pass, unverified.
 
 #### Gated row fields are written out per surface
 

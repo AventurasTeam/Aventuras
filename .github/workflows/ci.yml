@@ -193,6 +193,17 @@ jobs:
       - name: Run E2E (packaged, headless via xvfb)
         run: pnpm test:e2e:packaged --shard=${{ matrix.shard }}/${{ strategy.job-total }}
 
+      # Each failed attempt's error-context.md (the page at the failure), kept when a retry passed:
+      # a flaky attempt fails no shard, and the log shows only its assertion.
+      - name: Upload failed attempts
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: e2e-failed-attempts-shard-${{ matrix.shard }}
+          path: test-results/
+          if-no-files-found: ignore
+          retention-days: 7
+
       - name: Save embedder model cache
         if: matrix.shard == 1 && github.ref == 'refs/heads/main' && steps.embedder-cache.outputs.cache-hit != 'true'
         uses: actions/cache/save@v6
