@@ -90,6 +90,8 @@ export function useChapterDeleteConfirm({
 
   const open = useCallback(
     async (opening: string) => {
+      // A committed delete's resync leaves its stale card live, and a read of it refuses.
+      if (pendingRef.current) return
       openRequest.current += 1
       const request = openRequest.current
       const counted = generationStore.getSettleCount()

@@ -463,6 +463,41 @@ describe('useChapterDeleteConfirm: the removal', () => {
     expect(result.current.pending).toBe(false)
   })
 
+  it("ignores a Delete… press while a committed delete's resync runs", async () => {
+    const { result, loadPreview, remove, resync } = setup()
+    await openOn(result)
+    remove.mockRejectedValueOnce(
+      new DeltaReplayError('store sync failed', {
+        cause: new Error('stale store'),
+        actionId: 'act_delete',
+        stage: 'store-sync',
+      }),
+    )
+    const resyncing = deferred<unknown>()
+    resync.mockReturnValueOnce(resyncing.promise)
+    // The chapter is gone, so a read of it now refuses.
+    loadPreview.mockResolvedValue(refusal('not-found'))
+    let confirming!: Promise<void>
+    act(() => {
+      confirming = result.current.confirm('whole')
+    })
+    await waitFor(() => expect(resync).toHaveBeenCalledTimes(1))
+
+    await act(async () => {
+      await result.current.open('chap_2')
+    })
+
+    expect(loadPreview).toHaveBeenCalledTimes(1)
+    expect(result.current.target).toBeNull()
+    expect(toast.error).not.toHaveBeenCalled()
+    await act(async () => {
+      resyncing.resolve(undefined)
+      await confirming
+    })
+    expect(result.current.pending).toBe(false)
+    expect(toast.error).not.toHaveBeenCalled()
+  })
+
   it('closes, logs and toasts a removal that threw before it committed', async () => {
     const { result, remove, resync } = setup()
     await openOn(result)
