@@ -664,6 +664,14 @@ change amends the scope above.
   set's yield mode and the same `restorablePayload`, so a close update a
   later write replaced in every field counts nothing, and the count and
   the delete can't disagree.
+- **An open regenerate confirm that reads `immediate` shows a terminal
+  body (developer decision after review, Q18: B).** It replaces the
+  Scope's "`immediate` at render uses the cascade copy: the confirm is
+  already open": a pass committing as a ↻ tap's interrupt lands opens
+  the confirm on counts with one entry and no close, and "and everything
+  after it" is false of the newest reply. The body is
+  `reader:regenerateConfirm.terminalBody`, and the bullets, chapter lines
+  and irreversible line are the cascade kind's.
 - **The residue criterion split in two (developer decision after plan
   review).** A created lore row goes with every later delta on it, so
   one row can't show both the delete and the residue. The residue is

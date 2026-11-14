@@ -284,6 +284,9 @@ left out its rows, and the set the regenerate resolves now holds them.
 The regenerate then refuses `counts-changed` and
 the reader opens the regenerate confirm on the fresh counts, with no
 toast, since the ↻ tap has no open confirm for the toast to refer to.
+A confirm that opens or recounts to a reply with nothing after it and no
+close in range reads a terminal body, without `and everything after it`,
+`This discards entry <N>, then generates a new reply from your last action. The following are removed:`.
 
 **Confirm when the turn closed a chapter.** If a committed chapter
 close ends on this turn, as a manual close may, the regenerate reverses
