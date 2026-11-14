@@ -898,17 +898,17 @@ type LaterWriter = {
 const LATER_WRITERS: LaterWriter[] = [
   { writer: 'a later user_edit', source: 'user_edit', anchor: () => null },
   {
-    writer: 'a periodic_classifier delta anchored past the end entry',
+    writer: 'a pass anchored past the end entry',
     source: 'periodic_classifier',
-    anchor: (c) => c.fx.replyIds[3],
+    anchor: (c) => c.fx.replyIds[END_REPLY + 1],
   },
   {
-    writer: 'a per_turn_classifier fold write with a null anchor',
+    writer: 'a turn fold write, null anchor',
     source: 'per_turn_classifier',
     anchor: () => null,
   },
   {
-    writer: 'a pass anchored on the end entry and logged after the close',
+    writer: 'a pass anchored on the end entry',
     source: 'periodic_classifier',
     anchor: (c) => c.endEntryId,
   },
@@ -928,6 +928,7 @@ describe('later writes win over a whole delete (C13)', () => {
     })
 
     expect((await entityOf(c.fx, TOBIN.id))?.description).toBe(LATER_DESCRIPTION)
+    expect(await deltasOf(c.fx, c.actionId)).toEqual([])
     expect(await deltasOf(c.fx, 'act_later')).toHaveLength(1)
     expect((await worldRows(c.fx)).lore).toEqual([])
   })
@@ -990,6 +991,7 @@ describe('later writes win over a whole delete (C13)', () => {
     })
 
     expect(await retrievalCountOf(fx, awarenessId)).toBe(2)
+    expect(await deltasOf(fx, 'act_turn_bump')).toHaveLength(1)
   })
 
   // P under R; the close moves P to Q; a later pass moves it to S; the user deletes R. The ref
@@ -1001,7 +1003,7 @@ describe('later writes win over a whole delete (C13)', () => {
     await writeUnderClose(c, [placeUnder(fx.branchId, 'loc_pier', 'loc_quay', 'chapter_close')])
     await writeLater(fx, placeUnder(fx.branchId, 'loc_pier', 'loc_shrine', 'periodic_classifier'), {
       actionId: 'act_pass_later',
-      entryId: fx.replyIds[3],
+      entryId: fx.replyIds[END_REPLY + 1],
     })
     await writeLater(
       fx,
@@ -1018,6 +1020,7 @@ describe('later writes win over a whole delete (C13)', () => {
     })
 
     expect((await entityOf(fx, 'loc_pier'))?.state).toEqual({ parent_location_id: 'loc_shrine' })
+    expect(await deltasOf(fx, c.actionId)).toEqual([])
   })
 
   // The closure takes the user's edit with the row, as any machine create's later writes.
@@ -1054,6 +1057,7 @@ describe('later writes win over a whole delete (C13)', () => {
       status: 'ok',
     })
     expect((await entityOf(c.fx, TOBIN.id))?.description).toBe(LATER_DESCRIPTION)
+    expect(await deltasOf(c.fx, c.actionId)).toEqual([])
 
     expect(await undoLastAction(c.fx.branchId, c.fx.ctx)).toEqual({ status: 'ok' })
 
