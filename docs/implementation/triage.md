@@ -147,12 +147,6 @@ patch`, which 5.5a marks `restated`, so a close tool's write of it
   full-row compare can't hold for an embedded row (a reversal marks it
   stale), so every fixture row is one that was never embedded. Worth
   fixing before M8 writes thread translations. Raised in 5.5b's review.
-- **"Every history marks the user's turns" leaves three histories out.**
-  [`architecture.md`](../architecture.md#system-and-user-halves) names
-  the narrator's histories and the close's turns, but the
-  chapter-metadata call, its per-part call and the suggestion refresh
-  render through `macro_story_entry` and mark them too. Raised in 5.5b's
-  review; 5.8 added the per-part call.
 - **The close's count priming assumes the system half holds each turn's
   prose once.** `renderClosePrompt` / `primeCloseSystemCount`
   (`lib/pipeline/definitions/close-agent/turns.ts`) prime the system
