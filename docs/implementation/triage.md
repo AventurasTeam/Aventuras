@@ -261,12 +261,6 @@ patch`, which 5.5a marks `restated`, so a close tool's write of it
   records the limit
   ([`chapter-close.md → Tools and writes`](../memory/chapter-close.md#tools-and-writes)).
   Raised in 5.8's slice review, developer decision 2026-11-10.
-- **No retrieval test admits a happening through a seated chapter
-  range.** `run.test.ts`'s `makeQueryAll` returns every happening
-  whatever entry ids the query binds, so emptying the chapter-range
-  boost loop in `lib/retrieval/run.ts` keeps all its cases green,
-  including the one named for that admission. Raised in 5.9's Task 2
-  review.
 - **A folded stackable key can outgrow its schema bound.**
   `foldStackableKey` lowercases, and some letters lengthen when
   lowercased (`İ` becomes two code units), so a 40-character key can

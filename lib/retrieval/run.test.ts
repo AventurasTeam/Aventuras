@@ -181,6 +181,13 @@ function makeQueryAll(rows: Fixture): QueryAll & { mock: { calls: unknown[][] } 
     if (sql.includes('JOIN story_entries')) return rows.chapterRanges ?? []
     if (sql.includes('happening_awareness')) return rows.awareness ?? []
     if (sql.includes('FROM chapters')) return rows.chapters ?? []
+    // By what the statement binds, so an empty chapter-range loop admits nothing: rows are
+    // [id, title, description, common, occurredAt, stale].
+    if (sql.includes('FROM happenings') && sql.includes(' IN (')) {
+      const bound = new Set(params.slice(1))
+      const byEntry = sql.includes('occurred_at_entry_id IN')
+      return (rows.happenings ?? []).filter((row) => bound.has(byEntry ? row[4] : row[0]))
+    }
     if (sql.includes('FROM happenings')) return rows.happenings ?? []
     if (sql.includes('FROM threads')) return rows.threads ?? []
     if (sql.includes('FROM lore')) return rows.lore ?? []
