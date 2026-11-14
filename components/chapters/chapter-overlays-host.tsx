@@ -79,7 +79,7 @@ async function readReviewSources(branchId: string, chapterId: string): Promise<R
 }
 
 /**
- * C7's one root host: the review window, and the close modal's host (M5.10). A row press closes
+ * C7's one root host: the review window; the close modal joins it in M5.10. A row press closes
  * the window, then runs the current surface's guard, so it never bypasses a dirty pane.
  */
 export function ChapterOverlaysHost(): ReactElement | null {
@@ -179,7 +179,7 @@ function ReviewHost({ chapter }: { chapter: StoreChapter }): ReactElement {
 
   const press = useCallback(
     (href: string) => () => {
-      // A second press during the Sheet's exit finds the window already closed.
+      // Drops a second press made before the window unmounts.
       if (chapterOverlaysStore.getState().review == null) return
       // layout.md → Stacking: the window goes first, so the guard's dialog never sits over it.
       chapterOverlaysStore.closeReviewWindow()

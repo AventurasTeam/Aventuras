@@ -452,7 +452,7 @@ export const NoToolCalls: Story = {
   args: { review: { ...NOTHING, noToolCalls: true } },
   play: async () => {
     const dialog = await findWindow()
-    // Task 4 owns this copy; the play pins that the note renders, not its wording.
+    // Pins that the note renders, not its wording.
     expect(within(dialog).getByText(t('chapters:review.noToolCalls'))).toBeVisible()
     expect(within(dialog).queryByRole('heading', { name: 'Stopped early', level: 3 })).toBeNull()
     expect(within(dialog).queryByText('This close changed nothing.')).toBeNull()
