@@ -122,6 +122,7 @@ export type {
 export type { NavigationSnapshot } from './navigation/navigation'
 export type { OpenFailure, OpenFailureKind, StoriesSnapshot } from './stories/stories'
 export type { RecoveryReportSnapshot } from './ui/recovery-report'
+export { closeResultHolds, overlayChapterHolds } from './ui/chapter-overlays'
 export type {
   ChapterOverlaysState,
   CloseModalRequest,

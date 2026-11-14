@@ -1,6 +1,8 @@
 import { useStore } from 'zustand'
 import { createStore } from 'zustand/vanilla'
 
+import type { StoreChapter } from '../chapters/chapters'
+
 /** A focused route's leave guard and navigator, which an overlay's row press runs through (C7). */
 export type OverlaySurface = {
   guard: (proceed: () => void) => void
@@ -17,6 +19,27 @@ export type ChapterOverlaysState = {
   /** No reader yet: the close modal's host (M5.10). */
   closeModal: CloseModalRequest | null
   closeResult: CloseResult | null
+}
+
+type HeldChapter = Pick<StoreChapter, 'branchId' | 'hasCloseReport'>
+
+/** C7: an overlay's chapter stands while it holds a report on the open branch. */
+export function overlayChapterHolds<C extends HeldChapter>(
+  chapter: C | undefined,
+  openBranchId: string | null,
+): chapter is C {
+  return chapter != null && chapter.hasCloseReport && chapter.branchId === openBranchId
+}
+
+/** C7: a committed close's result holds while it is the open branch's and its chapter stands. */
+export function closeResultHolds(
+  result: CloseResult | null,
+  chapter: HeldChapter | undefined,
+  openBranchId: string | null,
+): boolean {
+  return (
+    result != null && result.branchId === openBranchId && overlayChapterHolds(chapter, openBranchId)
+  )
 }
 
 const INITIAL: ChapterOverlaysState = { review: null, closeModal: null, closeResult: null }

@@ -2,7 +2,12 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { resetAllStores } from '@/lib/stores'
 
-import { chapterOverlaysStore, type OverlaySurface } from './chapter-overlays'
+import {
+  chapterOverlaysStore,
+  closeResultHolds,
+  overlayChapterHolds,
+  type OverlaySurface,
+} from './chapter-overlays'
 
 type Guard = OverlaySurface['guard']
 
@@ -143,5 +148,26 @@ describe('chapterOverlaysStore', () => {
     resetAllStores()
     expect(chapterOverlaysStore.getState().review).toBeNull()
     expect(chapterOverlaysStore.currentSurface()).toBeNull()
+  })
+})
+
+describe('the overlays hold rule', () => {
+  const held = { branchId: 'br_1', hasCloseReport: true }
+  const result = { branchId: 'br_1', chapterId: 'chap_1', stoppedTasks: 0 }
+
+  it('holds a chapter with a report on the open branch, and nothing else', () => {
+    expect(overlayChapterHolds(held, 'br_1')).toBe(true)
+    expect(overlayChapterHolds(undefined, 'br_1')).toBe(false)
+    expect(overlayChapterHolds({ ...held, hasCloseReport: false }, 'br_1')).toBe(false)
+    expect(overlayChapterHolds(held, 'br_2')).toBe(false)
+    expect(overlayChapterHolds(held, null)).toBe(false)
+  })
+
+  it('holds a close result of the open branch whose chapter stands', () => {
+    expect(closeResultHolds(result, held, 'br_1')).toBe(true)
+    expect(closeResultHolds(null, held, 'br_1')).toBe(false)
+    expect(closeResultHolds({ ...result, branchId: 'br_2' }, held, 'br_1')).toBe(false)
+    expect(closeResultHolds(result, { ...held, hasCloseReport: false }, 'br_1')).toBe(false)
+    expect(closeResultHolds(result, undefined, 'br_1')).toBe(false)
   })
 })

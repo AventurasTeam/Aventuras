@@ -20,12 +20,14 @@ import { t } from '@/lib/i18n'
 import {
   chapterOverlaysStore,
   chaptersStore,
+  closeResultHolds,
   currentStoryStore,
   entitiesStore,
   generationStore,
   happeningAwarenessStore,
   happeningsStore,
   loreStore,
+  overlayChapterHolds,
   threadsStore,
   type StoreChapter,
 } from '@/lib/stores'
@@ -38,15 +40,6 @@ type ReviewSources = {
   deltas: readonly Delta[]
   /** Each entity the report names, by its kind when the window read it: live, else its delete's. */
   kinds: ReadonlyMap<string, EntityKind>
-}
-
-/** C7: an overlay's chapter stands while it holds a report on the open branch. */
-function overlayChapter(
-  chapter: StoreChapter | undefined,
-  openBranchId: string | null,
-): StoreChapter | null {
-  if (chapter == null || !chapter.hasCloseReport || chapter.branchId !== openBranchId) return null
-  return chapter
 }
 
 function reportEntityIds(report: CloseReport): string[] {
@@ -93,14 +86,16 @@ export function ChapterOverlaysHost(): ReactElement | null {
   const review = chapterOverlaysStore.useOverlays((s) => s.review)
   const closeResult = chapterOverlaysStore.useOverlays((s) => s.closeResult)
   const openBranchId = currentStoryStore.useCurrentStory((open) => open?.branchId ?? null)
-  const reviewChapter = chaptersStore.useChapters((rows) =>
-    review == null ? null : overlayChapter(rows.get(review.chapterId), openBranchId),
-  )
-  const resultHolds = chaptersStore.useChapters(
-    (rows) =>
-      closeResult != null &&
-      closeResult.branchId === openBranchId &&
-      overlayChapter(rows.get(closeResult.chapterId), openBranchId) != null,
+  const reviewChapter = chaptersStore.useChapters((rows) => {
+    const chapter = review == null ? undefined : rows.get(review.chapterId)
+    return overlayChapterHolds(chapter, openBranchId) ? chapter : null
+  })
+  const resultHolds = chaptersStore.useChapters((rows) =>
+    closeResultHolds(
+      closeResult,
+      closeResult == null ? undefined : rows.get(closeResult.chapterId),
+      openBranchId,
+    ),
   )
 
   // Pruned, not hidden: a redo restores the same chapter id, and nothing may reopen by itself.

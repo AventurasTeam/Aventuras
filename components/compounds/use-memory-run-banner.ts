@@ -5,6 +5,7 @@ import { CHAPTER_CLOSE_KIND, CLOSE_PHASE } from '@/lib/pipeline'
 import {
   chapterOverlaysStore,
   chaptersStore,
+  closeResultHolds,
   currentStoryStore,
   generationStore,
   interruptMemoryRuns,
@@ -100,9 +101,8 @@ export function useMemoryRunBanner(): MemoryRunBannerState | null {
     return { kind: 'run', label, onCancel: () => void interruptMemoryRuns(runBranchId) }
   }
 
-  if (result == null || result.branchId !== branchId) return null
-  if (chapter == null || !chapter.hasCloseReport || chapter.branchId !== branchId) return null
-  if (chapter.id !== latestChapter?.id) return null
+  if (result == null || !closeResultHolds(result, chapter, branchId)) return null
+  if (chapter == null || chapter.id !== latestChapter?.id) return null
   const { chapterId, stoppedTasks } = result
   const clear = () => chapterOverlaysStore.clearCloseResult()
   return {
