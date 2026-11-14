@@ -83,11 +83,7 @@ import {
   type RunTally,
   type StepAttempt,
 } from './close-probe-bar'
-import {
-  installProbeBridges,
-  probeEmbedderBridge,
-  type ProbeEmbedderBridge,
-} from './close-probe-embedder'
+import { installProbeBridges, probeEmbedderBridge } from './close-probe-embedder'
 import { rejudgeSaved } from './close-probe-rejudge'
 import {
   applyDatasetOverlay,
@@ -142,23 +138,8 @@ function resolveEmbeddersRoot(): string {
   return join(resolveDevSlot().dataDir, 'embedders')
 }
 
-// What the range embed did on the current run: texts embedded, and its clusters once it completed.
-const rangeEmbed: { texts: number; clusters: readonly (readonly string[])[] | null } = {
-  texts: 0,
-  clusters: null,
-}
-
-// Only the range embed embeds during a close: retrieval doesn't run, and reversal never embeds.
-function countingBridge(bridge: ProbeEmbedderBridge): ProbeEmbedderBridge {
-  return {
-    ...bridge,
-    embed: async (args) => {
-      const result = await bridge.embed(args)
-      if (result.ok) rangeEmbed.texts += args.texts.length
-      return result
-    },
-  }
-}
+// The range embed's clusters on the current run, once it completed; its counts are its own log entry.
+let rangeClusters: readonly (readonly string[])[] | null = null
 
 const measuredEmbedStep: CodeStep = {
   name: embedRangeStep.name,
@@ -166,8 +147,7 @@ const measuredEmbedStep: CodeStep = {
     ctx,
   ): AsyncGenerator<PhaseEmittedEvent, PhaseResult, GroupOutcome | undefined> {
     const result = yield* embedRangeStep.run(ctx)
-    if (result.status === 'completed')
-      rangeEmbed.clusters = closeClustersOf(ctx.phase.intermediates)
+    if (result.status === 'completed') rangeClusters = closeClustersOf(ctx.phase.intermediates)
     return result
   },
 }
@@ -188,15 +168,16 @@ function measuredSlots(): CloseAgentSlots {
 }
 
 function printRangeEmbed(k: number): void {
-  const { texts, clusters } = rangeEmbed
-  if (clusters === null) {
-    console.log(`[probe:close]   run ${k} range embed: did not complete (${texts} texts embedded)`)
+  const counts = capture.log.findLast(({ entry }) => entry.kind === 'memory.close_range_embed')
+  if (counts === undefined || rangeClusters === null) {
+    console.log(`[probe:close]   run ${k} range embed: did not complete`)
     return
   }
-  const sizes = clusters.map((cluster) => cluster.length)
+  const { embedded, happenings, clusters } = counts.entry.fields
+  const sizes = rangeClusters.map((cluster) => cluster.length)
   const rows = sizes.length === 0 ? '' : ` of ${sizes.join(', ')} rows`
   console.log(
-    `[probe:close]   run ${k} range embed: ${texts} happenings embedded, ${sizes.length} clusters${rows}`,
+    `[probe:close]   run ${k} range embed: ${String(embedded)} of ${String(happenings)} range happenings embedded, ${String(clusters)} clusters${rows}`,
   )
 }
 
@@ -606,8 +587,7 @@ async function probeRun(
   capture.retries = []
   capture.attempts = []
   capture.log = []
-  rangeEmbed.texts = 0
-  rangeEmbed.clusters = null
+  rangeClusters = null
   clearBuffers()
   const unsubscribe = [
     pipelineEventBus.subscribe('phase_start', (event) => {
@@ -632,7 +612,7 @@ async function probeRun(
     copyDatabase(source, copy)
     const opened = await openTestDb(copy)
     sqlite = opened.sqlite
-    uninstall = installProbeBridges(countingBridge(probeEmbedderBridge(embedders)), opened)
+    uninstall = installProbeBridges(probeEmbedderBridge(embedders), opened)
     clearLoreMgmtOverride(opened.sqlite)
     const ctx: DbCtx = { db: opened.db, runInTransaction: opened.runInTransaction }
     if (capture.dir !== null) mkdirSync(capture.dir, { recursive: true })
@@ -740,6 +720,10 @@ async function main(): Promise<void> {
   if (!existsSync(source)) throw new Error(`[probe:close] no database at ${source}`)
   refuseUsedOutput()
   const embedders = resolveEmbeddersRoot()
+  if (!STAND_IN && !existsSync(embedders))
+    throw new Error(
+      `[probe:close] no embedders folder at ${embedders}: the range embed loads the story's local model from it; set PROBE_EMBEDDERS_DIR to a folder that holds it`,
+    )
   console.log(`[probe:close] embedders ${embedders}`)
   stopOn('SIGINT', 130)
   stopOn('SIGTERM', 143)

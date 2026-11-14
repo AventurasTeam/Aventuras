@@ -114,6 +114,44 @@ describe('probeEmbedderBridge', () => {
     expect(await pending).toMatchObject({ ok: true, vectors: [[0.5, 0.25]] })
   })
 
+  it('cancels an embed issued in the same tick, before the embed first yields', async () => {
+    __setPipelineFactoryForTest(async () => stubPipeline(fixedVectors))
+    const bridge = probeEmbedderBridge(ROOT)
+
+    const pending = bridge.embed({ modelId: MODEL, texts: ['a'], requestId: 'req-1' })
+    void bridge.cancelEmbed({ requestId: 'req-1' })
+
+    expect(await pending).toEqual({
+      ok: false,
+      error: { kind: 'cancelled', message: 'embed cancelled' },
+    })
+  })
+
+  it('keeps a reused request id cancellable after the first embed on it finishes', async () => {
+    const runs: { release: () => void }[] = []
+    __setPipelineFactoryForTest(async () =>
+      stubPipeline(async (texts) => {
+        await new Promise<void>((release) => runs.push({ release }))
+        return fixedVectors(texts)
+      }),
+    )
+    const bridge = probeEmbedderBridge(ROOT)
+
+    const first = bridge.embed({ modelId: MODEL, texts: ['a'], requestId: 'req-1' })
+    await vi.waitFor(() => expect(runs).toHaveLength(1))
+    const second = bridge.embed({ modelId: MODEL, texts: ['b'], requestId: 'req-1' })
+    await vi.waitFor(() => expect(runs).toHaveLength(2))
+    runs[0]?.release()
+    await first
+    await bridge.cancelEmbed({ requestId: 'req-1' })
+    runs[1]?.release()
+
+    expect(await second).toEqual({
+      ok: false,
+      error: { kind: 'cancelled', message: 'embed cancelled' },
+    })
+  })
+
   it("counts tokens with the model's own tokenizer", async () => {
     const dirs: string[] = []
     __setTokenizerFactoryForTest(async (modelDir) => {
