@@ -207,7 +207,7 @@ describe('normalizeStackablesStep', () => {
   type RunLog = {
     rows: number
     skippedProtected: number
-    skippedBound: number
+    skippedUnsafe: number
     status: 'ok' | 'rejected' | 'none'
   }
   const runLogged = (fields: RunLog) => ['memory.close_stackables', fields, { actionId: ACTION_ID }]
@@ -394,7 +394,7 @@ describe('normalizeStackablesStep', () => {
     expect(groups).toEqual([])
     expect(await stackablesOf(f, WREN)).toEqual({ Gold: 6, gold: 3 })
     expect(runLog()).toEqual([
-      runLogged({ rows: 0, skippedProtected: 1, skippedBound: 0, status: 'none' }),
+      runLogged({ rows: 0, skippedProtected: 1, skippedUnsafe: 0, status: 'none' }),
     ])
   })
 
@@ -434,30 +434,47 @@ describe('normalizeStackablesStep', () => {
     expect(await stackablesOf(f, WREN)).toEqual(stored)
   })
 
-  it('keeps a key spelled __proto__ as an own key beside the keys it folds', async () => {
-    await seedCharacter(f, WREN, 'Wren')
-    await f.ctx.db
-      .update(entities)
-      .set({
-        state: {
-          ...emptyEntityState('character'),
-          stackables: JSON.parse('{"__proto__":3,"Gold":1,"gold":1}') as Record<string, number>,
+  it.each([
+    ['before and after folding', '{"__proto__":1,"__PROTO__":2}'],
+    ['once folded', '{"__PROTO__":2}'],
+    ['before folding only', '{"__proto__":0,"Gold":1}'],
+    ['beside keys that fold', '{"__proto__":3,"Gold":1,"gold":1}'],
+  ])(
+    'leaves a record holding a __proto__ key %s as stored, and CTRL-Z leaves it so',
+    async (_, raw) => {
+      await seedCharacter(f, WREN, 'Wren')
+      await seedCharacter(f, MARA, 'Mara', { Arrows: 1, arrows: 2 })
+      await f.ctx.db
+        .update(entities)
+        .set({
+          state: {
+            ...emptyEntityState('character'),
+            stackables: JSON.parse(raw) as Record<string, number>,
+          },
+        })
+        .where(eq(entities.id, WREN))
+      const storedEntries = Object.entries(JSON.parse(raw) as Record<string, number>)
+      const wrenEntries = async () =>
+        Object.entries((await stackablesOf(f, WREN)) as Record<string, number>)
+      const runLog = spyRunLog()
+
+      const { groups } = await drain(phaseFor(f), f)
+
+      expect(groups.flatMap((group) => group.actions)).toEqual([
+        {
+          kind: 'updateEntityStackables',
+          source: 'chapter_close',
+          payload: { branchId: f.branchId, id: MARA, stackables: { arrows: 3 } },
         },
-      })
-      .where(eq(entities.id, WREN))
-
-    const { groups } = await drain(phaseFor(f), f)
-
-    const written = groups.flatMap((group) => group.actions)
-    expect(written).toHaveLength(1)
-    const action = written[0]
-    if (action?.kind !== 'updateEntityStackables') throw new Error('expected a stackables write')
-    expect(Object.hasOwn(action.payload.stackables, '__proto__')).toBe(true)
-    expect(Object.entries(action.payload.stackables).sort()).toEqual([
-      ['__proto__', 3],
-      ['gold', 2],
-    ])
-  })
+      ])
+      expect(await wrenEntries()).toEqual(storedEntries)
+      expect(runLog()).toEqual([
+        runLogged({ rows: 1, skippedProtected: 0, skippedUnsafe: 1, status: 'ok' }),
+      ])
+      expect(await reverseReplayDeltas(ACTION_ID, f.ctx)).toBe(1)
+      expect(await wrenEntries()).toEqual(storedEntries)
+    },
+  )
 
   it("leaves a record alone when its folded key would pass the schema's bound", async () => {
     const long = 'İ'.repeat(40)
@@ -485,7 +502,7 @@ describe('normalizeStackablesStep', () => {
 
     expect(groups).toEqual([])
     expect(runLog()).toEqual([
-      runLogged({ rows: 0, skippedProtected: 0, skippedBound: 1, status: 'none' }),
+      runLogged({ rows: 0, skippedProtected: 0, skippedUnsafe: 1, status: 'none' }),
     ])
   })
 
@@ -500,7 +517,7 @@ describe('normalizeStackablesStep', () => {
 
     expect(await stackablesOf(f, MARA)).toEqual({ arrows: 3 })
     expect(runLog()).toEqual([
-      runLogged({ rows: 1, skippedProtected: 1, skippedBound: 1, status: 'ok' }),
+      runLogged({ rows: 1, skippedProtected: 1, skippedUnsafe: 1, status: 'ok' }),
     ])
   })
 
@@ -575,7 +592,7 @@ describe('normalizeStackablesStep', () => {
     })
     expect(await stackablesOf(f, WREN)).toEqual({ Gold: 5, gold: 3 })
     expect(runLog()).toEqual([
-      runLogged({ rows: 1, skippedProtected: 0, skippedBound: 0, status: 'rejected' }),
+      runLogged({ rows: 1, skippedProtected: 0, skippedUnsafe: 0, status: 'rejected' }),
     ])
   })
 

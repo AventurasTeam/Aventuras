@@ -27,6 +27,15 @@ function storedStackables(state: unknown): Record<string, number> | undefined {
 // against it: the row would land, then every later full-state write for the character is refused.
 const stackablesSchema = entityStateSchemaForKind('character').shape.stackables
 
+// An undo can't restore an own `__proto__` key, so a record holding one before or after is left.
+function safeToWrite(
+  before: Record<string, number> | undefined,
+  next: Record<string, number>,
+): boolean {
+  if (Object.hasOwn(before ?? {}, '__proto__') || Object.hasOwn(next, '__proto__')) return false
+  return stackablesSchema.safeParse(next).success
+}
+
 /**
  * memory/chapter-close.md → 3c: every character's stackables folded to one spelling per fungible,
  * as one group anchored on E. 3c cites no turn, so E's prose is its anchor: a record the user or a
@@ -50,14 +59,14 @@ async function* normalizeRun(
     return next === undefined || sameStackables(stored.get(id), next) ? [] : [{ id, next }]
   })
   if (folds.length === 0) return { status: 'completed' }
-  const changed = folds.filter(({ next }) => stackablesSchema.safeParse(next).success)
+  const changed = folds.filter(({ id, next }) => safeToWrite(stored.get(id), next))
   const logRun = (rows: number, status: GroupOutcome['status'] | 'none') =>
     logger.debug(
       'memory.close_stackables',
       {
         rows,
         skippedProtected: changed.length - rows,
-        skippedBound: folds.length - changed.length,
+        skippedUnsafe: folds.length - changed.length,
         status,
       },
       { actionId: ctx.phase.actionId },
