@@ -5,6 +5,7 @@ import {
   applyDeltaAction,
   applyDeltaActionGroupWithOutcomes,
 } from '@/lib/actions/delta/apply-delta-action'
+import { reverseReplayDeltas } from '@/lib/actions/delta/reverse-replay'
 import { updateStoryEntryContent } from '@/lib/actions/story-entries/operational'
 import type { GroupOutcome, PipelineAction } from '@/lib/actions/types'
 import type { ResolveModelConfig } from '@/lib/ai'
@@ -398,6 +399,19 @@ describe('normalizeStackablesStep', () => {
 
     expect(result).toEqual({ status: 'completed' })
     expect(groups).toEqual([])
+  })
+
+  it.each<{ stored: Record<string, number>; folded: Record<string, number> }>([
+    { stored: { Constructor: 1 }, folded: { constructor: 1 } },
+    { stored: { ToString: 2, gold: 1 }, folded: { tostring: 2, gold: 1 } },
+  ])('reverses the fold of $stored back to exactly what was stored', async ({ stored, folded }) => {
+    await seedCharacter(f, WREN, 'Wren', stored)
+
+    await drain(phaseFor(f), f)
+    expect(await stackablesOf(f, WREN)).toEqual(folded)
+
+    expect(await reverseReplayDeltas(ACTION_ID, f.ctx)).toBe(1)
+    expect(await stackablesOf(f, WREN)).toEqual(stored)
   })
 
   it('keeps a key spelled __proto__ as an own key beside the keys it folds', async () => {

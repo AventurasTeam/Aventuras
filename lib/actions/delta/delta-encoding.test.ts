@@ -102,6 +102,48 @@ describe('computeUndoPayload + applyUndoPayload', () => {
   })
 })
 
+// Payloads travel as JSON through the deltas table, which drops a function value.
+const viaJson = (value: unknown): Record<string, unknown> => JSON.parse(JSON.stringify(value))
+
+describe('record keys named like Object.prototype members', () => {
+  it('marks an added constructor or toString key for delete, and undo takes it away', () => {
+    const cur = { name: 'k', stack: { gold: 1 } }
+    const next = { name: 'k', stack: { gold: 1, constructor: 1, toString: 2 } }
+
+    const undo = viaJson(computeUndoPayload(fixture, cur, next))
+
+    expect(undo).toEqual({ stack: { constructor: null, toString: null } })
+    expect(applyUndoPayload(fixture, next, undo)).toEqual(cur)
+  })
+
+  it('encodes an own __proto__ key: an added one marked for delete, a changed one its prior count', () => {
+    const own = (count: number) => JSON.parse(`{"__proto__":${count}}`) as Record<string, number>
+
+    const added = computeUndoPayload(
+      fixture,
+      { name: 'k', stack: {} },
+      { name: 'k', stack: own(2) },
+    )
+    const changed = computeUndoPayload(
+      fixture,
+      { name: 'k', stack: own(1) },
+      { name: 'k', stack: own(3) },
+    )
+
+    expect(JSON.stringify(added)).toBe('{"stack":{"__proto__":null}}')
+    expect(JSON.stringify(changed)).toBe('{"stack":{"__proto__":1}}')
+  })
+
+  it('restores a removed __proto__ key whose value reads like the inherited prototype', () => {
+    const vars = z.object({ vars: z.record(z.string(), z.unknown()) })
+    const cur = { vars: JSON.parse('{"__proto__":{}}') as Record<string, unknown> }
+
+    const undo = computeUndoPayload(vars, cur, { vars: {} })
+
+    expect(JSON.stringify(undo)).toBe('{"vars":{"__proto__":{}}}')
+  })
+})
+
 // The real entry-metadata schema rather than a fixture: stateReport is the first
 // nested optional object on a delta-logged column, and the scene editor's write
 // depends on it staying out of a payload it never touched.

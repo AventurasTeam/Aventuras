@@ -97,13 +97,16 @@ function encodeField(schema: ZodType, cur: unknown, nxt: unknown): unknown {
   if (node.kind === 'record') {
     const c = (cur ?? {}) as Record<string, unknown>
     const n = (nxt ?? {}) as Record<string, unknown>
-    const sub: Record<string, unknown> = {}
+    // Own keys only, set by fromEntries: a key named `constructor` or `__proto__` is user data.
+    const sub: [string, unknown][] = []
     for (const k of new Set([...Object.keys(c), ...Object.keys(n)])) {
-      if (!(k in c) && k in n)
-        sub[k] = null // added -> delete on undo
-      else if (k in c && !deepEqual(c[k], n[k])) sub[k] = c[k] // changed/removed -> restore
+      const was = Object.hasOwn(c, k) ? c[k] : ABSENT
+      const now = Object.hasOwn(n, k) ? n[k] : ABSENT
+      if (was === ABSENT)
+        sub.push([k, null]) // added -> delete on undo
+      else if (!deepEqual(was, now)) sub.push([k, was]) // changed/removed -> restore
     }
-    return Object.keys(sub).length ? sub : NOCHANGE
+    return sub.length ? Object.fromEntries(sub) : NOCHANGE
   }
 
   if (node.kind === 'object') {
