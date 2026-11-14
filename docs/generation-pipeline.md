@@ -783,7 +783,12 @@ async function consumePhase(
   while (true) {
     const next = await gen.next(outcome)
     if (next.done) return next.value
-    outcome = await handleEvent(next.value, run)
+    try {
+      outcome = await handleEvent(next.value, run)
+    } catch (error) {
+      await gen.return({ status: 'aborted' }).catch(() => undefined) // the phase's finally runs
+      throw error
+    }
   }
 }
 ```

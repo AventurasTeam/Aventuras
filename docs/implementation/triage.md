@@ -86,11 +86,6 @@ slice-planning gate forces its resolution before that slice is planned.
   ([Parallel-group event coordination](../generation-pipeline.md#parallel-group-event-coordination)).
   Shown by probe on both write paths in 5.5a's review; latent, since no
   production pipeline declares a parallel group.
-- **`consumePhase` never closes a phase whose event throws.** When
-  `handleEvent` throws, the generator gets no `return()`, so a phase's
-  `finally` around a `yield` never runs. No phase has one today
-  (`chapter-close-metadata-call.ts`, `periodic-classifier.ts` and
-  `per-turn-retrieval.ts` checked). Raised in 5.5a's review.
 - **The two write paths disagree on what a bus event means.** A
   `delta_emitted` noop or refusal never reaches the bus, while a
   `delta_group_emitted` reaches it whether the group landed, no-oped or
