@@ -9,41 +9,30 @@ import {
 } from './regenerate-gate'
 
 describe('classifyRegenerateGate', () => {
-  it('terminal reply (only itself removed) fires without confirm', () => {
-    expect(
-      classifyRegenerateGate({
-        entries: 1,
-        chapters: 0,
-        worldStateChanges: 4,
-        closeWrites: 0,
-        reopenedChapter: null,
-        removedChapters: [],
-      }),
-    ).toBe('immediate')
+  it('fires a terminal reply with no close in range without a confirm', () => {
+    expect(classifyRegenerateGate({ entries: 1, chapters: 0, closeWrites: 0 })).toBe('immediate')
   })
-  it('older reply (cascade removes later entries) requires the cascade confirm', () => {
-    expect(
-      classifyRegenerateGate({
-        entries: 3,
-        chapters: 0,
-        worldStateChanges: 7,
-        closeWrites: 0,
-        reopenedChapter: null,
-        removedChapters: [],
-      }),
-    ).toBe('cascade-confirm')
+
+  it('confirms a reply a committed close ends on', () => {
+    expect(classifyRegenerateGate({ entries: 1, chapters: 1, closeWrites: 0 })).toBe(
+      'chapter-close-confirm',
+    )
   })
-  it('a chapter-close in the window routes to the chapter-close arm', () => {
-    expect(
-      classifyRegenerateGate({
-        entries: 1,
-        chapters: 1,
-        worldStateChanges: 9,
-        closeWrites: 0,
-        reopenedChapter: 2,
-        removedChapters: [],
-      }),
-    ).toBe('chapter-close-confirm')
+
+  // A divider removed with its close's work kept: no chapter goes, but that work does.
+  it("confirms a reply holding a removed chapter's kept work", () => {
+    expect(classifyRegenerateGate({ entries: 1, chapters: 0, closeWrites: 4 })).toBe(
+      'chapter-close-confirm',
+    )
+  })
+
+  it('takes the cascade confirm for an older reply, a close in its cascade or not', () => {
+    expect(classifyRegenerateGate({ entries: 3, chapters: 1, closeWrites: 0 })).toBe(
+      'cascade-confirm',
+    )
+    expect(classifyRegenerateGate({ entries: 3, chapters: 0, closeWrites: 0 })).toBe(
+      'cascade-confirm',
+    )
   })
 })
 

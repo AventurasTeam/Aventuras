@@ -28,10 +28,13 @@ export async function loadRegenerateCountsIfCurrent(
   return canContinueRegeneratePreflight(readPreflight()) ? counts : null
 }
 
-// counts.entries === 1 ⇔ the reply is terminal: system entries and the opening
-// carry no create deltas, so only later non-system entries can raise the count.
-// No chapter-close copy yet (M5.12): the route opens the cascade confirm for it.
-export function classifyRegenerateGate(counts: RollbackCounts): RegenerateGate {
-  if (counts.chapters > 0) return 'chapter-close-confirm'
-  return counts.entries === 1 ? 'immediate' : 'cascade-confirm'
+// counts.entries > 1 ⇔ the reply isn't terminal: system entries and the opening carry no create
+// deltas, so only later non-system entries raise the count. With one entry in range, a chapter in
+// range ends on that reply (C10).
+export function classifyRegenerateGate(
+  counts: Pick<RollbackCounts, 'entries' | 'chapters' | 'closeWrites'>,
+): RegenerateGate {
+  if (counts.entries > 1) return 'cascade-confirm'
+  if (counts.chapters > 0 || counts.closeWrites > 0) return 'chapter-close-confirm'
+  return 'immediate'
 }

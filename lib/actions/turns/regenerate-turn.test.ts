@@ -4,6 +4,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { idleStatus, PERIODIC_CLASSIFIER_KIND } from '@/lib/classifier'
 import {
   branches,
+  chapters,
   characterRelationships,
   deltas,
   entities,
@@ -16,6 +17,7 @@ import {
 } from '@/lib/db'
 import { logger } from '@/lib/diagnostics'
 import {
+  CHAPTER_CLOSE_KIND,
   CLASSIFIER_HELD,
   isClassifierHeld,
   PER_TURN_KIND,
@@ -34,6 +36,7 @@ import {
 } from '@/lib/stores'
 
 import { branchEntries, openStory, sseFetch, WORKING_CONFIG } from './__tests__/fixtures'
+import { registerStandInClose } from './__tests__/stand-in-close'
 import {
   failReversalsOf,
   registerStandInPass,
@@ -1176,5 +1179,81 @@ describe('regenerateTurn', () => {
     expect(expectRan(regen.result).outcome).toBe('failed')
     expect(regen.converged).toBe(true)
     expect(entriesStore.getById('e_u2')).toBeUndefined()
+  })
+
+  // The counts a ↻ tap reads beside a running close leave its rows out (rollback-confirm.md →
+  // Counts), so the interrupt's reversal of them can't refuse the sweep.
+  it('sweeps under a running close on the counts read beside it', async () => {
+    const { ctx, db } = await makeHarness()
+    await seedTwoTurnsWithCatchUp(ctx)
+    await openStory(db, 's1', 'b1')
+    await hydrateAppSettings(async () => WORKING_CONFIG)
+    const close = registerStandInClose()
+    // Ends the close on the newest reply, so its row and stamps sit in that reply's window.
+    generationStore.setPendingClose('b1', { endEntryId: 'e_r2' })
+    const closing = startPipeline(CHAPTER_CLOSE_KIND, ctx)
+    await close.nextHeld()
+    expect(await db.select().from(chapters)).toHaveLength(1)
+
+    const shown = await shownCounts(ctx, 'e_r2')
+    expect(shown).toEqual({
+      entries: 1,
+      chapters: 0,
+      worldStateChanges: 1,
+      closeWrites: 0,
+      reopenedChapter: null,
+      removedChapters: [],
+    })
+
+    const regen = await regenerateTurn({ storyId: 's1', branchId: 'b1' }, 'e_r2', ctx, {
+      expectedCounts: shown,
+    })
+
+    expect(regen.status).toBe('ran')
+    if (regen.status !== 'ran') return
+    expect(expectRan(regen.result).outcome).toBe('completed')
+    expect(await closing.origin).toMatchObject({ outcome: 'aborted' })
+    expect(await db.select().from(chapters)).toEqual([])
+  })
+
+  // A one-phase run whose phase returned commits whatever the abort (orchestrator commitRun), so
+  // the interrupt can't reverse this close: the set the sweep resolves gains it.
+  it('refuses with the fresh counts when a close commits as the interrupt lands', async () => {
+    const { ctx, db } = await makeHarness()
+    await seedTwoTurnsWithCatchUp(ctx)
+    await openStory(db, 's1', 'b1')
+    await hydrateAppSettings(async () => WORKING_CONFIG)
+    const close = registerStandInClose()
+    generationStore.setPendingClose('b1', { endEntryId: 'e_r2' })
+    const closing = startPipeline(CHAPTER_CLOSE_KIND, ctx)
+    const held = await close.nextHeld()
+    // What the tap read: one entry and no close, so it fired with no confirm.
+    const shown = await shownCounts(ctx, 'e_r2')
+    expect(shown).toMatchObject({ entries: 1, chapters: 0, closeWrites: 0 })
+
+    held.finish('completed')
+    const regen = await regenerateTurn({ storyId: 's1', branchId: 'b1' }, 'e_r2', ctx, {
+      expectedCounts: shown,
+    })
+
+    expect(regen).toEqual({
+      status: 'rejected',
+      code: 'counts-changed',
+      reason: expect.any(String),
+      // The chapter row and its five stamps; it starts at the opening, below the target.
+      counts: {
+        entries: 1,
+        chapters: 1,
+        worldStateChanges: 1,
+        closeWrites: 6,
+        reopenedChapter: 1,
+        removedChapters: [],
+      },
+    })
+    expect(await closing.origin).toMatchObject({ outcome: 'completed' })
+    expect(await db.select().from(chapters)).toHaveLength(1)
+    expect(entriesStore.getById('e_r2')).toBeDefined()
+    expect(generationStore.getTxState().pendingTurns.size).toBe(0)
+    expect(generationStore.isUserEditBlocked()).toBe(false)
   })
 })

@@ -72,3 +72,16 @@ export function reopenAfterRefusal(args: {
   if (!args.stillOnBranch || args.current != null) return args.current
   return { ...args.confirmed, counts: countsAfterRefusal(args.confirmed.counts, args.refusal) }
 }
+
+/** The confirm an immediate regenerate opens when its commit refuses on fresh counts. */
+export function confirmAfterImmediateRefusal(args: {
+  current: ConfirmState | null
+  refusal: RegenerateRefusal
+  opened: Pick<ConfirmState, 'targetId' | 'targetNumber' | 'countedAtSettle'>
+  stillOnBranch: boolean
+}): ConfirmState | null {
+  const { current, refusal, opened, stillOnBranch } = args
+  if (!stillOnBranch || current != null) return current
+  if (refusal.code !== STORY_ENTRY_REJECTION.countsChanged) return current
+  return { mode: 'regenerate', ...opened, counts: refusal.counts }
+}

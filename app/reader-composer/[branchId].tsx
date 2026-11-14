@@ -11,6 +11,7 @@ import { chapterBreaksOf } from '@/components/reader/chapter-breaks'
 import { Composer, type ComposerHandle } from '@/components/reader/composer'
 import { isDraftEmpty, planSubmissionHandback } from '@/components/reader/composer-draft'
 import {
+  confirmAfterImmediateRefusal,
   regenerateRefusalCopy,
   reopenAfterRefusal,
   rollbackRefusalCopy,
@@ -122,6 +123,7 @@ import {
   runClassifierNow,
   runOwedClose,
   sameRollbackCounts,
+  STORY_ENTRY_REJECTION,
   submitTurn,
   undoLastAction,
   type UndoRejectionCode,
@@ -867,11 +869,13 @@ export default function ReaderComposerRoute() {
   )
 
   // Guarded here, not at the callers: the immediate tap and the confirm both funnel through it.
-  // Resolves to the action's refusal, which a confirmed regenerate re-opens its confirm on.
+  // Resolves to the action's refusal: a confirmed regenerate re-opens its confirm on it, and a
+  // tap's counts-changed opens one.
   const runRegenerate = useCallback(
     async (
       targetId: string,
-      expectedCounts?: RollbackCounts,
+      expectedCounts: RollbackCounts,
+      origin: 'tap' | 'confirm',
     ): Promise<RegenerateRefusal | null> => {
       if (!storyId || !hydrationSucceeded) return null
       if (!beginDispatch()) {
@@ -931,7 +935,9 @@ export default function ReaderComposerRoute() {
           // Every rejection fires before the first sweep, so nothing else moved
           // and putting the failure entry back is an exact undo of the drop.
           await restoreSystemTail(dropped)
-          toast.error(t(regenerateRefusalCopy(regen)))
+          // A tap had no confirm open for "the counts changed" to refer to: its caller opens one.
+          if (origin === 'confirm' || regen.code !== STORY_ENTRY_REJECTION.countsChanged)
+            toast.error(t(regenerateRefusalCopy(regen)))
           return regen
         }
         const { result } = regen
@@ -1250,7 +1256,7 @@ export default function ReaderComposerRoute() {
     if (confirmed.mode === 'regenerate') {
       // Close before the stream starts; the streaming card takes over the surface.
       setRollback(null)
-      const refusal = await runRegenerate(confirmed.targetId, confirmed.counts)
+      const refusal = await runRegenerate(confirmed.targetId, confirmed.counts, 'confirm')
       if (refusal != null) reopenConfirm(confirmed, refusal)
       return
     }
@@ -1302,10 +1308,24 @@ export default function ReaderComposerRoute() {
         toast.error(t('reader:regenerateFailed'))
         return
       }
+      const targetNumber = entriesStore.getById(entryId)?.position ?? 0
       if (classifyRegenerateGate(counts) === 'immediate') {
         // The confirm path runs this through runAction; the ↻ tap fires it unhandled.
         try {
-          await runRegenerate(entryId)
+          // With the counts, a close committing as the interrupt lands is refused, not reversed
+          // unconfirmed, and its fresh counts open the confirm.
+          const refusal = await runRegenerate(entryId, counts, 'tap')
+          if (refusal != null) {
+            const stillOnBranch = branchUnchanged(startedBranchId)
+            setRollback((current) =>
+              confirmAfterImmediateRefusal({
+                current,
+                refusal,
+                opened: { targetId: entryId, targetNumber, countedAtSettle },
+                stillOnBranch,
+              }),
+            )
+          }
         } catch (err) {
           logger.error('reader.regenerate_failed', {
             branchId: startedBranchId,
@@ -1316,17 +1336,10 @@ export default function ReaderComposerRoute() {
         }
         return
       }
-      // Both confirm arms open the cascade modal: no chapter-close copy yet (M5.12).
-      const target = entriesStore.getById(entryId)
-      setRollback({
-        mode: 'regenerate',
-        targetId: entryId,
-        targetNumber: target?.position ?? 0,
-        counts,
-        countedAtSettle,
-      })
+      // Both confirm kinds open as a regenerate confirm: the modal derives its copy from the counts.
+      setRollback({ mode: 'regenerate', targetId: entryId, targetNumber, counts, countedAtSettle })
     },
-    [branchId, runRegenerate],
+    [branchId, runRegenerate, branchUnchanged],
   )
 
   // Chips are finished prose, so the draft is replaced outright and the mode
