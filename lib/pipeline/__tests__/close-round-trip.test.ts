@@ -420,9 +420,12 @@ type CloseHarness = {
   readonly before: WorldState
   /** The branch's whole delta log before the close ran: other actions' deltas only. */
   readonly beforeLog: readonly Delta[]
-  /** Runs the close to completion; a case must land at least one tool group. */
+  /** Runs the close to completion; a case must land at least one group past the metadata's. */
   close: () => Promise<void>
-  /** Starts the close and calls `act` once its first tool group has landed; resolves with the run. */
+  /**
+   * Starts the close and calls `act` once the first landed group its case's `abortOn` admits, a
+   * tool's or a code step's, has landed; resolves with the run.
+   */
   closeActingOnToolGroup: (act: () => void) => Promise<TxResult>
   /** The group `act` ran on, if it ran. */
   actedOn: () => ToolGroup | undefined
@@ -723,14 +726,16 @@ function withAwarenessCount(
   count: number,
 ): WorldState {
   const rows = state.rows.happening_awareness as readonly HappeningAwareness[]
+  const matches = (row: HappeningAwareness): boolean =>
+    row.happeningId === happeningId && row.characterId === characterId
+  if (!rows.some(matches))
+    throw new Error(`round trip: no awareness of ${happeningId} for ${characterId}`)
   return {
     ...state,
     rows: {
       ...state.rows,
       happening_awareness: rows.map((row) =>
-        row.happeningId === happeningId && row.characterId === characterId
-          ? { ...row, retrievalCount: count }
-          : row,
+        matches(row) ? { ...row, retrievalCount: count } : row,
       ),
     },
   }
@@ -1392,6 +1397,16 @@ const chapterWideSlots = (): CloseAgentSlots => ({
   after: [{ kind: 'code', step: resetRetrievalStep }],
 })
 
+// Canon's whole order, Awareness and the reset after the merge.
+const fullOrderSlots = (): CloseAgentSlots => ({
+  before: [{ kind: 'code', step: normalizeStackablesStep }, clustered(INN_PAIR), HAPPENINGS_TASK],
+  perPart: [],
+  after: [
+    { kind: 'task', def: awarenessTask },
+    { kind: 'code', step: resetRetrievalStep },
+  ],
+})
+
 const MERGE_WHY = 'Both rows are the one exchange at the inn about the night ferry.'
 
 // Keeps TOLD (hp2) and absorbs ASKED (hp1): the composite takes ASKED's earlier anchor.
@@ -1413,6 +1428,22 @@ const SET_PIN = {
   value: 0.5,
   turns: ['t5'],
   why: 'Tobin’s word decides every crossing Wren makes from here.',
+}
+
+// After the merge, Awareness lists TOLD's two rows by name: Tobin's, which the merge updated, as
+// aw1 at 0.6, and Wren's, which it created, as aw2 at 0.5. Each raise stays within 0.2 of its start.
+const PIN_MERGE_UPDATED = {
+  id: 'aw1',
+  value: 0.8,
+  turns: ['t5'],
+  why: 'Tobin’s word decides every crossing Wren makes from here.',
+}
+
+const PIN_MERGE_CREATED = {
+  id: 'aw2',
+  value: 0.7,
+  turns: ['t5'],
+  why: 'Wren has staked her letter on the night ferry.',
 }
 
 const MERGE_COMPOSITE_CASE: RoundTripCase = {
@@ -1504,6 +1535,26 @@ const LATER_BUMP_CASE: RoundTripCase = {
   },
 }
 
+const FULL_ORDER_CASE: RoundTripCase = {
+  name: 'normalization, merge_happenings, set_pin on the merged rows and the reset',
+  slots: fullOrderSlots,
+  seed: seedChapterWide,
+  steps: [
+    { calls: [{ toolName: 'merge_happenings', input: MERGE_COMPOSITE }] },
+    // Ends Happenings; the next step is Awareness's.
+    { calls: [] },
+    {
+      calls: [
+        { toolName: 'set_pin', input: PIN_MERGE_UPDATED },
+        { toolName: 'set_pin', input: PIN_MERGE_CREATED },
+      ],
+    },
+  ],
+  merge: true,
+  // The last group: the abort then reverses every group before it.
+  abortOn: ['resetAwarenessRetrieval'],
+}
+
 const MARK_MERGED_CASE: RoundTripCase = {
   name: 'mark_common_knowledge on a row merge_happenings absorbed, then on its survivor',
   slots: mergeSlots([{ kind: 'task', def: upkeepTask }]),
@@ -1519,7 +1570,7 @@ const MARK_MERGED_CASE: RoundTripCase = {
   abortOn: ['deleteHappening'],
 }
 
-/** C9: every tool's landed group joins this table. */
+/** C9: every tool's landed group, and every code step's, joins this table. */
 const CASES: readonly RoundTripCase[] = [
   STAND_IN_CASE,
   {
@@ -1579,6 +1630,7 @@ const CASES: readonly RoundTripCase[] = [
   CHAPTER_WIDE_CASE,
   LATER_BUMP_CASE,
   MARK_MERGED_CASE,
+  FULL_ORDER_CASE,
 ]
 
 /** C9's arms; chapter delete's two modes join here (5.12). */
@@ -1607,7 +1659,7 @@ const ARMS: readonly RoundTripArm[] = [
       const tx = await h.closeActingOnToolGroup(() => {
         void interruptMemoryRuns(h.fx.branchId)
       })
-      const group = defined(h.actedOn(), 'the abort never fired: no tool group landed')
+      const group = defined(h.actedOn(), 'the abort never fired: no group abortOn admits landed')
       expect(group.kinds, 'the group the abort fired on').not.toContain('createChapter')
       expect(tx.outcome).toBe('aborted')
     },
@@ -1631,7 +1683,8 @@ const ARMS: readonly RoundTripArm[] = [
   },
 ]
 
-describe.each(CASES)('the round trip of $name', (c) => {
+// Tuples: a `$name` title is cut at about 40 characters, out of `-t`'s reach.
+describe.each(CASES.map((c) => [c.name, c] as const))('the round trip of %s', (_name, c) => {
   it.each(ARMS)('$name leaves the database $expect', async (arm) => {
     const h = await openHarness(c)
 
@@ -1893,6 +1946,17 @@ describe('each new case lands what it names', () => {
     expect(group.kinds).not.toContain('updateEntityStackables')
   })
 
+  it('the full order: the abort acts on the reset’s group, after every other group landed', async () => {
+    const h = await openHarness(FULL_ORDER_CASE)
+
+    const tx = await h.closeActingOnToolGroup(() => {
+      void interruptMemoryRuns(h.fx.branchId)
+    })
+
+    expect(tx.outcome).toBe('aborted')
+    expect(defined(h.actedOn(), 'the abort never fired').kinds).toEqual(['resetAwarenessRetrieval'])
+  })
+
   // Each group the close emitted past its metadata's, its kinds sorted.
   async function closedWithGroups(
     c: RoundTripCase,
@@ -1926,6 +1990,14 @@ describe('each new case lands what it names', () => {
         ),
       )
     return rows.map((row) => row.entityId).toSorted()
+  }
+
+  // The reset's delta: the newest of the close's `writes` deltas on the row.
+  async function resetOf(h: CloseHarness, rowId: string, writes = 2): Promise<Delta> {
+    const written = (await deltasOf(h.fx, h.actionId())).filter((d) => d.targetId === rowId)
+    expect(written, `the close's deltas on ${rowId}`).toHaveLength(writes)
+    // deltasOf lists newest first.
+    return written[0]!
   }
 
   const stackablesOf = (row: { state: unknown }): unknown =>
@@ -2061,10 +2133,9 @@ describe('each new case lands what it names', () => {
     // The merge's summed count is the one row left counting; the reset clears it.
     const kept = await awarenessRow(h.fx, TOLD.id, TOBIN.id)
     expect(kept.retrievalCount).toBe(0)
-    const [reset] = (await deltasOf(h.fx, h.actionId())).filter((d) => d.targetId === kept.id)
-    expect(reset?.undoPayload, 'the reset undoes to the summed count').toEqual({
-      retrievalCount: ASKED_TOBIN_COUNT + TOLD_TOBIN_COUNT,
-    })
+    expect((await resetOf(h, kept.id)).undoPayload, 'the reset undoes to the summed count').toEqual(
+      { retrievalCount: ASKED_TOBIN_COUNT + TOLD_TOBIN_COUNT },
+    )
   })
 
   it('a merge and the reset beside a later turn’s retrieval bumps land, then CTRL-Z of the close and of the turn both succeed', async () => {
@@ -2072,11 +2143,12 @@ describe('each new case lands what it names', () => {
     expect(await writeCalls(h)).toMatchObject([
       { tool: 'merge_happenings', result: 'ok', survivor: { table: 'happenings', id: TOLD.id } },
     ])
-    // C12: neither bump reads as a later turn's write, so both bumped counts, 3 and 2, fold into TOLD's.
+    // C12: neither bump reads as a later turn's write, so both counts, each bumped once, fold in.
     const kept = await awarenessRow(h.fx, TOLD.id, TOBIN.id)
     expect(kept.retrievalCount).toBe(0)
-    const [reset] = (await deltasOf(h.fx, h.actionId())).filter((d) => d.targetId === kept.id)
-    expect(reset?.undoPayload).toEqual({ retrievalCount: 5 })
+    expect((await resetOf(h, kept.id)).undoPayload).toEqual({
+      retrievalCount: ASKED_TOBIN_COUNT + 1 + (TOLD_TOBIN_COUNT + 1),
+    })
 
     await undoClose(h)
     expect(await undoLastAction(h.fx.branchId, h.fx.ctx)).toEqual({ status: 'ok' })
@@ -2090,6 +2162,33 @@ describe('each new case lands what it names', () => {
       .where(eq(storyEntries.branchId, h.fx.branchId))
     expect(left.map((entry) => entry.id)).not.toContain(h.fx.replyIds[5])
     expect(await deltasOf(h.fx, 'act_close_turn_6')).toEqual([])
+  })
+
+  it('normalization, the merge, set_pin on a row it updated and on one it created, and the reset land in canon’s order', async () => {
+    const { h, groups } = await closedWithGroups(FULL_ORDER_CASE)
+
+    expect(groups).toEqual([
+      ['updateEntityStackables', 'updateEntityStackables'],
+      MERGE_KINDS,
+      ['upsertHappeningAwareness'],
+      ['upsertHappeningAwareness'],
+      ['resetAwarenessRetrieval'],
+    ])
+    expect((await writeCalls(h)).map((call) => [call.task, call.tool, call.result])).toEqual([
+      ['happenings', 'merge_happenings', 'ok'],
+      ['awareness', 'set_pin', 'ok'],
+      ['awareness', 'set_pin', 'ok'],
+    ])
+    const updated = await awarenessRow(h.fx, TOLD.id, TOBIN.id)
+    expect(updated).toMatchObject({ decayResistance: 0.8, retrievalCount: 0 })
+    expect(await awarenessRow(h.fx, TOLD.id, WREN.id)).toMatchObject({
+      decayResistance: 0.7,
+      retrievalCount: 0,
+    })
+    // The merge's upsert, the pin's and the reset, which undoes to the summed count.
+    expect((await resetOf(h, updated.id, 3)).undoPayload).toEqual({
+      retrievalCount: ASKED_TOBIN_COUNT + TOLD_TOBIN_COUNT,
+    })
   })
 
   it('mark_common_knowledge on ASKED after the merge is refused naming TOLD, which takes the write', async () => {
