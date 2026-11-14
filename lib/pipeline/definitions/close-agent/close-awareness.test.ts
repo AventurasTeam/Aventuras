@@ -523,18 +523,28 @@ describe('the Awareness start', () => {
     ).rejects.toThrow('awareness: the close holds no range')
   })
 
-  it("keeps each listed row's pin as the baseline set_pin holds the close to", async () => {
+  it("keeps each listed row's pin as the baseline set_pin holds the close to, no pin as 0", async () => {
     await seedAwarenessWorld(fx)
     const ctx = promptContextFor(fx)
 
     await awarenessTask.start(ctx)
 
-    expect([A_CHAPTER, A_BOTH, A_FREQUENT].map((id) => ctx.ids.startPinOf(id))).toEqual([
-      0.6,
-      0,
-      null,
-    ])
+    expect([A_CHAPTER, A_BOTH, A_FREQUENT].map((id) => ctx.ids.startPinOf(id))).toEqual([0.6, 0, 0])
     expect(ctx.ids.startPinOf(A_COMMON)).toBeUndefined()
+  })
+
+  it('keeps the first start pin when a start runs again in the same close', async () => {
+    await seedAwarenessWorld(fx)
+    const ctx = promptContextFor(fx)
+    await awarenessTask.start(ctx)
+    await fx.ctx.db
+      .update(happeningAwareness)
+      .set({ decayResistance: 0.9 })
+      .where(eq(happeningAwareness.id, A_CHAPTER))
+
+    await awarenessTask.start(ctx)
+
+    expect(ctx.ids.startPinOf(A_CHAPTER)).toBe(0.6)
   })
 
   // The start lists the chapter's rows by the same entries set_pin's one-way rule tests.

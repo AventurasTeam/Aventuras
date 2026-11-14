@@ -124,8 +124,8 @@ async function planSetPin(args: SetPinArgs, ctx: WriteContext): Promise<WritePla
       values: proposed,
     }
   // The bounds hold from the pin the start showed, so a pin moves freely inside them in one close.
-  const start = ctx.ids.startPinOf(id)
-  if (start === undefined)
+  const startPin = ctx.ids.startPinOf(id)
+  if (startPin === undefined)
     return {
       kind: 'refused',
       reason: NO_START_PIN,
@@ -133,7 +133,6 @@ async function planSetPin(args: SetPinArgs, ctx: WriteContext): Promise<WritePla
       values: proposed,
       note: 'The task showed no pin for this row, so it cannot be pinned: leave it.',
     }
-  const startPin = start ?? 0
   // The read gate admits only rows the start listed, so a row not learned in the chapter is a
   // frequent one.
   const ofChapter = row.learnedAtEntryId !== null && ctx.taskEntryIds.includes(row.learnedAtEntryId)

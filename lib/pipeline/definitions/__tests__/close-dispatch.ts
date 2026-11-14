@@ -30,8 +30,8 @@ import type { CloseLedger } from '../intermediates'
 /** A row the task's start showed: handed its handle in order, and read unless `seeds` is given. */
 export type ShownRow = GuardRow & {
   name: string
-  /** A shown awareness row's pin as the start read it: null for none; absent shows no pin. */
-  startPin?: number | null
+  /** A shown awareness row's pin as the start recorded it; absent shows no pin. */
+  startPin?: number
 }
 /** One model call; `part` runs it as that part of the task, the run's own when absent. */
 export type ScriptedCall = { toolName: string; input: Record<string, unknown>; part?: number }

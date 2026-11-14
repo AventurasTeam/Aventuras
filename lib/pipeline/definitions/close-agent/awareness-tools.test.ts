@@ -200,7 +200,8 @@ const pin = (
   why = WHY,
 ): ScriptedCall => ({ toolName: 'set_pin', input: { id, value, turns: [...turns], why } })
 
-// The Awareness start hands each listed row's pin as the model reads it; a row gone has none.
+// The Awareness start hands each listed row's pin as the model reads it, no pin as 0; a row gone
+// has none.
 async function startPinned(fx: CloseFixture, rows: readonly ShownRow[]): Promise<ShownRow[]> {
   const pins = new Map(
     (
@@ -210,7 +211,7 @@ async function startPinned(fx: CloseFixture, rows: readonly ShownRow[]): Promise
         .where(eq(happeningAwareness.branchId, fx.branchId))
     ).map(({ id, pin }) => [id, pin]),
   )
-  return rows.map((row) => (pins.has(row.id) ? { ...row, startPin: pins.get(row.id) } : row))
+  return rows.map((row) => (pins.has(row.id) ? { ...row, startPin: pins.get(row.id) ?? 0 } : row))
 }
 
 async function pinCalls(fx: CloseFixture, calls: readonly ScriptedCall[]): Promise<DispatchRun> {

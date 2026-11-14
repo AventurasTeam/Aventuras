@@ -30,7 +30,7 @@ export class CloseIds {
   private readonly names = new Map<string, string>()
   private turnCount = 0
   private awarenessCount = 0
-  private readonly startPins = new Map<string, number | null>()
+  private readonly startPins = new Map<string, number>()
   // Registered ids FULL_ID_IN_TEXT can't see, such as a seeded `entry_long_20_0001`.
   private readonly unpatterned = new Map<string, string>()
   private unpatternedInText: RegExp | null = null
@@ -59,12 +59,12 @@ export class CloseIds {
   }
 
   /**
-   * A happening_awareness row: aw1…, the same handle each time. `startPin` is the pin shown (null
-   * for none), the baseline set_pin's bounds hold for the whole close.
+   * A happening_awareness row: aw1…, the same handle each time. `startPin` is the pin shown, the
+   * baseline set_pin's bounds hold for the whole close: the first one recorded stands.
    */
-  showAwareness(id: string, startPin?: number | null): string {
+  showAwareness(id: string, startPin?: number): string {
     requirePrefix(id, AWARENESS_PREFIX)
-    if (startPin !== undefined) this.startPins.set(id, startPin)
+    if (startPin !== undefined && !this.startPins.has(id)) this.startPins.set(id, startPin)
     const held = this.map.getPlaceholderFor(id)
     if (held !== undefined) return held
     this.awarenessCount += 1
@@ -72,7 +72,7 @@ export class CloseIds {
   }
 
   /** The pin an awareness row was shown with; undefined for a row no start showed a pin for. */
-  startPinOf(id: string): number | null | undefined {
+  startPinOf(id: string): number | undefined {
     return this.startPins.get(id)
   }
 

@@ -183,7 +183,8 @@ async function startAwareness(ctx: TaskPromptContext): Promise<TaskStart<Awarene
   for (const group of groups) {
     ctx.ids.show(group.id, group.title)
     for (const { row } of group.listed) {
-      ctx.ids.showAwareness(row.id, row.decayResistance)
+      // No pin shows as "pin 0 (unset)": 0 is the pin its bounds hold from.
+      ctx.ids.showAwareness(row.id, row.decayResistance ?? 0)
       ctx.ids.show(row.characterId, row.name)
       learnedAtHandle(ctx, row.learnedAtEntryId)
     }

@@ -124,6 +124,22 @@ describe('CloseIds', () => {
     expect(ids.idOf('aw2')).toBe(HAW_B)
   })
 
+  it('keeps the first start pin recorded for an awareness row for the whole close', () => {
+    const ids = new CloseIds()
+    ids.showAwareness(HAW_A, 0.4)
+    ids.showAwareness(HAW_A, 0.7)
+    ids.showAwareness(HAW_A)
+    ids.withHandles(`as ${HAW_B} says`)
+
+    expect(ids.startPinOf(HAW_A)).toBe(0.4)
+    expect(ids.startPinOf(HAW_B)).toBeUndefined()
+
+    ids.showAwareness(HAW_B, 0)
+    ids.showAwareness(HAW_B, 0.3)
+
+    expect(ids.startPinOf(HAW_B)).toBe(0)
+  })
+
   it('reads an unknown handle as undefined, never as a turn', () => {
     const ids = new CloseIds()
     ids.showTurns([ENTRY_1, ENTRY_2])
