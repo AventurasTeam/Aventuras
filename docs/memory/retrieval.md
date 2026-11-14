@@ -1521,11 +1521,11 @@ floor; rare in practice.
 
 ### Sources
 
-| Source                                | Cadence                    | Signal                                                                                                                                                                     |
-| ------------------------------------- | -------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **User pin**                          | Any time                   | The `decay_resistance` field, 0 to 1, on awareness rows in the Plot panel. A pin the user sets stays theirs until they change it: a close's `set_pin` skips it.            |
-| **Classifier severity at extraction** | Periodic classifier writes | When emitting an awareness row, classifier judges severity ∈ `[0, 1]` from prose context. Subjective, model-judged. Becomes the default `decay_resistance` on the new row. |
-| **Lore-mgmt housekeeping**            | Chapter close              | Reviews closed-chapter awareness rows; can adjust `decay_resistance` upward (recognized structural) or downward (turned out incidental). Conservative bias.                |
+| Source                                | Cadence                    | Signal                                                                                                                                                                                                                                                                                                          |
+| ------------------------------------- | -------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **User pin**                          | Any time                   | The `decay_resistance` field, 0 to 1, on awareness rows in the Plot panel. A pin the user sets stays theirs until they change it: a close's `set_pin` skips it.                                                                                                                                                 |
+| **Classifier severity at extraction** | Periodic classifier writes | When emitting an awareness row, classifier judges severity ∈ `[0, 1]` from prose context. Subjective, model-judged. Becomes the default `decay_resistance` on the new row.                                                                                                                                      |
+| **Lore-mgmt housekeeping**            | Chapter close              | Reviews the closed chapter's awareness rows, adjusting `decay_resistance` upward (recognized structural) or downward (turned out incidental), and the high-frequency set from any chapter, upward only. A pin rises at most 0.2 a close ([3d](./chapter-close.md#3d--awareness-pin-tuning)). Conservative bias. |
 
 ### Ranker semantics
 

@@ -186,7 +186,8 @@ A write returns one of three results:
   added, it breaks a rule of its sub-job, or the row moved or went
   since the task read it, saying where it went.
 - `skipped`, when the field stands and a retry won't help: the user wrote
-  it after the cited prose, or a later turn did.
+  it after the cited prose, or a later turn did, or it is a pin the user
+  ever set ([3d](#3d--awareness-pin-tuning)).
 
 **A close leaves alone what later turns wrote.** A close runs after the
 turns past its chapter but anchors before them, so it skips a field one
@@ -686,10 +687,10 @@ Sub-job 3e identifies clusters that should merge.
 **Candidate identification (algorithmic, no LLM):**
 
 The close first embeds the happenings in its range: the catch-up passes'
-rows have no vectors until the next sync stage, and 3e never revisits a
-closed range, so their duplicates would stay for good. The embed takes
-the 300 s bound per-turn retrieval's embeds take, and an embedder
-failure, the bound's expiry included, fails the close. It then
+rows have no vectors until the next sync stage, and only a re-run of the
+close revisits a closed range, so their duplicates would otherwise stay.
+The embed takes the 300 s bound per-turn retrieval's embeds take, and an
+embedder failure, the bound's expiry included, fails the close. It then
 clusters happenings within the closed chapter range by:
 
 - Embedding similarity ≥ 0.80 (cosine).
@@ -880,13 +881,13 @@ and a restart end the same way, and every Send is a fresh attempt. A
 manual close isn't persisted: a restart drops it, and so does a reversal
 that removes its end entry.
 
-| Phase                      | Failure mode                                                                                         |
-| -------------------------- | ---------------------------------------------------------------------------------------------------- |
-| **0** (catch-up passes)    | The failed pass stops the chain; it runs before the next turn, and the close follows it.             |
-| **1** (boundary selection) | `callWithRetry` same-prompt retry; an unusable reply falls back to the latest reply before the head. |
-| **2** (metadata)           | A failed call fails the close, and so does a create or stamp that doesn't land.                      |
-| **3** (lore-mgmt)          | A refused write goes back to the task; a failed call, an embedder failure included, fails the close. |
-| **4** (lifecycle review)   | As phase 3.                                                                                          |
+| Phase                      | Failure mode                                                                                                                              |
+| -------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------- |
+| **0** (catch-up passes)    | The failed pass stops the chain; it runs before the next turn, and the close follows it.                                                  |
+| **1** (boundary selection) | `callWithRetry` same-prompt retry; an unusable reply falls back to the latest reply before the head.                                      |
+| **2** (metadata)           | A failed call fails the close, and so does a create or stamp that doesn't land.                                                           |
+| **3** (lore-mgmt)          | A refused write goes back to the task; a failed call, an embedder failure included, fails the close, as does a code step's refused group. |
+| **4** (lifecycle review)   | As phase 3.                                                                                                                               |
 
 These don't fail a close:
 

@@ -283,5 +283,5 @@ Known limitations the design accepts and documents rather than chases:
   "plot-relevant" vs. "character-defining"). v1 floor; multi-axis is
   the signal that drives a v1.x revisit.
 - **Pin contradiction reconciliation** — manual user un-pin in v1.
-  Chapter close's pin review doesn't reach a pin set chapters before
+  Chapter close's pin review can't lower a pin set chapters before
   ([`retrieval.md → Pin contradiction reconciliation`](./retrieval.md#pin-contradiction-reconciliation)).
