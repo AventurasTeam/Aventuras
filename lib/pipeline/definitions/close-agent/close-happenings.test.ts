@@ -44,6 +44,7 @@ const TOBIN = 'char_00000000-0000-4000-8000-000000000002'
 const MIRA = 'char_00000000-0000-4000-8000-000000000003'
 const FERRY = 'loc_00000000-0000-4000-8000-000000000004'
 const LANTERN = 'item_00000000-0000-4000-8000-000000000005'
+const SELA = 'char_00000000-0000-4000-8000-000000000006'
 const OTHER_BRANCH = 'br_other'
 const CAST = [
   { id: WREN, kind: 'character', name: 'Wren' },
@@ -119,6 +120,7 @@ async function seedHappening({
     title,
     description,
     occurredAtEntryId: at,
+    temporal: at === null ? 'Before the river froze' : null,
     createdAt: 1,
     updatedAt: 1,
     embeddingStale: embedded ? 0 : 1,
@@ -360,6 +362,26 @@ describe('the range embed', () => {
     )
   })
 
+  it('neither embeds nor clusters a temporal row, which has no anchor in the range', async () => {
+    await seedPair()
+    // The pair's cast, and a vector between theirs: only its missing anchor keeps it out.
+    await seedHappening({
+      id: H3,
+      title: 'The ferry runs at dusk',
+      at: null,
+      cast: [WREN, TOBIN],
+      vector: unitAt(0.1),
+    })
+    const { embedded } = script()
+    const phase = phaseOf()
+
+    expect(await runStep(phase)).toEqual({ status: 'completed' })
+
+    expect(embedded.map((ids) => [...ids].sort())).toEqual([[H1, H2]])
+    expect(closeClustersOf(phase.intermediates)).toEqual([[H1, H2]])
+    expect(await staleOf()).toEqual({ [H1]: 0, [H2]: 0, [H3]: 1 })
+  })
+
   it.each([
     { name: 'anchors five entries apart', h2: { at: 6, cast: [WREN, TOBIN] } },
     { name: 'casts that share nothing', h2: { at: 4, cast: [MIRA] } },
@@ -466,6 +488,34 @@ describe('the range embed', () => {
 
     expect(closeClustersOf(phase.intermediates)).toEqual([])
   })
+
+  it.each([
+    { name: 'is a place here', entityId: FERRY },
+    { name: 'has no row here', entityId: SELA },
+  ])(
+    'leaves out of a cast an entity that $name, though another branch holds it as a character',
+    async ({ entityId }) => {
+      await seedPair({ h1: { cast: [entityId] }, h2: { cast: [entityId] } })
+      // Read through the other branch's row, the two beats would share a character and cluster.
+      await openOtherBranch()
+      await fx.ctx.db.insert(entities).values({
+        id: entityId,
+        branchId: OTHER_BRANCH,
+        kind: 'character',
+        name: 'Sela',
+        status: 'active',
+        injectionMode: 'auto',
+        createdAt: 1,
+        updatedAt: 1,
+      })
+      script()
+      const phase = phaseOf()
+
+      expect(await runStep(phase)).toEqual({ status: 'completed' })
+
+      expect(closeClustersOf(phase.intermediates)).toEqual([])
+    },
+  )
 
   it('needs no embedder at all for a chapter with one happening', async () => {
     await seedHappening({
@@ -587,16 +637,25 @@ describe('the range embed bound', () => {
     {
       name: 'a call failure',
       error: () => new EmbedderCallError('embed timed out'),
+      reason: 'call',
       staleCount: 2,
     },
     {
       name: 'a cancel',
       error: () => new EmbedderCancelledError('embed cancelled'),
+      reason: 'call',
       staleCount: null,
+    },
+    // As in per-turn retrieval, the expiry replaces a failure's detail, never its reason.
+    {
+      name: 'an init failure',
+      error: () => new EmbedderInitError('model missing'),
+      reason: 'init',
+      staleCount: 2,
     },
   ])(
     'fails the close, naming the 300 s bound, when the embed outlives it and ends in $name',
-    async ({ error, staleCount }) => {
+    async ({ error, reason, staleCount }) => {
       await seedPair()
       vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] })
       script(async (_rows, signal) => {
@@ -609,7 +668,7 @@ describe('the range embed bound', () => {
         status: 'failed',
         error: {
           kind: 'embedder',
-          reason: 'call',
+          reason,
           detail: 'embed timed out after 300000ms',
           staleCount,
         },

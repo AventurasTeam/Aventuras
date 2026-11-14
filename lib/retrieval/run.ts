@@ -3,13 +3,14 @@ import {
   knnQuery,
   vecTableName,
   vectorsByIdQuery,
+  type CharacterState,
   type Entity,
   type VecTargetKind,
 } from '@/lib/db'
 import { logger } from '@/lib/diagnostics'
 import { EmbedderCancelledError, type EmbedderErrorKind } from '@/lib/embedder'
 import { countTokens } from '@/lib/tokens'
-import { placeModes } from '@/lib/world'
+import { placeModes, stateOf } from '@/lib/world'
 
 import { loadAwarenessForScene, type AwarenessRow } from './awareness'
 import {
@@ -370,7 +371,11 @@ async function runRetrievalPass(
     happenings: [] as readonly LoadedHappeningRow[],
     awareness,
     chapterAges: chapterRanges.ages,
-    entityStates: new Map(params.storeEntities.map((e) => [e.id, e.state])),
+    lastSeenAtByCharacter: new Map(
+      params.storeEntities.flatMap((e) =>
+        e.kind === 'character' ? [[e.id, stateOf(e, 'character').lastSeenAt] as const] : [],
+      ),
+    ),
     recentProse: params.recentProse,
     disabledPlaceIds,
     scanText: params.scanText,
@@ -587,8 +592,8 @@ type PoolCtx = {
   happenings: readonly LoadedHappeningRow[]
   awareness: readonly AwarenessRow[]
   chapterAges: ChapterAgeIndex
-  /** The store's entity states by id: source rows carry none, and a character ages off its own. */
-  entityStates: ReadonlyMap<string, unknown>
+  /** Each character's lastSeenAt by id, from the store: source rows carry no state. */
+  lastSeenAtByCharacter: ReadonlyMap<string, CharacterState['lastSeenAt']>
   recentProse: string
   disabledPlaceIds: ReadonlySet<string>
   scanText: string
@@ -761,11 +766,9 @@ function assembleCandidates(
     return vector
   }
 
-  const shared = () => ({
-    // Stale rows keep their old vector in vec0 and stay reachable by KNN, so
-    // each pool below drops them; everything that survives is fresh.
-    embeddingStale: false,
-  })
+  // Stale rows keep their old vector in vec0 and stay reachable by KNN, so
+  // each pool below drops them; everything that survives is fresh.
+  const embeddingStale = false
 
   switch (ctx.kind) {
     case 'entity': {
@@ -778,7 +781,7 @@ function assembleCandidates(
         const vector = vectorFor(r.id)
         const entity = measuredEntity(r, floor.views)
         return {
-          ...shared(),
+          embeddingStale,
           kind: 'entity' as const,
           id: r.id,
           displayName: r.name,
@@ -786,10 +789,7 @@ function assembleCandidates(
           entity,
           sims: simsFor(vector),
           vector,
-          chaptersOld:
-            r.kind === 'character'
-              ? characterChaptersOld(ctx.entityStates.get(r.id), chapterAges)
-              : 0,
+          chaptersOld: characterChaptersOld(ctx.lastSeenAtByCharacter.get(r.id), chapterAges),
           pinSignal: 0,
           keywordHits: kwHits([r.name, ...r.keywords]),
         }
@@ -801,7 +801,7 @@ function assembleCandidates(
       return inPool(pool).map((r) => {
         const vector = vectorFor(r.id)
         return {
-          ...shared(),
+          embeddingStale,
           kind: 'lore' as const,
           id: r.id,
           displayName: r.title,
@@ -836,7 +836,7 @@ function assembleCandidates(
           ? { chaptersOld: 0, pinSignal: 0 }
           : happeningAge(rows, r.occurredAtEntryId, chapterAges)
         return {
-          ...shared(),
+          embeddingStale,
           kind: 'happening' as const,
           id: r.id,
           displayName: r.title,
@@ -867,7 +867,7 @@ function assembleCandidates(
       return inPool(pool).map((r) => {
         const vector = vectorFor(r.id)
         return {
-          ...shared(),
+          embeddingStale,
           kind: 'thread' as const,
           id: r.id,
           displayName: r.title,
@@ -878,10 +878,7 @@ function assembleCandidates(
           renderedText: lines(`${r.title} (${r.status})`, r.description),
           sims: simsFor(vector),
           vector,
-          // A pass's status change keeps the resolved ref (lib/actions/threads/register.ts), so a
-          // reopened thread can still carry one.
-          chaptersOld:
-            r.status === 'pending' ? 0 : threadChaptersOld(r.resolvedAtEntryId, chapterAges),
+          chaptersOld: threadChaptersOld(r, chapterAges),
           pinSignal: 0,
           keywordHits: [],
         }
@@ -894,7 +891,7 @@ function assembleCandidates(
       return inPool(fresh(sourceRows.chapters)).map((r) => {
         const vector = vectorFor(r.id)
         return {
-          ...shared(),
+          embeddingStale,
           kind: 'chapter' as const,
           id: r.id,
           displayName: r.title,

@@ -36,7 +36,7 @@ const REPLY = `${REPLY_MARKER} the gate-warden reads the pact and lifts the bar.
 
 type OpenRow = [id: string, position: number, kind: string]
 
-// One total order for both sides of the reset comparison, whichever order the reset reads its rows in.
+// One total order for both sides of the reset comparison.
 const byBinary = (a: string, b: string): number => (a < b ? -1 : a > b ? 1 : 0)
 
 // Reached by URL (docs/testing.md → Harness structure): no in-app path leads here under E2E, as
@@ -225,7 +225,7 @@ test.describe('first chapter — a close from the dev route', () => {
         ['chapters', 'create', chapterId, endId, 'chapter_close'],
         ...range.map(([id]) => ['story_entries', 'update', id, endId, 'chapter_close']),
       ])
-      // The reset's read order isn't pinned, so both sides sort.
+      // counted has no ORDER BY, and canon fixes no order for the reset: sort both sides.
       expect(
         deltas.slice(stamped, -1).toSorted((a, b) => byBinary(String(a[2]), String(b[2]))),
         'then the reset: an update of each counted awareness row',

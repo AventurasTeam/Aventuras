@@ -1,17 +1,18 @@
-import { eq, sql } from 'drizzle-orm'
+import { eq } from 'drizzle-orm'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import type { generateStructured } from '@/lib/ai'
-import { chapters, type DbCtx } from '@/lib/db'
+import { chapters } from '@/lib/db'
 import { expectRan, resetSingletons } from '@/lib/pipeline/__tests__/harness'
 import {
   metadataReplyResult,
   openCloseFixture,
+  queryAllOn,
   type CloseFixture,
 } from '@/lib/pipeline/definitions/__tests__/close-fixture'
 import { __setCloseAgentSlots, NO_CLOSE_TASKS } from '@/lib/pipeline/definitions/close-agent/slots'
 import { readRecentEntryIds } from '@/lib/pipeline/definitions/entry-reads'
-import { readPromptBuffer, type BufferSettings, type QueryAll } from '@/lib/retrieval'
+import { readPromptBuffer, type BufferSettings } from '@/lib/retrieval'
 import { loadChapterRanges } from '@/lib/retrieval/source-rows'
 
 import { startManualClose } from './start-manual-close'
@@ -54,18 +55,6 @@ async function close(fx: CloseFixture): Promise<{ closed: string[]; current: str
 
 async function buffer(fx: CloseFixture, settings: BufferSettings): Promise<string[]> {
   return (await readPromptBuffer(fx.ctx.db, fx.branchId, settings)).map((row) => row.id)
-}
-
-// The app's positional query seam over the fixture's db, binding each `?` in order.
-function queryAllOn(db: DbCtx['db']): QueryAll {
-  return async (query, params) => {
-    const [head, ...rest] = query.split('?')
-    const statement = sql.join([
-      sql.raw(head),
-      ...rest.flatMap((piece, i) => [sql`${params[i]}`, sql.raw(piece)]),
-    ])
-    return db.all<unknown[]>(statement)
-  }
 }
 
 describe('reads after a close', () => {

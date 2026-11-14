@@ -97,11 +97,15 @@ function encodeField(schema: ZodType, cur: unknown, nxt: unknown): unknown {
   if (node.kind === 'record') {
     const c = (cur ?? {}) as Record<string, unknown>
     const n = (nxt ?? {}) as Record<string, unknown>
+    // Own keys only, so `constructor` is data. Assignment drops a `__proto__` key on purpose:
+    // reversal can't restore one, so its write must stay a refused noop.
     const sub: Record<string, unknown> = {}
     for (const k of new Set([...Object.keys(c), ...Object.keys(n)])) {
-      if (!(k in c) && k in n)
+      const was = Object.hasOwn(c, k) ? c[k] : ABSENT
+      const now = Object.hasOwn(n, k) ? n[k] : ABSENT
+      if (was === ABSENT)
         sub[k] = null // added -> delete on undo
-      else if (k in c && !deepEqual(c[k], n[k])) sub[k] = c[k] // changed/removed -> restore
+      else if (!deepEqual(was, now)) sub[k] = was // changed/removed -> restore
     }
     return Object.keys(sub).length ? sub : NOCHANGE
   }

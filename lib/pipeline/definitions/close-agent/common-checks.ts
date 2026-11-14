@@ -1,8 +1,7 @@
 import type { GuardRow } from '@/lib/actions/types'
 
 import { TURN_PREFIX, type CloseIds } from './ids'
-import { FULL_ID_SHAPE } from './tool'
-import { CLOSE_REASON } from './verdict'
+import { FULL_ID_SHAPE, type ToolContext } from './tool'
 
 /** Rows a task and part has read: seeded by its start, then read_row and landed creates (C11). */
 export type ReadSet = {
@@ -24,22 +23,23 @@ export function createReadSet(): ReadSet {
 
 export type CommonCheck =
   | { ok: true; turns: readonly string[]; proseEntryId: string }
-  | { ok: false; reason: string; gone?: GuardRow }
+  | { ok: false; reason: string; gone?: never }
+  | { ok: false; gone: GuardRow; reason?: never }
 
 /** `taskEntryIds`: the turns the task was shown, by position; a write cites only these. */
 type CheckContext = {
   ids: CloseIds
   taskEntryIds: readonly string[]
   readSet: ReadSet
-  survivorOf: (table: string, id: string) => { table: string; id: string } | undefined
+  survivorOf: ToolContext['survivorOf']
 }
 
 const TURN_HINT = 'cite the turns this task was shown, by their handles'
 
 /**
  * A write's first refusals in order: turns, why, read gate (an unread row a landed merge absorbed
- * is `row-gone`, naming where it went). Turns return as entry ids in position order, the last
- * being the write's prose entry for user precedence.
+ * returns as `gone`, so the answer can name where it went). Turns return as entry ids in position
+ * order, the last being the write's prose entry for user precedence.
  */
 export function commonChecks(
   args: { turns: unknown; why: unknown },
@@ -55,8 +55,7 @@ export function commonChecks(
     }
   const unread = named.find((row) => !ctx.readSet.has(row))
   if (unread === undefined) return cited
-  if (ctx.survivorOf(unread.table, unread.id) !== undefined)
-    return { ok: false, reason: CLOSE_REASON.rowGone, gone: unread }
+  if (ctx.survivorOf(unread.table, unread.id) !== undefined) return { ok: false, gone: unread }
   return {
     ok: false,
     reason: `${ctx.ids.handleOf(unread.id) ?? unread.id} hasn't been read in this task: call read_row on it, then write it`,

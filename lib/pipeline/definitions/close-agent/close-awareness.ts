@@ -1,10 +1,24 @@
-import { and, asc, desc, eq, gt, inArray, isNull, notInArray, or, type SQL } from 'drizzle-orm'
+import {
+  and,
+  asc,
+  desc,
+  eq,
+  gt,
+  inArray,
+  isNull,
+  notExists,
+  notInArray,
+  or,
+  sql,
+  type SQL,
+} from 'drizzle-orm'
 
 import type { GroupOutcome, GuardRow, PipelineAction } from '@/lib/actions/types'
 import type { PromptHalves } from '@/lib/ai'
 import {
   chapters,
   chunked,
+  deltas,
   entities,
   happeningAwareness,
   happenings,
@@ -114,13 +128,38 @@ function learnedAfterEnd(ctx: TaskPromptContext) {
     .where(and(eq(storyEntries.branchId, ctx.branchId), gt(storyEntries.position, end)))
 }
 
+// A row whose pin the user ever set, or that they created: set_pin skips it whatever turn is cited,
+// so it takes no place either. Key presence, as `carriesColumn` reads an undo payload; correlated
+// on the row so the read walks deltas_chain_idx, not the branch's whole log.
+function userPinned(ctx: TaskPromptContext) {
+  return ctx.db
+    .select({ id: deltas.id })
+    .from(deltas)
+    .where(
+      and(
+        eq(deltas.branchId, ctx.branchId),
+        eq(deltas.targetId, happeningAwareness.id),
+        eq(deltas.targetTable, 'happening_awareness'),
+        eq(deltas.source, 'user_edit'),
+        or(
+          eq(deltas.op, 'create'),
+          and(
+            eq(deltas.op, 'update'),
+            sql`json_type(${deltas.undoPayload}, '$.decayResistance') IS NOT NULL`,
+          ),
+        ),
+      ),
+    )
+}
+
 // Read when the task starts, after Happenings' merges, so a count a merge summed counts.
 async function frequentRows(ctx: TaskPromptContext): Promise<ListedRow[]> {
   const notLater = or(
     isNull(happeningAwareness.learnedAtEntryId),
     notInArray(happeningAwareness.learnedAtEntryId, learnedAfterEnd(ctx)),
   )!
-  return listable(ctx, and(gt(happeningAwareness.retrievalCount, 0), notLater)!)
+  const notUsers = notExists(userPinned(ctx))
+  return listable(ctx, and(gt(happeningAwareness.retrievalCount, 0), notLater, notUsers)!)
     .orderBy(desc(happeningAwareness.retrievalCount), asc(happeningAwareness.id))
     .limit(AWARENESS_TOP_N)
 }
@@ -183,7 +222,8 @@ async function startAwareness(ctx: TaskPromptContext): Promise<TaskStart<Awarene
   for (const group of groups) {
     ctx.ids.show(group.id, group.title)
     for (const { row } of group.listed) {
-      ctx.ids.showAwareness(row.id, row.decayResistance)
+      // No pin shows as "pin 0 (unset)": 0 is the pin its bounds hold from.
+      ctx.ids.showAwareness(row.id, row.decayResistance ?? 0)
       ctx.ids.show(row.characterId, row.name)
       learnedAtHandle(ctx, row.learnedAtEntryId)
     }

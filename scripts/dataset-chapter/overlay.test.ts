@@ -155,6 +155,22 @@ const branchEntities = (ctx: DbCtx) =>
 
 const byId = (rows: readonly Entity[]) => new Map(rows.map((row) => [row.id, row]))
 
+async function branchWrites(ctx: DbCtx) {
+  const [log] = await ctx.db
+    .select({ last: max(deltas.logPosition) })
+    .from(deltas)
+    .where(eq(deltas.branchId, B))
+  return {
+    entities: await branchEntities(ctx),
+    threads: await ctx.db
+      .select()
+      .from(threads)
+      .where(eq(threads.branchId, B))
+      .orderBy(asc(threads.id)),
+    lastLogPosition: log!.last,
+  }
+}
+
 async function overlaidState(ctx: DbCtx) {
   return {
     entities: await entityRows(ctx, OVERLAID),
@@ -521,12 +537,14 @@ describe('the dataset overlay', () => {
     await ctx.db
       .insert(chapters)
       .values({ ...closed!, id: generateId('chap'), sequenceNumber: closed!.sequenceNumber + 1 })
-    const before = await branchEntities(ctx)
+    const before = await branchWrites(ctx)
+    expect(before.threads).not.toEqual([])
+    expect(before.lastLogPosition).toEqual(expect.any(Number))
 
     await expect(applyDatasetOverlay(ctx)).rejects.toThrow(/holds 2 chapters/)
 
     expect(await chapterCount(ctx)).toBe(2)
-    expect(await branchEntities(ctx)).toEqual(before)
+    expect(await branchWrites(ctx)).toEqual(before)
   })
 
   it('throws on a seed row of another kind than the overlay names, before writing', async () => {

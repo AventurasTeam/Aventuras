@@ -360,8 +360,8 @@ breakdown under [UX](#ux).
   boosting before decay or by a larger factor. Raised 2026-11-13 by
   Slice 5.9's planning, when `chapters_old` came live.
 
-  The Awareness task raises a pin by at most 0.2 a close, never
-  straight to 1
+- **A close's pin raise step.** The Awareness task raises a pin by at
+  most 0.2 a close, never straight to 1
   ([3d](./memory/chapter-close.md#3d--awareness-pin-tuning)): the
   prompt asks for it and `set_pin` refuses a bigger raise. No later close
   can lower a frequent row's pin, so play tells whether 0.2 lets a
@@ -387,7 +387,11 @@ breakdown under [UX](#ux).
   composite description, and the merge landed. So `merge_happenings` and
   the Happenings prompt work on the dev model, but the keep-apart rule
   for differing knowers has met no real case yet. Developer decision
-  2026-11-14, from Slice 5.9's probes.
+  2026-11-14, from Slice 5.9's probes. Once 3e fires, World-merged
+  awareness rows start to block merges: each counts as a pin the user
+  set, so a merge that would absorb a happening a merged character knows
+  is skipped ([`triage.md`](./implementation/triage.md), "World merge
+  re-creates awareness rows as the user's.").
 
 - **User threads never decay.** A thread the user created, or one the
   user resolved or failed, carries no `resolved_at_entry_id` and never

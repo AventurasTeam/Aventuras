@@ -17,7 +17,14 @@ import {
   type WritePlan,
   type WriteTool,
 } from './tool'
-import { assertPlanShape, modelAnswer, rejectedWhole, verdictOf, type ToolVerdict } from './verdict'
+import {
+  assertPlanShape,
+  CLOSE_REASON,
+  modelAnswer,
+  rejectedWhole,
+  verdictOf,
+  type ToolVerdict,
+} from './verdict'
 import { readRowGuard } from '../../runtime/action-port'
 import { emitDeltaGroup } from '../../runtime/emit-group'
 import type { PhaseContext, PhaseEmittedEvent } from '../../types'
@@ -242,8 +249,10 @@ async function* writeCall(
   if (!check.ok) {
     const rows = rowsNamed(named, ctx.ids)
     // Only the judged row goes to rejectedWhole: a row-gone names its survivor, the ledger none.
-    const gone = check.gone === undefined ? [] : rowsNamed([check.gone], ctx.ids)
-    const verdict = rejectedWhole(check.reason, gone, ctx)
+    const verdict =
+      check.gone === undefined
+        ? rejectedWhole(check.reason, [], ctx)
+        : rejectedWhole(CLOSE_REASON.rowGone, rowsNamed([check.gone], ctx.ids), ctx)
     recordWrite(ctx, tool.name, args, { rows, turns: turnsShown(args.turns, ctx), verdict })
     return modelAnswer(verdict, {}, ctx.ids)
   }

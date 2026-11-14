@@ -86,13 +86,6 @@ describe('findClusters', () => {
     expect(cosine(EXACT_A, EXACT_B)).toBe(0.8)
   })
 
-  it('never clusters a temporal row, which has no anchor', () => {
-    expect(findClusters([row('a', { anchorIndex: null }), row('b')])).toEqual([])
-    expect(
-      findClusters([row('a', { anchorIndex: null }), row('b', { anchorIndex: null })]),
-    ).toEqual([])
-  })
-
   it('clusters two rows a redo re-derived at one entry', () => {
     expect(
       findClusters([

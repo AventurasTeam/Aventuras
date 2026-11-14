@@ -5,7 +5,7 @@ import { generateId } from '@/lib/ids'
 
 import { commonChecks, createReadSet } from './common-checks'
 import { CloseIds } from './ids'
-import { CLOSE_REASON } from './verdict'
+import type { ToolContext } from './tool'
 
 const ENTRY_1 = 'entry_11111111-1111-4111-8111-111111111111'
 const ENTRY_2 = 'entry_22222222-2222-4222-8222-222222222222'
@@ -20,7 +20,7 @@ const FERRY_RULE: GuardRow = { table: 'lore', id: 'lore_77777777-7777-4777-8777-
 const WREN: GuardRow = { table: 'entities', id: CHAR_A }
 const TOLL_LAW: GuardRow = { table: 'lore', id: LORE_A }
 
-type SurvivorOf = (table: string, id: string) => { table: string; id: string } | undefined
+type SurvivorOf = ToolContext['survivorOf']
 
 // The chapter is t1…t3, all shown to the task; t4 is a turn past it. Wren (c1) is seeded as read,
 // the toll law (lo1) isn't. No merge has landed unless `survivorOf` says one has.
@@ -156,7 +156,7 @@ describe('commonChecks', () => {
       ok: false,
       reason: 'turns takes the short handles of the turns this task was shown, not a full id',
     })
-    const reason = result.ok ? '' : result.reason
+    const reason = result.ok ? '' : (result.reason ?? '')
     expect(reason).not.toMatch(/_[0-9a-f]{8}-/)
     ctx.ids.withHandles(reason)
     expect(ctx.ids.idOf('t5')).toBeUndefined()
@@ -188,7 +188,7 @@ describe('commonChecks on a row a landed merge absorbed', () => {
         [WREN, TOLL_LAW],
         checkContext(undefined, tollLawMerged),
       ),
-    ).toEqual({ ok: false, reason: CLOSE_REASON.rowGone, gone: TOLL_LAW })
+    ).toEqual({ ok: false, gone: TOLL_LAW })
   })
 
   it('judges only the first unread row: one no merge took keeps the read refusal', () => {

@@ -9,7 +9,7 @@ import {
   writeFileSync,
 } from 'node:fs'
 import { tmpdir } from 'node:os'
-import { join, resolve } from 'node:path'
+import { dirname, join, resolve } from 'node:path'
 import { DatabaseSync } from 'node:sqlite'
 
 import { and, eq } from 'drizzle-orm'
@@ -101,8 +101,9 @@ import { resolveDevSlot } from './dev-slot/resolve'
 // seed's test overlay on each run's copy, and the bar over the runs), PROBE_WINDOW (none; the
 // model's window in tokens, set on the probe's provider as App Settings' override is, so a close
 // cuts its chapter into parts at half of it), AVENTURAS_DB_PATH (the dev slot's database; only
-// ever read, through a VACUUM INTO copy), PROBE_EMBEDDERS_DIR (the dev slot's userData embedders/;
-// where the range embed loads the story's local model, through onnxruntime-node in this process),
+// ever read, through a VACUUM INTO copy), PROBE_EMBEDDERS_DIR (the embedders/ beside the database,
+// else the dev slot's userData embedders/; where the range embed loads the story's local model,
+// through onnxruntime-node in this process),
 // PROBE_REJUDGE (a saved PROBE_OUT directory: judges its runs by the bar as it stands, from the
 // saved files, with no model call, and writes bar-rejudged.json beside them). Close the app
 // first: a live write moves the source's hash, and a held write lock fails the copy.
@@ -133,9 +134,20 @@ function resolveDbPath(): string {
   return join(resolveDevSlot().dataDir, 'aventuras.db')
 }
 
-function resolveEmbeddersRoot(): string {
-  if (process.env.PROBE_EMBEDDERS_DIR) return resolve(process.env.PROBE_EMBEDDERS_DIR)
-  return join(resolveDevSlot().dataDir, 'embedders')
+// A slot's userData holds both; an AVENTURAS_DB_PATH outside one, as dataset:chapter writes, falls
+// back to this checkout's slot. A stand-in loads no model, so it takes the first unchecked.
+function resolveEmbeddersRoot(source: string): string {
+  const named = process.env.PROBE_EMBEDDERS_DIR
+  const tried = [named ? resolve(named) : join(dirname(source), 'embedders')]
+  if (STAND_IN || existsSync(tried[0])) return tried[0]
+  if (!named && process.env.AVENTURAS_DB_PATH) {
+    const slot = join(resolveDevSlot().dataDir, 'embedders')
+    if (existsSync(slot)) return slot
+    if (slot !== tried[0]) tried.push(slot)
+  }
+  throw new Error(
+    `[probe:close] no embedders folder at ${tried.join(' or ')}: the range embed loads the story's local model from it; set PROBE_EMBEDDERS_DIR to a folder that holds it`,
+  )
 }
 
 // The current run's range-embed clusters, once it completed; its counts are its own log entry.
@@ -152,7 +164,6 @@ const measuredEmbedStep: CodeStep = {
   },
 }
 
-// The shipped slots with the range embed measured in its place.
 function measuredSlots(): CloseAgentSlots {
   const isEmbed = (entry: SlotEntry<'happenings'>): boolean =>
     entry.kind === 'code' && entry.step === embedRangeStep
@@ -168,16 +179,23 @@ function measuredSlots(): CloseAgentSlots {
 }
 
 function printRangeEmbed(k: number): void {
-  const counts = capture.log.findLast(({ entry }) => entry.kind === 'memory.close_range_embed')
-  if (counts === undefined || rangeClusters === null) {
+  if (rangeClusters === null) {
     console.log(`[probe:close]   run ${k} range embed: did not complete`)
     return
   }
-  const { embedded, happenings, clusters } = counts.entry.fields
+  const counts = capture.log.findLast(({ entry }) => entry.kind === 'memory.close_range_embed')
+  // embedRange's one completion with no log entry: a range of under two happenings.
+  if (counts === undefined) {
+    console.log(
+      `[probe:close]   run ${k} range embed: skipped, the range held fewer than two happenings`,
+    )
+    return
+  }
+  const { happenings, unembedded, clusters } = counts.entry.fields
   const sizes = rangeClusters.map((cluster) => cluster.length)
   const rows = sizes.length === 0 ? '' : ` of ${sizes.join(', ')} rows`
   console.log(
-    `[probe:close]   run ${k} range embed: ${String(embedded)} of ${String(happenings)} range happenings embedded, ${String(clusters)} clusters${rows}`,
+    `[probe:close]   run ${k} range embed: ${Number(happenings) - Number(unembedded)} of ${String(happenings)} range happenings embedded, ${String(clusters)} clusters${rows}`,
   )
 }
 
@@ -719,11 +737,7 @@ async function main(): Promise<void> {
   const source = resolveDbPath()
   if (!existsSync(source)) throw new Error(`[probe:close] no database at ${source}`)
   refuseUsedOutput()
-  const embedders = resolveEmbeddersRoot()
-  if (!STAND_IN && !existsSync(embedders))
-    throw new Error(
-      `[probe:close] no embedders folder at ${embedders}: the range embed loads the story's local model from it; set PROBE_EMBEDDERS_DIR to a folder that holds it`,
-    )
+  const embedders = resolveEmbeddersRoot(source)
   console.log(`[probe:close] embedders ${embedders}`)
   stopOn('SIGINT', 130)
   stopOn('SIGTERM', 143)

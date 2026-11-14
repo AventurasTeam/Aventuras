@@ -1,16 +1,17 @@
 import { and, asc, eq } from 'drizzle-orm'
-import { afterEach, beforeEach, describe, expect, it } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, onTestFinished, vi } from 'vitest'
 
 import {
   applyDeltaAction,
   applyDeltaActionGroupWithOutcomes,
 } from '@/lib/actions/delta/apply-delta-action'
+import { reverseReplayDeltas } from '@/lib/actions/delta/reverse-replay'
 import { updateStoryEntryContent } from '@/lib/actions/story-entries/operational'
 import type { GroupOutcome, PipelineAction } from '@/lib/actions/types'
 import type { ResolveModelConfig } from '@/lib/ai'
 import type { ChapterPartCut } from '@/lib/chapters'
 import { branches, deltas, emptyEntityState, entities, type EntityState } from '@/lib/db'
-import { makeLogger } from '@/lib/diagnostics'
+import { logger, makeLogger } from '@/lib/diagnostics'
 import { resetAllStores } from '@/lib/stores'
 
 import { normalizeStackablesStep } from './close-stackables'
@@ -197,6 +198,20 @@ describe('normalizeStackablesStep', () => {
     resetAllStores()
   })
 
+  function spyRunLog(): () => unknown[] {
+    const debug = vi.spyOn(logger, 'debug')
+    onTestFinished(() => debug.mockRestore())
+    return () => debug.mock.calls.filter(([kind]) => kind === 'memory.close_stackables')
+  }
+
+  type RunLog = {
+    rows: number
+    skippedProtected: number
+    skippedUnsafe: number
+    status: 'ok' | 'rejected' | 'none'
+  }
+  const runLogged = (fields: RunLog) => ['memory.close_stackables', fields, { actionId: ACTION_ID }]
+
   it('folds { Gold: 5, gold: 3 } into { gold: 8 }: one chapter_close delta on E, nothing in the ledger', async () => {
     expect(normalizeStackablesStep.name).toBe('stackables')
     await seedCharacter(f, WREN, 'Wren', { Gold: 5, gold: 3 })
@@ -252,14 +267,16 @@ describe('normalizeStackablesStep', () => {
     expect(await stackablesOf(f, TOBIN)).toEqual({ arrow: 2 })
   })
 
-  it('emits no group for a record with nothing to fold', async () => {
+  it('emits no group and logs nothing for a record with nothing to fold', async () => {
     await seedCharacter(f, WREN, 'Wren', { gold: 8, arrow: 2 })
+    const runLog = spyRunLog()
 
     const { groups, result } = await drain(phaseFor(f), f)
 
     expect(result).toEqual({ status: 'completed' })
     expect(groups).toEqual([])
     expect(await runDeltas(f)).toEqual([])
+    expect(runLog()).toEqual([])
   })
 
   it('emits no group for a character with no record or an empty one', async () => {
@@ -328,6 +345,59 @@ describe('normalizeStackablesStep', () => {
     expect(await stackablesOf(f, WREN)).toEqual({ Gold: 4, gold: 3 })
   })
 
+  it('normalizes records whose later writes touched other state fields, not the stackables', async () => {
+    await seedCharacter(f, WREN, 'Wren', { Gold: 5, gold: 3 })
+    await seedCharacter(f, MARA, 'Mara', { Arrows: 1, arrows: 2 })
+    await apply(
+      f,
+      {
+        kind: 'updateEntityLocationTracking',
+        source: 'per_turn_classifier',
+        payload: { branchId: f.branchId, id: WREN, currentLocationId: 'loc_far_bank' },
+      },
+      byLaterTurn(f),
+    )
+    await apply(
+      f,
+      {
+        kind: 'updateEntityVisualState',
+        source: 'user_edit',
+        payload: { branchId: f.branchId, id: MARA, visual: { hair: 'grey at the temples' } },
+      },
+      BY_USER,
+    )
+
+    const { groups } = await drain(phaseFor(f), f)
+
+    expect(groups.flatMap((group) => group.actions)).toEqual([
+      {
+        kind: 'updateEntityStackables',
+        source: 'chapter_close',
+        payload: { branchId: f.branchId, id: WREN, stackables: { gold: 8 } },
+      },
+      {
+        kind: 'updateEntityStackables',
+        source: 'chapter_close',
+        payload: { branchId: f.branchId, id: MARA, stackables: { arrows: 3 } },
+      },
+    ])
+  })
+
+  it('emits no group when the only record that would fold is one the user wrote after E', async () => {
+    await seedCharacter(f, WREN, 'Wren', { Gold: 5, gold: 3 })
+    await apply(f, writeStackables(f, WREN, { Gold: 6, gold: 3 }, 'user_edit'), BY_USER)
+    const runLog = spyRunLog()
+
+    const { groups, result } = await drain(phaseFor(f), f)
+
+    expect(result).toEqual({ status: 'completed' })
+    expect(groups).toEqual([])
+    expect(await stackablesOf(f, WREN)).toEqual({ Gold: 6, gold: 3 })
+    expect(runLog()).toEqual([
+      runLogged({ rows: 0, skippedProtected: 1, skippedUnsafe: 0, status: 'none' }),
+    ])
+  })
+
   it("reads this branch's characters only: a singular another branch holds is no fold target", async () => {
     await seedCharacter(f, MARA, 'Mara', { arrows: 3 })
     await f.ctx.db
@@ -351,30 +421,60 @@ describe('normalizeStackablesStep', () => {
     expect(groups).toEqual([])
   })
 
-  it('keeps a key spelled __proto__ as an own key beside the keys it folds', async () => {
-    await seedCharacter(f, WREN, 'Wren')
-    await f.ctx.db
-      .update(entities)
-      .set({
-        state: {
-          ...emptyEntityState('character'),
-          stackables: JSON.parse('{"__proto__":3,"Gold":1,"gold":1}') as Record<string, number>,
-        },
-      })
-      .where(eq(entities.id, WREN))
+  it.each<{ stored: Record<string, number>; folded: Record<string, number> }>([
+    { stored: { Constructor: 1 }, folded: { constructor: 1 } },
+    { stored: { ToString: 2, gold: 1 }, folded: { tostring: 2, gold: 1 } },
+  ])('reverses the fold of $stored back to exactly what was stored', async ({ stored, folded }) => {
+    await seedCharacter(f, WREN, 'Wren', stored)
 
-    const { groups } = await drain(phaseFor(f), f)
+    await drain(phaseFor(f), f)
+    expect(await stackablesOf(f, WREN)).toEqual(folded)
 
-    const written = groups.flatMap((group) => group.actions)
-    expect(written).toHaveLength(1)
-    const action = written[0]
-    if (action?.kind !== 'updateEntityStackables') throw new Error('expected a stackables write')
-    expect(Object.hasOwn(action.payload.stackables, '__proto__')).toBe(true)
-    expect(Object.entries(action.payload.stackables).sort()).toEqual([
-      ['__proto__', 3],
-      ['gold', 2],
-    ])
+    expect(await reverseReplayDeltas(ACTION_ID, f.ctx)).toBe(1)
+    expect(await stackablesOf(f, WREN)).toEqual(stored)
   })
+
+  it.each([
+    ['before and after folding', '{"__proto__":1,"__PROTO__":2}'],
+    ['once folded', '{"__PROTO__":2}'],
+    ['before folding only', '{"__proto__":0,"Gold":1}'],
+    ['beside keys that fold', '{"__proto__":3,"Gold":1,"gold":1}'],
+  ])(
+    'leaves a record holding a __proto__ key %s as stored, and CTRL-Z leaves it so',
+    async (_, raw) => {
+      await seedCharacter(f, WREN, 'Wren')
+      await seedCharacter(f, MARA, 'Mara', { Arrows: 1, arrows: 2 })
+      await f.ctx.db
+        .update(entities)
+        .set({
+          state: {
+            ...emptyEntityState('character'),
+            stackables: JSON.parse(raw) as Record<string, number>,
+          },
+        })
+        .where(eq(entities.id, WREN))
+      const storedEntries = Object.entries(JSON.parse(raw) as Record<string, number>)
+      const wrenEntries = async () =>
+        Object.entries((await stackablesOf(f, WREN)) as Record<string, number>)
+      const runLog = spyRunLog()
+
+      const { groups } = await drain(phaseFor(f), f)
+
+      expect(groups.flatMap((group) => group.actions)).toEqual([
+        {
+          kind: 'updateEntityStackables',
+          source: 'chapter_close',
+          payload: { branchId: f.branchId, id: MARA, stackables: { arrows: 3 } },
+        },
+      ])
+      expect(await wrenEntries()).toEqual(storedEntries)
+      expect(runLog()).toEqual([
+        runLogged({ rows: 1, skippedProtected: 0, skippedUnsafe: 1, status: 'ok' }),
+      ])
+      expect(await reverseReplayDeltas(ACTION_ID, f.ctx)).toBe(1)
+      expect(await wrenEntries()).toEqual(storedEntries)
+    },
+  )
 
   it("leaves a record alone when its folded key would pass the schema's bound", async () => {
     const long = 'İ'.repeat(40)
@@ -392,6 +492,33 @@ describe('normalizeStackablesStep', () => {
       },
     ])
     expect(await stackablesOf(f, WREN)).toEqual({ [long]: 1, gold: 1 })
+  })
+
+  it('logs a run whose only fold would pass the bound, with no group', async () => {
+    await seedCharacter(f, WREN, 'Wren', { ['İ'.repeat(40)]: 1, gold: 1 })
+    const runLog = spyRunLog()
+
+    const { groups } = await drain(phaseFor(f), f)
+
+    expect(groups).toEqual([])
+    expect(runLog()).toEqual([
+      runLogged({ rows: 0, skippedProtected: 0, skippedUnsafe: 1, status: 'none' }),
+    ])
+  })
+
+  it('logs the run as memory.close_stackables with what it wrote and what it skipped', async () => {
+    await seedCharacter(f, WREN, 'Wren', { Gold: 5, gold: 3 })
+    await seedCharacter(f, TOBIN, 'Tobin', { ['İ'.repeat(40)]: 1, gold: 1 })
+    await seedCharacter(f, MARA, 'Mara', { Arrows: 1, arrows: 2 })
+    await apply(f, writeStackables(f, WREN, { Gold: 6, gold: 3 }, 'user_edit'), BY_USER)
+    const runLog = spyRunLog()
+
+    await drain(phaseFor(f), f)
+
+    expect(await stackablesOf(f, MARA)).toEqual({ arrows: 3 })
+    expect(runLog()).toEqual([
+      runLogged({ rows: 1, skippedProtected: 1, skippedUnsafe: 1, status: 'ok' }),
+    ])
   })
 
   it("normalizes a record whose user edit came before a content edit of E's prose", async () => {
@@ -448,6 +575,7 @@ describe('normalizeStackablesStep', () => {
 
   it('fails the close when its group is refused', async () => {
     await seedCharacter(f, WREN, 'Wren', { Gold: 5, gold: 3 })
+    const runLog = spyRunLog()
 
     const { result } = await drain(phaseFor(f), f, () => ({
       status: 'rejected',
@@ -456,9 +584,16 @@ describe('normalizeStackablesStep', () => {
 
     expect(result).toEqual({
       status: 'failed',
-      error: { kind: 'action-layer', detail: 'stackable normalization refused: scripted refusal' },
+      error: {
+        kind: 'action-layer',
+        detail: 'stackable normalization refused: scripted refusal',
+        tableName: 'entities',
+      },
     })
     expect(await stackablesOf(f, WREN)).toEqual({ Gold: 5, gold: 3 })
+    expect(runLog()).toEqual([
+      runLogged({ rows: 1, skippedProtected: 0, skippedUnsafe: 0, status: 'rejected' }),
+    ])
   })
 
   // The nth read of `aborted` and every one after it say so; polls are counted, not timed.
@@ -485,16 +620,6 @@ describe('normalizeStackablesStep', () => {
 
   it('returns aborted for a cancelled close with nothing to fold', async () => {
     await seedCharacter(f, WREN, 'Wren', { gold: 8 })
-    const controller = new AbortController()
-    controller.abort()
-
-    const gen = normalizeStackablesStep.run(stepContext(f, controller.signal))
-
-    expect(await gen.next(undefined)).toEqual({ done: true, value: { status: 'aborted' } })
-  })
-
-  it('returns aborted, emitting nothing, when the close is cancelled', async () => {
-    await seedCharacter(f, WREN, 'Wren', { Gold: 5, gold: 3 })
     const controller = new AbortController()
     controller.abort()
 

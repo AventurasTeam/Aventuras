@@ -12,8 +12,7 @@ import {
   toEmbeddedFieldRow,
   vectorsByIdQuery,
 } from '@/lib/db'
-import { embedderReadDim } from '@/lib/embedder'
-import { composeRetrievalEmbedDeps, resolveStorySwapConfig } from '@/lib/embedder-swap'
+import { composeRetrievalEmbedDeps } from '@/lib/embedder-swap'
 import {
   decodeVector,
   runSyncStage,
@@ -26,8 +25,8 @@ import { storiesStore } from '@/lib/stores'
 import { findClusters, type ClusterInput } from './close-clusters'
 import type { CodeStep, CodeStepContext } from './slots'
 import type { PhaseContext, PhaseEmittedEvent, PhaseFailure, PhaseResult } from '../../types'
+import { EMBED_TIMEOUT_MS, embedderInitFailure, resolveStoryEmbedder } from '../blocking-embed'
 import { setCloseClusters } from '../close-intermediates'
-import { EMBED_TIMEOUT_MS } from '../embed-bound'
 
 /** What the range embed needs of an embedder: per-turn retrieval's deps, and where vectors live. */
 export type CloseEmbedDeps = Pick<SyncStageDeps, 'revalidateRows' | 'embedRows'> & {
@@ -36,7 +35,7 @@ export type CloseEmbedDeps = Pick<SyncStageDeps, 'revalidateRows' | 'embedRows'>
   dim: number
 }
 
-type RangeHappening = { id: string; anchorIndex: number | null }
+type RangeHappening = { id: string; anchorIndex: number }
 
 let testDeps: CloseEmbedDeps | undefined
 
@@ -47,11 +46,6 @@ export function __setCloseEmbedDepsForTest(deps: CloseEmbedDeps | undefined): vo
 
 const TIMED_OUT = `embed timed out after ${EMBED_TIMEOUT_MS}ms`
 
-// per-turn-retrieval.ts's envelope: an embedder the close can't reach fails it as it fails a turn.
-function embedderInitFailure(detail: string): PhaseFailure {
-  return { status: 'failed', error: { kind: 'embedder', reason: 'init', detail, staleCount: null } }
-}
-
 /** Per-turn retrieval's resolution, keyed by the run's story. */
 function resolveCloseEmbedDeps(phase: PhaseContext): CloseEmbedDeps | PhaseFailure {
   const { storyId } = phase
@@ -60,17 +54,16 @@ function resolveCloseEmbedDeps(phase: PhaseContext): CloseEmbedDeps | PhaseFailu
   const settings = storiesStore.getStories().rows.find((row) => row.id === storyId)?.settings
   if (settings == null)
     return embedderInitFailure(`embedder not configured: story ${storyId} isn't loaded`)
-  const resolution = resolveStorySwapConfig(storyId, {
-    modelId: settings.embedding_model_id,
-    backend: settings.embeddingBackend,
-    providerId: settings.embedding_provider_id,
-  })
-  if (!resolution.ok) return embedderInitFailure(`embedder not configured: ${resolution.reason}`)
-  const dim = embedderReadDim(resolution.config)
-  if (dim === null)
-    return embedderInitFailure(`embedder dim unknown for model ${resolution.config.modelId}`)
-  const { embedRows, revalidateRows } = composeRetrievalEmbedDeps(resolution.config)
-  return { embedRows, revalidateRows, queryAll: queryRows, modelId: resolution.config.modelId, dim }
+  const embedder = resolveStoryEmbedder(storyId, settings)
+  if ('status' in embedder) return embedder
+  const { embedRows, revalidateRows } = composeRetrievalEmbedDeps(embedder.config)
+  return {
+    embedRows,
+    revalidateRows,
+    queryAll: queryRows,
+    modelId: embedder.config.modelId,
+    dim: embedder.dim,
+  }
 }
 
 // `taskEntryIds` is part 0's: the range's non-system entries by position, as closeAgentPhase read them.
@@ -82,11 +75,13 @@ async function readRangeHappenings(ctx: CodeStepContext): Promise<RangeHappening
       .select({ id: happenings.id, occurredAtEntryId: happenings.occurredAtEntryId })
       .from(happenings)
       .where(and(eq(happenings.branchId, ctx.branchId), inArray(happenings.occurredAtEntryId, ids)))
-    for (const { id, occurredAtEntryId } of found)
-      rows.push({
-        id,
-        anchorIndex: occurredAtEntryId === null ? null : (indexOf.get(occurredAtEntryId) ?? null),
-      })
+    for (const { id, occurredAtEntryId } of found) {
+      // NULL matches no IN list, so a row with no anchor never reaches the clusters.
+      const anchorIndex = occurredAtEntryId === null ? undefined : indexOf.get(occurredAtEntryId)
+      if (anchorIndex === undefined)
+        throw new Error(`range embed: happening ${id} has no anchor in the range`)
+      rows.push({ id, anchorIndex })
+    }
   }
   return rows
 }

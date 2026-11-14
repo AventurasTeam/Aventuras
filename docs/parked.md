@@ -1833,11 +1833,21 @@ close's agent isn't one: its typed tools write named fields.
 
 That stackable doesn't land today either. `encodeField` in
 `lib/actions/delta/delta-encoding.ts` builds the undo payload by
-assignment, so a changed or added `__proto__` count encodes as `{}`
-and `updateEntityStackables` refuses the write as a noop; the row keeps
-its old stackables. A count that already exists still restores on
-undo. Found by the 2026-10-24 triage pass's slice review; the encoding
-dates from #546. The same signal applies.
+assignment, so a changed, added or removed `__proto__` count encodes as
+`{}` and `updateEntityStackables` refuses the write as a noop; the row
+keeps its old stackables. A count that already exists still restores on
+undo. The assignment stays on purpose: reversal rebuilds the payload by
+assignment too, in `pruneUndoPartial` and in the record overlay of
+`applyUndoPayload`, so a recorded `__proto__` key would land a write
+its undo can't restore. A write that changes another key beside the
+`__proto__` count still lands, and its undo leaves that count as
+written. Keys named like other `Object.prototype` members, such as
+`constructor`, encode as any key: `encodeField` tests membership with
+`Object.hasOwn`. Chapter close's stackable normalization leaves a
+record holding a `__proto__` key as stored
+([`chapter-close.md → 3c`](./memory/chapter-close.md#3c--stackable-normalization)).
+Found by the 2026-10-24 triage pass's slice review; the encoding dates
+from #546. The same signal applies.
 
 #### Merging any two rows of one kind
 

@@ -92,12 +92,12 @@ async function readTurns(
   if (end === undefined)
     throw new Error(`read_turns: the chapter's end entry ${ctx.endEntryId} is not on the branch`)
 
-  const notRead: NotRead[] = []
+  const notRead = new Map<string, NotRead>()
   const readable = new Map<string, { row: TurnRow; handle: string }>()
   for (const { handle, id } of asked) {
     const verdict = judge(handle, id, rows, end.position)
-    if ('notRead' in verdict) notRead.push(verdict.notRead)
-    else if (!readable.has(verdict.row.id))
+    if ('notRead' in verdict) notRead.set(verdict.notRead.id, verdict.notRead)
+    else
       readable.set(verdict.row.id, {
         row: verdict.row,
         handle: ctx.ids.handleOf(verdict.row.id) ?? handle,
@@ -113,7 +113,7 @@ async function readTurns(
   }
   const unread = ordered.slice(READ_TURNS_MAX).map(({ handle }) => handle)
   if (unread.length > 0) output.unread = unread
-  if (notRead.length > 0) output.notRead = notRead
+  if (notRead.size > 0) output.notRead = [...notRead.values()]
   return { output, rows: [], read: [] }
 }
 

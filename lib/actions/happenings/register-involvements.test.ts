@@ -487,4 +487,40 @@ describe.each(LINK_TABLES)('userDeletedHappeningLink over $name', ({ add, remove
 
     expect(await deletedOn(ctx, 'hap_1')).toBe(false)
   })
+
+  // The entity's delete takes its link rows with it, logging none of their own.
+  const deleteChar = (ctx: Ctx) =>
+    run(
+      ctx,
+      { kind: 'deleteEntity', source: 'user_edit', payload: { branchId: 'br_1', id: 'char_1' } },
+      'act_delete_char',
+    )
+
+  it("reads the user's delete after the prose of a character linked to it as deleted", async () => {
+    const { ctx } = await setupLinks()
+    await add(ctx, 'hap_1')
+    await writeProse(ctx)
+    expect((await deleteChar(ctx)).status).toBe('ok')
+
+    expect(await deletedOn(ctx, 'hap_1')).toBe(true)
+  })
+
+  it('reads no delete before the prose of a character linked to it', async () => {
+    const { ctx } = await setupLinks()
+    await add(ctx, 'hap_1')
+    expect((await deleteChar(ctx)).status).toBe('ok')
+    await writeProse(ctx)
+
+    expect(await deletedOn(ctx, 'hap_1')).toBe(false)
+  })
+
+  it('reads no delete of a character linked only to another happening', async () => {
+    const { ctx } = await setupLinks()
+    await add(ctx, 'hap_2')
+    await writeProse(ctx)
+    expect((await deleteChar(ctx)).status).toBe('ok')
+
+    expect(await deletedOn(ctx, 'hap_1')).toBe(false)
+    expect(await deletedOn(ctx, 'hap_2')).toBe(true)
+  })
 })

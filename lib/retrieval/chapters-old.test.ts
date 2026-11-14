@@ -183,10 +183,7 @@ describe('happeningAge', () => {
 })
 
 describe('characterChaptersOld', () => {
-  const lastSeenIn = (entryId: unknown) => ({
-    traits: [],
-    lastSeenAt: { entryId, locationId: null, worldTime: 0 },
-  })
+  const lastSeenIn = (entryId: string) => ({ entryId, locationId: null, worldTime: 0 })
 
   it('ages a character from the entry it was last seen at', () => {
     expect(characterChaptersOld(lastSeenIn(inChapter(59)), AT_60)).toBe(1)
@@ -197,13 +194,9 @@ describe('characterChaptersOld', () => {
     expect(characterChaptersOld(lastSeenIn(OPEN), AT_60)).toBe(0)
   })
 
-  it('reads 0 for a state with no readable lastSeenAt', () => {
+  it('reads 0 for a character never seen, or for no character', () => {
     expect(characterChaptersOld(null, AT_60)).toBe(0)
-    expect(characterChaptersOld({ traits: [] }, AT_60)).toBe(0)
-    expect(characterChaptersOld({ lastSeenAt: null }, AT_60)).toBe(0)
-    // A list holding a stamped id is still no entry id.
-    expect(characterChaptersOld(lastSeenIn([inChapter(3)]), AT_60)).toBe(0)
-    expect(characterChaptersOld('entry_ch3', AT_60)).toBe(0)
+    expect(characterChaptersOld(undefined, AT_60)).toBe(0)
   })
 
   it('reads 0 with no closed chapter', () => {
@@ -212,16 +205,25 @@ describe('characterChaptersOld', () => {
 })
 
 describe('threadChaptersOld', () => {
+  const resolvedAt = (resolvedAtEntryId: string | null) =>
+    ({ status: 'resolved', resolvedAtEntryId }) as const
+
   it('ages a thread from the entry it resolved or failed at', () => {
-    expect(threadChaptersOld(inChapter(58), AT_60)).toBe(2)
+    expect(threadChaptersOld(resolvedAt(inChapter(58)), AT_60)).toBe(2)
+    expect(threadChaptersOld({ status: 'failed', resolvedAtEntryId: inChapter(57) }, AT_60)).toBe(3)
   })
 
   it('reads 0 for no resolved ref, or one in the open region', () => {
-    expect(threadChaptersOld(null, AT_60)).toBe(0)
-    expect(threadChaptersOld(OPEN, AT_60)).toBe(0)
+    expect(threadChaptersOld(resolvedAt(null), AT_60)).toBe(0)
+    expect(threadChaptersOld(resolvedAt(OPEN), AT_60)).toBe(0)
+  })
+
+  // Reopening keeps the ref the thread resolved at.
+  it('reads 0 for a pending thread whatever ref it still holds', () => {
+    expect(threadChaptersOld({ status: 'pending', resolvedAtEntryId: inChapter(3) }, AT_60)).toBe(0)
   })
 
   it('reads 0 with no closed chapter', () => {
-    expect(threadChaptersOld('e1', EMPTY_CHAPTER_AGES)).toBe(0)
+    expect(threadChaptersOld(resolvedAt('e1'), EMPTY_CHAPTER_AGES)).toBe(0)
   })
 })

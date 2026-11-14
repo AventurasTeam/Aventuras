@@ -46,6 +46,17 @@ export function modelDir(id: string): string {
   return resolveModelDir(embeddersRoot(), id)
 }
 
+/** `id`'s folder under `root`, userData's embedders/ by default; a refused id throws, naming it. */
+export function requireModelDir(id: string, root?: string): string {
+  try {
+    return resolveModelDir(root ?? embeddersRoot(), id)
+  } catch (error) {
+    throw new Error(
+      `Invalid model id "${id}": ${error instanceof Error ? error.message : String(error)}`,
+    )
+  }
+}
+
 // Leading char excludes '.', so '.' / '..' / dotfiles can't be written, and the
 // class excludes both separators — join() can then never escape the model dir.
 const SAFE_FILE_NAME = /^[A-Za-z0-9][A-Za-z0-9._-]*$/

@@ -88,7 +88,7 @@ export function normalizeStackables(
     const singular = heldSingular(key, held)
     if (singular !== undefined) foldsTo.set(key, singular)
   }
-  // A key that receives a fold is a singular: folding it on would chain (buses → bus → bu).
+  // A key that receives a fold stays put, so one pass never chains buses → bus → bu.
   const receivers = new Set(foldsTo.values())
   const normalized = new Map<string, Record<string, number>>()
   for (const [id, keys] of folded) {

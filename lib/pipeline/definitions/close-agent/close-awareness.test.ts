@@ -49,6 +49,7 @@ import {
   stepWith,
   closePhaseFor,
   drainApplying,
+  userWritesAwareness,
 } from './__tests__/close-awareness-fixture'
 
 vi.mock('@/lib/ai', async (importOriginal) => ({
@@ -207,6 +208,67 @@ describe('the Awareness start', () => {
     expect(new Set(start?.show.groups.flatMap(({ rows }) => rows.map(({ list }) => list)))).toEqual(
       new Set(['frequent']),
     )
+  })
+
+  describe("the high-frequency set and the user's pins", () => {
+    // Rumours 1…22 count 2…23 and predate the chapter; the set holds rumours 3…22.
+    const rumours = async (): Promise<void> => {
+      await putChapter(fx)
+      await putCharacter(fx, ARIA, 'Aria')
+      for (let n = 1; n <= 23; n++)
+        await putHappening(fx, {
+          id: `hap_${uuid(100 + n)}`,
+          title: `Rumour ${String(n).padStart(2, '0')}`,
+          occurredAtEntryId: fx.entries[1]!.id,
+        })
+      for (let n = 1; n <= 22; n++)
+        await putAwareness(fx, {
+          id: `haw_${uuid(200 + n)}`,
+          characterId: ARIA,
+          happeningId: `hap_${uuid(100 + n)}`,
+          learnedAtEntryId: fx.entries[1]!.id,
+          decayResistance: 0.3,
+          retrievalCount: n + 1,
+        })
+    }
+
+    it('leaves out a row whose pin the user set and one the user created, and refills from the rest', async () => {
+      await rumours()
+      await userWritesAwareness(fx, {
+        characterId: ARIA,
+        happeningId: `hap_${uuid(122)}`,
+        decayResistance: 0.8,
+      })
+      await userWritesAwareness(fx, {
+        characterId: ARIA,
+        happeningId: `hap_${uuid(123)}`,
+        retrievalCount: 99,
+      })
+
+      const start = await awarenessTask.start(promptContextFor(fx))
+
+      const listed = start?.seeds.map(({ id }) => id) ?? []
+      const titles = start?.show.groups.map(({ happening }) => happening.title) ?? []
+      expect(listed).toHaveLength(20)
+      expect(listed).not.toContain(`haw_${uuid(222)}`)
+      expect(titles).not.toContain('Rumour 23')
+      expect(listed).toContain(`haw_${uuid(202)}`)
+      expect(listed).toContain(`haw_${uuid(203)}`)
+      expect(listed).not.toContain(`haw_${uuid(201)}`)
+    })
+
+    it("keeps a row whose only user edit isn't its pin", async () => {
+      await rumours()
+      await userWritesAwareness(fx, {
+        characterId: ARIA,
+        happeningId: `hap_${uuid(122)}`,
+        source: 'Aria heard it twice',
+      })
+
+      const start = await awarenessTask.start(promptContextFor(fx))
+
+      expect(start?.seeds.map(({ id }) => id)).toContain(`haw_${uuid(222)}`)
+    })
   })
 
   // Twenty of Aria's rows, counted 2…21, hold the set; Jorin's row of the kept crossing (1) is
@@ -523,18 +585,60 @@ describe('the Awareness start', () => {
     ).rejects.toThrow('awareness: the close holds no range')
   })
 
-  it("keeps each listed row's pin as the baseline set_pin holds the close to", async () => {
+  it("keeps each listed row's pin as the baseline set_pin holds the close to, no pin as 0", async () => {
     await seedAwarenessWorld(fx)
     const ctx = promptContextFor(fx)
 
     await awarenessTask.start(ctx)
 
-    expect([A_CHAPTER, A_BOTH, A_FREQUENT].map((id) => ctx.ids.startPinOf(id))).toEqual([
-      0.6,
-      0,
-      null,
-    ])
+    expect([A_CHAPTER, A_BOTH, A_FREQUENT].map((id) => ctx.ids.startPinOf(id))).toEqual([0.6, 0, 0])
     expect(ctx.ids.startPinOf(A_COMMON)).toBeUndefined()
+  })
+
+  it('keeps the first start pin when a start runs again in the same close', async () => {
+    await seedAwarenessWorld(fx)
+    const ctx = promptContextFor(fx)
+    await awarenessTask.start(ctx)
+    await fx.ctx.db
+      .update(happeningAwareness)
+      .set({ decayResistance: 0.9 })
+      .where(eq(happeningAwareness.id, A_CHAPTER))
+
+    await awarenessTask.start(ctx)
+
+    expect(ctx.ids.startPinOf(A_CHAPTER)).toBe(0.6)
+  })
+
+  it("lists a row learned at the chapter's first turn and one learned at E as the chapter's", async () => {
+    const AT_FIRST = `haw_${uuid(46)}`
+    const AT_END = `haw_${uuid(47)}`
+    await putChapter(fx)
+    await putCharacter(fx, ARIA, 'Aria')
+    await putHappening(fx, { id: FIGHT, title: 'A fight', occurredAtEntryId: fx.entries[3]!.id })
+    await putHappening(fx, { id: TOLL, title: 'The toll', occurredAtEntryId: endOf(fx) })
+    for (const [id, happeningId, learnedAtEntryId] of [
+      [AT_FIRST, FIGHT, fx.entries[3]!.id],
+      [AT_END, TOLL, endOf(fx)],
+    ] as const)
+      await putAwareness(fx, {
+        id,
+        characterId: ARIA,
+        happeningId,
+        learnedAtEntryId,
+        decayResistance: 0.6,
+      })
+
+    const start = await awarenessTask.start(promptContextFor(fx))
+
+    expect(
+      start?.show.groups.map(({ happening, rows }) => [
+        happening.title,
+        rows.map(({ learnedAt, list }) => [learnedAt, list]),
+      ]),
+    ).toEqual([
+      ['A fight', [['t1', 'chapter']]],
+      ['The toll', [['t4', 'chapter']]],
+    ])
   })
 
   // The start lists the chapter's rows by the same entries set_pin's one-way rule tests.
@@ -679,6 +783,13 @@ describe('the Awareness start', () => {
     await sibling.run(
       sql`UPDATE story_entries SET rowid = -1 WHERE branch_id = ${OTHER_BRANCH} AND id = ${endOf(fx)}`,
     )
+    // The sibling's user pin: an unscoped read of the user's pins drops this branch's A_FREQUENT.
+    await userWritesAwareness(fx, {
+      branchId: OTHER_BRANCH,
+      characterId: JORIN,
+      happeningId: TOLL,
+      decayResistance: 0.1,
+    })
     await seedAwarenessWorld(fx)
 
     const start = await awarenessTask.start(promptContextFor(fx))

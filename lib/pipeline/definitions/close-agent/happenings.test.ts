@@ -348,6 +348,37 @@ describe('happeningsTask', () => {
     ).toBeNull()
   })
 
+  it('drops a row that has lost its anchor since the embed, which would never have clustered it', async () => {
+    await seedClusters(f)
+    const edited = await applyDeltaAction(
+      {
+        action: {
+          kind: 'updateHappening',
+          source: 'user_edit',
+          payload: {
+            branchId: f.branchId,
+            id: SASH,
+            patch: { occurredAtEntryId: null, temporal: 'Every night' },
+            proseEntryId: null,
+          },
+        },
+        actionId: 'act_user_edit',
+        branchId: f.branchId,
+        entryId: null,
+      },
+      f.ctx,
+    )
+    expect(edited.status).toBe('ok')
+
+    const start = await happeningsTask.start(
+      promptContextFor(f, idsWithTurns(f), clustered(CLUSTERS)),
+    )
+    expect(start?.show.clusters.map((cluster) => cluster.map((row) => row.title))).toEqual([
+      ['A light on the far bank', 'Tobin poles Wren across'],
+    ])
+    expect(start?.seeds).toEqual([LIGHT, CROSSING].map((id) => ({ table: 'happenings', id })))
+  })
+
   it('shows every entity an involvement names that still exists, once, by name then id', async () => {
     await seedCharacter(f, WREN, 'Wren')
     await seedCharacter(f, WREN_TWIN, 'Wren')

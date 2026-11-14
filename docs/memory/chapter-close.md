@@ -186,7 +186,9 @@ A write returns one of three results:
   added, it breaks a rule of its sub-job, or the row moved or went
   since the task read it, saying where it went.
 - `skipped`, when the field stands and a retry won't help: the user wrote
-  it after the cited prose, or a later turn did.
+  it after the cited prose, or a later turn did, or it is a pin the user
+  ever set ([3d](#3d--awareness-pin-tuning),
+  [3e](#3e--happenings-consolidation)).
 
 **A close leaves alone what later turns wrote.** A close runs after the
 turns past its chapter but anchors before them, so it skips a field one
@@ -565,7 +567,8 @@ folds variant spellings of one fungible onto one key, per
   is left whole: folding some of its keys would bring an old spelling
   back beside the user's. A record whose folded form would break the
   schema's bound on a stackables key, which lowercasing can lengthen
-  past 40 characters, is left as stored.
+  past 40 characters, is left as stored, and so is one holding a
+  `__proto__` key before or after folding, which an undo can't restore.
 
 Every record that changes lands in one group anchored on the end entry,
 and its undo yields whole to a later write of the record
@@ -612,9 +615,12 @@ handle. Its bounds hold from the pin the Awareness start showed:
 - A pin the user ever set is left as they set it: `skipped`, raise or
   lower, whatever turn the call cites, since a pin is the user's
   preference, not a fact about the prose. A row the user created counts
-  as one whose pin they set. Other fields give way only to a user edit
-  after the cited turn
-  ([Tools and writes](#tools-and-writes)).
+  as one whose pin they set, and so does a row a World
+  [merge](../ui/screens/world/world.md#merge) moved to the kept
+  character, since the merge re-creates it as the user's
+  ([`triage.md`](../implementation/triage.md), "World merge re-creates
+  awareness rows as the user's."). Other fields give way only to a user
+  edit after the cited turn ([Tools and writes](#tools-and-writes)).
 
 **One-way frequency signal.** The frequency-driven candidate set
 only triggers consider-bump decisions, never demote-on-frequency.
@@ -628,13 +634,21 @@ counter, reset at chapter close after phase 3d commits**. Counts
 accumulate during a chapter via ranker-side increments (each
 injected row gets its `retrieval_count` bumped, delta-logged under
 the turn's `action_id` for rollback correctness). At chapter close,
-the top 20 by the chapter's accumulated counts form the set, a constant
-tuning will move; the agent reviews them. After the Awareness task, the
-last one, all counts reset to 0, whether or not the task stopped early:
-the reset is a delta per row under the chapter-close `action_id`, all
-landing as one group that
-[History](../ui/screens/world/world.md#history-tab) doesn't show. Next
-chapter starts fresh.
+the top 20 by the counts accumulated since the last close form the set,
+a constant tuning will move; the agent reviews them. After the
+Awareness task, the last one, all counts reset to 0, whether or not the
+task stopped early: the reset is a delta per row under the
+chapter-close `action_id`, all landing as one group that
+[History](../ui/screens/world/world.md#history-tab) doesn't show.
+
+The counter covers every turn up to the close, not up to the chapter's
+end. A close runs after the turns past its end (an auto close never ends
+on the newest reply, [Phase 1](#phase-1--boundary-selection)), so their
+retrievals count toward this close's set, and the next chapter's
+counting starts at the close, not at its first turn. Bounding it at the
+end would make the reset carry each row's later bumps across the close;
+a few turns' frequency signal landing one chapter early isn't worth
+that.
 
 The log doesn't make the counter exact across a close, since a count
 bump's undo restores the prior count by assignment. Rolling back turns
@@ -671,11 +685,13 @@ the list it came from; a row in both lists shows as a closed-chapter
 row. The high-frequency set is every row with a count above 0, highest
 first, ties by id, at most 20, read after the Happenings task so a
 merge's summed counts count. It leaves out a row a later turn created,
-learned after the chapter's end, but keeps the rows of retired
-characters. Both lists leave out the rows of a common-knowledge
-happening, where a pin reaches nothing. The chapter's summary comes
-with the lists. The chapter's rows are not bounded; the size the start
-reaches on the dataset chapter is measured in
+learned after the chapter's end, and a row whose pin the user ever set
+or that they created, since `set_pin` skips both; the next rows by count
+take their places. It keeps the rows of retired characters. Both lists
+leave out the rows of a common-knowledge happening, where a pin reaches
+nothing. The chapter's summary comes with the lists. The chapter's rows
+are not bounded; the size the start reaches on the dataset chapter is
+measured in
 [`followups.md → Tuning and play testing`](../followups.md#tuning-and-play-testing).
 
 ### 3e — happenings consolidation
@@ -688,10 +704,10 @@ Sub-job 3e identifies clusters that should merge.
 **Candidate identification (algorithmic, no LLM):**
 
 The close first embeds the happenings in its range: the catch-up passes'
-rows have no vectors until the next sync stage, and 3e never revisits a
-closed range, so their duplicates would stay for good. The embed takes
-the 300 s bound per-turn retrieval's embeds take, and an embedder
-failure, the bound's expiry included, fails the close. It then
+rows have no vectors until the next sync stage, and only a re-run of the
+close revisits a closed range, so their duplicates would otherwise stay.
+The embed takes the 300 s bound per-turn retrieval's embeds take, and an
+embedder failure, the bound's expiry included, fails the close. It then
 clusters happenings within the closed chapter range by:
 
 - Embedding similarity ≥ 0.80 (cosine).
@@ -752,7 +768,14 @@ row is a merge that keeps the kept row's text. Keep distinct is no call.
   joins only if the joined text stays within 120 characters, else it is
   skipped and the next is tried, so no stored source is ever cut. A
   user-written row's values stand when the user wrote them after the
-  cited prose.
+  cited prose, and a pin the user ever set stands whatever turn is
+  cited, as in [3d](#3d--awareness-pin-tuning): the kept row's isn't
+  sent, and an absorbed row's protects the merge (below). A known edge:
+  a row a World merge moved counts as user-pinned (3d), so its pin stays
+  on the kept row, and a merge that would absorb a happening a merged
+  character knows is skipped at every close
+  ([`triage.md`](../implementation/triage.md), "World merge re-creates
+  awareness rows as the user's.").
 - Deleted rows are delta-logged for rollback.
 
 **A merge lands whole, once per row.** Code checks user precedence on
@@ -760,12 +783,15 @@ every row of a merge before any of it lands, so a merge can't delete a
 row while its composite is skipped: one protected row skips the whole
 merge, as does a row a later turn touched. An absorbed row is protected
 by a user edit of it or its link rows, a link row the user deleted
-after the prose included. The kept row is protected only by a user edit
-of a field the merge writes, since its other fields lose nothing to a
-merge. A merge can't absorb a row this close already wrote, since redo
-refuses an update and a delete of one row in one group, and CTRL-Z of
-the close would then be refused for good. The agent merges everything
-in one call instead of in a chain.
+after the prose included, and by a pin the user ever set on one of its
+awareness rows, whatever turn is cited: merged, the pin would move to a
+row the close writes, which `set_pin` no longer reads as theirs, or give
+way to the kept row's higher pin. The kept row is protected only by a
+user edit of a field the merge writes, since its other fields lose
+nothing to a merge. A merge can't absorb a row this close already
+wrote, since redo refuses an update and a delete of one row in one
+group, and CTRL-Z of the close would then be refused for good. The
+agent merges everything in one call instead of in a chain.
 
 **Conservative override:** when the LLM is uncertain about cluster
 membership, default to keep-distinct.
@@ -882,13 +908,13 @@ and a restart end the same way, and every Send is a fresh attempt. A
 manual close isn't persisted: a restart drops it, and so does a reversal
 that removes its end entry.
 
-| Phase                      | Failure mode                                                                                         |
-| -------------------------- | ---------------------------------------------------------------------------------------------------- |
-| **0** (catch-up passes)    | The failed pass stops the chain; it runs before the next turn, and the close follows it.             |
-| **1** (boundary selection) | `callWithRetry` same-prompt retry; an unusable reply falls back to the latest reply before the head. |
-| **2** (metadata)           | A failed call fails the close, and so does a create or stamp that doesn't land.                      |
-| **3** (lore-mgmt)          | A refused write goes back to the task; a failed call, an embedder failure included, fails the close. |
-| **4** (lifecycle review)   | As phase 3.                                                                                          |
+| Phase                      | Failure mode                                                                                                                              |
+| -------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------- |
+| **0** (catch-up passes)    | The failed pass stops the chain; it runs before the next turn, and the close follows it.                                                  |
+| **1** (boundary selection) | `callWithRetry` same-prompt retry; an unusable reply falls back to the latest reply before the head.                                      |
+| **2** (metadata)           | A failed call fails the close, and so does a create or stamp that doesn't land.                                                           |
+| **3** (lore-mgmt)          | A refused write goes back to the task; a failed call, an embedder failure included, fails the close, as does a code step's refused group. |
+| **4** (lifecycle review)   | As phase 3.                                                                                                                               |
 
 These don't fail a close:
 

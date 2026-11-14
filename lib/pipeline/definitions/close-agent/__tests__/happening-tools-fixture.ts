@@ -1,6 +1,7 @@
 import { and, asc, eq } from 'drizzle-orm'
 
 import { applyDeltaAction } from '@/lib/actions/delta/apply-delta-action'
+import { updateStoryEntryContent } from '@/lib/actions/story-entries/operational'
 import type { PipelineAction } from '@/lib/actions/types'
 import { deltas, happeningAwareness, happeningInvolvements, happenings } from '@/lib/db'
 import { generateId } from '@/lib/ids'
@@ -27,7 +28,7 @@ export const LIGHT = hapId(12)
 export const PRICE = hapId(13)
 export const TOLL = hapId(14)
 
-// hp1…hp4, then c1…c3, in this order: as the Happenings start shows a cluster, then its cast.
+// hp1…hp4, then c1…c3: the tests' own order, happenings then cast.
 const SHOWN: readonly ShownRow[] = [
   { table: 'happenings', id: CROSSING, name: 'Tobin poles Wren across' },
   { table: 'happenings', id: LIGHT, name: 'A light on the far bank' },
@@ -170,6 +171,36 @@ export async function apply(
     fx.ctx,
   )
   if (result.status !== 'ok') throw new Error(`${action.kind} refused: ${result.reason}`)
+}
+
+/** The user sets a character's pin on a happening in the Plot panel. */
+export function pinByUser(
+  fx: CloseFixture,
+  happeningId: string,
+  characterId: string,
+  decayResistance: number,
+): Promise<void> {
+  return apply(
+    fx,
+    {
+      kind: 'upsertHappeningAwareness',
+      source: 'user_edit',
+      payload: {
+        branchId: fx.branchId,
+        characterId,
+        happeningId,
+        decayResistance,
+        proseEntryId: null,
+      },
+    },
+    BY_USER,
+  )
+}
+
+/** The user rewrites E's prose, so their edits so far predate the turn a merge cites. */
+export async function rewriteCitedProse(fx: CloseFixture): Promise<void> {
+  const result = await updateStoryEntryContent(fx.branchId, endEntryIdOf(fx), 'rewritten', fx.ctx)
+  if (result.status !== 'ok') throw new Error(`content edit refused: ${result.reason}`)
 }
 
 export async function seedCharacter(fx: CloseFixture, id: string, name: string): Promise<void> {

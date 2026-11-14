@@ -3,7 +3,13 @@ import type { AnySQLiteColumn, SQLiteTable } from 'drizzle-orm/sqlite-core'
 
 import type { GuardRow } from '@/lib/actions/types'
 import type { PromptHalves } from '@/lib/ai'
-import { entities, happeningAwareness, happeningInvolvements, type StoryMode } from '@/lib/db'
+import {
+  entities,
+  happeningAwareness,
+  happeningInvolvements,
+  type Happening,
+  type StoryMode,
+} from '@/lib/db'
 import { compareId } from '@/lib/list-modules'
 import { renderTemplate, TEMPLATE_IDS } from '@/lib/prompts'
 
@@ -28,7 +34,7 @@ export type HappeningClusterRow = {
   title: string
   description: string
   cast: NamedEntity[]
-  /** The characters with an awareness row of it. */
+  /** The characters with an awareness row of it; empty for common knowledge, as all know it. */
   knownBy: NamedEntity[]
   turn: string
   commonKnowledge: boolean
@@ -82,14 +88,17 @@ async function readLinked(
   return linked
 }
 
-// memory/chapter-close.md → Run order: the clusters the range embed found. A row gone since then
-// drops out, and a cluster left with one row has nothing to merge.
+const hasAnchor = (row: Happening): row is Happening & { occurredAtEntryId: string } =>
+  row.occurredAtEntryId !== null
+
+// memory/chapter-close.md → Run order: the range embed's clusters. A row gone or unanchored since
+// drops out, as the embed would leave it, and a cluster left with one row has nothing to merge.
 async function startHappenings(ctx: TaskPromptContext): Promise<TaskStart<HappeningsShow> | null> {
   const clusters = closeClustersOf(ctx.phase.intermediates)
   if (clusters.length === 0) return null
   const stored = await readHappenings(ctx, clusters.flat())
   const listed = clusters
-    .map((cluster) => cluster.flatMap((id) => stored.get(id) ?? []))
+    .map((cluster) => cluster.flatMap((id) => stored.get(id) ?? []).filter(hasAnchor))
     .filter((cluster) => cluster.length >= 2)
   if (listed.length === 0) return null
   const rows = listed.flat()
@@ -128,7 +137,7 @@ async function startHappenings(ctx: TaskPromptContext): Promise<TaskStart<Happen
             description: handled(row.description ?? ''),
             cast: (casts.get(row.id) ?? []).map(named),
             knownBy: (knownBy.get(row.id) ?? []).map(named),
-            turn: row.occurredAtEntryId === null ? '' : ctx.ids.showTurn(row.occurredAtEntryId),
+            turn: ctx.ids.showTurn(row.occurredAtEntryId),
             commonKnowledge: row.commonKnowledge === 1,
           }),
         ),
