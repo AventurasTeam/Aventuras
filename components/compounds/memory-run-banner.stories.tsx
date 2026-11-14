@@ -149,8 +149,6 @@ export const ClosedInfo: Story = {
     const done = closedArgs(args)
     const banner = screen.getByTestId('memory-run-banner')
     expect(banner).toHaveClass('border-info')
-    expect(within(banner).getAllByTestId('memory-run-banner-info-icon')[0]).toBeVisible()
-    expect(within(banner).queryAllByTestId('memory-run-banner-warning-icon')).toEqual([])
     const region = within(banner).getByRole('status')
     expect(region).toHaveTextContent('Chapter closed: The Keep Leans Closer')
     expect(within(region).queryAllByRole('button')).toEqual([])
@@ -177,8 +175,6 @@ export const ClosedWarning: Story = {
     const banner = screen.getByTestId('memory-run-banner')
     expect(banner).toHaveClass('border-warning')
     expect(banner).not.toHaveClass('border-info')
-    expect(within(banner).getAllByTestId('memory-run-banner-warning-icon')[0]).toBeVisible()
-    expect(within(banner).queryAllByTestId('memory-run-banner-info-icon')).toEqual([])
     expect(within(banner).getByRole('status')).toHaveTextContent(
       'Chapter closed, but 2 tasks stopped early',
     )

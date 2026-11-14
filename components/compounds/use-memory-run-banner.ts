@@ -10,7 +10,6 @@ import {
   interruptMemoryRuns,
   selectMemoryRun,
   type RunState,
-  type StoreChapter,
 } from '@/lib/stores'
 
 export type MemoryRunBannerState =
@@ -68,14 +67,6 @@ export function closeBannerLabel(
   }
 }
 
-function latestChapterIdOf(rows: ReadonlyMap<string, StoreChapter>): string | undefined {
-  let latest: StoreChapter | undefined
-  for (const row of rows.values()) {
-    if (latest == null || row.sequenceNumber > latest.sequenceNumber) latest = row
-  }
-  return latest?.id
-}
-
 function bannerLabel(run: RunState): string | null {
   if (run.kind === PERIODIC_CLASSIFIER_KIND)
     return run.beforeTurn
@@ -101,7 +92,7 @@ export function useMemoryRunBanner(): MemoryRunBannerState | null {
   const chapter = chaptersStore.useChapters((rows) =>
     result == null ? undefined : rows.get(result.chapterId),
   )
-  const latestChapterId = chaptersStore.useChapters(latestChapterIdOf)
+  const latestChapter = chaptersStore.useChapters(chaptersStore.selectLatest)
 
   const label = run == null ? null : bannerLabel(run)
   if (run != null && label != null) {
@@ -111,7 +102,7 @@ export function useMemoryRunBanner(): MemoryRunBannerState | null {
 
   if (result == null || result.branchId !== branchId) return null
   if (chapter == null || !chapter.hasCloseReport || chapter.branchId !== branchId) return null
-  if (chapter.id !== latestChapterId) return null
+  if (chapter.id !== latestChapter?.id) return null
   const { chapterId, stoppedTasks } = result
   const clear = () => chapterOverlaysStore.clearCloseResult()
   return {

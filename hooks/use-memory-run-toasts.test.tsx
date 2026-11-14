@@ -348,7 +348,11 @@ describe('useMemoryRunToasts', () => {
     it('logs a failed read and holds the latest chapter in the store, with no count', async () => {
       const warn = vi.spyOn(logger, 'warn').mockImplementation(() => {})
       openStory()
-      chaptersStore.hydrate('br_1', [chapter('chap_2', 2), chapter('chap_1', 1)])
+      chaptersStore.hydrate('br_1', [
+        chapter('chap_1', 1),
+        chapter('chap_2', 2),
+        chapter('chap_0', 0),
+      ])
       reads.latest.mockRejectedValue(new Error('disk'))
       render(<Probe />)
       committed('act_close')

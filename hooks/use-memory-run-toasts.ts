@@ -30,12 +30,7 @@ function failedCopy(
 }
 
 function latestStoreChapter(branchId: string): StoreChapter | undefined {
-  if (chaptersStore.getLoadedBranch() !== branchId) return undefined
-  let latest: StoreChapter | undefined
-  for (const chapter of chaptersStore.getChapters().values()) {
-    if (latest == null || chapter.sequenceNumber > latest.sequenceNumber) latest = chapter
-  }
-  return latest
+  return chaptersStore.getLoadedBranch() === branchId ? chaptersStore.getLatest() : undefined
 }
 
 /** `run_complete` names no chapter or branch: the open branch's latest report must carry its actionId. */

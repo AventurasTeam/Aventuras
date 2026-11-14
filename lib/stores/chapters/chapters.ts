@@ -8,6 +8,13 @@ export type StoreChapter = Omit<Chapter, 'closeReport'> & { hasCloseReport: bool
 
 const store = createWorkingSetStore<StoreChapter>()
 
+function latestOf(rows: ReadonlyMap<string, StoreChapter>): StoreChapter | undefined {
+  let latest: StoreChapter | undefined
+  for (const c of rows.values())
+    if (latest == null || c.sequenceNumber > latest.sequenceNumber) latest = c
+  return latest
+}
+
 export const chaptersStore = {
   useChapters: store.useRows,
   getChapters: store.getRows,
@@ -17,6 +24,9 @@ export const chaptersStore = {
     for (const c of store.getRows().values()) if (c.sequenceNumber === sequenceNumber) return c
     return undefined
   },
+  /** The highest-numbered chapter; `selectLatest` is the same read as a `useChapters` selector. */
+  getLatest: (): StoreChapter | undefined => latestOf(store.getRows()),
+  selectLatest: latestOf,
   hydrate: store.hydrate,
   // C4's projection on every write, so no caller can put a report into the store.
   patch: (branchId: string, patch: StorePatch): void =>
