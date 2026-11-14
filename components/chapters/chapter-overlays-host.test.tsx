@@ -58,20 +58,51 @@ vi.mock('@/lib/history', async (importOriginal) => ({
 const hostNavigate = vi.hoisted(() => vi.fn<(path: string) => void>())
 vi.mock('@/hooks/use-surface-navigate', () => ({ useSurfaceNavigate: () => hostNavigate }))
 
-const ENTRY_INDEX = vi.hoisted(() => ({
-  entries: [],
-  index: new Map([
-    [
-      'entry_47',
-      { id: 'entry_47', position: 47, kind: 'ai_reply' as const, chapterId: 'chap_2', excerpt: '' },
-    ],
-  ]),
-  ready: true,
-  failed: false,
-  updating: false,
-  retry: () => {},
-}))
-vi.mock('@/hooks/use-entry-index', () => ({ useEntryIndex: () => ENTRY_INDEX }))
+// An external store, so a test can resolve the index under a mounted host.
+const entryIndex = vi.hoisted(() => {
+  const READY = {
+    entries: [],
+    index: new Map([
+      [
+        'entry_47',
+        {
+          id: 'entry_47',
+          position: 47,
+          kind: 'ai_reply' as const,
+          chapterId: 'chap_2',
+          excerpt: '',
+        },
+      ],
+    ]),
+    ready: true,
+    failed: false,
+    updating: false,
+    retry: () => {},
+  }
+  type Snapshot = typeof READY
+  const listeners = new Set<() => void>()
+  let snapshot: Snapshot = READY
+  return {
+    READY,
+    PENDING: { ...READY, index: new Map(), ready: false } satisfies Snapshot,
+    FAILED: { ...READY, index: new Map(), ready: false, failed: true } satisfies Snapshot,
+    get: (): Snapshot => snapshot,
+    subscribe: (listener: () => void) => {
+      listeners.add(listener)
+      return () => listeners.delete(listener)
+    },
+    set: (next: Snapshot) => {
+      snapshot = next
+      for (const listener of listeners) listener()
+    },
+  }
+})
+vi.mock('@/hooks/use-entry-index', async () => {
+  const { useSyncExternalStore } = await import('react')
+  return {
+    useEntryIndex: () => useSyncExternalStore(entryIndex.subscribe, entryIndex.get),
+  }
+})
 
 // The real view pulls RN-Web chrome the unit project can't load; the host's props are the seam.
 const view = vi.hoisted(() => ({ props: null as ReviewWindowProps | null, renders: 0 }))
@@ -257,6 +288,7 @@ beforeEach(() => {
   view.props = null
   view.renders = 0
   hostNavigate.mockReset()
+  entryIndex.set(entryIndex.READY)
   reads.report.mockReset().mockResolvedValue(REPORT)
   reads.deltas.mockReset().mockResolvedValue(DELTAS)
   reads.kinds.mockReset().mockResolvedValue(new Map([['loc_mill', 'location']]))
@@ -348,11 +380,46 @@ describe('ChapterOverlaysHost — the review', () => {
       error: 'disk',
     })
 
+    let release = () => {}
+    reads.report.mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          release = () => resolve(REPORT)
+        }),
+    )
     const state = shown().state
     if (state.status !== 'failed') throw new Error('expected the failed state')
     act(() => state.onRetry())
+    await waitFor(() => expect(view.props?.state.status).toBe('loading'))
+
+    act(() => release())
     await waitFor(() => expect(view.props?.state.status).toBe('ready'))
     expect(reads.report).toHaveBeenCalledTimes(2)
+  })
+
+  // Built before the index reads, the review would cite raw entry ids and offer no entry links.
+  it('shows loading until the entry index has read, then the review with its entry links', async () => {
+    entryIndex.set(entryIndex.PENDING)
+    renderHost()
+    openWindow()
+    await waitFor(() => expect(reads.kinds).toHaveBeenCalled())
+    await act(() => new Promise((resolve) => setTimeout(resolve, 0)))
+    expect(shown().state.status).toBe('loading')
+    expect(reads.build).not.toHaveBeenCalled()
+
+    act(() => entryIndex.set(entryIndex.READY))
+    await waitFor(() => expect(view.props?.state.status).toBe('ready'))
+    const lookup = reads.build.mock.lastCall?.[2] as CloseReviewLookup
+    expect(lookup.entryPosition('entry_47')).toBe(47)
+    expect(shown().entryLinkOf(KAEL)?.label).toBe('entry #47 →')
+  })
+
+  it("shows the review when the entry index's read failed, rather than hang", async () => {
+    entryIndex.set(entryIndex.FAILED)
+    renderHost()
+    openWindow()
+    await waitFor(() => expect(view.props?.state.status).toBe('ready'))
+    expect(shown().entryLinkOf(KAEL)).toBeUndefined()
   })
 
   // Drizzle's JSON column parse throws a SyntaxError on corrupt text, not a ZodError.

@@ -86,8 +86,8 @@ async function readReviewSources(branchId: string, chapterId: string): Promise<R
 }
 
 /**
- * C7's one root host: the review window (and, from 5.10, the close modal). A row press closes the
- * window, then runs the current surface's guard, so it never bypasses a dirty pane.
+ * C7's one root host: the review window, and the close modal's host (M5.10). A row press closes
+ * the window, then runs the current surface's guard, so it never bypasses a dirty pane.
  */
 export function ChapterOverlaysHost(): ReactElement | null {
   const review = chapterOverlaysStore.useOverlays((s) => s.review)
@@ -120,7 +120,10 @@ function ReviewHost({ chapter }: { chapter: StoreChapter }): ReactElement {
   const { branchId, id: chapterId } = chapter
   const navigate = useSurfaceNavigate()
   const settleCount = generationStore.useGeneration((s) => s.settleCount)
-  const entryIndex = useEntryIndex(branchId).index
+  const entryIndexRead = useEntryIndex(branchId)
+  const entryIndex = entryIndexRead.index
+  // Built before the index reads, a review cites raw entry ids; a failed read shows it anyway.
+  const indexPending = !entryIndexRead.ready && !entryIndexRead.failed
   const entities = entitiesStore.useEntities((rows) => rows)
   const lore = loreStore.useLore((rows) => rows)
   const threads = threadsStore.useThreads((rows) => rows)
@@ -174,8 +177,9 @@ function ReviewHost({ chapter }: { chapter: StoreChapter }): ReactElement {
   )
 
   const review = useMemo(
-    () => (data == null ? null : buildCloseReview(data.report, data.deltas, lookup)),
-    [data, lookup],
+    () =>
+      data == null || indexPending ? null : buildCloseReview(data.report, data.deltas, lookup),
+    [data, indexPending, lookup],
   )
 
   const press = useCallback(
