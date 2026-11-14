@@ -417,9 +417,11 @@ type CloseReportCall = {
   tool on a row the two calls share, or that tool at all if it has no
   `rows`: its `rows` are every id argument, a landed call's the tool's
   own. A value-less slip never retried then hides behind a landing for
-  something else, but it held nothing to apply. A refused create mints
-  an id no retry shares, so it matches a later landed create by that
-  task with the same title, trimmed and case-folded.
+  something else, but it held nothing to apply. A `flag_duplicate` or a
+  merge naming two or more rows drops only on a landing over the same
+  rows, in any order: the pair or set is the proposal. A refused create
+  mints an id no retry shares, so it matches a later landed create by
+  that task with the same title, trimmed and case-folded.
 - **Stamps, `retrieval_count` resets and stackable normalization stay
   out of the review.** Normalization is code with no `why` or `turns`,
   and its keys are a spelling cleanup.

@@ -154,7 +154,9 @@ lookup of names and kinds the host passes.
   `task`, in a later call, lands the same `tool` on a row the two calls
   share, or that `tool` at all when it has no rows. A call the common
   checks refused records every id argument as its rows, and a landed
-  call the rows its tool picks, so one shared row is the match. Known
+  call the rows its tool picks, so one shared row is the match, except
+  for a `flag_duplicate` or a merge naming two or more rows, which needs
+  the same rows in any order (Implementation notes, Decision 4). Known
   cost: a value-less slip the model never retried is hidden once that
   task lands the same tool for something else, on one of its rows or,
   with none, anywhere; it held nothing to apply. A refused merge carries
@@ -385,7 +387,9 @@ stays covered. Ids, titles and positions don't move (C8).
   leaves no Not applied row. Neither does a `create_lore` refused for an
   empty `why`, then landed, nor a refusal naming two rows, a written row
   and a reference, followed by the same tool landing with one of them. A
-  value-less refusal the task never retried stays (same file).
+  value-less refusal the task never retried stays, as does a duplicate
+  flag or merge refused on two or more rows after the task lands another
+  pair or set sharing a row (same file).
 - A refused `create_lore` drops out when the same task later landed a
   `create_lore` titled `the tithe ` against its `The Tithe`, and stays when
   a different task did or the title differs. A refused merge holding
@@ -552,7 +556,13 @@ closed: <title>` at info with no stopped task, and the warning tone
    `rows[0]`, and a Not applied field counts as corrected when a later
    landed call by the same task and tool shares any row. It handles
    `flag_duplicate`'s landed row order without a schema change, at the
-   cost of the known gaps below.
+   cost of the known gaps below. Narrowed after the slice review
+   (developer decision, 2026-11-14): a `flag_duplicate`, `merge_threads`
+   or `merge_happenings` refusal counts as corrected only when such a
+   landed call names the same rows, in any order, since the pair or set
+   is the proposal. One that named a single row (a flag naming one row
+   twice, a merge with nothing to absorb) keeps the shared-row rule. A
+   merge retried without one of its rows shows under both sections.
 5. **The commit toast became a persistent banner.** On commit the close's
    `MemoryRunBanner` turns into `Chapter closed: <title> [Review] [×]`.
    A toast's `Review` raced its auto-dismiss, and on phone it opened over
@@ -612,7 +622,8 @@ closed: <title>` at info with no stopped task, and the warning tone
   Timeline's own 8.16%, software emulator).
 - **Smaller picks.** `update_place`'s `state.parent_location_id` and
   `state.unplaced` count as one Not applied field; a value-less refusal
-  is corrected by any later `ok` call of its task and tool sharing a row;
+  is corrected by any later `ok` call of its task and tool sharing a row
+  (the same rows, for a flag or merge naming two or more);
   a refused merge's summary is `values.description ?? values.title ?? ''`.
   Story Settings registers its surface inside `StorySettingsSurface`,
   where `useStorySettingsSaveSession()` is reachable.
