@@ -394,20 +394,20 @@ export async function rollbackCountsOf(
 }
 
 // rollback-confirm.md → Cross-chapter case: a chapter starting below the target keeps its earlier
-// entries, so it re-opens; every other chapter goes with all of its entries.
+// entries, so it re-opens; every other chapter, one with no start row among them, goes whole.
 async function chapterFates(
   branchId: string,
   chapterIds: readonly string[],
   targetPosition: number,
   ctx: Pick<DbCtx, 'db'>,
 ): Promise<Pick<RollbackCounts, 'reopenedChapter' | 'removedChapters'>> {
-  const starts: { sequenceNumber: number; startPosition: number }[] = []
+  const starts: { sequenceNumber: number; startPosition: number | null }[] = []
   for (const ids of chunked(chapterIds))
     starts.push(
       ...(await ctx.db
         .select({ sequenceNumber: chapters.sequenceNumber, startPosition: storyEntries.position })
         .from(chapters)
-        .innerJoin(
+        .leftJoin(
           storyEntries,
           and(
             eq(storyEntries.branchId, chapters.branchId),
@@ -417,7 +417,7 @@ async function chapterFates(
         .where(and(eq(chapters.branchId, branchId), inArray(chapters.id, ids)))),
     )
   starts.sort((a, b) => a.sequenceNumber - b.sequenceNumber)
-  const reopened = starts.find((c) => c.startPosition < targetPosition)
+  const reopened = starts.find((c) => c.startPosition != null && c.startPosition < targetPosition)
   return {
     reopenedChapter: reopened?.sequenceNumber ?? null,
     removedChapters: starts.filter((c) => c !== reopened).map((c) => c.sequenceNumber),

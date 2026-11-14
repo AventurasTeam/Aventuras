@@ -12,6 +12,7 @@ import {
 import { PERIODIC_CLASSIFIER_KIND } from '@/lib/classifier'
 import {
   branches,
+  chapters,
   deltas,
   entities,
   happeningAwareness,
@@ -1894,6 +1895,25 @@ describe('rollback counts and chapters', () => {
       closeWrites: 2,
       reopenedChapter: null,
       removedChapters: [2, 3],
+    })
+  })
+
+  it('reads a swept chapter whose start row is missing as removed', async () => {
+    const { db, runInTransaction } = await createTestDb()
+    const ctx = { db, runInTransaction }
+    await seedTwoChapters(db, ctx)
+    await db
+      .update(chapters)
+      .set({ startEntryId: 'ent_gone' })
+      .where(and(eq(chapters.branchId, 'b1'), eq(chapters.id, 'chap_1')))
+
+    expect(await getRollbackCounts('b1', 't1', ctx)).toEqual({
+      entries: 3,
+      chapters: 2,
+      worldStateChanges: 2,
+      closeWrites: 2,
+      reopenedChapter: null,
+      removedChapters: [1, 2],
     })
   })
 
