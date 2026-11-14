@@ -205,9 +205,9 @@ no anchor and belongs to a turn past it. A `retrieval_count` bump
 doesn't count, or most merges of recently retrieved rows would be
 refused, and the reset is exempt on the same grounds: a count is a
 frequency signal, and the edge a stale one leaves is recorded in
-[3d](#3d--awareness-pin-tuning). A `chapter_close` delta doesn't count either, so this
-close's earlier writes, which anchor on the end entry, never read as a
-later part's, and work a divider-only removal kept
+[3d](#3d--awareness-pin-tuning). A `chapter_close` delta doesn't count
+either, so this close's earlier writes, which anchor on the end entry,
+never read as a later part's, and work a divider-only removal kept
 ([Deleting a chapter](#deleting-a-chapter)) doesn't read as a later
 turn's when the chapter closes again.
 
@@ -743,9 +743,10 @@ row is a merge that keeps the kept row's text. Keep distinct is no call.
 every row of a merge before any of it lands, so a merge can't delete a
 row while its composite is skipped: one protected row skips the whole
 merge, as does a row a later turn touched. An absorbed row is protected
-by a user edit of it or its link rows. The kept row is protected only by
-a user edit of a field the merge writes, since its other fields lose
-nothing to a merge. A merge can't absorb a row this close already wrote, since redo
+by a user edit of it or its link rows, a link row the user deleted
+after the prose included. The kept row is protected only by a user edit
+of a field the merge writes, since its other fields lose nothing to a
+merge. A merge can't absorb a row this close already wrote, since redo
 refuses an update and a delete of one row in one group, and CTRL-Z of
 the close would then be refused for good. The agent merges everything
 in one call instead of in a chain.
