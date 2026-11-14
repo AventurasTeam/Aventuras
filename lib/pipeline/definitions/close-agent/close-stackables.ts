@@ -85,6 +85,7 @@ async function* normalizeRun(
       error: {
         kind: 'action-layer',
         detail: `stackable normalization refused: ${outcome.reason}`,
+        tableName: 'entities',
       },
     }
   return { status: 'completed' }

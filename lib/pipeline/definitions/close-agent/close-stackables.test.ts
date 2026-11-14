@@ -519,7 +519,11 @@ describe('normalizeStackablesStep', () => {
 
     expect(result).toEqual({
       status: 'failed',
-      error: { kind: 'action-layer', detail: 'stackable normalization refused: scripted refusal' },
+      error: {
+        kind: 'action-layer',
+        detail: 'stackable normalization refused: scripted refusal',
+        tableName: 'entities',
+      },
     })
     expect(await stackablesOf(f, WREN)).toEqual({ Gold: 5, gold: 3 })
   })
