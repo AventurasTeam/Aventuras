@@ -103,6 +103,7 @@
     "none": "none",
     "yes": "Yes",
     "no": "No",
+    "topLevel": "Top level",
     "reason": {
       "user-edited-since-prose": "You changed this after the cited entry.",
       "later-turn": "A later entry already changed this.",

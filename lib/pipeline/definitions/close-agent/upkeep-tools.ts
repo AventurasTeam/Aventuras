@@ -1,7 +1,7 @@
 import { and, eq } from 'drizzle-orm'
 import { z } from 'zod'
 
-import { happenings, type CloseReasonKey, type Happening } from '@/lib/db'
+import { CLOSE_TOP_LEVEL_VALUE, happenings, type CloseReasonKey, type Happening } from '@/lib/db'
 import { dedupeTerms } from '@/lib/keyword-terms'
 
 import {
@@ -86,8 +86,6 @@ type SentPlacement = { arg: PlacementArg; path: string; value: unknown }
 
 const PARENT_PATH = 'state.parent_location_id'
 const UNPLACED_PATH = 'state.unplaced'
-// C4: the top mark changes only state.unplaced, so its value names the move.
-const TOP_LEVEL_VALUE = 'top level'
 
 const UPKEEP_TEXT: readonly TextSpec<PlaceArgs | ItemArgs>[] = [
   { of: (args) => args.condition, path: 'state.condition', bound: 'condition' },
@@ -120,7 +118,7 @@ function sentPlacement(args: PlaceArgs): SentPlacement | undefined {
   if (args.parent !== undefined)
     return { arg: { kind: 'under', parentId: args.parent }, path: PARENT_PATH, value: args.parent }
   if (args.top === true)
-    return { arg: { kind: 'top' }, path: UNPLACED_PATH, value: TOP_LEVEL_VALUE }
+    return { arg: { kind: 'top' }, path: UNPLACED_PATH, value: CLOSE_TOP_LEVEL_VALUE }
   return undefined
 }
 

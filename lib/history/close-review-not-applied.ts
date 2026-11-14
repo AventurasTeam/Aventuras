@@ -134,6 +134,7 @@ function correctedLater(refusal: Refusal, calls: readonly CloseReportCall[]): bo
 }
 
 function refusalsOf(call: CloseReportCall, index: number, lookup: CloseReviewLookup): Refusal[] {
+  const table = call.rows[0]?.table ?? ''
   const ownReason = (path: string): string | undefined =>
     call.skippedFields?.find(({ field }) => field === path)?.reason ?? call.reason
   if (call.result === 'ok')
@@ -143,7 +144,7 @@ function refusalsOf(call: CloseReportCall, index: number, lookup: CloseReviewLoo
         index,
         call,
         path: field,
-        summary: value === undefined ? '' : reviewValueText(field, value, lookup),
+        summary: value === undefined ? '' : reviewValueText({ table, path: field }, value, lookup),
         reason,
       }
     })
@@ -173,7 +174,7 @@ function refusalsOf(call: CloseReportCall, index: number, lookup: CloseReviewLoo
     index,
     call,
     path,
-    summary: reviewValueText(path, value, lookup),
+    summary: reviewValueText({ table, path }, value, lookup),
     reason: ownReason(path),
   }))
 }

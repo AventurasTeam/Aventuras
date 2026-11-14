@@ -79,6 +79,9 @@ export const CLOSE_REASON_KEYS = [
 
 export type CloseReasonKey = (typeof CLOSE_REASON_KEYS)[number]
 
+/** C4: the value a close records for a place it marks top level, the move its flag alone can't name. */
+export const CLOSE_TOP_LEVEL_VALUE = 'top level'
+
 const REASON_KEYS: ReadonlySet<string> = new Set(CLOSE_REASON_KEYS)
 
 export function isCloseReasonKey(value: string): value is CloseReasonKey {

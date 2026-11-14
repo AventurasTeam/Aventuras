@@ -7,6 +7,7 @@ import {
   type EntityKind,
 } from '@/lib/db'
 import { logger } from '@/lib/diagnostics'
+import { i18n } from '@/lib/i18n'
 import { hasCopy } from '@/lib/i18n/__tests__/locale-keys'
 
 import { buildCloseReview, closeReviewStopped } from './close-review'
@@ -495,7 +496,7 @@ describe('closeReviewNotApplied', () => {
     })
   })
 
-  it('shows a proposed flag as yes or no, an empty value as none, and the top mark as stored', () => {
+  it('shows a proposed flag as yes or no, an empty value as none, and the top mark in words', () => {
     expect(
       notApplied([
         call({
@@ -526,7 +527,7 @@ describe('closeReviewNotApplied', () => {
     ).toEqual([
       ['The fire', 'commonKnowledge', 'Yes', 'later-turn'],
       ['The Quay', 'keywords', 'none', 'keyword-user-added'],
-      ['The Harbour', 'state.unplaced', 'top level', 'not-unplaced'],
+      ['The Harbour', 'state.unplaced', 'Top level', 'not-unplaced'],
     ])
   })
 
@@ -673,6 +674,27 @@ describe('closeReviewNotApplied', () => {
       ['resolvedAtEntryId', 'entry #118'],
       ['description', 'entry_gone'],
     ])
+  })
+
+  it("shows a refused retirement's status in the locale's words", async () => {
+    i18n.addResourceBundle('xx', 'world', { status: { retired: 'retirado' } })
+    await i18n.changeLanguage('xx')
+    try {
+      expect(
+        notApplied([
+          call({
+            task: 'lifecycle',
+            tool: 'retire_entity',
+            rows: [KAEL],
+            values: { status: 'retired' },
+            result: 'skipped',
+            reason: 'later-turn',
+          }),
+        ]),
+      ).toEqual([['Kael', 'status', 'retirado', 'later-turn']])
+    } finally {
+      await i18n.changeLanguage('en')
+    }
   })
 
   it("matches a refused create_lore's title by its row name when it sent no title", () => {

@@ -1,4 +1,11 @@
-import type { CloseReport, CloseReportCall, Delta } from '@/lib/db'
+import {
+  CLOSE_TOP_LEVEL_VALUE,
+  type CloseReport,
+  type CloseReportCall,
+  type Delta,
+  type Entity,
+  type ThreadStatus,
+} from '@/lib/db'
 import { formatEntryRef } from '@/lib/entry-refs'
 import { t } from '@/lib/i18n'
 import { isJsonObject } from '@/lib/json-object'
@@ -120,11 +127,55 @@ function entryRefText(value: string, lookup: CloseReviewLookup): string | undefi
   return position === undefined ? undefined : formatEntryRef(position)
 }
 
-// A stored old value as text: a list item by item, an entry id as its ref, a row id as its name.
-function shownValue(value: unknown, lookup: CloseReviewLookup): string {
+/** Where a value sits: its row's table and its delta path, which decide how a stored enum reads. */
+type ValueAt = { table: string; path: string }
+
+const STATUS_PATH = 'status'
+const UNPLACED_PATH = 'state.unplaced'
+
+const ENTITY_STATUS_COPY = {
+  staged: 'world:status.staged',
+  active: 'world:status.active',
+  retired: 'world:status.retired',
+} as const satisfies Record<Entity['status'], string>
+
+const THREAD_STATUS_COPY = {
+  pending: 'plot:status.pending',
+  active: 'plot:status.active',
+  resolved: 'plot:status.resolved',
+  failed: 'plot:status.failed',
+} as const satisfies Record<ThreadStatus, string>
+
+type StatusKey =
+  | (typeof ENTITY_STATUS_COPY)[keyof typeof ENTITY_STATUS_COPY]
+  | (typeof THREAD_STATUS_COPY)[keyof typeof THREAD_STATUS_COPY]
+type StatusCopy = Readonly<Record<string, StatusKey>>
+
+const STATUS_COPY: ReadonlyMap<string, StatusCopy> = new Map<string, StatusCopy>([
+  ['entities', ENTITY_STATUS_COPY],
+  ['threads', THREAD_STATUS_COPY],
+])
+
+function statusCopy(table: string, value: string) {
+  const copy = STATUS_COPY.get(table)
+  return copy !== undefined && Object.hasOwn(copy, value) ? copy[value] : undefined
+}
+
+// A stored enum in the user's words: a row's status, the close's top mark; an unknown one has none.
+function enumText({ table, path }: ValueAt, value: string): string | undefined {
+  if (path === UNPLACED_PATH && value === CLOSE_TOP_LEVEL_VALUE)
+    return t('chapters:review.topLevel')
+  const copy = path === STATUS_PATH ? statusCopy(table, value) : undefined
+  return copy === undefined ? undefined : t(copy)
+}
+
+// A stored old value as text: a list item by item, an enum in words, an entry id as its ref, a row
+// id as its name.
+function shownValue(value: unknown, at: ValueAt, lookup: CloseReviewLookup): string {
   if (value === null || value === undefined) return ''
-  if (Array.isArray(value)) return value.map((item) => shownValue(item, lookup)).join(', ')
-  if (typeof value === 'string') return entryRefText(value, lookup) ?? lookup.nameOf(value) ?? value
+  if (Array.isArray(value)) return value.map((item) => shownValue(item, at, lookup)).join(', ')
+  if (typeof value === 'string')
+    return enumText(at, value) ?? entryRefText(value, lookup) ?? lookup.nameOf(value) ?? value
   if (typeof value === 'object') return JSON.stringify(value)
   return String(value)
 }
@@ -192,33 +243,36 @@ function oldValues(planned: readonly Planned[], deltas: readonly Delta[]): Map<P
   return old
 }
 
-const UNPLACED_PATH = 'state.unplaced'
 const COMMON_KNOWLEDGE_PATH = 'commonKnowledge'
 
 const flagText = (value: unknown): string =>
   Number(value) === 1 ? t('chapters:review.yes') : t('chapters:review.no')
 
 /**
- * A recorded new or proposed value as the review shows it: a flag reads yes or no, '' reads none,
- * an entry id the branch knows reads as its ref.
+ * A recorded new or proposed value as the review shows it: a flag reads yes or no, '' reads none, a
+ * status or the top mark reads in words, an entry id the branch knows reads as its ref.
  */
-export function reviewValueText(path: string, value: string, lookup: CloseReviewLookup): string {
-  if (path === COMMON_KNOWLEDGE_PATH) return flagText(value)
+export function reviewValueText(at: ValueAt, value: string, lookup: CloseReviewLookup): string {
+  if (at.path === COMMON_KNOWLEDGE_PATH) return flagText(value)
   if (value === '') return t('chapters:review.none')
-  return entryRefText(value, lookup) ?? value
+  return enumText(at, value) ?? entryRefText(value, lookup) ?? value
 }
 
 // The top mark names only its move, since its old value is the unplaced flag.
 function updateSummary(
-  path: string,
+  at: ValueAt,
   old: unknown,
   value: string,
   lookup: CloseReviewLookup,
 ): string {
-  const after = reviewValueText(path, value, lookup)
-  if (path === UNPLACED_PATH) return after
+  const after = reviewValueText(at, value, lookup)
+  if (at.path === UNPLACED_PATH) return after
   const before =
-    path === COMMON_KNOWLEDGE_PATH ? (old == null ? '' : flagText(old)) : shownValue(old, lookup)
+    at.path === COMMON_KNOWLEDGE_PATH
+      ? old == null
+        ? ''
+        : flagText(old)
+      : shownValue(old, at, lookup)
   return before === '' ? after : `${before}${VALUE_ARROW}${after}`
 }
 
@@ -226,7 +280,8 @@ function summaryOf(write: Planned, old: unknown, lookup: CloseReviewLookup): str
   if (write.op === 'create') return write.call.values?.body ?? ''
   if (write.op === 'delete')
     return t('chapters:review.mergedInto', { name: reviewTarget(write.kept, lookup).name })
-  return updateSummary(write.path, old, write.call.values?.[write.path] ?? '', lookup)
+  const at = { table: write.row.table, path: write.path }
+  return updateSummary(at, old, write.call.values?.[write.path] ?? '', lookup)
 }
 
 /**

@@ -1,6 +1,7 @@
-import { describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it } from 'vitest'
 
 import type { CloseReport, CloseReportCall, Delta, EntityKind } from '@/lib/db'
+import { i18n } from '@/lib/i18n'
 
 import { closeReviewChanges, reviewFieldLabel } from './close-review-changes'
 import type { CloseReviewLookup } from './close-review-types'
@@ -301,7 +302,7 @@ describe('closeReviewChanges', () => {
     const deltas = [delta(QUAY, { state: { unplaced: true } })]
 
     expect(summaries(closeReviewChanges(report(calls), deltas, LOOKUP))).toEqual([
-      ['placesAndItems', 'The Quay', 'top level'],
+      ['placesAndItems', 'The Quay', 'Top level'],
     ])
   })
 
@@ -583,5 +584,37 @@ describe('reviewFieldLabel', () => {
     expect(reviewFieldLabel('lore', 'source')).toBe('source')
     expect(reviewFieldLabel('threads', 'role')).toBe('role')
     expect(reviewFieldLabel('entities', 'characterId')).toBe('characterId')
+  })
+})
+
+describe('closeReviewChanges in another locale', () => {
+  afterEach(async () => {
+    await i18n.changeLanguage('en')
+  })
+
+  it("shows a status and the top mark in the locale's words, an unknown status as stored", async () => {
+    i18n.addResourceBundle('xx', 'world', { status: { active: 'activo', retired: 'retirado' } })
+    i18n.addResourceBundle('xx', 'plot', { status: { active: 'abierto', resolved: 'resuelto' } })
+    i18n.addResourceBundle('xx', 'chapters', { review: { topLevel: 'nivel superior' } })
+    await i18n.changeLanguage('xx')
+    const calls = [
+      call({ tool: 'retire_entity', rows: [KAEL], values: { status: 'retired' } }),
+      call({ tool: 'update_thread', rows: [LETTER], values: { status: 'resolved' } }),
+      call({ tool: 'update_thread', rows: [SEAL], values: { status: 'archived' } }),
+      call({ tool: 'update_place', rows: [QUAY], values: { 'state.unplaced': 'top level' } }),
+    ]
+    const deltas = [
+      delta(KAEL, { status: 'active' }),
+      delta(LETTER, { status: 'active' }),
+      delta(SEAL, { status: 'dormant' }),
+      delta(QUAY, { state: { unplaced: true } }),
+    ]
+
+    expect(summaries(closeReviewChanges(report(calls), deltas, LOOKUP))).toEqual([
+      ['charactersAndFactions', 'Kael', 'activo → retirado'],
+      ['placesAndItems', 'The Quay', 'nivel superior'],
+      ['threads', 'The letter', 'abierto → resuelto'],
+      ['threads', 'The seal', 'dormant → archived'],
+    ])
   })
 })
