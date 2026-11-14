@@ -20,7 +20,14 @@ export const SingleEntryNoChapter: Story = {
   args: {
     open: true,
     targetEntryNumber: 47,
-    counts: { entries: 1, chapters: 0, worldStateChanges: 3 },
+    counts: {
+      entries: 1,
+      chapters: 0,
+      worldStateChanges: 3,
+      closeWrites: 0,
+      reopenedChapter: null,
+      removedChapters: [],
+    },
   },
 }
 
@@ -28,7 +35,14 @@ export const MultiEntryNoChapter: Story = {
   args: {
     open: true,
     targetEntryNumber: 47,
-    counts: { entries: 12, chapters: 0, worldStateChanges: 23 },
+    counts: {
+      entries: 12,
+      chapters: 0,
+      worldStateChanges: 23,
+      closeWrites: 0,
+      reopenedChapter: null,
+      removedChapters: [],
+    },
   },
 }
 
@@ -36,7 +50,14 @@ export const CrossChapter: Story = {
   args: {
     open: true,
     targetEntryNumber: 47,
-    counts: { entries: 12, chapters: 1, worldStateChanges: 23 },
+    counts: {
+      entries: 12,
+      chapters: 1,
+      worldStateChanges: 23,
+      closeWrites: 0,
+      reopenedChapter: 5,
+      removedChapters: [],
+    },
   },
   play: async () => {
     const dialog = await screen.findByRole('alertdialog')
@@ -55,7 +76,14 @@ export const CrossMultipleChapters: Story = {
   args: {
     open: true,
     targetEntryNumber: 47,
-    counts: { entries: 34, chapters: 2, worldStateChanges: 58 },
+    counts: {
+      entries: 34,
+      chapters: 2,
+      worldStateChanges: 58,
+      closeWrites: 0,
+      reopenedChapter: 4,
+      removedChapters: [5],
+    },
   },
 }
 
@@ -64,6 +92,13 @@ export const RegenerateCascade: Story = {
     open: true,
     variant: 'regenerate',
     targetEntryNumber: 47,
-    counts: { entries: 3, chapters: 0, worldStateChanges: 7 },
+    counts: {
+      entries: 3,
+      chapters: 0,
+      worldStateChanges: 7,
+      closeWrites: 0,
+      reopenedChapter: null,
+      removedChapters: [],
+    },
   },
 }

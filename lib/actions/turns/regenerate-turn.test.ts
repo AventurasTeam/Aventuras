@@ -1059,7 +1059,14 @@ describe('regenerateTurn', () => {
     await openStory(db, 's1', 'b1')
     await hydrateAppSettings(async () => WORKING_CONFIG)
     const shown = await shownCounts(ctx, 'e_r2')
-    expect(shown).toEqual({ entries: 1, chapters: 0, worldStateChanges: 1 })
+    expect(shown).toEqual({
+      entries: 1,
+      chapters: 0,
+      worldStateChanges: 1,
+      closeWrites: 0,
+      reopenedChapter: null,
+      removedChapters: [],
+    })
     const late: PipelineAction = {
       kind: 'createHappening',
       source: 'periodic_classifier',
@@ -1086,7 +1093,14 @@ describe('regenerateTurn', () => {
       status: 'rejected',
       code: 'counts-changed',
       reason: expect.any(String),
-      counts: { entries: 1, chapters: 0, worldStateChanges: 2 },
+      counts: {
+        entries: 1,
+        chapters: 0,
+        worldStateChanges: 2,
+        closeWrites: 0,
+        reopenedChapter: null,
+        removedChapters: [],
+      },
     })
     expect(await ctx.db.select().from(deltas)).toEqual(before)
     expect(entriesStore.getById('e_r2')).toBeDefined()
@@ -1122,7 +1136,8 @@ describe('regenerateTurn', () => {
     const pass = registerStandInPass({ anchorEntryId: 'e_r2' })
     const start = startPipeline(PERIODIC_CLASSIFIER_KIND, ctx)
     await pass.nextHeld()
-    expect(await shownCounts(ctx, 'e_r2')).toEqual({ ...shown, worldStateChanges: 2 })
+    // The running pass's write counts nowhere: confirming interrupts it, so no sweep takes it.
+    expect(await shownCounts(ctx, 'e_r2')).toEqual(shown)
 
     const regen = await regenerateTurn({ storyId: 's1', branchId: 'b1' }, 'e_r2', ctx, {
       expectedCounts: shown,

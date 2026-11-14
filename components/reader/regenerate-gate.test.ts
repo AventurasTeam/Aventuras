@@ -1,5 +1,7 @@
 import { describe, expect, it } from 'vitest'
 
+import type { RollbackCounts } from '@/lib/actions'
+
 import {
   canContinueRegeneratePreflight,
   classifyRegenerateGate,
@@ -8,19 +10,40 @@ import {
 
 describe('classifyRegenerateGate', () => {
   it('terminal reply (only itself removed) fires without confirm', () => {
-    expect(classifyRegenerateGate({ entries: 1, chapters: 0, worldStateChanges: 4 })).toBe(
-      'immediate',
-    )
+    expect(
+      classifyRegenerateGate({
+        entries: 1,
+        chapters: 0,
+        worldStateChanges: 4,
+        closeWrites: 0,
+        reopenedChapter: null,
+        removedChapters: [],
+      }),
+    ).toBe('immediate')
   })
   it('older reply (cascade removes later entries) requires the cascade confirm', () => {
-    expect(classifyRegenerateGate({ entries: 3, chapters: 0, worldStateChanges: 7 })).toBe(
-      'cascade-confirm',
-    )
+    expect(
+      classifyRegenerateGate({
+        entries: 3,
+        chapters: 0,
+        worldStateChanges: 7,
+        closeWrites: 0,
+        reopenedChapter: null,
+        removedChapters: [],
+      }),
+    ).toBe('cascade-confirm')
   })
   it('a chapter-close in the window routes to the chapter-close arm', () => {
-    expect(classifyRegenerateGate({ entries: 1, chapters: 1, worldStateChanges: 9 })).toBe(
-      'chapter-close-confirm',
-    )
+    expect(
+      classifyRegenerateGate({
+        entries: 1,
+        chapters: 1,
+        worldStateChanges: 9,
+        closeWrites: 0,
+        reopenedChapter: 2,
+        removedChapters: [],
+      }),
+    ).toBe('chapter-close-confirm')
   })
 })
 
@@ -42,16 +65,8 @@ describe('regenerate dispatch preflight', () => {
   })
 
   it('discards counts when another dispatch starts while the query is awaiting', async () => {
-    let resolveCounts!: (counts: {
-      entries: number
-      chapters: number
-      worldStateChanges: number
-    }) => void
-    const pendingCounts = new Promise<{
-      entries: number
-      chapters: number
-      worldStateChanges: number
-    }>((resolve) => {
+    let resolveCounts!: (counts: RollbackCounts) => void
+    const pendingCounts = new Promise<RollbackCounts>((resolve) => {
       resolveCounts = resolve
     })
     let dispatchInFlight = false
@@ -61,7 +76,14 @@ describe('regenerate dispatch preflight', () => {
       () => ({ ...current, dispatchInFlight }),
     )
     dispatchInFlight = true
-    resolveCounts({ entries: 3, chapters: 0, worldStateChanges: 1 })
+    resolveCounts({
+      entries: 3,
+      chapters: 0,
+      worldStateChanges: 1,
+      closeWrites: 0,
+      reopenedChapter: null,
+      removedChapters: [],
+    })
 
     expect(await result).toBeNull()
   })
@@ -70,7 +92,14 @@ describe('regenerate dispatch preflight', () => {
   it('discards counts when the head-reversal gate rises while the query is awaiting', async () => {
     let headReversalBlocked = false
     const result = loadRegenerateCountsIfCurrent(
-      async () => ({ entries: 1, chapters: 0, worldStateChanges: 0 }),
+      async () => ({
+        entries: 1,
+        chapters: 0,
+        worldStateChanges: 0,
+        closeWrites: 0,
+        reopenedChapter: null,
+        removedChapters: [],
+      }),
       () => ({ ...current, headReversalBlocked }),
     )
     headReversalBlocked = true
@@ -78,7 +107,14 @@ describe('regenerate dispatch preflight', () => {
   })
 
   it('returns counts when the post-await preflight remains current', async () => {
-    const counts = { entries: 1, chapters: 0, worldStateChanges: 2 }
+    const counts: RollbackCounts = {
+      entries: 1,
+      chapters: 0,
+      worldStateChanges: 2,
+      closeWrites: 0,
+      reopenedChapter: null,
+      removedChapters: [],
+    }
 
     await expect(
       loadRegenerateCountsIfCurrent(

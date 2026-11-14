@@ -208,9 +208,11 @@ describe('reversing a close that ran', () => {
     const tx = expectRan(await startManualClose(fx.branchId, fx.replyIds[END_REPLY], fx.ctx))
     expect(tx.outcome).toBe('completed')
 
-    // One chapter re-opened; its stamps add no entry, its report no world-state change.
+    // One chapter re-opened; its stamps add no entry, its report no world-state change. Its nine
+    // writes (the create, a stamp for each of the seven entries through E, the report) all anchor
+    // on E, so the window holds them.
     const counts = await shownCounts(fx.branchId, target, fx.ctx)
-    expect(counts).toEqual({ ...before, chapters: 1 })
+    expect(counts).toEqual({ ...before, chapters: 1, closeWrites: 9, reopenedChapter: 1 })
     expect(await rollbackToEntry(fx.branchId, target, fx.ctx, { expectedCounts: counts })).toEqual({
       status: 'ok',
       counts,

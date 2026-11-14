@@ -10,8 +10,22 @@ import {
   type ConfirmState,
 } from './confirm-refusal'
 
-const OPENED: RollbackCounts = { entries: 3, chapters: 0, worldStateChanges: 2 }
-const FRESH: RollbackCounts = { entries: 3, chapters: 0, worldStateChanges: 5 }
+const OPENED: RollbackCounts = {
+  entries: 3,
+  chapters: 0,
+  worldStateChanges: 2,
+  closeWrites: 0,
+  reopenedChapter: null,
+  removedChapters: [],
+}
+const FRESH: RollbackCounts = {
+  entries: 3,
+  chapters: 0,
+  worldStateChanges: 5,
+  closeWrites: 0,
+  reopenedChapter: null,
+  removedChapters: [],
+}
 
 function refused<C extends string>(code: C) {
   return { status: 'rejected', code, reason: `refused: ${code}` } as const

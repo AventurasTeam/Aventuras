@@ -7,6 +7,7 @@ import {
   reverseReplayDeltas,
   STORY_ENTRY_REJECTION,
   type DbCtx,
+  type PipelineAction,
 } from '@/lib/actions'
 import { PERIODIC_CLASSIFIER_KIND } from '@/lib/classifier'
 import {
@@ -26,6 +27,7 @@ import { logger } from '@/lib/diagnostics'
 import {
   __resetBus,
   __resetRegistry as resetPipelineRegistry,
+  CHAPTER_CLOSE_KIND,
   startPipeline,
   SUGGESTION_REFRESH_KIND,
 } from '@/lib/pipeline'
@@ -36,12 +38,15 @@ import {
   happeningInvolvementsStore,
   happeningsStore,
   undoRedoStore,
+  type DeferredWorkKind,
 } from '@/lib/stores'
 
 import { shownCounts } from './__tests__/shown-counts'
 import { isContentEditDelta } from './classifier-facts'
 import {
   getRollbackCounts,
+  resolveSweep,
+  rollbackCountsOf,
   rollbackToEntry,
   sameRollbackCounts,
   updateStoryEntryContent,
@@ -342,8 +347,16 @@ async function seedBranchWithTurns(db: Awaited<ReturnType<typeof createTestDb>>[
   )
 }
 
+// Counts for a window that holds no close and no chapter.
+const NO_CLOSE = {
+  chapters: 0,
+  closeWrites: 0,
+  reopenedChapter: null,
+  removedChapters: [],
+} as const
+
 // Where the preview refuses too, no confirm opens; the refusal lands before the counts compare.
-const NEVER_SHOWN: RollbackCounts = { entries: 0, chapters: 0, worldStateChanges: 0 }
+const NEVER_SHOWN: RollbackCounts = { ...NO_CLOSE, entries: 0, worldStateChanges: 0 }
 
 describe('rollbackToEntry', () => {
   it('counts and removes the clicked entry plus everything after it', async () => {
@@ -354,7 +367,7 @@ describe('rollbackToEntry', () => {
 
     // delete t2 removes t2 + t3 (2 entry-creates); world-state = ent_a create + ent_a update = 2.
     const counts = await shownCounts('b1', 't2', ctx)
-    expect(counts).toEqual({ entries: 2, chapters: 0, worldStateChanges: 2 })
+    expect(counts).toEqual({ ...NO_CLOSE, entries: 2, worldStateChanges: 2 })
 
     const result = await rollbackToEntry('b1', 't2', ctx, { expectedCounts: counts })
     expect(result.status).toBe('ok')
@@ -447,7 +460,7 @@ describe('rollbackToEntry', () => {
 
     // t3's delta is swept, but the entries line already reports that loss (rollback-confirm.md).
     const counts = await getRollbackCounts('b1', 't2', ctx)
-    expect(counts).toEqual({ entries: 2, chapters: 0, worldStateChanges: 2 })
+    expect(counts).toEqual({ ...NO_CLOSE, entries: 2, worldStateChanges: 2 })
   })
 
   // rollback-confirm.md → Counts: the create is the re-open; no chapter delta is world state.
@@ -510,9 +523,17 @@ describe('rollbackToEntry', () => {
     )
     expect([created.status, reported.status]).toEqual(['ok', 'ok'])
 
-    // Only ent_a's create and update count as world state.
+    // Only ent_a's create and update count as world state; the create and the report are the
+    // close's writes, and its chapter starts below t2, so it re-opens.
     const counts = await getRollbackCounts('b1', 't2', ctx)
-    expect(counts).toEqual({ entries: 2, chapters: 1, worldStateChanges: 2 })
+    expect(counts).toEqual({
+      entries: 2,
+      chapters: 1,
+      worldStateChanges: 2,
+      closeWrites: 2,
+      reopenedChapter: 1,
+      removedChapters: [],
+    })
   })
 
   it('brackets the sweep with reversalInProgress (set then cleared)', async () => {
@@ -1220,7 +1241,7 @@ describe('rollback over the closed set', () => {
 
     // The window alone holds ent_a's create and update and hap_t3's create; the link is a fourth.
     const shown = await shownCounts('b1', 't2', ctx)
-    expect(shown).toEqual({ entries: 2, chapters: 0, worldStateChanges: 4 })
+    expect(shown).toEqual({ ...NO_CLOSE, entries: 2, worldStateChanges: 4 })
 
     expect((await rollbackToEntry('b1', 't2', ctx, { expectedCounts: shown })).status).toBe('ok')
     expect(await db.select().from(happeningInvolvements)).toEqual([])
@@ -1269,7 +1290,7 @@ describe('rollback over the closed set', () => {
     expect(await reverseReplayDeltas('act_late', ctx)).toBe(1)
     releaseBranchWriteExclusive('b1', 'act_late')
 
-    expect(await preview).toEqual({ entries: 2, chapters: 0, worldStateChanges: 3 })
+    expect(await preview).toEqual({ ...NO_CLOSE, entries: 2, worldStateChanges: 3 })
     expect(error).not.toHaveBeenCalledWith('action_layer.reversal_refused', expect.anything())
     error.mockRestore()
   })
@@ -1436,7 +1457,7 @@ describe('rollback during a pass', () => {
 
     expect(result).toEqual({
       status: 'ok',
-      counts: { entries: 2, chapters: 0, worldStateChanges: 2 },
+      counts: { ...NO_CLOSE, entries: 2, worldStateChanges: 2 },
     })
     expect(await entryIds(db)).toEqual(['op', 't1'])
     expect(await start.origin).toMatchObject({ outcome: 'aborted', actionId: held.actionId })
@@ -1484,7 +1505,7 @@ describe('rollback confirm counts', () => {
     await seedBranchWithTurns(db, ctx)
     entriesStore.hydrate('b1', [])
     const shown = await shownCounts('b1', 't2', ctx)
-    expect(shown).toEqual({ entries: 2, chapters: 0, worldStateChanges: 2 })
+    expect(shown).toEqual({ ...NO_CLOSE, entries: 2, worldStateChanges: 2 })
     // A pass's fact about a turn the rollback removes, committed while the modal is open.
     await applyDeltaAction(
       {
@@ -1510,7 +1531,7 @@ describe('rollback confirm counts', () => {
       status: 'rejected',
       code: 'counts-changed',
       reason: expect.any(String),
-      counts: { entries: 2, chapters: 0, worldStateChanges: 3 },
+      counts: { ...NO_CLOSE, entries: 2, worldStateChanges: 3 },
     })
     // Compile-time: the code alone narrows to the rejection that carries the fresh counts.
     if (result.status === 'rejected' && result.code === STORY_ENTRY_REJECTION.countsChanged)
@@ -1544,7 +1565,8 @@ describe('rollback confirm counts', () => {
     const pass = registerStandInPass({ anchorEntryId: 't3' })
     const start = startStandInPass(ctx)
     await pass.nextHeld()
-    expect(await shownCounts('b1', 't2', ctx)).toEqual({ ...shown, worldStateChanges: 3 })
+    // The running pass's write counts nowhere: confirming interrupts it, so no commit takes it.
+    expect(await shownCounts('b1', 't2', ctx)).toEqual(shown)
 
     const result = await rollbackToEntry('b1', 't2', ctx, { expectedCounts: shown })
 
@@ -1555,13 +1577,20 @@ describe('rollback confirm counts', () => {
 })
 
 describe('sameRollbackCounts', () => {
-  const counts: RollbackCounts = { entries: 2, chapters: 1, worldStateChanges: 3 }
+  const counts: RollbackCounts = {
+    entries: 2,
+    chapters: 1,
+    worldStateChanges: 3,
+    closeWrites: 4,
+    reopenedChapter: 5,
+    removedChapters: [],
+  }
 
   it('matches equal counts', () => {
     expect(sameRollbackCounts(counts, { ...counts })).toBe(true)
   })
 
-  it.each(['entries', 'chapters', 'worldStateChanges'] as const)(
+  it.each(['entries', 'chapters', 'worldStateChanges', 'closeWrites'] as const)(
     'tells counts apart by %s',
     (field) => {
       expect(sameRollbackCounts(counts, { ...counts, [field]: counts[field] + 1 })).toBe(false)
@@ -1674,5 +1703,479 @@ describe('head-turn edits during a pass', () => {
     expect(runningPass('b1')?.actionId).toBe(held.actionId)
     held.finish('completed')
     expect(await start.origin).toMatchObject({ outcome: 'completed' })
+  })
+})
+
+async function applyOk(
+  ctx: DbCtx,
+  action: PipelineAction,
+  actionId: string,
+  entryId: string | null,
+): Promise<void> {
+  const result = await applyDeltaAction({ action, actionId, branchId: 'b1', entryId }, ctx)
+  if (result.status !== 'ok') throw new Error(`${action.kind} refused: ${result.reason}`)
+}
+
+function createChapter(chapter: {
+  id: string
+  sequenceNumber: number
+  startEntryId: string
+  endEntryId: string
+}): PipelineAction {
+  return {
+    kind: 'createChapter',
+    source: 'chapter_close',
+    payload: {
+      entry: {
+        ...chapter,
+        branchId: 'b1',
+        title: `Chapter ${chapter.sequenceNumber}`,
+        summary: 'Aria crosses the river country.',
+        theme: 'Passage',
+        tokenCount: 3,
+        closedAt: 1,
+        createdAt: 1,
+        updatedAt: 1,
+      },
+    },
+  }
+}
+
+// seedBranchWithTurns closed into chapter 1 (op–t1) and chapter 2 (t2–t3), each close anchored on
+// its end entry (C1) and logged after every turn.
+async function seedTwoChapters(db: Awaited<ReturnType<typeof createTestDb>>['db'], ctx: DbCtx) {
+  await seedBranchWithTurns(db, ctx)
+  await applyOk(
+    ctx,
+    createChapter({ id: 'chap_1', sequenceNumber: 1, startEntryId: 'op', endEntryId: 't1' }),
+    'close1',
+    't1',
+  )
+  await applyOk(
+    ctx,
+    createChapter({ id: 'chap_2', sequenceNumber: 2, startEntryId: 't2', endEntryId: 't3' }),
+    'close2',
+    't3',
+  )
+}
+
+// A character aware of a happening, written before the log as the opening is.
+async function seedAwareRow(db: Awaited<ReturnType<typeof createTestDb>>['db']) {
+  await db.insert(entities).values({
+    id: 'char_w',
+    branchId: 'b1',
+    kind: 'character',
+    name: 'Wren',
+    status: 'active',
+    injectionMode: 'auto',
+    createdAt: 1,
+    updatedAt: 1,
+  })
+  await db
+    .insert(happenings)
+    .values({ id: 'hap_known', branchId: 'b1', title: 'The crossing', createdAt: 1, updatedAt: 1 })
+  await db.insert(happeningAwareness).values({
+    id: 'haw_w',
+    branchId: 'b1',
+    happeningId: 'hap_known',
+    characterId: 'char_w',
+    learnedAtEntryId: null,
+    decayResistance: null,
+    retrievalCount: 3,
+    source: null,
+  })
+}
+
+function bump(
+  source: 'ai_classifier' | 'chapter_close',
+  id: string,
+  priorCount: number,
+): PipelineAction {
+  return { kind: 'bumpAwarenessRetrieval', source, payload: { branchId: 'b1', id, priorCount } }
+}
+
+// A run holding the branch with its writes in, as the gate shows it mid-run; no pipeline behind it.
+function holdRun(kind: string, interruptible: DeferredWorkKind, actionId: string): void {
+  generationStore.startRun({
+    runId: `run_${actionId}`,
+    kind,
+    gateBehavior: 'hard-gate',
+    interruptible,
+    beforeTurn: false,
+    actionId,
+    storyId: 's1',
+    branchId: 'b1',
+    abortController: new AbortController(),
+    currentPhase: '',
+    intermediates: {},
+    terminal: Promise.resolve(),
+    resolveTerminal: () => {},
+  })
+}
+
+describe('rollback counts and chapters', () => {
+  it.each([
+    {
+      name: 'inside chapter 2',
+      target: 't3',
+      counts: {
+        entries: 1,
+        chapters: 1,
+        worldStateChanges: 1,
+        closeWrites: 1,
+        reopenedChapter: 2,
+        removedChapters: [],
+      },
+    },
+    {
+      name: "at chapter 2's start",
+      target: 't2',
+      counts: {
+        entries: 2,
+        chapters: 1,
+        worldStateChanges: 2,
+        closeWrites: 1,
+        reopenedChapter: null,
+        removedChapters: [2],
+      },
+    },
+    {
+      name: 'inside chapter 1',
+      target: 't1',
+      counts: {
+        entries: 3,
+        chapters: 2,
+        worldStateChanges: 2,
+        closeWrites: 2,
+        reopenedChapter: 1,
+        removedChapters: [2],
+      },
+    },
+  ])('reads the fates of the chapters a target $name reaches', async ({ target, counts }) => {
+    const { db, runInTransaction } = await createTestDb()
+    const ctx = { db, runInTransaction }
+    await seedTwoChapters(db, ctx)
+
+    expect(await getRollbackCounts('b1', target, ctx)).toEqual(counts)
+  })
+
+  it('lists the removed chapters oldest first', async () => {
+    const { db, runInTransaction } = await createTestDb()
+    const ctx = { db, runInTransaction }
+    await seedBranchWithTurns(db, ctx)
+    // Chapter 1 ends on the opening, so a rollback to t1 spares it; chapters 2 and 3 both go.
+    await applyOk(
+      ctx,
+      createChapter({ id: 'chap_1', sequenceNumber: 1, startEntryId: 'op', endEntryId: 'op' }),
+      'close1',
+      'op',
+    )
+    await applyOk(
+      ctx,
+      createChapter({ id: 'chap_2', sequenceNumber: 2, startEntryId: 't1', endEntryId: 't2' }),
+      'close2',
+      't2',
+    )
+    await applyOk(
+      ctx,
+      createChapter({ id: 'chap_3', sequenceNumber: 3, startEntryId: 't3', endEntryId: 't3' }),
+      'close3',
+      't3',
+    )
+
+    expect(await getRollbackCounts('b1', 't1', ctx)).toEqual({
+      entries: 3,
+      chapters: 2,
+      worldStateChanges: 2,
+      closeWrites: 2,
+      reopenedChapter: null,
+      removedChapters: [2, 3],
+    })
+  })
+
+  it('holds the lock through the fate read, so the fates match the chapters it counted', async () => {
+    const { db, runInTransaction } = await createTestDb()
+    await seedTwoChapters(db, { db, runInTransaction })
+    let writer: Promise<void> | undefined
+    let granted = false
+    let readsAfterGrant = 0
+    const watched = new Proxy(db, {
+      get(target, prop, receiver) {
+        if (prop === 'select') {
+          // A reversal's exclusive hold, asked for once the preview starts reading.
+          writer ??= holdBranchWriteExclusive('b1', 'act_writer').then(() => {
+            granted = true
+          })
+          if (granted) readsAfterGrant++
+        }
+        return Reflect.get(target, prop, receiver) as unknown
+      },
+    })
+
+    const counts = await getRollbackCounts('b1', 't3', { db: watched, runInTransaction })
+
+    expect(writer).toBeDefined()
+    expect(readsAfterGrant).toBe(0)
+    expect(counts).toEqual({
+      entries: 1,
+      chapters: 1,
+      worldStateChanges: 1,
+      closeWrites: 1,
+      reopenedChapter: 2,
+      removedChapters: [],
+    })
+    await writer
+    expect(granted).toBe(true)
+    releaseBranchWriteExclusive('b1', 'act_writer')
+  })
+
+  it("counts a close's kept work at the head, with no chapter", async () => {
+    const { db, runInTransaction } = await createTestDb()
+    const ctx = { db, runInTransaction }
+    await seedBranchWithTurns(db, ctx)
+    // A close whose divider went: its write stands, anchored on its end, the head reply.
+    await applyOk(
+      ctx,
+      {
+        kind: 'updateEntity',
+        source: 'chapter_close',
+        payload: { branchId: 'b1', id: 'ent_a', patch: { description: 'Weighed by the close.' } },
+      },
+      'close1',
+      't3',
+    )
+
+    expect(await getRollbackCounts('b1', 't3', ctx)).toEqual({
+      ...NO_CLOSE,
+      entries: 1,
+      worldStateChanges: 2,
+      closeWrites: 1,
+    })
+  })
+
+  it('leaves out close writes only the closure reaches, a reset among them', async () => {
+    const { db, runInTransaction } = await createTestDb()
+    const ctx = { db, runInTransaction }
+    await seedBranchWithTurns(db, ctx)
+    await db.insert(happenings).values({
+      id: 'hap_known',
+      branchId: 'b1',
+      title: 'The crossing',
+      createdAt: 1,
+      updatedAt: 1,
+    })
+    // Turn 3 creates a character aware of the crossing; a close ending on t2, logged after it,
+    // writes both rows.
+    await applyOk(
+      ctx,
+      {
+        kind: 'createEntity',
+        source: 'ai_classifier',
+        payload: {
+          entry: {
+            id: 'char_late',
+            branchId: 'b1',
+            kind: 'character',
+            name: 'Tobin',
+            status: 'active',
+            injectionMode: 'auto',
+            createdAt: 1,
+            updatedAt: 1,
+          },
+        },
+      },
+      'turn3',
+      't3',
+    )
+    await applyOk(
+      ctx,
+      {
+        kind: 'upsertHappeningAwareness',
+        source: 'ai_classifier',
+        payload: {
+          branchId: 'b1',
+          characterId: 'char_late',
+          happeningId: 'hap_known',
+          proseEntryId: null,
+        },
+      },
+      'turn3',
+      't3',
+    )
+    const [aware] = await db
+      .select({ id: happeningAwareness.id })
+      .from(happeningAwareness)
+      .where(eq(happeningAwareness.characterId, 'char_late'))
+    await applyOk(
+      ctx,
+      {
+        kind: 'updateEntity',
+        source: 'chapter_close',
+        payload: { branchId: 'b1', id: 'char_late', patch: { description: 'The ferryman.' } },
+      },
+      'close1',
+      't2',
+    )
+    await applyOk(ctx, bump('chapter_close', aware.id, 0), 'close1', 't2')
+
+    const swept = await resolveSweep('b1', 't3', ctx)
+    if ('status' in swept) throw new Error(`sweep refused: ${swept.reason}`)
+
+    expect(swept.window.filter((d) => d.actionId === 'close1')).toEqual([])
+    expect(swept.set.rows.filter((d) => d.actionId === 'close1')).toHaveLength(2)
+    // ent_a's update, char_late's create, its awareness, and the close's update of char_late.
+    expect(await rollbackCountsOf(swept, ctx)).toEqual({
+      ...NO_CLOSE,
+      entries: 1,
+      worldStateChanges: 4,
+    })
+  })
+
+  it('reads no close writes for kept work that only moved a retrieval count', async () => {
+    const { db, runInTransaction } = await createTestDb()
+    const ctx = { db, runInTransaction }
+    await seedBranchWithTurns(db, ctx)
+    await seedAwareRow(db)
+    await applyOk(ctx, bump('chapter_close', 'haw_w', 3), 'close1', 't3')
+
+    expect(await getRollbackCounts('b1', 't3', ctx)).toEqual({
+      ...NO_CLOSE,
+      entries: 1,
+      worldStateChanges: 1,
+    })
+  })
+
+  it("counts a turn's retrieval bump nowhere", async () => {
+    const { db, runInTransaction } = await createTestDb()
+    const ctx = { db, runInTransaction }
+    await seedBranchWithTurns(db, ctx)
+    await seedAwareRow(db)
+    await applyOk(ctx, bump('ai_classifier', 'haw_w', 3), 'turn3', null)
+
+    expect(await getRollbackCounts('b1', 't3', ctx)).toEqual({
+      ...NO_CLOSE,
+      entries: 1,
+      worldStateChanges: 1,
+    })
+  })
+
+  it("counts a user's edit of a chapter the rollback spares, and not a swept close's report", async () => {
+    const { db, runInTransaction } = await createTestDb()
+    const ctx = { db, runInTransaction }
+    await seedTwoChapters(db, ctx)
+    await applyOk(
+      ctx,
+      {
+        kind: 'updateChapter',
+        source: 'user_edit',
+        payload: { branchId: 'b1', id: 'chap_1', patch: { title: 'The road out' } },
+      },
+      'act_title',
+      null,
+    )
+    await applyOk(
+      ctx,
+      {
+        kind: 'updateChapter',
+        source: 'chapter_close',
+        payload: {
+          branchId: 'b1',
+          id: 'chap_2',
+          patch: {
+            closeReport: {
+              version: 1,
+              actionId: 'close2',
+              calls: [],
+              stopped: [],
+              noToolCalls: true,
+            },
+          },
+        },
+      },
+      'close2',
+      't3',
+    )
+
+    // K: ent_a's create and update, and the user's title on chapter 1, which stands.
+    expect(await getRollbackCounts('b1', 't2', ctx)).toEqual({
+      entries: 2,
+      chapters: 1,
+      worldStateChanges: 3,
+      closeWrites: 2,
+      reopenedChapter: null,
+      removedChapters: [2],
+    })
+  })
+
+  it("leaves a running close's row, stamps and writes out of every count, though the set holds them", async () => {
+    const { db, runInTransaction } = await createTestDb()
+    const ctx = { db, runInTransaction }
+    await seedBranchWithTurns(db, ctx)
+    await applyOk(
+      ctx,
+      createChapter({ id: 'chap_r', sequenceNumber: 1, startEntryId: 'op', endEntryId: 't3' }),
+      'act_close_run',
+      't3',
+    )
+    for (const id of ['op', 't1', 't2', 't3'])
+      await applyOk(
+        ctx,
+        {
+          kind: 'stampEntryChapter',
+          source: 'chapter_close',
+          payload: { branchId: 'b1', id, chapterId: 'chap_r' },
+        },
+        'act_close_run',
+        't3',
+      )
+    await applyOk(
+      ctx,
+      {
+        kind: 'updateEntity',
+        source: 'chapter_close',
+        payload: { branchId: 'b1', id: 'ent_a', patch: { description: 'Weighed by the close.' } },
+      },
+      'act_close_run',
+      't3',
+    )
+    holdRun(CHAPTER_CLOSE_KIND, 'close', 'act_close_run')
+
+    expect(await getRollbackCounts('b1', 't3', ctx)).toEqual({
+      ...NO_CLOSE,
+      entries: 1,
+      worldStateChanges: 1,
+    })
+    const swept = await resolveSweep('b1', 't3', ctx)
+    if ('status' in swept) throw new Error(`sweep refused: ${swept.reason}`)
+    expect(swept.runningActionId).toBe('act_close_run')
+    expect(swept.set.rows.filter((d) => d.actionId === 'act_close_run')).toHaveLength(6)
+  })
+
+  it("leaves a running pass's writes out the same way", async () => {
+    const { db, runInTransaction } = await createTestDb()
+    const ctx = { db, runInTransaction }
+    await seedBranchWithTurns(db, ctx)
+    await applyOk(
+      ctx,
+      {
+        kind: 'createHappening',
+        source: 'periodic_classifier',
+        payload: {
+          entry: { id: 'hap_pass', branchId: 'b1', title: 'Pass', createdAt: 1, updatedAt: 1 },
+        },
+      },
+      'act_pass_run',
+      't3',
+    )
+    holdRun(PERIODIC_CLASSIFIER_KIND, 'pass', 'act_pass_run')
+
+    expect(await getRollbackCounts('b1', 't3', ctx)).toEqual({
+      ...NO_CLOSE,
+      entries: 1,
+      worldStateChanges: 1,
+    })
+    const swept = await resolveSweep('b1', 't3', ctx)
+    if ('status' in swept) throw new Error(`sweep refused: ${swept.reason}`)
+    expect(swept.set.rows.map((d) => d.targetId)).toContain('hap_pass')
   })
 })

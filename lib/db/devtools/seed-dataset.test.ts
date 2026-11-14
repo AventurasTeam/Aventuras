@@ -326,12 +326,22 @@ describe('seeded rollback', () => {
     expect(entries.length).toBeGreaterThan(100)
 
     for (const entry of entries) {
+      const at = `${entry.branchId} entry ${entry.position}`
       const counts = await getRollbackCounts(entry.branchId, entry.id, { db, runInTransaction })
-      expect(counts, `${entry.branchId} entry ${entry.position}`).toEqual({
+      if ('status' in counts) throw new Error(`${at}: ${counts.reason}`)
+      const { reopenedChapter, ...rest } = counts
+      expect(rest, at).toEqual({
         entries: expect.any(Number),
         chapters: expect.any(Number),
         worldStateChanges: expect.any(Number),
+        closeWrites: expect.any(Number),
+        removedChapters: expect.any(Array),
       })
+      expect(reopenedChapter === null || typeof reopenedChapter === 'number', at).toBe(true)
+      // Every counted chapter has one fate.
+      expect(counts.chapters, at).toBe(
+        counts.removedChapters.length + (reopenedChapter === null ? 0 : 1),
+      )
     }
   })
 
