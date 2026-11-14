@@ -21,8 +21,10 @@ import { generateId } from '@/lib/ids'
 
 import { restatedText, sentText } from './fields'
 import {
+  AWARENESS_FIELDS,
   earlierAnchor,
   foldMergeLinks,
+  type AwarenessField,
   type LinkRows,
   type MergeFold,
   type PositionOf,
@@ -71,14 +73,7 @@ type HappeningText = Partial<Pick<MergeArgs, 'title' | 'description'>>
 type HappeningPatch = Extract<PipelineAction, { kind: 'updateHappening' }>['payload']['patch']
 type AwarenessPayload = Extract<PipelineAction, { kind: 'upsertHappeningAwareness' }>['payload']
 type FoldedAwareness = MergeFold['awareness'][number]
-type AwarenessField = Exclude<keyof FoldedAwareness, 'characterId'>
 
-const AWARENESS_FIELDS: readonly AwarenessField[] = [
-  'learnedAtEntryId',
-  'decayResistance',
-  'retrievalCount',
-  'source',
-]
 const NO_LINKS: LinkRows = { involvements: [], awareness: [] }
 
 const MERGE_REFUSAL = {

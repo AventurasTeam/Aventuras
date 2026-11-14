@@ -30,6 +30,18 @@ export type MergeFold = {
 
 type AwarenessRow = LinkRows['awareness'][number]
 type FoldedAwareness = MergeFold['awareness'][number]
+/** A field the fold writes on a character's awareness of keep. */
+export type AwarenessField = Exclude<keyof FoldedAwareness, 'characterId'>
+
+// A Record, so a field the fold gains fails to compile until it's listed here.
+const FOLDED_FIELDS: Record<AwarenessField, true> = {
+  learnedAtEntryId: true,
+  decayResistance: true,
+  retrievalCount: true,
+  source: true,
+}
+export const AWARENESS_FIELDS = Object.keys(FOLDED_FIELDS) as readonly AwarenessField[]
+
 /** An entry's position on the branch; undefined for an entry off it. */
 export type PositionOf = (entryId: string) => number | undefined
 
@@ -100,10 +112,7 @@ function foldedAwareness(
 }
 
 const restatesRow = (stored: AwarenessRow, folded: FoldedAwareness): boolean =>
-  stored.learnedAtEntryId === folded.learnedAtEntryId &&
-  stored.decayResistance === folded.decayResistance &&
-  stored.retrievalCount === folded.retrievalCount &&
-  stored.source === folded.source
+  AWARENESS_FIELDS.every((field) => stored[field] === folded[field])
 
 /**
  * 3e's mechanical merge of link rows onto keep: an involvement for each entity keep lacks, with the
