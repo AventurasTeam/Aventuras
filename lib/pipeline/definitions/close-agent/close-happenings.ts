@@ -12,7 +12,7 @@ import {
   toEmbeddedFieldRow,
   vectorsByIdQuery,
 } from '@/lib/db'
-import { composeRetrievalEmbedDeps } from '@/lib/embedder-swap'
+import { composeRetrievalEmbedDeps, refreshEmbeddingStatus } from '@/lib/embedder-swap'
 import {
   decodeVector,
   runSyncStage,
@@ -203,6 +203,12 @@ async function* embedRange(
   } finally {
     bounded.dispose()
   }
+  // The clears commit whatever this step returns; the status pill reads the recount, as after a turn's sync.
+  if (phase.storyId !== null && (sync.revalidated > 0 || (sync.ok && sync.embedded > 0)))
+    await refreshEmbeddingStatus(phase.storyId, {
+      db: phase.db,
+      runInTransaction: phase.runInTransaction,
+    })
   if (phase.abortSignal.aborted) return { status: 'aborted' }
   if (!sync.ok) return syncFailure(sync, bounded.expired())
 
@@ -237,7 +243,7 @@ async function* embedRange(
   setCloseClusters(phase.intermediates, clusters)
   phase.log.debug('memory.close_range_embed', {
     happenings: range.length,
-    embedded: sync.embedded,
+    sent: sync.embedded,
     revalidated: sync.revalidated,
     unembedded,
     clusters: clusters.length,

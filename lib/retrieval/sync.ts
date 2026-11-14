@@ -25,16 +25,26 @@ export type SyncStageResult = {
    * failure arm too: the clears commit ahead of the embed and outlive it.
    */
   revalidated: number
-} & (
-  | { ok: true; embedded: number }
+} &
   /**
-   * Its own arm, not a reason on the failure one: a user-asked stop is no
-   * embedder fault, and "no Switch embedder on a cancel" must not rest on a
-   * caller's own outer-signal check.
+   * Rows sent to the embedder. A row edited mid-embed keeps its flag (the clear is guarded on the
+   * text it embedded), so this can count rows still stale.
    */
-  | { ok: false; cancelled: true }
-  | { ok: false; cancelled?: false; reason: EmbedderErrorKind; detail: string; staleCount: number }
-)
+  (| { ok: true; embedded: number }
+    /**
+     * Its own arm, not a reason on the failure one: a user-asked stop is no
+     * embedder fault, and "no Switch embedder on a cancel" must not rest on a
+     * caller's own outer-signal check.
+     */
+    | { ok: false; cancelled: true }
+    | {
+        ok: false
+        cancelled?: false
+        reason: EmbedderErrorKind
+        detail: string
+        staleCount: number
+      }
+  )
 
 /**
  * Typed embedder errors carry their own kind. Anything else the embed call

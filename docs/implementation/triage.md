@@ -484,14 +484,6 @@ patch`, which 5.5a marks `restated`, so a close tool's write of it
   arrived after the bound expired reads as a user stop. The close's range
   embed checks the bound first. Latent today: both embed paths report an
   expiry as a call error. Raised in 5.9's Task 12 review.
-- **The close's embed leaves the embedding-status count stale.** The range
-  embed clears stale flags without the `refreshEmbeddingStatus` per-turn
-  retrieval runs, so a memory panel open during a close shows an old
-  pending count until it reopens. The same count drives the story-status
-  pill (`components/compounds/story-status-pill.tsx`, through
-  `useMemoryHealth`), so the reader's pill can show the old pending rows
-  until a later recount. Raised in 5.9's Task 12 review, widened in its
-  slice review.
 - **No lint stops a builtin Hermes lacks.** 5.9 shipped
   `Array.prototype.toSorted` into close code that runs on Android; the
   Hermes VM appears to lack it (inferred from the binary, not a device),
@@ -524,15 +516,6 @@ patch`, which 5.5a marks `restated`, so a close tool's write of it
   edge ([`chapter-close.md`](../memory/chapter-close.md#3d--awareness-pin-tuning))
   names CTRL-Z of the close; a re-run's CTRL-Z that undoes the close
   altogether is a second path to it. Raised in 5.9's slice review.
-- **`runSyncStage` counts rows it didn't clear as embedded.**
-  `lib/retrieval/sync.ts` returns `embedded` as the stale count once its
-  write transaction runs, even when a guarded clear matched nothing (a
-  row edited during the embed keeps its flag). Per-turn retrieval reads
-  it only to trigger the status recount (`lib/retrieval/run.ts`), where
-  an overcount costs one extra recount. The close's range embed logs it
-  as `embedded` in `memory.close_range_embed`, which can overstate,
-  though that log's `unembedded` comes from the range embed's own re-read
-  of staleness. Raised in 5.9's slice review.
 - **World merge re-creates awareness rows as the user's.** World's
   character merge (`lib/world/entity-merge.ts`, `merge-links.ts`) moves
   each awareness row the kept character lacks by re-creating it as a

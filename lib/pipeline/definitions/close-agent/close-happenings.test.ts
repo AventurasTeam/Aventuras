@@ -29,6 +29,13 @@ import { openCloseFixture, queryAllOn, type CloseFixture } from '../__tests__/cl
 import { closeAgentPhase } from '../chapter-close-agent'
 import { closeClustersOf, setCloseParts, setCloseRange } from '../close-intermediates'
 
+const { refreshEmbeddingStatusMock } = vi.hoisted(() => ({ refreshEmbeddingStatusMock: vi.fn() }))
+
+vi.mock('@/lib/embedder-swap', async (importOriginal) => {
+  const actual = await importOriginal<Record<string, unknown>>()
+  return { ...actual, refreshEmbeddingStatus: refreshEmbeddingStatusMock }
+})
+
 const DIM = 384 // the dim family the migrations create
 const MODEL = 'test-embed-model'
 const ACTION_ID = 'act_range_embed'
@@ -204,7 +211,7 @@ function script(
     },
   }
   __setCloseEmbedDepsForTest(deps)
-  return { embedded, revalidated }
+  return { embedded, revalidated, deps }
 }
 
 function phaseOf(over: Partial<PhaseContext> = {}): PhaseContext {
@@ -279,6 +286,7 @@ beforeEach(async () => {
 
 afterEach(() => {
   vi.useRealTimers()
+  refreshEmbeddingStatusMock.mockReset()
   __setCloseEmbedDepsForTest(undefined)
   __setCloseAgentSlots(undefined)
   vectors.clear()
@@ -319,6 +327,57 @@ describe('the range embed', () => {
     expect(toll?.stale).toBe(1)
     expect(await storedVectorIds()).toEqual([H1, H2])
     expect(closeClustersOf(phase.intermediates)).toEqual([[H1, H2]])
+  })
+
+  describe("the status pill's stale count", () => {
+    /** The range's flags as each recount found them: it must follow the sync's commit. */
+    function recordRecounts(): Record<string, number>[] {
+      const seen: Record<string, number>[] = []
+      refreshEmbeddingStatusMock.mockImplementation(async (storyId: string) => {
+        expect(storyId).toBe(fx.storyId)
+        seen.push(await staleOf())
+      })
+      return seen
+    }
+
+    it('is recounted once the embed has cleared the range', async () => {
+      await seedPair()
+      script()
+      const recounts = recordRecounts()
+
+      expect(await runStep(phaseOf())).toEqual({ status: 'completed' })
+
+      expect(recounts).toEqual([{ [H1]: 0, [H2]: 0 }])
+    })
+
+    it('is recounted for a row revalidated ahead of an embed that fails', async () => {
+      await seedPair()
+      const { deps } = script(async () => {
+        throw new EmbedderCallError('provider down')
+      })
+      __setCloseEmbedDepsForTest({
+        ...deps,
+        revalidateRows: async (rows) => ({
+          staleRows: rows.filter(({ id }) => id !== H1),
+          freshOps: rows.filter(({ id }) => id === H1).map((row) => clearEmbeddingStaleOp(row)),
+        }),
+      })
+      const recounts = recordRecounts()
+
+      expect(await runStep(phaseOf())).toMatchObject({ status: 'failed' })
+
+      expect(recounts).toEqual([{ [H1]: 0, [H2]: 1 }])
+    })
+
+    it('is left alone when the sync cleared nothing', async () => {
+      await seedPair({ h1: { embedded: true }, h2: { embedded: true } })
+      script()
+      const recounts = recordRecounts()
+
+      expect(await runStep(phaseOf())).toEqual({ status: 'completed' })
+
+      expect(recounts).toEqual([])
+    })
   })
 
   it('reads back a stored vector, so a row embedded earlier clusters with a fresh one', async () => {

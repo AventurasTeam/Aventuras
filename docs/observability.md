@@ -278,8 +278,8 @@ convention, and the expectation that subsystems route through
   bound, or a `__proto__` key), and the group's status, `none` when no
   group went out), `close_range_embed`
   (the happenings embed over the range: the happenings in it, those
-  embedded and revalidated, those left without a vector, and the
-  clusters found), `close_retrieval_reset` (the `retrieval_count`
+  sent to the embedder and those revalidated, those left without a
+  vector, and the clusters found), `close_retrieval_reset` (the `retrieval_count`
   reset's group: its rows, its status and the round trip in `ms`),
   `close_reason_unkeyed` (warn: a ledger reason that isn't a
   `CLOSE_REASON_KEYS` member, recorded as `other`, with the raw
