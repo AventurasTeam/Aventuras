@@ -527,8 +527,10 @@ patch`, which 5.5a marks `restated`, so a close tool's write of it
   set before the cited turn is skipped under `USER_EDITED_SINCE_PROSE`,
   whose note tells the model "The user edited this after the cited
   turns", which is false for that case; the instruction not to write it
-  again stands. A reason of its own (with 5.11's stable keys) would make
-  the answer and the review accurate. Raised in 5.9's final review.
+  again stands. `merge_happenings` gives the same reason for such a pin
+  on the kept row or an absorbed one, since the slice review's R1. A
+  reason of its own (with 5.11's stable keys) would make the answer and
+  the review accurate. Raised in 5.9's final review.
 - **5.13's re-run meets three things 5.9 shipped.** Slice 5.13 (re-running
   a close) is planned on main; its doc isn't on this branch, so these wait
   for its Open questions. First, the later-bump case in
@@ -591,6 +593,17 @@ patch`, which 5.5a marks `restated`, so a close tool's write of it
   3e fires
   ([`followups.md → Tuning and play testing`](../followups.md#tuning-and-play-testing)).
   Developer decision 2026-11-14 (Q13), from 5.9's slice review.
+- **A frequent row whose pin a later turn wrote still takes a place.**
+  The Awareness start leaves out rows a later turn created and rows the
+  user pinned, but not a row learned before the chapter's end whose
+  `decay_resistance` a turn past the end rewrote: the upsert's update
+  arm takes a pass's new pin for a known pair (whether the classifier
+  sends one is unchecked). `set_pin` skips that row (`laterTurnWrote`),
+  so it holds one of the 20 places for nothing; at the next close the
+  turn falls inside the chapter, and the row can be tuned if it comes up
+  again. Leaving it out needs a later-turn read on the start's
+  candidates, which the row guard does per row. Raised in the slice
+  review fixes for 5.9's R2.
 - **A History tab test fails under a loaded box.**
   `components/history/history-tab.test.tsx`'s "refetches for an unshown
   link end's rename only while a search is set" timed out once in a full
