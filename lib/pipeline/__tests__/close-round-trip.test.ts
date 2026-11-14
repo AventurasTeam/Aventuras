@@ -2332,7 +2332,7 @@ describe('each new case lands what it names', () => {
     )
     expect(
       sent.some((messages) =>
-        messages.includes('The row was merged into hp2; write to hp2 instead.'),
+        messages.includes('The row hp1 was merged into hp2; write to hp2 instead.'),
       ),
       'the answer names the survivor',
     ).toBe(true)

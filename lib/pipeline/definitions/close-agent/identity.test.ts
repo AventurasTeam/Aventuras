@@ -987,7 +987,7 @@ describe('update_character and update_faction', () => {
     expect(answers[0]).toEqual({
       result: 'rejected',
       reason: CLOSE_REASON.rowGone,
-      note: 'The row was merged into c1; write to c1 instead.',
+      note: 'The row c3 was merged into c1; write to c1 instead.',
       survivor: 'c1',
     })
     expect(await runDeltas(f, result.actionId)).toEqual([])

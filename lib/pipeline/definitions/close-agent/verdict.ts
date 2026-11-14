@@ -38,17 +38,20 @@ export type ToolVerdict =
       notWritten?: readonly NotWritten[]
       /** A landed merge's kept row. */
       survivor?: Survivor
+      gone?: never
     }
-  | {
+  | ({
       result: 'rejected'
       /** The first refusal's. */
       reason: string
       landed: readonly []
       skippedFields: readonly Skipped[]
       notWritten?: readonly NotWritten[]
-      /** Where a gone row went, when a landed merge took it. */
-      survivor?: Survivor
-    }
+    } & (
+      | { survivor?: never; gone?: never }
+      /** A named row a landed merge took (`gone`), and the row it went into. */
+      | { survivor: Survivor; gone: Survivor }
+    ))
   | {
       result: 'skipped'
       /** The first protection's. */
@@ -57,6 +60,7 @@ export type ToolVerdict =
       skippedFields: readonly Skipped[]
       notWritten?: readonly NotWritten[]
       survivor?: never
+      gone?: never
     }
 /** Refused whole, by the common checks, an unresolved id, its plan or its group: no field named. */
 export type RefusedWhole = Extract<ToolVerdict, { result: 'rejected' }> & {
@@ -109,10 +113,13 @@ function ownReasons(
   return settleLosses(new Set(), losses)
 }
 
-function survivorAmong(rows: readonly ReportRow[], { survivorOf }: Survivors) {
+function survivorAmong(
+  rows: readonly ReportRow[],
+  { survivorOf }: Survivors,
+): { survivor: Survivor; gone: Survivor } | undefined {
   for (const row of rows) {
     const survivor = survivorOf(row.table, row.id)
-    if (survivor !== undefined) return survivor
+    if (survivor !== undefined) return { survivor, gone: { table: row.table, id: row.id } }
   }
   return undefined
 }
@@ -123,14 +130,9 @@ export function rejectedWhole(
   rows: readonly ReportRow[],
   ctx: Survivors,
 ): RefusedWhole {
-  const survivor = reason === CLOSE_REASON.rowGone ? survivorAmong(rows, ctx) : undefined
-  return {
-    result: 'rejected',
-    reason,
-    landed: [],
-    skippedFields: [],
-    ...(survivor === undefined ? {} : { survivor }),
-  }
+  const merged = reason === CLOSE_REASON.rowGone ? survivorAmong(rows, ctx) : undefined
+  const refused = { result: 'rejected', reason, landed: [], skippedFields: [] } as const
+  return merged === undefined ? refused : { ...refused, ...merged }
 }
 
 /** Every planned action names the delta paths it writes, or its outcome reads as nothing. */
@@ -243,9 +245,10 @@ export function modelAnswer(
     answer.id = ids.withHandles(extra.createdId)
   if (verdict.reason !== undefined) {
     answer.reason = ids.withHandles(verdict.reason)
+    // A write can name several rows, so the note says which one went.
     const note =
-      verdict.reason === CLOSE_REASON.rowGone && survivor !== undefined
-        ? `The row was merged into ${survivor}; write to ${survivor} instead.`
+      verdict.reason === CLOSE_REASON.rowGone && verdict.gone !== undefined
+        ? `The row ${ids.withHandles(verdict.gone.id)} was merged into ${survivor}; write to ${survivor} instead.`
         : (NOTES.get(verdict.reason) ??
           (extra.note === undefined ? undefined : ids.withHandles(extra.note)))
     if (note !== undefined) answer.note = note

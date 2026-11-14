@@ -153,7 +153,7 @@ describe('merge_happenings refusals', () => {
     expect(run.answers[1]).toEqual({
       result: 'rejected',
       reason: 'row-gone',
-      note: 'The row was merged into hp1; write to hp1 instead.',
+      note: 'The row hp2 was merged into hp1; write to hp1 instead.',
       survivor: 'hp1',
     })
     expect(run.calls[1]).toMatchObject({ result: 'rejected', reason: 'row-gone' })

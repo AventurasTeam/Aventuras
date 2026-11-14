@@ -431,11 +431,6 @@ patch`, which 5.5a marks `restated`, so a close tool's write of it
   `lib/pipeline/__tests__/close-round-trip.test.ts` pins today's
   behaviour. Developer decision 2026-11-14 (5.9): record the edge in
   canon, fix later.
-- **A row-gone refusal never says which row went.** When a write names
-  several rows, the note reads "The row was merged into c3" without
-  naming the absorbed row, on the read gate's path and the plan's path
-  alike (`survivorAmong` in `close-agent/verdict.ts`), so the model has to
-  guess which named row to replace. Raised in 5.9's Task 9 review.
 - **The row guard reads user edits once per row.** `readRowGuard`
   (`lib/actions/delta/row-guard.ts`) runs `userEditsSince` per guarded
   row, so a merge over many link rows makes one query each. Since the

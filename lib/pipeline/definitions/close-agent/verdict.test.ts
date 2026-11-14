@@ -94,6 +94,21 @@ describe("verdictOf, by C11's table", () => {
       landed: [],
       skippedFields: [],
       survivor: { table: 'lore', id: LORE_KEPT },
+      gone: { table: 'lore', id: LORE_A },
+    })
+  })
+
+  it('a call naming several rows says which one a merge took', () => {
+    const plan = writePlan({
+      actions: [BODY],
+      rows: [
+        { table: 'lore', id: LORE_B, name: 'The ferry rule' },
+        { table: 'lore', id: LORE_A, name: 'The toll law' },
+      ],
+    })
+    expect(verdictOf(plan, group(noop('gone', 'gone')), mergedIntoKept)).toMatchObject({
+      survivor: { table: 'lore', id: LORE_KEPT },
+      gone: { table: 'lore', id: LORE_A },
     })
   })
 
@@ -366,6 +381,7 @@ describe('verdictOf, naming what did not land', () => {
         { field: 'title', row: LORE_A, reason: USER_EDITED_SINCE_PROSE },
       ],
       survivor: { table: 'lore', id: LORE_KEPT },
+      gone: { table: 'lore', id: LORE_A },
     })
   })
 
@@ -440,12 +456,15 @@ describe('verdictOf, naming what did not land', () => {
 describe('ToolVerdict (checked by tsc)', () => {
   it("carries only what C11's table gives each result", () => {
     const merged = { table: 'lore', id: LORE_KEPT }
+    const takenBy = { survivor: merged, gone: { table: 'lore', id: LORE_A } }
     const none = [] as const
     const own = { skippedFields: [{ field: 'body', reason: 'x' }], notWritten: [] }
     const verdicts = (): ToolVerdict[] => [
       { result: 'ok', landed: ['body'], skippedFields: [], survivor: merged },
-      { result: 'rejected', reason: 'row-gone', landed: [], skippedFields: [], survivor: merged },
+      { result: 'rejected', reason: 'row-gone', landed: [], skippedFields: [], ...takenBy },
       { result: 'skipped', reason: USER_EDITED_SINCE_PROSE, landed: none, skippedFields: none },
+      // @ts-expect-error a gone row's survivor comes with the row it took
+      { result: 'rejected', reason: 'row-gone', landed: [], skippedFields: [], survivor: merged },
       { result: 'rejected', reason: 'x', landed: [], ...own },
       { result: 'skipped', reason: 'x', landed: [], ...own },
       // @ts-expect-error an ok has no reason
@@ -547,11 +566,12 @@ describe('modelAnswer', () => {
           landed: [],
           skippedFields: [],
           survivor: { table: 'lore', id: LORE_KEPT },
+          gone: { table: 'lore', id: LORE_A },
         },
         planNote,
         ids,
       ),
-    ).toMatchObject({ note: 'The row was merged into lo2; write to lo2 instead.' })
+    ).toMatchObject({ note: 'The row lo1 was merged into lo2; write to lo2 instead.' })
   })
 
   it('says what to do for each stable reason', () => {
@@ -592,6 +612,7 @@ describe('modelAnswer', () => {
           landed: [],
           skippedFields: [],
           survivor: { table: 'lore', id: LORE_KEPT },
+          gone: { table: 'lore', id: LORE_A },
         },
         {},
         shownIds(),
@@ -599,7 +620,7 @@ describe('modelAnswer', () => {
     ).toEqual({
       result: 'rejected',
       reason: CLOSE_REASON.rowGone,
-      note: 'The row was merged into lo2; write to lo2 instead.',
+      note: 'The row lo1 was merged into lo2; write to lo2 instead.',
       survivor: 'lo2',
     })
   })
