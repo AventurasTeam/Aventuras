@@ -1,7 +1,7 @@
 import { and, eq } from 'drizzle-orm'
 import { z } from 'zod'
 
-import { USER_EDITED_SINCE_PROSE } from '@/lib/actions/types'
+import { USER_EDITED_SINCE_PROSE, type PipelineAction } from '@/lib/actions/types'
 import { entities, happeningAwareness, happenings, type HappeningAwareness } from '@/lib/db'
 
 import {
@@ -27,6 +27,11 @@ export const SET_PIN_SHAPE = {
 }
 
 type SetPinArgs = z.output<WriteToolSchema<typeof SET_PIN_SHAPE>>
+// The upsert's update arm writes a chapter_close payload's anchor and count: a pin carries neither.
+type PinPayload = Omit<
+  Extract<PipelineAction, { kind: 'upsertHappeningAwareness' }>['payload'],
+  'retrievalCount' | 'learnedAtEntryId'
+>
 
 // decay_resistance: the delta path the report shows and the column the guard reads.
 const PIN_PATH = 'decayResistance'
@@ -151,21 +156,18 @@ async function planSetPin(args: SetPinArgs, ctx: WriteContext): Promise<WritePla
       note: `This close can raise it to ${noted} at most: send ${noted} or less, or leave it.`,
     }
   }
+  const payload: PinPayload = {
+    branchId: ctx.branchId,
+    characterId: row.characterId,
+    happeningId: row.happeningId,
+    decayResistance: value,
+    proseEntryId: ctx.proseEntryId,
+  }
   return {
     kind: 'write',
     actions: [
       {
-        action: {
-          kind: 'upsertHappeningAwareness',
-          source: 'chapter_close',
-          payload: {
-            branchId: ctx.branchId,
-            characterId: row.characterId,
-            happeningId: row.happeningId,
-            decayResistance: value,
-            proseEntryId: ctx.proseEntryId,
-          },
-        },
+        action: { kind: 'upsertHappeningAwareness', source: 'chapter_close', payload },
         fields: [PIN_PATH],
         row: row.characterId,
       },
