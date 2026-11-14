@@ -1,9 +1,8 @@
-import type { openTestDb } from '@/lib/db/__tests__/test-db'
+import { makeCallback, type openTestDb } from '@/lib/db/__tests__/test-db'
 import type { DbBridge } from '@/types/db-bridge'
 import type { EmbedderBridge } from '@/types/embedder-bridge'
 
-import { resolveModelDir } from '../electron/embedder/paths'
-import { countTokens, embed, smokeTest } from '../electron/embedder/service'
+import { embedderCallHandlers } from '../electron/embedder/handlers'
 
 // A Node close has no Electron preload: these stand in for its embedder and raw-database bridges.
 
@@ -16,63 +15,14 @@ export type ProbeEmbedderBridge = Pick<
 /** The probe's database as openTestDb opens it: { db, sqlite, runInTransaction }. */
 export type OpenedProbeDb = Awaited<ReturnType<typeof openTestDb>>
 
-const messageOf = (error: unknown): string =>
-  error instanceof Error ? error.message : String(error)
-
-// As main's requireModelDir: an id resolves under the root or throws, naming it.
-function modelDirUnder(root: string, modelId: string): string {
-  try {
-    return resolveModelDir(root, modelId)
-  } catch (error) {
-    throw new Error(`Invalid model id "${modelId}": ${messageOf(error)}`)
-  }
-}
-
 /** Main's embedder IPC handlers (electron/main.ts) over `root`, in place of userData's. */
 export function probeEmbedderBridge(root: string): ProbeEmbedderBridge {
-  const aborts = new Map<string, AbortController>()
-  return {
-    async embed({ modelId, texts, requestId }) {
-      const controller = new AbortController()
-      if (requestId !== undefined) aborts.set(requestId, controller)
-      try {
-        return await embed({
-          modelDir: modelDirUnder(root, modelId),
-          texts,
-          signal: controller.signal,
-        })
-      } finally {
-        // A reused request id keeps the live entry when an earlier call exits.
-        if (requestId !== undefined && aborts.get(requestId) === controller)
-          aborts.delete(requestId)
-      }
-    },
-    async countTokens({ modelId, texts }) {
-      return countTokens({ modelDir: modelDirUnder(root, modelId), texts })
-    },
-    async smokeTest({ modelId }) {
-      return smokeTest({ modelDir: modelDirUnder(root, modelId) })
-    },
-    async cancelEmbed({ requestId }) {
-      aborts.get(requestId)?.abort()
-    },
-  }
+  return embedderCallHandlers(root)
 }
 
-// As electron/db/service.ts: positional rows, and a 'get' as the one row itself or undefined.
 function probeDbBridge({ sqlite, runInTransaction }: OpenedProbeDb): DbBridge {
   return {
-    async query(sql, params, method) {
-      const statement = sqlite.prepare(sql)
-      if (method === 'run') {
-        statement.run(...(params as never[]))
-        return { rows: [] }
-      }
-      const rows = (statement.all(...(params as never[])) as Record<string, unknown>[]).map((row) =>
-        Object.values(row),
-      )
-      return { rows: (method === 'get' ? rows[0] : rows) as unknown[] }
-    },
+    query: makeCallback(sqlite),
     async exec(sql) {
       sqlite.exec(sql)
     },
