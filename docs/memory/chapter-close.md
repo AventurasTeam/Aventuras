@@ -53,8 +53,8 @@ and metadata calls stay single structured replies.
 3. Metadata, which writes the `chapters` row and each entry's
    `chapter_id`.
 4. Stackable normalization, in code.
-5. The Happenings task, after the range embed and clustering, in code,
-   find its clusters ([3e](#3e--happenings-consolidation)).
+5. The Happenings task, once the range embed and clustering, in code,
+   have found its clusters ([3e](#3e--happenings-consolidation)).
 6. For each [part](#parts) of the chapter, the Lore, Identity, Threads,
    Upkeep and Lifecycle tasks.
 7. The Awareness task.
