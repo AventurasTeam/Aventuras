@@ -1,4 +1,4 @@
-import type { CloseReasonKey, CloseTask, EntityKind } from '@/lib/db'
+import type { CloseReasonKey, CloseReport, CloseTask, EntityKind } from '@/lib/db'
 
 /** chapter-timeline.md → Review window: the Changes areas, in canon's order. */
 export const CLOSE_REVIEW_AREAS = [
@@ -62,7 +62,7 @@ export type CloseReviewNotApplied = {
 export type CloseReviewStopped = {
   task: CloseTask
   part: number
-  reason: 'budget' | 'window' | 'cut-off'
+  reason: CloseReport['stopped'][number]['reason']
   /** The line as shown: task, part unless 0, reason. */
   text: string
 }
