@@ -633,7 +633,7 @@ closed: <title>` at info with no stopped task, and the warning tone
   and the registered surface. `openCloseModal` runs the surface's guard
   before it holds its input, so a trigger can't skip it, and a guard that
   doesn't proceed holds nothing. 5.10 builds its modal on it.
-- **One hold rule.** `overlayChapterHolds` and `closeResultHolds`, in the
+- **One hold rule.** `overlayChapter` and `closeResultChapter`, in the
   store file, are shared by the host and the banner: a chapter holds
   while it has a report on the open branch. Reversal, a re-run replacing
   the report (5.13) and a delete (5.12) all clear through it, so a change
