@@ -582,8 +582,8 @@ None open: Implementation notes record each answer.
   frequent row's floor is its start pin, this chapter's rows may go to 0,
   and a row with no start pin is refused. The frequent set leaves out
   rows a later turn created, since they were learned after E, and retired
-  characters' rows stay listed. 0.2 is recorded in the decay tuning
-  followup.
+  characters' rows stay listed. 0.2 is recorded in
+  [`followups.md → Tuning and play testing`](../../../../followups.md#tuning-and-play-testing).
 - **A user's pin stays theirs (coordinator, by canon, 2026-11-14).**
   `set_pin` answers `skipped` for any row whose `decay_resistance` the
   user ever wrote, whatever turn the call cites, raise or lower:
