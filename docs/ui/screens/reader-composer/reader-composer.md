@@ -336,14 +336,11 @@ A close that commits turns the banner into its done state,
 `Chapter closed, but 2 tasks stopped early [Review] [×]`. `Review`
 opens the
 [review window](../chapter-timeline/chapter-timeline.md#review-window)
-and × dismisses the banner. It holds until one of them is pressed, the
-chapter reverses, a newer close commits, or the story closes or
-switches branch, on every in-story screen
-([`principles.md → Affordance loci`](../../principles.md#affordance-loci)).
-A later pass's or close's progress takes the banner while it runs, and
-the done state comes back after. It isn't a toast: a toast's `Review`
-would race its own dismissal, and on phone it would open the review
-over a Sheet.
+and × dismisses the banner. What ends it, and how a later run takes the
+bar, is in
+[`principles.md → Affordance loci`](../../principles.md#affordance-loci).
+It isn't a toast: a toast's `Review` would race its own dismissal, and
+on phone it would open the review over a Sheet.
 
 A close's
 [re-run](../chapter-timeline/chapter-timeline.md#re-run-a-close) shows

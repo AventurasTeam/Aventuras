@@ -261,7 +261,7 @@ convention, and the expectation that subsystems route through
 - `embedder.*` — `offline`, `compute_failed`, `staleness_detected`
 - `translation.*` — `soft_failed` (when that followup lands)
 - `memory.*` — periodic-classifier and chapter-close phase
-  emissions, among them the close's debug kinds
+  emissions, among them the close's kinds
   `close_tool_group_rejected` (a tool's whole group refused, with the
   tool, its action kinds, the reason and the code),
   `close_tool_action_noop` (one action's noop, with its reason and

@@ -395,7 +395,7 @@ type CloseReportCall = {
   records it here.
 - **A `reason` is a stable key** for every refusal, a member of
   `CLOSE_REASON_KEYS` beside the schema: the three shared classes,
-  `USER_EDITED_SINCE_PROSE`, `later-turn` and `row-gone`, each handler's
+  `user-edited-since-prose`, `later-turn` and `row-gone`, each handler's
   own code, and one key for each refusal the close builds itself, from
   the common checks to a tool's own rules. The model's tool result keeps
   its instruction, written `<key>: <text>`, and the ledger records the
@@ -573,10 +573,11 @@ per-route mount would touch every in-story route.
   `registerSurface({ guard, navigate })`, through `useOverlaySurface` on
   focus, in 5.11, with a surface that has nothing to guard defaulting to
   `(proceed) => proceed()`. `openCloseModal` runs that guard, so no
-  trigger can skip it. Run on the Timeline, where a press over a dirty
-  card asks first (`e2e/tests/chapter-review.spec.ts`); over a dirty
-  World pane it is covered only by the registration unit test, inferred
-  from the code, not run.
+  trigger can skip it. A row press's guard is run on the Timeline, where
+  a press over a dirty card asks first
+  (`e2e/tests/chapter-review.spec.ts`); over a dirty World pane it is
+  covered only by the registration unit test, inferred from the code,
+  not run.
 
 ### C8 — Seed stability
 

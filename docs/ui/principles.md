@@ -414,8 +414,9 @@ A close's commit, or its re-run's, leaves the banner in a done state
 instead of dismissing it: `Chapter closed: <title>`, a warning when a
 task stopped early, with `Review`, which opens the
 [review window](./screens/chapter-timeline/chapter-timeline.md#review-window),
-and ×. Pressing either ends it, and so do the chapter reversing, a
-newer close committing, and the story closing or switching branch. A
+and ×. Pressing either ends it, and so do its chapter stopping being
+current (the chapter reversing, or another branch opening), a newer
+close committing, and the story closing. A
 later pass's or close's progress takes the banner while it runs, and
 the done state comes back after. The banner sits under every Sheet and
 scrim, so its `Review` never opens the review over another surface.
