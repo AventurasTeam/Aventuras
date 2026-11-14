@@ -587,16 +587,25 @@ describe('the range embed bound', () => {
     {
       name: 'a call failure',
       error: () => new EmbedderCallError('embed timed out'),
+      reason: 'call',
       staleCount: 2,
     },
     {
       name: 'a cancel',
       error: () => new EmbedderCancelledError('embed cancelled'),
+      reason: 'call',
       staleCount: null,
+    },
+    // As in per-turn retrieval, the expiry replaces a failure's detail, never its reason.
+    {
+      name: 'an init failure',
+      error: () => new EmbedderInitError('model missing'),
+      reason: 'init',
+      staleCount: 2,
     },
   ])(
     'fails the close, naming the 300 s bound, when the embed outlives it and ends in $name',
-    async ({ error, staleCount }) => {
+    async ({ error, reason, staleCount }) => {
       await seedPair()
       vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] })
       script(async (_rows, signal) => {
@@ -609,7 +618,7 @@ describe('the range embed bound', () => {
         status: 'failed',
         error: {
           kind: 'embedder',
-          reason: 'call',
+          reason,
           detail: 'embed timed out after 300000ms',
           staleCount,
         },
