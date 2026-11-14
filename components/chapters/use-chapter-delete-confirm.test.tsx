@@ -23,6 +23,8 @@ type Hook = ReturnType<typeof useChapterDeleteConfirm>
 
 const NOT_LATEST = 'This is no longer the latest chapter.'
 const FAILED = "Couldn't delete the chapter."
+const RESYNC_FAILED =
+  "The chapter was deleted, but the Timeline couldn't refresh. Reopen the story."
 
 const PREVIEW: ChapterDeletePreview = {
   chapterNumber: 2,
@@ -436,7 +438,7 @@ describe('useChapterDeleteConfirm: the removal', () => {
     )
   })
 
-  it('logs a resync that fails after a committed delete', async () => {
+  it('logs a resync that fails after a committed delete, and toasts that the delete landed', async () => {
     const { result, remove, resync } = setup()
     await openOn(result)
     remove.mockRejectedValueOnce(
@@ -456,7 +458,8 @@ describe('useChapterDeleteConfirm: the removal', () => {
       'app.chapter_delete_resync_failed',
       expect.objectContaining({ chapterId: 'chap_2', error: 'read failed' }),
     )
-    expect(toast.error).not.toHaveBeenCalled()
+    expect(toast.error).toHaveBeenCalledTimes(1)
+    expect(toast.error).toHaveBeenCalledWith(RESYNC_FAILED)
     expect(result.current.pending).toBe(false)
   })
 

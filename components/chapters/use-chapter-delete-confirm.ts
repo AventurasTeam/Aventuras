@@ -161,12 +161,14 @@ export function useChapterDeleteConfirm({
           error: failureOf(removal.error),
         })
         const resynced = await attempt(() => latest.current.resync())
-        if (!resynced.ok)
+        if (!resynced.ok) {
           logger.error('app.chapter_delete_resync_failed', {
             branchId,
             chapterId,
             error: messageOf(resynced.error),
           })
+          toast.error(t('chapters:deleteConfirm.resyncFailed'))
+        }
       } else {
         logger.error('app.chapter_delete_threw', {
           branchId,

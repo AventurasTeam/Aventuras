@@ -84,6 +84,7 @@
     "removeDivider": "Remove divider only",
     "confirm": "Delete chapter",
     "notLatest": "This is no longer the latest chapter.",
-    "failed": "Couldn't delete the chapter."
+    "failed": "Couldn't delete the chapter.",
+    "resyncFailed": "The chapter was deleted, but the Timeline couldn't refresh. Reopen the story."
   }
 }
