@@ -28,7 +28,7 @@ export type HappeningClusterRow = {
   title: string
   description: string
   cast: NamedEntity[]
-  /** The characters with an awareness row of it. */
+  /** The characters with an awareness row of it; empty for common knowledge, as all know it. */
   knownBy: NamedEntity[]
   turn: string
   commonKnowledge: boolean
