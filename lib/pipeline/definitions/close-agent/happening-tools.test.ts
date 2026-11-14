@@ -1,6 +1,8 @@
+import { eq } from 'drizzle-orm'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 
 import { USER_EDITED_SINCE_PROSE, type PipelineAction } from '@/lib/actions/types'
+import { happeningAwareness } from '@/lib/db'
 import { generateId } from '@/lib/ids'
 import { resetAllStores } from '@/lib/stores'
 
@@ -808,6 +810,20 @@ describe('merge_happenings shape', () => {
       retrievalCount: 6,
       proseEntryId: endEntryIdOf(f),
     })
+  })
+
+  it("folds an absorbed awareness row's learned_at onto keep's when no merged happening is anchored there", async () => {
+    // t4 anchors neither CROSSING nor PRICE, so only the awareness rows' anchors place it.
+    await f.ctx.db
+      .update(happeningAwareness)
+      .set({ learnedAtEntryId: f.entries[3]!.id })
+      .where(eq(happeningAwareness.id, await awarenessId(f, PRICE, WREN)))
+    expect((await awarenessOf(f, CROSSING, WREN))?.learnedAtEntryId).toBe(f.entries[4]!.id)
+
+    const run = await runCalls(f, [merge({ keep: 'hp1', absorb: ['hp3'] })])
+
+    expect(run.answers).toEqual([{ result: 'ok', survivor: 'hp1' }])
+    expect((await awarenessOf(f, CROSSING, WREN))?.learnedAtEntryId).toBe(f.entries[3]!.id)
   })
 
   it('leaves an involvement the user removed from keep removed, naming its character', async () => {
