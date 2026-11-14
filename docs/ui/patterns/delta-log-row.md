@@ -58,13 +58,13 @@ type DeltaLogRowProps = {
     targetTable: string // host's resolution call; compound uses it as fallback label only
     targetDisplayName: string // pre-resolved by host
     fieldPath: string | null // op=update: "state.traits[2]"; op=create/delete: null
-    summary: string // pre-rendered diff prose, host-formatted
+    summary: string // pre-rendered diff prose, host-formatted; '' for none
     entryId: string | null // null for non-entry-triggered events
     createdAtRelative: string // pre-formatted "2h ago" / "12 Apr, 14:33"
     actionId: string // included for future grouping cue; v1 renders flat
   }
   onPress?: () => void // host wires navigation
-  className?: string // the outermost element: the row, or the row and its footer
+  className?: string // the outermost element, around the row and its footer
   footer?: ReactElement // under the row, outside its button, aligned to the summary
   showMeta?: boolean // default true; false drops the meta line
   summaryLines?: number | null // default 2; null for no clamp
@@ -87,8 +87,8 @@ of the host's under the row and outside its button (see
 [Footer](#footer)). `showMeta={false}` drops the
 [meta line](#meta-line) from view and from the row's description.
 `summaryLines` sets the [summary](#summary)'s clamp, and null lifts it.
-A host keeps a row's footer present or absent for the row's life:
-adding one re-parents the row, which drops its focus.
+Adding or removing a footer leaves the row's button in place, so its
+focus holds.
 
 ## Visual shape
 
@@ -133,7 +133,9 @@ the link label alone ("Relationship"). See
 
 The host's pre-rendered diff prose. 2-line ellipsis bound by default;
 `summaryLines` sets another bound, or none at null. The review window
-lifts it, since a clamp on `old → new` hides the new value.
+lifts it, since a clamp on `old → new` hides the new value. An empty
+summary drops the line and its part of the row's description; a Not
+applied refusal that proposed no value has none.
 Host owns rendering — for an entity update, this humanizes the
 `undo_payload` JSON; for create / delete, this can be a one-liner
 (`Created`, `Deleted`).
@@ -244,7 +246,8 @@ source labels, with-and-without `entryId`, with-and-without
 summary (2-line ellipsis), non-interactive variant
 (`onPress` undefined), a `footer` holding an entry link whose press
 fires its own handler and not the row's, `showMeta={false}`, and
-`summaryLines={null}` beside a clamped twin. Lives at
+`summaryLines={null}` beside a clamped twin, a footer toggled under
+focus, and an empty summary. Lives at
 `Compounds/DeltaLogRow`.
 
 ## What this design defers
