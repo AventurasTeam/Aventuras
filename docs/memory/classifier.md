@@ -178,6 +178,10 @@ alias list (the keywords bullet below).
     logged, and the row stays staged, so a later turn or pass that
     brings it into the scene promotes it with its finality lost
     ([`parked.md → A staged row has no retirement`](../parked.md#a-staged-row-has-no-retirement)).
+    The reason it stores is bounded as a condition is, to 500 UTF-16
+    units cut at a clause, and `classifier.retired_reason_truncated`
+    logs the cut; a chapter close's `retire_entity` bounds its `why`,
+    stored as the reason, the same way.
 
   - `retired → active` when the turns put a retired character in the
     scene now: not a memory, a flashback, a vision or someone's report

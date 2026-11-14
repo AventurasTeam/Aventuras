@@ -279,6 +279,19 @@ describe('retire_entity', () => {
     },
   )
 
+  it('stores a long why as a reason cut at a clause, as a pass does', async () => {
+    await seedRow(f, { id: TOBIN, kind: 'character', name: 'Tobin' })
+    const why = `${'a'.repeat(300)}, ${'b'.repeat(300)}`
+
+    await dispatchScripted(
+      f,
+      [{ toolName: 'retire_entity', input: { id: 'c1', ...cite(['t7'], why) } }],
+      { shown: [{ id: TOBIN, name: 'Tobin' }] },
+    )
+
+    expect((await storedEntity(f, TOBIN)).retiredReason).toBe('a'.repeat(300))
+  })
+
   it("retires the close's own row when a fork holds the same id already retired", async () => {
     // Inserted first, under a branch id sorting before the close's: a read that drops the branch
     // meets the fork's row first, by rowid or by the key.

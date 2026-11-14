@@ -378,6 +378,26 @@ describe('buildClassifierActions', () => {
     expect(planned[0].entryId).toBe('e2')
   })
 
+  it('cuts a long retirement reason at a clause, and reports the cut', () => {
+    const { planned, cutTexts } = buildClassifierActions(
+      reply({
+        statusFlips: [
+          {
+            ref: 'char_kael',
+            to: 'retired',
+            reason: `${'a'.repeat(300)}, ${'b'.repeat(300)}`,
+            sourceTurn: 't2',
+          },
+        ],
+      }),
+      base,
+    )
+    expect(planned[0].action).toMatchObject({ payload: { retiredReason: 'a'.repeat(300) } })
+    expect(cutTexts).toEqual([
+      { kind: 'retiredReason', ref: 'char_kael', length: 602, keptLength: 300 },
+    ])
+  })
+
   it('creates a new character with the reconcile decision applied', () => {
     const decisions = new Map<string, ReconcileDecision>([
       ['h1', { kind: 'create', flag: { partnerId: 'char_a', reason: 'in-scene' } }],

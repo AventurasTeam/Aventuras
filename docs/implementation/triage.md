@@ -139,11 +139,6 @@ patch`, which 5.5a marks `restated`, so a close tool's write of it
   (`raiseCollisionFlagHandler`). An exported constant, as `lib/world`'s
   `PLACE_REFUSAL` is, would tie each pair. Raised in 5.8's task review;
   the lifecycle copies in its slice review.
-- **`retiredReason` has no length bound.** The classifier's `reason`
-  (`lib/classifier/schema.ts`) is a plain optional string, and the
-  close stores `retire_entity`'s `why` the same way, while the close's
-  other stored text is capped (a condition at 500, a lore body at
-  1,200). Raised in 5.8's task review.
 - **Undoing a user's keyword edit wipes a later pass's term.** CTRL-Z
   or a rollback window of a user's keyword edit under a later
   periodic keyword write restores the whole list from the undo
