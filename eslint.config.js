@@ -45,6 +45,40 @@ const CLOSE_PROGRESS_MUTATORS = generationStoreMutators(
   "Only the orchestrator sets a close's progress. See docs/implementation/milestones/05-chapters-chapter-close/milestone.md#c6--what-the-banners-n-of-m-counts.",
 )
 
+// Kept in one array: a second no-restricted-syntax entry for a file replaces the first.
+const SYNTAX_BANS = [
+  // Wildcard import ban. Exception list lives in .claude/rules/code.md — keep in sync.
+  {
+    selector: 'ImportDeclaration[source.value!=/^@rn-primitives\\//] ImportNamespaceSpecifier',
+    message:
+      'Wildcard imports are banned. Use named imports. Exception: @rn-primitives/*. See .claude/rules/code.md.',
+  },
+  // RN's default "never" spends the first tap while a field is focused on dismissing the keyboard.
+  {
+    selector:
+      'JSXOpeningElement[name.name=/^(GH)?(ScrollView|FlatList|SectionList)$|^BottomSheet(ScrollView|FlatList|SectionList)$|^KeyboardAwareScrollView$/]:not(:has(> JSXAttribute[name.name="keyboardShouldPersistTaps"])):not(:has(> JSXSpreadAttribute))',
+    message:
+      'Set keyboardShouldPersistTaps (usually "handled"): the default spends the first tap on dismissing the keyboard. See docs/ui/foundations/mobile/touch.md.',
+  },
+  {
+    selector:
+      'JSXOpeningElement[name.property.name=/^(ScrollView|FlatList|SectionList)$/]:not(:has(> JSXAttribute[name.name="keyboardShouldPersistTaps"])):not(:has(> JSXSpreadAttribute))',
+    message:
+      'Set keyboardShouldPersistTaps (usually "handled"): the default spends the first tap on dismissing the keyboard. See docs/ui/foundations/mobile/touch.md.',
+  },
+]
+
+// Builtins Android's Hermes lacks, matched by a name nothing else uses (Set's `union` collides with
+// zod's). See docs/implementation/lessons-learned/hermes-missing-builtins.md.
+const HERMES_BUILTIN_MESSAGE =
+  "Hermes, the app's Android engine, lacks this builtin. See docs/implementation/lessons-learned/hermes-missing-builtins.md."
+const HERMES_BUILTIN_BANS = [
+  'MemberExpression[property.name=/^(toSorted|isWellFormed|toWellFormed)$/]',
+  "MemberExpression[object.name=/^(Object|Map)$/][property.name='groupBy']",
+  "MemberExpression[object.name='Promise'][property.name='withResolvers']",
+  "MemberExpression[object.name='Array'][property.name='fromAsync']",
+].map((selector) => ({ selector, message: HERMES_BUILTIN_MESSAGE }))
+
 module.exports = defineConfig([
   expoConfig,
   ...storybook.configs['flat/recommended'],
@@ -79,31 +113,8 @@ module.exports = defineConfig([
       ],
     },
     rules: {
-      // Wildcard import ban. Exception list lives in
-      // .claude/rules/code.md — keep in sync.
-      'no-restricted-syntax': [
-        'error',
-        {
-          selector:
-            'ImportDeclaration[source.value!=/^@rn-primitives\\//] ImportNamespaceSpecifier',
-          message:
-            'Wildcard imports are banned. Use named imports. Exception: @rn-primitives/*. See .claude/rules/code.md.',
-        },
-        // RN's default "never" spends the first tap while a field is focused on dismissing the
-        // keyboard. Kept in this array: a second no-restricted-syntax entry would replace it.
-        {
-          selector:
-            'JSXOpeningElement[name.name=/^(GH)?(ScrollView|FlatList|SectionList)$|^BottomSheet(ScrollView|FlatList|SectionList)$|^KeyboardAwareScrollView$/]:not(:has(> JSXAttribute[name.name="keyboardShouldPersistTaps"])):not(:has(> JSXSpreadAttribute))',
-          message:
-            'Set keyboardShouldPersistTaps (usually "handled"): the default spends the first tap on dismissing the keyboard. See docs/ui/foundations/mobile/touch.md.',
-        },
-        {
-          selector:
-            'JSXOpeningElement[name.property.name=/^(ScrollView|FlatList|SectionList)$/]:not(:has(> JSXAttribute[name.name="keyboardShouldPersistTaps"])):not(:has(> JSXSpreadAttribute))',
-          message:
-            'Set keyboardShouldPersistTaps (usually "handled"): the default spends the first tap on dismissing the keyboard. See docs/ui/foundations/mobile/touch.md.',
-        },
-      ],
+      // The wildcard-import ban and the other selectors: see SYNTAX_BANS at the top of this file.
+      'no-restricted-syntax': ['error', ...SYNTAX_BANS, ...HERMES_BUILTIN_BANS],
 
       // generationStore's mutators, by owner: see the constants at the top of this file.
       'no-restricted-properties': [
@@ -316,6 +327,22 @@ module.exports = defineConfig([
     files: ['**/*.test.{ts,tsx}', '**/__tests__/**', '**/*.stories.tsx'],
     rules: {
       'no-restricted-properties': 'off',
+    },
+  },
+
+  // Code that never runs on Hermes: Node (tests, scripts, Electron main, E2E) or the browser.
+  {
+    files: [
+      '**/*.test.{ts,tsx}',
+      '**/__tests__/**',
+      '**/*.stories.tsx',
+      'vitest.setup.ts',
+      'scripts/**',
+      'electron/**',
+      'e2e/**',
+    ],
+    rules: {
+      'no-restricted-syntax': ['error', ...SYNTAX_BANS],
     },
   },
 

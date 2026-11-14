@@ -48,6 +48,11 @@ slice plans when relevant.
   — web inherits `body { color: var(--fg-primary) }`, native
   RenderHTML always gets a `baseStyle` color; never patch color
   per-island.
+- [Hermes lacks some recent builtins](./hermes-missing-builtins.md)
+  — Android's Hermes 0.14.1 has no `toSorted`, `Object.groupBy`,
+  `Promise.withResolvers` or Set algebra; a lint rejects the names it
+  can match in shipped code; check the runtime library for anything
+  newer than ES2022.
 - [RN's global `fetch` cannot stream](./rn-fetch-cannot-stream.md)
   — whatwg-fetch is XHR-backed and exposes no `body`, so SSE calls
   fail as an AI SDK `Failed to process successful response` at

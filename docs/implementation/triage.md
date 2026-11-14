@@ -324,12 +324,6 @@ patch`, which 5.5a marks `restated`, so a close tool's write of it
   `lib/pipeline/__tests__/close-round-trip.test.ts` pins today's
   behaviour. Developer decision 2026-11-14 (5.9): record the edge in
   canon, fix later.
-- **No lint stops a builtin Hermes lacks.** 5.9 shipped
-  `Array.prototype.toSorted` into close code that runs on Android; the
-  Hermes VM appears to lack it (inferred from the binary, not a device),
-  and only review caught it. An eslint `no-restricted-properties` entry
-  for such builtins outside tests, or a lessons-learned entry, would
-  stop the next one. Raised in 5.9's clustering review.
 - **5.13's re-run meets three things 5.9 shipped.** Slice 5.13 (re-running
   a close) is planned on main; its doc isn't on this branch, so these wait
   for its Open questions. First, the later-bump case in
