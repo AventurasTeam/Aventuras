@@ -733,7 +733,9 @@ change amends the scope above.
   resolves during it.** The removal's own prose-reversal bracket bumps
   `settleCount`, and that settle re-read a chapter mid-delete, got
   `not-found` and closed the confirm with `Couldn't delete the chapter.`
-  over a delete that succeeded.
+  over a delete that succeeded. For the same reason `open` returns while
+  a removal or its resync runs: the stale card's `Delete…` stays live
+  until the resync lands.
 - **The hook's `try`/`catch` lives in a module-level `attempt` helper.**
   React Compiler won't lower a `try` with a `finally`, or one holding
   value blocks, and the hook body would join the bail-out baseline.
@@ -741,14 +743,30 @@ change amends the scope above.
   exists, and only while the screen is focused.** `preview` is required
   and a null target has none; an `AlertDialog` portals to the app root
   and would otherwise paint over a screen pushed on top. `loadPreview`
-  throws on a null `open`, which the hook already logs and toasts.
+  throws on a null `open`, which the hook already logs and toasts. The
+  hook also takes the focus as `active` and dismisses when it goes
+  false, dropping a preview still being read (provisional, from the
+  slice review; the other option keeps the confirm hidden and re-shows
+  it, as the reader's rollback confirm does). The render gate covers the
+  commit before that dismissal lands.
 - **The route's `resync` re-hydrates only while the branch is still
   open.** The hook's confirm continuation outlives the screen, so an
   always-current `loadOpenStory` could overwrite the story the user
   opened next; it passes `isCurrentRequest` and treats `'cancelled'` as
-  success. The confirm also shows no `blockedReason` while its own
-  delete runs, since the removal's bracket trips the edit gate and the
-  reason would read as a run in flight.
+  success. `ChapterDeleteConfirm` shows no `blockedReason` while
+  `pending`, since the removal's bracket trips the edit gate and the
+  reason would read as a run in flight; the route passes the gate's
+  reason as is. If the resync fails too, a toast says the chapter was
+  deleted but the Timeline couldn't refresh (provisional, from the slice
+  review; the other option logs it only).
+- **`createdLore` counts only close-created rows still live on the
+  branch (slice review).** A row the user deleted after the close isn't
+  one the delete removes, and its edits no longer mark
+  `, your edits included`.
+- **A swept chapter whose start row is missing reads removed
+  (provisional, from the slice review).** `chapterFates` left-joins the
+  start entry, so `chapters` always equals the fates; the other option
+  guards the close copy's `<n>` instead.
 - **5.9 merged into `main` mid-slice, and its arms came after the
   merge.** Tasks 4 and 7 ran before it landed and skipped their
   conditional arms; once `origin/main` was merged in (no textual

@@ -215,7 +215,8 @@ generation pipeline is in flight:
 └──────────────────────────────────────────────────┘
 ```
 
-- **Counts.** Rows the close created, then the other changes it made.
+- **Counts.** Rows the close created that still stand, then the other
+  changes it made.
   A change a later write replaced in every field isn't counted, since
   the delete leaves that later value standing. Each count line is
   omitted at zero, since a close can land with no writes. The turns line's second sentence states the residue a delete
@@ -238,6 +239,11 @@ generation pipeline is in flight:
 - **The open confirm re-reads its preview** each time a run settles
   under it. A re-read the delete refuses closes the confirm with that
   refusal's toast; one that fails keeps the preview on screen.
+- **Leaving the Timeline closes the confirm,** and a preview still being
+  read when it goes opens nothing.
+- **A delete that lands but leaves the screen stale** re-reads the
+  branch. If that fails too, a toast says so:
+  `The chapter was deleted, but the Timeline couldn't refresh. Reopen the story.`
 
 The reader beneath stays where it is, and the chapter's inline break
 goes.

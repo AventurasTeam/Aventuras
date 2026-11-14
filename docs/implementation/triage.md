@@ -641,11 +641,10 @@ patch`, which 5.5a marks `restated`, so a close tool's write of it
   (`components/chapters/use-chapter-delete-confirm.ts`, the open path),
   where only `integrity` is logged. Raised in Slice 5.12's review of
   Tasks 5 and 13.
-- **`useChapterDeleteConfirm` has three small edges.** `open` doesn't
-  read `pendingRef`: while a committed delete's resync runs, a stale
-  card can open a confirm whose actions are all disabled. An `open`
-  still awaiting its preview can toast after the route unmounts, since
-  only `dismiss` and a newer `open` bump the request counter. And
+- **`useChapterDeleteConfirm` has three small edges.** An `open` still
+  awaiting its preview can toast after the route unmounts with no blur
+  render first, since only `dismiss` (which losing focus calls) and a
+  newer `open` bump the request counter. And
   `app.chapter_delete_resynced` is logged before the resync runs, so
   its name claims a success that `app.chapter_delete_resync_failed` can
   then contradict. An `in-flight` refusal from `removeChapter` (a run

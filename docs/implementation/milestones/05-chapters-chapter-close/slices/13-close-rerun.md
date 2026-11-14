@@ -516,7 +516,8 @@ close's until this slice.
   (C13), not the group holding the `create`: after a re-run every lore
   create still in the log sits in the re-run's group, since its reversal
   pruned the close's into the journal. So a delete after a re-run, and a
-  second re-run, count the re-run's lore creates.
+  second re-run, count the re-run's lore creates whose rows still
+  stand.
 - `startCloseRerun(branchId, chapterId, expected, story, ctx)`, nothing
   committed before step 4:
   1. The manual close's start refusals, read up front: the gate

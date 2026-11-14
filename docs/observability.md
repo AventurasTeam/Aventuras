@@ -345,7 +345,10 @@ convention, and the expectation that subsystems route through
   the failure toast), `chapter_delete_resynced` (warn: the delete
   committed but the store sync after it failed; the branch re-hydrates,
   with no failure toast) and `chapter_delete_resync_failed` (that
-  re-hydration failed too), `world_set_lead_failed` (`app/world/[branchId].tsx`
+  re-hydration failed too; the user sees
+  `The chapter was deleted, but the Timeline couldn't refresh. Reopen the story.`);
+  `chapter_delete_threw` and `chapter_delete_resynced` log a replay
+  failure's cause, not its wrapper's message, `world_set_lead_failed` (`app/world/[branchId].tsx`
   — a `⋯ → Set as lead` whose `setStoryLead` threw rather than
   refused), `world_collision_resolve_failed`
   (`components/world/use-collision-resolve.ts` — a resolve dialog's
