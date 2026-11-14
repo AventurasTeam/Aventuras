@@ -392,11 +392,6 @@ patch`, which 5.5a marks `restated`, so a close tool's write of it
 - **The commit banner's Review and × unmount the focused button.** Focus
   is lost when the review dialog closes (cf. the
   rnweb-disabled-under-focus-blurs lesson). Raised in 5.11's review.
-- **`lib/actions/delta/reverse-replay.ts` has two cases nobody has
-  confirmed as deliberate.** `:386-400` and `:602-638`: reversing an
-  update whose target row is missing runs an UPDATE that matches nothing
-  and returns `ok`. `:576-600`: an undo partial that breaks the state
-  schema is restored without validation. Raised in 5.11's review.
 - **A landed merge's link-row losses can't name their row.**
   `settleLosses` (`lib/pipeline/definitions/close-agent/verdict.ts`)
   keys a merge's losses by path across all its actions, as C4 states, so
