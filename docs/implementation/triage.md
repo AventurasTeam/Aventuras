@@ -195,7 +195,15 @@ patch`, which 5.5a marks `restated`, so a close tool's write of it
   more of the same: a `seedHappening` now sits in five close test files,
   and `upkeep`, `driver`, `happenings`, `close-happenings`,
   `awareness-tools` and `close-awareness` each insert entity, happening
-  and awareness rows directly. Raised in 5.5b's review, widened in 5.9's.
+  and awareness rows directly. Two per-spec fixtures have since appeared:
+  `__tests__/close-awareness-fixture.ts` holds a `putHappening` and a
+  `putAwareness`, which `awareness-tools` and `upkeep` keep copies of,
+  and `__tests__/happening-tools-fixture.ts` holds one of the five
+  `seedHappening`s. `close-awareness-fixture.ts` also holds generic
+  agent-loop stand-ins (`USAGE`, `stepWith`, `closePhaseFor`,
+  `drainApplying`) with near-copies in `lore.test.ts`, `upkeep.test.ts`,
+  `identity.test.ts`, `lifecycle.test.ts` and `driver.test.ts`. Raised in
+  5.5b's review, widened in 5.9's and in its slice review.
 - **`setThreadStatus` and `updateThread` read "carries refs"
   differently.** `setThreadStatus` writes the resolved ref only when
   `triggeredAtEntryId` is set, while `updateThread` asks whether either
@@ -489,8 +497,12 @@ patch`, which 5.5a marks `restated`, so a close tool's write of it
   guess which named row to replace. Raised in 5.9's Task 9 review.
 - **The row guard reads user edits once per row.** `readRowGuard`
   (`lib/actions/delta/row-guard.ts`) runs `userEditsSince` per guarded
-  row, so a merge over many link rows makes one query each. Raised in
-  5.9's `merge_happenings` review.
+  row, so a merge over many link rows makes one query each. Since the
+  user-pin skip, that read starts at position 0, so each guarded row
+  reads its whole user-edit history (about 0.5 ms a row at 5000 deltas
+  on node:sqlite), though only `set_pin` needs the edits before the
+  prose. Raised in 5.9's `merge_happenings` review, widened in its slice
+  review.
 - **Per-turn retrieval reads a cancel before the embed bound.** In
   `lib/pipeline/definitions/per-turn-retrieval.ts`, a cancelled outcome
   returns `aborted` before the bound's expiry is checked, so a cancel that
@@ -500,16 +512,47 @@ patch`, which 5.5a marks `restated`, so a close tool's write of it
 - **The close's embed leaves the embedding-status count stale.** The range
   embed clears stale flags without the `refreshEmbeddingStatus` per-turn
   retrieval runs, so a memory panel open during a close shows an old
-  pending count until it reopens. Raised in 5.9's Task 12 review.
+  pending count until it reopens. The same count drives the story-status
+  pill (`components/compounds/story-status-pill.tsx`, through
+  `useMemoryHealth`), so the reader's pill can show the old pending rows
+  until a later recount. Raised in 5.9's Task 12 review, widened in its
+  slice review.
 - **No lint stops a builtin Hermes lacks.** 5.9 shipped
   `Array.prototype.toSorted` into close code that runs on Android; the
   Hermes VM appears to lack it (inferred from the binary, not a device),
   and only review caught it. An eslint `no-restricted-properties` entry
   for such builtins outside tests, or a lessons-learned entry, would
   stop the next one. Raised in 5.9's clustering review.
-- **`set_pin`'s user-pin refusal gives the wrong reason.** A pin the user
+- **`set_pin`'s user-pin skip gives the wrong reason.** A pin the user
   set before the cited turn is skipped under `USER_EDITED_SINCE_PROSE`,
   whose note tells the model "The user edited this after the cited
   turns", which is false for that case; the instruction not to write it
   again stands. A reason of its own (with 5.11's stable keys) would make
   the answer and the review accurate. Raised in 5.9's final review.
+- **5.13's re-run meets three things 5.9 shipped.** Slice 5.13 (re-running
+  a close) is planned on main; its doc isn't on this branch, so these wait
+  for its Open questions. First, the later-bump case in
+  `lib/pipeline/__tests__/close-round-trip.test.ts` overrides `armExpect`
+  and `armLog` for its rollback arms, since a count bump's undo restores by
+  assignment, and 5.13's re-run arms on that case need overrides of their
+  own: after a rollback past E, TOLD's row reads its pre-bump count over
+  the re-run's reset 0; after a rollback of a turn between E and the
+  re-run, then CTRL-Z, TOLD's row ends at its pre-merge count holding the
+  rolled-back bump. The test's key-list pins widen with them. Second,
+  the phase-writes rule in
+  [`generation-pipeline.md → Writes`](../generation-pipeline.md#writes)
+  ("Never: delta-loggable writes outside those two events, delta-log
+  appends, …") has no exception for 5.13's reversal phase, which prunes
+  deltas and writes `reversal_journals`. Third, 3d's count-bump
+  edge ([`chapter-close.md`](../memory/chapter-close.md#3d--awareness-pin-tuning))
+  names CTRL-Z of the close; a re-run's CTRL-Z that undoes the close
+  altogether is a second path to it. Raised in 5.9's slice review.
+- **`runSyncStage` counts rows it didn't clear as embedded.**
+  `lib/retrieval/sync.ts` returns `embedded` as the stale count once its
+  write transaction runs, even when a guarded clear matched nothing (a
+  row edited during the embed keeps its flag). Per-turn retrieval reads
+  it only to trigger the status recount (`lib/retrieval/run.ts`), where
+  an overcount costs one extra recount. The close's range embed logs it
+  as `embedded` in `memory.close_range_embed`, which can overstate,
+  though that log's `unembedded` comes from the range embed's own re-read
+  of staleness. Raised in 5.9's slice review.
