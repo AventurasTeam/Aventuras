@@ -224,8 +224,6 @@ export const Pending: Story = {
   },
 }
 
-const settle = () => new Promise((resolve) => setTimeout(resolve, 600))
-
 /** The owner flips `pending` on the press, as `useChapterDeleteConfirm` does. */
 function PendingOnDelete(props: ChapterDeleteConfirmProps) {
   const [pending, setPending] = useState(false)
@@ -252,7 +250,7 @@ export const FocusStaysWhenActionsDisable: Story = {
     await userEvent.keyboard('{Enter}')
     await waitFor(() => expect(args.onDelete).toHaveBeenCalledWith('whole'), WAIT)
     await waitFor(() => expect(confirm).toHaveAttribute('aria-disabled', 'true'), WAIT)
-    await settle()
+    await waitFor(() => expect(confirm).not.toHaveFocus(), WAIT)
     expect(dialog.contains(document.activeElement)).toBe(true)
     await userEvent.tab()
     expect(dialog.contains(document.activeElement)).toBe(true)
