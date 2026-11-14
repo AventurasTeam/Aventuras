@@ -2,6 +2,7 @@ import type { Meta, StoryObj } from '@storybook/react-native-web-vite'
 import { View } from 'react-native'
 import { expect, fn, screen, userEvent, waitFor } from 'storybook/test'
 
+import { Button } from '@/components/ui/button'
 import { expectInsetFocusRing } from '@/components/ui/focus-ring-probe'
 import { Text } from '@/components/ui/text'
 import { t } from '@/lib/i18n'
@@ -20,6 +21,35 @@ const baseDelta: Delta = {
   entryId: 'entry #47',
   createdAtRelative: '2h ago',
   actionId: 'action-1',
+}
+
+const LONG_SUMMARY =
+  'A long summary that should clamp to two lines and ellipsize cleanly. The host format covers the diff so the row can leave overflow rendering to the layout layer; consumers should expect the bound at exactly two lines so the meta strip keeps its baseline.'
+
+// The review window's row: one close's change, its entry in the footer's link, not in its name.
+const reviewDelta: Delta = {
+  ...baseDelta,
+  id: 'delta-review',
+  source: 'chapter_close',
+  fieldPath: 'Voice',
+  summary: 'wry, joking → short, flat sentences',
+  entryId: null,
+  createdAtRelative: '',
+}
+
+const openEntry = fn()
+
+function ReviewFooter() {
+  return (
+    <View className="flex-row flex-wrap items-center gap-x-2">
+      <Text variant="muted" size="sm">
+        He stops joking after Oss.
+      </Text>
+      <Button variant="ghost" size="sm" onPress={openEntry}>
+        <Text>entry #47 →</Text>
+      </Button>
+    </View>
+  )
 }
 
 const meta: Meta<typeof DeltaLogRow> = {
@@ -132,11 +162,7 @@ export const LongTargetName: Story = {
 
 export const LongSummary: Story = {
   args: {
-    delta: {
-      ...baseDelta,
-      summary:
-        'A long summary that should clamp to two lines and ellipsize cleanly. The host format covers the diff so the row can leave overflow rendering to the layout layer; consumers should expect the bound at exactly two lines so the meta strip keeps its baseline.',
-    },
+    delta: { ...baseDelta, summary: LONG_SUMMARY },
     onPress: fn(),
   },
 }
@@ -182,6 +208,66 @@ export const NonInteractiveIsNotAControl: Story = {
     expect(canvasElement.querySelector('[aria-disabled]')).toBeNull()
     expect(row).not.toHaveAttribute('tabindex')
     expect(row).toHaveTextContent('Added "former soldier"')
+  },
+}
+
+export const WithFooter: Story = {
+  args: { delta: reviewDelta, onPress: fn(), showMeta: false },
+  render: (args) => <DeltaLogRow {...args} footer={<ReviewFooter />} />,
+  play: async ({ args }) => {
+    openEntry.mockClear()
+    const link = screen.getByRole('button', { name: 'entry #47 →' })
+    // A control of its own: no button around it, the row's included.
+    expect(link.parentElement?.closest('[role="button"]')).toBeNull()
+    // Indented to the summary column, past the op badge.
+    const why = screen.getByText('He stops joking after Oss.')
+    const summary = screen.getByText('wry, joking → short, flat sentences')
+    expect(
+      Math.abs(why.getBoundingClientRect().left - summary.getBoundingClientRect().left),
+    ).toBeLessThanOrEqual(1)
+
+    await userEvent.click(link)
+    await waitFor(() => expect(openEntry).toHaveBeenCalledTimes(1))
+    expect(args.onPress).not.toHaveBeenCalled()
+
+    await userEvent.click(screen.getByRole('button', { name: 'update Kael' }))
+    await waitFor(() => expect(args.onPress).toHaveBeenCalledTimes(1))
+    expect(openEntry).toHaveBeenCalledTimes(1)
+  },
+}
+
+export const WithoutMeta: Story = {
+  args: { delta: baseDelta, onPress: fn(), showMeta: false },
+  play: async () => {
+    const meta = [t('history:source.ai_classifier'), 'entry #47', '2h ago'].join(' · ')
+    expect(screen.queryByText(meta)).toBeNull()
+    const button = screen.getByRole('button', { name: 'update Kael, entry #47' })
+    expect(button).toHaveAccessibleDescription(
+      'state.traits Added "former soldier"; was ["brave", "loyal"]',
+    )
+    // The dropped line leaves no id behind: every element the description names is there.
+    const ids = button.getAttribute('aria-describedby')?.split(' ') ?? []
+    expect(ids).toHaveLength(2)
+    for (const id of ids) expect(document.getElementById(id)).not.toBeNull()
+  },
+}
+
+export const UnclampedSummary: Story = {
+  render: () => (
+    <View>
+      <DeltaLogRow delta={{ ...baseDelta, summary: LONG_SUMMARY }} />
+      <DeltaLogRow
+        delta={{ ...baseDelta, id: 'delta-unclamped', summary: LONG_SUMMARY }}
+        summaryLines={null}
+      />
+    </View>
+  ),
+  play: async () => {
+    const [clamped, unclamped] = screen.getAllByText(LONG_SUMMARY)
+    // Taller than its clamped twin: the value runs past two lines, and nothing cuts it.
+    expect(unclamped.getBoundingClientRect().height).toBeGreaterThan(
+      clamped.getBoundingClientRect().height,
+    )
   },
 }
 
