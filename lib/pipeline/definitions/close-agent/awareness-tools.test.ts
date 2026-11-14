@@ -573,9 +573,10 @@ describe('set_pin', () => {
     const USER_EARLY = `haw_${uuid(41)}`
     const NEVER_EDITED = `haw_${uuid(42)}`
     const CITED = `entry_${uuid(900)}`
+    let userCreated: string
 
-    // The user pins Lena on the fight, then the chapter's one turn is written, so its prose is
-    // the later of the two.
+    // The user pins Lena on the fight and makes her row of the crossing with no pin, then the
+    // chapter's one turn is written, so its prose is the latest.
     beforeEach(async () => {
       await putCharacter(f, LENA, 'Lena')
       for (const [id, happeningId] of [
@@ -595,6 +596,23 @@ describe('set_pin', () => {
         { characterId: LENA, happeningId: FIGHT },
         { decayResistance: 0.6 },
       )
+      await editAwareness(
+        f,
+        'user',
+        { characterId: LENA, happeningId: CROSSING },
+        { source: 'saw the boat go' },
+      )
+      const [created] = await f.ctx.db
+        .select({ id: happeningAwareness.id })
+        .from(happeningAwareness)
+        .where(
+          and(
+            eq(happeningAwareness.branchId, f.branchId),
+            eq(happeningAwareness.characterId, LENA),
+            eq(happeningAwareness.happeningId, CROSSING),
+          ),
+        )
+      userCreated = created!.id
       await apply(
         f,
         {
@@ -618,7 +636,7 @@ describe('set_pin', () => {
       await f.ctx.db
         .update(happeningAwareness)
         .set({ learnedAtEntryId: CITED })
-        .where(inArray(happeningAwareness.id, [USER_EARLY, NEVER_EDITED]))
+        .where(inArray(happeningAwareness.id, [USER_EARLY, NEVER_EDITED, userCreated]))
     })
 
     const earlyCalls = async (calls: readonly ScriptedCall[]): Promise<DispatchRun> =>
@@ -627,7 +645,7 @@ describe('set_pin', () => {
         tools: { set_pin: setPinTool },
         shown: await startPinned(
           f,
-          [USER_EARLY, NEVER_EDITED].map((id) => ({
+          [USER_EARLY, NEVER_EDITED, userCreated].map((id) => ({
             table: 'happening_awareness' as const,
             id,
             name: '',
@@ -664,6 +682,14 @@ describe('set_pin', () => {
 
       expect(answers).toEqual([{ result: 'ok' }])
       expect(await storedPin(f, NEVER_EDITED)).toBe(0.5)
+    })
+
+    it('skips a pin on a row the user created, as one whose pin they set', async () => {
+      const { result, answers } = await earlyCalls([pin('aw3', 0.2, ['t1'])])
+
+      expect(answers[0]).toMatchObject({ result: 'skipped', reason: USER_EDITED_SINCE_PROSE })
+      expect(await runDeltas(f, result.actionId)).toEqual([])
+      expect(await storedPin(f, userCreated)).toBeNull()
     })
   })
 

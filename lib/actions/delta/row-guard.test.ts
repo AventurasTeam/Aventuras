@@ -140,6 +140,26 @@ describe('readRowGuard', () => {
     expect(row.userTouched()).toBe(false)
   })
 
+  it('reads a row the user created as written whole, ever, though before the cited prose', async () => {
+    const ctx = await setup()
+    await land(ctx, createEntry('e_1', 1), 'act_t1')
+    await land(
+      ctx,
+      {
+        kind: 'createEntity',
+        source: 'user_edit',
+        payload: { entry: entity('char_new', 'character', { name: 'Bram' }) },
+      },
+      'act_u',
+    )
+    await land(ctx, createEntry('e_2', 2), 'act_t2')
+
+    const row = (await guard(ctx, 'e_2')).row('entities', 'char_new')
+    expect(row.userWrote('description')).toBe(false)
+    expect(row.userEverWrote('description')).toBe(true)
+    expect(row.userEverWrote('state', ['voice'])).toBe(true)
+  })
+
   it("reads a later turn's write by field", async () => {
     const ctx = await setup()
     await turns(ctx)
