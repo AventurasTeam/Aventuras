@@ -106,8 +106,9 @@ async function planSetPin(args: SetPinArgs, ctx: WriteContext): Promise<WritePla
       rows,
       values: proposed,
     }
-  // Before the one-way rule: a user's pin answers skipped, not a refusal the model would retry.
-  if (verdicts.userWrote(PIN_PATH))
+  // A pin the user ever wrote stays theirs, whatever turn is cited. Ahead of the bounds: it answers
+  // skipped, not a refusal the model would retry.
+  if (verdicts.userEverWrote(PIN_PATH))
     return {
       kind: 'write',
       actions: [],

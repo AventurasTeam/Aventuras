@@ -366,6 +366,7 @@ function stubVerdicts(written: { user?: readonly string[]; later?: readonly stri
       asked.push(key(column, path))
       return (written.user ?? []).includes(key(column, path))
     },
+    userEverWrote: (column, path) => (written.user ?? []).includes(key(column, path)),
     laterTurnWrote: (column, path) => {
       askedLater.push(key(column, path))
       return (written.later ?? []).includes(key(column, path))

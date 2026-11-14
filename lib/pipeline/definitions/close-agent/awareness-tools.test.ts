@@ -1,4 +1,4 @@
-import { and, asc, eq, sql } from 'drizzle-orm'
+import { and, asc, eq, inArray, sql } from 'drizzle-orm'
 import { beforeEach, describe, expect, it } from 'vitest'
 
 import { applyDeltaAction } from '@/lib/actions/delta/apply-delta-action'
@@ -39,6 +39,7 @@ const uuid = (n: number): string => `00000000-0000-4000-8000-${String(n).padStar
 const ARIA = `char_${uuid(1)}`
 const JORIN = `char_${uuid(2)}`
 const KAI = `char_${uuid(3)}`
+const LENA = `char_${uuid(4)}`
 const FIGHT = `hap_${uuid(11)}`
 const TOLL = `hap_${uuid(12)}`
 const CROSSING = `hap_${uuid(13)}`
@@ -563,6 +564,105 @@ describe('set_pin', () => {
     expect(answers).toEqual([{ result: 'ok' }])
     expect(await runDeltas(f, result.actionId)).toHaveLength(1)
     expect(await storedPin(f, LATER_SOURCED)).toBe(0.5)
+  })
+
+  // The user's pin is theirs from the moment they set it, not only after the cited turn's prose.
+  describe('a pin the user set before the cited turn', () => {
+    const USER_EARLY = `haw_${uuid(41)}`
+    const NEVER_EDITED = `haw_${uuid(42)}`
+    const CITED = `entry_${uuid(900)}`
+
+    // The user pins Lena on the fight, then the chapter's one turn is written, so its prose is
+    // the later of the two.
+    beforeEach(async () => {
+      await putCharacter(f, LENA, 'Lena')
+      for (const [id, happeningId] of [
+        [USER_EARLY, FIGHT],
+        [NEVER_EDITED, TOLL],
+      ] as const)
+        await putAwareness(f, {
+          id,
+          characterId: LENA,
+          happeningId,
+          learnedAtEntryId: null,
+          decayResistance: 0.4,
+        })
+      await editAwareness(
+        f,
+        'user',
+        { characterId: LENA, happeningId: FIGHT },
+        { decayResistance: 0.6 },
+      )
+      await apply(
+        f,
+        {
+          kind: 'createStoryEntry',
+          source: 'ai_classifier',
+          payload: {
+            entry: {
+              id: CITED,
+              branchId: f.branchId,
+              position: 100,
+              kind: 'ai_reply',
+              content: 'Lena crosses.',
+              chapterId: null,
+              createdAt: 1,
+            },
+          },
+        },
+        'act_cited_turn',
+        CITED,
+      )
+      await f.ctx.db
+        .update(happeningAwareness)
+        .set({ learnedAtEntryId: CITED })
+        .where(inArray(happeningAwareness.id, [USER_EARLY, NEVER_EDITED]))
+    })
+
+    const earlyCalls = async (calls: readonly ScriptedCall[]): Promise<DispatchRun> =>
+      runDispatchCalls(f, {
+        task: 'awareness',
+        tools: { set_pin: setPinTool },
+        shown: await startPinned(
+          f,
+          [USER_EARLY, NEVER_EDITED].map((id) => ({
+            table: 'happening_awareness' as const,
+            id,
+            name: '',
+          })),
+        ),
+        calls,
+        turns: { endEntryId: CITED, taskEntryIds: [CITED], part: 0 },
+      })
+
+    it('skips both a lower pin and a raise of it', async () => {
+      const { result, answers } = await earlyCalls([
+        pin('aw1', 0.2, ['t1']),
+        pin('aw1', 0.7, ['t1']),
+      ])
+
+      expect(answers).toEqual([
+        {
+          result: 'skipped',
+          reason: USER_EDITED_SINCE_PROSE,
+          note: 'The user edited this after the cited turns; their value stands. Do not write it again.',
+        },
+        {
+          result: 'skipped',
+          reason: USER_EDITED_SINCE_PROSE,
+          note: 'The user edited this after the cited turns; their value stands. Do not write it again.',
+        },
+      ])
+      expect(await runDeltas(f, result.actionId)).toEqual([])
+      expect(await storedPin(f, USER_EARLY)).toBe(0.6)
+    })
+
+    it('lands a pin on a row the user never wrote', async () => {
+      const { answers } = await earlyCalls([pin('aw2', 0.5, ['t1'])])
+
+      expect(answers).toEqual([{ result: 'ok' }])
+      expect(await storedPin(f, NEVER_EDITED)).toBe(0.5)
+    })
   })
 
   describe('the raise step', () => {

@@ -607,8 +607,11 @@ handle. Its bounds hold from the pin the Awareness start showed:
   again.
 - A row listed only for its frequency has the shown pin as its floor,
   by the one-way rule below; this chapter's rows may go down to 0.
-- A pin the user set after the cited turn is `skipped`, as on any
-  field ([Tools and writes](#tools-and-writes)).
+- A pin the user ever set is left as they set it: `skipped`, raise or
+  lower, whatever turn the call cites, since a pin is the user's
+  preference, not a fact about the prose. Other fields give way only
+  to a user edit after the cited turn
+  ([Tools and writes](#tools-and-writes)).
 
 **One-way frequency signal.** The frequency-driven candidate set
 only triggers consider-bump decisions, never demote-on-frequency.

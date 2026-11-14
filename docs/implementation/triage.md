@@ -482,13 +482,6 @@ patch`, which 5.5a marks `restated`, so a close tool's write of it
   `lib/pipeline/__tests__/close-round-trip.test.ts` pins today's
   behaviour. Developer decision 2026-11-14 (5.9): record the edge in
   canon, fix later.
-- **A user's pin is not permanent against a close.**
-  [`retrieval.md → Sources`](../memory/retrieval.md#sources) says a
-  user's pin stands until the user toggles it off, but a close's
-  `set_pin` honours only user edits made after the prose it cites
-  ([`cadence.md`](../memory/cadence.md#user-edits-and-classifier-writes)),
-  so it can lower a pin the user set earlier. Canon disagrees with itself;
-  the code follows the close's rule. Raised in 5.9's `set_pin` review.
 - **A row-gone refusal never says which row went.** When a write names
   several rows, the note reads "The row was merged into c3" without
   naming the absorbed row, on the read gate's path and the plan's path
