@@ -6,6 +6,7 @@ import {
   confirmAfterImmediateRefusal,
   countsAfterRefusal,
   regenerateRefusalCopy,
+  regenerateRefusalToast,
   reopenAfterRefusal,
   rollbackRefusalCopy,
   type ConfirmState,
@@ -82,6 +83,32 @@ describe('regenerateRefusalCopy', () => {
 
   it('offers no retry for a regenerate that cannot succeed', () => {
     expect(regenerateRefusalCopy(refused('sweep-refused'))).toBe('reader:regenerateUnavailable')
+  })
+})
+
+describe('regenerateRefusalToast', () => {
+  const COUNTS_CHANGED_REFUSAL = {
+    status: 'rejected',
+    code: STORY_ENTRY_REJECTION.countsChanged,
+    reason: 'counts changed',
+    counts: FRESH,
+  } as const
+
+  it('stays silent for a tap whose counts changed, the caller opens a confirm', () => {
+    expect(regenerateRefusalToast(COUNTS_CHANGED_REFUSAL, 'tap')).toBeNull()
+  })
+
+  it('tells a confirm that its counts changed', () => {
+    expect(regenerateRefusalToast(COUNTS_CHANGED_REFUSAL, 'confirm')).toBe(
+      'reader:rollbackCountsChanged',
+    )
+  })
+
+  it('tells either origin about any other refusal', () => {
+    expect(regenerateRefusalToast(refused('classifier-held'), 'tap')).toBe('reader:regenerateHeld')
+    expect(regenerateRefusalToast(refused('classifier-held'), 'confirm')).toBe(
+      'reader:regenerateHeld',
+    )
   })
 })
 

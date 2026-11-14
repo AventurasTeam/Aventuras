@@ -12,7 +12,7 @@ import { Composer, type ComposerHandle } from '@/components/reader/composer'
 import { isDraftEmpty, planSubmissionHandback } from '@/components/reader/composer-draft'
 import {
   confirmAfterImmediateRefusal,
-  regenerateRefusalCopy,
+  regenerateRefusalToast,
   reopenAfterRefusal,
   rollbackRefusalCopy,
   type ConfirmState,
@@ -123,7 +123,6 @@ import {
   runClassifierNow,
   runOwedClose,
   sameRollbackCounts,
-  STORY_ENTRY_REJECTION,
   submitTurn,
   undoLastAction,
   type UndoRejectionCode,
@@ -935,9 +934,8 @@ export default function ReaderComposerRoute() {
           // Every rejection fires before the first sweep, so nothing else moved
           // and putting the failure entry back is an exact undo of the drop.
           await restoreSystemTail(dropped)
-          // A tap had no confirm open for "the counts changed" to refer to: its caller opens one.
-          if (origin === 'confirm' || regen.code !== STORY_ENTRY_REJECTION.countsChanged)
-            toast.error(t(regenerateRefusalCopy(regen)))
+          const toastCopy = regenerateRefusalToast(regen, origin)
+          if (toastCopy != null) toast.error(t(toastCopy))
           return regen
         }
         const { result } = regen

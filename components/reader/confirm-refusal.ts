@@ -40,6 +40,15 @@ export function regenerateRefusalCopy(
   return REGENERATE_REJECTION_COPY[refusal.code]
 }
 
+// A tap has no confirm open for "the counts changed" to refer to: its caller opens one instead.
+export function regenerateRefusalToast(
+  refusal: RegenerateRefusal,
+  origin: 'tap' | 'confirm',
+): (typeof REGENERATE_REJECTION_COPY)[RegenerateRejectionCode] | null {
+  if (origin === 'tap' && refusal.code === STORY_ENTRY_REJECTION.countsChanged) return null
+  return regenerateRefusalCopy(refusal)
+}
+
 export function rollbackRefusalCopy(
   refusal: RollbackRefusal,
 ): 'reader:rollbackCountsChanged' | 'reader:rollbackFailed' {
