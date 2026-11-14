@@ -7,6 +7,10 @@ export {
   type ImportRowResult,
 } from './avts/import-rows'
 export {
+  getChapterDeletePreview,
+  type ChapterDeletePreview,
+} from './chapters/chapter-delete-preview'
+export {
   CHAPTER_DELETE_REFUSAL,
   type ChapterDeleteMode,
   type ChapterDeleteRefusal,

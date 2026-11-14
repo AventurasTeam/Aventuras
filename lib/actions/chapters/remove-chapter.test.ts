@@ -8,7 +8,9 @@ import {
   deltas,
   entities,
   happeningAwareness,
+  happenings,
   lore,
+  STORY_SETTINGS_DEFAULTS,
   storyEntries,
   threads,
   type Chapter,
@@ -19,6 +21,7 @@ import {
   type NewEntity,
   type NewThread,
   type StoryEntry,
+  type StorySettings,
   type Thread,
 } from '@/lib/db'
 import { logger } from '@/lib/diagnostics'
@@ -31,10 +34,12 @@ import {
 import { __setCloseAgentSlots, NO_CLOSE_TASKS } from '@/lib/pipeline/definitions/close-agent/slots'
 import { entriesStore, generationStore, undoRedoStore } from '@/lib/stores'
 
+import { getChapterDeletePreview } from './chapter-delete-preview'
 import { CHAPTER_DELETE_REFUSAL, resolveChapterDeleteSet } from './chapter-delete-set'
 import { removeChapter } from './remove-chapter'
 import { startManualClose } from './start-manual-close'
 import { applyDeltaAction, applyDeltaActionGroupWithOutcomes } from '../delta/apply-delta-action'
+import { holdBranchWriteExclusive, releaseBranchWriteExclusive } from '../delta/branch-write-lock'
 import { __redoGroupForTest } from '../delta/redo'
 import {
   DeltaReplayError,
@@ -45,6 +50,7 @@ import type { selectReversalSet } from '../delta/row-closure'
 import { shownCounts } from '../story-entries/__tests__/shown-counts'
 import { rollbackToEntry } from '../story-entries/operational'
 import { redoLastAction, undoLastAction } from '../story-entries/undo'
+import { registerStoreOnlyRun } from '../turns/__tests__/stand-in-pass'
 import type { DeltaSource, PipelineAction } from '../types'
 
 const { generateStructuredMock } = vi.hoisted(() => ({
@@ -1063,5 +1069,352 @@ describe('later writes win over a whole delete (C13)', () => {
 
     expect((await entityOf(c.fx, TOBIN.id))?.description).toBe(TOBIN_CLOSE_DESCRIPTION)
     expect((await entryRows(c.fx)).map((e) => e.id)).not.toContain('entry_later_action')
+  })
+})
+
+describe('getChapterDeletePreview', () => {
+  // The third of six replies: three turns follow the chapter.
+  const PREVIEW_END = 2
+  const PREVIEW_TOBIN = 'char_tobin_preview'
+  const PREVIEW_CROSSING = 'hap_crossing_preview'
+  const PREVIEW_TOBIN_KNOWS = 'haw_tobin_crossing_preview'
+  const PREVIEW_TOLL = 'lore_toll_preview'
+  const PREVIEW_FERRY = 'lore_ferry_preview'
+  const LANDED = { status: 'landed' }
+
+  function previewStory(fx: CloseFixture, settings: Partial<StorySettings> = {}) {
+    return { branchId: fx.branchId, settings: { ...STORY_SETTINGS_DEFAULTS, ...settings } }
+  }
+
+  it('counts what a whole delete takes, by the lines the confirm shows', async () => {
+    const fx = await openCloseFixture()
+    // Rows the close's writes need, written before the log as the opening is.
+    await fx.ctx.db.insert(entities).values({
+      id: PREVIEW_TOBIN,
+      branchId: fx.branchId,
+      kind: 'character',
+      name: 'Tobin',
+      description: 'The ferryman at Harrow.',
+      status: 'active',
+      injectionMode: 'auto',
+      createdAt: 1,
+      updatedAt: 1,
+    })
+    await fx.ctx.db.insert(happenings).values({
+      id: PREVIEW_CROSSING,
+      branchId: fx.branchId,
+      title: 'The night crossing',
+      createdAt: 1,
+      updatedAt: 1,
+    })
+    await fx.ctx.db.insert(happeningAwareness).values({
+      id: PREVIEW_TOBIN_KNOWS,
+      branchId: fx.branchId,
+      happeningId: PREVIEW_CROSSING,
+      characterId: PREVIEW_TOBIN,
+      learnedAtEntryId: null,
+      decayResistance: null,
+      retrievalCount: 4,
+      source: null,
+    })
+    const { chapter, actionId } = await closeOn(fx, fx.replyIds[PREVIEW_END])
+    const asClose = { actionId, branchId: fx.branchId, entryId: chapter.endEntryId }
+    expect(
+      await applyDeltaActionGroupWithOutcomes(
+        [
+          {
+            kind: 'createLore',
+            source: 'chapter_close',
+            payload: {
+              entry: {
+                id: PREVIEW_TOLL,
+                branchId: fx.branchId,
+                title: 'The toll',
+                injectionMode: 'auto',
+                createdAt: 2,
+                updatedAt: 2,
+              },
+            },
+          },
+          {
+            kind: 'createLore',
+            source: 'chapter_close',
+            payload: {
+              entry: {
+                id: PREVIEW_FERRY,
+                branchId: fx.branchId,
+                title: 'The night ferry',
+                injectionMode: 'auto',
+                createdAt: 2,
+                updatedAt: 2,
+              },
+            },
+          },
+          {
+            kind: 'updateEntity',
+            source: 'chapter_close',
+            payload: {
+              branchId: fx.branchId,
+              id: PREVIEW_TOBIN,
+              patch: { description: 'Poles faster when a light shows on the far bank.' },
+            },
+          },
+          // Only retrieval_count moves: the shape of the close's reset.
+          retrievalWrite(fx.branchId, PREVIEW_TOBIN_KNOWS, 4, 'chapter_close'),
+        ],
+        asClose,
+        fx.ctx,
+      ),
+    ).toEqual({ status: 'ok', outcomes: [LANDED, LANDED, LANDED, LANDED] })
+    const closeUpdate = await applyDeltaAction(
+      {
+        action: {
+          kind: 'updateLore',
+          source: 'chapter_close',
+          payload: {
+            branchId: fx.branchId,
+            id: PREVIEW_TOLL,
+            patch: { body: 'Paid at the far bank, in silver.' },
+            proseEntryId: chapter.endEntryId,
+          },
+        },
+        ...asClose,
+      },
+      fx.ctx,
+    )
+    expect(closeUpdate.status).toBe('ok')
+    const userEdit = await applyDeltaAction(
+      {
+        action: {
+          kind: 'updateLore',
+          source: 'user_edit',
+          payload: {
+            branchId: fx.branchId,
+            id: PREVIEW_TOLL,
+            patch: { title: 'The Syndicate toll' },
+            proseEntryId: null,
+          },
+        },
+        actionId: 'act_user_toll',
+        branchId: fx.branchId,
+        entryId: null,
+      },
+      fx.ctx,
+    )
+    expect(userEdit.status).toBe('ok')
+    // The close consumed its pick, so `after` reads the threshold alone.
+    expect(generationStore.getTxState().pendingClose.has(fx.branchId)).toBe(false)
+
+    expect(
+      await getChapterDeletePreview(fx.branchId, chapter.id, previewStory(fx), fx.ctx),
+    ).toEqual({
+      chapterNumber: 1,
+      // The toll and the ferry; the user's later edit of the toll is in the set.
+      createdLore: { count: 2, userEdited: true },
+      // Tobin's description alone: the stamps, the chapter row and its report, every write to
+      // the two lore rows and the retrieval-count update are left out.
+      otherChanges: 1,
+      // The three replies past the end; their three actions don't count.
+      turnsSince: 3,
+      after: 'waits',
+    })
+  })
+
+  it('reports created lore the user left alone as not edited', async () => {
+    const c = await openClosed()
+    await writeCloseWork(c)
+
+    expect(
+      await getChapterDeletePreview(c.fx.branchId, c.chapter.id, previewStory(c.fx), c.fx.ctx),
+    ).toMatchObject({ createdLore: { count: 1, userEdited: false } })
+  })
+
+  // The close creates a place; the user later moves the pier under it. The move stands, so the
+  // pier's parent ref is cleared: one change for the place's create, one for the clear.
+  it('counts a reference the delete clears among the other changes', async () => {
+    const fx = await openSeeded()
+    await seedPlaces(fx)
+    const c = await closeOn(fx, fx.replyIds[PREVIEW_END])
+    await writeUnderClose(c, [
+      {
+        kind: 'createEntity',
+        source: 'chapter_close',
+        payload: {
+          entry: {
+            id: 'loc_ford',
+            branchId: fx.branchId,
+            kind: 'location',
+            name: 'The Ford',
+            status: 'active',
+            injectionMode: 'auto',
+            state: { parent_location_id: null },
+            createdAt: CLOSED_AT,
+            updatedAt: CLOSED_AT,
+          },
+        },
+      },
+    ])
+    await writeLater(fx, placeUnder(fx.branchId, 'loc_pier', 'loc_ford', 'user_edit'), {
+      actionId: 'act_user_pier',
+      entryId: null,
+    })
+    const resolved = await resolveChapterDeleteSet(fx.branchId, c.chapter.id, 'whole', fx.ctx)
+    if ('status' in resolved) throw new Error(`refused: ${resolved.reason}`)
+    expect(resolved.set.refClears).toHaveLength(1)
+
+    expect(
+      await getChapterDeletePreview(fx.branchId, c.chapter.id, previewStory(fx), fx.ctx),
+    ).toMatchObject({ createdLore: { count: 0, userEdited: false }, otherChanges: 2 })
+  })
+
+  it('reads what follows a delete from the region it leaves', async () => {
+    const fx = await openCloseFixture()
+    const { chapter } = await closeOn(fx, fx.replyIds[PREVIEW_END])
+    // Neither the token snapshot nor a system row stamped with the chapter is an input.
+    await fx.ctx.db
+      .update(chapters)
+      .set({ tokenCount: 0 })
+      .where(and(eq(chapters.branchId, fx.branchId), eq(chapters.id, chapter.id)))
+    await fx.ctx.db.insert(storyEntries).values({
+      id: 'entry_close_system',
+      branchId: fx.branchId,
+      position: 100,
+      kind: 'system',
+      content: 'The chapter closed.',
+      contentTokens: 5000,
+      chapterId: chapter.id,
+      createdAt: 1,
+    })
+    // Every non-system row is the chapter's or the open region's: the region after the delete.
+    const rows = await fx.ctx.db
+      .select({ kind: storyEntries.kind, tokens: storyEntries.contentTokens })
+      .from(storyEntries)
+      .where(eq(storyEntries.branchId, fx.branchId))
+    const tokensAfter = rows
+      .filter((row) => row.kind !== 'system')
+      .reduce((sum, row) => sum + (row.tokens ?? 0), 0)
+    const preview = (settings: Partial<StorySettings>) =>
+      getChapterDeletePreview(fx.branchId, chapter.id, previewStory(fx, settings), fx.ctx)
+
+    expect(await preview({ chapterTokenThreshold: tokensAfter })).toEqual({
+      chapterNumber: 1,
+      createdLore: { count: 0, userEdited: false },
+      otherChanges: 0,
+      turnsSince: 3,
+      after: 'closes-next-send',
+    })
+    expect(await preview({ chapterTokenThreshold: tokensAfter + 1 })).toMatchObject({
+      after: 'waits',
+    })
+    expect(
+      await preview({ chapterTokenThreshold: tokensAfter, chapterAutoClose: false }),
+    ).toMatchObject({ after: 'stays-open' })
+
+    generationStore.setPendingClose(fx.branchId, { endEntryId: fx.replyIds[5] })
+    expect(await preview({ chapterTokenThreshold: tokensAfter + 1 })).toMatchObject({
+      after: 'closes-next-send',
+    })
+    expect(
+      await preview({ chapterTokenThreshold: tokensAfter + 1, chapterAutoClose: false }),
+    ).toMatchObject({ after: 'closes-next-send' })
+  })
+
+  it('reads under the shared lock, so a reversal waits for its last read', async () => {
+    const fx = await openCloseFixture()
+    const { chapter } = await closeOn(fx, fx.replyIds[PREVIEW_END])
+    let reversal: Promise<void> | undefined
+    let granted = false
+    let readsAfterGrant = 0
+    const watched = new Proxy(fx.ctx.db, {
+      get(target, prop, receiver) {
+        if (prop === 'select') {
+          // The exclusive hold a prose reversal's bracket takes, asked for once the preview reads.
+          reversal ??= holdBranchWriteExclusive(fx.branchId, 'act_reversal_probe').then(() => {
+            granted = true
+          })
+          if (granted) readsAfterGrant++
+        }
+        return Reflect.get(target, prop, receiver) as unknown
+      },
+    })
+
+    const preview = await getChapterDeletePreview(fx.branchId, chapter.id, previewStory(fx), {
+      ...fx.ctx,
+      db: watched,
+    })
+
+    expect(preview).toMatchObject({ chapterNumber: 1, turnsSince: 3 })
+    expect(reversal).toBeDefined()
+    expect(readsAfterGrant).toBe(0)
+    await reversal
+    expect(granted).toBe(true)
+    releaseBranchWriteExclusive(fx.branchId, 'act_reversal_probe')
+  })
+
+  it('refuses as the action does, writing nothing', async () => {
+    const fx = await openCloseFixture()
+    const first = await closeOn(fx, fx.replyIds[PREVIEW_END])
+    await closeOn(fx, fx.replyIds[4])
+    const log = await logRows(fx)
+    const rows = await chapterRows(fx)
+
+    const notLatest = await getChapterDeletePreview(
+      fx.branchId,
+      first.chapter.id,
+      previewStory(fx),
+      fx.ctx,
+    )
+
+    expect(notLatest).toMatchObject({
+      status: 'rejected',
+      code: CHAPTER_DELETE_REFUSAL.notLatest,
+    })
+    expect(notLatest).toEqual(await removeChapter(fx.branchId, first.chapter.id, 'whole', fx.ctx))
+    expect(
+      await getChapterDeletePreview(fx.branchId, 'chap_gone', previewStory(fx), fx.ctx),
+    ).toMatchObject({ status: 'rejected', code: CHAPTER_DELETE_REFUSAL.notFound })
+    expect(await logRows(fx)).toEqual(log)
+    expect(await chapterRows(fx)).toEqual(rows)
+  })
+
+  it('refuses a chapter no close made, writing nothing', async () => {
+    const fx = await openCloseFixture()
+    await fx.ctx.db.insert(chapters).values({
+      id: 'chap_by_hand',
+      branchId: fx.branchId,
+      sequenceNumber: 1,
+      title: 'By hand',
+      summary: 'Written with no close.',
+      theme: 'None',
+      startEntryId: fx.entries[0].id,
+      endEntryId: fx.replyIds[PREVIEW_END],
+      tokenCount: 1,
+      closedAt: 1,
+      createdAt: 1,
+      updatedAt: 1,
+    })
+    const log = await logRows(fx)
+
+    const refused = await getChapterDeletePreview(
+      fx.branchId,
+      'chap_by_hand',
+      previewStory(fx),
+      fx.ctx,
+    )
+
+    expect(refused).toMatchObject({ status: 'rejected', code: CHAPTER_DELETE_REFUSAL.noClose })
+    expect(refused).toEqual(await removeChapter(fx.branchId, 'chap_by_hand', 'whole', fx.ctx))
+    expect(await logRows(fx)).toEqual(log)
+  })
+
+  it('reads while a run holds the gate, which the confirm shows disabled', async () => {
+    const fx = await openCloseFixture()
+    const { chapter } = await closeOn(fx, fx.replyIds[PREVIEW_END])
+    registerStoreOnlyRun('turn-stand-in', fx.branchId)
+    expect(generationStore.isUserEditBlocked()).toBe(true)
+
+    expect(
+      await getChapterDeletePreview(fx.branchId, chapter.id, previewStory(fx), fx.ctx),
+    ).toMatchObject({ chapterNumber: 1, turnsSince: 3 })
   })
 })
