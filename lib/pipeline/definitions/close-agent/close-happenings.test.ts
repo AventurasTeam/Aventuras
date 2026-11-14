@@ -331,6 +331,35 @@ describe('the range embed', () => {
     expect(closeClustersOf(phase.intermediates)).toEqual([[H1, H2]])
   })
 
+  it('leaves a row whose flag the sync could not clear out of the clusters, counted unembedded', async () => {
+    await seedPair({ h2: { embedded: true } })
+    // H2's text drifts, so the sync embeds it; a writer edits it again mid-embed, so the
+    // guarded vector write and flag clear match nothing and H2 keeps its old vector, still stale.
+    await fx.ctx.db
+      .update(happenings)
+      .set({ title: 'Wren haggles the fare', embeddingStale: 1 })
+      .where(and(eq(happenings.branchId, fx.branchId), eq(happenings.id, H2)))
+    script(async (rows) => {
+      const ops = embedOps(rows)
+      await fx.ctx.db
+        .update(happenings)
+        .set({ description: 'Edited while the embed ran.' })
+        .where(and(eq(happenings.branchId, fx.branchId), eq(happenings.id, H2)))
+      return ops
+    })
+    const phase = phaseOf()
+    const debug = vi.spyOn(phase.log, 'debug')
+
+    expect(await runStep(phase)).toEqual({ status: 'completed' })
+
+    expect(await staleOf()).toEqual({ [H1]: 0, [H2]: 1 })
+    expect(closeClustersOf(phase.intermediates)).toEqual([])
+    expect(debug).toHaveBeenCalledWith(
+      'memory.close_range_embed',
+      expect.objectContaining({ happenings: 2, unembedded: 1, clusters: 0 }),
+    )
+  })
+
   it.each([
     { name: 'anchors five entries apart', h2: { at: 6, cast: [WREN, TOBIN] } },
     { name: 'casts that share nothing', h2: { at: 4, cast: [MIRA] } },

@@ -214,7 +214,16 @@ async function* embedRange(
   let clusters: string[][]
   let unembedded: number
   try {
-    const vectors = await readVectors(deps, branchId, ids)
+    // The sync reports ok even when a writer's edit made its guarded clear match nothing: such a
+    // row keeps its old vector and its flag, and retrieval leaves it out as stale.
+    const stillStale = new Set(
+      (await staleInRange(deps, new Set(ids))([branchId])).map(({ id }) => id),
+    )
+    const vectors = await readVectors(
+      deps,
+      branchId,
+      ids.filter((id) => !stillStale.has(id)),
+    )
     const casts = await readCasts(ctx, ids)
     const inputs = range.flatMap(({ id, anchorIndex }): ClusterInput[] => {
       const vector = vectors.get(id)
