@@ -508,15 +508,6 @@ patch`, which 5.5a marks `restated`, so a close tool's write of it
   again. Leaving it out needs a later-turn read on the start's
   candidates, which the row guard does per row. Raised in the slice
   review fixes for 5.9's R2.
-- **A History tab test fails under a loaded box.**
-  `components/history/history-tab.test.tsx`'s "refetches for an unshown
-  link end's rename only while a search is set" timed out once in a full
-  `pnpm test:run` (load average 14, three slices' workers on one box):
-  its `waitFor` saw the loader called 2 times, not 3. It passed three
-  runs alone and the full suite an hour earlier. Unexamined: whether the
-  search debounce outlasts `waitFor`'s default timeout or the test reads
-  the call count before a pending search load lands. Raised in 5.9's
-  slice review.
 - **The reversal planner's source filters and lock window have three
   loose ends.** First, user mode reads later writes with
   `source = 'user_edit'` (`rowDeltasAfter`, `lib/actions/delta/user-precedence.ts`),
