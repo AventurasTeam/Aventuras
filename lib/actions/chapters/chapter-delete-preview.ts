@@ -1,17 +1,14 @@
-import { and, eq, ne, sql } from 'drizzle-orm'
+import { and, eq, inArray, ne, sql } from 'drizzle-orm'
 
 import { closeAfterDelete, type ChapterDeleteAfter } from '@/lib/chapters'
-import { openRegionSeries, storyEntries, type Delta } from '@/lib/db'
+import { chunked, lore, openRegionSeries, storyEntries, type Delta } from '@/lib/db'
 import { isRetrievalBumpOnly } from '@/lib/row-signals'
 import { generationStore, type OpenStory } from '@/lib/stores'
 
-import {
-  resolveChapterDeleteSet,
-  type ChapterDeleteReadRefusal,
-  type ChapterDeleteSet,
-} from './chapter-delete-set'
+import { resolveChapterDeleteSet, type ChapterDeleteReadRefusal } from './chapter-delete-set'
 import { withBranchWriteShared } from '../delta/branch-write-lock'
 import { restoringUpdates } from '../delta/reverse-replay'
+import type { ReversalSet } from '../delta/row-closure'
 import type { DbCtx } from '../types'
 
 const CHAPTER_DELETE_PREVIEW_LOCK_ID = 'chapter-delete-preview'
@@ -43,7 +40,11 @@ export async function getChapterDeletePreview(
     const chapterTokens = await ownEntryTokens(branchId, resolved.chapter.id, ctx)
     return {
       chapterNumber: resolved.chapter.sequenceNumber,
-      ...changesOf(resolved, await restoringUpdates(resolved.set, ctx)),
+      ...changesOf(
+        resolved.set,
+        await createdLoreOf(branchId, resolved.groups, ctx),
+        await restoringUpdates(resolved.set, ctx),
+      ),
       turnsSince: series.filter((row) => row.kind === 'ai_reply').length,
       after: closeAfterDelete({
         tokensAfter: regionTokens + chapterTokens,
@@ -74,23 +75,43 @@ async function ownEntryTokens(
   return row?.tokens ?? 0
 }
 
-// A created lore row has its own line (user edits included), so no write to it counts again; the
-// stamps and chapter row are the delete itself, and a retrieval bump is no change worth showing.
-function changesOf(
-  { set, groups }: ChapterDeleteSet,
-  restoring: ReadonlySet<string>,
-): Pick<ChapterDeletePreview, 'createdLore' | 'otherChanges'> {
-  const createdLore = new Set(
+type CreatedLore = { ids: ReadonlySet<string>; live: ReadonlySet<string> }
+
+// A created row the user deleted since is gone already, so the delete removes only the live ones.
+async function createdLoreOf(
+  branchId: string,
+  groups: readonly Delta[],
+  ctx: Pick<DbCtx, 'db'>,
+): Promise<CreatedLore> {
+  const ids = new Set(
     groups.filter((d) => d.op === 'create' && d.targetTable === 'lore').map((d) => d.targetId),
   )
+  const live = new Set<string>()
+  for (const chunk of chunked([...ids])) {
+    const rows = await ctx.db
+      .select({ id: lore.id })
+      .from(lore)
+      .where(and(eq(lore.branchId, branchId), inArray(lore.id, chunk)))
+    for (const row of rows) live.add(row.id)
+  }
+  return { ids, live }
+}
+
+// No write to a created lore row counts again: a live one has its own line, a gone one changes
+// nothing. The stamps and chapter row are the delete itself; a retrieval bump isn't worth showing.
+function changesOf(
+  set: ReversalSet,
+  created: CreatedLore,
+  restoring: ReadonlySet<string>,
+): Pick<ChapterDeletePreview, 'createdLore' | 'otherChanges'> {
   let userEdited = false
   let otherChanges = set.refClears.length
   for (const d of set.rows) {
-    if (d.targetTable === 'lore' && createdLore.has(d.targetId)) {
-      if (d.source === 'user_edit') userEdited = true
+    if (d.targetTable === 'lore' && created.ids.has(d.targetId)) {
+      if (d.source === 'user_edit' && created.live.has(d.targetId)) userEdited = true
     } else if (!countsNowhere(d, restoring)) otherChanges++
   }
-  return { createdLore: { count: createdLore.size, userEdited }, otherChanges }
+  return { createdLore: { count: created.live.size, userEdited }, otherChanges }
 }
 
 // An update a later write replaced in every field restores nothing, so the delete leaves it standing.

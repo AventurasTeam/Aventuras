@@ -3,10 +3,12 @@ import { describe, expect, expectTypeOf, it, vi } from 'vitest'
 
 import type { generateStructured } from '@/lib/ai'
 import {
+  branches,
   chapters,
   entities,
   happeningAwareness,
   happenings,
+  lore,
   STORY_SETTINGS_DEFAULTS,
   storyEntries,
   type CharacterState,
@@ -71,6 +73,7 @@ describe('getChapterDeletePreview', () => {
   const PREVIEW_TOBIN_KNOWS = 'haw_tobin_crossing_preview'
   const PREVIEW_TOLL = 'lore_toll_preview'
   const PREVIEW_FERRY = 'lore_ferry_preview'
+  const TOLL_ID = 'lore_harrow_toll'
   const LANDED = { status: 'landed' }
 
   function previewStory(fx: CloseFixture, settings: Partial<StorySettings> = {}) {
@@ -218,6 +221,52 @@ describe('getChapterDeletePreview', () => {
     expect(
       await getChapterDeletePreview(c.fx.branchId, c.chapter.id, previewStory(c.fx), c.fx.ctx),
     ).toMatchObject({ createdLore: { count: 1, userEdited: false } })
+  })
+
+  // The user edits the toll, then deletes it: the delete removes only the ferry, which they left
+  // alone, and a write to the gone toll changes nothing. A fork's toll, under the same id, isn't
+  // this branch's.
+  it('counts only created lore still live on the branch, and only edits of it', async () => {
+    const c = await openClosed()
+    const { branchId } = c.fx
+    await writeUnderClose(c, [
+      loreCreate(branchId, CLOSE_LORE_ID, 'The Harrow ferry'),
+      loreCreate(branchId, TOLL_ID, 'The Harrow toll'),
+    ])
+    await writeLater(c.fx, editLore(branchId, TOLL_ID, 'Doubled after dark.', 'user_edit'), {
+      actionId: 'act_user_toll',
+      entryId: null,
+    })
+    await writeLater(
+      c.fx,
+      { kind: 'deleteLore', source: 'user_edit', payload: { branchId, id: TOLL_ID } },
+      { actionId: 'act_user_toll_delete', entryId: null },
+    )
+    await c.fx.ctx.db.insert(branches).values({
+      id: 'branch_fork',
+      storyId: c.fx.storyId,
+      parentBranchId: branchId,
+      name: 'Fork',
+      createdAt: CLOSED_AT,
+    })
+    await c.fx.ctx.db.insert(lore).values({
+      id: TOLL_ID,
+      branchId: 'branch_fork',
+      title: 'The Harrow toll',
+      injectionMode: 'auto',
+      createdAt: CLOSED_AT,
+      updatedAt: CLOSED_AT,
+    })
+    expect((await worldRows(c.fx)).lore.map((row) => row.id)).toEqual([CLOSE_LORE_ID])
+
+    expect(
+      await getChapterDeletePreview(branchId, c.chapter.id, previewStory(c.fx), c.fx.ctx),
+    ).toMatchObject({ createdLore: { count: 1, userEdited: false }, otherChanges: 0 })
+
+    expect(await removeChapter(branchId, c.chapter.id, 'whole', c.fx.ctx)).toEqual({
+      status: 'ok',
+    })
+    expect((await worldRows(c.fx)).lore).toEqual([])
   })
 
   // The close creates a place; the user later moves the pier under it. The move stands, so the
