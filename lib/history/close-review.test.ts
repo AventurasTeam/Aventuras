@@ -617,6 +617,43 @@ describe('closeReviewNotApplied', () => {
     ).toEqual([['The fire', null, 'The quay burned.', 'later-turn']])
   })
 
+  it("labels a landed happening merge's link-row losses by their link table, never the raw path", () => {
+    const BLAZE = { table: 'happenings', id: 'hap_blaze', name: 'The blaze' }
+    const lost = [
+      'decayResistance',
+      'learnedAtEntryId',
+      'retrievalCount',
+      'source',
+      'role',
+      'entityId',
+      'characterId',
+    ]
+
+    const rows = closeReviewNotApplied(
+      report([
+        call({
+          task: 'happenings',
+          part: 0,
+          tool: 'merge_happenings',
+          rows: [FIRE, BLAZE],
+          survivor: { table: 'happenings', id: 'hap_fire' },
+          skippedFields: lost.map((field) => ({ field, reason: 'user-edited-since-prose' })),
+        }),
+      ]),
+      LOOKUP,
+    )
+
+    expect(rows.map((row) => [row.target?.name, row.fieldPath, row.fieldLabel])).toEqual([
+      ['The fire', 'decayResistance', 'Decay resistance'],
+      ['The fire', 'learnedAtEntryId', 'Learned at'],
+      ['The fire', 'retrievalCount', 'Retrieval count'],
+      ['The fire', 'source', 'Source'],
+      ['The fire', 'role', 'Role'],
+      ['The fire', 'entityId', 'Involvement'],
+      ['The fire', 'characterId', 'Awareness'],
+    ])
+  })
+
   it("matches a refused create_lore's title by its row name when it sent no title", () => {
     expect(
       notApplied([

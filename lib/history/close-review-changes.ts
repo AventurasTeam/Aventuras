@@ -57,9 +57,31 @@ export function reviewTarget(row: ReportRow, lookup: CloseReviewLookup): CloseRe
   return { table: row.table, id: row.id, name }
 }
 
+type HappeningLinkTable = 'happening_involvements' | 'happening_awareness'
+
+// A link create names only its character: the link itself is what the merge didn't carry over.
+const LINK_CREATE_PATHS: ReadonlyMap<string, HappeningLinkTable> = new Map([
+  ['entityId', 'happening_involvements'],
+  ['characterId', 'happening_awareness'],
+])
+
+// A happening merge records its link rows' losses on keep, under the link tables' own paths.
+function happeningLinkLabel(path: string): string | undefined {
+  const created = LINK_CREATE_PATHS.get(path)
+  if (created !== undefined) return linkTableLabel(created)
+  for (const table of ['happening_awareness', 'happening_involvements'] as const) {
+    const label = fieldPathLabel(table, path)
+    if (label !== path) return label
+  }
+  return undefined
+}
+
 /** A delta path's name on its table, as History labels it; the path itself on another table. */
 export function reviewFieldLabel(table: string, path: string): string {
-  return isLabelledTable(table) ? fieldPathLabel(table, path) : path
+  if (!isLabelledTable(table)) return path
+  const label = fieldPathLabel(table, path)
+  if (label !== path || table !== 'happenings') return label
+  return happeningLinkLabel(path) ?? path
 }
 
 export function reviewRowKey(callIndex: number, row: CloseReviewRowRef, part: string): string {
