@@ -368,9 +368,9 @@ type CloseReportCall = {
   why: string
   turns: string[] // entry ids
   result: 'ok' | 'rejected' | 'skipped'
-  reason?: string // why it didn't land: the first refusal's, else protection's
+  reason?: CloseReasonKey // why it didn't land: the first refusal's, else protection's
   values?: Record<string, string> // delta path to new or proposed value, cut to the bound
-  skippedFields?: { field: string; reason: string }[] // lost fields' own reasons (C11)
+  skippedFields?: { field: string; reason: CloseReasonKey }[] // lost fields' own reasons (C11)
   survivor?: { table: string; id: string } // a landed merge's kept row
 }
 ```
@@ -400,8 +400,9 @@ type CloseReportCall = {
   the common checks to a tool's own rules. The model's tool result keeps
   its instruction, written `<key>: <text>`, and the ledger records the
   key alone, so no stored reason holds a row id or a per-close handle.
-  A reason no key covers records `other`, and the review reads a stored
-  string that isn't a key as `other`. Every key has a `t()` label.
+  A reason no key covers records `other`. The schema still accepts any
+  stored string, so an older report parses, and parsing reads one that
+  isn't a key as `other`, logged. Every key has a `t()` label.
 - **The ledger**, behind an accessor in `close-intermediates.ts`, is
   `Pick<CloseReport, 'calls' | 'stopped' | 'noToolCalls'>`. A close with
   no ledger reads as none, with `noToolCalls: true`. The driver clears the

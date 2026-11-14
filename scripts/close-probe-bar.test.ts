@@ -111,7 +111,7 @@ describe('tallyRun', () => {
         task: 'identity',
         tool: 'update_character',
         result: 'rejected',
-        reason: 'over the soft cap',
+        reason: 'over-soft-cap',
         values: { 'state.traits': 'a, b' },
       }),
       call({
@@ -209,7 +209,7 @@ describe('tallyRun', () => {
         task: 'identity',
         tool: 'update_character',
         result: 'rejected',
-        reason: 'over the soft cap',
+        reason: 'over-soft-cap',
         ...onCapped,
         values: { 'state.traits': 'a' },
       }),
@@ -220,7 +220,7 @@ describe('tallyRun', () => {
         result: 'ok',
         ...onCapped,
         values: { 'state.traits': 'a', description: 'b' },
-        skippedFields: [{ field: 'state.traits', reason: 'over the soft cap' }],
+        skippedFields: [{ field: 'state.traits', reason: 'over-soft-cap' }],
       }),
       // Protected beside a landed sibling: never reached the check.
       call({
@@ -278,8 +278,8 @@ describe('tallyRun', () => {
     expect(tallied.capCalls).toBe(3)
     expect(tallied.capHits).toEqual([
       { row: 'Silver', path: 'state.traits', result: 'ok' },
-      { row: 'Silver', path: 'state.traits', result: 'refused', reason: 'over the soft cap' },
-      { row: 'Silver', path: 'state.traits', result: 'refused', reason: 'over the soft cap' },
+      { row: 'Silver', path: 'state.traits', result: 'refused', reason: 'over-soft-cap' },
+      { row: 'Silver', path: 'state.traits', result: 'refused', reason: 'over-soft-cap' },
     ])
   })
 
@@ -290,7 +290,7 @@ describe('tallyRun', () => {
       result: 'ok',
       ...onCapped,
       values: { 'state.traits': 'a', 'state.drives': 'b' },
-      skippedFields: [{ field: 'state.drives', reason: 'over the soft cap' }],
+      skippedFields: [{ field: 'state.drives', reason: 'over-soft-cap' }],
     })
     const tallied = run({
       report: report([both]),
@@ -302,14 +302,14 @@ describe('tallyRun', () => {
     expect(tallied.capCalls).toBe(1)
     expect(tallied.capHits).toEqual([
       { row: 'Silver', path: 'state.traits', result: 'ok' },
-      { row: 'Silver', path: 'state.drives', result: 'refused', reason: 'over the soft cap' },
+      { row: 'Silver', path: 'state.drives', result: 'refused', reason: 'over-soft-cap' },
     ])
   })
 
   it('types a reason on a refused cap hit only', () => {
     const at = { row: 'Silver', path: 'state.traits' }
     // @ts-expect-error a hit that passed the check has no reason
-    const passed: CapHit = { ...at, result: 'ok', reason: 'over the soft cap' }
+    const passed: CapHit = { ...at, result: 'ok', reason: 'over-soft-cap' }
     // @ts-expect-error a refused hit carries its reason
     const refused: CapHit = { ...at, result: 'refused' }
     expect([passed.result, refused.result]).toEqual(['ok', 'refused'])
@@ -332,7 +332,7 @@ describe('tallyRun', () => {
         task: 'threads',
         tool: 'merge_threads',
         result: 'rejected',
-        reason: 'keep the active one',
+        reason: 'merge-active-into-inactive',
         rows,
       }),
       call({ task: 'threads', tool: 'merge_threads', result: 'skipped', reason: 'later-turn' }),
@@ -342,7 +342,7 @@ describe('tallyRun', () => {
     expect(tallied.mergeCalls).toBe(3)
     expect(tallied.mergeHits).toEqual([
       { rows: ['The map', 'The chart'], result: 'ok' },
-      { rows: ['The map', 'The chart'], result: 'rejected', reason: 'keep the active one' },
+      { rows: ['The map', 'The chart'], result: 'rejected', reason: 'merge-active-into-inactive' },
       { rows: [], result: 'skipped', reason: 'later-turn' },
     ])
   })
