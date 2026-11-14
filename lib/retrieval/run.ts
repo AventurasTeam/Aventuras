@@ -880,10 +880,7 @@ function assembleCandidates(
           renderedText: lines(`${r.title} (${r.status})`, r.description),
           sims: simsFor(vector),
           vector,
-          // A pass's status change keeps the resolved ref (lib/actions/threads/register.ts), so a
-          // reopened thread can still carry one.
-          chaptersOld:
-            r.status === 'pending' ? 0 : threadChaptersOld(r.resolvedAtEntryId, chapterAges),
+          chaptersOld: threadChaptersOld(r, chapterAges),
           pinSignal: 0,
           keywordHits: [],
         }

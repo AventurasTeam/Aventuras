@@ -205,16 +205,25 @@ describe('characterChaptersOld', () => {
 })
 
 describe('threadChaptersOld', () => {
+  const resolvedAt = (resolvedAtEntryId: string | null) =>
+    ({ status: 'resolved', resolvedAtEntryId }) as const
+
   it('ages a thread from the entry it resolved or failed at', () => {
-    expect(threadChaptersOld(inChapter(58), AT_60)).toBe(2)
+    expect(threadChaptersOld(resolvedAt(inChapter(58)), AT_60)).toBe(2)
+    expect(threadChaptersOld({ status: 'failed', resolvedAtEntryId: inChapter(57) }, AT_60)).toBe(3)
   })
 
   it('reads 0 for no resolved ref, or one in the open region', () => {
-    expect(threadChaptersOld(null, AT_60)).toBe(0)
-    expect(threadChaptersOld(OPEN, AT_60)).toBe(0)
+    expect(threadChaptersOld(resolvedAt(null), AT_60)).toBe(0)
+    expect(threadChaptersOld(resolvedAt(OPEN), AT_60)).toBe(0)
+  })
+
+  // Reopening keeps the ref the thread resolved at.
+  it('reads 0 for a pending thread whatever ref it still holds', () => {
+    expect(threadChaptersOld({ status: 'pending', resolvedAtEntryId: inChapter(3) }, AT_60)).toBe(0)
   })
 
   it('reads 0 with no closed chapter', () => {
-    expect(threadChaptersOld('e1', EMPTY_CHAPTER_AGES)).toBe(0)
+    expect(threadChaptersOld(resolvedAt('e1'), EMPTY_CHAPTER_AGES)).toBe(0)
   })
 })

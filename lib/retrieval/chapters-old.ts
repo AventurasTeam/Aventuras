@@ -1,4 +1,4 @@
-import type { CharacterState } from '@/lib/db'
+import type { CharacterState, Thread } from '@/lib/db'
 
 /**
  * retrieval.md → Scoring function, `chapters_old`: distance in chapters from the open chapter,
@@ -80,10 +80,12 @@ export function characterChaptersOld(
   return chaptersOldAt(lastSeenAt?.entryId, index) ?? 0
 }
 
-/** A thread ages from where it resolved or failed; no ref reads 0. */
+/** A thread ages from where it resolved or failed; a pending one, or one with no ref, reads 0. */
 export function threadChaptersOld(
-  resolvedAtEntryId: string | null,
+  thread: Pick<Thread, 'status' | 'resolvedAtEntryId'>,
   index: ChapterAgeIndex,
 ): number {
-  return chaptersOldAt(resolvedAtEntryId, index) ?? 0
+  // Reopening keeps the resolved ref, so a pending thread can still carry one.
+  if (thread.status === 'pending') return 0
+  return chaptersOldAt(thread.resolvedAtEntryId, index) ?? 0
 }
