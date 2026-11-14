@@ -5,14 +5,14 @@ import { closeAgentPhase } from './chapter-close-agent'
 import { closeBoundaryPhase } from './chapter-close-boundary'
 import { closeMetadataPhase } from './chapter-close-metadata'
 import { closeReportPhase } from './chapter-close-report'
-import { CLOSE_PHASE } from './intermediates'
+import { CLOSE_PHASE, CLOSE_TARGET } from './intermediates'
 import { PER_TURN_KIND } from './per-turn'
 import { definePipeline } from '../authoring/define'
 import { getPipeline } from '../authoring/registry'
 import type { ResolverInput } from '../types'
 
 // C2: an unassigned lore-mgmt fails at pre-flight, not inside a phase.
-export const CHAPTER_CLOSE_RESOLVES: readonly ResolverInput[] = [{ target: 'lore-mgmt' }]
+export const CHAPTER_CLOSE_RESOLVES: readonly ResolverInput[] = [{ target: CLOSE_TARGET }]
 
 /** generation-pipeline.md → V1 declarations. Idempotent: boot and every start call it. */
 export function ensureChapterClosePipelineRegistered(): void {

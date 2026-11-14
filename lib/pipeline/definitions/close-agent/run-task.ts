@@ -1,7 +1,7 @@
 import type { JSONValue, ModelMessage, ToolModelMessage } from 'ai'
 
 import type { GroupOutcome } from '@/lib/actions/types'
-import { generateToolStep, type ResolveTarget, type ToolStep, type ToolStepCall } from '@/lib/ai'
+import { generateToolStep, type ToolStep, type ToolStepCall } from '@/lib/ai'
 import { logger } from '@/lib/diagnostics'
 
 import { createReadSet } from './common-checks'
@@ -12,9 +12,9 @@ import { toolStepTools } from './tool'
 import { modelAnswer } from './verdict'
 import { retriedAttemptEvents, toPipelineError } from '../../call-error'
 import type { PhaseEmittedEvent, PipelineError } from '../../types'
-import { CLOSE_PHASE } from '../intermediates'
+import { CLOSE_TARGET, CLOSE_PHASE } from '../intermediates'
 
-const TARGET = 'lore-mgmt' satisfies ResolveTarget
+const TARGET = CLOSE_TARGET
 
 /** chapter-close.md → When a task stops: the steps a task gets per part, tuned in play. */
 export const CLOSE_TASK_STEP_BUDGET = 24

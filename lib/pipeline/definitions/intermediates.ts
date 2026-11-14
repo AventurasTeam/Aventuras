@@ -1,3 +1,4 @@
+import type { ResolveTarget } from '@/lib/ai'
 import type { CloseReport } from '@/lib/db'
 
 /**
@@ -13,6 +14,12 @@ export type CloseRange = Readonly<{ chapterId: string; startEntryId: string; end
 
 /** C4: what a close's run builds of its report; `report` adds `version` and `actionId`. */
 export type CloseLedger = Pick<CloseReport, 'calls' | 'stopped' | 'noToolCalls'>
+
+/**
+ * The model every close call runs on: the metadata part cut reads this target's window, so the
+ * prose tasks must run on the same one.
+ */
+export const CLOSE_TARGET = 'lore-mgmt' satisfies ResolveTarget
 
 /** The close's phase names, shared by its declaration and every phase's `phaseName`. */
 export const CLOSE_PHASE = {

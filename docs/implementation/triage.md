@@ -193,22 +193,6 @@ patch`, which 5.5a marks `restated`, so a close tool's write of it
   merge's kept-row rule, `search_world`'s limit and ranking,
   `architecture.md`'s halves-table row and count-cache paragraph,
   `observability.md` and `testing.md`. Raised in 5.5b's slice review.
-- **The close's model target is spelled three times.** The chapter
-  close's metadata phase, its call and the close agent each declare
-  their own `lore-mgmt` target (`chapter-close-metadata.ts`,
-  `chapter-close-metadata-call.ts`, `close-agent/run-task.ts`), beside
-  `CHAPTER_CLOSE_RESOLVES` in `chapter-close.ts`. The parts cut reads
-  its window from that target, so it is right only while the prose
-  tasks run on the same model, and nothing ties the copies together.
-  One exported close target would. The phases also resolve it at
-  different times: the metadata phase cuts the parts from its own
-  settings snapshot and the agent phase reads a later one, and App
-  Settings → Providers (Quick wire, Fetch models) isn't gated during a
-  close. A reassignment or a smaller detected window between the two
-  leaves parts sized for the old window, so the first task call fails
-  the close, and the next run cuts afresh. Resolving the target once and
-  storing it beside the parts would close both. Raised in 5.8's task
-  review; the timing in its slice review.
 - **No test pins a prose task's token count into its render.** In
   the close's Identity, Threads, Lore and Upkeep tasks, passing 0 for
   `proseTokens` to `renderClosePrompt` still passes every task test.

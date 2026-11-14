@@ -1032,6 +1032,20 @@ change amends the scope above.
   does. If the default holds, this slice's PR edits those canon lines and
   the wireframe. The other option keeps the window open and has the host
   render the guard's dialog, which no slice has designed.
+- **Does the close resolve its model once?** The metadata phase cuts the
+  parts from its own settings snapshot (`chapter-close-metadata-call.ts`)
+  and the agent phase reads a later one (`chapter-close-agent.ts`), and
+  App Settings → Providers (Quick wire, Fetch models) isn't gated during a
+  close. A reassignment, or a smaller detected window, between the two
+  leaves parts sized for the old window. Parts are at most half that
+  window, so only a new window under about half the old one fails, and
+  then the first task call fails the close, which rolls back; the next
+  run cuts afresh. This slice's re-run arm cuts parts in `metadata` before
+  `agent` runs too. Default: `metadata` resolves `CLOSE_TARGET` once and
+  parks it beside the parts, and the agent phase reads that. The other
+  option accepts the failed close as today. Raised in 5.8's task and slice
+  reviews; routed from triage 2026-11-14, whose pass made the target one
+  `CLOSE_TARGET`.
 - **What can't be restored?** A re-run whose abort left its reversal
   uncommitted drops the gate (`abortRun`), and a later reversal can then
   drop its journal. If the re-run had written nothing, recovery has no
