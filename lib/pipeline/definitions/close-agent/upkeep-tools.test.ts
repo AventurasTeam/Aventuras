@@ -1519,7 +1519,7 @@ describe("a part and a later part's turns", () => {
   })
 
   it("lands part 1's write over a field it wrote earlier in the close, its group on E", async () => {
-    const { calls } = await runUpkeepCalls(
+    const { calls, result } = await runUpkeepCalls(
       f,
       WORLD_SHOWN,
       [
@@ -1534,6 +1534,11 @@ describe("a part and a later part's turns", () => {
 
     expect(calls.map((call) => call.result)).toEqual(['ok', 'ok'])
     expect((await storedEntity(f, HARROW)).state).toMatchObject({ condition: 'Ash' })
+    // C1: on E, not on part 1's last turn.
+    expect((await runDeltas(f, result.actionId)).map((delta) => delta.entryId)).toEqual([
+      endEntryIdOf(f),
+      endEntryIdOf(f),
+    ])
   })
 
   it("lands part 1's mark over a chapter-wide task's write on E, as no later turn's", async () => {

@@ -261,14 +261,6 @@ patch`, which 5.5a marks `restated`, so a close tool's write of it
   records the limit
   ([`chapter-close.md → Tools and writes`](../memory/chapter-close.md#tools-and-writes)).
   Raised in 5.8's slice review, developer decision 2026-11-10.
-- **Two close tool tests don't pin what their names claim.** In
-  `close-agent/upkeep-tools.test.ts` the test named "…its group on E"
-  never checks the group's anchor, and neither does
-  `lifecycle-tools.test.ts`'s five-turn case ending before E: anchoring
-  on the task's last turn instead keeps every close tool test green. No
-  test cites a part-1 turn from part 2 and expects a refusal either, so
-  swapping the part's turns for the turns handed handles goes unseen.
-  Raised in 5.9's Task 1 review.
 - **No retrieval test admits a happening through a seated chapter
   range.** `run.test.ts`'s `makeQueryAll` returns every happening
   whatever entry ids the query binds, so emptying the chapter-range
