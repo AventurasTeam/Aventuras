@@ -1,228 +1,48 @@
-import { and, asc, eq, inArray, sql } from 'drizzle-orm'
+import { and, eq, inArray, sql } from 'drizzle-orm'
 import { beforeEach, describe, expect, it } from 'vitest'
 
-import { applyDeltaAction } from '@/lib/actions/delta/apply-delta-action'
-import { USER_EDITED_SINCE_PROSE, type PipelineAction } from '@/lib/actions/types'
-import {
-  branches,
-  chapters,
-  deltas,
-  emptyEntityState,
-  ensureVecTablesSql,
-  entities,
-  happeningAwareness,
-  happenings,
-  packFloat32,
-  sourceHash,
-  STORY_SETTINGS_DEFAULTS,
-  storyEntries,
-  upsertVecOps,
-  type HappeningAwareness,
-  type ProbeCapturePayload,
-} from '@/lib/db'
-import { buildCapturePayload } from '@/lib/probe'
-import { RANKER_DEFAULTS, runRetrieval } from '@/lib/retrieval'
+import { USER_EDITED_SINCE_PROSE } from '@/lib/actions/types'
+import { branches, emptyEntityState, entities, happeningAwareness, happenings } from '@/lib/db'
 
 import { setPinTool } from './awareness-tools'
 import { assertReplaySafe } from './tool'
 import { CLOSE_REASON } from './verdict'
+import { runDispatchCalls, type DispatchRun, type ScriptedCall } from '../__tests__/close-dispatch'
+import { openCloseFixture, type CloseFixture } from '../__tests__/close-fixture'
 import {
-  runDispatchCalls,
-  type DispatchRun,
-  type DispatchTurns,
-  type ScriptedCall,
-  type ShownRow,
-} from '../__tests__/close-dispatch'
-import { openCloseFixture, queryAllOn, type CloseFixture } from '../__tests__/close-fixture'
-
-// Real `prefix_<uuid>` ids: CloseIds hands handles for those only.
-const uuid = (n: number): string => `00000000-0000-4000-8000-${String(n).padStart(12, '0')}`
-const ARIA = `char_${uuid(1)}`
-const JORIN = `char_${uuid(2)}`
-const KAI = `char_${uuid(3)}`
-const LENA = `char_${uuid(4)}`
-const FIGHT = `hap_${uuid(11)}`
-const TOLL = `hap_${uuid(12)}`
-const CROSSING = `hap_${uuid(13)}`
-// aw1…aw9, in the order SHOWN lists them.
-const PINNED = `haw_${uuid(21)}`
-const FREQUENT = `haw_${uuid(22)}`
-const USER_PINNED = `haw_${uuid(23)}`
-const LATER_PINNED = `haw_${uuid(24)}`
-const LATER_SOURCED = `haw_${uuid(25)}`
-// Shown, never seeded: a row gone before the call.
-const GONE = `haw_${uuid(26)}`
-// Seeded frequent rows: not learned in the chapter.
-const LATER_FREQUENT = `haw_${uuid(27)}`
-const UNPINNED_FREQUENT = `haw_${uuid(28)}`
-const USER_FREQUENT = `haw_${uuid(29)}`
-
-const SHOWN: readonly ShownRow[] = [
+  uuid,
+  ARIA,
+  JORIN,
+  KAI,
+  LENA,
+  FIGHT,
+  TOLL,
+  CROSSING,
   PINNED,
   FREQUENT,
   USER_PINNED,
   LATER_PINNED,
   LATER_SOURCED,
-  GONE,
   LATER_FREQUENT,
   UNPINNED_FREQUENT,
   USER_FREQUENT,
-].map((id): ShownRow => ({ table: 'happening_awareness', id, name: '' }))
-
-/** The chapter: the second turn to the third reply, t1…t4 by position; E is that reply. */
-const chapterOf = (fx: CloseFixture): string[] => fx.entries.slice(3, 7).map(({ id }) => id)
-const endOf = (fx: CloseFixture): string => fx.entries[6]!.id
-/** The first reply, before the chapter. */
-const earlierReplyOf = (fx: CloseFixture): string => fx.entries[2]!.id
-/** The fifth reply: past E, under the fixture's act_close_turn_5. */
-const laterReplyOf = (fx: CloseFixture): string => fx.replyIds[4]!
-
-// As the Awareness start leaves the ids: the chapter's turns, then a frequent row's earlier one, t5.
-const awarenessTurns = (fx: CloseFixture): DispatchTurns => ({
-  endEntryId: endOf(fx),
-  taskEntryIds: chapterOf(fx),
-  part: 0,
-  chapterEntryIds: [...chapterOf(fx), earlierReplyOf(fx)],
-})
-
-// Written with no delta, as an import leaves a row: precedence reads only the edits after it.
-async function putCharacter(fx: CloseFixture, id: string, name: string): Promise<void> {
-  await fx.ctx.db.insert(entities).values({
-    id,
-    branchId: fx.branchId,
-    kind: 'character',
-    name,
-    description: null,
-    status: 'active',
-    retiredReason: null,
-    injectionMode: 'auto',
-    state: emptyEntityState('character'),
-    keywords: [],
-    createdAt: 1,
-    updatedAt: 1,
-  })
-}
-
-async function putHappening(
-  fx: CloseFixture,
-  row: { id: string; title: string; description?: string; occurredAtEntryId: string },
-): Promise<void> {
-  await fx.ctx.db.insert(happenings).values({
-    id: row.id,
-    branchId: fx.branchId,
-    title: row.title,
-    description: row.description ?? null,
-    category: null,
-    icon: null,
-    temporal: null,
-    occurredAtEntryId: row.occurredAtEntryId,
-    commonKnowledge: 0,
-    embeddingStale: 0,
-    createdAt: 1,
-    updatedAt: 1,
-  })
-}
-
-type AwarenessSeed = Pick<
-  HappeningAwareness,
-  'id' | 'characterId' | 'happeningId' | 'learnedAtEntryId' | 'decayResistance'
-> & { retrievalCount?: number; source?: string }
-
-async function putAwareness(fx: CloseFixture, row: AwarenessSeed): Promise<void> {
-  await fx.ctx.db.insert(happeningAwareness).values({
-    id: row.id,
-    branchId: fx.branchId,
-    happeningId: row.happeningId,
-    characterId: row.characterId,
-    learnedAtEntryId: row.learnedAtEntryId,
-    decayResistance: row.decayResistance,
-    retrievalCount: row.retrievalCount ?? 0,
-    source: row.source ?? null,
-  })
-}
-
-async function apply(
-  fx: CloseFixture,
-  action: PipelineAction,
-  actionId: string,
-  entryId: string | null,
-): Promise<void> {
-  const result = await applyDeltaAction(
-    { action, actionId, branchId: fx.branchId, entryId },
-    fx.ctx,
-  )
-  if (result.status !== 'ok')
-    throw new Error(`${action.kind} under ${actionId} refused: ${result.reason}`)
-}
-
-// user: after every turn's prose, unanchored. later-turn: the fifth turn's writer, past E.
-async function editAwareness(
-  fx: CloseFixture,
-  who: 'user' | 'later-turn',
-  pair: { characterId: string; happeningId: string },
-  fields: { decayResistance?: number; source?: string },
-): Promise<void> {
-  const user = who === 'user'
-  await apply(
-    fx,
-    {
-      kind: 'upsertHappeningAwareness',
-      source: user ? 'user_edit' : 'per_turn_classifier',
-      payload: { branchId: fx.branchId, ...pair, ...fields, proseEntryId: null },
-    },
-    user ? 'act_user_edit' : 'act_close_turn_5',
-    user ? null : laterReplyOf(fx),
-  )
-}
-
-async function storedPin(fx: CloseFixture, id: string): Promise<number | null> {
-  const [row] = await fx.ctx.db
-    .select({ pin: happeningAwareness.decayResistance })
-    .from(happeningAwareness)
-    .where(and(eq(happeningAwareness.branchId, fx.branchId), eq(happeningAwareness.id, id)))
-  if (row === undefined) throw new Error(`no awareness row ${id}`)
-  return row.pin
-}
-
-function runDeltas(fx: CloseFixture, actionId: string) {
-  return fx.ctx.db
-    .select()
-    .from(deltas)
-    .where(eq(deltas.actionId, actionId))
-    .orderBy(asc(deltas.logPosition))
-}
-
-const WHY = 'The chapter turns on it.'
-
-const pin = (
-  id: string,
-  value: number,
-  turns: readonly string[] = ['t2'],
-  why = WHY,
-): ScriptedCall => ({ toolName: 'set_pin', input: { id, value, turns: [...turns], why } })
-
-// As the Awareness start shows them: each listed row's pin, no pin as 0; a gone row has none.
-async function startPinned(fx: CloseFixture, rows: readonly ShownRow[]): Promise<ShownRow[]> {
-  const pins = new Map(
-    (
-      await fx.ctx.db
-        .select({ id: happeningAwareness.id, pin: happeningAwareness.decayResistance })
-        .from(happeningAwareness)
-        .where(eq(happeningAwareness.branchId, fx.branchId))
-    ).map(({ id, pin }) => [id, pin]),
-  )
-  return rows.map((row) => (pins.has(row.id) ? { ...row, startPin: pins.get(row.id) ?? 0 } : row))
-}
-
-async function pinCalls(fx: CloseFixture, calls: readonly ScriptedCall[]): Promise<DispatchRun> {
-  return runDispatchCalls(fx, {
-    task: 'awareness',
-    tools: { set_pin: setPinTool },
-    shown: await startPinned(fx, SHOWN),
-    calls,
-    turns: awarenessTurns(fx),
-  })
-}
+  SHOWN,
+  endOf,
+  earlierReplyOf,
+  laterReplyOf,
+  awarenessTurns,
+  putCharacter,
+  putHappening,
+  putAwareness,
+  apply,
+  editAwareness,
+  storedPin,
+  runDeltas,
+  WHY,
+  pin,
+  startPinned,
+  pinCalls,
+} from './__tests__/awareness-tools-fixture'
 
 describe('set_pin: the tool', () => {
   it('replays as sent, and takes an awareness row by its aw id', () => {
@@ -1004,161 +824,4 @@ describe('set_pin', () => {
     expect(calls[0]).not.toHaveProperty('survivor')
     expect(await runDeltas(f, result.actionId)).toEqual([])
   })
-})
-
-// 59 closed chapters, a row learned in chapter 3 at 0.3, read at chapter 60, the open one. The pin
-// reaches the score only through the decay exponent.
-describe('a pin moves a score', () => {
-  const DIM = 4
-  const MODEL = 'pin-score-embed'
-  const AXIS = Float32Array.from([1, 0, 0, 0])
-  const HERO = `char_${uuid(31)}`
-  const OATH = `hap_${uuid(32)}`
-  const OATH_KNOWN = `haw_${uuid(33)}`
-  const OATH_TITLE = 'The oath at the ford'
-  const OATH_DESCRIPTION = 'Aria swore to carry the letter to Low Ashby.'
-  let fx: CloseFixture
-
-  const chapterId = (k: number): string => `chap_${uuid(1000 + k)}`
-
-  // Chapter k holds entries[k - 1] alone, so chapter 3 is the first reply; the last two entries
-  // stay open.
-  async function closeFiftyNineChapters(): Promise<void> {
-    for (let k = 1; k <= 59; k++) {
-      const entryId = fx.entries[k - 1]!.id
-      await fx.ctx.db.insert(chapters).values({
-        id: chapterId(k),
-        branchId: fx.branchId,
-        sequenceNumber: k,
-        title: `Chapter ${k}`,
-        summary: 'The road goes on.',
-        theme: 'the road',
-        keywords: [],
-        startEntryId: entryId,
-        endEntryId: entryId,
-        tokenCount: 1,
-        closedAt: 1,
-        embeddingStale: 1,
-        createdAt: 1,
-        updatedAt: 1,
-      })
-      await fx.ctx.db
-        .update(storyEntries)
-        .set({ chapterId: chapterId(k) })
-        .where(and(eq(storyEntries.branchId, fx.branchId), eq(storyEntries.id, entryId)))
-    }
-  }
-
-  beforeEach(async () => {
-    fx = await openCloseFixture({ turns: 30 })
-    await closeFiftyNineChapters()
-    await putCharacter(fx, HERO, 'Aria')
-    await putHappening(fx, {
-      id: OATH,
-      title: OATH_TITLE,
-      description: OATH_DESCRIPTION,
-      occurredAtEntryId: fx.entries[2]!.id,
-    })
-    await putAwareness(fx, {
-      id: OATH_KNOWN,
-      characterId: HERO,
-      happeningId: OATH,
-      learnedAtEntryId: fx.entries[2]!.id,
-      decayResistance: 0.3,
-      retrievalCount: 2,
-      source: 'swore it herself',
-    })
-    for (const ddl of ensureVecTablesSql(DIM)) await fx.ctx.db.run(sql.raw(ddl))
-    await fx.ctx.runInTransaction(
-      upsertVecOps(
-        {
-          kind: 'happening',
-          id: OATH,
-          branchId: fx.branchId,
-          modelId: MODEL,
-          dim: DIM,
-          sourceHash: sourceHash(OATH_TITLE),
-          vector: packFloat32(AXIS),
-        },
-        { fields: [OATH_TITLE, OATH_DESCRIPTION] },
-      ),
-    )
-  }, 30_000)
-
-  // A real pass over the fixture's rows, Aria in the scene and every query on the oath's axis;
-  // the probe's capture of the oath's row.
-  async function capturedOath(): Promise<ProbeCapturePayload['pools']['happenings'][number]> {
-    const outcome = await runRetrieval(
-      {
-        queryAll: queryAllOn(fx.ctx.db),
-        embedTexts: async (texts) => ({ vectors: texts.map(() => AXIS), dim: DIM }),
-        loadStaleRows: async () => [],
-        revalidateRows: async (rows) => ({ staleRows: rows, freshOps: [] }),
-        embedRows: async () => [],
-        runInTransaction: fx.ctx.runInTransaction,
-      },
-      {
-        branchId: fx.branchId,
-        modelId: MODEL,
-        dim: DIM,
-        budgets: STORY_SETTINGS_DEFAULTS.retrievalBudgets,
-        query: { userAction: 'I ask Aria about the oath.', eraName: null, piggybackSummary: null },
-        sceneCharacterIds: [HERO],
-        sceneEntityIds: [],
-        currentLocationId: null,
-        storeEntities: [],
-        recentProse: '',
-        scanText: '',
-        keywordRetrieval: STORY_SETTINGS_DEFAULTS.keywordRetrieval,
-      },
-    )
-    if (!outcome.ok) throw new Error(`the pass failed: ${JSON.stringify(outcome)}`)
-    const capture = buildCapturePayload({
-      branchId: fx.branchId,
-      targetEntryId: fx.entries[60]!.id,
-      chapterId: null,
-      capturedAt: 1,
-      embeddingModelId: MODEL,
-      mode: 'light',
-      params: RANKER_DEFAULTS,
-      settings: {
-        retrievalBudgets: STORY_SETTINGS_DEFAULTS.retrievalBudgets,
-        fullChapterInBuffer: false,
-        partialChapterBuffer: 2,
-        protectedBuffer: 1,
-      },
-      promptBufferTokens: 0,
-      scanText: '',
-      outcome,
-    })
-    const oath = capture.pools.happenings.find((row) => row.target_id === OATH)
-    if (oath === undefined) throw new Error('the oath never reached the happenings pool')
-    return oath
-  }
-
-  it("raises the next pass's captured recency_factor through the real action", async () => {
-    const before = await capturedOath()
-    expect(before).toMatchObject({ chapters_old: 57, pin_signal: 0.3 })
-    expect(Math.abs(before.recency_factor - Math.exp(-0.07 * 57 * 0.7))).toBeLessThan(0.001)
-
-    // Chapter 59's close: E is its one entry, and the oath's row is a frequent one.
-    const endEntryId = fx.entries[58]!.id
-    const { answers } = await runDispatchCalls(fx, {
-      task: 'awareness',
-      tools: { set_pin: setPinTool },
-      shown: await startPinned(fx, [{ table: 'happening_awareness', id: OATH_KNOWN, name: '' }]),
-      calls: [
-        {
-          toolName: 'set_pin',
-          input: { id: 'aw1', value: 0.5, turns: ['t1'], why: 'The oath still binds her.' },
-        },
-      ],
-      turns: { endEntryId, taskEntryIds: [endEntryId], part: 0 },
-    })
-    expect(answers).toEqual([{ result: 'ok' }])
-
-    const after = await capturedOath()
-    expect(after).toMatchObject({ chapters_old: 57, pin_signal: 0.5 })
-    expect(Math.abs(after.recency_factor - Math.exp(-0.07 * 57 * 0.5))).toBeLessThan(0.001)
-  }, 30_000)
 })
