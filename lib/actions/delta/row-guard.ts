@@ -1,6 +1,8 @@
-import type { DbCtx, RowGuard, RowGuardArgs, RowVerdicts } from '../types'
+import type { Delta } from '@/lib/db'
+
+import type { DbCtx, PrecedenceTable, RowGuard, RowGuardArgs, RowVerdicts } from '../types'
 import { laterTurnDeltas } from './later-turn'
-import { proseLogPosition, userEditsSince, wroteField } from './user-precedence'
+import { proseLogPosition, userEditsOnRows, wroteField } from './user-precedence'
 
 const rowKey = (table: string, id: string) => `${table}:${id}`
 
@@ -12,12 +14,21 @@ export async function readRowGuard(args: RowGuardArgs, ctx: DbCtx): Promise<RowG
   const { branchId, endEntryId, proseEntryId, rows } = args
   const since = await proseLogPosition(ctx, branchId, proseEntryId)
   const later = await laterTurnDeltas(ctx, branchId, endEntryId, rows)
+  // One read per table of every user edit: those after the prose are the cited turn's, all are ever.
+  const idsByTable = new Map<PrecedenceTable, Set<string>>()
+  for (const { table, id } of rows)
+    idsByTable.set(table, (idsByTable.get(table) ?? new Set()).add(id))
+  const everByRow = new Map<string, Delta[]>()
+  for (const [table, ids] of idsByTable)
+    for (const edit of await userEditsOnRows(ctx, branchId, table, [...ids], 0)) {
+      const key = rowKey(table, edit.targetId)
+      everByRow.set(key, [...(everByRow.get(key) ?? []), edit])
+    }
   const verdicts = new Map<string, RowVerdicts>()
   for (const { table, id } of rows) {
     const key = rowKey(table, id)
     if (verdicts.has(key)) continue
-    // One read of the row's user edits: those after the prose are the cited turn's, all are ever.
-    const everUser = await userEditsSince(ctx, branchId, table, id, 0)
+    const everUser = everByRow.get(key) ?? []
     const user = everUser.filter((d) => d.logPosition > since)
     const laterOnRow = later.filter((d) => d.targetTable === table && d.targetId === id)
     verdicts.set(key, {

@@ -339,14 +339,6 @@ patch`, which 5.5a marks `restated`, so a close tool's write of it
   `lib/pipeline/__tests__/close-round-trip.test.ts` pins today's
   behaviour. Developer decision 2026-11-14 (5.9): record the edge in
   canon, fix later.
-- **The row guard reads user edits once per row.** `readRowGuard`
-  (`lib/actions/delta/row-guard.ts`) runs `userEditsSince` per guarded
-  row, so a merge over many link rows makes one query each. Since the
-  user-pin skip, that read starts at position 0, so each guarded row
-  reads its whole user-edit history (about 0.5 ms a row at 5000 deltas
-  on node:sqlite), though only `set_pin` needs the edits before the
-  prose. Raised in 5.9's `merge_happenings` review, widened in its slice
-  review.
 - **Per-turn retrieval reads a cancel before the embed bound.** In
   `lib/pipeline/definitions/per-turn-retrieval.ts`, a cancelled outcome
   returns `aborted` before the bound's expiry is checked, so a cancel that

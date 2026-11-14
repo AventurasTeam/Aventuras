@@ -117,6 +117,20 @@ describe('readRowGuard', () => {
     expect(row.laterTurnTouched()).toBe(false)
   })
 
+  // Read once for the table, then split: one row's edits must not reach its neighbour's verdicts.
+  it('keeps two rows of one table to their own user edits', async () => {
+    const ctx = await setup()
+    await turns(ctx)
+    await land(ctx, updateEntity('user_edit', 'char_1', { description: 'a knight' }), 'act_u1')
+    await land(ctx, updateEntity('user_edit', 'loc_1', { name: 'The ford' }), 'act_u2')
+
+    const read = await guard(ctx)
+    expect(read.row('entities', 'char_1').userWrote('description')).toBe(true)
+    expect(read.row('entities', 'char_1').userEverWrote('name')).toBe(false)
+    expect(read.row('entities', 'loc_1').userWrote('description')).toBe(false)
+    expect(read.row('entities', 'loc_1').userEverWrote('name')).toBe(true)
+  })
+
   it("counts only user edits after the cited turn's prose", async () => {
     const ctx = await setup()
     await land(ctx, createEntry('e_1', 1), 'act_t1')

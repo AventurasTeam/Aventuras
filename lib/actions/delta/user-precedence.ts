@@ -61,6 +61,20 @@ async function rowDeltasAfter(
     .orderBy(asc(deltas.logPosition))) as Delta[]
 }
 
+/** `user_edit` deltas on any of `targetIds` logged after `since`, each row's oldest first. */
+export async function userEditsOnRows(
+  ctx: DbCtx,
+  branchId: string,
+  targetTable: PrecedenceTable,
+  targetIds: readonly string[],
+  since: number,
+): Promise<Delta[]> {
+  const edits: Delta[] = []
+  for (const chunk of chunked([...targetIds]))
+    edits.push(...(await rowDeltasAfter(ctx, branchId, targetTable, chunk, since, true)))
+  return edits
+}
+
 /** `user_edit` deltas on one row logged after `since`, oldest first. */
 export function userEditsSince(
   ctx: DbCtx,
