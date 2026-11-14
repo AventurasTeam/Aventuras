@@ -219,6 +219,36 @@ describe('entityActions — update', () => {
     ])
   })
 
+  it('clears the retired reason of a row set back to active, and keeps it while retired', () => {
+    const retired: Entity = { ...KAEL, status: 'retired', retiredReason: 'Fell at the ford.' }
+    const draftOf = (status: Entity['status']) => ({
+      ...characterDraftFrom(retired, [MIRA_LINK]),
+      status,
+    })
+    const patchOf = (status: Entity['status']) =>
+      entityActions({
+        branchEntities: [],
+        kind: 'character',
+        row: retired,
+        draft: draftOf(status),
+        relationships: [MIRA_LINK],
+        ...AT,
+      })
+
+    expect(patchOf('active')).toEqual([
+      {
+        kind: 'updateEntity',
+        source: 'user_edit',
+        payload: {
+          branchId: 'br_1',
+          id: 'char_kael',
+          patch: { status: 'active', retiredReason: null },
+        },
+      },
+    ])
+    expect(patchOf('retired')).toEqual([])
+  })
+
   it('refuses a row saved as another kind', () => {
     expect(() =>
       entityActions({
@@ -408,6 +438,22 @@ describe('entityActions — create', () => {
         },
       },
     ])
+  })
+
+  it('creates a row that is not retired with no reason, as an import of one carrying it does', () => {
+    const draft = { ...locationDraftFrom(null), name: 'Vellis', retiredReason: 'drowned' }
+    const create = (status: Entity['status']) =>
+      entityActions({
+        branchEntities: [],
+        kind: 'location',
+        row: null,
+        draft: { ...draft, status },
+        branchId: 'br_1',
+        id: 'loc_new',
+        now: 42,
+      })[0]
+    expect(create('active')).toMatchObject({ payload: { entry: { retiredReason: null } } })
+    expect(create('retired')).toMatchObject({ payload: { entry: { retiredReason: 'drowned' } } })
   })
 
   it('creates an untouched character over the empty character state', () => {

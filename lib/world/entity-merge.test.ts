@@ -247,6 +247,20 @@ describe('entityMergeActions — the canonical', () => {
     })
   })
 
+  it('keeps no retired reason on a canonical that ends up active, whichever side it came from', () => {
+    const loser = entity('char_b', 'character', { status: 'retired', retiredReason: 'fell' })
+    const patchOf = (canonical: Entity, fromLoser: EntityMergeInput['fromLoser']) =>
+      ofKind(merge({ canonical, loser, fromLoser }).actions, 'updateEntity')[0]?.payload.patch
+
+    expect(patchOf(entity('char_a', 'character'), ['retiredReason'])).toBeUndefined()
+    const retired = entity('char_a', 'character', { status: 'retired', retiredReason: 'gone' })
+    expect(patchOf({ ...retired, status: 'active' }, [])).toStrictEqual({ retiredReason: null })
+    expect(patchOf(entity('char_a', 'character'), ['status', 'retiredReason'])).toStrictEqual({
+      status: 'retired',
+      retiredReason: 'fell',
+    })
+  })
+
   it("unions the loser's terms after the canonical's, collapsing keyword case variants", () => {
     const canonical = entity('char_a', 'character', {
       keywords: ['the courier'],

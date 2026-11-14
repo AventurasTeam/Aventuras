@@ -383,16 +383,6 @@ patch`, which 5.5a marks `restated`, so a close tool's write of it
   close stores `retire_entity`'s `why` the same way, while the close's
   other stored text is capped (a condition at 500, a lore body at
   1,200). Raised in 5.8's task review.
-- **Reactivating a row in World keeps its retired reason.**
-  `lib/world/entity-actions.ts` patches `retiredReason` only when the
-  draft changes it, and the settings tab only makes it read-only, so a
-  row set back to active keeps a reason `data-model.md` calls
-  meaningful only while retired; the classifier's return from
-  retirement clears it. A close's Lifecycle task shows a reason only
-  on a retired row (developer decision, 2026-11-10), so the stale one
-  stays in the database and the export, and World's list search
-  (`lib/list-modules/entity-list.ts`) still matches a restored row on
-  it. Read in the code, not run. Raised in 5.8's task review.
 - **Undoing a user's keyword edit wipes a later pass's term.** CTRL-Z
   or a rollback window of a user's keyword edit under a later
   periodic keyword write restores the whole list from the undo

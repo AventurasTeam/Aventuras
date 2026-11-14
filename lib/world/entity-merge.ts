@@ -129,6 +129,11 @@ function canonicalPatch(input: MergeContext, merged: Merged): EntityPatch {
     const takes = field === 'name' ? merged.nameFromOther : loser[field] !== canonical[field]
     if (takes) takeScalar(scalars, field, loser)
   }
+  // ui/patterns/entity.md → Row-level fields: a row that ends up not retired keeps no reason.
+  if ((scalars.status ?? canonical.status) !== 'retired') {
+    if (canonical.retiredReason == null) delete scalars.retiredReason
+    else scalars.retiredReason = null
+  }
   const { tags, keywords } = merged.terms
   const state = canonicalStateAfter(input)
   const columns: EntityPatch = {
