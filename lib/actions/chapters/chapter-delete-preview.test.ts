@@ -27,6 +27,7 @@ import { registerStoreOnlyRun } from '../turns/__tests__/stand-in-pass'
 import type { DeltaSource, PipelineAction } from '../types'
 import {
   installChapterDeleteHooks,
+  END_REPLY,
   CLOSED_AT,
   TOBIN_STATE,
   TOBIN,
@@ -65,8 +66,6 @@ vi.mock('@/lib/ai', async (importOriginal) => ({
 installChapterDeleteHooks(generateStructuredMock)
 
 describe('getChapterDeletePreview', () => {
-  // The third of six replies: three turns follow the chapter.
-  const PREVIEW_END = 2
   const PREVIEW_TOBIN = 'char_tobin_preview'
   const PREVIEW_CROSSING = 'hap_crossing_preview'
   const PREVIEW_TOBIN_KNOWS = 'haw_tobin_crossing_preview'
@@ -109,7 +108,7 @@ describe('getChapterDeletePreview', () => {
       retrievalCount: 4,
       source: null,
     })
-    const { chapter, actionId } = await closeOn(fx, fx.replyIds[PREVIEW_END])
+    const { chapter, actionId } = await closeOn(fx, fx.replyIds[END_REPLY])
     const asClose = { actionId, branchId: fx.branchId, entryId: chapter.endEntryId }
     expect(
       await applyDeltaActionGroupWithOutcomes(
@@ -226,7 +225,7 @@ describe('getChapterDeletePreview', () => {
   it('counts a reference the delete clears among the other changes', async () => {
     const fx = await openSeeded()
     await seedPlaces(fx)
-    const c = await closeOn(fx, fx.replyIds[PREVIEW_END])
+    const c = await closeOn(fx, fx.replyIds[END_REPLY])
     await writeUnderClose(c, [
       {
         kind: 'createEntity',
@@ -264,7 +263,7 @@ describe('getChapterDeletePreview', () => {
   it("counts only a user's edit of created lore as an edit, and every other write as a change", async () => {
     const fx = await openSeeded()
     await seedPlaces(fx)
-    const c = await closeOn(fx, fx.replyIds[PREVIEW_END])
+    const c = await closeOn(fx, fx.replyIds[END_REPLY])
     await writeUnderClose(c, [
       loreCreate(fx.branchId, CLOSE_LORE_ID, 'The Harrow ferry'),
       {
@@ -287,7 +286,7 @@ describe('getChapterDeletePreview', () => {
     ])
     await writeLater(fx, editLore(fx.branchId, CLOSE_LORE_ID, 'later', 'periodic_classifier'), {
       actionId: 'act_pass_lore',
-      entryId: fx.replyIds[PREVIEW_END + 1],
+      entryId: fx.replyIds[END_REPLY + 1],
     })
     await writeLater(
       fx,
@@ -387,14 +386,14 @@ describe('getChapterDeletePreview', () => {
       payload: { branchId: fx.branchId, id: TOBIN.id, stackables: counts },
     })
     await seedPassWrite(fx, stackables({ gold: 5, 'gold coins': 2 }, 'periodic_classifier'))
-    const c = await closeOn(fx, fx.replyIds[PREVIEW_END])
+    const c = await closeOn(fx, fx.replyIds[END_REPLY])
     await writeUnderClose(c, [stackables({ gold: 7 }, 'chapter_close')])
     const preview = () =>
       getChapterDeletePreview(fx.branchId, c.chapter.id, previewStory(fx), fx.ctx)
     expect(await preview()).toMatchObject({ otherChanges: 1 })
     await writeLater(fx, stackables({ gold: 9 }, 'periodic_classifier'), {
       actionId: 'act_pass_later',
-      entryId: fx.replyIds[PREVIEW_END + 1],
+      entryId: fx.replyIds[END_REPLY + 1],
     })
 
     expect(await preview()).toMatchObject({ otherChanges: 0 })
@@ -410,7 +409,7 @@ describe('getChapterDeletePreview', () => {
   it('reads what follows a delete from the region it leaves', async () => {
     const fx = await openCloseFixture()
     const first = await closeOn(fx, fx.replyIds[0])
-    const { chapter } = await closeOn(fx, fx.replyIds[PREVIEW_END])
+    const { chapter } = await closeOn(fx, fx.replyIds[END_REPLY])
     // Neither the token snapshot nor a system row stamped with the chapter is an input.
     await fx.ctx.db
       .update(chapters)
@@ -471,7 +470,7 @@ describe('getChapterDeletePreview', () => {
 
   it('reads under the shared lock, so a reversal waits for its last read', async () => {
     const fx = await openCloseFixture()
-    const { chapter } = await closeOn(fx, fx.replyIds[PREVIEW_END])
+    const { chapter } = await closeOn(fx, fx.replyIds[END_REPLY])
     let reversal: Promise<void> | undefined
     let granted = false
     let readsAfterGrant = 0
@@ -503,7 +502,7 @@ describe('getChapterDeletePreview', () => {
 
   it('refuses as the action does, writing nothing', async () => {
     const fx = await openCloseFixture()
-    const first = await closeOn(fx, fx.replyIds[PREVIEW_END])
+    const first = await closeOn(fx, fx.replyIds[END_REPLY])
     await closeOn(fx, fx.replyIds[4])
     const log = await logRows(fx)
     const rows = await chapterRows(fx)
@@ -537,7 +536,7 @@ describe('getChapterDeletePreview', () => {
       summary: 'Written with no close.',
       theme: 'None',
       startEntryId: fx.entries[0].id,
-      endEntryId: fx.replyIds[PREVIEW_END],
+      endEntryId: fx.replyIds[END_REPLY],
       tokenCount: 1,
       closedAt: 1,
       createdAt: 1,
@@ -559,7 +558,7 @@ describe('getChapterDeletePreview', () => {
 
   it('reads while a run holds the gate', async () => {
     const fx = await openCloseFixture()
-    const { chapter } = await closeOn(fx, fx.replyIds[PREVIEW_END])
+    const { chapter } = await closeOn(fx, fx.replyIds[END_REPLY])
     registerStoreOnlyRun('turn-stand-in', fx.branchId)
     expect(generationStore.isUserEditBlocked()).toBe(true)
 
