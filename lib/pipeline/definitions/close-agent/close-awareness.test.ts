@@ -155,9 +155,8 @@ async function putChapter(fx: CloseFixture): Promise<void> {
 }
 
 /**
- * Aria learned of the fight at t2 and Jorin at t3, his row also among the most retrieved; Jorin's
- * row of the toll is from before the chapter, retrieved most and unpinned; Mara's was never
- * retrieved; Aria's of a rumour everyone knows is retrieved and learned at t2, but common knowledge.
+ * Fight: Aria learned at t2, Jorin at t3 (also most retrieved). Jorin's toll row predates the
+ * chapter, most retrieved, unpinned; Mara's never retrieved; Aria's rumour row is common knowledge.
  */
 async function seedAwarenessWorld(fx: CloseFixture): Promise<void> {
   await putChapter(fx)

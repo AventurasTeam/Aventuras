@@ -194,9 +194,8 @@ async function readLinks(
   )
 }
 
-// generation-pipeline.md → Reverse-replay: redo refuses an update and a delete of one row under one
-// action, and a deleted happening holds its links; so a row this close wrote, itself or through a
-// link, can be kept but never absorbed.
+// generation-pipeline.md → Reverse-replay: redo refuses an update plus a delete of one row under one
+// action, so a row this close wrote, itself or via a link, can be kept but never absorbed.
 async function closeWroteHappenings(
   ctx: WriteContext,
   links: ReadonlyMap<string, LinkRows>,

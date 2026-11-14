@@ -28,7 +28,7 @@ afterEach(() => {
   resetAllStores()
 })
 
-/** A chapter-wide task whose chapter runs from the opening to `fx.entries[endAt]`, shown t1…; E is that entry. */
+/** A chapter-wide task over the opening through `fx.entries[endAt]` (shown t1…); E is that entry. */
 function chapterContext(fx: CloseFixture, endAt: number): ToolContext {
   const chapter = fx.entries.slice(0, endAt + 1).map(({ id }) => id)
   const ids = new CloseIds()

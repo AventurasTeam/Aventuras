@@ -102,7 +102,7 @@ test.describe('first chapter — a close from the dev route', () => {
       `SELECT COALESCE(MAX(log_position), 0) FROM deltas WHERE branch_id = ?`,
       [branchId],
     )
-    // The close's code steps: the reset updates every counted row, normalization every record it folds.
+    // The close's code steps: the reset updates every counted row, normalization every folded record.
     const counted = (
       (await queryApp(
         page,

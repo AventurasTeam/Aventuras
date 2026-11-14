@@ -59,8 +59,8 @@ export class CloseIds {
   }
 
   /**
-   * A happening_awareness row: aw1…, the same handle each time. `startPin` is the pin the model was
-   * shown (null for none), the baseline set_pin's bounds hold for the whole close.
+   * A happening_awareness row: aw1…, the same handle each time. `startPin` is the pin shown (null
+   * for none), the baseline set_pin's bounds hold for the whole close.
    */
   showAwareness(id: string, startPin?: number | null): string {
     requirePrefix(id, AWARENESS_PREFIX)

@@ -37,9 +37,9 @@ type CheckContext = {
 const TURN_HINT = 'cite the turns this task was shown, by their handles'
 
 /**
- * A write's first refusals in order: turns, why, read gate. An unread row a landed merge absorbed
- * is `row-gone`, so the answer names where it went. Turns return as entry ids in position order,
- * the last being the write's prose entry for user precedence.
+ * A write's first refusals in order: turns, why, read gate (an unread row a landed merge absorbed
+ * is `row-gone`, naming where it went). Turns return as entry ids in position order, the last
+ * being the write's prose entry for user precedence.
  */
 export function commonChecks(
   args: { turns: unknown; why: unknown },

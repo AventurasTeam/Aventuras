@@ -729,7 +729,9 @@ describe('the agent phase with the production slots', () => {
     expect(NO_CLOSE_TASKS).toEqual({ before: [], perPart: [], after: [] })
   })
 
-  // The fixture holds no row: Lore reads the turns and calls no tool; the other six tasks make no call, and the code steps find nothing to write.
+  // The fixture holds no row: Lore reads the turns and calls no tool; the other six tasks make no
+  // call, and the code steps find nothing to write. The range embed resolves no embedder here (the
+  // fixture has none), so this test guards the empty-chapter no-embedder claim.
   it('ends a close that touches no row with the row, its stamps and a report of no tool calls', async () => {
     const end = f.replyIds[2]!
     const events = recordEvents()

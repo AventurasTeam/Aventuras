@@ -68,7 +68,7 @@ type DispatchSpec = {
   setup?: DispatchSetup
   /** The run's expected outcome; `completed` when absent. */
   outcome?: TxResult['outcome']
-  /** The range embed's clusters (happening ids), parked as the close parks them; none unless given. */
+  /** The range embed's clusters (happening ids), parked as the close parks them; none by default. */
   clusters?: readonly (readonly string[])[]
 }
 

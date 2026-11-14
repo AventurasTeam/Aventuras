@@ -1,9 +1,8 @@
 import { MACRO_IDS } from '../ids'
 import type { TemplateSources } from '../types'
 
-// memory/chapter-close.md → 3d. No prose (C3): the system half is the shared instructions alone, a
-// prefix of every prose task's. The rows, the chapter and the writes so far go in the user half,
-// and no retrieval count goes anywhere.
+// memory/chapter-close.md → 3d. No prose (C3): system is the shared instructions alone, a prefix of
+// every prose task's; rows, chapter and writes so far go in user, no retrieval count anywhere.
 export const CLOSE_AWARENESS: TemplateSources = {
   system: `{% include '${MACRO_IDS.closeInstructions}' %}`,
   user: `# Your task: awareness

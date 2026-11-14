@@ -1975,7 +1975,8 @@ async function drainAgent(
 const taskStartsIn = (events: readonly PhaseEmittedEvent[]): PhaseEmittedEvent[] =>
   events.filter((event) => event.type === 'close_task_start')
 
-// C6: Happenings, the five prose tasks and Awareness start, those with nothing to show included, in a one-part chapter of 7.
+// C6: Happenings, the five prose tasks and Awareness start, those with nothing to show included,
+// in a one-part chapter of 7.
 const PART_ONE_STARTS = [
   { type: 'close_task_start', task: 'happenings', part: 0, index: 1, total: 7 },
   { type: 'close_task_start', task: 'lore', part: 1, index: 2, total: 7 },

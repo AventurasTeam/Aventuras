@@ -138,7 +138,7 @@ function resolveEmbeddersRoot(): string {
   return join(resolveDevSlot().dataDir, 'embedders')
 }
 
-// The range embed's clusters on the current run, once it completed; its counts are its own log entry.
+// The current run's range-embed clusters, once it completed; its counts are its own log entry.
 let rangeClusters: readonly (readonly string[])[] | null = null
 
 const measuredEmbedStep: CodeStep = {
@@ -635,7 +635,7 @@ async function probeRun(
     const story = await loadOpenStory(BRANCH_ID, ctx)
     if (story.status !== 'ok')
       throw new Error(`[probe:close] branch ${BRANCH_ID} did not open: ${story.status}`)
-    // The range embed reads the story's embedder from the stories store, which the app's boot fills.
+    // The range embed reads the story's embedder from the stories store, which boot fills.
     if (!(await rehydrateStories(ctx.db)))
       throw new Error('[probe:close] the stories store did not load')
     const end = END_ENTRY ?? latestReply(await openRegionSeries(BRANCH_ID, ctx))

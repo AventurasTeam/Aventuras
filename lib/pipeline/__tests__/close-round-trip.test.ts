@@ -423,8 +423,8 @@ type CloseHarness = {
   /** Runs the close to completion; a case must land at least one group past the metadata's. */
   close: () => Promise<void>
   /**
-   * Starts the close and calls `act` once the first landed group its case's `abortOn` admits, a
-   * tool's or a code step's, has landed; resolves with the run.
+   * Starts the close and calls `act` once the first group its case's `abortOn` admits lands;
+   * resolves with the run.
    */
   closeActingOnToolGroup: (act: () => void) => Promise<TxResult>
   /** The group `act` ran on, if it ran. */
@@ -1258,9 +1258,8 @@ async function seedInnPair(fx: CloseFixture): Promise<void> {
   await seedInnRows(fx)
 }
 
-// Turn 6, the head turn, bumps both of Tobin's rows, so CTRL-Z reaches that turn once the close
-// is undone. Anchored on its reply, not null as a turn logs it: the rollback arms place every
-// seeded delta by its anchor (keptByRollback).
+// Turn 6 (head) bumps both of Tobin's rows, so CTRL-Z reaches it once the close is undone. Anchored
+// on its reply, not null: the rollback arms place every seeded delta by anchor (keptByRollback).
 async function seedInnPairWithLaterBump(fx: CloseFixture): Promise<void> {
   await seedInnPair(fx)
   for (const [happeningId, priorCount] of [
@@ -1430,8 +1429,8 @@ const SET_PIN = {
   why: 'Tobin’s word decides every crossing Wren makes from here.',
 }
 
-// After the merge, Awareness lists TOLD's two rows by name: Tobin's, which the merge updated, as
-// aw1 at 0.6, and Wren's, which it created, as aw2 at 0.5. Each raise stays within 0.2 of its start.
+// After the merge Awareness lists TOLD's rows: Tobin's (updated) as aw1 at 0.6, Wren's (created)
+// as aw2 at 0.5; each raise stays within 0.2.
 const PIN_MERGE_UPDATED = {
   id: 'aw1',
   value: 0.8,

@@ -2388,8 +2388,7 @@ describe('closeAgentPhase with the production slots: the chapter-wide entries', 
     })
   }
 
-  // As drainApplying, logging each task start and each group's kinds as the phase yields them,
-  // among the embed's and the chapter-wide tasks' own entries.
+  // As drainApplying, plus a timeline of task starts and group kinds among the embed's entries.
   async function drainTimeline(
     ctx: PhaseContext,
   ): Promise<{ events: PhaseEmittedEvent[]; result: PhaseResult }> {

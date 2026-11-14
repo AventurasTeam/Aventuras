@@ -207,7 +207,7 @@ export async function setClassifierStatus(
     .where(eq(branches.id, f.branchId))
 }
 
-/** The app's positional query seam (`queryRows`) over the fixture's db, binding each `?` in order. */
+/** The app's positional query seam (`queryRows`) over the fixture's db, binding `?` in order. */
 export function queryAllOn(
   db: DbCtx['db'],
 ): (query: string, params: unknown[]) => Promise<unknown[][]> {

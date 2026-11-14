@@ -34,7 +34,8 @@ const PIN_PATH = 'decayResistance'
 const FREQUENT_PIN_LOWERED = 'frequent-pin-lowered'
 const PIN_RAISE_TOO_LARGE = 'pin-raise-too-large'
 const NO_START_PIN = 'no-start-pin'
-// A pin climbs at most this far above its start pin in one close, in hundredths: whole numbers keep 0.7 to 0.9 a step.
+// A pin climbs at most this far above its start pin in one close, in hundredths: whole numbers
+// keep 0.7 to 0.9 a step.
 const PIN_STEP_HUNDREDTHS = 20
 const hundredths = (pin: number): number => Math.round(pin * 100)
 
@@ -71,7 +72,8 @@ async function linkNames(
 
 /**
  * chapter-close.md → 3d: one row's pin, one upsertHappeningAwareness. Read by id first, since the
- * upsert finds its row by character and happening; the action's precedence keeps a user's pin.
+ * upsert finds its row by character and happening. A user's pin is skipped here; the action's
+ * precedence is only the backstop.
  */
 async function planSetPin(args: SetPinArgs, ctx: WriteContext): Promise<WritePlan> {
   const { id, value } = args

@@ -167,8 +167,8 @@ async function chapterSummary(ctx: TaskPromptContext): Promise<string> {
   return row?.summary ?? ''
 }
 
-// memory/chapter-close.md → 3d: the chapter's rows and the high-frequency set, with the chapter's
-// summary. Each row shows the pin set_pin writes, so the start counts it as read (C11).
+// memory/chapter-close.md → 3d. Each row shows the pin set_pin writes, so the start counts it as
+// read (C11).
 async function startAwareness(ctx: TaskPromptContext): Promise<TaskStart<AwarenessShow> | null> {
   const ofChapter = await chapterRows(ctx)
   const inChapter = new Set(ofChapter.map((row) => row.id))
@@ -244,9 +244,8 @@ export const awarenessTask: CloseTaskDef<AwarenessShow> & { task: 'awareness' } 
 }
 
 /**
- * memory/chapter-close.md → 3d: after Awareness, stopped or not, every count on the branch goes
- * back to 0, one resetAwarenessRetrieval a row as one group on E. No ledger entry: resets stay out
- * of the review (C4), and C12 exempts them.
+ * memory/chapter-close.md → 3d: runs after Awareness, stopped or not. No ledger entry: resets stay
+ * out of the review (C4), and C12 exempts them.
  */
 async function* resetRetrieval(
   ctx: CodeStepContext,

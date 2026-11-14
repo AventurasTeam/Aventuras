@@ -2175,7 +2175,7 @@ describe('the read gate names the survivor of the row it judged', () => {
         { table: 'entities', id: BRAM, name: 'Bram' },
         { table: 'entities', id: GONE, name: 'Old Wren' },
       ],
-      // Wren was read, then a merge took her into KEPT_WREN; Old Wren went into Bram and was never read.
+      // Wren was read, then a merge took her into KEPT_WREN; Old Wren went into Bram, never read.
       seeds: [{ table: 'entities', id: WREN }],
       setup: (_ids, ledger) => {
         for (const [kept, absorbed] of [

@@ -59,11 +59,7 @@ const AFTER: readonly SlotEntry<'awareness'>[] = Object.freeze([
   { kind: 'code', step: resetRetrievalStep },
 ])
 
-/**
- * C2: canon's run order (memory/chapter-close.md → Run order): stackable normalization, the range
- * embed and Happenings before the parts, the five prose tasks per part, then Awareness and the
- * reset.
- */
+/** C2: canon's run order (memory/chapter-close.md → Run order). */
 export const PRODUCTION_CLOSE_SLOTS: CloseAgentSlots = Object.freeze({
   before: BEFORE,
   perPart: PER_PART,

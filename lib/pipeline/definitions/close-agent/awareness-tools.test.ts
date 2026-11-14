@@ -50,7 +50,7 @@ const LATER_PINNED = `haw_${uuid(24)}`
 const LATER_SOURCED = `haw_${uuid(25)}`
 // Shown, never seeded: a row gone before the call.
 const GONE = `haw_${uuid(26)}`
-// Seeded frequent rows: learned before the chapter.
+// Seeded frequent rows: not learned in the chapter.
 const LATER_FREQUENT = `haw_${uuid(27)}`
 const UNPINNED_FREQUENT = `haw_${uuid(28)}`
 const USER_FREQUENT = `haw_${uuid(29)}`
