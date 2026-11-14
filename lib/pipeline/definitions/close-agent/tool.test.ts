@@ -400,11 +400,11 @@ describe('resolveIdArgs', () => {
     })
     expect(resolveIdArgs({ ...MERGE_SAMPLE, keep: '' }, mergeRows, ids)).toEqual({
       ok: false,
-      reason: ' in keep is not a known id; use an id this task showed you',
+      reason: 'id-unknown:  in keep is not a known id; use an id this task showed you',
     })
     expect(resolveIdArgs({ turn: ' ' }, readTurn, ids)).toEqual({
       ok: false,
-      reason: '  in turn is not a known id; use an id this task showed you',
+      reason: 'id-unknown:   in turn is not a known id; use an id this task showed you',
     })
   })
 
@@ -417,7 +417,7 @@ describe('resolveIdArgs', () => {
     const resolved = resolveIdArgs({ ...MERGE_SAMPLE, keep: 'lo1' }, mergeRows, shownIds())
     expect(resolved).toEqual({
       ok: false,
-      reason: 'lo1 in keep is a lore row; keep takes a character or a faction',
+      reason: 'id-wrong-kind: lo1 in keep is a lore row; keep takes a character or a faction',
     })
   })
 
@@ -426,7 +426,7 @@ describe('resolveIdArgs', () => {
     const ids = shownIds()
     const single = resolveIdArgs({ ...MERGE_SAMPLE, keep: full }, mergeRows, ids)
     const inList = resolveIdArgs({ ...MERGE_SAMPLE, absorb: ['c2', `[${full}]`] }, mergeRows, ids)
-    const reason = 'keep takes a short id as shown (c1, lo2…), not a full id'
+    const reason = 'id-full: keep takes a short id as shown (c1, lo2…), not a full id'
     expect(single).toEqual({ ok: false, reason })
     expect(inList).toEqual({ ok: false, reason: reason.replace('keep', 'absorb') })
   })
@@ -438,11 +438,11 @@ describe('resolveIdArgs', () => {
     const absorbAsOne = declaring({ absorb: { shape: 'single', prefixes: ['char'] } })
     expect(resolveIdArgs(MERGE_SAMPLE, keepAsList, ids)).toEqual({
       ok: false,
-      reason: 'keep takes a list of ids',
+      reason: 'id-shape: keep takes a list of ids',
     })
     expect(resolveIdArgs(MERGE_SAMPLE, absorbAsOne, ids)).toEqual({
       ok: false,
-      reason: 'absorb takes one id',
+      reason: 'id-shape: absorb takes one id',
     })
   })
 

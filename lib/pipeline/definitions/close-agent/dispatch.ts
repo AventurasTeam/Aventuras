@@ -6,6 +6,7 @@ import { isJsonObject } from '@/lib/json-object'
 import { commonChecks, type ReadSet } from './common-checks'
 import { nameCloseProse, withHandlesDeep, type CloseIds } from './ids'
 import type { CloseLedgerWriter } from './ledger'
+import { ledgerReasonKey } from './reason-key'
 import {
   lastTaskTurn,
   resolveIdArgs,
@@ -96,11 +97,16 @@ function recordWrite(
     why: namedWhy(args, ctx.ids),
     turns: [...entry.turns],
     result: verdict.result,
-    ...(verdict.reason === undefined ? {} : { reason: verdict.reason }),
+    ...(verdict.reason === undefined ? {} : { reason: ledgerReasonKey(verdict.reason) }),
     ...(entry.values === undefined ? {} : { values: entry.values }),
     ...(verdict.skippedFields.length === 0
       ? {}
-      : { skippedFields: verdict.skippedFields.map((skipped) => ({ ...skipped })) }),
+      : {
+          skippedFields: verdict.skippedFields.map(({ field, reason }) => ({
+            field,
+            reason: ledgerReasonKey(reason),
+          })),
+        }),
     ...(entry.survivor === undefined ? {} : { survivor: entry.survivor }),
   })
 }

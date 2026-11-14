@@ -14,6 +14,7 @@ import {
   termHandleReason,
   type SentKeywords,
 } from './keyword-args'
+import { keyedReason } from './reason-key'
 import { turnHandleIn, turnInTextReason } from './text-checks'
 import {
   sameValue,
@@ -54,10 +55,16 @@ const titleTakenNote = (id: string): string =>
 
 // A field refusal has no note, so the reason itself points at the holder.
 const titleTakenReason = (id: string): string =>
-  `${LORE_REFUSAL.titleTaken}: ${id} already holds this title: keep this row's title, or extend or correct ${id} with update_lore`
+  keyedReason(
+    LORE_REFUSAL.titleTaken,
+    `${id} already holds this title: keep this row's title, or extend or correct ${id} with update_lore`,
+  )
 
 const bodyOverLimitReason = (length: number): string =>
-  `body is ${length} characters as stored, ids written as names, over the limit of ${LORE_BODY_LIMIT}: state the rule in fewer words`
+  keyedReason(
+    'body-over-limit',
+    `body is ${length} characters as stored, ids written as names, over the limit of ${LORE_BODY_LIMIT}: state the rule in fewer words`,
+  )
 
 /**
  * A lore row on the branch, other than `except`, whose title is `title`, trimmed and case-folded.
@@ -238,11 +245,16 @@ type SentLoreText = { field: LoreText; text: SentText }
 
 const LORE_TEXT: readonly LoreText[] = ['title', 'body', 'category']
 
-const NOTHING_SENT =
-  'nothing to write: send a title, a body, a category or keywords to add or remove'
+const NOTHING_SENT = keyedReason(
+  'nothing-sent',
+  'nothing to write: send a title, a body, a category or keywords to add or remove',
+)
 
 const bodyGrowthReason = (length: number, base: number): string =>
-  `body is ${length} characters as stored, ids written as names: a body over ${LORE_BODY_LIMIT} may grow the body as it stood before this close (${base}) by at most ${LORE_BODY_LIMIT}, so send a shorter one`
+  keyedReason(
+    'body-growth',
+    `body is ${length} characters as stored, ids written as names: a body over ${LORE_BODY_LIMIT} may grow the body as it stood before this close (${base}) by at most ${LORE_BODY_LIMIT}, so send a shorter one`,
+  )
 
 // Never cut: a body over the bound is refused, so a user's long body is never shortened.
 function sentBody(value: string | undefined): SentText | undefined {

@@ -1,6 +1,7 @@
 import type { GuardRow } from '@/lib/actions/types'
 
 import { TURN_PREFIX, type CloseIds } from './ids'
+import { keyedReason } from './reason-key'
 import { FULL_ID_SHAPE } from './tool'
 
 /** Rows a task and part has read: seeded by its start, then read_row and landed creates (C11). */
@@ -44,20 +45,26 @@ export function commonChecks(
   if (typeof args.why !== 'string' || args.why.trim() === '')
     return {
       ok: false,
-      reason: 'why is empty: give one sentence on what in the cited turns makes this write true',
+      reason: keyedReason(
+        'why-empty',
+        'why is empty: give one sentence on what in the cited turns makes this write true',
+      ),
     }
   const unread = named.find((row) => !ctx.readSet.has(row))
   if (unread !== undefined)
     return {
       ok: false,
-      reason: `${ctx.ids.handleOf(unread.id) ?? unread.id} hasn't been read in this task: call read_row on it, then write it`,
+      reason: keyedReason(
+        'unread',
+        `${ctx.ids.handleOf(unread.id) ?? unread.id} hasn't been read in this task: call read_row on it, then write it`,
+      ),
     }
   return cited
 }
 
 function citedTurns(value: unknown, { ids, taskEntryIds }: CheckContext): CommonCheck {
   if (!Array.isArray(value) || value.length === 0)
-    return { ok: false, reason: `turns is empty: ${TURN_HINT}` }
+    return { ok: false, reason: keyedReason('turns-empty', `turns is empty: ${TURN_HINT}`) }
   const positions = new Map(taskEntryIds.map((id, at) => [id, at] as const))
   const cited = new Set<number>()
   for (const handle of value) {
@@ -65,15 +72,24 @@ function citedTurns(value: unknown, { ids, taskEntryIds }: CheckContext): Common
     if (id === undefined && typeof handle === 'string' && FULL_ID_SHAPE.test(handle))
       return {
         ok: false,
-        reason: 'turns takes the short handles of the turns this task was shown, not a full id',
+        reason: keyedReason(
+          'turns-full-id',
+          'turns takes the short handles of the turns this task was shown, not a full id',
+        ),
       }
     if (id === undefined || !id.startsWith(TURN_PREFIX))
-      return { ok: false, reason: `${String(handle)} is not a turn: ${TURN_HINT}` }
+      return {
+        ok: false,
+        reason: keyedReason('not-a-turn', `${String(handle)} is not a turn: ${TURN_HINT}`),
+      }
     const at = positions.get(id)
     if (at === undefined)
       return {
         ok: false,
-        reason: `${String(handle)} is not one of the turns this task was shown: cite only those turns`,
+        reason: keyedReason(
+          'turn-not-shown',
+          `${String(handle)} is not one of the turns this task was shown: cite only those turns`,
+        ),
       }
     cited.add(at)
   }

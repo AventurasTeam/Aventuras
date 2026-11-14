@@ -2,7 +2,6 @@ import { and, asc, eq } from 'drizzle-orm'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 
 import { applyDeltaAction } from '@/lib/actions/delta/apply-delta-action'
-import { keywordUserAddedReason } from '@/lib/actions/delta/keyword-authors'
 import { readRowGuard } from '@/lib/actions/delta/row-guard'
 import { USER_EDITED_SINCE_PROSE, type GroupOutcome, type GuardRow } from '@/lib/actions/types'
 import { clampEmbeddedText } from '@/lib/classifier'
@@ -390,8 +389,8 @@ describe('create_lore', () => {
     )
 
     expect(run.answers).toEqual([
-      { result: 'rejected', reason: expect.stringMatching(/^turns is empty/) },
-      { result: 'rejected', reason: expect.stringMatching(/^t8 /) },
+      { result: 'rejected', reason: expect.stringMatching(/^turns-empty: turns is empty/) },
+      { result: 'rejected', reason: expect.stringMatching(/^turn-not-shown: t8 /) },
       {
         result: 'rejected',
         reason: 'body-blank',
@@ -581,7 +580,7 @@ describe('create_lore', () => {
       {
         result: 'rejected',
         reason:
-          'body is 1201 characters as stored, ids written as names, over the limit of 1200: state the rule in fewer words',
+          'body-over-limit: body is 1201 characters as stored, ids written as names, over the limit of 1200: state the rule in fewer words',
       },
       { result: 'ok', id: 'lo1' },
     ])
@@ -601,7 +600,7 @@ describe('create_lore', () => {
     expect(run.answers[0]).toEqual({
       result: 'rejected',
       reason:
-        'body is 1210 characters as stored, ids written as names, over the limit of 1200: state the rule in fewer words',
+        'body-over-limit: body is 1210 characters as stored, ids written as names, over the limit of 1200: state the rule in fewer words',
     })
   })
 
@@ -620,7 +619,7 @@ describe('create_lore', () => {
 
   it('drops a category naming a turn, or keywords holding a handle, and lands the row', async () => {
     const termReason =
-      'the keyword "c1" holds c1, an id: a keyword is a word the prose uses, never an id'
+      'keyword-holds-id: the keyword "c1" holds c1, an id: a keyword is a word the prose uses, never an id'
 
     const run = await dispatchScripted(
       f,
@@ -653,8 +652,8 @@ describe('create_lore', () => {
       },
     ])
     expect(run.calls.map(({ skippedFields }) => skippedFields)).toEqual([
-      [{ field: 'category', reason: turnInTextReason('t2') }],
-      [{ field: 'keywords', reason: termReason }],
+      [{ field: 'category', reason: 'turn-in-text' }],
+      [{ field: 'keywords', reason: 'keyword-holds-id' }],
     ])
     expect(run.calls[0]!.values).toMatchObject({ category: 'rule of t2' })
     expect(
@@ -742,7 +741,7 @@ describe('update_lore', () => {
 
     expect(run.answers[0]).toEqual({
       result: 'rejected',
-      reason: "lo1 hasn't been read in this task: call read_row on it, then write it",
+      reason: "unread: lo1 hasn't been read in this task: call read_row on it, then write it",
     })
     expect(run.answers[2]).toEqual({ result: 'ok' })
     expect(run.calls[2]).toEqual({
@@ -934,7 +933,7 @@ describe('update_lore', () => {
 
     expect(run.calls[1]).toMatchObject({
       result: 'ok',
-      skippedFields: [{ field: 'keywords', reason: keywordUserAddedReason('the toll') }],
+      skippedFields: [{ field: 'keywords', reason: 'keyword-user-added' }],
     })
     expect(await storedLore(f, TOLL)).toMatchObject({
       body: 'The toll doubles after dark.',
@@ -970,12 +969,7 @@ describe('update_lore', () => {
 
     expect(run.calls[1]).toMatchObject({
       result: 'ok',
-      skippedFields: [
-        {
-          field: 'keywords',
-          reason: '"Gate" is in both add and remove: send each term in one list',
-        },
-      ],
+      skippedFields: [{ field: 'keywords', reason: 'keyword-in-both' }],
     })
     expect(await storedLore(f, TOLL)).toMatchObject({
       category: 'tolls',
@@ -992,13 +986,7 @@ describe('update_lore', () => {
 
     expect(run.calls[1]).toMatchObject({
       result: 'ok',
-      skippedFields: [
-        {
-          field: 'keywords',
-          reason:
-            'the keyword "c1" holds c1, an id: a keyword is a word the prose uses, never an id',
-        },
-      ],
+      skippedFields: [{ field: 'keywords', reason: 'keyword-holds-id' }],
     })
     expect((await storedLore(f, TOLL)).keywords).toEqual(['toll', 'night crossing'])
   })
@@ -1017,7 +1005,8 @@ describe('update_lore', () => {
 
     expect(run.answers[1]).toEqual({
       result: 'rejected',
-      reason: 'nothing to write: send a title, a body, a category or keywords to add or remove',
+      reason:
+        'nothing-sent: nothing to write: send a title, a body, a category or keywords to add or remove',
     })
     expect(await runDeltas(f, run.result.actionId)).toEqual([])
   })
@@ -1035,7 +1024,7 @@ describe('update_lore', () => {
 
     expect(run.calls[1]).toMatchObject({
       result: 'ok',
-      skippedFields: [{ field: 'body', reason: turnInTextReason('t5') }],
+      skippedFields: [{ field: 'body', reason: 'turn-in-text' }],
     })
     expect(run.answers[2]).toEqual({ result: 'rejected', reason: turnInTextReason('t3') })
     expect(await storedLore(f, TOLL)).toMatchObject({
@@ -1061,7 +1050,7 @@ describe('update_lore', () => {
 
       expect(run.answers[1]).toEqual({
         result: 'rejected',
-        reason: `body is ${refused} characters as stored, ids written as names: a body over 1200 may grow the body as it stood before this close (${stored}) by at most 1200, so send a shorter one`,
+        reason: `body-growth: body is ${refused} characters as stored, ids written as names: a body over 1200 may grow the body as it stood before this close (${stored}) by at most 1200, so send a shorter one`,
       })
       expect(run.answers[2]).toEqual({ result: 'ok' })
       expect((await storedLore(f, FERRY)).body).toBe('x'.repeat(lands))
@@ -1069,7 +1058,7 @@ describe('update_lore', () => {
   )
 
   const growthRefusal = (length: number, base: number): string =>
-    `body is ${length} characters as stored, ids written as names: a body over 1200 may grow the body as it stood before this close (${base}) by at most 1200, so send a shorter one`
+    `body-growth: body is ${length} characters as stored, ids written as names: a body over 1200 may grow the body as it stood before this close (${base}) by at most 1200, so send a shorter one`
 
   it("grows a body by 1200 in all across one part's calls, from the body before the close", async () => {
     await seedLore(f, { id: FERRY, title: 'The Night Ferry', body: 'b'.repeat(100) })
@@ -1177,13 +1166,9 @@ describe('update_lore', () => {
     ])
     expect(run.calls[1]).toMatchObject({
       result: 'ok',
-      skippedFields: [
-        {
-          field: 'title',
-          reason: `title-taken: ${FERRY} already holds this title: keep this row's title, or extend or correct ${FERRY} with update_lore`,
-        },
-      ],
+      skippedFields: [{ field: 'title', reason: 'title-taken' }],
     })
+    expect(JSON.stringify(run.calls[1])).not.toContain(FERRY)
     expect(await storedLore(f, TOLL)).toMatchObject({ title: 'The Ferry Toll', category: 'tolls' })
     // Shown by name, so prose naming lo2 stores the holder's title.
     expect(runIds?.nameOfId(FERRY)).toBe('The Night Ferry')
@@ -1246,13 +1231,7 @@ describe('update_lore', () => {
 
     expect(run.calls[1]).toMatchObject({
       result: 'ok',
-      skippedFields: [
-        {
-          field: 'body',
-          reason:
-            'body is 1301 characters as stored, ids written as names: a body over 1200 may grow the body as it stood before this close (100) by at most 1200, so send a shorter one',
-        },
-      ],
+      skippedFields: [{ field: 'body', reason: 'body-growth' }],
     })
     expect(await storedLore(f, FERRY)).toMatchObject({
       title: 'The Midnight Ferry',

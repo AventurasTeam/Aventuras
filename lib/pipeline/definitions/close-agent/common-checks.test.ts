@@ -45,29 +45,41 @@ describe('commonChecks', () => {
   })
 
   it.each<{ name: string; args: { turns: unknown; why: unknown }; reason: RegExp }>([
-    { name: 'cites nothing', args: { turns: [], why: 'w' }, reason: /^turns is empty/ },
+    {
+      name: 'cites nothing',
+      args: { turns: [], why: 'w' },
+      reason: /^turns-empty: turns is empty/,
+    },
     {
       name: 'has no turns at all',
       args: { turns: undefined, why: 'w' },
-      reason: /^turns is empty/,
+      reason: /^turns-empty: turns is empty/,
     },
     {
       name: 'cites an unknown turn handle',
       args: { turns: ['t1', 't9'], why: 'w' },
-      reason: /^t9 is not a turn/,
+      reason: /^not-a-turn: t9 is not a turn/,
     },
     {
       name: 'cites a row handle as a turn',
       args: { turns: ['c1'], why: 'w' },
-      reason: /^c1 is not a turn/,
+      reason: /^not-a-turn: c1 is not a turn/,
     },
     {
       name: 'cites a turn outside the chapter',
       args: { turns: ['t4'], why: 'w' },
-      reason: /^t4 is not one of the turns this task was shown/,
+      reason: /^turn-not-shown: t4 is not one of the turns this task was shown/,
     },
-    { name: 'gives a blank why', args: { turns: ['t1'], why: '   ' }, reason: /^why is empty/ },
-    { name: 'gives no why', args: { turns: ['t1'], why: undefined }, reason: /^why is empty/ },
+    {
+      name: 'gives a blank why',
+      args: { turns: ['t1'], why: '   ' },
+      reason: /^why-empty: why is empty/,
+    },
+    {
+      name: 'gives no why',
+      args: { turns: ['t1'], why: undefined },
+      reason: /^why-empty: why is empty/,
+    },
   ])('rejects a write that $name', ({ args, reason }) => {
     expect(commonChecks(args, [WREN], checkContext())).toEqual({
       ok: false,
@@ -80,7 +92,8 @@ describe('commonChecks', () => {
     const partTwo = checkContext([ENTRY_2, ENTRY_3])
     expect(commonChecks({ turns: ['t2', 't1'], why: 'w' }, [WREN], partTwo)).toEqual({
       ok: false,
-      reason: 't1 is not one of the turns this task was shown: cite only those turns',
+      reason:
+        'turn-not-shown: t1 is not one of the turns this task was shown: cite only those turns',
     })
     expect(commonChecks({ turns: ['t3', 't2'], why: 'w' }, [WREN], partTwo)).toEqual({
       ok: true,
@@ -97,20 +110,20 @@ describe('commonChecks', () => {
       return result.ok ? undefined : result.reason
     }
     expect(reasonOf([])).toBe(
-      'turns is empty: cite the turns this task was shown, by their handles',
+      'turns-empty: turns is empty: cite the turns this task was shown, by their handles',
     )
     expect(reasonOf(['c1'])).toBe(
-      'c1 is not a turn: cite the turns this task was shown, by their handles',
+      'not-a-turn: c1 is not a turn: cite the turns this task was shown, by their handles',
     )
     expect(reasonOf([ENTRY_1])).toBe(
-      'turns takes the short handles of the turns this task was shown, not a full id',
+      'turns-full-id: turns takes the short handles of the turns this task was shown, not a full id',
     )
   })
 
   it('rejects a write on a row the task has not read, naming it and read_row', () => {
     expect(commonChecks({ turns: ['t1'], why: 'w' }, [WREN, TOLL_LAW], checkContext())).toEqual({
       ok: false,
-      reason: expect.stringMatching(/^lo1 .*read_row/),
+      reason: expect.stringMatching(/^unread: lo1 .*read_row/),
     })
   })
 
@@ -123,15 +136,15 @@ describe('commonChecks', () => {
     }
     expect(refusal([TOLL_LAW, WREN])).toEqual({
       ok: false,
-      reason: expect.stringMatching(/^lo1 /),
+      reason: expect.stringMatching(/^unread: lo1 /),
     })
     expect(refusal([WREN, TOLL_LAW, OTHER_LORE])).toEqual({
       ok: false,
-      reason: expect.stringMatching(/^lo1 /),
+      reason: expect.stringMatching(/^unread: lo1 /),
     })
     expect(refusal([OTHER_LORE, TOLL_LAW])).toEqual({
       ok: false,
-      reason: expect.stringMatching(/^lo2 /),
+      reason: expect.stringMatching(/^unread: lo2 /),
     })
   })
 
@@ -145,7 +158,8 @@ describe('commonChecks', () => {
     const result = commonChecks({ turns: [cited], why: 'w' }, [WREN], ctx)
     expect(result).toEqual({
       ok: false,
-      reason: 'turns takes the short handles of the turns this task was shown, not a full id',
+      reason:
+        'turns-full-id: turns takes the short handles of the turns this task was shown, not a full id',
     })
     const reason = result.ok ? '' : result.reason
     expect(reason).not.toMatch(/_[0-9a-f]{8}-/)
@@ -158,11 +172,11 @@ describe('commonChecks', () => {
     const ctx = checkContext()
     expect(commonChecks({ turns: [], why: '' }, [TOLL_LAW], ctx)).toEqual({
       ok: false,
-      reason: expect.stringMatching(/^turns/),
+      reason: expect.stringMatching(/^turns-empty: /),
     })
     expect(commonChecks({ turns: ['t1'], why: '' }, [TOLL_LAW], ctx)).toEqual({
       ok: false,
-      reason: expect.stringMatching(/^why/),
+      reason: expect.stringMatching(/^why-empty: /),
     })
   })
 })

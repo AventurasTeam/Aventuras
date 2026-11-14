@@ -5,6 +5,7 @@ import { USER_EDITED_SINCE_PROSE, type GuardRow, type RowGuard } from '@/lib/act
 import { deltas, readEntryPosition, threads, type InjectionMode, type Thread } from '@/lib/db'
 
 import { restatedText, sentText } from './fields'
+import { keyedReason } from './reason-key'
 import { turnHandleIn, turnInTextReason } from './text-checks'
 import {
   DELETE_PATH,
@@ -58,22 +59,41 @@ type MergeArgs = z.output<WriteToolSchema<typeof MERGE_SHAPE>>
 type ThreadUpdate = Partial<Pick<ThreadArgs, 'description' | 'status'>>
 type ThreadText = Partial<Pick<MergeArgs, 'title' | 'description'>>
 
-const NOTHING_SENT = 'nothing to write: send a description, a status or both'
+const NOTHING_SENT = keyedReason(
+  'nothing-sent',
+  'nothing to write: send a description, a status or both',
+)
 
 const MERGE_REFUSAL = {
-  emptyAbsorb: 'absorb is empty: name the threads to fold into keep',
-  keepAbsorbed: 'keep is also in absorb: keep one thread and absorb the others',
-  repeated: 'absorb names a thread twice: name each thread once',
-  activeIntoInactive:
+  emptyAbsorb: keyedReason(
+    'merge-absorb-empty',
+    'absorb is empty: name the threads to fold into keep',
+  ),
+  keepAbsorbed: keyedReason(
+    'merge-keep-absorbed',
+    'keep is also in absorb: keep one thread and absorb the others',
+  ),
+  repeated: keyedReason('merge-repeated', 'absorb names a thread twice: name each thread once'),
+  activeIntoInactive: keyedReason(
+    'merge-active-into-inactive',
     'an active thread can be absorbed only into another active one, or the narrator would lose it: keep an active one, then settle it with update_thread if the chapter resolved or failed it',
-  modeIntoOther:
+  ),
+  modeIntoOther: keyedReason(
+    'merge-mode-into-other',
     "a thread whose injection mode is always or disabled can be absorbed only into one with the same mode, or the user's setting would be lost: keep that thread instead, or leave the threads apart",
-  closeWrote:
+  ),
+  closeWrote: keyedReason(
+    'merge-close-wrote',
     'this close already wrote a thread in absorb, and absorbing it would block undoing the close: keep that thread instead',
-  noKeep:
+  ),
+  noKeep: keyedReason(
+    'merge-no-keep',
     "no choice of keep can land without dropping an active thread or a user's injection mode: leave them apart",
-  closeWroteNoKeep:
+  ),
+  closeWroteNoKeep: keyedReason(
+    'merge-close-wrote-no-keep',
     'this close already wrote among these threads and no choice of keep can land, so they cannot be merged in this close: leave them apart',
+  ),
 } as const
 
 async function readThreads(

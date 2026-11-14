@@ -15,6 +15,7 @@ import {
 import { restatedText, sentText, type BoundedField, type SentText } from './fields'
 import { keywordsRefusal, plannedKeywords, type SentKeywords } from './keyword-args'
 import { planPlacement, type PlacementArg } from './placement'
+import { keyedReason } from './reason-key'
 import { strings } from './row-values'
 import { turnHandleIn, turnInTextReason } from './text-checks'
 import {
@@ -98,10 +99,14 @@ const NOT_OF_KIND: Readonly<Record<UpkeepKind, string>> = {
   item: 'not-an-item',
 }
 
-const NOTHING_SENT =
-  'every field is blank or left out: send only the fields you change, each with its whole new value'
-const PARENT_AND_TOP =
-  'parent and top are both sent: send a parent to place the place under it, or top: true to mark an unplaced place top level, not both'
+const NOTHING_SENT = keyedReason(
+  'nothing-sent',
+  'every field is blank or left out: send only the fields you change, each with its whole new value',
+)
+const PARENT_AND_TOP = keyedReason(
+  'parent-and-top',
+  'parent and top are both sent: send a parent to place the place under it, or top: true to mark an unplaced place top level, not both',
+)
 
 function sentTexts<A>(args: A, specs: readonly TextSpec<A>[]): SentField[] {
   return specs.flatMap((spec) => {
@@ -264,7 +269,10 @@ export const MARK_COMMON_KNOWLEDGE_SHAPE = {
 type KeywordArgs = z.output<WriteToolSchema<typeof SET_KEYWORDS_SHAPE>>
 type MarkArgs = z.output<WriteToolSchema<typeof MARK_COMMON_KNOWLEDGE_SHAPE>>
 
-const NO_TERMS = 'add and remove are both empty: send the terms to add, to remove, or both'
+const NO_TERMS = keyedReason(
+  'nothing-sent',
+  'add and remove are both empty: send the terms to add, to remove, or both',
+)
 
 /**
  * chapter-close.md → 3f Keywords: one keywords write; the action judges authorship and user

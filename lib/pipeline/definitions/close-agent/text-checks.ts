@@ -1,4 +1,5 @@
 import { TURN_PREFIX, type CloseIds } from './ids'
+import { keyedReason } from './reason-key'
 
 // Every handle CloseIds mints is 1–2 letters and digits; a bracket around one or several hides none.
 const HANDLE_TOKEN = /\b[a-z]{1,2}\d+\b/g
@@ -26,5 +27,5 @@ export function handleInTerm(term: string, ids: CloseIds): string | undefined {
 }
 
 export function turnInTextReason(handle: string): string {
-  return `${handle} is a turn: cite turns in turns, never in the text`
+  return keyedReason('turn-in-text', `${handle} is a turn: cite turns in turns, never in the text`)
 }

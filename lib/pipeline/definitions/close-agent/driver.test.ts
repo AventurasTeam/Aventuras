@@ -1074,9 +1074,7 @@ describe('runCloseTask', () => {
       ['identity', 'touch_note', 'ok'],
       ['upkeep', 'touch_note', 'rejected'],
     ])
-    expect(ledger.calls[2]!.reason).toBe(
-      "lo1 hasn't been read in this task: call read_row on it, then write it",
-    )
+    expect(ledger.calls[2]!.reason).toBe('unread')
   })
 
   const NOT_JSON: [string, unknown][] = [
@@ -2001,7 +1999,7 @@ describe('closeAgentPhase over three parts', () => {
       ['append_note', 1, 'ok'],
       ['append_note', 2, 'rejected'],
     ])
-    expect(calls[2]?.reason).toMatch(/^c1 hasn't been read in this task/)
+    expect(calls[2]?.reason).toBe('unread')
   })
 
   it('refuses a part-2 write citing a turn only part 1 was shown', async () => {
@@ -2020,7 +2018,7 @@ describe('closeAgentPhase over three parts', () => {
         part: 2,
         result: 'rejected',
         turns: [],
-        reason: 't3 is not one of the turns this task was shown: cite only those turns',
+        reason: 'turn-not-shown',
       }),
     ])
   })

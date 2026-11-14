@@ -37,8 +37,19 @@ export { threadWriteSchema } from './threads/thread-schema'
 export type { ThreadWrite } from './threads/thread-schema'
 export { chapterWriteSchema } from './story-entries/chapter-schema'
 export type { ChapterWrite } from './story-entries/chapter-schema'
-export { CLOSE_TASKS, closeReportCallSchema, closeReportSchema } from './story-entries/close-report'
-export type { CloseReport, CloseReportCall, CloseTask } from './story-entries/close-report'
+export {
+  CLOSE_REASON_KEYS,
+  CLOSE_TASKS,
+  closeReportCallSchema,
+  closeReportSchema,
+  isCloseReasonKey,
+} from './story-entries/close-report'
+export type {
+  CloseReasonKey,
+  CloseReport,
+  CloseReportCall,
+  CloseTask,
+} from './story-entries/close-report'
 export { entryAssetWriteSchema } from './assets/entry-assets-schema'
 export type { EntryAssetWrite } from './assets/entry-assets-schema'
 export { translationWriteSchema } from './translations/translations-schema'

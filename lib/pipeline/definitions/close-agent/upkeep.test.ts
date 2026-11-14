@@ -884,7 +884,7 @@ describe('Upkeep in a close', () => {
     expect(calls[1]).toMatchObject({
       tool: 'set_keywords',
       result: 'rejected',
-      reason: expect.stringContaining("l4 hasn't been read"),
+      reason: 'unread',
     })
   })
 })

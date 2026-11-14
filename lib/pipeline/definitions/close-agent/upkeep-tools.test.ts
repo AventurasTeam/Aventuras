@@ -27,7 +27,6 @@ import { resetAllStores } from '@/lib/stores'
 import { createReadSet } from './common-checks'
 import { dispatchToolCall, type DispatchContext } from './dispatch'
 import { CloseLedgerWriter } from './ledger'
-import { turnInTextReason } from './text-checks'
 import { assertReplaySafe, type CloseTool } from './tool'
 import {
   markCommonKnowledgeTool,
@@ -800,7 +799,7 @@ describe('update_place', () => {
 
     expect(calls[0]).toMatchObject({
       result: 'ok',
-      skippedFields: [{ field: 'state.condition', reason: turnInTextReason('t3') }],
+      skippedFields: [{ field: 'state.condition', reason: 'turn-in-text' }],
     })
     const quay = await storedEntity(f, QUAY)
     expect(quay.description).toBe('Stone steps under the flood.')
@@ -832,7 +831,7 @@ describe('update_place', () => {
 
     expect(calls[0]).toMatchObject({
       result: 'rejected',
-      reason: expect.stringContaining('not both'),
+      reason: 'parent-and-top',
     })
     expect(await runDeltas(f, result.actionId)).toEqual([])
   })
@@ -861,7 +860,7 @@ describe('update_place', () => {
 
     expect(calls[0]).toMatchObject({
       result: 'rejected',
-      reason: expect.stringContaining('blank or left out'),
+      reason: 'nothing-sent',
     })
     expect(calls[0]).not.toHaveProperty('values')
     expect(await runDeltas(f, result.actionId)).toEqual([])
@@ -899,7 +898,7 @@ describe('update_place', () => {
 
     expect(calls[0]).toMatchObject({
       result: 'rejected',
-      reason: 'i1 in id is an item; id takes a place',
+      reason: 'id-wrong-kind',
     })
     expect(await runDeltas(f, result.actionId)).toEqual([])
   })
@@ -992,7 +991,7 @@ describe('update_item', () => {
 
     expect(calls[0]).toMatchObject({
       result: 'rejected',
-      reason: 'l1 in id is a place; id takes an item',
+      reason: 'id-wrong-kind',
     })
     expect(await runDeltas(f, result.actionId)).toEqual([])
   })
@@ -1181,7 +1180,7 @@ describe('set_keywords', () => {
       { toolName: 'set_keywords', input: { id, add: ['landmark'], remove: [term], ...cite() } },
     ])
 
-    expect(calls[0]).toMatchObject({ result: 'rejected', reason: `keyword-user-added: ${term}` })
+    expect(calls[0]).toMatchObject({ result: 'rejected', reason: 'keyword-user-added' })
     expect(await runDeltas(f, result.actionId)).toEqual([])
     expect((await storedEntity(f, row)).keywords).toEqual(before)
   })
@@ -1256,10 +1255,7 @@ describe('set_keywords', () => {
       { toolName: 'set_keywords', input: { id: 'l5', add: ['c1'], ...cite() } },
     ])
 
-    expect(calls[0]).toMatchObject({
-      result: 'rejected',
-      reason: expect.stringContaining('the keyword "c1" holds c1, an id'),
-    })
+    expect(calls[0]).toMatchObject({ result: 'rejected', reason: 'keyword-holds-id' })
     expect(await runDeltas(f, result.actionId)).toEqual([])
   })
 
@@ -1316,7 +1312,7 @@ describe('set_keywords', () => {
 
     expect(calls[0]).toMatchObject({
       result: 'rejected',
-      reason: expect.stringContaining('"Gate" is in both add and remove'),
+      reason: 'keyword-in-both',
     })
     expect(await runDeltas(f, result.actionId)).toEqual([])
   })
@@ -1327,14 +1323,10 @@ describe('set_keywords', () => {
       { toolName: 'set_keywords', input: { id: 'l1', add: ['the road from t3'], ...cite() } },
     ])
 
-    expect(calls[0]).toMatchObject({
-      result: 'rejected',
-      reason: expect.stringContaining('the keyword "c1" holds c1, an id'),
-    })
-    expect(calls[1]).toMatchObject({
-      result: 'rejected',
-      reason: expect.stringContaining('the keyword "the road from t3" holds t3, an id'),
-    })
+    expect(calls.map(({ result: outcome, reason }) => [outcome, reason])).toEqual([
+      ['rejected', 'keyword-holds-id'],
+      ['rejected', 'keyword-holds-id'],
+    ])
     expect(await runDeltas(f, result.actionId)).toEqual([])
   })
 
@@ -1345,7 +1337,7 @@ describe('set_keywords', () => {
 
     expect(calls[0]).toMatchObject({
       result: 'rejected',
-      reason: expect.stringContaining('both empty'),
+      reason: 'nothing-sent',
     })
     expect(calls[0]).not.toHaveProperty('values')
   })

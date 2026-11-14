@@ -22,6 +22,7 @@ import {
   type SentList,
   type SentText,
 } from './fields'
+import { keyedReason } from './reason-key'
 import { turnHandleIn, turnInTextReason } from './text-checks'
 import {
   writeToolSchema,
@@ -118,8 +119,10 @@ const NOT_OF_KIND: Readonly<Record<IdentityKind, string>> = {
   faction: 'not-a-faction',
 }
 
-const NOTHING_SENT =
-  'every field is blank or empty: send only the fields you change, each with its whole new value'
+const NOTHING_SENT = keyedReason(
+  'nothing-sent',
+  'every field is blank or empty: send only the fields you change, each with its whole new value',
+)
 
 const landingValue = (field: SentField): unknown =>
   field.kind === 'list' ? field.list.entries : field.text.bounded

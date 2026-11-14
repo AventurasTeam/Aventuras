@@ -12,6 +12,75 @@ export const CLOSE_TASKS = [
 
 export type CloseTask = (typeof CLOSE_TASKS)[number]
 
+/** C4: every reason a close records; `other` stands for one no key covers. */
+export const CLOSE_REASON_KEYS = [
+  'user-edited-since-prose',
+  'later-turn',
+  'row-gone',
+  'turns-empty',
+  'turns-full-id',
+  'not-a-turn',
+  'turn-not-shown',
+  'why-empty',
+  'unread',
+  'id-shape',
+  'id-full',
+  'id-unknown',
+  'id-wrong-kind',
+  'turn-in-text',
+  'keyword-holds-id',
+  'keyword-in-both',
+  'nothing-sent',
+  'parent-and-top',
+  'title-blank',
+  'body-blank',
+  'lore-cap',
+  'title-taken',
+  'body-over-limit',
+  'body-growth',
+  'not-a-character',
+  'not-a-faction',
+  'over-soft-cap',
+  'not-a-place',
+  'not-an-item',
+  'not-a-location',
+  'not-a-place-or-item',
+  'not-unplaced',
+  'parent-not-a-place',
+  'retired-parent',
+  'parent-cycle',
+  'parent-chain-broken',
+  'story-inside',
+  'keyword-user-added',
+  'keyword-pairs-flag',
+  'location',
+  'not-active',
+  'not-staged',
+  'in-scene-later',
+  'partner-is-self',
+  'partner-not-of-kind',
+  'already-flagged',
+  'flag-held-by-partner',
+  'pair-resolved',
+  'merge-absorb-empty',
+  'merge-keep-absorbed',
+  'merge-repeated',
+  'merge-active-into-inactive',
+  'merge-mode-into-other',
+  'merge-close-wrote',
+  'merge-no-keep',
+  'merge-close-wrote-no-keep',
+  'other',
+] as const
+
+export type CloseReasonKey = (typeof CLOSE_REASON_KEYS)[number]
+
+const REASON_KEYS: ReadonlySet<string> = new Set(CLOSE_REASON_KEYS)
+
+export function isCloseReasonKey(value: string): value is CloseReasonKey {
+  return REASON_KEYS.has(value)
+}
+
 const closeTaskSchema = z.enum(CLOSE_TASKS)
 const partSchema = z.number().int().min(0)
 
