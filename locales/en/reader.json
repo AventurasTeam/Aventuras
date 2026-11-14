@@ -77,7 +77,7 @@
     "entries": "{{count}} entry",
     "entries_other": "{{count}} entries",
     "chapterReopened": "1 chapter re-opened — chapter {{number}} will return to in-progress",
-    "chaptersRemoved": "1 chapter removed — chapter {{list}} goes with its entries",
+    "chaptersRemoved": "{{count}} chapter removed — chapter {{list}} goes with its entries",
     "chaptersRemoved_other": "{{count}} chapters removed — chapters {{list}} go with their entries",
     "chapterPair": "{{first}} and {{second}}",
     "chapterSpan": "{{first}}–{{last}}",

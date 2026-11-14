@@ -241,6 +241,30 @@ export const RegenerateClose: Story = {
   },
 }
 
+/** The close's chapter is gone from the reply's window, so the line names the removed one. */
+export const RegenerateCloseRemoved: Story = {
+  args: {
+    open: true,
+    variant: 'regenerate',
+    targetEntryNumber: 47,
+    counts: counts({
+      entries: 1,
+      chapters: 1,
+      worldStateChanges: 4,
+      closeWrites: 9,
+      removedChapters: [5],
+    }),
+  },
+  play: async () => {
+    const dialog = await findDialog(COPY.regenerateTitle)
+    await expectDescription(
+      dialog,
+      [COPY.closeBody, COPY.closeReturns, COPY.closeRunsAgain, COPY.regenerateIrreversible],
+      [COPY.cascadeBody, REOPENED_LINE, REMOVED_LINE],
+    )
+  },
+}
+
 /** Only a removed chapter's kept work is left on the reply, and no close brings it back. */
 export const RegenerateKeptWork: Story = {
   args: {
