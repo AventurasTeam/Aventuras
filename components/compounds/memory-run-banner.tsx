@@ -1,52 +1,79 @@
-import { Info } from 'lucide-react-native'
+import { Info, TriangleAlert, X, type LucideIcon } from 'lucide-react-native'
+import type { ReactElement } from 'react'
 import { View } from 'react-native'
 
 import { Button } from '@/components/ui/button'
 import { Icon } from '@/components/ui/icon'
+import { IconAction } from '@/components/ui/icon-action'
 import { Text } from '@/components/ui/text'
 import { POINTER_EVENTS_NONE } from '@/constants/styles'
 import { t } from '@/lib/i18n'
+import { cn } from '@/lib/utils'
 
-import { useMemoryRunBanner } from './use-memory-run-banner'
+import { useMemoryRunBanner, type MemoryRunBannerState } from './use-memory-run-banner'
 
-type MemoryRunBannerViewProps = {
-  label: string
-  onCancel: () => void
-}
+type MemoryRunBannerViewProps = MemoryRunBannerState
 
-/** The info-toned bar under the in-story chrome while a memory run holds the gate. */
-export function MemoryRunBannerView({ label, onCancel }: MemoryRunBannerViewProps) {
+type Tone = { bar: string; fill: string; icon: LucideIcon; iconClass: string }
+
+const TONE = {
+  info: { bar: 'border-info', fill: 'bg-info', icon: Info, iconClass: 'text-info' },
+  warning: {
+    bar: 'border-warning',
+    fill: 'bg-warning',
+    icon: TriangleAlert,
+    iconClass: 'text-warning',
+  },
+} as const satisfies Record<'info' | 'warning', Tone>
+
+/** The bar under the in-story chrome: a memory run holding the gate, or the close it committed. */
+export function MemoryRunBannerView(props: MemoryRunBannerViewProps): ReactElement {
+  const tone = TONE[props.kind === 'run' ? 'info' : props.tone]
   return (
     <View
       // E2E scope anchor: the banner's Cancel shares its role and name with the composer's.
       testID="memory-run-banner"
-      className="relative w-full flex-row items-center gap-2 border-b border-info px-4 py-1.5"
+      className={cn('relative w-full flex-row items-center gap-2 border-b px-4 py-1.5', tone.bar)}
     >
       <View
         aria-hidden
         style={POINTER_EVENTS_NONE}
-        className="absolute inset-0 bg-info opacity-[.12]"
+        className={cn('absolute inset-0 opacity-[.12]', tone.fill)}
       />
-      <Icon as={Info} size="sm" className="text-info" />
+      <Icon as={tone.icon} size="sm" className={tone.iconClass} />
       {/* Scoped to the label: role="status" implies aria-atomic, so a region spanning the bar
-          would re-announce Cancel too. aria-live is what maps to Android's live region. */}
+          would re-announce its buttons too. aria-live is what maps to Android's live region. */}
       <View role="status" aria-live="polite" className="min-w-0 flex-1">
         <Text size="sm" className="text-fg-primary">
-          {label}
+          {props.label}
         </Text>
       </View>
-      <Button variant="ghost" size="sm" onPress={onCancel}>
-        <Text>{t('cancel')}</Text>
-      </Button>
+      {props.kind === 'run' ? (
+        <Button variant="ghost" size="sm" onPress={props.onCancel}>
+          <Text>{t('cancel')}</Text>
+        </Button>
+      ) : (
+        <>
+          <Button variant="ghost" size="sm" onPress={props.onReview}>
+            <Text>{t('chrome.closeResult.review')}</Text>
+          </Button>
+          <IconAction
+            icon={X}
+            label={t('chrome.closeResult.dismiss')}
+            size="sm"
+            onPress={props.onDismiss}
+          />
+        </>
+      )}
     </View>
   )
 }
 
-/** The open branch's pass or close, as a banner; nothing while neither runs. */
+/** The open branch's pass or close, or the close it committed, as a banner; else nothing. */
 export function MemoryRunBanner() {
   const banner = useMemoryRunBanner()
   if (banner == null) return null
-  return <MemoryRunBannerView label={banner.label} onCancel={banner.onCancel} />
+  return <MemoryRunBannerView {...banner} />
 }
 
 export type { MemoryRunBannerViewProps }
