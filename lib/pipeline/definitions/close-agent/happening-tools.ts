@@ -22,6 +22,7 @@ import { generateId } from '@/lib/ids'
 import { restatedText, sentText } from './fields'
 import {
   AWARENESS_FIELDS,
+  changedAwarenessFields,
   earlierAnchor,
   foldMergeLinks,
   type AwarenessField,
@@ -382,9 +383,7 @@ function linkWrites(
   for (const folded of fold.awareness) {
     const stored = pairs.get(folded.characterId)
     const changed: readonly AwarenessField[] =
-      stored === undefined
-        ? AWARENESS_FIELDS
-        : AWARENESS_FIELDS.filter((field) => folded[field] !== stored[field])
+      stored === undefined ? AWARENESS_FIELDS : changedAwarenessFields(stored, folded)
     const userKept: readonly AwarenessField[] =
       stored === undefined
         ? []

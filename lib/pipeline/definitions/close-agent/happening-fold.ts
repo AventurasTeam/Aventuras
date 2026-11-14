@@ -111,8 +111,13 @@ function foldedAwareness(
   }
 }
 
-const restatesRow = (stored: AwarenessRow, folded: FoldedAwareness): boolean =>
-  AWARENESS_FIELDS.every((field) => stored[field] === folded[field])
+/** The fields where a fold differs from the awareness row it lands on. */
+export function changedAwarenessFields(
+  stored: AwarenessRow,
+  folded: FoldedAwareness,
+): AwarenessField[] {
+  return AWARENESS_FIELDS.filter((field) => stored[field] !== folded[field])
+}
 
 /**
  * 3e's mechanical merge of link rows onto keep: an involvement for each entity keep lacks, with the
@@ -146,7 +151,8 @@ export function foldMergeLinks(
       stored === undefined ? rows : [stored, ...rows],
       positionOf,
     )
-    if (stored === undefined || !restatesRow(stored, folded)) awareness.push(folded)
+    if (stored === undefined || changedAwarenessFields(stored, folded).length > 0)
+      awareness.push(folded)
   }
   return { involvements, awareness }
 }
