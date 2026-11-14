@@ -40,7 +40,7 @@ export type ChapterCardProps = {
   onToggle: () => void
   /** The route's session while open, else null; the body waits for its form to hold this row. */
   session: ChapterRowSession | null
-  /** Set while a run blocks edits (`generationGateReason`): fields and Save disable with it. */
+  /** Set while a run blocks edits (`generationGateReason`): fields, Save and Delete… disable with it. */
   blockedReason?: string
   /** Route focus, for Cmd/Ctrl-S on the in-card bar. */
   hotkeysEnabled: boolean
