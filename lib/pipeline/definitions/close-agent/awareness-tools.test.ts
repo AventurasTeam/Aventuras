@@ -666,6 +666,44 @@ describe('set_pin', () => {
     })
   })
 
+  // The chapter runs from t1 to E, t4: a row learned at either end is the chapter's.
+  describe("a row learned at the chapter's first turn or at E", () => {
+    const AT_FIRST = `haw_${uuid(46)}`
+    const AT_END = `haw_${uuid(47)}`
+
+    beforeEach(async () => {
+      await putCharacter(f, LENA, 'Lena')
+      for (const [id, happeningId, learnedAtEntryId] of [
+        [AT_FIRST, FIGHT, f.entries[3]!.id],
+        [AT_END, TOLL, endOf(f)],
+      ] as const)
+        await putAwareness(f, {
+          id,
+          characterId: LENA,
+          happeningId,
+          learnedAtEntryId,
+          decayResistance: 0.6,
+        })
+    })
+
+    it('lowers its pin, not refusing it as a frequent row', async () => {
+      const { answers } = await runDispatchCalls(f, {
+        task: 'awareness',
+        tools: { set_pin: setPinTool },
+        shown: await startPinned(
+          f,
+          [AT_FIRST, AT_END].map((id) => ({ table: 'happening_awareness' as const, id, name: '' })),
+        ),
+        calls: [pin('aw1', 0.1), pin('aw2', 0.1)],
+        turns: awarenessTurns(f),
+      })
+
+      expect(answers).toEqual([{ result: 'ok' }, { result: 'ok' }])
+      expect(await storedPin(f, AT_FIRST)).toBe(0.1)
+      expect(await storedPin(f, AT_END)).toBe(0.1)
+    })
+  })
+
   describe('the raise step', () => {
     async function setStored(id: string, pin: number): Promise<void> {
       await f.ctx.db

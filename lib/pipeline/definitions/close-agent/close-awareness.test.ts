@@ -547,6 +547,38 @@ describe('the Awareness start', () => {
     expect(ctx.ids.startPinOf(A_CHAPTER)).toBe(0.6)
   })
 
+  it("lists a row learned at the chapter's first turn and one learned at E as the chapter's", async () => {
+    const AT_FIRST = `haw_${uuid(46)}`
+    const AT_END = `haw_${uuid(47)}`
+    await putChapter(fx)
+    await putCharacter(fx, ARIA, 'Aria')
+    await putHappening(fx, { id: FIGHT, title: 'A fight', occurredAtEntryId: fx.entries[3]!.id })
+    await putHappening(fx, { id: TOLL, title: 'The toll', occurredAtEntryId: endOf(fx) })
+    for (const [id, happeningId, learnedAtEntryId] of [
+      [AT_FIRST, FIGHT, fx.entries[3]!.id],
+      [AT_END, TOLL, endOf(fx)],
+    ] as const)
+      await putAwareness(fx, {
+        id,
+        characterId: ARIA,
+        happeningId,
+        learnedAtEntryId,
+        decayResistance: 0.6,
+      })
+
+    const start = await awarenessTask.start(promptContextFor(fx))
+
+    expect(
+      start?.show.groups.map(({ happening, rows }) => [
+        happening.title,
+        rows.map(({ learnedAt, list }) => [learnedAt, list]),
+      ]),
+    ).toEqual([
+      ['A fight', [['t1', 'chapter']]],
+      ['The toll', [['t4', 'chapter']]],
+    ])
+  })
+
   // The start lists the chapter's rows by the same entries set_pin's one-way rule tests.
   it("lists a row as the chapter's exactly when set_pin lets its pin fall", async () => {
     await seedAwarenessWorld(fx)
