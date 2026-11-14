@@ -133,7 +133,7 @@ function correctedLater(refusal: Refusal, calls: readonly CloseReportCall[]): bo
   )
 }
 
-function refusalsOf(call: CloseReportCall, index: number): Refusal[] {
+function refusalsOf(call: CloseReportCall, index: number, lookup: CloseReviewLookup): Refusal[] {
   const ownReason = (path: string): string | undefined =>
     call.skippedFields?.find(({ field }) => field === path)?.reason ?? call.reason
   if (call.result === 'ok')
@@ -143,7 +143,7 @@ function refusalsOf(call: CloseReportCall, index: number): Refusal[] {
         index,
         call,
         path: field,
-        summary: value === undefined ? '' : reviewValueText(field, value),
+        summary: value === undefined ? '' : reviewValueText(field, value, lookup),
         reason,
       }
     })
@@ -173,7 +173,7 @@ function refusalsOf(call: CloseReportCall, index: number): Refusal[] {
     index,
     call,
     path,
-    summary: reviewValueText(path, value),
+    summary: reviewValueText(path, value, lookup),
     reason: ownReason(path),
   }))
 }
@@ -193,7 +193,7 @@ export function closeReviewNotApplied(
     return 'other'
   }
   const rows = report.calls
-    .flatMap((call, index) => refusalsOf(call, index))
+    .flatMap((call, index) => refusalsOf(call, index, lookup))
     .filter((refusal) => !correctedLater(refusal, report.calls))
     .map((refusal): CloseReviewNotApplied => {
       const { call, path } = refusal

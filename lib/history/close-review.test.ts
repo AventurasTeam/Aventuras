@@ -654,6 +654,27 @@ describe('closeReviewNotApplied', () => {
     ])
   })
 
+  it('shows a proposed entry id the branch knows as its ref', () => {
+    const rows = closeReviewNotApplied(
+      report([
+        call({
+          task: 'threads',
+          tool: 'update_thread',
+          rows: [LETTER],
+          values: { resolvedAtEntryId: 'entry_118', description: 'entry_gone' },
+          result: 'skipped',
+          reason: 'later-turn',
+        }),
+      ]),
+      { ...LOOKUP, entryPosition: (id) => (id === 'entry_118' ? 118 : undefined) },
+    )
+
+    expect(rows.map((row) => [row.fieldPath, row.summary])).toEqual([
+      ['resolvedAtEntryId', 'entry #118'],
+      ['description', 'entry_gone'],
+    ])
+  })
+
   it("matches a refused create_lore's title by its row name when it sent no title", () => {
     expect(
       notApplied([

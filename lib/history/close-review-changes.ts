@@ -114,15 +114,17 @@ function valueAt(payload: Delta['undoPayload'], path: string): unknown {
   return current
 }
 
+// A ledger keeps an entry id as stored (ID_PATTERN has no entry prefix); a known one reads as its ref.
+function entryRefText(value: string, lookup: CloseReviewLookup): string | undefined {
+  const position = lookup.entryPosition(value)
+  return position === undefined ? undefined : formatEntryRef(position)
+}
+
 // A stored old value as text: a list item by item, an entry id as its ref, a row id as its name.
 function shownValue(value: unknown, lookup: CloseReviewLookup): string {
   if (value === null || value === undefined) return ''
   if (Array.isArray(value)) return value.map((item) => shownValue(item, lookup)).join(', ')
-  if (typeof value === 'string') {
-    const position = lookup.entryPosition(value)
-    if (position !== undefined) return formatEntryRef(position)
-    return lookup.nameOf(value) ?? value
-  }
+  if (typeof value === 'string') return entryRefText(value, lookup) ?? lookup.nameOf(value) ?? value
   if (typeof value === 'object') return JSON.stringify(value)
   return String(value)
 }
@@ -196,10 +198,14 @@ const COMMON_KNOWLEDGE_PATH = 'commonKnowledge'
 const flagText = (value: unknown): string =>
   Number(value) === 1 ? t('chapters:review.yes') : t('chapters:review.no')
 
-/** A recorded new or proposed value as the review shows it: a flag reads yes or no, '' reads none. */
-export function reviewValueText(path: string, value: string): string {
+/**
+ * A recorded new or proposed value as the review shows it: a flag reads yes or no, '' reads none,
+ * an entry id the branch knows reads as its ref.
+ */
+export function reviewValueText(path: string, value: string, lookup: CloseReviewLookup): string {
   if (path === COMMON_KNOWLEDGE_PATH) return flagText(value)
-  return value === '' ? t('chapters:review.none') : value
+  if (value === '') return t('chapters:review.none')
+  return entryRefText(value, lookup) ?? value
 }
 
 // The top mark names only its move, since its old value is the unplaced flag.
@@ -209,9 +215,7 @@ function updateSummary(
   value: string,
   lookup: CloseReviewLookup,
 ): string {
-  // A ledger keeps an entry ref as its id (ID_PATTERN has no entry prefix): shown as its ref.
-  const position = lookup.entryPosition(value)
-  const after = position === undefined ? reviewValueText(path, value) : formatEntryRef(position)
+  const after = reviewValueText(path, value, lookup)
   if (path === UNPLACED_PATH) return after
   const before =
     path === COMMON_KNOWLEDGE_PATH ? (old == null ? '' : flagText(old)) : shownValue(old, lookup)
