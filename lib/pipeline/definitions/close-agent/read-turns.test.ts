@@ -170,6 +170,19 @@ describe('read_turns', () => {
     expect(JSON.stringify(answer)).not.toContain(fullId)
   })
 
+  it('names each handle it could not read once, however often it was asked', async () => {
+    const fx = await openCloseFixture()
+    const asked = ['t99', generateId('entry'), 't1', 't99', generateId('entry'), 't1']
+
+    expect(await readTurns(chapterContext(fx, 6), asked)).toEqual({
+      turns: [{ id: 't1', kind: 'opening', prose: expect.stringMatching(OPENING) }],
+      notRead: [
+        { id: 't99', reason: 'no turn was shown with this handle' },
+        { id: 'a full id', reason: 'a full id: give the short handle you were shown (t1, t2…)' },
+      ],
+    })
+  })
+
   it('reads ten turns and names the eleventh as unread', async () => {
     const fx = await openCloseFixture()
     const asked = ['t11', 't10', 't9', 't8', 't7', 't6', 't5', 't4', 't3', 't2', 't1']
