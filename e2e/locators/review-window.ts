@@ -10,6 +10,8 @@ const dialog = (page: Page): Locator => page.getByRole('dialog', { name: TITLE }
 
 export const reviewWindow = {
   window: dialog,
+  // A modal over the window hides it from the accessibility tree, so absence is read with hidden nodes.
+  mounted: (page: Page): Locator => page.getByRole('dialog', { name: TITLE, includeHidden: true }),
   // A review row passes DeltaLogRow no entry, so its name is `<op> <target>` (history:rowLabel);
   // the entry rides in the footer's link.
   row: (page: Page, name: string): Locator =>

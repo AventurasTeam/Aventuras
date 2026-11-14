@@ -1,5 +1,7 @@
 import { expect, test, type Page } from '@playwright/test'
 
+import type { CloseReport } from '@/lib/db'
+
 import { goToChapterTimeline, openStory } from '../flows/navigation'
 import { currentBranchId, queryApp } from '../harness/db'
 import { t } from '../harness/i18n'
@@ -23,9 +25,6 @@ const DRAFT = 'E2E dirty review draft'
 const NOT_APPLIED = 1
 
 type Chapter = { id: string; number: number }
-type ReportCall = { result: string; rows: { name: string }[]; turns: string[] }
-type Stopped = { task: string; part: number; reason: string }
-type Report = { calls: ReportCall[]; stopped: Stopped[] }
 type Change = { name: string; entryId: string; position: number }
 
 // Serial suite, one shared app: test 1 ends in World over the Timeline over the reader, test 2 in
@@ -36,7 +35,7 @@ test.describe.serial('Chapter review', () => {
   let branchId: string
   let reviewed: Chapter
   let change: Change
-  let stopped: Stopped
+  let stopped: CloseReport['stopped'][number]
 
   test.beforeAll(async () => {
     ;({ userDataDir } = createSeededUserDataDir())
@@ -61,28 +60,31 @@ test.describe.serial('Chapter review', () => {
     return { id: id as string, number: number as number }
   }
 
-  async function reportOf(page: Page, chapterId: string): Promise<Report> {
+  async function reportOf(page: Page, chapterId: string): Promise<CloseReport> {
     const [[json]] = await queryApp(
       page,
       `SELECT close_report FROM chapters WHERE branch_id = ? AND id = ?`,
       [branchId, chapterId],
     )
     if (typeof json !== 'string') throw new Error(`chapter ${chapterId} holds no close report`)
-    return JSON.parse(json) as Report
+    return JSON.parse(json) as CloseReport
   }
 
   // The landed write's row and its latest cited entry, as the review picks them (C4: from turns).
-  async function landedChange(page: Page, report: Report): Promise<Change> {
+  async function landedChange(page: Page, report: CloseReport): Promise<Change> {
     const landed = report.calls.filter((call) => call.result === 'ok')
     if (landed.length !== 1) throw new Error(`expected one landed call: ${landed.length}`)
     const [call] = landed
-    const [[entryId, position]] = await queryApp(
+    if (call.turns.length === 0) throw new Error('the landed call cites no entry')
+    const cited = await queryApp(
       page,
       `SELECT id, position FROM story_entries
        WHERE branch_id = ? AND id IN (${call.turns.map(() => '?').join(', ')})
        ORDER BY position DESC LIMIT 1`,
       [branchId, ...call.turns],
     )
+    if (cited.length === 0) throw new Error(`no cited entry is on the branch: ${call.turns}`)
+    const [[entryId, position]] = cited
     return { name: call.rows[0].name, entryId: entryId as string, position: position as number }
   }
 
@@ -159,7 +161,7 @@ test.describe.serial('Chapter review', () => {
     // The window closes before the guard asks, and nothing moves until it's answered.
     await changeRow(page).click()
     await expect(saveSession.unsavedDialog(page)).toBeVisible()
-    await expect(reviewWindow.window(page)).toHaveCount(0)
+    await expect(reviewWindow.mounted(page)).toHaveCount(0)
     await expect(page).toHaveURL(/\/chapter-timeline\//)
 
     await saveSession.unsavedCancel(page).click()
