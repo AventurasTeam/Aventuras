@@ -5,7 +5,6 @@ import { generateId } from '@/lib/ids'
 
 import { commonChecks, createReadSet } from './common-checks'
 import { CloseIds } from './ids'
-import { CLOSE_REASON } from './verdict'
 
 const ENTRY_1 = 'entry_11111111-1111-4111-8111-111111111111'
 const ENTRY_2 = 'entry_22222222-2222-4222-8222-222222222222'
@@ -156,7 +155,7 @@ describe('commonChecks', () => {
       ok: false,
       reason: 'turns takes the short handles of the turns this task was shown, not a full id',
     })
-    const reason = result.ok ? '' : result.reason
+    const reason = result.ok ? '' : (result.reason ?? '')
     expect(reason).not.toMatch(/_[0-9a-f]{8}-/)
     ctx.ids.withHandles(reason)
     expect(ctx.ids.idOf('t5')).toBeUndefined()
@@ -188,7 +187,7 @@ describe('commonChecks on a row a landed merge absorbed', () => {
         [WREN, TOLL_LAW],
         checkContext(undefined, tollLawMerged),
       ),
-    ).toEqual({ ok: false, reason: CLOSE_REASON.rowGone, gone: TOLL_LAW })
+    ).toEqual({ ok: false, gone: TOLL_LAW })
   })
 
   it('judges only the first unread row: one no merge took keeps the read refusal', () => {
