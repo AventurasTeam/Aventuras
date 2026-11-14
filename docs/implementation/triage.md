@@ -149,10 +149,6 @@ slice-planning gate forces its resolution before that slice is planned.
 patch`, which 5.5a marks `restated`, so a close tool's write of it
   reads `ok` with nothing written and leaves no trace in the review.
   Raised in 5.5a's review.
-- **`deepEqual` treats `[]` and `{}` as equal.** It compares any two
-  objects by their keys (`lib/actions/delta/delta-encoding.ts`), so an
-  empty array and an empty object read as unchanged. Raised in 5.5a's
-  review.
 - **`IdBiMap.allocate` ignores handles `registerHandle` set.**
   `lib/ids/bimap.ts` counts per placeholder prefix and never checks the
   counter against a registered handle, so a registered `c5` could later

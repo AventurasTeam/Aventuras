@@ -3,7 +3,7 @@ import { z } from 'zod'
 
 import { entityStateColumnSchema, entryMetadataSchema } from '@/lib/db'
 
-import { applyUndoPayload, computeUndoPayload } from './delta-encoding'
+import { applyUndoPayload, computeUndoPayload, deepEqual } from './delta-encoding'
 
 // Fixture covers every node type the engines discriminate:
 // nullable scalar, nullable object, record (dynamic-keyed), optional scalar,
@@ -207,5 +207,13 @@ describe("a place's unplaced flag through entityStateColumnSchema", () => {
     const undo = computeUndoPayload(entityStateColumnSchema, prior, next)
     expect(undo).toEqual({ parent_location_id: null, unplaced: true })
     expect(applyUndoPayload(entityStateColumnSchema, next, undo)).toEqual(prior)
+  })
+})
+
+describe('deepEqual', () => {
+  it('tells an array from an object holding the same keys', () => {
+    expect(deepEqual([], {})).toBe(false)
+    expect(deepEqual(['x'], { 0: 'x' })).toBe(false)
+    expect(deepEqual({ a: [1, { b: [] }] }, { a: [1, { b: [] }] })).toBe(true)
   })
 })
