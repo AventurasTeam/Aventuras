@@ -1,4 +1,4 @@
-import { and, asc, desc, eq, gt, inArray, type SQL } from 'drizzle-orm'
+import { and, asc, desc, eq, gt, inArray, isNull, notInArray, or, type SQL } from 'drizzle-orm'
 
 import type { GroupOutcome, GuardRow, PipelineAction } from '@/lib/actions/types'
 import type { PromptHalves } from '@/lib/ai'
@@ -8,6 +8,7 @@ import {
   entities,
   happeningAwareness,
   happenings,
+  storyEntries,
   type StoryMode,
 } from '@/lib/db'
 import { logger } from '@/lib/diagnostics'
@@ -100,9 +101,26 @@ async function chapterRows(ctx: TaskPromptContext): Promise<ListedRow[]> {
   return rows
 }
 
+// A row a turn after E created: every call on it answers skipped (a later create writes every
+// column), so it takes no place in the set.
+function learnedAfterEnd(ctx: TaskPromptContext) {
+  const end = ctx.db
+    .select({ position: storyEntries.position })
+    .from(storyEntries)
+    .where(and(eq(storyEntries.branchId, ctx.branchId), eq(storyEntries.id, ctx.endEntryId)))
+  return ctx.db
+    .select({ id: storyEntries.id })
+    .from(storyEntries)
+    .where(and(eq(storyEntries.branchId, ctx.branchId), gt(storyEntries.position, end)))
+}
+
 // Read when the task starts, after Happenings' merges, so a count a merge summed counts.
 async function frequentRows(ctx: TaskPromptContext): Promise<ListedRow[]> {
-  return listable(ctx, gt(happeningAwareness.retrievalCount, 0))
+  const notLater = or(
+    isNull(happeningAwareness.learnedAtEntryId),
+    notInArray(happeningAwareness.learnedAtEntryId, learnedAfterEnd(ctx)),
+  )!
+  return listable(ctx, and(gt(happeningAwareness.retrievalCount, 0), notLater)!)
     .orderBy(desc(happeningAwareness.retrievalCount), asc(happeningAwareness.id))
     .limit(AWARENESS_TOP_N)
 }

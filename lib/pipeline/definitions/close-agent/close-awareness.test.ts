@@ -978,6 +978,95 @@ describe('the Awareness start', () => {
     )
   })
 
+  it('tells the model to raise a pin in steps of about 0.2, never straight to 1', async () => {
+    await seedAwarenessWorld(fx)
+    const ctx = promptContextFor(fx)
+    const start = await awarenessTask.start(ctx)
+    if (start === null) throw new Error('the start listed nothing')
+
+    const { user } = awarenessTask.render(start, { ...ctx, writesSoFar: '' })
+
+    expect(user).toContain(
+      'Raise a pin in a step of about 0.2, never straight to 1: a row that stays load-bearing climbs again at a later close.',
+    )
+  })
+
+  // Twenty rows counted 2…21 fill the set; a later turn's row and one learned at E come with
+  // the highest counts, and rumour 1 has no anchor at all.
+  describe('the high-frequency set and the turns after the chapter', () => {
+    const rumourRows = async (anchorOf: (n: number) => string | null): Promise<void> => {
+      await putChapter(fx)
+      await putCharacter(fx, ARIA, 'Aria')
+      for (let n = 1; n <= 20; n++) {
+        await putHappening(fx, {
+          id: `hap_${uuid(100 + n)}`,
+          title: `Rumour ${String(n).padStart(2, '0')}`,
+          occurredAtEntryId: fx.entries[1]!.id,
+        })
+        await putAwareness(fx, {
+          id: `haw_${uuid(200 + n)}`,
+          characterId: ARIA,
+          happeningId: `hap_${uuid(100 + n)}`,
+          learnedAtEntryId: anchorOf(n),
+          decayResistance: 0.3,
+          retrievalCount: n + 1,
+        })
+      }
+    }
+    const lateRow = async (anchor: string): Promise<void> => {
+      await putHappening(fx, {
+        id: `hap_${uuid(150)}`,
+        title: 'Late rumour',
+        occurredAtEntryId: anchor,
+      })
+      await putAwareness(fx, {
+        id: `haw_${uuid(250)}`,
+        characterId: ARIA,
+        happeningId: `hap_${uuid(150)}`,
+        learnedAtEntryId: anchor,
+        decayResistance: 0.3,
+        retrievalCount: 9999,
+      })
+    }
+
+    it('leaves out a row a later turn created, which takes no place, and keeps a row with no anchor', async () => {
+      await rumourRows((n) => (n === 1 ? null : fx.entries[1]!.id))
+      await lateRow(fx.replyIds[4]!)
+
+      const start = await awarenessTask.start(promptContextFor(fx))
+
+      const listed = start?.seeds.map(({ id }) => id) ?? []
+      expect(listed).toHaveLength(20)
+      expect(listed).not.toContain(`haw_${uuid(250)}`)
+      expect(listed).toContain(`haw_${uuid(201)}`)
+      expect(listed).toContain(`haw_${uuid(202)}`)
+    })
+
+    it("lists a row learned at the chapter's last turn, and it takes a place", async () => {
+      await rumourRows(() => fx.entries[1]!.id)
+      await lateRow(endOf(fx))
+
+      const start = await awarenessTask.start(promptContextFor(fx))
+
+      const listed = start?.seeds.map(({ id }) => id) ?? []
+      expect(listed).toHaveLength(20)
+      expect(listed).toContain(`haw_${uuid(250)}`)
+      expect(listed).not.toContain(`haw_${uuid(201)}`)
+    })
+  })
+
+  it("keeps a retired character's rows listed", async () => {
+    await seedAwarenessWorld(fx)
+    await fx.ctx.db
+      .update(entities)
+      .set({ status: 'retired', retiredReason: 'died' })
+      .where(eq(entities.id, ARIA))
+
+    const start = await awarenessTask.start(promptContextFor(fx))
+
+    expect(start?.seeds.map(({ id }) => id)).toContain(A_CHAPTER)
+  })
+
   it('renders the writes so far after the rows, and the section only when there are some', async () => {
     await seedAwarenessWorld(fx)
     const ctx = promptContextFor(fx)
