@@ -132,7 +132,8 @@ module.exports = defineConfig([
         {
           default: 'allow',
           rules: [
-            // Disallow deep imports for everything except from pipeline to actions/types.ts to avoid circular require warnings in Metro/Expo
+            // Deep imports are errors, except lib/pipeline's of lib/actions/types.ts: the actions
+            // barrel would close a require cycle (Metro/Expo warns).
             {
               from: [
                 { type: 'app-code' },
@@ -145,9 +146,24 @@ module.exports = defineConfig([
             },
             {
               from: [{ type: 'lib-module', captured: { name: 'pipeline' } }],
-              disallow: [{ to: { type: 'lib-module', internalPath: '!{index.ts,types.ts}' } }],
+              disallow: [
+                {
+                  to: {
+                    type: 'lib-module',
+                    captured: { name: '!actions' },
+                    internalPath: '!index.ts',
+                  },
+                },
+                {
+                  to: {
+                    type: 'lib-module',
+                    captured: { name: 'actions' },
+                    internalPath: '!{index.ts,types.ts}',
+                  },
+                },
+              ],
               message:
-                'Import a lib module through its public API (index.ts) or types.ts, not its internal files. See docs/code-conventions.md.',
+                'Import a lib module through its public API (index.ts), or lib/actions through types.ts, not its internal files. See docs/code-conventions.md.',
             },
             // lib/actions/index.ts re-exports run-now, which imports the lib/pipeline barrel; a value
             // import back closes that cycle, and a mocked pipeline barrel then resolves to the real one.

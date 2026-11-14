@@ -135,12 +135,6 @@ patch`, which 5.5a marks `restated`, so a close tool's write of it
   ledger's lines read `state.traits` (`close-agent/ledger.ts`), while
   the task templates show the same field as `traits`, so the model has
   to join the two itself. Raised in 5.5b's review.
-- **`code-conventions.md` doesn't name the pipeline's two import
-  exceptions.** `eslint.config.js` lets `lib/pipeline` deep-import
-  `actions/types.ts` and, since 5.5b, forbids a value import of the
-  `lib/actions` barrel (a cycle through the mocked `@/lib/pipeline`);
-  [Module structure](../code-conventions.md#module-structure) mentions
-  neither. Raised in 5.5b's review.
 - **The close's round-trip snapshot leaves out translations and vector
   rows.** `WORLD_TABLES` in `lib/pipeline/__tests__/close-round-trip.test.ts`
   compares neither, though they are a thread's link rows, and its
