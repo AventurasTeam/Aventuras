@@ -91,24 +91,6 @@ patch`, which 5.5a marks `restated`, so a close tool's write of it
   ledger's lines read `state.traits` (`close-agent/ledger.ts`), while
   the task templates show the same field as `traits`, so the model has
   to join the two itself. Raised in 5.5b's review.
-- **The close's round-trip snapshot leaves out translations and vector
-  rows.** `WORLD_TABLES` in `lib/pipeline/__tests__/close-round-trip.test.ts`
-  compares neither, though they are a thread's link rows, and its
-  full-row compare can't hold for an embedded row (a reversal marks it
-  stale), so every fixture row is one that was never embedded. Worth
-  fixing before M8 writes thread translations. Raised in 5.5b's review.
-- **The close's count priming assumes the system half holds each turn's
-  prose once.** `renderClosePrompt` / `primeCloseSystemCount`
-  (`lib/pipeline/definitions/close-agent/turns.ts`) prime the system
-  half's count as the blank half's count plus the turns' stored prose
-  tokens, with no check. That holds while the
-  bundled pack renders `macro_story_entry` and the close templates as
-  shipped. Once M7.2's pack tab lets a user edit them, a truncating,
-  moved or doubled `{{ entry.content }}` makes the estimate wrong
-  silently, and the pre-send check has no margin. A guard: prime only
-  when the rendered half's length minus the blank half's equals the
-  summed turn contents, else count exactly. Raised in 5.5b's final
-  review.
 - **5.5b's slice doc has stale passages.** The slice review couldn't
   edit
   [the slice doc](./milestones/05-chapters-chapter-close/slices/05b-identity-threads.md).
@@ -174,15 +156,6 @@ patch`, which 5.5a marks `restated`, so a close tool's write of it
   `create_lore`, land whatever terms the model sends, while chapter
   metadata caps its keywords (`CHAPTER_KEYWORDS_MAX`). Each term feeds
   keyword injection on later turns. Raised in 5.8's reviews.
-- **A context group promises variables some of its templates never
-  get.** `lib/prompts/templateContextMap.ts` describes one variable list
-  per group and marks `chapter`'s `entries`, `previousChapterSummary`,
-  `threads` and `mode` `required`, but the close tasks' renders set only
-  `mode` and their own variables, and the metadata merge sets no
-  `entries` or `mode`. Nothing reads `required` outside tests today, so
-  it misleads only the template editor (M7): an override that reads
-  `entries` in a close task renders it empty. 5.8 added four more
-  templates to the group. Raised in 5.8's slice review.
 - **A later part's create closes the row to an earlier part.** A close's
   per-part task reads C12 past its part's last turn, and a create
   counts as writing every field, blank ones included (`wrotePath` in
@@ -270,9 +243,6 @@ patch`, which 5.5a marks `restated`, so a close tool's write of it
   reader's own Return, and a review-row press from the reader adds one
   more path. [`save-sessions.md → Where applied`](../ui/patterns/save-sessions.md#where-applied)
   doesn't classify it. Raised in 5.11's review.
-- **The commit banner's Review and × unmount the focused button.** Focus
-  is lost when the review dialog closes (cf. the
-  rnweb-disabled-under-focus-blurs lesson). Raised in 5.11's review.
 - **A landed merge's link-row losses can't name their row.**
   `settleLosses` (`lib/pipeline/definitions/close-agent/verdict.ts`)
   keys a merge's losses by path across all its actions, as C4 states, so
