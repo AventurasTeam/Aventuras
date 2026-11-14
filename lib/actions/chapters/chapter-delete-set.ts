@@ -74,7 +74,7 @@ export async function resolveChapterDeleteSet(
       `chapter ${chapter.sequenceNumber} is not the latest; ${latest.sequenceNumber} is`,
     )
 
-  // The chapter_close groups that wrote the row: the close's, and each re-run's.
+  // The row's chapter_close groups: the close's, and each re-run's once re-runs exist (M5.13).
   const groupIds = await ctx.db
     .selectDistinct({ actionId: deltas.actionId })
     .from(deltas)
