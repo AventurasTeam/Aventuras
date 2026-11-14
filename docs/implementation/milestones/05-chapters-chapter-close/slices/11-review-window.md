@@ -282,14 +282,16 @@ that goes under an open window stops pressing. The entry link is
   so the handler reads the open branch's latest close report
   (`readLatestCloseReport`) and goes on only when `report.actionId`
   equals the event's. It holds the result in
-  `chapterOverlaysStore.closeResult`.
+  `chapterOverlaysStore.closeResult`, stamped with the `openSeq` of the
+  story open it committed in.
 - The close's progress banner turns into the done state, `Chapter
 closed: <title>` at the info tone. With stopped tasks it takes the
   warning tone, `Chapter closed, but <n> tasks stopped early`, with
   singular and plural keys. Both carry `Review`, calling
   `openReviewWindow({ chapterId })` and clearing the result, and ×.
 - It stays until ×, `Review`, the chapter reversing, a newer close
-  committing, or the story closing or switching branch. A later run's
+  committing, or the story closing (seen when it next opens) or
+  switching branch. A later run's
   progress takes the slot while it runs, and the done state returns
   after.
 - A failed report read logs and holds the info state.
@@ -579,7 +581,8 @@ closed: <title>` at info with no stopped task, and the warning tone
   branch's highest-sequence chapter.** Without it, a stale run-to-done
   handoff showed and announced the previous close's result.
 - **The review shows `loading` until the entry index has read**, else old
-  values show raw entry ids. A failed index read falls through to `ready`.
+  values show raw entry ids. A failed index read shows `failed`, and its
+  Retry re-reads the index, and the report too when that failed.
 - **Value display.** A cleared value reads `old → none`; `state.unplaced`
   (a top mark) shows the new value alone; `commonKnowledge` reads
   `No → Yes`; a known `entry_` id reads `entry #n` on every value side;
@@ -641,7 +644,9 @@ closed: <title>` at info with no stopped task, and the warning tone
   doesn't proceed holds nothing. 5.10 builds its modal on it.
 - **One hold rule.** `overlayChapter` and `closeResultChapter`, in the
   store file, are shared by the host and the banner: a chapter holds
-  while it has a report on the open branch. Reversal, a re-run replacing
+  while it has a report on the open branch, and a close result while it
+  is also the current story open's (`openSeq`), since reopening a story
+  keeps its branch id. Reversal, a re-run replacing
   the report (5.13) and a delete (5.12) all clear through it, so a change
   there changes both. The id is pruned, not hidden, because a redo
   restores the chapter id.
