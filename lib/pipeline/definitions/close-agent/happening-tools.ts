@@ -439,7 +439,7 @@ async function planMergeHappenings(args: MergeArgs, ctx: WriteContext): Promise<
   }
   const links = await readLinks(ctx, named)
   const written = await closeWroteHappenings(ctx, links)
-  // Each merge row tried as keep, so a refusal's advice names only a merge that would land.
+  // Advice names the keeps the close-wrote rule allows; the row guard may still skip one.
   const landing = named.filter(
     (id) => written.size === 0 || (written.size === 1 && written.has(id)),
   )

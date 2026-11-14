@@ -290,7 +290,7 @@ async function planMergeThreads(args: MergeArgs, ctx: WriteContext): Promise<Wri
       ? {}
       : { description: description.bounded }),
   }
-  // Each of the threads tried as keep, so a refusal's advice names only a merge that would land.
+  // Advice names the keeps keepFault and the close-wrote rule allow; the row guard may skip one.
   const merged = [kept, ...absorbed]
   const held = mergedThreads(merged)
   const fitting = merged.filter((row) => keepFault(row, held) === undefined)
