@@ -1,4 +1,5 @@
 import type { Meta, StoryObj } from '@storybook/react-native-web-vite'
+import { useState } from 'react'
 import { Pressable, View } from 'react-native'
 import { expect, fn, screen, userEvent, waitFor } from 'storybook/test'
 
@@ -72,7 +73,7 @@ export const UpdateOp: Story = {
   args: { delta: baseDelta, onPress: fn() },
   play: async () => {
     const row = await screen.findByTestId('delta-log-row')
-    // Without a footer the row is the whole element: no wrapper, and even vertical padding.
+    // Without a footer the outer element holds the row alone, at even vertical padding.
     expect(row.parentElement?.childElementCount).toBe(1)
     const style = getComputedStyle(row)
     expect(style.paddingBottom).toBe(style.paddingTop)
@@ -253,6 +254,43 @@ export const WithFooter: Story = {
     await userEvent.click(screen.getByRole('button', { name: 'update Kael' }))
     await waitFor(() => expect(args.onPress).toHaveBeenCalledTimes(1))
     expect(openEntry).toHaveBeenCalledTimes(1)
+  },
+}
+
+function FooterToggleHarness() {
+  const [withFooter, setWithFooter] = useState(false)
+  return (
+    <DeltaLogRow
+      delta={reviewDelta}
+      onPress={() => setWithFooter((on) => !on)}
+      showMeta={false}
+      className="border-b border-border"
+      footer={withFooter ? <ReviewFooter /> : undefined}
+    />
+  )
+}
+
+/** A footer that comes and goes leaves the row's button where it was, and its focus with it. */
+export const FooterToggleKeepsFocus: Story = {
+  render: () => <FooterToggleHarness />,
+  play: async () => {
+    const button = screen.getByRole('button', { name: 'update Kael' })
+    const outer = button.parentElement
+    button.focus()
+
+    await userEvent.keyboard('{Enter}')
+    await screen.findByRole('link', { name: 'entry #47 →' })
+    expect(button).toHaveFocus()
+    expect(screen.getByRole('button', { name: 'update Kael' })).toBe(button)
+    // One outermost element in both shapes, carrying the host's className.
+    expect(button.parentElement).toBe(outer)
+    expect(outer).toHaveClass('border-b')
+
+    await userEvent.keyboard('{Enter}')
+    await waitFor(() => expect(screen.queryByRole('link', { name: 'entry #47 →' })).toBeNull())
+    expect(button).toHaveFocus()
+    expect(screen.getByRole('button', { name: 'update Kael' })).toBe(button)
+    expect(button.parentElement).toBe(outer)
   },
 }
 

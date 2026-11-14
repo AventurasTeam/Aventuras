@@ -47,12 +47,12 @@ type DeltaLogRowProps = {
    * (no hover, no press affordance).
    */
   onPress?: () => void
-  /** On the outermost element: the row, or the row and its footer. */
+  /** On the outermost element, around the row and its footer. */
   className?: string
   /**
    * Under the row and outside its button, aligned to the summary column, so a control in it is
-   * never nested in the row's. Keep it present or absent for the row's life: adding one
-   * re-parents the row.
+   * never nested in the row's. Adding or removing it leaves the row's button, and its focus, in
+   * place.
    */
   footer?: ReactElement
   /** Default true; false drops the meta line from view and from the row's description. */
@@ -166,10 +166,9 @@ export function DeltaLogRow({
     // The footer reads as the content column's next line, at its line gap.
     hasFooter ? 'pt-row-y-md pb-0.5' : 'py-row-y-md',
   )
-  const outerClassName = hasFooter ? undefined : className
   // Not a control, so nothing to name or disable: its text reads as it shows.
   const row = !interactive ? (
-    <View testID="delta-log-row" className={cn(rowClassName, outerClassName)}>
+    <View testID="delta-log-row" className={rowClassName}>
       {content}
     </View>
   ) : (
@@ -190,20 +189,21 @@ export function DeltaLogRow({
         Platform.select({
           web: 'cursor-pointer outline-none hover:bg-tint-hover focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-focus-ring',
         }),
-        outerClassName,
       )}
     >
       {content}
     </Pressable>
   )
-  if (!hasFooter) return row
+  // One tree with or without a footer: re-parenting the row would remount its button and drop focus.
   return (
     <View className={className}>
       {row}
-      <View className="flex-row gap-2.5 px-row-x-md pb-row-y-md">
-        <OpBadge op={delta.op} label={opLabel} spacer />
-        <View className="min-w-0 flex-1">{footer}</View>
-      </View>
+      {hasFooter ? (
+        <View className="flex-row gap-2.5 px-row-x-md pb-row-y-md">
+          <OpBadge op={delta.op} label={opLabel} spacer />
+          <View className="min-w-0 flex-1">{footer}</View>
+        </View>
+      ) : null}
     </View>
   )
 }
