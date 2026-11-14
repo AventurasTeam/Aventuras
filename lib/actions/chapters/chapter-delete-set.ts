@@ -21,11 +21,16 @@ export const CHAPTER_DELETE_REFUSAL = {
 export type ChapterDeleteRefusalCode =
   (typeof CHAPTER_DELETE_REFUSAL)[keyof typeof CHAPTER_DELETE_REFUSAL]
 
-export type ChapterDeleteRefusal = {
+export type ChapterDeleteRefusal<C extends ChapterDeleteRefusalCode = ChapterDeleteRefusalCode> = {
   status: 'rejected'
-  code: ChapterDeleteRefusalCode
+  code: C
   reason: string
 }
+
+/** Only the action refuses `in-flight`: the preview reads under a run. */
+export type ChapterDeleteReadRefusal = ChapterDeleteRefusal<
+  Exclude<ChapterDeleteRefusalCode, typeof CHAPTER_DELETE_REFUSAL.inFlight>
+>
 
 export type ChapterDeleteSet = {
   set: ReversalSet
@@ -37,7 +42,7 @@ export type ChapterDeleteSet = {
 // C1: a close writes no entries, so its rows on these are the chapter row, its report and stamps.
 const DIVIDER_TABLES: ReadonlySet<string> = new Set(['chapters', 'story_entries'])
 
-function refused(code: ChapterDeleteRefusalCode, reason: string): ChapterDeleteRefusal {
+function refused(code: ChapterDeleteReadRefusal['code'], reason: string): ChapterDeleteReadRefusal {
   return { status: 'rejected', code, reason }
 }
 
@@ -47,7 +52,7 @@ export async function resolveChapterDeleteSet(
   chapterId: string,
   mode: ChapterDeleteMode,
   ctx: DbCtx,
-): Promise<ChapterDeleteSet | ChapterDeleteRefusal> {
+): Promise<ChapterDeleteSet | ChapterDeleteReadRefusal> {
   const [chapter] = await ctx.db
     .select()
     .from(chapters)

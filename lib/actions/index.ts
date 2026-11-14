@@ -13,6 +13,7 @@ export {
 export {
   CHAPTER_DELETE_REFUSAL,
   type ChapterDeleteMode,
+  type ChapterDeleteReadRefusal,
   type ChapterDeleteRefusal,
   type ChapterDeleteRefusalCode,
 } from './chapters/chapter-delete-set'

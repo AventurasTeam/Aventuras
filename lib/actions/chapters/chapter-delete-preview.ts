@@ -7,7 +7,7 @@ import { generationStore, type OpenStory } from '@/lib/stores'
 
 import {
   resolveChapterDeleteSet,
-  type ChapterDeleteRefusal,
+  type ChapterDeleteReadRefusal,
   type ChapterDeleteSet,
 } from './chapter-delete-set'
 import { withBranchWriteShared } from '../delta/branch-write-lock'
@@ -34,7 +34,7 @@ export async function getChapterDeletePreview(
   chapterId: string,
   story: Pick<OpenStory, 'branchId' | 'settings'>,
   ctx: DbCtx,
-): Promise<ChapterDeletePreview | ChapterDeleteRefusal> {
+): Promise<ChapterDeletePreview | ChapterDeleteReadRefusal> {
   return withBranchWriteShared(branchId, CHAPTER_DELETE_PREVIEW_LOCK_ID, async () => {
     const resolved = await resolveChapterDeleteSet(branchId, chapterId, 'whole', ctx)
     if ('status' in resolved) return resolved

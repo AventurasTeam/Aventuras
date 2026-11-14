@@ -1,5 +1,5 @@
 import { and, eq } from 'drizzle-orm'
-import { describe, expect, it, vi } from 'vitest'
+import { describe, expect, expectTypeOf, it, vi } from 'vitest'
 
 import type { generateStructured } from '@/lib/ai'
 import {
@@ -524,6 +524,21 @@ describe('getChapterDeletePreview', () => {
     ).toMatchObject({ status: 'rejected', code: CHAPTER_DELETE_REFUSAL.notFound })
     expect(await logRows(fx)).toEqual(log)
     expect(await chapterRows(fx)).toEqual(rows)
+  })
+
+  it('types its refusal and the set read without in-flight, which only the action returns', () => {
+    type RefusedCode<T> = Extract<T, { status: 'rejected'; code: string }>['code']
+    type ReadCode = 'not-found' | 'not-latest' | 'no-close' | 'integrity'
+
+    expectTypeOf<
+      RefusedCode<Awaited<ReturnType<typeof getChapterDeletePreview>>>
+    >().toEqualTypeOf<ReadCode>()
+    expectTypeOf<
+      RefusedCode<Awaited<ReturnType<typeof resolveChapterDeleteSet>>>
+    >().toEqualTypeOf<ReadCode>()
+    expectTypeOf<RefusedCode<Awaited<ReturnType<typeof removeChapter>>>>().toEqualTypeOf<
+      ReadCode | 'in-flight'
+    >()
   })
 
   it('refuses a chapter no close made, writing nothing', async () => {
