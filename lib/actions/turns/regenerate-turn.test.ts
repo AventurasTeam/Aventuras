@@ -33,6 +33,7 @@ import {
   generationStore,
   hydrateAppSettings,
   undoRedoStore,
+  type RunState,
 } from '@/lib/stores'
 
 import { branchEntries, openStory, sseFetch, WORKING_CONFIG } from './__tests__/fixtures'
@@ -1231,11 +1232,21 @@ describe('regenerateTurn', () => {
     const shown = await shownCounts(ctx, 'e_r2')
     expect(shown).toMatchObject({ entries: 1, chapters: 0, closeWrites: 0 })
 
-    held.finish('completed')
+    // Finished as the bracket opens, so the interrupt still finds the close and aborts it.
+    let closeAtBracket: RunState | null | undefined
+    const off = generationStore.subscribe(() => {
+      const tx = generationStore.getTxState()
+      if (closeAtBracket !== undefined || !tx.reversalInProgress) return
+      closeAtBracket = [...tx.runs.values()].find((r) => r.actionId === held.actionId) ?? null
+      held.finish('completed')
+    })
     const regen = await regenerateTurn({ storyId: 's1', branchId: 'b1' }, 'e_r2', ctx, {
       expectedCounts: shown,
     })
+    off()
 
+    expect(closeAtBracket?.actionId).toBe(held.actionId)
+    expect(closeAtBracket?.abortController.signal.aborted).toBe(true)
     expect(regen).toEqual({
       status: 'rejected',
       code: 'counts-changed',
