@@ -156,7 +156,9 @@ chapter takes it:
   sits before the target, so its earlier entries stay and return to the
   open region. At most one chapter re-opens, bar the overlap of the accepted
   residue in
-  [`chapter-close.md → Failure modes`](../../../../memory/chapter-close.md#failure-modes-and-atomic-rollback).
+  [`chapter-close.md → Failure modes`](../../../../memory/chapter-close.md#failure-modes-and-atomic-rollback):
+  there the line names the lowest-numbered such chapter, and the removed
+  line lists the other, though its earlier entries stay.
 - **Removed** is every chapter whose first entry is the target or
   later: every entry it holds goes, and the chapter with them. Two read
   `2 chapters removed — chapters 5 and 6 go with their entries`, and

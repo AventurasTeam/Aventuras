@@ -108,7 +108,8 @@ already-expanded card → collapse.
 The full editor. **One card expanded at a time** — expanding
 another card with the current one dirty fires the
 [navigate-away guard](../../patterns/save-sessions.md#navigate-away-guard--global-intercept)
-(Save / Discard / Cancel), and so does collapsing the dirty card.
+(Save / Discard / Cancel), and so do collapsing the dirty card and its
+`Delete…`, since a draft on a chapter about to go has nowhere to land.
 
 Editable fields (zod-validated; types per
 [data-model → chapters](../../../data-model.md)):
@@ -225,7 +226,7 @@ generation pipeline is in flight:
   leave it:
   - with a manual close pending, or auto-close on and the region at the
     threshold, the line above;
-  - under the threshold,
+  - with auto-close on and the region under the threshold,
     `A close waits until the chapter grows past the threshold.`;
   - with auto-close off, `The chapter stays open until you close it.`
 - **`Remove divider only`** keeps everything else the close did and takes

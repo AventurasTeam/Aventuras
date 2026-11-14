@@ -285,8 +285,9 @@ The regenerate then refuses `counts-changed` and
 the reader opens the regenerate confirm on the fresh counts, with no
 toast, since the ↻ tap has no open confirm for the toast to refer to.
 When a confirm's counts show nothing after the reply and no close in
-range, as they do when it opens this way or a recount gets there, its
-body drops `and everything after it`:
+range, as they do when a pass commits that way or a recount gets there,
+its body drops `and everything after it`; a close committing that way
+opens the close copy below instead:
 `This discards entry <N>, then generates a new reply from your last action. The following are removed:`.
 
 **Confirm when the turn closed a chapter.** If a committed chapter

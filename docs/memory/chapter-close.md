@@ -944,8 +944,12 @@ is cited and stands alone, so until a later boot reverses it what's left
 is a partial close, and the next pass reading it is benign.
 
 **Accepted residue.** Four narrow cases leave state that no code
-repairs, though a restart ends the fourth's overlap. Each needs a manual close or a failed transaction, the last
-only the failed transaction:
+repairs, though a restart ends the fourth's overlap. Each needs a close
+that ends on the newest reply or a failed transaction, the last only the
+failed transaction. A manual close can end there; an automatic one does
+only when the open region holds a single reply
+([Phase 1](#phase-1--boundary-selection)), which a low threshold makes
+routine:
 
 - A redo under a manual close at the head can leave duplicates in its
   closed range, which [3e](#3e--happenings-consolidation) never revisits.

@@ -723,7 +723,7 @@ change amends the scope above.
   Chromium blurs a button as it disables, so focus could leave the
   `AlertDialog` for the page behind; the dialog now takes it in the same
   commit the state flips
-  (`rnweb-disabled-under-focus-blurs`, lessons-learned).
+  ([a control that disables under focus drops focus on web](../../../lessons-learned/rnweb-disabled-under-focus-blurs.md)).
 - **The delete hook's log events are `app.chapter_delete_*`, not
   `chapters.delete_*`.** `LogKind` is a closed union of subsystems with
   no `chapters` member, so the skeleton's names don't compile, and the
