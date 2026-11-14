@@ -120,10 +120,7 @@ type StoredCall = z.infer<typeof storedCallSchema>
 export type CloseReportCall = Omit<StoredCall, 'reason' | 'skippedFields'> & {
   /** Why it didn't land: the first refusal's, else the first protection's. */
   reason?: CloseReasonKey
-  /**
-   * Lost paths with their first loss's reason: an ok call's that landed on no row, and a call's
-   * where nothing landed when they don't all share its reason (C4).
-   */
+  /** C4: lost paths with their first loss's reason; set for an ok call or one whose losses differ. */
   skippedFields?: { field: string; reason: CloseReasonKey }[]
 }
 
@@ -153,7 +150,7 @@ export type CloseReport = Omit<z.infer<typeof storedReportSchema>, 'calls'> & {
   calls: CloseReportCall[]
 }
 
-/** Each call's reasons as keys; `unknown` gathers the strings no key matched, null a refusal's missing one. */
+/** Each call's reasons as keys; `unknown` gathers unmatched strings, null a refusal's missing one. */
 function keyedCalls(calls: readonly StoredCall[], unknown: Set<string | null>): CloseReportCall[] {
   const keyOf = (reason: string): CloseReasonKey => {
     if (isCloseReasonKey(reason)) return reason

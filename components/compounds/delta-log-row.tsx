@@ -49,11 +49,7 @@ type DeltaLogRowProps = {
   onPress?: () => void
   /** On the outermost element, around the row and its footer. */
   className?: string
-  /**
-   * Under the row and outside its button, aligned to the summary column, so a control in it is
-   * never nested in the row's. Adding or removing it leaves the row's button, and its focus, in
-   * place.
-   */
+  /** Under the row, outside its button: a control here never nests in the row's. */
   footer?: ReactElement
   /** Default true; false drops the meta line from view and from the row's description. */
   showMeta?: boolean
@@ -197,7 +193,7 @@ export function DeltaLogRow({
       {content}
     </Pressable>
   )
-  // One tree with or without a footer: re-parenting the row would remount its button and drop focus.
+  // One tree with or without a footer: re-parenting would remount the button and drop focus.
   return (
     <View className={className}>
       {row}

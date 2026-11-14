@@ -11,7 +11,7 @@ export function keyedReason(key: CloseReasonKey, text: string): string {
   return `${key}${KEY_END}${text}`
 }
 
-/** The ledger's key for a reason: its text before the first `: `, or all of it; else `other`, logged. */
+/** A reason's ledger key: its text before the first `: `, or all of it; else `other`, logged. */
 export function ledgerReasonKey(
   reason: string,
   { actionId, task, tool }: ReasonCall,

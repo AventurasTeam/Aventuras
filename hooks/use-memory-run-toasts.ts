@@ -33,10 +33,8 @@ function latestStoreChapter(branchId: string): StoreChapter | undefined {
   return chaptersStore.getLoadedBranch() === branchId ? chaptersStore.getLatest() : undefined
 }
 
-/**
- * `run_complete` names no chapter or branch, so the open branch's latest report must carry its
- * actionId; a failed read falls back to the store's latest chapter, unmatched and with no count.
- */
+// `run_complete` names no chapter or branch: the open branch's latest report must carry its
+// actionId; a failed read falls back to the store's latest chapter, unmatched, count 0.
 async function committedClose(actionId: string): Promise<CloseResult | null> {
   const branchId = currentStoryStore.getCurrentStory()?.branchId
   if (branchId == null) return null
