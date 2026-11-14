@@ -483,7 +483,13 @@ breakdown under [UX](#ux).
     costs a weak model what fewer tools are said to save, and whether a
     single conversation does better anywhere;
   - part size, half the window, and how a chapter cut in parts reads;
-  - servers that take the tool list and ignore it.
+  - servers that take the tool list and ignore it;
+  - the ledger's "Writes so far" lines, which name delta paths
+    (`state.traits`, `state.parent_location_id`, in
+    `close-agent/ledger.ts`) where the task templates name the tool's
+    arguments (`traits`, `parent`), leaving the model to join the two;
+    naming each by its argument is a per-tool map in `ledger.ts`
+    (routed from triage 2026-11-14).
 
   Play tunes the metadata prompt too, outside the agent. It has three data
   points. Two are in
@@ -595,3 +601,20 @@ breakdown under [UX](#ux).
   close at the merge after every part call ran; only near an 8k window
   and a chapter past about 420k tokens. Raised 2026-11-10 by 5.8's
   review; the merge size by its slice review.
+
+  The same long chapters should judge a later part's create closing the
+  row to an earlier part. A close's per-part task reads C12 past its
+  part's last turn, and a create counts as writing every field, blank
+  ones included (`wrotePath` in `lib/actions/delta/user-precedence.ts`,
+  through `wroteField`). Upkeep shows a part every live row its prose
+  names off the scene (`startUpkeep`), so an earlier part can name a row
+  a later part's turn first created and write nothing to it: detail only
+  the earlier part's turns hold is lost. Candidate fix: inside the
+  later-turn check only, a later part's create counts only for the
+  fields it set non-blank; `wroteField`'s create rule stays as it is for
+  user precedence. It costs more than it reads: a create delta stores no
+  undo payload, so "the fields it set" has to be rebuilt from later
+  deltas or the current row. 5.8 records the limit
+  ([`chapter-close.md → Tools and writes`](./memory/chapter-close.md#tools-and-writes)).
+  Raised in 5.8's slice review, developer decision 2026-11-10; routed
+  from triage 2026-11-14.
