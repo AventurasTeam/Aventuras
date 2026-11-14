@@ -30,6 +30,8 @@ import {
   groupActions,
   merge,
   NOTE,
+  pinByUser,
+  rewriteCitedProse,
 } from './__tests__/happening-tools-fixture'
 
 describe('merge_happenings shape', () => {
@@ -259,6 +261,61 @@ describe('merge_happenings shape', () => {
       (action) => action.kind === 'upsertHappeningAwareness' && action.payload.characterId === WREN,
     )
     expect(wrenUpsert?.payload).not.toHaveProperty('decayResistance')
+  })
+
+  it("keeps a pin the user set on keep's own row before the cited turn while the merge lands, naming its character", async () => {
+    await pinByUser(f, CROSSING, WREN, 0.1)
+    await rewriteCitedProse(f)
+
+    const run = await runCalls(f, [merge({ keep: 'hp1', absorb: ['hp2'] })])
+
+    expect(run.answers).toEqual([
+      {
+        result: 'ok',
+        survivor: 'hp1',
+        notWritten: [
+          {
+            field: 'decayResistance',
+            row: 'c1',
+            reason: USER_EDITED_SINCE_PROSE,
+            note: NOTE.user,
+          },
+        ],
+      },
+    ])
+    // The fold's other fields still land: only the pin is the user's whatever turn is cited.
+    expect(await awarenessOf(f, CROSSING, WREN)).toMatchObject({
+      decayResistance: 0.1,
+      learnedAtEntryId: f.entries[2]!.id,
+      retrievalCount: 5,
+    })
+    expect(await happeningRow(f, LIGHT)).toBeUndefined()
+  })
+
+  it("folds a source the user wrote on keep's own row before the cited turn", async () => {
+    await apply(
+      f,
+      {
+        kind: 'upsertHappeningAwareness',
+        source: 'user_edit',
+        payload: {
+          branchId: f.branchId,
+          characterId: WREN,
+          happeningId: CROSSING,
+          source: 'Wren rode the ferry',
+          proseEntryId: null,
+        },
+      },
+      BY_USER,
+    )
+    await rewriteCitedProse(f)
+
+    const run = await runCalls(f, [merge({ keep: 'hp1', absorb: ['hp2'] })])
+
+    expect(run.answers).toEqual([{ result: 'ok', survivor: 'hp1' }])
+    expect((await awarenessOf(f, CROSSING, WREN))?.source).toBe(
+      'Wren rode the ferry; Wren saw the light',
+    )
   })
 
   it('lands a composite past the bounds bounded', async () => {

@@ -35,6 +35,8 @@ import {
   NOTE,
   CLOSE_WROTE,
   NO_KEEP,
+  pinByUser,
+  rewriteCitedProse,
 } from './__tests__/happening-tools-fixture'
 
 describe('merge_happenings schema', () => {
@@ -356,6 +358,51 @@ describe('merge_happenings refusals', () => {
       expect(await happeningRow(f, LIGHT)).toBeDefined()
     },
   )
+
+  // Raised, the pin would move to a row the close writes, where set_pin no longer sees it as
+  // theirs; lowered, keep's higher pin would replace it.
+  it.each([
+    { change: 'raised', characterId: MARA, pin: 0.9 },
+    { change: 'lowered', characterId: WREN, pin: 0.05 },
+  ])(
+    'skips the whole merge when the user $change a pin on an absorbed row before the cited turn',
+    async ({ characterId, pin }) => {
+      await pinByUser(f, LIGHT, characterId, pin)
+      await rewriteCitedProse(f)
+
+      const run = await runCalls(f, [merge({ keep: 'hp1', absorb: ['hp2'] })])
+
+      expect(run.answers).toEqual([
+        { result: 'skipped', reason: USER_EDITED_SINCE_PROSE, note: NOTE.user },
+      ])
+      expect(await runDeltas(f, run.result.actionId)).toEqual([])
+      expect((await awarenessOf(f, LIGHT, characterId))?.decayResistance).toBe(pin)
+    },
+  )
+
+  it("still merges an absorbed row whose only user edit before the cited turn isn't its pin", async () => {
+    await apply(
+      f,
+      {
+        kind: 'upsertHappeningAwareness',
+        source: 'user_edit',
+        payload: {
+          branchId: f.branchId,
+          characterId: WREN,
+          happeningId: LIGHT,
+          source: 'Wren saw it go out',
+          proseEntryId: null,
+        },
+      },
+      BY_USER,
+    )
+    await rewriteCitedProse(f)
+
+    const run = await runCalls(f, [merge({ keep: 'hp1', absorb: ['hp2'] })])
+
+    expect(run.answers).toEqual([{ result: 'ok', survivor: 'hp1' }])
+    expect(await happeningRow(f, LIGHT)).toBeUndefined()
+  })
 
   it("skips the whole merge when the user wrote a field of keep's the merge writes", async () => {
     await apply(

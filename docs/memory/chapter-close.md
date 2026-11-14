@@ -187,7 +187,8 @@ A write returns one of three results:
   since the task read it, saying where it went.
 - `skipped`, when the field stands and a retry won't help: the user wrote
   it after the cited prose, or a later turn did, or it is a pin the user
-  ever set ([3d](#3d--awareness-pin-tuning)).
+  ever set ([3d](#3d--awareness-pin-tuning),
+  [3e](#3e--happenings-consolidation)).
 
 **A close leaves alone what later turns wrote.** A close runs after the
 turns past its chapter but anchors before them, so it skips a field one
@@ -752,7 +753,9 @@ row is a merge that keeps the kept row's text. Keep distinct is no call.
   joins only if the joined text stays within 120 characters, else it is
   skipped and the next is tried, so no stored source is ever cut. A
   user-written row's values stand when the user wrote them after the
-  cited prose.
+  cited prose, and a pin the user ever set stands whatever turn is
+  cited, as in [3d](#3d--awareness-pin-tuning): the kept row's isn't
+  sent, and an absorbed row's protects the merge (below).
 - Deleted rows are delta-logged for rollback.
 
 **A merge lands whole, once per row.** Code checks user precedence on
@@ -760,12 +763,15 @@ every row of a merge before any of it lands, so a merge can't delete a
 row while its composite is skipped: one protected row skips the whole
 merge, as does a row a later turn touched. An absorbed row is protected
 by a user edit of it or its link rows, a link row the user deleted
-after the prose included. The kept row is protected only by a user edit
-of a field the merge writes, since its other fields lose nothing to a
-merge. A merge can't absorb a row this close already wrote, since redo
-refuses an update and a delete of one row in one group, and CTRL-Z of
-the close would then be refused for good. The agent merges everything
-in one call instead of in a chain.
+after the prose included, and by a pin the user ever set on one of its
+awareness rows, whatever turn is cited: merged, the pin would move to a
+row the close writes, which `set_pin` no longer reads as theirs, or give
+way to the kept row's higher pin. The kept row is protected only by a
+user edit of a field the merge writes, since its other fields lose
+nothing to a merge. A merge can't absorb a row this close already
+wrote, since redo refuses an update and a delete of one row in one
+group, and CTRL-Z of the close would then be refused for good. The
+agent merges everything in one call instead of in a chain.
 
 **Conservative override:** when the LLM is uncertain about cluster
 membership, default to keep-distinct.

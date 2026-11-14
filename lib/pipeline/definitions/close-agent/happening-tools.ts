@@ -279,10 +279,13 @@ function mergeRows(id: string, links: ReadonlyMap<string, LinkRows>): GuardRow[]
   ]
 }
 
+// chapter-close.md → 3e, as set_pin in 3d: a pin the user ever set is theirs whatever turn is cited.
+const PIN: AwarenessField = 'decayResistance'
+
 // C11: a later turn's write on any row of the merge, link rows included, skips it whole; then the
-// user's edit of an absorbed row or its link rows (a deleted one included), or of a field the merge
-// writes on keep. keep's own link rows lose nothing to a merge: the group's per-field precedence
-// keeps a user's value.
+// user's edit of an absorbed row or its link rows (a deleted one included), a pin they ever set on
+// an absorbed row, or an edit of a field the merge writes on keep. keep's own link rows lose
+// nothing to a merge: the group's per-field precedence keeps a user's value.
 function mergeProtection(
   guard: RowGuard,
   keep: string,
@@ -295,9 +298,11 @@ function mergeProtection(
   const rowsOf = (id: string) => mergeRows(id, links)
   if ([keep, ...absorb].flatMap(rowsOf).some((row) => verdicts(row).laterTurnTouched()))
     return CLOSE_REASON.laterTurn
+  const absorbedPins = absorb.flatMap((id) => (links.get(id) ?? NO_LINKS).awareness)
   if (
     absorbedLinkDeleted ||
     absorb.flatMap(rowsOf).some((row) => verdicts(row).userTouched()) ||
+    absorbedPins.some(({ id }) => guard.row('happening_awareness', id).userEverWrote(PIN)) ||
     fields.some((field) => guard.row('happenings', keep).userWrote(field))
   )
     return USER_EDITED_SINCE_PROSE
@@ -349,7 +354,8 @@ function awarenessPayload(
 
 /**
  * The fold as writes on keep's links, each under its character. On a pair keep already holds, a
- * column the user wrote after the prose is named and not sent: the handler would keep it silently.
+ * column the user wrote after the prose, or a pin they ever set, is named and not sent: the
+ * handler would keep the first silently and overwrite the second.
  */
 function linkWrites(
   ctx: WriteContext,
@@ -384,10 +390,14 @@ function linkWrites(
     const stored = pairs.get(folded.characterId)
     const changed: readonly AwarenessField[] =
       stored === undefined ? AWARENESS_FIELDS : changedAwarenessFields(stored, folded)
+    const verdicts = stored === undefined ? undefined : guard.row('happening_awareness', stored.id)
     const userKept: readonly AwarenessField[] =
-      stored === undefined
+      verdicts === undefined
         ? []
-        : changed.filter((field) => guard.row('happening_awareness', stored.id).userWrote(field))
+        : changed.filter(
+            (field) =>
+              verdicts.userWrote(field) || (field === PIN && verdicts.userEverWrote(field)),
+          )
     for (const field of userKept)
       lost.push(protectedField(field, folded.characterId, USER_EDITED_SINCE_PROSE))
     const sent = changed.filter((field) => !userKept.includes(field))
