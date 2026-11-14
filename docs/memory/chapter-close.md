@@ -629,13 +629,21 @@ counter, reset at chapter close after phase 3d commits**. Counts
 accumulate during a chapter via ranker-side increments (each
 injected row gets its `retrieval_count` bumped, delta-logged under
 the turn's `action_id` for rollback correctness). At chapter close,
-the top 20 by the chapter's accumulated counts form the set, a constant
-tuning will move; the agent reviews them. After the Awareness task, the
-last one, all counts reset to 0, whether or not the task stopped early:
-the reset is a delta per row under the chapter-close `action_id`, all
-landing as one group that
-[History](../ui/screens/world/world.md#history-tab) doesn't show. Next
-chapter starts fresh.
+the top 20 by the counts accumulated since the last close form the set,
+a constant tuning will move; the agent reviews them. After the
+Awareness task, the last one, all counts reset to 0, whether or not the
+task stopped early: the reset is a delta per row under the
+chapter-close `action_id`, all landing as one group that
+[History](../ui/screens/world/world.md#history-tab) doesn't show.
+
+The counter covers every turn up to the close, not up to the chapter's
+end. A close runs after the turns past its end (an auto close never ends
+on the newest reply, [Phase 1](#phase-1--boundary-selection)), so their
+retrievals count toward this close's set, and the next chapter's
+counting starts at the close, not at its first turn. Bounding it at the
+end would make the reset carry each row's later bumps across the close;
+a few turns' frequency signal landing one chapter early isn't worth
+that.
 
 The log doesn't make the counter exact across a close, since a count
 bump's undo restores the prior count by assignment. Rolling back turns
