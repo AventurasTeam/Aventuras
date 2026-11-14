@@ -14,15 +14,22 @@ import { useMemoryRunBanner, type MemoryRunBannerState } from './use-memory-run-
 
 type MemoryRunBannerViewProps = MemoryRunBannerState
 
-type Tone = { bar: string; fill: string; icon: LucideIcon; iconClass: string }
+type Tone = { bar: string; fill: string; icon: LucideIcon; iconClass: string; iconTestID: string }
 
 const TONE = {
-  info: { bar: 'border-info', fill: 'bg-info', icon: Info, iconClass: 'text-info' },
+  info: {
+    bar: 'border-info',
+    fill: 'bg-info',
+    icon: Info,
+    iconClass: 'text-info',
+    iconTestID: 'memory-run-banner-info-icon',
+  },
   warning: {
     bar: 'border-warning',
     fill: 'bg-warning',
     icon: TriangleAlert,
     iconClass: 'text-warning',
+    iconTestID: 'memory-run-banner-warning-icon',
   },
 } as const satisfies Record<'info' | 'warning', Tone>
 
@@ -40,7 +47,7 @@ export function MemoryRunBannerView(props: MemoryRunBannerViewProps): ReactEleme
         style={POINTER_EVENTS_NONE}
         className={cn('absolute inset-0 opacity-[.12]', tone.fill)}
       />
-      <Icon as={tone.icon} size="sm" className={tone.iconClass} />
+      <Icon as={tone.icon} size="sm" className={tone.iconClass} testID={tone.iconTestID} />
       {/* Scoped to the label: role="status" implies aria-atomic, so a region spanning the bar
           would re-announce its buttons too. aria-live is what maps to Android's live region. */}
       <View role="status" aria-live="polite" className="min-w-0 flex-1">

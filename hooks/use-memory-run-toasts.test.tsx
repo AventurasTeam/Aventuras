@@ -41,6 +41,7 @@ vi.mock('@/lib/history', async (importOriginal) => {
   reads.real = original.readLatestCloseReport as typeof reads.real
   return { ...original, readLatestCloseReport: reads.latest }
 })
+
 function Probe() {
   useMemoryRunToasts()
   return null
@@ -301,7 +302,9 @@ describe('useMemoryRunToasts', () => {
     })
 
     it('holds nothing when the latest chapter has no report, or the branch no chapter', async () => {
+      const warn = vi.spyOn(logger, 'warn').mockImplementation(() => {})
       openStory()
+      chaptersStore.hydrate('br_1', [chapter('chap_1', 1), chapter('chap_2', 2)])
       reads.latest
         .mockResolvedValueOnce({ chapterId: 'chap_2', report: null })
         .mockResolvedValueOnce(null)
@@ -310,6 +313,17 @@ describe('useMemoryRunToasts', () => {
       committed('act_close')
       await vi.waitFor(() => expect(reads.latest).toHaveBeenCalledTimes(2))
       await flush()
+      expect(held()).toBeNull()
+      expect(warn).not.toHaveBeenCalled()
+    })
+
+    it('reads nothing for a pass or another kind that completes', async () => {
+      openStory()
+      render(<Probe />)
+      ended('completed')
+      ended('completed', { kind: PER_TURN_KIND })
+      await flush()
+      expect(reads.latest).not.toHaveBeenCalled()
       expect(held()).toBeNull()
     })
 
@@ -334,7 +348,7 @@ describe('useMemoryRunToasts', () => {
     it('logs a failed read and holds the latest chapter in the store, with no count', async () => {
       const warn = vi.spyOn(logger, 'warn').mockImplementation(() => {})
       openStory()
-      chaptersStore.hydrate('br_1', [chapter('chap_1', 1), chapter('chap_2', 2)])
+      chaptersStore.hydrate('br_1', [chapter('chap_2', 2), chapter('chap_1', 1)])
       reads.latest.mockRejectedValue(new Error('disk'))
       render(<Probe />)
       committed('act_close')
@@ -346,6 +360,18 @@ describe('useMemoryRunToasts', () => {
         actionId: 'act_close',
         error: 'disk',
       })
+    })
+
+    it('holds nothing on a failed read when the store holds another branch', async () => {
+      vi.spyOn(logger, 'warn').mockImplementation(() => {})
+      openStory()
+      chaptersStore.hydrate('br_2', [chapter('chap_9', 1)])
+      reads.latest.mockRejectedValue(new Error('disk'))
+      render(<Probe />)
+      committed('act_close')
+      await vi.waitFor(() => expect(reads.latest).toHaveBeenCalledTimes(1))
+      await flush()
+      expect(held()).toBeNull()
     })
 
     it('a newer close replaces the held one', async () => {

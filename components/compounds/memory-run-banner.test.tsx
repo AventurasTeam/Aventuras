@@ -356,6 +356,112 @@ describe("useMemoryRunBanner — a committed close's done state", () => {
   })
 })
 
+describe('useMemoryRunBanner — an older close result beside a newer close', () => {
+  const OLD = 'Chapter closed: Old Chapter'
+
+  function holdOld(): void {
+    chaptersStore.hydrate('branch-1', [
+      chapter({ id: 'chap_1', sequenceNumber: 1, title: 'Old Chapter' }),
+    ])
+    chapterOverlaysStore.showCloseResult({
+      branchId: 'branch-1',
+      chapterId: 'chap_1',
+      stoppedTasks: 0,
+    })
+  }
+
+  // The new close's row lands at its metadata phase, before the report that marks it closed.
+  function createNewRow(): void {
+    chaptersStore.patch('branch-1', {
+      op: 'create',
+      id: 'chap_2',
+      row: chapter({
+        id: 'chap_2',
+        sequenceNumber: 2,
+        title: 'New Chapter',
+        hasCloseReport: false,
+      }),
+    })
+  }
+
+  const seen = (state: MemoryRunBannerState | null) =>
+    state == null ? 'none' : `${state.kind}:${state.label}`
+
+  it('never shows the older result while the newer close runs, nor in the gap before its own', () => {
+    openStory()
+    holdOld()
+    const { result } = renderHook(() => useMemoryRunBanner())
+    const labels = [seen(result.current)]
+    const record = () => labels.push(seen(result.current))
+
+    const closing = close({ currentPhase: 'metadata' })
+    act(() => generationStore.startRun(closing))
+    record()
+    act(() => createNewRow())
+    act(() => generationStore.setCurrentPhase(closing.runId, 'report'))
+    record()
+    act(() => {
+      chaptersStore.patch('branch-1', {
+        op: 'update',
+        id: 'chap_2',
+        columns: {
+          closeReport: { version: 1, actionId: 'a', calls: [], stopped: [], noToolCalls: true },
+        },
+      })
+    })
+    act(() => generationStore.finishRun(closing.runId))
+    record()
+    act(() =>
+      chapterOverlaysStore.showCloseResult({
+        branchId: 'branch-1',
+        chapterId: 'chap_2',
+        stoppedTasks: 1,
+      }),
+    )
+    record()
+
+    expect(labels).toEqual([
+      `closed:${OLD}`,
+      'run:Closing chapter: writing its summary…',
+      'run:Closing chapter: finishing up…',
+      'none',
+      'closed:Chapter closed, but 1 task stopped early',
+    ])
+  })
+
+  it('shows the result of the highest-numbered chapter whatever order the store holds them', () => {
+    openStory()
+    chaptersStore.hydrate('branch-1', [
+      chapter({ id: 'chap_2', sequenceNumber: 2 }),
+      chapter({ id: 'chap_1', sequenceNumber: 1, title: 'Old Chapter' }),
+    ])
+    holdResult()
+    const { result } = renderHook(() => useMemoryRunBanner())
+    expect(closedBanner(result.current).label).toBe('Chapter closed: The Keep Leans Closer')
+  })
+
+  it('brings the older result back when the newer close is reversed', () => {
+    openStory()
+    holdOld()
+    const { result } = renderHook(() => useMemoryRunBanner())
+    act(() => createNewRow())
+    expect(result.current).toBeNull()
+
+    act(() => {
+      chaptersStore.patch('branch-1', { op: 'delete', id: 'chap_2' })
+    })
+    expect(closedBanner(result.current).label).toBe(OLD)
+  })
+
+  it("shows nothing for a chapter held in the store under another branch's id", () => {
+    openStory()
+    chaptersStore.hydrate('branch-2', [chapter({ branchId: 'branch-2' })])
+    holdResult(0, 'branch-1')
+    const { result } = renderHook(() => useMemoryRunBanner())
+    expect(result.current).toBeNull()
+  })
+})
+
 describe('closeBannerLabel', () => {
   const IDENTITY: CloseProgress = { task: 'identity', part: 1, index: 3, total: 7 }
 

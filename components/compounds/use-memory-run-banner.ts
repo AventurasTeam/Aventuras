@@ -10,6 +10,7 @@ import {
   interruptMemoryRuns,
   selectMemoryRun,
   type RunState,
+  type StoreChapter,
 } from '@/lib/stores'
 
 export type MemoryRunBannerState =
@@ -67,6 +68,14 @@ export function closeBannerLabel(
   }
 }
 
+function latestChapterIdOf(rows: ReadonlyMap<string, StoreChapter>): string | undefined {
+  let latest: StoreChapter | undefined
+  for (const row of rows.values()) {
+    if (latest == null || row.sequenceNumber > latest.sequenceNumber) latest = row
+  }
+  return latest?.id
+}
+
 function bannerLabel(run: RunState): string | null {
   if (run.kind === PERIODIC_CLASSIFIER_KIND)
     return run.beforeTurn
@@ -79,6 +88,8 @@ function bannerLabel(run: RunState): string | null {
 /**
  * The open branch's pass or close while one runs, its Cancel interrupting the run (deferring it to
  * the next Send); else the close it last committed there, until reviewed, dismissed or reversed.
+ * The result shows only while its chapter is the branch's latest, so an older one never reads as
+ * current beside a newer close that is running or has just committed.
  */
 export function useMemoryRunBanner(): MemoryRunBannerState | null {
   const branchId = currentStoryStore.useCurrentStory((open) => open?.branchId ?? null)
@@ -90,6 +101,7 @@ export function useMemoryRunBanner(): MemoryRunBannerState | null {
   const chapter = chaptersStore.useChapters((rows) =>
     result == null ? undefined : rows.get(result.chapterId),
   )
+  const latestChapterId = chaptersStore.useChapters(latestChapterIdOf)
 
   const label = run == null ? null : bannerLabel(run)
   if (run != null && label != null) {
@@ -99,6 +111,7 @@ export function useMemoryRunBanner(): MemoryRunBannerState | null {
 
   if (result == null || result.branchId !== branchId) return null
   if (chapter == null || !chapter.hasCloseReport || chapter.branchId !== branchId) return null
+  if (chapter.id !== latestChapterId) return null
   const { chapterId, stoppedTasks } = result
   const clear = () => chapterOverlaysStore.clearCloseResult()
   return {
