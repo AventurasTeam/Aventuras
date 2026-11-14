@@ -973,7 +973,11 @@ describe('runRetrieval — chapter age', () => {
   const lastSeenIn = (entryId: string) =>
     ({ lastSeenAt: { entryId, locationId: null, worldTime: 0 } }) as never
 
-  const pass = (chapterRanges: Row[], over: Partial<Fixture> = {}) =>
+  const pass = (
+    chapterRanges: Row[],
+    over: Partial<Fixture> = {},
+    extraStore: RetrievalParams['storeEntities'] = [],
+  ) =>
     runRetrieval(
       deps({
         queryAll: makeQueryAll({
@@ -1034,6 +1038,7 @@ describe('runRetrieval — chapter age', () => {
             state: lastSeenIn('e_open'),
           }),
           makeEntity({ id: 'loc_1', kind: 'location', name: 'The Hollow' }),
+          ...extraStore,
         ],
       }),
     )
@@ -1074,6 +1079,34 @@ describe('runRetrieval — chapter age', () => {
       th_pending: 0,
       th_reopened: 0,
       ch_1: 0,
+    })
+  })
+
+  // The character beside them is the control: the same stored state ages it.
+  it('reads a place, an item and a faction as 0 whatever lastSeenAt their state holds', async () => {
+    const seenInChapterOne = [
+      ['char_old', 'Oren', 'character'],
+      ['loc_lit', 'The Lantern', 'location'],
+      ['item_lamp', 'The Lamp', 'item'],
+      ['fac_guild', 'The Guild', 'faction'],
+    ] as const
+    const out = await pass(
+      CLOSED,
+      {
+        entities: seenInChapterOne.map(([id, name, kind]) => entityRow(id, name, { kind })),
+        knn: seenInChapterOne.map(([id]) => hit(id)),
+      },
+      seenInChapterOne.map(([id, name, kind]) =>
+        makeEntity({ id, kind, name, state: lastSeenIn('e_ch1') }),
+      ),
+    )
+
+    const ages = expectOk(out).bundles.entities.traces.map((t) => [t.id, t.chaptersOld])
+    expect(Object.fromEntries(ages)).toEqual({
+      char_old: 3,
+      loc_lit: 0,
+      item_lamp: 0,
+      fac_guild: 0,
     })
   })
 
