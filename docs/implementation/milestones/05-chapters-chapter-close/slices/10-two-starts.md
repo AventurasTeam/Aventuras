@@ -10,7 +10,8 @@
   [Slice 5.8](./08-prose-tasks.md),
   [Slice 5.9](./09-chapter-wide-tasks.md),
   [Slice 5.11](./11-review-window.md). It comes after everything it wires.
-- **Blocks:** none
+- **Blocks:** [Slice 5.13](./13-close-rerun.md), which re-runs the whole
+  close it wires
 
 ## Goal
 

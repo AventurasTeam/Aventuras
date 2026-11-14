@@ -10,7 +10,8 @@
   interrupted, and `pendingClose`'s lifecycle),
   [Slice 5.7](./07-chapter-timeline.md) (the card hosting `Delete…`, C16).
   C5 arrives through 5.6 and 5.7.
-- **Blocks:** none
+- **Blocks:** [Slice 5.13](./13-close-rerun.md), which builds on the
+  close-groups read, the preview and `yieldTo: 'any'`
 
 ## Goal
 
@@ -93,11 +94,14 @@ through `lib/actions/index.ts`:
      point). Every read below sits inside the bracket.
   2. Refuse `not-found` on a gone row, and `not-latest` when the chapter
      isn't the branch's highest `sequence_number`.
-  3. Read the chapter's `create` delta by `branch_id`, `target_table`,
-     `target_id` and `op`, and refuse `no-close` when there is none. Read
-     the group by `branch_id` and that delta's `action_id`, newest first.
-  4. Seed the set. `'whole'` takes the group. `'divider-only'` takes the
-     group's rows on `chapters` and `story_entries`: a close writes no
+  3. Read the chapter's close groups (C13): the `action_id`s of the
+     `chapter_close` deltas on the chapter's row, by `branch_id`,
+     `target_table` and `target_id`, and refuse `no-close` when there are
+     none. Until [Slice 5.13](./13-close-rerun.md)'s re-runs exist that is
+     the create's group alone. Read the groups' deltas by `branch_id` and
+     those `action_id`s, newest first.
+  4. Seed the set. `'whole'` takes the groups. `'divider-only'` takes the
+     groups' rows on `chapters` and `story_entries`: a close writes no
      entries, so those are the chapter row, its report and its stamps
      (C1).
   5. Call `selectReversalSet(ctx, { branchId, target, yieldTo: 'any' })`,
@@ -142,7 +146,9 @@ AlertDialog per canon, props in with no store reads, so stories run
 without a database. Copy goes in the `chapters` namespace 5.7 creates.
 
 - **Preview.** `getChapterDeletePreview` returns:
-  - `createdLore`: the `lore` creates in the group, with
+  - `createdLore`: the `lore` creates in the chapter's close groups
+    (C13), which after a [Slice 5.13](./13-close-rerun.md) re-run sit in
+    the re-run's group, not the create's, with
     `, your edits included` shown only when a `user_edit` delta on one of
     those rows is in the set.
   - `otherChanges`: `set.rows` less the stamps, the `chapters` rows, the
@@ -154,7 +160,9 @@ without a database. Copy goes in the `chapters` namespace 5.7 creates.
   - `after`, below.
 - **The after-delete line.** A pure `closeAfterDelete` in `lib/chapters`
   takes `{ tokensAfter, threshold, autoClose, manualPending }` and returns
-  `'closes-next-send'`, `'waits'` or `'stays-open'`.
+  `'closes-next-send'`, `'waits'` or `'stays-open'`. [Slice 5.13](./13-close-rerun.md)
+  later routes the `'closes-next-send'` arm through its `isCloseOwed`, so
+  the owed rule keeps one copy.
   - `tokensAfter` is the region's sum plus `content_tokens` over the
     chapter's own non-`system` entries. It isn't `chapters.token_count`,
     which [Slice 5.1](./01-token-measure.md) leaves as a snapshot.
@@ -351,7 +359,8 @@ with two, each bold and each omitted when empty:
 - The same file, refusals, each writing no delta: `in-flight` under a held
   gate, and for a second `removeChapter` issued synchronously with the
   first; `not-latest` on an earlier chapter, and on a chapter a close
-  outran after the preview read; `no-close` on a row with no `create` delta.
+  outran after the preview read; `no-close` on a row with no
+  `chapter_close` group (C13's read).
 - The same file: `settleCount` moves by one, `processedThrough` doesn't
   move, and `undoRedoStore` is empty afterwards, including when a mocked
   store sync throws after the commit.
@@ -597,9 +606,6 @@ change amends the scope above.
   seeded entry refuses `rollback-floor`, and CTRL-Z finds nothing to undo. Fine
   while it stays a measure fixture. A scale measure of delete needs it to write
   close-shaped deltas first. Routed from triage 2026-11-07.
-- **Where does re-running a close land?** A design for
-  [re-running a close](../../../../followups.md#ux) comes before this slice's
-  planning, and may land in this slice or in [Slice 5.11](./11-review-window.md).
 
 ## Implementation notes
 

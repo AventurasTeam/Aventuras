@@ -79,7 +79,7 @@ everything it wires: it makes both closes reachable, with the modal, `STORY TOOL
 `Close chapter here`, Phase 1's model call and the `toolCalling` gate,
 and it proves the whole close end to end.
 
-**The reversal track** is one slice.
+**The reversal track** is two slices.
 [Slice 5.12](./slices/12-chapter-delete-rollback.md) is not the new
 surface the roadmap expected: the rollback modal, its counts and the
 cascade warning shipped in M2.5, and reversal needs no code in
@@ -88,7 +88,12 @@ regenerate arm and honest copy. Chapter delete is **not** a rollback,
 which is a canon correction from the developer: deleting a chapter
 undoes what the close did and leaves every entry in place, for the
 latest chapter only, as CTRL-Z of the close still available after later
-turns (C13).
+turns (C13). [Slice 5.13](./slices/13-close-rerun.md) re-runs a close:
+the latest chapter's lore work reverses as a delete does, with a journal
+of everything the reversal touched, and the tasks run again; reversing
+the re-run writes the journal back, so CTRL-Z, Cancel, a failure or a
+crash restores the first close. A re-run runs before the next turn,
+rolling later turns back first when the user confirms.
 
 What changes from "before" to "after": the app goes from "an open
 region that only grows" to "a story in chapters, whose memory is
@@ -143,6 +148,10 @@ Slice 5.5b answers whether the agent holds, not whether it is good.
 - [Slice 5.12](./slices/12-chapter-delete-rollback.md) — chapter delete
   and rollback: delete, divider-only removal, the regenerate arm, copy,
   the preview under a running close (C13)
+- [Slice 5.13](./slices/13-close-rerun.md) — re-running a close: the
+  journaled reversal and its write-back, the close pipeline's re-run
+  arms, `pendingRerun`, the rollback shortcut, the confirm on the card
+  and the review window (C2, C4, C7, C9, C13)
 
 ## Dependency graph
 
@@ -156,6 +165,7 @@ day-one: 5.1   5.2   5.3   5.4          (5.2 lands after 5.1)
 5.2, 5.3, 5.5b, 5.7 ─→ 5.11
 5.2, 5.5a, 5.6, 5.7 ─→ 5.12
 5.1, 5.3, 5.6, 5.7, 5.8, 5.9, 5.11 ──→ 5.10
+5.10, 5.11, 5.12 ───────────────────→ 5.13
 
 5.1 ┄→ 5.3            (partial: count labels; percent until then)
 ```
@@ -182,6 +192,10 @@ day-one: 5.1   5.2   5.3   5.4          (5.2 lands after 5.1)
 - **5.8 and 5.9 run at once** and share the driver by C2's slots, and
   5.11 should run beside them, so the report meets its reader while the
   tools can still adjust.
+- **5.13 comes last.** It re-runs the tasks 5.8 and 5.9 land through
+  5.10's whole close, shows the result in 5.11's window, and builds on
+  5.12's delete set, preview and `yieldTo: 'any'`. Added 2026-11-13 from
+  the re-run design.
 - **The roadmap's parallel-paths sketch is superseded.** Its gate-then-
   four-parallel shape rested on a primitive canon doesn't have. M5.1
   dissolves into 5.1, 5.2 and 5.6. M5.2 becomes 5.2, 5.4, 5.5a, 5.5b,
@@ -229,7 +243,7 @@ anchor reverses positionally, which is the seed's bug.
 ### C2 — Pipeline shape
 
 Provider: [Slice 5.2](./slices/02-first-chapter.md). Consumers: 5.5a,
-5.5b, 5.6, 5.8, 5.9, 5.10.
+5.5b, 5.6, 5.8, 5.9, 5.10, 5.13.
 
 `lib/pipeline/definitions/chapter-close.ts` declares the kind per
 [`generation-pipeline.md → V1 declarations`](../../../generation-pipeline.md#v1-declarations):
@@ -245,7 +259,8 @@ Provider: [Slice 5.2](./slices/02-first-chapter.md). Consumers: 5.5a,
 chains nothing (`getPipelineSafe` in `commitRun`, `orchestrator.ts`).
 
 Phases are static (`Pipeline.phases` in `lib/pipeline/types.ts`), so the list is pinned,
-in order: `boundary`, `metadata`, `agent`, `report`, each in its own
+in order: `boundary`, `metadata`, `agent`, `report`, with 5.13's
+`reversal` between `metadata` and `agent`, each in its own
 file beside the declaration (`chapter-close-boundary.ts` and so on), as
 per-turn's are, since 5.5a, 5.5b, 5.6, 5.8, 5.9 and 5.10 all touch them
 and some run at once. `boundary`, `metadata` and `agent` declare
@@ -267,6 +282,13 @@ pre-flight, not in a phase.
   `before` (stackables, Happenings) and `after` (Awareness, the reset).
   A chapter-wide task can't land inside the part loop.
 - **`report`** writes `close_report` last, from the ledger.
+- **A re-run (5.13)** is this pipeline while `pendingRerun` holds the
+  branch, the run's `interruptible` set to `'rerun'` in `newRunState`.
+  `boundary` resolves the range from the chapter row and fails the run
+  when the chapter is no longer the latest or has no close; `metadata`
+  cuts the parts from the chapter's own entries and writes nothing;
+  `reversal` runs the journaled reversal through a `DeltaActionPort`
+  member (it no-ops on a close); `agent` and `report` run as a close's.
 - The close's run-scoped state sits behind typed accessors in
   `lib/pipeline/definitions/close-intermediates.ts`, whose keys stay
   private: the range, `{ chapterId, startEntryId, endEntryId }`, the
@@ -311,7 +333,7 @@ everything in the user half.
 
 Provider: [Slice 5.2](./slices/02-first-chapter.md) (column, schema,
 writer, store projection). Writers: 5.5a's ledger, used by 5.5b, 5.8 and
-5.9. Consumers: 5.7, 5.11.
+5.9, and 5.13's re-run. Consumers: 5.7, 5.11, 5.13.
 
 A nullable JSON column on `chapters`
 (`lib/db/story-entries/story-entries.table.ts:32-58`), added to
@@ -335,6 +357,7 @@ type CloseReport = {
   calls: CloseReportCall[] // every tool call, in run order
   stopped: { task: CloseTask; part: number; reason: 'budget' | 'window' | 'cut-off' }[]
   noToolCalls: boolean // no task called a tool
+  firstLogPosition?: number // 5.13: where a re-run's own writes start, for the review's lower bound
 }
 
 type CloseReportCall = {
@@ -393,6 +416,12 @@ type CloseReportCall = {
 - **Stamps, `retrieval_count` resets and stackable normalization stay
   out of the review.** Normalization is code with no `why` or `turns`,
   and its keys are a spelling cleanup.
+- **The review reads a close's group** under `actionId`, bounded by the
+  chapter row's deltas in it: the `create` first, the `close_report`
+  update last (5.11). A re-run's group (5.13) writes no `create`, only
+  its own writes and the report update, so 5.13 gives it its own lower
+  bound; without one the review would show its changes with no old
+  values.
 - **The report stays out of `chaptersStore`.** Story open hydrates chapter
   rows whole (`lib/actions/stories/operational.ts:168`), and the create
   handler, the update handler and redo all patch the row
@@ -405,7 +434,9 @@ type CloseReportCall = {
   since an update patch carries only what was written: a title save must
   leave the flag alone. The hydrate select matches, with `.mapWith(Boolean)`
   so the flag isn't 0 or 1. The store's row is
-  `Omit<Chapter, 'closeReport'> & { hasCloseReport: boolean }`. A store
+  `Omit<Chapter, 'closeReport'> & { hasCloseReport: boolean }`, and from
+  5.13 `closeReportActionId: string | null` beside it, projected the
+  same way, so the review window can tell a report a re-run replaced. A store
   test walks commit, a title save and its undo, CTRL-Z and redo. The
   review window reads the report by chapter id when it opens.
 
@@ -473,7 +504,7 @@ Provider: [Slice 5.1](./slices/01-token-measure.md). Consumers: 5.2, 5.3,
 Provider of the event: [Slice 5.5a](./slices/05a-task-runner.md).
 Provider of the store field and the label:
 [Slice 5.6](./slices/06-close-owed.md). They run at once. Consumers: 5.8,
-5.9.
+5.9, 5.13.
 
 A `close_task_start { task, part, index, total }` event joins
 `PhaseEmittedEvent` (`lib/pipeline/types.ts`) in whichever lands
@@ -503,24 +534,29 @@ banner is the only place phone names the wait). Phase 0's passes keep
 the pass's labels: `Updating memory before your turn…` under Send, whose
 `beforeTurn` each successor inherits from the chain's start, and
 `Updating memory…` outside one. Until 5.5a lands, a close shows only the
-phase labels.
+phase labels. A re-run (5.13) shows the same labels and count, plus its
+own label for the `reversal` phase, which a close's no-op pass through
+that phase never shows.
 
 ### C7 — Chapter overlays
 
 Providers: [Slice 5.11](./slices/11-review-window.md) (store, review
 host), then [Slice 5.10](./slices/10-two-starts.md) (modal host), which
-builds on it. Consumers: 5.3, 5.7.
+builds on it. Consumers: 5.3, 5.7, 5.13.
 
 `lib/stores/ui/chapter-overlays.ts` exposes
 `openCloseModal({ branchId, endEntryId? })` and
-`openReviewWindow({ chapterId })`, and one host for both,
+`openReviewWindow({ chapterId })`, and from 5.13, which provides it,
+`openRerunConfirm({ branchId, chapterId })`, and one host for all,
 `ChapterOverlaysHost` in `components/chapters/chapter-overlays-host.tsx`,
 mounts at the app root beside `MemoryRunToasts` (`app/_layout.tsx:115`).
 The toast's `Review` fires from there, and the modal has four triggers
 on five routes, so a per-route mount would touch every in-story route.
 
 - If the close reverses while the review window is open, it closes
-  itself. A stale toast's `Review` does nothing.
+  itself. A stale toast's `Review` does nothing. A re-run's commit, or
+  its undo, changes the row's `closeReportActionId`, and the window
+  closes the same way. The re-run confirm stacks over the window.
 - A row press goes through the current surface's guard. A root host
   doesn't hold one, and `useSurfaceNavigate` reuses a mounted screen
   with `setParams`, so a press over a dirty World pane could swap the
@@ -550,7 +586,7 @@ title or number, never by entry position.
 ### C9 — The round-trip rule
 
 Provider: [Slice 5.5a](./slices/05a-task-runner.md). Consumers: 5.5b, 5.8,
-5.9, 5.12.
+5.9, 5.12, 5.13.
 
 Reversal shapes are where "refused for good" hides. Each tool's landed
 group joins one suite that runs it through CTRL-Z, redo, abort and a
@@ -562,7 +598,13 @@ or one a ref-clear would restore), and the check counts link rows and
 creates, not only the merged row.
 
 Both chapter delete modes join the suite with 5.12: it adds their arms
-for tools already on main, and a tool landing later adds its own.
+for tools already on main, and a tool landing later adds its own. The
+re-run joins with 5.13: CTRL-Z (the journal written back, redo
+cleared), abort before and after its first own write, crash recovery,
+a rollback on each side of E after a re-run, a sweep from below the
+re-run dropping its journal and CTRL-Z then undoing the close
+altogether, both delete modes after one, a second re-run, and a re-run
+after each merge tool re-merging the same rows.
 
 ### C10 — What a chapter may end on
 
@@ -594,7 +636,7 @@ a reply. The threshold accepts values as low as 1
 ### C11 — Tool results
 
 Provider: [Slice 5.5a](./slices/05a-task-runner.md). Consumers: 5.5b, 5.8,
-5.9, 5.11.
+5.9, 5.11, 5.13.
 
 The tool result is the action layer's verdict. Canon's three results
 hold, with these cases settled:
@@ -657,7 +699,7 @@ since a merge's precedence can't live inside a group that drops noops.
 ### C12 — What "a later turn wrote" means
 
 Provider: [Slice 5.5a](./slices/05a-task-runner.md). Consumers: 5.5b, 5.8,
-5.9.
+5.9, 5.13.
 
 [`chapter-close.md → Tools and writes`](../../../memory/chapter-close.md#tools-and-writes)
 has a close leave alone what later turns wrote. No selector exists, and
@@ -674,22 +716,26 @@ chapter delete has its own (C13).
 
 ### C13 — Chapter delete
 
-Provider: [Slice 5.12](./slices/12-chapter-delete-rollback.md). Consumer:
-5.7.
+Provider: [Slice 5.12](./slices/12-chapter-delete-rollback.md). Consumers:
+5.7, 5.13.
 
 `Delete…` on the latest chapter's card, and only there. It is not a
 rollback: no entry goes. Two modes, one action in
 `lib/actions/chapters/`:
 
-- **Delete the chapter.** The close's `action_id` group reverses, with
-  stamps cleared, merged rows back, lore it created gone. The group is
-  found by the `action_id` of the chapter's `create` delta, and the
-  action refuses when there is none. A close-created row the user edited
-  later still goes, as any machine create does.
+- **Delete the chapter.** The chapter's close groups reverse, with
+  stamps cleared, merged rows back, lore it created gone. They are the
+  `chapter_close` groups with a delta on the chapter's row: the close's,
+  which holds the `create`, and from 5.13 each re-run's, which holds a
+  report update. Until 5.13 lands that is the create's group alone, but
+  5.12 builds the general read. The action refuses when there is none. A
+  close-created row the user edited later still goes, as any machine
+  create does.
 - **Remove the divider only.** The chapter row, its report and its stamps
-  reverse. The group's other deltas stay in the log, still anchored on E,
+  reverse, across the same groups. The groups' other deltas stay in the log, still anchored on E,
   as an ordinary undo target: with no later turn, the next CTRL-Z reverses
-  the kept work, and redo restores it. The review window goes with the
+  the kept work, and redo restores it, except a re-run's kept work, which
+  CTRL-Z restores from its journal with no redo (5.13). The review window goes with the
   row; History keeps the writes.
 
 **Later writes win.** For a delete, a field keeps its value when a delta
@@ -743,7 +789,8 @@ chapter's last entry, then a delete.
 
 ### C14 — The manual start and `pendingClose`
 
-Provider: [Slice 5.2](./slices/02-first-chapter.md). Consumers: 5.6, 5.10.
+Provider: [Slice 5.2](./slices/02-first-chapter.md). Consumers: 5.6, 5.10,
+5.13.
 
 `TxState` gains `pendingClose` as
 [`generation-pipeline.md → Multi-run txState`](../../../generation-pipeline.md#multi-run-txstate)
@@ -789,7 +836,9 @@ A provider flips any consumer already on main, and a consumer landing
 later binds directly. A consumer waiting on a provider renders disabled
 with a reason, per canon's "unbuilt disables, not hides", as in M4. Each
 flip is a line or two. `Review changes` is the exception: canon hides it
-on a chapter no close wrote, so it ships hidden.
+on a chapter no close wrote, so it ships hidden. 5.13 adds
+`Re-run close…` and the review window's `Re-run…` to hosts already on
+main, so neither flips.
 
 | Flip                          | Provider | Host |
 | ----------------------------- | -------- | ---- |
@@ -836,6 +885,13 @@ on a chapter no close wrote, so it ships hidden.
   window and modal work on desktop and at phone width, with Storybook
   stories for every new compound. A jump to chapter 1 on a long story
   is measured on Android, and the number is in the slice's notes.
+- **Re-run.** A re-run from the card and from the review window reverses
+  and repeats the latest chapter's lore work, rolling later turns back
+  first when the user confirms. CTRL-Z restores the first close, its
+  report and its deltas; Cancel, a failed call and a crash leave the
+  first close standing, and the re-run itself owes nothing, though a
+  catch-up pass it cancels defers as any pass (the round-trip suite,
+  with a failed-call arm; vitest; E2E).
 - **Honest copy.** Regenerate of a reply a close ends on or wrote under,
   rollback across chapters and chapter delete say what will happen
   (Storybook; E2E).
@@ -888,6 +944,9 @@ on a chapter no close wrote, so it ships hidden.
   own either: C4's `survivor` and refused rows, C5's boundaries rule, C7's
   default guard, C11's merge protection and start-row rule, C14's result
   and C15's `refetch()`. Read them all at slice planning.
-- **Sizes.** 5.5a, 5.8 and 5.10 sit close to the ceiling, at 16 to 20
+- **Sizes.** 5.13, added 2026-11-13, is estimated at 22 to 23 tasks;
+  the developer kept it one slice (2026-11-14), run as a two-PR stack,
+  since a split frees no dependency edge.
+  5.5a, 5.8 and 5.10 sit close to the ceiling, at 16 to 20
   tasks, on estimates that grew by about a tenth through the audit. Check
   each at its plan skeleton.

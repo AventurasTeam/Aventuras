@@ -10,7 +10,8 @@
   [Slice 5.7](./07-chapter-timeline.md) (the card hosting
   `Review changes`)
 - **Blocks:** [Slice 5.10](./10-two-starts.md), which builds its modal
-  host on this slice's store
+  host on this slice's store, and [Slice 5.13](./13-close-rerun.md),
+  which opens its re-run confirm from the review window
 
 ## Goal
 
@@ -528,9 +529,15 @@ stays covered. Ids, titles and positions don't move (C8).
   rule ([`chapter-close.md → Review`](../../../../memory/chapter-close.md#review)).
   Where nothing landed, a path lost on two rows for different reasons
   shows only its first loss's reason. Surfaced by 5.5a.
-- **Where does re-running a close land?** A design for
-  [re-running a close](../../../../followups.md#ux) comes before this slice's
-  planning, and may land in this slice or in [Slice 5.12](./12-chapter-delete-rollback.md).
+
+- **Keep the fallback toast when the commit notice moves to the banner.**
+  `toast.md`'s Reader entry gained, at `836720bf1`, a clause for a
+  chapter close re-run undone with no journal to write back, warning
+  severity, saying the earlier close couldn't be restored
+  ([`chapter-close.md → Re-running a close`](../../../../memory/chapter-close.md#re-running-a-close)).
+  It stays a toast, since nothing runs then to hold a banner, so this
+  slice's edit of that entry keeps it. Raised 2026-11-14 by 5.13's
+  planning.
 
 ## Implementation notes
 

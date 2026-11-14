@@ -158,7 +158,7 @@ vault shell; during M8 — M9.1 and M9.3.
 
 **Promoted** — defined in
 [`milestones/05-chapters-chapter-close/`](./milestones/05-chapters-chapter-close/milestone.md)
-(milestone + thirteen slice docs).
+(milestone + fourteen slice docs).
 
 ---
 
@@ -236,6 +236,16 @@ verified against the code first. Resolve with the slice each names.
   branch fork, replace the structural scan with the both-sides
   behavioral test** the slice AC originally described. Surfaced by the
   Slice 3.5 Task 14 review (2026-08-09).
+- **M6.1 — Fork carries a close re-run's journal with its group.** Slice
+  5.13's `reversal_journals` row is the undo half of a re-run's delta
+  group, so a fork that copies the group must copy its journal, and one
+  that doesn't must not
+  ([`data-model.md → Branch model`](../data-model.md#branch-model), the
+  branch-copy manifest). Re-running a close on a fork, which keeps turns
+  the re-run's shortcut would roll back, is parked for the same
+  milestone
+  ([`parked.md → Re-running a close on a fork`](../parked.md#re-running-a-close-on-a-fork)).
+  Raised 2026-11-13 by the re-run design.
 - **M6.1 — steps 2 and 3 of the fork partition use different predicates,
   so a foreground edit about a kept entry falls between them.** Step 2
   copies deltas below `L` plus, above `L`, only background
@@ -329,9 +339,10 @@ verified against the code first. Resolve with the slice each names.
   reconcile embed hangs, which nothing bounds yet (M7.1's embed-timeout
   item below). Routed from triage 2026-09-27.
 - **M6.3 — A branch delete drops the branch's close records.** M5 keeps
-  `deferred` and `pendingClose` in `generationStore`'s `TxState`, keyed
-  by branch. Nothing deletes a branch yet. The action that does clears
-  both, so no record outlives its branch. Raised 2026-11-01 by the M5
+  `deferred`, `pendingClose` and, from Slice 5.13, `pendingRerun` in
+  `generationStore`'s `TxState`, keyed by branch. Nothing deletes a
+  branch yet. The action that does clears all three, so no record
+  outlives its branch. Raised 2026-11-01 by the M5
   promotion.
 - **M6.3 — No shared branch filter for store rows.** About twenty call sites
   in `lib`, `components` and `app` filter a store's rows by
