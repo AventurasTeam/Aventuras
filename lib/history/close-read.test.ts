@@ -349,6 +349,13 @@ describe('readDeletedEntityKinds', () => {
         op: 'delete',
         undoPayload: null,
       }),
+      delta(9, {
+        actionId: 'act_9',
+        targetTable: 'entities',
+        targetId: 'char_made',
+        op: 'create',
+        undoPayload: { id: 'char_made', kind: 'location', name: 'Dock' },
+      }),
       delta(6, {
         branchId: OTHER_BRANCH,
         actionId: 'act_6',
@@ -365,6 +372,7 @@ describe('readDeletedEntityKinds', () => {
       'char_live',
       'odd_kind',
       'no_kind',
+      'char_made',
     ])
 
     expect(Object.fromEntries(kinds)).toEqual({ char_twice: 'faction', item_once: 'item' })
@@ -414,6 +422,12 @@ describe("loadCloseDeltas's query plan", () => {
         targetId: 'chap_1',
         op: 'update',
       }),
+      delta(12, {
+        actionId: 'act_user',
+        targetTable: 'chapters',
+        targetId: 'chap_1',
+        op: 'update',
+      }),
     ])
     const sent: { sql: string; params: unknown[] }[] = []
 
@@ -422,7 +436,10 @@ describe("loadCloseDeltas's query plan", () => {
     expect(sent).toHaveLength(2)
     const [range, rows] = sent.map((query) => planOf(sqlite, query))
     expect(range).toContain('USING INDEX deltas_chain_idx')
-    expect(rows).toContain('USING INDEX deltas_log_position_uniq')
+    expect(rows).toContain(
+      'SEARCH deltas USING INDEX deltas_log_position_uniq (branch_id=? AND log_position>? AND log_position<?)',
+    )
+    expect(sent[1]!.params.slice(1, 3)).toEqual([10, 11])
     expect(rows).not.toContain('USE TEMP B-TREE')
   })
 })

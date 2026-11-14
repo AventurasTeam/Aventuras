@@ -10,19 +10,19 @@ import {
   type EntityKind,
 } from '@/lib/db'
 
-import { inJsonList } from './link-ends'
+import { latestDeletedValues } from './link-ends'
 
 type Db = DbCtx['db']
 
-const ENTITY_KINDS: ReadonlySet<string> = new Set<EntityKind>([
-  'character',
-  'location',
-  'item',
-  'faction',
-])
+const ENTITY_KINDS = {
+  character: true,
+  location: true,
+  item: true,
+  faction: true,
+} as const satisfies Record<EntityKind, true>
 
 const isEntityKind = (value: unknown): value is EntityKind =>
-  typeof value === 'string' && ENTITY_KINDS.has(value)
+  typeof value === 'string' && Object.hasOwn(ENTITY_KINDS, value)
 
 function parsedReport(stored: unknown): CloseReport | null {
   return stored == null ? null : closeReportSchema.parse(stored)
@@ -96,28 +96,10 @@ export async function readLatestCloseReport(
 const PAYLOAD_KIND = sql<unknown>`json_extract(${deltas.undoPayload}, '$.kind')`
 
 /** Each deleted entity's kind, from its latest delete delta; an id with none is left out. */
-export async function readDeletedEntityKinds(
+export function readDeletedEntityKinds(
   db: Db,
   branchId: string,
   ids: readonly string[],
 ): Promise<ReadonlyMap<string, EntityKind>> {
-  const kinds = new Map<string, EntityKind>()
-  if (ids.length === 0) return kinds
-  const deleted = await db
-    .select({ id: deltas.targetId, kind: PAYLOAD_KIND, logPosition: deltas.logPosition })
-    .from(deltas)
-    .where(
-      and(
-        eq(deltas.branchId, branchId),
-        eq(deltas.op, 'delete'),
-        eq(deltas.targetTable, 'entities'),
-        inJsonList(deltas.targetId, ids),
-      ),
-    )
-  // Sorted here: without table statistics, an ORDER BY log_position steers SQLite off
-  // deltas_chain_idx onto a scan of the whole branch.
-  deleted.sort((x, y) => y.logPosition - x.logPosition)
-  for (const row of deleted)
-    if (!kinds.has(row.id) && isEntityKind(row.kind)) kinds.set(row.id, row.kind)
-  return kinds
+  return latestDeletedValues(db, branchId, ['entities'], ids, PAYLOAD_KIND, isEntityKind)
 }

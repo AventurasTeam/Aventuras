@@ -246,6 +246,39 @@ const PAYLOAD_NAME = sql<string | null>`coalesce(
   json_extract(${deltas.undoPayload}, '$.name'),
   json_extract(${deltas.undoPayload}, '$.title'))`
 
+/**
+ * Each id's value from its latest delete delta that `accept`s it, read from the undo payload
+ * through `field`. An id with no such delta is left out.
+ */
+export async function latestDeletedValues<T>(
+  db: Db,
+  branchId: string,
+  targetTables: readonly string[],
+  ids: readonly string[],
+  field: SQL<unknown>,
+  accept: (value: unknown) => value is T,
+): Promise<ReadonlyMap<string, T>> {
+  const found = new Map<string, T>()
+  if (ids.length === 0) return found
+  const deleted = await db
+    .select({ id: deltas.targetId, value: field, logPosition: deltas.logPosition })
+    .from(deltas)
+    .where(
+      and(
+        eq(deltas.branchId, branchId),
+        eq(deltas.op, 'delete'),
+        inArray(deltas.targetTable, [...targetTables]),
+        inJsonList(deltas.targetId, ids),
+      ),
+    )
+  // Sorted here: without table statistics, an ORDER BY log_position steers SQLite off
+  // deltas_chain_idx onto a scan of the whole branch.
+  deleted.sort((x, y) => y.logPosition - x.logPosition)
+  for (const row of deleted)
+    if (!found.has(row.id) && accept(row.value)) found.set(row.id, row.value)
+  return found
+}
+
 async function namesOf(
   db: Db,
   branchId: string,
@@ -265,24 +298,15 @@ async function namesOf(
   ])
   for (const row of [...liveEntities, ...liveHappenings]) names.set(row.id, row.name)
   const missing = ids.filter((id) => !names.has(id))
-  if (missing.length > 0) {
-    const deleted = await db
-      .select({ id: deltas.targetId, name: PAYLOAD_NAME, logPosition: deltas.logPosition })
-      .from(deltas)
-      .where(
-        and(
-          eq(deltas.branchId, branchId),
-          eq(deltas.op, 'delete'),
-          inArray(deltas.targetTable, HOLDING_TABLES),
-          inJsonList(deltas.targetId, missing),
-        ),
-      )
-    // Sorted here: without table statistics, an ORDER BY log_position steers SQLite off
-    // deltas_chain_idx onto a scan of the whole branch.
-    deleted.sort((x, y) => y.logPosition - x.logPosition)
-    for (const row of deleted)
-      if (row.name != null && !names.has(row.id)) names.set(row.id, row.name)
-  }
+  const deleted = await latestDeletedValues(
+    db,
+    branchId,
+    HOLDING_TABLES,
+    missing,
+    PAYLOAD_NAME,
+    (value): value is string => typeof value === 'string',
+  )
+  for (const [id, name] of deleted) names.set(id, name)
   return Object.fromEntries(names)
 }
 
