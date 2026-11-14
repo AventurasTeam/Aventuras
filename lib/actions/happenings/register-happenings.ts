@@ -13,7 +13,6 @@ import { happeningsStore } from '@/lib/stores'
 
 import { nullifyRef } from '../coerce'
 import { cascadedDelete, defineCascade, rowCascade } from '../delta/delete-cascade'
-import { deepEqual } from '../delta/delta-encoding'
 import {
   noopRefusal,
   register,
@@ -22,7 +21,11 @@ import {
   type ActionHandler,
   type PatchMatchesColumns,
 } from '../delta/registry'
-import { USER_EDITED_SINCE_PROSE, userEditsSinceProse, wroteField } from '../delta/user-precedence'
+import {
+  changedColumns,
+  USER_EDITED_SINCE_PROSE,
+  userEditsSinceProse,
+} from '../delta/user-precedence'
 import type { DeltaSource, ProseEntryId } from '../types'
 
 const ownCascade = rowCascade('happening')
@@ -141,23 +144,17 @@ const updateHandler: ActionHandler = async (action, branchId, ctx) => {
 
   const edits =
     proseEntryId != null ? await userEditsSinceProse(ctx, bid, 'happenings', id, proseEntryId) : []
-  // Unchanged columns are dropped: History and the later-turn rule read an undo payload's keys as
-  // written. Only the incoming side is normalized, so a stored blank temporal still clears.
-  const set: Record<string, unknown> = {}
-  const undoPayload: Record<string, unknown> = {}
-  let userKept = false
-  for (const col of named) {
-    const next =
-      col === 'temporal' || col === 'occurredAtEntryId' ? nullifyRef(patch[col]) : patch[col]
-    const prior = current[col as keyof Happening]
-    if (deepEqual(next, prior)) continue
-    if (wroteField(edits, 'happenings', col, [])) {
-      userKept = true
-      continue
-    }
-    set[col] = next
-    undoPayload[col] = prior
-  }
+  const { set, undoPayload, userKept } = changedColumns({
+    table: 'happenings',
+    named,
+    patch,
+    current,
+    edits,
+    normalize: (col, value) =>
+      col === 'temporal' || col === 'occurredAtEntryId'
+        ? nullifyRef(value as string | null | undefined)
+        : value,
+  })
   if (Object.keys(set).length === 0) {
     if (userKept) return noopRefusal(USER_EDITED_SINCE_PROSE, null)
     return noopRefusal('no-op happening patch', 'restated')
