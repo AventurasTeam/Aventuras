@@ -1,4 +1,17 @@
-import { and, asc, desc, eq, gt, inArray, isNull, notInArray, or, sql, type SQL } from 'drizzle-orm'
+import {
+  and,
+  asc,
+  desc,
+  eq,
+  gt,
+  inArray,
+  isNull,
+  notExists,
+  notInArray,
+  or,
+  sql,
+  type SQL,
+} from 'drizzle-orm'
 
 import type { GroupOutcome, GuardRow, PipelineAction } from '@/lib/actions/types'
 import type { PromptHalves } from '@/lib/ai'
@@ -116,14 +129,16 @@ function learnedAfterEnd(ctx: TaskPromptContext) {
 }
 
 // A row whose pin the user ever set, or that they created: set_pin skips it whatever turn is cited,
-// so it takes no place either. Key presence, as `carriesColumn` reads an undo payload.
+// so it takes no place either. Key presence, as `carriesColumn` reads an undo payload; correlated
+// on the row so the read walks deltas_chain_idx, not the branch's whole log.
 function userPinned(ctx: TaskPromptContext) {
   return ctx.db
-    .select({ id: deltas.targetId })
+    .select({ id: deltas.id })
     .from(deltas)
     .where(
       and(
         eq(deltas.branchId, ctx.branchId),
+        eq(deltas.targetId, happeningAwareness.id),
         eq(deltas.targetTable, 'happening_awareness'),
         eq(deltas.source, 'user_edit'),
         or(
@@ -143,7 +158,7 @@ async function frequentRows(ctx: TaskPromptContext): Promise<ListedRow[]> {
     isNull(happeningAwareness.learnedAtEntryId),
     notInArray(happeningAwareness.learnedAtEntryId, learnedAfterEnd(ctx)),
   )!
-  const notUsers = notInArray(happeningAwareness.id, userPinned(ctx))
+  const notUsers = notExists(userPinned(ctx))
   return listable(ctx, and(gt(happeningAwareness.retrievalCount, 0), notLater, notUsers)!)
     .orderBy(desc(happeningAwareness.retrievalCount), asc(happeningAwareness.id))
     .limit(AWARENESS_TOP_N)
