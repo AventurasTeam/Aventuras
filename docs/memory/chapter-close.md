@@ -944,15 +944,16 @@ is cited and stands alone, so until a later boot reverses it what's left
 is a partial close, and the next pass reading it is benign.
 
 **Accepted residue.** Four narrow cases leave state that no code
-repairs. Each needs a manual close or a failed transaction, the last
+repairs, though a restart ends the fourth's overlap. Each needs a manual close or a failed transaction, the last
 only the failed transaction:
 
 - A redo under a manual close at the head can leave duplicates in its
-  closed range, which 3e never revisits.
+  closed range, which [3e](#3e--happenings-consolidation) never revisits.
 - An edit of the head entry under a committed close keeps the writes the
   close derived from the replaced prose.
-- A reversal under a later close that fails, and that a later boot
-  completes, leaves the entries before that closed chapter unstamped.
+- A reversal of an earlier close, under a later closed chapter, whose
+  commit fails and that a later boot completes, leaves the entries
+  before that closed chapter unstamped.
   The next close starts its range at the first of them, so its chapter
   spans the closed one after it, and two chapters overlap.
 - A close stopped before its stamps whose own reversal fails keeps its
@@ -1138,7 +1139,10 @@ close, as a close's review does.
 | Crash                           | Boot recovery reverses the group and restores the journal, else undoes the close |
 
 **Head reversals.** Regenerate interrupts a running close with no
-confirm because nothing of it has committed. Under a re-run the close
+confirm because nothing of it has committed; if it commits as the
+interrupt lands, the regenerate refuses and confirms on the fresh counts
+([`reader-composer.md → Regenerate confirmation`](../ui/screens/reader-composer/reader-composer.md#regenerate-confirmation)).
+Under a re-run the close
 it replaces has, and once the reversal commits its lore sits in the
 journal, where no confirm can count it. So a head reversal reaching
 that chapter, a rollback into it or a regenerate of its end reply after

@@ -216,8 +216,8 @@ generation pipeline is in flight:
 
 - **Counts.** Rows the close created, then the other changes it made.
   Each count line is omitted at zero, since a close can land with no
-  writes. The third line is omitted when no turn followed the chapter.
-  Its second sentence states the residue a delete accepts: a later
+  writes. The turns line's second sentence states the residue a delete
+  accepts: a later
   turn's own undo can write back a value the delete removed
   ([`chapter-close.md → Deleting a chapter`](../../../memory/chapter-close.md#deleting-a-chapter)).
 - **The line after the list** reads the open region as the delete would
@@ -233,6 +233,9 @@ generation pipeline is in flight:
   `Removing only the divider closes the same prose again, on top of the kept work.`
 - **If a close landed while the confirm was open,** this is no longer the
   latest chapter, and the delete is refused with a toast.
+- **The open confirm re-reads its preview** each time a run settles
+  under it. A re-read the delete refuses closes the confirm with that
+  refusal's toast; one that fails keeps the preview on screen.
 
 The reader beneath stays where it is, and the chapter's inline break
 goes.

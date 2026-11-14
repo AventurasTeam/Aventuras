@@ -961,8 +961,8 @@ fixed:
   [an integrity refusal](#a-boot-recovery-refused-as-an-integrity-error-never-settles),
   which boot meets only for a pass's or a close's orphan. A pass's
   branch it holds back. A close's it doesn't: each of a close's writes
-  is cited and stands alone, so a pass reads a partial close, not broken
-  state
+  is cited and stands alone, so until a later boot reverses it a pass
+  reads a partial close, which is benign
   ([`memory/chapter-close.md → Failure modes`](./memory/chapter-close.md#failure-modes-and-atomic-rollback)).
 - **In-session it needs a later turn or Send.** A pass starts only
   from a turn's commit (per-turn's `chainsTo`) or before a turn at

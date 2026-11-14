@@ -104,10 +104,14 @@ close running as the counts are read count nowhere: confirming
 interrupts that run, and its abort reverses them before the sweep does.
 The set the commit resolves still holds them, so a run that commits as
 the interrupt lands changes the counts, and the commit refuses
-`counts-changed` (below).
+`counts-changed` (below). A ref clear carries no action id, so one
+caused only by the running run's rows still counts, and can refuse once
+with `counts-changed`; that is accepted.
 
-A regenerate reads one more number from the same range, a close's own
-writes: its `chapter_close` deltas, less those two kinds. It picks the
+A regenerate reads one more number, a close's own writes: the
+`chapter_close` deltas the sweep starts from, less those two kinds. It
+reads them before the closure, which also pulls in a close's write on a
+row a later turn created, for a chapter that stands. It picks the
 regenerate confirm's copy
 ([`reader-composer.md → Regenerate confirmation`](../reader-composer.md#regenerate-confirmation)),
 and the modal shows no line for it.
@@ -149,13 +153,16 @@ chapter takes it:
 > **1 chapter removed** — chapter 5 goes with its entries
 
 - **Re-opened** is the chapter the target falls inside. Its first entry
-  sits below the target, so its earlier entries stay and return to the
-  open region. At most one chapter re-opens.
+  sits before the target, so its earlier entries stay and return to the
+  open region. At most one chapter re-opens, bar the overlap of the accepted
+  residue in
+  [`chapter-close.md → Failure modes`](../../../../memory/chapter-close.md#failure-modes-and-atomic-rollback).
 - **Removed** is every chapter whose first entry is the target or
   later: every entry it holds goes, and the chapter with them. Two read
   `2 chapters removed — chapters 5 and 6 go with their entries`, and
-  three or more a span, `chapters 5–7`. The numbers are always
-  consecutive, since only the latest chapter can be deleted
+  three or more a span, `chapters 5–7`. The numbers are consecutive,
+  since only the latest chapter can be deleted, bar that residue's
+  numbering gap
   ([`chapter-timeline.md → Delete a chapter`](../../chapter-timeline/chapter-timeline.md#delete-a-chapter)).
 
 Why bold: chapter close fires lore-mgmt writes (its six sub-jobs);
@@ -202,8 +209,9 @@ mechanism rather than the hover-preview.
 
 ## Edge cases
 
-- **Most-recent entry only** — single entry, no chapter re-open, a
-  handful of world-state changes. Modal still opens; counts read
+- **Most-recent entry only** — single entry, usually no chapter line
+  (a manual close ending on it re-opens its chapter), a handful of
+  world-state changes. Modal still opens; counts read
   `1 entry, 3 world-state changes`. Skipping the modal for the
   smallest case isn't worth the inconsistency.
 - **Entire-branch rollback** — deleting the first entry on a

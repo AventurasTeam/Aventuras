@@ -279,6 +279,12 @@ re-run. The pass or close moves to the next turn, and a toast says so
 exception: the close it replaces has committed, so a regenerate reaching
 that chapter is held until the re-run ends; Cancel stops it first.
 
+A pass or close can still commit as the interrupt lands, since the
+counts leave out its rows and the set the regenerate resolves holds
+them. The regenerate then refuses `counts-changed` and
+the reader opens the regenerate confirm on the fresh counts, with no
+toast, since the ↻ tap has no open confirm for the toast to refer to.
+
 **Confirm when the turn closed a chapter.** If a committed chapter
 close ends on this turn, as a manual close may, the regenerate reverses
 it: the chapter returns to in-progress and its lore-management writes
@@ -289,7 +295,11 @@ confirm promises no re-run. It names the chapter,
 The gate is cost, not data loss — regenerate owns the loss of the prior
 take intrinsically; what warrants consent is throwing away the expensive
 sub-jobs' work, a boundary rare enough that the confirm never turns
-routine.
+routine. Its body is
+`This discards entry <N> and reverses the chapter close that ends on it, then generates a new reply from your last action. The following are removed:`,
+and it shows this named-chapter line in place of the rollback
+confirmation's chapter lines. `<n>` is the chapter the reply falls
+inside, else the one chapter removed.
 
 The same confirm fires when a close's work is all that's left on this
 turn, after its divider was
