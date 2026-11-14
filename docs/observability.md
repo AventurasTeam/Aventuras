@@ -279,8 +279,13 @@ convention, and the expectation that subsystems route through
   group went out), `close_range_embed`
   (the happenings embed over the range: the happenings in it, those
   embedded and revalidated, those left without a vector, and the
-  clusters found) and `close_retrieval_reset` (the `retrieval_count`
-  reset's group: its rows, its status and the round trip in `ms`)
+  clusters found), `close_retrieval_reset` (the `retrieval_count`
+  reset's group: its rows, its status and the round trip in `ms`),
+  `close_reason_unkeyed` (warn: a ledger reason that isn't a
+  `CLOSE_REASON_KEYS` member, recorded as `other`, with the raw
+  `reason`) and `close_review_unknown_reason` (warn, once per review
+  build: stored reasons that aren't keys, with the distinct raw
+  `reasons`)
 - `bootstrap.*` — boot-time hydration failures (e.g.
   `app_settings_hydrate_failed`)
 - `calendar.*` — `format_miss` (a `displayFormat` that fails or
@@ -308,6 +313,13 @@ convention, and the expectation that subsystems route through
   `story_chapter_numbers_read_failed`
   (`hooks/use-story-chapter-numbers.ts`, a failed read; the cards keep
   their last label, or none before the first read),
+  `close_review_read_failed` (error,
+  `components/chapters/chapter-overlays-host.tsx`: the review window's
+  read failed, with `branchId`, `chapterId` and `error`; the window
+  shows `failed`), `close_result_read_failed` (warn,
+  `hooks/use-memory-run-toasts.ts`: the commit banner's report read
+  failed, with `branchId`, `actionId` and `error`; the banner holds the
+  latest chapter with no count),
   `history_load_failed` / `history_load_more_failed`
   (`components/history/use-history-chunks.ts` — a chunk load or a
   load-more rejected; a failed load-more keeps the rows already

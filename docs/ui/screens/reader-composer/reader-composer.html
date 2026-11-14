@@ -124,6 +124,13 @@
   /* memory-run banner — sticky below chrome for the duration of a pass or a close */
   .gen-banner { display: none; padding: 8px 16px; border-bottom: 1px solid var(--line); background: var(--bg-region); align-items: center; gap: 12px; font-size: 12px; color: var(--ink); }
   .gen-banner.visible { display: flex; }
+  /* a close's done state — held after its commit until Review or × (principles.md -> Affordance loci) */
+  .gen-banner .done-only { display: none; }
+  .gen-banner.done .done-only { display: inline-block; }
+  .gen-banner.done .run-only { display: none; }
+  .gen-banner.done .gen-banner-icon { animation: none; background: var(--ink-muted); }
+  .gen-banner.done.warn { background: var(--warn-bg); border-bottom-color: var(--warn); }
+  .gen-banner.done.warn .gen-banner-icon { background: var(--warn); }
 
   /* info toast — top-center, auto-dismissed (patterns/toast.md) */
   .gen-toast { display: none; position: fixed; top: 16px; left: 50%; transform: translateX(-50%); max-width: 400px; padding: 8px 14px; border: 1px solid var(--line); border-radius: 4px; background: var(--bg-region); box-shadow: 0 4px 12px rgba(0,0,0,0.12); font-size: 12px; color: var(--ink); z-index: 200; }
@@ -738,10 +745,10 @@
   </div>
 
   <div class="rb-group">
-    <span class="gl">chapter-close toast:</span>
-    <button class="rb-btn" data-close-toast="closed">closed</button>
-    <button class="rb-btn" data-close-toast="stopped">stopped early</button>
-    <button class="rb-btn" data-close-toast="failed">failed</button>
+    <span class="gl">chapter close ends:</span>
+    <button class="rb-btn" data-close-end="closed">closed (banner)</button>
+    <button class="rb-btn" data-close-end="stopped">stopped early (banner)</button>
+    <button class="rb-btn" data-close-end="failed">failed (toast)</button>
   </div>
 
   <div class="rb-group">
@@ -912,14 +919,17 @@
   <span class="chip browse recent-1" id="phone-browse-chip" title="Open Browse (rail) as Sheet — background tints when any rail-surfaceable category has recent classifier activity (aggregate across all 7 categories)">&#9776; Browse</span>
 </div>
 
-<!-- Memory-run banner — sticky below chrome during a pass (updating-memory) or a chapter close -->
+<!-- Memory-run banner — sticky below chrome during a pass (updating-memory) or a chapter close, then
+     a committed close's done state until Review or × -->
 <div class="gen-banner" id="gen-banner">
   <span class="gen-banner-icon"></span>
   <span class="gen-banner-label" id="gen-banner-label">Closing chapter: 3 of 7 &mdash; Identity&hellip;</span>
-  <button class="gen-banner-cancel" id="gen-banner-cancel">Cancel</button>
+  <button class="gen-banner-cancel run-only" id="gen-banner-cancel">Cancel</button>
+  <button class="gen-banner-cancel done-only" id="gen-banner-review">Review</button>
+  <button class="gen-banner-cancel done-only" id="gen-banner-dismiss" aria-label="Dismiss">&times;</button>
 </div>
 
-<!-- Toast — the deferral a Cancel of a pass or a close fires, a failed pass's notice, and how a close ended -->
+<!-- Toast — the deferral a Cancel of a pass or a close fires, and a failed pass's or close's notice -->
 <div class="gen-toast" id="gen-toast" role="status" aria-live="polite"></div>
 
 <!-- Layout -->
@@ -1744,6 +1754,30 @@
   let deferredWork = false;
   let deferredClose = false;
 
+  // A close's commit leaves the banner's done state until Review or × (principles.md -> Affordance
+  // loci); a later pass's or close's progress takes the bar while it runs, then it comes back.
+  const closeResults = {
+    closed: { label: 'Chapter closed: The Tithe of Hours', warn: false },
+    stopped: { label: '⚠ Chapter closed, but 2 tasks stopped early', warn: true },
+  };
+  let closeResult = null;
+  function restoreBanner() {
+    const result = closeResults[closeResult];
+    banner.classList.toggle('done', result != null);
+    banner.classList.toggle('warn', result != null && result.warn);
+    if (result == null) {
+      banner.classList.remove('visible');
+      return;
+    }
+    bannerLabel.textContent = result.label;
+    banner.classList.add('visible');
+  }
+  function showRunInBanner(label) {
+    banner.classList.remove('done', 'warn');
+    bannerLabel.textContent = label;
+    banner.classList.add('visible');
+  }
+
   const toast = document.getElementById('gen-toast');
   let toastTimer = null;
   function showToast(text) {
@@ -1784,7 +1818,7 @@
         composer.classList.remove('generating');
         sendBtn.classList.remove('hidden');
         cancelBtn.classList.add('hidden');
-        banner.classList.remove('visible');
+        restoreBanner();
         cancelAction.textContent = 'Open Memory settings';
       } else if (memoryRun) {
         // A pass or a close: blocking, accent pill, no streaming surface. The composer stays
@@ -1793,8 +1827,7 @@
         composer.classList.remove('generating');
         sendBtn.classList.remove('hidden');
         cancelBtn.classList.add('hidden');
-        bannerLabel.textContent = memoryRun.banner;
-        banner.classList.add('visible');
+        showRunInBanner(memoryRun.banner);
         cancelAction.textContent = memoryRun.cancel;
       } else if (state === 'before-turn' || state === 'before-turn-close') {
         // Send's deferred work runs before its turn: no streaming card yet; Send turns into
@@ -1804,10 +1837,9 @@
         sendBtn.classList.add('hidden');
         cancelBtn.classList.remove('hidden');
         const closing = state === 'before-turn-close';
-        bannerLabel.textContent = closing
+        showRunInBanner(closing
           ? 'Before your turn: 3 of 7 \u2014 Identity\u2026'
-          : 'Updating memory before your turn\u2026';
-        banner.classList.add('visible');
+          : 'Updating memory before your turn\u2026');
         cancelAction.textContent = closing ? 'Cancel chapter close' : 'Cancel memory update';
       } else {
         // Active generation phase — streaming surface + composer-cancel mode.
@@ -1832,8 +1864,8 @@
           streamingEntry.classList.remove('visible');
         }
 
-        // The banner is for a pass or a close, which have their own branch above
-        banner.classList.remove('visible');
+        // A turn never runs in the banner; a close's done state stays through it
+        restoreBanner();
         cancelAction.textContent = 'Cancel generation';
       }
     } else {
@@ -1843,7 +1875,7 @@
       composer.classList.remove('generating');
       sendBtn.classList.remove('hidden');
       cancelBtn.classList.add('hidden');
-      banner.classList.remove('visible');
+      restoreBanner();
       setCancelPopover(false); // popover always closes when generation ends
     }
     document.querySelectorAll('[data-gen]').forEach(b => {
@@ -1891,20 +1923,26 @@
     });
   });
 
-  // How a close ended: a commit offers Review (the review window lives in chapter-timeline.html);
-  // a failure, like a failed pass, runs first at the next Send (before-turn).
-  const closeToasts = {
-    closed: 'Chapter closed: The Tithe of Hours   [Review]',
-    stopped: '⚠ Chapter closed, but 2 tasks stopped early   [Review]',
-    failed: '⚠ Chapter close failed. It runs again before your next turn.',
-  };
-  document.querySelectorAll('[data-close-toast]').forEach(b => {
+  // How a close ended: a commit holds the banner's done state, whose Review opens the review window
+  // (chapter-timeline.html); a failure, like a failed pass, toasts and runs first at the next Send.
+  document.querySelectorAll('[data-close-end]').forEach(b => {
     b.addEventListener('click', () => {
-      if (b.dataset.closeToast === 'failed') {
+      if (b.dataset.closeEnd === 'failed') {
         deferredWork = true;
         deferredClose = true;
+        showToast('⚠ Chapter close failed. It runs again before your next turn.');
+        return;
       }
-      showToast(closeToasts[b.dataset.closeToast]);
+      closeResult = b.dataset.closeEnd;
+      // A run in the bar keeps it; the done state shows once the run ends.
+      const runInBar = memoryRuns[genState] || genState === 'before-turn' || genState === 'before-turn-close';
+      if (!runInBar) restoreBanner();
+    });
+  });
+  ['gen-banner-review', 'gen-banner-dismiss'].forEach(id => {
+    document.getElementById(id).addEventListener('click', () => {
+      closeResult = null;
+      restoreBanner();
     });
   });
 

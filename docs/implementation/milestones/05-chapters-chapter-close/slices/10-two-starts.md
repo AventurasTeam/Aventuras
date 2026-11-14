@@ -353,7 +353,7 @@ and the catalog bullet below drops out.
   refusals, phase 0, the no-model fallback, the close hint's keys and the
   banner: [Slice 5.6](./06-close-owed.md).
 - The overlay store, the host's mount, `registerSurface`, the review window
-  and the commit toasts: [Slice 5.11](./11-review-window.md).
+  and the commit banner: [Slice 5.11](./11-review-window.md).
 - The popover and the chips, and whether the phone chip hides with no closed
   chapter: [Slice 5.3](./03-reader-chapters.md).
 - The Timeline's cards, and what expands after a close, which keeps 5.7's

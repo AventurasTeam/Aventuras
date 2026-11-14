@@ -240,7 +240,7 @@ that goes under an open window stops pressing. The entry link is
   surface it sets it at once. That state has no reader until
   [Slice 5.10](./10-two-starts.md).
 - `ChapterOverlaysHost` in `components/chapters/chapter-overlays-host.tsx`,
-  mounted beside `<MemoryRunToasts />` (`app/_layout.tsx:115`), inside
+  mounted beside `<MemoryRunToasts />` (`app/_layout.tsx:116-117`), inside
   `BottomSheetModalProvider`. This slice renders the review; 5.10 adds the
   modal.
 - **One derived rule covers a reversal and a stale toast.** The host
@@ -468,9 +468,9 @@ stays covered. Ids, titles and positions don't move (C8).
 - **E2E:** `e2e/tests/chapter-review.spec.ts` and
   `e2e/locators/review-window.ts`, on the seeded report. It proves the
   seams nothing cheaper reaches: the root host over the router, and the
-  guard C7 records as inferred, not run. Selectors by role and name
-  through i18n, chapters by title (C8). It writes nothing, so it asserts
-  where the press landed.
+  surface guard, which C7 records as run on the Timeline only. Selectors
+  by role and name through i18n, chapters by title (C8). It writes
+  nothing, so it asserts where the press landed.
 - **Mutation check.** The slip rule, the tail pairing and the host's
   id prune are the assertions most likely to pass vacuously. Break each
   once and see its test fail. Write expected text as literals, never from
