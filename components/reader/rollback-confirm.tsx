@@ -66,23 +66,25 @@ export function RollbackConfirmModal({
   variant = 'rollback',
 }: RollbackConfirmModalProps) {
   const kind = copyKindOf(variant, counts)
-  const regenerate = variant === 'regenerate'
-  const title = regenerate
-    ? t('reader:regenerateConfirm.title', { entryNumber: targetEntryNumber })
-    : t('reader:rollbackConfirm.title', { entryNumber: targetEntryNumber })
-  const irreversible = regenerate
-    ? t('reader:regenerateConfirm.irreversible')
-    : t('reader:rollbackConfirm.irreversible')
-  const confirmLabel = regenerate
-    ? t('reader:regenerateConfirm.confirm')
-    : t('reader:rollbackConfirm.confirm')
+  const copy =
+    variant === 'regenerate'
+      ? {
+          title: t('reader:regenerateConfirm.title', { entryNumber: targetEntryNumber }),
+          irreversible: t('reader:regenerateConfirm.irreversible'),
+          confirm: t('reader:regenerateConfirm.confirm'),
+        }
+      : {
+          title: t('reader:rollbackConfirm.title', { entryNumber: targetEntryNumber }),
+          irreversible: t('reader:rollbackConfirm.irreversible'),
+          confirm: t('reader:rollbackConfirm.confirm'),
+        }
   // The close copy names its chapter in a line of its own.
   const chapterLines = kind !== 'regenerate-close'
   return (
     <AlertDialog open={open} onOpenChange={onOpenChange}>
       <AlertDialogContent>
         <AlertDialogHeader>
-          <AlertDialogTitle>{title}</AlertDialogTitle>
+          <AlertDialogTitle>{copy.title}</AlertDialogTitle>
           <AlertDialogDescription>
             {bodyOf(kind, targetEntryNumber)}
             <Text size="sm">
@@ -105,17 +107,17 @@ export function RollbackConfirmModal({
               {`\n• ${t('reader:rollbackConfirm.worldState', { count: counts.worldStateChanges })}`}
             </Text>
             {kind === 'regenerate-close' ? (
-              <Text size="sm" className="font-semibold">
-                {`\n\n${t('reader:regenerateConfirm.closeReturns', {
-                  number: counts.reopenedChapter ?? counts.removedChapters[0],
-                })}`}
-              </Text>
-            ) : null}
-            {kind === 'regenerate-close' ? (
-              <Text size="sm">{`\n${t('reader:regenerateConfirm.closeRunsAgain')}`}</Text>
+              <>
+                <Text size="sm" className="font-semibold">
+                  {`\n\n${t('reader:regenerateConfirm.closeReturns', {
+                    number: counts.reopenedChapter ?? counts.removedChapters[0],
+                  })}`}
+                </Text>
+                <Text size="sm">{`\n${t('reader:regenerateConfirm.closeRunsAgain')}`}</Text>
+              </>
             ) : null}
             <Text size="sm" className="font-bold">
-              {`\n\n${irreversible}`}
+              {`\n\n${copy.irreversible}`}
             </Text>
           </AlertDialogDescription>
         </AlertDialogHeader>
@@ -127,7 +129,7 @@ export function RollbackConfirmModal({
           </AlertDialogCancel>
           <AlertDialogAction asChild>
             <Button variant="destructive" onPress={onConfirm}>
-              <Text>{confirmLabel}</Text>
+              <Text>{copy.confirm}</Text>
             </Button>
           </AlertDialogAction>
         </AlertDialogFooter>

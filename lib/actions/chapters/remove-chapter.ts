@@ -2,12 +2,13 @@ import { generationStore } from '@/lib/stores'
 
 import {
   CHAPTER_DELETE_REFUSAL,
+  integrityRefused,
   resolveChapterDeleteSet,
   type ChapterDeleteMode,
   type ChapterDeleteRefusal,
 } from './chapter-delete-set'
 import { ReversalIntegrityError } from '../delta/replay-errors'
-import { commitNewAction, logReversalRefused } from '../story-entries/operational'
+import { commitNewAction } from '../story-entries/operational'
 import { bracketProseReversal } from '../story-entries/prose-reversal'
 import type { DbCtx } from '../types'
 
@@ -38,9 +39,8 @@ export async function removeChapter(
       // No clamp: no entry goes, and a close never moves the watermark.
       await commitNewAction(resolved.set, ctx, [])
     } catch (e) {
-      if (!(e instanceof ReversalIntegrityError)) throw e
-      logReversalRefused(branchId, e)
-      return { status: 'rejected', code: CHAPTER_DELETE_REFUSAL.integrity, reason: e.message }
+      if (e instanceof ReversalIntegrityError) return integrityRefused(branchId, e)
+      throw e
     }
     return { status: 'ok' }
   })

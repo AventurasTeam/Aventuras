@@ -41,6 +41,14 @@ function refusal(code: ChapterDeleteRefusal['code']): ChapterDeleteRefusal {
   return { status: 'rejected', code, reason: `refused: ${code}` }
 }
 
+function storeSyncFailed(): DeltaReplayError {
+  return new DeltaReplayError('store sync failed', {
+    cause: new Error('stale store'),
+    actionId: 'act_delete',
+    stage: 'store-sync',
+  })
+}
+
 function deferred<T>() {
   let resolve!: (value: T) => void
   const promise = new Promise<T>((res) => {
@@ -463,13 +471,7 @@ describe('useChapterDeleteConfirm: the removal', () => {
   it('closes with no toast and resyncs once when the delete committed but its store sync failed', async () => {
     const { result, remove, resync } = setup()
     await openOn(result)
-    remove.mockRejectedValueOnce(
-      new DeltaReplayError('store sync failed', {
-        cause: new Error('stale store'),
-        actionId: 'act_delete',
-        stage: 'store-sync',
-      }),
-    )
+    remove.mockRejectedValueOnce(storeSyncFailed())
 
     await act(async () => {
       await result.current.confirm('whole')
@@ -490,13 +492,7 @@ describe('useChapterDeleteConfirm: the removal', () => {
   it('logs a resync that fails after a committed delete, and toasts that the delete landed', async () => {
     const { result, remove, resync } = setup()
     await openOn(result)
-    remove.mockRejectedValueOnce(
-      new DeltaReplayError('store sync failed', {
-        cause: new Error('stale store'),
-        actionId: 'act_delete',
-        stage: 'store-sync',
-      }),
-    )
+    remove.mockRejectedValueOnce(storeSyncFailed())
     resync.mockRejectedValueOnce(new Error('read failed'))
 
     await act(async () => {
@@ -515,13 +511,7 @@ describe('useChapterDeleteConfirm: the removal', () => {
   it("ignores a Delete… press while a committed delete's resync runs", async () => {
     const { result, loadPreview, remove, resync } = setup()
     await openOn(result)
-    remove.mockRejectedValueOnce(
-      new DeltaReplayError('store sync failed', {
-        cause: new Error('stale store'),
-        actionId: 'act_delete',
-        stage: 'store-sync',
-      }),
-    )
+    remove.mockRejectedValueOnce(storeSyncFailed())
     const resyncing = deferred<unknown>()
     resync.mockReturnValueOnce(resyncing.promise)
     // The chapter is gone, so a read of it now refuses.

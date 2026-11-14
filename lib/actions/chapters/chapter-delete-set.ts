@@ -46,6 +46,14 @@ function refused(code: ChapterDeleteReadRefusal['code'], reason: string): Chapte
   return { status: 'rejected', code, reason }
 }
 
+export function integrityRefused(
+  branchId: string,
+  e: ReversalIntegrityError,
+): ChapterDeleteReadRefusal {
+  logReversalRefused(branchId, e)
+  return refused(CHAPTER_DELETE_REFUSAL.integrity, e.message)
+}
+
 /** C13's read and seed. Writes nothing; the caller holds the bracket or the shared write lock. */
 export async function resolveChapterDeleteSet(
   branchId: string,
@@ -110,8 +118,7 @@ export async function resolveChapterDeleteSet(
     const set = await selectReversalSet(ctx, { branchId, target, yieldTo: 'any' })
     return { set, chapter, groups }
   } catch (e) {
-    if (!(e instanceof ReversalIntegrityError)) throw e
-    logReversalRefused(branchId, e)
-    return refused(CHAPTER_DELETE_REFUSAL.integrity, e.message)
+    if (e instanceof ReversalIntegrityError) return integrityRefused(branchId, e)
+    throw e
   }
 }
