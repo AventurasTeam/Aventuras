@@ -10,22 +10,27 @@ export type ChapterAgeIndex = {
   readonly sequenceOf: ReadonlyMap<string, number>
   /** One past the highest stamped sequence_number; 0 with no stamp. */
   readonly current: number
+  /** Minted only by chapterAgeIndex, so `current` exceeds every sequence and no age is negative. */
+  readonly __brand: 'ChapterAgeIndex'
 }
-
-export const EMPTY_CHAPTER_AGES: ChapterAgeIndex = { sequenceOf: new Map(), current: 0 }
 
 export function chapterAgeIndex(
   rows: readonly { sequence: number; entryId: string }[],
 ): ChapterAgeIndex {
-  if (rows.length === 0) return EMPTY_CHAPTER_AGES
   const sequenceOf = new Map<string, number>()
   let highest = 0
   for (const { sequence, entryId } of rows) {
     sequenceOf.set(entryId, sequence)
     if (sequence > highest) highest = sequence
   }
-  return { sequenceOf, current: highest + 1 }
+  const index: Omit<ChapterAgeIndex, '__brand'> = {
+    sequenceOf,
+    current: rows.length === 0 ? 0 : highest + 1,
+  }
+  return index as ChapterAgeIndex
 }
+
+export const EMPTY_CHAPTER_AGES = chapterAgeIndex([])
 
 /** Null for no anchor; 0 for an entry no closed chapter holds (open region or dangling). */
 export function chaptersOldAt(
