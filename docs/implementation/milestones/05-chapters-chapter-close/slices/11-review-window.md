@@ -527,9 +527,9 @@ closed: <title>` at info with no stopped task, and the warning tone
    whole close. 5.13 owns how the review reads a re-run's group, the
    host closing the window when a re-run replaces the report, the
    `Re-run…` footer button and the re-run's banner copy. A re-run's
-   commit shows in the banner too (`Chapter <N>'s close re-ran [Review]
-[×]`, warning tone when tasks stopped early), one durable notice for
-   the one window; its cancel and failure stay toasts with no action, as
+   commit shows in the banner too (`Chapter <N>'s close re-ran` with
+   `Review` and a dismiss, warning tone when tasks stopped early), one
+   durable notice for the one window; its cancel and failure stay toasts with no action, as
    does the fallback toast for a re-run undone with no journal to write
    back. Until 5.13, the commit handler shows a re-run's commit as a
    close's.
@@ -598,8 +598,8 @@ closed: <title>` at info with no stopped task, and the warning tone
   resistance", not "pin". A landed or skipped happening merge records
   keep's derived writes (`occurredAtEntryId`, `commonKnowledge`) in
   `values`, since C4 takes new values from `values`. That also changes
-  later tasks' writes-so-far line (`description, occurredAtEntryId,
-commonKnowledge; kept hp1`), pinned by a test. A happening's link-row
+  later tasks' writes-so-far line, which now lists the anchor and the
+  flag after the description, pinned by a test. A happening's link-row
   losses are labelled through the link tables' labels.
 - **List length.** Unvirtualized. A 22-row report scrolled on the slot
   AVD with no review-specific jank (5.63% janky frames against the
