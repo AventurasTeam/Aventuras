@@ -53,6 +53,7 @@ export {
   reverseReplayDeltas,
 } from './delta/reverse-replay'
 export { readRowGuard } from './delta/row-guard'
+export { userDeletedHappeningLink } from './delta/user-precedence'
 export { PLOT_REJECTION, type PlotSaveResult } from './plot/commit-plot-save'
 export type { RowSaveRejectionCode } from './row-save/commit-row-save'
 export { saveHappening } from './plot/save-happening'

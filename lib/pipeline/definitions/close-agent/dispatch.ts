@@ -17,7 +17,14 @@ import {
   type WritePlan,
   type WriteTool,
 } from './tool'
-import { assertPlanShape, modelAnswer, rejectedWhole, verdictOf, type ToolVerdict } from './verdict'
+import {
+  assertPlanShape,
+  CLOSE_REASON,
+  modelAnswer,
+  rejectedWhole,
+  verdictOf,
+  type ToolVerdict,
+} from './verdict'
 import { readRowGuard } from '../../runtime/action-port'
 import { emitDeltaGroup } from '../../runtime/emit-group'
 import type { PhaseContext, PhaseEmittedEvent } from '../../types'
@@ -52,6 +59,7 @@ function toolContextOf(ctx: DispatchContext): ToolContext {
     ids: ctx.ids,
     readFields: ctx.readFields,
     survivorOf: ctx.survivorOf,
+    clusterOf: ctx.clusterOf,
     landedCalls: ctx.landedCalls,
   }
 }
@@ -236,14 +244,16 @@ async function* writeCall(
     ids: ctx.ids,
     taskEntryIds: ctx.taskEntryIds,
     readSet: ctx.readSet,
+    survivorOf: ctx.survivorOf,
   })
   if (!check.ok) {
-    const verdict = rejectedWhole(check.reason, [], ctx)
-    recordWrite(ctx, tool.name, args, {
-      rows: rowsNamed(named, ctx.ids),
-      turns: turnsShown(args.turns, ctx),
-      verdict,
-    })
+    const rows = rowsNamed(named, ctx.ids)
+    // Only the judged row goes to rejectedWhole: a row-gone names its survivor, the ledger none.
+    const verdict =
+      check.gone === undefined
+        ? rejectedWhole(check.reason, [], ctx)
+        : rejectedWhole(CLOSE_REASON.rowGone, rowsNamed([check.gone], ctx.ids), ctx)
+    recordWrite(ctx, tool.name, args, { rows, turns: turnsShown(args.turns, ctx), verdict })
     return modelAnswer(verdict, {}, ctx.ids)
   }
 

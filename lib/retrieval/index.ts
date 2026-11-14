@@ -72,4 +72,5 @@ export type {
   RetrievalType,
   SeatedRow,
 } from './types'
-export { cosine } from './vector'
+export { decodeVector } from './decode-vector'
+export { cosine, VectorInvariantError } from './vector'

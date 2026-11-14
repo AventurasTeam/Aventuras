@@ -103,6 +103,7 @@ function promptContextFor(
     ids,
     readFields: LORE_READ_FIELDS,
     survivorOf: () => undefined,
+    clusterOf: () => undefined,
     landedCalls: opts.landedCalls ?? (() => 0),
     phase: {
       actionId,

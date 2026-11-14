@@ -11,6 +11,7 @@ import {
   resetStuckClassifierRunState,
   reverseReplayDeltas,
   settleUserWrites,
+  userDeletedHappeningLink,
 } from '@/lib/actions'
 import { configureTruncationNotice, displayEstimate } from '@/lib/ai'
 import type { DbCtx } from '@/lib/db'
@@ -72,6 +73,7 @@ export function ensureDeltaActionPort(): void {
     applyDeltaAction,
     applyDeltaActionGroupWithOutcomes,
     readRowGuard,
+    userDeletedHappeningLink,
     reverseReplayDeltas,
     describeReplayError: describeDeltaReplayError,
     settleUserWrites,

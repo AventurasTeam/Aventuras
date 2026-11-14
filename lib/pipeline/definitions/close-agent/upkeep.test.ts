@@ -298,6 +298,7 @@ function promptContextFor(
     ids,
     readFields: UPKEEP_READ_FIELDS,
     survivorOf: () => undefined,
+    clusterOf: () => undefined,
     landedCalls: () => 0,
     phase: {
       actionId,

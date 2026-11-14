@@ -348,6 +348,61 @@ breakdown under [UX](#ux).
   waits on these defaults settling. Raised 2026-10-19 by the
   entity-state design (the budgets).
 
+- **Decay against the chapter-match boost.** The ×1.3
+  [chapter-match boost](./memory/retrieval.md#chapter-match-boost-on-happenings)
+  multiplies a score after decay, so it can't seat an old row: on the
+  default ranker an unpinned happening alone in its pool seats through
+  a matched chapter up to 9 chapters old at similarity 0.3, 13 at 0.4
+  and 16 at 0.5 (5, 9 and 13 without the boost). Past that only the
+  [high-similarity bypass](./memory/retrieval.md#high-similarity-bypass--revival-of-decayed-memories)
+  at 0.85 revives it. That is canon working as written on guessed `λ`
+  values; play tells whether a matched chapter should reach further, by
+  boosting before decay or by a larger factor. Raised 2026-11-13 by
+  Slice 5.9's planning, when `chapters_old` came live.
+
+- **A close's pin raise step.** The Awareness task raises a pin by at
+  most 0.2 a close, never straight to 1
+  ([3d](./memory/chapter-close.md#3d--awareness-pin-tuning)): the
+  prompt asks for it and `set_pin` refuses a bigger raise. No later close
+  can lower a frequent row's pin, so play tells whether 0.2 lets a
+  load-bearing row climb fast enough while a one-chapter spike fades.
+  Developer decision 2026-11-14, from 5.9's Awareness review.
+
+- **3e's thresholds don't fit every embedder.** On the dataset chapter
+  with `Xenova/all-MiniLM-L6-v2`, which
+  [`retrieval.md`](./memory/retrieval.md) names the mobile default, 3e
+  found 0 clusters: 36 happenings, 630 pairs, and a highest cosine of
+  0.732, short of the 0.80 bar canon sets. The best pair inside the
+  distance and cast gates reads 0.701. The Spy-glass (0.709) and
+  Dr. Livesey (0.697) near-duplicates sit 6 entries apart, so the
+  distance gate drops them too, and the next in-gate pair, 0.590, is
+  likely distinct. So 3e doesn't fire on MiniLM today. One global cosine
+  can't fit every embedder; a per-embedder threshold, for instance one
+  the embedder's registry entry carries, is the likely shape. Play
+  measures EmbeddingGemma on the same chapter and re-tunes both gates
+  (cosine and distance) on real stories. One scratch probe with the
+  cosine bar lowered to 0.55 found a single cluster, the two halves of
+  Captain Smollett's cabin meeting (same cast and knowers, neither common
+  knowledge); the dev model read both turns and merged them with a
+  composite description, and the merge landed. So `merge_happenings` and
+  the Happenings prompt work on the dev model, but the keep-apart rule
+  for differing knowers has met no real case yet. Developer decision
+  2026-11-14, from Slice 5.9's probes. Once 3e fires, World-merged
+  awareness rows start to block merges: each counts as a pin the user
+  set, so a merge that would absorb a happening a merged character knows
+  is skipped ([`triage.md`](./implementation/triage.md), "World merge
+  re-creates awareness rows as the user's.").
+
+- **User threads never decay.** A thread the user created, or one the
+  user resolved or failed, carries no `resolved_at_entry_id` and never
+  decays: the [authorship contract](./data-model.md#authorship-contract)
+  keeps entry refs AI-only. If real stories show such threads crowding
+  retrieval, their age can come read-side from the delta log, from the
+  entry at the user's status-change delta's `log_position` (a user's
+  thread edit logs a null `entry_id` but a log position). That keeps
+  the contract but costs a delta-log read per thread candidate per
+  turn. The developer accepted the edge 2026-11-13.
+
 - **Prompt tuning.** Once the prompt content pass has every input in
   the prompts, play tunes their wording for the writing itself: the
   narrator's narrative writing, prose and behaviors. The
@@ -514,7 +569,9 @@ breakdown under [UX](#ux).
   dataset chapter cut at a 40,000 window, part 1's Upkeep start held
   39 rows and 29 happenings and its Lifecycle start 29 rows (part 2:
   20 and 22), with no bound on either, and the close still ran without
-  a window stop. The metadata merge grows with the part count too (about
+  a window stop. The Awareness start, which has no parts, listed 72 rows
+  in a 3334-token user half on the dataset chapter (Slice 5.9), with no
+  bound either. The metadata merge grows with the part count too (about
   75 tokens a part summary over a 420-token base) with no size check or
   staged merge, so on a small window a very long chapter could fail the
   close at the merge after every part call ran; only near an 8k window
