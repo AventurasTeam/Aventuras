@@ -1,10 +1,11 @@
-import { and, asc, desc, eq, gt, inArray, isNull, notInArray, or, type SQL } from 'drizzle-orm'
+import { and, asc, desc, eq, gt, inArray, isNull, notInArray, or, sql, type SQL } from 'drizzle-orm'
 
 import type { GroupOutcome, GuardRow, PipelineAction } from '@/lib/actions/types'
 import type { PromptHalves } from '@/lib/ai'
 import {
   chapters,
   chunked,
+  deltas,
   entities,
   happeningAwareness,
   happenings,
@@ -114,13 +115,36 @@ function learnedAfterEnd(ctx: TaskPromptContext) {
     .where(and(eq(storyEntries.branchId, ctx.branchId), gt(storyEntries.position, end)))
 }
 
+// A row whose pin the user ever set, or that they created: set_pin skips it whatever turn is cited,
+// so it takes no place either. Key presence, as `carriesColumn` reads an undo payload.
+function userPinned(ctx: TaskPromptContext) {
+  return ctx.db
+    .select({ id: deltas.targetId })
+    .from(deltas)
+    .where(
+      and(
+        eq(deltas.branchId, ctx.branchId),
+        eq(deltas.targetTable, 'happening_awareness'),
+        eq(deltas.source, 'user_edit'),
+        or(
+          eq(deltas.op, 'create'),
+          and(
+            eq(deltas.op, 'update'),
+            sql`json_type(${deltas.undoPayload}, '$.decayResistance') IS NOT NULL`,
+          ),
+        ),
+      ),
+    )
+}
+
 // Read when the task starts, after Happenings' merges, so a count a merge summed counts.
 async function frequentRows(ctx: TaskPromptContext): Promise<ListedRow[]> {
   const notLater = or(
     isNull(happeningAwareness.learnedAtEntryId),
     notInArray(happeningAwareness.learnedAtEntryId, learnedAfterEnd(ctx)),
   )!
-  return listable(ctx, and(gt(happeningAwareness.retrievalCount, 0), notLater)!)
+  const notUsers = notInArray(happeningAwareness.id, userPinned(ctx))
+  return listable(ctx, and(gt(happeningAwareness.retrievalCount, 0), notLater, notUsers)!)
     .orderBy(desc(happeningAwareness.retrievalCount), asc(happeningAwareness.id))
     .limit(AWARENESS_TOP_N)
 }

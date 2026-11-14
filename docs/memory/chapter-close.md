@@ -672,11 +672,13 @@ the list it came from; a row in both lists shows as a closed-chapter
 row. The high-frequency set is every row with a count above 0, highest
 first, ties by id, at most 20, read after the Happenings task so a
 merge's summed counts count. It leaves out a row a later turn created,
-learned after the chapter's end, but keeps the rows of retired
-characters. Both lists leave out the rows of a common-knowledge
-happening, where a pin reaches nothing. The chapter's summary comes
-with the lists. The chapter's rows are not bounded; the size the start
-reaches on the dataset chapter is measured in
+learned after the chapter's end, and a row whose pin the user ever set
+or that they created, since `set_pin` skips both; the next rows by count
+take their places. It keeps the rows of retired characters. Both lists
+leave out the rows of a common-knowledge happening, where a pin reaches
+nothing. The chapter's summary comes with the lists. The chapter's rows
+are not bounded; the size the start reaches on the dataset chapter is
+measured in
 [`followups.md → Tuning and play testing`](../followups.md#tuning-and-play-testing).
 
 ### 3e — happenings consolidation

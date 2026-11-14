@@ -1,8 +1,12 @@
-import { applyDeltaActionGroupWithOutcomes } from '@/lib/actions/delta/apply-delta-action'
+import {
+  applyDeltaAction,
+  applyDeltaActionGroupWithOutcomes,
+} from '@/lib/actions/delta/apply-delta-action'
 import type { GroupOutcome } from '@/lib/actions/types'
 import type { ResolveModelConfig, ToolStepCall, ToolStepResult } from '@/lib/ai'
 import { chapters, emptyEntityState, entities, happeningAwareness, happenings } from '@/lib/db'
 import { makeLogger } from '@/lib/diagnostics'
+import { generateId } from '@/lib/ids'
 
 import type { PhaseContext, PhaseEmittedEvent, PhaseResult } from '../../../types'
 import type { CloseFixture } from '../../__tests__/close-fixture'
@@ -99,6 +103,37 @@ export async function putAwareness(
     retrievalCount: row.retrievalCount ?? 0,
     source: row.source ?? null,
   })
+}
+
+/** The user's Plot-panel write of a pair: a create, or an update of the fields sent. */
+export async function userWritesAwareness(
+  fx: CloseFixture,
+  {
+    branchId = fx.branchId,
+    ...fields
+  }: {
+    branchId?: string
+    characterId: string
+    happeningId: string
+    decayResistance?: number
+    source?: string
+    retrievalCount?: number
+  },
+): Promise<void> {
+  const result = await applyDeltaAction(
+    {
+      action: {
+        kind: 'upsertHappeningAwareness',
+        source: 'user_edit',
+        payload: { branchId, ...fields, proseEntryId: null },
+      },
+      actionId: generateId('act'),
+      branchId,
+      entryId: null,
+    },
+    fx.ctx,
+  )
+  if (result.status !== 'ok') throw new Error(`user awareness write refused: ${result.reason}`)
 }
 
 // The chapter being closed, as the metadata phase writes it before the agent runs.
