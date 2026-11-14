@@ -1172,22 +1172,23 @@ code before it moved; resolve with the slice it names.
   (`passFailure`, e.g. `timeout after 600000ms`). The panel slice picks
   one form. Predates the pass failure policy slice; raised 2026-10-23
   by its slice review.
-- **M7.1 — Embed calls have no timeout of their own.** Reconcile's
-  description embeds (`scoreDescriptions` in
+- **M7.1 — Reconcile's embeds have no timeout of their own.**
+  Reconcile's description embeds (`scoreDescriptions` in
   `lib/classifier/reconcile.ts`, through `embedClassifierDescriptions`
-  in `lib/embedder-swap/app-deps.ts`) and retrieval's embeds end on a
-  cancel but nothing bounds them:
+  in `lib/embedder-swap/app-deps.ts`) end on a cancel but nothing bounds
+  them:
   [`classifier.md → Failure policy`](../memory/classifier.md#failure-policy)
   bounds only the pass's structured call, so a hung remote embedder
   holds the pass, and the gate, until it returns or the user cancels.
-  A close's
-  [3e embed](../memory/chapter-close.md#3e--happenings-consolidation) is
-  a third such call: M5 honours the signal and bounds nothing.
-  Options: extend the pass bound over reconcile, one deadline for the
-  call and its matching, or an embed timeout read from the embedder
-  profile, which the embedder settings would carry. Raised 2026-10-23
-  by the pass failure policy slice review; routed by the 2026-10-24
-  triage pass.
+  Retrieval's embeds and a close's
+  [3e embed](../memory/chapter-close.md#3e--happenings-consolidation)
+  take a fixed 300 s bound (`EMBED_TIMEOUT_MS`). Options: extend the
+  pass bound over reconcile, one deadline for the call and its matching,
+  or an embed timeout read from the embedder profile, which the embedder
+  settings would carry and which would replace the fixed bound too.
+  Raised 2026-10-23 by the pass failure policy slice review; routed by
+  the 2026-10-24 triage pass; narrowed to reconcile by Slice 5.9, which
+  bounded the 3e embed.
 - **M7.1 — The pass's retry after a timeout can never run.** A
   classifier profile's `timeout` bounds each attempt of the structured
   call (`lib/ai/generate.ts`) and, armed with the same value before the

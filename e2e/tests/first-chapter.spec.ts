@@ -36,6 +36,9 @@ const REPLY = `${REPLY_MARKER} the gate-warden reads the pact and lifts the bar.
 
 type OpenRow = [id: string, position: number, kind: string]
 
+// One total order for both sides of the reset comparison.
+const byBinary = (a: string, b: string): number => (a < b ? -1 : a > b ? 1 : 0)
+
 // Reached by URL (docs/testing.md → Harness structure): no in-app path leads here under E2E, as
 // Settings renders its /dev link only under __DEV__ (app/settings/index.tsx), false in both launch
 // modes; the route is the close's only start until the real starts replace it (Slice 5.10).
@@ -99,6 +102,27 @@ test.describe('first chapter — a close from the dev route', () => {
       `SELECT COALESCE(MAX(log_position), 0) FROM deltas WHERE branch_id = ?`,
       [branchId],
     )
+    // The close's code steps: the reset updates every counted row, normalization every folded record.
+    const counted = (
+      (await queryApp(
+        page,
+        `SELECT id FROM happening_awareness WHERE branch_id = ? AND retrieval_count > 0`,
+        [branchId],
+      )) as [string][]
+    )
+      .map(([id]) => id)
+      .toSorted(byBinary)
+    expect(counted.length, 'the seed counts retrievals for the reset to clear').toBeGreaterThan(0)
+    expect(
+      await queryScalar(
+        page,
+        `SELECT COUNT(*) FROM entities WHERE branch_id = ? AND kind = 'character'
+         AND json_extract(state, '$.stackables') IS NOT NULL
+         AND json_extract(state, '$.stackables') <> '{}'`,
+        [branchId],
+      ),
+      'no character holds stackables, so normalization writes nothing',
+    ).toBe(0)
 
     const { actionId, chapterId } =
       await test.step('the dev route closes at the reply', async () => {
@@ -193,14 +217,34 @@ test.describe('first chapter — a close from the dev route', () => {
          WHERE branch_id = ? AND action_id = ? ORDER BY log_position`,
         [branchId, actionId],
       )
+      const stamped = 1 + range.length
       expect(
-        deltas,
-        'C1: the create, a stamp per entry in position order, then the report',
+        deltas.slice(0, stamped),
+        'C1: the create, then a stamp per entry in position order',
       ).toEqual([
         ['chapters', 'create', chapterId, endId, 'chapter_close'],
         ...range.map(([id]) => ['story_entries', 'update', id, endId, 'chapter_close']),
-        ['chapters', 'update', chapterId, endId, 'chapter_close'],
       ])
+      // counted has no ORDER BY, and canon fixes no order for the reset: sort both sides.
+      expect(
+        deltas.slice(stamped, -1).toSorted((a, b) => byBinary(String(a[2]), String(b[2]))),
+        'then the reset: an update of each counted awareness row',
+      ).toEqual(counted.map((id) => ['happening_awareness', 'update', id, endId, 'chapter_close']))
+      expect(deltas.at(-1), 'then the report').toEqual([
+        'chapters',
+        'update',
+        chapterId,
+        endId,
+        'chapter_close',
+      ])
+      expect(
+        await queryScalar(
+          page,
+          `SELECT COUNT(*) FROM happening_awareness WHERE branch_id = ? AND retrieval_count > 0`,
+          [branchId],
+        ),
+        'the reset left no count',
+      ).toBe(0)
       expect(
         await queryScalar(
           page,

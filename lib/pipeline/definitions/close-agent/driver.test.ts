@@ -6,7 +6,7 @@ import {
   type ToolModelMessage,
 } from 'ai'
 import { MockLanguageModelV3 } from 'ai/test'
-import { and, eq } from 'drizzle-orm'
+import { and, eq, sql } from 'drizzle-orm'
 import { afterEach, beforeEach, describe, expect, it, onTestFinished, vi } from 'vitest'
 import { z } from 'zod'
 
@@ -14,7 +14,7 @@ import {
   applyDeltaAction,
   applyDeltaActionGroupWithOutcomes,
 } from '@/lib/actions/delta/apply-delta-action'
-import type { GroupOutcome } from '@/lib/actions/types'
+import type { GroupOutcome, PipelineAction } from '@/lib/actions/types'
 import {
   generateToolStep,
   type CallRetryError,
@@ -27,11 +27,25 @@ import {
   type ToolStepResult,
 } from '@/lib/ai'
 import type { ChapterPartCut } from '@/lib/chapters'
-import { entities, lore, storyEntries, threads, type CloseTask } from '@/lib/db'
+import {
+  clearEmbeddingStaleOp,
+  emptyEntityState,
+  ensureVecTablesSql,
+  entities,
+  happeningAwareness,
+  lore,
+  packFloat32,
+  sourceHash,
+  storyEntries,
+  threads,
+  upsertVecOps,
+  type CloseTask,
+} from '@/lib/db'
 import { logger, makeLogger } from '@/lib/diagnostics'
 import { generateId } from '@/lib/ids'
 import { appSettingsStore, currentStoryStore, entitiesStore, resetAllStores } from '@/lib/stores'
 
+import { __setCloseEmbedDepsForTest, type CloseEmbedDeps } from './close-happenings'
 import { entityWriteAction } from './entity-write'
 import { identityTask } from './identity'
 import { CloseIds } from './ids'
@@ -61,7 +75,7 @@ import {
 import { readTaskTurns } from './turns'
 import { CLOSE_REASON } from './verdict'
 import type { PhaseContext, PhaseEmittedEvent, PhaseResult, PipelineError } from '../../types'
-import { openCloseFixture, type CloseFixture } from '../__tests__/close-fixture'
+import { openCloseFixture, queryAllOn, type CloseFixture } from '../__tests__/close-fixture'
 import { closeAgentPhase } from '../chapter-close-agent'
 import {
   closeIdsOf,
@@ -312,6 +326,7 @@ function runContext(phase: PhaseContext): TaskRunArgs {
     part: 1,
     ids,
     survivorOf: (table, id) => writer.survivorOf(table, id),
+    clusterOf: () => undefined,
     landedCalls: (tool) => writer.landedCalls(tool),
     phase,
     taskEntryIds: chapterEntryIds(),
@@ -1725,17 +1740,25 @@ describe('closeAgentPhase', () => {
     expect(log).toEqual([])
   })
 
-  it('with the production slots, runs Lore, Identity, Threads, Upkeep and Lifecycle in each part', () => {
+  it('with the production slots, runs normalization, the range embed and Happenings, the prose tasks per part, then Awareness and the reset', () => {
     __setCloseAgentSlots({ before: [], perPart: [quietTask('identity', [])], after: [] })
     __setCloseAgentSlots(undefined)
     expect(closeAgentSlots()).toBe(PRODUCTION_CLOSE_SLOTS)
-    expect(PRODUCTION_CLOSE_SLOTS.before).toEqual([])
-    expect(PRODUCTION_CLOSE_SLOTS.after).toEqual([])
-    expect(
-      PRODUCTION_CLOSE_SLOTS.perPart.map((entry) =>
-        entry.kind === 'task' ? entry.def.task : entry.step.name,
-      ),
-    ).toEqual(['lore', 'identity', 'threads', 'upkeep', 'lifecycle'])
+    const named = (entries: readonly SlotEntry[]): string[] =>
+      entries.map((entry) => (entry.kind === 'task' ? entry.def.task : entry.step.name))
+    expect(named(PRODUCTION_CLOSE_SLOTS.before)).toEqual([
+      'stackables',
+      'happenings-embed',
+      'happenings',
+    ])
+    expect(named(PRODUCTION_CLOSE_SLOTS.perPart)).toEqual([
+      'lore',
+      'identity',
+      'threads',
+      'upkeep',
+      'lifecycle',
+    ])
+    expect(named(PRODUCTION_CLOSE_SLOTS.after)).toEqual(['awareness', 'retrieval-reset'])
   })
 
   it('with no task in any slot, starts nothing and reads no store and no parts, the ledger seeded', async () => {
@@ -2170,7 +2193,7 @@ describe('closeAgentPhase over parts, with the real tasks', () => {
     expect(stored.map(({ id }) => id)).not.toContain(capped.rows[0]!.id)
   })
 
-  it('starts the five prose tasks in each of three parts, 15 of 17, in run order', async () => {
+  it('starts Happenings, the five prose tasks in each of three parts, then Awareness: 17 of 17, in run order', async () => {
     __setCloseAgentSlots(undefined)
     const ctx = partsPhase([
       [0, 2],
@@ -2182,6 +2205,7 @@ describe('closeAgentPhase over parts, with the real tasks', () => {
 
     expect(result).toEqual({ status: 'completed' })
     expect(events.filter((event) => event.type === 'close_task_start')).toEqual([
+      { type: 'close_task_start', task: 'happenings', part: 0, index: 1, total: 17 },
       { type: 'close_task_start', task: 'lore', part: 1, index: 2, total: 17 },
       { type: 'close_task_start', task: 'identity', part: 1, index: 3, total: 17 },
       { type: 'close_task_start', task: 'threads', part: 1, index: 4, total: 17 },
@@ -2197,6 +2221,7 @@ describe('closeAgentPhase over parts, with the real tasks', () => {
       { type: 'close_task_start', task: 'threads', part: 3, index: 14, total: 17 },
       { type: 'close_task_start', task: 'upkeep', part: 3, index: 15, total: 17 },
       { type: 'close_task_start', task: 'lifecycle', part: 3, index: 16, total: 17 },
+      { type: 'close_task_start', task: 'awareness', part: 0, index: 17, total: 17 },
     ])
     // The fixture holds no row: only Lore, which starts from the prose, makes a step, once a part.
     expect(
@@ -2206,5 +2231,348 @@ describe('closeAgentPhase over parts, with the real tasks', () => {
       ['read_row', 'create_lore', 'update_lore'],
       ['read_row', 'create_lore', 'update_lore'],
     ])
+  })
+})
+
+describe('closeAgentPhase with the production slots: the chapter-wide entries', () => {
+  const CROSSING = 'hap_00000000-0000-4000-8000-00000000c002'
+  const TOLL_TALK = 'hap_00000000-0000-4000-8000-00000000c003'
+  const DIM = 4
+  const EMBED_MODEL = 'driver-range-embed'
+  let fx: CloseFixture
+  let timeline: string[]
+
+  // Every happening the range embed embeds lies on one axis, so two with a shared cast and close
+  // anchors cluster.
+  const scriptedEmbedDeps = (): CloseEmbedDeps => ({
+    queryAll: queryAllOn(fx.ctx.db),
+    modelId: EMBED_MODEL,
+    dim: DIM,
+    revalidateRows: async (rows) => ({ staleRows: rows, freshOps: [] }),
+    embedRows: async (rows) => {
+      timeline.push('embed')
+      return rows.flatMap((row) => [
+        ...upsertVecOps(
+          {
+            kind: row.kind,
+            id: row.id,
+            branchId: row.branchId,
+            modelId: EMBED_MODEL,
+            dim: DIM,
+            sourceHash: sourceHash(row.fields.join('\n')),
+            vector: packFloat32(Float32Array.from([1, 0, 0, 0])),
+          },
+          { fields: row.fields },
+        ),
+        clearEmbeddingStaleOp(row),
+      ])
+    },
+  })
+
+  beforeEach(async () => {
+    __setCloseAgentSlots(undefined)
+    timeline = []
+    fx = await openCloseFixture()
+    __setCloseEmbedDepsForTest(scriptedEmbedDeps())
+    // Only the chapter-wide tasks' calls join the timeline; the prose tasks' don't depend on it.
+    vi.mocked(generateToolStep).mockImplementation(async (_target, request) => {
+      const tools = Object.keys(request.tools)
+      if (tools.includes('merge_happenings')) timeline.push('call:happenings')
+      if (tools.includes('set_pin')) timeline.push('call:awareness')
+      return okStep([])
+    })
+  })
+
+  afterEach(() => {
+    __setCloseEmbedDepsForTest(undefined)
+    __setCloseAgentSlots(undefined)
+  })
+
+  async function apply(action: PipelineAction): Promise<void> {
+    const result = await applyDeltaAction(
+      { action, actionId: 'act_seed_world', branchId: fx.branchId, entryId: null },
+      fx.ctx,
+    )
+    if (result.status !== 'ok') throw new Error(`seeding ${action.kind} refused: ${result.reason}`)
+  }
+
+  // Wren holds Gold and gold; two happenings of the range she was in, anchored at t3 and t5; her
+  // awareness of the first, learned at t5 and retrieved three times since the last close.
+  async function seedChapterWide(): Promise<void> {
+    await apply({
+      kind: 'createEntity',
+      source: 'periodic_classifier',
+      payload: {
+        entry: {
+          id: WREN,
+          branchId: fx.branchId,
+          kind: 'character',
+          name: 'Wren',
+          description: 'A courier.',
+          status: 'active',
+          injectionMode: 'auto',
+          state: { ...emptyEntityState('character'), stackables: { Gold: 5, gold: 3 } },
+          createdAt: 1,
+          updatedAt: 1,
+        },
+      },
+    })
+    for (const [id, title, at] of [
+      [CROSSING, 'The night crossing', 2],
+      [TOLL_TALK, 'Talk of the toll', 4],
+    ] as const) {
+      await apply({
+        kind: 'createHappening',
+        source: 'periodic_classifier',
+        payload: {
+          entry: {
+            id,
+            branchId: fx.branchId,
+            title,
+            occurredAtEntryId: fx.entries[at]!.id,
+            createdAt: 1,
+            updatedAt: 1,
+          },
+        },
+      })
+      await apply({
+        kind: 'createHappeningInvolvement',
+        source: 'periodic_classifier',
+        payload: {
+          entry: {
+            id: generateId('hinv'),
+            branchId: fx.branchId,
+            happeningId: id,
+            entityId: WREN,
+            role: null,
+          },
+        },
+      })
+    }
+    await apply({
+      kind: 'upsertHappeningAwareness',
+      source: 'periodic_classifier',
+      payload: {
+        branchId: fx.branchId,
+        characterId: WREN,
+        happeningId: CROSSING,
+        learnedAtEntryId: fx.entries[4]!.id,
+        decayResistance: 0.4,
+        source: 'rode it',
+        proseEntryId: null,
+      },
+    })
+    await fx.ctx.db
+      .update(happeningAwareness)
+      .set({ retrievalCount: 3 })
+      .where(eq(happeningAwareness.branchId, fx.branchId))
+    for (const ddl of ensureVecTablesSql(DIM)) await fx.ctx.db.run(sql.raw(ddl))
+  }
+
+  // The opening to the third reply, t1–t7, cut at range indexes.
+  function phaseOver(bounds: readonly (readonly [number, number])[]): PhaseContext {
+    const range = fx.entries.slice(0, 7)
+    return closePhaseContext(fx, {
+      actionId: 'act_chapter_wide',
+      range: {
+        chapterId: 'chap_chapter_wide',
+        startEntryId: range[0]!.id,
+        endEntryId: range[6]!.id,
+      },
+      cuts: bounds.map(([first, last], index) => ({
+        part: index + 1,
+        startEntryId: range[first]!.id,
+        endEntryId: range[last]!.id,
+        tokens: 0,
+      })),
+    })
+  }
+
+  // As drainApplying, plus a timeline of task starts and group kinds among the embed's entries.
+  async function drainTimeline(
+    ctx: PhaseContext,
+  ): Promise<{ events: PhaseEmittedEvent[]; result: PhaseResult }> {
+    const gen = closeAgentPhase(ctx)
+    const events: PhaseEmittedEvent[] = []
+    let reply: GroupOutcome | undefined
+    for (;;) {
+      const next = await gen.next(reply)
+      if (next.done) return { events, result: next.value }
+      const event = next.value
+      events.push(event)
+      reply = undefined
+      if (event.type === 'close_task_start') timeline.push(`start:${event.task}@${event.part}`)
+      if (event.type === 'delta_group_emitted') {
+        timeline.push(`group:${[...new Set(event.actions.map(({ kind }) => kind))].join(',')}`)
+        reply = await applyDeltaActionGroupWithOutcomes(
+          event.actions,
+          { actionId: ctx.actionId, branchId: ctx.branchId, entryId: event.entryId },
+          fx.ctx,
+        )
+      }
+    }
+  }
+
+  async function wrenStackables(): Promise<unknown> {
+    const [row] = await fx.ctx.db
+      .select({ state: entities.state })
+      .from(entities)
+      .where(and(eq(entities.branchId, fx.branchId), eq(entities.id, WREN)))
+    return (row?.state as { stackables?: unknown } | undefined)?.stackables
+  }
+
+  async function counts(): Promise<number[]> {
+    const rows = await fx.ctx.db
+      .select({ count: happeningAwareness.retrievalCount })
+      .from(happeningAwareness)
+      .where(eq(happeningAwareness.branchId, fx.branchId))
+    return rows.map(({ count }) => count)
+  }
+
+  it('runs normalization, the range embed, Happenings, the prose tasks, Awareness and the reset, in that order', async () => {
+    await seedChapterWide()
+
+    const { events, result } = await drainTimeline(phaseOver([[0, 6]]))
+
+    expect(result).toEqual({ status: 'completed' })
+    expect(timeline).toEqual([
+      'group:updateEntityStackables',
+      'embed',
+      'start:happenings@0',
+      'call:happenings',
+      'start:lore@1',
+      'start:identity@1',
+      'start:threads@1',
+      'start:upkeep@1',
+      'start:lifecycle@1',
+      'start:awareness@0',
+      'call:awareness',
+      'group:resetAwarenessRetrieval',
+    ])
+    const starts = events.filter((event) => event.type === 'close_task_start')
+    expect(starts[0]).toEqual({
+      type: 'close_task_start',
+      task: 'happenings',
+      part: 0,
+      index: 1,
+      total: 7,
+    })
+    expect(starts.at(-1)).toEqual({
+      type: 'close_task_start',
+      task: 'awareness',
+      part: 0,
+      index: 7,
+      total: 7,
+    })
+    // Both code steps' groups landed through the stand-in orchestrator.
+    expect(await wrenStackables()).toEqual({ gold: 8 })
+    expect(await counts()).toEqual([0])
+  })
+
+  it('runs neither chapter-wide task twice in a chapter of two parts', async () => {
+    await seedChapterWide()
+
+    const { result } = await drainTimeline(
+      phaseOver([
+        [0, 3],
+        [4, 6],
+      ]),
+    )
+
+    expect(result).toEqual({ status: 'completed' })
+    expect(timeline).toEqual([
+      'group:updateEntityStackables',
+      'embed',
+      'start:happenings@0',
+      'call:happenings',
+      'start:lore@1',
+      'start:identity@1',
+      'start:threads@1',
+      'start:upkeep@1',
+      'start:lifecycle@1',
+      'start:lore@2',
+      'start:identity@2',
+      'start:threads@2',
+      'start:upkeep@2',
+      'start:lifecycle@2',
+      'start:awareness@0',
+      'call:awareness',
+      'group:resetAwarenessRetrieval',
+    ])
+  })
+
+  it('starts Happenings and Awareness with no cluster and no awareness row, and calls neither', async () => {
+    const { events, result } = await drainTimeline(phaseOver([[0, 6]]))
+
+    expect(result).toEqual({ status: 'completed' })
+    expect(timeline).toEqual([
+      'start:happenings@0',
+      'start:lore@1',
+      'start:identity@1',
+      'start:threads@1',
+      'start:upkeep@1',
+      'start:lifecycle@1',
+      'start:awareness@0',
+    ])
+    expect(events.filter((event) => event.type === 'delta_group_emitted')).toEqual([])
+  })
+
+  it("records both chapter-wide tasks' calls and stopped rows at part 0, and no code step", async () => {
+    await seedChapterWide()
+    let happeningsSteps = 0
+    let awarenessSteps = 0
+    vi.mocked(generateToolStep).mockImplementation(async (_target, request) => {
+      const tools = Object.keys(request.tools)
+      if (tools.includes('merge_happenings')) {
+        happeningsSteps += 1
+        return happeningsSteps === 1
+          ? okStep([{ toolCallId: 'h1', toolName: 'read_turns', input: { turns: ['t3'] } }])
+          : okStep([])
+      }
+      if (tools.includes('set_pin')) {
+        awarenessSteps += 1
+        return awarenessSteps === 1
+          ? okStep([
+              {
+                toolCallId: 'a1',
+                toolName: 'set_pin',
+                input: {
+                  id: 'aw1',
+                  value: 0.6,
+                  turns: ['t5'],
+                  why: 'Wren rides the crossing again.',
+                },
+              },
+            ])
+          : okStep([
+              {
+                toolCallId: `a${awarenessSteps}`,
+                toolName: 'read_turns',
+                input: { turns: ['t5'] },
+              },
+            ])
+      }
+      return okStep([])
+    })
+    const ctx = phaseOver([[0, 6]])
+
+    const { result } = await drainTimeline(ctx)
+
+    expect(result).toEqual({ status: 'completed' })
+    const ledger = closeLedgerOf(ctx.intermediates)!
+    expect(ledger.calls.map((call) => [call.task, call.part, call.tool, call.result])).toEqual([
+      ['happenings', 0, 'read_turns', 'ok'],
+      ['awareness', 0, 'set_pin', 'ok'],
+      ...Array.from({ length: CLOSE_TASK_STEP_BUDGET - 1 }, () => [
+        'awareness',
+        0,
+        'read_turns',
+        'ok',
+      ]),
+    ])
+    expect(ledger.stopped).toEqual([{ task: 'awareness', part: 0, reason: 'budget' }])
+    // Both code steps wrote, and neither left a call.
+    expect(await wrenStackables()).toEqual({ gold: 8 })
+    expect(await counts()).toEqual([0])
   })
 })

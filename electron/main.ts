@@ -16,19 +16,15 @@ import {
 } from './db/service'
 import type { DbProxyMethod } from './db/types'
 import { deletePartial, downloadFile, persistInstall } from './embedder/downloads'
+import { embedderCallHandlers } from './embedder/handlers'
 import {
   assertAllowedDownloadUrl,
   assertSafeFileName,
   assertSha256,
   modelDir,
+  requireModelDir,
 } from './embedder/paths'
-import {
-  countTokens as embedderCountTokens,
-  embed as embedderEmbed,
-  evictPipeline,
-  listInstalled,
-  smokeTest,
-} from './embedder/service'
+import { evictPipeline, listInstalled } from './embedder/service'
 import type { EmbedderAttestation } from './embedder/types'
 import { NATIVE_CHANNELS } from './native/channels'
 
@@ -36,9 +32,7 @@ import { NATIVE_CHANNELS } from './native/channels'
 // the transfer instead of only hiding its progress.
 const downloadAborts = new Map<string, AbortController>()
 
-// Abort handles for in-flight embeds, keyed by the renderer's per-call requestId
-// so a cancel can land on the service's next chunk boundary.
-const embedAborts = new Map<string, AbortController>()
+const embedderCalls = embedderCallHandlers()
 
 const isDev = !app.isPackaged
 
@@ -279,16 +273,6 @@ function createWindow(): void {
   }
 }
 
-function requireModelDir(modelId: string): string {
-  try {
-    return modelDir(modelId)
-  } catch (error) {
-    throw new Error(
-      `Invalid model id "${modelId}": ${error instanceof Error ? error.message : String(error)}`,
-    )
-  }
-}
-
 async function boot(): Promise<void> {
   if (!isPrimaryInstance) return
   if (!isDev) Menu.setApplicationMenu(Menu.buildFromTemplate(appMenuTemplate(process.platform)))
@@ -340,34 +324,17 @@ async function boot(): Promise<void> {
 
   ipcMain.handle(
     'embedder:embed',
-    async (_e, args: { modelId: string; texts: string[]; requestId?: string }) => {
-      const controller = new AbortController()
-      // Registered before the first await, so a cancel that follows this call on
-      // the renderer's ordered IPC channel always finds the controller.
-      if (args.requestId != null) embedAborts.set(args.requestId, controller)
-      try {
-        return await embedderEmbed({
-          modelDir: requireModelDir(args.modelId),
-          texts: args.texts,
-          signal: controller.signal,
-        })
-      } finally {
-        // Identity-checked: a renderer that reused a requestId must not have the
-        // live entry torn down by the earlier call's exit.
-        if (args.requestId != null && embedAborts.get(args.requestId) === controller) {
-          embedAborts.delete(args.requestId)
-        }
-      }
-    },
+    (_e, args: { modelId: string; texts: string[]; requestId?: string }) =>
+      embedderCalls.embed(args),
   )
   ipcMain.handle('embedder:count-tokens', (_e, args: { modelId: string; texts: string[] }) =>
-    embedderCountTokens({ modelDir: requireModelDir(args.modelId), texts: args.texts }),
+    embedderCalls.countTokens(args),
   )
-  ipcMain.handle('embedder:cancel-embed', (_e, args: { requestId: string }) => {
-    embedAborts.get(args.requestId)?.abort()
-  })
+  ipcMain.handle('embedder:cancel-embed', (_e, args: { requestId: string }) =>
+    embedderCalls.cancelEmbed(args),
+  )
   ipcMain.handle('embedder:smoke-test', (_e, args: { modelId: string }) =>
-    smokeTest({ modelDir: requireModelDir(args.modelId) }),
+    embedderCalls.smokeTest(args),
   )
   ipcMain.handle('embedder:list-installed', () => listInstalled())
   ipcMain.handle(

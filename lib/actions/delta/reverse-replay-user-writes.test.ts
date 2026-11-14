@@ -32,7 +32,7 @@ import { USER_EDITED_SINCE_PROSE } from './user-precedence'
 import { shownCounts } from '../story-entries/__tests__/shown-counts'
 import { rollbackToEntry, updateStoryEntryContent } from '../story-entries/operational'
 import { redoLastAction, undoLastAction } from '../story-entries/undo'
-import type { PipelineAction } from '../types'
+import type { DeltaSource, PipelineAction } from '../types'
 
 afterEach(() => {
   entitiesStore.__reset()
@@ -651,6 +651,125 @@ describe('reversing a machine write under a later user write', () => {
     await reverseReplayDeltas('act_u1', ctx)
 
     expect((await kael(db)).status).toBe('active')
+  })
+})
+
+// generation-pipeline.md → Reverse-replay: a close's normalization rewrites a record's keys, and a
+// later user write of the record logs only the keys it saw, so the record yields whole.
+describe("reversing a close's stackable normalization under a later user write", () => {
+  const BASE: CharacterState = {
+    visual: { attire: 'travel cloak' },
+    traits: ['brave'],
+    drives: [],
+    current_location_id: null,
+    equipped_items: [],
+    inventory: [],
+    faction_id: null,
+    lastSeenAt: null,
+  }
+  const BEFORE: CharacterState = { ...BASE, stackables: { Gold: 5, gold: 3 } }
+  const NORMALIZED: CharacterState = { ...BASE, stackables: { gold: 8 } }
+
+  const normalize = (source: DeltaSource): PipelineAction => ({
+    kind: 'updateEntityStackables',
+    source,
+    payload: { branchId: 'b1', id: 'char_kael', stackables: { gold: 8 } },
+  })
+
+  async function normalizeThen(
+    ctx: Ctx,
+    user: CharacterState | null,
+    source: DeltaSource = 'chapter_close',
+  ): Promise<void> {
+    await createKael(ctx, { state: BEFORE })
+    await apply(ctx, normalize(source), 'act_close')
+    if (user) await apply(ctx, userPatch({ state: user }), 'act_u')
+  }
+
+  async function stateAfterClose(db: Db, ctx: Ctx): Promise<CharacterState> {
+    expect(await reverseReplayDeltas('act_close', ctx)).toBe(1)
+    const state = (await kael(db)).state as CharacterState
+    expect(entitiesStore.getById('char_kael')?.state).toEqual(state)
+    return state
+  }
+
+  it('keeps a record the user removed after the close, with no old spelling back', async () => {
+    const { db, ctx } = await setup()
+    await normalizeThen(ctx, BASE)
+
+    expect(await stateAfterClose(db, ctx)).toEqual(BASE)
+  })
+
+  it('keeps a key the user edited after the close, with no old spelling back', async () => {
+    const { db, ctx } = await setup()
+    await normalizeThen(ctx, { ...BASE, stackables: { gold: 10 } })
+
+    expect((await stateAfterClose(db, ctx)).stackables).toEqual({ gold: 10 })
+  })
+
+  it('keeps the whole record on the copy a later user delete holds', async () => {
+    const { db, ctx } = await setup()
+    await normalizeThen(ctx, { ...BASE, stackables: { gold: 10 } })
+    await apply(
+      ctx,
+      { kind: 'deleteEntity', source: 'user_edit', payload: { branchId: 'b1', id: 'char_kael' } },
+      'act_del',
+    )
+
+    expect(await reverseReplayDeltas('act_close', ctx)).toBe(1)
+
+    const [held] = await deltasOf(db, 'act_del')
+    expect((held.undoPayload as { state: CharacterState }).state.stackables).toEqual({ gold: 10 })
+  })
+
+  it('restores the old spellings when no user write followed', async () => {
+    const { db, ctx } = await setup()
+    await normalizeThen(ctx, null)
+
+    expect((await stateAfterClose(db, ctx)).stackables).toEqual({ Gold: 5, gold: 3 })
+  })
+
+  it('restores the old spellings under a user edit of another state field', async () => {
+    const { db, ctx } = await setup()
+    await normalizeThen(ctx, { ...NORMALIZED, traits: ['brave', 'stern'] })
+
+    const state = await stateAfterClose(db, ctx)
+    expect(state.stackables).toEqual({ Gold: 5, gold: 3 })
+    expect(state.traits).toEqual(['brave', 'stern'])
+  })
+
+  it("restores a close's other state field beside the whole record", async () => {
+    const { db, ctx } = await setup()
+    await createKael(ctx, { state: BEFORE })
+    await apply(ctx, normalize('chapter_close'), 'act_close')
+    await apply(
+      ctx,
+      {
+        kind: 'updateEntity',
+        source: 'chapter_close',
+        payload: {
+          branchId: 'b1',
+          id: 'char_kael',
+          patch: { state: { ...NORMALIZED, traits: ['brave', 'stern'] } },
+        },
+      },
+      'act_close',
+    )
+    const closed: CharacterState = { ...NORMALIZED, traits: ['brave', 'stern'] }
+    await apply(ctx, userPatch({ state: { ...closed, stackables: { gold: 10 } } }), 'act_u')
+
+    expect(await reverseReplayDeltas('act_close', ctx)).toBe(2)
+
+    const state = (await kael(db)).state as CharacterState
+    expect(state.stackables).toEqual({ gold: 10 })
+    expect(state.traits).toEqual(['brave'])
+  })
+
+  it('keeps the per-key yield for a write that is not a close', async () => {
+    const { db, ctx } = await setup()
+    await normalizeThen(ctx, { ...BASE, stackables: { gold: 10 } }, 'periodic_classifier')
+
+    expect((await stateAfterClose(db, ctx)).stackables).toEqual({ Gold: 5, gold: 10 })
   })
 })
 

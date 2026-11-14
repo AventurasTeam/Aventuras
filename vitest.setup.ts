@@ -14,6 +14,7 @@ import {
 import { registerAllDomains } from '@/lib/actions/delta/registrations'
 import { describeDeltaReplayError, reverseReplayDeltas } from '@/lib/actions/delta/reverse-replay'
 import { readRowGuard } from '@/lib/actions/delta/row-guard'
+import { userDeletedHappeningLink } from '@/lib/actions/delta/user-precedence'
 import { configureDeltaActionPort } from '@/lib/pipeline/runtime/action-port'
 
 // Node and jsdom lack this global; a no-op also keeps tests from building the encoder unasked.
@@ -24,6 +25,7 @@ configureDeltaActionPort({
   applyDeltaAction,
   applyDeltaActionGroupWithOutcomes,
   readRowGuard,
+  userDeletedHappeningLink,
   reverseReplayDeltas,
   describeReplayError: describeDeltaReplayError,
   settleUserWrites,

@@ -81,6 +81,8 @@ export type RowVerdicts = {
   /** By wroteField's groups; `path` inside `state`, e.g. ['voice']. */
   laterTurnWrote: (column: string, path?: readonly string[]) => boolean
   userWrote: (column: string, path?: readonly string[]) => boolean
+  /** As userWrote, over every user edit of the row, whatever the cited turn. */
+  userEverWrote: (column: string, path?: readonly string[]) => boolean
   laterTurnTouched: () => boolean
   userTouched: () => boolean
 }

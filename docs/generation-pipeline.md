@@ -442,7 +442,8 @@ emission from the LLM is a prompt bug, not a runtime case to handle.
 **Via events the orchestrator dispatches:**
 
 - `delta_emitted` — every persisted write but a close's grouped ones:
-  its tool calls, and its `chapters` create with the stamps. The
+  its tool calls, its normalization and reset, and its `chapters`
+  create with the stamps. The
   orchestrator routes it through the action layer under the run's
   `actionId`, with the event's `entryId` (the entry the write belongs
   to, `null` when none) onto the delta row. The delta takes the
@@ -451,7 +452,9 @@ emission from the LLM is a prompt bug, not a runtime case to handle.
   records the turn capture's target entry. Phase doesn't touch delta
   log / SQLite / undo_payload.
 - `delta_group_emitted` — a chapter close's writes that land together:
-  one tool call's, or the close's `chapters` create and every
+  one tool call's, one code step's (every record stackable
+  normalization rewrites, or every count the `retrieval_count` reset
+  zeroes), or the close's `chapters` create and every
   `stampEntryChapter`. The orchestrator runs them through
   `applyDeltaActionGroupWithOutcomes`, one transaction under the run's
   `actionId` and the event's `entryId`. Each action's outcome, with its
@@ -459,7 +462,9 @@ emission from the LLM is a prompt bug, not a runtime case to handle.
   refusal of the whole group, so a tool call's refusal goes to the model
   instead of failing the run
   ([`memory/chapter-close.md → Tools and writes`](./memory/chapter-close.md#tools-and-writes)).
-  A throw from the action layer fails the run, as on `delta_emitted`.
+  A code step has no model to tell, so a refusal of its group fails the
+  close. A throw from the action layer fails the run, as on
+  `delta_emitted`.
 - `stream_chunk` — display-token path (`channel` splits narrative
   text from streamed reasoning). Orchestrator dispatches a
   side-channel append action; **no delta** until stream completion
@@ -476,12 +481,14 @@ against `ctx.db`, which is why the handle is on `PhaseContext` at all.
 protects the delta log and the undo contract, so it binds writes that
 belong in that contract. Derived infrastructure state that is
 deterministic from source rows, carries no undo payload and is never
-reverse-replayed sits outside it. The retrieval phase's vec0 sync is
-the only such writer: it embeds `embedding_stale` rows and clears
-their flags in one transaction, per
-[`retrieval.md → Compute lifecycle`](./memory/retrieval.md#compute-lifecycle).
-Routing it through `delta_emitted` would append undo rows for
-embeddings that a CTRL-Z must not remove. Such a phase takes
+reverse-replayed sits outside it. Two writers use it, each embedding
+`embedding_stale` rows and clearing their flags in one transaction, per
+[`retrieval.md → Compute lifecycle`](./memory/retrieval.md#compute-lifecycle):
+the retrieval phase's vec0 sync, and a chapter close's range embed,
+which embeds the stale happenings of its range before
+[3e](./memory/chapter-close.md#3e--happenings-consolidation) clusters
+them. Routing either through `delta_emitted` would append undo rows
+for embeddings that a CTRL-Z must not remove. Each takes
 `ctx.runInTransaction` rather than the module-global handle, so its
 writes and the run's reads cannot land on different databases.
 
@@ -1688,8 +1695,9 @@ keys, the same as an edit of those keys, so the undo would restore a
 key the user removed with it. Nothing reaches that today, since the
 reversals that run after later user edits take only a pass's or a
 close's facts, whose `state` writes are whole values (a character's
-faction, a faction's standing, a place's parent, unplaced mark and
-condition, an item's condition), with one exception. A close's stackable
+faction, traits, drives and voice, a faction's standing and agenda, a
+place's parent, unplaced mark and condition, an item's condition), with
+one exception. A close's stackable
 normalization writes a record, so its undo carries that guard. The same
 reach keeps the rule from
 splitting one move across two rows: undoing a turn's `<item>` or
@@ -1734,9 +1742,11 @@ holds both; a user's thread, which has no refs, logs the status alone.
 An undo that restores an absent `unplaced` mark without the parent puts
 the place back top-level, since the mark alone changed and an unplaced
 place's parent is null.
-`happenings_mutual_excl` holds through a close's merge, the one machine
-update of a happening: it clusters only rows with an
-`occurred_at_entry_id`, and a user edit writes both columns.
+`happenings_mutual_excl` holds through a close's two machine updates
+of a happening. A merge clusters only rows with an
+`occurred_at_entry_id` and, of the time pair, sends only that column,
+when the kept row's anchor moves; `mark_common_knowledge` writes
+`common_knowledge` alone; and a user edit writes both columns.
 
 **A chapter delete keeps later writes from any source.** It reverses a
 chapter's close groups with turns above them, the one reversal that

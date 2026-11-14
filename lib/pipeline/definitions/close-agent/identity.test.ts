@@ -2,7 +2,7 @@ import { and, asc, eq } from 'drizzle-orm'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { applyDeltaAction } from '@/lib/actions/delta/apply-delta-action'
-import { USER_EDITED_SINCE_PROSE, type DeltaSource, type GroupOutcome } from '@/lib/actions/types'
+import { USER_EDITED_SINCE_PROSE, type DeltaSource } from '@/lib/actions/types'
 import { generateToolStep, type ResolveModelConfig, type ToolStepResult } from '@/lib/ai'
 import {
   branches,
@@ -19,35 +19,28 @@ import {
 import { makeLogger } from '@/lib/diagnostics'
 import { resetAllStores } from '@/lib/stores'
 
-import { createReadSet } from './common-checks'
-import { dispatchToolCall, type DispatchContext, type ToolAnswer } from './dispatch'
 import { storedValue } from './entity-write'
 import { softCapReason } from './fields'
 import { IDENTITY_READ_FIELDS, identityTask } from './identity'
 import { updateCharacterTool, updateFactionTool } from './identity-tools'
 import { CloseIds, nameCloseProse } from './ids'
-import { CloseLedgerWriter } from './ledger'
 import { __setCloseAgentSlots, closeAgentSlots, NO_CLOSE_TASKS } from './slots'
 import type { TaskPromptContext } from './task'
 import { turnInTextReason } from './text-checks'
 import { assertReplaySafe, type CloseTool } from './tool'
 import { readTaskTurns, storyModeOf } from './turns'
 import { CLOSE_REASON } from './verdict'
-import { expectRan } from '../../__tests__/harness'
-import { definePipeline } from '../../authoring/define'
-import { getPipelineSafe } from '../../authoring/registry'
-import { runPipeline } from '../../runtime/orchestrator'
-import type { PhaseContext, PhaseEmittedEvent, PhaseResult, TxResult } from '../../types'
+import type { PhaseContext, PhaseEmittedEvent, PhaseResult } from '../../types'
+import {
+  runDispatchCalls,
+  shownOf,
+  type DispatchRun,
+  type DispatchSetup,
+  type ScriptedCall,
+} from '../__tests__/close-dispatch'
 import { openCloseFixture, type CloseFixture } from '../__tests__/close-fixture'
 import { closeAgentPhase } from '../chapter-close-agent'
-import {
-  closeIdsOf,
-  closeLedgerOf,
-  seedCloseLedger,
-  setCloseParts,
-  setCloseRange,
-} from '../close-intermediates'
-import type { CloseLedger } from '../intermediates'
+import { closeLedgerOf, setCloseParts, setCloseRange } from '../close-intermediates'
 
 vi.mock('@/lib/ai', async (importOriginal) => ({
   ...(await importOriginal<Record<string, unknown>>()),
@@ -120,10 +113,10 @@ async function seedEntity(f: CloseFixture, spec: SeedSpec): Promise<void> {
   if (result.status !== 'ok') throw new Error(`seeding ${spec.name} refused: ${result.reason}`)
 }
 
-type ShownRow = { id: string; name: string }
+type ShownEntity = { id: string; name: string }
 
 /** Wren, Tobin and the Syndicate, shown in that order: c1, c2, f1. */
-const CAST: readonly ShownRow[] = [
+const CAST: readonly ShownEntity[] = [
   { id: WREN, name: 'Wren' },
   { id: TOBIN, name: 'Tobin' },
   { id: SYNDICATE, name: 'the Syndicate' },
@@ -222,113 +215,25 @@ const cite = (turns: readonly string[] = ['t7'], why = 'The rain and the crossin
   why,
 })
 
-type ScriptedCall = { toolName: string; input: Record<string, unknown> }
-type DispatchRun = {
-  result: TxResult
-  /** Each scripted call's answer, in order. */
-  answers: readonly ToolAnswer[]
-  /** The ledger: what `setup` recorded, then each scripted call. */
-  calls: CloseLedger['calls']
-}
-
-const SCRIPTED_KIND = 'close-identity-test'
 const IDENTITY_TOOLS: Readonly<Record<string, CloseTool>> = {
   update_character: updateCharacterTool,
   update_faction: updateFactionTool,
 }
 
-let pending:
-  | {
-      fixture: CloseFixture
-      calls: readonly ScriptedCall[]
-      shown: readonly ShownRow[]
-      setup?: (ids: CloseIds, ledger: CloseLedgerWriter) => void
-      answers: ToolAnswer[]
-      ledger?: CloseLedger
-    }
-  | undefined
-
-// Stands where the agent phase will: the chapter's turns, the shown rows, all of them read.
-async function* scriptedPhase(
-  phase: PhaseContext,
-): AsyncGenerator<PhaseEmittedEvent, PhaseResult, GroupOutcome | undefined> {
-  const run = pending
-  if (run === undefined) throw new Error('no scripted calls')
-  const f = run.fixture
-  const ids = closeIdsOf(phase.intermediates)
-  ids.showTurns(chapterEntryIds(f))
-  for (const { id, name } of run.shown) ids.show(id, name)
-  const ledger = seedCloseLedger(phase.intermediates)
-  run.ledger = ledger
-  const writer = new CloseLedgerWriter(ledger, (id) => ids.nameOfId(id), phase.actionId)
-  run.setup?.(ids, writer)
-  const readSet = createReadSet()
-  readSet.add(run.shown.map(({ id }) => ({ table: 'entities' as const, id })))
-  const ctx: DispatchContext = {
-    db: phase.db,
-    branchId: phase.branchId,
-    endEntryId: endEntryId(f),
-    task: 'identity',
-    part: 1,
-    ids,
-    readFields: {},
-    survivorOf: (table, id) => writer.survivorOf(table, id),
-    landedCalls: (tool) => writer.landedCalls(tool),
-    phase,
-    taskEntryIds: chapterEntryIds(f),
-    readSet,
-    ledger: writer,
-  }
-  for (const [index, { toolName, input }] of run.calls.entries()) {
-    const tool = IDENTITY_TOOLS[toolName]
-    if (tool === undefined) throw new Error(`no identity tool ${toolName}`)
-    run.answers.push(
-      yield* dispatchToolCall({ toolCallId: `call_${index + 1}`, toolName, input }, tool, ctx),
-    )
-  }
-  return { status: 'completed' }
-}
-
 /** Runs `calls` through dispatchToolCall in one close-like run, `shown` shown and read in order. */
-async function dispatchScripted(
+function dispatchScripted(
   f: CloseFixture,
   calls: readonly ScriptedCall[],
-  opts: {
-    shown: readonly ShownRow[]
-    setup?: (ids: CloseIds, ledger: CloseLedgerWriter) => void
-  },
+  opts: { shown: readonly ShownEntity[]; setup?: DispatchSetup },
 ): Promise<DispatchRun> {
-  if (getPipelineSafe(SCRIPTED_KIND) === undefined)
-    definePipeline({
-      kind: SCRIPTED_KIND,
-      phases: [{ name: 'agent', run: scriptedPhase }],
-      affordance: 'invisible',
-      gateBehavior: 'hard-gate',
-      concurrencyPolicy: {},
-    })
-  const run: NonNullable<typeof pending> = {
-    fixture: f,
+  return runDispatchCalls(f, {
+    task: 'identity',
+    tools: IDENTITY_TOOLS,
+    shown: shownOf(opts.shown),
     calls,
-    shown: opts.shown,
-    ...(opts.setup === undefined ? {} : { setup: opts.setup }),
-    answers: [],
-  }
-  pending = run
-  try {
-    const result = expectRan(
-      await runPipeline(SCRIPTED_KIND, {
-        storyId: f.storyId,
-        branchId: f.branchId,
-        db: f.ctx.db,
-        runInTransaction: f.ctx.runInTransaction,
-      }),
-    )
-    expect(result.outcome).toBe('completed')
-    if (run.ledger === undefined) throw new Error('the scripted phase never ran')
-    return { result, answers: run.answers, calls: run.ledger.calls }
-  } finally {
-    pending = undefined
-  }
+    turns: { endEntryId: endEntryId(f), taskEntryIds: chapterEntryIds(f) },
+    setup: opts.setup,
+  })
 }
 
 afterEach(() => {
@@ -415,7 +320,7 @@ describe('update_character and update_faction', () => {
       { shown: CAST },
     )
 
-    expect(answers.map(({ output }) => output)).toEqual([{ result: 'ok' }, { result: 'ok' }])
+    expect(answers).toEqual([{ result: 'ok' }, { result: 'ok' }])
     expect(calls[0]).toEqual({
       task: 'identity',
       part: 1,
@@ -525,7 +430,7 @@ describe('update_character and update_faction', () => {
       { shown: CAST },
     )
 
-    expect(answers[0]!.output).toEqual({ result: 'ok' })
+    expect(answers[0]).toEqual({ result: 'ok' })
     expect(calls[0]).toMatchObject({ result: 'ok' })
     expect(calls[0]).not.toHaveProperty('values')
     expect(await runDeltas(f, result.actionId)).toEqual([])
@@ -606,7 +511,7 @@ describe('update_character and update_faction', () => {
       { shown: CAST },
     )
 
-    expect(answers.map(({ output }) => output)).toEqual([{ result: 'ok' }, { result: 'ok' }])
+    expect(answers).toEqual([{ result: 'ok' }, { result: 'ok' }])
     expect(calls[0]).toMatchObject({ result: 'ok' })
     expect(calls[0]).not.toHaveProperty('values')
     expect(calls[1]).toMatchObject({ result: 'ok', values: { 'state.traits': 'patient, wary' } })
@@ -664,7 +569,7 @@ describe('update_character and update_faction', () => {
       skippedFields: [{ field: 'state.voice', reason: USER_EDITED_SINCE_PROSE }],
     })
     expect(calls[0]).not.toHaveProperty('reason')
-    expect(answers[0]!.output).toMatchObject({
+    expect(answers[0]).toMatchObject({
       result: 'ok',
       notWritten: [{ field: 'state.voice', row: 'c1', reason: USER_EDITED_SINCE_PROSE }],
     })
@@ -1050,7 +955,7 @@ describe('update_character and update_faction', () => {
       reason: CLOSE_REASON.rowGone,
       values: { 'state.voice': 'hoarse' },
     })
-    expect(answers[0]!.output).toEqual({
+    expect(answers[0]).toEqual({
       result: 'rejected',
       reason: CLOSE_REASON.rowGone,
       note: 'The row was merged into c1; write to c1 instead.',
@@ -1169,9 +1074,7 @@ describe('update_character and update_faction: a turn handle in a text or list f
         { shown: CAST },
       )
 
-      expect(answers.map(({ output }) => output)).toEqual([
-        { result: 'rejected', reason: turnInTextReason('t3') },
-      ])
+      expect(answers).toEqual([{ result: 'rejected', reason: turnInTextReason('t3') }])
       expect(await storedEntity(f, rowOf(id))).toEqual(before)
     },
   )
@@ -1194,7 +1097,7 @@ describe('update_character and update_faction: a turn handle in a text or list f
         { shown: CAST },
       )
 
-      expect(answers.map(({ output }) => output)).toEqual([
+      expect(answers).toEqual([
         { result: 'ok', notWritten: [{ field: path, row: id, reason: turnInTextReason('t7') }] },
       ])
       expect(calls[0]!.skippedFields).toEqual([{ field: path, reason: turnInTextReason('t7') }])
@@ -1224,7 +1127,7 @@ describe('update_character and update_faction: a turn handle in a text or list f
         { shown: CAST },
       )
 
-      expect(answers.map(({ output }) => output)).toEqual([
+      expect(answers).toEqual([
         { result: 'ok', notWritten: [{ field: path, row: id, reason: turnInTextReason('t3') }] },
       ])
       expect(calls[0]!.skippedFields).toEqual([{ field: path, reason: turnInTextReason('t3') }])
@@ -1243,9 +1146,7 @@ describe('update_character and update_faction: a turn handle in a text or list f
       { shown: CAST },
     )
 
-    expect(answers.map(({ output }) => output)).toEqual([
-      { result: 'rejected', reason: turnInTextReason('t5') },
-    ])
+    expect(answers).toEqual([{ result: 'rejected', reason: turnInTextReason('t5') }])
     expect(await storedEntity(f, WREN)).toEqual(before)
   })
 
@@ -1263,7 +1164,7 @@ describe('update_character and update_faction: a turn handle in a text or list f
       { shown: CAST },
     )
 
-    expect(answers.map(({ output }) => output)).toEqual([{ result: 'ok' }])
+    expect(answers).toEqual([{ result: 'ok' }])
     expect(calls[0]).not.toHaveProperty('skippedFields')
     expect(await runDeltas(f, result.actionId)).toEqual([])
   })
@@ -1283,7 +1184,7 @@ describe('update_character and update_faction: a turn handle in a text or list f
       { shown: CAST },
     )
 
-    expect(answers.map(({ output }) => output)).toEqual([{ result: 'ok' }])
+    expect(answers).toEqual([{ result: 'ok' }])
     expect(calls[0]).not.toHaveProperty('skippedFields')
     expect(await runDeltas(f, result.actionId)).toEqual([])
   })
@@ -1403,6 +1304,7 @@ function promptContextFor(
     ids,
     readFields: IDENTITY_READ_FIELDS,
     survivorOf: () => undefined,
+    clusterOf: () => undefined,
     landedCalls: () => 0,
     phase: {
       actionId,
@@ -2073,13 +1975,16 @@ async function drainAgent(
 const taskStartsIn = (events: readonly PhaseEmittedEvent[]): PhaseEmittedEvent[] =>
   events.filter((event) => event.type === 'close_task_start')
 
-// C6: the five prose tasks start, those with nothing to show included, in a one-part chapter of 7.
+// C6: Happenings, the five prose tasks and Awareness start, those with nothing to show included,
+// in a one-part chapter of 7.
 const PART_ONE_STARTS = [
+  { type: 'close_task_start', task: 'happenings', part: 0, index: 1, total: 7 },
   { type: 'close_task_start', task: 'lore', part: 1, index: 2, total: 7 },
   { type: 'close_task_start', task: 'identity', part: 1, index: 3, total: 7 },
   { type: 'close_task_start', task: 'threads', part: 1, index: 4, total: 7 },
   { type: 'close_task_start', task: 'upkeep', part: 1, index: 5, total: 7 },
   { type: 'close_task_start', task: 'lifecycle', part: 1, index: 6, total: 7 },
+  { type: 'close_task_start', task: 'awareness', part: 0, index: 7, total: 7 },
 ]
 
 describe('Identity in the production close', () => {

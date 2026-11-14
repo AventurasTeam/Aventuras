@@ -251,10 +251,10 @@ export function filterLorePool<T extends LoreRow>(
 }
 
 /** Active threads are structural; pending / resolved / failed rank, by mode. */
-export function filterThreadPool(
-  rows: readonly ThreadRow[],
+export function filterThreadPool<T extends ThreadRow>(
+  rows: readonly T[],
   floorIds: ReadonlySet<string>,
-): ThreadRow[] {
+): T[] {
   return rows.filter(
     (r) =>
       !floorIds.has(r.id) && POOLABLE_THREAD_STATUS.has(r.status) && r.injectionMode !== 'disabled',

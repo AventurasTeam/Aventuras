@@ -268,10 +268,19 @@ convention, and the expectation that subsystems route through
   mark), `close_tool_call_invalid` (a malformed call or an unknown
   tool, which the SDK answered itself, with the task, part, tool and
   the SDK's detail), `close_task_failed` (a task whose step failed
-  the close, with the task, part and error kind) and
+  the close, with the task, part and error kind),
   `close_report_value` (every value a close's report records, a refused
   or skipped call's included, with the tool, the delta path and its
-  `length` in characters before `CLOSE_REPORT_VALUE_BOUND` cuts it)
+  `length` in characters before `CLOSE_REPORT_VALUE_BOUND` cuts it),
+  `close_stackables` (stackable normalization's run, when any record
+  would fold: the `rows` its group carried, the records it left as
+  written after the end entry and as unsafe to write (a key past the
+  bound, or a `__proto__` key), and the group's status, `none` when no
+  group went out), `close_range_embed`
+  (the happenings embed over the range: the happenings in it, those
+  embedded and revalidated, those left without a vector, and the
+  clusters found) and `close_retrieval_reset` (the `retrieval_count`
+  reset's group: its rows, its status and the round trip in `ms`)
 - `bootstrap.*` — boot-time hydration failures (e.g.
   `app_settings_hydrate_failed`)
 - `calendar.*` — `format_miss` (a `displayFormat` that fails or

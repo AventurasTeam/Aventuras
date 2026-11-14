@@ -664,6 +664,14 @@ export const VARIABLES: Record<ContextGroup, VariableDef[]> = {
       required: false,
     },
     {
+      name: 'closeHappeningClusters',
+      type: '{ id: string; title: string; description: string; cast: { id: string; name: string }[]; knownBy: { id: string; name: string }[]; turn: string; commonKnowledge: boolean }[][]',
+      category: 'Plot',
+      description:
+        "The Happenings task's clusters: happenings of the chapter that code found may record one event, at least two to a cluster, each in the order of the turns they occurred at. `id` is the short id its writes name it by (hp1, hp2…); `turn` the turn it occurred at (t1, t2…); `cast` the entities its involvements name, each by short id and name; `knownBy` the characters with an awareness row of it, in the same form, and empty when `commonKnowledge` is true; a missing description is an empty string; `commonKnowledge` is true for one every character knows. Only a close task's render sets it.",
+      required: false,
+    },
+    {
       name: 'closeLore',
       type: '{ id: string; title: string }[]',
       category: 'Retrieval',
@@ -703,6 +711,30 @@ export const VARIABLES: Record<ContextGroup, VariableDef[]> = {
         "The Lifecycle task's starting rows: the active characters and items in the scene of a turn the task reads, the active characters, items and factions whose name or a keyword those turns mention, and the active factions those characters belong to, less a character a reply after the part's last turn still has in its scene; never a place. Characters, then items, then factions, each by name. `id` is the short id (c1, i1, f1…); `retiredReason` is set only on a retired row, so it is empty on every starting row; `collision` is the row's flag as its partner's short id, quoted name and reason, marked dormant when it no longer holds, and empty when the row holds none. Only a close task's render sets it.",
       required: false,
     },
+    {
+      name: 'closeAwarenessRows',
+      type: "{ happening: { id: string; title: string }; rows: { id: string; character: { id: string; name: string }; decayResistance: number | null; source: string; learnedAt: string; list: 'chapter' | 'frequent' }[] }[]",
+      category: 'Plot',
+      description:
+        "The Awareness task's starting rows, under their happening, by title: the chapter's, each learned at one of its turns (`list` 'chapter'), then the high-frequency set, at most a fixed number of the rows retrieval drew on most since the last close (`list` 'frequent'), each by character name; a row in both is the chapter's, and a common-knowledge happening's row is never listed. `id` is the row's short id (aw1, aw2…), a happening's and a character's theirs (hp1, c1…); `decayResistance` is the row's pin, null when unset; `learnedAt` is the turn id it was learned at, empty when unrecorded; `source` as stored, empty when missing. Never the retrieval count. Only a close task's render sets it.",
+      required: false,
+    },
+    {
+      name: 'closeChapterSummary',
+      type: 'string',
+      category: 'Story',
+      description:
+        "The summary of the chapter being closed, as its metadata call wrote it; empty when its row holds none. Only a close task's render sets it.",
+      required: false,
+    },
+    {
+      name: 'closeChapterTurns',
+      type: '{ first: string; last: string }',
+      category: 'Story',
+      description:
+        "The first and last turn ids of the chapter being closed (t1 and its last), so a task that shows no prose can name the turns it may read and cite. Only a close task's render sets it.",
+      required: false,
+    },
   ],
   staticContent: [],
 }
@@ -715,11 +747,15 @@ export const CLOSE_ONLY_CHAPTER_VARIABLES = [
   'closeThreads',
   'closeWritesSoFar',
   'closeSoftCaps',
+  'closeHappeningClusters',
   'closeLore',
   'closeLoreLimits',
   'closeUpkeepRows',
   'closeUpkeepHappenings',
   'closeLifecycleRows',
+  'closeAwarenessRows',
+  'closeChapterSummary',
+  'closeChapterTurns',
 ] as const
 
 /** The `chapter` variable only the merge of a chapter closed in parts sets. */
@@ -735,6 +771,8 @@ export const TEMPLATE_GROUPS: Record<string, ContextGroup> & Record<TemplateId, 
   [TEMPLATE_IDS.chapterMetadata]: 'chapter',
   [TEMPLATE_IDS.chapterMetadataPart]: 'chapter',
   [TEMPLATE_IDS.chapterMetadataMerge]: 'chapter',
+  [TEMPLATE_IDS.closeHappenings]: 'chapter',
+  [TEMPLATE_IDS.closeAwareness]: 'chapter',
   [TEMPLATE_IDS.closeLore]: 'chapter',
   [TEMPLATE_IDS.closeIdentity]: 'chapter',
   [TEMPLATE_IDS.closeThreads]: 'chapter',
@@ -766,6 +804,8 @@ export const DISPLAY_GROUPS: Record<string, string[]> = {
     'partSummaries',
     'closeTurns',
     'closeWritesSoFar',
+    'closeChapterSummary',
+    'closeChapterTurns',
   ],
   Entities: [
     'entities',
@@ -791,7 +831,14 @@ export const DISPLAY_GROUPS: Record<string, string[]> = {
     'closeUpkeepRows',
     'closeLifecycleRows',
   ],
-  Plot: ['happenings', 'threads', 'closeThreads', 'closeUpkeepHappenings'],
+  Plot: [
+    'happenings',
+    'threads',
+    'closeHappeningClusters',
+    'closeThreads',
+    'closeUpkeepHappenings',
+    'closeAwarenessRows',
+  ],
   Retrieval: [
     'retrievedEntities',
     'retrievedLore',

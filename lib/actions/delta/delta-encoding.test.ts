@@ -102,6 +102,38 @@ describe('computeUndoPayload + applyUndoPayload', () => {
   })
 })
 
+// Payloads travel as JSON through the deltas table, which drops a function value.
+const viaJson = (value: unknown): Record<string, unknown> => JSON.parse(JSON.stringify(value))
+
+describe('record keys named like Object.prototype members', () => {
+  it('marks an added constructor or toString key for delete, and undo takes it away', () => {
+    const cur = { name: 'k', stack: { gold: 1 } }
+    const next = { name: 'k', stack: { gold: 1, constructor: 1, toString: 2 } }
+
+    const undo = viaJson(computeUndoPayload(fixture, cur, next))
+
+    expect(undo).toEqual({ stack: { constructor: null, toString: null } })
+    expect(applyUndoPayload(fixture, next, undo)).toEqual(cur)
+  })
+
+  // Reversal can't restore an own __proto__ key, so a write of one must stay a refused noop.
+  it.each([
+    ['added', '{}', '{"__proto__":2}'],
+    ['changed', '{"__proto__":1}', '{"__proto__":3}'],
+    ['removed', '{"__proto__":1}', '{}'],
+  ])('leaves out an own __proto__ key %s, so its write records nothing', (_, cur, next) => {
+    const stack = (json: string) => JSON.parse(json) as Record<string, number>
+
+    const undo = computeUndoPayload(
+      fixture,
+      { name: 'k', stack: stack(cur) },
+      { name: 'k', stack: stack(next) },
+    )
+
+    expect(undo).toEqual({})
+  })
+})
+
 // The real entry-metadata schema rather than a fixture: stateReport is the first
 // nested optional object on a delta-logged column, and the scene editor's write
 // depends on it staying out of a payload it never touched.

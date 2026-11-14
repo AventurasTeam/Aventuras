@@ -1,11 +1,6 @@
 import { boundedSignal } from '@/lib/abort'
 import { inheritedEntryMetadata, queryRows } from '@/lib/db'
-import { embedderReadDim } from '@/lib/embedder'
-import {
-  composeRetrievalEmbedDeps,
-  refreshEmbeddingStatus,
-  resolveStorySwapConfig,
-} from '@/lib/embedder-swap'
+import { composeRetrievalEmbedDeps, refreshEmbeddingStatus } from '@/lib/embedder-swap'
 import { generateId } from '@/lib/ids'
 import { promptProse } from '@/lib/piggyback'
 import { commitCaptureMode, reserveCaptureMode, writeProbeCapture } from '@/lib/probe'
@@ -24,22 +19,13 @@ import {
 import { appSettingsStore } from '@/lib/stores'
 import { resolveLead } from '@/lib/world'
 
+import { EMBED_TIMEOUT_MS, resolveStoryEmbedder } from './blocking-embed'
 import { readSceneSource } from './entry-reads'
 import { RETRIEVAL_INTERMEDIATE_KEY } from './intermediates'
 import { loadPerTurnWorkingSet } from './working-set'
 import type { PhaseContext, PhaseEmittedEvent, PhaseResult } from '../types'
 
 export const RETRIEVAL_PHASE_NAME = 'retrieval'
-
-// The two ways retrieval can find no usable embedder: unconfigured, and
-// configured but never probed for its dim. Same tier, same envelope.
-function embedderInitFailure(detail: string): PhaseResult {
-  return { status: 'failed', error: { kind: 'embedder', reason: 'init', detail, staleCount: null } }
-}
-
-// Matches the periodic classifier's call budget: both bound one blocking
-// provider call, and a turn already tolerates a narrative stream of this order.
-const EMBED_TIMEOUT_MS = 300_000
 
 export async function* retrievalPhase(
   ctx: PhaseContext,
@@ -51,17 +37,8 @@ export async function* retrievalPhase(
 
   if (ctx.abortSignal.aborted) return { status: 'aborted' }
 
-  const resolution = resolveStorySwapConfig(open.storyId, {
-    modelId: open.settings.embedding_model_id,
-    backend: open.settings.embeddingBackend,
-    providerId: open.settings.embedding_provider_id,
-  })
-  if (!resolution.ok) return embedderInitFailure(`embedder not configured: ${resolution.reason}`)
-  const dim = embedderReadDim(resolution.config)
-  // Only an unprobed provider lands here. Guessing would KNN the wrong vec0 dim
-  // family, which vec0 rejects with an opaque error rather than an empty result.
-  if (dim === null)
-    return embedderInitFailure(`embedder dim unknown for model ${resolution.config.modelId}`)
+  const embedder = resolveStoryEmbedder(open.storyId, open.settings)
+  if ('status' in embedder) return embedder
 
   const tail = entries.at(-1)
   // The row generation-context builds `sceneMetadata` from, so the pools are
@@ -128,12 +105,12 @@ export async function* retrievalPhase(
             })
           }
         },
-        ...composeRetrievalEmbedDeps(resolution.config),
+        ...composeRetrievalEmbedDeps(embedder.config),
       },
       {
         branchId,
-        modelId: resolution.config.modelId,
-        dim,
+        modelId: embedder.config.modelId,
+        dim: embedder.dim,
         budgets: open.settings.retrievalBudgets,
         query: {
           // Q1 is THIS turn's action, which submitTurn commits immediately before
@@ -207,7 +184,7 @@ export async function* retrievalPhase(
         // story_entries).
         chapterId: tail.chapterId,
         capturedAt: Date.now(),
-        embeddingModelId: resolution.config.modelId,
+        embeddingModelId: embedder.config.modelId,
         mode: reservation.mode,
         appGateOn,
         storyGateOn,
