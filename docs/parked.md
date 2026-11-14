@@ -1831,19 +1831,23 @@ zod's record skips that key. Parked 2026-10-09; the signal is a writer
 that can emit model-shaped state, such as an agentic classifier. Chapter
 close's agent isn't one: its typed tools write named fields.
 
-That stackable lands, but its undo doesn't restore it. `encodeField` in
-`lib/actions/delta/delta-encoding.ts` records an added, changed or
-removed `__proto__` count as an own key of the undo payload, so the
-write lands. Reversal then loses that key to assignment twice:
-`pruneUndoPartial` drops it before the overlay, and the record overlay
-in `applyUndoPayload` would drop a `__proto__` key the row no longer
-holds. Undoing a write that added the count leaves it, one that changed
-it keeps the new count, one that removed it doesn't bring it back, and
-undoing chapter close's fold of `__PROTO__` onto `__proto__` leaves
-both keys. A write that leaves the `__proto__` count alone undoes as
-any other. Found by the 2026-10-24 triage pass's slice review; the
-encoding dates from #546, and its own-key fix from slice 5.9's review
-(2026-11-14). The same signal applies.
+That stackable doesn't land today either. `encodeField` in
+`lib/actions/delta/delta-encoding.ts` builds the undo payload by
+assignment, so a changed, added or removed `__proto__` count encodes as
+`{}` and `updateEntityStackables` refuses the write as a noop; the row
+keeps its old stackables. A count that already exists still restores on
+undo. The assignment stays on purpose: reversal rebuilds the payload by
+assignment too, in `pruneUndoPartial` and in the record overlay of
+`applyUndoPayload`, so a recorded `__proto__` key would land a write
+its undo can't restore. A write that changes another key beside the
+`__proto__` count still lands, and its undo leaves that count as
+written. Keys named like other `Object.prototype` members, such as
+`constructor`, encode as any key: `encodeField` tests membership with
+`Object.hasOwn`. Chapter close's stackable normalization leaves a
+record holding a `__proto__` key as stored
+([`chapter-close.md → 3c`](./memory/chapter-close.md#3c--stackable-normalization)).
+Found by the 2026-10-24 triage pass's slice review; the encoding dates
+from #546. The same signal applies.
 
 #### Merging any two rows of one kind
 
