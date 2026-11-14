@@ -187,13 +187,6 @@ patch`, which 5.5a marks `restated`, so a close tool's write of it
   `drainApplying`) with near-copies in `lore.test.ts`, `upkeep.test.ts`,
   `identity.test.ts`, `lifecycle.test.ts` and `driver.test.ts`. Raised in
   5.5b's review, widened in 5.9's and in its slice review.
-- **`setThreadStatus` and `updateThread` read "carries refs"
-  differently.** `setThreadStatus` writes the resolved ref only when
-  `triggeredAtEntryId` is set, while `updateThread` asks whether either
-  ref is (`lib/actions/threads/register.ts`). A thread holding only a
-  resolved ref would keep a stale one after a status change. Nothing
-  writes that shape today, since a pass's create always sets the
-  trigger. Raised in 5.5b's review.
 - **A close's "Writes so far" names delta paths, not fields.** The
   ledger's lines read `state.traits` (`close-agent/ledger.ts`), while
   the task templates show the same field as `traits`, so the model has

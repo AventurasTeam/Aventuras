@@ -75,6 +75,10 @@ void (true satisfies PatchMatchesColumns<ThreadUpdatePatch, typeof UPDATABLE>)
 
 const REF_COLS = new Set(['triggeredAtEntryId', 'resolvedAtEntryId'])
 
+// One reading for both writers: a thread holding either ref logs its resolved ref beside a status.
+const carriesRefs = (thread: Pick<Thread, 'triggeredAtEntryId' | 'resolvedAtEntryId'>): boolean =>
+  thread.triggeredAtEntryId !== null || thread.resolvedAtEntryId !== null
+
 function fullRow(entry: NewThread): Thread {
   // Apply SQLite defaults so the inserted row and the store create-patch row are byte-identical.
   return {
@@ -173,8 +177,7 @@ const updateHandler: ActionHandler = async (action, branchId, ctx) => {
   // On a thread with refs, resolvedAt logs beside a status change so a reversal restores the pair;
   // a user's status change retracts it. A ref named in the patch but absent from `set` was restated
   // or user-kept.
-  const carriesRefs = current.triggeredAtEntryId !== null || current.resolvedAtEntryId !== null
-  if (carriesRefs && 'status' in set && !('resolvedAtEntryId' in set)) {
+  if (carriesRefs(current) && 'status' in set && !('resolvedAtEntryId' in set)) {
     set.resolvedAtEntryId =
       'resolvedAtEntryId' in patch || !isUserOriginatedSource(action.source)
         ? current.resolvedAtEntryId
@@ -239,7 +242,7 @@ const setStatusHandler: ActionHandler = async (action, branchId, ctx) => {
   const undoPayload: Record<string, unknown> = { status: current.status }
   // Entry refs are AI-only (data-model.md → Authorship contract): a user's thread keeps both null.
   // A pass's thread logs the ref beside the status, even unchanged, so a reversal restores both.
-  if (current.triggeredAtEntryId !== null) {
+  if (carriesRefs(current)) {
     set.resolvedAtEntryId =
       payload.status === 'active' ? null : nullifyRef(payload.resolvedAtEntryId)
     undoPayload.resolvedAtEntryId = current.resolvedAtEntryId
