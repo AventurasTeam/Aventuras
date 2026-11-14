@@ -1,4 +1,4 @@
-import { and, asc, eq } from 'drizzle-orm'
+import { and, asc, eq, sql } from 'drizzle-orm'
 import { afterEach, beforeEach, describe, expect, it, onTestFinished, vi } from 'vitest'
 
 import {
@@ -20,6 +20,7 @@ import {
   entities,
   happeningAwareness,
   happenings,
+  storyEntries,
 } from '@/lib/db'
 import { logger, makeLogger } from '@/lib/diagnostics'
 import { loadHistoryChunk } from '@/lib/history'
@@ -942,6 +943,22 @@ describe('the Awareness start', () => {
         source: 'sibling',
       })
     }
+    // E sits near the start on the sibling, and an earlier entry of this branch far past it: a
+    // read of E's position or of the entries after it that crosses branches excludes A_FREQUENT.
+    for (const [id, position] of [
+      [endOf(fx), 1],
+      [fx.entries[1]!.id, 1000],
+    ] as const) {
+      const [entry] = await sibling
+        .select()
+        .from(storyEntries)
+        .where(and(eq(storyEntries.branchId, fx.branchId), eq(storyEntries.id, id)))
+      await sibling.insert(storyEntries).values({ ...entry!, branchId: OTHER_BRANCH, position })
+    }
+    // Ahead of this branch's rows in a table scan, so an unscoped lookup of E finds the sibling's.
+    await sibling.run(
+      sql`UPDATE story_entries SET rowid = -1 WHERE branch_id = ${OTHER_BRANCH} AND id = ${endOf(fx)}`,
+    )
     await seedAwarenessWorld(fx)
 
     const start = await awarenessTask.start(promptContextFor(fx))
