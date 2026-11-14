@@ -1959,15 +1959,17 @@ describe('dispatchToolCall in a close phase', () => {
 
     const warn = vi.spyOn(logger, 'warn')
 
-    await runDispatch([
+    const { result } = await runDispatch([
       { toolName: 'scripted', input: { rows: [], ...cite(['t7']) } },
       { toolName: 'set_fields', input: { id: 'c1', description: 'Soaked.', ...cite(['t7']) } },
     ])
 
     expect(recorded()[0]).toMatchObject({ result: 'rejected', reason: 'other' })
-    expect(warn).toHaveBeenCalledWith('memory.close_reason_unkeyed', {
-      reason: expect.stringContaining('branch mismatch'),
-    })
+    expect(warn).toHaveBeenCalledWith(
+      'memory.close_reason_unkeyed',
+      { reason: expect.stringContaining('branch mismatch'), task: 'identity', tool: 'scripted' },
+      { actionId: result.actionId },
+    )
     expect(answers[0]).toMatchObject({ result: 'rejected' })
     expect(answers[0]).not.toHaveProperty('id')
     expect(shown!.handleOf(minted)).toBeUndefined()
