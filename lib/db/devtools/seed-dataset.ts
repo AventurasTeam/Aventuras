@@ -315,12 +315,12 @@ function forkEntries(): NewStoryEntry[] {
   return rows
 }
 
-// Chapter 2's close as its review window reads it (C4): a landed change, a write the user's edit
-// blocked, a task out of steps. Chapter 1 has no close report.
+// Chapter 2's close as its review window reads it (C4): a landed change, a list refused over its
+// soft cap, a task out of steps. Chapter 1 has no close report.
 const CHAP2_ACTION = 'act_chapter_2'
 const VORNE_TRAITS = ['patient', 'merciless']
 const VORNE_TRAITS_BEFORE_CLOSE = ['patient']
-const USER_EDIT_STOOD: CloseReasonKey = 'user-edited-since-prose'
+const OVER_SOFT_CAP: CloseReasonKey = 'over-soft-cap'
 
 const chapter2Report: CloseReport = closeReportSchema.parse({
   version: 1,
@@ -333,9 +333,20 @@ const chapter2Report: CloseReport = closeReportSchema.parse({
       rows: [{ table: 'entities', id: ID.mira, name: 'Mira' }],
       why: 'Mira stops hiding the debt and starts bargaining it down.',
       turns: [entryId('hero', 41)],
-      result: 'skipped',
-      reason: USER_EDIT_STOOD,
-      values: { 'state.drives': 'protect her network, buy back her debt to Vorne' },
+      result: 'rejected',
+      reason: OVER_SOFT_CAP,
+      // Past the drives soft cap and longer than her stored list: what over-soft-cap refuses.
+      values: {
+        'state.drives': [
+          'protect her network',
+          'buy back her debt to Vorne',
+          'keep Kael close',
+          'learn what the amulet is',
+          'stay ahead of the Watch',
+          'find who set the market fire',
+          'keep the broker guessing',
+        ].join(', '),
+      },
     },
     {
       task: 'identity',
