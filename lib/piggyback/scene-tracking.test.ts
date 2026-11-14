@@ -214,15 +214,72 @@ describe('sceneTrackingActions', () => {
   })
 
   // Retrieval ages a character from lastSeenAt.entryId: a skipped write leaves an older anchor
-  // that over-ages them, or none, so they never decay.
-  it('closes a character out at the previous entry when its scene had no location', () => {
+  // that over-ages them, or none, so they never decay. The fold moved them to this entry's place,
+  // which the edit says they were never in, so that place is cleared too.
+  it('closes a character out at a previous entry with no location, clearing the place they left', () => {
     const actions = sceneTrackingActions({
       branchId,
-      source: 'ai_classifier',
+      source: 'user_edit',
       entities,
       previous: {
         entryId: 'ent_0',
         currentLocationId: null,
+        worldTime: 30,
+        sceneEntities: ['char_b'],
+      },
+      before: { sceneEntities: ['char_b'], currentLocationId: 'loc_b' },
+      after: { sceneEntities: [], currentLocationId: 'loc_b' },
+    })
+    expect(payloadsFor(actions, 'char_b')).toEqual([
+      {
+        branchId,
+        id: 'char_b',
+        currentLocationId: null,
+        lastSeenAt: { entryId: 'ent_0', locationId: null, worldTime: 30 },
+      },
+    ])
+  })
+
+  // A null place on both sides is "never known", as for an in-scene character: the leave records
+  // when they were seen and keeps the location the user gave them.
+  it('keeps a manually set location when the scene they left never had one', () => {
+    const placed = {
+      id: 'char_k',
+      kind: 'character',
+      status: 'active',
+      state: { current_location_id: 'loc_manual', lastSeenAt: null },
+    } as unknown as Entity
+    const actions = sceneTrackingActions({
+      branchId,
+      source: 'ai_classifier',
+      entities: [placed],
+      previous: {
+        entryId: 'ent_0',
+        currentLocationId: null,
+        worldTime: 30,
+        sceneEntities: ['char_k'],
+      },
+      before: { sceneEntities: ['char_k'], currentLocationId: null },
+      after: { sceneEntities: [], currentLocationId: null },
+    })
+    expect(payloadsFor(actions, 'char_k')).toEqual([
+      {
+        branchId,
+        id: 'char_k',
+        lastSeenAt: { entryId: 'ent_0', locationId: null, worldTime: 30 },
+      },
+    ])
+  })
+
+  // An earlier edit cleared this entry's place; the previous entry still names one.
+  it('closes a character out at the previous place when this entry has none', () => {
+    const actions = sceneTrackingActions({
+      branchId,
+      source: 'user_edit',
+      entities,
+      previous: {
+        entryId: 'ent_0',
+        currentLocationId: 'loc_a',
         worldTime: 30,
         sceneEntities: ['char_b'],
       },
@@ -233,8 +290,8 @@ describe('sceneTrackingActions', () => {
       {
         branchId,
         id: 'char_b',
-        currentLocationId: null,
-        lastSeenAt: { entryId: 'ent_0', locationId: null, worldTime: 30 },
+        currentLocationId: 'loc_a',
+        lastSeenAt: { entryId: 'ent_0', locationId: 'loc_a', worldTime: 30 },
       },
     ])
   })
