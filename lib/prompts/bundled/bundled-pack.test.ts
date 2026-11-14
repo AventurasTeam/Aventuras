@@ -14,6 +14,7 @@ import {
 } from '../index'
 import { loadPack } from '../load-pack'
 import { validatePackIncludes } from '../validate-includes'
+import { CLOSE_TASK_SYSTEM } from './close-instructions'
 
 describe('bundled pack', () => {
   it('passes include-compatibility validation', () => {
@@ -172,7 +173,7 @@ describe("the close's system-half macros", () => {
       ...bundledPack.templates,
       [PROBE]: {
         group,
-        system: `{% include '${MACRO_IDS.closeInstructions}' %}\n\n{% include '${MACRO_IDS.closeProse}' %}`,
+        system: CLOSE_TASK_SYSTEM,
         user: 'Begin.',
       },
     },
