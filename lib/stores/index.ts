@@ -17,7 +17,7 @@ import { readStoryChapterNumbers, rehydrateStories, storiesStore } from './stori
 import { threadsStore } from './threads/threads'
 import { translationsStore } from './translations/translations'
 import { blockingOverlaysStore, useRegisteredOverlay } from './ui/blocking-overlays'
-import { chapterOverlaysStore } from './ui/chapter-overlays'
+import { chapterOverlaysStore, closeResultChapter, overlayChapter } from './ui/chapter-overlays'
 import { embedderSwapStore } from './ui/embedder-swap'
 import { embeddingStatusStore } from './ui/embedding-status'
 import { listCollapseStore } from './ui/list-collapse'
@@ -63,6 +63,7 @@ export {
   chapterOverlaysStore,
   chaptersStore,
   characterRelationshipsStore,
+  closeResultChapter,
   currentStoryStore,
   embedderSwapStore,
   embeddingStatusStore,
@@ -78,6 +79,7 @@ export {
   listCollapseStore,
   loreStore,
   navigationStore,
+  overlayChapter,
   readerRailStore,
   readStoryChapterNumbers,
   recoveryReportStore,
@@ -122,7 +124,6 @@ export type {
 export type { NavigationSnapshot } from './navigation/navigation'
 export type { OpenFailure, OpenFailureKind, StoriesSnapshot } from './stories/stories'
 export type { RecoveryReportSnapshot } from './ui/recovery-report'
-export { closeResultHolds, overlayChapterHolds } from './ui/chapter-overlays'
 export type {
   ChapterOverlaysState,
   CloseModalRequest,

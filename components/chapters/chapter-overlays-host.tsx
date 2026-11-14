@@ -20,14 +20,14 @@ import { t } from '@/lib/i18n'
 import {
   chapterOverlaysStore,
   chaptersStore,
-  closeResultHolds,
+  closeResultChapter,
   currentStoryStore,
   entitiesStore,
   generationStore,
   happeningAwarenessStore,
   happeningsStore,
   loreStore,
-  overlayChapterHolds,
+  overlayChapter,
   threadsStore,
   type StoreChapter,
 } from '@/lib/stores'
@@ -86,16 +86,16 @@ export function ChapterOverlaysHost(): ReactElement | null {
   const review = chapterOverlaysStore.useOverlays((s) => s.review)
   const closeResult = chapterOverlaysStore.useOverlays((s) => s.closeResult)
   const openBranchId = currentStoryStore.useCurrentStory((open) => open?.branchId ?? null)
-  const reviewChapter = chaptersStore.useChapters((rows) => {
-    const chapter = review == null ? undefined : rows.get(review.chapterId)
-    return overlayChapterHolds(chapter, openBranchId) ? chapter : null
-  })
-  const resultHolds = chaptersStore.useChapters((rows) =>
-    closeResultHolds(
-      closeResult,
-      closeResult == null ? undefined : rows.get(closeResult.chapterId),
-      openBranchId,
-    ),
+  const reviewChapter = chaptersStore.useChapters((rows) =>
+    overlayChapter(review == null ? undefined : rows.get(review.chapterId), openBranchId),
+  )
+  const resultHolds = chaptersStore.useChapters(
+    (rows) =>
+      closeResultChapter(
+        closeResult,
+        closeResult == null ? undefined : rows.get(closeResult.chapterId),
+        openBranchId,
+      ) != null,
   )
 
   // Pruned, not hidden: a redo restores the same chapter id, and nothing may reopen by itself.

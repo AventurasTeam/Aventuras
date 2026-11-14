@@ -5,7 +5,7 @@ import { CHAPTER_CLOSE_KIND, CLOSE_PHASE } from '@/lib/pipeline'
 import {
   chapterOverlaysStore,
   chaptersStore,
-  closeResultHolds,
+  closeResultChapter,
   currentStoryStore,
   generationStore,
   interruptMemoryRuns,
@@ -101,8 +101,8 @@ export function useMemoryRunBanner(): MemoryRunBannerState | null {
     return { kind: 'run', label, onCancel: () => void interruptMemoryRuns(runBranchId) }
   }
 
-  if (result == null || !closeResultHolds(result, chapter, branchId)) return null
-  if (chapter == null || chapter.id !== latestChapter?.id) return null
+  const held = closeResultChapter(result, chapter, branchId)
+  if (result == null || held == null || held.id !== latestChapter?.id) return null
   const { chapterId, stoppedTasks } = result
   const clear = () => chapterOverlaysStore.clearCloseResult()
   return {
@@ -110,7 +110,7 @@ export function useMemoryRunBanner(): MemoryRunBannerState | null {
     tone: stoppedTasks === 0 ? 'info' : 'warning',
     label:
       stoppedTasks === 0
-        ? t('chrome.closeResult.closed', { title: chapter.title })
+        ? t('chrome.closeResult.closed', { title: held.title })
         : t('chrome.closeResult.stopped', { count: stoppedTasks }),
     onReview: () => {
       chapterOverlaysStore.openReviewWindow({ chapterId })

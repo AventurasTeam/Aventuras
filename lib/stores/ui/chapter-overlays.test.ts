@@ -4,8 +4,8 @@ import { resetAllStores } from '@/lib/stores'
 
 import {
   chapterOverlaysStore,
-  closeResultHolds,
-  overlayChapterHolds,
+  closeResultChapter,
+  overlayChapter,
   type OverlaySurface,
 } from './chapter-overlays'
 
@@ -155,19 +155,19 @@ describe('the overlays hold rule', () => {
   const held = { branchId: 'br_1', hasCloseReport: true }
   const result = { branchId: 'br_1', chapterId: 'chap_1', stoppedTasks: 0 }
 
-  it('holds a chapter with a report on the open branch, and nothing else', () => {
-    expect(overlayChapterHolds(held, 'br_1')).toBe(true)
-    expect(overlayChapterHolds(undefined, 'br_1')).toBe(false)
-    expect(overlayChapterHolds({ ...held, hasCloseReport: false }, 'br_1')).toBe(false)
-    expect(overlayChapterHolds(held, 'br_2')).toBe(false)
-    expect(overlayChapterHolds(held, null)).toBe(false)
+  it('gives back a chapter with a report on the open branch, and null for any other', () => {
+    expect(overlayChapter(held, 'br_1')).toBe(held)
+    expect(overlayChapter(undefined, 'br_1')).toBeNull()
+    expect(overlayChapter({ ...held, hasCloseReport: false }, 'br_1')).toBeNull()
+    expect(overlayChapter(held, 'br_2')).toBeNull()
+    expect(overlayChapter(held, null)).toBeNull()
   })
 
-  it('holds a close result of the open branch whose chapter stands', () => {
-    expect(closeResultHolds(result, held, 'br_1')).toBe(true)
-    expect(closeResultHolds(null, held, 'br_1')).toBe(false)
-    expect(closeResultHolds({ ...result, branchId: 'br_2' }, held, 'br_1')).toBe(false)
-    expect(closeResultHolds(result, { ...held, hasCloseReport: false }, 'br_1')).toBe(false)
-    expect(closeResultHolds(result, undefined, 'br_1')).toBe(false)
+  it("gives back a close result's chapter while the result is the open branch's and it stands", () => {
+    expect(closeResultChapter(result, held, 'br_1')).toBe(held)
+    expect(closeResultChapter(null, held, 'br_1')).toBeNull()
+    expect(closeResultChapter({ ...result, branchId: 'br_2' }, held, 'br_1')).toBeNull()
+    expect(closeResultChapter(result, { ...held, hasCloseReport: false }, 'br_1')).toBeNull()
+    expect(closeResultChapter(result, undefined, 'br_1')).toBeNull()
   })
 })

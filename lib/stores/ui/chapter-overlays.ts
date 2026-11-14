@@ -23,23 +23,25 @@ export type ChapterOverlaysState = {
 
 type HeldChapter = Pick<StoreChapter, 'branchId' | 'hasCloseReport'>
 
-/** C7: an overlay's chapter stands while it holds a report on the open branch. */
-export function overlayChapterHolds<C extends HeldChapter>(
+/** C7: an overlay's chapter stands while it holds a report on the open branch; else null. */
+export function overlayChapter<C extends HeldChapter>(
   chapter: C | undefined,
   openBranchId: string | null,
-): chapter is C {
+): C | null {
   return chapter != null && chapter.hasCloseReport && chapter.branchId === openBranchId
+    ? chapter
+    : null
 }
 
-/** C7: a committed close's result holds while it is the open branch's and its chapter stands. */
-export function closeResultHolds(
+/** C7: a committed close's chapter while its result is the open branch's and it stands; else null. */
+export function closeResultChapter<C extends HeldChapter>(
   result: CloseResult | null,
-  chapter: HeldChapter | undefined,
+  chapter: C | undefined,
   openBranchId: string | null,
-): boolean {
-  return (
-    result != null && result.branchId === openBranchId && overlayChapterHolds(chapter, openBranchId)
-  )
+): C | null {
+  return result != null && result.branchId === openBranchId
+    ? overlayChapter(chapter, openBranchId)
+    : null
 }
 
 const INITIAL: ChapterOverlaysState = { review: null, closeModal: null, closeResult: null }
