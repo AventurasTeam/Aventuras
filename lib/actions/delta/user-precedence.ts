@@ -107,7 +107,7 @@ export async function userEditsOutliving(
   ctx: DbCtx,
   rows: readonly Delta[],
   wanted: (delta: Delta) => boolean,
-  yieldTo: YieldTo = 'user',
+  yieldTo: YieldTo,
 ): Promise<ReadonlyMap<string, Delta[]>> {
   const reversed = new Set(rows.map((r) => r.id))
   const machine = rows.filter((d) => !isUserOriginatedSource(d.source) && wanted(d))

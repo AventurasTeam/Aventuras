@@ -689,7 +689,7 @@ async function buildUndoOps(
     swept: new Map(),
   }
   const listVecTables = vecTableLister(ctx)
-  const laterUserEdits = await userEditsOutliving(ctx, set.rows, readsUserEdits)
+  const laterUserEdits = await userEditsOutliving(ctx, set.rows, readsUserEdits, 'user')
   // A create keeps its row only for the user's writes, whatever the set's mode.
   const fieldEdits = set.yieldTo === 'any' ? await fieldEditsOutliving(set, ctx) : laterUserEdits
   const liveLinks = await liveLinkFilter(set.rows, ctx)
