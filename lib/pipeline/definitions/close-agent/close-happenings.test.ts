@@ -44,6 +44,7 @@ const TOBIN = 'char_00000000-0000-4000-8000-000000000002'
 const MIRA = 'char_00000000-0000-4000-8000-000000000003'
 const FERRY = 'loc_00000000-0000-4000-8000-000000000004'
 const LANTERN = 'item_00000000-0000-4000-8000-000000000005'
+const SELA = 'char_00000000-0000-4000-8000-000000000006'
 const OTHER_BRANCH = 'br_other'
 const CAST = [
   { id: WREN, kind: 'character', name: 'Wren' },
@@ -466,6 +467,34 @@ describe('the range embed', () => {
 
     expect(closeClustersOf(phase.intermediates)).toEqual([])
   })
+
+  it.each([
+    { name: 'is a place here', entityId: FERRY },
+    { name: 'has no row here', entityId: SELA },
+  ])(
+    'leaves out of a cast an entity that $name, though another branch holds it as a character',
+    async ({ entityId }) => {
+      await seedPair({ h1: { cast: [entityId] }, h2: { cast: [entityId] } })
+      // Read through the other branch's row, the two beats would share a character and cluster.
+      await openOtherBranch()
+      await fx.ctx.db.insert(entities).values({
+        id: entityId,
+        branchId: OTHER_BRANCH,
+        kind: 'character',
+        name: 'Sela',
+        status: 'active',
+        injectionMode: 'auto',
+        createdAt: 1,
+        updatedAt: 1,
+      })
+      script()
+      const phase = phaseOf()
+
+      expect(await runStep(phase)).toEqual({ status: 'completed' })
+
+      expect(closeClustersOf(phase.intermediates)).toEqual([])
+    },
+  )
 
   it('needs no embedder at all for a chapter with one happening', async () => {
     await seedHappening({
