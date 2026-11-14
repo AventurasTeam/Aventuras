@@ -182,6 +182,29 @@ describe('closeReviewNotApplied', () => {
     ])
   })
 
+  it('keeps a refused field a later landed call lost again, listing both', () => {
+    expect(
+      notApplied([
+        call({
+          tool: 'update_character',
+          rows: [KAEL],
+          values: { 'state.voice': 'Flat' },
+          result: 'rejected',
+          reason: 'turn-in-text',
+        }),
+        call({
+          tool: 'update_character',
+          rows: [KAEL],
+          values: { description: 'A ranger.', 'state.voice': 'Hoarse' },
+          skippedFields: [{ field: 'state.voice', reason: 'user-edited-since-prose' }],
+        }),
+      ]),
+    ).toEqual([
+      ['Kael', 'state.voice', 'Flat', 'turn-in-text'],
+      ['Kael', 'state.voice', 'Hoarse', 'user-edited-since-prose'],
+    ])
+  })
+
   it("lists a partly landed call's lost field here and its landed one under Changes", () => {
     const review = buildCloseReview(
       report([
