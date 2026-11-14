@@ -1,4 +1,4 @@
-import { isJsonObject } from '@/lib/json-object'
+import type { CharacterState } from '@/lib/db'
 
 /**
  * retrieval.md → Scoring function, `chapters_old`: distance in chapters from the open chapter,
@@ -72,11 +72,12 @@ export function happeningAge(
   return best ?? { chaptersOld: 0, pinSignal: 0 }
 }
 
-/** A character ages from where it was last seen; no readable `lastSeenAt` reads 0. */
-export function characterChaptersOld(state: unknown, index: ChapterAgeIndex): number {
-  if (!isJsonObject(state) || !isJsonObject(state.lastSeenAt)) return 0
-  const { entryId } = state.lastSeenAt
-  return typeof entryId === 'string' ? (chaptersOldAt(entryId, index) ?? 0) : 0
+/** A character ages from where it was last seen; never seen, or not a character, reads 0. */
+export function characterChaptersOld(
+  lastSeenAt: CharacterState['lastSeenAt'] | undefined,
+  index: ChapterAgeIndex,
+): number {
+  return chaptersOldAt(lastSeenAt?.entryId, index) ?? 0
 }
 
 /** A thread ages from where it resolved or failed; no ref reads 0. */

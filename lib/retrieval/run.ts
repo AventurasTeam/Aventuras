@@ -3,13 +3,14 @@ import {
   knnQuery,
   vecTableName,
   vectorsByIdQuery,
+  type CharacterState,
   type Entity,
   type VecTargetKind,
 } from '@/lib/db'
 import { logger } from '@/lib/diagnostics'
 import { EmbedderCancelledError, type EmbedderErrorKind } from '@/lib/embedder'
 import { countTokens } from '@/lib/tokens'
-import { placeModes } from '@/lib/world'
+import { placeModes, stateOf } from '@/lib/world'
 
 import { loadAwarenessForScene, type AwarenessRow } from './awareness'
 import {
@@ -370,7 +371,11 @@ async function runRetrievalPass(
     happenings: [] as readonly LoadedHappeningRow[],
     awareness,
     chapterAges: chapterRanges.ages,
-    entityStates: new Map(params.storeEntities.map((e) => [e.id, e.state])),
+    lastSeenAtByCharacter: new Map(
+      params.storeEntities.flatMap((e) =>
+        e.kind === 'character' ? [[e.id, stateOf(e, 'character').lastSeenAt] as const] : [],
+      ),
+    ),
     recentProse: params.recentProse,
     disabledPlaceIds,
     scanText: params.scanText,
@@ -587,8 +592,8 @@ type PoolCtx = {
   happenings: readonly LoadedHappeningRow[]
   awareness: readonly AwarenessRow[]
   chapterAges: ChapterAgeIndex
-  /** The store's entity states by id: source rows carry none, and a character ages off its own. */
-  entityStates: ReadonlyMap<string, unknown>
+  /** Each character's lastSeenAt by id, from the store: source rows carry no state. */
+  lastSeenAtByCharacter: ReadonlyMap<string, CharacterState['lastSeenAt']>
   recentProse: string
   disabledPlaceIds: ReadonlySet<string>
   scanText: string
@@ -786,10 +791,7 @@ function assembleCandidates(
           entity,
           sims: simsFor(vector),
           vector,
-          chaptersOld:
-            r.kind === 'character'
-              ? characterChaptersOld(ctx.entityStates.get(r.id), chapterAges)
-              : 0,
+          chaptersOld: characterChaptersOld(ctx.lastSeenAtByCharacter.get(r.id), chapterAges),
           pinSignal: 0,
           keywordHits: kwHits([r.name, ...r.keywords]),
         }
