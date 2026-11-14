@@ -2,15 +2,9 @@ import { and, asc, eq } from 'drizzle-orm'
 
 import { applyDeltaAction } from '@/lib/actions/delta/apply-delta-action'
 import type { PipelineAction } from '@/lib/actions/types'
-import {
-  deltas,
-  emptyEntityState,
-  entities,
-  happeningAwareness,
-  happenings,
-  type HappeningAwareness,
-} from '@/lib/db'
+import { deltas, happeningAwareness } from '@/lib/db'
 
+import { chapterOf, endOf, uuid } from './close-awareness-fixture'
 import {
   runDispatchCalls,
   type DispatchRun,
@@ -21,8 +15,6 @@ import {
 import type { CloseFixture } from '../../__tests__/close-fixture'
 import { setPinTool } from '../awareness-tools'
 
-// Real `prefix_<uuid>` ids: CloseIds hands handles for those only.
-export const uuid = (n: number): string => `00000000-0000-4000-8000-${String(n).padStart(12, '0')}`
 export const ARIA = `char_${uuid(1)}`
 export const JORIN = `char_${uuid(2)}`
 export const KAI = `char_${uuid(3)}`
@@ -55,9 +47,6 @@ export const SHOWN: readonly ShownRow[] = [
   USER_FREQUENT,
 ].map((id): ShownRow => ({ table: 'happening_awareness', id, name: '' }))
 
-/** The chapter: the second turn to the third reply, t1…t4 by position; E is that reply. */
-const chapterOf = (fx: CloseFixture): string[] => fx.entries.slice(3, 7).map(({ id }) => id)
-export const endOf = (fx: CloseFixture): string => fx.entries[6]!.id
 /** The first reply, before the chapter. */
 export const earlierReplyOf = (fx: CloseFixture): string => fx.entries[2]!.id
 /** The fifth reply: past E, under the fixture's act_close_turn_5. */
@@ -70,62 +59,6 @@ export const awarenessTurns = (fx: CloseFixture): DispatchTurns => ({
   part: 0,
   chapterEntryIds: [...chapterOf(fx), earlierReplyOf(fx)],
 })
-
-// Written with no delta, as an import leaves a row: precedence reads only the edits after it.
-export async function putCharacter(fx: CloseFixture, id: string, name: string): Promise<void> {
-  await fx.ctx.db.insert(entities).values({
-    id,
-    branchId: fx.branchId,
-    kind: 'character',
-    name,
-    description: null,
-    status: 'active',
-    retiredReason: null,
-    injectionMode: 'auto',
-    state: emptyEntityState('character'),
-    keywords: [],
-    createdAt: 1,
-    updatedAt: 1,
-  })
-}
-
-export async function putHappening(
-  fx: CloseFixture,
-  row: { id: string; title: string; description?: string; occurredAtEntryId: string },
-): Promise<void> {
-  await fx.ctx.db.insert(happenings).values({
-    id: row.id,
-    branchId: fx.branchId,
-    title: row.title,
-    description: row.description ?? null,
-    category: null,
-    icon: null,
-    temporal: null,
-    occurredAtEntryId: row.occurredAtEntryId,
-    commonKnowledge: 0,
-    embeddingStale: 0,
-    createdAt: 1,
-    updatedAt: 1,
-  })
-}
-
-type AwarenessSeed = Pick<
-  HappeningAwareness,
-  'id' | 'characterId' | 'happeningId' | 'learnedAtEntryId' | 'decayResistance'
-> & { retrievalCount?: number; source?: string }
-
-export async function putAwareness(fx: CloseFixture, row: AwarenessSeed): Promise<void> {
-  await fx.ctx.db.insert(happeningAwareness).values({
-    id: row.id,
-    branchId: fx.branchId,
-    happeningId: row.happeningId,
-    characterId: row.characterId,
-    learnedAtEntryId: row.learnedAtEntryId,
-    decayResistance: row.decayResistance,
-    retrievalCount: row.retrievalCount ?? 0,
-    source: row.source ?? null,
-  })
-}
 
 export async function apply(
   fx: CloseFixture,

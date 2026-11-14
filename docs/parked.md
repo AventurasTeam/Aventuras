@@ -4039,7 +4039,11 @@ every copy. `lib/pipeline/definitions/__tests__/phase-db.ts` could hold
 `drain`; the two factories need a home stories can import too, which no
 `__tests__` file is today. **Revisit signal:** the next `RunState` or
 `StoreChapter` change that edits the copies, when consolidating costs
-what the edit does. Routed from triage 2026-11-07.
+what the edit does. Routed from triage 2026-11-07. The 2026-11-14 pass
+gave the close's test helpers one home each and found more not yet
+counted here, unverified: `runDeltas` in about seven test files,
+`idsWithTurns` and `START_CONFIG` in five or six, `seedCharacter` in
+four, and several `apply` variants.
 
 #### The mock LLM's token count has no run guard
 

@@ -223,7 +223,7 @@ export async function seedCharacter(fx: CloseFixture, id: string, name: string):
   })
 }
 
-async function seedHappening(fx: CloseFixture, seed: HappeningSeed): Promise<void> {
+async function seedWorldHappening(fx: CloseFixture, seed: HappeningSeed): Promise<void> {
   await apply(fx, {
     kind: 'createHappening',
     source: 'periodic_classifier',
@@ -286,7 +286,65 @@ export async function seedWorld(fx: CloseFixture): Promise<void> {
   await seedCharacter(fx, WREN, 'Wren')
   await seedCharacter(fx, TOBIN, 'Tobin')
   await seedCharacter(fx, MARA, 'Mara')
-  for (const seed of WORLD) await seedHappening(fx, seed)
+  for (const seed of WORLD) await seedWorldHappening(fx, seed)
+}
+
+/** A happening a pass wrote before the chapter, at the fixture entry `at`, with its links. */
+export async function seedHappening(
+  fx: CloseFixture,
+  row: {
+    id: string
+    title: string
+    description?: string
+    at: number
+    commonKnowledge?: 0 | 1
+    /** Linked with no role; none unless given. */
+    cast?: readonly string[]
+    /** Ids for the cast's links, in cast order; random when absent. */
+    linkIds?: readonly string[]
+    /** Characters with an awareness row of this happening; ids as for `linkIds`. */
+    knownBy?: readonly string[]
+    awarenessIds?: readonly string[]
+  },
+): Promise<void> {
+  await apply(fx, {
+    kind: 'createHappening',
+    source: 'periodic_classifier',
+    payload: {
+      entry: {
+        id: row.id,
+        branchId: fx.branchId,
+        title: row.title,
+        ...(row.description === undefined ? {} : { description: row.description }),
+        occurredAtEntryId: fx.entries[row.at]!.id,
+        commonKnowledge: row.commonKnowledge ?? 0,
+        createdAt: 1,
+        updatedAt: 1,
+      },
+    },
+  })
+  for (const [index, entityId] of (row.cast ?? []).entries())
+    await apply(fx, {
+      kind: 'createHappeningInvolvement',
+      source: 'periodic_classifier',
+      payload: {
+        entry: {
+          id: row.linkIds?.[index] ?? generateId('hinv'),
+          branchId: fx.branchId,
+          happeningId: row.id,
+          entityId,
+          role: null,
+        },
+      },
+    })
+  for (const [index, characterId] of (row.knownBy ?? []).entries())
+    await fx.ctx.db.insert(happeningAwareness).values({
+      id: row.awarenessIds?.[index] ?? generateId('haw'),
+      branchId: fx.branchId,
+      happeningId: row.id,
+      characterId,
+      retrievalCount: 0,
+    })
 }
 
 export async function happeningRow(fx: CloseFixture, id: string) {

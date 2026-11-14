@@ -1,8 +1,7 @@
-import { and, eq } from 'drizzle-orm'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
-import { generateToolStep, type ResolveModelConfig, type ToolStepResult } from '@/lib/ai'
-import { branches, entities, lore, stories, storyEntries, type StoryMode } from '@/lib/db'
+import { generateToolStep, type ResolveModelConfig } from '@/lib/ai'
+import { branches, entities, lore, type StoryMode } from '@/lib/db'
 import { makeLogger } from '@/lib/diagnostics'
 import { resetAllStores } from '@/lib/stores'
 
@@ -13,10 +12,15 @@ import { createLoreTool } from './lore-tools'
 import { __setCloseAgentSlots, type CloseAgentSlots } from './slots'
 import type { TaskPromptContext } from './task'
 import type { CloseTool, ToolContext } from './tool'
-import type { PhaseContext, PhaseEmittedEvent, PhaseResult } from '../../types'
-import { openCloseFixture, type CloseFixture } from '../__tests__/close-fixture'
-import { closeAgentPhase } from '../chapter-close-agent'
-import { closeLedgerOf, setCloseParts, setCloseRange } from '../close-intermediates'
+import type { PhaseContext } from '../../types'
+import {
+  openCloseFixture,
+  putSceneCharacter,
+  setStoryMode,
+  type CloseFixture,
+} from '../__tests__/close-fixture'
+import { closeLedgerOf } from '../close-intermediates'
+import { closePhaseContext, drainApplying, stepWith } from './__tests__/agent-loop'
 
 vi.mock('@/lib/ai', async (importOriginal) => ({
   ...(await importOriginal<Record<string, unknown>>()),
@@ -52,30 +56,6 @@ async function putLoreRow(
     createdAt: 1,
     updatedAt: 1,
   })
-}
-
-// Identity starts only on a scene character; the system-half tests compare against its render.
-async function putSceneCharacter(fx: CloseFixture): Promise<void> {
-  await fx.ctx.db.insert(entities).values({
-    id: KAEL,
-    branchId: fx.branchId,
-    kind: 'character',
-    name: 'Kael',
-    status: 'active',
-    injectionMode: 'auto',
-    createdAt: 1,
-    updatedAt: 1,
-  })
-  const where = and(eq(storyEntries.branchId, fx.branchId), eq(storyEntries.id, fx.entries[2]!.id))
-  const [row] = await fx.ctx.db
-    .select({ metadata: storyEntries.metadata })
-    .from(storyEntries)
-    .where(where)
-  if (!row?.metadata) throw new Error('putSceneCharacter: the entry has no metadata')
-  await fx.ctx.db
-    .update(storyEntries)
-    .set({ metadata: { ...row.metadata, sceneEntities: [KAEL] } })
-    .where(where)
 }
 
 // As the agent phase does before any task: every chapter entry a turn, t1 the first.
@@ -279,7 +259,7 @@ describe('loreTask', () => {
   // memory/chapter-close.md → Conversations: a part's tasks reuse the chapter's cached prefix.
   it("renders a system half byte-identical to Identity's for the same turns and mode", async () => {
     await putLoreRow(fx, { id: LORE_ROWS.eldrin, title: 'House Eldrin' })
-    await putSceneCharacter(fx)
+    await putSceneCharacter(fx, KAEL, 'Kael', fx.entries[2]!.id)
     const ids = idsWithTurns(fx)
     const ctx = promptContextFor(fx, ids)
     const identityStart = await identityTask.start({
@@ -298,16 +278,9 @@ describe('loreTask', () => {
   })
 
   it("puts the story mode's rule in the system half, the same as Identity's", async () => {
-    await putSceneCharacter(fx)
+    await putSceneCharacter(fx, KAEL, 'Kael', fx.entries[2]!.id)
     const render = async (mode: StoryMode) => {
-      const [story] = await fx.ctx.db
-        .select({ definition: stories.definition })
-        .from(stories)
-        .where(eq(stories.id, fx.storyId))
-      await fx.ctx.db
-        .update(stories)
-        .set({ definition: { ...story!.definition!, mode } })
-        .where(eq(stories.id, fx.storyId))
+      await setStoryMode(fx, mode)
       const ctx = promptContextFor(fx, idsWithTurns(fx))
       const identityStart = await identityTask.start({
         ...ctx,
@@ -373,63 +346,16 @@ describe('loreTask', () => {
   })
 })
 
-const USAGE = {
-  inputTokens: 100,
-  inputTokenDetails: { noCacheTokens: 100, cacheReadTokens: 0, cacheWriteTokens: 0 },
-  outputTokens: 5,
-  outputTokenDetails: { textTokens: 5, reasoningTokens: 0 },
-  totalTokens: 105,
-}
-
-// A reply with no tool call: the task ends after one step.
-function noCallStep(): ToolStepResult {
-  return {
-    status: 'ok',
-    step: {
-      calls: [],
-      invalidCalls: [],
-      responseMessages: [
-        { role: 'assistant', content: [{ type: 'text', text: 'Nothing to change.' }] },
-      ],
-      text: 'Nothing to change.',
-      finishReason: 'stop',
-      usage: USAGE,
-    },
-    recoverable: [],
-  }
-}
-
 // The opening through the third reply (positions 1-7), as one part.
 function closePhaseFor(fx: CloseFixture): PhaseContext {
-  const actionId = 'act_lore_close'
-  const intermediates: Record<string, unknown> = {}
-  const startEntryId = fx.entries[0]!.id
-  const endEntryId = fx.replyIds[2]!
-  setCloseRange(intermediates, { chapterId: 'chap_lore_close', startEntryId, endEntryId })
-  setCloseParts(intermediates, [{ part: 1, startEntryId, endEntryId, tokens: 0 }])
-  return {
-    actionId,
-    abortSignal: new AbortController().signal,
-    intermediates,
-    log: makeLogger(actionId),
-    db: fx.ctx.db,
-    runInTransaction: fx.ctx.runInTransaction,
-    storyId: fx.storyId,
-    branchId: fx.branchId,
-  }
-}
-
-// No step writes here, so no group outcome is ever owed back.
-async function drainAgent(
-  ctx: PhaseContext,
-): Promise<{ events: PhaseEmittedEvent[]; result: PhaseResult }> {
-  const gen = closeAgentPhase(ctx)
-  const events: PhaseEmittedEvent[] = []
-  for (;;) {
-    const next = await gen.next(undefined)
-    if (next.done) return { events, result: next.value }
-    events.push(next.value)
-  }
+  return closePhaseContext(fx, {
+    actionId: 'act_lore_close',
+    range: {
+      chapterId: 'chap_lore_close',
+      startEntryId: fx.entries[0]!.id,
+      endEntryId: fx.replyIds[2]!,
+    },
+  })
 }
 
 const LORE_ONLY: CloseAgentSlots = {
@@ -443,7 +369,7 @@ describe('Lore in a close', () => {
 
   beforeEach(async () => {
     vi.mocked(generateToolStep).mockReset()
-    vi.mocked(generateToolStep).mockResolvedValue(noCallStep())
+    vi.mocked(generateToolStep).mockResolvedValue(stepWith([]))
     __setCloseAgentSlots(LORE_ONLY)
     fx = await openCloseFixture()
   })
@@ -457,7 +383,7 @@ describe('Lore in a close', () => {
   it("starts 2 of 7 and sends canon's Lore tools on a story with no lore yet", async () => {
     const ctx = closePhaseFor(fx)
 
-    const { events, result } = await drainAgent(ctx)
+    const { events, result } = await drainApplying(ctx, fx)
 
     expect(result).toEqual({ status: 'completed' })
     expect(events.filter((event) => event.type === 'close_task_start')).toEqual([

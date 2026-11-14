@@ -1,17 +1,13 @@
-import {
-  applyDeltaAction,
-  applyDeltaActionGroupWithOutcomes,
-} from '@/lib/actions/delta/apply-delta-action'
-import type { GroupOutcome } from '@/lib/actions/types'
-import type { ResolveModelConfig, ToolStepCall, ToolStepResult } from '@/lib/ai'
+import { applyDeltaAction } from '@/lib/actions/delta/apply-delta-action'
+import type { ResolveModelConfig } from '@/lib/ai'
 import { chapters, emptyEntityState, entities, happeningAwareness, happenings } from '@/lib/db'
 import { makeLogger } from '@/lib/diagnostics'
 import { generateId } from '@/lib/ids'
 
-import type { PhaseContext, PhaseEmittedEvent, PhaseResult } from '../../../types'
+import { closePhaseContext } from './agent-loop'
+import type { PhaseContext } from '../../../types'
 import type { CloseFixture } from '../../__tests__/close-fixture'
-import { closeAgentPhase } from '../../chapter-close-agent'
-import { setCloseParts, setCloseRange } from '../../close-intermediates'
+import { setCloseRange } from '../../close-intermediates'
 import type { CloseRange } from '../../intermediates'
 import { CloseIds } from '../ids'
 import type { TaskPromptContext } from '../task'
@@ -43,7 +39,7 @@ const rangeOf = (fx: CloseFixture): CloseRange => ({
   endEntryId: endOf(fx),
 })
 
-// Written with no delta, as an import leaves a row: a start reads rows, not history.
+// Written with no delta, as an import leaves a row: no edit history precedes it.
 export async function putCharacter(fx: CloseFixture, id: string, name: string): Promise<void> {
   await fx.ctx.db.insert(entities).values({
     id,
@@ -63,13 +59,21 @@ export async function putCharacter(fx: CloseFixture, id: string, name: string): 
 
 export async function putHappening(
   fx: CloseFixture,
-  row: { id: string; title: string; occurredAtEntryId: string; commonKnowledge?: 0 | 1 },
+  row: {
+    id: string
+    title: string
+    description?: string
+    occurredAtEntryId: string | null
+    commonKnowledge?: 0 | 1
+    /** The fixture's branch unless given. */
+    branchId?: string
+  },
 ): Promise<void> {
   await fx.ctx.db.insert(happenings).values({
     id: row.id,
-    branchId: fx.branchId,
+    branchId: row.branchId ?? fx.branchId,
     title: row.title,
-    description: null,
+    description: row.description ?? null,
     category: null,
     icon: null,
     temporal: null,
@@ -264,88 +268,10 @@ export function promptContextFor(
   }
 }
 
-const USAGE = {
-  inputTokens: 100,
-  inputTokenDetails: { noCacheTokens: 100, cacheReadTokens: 0, cacheWriteTokens: 0 },
-  outputTokens: 5,
-  outputTokenDetails: { textTokens: 5, reasoningTokens: 0 },
-  totalTokens: 105,
-}
-
-// A step as the SDK returns it; no call ends the task.
-export function stepWith(calls: readonly ToolStepCall[]): ToolStepResult {
-  const text = calls.length === 0 ? 'Nothing to change.' : ''
-  return {
-    status: 'ok',
-    step: {
-      calls,
-      invalidCalls: [],
-      responseMessages: [
-        {
-          role: 'assistant',
-          content:
-            calls.length === 0
-              ? [{ type: 'text', text }]
-              : calls.map(({ toolCallId, toolName, input }) => ({
-                  type: 'tool-call' as const,
-                  toolCallId,
-                  toolName,
-                  input,
-                })),
-        },
-      ],
-      text,
-      finishReason: calls.length === 0 ? 'stop' : 'tool-calls',
-      usage: USAGE,
-    },
-    recoverable: [],
-  }
-}
-
 /** A close over the chapter as one part; its chapter row is putChapter's. */
 export function closePhaseFor(
   fx: CloseFixture,
   abortSignal: AbortSignal = new AbortController().signal,
 ): PhaseContext {
-  const actionId = 'act_awareness_close'
-  const intermediates: Record<string, unknown> = {}
-  const range = rangeOf(fx)
-  setCloseRange(intermediates, range)
-  setCloseParts(intermediates, [
-    { part: 1, startEntryId: range.startEntryId, endEntryId: range.endEntryId, tokens: 0 },
-  ])
-  return {
-    actionId,
-    abortSignal,
-    intermediates,
-    log: makeLogger(actionId),
-    db: fx.ctx.db,
-    runInTransaction: fx.ctx.runInTransaction,
-    storyId: fx.storyId,
-    branchId: fx.branchId,
-  }
-}
-
-// Stands in for the orchestrator: each group lands in the fixture and its outcome goes back.
-export async function drainApplying(
-  ctx: PhaseContext,
-  fx: CloseFixture,
-): Promise<{ events: PhaseEmittedEvent[]; result: PhaseResult }> {
-  const gen = closeAgentPhase(ctx)
-  const events: PhaseEmittedEvent[] = []
-  let reply: GroupOutcome | undefined
-  for (;;) {
-    const next = await gen.next(reply)
-    if (next.done) return { events, result: next.value }
-    const event = next.value
-    events.push(event)
-    reply =
-      event.type === 'delta_group_emitted'
-        ? await applyDeltaActionGroupWithOutcomes(
-            event.actions,
-            { actionId: ctx.actionId, branchId: ctx.branchId, entryId: event.entryId },
-            fx.ctx,
-          )
-        : undefined
-  }
+  return closePhaseContext(fx, { actionId: 'act_awareness_close', range: rangeOf(fx), abortSignal })
 }

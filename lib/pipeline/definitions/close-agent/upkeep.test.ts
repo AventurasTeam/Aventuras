@@ -1,24 +1,9 @@
-import { and, eq } from 'drizzle-orm'
+import { eq } from 'drizzle-orm'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { applyDeltaAction } from '@/lib/actions/delta/apply-delta-action'
-import {
-  generateToolStep,
-  type ResolveModelConfig,
-  type ToolStepCall,
-  type ToolStepResult,
-} from '@/lib/ai'
-import {
-  branches,
-  emptyEntityState,
-  entities,
-  happenings,
-  stories,
-  storyEntries,
-  type Entity,
-  type EntityState,
-  type StoryMode,
-} from '@/lib/db'
+import { generateToolStep, type ResolveModelConfig } from '@/lib/ai'
+import { branches, emptyEntityState, entities, type StoryMode } from '@/lib/db'
 import { makeLogger } from '@/lib/diagnostics'
 import { resetAllStores } from '@/lib/stores'
 
@@ -28,10 +13,17 @@ import { readRowTool } from './read-tools'
 import { __setCloseAgentSlots, type CloseAgentSlots } from './slots'
 import type { TaskPromptContext } from './task'
 import { UPKEEP_READ_FIELDS, upkeepTask } from './upkeep'
-import type { PhaseContext, PhaseEmittedEvent, PhaseResult } from '../../types'
-import { openCloseFixture, type CloseFixture } from '../__tests__/close-fixture'
-import { closeAgentPhase } from '../chapter-close-agent'
-import { closeLedgerOf, setCloseParts, setCloseRange } from '../close-intermediates'
+import type { PhaseContext } from '../../types'
+import {
+  openCloseFixture,
+  putEntityRow,
+  setSceneOf,
+  setStoryMode,
+  type CloseFixture,
+} from '../__tests__/close-fixture'
+import { closeLedgerOf } from '../close-intermediates'
+import { closePhaseContext, drainApplying, stepWith } from './__tests__/agent-loop'
+import { putHappening } from './__tests__/close-awareness-fixture'
 
 vi.mock('@/lib/ai', async (importOriginal) => ({
   ...(await importOriginal<Record<string, unknown>>()),
@@ -63,61 +55,6 @@ const HAPS = {
 /** The part: the opening to the third reply, t1…t7. */
 const partEntryIds = (fx: CloseFixture): string[] => fx.entries.slice(0, 7).map(({ id }) => id)
 
-type EntityRowSeed = {
-  id: string
-  kind: Entity['kind']
-  name: string
-  status?: Entity['status']
-  description?: string | null
-  keywords?: string[]
-  state: Readonly<Record<string, unknown>>
-}
-
-// Written with no delta, as an import or a hand edit leaves a row: a start reads rows, not history.
-async function putEntityRow(fx: CloseFixture, row: EntityRowSeed): Promise<void> {
-  await fx.ctx.db.insert(entities).values({
-    id: row.id,
-    branchId: fx.branchId,
-    kind: row.kind,
-    name: row.name,
-    description: row.description ?? null,
-    status: row.status ?? 'active',
-    retiredReason: row.status === 'retired' ? 'Lost to the river.' : null,
-    injectionMode: 'auto',
-    state: row.state as EntityState,
-    keywords: row.keywords ?? [],
-    createdAt: 1,
-    updatedAt: 1,
-  })
-}
-
-async function putHappening(
-  fx: CloseFixture,
-  row: {
-    id: string
-    title: string
-    description?: string
-    occurredAtEntryId: string | null
-    commonKnowledge: 0 | 1
-    branchId?: string
-  },
-): Promise<void> {
-  await fx.ctx.db.insert(happenings).values({
-    id: row.id,
-    branchId: row.branchId ?? fx.branchId,
-    title: row.title,
-    description: row.description ?? null,
-    category: null,
-    icon: null,
-    temporal: null,
-    occurredAtEntryId: row.occurredAtEntryId,
-    commonKnowledge: row.commonKnowledge,
-    embeddingStale: 0,
-    createdAt: 1,
-    updatedAt: 1,
-  })
-}
-
 /** A happening a pass made from `entryId`: its create delta anchored there, set at no entry. */
 async function madeFromEntry(
   fx: CloseFixture,
@@ -146,23 +83,6 @@ async function madeFromEntry(
     fx.ctx,
   )
   if (result.status !== 'ok') throw new Error(`seeding ${row.title} refused: ${result.reason}`)
-}
-
-async function setSceneOf(
-  fx: CloseFixture,
-  entryId: string,
-  scene: { sceneEntities: string[]; currentLocationId: string | null },
-): Promise<void> {
-  const where = and(eq(storyEntries.branchId, fx.branchId), eq(storyEntries.id, entryId))
-  const [row] = await fx.ctx.db
-    .select({ metadata: storyEntries.metadata })
-    .from(storyEntries)
-    .where(where)
-  if (!row?.metadata) throw new Error(`setSceneOf: entry ${entryId} has no metadata`)
-  await fx.ctx.db
-    .update(storyEntries)
-    .set({ metadata: { ...row.metadata, ...scene } })
-    .where(where)
 }
 
 /**
@@ -237,6 +157,7 @@ async function seedUpkeepWorld(fx: CloseFixture): Promise<void> {
     kind: 'item',
     name: 'letter',
     status: 'retired',
+    retiredReason: 'Lost to the river.',
     description: 'Sealed.',
     state: { at_location_id: null },
   })
@@ -246,11 +167,8 @@ async function seedUpkeepWorld(fx: CloseFixture): Promise<void> {
     name: 'Mara',
     state: emptyEntityState('character'),
   })
-  await setSceneOf(fx, fx.entries[2]!.id, {
-    sceneEntities: [ROWS.satchel, ROWS.mara, ROWS.letter],
-    currentLocationId: ROWS.inn,
-  })
-  await setSceneOf(fx, fx.entries[6]!.id, { sceneEntities: [], currentLocationId: ROWS.landing })
+  await setSceneOf(fx, fx.entries[2]!.id, [ROWS.satchel, ROWS.mara, ROWS.letter], ROWS.inn)
+  await setSceneOf(fx, fx.entries[6]!.id, [], ROWS.landing)
   await putHappening(fx, {
     id: HAPS.fight,
     title: 'A fight at the inn',
@@ -546,9 +464,10 @@ describe('upkeepTask', () => {
       kind: 'item',
       name: 'letter',
       status: 'retired',
+      retiredReason: 'Lost to the river.',
       state: { at_location_id: null },
     })
-    await setSceneOf(fx, fx.entries[6]!.id, { sceneEntities: [], currentLocationId: ROWS.landing })
+    await setSceneOf(fx, fx.entries[6]!.id, [], ROWS.landing)
     await putHappening(fx, {
       id: HAPS.toll,
       title: 'The new toll',
@@ -657,14 +576,7 @@ describe('upkeepTask', () => {
   it("puts the story mode's rule in the system half, the same as Identity's", async () => {
     await seedUpkeepWorld(fx)
     const render = async (mode: StoryMode) => {
-      const [story] = await fx.ctx.db
-        .select({ definition: stories.definition })
-        .from(stories)
-        .where(eq(stories.id, fx.storyId))
-      await fx.ctx.db
-        .update(stories)
-        .set({ definition: { ...story!.definition!, mode } })
-        .where(eq(stories.id, fx.storyId))
+      await setStoryMode(fx, mode)
       const ctx = promptContextFor(fx, idsWithTurns(fx))
       const identityStart = await identityTask.start({
         ...ctx,
@@ -724,89 +636,16 @@ describe('upkeepTask', () => {
   })
 })
 
-const USAGE = {
-  inputTokens: 100,
-  inputTokenDetails: { noCacheTokens: 100, cacheReadTokens: 0, cacheWriteTokens: 0 },
-  outputTokens: 5,
-  outputTokenDetails: { textTokens: 5, reasoningTokens: 0 },
-  totalTokens: 105,
-}
-
-// A reply with no tool call: the task ends after one step.
-function noCallStep(): ToolStepResult {
-  return {
-    status: 'ok',
-    step: {
-      calls: [],
-      invalidCalls: [],
-      responseMessages: [
-        { role: 'assistant', content: [{ type: 'text', text: 'Nothing to change.' }] },
-      ],
-      text: 'Nothing to change.',
-      finishReason: 'stop',
-      usage: USAGE,
-    },
-    recoverable: [],
-  }
-}
-
-// A step as the SDK returns it: the assistant message holding the calls.
-function callStep(calls: readonly ToolStepCall[]): ToolStepResult {
-  return {
-    status: 'ok',
-    step: {
-      calls,
-      invalidCalls: [],
-      responseMessages: [
-        {
-          role: 'assistant',
-          content: calls.map(({ toolCallId, toolName, input }) => ({
-            type: 'tool-call' as const,
-            toolCallId,
-            toolName,
-            input,
-          })),
-        },
-      ],
-      text: '',
-      finishReason: 'tool-calls',
-      usage: USAGE,
-    },
-    recoverable: [],
-  }
-}
-
 // The opening through the third reply (positions 1-7), as one part.
 function closePhaseFor(fx: CloseFixture): PhaseContext {
-  const actionId = 'act_upkeep_close'
-  const intermediates: Record<string, unknown> = {}
-  const startEntryId = fx.entries[0]!.id
-  const endEntryId = fx.replyIds[2]!
-  setCloseRange(intermediates, { chapterId: 'chap_upkeep_close', startEntryId, endEntryId })
-  setCloseParts(intermediates, [{ part: 1, startEntryId, endEntryId, tokens: 0 }])
-  return {
-    actionId,
-    abortSignal: new AbortController().signal,
-    intermediates,
-    log: makeLogger(actionId),
-    db: fx.ctx.db,
-    runInTransaction: fx.ctx.runInTransaction,
-    storyId: fx.storyId,
-    branchId: fx.branchId,
-  }
-}
-
-// No call here writes (a restated list and a read-gate refusal), so no group outcome is owed back.
-async function drainAgent(
-  ctx: PhaseContext,
-): Promise<{ events: PhaseEmittedEvent[]; result: PhaseResult }> {
-  const gen = closeAgentPhase(ctx)
-  const events: PhaseEmittedEvent[] = []
-  for (;;) {
-    const next = await gen.next(undefined)
-    if (next.done) return { events, result: next.value }
-    events.push(next.value)
-  }
+  return closePhaseContext(fx, {
+    actionId: 'act_upkeep_close',
+    range: {
+      chapterId: 'chap_upkeep_close',
+      startEntryId: fx.entries[0]!.id,
+      endEntryId: fx.replyIds[2]!,
+    },
+  })
 }
 
 const UPKEEP_ONLY: CloseAgentSlots = {
@@ -820,7 +659,7 @@ describe('Upkeep in a close', () => {
 
   beforeEach(async () => {
     vi.mocked(generateToolStep).mockReset()
-    vi.mocked(generateToolStep).mockResolvedValue(noCallStep())
+    vi.mocked(generateToolStep).mockResolvedValue(stepWith([]))
     __setCloseAgentSlots(UPKEEP_ONLY)
     fx = await openCloseFixture()
   })
@@ -834,7 +673,7 @@ describe('Upkeep in a close', () => {
   it('makes no call when its start is empty, and still starts 5 of 7', async () => {
     const ctx = closePhaseFor(fx)
 
-    const { events, result } = await drainAgent(ctx)
+    const { events, result } = await drainApplying(ctx, fx)
 
     expect(result).toEqual({ status: 'completed' })
     expect(events.filter((event) => event.type === 'close_task_start')).toEqual([
@@ -850,7 +689,7 @@ describe('Upkeep in a close', () => {
     await seedUpkeepWorld(fx)
     vi.mocked(generateToolStep)
       .mockResolvedValueOnce(
-        callStep([
+        stepWith([
           {
             toolCallId: 'call_1',
             toolName: 'set_keywords',
@@ -863,10 +702,10 @@ describe('Upkeep in a close', () => {
           },
         ]),
       )
-      .mockResolvedValueOnce(noCallStep())
+      .mockResolvedValueOnce(stepWith([]))
     const ctx = closePhaseFor(fx)
 
-    const { result } = await drainAgent(ctx)
+    const { result } = await drainApplying(ctx, fx)
 
     expect(result).toEqual({ status: 'completed' })
     const [, request] = vi.mocked(generateToolStep).mock.calls[0]!

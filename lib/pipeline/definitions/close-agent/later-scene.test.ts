@@ -5,7 +5,7 @@ import { branches, storyEntries } from '@/lib/db'
 import { resetAllStores } from '@/lib/stores'
 
 import { charactersInSceneAfter } from './later-scene'
-import { openCloseFixture, type CloseFixture } from '../__tests__/close-fixture'
+import { openCloseFixture, setSceneOf } from '../__tests__/close-fixture'
 
 // Real `prefix_<uuid>` ids, as a scene holds them.
 const PIP = 'char_00000000-0000-4000-8000-00000000c001'
@@ -16,23 +16,6 @@ const LANTERN = 'item_00000000-0000-4000-8000-00000000c004'
 // The fixture's entries by index: 6 is E (the third reply, position 7), 7 the action after it,
 // 8 the reply after that (position 9), 12 the last reply (position 13).
 const END = 6
-
-async function setSceneOf(
-  f: CloseFixture,
-  entryId: string,
-  ids: readonly unknown[],
-): Promise<void> {
-  const where = and(eq(storyEntries.branchId, f.branchId), eq(storyEntries.id, entryId))
-  const [row] = await f.ctx.db
-    .select({ metadata: storyEntries.metadata })
-    .from(storyEntries)
-    .where(where)
-  if (!row?.metadata) throw new Error(`setSceneOf: entry ${entryId} has no metadata`)
-  await f.ctx.db
-    .update(storyEntries)
-    .set({ metadata: { ...row.metadata, sceneEntities: [...ids] as string[] } })
-    .where(where)
-}
 
 afterEach(() => {
   resetAllStores()
@@ -88,7 +71,7 @@ describe('charactersInSceneAfter', () => {
       .where(
         and(eq(storyEntries.branchId, f.branchId), eq(storyEntries.id, f.entries[END + 2]!.id)),
       )
-    await setSceneOf(f, f.entries[10]!.id, [PIP, 7, null])
+    await setSceneOf(f, f.entries[10]!.id, [PIP, 7, null] as string[])
 
     const later = await charactersInSceneAfter(
       { db: f.ctx.db, branchId: f.branchId },

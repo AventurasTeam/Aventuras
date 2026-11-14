@@ -9,7 +9,6 @@ import {
   deltas,
   emptyEntityState,
   entities,
-  storyEntries,
   type CollisionReason,
   type Entity,
   type EntityState,
@@ -30,7 +29,12 @@ import {
   type DispatchRun,
   type ScriptedCall,
 } from '../__tests__/close-dispatch'
-import { openCloseFixture, type CloseFixture } from '../__tests__/close-fixture'
+import {
+  appendLateTurns,
+  openCloseFixture,
+  setSceneOf,
+  type CloseFixture,
+} from '../__tests__/close-fixture'
 
 // ---- Fixture helpers ----
 
@@ -125,66 +129,6 @@ async function keepPair(f: CloseFixture, holder: string, partner: string): Promi
     branchEntities: rows,
   }))
     await write(f, action, 'act_user_keep', null)
-}
-
-async function setSceneOf(f: CloseFixture, entryId: string, ids: readonly string[]): Promise<void> {
-  const where = and(eq(storyEntries.branchId, f.branchId), eq(storyEntries.id, entryId))
-  const [row] = await f.ctx.db
-    .select({ metadata: storyEntries.metadata })
-    .from(storyEntries)
-    .where(where)
-  if (!row?.metadata) throw new Error(`setSceneOf: entry ${entryId} has no metadata`)
-  await f.ctx.db
-    .update(storyEntries)
-    .set({ metadata: { ...row.metadata, sceneEntities: [...ids] } })
-    .where(where)
-}
-
-/** A turn written after the fixture's, as the fixture writes one: the reply anchored on itself. */
-async function appendTurnEntry(
-  f: CloseFixture,
-  entry: { id: string; position: number; kind: 'user_action' | 'ai_reply'; content: string },
-): Promise<void> {
-  await write(
-    f,
-    {
-      kind: 'createStoryEntry',
-      source: entry.kind === 'user_action' ? 'user_edit' : 'ai_classifier',
-      payload: {
-        entry: {
-          ...entry,
-          branchId: f.branchId,
-          chapterId: null,
-          metadata: { sceneEntities: [], currentLocationId: null, worldTime: entry.position * 60 },
-          createdAt: 1_767_225_600_000 + entry.position,
-        },
-      },
-    },
-    `act_late_turn_${entry.position}`,
-    entry.kind === 'ai_reply' ? entry.id : null,
-  )
-}
-
-/** On a two-turn fixture (t1–t5): appends t6, t7 (E), so an earlier write lands before E. */
-async function appendLateTurns(
-  f: CloseFixture,
-): Promise<{ endEntryId: string; taskEntryIds: string[] }> {
-  await appendTurnEntry(f, {
-    id: 'entry_late_006',
-    position: 6,
-    kind: 'user_action',
-    content: 'I ask who keeps the far bank.',
-  })
-  await appendTurnEntry(f, {
-    id: 'entry_late_007',
-    position: 7,
-    kind: 'ai_reply',
-    content: 'Tobin pulls his hood low and says nothing.',
-  })
-  return {
-    endEntryId: 'entry_late_007',
-    taskEntryIds: [...f.entries.map((entry) => entry.id), 'entry_late_006', 'entry_late_007'],
-  }
 }
 
 async function storedEntity(f: CloseFixture, id: string): Promise<Entity> {
@@ -1126,18 +1070,7 @@ describe('flag_duplicate', () => {
     })
     await seedRow(f, { id: STRANGER, kind: 'character', name: 'the hooded stranger' })
     await keepPair(f, TOBIN, STRANGER)
-    await appendTurnEntry(f, {
-      id: 'entry_late_006',
-      position: 6,
-      kind: 'user_action',
-      content: 'I ask who keeps the far bank.',
-    })
-    await appendTurnEntry(f, {
-      id: 'entry_late_007',
-      position: 7,
-      kind: 'ai_reply',
-      content: 'Tobin pulls his hood low and says nothing.',
-    })
+    await appendLateTurns(f)
 
     const { result, answers } = await dispatchScripted(f, [flagCall()], {
       shown: SHOWN,

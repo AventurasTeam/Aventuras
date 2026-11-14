@@ -103,26 +103,6 @@ patch`, which 5.5a marks `restated`, so a close tool's write of it
   (`reviewValueText` and `entryRefText` in
   `lib/history/close-review-changes.ts`), and shows the raw id once the
   entry is gone. Raised in 5.5a's review.
-- **The close's task test files repeat their fixture helpers.** Under
-  `lib/pipeline/definitions/close-agent/`, a `setSceneOf` is written in
-  five test files (`identity`, `upkeep`, `lifecycle`, `lifecycle-tools`
-  and `later-scene`), a `putSceneCharacter` in two (`lore`, `threads`), a
-  `putEntityRow` in two (`identity`, `upkeep`), and a story-mode write in
-  five. The scripted-dispatch harness they also repeated now lives in
-  `__tests__/close-dispatch.ts`; these helpers stayed per file, and one
-  module beside `__tests__/close-fixture.ts` would serve them. 5.9 added
-  more of the same: a `seedHappening` now sits in five close test files,
-  and `upkeep`, `driver`, `happenings`, `close-happenings`,
-  `awareness-tools` and `close-awareness` each insert entity, happening
-  and awareness rows directly. Two per-spec fixtures have since appeared:
-  `__tests__/close-awareness-fixture.ts` holds a `putHappening` and a
-  `putAwareness`, which `awareness-tools` and `upkeep` keep copies of,
-  and `__tests__/happening-tools-fixture.ts` holds one of the five
-  `seedHappening`s. `close-awareness-fixture.ts` also holds generic
-  agent-loop stand-ins (`USAGE`, `stepWith`, `closePhaseFor`,
-  `drainApplying`) with near-copies in `lore.test.ts`, `upkeep.test.ts`,
-  `identity.test.ts`, `lifecycle.test.ts` and `driver.test.ts`. Raised in
-  5.5b's review, widened in 5.9's and in its slice review.
 - **A close's "Writes so far" names delta paths, not fields.** The
   ledger's lines read `state.traits` (`close-agent/ledger.ts`), while
   the task templates show the same field as `traits`, so the model has
@@ -332,23 +312,6 @@ patch`, which 5.5a marks `restated`, so a close tool's write of it
   blocked-while-generating copy, or keeping the confirm open, would say
   what happened. Raised in Slice 5.12's review of Task 12 and its final
   review.
-- **Test and story helpers are duplicated.** `appendTurnEntry` in
-  `lib/pipeline/definitions/close-agent/upkeep-tools.test.ts` and
-  `lifecycle-tools.test.ts`, and `writeLaterTurn` in
-  `lib/actions/chapters/remove-chapter.test.ts`, each write a later turn
-  through `createStoryEntry`; one `writeTurn` in
-  `lib/pipeline/definitions/__tests__/close-fixture.ts`, beside its
-  `writeTurnEntry`, would serve all three. `chapterByTitle` is written
-  out in `chapter-delete.spec.ts`, `reader-rollback.spec.ts`,
-  `reader-chapters.spec.ts` and `chapter-timeline.spec.ts`; it belongs
-  in `e2e/harness/db.ts`. `components/story-settings/external-cell.ts`
-  says it is for save-session story harnesses, but
-  `chapter-card.stories.tsx` and `rollback-confirm.stories.tsx` use it
-  too, so the comment is stale or the helper belongs outside a domain
-  folder. `chapterListCopy` in `e2e/locators/reader.ts` rewrites
-  `components/reader/chapter-list-label.ts`'s pair and span copy, so a
-  wording change in one won't reach the other. Raised in Slice 5.12's
-  review of Tasks 4, 10 and 14 and its final review.
 - **`regenerateTurn` takes its expected counts as optional.**
   `regenerateTurn(…, opts?: { expectedCounts?: RollbackCounts })`
   (`lib/actions/turns/regenerate-turn.ts`) predates Slice 5.12, which

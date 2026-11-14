@@ -24,6 +24,7 @@ import { __setCloseAgentSlots, type CloseAgentSlots, type CodeStepContext } from
 import type { PhaseEmittedEvent, PhaseResult } from '../../types'
 import { openCloseFixture, type CloseFixture } from '../__tests__/close-fixture'
 import { closeLedgerOf } from '../close-intermediates'
+import { drainApplying, stepWith } from './__tests__/agent-loop'
 import {
   ARIA,
   JORIN,
@@ -40,9 +41,7 @@ import {
   seedAwarenessWorld,
   chapterIds,
   promptContextFor,
-  stepWith,
   closePhaseFor,
-  drainApplying,
 } from './__tests__/close-awareness-fixture'
 
 vi.mock('@/lib/ai', async (importOriginal) => ({

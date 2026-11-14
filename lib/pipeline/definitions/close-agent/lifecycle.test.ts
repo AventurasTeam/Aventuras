@@ -1,23 +1,12 @@
 import { and, eq } from 'drizzle-orm'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
-import {
-  applyDeltaAction,
-  applyDeltaActionGroupWithOutcomes,
-} from '@/lib/actions/delta/apply-delta-action'
-import type { GroupOutcome } from '@/lib/actions/types'
-import {
-  generateToolStep,
-  type ResolveModelConfig,
-  type ToolStepCall,
-  type ToolStepResult,
-} from '@/lib/ai'
+import { applyDeltaAction } from '@/lib/actions/delta/apply-delta-action'
+import { generateToolStep, type ResolveModelConfig } from '@/lib/ai'
 import {
   branches,
   emptyEntityState,
   entities,
-  stories,
-  storyEntries,
   type CollisionReason,
   type EntityState,
   type NewEntity,
@@ -31,10 +20,15 @@ import { CloseIds } from './ids'
 import { LIFECYCLE_READ_FIELDS, lifecycleTask, type LifecycleRow } from './lifecycle'
 import { __setCloseAgentSlots } from './slots'
 import type { TaskPromptContext } from './task'
-import type { PhaseContext, PhaseEmittedEvent, PhaseResult } from '../../types'
-import { openCloseFixture, type CloseFixture } from '../__tests__/close-fixture'
-import { closeAgentPhase } from '../chapter-close-agent'
-import { closeLedgerOf, setCloseParts, setCloseRange } from '../close-intermediates'
+import type { PhaseContext } from '../../types'
+import {
+  openCloseFixture,
+  setSceneOf,
+  setStoryMode,
+  type CloseFixture,
+} from '../__tests__/close-fixture'
+import { closeLedgerOf } from '../close-intermediates'
+import { closePhaseContext, drainApplying, stepWith } from './__tests__/agent-loop'
 
 vi.mock('@/lib/ai', async (importOriginal) => ({
   ...(await importOriginal<Record<string, unknown>>()),
@@ -110,23 +104,6 @@ async function seedRow(fx: CloseFixture, spec: RowSpec): Promise<void> {
     fx.ctx,
   )
   if (result.status !== 'ok') throw new Error(`seeding ${spec.name} refused: ${result.reason}`)
-}
-
-async function setSceneOf(
-  fx: CloseFixture,
-  entryId: string,
-  ids: readonly string[],
-): Promise<void> {
-  const where = and(eq(storyEntries.branchId, fx.branchId), eq(storyEntries.id, entryId))
-  const [row] = await fx.ctx.db
-    .select({ metadata: storyEntries.metadata })
-    .from(storyEntries)
-    .where(where)
-  if (!row?.metadata) throw new Error(`setSceneOf: entry ${entryId} has no metadata`)
-  await fx.ctx.db
-    .update(storyEntries)
-    .set({ metadata: { ...row.metadata, sceneEntities: [...ids] } })
-    .where(where)
 }
 
 // The fixture's entries by index: 0-6 the chapter (positions 1-7, t1-t7), 6 is E, 7 the action
@@ -601,14 +578,7 @@ describe('lifecycleTask', () => {
     await seedRow(fx, { id: ROWS.tobin, kind: 'character', name: 'Tobin' })
     await setSceneOf(fx, fx.entries[4]!.id, [ROWS.tobin])
     const render = async (mode: StoryMode) => {
-      const [story] = await fx.ctx.db
-        .select({ definition: stories.definition })
-        .from(stories)
-        .where(eq(stories.id, fx.storyId))
-      await fx.ctx.db
-        .update(stories)
-        .set({ definition: { ...story!.definition!, mode } })
-        .where(eq(stories.id, fx.storyId))
+      await setStoryMode(fx, mode)
       const { ctx, start } = await startOf(fx)
       const identityStart = await identityTask.start({
         ...ctx,
@@ -635,84 +605,16 @@ describe('lifecycleTask', () => {
 
 // ---- In the agent phase ----
 
-const USAGE: Extract<ToolStepResult, { status: 'ok' }>['step']['usage'] = {
-  inputTokens: 100,
-  inputTokenDetails: { noCacheTokens: 100, cacheReadTokens: 0, cacheWriteTokens: 0 },
-  outputTokens: 5,
-  outputTokenDetails: { textTokens: 5, reasoningTokens: 0 },
-  totalTokens: 105,
-}
-
-function stepWith(calls: readonly ToolStepCall[]): ToolStepResult {
-  const done = calls.length === 0
-  return {
-    status: 'ok',
-    step: {
-      calls: [...calls],
-      invalidCalls: [],
-      responseMessages: [
-        {
-          role: 'assistant',
-          content: done
-            ? [{ type: 'text', text: 'Nothing to change.' }]
-            : calls.map((call) => ({ type: 'tool-call' as const, ...call })),
-        },
-      ],
-      text: done ? 'Nothing to change.' : '',
-      finishReason: done ? 'stop' : 'tool-calls',
-      usage: USAGE,
-    },
-    recoverable: [],
-  }
-}
-
 // The opening to the third reply as one part.
 function closePhase(fx: CloseFixture): PhaseContext {
-  const actionId = 'act_lifecycle_close'
-  const chapter = fx.entries.slice(0, 7)
-  const intermediates: Record<string, unknown> = {}
-  setCloseRange(intermediates, {
-    chapterId: 'chap_lifecycle',
-    startEntryId: chapter[0]!.id,
-    endEntryId: chapter[6]!.id,
+  return closePhaseContext(fx, {
+    actionId: 'act_lifecycle_close',
+    range: {
+      chapterId: 'chap_lifecycle',
+      startEntryId: fx.entries[0]!.id,
+      endEntryId: fx.entries[6]!.id,
+    },
   })
-  // The agent loop reads a cut's ids; its token count is the metadata phase's.
-  setCloseParts(intermediates, [
-    { part: 1, startEntryId: chapter[0]!.id, endEntryId: chapter[6]!.id, tokens: 0 },
-  ])
-  return {
-    actionId,
-    abortSignal: new AbortController().signal,
-    intermediates,
-    log: makeLogger(actionId),
-    db: fx.ctx.db,
-    runInTransaction: fx.ctx.runInTransaction,
-    storyId: fx.storyId,
-    branchId: fx.branchId,
-  }
-}
-
-// Stands in for the orchestrator: each group lands and its outcome goes back.
-async function drainLanding(
-  fx: CloseFixture,
-  ctx: PhaseContext,
-): Promise<{ events: PhaseEmittedEvent[]; result: PhaseResult }> {
-  const gen = closeAgentPhase(ctx)
-  const events: PhaseEmittedEvent[] = []
-  let reply: GroupOutcome | undefined
-  for (;;) {
-    const next = await gen.next(reply)
-    if (next.done) return { events, result: next.value }
-    events.push(next.value)
-    reply =
-      next.value.type === 'delta_group_emitted'
-        ? await applyDeltaActionGroupWithOutcomes(
-            next.value.actions,
-            { actionId: ctx.actionId, branchId: ctx.branchId, entryId: next.value.entryId },
-            fx.ctx,
-          )
-        : undefined
-  }
 }
 
 describe('Lifecycle in the agent phase', () => {
@@ -730,7 +632,7 @@ describe('Lifecycle in the agent phase', () => {
   })
 
   it('starts with nothing to show, makes no step and still counts (C6)', async () => {
-    const { events, result } = await drainLanding(fx, closePhase(fx))
+    const { events, result } = await drainApplying(closePhase(fx), fx)
 
     expect(result).toEqual({ status: 'completed' })
     expect(events.filter((event) => event.type === 'close_task_start')).toEqual([
@@ -757,7 +659,7 @@ describe('Lifecycle in the agent phase', () => {
     )
     const ctx = closePhase(fx)
 
-    const { result } = await drainLanding(fx, ctx)
+    const { result } = await drainApplying(ctx, fx)
 
     expect(result).toEqual({ status: 'completed' })
     expect(closeLedgerOf(ctx.intermediates)?.calls).toMatchObject([

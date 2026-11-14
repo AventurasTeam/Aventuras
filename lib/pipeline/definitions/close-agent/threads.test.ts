@@ -8,8 +8,6 @@ import { generateToolStep, type ResolveModelConfig, type ToolStepResult } from '
 import {
   branches,
   deltas,
-  entities,
-  stories,
   storyEntries,
   threads,
   type InjectionMode,
@@ -35,7 +33,12 @@ import { __resetRegistry } from '../../authoring/registry'
 import { __resetBus } from '../../runtime/event-bus'
 import type { PhaseContext, PhaseEmittedEvent, PhaseResult, PipelineEvent } from '../../types'
 import { runDispatchCalls, type DispatchRun, type ScriptedCall } from '../__tests__/close-dispatch'
-import { openCloseFixture, type CloseFixture } from '../__tests__/close-fixture'
+import {
+  openCloseFixture,
+  putSceneCharacter,
+  setStoryMode,
+  type CloseFixture,
+} from '../__tests__/close-fixture'
 import { closeAgentPhase } from '../chapter-close-agent'
 import { setCloseParts, setCloseRange } from '../close-intermediates'
 
@@ -1842,30 +1845,6 @@ async function putThreadRoster(fx: CloseFixture): Promise<void> {
   })
 }
 
-// A character in one turn's scene, so Identity has a start beside Threads'.
-async function putSceneCharacter(fx: CloseFixture, id: string, name: string, entryId: string) {
-  await fx.ctx.db.insert(entities).values({
-    id,
-    branchId: fx.branchId,
-    kind: 'character',
-    name,
-    status: 'active',
-    injectionMode: 'auto',
-    createdAt: 1,
-    updatedAt: 1,
-  })
-  const where = and(eq(storyEntries.branchId, fx.branchId), eq(storyEntries.id, entryId))
-  const [row] = await fx.ctx.db
-    .select({ metadata: storyEntries.metadata })
-    .from(storyEntries)
-    .where(where)
-  if (!row?.metadata) throw new Error(`putSceneCharacter: entry ${entryId} has no metadata`)
-  await fx.ctx.db
-    .update(storyEntries)
-    .set({ metadata: { ...row.metadata, sceneEntities: [id] } })
-    .where(where)
-}
-
 // As the agent phase does before any task: every chapter entry a turn, t1 the first.
 function threadsIdsWithTurns(fx: CloseFixture): CloseIds {
   const ids = new CloseIds()
@@ -2216,14 +2195,7 @@ describe('threadsTask', () => {
     await putSceneCharacter(fx, OPEN_ROWS.kael, 'Kael', fx.entries[2]!.id)
     await putThreadRoster(fx)
     const render = async (mode: StoryMode) => {
-      const [story] = await fx.ctx.db
-        .select({ definition: stories.definition })
-        .from(stories)
-        .where(eq(stories.id, fx.storyId))
-      await fx.ctx.db
-        .update(stories)
-        .set({ definition: { ...story!.definition!, mode } })
-        .where(eq(stories.id, fx.storyId))
+      await setStoryMode(fx, mode)
       const ctx = threadsPromptContext(fx, threadsIdsWithTurns(fx))
       const identityStart = await identityTask.start({
         ...ctx,
