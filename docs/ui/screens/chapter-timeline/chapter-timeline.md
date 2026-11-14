@@ -215,8 +215,9 @@ generation pipeline is in flight:
 ```
 
 - **Counts.** Rows the close created, then the other changes it made.
-  Each count line is omitted at zero, since a close can land with no
-  writes. The turns line's second sentence states the residue a delete
+  A change a later write replaced in every field isn't counted, since
+  the delete leaves that later value standing. Each count line is
+  omitted at zero, since a close can land with no writes. The turns line's second sentence states the residue a delete
   accepts: a later
   turn's own undo can write back a value the delete removed
   ([`chapter-close.md → Deleting a chapter`](../../../memory/chapter-close.md#deleting-a-chapter)).

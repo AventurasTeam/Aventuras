@@ -656,6 +656,14 @@ change amends the scope above.
   every later write to a created row into the set, the user's edits
   included, and the lore line already reports them
   (`, your edits included`).
+- **`otherChanges` counts only updates the delete restores (developer
+  decision after review, Q16: B).** A corrected criterion: the Scope's
+  "a delta whose every field yields still counts", with its slight
+  overstatement, no longer holds. The planner's `restoringUpdates` reads
+  each update as the walk does, with the same later-write map under the
+  set's yield mode and the same `restorablePayload`, so a close update a
+  later write replaced in every field counts nothing, and the count and
+  the delete can't disagree.
 - **The residue criterion split in two (developer decision after plan
   review).** A created lore row goes with every later delta on it, so
   one row can't show both the delete and the residue. The residue is
