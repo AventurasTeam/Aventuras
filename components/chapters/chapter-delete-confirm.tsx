@@ -26,9 +26,15 @@ export type ChapterDeleteConfirmProps = {
   open: boolean
   onOpenChange: (open: boolean) => void
   preview: ChapterDeletePreview
-  /** Set while a run holds the gate; both actions disable with it. */
+  /**
+   * Set while a run holds the gate; both actions disable with it. Hidden while `pending`: the
+   * removal trips the gate itself, and the reason would read as some other run.
+   */
   blockedReason?: string
-  /** A removal is running (`useChapterDeleteConfirm().pending`); both actions disable. */
+  /**
+   * A removal is running (`useChapterDeleteConfirm().pending`); every button disables, Cancel
+   * included.
+   */
   pending?: boolean
   onDelete: (mode: ChapterDeleteMode) => void
 }
@@ -56,7 +62,8 @@ export function ChapterDeleteConfirm({
   pending = false,
   onDelete,
 }: ChapterDeleteConfirmProps): ReactElement {
-  const actionsDisabled = pending || blockedReason != null
+  const reason = pending ? undefined : blockedReason
+  const actionsDisabled = pending || reason != null
   const contentRef = useRef<View>(null)
   // Chromium blurs a button the moment it disables; the dialog takes focus so Tab stays inside.
   useEffect(() => {
@@ -98,7 +105,7 @@ export function ChapterDeleteConfirm({
           <Button
             variant="secondary"
             disabled={actionsDisabled}
-            disabledReason={blockedReason}
+            disabledReason={reason}
             onPress={() => onDelete('divider-only')}
           >
             <Text>{t('chapters:deleteConfirm.removeDivider')}</Text>
@@ -106,7 +113,7 @@ export function ChapterDeleteConfirm({
           <Button
             variant="destructive"
             disabled={actionsDisabled}
-            disabledReason={blockedReason}
+            disabledReason={reason}
             onPress={() => onDelete('whole')}
           >
             <Text>{t('chapters:deleteConfirm.confirm')}</Text>

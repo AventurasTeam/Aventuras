@@ -211,7 +211,7 @@ export default function ChapterTimelineRoute(): ReactElement {
             if (!next) deleteConfirm.dismiss()
           }}
           preview={deleteConfirm.target.preview}
-          blockedReason={deleteConfirm.pending ? undefined : gateReason}
+          blockedReason={gateReason}
           pending={deleteConfirm.pending}
           onDelete={(mode) => void deleteConfirm.confirm(mode)}
         />

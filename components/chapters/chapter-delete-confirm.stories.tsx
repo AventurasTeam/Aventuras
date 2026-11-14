@@ -224,6 +224,19 @@ export const Pending: Story = {
   },
 }
 
+/** The removal trips the gate it runs under, so a reason would read as some other run. */
+export const PendingHidesBlockedReason: Story = {
+  args: { pending: true, blockedReason: BLOCKED_REASON },
+  play: async () => {
+    await findDialog()
+    for (const name of [COPY.removeDivider, COPY.confirm]) {
+      const button = screen.getByRole('button', { name })
+      expect(button).toHaveAttribute('aria-disabled', 'true')
+      expect(button.closest('[title]')).toBeNull()
+    }
+  },
+}
+
 /** The owner flips `pending` on the press, as `useChapterDeleteConfirm` does. */
 function PendingOnDelete(props: ChapterDeleteConfirmProps) {
   const [pending, setPending] = useState(false)
