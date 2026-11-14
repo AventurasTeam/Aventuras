@@ -45,10 +45,6 @@ vi.mock('#lib/stores/activity.svelte.ts', () => ({
     recordStep: vi.fn(() => ''),
   },
 }))
-vi.mock('#lib/stores/debug.svelte.ts', () => ({
-  debug: { log: vi.fn(), isActive: false },
-}))
-
 // In-memory fake mirroring the real DB's semantics (see database.ts): create()
 // inserts a full row, save() does a partial column update on an existing row.
 const conversationRows = new Map<string, Record<string, unknown>>()

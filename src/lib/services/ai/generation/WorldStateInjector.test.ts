@@ -11,13 +11,6 @@ vi.mock('#lib/stores/activity.svelte.ts', () => ({
   },
 }))
 
-vi.mock('#lib/stores/debug.svelte.ts', () => ({
-  debug: {
-    addDebugRequest: vi.fn(),
-    addDebugResponse: vi.fn(),
-  },
-}))
-
 // The LLM half of Tier 3, stubbed: these tests are about *when* it is called, and
 // calling it for real would drag in the prompt engine and a provider.
 const runTier3Selection = vi.fn()

@@ -1,5 +1,6 @@
 <script lang="ts">
-  import { type DebugLogEntry } from '#lib/stores/debug.svelte.ts'
+  import { onDestroy, tick, untrack } from 'svelte'
+  import { debug, type DebugLogEntry } from '#lib/stores/debug.svelte.ts'
   import {
     ArrowUpCircle,
     ArrowDownCircle,
@@ -21,15 +22,26 @@
   import { Separator } from '#lib/components/ui/separator/index.ts'
   import { Autocomplete } from '#lib/components/ui/autocomplete/index.ts'
   import { cn } from '#lib/utils/cn.ts'
+  import { errMessage } from '#lib/utils/error.ts'
+  import { DebugJsonCache, safeStringify } from './debugJson'
 
   interface Props {
-    logs: DebugLogEntry[]
     onClear?: () => void
-    renderNewlines: boolean
-    onToggleRenderNewlines?: () => void
+    onToggleReadableView?: () => void
   }
 
-  let { logs, onClear, renderNewlines, onToggleRenderNewlines }: Props = $props()
+  let { onClear, onToggleReadableView }: Props = $props()
+
+  // `id` is the request's id, whether or not the request itself is still in the list.
+  type LogGroup = { id: string; request?: DebugLogEntry; response?: DebugLogEntry }
+  type ScrollAnchor = { id: string; offset: number }
+
+  /** Window between snapshots of the store's log. */
+  const THROTTLE_MS = 1200
+
+  // Raw: entries are replaced, never mutated, and their bodies are large.
+  let logs = $state.raw<DebugLogEntry[]>([])
+  const jsonCache = new DebugJsonCache()
 
   let copiedId = $state<string | null>(null)
   let exporting = $state(false)
@@ -40,15 +52,91 @@
   let userScrolledAway = $state(false)
 
   // Pagination
-  let currentPage = $state(1)
+  let requestedPage = $state(1)
   let pageSize = $state(20)
 
+  let lastSnapshotAt = 0
+  let pendingSnapshot: ReturnType<typeof setTimeout> | null = null
+
+  function setCategories(next: string[]) {
+    selectedCategories = next
+    requestedPage = 1
+  }
+
+  function setPageSize(next: number) {
+    pageSize = next
+    requestedPage = 1
+  }
+
+  function findAnchor(container: HTMLElement): ScrollAnchor | null {
+    const top = container.getBoundingClientRect().top
+    for (const row of container.querySelectorAll<HTMLElement>('[data-log-id]')) {
+      const rect = row.getBoundingClientRect()
+      const id = row.dataset.logId
+      if (id && rect.bottom > top) return { id, offset: rect.top - top }
+    }
+    return null
+  }
+
+  function restoreAnchor(container: HTMLElement, anchor: ScrollAnchor | null) {
+    if (!anchor) return
+    const row = container.querySelector<HTMLElement>(`[data-log-id="${CSS.escape(anchor.id)}"]`)
+    if (!row) return
+    const offset = row.getBoundingClientRect().top - container.getBoundingClientRect().top
+    container.scrollTop += offset - anchor.offset
+  }
+
+  async function applySnapshot(next: DebugLogEntry[]) {
+    lastSnapshotAt = Date.now()
+    const container = scrollContainer
+    const following = currentPage === 1 && !userScrolledAway
+    // Ids, not lengths or identities: the log is capped, and a merge replaces the newest entry.
+    const hasNewer = next.at(-1)?.id !== logs.at(-1)?.id
+    const anchor = container && !following ? findAnchor(container) : null
+    // Stable row keys let engines with scroll anchoring keep the reader's place within a page.
+    const nativeAnchoring = CSS.supports('overflow-anchor', 'auto')
+
+    logs = next
+    // New groups push older ones to later pages, so follow the row being read; failing that, keep
+    // the page, which a shrunken list may have clamped, from drifting back on regrowth.
+    const anchorIndex = anchor ? groupedLogs.findIndex((group) => group.id === anchor.id) : -1
+    requestedPage = anchorIndex === -1 ? currentPage : Math.floor(anchorIndex / pageSize) + 1
+
+    if (!container) return
+    if (following) {
+      if (!hasNewer) return
+      await tick()
+      container.scrollTop = 0
+    } else if (anchor && !nativeAnchoring) {
+      await tick()
+      restoreAnchor(container, anchor)
+    }
+  }
+
   $effect(() => {
-    // Reset to page 1 when filters change, logs are cleared, or page size changes
-    void selectedCategories
-    void logs
-    void pageSize
-    currentPage = 1
+    void debug.logsVersion
+
+    // Only `logsVersion` may trigger a snapshot; scrolling and paging must not.
+    untrack(() => {
+      const elapsed = Date.now() - lastSnapshotAt
+
+      // An empty list on either side is applied at once: the pop-out mounts before its
+      // first batch arrives, and a clear should not linger.
+      if (elapsed >= THROTTLE_MS || logs.length === 0 || debug.logCount === 0) {
+        if (pendingSnapshot) clearTimeout(pendingSnapshot)
+        pendingSnapshot = null
+        void applySnapshot(debug.getSnapshot())
+      } else if (!pendingSnapshot) {
+        pendingSnapshot = setTimeout(() => {
+          pendingSnapshot = null
+          void applySnapshot(debug.getSnapshot())
+        }, THROTTLE_MS - elapsed)
+      }
+    })
+  })
+
+  onDestroy(() => {
+    if (pendingSnapshot) clearTimeout(pendingSnapshot)
   })
 
   function formatTimestamp(timestamp: number): string {
@@ -67,44 +155,19 @@
     return `${(duration / 1000).toFixed(2)}s`
   }
 
-  // eslint-disable-next-line svelte/prefer-svelte-reactivity -- SvelteMap cannot be mutated inside template expressions (state_unsafe_mutation)
-  const jsonCache = new Map<string, string>()
-
-  const MAX_DISPLAY_CHARS = 200_000
-
-  /** JSON.stringify that survives circular references instead of throwing. */
-  function safeStringify(value: unknown, indent = 2): string {
-    try {
-      return JSON.stringify(value, null, indent) ?? ''
-    } catch {
-      // eslint-disable-next-line svelte/prefer-svelte-reactivity -- plain Set: not reactive state
-      const seen = new Set()
-      return JSON.stringify(
-        value,
-        (_key, v) => {
-          if (typeof v === 'object' && v !== null) {
-            if (seen.has(v)) return '[Circular]'
-            seen.add(v)
-          }
-          return v
-        },
-        indent,
-      )
-    }
-  }
-
   /**
    * Write every log entry to a JSON file. Exports the full set, not the current filter:
    * the point is to hand the whole session to someone else.
    */
   async function exportLogs() {
-    if (logs.length === 0 || exporting) return
+    const all = debug.getSnapshot()
+    if (all.length === 0 || exporting) return
     exporting = true
     try {
       const content = safeStringify({
         exportedAt: new Date().toISOString(),
-        count: logs.length,
-        logs,
+        count: all.length,
+        logs: all,
       })
       const stamp = new Date().toISOString().slice(0, 19).replace(/[:T]/g, '-')
       const target = await resolveSaveTarget(`aventura-debug-${stamp}.json`, [
@@ -116,7 +179,7 @@
       setTimeout(() => (exported = false), 2000)
     } catch (err) {
       console.error('[DebugLogView] Failed to export logs:', err)
-      exportError = err instanceof Error ? err.message : String(err)
+      exportError = errMessage(err)
       setTimeout(() => (exportError = null), 4000)
     } finally {
       exporting = false
@@ -124,51 +187,11 @@
   }
 
   function formatJson(entry: DebugLogEntry): string {
-    const cacheKey = `${entry.id}-${renderNewlines}`
-    const cached = jsonCache.get(cacheKey)
-    if (cached) return cached
+    return jsonCache.get(entry, debug.readableView).text
+  }
 
-    let raw: string | undefined
-    try {
-      raw = JSON.stringify(entry.data, null, 2)
-    } catch {
-      // Likely circular references — retry with a safe replacer
-      try {
-        // eslint-disable-next-line svelte/prefer-svelte-reactivity -- SvelteSet cannot be mutated inside template expressions (state_unsafe_mutation)
-        const seen = new Set()
-        raw = JSON.stringify(
-          entry.data,
-          (_key, value) => {
-            if (typeof value === 'object' && value !== null) {
-              if (seen.has(value)) return '[Circular]'
-              seen.add(value)
-            }
-            return value
-          },
-          2,
-        )
-      } catch (e) {
-        console.error('[DebugLogView] formatJson failed for entry', entry.id, e)
-        // Not cached — lets the next render retry in case the data changes
-        return `[Serialization error: ${e instanceof Error ? e.message : String(e)}]`
-      }
-    }
-
-    let json = raw ?? '(no data)'
-    if (renderNewlines) {
-      json = json.replace(/\\n/g, '\n')
-    }
-    if (json.length > MAX_DISPLAY_CHARS) {
-      json =
-        json.slice(0, MAX_DISPLAY_CHARS) +
-        `\n\n... [truncated — ${json.length.toLocaleString()} total chars] ...`
-    }
-    if (jsonCache.size > 200) {
-      const firstKey = jsonCache.keys().next().value
-      if (firstKey) jsonCache.delete(firstKey)
-    }
-    jsonCache.set(cacheKey, json)
-    return json
+  function hasJsonText(entry: DebugLogEntry): boolean {
+    return jsonCache.get(entry, debug.readableView).jsonText
   }
 
   async function copyToClipboard(entry: DebugLogEntry) {
@@ -188,7 +211,7 @@
     const templateIds = new Set(PROMPT_TEMPLATES.map((t) => t.id))
     const logServiceNames = new Set(logs.map((l) => l.serviceName))
     const all = new Set([...templateIds, ...logServiceNames])
-    return Array.from(all).sort()
+    return [...all].toSorted()
   })
 
   let groupedLogs = $derived.by(() => {
@@ -198,13 +221,13 @@
       currentLogs = currentLogs.filter((l) => selectedCategories.includes(l.serviceName))
     }
 
-    const groups: { request?: DebugLogEntry; response?: DebugLogEntry }[] = []
+    const groups: LogGroup[] = []
     // eslint-disable-next-line svelte/prefer-svelte-reactivity -- SvelteMap cannot be mutated inside $derived (state_unsafe_mutation)
     const requestMap = new Map<string, number>()
 
     for (const log of currentLogs) {
       if (log.type === 'request') {
-        groups.push({ request: log })
+        groups.push({ id: log.id, request: log })
         requestMap.set(log.id, groups.length - 1)
       } else {
         const requestId = log.id.replace('-response', '')
@@ -212,23 +235,25 @@
         if (groupIndex !== undefined) {
           groups[groupIndex].response = log
         } else {
-          groups.push({ response: log })
+          groups.push({ id: requestId, response: log })
         }
       }
     }
 
-    return groups.reverse()
+    return groups.toReversed()
   })
 
+  let requestCount = $derived(groupedLogs.filter((g) => g.request).length)
+  let totalRequests = $derived(logs.filter((l) => l.type === 'request').length)
+
   let totalPages = $derived(Math.ceil(groupedLogs.length / pageSize) || 1)
+  // Clamped, so a shrinking list (a clear, a narrower filter) never strands the view past the end.
+  let currentPage = $derived(Math.min(requestedPage, totalPages))
 
   let pagedLogs = $derived.by(() => {
     const start = (currentPage - 1) * pageSize
     return groupedLogs.slice(start, start + pageSize)
   })
-
-  // Auto-scroll to top when new logs arrive (newest logs appear at top)
-  let prevLogCount = 0
 
   function scrollToTop() {
     if (!scrollContainer) return
@@ -244,30 +269,25 @@
     if (!scrollContainer) return
     userScrolledAway = !isNearTop()
   }
-
-  $effect(() => {
-    const currentCount = logs.length
-    if (currentCount > prevLogCount && !userScrolledAway) {
-      // New logs arrived and user hasn't scrolled away — scroll to top
-      requestAnimationFrame(() => {
-        if (scrollContainer) scrollContainer.scrollTop = 0
-      })
-    }
-    prevLogCount = currentCount
-  })
 </script>
 
 <div class="bg-background flex h-full flex-col overflow-hidden">
   <!-- Toolbar -->
   <div class="border-border bg-card/50 flex items-center justify-between border-b px-6 py-3">
     <div class="flex items-center gap-2">
-      <Filter class="text-muted-foreground h-3.5 w-3.5" />
+      <span
+        class="bg-secondary text-secondary-foreground rounded px-2 py-0.5 font-mono text-xs whitespace-nowrap"
+      >
+        {requestCount}
+        {#if selectedCategories.length > 0}
+          <span class="hidden sm:inline">of {totalRequests}</span>
+        {/if}
+      </span>
+      <Filter class="text-muted-foreground size-3.5" />
       <Autocomplete
         items={categories}
         selected={selectedCategories}
-        onSelect={(val) => {
-          selectedCategories = val as string[]
-        }}
+        onSelect={(val) => setCategories(val as string[])}
         multiple
         placeholder="Services"
         class="bg-muted/20 h-8 w-48 shrink-0 border-dashed"
@@ -276,7 +296,7 @@
       >
         {#snippet triggerSnippet()}
           <div class="flex items-center gap-2">
-            <CirclePlus class="h-4 w-4 opacity-50" />
+            <CirclePlus class="size-4 opacity-50" />
             <span class="text-xs">Services</span>
           </div>
         {/snippet}
@@ -284,11 +304,11 @@
           {@const isSelected = selectedCategories.includes(cat)}
           <div
             class={cn(
-              'border-primary mr-2 flex h-4 w-4 shrink-0 items-center justify-center rounded-sm border transition-colors',
+              'border-primary mr-2 flex size-4 shrink-0 items-center justify-center rounded-sm border transition-colors',
               isSelected ? 'bg-primary text-primary-foreground' : 'opacity-50 [&_svg]:invisible',
             )}
           >
-            <Check class="h-4 w-4" />
+            <Check class="size-4" />
           </div>
           <span class="truncate text-xs">{cat}</span>
         {/snippet}
@@ -301,19 +321,17 @@
             <Badge
               variant="secondary"
               class="hover:bg-secondary/80 flex cursor-pointer items-center gap-1 rounded-sm px-1.5 py-0.5 text-[10px] font-normal transition-colors"
-              onclick={() => {
-                selectedCategories = selectedCategories.filter((c) => c !== cat)
-              }}
+              onclick={() => setCategories(selectedCategories.filter((c) => c !== cat))}
             >
               {cat}
-              <Trash2 class="h-3 w-3 opacity-50 hover:opacity-100" />
+              <Trash2 class="size-3 opacity-50 hover:opacity-100" />
             </Badge>
           {/each}
           <Button
             variant="ghost"
             size="sm"
             class="text-muted-foreground h-6 px-1.5 text-[10px] font-medium transition-colors hover:text-red-400"
-            onclick={() => (selectedCategories = [])}
+            onclick={() => setCategories([])}
           >
             Clear all
           </Button>
@@ -322,32 +340,32 @@
     </div>
 
     <div class="flex items-center gap-2">
-      {#if onToggleRenderNewlines}
+      {#if onToggleReadableView}
         <Button
           variant="ghost"
           size="icon"
-          class={renderNewlines
+          class={debug.readableView
             ? 'text-blue-400 hover:text-blue-500'
             : 'text-muted-foreground hover:text-foreground'}
-          onclick={onToggleRenderNewlines}
-          title={renderNewlines ? 'Show escaped newlines (\\n)' : 'Render newlines as line breaks'}
+          onclick={onToggleReadableView}
+          title={debug.readableView ? 'Show raw strings' : 'Render newlines and expand JSON text'}
         >
-          <WrapText class="h-4 w-4" />
+          <WrapText class="size-4" />
         </Button>
       {/if}
 
       <Button
         variant="ghost"
         size="icon"
-        class="text-muted-foreground hover:text-foreground h-8 w-8"
+        class="text-muted-foreground hover:text-foreground size-8"
         onclick={exportLogs}
         disabled={logs.length === 0 || exporting}
-        title={exportError ?? `Export all ${logs.length} log entries as JSON`}
+        title={exportError ?? 'Export all log entries as JSON'}
       >
         {#if exported}
-          <Check class="h-4 w-4 text-green-400" />
+          <Check class="size-4 text-green-400" />
         {:else}
-          <Download class={cn('h-4 w-4', exportError && 'text-red-400')} />
+          <Download class={cn('size-4', exportError && 'text-red-400')} />
         {/if}
       </Button>
 
@@ -355,11 +373,11 @@
         <Button
           variant="ghost"
           size="icon"
-          class="text-muted-foreground h-8 w-8 hover:bg-red-900/10 hover:text-red-400"
+          class="text-muted-foreground size-8 hover:bg-red-900/10 hover:text-red-400"
           onclick={onClear}
           title="Clear all logs"
         >
-          <Trash2 class="h-4 w-4" />
+          <Trash2 class="size-4" />
         </Button>
       {/if}
     </div>
@@ -377,14 +395,17 @@
       </div>
     {:else}
       <div class="space-y-4 pb-4">
-        {#each pagedLogs as group, i (`${group.request?.id ?? group.response?.id ?? i}-${i}`)}
-          <div class="border-border bg-card overflow-hidden rounded-lg border">
+        {#each pagedLogs as group (group.id)}
+          <div
+            class="border-border bg-card overflow-hidden rounded-lg border"
+            data-log-id={group.id}
+          >
             <!-- Request -->
             {#if group.request}
               <div class="bg-muted/30">
                 <div class="border-border flex items-center justify-between border-b px-4 py-2">
                   <div class="flex items-center gap-2">
-                    <ArrowUpCircle class="h-4 w-4 text-blue-400" />
+                    <ArrowUpCircle class="size-4 text-blue-400" />
                     <span class="text-sm font-medium text-blue-400">Request</span>
                     <span class="text-muted-foreground text-xs">{group.request.serviceName}</span>
                   </div>
@@ -395,14 +416,14 @@
                     <Button
                       variant="ghost"
                       size="icon"
-                      class="text-muted-foreground hover:text-foreground h-6 w-6"
+                      class="text-muted-foreground hover:text-foreground size-6"
                       onclick={() => copyToClipboard(group.request!)}
                       title="Copy JSON"
                     >
                       {#if copiedId === group.request.id}
-                        <Check class="h-3.5 w-3.5 text-green-400" />
+                        <Check class="size-3.5 text-green-400" />
                       {:else}
-                        <Copy class="h-3.5 w-3.5" />
+                        <Copy class="size-3.5" />
                       {/if}
                     </Button>
                   </div>
@@ -420,12 +441,13 @@
                 <div class="border-border flex items-center justify-between border-b px-4 py-2">
                   <div class="flex items-center gap-2">
                     <span class={group.response.error ? 'text-red-400' : 'text-green-400'}>
-                      <ArrowDownCircle class="h-4 w-4" />
+                      <ArrowDownCircle class="size-4" />
                     </span>
                     <span
-                      class="text-sm font-medium {group.response.error
-                        ? 'text-red-400'
-                        : 'text-green-400'}"
+                      class={cn(
+                        'text-sm font-medium',
+                        group.response.error ? 'text-red-400' : 'text-green-400',
+                      )}
                     >
                       {group.response.error ? 'Error' : 'Response'}
                     </span>
@@ -436,6 +458,14 @@
                         {formatDuration(group.response.duration)}
                       </span>
                     {/if}
+                    {#if hasJsonText(group.response)}
+                      <span
+                        class="bg-secondary text-secondary-foreground rounded px-1.5 py-0.5 font-mono text-xs"
+                        title="A string in this response holds JSON; the readable view expands it"
+                      >
+                        JSON text
+                      </span>
+                    {/if}
                   </div>
                   <div class="flex items-center gap-2">
                     <span class="text-muted-foreground font-mono text-xs">
@@ -444,22 +474,23 @@
                     <Button
                       variant="ghost"
                       size="icon"
-                      class="text-muted-foreground hover:text-foreground h-6 w-6"
+                      class="text-muted-foreground hover:text-foreground size-6"
                       onclick={() => copyToClipboard(group.response!)}
                       title="Copy JSON"
                     >
                       {#if copiedId === group.response.id}
-                        <Check class="h-3.5 w-3.5 text-green-400" />
+                        <Check class="size-3.5 text-green-400" />
                       {:else}
-                        <Copy class="h-3.5 w-3.5" />
+                        <Copy class="size-3.5" />
                       {/if}
                     </Button>
                   </div>
                 </div>
                 <pre
-                  class="bg-primary-foreground/5 max-h-[500px] overflow-x-auto overflow-y-auto p-3 font-mono text-xs whitespace-pre-wrap"
-                  class:text-muted-foreground={!group.response.error}
-                  class:text-red-300={group.response.error}>{formatJson(group.response)}</pre>
+                  class={cn(
+                    'bg-primary-foreground/5 max-h-[500px] overflow-x-auto overflow-y-auto p-3 font-mono text-xs whitespace-pre-wrap',
+                    group.response.error ? 'text-red-300' : 'text-muted-foreground',
+                  )}>{formatJson(group.response)}</pre>
               </div>
             {/if}
           </div>
@@ -477,7 +508,7 @@
           onclick={scrollToTop}
           aria-label="Scroll to latest"
         >
-          <ArrowUp class="mr-1.5 h-3.5 w-3.5" />
+          <ArrowUp class="mr-1.5 size-3.5" />
           <span class="text-xs">Latest</span>
         </Button>
       </div>
@@ -506,7 +537,7 @@
           type="single"
           value={String(pageSize)}
           onValueChange={(v) => {
-            if (v) pageSize = Number(v)
+            if (v) setPageSize(Number(v))
           }}
         >
           <Select.Trigger class="bg-muted/20 border-border h-7 w-16 text-xs">
@@ -529,7 +560,7 @@
         class="h-7 px-2 text-xs"
         disabled={currentPage === 1}
         onclick={() => {
-          currentPage--
+          requestedPage = currentPage - 1
           scrollContainer?.scrollTo({ top: 0, behavior: 'smooth' })
         }}
       >
@@ -544,7 +575,7 @@
         class="h-7 px-2 text-xs"
         disabled={currentPage === totalPages}
         onclick={() => {
-          currentPage++
+          requestedPage = currentPage + 1
           scrollContainer?.scrollTo({ top: 0, behavior: 'smooth' })
         }}
       >

@@ -1,12 +1,5 @@
 import { describe, it, expect, vi } from 'vitest'
 
-vi.mock('#lib/stores/debug.svelte.ts', () => ({
-  debug: {
-    addDebugRequest: vi.fn(),
-    addDebugResponse: vi.fn(),
-  },
-}))
-
 vi.mock('#lib/stores/settings.svelte.ts', () => ({
   settings: {
     apiSettings: {

@@ -1,16 +1,14 @@
 /**
  * Tauri Fetch Adapter
  *
- * Wraps httpFetch for Vercel AI SDK providers.
+ * Wraps loggedFetch for Vercel AI SDK providers.
  * Patches common provider response issues before SDK validation.
  */
 
 import { LLM_TIMEOUT_DEFAULT } from '#lib/constants/timeout.ts'
 import { parseManualBody } from './manualBody'
-import { debug } from '#lib/stores/debug.svelte.ts'
-import { createRequestGuard } from '#lib/utils/idleTimeout.ts'
-import { httpFetch } from '#lib/utils/http.ts'
-import { logErrorResponse, logStreamResponse, providerMetadataOf, redactHeaders } from './debugLog'
+import { loggedFetch } from '#lib/services/http/index.ts'
+import { logSdkResponse } from './debugLog'
 
 interface Usage {
   input_tokens?: number
@@ -38,7 +36,6 @@ export function createTimeoutFetch(
   debugIdExternal?: string,
 ) {
   return async (input: RequestInfo | URL, init?: RequestInit): Promise<Response> => {
-    const startTime = Date.now()
     let requestBody: Record<string, unknown> = {}
     if (typeof init?.body === 'string') {
       try {
@@ -58,87 +55,48 @@ export function createTimeoutFetch(
     const merged = { ...requestBody, ...Object.fromEntries(manualEntries) }
     const parsedBody = Object.keys(merged).length > 0 ? merged : undefined
 
-    const debugId = debug.addDebugRequest(
-      serviceId,
+    const response = await loggedFetch(
+      input.toString(),
       {
-        url: input.toString(),
-        method: init?.method ?? 'GET',
-        headers: redactHeaders(init?.headers),
-        body: parsedBody,
-      },
-      debugIdExternal,
-    )
-
-    const guard = createRequestGuard({ timeoutMs, callerSignal: init?.signal })
-
-    try {
-      let response = await httpFetch(input.toString(), {
         method: init?.method,
         headers: init?.headers,
         body: parsedBody ? JSON.stringify(parsedBody) : undefined,
-        signal: guard.signal,
-      })
-
-      // Paths A and B hand the body to the caller unread, so it needs its own idle timer.
-      // Path C buffers below, which the header timer bounds: `dispose()` runs after `response.text()`.
-      const isJson = response.headers.get('content-type')?.includes('application/json') ?? false
-      if (!response.ok || !isJson) response = guard.wrapBody(response)
-
-      // Path A: Error Response (Non-2xx)
-      // We log the error asynchronously and return the original response immediately.
-      // This ensures the SDK receives the correct status and body for its own error handling.
-      if (!response.ok) {
-        // Only buffer the body when debug logging is active — otherwise reading a clone
-        // of every error response just wastes memory.
-        if (debug.isActive) {
-          void logErrorResponse(response.clone(), debugId, serviceId, startTime)
-        }
-        return response
-      }
-
-      // Path B: Non-JSON Success Response (mostly Streams)
-      if (!isJson) {
-        // Stream/non-JSON success — only buffer the full body for the debug panel when active.
-        if (debug.isActive) {
-          void logStreamResponse(response.clone(), debugId, serviceId, startTime)
-        }
-        return response
-      }
-
-      // Path C: JSON Success Response (Normal completion)
-      const text = await response.text()
-      let responsePayload
-      try {
-        responsePayload = JSON.parse(text)
-      } catch {
-        responsePayload = text
-      }
-
-      debug.addDebugResponse(
-        debugId,
+      },
+      {
         serviceId,
-        { body: responsePayload, providerMetadata: providerMetadataOf(responsePayload) },
-        startTime,
-      )
+        timeoutMs,
+        signal: init?.signal,
+        debugId: debugIdExternal,
+        logResponse: logSdkResponse,
+      },
+    )
 
-      if (typeof responsePayload === 'object' && responsePayload !== null) {
-        const patched = JSON.stringify(patchResponseJson(responsePayload))
-        return new Response(patched, {
-          status: response.status,
-          statusText: response.statusText,
-          headers: response.headers,
-        })
-      }
+    // Errors and streams go back to the SDK unread; only a JSON success is buffered and patched.
+    // The buffered body is bounded by the idle timer on each read, not by a total deadline.
+    const isJson = response.headers.get('content-type')?.includes('application/json') ?? false
+    if (!response.ok || !isJson) return response
 
-      return new Response(text, {
+    const text = await response.text()
+    let responsePayload
+    try {
+      responsePayload = JSON.parse(text)
+    } catch {
+      responsePayload = text
+    }
+
+    if (typeof responsePayload === 'object' && responsePayload !== null) {
+      const patched = JSON.stringify(patchResponseJson(responsePayload))
+      return new Response(patched, {
         status: response.status,
         statusText: response.statusText,
         headers: response.headers,
       })
-    } catch (error) {
-      throw guard.mapError(error)
-    } finally {
-      guard.dispose()
     }
+
+    return new Response(text, {
+      status: response.status,
+      statusText: response.statusText,
+      headers: response.headers,
+    })
   }
 }

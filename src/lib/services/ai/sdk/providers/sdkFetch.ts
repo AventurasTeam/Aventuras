@@ -1,20 +1,18 @@
 // Transport for SDK image providers: Tauri HTTP, a request guard, and debug logging. Responses come
 // back unthrown so the SDK builds its own errors. `createTimeoutFetch` is the text-model transport.
 
-import { debug } from '#lib/stores/debug.svelte.ts'
-import { errMessage } from '#lib/utils/error.ts'
-import { createRequestGuard } from '#lib/utils/idleTimeout.ts'
-import { httpFetch } from '#lib/utils/http.ts'
 import {
+  describeReadFailure,
   describeRequestBody,
-  isBinaryContentType,
-  logBinaryResponse,
-  logErrorResponse,
-  logJsonResponse,
-  logStreamResponse,
+  headerEntries,
+  loggedFetch,
+  parseLoggedBody,
+  readLoggedBody,
   redactHeaders,
-  scrubBase64,
-} from './debugLog'
+} from '#lib/services/http/index.ts'
+import { debugLog } from '#lib/stores/debugLog.ts'
+import { errMessage } from '#lib/utils/error.ts'
+import { logSdkResponse } from './debugLog'
 
 interface SdkFetchOptions {
   serviceId: string
@@ -30,72 +28,40 @@ interface SdkFetchOptions {
 // caller has set no `content-type`.
 function headersFor(init: RequestInit | undefined): RequestInit['headers'] {
   if (!(init?.body instanceof FormData)) return init?.headers
-  const headers = new Headers(init.headers)
-  headers.delete('content-type')
-  return headers
+  // Entries, not `Headers`, which lowercases the names the debug panel shows.
+  return Array.from(headerEntries(init.headers)).filter(
+    ([name]) => name.toLowerCase() !== 'content-type',
+  )
 }
 
 export type Fetch = (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>
-
-function logResponse(response: Response, debugId: string, serviceId: string, startTime: number) {
-  const contentType = response.headers.get('content-type') ?? ''
-  if (!response.ok) {
-    void logErrorResponse(response.clone(), debugId, serviceId, startTime)
-  } else if (isBinaryContentType(contentType)) {
-    logBinaryResponse(response, debugId, serviceId, startTime)
-  } else if (contentType.includes('json')) {
-    void logJsonResponse(response.clone(), debugId, serviceId, startTime)
-  } else {
-    void logStreamResponse(response.clone(), debugId, serviceId, startTime)
-  }
-}
 
 const requestUrl = (input: RequestInfo | URL): string =>
   input instanceof Request ? input.url : input.toString()
 
 export function createSdkFetch(options: SdkFetchOptions): Fetch {
-  const { serviceId, timeoutMs, what, debugId: debugIdExternal, log = true } = options
+  const { serviceId, timeoutMs, what, debugId, log } = options
 
-  return async (input, init) => {
-    const startTime = Date.now()
-    const url = requestUrl(input)
-    const method = init?.method ?? 'GET'
-
-    const logging = log && debug.isActive
-    const debugId = logging
-      ? debug.addDebugRequest(
-          serviceId,
-          {
-            url,
-            method,
-            headers: redactHeaders(init?.headers),
-            body: describeRequestBody(init?.body),
-          },
-          debugIdExternal,
-        )
-      : ''
-
-    const guard = createRequestGuard({ timeoutMs, what, callerSignal: init?.signal })
-
-    try {
-      const response = guard.wrapBody(
-        await httpFetch(url, {
-          method,
-          headers: headersFor(init),
-          body: init?.body,
-          signal: guard.signal,
-          // The SDK follows redirects itself, to validate each hop.
-          ...(init?.redirect === 'manual' && { maxRedirections: 0 }),
-        }),
-      )
-      if (logging) logResponse(response, debugId, serviceId, startTime)
-      return response
-    } catch (error) {
-      throw guard.mapError(error)
-    } finally {
-      guard.dispose()
-    }
-  }
+  return (input, init) =>
+    loggedFetch(
+      requestUrl(input),
+      {
+        method: init?.method ?? 'GET',
+        headers: headersFor(init),
+        body: init?.body,
+        // The SDK follows redirects itself, to validate each hop.
+        ...(init?.redirect === 'manual' && { maxRedirections: 0 }),
+      },
+      {
+        serviceId,
+        timeoutMs,
+        what,
+        signal: init?.signal,
+        debugId,
+        log,
+        logResponse: logSdkResponse,
+      },
+    )
 }
 
 const MAX_FAILURES_KEPT = 20
@@ -111,7 +77,7 @@ interface PollFailure {
 
 type PollRequest =
   | { method: string; url: string; status: number; body: unknown }
-  | { method: string; url: string; error: string }
+  | { method: string; url: string; status?: number; error: string; body?: unknown }
 
 /**
  * A fetch whose requests share one debug entry, updated in place: how many there were, the last
@@ -136,7 +102,7 @@ export function createPollSdkFetch(options: Omit<SdkFetchOptions, 'log' | 'debug
 
   const write = (id: string, count: number, last: PollRequest, failure?: PollFailure) => {
     if (failure) failures = [...failures, failure].slice(-MAX_FAILURES_KEPT)
-    debug.addDebugResponse(
+    debugLog.addResponse(
       id,
       serviceId,
       { requests: count, last, ...(failures.length > 0 && { failures }) },
@@ -145,13 +111,13 @@ export function createPollSdkFetch(options: Omit<SdkFetchOptions, 'log' | 'debug
   }
 
   return async (input, init) => {
-    if (!debug.isActive) return inner(input, init)
+    if (!debugLog.active) return inner(input, init)
 
     const url = requestUrl(input)
     const method = init?.method ?? 'GET'
     if (debugId === undefined) {
       startTime = Date.now()
-      debugId = debug.addDebugRequest(serviceId, {
+      debugId = debugLog.addRequest(serviceId, {
         url,
         method,
         headers: redactHeaders(init?.headers),
@@ -176,20 +142,31 @@ export function createPollSdkFetch(options: Omit<SdkFetchOptions, 'log' | 'debug
     const copy = response.clone()
     const { status, ok } = response
     enqueue(async () => {
-      const text = await copy.text()
-      let body: unknown
-      try {
-        body = JSON.parse(text, (_key, value) => scrubBase64(value))
-      } catch {
-        body = scrubBase64(text)
+      const read = await readLoggedBody(copy)
+      if (!read.ok) {
+        const error = describeReadFailure(read)
+        const received = read.bytes > 0 ? parseLoggedBody(read.text) : undefined
+        write(
+          id,
+          count,
+          { method, url, status, error, body: received },
+          {
+            method,
+            url,
+            status,
+            error,
+            body: read.text.slice(0, FAILURE_BODY_EXCERPT) || undefined,
+          },
+        )
+        return
       }
       write(
         id,
         count,
-        { method, url, status, body },
+        { method, url, status, body: parseLoggedBody(read.text) },
         ok
           ? undefined
-          : { method, url, status, body: text.slice(0, FAILURE_BODY_EXCERPT) || undefined },
+          : { method, url, status, body: read.text.slice(0, FAILURE_BODY_EXCERPT) || undefined },
       )
     })
     return response

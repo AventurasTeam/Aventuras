@@ -1,18 +1,26 @@
-import { httpFetch } from '#lib/utils/http.ts'
+import { httpFetch, loggedFetch } from '#lib/services/http/index.ts'
 
-export async function corsFetch(url: string, options?: RequestInit): Promise<Response> {
+interface CorsFetchOptions extends RequestInit {
+  /** Writes the request and response to the debug log under this service. Off unless given. */
+  debug?: { serviceId: string }
+}
+
+export async function corsFetch(url: string, options?: CorsFetchOptions): Promise<Response> {
   // Tauri's fetch implementation automatically bypasses CORS
   // We wrap it just in case we need to add global headers or error handling later
+  const { debug, ...init } = options ?? {}
+  const request = {
+    ...init,
+    headers: {
+      'User-Agent':
+        'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+      ...init.headers,
+    },
+  }
   try {
-    const response = await httpFetch(url, {
-      ...options,
-      headers: {
-        'User-Agent':
-          'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-        ...options?.headers,
-      },
-    })
-    return response
+    return debug
+      ? await loggedFetch(url, request, { serviceId: debug.serviceId, signal: init.signal })
+      : await httpFetch(url, request)
   } catch (error) {
     console.error('[Discovery] Fetch error:', error)
     throw error

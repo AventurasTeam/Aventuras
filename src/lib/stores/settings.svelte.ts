@@ -59,7 +59,7 @@ import type {
   ImageGenerationServiceSettings,
   TimelineFillSettings,
 } from '#lib/services/ai/index.ts'
-import { debug } from './debug.svelte'
+import { debugLog } from '#lib/stores/debugLog.ts'
 import { activity } from './activity.svelte'
 import { modelHealth } from './modelHealth.svelte'
 import {
@@ -1620,7 +1620,7 @@ class SettingsStore {
       applyIncognitoKeyboard(this.uiSettings.incognitoKeyboard)
 
       const debugMode = await database.getSetting('debug_mode')
-      if (debugMode !== null) debug.isActive = this.uiSettings.debugMode = debugMode === 'true'
+      if (debugMode !== null) debugLog.active = this.uiSettings.debugMode = debugMode === 'true'
 
       const activityReporting = await database.getSetting('activity_reporting')
       if (
@@ -2709,7 +2709,7 @@ class SettingsStore {
   }
 
   async setDebugMode(enabled: boolean) {
-    debug.isActive = this.uiSettings.debugMode = enabled
+    debugLog.active = this.uiSettings.debugMode = enabled
     await database.setSetting('debug_mode', enabled.toString())
   }
 

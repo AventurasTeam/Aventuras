@@ -1,18 +1,18 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 
 vi.mock('@tauri-apps/plugin-http', () => ({ fetch: vi.fn() }))
-
-// The real store is a rune module, which this suite cannot import.
-const { debug } = vi.hoisted(() => ({
-  debug: { isActive: false, addDebugRequest: vi.fn(() => 'dbg'), addDebugResponse: vi.fn() },
-}))
-vi.mock('#lib/stores/debug.svelte.ts', () => ({ debug }))
+vi.mock('./streamLog', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('./streamLog')>()
+  return { ...actual, aggregateStream: vi.fn(actual.aggregateStream) }
+})
 
 import { fetch as tauriHttpFetch } from '@tauri-apps/plugin-http'
 import { isAbortError } from '#lib/services/activity/describeError.ts'
 import { RequestTimeoutError } from '#lib/utils/error.ts'
-import { describeRequestBody, logStreamResponse, scrubBase64 } from './debugLog'
+import { debugLog } from '#lib/stores/debugLog.ts'
+import { logStreamResponse } from './debugLog'
 import { createPollSdkFetch, createSdkFetch } from './sdkFetch'
+import { aggregateStream } from './streamLog'
 
 const mockFetch = vi.mocked(tauriHttpFetch)
 const API_URL = 'https://api.test/v1/images'
@@ -29,11 +29,15 @@ function pendingUntilAborted(_url: unknown, init?: { signal?: AbortSignal | null
 
 const flush = () => new Promise((resolve) => setTimeout(resolve, 0))
 
+// Entries are not stored: these tests assert on what is written.
+const addRequest = vi.spyOn(debugLog, 'addRequest')
+const addResponse = vi.spyOn(debugLog, 'addResponse')
+
 beforeEach(() => {
   mockFetch.mockReset()
-  debug.isActive = false
-  debug.addDebugRequest.mockClear()
-  debug.addDebugResponse.mockClear()
+  debugLog.active = false
+  addRequest.mockReset().mockReturnValue('dbg')
+  addResponse.mockReset().mockImplementation(() => {})
 })
 
 describe('request bodies', () => {
@@ -177,10 +181,10 @@ describe('debug logging', () => {
   }
 
   beforeEach(() => {
-    debug.isActive = true
+    debugLog.active = true
   })
 
-  it('redacts the key and lists FormData field names', async () => {
+  it('redacts the key and shows FormData fields', async () => {
     mockFetch.mockResolvedValueOnce(new Response('{}', { status: 200 }))
     const form = new FormData()
     form.append('prompt', 'a castle')
@@ -192,11 +196,11 @@ describe('debug logging', () => {
       body: form,
     })
 
-    expect(debug.addDebugRequest).toHaveBeenCalledWith(
+    expect(addRequest).toHaveBeenCalledWith(
       'google-image',
       expect.objectContaining({
         headers: { Authorization: 'Bear...cdef' },
-        body: { formData: ['prompt', 'image'] },
+        body: { formData: { prompt: 'a castle', image: '[file a.png, unknown type, 1 bytes]' } },
       }),
       undefined,
     )
@@ -211,7 +215,7 @@ describe('debug logging', () => {
       body: '{}',
     })
 
-    expect(debug.addDebugRequest).toHaveBeenCalledWith(
+    expect(addRequest).toHaveBeenCalledWith(
       'google-image',
       expect.objectContaining({ headers: { 'x-goog-api-key': 'AIza...ghij' } }),
       undefined,
@@ -219,12 +223,12 @@ describe('debug logging', () => {
   })
 
   it('does not describe the request when debug logging is off', async () => {
-    debug.isActive = false
+    debugLog.active = false
     mockFetch.mockResolvedValueOnce(new Response('{}', { status: 200 }))
 
     await sdkFetch()(API_URL, { method: 'POST', body: '{}' })
 
-    expect(debug.addDebugRequest).not.toHaveBeenCalled()
+    expect(addRequest).not.toHaveBeenCalled()
   })
 
   it('keeps a request out of the debug log when log is false', async () => {
@@ -234,7 +238,7 @@ describe('debug logging', () => {
     await quiet(API_URL)
 
     expect(mockFetch).toHaveBeenCalledTimes(1)
-    expect(debug.addDebugRequest).not.toHaveBeenCalled()
+    expect(addRequest).not.toHaveBeenCalled()
   })
 
   it('scrubs inline image data from a JSON response and keeps the rest', async () => {
@@ -248,7 +252,7 @@ describe('debug logging', () => {
     const response = await sdkFetch()(API_URL, { method: 'POST', body: '{}' })
     await flush()
 
-    expect(debug.addDebugResponse).toHaveBeenCalledWith(
+    expect(addResponse).toHaveBeenCalledWith(
       'dbg',
       'google-image',
       {
@@ -263,6 +267,7 @@ describe('debug logging', () => {
           ],
         },
         providerMetadata: { safetyRatings: [{ category: 'X' }] },
+        status: 200,
       },
       expect.any(Number),
     )
@@ -275,7 +280,7 @@ describe('debug logging', () => {
 
     await sdkFetch()(API_URL, { method: 'POST', body: JSON.stringify(body) })
 
-    expect(debug.addDebugRequest).toHaveBeenCalledWith(
+    expect(addRequest).toHaveBeenCalledWith(
       'google-image',
       expect.objectContaining({
         body: { contents: [{ parts: [{ inlineData: { data: '[base64, 2048 chars]' } }] }] },
@@ -294,10 +299,10 @@ describe('debug logging', () => {
 
     const response = await sdkFetch()(API_URL, { method: 'POST', body: '{}' })
 
-    expect(debug.addDebugResponse).toHaveBeenCalledWith(
+    expect(addResponse).toHaveBeenCalledWith(
       'dbg',
       'google-image',
-      { contentType: 'audio/mpeg', size: 4 },
+      { status: 200, contentType: 'audio/mpeg', size: 4 },
       expect.any(Number),
     )
     expect(response.bodyUsed).toBe(false)
@@ -313,10 +318,10 @@ describe('debug logging', () => {
 
     const response = await sdkFetch()(API_URL, { method: 'POST', body: '{}' })
 
-    expect(debug.addDebugResponse).toHaveBeenCalledWith(
+    expect(addResponse).toHaveBeenCalledWith(
       'dbg',
       'google-image',
-      { contentType: 'binary/octet-stream', size: 4 },
+      { status: 200, contentType: 'binary/octet-stream', size: 4 },
       expect.any(Number),
     )
     expect(response.bodyUsed).toBe(false)
@@ -328,7 +333,7 @@ describe('debug logging', () => {
     const response = await sdkFetch()(API_URL, { method: 'POST', body: '{}' })
     await flush()
 
-    expect(debug.addDebugResponse).toHaveBeenCalledWith(
+    expect(addResponse).toHaveBeenCalledWith(
       'dbg',
       'google-image',
       expect.objectContaining({ status: 400, error: { error: 'bad' } }),
@@ -336,39 +341,6 @@ describe('debug logging', () => {
       '{"error":"bad"}',
     )
     expect(response.status).toBe(400)
-  })
-})
-
-describe('scrubBase64', () => {
-  it('replaces long base64 and data URIs', () => {
-    expect(scrubBase64('A'.repeat(1024))).toBe('[base64, 1024 chars]')
-    expect(scrubBase64('data:image/png;base64,' + 'A'.repeat(1024))).toMatch(
-      /^\[base64, \d+ chars\]$/,
-    )
-  })
-
-  it('leaves short strings, long prose and non-strings alone', () => {
-    const prose = 'The quick brown fox jumps over the lazy dog. '.repeat(40)
-    expect(scrubBase64('iVBORw0KGgo=')).toBe('iVBORw0KGgo=')
-    expect(scrubBase64(prose)).toBe(prose)
-    expect(scrubBase64(7)).toBe(7)
-    expect(scrubBase64(null)).toBe(null)
-  })
-})
-
-describe('describeRequestBody', () => {
-  it('scrubs nested strings and keeps other values', () => {
-    const body = JSON.stringify({ n: 1, ok: true, none: null, list: [{ data: 'A'.repeat(1024) }] })
-    expect(describeRequestBody(body)).toEqual({
-      n: 1,
-      ok: true,
-      none: null,
-      list: [{ data: '[base64, 1024 chars]' }],
-    })
-  })
-
-  it('falls back to a raw excerpt for a body that is not JSON', () => {
-    expect(describeRequestBody('not json')).toEqual({ raw: 'not json' })
   })
 })
 
@@ -407,14 +379,13 @@ describe('logStreamResponse', () => {
       '[DONE]',
     )
 
-    await logStreamResponse(response, 'dbg', 'test', 0)
+    await logStreamResponse(response, { debugId: 'dbg', serviceId: 'test', startTime: 0 })
 
-    expect(debug.addDebugResponse).toHaveBeenCalledWith(
+    expect(addResponse).toHaveBeenCalledWith(
       'dbg',
       'test',
       {
         body: {
-          _note: 'Aggregated from stream',
           id: 'c1',
           model: 'm',
           choices: [
@@ -436,10 +407,46 @@ describe('logStreamResponse', () => {
             },
           ],
         },
-        providerMetadata: undefined,
-        stream: true,
+        status: 200,
+        stream: { format: 'chat-completions', complete: true, eventCount: 3 },
       },
       0,
+      undefined,
+    )
+  })
+
+  it('logs the parsed events when summarizing them throws', async () => {
+    vi.mocked(aggregateStream).mockImplementationOnce(() => {
+      throw new Error('boom')
+    })
+    const response = sse({ choices: [{ index: 0, delta: { content: 'hi' } }] })
+
+    await logStreamResponse(response, { debugId: 'dbg', serviceId: 'test', startTime: 0 })
+
+    expect(addResponse).toHaveBeenCalledWith(
+      'dbg',
+      'test',
+      {
+        status: 200,
+        error: 'stream summary failed: boom',
+        body: [{ choices: [{ index: 0, delta: { content: 'hi' } }] }],
+      },
+      0,
+      'stream summary failed: boom',
+    )
+  })
+
+  it('records a stream whose choices hold a null', async () => {
+    const response = sse({ choices: [null] }, '[DONE]')
+
+    await logStreamResponse(response, { debugId: 'dbg', serviceId: 'test', startTime: 0 })
+
+    expect(addResponse).toHaveBeenCalledWith(
+      'dbg',
+      'test',
+      expect.objectContaining({ stream: expect.objectContaining({ format: 'chat-completions' }) }),
+      0,
+      undefined,
     )
   })
 
@@ -449,9 +456,9 @@ describe('logStreamResponse', () => {
       { promptFeedback: { blockReason: 'SAFETY' } },
     )
 
-    await logStreamResponse(response, 'dbg', 'test', 0)
+    await logStreamResponse(response, { debugId: 'dbg', serviceId: 'test', startTime: 0 })
 
-    expect(debug.addDebugResponse).toHaveBeenCalledWith(
+    expect(addResponse).toHaveBeenCalledWith(
       'dbg',
       'test',
       expect.objectContaining({
@@ -461,6 +468,7 @@ describe('logStreamResponse', () => {
         },
       }),
       0,
+      undefined,
     )
   })
 })
@@ -478,10 +486,10 @@ describe('createPollSdkFetch', () => {
   const jsonReply = (body: unknown, status = 200) =>
     new Response(JSON.stringify(body), { status, headers: { 'content-type': 'application/json' } })
 
-  const lastResponseData = () => debug.addDebugResponse.mock.calls.at(-1)?.[2]
+  const lastResponseData = () => addResponse.mock.calls.at(-1)?.[2]
 
   beforeEach(() => {
-    debug.isActive = true
+    debugLog.active = true
   })
 
   it('opens one entry however many requests there are', async () => {
@@ -494,13 +502,13 @@ describe('createPollSdkFetch', () => {
     await flush()
 
     expect(mockFetch).toHaveBeenCalledTimes(3)
-    expect(debug.addDebugRequest).toHaveBeenCalledTimes(1)
-    expect(debug.addDebugRequest).toHaveBeenCalledWith(
+    expect(addRequest).toHaveBeenCalledTimes(1)
+    expect(addRequest).toHaveBeenCalledWith(
       'comfyui-image',
       expect.objectContaining({ url: `${POLL_URL}1`, method: 'GET' }),
     )
-    expect(debug.addDebugResponse).toHaveBeenCalledTimes(3)
-    expect(debug.addDebugResponse.mock.calls.every(([id]) => id === 'dbg')).toBe(true)
+    expect(addResponse).toHaveBeenCalledTimes(3)
+    expect(addResponse.mock.calls.every(([id]) => id === 'dbg')).toBe(true)
   })
 
   it('keeps the count and the latest request and response in the entry', async () => {
@@ -521,7 +529,7 @@ describe('createPollSdkFetch', () => {
     await fetch(`${POLL_URL}3`, { method: 'POST' })
     await flush()
 
-    expect(debug.addDebugResponse).toHaveBeenLastCalledWith(
+    expect(addResponse).toHaveBeenLastCalledWith(
       'dbg',
       'comfyui-image',
       {
@@ -566,6 +574,26 @@ describe('createPollSdkFetch', () => {
     })
   })
 
+  it('records the status and the error of a body that fails mid-read', async () => {
+    const body = new ReadableStream<Uint8Array>({
+      start: (controller) => controller.error(new Error('connection lost')),
+    })
+    mockFetch.mockResolvedValueOnce(
+      new Response(body, { status: 200, headers: { 'content-type': 'application/json' } }),
+    )
+
+    await poll()(POLL_URL)
+    await flush()
+
+    const failure = {
+      method: 'GET',
+      url: POLL_URL,
+      status: 200,
+      error: 'connection lost (headers received, no body yet)',
+    }
+    expect(lastResponseData()).toEqual({ requests: 1, last: failure, failures: [failure] })
+  })
+
   it('keeps only the most recent failures', async () => {
     mockFetch.mockImplementation(async () => new Response('busy', { status: 503 }))
     const fetch = poll()
@@ -591,29 +619,29 @@ describe('createPollSdkFetch', () => {
   })
 
   it('records nothing while debug logging is off', async () => {
-    debug.isActive = false
+    debugLog.active = false
     mockFetch.mockResolvedValue(jsonReply({ status: 'completed' }))
 
     await poll()(POLL_URL)
     await flush()
 
     expect(mockFetch).toHaveBeenCalledTimes(1)
-    expect(debug.addDebugRequest).not.toHaveBeenCalled()
-    expect(debug.addDebugResponse).not.toHaveBeenCalled()
+    expect(addRequest).not.toHaveBeenCalled()
+    expect(addResponse).not.toHaveBeenCalled()
   })
 
   it('opens the entry when debug logging turns on partway through', async () => {
-    debug.isActive = false
+    debugLog.active = false
     mockFetch.mockImplementation(async () => jsonReply({ status: 'in_progress' }))
     const fetch = poll()
 
     await fetch(POLL_URL)
-    debug.isActive = true
+    debugLog.active = true
     await fetch(POLL_URL)
     await fetch(POLL_URL)
     await flush()
 
-    expect(debug.addDebugRequest).toHaveBeenCalledTimes(1)
+    expect(addRequest).toHaveBeenCalledTimes(1)
     expect(lastResponseData()).toMatchObject({ requests: 2 })
   })
 })

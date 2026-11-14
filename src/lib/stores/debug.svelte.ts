@@ -1,40 +1,33 @@
 import { emit, listen, type UnlistenFn } from '@tauri-apps/api/event'
 import { WebviewWindow } from '@tauri-apps/api/webviewWindow'
+import { debugLog, type DebugLogEntry } from '#lib/stores/debugLog.ts'
 
-export function countRequests(debugLogs: Array<DebugLogEntry>) {
-  return debugLogs.reduce((req, e) => {
-    return req + (e.type === 'request' ? 1 : 0)
-  }, 0)
-}
+export type { DebugLogEntry }
 
-// Debug log entry for request/response logging
-export type DebugLogEntry = {
-  id: string
-  timestamp: number
-  type: 'request' | 'response'
-  serviceName: string
-  data: Record<string, unknown>
-  duration?: number // For responses, time taken in ms
-  error?: string // For error responses
-}
-
+// The entries live in `debugLog`, which writers import directly; this store adds reactivity and
+// the pop-out window on top.
 class DebugStore {
-  // Debug mode state - session-only request/response logging
-  isActive = $state(false)
-  // Non-reactive storage - UI pulls updates via getSnapshot()
-  private debugLogs: DebugLogEntry[] = []
   // Reactive signal that increments when logs change - UI can track this
   logsVersion = $state(0)
   debugModalOpen = $state(false)
   debugWindowActive = $state(false)
-  debugRenderNewlines = $state(false)
-  private debugLogIdCounter = 0
+  readableView = $state(false)
   private unlistenPopIn: UnlistenFn | null = null
   private unlistenRequestLogs: UnlistenFn | null = null
   private unlistenClearLogs: UnlistenFn | null = null
-  private unlistenToggleRenderNewlines: UnlistenFn | null = null
+  private unlistenToggleReadableView: UnlistenFn | null = null
   /** See emitToDebugWindow: false from window creation until the window reports ready. */
   private debugWindowReady = false
+
+  constructor() {
+    debugLog.onChange((change) => {
+      this.logsVersion++
+      // Checked first: serialising an entry nobody is listening for is wasted work.
+      if (change.kind === 'entry' && this.debugWindowReady) {
+        this.emitToDebugWindow('debug-log-added', this.safeIpcEntry(change.entry))
+      }
+    })
+  }
 
   /**
    * Send an event to the pop-out window, but only once that window is ready.
@@ -46,7 +39,7 @@ class DebugStore {
    * event loop stops, and every window freezes with the CPU at zero.
    *
    * Events sent before then are dropped rather than queued: every one of them is already
-   * reflected in `debugLogs`, which `initial-debug-logs` hands over in full.
+   * reflected in `debugLog`, which `initial-debug-logs` hands over in full.
    */
   private emitToDebugWindow(event: string, payload: unknown) {
     // `debugWindowReady` alone, deliberately: it is set by the window announcing itself, so
@@ -65,7 +58,7 @@ class DebugStore {
    * Get a snapshot of current logs. UI should call this when logsVersion changes.
    */
   getSnapshot(): DebugLogEntry[] {
-    return [...this.debugLogs]
+    return debugLog.snapshot()
   }
 
   /**
@@ -74,18 +67,12 @@ class DebugStore {
   get requestCount(): number {
     // touch logsVersion to make this reactive
     void this.logsVersion
-    return countRequests(this.debugLogs)
+    return debugLog.requestCount
   }
 
-  // Debug log methods
-  private appendLogEntry(entry: DebugLogEntry) {
-    // Keep only last 100 entries to prevent memory issues
-    if (this.debugLogs.push(entry) > 100) {
-      this.debugLogs = this.debugLogs.slice(-100)
-    }
-
-    // Signal that logs have changed
-    this.logsVersion++
+  /** Not reactive; callers already track `logsVersion`. */
+  get logCount(): number {
+    return debugLog.count
   }
 
   /** Max IPC payload size for external window events (~500KB). */
@@ -109,80 +96,58 @@ class DebugStore {
   }
 
   /**
-   * Add a request log entry. Returns the entry ID for pairing with response.
-   */
-  addDebugRequest(serviceName: string, data: Record<string, unknown>, debugId?: string): string {
-    if (!this.isActive) return ''
-    let id = debugId || `debug-${++this.debugLogIdCounter}-${Date.now()}`
-    // Multi-step streamText reuses the same debugId for each fetch call — deduplicate
-    if (debugId && this.debugLogs.some((e) => e.id === id)) {
-      id = `${debugId}-${++this.debugLogIdCounter}`
-    }
-    const entry: DebugLogEntry = {
-      id,
-      timestamp: Date.now(),
-      type: 'request',
-      serviceName,
-      data,
-    }
-
-    this.appendLogEntry(entry)
-
-    this.emitToDebugWindow('debug-log-added', this.safeIpcEntry(entry))
-
-    return id
-  }
-
-  /**
-   * Add a response log entry paired with a request.
-   */
-  addDebugResponse(
-    requestId: string,
-    serviceName: string,
-    data: Record<string, unknown>,
-    startTime: number,
-    error?: string,
-  ) {
-    if (!this.isActive) return
-
-    const entryId = `${requestId}-response`
-    const existingEntry = this.debugLogs.find((l) => l.id === entryId)
-
-    if (existingEntry) {
-      // Merge data instead of overwriting
-      existingEntry.data = { ...existingEntry.data, ...data }
-      existingEntry.duration = Date.now() - startTime
-      if (error) existingEntry.error = error
-
-      // Signal that logs have changed
-      this.logsVersion++
-
-      this.emitToDebugWindow('debug-log-added', this.safeIpcEntry(existingEntry))
-      return
-    }
-
-    const entry: DebugLogEntry = {
-      id: entryId,
-      timestamp: Date.now(),
-      type: 'response',
-      serviceName,
-      data,
-      duration: Date.now() - startTime,
-      error,
-    }
-
-    this.appendLogEntry(entry)
-
-    this.emitToDebugWindow('debug-log-added', this.safeIpcEntry(entry))
-  }
-
-  /**
    * Clear all debug logs (session clear).
    */
   clearDebugLogs() {
-    this.debugLogs = []
-    this.logsVersion++
+    debugLog.reset()
     this.emitToDebugWindow('debug-logs-cleared', {})
+  }
+
+  /**
+   * Pop-out window side: mirror what the main window sends, then ask it for the current log.
+   * Returns the function that removes the listeners; never rejects.
+   */
+  async connectAsDebugWindow(): Promise<() => void> {
+    const settled = await Promise.allSettled([
+      listen<{ logs: DebugLogEntry[]; readableView: boolean }>(
+        'initial-debug-logs',
+        ({ payload }) => {
+          console.log('[DebugWin] Received initial-debug-logs', payload.logs.length)
+          debugLog.reset(payload.logs)
+          this.readableView = payload.readableView
+        },
+      ),
+      // The main window re-emits an entry each time it merges into it.
+      listen<DebugLogEntry>('debug-log-added', ({ payload }) => {
+        console.log('[DebugWin] Received debug-log-added', payload.id)
+        debugLog.upsert(payload)
+      }),
+      listen('debug-logs-cleared', () => {
+        console.log('[DebugWin] Received debug-logs-cleared')
+        debugLog.reset()
+      }),
+      listen<boolean>('debug-readable-view-changed', ({ payload }) => {
+        console.log('[DebugWin] Received debug-readable-view-changed', payload)
+        this.readableView = payload
+      }),
+    ])
+
+    const unlisteners = settled.flatMap((r) => (r.status === 'fulfilled' ? [r.value] : []))
+    const unlistenAll = () => unlisteners.forEach((unlisten) => unlisten())
+
+    try {
+      const failed = settled.find((r) => r.status === 'rejected')
+      if (failed) throw failed.reason
+      // Raw `emit`: `emitToDebugWindow` is gated on `debugWindowReady`, which only the main
+      // window sets.
+      console.log('[DebugWin] Emitting request-initial-debug-logs')
+      await emit('request-initial-debug-logs')
+    } catch (err) {
+      console.error('[DebugWin] Failed to connect to the main window:', err)
+      unlistenAll()
+      return () => {}
+    }
+    return unlistenAll
   }
 
   /**
@@ -209,10 +174,10 @@ class DebugStore {
   /**
    * Toggle rendering of newlines in debug logs.
    */
-  toggleDebugRenderNewlines() {
-    this.debugRenderNewlines = !this.debugRenderNewlines
-    console.log('[UI] toggleDebugRenderNewlines', this.debugRenderNewlines)
-    this.emitToDebugWindow('debug-render-newlines-changed', this.debugRenderNewlines)
+  toggleReadableView() {
+    this.readableView = !this.readableView
+    console.log('[UI] toggleReadableView', this.readableView)
+    this.emitToDebugWindow('debug-readable-view-changed', this.readableView)
   }
 
   /** Listeners for everything the pop-out window sends back. */
@@ -228,8 +193,8 @@ class DebugStore {
       console.log('[UI] Received request-initial-debug-logs')
       this.debugWindowReady = true
       this.emitToDebugWindow('initial-debug-logs', {
-        logs: this.debugLogs.map((e) => this.safeIpcEntry(e) as DebugLogEntry),
-        renderNewlines: this.debugRenderNewlines,
+        logs: debugLog.snapshot().map((e) => this.safeIpcEntry(e) as DebugLogEntry),
+        readableView: this.readableView,
       })
     })
 
@@ -237,8 +202,8 @@ class DebugStore {
       this.clearDebugLogs()
     })
 
-    this.unlistenToggleRenderNewlines = await listen('request-toggle-debug-render-newlines', () => {
-      this.toggleDebugRenderNewlines()
+    this.unlistenToggleReadableView = await listen('request-toggle-debug-readable-view', () => {
+      this.toggleReadableView()
     })
   }
 
@@ -286,9 +251,9 @@ class DebugStore {
           this.unlistenClearLogs()
           this.unlistenClearLogs = null
         }
-        if (this.unlistenToggleRenderNewlines) {
-          this.unlistenToggleRenderNewlines()
-          this.unlistenToggleRenderNewlines = null
+        if (this.unlistenToggleReadableView) {
+          this.unlistenToggleReadableView()
+          this.unlistenToggleReadableView = null
         }
       })
 

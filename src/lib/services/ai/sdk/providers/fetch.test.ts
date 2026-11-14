@@ -2,13 +2,9 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 
 vi.mock('@tauri-apps/plugin-http', () => ({ fetch: vi.fn() }))
 
-// The real store is a rune module, which this suite cannot import.
-vi.mock('#lib/stores/debug.svelte.ts', () => ({
-  debug: { isActive: false, addDebugRequest: vi.fn(), addDebugResponse: vi.fn() },
-}))
-
 import { fetch as tauriHttpFetch } from '@tauri-apps/plugin-http'
 import { isAbortError } from '#lib/services/activity/describeError.ts'
+import { debugLog } from '#lib/stores/debugLog.ts'
 import { RequestTimeoutError } from '#lib/utils/error.ts'
 import { firstReadError } from '#lib/utils/idleTimeout.testing.ts'
 import { createTimeoutFetch } from './fetch'
@@ -86,8 +82,8 @@ describe('createTimeoutFetch abort handling', () => {
   })
 })
 
-/** An SSE response whose body the test drives; the plugin errors it with a bare string on abort. */
-function sseResponse(signal?: AbortSignal | null) {
+/** A response whose body the test drives; the plugin errors it with a bare string on abort. */
+function sseResponse(signal?: AbortSignal | null, contentType = 'text/event-stream') {
   let controller!: ReadableStreamDefaultController<Uint8Array>
   const body = new ReadableStream<Uint8Array>({
     start: (c) => {
@@ -97,10 +93,12 @@ function sseResponse(signal?: AbortSignal | null) {
   })
   const response = new Response(body, {
     status: 200,
-    headers: { 'content-type': 'text/event-stream' },
+    headers: { 'content-type': contentType },
   })
   return { response, controller }
 }
+
+const encode = (text: string) => new TextEncoder().encode(text)
 
 describe('createTimeoutFetch body handling', () => {
   beforeEach(() => {
@@ -135,6 +133,48 @@ describe('createTimeoutFetch body handling', () => {
       expect(pluginSignal?.aborted).toBe(true)
     },
   )
+
+  it('times out a JSON body that stalls, as a RequestTimeoutError', async () => {
+    vi.useFakeTimers()
+    mockFetch.mockImplementation(async (_url, init) => {
+      const { controller, response } = sseResponse(init?.signal, 'application/json')
+      controller.enqueue(encode('{"partial":'))
+      return response
+    })
+
+    const request = createTimeoutFetch(
+      5_000,
+      'test',
+    )('https://api.test/v1').catch((e: unknown) => e)
+    await vi.advanceTimersByTimeAsync(5_000)
+
+    expect(await request).toBeInstanceOf(RequestTimeoutError)
+  })
+
+  it('does not time out a JSON body that keeps arriving, however long it takes in all', async () => {
+    vi.useFakeTimers()
+    let controller!: ReadableStreamDefaultController<Uint8Array>
+    mockFetch.mockImplementation(async (_url, init) => {
+      const reply = sseResponse(init?.signal, 'application/json')
+      controller = reply.controller
+      controller.enqueue(encode('{"a":'))
+      return reply.response
+    })
+
+    const request = createTimeoutFetch(5_000, 'test')('https://api.test/v1')
+    await vi.advanceTimersByTimeAsync(4_000)
+    controller.enqueue(encode('1,'))
+    await vi.advanceTimersByTimeAsync(4_000)
+    controller.enqueue(encode('"b":2}'))
+    controller.close()
+
+    const response = await request
+    expect(await response.json()).toEqual({
+      a: 1,
+      b: 2,
+      usage: { input_tokens: 0, output_tokens: 0 },
+    })
+  })
 
   it('rejects a caller abort mid-body as an AbortError', async () => {
     mockFetch.mockImplementation(async (_url, init) => sseResponse(init?.signal).response)
@@ -317,5 +357,151 @@ describe('createTimeoutFetch manual body', () => {
     await createTimeoutFetch(60_000, 'test')('https://api.test/v1')
 
     expect(mockFetch.mock.calls[0][1]?.body).toBeUndefined()
+  })
+})
+
+describe('createTimeoutFetch debug log', () => {
+  const entries = (type: 'request' | 'response') =>
+    debugLog.snapshot().filter((e) => e.type === type)
+
+  beforeEach(() => {
+    mockFetch.mockReset()
+    debugLog.reset()
+    debugLog.active = true
+  })
+
+  afterEach(() => {
+    debugLog.active = false
+    debugLog.reset()
+    vi.useRealTimers()
+  })
+
+  it('logs the status and the error when a JSON body fails mid-read', async () => {
+    mockFetch.mockImplementation(async (_url, init) => {
+      const { controller, response } = sseResponse(init?.signal, 'application/json')
+      controller.enqueue(encode('{"partial":'))
+      controller.error(new Error('connection lost'))
+      return response
+    })
+
+    await expect(createTimeoutFetch(60_000, 'test')('https://api.test/v1')).rejects.toThrow(
+      'connection lost',
+    )
+
+    await vi.waitFor(() => expect(entries('response')).toHaveLength(1))
+    expect(entries('response')[0].data).toEqual({
+      status: 200,
+      error: 'connection lost (headers received, no body yet)',
+      received: { bytes: 0 },
+    })
+  })
+
+  it('logs the status and the error when a stream stalls', async () => {
+    vi.useFakeTimers()
+    mockFetch.mockImplementation(async (_url, init) => {
+      const { controller, response } = sseResponse(init?.signal)
+      controller.enqueue(encode('data: {"partial":'))
+      return response
+    })
+
+    const response = await createTimeoutFetch(5_000, 'test')('https://api.test/v1')
+    const read = response.text().catch((e: unknown) => e)
+    await vi.advanceTimersByTimeAsync(5_000)
+    await read
+
+    await vi.waitFor(() => expect(entries('response')).toHaveLength(1))
+    expect(entries('response')[0].data).toMatchObject({
+      status: 200,
+      error: 'Request timed out after 5s (17 bytes received)',
+      body: ['{"partial":'],
+      stream: { format: 'unknown', complete: false },
+    })
+  })
+
+  it('leaves the caller the whole stream while logging it', async () => {
+    const { controller, response } = sseResponse()
+    mockFetch.mockResolvedValue(response)
+    const event = 'data: {"choices":[{"index":0,"delta":{"content":"hi"}}]}\n\n'
+
+    const result = await createTimeoutFetch(60_000, 'test')('https://api.test/v1')
+    controller.enqueue(encode(event))
+    controller.close()
+
+    expect(await result.text()).toBe(event)
+    await vi.waitFor(() => expect(entries('response')).toHaveLength(1))
+    expect(entries('response')[0].data).toMatchObject({
+      status: 200,
+      stream: { format: 'chat-completions', complete: false, eventCount: 1 },
+    })
+  })
+
+  it('logs the JSON response unpatched, scrubbed, with its status', async () => {
+    mockFetch.mockResolvedValue(jsonResponse({ id: 'x', image: 'A'.repeat(2048) }))
+
+    const response = await createTimeoutFetch(60_000, 'test')('https://api.test/v1')
+    expect(await response.json()).toEqual({
+      id: 'x',
+      image: 'A'.repeat(2048),
+      usage: { input_tokens: 0, output_tokens: 0 },
+    })
+
+    await vi.waitFor(() => expect(entries('response')).toHaveLength(1))
+    expect(entries('response')[0].data).toEqual({
+      status: 200,
+      body: { id: 'x', image: '[base64, 2048 chars]' },
+      providerMetadata: undefined,
+    })
+  })
+
+  it('shows the body it sends, manual keys included, with the key redacted', async () => {
+    mockFetch.mockResolvedValue(jsonResponse({}))
+
+    await createTimeoutFetch(
+      60_000,
+      'test',
+      '{"top_k":5}',
+    )('https://api.test/v1', {
+      method: 'POST',
+      headers: { Authorization: 'Bearer sk-1234567890' },
+      body: JSON.stringify({ model: 'm' }),
+    })
+
+    expect(entries('request')[0].data).toMatchObject({
+      method: 'POST',
+      headers: { Authorization: 'Bear...7890' },
+      body: { model: 'm', top_k: 5 },
+    })
+  })
+
+  it('attaches to the debug id it is given', async () => {
+    mockFetch.mockResolvedValue(jsonResponse({}))
+
+    await createTimeoutFetch(60_000, 'test', '', 'turn-1')('https://api.test/v1')
+
+    expect(entries('request')[0].id).toBe('turn-1')
+  })
+
+  it('writes an error entry when the request times out', async () => {
+    vi.useFakeTimers()
+    mockFetch.mockImplementation(pendingUntilAborted)
+
+    const request = createTimeoutFetch(
+      5_000,
+      'test',
+    )('https://api.test/v1').catch((e: unknown) => e)
+    await vi.advanceTimersByTimeAsync(5_000)
+
+    expect(await request).toBeInstanceOf(RequestTimeoutError)
+    expect(entries('response')[0].data).toEqual({ error: 'Request timed out after 5s' })
+    vi.useRealTimers()
+  })
+
+  it('writes nothing while debug mode is off', async () => {
+    debugLog.active = false
+    mockFetch.mockResolvedValue(jsonResponse({}))
+
+    await createTimeoutFetch(60_000, 'test')('https://api.test/v1')
+
+    expect(debugLog.snapshot()).toEqual([])
   })
 })

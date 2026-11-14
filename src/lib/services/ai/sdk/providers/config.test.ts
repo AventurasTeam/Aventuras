@@ -1,11 +1,7 @@
-import { describe, it, expect, vi } from 'vitest'
+import { describe, it, expect } from 'vitest'
 
 // `./config` is a plain constants module, but the barrel it sits in reaches the debug *rune*
 // store through the image fetch adapter; see modelPing.test.ts.
-vi.mock('#lib/stores/debug.svelte.ts', () => ({
-  debug: { isActive: false, addDebugRequest: vi.fn(), addDebugResponse: vi.fn() },
-}))
-
 const { PROVIDERS } = await import('./config')
 const { normalizeBaseUrl } = await import('#lib/utils/url.ts')
 
