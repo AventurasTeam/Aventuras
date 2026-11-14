@@ -2,6 +2,8 @@ import type { AssistantModelMessage, ToolCallPart } from 'ai'
 import { and, asc, desc, eq, isNotNull, lte } from 'drizzle-orm'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
+import type { ChapterDeleteMode } from '@/lib/actions/chapters/chapter-delete-set'
+import { removeChapter } from '@/lib/actions/chapters/remove-chapter'
 import { startManualClose } from '@/lib/actions/chapters/start-manual-close'
 import {
   applyDeltaAction,
@@ -543,6 +545,40 @@ function keptByRollback(h: CloseHarness, targetId: string): Delta[] {
   )
 }
 
+// C13: the close made one chapter, which each delete mode removes.
+async function removeTheChapter(h: CloseHarness, mode: ChapterDeleteMode): Promise<void> {
+  const [chapter, ...more] = h.closed().state.rows.chapters
+  expect(more, 'the close made one chapter').toEqual([])
+  const id = defined(chapter, 'the close made no chapter').id
+  expect(await removeChapter(h.fx.branchId, id, mode, h.fx.ctx)).toEqual({ status: 'ok' })
+}
+
+// C13: removing the divider reverses the chapter row, its report and its stamps; the rest stands.
+function dividerRemoved(closed: { state: WorldState; log: Delta[] }): {
+  state: WorldState
+  log: Delta[]
+} {
+  const removed = new Set(closed.state.rows.chapters.map((c) => c.id))
+  return {
+    state: {
+      rows: { ...closed.state.rows, chapters: [] },
+      // worldState lists stamped entries only, so a cleared stamp leaves the list.
+      stamped: closed.state.stamped.filter(
+        (e) => e.chapterId === null || !removed.has(e.chapterId),
+      ),
+    },
+    log: closed.log.filter(
+      (d) => d.targetTable !== 'chapters' && d.targetTable !== 'story_entries',
+    ),
+  }
+}
+
+function expectedAfter(h: CloseHarness, arm: RoundTripArm): { state: WorldState; log: Delta[] } {
+  if (arm.expect === 'before-close') return { state: h.before, log: [] }
+  if (arm.expect === 'after-close') return h.closed()
+  return dividerRemoved(h.closed())
+}
+
 type RoundTripCase = {
   name: string
   slots: () => CloseAgentSlots
@@ -559,7 +595,7 @@ type RoundTripCase = {
 type RoundTripArm = {
   name: string
   run: (h: CloseHarness) => Promise<void>
-  expect: 'before-close' | 'after-close'
+  expect: 'before-close' | 'after-close' | 'divider-removed'
 }
 
 const STAND_IN_CASE: RoundTripCase = {
@@ -1068,7 +1104,7 @@ const CASES: readonly RoundTripCase[] = [
   THREADS_ACROSS_PARTS_CASE,
 ]
 
-/** C9's arms; chapter delete's two modes join here (5.12). */
+/** C9's arms: CTRL-Z, redo, an abort, a rollback on each side of E, and both delete modes. */
 const ARMS: readonly RoundTripArm[] = [
   {
     name: 'CTRL-Z',
@@ -1116,6 +1152,42 @@ const ARMS: readonly RoundTripArm[] = [
       await h.rollBack(h.endEntryId)
     },
   },
+  {
+    name: 'delete the chapter',
+    expect: 'before-close',
+    run: async (h) => {
+      await h.close()
+      await removeTheChapter(h, 'whole')
+    },
+  },
+  {
+    name: 'remove the divider only',
+    expect: 'divider-removed',
+    run: async (h) => {
+      await h.close()
+      await removeTheChapter(h, 'divider-only')
+    },
+  },
+  {
+    name: 'remove the divider only, then CTRL-Z',
+    expect: 'before-close',
+    run: async (h) => {
+      await h.close()
+      await removeTheChapter(h, 'divider-only')
+      // The kept work is the newest action, so CTRL-Z reverses it (C13).
+      await undoClose(h)
+    },
+  },
+  {
+    name: 'remove the divider only, then CTRL-Z and redo',
+    expect: 'divider-removed',
+    run: async (h) => {
+      await h.close()
+      await removeTheChapter(h, 'divider-only')
+      await undoClose(h)
+      expect(await redoLastAction(h.fx.branchId, h.fx.ctx)).toEqual({ status: 'ok' })
+    },
+  },
 ]
 
 describe.each(CASES)('the round trip of $name', (c) => {
@@ -1124,7 +1196,7 @@ describe.each(CASES)('the round trip of $name', (c) => {
 
     await arm.run(h)
 
-    const expected = arm.expect === 'before-close' ? { state: h.before, log: [] } : h.closed()
+    const expected = expectedAfter(h, arm)
     const own = c.armExpect?.[arm.name]
     if (own === undefined) expect(await worldState(h.fx)).toEqual(expected.state)
     else await own(h)
