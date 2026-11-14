@@ -184,15 +184,15 @@ patch`, which 5.5a marks `restated`, so a close tool's write of it
   but `vitest.setup.ts` must not load the `@/lib/pipeline` barrel before
   a test's mocks, and `bootstrap.ts` pulls in UI modules a script can't
   load. Raised in 5.5a's review.
-- **The close's scripted-dispatch test harness exists six times.**
-  `write-path.test.ts`, `identity.test.ts`, `threads.test.ts`,
-  `lore-tools.test.ts`, `upkeep-tools.test.ts` and
-  `lifecycle-tools.test.ts` under `lib/pipeline/definitions/close-agent/`
-  each build the same `DispatchContext` (about 80 lines), and the task
-  test files also repeat their fixture helpers (story mode, scene
-  setters, thread seeds). One helper beside `__tests__/close-fixture.ts`
-  would serve all six before 5.9 adds more. Raised in 5.5b's review;
-  5.8 added the last three.
+- **The close's task test files repeat their fixture helpers.** Under
+  `lib/pipeline/definitions/close-agent/`, a `setSceneOf` is written in
+  five test files (`identity`, `upkeep`, `lifecycle`, `lifecycle-tools`
+  and `later-scene`), a `putSceneCharacter` in two (`lore`, `threads`), a
+  `putEntityRow` in two (`identity`, `upkeep`), and a story-mode write in
+  five. The scripted-dispatch harness they also repeated now lives in
+  `__tests__/close-dispatch.ts`; these helpers stayed per file, and one
+  module beside `__tests__/close-fixture.ts` would serve them. Raised in
+  5.5b's review.
 - **`setThreadStatus` and `updateThread` read "carries refs"
   differently.** `setThreadStatus` writes the resolved ref only when
   `triggeredAtEntryId` is set, while `updateThread` asks whether either
@@ -443,3 +443,33 @@ patch`, which 5.5a marks `restated`, so a close tool's write of it
   records the limit
   ([`chapter-close.md → Tools and writes`](../memory/chapter-close.md#tools-and-writes)).
   Raised in 5.8's slice review, developer decision 2026-11-10.
+- **Two close tool tests don't pin what their names claim.** In
+  `close-agent/upkeep-tools.test.ts` the test named "…its group on E"
+  never checks the group's anchor, and neither does
+  `lifecycle-tools.test.ts`'s five-turn case ending before E: anchoring
+  on the task's last turn instead keeps every close tool test green. No
+  test cites a part-1 turn from part 2 and expects a refusal either, so
+  swapping the part's turns for the turns handed handles goes unseen.
+  Raised in 5.9's Task 1 review.
+- **No retrieval test admits a happening through a seated chapter
+  range.** `run.test.ts`'s `makeQueryAll` returns every happening
+  whatever entry ids the query binds, so emptying the chapter-range
+  boost loop in `lib/retrieval/run.ts` keeps all its cases green,
+  including the one named for that admission. Raised in 5.9's Task 2
+  review.
+- **The open chapter's number and retrieval's `current` can disagree.**
+  Retrieval numbers the open chapter one past the highest closed
+  chapter that still holds a stamped entry (the stamp join in
+  `loadChapterRanges`), while the story card's open chapter
+  (`openChapterNumber`) is one past the highest closed chapter whatever
+  it holds. Deleting every entry of the newest closed chapter, which
+  `deleteStoryEntry` allows, splits them, so ages run one short of the
+  number the user sees. Raised in 5.9's Task 3 review.
+- **A folded stackable key can outgrow its schema bound.**
+  `foldStackableKey` lowercases, and some letters lengthen when
+  lowercased (`İ` becomes two code units), so a 40-character key can
+  fold past the character schema's 40-character bound and the write is
+  refused. The per-turn transfer path has this today; 5.9's
+  normalization step inherits it, where a refused group fails the close
+  on every close until the key is edited. Rare input. Raised in 5.9's
+  Task 7 review.

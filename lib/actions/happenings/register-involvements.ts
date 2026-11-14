@@ -6,11 +6,26 @@ import { happeningInvolvementsStore } from '@/lib/stores'
 
 import { missingRef, MISSING_REF } from '../delta/live-refs'
 import { noopRefusal, register, type ActionHandler } from '../delta/registry'
-import type { DeltaSource } from '../types'
+import {
+  proseLogPosition,
+  USER_EDITED_SINCE_PROSE,
+  userDeletedInvolvementSince,
+} from '../delta/user-precedence'
+import type { DeltaSource, ProseEntryId } from '../types'
 
 declare module '@/lib/actions/action-map' {
   interface PipelineActionMap {
-    createHappeningInvolvement: { source: DeltaSource; payload: { entry: NewHappeningInvolvement } }
+    createHappeningInvolvement: {
+      source: DeltaSource
+      payload: {
+        entry: NewHappeningInvolvement
+        /**
+         * The latest turn a close cites: an involvement the user removed after its prose stays
+         * removed. Absent or null checks nothing.
+         */
+        proseEntryId?: ProseEntryId
+      }
+    }
     updateHappeningInvolvement: {
       source: DeltaSource
       payload: { branchId: string; id: string; patch: { role?: string | null } }
@@ -32,7 +47,7 @@ function fullRow(entry: NewHappeningInvolvement): HappeningInvolvement {
 const createHandler: ActionHandler = async (action, branchId, ctx, group) => {
   if (action.kind !== 'createHappeningInvolvement')
     throw new Error(`handler/kind mismatch: ${action.kind}`)
-  const { entry } = action.payload
+  const { entry, proseEntryId } = action.payload
   if (entry.branchId !== branchId)
     return {
       status: 'rejected',
@@ -47,6 +62,17 @@ const createHandler: ActionHandler = async (action, branchId, ctx, group) => {
     { table: 'entities', id: row.entityId },
   ] as const
   if (await missingRef(ctx, branchId, refs, group)) return MISSING_REF
+  if (
+    proseEntryId != null &&
+    (await userDeletedInvolvementSince(
+      ctx,
+      branchId,
+      row.entityId,
+      row.happeningId,
+      await proseLogPosition(ctx, branchId, proseEntryId),
+    ))
+  )
+    return noopRefusal(USER_EDITED_SINCE_PROSE, null)
   return {
     status: 'ok',
     targetTable: 'happening_involvements',

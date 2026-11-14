@@ -106,7 +106,7 @@ describe('reads after a close', () => {
     expect(await readRecentEntryIds(fx.ctx.db, fx.branchId, bounds)).toEqual(new Set(current))
   })
 
-  it('loadChapterRanges returns every stamped entry of the range', async () => {
+  it('loadChapterRanges returns every stamped entry of the range, each in chapter 1 of 2', async () => {
     const fx = await openCloseFixture({ turns: TURNS })
     const { closed } = await close(fx)
     const [chapter] = await fx.ctx.db
@@ -114,8 +114,9 @@ describe('reads after a close', () => {
       .from(chapters)
       .where(eq(chapters.branchId, fx.branchId))
 
-    const ranges = await loadChapterRanges(queryAllOn(fx.ctx.db), fx.branchId)
+    const { ranges, ages } = await loadChapterRanges(queryAllOn(fx.ctx.db), fx.branchId)
 
     expect(ranges).toEqual(new Map([[chapter.id, new Set(closed)]]))
+    expect(ages).toEqual({ sequenceOf: new Map(closed.map((id) => [id, 1])), current: 2 })
   })
 })

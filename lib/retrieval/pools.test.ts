@@ -55,6 +55,7 @@ const loadedLore = (over: Partial<LoreRow> & Pick<LoreRow, 'id'>): LoadedLoreRow
 
 const loadedThread = (over: Partial<ThreadRow> & Pick<ThreadRow, 'id'>): LoadedThreadRow => ({
   ...thread(over),
+  resolvedAtEntryId: 'entry_1',
   embeddingStale: true,
 })
 
