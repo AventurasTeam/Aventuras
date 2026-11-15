@@ -356,7 +356,13 @@ each carrying a `position` and a `branchId`. Almost everything else hangs off th
   which is what makes retry, time-travel delete and regenerate reversible (`rollbackService`) and
   lets a checkpoint be rebuilt at a past entry.
   See [state-tracking.md](state-tracking.md).
-- **Checkpoints** are full state snapshots; **retry backups** are in-memory only and do not
+- **Checkpoints** are full state snapshots. A story's first turn takes one named "Story start"
+  before it writes anything (`ensureStartCheckpoint`), so a branch can always go back to the
+  beginning, with the edits made before playing. "Not played yet" means the last entry was written
+  by the wizard's opening or a chat import (`isStoryStartEntry`, by `metadata.source`); a
+  regenerate of an imported reply takes it after its undo, on the imported action. It is an
+  ordinary checkpoint, and a failure to take it does not stop the turn. **Retry backups** are
+  in-memory only and do not
   survive an app restart or a story switch. With State Tracking on, a retry backup copies no world
   state: the retry rewinds through the records, as a delete does (see
   [state-tracking.md](state-tracking.md)). The backup says which (`throughRecords`), so turning

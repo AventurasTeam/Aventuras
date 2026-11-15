@@ -174,8 +174,11 @@ import {
   CLOSING_SNAPSHOT_PREFIX,
   checkpointDeletionBlocker,
   entryNumber,
+  needsStartCheckpoint,
+  startClock,
   type SnapshotMark,
 } from '#lib/utils/storyNavigation.ts'
+import { IMPORTED_CHAT_SOURCE, OPENING_SOURCE } from '#lib/utils/storyEntries.ts'
 import {
   buildChapterBanners,
   lastResolvedChapterEnd,
@@ -986,7 +989,7 @@ class StoryStore {
       content: msg.content,
       parentId: null,
       position: i,
-      metadata: { source: 'sillytavern_import' },
+      metadata: { source: IMPORTED_CHAT_SOURCE },
       branchId: null,
     }))
     await database.bulkInsertStoryEntries(entries)
@@ -4556,13 +4559,14 @@ class StoryStore {
   }
 
   // Create a checkpoint (snapshot of current state)
-  async createCheckpoint(name: string): Promise<Checkpoint> {
+  async createCheckpoint(name: string, holder?: GenerationLease): Promise<Checkpoint> {
     if (!this.currentStory) throw new Error('No story loaded')
 
     // A checkpoint is a full snapshot, and a branch created from one copies it wholesale. Taken
     // mid-turn it would freeze a half-written turn — the user action in, the narration or its
-    // world state not yet — and hand that to every branch made from it afterwards.
-    this.assertNotBusy('create a checkpoint')
+    // world state not yet — and hand that to every branch made from it afterwards. `holder` is
+    // a turn's own lease, taken before the turn writes anything.
+    this.assertNotBusy('create a checkpoint', holder)
 
     const lastEntry = this.entries[this.entries.length - 1]
     if (!lastEntry) throw new Error('No entries to checkpoint')
@@ -4621,6 +4625,19 @@ class StoryStore {
     })
 
     return checkpoint
+  }
+
+  /**
+   * Checkpoints the story as it was created or imported, on its first turn and before that turn
+   * writes anything, so a branch can always go back to the start.
+   */
+  async ensureStartCheckpoint(lease: GenerationLease): Promise<void> {
+    if (!needsStartCheckpoint(this.entries, this.checkpoints)) return
+    try {
+      await this.createCheckpoint('Story start', lease)
+    } catch (error) {
+      log('Start checkpoint not created', error)
+    }
   }
 
   /** The snapshots of the branch being read, for listing; their contents are not loaded. */
@@ -5636,30 +5653,37 @@ class StoryStore {
   }
 
   /**
-   * Restore time tracker from the last entry's timeEnd metadata.
+   * Restore time tracker from the start checkpoint's clock when the branch ends on a story-start
+   * entry, otherwise from the last entry's timeEnd metadata.
    * Called after loading entries for a branch to ensure time consistency.
    */
   private async restoreTimeFromLastEntry(): Promise<void> {
     if (!this.currentStory || this.entries.length === 0) return
 
     const lastEntry = this.entries[this.entries.length - 1]
-    const timeEnd = lastEntry.metadata?.timeEnd
 
-    if (timeEnd && typeof timeEnd === 'object') {
-      const newTime = timeEnd as TimeTracker
-      // Only update if different to avoid unnecessary DB writes
-      const current = this.currentStory.timeTracker
-      if (
-        !current ||
-        current.years !== newTime.years ||
-        current.days !== newTime.days ||
-        current.hours !== newTime.hours ||
-        current.minutes !== newTime.minutes
-      ) {
-        this.currentStory = { ...this.currentStory, timeTracker: newTime }
-        await database.updateStory(this.currentStory.id, { timeTracker: newTime })
-        log('Time tracker restored from last entry:', newTime)
-      }
+    const start = startClock(lastEntry, this.checkpoints)
+    if (start !== undefined) {
+      await this.restoreTimeTrackerSnapshot(start)
+      return
+    }
+
+    const timeEnd = lastEntry.metadata?.timeEnd
+    if (!timeEnd || typeof timeEnd !== 'object') return
+
+    const newTime = timeEnd as TimeTracker
+    // Only update if different to avoid unnecessary DB writes
+    const current = this.currentStory.timeTracker
+    if (
+      !current ||
+      current.years !== newTime.years ||
+      current.days !== newTime.days ||
+      current.hours !== newTime.hours ||
+      current.minutes !== newTime.minutes
+    ) {
+      this.currentStory = { ...this.currentStory, timeTracker: newTime }
+      await database.updateStory(this.currentStory.id, { timeTracker: newTime })
+      log('Time tracker restored from last entry:', newTime)
     }
   }
 
@@ -6232,7 +6256,7 @@ class StoryStore {
         parentId: null,
         position: 0,
         metadata: {
-          source: 'wizard',
+          source: OPENING_SOURCE,
           tokenCount,
           timeStart: { ...baseTime },
           timeEnd: { ...baseTime },

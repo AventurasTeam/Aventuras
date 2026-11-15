@@ -1,5 +1,6 @@
-import type { Branch, Checkpoint, StoryEntry } from '#lib/types/index.ts'
+import type { Branch, Checkpoint, StoryEntry, TimeTracker } from '#lib/types/index.ts'
 import { chapterBannerLabel, type ChapterBanner } from './chapterBanners'
+import { isStoryStartEntry } from './storyEntries'
 
 /**
  * The number a reader sees for an entry: its stored position, one-based, so the last entry's
@@ -217,6 +218,36 @@ export function canCreateCheckpointAt(
     entry.type === 'narration' &&
     (entry.branchId ?? null) === context.currentBranchId
   )
+}
+
+/** Whether the story has not been played since it was created or imported, and has no checkpoint there. */
+export function needsStartCheckpoint(
+  entries: Pick<StoryEntry, 'id' | 'type' | 'metadata'>[],
+  checkpoints: Pick<Checkpoint, 'lastEntryId'>[],
+): boolean {
+  const last = entries.at(-1)
+  return (
+    !!last &&
+    last.type !== 'system' &&
+    isStoryStartEntry(last) &&
+    !checkpoints.some((cp) => cp.lastEntryId === last.id)
+  )
+}
+
+/**
+ * The clock for a branch ending on a story-start entry: the clock its start checkpoint saved, which
+ * keeps edits made before the first turn. A checkpoint with no clock clears one only where the
+ * entry has no time of its own. Undefined leaves the decision to the entry.
+ */
+export function startClock(
+  last: Pick<StoryEntry, 'id' | 'metadata'>,
+  checkpoints: Pick<Checkpoint, 'lastEntryId' | 'timeTrackerSnapshot'>[],
+): TimeTracker | null | undefined {
+  if (!isStoryStartEntry(last)) return undefined
+  const checkpoint = checkpoints.find((cp) => cp.lastEntryId === last.id)
+  if (!checkpoint) return undefined
+  if (checkpoint.timeTrackerSnapshot) return checkpoint.timeTrackerSnapshot
+  return last.metadata?.timeEnd ? undefined : null
 }
 
 export function checkpointsOnBranch(

@@ -156,6 +156,17 @@ describe('past checkpoints', () => {
   )
 })
 
+describe('the start checkpoint', () => {
+  it('is taken under the turn that asks for it', () => {
+    expect(bodyOf('createCheckpoint')).toContain(
+      "this.assertNotBusy('create a checkpoint', holder)",
+    )
+    const body = bodyOf('ensureStartCheckpoint')
+    expect(body).toContain('needsStartCheckpoint(this.entries, this.checkpoints)')
+    expect(body).toContain("this.createCheckpoint('Story start', lease)")
+  })
+})
+
 describe('deleting one entry', () => {
   it('moves the records to a neighbouring entry when no rollback is made', () => {
     expect(bodyOf('deleteEntry')).toContain(

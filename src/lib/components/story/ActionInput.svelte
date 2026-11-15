@@ -1283,6 +1283,8 @@
       inputValue = ''
       if (textareaRef) textareaRef.scrollTop = 0
 
+      await story.ensureStartCheckpoint(lease)
+
       const embeddedImageIds = await database.getEmbeddedImageIdsForStory(currentStory.id)
       ui.createRetryBackup(
         currentStory.id,
@@ -1414,6 +1416,10 @@
         )
       }
 
+      // After the undo: a regenerated imported reply is the story's first turn, and a checkpoint
+      // on that reply would go with it.
+      await story.ensureStartCheckpoint(lease)
+
       // The rewind above put the story back exactly where the previous turn's retrieval was
       // computed, so that result is still the right one — same branch, same position, same
       // action. Read after the undo, since the key is position-sensitive.
@@ -1435,6 +1441,7 @@
 
     await withGenerationLease(async (lease) => {
       ui.clearSuggestions(storyId)
+      await story.ensureStartCheckpoint(lease)
       await generateResponse(lease, userActionEntry.id, userActionEntry.content, {
         styleReviewSource: 'generate-from-action',
         cachedRetrievalResult: cachedRetrievalFor(userActionEntry.content),
