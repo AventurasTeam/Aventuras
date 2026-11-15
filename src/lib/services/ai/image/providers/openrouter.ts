@@ -9,6 +9,11 @@ import * as z from 'zod'
 import { createOpenRouter } from '@openrouter/ai-sdk-provider'
 import type { ImageModelCapabilities } from '#lib/types/index.ts'
 import { isAspectRatio, pickResolution, specToAspectRatio } from '#lib/utils/image.ts'
+import {
+  isImageOutputFormat,
+  LOSSY_IMAGE_OUTPUT_FORMATS,
+  outputWireFields,
+} from '#lib/utils/imageOutput.ts'
 import { endpoint } from '#lib/utils/url.ts'
 import { resolveBaseUrl } from './baseUrls'
 import type {
@@ -49,6 +54,12 @@ const OpenRouterModel = z.object({
         .object({ min: optionalNumber, max: optionalNumber })
         .optional()
         .catch(undefined),
+      output_format: z
+        .object({ values: z.array(z.string()) })
+        .optional()
+        .catch(undefined),
+      // Listed as a 0-100 range; only its presence is read.
+      output_compression: z.object({}).optional().catch(undefined),
     })
     .catch({}),
 })
@@ -71,6 +82,8 @@ function toCapabilities({
     requiresReferenceImage: (refs?.min ?? 0) >= 1 ? true : undefined,
     supportedResolutions: nonEmpty(params.resolution?.values),
     supportedAspectRatios: nonEmpty(params.aspect_ratio?.values.filter(isAspectRatio)),
+    outputFormats: nonEmpty(params.output_format?.values.filter(isImageOutputFormat)),
+    compressionFormats: params.output_compression ? [...LOSSY_IMAGE_OUTPUT_FORMATS] : undefined,
   }
 }
 
@@ -118,7 +131,7 @@ export function createOpenRouterProvider(config: ImageProviderConfig): ImageProv
     name: 'OpenRouter',
 
     async generate(options: ImageGenerateOptions): Promise<ImageGenerateResult> {
-      const { model, prompt, spec, modelInfo, referenceImages, signal } = options
+      const { model, prompt, spec, modelInfo, referenceImages, output, signal } = options
       const resolution = pickResolution(spec, modelInfo?.supportedResolutions)
 
       return generateSdkImage({
@@ -130,7 +143,9 @@ export function createOpenRouterProvider(config: ImageProviderConfig): ImageProv
           modelInfo?.supportedAspectRatios ?? [],
           OPENROUTER_ASPECT_RATIOS,
         ),
-        providerOptions: { openrouter: resolution ? { resolution } : {} },
+        providerOptions: {
+          openrouter: { ...(resolution && { resolution }), ...outputWireFields(output) },
+        },
         signal,
       })
     },
