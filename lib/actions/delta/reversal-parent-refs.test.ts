@@ -727,6 +727,54 @@ describe('a reversed pass placement and the writes after it', () => {
     })
   })
 
+  const restate = (state: Record<string, unknown>): PipelineAction => ({
+    kind: 'updateEntity',
+    source: 'periodic_classifier',
+    payload: { branchId: 'b1', id: 'loc_p', patch: { state } },
+  })
+  const reverseLater = async () =>
+    reverse(await selectReversalSet(ctx, { branchId: 'b1', target: await deltasOf('act_later') }))
+
+  // Absent reads as null, so a rewrite to a null prior leaves out a key the survivor never logged.
+  it('leaves a placement key the survivor never logged out of its rewrite', async () => {
+    await act('act_pass', restate({ parent_location_id: 'loc_quarter' }))
+    await act('act_later', restate({ parent_location_id: null }))
+    const set = await selectReversalSet(ctx, { branchId: 'b1', target: await deltasOf('act_pass') })
+    const rewrites: Record<string, unknown>[] = []
+    await reverseAndPruneDeltaRows(set, ctx, { keepRedoExact: false }, [], (plan) =>
+      rewrites.push(...plan.survivorRewrites.map(({ payload }) => payload)),
+    )
+    expect(rewrites).toStrictEqual([{ state: { parent_location_id: null } }])
+  })
+
+  // Two reversed writes rewrite one survivor, newest first: the older's prior must clear the key
+  // the newer's rewrite added, or the survivor's own undo decodes the newer's placement.
+  describe('a survivor two reversed placements rewrite', () => {
+    it('drops the mark the newer rewrite added when the older prior is top-level', async () => {
+      await act('act_pass', restate(UNPLACED))
+      await act('act_pass', restate({ parent_location_id: 'loc_quarter' }))
+      await act('act_later', restate({ parent_location_id: null }))
+      await reversePass()
+      expect(await stateOf('loc_p')).toEqual({ parent_location_id: null })
+      const [later] = await deltasOf('act_later')
+      expect(later.undoPayload).toEqual({ state: { parent_location_id: null, unplaced: null } })
+      await reverseLater()
+      expect(await stateOf('loc_p')).toEqual({ parent_location_id: null })
+    })
+
+    it('drops the parent the newer rewrite added when the older prior is top-level', async () => {
+      await act('act_pass', restate({ parent_location_id: 'loc_quarter' }))
+      await act('act_pass', restate({ parent_location_id: null }))
+      await act('act_later', restate(UNPLACED))
+      await reversePass()
+      expect(await stateOf('loc_p')).toEqual(UNPLACED)
+      const [later] = await deltasOf('act_later')
+      expect(later.undoPayload).toEqual({ state: { unplaced: null, parent_location_id: null } })
+      await reverseLater()
+      expect(await stateOf('loc_p')).toEqual({ parent_location_id: null })
+    })
+  })
+
   it.each([
     ['moved it elsewhere', { kind: 'under', parentId: 'loc_p' }, 'loc_quarter'],
     ['marked it top-level', { kind: 'under', parentId: 'loc_p' }, null],

@@ -263,17 +263,17 @@ export function undonePlacement(partial: Record<string, unknown>): PlacePlacemen
   return typeof parentId === 'string' ? { kind: 'under', parentId } : { kind: 'top' }
 }
 
-// A placement prior decodes from both keys, so a rewrite writes whichever one it needs.
+// A placement prior decodes from both keys, an absent one as null. Both are set on the prior as it
+// stands, so an older reversed write clears a key a newer one's rewrite added; a null stays absent.
 function placementEdits(survivor: Delta, prior: PlacePlacement): SurvivorEdit[] {
-  const carried = (key: string) => priorOf(survivor, 'state', [key]).carried
+  const setTo = (value: string | true | null) => (pending: unknown) =>
+    pending === undefined && value === null ? undefined : value
   const parent = prior.kind === 'under' ? prior.parentId : null
   const unplaced = prior.kind === 'unplaced' ? true : null
-  const edits: SurvivorEdit[] = []
-  if (parent !== null || carried('parent_location_id'))
-    edits.push({ survivor, column: 'state', path: ['parent_location_id'], edit: () => parent })
-  if (unplaced !== null || carried('unplaced'))
-    edits.push({ survivor, column: 'state', path: ['unplaced'], edit: () => unplaced })
-  return edits
+  return [
+    { survivor, column: 'state', path: ['parent_location_id'], edit: setTo(parent) },
+    { survivor, column: 'state', path: ['unplaced'], edit: setTo(unplaced) },
+  ]
 }
 
 // For a field, the first survivor that changed it takes the reversed delta's prior.
@@ -452,24 +452,25 @@ function omit(payload: Record<string, unknown>, key: string): Record<string, unk
   return rest
 }
 
-/** Sets `edit(prior)` at `column` and `path` in `payload`; false when a container on the way isn't one. */
+/**
+ * Sets `edit(prior)` at `column` and `path` in `payload`, leaving the key out when the edit gives
+ * undefined; false when a container on the way isn't one.
+ */
 export function editPayloadAt(
   payload: Record<string, unknown>,
   column: string,
   path: readonly string[],
   edit: (prior: unknown) => unknown,
 ): boolean {
-  if (path.length === 0) {
-    payload[column] = edit(payload[column])
-    return true
-  }
-  let node: unknown = payload[column]
-  for (const key of path.slice(0, -1)) {
+  let node: unknown = payload
+  for (const key of [column, ...path].slice(0, -1)) {
     if (!isJsonObject(node)) return false
     node = node[key]
   }
   if (!isJsonObject(node)) return false
-  const last = path[path.length - 1]
-  node[last] = edit(node[last])
+  const last = path.length === 0 ? column : path[path.length - 1]
+  const value = edit(node[last])
+  if (value === undefined) delete node[last]
+  else node[last] = value
   return true
 }
