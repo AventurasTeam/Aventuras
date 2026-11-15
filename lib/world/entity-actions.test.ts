@@ -249,6 +249,20 @@ describe('entityActions — update', () => {
     expect(patchOf('retired')).toEqual([])
   })
 
+  it('clears a blank stored reason of a row set back to active', () => {
+    const row: Entity = { ...KAEL, status: 'retired', retiredReason: '   ' }
+    const patch = entityActions({
+      branchEntities: [],
+      kind: 'character',
+      row,
+      draft: { ...characterDraftFrom(row, [MIRA_LINK]), status: 'active' },
+      relationships: [MIRA_LINK],
+      ...AT,
+    })
+
+    expect(patch).toMatchObject([{ payload: { patch: { status: 'active', retiredReason: null } } }])
+  })
+
   it('refuses a row saved as another kind', () => {
     expect(() =>
       entityActions({

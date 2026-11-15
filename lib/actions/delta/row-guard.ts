@@ -22,7 +22,9 @@ export async function readRowGuard(args: RowGuardArgs, ctx: DbCtx): Promise<RowG
   for (const [table, ids] of idsByTable)
     for (const edit of await userEditsOnRows(ctx, branchId, table, [...ids], 0)) {
       const key = rowKey(table, edit.targetId)
-      everByRow.set(key, [...(everByRow.get(key) ?? []), edit])
+      const edits = everByRow.get(key)
+      if (edits === undefined) everByRow.set(key, [edit])
+      else edits.push(edit)
     }
   const verdicts = new Map<string, RowVerdicts>()
   for (const { table, id } of rows) {

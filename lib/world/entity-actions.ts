@@ -123,7 +123,10 @@ function columnPatch(row: Entity, draft: EntityBaseDraft): ColumnPatch {
   if (description !== blankToNull(row.description ?? '')) patch.description = description
   if (draft.status !== row.status) patch.status = draft.status
   const retiredReason = retiredReasonFor(draft.status, draft.retiredReason)
-  if (retiredReason !== blankToNull(row.retiredReason ?? '')) patch.retiredReason = retiredReason
+  // Off retired, any stored value goes, a blank one too, which blankToNull would read as none.
+  const storedReason =
+    draft.status === 'retired' ? blankToNull(row.retiredReason ?? '') : (row.retiredReason ?? null)
+  if (retiredReason !== storedReason) patch.retiredReason = retiredReason
   if (draft.injectionMode !== row.injectionMode) patch.injectionMode = draft.injectionMode
   const tags = cleanList(draft.tags)
   if (!sameList(tags, cleanList(row.tags))) patch.tags = tags
