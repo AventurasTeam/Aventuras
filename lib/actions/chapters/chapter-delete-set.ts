@@ -115,7 +115,7 @@ export async function resolveChapterDeleteSet(
     .orderBy(desc(deltas.logPosition))) as Delta[]
   const target = mode === 'whole' ? groups : groups.filter((d) => DIVIDER_TABLES.has(d.targetTable))
   try {
-    const set = await selectReversalSet(ctx, { branchId, target, yieldTo: 'any' })
+    const set = await selectReversalSet(ctx, { branchId, target })
     return { set, chapter, groups }
   } catch (e) {
     if (e instanceof ReversalIntegrityError) return integrityRefused(branchId, e)

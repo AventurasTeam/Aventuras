@@ -60,10 +60,10 @@ function demotedName(row: KeywordDelta, key: string): boolean {
 
 /**
  * Normalized live term → who added it (retrieval.md → Keywords schema): the latest update whose
- * before-list lacks the term, else the create; an undone update has left the log. A name a machine
- * rename demoted goes to the latest earlier name write, else the create. Undoing a user's keyword
- * edit under a later machine keyword write restores the whole list, so a user's term that write's
- * before-list lacks is credited to that write, and a close may remove it.
+ * before-list lacks the term, else the create; an undone update has left the log, and its reversal
+ * rewrote the later before-lists as if it had never been written (generation-pipeline.md →
+ * Reverse-replay), so a term it put back goes to the write that added it. A name a machine rename
+ * demoted goes to the latest earlier name write, else the create.
  */
 export async function keywordAuthors(
   ctx: DbCtx,

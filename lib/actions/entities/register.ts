@@ -393,6 +393,15 @@ export function registerEntities(): void {
     table: 'entities',
     descriptor: { table: entities, idCol: entities.id, branchCol: entities.branchId },
     columnSchemas: { state: entityStateColumnSchema },
+    termLists: [
+      { column: 'keywords', match: 'normalized' },
+      { column: 'tags', match: 'normalized' },
+      ...(['traits', 'drives', 'agenda', 'inventory', 'equipped_items'] as const).map((key) => ({
+        column: 'state',
+        path: [key],
+        match: 'exact' as const,
+      })),
+    ],
     handlers: {
       createEntity: createHandler,
       updateEntity: updateHandler,

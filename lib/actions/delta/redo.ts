@@ -1,3 +1,5 @@
+import { eq } from 'drizzle-orm'
+
 import type { Delta, Entity, LocationState, SqlOp } from '@/lib/db'
 import { deltas, isEmbeddedSourceTable } from '@/lib/db'
 import { placementOf, withPlacement, type PlacePlacement } from '@/lib/world'
@@ -14,6 +16,7 @@ import {
   reverseAndPruneDeltaRows,
   stateWithRefCleared,
 } from './reverse-replay'
+import type { ReversePlan } from './reverse-replay'
 import type { RefClear, ReversalSet, RowRef } from './row-closure'
 import { deltaLockKeys } from './row-locks'
 
@@ -34,6 +37,12 @@ export type RefRestore = {
   readonly placementBeforeUndo: PlacePlacement | null
 }
 
+/** A surviving delta's payload from before the undo rewrote it, for redo to write back. */
+export type SurvivorPayload = {
+  readonly id: string
+  readonly undoPayload: Record<string, unknown> | null
+}
+
 /**
  * A CTRL-Z's redo snapshot, minted only by prepareUndo, as ReversalSet is by selectReversalSet:
  * its held-row refusal and its taken-before-the-reversal timing hold for no other producer.
@@ -44,10 +53,20 @@ class RedoGroup {
   readonly snapshots: readonly RedoSnapshot[]
   /** The clears of refs to a row the snapshot re-creates; redo writes each back, logging nothing. */
   readonly refRestores: readonly RefRestore[]
+  /**
+   * The survivors the undo rewrote on a row the snapshot restores, filled by `reverse` once its
+   * plan is built and before it commits; a sweep-only row keeps its rewrite, as it keeps its row.
+   */
+  readonly survivorPayloads: readonly SurvivorPayload[]
 
-  constructor(snapshots: readonly RedoSnapshot[], refRestores: readonly RefRestore[]) {
+  constructor(
+    snapshots: readonly RedoSnapshot[],
+    refRestores: readonly RefRestore[],
+    survivorPayloads: readonly SurvivorPayload[] = [],
+  ) {
     this.snapshots = snapshots
     this.refRestores = refRestores
+    this.survivorPayloads = survivorPayloads
   }
 }
 
@@ -67,11 +86,19 @@ export type PreparedUndo = {
 
 // One call takes the snapshot and fixes keepRedoExact, so the two cannot disagree.
 export async function prepareUndo(set: ReversalSet, ctx: DbCtx): Promise<PreparedUndo> {
-  const group = await snapshotForRedo(set, ctx)
+  const survivors: SurvivorPayload[] = []
+  const group = await snapshotForRedo(set, ctx, survivors)
+  const restored = new Set(set.redoRows.map((d) => heldKey(d.targetTable, d.targetId)))
+  const takeSurvivors = ({ survivorRewrites }: ReversePlan) => {
+    survivors.length = 0
+    for (const { delta } of survivorRewrites)
+      if (restored.has(heldKey(delta.targetTable, delta.targetId)))
+        survivors.push({ id: delta.id, undoPayload: delta.undoPayload })
+  }
   return {
     group,
     reverse: (extraOps = []) =>
-      reverseAndPruneDeltaRows(set, ctx, { keepRedoExact: true }, extraOps),
+      reverseAndPruneDeltaRows(set, ctx, { keepRedoExact: true }, extraOps, takeSurvivors),
   }
 }
 
@@ -112,7 +139,11 @@ function clearsRedoRestores(set: ReversalSet): RefClear[] {
   )
 }
 
-async function snapshotForRedo(set: ReversalSet, ctx: DbCtx): Promise<RedoGroup> {
+async function snapshotForRedo(
+  set: ReversalSet,
+  ctx: DbCtx,
+  survivors: readonly SurvivorPayload[],
+): Promise<RedoGroup> {
   // Redo restores rows to their tables; it cannot put one back into a delete's payload
   // (generation-pipeline.md → Reverse-replay).
   const heldWrite = set.redoRows.find(
@@ -142,7 +173,7 @@ async function snapshotForRedo(set: ReversalSet, ctx: DbCtx): Promise<RedoGroup>
       refRestores.push({ branchId: set.branchId, row, ref, idBeforeUndo: id, placementBeforeUndo })
     }
   }
-  return new RedoGroup(snapshots, refRestores)
+  return new RedoGroup(snapshots, refRestores, survivors)
 }
 
 // A whole-row snapshot carries no diff, so redo errs dirty on membership alone; the
@@ -165,7 +196,7 @@ export function applyRedo(
   ctx: DbCtx,
   extraOps: readonly SqlOp[] = [],
 ): Promise<void> {
-  const { snapshots, refRestores } = group
+  const { snapshots, refRestores, survivorPayloads } = group
   const keys = deltaLockKeys([
     ...snapshots.map((s) => s.delta),
     ...refRestores.map(({ branchId, row }) => ({
@@ -174,7 +205,9 @@ export function applyRedo(
       targetId: row.id,
     })),
   ])
-  return withKeyLocks(keys, () => applyRedoLocked(snapshots, refRestores, ctx, extraOps))
+  return withKeyLocks(keys, () =>
+    applyRedoLocked(snapshots, refRestores, survivorPayloads, ctx, extraOps),
+  )
 }
 
 // generation-pipeline.md → Reverse-replay: a redo never leaves a ref naming a row that doesn't
@@ -238,6 +271,7 @@ function withoutDeadRefs(
 async function applyRedoLocked(
   snapshots: readonly RedoSnapshot[],
   refRestores: readonly RefRestore[],
+  survivorPayloads: readonly SurvivorPayload[],
   ctx: DbCtx,
   extraOps: readonly SqlOp[],
 ): Promise<void> {
@@ -289,6 +323,9 @@ async function applyRedoLocked(
   // logged into the slot the undo freed, and log order stays write order
   // (data-model.md -> Entry mutability & rollback).
   const deltaOps = restoredDeltas.map((delta) => ctx.db.insert(deltas).values(delta).toSQL())
+  // The survivors sit on snapshot rows, so the row locks above cover them.
+  for (const { id, undoPayload } of survivorPayloads)
+    deltaOps.push(ctx.db.update(deltas).set({ undoPayload }).where(eq(deltas.id, id)).toSQL())
   // Read under the key locks: only the ref goes back, over the column as the undo left it.
   const refPatches: { row: RowRef; branchId: string; columns: Record<string, unknown> }[] = []
   for (const restore of refRestores) {

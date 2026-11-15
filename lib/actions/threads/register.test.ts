@@ -610,13 +610,19 @@ describe('setThreadStatus', () => {
     expect(await undoOf(db, 'act_s')).toEqual({ status: 'pending', resolvedAtEntryId: null })
   })
 
-  it("reverses a take-up to pending with no entry, past a later pass's resolve", async () => {
+  // A later pass's resolve survives; it takes the take-up's prior, so its own undo gives pending.
+  it("keeps a later pass's resolve over a reversed take-up and gives it the pending prior", async () => {
     const { db, ctx } = await setupWithProse()
     await seed(ctx, { ...PASS_THREAD, status: 'pending' })
     await apply(ctx, setStatus('active'), 'act_s')
     await apply(ctx, setStatus('resolved'), 'act_s2')
+    const resolved = await rowFor(db, 'thr_1')
     await reverseReplayDeltas('act_s', ctx)
-    expect(await rowFor(db, 'thr_1')).toMatchObject({ status: 'pending', resolvedAtEntryId: null })
+    expect(await rowFor(db, 'thr_1')).toMatchObject({
+      status: 'resolved',
+      resolvedAtEntryId: resolved.resolvedAtEntryId,
+    })
+    expect(await undoOf(db, 'act_s2')).toEqual({ status: 'pending', resolvedAtEntryId: null })
   })
 
   it('reverses to the status and entry before it', async () => {
@@ -752,7 +758,8 @@ describe("a thread's status and entry ref through a rollback", () => {
   const applyAt = (ctx: Ctx, action: PipelineAction, actionId: string, entryId: string) =>
     applyDeltaAction({ action, actionId, branchId: 'br_1', entryId }, ctx)
 
-  it("restores the pair a user's status change logged, over the ref a later pass wrote", async () => {
+  // The swept user edit yields to the pass logged after it, its status and entry as one field.
+  it("keeps the pair a later pass wrote over a swept user's status change", async () => {
     const { db, ctx } = await setup()
     registerStoryEntries()
     await db.insert(storyEntries).values({
@@ -793,7 +800,7 @@ describe("a thread's status and entry ref through a rollback", () => {
 
     const shown = await shownCounts('br_1', 't2', ctx)
     expect((await rollbackToEntry('br_1', 't2', ctx, { expectedCounts: shown })).status).toBe('ok')
-    expect(await rowFor(db, 'thr_1')).toMatchObject({ status: 'active', resolvedAtEntryId: null })
+    expect(await rowFor(db, 'thr_1')).toMatchObject({ status: 'resolved', resolvedAtEntryId: 't1' })
   })
 })
 

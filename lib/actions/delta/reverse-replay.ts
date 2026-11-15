@@ -10,15 +10,27 @@ import {
   rowsPerInsert,
 } from '@/lib/db'
 import { isJsonObject } from '@/lib/json-object'
-import { withPlacement, type PlacePlacement } from '@/lib/world'
+import { withPlacement } from '@/lib/world'
 
 import type { DbCtx } from '../types'
 import { capturedChildren, vecSweepIdsOps, vecTableLister } from './delete-cascade'
-import { applyUndoPayload, isPayloadMetaKey, pruneUndoPartial } from './delta-encoding'
+import { applyUndoPayload, deepEqual } from './delta-encoding'
 import { deletedRow, heldKey, type HeldRow } from './held-rows'
 import { withKeyLocks } from './key-lock'
 import { liveLinkFilter, type LiveLinkFilter } from './live-link-filter'
 import type { RefPath } from './live-refs'
+import {
+  editPayloadAt,
+  loadChains,
+  planOwnWrite,
+  undoneList,
+  undonePlacement,
+  valueAt,
+  writesRow,
+  type OwnWriteUndo,
+  type ReversalChains,
+  type SurvivorEdit,
+} from './own-write'
 import { resolveByTable, whereForDelta, type StorePatch, type TableEntry } from './registry'
 import { DeltaReplayError, ReversalIntegrityError, type IntegrityRefusal } from './replay-errors'
 import {
@@ -29,13 +41,7 @@ import {
   type ReversalSet,
   type RowRef,
 } from './row-closure'
-import {
-  PLACEMENT_PATHS,
-  writesOutliving,
-  wroteColumn,
-  wroteField,
-  wrotePath,
-} from './user-precedence'
+import { PLACEMENT_PATHS, wroteColumn } from './user-precedence'
 
 export {
   DeltaReplayError,
@@ -77,7 +83,14 @@ export type ReversePlan = {
    */
   pruneOps: SqlOp[]
   patches: PatchEmission[]
+  /**
+   * Each surviving later delta whose prior value the reversal rewrites, as logged before it, with
+   * the payload it writes (generation-pipeline.md → Reverse-replay).
+   */
+  survivorRewrites: SurvivorRewrite[]
 }
+
+export type SurvivorRewrite = { readonly delta: Delta; readonly payload: Record<string, unknown> }
 
 /**
  * The reversal of a closed set, unexecuted, for a caller committing it inside its own transaction.
@@ -104,6 +117,7 @@ export async function buildReverseAndPrunePlan(
     ops: built.ops,
     pruneOps: [...set.rows, ...built.prunedHolders, ...built.strandedWrites].map(reownOrPrune),
     patches: built.patches,
+    survivorRewrites: built.survivorRewrites,
   }
 }
 
@@ -173,6 +187,7 @@ type BuiltUndo = {
   prunedHolders: Delta[]
   /** Writes outside the set to a row-keeping row the reversal leaves absent. */
   strandedWrites: Delta[]
+  survivorRewrites: SurvivorRewrite[]
 }
 
 // A null partial on a schema-backed column means the column itself was null pre-change — no
@@ -195,14 +210,6 @@ function undoneColumn(entry: TableEntry, col: string, partial: unknown, current:
   if (!isJsonObject(partial) || !isJsonObject(undone)) return undone
   if (!PLACEMENT_PATHS.some((key) => Object.hasOwn(partial, key))) return undone
   return withPlacement(undone as LocationState, undonePlacement(partial))
-}
-
-// The encoder records an absent mark as null, so only `true` restores unplaced. A partial without
-// the parent changed the mark alone, which sits beside a null parent, so the place was top-level.
-function undonePlacement(partial: Record<string, unknown>): PlacePlacement {
-  if (partial.unplaced === true) return { kind: 'unplaced' }
-  const parentId = partial.parent_location_id
-  return typeof parentId === 'string' ? { kind: 'under', parentId } : { kind: 'top' }
 }
 
 function rebuiltPayload(holder: Delta, copies: readonly HeldCopy[]): Record<string, unknown> {
@@ -349,6 +356,9 @@ type UndoWalk = {
   readonly reowned: Map<string, string>
   // Vectors carry no deltas, so the closure can't reach them (retrieval.md → Compute lifecycle).
   readonly swept: Map<string, { table: string; branchId: string; ids: string[] }>
+  readonly chains: ReversalChains
+  /** Survivors' payloads as the walk's rewrites leave them, by delta id. */
+  readonly survivors: Map<string, SurvivorRewrite>
 }
 
 /** A row the plan writes. */
@@ -557,75 +567,62 @@ function undoDelete(walk: UndoWalk, target: UndoTarget, liveLinks: LiveLinkFilte
   }
 }
 
-// A close's normalization rewrites a record's keys, and a later write of the record logs only
-// the keys it saw: restored key by key, an old spelling would come back beside the user's record.
-function yieldsStackablesWhole(
+// The undone lists and count land on the row as it stands, the scalar partial through its schema.
+function restoredColumns(
   entry: TableEntry,
-  delta: Delta,
-  laterWrites: readonly Delta[],
-): boolean {
-  return (
-    entry.table === 'entities' &&
-    delta.source === 'chapter_close' &&
-    wrotePath(laterWrites, 'state', ['stackables'])
-  )
-}
-
-// A schema-backed column yields sub-field by sub-field, as its undo payload records them; the
-// column groups `wroteField` counts as one field yield together, and so does a close's record.
-function restorablePayload(
-  entry: TableEntry,
-  payload: Record<string, unknown>,
-  laterWrites: readonly Delta[],
-  delta: Delta,
+  undo: OwnWriteUndo,
+  row: Record<string, unknown>,
 ): Record<string, unknown> {
-  const stackablesWhole = yieldsStackablesWhole(entry, delta, laterWrites)
-  const restorable: Record<string, unknown> = {}
-  for (const [col, partial] of Object.entries(payload)) {
-    if (isPayloadMetaKey(col)) continue
-    if (!Object.hasOwn(entry.columnSchemas, col)) {
-      if (!wroteField(laterWrites, entry.table, col, [])) restorable[col] = partial
+  const partials: Record<string, unknown> = { ...undo.restorable }
+  const restored: Record<string, unknown> = {}
+  for (const listUndo of undo.lists) {
+    const { column, path = [] } = listUndo.list
+    const value = undoneList(valueAt(row, column, path), listUndo)
+    if (path.length === 0) {
+      restored[column] = value
       continue
     }
-    const kept = pruneUndoPartial(
-      entry.columnSchemas[col],
-      partial,
-      (path) =>
-        (stackablesWhole && col === 'state' && path[0] === 'stackables') ||
-        wroteField(laterWrites, entry.table, col, path),
-    )
-    if (kept !== undefined) restorable[col] = kept
+    // A column restored whole to null takes its lists with it.
+    if (partials[column] === null) continue
+    const partial = isJsonObject(partials[column]) ? { ...partials[column] } : {}
+    if (editPayloadAt({ [column]: partial }, column, path, () => value)) partials[column] = partial
   }
-  return restorable
+  for (const [col, partial] of Object.entries(partials))
+    restored[col] = undoneColumn(entry, col, partial, row[col])
+  if (undo.count) {
+    const current = row[undo.count.column]
+    if (typeof current === 'number')
+      restored[undo.count.column] = Math.max(0, current + undo.count.shift)
+  }
+  return restored
 }
 
-async function undoUpdate(
-  walk: UndoWalk,
-  target: UndoTarget,
-  laterWrites: readonly Delta[],
-): Promise<void> {
+function recordEdits(walk: UndoWalk, edits: readonly SurvivorEdit[]): void {
+  for (const { survivor, column, path, edit } of edits) {
+    const known = walk.survivors.get(survivor.id)
+    const rewrite = known ?? {
+      delta: survivor,
+      payload: JSON.parse(JSON.stringify(survivor.undoPayload ?? {})) as Record<string, unknown>,
+    }
+    if (editPayloadAt(rewrite.payload, column, path, edit) && !known)
+      walk.survivors.set(survivor.id, rewrite)
+  }
+}
+
+async function undoUpdate(walk: UndoWalk, target: UndoTarget): Promise<void> {
   const { delta, entry } = target
-  const payload = restorablePayload(
-    entry,
-    (delta.undoPayload ?? {}) as Record<string, unknown>,
-    laterWrites,
-    delta,
-  )
-  const columns = Object.keys(payload)
-  if (columns.length === 0) return
+  const undo = await planOwnWrite(walk.chains, entry, delta)
+  recordEdits(walk, undo.edits)
+  if (!writesRow(undo)) return
   const copy = await heldCopyOf(walk, target)
   if (copy) {
-    undoHeldUpdate(entry, copy, payload, columns)
+    undoHeldUpdate(entry, copy, undo)
     return
   }
   const state = await rowStateOf(walk, target)
   const { row } = state
-  const restored: Record<string, unknown> = {}
-  for (const col of columns) {
-    const value = undoneColumn(entry, col, payload[col], row[col])
-    restored[col] = value
-    row[col] = value // thread into the working copy for later-in-DESC undos
-  }
+  const restored = restoredColumns(entry, undo, row)
+  Object.assign(row, restored) // thread into the working copy for later-in-DESC undos
   const keepsNone = keepsNothing(entry, row)
   if (state.presence === 'tombstoned') {
     if (keepsNone) return
@@ -637,14 +634,9 @@ async function undoUpdate(
   } else emitUpdate(walk, target, restored, row)
 }
 
-function undoHeldUpdate(
-  entry: TableEntry,
-  copy: HeldCopy,
-  payload: Record<string, unknown>,
-  columns: readonly string[],
-): void {
+function undoHeldUpdate(entry: TableEntry, copy: HeldCopy, undo: OwnWriteUndo): void {
   if (copy.removedByCreate) return
-  for (const col of columns) copy.row[col] = undoneColumn(entry, col, payload[col], copy.row[col])
+  Object.assign(copy.row, restoredColumns(entry, undo, copy.row))
   copy.removed = keepsNothing(entry, copy.row)
 }
 
@@ -670,8 +662,8 @@ async function clearRef(walk: UndoWalk, { row, ref }: RefClear): Promise<void> {
   if (copy && !copy.removed) copy.row[ref.column] = cleared(copy.row[ref.column])
 }
 
-// Machine undos yield to later user edits; a chapter delete's field restores yield to any later
-// write but a retrieval bump (generation-pipeline.md → Reverse-replay).
+// Every undo yields to a surviving later write and rewrites what survives it; a machine create
+// keeps its row only for the user's (generation-pipeline.md → Reverse-replay).
 async function buildUndoOps(
   set: ReversalSet,
   ctx: DbCtx,
@@ -687,23 +679,17 @@ async function buildUndoOps(
     patches: [],
     reowned: new Map(),
     swept: new Map(),
+    chains: await loadChains(set, ctx),
+    survivors: new Map(),
   }
   const listVecTables = vecTableLister(ctx)
-  // A create keeps its row only for the user's writes, whatever the set's mode.
-  const laterUserEdits = await writesOutliving(
-    ctx,
-    set.rows,
-    set.yieldTo === 'user' ? readsUserEdits : isRowKeepingCreate,
-    'user',
-  )
-  const fieldEdits = set.yieldTo === 'user' ? laterUserEdits : await fieldEditsOutliving(set, ctx)
   const liveLinks = await liveLinkFilter(set.rows, ctx)
 
   for (const delta of set.rows) {
     const target = undoTargetOf(delta)
-    if (delta.op === 'create') await undoCreate(walk, target, laterUserEdits.get(delta.id) ?? [])
+    if (delta.op === 'create') await undoCreate(walk, target, laterUserEdits(walk, delta))
     else if (delta.op === 'delete') undoDelete(walk, target, liveLinks)
-    else await undoUpdate(walk, target, fieldEdits.get(delta.id) ?? [])
+    else await undoUpdate(walk, target)
   }
   // After the walk, so a clear lands on the row as every undo of it leaves it.
   for (const clear of set.refClears) await clearRef(walk, clear)
@@ -718,8 +704,14 @@ async function buildUndoOps(
       `${stranded.targetTable}:${stranded.targetId} ends absent; pruning ${stranded.id} would leave redo inexact`,
       set.rows[0]?.actionId ?? 'reversal',
     )
+  const survivorRewrites = settledSurvivors(walk, strandedWrites)
+  for (const { delta, payload } of survivorRewrites) rewritten.set(delta.id, payload)
   await refuseWriteBack(ctx, set, pruned, rewritten, strandedWrites)
   walk.ops.push(...payloadOps)
+  for (const { delta, payload } of survivorRewrites)
+    walk.ops.push(
+      ctx.db.update(deltas).set({ undoPayload: payload }).where(eq(deltas.id, delta.id)).toSQL(),
+    )
 
   // One vec0 scan per family table, not per row: each statement scans the whole table.
   for (const { table, branchId, ids } of walk.swept.values())
@@ -731,29 +723,34 @@ async function buildUndoOps(
     reowned: walk.reowned,
     prunedHolders: pruned,
     strandedWrites,
+    survivorRewrites,
   }
 }
 
-function fieldEditsOutliving(set: ReversalSet, ctx: DbCtx): Promise<ReadonlyMap<string, Delta[]>> {
-  return writesOutliving(ctx, set.rows, (d) => d.op === 'update', set.yieldTo)
+// The closure takes every other write to a reversed create's row, so these are the ones that kept it.
+function laterUserEdits(walk: UndoWalk, create: Delta): Delta[] {
+  return walk.chains.survivors(create).filter((d) => d.source === 'user_edit')
+}
+
+// A survivor this reversal prunes takes no rewrite; one left as logged writes nothing.
+function settledSurvivors(walk: UndoWalk, stranded: readonly Delta[]): SurvivorRewrite[] {
+  const pruned = new Set(stranded.map((d) => d.id))
+  return [...walk.survivors.values()].filter(
+    ({ delta, payload }) => !pruned.has(delta.id) && !deepEqual(payload, delta.undoPayload ?? {}),
+  )
 }
 
 /**
- * The ids of the set's `update` deltas whose undo restores some field under the set's yield mode,
- * read as the walk reads them; one a later write replaced in every field restores nothing.
+ * The ids of the set's `update` deltas whose undo restores some field, list term or count, read as
+ * the walk reads them; one a later write replaced in every part restores nothing.
  */
 export async function restoringUpdates(set: ReversalSet, ctx: DbCtx): Promise<ReadonlySet<string>> {
-  const fieldEdits = await fieldEditsOutliving(set, ctx)
+  const chains = await loadChains(set, ctx)
   const restoring = new Set<string>()
   for (const delta of set.rows) {
     if (delta.op !== 'update') continue
-    const payload = restorablePayload(
-      undoTargetOf(delta).entry,
-      (delta.undoPayload ?? {}) as Record<string, unknown>,
-      fieldEdits.get(delta.id) ?? [],
-      delta,
-    )
-    if (Object.keys(payload).length > 0) restoring.add(delta.id)
+    if (writesRow(await planOwnWrite(chains, undoTargetOf(delta).entry, delta)))
+      restoring.add(delta.id)
   }
   return restoring
 }
@@ -763,20 +760,13 @@ function oldestKeepingWrite(edits: readonly Delta[], columns: readonly string[])
   return keeping.reduce((oldest, e) => (e.logPosition < oldest.logPosition ? e : oldest))
 }
 
-// A delete's undo re-inserts the whole row whatever came after, so it reads no user edits.
-function readsUserEdits(delta: Delta): boolean {
-  return delta.op === 'update' || isRowKeepingCreate(delta)
-}
-
-function isRowKeepingCreate(delta: Delta): boolean {
-  return delta.op === 'create' && resolveByTable(delta.targetTable)?.rowKeepingColumns != null
-}
-
 export async function reverseAndPruneDeltaRows(
   set: ReversalSet,
   ctx: DbCtx,
   options: ReversalOptions,
   extraOps: readonly SqlOp[] = [],
+  /** Hears the plan before its transaction runs, as a redo snapshot reads its rewrites. */
+  onPlan: (plan: ReversePlan) => void = () => {},
 ): Promise<number> {
   if (set.rows.length === 0 && extraOps.length === 0) return 0
   const actionId = set.rows[0]?.actionId ?? 'rollback'
@@ -785,6 +775,7 @@ export async function reverseAndPruneDeltaRows(
     try {
       const plan = await buildReverseAndPrunePlan(set, ctx, options)
       patches = plan.patches
+      onPlan(plan)
       await ctx.runInTransaction([...plan.ops, ...plan.pruneOps, ...extraOps])
     } catch (e) {
       if (e instanceof ReversalIntegrityError) throw e

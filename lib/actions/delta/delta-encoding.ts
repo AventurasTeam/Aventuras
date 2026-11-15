@@ -64,6 +64,16 @@ export function isPayloadMetaKey(key: string): boolean {
   return key.startsWith(PAYLOAD_META_PREFIX)
 }
 
+/** The paths of every array an object schema holds, nested objects included, records not. */
+export function schemaArrayPaths(schema: ZodType, path: readonly string[] = []): string[][] {
+  const node = classify(schema)
+  if (node.kind === 'array') return [[...path]]
+  if (node.kind !== 'object' || !node.shape) return []
+  return Object.entries(node.shape).flatMap(([key, child]) =>
+    schemaArrayPaths(child, [...path, key]),
+  )
+}
+
 // FORWARD: produce the nested-partial of changed paths carrying pre-change values.
 export function computeUndoPayload(
   schema: ZodType,
