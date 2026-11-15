@@ -14,9 +14,10 @@
   of the round-trip suite). Through them,
   [Slice 5.8](./08-prose-tasks.md) and
   [Slice 5.9](./09-chapter-wide-tasks.md), whose tasks a re-run runs again.
-  And the undo-own-write substrate, a plan-mode followup that lands before
-  this slice is planned: one yield rule for every reversal, with no
-  `yieldTo` mode, and the survivor rewrites the journal captures
+  And the undo-own-write substrate, built by a plan-mode followup (PR #745):
+  one yield rule for every reversal, with no `yieldTo` mode, and the
+  survivor rewrites the journal captures, which the reversal's plan lists
+  as `survivorRewrites`
   ([`generation-pipeline.md → Reverse-replay`](../../../../generation-pipeline.md#reverse-replay),
   "An undo reverts only its own write";
   [C13](../milestone.md#c13--chapter-delete), "Later writes win").
@@ -1083,13 +1084,15 @@ change amends the scope above.
 - **What do this slice's re-run arms meet from 5.9?** Two things 5.9
   shipped. First, the later-bump case in
   `lib/pipeline/__tests__/close-round-trip.test.ts` overrides `armExpect`
-  and `armLog` for its rollback arms, pinning a count bump's undo by
-  assignment. The undo-own-write substrate this slice waits on drops
-  those overrides, since a count is then a counter
-  ([`generation-pipeline.md → Reverse-replay`](../../../../generation-pipeline.md#reverse-replay)):
-  a rollback past E leaves the reset's 0. So the re-run arms on that case
-  expect canon's counter outcome, with no overrides pinning assignment,
-  and the test's key-list pins widen with them. Second, the phase-writes
+  and `armLog` for its rollback arms. The undo-own-write substrate (PR
+  #745) made a count a counter
+  ([`generation-pipeline.md → Reverse-replay`](../../../../generation-pipeline.md#reverse-replay)),
+  so a rollback past E leaves the reset's 0 and that arm's state override
+  went. Its `armLog` override stays, since the bump's undo lowers the
+  held copy's count and the merge's prior count, and the rollback to E
+  keeps its own, since the turns' bumps go with it. So the re-run arms on
+  that case expect canon's counter outcome, and the test's key-list pins
+  widen with them. Second, the phase-writes
   rule in
   [`generation-pipeline.md → Writes`](../../../../generation-pipeline.md#writes)
   ("Never: delta-loggable writes outside those two events, delta-log

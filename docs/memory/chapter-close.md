@@ -860,7 +860,10 @@ conservative bias as the sub-jobs above:
   is free: the row the call flags (its `id`), or, when that row's live flag names
   a third row, its partner. It is refused when both rows' live flags
   name other rows or the user already resolved the pair, or each close
-  could ask the same question. The agent never merges.
+  could ask the same question. A user edit that cleared the pair's flag
+  resolved it, and records the partner under `$resolvedPair`, which a
+  reversal rewriting the edit's prior flag leaves standing
+  ([`data-model.md → Entry mutability & rollback`](../data-model.md#entry-mutability--rollback)). The agent never merges.
 
 ## Phase 4 — lifecycle review
 
