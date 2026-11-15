@@ -69,10 +69,11 @@
     defaultImageSpec,
     isSizeString,
     normalizeImageDataUrl,
+    sniffImageMime,
     type ImageSpec,
   } from '#lib/utils/image.ts'
-  import { cn } from '#lib/utils/cn.ts'
   import { IMAGE_OUTPUT_FORMATS, type ImageOutputFormat } from '#lib/utils/imageOutput.ts'
+  import { cn } from '#lib/utils/cn.ts'
   import { describeLoadError } from '#lib/utils/error.ts'
   import { parseHttpUrl } from '#lib/utils/url.ts'
 
@@ -154,9 +155,9 @@
   let profileMinPixels = $state<number | null>(null)
   let profileSizesText = $state('')
   let profileReferences = $state<'' | 'on' | 'off'>('')
-  let capabilitiesOpen = $state(false)
   let profileOutputFormats = $state<ImageOutputFormat[]>([])
   let profileOutputCompression = $state(false)
+  let capabilitiesOpen = $state(false)
   const markedClass = 'ring-2 ring-amber-500/60'
   const referencesItems = [
     { value: '', label: 'From the provider' },
@@ -292,6 +293,9 @@
   let testSize = $state<ImageSpec>(defaultImageSpec())
   let isGeneratingTestImage = $state(false)
   let testImageResult = $state<string | null>(null)
+  const testImageMime = $derived(
+    testImageResult ? sniffImageMime(testImageResult.replace(/^data:[^,]*;base64,/, '')) : null,
+  )
   let testError = $state<string | null>(null)
 
   $effect(() => {
@@ -556,32 +560,32 @@
     const sizes = parsedSizes.filter(isSizeString)
     if (sizes.length > 0) override.sizes = sizes
     if (profileReferences) override.references = profileReferences === 'on'
-    return Object.keys(override).length > 0 ? override : undefined
-  })
-
-  function loadCapabilityOverride(override: ImageCapabilityOverride | undefined) {
     if (profileOutputFormats.length > 0) {
       override.outputFormats = IMAGE_OUTPUT_FORMATS.filter((f) => profileOutputFormats.includes(f))
       if (profileOutputCompression) override.outputCompression = true
     }
+    return Object.keys(override).length > 0 ? override : undefined
+  })
+
+  function loadCapabilityOverride(override: ImageCapabilityOverride | undefined) {
     profileMinPixels = override?.minPixels ?? null
     profileSizesText = override?.sizes?.join('\n') ?? ''
     profileReferences = override?.references === undefined ? '' : override.references ? 'on' : 'off'
+    profileOutputFormats = override?.outputFormats?.slice() ?? []
+    profileOutputCompression = override?.outputCompression === true
     capabilitiesOpen = !!override
   }
 
-  // What the provider published for the current model, once the loaded list is for these inputs.
-    profileOutputFormats = override?.outputFormats?.slice() ?? []
-    profileOutputCompression = override?.outputCompression === true
-  const publishedCapabilities = $derived(
-    modelsSettled ? findListedModel(profileModels, profileModel) : undefined,
-  )
   function toggleOutputFormat(format: ImageOutputFormat, on: boolean) {
     profileOutputFormats = on
       ? [...profileOutputFormats, format]
       : profileOutputFormats.filter((f) => f !== format)
   }
 
+  // What the provider published for the current model, once the loaded list is for these inputs.
+  const publishedCapabilities = $derived(
+    modelsSettled ? findListedModel(profileModels, profileModel) : undefined,
+  )
   const overridden = $derived(overriddenFields(capabilityOverride, publishedCapabilities))
   const conflicts = $derived(overrideConflicts(capabilityOverride, publishedCapabilities))
 
@@ -615,12 +619,12 @@
         profileMinPixels,
         profileSizesText,
         profileReferences,
+        profileOutputFormats,
+        profileOutputCompression,
         profileSampler,
         profileScheduler,
         profileMode,
         profileCfg,
-        profileOutputFormats,
-        profileOutputCompression,
         profileSteps,
         profilePositivePrompt,
         profileNegativePrompt,
@@ -1254,6 +1258,9 @@
             {#if testImageResult}
               <div class="mt-4 space-y-2">
                 <Label>Result Image</Label>
+                <p class="text-muted-foreground text-xs">
+                  Format received: {testImageMime ?? 'unknown'}
+                </p>
                 <div class="overflow-hidden rounded-lg border bg-black/5">
                   <img
                     src={normalizeImageDataUrl(testImageResult) ?? ''}
@@ -1469,13 +1476,6 @@
                 </p>
               {/each}
             </div>
-          </Collapsible.Content>
-        </Collapsible.Root>
-      {/if}
-    {/if}
-    {#if profileProviderType === 'a1111'}
-      <div class="space-y-2">
-        {@render modelSelectContent()}
             <div class="space-y-2">
               <Label>Output formats</Label>
               <div class="flex flex-wrap gap-x-4 gap-y-2">
@@ -1509,6 +1509,13 @@
                 no format is sent.
               </p>
             </div>
+          </Collapsible.Content>
+        </Collapsible.Root>
+      {/if}
+    {/if}
+    {#if profileProviderType === 'a1111'}
+      <div class="space-y-2">
+        {@render modelSelectContent()}
       </div>
       <div class="grid grid-cols-2 gap-4 pt-2">
         <div class="space-y-2">
