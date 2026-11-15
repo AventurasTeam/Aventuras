@@ -59,6 +59,7 @@ import type {
 } from '#lib/types/index.ts'
 import { findLiveCharacter, type BranchScope } from '#lib/utils/branchScope.ts'
 import { expectedPixels, type ImageSpec } from '#lib/utils/image.ts'
+import type { ImageOutputPreference } from '#lib/utils/imageOutput.ts'
 import type { StreamChunk } from './core/types'
 import { serviceFactory } from './core/factory'
 import {
@@ -171,6 +172,9 @@ export interface ImageGenerationServiceSettings {
   backgroundProfileId: string | null // API profile for background image generation
   backgroundSize: ImageSpec // Background image size
   backgroundBlur: number // Background blur amount in pixels (default: 0)
+
+  // Output format, in order of preference; empty leaves each provider on its own default
+  outputFormats: ImageOutputPreference[]
 }
 
 // Re-export ImageGenerationContext type for backwards compatibility

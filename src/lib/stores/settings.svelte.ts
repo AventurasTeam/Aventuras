@@ -692,6 +692,7 @@ export function getDefaultImageGenerationSettings(): ImageGenerationServiceSetti
     backgroundProfileId: null,
     backgroundSize: { orientation: 'landscape', size: 'small' },
     backgroundBlur: 2, // Default blur for atmosphere
+    outputFormats: [],
   }
 }
 
@@ -1840,7 +1841,7 @@ class SettingsStore {
                 ...loaded.worldStateInjection,
               }),
             ),
-            imageGeneration: migrateImageGeneration({
+            imageGeneration: migrateImageGeneration<ImageGenerationServiceSettings>({
               ...defaults.imageGeneration,
               ...loaded.imageGeneration,
             }),
