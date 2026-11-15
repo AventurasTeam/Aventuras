@@ -10,6 +10,7 @@ import { createOpenAI } from '@ai-sdk/openai'
 import * as z from 'zod'
 import type { ImageModelCapabilities } from '#lib/types/index.ts'
 import { pickRequestSize } from '#lib/utils/image.ts'
+import { IMAGE_OUTPUT_FORMATS, LOSSY_IMAGE_OUTPUT_FORMATS } from '#lib/utils/imageOutput.ts'
 import { endpoint } from '#lib/utils/url.ts'
 import { resolveBaseUrl } from './baseUrls'
 import type {
@@ -39,18 +40,26 @@ const imageModel = (supportedResolutions?: readonly string[]): ImageModelCapabil
   ...(supportedResolutions && { supportedResolutions: [...supportedResolutions] }),
 })
 
+// The Images API reference documents `output_format` for the GPT image models, which include
+// `chatgpt-image-latest`.
+const gptImageModel = (supportedResolutions?: readonly string[]): ImageModelCapabilities => ({
+  ...imageModel(supportedResolutions),
+  outputFormats: [...IMAGE_OUTPUT_FORMATS],
+  compressionFormats: [...LOSSY_IMAGE_OUTPUT_FORMATS],
+})
+
 // From the image generation guide. `gpt-image-2` and `gpt-image-2.5-*` take any `WxH` within the
 // pixel bounds, so they list no sizes; the other models take the standard three. `gpt-image-2.6-*`
 // is free-form per the image prompting guide, though the API reference's `size` text omits it.
 const OPENAI_IMAGE_MODELS = new Map<string, ImageModelCapabilities>([
-  ['gpt-image-2', imageModel()],
-  ['gpt-image-2.5-sunburst', imageModel()],
-  ['gpt-image-2.5-flare', imageModel()],
-  ['gpt-image-2.6-sunburst', imageModel()],
-  ['gpt-image-2.6-flare', imageModel()],
-  ['gpt-image-1.5', imageModel(STANDARD_SIZES)],
-  ['gpt-image-1-mini', imageModel(STANDARD_SIZES)],
-  ['chatgpt-image-latest', imageModel(STANDARD_SIZES)],
+  ['gpt-image-2', gptImageModel()],
+  ['gpt-image-2.5-sunburst', gptImageModel()],
+  ['gpt-image-2.5-flare', gptImageModel()],
+  ['gpt-image-2.6-sunburst', gptImageModel()],
+  ['gpt-image-2.6-flare', gptImageModel()],
+  ['gpt-image-1.5', gptImageModel(STANDARD_SIZES)],
+  ['gpt-image-1-mini', gptImageModel(STANDARD_SIZES)],
+  ['chatgpt-image-latest', gptImageModel(STANDARD_SIZES)],
 ])
 
 /** A dated snapshot without an entry of its own is its undated model. */
@@ -81,12 +90,18 @@ export function createOpenAIProvider(config: ImageProviderConfig): ImageProvider
     name: 'OpenAI',
 
     async generate(options: ImageGenerateOptions): Promise<ImageGenerateResult> {
-      const { model, prompt, spec, modelInfo, referenceImages, signal } = options
+      const { model, prompt, spec, modelInfo, referenceImages, output, signal } = options
       return generateSdkImage({
         model: openai.image(model),
         prompt,
         referenceImages,
         size: pickRequestSize(spec, modelInfo?.supportedResolutions, MIN_PIXELS),
+        providerOptions: output && {
+          openai: {
+            outputFormat: output.format,
+            ...(output.compression !== undefined && { outputCompression: output.compression }),
+          },
+        },
         signal,
       })
     },

@@ -268,4 +268,65 @@ describe('OpenAI model capabilities', () => {
     expect(openaiModelCapabilities('gpt-4o')).toBeUndefined()
     expect(openaiModelCapabilities('dall-e-3')).toBeUndefined()
   })
+
+  it('lists the output formats of the gpt-image models, with compression for the lossy ones', () => {
+    for (const model of [
+      'gpt-image-2',
+      'gpt-image-1.5',
+      'gpt-image-1-mini',
+      'chatgpt-image-latest',
+    ]) {
+      expect(openaiModelCapabilities(model)).toMatchObject({
+        outputFormats: ['png', 'jpeg', 'webp'],
+        compressionFormats: ['jpeg', 'webp'],
+      })
+    }
+  })
+
+  it('lists no output formats for a model the table does not know', () => {
+    expect(openaiModelCapabilities('gpt-image-9')?.outputFormats).toBeUndefined()
+  })
+
+  it('reads a dated snapshot as its undated model', () => {
+    expect(openaiModelCapabilities('gpt-image-1.5-2025-12-16')?.outputFormats).toEqual([
+      'png',
+      'jpeg',
+      'webp',
+    ])
+  })
+})
+
+describe('OpenAI output format', () => {
+  it('sends the format and compression in a JSON generation', async () => {
+    await createOpenAIProvider({ apiKey: 'k' }).generate(
+      options({ output: { format: 'webp', compression: 80 } }),
+    )
+
+    expect(lastJson()).toMatchObject({ output_format: 'webp', output_compression: 80 })
+  })
+
+  it('sends them in an edit form too', async () => {
+    await createOpenAIProvider({ apiKey: 'k' }).generate(
+      options({ referenceImages: [PNG], output: { format: 'jpeg', compression: 55 } }),
+    )
+
+    const form = lastForm()
+    expect(lastCall().url).toBe('https://api.openai.com/v1/images/edits')
+    expect(form.get('output_format')).toBe('jpeg')
+    expect(form.get('output_compression')).toBe('55')
+  })
+
+  it('sends a format alone when no compression is chosen', async () => {
+    await createOpenAIProvider({ apiKey: 'k' }).generate(options({ output: { format: 'png' } }))
+
+    expect(lastJson().output_format).toBe('png')
+    expect(lastJson()).not.toHaveProperty('output_compression')
+  })
+
+  it('sends neither without a chosen output', async () => {
+    await createOpenAIProvider({ apiKey: 'k' }).generate(options())
+
+    expect(lastJson()).not.toHaveProperty('output_format')
+    expect(lastJson()).not.toHaveProperty('output_compression')
+  })
 })
