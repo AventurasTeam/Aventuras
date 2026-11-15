@@ -60,10 +60,3 @@ slice-planning gate forces its resolution before that slice is planned.
   to get. Held rather than routed in the 2026-09-09 triage pass, which
   did not re-run the suite serially — the evidence above is still as of
   `edce17b8`.
-
-- **The reader's in-place prose edit has no leave guard.**
-  `components/reader/reader-surface.tsx:~330` (`editingId`, `editDraft`):
-  any navigation that pops the reader drops the draft, including the
-  reader's own Return, and a review-row press from the reader adds one
-  more path. [`save-sessions.md → Where applied`](../ui/patterns/save-sessions.md#where-applied)
-  doesn't classify it. Raised in 5.11's review.

@@ -383,6 +383,19 @@ for the placement rule.
   down. Both from 5.3's slice review, 2026-11-03, in stories, not on a
   device. Routed from triage 2026-11-05.
 
+- **The reader's in-place prose edit has no leave guard.**
+  `components/reader/reader-surface.tsx:~330` (`editingId`, `editDraft`):
+  any navigation that pops the reader drops the draft, including the
+  reader's own Return, and a review-row press from the reader adds one
+  more path. [`save-sessions.md → Where applied`](./ui/patterns/save-sessions.md#where-applied)
+  doesn't classify it. Raised in 5.11's review. The default, developer
+  decision 2026-11-15: a dirty inline editor takes the
+  [navigate-away guard](./ui/patterns/save-sessions.md#navigate-away-guard--global-intercept)
+  with `UnsavedChangesDialog`, its Save running the editor's
+  `commitDraft`, on Return and every other leave, and `save-sessions.md`
+  classifies it. The reader's world-time and scene edit sheets already
+  guard their own dismiss.
+
 ## Tuning and play testing
 
 v1 work held for the end of the cycle, once every base system is
