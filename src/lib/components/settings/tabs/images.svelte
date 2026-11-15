@@ -72,6 +72,7 @@
     type ImageSpec,
   } from '#lib/utils/image.ts'
   import { cn } from '#lib/utils/cn.ts'
+  import { IMAGE_OUTPUT_FORMATS, type ImageOutputFormat } from '#lib/utils/imageOutput.ts'
   import { describeLoadError } from '#lib/utils/error.ts'
   import { parseHttpUrl } from '#lib/utils/url.ts'
 
@@ -154,6 +155,8 @@
   let profileSizesText = $state('')
   let profileReferences = $state<'' | 'on' | 'off'>('')
   let capabilitiesOpen = $state(false)
+  let profileOutputFormats = $state<ImageOutputFormat[]>([])
+  let profileOutputCompression = $state(false)
   const markedClass = 'ring-2 ring-amber-500/60'
   const referencesItems = [
     { value: '', label: 'From the provider' },
@@ -557,6 +560,10 @@
   })
 
   function loadCapabilityOverride(override: ImageCapabilityOverride | undefined) {
+    if (profileOutputFormats.length > 0) {
+      override.outputFormats = IMAGE_OUTPUT_FORMATS.filter((f) => profileOutputFormats.includes(f))
+      if (profileOutputCompression) override.outputCompression = true
+    }
     profileMinPixels = override?.minPixels ?? null
     profileSizesText = override?.sizes?.join('\n') ?? ''
     profileReferences = override?.references === undefined ? '' : override.references ? 'on' : 'off'
@@ -564,9 +571,17 @@
   }
 
   // What the provider published for the current model, once the loaded list is for these inputs.
+    profileOutputFormats = override?.outputFormats?.slice() ?? []
+    profileOutputCompression = override?.outputCompression === true
   const publishedCapabilities = $derived(
     modelsSettled ? findListedModel(profileModels, profileModel) : undefined,
   )
+  function toggleOutputFormat(format: ImageOutputFormat, on: boolean) {
+    profileOutputFormats = on
+      ? [...profileOutputFormats, format]
+      : profileOutputFormats.filter((f) => f !== format)
+  }
+
   const overridden = $derived(overriddenFields(capabilityOverride, publishedCapabilities))
   const conflicts = $derived(overrideConflicts(capabilityOverride, publishedCapabilities))
 
@@ -604,6 +619,8 @@
         profileScheduler,
         profileMode,
         profileCfg,
+        profileOutputFormats,
+        profileOutputCompression,
         profileSteps,
         profilePositivePrompt,
         profileNegativePrompt,
@@ -1459,6 +1476,39 @@
     {#if profileProviderType === 'a1111'}
       <div class="space-y-2">
         {@render modelSelectContent()}
+            <div class="space-y-2">
+              <Label>Output formats</Label>
+              <div class="flex flex-wrap gap-x-4 gap-y-2">
+                {#each IMAGE_OUTPUT_FORMATS as format, index (index)}
+                  <div class="flex items-center gap-2">
+                    <Checkbox
+                      id="override-format-{format}"
+                      checked={profileOutputFormats.includes(format)}
+                      onCheckedChange={(checked) => toggleOutputFormat(format, checked)}
+                    />
+                    <Label for="override-format-{format}" class="font-normal uppercase">
+                      {format}
+                    </Label>
+                  </div>
+                {/each}
+              </div>
+              <div class="flex items-center gap-2">
+                <Checkbox
+                  id="override-output-compression"
+                  checked={profileOutputCompression}
+                  disabled={profileOutputFormats.length === 0}
+                  onCheckedChange={(checked) => (profileOutputCompression = checked)}
+                />
+                <Label for="override-output-compression" class="font-normal">
+                  Takes a compression level
+                </Label>
+              </div>
+              <p class="text-muted-foreground text-xs">
+                The formats this host returns on request. They are used only for formats in the
+                preference list under Settings → Advanced → Image Output Format; with none ticked,
+                no format is sent.
+              </p>
+            </div>
       </div>
       <div class="grid grid-cols-2 gap-4 pt-2">
         <div class="space-y-2">
