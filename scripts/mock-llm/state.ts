@@ -429,10 +429,19 @@ export function loadState(): MockState {
       `${STATE_PATH} is not valid mock state — delete it to regenerate defaults.\n${parsed.error.message}`,
     )
   }
-  // A state file written before a shape was registered has no lane for it.
-  for (const s of STRUCTURED_SHAPES) parsed.data.lanes[s.name] ??= emptyLane()
-  parsed.data.lanes[NARRATIVE_LANE] ??= emptyLane()
-  return parsed.data
+  return { ...parsed.data, lanes: withShippedLanes(parsed.data.lanes) }
+}
+
+/**
+ * A state file written before a shape was registered has no lane for it: the shape gets the lane
+ * it ships with, not an empty one that answers `{}`.
+ */
+export function withShippedLanes(lanes: Record<string, Lane>): Record<string, Lane> {
+  const shipped = defaultLanes()
+  const out = { ...lanes }
+  for (const name of [...STRUCTURED_SHAPES.map((s) => s.name), NARRATIVE_LANE])
+    out[name] ??= shipped[name] ?? emptyLane()
+  return out
 }
 
 let pending: NodeJS.Timeout | undefined

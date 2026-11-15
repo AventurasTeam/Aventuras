@@ -41,6 +41,20 @@ export function isUserOriginatedSource(source: DeltaSource): boolean {
   return DELTA_SOURCE_ORIGIN[source] === 'user'
 }
 
+// SQL reading the user's writes filters `source = 'user_edit'` (user-precedence.ts,
+// close-awareness.ts, lib/row-signals/read.ts, which sits below lib/actions): a second
+// user-originated source fails here first, before those filters split from this map.
+type _UserSources = {
+  [S in DeltaSource]: (typeof DELTA_SOURCE_ORIGIN)[S] extends 'user' ? S : never
+}[DeltaSource]
+type _OnlyUserEdit = [_UserSources] extends ['user_edit']
+  ? ['user_edit'] extends [_UserSources]
+    ? true
+    : never
+  : never
+const _onlyUserEditCheck: [_OnlyUserEdit] = [true]
+void _onlyUserEditCheck
+
 type ActionMap = PipelineActionMap & TestPipelineActionMap
 
 export type PipelineAction = {

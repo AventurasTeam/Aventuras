@@ -574,6 +574,20 @@ describe('setThreadStatus', () => {
     expect(await undoOf(db, 'act_s')).toEqual({ status: 'resolved', resolvedAtEntryId: 'e_old' })
   })
 
+  // updateThread's reading of "carries refs": a resolved ref alone is enough.
+  it('clears the resolved entry of a thread holding only that ref when it is taken up again', async () => {
+    const { db, ctx } = await setupWithProse()
+    await seed(ctx, {
+      ...PASS_THREAD,
+      status: 'resolved',
+      triggeredAtEntryId: null,
+      resolvedAtEntryId: 'e_old',
+    })
+    expect((await apply(ctx, setStatus('active'), 'act_s')).status).toBe('ok')
+    expect(await rowFor(db, 'thr_1')).toMatchObject({ status: 'active', resolvedAtEntryId: null })
+    expect(await undoOf(db, 'act_s')).toEqual({ status: 'resolved', resolvedAtEntryId: 'e_old' })
+  })
+
   it("leaves a user's thread with no entry refs, whatever the payload carries", async () => {
     const { db, ctx } = await setupWithProse()
     await create(ctx, USER_THREAD, 'user_edit')

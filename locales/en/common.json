@@ -1,5 +1,6 @@
 {
   "cancel": "Cancel",
+  "close": "Close",
   "save": "Save",
   "disabledWithReason": "{{label}}, {{reason}}",
   "countSuffix": "({{value}})",

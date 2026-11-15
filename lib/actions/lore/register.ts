@@ -5,7 +5,6 @@ import { KIND_FIELDS, lore, loreWriteSchema } from '@/lib/db'
 import { loreStore } from '@/lib/stores'
 
 import { cascadedDelete, rowCascade } from '../delta/delete-cascade'
-import { deepEqual } from '../delta/delta-encoding'
 import { keywordEditNoop, planKeywordEdit } from '../delta/keyword-authors'
 import {
   noopRefusal,
@@ -15,7 +14,11 @@ import {
   type ActionHandler,
   type PatchMatchesColumns,
 } from '../delta/registry'
-import { USER_EDITED_SINCE_PROSE, userEditsSinceProse, wroteField } from '../delta/user-precedence'
+import {
+  changedColumns,
+  USER_EDITED_SINCE_PROSE,
+  userEditsSinceProse,
+} from '../delta/user-precedence'
 import type { DeltaSource, ProseEntryId } from '../types'
 
 const cascade = rowCascade('lore')
@@ -147,20 +150,13 @@ const updateHandler: ActionHandler = async (action, branchId, ctx) => {
 
   const edits =
     proseEntryId != null ? await userEditsSinceProse(ctx, bid, 'lore', id, proseEntryId) : []
-  // Unchanged columns are dropped: History reads an undo payload's keys as fields that changed.
-  const set: Record<string, unknown> = {}
-  const undoPayload: Record<string, unknown> = {}
-  let userKept = false
-  for (const col of named) {
-    const prior = current[col as keyof Lore]
-    if (deepEqual(patch[col], prior)) continue
-    if (wroteField(edits, 'lore', col, [])) {
-      userKept = true
-      continue
-    }
-    set[col] = patch[col]
-    undoPayload[col] = prior
-  }
+  const { set, undoPayload, userKept } = changedColumns({
+    table: 'lore',
+    named,
+    patch,
+    current,
+    edits,
+  })
   if (Object.keys(set).length === 0) {
     if (userKept) return noopRefusal(USER_EDITED_SINCE_PROSE, null)
     return noopRefusal('no-op lore patch', 'restated')

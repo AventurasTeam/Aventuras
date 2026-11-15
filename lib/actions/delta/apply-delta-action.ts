@@ -322,7 +322,7 @@ async function applyDeltaActionGroupUnlocked(
   type Refusal = Extract<GroupOutcome, { status: 'rejected' }>
   const prepared: Prepared[] = []
   const pendingColumns = new Map<string, Set<string>>()
-  const created = new Set<string>()
+  const created = new Map<string, Readonly<Record<string, unknown>> | null>()
 
   const prepare = async (action: PipelineAction): Promise<Refusal | NoopOutcome | null> => {
     if (isUserOriginatedSource(action.source) && generationStore.getTxState().reversalInProgress)
@@ -353,7 +353,8 @@ async function applyDeltaActionGroupUnlocked(
     pendingColumns.set(rowKey, claimed)
 
     prepared.push({ deltaId: generateId('delta'), source: action.source, outcome })
-    if (outcome.op === 'create') created.add(rowKey)
+    if (outcome.op === 'create')
+      created.set(rowKey, outcome.patch?.op === 'create' ? outcome.patch.row : null)
     return null
   }
 

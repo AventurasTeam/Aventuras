@@ -1,4 +1,5 @@
 import type { Meta, StoryObj } from '@storybook/react-native-web-vite'
+import { useState, type ComponentProps } from 'react'
 import { expect, fn, screen, userEvent, waitFor } from 'storybook/test'
 
 import { UnsavedChangesDialog } from './unsaved-changes-dialog'
@@ -30,6 +31,40 @@ export const Saving: Story = {
     expect(args.onCancel).not.toHaveBeenCalled()
     expect(args.onSave).not.toHaveBeenCalled()
     expect(args.onDiscard).not.toHaveBeenCalled()
+  },
+}
+
+/** The owner flips `saving` on the press, as a leave guard does. */
+function SavingOnSave(props: ComponentProps<typeof UnsavedChangesDialog>) {
+  const [saving, setSaving] = useState(false)
+  return (
+    <UnsavedChangesDialog
+      {...props}
+      saving={saving}
+      onSave={() => {
+        props.onSave()
+        setSaving(true)
+      }}
+    />
+  )
+}
+
+/** Every action disables at once, the focused one too: the dialog takes focus so Tab stays in. */
+export const FocusStaysWhileSaving: Story = {
+  args: { open: true, onSave: fn(), onDiscard: fn(), onCancel: fn() },
+  render: (args) => <SavingOnSave {...args} />,
+  play: async ({ args }) => {
+    const dialog = await screen.findByRole('alertdialog')
+    const save = screen.getByRole('button', { name: 'Save' })
+    save.focus()
+    await expect(save).toHaveFocus()
+    await userEvent.keyboard('{Enter}')
+    await waitFor(() => expect(args.onSave).toHaveBeenCalled())
+    await waitFor(() => expect(save).toBeDisabled())
+    await waitFor(() => expect(save).not.toHaveFocus())
+    expect(dialog.contains(document.activeElement)).toBe(true)
+    await userEvent.tab()
+    expect(dialog.contains(document.activeElement)).toBe(true)
   },
 }
 

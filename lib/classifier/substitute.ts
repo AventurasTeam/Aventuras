@@ -75,6 +75,21 @@ export const PROSE_FIELDS = [
 
 // A bracketed token, a bare short-prefix placeholder, or a bare handle; `nameOf` decides which name.
 const PROSE_TOKEN = /\[([^[\]\s]+)\]|\b[a-z]{1,2}\d+\b|\bnew:[\w-]+/g
+const BARE_TOKEN = /\b[a-z]{1,2}\d+\b|\bnew:[\w-]+/g
+
+function nameToken(
+  token: string,
+  inner: string | undefined,
+  after: string | undefined,
+  nameOf: (token: string) => string | undefined,
+): string {
+  if (inner === undefined) return nameOf(token) ?? token
+  const name = nameOf(inner)
+  // A bracket of several ([c1,c2], [c1-c3]) names each id in it, the bracket kept.
+  if (name === undefined) return `[${inner.replace(BARE_TOKEN, (bare) => nameOf(bare) ?? bare)}]`
+  // [c1][c2] would otherwise run the two names together.
+  return after === '[' ? `${name}, ` : name
+}
 
 /**
  * An ID or a handle the model wrote into prose, as the name `nameOf` gives it: a placeholder means
@@ -85,7 +100,9 @@ export function nameIdsInProse<T>(value: T, nameOf: (token: string) => string | 
   const walk = (v: unknown, prose: boolean): unknown => {
     if (typeof v === 'string')
       return prose
-        ? v.replace(PROSE_TOKEN, (token, inner?: string) => nameOf(inner ?? token) ?? token)
+        ? v.replace(PROSE_TOKEN, (token: string, inner: string | undefined, at: number) =>
+            nameToken(token, inner, v[at + token.length], nameOf),
+          )
         : v
     if (Array.isArray(v)) return v.map((item) => walk(item, prose))
     if (v === null || typeof v !== 'object') return v

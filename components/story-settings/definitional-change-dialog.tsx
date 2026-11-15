@@ -37,7 +37,7 @@ export function DefinitionalChangeDialog({
         if (!next && !saving) onCancel()
       }}
     >
-      <AlertDialogContent>
+      <AlertDialogContent busy={saving}>
         <AlertDialogHeader>
           <AlertDialogTitle>{t('storySettings:confirm.title')}</AlertDialogTitle>
           {/* Fields inside the description, so a screen reader announces them with the dialog. */}

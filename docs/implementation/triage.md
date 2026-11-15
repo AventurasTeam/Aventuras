@@ -77,25 +77,6 @@ slice-planning gate forces its resolution before that slice is planned.
   handlers of entities, lore, threads and happenings, and the chapters
   update, return the coded `not-found` C11 names but doesn't list them.
   Raised in 5.5a's review.
-- **Handlers read committed rows, so a row created earlier in the same
-  group reads as missing.** `placeLocationHandler` takes no `GroupScope`
-  (`lib/actions/entities/state-patch-actions.ts`), and the
-  `partner-not-found` and each target's `... not found` refusals read the
-  same way. 5.5a marks all of them `gone`, so once the close's
-  verdict mapping reads marks the model would hear that a row it just
-  created is gone. The fix is reading the group's created rows through
-  `GroupScope`, not a mark special case. Nothing groups a create with
-  such a write yet; a close tool that does needs it. Raised in 5.5a's
-  review.
-- **A row the group creates passes as a faction.** `membershipKind`
-  (`lib/actions/entities/state-patch-actions.ts`) reads any row in
-  `GroupScope.created` as a faction, since the scope holds keys only, so
-  a `setCharacterFaction` naming a character or place the same group
-  creates would land. `GroupScope.created` should carry each created
-  row's kind, so that write is refused `not-a-faction`. No writer
-  reaches it today: the classifier resolves its faction ref by kind and
-  writes through `delta_emitted`, outside a group. A close tool that
-  groups a create with a membership would. Raised in 5.5a's review.
 - **A parallel group's failing branch outlives the reversal.**
   `runParallelGroup` (`lib/pipeline/runtime/orchestrator.ts`) awaits
   `Promise.all`, so one branch's throw reverses and fails the run while
@@ -105,11 +86,6 @@ slice-planning gate forces its resolution before that slice is planned.
   ([Parallel-group event coordination](../generation-pipeline.md#parallel-group-event-coordination)).
   Shown by probe on both write paths in 5.5a's review; latent, since no
   production pipeline declares a parallel group.
-- **`consumePhase` never closes a phase whose event throws.** When
-  `handleEvent` throws, the generator gets no `return()`, so a phase's
-  `finally` around a `yield` never runs. No phase has one today
-  (`chapter-close-metadata-call.ts`, `periodic-classifier.ts` and
-  `per-turn-retrieval.ts` checked). Raised in 5.5a's review.
 - **The two write paths disagree on what a bus event means.** A
   `delta_emitted` noop or refusal never reaches the bus, while a
   `delta_group_emitted` reaches it whether the group landed, no-oped or
@@ -118,39 +94,6 @@ slice-planning gate forces its resolution before that slice is planned.
   orchestrator forwards every event. No production code subscribes to
   delta events yet; one rule for both paths is wanted before one does.
   Raised in 5.5a's review.
-- **`promoteStagedEntity`'s store-only guard can still refuse a
-  legitimate promotion while a story opens.** `loadOpenStory` reads
-  `entities`, then hydrates after eight more reads, so a write or
-  reversal landing in between leaves the store copy active over a
-  DB-staged row, and `promoteStagedEntityHandler` refuses `not-staged`;
-  since 5.5a that reads `rejected`, not `ok`. The row lock may make the guard
-  redundant: `promoteStagedEntity` takes the row's lock key, so two
-  promotes through the action layer serialise and the second reads the
-  DB already active. The lock did not come later: `ae48d4513` (M3.2)
-  added both, `a6d81c572` (M4.2a) only widened the key. The stale store
-  itself is the next entry. Raised in 5.5a's review.
-- **A write that commits while a story opens is lost from its stores.**
-  `loadOpenStory` (`lib/actions/stories/operational.ts`) reads every
-  working-set table one after another, then hydrates them all together,
-  so a write committing in between is lost from the store, either way:
-  if the store already holds that branch, the write's patch applies and
-  the hydrate overwrites it; if not, the patch is dropped
-  (`lib/stores/factory/working-set-store.ts`, a branch the store doesn't
-  hold) and the hydrate brings the older rows. World and the other store
-  readers show the old row until the next open. The writers that can
-  land in that window are background runs on that branch: a pass, or a
-  close. Raised in 5.5a's review.
-- **`teardown.spec.ts`'s rejected-close case can hang its first attempt,
-  and the hang fails the shard though the retry passes.** "a rejected
-  close still ends the app before its userData goes" timed out at its
-  120 s on the packaged project in CI, then the worker's teardown passed
-  Playwright's 90 s, an error outside any test; the retry passed in 4 s.
-  Seen twice on E2E shard 3/3: PR 717 (run `42462233487`, 2026-11-08),
-  a docs-only push whose code had passed E2E one push before, and PR 721
-  (run `42665576759`, 2026-11-09), a code push that touched no `e2e/` or
-  `electron/` file. Not yet
-  traced: whether the hang is in the harness ending the app after the
-  rejected close, or in the app itself. Raised in 5.5a's review.
 - **`set.state` in `updateEntity` stores a patch's keys the schema
   doesn't know, with no undo record.** `set.state` takes the raw
   patch while `computeUndoPayload` walks only `entityStateColumnSchema`
@@ -160,16 +103,6 @@ slice-planning gate forces its resolution before that slice is planned.
 patch`, which 5.5a marks `restated`, so a close tool's write of it
   reads `ok` with nothing written and leaves no trace in the review.
   Raised in 5.5a's review.
-- **`deepEqual` treats `[]` and `{}` as equal.** It compares any two
-  objects by their keys (`lib/actions/delta/delta-encoding.ts`), so an
-  empty array and an empty object read as unchanged. Raised in 5.5a's
-  review.
-- **`IdBiMap.allocate` ignores handles `registerHandle` set.**
-  `lib/ids/bimap.ts` counts per placeholder prefix and never checks the
-  counter against a registered handle, so a registered `c5` could later
-  be handed to another id. Nothing triggers it today: the close
-  registers only `t` and `aw` handles, which aren't placeholder
-  prefixes. Raised in 5.5a's review.
 - **A landed entry ref in a close's `values` is stored raw.**
   `ID_PATTERN` has no `entry` prefix, so the ledger keeps the raw
   `entry_` id, as `merge_happenings` records `occurredAtEntryId`. The
@@ -178,16 +111,6 @@ patch`, which 5.5a marks `restated`, so a close tool's write of it
   (`reviewValueText` and `entryRefText` in
   `lib/history/close-review-changes.ts`), and shows the raw id once the
   entry is gone. Raised in 5.5a's review.
-- **The real delta action port is assembled in three places.**
-  `lib/boot/bootstrap.ts`, `vitest.setup.ts` and
-  `realDeltaActionPort()` in `lib/pipeline/__tests__/harness.ts` each
-  list every `DeltaActionPort` member, and `scripts/close-probe.ts` now
-  borrows the test harness's. The type makes a missing member a compile
-  error, so nothing drifts silently; the cost is three edits per new
-  port method. One builder in the action layer would serve all of them,
-  but `vitest.setup.ts` must not load the `@/lib/pipeline` barrel before
-  a test's mocks, and `bootstrap.ts` pulls in UI modules a script can't
-  load. Raised in 5.5a's review.
 - **The close's task test files repeat their fixture helpers.** Under
   `lib/pipeline/definitions/close-agent/`, a `setSceneOf` is written in
   five test files (`identity`, `upkeep`, `lifecycle`, `lifecycle-tools`
@@ -208,38 +131,10 @@ patch`, which 5.5a marks `restated`, so a close tool's write of it
   `drainApplying`) with near-copies in `lore.test.ts`, `upkeep.test.ts`,
   `identity.test.ts`, `lifecycle.test.ts` and `driver.test.ts`. Raised in
   5.5b's review, widened in 5.9's and in its slice review.
-- **`setThreadStatus` and `updateThread` read "carries refs"
-  differently.** `setThreadStatus` writes the resolved ref only when
-  `triggeredAtEntryId` is set, while `updateThread` asks whether either
-  ref is (`lib/actions/threads/register.ts`). A thread holding only a
-  resolved ref would keep a stale one after a status change. Nothing
-  writes that shape today, since a pass's create always sets the
-  trigger. Raised in 5.5b's review.
 - **A close's "Writes so far" names delta paths, not fields.** The
   ledger's lines read `state.traits` (`close-agent/ledger.ts`), while
   the task templates show the same field as `traits`, so the model has
   to join the two itself. Raised in 5.5b's review.
-- **The 5.5a probe test restates the close's system half.**
-  `lib/prompts/bundled/bundled-pack.test.ts` keeps a copy of the
-  `CLOSE_TASK_SYSTEM` text instead of importing the constant, so the
-  macros test checks a copy rather than the half that ships. Raised in
-  5.5b's review.
-- **`search_world` breaks ties with `localeCompare`.** Its result order
-  then depends on the device's locale
-  (`close-agent/read-tools.ts`), which `identity.ts` and
-  `lib/retrieval/injection.ts` avoid with a code-unit compare. Raised in
-  5.5b's review.
-- **Katakana with the long-vowel mark loses substring matching.**
-  `usesSubstringMatch` (`lib/retrieval/name-index.ts`) tests
-  `\p{Script=Katakana}`, but ー (U+30FC) is Script=Common and a letter,
-  so a term such as シルバー falls back to word-boundary anchoring:
-  `matchTerms('シルバーは笑った。', ['シルバー'])` returns nothing. That
-  contradicts
-  [`retrieval.md`](../memory/retrieval.md)'s rule that kana terms match
-  by substring, and it reaches the keyword scan and name suppression in
-  Japanese stories. A likely fix is `Script_Extensions=Katakana`.
-  Separately, `normalizeTerm` doesn't collapse internal whitespace, so a
-  query with a doubled space matches nothing. Raised in 5.5b's review.
 - **`code-conventions.md` doesn't name the pipeline's two import
   exceptions.** `eslint.config.js` lets `lib/pipeline` deep-import
   `actions/types.ts` and, since 5.5b, forbids a value import of the
@@ -262,28 +157,6 @@ patch`, which 5.5a marks `restated`, so a close tool's write of it
   chapter-metadata call, its per-part call and the suggestion refresh
   render through `macro_story_entry` and mark them too. Raised in 5.5b's
   review; 5.8 added the per-part call.
-- **Boot recovery reverts a close that is still running.**
-  `recoverInFlightRuns` (`lib/pipeline/runtime/recovery.ts`, called only
-  from `runBootstrap`) reverses every `pipeline_runs` row with no
-  `finished_at`, with no check against the runs live in this process.
-  Observed: 5.5b's dev-route close failed once in a way that fits, the
-  report phase finding no chapter row and a "Story recovered" modal
-  following. It didn't reproduce on a clean rerun and no Fast Refresh
-  was observed, so the trigger is unconfirmed. Assumed, not shown: that
-  only a dev build can re-run the bootstrap under a live run, through a
-  Fast Refresh that re-runs `RootLayout`'s bootstrap effect. Production
-  is unverified. A candidate production path to check (the
-  coordinator's reading, not verified on a device): React Native's
-  Android host keeps the JS runtime in the Application, which outlives
-  the Activity, so a re-created Activity remounts `RootLayout` in the
-  same runtime, `useBootstrap`'s effect runs `runBootstrap` again while
-  the close's promises are live, and `recoverInFlightRuns` reverses its
-  unfinished `pipeline_runs` row. The Activity is re-created on a config
-  change outside the manifest's `configChanges` (locale, font scale,
-  density), on Back from the root Activity on Android 11 and below, and
-  under "Don't keep activities"; the prebuild manifest's
-  `configChanges` is `keyboard|keyboardHidden|orientation|screenSize|screenLayout|uiMode|smallestScreenSize`.
-  Raised in 5.5b's measure.
 - **The close's count priming assumes the system half holds each turn's
   prose once.** `renderClosePrompt` / `primeCloseSystemCount`
   (`lib/pipeline/definitions/close-agent/turns.ts`) prime the system
@@ -315,58 +188,6 @@ patch`, which 5.5a marks `restated`, so a close tool's write of it
   merge's kept-row rule, `search_world`'s limit and ranking,
   `architecture.md`'s halves-table row and count-cache paragraph,
   `observability.md` and `testing.md`. Raised in 5.5b's slice review.
-- **Two duplicates the close's code waits on a third use for.** The
-  capped list names (`traits`, `drives`, `agenda`) are spelled in
-  `scripts/dataset-chapter/overlay.ts` and again in
-  `scripts/close-probe-rejudge.ts`; one exported constant in
-  `close-agent/fields.ts` would make the re-judge load the classifier,
-  piggyback and wizard barrels it now avoids by importing a type only.
-  And `updateThread` and `updateHappening` repeat one
-  restated, user-kept and write loop (`lib/actions/threads/register.ts`,
-  `lib/actions/happenings/register-happenings.ts`), which a shared
-  helper would take about six parameters to serve. Worth lifting when a
-  third copy appears. Raised in 5.5b's slice review. The third copy of
-  the loop has appeared: 5.8 gave `updateLore` the same restated,
-  user-kept and write loop (`lib/actions/lore/register.ts`), with no
-  refs, so a helper may take fewer parameters than that estimate; three
-  handlers now carry one precedence rule, so drift is a precedence
-  bug. Noted in 5.8's final review.
-- **The close's model target is spelled three times.** The chapter
-  close's metadata phase, its call and the close agent each declare
-  their own `lore-mgmt` target (`chapter-close-metadata.ts`,
-  `chapter-close-metadata-call.ts`, `close-agent/run-task.ts`), beside
-  `CHAPTER_CLOSE_RESOLVES` in `chapter-close.ts`. The parts cut reads
-  its window from that target, so it is right only while the prose
-  tasks run on the same model, and nothing ties the copies together.
-  One exported close target would. The phases also resolve it at
-  different times: the metadata phase cuts the parts from its own
-  settings snapshot and the agent phase reads a later one, and App
-  Settings → Providers (Quick wire, Fetch models) isn't gated during a
-  close. A reassignment or a smaller detected window between the two
-  leaves parts sized for the old window, so the first task call fails
-  the close, and the next run cuts afresh. Resolving the target once and
-  storing it beside the parts would close both. Raised in 5.8's task
-  review; the timing in its slice review.
-- **A new mock shape answers `{}` from an older `state.json`.** In
-  `scripts/mock-llm/state.ts`, `loadState` gives a shape the saved file
-  lacks an empty lane, not its shipped default. So every shape added
-  after a developer's `state.json` was written answers `{}` until the
-  file is deleted; 5.8's chapter metadata part and merge lanes are the
-  latest case, and a multi-part close then fails to parse in the dev
-  mock. Raised in 5.8's task review.
-- **A bracket of several handles hides them from prose naming.**
-  `PROSE_TOKEN` in `lib/classifier/substitute.ts` takes a whole
-  bracket as one token, so `nameIdsInProse` and the close's
-  `nameCloseProse` leave `[c1,c2]`, `[c1-c3]` or `[c1,t3]` unnamed,
-  and a stored row handle survives in a pass's and a close's prose.
-  The close's turn-handle check scans bare tokens instead. Raised in
-  5.8's task review.
-- **No test pins a prose task's token count into its render.** In
-  the close's Identity, Threads, Lore and Upkeep tasks, passing 0 for
-  `proseTokens` to `renderClosePrompt` still passes every task test.
-  The count primes the system half's token total, so losing it would
-  undercount the window check. One shared pin would cover every prose
-  task. Raised in 5.8's task review.
 - **The close's placement plan copies two handler details.** The
   `not-unplaced` and `parent-not-a-place` refusals are inline strings
   in `state-patch-actions.ts`, outside `PLACE_REFUSAL`, and
@@ -383,16 +204,6 @@ patch`, which 5.5a marks `restated`, so a close tool's write of it
   close stores `retire_entity`'s `why` the same way, while the close's
   other stored text is capped (a condition at 500, a lore body at
   1,200). Raised in 5.8's task review.
-- **Reactivating a row in World keeps its retired reason.**
-  `lib/world/entity-actions.ts` patches `retiredReason` only when the
-  draft changes it, and the settings tab only makes it read-only, so a
-  row set back to active keeps a reason `data-model.md` calls
-  meaningful only while retired; the classifier's return from
-  retirement clears it. A close's Lifecycle task shows a reason only
-  on a retired row (developer decision, 2026-11-10), so the stale one
-  stays in the database and the export, and World's list search
-  (`lib/list-modules/entity-list.ts`) still matches a restored row on
-  it. Read in the code, not run. Raised in 5.8's task review.
 - **Undoing a user's keyword edit wipes a later pass's term.** CTRL-Z
   or a rollback window of a user's keyword edit under a later
   periodic keyword write restores the whole list from the undo
@@ -450,14 +261,6 @@ patch`, which 5.5a marks `restated`, so a close tool's write of it
   records the limit
   ([`chapter-close.md → Tools and writes`](../memory/chapter-close.md#tools-and-writes)).
   Raised in 5.8's slice review, developer decision 2026-11-10.
-- **Two close tool tests don't pin what their names claim.** In
-  `close-agent/upkeep-tools.test.ts` the test named "…its group on E"
-  never checks the group's anchor, and neither does
-  `lifecycle-tools.test.ts`'s five-turn case ending before E: anchoring
-  on the task's last turn instead keeps every close tool test green. No
-  test cites a part-1 turn from part 2 and expects a refusal either, so
-  swapping the part's turns for the turns handed handles goes unseen.
-  Raised in 5.9's Task 1 review.
 - **No retrieval test admits a happening through a seated chapter
   range.** `run.test.ts`'s `makeQueryAll` returns every happening
   whatever entry ids the query binds, so emptying the chapter-range
@@ -486,47 +289,6 @@ patch`, which 5.5a marks `restated`, so a close tool's write of it
   `lib/pipeline/__tests__/close-round-trip.test.ts` pins today's
   behaviour. Developer decision 2026-11-14 (5.9): record the edge in
   canon, fix later.
-- **A row-gone refusal never says which row went.** When a write names
-  several rows, the note reads "The row was merged into c3" without
-  naming the absorbed row, on the read gate's path and the plan's path
-  alike (`survivorAmong` in `close-agent/verdict.ts`), so the model has to
-  guess which named row to replace. Raised in 5.9's Task 9 review.
-- **The row guard reads user edits once per row.** `readRowGuard`
-  (`lib/actions/delta/row-guard.ts`) runs `userEditsSince` per guarded
-  row, so a merge over many link rows makes one query each. Since the
-  user-pin skip, that read starts at position 0, so each guarded row
-  reads its whole user-edit history (about 0.5 ms a row at 5000 deltas
-  on node:sqlite), though only `set_pin` needs the edits before the
-  prose. Raised in 5.9's `merge_happenings` review, widened in its slice
-  review.
-- **Per-turn retrieval reads a cancel before the embed bound.** In
-  `lib/pipeline/definitions/per-turn-retrieval.ts`, a cancelled outcome
-  returns `aborted` before the bound's expiry is checked, so a cancel that
-  arrived after the bound expired reads as a user stop. The close's range
-  embed checks the bound first. Latent today: both embed paths report an
-  expiry as a call error. Raised in 5.9's Task 12 review.
-- **The close's embed leaves the embedding-status count stale.** The range
-  embed clears stale flags without the `refreshEmbeddingStatus` per-turn
-  retrieval runs, so a memory panel open during a close shows an old
-  pending count until it reopens. The same count drives the story-status
-  pill (`components/compounds/story-status-pill.tsx`, through
-  `useMemoryHealth`), so the reader's pill can show the old pending rows
-  until a later recount. Raised in 5.9's Task 12 review, widened in its
-  slice review.
-- **No lint stops a builtin Hermes lacks.** 5.9 shipped
-  `Array.prototype.toSorted` into close code that runs on Android; the
-  Hermes VM appears to lack it (inferred from the binary, not a device),
-  and only review caught it. An eslint `no-restricted-properties` entry
-  for such builtins outside tests, or a lessons-learned entry, would
-  stop the next one. Raised in 5.9's clustering review.
-- **`set_pin`'s user-pin skip gives the wrong reason.** A pin the user
-  set before the cited turn is skipped under `USER_EDITED_SINCE_PROSE`,
-  whose note tells the model "The user edited this after the cited
-  turns", which is false for that case; the instruction not to write it
-  again stands. `merge_happenings` gives the same reason for such a pin
-  on the kept row or an absorbed one, since the slice review's R1. A
-  key of its own (5.11 keyed every reason) would make the answer and
-  the review accurate. Raised in 5.9's final review.
 - **5.13's re-run meets three things 5.9 shipped.** Slice 5.13 (re-running
   a close) is planned on main; its doc isn't on this branch, so these wait
   for its Open questions. First, the later-bump case in
@@ -545,15 +307,6 @@ patch`, which 5.5a marks `restated`, so a close tool's write of it
   edge ([`chapter-close.md`](../memory/chapter-close.md#3d--awareness-pin-tuning))
   names CTRL-Z of the close; a re-run's CTRL-Z that undoes the close
   altogether is a second path to it. Raised in 5.9's slice review.
-- **`runSyncStage` counts rows it didn't clear as embedded.**
-  `lib/retrieval/sync.ts` returns `embedded` as the stale count once its
-  write transaction runs, even when a guarded clear matched nothing (a
-  row edited during the embed keeps its flag). Per-turn retrieval reads
-  it only to trigger the status recount (`lib/retrieval/run.ts`), where
-  an overcount costs one extra recount. The close's range embed logs it
-  as `embedded` in `memory.close_range_embed`, which can overstate,
-  though that log's `unembedded` comes from the range embed's own re-read
-  of staleness. Raised in 5.9's slice review.
 - **World merge re-creates awareness rows as the user's.** World's
   character merge (`lib/world/entity-merge.ts`, `merge-links.ts`) moves
   each awareness row the kept character lacks by re-creating it as a
@@ -600,43 +353,6 @@ patch`, which 5.5a marks `restated`, so a close tool's write of it
   again. Leaving it out needs a later-turn read on the start's
   candidates, which the row guard does per row. Raised in the slice
   review fixes for 5.9's R2.
-- **A History tab test fails under a loaded box.**
-  `components/history/history-tab.test.tsx`'s "refetches for an unshown
-  link end's rename only while a search is set" timed out once in a full
-  `pnpm test:run` (load average 14, three slices' workers on one box):
-  its `waitFor` saw the loader called 2 times, not 3. It passed three
-  runs alone and the full suite an hour earlier. Unexamined: whether the
-  search debounce outlasts `waitFor`'s default timeout or the test reads
-  the call count before a pending search load lands. Raised in 5.9's
-  slice review.
-- **The reversal planner's source filters and lock window have three
-  loose ends.** First, user mode reads later writes with
-  `source = 'user_edit'` (`rowDeltasAfter`, `lib/actions/delta/user-precedence.ts`),
-  while the same file's user-delta exclusion uses
-  `isUserOriginatedSource`; no source outside `user_edit` is user
-  originated today, so nothing differs yet, and a second user-originated
-  source would split the two. Second, `refClearsOf`
-  (`lib/actions/delta/row-closure.ts`) reads later writes at selection,
-  and `reverseReplayDeltas` selects before it takes `withKeyLocks`,
-  while the walk re-reads them inside the lock
-  (`lib/actions/delta/reverse-replay.ts`); a write landing between the
-  two leaves the clears planned from a read the walk no longer shares.
-  Third, 5.9's #732 has landed, so `userEditsOutliving` and the
-  walk's `userEdits` parameters carry any source in `'any'` mode and
-  the name is now wrong; a rename to the later-writes sense would fit.
-  Raised in Slice 5.12's review of Task 1.
-- **The chapter-delete preview has an unused input, and its refusals
-  log unevenly.** `getChapterDeletePreview` takes
-  `story: Pick<OpenStory, 'branchId' | 'settings'>` and never reads
-  `branchId`. `resolveChapterDeleteSet` logs
-  `action_layer.reversal_refused` at error on every read of an
-  integrity-refused chapter, so each settle re-read of an open confirm
-  logs it again; `getRollbackCounts` does the same through
-  `resolveSweep`. The preview's `no-close` and `not-found` refusals
-  toast the generic failure with no log event at all
-  (`components/chapters/use-chapter-delete-confirm.ts`, the open path),
-  where only `integrity` is logged. Raised in Slice 5.12's review of
-  Tasks 5 and 13.
 - **`useChapterDeleteConfirm` has two small edges.**
   `app.chapter_delete_resynced` is logged before the resync runs, so
   its name claims a success that `app.chapter_delete_resync_failed` can
@@ -646,30 +362,6 @@ patch`, which 5.5a marks `restated`, so a close tool's write of it
   blocked-while-generating copy, or keeping the confirm open, would say
   what happened. Raised in Slice 5.12's review of Task 12 and its final
   review.
-- **A refused regenerate dispatch gives no feedback, and
-  `openRollback` skips the dispatch guard.** `runRegenerate` in
-  `app/reader-composer/[branchId].tsx` returns null with only a
-  `logger.warn` when `beginDispatch()` refuses, so a ↻ tap whose
-  dispatch started during the counts read, or a confirmed regenerate
-  that closed its confirm first, does nothing visible.
-  `handleRequestRegenerate` returns early on `dispatchInFlightRef`, but
-  `openRollback` doesn't check it, so a rollback confirm can open over
-  an in-flight dispatch. If that dispatch is a ↻ tap whose regenerate
-  then refuses `counts-changed`, the tap shows nothing: a tap raises no
-  toast for that refusal, since it opens the regenerate confirm instead,
-  and `confirmAfterImmediateRefusal` keeps the rollback confirm already
-  open, so only `pipeline.regenerate_rejected` logs it (read, not run).
-  Raised in Slice 5.12's review of Task 9 and its slice review.
-- **A dialog whose actions and Cancel all disable while saving
-  probably drops focus on web.** `UnsavedChangesDialog`
-  (`components/compounds/unsaved-changes-dialog.tsx`) disables Cancel,
-  Discard and Save together while `saving`, the shape of
-  [a control that disables under focus drops focus on web](lessons-learned/rnweb-disabled-under-focus-blurs.md).
-  Inferred from the structure, not probed in a browser. The lesson
-  names buttons that disable while loading; adding the dialog shape,
-  where the focused action and every other control disable at once so
-  there is nothing to hand focus to but the dialog, would cover this
-  second consumer. Raised in Slice 5.12's review of Task 11.
 - **Test and story helpers are duplicated.** `appendTurnEntry` in
   `lib/pipeline/definitions/close-agent/upkeep-tools.test.ts` and
   `lifecycle-tools.test.ts`, and `writeLaterTurn` in
@@ -722,11 +414,6 @@ patch`, which 5.5a marks `restated`, so a close tool's write of it
   or keep and log) and in their log events, so a shared hook would take
   each as a parameter; it would also need a home outside both domain
   folders. Raised in Slice 5.12's slice review (the simplifier pass).
-- **Upkeep's not-of-kind refusal has no test.**
-  `lib/pipeline/definitions/close-agent/upkeep-tools.ts:95-98` and
-  `:148` refuse a row of the wrong kind with `not-a-place` or
-  `not-an-item`. A rename is now a type error, but the behaviour is
-  unpinned. Raised in 5.11's review.
 - **A `create_lore` refused for `title-blank` can never drop out of
   Not applied.** The review matches a refused create to a landed one by
   title, and a blank title matches nothing, so a retry with a title
@@ -751,22 +438,6 @@ patch`, which 5.5a marks `restated`, so a close tool's write of it
   reader's own Return, and a review-row press from the reader adds one
   more path. [`save-sessions.md → Where applied`](../ui/patterns/save-sessions.md#where-applied)
   doesn't classify it. Raised in 5.11's review.
-- **Keyboard-dead `Pressable accessibilityRole="link"` with no `href` or
-  Enter handler.** RN-web's PressResponder doesn't press a role-link on
-  Enter. Read, not run. Places:
-  `components/reader/peek/peek-foot.tsx:21`,
-  `components/world/overview/overview-parts.tsx:113`,
-  `components/compounds/collision-list-row.tsx:42`,
-  `components/compounds/breadcrumb.tsx:74`,
-  `components/ui/select.tsx:376`,
-  `components/compounds/calendar-picker.tsx:149` and `:376`,
-  `components/compounds/embedder-download-dialog.tsx:388`.
-  `components/chapters/review-window.tsx`'s `webEnterProps` is a
-  template. Raised in 5.11's review.
-- **`components/ui/dialog.tsx` has three gaps.** `:162` `DialogTitle` has
-  no heading semantics on web; `:128` the × label is a raw "Close", not
-  `t()`; `:68` a `DialogContent` without a description raises Radix's
-  "Missing Description" warning throughout. Raised in 5.11's review.
 - **The commit banner's Review and × unmount the focused button.** Focus
   is lost when the review dialog closes (cf. the
   rnweb-disabled-under-focus-blurs lesson). Raised in 5.11's review.
@@ -800,10 +471,6 @@ patch`, which 5.5a marks `restated`, so a close tool's write of it
   user-kept: the model was told `notWritten: decayResistance (c1)`,
   `skippedFields` was empty, and Not applied was `[]`. Raised in 5.11's
   review.
-- **`useMemoryRunToasts` no longer only toasts.**
-  `hooks/use-memory-run-toasts.ts` also holds a committed close's result
-  for the commit banner's done state, so neither its name nor its file
-  says what it does. Raised in 5.11's review.
 - **The review window closes without an exit animation.**
   `ChapterOverlaysHost` unmounts `ReviewWindow` as soon as the review id
   clears, so the Dialog on desktop and the Sheet on phone vanish in one

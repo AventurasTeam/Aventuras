@@ -783,7 +783,12 @@ async function consumePhase(
   while (true) {
     const next = await gen.next(outcome)
     if (next.done) return next.value
-    outcome = await handleEvent(next.value, run)
+    try {
+      outcome = await handleEvent(next.value, run)
+    } catch (error) {
+      await gen.return({ status: 'aborted' }).catch(() => undefined) // the phase's finally runs
+      throw error
+    }
   }
 }
 ```
@@ -1212,6 +1217,13 @@ Recovery runs in a fixed boot slot:
    checks, first user-facing surface renders.
 6. Story-load and background-task startup gated until recovery
    resolves.
+
+The pass runs once per JS runtime, with its classifier `running`
+reset and its report. A later boot in the same runtime (Fast Refresh
+re-running the root's boot effect in a dev build, a root remount that
+keeps the runtime) waits on that first pass instead of running its
+own: every run it would find unfinished is this process's own, still
+live or finishing, and reversing it would undo work in flight.
 
 Migrations-first is load-bearing: a migration that mutated a column
 an orphan's `undo_payload` references will surface the failure

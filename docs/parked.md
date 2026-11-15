@@ -1118,6 +1118,28 @@ gaining a synchronous subscriber or patch logic that can throw
 (validation, a must-exist invariant), or anything starting to read
 `pipeline_runs.outcome`, is the signal to revisit.
 
+#### A write that commits while a story opens is lost from its stores
+
+`loadOpenStory` (`lib/actions/stories/operational.ts`) reads every
+working-set table one after another, then hydrates them all together,
+so a write committing in between is lost from the store, either way: if
+the store already holds that branch, the write's patch applies and the
+hydrate overwrites it; if not, the patch is dropped
+(`lib/stores/factory/working-set-store.ts`, a branch the store doesn't
+hold) and the hydrate brings the older rows. World and the other store
+readers show the old row until the next open. The 2026-11-14 triage
+pass found no writer that lands in that window today: leaving a story
+cancels its runs and waits for idle, boot waits for crash recovery, a
+reload ends every run, and M6.3's branch switch is settled to wait on
+the gate. The one store guard that let the stale copy change a write,
+`promoteStagedEntity`'s, went in the same pass. One path is open and
+unverified: a deep link into another story while one is busy, which
+skips the story-leave guard
+([Slice 5.10's Open questions](./implementation/milestones/05-chapters-chapter-close/slices/10-two-starts.md#open-questions)).
+**Revisit signal:** an open or re-hydrate path that can run while a
+write on that branch commits. Raised in 5.5a's review; routed from
+triage 2026-11-14.
+
 #### The reversal closure doesn't follow ids inside JSON columns
 
 `REF_COLUMNS` in `lib/actions/delta/live-refs.ts` registers link-table
@@ -1265,6 +1287,26 @@ refused state in
 Parked 2026-10-05; the signal to revisit is a non-periodic machine
 source writing a table with row-keeping columns, or a user write to
 one gaining an entry anchor.
+
+#### A write grouped after its row's create reads the row as missing
+
+Handlers read committed rows, so a row created earlier in the same
+group reads as missing. `placeLocationHandler` takes no `GroupScope`
+(`lib/actions/entities/state-patch-actions.ts`), and the
+`partner-not-found` and each target's `... not found` refusals read the
+same way. 5.5a marks all of them `gone`, so once the close's verdict
+mapping reads marks the model would hear that a row it just created is
+gone. The fix is reading the group's created rows through `GroupScope`,
+not a mark special case. Nothing groups a create with such a write yet;
+a close tool that does needs it. Wider than first raised (verified by
+reading in the 2026-11-14 triage pass): any handler targeting a row
+created earlier in the same group reads it as missing, and for
+`updateEntity`, `updateLore`, `updateThread` and `updateHappening` that
+rejects the whole group rather than marking the row gone. The same pass
+gave `GroupScope.created` each created row, which a read-through would
+start from. **Revisit signal:** a writer that groups a create with a
+non-link write naming the created row. Raised in 5.5a's review; routed
+from triage 2026-11-14.
 
 #### Prompt-cache optimization
 
@@ -3906,6 +3948,37 @@ reaches Playwright through all three relays (probed). Sketch: spawn
 Playwright detached and relay SIGTERM, SIGHUP and SIGINT to its group.
 **Revisit signal:** an orphaned run seen colliding with a later one.
 Routed from triage 2026-11-07.
+
+#### The teardown spec's rejected-close hang has no cause yet
+
+`teardown.spec.ts`'s "a rejected close still ends the app before its
+userData goes" timed out at its 120 s twice on E2E shard 3/3 (run
+`42462233487`, 2026-11-08, and run `42665576759`, 2026-11-09), the
+worker's teardown then overrunning Playwright's 90 s; each retry passed
+in about 4 s. It has not recurred in the 27 CI runs since. The
+2026-11-14 triage pass bounded the two waits on that path that had no
+limit (`closeApp`'s `main.exit` evaluate, which ran ahead of the kill
+fallback, and the app window's load wait), which fit the overrun
+without showing the cause. CI now keeps each failed attempt's
+`test-results/`, its error context among them, but no trace:
+Playwright's `use.trace` covers its own browser context, not an app
+from `_electron.launch`, so tracing one means starting
+`app.context().tracing` in the harness. **Revisit signal:** a third
+hang. Routed from triage 2026-11-14.
+
+#### Undo in the reader's undo/redo spec sometimes reverses nothing
+
+`reader-undo-redo.spec.ts`'s "undo reverses the committed turn; redo
+re-applies it" failed its first attempt three times on E2E shard 2/3
+(run `42531873796` on main, 2026-11-08; `42799606042`, 2026-11-10;
+`43561357510`, 2026-11-14): after the Undo row's click the reply count
+stayed 1 for the 15 s poll, and each retry passed. A flaky attempt
+fails no shard, so it showed only as "1 flaky". It didn't reproduce in
+20 runs on the dev project and 10 on the packaged one (2026-11-14).
+Unread: whether the undo was refused (its toast would say
+`blockedWhileGenerating` or `nothingToUndo`) or the click missed the
+row. **Revisit signal:** a fourth failure, now with its uploaded error
+context. Raised in the 2026-11-14 triage pass, unverified.
 
 #### Gated row fields are written out per surface
 

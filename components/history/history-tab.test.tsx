@@ -311,13 +311,20 @@ describe('HistoryTab over the link-row union', () => {
 
   it("refetches for an unshown link end's rename only while a search is set", async () => {
     happeningsStore.hydrate(BRANCH, [fire(BRANCH, 'Fire')])
-    const load = loader((query) => (query.search === 'blaze' ? [] : [INVOLVES_FIRE]), {
-      hap_fire: 'Fire',
+    // A slow search read: its rows are [] while it loads as well as once it lands, and the link
+    // ends it watches come only with its names.
+    const load = vi.fn(async (query: HistoryQuery): Promise<HistoryChunk> => {
+      if (query.search === 'blaze') await new Promise((resolve) => setTimeout(resolve, 50))
+      return {
+        rows: query.search === 'blaze' ? [] : [INVOLVES_FIRE],
+        nextCursor: null,
+        names: { hap_fire: 'Fire' },
+      }
     })
     renderTab(load, 'char_aria')
     await firstRow()
     act(() => view.props?.onSearchChange('blaze'))
-    await waitFor(() => expect(view.props?.rows).toHaveLength(0))
+    await waitFor(() => expect(view.props).toMatchObject({ status: 'ready', rows: [] }))
     const searched = load.mock.calls.length
     act(() =>
       happeningsStore.patch(BRANCH, { op: 'update', id: 'hap_fire', columns: { title: 'Blaze' } }),

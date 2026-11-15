@@ -8,7 +8,6 @@ import {
   type GenerateStructuredResult,
   type PromptHalves,
   type ResolveModelConfig,
-  type ResolveTarget,
 } from '@/lib/ai'
 import type { ChapterPartCut } from '@/lib/chapters'
 import { storyEntries, type DbCtx, type StoryMode, type Thread } from '@/lib/db'
@@ -28,12 +27,12 @@ import {
   type NormalizedChapterMetadata,
 } from './chapter-metadata-schema'
 import { closeParts } from './close-agent/parts'
-import { CLOSE_PHASE, type CloseRange } from './intermediates'
+import { CLOSE_TARGET, CLOSE_PHASE, type CloseRange } from './intermediates'
 import { storesHoldBranch } from './stores-hold-branch'
 import { retriedAttemptEvents, structuredCallFailure } from '../call-error'
 import type { PhaseContext, PhaseEmittedEvent, PhaseFailure, PipelineError } from '../types'
 
-const TARGET = 'lore-mgmt' satisfies ResolveTarget
+const TARGET = CLOSE_TARGET
 
 /** The range's whole non-system rows, start entry through end, oldest first, stamped or not. */
 export async function readCloseRangeEntries(

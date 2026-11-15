@@ -191,7 +191,7 @@ describe('missingRef', () => {
   })
 
   it('counts a row the same group creates', async () => {
-    const group = { created: new Set(['lore:lore_new']) }
+    const group = { created: new Map([['lore:lore_new', null]]) }
 
     expect(await missingRef(ctx, 'b1', [{ table: 'lore', id: 'lore_new' }], group)).toBe(false)
   })

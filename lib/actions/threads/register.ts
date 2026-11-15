@@ -6,7 +6,6 @@ import { threadsStore } from '@/lib/stores'
 
 import { nullifyRef } from '../coerce'
 import { cascadedDelete, rowCascade } from '../delta/delete-cascade'
-import { deepEqual } from '../delta/delta-encoding'
 import {
   noopRefusal,
   register,
@@ -15,7 +14,12 @@ import {
   type ActionHandler,
   type PatchMatchesColumns,
 } from '../delta/registry'
-import { USER_EDITED_SINCE_PROSE, userEditsSinceProse, wroteField } from '../delta/user-precedence'
+import {
+  changedColumns,
+  USER_EDITED_SINCE_PROSE,
+  userEditsSinceProse,
+  wroteField,
+} from '../delta/user-precedence'
 import { isUserOriginatedSource, type DeltaSource, type ProseEntryId } from '../types'
 
 const cascade = rowCascade('thread')
@@ -74,6 +78,10 @@ export const UPDATABLE = [
 void (true satisfies PatchMatchesColumns<ThreadUpdatePatch, typeof UPDATABLE>)
 
 const REF_COLS = new Set(['triggeredAtEntryId', 'resolvedAtEntryId'])
+
+// One reading for both writers: a thread holding either ref logs its resolved ref beside a status.
+const carriesRefs = (thread: Pick<Thread, 'triggeredAtEntryId' | 'resolvedAtEntryId'>): boolean =>
+  thread.triggeredAtEntryId !== null || thread.resolvedAtEntryId !== null
 
 function fullRow(entry: NewThread): Thread {
   // Apply SQLite defaults so the inserted row and the store create-patch row are byte-identical.
@@ -151,30 +159,20 @@ const updateHandler: ActionHandler = async (action, branchId, ctx) => {
 
   const edits =
     proseEntryId != null ? await userEditsSinceProse(ctx, bid, 'threads', id, proseEntryId) : []
-  // Unchanged columns are dropped: History and the later-turn rule read an undo payload's keys as
-  // written. Only the incoming side is normalized, so a stored '' ref still clears.
-  const set: Record<string, unknown> = {}
-  const undoPayload: Record<string, unknown> = {}
-  let userKept = false
-  for (const col of named) {
-    const next = REF_COLS.has(col)
-      ? nullifyRef(patch[col] as string | null | undefined)
-      : patch[col]
-    const prior = current[col as keyof Thread]
-    if (deepEqual(next, prior)) continue
-    if (wroteField(edits, 'threads', col, [])) {
-      userKept = true
-      continue
-    }
-    set[col] = next
-    // No columnSchemas registered: scalar/nullable columns take the whole prior value as undo.
-    undoPayload[col] = prior
-  }
+  // No columnSchemas registered: scalar/nullable columns take the whole prior value as undo.
+  const { set, undoPayload, userKept } = changedColumns({
+    table: 'threads',
+    named,
+    patch,
+    current,
+    edits,
+    normalize: (col, value) =>
+      REF_COLS.has(col) ? nullifyRef(value as string | null | undefined) : value,
+  })
   // On a thread with refs, resolvedAt logs beside a status change so a reversal restores the pair;
   // a user's status change retracts it. A ref named in the patch but absent from `set` was restated
   // or user-kept.
-  const carriesRefs = current.triggeredAtEntryId !== null || current.resolvedAtEntryId !== null
-  if (carriesRefs && 'status' in set && !('resolvedAtEntryId' in set)) {
+  if (carriesRefs(current) && 'status' in set && !('resolvedAtEntryId' in set)) {
     set.resolvedAtEntryId =
       'resolvedAtEntryId' in patch || !isUserOriginatedSource(action.source)
         ? current.resolvedAtEntryId
@@ -239,7 +237,7 @@ const setStatusHandler: ActionHandler = async (action, branchId, ctx) => {
   const undoPayload: Record<string, unknown> = { status: current.status }
   // Entry refs are AI-only (data-model.md → Authorship contract): a user's thread keeps both null.
   // A pass's thread logs the ref beside the status, even unchanged, so a reversal restores both.
-  if (current.triggeredAtEntryId !== null) {
+  if (carriesRefs(current)) {
     set.resolvedAtEntryId =
       payload.status === 'active' ? null : nullifyRef(payload.resolvedAtEntryId)
     undoPayload.resolvedAtEntryId = current.resolvedAtEntryId

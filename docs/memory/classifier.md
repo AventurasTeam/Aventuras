@@ -395,8 +395,9 @@ unresolved reference.
 
 A placeholder means nothing past its call, so an ID or a handle the
 reply writes into prose (a title, a description, an awareness source,
-a profile field), bracketed or bare, is replaced with what it stands
-for before anything is stored: a listed entity's name, a listed
+a profile field), bracketed or bare, and each one in a bracket of
+several (`[c1,c2]`), is replaced with what it stands for before
+anything is stored: a listed entity's name, a listed
 happening's or thread's title, or the name a new row's handle
 declares. A stored `"[c1] charged"` would otherwise name whoever holds
 `c1` in a later prompt. A handle the reply declares stands for its new

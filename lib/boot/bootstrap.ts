@@ -1,17 +1,9 @@
 import {
-  applyDeltaAction,
-  applyDeltaActionGroupWithOutcomes,
-  describeDeltaReplayError,
-  holdBranchWriteExclusive,
+  deltaActionPort,
   normalizeAppSettingsRow,
   readHeldClassifierStoryIds,
-  readRowGuard,
   registerAllDomains,
-  releaseBranchWriteExclusive,
   resetStuckClassifierRunState,
-  reverseReplayDeltas,
-  settleUserWrites,
-  userDeletedHappeningLink,
 } from '@/lib/actions'
 import { configureTruncationNotice, displayEstimate } from '@/lib/ai'
 import type { DbCtx } from '@/lib/db'
@@ -66,20 +58,8 @@ export function ensureTruncationNotice(): void {
   })
 }
 
-// lib/pipeline can't import @/lib/actions directly (require cycle through
-// submit-turn.ts), so the real delta-action functions are wired in here.
 export function ensureDeltaActionPort(): void {
-  configureDeltaActionPort({
-    applyDeltaAction,
-    applyDeltaActionGroupWithOutcomes,
-    readRowGuard,
-    userDeletedHappeningLink,
-    reverseReplayDeltas,
-    describeReplayError: describeDeltaReplayError,
-    settleUserWrites,
-    holdBranchWriteExclusive,
-    releaseBranchWriteExclusive,
-  })
+  configureDeltaActionPort(deltaActionPort())
 }
 
 let teardownDrainWorker: (() => void) | null = null
@@ -106,17 +86,17 @@ export function wireDrainWorker(ctx: DbCtx): void {
   }
 }
 
-export async function runBootstrap(ctx: DbCtx): Promise<BootHydrateResult> {
-  // Registry must be populated before recovery drives reverse-replay (resolves by target_table).
-  registerAllDomains()
-  ensureDiagnosticsGate()
-  ensureTruncationNotice()
-  ensureDeltaActionPort()
-  wireDrainWorker(ctx)
-  configureClassifierEmbedder(embedClassifierDescriptions)
-  // A chain names its successor's kind at commit, and an unregistered kind chains nothing.
-  ensurePeriodicClassifierPipelineRegistered()
-  ensureChapterClosePipelineRegistered()
+// generation-pipeline.md → Startup recovery pass: once per JS runtime. A later boot in the same
+// runtime (Fast Refresh, a root remount) finds only this process's own runs unfinished, still live,
+// so it waits on the first boot's pass rather than running its own.
+let crashRecovery: Promise<void> | null = null
+
+/** Tests boot more than once per module instance. */
+export function __resetCrashRecoveryGuard(): void {
+  crashRecovery = null
+}
+
+async function runCrashRecovery(ctx: DbCtx): Promise<void> {
   // Recovery must never block boot: a failure of the orphan pass itself (not just
   // a per-orphan delta) is logged and reported, and boot proceeds to hydrate.
   let recovery: RecoveryReport | null = null
@@ -158,6 +138,21 @@ export async function runBootstrap(ctx: DbCtx): Promise<BootHydrateResult> {
     heldStoryIds,
     ...(recovery === null ? { passFailed: true } : {}),
   })
+}
+
+export async function runBootstrap(ctx: DbCtx): Promise<BootHydrateResult> {
+  // Registry must be populated before recovery drives reverse-replay (resolves by target_table).
+  registerAllDomains()
+  ensureDiagnosticsGate()
+  ensureTruncationNotice()
+  ensureDeltaActionPort()
+  wireDrainWorker(ctx)
+  configureClassifierEmbedder(embedClassifierDescriptions)
+  // A chain names its successor's kind at commit, and an unregistered kind chains nothing.
+  ensurePeriodicClassifierPipelineRegistered()
+  ensureChapterClosePipelineRegistered()
+  crashRecovery ??= runCrashRecovery(ctx)
+  await crashRecovery
   // ctx.db (not the module-level default) so recovery and hydrate hit the
   // same instance.
   const result = await rehydrateAppSettings(ctx.db)

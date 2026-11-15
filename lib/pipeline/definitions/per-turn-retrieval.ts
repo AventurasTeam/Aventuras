@@ -207,11 +207,16 @@ export async function* retrievalPhase(
   }
 
   if (!outcome.ok) {
-    // Keeps a cancel off the failure surface even if a caller never checks the signal.
-    if (outcome.cancelled) return { status: 'aborted' }
-    const failure = bounded.expired()
-      ? { ...outcome.failure, detail: `embed timed out after ${EMBED_TIMEOUT_MS}ms` }
-      : outcome.failure
+    // Keeps a cancel off the failure surface even if a caller never checks the signal; one the
+    // expired bound raised is its timeout, as the close's range embed reads it.
+    const expired = bounded.expired()
+    if (outcome.cancelled && !expired) return { status: 'aborted' }
+    const timedOut = `embed timed out after ${EMBED_TIMEOUT_MS}ms`
+    const failure = outcome.cancelled
+      ? { reason: 'call' as const, detail: timedOut, staleCount: null }
+      : expired
+        ? { ...outcome.failure, detail: timedOut }
+        : outcome.failure
     ctx.log.warn('retrieval.embed_failed', {
       reason: failure.reason,
       staleCount: failure.staleCount,

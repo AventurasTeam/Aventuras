@@ -98,6 +98,10 @@ Default (non-destructive) actions use the same pattern with `variant="primary"` 
 
 No `tone` / `severity` prop on AlertDialog itself — the variant axis would duplicate Button's, and the asChild composition is idiomatic across rn-primitives.
 
+## Busy
+
+A dialog whose actions disable while it works (a save in flight, a removal, a gate) passes `busy` to `AlertDialogContent`. On web the focused action blurs the moment it disables, and with every action off there is nothing to hand focus to, so the dialog takes it and Tab stays inside ([a control that disables under focus drops focus on web](../../implementation/lessons-learned/rnweb-disabled-under-focus-blurs.md)).
+
 ## Copy contract
 
 - **Title ends with `?`** — consent-gate signal. `Delete from entry <N>?`, `Switch calendar to <name>?`.

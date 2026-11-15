@@ -399,6 +399,36 @@ describe('update_place and update_item: the tools', () => {
   })
 })
 
+// Reachable only where a row's id prefix and kind disagree: the id check refuses a wrong-kind
+// handle first.
+describe('update_place and update_item on a row of the other kind', () => {
+  it('refuses it not-a-place or not-an-item, writing nothing', async () => {
+    const f = await openCloseFixture()
+    const itemUnderLoc = 'loc_00000000-0000-4000-8000-00000000e001'
+    const placeUnderItem = 'item_00000000-0000-4000-8000-00000000e002'
+    await seedEntity(f, { id: itemUnderLoc, kind: 'item', name: 'The lantern' })
+    await seedEntity(f, { id: placeUnderItem, kind: 'location', name: 'The quay' })
+
+    const { result, calls } = await runUpkeepCalls(
+      f,
+      [
+        { table: 'entities', id: itemUnderLoc, name: 'The lantern' },
+        { table: 'entities', id: placeUnderItem, name: 'The quay' },
+      ],
+      [
+        { toolName: 'update_place', input: { id: 'l1', condition: 'Flooded', ...cite() } },
+        { toolName: 'update_item', input: { id: 'i1', condition: 'Rusted', ...cite() } },
+      ],
+    )
+
+    expect(calls.map(({ result: outcome, reason }) => [outcome, reason])).toEqual([
+      ['rejected', 'not-a-place'],
+      ['rejected', 'not-an-item'],
+    ])
+    expect(await runDeltas(f, result.actionId)).toEqual([])
+  })
+})
+
 describe('update_place', () => {
   let f: CloseFixture
 
@@ -1519,7 +1549,7 @@ describe("a part and a later part's turns", () => {
   })
 
   it("lands part 1's write over a field it wrote earlier in the close, its group on E", async () => {
-    const { calls } = await runUpkeepCalls(
+    const { calls, result } = await runUpkeepCalls(
       f,
       WORLD_SHOWN,
       [
@@ -1534,6 +1564,11 @@ describe("a part and a later part's turns", () => {
 
     expect(calls.map((call) => call.result)).toEqual(['ok', 'ok'])
     expect((await storedEntity(f, HARROW)).state).toMatchObject({ condition: 'Ash' })
+    // C1: on E, not on part 1's last turn.
+    expect((await runDeltas(f, result.actionId)).map((delta) => delta.entryId)).toEqual([
+      endEntryIdOf(f),
+      endEntryIdOf(f),
+    ])
   })
 
   it("lands part 1's mark over a chapter-wide task's write on E, as no later turn's", async () => {

@@ -394,7 +394,7 @@ export const merge = (args: MergeInput, turns: readonly string[] = ['t7']): Scri
 })
 
 export const NOTE = {
-  user: 'The user edited this after the cited turns; their value stands. Do not write it again.',
+  user: 'The user set this value themselves; it stands. Do not write it again.',
   laterTurn: 'A later turn wrote this; its value stands. Do not write it again.',
   gone: 'The row is gone; do not write to it again.',
 } as const

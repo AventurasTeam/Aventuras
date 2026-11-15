@@ -109,6 +109,11 @@ function sameRecord(
   )
 }
 
+/** ui/patterns/entity.md → Row-level fields: the reason is NULL on active and staged rows. */
+function retiredReasonFor(status: Entity['status'], reason: string | null): string | null {
+  return status === 'retired' ? blankToNull(reason ?? '') : null
+}
+
 /** Normalized on both sides: the classifier's verbatim text must not read as a user edit. */
 function columnPatch(row: Entity, draft: EntityBaseDraft): ColumnPatch {
   const patch: ColumnPatch = {}
@@ -117,8 +122,11 @@ function columnPatch(row: Entity, draft: EntityBaseDraft): ColumnPatch {
   const description = blankToNull(draft.description)
   if (description !== blankToNull(row.description ?? '')) patch.description = description
   if (draft.status !== row.status) patch.status = draft.status
-  const retiredReason = blankToNull(draft.retiredReason)
-  if (retiredReason !== blankToNull(row.retiredReason ?? '')) patch.retiredReason = retiredReason
+  const retiredReason = retiredReasonFor(draft.status, draft.retiredReason)
+  // Off retired, any stored value goes, a blank one too, which blankToNull would read as none.
+  const storedReason =
+    draft.status === 'retired' ? blankToNull(row.retiredReason ?? '') : (row.retiredReason ?? null)
+  if (retiredReason !== storedReason) patch.retiredReason = retiredReason
   if (draft.injectionMode !== row.injectionMode) patch.injectionMode = draft.injectionMode
   const tags = cleanList(draft.tags)
   if (!sameList(tags, cleanList(row.tags))) patch.tags = tags
@@ -344,7 +352,7 @@ export function entityActions(args: EntityActionArgs): PipelineAction[] {
       name: draft.name.trim(),
       description: blankToNull(draft.description),
       status: draft.status,
-      retiredReason: blankToNull(draft.retiredReason),
+      retiredReason: retiredReasonFor(draft.status, draft.retiredReason),
       injectionMode: draft.injectionMode,
       tags: cleanList(draft.tags),
       keywords: dedupeTerms(draft.keywords),

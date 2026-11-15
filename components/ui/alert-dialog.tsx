@@ -1,5 +1,13 @@
 import * as AlertDialogPrimitive from '@rn-primitives/alert-dialog'
-import { Children, Fragment, isValidElement, type ComponentProps, type ReactNode } from 'react'
+import {
+  Children,
+  Fragment,
+  isValidElement,
+  useEffect,
+  useRef,
+  type ComponentProps,
+  type ReactNode,
+} from 'react'
 import {
   Platform,
   ScrollView,
@@ -79,23 +87,35 @@ function partitionActions(children: ReactNode): { body: ReactNode[]; actions: Re
 function AlertDialogContent({
   className,
   portalHost,
+  busy = false,
   style,
   children,
   ...props
-}: ComponentProps<typeof AlertDialogPrimitive.Content> & {
+}: Omit<ComponentProps<typeof AlertDialogPrimitive.Content>, 'ref'> & {
   portalHost?: string
+  /** Its actions are disabling (a save in flight, a gate): focus stays in the dialog. */
+  busy?: boolean
 }) {
   // Keyed on `open`, not mount-scoped: the Portal unmounts its children while
   // closed, but this renders the Portal rather than living inside one, so it
   // stays mounted with the consumer for the life of the surface.
   const { open } = AlertDialogPrimitive.useRootContext()
   useRegisteredOverlay(open)
+  const contentRef = useRef<View>(null)
+  // Chromium blurs a button the moment it disables, and with every action off the dialog is all
+  // that's left to hold focus (lessons-learned/rnweb-disabled-under-focus-blurs.md).
+  useEffect(() => {
+    if (Platform.OS !== 'web' || !open || !busy) return
+    const content = contentRef.current as unknown as HTMLElement | null
+    if (content != null && !content.contains(document.activeElement)) content.focus()
+  }, [open, busy])
   const { height } = useWindowDimensions()
   const { body, actions } = partitionActions(children)
   return (
     <AlertDialogPortal hostName={portalHost}>
       <AlertDialogOverlay>
         <AlertDialogPrimitive.Content
+          ref={contentRef}
           className={cn(
             'z-50 flex w-full max-w-[calc(100%-2rem)] flex-col gap-4 rounded-lg border border-border bg-bg-overlay p-6 shadow-lg shadow-black/5 sm:max-w-lg',
             Platform.select({ web: 'animate-fade-in' }),

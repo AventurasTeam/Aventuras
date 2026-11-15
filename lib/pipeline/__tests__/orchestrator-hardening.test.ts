@@ -125,6 +125,31 @@ describe('orchestrator hardening', () => {
     expect(generationStore.getTxState().runs.size).toBe(0) // active run released
   })
 
+  it('closes a phase whose event throws, so its finally around the yield runs', async () => {
+    const { ctx } = await makeHarness()
+    let closed = false
+    definePipeline({
+      kind: 'throwy-finally',
+      phases: [
+        {
+          name: 'p',
+          run: async function* () {
+            try {
+              yield* doubleCreate()
+            } finally {
+              closed = true
+            }
+            return { status: 'completed' } as const
+          },
+        },
+      ],
+      ...base,
+    })
+
+    expect(expectRan(await runPipeline('throwy-finally', ctx)).outcome).toBe('failed')
+    expect(closed).toBe(true)
+  })
+
   it('a rejected MutationResult routes to abortRun as an action-layer error', async () => {
     const { ctx } = await makeHarness()
     definePipeline({ kind: 'rejecty', phases: [{ name: 'p', run: updateMissing }], ...base })

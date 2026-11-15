@@ -61,7 +61,7 @@ async function committedClose(actionId: string): Promise<CloseResult | null> {
  * holds a committed close for the in-story banner. Mount once, at the app root: the orchestrator
  * emits each event once.
  */
-export function useMemoryRunToasts(): void {
+export function useMemoryRunOutcomes(): void {
   useEffect(() => {
     let mounted = true
     const offDeferred = pipelineEventBus.subscribe('run_deferred', (event) => {

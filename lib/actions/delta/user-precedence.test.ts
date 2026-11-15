@@ -24,6 +24,7 @@ import {
   userDeletedPairSince,
   userEditsSince,
   wroteColumn,
+  changedColumns,
   wroteField,
   wrotePlacement,
 } from './user-precedence'
@@ -303,5 +304,35 @@ describe('userDeletedPairSince', () => {
     expect(await userDeletedPairSince(ctx, 'br_1', 'char_kael', 'char_mira', deleted - 1)).toBe(
       true,
     )
+  })
+})
+
+// The one precedence rule updateLore, updateThread and updateHappening share.
+describe('changedColumns', () => {
+  const userWrote = (col: string) => [{ op: 'update', undoPayload: { [col]: 'was' } } as Delta]
+
+  it('drops a restated column, keeps a user-written one out and reports it, writes the rest', () => {
+    expect(
+      changedColumns({
+        table: 'lore',
+        named: ['title', 'body', 'category'],
+        patch: { title: 'Toll law', body: 'Pay twice.', category: 'law' },
+        current: { title: 'Toll law', body: 'Pay once.', category: 'custom' },
+        edits: userWrote('category'),
+      }),
+    ).toEqual({ set: { body: 'Pay twice.' }, undoPayload: { body: 'Pay once.' }, userKept: true })
+  })
+
+  it('normalizes the incoming value only, so a stored blank still clears', () => {
+    expect(
+      changedColumns({
+        table: 'happenings',
+        named: ['temporal'],
+        patch: { temporal: '' },
+        current: { temporal: '' },
+        edits: [],
+        normalize: (_col, value) => (value === '' ? null : value),
+      }),
+    ).toEqual({ set: { temporal: null }, undoPayload: { temporal: '' }, userKept: false })
   })
 })

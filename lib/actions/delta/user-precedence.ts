@@ -5,6 +5,7 @@ import { isJsonObject } from '@/lib/json-object'
 import { isRetrievalBumpOnly } from '@/lib/row-signals'
 
 import { isUserOriginatedSource, type DbCtx, type PrecedenceTable } from '../types'
+import { deepEqual } from './delta-encoding'
 
 export { USER_EDITED_SINCE_PROSE } from '../types'
 
@@ -60,6 +61,20 @@ async function rowDeltasAfter(
     .orderBy(asc(deltas.logPosition))) as Delta[]
 }
 
+/** `user_edit` deltas on any of `targetIds` logged after `since`, each row's oldest first. */
+export async function userEditsOnRows(
+  ctx: DbCtx,
+  branchId: string,
+  targetTable: PrecedenceTable,
+  targetIds: readonly string[],
+  since: number,
+): Promise<Delta[]> {
+  const edits: Delta[] = []
+  for (const chunk of chunked([...targetIds]))
+    edits.push(...(await rowDeltasAfter(ctx, branchId, targetTable, chunk, since, true)))
+  return edits
+}
+
 /** `user_edit` deltas on one row logged after `since`, oldest first. */
 export function userEditsSince(
   ctx: DbCtx,
@@ -103,7 +118,7 @@ export type YieldTo = 'user' | 'any'
  * that `rows` doesn't also reverse, oldest first: `user_edit` ones, or with `'any'` every source
  * except a `retrievalCount`-only update. A user delta has none.
  */
-export async function userEditsOutliving(
+export async function writesOutliving(
   ctx: DbCtx,
   rows: readonly Delta[],
   wanted: (delta: Delta) => boolean,
@@ -225,6 +240,39 @@ const THREAD_STATUS_COLUMNS: readonly string[] = [
 /** A delta wrote a thread's status or resolved-at entry (classifier.md → Threads → The row). */
 function wroteThreadStatus(edits: readonly Delta[]): boolean {
   return THREAD_STATUS_COLUMNS.some((column) => wroteColumn(edits, column))
+}
+
+/**
+ * The columns a patch changes on `current`, one rule for every update handler: a restated column
+ * is dropped (History and the later-turn rule read an undo payload's keys as written), and a column
+ * the user wrote since the cited prose is kept and reported. `normalize` maps the incoming value
+ * only, so a stored blank still clears.
+ */
+export function changedColumns(args: {
+  table: string
+  named: readonly string[]
+  patch: Readonly<Record<string, unknown>>
+  current: object
+  edits: readonly Delta[]
+  normalize?: (column: string, value: unknown) => unknown
+}): { set: Record<string, unknown>; undoPayload: Record<string, unknown>; userKept: boolean } {
+  const { table, named, patch, edits, normalize } = args
+  const current = args.current as Readonly<Record<string, unknown>>
+  const set: Record<string, unknown> = {}
+  const undoPayload: Record<string, unknown> = {}
+  let userKept = false
+  for (const col of named) {
+    const next = normalize ? normalize(col, patch[col]) : patch[col]
+    const prior = current[col]
+    if (deepEqual(next, prior)) continue
+    if (wroteField(edits, table, col, [])) {
+      userKept = true
+      continue
+    }
+    set[col] = next
+    undoPayload[col] = prior
+  }
+  return { set, undoPayload, userKept }
 }
 
 /** wrotePath, but each column group above (placement, collision flag, retirement, thread status)

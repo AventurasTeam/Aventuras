@@ -13,7 +13,6 @@ import {
 import { logger } from '@/lib/diagnostics'
 import { newTerms, normalizeTerm } from '@/lib/keyword-terms'
 import { boundStateText } from '@/lib/piggyback'
-import { entitiesStore } from '@/lib/stores'
 import {
   brokenFlags,
   characterFactionId,
@@ -392,9 +391,8 @@ export const promoteStagedEntityHandler: ActionHandler = async (action, branchId
     return { status: 'rejected', reason: `branch mismatch: delta ${branchId} vs target ${bid}` }
   const current = await loadCurrent(bid, id, ctx)
   if (!current) return noopRefusal(`promote target entities ${bid}:${id} not found`, 'gone')
-  const held = entitiesStore.getById(id)
-  const storeEntity = held?.branchId === bid ? held : undefined
-  if (current.status !== 'staged' || (storeEntity !== undefined && storeEntity.status !== 'staged'))
+  // cadence.md → Idempotent writes: the row decides; the row lock serialises two promotes.
+  if (current.status !== 'staged')
     return noopRefusal('not-staged', current.status === 'active' ? 'restated' : null)
   if (await userWroteSinceProse(ctx, bid, id, proseEntryId, 'status'))
     return noopRefusal(USER_EDITED_SINCE_PROSE, null)
@@ -520,14 +518,15 @@ export const retireEntityHandler: ActionHandler = async (action, branchId, ctx) 
   )
 }
 
-/** The membership target's kind, undefined if gone; a row this group creates is a faction. */
+/** The membership target's kind, undefined if gone; a row this group creates by its own kind. */
 async function membershipKind(
   ctx: DbCtx,
   branchId: string,
   id: string,
   group: GroupScope | undefined,
 ): Promise<Entity['kind'] | undefined> {
-  if (group?.created.has(createdKey('entities', id))) return 'faction'
+  const key = createdKey('entities', id)
+  if (group?.created.has(key)) return group.created.get(key)?.kind as Entity['kind'] | undefined
   const [row] = await ctx.db
     .select({ kind: entities.kind })
     .from(entities)

@@ -1,6 +1,7 @@
 // matchTerms normalizes only its haystack, so every term producer must match that
 // shape or the lookup silently misses — hence the rule in a shared barrel-free module.
 import { normalizeTerm } from '@/lib/keyword-terms'
+import { oneLine } from '@/lib/text'
 
 export { normalizeTerm }
 
@@ -47,6 +48,9 @@ function boundaryPattern(term: string): RegExp {
 // fire in their prose; substring is safe because their characters are morphemes.
 // docs/memory/retrieval.md → Keyword scan surface.
 const UNSPACED_SCRIPT = /[\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakana}\p{Script=Hangul}]/u
+// ー, ｰ and 〆 are Script=Common letters written inside those words; letters only, so 。 stays out.
+const UNSPACED_COMMON_LETTER =
+  /(?=\p{L})[\p{scx=Han}\p{scx=Hiragana}\p{scx=Katakana}\p{scx=Hangul}]/u
 const LETTER = /\p{L}/u
 // \s, not ' ': U+3000 IDEOGRAPHIC SPACE is the delimiter a CJK author actually types.
 const ANY_SPACE = /\s/u
@@ -59,7 +63,7 @@ function usesSubstringMatch(term: string): boolean {
   if (chars.length < 2 || ANY_SPACE.test(term)) return false
   let sawUnspacedScript = false
   for (const char of chars) {
-    if (UNSPACED_SCRIPT.test(char)) sawUnspacedScript = true
+    if (UNSPACED_SCRIPT.test(char) || UNSPACED_COMMON_LETTER.test(char)) sawUnspacedScript = true
     else if (LETTER.test(char)) return false
   }
   return sawUnspacedScript
@@ -68,7 +72,7 @@ function usesSubstringMatch(term: string): boolean {
 export function matchTerms(text: string, terms: Iterable<string>): string[] {
   // Terms are stored NFC-normalized; prose (LLM-authored) isn't guaranteed to
   // be, so the same rendered name can otherwise miss on codepoint mismatch.
-  const haystack = text.toLowerCase().normalize('NFC')
+  const haystack = oneLine(text).toLowerCase().normalize('NFC')
   const hits: string[] = []
   for (const term of terms) {
     if (term === '') continue

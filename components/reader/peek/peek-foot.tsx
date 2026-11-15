@@ -3,6 +3,7 @@ import { Platform, Pressable, View } from 'react-native'
 import { Text } from '@/components/ui/text'
 import { useTier } from '@/hooks/use-tier'
 import { t } from '@/lib/i18n'
+import { webEnterProps } from '@/lib/keyboard'
 import { railGroupOf, type RailCategory } from '@/lib/reader-rail'
 import { cn } from '@/lib/utils'
 
@@ -20,6 +21,7 @@ export function PeekFoot({
       <Pressable
         accessibilityRole="link"
         onPress={onOpenInPanel}
+        {...webEnterProps(onOpenInPanel)}
         className={cn(
           'rounded-sm px-2 py-1 active:bg-tint-press',
           // touch.md → Touch-target floor.

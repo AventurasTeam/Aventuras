@@ -6,7 +6,7 @@ import { __resetDiagnosticsGate } from '@/lib/diagnostics'
 import { recoverInFlightRuns } from '@/lib/pipeline'
 import { rehydrateAppSettings, resetAllStores } from '@/lib/stores'
 
-import { runBootstrap } from './bootstrap'
+import { __resetCrashRecoveryGuard, runBootstrap } from './bootstrap'
 
 // Auto-spy both barrels (call-through), so the ordering assertion observes the
 // real invocation sequence rather than just the source order. invocationCallOrder
@@ -22,6 +22,7 @@ beforeEach(async () => {
     .insert(appSettings)
     .values({ id: APP_SETTINGS_SINGLETON_ID, ...APP_SETTINGS_DEFAULTS })
   __resetDiagnosticsGate()
+  __resetCrashRecoveryGuard()
 })
 afterEach(() => {
   resetAllStores()

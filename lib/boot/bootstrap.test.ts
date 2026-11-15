@@ -40,7 +40,12 @@ import {
 import { appSettingsStore, recoveryReportStore, resetAllStores } from '@/lib/stores'
 import { toastStore, type ToastItem } from '@/lib/toast'
 
-import { ensureDeltaActionPort, ensureTruncationNotice, runBootstrap } from './bootstrap'
+import {
+  __resetCrashRecoveryGuard,
+  ensureDeltaActionPort,
+  ensureTruncationNotice,
+  runBootstrap,
+} from './bootstrap'
 
 let ctx: {
   db: Awaited<ReturnType<typeof createTestDb>>['db']
@@ -52,6 +57,7 @@ beforeEach(async () => {
   const t = await createTestDb()
   ctx = { db: t.db, runInTransaction: t.runInTransaction, sqlite: t.sqlite }
   __resetDiagnosticsGate()
+  __resetCrashRecoveryGuard()
 })
 afterEach(() => resetAllStores())
 
@@ -104,6 +110,41 @@ describe('runBootstrap', () => {
     const rows = await ctx.db.select().from(pipelineRuns).where(eq(pipelineRuns.runId, 'r1'))
     expect(rows).toHaveLength(0)
     expect(recoveryReportStore.getSnapshot().pendingRecoveryReport).toBeNull()
+  })
+
+  describe('a second boot in the same runtime', () => {
+    const orphan = (runId: string) =>
+      ctx.db.insert(pipelineRuns).values({
+        runId,
+        kind: 'smoke',
+        actionId: `a-${runId}`,
+        storyId: null,
+        startedAt: 1,
+        finishedAt: null,
+        outcome: null,
+      })
+    const markers = async () => (await ctx.db.select().from(pipelineRuns)).map((r) => r.runId)
+
+    it('leaves a run this process started unfinished alone', async () => {
+      await seedRow()
+      await runBootstrap(ctx)
+      await orphan('live')
+
+      expect(await runBootstrap(ctx)).toEqual({ status: 'ok' })
+
+      expect(await markers()).toEqual(['live'])
+    })
+
+    it('waits on the first boot’s recovery when the two race', async () => {
+      await seedRow()
+      await orphan('crashed')
+
+      const first = runBootstrap(ctx)
+      await runBootstrap(ctx)
+
+      expect(await markers()).toEqual([])
+      await first
+    })
   })
 
   it('recovery failure does not block boot (still hydrates)', async () => {

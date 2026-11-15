@@ -12,6 +12,7 @@ import { useTier } from '@/hooks/use-tier'
 import type { CalendarSystem } from '@/lib/calendar'
 import type { Entity, InjectionMode } from '@/lib/db'
 import { t } from '@/lib/i18n'
+import { webEnterProps } from '@/lib/keyboard'
 import { cn } from '@/lib/utils'
 import type { ChipPreview } from '@/lib/world'
 
@@ -112,6 +113,7 @@ export function EntityLink({ entity, onPress }: { entity: Entity; onPress: () =>
     <Pressable
       accessibilityRole="link"
       onPress={onPress}
+      {...webEnterProps(onPress)}
       className={cn(
         'shrink',
         isPhone && PHONE_TOUCH_FLOOR,

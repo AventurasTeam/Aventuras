@@ -322,6 +322,41 @@ describe('useChapterDeleteConfirm: opening and staying true', () => {
     expect(toast.error).toHaveBeenCalledWith(FAILED)
   })
 
+  it('logs a refused read that means a broken log or a stale card, not the latest-chapter race', async () => {
+    const { result, loadPreview } = setup()
+    loadPreview
+      .mockResolvedValueOnce(refusal('no-close'))
+      .mockResolvedValueOnce(refusal('not-found'))
+      .mockResolvedValueOnce(refusal('not-latest'))
+
+    for (let i = 0; i < 3; i += 1) await openOn(result)
+
+    expect(vi.mocked(logger.warn).mock.calls).toEqual([
+      [
+        'app.chapter_delete_preview_refused',
+        { branchId: expect.any(String), chapterId: 'chap_2', code: 'no-close' },
+      ],
+      [
+        'app.chapter_delete_preview_refused',
+        { branchId: expect.any(String), chapterId: 'chap_2', code: 'not-found' },
+      ],
+    ])
+  })
+
+  it('logs a re-read refused for a missing close', async () => {
+    const { result, loadPreview } = setup()
+    await openOn(result)
+    loadPreview.mockResolvedValueOnce(refusal('no-close'))
+
+    settleARun()
+
+    await waitFor(() => expect(result.current.target).toBeNull())
+    expect(logger.warn).toHaveBeenCalledWith(
+      'app.chapter_delete_preview_refused',
+      expect.objectContaining({ code: 'no-close' }),
+    )
+  })
+
   it('names a chapter that is no longer the latest when the opening read is refused', async () => {
     const { result, loadPreview } = setup()
     loadPreview.mockResolvedValueOnce(refusal('not-latest'))
@@ -533,7 +568,7 @@ describe('useChapterDeleteConfirm: the removal', () => {
     expect(resync).toHaveBeenCalledTimes(1)
     expect(toast.error).not.toHaveBeenCalled()
     expect(logger.warn).toHaveBeenCalledWith(
-      'app.chapter_delete_resynced',
+      'app.chapter_delete_sync_failed',
       expect.objectContaining({
         chapterId: 'chap_2',
         error: expect.stringContaining('stale store'),

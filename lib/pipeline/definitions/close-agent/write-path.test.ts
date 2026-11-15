@@ -1321,7 +1321,7 @@ describe('dispatchToolCall in a close phase', () => {
           field: 'state.voice',
           row: 'c1',
           reason: USER_EDITED_SINCE_PROSE,
-          note: expect.stringContaining('The user edited this'),
+          note: expect.stringContaining('The user set this value'),
         },
       ],
     })
@@ -1360,7 +1360,7 @@ describe('dispatchToolCall in a close phase', () => {
           field: 'state.voice',
           row: 'c1',
           reason: USER_EDITED_SINCE_PROSE,
-          note: expect.stringContaining('The user edited this'),
+          note: expect.stringContaining('The user set this value'),
         },
         { field: 'state.traits', row: 'c1', reason: TEST_CAP },
       ],
@@ -1392,7 +1392,7 @@ describe('dispatchToolCall in a close phase', () => {
       {
         result: 'skipped',
         reason: USER_EDITED_SINCE_PROSE,
-        note: expect.stringContaining('The user edited this'),
+        note: expect.stringContaining('The user set this value'),
       },
       {
         result: 'skipped',
@@ -2106,7 +2106,7 @@ describe('the read gate on a row a landed merge absorbed', () => {
     expect(answers[2]).toEqual({
       result: 'rejected',
       reason: CLOSE_REASON.rowGone,
-      note: 'The row was merged into c1; write to c1 instead.',
+      note: 'The row c2 was merged into c1; write to c1 instead.',
       survivor: 'c1',
     })
     expect(calls[2]).toEqual({
@@ -2214,7 +2214,7 @@ describe('the read gate names the survivor of the row it judged', () => {
     expect(answers[0]).toEqual({
       result: 'rejected',
       reason: CLOSE_REASON.rowGone,
-      note: 'The row was merged into c3; write to c3 instead.',
+      note: 'The row c4 was merged into c3; write to c3 instead.',
       survivor: 'c3',
     })
   })

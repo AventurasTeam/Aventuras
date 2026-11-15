@@ -31,7 +31,7 @@ import {
 } from './row-closure'
 import {
   PLACEMENT_PATHS,
-  userEditsOutliving,
+  writesOutliving,
   wroteColumn,
   wroteField,
   wrotePath,
@@ -557,17 +557,17 @@ function undoDelete(walk: UndoWalk, target: UndoTarget, liveLinks: LiveLinkFilte
   }
 }
 
-// A close's normalization rewrites a record's keys, and a later user write of the record logs only
+// A close's normalization rewrites a record's keys, and a later write of the record logs only
 // the keys it saw: restored key by key, an old spelling would come back beside the user's record.
 function yieldsStackablesWhole(
   entry: TableEntry,
   delta: Delta,
-  userEdits: readonly Delta[],
+  laterWrites: readonly Delta[],
 ): boolean {
   return (
     entry.table === 'entities' &&
     delta.source === 'chapter_close' &&
-    wrotePath(userEdits, 'state', ['stackables'])
+    wrotePath(laterWrites, 'state', ['stackables'])
   )
 }
 
@@ -576,15 +576,15 @@ function yieldsStackablesWhole(
 function restorablePayload(
   entry: TableEntry,
   payload: Record<string, unknown>,
-  userEdits: readonly Delta[],
+  laterWrites: readonly Delta[],
   delta: Delta,
 ): Record<string, unknown> {
-  const stackablesWhole = yieldsStackablesWhole(entry, delta, userEdits)
+  const stackablesWhole = yieldsStackablesWhole(entry, delta, laterWrites)
   const restorable: Record<string, unknown> = {}
   for (const [col, partial] of Object.entries(payload)) {
     if (isPayloadMetaKey(col)) continue
     if (!Object.hasOwn(entry.columnSchemas, col)) {
-      if (!wroteField(userEdits, entry.table, col, [])) restorable[col] = partial
+      if (!wroteField(laterWrites, entry.table, col, [])) restorable[col] = partial
       continue
     }
     const kept = pruneUndoPartial(
@@ -592,7 +592,7 @@ function restorablePayload(
       partial,
       (path) =>
         (stackablesWhole && col === 'state' && path[0] === 'stackables') ||
-        wroteField(userEdits, entry.table, col, path),
+        wroteField(laterWrites, entry.table, col, path),
     )
     if (kept !== undefined) restorable[col] = kept
   }
@@ -602,13 +602,13 @@ function restorablePayload(
 async function undoUpdate(
   walk: UndoWalk,
   target: UndoTarget,
-  userEdits: readonly Delta[],
+  laterWrites: readonly Delta[],
 ): Promise<void> {
   const { delta, entry } = target
   const payload = restorablePayload(
     entry,
     (delta.undoPayload ?? {}) as Record<string, unknown>,
-    userEdits,
+    laterWrites,
     delta,
   )
   const columns = Object.keys(payload)
@@ -690,7 +690,7 @@ async function buildUndoOps(
   }
   const listVecTables = vecTableLister(ctx)
   // A create keeps its row only for the user's writes, whatever the set's mode.
-  const laterUserEdits = await userEditsOutliving(
+  const laterUserEdits = await writesOutliving(
     ctx,
     set.rows,
     set.yieldTo === 'user' ? readsUserEdits : isRowKeepingCreate,
@@ -735,7 +735,7 @@ async function buildUndoOps(
 }
 
 function fieldEditsOutliving(set: ReversalSet, ctx: DbCtx): Promise<ReadonlyMap<string, Delta[]>> {
-  return userEditsOutliving(ctx, set.rows, (d) => d.op === 'update', set.yieldTo)
+  return writesOutliving(ctx, set.rows, (d) => d.op === 'update', set.yieldTo)
 }
 
 /**
@@ -802,6 +802,8 @@ export async function reverseAndPruneDeltaRows(
 /**
  * Reverses and prunes in one transaction, as CTRL-Z does: unpruned rows would read as the undo head
  * (data-model.md → Entry mutability & rollback). `settleOps(deltaCount)` ops join it, even at 0.
+ * Callers hold the branch exclusive, or run where nothing else writes: the set's ref clears are
+ * planned from a read taken before the key locks.
  */
 export async function reverseReplayDeltas(
   actionId: string,

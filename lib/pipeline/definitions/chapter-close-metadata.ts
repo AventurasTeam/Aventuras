@@ -1,22 +1,17 @@
 import { eq, sql } from 'drizzle-orm'
 
 import type { GroupOutcome, PipelineAction } from '@/lib/actions/types'
-import {
-  generationWindow,
-  resolveModel,
-  type ResolveModelConfig,
-  type ResolveTarget,
-} from '@/lib/ai'
+import { generationWindow, resolveModel, type ResolveModelConfig } from '@/lib/ai'
 import { cutChapterParts } from '@/lib/chapters'
 import { chapters, openRegionSeries, type DbCtx, type OpenRegionRow } from '@/lib/db'
 
 import { readMetadataInputs, requestChapterMetadata } from './chapter-close-metadata-call'
 import { requireCloseRange, setCloseParts } from './close-intermediates'
-import { CLOSE_PHASE } from './intermediates'
+import { CLOSE_TARGET, CLOSE_PHASE } from './intermediates'
 import { emitDeltaGroup } from '../runtime/emit-group'
 import type { PhaseContext, PhaseEmittedEvent, PhaseResult, PipelineError } from '../types'
 
-const TARGET = 'lore-mgmt' satisfies ResolveTarget
+const TARGET = CLOSE_TARGET
 
 /** The open-region rows from the first through `endEntryId`; null when the end isn't among them. */
 export function closeSeriesThrough(

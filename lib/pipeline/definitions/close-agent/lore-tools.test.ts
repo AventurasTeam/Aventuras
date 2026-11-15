@@ -713,7 +713,7 @@ describe('update_lore', () => {
     expect(run.answers[1]).toEqual({
       result: 'skipped',
       reason: USER_EDITED_SINCE_PROSE,
-      note: 'The user edited this after the cited turns; their value stands. Do not write it again.',
+      note: 'The user set this value themselves; it stands. Do not write it again.',
     })
     expect(await runDeltas(f, run.result.actionId)).toEqual([])
   })

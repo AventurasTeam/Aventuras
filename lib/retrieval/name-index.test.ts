@@ -86,6 +86,12 @@ describe('matchTerms', () => {
     expect(matchTerms(`the ${nfd} closed early`, new Set([nfc]))).toEqual([nfc])
   })
 
+  it('matches a term whose spacing differs from the prose', () => {
+    expect(matchTerms('the grey\n  wolf howled', [normalizeTerm(' Grey \t Wolf ')])).toEqual([
+      'grey wolf',
+    ])
+  })
+
   it('never matches on an empty term', () => {
     expect(matchTerms('A miracle, she said.', new Set(['']))).toEqual([])
   })
@@ -164,6 +170,17 @@ describe('matchTerms — per-term script rule', () => {
   it('matches an astral ideograph pair by substring', () => {
     const term = '\u{20BB7}\u{20BB7}'
     expect(matchTerms(`彼は${term}を見た。`, [normalizeTerm(term)])).toEqual([term])
+  })
+
+  // ー (and halfwidth ｰ, 〆) is Script=Common: a Script=Katakana test reads it as a foreign letter.
+  it('matches a katakana term carrying the long-vowel mark by substring', () => {
+    for (const name of ['シルバー', 'ジョン・シルバー', 'ｼﾙﾊﾞｰ', '〆切']) {
+      expect(matchTerms(`${name}は笑った。`, [normalizeTerm(name)])).toEqual([normalizeTerm(name)])
+    }
+  })
+
+  it('earns substring mode from letters only, not from CJK punctuation', () => {
+    expect(matchTerms('彼。。', [normalizeTerm('。。')])).toEqual([])
   })
 
   it('treats the ideographic space as an author-supplied delimiter', () => {

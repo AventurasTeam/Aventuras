@@ -1,16 +1,5 @@
-import {
-  applyDeltaAction,
-  applyDeltaActionGroupWithOutcomes,
-  settleUserWrites,
-} from '@/lib/actions/delta/apply-delta-action'
-import {
-  __resetBranchWriteLocks,
-  holdBranchWriteExclusive,
-  releaseBranchWriteExclusive,
-} from '@/lib/actions/delta/branch-write-lock'
-import { describeDeltaReplayError, reverseReplayDeltas } from '@/lib/actions/delta/reverse-replay'
-import { readRowGuard } from '@/lib/actions/delta/row-guard'
-import { userDeletedHappeningLink } from '@/lib/actions/delta/user-precedence'
+import { deltaActionPort } from '@/lib/actions/delta/action-port'
+import { __resetBranchWriteLocks } from '@/lib/actions/delta/branch-write-lock'
 import { __resetBranchQueues } from '@/lib/actions/turns/branch-queue'
 import { branches, stories } from '@/lib/db'
 import { createTestDb } from '@/lib/db/__tests__/test-db'
@@ -55,17 +44,7 @@ export async function makeHarness(): Promise<{
 
 /** The port boot wires, from the action layer's own functions; a test spreads its override over it. */
 export function realDeltaActionPort(): DeltaActionPort {
-  return {
-    applyDeltaAction,
-    applyDeltaActionGroupWithOutcomes,
-    readRowGuard,
-    userDeletedHappeningLink,
-    reverseReplayDeltas,
-    describeReplayError: describeDeltaReplayError,
-    settleUserWrites,
-    holdBranchWriteExclusive,
-    releaseBranchWriteExclusive,
-  }
+  return deltaActionPort()
 }
 
 export function resetSingletons(): void {
