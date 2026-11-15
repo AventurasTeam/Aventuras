@@ -661,8 +661,9 @@ describe('a reversed pass placement and the writes after it', () => {
     expect(await stateOf('loc_p')).toEqual({ parent_location_id: null })
   })
 
-  // The mark alone changed, so the place was top-level before it: the pair restored as one field.
-  it('puts a place a reversed write marked unplaced back at the top over a later machine move', async () => {
+  // Every reversal yields to a surviving later write: the move stands, and its prior takes the
+  // placement from before the mark, both keys, so its own undo puts the place back at the top.
+  it('keeps a later machine move over a reversed mark and gives it the top-level prior', async () => {
     await act('act_pass', {
       kind: 'updateEntity',
       source: 'periodic_classifier',
@@ -674,11 +675,13 @@ describe('a reversed pass placement and the writes after it', () => {
     })
     await act('act_later', placeAt('loc_p', { kind: 'under', parentId: 'loc_quarter' }))
     await reversePass()
-    expect(await stateOf('loc_p')).toEqual({ parent_location_id: null })
+    expect(await stateOf('loc_p')).toEqual({ parent_location_id: 'loc_quarter' })
+    const [later] = await deltasOf('act_later')
+    expect(later.undoPayload).toEqual({ state: { parent_location_id: null, unplaced: null } })
   })
 
-  // A later machine write yields to the reversal, the pair restored as one field.
-  it('puts a place the pass marked top-level back unplaced over a later machine move', async () => {
+  // The later write logged the parent alone; the rewrite adds the mark, so its undo decodes unplaced.
+  it('keeps a later machine move over a reversed top-level mark and gives it the unplaced prior', async () => {
     await act('act_pass', placeAt('loc_u', { kind: 'top' }))
     await act('act_later', {
       kind: 'updateEntity',
@@ -689,8 +692,87 @@ describe('a reversed pass placement and the writes after it', () => {
         patch: { state: { parent_location_id: 'loc_quarter' } },
       },
     })
+    const [logged] = await deltasOf('act_later')
+    expect(logged.undoPayload).toEqual({ state: { parent_location_id: null } })
     await reversePass()
-    expect(await stateOf('loc_u')).toEqual(UNPLACED)
+    expect(await stateOf('loc_u')).toEqual({ parent_location_id: 'loc_quarter' })
+    const [later] = await deltasOf('act_later')
+    expect(later.undoPayload).toEqual({ state: { parent_location_id: null, unplaced: true } })
+  })
+
+  // The later write logged the mark alone; the rewrite adds the parent, so its undo decodes it.
+  it('keeps a later unplacing over a reversed move to the top and gives it the parent prior', async () => {
+    await ctx.db.insert(entities).values(place('loc_c', 'loc_quarter'))
+    await act('act_pass', {
+      kind: 'updateEntity',
+      source: 'periodic_classifier',
+      payload: { branchId: 'b1', id: 'loc_c', patch: { state: { parent_location_id: null } } },
+    })
+    await act('act_later', {
+      kind: 'updateEntity',
+      source: 'periodic_classifier',
+      payload: {
+        branchId: 'b1',
+        id: 'loc_c',
+        patch: { state: { parent_location_id: null, unplaced: true } },
+      },
+    })
+    const [logged] = await deltasOf('act_later')
+    expect(logged.undoPayload).toEqual({ state: { unplaced: null } })
+    await reversePass()
+    expect(await stateOf('loc_c')).toEqual(UNPLACED)
+    const [later] = await deltasOf('act_later')
+    expect(later.undoPayload).toEqual({
+      state: { unplaced: null, parent_location_id: 'loc_quarter' },
+    })
+  })
+
+  const restate = (state: Record<string, unknown>): PipelineAction => ({
+    kind: 'updateEntity',
+    source: 'periodic_classifier',
+    payload: { branchId: 'b1', id: 'loc_p', patch: { state } },
+  })
+  const reverseLater = async () =>
+    reverse(await selectReversalSet(ctx, { branchId: 'b1', target: await deltasOf('act_later') }))
+
+  // Absent reads as null, so a rewrite to a null prior leaves out a key the survivor never logged.
+  it('leaves a placement key the survivor never logged out of its rewrite', async () => {
+    await act('act_pass', restate({ parent_location_id: 'loc_quarter' }))
+    await act('act_later', restate({ parent_location_id: null }))
+    const set = await selectReversalSet(ctx, { branchId: 'b1', target: await deltasOf('act_pass') })
+    const rewrites: Record<string, unknown>[] = []
+    await reverseAndPruneDeltaRows(set, ctx, { keepRedoExact: false }, [], (plan) =>
+      rewrites.push(...plan.survivorRewrites.map(({ payload }) => payload)),
+    )
+    expect(rewrites).toStrictEqual([{ state: { parent_location_id: null } }])
+  })
+
+  // Two reversed writes rewrite one survivor, newest first: the older's prior must clear the key
+  // the newer's rewrite added, or the survivor's own undo decodes the newer's placement.
+  describe('a survivor two reversed placements rewrite', () => {
+    it('drops the mark the newer rewrite added when the older prior is top-level', async () => {
+      await act('act_pass', restate(UNPLACED))
+      await act('act_pass', restate({ parent_location_id: 'loc_quarter' }))
+      await act('act_later', restate({ parent_location_id: null }))
+      await reversePass()
+      expect(await stateOf('loc_p')).toEqual({ parent_location_id: null })
+      const [later] = await deltasOf('act_later')
+      expect(later.undoPayload).toEqual({ state: { parent_location_id: null, unplaced: null } })
+      await reverseLater()
+      expect(await stateOf('loc_p')).toEqual({ parent_location_id: null })
+    })
+
+    it('drops the parent the newer rewrite added when the older prior is top-level', async () => {
+      await act('act_pass', restate({ parent_location_id: 'loc_quarter' }))
+      await act('act_pass', restate({ parent_location_id: null }))
+      await act('act_later', restate(UNPLACED))
+      await reversePass()
+      expect(await stateOf('loc_p')).toEqual(UNPLACED)
+      const [later] = await deltasOf('act_later')
+      expect(later.undoPayload).toEqual({ state: { unplaced: null, parent_location_id: null } })
+      await reverseLater()
+      expect(await stateOf('loc_p')).toEqual({ parent_location_id: null })
+    })
   })
 
   it.each([

@@ -18,8 +18,7 @@ const COPY = {
   lore: '2 lore rows removed',
   editsIncluded: 'your edits included',
   otherChanges: '31 other changes reversed',
-  turnsSince:
-    '14 turns since stay as written, and can still reflect what it added. Undoing one can bring back a value this removes.',
+  turnsSince: '14 turns since stay as written, and can still reflect what it added.',
   closesNextSend: 'A close runs again before your next turn.',
   waits: 'A close waits until the chapter grows past the threshold.',
   staysOpen: 'The chapter stays open until you close it.',
@@ -32,6 +31,8 @@ const COPY = {
 const LORE_LINE = /lore rows? removed/
 const OTHER_LINE = /other changes? reversed/
 const TURNS_LINE = /turns? since/
+// chapter-timeline.md → Delete a chapter: a later turn's undo restores what preceded the close.
+const RESIDUE_LINE = /bring back a value/
 
 // chapter-timeline.md → Delete a chapter's sketch.
 const PREVIEW: ChapterDeletePreview = {
@@ -74,15 +75,19 @@ type Story = StoryObj<typeof meta>
 export const ClosesNextSend: Story = {
   play: async () => {
     const dialog = await findDialog()
-    await expectDescription(dialog, [
-      COPY.body,
-      COPY.loreEdited,
-      COPY.otherChanges,
-      COPY.turnsSince,
-      COPY.closesNextSend,
-      COPY.divider,
-      COPY.irreversible,
-    ])
+    await expectDescription(
+      dialog,
+      [
+        COPY.body,
+        COPY.loreEdited,
+        COPY.otherChanges,
+        COPY.turnsSince,
+        COPY.closesNextSend,
+        COPY.divider,
+        COPY.irreversible,
+      ],
+      [RESIDUE_LINE],
+    )
     // The order: lore, other changes, turns since.
     const description = dialog.getAttribute('aria-describedby')
     const text = document.getElementById(description ?? '')?.textContent ?? ''
@@ -138,9 +143,7 @@ export const NoCountLines: Story = {
     const dialog = await findDialog()
     await expectDescription(
       dialog,
-      [
-        '3 turns since stay as written, and can still reflect what it added. Undoing one can bring back a value this removes.',
-      ],
+      ['3 turns since stay as written, and can still reflect what it added.'],
       [LORE_LINE, OTHER_LINE],
     )
   },
@@ -168,7 +171,7 @@ export const SingleOfEach: Story = {
     await expectDescription(dialog, [
       '1 lore row removed, your edits included',
       '1 other change reversed',
-      '1 turn since stays as written, and can still reflect what it added. Undoing one can bring back a value this removes.',
+      '1 turn since stays as written, and can still reflect what it added.',
     ])
   },
 }

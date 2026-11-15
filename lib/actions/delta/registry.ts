@@ -6,6 +6,8 @@ import type { Delta, SqlOp } from '@/lib/db'
 import { isEmbeddedSourceTable } from '@/lib/db'
 
 import type { DbCtx, NoopMark, PipelineAction } from '../types'
+import { schemaArrayPaths } from './delta-encoding'
+import type { TermMatch } from './term-list'
 
 export type DeltaOp = 'create' | 'update' | 'delete'
 
@@ -119,6 +121,19 @@ export function whereForDelta(
     : eq(descriptor.idCol, delta.targetId)
 }
 
+/** A string list a reversal undoes term by term: a column, or an array `path` inside a schema-backed one. */
+export type TermListField = {
+  readonly column: string
+  readonly path?: readonly string[]
+  readonly match: TermMatch
+}
+
+/** A count a reversal undoes as a counter: relative writes shift it, the rest set it. */
+export type CounterField = {
+  readonly column: string
+  readonly isRelative: (delta: Delta) => boolean
+}
+
 export type DomainRegistration = {
   table: string
   descriptor: TableDescriptor
@@ -131,6 +146,9 @@ export type DomainRegistration = {
    * spanning columns needs a one-field group: `docs/generation-pipeline.md` → Reverse-replay.
    */
   rowKeepingColumns?: readonly [string, ...string[]]
+  /** Every array in a schema-backed column that declares one must be declared. */
+  termLists?: readonly TermListField[]
+  counter?: CounterField
 }
 
 export type TableEntry = Omit<DomainRegistration, 'handlers'>
@@ -155,11 +173,42 @@ export function register(reg: DomainRegistration): void {
         throw new Error(`register: ${reg.table} has no column ${col} to keep rows by`)
     }
   }
+  checkFieldKinds(reg)
   const { handlers, ...tableEntry } = reg
   tableRegistry.set(reg.table, tableEntry)
   for (const [kind, handler] of Object.entries(handlers)) {
     actionRegistry.set(kind, { table: reg.table, handler })
   }
+}
+
+const pathKey = (column: string, path: readonly string[]) => [column, ...path].join('.')
+
+// A misdeclared list would undo as a whole value, the bug the declaration exists to prevent.
+function checkFieldKinds(reg: DomainRegistration): void {
+  const columns = getTableColumns(reg.descriptor.table)
+  const declared = new Set<string>()
+  for (const { column, path = [] } of reg.termLists ?? []) {
+    if (!Object.hasOwn(columns, column))
+      throw new Error(`register: ${reg.table} has no column ${column} to list terms in`)
+    const schema = reg.columnSchemas[column]
+    if (path.length > 0) {
+      const arrays = schema ? schemaArrayPaths(schema).map((p) => pathKey(column, p)) : []
+      if (!arrays.includes(pathKey(column, path)))
+        throw new Error(`register: ${reg.table}.${pathKey(column, path)} is not an array`)
+    } else if (schema)
+      throw new Error(`register: ${reg.table}.${column} is schema-backed; declare its array paths`)
+    declared.add(pathKey(column, path))
+  }
+  for (const column of new Set((reg.termLists ?? []).map((list) => list.column))) {
+    const schema = reg.columnSchemas[column]
+    if (!schema) continue
+    const missing = schemaArrayPaths(schema).find((p) => !declared.has(pathKey(column, p)))
+    if (missing)
+      throw new Error(`register: ${reg.table}.${pathKey(column, missing)} is an undeclared list`)
+  }
+  const counter = reg.counter?.column
+  if (counter !== undefined && (!Object.hasOwn(columns, counter) || reg.columnSchemas[counter]))
+    throw new Error(`register: ${reg.table} has no plain column ${counter} to count in`)
 }
 
 export function resolveByActionKind(kind: string) {

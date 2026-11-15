@@ -3,6 +3,7 @@ import { and, eq } from 'drizzle-orm'
 import type { HappeningAwareness } from '@/lib/db'
 import { happeningAwareness, happeningAwarenessWriteSchema } from '@/lib/db'
 import { generateId } from '@/lib/ids'
+import { isRetrievalBumpOnly } from '@/lib/row-signals'
 import { happeningAwarenessStore } from '@/lib/stores'
 
 import { nullifyRef } from '../coerce'
@@ -276,7 +277,6 @@ const bumpRetrievalHandler: ActionHandler = (action, branchId, ctx) => {
     targetTable: 'happening_awareness',
     targetId: id,
     op: 'update',
-    // retrievalCount has no columnSchemas entry, so reverse-replay restores it by assignment.
     undoPayload: { retrievalCount: priorCount },
     ops: [
       ctx.db
@@ -332,6 +332,11 @@ export function registerHappeningAwareness(): void {
       branchCol: happeningAwareness.branchId,
     },
     columnSchemas: {},
+    // chapter-close.md → 3d: a turn's bump moves the count; a close's reset and merge set it.
+    counter: {
+      column: 'retrievalCount',
+      isRelative: (d) => d.source === 'ai_classifier' && isRetrievalBumpOnly(d.op, d.undoPayload),
+    },
     handlers: {
       upsertHappeningAwareness: upsertHandler,
       deleteHappeningAwareness: deleteHandler,

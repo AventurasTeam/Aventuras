@@ -57,6 +57,7 @@ import {
 } from '../delta/user-precedence'
 import type { DbCtx, DeltaSource, ProseEntryId } from '../types'
 import { branchPlaces, parentChainRefusal } from './parent-chain-check'
+import { resolvesPair } from './resolved-pair'
 import { loadStoryPlace } from '../story-entries/story-place'
 
 declare module '@/lib/actions/action-map' {
@@ -680,20 +681,14 @@ const flagUndo = (row: Entity) => ({
   nameCollisionReason: row.nameCollisionReason,
 })
 
-// No delta says which pair a clear answered: a user edit whose undo held this pair's flag did.
+// A user edit that cleared this pair's flag answered it, by its meta key or its prior flag.
 async function userResolvedPair(ctx: DbCtx, a: Entity, b: Entity): Promise<boolean> {
   for (const [row, other] of [
     [a, b],
     [b, a],
   ] as const) {
     const edits = await userEditsSince(ctx, row.branchId, 'entities', row.id, 0)
-    if (
-      edits.some(
-        ({ undoPayload }) =>
-          undoPayload?.nameCollisionFlag === 1 && undoPayload.nameCollisionPartnerId === other.id,
-      )
-    )
-      return true
+    if (edits.some(({ undoPayload }) => resolvesPair(undoPayload, other.id))) return true
   }
   return false
 }

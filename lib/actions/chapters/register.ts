@@ -137,6 +137,7 @@ export function registerChapters(): void {
     table: 'chapters',
     descriptor: { table: chapters, idCol: chapters.id, branchCol: chapters.branchId },
     columnSchemas: {},
+    termLists: [{ column: 'keywords', match: 'normalized' }],
     handlers: {
       createChapter: createHandler,
       updateChapter: updateHandler,

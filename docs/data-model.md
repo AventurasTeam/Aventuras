@@ -2737,6 +2737,10 @@ arbitrary editing.
   be namespaced out of that walk or it reaches a `SET` clause and the store
   patch beside it. The prefix cannot collide with a column, because column
   keys are identifiers. `$invalidationScope` is the first such key.
+  `$resolvedPair`, on a user edit that cleared a live collision flag,
+  names the partner the user answered: a reversal can rewrite the
+  edit's prior flag, so the flag alone can't keep the answer
+  ([`memory/chapter-close.md → 3f`](./memory/chapter-close.md#3f--world-upkeep)).
 - **The reversal set closes over the rows its creates delete, and the
   rows naming them**, not over the anchor alone. Undoing a `create` is a
   plain row delete with no cascade — only an explicit delete action
@@ -3019,8 +3023,9 @@ Algorithm:
 
 Redo re-applies from the in-memory stack, including the rows the
 closure took with the group and the prior values the undo rewrote on
-surviving deltas, so undo and redo stay exact inverses; a sweep's rows
-stay out, since the clamped watermark re-derives them. A
+surviving deltas of the rows it restores, so undo and redo stay exact
+inverses; a sweep's rows stay out, since the clamped watermark
+re-derives them. A
 close's re-run has no redo: its undo writes a journal back, which redo
 can't replay, so re-running is the way back, and its undo clears the
 stack, whose snapshots can hold the re-run's values. The stack clears on any

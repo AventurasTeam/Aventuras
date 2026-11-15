@@ -273,8 +273,9 @@ describe('keywordAuthors', () => {
     })
   })
 
-  // An undone update leaves the log, so its term falls back to an earlier writer: the known gap.
-  it("credits a term a pruned machine update added to the create's source", async () => {
+  // generation-pipeline.md → Reverse-replay: a user's save confirms nothing, so the term goes with
+  // the write that added it, and the save's rewritten before-list still credits its own term.
+  it('takes a term a reversed update added, though a later user save kept it', async () => {
     const ctx = await setup()
     await applyOk(
       ctx,
@@ -289,11 +290,8 @@ describe('keywordAuthors', () => {
       'the drunk': 'user_edit',
     })
     await reverseReplayDeltas('act_m', ctx)
-    expect(await liveKeywords(ctx, 'entities', 'char_1')).toEqual(['the knight', 'the drunk'])
-    expect(await authorsOf(ctx)).toEqual({
-      'the knight': 'periodic_classifier',
-      'the drunk': 'user_edit',
-    })
+    expect(await liveKeywords(ctx, 'entities', 'char_1')).toEqual(['the drunk'])
+    expect(await authorsOf(ctx)).toEqual({ 'the drunk': 'user_edit' })
   })
 })
 

@@ -1728,9 +1728,15 @@ undone. In the same transaction, the reversal rewrites the prior values
 of the surviving later deltas on that row as if the reversed delta had
 never been written, walking them in log order. For a column or
 sub-field, the first survivor that changed it takes the reversed
-delta's prior value. For a term, each survivor that left it alone gets
-it reversed in its prior list, and the first that changed it gets the
-same and ends the walk. For a count, a reversed bump of n lowers the
+delta's prior value. A column group (a place's parent and `unplaced`
+mark, the collision flag's three columns, a status with its reason or
+entry) takes the prior as one field, so a survivor that recorded only
+part of it gets the rest too, and a survivor that logged an object
+whole takes the prior for that object. For a term, each survivor that left it alone
+gets it reversed in its prior list, and the first that changed it gets
+the same and ends the walk. Whether a survivor changed a term is read
+from the log as the reversal found it, so one that a newer reversed
+delta's rewrite left restating the term still ends the walk. For a count, a reversed bump of n lowers the
 prior counts after it by n, and a reversed absolute write shifts them
 by its prior value less the value it wrote, each through the next
 absolute write. The row itself changes only where no survivor ended
@@ -1752,7 +1758,9 @@ pass's or a close's facts, whose `state` writes are whole values or
 lists (a character's faction, traits, drives and voice, a faction's
 standing and agenda, a place's parent, unplaced mark and condition, an
 item's condition), with one exception. A close's stackable
-normalization writes a record, so its undo carries that guard. Reach
+normalization writes a record, so its undo carries that guard, and the
+survivor that wrote the record keeps its logged prior, so the record
+stays normalized there too. Reach
 also keeps the rule from splitting one move across two rows, leaving an
 item held and lying somewhere at once. A move writes only the sides it
 changes (a take of an item lying nowhere writes no position, and a take
@@ -2032,8 +2040,9 @@ put back as one field. A row the snapshot restores whole gets
 the field back with its row. A row whose reference only a sweep's row
 removes would stay cleared; that is a guard, since no sweep holds an
 entity create today. The snapshot also takes the payload of each
-surviving delta whose prior value the reversal rewrites, and redo
-writes each back. Every delta-logged write clears the redo stack, so
+surviving delta whose prior value the reversal rewrites on a row the
+snapshot restores, and redo writes each back; a survivor on a sweep's
+row keeps its rewrite, as that row keeps the undo. Every delta-logged write clears the redo stack, so
 redo always meets the state its undo left.
 
 Abort is conceptually identical to user CTRL-Z — same

@@ -2,9 +2,8 @@ import { and, asc, desc, eq, gt, inArray, or, sql } from 'drizzle-orm'
 
 import { chunked, deltas, type Delta, type Entity, type LocationState, type Thread } from '@/lib/db'
 import { isJsonObject } from '@/lib/json-object'
-import { isRetrievalBumpOnly } from '@/lib/row-signals'
 
-import { isUserOriginatedSource, type DbCtx, type PrecedenceTable } from '../types'
+import type { DbCtx, PrecedenceTable } from '../types'
 import { deepEqual } from './delta-encoding'
 
 export { USER_EDITED_SINCE_PROSE } from '../types'
@@ -98,7 +97,9 @@ export async function userEditsSinceProse(
   return userEditsSince(ctx, branchId, targetTable, targetId, since)
 }
 
-const rowKey = (d: Delta) => `${d.targetTable}:${d.branchId}:${d.targetId}`
+/** A delta's row: its table, branch and target id. */
+export const rowKey = (d: Pick<Delta, 'branchId' | 'targetTable' | 'targetId'>) =>
+  `${d.targetTable}:${d.branchId}:${d.targetId}`
 
 function groupBy(items: readonly Delta[], key: (d: Delta) => string): Map<string, Delta[]> {
   const groups = new Map<string, Delta[]>()
@@ -110,40 +111,44 @@ function groupBy(items: readonly Delta[], key: (d: Delta) => string): Map<string
   return groups
 }
 
-/** Whose later writes a reversed machine field yields to (generation-pipeline.md → Reverse-replay). */
-export type YieldTo = 'user' | 'any'
+/** Deltas of any source on any of `targetIds` logged after `since`, oldest first. */
+export function deltasOnRowsAfter(
+  ctx: DbCtx,
+  branchId: string,
+  targetTable: string,
+  targetIds: readonly string[],
+  since: number,
+): Promise<Delta[]> {
+  return rowDeltasAfter(ctx, branchId, targetTable, targetIds, since, false)
+}
 
 /**
- * Maps each machine delta in `rows` that `wanted` accepts to the deltas on its row logged after it
- * that `rows` doesn't also reverse, oldest first: `user_edit` ones, or with `'any'` every source
- * except a `retrievalCount`-only update. A user delta has none.
+ * Maps each delta in `rows` that `wanted` accepts to the deltas on its row logged after it that
+ * `rows` doesn't also reverse, oldest first, from any source: every reversal yields to a surviving
+ * later write (generation-pipeline.md → Reverse-replay).
  */
 export async function writesOutliving(
   ctx: DbCtx,
   rows: readonly Delta[],
   wanted: (delta: Delta) => boolean,
-  yieldTo: YieldTo,
 ): Promise<ReadonlyMap<string, Delta[]>> {
   const reversed = new Set(rows.map((r) => r.id))
-  const machine = rows.filter((d) => !isUserOriginatedSource(d.source) && wanted(d))
+  const kept = rows.filter(wanted)
   const edits: Delta[] = []
-  for (const group of groupBy(machine, (d) => `${d.branchId}:${d.targetTable}`).values()) {
+  for (const group of groupBy(kept, (d) => `${d.branchId}:${d.targetTable}`).values()) {
     const { branchId, targetTable } = group[0]
-    // One bound per table; each machine write below keeps only its own row's later edits.
+    // One bound per table; each write below keeps only its own row's later edits.
     const since = group.reduce((min, d) => Math.min(min, d.logPosition), Infinity)
     const ids = [...new Set(group.map((d) => d.targetId))]
     for (const chunk of chunked(ids))
-      edits.push(
-        ...(await rowDeltasAfter(ctx, branchId, targetTable, chunk, since, yieldTo === 'user')),
-      )
+      edits.push(...(await deltasOnRowsAfter(ctx, branchId, targetTable, chunk, since)))
   }
-  // A count retrieval bumps every turn is nothing a field yields to (C13).
-  const outliving = edits.filter(
-    (e) => !reversed.has(e.id) && (yieldTo === 'user' || !isRetrievalBumpOnly(e.op, e.undoPayload)),
+  const editsByRow = groupBy(
+    edits.filter((e) => !reversed.has(e.id)),
+    rowKey,
   )
-  const editsByRow = groupBy(outliving, rowKey)
   return new Map(
-    machine.map((d) => [
+    kept.map((d) => [
       d.id,
       (editsByRow.get(rowKey(d)) ?? []).filter((e) => e.logPosition > d.logPosition),
     ]),

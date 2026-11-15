@@ -19,7 +19,6 @@ import {
   CLOSED_AT,
   TOBIN_STATE,
   TOBIN,
-  TOBIN_CLOSE_DESCRIPTION,
   CLOSE_LORE_ID,
   type ClosedChapter,
   worldRows,
@@ -211,7 +210,8 @@ describe('later writes win over a whole delete (C13)', () => {
     expect(state.traits).toEqual(['taciturn'])
   })
 
-  it('restores the count a later retrieval bump moved, which holds no field', async () => {
+  // The close's write is absolute: its undo gives back its prior count plus the bump that survives.
+  it('restores the count from before the close plus a later retrieval bump', async () => {
     const fx = await openSeeded()
     const awarenessId = await seedAwareness(fx)
     const c = await closeOn(fx, fx.replyIds[END_REPLY])
@@ -226,8 +226,11 @@ describe('later writes win over a whole delete (C13)', () => {
       status: 'ok',
     })
 
-    expect(await retrievalCountOf(fx, awarenessId)).toBe(2)
-    expect(await deltasOf(fx, 'act_turn_bump')).toHaveLength(1)
+    expect(await retrievalCountOf(fx, awarenessId)).toBe(3)
+    const [bump] = await deltasOf(fx, 'act_turn_bump')
+    expect(bump.undoPayload, 'the bump now counts up from the pre-close count').toEqual({
+      retrievalCount: 2,
+    })
   })
 
   // P under R; the close moves P to Q; a later pass moves it to S; the user deletes R. The ref
@@ -280,7 +283,8 @@ describe('later writes win over a whole delete (C13)', () => {
 
   // C13's accepted residue: the later write's undo holds the close's value, so undoing that turn
   // after the delete writes it back.
-  it("lets a later turn's undo write the close's value back after the delete", async () => {
+  // The delete rewrites the later turn's prior, so its undo restores what preceded the close.
+  it("has a later turn's undo restore the value from before the close", async () => {
     const c = await openClosed()
     await writeCloseWork(c)
     await writeLaterTurn(c.fx, 'act_turn_later')
@@ -297,7 +301,7 @@ describe('later writes win over a whole delete (C13)', () => {
 
     expect(await undoLastAction(c.fx.branchId, c.fx.ctx)).toEqual({ status: 'ok' })
 
-    expect((await entityOf(c.fx, TOBIN.id))?.description).toBe(TOBIN_CLOSE_DESCRIPTION)
+    expect((await entityOf(c.fx, TOBIN.id))?.description).toBe(TOBIN.description)
     expect((await entryRows(c.fx)).map((e) => e.id)).not.toContain('entry_later_action')
   })
 

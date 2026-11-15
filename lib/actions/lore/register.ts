@@ -258,6 +258,10 @@ export function registerLore(): void {
     table: 'lore',
     descriptor: { table: lore, idCol: lore.id, branchCol: lore.branchId },
     columnSchemas: {},
+    termLists: [
+      { column: 'keywords', match: 'normalized' },
+      { column: 'tags', match: 'normalized' },
+    ],
     handlers: {
       createLore: createHandler,
       updateLore: updateHandler,

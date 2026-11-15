@@ -114,7 +114,7 @@ function changesOf(
   return { createdLore: { count: created.live.size, userEdited }, otherChanges }
 }
 
-// An update a later write replaced in every field restores nothing, so the delete leaves it standing.
+// An update a later write replaced in every field, list term and count restores nothing.
 function countsNowhere(d: Delta, restoring: ReadonlySet<string>): boolean {
   return (
     d.targetTable === 'story_entries' ||

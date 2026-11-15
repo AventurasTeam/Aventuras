@@ -749,10 +749,12 @@ describe('collision flag columns', () => {
     expect((await rowFor(db, 'char_1')).embeddingStale).toBe(0)
     const logged = await deltasOf(db, 'act_keep')
     expect(logged).toHaveLength(1)
+    // chapter-close.md → 3f: the clear names the pair it answered in a key no reversal rewrites.
     expect(logged[0].undoPayload).toEqual({
       nameCollisionFlag: 1,
       nameCollisionPartnerId: 'char_2',
       nameCollisionReason: 'distinct',
+      $resolvedPair: 'char_2',
     })
 
     expect(await reverseReplayDeltas('act_keep', ctx)).toBe(1)
@@ -773,6 +775,7 @@ describe('collision flag columns', () => {
       nameCollisionFlag: 1,
       nameCollisionPartnerId: 'char_2',
       nameCollisionReason: 'distinct',
+      $resolvedPair: 'char_2',
     })
     expect((await rowFor(db, 'char_1')).name).toBe('Kaelin')
     expect(await flagColumns(db, 'char_1')).toEqual([0, null, null])

@@ -269,7 +269,9 @@ describe('a reversal applies to rows a delete outside the set holds', () => {
     expect(await payloadOf('act_del')).toMatchObject({ status: 'staged', keywords: ['a'] })
   })
 
-  it('keeps a later user write on the held copy and restores only what the user left', async () => {
+  // A held copy yields term by term: the pass's term goes though the user's save kept it, and the
+  // save's prior is rewritten as if the pass had never added it.
+  it('undoes the held copy term by term and keeps what the user wrote', async () => {
     await ctx.db.insert(entities).values(character('char_s', { status: 'staged', keywords: ['a'] }))
     await act('act_pass', {
       kind: 'promoteStagedEntity',
@@ -290,10 +292,8 @@ describe('a reversal applies to rows a delete outside the set holds', () => {
 
     await reverseReplayDeltas('act_pass', ctx)
 
-    expect(await payloadOf('act_del')).toMatchObject({
-      status: 'staged',
-      keywords: ['a', 'b', 'u'],
-    })
+    expect(await payloadOf('act_del')).toMatchObject({ status: 'staged', keywords: ['a', 'u'] })
+    expect(await payloadOf('act_user')).toEqual({ keywords: ['a'] })
     expect(await deltasOf('act_pass')).toEqual([])
   })
 

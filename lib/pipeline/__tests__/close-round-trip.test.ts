@@ -786,6 +786,36 @@ function withAwarenessCount(
   }
 }
 
+/** The close's log with the merge's prior count on the kept awareness row of the pair at `count`. */
+function withMergePriorCount(
+  h: CloseHarness,
+  log: readonly Delta[],
+  happeningId: string,
+  characterId: string,
+  count: number,
+): Delta[] {
+  const rows = h.closed().state.rows.happening_awareness as readonly HappeningAwareness[]
+  const kept = defined(
+    rows.find((row) => row.happeningId === happeningId && row.characterId === characterId),
+    `round trip: no awareness of ${happeningId} for ${characterId}`,
+  )
+  // The merge's upsert writes the summed count beside other fields; the reset writes it alone.
+  const isMerge = (delta: Delta) =>
+    delta.op === 'update' &&
+    delta.targetTable === 'happening_awareness' &&
+    delta.targetId === kept.id &&
+    delta.undoPayload != null &&
+    Object.hasOwn(delta.undoPayload, 'retrievalCount') &&
+    Object.keys(delta.undoPayload).length > 1
+  if (log.filter(isMerge).length !== 1)
+    throw new Error(`round trip: not one merge upsert of ${kept.id}`)
+  return log.map((delta) =>
+    isMerge(delta)
+      ? { ...delta, undoPayload: { ...delta.undoPayload, retrievalCount: count } }
+      : delta,
+  )
+}
+
 type HeldAwareness = { characterId: string; retrievalCount: number }
 
 /** The close's log with one held awareness copy, in its delete of `happeningId`, at `count`. */
@@ -1552,13 +1582,6 @@ const LATER_BUMP_CASE: RoundTripCase = {
   merge: true,
   abortOn: ['deleteHappening'],
   armExpect: {
-    // The bump's undo restores by assignment, so TOLD's row reads its pre-bump count over the
-    // reset's 0. Canon records the edge (chapter-close.md → 3d).
-    'a rollback past E': async (h) => {
-      expect(await worldState(h.fx)).toEqual(
-        withAwarenessCount(h.closed().state, TOLD.id, TOBIN.id, TOLD_TOBIN_COUNT),
-      )
-    },
     // The close's undo puts ASKED's row back, then the bumps go with the turns past E.
     'a rollback to E': async (h) => {
       expect(await worldState(h.fx)).toEqual(
@@ -1572,9 +1595,17 @@ const LATER_BUMP_CASE: RoundTripCase = {
     },
   },
   armLog: {
-    // The close stands, so the bump's undo lands on the copy of the row its delete of ASKED holds.
+    // The close stands, so each bump's undo lowers the count after it by one: on the copy of the
+    // row its delete of ASKED holds, and on the merge's prior count of the row it kept, an absolute
+    // write that ends the walk, so the reset's 0 stands (chapter-close.md → 3d).
     'a rollback past E': (h) =>
-      withHeldCount(h.closed().log, ASKED.id, TOBIN.id, ASKED_TOBIN_COUNT),
+      withMergePriorCount(
+        h,
+        withHeldCount(h.closed().log, ASKED.id, TOBIN.id, ASKED_TOBIN_COUNT),
+        TOLD.id,
+        TOBIN.id,
+        TOLD_TOBIN_COUNT,
+      ),
   },
 }
 
@@ -1996,10 +2027,7 @@ describe('the round trip table', () => {
       for (const name of [...Object.keys(c.armExpect ?? {}), ...Object.keys(c.armLog ?? {})])
         expect(arms.has(name), `${c.name}: ${name}`).toBe(true)
     expect(Object.keys(FLAG_CASE.armExpect ?? {})).toEqual(['a rollback past E', 'a rollback to E'])
-    expect(Object.keys(LATER_BUMP_CASE.armExpect ?? {})).toEqual([
-      'a rollback past E',
-      'a rollback to E',
-    ])
+    expect(Object.keys(LATER_BUMP_CASE.armExpect ?? {})).toEqual(['a rollback to E'])
     expect(Object.keys(LATER_BUMP_CASE.armLog ?? {})).toEqual(['a rollback past E'])
   })
 

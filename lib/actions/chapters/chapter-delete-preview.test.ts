@@ -381,6 +381,48 @@ describe('getChapterDeletePreview', () => {
     ])
   })
 
+  // generation-pipeline.md → Reverse-replay: a list yields term by term, so a close's keyword write
+  // counts while a term it added still stands, and not once a later write took every one.
+  it('leaves out a close keyword update a later write replaced term by term', async () => {
+    const c = await openClosed()
+    await writeUnderClose(c, [
+      {
+        kind: 'setEntityKeywords',
+        source: 'chapter_close',
+        payload: {
+          branchId: c.fx.branchId,
+          id: TOBIN.id,
+          add: ['the boatman'],
+          remove: [],
+          proseEntryId: null,
+        },
+      },
+    ])
+    const preview = () =>
+      getChapterDeletePreview(c.fx.branchId, c.chapter.id, previewStory(c.fx), c.fx.ctx)
+    const keywords = async () => (await entityOf(c.fx, TOBIN.id))?.keywords ?? []
+    const userKeywords = async (list: string[], actionId: string) =>
+      writeLater(
+        c.fx,
+        {
+          kind: 'updateEntity',
+          source: 'user_edit',
+          payload: { branchId: c.fx.branchId, id: TOBIN.id, patch: { keywords: list } },
+        },
+        { actionId, entryId: null },
+      )
+    expect(await preview()).toMatchObject({ otherChanges: 1 })
+
+    await userKeywords([...(await keywords()), 'the ferry'], 'act_user_add')
+    expect(await preview(), 'the added term still stands').toMatchObject({ otherChanges: 1 })
+
+    await userKeywords(
+      (await keywords()).filter((term) => term !== 'the boatman'),
+      'act_user_remove',
+    )
+    expect(await preview()).toMatchObject({ otherChanges: 0 })
+  })
+
   it('counts a close update a later write replaced in part', async () => {
     const c = await openClosed()
     await writeUnderClose(c, [
