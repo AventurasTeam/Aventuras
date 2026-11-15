@@ -94,6 +94,23 @@ describe('NanoGPT adapter', () => {
     )
     expect(sentRequest().body).not.toHaveProperty('aspect_ratio')
   })
+
+  it('sends the chosen output format and compression beside the resolution', async () => {
+    await createNanoGPTProvider({ apiKey: 'k' }).generate(
+      options({ output: { format: 'jpeg', compression: 85 } }),
+    )
+    expect(sentRequest().body).toMatchObject({
+      resolution: '1536x1536',
+      output_format: 'jpeg',
+      output_compression: 85,
+    })
+  })
+
+  it('sends no output fields without a chosen output', async () => {
+    await createNanoGPTProvider({ apiKey: 'k' }).generate(options())
+    expect(sentRequest().body).not.toHaveProperty('output_format')
+    expect(sentRequest().body).not.toHaveProperty('output_compression')
+  })
 })
 
 const listed = (
@@ -161,6 +178,62 @@ describe('NanoGPT model catalogue', () => {
     )
     expect(model?.supportedResolutions).toBeUndefined()
     expect(model?.supportedAspectRatios).toBeUndefined()
+  })
+
+  it('reads the output formats the model lists, flat or typed, and drops the rest', async () => {
+    const flat = await capabilitiesOf(
+      listed('m', { supported_parameters: { output_format: ['jpeg', 'png', 'gif'] } }),
+    )
+    expect(flat?.outputFormats).toEqual(['jpeg', 'png'])
+
+    const typed = await capabilitiesOf(
+      listed('m', {
+        supported_parameters: { output_format: { type: 'enum', values: ['webp', 'png'] } },
+      }),
+    )
+    expect(typed?.outputFormats).toEqual(['webp', 'png'])
+  })
+
+  it('reads the formats compression applies to', async () => {
+    const model = await capabilitiesOf(
+      listed('m', {
+        supported_parameters: {
+          output_format: ['png', 'jpeg', 'webp'],
+          output_compression: { min: 0, max: 100, formats: ['jpeg', 'webp'] },
+        },
+      }),
+    )
+    expect(model).toMatchObject({
+      outputFormats: ['png', 'jpeg', 'webp'],
+      compressionFormats: ['jpeg', 'webp'],
+    })
+  })
+
+  it('narrows compression to the formats its entry lists', async () => {
+    const model = await capabilitiesOf(
+      listed('m', {
+        supported_parameters: {
+          output_format: ['png', 'jpeg', 'webp'],
+          output_compression: { formats: ['webp', 'png'] },
+        },
+      }),
+    )
+    expect(model?.compressionFormats).toEqual(['webp'])
+  })
+
+  it('takes compression for every lossy format when its entry names none', async () => {
+    const model = await capabilitiesOf(
+      listed('m', {
+        supported_parameters: { output_format: ['jpeg'], output_compression: { min: 0, max: 100 } },
+      }),
+    )
+    expect(model?.compressionFormats).toEqual(['jpeg', 'webp'])
+  })
+
+  it('reads a model that lists no output parameters as unknown', async () => {
+    const model = await capabilitiesOf(listed('m'))
+    expect(model?.outputFormats).toBeUndefined()
+    expect(model?.compressionFormats).toBeUndefined()
   })
 
   it('takes the reference limit from max_input_images, then from the constraints', async () => {

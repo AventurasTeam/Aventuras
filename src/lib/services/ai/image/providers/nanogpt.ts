@@ -26,6 +26,13 @@ import {
   pickSize,
   specToAspectRatio,
 } from '#lib/utils/image.ts'
+import {
+  isImageOutputFormat,
+  LOSSY_IMAGE_OUTPUT_FORMATS,
+  outputWireFields,
+  takesCompression,
+  type ImageOutputFormat,
+} from '#lib/utils/imageOutput.ts'
 import { endpoint } from '#lib/utils/url.ts'
 import { resolveBaseUrl } from './baseUrls'
 import { findListedModel } from './modelCapabilities'
@@ -69,6 +76,11 @@ const supportedParameters = z
       .object({ min: optionalNumber, max: optionalNumber })
       .optional()
       .catch(undefined),
+    output_format: stringList,
+    output_compression: z
+      .object({ formats: z.array(z.string()).optional().catch(undefined) })
+      .optional()
+      .catch(undefined),
   })
   .catch({})
 
@@ -100,6 +112,15 @@ const ModelEndpoints = z.object({
 type NanoGptModel = z.output<typeof NanoGptModel>
 type ModelFacts = Pick<NanoGptModel, 'architecture' | 'capabilities' | 'supported_parameters'>
 type ImageConstraints = z.output<typeof imageConstraints>
+
+/** An entry listing no formats means every lossy one; one listing only formats without a level means none. */
+function compressionFormatsOf(
+  entry: { formats?: string[] } | undefined,
+): ImageOutputFormat[] | undefined {
+  if (!entry) return undefined
+  if (!entry.formats) return [...LOSSY_IMAGE_OUTPUT_FORMATS]
+  return nonEmpty(entry.formats.filter(isImageOutputFormat).filter(takesCompression))
+}
 
 function boundOf(values: (number | undefined)[], pick: (...n: number[]) => number) {
   const present = values.filter((v): v is number => v !== undefined)
@@ -164,6 +185,8 @@ function toCapabilities({
     referenceConstraints: toReferenceConstraints(params.input_image_constraints),
     supportedResolutions: nonEmpty(params.resolutions) ?? nonEmpty(params.resolution),
     supportedAspectRatios: nonEmpty(params.aspect_ratio?.filter(isAspectRatio)),
+    outputFormats: nonEmpty(params.output_format?.filter(isImageOutputFormat)),
+    compressionFormats: compressionFormatsOf(params.output_compression),
   }
 }
 
@@ -185,7 +208,7 @@ export function createNanoGPTProvider(config: ImageProviderConfig): ImageProvide
     name: 'NanoGPT',
 
     async generate(options: ImageGenerateOptions): Promise<ImageGenerateResult> {
-      const { model, prompt, spec, modelInfo, referenceImages, signal } = options
+      const { model, prompt, spec, modelInfo, referenceImages, output, signal } = options
 
       const ratios = modelInfo?.supportedAspectRatios
 
@@ -199,6 +222,7 @@ export function createNanoGPTProvider(config: ImageProviderConfig): ImageProvide
             resolution:
               pickSize(spec, modelInfo?.supportedResolutions) ??
               formatImageSize(specToPixels(spec)),
+            ...outputWireFields(output),
           },
         },
         signal,
