@@ -436,6 +436,50 @@ describe('a field yields to a surviving later write from any source', () => {
     ).toMatchObject({ status: 'rejected', reason: 'pair-resolved' })
   })
 
+  // The meta key names the pair the user answered; a prior flag rewritten to another partner
+  // names a pair the user never saw, so the close may raise it.
+  it('raises a pair the rewritten prior flag names but the user never answered', async () => {
+    const { db, ctx } = await setup()
+    await createKael(ctx)
+    await db.insert(entities).values([
+      { ...KAEL, id: 'char_mira', name: 'Mira', keywords: [] },
+      { ...KAEL, id: 'char_quinn', name: 'Quinn', keywords: [] },
+    ])
+    const duplicate: PipelineAction = {
+      kind: 'raiseCollisionFlag',
+      source: 'chapter_close',
+      payload: {
+        branchId: 'b1',
+        id: 'char_kael',
+        partnerId: 'char_mira',
+        reason: 'duplicate',
+        proseEntryId: null,
+      },
+    }
+    await apply(ctx, duplicate, 'act_close')
+    await apply(ctx, patchKael('user_edit', { nameCollisionPartnerId: 'char_quinn' }), 'act_point')
+    await apply(
+      ctx,
+      patchKael('user_edit', {
+        nameCollisionFlag: 0,
+        nameCollisionPartnerId: null,
+        nameCollisionReason: null,
+      }),
+      'act_clear',
+    )
+
+    await reverse(db, ctx, 'act_point')
+
+    expect(await payloadOf(db, 'act_clear')).toMatchObject({
+      nameCollisionFlag: 1,
+      nameCollisionPartnerId: 'char_mira',
+      [RESOLVED_PAIR_KEY]: 'char_quinn',
+    })
+    expect(
+      await applyDeltaAction({ action: duplicate, actionId: 'act_rerun', branchId: 'b1' }, ctx),
+    ).toMatchObject({ status: 'ok' })
+  })
+
   // The collision flag is one field: a re-point that logged the partner alone takes the whole
   // prior flag, so neither later undo can write a partner beside a flag the CHECK forbids.
   it('gives the first survivor of a column group the whole prior group', async () => {

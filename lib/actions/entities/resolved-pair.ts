@@ -13,11 +13,13 @@ export function withResolvedPair(undoPayload: Record<string, unknown>): Record<s
   return { ...undoPayload, [RESOLVED_PAIR_KEY]: partner }
 }
 
-/** Whether a user edit's undo payload says the user resolved the pair with `partnerId`. */
+/**
+ * Whether a user edit's undo payload says the user resolved the pair with `partnerId`. The meta key
+ * decides when present: a reversal may have rewritten the prior flag to a partner the user never saw.
+ */
 export function resolvesPair(undoPayload: Record<string, unknown> | null, partnerId: string) {
   if (undoPayload == null) return false
-  return (
-    undoPayload[RESOLVED_PAIR_KEY] === partnerId ||
-    (undoPayload.nameCollisionFlag === 1 && undoPayload.nameCollisionPartnerId === partnerId)
-  )
+  if (Object.hasOwn(undoPayload, RESOLVED_PAIR_KEY))
+    return undoPayload[RESOLVED_PAIR_KEY] === partnerId
+  return undoPayload.nameCollisionFlag === 1 && undoPayload.nameCollisionPartnerId === partnerId
 }
