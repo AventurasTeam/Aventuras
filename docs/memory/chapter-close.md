@@ -652,15 +652,14 @@ end would make the reset carry each row's later bumps across the close;
 a few turns' frequency signal landing one chapter early isn't worth
 that.
 
-The log doesn't make the counter exact across a close, since a count
-bump's undo restores the prior count by assignment. Rolling back turns
-past the chapter's end that ran before the close (the close stands)
-puts their pre-bump count back over the reset's 0, and CTRL-Z of the
-close can give a merge's kept row ([3e](#3e--happenings-consolidation)'s
-survivor) a count holding a later turn's bump. One chapter's frequency
-signal is off, and no data is lost
-([`followups.md → Data-model`](../followups.md#data-model), "An undo
-restores a whole prior value over later writes").
+The counter stays exact across a close's reversals, since an undo
+treats it as a counter: a bump's undo subtracts it, and the reset's
+undo gives back the prior count plus the bumps after it that survive
+([`generation-pipeline.md → Reverse-replay`](../generation-pipeline.md#reverse-replay)).
+Rolling back turns past the chapter's end that ran before the close
+(the close stands) leaves the reset's 0, and CTRL-Z of the close gives
+a merge's kept row ([3e](#3e--happenings-consolidation)'s survivor) its
+count from before the merge plus the bumps logged since.
 
 **Why per-chapter reset, not lifetime accumulation.** Lifetime
 counts create a Matthew-effect feedback loop — early-popular rows
@@ -1055,16 +1054,16 @@ Neither mode can be undone.
   takes them, and with no later turn the next CTRL-Z reverses them. The
   review goes with the row; each row's History keeps the writes.
 
-**Later writes win.** A field keeps its value when anything logged after
-the close wrote it, whichever writer, except a `retrieval_count` bump
+**Later writes win.** A field, a list term or a count keeps its value
+when anything logged after the close wrote it, whichever writer, as in
+every reversal; a `retrieval_count` bump makes no other field yield
 ([`generation-pipeline.md → Reverse-replay`](../generation-pipeline.md#reverse-replay)).
 A normalized stackable record a later write touched stays normalized,
 since undoing it could double-count.
 
-A later write's own undo holds the value it replaced, which may be the
-close's, so rolling that turn back after a delete writes it again, and
-the value before it isn't in the log. That's accepted: the order is rare,
-the state stays valid, and the next pass or close corrects it.
+The later write's own undo then holds the value from before the close,
+not the close's: the delete rewrites it, so rolling that turn back
+after a delete restores what preceded the close.
 
 **What follows.** The chapter's tokens return to the open region. With a
 manual close pending, the next Send runs it, whatever the region's size

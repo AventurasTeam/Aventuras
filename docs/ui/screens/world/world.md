@@ -1424,7 +1424,8 @@ CTRL-Z restores the non-canonical as it was, with its original link
 rows and translations, the refs and the tail scene; puts the
 canonical's earlier columns back (scalars, tags, keywords, the flag
 with its partner and reason, and `state`, a tracked location
-included); re-points the flags it moved back at the non-canonical;
+included), except a field, term or count a pass wrote since, which
+stays; re-points the flags it moved back at the non-canonical;
 and removes the rows the merge created on the canonical.
 
 Embeddings are not delta-logged

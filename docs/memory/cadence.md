@@ -325,8 +325,9 @@ only creates involvements on a happening it creates in the same pass.
 **Reversals.** Reversing a classifier fact for a prose edit, its undo
 or redo, or a failed or interrupted pass keeps each field the user
 wrote after the fact on a row the reversal leaves standing, field by
-field inside `state`, so the precedence above never leaves a value
-neither the user nor the prose chose. A membership's undo that would
+field inside `state` and term by term in a list such as `keywords`,
+so the precedence above never leaves a value neither the user nor
+the prose chose. A membership's undo that would
 put back a faction the user has deleted since writes none instead
 ([`generation-pipeline.md → Reverse-replay`](../generation-pipeline.md#reverse-replay)).
 A pair the classifier created keeps a view the user added since

@@ -194,8 +194,9 @@ day-one: 5.1   5.2   5.3   5.4          (5.2 lands after 5.1)
   tools can still adjust.
 - **5.13 comes last.** It re-runs the tasks 5.8 and 5.9 land through
   5.10's whole close, shows the result in 5.11's window, and builds on
-  5.12's delete set, preview and `yieldTo: 'any'`. Added 2026-11-13 from
-  the re-run design.
+  5.12's delete set and preview. Added 2026-11-13 from the re-run
+  design. It also waits on the undo-own-write substrate (C13's "Later
+  writes win"), whose survivor rewrites its journal captures.
 - **The roadmap's parallel-paths sketch is superseded.** Its gate-then-
   four-parallel shape rested on a primitive canon doesn't have. M5.1
   dissolves into 5.1, 5.2 and 5.6. M5.2 becomes 5.2, 5.4, 5.5a, 5.5b,
@@ -761,15 +762,17 @@ rollback: no entry goes. Two modes, one action in
 **Later writes win.** For a delete, a field keeps its value when a delta
 on that row, outside the set, with a higher log position, wrote it, from
 any source, unless the delta only moved `retrieval_count`
-(`lib/row-signals/link-owners.ts:71-77` holds that test). The shipped
-reversal yields only to `user_edit`
-(`lib/actions/delta/user-precedence.ts:103-127`,
-`reverse-replay.ts:664`), and canon's reversal rules assume only
-periodic-classifier groups sit above a reversed group, so this is new.
-The yield mode goes on `ReversalSeed` and the nominal `ReversalSet`,
-since `refClearsOf` reads later edits itself at selection
-(`lib/actions/delta/row-closure.ts:185-202,358-359`): a yield in the
-planner alone would still clear a later place move. A normalized
+(`lib/row-signals/link-owners.ts:71-77` holds that test). 5.12 shipped
+this as a yield mode, `yieldTo: 'any'` on `ReversalSeed` and the
+nominal `ReversalSet`, since `refClearsOf` reads later edits itself at
+selection (`lib/actions/delta/row-closure.ts`): a yield in the planner
+alone would still clear a later place move. The undo-own-write design
+(2026-11-15) makes it every reversal's rule, term by term in a list
+and relative for `retrieval_count`, rewriting later survivors' prior
+values, and drops the mode
+([`generation-pipeline.md → Reverse-replay`](../../../generation-pipeline.md#reverse-replay)).
+A plan-mode followup builds it before 5.13 is planned, and drops the
+round-trip suite's later-bump overrides, which pin today's assignment. A normalized
 stackable record a later write touched stays normalized, since undoing
 it can double-count; that's settled by the later of 5.9 and 5.12 to land.
 
@@ -788,12 +791,13 @@ redo even when the store sync fails after the commit. Neither is undoable. `dele
 (`lib/actions/chapters/register.ts:136`) has no production caller and
 dangles stamps; 5.12 removes it.
 
-**A later undo can bring a deleted value back.** A later write's own
-undo payload holds the value it replaced, which may be the close's, so
-rolling that turn back after a delete writes it again, and the value
-before it isn't in the log. This is accepted: the order is rare, the
-state stays valid, and the next pass or close corrects it. The confirm
-and canon say so.
+**A later undo can bring a deleted value back.** 5.12 shipped with a
+later write's own undo payload holding the value it replaced, which may
+be the close's, so rolling that turn back after a delete writes it
+again, and its confirm says so. The undo-own-write design (2026-11-15)
+rewrites that payload to the value from before the close (Later writes
+win, above), so the residue and the confirm's sentence on it go with
+that followup.
 
 **After a delete.** The region grows by the chapter's tokens. The
 confirm reads the result and says which applies: with a manual close

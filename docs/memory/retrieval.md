@@ -1405,13 +1405,6 @@ The user's own terms are unbounded. How many terms a row may hold is
 open
 ([`followups.md → Tuning and play testing`](../followups.md#tuning-and-play-testing)).
 
-One known gap: when an undo or a rollback window reverts a user's
-keyword edit under a later classifier keyword write, a term that edit
-had removed comes back credited to that pass, so a close may remove it.
-The undo itself wipes the pass's term in the same restore
-([`followups.md → Data-model`](../followups.md#data-model), "An undo
-restores a whole prior value over later writes").
-
 ### `auto` injection mode
 
 `injection_mode='keyword_llm'` is renamed to `'auto'` across entities,

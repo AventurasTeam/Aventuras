@@ -10,10 +10,16 @@
   state on `closeResult`, `loadCloseDeltas`),
   [Slice 5.12](./12-chapter-delete-rollback.md) (`removeChapter` and its
   close-groups read, `getChapterDeletePreview` under
-  `withBranchWriteShared`, `yieldTo: 'any'` on `ReversalSeed`, the async
-  `rollbackCountsOf`, the delete arms of the round-trip suite). Through
-  them, [Slice 5.8](./08-prose-tasks.md) and
+  `withBranchWriteShared`, the async `rollbackCountsOf`, the delete arms
+  of the round-trip suite). Through them,
+  [Slice 5.8](./08-prose-tasks.md) and
   [Slice 5.9](./09-chapter-wide-tasks.md), whose tasks a re-run runs again.
+  And the undo-own-write substrate, a plan-mode followup that lands before
+  this slice is planned: one yield rule for every reversal, with no
+  `yieldTo` mode, and the survivor rewrites the journal captures
+  ([`generation-pipeline.md → Reverse-replay`](../../../../generation-pipeline.md#reverse-replay),
+  "An undo reverts only its own write";
+  [C13](../milestone.md#c13--chapter-delete), "Later writes win").
 - **Blocks:** none. M5's last slice.
 
 ## Goal
@@ -54,8 +60,8 @@ canon wins where they differ.
   [`Run order`](../../../../memory/chapter-close.md#run-order) and
   [`Logs and anchors`](../../../../memory/chapter-close.md#logs-and-anchors).
 - [`generation-pipeline.md → Reverse-replay`](../../../../generation-pipeline.md#reverse-replay),
-  from "A chapter delete keeps later writes from any source" through the
-  two "A close's re-run journals its reversal" paragraphs.
+  from "An undo reverts only its own write" through the two "A close's
+  re-run journals its reversal" paragraphs.
 - [`generation-pipeline.md → Multi-run txState`](../../../../generation-pipeline.md#multi-run-txstate),
   [`chainsTo on predecessor`](../../../../generation-pipeline.md#chainsto-on-predecessor),
   [`Run state transitions`](../../../../generation-pipeline.md#run-state-transitions),
@@ -169,7 +175,8 @@ re-run, and how `Re-run…` meets the surface guard from the review window.
 - The journal JSON holds the chapter's id and its number
   (`sequence_number`, for the fallback's toast once the row is gone), the
   **floor**, and the before-images: each row the plan writes, by table and id, whole or
-  absent; each delta row it prunes or edits, whole; each earlier journal row
+  absent; each delta row it prunes or edits, whole, a survivor whose prior
+  value it rewrites among them; each earlier journal row
   it drops, whole. Only the write-back reads the before-images; the
   planner's checks read the chapter id and floor without parsing them in
   JS.
@@ -182,14 +189,13 @@ re-run, and how `Re-run…` meets the surface guard from the review window.
 - `ReversePlan` (`lib/actions/delta/reverse-replay.ts:61`) gains what the
   journal needs and doesn't expose today: the ids of the delta rows its
   `pruneOps` remove or re-own (the set's rows, `prunedHolders` and
-  `strandedWrites`), and the held-delete holders whose payload its `ops`
-  rewrite (`settleHeldCopies`' `rewritten`). Every other caller ignores
-  them.
+  `strandedWrites`), the held-delete holders whose payload its `ops`
+  rewrite (`settleHeldCopies`' `rewritten`), and the survivors whose prior
+  value its `ops` rewrite. Every other caller ignores them.
 - `reverseCloseForRerun({ branchId, chapterId, actionId }, ctx)`, in order:
   1. The seed: the chapter's close groups (5.12's close-groups read, C13)
      less their deltas on `chapters` and `story_entries`, the complement of
-     a divider-only removal's seed, through `selectReversalSet` with
-     `yieldTo: 'any'`.
+     a divider-only removal's seed, through `selectReversalSet`.
   2. `buildReverseAndPrunePlan(set, ctx, { keepRedoExact: false })`.
   3. The before-images, read before the transaction: a whole row per
      `(table, id)` in the plan's `patches` (`currentRow` in
@@ -278,7 +284,7 @@ transaction that drops it.
   boot.
 - **Without the journal, or on a failed check,** the caller's set becomes
   the group plus the chapter's other close groups (C13's read), through
-  `selectReversalSet` with `yieldTo: 'any'`, undoing the close as
+  `selectReversalSet`, undoing the close as
   `removeChapter`'s `'whole'` mode does, and the outcome is `undone` with
   the chapter's number, from the journal, else from the row read before
   the reversal. A group with no chapter
@@ -679,7 +685,7 @@ component tests, the E2E and the Android measure, as
 - Export code: none exists, and canon's manifest already lists the table.
 - `Regenerate summary` and the metadata a re-run keeps (M7.2), and a
   close's display translation slot (M8.1).
-- The delete set, `removeChapter`, its preview and confirm, `yieldTo`,
+- The delete set, `removeChapter`, its preview and confirm,
   `rollbackCountsOf`'s chapter fields and regenerate's close arm:
   [Slice 5.12](./12-chapter-delete-rollback.md).
 - The review window, its host and store, `registerSurface`, the commit
@@ -1074,28 +1080,25 @@ change amends the scope above.
   relies on C4's `close_report`-last write, it replaces the old result
   just before commit, the `actionId` and failed-read tests are rewritten,
   and undo and redo don't emit on that bus. Raised in 5.11's review.
-- **What do this slice's re-run arms meet from 5.9?** Three things 5.9
+- **What do this slice's re-run arms meet from 5.9?** Two things 5.9
   shipped. First, the later-bump case in
   `lib/pipeline/__tests__/close-round-trip.test.ts` overrides `armExpect`
-  and `armLog` for its rollback arms, since a count bump's undo restores by
-  assignment, and the re-run arms on that case need overrides of their
-  own: after a rollback past E, TOLD's row reads its pre-bump count over
-  the re-run's reset 0; after a rollback of a turn between E and the
-  re-run, then CTRL-Z, TOLD's row ends at its pre-merge count holding the
-  rolled-back bump. The test's key-list pins widen with them. Second, the
-  phase-writes rule in
+  and `armLog` for its rollback arms, pinning a count bump's undo by
+  assignment. The undo-own-write substrate this slice waits on drops
+  those overrides, since a count is then a counter
+  ([`generation-pipeline.md → Reverse-replay`](../../../../generation-pipeline.md#reverse-replay)):
+  a rollback past E leaves the reset's 0. So the re-run arms on that case
+  expect canon's counter outcome, with no overrides pinning assignment,
+  and the test's key-list pins widen with them. Second, the phase-writes
+  rule in
   [`generation-pipeline.md → Writes`](../../../../generation-pipeline.md#writes)
   ("Never: delta-loggable writes outside those two events, delta-log
   appends, …") has no exception for this slice's `reversal` phase, which
-  prunes deltas and writes `reversal_journals`. Third, 3d's count-bump
-  edge
-  ([`chapter-close.md`](../../../../memory/chapter-close.md#3d--awareness-pin-tuning))
-  names CTRL-Z of the close; a re-run's CTRL-Z that undoes the close
-  altogether is a second path to it. Default: the round-trip's re-run
-  arms carry their own overrides, the Writes rule gains a carve-out for
-  the `reversal` phase (the other option routes the reversal through an
-  event), and 3d names the second path. Raised in 5.9's slice review;
-  routed from triage 2026-11-14.
+  prunes deltas and writes `reversal_journals`. Default: the Writes rule
+  gains a carve-out for the `reversal` phase (the other option routes the
+  reversal through an event). Raised in 5.9's slice review; routed from
+  triage 2026-11-14; the count half reframed 2026-11-15 by the
+  undo-own-write design, which retired 3d's count-bump edge.
 - **What does a confirm say for an `in-flight` refusal?** `removeChapter`'s
   `in-flight` refusal (a run started between the last enabled render and
   the press) closes the chapter-delete confirm with the generic

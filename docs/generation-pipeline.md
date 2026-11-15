@@ -1682,41 +1682,87 @@ but does not leave it to boot recovery, since its marker settled with
 the reversal. `submitTurn` logs either
 kind and still returns the rejection.
 
-**A reversed machine write keeps a later user write.** Undoing a delta
-from a pipeline source skips each top-level column that a later
-`user_edit` delta on the same row wrote, by creating the row or
-changing that column, unless that delta is in the set being reversed
-too. Later means by log position, which a redo restores rather than
-reassigns
+**An undo reverts only its own write.** Every reversal (CTRL-Z,
+rollback, regenerate, an aborted or crash-recovered run, a chapter
+delete, a close's re-run) undoes only what each of its deltas did,
+against the row as it stands, and skips any part a surviving later
+write changed: a delta on the same row, logged after it and not in the
+set, from any source, the user's included, that created the row or
+changed that part. Later means by log position, which a redo restores
+rather than reassigns
 ([`data-model.md → Entry mutability & rollback`](./data-model.md#entry-mutability--rollback)).
-A delta left with no column writes nothing and is still pruned.
-A `user_edit` inside the set restores as usual: a rollback or
-regenerate sweeps every null-anchored World edit after its target, so
-the row still returns to its prior value, and CTRL-Z of the user's own
-action is never filtered. CTRL-Z of a user edit the rule kept restores
-the value that edit overwrote, which may be the reversed fact's; of the
-oldest user write that kept a create (below), it removes the row. A
-schema-backed JSON column such as an entity's `state` is judged sub-field
-by sub-field: its undo restores the sub-fields its delta changed except
-those a later user write changed, which the undo payload records field
-by field
-([`memory/cadence.md → User edits and classifier writes`](./memory/cadence.md#user-edits-and-classifier-writes)).
-That record can't tell one user write apart: removing a whole record,
-as World's Save drops an emptied `stackables`, records the record's old
-keys, the same as an edit of those keys, so the undo would restore a
-key the user removed with it. Nothing reaches that today, since the
-reversals that run after later user edits take only a pass's or a
-close's facts, whose `state` writes are whole values (a character's
-faction, traits, drives and voice, a faction's standing and agenda, a
-place's parent, unplaced mark and condition, an item's condition), with
-one exception. A close's stackable
-normalization writes a record, so its undo carries that guard. The same
-reach keeps the rule from
-splitting one move across two rows: undoing a turn's `<item>` or
-`<drop>` after the user moved the item in World would restore the
-holder's inventory but keep the user's position, so the item would be
-held and lying somewhere at once. No reversal that keeps a later user
-write takes a turn's facts.
+A delta that only moved `retrieval_count` makes no other field yield,
+since retrieval bumps a count every turn. A delta left with nothing to
+restore writes nothing and is still pruned. A rollback or regenerate
+sweeps every null-anchored World edit after its target into its set,
+so those return to their prior values with the turn. CTRL-Z of a
+user's own edit yields like any other: a pass that appended a keyword
+after it keeps the keyword.
+
+The part an undo yields on depends on the field:
+
+- A column, or a sub-field of a schema-backed JSON column such as an
+  entity's `state`, which the undo payload records field by field
+  ([`memory/cadence.md → User edits and classifier writes`](./memory/cadence.md#user-edits-and-classifier-writes)).
+- One term of a string list: entity and lore `keywords` and `tags`, a
+  chapter's `keywords`, and the `traits`, `drives`, `agenda`,
+  `inventory` and `equipped_items` in `state`. A term is its presence
+  and its spelling. The undo removes the terms its delta added, puts
+  back the terms it removed and restores a spelling it changed;
+  keywords and tags match by `normalizeTerm`, the other lists exactly.
+  A term put back takes its spelling from the delta's prior list and
+  its place there, relative to the terms still present. A list is a
+  set: a duplicate is one term.
+- `retrieval_count`, a counter. A retrieval bump is relative; the
+  close's reset and a merge's summed count are absolute. Undoing a bump
+  subtracts it, and undoing an absolute write restores its prior value
+  plus the bumps after it that survive. Either is skipped when an
+  absolute write survives after it. A count never goes below 0.
+
+A delta's result is the prior value of the next delta on the row that
+holds the field, whether the set holds it or not, else the row as it
+stands or the copy a later delete holds, as the
+[diff cache's walk](./architecture.md#walk-algorithm) reads it; the
+reversal runs newest first, so the set's later deltas are already
+undone. In the same transaction, the reversal rewrites the prior values
+of the surviving later deltas on that row as if the reversed delta had
+never been written, walking them in log order. For a column or
+sub-field, the first survivor that changed it takes the reversed
+delta's prior value. For a term, each survivor that left it alone gets
+it reversed in its prior list, and the first that changed it gets the
+same and ends the walk. For a count, a reversed bump of n lowers the
+prior counts after it by n, and a reversed absolute write shifts them
+by its prior value less the value it wrote, each through the next
+absolute write. The row itself changes only where no survivor ended
+the walk. So the log stays a history the reversed delta was never in:
+a later reversal of a survivor restores what preceded the reversed
+delta, and the keyword authors a close reads
+([`memory/retrieval.md → Keywords schema`](./memory/retrieval.md#keywords-schema))
+credit a restored term to the write that added it. A survivor the
+rewrite leaves restating its field keeps the key, since a payload's
+keys say who wrote a field: a user edit stays the user's. Only a
+reversal rewrites a prior value, and it never deletes a survivor.
+
+The field-by-field record can't tell one user write apart: removing a
+whole record, as World's Save drops an emptied `stackables`, records
+the record's old keys, the same as an edit of those keys, so the undo
+would restore a key the user removed with it. Nothing reaches that
+today, since the reversals that run after later user edits take only a
+pass's or a close's facts, whose `state` writes are whole values or
+lists (a character's faction, traits, drives and voice, a faction's
+standing and agenda, a place's parent, unplaced mark and condition, an
+item's condition), with one exception. A close's stackable
+normalization writes a record, so its undo carries that guard. Reach
+also keeps the rule from splitting one move across two rows, leaving an
+item held and lying somewhere at once. A move writes only the sides it
+changes (a take of an item lying nowhere writes no position, and a take
+of a dropped item leaves the holder who dropped it alone), so a later
+move can yield one side of an undone move and not the other. But only
+the per-turn writer and World's Save move items, and every reversal
+that takes a move takes each later move of that item with it: a
+rollback, a regenerate and CTRL-Z of a turn take everything after it
+but the facts of passes and closes, which move no items, and CTRL-Z
+reaches a World save only when nothing but passes sits above it.
 The rule has one exception. A machine `create`
 still deletes its row, since an entity or happening exists only
 because of the reversed write, and takes every later write to that row
@@ -1762,15 +1808,12 @@ of a happening. A merge clusters only rows with an
 when the kept row's anchor moves; `mark_common_knowledge` writes
 `common_knowledge` alone; and a user edit writes both columns.
 
-**A chapter delete keeps later writes from any source.** It reverses a
-chapter's close groups with turns above them, the one reversal that
-does
-([`memory/chapter-close.md → Deleting a chapter`](./memory/chapter-close.md#deleting-a-chapter)).
-So the rule above widens for it: a field yields to any delta outside the
-set logged after it, whatever its source, except one that only moved
-`retrieval_count`. The set carries that mode, since the closure reads
-later writes too when it decides what a `state` reference will hold. It
-runs in the reversal bracket, refused while the gate is closed, and
+**A chapter delete reverses close groups under later turns.** It
+reverses a chapter's close groups with turns above them, the one
+reversal that does
+([`memory/chapter-close.md → Deleting a chapter`](./memory/chapter-close.md#deleting-a-chapter)),
+so its fields yield to those turns' writes as the rule above has every
+reversal's yield. It runs in the reversal bracket, refused while the gate is closed, and
 rechecks there that the chapter is still the latest. Removing only the
 divider seeds the same reversal with the chapter row's deltas and the
 stamps, and leaves the group's other deltas in the log. Both seed from
@@ -1783,7 +1826,8 @@ lore work, every delta in those groups except those on `chapters` and
 does. In the same transaction, before the plan's ops run, it writes a
 journal: the before-image of every row the plan writes, whole or
 absent, and of every delta row it prunes or edits (the pruned deltas, a
-held delete's rewritten payload, a re-owned create). The journal is one
+held delete's rewritten payload, a re-owned create, a survivor's
+rewritten prior value). The journal is one
 `reversal_journals` row keyed by the re-run's `action_id`. Whenever the
 re-run's group reverses, by CTRL-Z, an abort or crash recovery, the
 same transaction writes the journal back after the group's own deltas
@@ -1870,8 +1914,8 @@ reversal nulls on a kept relationship. A link row's ends never change
 after its create, but a `state` field can, so the reversal judges that
 reference by the value the row holds once the set's own writes to it
 are undone: the pre-value of the oldest update in the set that changed
-it, which the newest-first walk restores last unless a later user write
-changed it, else its live value, or the held copy's for a row a delete
+it, which the newest-first walk restores last unless a surviving later
+write changed it, else its live value, or the held copy's for a row a delete
 holds. A place the user moved under a removed parent so returns to its
 old parent, and one the set moved off a removed parent becomes
 unplaced, since the reversal puts it back under that parent first. One
@@ -1909,9 +1953,10 @@ row is back in its table by then. Otherwise a `create`'s undo strips a
 captured child from the payload, and prunes the delete when the row is
 the delete's own target: its captured children name the target, so the
 closure takes them and their deltas. An `update`'s undo patches the
-payload copy under the rules a live row follows — user precedence,
-field by field inside a schema-backed column, and a relationship left
-with no view is stripped. A relationship's `create` follows the live arm too: a view a
+payload copy under the rules a live row follows — yielding to a
+surviving later write, field by field inside a schema-backed column and
+term by term in a list, and a relationship left with no view is
+stripped. A relationship's `create` follows the live arm too: a view a
 later user write set keeps the copy, with the views the user did not
 write nulled and the create re-owned. Each changed payload is one write
 to that delta's `undo_payload` in the reversal's transaction; stores
@@ -1986,7 +2031,9 @@ parent, top-level or unplaced, with the parent and the `unplaced` mark
 put back as one field. A row the snapshot restores whole gets
 the field back with its row. A row whose reference only a sweep's row
 removes would stay cleared; that is a guard, since no sweep holds an
-entity create today. Every delta-logged write clears the redo stack, so
+entity create today. The snapshot also takes the payload of each
+surviving delta whose prior value the reversal rewrites, and redo
+writes each back. Every delta-logged write clears the redo stack, so
 redo always meets the state its undo left.
 
 Abort is conceptually identical to user CTRL-Z — same

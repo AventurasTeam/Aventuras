@@ -15,71 +15,6 @@ for the placement rule.
 
 ## Data-model
 
-- **An undo restores a whole prior value over later writes.** A write's
-  undo stores the value it replaced, not the change it made, so
-  reversing it under a later write to the same field takes that write
-  back too. Three cases are known, and the fix in each is an undo that
-  reverts only its own write. Moved here 2026-11-15 from `parked.md` and
-  the triage queue, developer decision: the user-edit case breaks the
-  rule that a close never removes a keyword the user wrote
-  ([`retrieval.md → Keywords schema`](./memory/retrieval.md#keywords-schema)),
-  which v1 makes.
-
-  **A keyword write's undo restores the whole prior list.**
-  `appendEntityKeywords` and `renameEntity`
-  (`lib/actions/entities/state-patch-actions.ts`) store the row's
-  pre-write keywords as undo. Reversing a write that landed before an
-  earlier turn's keyword write, which the reversal spares, restores the
-  list from before it and takes the spared write's terms away too, and
-  the watermark clamp means that turn is never re-read
-  ([`memory/classifier.md → Provenance attribution`](./memory/classifier.md#provenance-attribution)
-  says reversal spares facts about surviving turns). Within one reply
-  the planner plans every keyword write to a row in turn order (its
-  renames, aliases, a known or promoted mention's terms and a reused
-  place's), and the periodic classifier, their only writer, lands its
-  passes in turn order, so the loss needs a later reply carrying an
-  earlier turn's term than one already written. One reply can carry it
-  too: a new place waiting for a later turn's parent writes a reused
-  place's terms at its parent's turn
-  ([`memory/classifier.md → Mentioned places`](./memory/classifier.md#mentioned-places)),
-  after a keyword write of a turn between them. The general fix is an
-  undo that removes only the terms its own write added.
-
-  Parked 2026-10-24; the signal is a keyword of a surviving turn lost to
-  a reversal, or a second keyword writer landing terms out of turn order.
-  Chapter close isn't one: it skips a keyword list a turn past its
-  chapter wrote.
-
-  **Undoing a user's keyword edit wipes a later pass's term.** CTRL-Z
-  or a rollback window of a user's keyword edit under a later
-  periodic keyword write restores the whole list from the undo
-  payload, wiping the pass's term, while the pass's surviving delta
-  keeps a before-list without the user's restored term. The close's
-  keyword-author walk then credits that term to the pass, and a later
-  close may remove it (5.8 records this as the walk's second known
-  gap). The same whole-list restore may hit other list fields a pass
-  appends to, unchecked, and `data-model.md`'s "periodic-classifier
-  deltas above it … stay put" doesn't hold when they wrote the same
-  field. Same root cause and fix as the case above, and the revisit signal it
-  was parked on. For the undo substrate's owner. Raised in 5.8's
-  execution, developer decision 2026-11-10. The close's keyword writes
-  store the whole prior list as undo too (`setEntityKeywords`,
-  `updateLore`), so CTRL-Z of a close under a later pass's keyword write
-  loses that pass's term the same way; read from the code, not probed.
-
-  **A count bump's undo can bring back a pre-reset count.**
-  `bumpAwarenessRetrieval`'s undo restores the prior `retrieval_count` by
-  assignment (`lib/actions/happenings/register-awareness.ts`), and
-  reverse-replay rewrites only the copies a delete holds. So a rollback
-  past a close puts a later turn's pre-reset count back over the close's
-  reset, and CTRL-Z of the close can restore a kept row's count with a
-  later turn's bump in it. One chapter's frequency signal is off; no
-  data is lost. Candidate fixes: a relative undo for count bumps, or
-  reverse-replay rebasing the held count. The later-bump case in
-  `lib/pipeline/__tests__/close-round-trip.test.ts` pins today's
-  behaviour. Developer decision 2026-11-14 (5.9): record the edge in
-  canon, fix later.
-
 - **World merge re-creates awareness rows as the user's.** World's
   character merge (`lib/world/entity-merge.ts`, `merge-links.ts`) moves
   each awareness row the kept character lacks by re-creating it as a
@@ -717,6 +652,7 @@ breakdown under [UX](#ux).
   - [A twin across a placement](./parked.md#a-twin-across-a-placement)
   - [Resuming a failed close](./parked.md#resuming-a-failed-close)
   - [A staged row has no retirement](./parked.md#a-staged-row-has-no-retirement)
+  - [A term a surviving turn re-sent can be lost to a reversal](./parked.md#a-term-a-surviving-turn-re-sent-can-be-lost-to-a-reversal)
 
 - **A close's later part can't undo an earlier part's one-way
   write.** On a chapter longer than half the window, each part's

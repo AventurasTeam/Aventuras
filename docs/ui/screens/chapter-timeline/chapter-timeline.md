@@ -201,8 +201,7 @@ generation pipeline is in flight:
 │  • 2 lore rows removed, your edits included      │
 │  • 31 other changes reversed                     │
 │  • 14 turns since stay as written, and can still │
-│    reflect what it added. Undoing one can bring  │
-│    back a value this removes.                    │
+│    reflect what it added.                        │
 │                                                  │
 │  A close runs again before your next turn.       │
 │  Removing only the divider closes the same       │
@@ -217,11 +216,11 @@ generation pipeline is in flight:
 
 - **Counts.** Rows the close created that still stand, then the other
   changes it made.
-  A change a later write replaced in every field isn't counted, since
-  the delete leaves that later value standing. Each count line is
-  omitted at zero, since a close can land with no writes. The turns line's second sentence states the residue a delete
-  accepts: a later
-  turn's own undo can write back a value the delete removed
+  A change a later write replaced in every field, list term and count
+  isn't counted, since the delete leaves that later value standing.
+  Each count line is omitted at zero, since a close can land with no
+  writes. A later turn's own undo then restores what preceded the close,
+  not the close's value
   ([`chapter-close.md → Deleting a chapter`](../../../memory/chapter-close.md#deleting-a-chapter)).
 - **The line after the list** reads the open region as the delete would
   leave it:

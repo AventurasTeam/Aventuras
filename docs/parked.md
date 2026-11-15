@@ -2056,6 +2056,27 @@ unless reconciliation catches them.
 Parked 2026-10-24; the signal is the unattributed fallback
 (`classifier.window_head_fallback`) firing often enough to measure.
 
+#### A term a surviving turn re-sent can be lost to a reversal
+
+An undo reverts only its own write, term by term
+([`generation-pipeline.md → Reverse-replay`](./generation-pipeline.md#reverse-replay)),
+so a rollback that spares a later-logged keyword write of an earlier
+turn keeps that write's terms. One case slips through. Turn 5's write
+adds "the captain"; turn 3's pass, logged later, sends the same term,
+and since the list already holds it, `appendEntityKeywords` refuses the
+write as restated and logs nothing. A rollback to turn 4 undoes turn
+5's add and removes the term, though turn 3 still supports it, and the
+clamped watermark never re-reads turn 3
+([`data-model.md → Survival anchor`](./data-model.md#survival-anchor)).
+The fix logs a delta for a write that only confirms terms, recording
+them under a `$` payload key so the undo of the write that added them
+yields to it. That turns a restated keyword no-op into a write and
+adds a delta per known mention per pass, and every reader of payload
+keys has to skip it.
+
+Parked 2026-11-15 by the undo-own-write design (developer decision);
+the signal is a keyword of a surviving turn lost to a reversal.
+
 #### A twin across a placement
 
 Two new places with one name and declared parent map to the first

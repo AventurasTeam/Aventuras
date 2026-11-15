@@ -1428,6 +1428,10 @@ pre-state. For a delta whose `undo_payload` is
 `state = {traits: ["brave", "former soldier"], drives: [...], voice: "low"}`,
 the renderer reads `keys(old.state)` → `["traits"]` and emits
 `Added "former soldier"` without touching `drives` or `voice`.
+A key whose old and new values match renders nothing: a reversal can
+rewrite a surviving delta into restating a field, and the delta keeps
+the key so it still says who wrote the field
+([`generation-pipeline.md → Reverse-replay`](./generation-pipeline.md#reverse-replay)).
 
 `op=create` and `op=delete` never go through the cache —
 [`DeltaLogRow`](./ui/patterns/delta-log-row.md#summary) renders
@@ -1451,8 +1455,12 @@ populateBatch(deltas: Delta[]): Promise<void>      // groups by target
 
 LRU eviction, hard cap **2000 entries**. Conservative estimate
 ~500 bytes per entry, ~1 MB at cap. Process lifetime; no
-persistence. Cleared on app restart only; cold every launch by
-design. `delta.id` is a globally-unique kind-prefixed UUID
+persistence. Cold every launch by design, and cleared otherwise only
+by a reversal, which evicts the entries of every row whose deltas it
+replays or rewrites: an update's old and new hold until a reversal
+rewrites a surviving delta's prior value
+([`generation-pipeline.md → Reverse-replay`](./generation-pipeline.md#reverse-replay)).
+`delta.id` is a globally-unique kind-prefixed UUID
 ([`data-model.md → ID shape`](./data-model.md#id-shape--kind-prefixed-uuids-throughout)),
 so cross-story and cross-branch sharing in the same cache is
 safe.
@@ -1502,14 +1510,17 @@ SQL query.
 
 Reads happen concurrently with writes under WAL; the single-txn
 read snapshot is the entire concurrency contract. New deltas
-committing after a walk completes don't affect cached entries
-(historical `(old, new)` is immutable for a given delta).
+committing after a walk completes don't affect cached entries: a
+forward write never changes an earlier delta's `(old, new)`.
 
-Rollback and CTRL-Z reverse-and-delete deltas
-([`data-model.md → Entry mutability & rollback`](./data-model.md#entry-mutability--rollback));
-cache entries for deleted delta IDs become stranded. Nothing
-reads them — the deltas don't render on any surface anymore —
-and LRU evicts naturally. **No invalidation API.**
+A reversal is the one invalidation. It deletes the deltas it
+replays and rewrites the prior values of surviving later deltas on
+the rows it touches
+([`data-model.md → Entry mutability & rollback`](./data-model.md#entry-mutability--rollback)),
+so it evicts every cached entry on those rows, as
+[Cache shape and lifecycle](#cache-shape-and-lifecycle) says. An
+entry for a deleted delta needs nothing more: nothing reads it,
+since the delta renders on no surface anymore.
 
 Single renderer process at v1; cross-window coordination would
 require IPC and is out of scope until multi-window support

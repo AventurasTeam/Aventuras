@@ -2617,11 +2617,14 @@ keeps is re-owned to the oldest such write, as a `user_edit` with no
 entry. A reversal can also change a delta it does not replay: reversing
 a write to a row that a delete still in the log holds applies the undo
 to that delete's `undo_payload` copy, and prunes the delete when the
-row was its target; and a relationship the reversal leaves absent takes
-its other logged writes with it
+row was its target; a relationship the reversal leaves absent takes
+its other logged writes with it; and a surviving later delta on a
+reversed row gets its prior value rewritten as if the reversed delta
+had never been written, since an undo reverts only its own write
 ([`generation-pipeline.md → Reverse-replay`](./generation-pipeline.md#reverse-replay)).
 Forward writes only ever append; only a reversal prunes or edits, and
-what it edits is a delete's payload or a kept create's owner. A
+what it edits is a delete's payload, a kept create's owner or a
+surviving delta's prior value. A
 close's re-run also journals what its reversal prunes and writes, so
 undoing the re-run writes the close it replaced back, or undoes the
 chapter's close altogether when the journal can't be written back
@@ -3002,7 +3005,9 @@ Algorithm:
      chapter-close batch) — reverse just that `action_id` group.
      Periodic-classifier deltas above it describe unrelated turns and
      stay put, except any that name a row the group created, which the
-     reversal's closure takes with it. A close's re-run is one such
+     reversal's closure takes with it; where one wrote a field, list
+     term or count the group wrote, the group's undo yields to it. A
+     close's re-run is one such
      group: after it reverses, its journal is written back and the redo
      stack clears; when the journal can't be written back exactly, the
      chapter's other close groups reverse with it, undoing the close as
@@ -3013,8 +3018,9 @@ Algorithm:
    them from the `deltas` table.
 
 Redo re-applies from the in-memory stack, including the rows the
-closure took with the group, so undo and redo stay exact inverses; a
-sweep's rows stay out, since the clamped watermark re-derives them. A
+closure took with the group and the prior values the undo rewrote on
+surviving deltas, so undo and redo stay exact inverses; a sweep's rows
+stay out, since the clamped watermark re-derives them. A
 close's re-run has no redo: its undo writes a journal back, which redo
 can't replay, so re-running is the way back, and its undo clears the
 stack, whose snapshots can hold the re-run's values. The stack clears on any
