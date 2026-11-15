@@ -4557,13 +4557,14 @@ class StoryStore {
   }
 
   // Create a checkpoint (snapshot of current state)
-  async createCheckpoint(name: string): Promise<Checkpoint> {
+  async createCheckpoint(name: string, holder?: GenerationLease): Promise<Checkpoint> {
     if (!this.currentStory) throw new Error('No story loaded')
 
     // A checkpoint is a full snapshot, and a branch created from one copies it wholesale. Taken
     // mid-turn it would freeze a half-written turn — the user action in, the narration or its
-    // world state not yet — and hand that to every branch made from it afterwards.
-    this.assertNotBusy('create a checkpoint')
+    // world state not yet — and hand that to every branch made from it afterwards. `holder` is
+    // a turn's own lease, taken before the turn writes anything.
+    this.assertNotBusy('create a checkpoint', holder)
 
     const lastEntry = this.entries[this.entries.length - 1]
     if (!lastEntry) throw new Error('No entries to checkpoint')
