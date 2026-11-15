@@ -40,6 +40,7 @@ import {
   OUTSIDE_CLUSTER,
   pinByUser,
   rewriteCitedProse,
+  worldMergeMoves,
 } from './__tests__/happening-tools-fixture'
 
 describe('merge_happenings schema', () => {
@@ -387,6 +388,31 @@ describe('merge_happenings refusals', () => {
       expect((await awarenessOf(f, LIGHT, characterId))?.decayResistance).toBe(pin)
     },
   )
+
+  // chapter-close.md → 3d: a World merge's copy keeps the owner its source row's pin had.
+  it("merges an absorbed row a World merge copied from a pin the user didn't set", async () => {
+    await worldMergeMoves(f, LIGHT, MARA, TOBIN)
+    await rewriteCitedProse(f)
+
+    const run = await runCalls(f, [merge({ keep: 'hp1', absorb: ['hp2'] })])
+
+    expect(run.answers).toEqual([{ result: 'ok', survivor: 'hp1' }])
+    expect(await happeningRow(f, LIGHT)).toBeUndefined()
+  })
+
+  it('skips the whole merge when a World merge copied an absorbed row from a pin the user set', async () => {
+    await pinByUser(f, LIGHT, MARA, 0.9)
+    await worldMergeMoves(f, LIGHT, MARA, TOBIN)
+    await rewriteCitedProse(f)
+
+    const run = await runCalls(f, [merge({ keep: 'hp1', absorb: ['hp2'] })])
+
+    expect(run.answers).toEqual([
+      { result: 'skipped', reason: USER_EDITED_SINCE_PROSE, note: NOTE.user },
+    ])
+    expect(await runDeltas(f, run.result.actionId)).toEqual([])
+    expect((await awarenessOf(f, LIGHT, TOBIN))?.decayResistance).toBe(0.9)
+  })
 
   it("still merges an absorbed row whose only user edit before the cited turn isn't its pin", async () => {
     await apply(

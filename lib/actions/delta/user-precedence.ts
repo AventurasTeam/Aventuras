@@ -3,7 +3,7 @@ import { and, asc, desc, eq, gt, inArray, or, sql } from 'drizzle-orm'
 import { chunked, deltas, type Delta, type Entity, type LocationState, type Thread } from '@/lib/db'
 import { isJsonObject } from '@/lib/json-object'
 
-import type { DbCtx, PrecedenceTable } from '../types'
+import { MACHINE_PIN_KEY, type DbCtx, type PrecedenceTable } from '../types'
 import { deepEqual } from './delta-encoding'
 
 export { USER_EDITED_SINCE_PROSE } from '../types'
@@ -247,6 +247,19 @@ function wroteThreadStatus(edits: readonly Delta[]): boolean {
   return THREAD_STATUS_COLUMNS.some((column) => wroteColumn(edits, column))
 }
 
+/** A World merge's copy whose create says the pin it copied wasn't the user's. */
+const isMachinePinCopy = (d: Delta) =>
+  d.undoPayload != null && Object.hasOwn(d.undoPayload, MACHINE_PIN_KEY)
+
+/** A delta wrote an awareness row's pin (chapter-close.md → 3d): a marked create didn't. */
+function wroteAwarenessPin(edits: readonly Delta[]): boolean {
+  return edits.some((d) =>
+    d.op === 'create'
+      ? !isMachinePinCopy(d)
+      : d.op === 'update' && carriesColumn(d, 'decayResistance'),
+  )
+}
+
 /**
  * The columns a patch changes on `current`, one rule for every update handler: a restated column
  * is dropped (History and the later-turn rule read an undo payload's keys as written), and a column
@@ -281,13 +294,16 @@ export function changedColumns(args: {
 }
 
 /** wrotePath, but each column group above (placement, collision flag, retirement, thread status)
- *  counts as one field (generation-pipeline.md → Reverse-replay). */
+ *  counts as one field (generation-pipeline.md → Reverse-replay), and an awareness row's pin
+ *  isn't written by a merge copy's marked create. */
 export function wroteField(
   edits: readonly Delta[],
   table: string,
   column: string,
   path: readonly string[],
 ): boolean {
+  if (table === 'happening_awareness' && column === 'decayResistance')
+    return wroteAwarenessPin(edits)
   if (table === 'entities') {
     if (column === 'state' && path.length === 1 && PLACEMENT_PATHS.includes(path[0]))
       return wrotePlacement(edits)
@@ -297,6 +313,15 @@ export function wroteField(
   }
   if (table === 'threads' && THREAD_STATUS_COLUMNS.includes(column)) return wroteThreadStatus(edits)
   return wrotePath(edits, column, path)
+}
+
+/**
+ * Whether an awareness row's pin is the user's, read from every user edit on the row
+ * (chapter-close.md → 3d).
+ */
+export async function userOwnsPin(ctx: DbCtx, branchId: string, rowId: string): Promise<boolean> {
+  const edits = await userEditsSince(ctx, branchId, 'happening_awareness', rowId, 0)
+  return wroteField(edits, 'happening_awareness', 'decayResistance', [])
 }
 
 // By natural key, not row id: a pair re-created after the delete is a new row. A delete's undo

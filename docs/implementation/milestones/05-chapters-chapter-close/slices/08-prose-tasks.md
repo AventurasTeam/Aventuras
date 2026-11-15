@@ -73,7 +73,7 @@ chapter's end entry, and canon is the authority on every rule.
 - [`generation-pipeline.md → Reverse-replay`](../../../../generation-pipeline.md#reverse-replay)
   and [`Phase vs sub-work`](../../../../generation-pipeline.md#phase-vs-sub-work)
 - [`retrieval.md → Keywords schema`](../../../../memory/retrieval.md#keywords-schema)
-- [`followups.md → Data-model`](../../../../followups.md#data-model), "An undo restores a whole prior value over later writes":
+- [`followups.md`](../../../../followups.md), "An undo restores a whole prior value over later writes":
   why a close skips a list a later turn wrote
 - [Slice 5.5a → Scope: in](./05a-task-runner.md#scope-in) and
   [Slice 5.5b → Every write tool, in order](./05b-identity-threads.md#every-write-tool-in-order):
@@ -405,7 +405,7 @@ would drop one slice's rows.
 - World's "stale active" (followups). Phase 4's surfacing half doesn't
   land here.
 - An undo that removes only its own terms
-  ([`followups.md`](../../../../followups.md#data-model)).
+  ([`followups.md`](../../../../followups.md)).
 - Prompt tuning
   ([`followups.md → Tuning and play testing`](../../../../followups.md#tuning-and-play-testing)).
 

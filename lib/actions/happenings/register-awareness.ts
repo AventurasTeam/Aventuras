@@ -1,4 +1,4 @@
-import { and, eq } from 'drizzle-orm'
+import { and, eq, inArray } from 'drizzle-orm'
 
 import type { HappeningAwareness } from '@/lib/db'
 import { happeningAwareness, happeningAwarenessWriteSchema } from '@/lib/db'
@@ -14,9 +14,15 @@ import {
   USER_EDITED_SINCE_PROSE,
   userDeletedAwarenessSince,
   userEditsSinceProse,
-  wroteColumn,
+  userOwnsPin,
+  wroteField,
 } from '../delta/user-precedence'
-import { isUserOriginatedSource, type DeltaSource, type ProseEntryId } from '../types'
+import {
+  isUserOriginatedSource,
+  MACHINE_PIN_KEY,
+  type DeltaSource,
+  type ProseEntryId,
+} from '../types'
 
 type AwarenessUpsertPayload = {
   branchId: string
@@ -35,11 +41,25 @@ type AwarenessUpsertPayload = {
    * stand. Null checks nothing, as for a user write.
    */
   proseEntryId: ProseEntryId
+  /**
+   * The awareness row a World merge copies: the create keeps that row's pin owner
+   * (chapter-close.md → 3d). Ignored on an update.
+   */
+  pinFrom?: string
 }
 
 declare module '@/lib/actions/action-map' {
   interface PipelineActionMap {
     upsertHappeningAwareness: { source: DeltaSource; payload: AwarenessUpsertPayload }
+    /**
+     * World's merge, on a happening both characters know: the kept row `id` takes the pin of the
+     * dropped row `pinFrom` when that pin is the user's and the kept row's isn't (world.md →
+     * Reversibility).
+     */
+    carryAwarenessPin: {
+      source: DeltaSource
+      payload: { branchId: string; id: string; pinFrom: string }
+    }
     deleteHappeningAwareness: { source: DeltaSource; payload: { branchId: string; id: string } }
     bumpAwarenessRetrieval: {
       source: DeltaSource
@@ -70,6 +90,7 @@ const upsertHandler: ActionHandler = async (action, branchId, ctx, group) => {
     source,
     retrievalCount,
     proseEntryId,
+    pinFrom,
   } = action.payload
   if (bid !== branchId)
     return { status: 'rejected', reason: `branch mismatch: delta ${branchId} vs target ${bid}` }
@@ -146,7 +167,7 @@ const upsertHandler: ActionHandler = async (action, branchId, ctx, group) => {
     }
     if (Object.keys(set).length === 0) return noopRefusal('awareness unchanged', 'restated')
     // A field the user wrote after the prose keeps its value; a pair the user created since counts
-    // as written whole, since wroteColumn counts a create.
+    // as written whole, except a merge copy's pin it didn't take from the user (wroteField).
     if (proseEntryId != null) {
       const edits = await userEditsSinceProse(
         ctx,
@@ -156,7 +177,7 @@ const upsertHandler: ActionHandler = async (action, branchId, ctx, group) => {
         proseEntryId,
       )
       for (const field of Object.keys(set)) {
-        if (!wroteColumn(edits, field)) continue
+        if (!wroteField(edits, 'happening_awareness', field, [])) continue
         delete set[field]
         delete undoPayload[field]
       }
@@ -211,14 +232,59 @@ const upsertHandler: ActionHandler = async (action, branchId, ctx, group) => {
         : 0,
     source: source ?? null,
   }
+  const machinePin = pinFrom !== undefined && !(await userOwnsPin(ctx, bid, pinFrom))
   return {
     status: 'ok',
     targetTable: 'happening_awareness',
     targetId: row.id,
     op: 'create',
-    undoPayload: null,
+    undoPayload: machinePin ? { [MACHINE_PIN_KEY]: true } : null,
     ops: [ctx.db.insert(happeningAwareness).values(row).toSQL()],
     patch: { op: 'create', id: row.id, row },
+  }
+}
+
+// The write is what makes the pin the user's, so an equal pin is logged too (data-model.md →
+// Entry mutability & rollback, the op=update encoding rule).
+const carryPinHandler: ActionHandler = async (action, branchId, ctx) => {
+  if (action.kind !== 'carryAwarenessPin') throw new Error(`handler/kind mismatch: ${action.kind}`)
+  const { branchId: bid, id, pinFrom } = action.payload
+  if (bid !== branchId)
+    return { status: 'rejected', reason: `branch mismatch: delta ${branchId} vs target ${bid}` }
+  const rows = await ctx.db
+    .select()
+    .from(happeningAwareness)
+    .where(and(eq(happeningAwareness.branchId, bid), inArray(happeningAwareness.id, [id, pinFrom])))
+  const kept = rows.find((row) => row.id === id)
+  const from = rows.find((row) => row.id === pinFrom)
+  if (!kept || !from)
+    return {
+      status: 'rejected',
+      reason: `carry awareness ${bid}:${pinFrom} → ${id}: a row is gone`,
+      code: TARGET_NOT_FOUND,
+    }
+  if (kept.happeningId !== from.happeningId)
+    return {
+      status: 'rejected',
+      reason: `carry awareness ${pinFrom} → ${id}: the rows know different happenings`,
+    }
+  if (!(await userOwnsPin(ctx, bid, from.id)) || (await userOwnsPin(ctx, bid, kept.id)))
+    return noopRefusal('pin-not-carried', null)
+  const columns = { decayResistance: from.decayResistance }
+  return {
+    status: 'ok',
+    targetTable: 'happening_awareness',
+    targetId: kept.id,
+    op: 'update',
+    undoPayload: { decayResistance: kept.decayResistance },
+    ops: [
+      ctx.db
+        .update(happeningAwareness)
+        .set(columns)
+        .where(and(eq(happeningAwareness.branchId, bid), eq(happeningAwareness.id, kept.id)))
+        .toSQL(),
+    ],
+    patch: { op: 'update', id: kept.id, columns },
   }
 }
 
@@ -339,6 +405,7 @@ export function registerHappeningAwareness(): void {
     },
     handlers: {
       upsertHappeningAwareness: upsertHandler,
+      carryAwarenessPin: carryPinHandler,
       deleteHappeningAwareness: deleteHandler,
       bumpAwarenessRetrieval: bumpRetrievalHandler,
       resetAwarenessRetrieval: resetRetrievalHandler,

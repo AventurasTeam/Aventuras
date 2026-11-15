@@ -4,7 +4,7 @@ import { describe, expect, it, vi } from 'vitest'
 import type { Delta, HappeningAwareness } from '@/lib/db'
 import { branches, deltas, entities, happeningAwareness, happenings, stories } from '@/lib/db'
 import { createTestDb } from '@/lib/db/__tests__/test-db'
-import { loadHistoryChunk } from '@/lib/history'
+import { humanizeDelta, loadHistoryChunk } from '@/lib/history'
 import { isRetrievalBumpOnly } from '@/lib/row-signals'
 import { happeningAwarenessStore } from '@/lib/stores'
 
@@ -13,10 +13,10 @@ import { registerHappenings } from './register-happenings'
 import { applyDeltaAction, applyDeltaActionGroupWithOutcomes } from '../delta/apply-delta-action'
 import { __resetRegistry } from '../delta/registry'
 import { reverseReplayDeltas } from '../delta/reverse-replay'
-import { USER_EDITED_SINCE_PROSE } from '../delta/user-precedence'
+import { USER_EDITED_SINCE_PROSE, userOwnsPin } from '../delta/user-precedence'
 import { registerEntities } from '../entities/register'
 import { registerStoryEntries } from '../story-entries/register'
-import type { DeltaSource, PipelineAction } from '../types'
+import { MACHINE_PIN_KEY, TARGET_NOT_FOUND, type DeltaSource, type PipelineAction } from '../types'
 
 const BRANCH = 'br_1'
 const OTHER_BRANCH = 'br_2'
@@ -1407,5 +1407,336 @@ describe('upsertHappeningAwareness under user precedence', () => {
       source: 'saw the smoke',
     })
     expect(await db.select().from(deltas).where(eq(deltas.actionId, 'act_m'))).toEqual([])
+  })
+})
+
+// chapter-close.md → 3d: a World merge's copy keeps the owner its source row's pin had.
+describe("upsertHappeningAwareness copying a row's pin owner", () => {
+  const PROSE = 'e_prose'
+  // A pass wrote it: no user delta stands on it.
+  const SOURCE: HappeningAwareness = {
+    id: 'haw_src',
+    branchId: BRANCH,
+    happeningId: 'hap_1',
+    characterId: 'char_a',
+    learnedAtEntryId: null,
+    decayResistance: 0.4,
+    retrievalCount: 3,
+    source: 'overheard',
+  }
+  const character = (id: string, name: string) => ({
+    id,
+    branchId: BRANCH,
+    kind: 'character' as const,
+    name,
+    status: 'active' as const,
+    injectionMode: 'auto' as const,
+    createdAt: 1,
+    updatedAt: 1,
+  })
+
+  async function setupCopy(rows: HappeningAwareness[] = [SOURCE]) {
+    const harness = await setup(rows)
+    registerStoryEntries()
+    await harness.db
+      .insert(entities)
+      .values([character('char_b', 'Bren'), character('char_c', 'Cass')])
+    return harness
+  }
+  type Harness = Awaited<ReturnType<typeof setupCopy>>
+  const run = (ctx: Harness['ctx'], action: PipelineAction, actionId: string) =>
+    applyDeltaAction({ action, actionId, branchId: BRANCH }, ctx)
+  const upsert = (
+    source: DeltaSource,
+    characterId: string,
+    fields: Partial<Pick<HappeningAwareness, 'source' | 'decayResistance'>> & {
+      proseEntryId?: string | null
+    },
+  ): PipelineAction => ({
+    kind: 'upsertHappeningAwareness',
+    source,
+    payload: { branchId: BRANCH, characterId, happeningId: 'hap_1', proseEntryId: null, ...fields },
+  })
+  const rowOf = async (db: Harness['db'], characterId: string) =>
+    (await awarenessRows(db, characterId, 'hap_1'))[0]
+  // What World's merge sends for a moved row (lib/world/entity-merge.ts).
+  const copy = async (harness: Harness, from: string, to: string, actionId: string) => {
+    const row = await rowOf(harness.db, from)
+    const result = await run(
+      harness.ctx,
+      {
+        kind: 'upsertHappeningAwareness',
+        source: 'user_edit',
+        payload: {
+          branchId: BRANCH,
+          characterId: to,
+          happeningId: row.happeningId,
+          learnedAtEntryId: row.learnedAtEntryId,
+          decayResistance: row.decayResistance,
+          source: row.source,
+          retrievalCount: row.retrievalCount,
+          proseEntryId: null,
+          pinFrom: row.id,
+        },
+      },
+      actionId,
+    )
+    expect(result.status).toBe('ok')
+    const [logged] = await harness.db.select().from(deltas).where(eq(deltas.actionId, actionId))
+    expect(logged.op).toBe('create')
+    return logged
+  }
+  const owned = async (harness: Harness, characterId: string) =>
+    userOwnsPin(harness.ctx, BRANCH, (await rowOf(harness.db, characterId)).id)
+  const writeProse = (ctx: Harness['ctx']) =>
+    run(
+      ctx,
+      {
+        kind: 'createStoryEntry',
+        source: 'ai_classifier',
+        payload: {
+          entry: {
+            id: PROSE,
+            branchId: BRANCH,
+            position: 1,
+            kind: 'ai_reply',
+            content: 'Jorin tells Bren about the fire.',
+            createdAt: 1,
+          },
+        },
+      },
+      'act_prose',
+    )
+  const passLearns = upsert('periodic_classifier', 'char_b', {
+    source: 'told by Jorin',
+    decayResistance: 0.8,
+    proseEntryId: PROSE,
+  })
+
+  it('marks the copy of a pin a close set, which reads as no user pin', async () => {
+    const harness = await setupCopy()
+    await run(harness.ctx, upsert('chapter_close', 'char_a', { decayResistance: 0.7 }), 'act_c')
+
+    const logged = await copy(harness, 'char_a', 'char_b', 'act_m')
+
+    expect(logged.undoPayload).toEqual({ [MACHINE_PIN_KEY]: true })
+    expect(await rowOf(harness.db, 'char_b')).toMatchObject({
+      decayResistance: 0.7,
+      source: 'overheard',
+      retrievalCount: 3,
+    })
+    expect(await owned(harness, 'char_b')).toBe(false)
+  })
+
+  it("doesn't mark the copy of a pin the user set", async () => {
+    const harness = await setupCopy()
+    await run(harness.ctx, upsert('user_edit', 'char_a', { decayResistance: 0.6 }), 'act_u')
+
+    const logged = await copy(harness, 'char_a', 'char_b', 'act_m')
+
+    expect(logged.undoPayload).toBeNull()
+    expect(await owned(harness, 'char_b')).toBe(true)
+  })
+
+  it("doesn't mark the copy of a row the user created", async () => {
+    const harness = await setupCopy([])
+    await run(harness.ctx, upsert('user_edit', 'char_a', { source: 'saw the smoke' }), 'act_u')
+
+    const logged = await copy(harness, 'char_a', 'char_b', 'act_m')
+
+    expect(logged.undoPayload).toBeNull()
+    expect(await owned(harness, 'char_b')).toBe(true)
+  })
+
+  it('marks a copy of a marked copy', async () => {
+    const harness = await setupCopy()
+    await copy(harness, 'char_a', 'char_b', 'act_m1')
+
+    const logged = await copy(harness, 'char_b', 'char_c', 'act_m2')
+
+    expect(logged.undoPayload).toEqual({ [MACHINE_PIN_KEY]: true })
+    expect(await owned(harness, 'char_c')).toBe(false)
+  })
+
+  it("doesn't mark the copy of a marked copy whose pin the user set since", async () => {
+    const harness = await setupCopy()
+    await copy(harness, 'char_a', 'char_b', 'act_m1')
+    await run(harness.ctx, upsert('user_edit', 'char_b', { decayResistance: 0.9 }), 'act_u')
+
+    const logged = await copy(harness, 'char_b', 'char_c', 'act_m2')
+
+    expect(logged.undoPayload).toBeNull()
+    expect(await owned(harness, 'char_c')).toBe(true)
+  })
+
+  it("lets a pass citing prose older than the copy move its pin, and holds the copy's other fields", async () => {
+    const harness = await setupCopy()
+    await writeProse(harness.ctx)
+    await copy(harness, 'char_a', 'char_b', 'act_m')
+
+    expect((await run(harness.ctx, passLearns, 'act_p')).status).toBe('ok')
+
+    expect(await rowOf(harness.db, 'char_b')).toMatchObject({
+      decayResistance: 0.8,
+      source: 'overheard',
+    })
+    const [logged] = await harness.db.select().from(deltas).where(eq(deltas.actionId, 'act_p'))
+    expect(logged.undoPayload).toEqual({ decayResistance: 0.4 })
+  })
+
+  it("holds an unmarked copy's pin from a pass citing prose older than the copy", async () => {
+    const harness = await setupCopy()
+    await run(harness.ctx, upsert('user_edit', 'char_a', { decayResistance: 0.6 }), 'act_u')
+    await writeProse(harness.ctx)
+    await copy(harness, 'char_a', 'char_b', 'act_m')
+
+    expect(await run(harness.ctx, passLearns, 'act_p')).toEqual({
+      status: 'rejected',
+      reason: USER_EDITED_SINCE_PROSE,
+      code: 'noop',
+    })
+    expect(await rowOf(harness.db, 'char_b')).toMatchObject({
+      decayResistance: 0.6,
+      source: 'overheard',
+    })
+  })
+
+  describe('carryAwarenessPin', () => {
+    // Bren's own row of the fire: a close set its pin.
+    const KEPT: HappeningAwareness = {
+      ...SOURCE,
+      id: 'haw_kept',
+      characterId: 'char_b',
+      decayResistance: 0.7,
+      source: 'smelled the smoke',
+    }
+    const carry = (id = KEPT.id, pinFrom = SOURCE.id): PipelineAction => ({
+      kind: 'carryAwarenessPin',
+      source: 'user_edit',
+      payload: { branchId: BRANCH, id, pinFrom },
+    })
+    const loggedBy = (db: Harness['db'], actionId: string) =>
+      db.select().from(deltas).where(eq(deltas.actionId, actionId))
+    const noop = { status: 'rejected', reason: 'pin-not-carried', code: 'noop' }
+
+    it("moves a user pin onto the kept row's machine pin, which becomes the user's", async () => {
+      const harness = await setupCopy([SOURCE, KEPT])
+      await run(harness.ctx, upsert('user_edit', 'char_a', { decayResistance: 0.2 }), 'act_u')
+
+      expect((await run(harness.ctx, carry(), 'act_m')).status).toBe('ok')
+
+      expect(await rowOf(harness.db, 'char_b')).toMatchObject({
+        decayResistance: 0.2,
+        source: 'smelled the smoke',
+      })
+      const [logged] = await loggedBy(harness.db, 'act_m')
+      expect(logged).toMatchObject({
+        op: 'update',
+        targetId: 'haw_kept',
+        undoPayload: { decayResistance: 0.7 },
+      })
+      expect(await owned(harness, 'char_b')).toBe(true)
+    })
+
+    it('logs the pin even when the two values are equal', async () => {
+      const harness = await setupCopy([SOURCE, KEPT])
+      await run(harness.ctx, upsert('user_edit', 'char_a', { decayResistance: 0.7 }), 'act_u')
+
+      expect((await run(harness.ctx, carry(), 'act_m')).status).toBe('ok')
+
+      const [logged] = await loggedBy(harness.db, 'act_m')
+      expect(logged).toMatchObject({ op: 'update', undoPayload: { decayResistance: 0.7 } })
+      expect(await owned(harness, 'char_b')).toBe(true)
+    })
+
+    it('carries a null pin from a row the user created without one', async () => {
+      const harness = await setupCopy([KEPT])
+      await run(harness.ctx, upsert('user_edit', 'char_a', { source: 'saw the smoke' }), 'act_u')
+      const created = await rowOf(harness.db, 'char_a')
+
+      expect((await run(harness.ctx, carry(KEPT.id, created.id), 'act_m')).status).toBe('ok')
+
+      expect((await rowOf(harness.db, 'char_b')).decayResistance).toBeNull()
+      expect(await owned(harness, 'char_b')).toBe(true)
+    })
+
+    it("writes nothing when the kept row's pin is the user's too", async () => {
+      const harness = await setupCopy([SOURCE, KEPT])
+      await run(harness.ctx, upsert('user_edit', 'char_a', { decayResistance: 0.2 }), 'act_u1')
+      await run(harness.ctx, upsert('user_edit', 'char_b', { decayResistance: 0.9 }), 'act_u2')
+
+      expect(await run(harness.ctx, carry(), 'act_m')).toEqual(noop)
+
+      expect((await rowOf(harness.db, 'char_b')).decayResistance).toBe(0.9)
+      expect(await loggedBy(harness.db, 'act_m')).toEqual([])
+    })
+
+    it("writes nothing when the dropped row's pin isn't the user's", async () => {
+      const harness = await setupCopy([SOURCE, KEPT])
+      await run(harness.ctx, upsert('user_edit', 'char_a', { source: 'saw the smoke' }), 'act_u')
+
+      expect(await run(harness.ctx, carry(), 'act_m')).toEqual(noop)
+
+      expect((await rowOf(harness.db, 'char_b')).decayResistance).toBe(0.7)
+      expect(await loggedBy(harness.db, 'act_m')).toEqual([])
+      expect(await owned(harness, 'char_b')).toBe(false)
+    })
+
+    // world.md:693: History names the pin by its column label.
+    it("lists a restated carry in the happening's History as a pin edit", async () => {
+      const harness = await setupCopy([SOURCE, KEPT])
+      await run(harness.ctx, upsert('user_edit', 'char_a', { decayResistance: 0.7 }), 'act_u')
+      await run(harness.ctx, carry(), 'act_m')
+
+      const chunk = await loadHistoryChunk(harness.db, {
+        branchId: BRANCH,
+        targetTable: 'happenings',
+        targetId: 'hap_1',
+        sort: 'newest',
+        cursor: null,
+      })
+      const carried = chunk.rows.find((r) => r.delta.actionId === 'act_m')
+
+      expect(carried).toBeDefined()
+      expect(
+        humanizeDelta(carried!, {
+          targetTable: 'happenings',
+          targetName: 'The fire',
+          otherName: (id) => (id === 'char_b' ? 'Bren' : null),
+          entryLabel: () => null,
+          nowMs: 0,
+        }),
+      ).toMatchObject({ summary: 'Modified Decay resistance' })
+    })
+
+    it('refuses a carry whose row is gone', async () => {
+      const harness = await setupCopy([SOURCE, KEPT])
+
+      expect(await run(harness.ctx, carry(KEPT.id, 'haw_gone'), 'act_m')).toMatchObject({
+        status: 'rejected',
+        code: TARGET_NOT_FOUND,
+      })
+      expect(await run(harness.ctx, carry('haw_gone'), 'act_m')).toMatchObject({
+        status: 'rejected',
+        code: TARGET_NOT_FOUND,
+      })
+    })
+
+    it('refuses a carry between rows of different happenings', async () => {
+      const harness = await setupCopy([SOURCE, KEPT])
+      await harness.db
+        .insert(happenings)
+        .values({ id: 'hap_2', branchId: BRANCH, title: 'The flood', createdAt: 1, updatedAt: 1 })
+      await harness.db
+        .update(happeningAwareness)
+        .set({ happeningId: 'hap_2' })
+        .where(eq(happeningAwareness.id, KEPT.id))
+      await run(harness.ctx, upsert('user_edit', 'char_a', { decayResistance: 0.2 }), 'act_u')
+
+      const result = await run(harness.ctx, carry(), 'act_m')
+
+      expect(result.status).toBe('rejected')
+      expect(await loggedBy(harness.db, 'act_m')).toEqual([])
+    })
   })
 })

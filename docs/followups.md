@@ -13,38 +13,6 @@ the two files is normal as scope clarifies; see
 [`conventions.md → Followups vs parked`](./conventions.md#followups-vs-parked)
 for the placement rule.
 
-## Data-model
-
-- **A World merge's pin ownership isn't built.** Canon keeps a moved
-  awareness row's pin with the owner it had on the merged character,
-  through a `$machinePin` key on the copy's create, and carries a pin
-  the user set on a row the merge drops to the kept row when its pin
-  isn't the user's
-  ([`chapter-close.md → 3d`](./memory/chapter-close.md#3d--awareness-pin-tuning),
-  [`world.md → Reversibility`](./ui/screens/world/world.md#reversibility)).
-  The code still re-creates every moved row as a plain user create
-  (`lib/world/entity-merge.ts`), so `set_pin` skips it at every close,
-  the Awareness start leaves it out of the frequent set, and a
-  Happenings merge keeps its pin on the kept row or skips absorbing a
-  happening a merged character knows. The build:
-  - `wroteField` (`lib/actions/delta/user-precedence.ts`) takes an
-    awareness-pin case: a create counts as writing `decayResistance`
-    only without `$machinePin`.
-  - `register-awareness.ts` reads its precedence through `wroteField`,
-    not `wroteColumn`.
-  - The Awareness start's `userPinned` query (`close-awareness.ts`) skips
-    a marked create.
-  - The merge's awareness actions name the moved character's row, and
-    the handler reads that row's ownership when it applies, since the
-    merge is built from stores in one tick
-    (`lib/actions/world/resolve-collision.ts`). That covers the copy's
-    mark and, on a happening both characters know, the carry to the
-    kept row, which logs `decayResistance` even when it restates.
-
-  A plan-mode followup builds it; dev databases with earlier merges
-  reseed. Developer decision 2026-11-15, from the design session that
-  resolved the 2026-11-14 entry (Q13, 5.9's slice review).
-
 ## UX
 
 - **Per-turn token usage breakdown.** Every turn records the tokens

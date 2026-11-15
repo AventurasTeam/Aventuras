@@ -49,6 +49,7 @@ import {
   promptContextFor,
   closePhaseFor,
   userWritesAwareness,
+  worldMergeCopy,
 } from './__tests__/close-awareness-fixture'
 
 vi.mock('@/lib/ai', async (importOriginal) => ({
@@ -254,6 +255,43 @@ describe('the Awareness start', () => {
       expect(listed).toContain(`haw_${uuid(202)}`)
       expect(listed).toContain(`haw_${uuid(203)}`)
       expect(listed).not.toContain(`haw_${uuid(201)}`)
+    })
+
+    // chapter-close.md → 3d: a World merge's copy keeps the owner its source row's pin had.
+    it("lists a World merge's copy of a machine pin, and leaves out a copy of the user's", async () => {
+      await rumours()
+      await putCharacter(fx, JORIN, 'Jorin')
+      await putCharacter(fx, MARA, 'Mara')
+      await putHappening(fx, {
+        id: `hap_${uuid(124)}`,
+        title: 'Rumour 24',
+        occurredAtEntryId: fx.entries[1]!.id,
+      })
+      const counted = (id: number, characterId: string, happening: number, count: number) =>
+        putAwareness(fx, {
+          id: `haw_${uuid(id)}`,
+          characterId,
+          happeningId: `hap_${uuid(100 + happening)}`,
+          learnedAtEntryId: fx.entries[1]!.id,
+          decayResistance: 0.3,
+          retrievalCount: count,
+        })
+      await counted(301, JORIN, 23, 50)
+      await counted(302, MARA, 24, 60)
+      await userWritesAwareness(fx, {
+        characterId: MARA,
+        happeningId: `hap_${uuid(124)}`,
+        decayResistance: 0.7,
+      })
+      const machineCopy = await worldMergeCopy(fx, `haw_${uuid(301)}`, ARIA)
+      const userCopy = await worldMergeCopy(fx, `haw_${uuid(302)}`, ARIA)
+
+      const start = await awarenessTask.start(promptContextFor(fx))
+
+      const listed = start?.seeds.map(({ id }) => id) ?? []
+      expect(listed).toHaveLength(20)
+      expect(listed).toContain(machineCopy)
+      expect(listed).not.toContain(userCopy)
     })
 
     it("keeps a row whose only user edit isn't its pin", async () => {

@@ -1076,7 +1076,7 @@ describe('entityMergeActions — inverse refs', () => {
 })
 
 describe('entityMergeActions — link rows', () => {
-  it('moves the loser’s awareness with its fields and count, dropping one the canonical has', () => {
+  it('moves the loser’s awareness with its fields, count and source row, dropping one the canonical has', () => {
     const plan = merge({
       awareness: [
         aware('haw_1', 'char_a', 'hap_1'),
@@ -1103,10 +1103,19 @@ describe('entityMergeActions — link rows', () => {
           source: 'witnessed',
           retrievalCount: 7,
           proseEntryId: null,
+          pinFrom: 'haw_3',
         },
       },
     ])
     expect(plan.overlap.awareness).toBe(1)
+    // world.md → Reversibility: the dropped row's pin is offered to the canonical's row.
+    expect(ofKind(plan.actions, 'carryAwarenessPin')).toStrictEqual([
+      {
+        kind: 'carryAwarenessPin',
+        source: 'user_edit',
+        payload: { branchId: 'b1', id: 'haw_1', pinFrom: 'haw_2' },
+      },
+    ])
   })
 
   it('re-creates an involvement under an injected id, dropping one in a happening the canonical is in', () => {
@@ -1424,7 +1433,11 @@ describe('entityMergeActions — the group', () => {
 
     const characters = merge({
       canonical: entity('char_a', 'character', flaggedWith('char_b')),
-      awareness: [aware('haw_1', 'char_b', 'hap_1')],
+      awareness: [
+        aware('haw_1', 'char_b', 'hap_1'),
+        aware('haw_2', 'char_a', 'hap_2'),
+        aware('haw_3', 'char_b', 'hap_2'),
+      ],
       involvements: [involved('hinv_1', 'char_b', 'hap_1', null)],
       relationships: [rel('rel_1', 'char_b', 'char_m', 'friend', null)],
       tail: { id: 'entry_9', sceneEntities: ['char_b'], currentLocationId: null },
@@ -1432,6 +1445,7 @@ describe('entityMergeActions — the group', () => {
     expect(characters.actions.map(label)).toStrictEqual([
       'updateEntity:char_a',
       'upsertHappeningAwareness',
+      'carryAwarenessPin',
       'createHappeningInvolvement',
       'upsertCharacterRelationship',
       'updateStoryEntryMetadata',
