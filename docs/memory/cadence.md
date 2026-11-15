@@ -256,6 +256,9 @@ membership, link rows, threads and lore:
   log, so every user edit outranks it.
 - The user wrote a field after that prose when a `user_edit` delta on
   the same row, logged later, created the row or changed that column.
+  An awareness row's pin is the exception for a create: a World merge's
+  copy carrying `$machinePin` didn't write it
+  ([`chapter-close.md → 3d`](./chapter-close.md#3d--awareness-pin-tuning)).
   `updateEntity` drops the columns a patch leaves unchanged, so an edit
   to a description does not shield the status. Inside `state` the
   check is per field: the undo payload holds only the fields an update

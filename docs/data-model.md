@@ -274,7 +274,7 @@ erDiagram
         text target_table "story_entries | entities | lore | threads | happenings | happening_involvements | happening_awareness | character_relationships | chapters | entry_assets | translations | branch_era_flips"
         text target_id "id in target_table"
         text op "create | update | delete"
-        json undo_payload "op=create: null; op=update: nested-partial diff of changed paths with their PRE-change values per Entry mutability & rollback; op=delete: full row to re-insert"
+        json undo_payload "op=create: null, or only payload metadata keys; op=update: nested-partial diff of changed paths with their PRE-change values per Entry mutability & rollback; op=delete: full row to re-insert"
         integer encoding_version "writer-stamped encoding-contract version; defaults to 1 at v1. Reserved for future apply-time dispatch when delta-logged column shapes or encoding rules change. See Entry mutability & rollback"
         integer created_at
     }
@@ -2741,6 +2741,11 @@ arbitrary editing.
   names the partner the user answered: a reversal can rewrite the
   edit's prior flag, so the flag alone can't keep the answer
   ([`memory/chapter-close.md → 3f`](./memory/chapter-close.md#3f--world-upkeep)).
+  `$machinePin`, on a World merge's create of an awareness row, says the
+  pin it copied wasn't the user's: user precedence reads a user create as
+  writing every field, and without the key the copy's pin would read as
+  one the user set
+  ([`memory/chapter-close.md → 3d`](./memory/chapter-close.md#3d--awareness-pin-tuning)).
 - **The reversal set closes over the rows its creates delete, and the
   rows naming them**, not over the anchor alone. Undoing a `create` is a
   plain row delete with no cascade — only an explicit delete action
@@ -2848,8 +2853,8 @@ at insert time.
 
 **Delta storage economy.** Each delta stores only **undo** information in
 a single `undo_payload` column — no redundant "after" snapshot, since the
-live row already holds that. For `op=create` the payload is null (undo =
-delete target_id). For `op=update` it's a nested-partial diff of only the
+live row already holds that. For `op=create` the payload is null, or holds
+only `$` metadata keys (undo = delete target_id). For `op=update` it's a nested-partial diff of only the
 paths that changed, with their pre-change values (see encoding rule below).
 For `op=delete` it's the full row JSON (needed to re-insert). This
 collapses storage by ~6-7x compared to storing full before+after
@@ -2865,6 +2870,11 @@ nested objects within nested objects follow the same rule. Flat-array
 JSON columns (`tags`, `keywords`) carry the full pre-change array
 (arrays go whole; partial encoding inside arrays would re-introduce
 absence-sentinel ambiguity at index granularity for no storage win).
+A key whose prior value equals the new one is left out, with one
+exception written on purpose: the pin a World merge carries to the
+kept character's awareness row is logged even when the values match,
+since the key is what makes the pin the user's
+([`ui/screens/world/world.md → Reversibility`](./ui/screens/world/world.md#reversibility)).
 
 **The `null`-as-sentinel rule.** A `null` value in `undo_payload` is
 overloaded across three Zod node types, schema-discriminated at apply

@@ -1198,7 +1198,9 @@ Duplicate handling is deterministic and not user-facing: when an
 awareness row from non-canonical would collide on
 `(branch_id, character_id, happening_id)` with an existing
 canonical row, the canonical's row stays and the loser's row is
-dropped. An involvement in a happening the canonical already takes
+dropped, except that a pin the user set on the loser's row carries to
+the canonical's when the user didn't set that one
+([Reversibility](#reversibility)). An involvement in a happening the canonical already takes
 part in is dropped the same way: the table has no UNIQUE, but two
 involvements of one entity in one happening say nothing one row
 doesn't, and the canonical's `role` stays. For the same reason, of
@@ -1382,9 +1384,16 @@ Merge writes, in order:
   applies. Folded into that row's `state` patch above when it has
   one.
 - `happening_awareness` op=`create` per moved row, on the
-  canonical, carrying the row's `retrieval_count`. A row for a
-  happening the canonical already knows, or one gone from the branch,
-  isn't moved.
+  canonical, carrying the row's `retrieval_count`, with `$machinePin`
+  in its `undo_payload` when the moved row's pin wasn't the user's
+  ([`data-model.md → Entry mutability & rollback`](../../../data-model.md#entry-mutability--rollback)).
+  A row for a happening the canonical already knows, or one gone from
+  the branch, isn't moved.
+- `happening_awareness` op=`update` on the canonical's row for a
+  happening both know, when the user set the non-canonical's pin and
+  not the canonical's: the canonical's row takes that pin and it
+  becomes the user's. It is written even when the two values are
+  equal, since the write is what makes the pin theirs.
 - `happening_involvements` op=`create` per moved row, on the
   canonical. One in a happening the canonical already takes part in
   or one gone from the branch isn't moved, nor one after the
@@ -1420,12 +1429,18 @@ They are user creates, though: a prose edit's sweep that reverses
 the classifier pass which made the originals leaves the copies on
 the canonical, unless a copy names a row that pass created
 (rollback and regenerate sweep the merge group too and take them).
+An awareness copy's pin is the exception: it keeps the owner it had
+on the non-canonical, so a pin a pass or a close set stays theirs to
+tune, and one the user set stays the user's
+([`chapter-close.md → 3d`](../../../memory/chapter-close.md#3d--awareness-pin-tuning)).
 CTRL-Z restores the non-canonical as it was, with its original link
 rows and translations, the refs and the tail scene; puts the
 canonical's earlier columns back (scalars, tags, keywords, the flag
 with its partner and reason, and `state`, a tracked location
 included), except a field, term or count a pass wrote since, which
 stays; re-points the flags it moved back at the non-canonical;
+puts back the pin it carried to a canonical awareness row, which
+stops being the user's, unless the user set that pin since;
 and removes the rows the merge created on the canonical.
 
 Embeddings are not delta-logged
@@ -1468,9 +1483,11 @@ applies (every field a pass or a close updates), what a resolution
 writes counts as the user's: a classifier fact from prose older than
 the resolution doesn't overwrite it. That includes a relationship
 view the merge carries over from the non-canonical, though the
-classifier first wrote it.
+classifier first wrote it. A moved awareness row's pin is the
+exception: it keeps its owner ([Reversibility](#reversibility)).
 Only what the resolution changes counts — an unchanged column isn't
-written.
+written, except a pin the merge carries to the canonical's awareness
+row, which is written to make it the user's.
 
 The dialog handles two-side merges only. When 3+ entities are
 namesakes, the user iterates: each flagged row's strip names its own
