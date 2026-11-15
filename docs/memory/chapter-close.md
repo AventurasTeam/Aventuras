@@ -620,8 +620,8 @@ handle. Its bounds hold from the pin the Awareness start showed:
   as one whose pin they set, and so does a row a World
   [merge](../ui/screens/world/world.md#merge) moved to the kept
   character, since the merge re-creates it as the user's
-  ([`triage.md`](../implementation/triage.md), "World merge re-creates
-  awareness rows as the user's."). Other fields give way only to a user
+  ([`followups.md → Data-model`](../followups.md#data-model), "World merge
+  re-creates awareness rows as the user's."). Other fields give way only to a user
   edit after the cited turn ([Tools and writes](#tools-and-writes)).
 
 **One-way frequency signal.** The frequency-driven candidate set
@@ -776,8 +776,8 @@ row is a merge that keeps the kept row's text. Keep distinct is no call.
   a row a World merge moved counts as user-pinned (3d), so its pin stays
   on the kept row, and a merge that would absorb a happening a merged
   character knows is skipped at every close
-  ([`triage.md`](../implementation/triage.md), "World merge re-creates
-  awareness rows as the user's.").
+  ([`followups.md → Data-model`](../followups.md#data-model), "World merge
+  re-creates awareness rows as the user's.").
 - Deleted rows are delta-logged for rollback.
 
 **A merge lands whole, once per row.** Code checks user precedence on

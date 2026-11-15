@@ -80,6 +80,54 @@ for the placement rule.
   behaviour. Developer decision 2026-11-14 (5.9): record the edge in
   canon, fix later.
 
+- **World merge re-creates awareness rows as the user's.** World's
+  character merge (`lib/world/entity-merge.ts`, `merge-links.ts`) moves
+  each awareness row the kept character lacks by re-creating it as a
+  `user_edit` while `deleteEntity` cascades the original. The row guard
+  reads a user create as a pin the user set, so `set_pin` skips the row
+  at every close, the Awareness start leaves it out of the frequent set,
+  a happenings merge keeps its pin on the kept row, and a merge that
+  would absorb a happening a merged character knows is skipped
+  ([`chapter-close.md → 3e`](./memory/chapter-close.md#3e--happenings-consolidation)).
+  Re-pointing the row (an update of `character_id`) keeps its history,
+  so only a pin the user set counts. Read from the code, not built, a
+  re-point needs four things. First, a re-point arm on
+  `happening_awareness`, its undo `{characterId}`. Second, the group's
+  `deleteEntity` cascade has to skip the rows the group re-points:
+  handlers read pre-group state, so the cascade still captures them and
+  `groupConflict` refuses the group ("the group writes …, which a
+  delete in it cascades", `lib/actions/delta/apply-delta-action.ts`);
+  a widened `deleteEntity` payload or a `GroupScope` field. Third, redo
+  has to skip them too: its delete arm (`applyRedoLocked`,
+  `lib/actions/delta/redo.ts`) re-runs the cascade against the post-undo
+  database, where the rows are back on the loser, and would delete them
+  with no record, so every cascade's `run` likely takes an exclusion
+  set. Fourth, History lists an awareness update only by its labelled
+  columns (`lib/history/field-labels.ts`), so a re-point shows nowhere,
+  where today's re-create lists. Reverse-replay needs no change by that
+  reading: an undo restores the entity first, then points the row back.
+  Its closure is another matter: it judges a link row's references by
+  their live value because a link row's ends never change after its
+  create
+  ([`generation-pipeline.md → Reverse-replay`](./generation-pipeline.md#reverse-replay)),
+  so a re-point changes that canon, and the closure would judge
+  `character_id` by its pre-value, as it does a `state` reference.
+  Involvements need nothing: their re-create trips Q5's deleted-link
+  check and `userTouched` only in a close whose cited prose predates the
+  World merge, and a re-point would be a user edit after that prose too.
+  A cheaper alternative to weigh first, unverified: the re-create marks
+  each row as carried from the loser's row, and user precedence reads
+  the pin's ownership from the original row's history. Two reads decide
+  that the user set a pin, the row guard's `userEverWrote`
+  (`lib/actions/delta/row-guard.ts`) and the Awareness start's
+  `userPinned` query (`close-awareness.ts`), so both change, and a row
+  carried by two merges in a row reads the first row's history. It
+  matters at every close today: the `set_pin` skip and the frequent-set
+  gap hit whether or not 3e fires, and only the merge skip waits on it
+  ([`3e's thresholds`](#tuning-and-play-testing)).
+  Developer decision 2026-11-14 (Q13), from 5.9's slice review; moved
+  here from the triage queue 2026-11-15, developer decision.
+
 ## UX
 
 - **Per-turn token usage breakdown.** Every turn records the tokens
@@ -453,8 +501,8 @@ breakdown under [UX](#ux).
   2026-11-14, from Slice 5.9's probes. Once 3e fires, World-merged
   awareness rows start to block merges: each counts as a pin the user
   set, so a merge that would absorb a happening a merged character knows
-  is skipped ([`triage.md`](./implementation/triage.md), "World merge
-  re-creates awareness rows as the user's.").
+  is skipped ([Data-model](#data-model), "World merge re-creates
+  awareness rows as the user's.").
 
 - **Which embedders are the floor and the standard.** The dev
   embedder, `Xenova/all-MiniLM-L6-v2`, is today's mobile default
