@@ -1,4 +1,5 @@
 import type { PipelineActionMap, TestPipelineActionMap } from './action-map'
+import { PAYLOAD_META_PREFIX } from './delta/delta-encoding'
 import type { LockedTable } from './delta/row-locks'
 
 export type { DbCtx } from '@/lib/db'
@@ -20,7 +21,7 @@ export const TARGET_NOT_FOUND = 'not-found'
  * Payload metadata on a World merge's create of an awareness row: the pin it copied wasn't the
  * user's (data-model.md → Entry mutability & rollback). Its value is `true`, never an id.
  */
-export const MACHINE_PIN_KEY = '$machinePin'
+export const MACHINE_PIN_KEY = `${PAYLOAD_META_PREFIX}machinePin` as const
 
 export type DeltaSource =
   | 'ai_classifier'

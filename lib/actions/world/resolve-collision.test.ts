@@ -692,8 +692,6 @@ describe('resolveCollision — merge', () => {
   })
 })
 
-// A run reserving right after the build's gate check settles the writes dispatched so far, so the
-// resolution must be among them (generation-pipeline.md → Action rejection — defense in depth).
 // chapter-close.md → 3d and world.md → Reversibility: B's flood row moves as a copy of a machine
 // pin; the user set B's fire pin, which carries onto A's machine-pinned fire row.
 describe('resolveCollision — merge keeps a pin owner', () => {
@@ -828,6 +826,8 @@ describe('resolveCollision — merge keeps a pin owner', () => {
   })
 })
 
+// A run reserving right after the build's gate check settles the writes dispatched so far, so the
+// resolution must be among them (generation-pipeline.md → Action rejection — defense in depth).
 describe('resolveCollision — dispatches in the tick of its gate check', () => {
   it.each([
     ['merge', MERGE_B_INTO_A],
