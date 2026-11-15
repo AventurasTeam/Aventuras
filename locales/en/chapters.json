@@ -73,8 +73,8 @@
     "loreEdited_other": "{{count}} lore rows removed, your edits included",
     "otherChanges": "{{count}} other change reversed",
     "otherChanges_other": "{{count}} other changes reversed",
-    "turnsSince": "{{count}} turn since stays as written, and can still reflect what it added. Undoing one can bring back a value this removes.",
-    "turnsSince_other": "{{count}} turns since stay as written, and can still reflect what it added. Undoing one can bring back a value this removes.",
+    "turnsSince": "{{count}} turn since stays as written, and can still reflect what it added.",
+    "turnsSince_other": "{{count}} turns since stay as written, and can still reflect what it added.",
     "after": {
       "closesNextSend": "A close runs again before your next turn.",
       "waits": "A close waits until the chapter grows past the threshold.",
