@@ -8,7 +8,13 @@ import { isPayloadMetaKey, pruneUndoPartial } from './delta-encoding'
 import { heldKey, type HeldRowIndex } from './held-rows'
 import { whereForDelta, type TableEntry, type TermListField } from './registry'
 import { termChanges, undoTermChange, type TermChange } from './term-list'
-import { deltasOnRowsAfter, PLACEMENT_PATHS, wroteField, wrotePath } from './user-precedence'
+import {
+  deltasOnRowsAfter,
+  PLACEMENT_PATHS,
+  rowKey,
+  wroteField,
+  wrotePath,
+} from './user-precedence'
 
 // generation-pipeline.md → Reverse-replay, "An undo reverts only its own write": a reversed
 // delta undoes only what it did and yields any part a surviving later write changed, then rewrites
@@ -19,9 +25,6 @@ type ChainSet = {
   readonly rows: readonly Delta[]
   readonly held: HeldRowIndex
 }
-
-const rowKeyOf = (d: Pick<Delta, 'branchId' | 'targetTable' | 'targetId'>) =>
-  `${d.targetTable}:${d.branchId}:${d.targetId}`
 
 /** Each reversed row's log from its oldest reversed delta on, read once before the walk. */
 export class ReversalChains {
@@ -45,7 +48,7 @@ export class ReversalChains {
 
   /** Every delta on `d`'s row logged after it, the set's own included, oldest first. */
   later(d: Delta): readonly Delta[] {
-    return (this.#byRow.get(rowKeyOf(d)) ?? []).filter((e) => e.logPosition > d.logPosition)
+    return (this.#byRow.get(rowKey(d)) ?? []).filter((e) => e.logPosition > d.logPosition)
   }
 
   /** The deltas on `d`'s row logged after it that the set doesn't reverse, oldest first. */
@@ -55,7 +58,7 @@ export class ReversalChains {
 
   /** The row as it stands before the reversal, or the copy a delete holds, or null. */
   end(d: Delta, entry: TableEntry): Promise<Readonly<Record<string, unknown>> | null> {
-    const key = rowKeyOf(d)
+    const key = rowKey(d)
     let found = this.#ends.get(key)
     if (!found) {
       found = (async () => {
@@ -83,9 +86,9 @@ export async function loadChains(set: ChainSet, ctx: DbCtx): Promise<ReversalCha
   for (const [table, { since, ids }] of byTable)
     for (const chunk of chunked([...ids]))
       for (const d of await deltasOnRowsAfter(ctx, set.branchId, table, chunk, since)) {
-        const row = byRow.get(rowKeyOf(d))
+        const row = byRow.get(rowKey(d))
         if (row) row.push(d)
-        else byRow.set(rowKeyOf(d), [d])
+        else byRow.set(rowKey(d), [d])
       }
   for (const row of byRow.values()) row.sort((a, b) => a.logPosition - b.logPosition)
   return new ReversalChains(ctx, set.held, byRow, new Set(set.rows.map((d) => d.id)))
@@ -219,10 +222,9 @@ function restorablePayload(
   entry: TableEntry,
   payload: Record<string, unknown>,
   later: readonly Delta[],
-  delta: Delta,
-  onYield: (column: string, path: readonly string[]) => void = () => {},
+  stackablesWhole: boolean,
+  onYield: (column: string, path: readonly string[]) => void,
 ): Record<string, unknown> {
-  const stackablesWhole = yieldsStackablesWhole(entry, delta, later)
   const restorable: Record<string, unknown> = {}
   for (const [col, partial] of Object.entries(payload)) {
     if (isPayloadMetaKey(col)) continue
@@ -302,11 +304,23 @@ function fieldEdits(
       )
       continue
     }
-    if (!priorOf(first, column, path).carried) continue
-    const prior = valueAt(payload, column, path)
-    edits.push({ survivor: first, column, path, edit: () => prior })
+    // A group member the survivor didn't log joins it, as the group is one field.
+    const at = recordedAt(first, column, path)
+    const prior = valueAt(payload, column, at)
+    edits.push({ survivor: first, column, path: at, edit: () => prior })
   }
   return edits
+}
+
+// A survivor that logged a container whole (a null or a replaced value) holds the field at that
+// container, which the reversed delta also replaced whole, so the rewrite lands there.
+function recordedAt(survivor: Delta, column: string, path: readonly string[]): readonly string[] {
+  let node: unknown = survivor.undoPayload?.[column]
+  for (let i = 0; i < path.length; i++) {
+    if (!isJsonObject(node)) return path.slice(0, i)
+    node = node[path[i]]
+  }
+  return path
 }
 
 // A list inside a column recorded whole (null, or replaced outright) undoes with that column.
@@ -355,7 +369,7 @@ export async function planOwnWrite(
     const priorValue = valueAt(payload, list.column, path)
     const prior = termsOf(priorValue)
     const result = termsOf(await resultOf(chains, entry, delta, list.column, path))
-    // A broken chain's list undoes as a whole value (Q5).
+    // A list a broken chain recorded as something else undoes as a whole value.
     if (prior === undefined || result === undefined) continue
     payload = withoutList(payload, list)
     const terms: TermUndo[] = []
@@ -407,19 +421,11 @@ export async function planOwnWrite(
   }
 
   const yielded: { column: string; path: readonly string[] }[] = []
-  const restorable = restorablePayload(entry, payload, later, delta, (column, path) =>
+  const stackablesWhole = yieldsStackablesWhole(entry, delta, later)
+  const restorable = restorablePayload(entry, payload, later, stackablesWhole, (column, path) =>
     yielded.push({ column, path }),
   )
-  edits.push(
-    ...fieldEdits(
-      entry,
-      delta,
-      payload,
-      updates,
-      yielded,
-      yieldsStackablesWhole(entry, delta, later),
-    ),
-  )
+  edits.push(...fieldEdits(entry, delta, payload, updates, yielded, stackablesWhole))
   return { restorable, lists, count, edits }
 }
 

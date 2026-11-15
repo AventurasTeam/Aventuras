@@ -1728,9 +1728,11 @@ undone. In the same transaction, the reversal rewrites the prior values
 of the surviving later deltas on that row as if the reversed delta had
 never been written, walking them in log order. For a column or
 sub-field, the first survivor that changed it takes the reversed
-delta's prior value; a place's parent and `unplaced` mark take the
-prior placement as one field, so a survivor that recorded only one of
-them gets the other too. For a term, each survivor that left it alone
+delta's prior value. A column group (a place's parent and `unplaced`
+mark, the collision flag's three columns, a status with its reason or
+entry) takes the prior as one field, so a survivor that recorded only
+part of it gets the rest too, and a survivor that logged an object
+whole takes the prior for that object. For a term, each survivor that left it alone
 gets it reversed in its prior list, and the first that changed it gets
 the same and ends the walk. Whether a survivor changed a term is read
 from the log as the reversal found it, so one that a newer reversed

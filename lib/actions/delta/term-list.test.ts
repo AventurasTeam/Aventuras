@@ -41,7 +41,7 @@ describe('undoTermChange', () => {
   const putBack = (prior: string[], now: string[], ...terms: string[]) =>
     terms.reduce((list, term) => undoTermChange(list, term, 'removed', prior, 'exact'), now)
 
-  // Q3: after the nearest earlier prior term present now, else at the start.
+  // After the nearest earlier prior term present now, else at the start.
   it.each([
     [['a', 't', 'b'], ['a', 'b', 'x'], ['t'], ['a', 't', 'b', 'x']],
     [['t', 'b'], ['b', 'x'], ['t'], ['t', 'b', 'x']],
@@ -76,7 +76,7 @@ describe('undoTermChange', () => {
     ).toEqual(['a', 'spyglass', 'b'])
   })
 
-  // Q5: a chain whole-value undos broke can ask for any of these.
+  // A chain whole-value undos broke can ask for any of these.
   it('changes nothing a broken chain asks of it', () => {
     expect(undoTermChange(['a'], 'gone', 'added', [], 'exact')).toEqual(['a'])
     expect(undoTermChange(['a', 't'], 't', 'removed', ['t', 'a'], 'exact')).toEqual(['a', 't'])

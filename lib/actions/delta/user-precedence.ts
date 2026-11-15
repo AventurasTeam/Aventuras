@@ -97,7 +97,9 @@ export async function userEditsSinceProse(
   return userEditsSince(ctx, branchId, targetTable, targetId, since)
 }
 
-const rowKey = (d: Delta) => `${d.targetTable}:${d.branchId}:${d.targetId}`
+/** A delta's row: its table, branch and target id. */
+export const rowKey = (d: Pick<Delta, 'branchId' | 'targetTable' | 'targetId'>) =>
+  `${d.targetTable}:${d.branchId}:${d.targetId}`
 
 function groupBy(items: readonly Delta[], key: (d: Delta) => string): Map<string, Delta[]> {
   const groups = new Map<string, Delta[]>()

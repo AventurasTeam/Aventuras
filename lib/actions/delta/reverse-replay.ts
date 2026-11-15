@@ -582,8 +582,8 @@ function restoredColumns(
       restored[column] = value
       continue
     }
-    // A column restored whole to null takes its lists with it.
-    if (partials[column] === null) continue
+    // A column restored whole to null takes its lists with it, and a null one holds none to undo.
+    if (partials[column] === null || !isJsonObject(row[column])) continue
     const partial = isJsonObject(partials[column]) ? { ...partials[column] } : {}
     if (editPayloadAt({ [column]: partial }, column, path, () => value)) partials[column] = partial
   }
@@ -622,6 +622,8 @@ async function undoUpdate(walk: UndoWalk, target: UndoTarget): Promise<void> {
   const state = await rowStateOf(walk, target)
   const { row } = state
   const restored = restoredColumns(entry, undo, row)
+  // A list or count a broken chain left nothing to undo on writes nothing, not an empty SET.
+  if (Object.keys(restored).length === 0) return
   Object.assign(row, restored) // thread into the working copy for later-in-DESC undos
   const keepsNone = keepsNothing(entry, row)
   if (state.presence === 'tombstoned') {

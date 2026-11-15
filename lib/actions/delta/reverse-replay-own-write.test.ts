@@ -282,6 +282,23 @@ describe('a string list undoes term by term', () => {
   })
 })
 
+// A chain whole-value undos broke can leave the row without the container a list undo needs.
+it('writes nothing for a list undo on a row whose state is null', async () => {
+  const { db, ctx } = await setup()
+  await createKael(ctx)
+  await apply(
+    ctx,
+    patchKael('periodic_classifier', { state: { ...STATE, traits: ['brave', 'oathbound'] } }),
+    'act_c',
+  )
+  await db.update(entities).set({ state: null }).where(eq(entities.id, 'char_kael'))
+
+  await reverse(db, ctx, 'act_c')
+
+  expect((await kael(db)).state).toBeNull()
+  expect(await deltasOf(db, 'act_c')).toEqual([])
+})
+
 describe('a field yields to a surviving later write from any source', () => {
   const withVoice = (voice: string) => ({ state: { ...STATE, voice } })
 
@@ -308,6 +325,30 @@ describe('a field yields to a surviving later write from any source', () => {
     await reverseReplayDeltas('act_u', ctx)
 
     expect(((await kael(db)).state as CharacterState).voice).toBe('low and dry')
+  })
+
+  // The survivor logged the object whole (null before it), so its prior takes the whole object the
+  // reversed write had nulled, not one leaf of it.
+  it('rewrites a survivor that logged a container whole at that container', async () => {
+    const { db, ctx } = await setup()
+    const seen = (entryId: string, worldTime: number) => ({ entryId, locationId: null, worldTime })
+    await createKael(ctx, { state: { ...STATE, lastSeenAt: seen('e1', 1) } })
+    await apply(
+      ctx,
+      patchKael('periodic_classifier', { state: { ...STATE, lastSeenAt: null } }),
+      'act_c',
+    )
+    await apply(
+      ctx,
+      patchKael('user_edit', { state: { ...STATE, lastSeenAt: seen('e2', 2) } }),
+      'act_u',
+    )
+    expect(await payloadOf(db, 'act_u')).toEqual({ state: { lastSeenAt: null } })
+
+    await reverse(db, ctx, 'act_c')
+
+    expect(((await kael(db)).state as CharacterState).lastSeenAt).toEqual(seen('e2', 2))
+    expect(await payloadOf(db, 'act_u')).toEqual({ state: { lastSeenAt: seen('e1', 1) } })
   })
 
   // A payload's keys say who wrote a field: a user edit stays the user's.
@@ -362,6 +403,57 @@ describe('a field yields to a surviving later write from any source', () => {
     expect(
       await applyDeltaAction({ action: duplicate, actionId: 'act_rerun', branchId: 'b1' }, ctx),
     ).toMatchObject({ status: 'rejected', reason: 'pair-resolved' })
+  })
+
+  // The collision flag is one field: a re-point that logged the partner alone takes the whole
+  // prior flag, so neither later undo can write a partner beside a flag the CHECK forbids.
+  it('gives the first survivor of a column group the whole prior group', async () => {
+    const { db, ctx } = await setup()
+    await createKael(ctx)
+    await db.insert(entities).values([
+      { ...KAEL, id: 'char_mira', name: 'Mira', keywords: [] },
+      { ...KAEL, id: 'char_quinn', name: 'Quinn', keywords: [] },
+    ])
+    await apply(
+      ctx,
+      {
+        kind: 'raiseCollisionFlag',
+        source: 'chapter_close',
+        payload: {
+          branchId: 'b1',
+          id: 'char_kael',
+          partnerId: 'char_mira',
+          reason: 'duplicate',
+          proseEntryId: null,
+        },
+      },
+      'act_close',
+    )
+    await apply(ctx, patchKael('user_edit', { nameCollisionPartnerId: 'char_quinn' }), 'act_point')
+    await apply(
+      ctx,
+      patchKael('user_edit', {
+        nameCollisionFlag: 0,
+        nameCollisionPartnerId: null,
+        nameCollisionReason: null,
+      }),
+      'act_clear',
+    )
+
+    await reverse(db, ctx, 'act_close')
+
+    expect(await payloadOf(db, 'act_point')).toEqual({
+      nameCollisionFlag: 0,
+      nameCollisionPartnerId: null,
+      nameCollisionReason: null,
+    })
+    await reverseReplayDeltas('act_clear', ctx)
+    await reverseReplayDeltas('act_point', ctx)
+    expect(await kael(db)).toMatchObject({
+      nameCollisionFlag: 0,
+      nameCollisionPartnerId: null,
+      nameCollisionReason: null,
+    })
   })
 
   it("keeps a close's normalized stackables in the survivor's prior when the record yields whole", async () => {
@@ -467,7 +559,7 @@ describe('retrieval_count undoes as a counter', () => {
     expect(await countPayloads(db)).toEqual([{ retrievalCount: 2 }])
   })
 
-  // Q5: a chain whole-value undos broke can ask for a count below zero.
+  // A chain whole-value undos broke can ask for a count below zero.
   it('never takes a count below 0', async () => {
     const { db, ctx } = await setup()
     await awareness(db, 0)
@@ -577,7 +669,7 @@ describe('redo after a survivor rewrite', () => {
     expect(await snapshot(db)).toEqual(before)
   })
 
-  // Q7: redo leaves a sweep's row to re-derive, so a survivor there keeps the undo's rewrite.
+  // Redo leaves a sweep's row to re-derive, so a survivor there keeps the undo's rewrite.
   it("keeps the rewrite of a survivor on a row only the sweep's reversal reached", async () => {
     const { db, ctx } = await setup()
     await createKael(ctx)
