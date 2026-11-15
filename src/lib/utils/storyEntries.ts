@@ -7,6 +7,12 @@ export const GENERATION_ERROR_SOURCE = 'generation-error'
 export const OPENING_SOURCE = 'wizard'
 export const IMPORTED_CHAT_SOURCE = 'sillytavern_import'
 
+/** Whether story creation or a chat import wrote the entry, rather than a turn. */
+export function isStoryStartEntry(entry: Pick<StoryEntry, 'metadata'>): boolean {
+  const source = entry.metadata?.source
+  return source === OPENING_SOURCE || source === IMPORTED_CHAT_SOURCE
+}
+
 /** Whether a system entry records a failed generation, which offers Retry and Dismiss. */
 export function isGenerationErrorEntry(entry: StoryEntry): boolean {
   return entry.type === 'system' && entry.metadata?.source === GENERATION_ERROR_SOURCE

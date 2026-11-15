@@ -1,5 +1,6 @@
 import type { Branch, Checkpoint, StoryEntry } from '#lib/types/index.ts'
 import { chapterBannerLabel, type ChapterBanner } from './chapterBanners'
+import { isStoryStartEntry } from './storyEntries'
 
 /**
  * The number a reader sees for an entry: its stored position, one-based, so the last entry's
@@ -216,6 +217,20 @@ export function canCreateCheckpointAt(
     context.tracking &&
     entry.type === 'narration' &&
     (entry.branchId ?? null) === context.currentBranchId
+  )
+}
+
+/** Whether the story has not been played since it was created or imported, and has no checkpoint there. */
+export function needsStartCheckpoint(
+  entries: Pick<StoryEntry, 'id' | 'type' | 'metadata'>[],
+  checkpoints: Pick<Checkpoint, 'lastEntryId'>[],
+): boolean {
+  const last = entries.at(-1)
+  return (
+    !!last &&
+    last.type !== 'system' &&
+    isStoryStartEntry(last) &&
+    !checkpoints.some((cp) => cp.lastEntryId === last.id)
   )
 }
 

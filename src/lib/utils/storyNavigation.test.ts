@@ -12,6 +12,7 @@ import {
   entryNumber,
   entryNumberRange,
   jumpToEntry,
+  needsStartCheckpoint,
   resolveEntryByNumber,
   withSnapshotLandmarks,
   type EntryJumpUi,
@@ -758,5 +759,32 @@ describe('canCreateCheckpointAt', () => {
       canCreateCheckpointAt(entries[0], { ...context, checkpoints: [{ lastEntryId: 'a' }] }),
     ).toBe(false)
     expect(canCreateCheckpointAt(entries[2], { ...context, locked: true })).toBe(false)
+  })
+})
+
+describe('needsStartCheckpoint', () => {
+  const entry = (id: string, type: StoryEntry['type'], source?: string) =>
+    ({ id, type, metadata: source ? { source } : null }) as StoryEntry
+  const opening = entry('o', 'narration', 'wizard')
+  const action = (id: string) => entry(id, 'user_action', 'sillytavern_import')
+  const reply = (id: string) => entry(id, 'narration', 'sillytavern_import')
+
+  it('wants one on a story that has not been played', () => {
+    expect(needsStartCheckpoint([opening], [])).toBe(true)
+    expect(needsStartCheckpoint([action('a'), reply('b')], [])).toBe(true)
+    expect(needsStartCheckpoint([reply('b'), action('a')], [])).toBe(true)
+  })
+
+  it('wants none once a turn has been played', () => {
+    expect(needsStartCheckpoint([opening, entry('u', 'user_action')], [])).toBe(false)
+    expect(
+      needsStartCheckpoint([opening, entry('u', 'user_action'), entry('n', 'narration')], []),
+    ).toBe(false)
+  })
+
+  it('wants none without an entry, after a system entry, or where one exists', () => {
+    expect(needsStartCheckpoint([], [])).toBe(false)
+    expect(needsStartCheckpoint([opening, entry('s', 'system')], [])).toBe(false)
+    expect(needsStartCheckpoint([opening], [{ lastEntryId: 'o' }])).toBe(false)
   })
 })
