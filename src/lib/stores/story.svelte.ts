@@ -176,6 +176,7 @@ import {
   entryNumber,
   type SnapshotMark,
 } from '#lib/utils/storyNavigation.ts'
+import { IMPORTED_CHAT_SOURCE, OPENING_SOURCE } from '#lib/utils/storyEntries.ts'
 import {
   buildChapterBanners,
   lastResolvedChapterEnd,
@@ -986,7 +987,7 @@ class StoryStore {
       content: msg.content,
       parentId: null,
       position: i,
-      metadata: { source: 'sillytavern_import' },
+      metadata: { source: IMPORTED_CHAT_SOURCE },
       branchId: null,
     }))
     await database.bulkInsertStoryEntries(entries)
@@ -6232,7 +6233,7 @@ class StoryStore {
         parentId: null,
         position: 0,
         metadata: {
-          source: 'wizard',
+          source: OPENING_SOURCE,
           tokenCount,
           timeStart: { ...baseTime },
           timeEnd: { ...baseTime },
