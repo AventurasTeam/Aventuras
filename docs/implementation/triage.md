@@ -61,34 +61,6 @@ slice-planning gate forces its resolution before that slice is planned.
   did not re-run the suite serially — the evidence above is still as of
   `edce17b8`.
 
-- **Undoing a user's keyword edit wipes a later pass's term.** CTRL-Z
-  or a rollback window of a user's keyword edit under a later
-  periodic keyword write restores the whole list from the undo
-  payload, wiping the pass's term, while the pass's surviving delta
-  keeps a before-list without the user's restored term. The close's
-  keyword-author walk then credits that term to the pass, and a later
-  close may remove it (5.8 records this as the walk's second known
-  gap). The same whole-list restore may hit other list fields a pass
-  appends to, unchecked, and `data-model.md`'s "periodic-classifier
-  deltas above it … stay put" doesn't hold when they wrote the same
-  field. Same root cause and fix as the parked
-  [keyword undo item](../parked.md#a-keyword-writes-undo-restores-the-whole-prior-list),
-  whose revisit signal this is. For the undo substrate's owner. The Keywords
-  schema section of `retrieval.md` links this item, so a triage pass
-  updates that link when routing it. Raised in 5.8's execution,
-  developer decision 2026-11-10.
-- **A count bump's undo can bring back a pre-reset count.**
-  `bumpAwarenessRetrieval`'s undo restores the prior `retrieval_count` by
-  assignment (`lib/actions/happenings/register-awareness.ts`), and
-  reverse-replay rewrites only the copies a delete holds. So a rollback
-  past a close puts a later turn's pre-reset count back over the close's
-  reset, and CTRL-Z of the close can restore a kept row's count with a
-  later turn's bump in it. One chapter's frequency signal is off; no
-  data is lost. Candidate fixes: a relative undo for count bumps, or
-  reverse-replay rebasing the held count. The later-bump case in
-  `lib/pipeline/__tests__/close-round-trip.test.ts` pins today's
-  behaviour. Developer decision 2026-11-14 (5.9): record the edge in
-  canon, fix later.
 - **World merge re-creates awareness rows as the user's.** World's
   character merge (`lib/world/entity-merge.ts`, `merge-links.ts`) moves
   each awareness row the kept character lacks by re-creating it as a

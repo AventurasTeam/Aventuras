@@ -5235,7 +5235,7 @@ describe('planning order', () => {
       ])
     })
 
-    // parked.md → A keyword write's undo restores the whole prior list.
+    // followups.md → Data-model: an undo restores a whole prior value over later writes.
     it("writes a reused place's terms when it settles, after the keyword writes of that turn", () => {
       const { planned } = plan(
         {

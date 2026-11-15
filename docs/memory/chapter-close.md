@@ -659,8 +659,8 @@ puts their pre-bump count back over the reset's 0, and CTRL-Z of the
 close can give a merge's kept row ([3e](#3e--happenings-consolidation)'s
 survivor) a count holding a later turn's bump. One chapter's frequency
 signal is off, and no data is lost
-([`triage.md`](../implementation/triage.md), "A count bump's undo can
-bring back a pre-reset count.").
+([`followups.md → Data-model`](../followups.md#data-model), "An undo
+restores a whole prior value over later writes").
 
 **Why per-chapter reset, not lifetime accumulation.** Lifetime
 counts create a Matthew-effect feedback loop — early-popular rows

@@ -1976,32 +1976,6 @@ user edit made after the cited prose stands, and CTRL-Z of the close
 reverses all of it. Parked 2026-10-20 with the AI writer map; the
 signal is users undoing whole closes to keep one description.
 
-#### A keyword write's undo restores the whole prior list
-
-`appendEntityKeywords` and `renameEntity`
-(`lib/actions/entities/state-patch-actions.ts`) store the row's
-pre-write keywords as undo. Reversing a write that landed before an
-earlier turn's keyword write, which the reversal spares, restores the
-list from before it and takes the spared write's terms away too, and
-the watermark clamp means that turn is never re-read
-([`memory/classifier.md → Provenance attribution`](./memory/classifier.md#provenance-attribution)
-says reversal spares facts about surviving turns). Within one reply
-the planner plans every keyword write to a row in turn order (its
-renames, aliases, a known or promoted mention's terms and a reused
-place's), and the periodic classifier, their only writer, lands its
-passes in turn order, so the loss needs a later reply carrying an
-earlier turn's term than one already written. One reply can carry it
-too: a new place waiting for a later turn's parent writes a reused
-place's terms at its parent's turn
-([`memory/classifier.md → Mentioned places`](./memory/classifier.md#mentioned-places)),
-after a keyword write of a turn between them. The general fix is an
-undo that removes only the terms its own write added.
-
-Parked 2026-10-24; the signal is a keyword of a surviving turn lost to
-a reversal, or a second keyword writer landing terms out of turn order.
-Chapter close isn't one: it skips a keyword list a turn past its
-chapter wrote.
-
 #### Resuming a failed close
 
 A close that fails reverses whole and runs again from its first task
