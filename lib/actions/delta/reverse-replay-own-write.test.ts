@@ -23,6 +23,7 @@ import { keywordAuthors, protectedKeywordTerms } from './keyword-authors'
 import { applyRedo, prepareUndo } from './redo'
 import { buildReverseAndPrunePlan, reverseReplayDeltas } from './reverse-replay'
 import { selectReversalSet } from './row-closure'
+import { RESOLVED_PAIR_KEY } from '../entities/resolved-pair'
 import { redoLastAction, undoLastAction } from '../story-entries/undo'
 import type { DeltaSource, PipelineAction } from '../types'
 
@@ -320,6 +321,47 @@ describe('a field yields to a surviving later write from any source', () => {
 
     expect((await kael(db)).description).toBe('a wandering knight')
     expect(await payloadOf(db, 'act_u')).toEqual({ description: 'a wandering knight' })
+  })
+
+  // chapter-close.md → 3f: the user's answer outlives the rewrite of the flag it cleared, so the
+  // re-run close doesn't ask about the pair again.
+  it('keeps the meta key of a survivor whose prior flag it rewrites', async () => {
+    const { db, ctx } = await setup()
+    await createKael(ctx)
+    await db.insert(entities).values({ ...KAEL, id: 'char_mira', name: 'Mira', keywords: [] })
+    const duplicate: PipelineAction = {
+      kind: 'raiseCollisionFlag',
+      source: 'chapter_close',
+      payload: {
+        branchId: 'b1',
+        id: 'char_kael',
+        partnerId: 'char_mira',
+        reason: 'duplicate',
+        proseEntryId: null,
+      },
+    }
+    await apply(ctx, duplicate, 'act_close')
+    await apply(
+      ctx,
+      patchKael('user_edit', {
+        nameCollisionFlag: 0,
+        nameCollisionPartnerId: null,
+        nameCollisionReason: null,
+      }),
+      'act_u',
+    )
+
+    await reverse(db, ctx, 'act_close')
+
+    expect(await payloadOf(db, 'act_u')).toEqual({
+      nameCollisionFlag: 0,
+      nameCollisionPartnerId: null,
+      nameCollisionReason: null,
+      [RESOLVED_PAIR_KEY]: 'char_mira',
+    })
+    expect(
+      await applyDeltaAction({ action: duplicate, actionId: 'act_rerun', branchId: 'b1' }, ctx),
+    ).toMatchObject({ status: 'rejected', reason: 'pair-resolved' })
   })
 
   it("keeps a close's normalized stackables in the survivor's prior when the record yields whole", async () => {

@@ -26,9 +26,10 @@ import {
   type HandlerOutcome,
   type PatchMatchesColumns,
 } from '../delta/registry'
-import type { DbCtx, DeltaSource } from '../types'
+import { isUserOriginatedSource, type DbCtx, type DeltaSource } from '../types'
 import { entityCascade } from './entity-cascade'
 import { branchPlaces, parentChainRefusal } from './parent-chain-check'
+import { withResolvedPair } from './resolved-pair'
 import {
   appendEntityKeywordsHandler,
   placeLocationHandler,
@@ -332,7 +333,9 @@ const updateHandler: ActionHandler = async (action, branchId, ctx) => {
     targetTable: 'entities',
     targetId: id,
     op: 'update',
-    undoPayload,
+    undoPayload: isUserOriginatedSource(action.source)
+      ? withResolvedPair(undoPayload)
+      : undoPayload,
     ops: [
       ctx.db
         .update(entities)

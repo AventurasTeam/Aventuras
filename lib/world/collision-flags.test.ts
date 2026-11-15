@@ -631,6 +631,7 @@ describe('flag clears through the entity arm', () => {
       nameCollisionFlag: 1,
       nameCollisionPartnerId: 'char_p',
       nameCollisionReason: kael.nameCollisionReason,
+      $resolvedPair: 'char_p',
     })
 
     await undoEverything(ctx)
@@ -703,6 +704,7 @@ describe('flag clears through the entity arm', () => {
     const childDeltas = (await deltaRows(ctx)).filter((d) => d.targetId === 'loc_b')
     expect(childDeltas).toHaveLength(1)
     expect(Object.keys(childDeltas[0].undoPayload ?? {}).sort()).toStrictEqual([
+      '$resolvedPair',
       'nameCollisionFlag',
       'nameCollisionPartnerId',
       'nameCollisionReason',
