@@ -41,6 +41,7 @@ const RULE_REASONS: readonly string[] = [
   'pair-resolved',
   'partner-is-self',
   'partner-not-of-kind',
+  'pin-not-carried',
 ]
 
 // Non-literal reasons that are a rule or user precedence, by their source text.

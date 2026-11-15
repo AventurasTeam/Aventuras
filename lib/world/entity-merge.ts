@@ -263,7 +263,7 @@ function mergeContext({ pair, canonicalId, ...rest }: EntityMergeInput): MergeCo
 export function entityMergeActions(request: EntityMergeInput): PipelineAction[] {
   const input = mergeContext(request)
   const { branchId, canonical, loser, newId } = input
-  const { moved } = mergeLinks(input)
+  const { moved, pinCarries } = mergeLinks(input)
   const merged = mergedRow(input)
   const tail = tailSceneActions(branchId, input.tail, loser.id, canonical.id)
   const scene = withSceneEffects(input, canonicalPatch(input, merged), tail.length > 0)
@@ -293,7 +293,14 @@ export function entityMergeActions(request: EntityMergeInput): PipelineAction[] 
         source: row.source,
         retrievalCount: row.retrievalCount,
         proseEntryId: null,
+        pinFrom: row.id,
       },
+    })
+  for (const { keptId, fromId } of pinCarries)
+    actions.push({
+      kind: 'carryAwarenessPin',
+      source: 'user_edit',
+      payload: { branchId, id: keptId, pinFrom: fromId },
     })
 
   for (const row of moved.involvements)

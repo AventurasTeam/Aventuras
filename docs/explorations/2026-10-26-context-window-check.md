@@ -5,7 +5,7 @@ before it is sent, a provider's overflow rejection is recognized as
 one, and a prompt the server silently cut is caught afterwards. The
 window is a figure per model that the user declares, pre-filled only
 where a server publishes it unambiguously. Designed 2026-10-26; closes
-the [followup](../followups.md#data-model) "Generation prompts aren't
+the [followup](../followups.md) "Generation prompts aren't
 checked against the model's window".
 
 ## Why

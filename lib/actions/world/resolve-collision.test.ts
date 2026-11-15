@@ -34,6 +34,7 @@ import { logger } from '@/lib/diagnostics'
 import {
   characterRelationshipsStore,
   entitiesStore,
+  entriesStore,
   generationStore,
   happeningAwarenessStore,
   happeningInvolvementsStore,
@@ -43,15 +44,18 @@ import { entityLinkRows } from '@/lib/world'
 
 import { resolveCollision, type CollisionResolution } from './resolve-collision'
 import { reserveRunAfterGateCheck } from '../delta/__tests__/gate-race'
+import { applyDeltaAction } from '../delta/apply-delta-action'
 import { __resetBranchWriteLocks } from '../delta/branch-write-lock'
 import { withKeyLock } from '../delta/key-lock'
 import { applyRedo, prepareUndo } from '../delta/redo'
 import { selectReversalSet } from '../delta/row-closure'
 import { rowLock } from '../delta/row-locks'
+import { userOwnsPin } from '../delta/user-precedence'
 import { deleteEntityRow } from '../row-delete/delete-entity'
 import type { loadHeadTurn as LoadHeadTurn } from '../story-entries/head-turn'
 import { updateEntrySceneFields } from '../story-entries/scene-fields'
-import type { DbCtx } from '../types'
+import { redoLastAction, undoLastAction } from '../story-entries/undo'
+import { MACHINE_PIN_KEY, type DbCtx, type PipelineAction } from '../types'
 
 // Fires `onSecond` inside the SECOND `loadHeadTurn` call — the in-lock re-read — so a test can
 // land a new tail exactly between the two reads.
@@ -690,6 +694,140 @@ describe('resolveCollision — merge', () => {
 
 // A run reserving right after the build's gate check settles the writes dispatched so far, so the
 // resolution must be among them (generation-pipeline.md → Action rejection — defense in depth).
+// chapter-close.md → 3d and world.md → Reversibility: B's flood row moves as a copy of a machine
+// pin; the user set B's fire pin, which carries onto A's machine-pinned fire row.
+describe('resolveCollision — merge keeps a pin owner', () => {
+  const pinAwareness = (
+    source: PipelineAction['source'],
+    characterId: string,
+    decayResistance: number,
+    proseEntryId: string | null = null,
+  ): PipelineAction => ({
+    kind: 'upsertHappeningAwareness',
+    source,
+    payload: { branchId: 'b1', characterId, happeningId: 'hap_1', decayResistance, proseEntryId },
+  })
+  const write = async (action: PipelineAction, actionId: string, entryId: string | null = null) =>
+    expect(
+      (await applyDeltaAction({ action, actionId, branchId: 'b1', entryId }, ctx)).status,
+    ).toBe('ok')
+  const pinOf = async (id: string) =>
+    (await ctx.db.select().from(happeningAwareness).where(eq(happeningAwareness.id, id)))[0]
+      ?.decayResistance
+  const merge = async (): Promise<Delta[]> => {
+    expect(await resolveCollision('b1', MERGE_B_INTO_A, ctx)).toEqual({ status: 'ok' })
+    const [head] = await deltaRows()
+    return (await deltaRows()).filter((d) => d.actionId === head.actionId)
+  }
+  // The merge's group alone, with a later write left standing. CTRL-Z never reaches this state: it
+  // takes the newer write first (a user pin edit, or the turn whose prose let a pass move the pin).
+  const reverseMergeAlone = async (group: readonly Delta[]) => {
+    const set = await selectReversalSet(ctx, { branchId: 'b1', target: [...group] })
+    const { group: redo, reverse } = await prepareUndo(set, ctx)
+    await reverse()
+    return redo
+  }
+  const carryOf = (group: readonly Delta[]) =>
+    group.find((d) => d.targetTable === 'happening_awareness' && d.op === 'update')
+
+  beforeEach(async () => {
+    await ctx.db
+      .update(happeningAwareness)
+      .set({ decayResistance: 0.3 })
+      .where(eq(happeningAwareness.id, 'haw_a1'))
+    await hydrateStores()
+    await write(pinAwareness('user_edit', 'char_b', 0.6), 'act_user_pin')
+  })
+
+  it("marks a moved machine pin and carries the user's pin onto A's row in the one group", async () => {
+    const group = await merge()
+
+    const [copy] = await ctx.db
+      .select()
+      .from(happeningAwareness)
+      .where(eq(happeningAwareness.happeningId, 'hap_2'))
+    expect(copy.characterId).toBe('char_a')
+    const created = group.find((d) => d.targetId === copy.id)
+    expect(created).toMatchObject({ op: 'create', undoPayload: { [MACHINE_PIN_KEY]: true } })
+    expect(await userOwnsPin(ctx, 'b1', copy.id)).toBe(false)
+
+    expect(carryOf(group)).toMatchObject({
+      targetId: 'haw_a1',
+      undoPayload: { decayResistance: 0.3 },
+    })
+    expect(await pinOf('haw_a1')).toBe(0.6)
+    expect(await userOwnsPin(ctx, 'b1', 'haw_a1')).toBe(true)
+  })
+
+  it('CTRL-Z puts the carried pin back with its owner, and redo restores the merge exactly', async () => {
+    entriesStore.hydrate('b1', await ctx.db.select().from(storyEntries))
+    const before = { world: await worldSnapshot(), deltas: await deltaRows() }
+    await merge()
+    const merged = { world: await worldSnapshot(), deltas: await deltaRows() }
+
+    expect(await undoLastAction('b1', ctx)).toEqual({ status: 'ok' })
+
+    expect({ world: await worldSnapshot(), deltas: await deltaRows() }).toEqual(before)
+    expect(await pinOf('haw_a1')).toBe(0.3)
+    expect(await userOwnsPin(ctx, 'b1', 'haw_a1')).toBe(false)
+
+    plantVectors('char_b')
+    expect(await redoLastAction('b1', ctx)).toEqual({ status: 'ok' })
+
+    expect({ world: await worldSnapshot(), deltas: await deltaRows() }).toEqual(merged)
+  })
+
+  it('reversing the merge alone leaves a pin the user set on A since, which stays theirs, and redo is exact', async () => {
+    const group = await merge()
+    await write(pinAwareness('user_edit', 'char_a', 0.9), 'act_user_repin')
+    const repinned = { world: await worldSnapshot(), deltas: await deltaRows() }
+
+    const redo = await reverseMergeAlone(group)
+
+    expect(await pinOf('haw_a1')).toBe(0.9)
+    expect(await userOwnsPin(ctx, 'b1', 'haw_a1')).toBe(true)
+    expect((await deltaRows()).map((d) => d.id)).not.toContain(carryOf(group)!.id)
+
+    plantVectors('char_b')
+    await applyRedo(redo, ctx)
+
+    expect({ world: await worldSnapshot(), deltas: await deltaRows() }).toEqual(repinned)
+  })
+
+  it("reversing the merge alone leaves a pass's later pin on A, which stops being the user's", async () => {
+    const group = await merge()
+    await write(
+      {
+        kind: 'createStoryEntry',
+        source: 'ai_classifier',
+        payload: {
+          entry: {
+            id: 'entry_3',
+            branchId: 'b1',
+            position: 3,
+            kind: 'ai_reply',
+            content: 'Later.',
+            createdAt: 3,
+          },
+        },
+      },
+      'act_turn_3',
+      'entry_3',
+    )
+    await write(
+      pinAwareness('periodic_classifier', 'char_a', 0.1, 'entry_3'),
+      'act_pass',
+      'entry_3',
+    )
+    expect(await pinOf('haw_a1')).toBe(0.1)
+
+    await reverseMergeAlone(group)
+
+    expect(await pinOf('haw_a1')).toBe(0.1)
+    expect(await userOwnsPin(ctx, 'b1', 'haw_a1')).toBe(false)
+  })
+})
+
 describe('resolveCollision — dispatches in the tick of its gate check', () => {
   it.each([
     ['merge', MERGE_B_INTO_A],

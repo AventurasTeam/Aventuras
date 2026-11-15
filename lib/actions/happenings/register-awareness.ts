@@ -1,4 +1,4 @@
-import { and, eq } from 'drizzle-orm'
+import { and, eq, inArray } from 'drizzle-orm'
 
 import type { HappeningAwareness } from '@/lib/db'
 import { happeningAwareness, happeningAwarenessWriteSchema } from '@/lib/db'
@@ -51,6 +51,15 @@ type AwarenessUpsertPayload = {
 declare module '@/lib/actions/action-map' {
   interface PipelineActionMap {
     upsertHappeningAwareness: { source: DeltaSource; payload: AwarenessUpsertPayload }
+    /**
+     * World's merge, on a happening both characters know: the kept row `id` takes the pin of the
+     * dropped row `pinFrom` when that pin is the user's and the kept row's isn't (world.md →
+     * Reversibility).
+     */
+    carryAwarenessPin: {
+      source: DeltaSource
+      payload: { branchId: string; id: string; pinFrom: string }
+    }
     deleteHappeningAwareness: { source: DeltaSource; payload: { branchId: string; id: string } }
     bumpAwarenessRetrieval: {
       source: DeltaSource
@@ -235,6 +244,50 @@ const upsertHandler: ActionHandler = async (action, branchId, ctx, group) => {
   }
 }
 
+// The write is what makes the pin the user's, so an equal pin is logged too (data-model.md →
+// Entry mutability & rollback, the op=update encoding rule).
+const carryPinHandler: ActionHandler = async (action, branchId, ctx) => {
+  if (action.kind !== 'carryAwarenessPin') throw new Error(`handler/kind mismatch: ${action.kind}`)
+  const { branchId: bid, id, pinFrom } = action.payload
+  if (bid !== branchId)
+    return { status: 'rejected', reason: `branch mismatch: delta ${branchId} vs target ${bid}` }
+  const rows = await ctx.db
+    .select()
+    .from(happeningAwareness)
+    .where(and(eq(happeningAwareness.branchId, bid), inArray(happeningAwareness.id, [id, pinFrom])))
+  const kept = rows.find((row) => row.id === id)
+  const from = rows.find((row) => row.id === pinFrom)
+  if (!kept || !from)
+    return {
+      status: 'rejected',
+      reason: `carry awareness ${bid}:${pinFrom} → ${id}: a row is gone`,
+      code: TARGET_NOT_FOUND,
+    }
+  if (kept.happeningId !== from.happeningId)
+    return {
+      status: 'rejected',
+      reason: `carry awareness ${pinFrom} → ${id}: the rows know different happenings`,
+    }
+  if (!(await userOwnsPin(ctx, bid, from.id)) || (await userOwnsPin(ctx, bid, kept.id)))
+    return noopRefusal('pin-not-carried', null)
+  const columns = { decayResistance: from.decayResistance }
+  return {
+    status: 'ok',
+    targetTable: 'happening_awareness',
+    targetId: kept.id,
+    op: 'update',
+    undoPayload: { decayResistance: kept.decayResistance },
+    ops: [
+      ctx.db
+        .update(happeningAwareness)
+        .set(columns)
+        .where(and(eq(happeningAwareness.branchId, bid), eq(happeningAwareness.id, kept.id)))
+        .toSQL(),
+    ],
+    patch: { op: 'update', id: kept.id, columns },
+  }
+}
+
 const deleteHandler: ActionHandler = async (action, branchId, ctx) => {
   if (action.kind !== 'deleteHappeningAwareness')
     throw new Error(`handler/kind mismatch: ${action.kind}`)
@@ -352,6 +405,7 @@ export function registerHappeningAwareness(): void {
     },
     handlers: {
       upsertHappeningAwareness: upsertHandler,
+      carryAwarenessPin: carryPinHandler,
       deleteHappeningAwareness: deleteHandler,
       bumpAwarenessRetrieval: bumpRetrievalHandler,
       resetAwarenessRetrieval: resetRetrievalHandler,

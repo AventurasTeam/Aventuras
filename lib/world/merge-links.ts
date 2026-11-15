@@ -58,6 +58,12 @@ export type MergeOverlap = {
   canonicalPlacement?: 'takes-loser' | 'stays-unplaced'
 }
 
+/**
+ * A loser's awareness row the merge drops, on a happening the canonical knows: its pin may carry
+ * to the canonical's row (world.md → Reversibility).
+ */
+export type PinCarry = { keptId: string; fromId: string }
+
 /** A relationship the canonical takes from the loser: the other end and the merged views. */
 export type RelationshipCopy = {
   otherId: string
@@ -77,6 +83,8 @@ export type MergeLinks = {
     involvements: HappeningInvolvement[]
     relationships: RelationshipCopy[]
   }
+  /** The dropped awareness rows' pins, each offered to the canonical's row it gives way to. */
+  pinCarries: PinCarry[]
   overlap: MergeOverlap
 }
 
@@ -182,8 +190,12 @@ export function mergeLinks(input: MergeLinkInput): MergeLinks {
     }),
   }
 
-  const known = new Set(canonicalLinks.awareness.map((row) => row.happeningId))
+  const known = new Map(canonicalLinks.awareness.map((row) => [row.happeningId, row.id]))
   const awareness = rows.awareness.filter((row) => !known.has(row.happeningId))
+  const pinCarries = rows.awareness.flatMap((row) => {
+    const keptId = known.get(row.happeningId)
+    return keptId === undefined ? [] : [{ keptId, fromId: row.id }]
+  })
   const involved = new Set(canonicalLinks.involvements.map((row) => row.happeningId))
   const involvements = rows.involvements.filter((row) => {
     if (involved.has(row.happeningId)) return false
@@ -195,6 +207,7 @@ export function mergeLinks(input: MergeLinkInput): MergeLinks {
   return {
     rows,
     moved: { awareness, involvements, relationships: relationships.copies },
+    pinCarries,
     overlap: {
       awareness: rows.awareness.length - awareness.length,
       involvements: rows.involvements.length - involvements.length,
