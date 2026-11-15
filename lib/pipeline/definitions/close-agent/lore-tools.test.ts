@@ -575,6 +575,23 @@ describe('create_lore', () => {
       ['The Night Crossing', null, []],
     ])
   })
+
+  it('drops keywords holding a term over 120 characters, and lands the row', async () => {
+    const run = await dispatchScripted(f, [
+      create({
+        title: 'The Ferry Toll',
+        body: 'Paid at the far bank.',
+        keywords: ['toll', 'w'.repeat(121)],
+      }),
+    ])
+
+    expect(run.calls.map(({ skippedFields }) => skippedFields)).toEqual([
+      [{ field: 'keywords', reason: 'keyword-too-long' }],
+    ])
+    expect((await loreRows(f)).map(({ title, keywords }) => [title, keywords])).toEqual([
+      ['The Ferry Toll', []],
+    ])
+  })
 })
 
 // ---- update_lore ----

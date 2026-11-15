@@ -1136,6 +1136,19 @@ describe('set_keywords', () => {
     expect(await runDeltas(f, result.actionId)).toEqual([])
   })
 
+  it('refuses an add over 120 characters, landing none of the call', async () => {
+    const SHELF = place(27)
+    await seedEntity(f, { id: SHELF, kind: 'location', name: 'The shelf', keywords: [] })
+    const shown = [...KEYWORD_SHOWN, { table: 'entities', id: SHELF, name: 'The shelf' } as const]
+
+    const { result, calls } = await runUpkeepCalls(f, shown, [
+      { toolName: 'set_keywords', input: { id: 'l5', add: ['ledge', 'w'.repeat(121)], ...cite() } },
+    ])
+
+    expect(calls[0]).toMatchObject({ result: 'rejected', reason: 'keyword-too-long' })
+    expect(await runDeltas(f, result.actionId)).toEqual([])
+  })
+
   // A removal stores nothing, so a term a pass stored that reads as a handle can still go.
   it('removes a term a pass added that holds a short id', async () => {
     const SHELF = place(27)

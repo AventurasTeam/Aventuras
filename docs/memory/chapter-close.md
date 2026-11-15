@@ -174,6 +174,8 @@ of its turns is refused, and so is a `traits`, `drives` or `agenda` list
 with an entry that does, and a keyword it adds holding any id it shows:
 a stored `t3` would name another turn in a later prompt, a stored row
 id another row. Turns are cited in `turns`; a `why` only the review shows keeps them as written.
+A keyword it adds over 120 characters is refused the same way
+([`retrieval.md → Keywords schema`](./retrieval.md#keywords-schema)).
 
 A write returns one of three results:
 

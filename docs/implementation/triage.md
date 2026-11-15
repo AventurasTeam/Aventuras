@@ -77,11 +77,6 @@ slice-planning gate forces its resolution before that slice is planned.
   schema section of `retrieval.md` links this item, so a triage pass
   updates that link when routing it. Raised in 5.8's execution,
   developer decision 2026-11-10.
-- **Keyword lists have no count or term-length bound.**
-  `appendEntityKeywords`, and now the close's `set_keywords` and
-  `create_lore`, land whatever terms the model sends, while chapter
-  metadata caps its keywords (`CHAPTER_KEYWORDS_MAX`). Each term feeds
-  keyword injection on later turns. Raised in 5.8's reviews.
 - **A count bump's undo can bring back a pre-reset count.**
   `bumpAwarenessRetrieval`'s undo restores the prior `retrieval_count` by
   assignment (`lib/actions/happenings/register-awareness.ts`), and

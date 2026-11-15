@@ -116,6 +116,11 @@ describe('the reasons a close records', () => {
       () => keywordsRefusal({ add: ['Gate'], remove: ['gate'] }, shown().ids) ?? '',
       'keyword-in-both',
     ],
+    [
+      'a keyword over its bound',
+      () => keywordsRefusal({ add: ['w'.repeat(121)], remove: [] }, shown().ids) ?? '',
+      'keyword-too-long',
+    ],
     ['a list over its cap', () => softCapReason('traits'), 'over-soft-cap'],
     [
       'a joined list over its cap',

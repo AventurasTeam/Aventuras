@@ -1394,6 +1394,17 @@ the user wrote, which the delta log tells apart
 A name a classifier rename keeps as a keyword is credited to whoever
 wrote that name, so a name the user typed stays the user's.
 
+**A model's keyword is at most 120 characters.** A keyword is a name or
+a short phrase the prose uses, so a model-written term longer than
+that, trimmed, is dropped or refused, never cut: the classifier reads it
+as a malformed entry
+([`classifier.md → Failure policy`](./classifier.md#failure-policy)),
+and a close refuses the keyword write that holds it, as
+`keyword-too-long`, so `create_lore` lands its row without keywords.
+The user's own terms are unbounded. How many terms a row may hold is
+open
+([`followups.md → Tuning and play testing`](../followups.md#tuning-and-play-testing)).
+
 One known gap: when an undo or a rollback window reverts a user's
 keyword edit under a later classifier keyword write, a term that edit
 had removed comes back credited to that pass, so a close may remove it.

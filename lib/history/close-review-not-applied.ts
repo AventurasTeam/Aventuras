@@ -34,6 +34,7 @@ const REASON_COPY = {
   'turn-in-text': 'chapters:review.reason.turn-in-text',
   'keyword-holds-id': 'chapters:review.reason.keyword-holds-id',
   'keyword-in-both': 'chapters:review.reason.keyword-in-both',
+  'keyword-too-long': 'chapters:review.reason.keyword-too-long',
   'nothing-sent': 'chapters:review.reason.nothing-sent',
   'parent-and-top': 'chapters:review.reason.parent-and-top',
   'title-blank': 'chapters:review.reason.title-blank',

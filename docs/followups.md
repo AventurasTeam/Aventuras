@@ -446,6 +446,24 @@ breakdown under [UX](#ux).
   reply is stripped of it or told not to (added 2026-10-30 by the
   content pass's implementation).
 
+- **How many keywords a row may hold.** A model's keyword lists have
+  no count bound, only a term-length one
+  ([`retrieval.md → Keywords schema`](./memory/retrieval.md#keywords-schema)):
+  the classifier's creates and appends, and the close's `set_keywords`,
+  `create_lore` and `update_lore`, land every term they send. Retrieval
+  already bounds what keywords cost injection
+  ([`Keyword injection budget`](./memory/retrieval.md#keyword-injection-budget)),
+  but every entity's keywords render in each periodic pass's Known
+  entities and in the close's upkeep rows, so a list that only grows
+  grows those prompts. Chapter metadata caps its browse keywords at 8
+  (`CHAPTER_KEYWORDS_MAX`). A starting guess to test is 50 terms a row,
+  the classifier dropping the overflow and a close refusing a longer
+  list only when it is longer than the stored one, as the soft caps do
+  ([`data-model.md → Soft caps + compaction discipline`](./data-model.md#soft-caps--compaction-discipline)).
+  Play on long stories shows whether lists grow that far. Split
+  2026-11-15 from a triage entry raised in 5.8's reviews, whose length
+  half landed; developer decision.
+
 - **Judge the classifier's descriptions.** A happening's description
   is the story's memory of the scene, recalled later as fact, and the
   evaluation set's checks look for the facts a reply must hold but

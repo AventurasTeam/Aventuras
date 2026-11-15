@@ -144,6 +144,7 @@
       "turn-in-text": "The text named an entry by its id.",
       "keyword-holds-id": "A keyword held an id.",
       "keyword-in-both": "A keyword was both added and removed.",
+      "keyword-too-long": "A keyword was too long to be a name or phrase.",
       "nothing-sent": "The write held nothing to change.",
       "parent-and-top": "The place was both placed inside another and marked top level.",
       "title-blank": "The title was blank.",

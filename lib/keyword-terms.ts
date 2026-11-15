@@ -8,6 +8,16 @@ export function normalizeTerm(s: string): string {
   return oneLine(s).toLowerCase().normalize('NFC')
 }
 
+/**
+ * retrieval.md → Keywords schema: the longest term a model may store, trimmed. A keyword is a name
+ * or a short phrase, so a longer one is dropped or refused, never cut; the user's own are unbounded.
+ */
+export const MODEL_TERM_MAX = 120
+
+export function modelTermFits(term: string): boolean {
+  return term.trim().length <= MODEL_TERM_MAX
+}
+
 /** Trimmed terms, one per `normalizeTerm` key with the first spelling kept; blanks dropped. */
 export function dedupeTerms(terms: readonly string[]): string[] {
   return newTerms([], terms)

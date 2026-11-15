@@ -32,6 +32,7 @@ export const CLOSE_REASON_KEYS = [
   'turn-in-text',
   'keyword-holds-id',
   'keyword-in-both',
+  'keyword-too-long',
   'nothing-sent',
   'parent-and-top',
   'title-blank',
