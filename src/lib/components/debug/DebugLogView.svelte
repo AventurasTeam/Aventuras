@@ -4,7 +4,10 @@
   import {
     ArrowUpCircle,
     ArrowDownCircle,
-    ArrowUp,
+    ChevronLeft,
+    ChevronRight,
+    ChevronsLeft,
+    ChevronsRight,
     Copy,
     Check,
     Filter,
@@ -23,6 +26,7 @@
   import { Autocomplete } from '#lib/components/ui/autocomplete/index.ts'
   import { cn } from '#lib/utils/cn.ts'
   import { errMessage } from '#lib/utils/error.ts'
+  import { readJumpState } from '#lib/components/shared/scrollJump.ts'
   import { DebugJsonCache, safeStringify } from './debugJson'
 
   interface Props {
@@ -50,6 +54,7 @@
   let selectedCategories = $state<string[]>([])
   let scrollContainer: HTMLDivElement | null = $state(null)
   let userScrolledAway = $state(false)
+  let atBottom = $state(false)
 
   // Pagination
   let requestedPage = $state(1)
@@ -255,9 +260,13 @@
     return groupedLogs.slice(start, start + pageSize)
   })
 
-  function scrollToTop() {
-    requestedPage = 1
-    scrollContainer?.scrollTo({ top: 0, behavior: 'smooth' })
+  async function goToPage(page: number, edge: 'top' | 'bottom') {
+    requestedPage = page
+    // The bottom depends on the new page's height; the top does not.
+    if (edge === 'bottom') await tick()
+    const container = scrollContainer
+    if (!container) return
+    container.scrollTo({ top: edge === 'top' ? 0 : container.scrollHeight, behavior: 'smooth' })
   }
 
   function isNearTop(): boolean {
@@ -265,10 +274,35 @@
     return scrollContainer.scrollTop < 50
   }
 
+  function syncAtBottom() {
+    if (!scrollContainer) return
+    const { scrollTop, scrollHeight, clientHeight } = scrollContainer
+    // `tallest` only feeds `long`, which is unused here.
+    atBottom = readJumpState({
+      scrollTop,
+      scrollHeight,
+      clientHeight,
+      tallest: clientHeight,
+    }).atBottom
+  }
+
   function handleScroll() {
     if (!scrollContainer) return
     userScrolledAway = !isNearTop()
+    syncAtBottom()
   }
+
+  // Content or window resizes move the bottom without a scroll event.
+  $effect(() => {
+    const container = scrollContainer
+    if (!container) return
+    // Re-observe when the first child swaps between the empty state and the list.
+    void (pagedLogs.length === 0)
+    const observer = new ResizeObserver(syncAtBottom)
+    observer.observe(container)
+    if (container.firstElementChild) observer.observe(container.firstElementChild)
+    return () => observer.disconnect()
+  })
 </script>
 
 <div class="bg-background flex h-full flex-col overflow-hidden">
@@ -497,22 +531,6 @@
         {/each}
       </div>
     {/if}
-
-    <!-- Scroll to latest button -->
-    {#if userScrolledAway || currentPage > 1}
-      <div class="pointer-events-none sticky top-2 flex w-full justify-center">
-        <Button
-          variant="outline"
-          size="sm"
-          class="border-border bg-background/80 hover:bg-accent animate-in fade-in slide-in-from-top-2 pointer-events-auto h-8 rounded-full border px-3 shadow-lg backdrop-blur-sm"
-          onclick={scrollToTop}
-          aria-label="Scroll to latest"
-        >
-          <ArrowUp class="mr-1.5 size-3.5" />
-          <span class="text-xs">Latest</span>
-        </Button>
-      </div>
-    {/if}
   </div>
 
   <!-- Pagination Controls -->
@@ -556,30 +574,46 @@
     <div class="flex items-center gap-2">
       <Button
         variant="outline"
-        size="sm"
-        class="h-7 px-2 text-xs"
-        disabled={currentPage === 1}
-        onclick={() => {
-          requestedPage = currentPage - 1
-          scrollContainer?.scrollTo({ top: 0, behavior: 'smooth' })
-        }}
+        size="icon"
+        class="size-7"
+        disabled={currentPage === 1 && !userScrolledAway}
+        onclick={() => goToPage(1, 'top')}
+        title="Newest entry"
       >
-        Previous
+        <ChevronsLeft />
+      </Button>
+      <Button
+        variant="outline"
+        size="icon"
+        class="size-7"
+        disabled={currentPage === 1}
+        onclick={() => goToPage(currentPage - 1, 'top')}
+        title="Previous page"
+      >
+        <ChevronLeft />
       </Button>
       <div class="min-w-[80px] px-2 text-center text-xs font-medium">
         Page {currentPage} of {totalPages}
       </div>
       <Button
         variant="outline"
-        size="sm"
-        class="h-7 px-2 text-xs"
+        size="icon"
+        class="size-7"
         disabled={currentPage === totalPages}
-        onclick={() => {
-          requestedPage = currentPage + 1
-          scrollContainer?.scrollTo({ top: 0, behavior: 'smooth' })
-        }}
+        onclick={() => goToPage(currentPage + 1, 'top')}
+        title="Next page"
       >
-        Next
+        <ChevronRight />
+      </Button>
+      <Button
+        variant="outline"
+        size="icon"
+        class="size-7"
+        disabled={currentPage === totalPages && atBottom}
+        onclick={() => goToPage(totalPages, 'bottom')}
+        title="Oldest entry"
+      >
+        <ChevronsRight />
       </Button>
     </div>
   </div>
