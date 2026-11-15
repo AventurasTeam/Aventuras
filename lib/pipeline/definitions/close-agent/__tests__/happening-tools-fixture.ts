@@ -6,6 +6,7 @@ import type { PipelineAction } from '@/lib/actions/types'
 import { deltas, happeningAwareness, happeningInvolvements, happenings } from '@/lib/db'
 import { generateId } from '@/lib/ids'
 
+import { worldMergeCopy } from './close-awareness-fixture'
 import {
   runDispatchCalls,
   type DispatchRun,
@@ -195,6 +196,30 @@ export function pinByUser(
     },
     BY_USER,
   )
+}
+
+/**
+ * World's merge moving `from`'s row of a happening to `to`: the copy keeps the source pin's owner,
+ * and the source goes as the loser's cascade takes it. Returns the copy's id.
+ */
+export async function worldMergeMoves(
+  fx: CloseFixture,
+  happeningId: string,
+  from: string,
+  to: string,
+): Promise<string> {
+  const source = await awarenessId(fx, happeningId, from)
+  const copy = await worldMergeCopy(fx, source, to)
+  await apply(
+    fx,
+    {
+      kind: 'deleteHappeningAwareness',
+      source: 'user_edit',
+      payload: { branchId: fx.branchId, id: source },
+    },
+    BY_USER,
+  )
+  return copy
 }
 
 /** The user rewrites E's prose, so their edits so far predate the turn a merge cites. */

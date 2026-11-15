@@ -16,6 +16,12 @@ export const USER_EDITED_SINCE_PROSE = 'user-edited-since-prose'
 /** A handler's code for a write whose target row is gone, so each family's boundary can name it. */
 export const TARGET_NOT_FOUND = 'not-found'
 
+/**
+ * Payload metadata on a World merge's create of an awareness row: the pin it copied wasn't the
+ * user's (data-model.md → Entry mutability & rollback). Its value is `true`, never an id.
+ */
+export const MACHINE_PIN_KEY = '$machinePin'
+
 export type DeltaSource =
   | 'ai_classifier'
   | 'piggyback_tagged_block'

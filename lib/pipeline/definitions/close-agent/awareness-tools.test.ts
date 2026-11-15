@@ -44,6 +44,7 @@ import {
   putCharacter,
   putHappening,
   putAwareness,
+  worldMergeCopy,
 } from './__tests__/close-awareness-fixture'
 
 describe('set_pin: the tool', () => {
@@ -511,6 +512,50 @@ describe('set_pin', () => {
       expect(answers[0]).toMatchObject({ result: 'skipped', reason: USER_EDITED_SINCE_PROSE })
       expect(await runDeltas(f, result.actionId)).toEqual([])
       expect(await storedPin(f, userCreated)).toBeNull()
+    })
+  })
+
+  // chapter-close.md → 3d: a World merge's copy keeps the owner its source row's pin had. Both
+  // sources are learned in the chapter, so a lower pin is in bounds.
+  describe("a World merge's copy", () => {
+    let machineCopy: string
+    let userCopy: string
+
+    beforeEach(async () => {
+      await putCharacter(f, LENA, 'Lena')
+      machineCopy = await worldMergeCopy(f, PINNED, LENA)
+      userCopy = await worldMergeCopy(f, USER_PINNED, LENA)
+    })
+
+    const copyCalls = async (calls: readonly ScriptedCall[]): Promise<DispatchRun> =>
+      runDispatchCalls(f, {
+        task: 'awareness',
+        tools: { set_pin: setPinTool },
+        shown: await startPinned(
+          f,
+          [machineCopy, userCopy].map((id) => ({
+            table: 'happening_awareness' as const,
+            id,
+            name: '',
+          })),
+        ),
+        calls,
+        turns: awarenessTurns(f),
+      })
+
+    it("tunes a copy of a pin the user didn't set", async () => {
+      const { answers } = await copyCalls([pin('aw1', 0.2)])
+
+      expect(answers).toEqual([{ result: 'ok' }])
+      expect(await storedPin(f, machineCopy)).toBe(0.2)
+    })
+
+    it('skips a copy of a pin the user set', async () => {
+      const { result, answers } = await copyCalls([pin('aw2', 0.2)])
+
+      expect(answers[0]).toMatchObject({ result: 'skipped', reason: USER_EDITED_SINCE_PROSE })
+      expect(await runDeltas(f, result.actionId)).toEqual([])
+      expect(await storedPin(f, userCopy)).toBe(0.95)
     })
   })
 

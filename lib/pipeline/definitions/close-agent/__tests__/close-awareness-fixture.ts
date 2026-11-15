@@ -1,3 +1,5 @@
+import { and, eq } from 'drizzle-orm'
+
 import { applyDeltaAction } from '@/lib/actions/delta/apply-delta-action'
 import type { ResolveModelConfig } from '@/lib/ai'
 import { chapters, emptyEntityState, entities, happeningAwareness, happenings } from '@/lib/db'
@@ -138,6 +140,58 @@ export async function userWritesAwareness(
     fx.ctx,
   )
   if (result.status !== 'ok') throw new Error(`user awareness write refused: ${result.reason}`)
+}
+
+/**
+ * World's merge moving `sourceId` onto `characterId` (lib/world/entity-merge.ts): a user create
+ * naming its source, so the copy keeps the source pin's owner. Returns the copy's id.
+ */
+export async function worldMergeCopy(
+  fx: CloseFixture,
+  sourceId: string,
+  characterId: string,
+): Promise<string> {
+  const [row] = await fx.ctx.db
+    .select()
+    .from(happeningAwareness)
+    .where(and(eq(happeningAwareness.branchId, fx.branchId), eq(happeningAwareness.id, sourceId)))
+  if (row === undefined) throw new Error(`no awareness row ${sourceId}`)
+  const result = await applyDeltaAction(
+    {
+      action: {
+        kind: 'upsertHappeningAwareness',
+        source: 'user_edit',
+        payload: {
+          branchId: fx.branchId,
+          characterId,
+          happeningId: row.happeningId,
+          learnedAtEntryId: row.learnedAtEntryId,
+          decayResistance: row.decayResistance,
+          source: row.source,
+          retrievalCount: row.retrievalCount,
+          proseEntryId: null,
+          pinFrom: row.id,
+        },
+      },
+      actionId: generateId('act'),
+      branchId: fx.branchId,
+      entryId: null,
+    },
+    fx.ctx,
+  )
+  if (result.status !== 'ok') throw new Error(`world merge copy refused: ${result.reason}`)
+  const [copy] = await fx.ctx.db
+    .select({ id: happeningAwareness.id })
+    .from(happeningAwareness)
+    .where(
+      and(
+        eq(happeningAwareness.branchId, fx.branchId),
+        eq(happeningAwareness.characterId, characterId),
+        eq(happeningAwareness.happeningId, row.happeningId),
+      ),
+    )
+  if (copy === undefined || copy.id === sourceId) throw new Error('world merge copy not created')
+  return copy.id
 }
 
 // The chapter being closed, as the metadata phase writes it before the agent runs.

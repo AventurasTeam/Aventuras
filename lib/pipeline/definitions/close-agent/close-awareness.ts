@@ -13,7 +13,12 @@ import {
   type SQL,
 } from 'drizzle-orm'
 
-import type { GroupOutcome, GuardRow, PipelineAction } from '@/lib/actions/types'
+import {
+  MACHINE_PIN_KEY,
+  type GroupOutcome,
+  type GuardRow,
+  type PipelineAction,
+} from '@/lib/actions/types'
 import type { PromptHalves } from '@/lib/ai'
 import {
   chapters,
@@ -128,9 +133,13 @@ function learnedAfterEnd(ctx: TaskPromptContext) {
     .where(and(eq(storyEntries.branchId, ctx.branchId), gt(storyEntries.position, end)))
 }
 
-// A row whose pin the user ever set, or that they created: set_pin skips it whatever turn is cited,
-// so it takes no place either. Key presence, as `carriesColumn` reads an undo payload; correlated
-// on the row so the read walks deltas_chain_idx, not the branch's whole log.
+// The mark's label quoted: a `$`-prefixed key in a JSON path.
+const MACHINE_PIN_PATH = `$."${MACHINE_PIN_KEY}"`
+
+// A row whose pin the user ever set, or that they created unless a World merge marked the copy:
+// set_pin skips it whatever turn is cited, so it takes no place either. Key presence, as
+// `carriesColumn` reads an undo payload (wroteField's pin case); correlated on the row so the read
+// walks deltas_chain_idx, not the branch's whole log.
 function userPinned(ctx: TaskPromptContext) {
   return ctx.db
     .select({ id: deltas.id })
@@ -142,7 +151,10 @@ function userPinned(ctx: TaskPromptContext) {
         eq(deltas.targetTable, 'happening_awareness'),
         eq(deltas.source, 'user_edit'),
         or(
-          eq(deltas.op, 'create'),
+          and(
+            eq(deltas.op, 'create'),
+            sql`json_type(${deltas.undoPayload}, ${MACHINE_PIN_PATH}) IS NULL`,
+          ),
           and(
             eq(deltas.op, 'update'),
             sql`json_type(${deltas.undoPayload}, '$.decayResistance') IS NOT NULL`,

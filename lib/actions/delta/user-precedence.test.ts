@@ -16,8 +16,9 @@ import { registerEntities } from '../entities/register'
 import { registerCharacterRelationships } from '../relationships/register'
 import { updateStoryEntryContent } from '../story-entries/operational'
 import { registerStoryEntries } from '../story-entries/register'
-import type { DeltaSource, PipelineAction } from '../types'
+import { MACHINE_PIN_KEY, type DeltaSource, type PipelineAction } from '../types'
 import { applyDeltaAction } from './apply-delta-action'
+import { isPayloadMetaKey } from './delta-encoding'
 import { __resetRegistry } from './registry'
 import {
   proseLogPosition,
@@ -276,6 +277,40 @@ describe('wroteField', () => {
     const failed = [update({ status: 'active' })]
     expect(wroteField(failed, 'entities', 'resolvedAtEntryId', [])).toBe(false)
     expect(wroteField(failed, 'threads', 'triggeredAtEntryId', [])).toBe(false)
+  })
+
+  // chapter-close.md → 3d: a World merge's copy of a pin it didn't take from the user is marked.
+  describe("an awareness row's pin", () => {
+    const create = (undoPayload: Record<string, unknown> | null) =>
+      ({ op: 'create', undoPayload }) as Delta
+    const marked = create({ [MACHINE_PIN_KEY]: true })
+    const pinOf = (edits: readonly Delta[]) =>
+      wroteField(edits, 'happening_awareness', 'decayResistance', [])
+
+    it('names the mark as payload metadata', () => {
+      expect(isPayloadMetaKey(MACHINE_PIN_KEY)).toBe(true)
+    })
+
+    it('counts a create without the mark as writing the pin', () => {
+      expect(pinOf([create(null)])).toBe(true)
+    })
+
+    it("doesn't count a marked create as writing the pin, but still counts it for other fields", () => {
+      expect(pinOf([marked])).toBe(false)
+      expect(wroteField([marked], 'happening_awareness', 'source', [])).toBe(true)
+      expect(wroteField([marked], 'happening_awareness', 'learnedAtEntryId', [])).toBe(true)
+    })
+
+    it('counts an update carrying the pin, after a marked create or none', () => {
+      const pinned = update({ decayResistance: 0.4 })
+      expect(pinOf([marked, pinned])).toBe(true)
+      expect(pinOf([pinned])).toBe(true)
+      expect(pinOf([marked, update({ source: 'heard it' })])).toBe(false)
+    })
+
+    it('reads the mark only on an awareness row', () => {
+      expect(wroteField([marked], 'entities', 'decayResistance', [])).toBe(true)
+    })
   })
 })
 

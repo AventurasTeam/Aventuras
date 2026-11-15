@@ -32,6 +32,7 @@ import {
   NOTE,
   pinByUser,
   rewriteCitedProse,
+  worldMergeMoves,
 } from './__tests__/happening-tools-fixture'
 
 describe('merge_happenings shape', () => {
@@ -294,6 +295,42 @@ describe('merge_happenings shape', () => {
       retrievalCount: 5,
     })
     expect(await happeningRow(f, LIGHT)).toBeUndefined()
+  })
+
+  // chapter-close.md → 3d: a World merge's copy keeps the owner its source row's pin had. Tobin's
+  // copy on the light takes the crossing's higher pin unless the copied pin was the user's.
+  it("folds the pin into keep's own row a World merge copied from a pin the user didn't set", async () => {
+    await worldMergeMoves(f, LIGHT, MARA, TOBIN)
+    await rewriteCitedProse(f)
+
+    const run = await runCalls(f, [merge({ keep: 'hp2', absorb: ['hp1'] })])
+
+    expect(run.answers).toEqual([{ result: 'ok', survivor: 'hp2' }])
+    expect((await awarenessOf(f, LIGHT, TOBIN))?.decayResistance).toBe(0.3)
+  })
+
+  it("keeps the pin on keep's own row a World merge copied from a pin the user set", async () => {
+    await pinByUser(f, LIGHT, MARA, 0.05)
+    await worldMergeMoves(f, LIGHT, MARA, TOBIN)
+    await rewriteCitedProse(f)
+
+    const run = await runCalls(f, [merge({ keep: 'hp2', absorb: ['hp1'] })])
+
+    expect(run.answers).toEqual([
+      {
+        result: 'ok',
+        survivor: 'hp2',
+        notWritten: [
+          {
+            field: 'decayResistance',
+            row: 'c2',
+            reason: USER_EDITED_SINCE_PROSE,
+            note: NOTE.user,
+          },
+        ],
+      },
+    ])
+    expect((await awarenessOf(f, LIGHT, TOBIN))?.decayResistance).toBe(0.05)
   })
 
   it("folds a source the user wrote on keep's own row before the cited turn", async () => {

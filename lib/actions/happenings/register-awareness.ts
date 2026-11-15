@@ -14,9 +14,15 @@ import {
   USER_EDITED_SINCE_PROSE,
   userDeletedAwarenessSince,
   userEditsSinceProse,
-  wroteColumn,
+  userOwnsPin,
+  wroteField,
 } from '../delta/user-precedence'
-import { isUserOriginatedSource, type DeltaSource, type ProseEntryId } from '../types'
+import {
+  isUserOriginatedSource,
+  MACHINE_PIN_KEY,
+  type DeltaSource,
+  type ProseEntryId,
+} from '../types'
 
 type AwarenessUpsertPayload = {
   branchId: string
@@ -35,6 +41,11 @@ type AwarenessUpsertPayload = {
    * stand. Null checks nothing, as for a user write.
    */
   proseEntryId: ProseEntryId
+  /**
+   * The awareness row a World merge copies: the create keeps that row's pin owner
+   * (chapter-close.md → 3d). Ignored on an update.
+   */
+  pinFrom?: string
 }
 
 declare module '@/lib/actions/action-map' {
@@ -70,6 +81,7 @@ const upsertHandler: ActionHandler = async (action, branchId, ctx, group) => {
     source,
     retrievalCount,
     proseEntryId,
+    pinFrom,
   } = action.payload
   if (bid !== branchId)
     return { status: 'rejected', reason: `branch mismatch: delta ${branchId} vs target ${bid}` }
@@ -146,7 +158,7 @@ const upsertHandler: ActionHandler = async (action, branchId, ctx, group) => {
     }
     if (Object.keys(set).length === 0) return noopRefusal('awareness unchanged', 'restated')
     // A field the user wrote after the prose keeps its value; a pair the user created since counts
-    // as written whole, since wroteColumn counts a create.
+    // as written whole, except a merge copy's pin it didn't take from the user (wroteField).
     if (proseEntryId != null) {
       const edits = await userEditsSinceProse(
         ctx,
@@ -156,7 +168,7 @@ const upsertHandler: ActionHandler = async (action, branchId, ctx, group) => {
         proseEntryId,
       )
       for (const field of Object.keys(set)) {
-        if (!wroteColumn(edits, field)) continue
+        if (!wroteField(edits, 'happening_awareness', field, [])) continue
         delete set[field]
         delete undoPayload[field]
       }
@@ -211,12 +223,13 @@ const upsertHandler: ActionHandler = async (action, branchId, ctx, group) => {
         : 0,
     source: source ?? null,
   }
+  const machinePin = pinFrom !== undefined && !(await userOwnsPin(ctx, bid, pinFrom))
   return {
     status: 'ok',
     targetTable: 'happening_awareness',
     targetId: row.id,
     op: 'create',
-    undoPayload: null,
+    undoPayload: machinePin ? { [MACHINE_PIN_KEY]: true } : null,
     ops: [ctx.db.insert(happeningAwareness).values(row).toSQL()],
     patch: { op: 'create', id: row.id, row },
   }
