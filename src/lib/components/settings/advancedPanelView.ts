@@ -24,6 +24,7 @@ export interface AdvancedPanelSettings {
   entryRetrieval?: { enableLLMSelection?: boolean } | null
   worldStateInjection?: { enableLLMSelection?: boolean } | null
   styleReviewer?: { enabled?: boolean } | null
+  imageGeneration?: { outputFormats?: readonly { format: string }[] } | null
 }
 
 export interface SectionBadge {
@@ -46,6 +47,8 @@ export interface AdvancedPanelView {
     worldState: SectionBadge
     /** Absent while on: a badge on every section would stop meaning anything. */
     styleReviewer?: SectionBadge
+    /** The preferred formats in order, or muted when nothing is preferred. */
+    imageOutput: SectionBadge
   }
 
   /** `undefined` means the control is live. Anything else is shown to the user verbatim. */
@@ -84,6 +87,7 @@ export function advancedPanelView(settings: AdvancedPanelSettings): AdvancedPane
   const entryLLMOn = settings.entryRetrieval?.enableLLMSelection ?? true
   const worldStateLLMOn = settings.worldStateInjection?.enableLLMSelection ?? true
   const styleReviewerOn = settings.styleReviewer?.enabled ?? true
+  const outputFormats = settings.imageGeneration?.outputFormats ?? []
 
   return {
     memoryOn,
@@ -106,6 +110,9 @@ export function advancedPanelView(settings: AdvancedPanelSettings): AdvancedPane
         ? { text: 'LLM on', muted: false }
         : { text: 'Names only', muted: true },
       styleReviewer: styleReviewerOn ? undefined : { text: 'Off', muted: true },
+      imageOutput: outputFormats.length
+        ? { text: outputFormats.map((p) => p.format.toUpperCase()).join(' › '), muted: false }
+        : { text: 'Provider default', muted: true },
     },
 
     inactive: {

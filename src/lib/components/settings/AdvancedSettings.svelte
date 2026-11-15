@@ -19,6 +19,7 @@
     Sparkles,
     Users,
     PenLine,
+    Image as ImageIcon,
   } from '@lucide/svelte'
   import { Switch } from '#lib/components/ui/switch/index.ts'
   import { Label } from '#lib/components/ui/label/index.ts'
@@ -27,6 +28,7 @@
   import * as Collapsible from '#lib/components/ui/collapsible/index.ts'
   import { Separator } from '#lib/components/ui/separator/index.ts'
   import { advancedPanelView } from './advancedPanelView'
+  import ImageOutputFormats from './ImageOutputFormats.svelte'
 
   // Open/closed state for every collapsible section, keyed by id so `sectionHeader` can
   // bind to it generically instead of each section carrying its own `let`.
@@ -45,6 +47,7 @@
     loreManagement: false,
     suggestions: false,
     lorebookImport: false,
+    imageOutput: false,
   })
 
   type SectionId = keyof typeof openSections
@@ -919,6 +922,60 @@
                 saveService()
               },
             })}
+          </div>
+        </Collapsible.Content>
+      </Collapsible.Root>
+    </div>
+  </div>
+
+  <Separator />
+
+  <!-- ==================================================================== -->
+  <!-- Group 4: how generated images are encoded                             -->
+  <!-- ==================================================================== -->
+  {@render groupHeading(
+    'Images',
+    'Applies to every generated image: story images, portraits and backgrounds.',
+  )}
+
+  <div class="space-y-3">
+    <!-- Image Output Format -->
+    <div class="bg-card text-card-foreground rounded-lg border shadow-sm">
+      <Collapsible.Root bind:open={openSections.imageOutput}>
+        {@render sectionHeader({
+          id: 'imageOutput',
+          title: 'Image Output Format',
+          subtitle: 'Which file format generated images are requested in',
+          icon: ImageIcon,
+          iconWrap: 'bg-indigo-500/10 group-hover/trigger:bg-indigo-500/20',
+          iconColor: 'text-indigo-500',
+          onReset: () => settings.resetImageOutputSettings(),
+          badge: view.badges.imageOutput,
+        })}
+
+        <Collapsible.Content>
+          <div class="bg-muted/10 space-y-4 border-t p-4">
+            <p class="text-muted-foreground text-xs leading-relaxed">
+              Each image asks for the first format on this list that its model accepts, so put your
+              favourite first. A model that accepts none of them, or whose formats are unknown, is
+              asked for nothing and returns its provider's own format. Leave the list empty to
+              change nothing.
+            </p>
+            <p class="text-muted-foreground text-xs leading-relaxed">
+              Honoured by OpenAI, by the OpenRouter and NanoGPT models that list their formats, and
+              by OpenAI Compatible profiles once their formats are ticked under Images → Profiles →
+              Model capabilities. Google, Z.AI, Pollinations, ComfyUI and A1111 always use their
+              own. Compression is sent only for formats the model says take it, as typed: leave it
+              blank to keep the provider's default. A reference image in a format its model does not
+              accept is left out of the request.
+            </p>
+            <ImageOutputFormats
+              value={system.imageGeneration.outputFormats}
+              onChange={(next) => {
+                system.imageGeneration.outputFormats = next
+                saveSystem()
+              }}
+            />
           </div>
         </Collapsible.Content>
       </Collapsible.Root>
