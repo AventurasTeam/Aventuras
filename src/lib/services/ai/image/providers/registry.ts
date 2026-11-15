@@ -16,6 +16,7 @@ import type {
 } from '#lib/types/index.ts'
 import { abortable } from '#lib/utils/async.ts'
 import { parseImageSpec, describeImageSpec, type ImageSpec } from '#lib/utils/image.ts'
+import { pickImageOutput } from '#lib/utils/imageOutput.ts'
 import type {
   ComfySamplerInfo,
   ImageProvider,
@@ -321,6 +322,12 @@ export async function generateImage(options: {
   // The model's sizes and reference limit, from the source its provider declares.
   const capabilities = await abortable(modelCapabilities(profile, model), signal)
 
+  const output = pickImageOutput(
+    settings.systemServicesSettings.imageGeneration.outputFormats,
+    capabilities,
+  )
+  log('generateImage output', { output })
+
   // A reference that cannot be fetched is dropped; the scene is still worth drawing without it.
   const providerLimit = referenceLimit(profile.providerType, profile.providerOptions)
   const limit =
@@ -355,6 +362,7 @@ export async function generateImage(options: {
     spec,
     modelInfo: capabilities,
     referenceImages: cleanRefs,
+    output,
     signal,
     providerOptions: profile.providerOptions,
   })

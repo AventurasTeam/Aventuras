@@ -7,6 +7,7 @@ vi.mock('#lib/stores/settings.svelte.ts', () => ({
     apiSettings: {
       llmTimeoutMs: 30000,
     },
+    systemServicesSettings: { imageGeneration: { outputFormats: [] } },
   },
 }))
 
@@ -80,6 +81,7 @@ import {
 } from './registry'
 import { settings } from '#lib/stores/settings.svelte.ts'
 import type { ImageModelCapabilities, ImageProfile, ImageProviderType } from '#lib/types/index.ts'
+import type { ImageOutputPreference } from '#lib/utils/imageOutput.ts'
 
 const conn = (providerType: ImageProviderType, apiKey: string, baseUrl?: string) =>
   imageConnectionFor(providerType, apiKey, baseUrl)
@@ -615,6 +617,95 @@ describe('Image Provider Registry', () => {
 
     const generate = (model = 'm', referenceImages?: string[]) =>
       generateImage({ profileId: 'p', model, prompt: 'x', referenceImages })
+
+    describe('output format', () => {
+      const prefer = (list: ImageOutputPreference[]) => {
+        settings.systemServicesSettings.imageGeneration.outputFormats = list
+      }
+      const listing = (over: Partial<ImageModelInfo>) => ({
+        listModels: vi.fn(async (): Promise<ImageModelInfo[]> => [{ id: 'm', name: 'm', ...over }]),
+      })
+
+      afterEach(() => prefer([]))
+
+      it('hands the adapter the first preferred format the model lists, with its compression', async () => {
+        prefer([
+          { format: 'webp', compression: 80 },
+          { format: 'jpeg', compression: 90 },
+        ])
+        const { generate: send } = setup(
+          {},
+          listing({ outputFormats: ['png', 'jpeg'], compressionFormats: ['jpeg'] }),
+        )
+
+        await generate()
+
+        expect(send).toHaveBeenCalledWith(
+          expect.objectContaining({ output: { format: 'jpeg', compression: 90 } }),
+        )
+      })
+
+      it('sends a format without compression the model does not take for it', async () => {
+        prefer([{ format: 'webp', compression: 80 }])
+        const { generate: send } = setup({}, listing({ outputFormats: ['webp'] }))
+
+        await generate()
+
+        expect(send).toHaveBeenCalledWith(expect.objectContaining({ output: { format: 'webp' } }))
+      })
+
+      it('sends no output when the model lists none of the preferred formats', async () => {
+        prefer([{ format: 'webp' }])
+        const { generate: send } = setup({}, listing({ outputFormats: ['png', 'jpeg'] }))
+
+        await generate()
+
+        expect(send).toHaveBeenCalledWith(expect.objectContaining({ output: undefined }))
+      })
+
+      it('sends no output for a model whose formats are unknown', async () => {
+        prefer([{ format: 'png' }])
+        const { generate: send } = setup({}, listing({}))
+
+        await generate()
+
+        expect(send).toHaveBeenCalledWith(expect.objectContaining({ output: undefined }))
+      })
+
+      it('sends no output when nothing is preferred', async () => {
+        const { generate: send } = setup({}, listing({ outputFormats: ['png', 'jpeg', 'webp'] }))
+
+        await generate()
+
+        expect(send).toHaveBeenCalledWith(expect.objectContaining({ output: undefined }))
+      })
+
+      it('reads the formats of an OpenAI Compatible host from its override', async () => {
+        prefer([{ format: 'webp', compression: 70 }])
+        const send = vi.fn(async (_options: unknown) => ({ base64: 'RESULT' }))
+        vi.mocked(createOpenAICompatibleProvider).mockReturnValue({
+          id: 'openai-compatible',
+          name: 'openai-compatible',
+          generate: send,
+          listModels: vi.fn(async () => []),
+        })
+        vi.mocked(settings.getImageProfile).mockReturnValue({
+          id: 'compat-output',
+          providerType: 'openai-compatible',
+          apiKey: 'sk-compat-output',
+          baseUrl: 'https://proxy.test/v1',
+          model: 'm',
+          providerOptions: {},
+          capabilityOverride: { outputFormats: ['png', 'webp'], outputCompression: true },
+        } as ImageProfile)
+
+        await generate()
+
+        expect(send).toHaveBeenCalledWith(
+          expect.objectContaining({ output: { format: 'webp', compression: 70 } }),
+        )
+      })
+    })
 
     it('reads the model from the list once, and saves nothing to the profile', async () => {
       const { generate: send, listModels } = setup(

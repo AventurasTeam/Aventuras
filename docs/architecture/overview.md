@@ -675,6 +675,23 @@ its API reference publishes both, because no endpoint lists image models)
 (`src/lib/utils/image.ts`). A backend that is handed pixel dimensions it does not offer answers
 with the nearest thing it does, which is not the same picture.
 
+The output format is a preference, not a request: `systemServicesSettings.imageGeneration.outputFormats`
+is an ordered list of PNG, JPEG and WebP, each with an optional compression level (Settings →
+Advanced → Image Output Format), and it applies to every image. `generateImage` resolves it once,
+with `pickImageOutput` (`src/lib/utils/imageOutput.ts`): the first preferred format the model's
+capabilities list in `outputFormats`, plus compression only when the model lists that format in
+`compressionFormats`. Unknown means unsupported: a model that lists no formats, or none of the
+preferred ones, is sent no format field at all, and so is every model when the list is empty. It is
+decided before the request and never by retrying on an error, because a failed generation may
+already have been billed. Support comes from the OpenAI adapter's table (the GPT image models, which
+the Images API reference documents `output_format` for; an id the table lacks is unknown), from the
+`output_format` and `output_compression` entries in the OpenRouter and NanoGPT catalogues, and, for
+OpenAI Compatible, from the profile's capability override, since those hosts publish nothing.
+Google, Z.AI, Pollinations, ComfyUI and A1111 have no such parameter and return their own format.
+The fields are `providerOptions.openai.outputFormat` and `outputCompression` for OpenAI and
+`output_format` and `output_compression` in the body for the rest; the unrelated `response_format:
+'b64_json'` that OpenAI-shaped hosts are always asked for is unchanged.
+
 Only a 429 is retried, because any other failure may already have been billed. The same rule has
 one sharp edge: when a reply gives a URL and the SDK downloads the image itself, a 429 from the
 image host makes the whole generation run again, and it is billed again. The key is sent only to
