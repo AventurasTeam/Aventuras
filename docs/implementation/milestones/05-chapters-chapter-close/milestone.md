@@ -771,7 +771,7 @@ alone would still clear a later place move. The undo-own-write design
 and relative for `retrieval_count`, rewriting later survivors' prior
 values, and drops the mode
 ([`generation-pipeline.md → Reverse-replay`](../../../generation-pipeline.md#reverse-replay)).
-A plan-mode followup built it before 5.13 was planned (PR #745). A normalized
+A plan-mode followup built it before 5.13 was planned (PR #746). A normalized
 stackable record a later write touched stays normalized, since undoing
 it can double-count; that's settled by the later of 5.9 and 5.12 to land.
 

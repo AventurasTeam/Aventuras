@@ -14,7 +14,7 @@
   of the round-trip suite). Through them,
   [Slice 5.8](./08-prose-tasks.md) and
   [Slice 5.9](./09-chapter-wide-tasks.md), whose tasks a re-run runs again.
-  And the undo-own-write substrate, built by a plan-mode followup (PR #745):
+  And the undo-own-write substrate, built by a plan-mode followup (PR #746):
   one yield rule for every reversal, with no `yieldTo` mode, and the
   survivor rewrites the journal captures, which the reversal's plan lists
   as `survivorRewrites`
@@ -1085,7 +1085,7 @@ change amends the scope above.
   shipped. First, the later-bump case in
   `lib/pipeline/__tests__/close-round-trip.test.ts` overrides `armExpect`
   and `armLog` for its rollback arms. The undo-own-write substrate (PR
-  #745) made a count a counter
+  #746) made a count a counter
   ([`generation-pipeline.md → Reverse-replay`](../../../../generation-pipeline.md#reverse-replay)),
   so a rollback past E leaves the reset's 0 and that arm's state override
   went. Its `armLog` override stays, since the bump's undo lowers the
