@@ -775,14 +775,59 @@ such as Cloudflare Access service tokens are not supported.
 
 Remote HTTP goes through `@tauri-apps/plugin-http`, not the WebView's `fetch`: the endpoints are
 user-configured, so CORS, Android's cleartext block and iOS ATS (above) would each break some of
-them. `httpFetch` (`utils/http.ts`) is the only way into the plugin, and an ESLint rule rejects
-any other import of its `fetch`. Prefer the existing helpers built on it: `createTimeoutFetch` for
-AI SDK providers, `createSdkFetch` for SDK image models (Tauri transport, request guard and
-debug logging; Google, OpenAI, OpenAI Compatible, Pollinations, Z.AI, OpenRouter, NanoGPT, A1111 and
-ComfyUI use it; ComfyUI polls through `createPollSdkFetch`, which keeps them in one entry so they
-do not push the generation POST out of the debug store's last 100 entries),
-`imageGetFetch` / `fetchPublicImageBase64` for model
-discovery and reference fetching, `corsFetch` for discovery.
+them. `httpFetch` (`services/http/httpFetch.ts`) is the only way into the plugin, and an ESLint
+rule rejects any other import of its `fetch`.
+
+`loggedFetch` (`services/http/`) is the transport the app's own requests share: the request's
+debug entry, the request guard (header and idle timeouts, abort mapping) and the response's entry.
+The header timer stops when the headers arrive; every body after that, a buffered JSON completion
+included, is bounded only by the idle timer. A non-streaming completion sends its headers early and
+its body when generation finishes, so for it the idle timer is the whole generation's deadline: the
+LLM timeout setting. Prefer the helpers built on it:
+
+- `createTimeoutFetch` for AI SDK providers (it adds manual-body merging and usage patching).
+- `createSdkFetch` for SDK image models. Google, OpenAI, OpenAI Compatible, Pollinations, Z.AI,
+  OpenRouter, NanoGPT, A1111 and ComfyUI use it. ComfyUI polls through `createPollSdkFetch`, which
+  keeps them in one entry so they do not push the generation POST out of the debug log's last 100
+  entries.
+- `imageGetFetch` / `fetchPublicImageBase64` for model discovery and reference fetching.
+- `corsFetch` for character-card discovery and other plain GETs. It logs nothing unless a caller
+  passes `debug: { serviceId }`.
+
+`updater.ts` and the model-health ping call `httpFetch` directly and are not logged.
+
+Debug logging writes the whole response. The generic dispatcher (`services/http/debugLog.ts`)
+writes status and body for JSON and text, status, type and size for binary (or untyped) bodies, and
+the status and error body for a failure. A multipart request body is logged field by field: strings
+as sent (long base64 scrubbed), a file as its name, type and size, a repeated key as an array.
+
+Bodies are read with `readLoggedBody`, which never throws: a body that fails partway is logged with
+its status, the reason, and the text that did arrive (`received`). The entry's error says how far
+it got: `(headers received, no body yet)` or `(N bytes received)`. The poll transport reads the
+same way.
+
+The AI SDK transports are the same dispatcher with Gemini safety metadata and stream aggregation
+(`sdk/providers/debugLog.ts`, `streamLog.ts`). A stream is parsed as SSE and summarized as the one
+body it would have been without streaming, by format: Anthropic Messages, OpenAI Responses, Chat
+Completions (and its many compatible providers) and Gemini; any other format is the list of its
+payloads, and a body with no SSE events is logged as text. `stream` records the format, the number
+of events and whether the format's final event (`message_stop`, `response.completed`, `[DONE]` or a
+finish reason, a terminal Responses event) arrived. A stream cut off before it is logged with what
+had arrived, `complete: false`, the last payload as `lastEvent`, and the error: the read failure,
+else an error event the stream carried, else `stream ended before its final event`. Every read is of
+a clone, taken only while debug mode is on. A reply the caller will cancel (a redirect under
+`followRedirects: false`, an `allowStatuses` status) is logged by status alone, because a live clone
+would keep the plugin's body open on the Rust side.
+
+The log viewer's readable view (`debug.readableView`) renders escaped newlines as line breaks and
+expands a string value that holds JSON (a structured-output reply's text) into the value it holds;
+an entry with such a string gets a "JSON text" badge either way. An entry over the display limit is
+trimmed value by value, with `… N more items` / `… [N more chars]` markers, so the text stays valid
+JSON; the readable view is for reading, not parsing. Export and the store hold the raw entries.
+
+Entries are written to `stores/debugLog.ts`, a plain module with no runes or Tauri imports, so
+transports and their tests need no store mock. `debug.svelte.ts` wraps it for reactivity and the
+pop-out window.
 
 What the plugin changes for the server on the other end:
 

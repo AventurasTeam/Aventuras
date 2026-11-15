@@ -8,7 +8,7 @@
  */
 
 import { PROVIDERS } from './config'
-import { httpFetch } from '#lib/utils/http.ts'
+import { httpFetch } from '#lib/services/http/index.ts'
 import { normalizeBaseUrl } from '#lib/utils/url.ts'
 import type { APIProfile } from '#lib/types/index.ts'
 import {

@@ -10,13 +10,6 @@ vi.mock('#lib/stores/settings.svelte.ts', () => ({
   },
 }))
 
-vi.mock('#lib/stores/debug.svelte.ts', () => ({
-  debugStore: {
-    logApiRequest: vi.fn(),
-    logApiResponse: vi.fn(),
-  },
-}))
-
 vi.mock('./fetchAdapter', () => ({
   imageGetFetch: vi.fn(),
   fetchPublicImageBase64: vi.fn(),

@@ -6,7 +6,7 @@
  */
 
 import { createLogger } from '#lib/log.ts'
-import { debug } from '#lib/stores/debug.svelte.ts'
+import { debugLog } from '#lib/stores/debugLog.ts'
 
 import { settings } from '#lib/stores/settings.svelte.ts'
 import type {
@@ -317,7 +317,7 @@ export function streamNarrative(options: NarrativeGenerateOptions) {
     providerOptions,
     abortSignal: signal,
     onFinish: (result) => {
-      debug.addDebugResponse(
+      debugLog.addResponse(
         debugId,
         'narrative:result',
         {

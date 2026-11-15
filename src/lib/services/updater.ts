@@ -29,7 +29,7 @@ import { getVersion, getBundleType, type BundleType } from '@tauri-apps/api/app'
 import { openUrl } from '@tauri-apps/plugin-opener'
 import { isAndroid, isIos } from '#lib/utils/platform.ts'
 import { isNewerVersion } from '#lib/utils/version.ts'
-import { httpFetch } from '#lib/utils/http.ts'
+import { httpFetch } from '#lib/services/http/index.ts'
 
 /**
  * The repository the release workflow publishes to. Must stay in step with the `updater`
