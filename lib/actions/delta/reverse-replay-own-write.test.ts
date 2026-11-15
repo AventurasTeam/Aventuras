@@ -266,6 +266,37 @@ describe('a string list undoes term by term', () => {
     expect(await payloadOf(db, 'act_u')).toEqual({ keywords: ['ferry'] })
   })
 
+  // An agenda absent before the reversed write is absent in the survivor's rewritten prior too.
+  it('gives a survivor the absent prior of a list the reversed write started', async () => {
+    const { db, ctx } = await setup()
+    const faction: NewEntity = { ...KAEL, id: 'fac_veil', kind: 'faction', name: 'Veil', state: {} }
+    await apply(
+      ctx,
+      { kind: 'createEntity', source: 'user_edit', payload: { entry: faction } },
+      'act_0',
+    )
+    const agenda = (source: DeltaSource, list: string[]): PipelineAction => ({
+      kind: 'updateEntity',
+      source,
+      payload: { branchId: 'b1', id: 'fac_veil', patch: { state: { agenda: list } } },
+    })
+    const veilState = async () =>
+      (await db.select().from(entities).where(eq(entities.id, 'fac_veil')))[0].state
+    await apply(ctx, agenda('chapter_close', ['hold the pass']), 'act_close')
+    await apply(
+      ctx,
+      agenda('periodic_classifier', ['hold the pass', 'seize the amulet']),
+      'act_pass',
+    )
+
+    await reverse(db, ctx, 'act_close')
+
+    expect(await veilState()).toEqual({ agenda: ['seize the amulet'] })
+    expect(await payloadOf(db, 'act_pass')).toEqual({ state: { agenda: null } })
+    await reverse(db, ctx, 'act_pass')
+    expect(await veilState()).toEqual({})
+  })
+
   // The survivor's own change is read from the log as it stood before the reversal: re-read after
   // the newer reversed write had rewritten it into a restatement, its term would be lost.
   it("keeps a survivor's term that two reversed writes before it added and removed", async () => {

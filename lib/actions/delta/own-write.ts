@@ -372,6 +372,7 @@ export async function planOwnWrite(
     // A list a broken chain recorded as something else undoes as a whole value.
     if (prior === undefined || result === undefined) continue
     payload = withoutList(payload, list)
+    const priorAbsent = priorValue == null
     const terms: TermUndo[] = []
     for (const [key, change] of termChanges(prior, result, list.match)) {
       let stopped = false
@@ -381,7 +382,8 @@ export async function planOwnWrite(
           survivor,
           column: list.column,
           path,
-          edit: (value) => listUndoneOn(value, list, prior, [{ key, change }]),
+          edit: (value) =>
+            undoneList(value, { list, prior, priorAbsent, terms: [{ key, change }] }),
         })
         if (await changedTerm(chains, entry, survivor, list, key)) {
           stopped = true
@@ -390,7 +392,7 @@ export async function planOwnWrite(
       }
       if (!stopped) terms.push({ key, change })
     }
-    if (terms.length > 0) lists.push({ list, prior, priorAbsent: priorValue == null, terms })
+    if (terms.length > 0) lists.push({ list, prior, priorAbsent, terms })
   }
 
   let count: OwnWriteUndo['count'] = null
