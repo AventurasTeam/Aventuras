@@ -15,7 +15,12 @@ import type {
   ImageProviderType,
 } from '#lib/types/index.ts'
 import { abortable } from '#lib/utils/async.ts'
-import { parseImageSpec, describeImageSpec, type ImageSpec } from '#lib/utils/image.ts'
+import {
+  parseImageSpec,
+  describeImageSpec,
+  sniffImageMime,
+  type ImageSpec,
+} from '#lib/utils/image.ts'
 import { pickImageOutput } from '#lib/utils/imageOutput.ts'
 import type {
   ComfySamplerInfo,
@@ -275,6 +280,13 @@ export async function supportsReferenceImages(profileId: string, model: string):
   return capabilities?.supportsImg2Img !== false
 }
 
+/** A reference in a format the model does not list is left out; one whose format cannot be told is kept. */
+function acceptsReferenceFormat(image: string, mimeTypes: readonly string[] | undefined): boolean {
+  if (!mimeTypes?.length) return true
+  const mime = sniffImageMime(image)
+  return mime === null || mimeTypes.includes(mime)
+}
+
 /** Adapters take raw base64; a reference can arrive as a data URL or a remote URL. */
 export async function toRawBase64(image: string, signal?: AbortSignal): Promise<string> {
   if (/^https?:\/\//i.test(image)) {
@@ -328,12 +340,14 @@ export async function generateImage(options: {
   )
   log('generateImage output', { output })
 
-  // A reference that cannot be fetched is dropped; the scene is still worth drawing without it.
+  // A reference that cannot be fetched, or that the model cannot read, is dropped; the scene is
+  // still worth drawing without it.
   const providerLimit = referenceLimit(profile.providerType, profile.providerOptions)
   const limit =
     capabilities?.supportsImg2Img === false
       ? 0
       : Math.min(capabilities?.maxReferenceImages ?? Infinity, providerLimit)
+  const referenceMimeTypes = capabilities?.referenceConstraints?.mimeTypes
   const cleanRefs =
     referenceImages && providerLimit > 0
       ? (
@@ -341,9 +355,18 @@ export async function generateImage(options: {
             referenceImages.slice(0, limit).map((img) => toRawBase64(img, signal)),
           )
         ).flatMap((result) => {
-          if (result.status === 'fulfilled') return [result.value]
-          log('Dropped a reference image', { error: result.reason })
-          return []
+          if (result.status === 'rejected') {
+            log('Dropped a reference image', { error: result.reason })
+            return []
+          }
+          if (!acceptsReferenceFormat(result.value, referenceMimeTypes)) {
+            log('Dropped a reference image', {
+              format: sniffImageMime(result.value),
+              accepted: referenceMimeTypes,
+            })
+            return []
+          }
+          return [result.value]
         })
       : undefined
 

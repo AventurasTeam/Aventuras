@@ -707,6 +707,55 @@ describe('Image Provider Registry', () => {
       })
     })
 
+    describe('reference formats', () => {
+      const PNG = 'iVBORw0KGgo='
+      const JPEG = '/9j/4AAQSkZJRg=='
+      const WEBP = 'UklGRgAAAABXRUJQ'
+      const UNKNOWN = 'AAAA'
+      const takes = (mimeTypes: string[], over: Partial<ImageModelInfo> = {}) => ({
+        listModels: vi.fn(async (): Promise<ImageModelInfo[]> => [
+          {
+            id: 'm',
+            name: 'm',
+            supportsImg2Img: true,
+            referenceConstraints: { mimeTypes },
+            ...over,
+          },
+        ]),
+      })
+
+      it('drops a reference in a format the model does not list, and keeps the rest', async () => {
+        const { generate: send } = setup({}, takes(['image/png', 'image/jpeg']))
+
+        await generate('m', [WEBP, PNG, JPEG])
+
+        expect(send).toHaveBeenCalledWith(expect.objectContaining({ referenceImages: [PNG, JPEG] }))
+      })
+
+      it('keeps a reference whose format cannot be told', async () => {
+        const { generate: send } = setup({}, takes(['image/png']))
+
+        await generate('m', [UNKNOWN, WEBP])
+
+        expect(send).toHaveBeenCalledWith(expect.objectContaining({ referenceImages: [UNKNOWN] }))
+      })
+
+      it('keeps every reference when the model lists no formats', async () => {
+        const { generate: send } = setup({}, takes([]))
+
+        await generate('m', [WEBP, PNG])
+
+        expect(send).toHaveBeenCalledWith(expect.objectContaining({ referenceImages: [WEBP, PNG] }))
+      })
+
+      it('still refuses a model that needs a reference when none is left', async () => {
+        const { generate: send } = setup({}, takes(['image/png'], { requiresReferenceImage: true }))
+
+        await expect(generate('m', [WEBP])).rejects.toThrow('needs a reference image')
+        expect(send).not.toHaveBeenCalled()
+      })
+    })
+
     it('reads the model from the list once, and saves nothing to the profile', async () => {
       const { generate: send, listModels } = setup(
         {},
