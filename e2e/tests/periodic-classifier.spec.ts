@@ -1,7 +1,7 @@
 import { expect, test } from '@playwright/test'
 
 import { passProbe } from '../flows/classifier-pass'
-import { goToWorld, openStory } from '../flows/navigation'
+import { goToReader, goToWorld, openStory } from '../flows/navigation'
 import { takeTurn } from '../flows/turn'
 import { currentBranchId, queryApp, queryScalar } from '../harness/db'
 import { installEmbedderModel } from '../harness/embedder'
@@ -18,7 +18,6 @@ import {
   setProviderEndpoint,
   unassignClassifierAgent,
 } from '../harness/seed'
-import { chrome } from '../locators/chrome'
 import { home } from '../locators/home'
 import { reader } from '../locators/reader'
 import { saveSession } from '../locators/save-session'
@@ -797,9 +796,7 @@ test.describe('periodic classifier — the writer map', () => {
     await saveSession.saveBarSave(page).click()
     await expect(saveSession.saveBarSave(page)).toHaveCount(0)
     expect((await entityOf(watch)).state.standing).toBe(USER_STANDING)
-    await chrome.actionsTrigger(page).click()
-    await chrome.goToReaderRow(page).click()
-    await page.waitForURL(/\/reader-composer\//)
+    await goToReader(page)
 
     // Turn 2 brings the pass due. Its call is held until the reply can name the prompt's ids.
     mock.holdNextStructured('periodic-classifier')

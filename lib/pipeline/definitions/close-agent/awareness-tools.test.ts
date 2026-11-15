@@ -10,7 +10,6 @@ import { CLOSE_REASON } from './verdict'
 import { runDispatchCalls, type DispatchRun, type ScriptedCall } from '../__tests__/close-dispatch'
 import { openCloseFixture, type CloseFixture } from '../__tests__/close-fixture'
 import {
-  uuid,
   ARIA,
   JORIN,
   KAI,
@@ -27,13 +26,9 @@ import {
   UNPINNED_FREQUENT,
   USER_FREQUENT,
   SHOWN,
-  endOf,
   earlierReplyOf,
   laterReplyOf,
   awarenessTurns,
-  putCharacter,
-  putHappening,
-  putAwareness,
   apply,
   editAwareness,
   storedPin,
@@ -43,6 +38,13 @@ import {
   startPinned,
   pinCalls,
 } from './__tests__/awareness-tools-fixture'
+import {
+  uuid,
+  endOf,
+  putCharacter,
+  putHappening,
+  putAwareness,
+} from './__tests__/close-awareness-fixture'
 
 describe('set_pin: the tool', () => {
   it('replays as sent, and takes an awareness row by its aw id', () => {

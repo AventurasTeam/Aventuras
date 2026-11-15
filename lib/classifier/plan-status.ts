@@ -1,4 +1,4 @@
-import { nonBlank, SOURCE, type PlanContext } from './plan-context'
+import { SOURCE, stateText, type PlanContext } from './plan-context'
 import type { ClassifierExtraction } from './schema'
 
 /** classifier.md → What the classifier writes → Status transitions, against the reply's view. */
@@ -30,6 +30,12 @@ export function planStatusFlip(
   if (flip.to === 'retired' && current.status !== 'active') return
   index.set(id, { ...current, status: flip.to })
   const proseEntryId = ctx.proseSource(flip.sourceTurn)
+  const retiredReason =
+    flip.to === 'retired'
+      ? (stateText(flip.reason, (cut) =>
+          report.cutTexts.push({ kind: 'retiredReason', ref: flip.ref, ...cut }),
+        ) ?? null)
+      : null
   planned.push({
     action:
       flip.to === 'retired'
@@ -39,7 +45,7 @@ export function planStatusFlip(
             payload: {
               branchId,
               id,
-              retiredReason: nonBlank(flip.reason) ?? null,
+              retiredReason,
               proseEntryId,
             },
           }

@@ -34,19 +34,28 @@ function resolveVecExtensionPath(): string {
   return existsSync(unpacked) ? unpacked : loadable
 }
 
-// node:sqlite returns row objects; sqlite-proxy needs positional arrays. For
-// 'get', drizzle treats the returned rows value AS the single row, so it must be
-// that one positional array (or undefined when no row matched — returning [] here
-// makes drizzle map an empty row and emit a bogus object / decoder error).
-export function query(sqlText: string, params: unknown[], method: DbProxyMethod): DbProxyResult {
-  const stmt = getDb().prepare(sqlText)
+// sqlite-proxy needs positional arrays, read as arrays: a row object keeps one of two same-named
+// columns (a join's `a.id, b.id`) and moves a numeric alias first. For 'get', drizzle treats the
+// returned rows value AS the single row, so it must be that one array (or undefined when no row
+// matched — [] makes drizzle map an empty row and emit a bogus object / decoder error).
+export function queryOn(
+  db: DatabaseSync,
+  sqlText: string,
+  params: unknown[],
+  method: DbProxyMethod,
+): DbProxyResult {
+  const stmt = db.prepare(sqlText)
   if (method === 'run') {
     stmt.run(...(params as never[]))
     return { rows: [] }
   }
-  const rows = stmt.all(...(params as never[])) as Record<string, unknown>[]
-  const asArrays = rows.map((r) => Object.values(r))
-  return { rows: (method === 'get' ? asArrays[0] : asArrays) as unknown[] }
+  stmt.setReturnArrays(true)
+  const rows = stmt.all(...(params as never[])) as unknown as unknown[][]
+  return { rows: (method === 'get' ? rows[0] : rows) as unknown[] }
+}
+
+export function query(sqlText: string, params: unknown[], method: DbProxyMethod): DbProxyResult {
+  return queryOn(getDb(), sqlText, params, method)
 }
 
 export function exec(sqlText: string): void {

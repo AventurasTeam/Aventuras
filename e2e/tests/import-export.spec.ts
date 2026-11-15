@@ -4,7 +4,7 @@ import { join } from 'node:path'
 
 import { expect, test, type Page } from '@playwright/test'
 
-import { openStory, openWorld } from '../flows/navigation'
+import { goToReader, openStory, openWorld } from '../flows/navigation'
 import { currentBranchId, queryApp } from '../harness/db'
 import { t } from '../harness/i18n'
 import { launchApp, type LaunchedApp } from '../harness/launch'
@@ -101,9 +101,7 @@ function swapClipboardText(app: LaunchedApp, text: string): Promise<string> {
 
 // GO TO pops to the reader already on the stack; the reader's back returns to the story list.
 async function leaveToStoryList(page: Page): Promise<void> {
-  await chrome.actionsTrigger(page).click()
-  await chrome.goToReaderRow(page).click()
-  await page.waitForURL(/\/reader-composer\//)
+  await goToReader(page)
   await chrome.back(page).click()
 }
 

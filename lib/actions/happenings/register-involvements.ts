@@ -5,7 +5,7 @@ import { happeningInvolvements, happeningInvolvementWriteSchema } from '@/lib/db
 import { happeningInvolvementsStore } from '@/lib/stores'
 
 import { missingRef, MISSING_REF } from '../delta/live-refs'
-import { noopRefusal, register, type ActionHandler } from '../delta/registry'
+import { noopRefusal, register, type ActionHandler, TARGET_NOT_FOUND } from '../delta/registry'
 import {
   proseLogPosition,
   USER_EDITED_SINCE_PROSE,
@@ -101,7 +101,11 @@ const updateHandler: ActionHandler = async (action, branchId, ctx) => {
     .from(happeningInvolvements)
     .where(and(eq(happeningInvolvements.branchId, bid), eq(happeningInvolvements.id, id)))
   if (!current)
-    return { status: 'rejected', reason: `update target involvement ${bid}:${id} not found` }
+    return {
+      status: 'rejected',
+      reason: `update target involvement ${bid}:${id} not found`,
+      code: TARGET_NOT_FOUND,
+    }
   const set = { role: patch.role ?? null }
   // Logged anyway, it would show in History as a "Modified Role" that changed nothing.
   if (set.role === current.role) return noopRefusal('involvement unchanged', 'restated')
@@ -133,7 +137,11 @@ const deleteHandler: ActionHandler = async (action, branchId, ctx) => {
     .from(happeningInvolvements)
     .where(and(eq(happeningInvolvements.branchId, bid), eq(happeningInvolvements.id, id)))
   if (!current)
-    return { status: 'rejected', reason: `delete target involvement ${bid}:${id} not found` }
+    return {
+      status: 'rejected',
+      reason: `delete target involvement ${bid}:${id} not found`,
+      code: TARGET_NOT_FOUND,
+    }
   return {
     status: 'ok',
     targetTable: 'happening_involvements',

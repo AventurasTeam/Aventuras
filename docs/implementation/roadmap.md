@@ -889,6 +889,29 @@ code before it moved; resolve with the slice it names.
   (`lib/prompts/validate-includes.ts` already parses the include
   graph, so the substrate exists), and a filter allow-list. Surfaced
   by the Slice 3.6a Task 9b review (2026-08-10); sized 2026-08-19.
+- **M7.2 — A context group promises variables some of its templates
+  never get.** `lib/prompts/templateContextMap.ts` describes one variable
+  list per group and marks `chapter`'s `entries`, `previousChapterSummary`,
+  `threads` and `mode` `required` for all ten of the group's templates,
+  but the close tasks' renders set only `mode` and their own variables,
+  and the metadata merge sets no `entries` or `mode`. Nothing reads
+  `required` outside tests today, so it misleads only the template
+  editor: an override that reads `entries` in a close task renders it
+  empty. The editor is the first reader of `required`, so it picks the
+  shape, beside the `validateRegistry` entry above. Raised in 5.8's slice
+  review; routed from triage 2026-11-14.
+- **M7.2 — The close's count priming assumes the system half holds each
+  turn's prose once.** `renderClosePrompt` / `primeCloseSystemCount`
+  (`lib/pipeline/definitions/close-agent/turns.ts`) prime the system
+  half's count as the blank half's count plus the turns' stored prose
+  tokens, with no check. That holds while the bundled pack renders
+  `macro_story_entry` and the close templates as shipped. Once the pack
+  tab lets a user edit them, a truncating, moved or doubled
+  `{{ entry.content }}` makes the estimate wrong silently, and the
+  pre-send check has no margin. A guard: prime only when the rendered
+  half's length minus the blank half's equals the summed turn contents,
+  else count exactly. Raised in 5.5b's final review; routed from triage
+  2026-11-14.
 - **M7.2 — Nothing implements the window-level accounting canon
   describes.** Routed from the Slice 3.12 split (2026-08-19).
   [`retrieval.md → Structural floor takes budget first`](../memory/retrieval.md#structural-floor-takes-budget-first)
@@ -1470,6 +1493,17 @@ each names.
   [`chapter-close.md → Run order`](../memory/chapter-close.md#run-order)
   has no slot until the translation pipeline exists, and M5 ships none.
   M8.1 adds the step and M8.2 shows it. Moved here at M5's promotion (2026-11-01).
+- **M8.1 — The close's round-trip snapshot leaves out translations.**
+  `WORLD_TABLES` in `lib/pipeline/__tests__/close-round-trip.test.ts`
+  compares no `translations`, though a thread's and a happening's are
+  link rows their deletes carry in the undo payload and the merge cases
+  delete both; the unlisted-table guard sees only tables with deltas, so
+  a lost translation restore would pass. Not live while
+  `createTranslation` has no caller outside tests. With the first
+  translation writer: add `translations` to `WORLD_TABLES` and seed one
+  on a merged thread and happening. Raised in 5.5b's review; routed from
+  triage 2026-11-14, whose pass dropped the entry's vector-row half (a
+  reversed row comes back stale and is embedded again by design).
 - **M8.1 — `user-action-translation` recounts `content_tokens`.** It
   rewrites `content`, and M5 stores each entry's token count beside it
   ([Slice 5.1](./milestones/05-chapters-chapter-close/slices/01-token-measure.md)),
@@ -1756,6 +1790,14 @@ own.
   `hitSlop` or nothing. Extracting a primitive would normalise
   behaviour rather than dedupe, so it wants a call on one variant or
   two.
+
+- **M9.2 — The web Dialog and AlertDialog never animate their close.**
+  Both primitives carry `animate-fade-in` and nothing on exit, while
+  [`motion.md`](../ui/foundations/motion.md) gives modal open-close
+  `--duration-slow`; a modal vanishes in one frame on web at every
+  close. A host that unmounts its dialog when it closes (the review
+  window) would also need to stay mounted through the exit. Read, not
+  run. Raised in the 2026-11-14 triage pass.
 
 - **M9.2 — `ListRow`'s `aria-label` hides its channel content.** The
   row's `aria-label` replaces its child content, so status, lead and
@@ -2151,7 +2193,12 @@ own.
   `components/ui/alert-dialog.tsx`: remember the focused element when
   the content opens and, when no trigger takes focus back, restore it on
   close if it's still connected, else hand focus to a stable container.
-  Raised by CodeRabbit on PR #742 (Slice 5.12).
+  Raised by CodeRabbit on PR #742 (Slice 5.12). The commit banner adds
+  two more (5.11): its `Review` and `×` clear the close result, the
+  banner renders nothing, and the focused button unmounts; the review
+  window it opens has no registered trigger, so closing that drops focus
+  to `<body>` too. The memory banner's run-state `Cancel` does the same.
+  Read, not run; routed from triage 2026-11-14.
 
 **Gates.** M8 (every user-facing surface must exist before the
 visual audit, and translation must round-trip cleanly through

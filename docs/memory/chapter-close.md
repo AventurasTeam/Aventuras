@@ -174,6 +174,8 @@ of its turns is refused, and so is a `traits`, `drives` or `agenda` list
 with an entry that does, and a keyword it adds holding any id it shows:
 a stored `t3` would name another turn in a later prompt, a stored row
 id another row. Turns are cited in `turns`; a `why` only the review shows keeps them as written.
+A keyword it adds over 120 characters is refused the same way
+([`retrieval.md → Keywords schema`](./retrieval.md#keywords-schema)).
 
 A write returns one of three results:
 
@@ -618,8 +620,8 @@ handle. Its bounds hold from the pin the Awareness start showed:
   as one whose pin they set, and so does a row a World
   [merge](../ui/screens/world/world.md#merge) moved to the kept
   character, since the merge re-creates it as the user's
-  ([`triage.md`](../implementation/triage.md), "World merge re-creates
-  awareness rows as the user's."). Other fields give way only to a user
+  ([`followups.md → Data-model`](../followups.md#data-model), "World merge
+  re-creates awareness rows as the user's."). Other fields give way only to a user
   edit after the cited turn ([Tools and writes](#tools-and-writes)).
 
 **One-way frequency signal.** The frequency-driven candidate set
@@ -657,8 +659,8 @@ puts their pre-bump count back over the reset's 0, and CTRL-Z of the
 close can give a merge's kept row ([3e](#3e--happenings-consolidation)'s
 survivor) a count holding a later turn's bump. One chapter's frequency
 signal is off, and no data is lost
-([`triage.md`](../implementation/triage.md), "A count bump's undo can
-bring back a pre-reset count.").
+([`followups.md → Data-model`](../followups.md#data-model), "An undo
+restores a whole prior value over later writes").
 
 **Why per-chapter reset, not lifetime accumulation.** Lifetime
 counts create a Matthew-effect feedback loop — early-popular rows
@@ -774,8 +776,8 @@ row is a merge that keeps the kept row's text. Keep distinct is no call.
   a row a World merge moved counts as user-pinned (3d), so its pin stays
   on the kept row, and a merge that would absorb a happening a merged
   character knows is skipped at every close
-  ([`triage.md`](../implementation/triage.md), "World merge re-creates
-  awareness rows as the user's.").
+  ([`followups.md → Data-model`](../followups.md#data-model), "World merge
+  re-creates awareness rows as the user's.").
 - Deleted rows are delta-logged for rollback.
 
 **A merge lands whole, once per row.** Code checks user precedence on
@@ -1006,7 +1008,10 @@ the loss.
 
 A refused create mints an id no retry shares, so it counts as corrected
 once the same task lands a create with the same title, trimmed and
-case-folded. Every refusal's reason is recorded as a stable key, which
+case-folded. A create refused for its title itself, blank or holding a
+turn handle, matches no retry's title, so it stays listed beside the
+retry that landed, as a merge retried without a row does. Every
+refusal's reason is recorded as a stable key, which
 the review shows as a sentence of its own; the model's tool result
 keeps the instruction it acts on, with the short ids and turn handles
 that mean something only inside the close.

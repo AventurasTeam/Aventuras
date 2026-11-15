@@ -195,6 +195,62 @@ describe('noopRefusal marks: the scan (C11)', () => {
   })
 })
 
+// A hard refusal of a missing row: an object literal `{ status: 'rejected', reason: \`… not found\` }`.
+function hardNotFounds(path: string, source: string): { at: string; coded: boolean }[] {
+  const file = ts.createSourceFile(path, source, ts.ScriptTarget.Latest, true, ts.ScriptKind.TS)
+  const found: { at: string; coded: boolean }[] = []
+  const visit = (node: ts.Node): void => {
+    if (ts.isObjectLiteralExpression(node)) {
+      const prop = (name: string) =>
+        node.properties.find(
+          (p): p is ts.PropertyAssignment =>
+            ts.isPropertyAssignment(p) && ts.isIdentifier(p.name) && p.name.text === name,
+        )
+      const status = prop('status')?.initializer
+      const reason = prop('reason')?.initializer
+      if (
+        status !== undefined &&
+        ts.isStringLiteralLike(status) &&
+        status.text === 'rejected' &&
+        reason !== undefined &&
+        (ts.isTemplateExpression(reason) || ts.isNoSubstitutionTemplateLiteral(reason)) &&
+        reason.getText(file).includes('not found')
+      ) {
+        const { line } = file.getLineAndCharacterOfPosition(node.getStart(file))
+        found.push({ at: `${path}:${line + 1}`, coded: prop('code') !== undefined })
+      }
+    }
+    ts.forEachChild(node, visit)
+  }
+  visit(file)
+  return found
+}
+
+// C11: a close reads a hard not-found as row-gone only by its code.
+describe('hard not-found refusals: the scan (C11)', () => {
+  it('flags a missing-row rejection that carries no code', () => {
+    const probe = [
+      "const a = { status: 'rejected', reason: `update target lore ${bid}:${id} not found` }",
+      "const b = { status: 'rejected', reason: `x ${id} not found`, code: TARGET_NOT_FOUND }",
+      "const c = { status: 'rejected', reason: 'invalid patch' }",
+    ].join('\n')
+    expect(hardNotFounds('probe.ts', probe)).toEqual([
+      { at: 'probe.ts:1', coded: false },
+      { at: 'probe.ts:2', coded: true },
+    ])
+  })
+
+  it('finds every hard not-found in lib/actions coded', async () => {
+    const paths = await fg(['lib/actions/**/*.ts'], {
+      cwd: process.cwd(),
+      ignore: ['**/*.test.ts', '**/__tests__/**'],
+    })
+    const found = paths.flatMap((path) => hardNotFounds(path, readFileSync(path, 'utf8')))
+    expect(found.length, 'hard not-founds the scan read').toBeGreaterThanOrEqual(8)
+    expect(found.filter(({ coded }) => !coded).map(({ at }) => at)).toEqual([])
+  })
+})
+
 const BRANCH = 'br_1'
 
 const entity = (

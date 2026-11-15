@@ -31,6 +31,14 @@ public entry. Everything else in the module is internal.
 - **Types are part of the public API.** A deep `import type` from a
   module's internals is banned the same as a value import. Re-export
   public types from the root `index.ts`.
+- **`lib/pipeline` and `lib/actions` have two exceptions.** The actions
+  barrel re-exports code that imports the `lib/pipeline` barrel, so a
+  value import of the actions barrel from `lib/pipeline` closes a
+  require cycle, and a test's mocked `@/lib/pipeline` then resolves to
+  the real one. `lib/pipeline` takes no value import of `@/lib/actions`;
+  it may deep-import `@/lib/actions/types` instead, the one internal
+  file it may name, and reaches the action layer's functions through
+  the delta action port boot wires.
 - **Tests and their fixtures are exempt.** A test file, or a fixture
   under a `__tests__/` folder, may import any module's internals: a
   test stages state the public API has no reason to expose. A helper

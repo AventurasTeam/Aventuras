@@ -706,6 +706,33 @@ describe('an entry of a reply list that does not fit', () => {
     ])
   })
 
+  it('drops a keyword term over 120 characters alone, as a malformed entry', () => {
+    const long = 'w'.repeat(121)
+    const { reply, malformed } = readClassifierReply(
+      classifierExtractionWithPlacesSchema.parse({
+        newCharacters: [
+          {
+            handle: 'new:mira',
+            name: 'Mira',
+            description: 'A ferrywoman.',
+            keywords: [long, 'Mi'],
+          },
+        ],
+        aliases: [{ ref: 'c1', terms: ['x'.repeat(120), long] }],
+        newPlaces: [{ handle: 'new:varn', name: 'Varn', description: '', keywords: [long] }],
+      }),
+    )
+    const lists = reply as ClassifierPlacesExtraction
+    expect(lists.newCharacters.map((c) => c.keywords)).toEqual([['Mi']])
+    expect(lists.aliases).toEqual([{ ref: 'c1', terms: ['x'.repeat(120)] }])
+    expect(lists.newPlaces.map((p) => p.keywords)).toEqual([[]])
+    expect(malformed).toEqual([
+      { list: 'newCharacters.keywords', count: 1 },
+      { list: 'aliases.terms', count: 1 },
+      { list: 'newPlaces.keywords', count: 1 },
+    ])
+  })
+
   it('drops a trait, drive or agenda item that is no string alone, keeping its list', () => {
     const { reply, malformed } = readClassifierReply(
       classifierExtractionSchema.parse({

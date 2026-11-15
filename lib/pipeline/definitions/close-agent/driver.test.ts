@@ -36,7 +36,6 @@ import {
   lore,
   packFloat32,
   sourceHash,
-  storyEntries,
   threads,
   upsertVecOps,
   type CloseTask,
@@ -75,16 +74,16 @@ import {
 import { readTaskTurns } from './turns'
 import { CLOSE_REASON } from './verdict'
 import type { PhaseContext, PhaseEmittedEvent, PhaseResult, PipelineError } from '../../types'
-import { openCloseFixture, queryAllOn, type CloseFixture } from '../__tests__/close-fixture'
-import { closeAgentPhase } from '../chapter-close-agent'
 import {
-  closeIdsOf,
-  closeLedgerOf,
-  seedCloseLedger,
-  setCloseParts,
-  setCloseRange,
-} from '../close-intermediates'
-import type { CloseLedger, CloseRange } from '../intermediates'
+  openCloseFixture,
+  queryAllOn,
+  setSceneOf,
+  type CloseFixture,
+} from '../__tests__/close-fixture'
+import { closeAgentPhase } from '../chapter-close-agent'
+import { closeIdsOf, closeLedgerOf, seedCloseLedger } from '../close-intermediates'
+import type { CloseLedger } from '../intermediates'
+import { closePhaseContext, drainApplying } from './__tests__/agent-loop'
 
 vi.mock('@/lib/ai', async (importOriginal) => ({
   ...(await importOriginal<Record<string, unknown>>()),
@@ -1149,57 +1148,6 @@ describe('runCloseTask', () => {
   })
 })
 
-// `cuts: null` parks no parts, as a run whose metadata phase never ran.
-function closePhaseContext(
-  fixture: CloseFixture,
-  opts: {
-    actionId: string
-    range: CloseRange
-    cuts: readonly ChapterPartCut[] | null
-    abortSignal?: AbortSignal
-  },
-): PhaseContext {
-  const { actionId, range, cuts, abortSignal = new AbortController().signal } = opts
-  const intermediates: Record<string, unknown> = {}
-  setCloseRange(intermediates, range)
-  if (cuts !== null) setCloseParts(intermediates, cuts)
-  return {
-    actionId,
-    abortSignal,
-    intermediates,
-    log: makeLogger(actionId),
-    db: fixture.ctx.db,
-    runInTransaction: fixture.ctx.runInTransaction,
-    storyId: fixture.storyId,
-    branchId: fixture.branchId,
-  }
-}
-
-// Stands in for the orchestrator over a whole phase: each group lands in `fixture` and its outcome
-// goes back, so a landed create counts toward a cap as it does in a close.
-async function drainApplying(
-  ctx: PhaseContext,
-  fixture: CloseFixture,
-): Promise<{ events: PhaseEmittedEvent[]; result: PhaseResult }> {
-  const gen = closeAgentPhase(ctx)
-  const events: PhaseEmittedEvent[] = []
-  let reply: GroupOutcome | undefined
-  for (;;) {
-    const next = await gen.next(reply)
-    if (next.done) return { events, result: next.value }
-    const event = next.value
-    events.push(event)
-    reply =
-      event.type === 'delta_group_emitted'
-        ? await applyDeltaActionGroupWithOutcomes(
-            event.actions,
-            { actionId: ctx.actionId, branchId: ctx.branchId, entryId: event.entryId },
-            fixture.ctx,
-          )
-        : undefined
-  }
-}
-
 describe('closeAgentPhase', () => {
   const SCRIPTED_ERROR: PipelineError = { kind: 'orchestrator', detail: 'scripted task failure' }
   let fixture: CloseFixture
@@ -1918,19 +1866,6 @@ describe('closeAgentPhase over three parts', () => {
     })
   }
 
-  async function setScene(entryId: string, sceneIds: readonly string[]): Promise<void> {
-    const where = and(eq(storyEntries.branchId, f.branchId), eq(storyEntries.id, entryId))
-    const [row] = await f.ctx.db
-      .select({ metadata: storyEntries.metadata })
-      .from(storyEntries)
-      .where(where)
-    if (!row?.metadata) throw new Error(`setScene: entry ${entryId} has no metadata`)
-    await f.ctx.db
-      .update(storyEntries)
-      .set({ metadata: { ...row.metadata, sceneEntities: [...sceneIds] } })
-      .where(where)
-  }
-
   async function putThread(id: string, title: string): Promise<void> {
     await f.ctx.db.insert(threads).values({
       id,
@@ -2049,8 +1984,8 @@ describe('closeAgentPhase over three parts', () => {
   it("starts Identity in part 2 from part 2's scene characters only", async () => {
     __setCloseAgentSlots(IDENTITY_AND_THREADS)
     await putCharacter(TOBIN, 'Tobin')
-    await setScene(f.entries[2]!.id, [WREN])
-    await setScene(f.entries[7]!.id, [TOBIN])
+    await setSceneOf(f, f.entries[2]!.id, [WREN])
+    await setSceneOf(f, f.entries[7]!.id, [TOBIN])
 
     await drainApplying(partsCtx(), f)
 
@@ -2065,8 +2000,8 @@ describe('closeAgentPhase over three parts', () => {
   it('renders one system half for Identity and Threads in a part, and another in the next', async () => {
     __setCloseAgentSlots(IDENTITY_AND_THREADS)
     await putCharacter(TOBIN, 'Tobin')
-    await setScene(f.entries[2]!.id, [WREN])
-    await setScene(f.entries[7]!.id, [TOBIN])
+    await setSceneOf(f, f.entries[2]!.id, [WREN])
+    await setSceneOf(f, f.entries[7]!.id, [TOBIN])
     await putThread(LETTER, 'Deliver the letter')
 
     await drainApplying(partsCtx(), f)

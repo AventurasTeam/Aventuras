@@ -1743,8 +1743,10 @@ creates and updates with it, pruned in the same transaction, so no
 write left in the log targets a row that is gone. The prune passes
 over deletes: the pair's own delete is already pruned as its holder,
 and a delete that captured it still holds other rows. CTRL-Z and redo
-refuse such a reversal instead (below). Restoring column by column
-assumes no other constraint spans a row's columns. The collision flag's
+refuse such a reversal instead (below). Restoring column by column, and
+a schema-backed column sub-field by sub-field, unvalidated, assumes no
+other constraint spans a row's columns or a column's sub-fields. The
+collision flag's
 three columns (flag, partner and reason) are the exception: they are
 restored and kept as one field, as are a place's parent and its
 unplaced mark, an entity's status and its `retired_reason`, and a
@@ -1926,6 +1928,11 @@ the delete can be undone only after the edit is, once the prose the
 fact came from is back. The cost is narrow: a pass that runs between
 the two undos cannot re-derive a link naming the still-deleted row,
 and that link stays lost.
+
+An undo of an update whose row is absent and that no delete holds
+writes nothing, and the delta is pruned with the set. Only the row-blind
+retrieval-count bump can log one, since it updates without reading its
+row (`bumpAwarenessRetrieval`); every other update reads its row first.
 
 **Four states are refused as integrity errors, writing nothing.** A
 delete the planner would prune that shares its action group with a

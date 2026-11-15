@@ -2,6 +2,7 @@ import { z } from 'zod'
 
 import { USER_EDITED_SINCE_PROSE } from '@/lib/actions/types'
 import type { CloseReasonKey, Entity } from '@/lib/db'
+import { boundStateText } from '@/lib/piggyback'
 import { flaggedSideOf, flagStillHolds } from '@/lib/world'
 
 import { entityReportRow, readEntity } from './entity-write'
@@ -112,7 +113,7 @@ async function planRetire(args: RetireArgs, ctx: WriteContext): Promise<WritePla
           payload: {
             branchId: ctx.branchId,
             id,
-            retiredReason: args.why.trim(),
+            retiredReason: boundStateText(args.why.trim()).text,
             proseEntryId: ctx.proseEntryId,
           },
         },

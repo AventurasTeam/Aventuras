@@ -3,7 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { applyDeltaAction } from '@/lib/actions/delta/apply-delta-action'
 import { USER_EDITED_SINCE_PROSE, type DeltaSource } from '@/lib/actions/types'
-import { generateToolStep, type ResolveModelConfig, type ToolStepResult } from '@/lib/ai'
+import { generateToolStep, type ResolveModelConfig } from '@/lib/ai'
 import {
   branches,
   deltas,
@@ -14,7 +14,6 @@ import {
   type Entity,
   type EntityState,
   type NewEntity,
-  type StoryMode,
 } from '@/lib/db'
 import { makeLogger } from '@/lib/diagnostics'
 import { resetAllStores } from '@/lib/stores'
@@ -30,7 +29,7 @@ import { turnInTextReason } from './text-checks'
 import { assertReplaySafe, type CloseTool } from './tool'
 import { readTaskTurns, storyModeOf } from './turns'
 import { CLOSE_REASON } from './verdict'
-import type { PhaseContext, PhaseEmittedEvent, PhaseResult } from '../../types'
+import type { PhaseContext, PhaseEmittedEvent } from '../../types'
 import {
   runDispatchCalls,
   shownOf,
@@ -38,9 +37,15 @@ import {
   type DispatchSetup,
   type ScriptedCall,
 } from '../__tests__/close-dispatch'
-import { openCloseFixture, type CloseFixture } from '../__tests__/close-fixture'
-import { closeAgentPhase } from '../chapter-close-agent'
-import { closeLedgerOf, setCloseParts, setCloseRange } from '../close-intermediates'
+import {
+  openCloseFixture,
+  putEntityRow,
+  setSceneOf,
+  setStoryMode,
+  type CloseFixture,
+} from '../__tests__/close-fixture'
+import { closeLedgerOf } from '../close-intermediates'
+import { closePhaseContext, drainApplying, stepWith } from './__tests__/agent-loop'
 
 vi.mock('@/lib/ai', async (importOriginal) => ({
   ...(await importOriginal<Record<string, unknown>>()),
@@ -1249,65 +1254,6 @@ const START_ROWS = {
   quietTwin: 'fact_00000000-0000-4000-8000-00000000b00c',
 } as const
 
-type EntityRowSeed = {
-  id: string
-  kind: 'character' | 'location' | 'faction'
-  name: string
-  status?: 'active' | 'retired'
-  description?: string | null
-  state?: EntityState | null
-  keywords?: string[]
-  /** The fixture's branch unless given. */
-  branchId?: string
-}
-
-// Written as a hand-edited or imported row is, with no delta: a start reads rows, not history.
-async function putEntityRow(fx: CloseFixture, row: EntityRowSeed): Promise<void> {
-  await fx.ctx.db.insert(entities).values({
-    id: row.id,
-    branchId: row.branchId ?? fx.branchId,
-    kind: row.kind,
-    name: row.name,
-    description: row.description ?? null,
-    status: row.status ?? 'active',
-    retiredReason: row.status === 'retired' ? 'Left the story.' : null,
-    injectionMode: 'auto',
-    state: row.state ?? null,
-    keywords: row.keywords ?? [],
-    createdAt: 1,
-    updatedAt: 1,
-  })
-}
-
-async function setSceneOf(
-  fx: CloseFixture,
-  entryId: string,
-  sceneIds: readonly string[],
-): Promise<void> {
-  const where = and(eq(storyEntries.branchId, fx.branchId), eq(storyEntries.id, entryId))
-  const [row] = await fx.ctx.db
-    .select({ metadata: storyEntries.metadata })
-    .from(storyEntries)
-    .where(where)
-  if (!row?.metadata) throw new Error(`setSceneOf: entry ${entryId} has no metadata`)
-  await fx.ctx.db
-    .update(storyEntries)
-    .set({ metadata: { ...row.metadata, sceneEntities: [...sceneIds] } })
-    .where(where)
-}
-
-async function setStoryMode(fx: CloseFixture, mode: StoryMode): Promise<void> {
-  const [story] = await fx.ctx.db
-    .select({ definition: stories.definition })
-    .from(stories)
-    .where(eq(stories.id, fx.storyId))
-  if (!story?.definition) throw new Error('setStoryMode: the fixture story has no definition')
-  await fx.ctx.db
-    .update(stories)
-    .set({ definition: { ...story.definition, mode } })
-    .where(eq(stories.id, fx.storyId))
-}
-
 // As the agent phase does before any task: every chapter entry a turn, t1 the first.
 function idsWithTurns(fx: CloseFixture): CloseIds {
   const ids = new CloseIds()
@@ -1938,67 +1884,16 @@ describe('identityTask', () => {
   })
 })
 
-// A reply with no tool call: the task ends after one step.
-function noCallStep(): ToolStepResult {
-  return {
-    status: 'ok',
-    step: {
-      calls: [],
-      invalidCalls: [],
-      responseMessages: [
-        { role: 'assistant', content: [{ type: 'text', text: 'Nothing to change.' }] },
-      ],
-      text: 'Nothing to change.',
-      finishReason: 'stop',
-      usage: {
-        inputTokens: 100,
-        inputTokenDetails: { noCacheTokens: 100, cacheReadTokens: 0, cacheWriteTokens: 0 },
-        outputTokens: 5,
-        outputTokenDetails: { textTokens: 5, reasoningTokens: 0 },
-        totalTokens: 105,
-      },
-    },
-    recoverable: [],
-  }
-}
-
 // The opening through the third reply (positions 1-7): one part.
 function closePhaseFor(fx: CloseFixture): PhaseContext {
-  const actionId = 'act_identity_close'
-  const intermediates: Record<string, unknown> = {}
-  const range = {
-    chapterId: 'chap_identity_close',
-    startEntryId: fx.entries[0]!.id,
-    endEntryId: fx.replyIds[2]!,
-  }
-  setCloseRange(intermediates, range)
-  // As the metadata phase stores a chapter that fits; the agent reads only the cut's ids.
-  setCloseParts(intermediates, [
-    { part: 1, startEntryId: range.startEntryId, endEntryId: range.endEntryId, tokens: 0 },
-  ])
-  return {
-    actionId,
-    abortSignal: new AbortController().signal,
-    intermediates,
-    log: makeLogger(actionId),
-    db: fx.ctx.db,
-    runInTransaction: fx.ctx.runInTransaction,
-    storyId: fx.storyId,
-    branchId: fx.branchId,
-  }
-}
-
-// No step writes here, so no group outcome is ever owed back.
-async function drainAgent(
-  ctx: PhaseContext,
-): Promise<{ events: PhaseEmittedEvent[]; result: PhaseResult }> {
-  const gen = closeAgentPhase(ctx)
-  const events: PhaseEmittedEvent[] = []
-  for (;;) {
-    const next = await gen.next(undefined)
-    if (next.done) return { events, result: next.value }
-    events.push(next.value)
-  }
+  return closePhaseContext(fx, {
+    actionId: 'act_identity_close',
+    range: {
+      chapterId: 'chap_identity_close',
+      startEntryId: fx.entries[0]!.id,
+      endEntryId: fx.replyIds[2]!,
+    },
+  })
 }
 
 const taskStartsIn = (events: readonly PhaseEmittedEvent[]): PhaseEmittedEvent[] =>
@@ -2021,7 +1916,7 @@ describe('Identity in the production close', () => {
 
   beforeEach(async () => {
     vi.mocked(generateToolStep).mockReset()
-    vi.mocked(generateToolStep).mockResolvedValue(noCallStep())
+    vi.mocked(generateToolStep).mockResolvedValue(stepWith([]))
     __setCloseAgentSlots(undefined)
     fx = await openCloseFixture()
   })
@@ -2035,7 +1930,7 @@ describe('Identity in the production close', () => {
     await putEntityRow(fx, { id: START_ROWS.pip, kind: 'character', name: 'Pip' })
     await setSceneOf(fx, fx.entries[2]!.id, [START_ROWS.pip])
 
-    const { events, result } = await drainAgent(closePhaseFor(fx))
+    const { events, result } = await drainApplying(closePhaseFor(fx), fx)
 
     expect(result).toEqual({ status: 'completed' })
     expect(taskStartsIn(events)).toEqual(PART_ONE_STARTS)
@@ -2052,7 +1947,7 @@ describe('Identity in the production close', () => {
   it("makes only Lore's step, and no failure, when no other task has anything to start from", async () => {
     const ctx = closePhaseFor(fx)
 
-    const { events, result } = await drainAgent(ctx)
+    const { events, result } = await drainApplying(ctx, fx)
 
     expect(result).toEqual({ status: 'completed' })
     expect(taskStartsIn(events)).toEqual(PART_ONE_STARTS)
@@ -2069,7 +1964,7 @@ describe('Identity in the production close', () => {
     __setCloseAgentSlots(NO_CLOSE_TASKS)
 
     expect(closeAgentSlots()).toBe(NO_CLOSE_TASKS)
-    const { events, result } = await drainAgent(closePhaseFor(fx))
+    const { events, result } = await drainApplying(closePhaseFor(fx), fx)
 
     expect(result).toEqual({ status: 'completed' })
     expect(events).toEqual([])

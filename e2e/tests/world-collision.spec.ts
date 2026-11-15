@@ -2,7 +2,7 @@ import { DatabaseSync } from 'node:sqlite'
 
 import { expect, test, type Page } from '@playwright/test'
 
-import { goToWorld, undoFromReader } from '../flows/navigation'
+import { goToReader, goToWorld, undoFromReader } from '../flows/navigation'
 import { currentBranchId, queryApp, tailMetadata, queryScalar } from '../harness/db'
 import { launchApp, type LaunchedApp } from '../harness/launch'
 import { suppressNativeUnloadDialogRace } from '../harness/reload'
@@ -274,7 +274,7 @@ test.describe.serial('World collision resolve', () => {
 
     await world.resolveButton(page).click()
     await expect(saveSession.unsavedDialog(page)).toBeVisible()
-    await expect(world.collisionMode(page, 'merge')).toHaveCount(0)
+    await expect(world.collisionModeMounted(page, 'merge')).toHaveCount(0)
     await saveSession.unsavedDiscard(page).click()
     await expect(saveSession.unsavedDialog(page)).toHaveCount(0)
     await expect(world.collisionMode(page, 'merge')).toBeVisible()
@@ -294,9 +294,7 @@ test.describe.serial('World collision resolve', () => {
     await expect(world.collisionStrip(page, 'Brannoc')).toBeVisible()
 
     // Known screen for the tests after this one.
-    await chrome.actionsTrigger(page).click()
-    await chrome.goToReaderRow(page).click()
-    await page.waitForURL(/\/reader-composer\//)
+    await goToReader(page)
   })
 
   test('keep as distinct clears the flag in one delta; undo re-flags the row', async () => {

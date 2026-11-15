@@ -702,10 +702,15 @@ a dozen spellings, some restated only by row state, and gone rows
 interpolate ids, so both carry a stable marker,
 `noopRefusal(reason, 'restated' | 'gone' | null)`
 (`lib/actions/delta/registry.ts:88`), and rule refusals pass `null`.
-`updateEntity`, `updateLore`, `updateThread` and `updateHappening` return
-a hard `not-found` that aborts a group
-(`lib/actions/lore/register.ts:108-112`), which gives the whole call
-`rejected` with nothing written, and an all-noop group still returns its
+A handler whose target row is missing either marks a gone noop (the
+status, keyword, faction, placement and flag handlers) or returns a hard
+`not-found`, coded `TARGET_NOT_FOUND` (`lib/actions/types.ts`), that
+aborts a group: every update and delete handler that reads its row whole,
+`updateEntity`, `updateLore`, `updateThread` and `updateHappening` among
+them, and the per-turn writer's state patches. The close reads the code
+as row-gone, so a hard not-found gives the whole call `rejected` with
+nothing written; `lib/actions/delta/noop-marks.test.ts` scans
+`lib/actions` for both shapes. An all-noop group still returns its
 outcomes. The exact types are settled by 5.5a's implementation and
 sequenced to the tool slices. Its
 starting design: a tool's reads and refusals run ahead of one group,

@@ -1,6 +1,7 @@
 import { z } from 'zod'
 
 import { isJsonObject } from '@/lib/json-object'
+import { modelTermFits } from '@/lib/keyword-terms'
 import { PLOT_ICON_KEYS } from '@/lib/plot'
 
 // No .transform() on a parsed value: z.toJSONSchema (used by generateStructured) throws on one,
@@ -343,13 +344,19 @@ export function readClassifierReply(parsed: ParsedClassifierReply): {
   }
   const presentIfSent = <T>(list: TolerantList, entries: readonly (T | undefined)[] | undefined) =>
     entries === undefined ? undefined : present(list, entries)
+  // Here, not in the schema: a maxLength would change the schema the prompt shows the model.
+  const presentTerms = (list: TolerantList, terms: readonly (string | undefined)[]) =>
+    present(
+      list,
+      terms.map((term) => (term !== undefined && modelTermFits(term) ? term : undefined)),
+    )
   const withKeywords = <E extends { keywords: readonly (string | undefined)[] }>(
     list: 'newCharacters' | 'newFactions' | 'newPlaces',
     entries: readonly (E | undefined)[],
   ): (Omit<E, 'keywords'> & { keywords: string[] })[] =>
     present(list, entries).map((entry) => ({
       ...entry,
-      keywords: present(`${list}.keywords`, entry.keywords),
+      keywords: presentTerms(`${list}.keywords`, entry.keywords),
     }))
   const reply: ClassifierExtraction = {
     happenings: present('happenings', parsed.happenings).map((happening) => ({
@@ -371,7 +378,7 @@ export function readClassifierReply(parsed: ParsedClassifierReply): {
     memberships: present('memberships', parsed.memberships),
     aliases: present('aliases', parsed.aliases).map((alias) => ({
       ...alias,
-      terms: present('aliases.terms', alias.terms),
+      terms: presentTerms('aliases.terms', alias.terms),
     })),
     renames: present('renames', parsed.renames),
     placements: present('placements', parsed.placements),

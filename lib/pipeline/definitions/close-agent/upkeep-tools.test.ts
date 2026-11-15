@@ -34,7 +34,8 @@ import {
   type ScriptedCall,
   type ShownRow,
 } from '../__tests__/close-dispatch'
-import { openCloseFixture, type CloseFixture } from '../__tests__/close-fixture'
+import { appendLateTurns, openCloseFixture, type CloseFixture } from '../__tests__/close-fixture'
+import { seedHappening } from './__tests__/happening-tools-fixture'
 
 // ---- Harness: the Upkeep task's tools and turns, on the shared scripted dispatch. ----
 
@@ -221,59 +222,6 @@ async function addFork(fx: CloseFixture): Promise<void> {
     name: 'fork',
     createdAt: 2,
   })
-}
-
-/** A turn written after the fixture's, as the fixture writes one: the reply anchored on itself. */
-async function appendTurnEntry(
-  fx: CloseFixture,
-  entry: { id: string; position: number; kind: 'user_action' | 'ai_reply'; content: string },
-): Promise<void> {
-  const result = await applyDeltaAction(
-    {
-      action: {
-        kind: 'createStoryEntry',
-        source: entry.kind === 'user_action' ? 'user_edit' : 'ai_classifier',
-        payload: {
-          entry: {
-            ...entry,
-            branchId: fx.branchId,
-            chapterId: null,
-            metadata: {
-              sceneEntities: [],
-              currentLocationId: null,
-              worldTime: entry.position * 60,
-            },
-            createdAt: 1_767_225_600_000 + entry.position,
-          },
-        },
-      },
-      actionId: `act_late_turn_${entry.position}`,
-      branchId: fx.branchId,
-      entryId: entry.kind === 'ai_reply' ? entry.id : null,
-    },
-    fx.ctx,
-  )
-  if (result.status !== 'ok') throw new Error(`appending ${entry.id} refused: ${result.reason}`)
-}
-
-/** On a two-turn fixture (t1–t5): appends t6, t7 (E), so a write before them lands before E. */
-async function appendLateTurns(fx: CloseFixture): Promise<DispatchTurns> {
-  await appendTurnEntry(fx, {
-    id: 'entry_late_006',
-    position: 6,
-    kind: 'user_action',
-    content: 'I ask who keeps the far bank.',
-  })
-  await appendTurnEntry(fx, {
-    id: 'entry_late_007',
-    position: 7,
-    kind: 'ai_reply',
-    content: 'Tobin pulls his hood low and says nothing.',
-  })
-  return {
-    endEntryId: 'entry_late_007',
-    taskEntryIds: [...fx.entries.map((entry) => entry.id), 'entry_late_006', 'entry_late_007'],
-  }
 }
 
 afterEach(() => {
@@ -1188,6 +1136,19 @@ describe('set_keywords', () => {
     expect(await runDeltas(f, result.actionId)).toEqual([])
   })
 
+  it('refuses an add over 120 characters, landing none of the call', async () => {
+    const SHELF = place(27)
+    await seedEntity(f, { id: SHELF, kind: 'location', name: 'The shelf', keywords: [] })
+    const shown = [...KEYWORD_SHOWN, { table: 'entities', id: SHELF, name: 'The shelf' } as const]
+
+    const { result, calls } = await runUpkeepCalls(f, shown, [
+      { toolName: 'set_keywords', input: { id: 'l5', add: ['ledge', 'w'.repeat(121)], ...cite() } },
+    ])
+
+    expect(calls[0]).toMatchObject({ result: 'rejected', reason: 'keyword-too-long' })
+    expect(await runDeltas(f, result.actionId)).toEqual([])
+  })
+
   // A removal stores nothing, so a term a pass stored that reads as a handle can still go.
   it('removes a term a pass added that holds a short id', async () => {
     const SHELF = place(27)
@@ -1295,36 +1256,6 @@ const HAPPENING_SHOWN: readonly ShownRow[] = [
   { table: 'happenings', id: SPREAD, name: 'The harvest news' },
 ]
 
-async function seedHappening(
-  fx: CloseFixture,
-  row: { id: string; title: string; commonKnowledge: 0 | 1 },
-): Promise<void> {
-  const result = await applyDeltaAction(
-    {
-      action: {
-        kind: 'createHappening',
-        source: 'periodic_classifier',
-        payload: {
-          entry: {
-            id: row.id,
-            branchId: fx.branchId,
-            title: row.title,
-            occurredAtEntryId: fx.entries[4]!.id,
-            commonKnowledge: row.commonKnowledge,
-            createdAt: 1,
-            updatedAt: 1,
-          },
-        },
-      },
-      actionId: 'act_seed_world',
-      branchId: fx.branchId,
-      entryId: null,
-    },
-    fx.ctx,
-  )
-  if (result.status !== 'ok') throw new Error(`seeding ${row.title} refused: ${result.reason}`)
-}
-
 async function editHappening(
   fx: CloseFixture,
   id: string,
@@ -1362,12 +1293,12 @@ describe('mark_common_knowledge', () => {
 
   beforeEach(async () => {
     f = await openCloseFixture()
-    await seedHappening(f, { id: FIGHT, title: 'A fight at the inn', commonKnowledge: 0 })
-    await seedHappening(f, { id: TOLL, title: 'The new toll', commonKnowledge: 1 })
+    await seedHappening(f, { id: FIGHT, title: 'A fight at the inn', commonKnowledge: 0, at: 4 })
+    await seedHappening(f, { id: TOLL, title: 'The new toll', commonKnowledge: 1, at: 4 })
     await editHappening(f, TOLL, 'later-turn', { commonKnowledge: 0 })
-    await seedHappening(f, { id: CROSSING, title: 'The night crossing', commonKnowledge: 1 })
+    await seedHappening(f, { id: CROSSING, title: 'The night crossing', commonKnowledge: 1, at: 4 })
     await editHappening(f, CROSSING, 'user', { commonKnowledge: 0 })
-    await seedHappening(f, { id: SPREAD, title: 'The harvest news', commonKnowledge: 0 })
+    await seedHappening(f, { id: SPREAD, title: 'The harvest news', commonKnowledge: 0, at: 4 })
     await editHappening(f, SPREAD, 'later-turn', { commonKnowledge: 1 })
   })
 
@@ -1428,7 +1359,7 @@ describe('mark_common_knowledge', () => {
   // The action judges the user's edit against the latest cited turn's prose, not E's.
   it('skips a mark the user cleared after the cited turn though before E', async () => {
     f = await openCloseFixture({ turns: 2 })
-    await seedHappening(f, { id: CROSSING, title: 'The night crossing', commonKnowledge: 1 })
+    await seedHappening(f, { id: CROSSING, title: 'The night crossing', commonKnowledge: 1, at: 4 })
     await editHappening(f, CROSSING, 'user', { commonKnowledge: 0 })
     const late = await appendLateTurns(f)
 
@@ -1572,7 +1503,7 @@ describe("a part and a later part's turns", () => {
   })
 
   it("lands part 1's mark over a chapter-wide task's write on E, as no later turn's", async () => {
-    await seedHappening(f, { id: TOLL, title: 'The new toll', commonKnowledge: 1 })
+    await seedHappening(f, { id: TOLL, title: 'The new toll', commonKnowledge: 1, at: 4 })
     await editHappening(f, TOLL, 'this-close', { commonKnowledge: 0 })
 
     const { calls } = await runUpkeepCalls(

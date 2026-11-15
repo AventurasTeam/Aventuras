@@ -15,7 +15,118 @@ for the placement rule.
 
 ## Data-model
 
-No open items.
+- **An undo restores a whole prior value over later writes.** A write's
+  undo stores the value it replaced, not the change it made, so
+  reversing it under a later write to the same field takes that write
+  back too. Three cases are known, and the fix in each is an undo that
+  reverts only its own write. Moved here 2026-11-15 from `parked.md` and
+  the triage queue, developer decision: the user-edit case breaks the
+  rule that a close never removes a keyword the user wrote
+  ([`retrieval.md → Keywords schema`](./memory/retrieval.md#keywords-schema)),
+  which v1 makes.
+
+  **A keyword write's undo restores the whole prior list.**
+  `appendEntityKeywords` and `renameEntity`
+  (`lib/actions/entities/state-patch-actions.ts`) store the row's
+  pre-write keywords as undo. Reversing a write that landed before an
+  earlier turn's keyword write, which the reversal spares, restores the
+  list from before it and takes the spared write's terms away too, and
+  the watermark clamp means that turn is never re-read
+  ([`memory/classifier.md → Provenance attribution`](./memory/classifier.md#provenance-attribution)
+  says reversal spares facts about surviving turns). Within one reply
+  the planner plans every keyword write to a row in turn order (its
+  renames, aliases, a known or promoted mention's terms and a reused
+  place's), and the periodic classifier, their only writer, lands its
+  passes in turn order, so the loss needs a later reply carrying an
+  earlier turn's term than one already written. One reply can carry it
+  too: a new place waiting for a later turn's parent writes a reused
+  place's terms at its parent's turn
+  ([`memory/classifier.md → Mentioned places`](./memory/classifier.md#mentioned-places)),
+  after a keyword write of a turn between them. The general fix is an
+  undo that removes only the terms its own write added.
+
+  Parked 2026-10-24; the signal is a keyword of a surviving turn lost to
+  a reversal, or a second keyword writer landing terms out of turn order.
+  Chapter close isn't one: it skips a keyword list a turn past its
+  chapter wrote.
+
+  **Undoing a user's keyword edit wipes a later pass's term.** CTRL-Z
+  or a rollback window of a user's keyword edit under a later
+  periodic keyword write restores the whole list from the undo
+  payload, wiping the pass's term, while the pass's surviving delta
+  keeps a before-list without the user's restored term. The close's
+  keyword-author walk then credits that term to the pass, and a later
+  close may remove it (5.8 records this as the walk's second known
+  gap). The same whole-list restore may hit other list fields a pass
+  appends to, unchecked, and `data-model.md`'s "periodic-classifier
+  deltas above it … stay put" doesn't hold when they wrote the same
+  field. Same root cause and fix as the case above, and the revisit signal it
+  was parked on. For the undo substrate's owner. Raised in 5.8's
+  execution, developer decision 2026-11-10. The close's keyword writes
+  store the whole prior list as undo too (`setEntityKeywords`,
+  `updateLore`), so CTRL-Z of a close under a later pass's keyword write
+  loses that pass's term the same way; read from the code, not probed.
+
+  **A count bump's undo can bring back a pre-reset count.**
+  `bumpAwarenessRetrieval`'s undo restores the prior `retrieval_count` by
+  assignment (`lib/actions/happenings/register-awareness.ts`), and
+  reverse-replay rewrites only the copies a delete holds. So a rollback
+  past a close puts a later turn's pre-reset count back over the close's
+  reset, and CTRL-Z of the close can restore a kept row's count with a
+  later turn's bump in it. One chapter's frequency signal is off; no
+  data is lost. Candidate fixes: a relative undo for count bumps, or
+  reverse-replay rebasing the held count. The later-bump case in
+  `lib/pipeline/__tests__/close-round-trip.test.ts` pins today's
+  behaviour. Developer decision 2026-11-14 (5.9): record the edge in
+  canon, fix later.
+
+- **World merge re-creates awareness rows as the user's.** World's
+  character merge (`lib/world/entity-merge.ts`, `merge-links.ts`) moves
+  each awareness row the kept character lacks by re-creating it as a
+  `user_edit` while `deleteEntity` cascades the original. The row guard
+  reads a user create as a pin the user set, so `set_pin` skips the row
+  at every close, the Awareness start leaves it out of the frequent set,
+  a happenings merge keeps its pin on the kept row, and a merge that
+  would absorb a happening a merged character knows is skipped
+  ([`chapter-close.md → 3e`](./memory/chapter-close.md#3e--happenings-consolidation)).
+  Re-pointing the row (an update of `character_id`) keeps its history,
+  so only a pin the user set counts. Read from the code, not built, a
+  re-point needs four things. First, a re-point arm on
+  `happening_awareness`, its undo `{characterId}`. Second, the group's
+  `deleteEntity` cascade has to skip the rows the group re-points:
+  handlers read pre-group state, so the cascade still captures them and
+  `groupConflict` refuses the group ("the group writes …, which a
+  delete in it cascades", `lib/actions/delta/apply-delta-action.ts`);
+  a widened `deleteEntity` payload or a `GroupScope` field. Third, redo
+  has to skip them too: its delete arm (`applyRedoLocked`,
+  `lib/actions/delta/redo.ts`) re-runs the cascade against the post-undo
+  database, where the rows are back on the loser, and would delete them
+  with no record, so every cascade's `run` likely takes an exclusion
+  set. Fourth, History lists an awareness update only by its labelled
+  columns (`lib/history/field-labels.ts`), so a re-point shows nowhere,
+  where today's re-create lists. Reverse-replay needs no change by that
+  reading: an undo restores the entity first, then points the row back.
+  Its closure is another matter: it judges a link row's references by
+  their live value because a link row's ends never change after its
+  create
+  ([`generation-pipeline.md → Reverse-replay`](./generation-pipeline.md#reverse-replay)),
+  so a re-point changes that canon, and the closure would judge
+  `character_id` by its pre-value, as it does a `state` reference.
+  Involvements need nothing: their re-create trips Q5's deleted-link
+  check and `userTouched` only in a close whose cited prose predates the
+  World merge, and a re-point would be a user edit after that prose too.
+  A cheaper alternative to weigh first, unverified: the re-create marks
+  each row as carried from the loser's row, and user precedence reads
+  the pin's ownership from the original row's history. Two reads decide
+  that the user set a pin, the row guard's `userEverWrote`
+  (`lib/actions/delta/row-guard.ts`) and the Awareness start's
+  `userPinned` query (`close-awareness.ts`), so both change, and a row
+  carried by two merges in a row reads the first row's history. It
+  matters at every close today: the `set_pin` skip and the frequent-set
+  gap hit whether or not 3e fires, and only the merge skip waits on it
+  ([`3e's thresholds`](#tuning-and-play-testing)).
+  Developer decision 2026-11-14 (Q13), from 5.9's slice review; moved
+  here from the triage queue 2026-11-15, developer decision.
 
 ## UX
 
@@ -272,6 +383,19 @@ No open items.
   down. Both from 5.3's slice review, 2026-11-03, in stories, not on a
   device. Routed from triage 2026-11-05.
 
+- **The reader's in-place prose edit has no leave guard.**
+  `components/reader/reader-surface.tsx:~330` (`editingId`, `editDraft`):
+  any navigation that pops the reader drops the draft, including the
+  reader's own Return, and a review-row press from the reader adds one
+  more path. [`save-sessions.md → Where applied`](./ui/patterns/save-sessions.md#where-applied)
+  doesn't classify it. Raised in 5.11's review. The default, developer
+  decision 2026-11-15: a dirty inline editor takes the
+  [navigate-away guard](./ui/patterns/save-sessions.md#navigate-away-guard--global-intercept)
+  with `UnsavedChangesDialog`, its Save running the editor's
+  `commitDraft`, on Return and every other leave, and `save-sessions.md`
+  classifies it. The reader's world-time and scene edit sheets already
+  guard their own dismiss.
+
 ## Tuning and play testing
 
 v1 work held for the end of the cycle, once every base system is
@@ -390,8 +514,8 @@ breakdown under [UX](#ux).
   2026-11-14, from Slice 5.9's probes. Once 3e fires, World-merged
   awareness rows start to block merges: each counts as a pin the user
   set, so a merge that would absorb a happening a merged character knows
-  is skipped ([`triage.md`](./implementation/triage.md), "World merge
-  re-creates awareness rows as the user's.").
+  is skipped ([Data-model](#data-model), "World merge re-creates
+  awareness rows as the user's.").
 
 - **Which embedders are the floor and the standard.** The dev
   embedder, `Xenova/all-MiniLM-L6-v2`, is today's mobile default
@@ -446,6 +570,24 @@ breakdown under [UX](#ux).
   reply is stripped of it or told not to (added 2026-10-30 by the
   content pass's implementation).
 
+- **How many keywords a row may hold.** A model's keyword lists have
+  no count bound, only a term-length one
+  ([`retrieval.md → Keywords schema`](./memory/retrieval.md#keywords-schema)):
+  the classifier's creates and appends, and the close's `set_keywords`,
+  `create_lore` and `update_lore`, land every term they send. Retrieval
+  already bounds what keywords cost injection
+  ([`Keyword injection budget`](./memory/retrieval.md#keyword-injection-budget)),
+  but every entity's keywords render in each periodic pass's Known
+  entities and in the close's upkeep rows, so a list that only grows
+  grows those prompts. Chapter metadata caps its browse keywords at 8
+  (`CHAPTER_KEYWORDS_MAX`). A starting guess to test is 50 terms a row,
+  the classifier dropping the overflow and a close refusing a longer
+  list only when it is longer than the stored one, as the soft caps do
+  ([`data-model.md → Soft caps + compaction discipline`](./data-model.md#soft-caps--compaction-discipline)).
+  Play on long stories shows whether lists grow that far. Split
+  2026-11-15 from a triage entry raised in 5.8's reviews, whose length
+  half landed; developer decision.
+
 - **Judge the classifier's descriptions.** A happening's description
   is the story's memory of the scene, recalled later as fact, and the
   evaluation set's checks look for the facts a reply must hold but
@@ -483,7 +625,13 @@ breakdown under [UX](#ux).
     costs a weak model what fewer tools are said to save, and whether a
     single conversation does better anywhere;
   - part size, half the window, and how a chapter cut in parts reads;
-  - servers that take the tool list and ignore it.
+  - servers that take the tool list and ignore it;
+  - the ledger's "Writes so far" lines, which name delta paths
+    (`state.traits`, `state.parent_location_id`, in
+    `close-agent/ledger.ts`) where the task templates name the tool's
+    arguments (`traits`, `parent`), leaving the model to join the two;
+    naming each by its argument is a per-tool map in `ledger.ts`
+    (routed from triage 2026-11-14).
 
   Play tunes the metadata prompt too, outside the agent. It has three data
   points. Two are in
@@ -595,3 +743,20 @@ breakdown under [UX](#ux).
   close at the merge after every part call ran; only near an 8k window
   and a chapter past about 420k tokens. Raised 2026-11-10 by 5.8's
   review; the merge size by its slice review.
+
+  The same long chapters should judge a later part's create closing the
+  row to an earlier part. A close's per-part task reads C12 past its
+  part's last turn, and a create counts as writing every field, blank
+  ones included (`wrotePath` in `lib/actions/delta/user-precedence.ts`,
+  through `wroteField`). Upkeep shows a part every live row its prose
+  names off the scene (`startUpkeep`), so an earlier part can name a row
+  a later part's turn first created and write nothing to it: detail only
+  the earlier part's turns hold is lost. Candidate fix: inside the
+  later-turn check only, a later part's create counts only for the
+  fields it set non-blank; `wroteField`'s create rule stays as it is for
+  user precedence. It costs more than it reads: a create delta stores no
+  undo payload, so "the fields it set" has to be rebuilt from later
+  deltas or the current row. 5.8 records the limit
+  ([`chapter-close.md → Tools and writes`](./memory/chapter-close.md#tools-and-writes)).
+  Raised in 5.8's slice review, developer decision 2026-11-10; routed
+  from triage 2026-11-14.

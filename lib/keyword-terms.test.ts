@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest'
 import {
   dedupeTerms,
   foldStackables,
+  modelTermFits,
   newTerms,
   normalizeTerm,
   normalizeStackables,
@@ -48,6 +49,14 @@ describe('newTerms', () => {
 
   it('matches the current list under the same normalization as incoming', () => {
     expect(newTerms([' The Grey Wolf ', 'Café'], ['the grey wolf', 'Café'])).toEqual([])
+  })
+})
+
+describe('modelTermFits', () => {
+  it('fits a term of 120 characters, trimmed, and not one of 121', () => {
+    expect(modelTermFits('a'.repeat(120))).toBe(true)
+    expect(modelTermFits(`  ${'a'.repeat(120)}\n`)).toBe(true)
+    expect(modelTermFits('a'.repeat(121))).toBe(false)
   })
 })
 

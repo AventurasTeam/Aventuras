@@ -4,7 +4,12 @@ import type { BranchEraFlip, NewBranchEraFlip } from '@/lib/db'
 import { branchEraFlipWriteSchema, branchEraFlips } from '@/lib/db'
 import { eraFlipsStore } from '@/lib/stores'
 
-import { register, type ActionHandler, type PatchMatchesColumns } from '../delta/registry'
+import {
+  register,
+  type ActionHandler,
+  type PatchMatchesColumns,
+  TARGET_NOT_FOUND,
+} from '../delta/registry'
 import type { DeltaSource } from '../types'
 
 type BranchEraFlipUpdatePatch = Partial<{ atWorldtime: number; eraName: string }>
@@ -71,7 +76,11 @@ const updateHandler: ActionHandler = async (action, branchId, ctx) => {
     .from(branchEraFlips)
     .where(and(eq(branchEraFlips.branchId, bid), eq(branchEraFlips.id, id)))
   if (!current)
-    return { status: 'rejected', reason: `update target branch_era_flips ${bid}:${id} not found` }
+    return {
+      status: 'rejected',
+      reason: `update target branch_era_flips ${bid}:${id} not found`,
+      code: TARGET_NOT_FOUND,
+    }
 
   const set: Record<string, unknown> = {}
   const undoPayload: Record<string, unknown> = {}
@@ -116,7 +125,11 @@ const deleteHandler: ActionHandler = async (action, branchId, ctx) => {
     .from(branchEraFlips)
     .where(and(eq(branchEraFlips.branchId, bid), eq(branchEraFlips.id, id)))
   if (!current)
-    return { status: 'rejected', reason: `delete target branch_era_flips ${bid}:${id} not found` }
+    return {
+      status: 'rejected',
+      reason: `delete target branch_era_flips ${bid}:${id} not found`,
+      code: TARGET_NOT_FOUND,
+    }
   return {
     status: 'ok',
     targetTable: 'branch_era_flips',

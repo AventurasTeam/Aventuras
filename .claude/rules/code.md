@@ -114,7 +114,9 @@ after the import line changes.
 `lib/*` modules expose a public API through their root `index.ts`;
 code outside the module (including outside `lib/`) imports only from
 there, enforced by `boundaries/dependencies`. Intra-module imports
-are free, types are public, and `scripts/**` is exempt. See
+are free, types are public, and `scripts/**` is exempt. `lib/pipeline`
+takes no value import of the `lib/actions` barrel and may deep-import
+`@/lib/actions/types` alone. See
 [code-conventions.md → Module structure](../../docs/code-conventions.md#module-structure).
 
 ## State placement

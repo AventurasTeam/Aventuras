@@ -21,6 +21,7 @@ import { __setCloseAgentSlots, type CloseAgentSlots } from './slots'
 import { runDispatchCalls } from '../__tests__/close-dispatch'
 import { openCloseFixture, type CloseFixture } from '../__tests__/close-fixture'
 import { closeLedgerOf } from '../close-intermediates'
+import { drainApplying, stepWith } from './__tests__/agent-loop'
 import {
   uuid,
   ARIA,
@@ -46,9 +47,7 @@ import {
   seedAwarenessWorld,
   chapterIds,
   promptContextFor,
-  stepWith,
   closePhaseFor,
-  drainApplying,
   userWritesAwareness,
 } from './__tests__/close-awareness-fixture'
 

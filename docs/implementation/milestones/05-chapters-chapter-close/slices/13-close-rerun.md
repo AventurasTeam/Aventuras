@@ -1074,6 +1074,74 @@ change amends the scope above.
   relies on C4's `close_report`-last write, it replaces the old result
   just before commit, the `actionId` and failed-read tests are rewritten,
   and undo and redo don't emit on that bus. Raised in 5.11's review.
+- **What do this slice's re-run arms meet from 5.9?** Three things 5.9
+  shipped. First, the later-bump case in
+  `lib/pipeline/__tests__/close-round-trip.test.ts` overrides `armExpect`
+  and `armLog` for its rollback arms, since a count bump's undo restores by
+  assignment, and the re-run arms on that case need overrides of their
+  own: after a rollback past E, TOLD's row reads its pre-bump count over
+  the re-run's reset 0; after a rollback of a turn between E and the
+  re-run, then CTRL-Z, TOLD's row ends at its pre-merge count holding the
+  rolled-back bump. The test's key-list pins widen with them. Second, the
+  phase-writes rule in
+  [`generation-pipeline.md → Writes`](../../../../generation-pipeline.md#writes)
+  ("Never: delta-loggable writes outside those two events, delta-log
+  appends, …") has no exception for this slice's `reversal` phase, which
+  prunes deltas and writes `reversal_journals`. Third, 3d's count-bump
+  edge
+  ([`chapter-close.md`](../../../../memory/chapter-close.md#3d--awareness-pin-tuning))
+  names CTRL-Z of the close; a re-run's CTRL-Z that undoes the close
+  altogether is a second path to it. Default: the round-trip's re-run
+  arms carry their own overrides, the Writes rule gains a carve-out for
+  the `reversal` phase (the other option routes the reversal through an
+  event), and 3d names the second path. Raised in 5.9's slice review;
+  routed from triage 2026-11-14.
+- **What does a confirm say for an `in-flight` refusal?** `removeChapter`'s
+  `in-flight` refusal (a run started between the last enabled render and
+  the press) closes the chapter-delete confirm with the generic
+  `Couldn't delete the chapter.`, where a blocked-while-generating copy,
+  or keeping the confirm open, would say what happened; the re-run
+  confirm gets the same refusal and is specced to toast a failure and
+  close. Default: one answer for both confirms, keeping the confirm open
+  with `reader:actions.blockedWhileGenerating` as its reason. Raised in
+  Slice 5.12's review of Task 12 and its final review (the same entry's
+  log-naming edge was fixed in the 2026-11-14 triage pass); routed from
+  triage 2026-11-14.
+- **Does the re-run confirm share the settle re-read?** The re-read effect
+  in `components/chapters/use-chapter-delete-confirm.ts` repeats
+  `components/reader/use-live-rollback-counts.ts`'s shape: a
+  `settleCount` subscription, a ref holding the host's callbacks, a guard
+  on the counted settle and a `live` flag. They differ in the skip while a
+  removal runs, in how a refusal lands (close with a toast, or keep and
+  log) and in their log events, so a shared hook would take each as a
+  parameter, and would need a home outside both domain folders. This
+  slice's `useCloseRerunConfirm` is specced as a third copy. Default:
+  extract the shared hook into `hooks/` with the third copy. Raised in
+  Slice 5.12's slice review (the simplifier pass); routed from triage
+  2026-11-14.
+- **Does the review window animate its close?** `ChapterOverlaysHost`
+  unmounts `ReviewWindow` as soon as the review id clears, so the Sheet on
+  phone vanishes in one frame, skipping its slide-out (the web Dialog has
+  no exit animation at all, so desktop is unchanged either way). A fix
+  keeps the window mounted with `open={false}` through its exit, which has
+  to agree with the host's prune of a chapter that no longer holds; this
+  slice reworks that host's close-and-reopen lifecycle. Default: keep it
+  mounted through the Sheet's exit as part of that rework. Raised in
+  5.11's review; routed from triage 2026-11-14.
+- **Does `regenerateTurn` require its expected counts?**
+  `regenerateTurn(…, opts?: { expectedCounts?: RollbackCounts })`
+  (`lib/actions/turns/regenerate-turn.ts`) predates Slice 5.12, which
+  made the reader route pass counts on every call, so a close committing
+  as the interrupt lands is refused rather than reversed unconfirmed. A
+  new caller that leaves them out still compiles and sweeps with no
+  consent check. Requiring them fits
+  [Type design](../../../../code-conventions.md#type-design), as
+  `rollbackToEntry` already does; the internal follow-up sweep
+  (`sweepFrom(…, origin.id, ctx)`) legitimately has none. This slice
+  edits `regenerateTurn`. Default: require them, the 33 test calls
+  reading counts from the preview first (some are concurrency tests, so
+  each needs its interleaving checked). Raised in Slice 5.12's slice
+  review; routed from triage 2026-11-14.
 
 ## Implementation notes
 

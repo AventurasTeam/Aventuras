@@ -1,5 +1,6 @@
 import { expect, test, type Page } from '@playwright/test'
 
+import { goToReader } from '../flows/navigation'
 import { currentBranchId, queryApp, seedVectors, vecCounts } from '../harness/db'
 import { t } from '../harness/i18n'
 import { launchApp, type LaunchedApp } from '../harness/launch'
@@ -143,9 +144,7 @@ test.describe.serial('Plot panel', () => {
     ).toEqual([[1]])
 
     // CTRL-Z lives on the reader; the Actions menu row is its touch-tier twin.
-    await chrome.actionsTrigger(page).click()
-    await chrome.goToReaderRow(page).click()
-    await page.waitForURL(/\/reader-composer\//)
+    await goToReader(page)
     await chrome.actionsTrigger(page).click()
     await reader.undoRow(page).click()
     await expect
@@ -264,9 +263,7 @@ test.describe.serial('Plot panel', () => {
     await page.waitForURL(/\/plot\//)
     await expect(plot.tab(page, 'awareness')).toHaveAttribute('aria-selected', 'true')
 
-    await chrome.actionsTrigger(page).click()
-    await chrome.goToReaderRow(page).click()
-    await page.waitForURL(/\/reader-composer\//)
+    await goToReader(page)
     await chrome.actionsTrigger(page).click()
     await reader.undoRow(page).click()
 
@@ -401,9 +398,7 @@ test.describe.serial('Plot panel', () => {
     await expect(plot.tab(page, 'overview')).toHaveAttribute('aria-selected', 'true')
 
     // Known screen for anything appended after this test.
-    await chrome.actionsTrigger(page).click()
-    await chrome.goToReaderRow(page).click()
-    await page.waitForURL(/\/reader-composer\//)
+    await goToReader(page)
   })
 
   test('a dirty pane guards the segment switch', async () => {
@@ -452,9 +447,7 @@ test.describe.serial('Plot panel', () => {
     const page = app.window
     const title = 'The old betrayal'
     // Via the reader, to drop the route-local state the prior test left on this Plot instance.
-    await chrome.actionsTrigger(page).click()
-    await chrome.goToReaderRow(page).click()
-    await page.waitForURL(/\/reader-composer\//)
+    await goToReader(page)
     await chrome.actionsTrigger(page).click()
     await chrome.goToPlotRow(page).click()
     await page.waitForURL(/\/plot\//)
@@ -510,9 +503,7 @@ test.describe.serial('Plot panel', () => {
     ).toEqual([['happenings', 'delete', 'user_edit']])
     await expect(plot.row(page, title)).toHaveCount(0)
 
-    await chrome.actionsTrigger(page).click()
-    await chrome.goToReaderRow(page).click()
-    await page.waitForURL(/\/reader-composer\//)
+    await goToReader(page)
     await chrome.actionsTrigger(page).click()
     await reader.undoRow(page).click()
     // Vectors aren't delta-logged: the restored row comes back stale (the seed's value already)

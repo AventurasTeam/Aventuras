@@ -275,7 +275,7 @@ const NO_TERMS = keyedReason(
 /**
  * chapter-close.md → 3f Keywords: one keywords write; the action judges authorship and user
  * removals as it lands. A later turn's list skips the call whole: an undo restores the prior list
- * (parked.md).
+ * (followups.md → Data-model).
  */
 async function planSetKeywords(args: KeywordArgs, ctx: WriteContext): Promise<WritePlan> {
   const { id } = args

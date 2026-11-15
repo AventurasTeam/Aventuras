@@ -4,7 +4,12 @@ import type { EntryAsset, NewEntryAsset } from '@/lib/db'
 import { entryAssetWriteSchema, entryAssets } from '@/lib/db'
 import { entryAssetsStore } from '@/lib/stores'
 
-import { register, type ActionHandler, type PatchMatchesColumns } from '../delta/registry'
+import {
+  register,
+  type ActionHandler,
+  type PatchMatchesColumns,
+  TARGET_NOT_FOUND,
+} from '../delta/registry'
 import type { DeltaSource } from '../types'
 
 type EntryAssetUpdatePatch = Partial<{ role: string | null; position: number | null }>
@@ -72,7 +77,11 @@ const updateHandler: ActionHandler = async (action, branchId, ctx) => {
     .from(entryAssets)
     .where(and(eq(entryAssets.branchId, bid), eq(entryAssets.id, id)))
   if (!current)
-    return { status: 'rejected', reason: `update target entry_assets ${bid}:${id} not found` }
+    return {
+      status: 'rejected',
+      reason: `update target entry_assets ${bid}:${id} not found`,
+      code: TARGET_NOT_FOUND,
+    }
 
   const set: Record<string, unknown> = {}
   const undoPayload: Record<string, unknown> = {}
@@ -115,7 +124,11 @@ const deleteHandler: ActionHandler = async (action, branchId, ctx) => {
     .from(entryAssets)
     .where(and(eq(entryAssets.branchId, bid), eq(entryAssets.id, id)))
   if (!current)
-    return { status: 'rejected', reason: `delete target entry_assets ${bid}:${id} not found` }
+    return {
+      status: 'rejected',
+      reason: `delete target entry_assets ${bid}:${id} not found`,
+      code: TARGET_NOT_FOUND,
+    }
   return {
     status: 'ok',
     targetTable: 'entry_assets',

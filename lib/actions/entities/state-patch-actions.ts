@@ -47,6 +47,7 @@ import {
   type GroupScope,
   type HandlerCtx,
   type HandlerOutcome,
+  TARGET_NOT_FOUND,
 } from '../delta/registry'
 import {
   USER_EDITED_SINCE_PROSE,
@@ -278,7 +279,11 @@ export const updateEntityVisualStateHandler: ActionHandler = async (action, bran
     return { status: 'rejected', reason: `branch mismatch: delta ${branchId} vs target ${bid}` }
   const current = await loadCurrent(bid, id, ctx)
   if (!current)
-    return { status: 'rejected', reason: `update target entities ${bid}:${id} not found` }
+    return {
+      status: 'rejected',
+      reason: `update target entities ${bid}:${id} not found`,
+      code: TARGET_NOT_FOUND,
+    }
   const wrongKind = refuseNonCharacter(action.kind, current)
   if (wrongKind) return wrongKind
   return buildStatePatchOutcome(bid, id, current, { visual }, ctx)
@@ -292,7 +297,11 @@ export const updateEntityInventoryHandler: ActionHandler = async (action, branch
     return { status: 'rejected', reason: `branch mismatch: delta ${branchId} vs target ${bid}` }
   const current = await loadCurrent(bid, id, ctx)
   if (!current)
-    return { status: 'rejected', reason: `update target entities ${bid}:${id} not found` }
+    return {
+      status: 'rejected',
+      reason: `update target entities ${bid}:${id} not found`,
+      code: TARGET_NOT_FOUND,
+    }
   const wrongKind = refuseNonCharacter(action.kind, current)
   if (wrongKind) return wrongKind
   const patch: Record<string, unknown> = {}
@@ -316,7 +325,11 @@ export const updateEntityStackablesHandler: ActionHandler = async (action, branc
     return { status: 'rejected', reason: `branch mismatch: delta ${branchId} vs target ${bid}` }
   const current = await loadCurrent(bid, id, ctx)
   if (!current)
-    return { status: 'rejected', reason: `update target entities ${bid}:${id} not found` }
+    return {
+      status: 'rejected',
+      reason: `update target entities ${bid}:${id} not found`,
+      code: TARGET_NOT_FOUND,
+    }
   const wrongKind = refuseNonCharacter(action.kind, current)
   if (wrongKind) return wrongKind
   return buildStatePatchOutcome(bid, id, current, { stackables }, ctx)
@@ -330,7 +343,11 @@ export const updateItemPositionHandler: ActionHandler = async (action, branchId,
     return { status: 'rejected', reason: `branch mismatch: delta ${branchId} vs target ${bid}` }
   const current = await loadCurrent(bid, id, ctx)
   if (!current)
-    return { status: 'rejected', reason: `update target entities ${bid}:${id} not found` }
+    return {
+      status: 'rejected',
+      reason: `update target entities ${bid}:${id} not found`,
+      code: TARGET_NOT_FOUND,
+    }
   if (current.kind !== 'item')
     return { status: 'rejected', reason: `updateItemPosition target ${bid}:${id} is not an item` }
   return buildStatePatchOutcome(bid, id, current, { at_location_id: atLocationId }, ctx)
@@ -369,7 +386,11 @@ export const updateEntityLocationTrackingHandler: ActionHandler = async (action,
     return { status: 'rejected', reason: `branch mismatch: delta ${branchId} vs target ${bid}` }
   const current = await loadCurrent(bid, id, ctx)
   if (!current)
-    return { status: 'rejected', reason: `update target entities ${bid}:${id} not found` }
+    return {
+      status: 'rejected',
+      reason: `update target entities ${bid}:${id} not found`,
+      code: TARGET_NOT_FOUND,
+    }
   const wrongKind = refuseNonCharacter(action.kind, current)
   if (wrongKind) return wrongKind
   const patch: Record<string, unknown> = {}

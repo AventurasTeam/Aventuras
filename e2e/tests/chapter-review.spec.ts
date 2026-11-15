@@ -2,14 +2,13 @@ import { expect, test, type Page } from '@playwright/test'
 
 import type { CloseReport } from '@/lib/db'
 
-import { goToChapterTimeline, openStory } from '../flows/navigation'
-import { currentBranchId, queryApp } from '../harness/db'
+import { goToChapterTimeline, goToReader, openStory } from '../flows/navigation'
+import { chapterByTitle, type ChapterRow, currentBranchId, queryApp } from '../harness/db'
 import { t } from '../harness/i18n'
 import { launchApp, type LaunchedApp } from '../harness/launch'
 import { suppressNativeUnloadDialogRace } from '../harness/reload'
 import { createSeededUserDataDir, removeUserDataDir } from '../harness/seed'
 import { chapterTimeline } from '../locators/chapter-timeline'
-import { chrome } from '../locators/chrome'
 import { reader } from '../locators/reader'
 import { reviewWindow } from '../locators/review-window'
 import { saveSession } from '../locators/save-session'
@@ -24,7 +23,6 @@ const DRAFT = 'E2E dirty review draft'
 // The seeded report's one refused write (lib/db/devtools/seed-dataset.ts).
 const NOT_APPLIED = 1
 
-type Chapter = { id: string; number: number }
 type Change = { name: string; entryId: string; position: number }
 
 // Serial suite, one shared app: test 1 ends in World over the Timeline over the reader, test 2 in
@@ -33,7 +31,7 @@ test.describe.serial('Chapter review', () => {
   let app: LaunchedApp
   let userDataDir: string
   let branchId: string
-  let reviewed: Chapter
+  let reviewed: ChapterRow
   let change: Change
   let stopped: CloseReport['stopped'][number]
 
@@ -49,17 +47,6 @@ test.describe.serial('Chapter review', () => {
   })
 
   // A renamed chapter throws: an undefined id would scope every card locator to nothing.
-  async function chapterByTitle(page: Page, title: string): Promise<Chapter> {
-    const rows = await queryApp(
-      page,
-      `SELECT id, sequence_number FROM chapters WHERE branch_id = ? AND title = ?`,
-      [branchId, title],
-    )
-    if (rows.length !== 1) throw new Error(`expected one chapter titled ${title}: ${rows.length}`)
-    const [id, number] = rows[0]
-    return { id: id as string, number: number as number }
-  }
-
   async function reportOf(page: Page, chapterId: string): Promise<CloseReport> {
     const [[json]] = await queryApp(
       page,
@@ -93,9 +80,7 @@ test.describe.serial('Chapter review', () => {
 
   // GO TO pops back to the reader, so a Timeline opened after it starts with every card collapsed.
   async function backToReader(page: Page): Promise<void> {
-    await chrome.actionsTrigger(page).click()
-    await chrome.goToReaderRow(page).click()
-    await page.waitForURL(/\/reader-composer\//)
+    await goToReader(page)
     await expect(reader.composer(page)).toBeVisible()
   }
 
@@ -113,8 +98,8 @@ test.describe.serial('Chapter review', () => {
     const page = app.window
     await openStory(page, HERO_TITLE)
     branchId = await currentBranchId(page, HERO_STORY)
-    reviewed = await chapterByTitle(page, REVIEWED)
-    const unreviewed = await chapterByTitle(page, UNREVIEWED)
+    reviewed = await chapterByTitle(page, branchId, REVIEWED)
+    const unreviewed = await chapterByTitle(page, branchId, UNREVIEWED)
     const report = await reportOf(page, reviewed.id)
     change = await landedChange(page, report)
     stopped = report.stopped[0]
@@ -128,7 +113,7 @@ test.describe.serial('Chapter review', () => {
 
     await openReview(page)
     await expect(reviewWindow.window(page)).toHaveAccessibleName(
-      t('chapters:review.title', { number: reviewed.number, title: REVIEWED }),
+      t('chapters:review.title', { number: reviewed.sequenceNumber, title: REVIEWED }),
     )
     await expect(changeRow(page)).toBeVisible()
     await expect(reviewWindow.notApplied(page, NOT_APPLIED)).toBeVisible()

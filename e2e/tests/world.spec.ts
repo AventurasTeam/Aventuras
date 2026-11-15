@@ -2,7 +2,7 @@ import { expect, test, type Page } from '@playwright/test'
 
 import type { StorySettings, SuggestionCategory } from '@/lib/db'
 
-import { goToWorld as goToWorldFlow, openWorld } from '../flows/navigation'
+import { goToReader, goToWorld as goToWorldFlow, openWorld } from '../flows/navigation'
 import { currentBranchId, queryApp } from '../harness/db'
 import { installEmbedderModel } from '../harness/embedder'
 import { t } from '../harness/i18n'
@@ -193,9 +193,7 @@ test.describe.serial('World panel', () => {
   test('a GO TO round trip keeps the same reader instance', async () => {
     const page = app.window
     await expect(world.subHeader(page)).toBeVisible()
-    await chrome.actionsTrigger(page).click()
-    await chrome.goToReaderRow(page).click()
-    await page.waitForURL(/\/reader-composer\//)
+    await goToReader(page)
     await expect(reader.composer(page)).toBeVisible({ timeout: 20_000 })
     await expect(reader.composer(page)).toHaveValue('')
 
@@ -204,9 +202,7 @@ test.describe.serial('World panel', () => {
     await chrome.goToWorldRow(page).click()
     await page.waitForURL(/\/world\//)
 
-    await chrome.actionsTrigger(page).click()
-    await chrome.goToReaderRow(page).click()
-    await page.waitForURL(/\/reader-composer\//)
+    await goToReader(page)
     await expect(reader.composer(page)).toHaveValue('E2E draft survives')
 
     // Leave the composer clean for the tests that follow.
@@ -371,9 +367,7 @@ test.describe.serial('World panel', () => {
     await expect(world.detailName(page)).toHaveText('The Drowned Market')
 
     // Known screen for anything appended after this test.
-    await chrome.actionsTrigger(page).click()
-    await chrome.goToReaderRow(page).click()
-    await page.waitForURL(/\/reader-composer\//)
+    await goToReader(page)
   })
 
   test('Identity and Settings edits save as one delta; reader undo reverses all three', async () => {
@@ -415,9 +409,7 @@ test.describe.serial('World panel', () => {
     ).toEqual([[1]])
 
     // CTRL-Z lives on the reader; the Actions menu row is its touch-tier twin.
-    await chrome.actionsTrigger(page).click()
-    await chrome.goToReaderRow(page).click()
-    await page.waitForURL(/\/reader-composer\//)
+    await goToReader(page)
     await chrome.actionsTrigger(page).click()
     await reader.undoRow(page).click()
     await expect.poll(() => entitySnapshot(page, kael), { timeout: 30_000 }).toEqual(before)
@@ -599,9 +591,7 @@ test.describe('World panel — lead change reaches the reader', () => {
     await world.menuItem(page, 'setLead').click()
     await expect(world.leadTag(page, 'Mira')).toBeVisible()
 
-    await chrome.actionsTrigger(page).click()
-    await chrome.goToReaderRow(page).click()
-    await page.waitForURL(/\/reader-composer\//)
+    await goToReader(page)
     await reader.modeTrigger(page).click()
     await reader.modeOption(page, 'do').click()
     await reader.composer(page).fill('draw the E2E-LEAD blade')

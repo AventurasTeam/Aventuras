@@ -1,4 +1,4 @@
-import { newTerms, normalizeTerm } from '@/lib/keyword-terms'
+import { MODEL_TERM_MAX, modelTermFits, newTerms, normalizeTerm } from '@/lib/keyword-terms'
 
 import type { CloseIds } from './ids'
 import { keyedReason } from './reason-key'
@@ -17,7 +17,17 @@ export const termHandleReason = (term: string, handle: string): string =>
 const keywordInBothReason = (term: string): string =>
   keyedReason('keyword-in-both', `"${term}" is in both add and remove: send each term in one list`)
 
-export function firstTermHandle(
+const keywordTooLongReason = (term: string): string => {
+  const trimmed = term.trim()
+  // By code point, so the quoted start never ends on half a surrogate pair.
+  const start = Array.from(trimmed).slice(0, 40).join('')
+  return keyedReason(
+    'keyword-too-long',
+    `the keyword starting "${start}" runs ${trimmed.length} characters, over ${MODEL_TERM_MAX}: a keyword is a name or short phrase the prose uses`,
+  )
+}
+
+function firstTermHandle(
   terms: readonly string[],
   ids: CloseIds,
 ): { term: string; handle: string } | undefined {
@@ -38,13 +48,15 @@ export function plannedKeywords(
 }
 
 /**
- * Why a keyword write is refused whole: a term in both lists, or an add holding a handle. A removal
- * stores nothing, so a handle in one names no turn later.
+ * Why a keyword write is refused whole: a term in both lists, or an add holding a handle or over
+ * the model's bound. A removal stores nothing, so neither a handle nor a length in one matters.
  */
 export function keywordsRefusal({ add, remove }: SentKeywords, ids: CloseIds): string | undefined {
   const removing = new Set(remove.map(normalizeTerm))
   const both = add.find((term) => removing.has(normalizeTerm(term)))
   if (both !== undefined) return keywordInBothReason(both)
   const held = firstTermHandle(add, ids)
-  return held === undefined ? undefined : termHandleReason(held.term, held.handle)
+  if (held !== undefined) return termHandleReason(held.term, held.handle)
+  const long = add.find((term) => !modelTermFits(term))
+  return long === undefined ? undefined : keywordTooLongReason(long)
 }

@@ -2,7 +2,6 @@ import { eq } from 'drizzle-orm'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 
 import { applyDeltaAction } from '@/lib/actions/delta/apply-delta-action'
-import type { PipelineAction } from '@/lib/actions/types'
 import type { ResolveModelConfig } from '@/lib/ai'
 import {
   branches,
@@ -10,7 +9,6 @@ import {
   happeningAwareness,
   happeningInvolvements,
   happenings,
-  stories,
   storyEntries,
   type StoryMode,
 } from '@/lib/db'
@@ -22,8 +20,9 @@ import { HAPPENINGS_READ_FIELDS, happeningsTask } from './happenings'
 import { CloseIds } from './ids'
 import { readRowTool } from './read-tools'
 import type { TaskPromptContext } from './task'
-import { openCloseFixture, type CloseFixture } from '../__tests__/close-fixture'
+import { openCloseFixture, setStoryMode, type CloseFixture } from '../__tests__/close-fixture'
 import { setCloseClusters } from '../close-intermediates'
+import { apply, seedHappening } from './__tests__/happening-tools-fixture'
 
 // Real `prefix_<uuid>` ids: CloseIds.show allocates handles for those only.
 const WREN = 'char_00000000-0000-4000-8000-00000000e001'
@@ -46,14 +45,6 @@ const CLUSTERS: readonly (readonly string[])[] = [
   [LIGHT, CROSSING],
   [TOLL, SASH],
 ]
-
-async function apply(fx: CloseFixture, action: PipelineAction): Promise<void> {
-  const result = await applyDeltaAction(
-    { action, actionId: 'act_seed_world', branchId: fx.branchId, entryId: null },
-    fx.ctx,
-  )
-  if (result.status !== 'ok') throw new Error(`${action.kind} refused: ${result.reason}`)
-}
 
 async function seedCharacter(
   fx: CloseFixture,
@@ -78,62 +69,6 @@ async function seedCharacter(
       },
     },
   })
-}
-
-async function seedHappening(
-  fx: CloseFixture,
-  row: {
-    id: string
-    title: string
-    description?: string
-    at: number
-    commonKnowledge?: 0 | 1
-    cast: readonly string[]
-    /** Ids for the cast's links, in cast order; random when absent. */
-    linkIds?: readonly string[]
-    /** Characters with an awareness row of this happening; ids as for `linkIds`. */
-    knownBy?: readonly string[]
-    awarenessIds?: readonly string[]
-  },
-): Promise<void> {
-  await apply(fx, {
-    kind: 'createHappening',
-    source: 'periodic_classifier',
-    payload: {
-      entry: {
-        id: row.id,
-        branchId: fx.branchId,
-        title: row.title,
-        ...(row.description === undefined ? {} : { description: row.description }),
-        occurredAtEntryId: fx.entries[row.at]!.id,
-        commonKnowledge: row.commonKnowledge ?? 0,
-        createdAt: 1,
-        updatedAt: 1,
-      },
-    },
-  })
-  for (const [index, entityId] of row.cast.entries())
-    await apply(fx, {
-      kind: 'createHappeningInvolvement',
-      source: 'periodic_classifier',
-      payload: {
-        entry: {
-          id: row.linkIds?.[index] ?? generateId('hinv'),
-          branchId: fx.branchId,
-          happeningId: row.id,
-          entityId,
-          role: null,
-        },
-      },
-    })
-  for (const [index, characterId] of (row.knownBy ?? []).entries())
-    await fx.ctx.db.insert(happeningAwareness).values({
-      id: row.awarenessIds?.[index] ?? generateId('haw'),
-      branchId: fx.branchId,
-      happeningId: row.id,
-      characterId,
-      retrievalCount: 0,
-    })
 }
 
 async function seedClusters(fx: CloseFixture): Promise<void> {
@@ -559,14 +494,7 @@ describe('happeningsTask', () => {
   it("puts the story mode's rule in the system half", async () => {
     await seedClusters(f)
     const render = async (mode: StoryMode) => {
-      const [story] = await f.ctx.db
-        .select({ definition: stories.definition })
-        .from(stories)
-        .where(eq(stories.id, f.storyId))
-      await f.ctx.db
-        .update(stories)
-        .set({ definition: { ...story!.definition!, mode } })
-        .where(eq(stories.id, f.storyId))
+      await setStoryMode(f, mode)
       const ctx = promptContextFor(f, idsWithTurns(f), clustered(CLUSTERS))
       const start = await happeningsTask.start(ctx)
       return happeningsTask.render(start!, { ...ctx, writesSoFar: '' }).system

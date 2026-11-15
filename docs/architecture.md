@@ -316,9 +316,10 @@ through `resolveLead`, absent when it dangles on the branch, or the
 wizard draft's. Without a lead the instructions name none, and
 narration in first or second person still holds.
 
-**Every history marks the user's turns.** Story so far, the fallback's
-turns, the periodic classifier's turns and the turns a chapter close
-task's prompt shows
+**Every history marks the user's turns.** Story so far (the suggestion
+refresh's among them), the fallback's turns, the periodic classifier's
+turns, the entries the chapter metadata call reads, whole or by part,
+and the turns a chapter close task's prompt shows
 ([`chapter-close.md → Conversations`](./memory/chapter-close.md#conversations))
 mark a `user_action` entry as the user's, so a model can tell the lead's
 attempt or a direction from the narration; the opening and the replies

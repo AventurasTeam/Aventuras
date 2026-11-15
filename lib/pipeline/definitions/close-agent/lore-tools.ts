@@ -7,13 +7,7 @@ import { dedupeTerms, normalizeTerm } from '@/lib/keyword-terms'
 
 import { fieldVerdicts } from './entity-write'
 import { restatedText, sentText, TEXT_BOUNDS, type SentText } from './fields'
-import {
-  firstTermHandle,
-  keywordsRefusal,
-  plannedKeywords,
-  termHandleReason,
-  type SentKeywords,
-} from './keyword-args'
+import { keywordsRefusal, plannedKeywords, type SentKeywords } from './keyword-args'
 import { keyedReason } from './reason-key'
 import { turnHandleIn, turnInTextReason } from './text-checks'
 import {
@@ -148,16 +142,11 @@ async function planCreateLore(args: CreateArgs, ctx: WriteContext): Promise<Writ
       kind: 'refused',
       reason: turnInTextReason(categoryHandle),
     })
-  const termHandle = firstTermHandle(keywords, ctx.ids)
-  if (termHandle !== undefined)
-    lost.push({
-      field: 'keywords',
-      row: 'lore',
-      kind: 'refused',
-      reason: termHandleReason(termHandle.term, termHandle.handle),
-    })
+  const keywordRefusal = keywordsRefusal({ add: keywords, remove: [] }, ctx.ids)
+  if (keywordRefusal !== undefined)
+    lost.push({ field: 'keywords', row: 'lore', kind: 'refused', reason: keywordRefusal })
   const landingCategory = categoryHandle === undefined ? category : null
-  const landingKeywords = termHandle === undefined ? keywords : []
+  const landingKeywords = keywordRefusal === undefined ? keywords : []
   const now = Date.now()
   const entry: NewLore = {
     id,

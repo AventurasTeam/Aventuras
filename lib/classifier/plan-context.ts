@@ -95,6 +95,7 @@ export type CutText = CutLengths &
         /** A new faction's handle, or a listed faction's id. */
         ref: string
       }
+    | { kind: 'retiredReason'; ref: string }
   )
 
 /** What the pass logs: the facts that planned nothing, or less than they said. */

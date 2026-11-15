@@ -48,7 +48,7 @@ export type SourceRows = {
 // cannot drift: reordering a column here moves it in the statement and in the
 // read together, where two hand-aligned lists would land `name` in `description`
 // with no error. Explicit, uniquely-named, non-numeric columns, because the
-// drivers rebuild positional rows with Object.values (lib/db/runtime/exec.native.ts
+// native driver rebuilds positional rows with Object.values (lib/db/runtime/exec.native.ts
 // → queryRows) and a duplicate or numeric key silently collapses or reorders them.
 const SOURCE_COLUMNS = {
   entity: [
@@ -266,7 +266,7 @@ export async function loadChapterRanges(
   branchId: string,
 ): Promise<ChapterRanges> {
   const rows = await queryAll(
-    // Aliased: both join sides name their key `id`, and the drivers rebuild rows with
+    // Aliased: both join sides name their key `id`, and the native driver rebuilds rows with
     // Object.values, collapsing the pair into one cell.
     `SELECT c.id AS chapter_id, c.sequence_number, e.id AS entry_id FROM chapters c
      JOIN story_entries e ON e.branch_id = c.branch_id AND e.chapter_id = c.id

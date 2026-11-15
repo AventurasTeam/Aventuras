@@ -3,7 +3,7 @@ import { expect, test, type Page } from '@playwright/test'
 import { ENTRIES_WINDOW_SIZE } from '@/lib/actions'
 
 import { goToWorld, openStory } from '../flows/navigation'
-import { currentBranchId, queryApp } from '../harness/db'
+import { chapterByTitle, currentBranchId, queryApp } from '../harness/db'
 import { t } from '../harness/i18n'
 import { launchApp, type LaunchedApp } from '../harness/launch'
 import { suppressNativeUnloadDialogRace } from '../harness/reload'
@@ -230,21 +230,6 @@ test.describe.serial('Reader chapter chrome', () => {
 
   // Chapters by title, never by position: a seed change moves chapter ends. A renamed chapter
   // throws: an undefined id would pass the `toHaveCount(0)` precondition below.
-  async function chapterByTitle(page: Page, title: string) {
-    const rows = await queryApp(
-      page,
-      `SELECT start_entry_id, end_entry_id, sequence_number FROM chapters WHERE branch_id = ? AND title = ?`,
-      [branchId, title],
-    )
-    if (rows.length !== 1) throw new Error(`expected one chapter titled ${title}: ${rows.length}`)
-    const [startEntryId, endEntryId, number] = rows[0]
-    return {
-      startEntryId: startEntryId as string,
-      endEntryId: endEntryId as string,
-      number: number as number,
-    }
-  }
-
   async function closedChapterCount(page: Page, branch: string): Promise<number> {
     const [[count]] = await queryApp(page, `SELECT count(*) FROM chapters WHERE branch_id = ?`, [
       branch,
@@ -285,7 +270,7 @@ test.describe.serial('Reader chapter chrome', () => {
 
   test('a closed row jumps from the fresh window to its first entry', async () => {
     const page = app.window
-    const { startEntryId } = await chapterByTitle(page, FIRST_CHAPTER)
+    const { startEntryId } = await chapterByTitle(page, branchId, FIRST_CHAPTER)
     // The window has painted, as the last test read its tail: this row really is outside it.
     await expect(reader.row(page, startEntryId)).toHaveCount(0)
 
@@ -299,7 +284,11 @@ test.describe.serial('Reader chapter chrome', () => {
 
   test('a chapter jump opens under the break that heads it', async () => {
     const page = app.window
-    const { startEntryId, number } = await chapterByTitle(page, SECOND_CHAPTER)
+    const { startEntryId, sequenceNumber: number } = await chapterByTitle(
+      page,
+      branchId,
+      SECOND_CHAPTER,
+    )
 
     await reader.chapterChip(page, OPEN_CHAPTER).click()
     await reader.popoverRow(page, SECOND_CHAPTER).click()
@@ -322,7 +311,7 @@ test.describe.serial('Reader chapter chrome', () => {
   // so only the popover's refetch on open shows the new range.
   test('retiming a closed chapter’s last entry moves its range', async () => {
     const page = app.window
-    const { endEntryId } = await chapterByTitle(page, SECOND_CHAPTER)
+    const { endEntryId } = await chapterByTitle(page, branchId, SECOND_CHAPTER)
     const row = reader.popoverRow(page, SECOND_CHAPTER)
     const footer = reader.worldTimeFooter(page, endEntryId)
 

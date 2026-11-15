@@ -17,13 +17,8 @@ import { RANKER_DEFAULTS, runRetrieval } from '@/lib/retrieval'
 import { setPinTool } from './awareness-tools'
 import { runDispatchCalls } from '../__tests__/close-dispatch'
 import { openCloseFixture, queryAllOn, type CloseFixture } from '../__tests__/close-fixture'
-import {
-  uuid,
-  putCharacter,
-  putHappening,
-  putAwareness,
-  startPinned,
-} from './__tests__/awareness-tools-fixture'
+import { startPinned } from './__tests__/awareness-tools-fixture'
+import { uuid, putCharacter, putHappening, putAwareness } from './__tests__/close-awareness-fixture'
 
 // 59 closed chapters, a row learned in chapter 3 at 0.3, read at chapter 60, the open one. The pin
 // reaches the score only through the decay exponent.

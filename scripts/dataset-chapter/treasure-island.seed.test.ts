@@ -14,6 +14,7 @@ import {
 import { chaptersStore, entitiesStore, resetAllStores } from '@/lib/stores'
 import { selectUndoTarget } from '@/lib/undo'
 
+import { DATASET_BRANCH_ID } from './overlay'
 import { exportStorySeed } from './seed-export'
 import { createTestDb } from '../../lib/db/__tests__/test-db'
 import { buildSeedSteps } from '../../lib/db/devtools/seed-dataset'
@@ -35,7 +36,7 @@ import { DATASET_SEED_PATH, datasetStorySteps, seedAppRefs } from '../seed/datas
 import { insertSeedSteps } from '../seed/insert'
 
 const STORY = 'story_77a59fe9-7741-4634-b6cd-5633f9e50f5b'
-const BRANCH = 'br_aa6101af-d3dd-4964-9869-81e76cc35f97'
+const BRANCH = DATASET_BRANCH_ID
 const JIM = 'char_25b8a728-1ab9-4ee6-994d-0a44dd2ea897'
 
 async function seededWithDataset() {

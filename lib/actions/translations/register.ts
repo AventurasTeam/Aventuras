@@ -5,7 +5,12 @@ import { translationWriteSchema, translations } from '@/lib/db'
 import { translationsStore } from '@/lib/stores'
 
 import { missingRef, MISSING_REF, rowRefs } from '../delta/live-refs'
-import { register, type ActionHandler, type PatchMatchesColumns } from '../delta/registry'
+import {
+  register,
+  type ActionHandler,
+  type PatchMatchesColumns,
+  TARGET_NOT_FOUND,
+} from '../delta/registry'
 import type { DeltaSource } from '../types'
 
 type TranslationUpdatePatch = Partial<{ translatedText: string }>
@@ -77,7 +82,11 @@ const updateHandler: ActionHandler = async (action, branchId, ctx) => {
     .from(translations)
     .where(and(eq(translations.branchId, bid), eq(translations.id, id)))
   if (!current)
-    return { status: 'rejected', reason: `update target translations ${bid}:${id} not found` }
+    return {
+      status: 'rejected',
+      reason: `update target translations ${bid}:${id} not found`,
+      code: TARGET_NOT_FOUND,
+    }
 
   const set: Record<string, unknown> = {}
   const undoPayload: Record<string, unknown> = {}
@@ -120,7 +129,11 @@ const deleteHandler: ActionHandler = async (action, branchId, ctx) => {
     .from(translations)
     .where(and(eq(translations.branchId, bid), eq(translations.id, id)))
   if (!current)
-    return { status: 'rejected', reason: `delete target translations ${bid}:${id} not found` }
+    return {
+      status: 'rejected',
+      reason: `delete target translations ${bid}:${id} not found`,
+      code: TARGET_NOT_FOUND,
+    }
   return {
     status: 'ok',
     targetTable: 'translations',

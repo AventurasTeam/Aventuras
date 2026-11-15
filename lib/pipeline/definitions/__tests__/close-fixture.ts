@@ -1,4 +1,4 @@
-import { eq, sql } from 'drizzle-orm'
+import { and, eq, sql } from 'drizzle-orm'
 
 import { applyDeltaAction } from '@/lib/actions/delta/apply-delta-action'
 import { __resetRegistrationGuard, registerAllDomains } from '@/lib/actions/delta/registrations'
@@ -6,13 +6,17 @@ import { loadOpenStory } from '@/lib/actions/stories/operational'
 import type { GenerateStructuredResult } from '@/lib/ai'
 import {
   branches,
+  entities,
   STORY_SETTINGS_DEFAULTS,
   stories,
   storyDefinitionSchema,
   storyEntries,
   type DbCtx,
+  type Entity,
+  type EntityState,
   type EntryMetadata,
   type StoryEntry,
+  type StoryMode,
 } from '@/lib/db'
 import { createTestDb } from '@/lib/db/__tests__/test-db'
 import { hydrateAppSettings, resetAllStores } from '@/lib/stores'
@@ -160,12 +164,21 @@ const metadataAt = (position: number): EntryMetadata => ({
   worldTime: position * 60,
 })
 
-async function writeTurnEntry(
-  ctx: DbCtx,
+export type TurnEntry = {
+  id: string
+  position: number
+  kind: 'user_action' | 'ai_reply'
+  content: string
+  /** The fixture's clock at its position unless given. */
+  createdAt?: number
+}
+
+/** Creates one entry of a turn through the action layer, as a turn writes it, under `actionId`. */
+export async function writeTurnEntry(
+  f: Pick<CloseFixture, 'ctx' | 'branchId'>,
   actionId: string,
-  entry: { position: number; kind: 'user_action' | 'ai_reply'; content: string },
-): Promise<string> {
-  const id = entryIdAt(entry.position)
+  entry: TurnEntry,
+): Promise<void> {
   const result = await applyDeltaAction(
     {
       action: {
@@ -173,27 +186,146 @@ async function writeTurnEntry(
         source: entry.kind === 'user_action' ? 'user_edit' : 'ai_classifier',
         payload: {
           entry: {
-            id,
-            branchId: BRANCH_ID,
+            id: entry.id,
+            branchId: f.branchId,
             position: entry.position,
             kind: entry.kind,
             content: entry.content,
             chapterId: null,
             metadata: metadataAt(entry.position),
-            createdAt: BASE + entry.position,
+            createdAt: entry.createdAt ?? BASE + entry.position,
           },
         },
       },
       actionId,
-      branchId: BRANCH_ID,
+      branchId: f.branchId,
       // As a turn logs them: the action unanchored, the reply anchored on itself.
-      entryId: entry.kind === 'ai_reply' ? id : null,
+      entryId: entry.kind === 'ai_reply' ? entry.id : null,
     },
-    ctx,
+    f.ctx,
   )
   if (result.status !== 'ok')
-    throw new Error(`close fixture: entry ${id} refused: ${result.reason}`)
-  return id
+    throw new Error(`close fixture: entry ${entry.id} refused: ${result.reason}`)
+}
+
+/** On a two-turn fixture (t1–t5): appends t6, t7 (E), so an earlier write lands before E. */
+export async function appendLateTurns(
+  f: CloseFixture,
+): Promise<{ endEntryId: string; taskEntryIds: string[] }> {
+  const late: TurnEntry[] = [
+    {
+      id: 'entry_late_006',
+      position: 6,
+      kind: 'user_action',
+      content: 'I ask who keeps the far bank.',
+    },
+    {
+      id: 'entry_late_007',
+      position: 7,
+      kind: 'ai_reply',
+      content: 'Tobin pulls his hood low and says nothing.',
+    },
+  ]
+  for (const entry of late) await writeTurnEntry(f, `act_late_turn_${entry.position}`, entry)
+  return {
+    endEntryId: 'entry_late_007',
+    taskEntryIds: [...f.entries.map((entry) => entry.id), 'entry_late_006', 'entry_late_007'],
+  }
+}
+
+/** Sets an entry's scene, and its location when given. */
+export async function setSceneOf(
+  f: Pick<CloseFixture, 'ctx' | 'branchId'>,
+  entryId: string,
+  sceneEntities: readonly string[],
+  currentLocationId?: string | null,
+): Promise<void> {
+  const where = and(eq(storyEntries.branchId, f.branchId), eq(storyEntries.id, entryId))
+  const [row] = await f.ctx.db
+    .select({ metadata: storyEntries.metadata })
+    .from(storyEntries)
+    .where(where)
+  if (!row?.metadata) throw new Error(`setSceneOf: entry ${entryId} has no metadata`)
+  await f.ctx.db
+    .update(storyEntries)
+    .set({
+      metadata: {
+        ...row.metadata,
+        sceneEntities: [...sceneEntities],
+        ...(currentLocationId === undefined ? {} : { currentLocationId }),
+      },
+    })
+    .where(where)
+}
+
+/** A character in one entry's scene, written with no delta: Identity starts only on one. */
+export async function putSceneCharacter(
+  f: Pick<CloseFixture, 'ctx' | 'branchId'>,
+  id: string,
+  name: string,
+  entryId: string,
+): Promise<void> {
+  await f.ctx.db.insert(entities).values({
+    id,
+    branchId: f.branchId,
+    kind: 'character',
+    name,
+    status: 'active',
+    injectionMode: 'auto',
+    createdAt: 1,
+    updatedAt: 1,
+  })
+  await setSceneOf(f, entryId, [id])
+}
+
+export type EntityRowSeed = {
+  id: string
+  kind: Entity['kind']
+  name: string
+  status?: Entity['status']
+  /** 'Left the story.' for a retired row unless given. */
+  retiredReason?: string
+  description?: string | null
+  state?: Readonly<Record<string, unknown>> | null
+  keywords?: string[]
+  /** The fixture's branch unless given. */
+  branchId?: string
+}
+
+// Written with no delta, as an import or a hand edit leaves a row: a start reads rows, not history.
+export async function putEntityRow(
+  f: Pick<CloseFixture, 'ctx' | 'branchId'>,
+  row: EntityRowSeed,
+): Promise<void> {
+  await f.ctx.db.insert(entities).values({
+    id: row.id,
+    branchId: row.branchId ?? f.branchId,
+    kind: row.kind,
+    name: row.name,
+    description: row.description ?? null,
+    status: row.status ?? 'active',
+    retiredReason: row.retiredReason ?? (row.status === 'retired' ? 'Left the story.' : null),
+    injectionMode: 'auto',
+    state: (row.state ?? null) as EntityState | null,
+    keywords: row.keywords ?? [],
+    createdAt: 1,
+    updatedAt: 1,
+  })
+}
+
+export async function setStoryMode(
+  f: Pick<CloseFixture, 'ctx' | 'storyId'>,
+  mode: StoryMode,
+): Promise<void> {
+  const [story] = await f.ctx.db
+    .select({ definition: stories.definition })
+    .from(stories)
+    .where(eq(stories.id, f.storyId))
+  if (!story?.definition) throw new Error('setStoryMode: the fixture story has no definition')
+  await f.ctx.db
+    .update(stories)
+    .set({ definition: { ...story.definition, mode } })
+    .where(eq(stories.id, f.storyId))
 }
 
 /** Writes the fixture branch's classifier status; `running` with no pass live holds the branch. */
@@ -272,22 +404,24 @@ export async function openCloseFixture(opts?: {
   for (let turn = 0; turn < turns; turn++) {
     const actionId = `act_close_turn_${turn + 1}`
     const position = 2 * turn + 2
-    const action = ACTIONS[turn % ACTIONS.length]!
-    const reply = REPLIES[turn % REPLIES.length]!
-    entries.push({
-      id: await writeTurnEntry(ctx, actionId, { position, kind: 'user_action', content: action }),
-      kind: 'user_action',
-      position,
-    })
-    entries.push({
-      id: await writeTurnEntry(ctx, actionId, {
+    const pair: TurnEntry[] = [
+      {
+        id: entryIdAt(position),
+        position,
+        kind: 'user_action',
+        content: ACTIONS[turn % ACTIONS.length]!,
+      },
+      {
+        id: entryIdAt(position + 1),
         position: position + 1,
         kind: 'ai_reply',
-        content: reply,
-      }),
-      kind: 'ai_reply',
-      position: position + 1,
-    })
+        content: REPLIES[turn % REPLIES.length]!,
+      },
+    ]
+    for (const entry of pair) {
+      await writeTurnEntry({ ctx, branchId: BRANCH_ID }, actionId, entry)
+      entries.push({ id: entry.id, kind: entry.kind, position: entry.position })
+    }
   }
 
   // No public writer exists, and running a pass to move it would need a model.

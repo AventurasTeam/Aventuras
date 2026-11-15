@@ -1061,7 +1061,10 @@ so it needs a canon edit first.
 
 Parked 2026-09-13 from the PR #513 review; the first pipeline that
 declares a `parallel:` group, or a cancel that visibly lags, is the
-signal to revisit.
+signal to revisit. Seen again in 5.5a's review, shown by probe on both
+write paths: a throw out of a group dispatch (`delta_group_emitted`)
+rejects `Promise.all` the same way as `delta_emitted`'s; routed from
+triage 2026-11-14.
 
 #### A run that throws after its writes is unwound over them
 
@@ -1660,6 +1663,56 @@ Its signal is a Threads start nearing the `lore-mgmt` model's window,
 which `probe:close`'s saved steps show, and past which the close
 fails. Added 2026-11-09 from Slice 5.5b's review.
 
+#### A pass stores a turn handle written into prose
+
+[classifier.md's ID handling](./memory/classifier.md#id-handling-in-classifier-output)
+names each id a pass's reply writes into prose before it lands, and
+keeps a token that names nothing as written. A turn handle names no
+row, so a reply that writes "as t3 shows" into a description stores
+`t3`, which a later prompt reads as its own turn. Chapter close refuses
+such a field
+([`chapter-close.md → Tools and writes`](./memory/chapter-close.md#tools-and-writes));
+the periodic classifier has no such check, and canon permits the token
+(a test pins `[t2]` staying). It needs the model to slip: the pass's
+prompt shows its turns as `t1…tN`. A first try, should it surface: one
+line in the pass prompt, before a refusal or a strip. **Revisit
+signal:** a probe or play transcript where a pass stores a turn handle
+in a text field. Surfaced by 5.5a's review; routed from triage
+2026-11-14.
+
+#### A landed merge's link-row losses can't name their row
+
+`settleLosses` (`lib/pipeline/definitions/close-agent/verdict.ts`) keys
+a merge's losses by path across all its actions, as C4 states, so a
+link loss drops from the ledger when another link on the same merge
+lands that path, and two characters' losses on one path collapse into
+one row. The review names no character for a link-row loss under the
+kept happening (5.11's Developer decision 4 accepted the gap). The
+model's answer names them all; only the ledger loses them. A probe with
+Tobin's pin landing on keep and Wren's user-kept: the model was told
+`notWritten: decayResistance (c1)`, `skippedFields` was empty, and Not
+applied was `[]`. A fix gives `skippedFields` an optional row (the
+stored schema is lenient, so old and new readers both parse, though it
+changes C4's rules) and the lost value too, since the merge records
+only the kept row's values. **Revisit signal:** merges (3e) firing in
+play where the review misses a link-row loss. Raised in 5.11's review;
+routed from triage 2026-11-14.
+
+#### A folded stackable key can outgrow its schema bound
+
+`foldStackableKey` lowercases, and some letters lengthen when lowercased
+(`İ` becomes two code units; Devanagari nukta letters under NFC do
+too), so a 40-character key can fold past the character schema's
+40-character bound. `updateEntityStackables` doesn't check the schema,
+so such a key lands, and every later `updateEntity` carrying that
+character's `state` is refused until the key is shortened. 5.9's
+normalization step skips a record that would fold past the bound. No
+shipped writer reaches it today: every one, the per-turn transfer
+writer included, stores keys already folded, which never lengthen when
+folded again. **Revisit signal:** a stackables writer that stores a key
+without folding it first. Raised in 5.9's Task 7 and Task 16 reviews;
+routed from triage 2026-11-14.
+
 #### Cross-chapter semantic dedup of happenings
 
 Phase 3e
@@ -1891,6 +1944,15 @@ record holding a `__proto__` key as stored
 Found by the 2026-10-24 triage pass's slice review; the encoding dates
 from #546. The same signal applies.
 
+Two more facts, from 5.5a's review: `set.state` in `updateEntity` takes
+the raw patch while `computeUndoPayload` walks only
+`entityStateColumnSchema`, so a `state` key outside the schema lands
+with no undo record and a reversal can't remove it; and when such a key
+is the only change, nothing is written and the handler returns `no-op
+entity patch`, marked `restated`, so a close tool's write of it reads
+`ok` with nothing written and leaves no trace in the review. Routed from
+triage 2026-11-14.
+
 #### Merging any two rows of one kind
 
 World merges two rows only inside the collision dialog, which pairs a
@@ -1913,32 +1975,6 @@ a pending proposal means to the next close and to retrieval. Today a
 user edit made after the cited prose stands, and CTRL-Z of the close
 reverses all of it. Parked 2026-10-20 with the AI writer map; the
 signal is users undoing whole closes to keep one description.
-
-#### A keyword write's undo restores the whole prior list
-
-`appendEntityKeywords` and `renameEntity`
-(`lib/actions/entities/state-patch-actions.ts`) store the row's
-pre-write keywords as undo. Reversing a write that landed before an
-earlier turn's keyword write, which the reversal spares, restores the
-list from before it and takes the spared write's terms away too, and
-the watermark clamp means that turn is never re-read
-([`memory/classifier.md → Provenance attribution`](./memory/classifier.md#provenance-attribution)
-says reversal spares facts about surviving turns). Within one reply
-the planner plans every keyword write to a row in turn order (its
-renames, aliases, a known or promoted mention's terms and a reused
-place's), and the periodic classifier, their only writer, lands its
-passes in turn order, so the loss needs a later reply carrying an
-earlier turn's term than one already written. One reply can carry it
-too: a new place waiting for a later turn's parent writes a reused
-place's terms at its parent's turn
-([`memory/classifier.md → Mentioned places`](./memory/classifier.md#mentioned-places)),
-after a keyword write of a turn between them. The general fix is an
-undo that removes only the terms its own write added.
-
-Parked 2026-10-24; the signal is a keyword of a surviving turn lost to
-a reversal, or a second keyword writer landing terms out of turn order.
-Chapter close isn't one: it skips a keyword list a turn past its
-chapter wrote.
 
 #### Resuming a failed close
 
@@ -2602,10 +2638,9 @@ threshold (rough lean: ≥ 8). Pick the actual number once we have
 real preset catalogs to test against — speculative until the
 catalog size is concrete enough to validate against. The picker's
 open-shape question (Select-extension vs Picker-fork) was
-resolved during the calendar-picker build pass — picker extends
-Select via the `renderRow` / `renderTrigger` / `tailAction` hooks
-documented in
-[`forms.md → Select primitive`](./ui/patterns/forms.md#select-primitive).
+resolved during the calendar-picker build pass — the picker builds on
+[`SearchableOverlayList`](./ui/patterns/searchable-overlay-list.md)
+via its `renderTrigger` / `renderRow` / `renderFooter` hooks.
 
 #### Chip input vs comma-separated string
 
@@ -3980,6 +4015,19 @@ Unread: whether the undo was refused (its toast would say
 row. **Revisit signal:** a fourth failure, now with its uploaded error
 context. Raised in the 2026-11-14 triage pass, unverified.
 
+#### The close's placement plan re-implements the place rules
+
+The close places a row through `updateEntity`, not `placeLocation`, so
+`close-agent/placement.ts`'s `planPlacement` re-implements
+`placeLocationHandler`'s rule order (`state-patch-actions.ts`) and
+copies its `branchPlaces` query, which `lib/pipeline` may not import
+(only `@/lib/actions/types`). The two can drift. The refusal strings the
+entry first named are already tied: each is a `CloseReasonKey`, so a
+rename fails `tsc`. **Revisit signal:** a change to
+`placeLocationHandler`'s rules; a parity test over both is the cheap
+tie then. Raised in 5.8's task and slice reviews; routed from triage
+2026-11-14.
+
 #### Gated row fields are written out per surface
 
 World's `components/world/detail/fields.tsx`, Plot's inline Controllers
@@ -4039,7 +4087,11 @@ every copy. `lib/pipeline/definitions/__tests__/phase-db.ts` could hold
 `drain`; the two factories need a home stories can import too, which no
 `__tests__` file is today. **Revisit signal:** the next `RunState` or
 `StoreChapter` change that edits the copies, when consolidating costs
-what the edit does. Routed from triage 2026-11-07.
+what the edit does. Routed from triage 2026-11-07. The 2026-11-14 pass
+gave the close's test helpers one home each and found more not yet
+counted here, unverified: `runDeltas` in about seven test files,
+`idsWithTurns` and `START_CONFIG` in five or six, `seedCharacter` in
+four, and several `apply` variants.
 
 #### The mock LLM's token count has no run guard
 

@@ -3,7 +3,11 @@ import { describe, expect, it, vi } from 'vitest'
 
 import type { generateStructured } from '@/lib/ai'
 import { happeningAwareness, type CharacterState } from '@/lib/db'
-import { type CloseFixture } from '@/lib/pipeline/definitions/__tests__/close-fixture'
+import {
+  writeTurnEntry,
+  type CloseFixture,
+  type TurnEntry,
+} from '@/lib/pipeline/definitions/__tests__/close-fixture'
 
 import { removeChapter } from './remove-chapter'
 import { undoLastAction } from '../story-entries/undo'
@@ -103,33 +107,22 @@ async function retrievalCountOf(fx: CloseFixture, id: string): Promise<number | 
 // A turn past the fixture's last entry: its action and reply created under one action id.
 async function writeLaterTurn(fx: CloseFixture, actionId: string): Promise<void> {
   const last = fx.entries[fx.entries.length - 1].position
-  const turn = [
-    { id: 'entry_later_action', kind: 'user_action', content: 'I ask Tobin his price after dark.' },
-    { id: 'entry_later_reply', kind: 'ai_reply', content: 'Double, he says, and does not smile.' },
-  ] as const
-  for (const [offset, entry] of turn.entries()) {
-    const position = last + 1 + offset
-    await writeLater(
-      fx,
-      {
-        kind: 'createStoryEntry',
-        source: entry.kind === 'user_action' ? 'user_edit' : 'ai_classifier',
-        payload: {
-          entry: {
-            id: entry.id,
-            branchId: fx.branchId,
-            position,
-            kind: entry.kind,
-            content: entry.content,
-            chapterId: null,
-            metadata: { sceneEntities: [], currentLocationId: null, worldTime: position * 60 },
-            createdAt: CLOSED_AT + position,
-          },
-        },
-      },
-      { actionId, entryId: entry.kind === 'ai_reply' ? entry.id : null },
-    )
-  }
+  const turn: TurnEntry[] = [
+    {
+      id: 'entry_later_action',
+      position: last + 1,
+      kind: 'user_action',
+      content: 'I ask Tobin his price after dark.',
+    },
+    {
+      id: 'entry_later_reply',
+      position: last + 2,
+      kind: 'ai_reply',
+      content: 'Double, he says, and does not smile.',
+    },
+  ]
+  for (const entry of turn)
+    await writeTurnEntry(fx, actionId, { ...entry, createdAt: CLOSED_AT + entry.position })
 }
 
 type LaterWriter = {

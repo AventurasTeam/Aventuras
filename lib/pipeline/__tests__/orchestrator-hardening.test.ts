@@ -6,6 +6,7 @@ import { deltas, entities, pipelineRuns, storyEntries } from '@/lib/db'
 import { getDiagnosticsSnapshot } from '@/lib/diagnostics'
 import {
   definePipeline,
+  pipelineEventBus,
   recoverInFlightRuns,
   runPipeline,
   type PhaseContext,
@@ -399,12 +400,17 @@ describe('orchestrator hardening', () => {
       updatedAt: 1,
     } as never)
     definePipeline({ kind: 'noopy', phases: [{ name: 'p', run: redundantStatePatch }], ...base })
+    const seen: string[] = []
+    const unsubscribe = pipelineEventBus.subscribeAll((event) => seen.push(event.type))
 
     const result = expectRan(await runPipeline('noopy', ctx))
+    unsubscribe()
 
     expect(result.outcome).toBe('completed')
     // Nothing to undo, so nothing is logged.
     expect((await db.select().from(deltas)).length).toBe(0)
+    // generation-pipeline.md → Routing model: every event reaches the bus, a no-op write too.
+    expect(seen).toContain('delta_emitted')
   })
 
   it('a non-action throw from a phase body maps to an orchestrator error', async () => {

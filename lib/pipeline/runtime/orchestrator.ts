@@ -229,16 +229,13 @@ async function handleEvent(
       // promotion the other writer already landed. Both are ordinary with a real
       // model, and failing the run would reverse the user's whole turn over a
       // write that was never needed. Skipped, not logged as an error, and no
-      // delta is written: there is nothing to undo.
-      if (result.code === 'noop') {
-        logger.debug(
-          'pipeline.action_noop',
-          { kind: event.action.kind, reason: result.reason },
-          { actionId: run.actionId },
-        )
-        return
-      }
-      throw new ActionRejectedError(result.reason)
+      // delta is written: there is nothing to undo. It still reaches the bus, as a group's does.
+      if (result.code !== 'noop') throw new ActionRejectedError(result.reason)
+      logger.debug(
+        'pipeline.action_noop',
+        { kind: event.action.kind, reason: result.reason },
+        { actionId: run.actionId },
+      )
     }
     if (event.action.kind === 'createStoryEntry' && event.entryId) {
       turnCaptureSink.recordTargetEntry(run.actionId, event.entryId)

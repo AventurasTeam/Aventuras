@@ -3,14 +3,7 @@ import * as RadioGroupBase from '@rn-primitives/radio-group'
 import * as SelectBase from '@rn-primitives/select'
 import { Check, ChevronDown, ChevronDownIcon, ChevronUpIcon } from 'lucide-react-native'
 import { Fragment, useMemo, useRef, type ComponentProps, type ReactNode } from 'react'
-import {
-  Platform,
-  Pressable,
-  StyleSheet,
-  useWindowDimensions,
-  View,
-  type ViewStyle,
-} from 'react-native'
+import { Platform, StyleSheet, useWindowDimensions, View, type ViewStyle } from 'react-native'
 // rn-primitives Content stamps onStartShouldSetResponder={() => true},
 // which competes with RN's JS-side ScrollView pan claim. Gesture-handler's
 // ScrollView uses native gesture handling and bypasses the JS responder.
@@ -119,14 +112,12 @@ function PhoneSheetContent({
   sheetSize = 'short',
   portalHost,
   label,
-  tailAction,
 }: {
   className?: string
   children?: ReactNode
   sheetSize?: ContentSheetSize
   portalHost?: string
   label?: string
-  tailAction?: { label: string; onPress: () => void }
 }) {
   const { open, onOpenChange } = SelectBase.useRootContext()
   useRegisteredOverlay(open)
@@ -212,12 +203,6 @@ function PhoneSheetContent({
                   <BottomSheetScrollView keyboardShouldPersistTaps="handled" className="flex-1">
                     <SelectBase.Viewport>{children}</SelectBase.Viewport>
                   </BottomSheetScrollView>
-                  {tailAction != null ? (
-                    <>
-                      <View className="-mx-4 h-px bg-border" />
-                      <TailActionRow label={tailAction.label} onPress={tailAction.onPress} />
-                    </>
-                  ) : null}
                 </SelectBase.Content>
               </View>
             </TextClassContext.Provider>
@@ -235,12 +220,10 @@ function PopoverContent({
   children,
   position = 'popper',
   portalHost,
-  tailAction,
   ...props
 }: ComponentProps<typeof SelectBase.Content> & {
   className?: string
   portalHost?: string
-  tailAction?: { label: string; onPress: () => void }
 }) {
   // Web stretches the popover to the trigger via --radix-select-trigger-width
   // and clamps height via max-h-52; native has no equivalent so we derive both
@@ -325,12 +308,6 @@ function PopoverContent({
                   )}
                 </SelectBase.Viewport>
                 <ScrollDownButton />
-                {tailAction != null ? (
-                  <>
-                    <View className="h-px bg-border" />
-                    <TailActionRow label={tailAction.label} onPress={tailAction.onPress} />
-                  </>
-                ) : null}
               </SelectBase.Content>
             </NativeOnlyAnimatedView>
           </TextClassContext.Provider>
@@ -343,51 +320,23 @@ function PopoverContent({
 function Content({
   sheetSize,
   label,
-  tailAction,
   ...props
 }: ComponentProps<typeof SelectBase.Content> & {
   className?: string
   portalHost?: string
   sheetSize?: ContentSheetSize
   label?: string
-  tailAction?: { label: string; onPress: () => void }
 }) {
   const tier = useTier()
   const usesSheet = Platform.OS !== 'web' && tier === 'phone'
   if (usesSheet) {
     return (
-      <PhoneSheetContent
-        className={props.className}
-        sheetSize={sheetSize}
-        label={label}
-        tailAction={tailAction}
-      >
+      <PhoneSheetContent className={props.className} sheetSize={sheetSize} label={label}>
         {props.children}
       </PhoneSheetContent>
     )
   }
-  return <PopoverContent tailAction={tailAction} {...props} />
-}
-
-function TailActionRow({ label, onPress }: { label: string; onPress: () => void }) {
-  const { onOpenChange } = SelectBase.useRootContext()
-  return (
-    <Pressable
-      accessibilityRole="link"
-      onPress={() => {
-        onOpenChange(false)
-        onPress()
-      }}
-      className={cn(
-        'flex-row items-center justify-between px-row-x-md py-row-y-md active:bg-tint-press',
-        Platform.select({ web: 'cursor-pointer hover:bg-tint-hover' }) ?? '',
-      )}
-    >
-      <Text size="sm" className="font-medium">
-        {label}
-      </Text>
-    </Pressable>
-  )
+  return <PopoverContent {...props} />
 }
 
 function Label({ className, ...props }: ComponentProps<typeof SelectBase.Label>) {
@@ -567,13 +516,6 @@ export type SelectProps = {
     selected: SelectOption | undefined
     placeholder: string | undefined
   }) => ReactNode
-
-  /**
-   * Optional fixed action surfaced at the bottom of the popover /
-   * sheet, after the option list. Closes the dropdown on press in
-   * addition to firing the caller's handler.
-   */
-  tailAction?: { label: string; onPress: () => void }
 }
 
 export function resolveMode(
@@ -750,7 +692,6 @@ function DropdownBranch({
   size,
   renderRow,
   renderTrigger,
-  tailAction,
 }: SelectProps) {
   const selected = options.find((o) => o.value === value)
   const resolvedSheetSize: ContentSheetSize =
@@ -783,7 +724,6 @@ function DropdownBranch({
       <Content
         sheetSize={resolvedSheetSize}
         label={label}
-        tailAction={tailAction}
         className={
           renderRow != null ? (Platform.select({ web: 'max-h-96' }) ?? undefined) : undefined
         }

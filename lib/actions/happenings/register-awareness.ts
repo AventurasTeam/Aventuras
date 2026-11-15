@@ -7,7 +7,7 @@ import { happeningAwarenessStore } from '@/lib/stores'
 
 import { nullifyRef } from '../coerce'
 import { missingRef, MISSING_REF } from '../delta/live-refs'
-import { noopRefusal, register, type ActionHandler } from '../delta/registry'
+import { noopRefusal, register, type ActionHandler, TARGET_NOT_FOUND } from '../delta/registry'
 import {
   proseLogPosition,
   USER_EDITED_SINCE_PROSE,
@@ -232,7 +232,11 @@ const deleteHandler: ActionHandler = async (action, branchId, ctx) => {
     .from(happeningAwareness)
     .where(and(eq(happeningAwareness.branchId, bid), eq(happeningAwareness.id, id)))
   if (!current)
-    return { status: 'rejected', reason: `delete target awareness ${bid}:${id} not found` }
+    return {
+      status: 'rejected',
+      reason: `delete target awareness ${bid}:${id} not found`,
+      code: TARGET_NOT_FOUND,
+    }
   return {
     status: 'ok',
     targetTable: 'happening_awareness',

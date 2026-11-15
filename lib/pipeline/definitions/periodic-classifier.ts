@@ -127,6 +127,7 @@ const CUT_KEYS = {
   condition: 'classifier.condition_truncated',
   visual: 'classifier.visual_truncated',
   standing: 'classifier.standing_truncated',
+  retiredReason: 'classifier.retired_reason_truncated',
 } as const satisfies Record<PlanResult['cutTexts'][number]['kind'], string>
 
 type StatusCtx = Pick<PhaseContext, 'db' | 'branchId'>
