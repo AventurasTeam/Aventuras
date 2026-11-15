@@ -14,6 +14,7 @@ import {
   jumpToEntry,
   needsStartCheckpoint,
   resolveEntryByNumber,
+  startClock,
   withSnapshotLandmarks,
   type EntryJumpUi,
   type Landmark,
@@ -786,5 +787,34 @@ describe('needsStartCheckpoint', () => {
     expect(needsStartCheckpoint([], [])).toBe(false)
     expect(needsStartCheckpoint([opening, entry('s', 'system')], [])).toBe(false)
     expect(needsStartCheckpoint([opening], [{ lastEntryId: 'o' }])).toBe(false)
+  })
+})
+
+describe('startClock', () => {
+  const clock = { years: 0, days: 2, hours: 3, minutes: 0 }
+  const entry = (id: string, metadata: StoryEntry['metadata']) => ({ id, metadata })
+  const imported = entry('i', { source: 'sillytavern_import' })
+  const checkpoint = (lastEntryId: string, timeTrackerSnapshot: typeof clock | null) => ({
+    lastEntryId,
+    timeTrackerSnapshot,
+  })
+
+  it('leaves a stamped entry to its own time', () => {
+    const stamped = entry('i', { source: 'sillytavern_import', timeEnd: clock })
+    expect(startClock(stamped, [checkpoint('i', null)])).toBeUndefined()
+  })
+
+  it('leaves an unstamped entry that is not a story start alone', () => {
+    expect(startClock(entry('x', null), [checkpoint('x', clock)])).toBeUndefined()
+  })
+
+  it('leaves the clock alone without a checkpoint on the entry', () => {
+    expect(startClock(imported, [])).toBeUndefined()
+    expect(startClock(imported, [checkpoint('other', clock)])).toBeUndefined()
+  })
+
+  it("takes the start checkpoint's clock, including none", () => {
+    expect(startClock(imported, [checkpoint('i', clock)])).toEqual(clock)
+    expect(startClock(imported, [checkpoint('i', null)])).toBeNull()
   })
 })

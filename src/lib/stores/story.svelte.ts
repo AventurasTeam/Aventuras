@@ -175,6 +175,7 @@ import {
   checkpointDeletionBlocker,
   entryNumber,
   needsStartCheckpoint,
+  startClock,
   type SnapshotMark,
 } from '#lib/utils/storyNavigation.ts'
 import { IMPORTED_CHAT_SOURCE, OPENING_SOURCE } from '#lib/utils/storyEntries.ts'
@@ -5652,7 +5653,8 @@ class StoryStore {
   }
 
   /**
-   * Restore time tracker from the last entry's timeEnd metadata.
+   * Restore time tracker from the last entry's timeEnd metadata, or from the start checkpoint's
+   * clock when the branch ends on an unstamped story-start entry.
    * Called after loading entries for a branch to ensure time consistency.
    */
   private async restoreTimeFromLastEntry(): Promise<void> {
@@ -5661,21 +5663,24 @@ class StoryStore {
     const lastEntry = this.entries[this.entries.length - 1]
     const timeEnd = lastEntry.metadata?.timeEnd
 
-    if (timeEnd && typeof timeEnd === 'object') {
-      const newTime = timeEnd as TimeTracker
-      // Only update if different to avoid unnecessary DB writes
-      const current = this.currentStory.timeTracker
-      if (
-        !current ||
-        current.years !== newTime.years ||
-        current.days !== newTime.days ||
-        current.hours !== newTime.hours ||
-        current.minutes !== newTime.minutes
-      ) {
-        this.currentStory = { ...this.currentStory, timeTracker: newTime }
-        await database.updateStory(this.currentStory.id, { timeTracker: newTime })
-        log('Time tracker restored from last entry:', newTime)
-      }
+    if (!timeEnd || typeof timeEnd !== 'object') {
+      await this.restoreTimeTrackerSnapshot(startClock(lastEntry, this.checkpoints))
+      return
+    }
+
+    const newTime = timeEnd as TimeTracker
+    // Only update if different to avoid unnecessary DB writes
+    const current = this.currentStory.timeTracker
+    if (
+      !current ||
+      current.years !== newTime.years ||
+      current.days !== newTime.days ||
+      current.hours !== newTime.hours ||
+      current.minutes !== newTime.minutes
+    ) {
+      this.currentStory = { ...this.currentStory, timeTracker: newTime }
+      await database.updateStory(this.currentStory.id, { timeTracker: newTime })
+      log('Time tracker restored from last entry:', newTime)
     }
   }
 

@@ -1,4 +1,4 @@
-import type { Branch, Checkpoint, StoryEntry } from '#lib/types/index.ts'
+import type { Branch, Checkpoint, StoryEntry, TimeTracker } from '#lib/types/index.ts'
 import { chapterBannerLabel, type ChapterBanner } from './chapterBanners'
 import { isStoryStartEntry } from './storyEntries'
 
@@ -232,6 +232,19 @@ export function needsStartCheckpoint(
     isStoryStartEntry(last) &&
     !checkpoints.some((cp) => cp.lastEntryId === last.id)
   )
+}
+
+/**
+ * The clock for a branch ending on an unstamped story-start entry: the clock saved by a checkpoint
+ * there. Undefined leaves the current clock alone.
+ */
+export function startClock(
+  last: Pick<StoryEntry, 'id' | 'metadata'>,
+  checkpoints: Pick<Checkpoint, 'lastEntryId' | 'timeTrackerSnapshot'>[],
+): TimeTracker | null | undefined {
+  if (last.metadata?.timeEnd || !isStoryStartEntry(last)) return undefined
+  const checkpoint = checkpoints.find((cp) => cp.lastEntryId === last.id)
+  return checkpoint ? (checkpoint.timeTrackerSnapshot ?? null) : undefined
 }
 
 export function checkpointsOnBranch(
