@@ -236,6 +236,17 @@ describe('NanoGPT model catalogue', () => {
     expect(model?.compressionFormats).toBeUndefined()
   })
 
+  it('names a reference format listed as jpg by the type the sniffer reports', async () => {
+    const model = await capabilitiesOf(
+      listed('m', {
+        supported_parameters: {
+          input_image_constraints: { route: { formats: ['PNG', 'JPG'] } },
+        },
+      }),
+    )
+    expect(model?.referenceConstraints?.mimeTypes).toEqual(['image/png', 'image/jpeg'])
+  })
+
   it('takes the reference limit from max_input_images, then from the constraints', async () => {
     expect(
       (await capabilitiesOf(listed('m', { supported_parameters: { max_input_images: 3 } })))

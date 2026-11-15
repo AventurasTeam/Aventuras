@@ -113,6 +113,12 @@ type NanoGptModel = z.output<typeof NanoGptModel>
 type ModelFacts = Pick<NanoGptModel, 'architecture' | 'capabilities' | 'supported_parameters'>
 type ImageConstraints = z.output<typeof imageConstraints>
 
+/** The catalogue spells JPEG both ways; `sniffImageMime` says `image/jpeg`. */
+const referenceMime = (format: string): string => {
+  const lower = format.toLowerCase()
+  return `image/${lower === 'jpg' ? 'jpeg' : lower}`
+}
+
 /** An entry listing no formats means every lossy one; one listing only formats without a level means none. */
 function compressionFormatsOf(
   entry: { formats?: string[] } | undefined,
@@ -153,7 +159,7 @@ function toReferenceConstraints(
       sides.flatMap((side) => [side.max_width, side.max_height]),
       Math.min,
     ),
-    mimeTypes: formats?.length ? formats.map((f) => `image/${f.toLowerCase()}`) : undefined,
+    mimeTypes: formats?.length ? formats.map(referenceMime) : undefined,
   }
   return Object.values(result).some((v) => v !== undefined) ? result : undefined
 }
