@@ -1,4 +1,5 @@
 import type { RetrievalSnapshot } from '#lib/services/ai/retrieval/retrievalSnapshot.ts'
+import type { ImageOutputFormat } from '#lib/utils/imageOutput.ts'
 // Core entity types for Aventura
 export type StoryMode = 'adventure' | 'creative-writing'
 export type POV = 'first' | 'second' | 'third'
@@ -897,6 +898,10 @@ export interface ImageModelCapabilities {
   supportedAspectRatios?: string[]
   /** The fewest pixels a request may ask for. Set only by a profile's override, never listed. */
   minPixels?: number
+  /** Formats the model returns on request; absent means unknown, and no format is sent. */
+  outputFormats?: ImageOutputFormat[]
+  /** Formats that take a compression level; absent means none do. */
+  compressionFormats?: ImageOutputFormat[]
 }
 
 /** What a profile says about its model where the provider publishes nothing usable. A blank field defers to the provider. */
@@ -905,6 +910,10 @@ export interface ImageCapabilityOverride {
   /** Sizes to send, as `WxH`. */
   sizes?: string[]
   references?: boolean
+  /** Formats the host returns on request. */
+  outputFormats?: ImageOutputFormat[]
+  /** The host takes a compression level for its lossy formats. */
+  outputCompression?: boolean
 }
 
 declare const imageConnectionBrand: unique symbol

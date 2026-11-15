@@ -123,6 +123,8 @@ rather than load-time functions. Migration 046 turns a ComfyUI custom workflow's
 `positivePromptPath` and `negativePromptPath` into the lists `positivePromptPaths` and
 `negativePromptPaths` (an input in both stays only a prompt input), and points a `KSamplerAdvanced`
 seed path that named `seed` at `noise_seed`. Its rules are tested in `src-tauri/src/comfy_workflow_paths.rs`.
+An optional field added to a profile (such as the output formats in `capabilityOverride`) needs no
+migration: profiles are spread on load and written whole, and a profile without it reads as unset.
 
 ## Story Settings
 
