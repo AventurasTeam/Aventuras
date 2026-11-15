@@ -55,6 +55,31 @@ describe('OpenAI Compatible image generation', () => {
     })
   })
 
+  it('passes the chosen output format and compression as extra body fields', async () => {
+    const provider = createOpenAICompatibleProvider({ apiKey: 'k', baseUrl: BASE_URL })
+
+    await provider.generate(options({ output: { format: 'webp', compression: 60 } }))
+    expect(lastGenerate().providerOptions).toEqual({
+      openaiCompatible: {
+        response_format: 'b64_json',
+        output_format: 'webp',
+        output_compression: 60,
+      },
+    })
+
+    await provider.generate(options({ output: { format: 'png' } }))
+    expect(lastGenerate().providerOptions).toEqual({
+      openaiCompatible: { response_format: 'b64_json', output_format: 'png' },
+    })
+  })
+
+  it('passes no output fields without a chosen output', async () => {
+    await createOpenAICompatibleProvider({ apiKey: 'k', baseUrl: BASE_URL }).generate(options())
+    expect(lastGenerate().providerOptions).toEqual({
+      openaiCompatible: { response_format: 'b64_json' },
+    })
+  })
+
   it('sends the size picked from the listed sizes, and canonical pixels without them', async () => {
     const provider = createOpenAICompatibleProvider({ apiKey: 'k', baseUrl: BASE_URL })
     const spec = { orientation: 'landscape', size: 'medium' } as const

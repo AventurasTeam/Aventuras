@@ -9,6 +9,7 @@
 
 import * as z from 'zod'
 import { pickRequestSize } from '#lib/utils/image.ts'
+import { outputWireFields } from '#lib/utils/imageOutput.ts'
 import { endpoint } from '#lib/utils/url.ts'
 import { resolveBaseUrl } from './baseUrls'
 import type {
@@ -104,7 +105,7 @@ export function createOpenAICompatibleProvider(config: ImageProviderConfig): Ima
     name: 'OpenAI Compatible',
 
     async generate(options: ImageGenerateOptions): Promise<ImageGenerateResult> {
-      const { model, prompt, spec, modelInfo, referenceImages, signal } = options
+      const { model, prompt, spec, modelInfo, referenceImages, output, signal } = options
       if (!baseUrl) throw new Error('OpenAI-compatible provider requires a custom base URL')
 
       return generateOpenAICompatibleImage({
@@ -115,6 +116,7 @@ export function createOpenAICompatibleProvider(config: ImageProviderConfig): Ima
         prompt,
         size: pickRequestSize(spec, modelInfo?.supportedResolutions, modelInfo?.minPixels),
         referenceImages,
+        extraFields: outputWireFields(output),
         signal,
       })
     },

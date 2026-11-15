@@ -50,6 +50,25 @@ beforeEach(() => {
   sent.bodies.length = 0
 })
 
+describe('output format fields', () => {
+  it('join the body beside the response format the app always asks for', async () => {
+    await generateOpenAICompatibleImage({
+      baseUrl: 'https://proxy.test/v1',
+      serviceId: 'svc-image',
+      model: 'flux-dev',
+      prompt: 'a castle',
+      size: '1024x1024',
+      extraFields: { output_format: 'webp', output_compression: 60 },
+    })
+
+    expect(JSON.parse(sent.bodies[0] as string)).toMatchObject({
+      response_format: 'b64_json',
+      output_format: 'webp',
+      output_compression: 60,
+    })
+  })
+})
+
 describe('the model in a request', () => {
   it('is sent when the profile names one', async () => {
     await generate('flux-dev')
