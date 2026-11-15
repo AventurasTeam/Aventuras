@@ -5653,20 +5653,23 @@ class StoryStore {
   }
 
   /**
-   * Restore time tracker from the last entry's timeEnd metadata, or from the start checkpoint's
-   * clock when the branch ends on an unstamped story-start entry.
+   * Restore time tracker from the start checkpoint's clock when the branch ends on a story-start
+   * entry, otherwise from the last entry's timeEnd metadata.
    * Called after loading entries for a branch to ensure time consistency.
    */
   private async restoreTimeFromLastEntry(): Promise<void> {
     if (!this.currentStory || this.entries.length === 0) return
 
     const lastEntry = this.entries[this.entries.length - 1]
-    const timeEnd = lastEntry.metadata?.timeEnd
 
-    if (!timeEnd || typeof timeEnd !== 'object') {
-      await this.restoreTimeTrackerSnapshot(startClock(lastEntry, this.checkpoints))
+    const start = startClock(lastEntry, this.checkpoints)
+    if (start !== undefined) {
+      await this.restoreTimeTrackerSnapshot(start)
       return
     }
+
+    const timeEnd = lastEntry.metadata?.timeEnd
+    if (!timeEnd || typeof timeEnd !== 'object') return
 
     const newTime = timeEnd as TimeTracker
     // Only update if different to avoid unnecessary DB writes

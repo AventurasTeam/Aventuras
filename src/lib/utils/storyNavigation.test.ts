@@ -799,13 +799,20 @@ describe('startClock', () => {
     timeTrackerSnapshot,
   })
 
-  it('leaves a stamped entry to its own time', () => {
-    const stamped = entry('i', { source: 'sillytavern_import', timeEnd: clock })
-    expect(startClock(stamped, [checkpoint('i', null)])).toBeUndefined()
+  const opening = (timeEnd: typeof clock) => entry('o', { source: 'wizard', timeEnd })
+
+  it("keeps the start checkpoint's clock over a stamped opening's", () => {
+    const edited = { ...clock, days: 5 }
+    expect(startClock(opening(clock), [checkpoint('o', edited)])).toEqual(edited)
   })
 
-  it('leaves an unstamped entry that is not a story start alone', () => {
+  it('leaves a stamped opening to its own time when its checkpoint has no clock', () => {
+    expect(startClock(opening(clock), [checkpoint('o', null)])).toBeUndefined()
+  })
+
+  it('leaves an entry that is not a story start alone', () => {
     expect(startClock(entry('x', null), [checkpoint('x', clock)])).toBeUndefined()
+    expect(startClock(entry('x', { timeEnd: clock }), [checkpoint('x', null)])).toBeUndefined()
   })
 
   it('leaves the clock alone without a checkpoint on the entry', () => {

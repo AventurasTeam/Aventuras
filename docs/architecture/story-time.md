@@ -26,10 +26,11 @@ Classification advances the clock by one of four buckets — none, 15 minutes, 2
 failed classification counts as none. A player action is an instant: its start and end are the same
 moment, and it never carries a duration or a weight anywhere below.
 
-Loading a branch sets the register from its last entry's `timeEnd`. A branch that ends on an
-unstamped story-start entry, an imported chat, takes the clock of the checkpoint on that entry
-instead (`startClock`), so branching from or returning to a story's start does not carry the clock of
-turns played elsewhere.
+Loading a branch sets the register from its last entry's `timeEnd`. A branch that ends on a
+story-start entry, a wizard opening or an imported chat, takes the clock of the checkpoint on that
+entry instead (`startClock`): it keeps a clock edited before the first turn, and branching from or
+returning to a story's start does not carry the clock of turns played elsewhere. A checkpoint with
+no clock clears the register only for an unstamped entry; a stamped one keeps its own time.
 
 A zero clock and an absent one are written identically by `addEntry`, so a stored zero cannot be read
 as either. Detection treats it as suspect, never as proof.

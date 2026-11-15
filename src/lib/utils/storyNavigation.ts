@@ -235,16 +235,19 @@ export function needsStartCheckpoint(
 }
 
 /**
- * The clock for a branch ending on an unstamped story-start entry: the clock saved by a checkpoint
- * there. Undefined leaves the current clock alone.
+ * The clock for a branch ending on a story-start entry: the clock its start checkpoint saved, which
+ * keeps edits made before the first turn. A checkpoint with no clock clears one only where the
+ * entry has no time of its own. Undefined leaves the decision to the entry.
  */
 export function startClock(
   last: Pick<StoryEntry, 'id' | 'metadata'>,
   checkpoints: Pick<Checkpoint, 'lastEntryId' | 'timeTrackerSnapshot'>[],
 ): TimeTracker | null | undefined {
-  if (last.metadata?.timeEnd || !isStoryStartEntry(last)) return undefined
+  if (!isStoryStartEntry(last)) return undefined
   const checkpoint = checkpoints.find((cp) => cp.lastEntryId === last.id)
-  return checkpoint ? (checkpoint.timeTrackerSnapshot ?? null) : undefined
+  if (!checkpoint) return undefined
+  if (checkpoint.timeTrackerSnapshot) return checkpoint.timeTrackerSnapshot
+  return last.metadata?.timeEnd ? undefined : null
 }
 
 export function checkpointsOnBranch(
