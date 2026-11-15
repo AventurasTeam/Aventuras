@@ -174,6 +174,7 @@ import {
   CLOSING_SNAPSHOT_PREFIX,
   checkpointDeletionBlocker,
   entryNumber,
+  needsStartCheckpoint,
   type SnapshotMark,
 } from '#lib/utils/storyNavigation.ts'
 import { IMPORTED_CHAT_SOURCE, OPENING_SOURCE } from '#lib/utils/storyEntries.ts'
@@ -4623,6 +4624,19 @@ class StoryStore {
     })
 
     return checkpoint
+  }
+
+  /**
+   * Checkpoints the story as it was created or imported, on its first turn and before that turn
+   * writes anything, so a branch can always go back to the start.
+   */
+  async ensureStartCheckpoint(lease: GenerationLease): Promise<void> {
+    if (!needsStartCheckpoint(this.entries, this.checkpoints)) return
+    try {
+      await this.createCheckpoint('Story start', lease)
+    } catch (error) {
+      log('Start checkpoint not created', error)
+    }
   }
 
   /** The snapshots of the branch being read, for listing; their contents are not loaded. */
