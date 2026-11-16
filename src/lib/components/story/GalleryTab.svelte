@@ -35,6 +35,7 @@
   import { Button } from '#lib/components/ui/button/index.ts'
   import { Checkbox } from '#lib/components/ui/checkbox/index.ts'
   import { Textarea } from '#lib/components/ui/textarea/index.ts'
+  import { claimBackPress } from '#lib/utils/backPress.ts'
   import * as ResponsiveModal from '#lib/components/ui/responsive-modal/index.ts'
   import { SvelteSet, SvelteMap } from 'svelte/reactivity'
   import type { Attachment } from 'svelte/attachments'
@@ -451,8 +452,9 @@
   }
 
   function handleKeydown(e: KeyboardEvent) {
+    // A layer above already took this key: the lightbox's Escape must not also close the gallery.
+    if (e.defaultPrevented) return
     if (lightboxOpen) {
-      if (e.key === 'Escape') closeLightbox()
       // Arrows move the caret in a field, and switching images would discard its unsaved edit.
       const target = e.target as HTMLElement | null
       if (
@@ -469,6 +471,15 @@
   }
 
   const OrderIcon = $derived(ui.galleryNewestFirst ? ClockArrowDown : ClockArrowUp)
+
+  // Back closes the lightbox alone; the layout's Escape fallback would close the gallery behind it.
+  $effect(() => {
+    if (!lightboxOpen) return
+    return claimBackPress(() => {
+      closeLightbox()
+      return true
+    })
+  })
 
   // Load the lightbox window's pixels, and evict what it no longer protects.
   $effect(() => {
