@@ -591,8 +591,8 @@ export function ReaderSurface({
   // applied to scrollTop. Chrome's scroll anchoring skips this tree (desktop-observed), so the
   // scroller opts out via overflow-anchor:none and this rule is the sole authority; split per-cause
   // compensations fought each other here. When that row is gone, the surviving row nearest it
-  // stands in. The short hold loop absorbs late layout of inserted content. A running landing
-  // wins: it is measured from its row. A scroll drops the memo, so a commit never undoes one: each
+  // stands in. The short hold loop absorbs late layout of inserted content. A scroll drops the
+  // memo, so a commit never undoes one: each
   // props change records afresh in its first commit, which changes nothing.
   const anchorMemoRef = useRef<AnchorMemo | null>(null)
   const anchorHoldRafRef = useRef(0)
@@ -603,7 +603,9 @@ export function ReaderSurface({
     const rowEls = rowElementsOf(el)
     const memo = anchorMemoRef.current
     const { branchKey: shownBranch } = shownRef.current
-    if (memo != null && memo.branchKey === shownBranch && landingRef.current?.running !== true) {
+    // A running landing or bottom pin wins: each places the reader by its own measure.
+    const placed = landingRef.current?.running === true || pinActiveRef.current
+    if (memo != null && memo.branchKey === shownBranch && !placed) {
       const now = new Map(rowEls.map((rowEl) => [rowEl.dataset.entryRow, rowEl]))
       let anchor: { el: HTMLElement; deltaPx: number } | null = null
       for (let step = 0; anchor == null && step < memo.ids.length; step += 1) {
