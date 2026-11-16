@@ -27,6 +27,7 @@ import {
 import type { RetrievalEventInput } from '../../retrieval/retrievalHistory'
 import { sampleMatches } from '../../retrieval/grepSampling'
 import { entryTimeTag } from '#lib/utils/storyTime.ts'
+import { itemLocationLabel, readItemPlacement } from '#lib/utils/itemLocation.ts'
 
 /**
  * Shape of live WorldState snapshot available during agentic retrieval.
@@ -963,16 +964,20 @@ function createInspectWorldStateTool({
       }
 
       if (category === 'items' || category === 'all') {
-        const matched = (ws.items ?? []).filter(
-          (i: Item) => match(i.name) || match(i.description) || match(i.location),
+        const placed = (ws.items ?? []).map((i: Item) => ({
+          item: i,
+          label: itemLocationLabel(readItemPlacement(i, ws.locations ?? [])),
+        }))
+        const matched = placed.filter(
+          ({ item, label }) => match(item.name) || match(item.description) || match(label),
         )
         totalMatched += matched.length
-        const sliced = matched.slice(0, limit).map((i: Item) => ({
-          id: i.id,
-          name: i.name,
-          location: i.location,
-          equipped: i.equipped,
-          description: i.description,
+        const sliced = matched.slice(0, limit).map(({ item, label }) => ({
+          id: item.id,
+          name: item.name,
+          location: label,
+          equipped: item.equipped,
+          description: item.description,
         }))
         totalReturned += sliced.length
         results.items = sliced

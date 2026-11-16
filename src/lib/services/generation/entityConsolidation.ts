@@ -99,6 +99,8 @@ interface PoolOps<T extends { id: string; name: string }> {
   plan: (primary: T, rows: T[]) => MergePlan
   /** Writes the merged values. `updates` is what `applyMergePlan` produced. */
   write: (id: string, updates: Record<string, unknown>) => Promise<void>
+  /** Repoints what refers to the absorbed records, before they are removed. */
+  repoint?: (primaryId: string, absorbedIds: string[]) => Promise<void>
   remove: (id: string) => Promise<void>
 }
 
@@ -117,6 +119,7 @@ const POOL_OPS = {
     candidate: (l) => ({ id: l.id, name: l.name }),
     plan: planLocationMerge,
     write: (id, updates) => story.updateLocation(id, updates as Partial<Location>),
+    repoint: (primaryId, absorbedIds) => story.moveItemsBetweenLocations(absorbedIds, primaryId),
     remove: (id) => story.deleteLocation(id),
   } satisfies PoolOps<Location>,
   item: {
@@ -193,6 +196,7 @@ export async function mergeGroup(group: ScopedDuplicateGroup, plan: MergePlan): 
   log('Merging group', { pool: group.pool, primaryId: plan.primaryId, absorbing: others.length })
 
   await ops.write(plan.primaryId, applyMergePlan(plan))
+  await ops.repoint?.(plan.primaryId, others)
 
   const failed: string[] = []
   for (const id of others) {
