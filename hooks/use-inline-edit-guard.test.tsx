@@ -225,6 +225,52 @@ describe('useInlineEditGuard', () => {
     expect(proceed).not.toHaveBeenCalled()
   })
 
+  it('asks afresh after a refocus, ignoring an answer to the question focus loss dropped', async () => {
+    const first = deferred<QueryAnswer>()
+    const second = deferred<QueryAnswer>()
+    const port = {
+      ...fakePort(null),
+      query: vi.fn().mockReturnValueOnce(first.promise).mockReturnValueOnce(second.promise),
+    }
+    const r = render(port)
+    act(() => r.result.current.guard(vi.fn()))
+    stubs.focused = false
+    r.rerender({ armed: true })
+    stubs.focused = true
+    r.rerender({ armed: true })
+
+    const proceed = vi.fn()
+    act(() => r.result.current.guard(proceed))
+    expect(port.query).toHaveBeenCalledTimes(2)
+
+    await act(async () => first.resolve({ entryId: 'e2', dirty: false }))
+    expect(proceed).not.toHaveBeenCalled()
+
+    await act(async () => second.resolve(DIRTY))
+    expect(proceed).not.toHaveBeenCalled()
+    expect(dialogOf(r)?.open).toBe(true)
+  })
+
+  it("lets a Save that outlived its dialog settle nothing of a newer one's", async () => {
+    const commit = deferred<CommitAnswer>()
+    const port = { ...fakePort(DIRTY), commit: vi.fn(() => commit.promise) }
+    const r = render(port)
+    await leave(r)
+    act(() => dialogOf(r)?.onSave())
+    stubs.focused = false
+    r.rerender({ armed: true })
+    stubs.focused = true
+    r.rerender({ armed: true })
+    const proceed = await leave(r)
+    expect(dialogOf(r)?.open).toBe(true)
+
+    await act(async () => commit.resolve({ ok: true }))
+
+    expect(proceed).not.toHaveBeenCalled()
+    expect(dialogOf(r)?.open).toBe(true)
+    expect(dialogOf(r)?.saving).toBe(false)
+  })
+
   it("opens degraded when the editor doesn't answer: Save off, Discard still leaves", async () => {
     const port = fakePort(UNRESPONSIVE)
     const r = render(port)

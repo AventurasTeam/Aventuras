@@ -20,7 +20,8 @@ export type InlineEditPort = {
   discard: () => void
 }
 
-type Pending = { saving: boolean; reason: string | null; unresponsive: boolean }
+/** `id` is the query that opened it; a late answer or Save applies only while it's current. */
+type Pending = { id: number; saving: boolean; reason: string | null; unresponsive: boolean }
 
 type InlineEditGuard = {
   guard: (proceed: () => void) => void
@@ -57,8 +58,9 @@ export function useInlineEditGuard({
   const [pending, setPending] = useState<Pending | null>(null)
   // Leaves queued behind one question: a second leave while the first asks waits on its answer.
   const intentsRef = useRef<(() => void)[]>([])
-  const askingRef = useRef(false)
-  const openRef = useRef(false)
+  const querySeqRef = useRef(0)
+  const askingRef = useRef<number | null>(null)
+  const openRef = useRef<number | null>(null)
   const portRef = useRef(port)
   const armedRef = useRef(armed)
   useEffect(() => {
@@ -67,7 +69,7 @@ export function useInlineEditGuard({
   })
 
   const show = useCallback((next: Pending | null) => {
-    openRef.current = next != null
+    openRef.current = next?.id ?? null
     setPending(next)
   }, [])
 
@@ -89,22 +91,29 @@ export function useInlineEditGuard({
 
   const requestLeave = useCallback(
     (proceed: () => void) => {
-      if (!armedRef.current && !openRef.current && !askingRef.current) {
+      const busy = openRef.current != null || askingRef.current != null
+      if (!armedRef.current && !busy) {
         proceed()
         return
       }
       intentsRef.current = [...intentsRef.current, proceed]
-      if (openRef.current || askingRef.current) return
-      askingRef.current = true
+      if (busy) return
+      const id = ++querySeqRef.current
+      askingRef.current = id
       void portRef.current.query().then((answer) => {
-        askingRef.current = false
-        // Dropped meanwhile: the screen lost focus, and a held leave must not navigate unasked.
-        if (intentsRef.current.length === 0) return
+        // Forgotten when the screen lost focus: the draft may have changed since it was asked.
+        if (askingRef.current !== id) return
+        askingRef.current = null
         if (answer === UNRESPONSIVE) {
           logger.warn('reader.edit_guard_unresponsive', { step: 'query' })
-          show({ saving: false, reason: t('reader:editGuard.unresponsive'), unresponsive: true })
+          show({
+            id,
+            saving: false,
+            reason: t('reader:editGuard.unresponsive'),
+            unresponsive: true,
+          })
         } else if (answer?.dirty === true)
-          show({ saving: false, reason: null, unresponsive: false })
+          show({ id, saving: false, reason: null, unresponsive: false })
         else settle()
       })
     },
@@ -120,11 +129,13 @@ export function useInlineEditGuard({
   useEffect(() => {
     if (isFocused) return
     intentsRef.current = []
+    askingRef.current = null
     show(null)
   }, [isFocused, show])
 
   const save = useCallback(() => {
     if (pending == null || pending.saving || pending.unresponsive) return
+    const { id } = pending
     show({ ...pending, saving: true })
     void portRef.current
       .commit()
@@ -135,12 +146,19 @@ export function useInlineEditGuard({
         return { ok: false }
       })
       .then((result) => {
-        if (!openRef.current) return
+        // Its dialog closed meanwhile; settling a newer one would release a leave it never asked.
+        if (openRef.current !== id) return
         if (result === UNRESPONSIVE) {
           logger.warn('reader.edit_guard_unresponsive', { step: 'commit' })
-          show({ saving: false, reason: t('reader:editGuard.unresponsive'), unresponsive: false })
+          show({
+            id,
+            saving: false,
+            reason: t('reader:editGuard.unresponsive'),
+            unresponsive: false,
+          })
         } else if (result.ok) settle()
-        else show({ saving: false, reason: editRefusalReason(result.code), unresponsive: false })
+        else
+          show({ id, saving: false, reason: editRefusalReason(result.code), unresponsive: false })
       })
   }, [pending, settle, show])
 
