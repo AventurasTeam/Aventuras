@@ -107,7 +107,9 @@ momentum. A width reflow takes the same anchor
 ([`reader-composer.md → Anchor preservation under shifts`](../screens/reader-composer/reader-composer.md#anchor-preservation-under-shifts)).
 While a jump's landing runs it wins over the anchor rule
 ([`reader-composer.md → Loaded-set model`](../screens/reader-composer/reader-composer.md#loaded-set-model)),
-and the chapter-break pin only re-pins a reader already at the bottom
+and so does a bottom pin (open-at-bottom, the stream-end settle), which
+places the reader by the bottom rather than by a row; the chapter-break
+pin only re-pins a reader already at the bottom
 ([`reader-composer.md → Autoscroll`](../screens/reader-composer/reader-composer.md#autoscroll)).
 
 Open-at-bottom is a document concern: land on the last entry
