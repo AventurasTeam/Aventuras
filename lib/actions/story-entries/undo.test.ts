@@ -1125,6 +1125,21 @@ describe('undo and redo during a pass', () => {
     expect(await start.origin).toMatchObject({ outcome: 'completed' })
   })
 
+  it('refuses a CTRL-Z through the pass whose named action is no longer the head', async () => {
+    const { ctx, pass } = await seedWithPass()
+    const start = startPass(ctx)
+    const held = await pass.nextHeld()
+
+    const result = await undoLastAction('b1', ctx, { expectedActionId: 'act_named_earlier' })
+
+    expect(result).toMatchObject({ status: 'rejected', code: 'target-moved' })
+    expect(entriesStore.getById('e_turn')).toBeDefined()
+    expect(runningPass('b1')?.actionId).toBe(held.actionId)
+    expect(generationStore.getTxState().deferred.size).toBe(0)
+    held.finish('completed')
+    expect(await start.origin).toMatchObject({ outcome: 'completed' })
+  })
+
   it('refuses redo while a pass runs, leaving the pass running', async () => {
     const { ctx, pass } = await seedWithPass()
     const start = startPass(ctx)
@@ -1283,5 +1298,56 @@ describe('undo past a committed close', () => {
 
     expect(await undoLastAction('b1', ctx)).toEqual({ status: 'ok' })
     expect(entriesStore.getById('e_turn')).toBeUndefined()
+  })
+})
+
+// reader-composer.md → Undo and redo: the undo reverses exactly the action its label or confirm
+// named; a newer head undoes nothing.
+describe('undo and redo pinned to the action they named', () => {
+  async function seeded() {
+    const { db, runInTransaction } = await createTestDb()
+    const ctx = { db, runInTransaction }
+    await seed(db)
+    hydrateOpeningAndTurn()
+    return { db, ctx }
+  }
+
+  it('undoes the named head, and its redo group names it', async () => {
+    const { ctx } = await seeded()
+
+    expect(await undoLastAction('b1', ctx, { expectedActionId: 'act_turn' })).toEqual({
+      status: 'ok',
+    })
+
+    expect(entriesStore.getById('e_turn')).toBeUndefined()
+    expect(undoRedoStore.peekRedoGroup()?.actionId).toBe('act_turn')
+  })
+
+  it('refuses target-moved when a newer action heads the log, writing nothing', async () => {
+    const { db, ctx } = await seeded()
+    expect(await updateStoryEntryContent('b1', 'e_turn', 'edited', ctx)).toEqual({ status: 'ok' })
+    const before = await db.select().from(deltas)
+
+    const result = await undoLastAction('b1', ctx, { expectedActionId: 'act_turn' })
+
+    expect(result).toMatchObject({ status: 'rejected', code: 'target-moved' })
+    expect(entriesStore.getById('e_turn')?.content).toBe('edited')
+    expect(await db.select().from(deltas)).toEqual(before)
+    expect(undoRedoStore.hasRedo()).toBe(false)
+  })
+
+  it('refuses a redo whose named action is no longer the stack top, leaving the stack', async () => {
+    const { ctx } = await seeded()
+    expect((await undoLastAction('b1', ctx)).status).toBe('ok')
+
+    const result = await redoLastAction('b1', ctx, { expectedActionId: 'act_other' })
+
+    expect(result).toMatchObject({ status: 'rejected', code: 'target-moved' })
+    expect(entriesStore.getById('e_turn')).toBeUndefined()
+    expect(undoRedoStore.peekRedoGroup()?.actionId).toBe('act_turn')
+    expect(await redoLastAction('b1', ctx, { expectedActionId: 'act_turn' })).toEqual({
+      status: 'ok',
+    })
+    expect(entriesStore.getById('e_turn')).toBeDefined()
   })
 })

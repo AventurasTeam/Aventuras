@@ -154,6 +154,7 @@ export {
   redoLastAction,
   undoLastAction,
   type UndoRejectionCode,
+  type UndoOptions,
   type UndoResult,
 } from './story-entries/undo'
 export { clearSystemEntry, writeSystemEntry } from './story-entries/system-entry'
