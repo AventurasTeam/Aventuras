@@ -14,7 +14,8 @@ Used by: every detail-pane editing surface — World panel detail
 panes (entities, lore), Plot panel detail panes (threads,
 happenings), Story Settings, App Settings, Vault calendar editor,
 chapter-timeline expanded card edit, and any future detail-pane
-surface that gates writes behind explicit save.
+surface that gates writes behind explicit save. One inline variant
+rides it too: the reader's entry editor.
 
 ---
 
@@ -262,6 +263,15 @@ where the explicit-save pattern applies.
   [navigate-away guard](#navigate-away-guard--global-intercept)
   (Save / Discard / Cancel). The bar sits in the card on tablet and
   desktop, and at the surface's bottom edge on phone.
+- [Reader / composer](../screens/reader-composer/reader-composer.md#inline-edit-session)
+  — inline-editor variant: one session per open entry editor, its own
+  Save and Cancel in place of the bar. Every leave fires the
+  [navigate-away guard](#navigate-away-guard--global-intercept) while
+  the draft is dirty. Inside the reader, the other entries' actions and
+  story undo and redo wait while an editor is open, rather than
+  intercepting, since an undo can't take Save-then-proceed. A draft
+  whose row leaves by a path no user action takes, such as a run's
+  settle or an Android document crash, is dropped unprompted.
 - [Vault calendars editor](../screens/vault/calendars/calendars.md)
   — editor surface uses the standard one-session-per-detail shape.
 - Future master-detail surfaces inherit the pattern by default

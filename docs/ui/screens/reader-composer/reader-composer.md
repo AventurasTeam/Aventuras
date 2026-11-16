@@ -33,6 +33,9 @@ bottom` to the universal `⚲` directory — the touch-tier path to
 - [Generation status pill](../../patterns/generation-status-pill.md)
   (top-bar status surface, click-to-cancel popover, sticky memory
   error variant)
+- [Navigate-away guard](../../patterns/save-sessions.md#navigate-away-guard--global-intercept)
+  (an entry's inline editor is a session of its own, per
+  [Inline edit session](#inline-edit-session))
 
 ## Layout
 
@@ -402,6 +405,79 @@ then regenerates the reply it produced, through this same confirmation
 path. Offered on that one entry only; the full rule and its rationale live
 in
 [EntryCard → Save and regenerate](../../patterns/entry-card.md#save-and-regenerate).
+
+### Inline edit session
+
+An entry's inline editor
+([EntryCard → Edit mode](../../patterns/entry-card.md#edit-mode)) is a
+[save session](../../patterns/save-sessions.md) of its own: one per open
+editor, dirty while the draft differs from the entry's stored text. The
+editor's own Save and Cancel stand in for a save bar, and Esc cancels. A
+clean editor guards nothing.
+
+**Every leave is guarded while the draft is dirty.** The
+[navigate-away guard](../../patterns/save-sessions.md#navigate-away-guard--global-intercept)
+intercepts:
+
+- Return and Android back;
+- every link out of the reader: the Actions menu's Go-to, ⛭ Story
+  Settings, the chapter popover's `Manage chapters →`, the peek
+  drawer's and Browse chip's links, the status pill's Memory, and a
+  system entry's or cut-off notice's fix;
+- a press on a review-window row, after the window closes;
+- `Close chapter…`, from the chapter popover or the Actions menu, since
+  the close reads the chapter's stored prose: Save lets it read the new
+  text;
+- a branch switch;
+- the desktop window's close or reload.
+
+A push leaves the reader mounted under the new screen and is guarded
+anyway: a draft held under the stack is one the user can no longer see.
+
+The guard's Save is the editor's plain Save, never `Save & regenerate`,
+even on the head turn's user entry. It is available exactly when the
+editor's own Save is, held by the same edit gate with the same reason.
+A head-turn edit stays savable through a pass or a close, and the edit
+interrupts it
+([principles.md → Pipelines covered](../../principles.md#pipelines-covered)).
+A refused Save keeps the draft: the dialog stays up with the reason, and
+the leave stays held. When a run is in flight as well, the guard asks
+before the story-leave abort-confirm, as on World and Plot.
+
+**Edit-mode focus.** While an editor is open, dirty or not, these
+actions wait:
+
+- every other entry's action cluster (✎ ↻ ⎇ 📅 🔍 ×);
+- a system entry's `Retry`, which re-runs from the stored text as ↻
+  would;
+- story undo and redo. The Actions menu's entries disable, and the
+  keyboard shortcut is refused silently, as its other refusals are.
+
+Each disabled control's reason reads "Finish or cancel the edit first."
+When the
+run gate holds the control too, the gate's reason shows instead, since
+cancelling the edit wouldn't free it.
+
+Undo waits rather than taking the guard's Save-then-proceed, because the
+Save would become the latest action and the undo would reverse it.
+Inside the textarea, Ctrl/Cmd-Z is the textarea's own undo.
+
+**What stays live.** None of these drops the draft:
+
+- Send, which moves the head turn on, so the editor's notice changes
+  with it
+  ([EntryCard → Divergence notices](../../patterns/entry-card.md#divergence-notices));
+- the suggestion chips;
+- jumps, which grow the window and keep the editor's row;
+- the peek drawer;
+- the world-time and scene editors;
+- `Flip era…` and `Set lead character…`;
+- a system entry's `Dismiss` and copy.
+
+**A row leaving the loaded set** by any other path closes its editor and
+drops the draft. A redo that restores the row shows the row, not the old
+editor. On Android, a crash of the reader's document loses an open
+draft.
 
 ## Era flip
 
@@ -1205,7 +1281,8 @@ Cross-branch navigation is the
 domain.
 
 **Branch switch.** Resets the window to the recent ~50 entries of
-the new branch, scrolled to bottom.
+the new branch, scrolled to bottom. An open inline edit with a dirty
+draft is guarded first, per [Inline edit session](#inline-edit-session).
 
 ### Autoscroll
 

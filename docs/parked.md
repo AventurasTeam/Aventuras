@@ -674,9 +674,8 @@ are built.
 - **Accept-and-continue.** When the user picks a take and takes the
   next turn, are the inactive takes dropped or archived? Pin the
   lifecycle.
-- **Hand-edited takes.** Entry-prose edits bypass the delta log, so
-  the snapshot must read live content for edits to ride along per
-  take; define edit-then-swipe behavior.
+- **Hand-edited takes.** The snapshot must read live content for
+  edits to ride along per take; define edit-then-swipe behavior.
 - **Chapter-closing takes** carry the heavier lore-agent cascade and
   the one embedding re-cost above; decide whether swiping across a
   chapter boundary is offered or gated.

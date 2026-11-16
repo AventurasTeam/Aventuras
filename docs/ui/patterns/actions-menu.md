@@ -166,7 +166,9 @@ CTRL-Shift-Z (keyboard remains the desktop fast path). `Redo` is
 absent — not disabled — when the redo stack is empty (store-derived,
 cheap); `Undo last action` stays present because its availability
 needs a delta-log query, and a rejected activation surfaces a
-"Nothing to undo" toast instead. Both disable during generation;
+"Nothing to undo" toast instead. Both disable during generation and
+while an entry's inline editor is open
+([`reader-composer.md → Inline edit session`](../screens/reader-composer/reader-composer.md#inline-edit-session));
 `Jump to bottom` is absent on an empty entry list.
 
 ## Surface coverage

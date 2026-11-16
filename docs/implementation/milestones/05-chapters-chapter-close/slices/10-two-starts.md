@@ -225,10 +225,12 @@ and the catalog bullet below drops out.
 
 - `openCloseModal` runs the registered surface's `guard` before it sets the
   modal's state, so no trigger can skip it (C7,
-  [Slice 5.11](./11-review-window.md)'s `registerSurface`). The reader has
-  nothing to guard, so its default `(proceed) => proceed()` opens the modal at
-  once: it has no save session, and a close writes no entry content, so an open
-  inline edit isn't at risk.
+  [Slice 5.11](./11-review-window.md)'s `registerSurface`). On the reader that
+  guard is the inline edit session's
+  ([`reader-composer.md → Inline edit session`](../../../../ui/screens/reader-composer/reader-composer.md#inline-edit-session)):
+  a dirty draft raises Save / Discard / Cancel first, since the close reads the
+  chapter's stored prose. Until that session is built, the reader registers the
+  default `(proceed) => proceed()`, and the modal opens at once.
 - `CloseChapterModal` in `components/chapters/close-chapter-modal.tsx`,
   rendered by `ChapterOverlaysHost`: a pure `CloseChapterModalView`, props
   in, and a connected body rendered only while open, so its reads don't

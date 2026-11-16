@@ -479,7 +479,9 @@ When `editing === true`:
   dirty-state tracking can mount its own SaveBar at detail-pane
   level in parallel.
 - Brain, reasoning body, and action cluster are hidden during
-  edit. The entry is in edit-mode focus.
+  edit. The entry is in edit-mode focus, and the reader holds its
+  other entries' actions meanwhile
+  ([`reader-composer.md → Inline edit session`](../screens/reader-composer/reader-composer.md#inline-edit-session)).
 - Reasoning text is NOT editable. Only `content`. Reasoning is
   generation provenance.
 
