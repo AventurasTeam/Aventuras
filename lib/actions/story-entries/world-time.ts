@@ -76,7 +76,7 @@ async function updateEntryWorldTimeLocked(
       action: {
         kind: 'updateStoryEntryMetadata',
         source: 'user_edit',
-        payload: { branchId, id, metadata: { worldTime } },
+        payload: { branchId, id, metadata: { worldTime }, undoKind: 'entryTime' },
       },
       actionId: generateId('act'),
       branchId,

@@ -23,6 +23,17 @@ export const TARGET_NOT_FOUND = 'not-found'
  */
 export const MACHINE_PIN_KEY = `${PAYLOAD_META_PREFIX}machinePin` as const
 
+/**
+ * The writers whose result the reader shows in place. Each tags its entry delta, so undo can name
+ * the target and skip the confirm an unseen one takes (data-model.md → Entry mutability &
+ * rollback). A writer that doesn't tag reads as unseen.
+ */
+export const UNDO_KINDS = ['entryText', 'entryScene', 'entryTime', 'suggestionRefresh'] as const
+export type UndoKind = (typeof UNDO_KINDS)[number]
+
+/** Payload metadata on a tagged writer's entry delta: its `UndoKind`. */
+export const UNDO_KIND_KEY = `${PAYLOAD_META_PREFIX}undoKind` as const
+
 export type DeltaSource =
   | 'ai_classifier'
   | 'piggyback_tagged_block'

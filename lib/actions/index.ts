@@ -189,7 +189,9 @@ export type {
   RowGuard,
   RowGuardArgs,
   RowVerdicts,
+  UndoKind,
 } from './types'
+export { UNDO_KIND_KEY, UNDO_KINDS } from './types'
 export {
   clearLiveSession,
   loadDraft,

@@ -1255,8 +1255,13 @@ const heroDeltas: SlottedDelta[] = [
     targetId: entryId('hero', 14),
     op: 'update',
     // A literal: this array builds at import, and on Android that's the boot path, so a countTokens
-    // here would build the encoder on every launch. The seed test pins it to the count.
-    undoPayload: { content: 'I draw the blade and wait.', contentTokens: 7 },
+    // here would build the encoder on every launch. The seed test pins it to the count, and the
+    // undo-kind tag to the key the content edit writes.
+    undoPayload: {
+      content: 'I draw the blade and wait.',
+      contentTokens: 7,
+      $undoKind: 'entryText',
+    },
     encodingVersion: 1,
     createdAt: BASE + 14 * MIN,
   },

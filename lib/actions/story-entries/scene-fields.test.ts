@@ -1,10 +1,11 @@
-import { and, eq } from 'drizzle-orm'
+import { and, desc, eq } from 'drizzle-orm'
 import { afterEach, describe, expect, it } from 'vitest'
 
 import {
   applyDeltaAction,
   deleteEntityRow,
   saveEntity,
+  UNDO_KIND_KEY,
   undoLastAction,
   updateEntrySceneFields,
   writeSystemEntry,
@@ -263,6 +264,30 @@ describe('updateEntrySceneFields', () => {
     )
     expect((await entityState(db, 'char_a')).current_location_id).toBe(LOC_B)
     expect((await entityState(db, 'char_b')).current_location_id).toBe(LOC_B)
+  })
+
+  // reader-composer.md → Undo and redo: the reader shows a scene edit in place, so its undo
+  // doesn't confirm; the tag rides the entry delta alone, not the group's entity writes.
+  it('tags its entry delta as a scene edit, and only that delta', async () => {
+    const { db, runInTransaction } = await createTestDb()
+    const ctx = { db, runInTransaction }
+    await seed(db)
+
+    await updateEntrySceneFields(
+      'b1',
+      'e2',
+      { sceneEntities: ['char_a', 'char_b'], currentLocationId: LOC_B },
+      ctx,
+    )
+
+    const [newest] = await db.select().from(deltas).orderBy(desc(deltas.logPosition)).limit(1)
+    const group = await db.select().from(deltas).where(eq(deltas.actionId, newest.actionId))
+    const entry = group.filter((d) => d.targetTable === 'story_entries')
+    const world = group.filter((d) => d.targetTable !== 'story_entries')
+    expect(entry).toHaveLength(1)
+    expect(entry[0].undoPayload?.[UNDO_KIND_KEY]).toBe('entryScene')
+    expect(world.length).toBeGreaterThan(0)
+    for (const delta of world) expect(delta.undoPayload?.[UNDO_KIND_KEY]).toBeUndefined()
   })
 
   // char_c left the scene at e2 and has been moved by hand since. An edit that doesn't

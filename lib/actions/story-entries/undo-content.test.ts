@@ -245,6 +245,7 @@ describe('the recorded invalidation scope', () => {
       content: 'the courier rode north',
       contentTokens: null,
       $invalidationScope: { entryIds: ['e_reply'], editedPosition: 2 },
+      $undoKind: 'entryText',
     })
   })
 })
@@ -553,6 +554,7 @@ describe('a two-entry recorded scope', () => {
       content: 'i ride north',
       contentTokens: null,
       $invalidationScope: { entryIds: ['e_act', 'e_reply'], editedPosition: 2 },
+      $undoKind: 'entryText',
     })
   })
 })
@@ -643,6 +645,7 @@ describe('a content edit of a cut-off reply', () => {
       contentTokens: null,
       metadata: { cutOff: MARK },
       $invalidationScope: { entryIds: ['e_reply'], editedPosition: 2 },
+      $undoKind: 'entryText',
     })
   })
 
@@ -749,6 +752,7 @@ describe('a content edit of a cut-off reply', () => {
       content: 'the courier rode north',
       contentTokens: null,
       metadata: { cutOff: MARK },
+      $undoKind: 'entryText',
     })
     expect((await replyRow(db)).metadata).toEqual(REPLY_META)
 

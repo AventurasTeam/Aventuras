@@ -210,6 +210,7 @@ async function* suggestionEmissionPhase(
             ...(guidance ? { refreshGuidance: guidance } : {}),
           },
         },
+        undoKind: 'suggestionRefresh',
       },
     },
   }
