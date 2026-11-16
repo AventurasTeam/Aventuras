@@ -72,7 +72,7 @@ async function refusingIntegrity(
 // CTRL-Z reads one group, not the log: the newest row a user would undo (a pass's rows sit above
 // its turn with their own action id), then that action's rows, newest first as selectUndoTarget
 // requires. A long branch's whole log runs to tens of MB.
-export async function headGroupRows(
+async function headGroupRows(
   branchId: string,
   ctx: DbCtx,
   skipActionId?: string,
@@ -97,6 +97,17 @@ export async function headGroupRows(
     .orderBy(desc(deltas.logPosition))) as Delta[]
 }
 
+/**
+ * The group the next undo targets, read for its label and for the gate: a close or pass still
+ * running heads the log above it until the undo's interrupt reverses it, so it is passed over.
+ */
+export async function headUndoGroup(branchId: string, ctx: DbCtx): Promise<Delta[]> {
+  const running = generationStore.isUserEditBlocked()
+    ? selectMemoryRun(generationStore.getTxState(), { branchId })?.actionId
+    : undefined
+  return headGroupRows(branchId, ctx, running)
+}
+
 export async function undoLastAction(
   branchId: string,
   ctx: DbCtx,
@@ -107,9 +118,7 @@ export async function undoLastAction(
   let throughInterrupt = false
   if (generationStore.isUserEditBlocked()) {
     if (generationStore.isHeadReversalBlocked(branchId)) return GATED
-    // A running close's rows head the log above the turn; the interrupt reverses them first.
-    const running = selectMemoryRun(generationStore.getTxState(), { branchId })?.actionId
-    const target = selectUndoTarget(await headGroupRows(branchId, ctx, running))
+    const target = selectUndoTarget(await headUndoGroup(branchId, ctx))
     const moved = target == null ? null : movedFrom(expectedActionId, target.actionId)
     if (moved != null) return moved
     if (generationStore.isUserEditBlocked()) {

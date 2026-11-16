@@ -12,7 +12,7 @@ import {
   type UndoTargetRead,
 } from '@/lib/actions'
 import type { Delta } from '@/lib/db'
-import { entitiesStore, undoRedoStore } from '@/lib/stores'
+import { entitiesStore, generationStore, undoRedoStore, type RunState } from '@/lib/stores'
 import { toastStore, type ToastItem } from '@/lib/toast'
 
 import { useReaderUndo } from './use-reader-undo'
@@ -105,14 +105,15 @@ function undoLands(read: UndoTargetRead, rowBeforeUndo: Record<string, unknown> 
   })
 }
 
-function render(focused = true) {
-  return renderHook(
-    (props: { isFocused: boolean }) => useReaderUndo({ branchId: 'b1', ctx, ...props }),
-    {
-      initialProps: { isFocused: focused },
-    },
-  )
+type Props = { isFocused: boolean; held: boolean; branchId: string }
+
+function render(initial: Partial<Props> = {}) {
+  return renderHook((props: Props) => useReaderUndo({ ctx, ...props }), {
+    initialProps: { isFocused: true, held: false, branchId: 'b1', ...initial },
+  })
 }
+
+const LIVE: Props = { isFocused: true, held: false, branchId: 'b1' }
 
 async function settle() {
   await act(async () => {
@@ -318,8 +319,8 @@ describe('useReaderUndo — an unseen target', () => {
     const r = render()
     act(() => r.result.current.undo('menu'))
     await settle()
-    r.rerender({ isFocused: false })
-    r.rerender({ isFocused: true })
+    r.rerender({ ...LIVE, isFocused: false })
+    r.rerender(LIVE)
     expect(r.result.current.confirmOpen).toBe(false)
   })
 })
@@ -360,5 +361,101 @@ describe('useReaderUndo — refusals', () => {
     await settle()
     expect(actions.redoLastAction).toHaveBeenCalledWith('b1', ctx, { expectedActionId: 'act_turn' })
     expect(toasts[0].message).toBe('Redid the turn at entry #2')
+  })
+})
+
+describe('useReaderUndo — review fixes', () => {
+  function deferred<T>() {
+    let resolve!: (value: T) => void
+    const promise = new Promise<T>((res) => {
+      resolve = res
+    })
+    return { promise, resolve }
+  }
+
+  it("holds the notice's Redo while an editor is open", async () => {
+    actions.readUndoTarget.mockResolvedValue(TURN)
+    undoLands(TURN, { id: 'e2', position: 2 })
+    const r = render()
+    act(() => r.result.current.undo('keyboard'))
+    await settle()
+    r.rerender({ ...LIVE, held: true })
+
+    act(() => toasts[0].action?.onPress())
+    await settle()
+
+    expect(actions.redoLastAction).not.toHaveBeenCalled()
+    expect(toasts.at(-1)?.message).toBe('Finish or cancel the edit first.')
+  })
+
+  it("dismisses the notice when the branch changes, its Redo being the old branch's", async () => {
+    actions.readUndoTarget.mockResolvedValue(TURN)
+    undoLands(TURN, { id: 'e2', position: 2 })
+    const r = render()
+    act(() => r.result.current.undo('keyboard'))
+    await settle()
+    expect(toasts).toHaveLength(1)
+
+    r.rerender({ ...LIVE, branchId: 'b2' })
+    expect(toasts).toHaveLength(0)
+  })
+
+  // A pass or close holding the gate refuses every undo but a turn's, and a turn is always seen.
+  it('refuses an unseen target under a run without asking first', async () => {
+    actions.readUndoTarget.mockResolvedValue(LORE_SAVE)
+    const run: RunState = {
+      runId: 'run_pass',
+      kind: 'periodic-classifier',
+      gateBehavior: 'hard-gate',
+      actionId: 'act_pass',
+      storyId: 's1',
+      branchId: 'b1',
+      abortController: new AbortController(),
+      currentPhase: 'classify',
+      intermediates: {},
+      terminal: new Promise<void>(() => {}),
+      resolveTerminal: () => {},
+      interruptible: 'pass',
+      beforeTurn: false,
+    }
+    generationStore.startRun(run)
+    const r = render()
+
+    act(() => r.result.current.undo('menu'))
+    await settle()
+
+    expect(r.result.current.confirmOpen).toBe(false)
+    expect(actions.undoLastAction).not.toHaveBeenCalled()
+    expect(toasts.map((toast) => toast.message)).toEqual(['Unavailable while generating.'])
+    generationStore.__reset()
+  })
+
+  it('drops a confirm whose lines resolve after the screen lost focus', async () => {
+    actions.readUndoTarget.mockResolvedValue(CLOSE)
+    const impact = deferred<Awaited<ReturnType<typeof readUndoImpact>>>()
+    actions.readUndoImpact.mockReturnValue(impact.promise)
+    const r = render()
+    act(() => r.result.current.undo('menu'))
+    await settle()
+    r.rerender({ ...LIVE, isFocused: false })
+
+    await act(async () =>
+      impact.resolve({ createdLore: { count: 1, userEdited: false }, otherChanges: 0 }),
+    )
+    await settle()
+    r.rerender(LIVE)
+
+    expect(r.result.current.confirmOpen).toBe(false)
+  })
+
+  it('lists the rows when the impact read fails, rather than failing the undo', async () => {
+    actions.readUndoTarget.mockResolvedValue(CLOSE)
+    actions.readUndoImpact.mockRejectedValue(new Error('locked'))
+    const r = render()
+    act(() => r.result.current.undo('menu'))
+    await settle()
+
+    expect(r.result.current.confirmOpen).toBe(true)
+    expect(r.result.current.confirm?.props.lines).toEqual(['and 1 more'])
   })
 })

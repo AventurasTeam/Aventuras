@@ -13,7 +13,7 @@ import {
 import type { Delta } from '@/lib/db'
 import { logger } from '@/lib/diagnostics'
 import { t } from '@/lib/i18n'
-import { undoRedoStore } from '@/lib/stores'
+import { generationStore, undoRedoStore } from '@/lib/stores'
 import { toast } from '@/lib/toast'
 import { describeRedoTarget, describeUndoGroup, type UndoDescription } from '@/lib/undo'
 import { runAction } from '@/lib/utils'
@@ -52,6 +52,7 @@ type Confirm = {
 }
 
 const NOTHING: Refusal = { code: 'nothing-to-apply', reason: 'nothing to apply' }
+const GATED: Refusal = { code: 'gated', reason: 'generation in flight' }
 
 const CLOSE_KINDS: ReadonlySet<UndoDescription['kind']> = new Set(['close', 'rerun', 'keptClose'])
 
@@ -68,10 +69,13 @@ export function useReaderUndo({
   branchId,
   ctx,
   isFocused,
+  held,
 }: {
   branchId: string
   ctx: DbCtx
   isFocused: boolean
+  /** An entry's inline editor is open: undo and redo wait, the notice's Redo included. */
+  held: boolean
 }): {
   undoLabel: string
   redoLabel: string | null
@@ -88,15 +92,23 @@ export function useReaderUndo({
   const noticeRef = useRef<string | null>(null)
   // Each open resolves afresh; a resolution an older open started is dropped.
   const resolveSeqRef = useRef(0)
+  // Read after an await: a confirm resolved once the screen left or switched branch is dropped.
+  const liveRef = useRef({ branchId, isFocused, held })
+  useEffect(() => {
+    liveRef.current = { branchId, isFocused, held }
+  })
 
   const showMenuTarget = useCallback((target: Target | null) => {
     menuTargetRef.current = target
     setMenuTarget(target)
   }, [])
 
+  // The notice's Redo belongs to the branch it was shown on.
   useEffect(() => {
     showMenuTarget(null)
     setConfirm(null)
+    if (noticeRef.current != null) toast.dismiss(noticeRef.current)
+    noticeRef.current = null
   }, [branchId, showMenuTarget])
 
   // A confirm held on a screen that lost focus would undo unasked once it came back.
@@ -187,7 +199,12 @@ export function useReaderUndo({
       const redoable = undoRedoStore.peekRedoGroup()?.actionId === target.actionId
       announce(
         undoTargetText(target.description, target.names, 'notice'),
-        redoable ? () => guarded('redo', () => runRedo('notice', target.actionId)) : undefined,
+        redoable
+          ? () => {
+              if (liveRef.current.held) toast.info(t('reader:editFocus.held'))
+              else guarded('redo', () => runRedo('notice', target.actionId))
+            }
+          : undefined,
       )
     },
     [announce, branchId, ctx, guarded, report, runRedo, showMenuTarget],
@@ -196,7 +213,16 @@ export function useReaderUndo({
   const confirmLines = useCallback(
     async (target: Target): Promise<string[]> => {
       if (CLOSE_KINDS.has(target.description.kind)) {
-        const impact = await readUndoImpact(branchId, target.actionId, ctx)
+        // A set it can't count still leaves the rows to list; the undo reports its own failure.
+        const impact = await readUndoImpact(branchId, target.actionId, ctx).catch(
+          (err: unknown) => {
+            logger.error('reader.undo_impact_read_failed', {
+              branchId,
+              error: err instanceof Error ? err.message : String(err),
+            })
+            return null
+          },
+        )
         const lines = impact == null ? [] : chapterImpactLines(impact)
         if (lines.length > 0) return lines
       }
@@ -219,13 +245,23 @@ export function useReaderUndo({
           await runUndo(target, origin)
           return
         }
+        // Only a turn's undo passes a run, and a turn is always seen: never ask what the gate
+        // refuses.
+        if (generationStore.isUserEditBlocked()) {
+          report('undo', GATED, origin)
+          return
+        }
+        const started = branchId
+        const lines = await confirmLines(target)
+        const live = liveRef.current
+        if (live.branchId !== started || !live.isFocused || live.held) return
         setConfirm({
           target: { ...target, description },
           title: undoConfirmTitle(description, target.names),
-          lines: await confirmLines(target),
+          lines,
         })
       }),
-    [confirmLines, guarded, report, resolve, runUndo],
+    [branchId, confirmLines, guarded, report, resolve, runUndo],
   )
 
   const redo = useCallback(

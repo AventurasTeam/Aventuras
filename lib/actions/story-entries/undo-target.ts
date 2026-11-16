@@ -1,11 +1,10 @@
 import { and, desc, eq, inArray } from 'drizzle-orm'
 
 import { chunked, deltas, storyEntries, type Delta } from '@/lib/db'
-import { generationStore, selectMemoryRun } from '@/lib/stores'
 import { selectUndoTarget } from '@/lib/undo'
 
 import { resolveInvalidationForDeltas } from './classifier-facts'
-import { headGroupRows } from './undo'
+import { headUndoGroup } from './undo'
 import { reversalImpactOf, type ChapterDeletePreview } from '../chapters/chapter-delete-preview'
 import { withBranchWriteShared } from '../delta/branch-write-lock'
 import { ReversalIntegrityError } from '../delta/reverse-replay'
@@ -22,15 +21,9 @@ export type UndoTargetRead = {
   entryPositions: Readonly<Record<string, number>>
 }
 
-/**
- * The group the next undo reverses, read for its label and confirm. A close running on the
- * branch heads the log until its interrupt reverses it, so it is passed over as undo passes it.
- */
+/** The group the next undo reverses, read for its label and confirm as undo itself reads it. */
 export async function readUndoTarget(branchId: string, ctx: DbCtx): Promise<UndoTargetRead | null> {
-  const running = generationStore.isUserEditBlocked()
-    ? selectMemoryRun(generationStore.getTxState(), { branchId })?.actionId
-    : undefined
-  const group = await headGroupRows(branchId, ctx, running)
+  const group = await headUndoGroup(branchId, ctx)
   const target = selectUndoTarget(group)
   if (target == null) return null
   return {

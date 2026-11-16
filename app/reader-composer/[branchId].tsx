@@ -1545,7 +1545,7 @@ export default function ReaderComposerRoute() {
     redo: redoAction,
     confirmOpen: undoConfirmOpen,
     confirm: undoConfirm,
-  } = useReaderUndo({ branchId, ctx, isFocused })
+  } = useReaderUndo({ branchId, ctx, isFocused, held: editSession != null })
   // Editable-target exclusion lets the browser's native undo/redo win when
   // focus is in a text input — otherwise Ctrl/Cmd+Z on a composer typo
   // reverses the last story turn instead of the typo.
