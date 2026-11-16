@@ -56,7 +56,6 @@
     "@tutorlatin/svelte-tiny-virtual-list": "^4.0.0",
     "ai": "^7.0.173",
     "ai-sdk-pollinations": "^0.0.2",
-    "clsx": "^2.1.1",
     "codemirror": "^6.0.2",
     "gpt-tokenizer": "^4.1.2",
     "harper.js": "^3.2.0",
@@ -65,7 +64,6 @@
     "liquidjs": "^10.30.1",
     "marked": "^18.2.1",
     "svelte-codemirror-editor": "^2.1.0",
-    "tailwind-merge": "^3.7.0",
     "yaml": "^2.9.1",
     "zod": "^4.6.7"
   },
