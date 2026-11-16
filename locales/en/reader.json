@@ -56,6 +56,9 @@
     }
   },
   "editFailed": "Couldn't save your edit. Please try again.",
+  "editFocus": {
+    "held": "Finish or cancel the edit first."
+  },
   "rollbackFailed": "Couldn't roll back the story. Please try again.",
   "rollbackCountsChanged": "The counts changed while this was open. Check them before confirming.",
   "regenerateFailed": "Couldn't regenerate the reply. Please try again.",

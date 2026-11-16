@@ -11,9 +11,18 @@ export type StreamingPayload = { content: string; reasoning: string }
 // offering a retry the refusal will never accept.
 export type EditResult = { ok: true } | { ok: false; code?: string }
 
+/** An open inline editor: the entry it edits, and whether the draft differs from the stored text. */
+export type EditSession = { entryId: string; dirty: boolean }
+
 export type ReaderSurfaceHandle = {
   jumpToBottom: () => void
   jumpToEntry: (entryId: string) => void
+  /** The open editor's session, read now; null with no editor open. */
+  editSession: () => EditSession | null
+  /** The editor's plain Save (never Save & regenerate). With no editor open it counts as clean. */
+  commitDraft: () => Promise<EditResult>
+  /** Closes the editor and drops its draft. */
+  discardDraft: () => void
 }
 
 /**
@@ -87,4 +96,9 @@ export type ReaderSurfaceProps = {
   onFixCutOff: () => Promise<void>
   /** A landing's first frame has painted, or its target was dropped. Must settle, never reject. */
   onEntryLanded: (entryId: string) => Promise<void>
+  /**
+   * The inline editor's session on each transition (opened, closed, dirty flipped), never per
+   * keystroke. Must settle, never reject.
+   */
+  onEditSession: (session: EditSession | null) => Promise<void>
 }

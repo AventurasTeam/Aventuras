@@ -5,6 +5,7 @@ import { Platform, View } from 'react-native'
 
 import { type ActionGroup } from '@/components/compounds/actions-menu'
 import { AppActionsMenu } from '@/components/compounds/app-actions-menu'
+import { heldControl } from '@/components/compounds/entry-card-hold'
 import { StoryStatusPill } from '@/components/compounds/story-status-pill'
 import { TruncatedText } from '@/components/compounds/truncated-text'
 import { chapterBreaksOf } from '@/components/reader/chapter-breaks'
@@ -39,7 +40,10 @@ import {
   type ReaderChapterChipsHandle,
 } from '@/components/reader/reader-chapter-chips'
 import ReaderDocument, { type ReaderDocumentRef } from '@/components/reader/reader-document'
-import { type ReaderSurfaceHandle } from '@/components/reader/reader-document-types'
+import {
+  type EditSession,
+  type ReaderSurfaceHandle,
+} from '@/components/reader/reader-document-types'
 import { ReaderSurface } from '@/components/reader/reader-surface'
 import {
   classifyRegenerateGate,
@@ -439,6 +443,12 @@ export default function ReaderComposerRoute() {
   const [chapterPopoverOpen, setChapterPopoverOpen] = useState(false)
   const [syncNonce, setSyncNonce] = useState(0)
   const [documentPainted, setDocumentPainted] = useState(false)
+  // The surface's inline editor, as its transitions report it (reader-composer.md → Inline edit
+  // session). Settles: on native a rejection would re-reject inside the WebView unlogged.
+  const [editSession, setEditSession] = useState<EditSession | null>(null)
+  const handleEditSession = useCallback(async (session: EditSession | null) => {
+    setEditSession(session)
+  }, [])
 
   // A full first window means older entries may exist; any shorter load
   // proves the branch top is already inside the window.
@@ -1515,9 +1525,15 @@ export default function ReaderComposerRoute() {
   // Editable-target exclusion lets the browser's native undo/redo win when
   // focus is in a text input — otherwise Ctrl/Cmd+Z on a composer typo
   // reverses the last story turn instead of the typo.
+  // An open editor holds undo and redo (reader-composer.md → Inline edit session): refused
+  // silently, as the shortcut's other refusals are.
+  const editorOpen = editSession != null
   const handleUndoRedoShortcut = useCallback(
-    (ev: KeyboardEvent) => runUndoRedo(ev.shiftKey ? 'redo' : 'undo', true),
-    [runUndoRedo],
+    (ev: KeyboardEvent) => {
+      if (editorOpen) return
+      runUndoRedo(ev.shiftKey ? 'redo' : 'undo', true)
+    },
+    [editorOpen, runUndoRedo],
   )
   useGlobalHotkey(matchesUndoRedoShortcut, handleUndoRedoShortcut, {
     ignoreEditableTargets: true,
@@ -1596,7 +1612,14 @@ export default function ReaderComposerRoute() {
   })
   const contextualActions: ActionGroup = useMemo(() => {
     // Undo of the turn is a head reversal, live through a pass; the action refuses any other
-    // target with `gated`. Redo never is one, so it keeps the whole gate.
+    // target with `gated`. Redo never is one, so it keeps the whole gate. An open editor holds
+    // both, the gate's reason outranking its own.
+    const held = t('reader:editFocus.held')
+    const undo = heldControl(headReversalBlocked, editorOpen, {
+      gate: headReversalReason,
+      held,
+    })
+    const redo = heldControl(actionsBlocked, editorOpen, { gate: gateReason, held })
     return {
       id: 'reader',
       header: t('chrome.onThisScreen'),
@@ -1604,8 +1627,8 @@ export default function ReaderComposerRoute() {
         {
           id: 'undo',
           label: t('reader:actions.undo'),
-          disabled: headReversalBlocked,
-          disabledReason: headReversalReason,
+          disabled: undo.disabled,
+          disabledReason: undo.reason,
           onActivate: () => runUndoRedo('undo'),
         },
         // Absent, not disabled, when the stack is empty — the menu doesn't
@@ -1616,8 +1639,8 @@ export default function ReaderComposerRoute() {
               {
                 id: 'redo',
                 label: t('reader:actions.redo'),
-                disabled: actionsBlocked,
-                disabledReason: gateReason,
+                disabled: redo.disabled,
+                disabledReason: redo.reason,
                 onActivate: () => runUndoRedo('redo'),
               },
             ]
@@ -1633,6 +1656,7 @@ export default function ReaderComposerRoute() {
     headReversalBlocked,
     headReversalReason,
     gateReason,
+    editorOpen,
     runUndoRedo,
     entries.length,
     jumpToBottom,
@@ -1693,6 +1717,7 @@ export default function ReaderComposerRoute() {
     onFixSystemEntry: handleFixSystemEntry,
     onFixCutOff: handleFixCutOff,
     onEntryLanded: handleEntryLanded,
+    onEditSession: handleEditSession,
   }
 
   return (
