@@ -834,9 +834,9 @@ export function ReaderSurface({
   }, [landed])
 
   // A request the host hasn't answered yet: the next rest waits for it or a new slice.
-  const requestInFlightRef = useRef(false)
+  const requestInFlightRef = useRef<object | null>(null)
   useLayoutEffect(() => {
-    requestInFlightRef.current = false
+    requestInFlightRef.current = null
   }, [sliceKey])
   // Keyed on sliceKey, not rows: a turn's trim waits for a scroll's rest, else its compensating
   // write could lift a bottom reader between the user's row and the reply, disengaging the stream.
@@ -855,12 +855,14 @@ export function ReaderSurface({
     // Before adopting: the gesture's scrolls dropped the memo the held change would compensate by.
     recordAnchor()
     if (adoptHeld()) return
-    if (requestInFlightRef.current) return
+    if (requestInFlightRef.current != null) return
     const current = shownRef.current
     const send = (request: Promise<void>) => {
-      requestInFlightRef.current = true
+      // Its own token: an older answer, landing after a new key's request, mustn't free that one.
+      const token = {}
+      requestInFlightRef.current = token
       const settle = () => {
-        requestInFlightRef.current = false
+        if (requestInFlightRef.current === token) requestInFlightRef.current = null
       }
       void request.then(settle, settle)
     }

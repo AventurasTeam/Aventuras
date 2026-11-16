@@ -3567,6 +3567,7 @@ function SliceHostHarness({
       queued.current = []
       for (const apply of pending) apply()
     },
+    'Deliver first': () => queued.current.shift()?.(),
     'Host jump to bottom': jumpToBottom,
     // The slice's rows above grow by a page, as an upward extension's answer does.
     'Extend up': () =>
@@ -4141,6 +4142,25 @@ export const SliceAsksOnceWhileUnanswered: Story = {
     await scrollTo(scroller, 10)
     await new Promise((resolve) => setTimeout(resolve, 600))
     expect(args.onNearTop).toHaveBeenCalledTimes(1)
+  },
+}
+
+/** An answer to a request whose slice moved on frees nothing a newer request still holds. */
+export const SliceOlderAnswerKeepsTheNewerRequestWaiting: Story = {
+  args: { onNearTop: fn(async () => {}) },
+  render: (args) => <SliceHostHarness {...args} deferRequests />,
+  play: async ({ args }) => {
+    const scroller = scrollerOf('s71')
+    await settleLanding(scroller)
+    await scrollTo(scroller, 0)
+    await waitFor(() => expect(args.onNearTop).toHaveBeenCalledTimes(1), SLICE_WAIT)
+    // A new key frees the wait, so the next rest asks again, for that key.
+    press('Tail at the next key')
+    await waitFor(() => expect(args.onNearTop).toHaveBeenCalledTimes(2), SLICE_WAIT)
+    press('Deliver first')
+    await scrollTo(scroller, 10)
+    await new Promise((resolve) => setTimeout(resolve, 600))
+    expect(args.onNearTop).toHaveBeenCalledTimes(2)
   },
 }
 
