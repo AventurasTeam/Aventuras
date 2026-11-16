@@ -822,6 +822,13 @@ the hedged hint naming the profile's setting and the model's badge
 takes the place of **LLM call failed**'s line, or follows **Memory
 update failed**'s lead sentence, and the entry gains `Fix profile`.
 
+A call that ran on the story's override names the override's setting
+instead ("the 4,096-token max output of this story's narrative
+override"), and every `Fix profile` on this surface, in the table or
+the prose above, reads `Fix story override` when the story overrides
+the slot, per
+[`generation-pipeline.md → Cut-off replies`](../../../generation-pipeline.md#cut-off-replies).
+
 The embed-failure system entry follows the same visual shape as the
 LLM-failure entry — the contract is "transient pipeline failure
 that blocks turn completion until resolved." `Switch embedder`
@@ -1158,7 +1165,8 @@ state — it is not an anchor, so the previous reply's chips hold.
   succeed. A reply cut off at its limit names the limit, as the
   reader's cut-off copy does: the suggestion profile's max output
   ("…cut off at the suggestion profile's 1,024-token max output. Raise
-  it, then Retry."), the model's window, or the server's own limit,
+  it, then Retry."), or the override's when the call ran on the story's
+  suggestion override, the model's window, or the server's own limit,
   with the max output it stopped short of when the call sent one
   ([`generation-pipeline.md → Cut-off replies`](../../../generation-pipeline.md#cut-off-replies)).
   It keeps Retry and gains no fix action

@@ -1018,8 +1018,8 @@ model removed from the catalog) stops the branch's turns until the user
 fixes it at the source. A failure while the pass applies its planned
 writes (a rejected write rolls the whole pass back) is a failed run too.
 
-The structured call is bounded by the classifier profile's `timeout`
-when the user set one, longer or shorter, and by ten minutes otherwise,
+The structured call is bounded by the `timeout` of the classifier
+profile, or of the story's classifier override, when the user set one, longer or shorter, and by ten minutes otherwise,
 so a hung provider ends in an error the user can act on. A `timeout`
 the user set also bounds each attempt inside the call
 ([`generation-pipeline.md → Two retry tiers`](../generation-pipeline.md#two-retry-tiers-both-at-phase-level)),

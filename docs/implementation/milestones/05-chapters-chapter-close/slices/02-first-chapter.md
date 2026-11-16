@@ -675,7 +675,8 @@ that ran)
   boundary and metadata" for metadata; boundary's stays
   [Slice 5.10](./10-two-starts.md)'s. The gap a story override leaves is
   filed under
-  [M7.1](../../../roadmap.md#m7--app-settings--diagnostics--onboarding).
+  [`followups.md → UX`](../../../../followups.md#ux), "Story overrides'
+  settings aren't built".
   One of fifteen dataset closes on the dev model (force-on aside) failed
   `reply-cut-off`
   with 39,689 output tokens and no max output set, and wrote nothing;

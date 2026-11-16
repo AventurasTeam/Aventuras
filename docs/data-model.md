@@ -1549,17 +1549,20 @@ stories.settings: {
   // narrative is the always-present storyteller slot. Each override is a
   // provider-qualified ref: a bare model id cannot say which provider serves
   // it, and running it on the app's default provider silently picked the wrong
-  // one. Image generation is deferred past v1 — `imageGen` returns when the
-  // feature lands. `memory-compaction` was dropped — chapter-close lore-mgmt
-  // subsumes its role per the cadence stratification; see
+  // one. An override also carries its own call settings (ModelSettings, see
+  // App settings storage), owned by the story: picking a model where a slot has
+  // no override copies the settings the slot resolves to then, limited to the
+  // slot's fields. Image generation is deferred past v1 — `imageGen` returns
+  // when the feature lands. `memory-compaction` was dropped — chapter-close
+  // lore-mgmt subsumes its role per the cadence stratification; see
   // docs/memory/chapter-close.md.
   models: {
-    narrative?: { providerId: string; modelId: string }   // optional override; absent = resolve through assignments[agentId] → profile.modelRef
-    classifier?: { providerId: string; modelId: string }
-    translation?: { providerId: string; modelId: string }
-    suggestion?: { providerId: string; modelId: string }
-    'lore-mgmt'?: { providerId: string; modelId: string }  // kebab-case agent ids match the UI labels in app-settings + story-settings Models tabs
-    retrieval?: { providerId: string; modelId: string }    // auto-mode injection fallback consumer — LLM call to resolve marginal embedding+keyword candidates with injection_mode='auto'
+    narrative?: ModelOverride   // optional override; absent = resolve through assignments[agentId] → the profile
+    classifier?: ModelOverride
+    translation?: ModelOverride
+    suggestion?: ModelOverride
+    'lore-mgmt'?: ModelOverride  // kebab-case agent ids match the UI labels in app-settings + story-settings Models tabs
+    retrieval?: ModelOverride    // auto-mode injection fallback consumer — LLM call to resolve marginal embedding+keyword candidates with injection_mode='auto'
   }
 
   // Pack
@@ -1639,10 +1642,13 @@ disentangles them and matches the UI's two-section structure.
    un-overridden story. The UX difference (Models' dashed-italic "App
    default: X" sentinel vs copy-at-creation fields showing a concrete
    value) derives directly from this pattern split. Unresolved
-   agents pre-flight-error at generation time. An override names its
+   agents pre-flight-error at generation time. A present override pins
+   both its model and its call settings: the settings start as a copy of
+   what the slot resolved to when the override was made, and a later
+   profile edit doesn't reach them. An override names its
    provider; deleting that provider leaves the override in place and it
    fails `override-provider-missing` at pre-flight until cleared or
-   re-picked on the Models tab.
+   re-picked on the Models tab, which keeps its settings.
 
 Most operational fields seed from `app_settings.default_story_settings`;
 a few — `default_provider_id`, `default_calendar_id` — sit as
@@ -1717,22 +1723,37 @@ actions across the rest of the app.
 **Profiles — narrative + agents.**
 
 ```ts
+// The call settings a profile and a story's model override share.
+type ModelSettings = {
+  temperature?: number                       // 0-2 (provider-dependent; Anthropic caps at 1, OpenAI/Google allow 2)
+  maxOutput?: number                         // a positive whole number
+  thinking?: number                          // reasoning slider; conditional on model capability; a whole number, 0 turns it off
+  timeout?: number                           // seconds; unset = no limit, except a classifier pass's or a chapter close's call's ten minutes
+  structuredOutput?: 'auto' | 'force-on' | 'force-off'  // agents only
+  closeConversation?: 'split' | 'single'     // agents only; chapter close's shape, default split. See docs/memory/chapter-close.md → Conversations
+  closeTools?: 'separate' | 'shared'         // agents only; default separate; has no effect under closeConversation 'single'
+  customJson?: Record<string, unknown>       // advanced — per-field merge over constructed payload
+}
+
 app_settings.profiles: Array<{
   id: string                                 // stable UUID
   kind: 'narrative' | 'agent'                // narrative is special-cased (always present, undeletable)
   name: string                               // 'Narrative' / 'Fast tasks' / 'Heavy reasoning' / etc.
   description?: string                       // user-authored, agent profiles only
   modelRef: { providerId: string; modelId: string }  // composite — disambiguates same modelId across providers
-  temperature?: number                       // 0-2 (provider-dependent; Anthropic caps at 1, OpenAI/Google allow 2)
-  maxOutput?: number                         // a positive whole number
-  thinking?: number                          // reasoning slider; conditional on model capability; a whole number, 0 turns it off
-  timeout?: number                           // seconds; unset = no limit, except a classifier pass's or a chapter close's call's ten minutes
-  structuredOutput?: 'auto' | 'force-on' | 'force-off'  // agent profiles only
-  closeConversation?: 'split' | 'single'     // agent profiles only; chapter close's shape, default split. See docs/memory/chapter-close.md → Conversations
-  closeTools?: 'separate' | 'shared'         // agent profiles only; default separate; has no effect under closeConversation 'single'
-  customJson?: Record<string, unknown>       // advanced — per-field merge over constructed payload
-}>
+} & ModelSettings>
+
+// A story's override (stories.settings.models[slot]), flat where a profile nests modelRef.
+// It holds only its slot's fields: a narrative override the narrative profile's,
+// an agent override adds structuredOutput, a lore-mgmt override the close switches.
+type ModelOverride = { providerId: string; modelId: string } & ModelSettings
 ```
+
+An unset field means the same on both owners: the call's own fallback
+applies (a close step's 8k output cap, a pass's or a close's ten-minute
+timeout, otherwise the provider's default). The fields, controls and
+per-slot rules are
+[`patterns/model-settings.md`](./ui/patterns/model-settings.md).
 
 `modelRef` is a composite `{ providerId, modelId }` rather than a
 bare model id string — the same model id can exist on multiple
@@ -1943,10 +1964,12 @@ to its id stay intact:
   unassigned explicitly and gets to see the agent is unconfigured.
 
 Per-story model overrides (`stories.settings.models[agentId]`) are
-provider-qualified `{ providerId, modelId }` refs. Deleting the
+provider-qualified `{ providerId, modelId }` refs carrying their own
+call settings. Deleting the
 provider one names leaves the override in place: it fails
 `override-provider-missing` at pre-flight and shows as a broken row on
-the Models tab until the user clears or re-picks it. The kind is
+the Models tab until the user clears or re-picks it; a re-pick keeps
+its settings. The kind is
 distinct from the chain's `provider-missing` so the reader's fix action
 can route to the story rather than to a healthy App Settings chain. Model-catalog
 freshness is handled by the pre-existing global broken-config
@@ -2037,12 +2060,14 @@ story_entries.metadata: {
     | {
         cause: 'max-output' | 'window'
         outputTokens?: number       // as the provider reported
-        limit: number               // the profile's max output, or the model's window, that the cause names
+        limit: number               // the max output the call sent, or the model's window, that the cause names
+        fromOverride?: true         // the call's settings came from the story's narrative override, not the profile; absent = the profile
       }
     | {
         cause: 'unknown'            // no limit the call knew of was reached
         outputTokens?: number
         maxOutput?: number          // the max output the call sent, which the reply fell short of; absent when it sent none
+        fromOverride?: true         // as above
       }
     | {
         cause: 'interrupted' | 'content-filter'  // no finish signal arrived, or a filter stopped it
@@ -2119,7 +2144,9 @@ early: the server stopped it at `length`, a filter stopped it, or the
 stream closed with no finish signal
 ([`generation-pipeline.md → Cut-off replies`](./generation-pipeline.md#cut-off-replies)).
 The card shows it as a notice
-([`entry-card.md → Cut-off notice`](./ui/patterns/entry-card.md#cut-off-notice)).
+([`entry-card.md → Cut-off notice`](./ui/patterns/entry-card.md#cut-off-notice)),
+whose copy names whose max output it was; `fromOverride` keeps that,
+since the story's override can come or go after the reply.
 A content edit removes it in the same delta as the new content, so an
 undo of the edit restores both; a regenerate replaces the entry and the
 mark with it. Untranslated, like `model`.
@@ -3456,7 +3483,8 @@ importer's rows; story-internal references do not.
 **Stripped `app_settings` references.** Four `stories.settings`
 fields plus the `vec0` vectors are meaningless on another setup and
 are omitted from the envelope: `stories.settings.models[agentId]`
-(per-agent model overrides), `stories.settings.embedding_provider_id`
+(per-agent model overrides, their call settings with them, since each
+names a provider of the exporter's), `stories.settings.embedding_provider_id`
 (an `app_settings` provider reference),
 `stories.settings.embedding_model_id` (embedding model choice),
 `stories.settings.embedding_upgrade_declined` (a prompt declined

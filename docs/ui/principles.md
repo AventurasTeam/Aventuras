@@ -583,7 +583,9 @@ Per-screen detail in
 [settings scope policy](#settings-architecture--split-by-location).
 All fields optional — an absent field resolves to the global App
 Settings default at render time; a present field pins this story
-against future changes to the global.
+against future changes to the global. A present override pins its
+model and its call settings, copied from what the slot resolved to
+when it was made and owned by the story from then on.
 
 Applies to every agent in the assignments registry. The agent set
 is the single source of truth (centralized; per

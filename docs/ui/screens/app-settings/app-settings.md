@@ -17,6 +17,8 @@ Cross-cutting principles that govern this surface are in
   (this surface is the source side; Story Settings is the override side)
 - [Form controls — Select primitive](../../patterns/forms.md#select-primitive)
 - [Save-session pattern](../../patterns/save-sessions.md)
+- [Model settings form](../../patterns/model-settings.md)
+  (each profile card on Profiles)
 - [Icon-actions pattern](../../patterns/icon-actions.md)
   (per-row edit / delete on the Providers, Profiles, Embedding
   models, and Agent-assignments lists)
@@ -303,7 +305,9 @@ The error surface phrases it as a hint, never an assertion, because
 provider error strings aren't standardized. It points at the two places
 the capability lives: the profile's per-call setting (the thinking
 slider, the structured-output mode), which its `Fix profile` opens, and
-the model's badge on this tab.
+the model's badge on this tab. Under a story's override both read the
+override's instead
+([`generation-pipeline.md → Cut-off replies`](../../../generation-pipeline.md#cut-off-replies)).
 
 ### Model fetching strategy
 
@@ -381,61 +385,18 @@ assignments anchor the bottom.
 Always visible at the top, "big" — narrative is the storyteller, the
 single most-edited profile. Cannot be deleted; can be reconfigured.
 
-Fields:
-
-- **provider/model** —
-  [ProviderModelPicker primitive](../../patterns/provider-model-picker.md).
-  Sets `modelRef: {providerId, modelId}`. Trigger shows the modelId
-  - capability icons; the open picker carries type-to-search,
-    cross-provider Favorites, grouped provider sections, and a
-    sticky-footer custom-add composer.
-- **temperature** — 0–2 slider.
-- **max output** — slider with `[✎ custom]` for direct numeric input
-  beyond the slider's range. A muted line beneath gives the model's
-  [context window](#context-window) and its source
-  (`Context window 65,536 · detected`, `· set by you`), or
-  `Context window unknown · set it in Providers`. Max output is not
-  checked against the window: it is a ceiling, and calls are checked
-  on the prompt alone.
-- **thinking** — slider, **conditional** rendering rules:
-  - Provider known + model supports → slider visible.
-  - Provider known + model doesn't → slider hidden, info text
-    `Reasoning: not supported`.
-  - Capability data unavailable → slider visible, info text
-    `Reasoning: capability data unavailable — slider applies if model supports it`.
-- **timeout** — 5–300s slider, `[✎ custom]` for outliers. Unset by
-  default: no limit, except the ten minutes of a classifier pass or a
-  chapter close's call
-  ([`memory/classifier.md → Failure policy`](../../../memory/classifier.md#failure-policy)).
-- **structured output** — agent profiles only; not on narrative.
-- **Advanced — custom JSON payload** — collapsed by default. Per-field
-  override merged on top of the constructed request payload. Any
-  parameters we don't surface in UI (`top_k`, `seed`,
-  `repetition_penalty`, etc.). JSON-validated; warning if invalid.
+Its fields are the
+[model settings form](../../patterns/model-settings.md#fields) for a
+narrative profile: model, temperature, max output, thinking, timeout and
+custom JSON. The model picker sets `modelRef: {providerId, modelId}`.
 
 ### Agent profiles
 
 User-creatable, named, with description. Listed as a collapsible
 [Accordion](../../patterns/accordion.md) (card-style composition —
 each profile is its own bordered card). Each profile carries the
-same fields as Narrative plus `structured output` (auto / force on
-/ force off):
-
-- **`auto`** uses capability data: model supports → force-on; model
-  doesn't → force-off; data unavailable → force-off (conservative).
-- **force on / force off** override the auto logic.
-
-Under a **Chapter close** label, two switches set how a close uses this
-profile, since the right shape depends on the model. They do nothing for
-any other agent, which the label says.
-
-- **Conversation** (`split` / `single`): one conversation per task, or
-  one for all of them. `single` needs a large window.
-- **Tools** (`separate` / `shared`): each task's own tools, or all of them
-  on every task. `shared` keeps the chapter cached on more models, at some
-  cost to a weak one. Disabled under `single`, where it has no effect.
-
-See [`chapter-close.md → Conversations`](../../../memory/chapter-close.md#conversations).
+[model settings form](../../patterns/model-settings.md#which-fields-an-owner-shows)
+for an agent profile.
 
 `+ New profile` adds a profile (name + description + standard fields).
 Profile `⋯` menu offers rename, duplicate, delete. Delete is permitted

@@ -685,6 +685,12 @@ cause and passes the route as an inline link:
 - **`content-filter`**: "The provider's content filter stopped this
   reply." No link, for the same reason.
 
+When the mark's `fromOverride` is set, the copy names the story's
+narrative override instead of the profile: "Cut off at the 4,096-token
+max output of this story's narrative override." The link's label and
+route follow
+[`generation-pipeline.md → Cut-off replies`](../../generation-pipeline.md#cut-off-replies).
+
 Regenerate is already in the action cluster. The notice is not
 dismissible: a committed edit clears it
 ([Edit mode](#edit-mode)), and a regenerate replaces the entry. A cut

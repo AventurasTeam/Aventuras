@@ -293,6 +293,17 @@
     .segment { display: flex; justify-self: stretch; width: 100%; }
     .segment > .seg { flex: 1 1 0; text-align: center; }
   }
+  /* Model override settings (patterns/model-settings.md) — same form as an App Settings profile card */
+  .ovr-settings { margin: 6px 0 4px 0; padding: 10px 12px; border: 1px solid var(--line-soft); border-radius: 3px; background: var(--bg-region); display: flex; flex-direction: column; gap: 8px; }
+  .ovr-settings .ovr-row { display: grid; grid-template-columns: 110px 1fr; gap: 10px; align-items: center; font-size: 12px; }
+  .ovr-settings .ovr-label { color: var(--ink-muted); }
+  .ovr-slider { display: flex; align-items: center; gap: 10px; }
+  .ovr-slider .track { flex: 1; height: 4px; background: var(--line-soft); border-radius: 2px; position: relative; }
+  .ovr-slider .thumb { position: absolute; top: -5px; width: 14px; height: 14px; border-radius: 50%; background: var(--ink); }
+  .ovr-slider .val { width: 64px; padding: 3px 6px; border: 1px solid var(--line-soft); border-radius: 3px; font-family: ui-monospace, monospace; font-size: 11px; text-align: right; }
+  .ovr-note { font-size: 10px; color: var(--ink-faint); }
+  .ovr-summary { font-size: 11px; color: var(--ink-muted); cursor: pointer; margin: 4px 0 0; }
+  @media (max-width: 560px) { .ovr-settings .ovr-row { grid-template-columns: 1fr; gap: 4px; } }
 </style>
 </head>
 <body data-md-state="detail">
@@ -666,7 +677,7 @@
       <!-- MODELS (override-only) -->
       <div class="tab-panel" data-panel="models">
         <div class="warn-box" style="background: #eef5fb; border-color: #b8d0e4; border-left-color: #3d5a7a; color: #3d5a7a;">
-          <b>Per-feature model overrides.</b> Story-level override is a model id &mdash; bypasses the App Settings profile chain for that feature. Empty agents fall back to <code>App default</code>, which resolves the chain at render time.
+          <b>Per-feature model overrides.</b> A story-level override is a model with its own call settings, owned by this story &mdash; bypasses the App Settings profile chain for that feature. Picking a model copies the settings the slot resolves to then. Empty agents fall back to <code>App default</code>, which resolves the chain at render time.
         </div>
 
         <!-- NARRATIVE: always visible -->
@@ -682,6 +693,22 @@
             </div>
             <span title="Remove override &mdash; revert to App default" style="color: var(--ink-faint); cursor: pointer; font-size: 14px; padding: 0 4px;">&times;</span>
           </div>
+        </div>
+        <!-- Override settings, open: the override was created in this session, so the copied
+             values show before Save (story-settings.md → An override row). Narrative's fields:
+             no structured output, no Chapter close switches. -->
+        <div class="ovr-settings">
+          <div class="ovr-summary">&#9662; Settings <span class="ovr-note">&middot; copied from the Narrative profile</span></div>
+          <div class="ovr-row"><span class="ovr-label">temperature</span>
+            <div class="ovr-slider"><div class="track"><div class="thumb" style="left: 40%;"></div></div><span class="val">0.8</span></div></div>
+          <div class="ovr-row"><span class="ovr-label">max output</span>
+            <div><div class="ovr-slider"><div class="track"><div class="thumb" style="left: 25%;"></div></div><span class="val">4,096</span></div>
+              <div class="ovr-note">Context window 200,000 &middot; detected</div></div></div>
+          <div class="ovr-row"><span class="ovr-label">thinking</span>
+            <div class="ovr-slider"><div class="track"><div class="thumb" style="left: 0%;"></div></div><span class="val">0</span></div></div>
+          <div class="ovr-row"><span class="ovr-label">timeout</span>
+            <div class="ovr-slider"><div class="track"><div class="thumb" style="left: 0%;"></div></div><span class="val">default</span></div></div>
+          <div class="ovr-summary">&#9656; Advanced &mdash; custom JSON payload</div>
         </div>
 
         <!-- AGENT OVERRIDES: empty by default + Add -->
@@ -703,6 +730,10 @@
             <span title="Remove override" style="color: var(--ink-faint); cursor: pointer; font-size: 14px; padding: 0 4px;">&times;</span>
           </div>
         </div>
+        <!-- Override settings, collapsed on a later visit: the summary names temperature, max output
+             and timeout, an unset one as "default". Expanded, an agent's adds structured output;
+             only a lore-mgmt override adds the Chapter close switches. -->
+        <div class="ovr-summary" style="margin-left: 0;">&#9656; Settings &middot; temp 0.3 &middot; max 2,048 &middot; timeout default</div>
 
         <div style="margin-top: 6px;">
           <span style="display: inline-block; padding: 6px 14px; border: 1px dashed var(--line); border-radius: 3px; background: var(--bg); cursor: pointer; color: var(--ink-muted); font-size: 11px;">+ Add override</span>

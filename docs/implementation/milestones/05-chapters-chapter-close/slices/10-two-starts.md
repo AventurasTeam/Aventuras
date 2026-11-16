@@ -196,7 +196,11 @@ and the catalog bullet below drops out.
   `CLOSE_RESOLVER_COPY` and `EXPECTED` in
   `components/reader/resolver-failure-copy.test.tsx` are keyed by it. `FIX_LABEL`
   maps the new kind to `reader:systemEntry.fixProfile`, which lands on the
-  Providers tab until M7.1.
+  Providers tab until M7.1. If the story-override settings followup
+  ([`followups.md → UX`](../../../../followups.md#ux)) has shipped, the action
+  reads `Fix story override` when the story overrides `lore-mgmt`, by its rule
+  ([`generation-pipeline.md → Cut-off replies`](../../../../generation-pipeline.md#cut-off-replies)).
+  The copy names the model, so it needs no `fromOverride`.
 - The can't-call-tools entry: canon's **Chapter close's model can't call
   tools**, as `CLOSE_RESOLVER_COPY`'s line through 5.6's
   `describeCloseFailure`, with `Fix profile`, `Retry` and `Dismiss`, since 5.6
@@ -582,7 +586,7 @@ amends the scope above.
   provider failure as failed. Default: a `reply-cut-off` takes the fallback, since
   that loses nothing and a failed close stops the next Send.
 - **Does boundary take the 8k output default?** Canon states it for a step, and a
-  story override otherwise sends no limit. Default: yes, as Scope has it. If 5.2
+  story override with no max output otherwise sends no limit. Default: yes, as Scope has it. If 5.2
   answered no for metadata, keep the two calls alike or say why they differ.
 - **Can the user withdraw a manual close?** [Slice 5.6](./06-close-owed.md)
   ships Cancel deferring it, as canon says, and during phase 0 the toast names

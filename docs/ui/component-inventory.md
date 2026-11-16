@@ -59,7 +59,9 @@ _Empty — every shipped primitive matches its spec._
 
 ### Primitives — build-ready
 
-_Empty — every build-ready primitive has shipped._
+| Primitive | Spec                                                                                                                                                          | Notes                                                                                                                                                                                             |
+| --------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Slider    | [forms.md → Inline-row exceptions](./patterns/forms.md#inline-row-exceptions) (slider row), [model-settings.md → Fields](./patterns/model-settings.md#fields) | Track plus numeric input, with `[✎ custom]` past the range on max output and timeout. First consumer: the model settings form (M7.1). On Android, a native dependency means a dev-client rebuild. |
 
 ### Primitives — needs design
 
@@ -187,7 +189,9 @@ for the rule.
 
 ### Compounds — build-ready
 
-_Empty — every compound either ships or has a spec awaiting design._
+| Compound          | Spec                                              | Notes                                                                                                                                            |
+| ----------------- | ------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------ |
+| ModelSettingsForm | [model-settings.md](./patterns/model-settings.md) | The fields that set how a model is called, per owner. App Settings profile cards and Story Settings' override rows host it (M7.1). Needs Slider. |
 
 ### Compounds — needs design
 

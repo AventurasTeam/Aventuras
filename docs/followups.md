@@ -30,15 +30,42 @@ for the placement rule.
   marker pays.
   Wanted in v1, design deferred. Raised by the developer 2026-10-10.
 
-- **Story model overrides carry no settings.** A story's override
-  (`stories.settings.models`) names a provider and a model, not a
-  profile, so it has no output limit, thinking, timeout, temperature or
-  structured-output mode, and a chapter close under one runs on the
-  defaults
-  ([`chapter-close.md → Conversations`](./memory/chapter-close.md#conversations)).
-  Overrides need those settings, likely in a form close to App Settings'
-  model select; the form is open. Raised by the developer 2026-10-31 in
-  the chapter-close agent design.
+- **Story overrides' settings aren't built.** A story's model override
+  carries its own call settings, copied from what its slot resolves to
+  when it's made
+  ([`story-settings.md → An override row`](./ui/screens/story-settings/story-settings.md#an-override-row)),
+  and a failure that names a setting says whose it was
+  ([`generation-pipeline.md → Cut-off replies`](./generation-pipeline.md#cut-off-replies)).
+  The code stores `{ providerId, modelId }`, and `resolveModel` returns
+  `params: {}` for an override. To be built as a plan-mode followup;
+  the form on the Models tab is M7.1's
+  ([roadmap](./implementation/roadmap.md#m7--app-settings--diagnostics--onboarding)).
+  Build notes:
+  - `ModelSettings` in `lib/db/app-settings/app-settings-schema.ts`,
+    `modelProfileSchema` built on it and `storyModelRefSchema`
+    (`lib/db/stories/story-config-schema.ts`) extended by it, every
+    field optional with no `.default()`, so a stored model-only
+    override parses unchanged;
+  - `resolveModel` returns an override's settings as `params`, and
+    `fromOverride` on every `ok` result;
+  - the copy at creation in the Models tab's `setOverride`
+    (`components/story-settings/models-panel.tsx`), limited to the
+    slot's fields; re-picking a model keeps them. This is what makes the
+    resolver change reach an override the app creates;
+  - `fromOverride` on `ReplyCutOffFailure`, on `PipelineError.provider`
+    beside a capability hint, and on `metadata.cutOff`;
+  - the strings in `locales/en/reader.json` that name a profile's
+    setting: the turn's, the pass's and the close's cut-off and hint
+    copy, the card notice and the suggestion strip;
+  - every `Fix profile` reading `Fix story override` when the story
+    overrides the slot now: `FIX_LABEL`'s route in
+    `components/reader/system-entry-actions.tsx` and the host's
+    `cutOffFixLabel`, plus 5.10's can't-call-tools entry if it has
+    shipped.
+
+  The close switches wait for M7.1, which adds them to `ModelSettings`
+  for both owners. Raised by the developer 2026-10-31 in the
+  chapter-close agent design; designed 2026-11-17.
 
 - **Measure the encoder build and a CJK count on a phone.** Slice 5.1
   measured the build on an x86_64 emulator's debug build, 942 to 1,325 ms

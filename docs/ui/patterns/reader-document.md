@@ -208,7 +208,8 @@ Serializable props in (native → document):
 - `editGate`, `jumpButtonEnabled`,
   `systemFixLabel` (present only when the system entry has a
   kind-specific fix route), `cutOffFixLabel` (the cut-off notice's
-  `Fix profile` label, which the reader host always supplies; the
+  fix label, `Fix profile` or `Fix story override` by whether the story
+  overrides narrative now, which the reader host always supplies; the
   document drops the action for a `window` cut-off), theme id and
   token values, and other settings-derived flags.
 - `syncNonce` — bumped by the host whenever it must force a full

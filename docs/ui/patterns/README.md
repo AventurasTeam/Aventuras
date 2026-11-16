@@ -40,6 +40,11 @@ The split heuristic + when-to-add rules live in
   cross-provider Favorites, sticky-footer custom-add composer.
   Composes `SearchableOverlayList`; owns grouped source and rich
   rows.
+- [`model-settings.md`](./model-settings.md) — the form that sets how
+  a model is called: model, temperature, max output, thinking,
+  timeout, structured output, the Chapter close switches, custom JSON.
+  Shared by App Settings profiles and a story's model overrides, with
+  the fields each owner shows.
 - [`overlays.md`](./overlays.md) — Sheet and Popover primitive
   contracts: rn-primitives mapping, API surface, slot reshape, story
   shapes. Consumer-side decision tree (when to use Sheet vs Popover

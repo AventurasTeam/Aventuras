@@ -800,7 +800,8 @@ code before it moved; resolve with the slice it names.
   anywhere. Today reachable only by hand-editing SQLite; it becomes a
   footgun labelled "force on" the moment M7.1's profile editor ships,
   which is why it lands with that editor. Wiring: thread the resolved
-  profile into provider creation, capability-gate on `json_schema`
+  settings into provider creation (a story's agent override carries its
+  own `structuredOutput`, so not the profile alone), capability-gate on `json_schema`
   support, and convert the structured schemas' optional fields to
   nullable (the classifier's `currentLocation?` / `summary?` at
   minimum — that conversion also changes what the auto path accepts,
@@ -861,8 +862,11 @@ code before it moved; resolve with the slice it names.
   ([`generation-pipeline.md → Fatal error categories`](../generation-pipeline.md#fatal-error-categories)),
   so `carriedCapabilities` in `lib/ai/generate.ts`, which reads only the
   Anthropic thinking setting, the JSON response format and the tool
-  list today, must read them too. Per-story `customJson` stays parked
-  ([`parked.md → Granular per-story model controls`](../parked.md#granular-per-story-model-controls)).
+  list today, must read them too. A story's override carries its own
+  `customJson`
+  ([`story-settings.md → An override row`](../ui/screens/story-settings/story-settings.md#an-override-row)),
+  which `resolveModel` returns in the same `params`, so the fix reads
+  the resolved params rather than the profile.
   Raised by the coordinator from the cut-off replies Task 15 smoke.
 - **M7.1 — The blocking embed path has no per-request token budget.**
   Routed from the Slice 3.12 split (2026-08-19), which keeps the cheap
@@ -941,45 +945,23 @@ code before it moved; resolve with the slice it names.
 - **M7.1 — Provider deletion must decide how it treats story model
   overrides.** Story overrides are provider-qualified since Slice 4.4,
   and deleting the provider one names leaves the override in place,
-  failing `provider-missing` at pre-flight
+  failing `override-provider-missing` at pre-flight with
+  `Fix story override`
   ([`story-settings.md → Models tab`](../ui/screens/story-settings/story-settings.md#models-tab--overrides-only)).
-  The deletion slice must settle two things: whether the
-  confirm-with-impact dialog counts stories whose overrides name the
-  provider (canon currently says it does not — see
-  [`app-settings.md → Provider menu`](../ui/screens/app-settings/app-settings.md#provider-menu-)),
-  and which fix the reader's failure entry offers — every
-  provider-missing row in the
-  [reader-composer failure table](../ui/screens/reader-composer/reader-composer.md#error-surface--system-entries-vs-persistent-state-pill)
-  routes to `Fix profile` or `Fix default`, but a broken override is
-  fixed on Story Settings → Models, and `resolveModel`'s failure
-  result does not say which path failed. Unreachable until deletion
-  ships. Surfaced by Slice 4.4 execution (2026-09-14).
-- **M7.1 — A cut-off under a story's model override blames a profile
-  that never reached the call.** An override names a provider and a
-  model only
-  ([`story-settings.md → Insulation from profile changes`](../ui/screens/story-settings/story-settings.md#insulation-from-profile-changes)),
-  so `resolveModel` (`lib/ai/resolve-model.ts`) sends it with no
-  profile parameters at all (`params: {}`), max output included. A
-  reply the server cuts at its own default then reads `unknown`
+  The deletion slice must settle whether the confirm-with-impact dialog
+  counts stories whose overrides name the provider (canon currently
+  says it does not — see
+  [`app-settings.md → Provider menu`](../ui/screens/app-settings/app-settings.md#provider-menu-)).
+  Unreachable until deletion ships. Surfaced by Slice 4.4 execution
+  (2026-09-14).
+- **M7.1 — `Fix profile` on an `unknown` cut-off short of a max
+  output.** An `unknown` cut-off that carries the max output the reply
+  fell short of keeps `Fix profile`
   ([`generation-pipeline.md → Cut-off replies`](../generation-pipeline.md#cut-off-replies)),
-  even when the agent's profile sets a max output, and the copy tells
-  the user that a max output on the profile overrides the server's
-  limit and offers `Fix profile`, though that profile never reaches the
-  call; the suggestion strip's copy says the same, without the action.
-  For the periodic pass, every Send fails again with the same
-  advice until the override goes or the server stops cutting. Revisit
-  with M7.1's profile routing, when `Fix profile` stops landing on the
-  interim providers tab. The slice review's options: record whether
-  the call ran on an override (only the profile path returns a
-  `profileId`) and, for one, say so and route to Story Settings →
-  Models instead, which changes the `ReplyCutOffFailure` and `cutOff`
-  shapes canon prints; or let overrides carry parameters such as a max
-  output, which changes the insulation rule above. No interim measure
-  until then (developer, 2026-10-27). The same pass revisits
-  `Fix profile` on an `unknown` cut-off that carries the max output the
-  reply fell short of, where raising that limit can't help and only the
-  profile's model can (kept for now, developer, 2026-10-27). Raised by
-  the cut-off replies slice review (2026-10-26).
+  though raising that limit can't help and only another model can
+  (kept for now, developer, 2026-10-27). Revisit with M7.1's profile
+  routing, when `Fix profile` stops landing on the interim providers
+  tab. Raised by the cut-off replies slice review (2026-10-26).
 - **M7.1 — A detected window can go stale and lock a model out.**
   Canon keeps
   the last detected figure when a fetch publishes none
@@ -1248,7 +1230,22 @@ code before it moved; resolve with the slice it names.
   `separate` only, since nothing can set either switch before the
   profile editor. `single` is a second driver and only the default was
   tuned, so what it does on outgrowing the window, and the read check
-  after that, need settling first. Moved here at M5's promotion (2026-11-01).
+  after that, need settling first. The switches sit on `ModelSettings`,
+  so a story's `lore-mgmt` override carries them too
+  ([`story-settings.md → An override row`](../ui/screens/story-settings/story-settings.md#an-override-row)).
+  Moved here at M5's promotion (2026-11-01).
+- **M7.1 — The override form on Story Settings' Models tab.** Each
+  override row mounts the
+  [model settings form](../ui/patterns/model-settings.md), as
+  [`story-settings.md → An override row`](../ui/screens/story-settings/story-settings.md#an-override-row)
+  describes: open when the override was created in this session,
+  collapsed to its summary otherwise, and opened at the slot's row by
+  `Fix story override`. It shares the form with the profile editor, and
+  the Slider primitive both need: `components/ui` has none (checked
+  2026-11-17). The override's data, its copy at creation and the
+  routing ship before it, as a followup
+  ([`followups.md → UX`](../followups.md#ux)). Developer decision
+  2026-11-17.
 - **M7.1 — A close's capability surfaces.** The tool badge, the
   `lore-mgmt` warning and `Set window` on a close's entries, none of
   which has a settings surface in M5. Until this slice `Fix profile`

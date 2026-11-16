@@ -328,10 +328,9 @@ illustrations / etc.) — entire feature deferred. Implies:
   dedicated configuration tab in App Settings.
 - `stories.settings.models.imageGen?` field returns to the override
   list at that point.
-- Per-story granular image-gen parameter override (size / style /
-  quality) joins the existing
-  [Granular per-story model controls](#granular-per-story-model-controls)
-  followup.
+- Per-story image-gen parameters (size / style / quality) join the
+  override then, as a text model's settings did
+  ([`story-settings.md → An override row`](./ui/screens/story-settings/story-settings.md#an-override-row)).
 
 Asset gallery (uploaded images) and `entry_assets` table are in
 scope; only the auto-generation pipeline is deferred. Decoupled
@@ -2503,15 +2502,6 @@ AlertDialog — see
 [`app-settings.md → APP · Data`](./ui/screens/app-settings/app-settings.md#app--data)
 — since backup is the one user-initiated action that takes the
 unencrypted keys outside the local-only threat model.
-
-#### Granular per-story model controls
-
-v1 story-level override is **model id only** (no per-story
-temperature, max-output, custom JSON, etc.). When a real demand
-surfaces (e.g., "this story needs a different temperature for the
-narrative model only"), extend `stories.settings.models` to hold
-either inline param overrides or a story-specific profile id. Lean
-toward inline param overrides as the simpler extension.
 
 #### Story tags on library cards
 

@@ -121,8 +121,9 @@ the shape:
   where a list that changed would invalidate everything after it. Code
   refuses a tool outside the task and hands that back.
 
-A story's model override names a model, not a profile, so it runs on the
-defaults.
+A story's `lore-mgmt` override carries the two switches itself, copied
+from the assigned profile when the override was made
+([`story-settings.md → An override row`](../ui/screens/story-settings/story-settings.md#an-override-row)).
 
 ### Parts
 
@@ -230,7 +231,8 @@ the exception and skips whole ([3e](#3e--happenings-consolidation)).
 ### When a task stops
 
 A task's budget is 24 steps per part, tuned in play. Each step's output
-is bounded by the profile's max output, else 8k tokens, since a model
+is bounded by the max output of the profile or the story's override,
+else 8k tokens, since a model
 can reason through its whole limit and never reply. Each call is bounded
 as a pass's is
 ([`classifier.md → Failure policy`](./classifier.md#failure-policy)),

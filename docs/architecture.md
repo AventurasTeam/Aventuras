@@ -333,8 +333,8 @@ declare a Zod schema in code; `lib/ai` renders it into the call at
 request time, so templates carry creative content only and a pack
 edit can never break reply parsing. Field descriptions authored with
 `.describe()` on the schema reach the model as comments on the
-rendered interface. The profile's `structuredOutput` param picks the
-mechanism: `force-on` sends the schema as the provider-native
+rendered interface. The `structuredOutput` param of the call's
+settings, the profile's or a story override's, picks the mechanism: `force-on` sends the schema as the provider-native
 response format; `force-off` renders it into the prompt as a
 TypeScript `interface Response` block via AI SDK middleware
 (`lib/ai/prompt-schema.ts`); `auto` takes the prompt-injection path
@@ -749,9 +749,14 @@ enum-union dedup that drizzle `$inferSelect` will own is tracked in
 read sites" — because models use override-at-render, the context
 getter calls a named `resolveModel(agentId)` function that walks
 `stories.settings.models[agentId]` (per-story override, a
-`{ providerId, modelId }` ref that runs on its own provider) →
+`{ providerId, modelId }` ref with its own call settings, run on its own
+provider) →
 `app_settings.assignments[agentId]` (the assigned profile) →
-`profile.modelRef` (the profile's `(providerId, modelId)`). No
+`profile.modelRef` (the profile's `(providerId, modelId)`). The call
+settings come from where the walk stopped: an override's own, which
+the story owns, or the profile's. The result says which
+(`fromOverride`), so a failure that names a setting can say whose it
+was ([`generation-pipeline.md → Cut-off replies`](./generation-pipeline.md#cut-off-replies)). No
 fallback constant: the absence of a valid model at any step is an
 error state, not a recoverable case. Pre-flight halt — the
 orchestrator validates resolver inputs before phase 0 fires, so no

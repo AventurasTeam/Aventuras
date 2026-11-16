@@ -21,6 +21,8 @@ Used by:
 
 - [App Settings · Profiles → Narrative profile](../screens/app-settings/app-settings.md#narrative-profile-always-present)
 - [App Settings · Profiles → Agent profiles](../screens/app-settings/app-settings.md#agent-profiles)
+- [Story Settings · Models tab](../screens/story-settings/story-settings.md#models-tab--overrides-only),
+  through the [model settings form](./model-settings.md)
 
 ## API
 

@@ -25,6 +25,8 @@ Cross-cutting principles that govern this screen are in
   picker on this surface)
 - [Save-session pattern](../../patterns/save-sessions.md)
   (the same pattern applies here)
+- [Model settings form](../../patterns/model-settings.md)
+  (each model override row on the Models tab)
 - [Naming convention — World / Plot](../../principles.md#naming-convention--world--plot-and-their-panel-descriptor)
 - [Actions menu (contextual zone)](../../patterns/actions-menu.md#contextual-zone)
   (Story Settings contributes tab-jump + reset commands to the
@@ -129,8 +131,8 @@ card `⋯ → Edit info` routes to `About` directly.
 
 ## Models tab — overrides only
 
-Story-level overrides pin a provider-qualified model — a
-`{ providerId, modelId }` ref, not a profile. App-level
+Story-level overrides pin a provider-qualified model with its own call
+settings: a model tuned for this story, not a profile. App-level
 profile architecture (App Settings · Profiles) provides the resolution
 chain; this tab lets the story bypass the chain for specific features.
 
@@ -142,8 +144,10 @@ its slot is always rendered:
 - **App default sentinel** resolves the chain and shows what's
   currently in effect:
   `App default: claude-sonnet-4-7 (Narrative profile)`.
-- Picking a model pins that provider and model for this story
-  regardless of changes to App Settings · Profiles · Narrative.
+- Picking a model creates the [override](#an-override-row), pinning
+  that model and a copy of the narrative profile's settings for this
+  story regardless of later changes to App Settings · Profiles ·
+  Narrative.
 - `×` on the row removes the override; reverts to the App default
   sentinel.
 
@@ -166,8 +170,9 @@ resolves through App Settings only.
 [`parked.md → Image generation`](../../../parked.md#image-generation).)
 
 User picks an agent; the override row materializes with a model
-picker. `×` on the row removes the override; agent reverts to App
-default.
+picker, and picking a model creates the
+[override](#an-override-row). `×` on the row removes the override;
+agent reverts to App default.
 
 Most stories override 0-1 agents — empty default keeps noise
 proportional to actual overrides.
@@ -178,13 +183,45 @@ outside this screen's save session. Discard rolls back the override
 being picked, but neither the favorite nor the added model id goes
 with it.
 
+### An override row
+
+An override holds a model and the
+[model settings form](../../patterns/model-settings.md)'s fields for
+its slot: the narrative profile's on the narrative row, structured
+output added on an agent's, the Chapter close switches on `lore-mgmt`'s
+alone
+([which fields an owner shows](../../patterns/model-settings.md#which-fields-an-owner-shows)).
+
+- **Created as a copy.** Picking a model where the slot has no override
+  copies the settings the slot resolves to at that moment, the assigned
+  profile's or Narrative's, limited to the slot's fields. A broken
+  chain (no profile assigned, the profile gone) copies nothing, so the
+  settings start unset. Picking the model the chain already uses is
+  allowed: the same model with different settings for this story.
+- **The row** shows the slot's label, `×`, and the form: the model
+  picker first, always visible, then the settings in a collapsible
+  block. Collapsed, a one-line summary names temperature, max output
+  and timeout, an unset one as `default`
+  (`temp 0.8 · max 4,096 · timeout default`). The block is open when
+  the override was created in this session, so the copied values are
+  seen before Save, and collapsed otherwise. Custom JSON sits under a
+  collapsed Advanced, as on a profile card.
+- **Re-picking the model** keeps the settings; thinking's visibility
+  follows the new model's capability.
+- **The save session** keeps one dirty label per slot: a changed
+  setting marks it as a new model does. Discard rolls the row back
+  whole.
+- **`Fix story override`** from the reader
+  ([`generation-pipeline.md → Cut-off replies`](../../../generation-pipeline.md#cut-off-replies))
+  opens this tab at the slot's row with its settings open.
+
 ### Insulation from profile changes
 
-Story-level overrides name a provider and a model, not a profile —
+Story-level overrides own their settings and name no profile —
 they bypass the profile chain entirely:
 
-- Profile renamed / model changed / temperature changed → stories
-  with override unaffected.
+- Profile renamed / model changed / any setting changed → stories
+  with override unaffected; the copy made at creation stays.
 - Profile deleted → per the
   [deletion-semantics design](../../../data-model.md#app-settings-storage),
   the delete is permitted (not blocked) and assignments using that
@@ -193,7 +230,8 @@ they bypass the profile chain entirely:
   unchanged — they don't reference the profile id.
 - Provider deleted → overrides naming it stay in place and fail
   `override-provider-missing` at the next pipeline use; the Models tab
-  renders the row broken with `×` to clear it. Its own kind, not the
+  renders the row broken with `×` to clear it, and re-picking a model
+  on a live provider repairs it with its settings kept. Its own kind, not the
   chain's `provider-missing`: the App Settings chain is healthy here, so
   the reader's fix action has to point at this tab instead.
 - Model removed from provider catalog → triggers the global
@@ -202,28 +240,18 @@ they bypass the profile chain entirely:
   that lets the user fix it). Story override stays valid only as
   long as the model id resolves.
 
-### What story override **doesn't** include in v1
-
-- Per-story full-profile override (creating a story-specific
-  profile, etc.).
-- Per-story custom JSON payload override.
-- Per-story image-gen advanced parameters (size, style, quality —
-  only the model id can be overridden).
-
-Tracked as granular per-story controls in
-[`parked.md → Granular per-story model controls`](../../../parked.md#granular-per-story-model-controls)
-— extension when demand emerges.
-
 ### Data model
 
 ```ts
+// ModelOverride = { providerId, modelId } & ModelSettings
+// (data-model.md → App settings storage)
 stories.settings.models: {
-  narrative?: { providerId: string; modelId: string };
-  classifier?: { providerId: string; modelId: string };
-  translation?: { providerId: string; modelId: string };
-  suggestion?: { providerId: string; modelId: string };
-  'lore-mgmt'?: { providerId: string; modelId: string };
-  retrieval?: { providerId: string; modelId: string };
+  narrative?: ModelOverride;
+  classifier?: ModelOverride;
+  translation?: ModelOverride;
+  suggestion?: ModelOverride;
+  'lore-mgmt'?: ModelOverride;
+  retrieval?: ModelOverride;
 }
 ```
 
@@ -232,7 +260,9 @@ feature lands.)
 
 All fields optional; absent = resolve through the App Settings
 profile chain at render time. A present override runs on its own
-`providerId`. See
+`providerId` with its own settings; an unset setting takes the call's
+own fallback, as on a profile
+([`data-model.md → App settings storage`](../../../data-model.md#app-settings-storage)). See
 [principles.md → Models are override-only](../../principles.md#models-are-override-only-per-story)
 for the cross-cutting pattern.
 

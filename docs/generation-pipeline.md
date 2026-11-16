@@ -2081,7 +2081,8 @@ failed attempt yields a `recoverable_error` event. Retries are
 transparent — the phase eventually returns success or fatal; no
 user surfacing in between.
 
-A profile's `timeout` bounds each attempt of a structured call, and a
+The `timeout` a call's settings set, a profile's or a story
+override's, bounds each attempt of a structured call, and a
 streamed reply as a whole, by the app's own signal rather than the
 SDK's `timeout` option, which builds `AbortSignal.timeout` and React
 Native's `AbortSignal` has no `timeout`. An expired attempt is a provider
@@ -2128,10 +2129,11 @@ type ReplyCutOffFailure = {
   outputTokens: number | null // as the provider reported; null when it reported none
   // 0 can mean unreported (OpenAI-compatible reports a missing count as 0); described as absent
   reasoningTokens: number | null // the part of outputTokens spent thinking, when reported
-  maxOutput: number | null // the profile's, or a tool step's as sent; null when none (see the cause)
+  maxOutput: number | null // the profile's or the override's, or a tool step's as sent; null when none (see the cause)
   window: number | null // the model's known window; null when unknown
   providerId: string
   modelId: string
+  fromOverride: boolean // the call's settings came from the story's override, not a profile (see Cut-off replies)
 }
 
 type CallWithRetryResult<T> =
@@ -2261,15 +2263,16 @@ call sent a max output and the output tokens reached it, or the
 provider reported none. The figure it reads differs by path. A tool
 step reads back the `max_tokens` its request carried, where the
 adapter's body shows it (Anthropic's adds the thinking budget), else
-what it asked for, the profile's or its own default; only the log reads
-it. A structured or narrative call keeps the profile's `maxOutput`,
-since its copy names that figure, so with thinking on a cut at the
+what it asked for, the profile's or the override's, or its own default;
+only the log reads it. A structured or narrative call keeps the
+`maxOutput` its settings set, the profile's or the override's, since
+its copy names that figure, so with thinking on a cut at the
 window can read as `max-output`. Then `window` when the model's window
 is known and the prompt plus the output tokens reach it, reading the
 prompt from the provider's input count and from the estimate only when
 it reported none, since o200k can miss a server's own count by a
 quarter either way; `unknown` otherwise, on hosted servers usually
-their own default `max_tokens`, which a profile max output overrides. Output tokens include reasoning
+their own default `max_tokens`, which a max output on the profile or the override overrides. Output tokens include reasoning
 on both providers, so a model that spends its allowance thinking reads
 as `max-output`, with `reasoningTokens` saying how much went there.
 An `unknown` cut-off on a call that sent a max output stopped short of
@@ -2281,6 +2284,21 @@ provider's own ceiling below it
 The failure carries the limit in `maxOutput` and the entry's mark keeps
 it, so each surface says the server stopped short of that limit instead
 of telling the user to set one.
+
+**Whose setting it was.** A call's settings come from the agent's
+profile or from the story's override for that slot
+([`architecture.md → Settings`](./architecture.md#settings-strict-types-defaults-at-load)).
+The failure carries `fromOverride`, and the narrative mark keeps it, so
+every surface that names an agent's setting says whose it was: a
+cut-off's limit ("the narrative profile's 4,096-token max output", or
+"the 4,096-token max output of this story's narrative override"), a
+capability hint's thinking or structured-output setting. The fix action
+doesn't read it. Every `Fix profile`, whatever its failure, follows
+where the slot's settings live when the surface renders: it reads
+`Fix story override` and opens Story Settings → Models at that slot's row
+when the story overrides the slot now, and stays `Fix profile`
+otherwise. So a notice from before an override was added routes to the
+override, which is where its limit lives now.
 
 Every cut-off, committed or failed, logs a warning with the cause and
 the numbers. A plain-text call other than the narrative, such as a
@@ -2353,6 +2371,7 @@ type PipelineError =
       reason: 'auth' | 'network' | 'timeout' | 'unknown'
       detail?: string
       possibleCapabilityMismatch?: CapabilityHint // from CallRetryError, or the narrative's stream error
+      fromOverride?: boolean // set with the hint: the call's settings came from the story's override, so its copy names the override's setting
     }
   | {
       kind: 'phase-logic'
@@ -2411,9 +2430,11 @@ caller couldn't use: a structured reply, or a narrative reply with no
 prose ([Cut-off replies](#cut-off-replies)). Its remedy is the reply's
 limit, so its surfaces route to the model's window (`Set window`) for
 `window`, and to the profile (`Fix profile`) for `max-output` and
-`unknown`, where a profile max output overrides the server's default.
+`unknown`, where a max output overrides the server's default.
 An `unknown` cut short of a max output the call sent keeps
-`Fix profile` too. The failure never carries `interrupted` or
+`Fix profile` too. Each `Fix profile` reads `Fix story override` when the
+story overrides the slot
+([Cut-off replies → Whose setting it was](#cut-off-replies)). The failure never carries `interrupted` or
 `content-filter`, so no remedy routes them: a narrative reply marks
 those, a structured reply's filter fails its parse, and a tool step's
 ends the task as `stopped`.
@@ -2457,6 +2478,10 @@ for another reason." Its action is `Fix profile`, since the profile
 holds the per-call setting and App Settings · Providers the model's
 badge
 ([`app-settings.md → Override semantic — trust-the-user`](./ui/screens/app-settings/app-settings.md#override-semantic--trust-the-user)).
+Under a story's override the phase sets `fromOverride` beside the hint,
+and the copy reads "check this story's override's thinking setting";
+the action follows the rule in
+[Cut-off replies → Whose setting it was](#cut-off-replies).
 
 **Structured-context fields on `phase-logic` and `action-layer`**
 (O4). All optional so existing call sites keep compiling.
