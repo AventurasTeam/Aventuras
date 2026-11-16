@@ -283,7 +283,8 @@ export async function supportsReferenceImages(profileId: string, model: string):
 /** A reference in a format the model does not list is left out; one whose format cannot be told is kept. */
 function acceptsReferenceFormat(image: string, mimeTypes: readonly string[] | undefined): boolean {
   if (!mimeTypes?.length) return true
-  const mime = sniffImageMime(image)
+  const sniffed = sniffImageMime(image)
+  const mime = sniffed === 'image/apng' ? 'image/png' : sniffed
   return mime === null || mimeTypes.includes(mime)
 }
 

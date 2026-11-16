@@ -695,9 +695,10 @@ The fields are `providerOptions.openai.outputFormat` and `outputCompression` for
 Because a portrait can now be stored as JPEG or WebP and later sent as a reference, `generateImage`
 drops a reference whose sniffed type is not in the model's `referenceConstraints.mimeTypes` (NanoGPT
 publishes them), as it does one that cannot be fetched. NanoGPT's route and provider lists are
-normalized (`jpg` is `image/jpeg`, case ignored) before they are intersected. A reference whose type
-cannot be told is kept. Nothing downstream assumes a generated image is a PNG: stored images are
-labelled by sniffing their bytes (`normalizeImageDataUrl`).
+normalized (`jpg` is `image/jpeg`, case ignored) before they are intersected, and an animated PNG
+(`image/apng`) counts as `image/png`. A reference whose type cannot be told is kept. Nothing
+downstream assumes a generated image is a PNG: stored images are labelled by sniffing their bytes
+(`normalizeImageDataUrl`).
 
 Only a 429 is retried, because any other failure may already have been billed. The same rule has
 one sharp edge: when a reply gives a URL and the SDK downloads the image itself, a 429 from the

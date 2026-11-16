@@ -748,6 +748,15 @@ describe('Image Provider Registry', () => {
         expect(send).toHaveBeenCalledWith(expect.objectContaining({ referenceImages: [WEBP, PNG] }))
       })
 
+      it('reads an animated PNG as a PNG', async () => {
+        const APNG = btoa('\x89PNG\r\n\x1a\n\0\0\0\x08acTL' + '\0'.repeat(12))
+        const { generate: send } = setup({}, takes(['image/png']))
+
+        await generate('m', [APNG])
+
+        expect(send).toHaveBeenCalledWith(expect.objectContaining({ referenceImages: [APNG] }))
+      })
+
       it('still refuses a model that needs a reference when none is left', async () => {
         const { generate: send } = setup({}, takes(['image/png'], { requiresReferenceImage: true }))
 
