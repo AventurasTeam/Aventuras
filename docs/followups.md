@@ -160,10 +160,15 @@ for the placement rule.
   accessibility, holds all 138 text nodes of a 50-row slice. The
   document is `react-native-webview` 13.16.0 under expo-dom, mounted
   with `scrollEnabled: false` and scrolling in its own DOM scroller; the
-  jump veil renders nothing while idle, so it doesn't cover it. Cause
-  not found. The sliding reader window's PR (#752) doesn't change the
-  mount or the WebView's props (read from its diff); not tried on main,
-  with Google's TalkBack, or on an emulator. Once TalkBack reaches the
+  jump veil renders nothing while idle, so it doesn't cover it. It
+  worked on this device on 2026-07-19
+  ([`reader-document.md → Validation record`](./ui/patterns/reader-document.md#validation-record),
+  item 9: traversal walked from the chrome into the surface, and
+  explore-by-touch worked), so this is a regression since. The mount's
+  props, `expo`, `react-native` and `react-native-webview` are the same
+  as then. Cause not found. The sliding reader window's PR (#752)
+  doesn't change the mount or the WebView's props (read from its diff);
+  not tried on main, with Google's TalkBack, or on an emulator. Once TalkBack reaches the
   document, check that its linear navigation extends the slice at the
   bottom shimmer, which that PR's acceptance asked for and couldn't run.
   Raised 2026-11-16 by its Fold session (developer decision).
