@@ -53,11 +53,23 @@ function createSliceStore(): SliceStore {
   }
 }
 
+// The store replaces its map on every write, so the map's identity keys the sorted window.
+let sortedWindow: {
+  rows: ReadonlyMap<string, StoryEntry>
+  branchId: string
+  window: StoryEntry[]
+} = { rows: new Map(), branchId: '', window: [] }
+
 /** The store's window for the branch now, sorted: handlers run between renders. */
 function readWindow(branchId: string): StoryEntry[] {
-  return [...entriesStore.getEntries().values()]
-    .filter((row) => row.branchId === branchId)
-    .sort((a, b) => a.position - b.position)
+  const rows = entriesStore.getEntries()
+  if (sortedWindow.rows !== rows || sortedWindow.branchId !== branchId) {
+    const window = [...rows.values()]
+      .filter((row) => row.branchId === branchId)
+      .sort((a, b) => a.position - b.position)
+    sortedWindow = { rows, branchId, window }
+  }
+  return sortedWindow.window
 }
 
 export type ReaderSlice = {

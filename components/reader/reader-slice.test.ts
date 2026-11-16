@@ -62,6 +62,12 @@ describe('deriveSlice — open and branch switch', () => {
     expect(view.next?.windowHasOlder).toBe(false)
   })
 
+  it('opens at the tail’s last 50 when the window still holds more from an earlier visit', () => {
+    const view = deriveSlice(null, BRANCH, WINDOW, PAGE)
+    expect(view.next).toMatchObject({ top: 71, bottom: null })
+    expect(view.rows).toHaveLength(50)
+  })
+
   it('opens nothing on an empty window', () => {
     expect(deriveSlice(null, BRANCH, [], PAGE)).toMatchObject({ rows: [], next: null })
   })

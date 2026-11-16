@@ -105,7 +105,10 @@ function withBounds(
   })
 }
 
-/** On branch open the slice is the whole window, at the tail. */
+/**
+ * On branch open the slice is the window at the tail, or its last {@link SLICE_CAP} rows: a
+ * story reopened while its branch is still loaded keeps the window an earlier jump grew.
+ */
 export function openSlice(
   branchId: string,
   window: readonly SliceRow[],
@@ -114,7 +117,7 @@ export function openSlice(
 ): SliceState {
   return {
     branchId,
-    top: window[0]?.position ?? 0,
+    top: window[Math.max(0, window.length - SLICE_CAP)]?.position ?? 0,
     bottom: null,
     key: previousKey + 1,
     windowHasOlder,
