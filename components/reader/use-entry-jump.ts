@@ -7,6 +7,8 @@ import { t } from '@/lib/i18n'
 import { entriesStore } from '@/lib/stores'
 import { toast } from '@/lib/toast'
 
+import type { JumpClass } from './reader-slice'
+
 // Well past the 10.7 s a 60-chapter jump took to land on the Fold: a stalled read or a landing
 // that never signals must not leave the veil blocking the reader, and an early lift only shows a
 // busy one.
@@ -138,14 +140,14 @@ export type EntryJump = {
 type JumpDropCause = 'bound' | 'left_window' | 'document_reload'
 
 /**
- * `land` (platform dispatch) and `topLoaded` must be stable. `topLoaded` runs in the store write's
- * tick only when a read brings in a target that is the branch's first row, so the host drops its
- * shimmer in that commit.
- * `lost` reports a landing call for `entryId` that a document reload lost.
+ * `classify`, `land` (platform dispatch) and `topLoaded` must be stable. `topLoaded` runs in the
+ * store write's tick, only when a read brings in a target that is the branch's first row, so the
+ * host drops its shimmer in that commit. `lost` reports a landing a document reload lost.
  */
 export function useEntryJump(
   branchId: string,
   ctx: DbCtx,
+  classify: (entryId: string) => JumpClass,
   land: (entryId: string) => void,
   topLoaded: () => void,
 ): EntryJump & { lost: (entryId: string) => void } {
@@ -227,9 +229,9 @@ export function useEntryJump(
       const current = () => generation === generationRef.current
       const superseded = () => !current() || entriesStore.getLoadedBranch() !== branchId
 
-      const inWindow = entriesStore.getById(entryId)?.branchId === branchId
+      const where = classify(entryId)
       try {
-        if (inWindow) {
+        if (where === 'slice') {
           // On native the host's store runs ahead of the document: lifting a running wait here
           // would unveil the old view until the document renders this row.
           if (veil.isWaiting()) {
@@ -241,6 +243,12 @@ export function useEntryJump(
         }
         targetRef.current = entryId
         veil.wait()
+        // The window holds the target and its row above: the slice moves, and nothing is read.
+        if (where === 'window') {
+          watchLanding(entryId)
+          land(entryId)
+          return
+        }
         bindWait(entryId)
         const position = await readEntryPosition(branchId, entryId, ctx.db)
         if (superseded()) {
@@ -271,7 +279,7 @@ export function useEntryJump(
         reportJumpFailure(branchId, entryId, error, superseded())
       }
     },
-    [bindWait, branchId, ctx, land, release, topLoaded, veil, watchLanding],
+    [bindWait, branchId, classify, ctx, land, release, topLoaded, veil, watchLanding],
   )
 
   return { jump, veil, landed, lost }

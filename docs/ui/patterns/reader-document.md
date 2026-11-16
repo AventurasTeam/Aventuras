@@ -107,7 +107,9 @@ momentum. A width reflow takes the same anchor
 ([`reader-composer.md → Anchor preservation under shifts`](../screens/reader-composer/reader-composer.md#anchor-preservation-under-shifts)).
 While a jump's landing runs it wins over the anchor rule
 ([`reader-composer.md → Loaded-set model`](../screens/reader-composer/reader-composer.md#loaded-set-model)),
-and the chapter-break pin only re-pins a reader already at the bottom
+and so does a bottom pin (open-at-bottom, the stream-end settle), which
+places the reader by the bottom rather than by a row; the chapter-break
+pin only re-pins a reader already at the bottom
 ([`reader-composer.md → Autoscroll`](../screens/reader-composer/reader-composer.md#autoscroll)).
 
 Open-at-bottom is a document concern: land on the last entry
@@ -187,8 +189,6 @@ Serializable props in (native → document):
   with it: what an open costs, where the whole window carried 14.2 MB
   at 60 chapters
   ([Slice 5.3's measure](../../implementation/milestones/05-chapters-chapter-close/slices/03-reader-chapters.md#android-measure)).
-  The slice isn't built yet ([followup](../../followups.md#ux), "The
-  sliding reader window isn't built").
 - `hasOlder` — rows may exist above the slice: in the window, or above
   it by window-size math (a full first window means maybe-more; any
   short load proves the branch top is in the window). Drives the top
@@ -228,15 +228,28 @@ Async function props out (document → native):
   The document requests; native confirms (modals) and executes
   (action layer); results flow back as `rows` updates, with the
   decorations recomputed from them.
-- `onNearTop` — extend the slice upward. The host takes the rows from
-  the window, reading a page into it first above its oldest row. Fired
-  only at scroll rest and only while `hasOlder` holds.
-- `onNearBottom` — extend the slice downward, from the window. Fired
-  only at scroll rest and only while `hasNewer` holds.
-- `onTrim(end)` — the slice holds more than 50 rows: trim the named
-  end, the one farther from the viewport. Fired at scroll rest once no
-  landing, bottom pin or stream-end settle runs, so the trim's
-  compensating write never runs beside theirs.
+- `onNearTop({ sliceKey, keepId })` — extend the slice upward. The
+  host takes the rows from the window, reading a page into it first
+  above its oldest row, and in the same write trims the bottom back to 50. Fired only at scroll rest and only while `hasOlder` holds.
+- `onNearBottom({ sliceKey, keepId })` — extend the slice downward,
+  from the window, trimming the top back to 50. Fired only at scroll
+  rest and only while `hasNewer` holds.
+- `onTrim({ end, sliceKey, keepId })` — the slice holds more than 50
+  rows: trim the named end, the one farther from the viewport. Fired at
+  scroll rest once no landing, bottom pin or stream-end settle runs, so
+  the trim's compensating write never runs beside theirs.
+- Each request names the `sliceKey` the document measured on, and the
+  host ignores one whose key isn't its current one: a jump or a trim
+  moved the slice since, or the request crossed the bridge twice.
+  `keepId` is the farthest row on the trimmed side within a
+  viewport-height of the viewport, measured in the document since the
+  host can't measure heights; a trim never removes it or the rows
+  between it and the viewport, and trims nothing if it has left the
+  window.
+- `onJumpToBottom` — the document's Jump to bottom pressed while
+  `hasNewer` holds: the host swaps the slice to the tail and calls
+  `jumpToBottom` with the swap's key, as for the End key. At the tail
+  the button scrolls in the document, with no round trip.
 - `onReady` — the readiness handshake (below).
 - `onFirstPaint` — once per boot, after the first non-empty rows
   paint (double-rAF); the host drops the loading veil on it.
@@ -268,7 +281,10 @@ by bumping `syncNonce`, forcing a fresh emission of current state.
 Native never assumes delivery before the first `onReady`. A jump's
 landing call waits in the host until the document has painted since
 it last booted, and a reload loses a call already made, so the host
-ends the jump's wait and lifts its veil if it shows.
+ends the jump's wait and lifts its veil if it shows. A waiting landing
+moves the slice and names its key only when it's sent: the handshake's
+reset to the tail would leave an earlier key naming a slice already
+gone.
 
 ## Streaming
 
@@ -289,7 +305,8 @@ draft lives in document state; commit/cancel cross the bridge with
 the final text only. It lives at the surface's level, not in its row,
 so it survives the row leaving the slice: `editingRow` carries the
 row's stored text meanwhile, and the row shows its editor again when it
-returns
+returns, without taking focus: only opening an editor focuses it, so
+scrolling past an open one raises no keyboard
 ([`reader-composer.md → Inline edit session`](../screens/reader-composer/reader-composer.md#inline-edit-session)).
 
 **Android IME inside a WebView is this pattern's top validation

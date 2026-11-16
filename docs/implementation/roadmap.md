@@ -2132,13 +2132,12 @@ own.
   2026-10-09 (developer): compensate, and canon now names width reflow as
   its fourth, compensated scenario. Any width change does it: resize, a
   Fold unfold, orientation. The jump grows with the text above the
-  viewport. The anchor rule can't catch it: its effect is keyed on the
-  row window, so a resize never runs it. The sliding reader window moves
-  the rule's anchor to the topmost in-viewport row
-  ([`followups.md → UX`](../followups.md#ux), "The sliding reader window
-  isn't built"); this holds that anchor across the change, through the
-  rail's width animation, with a resize observer as the trigger. Routed
-  from triage 2026-10-09.
+  viewport. The anchor rule can't catch it: it runs on commits, and a
+  resize makes none. The rule's anchor is the topmost in-viewport row
+  ([`reader-document.md → Entry list`](../ui/patterns/reader-document.md#entry-list-fully-rendered-flow-layout));
+  this holds that anchor across the change, through the rail's width
+  animation, with a resize observer as the trigger. Routed from triage
+  2026-10-09.
 - **M9.5 — Bottom Sheets on web move no focus in and return none on close.**
   [`layout.md → Sheet`](../ui/foundations/mobile/layout.md#sheet) says sheets
   trap Tab focus; the primitive neither focuses into the Sheet nor restores

@@ -4,7 +4,7 @@ import { routeJumpToBottom } from './jump-to-bottom'
 
 // Expo's DOM ref proxy: an unregistered method reads as undefined, a registered one injects.
 function documentProxy(registered: boolean, inject: () => void) {
-  return new Proxy({} as { jumpToBottom: () => void }, {
+  return new Proxy({} as { jumpToBottom: (sliceKey: number) => void }, {
     get: (_, prop) => (registered && prop === 'jumpToBottom' ? inject : undefined),
   })
 }
@@ -14,9 +14,9 @@ describe('routeJumpToBottom', () => {
     const surface = { jumpToBottom: vi.fn() }
     const inject = vi.fn()
 
-    routeJumpToBottom('web', surface, documentProxy(true, inject), false)
+    routeJumpToBottom('web', surface, documentProxy(true, inject), false, 4)
 
-    expect(surface.jumpToBottom).toHaveBeenCalledOnce()
+    expect(surface.jumpToBottom).toHaveBeenCalledExactlyOnceWith(4)
     expect(inject).not.toHaveBeenCalled()
   })
 
@@ -24,7 +24,7 @@ describe('routeJumpToBottom', () => {
     const inject = vi.fn()
 
     expect(() =>
-      routeJumpToBottom('android', null, documentProxy(false, inject), false),
+      routeJumpToBottom('android', null, documentProxy(false, inject), false, 4),
     ).not.toThrow()
     expect(inject).not.toHaveBeenCalled()
   })
@@ -32,8 +32,8 @@ describe('routeJumpToBottom', () => {
   it('jumps the document on native once it has painted', () => {
     const inject = vi.fn()
 
-    routeJumpToBottom('android', null, documentProxy(true, inject), true)
+    routeJumpToBottom('android', null, documentProxy(true, inject), true, 4)
 
-    expect(inject).toHaveBeenCalledOnce()
+    expect(inject).toHaveBeenCalledExactlyOnceWith(4)
   })
 })

@@ -5,10 +5,23 @@ import { expect, fn, screen, spyOn, userEvent, waitFor, within } from 'storybook
 import { EARTH_GREGORIAN } from '@/lib/calendar'
 import type { CutOffMark, StoryEntry, SystemFailureMeta } from '@/lib/db'
 import { t } from '@/lib/i18n'
+import { WHEEL_CHAIN_GAP_MS } from '@/lib/reader-scroll'
 
 import type { ChapterBreaks } from './chapter-breaks'
-import type { ReaderSurfaceHandle } from './reader-document-types'
-import { ReaderSurface, WHEEL_CHAIN_GAP_MS } from './reader-surface'
+import type { EditSession, ReaderSurfaceHandle } from './reader-document-types'
+import {
+  deriveSlice,
+  editingRowOf,
+  extendDown,
+  extendUp,
+  markWindowTop,
+  openSlice,
+  placeJump,
+  resetToTail,
+  trimSlice,
+  type SliceState,
+} from './reader-slice'
+import { ReaderSurface } from './reader-surface'
 import {
   describePassFailure,
   describeTurnFailure,
@@ -85,6 +98,9 @@ const noopHandlers = {
   onEditScene: async () => ({ ok: true }),
   onRequestEditScene: () => {},
   onNearTop: async () => {},
+  onNearBottom: async () => {},
+  onTrim: async () => {},
+  onJumpToBottom: async () => {},
   onCommitEdit: async () => ({ ok: true }),
   onRequestRollback: async () => {},
   onEditWorldTime: async () => ({ ok: true }),
@@ -181,6 +197,9 @@ const meta = {
     streaming: null,
     branchKey: 'branch_story',
     hasOlder: false,
+    hasNewer: false,
+    sliceKey: 0,
+    editingRow: null,
     editGate: 'open',
     jumpButtonEnabled: true,
     ...noopHandlers,
@@ -759,10 +778,10 @@ function LandingSignalHarness(props: ComponentProps<typeof ReaderSurface>) {
   const ref = useRef<ReaderSurfaceHandle>(null)
   return (
     <div style={{ display: 'flex', height: '100%', flexDirection: 'column' }}>
-      <button type="button" onClick={() => ref.current?.jumpToEntry('o1')}>
+      <button type="button" onClick={() => ref.current?.jumpToEntry('o1', 0)}>
         Jump to o1
       </button>
-      <button type="button" onClick={() => ref.current?.jumpToEntry('o_later')}>
+      <button type="button" onClick={() => ref.current?.jumpToEntry('o_later', 0)}>
         Jump to a later row
       </button>
       <div style={{ minHeight: 0, flex: 1 }}>
@@ -1292,7 +1311,7 @@ function BreakCommitHarness({ after, jumpTo, ...props }: BreakCommitProps) {
       <button
         type="button"
         onClick={() => {
-          if (jumpTo != null) surfaceRef.current?.jumpToEntry(jumpTo)
+          if (jumpTo != null) surfaceRef.current?.jumpToEntry(jumpTo, 0)
           setCommitted(true)
         }}
       >
@@ -1307,6 +1326,19 @@ function BreakCommitHarness({ after, jumpTo, ...props }: BreakCommitProps) {
 
 const topBelowReaderEdge = (el: Element, scroller: HTMLElement) =>
   el.getBoundingClientRect().top - scroller.getBoundingClientRect().top
+
+// The row at the viewport's top and its offset there: what the anchor rule holds still.
+function readingLine(scroller: HTMLElement) {
+  const row = Array.from(scroller.querySelectorAll<HTMLElement>('[data-entry-row]')).find(
+    (candidate) => topBelowReaderEdge(candidate, scroller) + candidate.offsetHeight > 0,
+  )
+  if (row?.dataset.entryRow == null) throw new Error('no row in view')
+  return { row, offset: topBelowReaderEdge(row, scroller) }
+}
+
+function expectReadingLineHeld(scroller: HTMLElement, before: ReturnType<typeof readingLine>) {
+  expect(Math.abs(topBelowReaderEdge(before.row, scroller) - before.offset)).toBeLessThan(1)
+}
 
 async function pressCommit() {
   screen.getByRole('button', { name: 'Commit' }).click()
@@ -1344,8 +1376,8 @@ export const BreakNearBottomRepins: Story = {
   },
 }
 
-/** Further up nothing is written, though a break above the viewport shifts content. */
-export const BreakAwayFromBottomWritesNothing: Story = {
+/** Further up nothing re-pins; the anchor rule holds the reading line over the break above. */
+export const BreakAwayFromBottomHoldsTheReadingLine: Story = {
   args: { rows: OVERFLOW_ROWS },
   render: (args) => (
     <BreakCommitHarness {...args} after={{ chapterBreaks: { o2: { number: 2 } } }} />
@@ -1354,10 +1386,11 @@ export const BreakAwayFromBottomWritesNothing: Story = {
     const scroller = scrollerOf('o1')
     await settleLanding(scroller)
     await scrollToDistance(scroller, 200)
-    const scrollTop = scroller.scrollTop
+    const line = readingLine(scroller)
     await pressCommit()
     await scrollSettled(scroller)
-    expect(scroller.scrollTop).toBe(scrollTop)
+    expectReadingLineHeld(scroller, line)
+    expect(distanceFromBottom(scroller)).toBeGreaterThan(150)
   },
 }
 
@@ -1474,7 +1507,7 @@ export const JumpMountingBreaksLands: Story = {
 }
 
 type BreakStepsProps = ComponentProps<typeof ReaderSurface> & {
-  steps: { rows?: StoryEntry[]; chapterBreaks?: ChapterBreaks }[]
+  steps: Partial<ComponentProps<typeof ReaderSurface>>[]
 }
 
 function BreakStepsHarness({ steps, ...props }: BreakStepsProps) {
@@ -1497,8 +1530,29 @@ async function pressNextStep(scroller: HTMLElement) {
   await scrollSettled(scroller)
 }
 
+// Every row's world-time footer, as the decorations arrive once the calendar resolves after open.
+const OVERFLOW_FOOTERS = Object.fromEntries(
+  OVERFLOW_ROWS.map((row, i) => [row.id, { label: `Day ${i + 1}, dawn`, raw: i }]),
+)
+
+/** Rows above growing during the open-at-bottom pin: the pin wins over the anchor rule. */
+export const OpenPinWinsOverGrowthAbove: Story = {
+  args: { rows: OVERFLOW_ROWS },
+  render: (args) => (
+    <BreakStepsHarness {...args} steps={[{ worldTimeDecorations: OVERFLOW_FOOTERS }]} />
+  ),
+  play: async () => {
+    const scroller = scrollerOf('o1')
+    await nextFrame()
+    screen.getByRole('button', { name: 'Next step' }).click()
+    await settleLanding(scroller)
+    await outlastLanding()
+    expect(distanceFromBottom(scroller)).toBeLessThanOrEqual(1)
+  },
+}
+
 /** A commit made while the reader had no layout leaves no height for a later break to read. */
-export const BreakAfterHiddenCommitWritesNothing: Story = {
+export const BreakAfterHiddenCommitDoesNotPin: Story = {
   args: { rows: OVERFLOW_ROWS },
   render: (args) => (
     <BreakStepsHarness {...args} steps={[{}, { chapterBreaks: { o3: { number: 2 } } }]} />
@@ -1515,13 +1569,15 @@ export const BreakAfterHiddenCommitWritesNothing: Story = {
     box.style.display = ''
     await frames(3)
     expect(scroller.scrollTop).toBe(scrollTop)
+    const line = readingLine(scroller)
     await pressNextStep(scroller)
-    expect(scroller.scrollTop).toBe(scrollTop)
+    expectReadingLineHeld(scroller, line)
+    expect(distanceFromBottom(scroller)).toBeGreaterThan(250)
   },
 }
 
 /** Rows growing below a reader that doesn't follow move the bottom away before a break lands. */
-export const BreakAfterGrowthBelowWritesNothing: Story = {
+export const BreakAfterGrowthBelowDoesNotPin: Story = {
   args: { rows: OVERFLOW_ROWS.slice(0, 12) },
   render: (args) => (
     <BreakStepsHarness
@@ -1536,10 +1592,12 @@ export const BreakAfterGrowthBelowWritesNothing: Story = {
     const scroller = scrollerOf('o1')
     await settleLanding(scroller)
     await pressNextStep(scroller)
-    const scrollTop = scroller.scrollTop
-    expect(distanceFromBottom(scroller)).toBeGreaterThan(20)
+    const distance = distanceFromBottom(scroller)
+    expect(distance).toBeGreaterThan(20)
+    const line = readingLine(scroller)
     await pressNextStep(scroller)
-    expect(scroller.scrollTop).toBe(scrollTop)
+    expectReadingLineHeld(scroller, line)
+    expect(distanceFromBottom(scroller)).toBeGreaterThan(20)
   },
 }
 
@@ -1899,9 +1957,9 @@ function JumpHarness(props: ComponentProps<typeof ReaderSurface>) {
   const [chunks, setChunks] = useState(0)
   const content = Array.from({ length: chunks }, () => REPLY_TEXT).join('\n\n')
   const actions = {
-    Jump: () => surfaceRef.current?.jumpToEntry(JUMP_TARGET),
-    'Jump to tail': () => surfaceRef.current?.jumpToEntry('o14'),
-    'Bottom button': () => surfaceRef.current?.jumpToBottom(),
+    Jump: () => surfaceRef.current?.jumpToEntry(JUMP_TARGET, 0),
+    'Jump to tail': () => surfaceRef.current?.jumpToEntry('o14', 0),
+    'Bottom button': () => surfaceRef.current?.jumpToBottom(0),
     'Load all rows': () => setRows(OVERFLOW_ROWS),
     'Prepend and grow': () =>
       setRows((current) => [OVERFLOW_ROWS[0]!, ...current].map(grownAboveTarget)),
@@ -2195,6 +2253,32 @@ export const HoldSurvivesWithoutAJump: Story = {
   },
 }
 
+/** A downward scroll key takes the reader from the anchor hold, as every other gesture does. */
+export const HoldReleasedByADownwardKey: Story = {
+  render: (args) => <JumpHarness {...args} />,
+  args: { rows: OVERFLOW_ROWS.slice(1), hasOlder: true },
+  play: async () => {
+    const scroller = scrollerOf('o14')
+    await settleLanding(scroller)
+    // Off the bottom, where a move down has room and the bottom pin has let go.
+    await scrollTo(scroller, scroller.scrollTop - 600)
+    await frames(15)
+    const beforeGrowth = scroller.scrollTop
+    press('Prepend and grow')
+    await nextFrame()
+    // The anchor rule's write, which starts the hold.
+    expect(scroller.scrollTop).toBeGreaterThan(beforeGrowth)
+    // A dispatched key scrolls nothing, so the play makes the move the key would.
+    scroller.dispatchEvent(new KeyboardEvent('keydown', { key: 'PageDown', bubbles: true }))
+    const beforeKey = scroller.scrollTop
+    scroller.scrollTop += 200
+    const scrollTop = scroller.scrollTop
+    expect(scrollTop - beforeKey).toBe(200)
+    await outlastLanding()
+    expect(scroller.scrollTop).toBe(scrollTop)
+  },
+}
+
 /**
  * An empty near-top load flips `hasOlder` alone, so the skeleton's unmount starts a hold with no
  * `rows` commit to go with it. The growth is a style, as a `rows` commit would hide the gap.
@@ -2214,7 +2298,7 @@ export const JumpBeatsAHasOlderFlip: Story = {
   },
 }
 
-/** A row too near the tail to reach the top stops at the bottom, and the loop still ends. */
+/** A row too near the tail to reach the top stops at the bottom; the loop ends: writes stay. */
 export const JumpToTailRowStopsAtBottom: Story = {
   render: (args) => <JumpHarness {...args} />,
   args: { rows: OVERFLOW_ROWS },
@@ -2227,9 +2311,9 @@ export const JumpToTailRowStopsAtBottom: Story = {
     await waitFor(() => expect(distanceFromBottom(scroller)).toBeLessThanOrEqual(1))
     await outlastLanding()
     expect(topOffset('o14', scroller)).toBeGreaterThan(LANDING_GAP_PX + 100)
-    press('Grow above target')
+    scroller.scrollTop -= 200
     await outlastLanding()
-    expect(distanceFromBottom(scroller)).toBeGreaterThan(100)
+    expect(distanceFromBottom(scroller)).toBeGreaterThan(190)
   },
 }
 
@@ -3082,6 +3166,23 @@ export const JumpPendingDroppedByBranchChange: Story = {
   },
 }
 
+/** A branch switch lands at the new bottom: the anchor rule must skip the ids its copies reuse. */
+export const BranchSwitchLandsAtTheNewBottom: Story = {
+  render: (args) => <JumpHarness {...args} />,
+  args: { rows: PARTIAL_ROWS },
+  play: async () => {
+    const scroller = scrollerOf('o14')
+    await settleLanding(scroller)
+    scroller.scrollTop = 0
+    await scrollSettled(scroller)
+    press('Switch branch')
+    await waitFor(() => expect(entryRow('o1')).toBeInstanceOf(HTMLElement))
+    await outlastLanding()
+    await scrollSettled(scroller)
+    expect(distanceFromBottom(scroller)).toBeLessThanOrEqual(1)
+  },
+}
+
 /** A branch switch clears the highlight of a row that already landed. */
 export const JumpHighlightClearedByBranchChange: Story = {
   render: (args) => <JumpHarness {...args} />,
@@ -3380,5 +3481,741 @@ export const EditHandleRefusedCommitKeepsDraft: Story = {
     expect(screen.getByRole('textbox', { name: t('reader:entryCard.editContent') })).toHaveValue(
       `${PASS_ROWS[1].content}!`,
     )
+  },
+}
+
+// The sliding window: reader-composer.md → Loaded-set model.
+
+// Long enough for the slice to move inside it, as the host's window does.
+const SLICE_WINDOW: StoryEntry[] = Array.from({ length: 120 }, (_, i) =>
+  entry({
+    id: `s${i + 1}`,
+    kind: i % 2 === 0 ? 'user_action' : 'ai_reply',
+    content: `Wing ${i + 1}: the gallery adds another room each time you look away from it.`,
+    position: i + 1,
+  }),
+)
+
+type SliceHostProps = ComponentProps<typeof ReaderSurface> & {
+  /** The slice opens on the tail's last 50, or where a jump to this row would place it. */
+  openAt?: string
+  /** Rows may exist above the window. */
+  olderAbove?: boolean
+  /** Breaks over the whole window; the host cuts them to the slice. */
+  windowBreaks?: ChapterBreaks
+  /** Queue the document's requests until "Deliver", as a slow host would answer them. */
+  deferRequests?: boolean
+  /** Rows the "Jump to" buttons offer. */
+  jumpTargets?: string[]
+}
+
+// The route's slice host, same pure rules over a fixed window; each button is one host action.
+function SliceHostHarness({
+  openAt,
+  olderAbove = false,
+  windowBreaks: initialBreaks = {},
+  deferRequests = false,
+  jumpTargets = [],
+  ...props
+}: SliceHostProps) {
+  const surfaceRef = useRef<ReaderSurfaceHandle>(null)
+  const [windowRows, setWindowRows] = useState(SLICE_WINDOW)
+  const [windowBreaks, setWindowBreaks] = useState(initialBreaks)
+  const [state, setState] = useState<SliceState>(() => {
+    const opened = openSlice('branch_story', SLICE_WINDOW, olderAbove, 0)
+    const tail = resetToTail(opened, SLICE_WINDOW) ?? opened
+    return openAt == null ? tail : (placeJump(tail, SLICE_WINDOW, openAt) ?? tail)
+  })
+  const stateRef = useRef(state)
+  const commit = (next: SliceState | null): SliceState => {
+    if (next == null) return stateRef.current
+    stateRef.current = next
+    setState(next)
+    return next
+  }
+  const [session, setSession] = useState<EditSession | null>(null)
+  const [chunks, setChunks] = useState(0)
+  const [answer, setAnswer] = useState('')
+  const queued = useRef<(() => void)[]>([])
+  const view = deriveSlice(state, 'branch_story', windowRows, 50)
+  const sliceIds = new Set(view.rows.map((row) => row.id))
+  const chapterBreaks = Object.fromEntries(
+    Object.entries(windowBreaks).filter(([id]) => sliceIds.has(id)),
+  )
+  // A deferred answer keeps the request's promise pending, as a host still reading would.
+  const answerOrQueue = (apply: () => void): Promise<void> => {
+    if (!deferRequests) {
+      apply()
+      return Promise.resolve()
+    }
+    return new Promise((resolve) =>
+      queued.current.push(() => {
+        apply()
+        resolve()
+      }),
+    )
+  }
+  const jumpToBottom = () => {
+    const current = stateRef.current
+    const key = current.bottom == null ? current.key : commit(resetToTail(current, windowRows)).key
+    surfaceRef.current?.jumpToBottom(key)
+  }
+  const anchorKeep = () => view.rows.at(-1)?.id ?? ''
+  const actions: Record<string, () => void> = {
+    Deliver: () => {
+      const pending = queued.current
+      queued.current = []
+      for (const apply of pending) apply()
+    },
+    'Deliver first': () => queued.current.shift()?.(),
+    'Host jump to bottom': jumpToBottom,
+    // The slice's rows above grow by a page, as an upward extension's answer does.
+    'Extend up': () =>
+      commit(
+        extendUp(stateRef.current, windowRows, {
+          sliceKey: stateRef.current.key,
+          keepId: anchorKeep(),
+        }),
+      ),
+    'Break above': () =>
+      setWindowBreaks((breaks) => ({ ...breaks, [view.rows[2].id]: { number: 9 } })),
+    'Break at slice end': () =>
+      setWindowBreaks((breaks) => ({ ...breaks, [view.rows.at(-1)?.id ?? '']: { number: 9 } })),
+    // The slice moves past the reader, as a fling outrunning a trim's keep row would leave it.
+    'Move past the reader': () =>
+      commit({ ...stateRef.current, top: 111, bottom: null, key: stateRef.current.key + 1 }),
+    // A jump call ahead of its slice's props, as on native.
+    'Call jump to s71 ahead': () =>
+      surfaceRef.current?.jumpToEntry('s71', stateRef.current.key + 1),
+    'Call jump to s5 ahead': () => surfaceRef.current?.jumpToEntry('s5', stateRef.current.key + 1),
+    'Place s71': () => commit(placeJump(stateRef.current, windowRows, 's71')),
+    'Place s71, two keys on': () => {
+      const placed = placeJump(stateRef.current, windowRows, 's71')
+      if (placed != null) commit({ ...placed, key: placed.key + 1 })
+    },
+    'Tail at the next key': () =>
+      commit({ ...stateRef.current, top: 71, bottom: null, key: stateRef.current.key + 1 }),
+    'Prove top and jump to s1': () => {
+      const proven = markWindowTop(stateRef.current, false) ?? stateRef.current
+      const key = commit(placeJump(proven, windowRows, 's1') ?? proven).key
+      surfaceRef.current?.jumpToEntry('s1', key)
+    },
+    'Next chunk': () => setChunks((n) => n + 1),
+    // A Jump to bottom named for a slice at the tail, arriving after the slice went short of it.
+    'Stale jump to bottom': () => surfaceRef.current?.jumpToBottom(stateRef.current.key),
+    // A change held above the reader adopted with a sent turn's row below it, in one commit.
+    'Extend up with a turn': () => {
+      commit(
+        extendUp(stateRef.current, windowRows, {
+          sliceKey: stateRef.current.key,
+          keepId: anchorKeep(),
+        }),
+      )
+      setWindowRows((rows) => [
+        ...rows,
+        entry({
+          id: `s${rows.length + 1}`,
+          kind: 'user_action',
+          content: Array.from({ length: 4 }, () => 'I ask the gallery for one more room.').join(
+            ' ',
+          ),
+          position: rows.length + 1,
+        }),
+      ])
+    },
+    // The user's action of a sent turn, at the tail below a reader at the bottom.
+    'Append a turn': () =>
+      setWindowRows((rows) => [
+        ...rows,
+        entry({
+          id: `s${rows.length + 1}`,
+          kind: 'user_action',
+          content: `Wing ${rows.length + 1}: I ask the gallery for one more room.`,
+          position: rows.length + 1,
+        }),
+      ]),
+    'Leave window': () =>
+      setWindowRows((rows) => rows.filter((row) => row.id !== session?.entryId)),
+    'read session': () => setAnswer(JSON.stringify(surfaceRef.current?.editSession() ?? null)),
+  }
+  for (const id of jumpTargets)
+    actions[`Jump to ${id}`] = () => {
+      const key = commit(placeJump(stateRef.current, windowRows, id)).key
+      surfaceRef.current?.jumpToEntry(id, key)
+    }
+  const content = Array.from({ length: chunks }, () => REPLY_TEXT).join('\n\n')
+  return (
+    <div style={{ display: 'flex', height: '100%', flexDirection: 'column' }}>
+      <div>
+        {Object.entries(actions).map(([label, onClick]) => (
+          <button key={label} type="button" onClick={onClick}>
+            {label}
+          </button>
+        ))}
+        <output aria-label="answer">{answer}</output>
+      </div>
+      <div style={{ minHeight: 0, flex: 1 }}>
+        <ReaderSurface
+          {...props}
+          ref={surfaceRef}
+          rows={view.rows}
+          chapterBreaks={chapterBreaks}
+          hasOlder={view.hasOlder}
+          hasNewer={view.hasNewer}
+          sliceKey={view.sliceKey}
+          editingRow={editingRowOf(windowRows, view.rows, session?.entryId ?? null)}
+          streaming={chunks > 0 && !view.hasNewer ? { content, reasoning: '' } : null}
+          onNearTop={async (request) => {
+            await props.onNearTop(request)
+            await answerOrQueue(() => commit(extendUp(stateRef.current, windowRows, request)))
+          }}
+          onNearBottom={async (request) => {
+            await props.onNearBottom(request)
+            await answerOrQueue(() => commit(extendDown(stateRef.current, windowRows, request)))
+          }}
+          onTrim={async (request) => {
+            await props.onTrim(request)
+            await answerOrQueue(() => commit(trimSlice(stateRef.current, windowRows, request)))
+          }}
+          onJumpToBottom={async () => {
+            await props.onJumpToBottom()
+            jumpToBottom()
+          }}
+          onEditSession={async (next) => {
+            setSession(next)
+            await props.onEditSession(next)
+          }}
+        />
+      </div>
+    </div>
+  )
+}
+
+const sliceRowIds = () =>
+  Array.from(
+    document.querySelectorAll<HTMLElement>('[data-entry-row]'),
+    (row) => row.dataset.entryRow,
+  )
+const isShown = (id: string) => document.querySelector(`[data-entry-row="${id}"]`) != null
+// CI runs plays several times slower; a rest is 150 ms past the last scroll.
+const SLICE_WAIT = { timeout: 5_000 }
+
+async function scrollTo(scroller: HTMLElement, top: number) {
+  scroller.scrollTop = top
+  await nextFrame()
+  await nextFrame()
+}
+
+/** At rest near the top, the slice extends up from the window, and the reading line holds. */
+export const SliceExtendsUpHoldingTheReadingLine: Story = {
+  args: { onNearTop: fn(async () => {}) },
+  render: (args) => <SliceHostHarness {...args} deferRequests />,
+  play: async ({ args }) => {
+    const scroller = scrollerOf('s71')
+    await settleLanding(scroller)
+    await scrollTo(scroller, 0)
+    await waitFor(() => expect(args.onNearTop).toHaveBeenCalled(), SLICE_WAIT)
+    // The bottom trim keeps rows to a viewport-height past the viewport, and no further in.
+    const [[{ keepId }]] = (args.onNearTop as ReturnType<typeof fn>).mock.calls as [
+      [{ keepId: string }],
+    ]
+    expect(topBelowReaderEdge(entryRow(keepId), scroller)).toBeGreaterThan(scroller.clientHeight)
+    const line = readingLine(scroller)
+    press('Deliver')
+    await waitFor(() => expect(isShown('s46')).toBe(true), SLICE_WAIT)
+    await scrollSettled(scroller)
+    expectReadingLineHeld(scroller, line)
+    // The same write trimmed the far end back to 50, so the slice stops short of the tail.
+    expect(sliceRowIds()).toHaveLength(50)
+    expect(isShown('s120')).toBe(false)
+    expect(jumpToBottomButton()).toBeVisible()
+  },
+}
+
+/** At rest near the bottom of a slice short of the tail, it extends down and trims its top. */
+export const SliceExtendsDownHoldingTheReadingLine: Story = {
+  args: { onNearBottom: fn(async () => {}) },
+  render: (args) => <SliceHostHarness {...args} openAt="s10" deferRequests />,
+  play: async ({ args }) => {
+    const scroller = scrollerOf('s10')
+    await waitFor(() => expect(args.onNearBottom).toHaveBeenCalled(), SLICE_WAIT)
+    const line = readingLine(scroller)
+    expect(isShown('s59')).toBe(false)
+    press('Deliver')
+    await waitFor(() => expect(isShown('s83')).toBe(true), SLICE_WAIT)
+    await scrollSettled(scroller)
+    expectReadingLineHeld(scroller, line)
+    expect(isShown('s9')).toBe(false)
+  },
+}
+
+/** A slice grown past 50 trims its far end at the next rest, holding the reading line. */
+export const SliceTrimsAfterALongScroll: Story = {
+  args: { onTrim: fn(async () => {}) },
+  render: (args) => <SliceHostHarness {...args} deferRequests />,
+  play: async ({ args }) => {
+    const scroller = scrollerOf('s71')
+    await settleLanding(scroller)
+    press('Extend up')
+    await waitFor(() => expect(isShown('s46')).toBe(true), SLICE_WAIT)
+    // A long scroll back down with no commit: the rest record, not the last commit's, anchors it.
+    await scrollTo(scroller, scroller.scrollHeight)
+    await waitFor(
+      () => expect(args.onTrim).toHaveBeenCalledWith(expect.objectContaining({ end: 'top' })),
+      SLICE_WAIT,
+    )
+    const line = readingLine(scroller)
+    press('Deliver')
+    await waitFor(() => expect(isShown('s46')).toBe(false), SLICE_WAIT)
+    await scrollSettled(scroller)
+    expectReadingLineHeld(scroller, line)
+    expect(sliceRowIds()).toHaveLength(50)
+  },
+}
+
+/** Rows added above wait under a finger and land at rest, compensated for where the drag ended. */
+export const SliceChangeAboveWaitsUnderAFinger: Story = {
+  render: (args) => <SliceHostHarness {...args} />,
+  play: async () => {
+    const scroller = scrollerOf('s71')
+    await settleLanding(scroller)
+    await scrollTo(scroller, 1_200)
+    dispatchTouch(scroller, 'touchstart')
+    press('Extend up')
+    await frames(10)
+    expect(isShown('s46')).toBe(false)
+    // The drag goes on after the change arrived.
+    await scrollTo(scroller, 1_500)
+    const line = readingLine(scroller)
+    dispatchTouch(scroller, 'touchend')
+    await waitFor(() => expect(isShown('s46')).toBe(true), SLICE_WAIT)
+    await scrollSettled(scroller)
+    expectReadingLineHeld(scroller, line)
+  },
+}
+
+/** A change held when another screen covered the reader lands once the reader shows again. */
+export const SliceHeldChangeLandsWhenShownAgain: Story = {
+  render: (args) => <SliceHostHarness {...args} />,
+  play: async () => {
+    const scroller = scrollerOf('s71')
+    await settleLanding(scroller)
+    await scrollTo(scroller, 1_200)
+    dispatchTouch(scroller, 'touchstart')
+    press('Extend up')
+    await frames(3)
+    expect(isShown('s46')).toBe(false)
+    const box = scroller.parentElement?.parentElement
+    if (box == null) throw new Error('no reader box')
+    box.style.display = 'none'
+    dispatchTouch(scroller, 'touchend')
+    // Its rest comes and goes while nothing is laid out.
+    await new Promise((resolve) => setTimeout(resolve, 400))
+    expect(isShown('s46')).toBe(false)
+    box.style.display = ''
+    await waitFor(() => expect(isShown('s46')).toBe(true), SLICE_WAIT)
+  },
+}
+
+/** A chapter break mounting above the viewport waits for rest the same way. */
+export const SliceBreakAboveWaitsUnderAFinger: Story = {
+  render: (args) => <SliceHostHarness {...args} />,
+  play: async () => {
+    const scroller = scrollerOf('s71')
+    await settleLanding(scroller)
+    await scrollTo(scroller, 1_200)
+    const line = readingLine(scroller)
+    dispatchTouch(scroller, 'touchstart')
+    press('Break above')
+    await frames(10)
+    expect(screen.queryByRole('separator')).toBeNull()
+    dispatchTouch(scroller, 'touchend')
+    await waitFor(() => expect(screen.getByRole('separator')).toBeInTheDocument(), SLICE_WAIT)
+    await scrollSettled(scroller)
+    expectReadingLineHeld(scroller, line)
+  },
+}
+
+/** A slice that lost the reader's row mid-gesture holds whole until rest, not under the finger. */
+export const SliceLosingTheAnchorHoldsWhole: Story = {
+  render: (args) => <SliceHostHarness {...args} />,
+  play: async () => {
+    const scroller = scrollerOf('s71')
+    await settleLanding(scroller)
+    await scrollTo(scroller, 1_200)
+    const before = sliceRowIds()
+    dispatchTouch(scroller, 'touchstart')
+    press('Move past the reader')
+    await frames(10)
+    expect(sliceRowIds()).toEqual(before)
+    dispatchTouch(scroller, 'touchend')
+    await waitFor(() => expect(isShown('s71')).toBe(false), SLICE_WAIT)
+  },
+}
+
+/** A jump takes a change held for rest at once: a jump's slice doesn't wait. */
+export const SliceJumpTakesAHeldChange: Story = {
+  render: (args) => <SliceHostHarness {...args} jumpTargets={['s100']} />,
+  play: async () => {
+    const scroller = scrollerOf('s71')
+    await settleLanding(scroller)
+    await scrollTo(scroller, 1_200)
+    dispatchTouch(scroller, 'touchstart')
+    press('Extend up')
+    await frames(5)
+    expect(isShown('s46')).toBe(false)
+    press('Jump to s100')
+    await waitFor(() => expect(isShown('s46')).toBe(true), SLICE_WAIT)
+    dispatchTouch(scroller, 'touchend')
+    await landedOn('s100', scroller)
+  },
+}
+
+/** A jump lands only on its named slice or later: the one it leaves lacks the target's break. */
+export const SliceLandingWaitsForItsKey: Story = {
+  args: { onEntryLanded: fn(async () => {}) },
+  render: (args) => <SliceHostHarness {...args} windowBreaks={{ s70: { number: 4 } }} />,
+  play: async ({ args }) => {
+    const scroller = scrollerOf('s71')
+    await settleLanding(scroller)
+    press('Call jump to s71 ahead')
+    await outlastLanding()
+    expect(args.onEntryLanded).not.toHaveBeenCalled()
+    expect(entryRow('s71').hasAttribute('data-landed')).toBe(false)
+    press('Place s71')
+    const brk = await screen.findByRole('separator', { name: t('chapters:label', { number: 4 }) })
+    await waitFor(() =>
+      expect(Math.abs(topBelowReaderEdge(brk, scroller) - LANDING_GAP_PX)).toBeLessThan(1.5),
+    )
+    await waitFor(() => expect(args.onEntryLanded).toHaveBeenCalledWith('s71'))
+    expect(args.onEntryLanded).toHaveBeenCalledTimes(1)
+  },
+}
+
+/** A later key holding the target lands it: a trim or a new turn can move the slice first. */
+export const SliceLaterKeyLandsTheJump: Story = {
+  render: (args) => <SliceHostHarness {...args} windowBreaks={{ s70: { number: 4 } }} />,
+  play: async () => {
+    const scroller = scrollerOf('s71')
+    await settleLanding(scroller)
+    press('Call jump to s71 ahead')
+    press('Place s71, two keys on')
+    const brk = await screen.findByRole('separator', { name: t('chapters:label', { number: 4 }) })
+    await waitFor(() =>
+      expect(Math.abs(topBelowReaderEdge(brk, scroller) - LANDING_GAP_PX)).toBeLessThan(1.5),
+    )
+  },
+}
+
+/** A slice at the landing's key without its row drops the jump and says so, freeing the trims. */
+export const SliceWithoutTheTargetDropsTheJump: Story = {
+  args: { onEntryLanded: fn(async () => {}) },
+  render: (args) => <SliceHostHarness {...args} />,
+  play: async ({ args }) => {
+    const scroller = scrollerOf('s71')
+    await settleLanding(scroller)
+    press('Call jump to s5 ahead')
+    press('Tail at the next key')
+    await waitFor(() => expect(args.onEntryLanded).toHaveBeenCalledWith('s5'))
+    expect(args.onEntryLanded).toHaveBeenCalledTimes(1)
+  },
+}
+
+/** A jump to the branch's first row drops the shimmer in its commit: it lands flush and stays. */
+export const SliceJumpToTheBranchTopDoesNotShift: Story = {
+  render: (args) => <SliceHostHarness {...args} olderAbove />,
+  play: async () => {
+    const scroller = scrollerOf('s71')
+    await settleLanding(scroller)
+    press('Prove top and jump to s1')
+    await waitFor(() => expect(entryRow('s1').hasAttribute('data-landed')).toBe(true), SLICE_WAIT)
+    expect(Math.abs(topOffset('s1', scroller))).toBeLessThan(1)
+    await outlastLanding()
+    expect(Math.abs(topOffset('s1', scroller))).toBeLessThan(1)
+  },
+}
+
+/**
+ * A turn sent from the bottom grows the slice past 50 and streams engaged: the trim back waits
+ * for a scroll's rest, so it can't move the reader off the bottom before the reply.
+ */
+export const SliceTurnPast50StreamsEngaged: Story = {
+  render: (args) => <SliceHostHarness {...args} />,
+  play: async () => {
+    const scroller = scrollerOf('s71')
+    await settleLanding(scroller)
+    press('Append a turn')
+    await waitFor(() => expect(isShown('s121')).toBe(true))
+    // Past a rest's worth of quiet, as a model's first token can be.
+    await new Promise((resolve) => setTimeout(resolve, 400))
+    press('Next chunk')
+    await screen.findByText(REPLY_TEXT)
+    press('Next chunk')
+    await frames(3)
+    expect(distanceFromBottom(scroller)).toBeLessThanOrEqual(1)
+  },
+}
+
+/** The anchor rule's own write is no reader scroll: it doesn't disengage, so the reply follows. */
+export const SliceCompensationKeepsTheReplyEngaged: Story = {
+  render: (args) => <SliceHostHarness {...args} />,
+  play: async () => {
+    const scroller = scrollerOf('s71')
+    await settleLanding(scroller)
+    press('Extend up with a turn')
+    await waitFor(() => expect(isShown('s121')).toBe(true))
+    await waitFor(() => expect(isShown('s46')).toBe(true))
+    await frames(3)
+    expect(distanceFromBottom(scroller)).toBeGreaterThan(80)
+    press('Next chunk')
+    await screen.findByText(REPLY_TEXT)
+    press('Next chunk')
+    await frames(3)
+    expect(distanceFromBottom(scroller)).toBeLessThanOrEqual(1)
+  },
+}
+
+/** A viewport shrinking right after a trim's compensation still re-pins a reader at the bottom. */
+export const SliceTrimThenShrinkStaysAtTheBottom: Story = {
+  args: { onTrim: fn(async () => {}) },
+  render: (args) => <SliceHostHarness {...args} deferRequests />,
+  play: async ({ args }) => {
+    const scroller = scrollerOf('s71')
+    await settleLanding(scroller)
+    press('Append a turn')
+    await waitFor(() => expect(isShown('s121')).toBe(true))
+    // The reader follows to the bottom with a scroll, whose rest asks for the trim.
+    await scrollTo(scroller, scroller.scrollHeight)
+    await waitFor(() => expect(args.onTrim).toHaveBeenCalled(), SLICE_WAIT)
+    press('Deliver')
+    await waitFor(() => expect(isShown('s71')).toBe(false), SLICE_WAIT)
+    const box = scroller.parentElement?.parentElement
+    if (box == null) throw new Error('no reader box')
+    const height = box.offsetHeight
+    box.style.flex = 'none'
+    box.style.height = `${height - BANNER_HEIGHT_PX}px`
+    await scrollSettled(scroller)
+    expect(distanceFromBottom(scroller)).toBeLessThanOrEqual(1)
+  },
+}
+
+/** Short of the tail there is no stream card; the swap brings it with its text, engaged. */
+export const SliceStreamAppearsWithTheSwap: Story = {
+  render: (args) => <SliceHostHarness {...args} openAt="s10" />,
+  play: async () => {
+    press('Next chunk')
+    await frames(3)
+    expect(screen.queryByText(REPLY_TEXT)).toBeNull()
+    press('Host jump to bottom')
+    const scroller = await waitFor(() => scrollerOf('s120'), SLICE_WAIT)
+    await screen.findByText(REPLY_TEXT)
+    await settleLanding(scroller)
+    press('Next chunk')
+    await frames(3)
+    expect(distanceFromBottom(scroller)).toBeLessThanOrEqual(1)
+  },
+}
+
+/** A stream card an extension brings in starts disengaged: the reader stays where they read. */
+export const SliceStreamFromAnExtensionStartsDisengaged: Story = {
+  args: { onNearBottom: fn(async () => {}) },
+  render: (args) => <SliceHostHarness {...args} openAt="s62" deferRequests />,
+  play: async ({ args }) => {
+    const scroller = scrollerOf('s62')
+    press('Next chunk')
+    await waitFor(() => expect(args.onNearBottom).toHaveBeenCalled(), SLICE_WAIT)
+    press('Deliver')
+    await screen.findByText(REPLY_TEXT)
+    await scrollSettled(scroller)
+    const distance = distanceFromBottom(scroller)
+    expect(distance).toBeGreaterThan(NEAR_BOTTOM_PX)
+    press('Next chunk')
+    await frames(3)
+    expect(distanceFromBottom(scroller)).toBeGreaterThan(distance)
+  },
+}
+
+/** Short of the tail, a shrinking viewport doesn't pin the bottom shimmer. */
+export const SliceShrinkShortOfTheTailHolds: Story = {
+  render: (args) => <SliceHostHarness {...args} openAt="s10" deferRequests />,
+  play: async () => {
+    const scroller = scrollerOf('s10')
+    await settleLanding(scroller)
+    expect(distanceFromBottom(scroller)).toBeLessThanOrEqual(NEAR_BOTTOM_PX)
+    // The harness's flex child: fixing its height is what shrinks the reader.
+    const box = scroller.parentElement?.parentElement
+    if (box == null) throw new Error('no reader box')
+    const before = scroller.clientHeight
+    const height = box.offsetHeight
+    box.style.flex = 'none'
+    box.style.height = `${height - BANNER_HEIGHT_PX}px`
+    await waitFor(() => expect(scroller.clientHeight).toBe(before - BANNER_HEIGHT_PX))
+    await frames(3)
+    expect(distanceFromBottom(scroller)).toBeGreaterThan(NEAR_BOTTOM_PX)
+  },
+}
+
+/** Short of the tail, a break under the slice's last row doesn't pin the bottom shimmer. */
+export const SliceBreakShortOfTheTailHolds: Story = {
+  render: (args) => <SliceHostHarness {...args} openAt="s10" deferRequests />,
+  play: async () => {
+    const scroller = scrollerOf('s10')
+    await settleLanding(scroller)
+    expect(distanceFromBottom(scroller)).toBeLessThanOrEqual(NEAR_BOTTOM_PX)
+    press('Break at slice end')
+    await screen.findByRole('separator')
+    await scrollSettled(scroller)
+    expect(distanceFromBottom(scroller)).toBeGreaterThan(10)
+  },
+}
+
+/** The button stays up short of the tail; pressed, the host swaps and it lands at once. */
+export const SliceJumpButtonSwapsToTheTail: Story = {
+  args: { onJumpToBottom: fn(async () => {}) },
+  render: (args) => <SliceHostHarness {...args} openAt="s10" deferRequests />,
+  play: async ({ args }) => {
+    const scroller = scrollerOf('s10')
+    await settleLanding(scroller)
+    // At the slice's bottom: the button shows for the slice, not for the distance.
+    expect(distanceFromBottom(scroller)).toBeLessThanOrEqual(NEAR_BOTTOM_PX)
+    expect(jumpToBottomButton()).toBeVisible()
+    jumpToBottomButton()?.click()
+    await waitFor(() => expect(isShown('s120')).toBe(true), SLICE_WAIT)
+    // No animation: nothing between was rendered, so the first frame already sits at the bottom.
+    await nextFrame()
+    expect(distanceFromBottom(scroller)).toBeLessThanOrEqual(1)
+    expect(args.onJumpToBottom).toHaveBeenCalledOnce()
+  },
+}
+
+/** A Jump to bottom whose key the slice has passed, short of the tail, moves nothing. */
+export const SliceStaleJumpToBottomShortOfTheTailDrops: Story = {
+  render: (args) => <SliceHostHarness {...args} openAt="s10" deferRequests />,
+  play: async () => {
+    const scroller = scrollerOf('s10')
+    await settleLanding(scroller)
+    await scrollTo(scroller, 0)
+    await scrollSettled(scroller)
+    press('Stale jump to bottom')
+    await frames(20)
+    expect(scroller.scrollTop).toBe(0)
+    expect(jumpToBottomButton()).toBeVisible()
+  },
+}
+
+/** A break that arrives with an extension's rows is no close: it doesn't re-pin the bottom. */
+export const SliceBreakWithItsRowsDoesNotPin: Story = {
+  render: (args) => <SliceHostHarness {...args} windowBreaks={{ s50: { number: 2 } }} />,
+  play: async () => {
+    const scroller = scrollerOf('s71')
+    await settleLanding(scroller)
+    await scrollToDistance(scroller, 15)
+    press('Extend up')
+    await screen.findByRole('separator')
+    await scrollSettled(scroller)
+    expect(distanceFromBottom(scroller)).toBeGreaterThan(5)
+  },
+}
+
+/** A jump landed near the slice's top asks for the rows above once it ends, with no scroll. */
+export const SliceLandingNearTheTopExtendsUpAfterwards: Story = {
+  args: { onNearTop: fn(async () => {}) },
+  render: (args) => <SliceHostHarness {...args} deferRequests jumpTargets={['s72']} />,
+  play: async ({ args }) => {
+    const scroller = scrollerOf('s71')
+    await settleLanding(scroller)
+    press('Jump to s72')
+    await landedOn('s72', scroller)
+    await waitFor(() => expect(args.onNearTop).toHaveBeenCalled(), SLICE_WAIT)
+  },
+}
+
+/** One boundary request at a time: rests while the host hasn't answered ask nothing more. */
+export const SliceAsksOnceWhileUnanswered: Story = {
+  args: { onNearTop: fn(async () => {}) },
+  render: (args) => <SliceHostHarness {...args} deferRequests />,
+  play: async ({ args }) => {
+    const scroller = scrollerOf('s71')
+    await settleLanding(scroller)
+    await scrollTo(scroller, 0)
+    await waitFor(() => expect(args.onNearTop).toHaveBeenCalled(), SLICE_WAIT)
+    await scrollTo(scroller, 10)
+    await new Promise((resolve) => setTimeout(resolve, 600))
+    expect(args.onNearTop).toHaveBeenCalledTimes(1)
+  },
+}
+
+/** An answer to a request whose slice moved on frees nothing a newer request still holds. */
+export const SliceOlderAnswerKeepsTheNewerRequestWaiting: Story = {
+  args: { onNearTop: fn(async () => {}) },
+  render: (args) => <SliceHostHarness {...args} deferRequests />,
+  play: async ({ args }) => {
+    const scroller = scrollerOf('s71')
+    await settleLanding(scroller)
+    await scrollTo(scroller, 0)
+    await waitFor(() => expect(args.onNearTop).toHaveBeenCalledTimes(1), SLICE_WAIT)
+    // A new key frees the wait, so the next rest asks again, for that key.
+    press('Tail at the next key')
+    await waitFor(() => expect(args.onNearTop).toHaveBeenCalledTimes(2), SLICE_WAIT)
+    press('Deliver first')
+    await scrollTo(scroller, 10)
+    await new Promise((resolve) => setTimeout(resolve, 600))
+    expect(args.onNearTop).toHaveBeenCalledTimes(2)
+  },
+}
+
+/**
+ * The editor's draft survives its row leaving the slice, and returns without taking focus; leaving
+ * the window drops it.
+ */
+export const SliceEditorSurvivesTheSlice: Story = {
+  render: (args) => <SliceHostHarness {...args} jumpTargets={['s10']} />,
+  play: async () => {
+    const answer = () => screen.getByRole('status', { name: 'answer' })
+    const textarea = await openEditor('s100')
+    await userEvent.type(textarea, '!')
+    press('Jump to s10')
+    await waitFor(() => expect(isShown('s100')).toBe(false), SLICE_WAIT)
+    press('read session')
+    await waitFor(() => expect(answer()).toHaveTextContent('{"entryId":"s100","dirty":true}'))
+    // The other rows still wait on the edit.
+    const held = t('reader:editFocus.held')
+    expect(within(entryRow('s12')).getAllByRole('button', { name: held }).length).toBeGreaterThan(0)
+    press('Host jump to bottom')
+    const back = await waitFor(
+      () =>
+        within(entryRow('s100')).getByRole('textbox', { name: t('reader:entryCard.editContent') }),
+      SLICE_WAIT,
+    )
+    expect(back).toHaveValue(`${SLICE_WINDOW[99].content}!`)
+    // Focusing it would raise the phone's keyboard as the reader scrolls past it.
+    expect(back).not.toHaveFocus()
+    press('Jump to s10')
+    await waitFor(() => expect(isShown('s100')).toBe(false), SLICE_WAIT)
+    press('Leave window')
+    await waitFor(() => {
+      press('read session')
+      expect(answer()).toHaveTextContent('null')
+    }, SLICE_WAIT)
+  },
+}
+
+/** An editor back from outside the slice, closed and opened again, takes focus as any edit does. */
+export const SliceEditorReopenedTakesFocus: Story = {
+  render: (args) => <SliceHostHarness {...args} jumpTargets={['s10']} />,
+  play: async () => {
+    await openEditor('s100')
+    press('Jump to s10')
+    await waitFor(() => expect(isShown('s100')).toBe(false), SLICE_WAIT)
+    press('Host jump to bottom')
+    const back = await waitFor(
+      () =>
+        within(entryRow('s100')).getByRole('textbox', { name: t('reader:entryCard.editContent') }),
+      SLICE_WAIT,
+    )
+    expect(back).not.toHaveFocus()
+    await userEvent.click(within(entryRow('s100')).getByRole('button', { name: t('cancel') }))
+    const reopened = await openEditor('s100')
+    await waitFor(() => expect(reopened).toHaveFocus())
   },
 }

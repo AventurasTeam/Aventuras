@@ -728,6 +728,23 @@ amends the scope above.
   with the residue accepted. The other option owes no automatic close until the
   open region holds a second reply, so the close waits a turn and ends before the
   newest reply. Routed from Slice 5.12's slice review.
+- **Does the Android measure run one close on a grown window?** The sliding
+  reader window's acceptance asked for a close's stamps on a grown window, and
+  no close could be started there by hand, so it never ran
+  ([5.3 → Re-measured with the sliding window](./03-reader-chapters.md#re-measured-with-the-sliding-window)).
+  On the Fold's 60-chapter window grown to its first row, each store change held
+  the host about 1.1 s
+  ([parked](../../../../parked.md#a-store-changes-host-cost-grows-with-the-loaded-window)).
+  A close writes its stamps as one group, whose store patches go out in one
+  synchronous loop, so it should cost about one change (read from the code); if
+  that time is paid per store write rather than per render, it is about 133.
+  Owed closes already run before a turn, so a long story meets this before this
+  slice's button does. Default: yes, one close on `pnpm db:seed:long` at 60
+  chapters with the reader grown, on the Fold's release build, against
+  [5.2's bar](./02-first-chapter.md#implementation-notes): no JS-thread stall
+  over 500 ms and no gap between the document's paints over 500 ms. A miss goes
+  to the developer and reopens the parked entry. Routed from the sliding reader
+  window's Fold measure, 2026-11-16 (developer decision).
 - **A fact for the planner, not a question.** If the host ever reads a run's result:
   `completed` can be the catch-up pass alone (a late Cancel after its last phase, or
   the open story leaving the branch), with no close run and the pick still owed.

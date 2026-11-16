@@ -17,9 +17,9 @@ import { ThemeProvider, useTheme } from '@/lib/themes'
 type DOMImperativeArg = Parameters<DOMImperativeFactory[string]>[number]
 
 export interface ReaderDocumentRef extends DOMImperativeFactory {
-  jumpToBottom: () => void
-  // The factory's index signature takes any JSONValue, so a `string` parameter won't compile.
-  jumpToEntry: (entryId: DOMImperativeArg) => void
+  // The factory's index signature takes any JSONValue, so a typed parameter won't compile.
+  jumpToBottom: (sliceKey: DOMImperativeArg) => void
+  jumpToEntry: (entryId: DOMImperativeArg, sliceKey: DOMImperativeArg) => void
   // These return nothing over the bridge: each answers its request id through onEditAnswer.
   queryEditSession: (requestId: DOMImperativeArg) => void
   commitDraft: (requestId: DOMImperativeArg) => void
@@ -73,8 +73,9 @@ export default function ReaderDocument({
   useDOMImperativeHandle(
     ref,
     () => ({
-      jumpToBottom: () => surfaceRef.current?.jumpToBottom(),
-      jumpToEntry: (entryId) => surfaceRef.current?.jumpToEntry(String(entryId)),
+      jumpToBottom: (sliceKey) => surfaceRef.current?.jumpToBottom(Number(sliceKey)),
+      jumpToEntry: (entryId, sliceKey) =>
+        surfaceRef.current?.jumpToEntry(String(entryId), Number(sliceKey)),
       queryEditSession: (requestId) => {
         const session = surfaceRef.current?.editSession() ?? null
         void onEditAnswerRef.current(String(requestId), { kind: 'query', session })

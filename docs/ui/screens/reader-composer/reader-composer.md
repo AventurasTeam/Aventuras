@@ -471,7 +471,7 @@ Inside the textarea, Ctrl/Cmd-Z is the textarea's own undo.
 - jumps and Jump to bottom, which can move the
   [slice](#loaded-set-model) off the editor's row: the editor stays
   open with its draft, the other rows' actions still wait, and the row
-  shows its editor again when it comes back into the slice;
+  shows its editor again, unfocused, when it comes back into the slice;
 - the peek drawer;
 - the world-time and scene editors;
 - `Flip era…` and `Set lead character…`;
@@ -1415,8 +1415,8 @@ domain.
 **When the window changes under the slice.** The slice keeps its
 bounds by entry position. Rows the window loses (a delete, a rollback,
 an undone turn) leave the slice, and a rollback from a row in it leaves
-the slice at the new tail. A slice that loses every row, as a chapter
-deleted from the Timeline can make it, falls back to the tail's last
+the slice at the new tail. A slice that loses every row, as a rollback
+from its first row makes it, falls back to the tail's last
 50, and so does the slice when the window reloads (after a failed
 turn, for one), which replaces the window with its recent ~50. A
 reload of the reader's document resets the slice to the tail too,

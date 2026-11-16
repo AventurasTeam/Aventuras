@@ -46,6 +46,7 @@ import {
   type EditSession,
   type ReaderSurfaceHandle,
 } from '@/components/reader/reader-document-types'
+import { editingRowOf } from '@/components/reader/reader-slice'
 import { ReaderSurface } from '@/components/reader/reader-surface'
 import {
   classifyRegenerateGate,
@@ -101,8 +102,8 @@ import {
   useSystemEntryActions,
 } from '@/components/reader/system-entry-actions'
 import { useLiveRollbackCounts } from '@/components/reader/use-live-rollback-counts'
-import { useLoadOlderEntries } from '@/components/reader/use-load-older-entries'
 import { useReaderEntryJump } from '@/components/reader/use-reader-entry-jump'
+import { useReaderSlice } from '@/components/reader/use-reader-slice'
 import { useReaderUndo } from '@/components/reader/use-reader-undo'
 import { useWorldTimeEditing } from '@/components/reader/world-time-editing'
 import { WorldTimeEditSheet } from '@/components/reader/worldtime-edit-sheet'
@@ -282,6 +283,8 @@ export default function ReaderComposerRoute() {
         .sort((a, b) => a.position - b.position),
     [rows, branchId],
   )
+  // The document renders a slice of the window (reader-composer.md → Loaded-set model).
+  const slice = useReaderSlice(branchId, entries, db)
 
   const editBlocked = generationStore.useGeneration((s) => isUserEditBlocked(s.txState))
   // Narrower than editBlocked: a pass or a close alone lets the head reversals through, each
@@ -354,8 +357,19 @@ export default function ReaderComposerRoute() {
   )
   const chapterRows = chaptersStore.useChapters((m) => m)
   const chapterBreaks = useMemo(
-    () => chapterBreaksOf([...chapterRows.values()], entries, worldTimeDecorations),
-    [chapterRows, entries, worldTimeDecorations],
+    () => chapterBreaksOf([...chapterRows.values()], slice.rows, worldTimeDecorations),
+    [chapterRows, slice.rows, worldTimeDecorations],
+  )
+  // Walked over the window: the slice's first row reads its monotonicity break from the row above.
+  const sliceDecorations = useMemo(
+    () =>
+      Object.fromEntries(
+        slice.rows.flatMap((row) => {
+          const decoration = worldTimeDecorations[row.id]
+          return decoration != null ? [[row.id, decoration]] : []
+        }),
+      ),
+    [slice.rows, worldTimeDecorations],
   )
 
   // Same snapshot-stability contract as `rows` above: select the raw map, derive
@@ -366,7 +380,8 @@ export default function ReaderComposerRoute() {
     () => [...entityRows.values()].filter((e) => e.branchId === branchId),
     [entityRows, branchId],
   )
-  // Entries only ever prepend and nothing trims the far end yet, so it is still the tail.
+  // The window always reaches the tail. A slice short of it gets no tail actions: none of its rows
+  // is tailEntryId, which the surface's tail checks compare against.
   const holdsLiveEdge = true
   const {
     entityNames,
@@ -456,16 +471,11 @@ export default function ReaderComposerRoute() {
     setEditSession(session)
   }, [])
 
-  // A full first window means older entries may exist; any shorter load
-  // proves the branch top is already inside the window.
-  const [hasOlder, setHasOlder] = useState(false)
-  const hasOlderSeededRef = useRef<string | null>(null)
-  useEffect(() => {
-    if (!hydrationSucceeded || hasOlderSeededRef.current === branchId || entries.length === 0)
-      return
-    hasOlderSeededRef.current = branchId
-    setHasOlder(entries.length >= ENTRIES_WINDOW_SIZE)
-  }, [hydrationSucceeded, branchId, entries.length])
+  // reader-document.md → Edit mode: the draft survives its row leaving the slice.
+  const editingRow = useMemo(
+    () => editingRowOf(entries, slice.rows, editSession?.entryId ?? null),
+    [entries, slice.rows, editSession?.entryId],
+  )
 
   // A branch switch must drop any in-flight buffer from the prior branch —
   // it belongs to a different entry list and would otherwise leak forward.
@@ -475,7 +485,6 @@ export default function ReaderComposerRoute() {
   useEffect(() => {
     streamBufferRef.current = null
     setStreaming(null)
-    setHasOlder(false)
     setLastSubmission(null)
   }, [branchId])
 
@@ -538,17 +547,14 @@ export default function ReaderComposerRoute() {
   const streamingVisible =
     turnStreaming && !(streaming != null && entries.some((e) => e.id === streaming.entryId))
 
+  const { reloaded: sliceReloaded } = slice
   const reload = useCallback(async () => {
     const recent = await readRecentEntries(branchId, db)
     if (!entriesStore.hydrateIfLoaded(branchId, recent)) return
-    // A recent-window reload drops any older entries a scroll-up had loaded, so
-    // recompute the boundary: a full window means older may exist, a short one
-    // proves the branch top is in the window. The seed guard won't do this.
-    hasOlderSeededRef.current = branchId
-    setHasOlder(recent.length >= ENTRIES_WINDOW_SIZE)
-  }, [branchId])
-
-  const loadOlderEntries = useLoadOlderEntries(branchId, db, setHasOlder)
+    // The reload drops older entries a scroll-up loaded, so the slice returns to the tail; a full
+    // window means older may exist, a short one proves the branch top is in it.
+    sliceReloaded(recent.length >= ENTRIES_WINDOW_SIZE)
+  }, [branchId, sliceReloaded])
 
   useEffect(() => {
     // Never rejects: internally try/caught, logs embedder.status_refresh_failed on its own.
@@ -1501,6 +1507,7 @@ export default function ReaderComposerRoute() {
   }, [terminalEntry, openForBranch, branchId])
 
   const documentPaintedRef = useRef(false)
+  const { resetToTail: resetSliceToTail } = slice
   const handleReady = useCallback(async () => {
     // Boot/reload handshake: emissions before onReady are lost, so bump the
     // nonce to force a fresh full-prop emission, and re-arm the loading veil.
@@ -1508,11 +1515,13 @@ export default function ReaderComposerRoute() {
       logger.warn('reader.document_reloaded', { branchId: branchIdRef.current })
     documentPaintedRef.current = false
     setDocumentPainted(false)
+    // The reloaded document lands at the bottom: of the branch, not of a slice short of it.
+    resetSliceToTail()
     setSyncNonce((n) => n + 1)
     // A boot took any open editor with it: what waited on the old document resolves as clean.
     editRequests.resetAll()
     setEditSession(null)
-  }, [editRequests])
+  }, [editRequests, resetSliceToTail])
 
   const handleFirstPaint = useCallback(async () => {
     documentPaintedRef.current = true
@@ -1565,7 +1574,8 @@ export default function ReaderComposerRoute() {
     enabled: isFocused,
   })
 
-  // Engage/settle semantics live in the surface's own jumpToBottom; the host only routes it.
+  // Engage/settle live in the surface's own jumpToBottom; the host moves the slice to the tail.
+  const { toTail: sliceToTail } = slice
   const jumpToBottom = useCallback(
     () =>
       routeJumpToBottom(
@@ -1573,15 +1583,22 @@ export default function ReaderComposerRoute() {
         surfaceRef.current,
         documentRef.current,
         documentPaintedRef.current,
+        sliceToTail(),
       ),
-    [],
+    [sliceToTail],
   )
+  // Settles: on native a rejection would re-reject inside the WebView unlogged.
+  const handleJumpToBottom = useCallback(async () => jumpToBottom(), [jumpToBottom])
   const openChapterPopover = useCallback(() => chapterChipsRef.current?.openPopover(), [])
-  const markBranchTopLoaded = useCallback(() => setHasOlder(false), [])
-  const sendEntryLanding = useCallback((entryId: string) => {
-    if (Platform.OS === 'web') surfaceRef.current?.jumpToEntry(entryId)
-    else documentRef.current?.jumpToEntry(entryId)
+  const sendEntryLanding = useCallback((entryId: string, sliceKey: number) => {
+    if (Platform.OS === 'web') surfaceRef.current?.jumpToEntry(entryId, sliceKey)
+    else documentRef.current?.jumpToEntry(entryId, sliceKey)
   }, [])
+  const { classifyJump, placeLanding, topLoaded } = slice
+  const jumpSlice = useMemo(
+    () => ({ classifyJump, placeLanding, topLoaded }),
+    [classifyJump, placeLanding, topLoaded],
+  )
   // Not entryLinkReady: a reader under another screen still takes the call; only a reload loses it.
   const {
     jump: jumpToEntry,
@@ -1592,7 +1609,7 @@ export default function ReaderComposerRoute() {
     ctx,
     Platform.OS === 'web' || documentPainted,
     sendEntryLanding,
-    markBranchTopLoaded,
+    jumpSlice,
   )
   // Settles: a rejection here would re-reject inside the WebView, where nothing logs it.
   const handleEntryLanded = useCallback(
@@ -1693,12 +1710,13 @@ export default function ReaderComposerRoute() {
     jumpToBottom,
   ])
 
+  // Short of the tail the reply streams below the slice, reached by scrolling or Jump to bottom.
   const streamingPayload = useMemo(
     () =>
-      streamingVisible
+      streamingVisible && !slice.hasNewer
         ? { content: streaming?.content ?? '', reasoning: streaming?.reasoning ?? '' }
         : null,
-    [streamingVisible, streaming],
+    [streamingVisible, slice.hasNewer, streaming],
   )
 
   const jumpButtonEnabled = appSettingsStore.useAppSettings((s) => s.appearance.showJumpToBottom)
@@ -1718,19 +1736,25 @@ export default function ReaderComposerRoute() {
   })
 
   const surfaceProps = {
-    rows: entries,
-    worldTimeDecorations,
+    rows: slice.rows,
+    worldTimeDecorations: sliceDecorations,
     chapterBreaks,
     worldTimeFrame,
     streaming: streamingPayload,
     branchKey: branchId,
-    hasOlder,
+    hasOlder: slice.hasOlder,
+    hasNewer: slice.hasNewer,
+    sliceKey: slice.sliceKey,
+    editingRow,
     editGate,
     gateReason: rowGateReason(editGate, { gate: gateReason, headReversal: headReversalReason }),
     jumpButtonEnabled,
     systemFixLabel: fixAction?.label,
     cutOffFixLabel: cutOffFix?.label,
-    onNearTop: loadOlderEntries,
+    onNearTop: slice.requestNearTop,
+    onNearBottom: slice.requestNearBottom,
+    onTrim: slice.requestTrim,
+    onJumpToBottom: handleJumpToBottom,
     onCommitEdit: handleCommitEdit,
     onRequestRollback: openRollback,
     onEditWorldTime: editWorldTime,
