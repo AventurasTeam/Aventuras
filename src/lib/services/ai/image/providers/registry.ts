@@ -288,6 +288,41 @@ function acceptsReferenceFormat(image: string, mimeTypes: readonly string[] | un
   return mime === null || mimeTypes.includes(mime)
 }
 
+/**
+ * Raw base64 for up to `limit` references. A reference the model cannot read leaves its slot to the
+ * next one; one that fails to download keeps it, so a slow host costs one timeout per batch.
+ */
+async function collectReferences(
+  images: readonly string[],
+  limit: number,
+  mimeTypes: readonly string[] | undefined,
+  signal?: AbortSignal,
+): Promise<string[]> {
+  const kept: string[] = []
+  let free = limit
+  let next = 0
+  while (free > 0 && next < images.length) {
+    const batch = images.slice(next, next + free)
+    next += batch.length
+    const results = await Promise.allSettled(batch.map((img) => toRawBase64(img, signal)))
+    for (const result of results) {
+      if (result.status === 'rejected') {
+        log('Dropped a reference image', { error: result.reason })
+        free--
+      } else if (!acceptsReferenceFormat(result.value, mimeTypes)) {
+        log('Dropped a reference image', {
+          format: sniffImageMime(result.value),
+          accepted: mimeTypes,
+        })
+      } else {
+        kept.push(result.value)
+        free--
+      }
+    }
+  }
+  return kept
+}
+
 /** Adapters take raw base64; a reference can arrive as a data URL or a remote URL. */
 export async function toRawBase64(image: string, signal?: AbortSignal): Promise<string> {
   if (/^https?:\/\//i.test(image)) {
@@ -351,24 +386,7 @@ export async function generateImage(options: {
   const referenceMimeTypes = capabilities?.referenceConstraints?.mimeTypes
   const cleanRefs =
     referenceImages && providerLimit > 0
-      ? (
-          await Promise.allSettled(
-            referenceImages.slice(0, limit).map((img) => toRawBase64(img, signal)),
-          )
-        ).flatMap((result) => {
-          if (result.status === 'rejected') {
-            log('Dropped a reference image', { error: result.reason })
-            return []
-          }
-          if (!acceptsReferenceFormat(result.value, referenceMimeTypes)) {
-            log('Dropped a reference image', {
-              format: sniffImageMime(result.value),
-              accepted: referenceMimeTypes,
-            })
-            return []
-          }
-          return [result.value]
-        })
+      ? await collectReferences(referenceImages, limit, referenceMimeTypes, signal)
       : undefined
 
   if (capabilities?.requiresReferenceImage && !cleanRefs?.length) {

@@ -748,6 +748,30 @@ describe('Image Provider Registry', () => {
         expect(send).toHaveBeenCalledWith(expect.objectContaining({ referenceImages: [WEBP, PNG] }))
       })
 
+      it('lets a reference the model cannot read leave its slot to the next one', async () => {
+        const { generate: send } = setup(
+          {},
+          takes(['image/png', 'image/jpeg'], { maxReferenceImages: 1 }),
+        )
+
+        await generate('m', [WEBP, PNG])
+
+        expect(send).toHaveBeenCalledWith(expect.objectContaining({ referenceImages: [PNG] }))
+      })
+
+      it('does not give a failed download slot to the next reference', async () => {
+        const { generate: send } = setup({}, takes(['image/png'], { maxReferenceImages: 1 }))
+        vi.mocked(fetchPublicImageBase64).mockImplementation(async (url) => {
+          if (url.includes('bad')) throw new Error('refused')
+          return PNG
+        })
+
+        await generate('m', ['http://bad.test/a.png', 'https://img.test/b.png'])
+
+        expect(fetchPublicImageBase64).toHaveBeenCalledTimes(1)
+        expect(send).toHaveBeenCalledWith(expect.objectContaining({ referenceImages: [] }))
+      })
+
       it('reads an animated PNG as a PNG', async () => {
         const APNG = btoa('\x89PNG\r\n\x1a\n\0\0\0\x08acTL' + '\0'.repeat(12))
         const { generate: send } = setup({}, takes(['image/png']))

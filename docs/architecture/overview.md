@@ -740,8 +740,10 @@ capabilities.
 Every cloud provider except Z.AI takes reference images. A1111 takes them only with its profile
 switch on, and ComfyUI only through a custom workflow's selected nodes. The registry holds each
 provider's reference limit (`PROVIDER_REFERENCE_LIMIT`), downloads nothing for a limit of 0, and
-otherwise cuts the references to the smaller of that limit and the model's `maxReferenceImages`
-before fetching `http(s)` ones to base64, so every adapter receives raw base64. A reference URL can
+otherwise fills up to the smaller of that limit and the model's `maxReferenceImages`, fetching
+`http(s)` ones to base64 only as many as there are free slots, so every adapter receives raw base64.
+A reference skipped for its format leaves its slot to the next one; one that fails to download keeps
+its slot. A reference URL can
 come from a discovery card, so it is fetched only from a public host and each redirect is checked
 the same way (`fetchPublicImageBase64`); a name that merely resolves to a private address is not
 caught. A NanoGPT reply that carries a URL instead of base64 is downloaded the same way, and a failed
