@@ -34,7 +34,8 @@
   } from '@lucide/svelte'
   import { Button } from '#lib/components/ui/button/index.ts'
   import { Checkbox } from '#lib/components/ui/checkbox/index.ts'
-  import { Textarea } from '#lib/components/ui/textarea/index.ts'
+  import { Textarea, setTextareaUncapped } from '#lib/components/ui/textarea/index.ts'
+  import { claimBackPress } from '#lib/utils/backPress.ts'
   import * as ResponsiveModal from '#lib/components/ui/responsive-modal/index.ts'
   import { SvelteSet, SvelteMap } from 'svelte/reactivity'
   import type { Attachment } from 'svelte/attachments'
@@ -42,6 +43,9 @@
   const SWIPE_THRESHOLD = 50
 
   const promptId = $props.id()
+
+  // The lightbox's edit area scrolls, so the prompt grows into it rather than into its own cap.
+  setTextareaUncapped()
 
   // Always chronological, as loaded and cached in `ui`; `images` is the display order.
   let loadedImages = $state.raw<EmbeddedImageMeta[]>([])
@@ -451,8 +455,9 @@
   }
 
   function handleKeydown(e: KeyboardEvent) {
+    // A layer above already took this key: the lightbox's Escape must not also close the gallery.
+    if (e.defaultPrevented) return
     if (lightboxOpen) {
-      if (e.key === 'Escape') closeLightbox()
       // Arrows move the caret in a field, and switching images would discard its unsaved edit.
       const target = e.target as HTMLElement | null
       if (
@@ -469,6 +474,15 @@
   }
 
   const OrderIcon = $derived(ui.galleryNewestFirst ? ClockArrowDown : ClockArrowUp)
+
+  // Back closes the lightbox alone; the layout's Escape fallback would close the gallery behind it.
+  $effect(() => {
+    if (!lightboxOpen) return
+    return claimBackPress(() => {
+      closeLightbox()
+      return true
+    })
+  })
 
   // Load the lightbox window's pixels, and evict what it no longer protects.
   $effect(() => {
@@ -791,11 +805,11 @@
 
 <!-- Lightbox Modal using ResponsiveModal -->
 <ResponsiveModal.Root bind:open={lightboxOpen}>
-  <ResponsiveModal.Content class="gap-0 overflow-hidden p-0 sm:max-w-3xl">
+  <ResponsiveModal.Content class="flex flex-col gap-0 overflow-hidden p-0 sm:max-w-3xl">
     <!-- Image area with navigation -->
     <!-- svelte-ignore a11y_no_static_element_interactions -->
     <div
-      class="bg-surface-950 relative flex items-center justify-center p-4"
+      class="bg-surface-950 relative flex shrink-0 items-center justify-center p-4"
       ontouchstart={handleTouchStart}
       ontouchend={handleTouchEnd}
     >
@@ -804,11 +818,11 @@
         <button
           onclick={previousImage}
           disabled={lightboxIndex <= 0}
-          class="bg-surface-800/80 hover:bg-surface-700 text-surface-300 absolute top-1/2 left-2 -translate-y-1/2 rounded-full p-2 transition-colors hover:text-white disabled:cursor-not-allowed disabled:opacity-30"
+          class="bg-surface-800/80 hover:bg-surface-700 text-surface-300 absolute top-1/2 left-2 z-10 -translate-y-1/2 rounded-full p-2 transition-colors hover:text-white disabled:cursor-not-allowed disabled:opacity-30"
           title="Previous (←)"
           aria-label="Previous image"
         >
-          <ChevronLeft class="h-5 w-5" />
+          <ChevronLeft class="size-5" />
         </button>
       {/if}
 
@@ -824,17 +838,17 @@
         <button
           onclick={nextImage}
           disabled={lightboxIndex === images.length - 1}
-          class="bg-surface-800/80 hover:bg-surface-700 text-surface-300 absolute top-1/2 right-2 -translate-y-1/2 rounded-full p-2 transition-colors hover:text-white disabled:cursor-not-allowed disabled:opacity-30"
+          class="bg-surface-800/80 hover:bg-surface-700 text-surface-300 absolute top-1/2 right-2 z-10 -translate-y-1/2 rounded-full p-2 transition-colors hover:text-white disabled:cursor-not-allowed disabled:opacity-30"
           title="Next (→)"
           aria-label="Next image"
         >
-          <ChevronRight class="h-5 w-5" />
+          <ChevronRight class="size-5" />
         </button>
       {/if}
     </div>
 
     <!-- Edit area -->
-    <div class="bg-surface-900 border-surface-800 border-t px-4 py-3">
+    <div class="bg-surface-900 border-surface-800 min-h-0 overflow-y-auto border-t px-4 py-3">
       <label for={promptId} class="text-surface-400 mb-1.5 block text-xs">Image Prompt</label>
       <Textarea
         id={promptId}
@@ -848,7 +862,7 @@
 
     <!-- Footer toolbar -->
     <div
-      class="bg-surface-900 border-surface-800 flex items-center justify-between gap-3 border-t px-4 py-3"
+      class="bg-surface-900 border-surface-800 flex shrink-0 items-center justify-between gap-3 border-t px-4 py-3"
     >
       <!-- Counter -->
       <div class="text-surface-400 text-sm tabular-nums">
