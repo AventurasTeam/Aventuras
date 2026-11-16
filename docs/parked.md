@@ -3979,6 +3979,25 @@ too and weren't probed. Revisit when an entry with media controls is
 reported, or when the sanitizer's allowlist changes. Routed from
 triage 2026-11-05.
 
+#### A store change's host cost grows with the loaded window
+
+The reader's document renders a capped slice, but the host still works
+over the whole loaded window on every store change: the route,
+`useBranchWorldTime`, `useStoryPlace` and `useRowSignals` each copy,
+filter and sort the entries store. A fresh open loads about 50 rows; a
+far jump or reading back grows the window, and it stays grown until
+the reader reopens. On the Fold's release build with
+`pnpm db:seed:long`, a reply's end held the host for two changes (the
+saved row replacing the stream card, then the next update) with
+nothing emitted in between: about 1.1 to 1.2 s each on the 60-chapter
+window grown to its first row (7,943 rows), about 0.4 s at 20 chapters
+(2,659 rows), about 0.2 s on a fresh window at 60 chapters. The
+streamed text itself painted with no gap over 160 ms at either size.
+The split of that time between the four copies and the rest of the
+host's work isn't profiled. **Revisit signal:** a user noticing the
+pause, or a story long enough for it to pass about 2 s. Routed from the
+sliding reader window's Fold measure, 2026-11-16 (developer decision).
+
 ### Code structure (parked)
 
 #### The E2E embedder cache can rebuild under a parallel run

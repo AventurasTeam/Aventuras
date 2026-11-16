@@ -676,3 +676,51 @@ and 18.8 s at 60. [Slice 5.2](./02-first-chapter.md) doesn't plan to
 measure it on a grown window, and its
 [Open questions](./02-first-chapter.md#open-questions) ask whether it
 should ("Does the close's measure run once with the reader grown?").
+
+#### Re-measured with the sliding window
+
+The fix the miss above was routed to, a document that renders a slice
+of at most 50 rows of the window
+([`reader-composer.md → Loaded-set model`](../../../../ui/screens/reader-composer/reader-composer.md#loaded-set-model)),
+was measured on 2026-11-16 against the bar its followup set: at 20 and
+60 chapters, a jump to entry 1 lands within 3 s; a reply streamed after
+it, re-attached by Jump to bottom and with the slice short of the tail,
+has no gap between paints over 500 ms; renderer memory after the jump
+stays near a fresh open's; no renderer kill. Same device and screen,
+fixture and timing in the document as above. Build: release from
+`8ef5c0d61` with the measure's temporary marks on top, uncommitted. The
+mock streamed one reply of about 1,590 characters over about 4.3 s.
+
+| Measure                                    | 20 chapters     | 60 chapters                | Bar    | Verdict |
+| ------------------------------------------ | --------------- | -------------------------- | ------ | ------- |
+| Landed (median)                            | 528 ms, 5 runs  | 1,369 ms, 4 runs           | 3 s    | pass    |
+| Landed, range                              | 500–541 ms      | 1,358–1,384 ms             |        |         |
+| Rows in the window                         | about 2,660     | about 7,940                |        |         |
+| Rows in the document                       | 50              | 50                         |        |         |
+| Payload per emission                       | about 89 KB     | about 89 KB                |        |         |
+| Renderer PSS, fresh open                   | 183–200 MB      | 175–182 MB                 |        |         |
+| Renderer PSS, landed                       | 124–147 MB      | 121–142 MB                 | near   | pass    |
+| App PSS, landed                            | 368–388 MB      | 406–412 MB                 |        |         |
+| Longest paint gap, slice short of the tail | 129 ms          | 118 ms                     | 500 ms | pass    |
+| Longest paint gap, after Jump to bottom    | 159 ms          | 109 ms                     | 500 ms | pass    |
+| Jump to bottom, press to landed            | 84 ms           | 500 ms                     |        |         |
+| Host pause at the reply's end, two changes | 390–416 ms each | 1,130–1,244 ms each        |        |         |
+| Renderer kill                              | none            | none                       | none   | pass    |
+| Second jump, popover, grown                | not run         | 148 ms                     |        |         |
+| Back from World, emissions                 | not run         | 2, painted in 29 and 51 ms |        |         |
+
+At 60 chapters about 90 ms of the landing is the document's; the rest
+is the host's read. The paint-gap rows cover the streamed text. Each
+reply then ends with two host pauses, the saved row replacing the
+stream card and the update after it, in which nothing is emitted; they
+grow with the window (about 0.2 s each on a fresh window at 60
+chapters) and are
+[parked](../../../../parked.md#a-store-changes-host-cost-grows-with-the-loaded-window)
+(developer decision, 2026-11-16). Over about 40 extensions and trims at
+60 chapters the renderer ranged from 195 to 282 MB and fell back after
+a collection, with no upward trend, and stayed the same process from a
+cold open to the session's end.
+
+Not run: a History link back, since the long fixture has no entities,
+happenings or deltas to link from; and a close's stamp burst on a grown
+window, since closing a chapter by hand lands in a later milestone.
