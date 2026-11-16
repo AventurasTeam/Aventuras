@@ -151,6 +151,23 @@ for the placement rule.
   down. Both from 5.3's slice review, 2026-11-03, in stories, not on a
   device. Routed from triage 2026-11-05.
 
+- **TalkBack can't reach the reader document on Android.** On the
+  Fold's release build with Samsung TalkBack, swiping skips from the
+  reader's top bar to the composer, and touching the story text plays
+  only TalkBack's "nothing here" sound, so a screen-reader user can't
+  read the story. The rows are in the accessibility tree: a compressed
+  `uiautomator dump`, which keeps only nodes important for
+  accessibility, holds all 138 text nodes of a 50-row slice. The
+  document is `react-native-webview` 13.16.0 under expo-dom, mounted
+  with `scrollEnabled: false` and scrolling in its own DOM scroller; the
+  jump veil renders nothing while idle, so it doesn't cover it. Cause
+  not found. The sliding reader window's PR (#752) doesn't change the
+  mount or the WebView's props (read from its diff); not tried on main,
+  with Google's TalkBack, or on an emulator. Once TalkBack reaches the
+  document, check that its linear navigation extends the slice at the
+  bottom shimmer, which that PR's acceptance asked for and couldn't run.
+  Raised 2026-11-16 by its Fold session (developer decision).
+
 ## Tuning and play testing
 
 v1 work held for the end of the cycle, once every base system is
