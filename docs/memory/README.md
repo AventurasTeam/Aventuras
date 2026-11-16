@@ -53,6 +53,10 @@ the shape.
   / model swap / failure capture / param drift. Embedding-mode
   only. Screen UX in
   [`docs/ui/screens/memory-probe/memory-probe.md`](../ui/screens/memory-probe/memory-probe.md).
+- **[decision-model.md](./decision-model.md)** — candidate ideas, not
+  a design: where an optional decision model could rerank retrieval,
+  answer closed-set state questions or detect conflicts, with each
+  idea's status, the evidence so far and what reopens it.
 
 Memory-pipeline deferrals live in the top-level
 [`parked.md → Memory pipeline (parked)`](../parked.md#memory-pipeline-parked).
