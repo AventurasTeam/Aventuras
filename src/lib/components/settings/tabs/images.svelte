@@ -580,6 +580,7 @@
     profileOutputFormats = on
       ? [...profileOutputFormats, format]
       : profileOutputFormats.filter((f) => f !== format)
+    if (profileOutputFormats.length === 0) profileOutputCompression = false
   }
 
   // What the provider published for the current model, once the loaded list is for these inputs.
