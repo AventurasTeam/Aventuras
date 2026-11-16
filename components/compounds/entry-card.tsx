@@ -1048,6 +1048,10 @@ export function EntryCard({
   const [expanded, setExpanded] = useState(false)
   const [stateExpanded, setStateExpanded] = useState(false)
   const [sceneEditOpen, setSceneEditOpen] = useState(false)
+  // Only an edit started on this card takes focus: one mounting already open is a row scrolled
+  // back into the reader's slice, and focusing it would raise the phone keyboard mid-scroll.
+  const [editStart, setEditStart] = useState({ editing, focus: false })
+  if (editStart.editing !== editing) setEditStart({ editing, focus: editing === true })
   const hasReasoning = reasoning != null && reasoning.length > 0
   // Head reversals are gated apart from `disabled`: they pass through a pass or a close.
   const editOff = editDisabled ?? disabled
@@ -1242,7 +1246,7 @@ export function EntryCard({
             value={content}
             onChangeText={onContentChange}
             editable={!editOff}
-            autoFocus
+            autoFocus={editStart.focus}
             aria-label={t('reader:entryCard.editContent')}
             onKeyPress={(e) => {
               if (e.nativeEvent.key === 'Escape') onCancelEdit?.()

@@ -302,7 +302,8 @@ draft lives in document state; commit/cancel cross the bridge with
 the final text only. It lives at the surface's level, not in its row,
 so it survives the row leaving the slice: `editingRow` carries the
 row's stored text meanwhile, and the row shows its editor again when it
-returns
+returns, without taking focus: only opening an editor focuses it, so
+scrolling past an open one raises no keyboard
 ([`reader-composer.md → Inline edit session`](../screens/reader-composer/reader-composer.md#inline-edit-session)).
 
 **Android IME inside a WebView is this pattern's top validation

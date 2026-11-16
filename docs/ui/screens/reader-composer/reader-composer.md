@@ -471,7 +471,7 @@ Inside the textarea, Ctrl/Cmd-Z is the textarea's own undo.
 - jumps and Jump to bottom, which can move the
   [slice](#loaded-set-model) off the editor's row: the editor stays
   open with its draft, the other rows' actions still wait, and the row
-  shows its editor again when it comes back into the slice;
+  shows its editor again, unfocused, when it comes back into the slice;
 - the peek drawer;
 - the world-time and scene editors;
 - `Flip era…` and `Set lead character…`;

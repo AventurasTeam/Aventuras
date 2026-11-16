@@ -4118,7 +4118,10 @@ export const SliceAsksOnceWhileUnanswered: Story = {
   },
 }
 
-/** The editor's draft survives its row leaving the slice; leaving the window drops it. */
+/**
+ * The editor's draft survives its row leaving the slice, and returns without taking focus; leaving
+ * the window drops it.
+ */
 export const SliceEditorSurvivesTheSlice: Story = {
   render: (args) => <SliceHostHarness {...args} jumpTargets={['s10']} />,
   play: async () => {
@@ -4139,6 +4142,8 @@ export const SliceEditorSurvivesTheSlice: Story = {
       SLICE_WAIT,
     )
     expect(back).toHaveValue(`${SLICE_WINDOW[99].content}!`)
+    // Focusing it would raise the phone's keyboard as the reader scrolls past it.
+    expect(back).not.toHaveFocus()
     press('Jump to s10')
     await waitFor(() => expect(isShown('s100')).toBe(false), SLICE_WAIT)
     press('Leave window')
@@ -4146,5 +4151,25 @@ export const SliceEditorSurvivesTheSlice: Story = {
       press('read session')
       expect(answer()).toHaveTextContent('null')
     }, SLICE_WAIT)
+  },
+}
+
+/** An editor back from outside the slice, closed and opened again, takes focus as any edit does. */
+export const SliceEditorReopenedTakesFocus: Story = {
+  render: (args) => <SliceHostHarness {...args} jumpTargets={['s10']} />,
+  play: async () => {
+    await openEditor('s100')
+    press('Jump to s10')
+    await waitFor(() => expect(isShown('s100')).toBe(false), SLICE_WAIT)
+    press('Host jump to bottom')
+    const back = await waitFor(
+      () =>
+        within(entryRow('s100')).getByRole('textbox', { name: t('reader:entryCard.editContent') }),
+      SLICE_WAIT,
+    )
+    expect(back).not.toHaveFocus()
+    await userEvent.click(within(entryRow('s100')).getByRole('button', { name: t('cancel') }))
+    const reopened = await openEditor('s100')
+    await waitFor(() => expect(reopened).toHaveFocus())
   },
 }
