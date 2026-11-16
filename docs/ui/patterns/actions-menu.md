@@ -142,7 +142,7 @@ not reader-contextual.
 
 | Surface                                                             | `ON THIS SCREEN` entries                            |
 | ------------------------------------------------------------------- | --------------------------------------------------- |
-| [Reader / composer](../screens/reader-composer/reader-composer.md)  | Undo last action · Redo · Jump to bottom            |
+| [Reader / composer](../screens/reader-composer/reader-composer.md)  | `Undo <target>` · `Redo <target>` · Jump to bottom  |
 | [World](../screens/world/world.md)                                  | Add entity… · Add lore…                             |
 | [Plot](../screens/plot/plot.md)                                     | Add thread… · Add happening…                        |
 | [Story List](../screens/story-list/story-list.md)                   | New story… · Import story…                          |
@@ -162,12 +162,18 @@ The `…` suffix marks an entry that opens a further surface
 (`Jump to bottom`) carry no suffix.
 
 Reader's undo/redo entries are the touch-tier path to CTRL-Z /
-CTRL-Shift-Z (keyboard remains the desktop fast path). `Redo` is
-absent — not disabled — when the redo stack is empty (store-derived,
-cheap); `Undo last action` stays present because its availability
+CTRL-Shift-Z (keyboard remains the desktop fast path). Each names
+its target, and an unseen target's Undo ends in `…`, since it opens a
+confirm
+([`reader-composer.md → Undo and redo`](../screens/reader-composer/reader-composer.md#undo-and-redo)).
+Redo is absent — not disabled — when the redo stack is empty
+(store-derived, cheap). Undo stays present because its availability
 needs a delta-log query, and a rejected activation surfaces a
-"Nothing to undo" toast instead. Both disable during generation and
-while an entry's inline editor is open
+"Nothing to undo" toast instead. Redo disables while any run holds the
+reader's edit gate. Undo disables only while a head reversal is held,
+since undoing a turn passes through a pass or a close
+([`principles.md → Pipelines covered`](../principles.md#pipelines-covered)).
+Both disable while an entry's inline editor is open
 ([`reader-composer.md → Inline edit session`](../screens/reader-composer/reader-composer.md#inline-edit-session));
 `Jump to bottom` is absent on an empty entry list.
 

@@ -510,9 +510,11 @@ live read — the arm re-reads the cascade at apply time regardless. A
 pending confirm is cancelled when the screen loses focus, on both
 screens.
 
-The confirm's description reads "You can undo this from the reader:
-Undo last action in its menu, or Cmd/Ctrl-Z," naming the reader's own
-undo label so the copy can't drift from the reader's menu — one shared
+The confirm's description reads "You can undo this from the reader's
+menu, or with Cmd/Ctrl-Z." It quotes no menu label, since the reader's
+Undo names its target
+([`reader-composer.md → Undo and redo`](../reader-composer/reader-composer.md#undo-and-redo))
+and a quoted label would drift from it in other languages — one shared
 string (`common:deleteUndoHint`) across every kind. What else it lists
 is per kind: an entity's awareness, involvement and relationship
 counts, other entities losing their link to it, items and places left unplaced,

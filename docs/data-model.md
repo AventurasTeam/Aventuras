@@ -2746,6 +2746,11 @@ arbitrary editing.
   writing every field, and without the key the copy's pin would read as
   one the user set
   ([`memory/chapter-close.md → 3d`](./memory/chapter-close.md#3d--awareness-pin-tuning)).
+  `$undoKind`, on the entry delta of a group made by one of the four
+  writers whose result the reader shows in place (an entry's text,
+  scene or world-time edit, or a suggestion refresh), names that kind. Undo reads it to say what it
+  reverses and to skip the confirm an unseen target takes
+  ([`reader-composer.md → Undo and redo`](./ui/screens/reader-composer/reader-composer.md#undo-and-redo)).
 - **The reversal set closes over the rows its creates delete, and the
   rows naming them**, not over the anchor alone. Undoing a `create` is a
   plain row delete with no cascade — only an explicit delete action

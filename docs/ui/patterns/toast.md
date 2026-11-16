@@ -35,7 +35,11 @@ Used by:
   A chapter close's re-run cancelled, info severity, or failed, warning
   severity, with no action, both saying the close is as it was; and a
   re-run undone with no journal to write back, warning severity, saying
-  the earlier close couldn't be restored.
+  the earlier close couldn't be restored. An undo that landed, info
+  severity, `Undid <target>` with a Redo action when the undo left
+  something to redo, replaced by a newer undo's notice; a redo, info severity, no action; and an undo refused
+  because a newer change landed while its confirm was up, info severity
+  ([`reader-composer.md → Undo and redo`](../screens/reader-composer/reader-composer.md#undo-and-redo)).
 - Any surface whose generation call came back with far fewer input
   tokens than were sent
   ([`architecture.md → Truncation cross-check`](../../architecture.md#truncation-cross-check))
@@ -52,7 +56,8 @@ Toasts deliberately do **not** cover:
   ([`principles.md → Affordance loci`](../principles.md#affordance-loci)),
   since an action on a toast races its auto-dismiss.
 - **Undo affordance** — not a v1 UI pattern; rollback happens in
-  the reader. History is read-only.
+  the reader. History is read-only. The one action over a reversal is
+  the reader's undo notice's Redo, a shortcut to the menu's own.
 
 ## Placement
 

@@ -27,9 +27,9 @@ Cross-cutting principles that govern this screen are in
   (entry list at scale: virtualization layered on a loaded window
   per [Scroll behavior](#scroll-behavior) below)
 - [Actions menu (contextual zone)](../../patterns/actions-menu.md#contextual-zone)
-  (Reader contributes `Undo last action` / `Redo` / `Jump to
-bottom` to the universal `⚲` directory — the touch-tier path to
-  the CTRL-Z pair)
+  (Reader contributes `Undo` and `Redo`, each naming its target per
+  [Undo and redo](#undo-and-redo), and `Jump to bottom` to the
+  universal `⚲` directory — the touch-tier path to the CTRL-Z pair)
 - [Generation status pill](../../patterns/generation-status-pill.md)
   (top-bar status surface, click-to-cancel popover, sticky memory
   error variant)
@@ -478,6 +478,94 @@ Inside the textarea, Ctrl/Cmd-Z is the textarea's own undo.
 drops the draft. A redo that restores the row shows the row, not the old
 editor. On Android, a crash of the reader's document loses an open
 draft.
+
+## Undo and redo
+
+Story undo lives in the reader: CTRL-Z and CTRL-Shift-Z, and the
+[Actions menu](../../patterns/actions-menu.md#contextual-zone)'s entries
+for touch. It reverses the branch's newest action, wherever that action
+was taken, though never a pass
+([`data-model.md → Entry mutability & rollback`](../../../data-model.md#entry-mutability--rollback)).
+So each press says what it reverses.
+
+**Seen and unseen targets.** A target is _seen_ when the reader shows
+its result in place: a turn, or a group tagged with `$undoKind` by one
+of four writers. Those writers are the entry text, scene and world-time
+edits and a suggestion refresh. Every other target is _unseen_: a
+chapter close, its re-run or the work it kept, a World or Plot save or
+merge, a Timeline chapter edit, an era flip. An era flip confirms even
+when it was made in the reader, since it changes every date on display.
+A writer that doesn't tag its group is unseen by default.
+
+**The labels.** The menu's Undo reads `Undo <target>` once its target
+resolves as the menu opens, and `Undo last action` until then. An unseen
+target's label ends in `…`, since it opens a confirm. Redo reads
+`Redo <target>`, described from the redo stack's snapshot. With nothing
+to undo, activation keeps its "Nothing to undo" toast.
+
+**Activation**, from the keyboard or the menu:
+
+- A seen target undoes at once.
+- An unseen target opens a confirm, an
+  [AlertDialog](../../patterns/alert-dialog.md) titled
+  `Undo <target>?`. Its body says what the undo reverses:
+  - for a close, a re-run or a close's kept work, its impact in the
+    lines the
+    [chapter delete confirm](../chapter-timeline/chapter-timeline.md#delete-a-chapter)
+    uses: the lore rows it removes, your edits included, and the other
+    changes it reverses;
+  - otherwise, up to five of the group's rows as History names them
+    (the row, then what changed), and "and N more".
+
+  The buttons are Cancel and Undo. Undo is the default, and Esc
+  cancels. The confirm is a blocking overlay, so the shortcut stands
+  down while it is up.
+
+- The undo reverses exactly the action its label or confirm named. If a
+  newer action became the latest in between, nothing is undone. A close
+  that a pass started in the background can commit while the confirm
+  is up. The confirm then closes, an info
+  toast says a newer change landed and nothing was undone, and the next
+  press names the new target.
+
+**The notice.** Every undo that lands, the keyboard's included, shows
+an info toast, `Undid <target>`, with a Redo action when the undo left
+something to redo. A re-run's undo can't be redone
+([`chapter-close.md → Re-running a close`](../../../memory/chapter-close.md#re-running-a-close)),
+so its notice has none. A newer undo's notice replaces the older one,
+so the toast's Redo is always the top of the redo stack. An undo that
+raises its own warning, such as a re-run undone with no journal to
+write back, shows that warning instead.
+
+A redo shows `Redid <target>`, with no action. Redo never confirms,
+since it restores what the user just undid and the undo's notice named
+it. Refusals are otherwise unchanged: the menu toasts them, and the
+keyboard stays silent. The refusal after a confirm is the exception: it
+toasts on both paths, since the user just answered the confirm.
+
+**Describing a target.** The description comes from the group's
+deltas, or from the redo snapshot's, and the first match wins:
+
+| Group                                                                          | Target                                                                                                                                                | Seen   |
+| ------------------------------------------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------- | ------ |
+| A turn, regenerate included                                                    | the turn at entry #N, its earliest created entry                                                                                                      | seen   |
+| Tagged `$undoKind`                                                             | `entryText` your edit to entry #N; `entryScene` entry #N's scene; `entryTime` entry #N's time; `suggestionRefresh` the suggestion refresh at entry #N | seen   |
+| `chapter_close` with a `chapters` create                                       | chapter N's close                                                                                                                                     | unseen |
+| `chapter_close` with a `chapters` update and no create                         | chapter N's re-run                                                                                                                                    | unseen |
+| `chapter_close` with no `chapters` delta, the work a divider-only removal kept | the kept close work at entry #N, the end entry its deltas anchor on                                                                                   | unseen |
+| Any other user group on one row besides entries                                | adding, deleting or your edit to `<name>`, by the delta's op                                                                                          | unseen |
+| Any other user group on several rows                                           | your changes to `<name>` and N more, `<name>` being the first row besides entries it wrote                                                            | unseen |
+| Anything else                                                                  | the latest change                                                                                                                                     | unseen |
+
+Names and entry numbers are History's, the row's display name and its
+`entry #n`
+([World → History tab](../world/world.md#history-tab)), so the two can't
+disagree. Each kind's string is a whole sentence per place: the menu
+label, the confirm title and the notice. It is never a target spliced
+into an "Undo …" frame, since languages move the verb.
+
+While an entry's inline editor is open, undo and redo wait
+([Inline edit session](#inline-edit-session)).
 
 ## Era flip
 
