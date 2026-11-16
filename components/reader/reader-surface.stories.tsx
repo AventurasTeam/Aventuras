@@ -3551,6 +3551,17 @@ function SliceHostHarness({
       surfaceRef.current?.jumpToEntry('s1', key)
     },
     'Next chunk': () => setChunks((n) => n + 1),
+    // The user's action of a sent turn, at the tail below a reader at the bottom.
+    'Append a turn': () =>
+      setWindowRows((rows) => [
+        ...rows,
+        entry({
+          id: `s${rows.length + 1}`,
+          kind: 'user_action',
+          content: `Wing ${rows.length + 1}: I ask the gallery for one more room.`,
+          position: rows.length + 1,
+        }),
+      ]),
     'Leave window': () =>
       setWindowRows((rows) => rows.filter((row) => row.id !== session?.entryId)),
     'read session': () => setAnswer(JSON.stringify(surfaceRef.current?.editSession() ?? null)),
@@ -3830,6 +3841,52 @@ export const SliceJumpToTheBranchTopDoesNotShift: Story = {
     expect(Math.abs(topOffset('s1', scroller))).toBeLessThan(1)
     await outlastLanding()
     expect(Math.abs(topOffset('s1', scroller))).toBeLessThan(1)
+  },
+}
+
+/**
+ * A turn sent from the bottom grows the slice past 50 and its reply streams engaged: the trim
+ * that brings it back waits for a scroll's rest, so it can't move the reader off the bottom
+ * between the user's row and the reply.
+ */
+export const SliceTurnPast50StreamsEngaged: Story = {
+  render: (args) => <SliceHostHarness {...args} />,
+  play: async () => {
+    const scroller = scrollerOf('s71')
+    await settleLanding(scroller)
+    press('Append a turn')
+    await waitFor(() => expect(isShown('s121')).toBe(true))
+    // Past a rest's worth of quiet, as a model's first token can be.
+    await new Promise((resolve) => setTimeout(resolve, 400))
+    press('Next chunk')
+    await screen.findByText(REPLY_TEXT)
+    press('Next chunk')
+    await frames(3)
+    expect(distanceFromBottom(scroller)).toBeLessThanOrEqual(1)
+  },
+}
+
+/** A viewport shrinking right after a trim's compensation still re-pins a reader at the bottom. */
+export const SliceTrimThenShrinkStaysAtTheBottom: Story = {
+  args: { onTrim: fn(async () => {}) },
+  render: (args) => <SliceHostHarness {...args} deferRequests />,
+  play: async ({ args }) => {
+    const scroller = scrollerOf('s71')
+    await settleLanding(scroller)
+    press('Append a turn')
+    await waitFor(() => expect(isShown('s121')).toBe(true))
+    // The reader follows to the bottom with a scroll, whose rest asks for the trim.
+    await scrollTo(scroller, scroller.scrollHeight)
+    await waitFor(() => expect(args.onTrim).toHaveBeenCalled(), SLICE_WAIT)
+    press('Deliver')
+    await waitFor(() => expect(isShown('s71')).toBe(false), SLICE_WAIT)
+    const box = scroller.parentElement?.parentElement
+    if (box == null) throw new Error('no reader box')
+    const height = box.offsetHeight
+    box.style.flex = 'none'
+    box.style.height = `${height - BANNER_HEIGHT_PX}px`
+    await scrollSettled(scroller)
+    expect(distanceFromBottom(scroller)).toBeLessThanOrEqual(1)
   },
 }
 

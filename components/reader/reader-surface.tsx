@@ -486,6 +486,8 @@ export function ReaderSurface({
     setEditingId(null)
     setEditDraft('')
   }, [branchKey])
+  // The anchor rule's hold loop; every other writer that moves the reader stops it.
+  const anchorHoldActiveRef = useRef(false)
   // Bottom pin: late layout (font swaps, image decode) can still grow content
   // after a scrollTop write, so re-assert per frame until the scroll height
   // settles. A wheel, touch drag, scrollbar press or upward scroll key breaks it.
@@ -499,6 +501,7 @@ export function ReaderSurface({
     if (el == null) return
     cancelAnimationFrame(pinRafRef.current)
     pinActiveRef.current = true
+    anchorHoldActiveRef.current = false
     let stableFrames = 0
     let lastHeight = -1
     const assertBottom = () => {
@@ -592,7 +595,6 @@ export function ReaderSurface({
   // wins: it is measured from its row. A scroll drops the memo, so a commit never undoes one: each
   // props change records afresh in its first commit, which changes nothing.
   const anchorMemoRef = useRef<AnchorMemo | null>(null)
-  const anchorHoldActiveRef = useRef(false)
   const anchorHoldRafRef = useRef(0)
   useEffect(() => () => cancelAnimationFrame(anchorHoldRafRef.current), [])
   useLayoutEffect(() => {
@@ -834,10 +836,12 @@ export function ReaderSurface({
   useLayoutEffect(() => {
     requestInFlightRef.current = false
   }, [sliceKey])
-  // A new slice may want an extension or a trim at the next rest.
+  // A new slice may want an extension or a trim at the next rest. Rows a turn adds don't arm it:
+  // their trim waits for a scroll's rest, so its compensating scroll can't move a reader at the
+  // bottom off it between the user's row and the reply, which would start the stream disengaged.
   useLayoutEffect(() => {
     armRest()
-  }, [rows, hasOlder, hasNewer, armRest])
+  }, [sliceKey, armRest])
 
   // At rest, a held change is adopted first; its commit arms the next rest, so a request measures
   // the slice the host holds. Then one request: extend toward the edge the reader is within a
@@ -1070,6 +1074,7 @@ export function ReaderSurface({
       // event, and a shrink never clamps scrollTop.
       const distanceBeforePx = el.scrollHeight - el.scrollTop - previousClientHeight
       if (distanceBeforePx > NEAR_BOTTOM_THRESHOLD_PX) return
+      anchorHoldActiveRef.current = false
       el.scrollTop = el.scrollHeight
     })
     observer.observe(el)
