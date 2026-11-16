@@ -12,7 +12,14 @@ import {
   type UndoTargetRead,
 } from '@/lib/actions'
 import type { Delta } from '@/lib/db'
-import { entitiesStore, generationStore, undoRedoStore, type RunState } from '@/lib/stores'
+import { makeLore } from '@/lib/list-modules/__tests__/fixtures'
+import {
+  entitiesStore,
+  generationStore,
+  loreStore,
+  undoRedoStore,
+  type RunState,
+} from '@/lib/stores'
 import { toastStore, type ToastItem } from '@/lib/toast'
 
 import { useReaderUndo } from './use-reader-undo'
@@ -129,6 +136,7 @@ beforeEach(() => {
   })
   undoRedoStore.clear()
   entitiesStore.__reset()
+  loreStore.__reset()
   for (const fn of Object.values(actions)) fn.mockReset()
   actions.readUndoImpact.mockResolvedValue(null)
 })
@@ -446,6 +454,61 @@ describe('useReaderUndo — review fixes', () => {
     r.rerender(LIVE)
 
     expect(r.result.current.confirmOpen).toBe(false)
+  })
+
+  it('holds a seen undo when an editor opened while its target was read', async () => {
+    const read = deferred<UndoTargetRead | null>()
+    actions.readUndoTarget.mockReturnValue(read.promise)
+    undoLands(TURN, { id: 'e2', position: 2 })
+    const r = render()
+    act(() => r.result.current.undo('keyboard'))
+    r.rerender({ ...LIVE, held: true })
+
+    await act(async () => read.resolve(TURN))
+    await settle()
+
+    expect(actions.undoLastAction).not.toHaveBeenCalled()
+    expect(toasts).toHaveLength(0)
+  })
+
+  it('names a created row in the notice although the undo removed it', async () => {
+    const created: UndoTargetRead = {
+      actionId: 'act_add',
+      deltas: [
+        delta({ actionId: 'act_add', op: 'create', targetTable: 'lore', targetId: 'lore_new' }),
+      ],
+      entryPositions: {},
+    }
+    loreStore.hydrate('b1', [makeLore({ id: 'lore_new', title: 'The new toll' })])
+    actions.readUndoTarget.mockResolvedValue(created)
+    actions.undoLastAction.mockImplementation(async () => {
+      loreStore.hydrate('b1', [])
+      return OK
+    })
+    const r = render()
+    act(() => r.result.current.undo('menu'))
+    await settle()
+    expect(r.result.current.confirm?.props.title).toBe('Undo adding The new toll?')
+
+    act(() => r.result.current.confirm?.props.onConfirm())
+    await settle()
+
+    expect(toasts.map((toast) => toast.message)).toEqual(['Undid adding The new toll'])
+  })
+
+  it('names a redone delete in its notice although the redo removed the row', async () => {
+    loreStore.hydrate('b1', [makeLore({ id: 'lore_1', title: 'The toll' })])
+    const snapshots = LORE_SAVE.deltas.map((d) => ({ delta: d, rowBeforeUndo: null }))
+    undoRedoStore.pushRedoGroup(__redoGroupForTest(snapshots, LORE_SAVE.actionId))
+    actions.redoLastAction.mockImplementation(async () => {
+      loreStore.hydrate('b1', [])
+      return OK
+    })
+    const r = render()
+    act(() => r.result.current.redo('menu'))
+    await settle()
+
+    expect(toasts.map((toast) => toast.message)).toEqual(['Redid deleting The toll'])
   })
 
   it('lists the rows when the impact read fails, rather than failing the undo', async () => {

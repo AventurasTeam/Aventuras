@@ -162,13 +162,13 @@ export function useReaderUndo({
         report('redo', NOTHING, origin)
         return
       }
-      const description = describeRedoTarget(group)
-      const names = redoNames(group)
+      // Read before the redo lands: a redone delete takes the row its name came from.
+      const notice = undoTargetText(describeRedoTarget(group), redoNames(group), 'redoNotice')
       const result = await redoLastAction(branchId, ctx, {
         expectedActionId: expectedActionId ?? group.actionId,
       })
       if (result.status === 'rejected') report('redo', result, origin)
-      else announce(undoTargetText(description, names, 'redoNotice'))
+      else announce(notice)
     },
     [announce, branchId, ctx, report],
   )
@@ -189,6 +189,8 @@ export function useReaderUndo({
 
   const runUndo = useCallback(
     async (target: Target, origin: Origin) => {
+      // Names resolve against the stores, so read them before an undo removes a created row.
+      const notice = undoTargetText(target.description, target.names, 'notice')
       const result = await undoLastAction(branchId, ctx, { expectedActionId: target.actionId })
       showMenuTarget(null)
       if (result.status === 'rejected') {
@@ -198,7 +200,7 @@ export function useReaderUndo({
       // A re-run's undo can't be redone and clears the stack, so its notice offers no Redo.
       const redoable = undoRedoStore.peekRedoGroup()?.actionId === target.actionId
       announce(
-        undoTargetText(target.description, target.names, 'notice'),
+        notice,
         redoable
           ? () => {
               if (liveRef.current.held) toast.info(t('reader:editFocus.held'))
@@ -235,11 +237,18 @@ export function useReaderUndo({
   const undo = useCallback(
     (origin: 'menu' | 'keyboard') =>
       guarded('undo', async () => {
+        const started = branchId
+        // Read after each await: the screen left, switched branch or opened an editor meanwhile.
+        const stale = () => {
+          const live = liveRef.current
+          return live.branchId !== started || !live.isFocused || live.held
+        }
         const target = (origin === 'menu' ? menuTargetRef.current : null) ?? (await resolve())
         if (target == null) {
           report('undo', NOTHING, origin)
           return
         }
+        if (stale()) return
         const { description } = target
         if (description.seen) {
           await runUndo(target, origin)
@@ -251,10 +260,8 @@ export function useReaderUndo({
           report('undo', GATED, origin)
           return
         }
-        const started = branchId
         const lines = await confirmLines(target)
-        const live = liveRef.current
-        if (live.branchId !== started || !live.isFocused || live.held) return
+        if (stale()) return
         setConfirm({
           target: { ...target, description },
           title: undoConfirmTitle(description, target.names),
