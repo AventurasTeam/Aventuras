@@ -3994,9 +3994,16 @@ window grown to its first row (7,943 rows), about 0.4 s at 20 chapters
 (2,659 rows), about 0.2 s on a fresh window at 60 chapters. The
 streamed text itself painted with no gap over 160 ms at either size.
 The split of that time between the four copies and the rest of the
-host's work isn't profiled. **Revisit signal:** a user noticing the
-pause, or a story long enough for it to pass about 2 s. Routed from the
-sliding reader window's Fold measure, 2026-11-16 (developer decision).
+host's work isn't profiled. A chapter close writes its stamps as one
+group, whose store patches go out in one synchronous loop, so it should
+cost about one change; if the time is paid per store write rather than
+per render, a close on that window pays it about 133 times. Owed closes
+run before a turn, so a long story reaches this without a manual close.
+**Revisit signal:** the first close measured on a grown window
+([Slice 5.10's Open questions](./implementation/milestones/05-chapters-chapter-close/slices/10-two-starts.md#open-questions)),
+a user noticing the pause, or a story long enough for it to pass about
+2 s. Routed from the sliding reader window's Fold measure, 2026-11-16
+(developer decision).
 
 ### Code structure (parked)
 
