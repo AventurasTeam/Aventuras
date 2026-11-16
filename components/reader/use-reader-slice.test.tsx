@@ -176,12 +176,16 @@ describe('useReaderSlice', () => {
 
   it('keeps the key for Jump to bottom at the tail, where it scrolls', () => {
     const { result } = mount(ctx)
+    // A new turn grows the tail slice past 50 until the next rest trims it.
+    act(() => entriesStore.insertMany(BRANCH, [row(121)]))
+    expect(result.current.rows).toHaveLength(51)
     const { sliceKey } = result.current
     let key = 0
     act(() => {
       key = result.current.toTail()
     })
     expect(key).toBe(sliceKey)
+    expect(result.current.rows[0].position).toBe(71)
   })
 
   it('lands at once in the slice, and moves the slice for a window row outside it', () => {

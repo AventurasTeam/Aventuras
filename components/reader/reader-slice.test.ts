@@ -297,6 +297,10 @@ describe('the window changing under the slice', () => {
     })
   })
 
+  it('records the top an empty reload proves', () => {
+    expect(reloadSlice(slice(1, null), [], false)).toMatchObject({ windowHasOlder: false, key: 8 })
+  })
+
   it('resets to the tail on a document reload', () => {
     expect(resetToTail(slice(10, 59), WINDOW)).toMatchObject({ top: 71, bottom: null })
   })
