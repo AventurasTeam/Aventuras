@@ -6,7 +6,7 @@ import { computeScrollMetrics } from './scroll-metrics'
 describe('computeScrollMetrics', () => {
   it('reports distance from bottom', () => {
     expect(computeScrollMetrics({ scrollTop: 100, clientHeight: 600, scrollHeight: 2000 })).toEqual(
-      { distanceFromBottomPx: 1300, withinTopViewport: true },
+      { distanceFromBottomPx: 1300, withinTopViewport: true, withinBottomViewport: false },
     )
   })
 
@@ -24,6 +24,17 @@ describe('computeScrollMetrics', () => {
     expect(
       computeScrollMetrics({ scrollTop: 601, clientHeight: 600, scrollHeight: 2000 })
         .withinTopViewport,
+    ).toBe(false)
+  })
+
+  it('marks within-bottom when the distance from bottom is inside one viewport height', () => {
+    expect(
+      computeScrollMetrics({ scrollTop: 800, clientHeight: 600, scrollHeight: 2000 })
+        .withinBottomViewport,
+    ).toBe(true)
+    expect(
+      computeScrollMetrics({ scrollTop: 799, clientHeight: 600, scrollHeight: 2000 })
+        .withinBottomViewport,
     ).toBe(false)
   })
 
