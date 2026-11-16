@@ -3,6 +3,7 @@ import type { CalendarFrame } from '@/lib/calendar'
 import type { StoryEntry } from '@/lib/db'
 
 import type { ChapterBreaks } from './chapter-breaks'
+import type { SliceRequest, TrimRequest } from './reader-slice'
 import type { WorldTimeDecoration } from './worldtime-decoration'
 
 export type StreamingPayload = { content: string; reasoning: string }
@@ -14,9 +15,16 @@ export type EditResult = { ok: true } | { ok: false; code?: string }
 /** An open inline editor: the entry it edits, and whether the draft differs from the stored text. */
 export type EditSession = { entryId: string; dirty: boolean }
 
+/** An editor's row outside the slice: its id and stored text. */
+export type EditingRow = { id: string; content: string }
+
+/**
+ * The jumps name the slice key they land on: rows and a call cross the bridge apart, so the
+ * document holds a jump until it has committed a slice at that key or past it.
+ */
 export type ReaderSurfaceHandle = {
-  jumpToBottom: () => void
-  jumpToEntry: (entryId: string) => void
+  jumpToBottom: (sliceKey: number) => void
+  jumpToEntry: (entryId: string, sliceKey: number) => void
   /** The open editor's session, read now; null with no editor open. */
   editSession: () => EditSession | null
   /** The editor's plain Save (never Save & regenerate). With no editor open it counts as clean. */
@@ -38,6 +46,7 @@ export type EditGate = 'open' | 'interruptible' | 'closed'
  * the expo-dom bridge. Web consumes the identical shape inline.
  */
 export type ReaderSurfaceProps = {
+  /** The window's slice (reader-composer.md → Loaded-set model): at most 50 rows at rest. */
   rows: StoryEntry[]
   /** Host-computed world-time labels + monotonicity flags, by entry id. Side table, not merged
    *  into `rows`: merging hands ReaderRow fresh objects each patch and voids its memo on web. */
@@ -51,11 +60,19 @@ export type ReaderSurfaceProps = {
   /** Branch identity: switch resets edit state and re-lands at bottom. */
   branchKey: string
   /**
-   * Older entries may exist above the loaded window. Drives the boundary
-   * shimmer and gates near-top load requests; host-derived from window-size
-   * math (a short load proves the branch top is in the window).
+   * Rows may exist above the slice: in the window, or above it by window-size math (a short load
+   * proves the branch top is in the window). Drives the top boundary shimmer and gates onNearTop.
    */
   hasOlder: boolean
+  /**
+   * The slice stops short of the branch tail: drives the bottom shimmer, gates onNearBottom, keeps
+   * the jump button up and turns the bottom-anchored behaviors off.
+   */
+  hasNewer: boolean
+  /** Rises whenever the slice's bounds change; the imperative jumps name the one they expect. */
+  sliceKey: number
+  /** The open editor's row while it is in the window but not the slice, else null. */
+  editingRow: EditingRow | null
   editGate: EditGate
   /** The tooltip on the row controls `editGate` disables; undefined while it is `open`. */
   gateReason?: string
@@ -64,7 +81,14 @@ export type ReaderSurfaceProps = {
   systemFixLabel?: string
   /** `Fix profile`'s label for a cut-off notice; the notice shows no action when unset. */
   cutOffFixLabel?: string
-  onNearTop: () => Promise<void>
+  /** Extend the slice up; fired at scroll rest while hasOlder holds. */
+  onNearTop: (request: SliceRequest) => Promise<void>
+  /** Extend the slice down; fired at scroll rest while hasNewer holds. */
+  onNearBottom: (request: SliceRequest) => Promise<void>
+  /** The slice holds more than 50 rows: trim the end farther from the viewport. */
+  onTrim: (request: TrimRequest) => Promise<void>
+  /** The document's Jump to bottom short of the tail: the host swaps the slice and jumps. */
+  onJumpToBottom: () => Promise<void>
   onCommitEdit: (entryId: string, content: string) => Promise<EditResult>
   onRequestRollback: (entryId: string) => Promise<void>
   onEditWorldTime: (entryId: string, nextWorldTime: number) => Promise<EditResult>

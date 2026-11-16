@@ -298,6 +298,37 @@ test.describe.serial('Reader chapter chrome', () => {
     await expect(reader.row(page, startEntryId)).toBeInViewport()
   })
 
+  // reader-composer.md → Loaded-set model. Starts on the slice the first chapter's jump left: from
+  // the branch's top, short of the tail.
+  test('a slice short of the tail extends down at rest until it reaches the tail', async () => {
+    const page = app.window
+    const tail = reader.row(page, await tailEntryId(page, branchId))
+    const { startEntryId } = await chapterByTitle(page, branchId, FIRST_CHAPTER)
+    await expect(tail).toHaveCount(0)
+    await expect(reader.jumpToBottom(page)).toBeVisible()
+
+    await reader.scroller(page).hover()
+    await page.mouse.wheel(0, 1_000_000)
+
+    await expect(tail).toHaveCount(1, { timeout: 10_000 })
+    await expect(reader.row(page, startEntryId)).toHaveCount(0)
+  })
+
+  test('End swaps a slice short of the tail to the tail', async () => {
+    const page = app.window
+    const tail = reader.row(page, await tailEntryId(page, branchId))
+    const { startEntryId } = await chapterByTitle(page, branchId, FIRST_CHAPTER)
+    await reader.chapterChip(page, OPEN_CHAPTER).click()
+    await reader.popoverRow(page, FIRST_CHAPTER).click()
+    await expect(reader.row(page, startEntryId)).toBeInViewport()
+    await expect(tail).toHaveCount(0)
+
+    await page.keyboard.press('End')
+
+    await expect(tail).toBeInViewport()
+    await expect(reader.row(page, startEntryId)).toHaveCount(0)
+  })
+
   test('the strip opens the popover on desktop', async () => {
     const page = app.window
     await expect(reader.popoverRow(page, FIRST_CHAPTER)).toBeHidden()

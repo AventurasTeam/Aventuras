@@ -29,6 +29,6 @@ that fails does nothing at all.
 - This was read from the expo source. What the identity loss costs on a
   grown window was then measured on a device
   ([Slice 5.3's measure](../milestones/05-chapters-chapter-close/slices/03-reader-chapters.md#android-measure)),
-  and the fix is a followup:
-  [`followups.md → UX`](../../followups.md#ux), "The sliding reader
-  window isn't built".
+  and the fix bounds what crosses: the document renders a slice of at
+  most 50 rows
+  ([`reader-composer.md → Loaded-set model`](../../ui/screens/reader-composer/reader-composer.md#loaded-set-model)).

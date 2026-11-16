@@ -1,16 +1,16 @@
-type BottomJumper = { jumpToBottom: () => void }
+type BottomJumper = { jumpToBottom: (sliceKey: number) => void }
 
 /**
- * Routes Jump to bottom to the mounted reader. On native, expo's DOM proxy returns undefined for a
- * method until the document registers its handle, so a call before the first paint would throw;
- * the boot lands at the bottom anyway.
+ * Routes Jump to bottom to the mounted reader, naming the slice key it lands on. Native: expo's
+ * DOM proxy's method is undefined until the document registers its handle; boot lands at bottom.
  */
 export function routeJumpToBottom(
   platform: string,
   surface: BottomJumper | null,
   document: BottomJumper | null,
   documentPainted: boolean,
+  sliceKey: number,
 ): void {
-  if (platform === 'web') surface?.jumpToBottom()
-  else if (documentPainted) document?.jumpToBottom()
+  if (platform === 'web') surface?.jumpToBottom(sliceKey)
+  else if (documentPainted) document?.jumpToBottom(sliceKey)
 }
