@@ -299,7 +299,7 @@ async function collectReferences(
   signal?: AbortSignal,
 ): Promise<string[]> {
   const kept: string[] = []
-  let free = limit
+  let free = Math.floor(limit)
   let next = 0
   while (free > 0 && next < images.length) {
     const batch = images.slice(next, next + free)

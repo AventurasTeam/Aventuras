@@ -759,6 +759,14 @@ describe('Image Provider Registry', () => {
         expect(send).toHaveBeenCalledWith(expect.objectContaining({ referenceImages: [PNG] }))
       })
 
+      it('rounds a fractional reference limit down', async () => {
+        const { generate: send } = setup({}, takes(['image/png'], { maxReferenceImages: 1.5 }))
+
+        await generate('m', [PNG, PNG])
+
+        expect(send).toHaveBeenCalledWith(expect.objectContaining({ referenceImages: [PNG] }))
+      })
+
       it('does not give a failed download slot to the next reference', async () => {
         const { generate: send } = setup({}, takes(['image/png'], { maxReferenceImages: 1 }))
         vi.mocked(fetchPublicImageBase64).mockImplementation(async (url) => {
