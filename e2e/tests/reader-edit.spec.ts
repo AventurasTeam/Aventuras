@@ -1,7 +1,6 @@
 import { expect, test } from '@playwright/test'
 
 import { currentBranchId, queryApp } from '../harness/db'
-import { t } from '../harness/i18n'
 import { launchApp, type LaunchedApp } from '../harness/launch'
 import { createSeededUserDataDir, removeUserDataDir } from '../harness/seed'
 import { chrome } from '../locators/chrome'
@@ -155,14 +154,8 @@ test.describe('reader — edit an entry', () => {
     // A seen undo commits well inside this; a silent refusal shows nothing at all.
     await app.window.waitForTimeout(1_500)
     expect(await replyContent()).toBe(headEdit)
-    // Scoped to the menu's rows: the other entries' held controls carry the same reason.
     await chrome.actionsTrigger(app.window).click()
-    await expect(
-      app.window
-        .getByRole('option')
-        .getByTitle(t('reader:editFocus.held'), { exact: true })
-        .first(),
-    ).toBeVisible()
+    await expect(reader.heldMenuRow(app.window)).toBeVisible()
     await app.window.keyboard.press('Escape')
     await expect(reader.editTextarea(app.window)).toHaveValue(draft)
 

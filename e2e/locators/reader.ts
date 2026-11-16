@@ -214,6 +214,10 @@ export const reader = {
   // Redo whatever it names, for its absence: every Redo sentence opens on the menu's own word.
   anyRedoRow: (page: Page): Locator =>
     page.getByRole('option', { name: new RegExp(`^${escapeRegExp(t('reader:actions.redo'))} `) }),
+  // A menu row an open editor holds. Scoped to the menu's options: the other entries' held
+  // controls carry the same reason.
+  heldMenuRow: (page: Page): Locator =>
+    page.getByRole('option').getByTitle(t('reader:editFocus.held'), { exact: true }).first(),
   // The confirm an unseen target opens, `Undo <target>?`, and its Undo.
   undoConfirm: (page: Page, title: string): Locator =>
     page.getByRole('alertdialog').filter({ hasText: title }),
