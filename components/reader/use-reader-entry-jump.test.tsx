@@ -326,6 +326,21 @@ describe('useReaderEntryJump', () => {
     expect(send).toHaveBeenCalledExactlyOnceWith('entry_10', 3)
   })
 
+  it('places a held landing when it sends, after a reload has reset the slice', async () => {
+    let key = 3
+    const slice: JumpSlice = { ...WINDOW_SLICE, placeLanding: () => ++key }
+    const { result, rerender } = renderHook(
+      ({ ready }) => useReaderEntryJump(BRANCH, ctx, ready, send, slice),
+      { initialProps: { ready: false } },
+    )
+    await act(() => result.current.jump('entry_10'))
+    // The reloaded document's handshake moves the slice to the tail before the reader is ready.
+    key += 10
+    rerender({ ready: true })
+    // A key from before the reset names a slice already gone, so the document could never land.
+    expect(send).toHaveBeenCalledExactlyOnceWith('entry_10', key)
+  })
+
   it('raises and lifts the veil without re-rendering its consumer', async () => {
     let renders = 0
     const { result, rerender } = renderHook(

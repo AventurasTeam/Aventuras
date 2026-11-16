@@ -281,7 +281,10 @@ by bumping `syncNonce`, forcing a fresh emission of current state.
 Native never assumes delivery before the first `onReady`. A jump's
 landing call waits in the host until the document has painted since
 it last booted, and a reload loses a call already made, so the host
-ends the jump's wait and lifts its veil if it shows.
+ends the jump's wait and lifts its veil if it shows. A waiting landing
+moves the slice and names its key only when it's sent: the handshake's
+reset to the tail would leave an earlier key naming a slice already
+gone.
 
 ## Streaming
 

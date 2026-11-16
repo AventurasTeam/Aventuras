@@ -5,7 +5,7 @@ import type { DbCtx } from '@/lib/db'
 import type { JumpClass } from './reader-slice'
 import { useEntryJump, type EntryJump } from './use-entry-jump'
 
-type Landing = { readonly entryId: string; readonly sliceKey: number; readonly sent: boolean }
+type Landing = { readonly entryId: string; readonly sent: boolean }
 
 /** The reader slice's side of a jump: where the target sits, and the slice it lands on. */
 export type JumpSlice = {
@@ -35,12 +35,13 @@ export function useReaderEntryJump(
   }, [ready])
 
   const { classifyJump, placeLanding, topLoaded } = slice
+  // Placed as it's sent: a reload resets the slice to the tail before ready, so a key named
+  // earlier would wait for a slice already gone.
   const land = useCallback(
     (entryId: string) => {
-      const sliceKey = placeLanding(entryId)
       const sent = readyRef.current
-      landingRef.current = { entryId, sliceKey, sent }
-      if (sent) send(entryId, sliceKey)
+      landingRef.current = { entryId, sent }
+      if (sent) send(entryId, placeLanding(entryId))
     },
     [placeLanding, send],
   )
@@ -92,8 +93,8 @@ export function useReaderEntryJump(
     }
     if (landing.sent) return
     landingRef.current = { ...landing, sent: true }
-    send(landing.entryId, landing.sliceKey)
-  }, [lost, ready, send])
+    send(landing.entryId, placeLanding(landing.entryId))
+  }, [lost, placeLanding, ready, send])
 
   return { jump, veil, landed }
 }
