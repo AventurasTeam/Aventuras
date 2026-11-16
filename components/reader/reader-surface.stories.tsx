@@ -1535,10 +1535,7 @@ const OVERFLOW_FOOTERS = Object.fromEntries(
   OVERFLOW_ROWS.map((row, i) => [row.id, { label: `Day ${i + 1}, dawn`, raw: i }]),
 )
 
-/**
- * Rows above the viewport growing while the open-at-bottom pin runs: the pin wins over the
- * anchor rule, which would otherwise hold the old reading line against it.
- */
+/** Rows above growing during the open-at-bottom pin: the pin wins over the anchor rule. */
 export const OpenPinWinsOverGrowthAbove: Story = {
   args: { rows: OVERFLOW_ROWS },
   render: (args) => (
@@ -2275,10 +2272,7 @@ export const JumpBeatsAHasOlderFlip: Story = {
   },
 }
 
-/**
- * A row too near the tail to reach the top stops at the bottom, and the loop still ends: a write
- * after it stays, where a running loop would land the row again.
- */
+/** A row too near the tail to reach the top stops at the bottom; the loop ends: writes stay. */
 export const JumpToTailRowStopsAtBottom: Story = {
   render: (args) => <JumpHarness {...args} />,
   args: { rows: OVERFLOW_ROWS },
@@ -3146,10 +3140,7 @@ export const JumpPendingDroppedByBranchChange: Story = {
   },
 }
 
-/**
- * A branch switch lands at the new branch's bottom: its copies share the old branch's entry ids,
- * which the anchor rule must not compensate against.
- */
+/** A branch switch lands at the new bottom: the anchor rule must skip the ids its copies reuse. */
 export const BranchSwitchLandsAtTheNewBottom: Story = {
   render: (args) => <JumpHarness {...args} />,
   args: { rows: PARTIAL_ROWS },
@@ -3467,7 +3458,7 @@ export const EditHandleRefusedCommitKeepsDraft: Story = {
   },
 }
 
-// ── The sliding window (reader-composer.md → Loaded-set model) ─────────────────────────────────
+// The sliding window: reader-composer.md → Loaded-set model.
 
 // Long enough for the slice to move inside it, as the host's window does.
 const SLICE_WINDOW: StoryEntry[] = Array.from({ length: 120 }, (_, i) =>
@@ -3492,8 +3483,7 @@ type SliceHostProps = ComponentProps<typeof ReaderSurface> & {
   jumpTargets?: string[]
 }
 
-// The route's slice host over a fixed window, through the same pure rules: the document's requests
-// move the slice, and each button is one more thing the host does.
+// The route's slice host, same pure rules over a fixed window; each button is one host action.
 function SliceHostHarness({
   openAt,
   olderAbove = false,
@@ -3756,10 +3746,7 @@ export const SliceTrimsAfterALongScroll: Story = {
   },
 }
 
-/**
- * A commit adding rows above the viewport waits while a finger is down, and lands at rest,
- * compensated for where the gesture left the reader.
- */
+/** Rows added above wait under a finger and land at rest, compensated for where the drag ended. */
 export const SliceChangeAboveWaitsUnderAFinger: Story = {
   render: (args) => <SliceHostHarness {...args} />,
   play: async () => {
@@ -3857,10 +3844,7 @@ export const SliceJumpTakesAHeldChange: Story = {
   },
 }
 
-/**
- * A jump lands only on the slice it named or a later one: its target in the slice it leaves,
- * with the row above missing, would land without its chapter break.
- */
+/** A jump lands only on its named slice or later: the one it leaves lacks the target's break. */
 export const SliceLandingWaitsForItsKey: Story = {
   args: { onEntryLanded: fn(async () => {}) },
   render: (args) => <SliceHostHarness {...args} windowBreaks={{ s70: { number: 4 } }} />,
@@ -3910,10 +3894,7 @@ export const SliceWithoutTheTargetDropsTheJump: Story = {
   },
 }
 
-/**
- * A jump to the branch's first row drops the shimmer in its own commit: the row lands at the top
- * edge, where nothing is above it, and stays there.
- */
+/** A jump to the branch's first row drops the shimmer in its commit: it lands flush and stays. */
 export const SliceJumpToTheBranchTopDoesNotShift: Story = {
   render: (args) => <SliceHostHarness {...args} olderAbove />,
   play: async () => {
@@ -3928,9 +3909,8 @@ export const SliceJumpToTheBranchTopDoesNotShift: Story = {
 }
 
 /**
- * A turn sent from the bottom grows the slice past 50 and its reply streams engaged: the trim
- * that brings it back waits for a scroll's rest, so it can't move the reader off the bottom
- * between the user's row and the reply.
+ * A turn sent from the bottom grows the slice past 50 and streams engaged: the trim back waits
+ * for a scroll's rest, so it can't move the reader off the bottom before the reply.
  */
 export const SliceTurnPast50StreamsEngaged: Story = {
   render: (args) => <SliceHostHarness {...args} />,
@@ -3949,10 +3929,7 @@ export const SliceTurnPast50StreamsEngaged: Story = {
   },
 }
 
-/**
- * The anchor rule's own write is no scroll of the reader's: rows landing above with a turn's row
- * below compensate without recording the reader as having left the bottom, so the reply follows.
- */
+/** The anchor rule's own write is no reader scroll: it doesn't disengage, so the reply follows. */
 export const SliceCompensationKeepsTheReplyEngaged: Story = {
   render: (args) => <SliceHostHarness {...args} />,
   play: async () => {

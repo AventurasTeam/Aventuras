@@ -37,9 +37,8 @@ export type LandingSettle = {
 }
 
 /**
- * The per-frame rules of a jump's landing (reader-composer.md → Where a jump lands). Each frame
- * calls `plan` before its write and `settle` after reading the scroll position back, since the
- * browser clamps a write at either end.
+ * A jump's per-frame landing rules (reader-composer.md → Where a jump lands). Call `plan` before
+ * the write and `settle` on the read-back position: the browser clamps a write at either end.
  */
 export type LandingMachine = {
   plan(frame: LandingFrame): LandingStep
@@ -88,8 +87,9 @@ export function createLandingMachine(): LandingMachine {
       // One halt: should a fling outlive it, the loop waits for rest rather than fight it.
       halting = current.writable && !halted && movingFrames >= 2
       if (halting) halted = true
-      // A frame the loop had to correct hasn't settled: a fling's sub-pixel tail reads as rest. Nor
-      // has one inside a chain, whose next wheel would scroll the reader once the loop let go.
+      // A frame that didn't land never settles, or the loop would end without having landed. Nor
+      // has one the loop had to correct (a fling's sub-pixel tail reads as rest), or one inside a
+      // chain, whose next wheel would scroll the reader once the loop let go.
       const settled =
         current.land &&
         !current.wheelChainLive &&

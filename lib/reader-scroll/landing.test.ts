@@ -21,7 +21,7 @@ function asFrame(step: LandingStep) {
   return step
 }
 
-/** Runs one frame in which the reader sits still at `scrollTop`; returns the plan and settle. */
+/** Runs one frame in which the reader sits still at `scrollTop`. */
 function still(
   machine: ReturnType<typeof createLandingMachine>,
   overrides: Partial<LandingFrame> = {},

@@ -140,10 +140,9 @@ export type EntryJump = {
 type JumpDropCause = 'bound' | 'left_window' | 'document_reload'
 
 /**
- * `classify`, `land` (platform dispatch) and `topLoaded` must be stable. `classify` says where the
- * target sits against the reader's slice. `topLoaded` runs in the store write's tick only when a
- * read brings in a target that is the branch's first row, so the host drops its shimmer in that
- * commit. `lost` reports a landing call for `entryId` that a document reload lost.
+ * `classify`, `land` (platform dispatch) and `topLoaded` must be stable. `topLoaded` runs in the
+ * store write's tick, only when a read brings in a target that is the branch's first row, so the
+ * host drops its shimmer in that commit. `lost` reports a landing a document reload lost.
  */
 export function useEntryJump(
   branchId: string,

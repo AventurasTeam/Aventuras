@@ -24,7 +24,6 @@ const row = (position: number): Row => ({
   position,
   content: `text ${position}`,
 })
-/** Rows at positions `from`..`to`, ascending. */
 const span = (from: number, to: number): Row[] =>
   Array.from({ length: to - from + 1 }, (_, i) => row(from + i))
 
@@ -32,7 +31,6 @@ function slice(top: number, bottom: number | null, extra: Partial<SliceState> = 
   return { branchId: BRANCH, top, bottom, key: 7, windowHasOlder: true, ...extra }
 }
 
-/** The positions a state renders over a window, first and last. */
 function shown(state: SliceState, window: Row[]) {
   const view = deriveSlice(state, BRANCH, window, PAGE)
   const rows = view.rows

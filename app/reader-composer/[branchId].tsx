@@ -360,8 +360,7 @@ export default function ReaderComposerRoute() {
     () => chapterBreaksOf([...chapterRows.values()], slice.rows, worldTimeDecorations),
     [chapterRows, slice.rows, worldTimeDecorations],
   )
-  // Walked over the window, so the slice's first row reads its monotonicity break from the row
-  // above; cut to the slice's rows for the document.
+  // Walked over the window: the slice's first row reads its monotonicity break from the row above.
   const sliceDecorations = useMemo(
     () =>
       Object.fromEntries(
@@ -552,9 +551,8 @@ export default function ReaderComposerRoute() {
   const reload = useCallback(async () => {
     const recent = await readRecentEntries(branchId, db)
     if (!entriesStore.hydrateIfLoaded(branchId, recent)) return
-    // A recent-window reload drops any older entries a scroll-up had loaded, so the slice goes to
-    // the tail and the boundary is recomputed: a full window means older may exist, a short one
-    // proves the branch top is in the window.
+    // The reload drops older entries a scroll-up loaded, so the slice returns to the tail; a full
+    // window means older may exist, a short one proves the branch top is in it.
     sliceReloaded(recent.length >= ENTRIES_WINDOW_SIZE)
   }, [branchId, sliceReloaded])
 
@@ -1576,8 +1574,7 @@ export default function ReaderComposerRoute() {
     enabled: isFocused,
   })
 
-  // Engage/settle semantics live in the surface's own jumpToBottom; the host swaps a slice short
-  // of the tail to the tail's last rows and names the key the jump lands on.
+  // Engage/settle live in the surface's own jumpToBottom; the host moves the slice to the tail.
   const { toTail: sliceToTail } = slice
   const jumpToBottom = useCallback(
     () =>

@@ -48,7 +48,7 @@ export type SliceView<T extends SliceRow> = {
 
 type Bounds = { topIdx: number; bottomIdx: number }
 
-/** The first index whose position passes `passes`, by binary search; positions only ever rise. */
+/** Binary search; window positions only ever rise. */
 function firstIndexWhere(
   window: readonly SliceRow[],
   passes: (position: number) => boolean,
@@ -148,18 +148,16 @@ export function reloadSlice(
 
 /**
  * What a read proved about rows above the window, on its own key: a landing named after a proven
- * top waits for the commit that drops the top skeleton, rather than landing beside it and
- * shifting when it goes.
+ * top waits for the commit that drops the top skeleton instead of shifting when it goes.
  */
 export function markWindowTop(state: SliceState, windowHasOlder: boolean): SliceState | null {
   return commit(state, { windowHasOlder })
 }
 
 /**
- * Extends the slice up by {@link SLICE_STEP} rows from the window and, in the same write, trims
- * its bottom back to {@link SLICE_CAP}, never past the request's keep row. After a read into the
- * window, `windowHasOlder` is what the read proved, applied in the same key. Null when the request
- * names another slice or nothing changes.
+ * Extends the slice up by {@link SLICE_STEP} and trims its bottom back to {@link SLICE_CAP} in the
+ * same write, never past the keep row; after a read, `windowHasOlder` is what it proved, same key.
+ * Null when the request names another slice or nothing changes.
  */
 export function extendUp(
   state: SliceState,
@@ -239,8 +237,7 @@ function trimmedTop(
 
 /**
  * A jump lands at once when its target and the row above it (whose break the landing opens under)
- * are both in the slice, or the target is the proven branch top. The window's oldest row with
- * older rows possible needs a read for the row above.
+ * are in the slice, or the target is the proven branch top; an unproven window top needs a read.
  */
 export function classifyJump(
   state: SliceState,
@@ -255,9 +252,8 @@ export function classifyJump(
 }
 
 /**
- * The slice a jump moves to: {@link SLICE_CAP} rows from the row above the target down, or the
- * tail's last {@link SLICE_CAP} when those would reach the tail. Null when the jump lands at once
- * or the target isn't in the window.
+ * {@link SLICE_CAP} rows from the row above the target down, or the tail's last {@link SLICE_CAP}
+ * when they'd reach the tail. Null when the jump lands at once or the target isn't in the window.
  */
 export function placeJump(
   state: SliceState,
@@ -276,9 +272,8 @@ export function placeJump(
 }
 
 /**
- * The slice's rows and flags over the current window. A state for another branch opens the slice;
- * a slice that lost every row falls back to the tail's last {@link SLICE_CAP}; a bottom with
- * nothing below it becomes the tail, so new turns extend the slice again. Each returns `next`.
+ * Another branch's state opens the slice; an emptied slice falls back to the tail's last cap;
+ * a bottom with nothing below becomes the tail, so new turns extend it. Each returns `next`.
  */
 export function deriveSlice<T extends SliceRow>(
   state: SliceState | null,

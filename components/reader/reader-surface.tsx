@@ -63,21 +63,16 @@ const LANDED_HIGHLIGHT_MS = 1_500
 // Custom properties inherit; the card's animation can't read the wrapper's animation-duration.
 const LANDED_ROW_STYLE = { '--reader-landed-ms': `${LANDED_HIGHLIGHT_MS}ms` } as CSSProperties
 
-// No content-visibility culling on rows: placeholder-height settle shifted
-// content under the user's finger on every first upward pass (device-observed,
-// worst on rich rows), and browser scroll anchoring doesn't fire for this
-// tree. The slice (at most SLICE_CAP rows at rest) is small enough to keep
-// fully laid out — real heights make landing, prepend compensation, and
-// scrolling exact.
+// No content-visibility culling: placeholder heights settling shifted content under the finger
+// (device-observed; no scroll anchoring here). A slice of at most SLICE_CAP rows lays out in full.
 const ROW_FRAME_CLASS = 'mx-auto w-full max-w-[860px] px-7 py-2'
 
 /** A jump held until the document has committed a slice at `key` or past it. */
 type Landing = { entryId: string; key: number; running: boolean }
 
 /**
- * The topmost row in the viewport, by index, with every row's id and content offset, and the
- * scroll position they were read at: a commit that shrinks the content clamps scrollTop before
- * the anchor rule runs, so the rule compensates from this position, not the clamped one.
+ * The topmost viewport row plus every row's id and offset, and the scrollTop they were read at: a
+ * shrinking commit clamps scrollTop before the anchor rule runs, so it compensates from this one.
  */
 type AnchorMemo = {
   branchKey: string
@@ -90,8 +85,7 @@ type AnchorMemo = {
 const rowElementsOf = (el: HTMLElement) =>
   Array.from(el.querySelectorAll<HTMLElement>('[data-entry-row]'))
 
-// Offsets inside the scroller's content, whatever it has scrolled: rows and the scroller share an
-// offset parent.
+// Scroll-independent content offset: rows and the scroller share an offset parent.
 const contentTop = (el: HTMLElement, rowEl: HTMLElement) => rowEl.offsetTop - el.offsetTop
 
 // Branch copies share entry ids, so the memo names its branch.
@@ -352,9 +346,8 @@ export function ReaderSurface({
   ref,
   ...incoming
 }: ReaderSurfaceProps & { ref?: Ref<ReaderSurfaceHandle> }) {
-  // Everything renders from `shown`, the props as last adopted. A change that adds or removes rows
-  // above the viewport waits for scroll rest (reader-document.md → Entry list), and adopting in a
-  // layout effect lets that decision read the DOM the change would move.
+  // Renders from `shown`, the props as last adopted (reader-document.md → Entry list). Adopting in
+  // a layout effect lets the hold decision read the DOM the change would move.
   const [shown, setShown] = useState<ReaderSurfaceProps>(incoming)
   const {
     rows,
@@ -411,8 +404,7 @@ export function ReaderSurface({
     setShowJumpToBottom(computeScrollMetrics(el).distanceFromBottomPx > NEAR_BOTTOM_THRESHOLD_PX)
   }, [])
 
-  // Scroll rest: no finger down and no scroll event for REST_MS. Boundary requests, trims and held
-  // changes all wait for it; whatever might have work for it arms the check again.
+  // Boundary requests, trims and held changes all wait for rest; whatever may have work re-arms it.
   const gestureActiveRef = useRef(false)
   const lastScrollAtRef = useRef(Number.NEGATIVE_INFINITY)
   const midGesture = useCallback(
@@ -553,11 +545,9 @@ export function ReaderSurface({
   const lastWheelHandledAtRef = useRef(Number.NEGATIVE_INFINITY)
   const lastWheelSignRef = useRef(0)
 
-  // A close's break mounting under a reader at the bottom hides the reply's last lines with no
-  // scroll event to raise the jump button. Only a break under a row the last commit already showed
-  // is a close's; one arriving with its rows is the slice moving. Sits ahead of the anchor rule,
-  // whose scrollTop write would skew the distance, and measures the last commit's height, since
-  // this commit's already holds the break. Short of the tail there's no bottom to pin.
+  // A close's break (under a row the last commit showed; with its rows, it's the slice moving)
+  // hides a bottom reader's last lines without a scroll event. Ahead of the anchor rule (its write
+  // skews the distance), on the last commit's pre-break height; short of the tail, no bottom.
   const lastCommitHeightRef = useRef<number | null>(null)
   const lastCommitRowIdsRef = useRef<ReadonlySet<string>>(new Set())
   const lastCommitBreakIdsRef = useRef<ReadonlySet<string>>(new Set())
@@ -585,18 +575,11 @@ export function ReaderSurface({
     lastCommitBreakIdsRef.current = new Set(Object.keys(shownRef.current.chapterBreaks))
   })
 
-  // Everything that changes height above the reading position (rows added or trimmed, a
-  // shimmer mounting or unmounting, a break, a footer re-wrap) funnels through one anchor rule:
-  // the topmost row in the viewport at the last commit or rest has its content-offset delta
-  // applied to scrollTop. Chrome's scroll anchoring skips this tree (desktop-observed), so the
-  // scroller opts out via overflow-anchor:none and this rule is the sole authority; split per-cause
-  // compensations fought each other here. When that row is gone, the surviving row nearest it
-  // stands in. The short hold loop absorbs late layout of inserted content. It runs on each slice
-  // adopted; the adoption records the memo just before, and a scroll drops it, so a commit never
-  // undoes one.
+  // The one anchor rule (reader-document.md → Entry list): the memo row's, or nearest survivor's,
+  // offset delta, then a hold against late layout. A scroll drops the memo: no commit undoes one.
   const anchorMemoRef = useRef<AnchorMemo | null>(null)
-  // Where the anchor rule last wrote scrollTop: that scroll event is the reader's own write, not the
-  // user scrolling (reader-composer.md → Autoscroll), so it moves neither autoscroll nor the memo.
+  // The anchor rule's last scrollTop write: its scroll event is the reader's own, not the user's
+  // (reader-composer.md → Autoscroll), so it moves neither autoscroll nor the memo.
   const anchorWriteRef = useRef<number | null>(null)
   const anchorHoldRafRef = useRef(0)
   useEffect(() => () => cancelAnimationFrame(anchorHoldRafRef.current), [])
@@ -646,8 +629,7 @@ export function ReaderSurface({
         let totalFrames = 0
         const hold = () => {
           if (!anchorHoldActiveRef.current || !anchorEl.isConnected) return
-          // Sub-pixel tolerance: scrollTop writes round, so a fractional drift
-          // can never fully clear — without it this loop would spin to the cap.
+          // scrollTop writes round: without the 1px floor, sub-pixel drift spins this to the cap.
           const drift = anchorEl.getBoundingClientRect().top - targetTop
           if (Math.abs(drift) >= 1) {
             writeAnchorScroll(el, el.scrollTop + drift)
@@ -668,10 +650,8 @@ export function ReaderSurface({
     anchorMemoRef.current = readAnchor(el, rowEls, shownBranch)
   }, [shown, writeAnchorScroll])
 
-  // Adoption: after the anchor rule has recorded the row the reader is on, a props change is
-  // adopted before paint, unless it adds or removes rows or breaks above that row, or flips the
-  // top shimmer, while a gesture runs. Then the shown part above the anchor holds until rest and
-  // everything from it down stays live. A jump's own slice and a branch switch never wait.
+  // After the anchor rule. Mid-gesture, a change above the anchor row (rows, breaks, top shimmer)
+  // holds that part until rest; below stays live. A jump's slice and a branch switch never wait.
   const incomingRef = useRef(incoming)
   const sourceRef = useRef(incoming)
   const heldRef = useRef(false)
@@ -829,9 +809,8 @@ export function ReaderSurface({
     if (streamActiveRef.current) autoscrollRef.current.streamStarted({ distanceFromBottomPx: 0 })
     else autoscrollRef.current.autoscrollApplied({ distanceFromBottomPx: 0 })
   }, [startBottomPin])
-  // After the anchor rule's effect, on each adopted slice: a jump waiting for this key lands, and a
-  // landing whose slice at or past its key lacks the row drops, or it would hold every trim back.
-  // Landing cancels any hold the anchor rule just started; one rule per frame.
+  // After the anchor rule, per adopted slice: a waiting jump lands, cancelling the rule's hold (one
+  // rule per frame). A landing whose slice lacks its row drops, or it would hold every trim back.
   useLayoutEffect(() => {
     const bottomKey = pendingBottomRef.current
     if (bottomKey != null && sliceKey >= bottomKey) {
@@ -859,17 +838,14 @@ export function ReaderSurface({
   useLayoutEffect(() => {
     requestInFlightRef.current = false
   }, [sliceKey])
-  // A new slice may want an extension or a trim at the next rest. Rows a turn adds don't arm it:
-  // their trim waits for a scroll's rest, so its compensating scroll can't move a reader at the
-  // bottom off it between the user's row and the reply, which would start the stream disengaged.
+  // Keyed on sliceKey, not rows: a turn's trim waits for a scroll's rest, else its compensating
+  // write could lift a bottom reader between the user's row and the reply, disengaging the stream.
   useLayoutEffect(() => {
     armRest()
   }, [sliceKey, armRest])
 
-  // At rest, a held change is adopted first; its commit arms the next rest, so a request measures
-  // the slice the host holds. Then one request: extend toward the edge the reader is within a
-  // viewport-height of, else trim the end farther from the viewport. The extensions and trims fire
-  // only here: their compensating scroll write never fights compositor-owned scrolling.
+  // A held change adopts first and its commit re-arms rest, so a request measures the host's slice.
+  // Extensions and trims fire only here: their compensating write never fights compositor scroll.
   const onRest = useCallback(() => {
     if (midGesture()) return
     if (landingRef.current != null || pendingBottomRef.current != null) return
@@ -1030,10 +1006,9 @@ export function ReaderSurface({
     armRest()
   }, [armRest])
 
-  // Stream lifecycle + pin. Layout effect so the pin targets the row height
-  // the just-arrived chunk actually produced. Short of the tail the host sends no stream: a card
-  // the slice takes with it hasn't ended, and one an extension brings in starts disengaged
-  // (reader-composer.md → Autoscroll → At the tail only); one a bottom jump brings in is engaged.
+  // Layout effect: the pin targets the height the just-arrived chunk produced. Short of the tail no
+  // stream comes; a card the slice leaves with hasn't ended, one an extension brings is disengaged,
+  // one a bottom jump brings is engaged (reader-composer.md → Autoscroll → At the tail only).
   const previousHasNewerRef = useRef(hasNewer)
   useLayoutEffect(() => {
     const machine = autoscrollRef.current
@@ -1111,9 +1086,8 @@ export function ReaderSurface({
 
   const jumpToBottom = useCallback(
     (key: number) => {
-      // Cancel any active bottom pin / anchor-hold loop first: otherwise a hold
-      // spawned by a just-fired boundary prepend keeps yanking scrollTop toward
-      // the top anchor while this animates to the bottom, and they fight.
+      // Stop pin and anchor hold first: a hold from a just-fired prepend would keep yanking
+      // scrollTop toward its anchor while this animates to the bottom.
       stopBottomPin()
       stopLanding()
       anchorHoldActiveRef.current = false

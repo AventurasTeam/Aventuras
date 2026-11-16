@@ -1,9 +1,8 @@
 type BottomJumper = { jumpToBottom: (sliceKey: number) => void }
 
 /**
- * Routes Jump to bottom to the mounted reader, naming the slice key it lands on. On native, expo's
- * DOM proxy returns undefined for a method until the document registers its handle, so a call
- * before the first paint would throw; the boot lands at the bottom anyway.
+ * Routes Jump to bottom to the mounted reader, naming the slice key it lands on. Native: expo's
+ * DOM proxy's method is undefined until the document registers its handle; boot lands at bottom.
  */
 export function routeJumpToBottom(
   platform: string,

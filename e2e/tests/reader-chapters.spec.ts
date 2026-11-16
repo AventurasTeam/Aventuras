@@ -298,8 +298,8 @@ test.describe.serial('Reader chapter chrome', () => {
     await expect(reader.row(page, startEntryId)).toBeInViewport()
   })
 
-  // reader-composer.md → Loaded-set model: the document renders a slice of at most 50 rows. The
-  // first chapter's jump left one from the branch's top, short of the tail.
+  // reader-composer.md → Loaded-set model. Starts on the slice the first chapter's jump left: from
+  // the branch's top, short of the tail.
   test('a slice short of the tail extends down at rest until it reaches the tail', async () => {
     const page = app.window
     const tail = reader.row(page, await tailEntryId(page, branchId))

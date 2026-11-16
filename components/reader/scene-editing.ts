@@ -51,12 +51,9 @@ export function useSceneEditing(
   // scoping would render them as unknown.
   const entityNames = useMemo(() => entities.map((e) => ({ id: e.id, name: e.name })), [entities])
 
-  // Resolved here, not in the card: only this entry gets edit handlers, so every other
-  // card renders no control at all rather than a disabled one. Read off rows that reach
-  // the live edge because the action layer resolves the same head turn off the DB tail:
-  // the reader's slice can stop short of it, and then holds no row with this id, rather
-  // than offering scene editing, Save & regenerate and the self-heals notice on a row
-  // whose edit the action layer treats as frozen, which is silent drift under reassuring copy.
+  // Resolved here, not in the card: other cards render no control, not a disabled one. Live edge
+  // only: the action layer resolves the head turn off the DB tail, so a slice stopping short would
+  // offer edits on a row it treats as frozen — silent drift under reassuring copy.
   const tailEntryId = useMemo(
     () => (holdsLiveEdge ? (resolveHeadTurn(entries)?.tail.id ?? null) : null),
     [entries, holdsLiveEdge],

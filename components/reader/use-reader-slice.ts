@@ -113,8 +113,7 @@ export function useReaderSlice(
     if (view.next != null) store.replace(state, view.next)
   }, [store, state, view.next])
 
-  // The state as the document sees it (an open or fallback the layout effect hasn't stored yet),
-  // with the window it was read against.
+  // The document's view of the state, with any open or fallback the layout effect hasn't stored.
   const current = useCallback((): { from: SliceState; window: StoryEntry[] } | null => {
     const stored = store.get()
     const window = readWindow(branchId)
