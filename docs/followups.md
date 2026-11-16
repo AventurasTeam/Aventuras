@@ -271,38 +271,6 @@ for the placement rule.
   down. Both from 5.3's slice review, 2026-11-03, in stories, not on a
   device. Routed from triage 2026-11-05.
 
-- **Undo doesn't say what it reverses.**
-  [`reader-composer.md → Undo and redo`](./ui/screens/reader-composer/reader-composer.md#undo-and-redo)
-  is the spec. Each undo and redo names its target. An unseen target,
-  such as a close or a World save, confirms first. Every undo that lands
-  shows a notice with Redo. Today a successful undo shows nothing, and
-  the menu reads `Undo last action`. Build notes from the design:
-  - `undoLastAction` and `redoLastAction` take the `actionId` their
-    label or confirm named. They refuse with a new code when the head
-    moved.
-  - One describe function over a group's deltas, or the redo
-    snapshot's, gives the target, its kind and whether it is seen. The
-    label, the confirm and the notice all use it, with names and entry
-    numbers through History's humanizer.
-  - Four writers stamp `$undoKind` on their entry delta:
-    - the content edit (`lib/actions/story-entries/operational.ts`);
-    - the scene edit (`scene-fields.ts`);
-    - the world-time edit (`world-time.ts`);
-    - suggestion refresh
-      (`lib/pipeline/definitions/suggestion-refresh.ts`).
-  - The menu's Undo label resolves when the menu opens, and Redo's
-    from the snapshot.
-  - Per-kind i18n strings, three places each.
-  - The shared `common:deleteUndoHint` quotes no label any more.
-  - A newer notice replaces the older one by its toast id. `lib/toast`
-    returns the id and has `toast.dismiss`, but `toast.md`'s API
-    documents neither.
-  - The E2E locators `undoRow` and `undoMenuRow`
-    (`e2e/locators/reader.ts`) match the label's exact text, so they
-    need a prefix or role match once the label names its target.
-
-  Raised by the developer 2026-11-16 and designed the same day.
-
 ## Tuning and play testing
 
 v1 work held for the end of the cycle, once every base system is

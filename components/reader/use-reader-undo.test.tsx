@@ -1,0 +1,364 @@
+// @vitest-environment jsdom
+import { act, cleanup, renderHook, waitFor } from '@testing-library/react'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+
+import {
+  __redoGroupForTest,
+  type readUndoImpact,
+  type readUndoTarget,
+  type redoLastAction,
+  type undoLastAction,
+  type UndoResult,
+  type UndoTargetRead,
+} from '@/lib/actions'
+import type { Delta } from '@/lib/db'
+import { entitiesStore, undoRedoStore } from '@/lib/stores'
+import { toastStore, type ToastItem } from '@/lib/toast'
+
+import { useReaderUndo } from './use-reader-undo'
+
+const actions = vi.hoisted(() => ({
+  readUndoTarget: vi.fn<typeof readUndoTarget>(),
+  readUndoImpact: vi.fn<typeof readUndoImpact>(),
+  undoLastAction: vi.fn<typeof undoLastAction>(),
+  redoLastAction: vi.fn<typeof redoLastAction>(),
+}))
+
+vi.mock('@/lib/actions', async (importOriginal) => ({
+  ...(await importOriginal<Record<string, unknown>>()),
+  ...actions,
+}))
+// The real confirm renders rn-primitives chrome the unit project can't load; its props are what
+// the hook decides.
+vi.mock('./undo-confirm', () => ({ UndoConfirm: () => null }))
+
+const ctx = {} as Parameters<typeof undoLastAction>[1]
+const OK: UndoResult = { status: 'ok' }
+
+let log = 0
+function delta(over: Partial<Delta>): Delta {
+  log += 1
+  return {
+    id: `d${log}`,
+    branchId: 'b1',
+    actionId: 'act_1',
+    op: 'update',
+    targetTable: 'entities',
+    targetId: 'ent',
+    entryId: null,
+    source: 'user_edit',
+    undoPayload: null,
+    logPosition: log,
+    encodingVersion: 1,
+    createdAt: 1,
+    ...over,
+  }
+}
+
+const TURN: UndoTargetRead = {
+  actionId: 'act_turn',
+  deltas: [
+    delta({ actionId: 'act_turn', op: 'create', targetTable: 'story_entries', targetId: 'e2' }),
+  ],
+  entryPositions: { e2: 2 },
+}
+
+// Newest first, as the log reads a group: an edit, then the delete that followed it.
+const LORE_SAVE: UndoTargetRead = {
+  actionId: 'act_save',
+  deltas: [
+    delta({
+      actionId: 'act_save',
+      op: 'delete',
+      targetTable: 'lore',
+      targetId: 'lore_1',
+      undoPayload: { title: 'The toll' },
+    }),
+    delta({ actionId: 'act_save', op: 'update', targetTable: 'lore', targetId: 'lore_1' }),
+  ],
+  entryPositions: {},
+}
+
+const CLOSE: UndoTargetRead = {
+  actionId: 'act_close',
+  deltas: [
+    delta({
+      actionId: 'act_close',
+      source: 'chapter_close',
+      op: 'create',
+      targetTable: 'chapters',
+      targetId: 'ch3',
+    }),
+  ],
+  entryPositions: {},
+}
+
+let toasts: ToastItem[] = []
+
+// An undo that lands pushes the redo group it took, as undoLastAction does: the target's rows as
+// they stood before it.
+function undoLands(read: UndoTargetRead, rowBeforeUndo: Record<string, unknown> | null = null) {
+  actions.undoLastAction.mockImplementation(async () => {
+    const snapshots = read.deltas.map((d) => ({ delta: d, rowBeforeUndo }))
+    undoRedoStore.pushRedoGroup(__redoGroupForTest(snapshots, read.actionId))
+    return OK
+  })
+}
+
+function render(focused = true) {
+  return renderHook(
+    (props: { isFocused: boolean }) => useReaderUndo({ branchId: 'b1', ctx, ...props }),
+    {
+      initialProps: { isFocused: focused },
+    },
+  )
+}
+
+async function settle() {
+  await act(async () => {
+    await new Promise((resolve) => setTimeout(resolve, 0))
+  })
+}
+
+beforeEach(() => {
+  toastStore.__reset()
+  toasts = []
+  toastStore.subscribe((next) => {
+    toasts = next
+  })
+  undoRedoStore.clear()
+  entitiesStore.__reset()
+  for (const fn of Object.values(actions)) fn.mockReset()
+  actions.readUndoImpact.mockResolvedValue(null)
+})
+afterEach(() => cleanup())
+
+describe('useReaderUndo — the label', () => {
+  it('reads Undo last action until the target resolves as the menu opens', async () => {
+    actions.readUndoTarget.mockResolvedValue(TURN)
+    const r = render()
+    expect(r.result.current.undoLabel).toBe('Undo last action')
+
+    act(() => r.result.current.onMenuOpenChange(true))
+    await waitFor(() => expect(r.result.current.undoLabel).toBe('Undo the turn at entry #2'))
+  })
+
+  it('ends an unseen target in an ellipsis, since it opens a confirm', async () => {
+    actions.readUndoTarget.mockResolvedValue(CLOSE)
+    entitiesStore.__reset()
+    const r = render()
+    act(() => r.result.current.onMenuOpenChange(true))
+    // No chapter row is loaded, so the target falls to the catch-all, still unseen.
+    await waitFor(() => expect(r.result.current.undoLabel).toBe('Undo the latest change…'))
+  })
+
+  it('drops a resolution that lands after the menu closed', async () => {
+    let finish!: (read: UndoTargetRead) => void
+    actions.readUndoTarget.mockReturnValue(new Promise((resolve) => (finish = resolve)))
+    const r = render()
+    act(() => r.result.current.onMenuOpenChange(true))
+    act(() => r.result.current.onMenuOpenChange(false))
+    await act(async () => finish(TURN))
+    expect(r.result.current.undoLabel).toBe('Undo last action')
+  })
+
+  it('names Redo from the stack top, and has none with the stack empty', () => {
+    const r = render()
+    expect(r.result.current.redoLabel).toBeNull()
+    act(() =>
+      undoRedoStore.pushRedoGroup(
+        __redoGroupForTest(
+          [{ delta: TURN.deltas[0], rowBeforeUndo: { id: 'e2', position: 2 } }],
+          'act_turn',
+        ),
+      ),
+    )
+    expect(r.result.current.redoLabel).toBe('Redo the turn at entry #2')
+  })
+})
+
+describe('useReaderUndo — a seen target', () => {
+  it('undoes the action its label named, at once, and shows the notice with Redo', async () => {
+    actions.readUndoTarget.mockResolvedValue(TURN)
+    undoLands(TURN, { id: 'e2', position: 2 })
+    const r = render()
+    act(() => r.result.current.onMenuOpenChange(true))
+    await waitFor(() => expect(r.result.current.undoLabel).toContain('entry #2'))
+
+    act(() => r.result.current.undo('menu'))
+    await settle()
+
+    expect(actions.undoLastAction).toHaveBeenCalledWith('b1', ctx, { expectedActionId: 'act_turn' })
+    expect(r.result.current.confirmOpen).toBe(false)
+    expect(toasts).toHaveLength(1)
+    expect(toasts[0]).toMatchObject({ severity: 'info', message: 'Undid the turn at entry #2' })
+    expect(toasts[0].action?.label).toBe('Redo')
+  })
+
+  it('reads the target itself on the keyboard path', async () => {
+    actions.readUndoTarget.mockResolvedValue(TURN)
+    undoLands(TURN, { id: 'e2', position: 2 })
+    const r = render()
+    act(() => r.result.current.undo('keyboard'))
+    await settle()
+    expect(actions.undoLastAction).toHaveBeenCalledWith('b1', ctx, { expectedActionId: 'act_turn' })
+  })
+
+  it('offers no Redo when the undo left nothing to redo', async () => {
+    actions.readUndoTarget.mockResolvedValue(TURN)
+    actions.undoLastAction.mockResolvedValue(OK)
+    const r = render()
+    act(() => r.result.current.undo('keyboard'))
+    await settle()
+    expect(toasts).toHaveLength(1)
+    expect(toasts[0].action).toBeUndefined()
+  })
+
+  it("replaces an older notice with a newer undo's", async () => {
+    actions.readUndoTarget.mockResolvedValue(TURN)
+    undoLands(TURN, { id: 'e2', position: 2 })
+    const r = render()
+    act(() => r.result.current.undo('keyboard'))
+    await settle()
+    act(() => r.result.current.undo('keyboard'))
+    await settle()
+    expect(actions.undoLastAction).toHaveBeenCalledTimes(2)
+    expect(toasts).toHaveLength(1)
+  })
+
+  it('redoes through the notice, pinned to what the undo reversed', async () => {
+    actions.readUndoTarget.mockResolvedValue(TURN)
+    undoLands(TURN, { id: 'e2', position: 2 })
+    actions.redoLastAction.mockResolvedValue(OK)
+    const r = render()
+    act(() => r.result.current.undo('keyboard'))
+    await settle()
+
+    act(() => toasts[0].action?.onPress())
+    await settle()
+
+    expect(actions.redoLastAction).toHaveBeenCalledWith('b1', ctx, { expectedActionId: 'act_turn' })
+    expect(toasts).toHaveLength(1)
+    expect(toasts[0].message).toBe('Redid the turn at entry #2')
+    expect(toasts[0].action).toBeUndefined()
+  })
+})
+
+describe('useReaderUndo — an unseen target', () => {
+  it('asks first, then undoes exactly the action the confirm named', async () => {
+    actions.readUndoTarget.mockResolvedValue(LORE_SAVE)
+    undoLands(LORE_SAVE)
+    const r = render()
+
+    act(() => r.result.current.undo('keyboard'))
+    await settle()
+
+    expect(actions.undoLastAction).not.toHaveBeenCalled()
+    expect(r.result.current.confirmOpen).toBe(true)
+    const confirm = r.result.current.confirm?.props
+    expect(confirm?.title).toBe('Undo deleting The toll?')
+    expect(confirm?.lines).toEqual(['The toll: Modified', 'The toll: Deleted'])
+
+    act(() => confirm?.onConfirm())
+    await settle()
+
+    expect(actions.undoLastAction).toHaveBeenCalledWith('b1', ctx, { expectedActionId: 'act_save' })
+    expect(r.result.current.confirmOpen).toBe(false)
+    expect(toasts[0].message).toBe('Undid deleting The toll')
+  })
+
+  it("lists a close's impact in the delete confirm's lines", async () => {
+    actions.readUndoTarget.mockResolvedValue(CLOSE)
+    actions.readUndoImpact.mockResolvedValue({
+      createdLore: { count: 2, userEdited: true },
+      otherChanges: 4,
+    })
+    const r = render()
+    act(() => r.result.current.undo('menu'))
+    await settle()
+
+    expect(actions.readUndoImpact).toHaveBeenCalledWith('b1', 'act_close', ctx)
+    expect(r.result.current.confirm?.props.lines).toEqual([
+      '2 lore rows removed, your edits included',
+      '4 other changes reversed',
+    ])
+  })
+
+  it('Cancel undoes nothing', async () => {
+    actions.readUndoTarget.mockResolvedValue(LORE_SAVE)
+    const r = render()
+    act(() => r.result.current.undo('menu'))
+    await settle()
+    act(() => r.result.current.confirm?.props.onCancel())
+    expect(r.result.current.confirmOpen).toBe(false)
+    expect(actions.undoLastAction).not.toHaveBeenCalled()
+  })
+
+  // A close a background pass started can commit under the confirm: the pin refuses it.
+  it('toasts a refusal after the confirm even on the keyboard path, and shows no notice', async () => {
+    actions.readUndoTarget.mockResolvedValue(LORE_SAVE)
+    actions.undoLastAction.mockResolvedValue({
+      status: 'rejected',
+      code: 'target-moved',
+      reason: 'moved',
+    })
+    const r = render()
+    act(() => r.result.current.undo('keyboard'))
+    await settle()
+    act(() => r.result.current.confirm?.props.onConfirm())
+    await settle()
+
+    expect(toasts).toHaveLength(1)
+    expect(toasts[0].message).toBe('A newer change landed, so nothing was undone.')
+    expect(toasts[0].action).toBeUndefined()
+  })
+
+  it('drops an open confirm when the screen loses focus', async () => {
+    actions.readUndoTarget.mockResolvedValue(LORE_SAVE)
+    const r = render()
+    act(() => r.result.current.undo('menu'))
+    await settle()
+    r.rerender({ isFocused: false })
+    r.rerender({ isFocused: true })
+    expect(r.result.current.confirmOpen).toBe(false)
+  })
+})
+
+describe('useReaderUndo — refusals', () => {
+  it('stays silent on the keyboard and toasts from the menu', async () => {
+    actions.readUndoTarget.mockResolvedValue(null)
+    const r = render()
+    act(() => r.result.current.undo('keyboard'))
+    await settle()
+    expect(toasts).toHaveLength(0)
+
+    act(() => r.result.current.undo('menu'))
+    await settle()
+    expect(toasts.map((toast) => toast.message)).toEqual(['Nothing to undo.'])
+  })
+
+  it('shows Redo refusals from the menu only', async () => {
+    const r = render()
+    act(() => r.result.current.redo('keyboard'))
+    await settle()
+    expect(toasts).toHaveLength(0)
+    act(() => r.result.current.redo('menu'))
+    await settle()
+    expect(toasts.map((toast) => toast.message)).toEqual(['Nothing to redo.'])
+  })
+
+  it('redoes the stack top, pinned to it', async () => {
+    undoRedoStore.pushRedoGroup(
+      __redoGroupForTest(
+        [{ delta: TURN.deltas[0], rowBeforeUndo: { id: 'e2', position: 2 } }],
+        'act_turn',
+      ),
+    )
+    actions.redoLastAction.mockResolvedValue(OK)
+    const r = render()
+    act(() => r.result.current.redo('menu'))
+    await settle()
+    expect(actions.redoLastAction).toHaveBeenCalledWith('b1', ctx, { expectedActionId: 'act_turn' })
+    expect(toasts[0].message).toBe('Redid the turn at entry #2')
+  })
+})

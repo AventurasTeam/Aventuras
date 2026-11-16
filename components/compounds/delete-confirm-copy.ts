@@ -10,7 +10,10 @@ export type DeleteConfirmCopy = {
   confirmLabel: string
 }
 
-/** Every domain's delete confirm shares this undo hint, naming the reader's own undo label. */
+/**
+ * Every domain's delete confirm shares this undo hint. It quotes no menu label: the reader's Undo
+ * names its target, and a quoted label would drift from it in other languages (world.md → Delete).
+ */
 export function deleteUndoHint(): string {
-  return t('common:deleteUndoHint', { action: t('reader:actions.undo') })
+  return t('common:deleteUndoHint')
 }

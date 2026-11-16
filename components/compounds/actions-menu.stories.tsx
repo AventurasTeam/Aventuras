@@ -1,7 +1,7 @@
 import type { Meta, StoryObj } from '@storybook/react-native-web-vite'
 import type { ReactNode } from 'react'
 import { View } from 'react-native'
-import { expect, screen, userEvent, waitFor } from 'storybook/test'
+import { expect, fn, screen, userEvent, waitFor } from 'storybook/test'
 
 import {
   AlertDialog,
@@ -421,5 +421,25 @@ export const ClosingReturnsFocusToTheTrigger: Story = {
     await userEvent.keyboard('{Escape}')
     expect(screen.queryByPlaceholderText('Search actions…')).not.toBeInTheDocument()
     await waitFor(() => expect(document.activeElement).toBe(trigger))
+  },
+}
+
+// A surface resolves an entry's label as the menu opens (the reader's Undo): told on open and
+// close, from the shortcut as from the trigger.
+const onOpenChange = fn()
+export const ReportsOpenChange: Story = {
+  render: () => (
+    <ActionsMenu
+      contextual={READER_CONTEXT}
+      coreGroups={[GO_TO, STORY_TOOLS, APP]}
+      onOpenChange={onOpenChange}
+    />
+  ),
+  play: async () => {
+    onOpenChange.mockClear()
+    await userEvent.keyboard('{Control>}k{/Control}')
+    await waitFor(() => expect(onOpenChange).toHaveBeenLastCalledWith(true))
+    await userEvent.keyboard('{Escape}')
+    await waitFor(() => expect(onOpenChange).toHaveBeenLastCalledWith(false))
   },
 }

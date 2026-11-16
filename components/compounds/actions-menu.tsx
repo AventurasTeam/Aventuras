@@ -1,5 +1,5 @@
 import { MoreVertical } from 'lucide-react-native'
-import { useCallback, useMemo, useState, type Ref } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState, type Ref } from 'react'
 import { Platform, View } from 'react-native'
 
 import { IconAction, type IconActionSize } from '@/components/ui/icon-action'
@@ -74,6 +74,11 @@ type ActionsMenuProps = {
    * trigger inert too.
    */
   hotkeyEnabled?: boolean
+  /**
+   * Each time the menu opens or closes, from the trigger or the shortcut: a surface can resolve
+   * an entry's label as the menu opens.
+   */
+  onOpenChange?: (open: boolean) => void
 }
 
 type MenuRowData = {
@@ -164,8 +169,16 @@ function ActionsMenu({
   triggerSize,
   blocked,
   hotkeyEnabled = true,
+  onOpenChange,
 }: ActionsMenuProps) {
   const [open, setOpen] = useState(false)
+  const onOpenChangeRef = useRef(onOpenChange)
+  useEffect(() => {
+    onOpenChangeRef.current = onOpenChange
+  })
+  useEffect(() => {
+    onOpenChangeRef.current?.(open)
+  }, [open])
   const [query, setQuery] = useState('')
   const shortcutHint = useShortcutHint()
 

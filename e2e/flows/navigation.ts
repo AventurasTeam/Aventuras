@@ -40,11 +40,19 @@ export async function goToReader(page: Page): Promise<void> {
   await page.waitForURL(/\/reader-composer\//)
 }
 
-// World → Reader over GO TO, then the Actions menu's Undo row (CTRL-Z's touch-tier twin).
-export async function undoFromReader(page: Page): Promise<void> {
+// World → Reader over GO TO, then the Actions menu's Undo row (CTRL-Z's touch-tier twin), named
+// `label`. An unseen target asks first: `confirmTitle` is the confirm the spec expects, and Undo.
+export async function undoFromReader(
+  page: Page,
+  label: string,
+  confirmTitle?: string,
+): Promise<void> {
   await goToReader(page)
   await chrome.actionsTrigger(page).click()
-  await reader.undoRow(page).click()
+  await reader.undoRow(page, label).click()
+  if (confirmTitle === undefined) return
+  await expect(reader.undoConfirm(page, confirmTitle)).toBeVisible()
+  await reader.undoConfirmUndo(page).click()
 }
 
 // Story list → reader, waiting out the story's open.

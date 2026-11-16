@@ -103,6 +103,7 @@ import {
 import { useLiveRollbackCounts } from '@/components/reader/use-live-rollback-counts'
 import { useLoadOlderEntries } from '@/components/reader/use-load-older-entries'
 import { useReaderEntryJump } from '@/components/reader/use-reader-entry-jump'
+import { useReaderUndo } from '@/components/reader/use-reader-undo'
 import { useWorldTimeEditing } from '@/components/reader/world-time-editing'
 import { WorldTimeEditSheet } from '@/components/reader/worldtime-edit-sheet'
 import { ScreenShell } from '@/components/shells/screen-shell'
@@ -129,7 +130,6 @@ import {
   getRollbackCounts,
   loadOpenStory,
   readRecentEntries,
-  redoLastAction,
   refreshSuggestions,
   regenerateTurn,
   rollbackToEntry,
@@ -137,8 +137,6 @@ import {
   runOwedClose,
   sameRollbackCounts,
   submitTurn,
-  undoLastAction,
-  type UndoRejectionCode,
   writeSystemEntry,
   type LoadOpenStoryResult,
   type RollbackCounts,
@@ -178,7 +176,6 @@ import {
   readerRailStore,
   rehydrateStories,
   storiesStore,
-  undoRedoStore,
 } from '@/lib/stores'
 import { useTheme } from '@/lib/themes'
 import { toast } from '@/lib/toast'
@@ -1539,53 +1536,16 @@ export default function ReaderComposerRoute() {
     return false
   }, [])
 
-  // Every rejection is logged; only the actionable ones are shown. `integrity` means
-  // the delta log cannot produce the reversal it should — an error, not "Nothing to
-  // undo." A branch-not-loaded rejection is a branch-switch race that resolves itself.
-  const reportUndoRejection = useCallback(
-    (
-      op: 'undo' | 'redo',
-      result: { code: UndoRejectionCode; reason: string },
-      silent = false,
-    ): void => {
-      const isUndo = op === 'undo'
-      const fields = { branchId, code: result.code, reason: result.reason }
-      if (result.code === 'integrity')
-        logger.error(isUndo ? 'reader.undo_failed' : 'reader.redo_failed', fields)
-      else logger.debug(isUndo ? 'reader.undo_rejected' : 'reader.redo_rejected', fields)
-      if (silent) return
-      if (result.code === 'integrity')
-        toast.error(t(isUndo ? 'reader:actions.undoFailed' : 'reader:actions.redoFailed'))
-      else if (result.code === 'nothing-to-apply')
-        toast.info(t(isUndo ? 'reader:actions.nothingToUndo' : 'reader:actions.nothingToRedo'))
-      else if (result.code === 'gated') toast.info(t('reader:actions.blockedWhileGenerating'))
-    },
-    [branchId],
-  )
-
-  // The one place op maps to its action, log event and toast. Two failure notions
-  // share the flow: a rejection toasts unless `silent` (the keyboard path, by the
-  // native undo convention); a thrown failure toasts on both paths, via runAction.
-  const runUndoRedo = useCallback(
-    (op: 'undo' | 'redo', silent = false) =>
-      runAction(
-        (op === 'redo' ? redoLastAction(branchId, ctx) : undoLastAction(branchId, ctx)).then(
-          (result) => {
-            // Silent to the user, never unlogged: an integrity rejection looks
-            // identical to an empty history.
-            if (result.status === 'rejected') reportUndoRejection(op, result, silent)
-          },
-        ),
-        {
-          event: op === 'redo' ? 'reader.redo_failed' : 'reader.undo_failed',
-          toastMessage: t(
-            op === 'redo' ? 'reader:actions.redoFailed' : 'reader:actions.undoFailed',
-          ),
-        },
-      ),
-    [branchId, reportUndoRejection],
-  )
-
+  // reader-composer.md → Undo and redo: labels, the confirm, the notice and the pin.
+  const {
+    undoLabel,
+    redoLabel,
+    onMenuOpenChange,
+    undo: undoAction,
+    redo: redoAction,
+    confirmOpen: undoConfirmOpen,
+    confirm: undoConfirm,
+  } = useReaderUndo({ branchId, ctx, isFocused })
   // Editable-target exclusion lets the browser's native undo/redo win when
   // focus is in a text input — otherwise Ctrl/Cmd+Z on a composer typo
   // reverses the last story turn instead of the typo.
@@ -1595,17 +1555,16 @@ export default function ReaderComposerRoute() {
   const handleUndoRedoShortcut = useCallback(
     (ev: KeyboardEvent) => {
       if (editorOpen) return
-      runUndoRedo(ev.shiftKey ? 'redo' : 'undo', true)
+      if (ev.shiftKey) redoAction('keyboard')
+      else undoAction('keyboard')
     },
-    [editorOpen, runUndoRedo],
+    [editorOpen, redoAction, undoAction],
   )
   useGlobalHotkey(matchesUndoRedoShortcut, handleUndoRedoShortcut, {
     ignoreEditableTargets: true,
     enabled: isFocused,
   })
 
-  // Touch-tier path to undo/redo (the shortcut is keyboard-only).
-  const hasRedo = undoRedoStore.useUndoRedo((s) => s.redoStack.length > 0)
   // Engage/settle semantics live in the surface's own jumpToBottom; the host only routes it.
   const jumpToBottom = useCallback(
     () =>
@@ -1696,22 +1655,22 @@ export default function ReaderComposerRoute() {
       entries: [
         {
           id: 'undo',
-          label: t('reader:actions.undo'),
+          label: undoLabel,
           disabled: undo.disabled,
           disabledReason: undo.reason,
-          onActivate: () => runUndoRedo('undo'),
+          onActivate: () => undoAction('menu'),
         },
         // Absent, not disabled, when the stack is empty — the menu doesn't
         // surface dead commands (actions-menu spec); emptiness is store-derived
         // and cheap, unlike undo's DB-backed target lookup.
-        ...(hasRedo
+        ...(redoLabel != null
           ? [
               {
                 id: 'redo',
-                label: t('reader:actions.redo'),
+                label: redoLabel,
                 disabled: redo.disabled,
                 disabledReason: redo.reason,
-                onActivate: () => runUndoRedo('redo'),
+                onActivate: () => redoAction('menu'),
               },
             ]
           : []),
@@ -1721,13 +1680,15 @@ export default function ReaderComposerRoute() {
       ],
     }
   }, [
-    hasRedo,
+    undoLabel,
+    redoLabel,
+    undoAction,
+    redoAction,
     actionsBlocked,
     headReversalBlocked,
     headReversalReason,
     gateReason,
     editorOpen,
-    runUndoRedo,
     entries.length,
     jumpToBottom,
   ])
@@ -1839,7 +1800,8 @@ export default function ReaderComposerRoute() {
           story={storyId != null ? { storyId, branchId, surface: 'reader' } : undefined}
           beforeNavigate={guardEdit}
           beforeLeaveStory={guardLeave}
-          blocked={rollback != null || timeEdit != null}
+          blocked={rollback != null || timeEdit != null || undoConfirmOpen}
+          onOpenChange={onMenuOpenChange}
         />
       }
       statusSlot={
@@ -1997,6 +1959,7 @@ export default function ReaderComposerRoute() {
           onClose={closeSceneEdit}
         />
       ) : null}
+      {undoConfirm}
       {editGuardDialog}
       {storyLeaveDialog}
     </ScreenShell>

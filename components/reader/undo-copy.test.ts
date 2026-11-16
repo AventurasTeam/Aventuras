@@ -7,6 +7,7 @@ import type { UndoDescription } from '@/lib/undo'
 import {
   deletedRowsOf,
   firstRowOf,
+  snapshotRowsOf,
   undoConfirmRows,
   undoConfirmTitle,
   undoNames,
@@ -153,6 +154,22 @@ describe('undoNames', () => {
     expect(names.entryRef('e_loaded')).toBe('entry #7')
     expect(names.entryRef('e_gone')).toBe('entry #9')
     expect(names.entryRef('e_nowhere')).toBeNull()
+  })
+
+  it('reads a row a redo brings back, and its entry number, from the snapshot', () => {
+    const snapshots = [
+      {
+        delta: { targetTable: 'entities', targetId: 'ent_new' },
+        rowBeforeUndo: { id: 'ent_new', name: 'Wren' },
+      },
+      {
+        delta: { targetTable: 'story_entries', targetId: 'e_gone' },
+        rowBeforeUndo: { position: 12 },
+      },
+    ]
+    const names = undoNames(firstRowOf(rows, snapshotRowsOf(snapshots)))
+    expect(names.rowName({ table: 'entities', id: 'ent_new' })).toBe('Wren')
+    expect(names.entryRef('e_gone')).toBe('entry #12')
   })
 
   it("reads a deleted row's name from its delete's payload", () => {

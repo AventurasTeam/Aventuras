@@ -127,8 +127,9 @@ test.describe.serial('chapter progress strip', () => {
     await expect.poll(() => sqlPercent(page, branchId), { timeout: 15_000 }).toBeGreaterThan(before)
     await expectStripMatchesSql(page, branchId)
 
-    // Blur first: the global shortcut ignores editable targets, and the saved edit's textarea may
-    // still hold focus.
+    // The editor closes once its commit settles, and an open one holds undo. Blur too: the global
+    // shortcut ignores editable targets.
+    await expect(reader.editTextarea(page)).toHaveCount(0)
     await page.evaluate(() => (document.activeElement as HTMLElement | null)?.blur())
     await page.keyboard.press('Control+z')
 

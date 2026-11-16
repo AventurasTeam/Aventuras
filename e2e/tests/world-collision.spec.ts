@@ -9,7 +9,7 @@ import { suppressNativeUnloadDialogRace } from '../harness/reload'
 import { createSeededUserDataDir, removeUserDataDir } from '../harness/seed'
 import { chrome } from '../locators/chrome'
 import { home } from '../locators/home'
-import { reader } from '../locators/reader'
+import { reader, undoText } from '../locators/reader'
 import { saveSession } from '../locators/save-session'
 import { world } from '../locators/world'
 
@@ -215,6 +215,16 @@ async function logHead(page: Page, branchId: string): Promise<number> {
   )
 }
 
+// Rows besides entries the one action since `head` wrote: what an undo's label counts.
+async function rowsWrittenSince(page: Page, branchId: string, head: number): Promise<number> {
+  return queryScalar(
+    page,
+    `SELECT count(DISTINCT target_table || ':' || target_id) FROM deltas
+       WHERE branch_id = ? AND log_position > ? AND target_table != 'story_entries'`,
+    [branchId, head],
+  )
+}
+
 async function writtenSince(page: Page, branchId: string, head: number) {
   const [[deltas, actions]] = await queryApp(
     page,
@@ -316,7 +326,11 @@ test.describe.serial('World collision resolve', () => {
     expect(await writtenSince(page, pair.branchId, head)).toEqual({ deltas: 1, actions: 1 })
     await expect(world.collisionStrip(page, 'Brannoc')).toHaveCount(0)
 
-    await undoFromReader(page)
+    await undoFromReader(
+      page,
+      undoText('menu', 'edited', { name: 'Brannoc' }),
+      undoText('title', 'edited', { name: 'Brannoc' }),
+    )
     await expect
       .poll(() => flags(page, pair), { timeout: 30_000 })
       .toEqual({ older: 0, flagged: 1 })
@@ -352,13 +366,19 @@ test.describe.serial('World collision resolve', () => {
       .toEqual(merged(tailLocation))
     expect((await writtenSince(page, pair.branchId, head)).actions).toBe(1)
     await expect(world.collisionStrip(page, 'Brannoc')).toHaveCount(0)
+    // A merge writes both rows and the links it moves: named by the first, counting the rest.
+    const merge = {
+      name: 'Brannoc',
+      count: (await rowsWrittenSince(page, pair.branchId, head)) - 1,
+    }
+    expect(merge.count).toBeGreaterThan(0)
 
-    await undoFromReader(page)
+    await undoFromReader(page, undoText('menu', 'rows', merge), undoText('title', 'rows', merge))
     // Reverse-replay forces a restored row's embedding_stale to 1: its vectors are gone.
     await expect.poll(() => pairSnapshot(page, pair), { timeout: 30_000 }).toEqual(paired(1))
 
     await chrome.actionsTrigger(page).click()
-    await reader.redoRow(page).click()
+    await reader.redoRow(page, undoText('redoMenu', 'rows', merge)).click()
     await expect
       .poll(() => pairSnapshot(page, pair), { timeout: 30_000 })
       .toEqual(merged(tailLocation))

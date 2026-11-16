@@ -5,7 +5,7 @@ import { launchApp, type LaunchedApp } from '../harness/launch'
 import { createSeededUserDataDir, removeUserDataDir } from '../harness/seed'
 import { chrome } from '../locators/chrome'
 import { home } from '../locators/home'
-import { reader } from '../locators/reader'
+import { reader, undoText } from '../locators/reader'
 import { saveSession } from '../locators/save-session'
 
 // Edit an existing entry (common reader mutation): the inline editor commits
@@ -83,8 +83,15 @@ test.describe('reader — edit an entry', () => {
     // undo target walk, so this reversed the turn and deleted its entries instead. An open
     // editor holds undo, and the editor closes only once the commit settles.
     await expect(reader.editTextarea(app.window)).toHaveCount(0)
+    const [[entryAt]] = await queryApp(
+      app.window,
+      `SELECT position FROM story_entries WHERE id = ?`,
+      [entryId],
+    )
     await chrome.actionsTrigger(app.window).click()
-    await reader.undoRow(app.window).click()
+    await reader
+      .undoRow(app.window, undoText('menu', 'entryText', { entry: entryAt as number }))
+      .click()
 
     await expect.poll(contentOf, { timeout: 15_000 }).toBe(original)
     expect(await entryCount()).toBe(before)

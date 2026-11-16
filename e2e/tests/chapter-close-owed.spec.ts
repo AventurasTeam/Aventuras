@@ -15,7 +15,7 @@ import {
 } from '../harness/seed'
 import { chrome } from '../locators/chrome'
 import { memoryBanner } from '../locators/memory-banner'
-import { reader } from '../locators/reader'
+import { reader, undoText } from '../locators/reader'
 import { toast } from '../locators/toast'
 
 const HERO_STORY = 'story_hero'
@@ -513,10 +513,17 @@ test.describe('chapter close owed — CTRL-Z of the turn during a close', () => 
     const interrupted = await heldClose(calls)
     await expect(memoryBanner.closingMetadata(page)).toBeVisible()
 
-    // CTRL-Z's touch-tier twin: the keyboard shortcut is inert while focus is in the composer.
+    // CTRL-Z's touch-tier twin: the keyboard shortcut is inert while focus is in the composer. It
+    // names the turn, not the close the interrupt reverses on the way.
+    const turnAt = await queryScalar(
+      page,
+      `SELECT position FROM story_entries WHERE branch_id = ? AND content LIKE 'E2E-UNDO-U1%'`,
+      [branch],
+    )
+    const undoTurn = reader.undoRow(page, undoText('menu', 'turn', { entry: turnAt }))
     await chrome.actionsTrigger(page).click()
-    await expect(reader.undoMenuRow(page)).toBeEnabled()
-    await reader.undoRow(page).click()
+    await expect(undoTurn).toBeEnabled()
+    await undoTurn.click()
 
     await expect.poll(() => runOutcome(interrupted), { timeout: 20_000 }).toBe('aborted')
     await expect

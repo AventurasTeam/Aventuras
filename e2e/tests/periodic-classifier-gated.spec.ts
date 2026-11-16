@@ -18,7 +18,7 @@ import {
 import { chrome } from '../locators/chrome'
 import { home } from '../locators/home'
 import { memoryBanner } from '../locators/memory-banner'
-import { reader, worldStateCountOf } from '../locators/reader'
+import { reader, undoText, worldStateCountOf } from '../locators/reader'
 import { storyLeave } from '../locators/story-leave'
 
 // The reader's distance from the bottom once its geometry has held for 10 frames: an end
@@ -158,12 +158,16 @@ test.describe('periodic classifier — the gated pass', () => {
       reader.gatedEntryAction(page, offHead, t('generationGate.updatingMemory')),
     ).toBeDisabled()
     await expect(reader.suggestionRefreshAny(page)).toBeEnabled()
+    const [[turnAt]] = await queryApp(page, `SELECT position FROM story_entries WHERE id = ?`, [
+      userEntry,
+    ])
+    const undoTurn = reader.undoRow(page, undoText('menu', 'turn', { entry: turnAt as number }))
     await chrome.actionsTrigger(page).click()
-    await expect(reader.undoMenuRow(page)).toBeEnabled()
+    await expect(undoTurn).toBeEnabled()
     // The turn's commit cleared the redo stack, so Redo is absent, not disabled.
-    await expect(reader.redoRow(page)).toHaveCount(0)
+    await expect(reader.anyRedoRow(page)).toHaveCount(0)
     await page.keyboard.press('Escape')
-    await expect(reader.undoMenuRow(page)).toBeHidden()
+    await expect(undoTurn).toBeHidden()
     // Not Send's run: the composer stays live, Send waits, and only the banner cancels.
     await reader.composer(page).fill('E2E-GATE-DRAFT the next move')
     await expect(reader.send(page)).toBeDisabled()

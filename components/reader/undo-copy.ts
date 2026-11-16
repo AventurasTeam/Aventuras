@@ -204,6 +204,18 @@ export function deletedRowsOf(deltas: readonly Delta[]): UndoRowSource {
       ?.undoPayload ?? undefined
 }
 
+/** A row as a redo snapshot held it before the undo: what the redo brings back. */
+export function snapshotRowsOf(
+  snapshots: readonly {
+    delta: Pick<Delta, 'targetTable' | 'targetId'>
+    rowBeforeUndo: Row | null
+  }[],
+): UndoRowSource {
+  return ({ table, id }) =>
+    snapshots.find((s) => s.delta.targetTable === table && s.delta.targetId === id)
+      ?.rowBeforeUndo ?? undefined
+}
+
 /** Tries each source in turn. */
 export function firstRowOf(...sources: UndoRowSource[]): UndoRowSource {
   return (row) => {
