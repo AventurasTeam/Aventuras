@@ -27,3 +27,14 @@ export function selectUndoTarget(rows: readonly UndoCandidateDelta[]): UndoTarge
   if (turnCreate) return { actionId: head.actionId, kind: 'turn', entryId: turnCreate.targetId }
   return { actionId: head.actionId, kind: 'group' }
 }
+
+export {
+  describeRedoTarget,
+  describeUndoGroup,
+  UNDO_LINK_TABLES,
+  UNDO_NAMED_TABLES,
+  type UndoDescription,
+  type UndoGroupDelta,
+  type UndoRowRef,
+} from './describe'
+export { isUndoKind, UNDO_KIND_KEY, UNDO_KINDS, type UndoKind } from './kinds'

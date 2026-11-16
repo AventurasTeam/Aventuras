@@ -18,13 +18,33 @@ import type { DbCtx } from '../types'
  * is branched on: a surface must tell a routine refusal from a delta log that cannot
  * produce the reversal it should, which must not read as "Nothing to undo".
  */
-export type UndoRejectionCode = 'gated' | 'branch-not-loaded' | 'nothing-to-apply' | 'integrity'
+export type UndoRejectionCode =
+  | 'gated'
+  | 'branch-not-loaded'
+  | 'nothing-to-apply'
+  | 'integrity'
+  | 'target-moved'
 
 export type UndoResult =
   | { status: 'ok' }
   | { status: 'rejected'; code: UndoRejectionCode; reason: string }
 
+/**
+ * The action the caller named: reader-composer.md → Undo and redo reverses exactly what its label
+ * or confirm described, so a newer head refuses `target-moved` and nothing is undone.
+ */
+export type UndoOptions = { expectedActionId?: string }
+
 const GATED: UndoResult = { status: 'rejected', code: 'gated', reason: 'generation in flight' }
+
+function movedFrom(expectedActionId: string | undefined, actionId: string): UndoResult | null {
+  if (expectedActionId === undefined || expectedActionId === actionId) return null
+  return {
+    status: 'rejected',
+    code: 'target-moved',
+    reason: `expected ${expectedActionId}, latest is ${actionId}`,
+  }
+}
 
 function unreadableScopeRejection(deltaId: string): UndoResult {
   return {
@@ -77,15 +97,30 @@ async function headGroupRows(
     .orderBy(desc(deltas.logPosition))) as Delta[]
 }
 
-export async function undoLastAction(branchId: string, ctx: DbCtx): Promise<UndoResult> {
+/**
+ * The group the next undo targets, read for its label and for the gate: a close or pass still
+ * running heads the log above it until the undo's interrupt reverses it, so it is passed over.
+ */
+export async function headUndoGroup(branchId: string, ctx: DbCtx): Promise<Delta[]> {
+  const running = generationStore.isUserEditBlocked()
+    ? selectMemoryRun(generationStore.getTxState(), { branchId })?.actionId
+    : undefined
+  return headGroupRows(branchId, ctx, running)
+}
+
+export async function undoLastAction(
+  branchId: string,
+  ctx: DbCtx,
+  { expectedActionId }: UndoOptions = {},
+): Promise<UndoResult> {
   // Only CTRL-Z of the turn passes a pass or a close, by interrupting it, so the target is read
   // before the gate decides (principles.md → Edit restrictions during in-flight generation).
   let throughInterrupt = false
   if (generationStore.isUserEditBlocked()) {
     if (generationStore.isHeadReversalBlocked(branchId)) return GATED
-    // A running close's rows head the log above the turn; the interrupt reverses them first.
-    const running = selectMemoryRun(generationStore.getTxState(), { branchId })?.actionId
-    const target = selectUndoTarget(await headGroupRows(branchId, ctx, running))
+    const target = selectUndoTarget(await headUndoGroup(branchId, ctx))
+    const moved = target == null ? null : movedFrom(expectedActionId, target.actionId)
+    if (moved != null) return moved
     if (generationStore.isUserEditBlocked()) {
       if (target?.kind !== 'turn' || generationStore.isHeadReversalBlocked(branchId)) return GATED
       throughInterrupt = true
@@ -101,7 +136,9 @@ export async function undoLastAction(branchId: string, ctx: DbCtx): Promise<Undo
   // rollbackToEntry — a concurrent edit/submit/generation mid-sweep must not
   // race the rows this undo is about to read and reverse.
   return bracketProseReversal(branchId, ctx, () =>
-    refusingIntegrity(branchId, () => undoBracketed(branchId, ctx, throughInterrupt)),
+    refusingIntegrity(branchId, () =>
+      undoBracketed(branchId, ctx, throughInterrupt, expectedActionId),
+    ),
   )
 }
 
@@ -109,10 +146,13 @@ async function undoBracketed(
   branchId: string,
   ctx: DbCtx,
   throughInterrupt: boolean,
+  expectedActionId: string | undefined,
 ): Promise<UndoResult> {
   const group = await headGroupRows(branchId, ctx)
   const target = selectUndoTarget(group)
   if (!target) return { status: 'rejected', code: 'nothing-to-apply', reason: 'nothing to undo' }
+  const moved = movedFrom(expectedActionId, target.actionId)
+  if (moved != null) return moved
   // Admitted past the gate to undo the turn; a target that moved during the interrupt is gated.
   if (throughInterrupt && target.kind !== 'turn') return GATED
 
@@ -134,7 +174,7 @@ async function undoBracketed(
   }
 
   // Redo restores the target and its closure (data-model.md → Entry mutability & rollback).
-  const undo = await prepareUndo(set, ctx)
+  const undo = await prepareUndo(set, ctx, target.actionId)
   try {
     await undo.reverse(clampOps)
   } catch (e) {
@@ -147,13 +187,19 @@ async function undoBracketed(
   return { status: 'ok' }
 }
 
-export async function redoLastAction(branchId: string, ctx: DbCtx): Promise<UndoResult> {
+export async function redoLastAction(
+  branchId: string,
+  ctx: DbCtx,
+  { expectedActionId }: UndoOptions = {},
+): Promise<UndoResult> {
   if (generationStore.isUserEditBlocked()) return GATED
   if (entriesStore.getLoadedBranch() !== branchId)
     return { status: 'rejected', code: 'branch-not-loaded', reason: 'branch not loaded' }
 
   const group = undoRedoStore.peekRedoGroup()
   if (!group) return { status: 'rejected', code: 'nothing-to-apply', reason: 'nothing to redo' }
+  const moved = movedFrom(expectedActionId, group.actionId)
+  if (moved != null) return moved
   // The redo stack is a single global stack, not partitioned per branch. Guard
   // against applying another branch's snapshot to this context.
   if (group.snapshots.some((s) => s.delta.branchId !== branchId))

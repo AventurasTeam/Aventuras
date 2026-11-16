@@ -2,6 +2,7 @@ import { expect, test } from '@playwright/test'
 
 import { currentBranchId, queryApp } from '../harness/db'
 import { installEmbedderModel } from '../harness/embedder'
+import { t } from '../harness/i18n'
 import { launchApp, type LaunchedApp } from '../harness/launch'
 import { startMockLlm, type MockLlm } from '../harness/mock-llm'
 import {
@@ -13,7 +14,8 @@ import {
 } from '../harness/seed'
 import { chrome } from '../locators/chrome'
 import { home } from '../locators/home'
-import { reader } from '../locators/reader'
+import { reader, undoText } from '../locators/reader'
+import { toast } from '../locators/toast'
 
 // Reverse / re-apply a committed turn via the chrome Actions menu (the undo/redo
 // reversal path — see reader-regenerate.spec.ts for the reply-level ↻ control's
@@ -66,17 +68,32 @@ test.describe('reader — undo / redo a turn', () => {
       timeout: 30_000,
     })
     expect(await replyCount()).toBe(1)
+    const branchId = await currentBranchId(app.window, 'story_hero')
+    const turnAt = (
+      (
+        await queryApp(
+          app.window,
+          `SELECT position FROM story_entries WHERE branch_id = ? AND content LIKE 'E2E-UNDO-USER%'`,
+          [branchId],
+        )
+      )[0] as [number]
+    )[0]
 
     // Undo through the chrome actions menu (the touch-tier path; the keyboard
-    // shortcut is intentionally inert while focus is in the composer).
+    // shortcut is intentionally inert while focus is in the composer). Its label names the turn,
+    // which the reader shows, so it undoes at once and says what it undid.
     await chrome.actionsTrigger(app.window).click()
-    await reader.undoRow(app.window).click()
+    await reader.undoRow(app.window, undoText('menu', 'turn', { entry: turnAt })).click()
     await expect.poll(replyCount, { timeout: 15_000 }).toBe(0)
+    const undid = undoText('notice', 'turn', { entry: turnAt })
+    await expect(toast.withText(app.window, undid)).toBeVisible()
 
-    // Redo re-applies the same turn — the row comes back.
-    await chrome.actionsTrigger(app.window).click()
-    await reader.redoRow(app.window).click()
+    // The notice's Redo re-applies the same turn — the row comes back.
+    await toast.action(app.window, undid, t('reader:undo.noticeRedo')).click()
     await expect.poll(replyCount, { timeout: 15_000 }).toBe(1)
+    await expect(
+      toast.withText(app.window, undoText('redoNotice', 'turn', { entry: turnAt })),
+    ).toBeVisible()
   })
 })
 
@@ -224,7 +241,7 @@ test.describe('reader — undo of a turn covered by a two-turn classifier pass',
     expect(anchorFor(FACT_A)[2]).toBeGreaterThan(createLogPosition)
 
     await chrome.actionsTrigger(app.window).click()
-    await reader.undoRow(app.window).click()
+    await reader.undoRow(app.window, undoText('menu', 'turn', { entry: bUserPosition })).click()
     await expect.poll(() => turnBEntryCount(branch), { timeout: 15_000 }).toBe(0)
 
     // The fact anchored to the undone turn goes; the lagging fact about the
@@ -242,7 +259,7 @@ test.describe('reader — undo of a turn covered by a two-turn classifier pass',
 
     // Redo restores the whole unit — the turn and its B-anchored fact.
     await chrome.actionsTrigger(app.window).click()
-    await reader.redoRow(app.window).click()
+    await reader.redoRow(app.window, undoText('redoMenu', 'turn', { entry: bUserPosition })).click()
     await expect.poll(() => turnBEntryCount(branch), { timeout: 15_000 }).toBe(2)
     expect(await happeningCount(branch, FACT_B)).toBe(1)
     expect(await happeningCount(branch, FACT_A)).toBe(1)

@@ -59,6 +59,7 @@ import {
 } from '@/lib/piggyback'
 import { cn } from '@/lib/utils'
 
+import { heldControl } from './entry-card-hold'
 import { DetailsDisclosure, HeldTextQuote } from './entry-card-system'
 import { RichEntryContent } from './rich-entry-content'
 import { SceneEditForm, sceneSaveErrorKey, type SceneSaveResult } from './scene-edit-form'
@@ -175,6 +176,13 @@ type EntryCardProps = {
   editDisabled?: boolean
   /** Gates ↻, × and Save & regenerate (with `editDisabled`); falls back to `disabled`. */
   reversalDisabled?: boolean
+  /**
+   * Edit-mode focus on another entry: holds the action cluster and a system entry's Retry, never
+   * Dismiss, copy, a fix or the scene and time editors. A control its own gate flag also holds
+   * keeps `disabledReason`; the rest show `heldReason`.
+   */
+  held?: boolean
+  heldReason?: string
 
   // edit mode (host-controlled):
   editing?: boolean
@@ -1026,6 +1034,8 @@ export function EntryCard({
   disabledReason,
   editDisabled,
   reversalDisabled,
+  held,
+  heldReason,
   editing,
   contentEditNotice,
   editDirty = true,
@@ -1042,6 +1052,10 @@ export function EntryCard({
   // Head reversals are gated apart from `disabled`: they pass through a pass or a close.
   const editOff = editDisabled ?? disabled
   const reversalOff = reversalDisabled ?? disabled
+  const reasons = { gate: disabledReason, held: heldReason }
+  const editHold = heldControl(editOff, held, reasons)
+  const reversalHold = heldControl(reversalOff, held, reasons)
+  const clusterHold = heldControl(disabled, held, reasons)
 
   // Carries the narrowed values rather than a bare boolean so the footer can
   // forward them without a non-null assertion.
@@ -1276,7 +1290,13 @@ export function EntryCard({
                 </Button>
               ) : null}
               {onRetry != null ? (
-                <Button variant="secondary" size="sm" onPress={onRetry} disabled={disabled}>
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  onPress={onRetry}
+                  disabled={clusterHold.disabled}
+                  disabledReason={clusterHold.reason}
+                >
                   <Icon as={RefreshCw} size="sm" />
                   <Text>{t('reader:systemEntry.retry')}</Text>
                 </Button>
@@ -1312,8 +1332,8 @@ export function EntryCard({
               label={t('reader:entryCard.editEntry')}
               size="sm"
               onPress={onEdit}
-              disabled={editOff}
-              disabledReason={disabledReason}
+              disabled={editHold.disabled}
+              disabledReason={editHold.reason}
             />
           ) : null}
           {onRegen != null && kind === 'ai_reply' ? (
@@ -1322,8 +1342,8 @@ export function EntryCard({
               label={t('reader:entryCard.regenerate')}
               size="sm"
               onPress={onRegen}
-              disabled={reversalOff}
-              disabledReason={disabledReason}
+              disabled={reversalHold.disabled}
+              disabledReason={reversalHold.reason}
             />
           ) : null}
           {onBranch != null && (kind === 'ai_reply' || kind === 'opening') ? (
@@ -1332,8 +1352,8 @@ export function EntryCard({
               label={t('reader:entryCard.branchFromHere')}
               size="sm"
               onPress={onBranch}
-              disabled={disabled}
-              disabledReason={disabledReason}
+              disabled={clusterHold.disabled}
+              disabledReason={clusterHold.reason}
             />
           ) : null}
           {onFlipEra != null ? (
@@ -1342,8 +1362,8 @@ export function EntryCard({
               label={t('reader:entryCard.flipEra')}
               size="sm"
               onPress={onFlipEra}
-              disabled={disabled}
-              disabledReason={disabledReason}
+              disabled={clusterHold.disabled}
+              disabledReason={clusterHold.reason}
             />
           ) : null}
           {onDelete != null && kind !== 'opening' ? (
@@ -1353,8 +1373,8 @@ export function EntryCard({
               size="sm"
               variant="destructive"
               onPress={onDelete}
-              disabled={reversalOff}
-              disabledReason={disabledReason}
+              disabled={reversalHold.disabled}
+              disabledReason={reversalHold.reason}
             />
           ) : null}
         </View>

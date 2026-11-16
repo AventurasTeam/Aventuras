@@ -23,6 +23,8 @@ export const TARGET_NOT_FOUND = 'not-found'
  */
 export const MACHINE_PIN_KEY = `${PAYLOAD_META_PREFIX}machinePin` as const
 
+export { UNDO_KIND_KEY, UNDO_KINDS, type UndoKind } from '@/lib/undo'
+
 export type DeltaSource =
   | 'ai_classifier'
   | 'piggyback_tagged_block'

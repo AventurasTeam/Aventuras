@@ -204,12 +204,27 @@ export const reader = {
         exact: false,
       }),
 
-  // Undo / Redo live in the chrome Actions menu's contextual group (chrome.ts opens it).
-  undoRow: (page: Page): Locator => page.getByText(t('reader:actions.undo'), { exact: true }),
-  redoRow: (page: Page): Locator => page.getByText(t('reader:actions.redo'), { exact: true }),
-  // The Undo row itself (a listbox option), which carries the disabled state its label doesn't.
-  undoMenuRow: (page: Page): Locator =>
-    page.getByRole('option', { name: t('reader:actions.undo'), exact: true }),
+  // Undo / Redo live in the chrome Actions menu's contextual group (chrome.ts opens it), each
+  // named by its target once that resolves as the menu opens: a spec passes the sentence it
+  // expects (`undoText`), which is the assertion that undo names what it reverses.
+  undoRow: (page: Page, label: string): Locator =>
+    page.getByRole('option', { name: label, exact: true }),
+  redoRow: (page: Page, label: string): Locator =>
+    page.getByRole('option', { name: label, exact: true }),
+  // Redo whatever it names, for its absence: every Redo sentence opens on the menu's own word.
+  anyRedoRow: (page: Page): Locator =>
+    page.getByRole('option', { name: new RegExp(`^${escapeRegExp(t('reader:actions.redo'))} `) }),
+  // A menu row an open editor holds. Scoped to the menu's options: the other entries' held
+  // controls carry the same reason.
+  heldMenuRow: (page: Page): Locator =>
+    page.getByRole('option').getByTitle(t('reader:editFocus.held'), { exact: true }).first(),
+  // The confirm an unseen target opens, `Undo <target>?`, and its Undo.
+  undoConfirm: (page: Page, title: string): Locator =>
+    page.getByRole('alertdialog').filter({ hasText: title }),
+  undoConfirmUndo: (page: Page): Locator =>
+    page
+      .getByRole('alertdialog')
+      .getByRole('button', { name: t('reader:undo.confirm'), exact: true }),
 
   // Rollback (delete-to-entry) confirm modal.
   rollbackConfirm: (page: Page): Locator =>
@@ -289,4 +304,22 @@ export const reader = {
   popoverManage: (page: Page): Locator =>
     page.getByRole('button', { name: t('chapters:popover.manage'), exact: true }),
   jumpVeil: (page: Page): Locator => page.getByText(t('reader:jumpLoading'), { exact: true }),
+}
+
+type UndoPlace = 'menu' | 'title' | 'notice' | 'redoMenu' | 'redoNotice'
+
+/**
+ * An undo or redo target's sentence in `place` (reader-composer.md → Undo and redo), through the
+ * app's own keys: `entry` takes an entry's position, which reads as History's `entry #n`.
+ */
+export function undoText(
+  place: UndoPlace,
+  kind: string,
+  params: { entry?: number; number?: number; name?: string; count?: number } = {},
+): string {
+  const { entry, ...rest } = params
+  return t(`reader:undo.${place}.${kind}`, {
+    ...rest,
+    ...(entry === undefined ? {} : { entry: t('entryRef', { n: entry }) }),
+  })
 }

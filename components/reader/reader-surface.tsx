@@ -39,7 +39,12 @@ import {
 
 import type { ChapterBreak } from './chapter-breaks'
 import { keptSubmissionText } from './composer-draft'
-import type { EditResult, ReaderSurfaceHandle, ReaderSurfaceProps } from './reader-document-types'
+import type {
+  EditResult,
+  EditSession,
+  ReaderSurfaceHandle,
+  ReaderSurfaceProps,
+} from './reader-document-types'
 import { headTurnIdsOf, rowReversalFlags } from './row-reversal-flags'
 import { resolveSaveAndRegenTurn } from './save-and-regen'
 import type { ResolvedEntity } from './scene-editing'
@@ -99,6 +104,8 @@ type ReaderRowProps = {
   editDisabled: boolean
   reversalDisabled: boolean
   disabledReason?: string
+  /** Another entry's editor is open: this row's actions wait on it. */
+  held: boolean
   systemFixLabel?: string
   cutOffFixLabel?: string
   // Flat primitives rather than the decoration object: a fresh `{…}` per walk
@@ -144,6 +151,7 @@ const ReaderRow = memo(function ReaderRow({
   editDisabled,
   reversalDisabled,
   disabledReason,
+  held,
   systemFixLabel,
   cutOffFixLabel,
   worldTimeLabel,
@@ -212,6 +220,8 @@ const ReaderRow = memo(function ReaderRow({
       disabledReason={disabledReason}
       editDisabled={editDisabled}
       reversalDisabled={reversalDisabled}
+      held={held}
+      heldReason={held ? t('reader:editFocus.held') : undefined}
       editing={editing}
       contentEditNotice={contentEditNotice ?? undefined}
       editDirty={editing && editContent !== row.content}
@@ -306,6 +316,7 @@ export function ReaderSurface({
   onFixSystemEntry,
   onFixCutOff,
   onEntryLanded,
+  onEditSession,
   ref,
 }: ReaderSurfaceProps & { ref?: Ref<ReaderSurfaceHandle> }) {
   // One window subscription for the whole list. Resolved per card, every row would
@@ -335,6 +346,35 @@ export function ReaderSurface({
   const editDraftRef = useRef('')
   editingIdRef.current = editingId
   editDraftRef.current = editDraft
+  const editingStored = useMemo(
+    () => (editingId == null ? undefined : rows.find((row) => row.id === editingId)?.content),
+    [rows, editingId],
+  )
+  const editingStoredRef = useRef<string | undefined>(undefined)
+  editingStoredRef.current = editingStored
+  const editDirty = editingId != null && editDraft !== editingStored
+
+  // A row leaving the loaded set by a path no user action takes drops its draft, so a redo that
+  // restores the row shows the row, not the old editor.
+  const editingRowLoaded = editingId == null || editingStored !== undefined
+  useEffect(() => {
+    if (editingRowLoaded) return
+    setEditingId(null)
+    setEditDraft('')
+  }, [editingRowLoaded])
+
+  // Transitions only: the host arms its leave guard from these, and on native each one crosses
+  // the bridge, so a keystroke that doesn't flip dirty sends nothing.
+  const onEditSessionRef = useRef(onEditSession)
+  useLayoutEffect(() => {
+    onEditSessionRef.current = onEditSession
+  })
+  const reportedEntryId = editingRowLoaded ? editingId : null
+  useEffect(() => {
+    void onEditSessionRef.current(
+      reportedEntryId == null ? null : { entryId: reportedEntryId, dirty: editDirty },
+    )
+  }, [reportedEntryId, editDirty])
 
   // Branch switch: new window, scrolled to bottom, edit state dropped
   // (reader-composer.md → Loaded-set model).
@@ -860,30 +900,28 @@ export function ReaderSurface({
       pendingJumpAtRef.current = Date.now()
     }
   }, [stopBottomPin, stopLanding])
-  useImperativeHandle(ref, () => ({ jumpToBottom, jumpToEntry }), [jumpToBottom, jumpToEntry])
-
   const startEdit = useCallback((row: StoryEntry) => {
     setEditingId(row.id)
     setEditDraft(row.content)
   }, [])
-  // Shared by both commit buttons so the refusal policy has one home: a
-  // rejected commit keeps the draft open so typing isn't silently lost, and
-  // the host owns the error toast.
-  const commitDraft = useCallback(async (): Promise<boolean> => {
+  // Shared by both commit buttons and the host's leave guard, so the refusal policy has one home:
+  // a rejected commit keeps the draft open so typing isn't silently lost, and the host owns the
+  // error toast. No open editor has nothing to lose, so it counts as clean.
+  const commitDraft = useCallback(async (): Promise<EditResult> => {
     const id = editingIdRef.current
-    if (id == null) return false
+    if (id == null) return { ok: true }
     const result = await onCommitEdit(id, editDraftRef.current)
-    if (!result?.ok) return false
+    if (!result?.ok) return result ?? { ok: false }
     setEditingId(null)
     setEditDraft('')
-    return true
+    return { ok: true }
   }, [onCommitEdit])
   const commitEdit = useCallback(async () => {
     await commitDraft()
   }, [commitDraft])
   const commitEditAndRegen = useCallback(
     async (replyId: string) => {
-      if (!(await commitDraft())) return
+      if (!(await commitDraft()).ok) return
       // Regenerate second: the pipeline re-reads its prompt from the branch tail,
       // so the edit has to be committed before the run starts to be the one it reads.
       await onRegenerate(replyId)
@@ -894,6 +932,17 @@ export function ReaderSurface({
     setEditingId(null)
     setEditDraft('')
   }, [])
+  const editSession = useCallback((): EditSession | null => {
+    const entryId = editingIdRef.current
+    const stored = editingStoredRef.current
+    if (entryId == null || stored === undefined) return null
+    return { entryId, dirty: editDraftRef.current !== stored }
+  }, [])
+  useImperativeHandle(
+    ref,
+    () => ({ jumpToBottom, jumpToEntry, editSession, commitDraft, discardDraft: cancelEdit }),
+    [jumpToBottom, jumpToEntry, editSession, commitDraft, cancelEdit],
+  )
   const headTurn = useMemo(() => resolveSaveAndRegenTurn(rows, tailEntryId), [rows, tailEntryId])
   const headTurnIds = useMemo(() => headTurnIdsOf(rows, tailEntryId), [rows, tailEntryId])
 
@@ -941,6 +990,7 @@ export function ReaderSurface({
                   editDisabled={flags.editDisabled}
                   reversalDisabled={flags.reversalDisabled}
                   disabledReason={gateReason}
+                  held={editingId != null && editingId !== row.id}
                   systemFixLabel={systemFixLabel}
                   cutOffFixLabel={cutOffFixLabel}
                   worldTimeLabel={decoration?.label}

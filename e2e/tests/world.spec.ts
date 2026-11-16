@@ -17,7 +17,7 @@ import {
 import { createSeededUserDataDir, removeUserDataDir, setProviderEndpoint } from '../harness/seed'
 import { chrome } from '../locators/chrome'
 import { home } from '../locators/home'
-import { reader } from '../locators/reader'
+import { reader, undoText } from '../locators/reader'
 import { saveSession } from '../locators/save-session'
 import { storySettings } from '../locators/story-settings'
 import { world } from '../locators/world'
@@ -408,10 +408,15 @@ test.describe.serial('World panel', () => {
       await queryApp(page, `SELECT COUNT(*) FROM deltas WHERE action_id = ?`, [actionId]),
     ).toEqual([[1]])
 
-    // CTRL-Z lives on the reader; the Actions menu row is its touch-tier twin.
+    // CTRL-Z lives on the reader; the Actions menu row is its touch-tier twin. The reader can't
+    // show a World save, so the undo asks first.
     await goToReader(page)
     await chrome.actionsTrigger(page).click()
-    await reader.undoRow(page).click()
+    await reader.undoRow(page, undoText('menu', 'edited', { name: 'Kael' })).click()
+    await expect(
+      reader.undoConfirm(page, undoText('title', 'edited', { name: 'Kael' })),
+    ).toBeVisible()
+    await reader.undoConfirmUndo(page).click()
     await expect.poll(() => entitySnapshot(page, kael), { timeout: 30_000 }).toEqual(before)
   })
 

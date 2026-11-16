@@ -2,13 +2,13 @@ import { expect, test, type Page } from '@playwright/test'
 
 import { goToChapterTimeline, goToReader, openStory } from '../flows/navigation'
 import { chapterByTitle, type ChapterRow, currentBranchId, queryApp } from '../harness/db'
-import { escapeRegExp } from '../harness/i18n'
+import { escapeRegExp, t } from '../harness/i18n'
 import { launchApp, type LaunchedApp } from '../harness/launch'
 import { suppressNativeUnloadDialogRace } from '../harness/reload'
 import { createSeededUserDataDir, removeUserDataDir } from '../harness/seed'
 import { chapterTimeline } from '../locators/chapter-timeline'
 import { chrome } from '../locators/chrome'
-import { reader } from '../locators/reader'
+import { reader, undoText } from '../locators/reader'
 import { saveSession } from '../locators/save-session'
 
 const HERO_STORY = 'story_hero'
@@ -162,6 +162,13 @@ test.describe.serial('Chapter Timeline', () => {
     // The shortcut ignores editable targets, and the composer can hold focus on return.
     await page.evaluate(() => (document.activeElement as HTMLElement | null)?.blur())
     await page.keyboard.press('Control+z')
+    // The reader can't show a Timeline edit, so the undo asks first, naming the chapter.
+    const chapter = t('reader:undo.chapterName', { number: keep.sequenceNumber })
+    await expect(
+      reader.undoConfirm(page, undoText('title', 'edited', { name: chapter })),
+    ).toBeVisible()
+    expect(await columnsOf(page, keep.id)).not.toEqual(keepSeeded)
+    await reader.undoConfirmUndo(page).click()
 
     await expect.poll(() => columnsOf(page, keep.id), { timeout: 15_000 }).toEqual(keepSeeded)
   })

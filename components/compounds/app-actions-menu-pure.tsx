@@ -12,6 +12,8 @@ type AppActionsMenuPureProps = {
   hotkeyEnabled?: boolean
   /** Passed through to `ActionsMenu`; the route owns which overlays block it. */
   blocked?: boolean
+  /** Passed through to `ActionsMenu`. */
+  onOpenChange?: (open: boolean) => void
 }
 
 // Presentational variant — props in, no store/navigation coupling — so stories
@@ -24,6 +26,7 @@ export function AppActionsMenuPure({
   goTo,
   hotkeyEnabled,
   blocked,
+  onOpenChange,
 }: AppActionsMenuPureProps) {
   // Capability-gated entries are absent from the array, not disabled — the menu
   // doesn't surface dead commands (per actions-menu spec).
@@ -49,6 +52,7 @@ export function AppActionsMenuPure({
       triggerSize="lg"
       hotkeyEnabled={hotkeyEnabled}
       blocked={blocked}
+      onOpenChange={onOpenChange}
     />
   )
 }

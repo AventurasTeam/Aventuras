@@ -229,8 +229,7 @@ and the catalog bullet below drops out.
   guard is the inline edit session's
   ([`reader-composer.md → Inline edit session`](../../../../ui/screens/reader-composer/reader-composer.md#inline-edit-session)):
   a dirty draft raises Save / Discard / Cancel first, since the close reads the
-  chapter's stored prose. Until that session is built, the reader registers the
-  default `(proceed) => proceed()`, and the modal opens at once.
+  chapter's stored prose. The reader registers it through `useOverlaySurface`.
 - `CloseChapterModal` in `components/chapters/close-chapter-modal.tsx`,
   rendered by `ChapterOverlaysHost`: a pure `CloseChapterModalView`, props
   in, and a connected body rendered only while open, so its reads don't

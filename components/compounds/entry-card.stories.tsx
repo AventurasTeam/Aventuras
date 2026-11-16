@@ -2906,3 +2906,52 @@ export const WorldStateAbsentOnUserAction: StoryT = {
     expect(screen.queryByRole('button', { name: 'Show state' })).not.toBeInTheDocument()
   },
 }
+
+const HELD_REASON = 'Finish or cancel the edit first.'
+
+/** Edit-mode focus elsewhere holds the whole cluster, each control named by the edit. */
+export const HeldByEditFocus: StoryT = {
+  ...wrap,
+  args: { ...baseProps, ...aiEntry, held: true, heldReason: HELD_REASON },
+  play: async () => {
+    const held = await screen.findAllByRole('button', { name: HELD_REASON })
+    expect(held).toHaveLength(5)
+    for (const button of held) expect(button).toBeDisabled()
+  },
+}
+
+/** A control its own gate holds keeps the gate's reason; the rest show the edit's. */
+export const HeldUnderInterruptibleGate: StoryT = {
+  ...wrap,
+  args: {
+    ...baseProps,
+    ...aiEntry,
+    disabled: true,
+    disabledReason: 'Updating memory…',
+    editDisabled: true,
+    reversalDisabled: false,
+    held: true,
+    heldReason: HELD_REASON,
+  },
+  play: async () => {
+    expect(await screen.findAllByRole('button', { name: 'Updating memory…' })).toHaveLength(3)
+    expect(screen.getAllByRole('button', { name: HELD_REASON })).toHaveLength(2)
+  },
+}
+
+/** A system entry's Retry waits on the edit; Dismiss doesn't. */
+export const SystemRetryHeld: StoryT = {
+  ...wrap,
+  args: {
+    kind: 'system',
+    content: 'Generation failed: provider returned 503.',
+    onRetry: fn(),
+    onDismiss: fn(),
+    held: true,
+    heldReason: HELD_REASON,
+  },
+  play: async () => {
+    expect(await screen.findByRole('button', { name: /Retry/ })).toBeDisabled()
+    expect(screen.getByRole('button', { name: /Dismiss/ })).not.toBeDisabled()
+  },
+}

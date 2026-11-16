@@ -50,6 +50,8 @@ export type SurvivorPayload = {
 class RedoGroup {
   // A private field makes the type nominal: no literal or spread of a group satisfies it.
   readonly #minted = true
+  /** The action the CTRL-Z undid: what redo names, and the id a caller pins it to. */
+  readonly actionId: string
   readonly snapshots: readonly RedoSnapshot[]
   /** The clears of refs to a row the snapshot re-creates; redo writes each back, logging nothing. */
   readonly refRestores: readonly RefRestore[]
@@ -60,10 +62,12 @@ class RedoGroup {
   readonly survivorPayloads: readonly SurvivorPayload[]
 
   constructor(
+    actionId: string,
     snapshots: readonly RedoSnapshot[],
     refRestores: readonly RefRestore[],
     survivorPayloads: readonly SurvivorPayload[] = [],
   ) {
+    this.actionId = actionId
     this.snapshots = snapshots
     this.refRestores = refRestores
     this.survivorPayloads = survivorPayloads
@@ -73,8 +77,11 @@ class RedoGroup {
 export type { RedoGroup }
 
 // Test-only: a group no undo took, for a test that needs one on the redo stack.
-export function __redoGroupForTest(snapshots: readonly RedoSnapshot[] = []): RedoGroup {
-  return new RedoGroup(snapshots, [])
+export function __redoGroupForTest(
+  snapshots: readonly RedoSnapshot[] = [],
+  actionId = snapshots[0]?.delta.actionId ?? 'act_test',
+): RedoGroup {
+  return new RedoGroup(actionId, snapshots, [])
 }
 
 /** A redoable CTRL-Z of a set: the redo group, taken before `reverse` runs the reversal. */
@@ -85,9 +92,14 @@ export type PreparedUndo = {
 }
 
 // One call takes the snapshot and fixes keepRedoExact, so the two cannot disagree.
-export async function prepareUndo(set: ReversalSet, ctx: DbCtx): Promise<PreparedUndo> {
+export async function prepareUndo(
+  set: ReversalSet,
+  ctx: DbCtx,
+  // The closure reaches only rows written after its target, so the oldest is the target's.
+  actionId: string = set.redoRows.at(-1)?.actionId ?? '',
+): Promise<PreparedUndo> {
   const survivors: SurvivorPayload[] = []
-  const group = await snapshotForRedo(set, ctx, survivors)
+  const group = await snapshotForRedo(set, actionId, ctx, survivors)
   const restored = new Set(set.redoRows.map((d) => heldKey(d.targetTable, d.targetId)))
   const takeSurvivors = ({ survivorRewrites }: ReversePlan) => {
     survivors.length = 0
@@ -141,6 +153,7 @@ function clearsRedoRestores(set: ReversalSet): RefClear[] {
 
 async function snapshotForRedo(
   set: ReversalSet,
+  actionId: string,
   ctx: DbCtx,
   survivors: readonly SurvivorPayload[],
 ): Promise<RedoGroup> {
@@ -173,7 +186,7 @@ async function snapshotForRedo(
       refRestores.push({ branchId: set.branchId, row, ref, idBeforeUndo: id, placementBeforeUndo })
     }
   }
-  return new RedoGroup(snapshots, refRestores, survivors)
+  return new RedoGroup(actionId, snapshots, refRestores, survivors)
 }
 
 // A whole-row snapshot carries no diff, so redo errs dirty on membership alone; the

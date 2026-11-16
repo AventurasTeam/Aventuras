@@ -1,6 +1,12 @@
 import { describe, expect, it } from 'vitest'
 
-import { editGateOf, headTurnIdsOf, rowGateReason, rowReversalFlags } from './row-reversal-flags'
+import {
+  editGateOf,
+  headTurnIdsOf,
+  inlineEditSaveGate,
+  rowGateReason,
+  rowReversalFlags,
+} from './row-reversal-flags'
 
 function entry(id: string, kind: string) {
   return { id, kind, position: 0 }
@@ -111,5 +117,40 @@ describe('rowGateReason', () => {
 
   it('names nothing while the gate is open', () => {
     expect(rowGateReason('open', reasons)).toBeUndefined()
+  })
+})
+
+describe('inlineEditSaveGate', () => {
+  const reasons = { gate: 'Updating memory…', headReversal: 'Waiting on the turn…' }
+  const head = new Set(['e4', 'e5'])
+
+  it('leaves Save open with no editor', () => {
+    expect(
+      inlineEditSaveGate({ entryId: null, headTurnIds: head, editGate: 'closed', reasons }),
+    ).toEqual({ disabled: false, reason: undefined })
+  })
+
+  it('keeps a head-turn edit savable through a pass', () => {
+    expect(
+      inlineEditSaveGate({ entryId: 'e5', headTurnIds: head, editGate: 'interruptible', reasons }),
+    ).toEqual({ disabled: false, reason: undefined })
+  })
+
+  it('holds an older edit through a pass, with the run as its reason', () => {
+    expect(
+      inlineEditSaveGate({ entryId: 'e2', headTurnIds: head, editGate: 'interruptible', reasons }),
+    ).toEqual({ disabled: true, reason: reasons.gate })
+  })
+
+  it("holds the head turn's edit too once the gate is closed", () => {
+    expect(
+      inlineEditSaveGate({ entryId: 'e5', headTurnIds: head, editGate: 'closed', reasons }),
+    ).toEqual({ disabled: true, reason: reasons.headReversal })
+  })
+
+  it('leaves every edit savable with the gate open', () => {
+    expect(
+      inlineEditSaveGate({ entryId: 'e2', headTurnIds: head, editGate: 'open', reasons }),
+    ).toEqual({ disabled: false, reason: undefined })
   })
 })

@@ -1,8 +1,10 @@
-import { useNavigation, usePreventRemove } from '@react-navigation/native'
+import { useNavigation, usePreventRemove, useRoute } from '@react-navigation/native'
 import { useEffect, useRef } from 'react'
 import { Platform } from 'react-native'
 
 import type { NativeApi } from '@/types/native'
+
+import { armUnsavedPop, storyLeavePop } from './leave-guard-chain'
 
 type CloseBridge = Pick<
   NativeApi,
@@ -87,6 +89,7 @@ function syncBridge(native: CloseBridge): void {
  */
 export function useUnsavedChangesGuard(dirty: boolean, requestLeave: LeaveRequest): void {
   const navigation = useNavigation()
+  const { key: routeKey } = useRoute()
   const requestLeaveRef = useRef(requestLeave)
   // Post-commit, not in render: React can discard a render pass, and both
   // readers below only fire on a later user gesture.
@@ -94,9 +97,11 @@ export function useUnsavedChangesGuard(dirty: boolean, requestLeave: LeaveReques
     requestLeaveRef.current = requestLeave
   })
 
+  // Asks before the story-leave confirm: a pop it releases runs that check before replaying.
   usePreventRemove(dirty, ({ data }) => {
-    requestLeaveRef.current(() => navigation.dispatch(data.action))
+    requestLeaveRef.current(() => storyLeavePop(routeKey)(() => navigation.dispatch(data.action)))
   })
+  useEffect(() => (dirty ? armUnsavedPop(routeKey) : undefined), [dirty, routeKey])
 
   useEffect(() => {
     if (Platform.OS !== 'web' || typeof window === 'undefined') return undefined

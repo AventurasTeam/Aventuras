@@ -154,9 +154,11 @@ export {
   redoLastAction,
   undoLastAction,
   type UndoRejectionCode,
+  type UndoOptions,
   type UndoResult,
 } from './story-entries/undo'
 export { clearSystemEntry, writeSystemEntry } from './story-entries/system-entry'
+export { readUndoImpact, readUndoTarget, type UndoTargetRead } from './story-entries/undo-target'
 export {
   updateEntrySceneFields,
   type SceneFieldsEdit,
@@ -189,7 +191,9 @@ export type {
   RowGuard,
   RowGuardArgs,
   RowVerdicts,
+  UndoKind,
 } from './types'
+export { UNDO_KIND_KEY, UNDO_KINDS } from './types'
 export {
   clearLiveSession,
   loadDraft,

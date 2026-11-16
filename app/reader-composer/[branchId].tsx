@@ -5,6 +5,7 @@ import { Platform, View } from 'react-native'
 
 import { type ActionGroup } from '@/components/compounds/actions-menu'
 import { AppActionsMenu } from '@/components/compounds/app-actions-menu'
+import { heldControl } from '@/components/compounds/entry-card-hold'
 import { StoryStatusPill } from '@/components/compounds/story-status-pill'
 import { TruncatedText } from '@/components/compounds/truncated-text'
 import { chapterBreaksOf } from '@/components/reader/chapter-breaks'
@@ -20,8 +21,10 @@ import {
   type RollbackRefusal,
 } from '@/components/reader/confirm-refusal'
 import { useContentEditing } from '@/components/reader/content-editing'
+import { createEditRequests, type EditBridgeAnswer } from '@/components/reader/edit-bridge-requests'
 import { EntryJumpVeil } from '@/components/reader/entry-jump-veil'
 import { readerPillPhase } from '@/components/reader/generation-phase'
+import { nativeEditPort, webEditPort } from '@/components/reader/inline-edit-port'
 import { routeJumpToBottom } from '@/components/reader/jump-to-bottom'
 import {
   draftSubmission,
@@ -39,7 +42,10 @@ import {
   type ReaderChapterChipsHandle,
 } from '@/components/reader/reader-chapter-chips'
 import ReaderDocument, { type ReaderDocumentRef } from '@/components/reader/reader-document'
-import { type ReaderSurfaceHandle } from '@/components/reader/reader-document-types'
+import {
+  type EditSession,
+  type ReaderSurfaceHandle,
+} from '@/components/reader/reader-document-types'
 import { ReaderSurface } from '@/components/reader/reader-surface'
 import {
   classifyRegenerateGate,
@@ -54,7 +60,12 @@ import {
   settleWithDroppedHandback,
 } from '@/components/reader/regenerate-outcome'
 import { RollbackConfirmModal } from '@/components/reader/rollback-confirm'
-import { editGateOf, rowGateReason } from '@/components/reader/row-reversal-flags'
+import {
+  editGateOf,
+  headTurnIdsOf,
+  inlineEditSaveGate,
+  rowGateReason,
+} from '@/components/reader/row-reversal-flags'
 import { SceneEditSheet } from '@/components/reader/scene-edit-sheet'
 import { useSceneEditing } from '@/components/reader/scene-editing'
 import {
@@ -92,6 +103,7 @@ import {
 import { useLiveRollbackCounts } from '@/components/reader/use-live-rollback-counts'
 import { useLoadOlderEntries } from '@/components/reader/use-load-older-entries'
 import { useReaderEntryJump } from '@/components/reader/use-reader-entry-jump'
+import { useReaderUndo } from '@/components/reader/use-reader-undo'
 import { useWorldTimeEditing } from '@/components/reader/world-time-editing'
 import { WorldTimeEditSheet } from '@/components/reader/worldtime-edit-sheet'
 import { ScreenShell } from '@/components/shells/screen-shell'
@@ -105,12 +117,12 @@ import { EmptyState } from '@/components/ui/empty-state'
 import { KeyboardInsetColumn } from '@/components/ui/keyboard-inset-column'
 import { useChapterProgress } from '@/hooks/use-chapter-progress'
 import { useGlobalHotkey } from '@/hooks/use-global-hotkey'
+import { useInlineEditGuard } from '@/hooks/use-inline-edit-guard'
 import { useLeaveFailedStoryOpen } from '@/hooks/use-leave-failed-story-open'
 import { useSwapState } from '@/hooks/use-memory-health'
 import { useOverlaySurface } from '@/hooks/use-overlay-surface'
 import { useRouteLink } from '@/hooks/use-route-link'
 import { useStoryLeaveGuard } from '@/hooks/use-story-leave-guard'
-import { useSurfaceNavigate } from '@/hooks/use-surface-navigate'
 import { useTier } from '@/hooks/use-tier'
 import {
   clearSystemEntry,
@@ -118,7 +130,6 @@ import {
   getRollbackCounts,
   loadOpenStory,
   readRecentEntries,
-  redoLastAction,
   refreshSuggestions,
   regenerateTurn,
   rollbackToEntry,
@@ -126,8 +137,6 @@ import {
   runOwedClose,
   sameRollbackCounts,
   submitTurn,
-  undoLastAction,
-  type UndoRejectionCode,
   writeSystemEntry,
   type LoadOpenStoryResult,
   type RollbackCounts,
@@ -167,7 +176,6 @@ import {
   readerRailStore,
   rehydrateStories,
   storiesStore,
-  undoRedoStore,
 } from '@/lib/stores'
 import { useTheme } from '@/lib/themes'
 import { toast } from '@/lib/toast'
@@ -175,6 +183,11 @@ import { runAction } from '@/lib/utils'
 import { resolveLead } from '@/lib/world'
 
 const ctx = { db, runInTransaction }
+
+// A live document answers within frames; one that can't in this long can't save the draft either.
+const EDIT_QUERY_TIMEOUT_MS = 2_000
+// A commit can wait on a pass it interrupts, so it gets longer before it reads as unanswered.
+const EDIT_COMMIT_TIMEOUT_MS = 10_000
 
 const loadRollbackCounts = (branchId: string, targetId: string) =>
   getRollbackCounts(branchId, targetId, ctx)
@@ -230,9 +243,6 @@ function readerPlaceholder(state: {
 
 export default function ReaderComposerRoute() {
   const router = useRouter()
-  const surfaceNavigate = useSurfaceNavigate()
-  // No pane to guard, so the default guard (C7).
-  useOverlaySurface()
   const tier = useTier()
   const showRail = tier !== 'phone'
   const isFocused = useIsFocused()
@@ -439,6 +449,12 @@ export default function ReaderComposerRoute() {
   const [chapterPopoverOpen, setChapterPopoverOpen] = useState(false)
   const [syncNonce, setSyncNonce] = useState(0)
   const [documentPainted, setDocumentPainted] = useState(false)
+  // The surface's inline editor, as its transitions report it (reader-composer.md → Inline edit
+  // session). Settles: on native a rejection would re-reject inside the WebView unlogged.
+  const [editSession, setEditSession] = useState<EditSession | null>(null)
+  const handleEditSession = useCallback(async (session: EditSession | null) => {
+    setEditSession(session)
+  }, [])
 
   // A full first window means older entries may exist; any shorter load
   // proves the branch top is already inside the window.
@@ -749,6 +765,58 @@ export default function ReaderComposerRoute() {
     headReversal: headReversalRunKind,
     pill: gateRunKind,
   })
+
+  // reader-composer.md → Inline edit session: every leave runs this guard. Armed on dirty on web;
+  // on native on an open editor, since a dirty report can still be crossing the bridge.
+  const editRequests = useMemo(
+    () =>
+      createEditRequests({
+        queryTimeoutMs: EDIT_QUERY_TIMEOUT_MS,
+        commitTimeoutMs: EDIT_COMMIT_TIMEOUT_MS,
+      }),
+    [],
+  )
+  const editPort = useMemo(
+    () =>
+      Platform.OS === 'web'
+        ? webEditPort(() => surfaceRef.current)
+        : nativeEditPort(editRequests, () => documentRef.current),
+    [editRequests],
+  )
+  const editHeadTurnIds = useMemo(() => headTurnIdsOf(entries, tailEntryId), [entries, tailEntryId])
+  const {
+    guard,
+    navigateGuarded,
+    dialog: editGuardDialog,
+  } = useInlineEditGuard({
+    port: editPort,
+    armed: Platform.OS === 'web' ? editSession?.dirty === true : editSession != null,
+    saveGate: inlineEditSaveGate({
+      entryId: editSession?.entryId ?? null,
+      headTurnIds: editHeadTurnIds,
+      editGate,
+      reasons: { gate: gateReason, headReversal: headReversalReason },
+    }),
+  })
+  // C7: review-row presses and the close modal run it first.
+  useOverlaySurface(guard)
+  // Stable for every row's handlers: the guard's own identity follows each session transition.
+  const guardRef = useRef(guard)
+  useLayoutEffect(() => {
+    guardRef.current = guard
+  })
+  const guardEdit = useCallback((proceed: () => void) => guardRef.current(proceed), [])
+  const guardedStripFix = useMemo(
+    () =>
+      stripErrorFix == null
+        ? undefined
+        : { ...stripErrorFix, onPress: () => guardEdit(stripErrorFix.onPress) },
+    [stripErrorFix, guardEdit],
+  )
+  const handleEditAnswer = useCallback(
+    async (requestId: string, answer: EditBridgeAnswer) => editRequests.answer(requestId, answer),
+    [editRequests],
+  )
 
   const runSubmit = useCallback(
     async (content: string, composerMode: string, raw?: { text: string; mode: ComposerMode }) => {
@@ -1441,7 +1509,10 @@ export default function ReaderComposerRoute() {
     documentPaintedRef.current = false
     setDocumentPainted(false)
     setSyncNonce((n) => n + 1)
-  }, [])
+    // A boot took any open editor with it: what waited on the old document resolves as clean.
+    editRequests.resetAll()
+    setEditSession(null)
+  }, [editRequests])
 
   const handleFirstPaint = useCallback(async () => {
     documentPaintedRef.current = true
@@ -1465,67 +1536,35 @@ export default function ReaderComposerRoute() {
     return false
   }, [])
 
-  // Every rejection is logged; only the actionable ones are shown. `integrity` means
-  // the delta log cannot produce the reversal it should — an error, not "Nothing to
-  // undo." A branch-not-loaded rejection is a branch-switch race that resolves itself.
-  const reportUndoRejection = useCallback(
-    (
-      op: 'undo' | 'redo',
-      result: { code: UndoRejectionCode; reason: string },
-      silent = false,
-    ): void => {
-      const isUndo = op === 'undo'
-      const fields = { branchId, code: result.code, reason: result.reason }
-      if (result.code === 'integrity')
-        logger.error(isUndo ? 'reader.undo_failed' : 'reader.redo_failed', fields)
-      else logger.debug(isUndo ? 'reader.undo_rejected' : 'reader.redo_rejected', fields)
-      if (silent) return
-      if (result.code === 'integrity')
-        toast.error(t(isUndo ? 'reader:actions.undoFailed' : 'reader:actions.redoFailed'))
-      else if (result.code === 'nothing-to-apply')
-        toast.info(t(isUndo ? 'reader:actions.nothingToUndo' : 'reader:actions.nothingToRedo'))
-      else if (result.code === 'gated') toast.info(t('reader:actions.blockedWhileGenerating'))
-    },
-    [branchId],
-  )
-
-  // The one place op maps to its action, log event and toast. Two failure notions
-  // share the flow: a rejection toasts unless `silent` (the keyboard path, by the
-  // native undo convention); a thrown failure toasts on both paths, via runAction.
-  const runUndoRedo = useCallback(
-    (op: 'undo' | 'redo', silent = false) =>
-      runAction(
-        (op === 'redo' ? redoLastAction(branchId, ctx) : undoLastAction(branchId, ctx)).then(
-          (result) => {
-            // Silent to the user, never unlogged: an integrity rejection looks
-            // identical to an empty history.
-            if (result.status === 'rejected') reportUndoRejection(op, result, silent)
-          },
-        ),
-        {
-          event: op === 'redo' ? 'reader.redo_failed' : 'reader.undo_failed',
-          toastMessage: t(
-            op === 'redo' ? 'reader:actions.redoFailed' : 'reader:actions.undoFailed',
-          ),
-        },
-      ),
-    [branchId, reportUndoRejection],
-  )
-
+  // reader-composer.md → Undo and redo: labels, the confirm, the notice and the pin.
+  const {
+    undoLabel,
+    redoLabel,
+    onMenuOpenChange,
+    undo: undoAction,
+    redo: redoAction,
+    confirmOpen: undoConfirmOpen,
+    confirm: undoConfirm,
+  } = useReaderUndo({ branchId, ctx, isFocused, held: editSession != null })
   // Editable-target exclusion lets the browser's native undo/redo win when
   // focus is in a text input — otherwise Ctrl/Cmd+Z on a composer typo
   // reverses the last story turn instead of the typo.
+  // An open editor holds undo and redo (reader-composer.md → Inline edit session): refused
+  // silently, as the shortcut's other refusals are.
+  const editorOpen = editSession != null
   const handleUndoRedoShortcut = useCallback(
-    (ev: KeyboardEvent) => runUndoRedo(ev.shiftKey ? 'redo' : 'undo', true),
-    [runUndoRedo],
+    (ev: KeyboardEvent) => {
+      if (editorOpen) return
+      if (ev.shiftKey) redoAction('keyboard')
+      else undoAction('keyboard')
+    },
+    [editorOpen, redoAction, undoAction],
   )
   useGlobalHotkey(matchesUndoRedoShortcut, handleUndoRedoShortcut, {
     ignoreEditableTargets: true,
     enabled: isFocused,
   })
 
-  // Touch-tier path to undo/redo (the shortcut is keyboard-only).
-  const hasRedo = undoRedoStore.useUndoRedo((s) => s.redoStack.length > 0)
   // Engage/settle semantics live in the surface's own jumpToBottom; the host only routes it.
   const jumpToBottom = useCallback(
     () =>
@@ -1585,10 +1624,16 @@ export default function ReaderComposerRoute() {
   )
 
   const handleRetrySystemEntry = useCallback(async () => retrySystemEntry?.(), [retrySystemEntry])
-  const handleFixSystemEntry = useCallback(async () => fixAction?.onPress(), [fixAction])
+  const handleFixSystemEntry = useCallback(
+    async () => guardEdit(() => fixAction?.onPress()),
+    [fixAction, guardEdit],
+  )
   // One stable action for every row's notice: useProfileFixAction keeps its identity.
   const cutOffFix = useProfileFixAction(true, guardLeave)
-  const handleFixCutOff = useCallback(async () => cutOffFix?.onPress(), [cutOffFix])
+  const handleFixCutOff = useCallback(
+    async () => guardEdit(() => cutOffFix?.onPress()),
+    [cutOffFix, guardEdit],
+  )
   // Editable-target exclusion keeps End moving the caret inside the composer.
   useGlobalHotkey(matchesJumpToBottomShortcut, jumpToBottom, {
     ignoreEditableTargets: true,
@@ -1596,29 +1641,36 @@ export default function ReaderComposerRoute() {
   })
   const contextualActions: ActionGroup = useMemo(() => {
     // Undo of the turn is a head reversal, live through a pass; the action refuses any other
-    // target with `gated`. Redo never is one, so it keeps the whole gate.
+    // target with `gated`. Redo never is one, so it keeps the whole gate. An open editor holds
+    // both, the gate's reason outranking its own.
+    const held = t('reader:editFocus.held')
+    const undo = heldControl(headReversalBlocked, editorOpen, {
+      gate: headReversalReason,
+      held,
+    })
+    const redo = heldControl(actionsBlocked, editorOpen, { gate: gateReason, held })
     return {
       id: 'reader',
       header: t('chrome.onThisScreen'),
       entries: [
         {
           id: 'undo',
-          label: t('reader:actions.undo'),
-          disabled: headReversalBlocked,
-          disabledReason: headReversalReason,
-          onActivate: () => runUndoRedo('undo'),
+          label: undoLabel,
+          disabled: undo.disabled,
+          disabledReason: undo.reason,
+          onActivate: () => undoAction('menu'),
         },
         // Absent, not disabled, when the stack is empty — the menu doesn't
         // surface dead commands (actions-menu spec); emptiness is store-derived
         // and cheap, unlike undo's DB-backed target lookup.
-        ...(hasRedo
+        ...(redoLabel != null
           ? [
               {
                 id: 'redo',
-                label: t('reader:actions.redo'),
-                disabled: actionsBlocked,
-                disabledReason: gateReason,
-                onActivate: () => runUndoRedo('redo'),
+                label: redoLabel,
+                disabled: redo.disabled,
+                disabledReason: redo.reason,
+                onActivate: () => redoAction('menu'),
               },
             ]
           : []),
@@ -1628,12 +1680,15 @@ export default function ReaderComposerRoute() {
       ],
     }
   }, [
-    hasRedo,
+    undoLabel,
+    redoLabel,
+    undoAction,
+    redoAction,
     actionsBlocked,
     headReversalBlocked,
     headReversalReason,
     gateReason,
-    runUndoRedo,
+    editorOpen,
     entries.length,
     jumpToBottom,
   ])
@@ -1693,6 +1748,7 @@ export default function ReaderComposerRoute() {
     onFixSystemEntry: handleFixSystemEntry,
     onFixCutOff: handleFixCutOff,
     onEntryLanded: handleEntryLanded,
+    onEditSession: handleEditSession,
   }
 
   return (
@@ -1713,7 +1769,7 @@ export default function ReaderComposerRoute() {
             progress={chapterProgress}
             isFocused={isFocused}
             onJumpToEntry={followEntry}
-            onManageChapters={() => surfaceNavigate(`/chapter-timeline/${branchId}`)}
+            onManageChapters={() => navigateGuarded(`/chapter-timeline/${branchId}`)}
             onOpenChange={setChapterPopoverOpen}
           />
         ) : undefined
@@ -1730,20 +1786,22 @@ export default function ReaderComposerRoute() {
             storyId={storyId}
             blocked={actionsBlocked}
             blockedReason={gateReason}
-            onNavigate={surfaceNavigate}
+            onNavigate={navigateGuarded}
           />
         ) : undefined
       }
       onBack={() => router.back()}
       onOpenStorySettings={() => {
-        if (storyId != null) surfaceNavigate(`/story-settings/${storyId}`)
+        if (storyId != null) navigateGuarded(`/story-settings/${storyId}`)
       }}
       actions={
         <AppActionsMenu
           contextual={contextualActions}
           story={storyId != null ? { storyId, branchId, surface: 'reader' } : undefined}
+          beforeNavigate={guardEdit}
           beforeLeaveStory={guardLeave}
-          blocked={rollback != null || timeEdit != null}
+          blocked={rollback != null || timeEdit != null || undoConfirmOpen}
+          onOpenChange={onMenuOpenChange}
         />
       }
       statusSlot={
@@ -1757,7 +1815,8 @@ export default function ReaderComposerRoute() {
             ? { onCancel: handleCancelPill }
             : {})}
           onOpenMemory={() => {
-            if (storyId != null) router.push(`/story-settings/${storyId}?tab=memory`)
+            if (storyId != null)
+              guardEdit(() => router.push(`/story-settings/${storyId}?tab=memory`))
           }}
         />
       }
@@ -1780,6 +1839,7 @@ export default function ReaderComposerRoute() {
                   syncNonce={syncNonce}
                   onReady={handleReady}
                   onFirstPaint={handleFirstPaint}
+                  onEditAnswer={handleEditAnswer}
                   dom={{
                     scrollEnabled: false,
                     style: { flex: 1 },
@@ -1804,7 +1864,7 @@ export default function ReaderComposerRoute() {
               chips={chips}
               categories={suggestionCategories}
               errorMessage={stripErrorMessage}
-              errorFix={stripErrorFix}
+              errorFix={guardedStripFix}
               canRefresh={canRefreshSuggestions}
               onTapChip={handleTapChip}
               onRefresh={handleRefreshSuggestions}
@@ -1845,7 +1905,7 @@ export default function ReaderComposerRoute() {
               storyId={storyId}
               blocked={actionsBlocked}
               blockedReason={gateReason}
-              onNavigate={surfaceNavigate}
+              onNavigate={navigateGuarded}
             />
           </>
         ) : null}
@@ -1899,6 +1959,8 @@ export default function ReaderComposerRoute() {
           onClose={closeSceneEdit}
         />
       ) : null}
+      {undoConfirm}
+      {editGuardDialog}
       {storyLeaveDialog}
     </ScreenShell>
   )

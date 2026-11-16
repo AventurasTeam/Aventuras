@@ -633,6 +633,7 @@ describe('suggestion-refresh emission phase', () => {
               source: 'refresh',
             },
           },
+          undoKind: 'suggestionRefresh',
         },
       },
     })

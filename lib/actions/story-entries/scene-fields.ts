@@ -141,7 +141,7 @@ async function updateEntrySceneFieldsLocked(
     {
       kind: 'updateStoryEntryMetadata',
       source: 'user_edit',
-      payload: { branchId, id, metadata: after },
+      payload: { branchId, id, metadata: after, undoKind: 'entryScene' },
     },
     // Promotion first: a staged scene member, or a staged place the edit moves the scene to, is
     // promoted as the generation fold promotes one; an unchanged location promotes nothing.

@@ -9,7 +9,7 @@ import { createSeededUserDataDir, removeUserDataDir } from '../harness/seed'
 import { chrome } from '../locators/chrome'
 import { home } from '../locators/home'
 import { plot } from '../locators/plot'
-import { reader } from '../locators/reader'
+import { reader, undoText } from '../locators/reader'
 import { saveSession } from '../locators/save-session'
 import { world } from '../locators/world'
 
@@ -143,10 +143,15 @@ test.describe.serial('Plot panel', () => {
       await queryApp(page, `SELECT COUNT(*) FROM deltas WHERE action_id = ?`, [updateActionId]),
     ).toEqual([[1]])
 
-    // CTRL-Z lives on the reader; the Actions menu row is its touch-tier twin.
+    // CTRL-Z lives on the reader; the Actions menu row is its touch-tier twin. The reader can't
+    // show a Plot save, so the undo asks first.
     await goToReader(page)
     await chrome.actionsTrigger(page).click()
-    await reader.undoRow(page).click()
+    await reader.undoRow(page, undoText('menu', 'edited', { name: 'E2E thread' })).click()
+    await expect(
+      reader.undoConfirm(page, undoText('title', 'edited', { name: 'E2E thread' })),
+    ).toBeVisible()
+    await reader.undoConfirmUndo(page).click()
     await expect
       .poll(
         async () =>
@@ -263,9 +268,19 @@ test.describe.serial('Plot panel', () => {
     await page.waitForURL(/\/plot\//)
     await expect(plot.tab(page, 'awareness')).toHaveAttribute('aria-selected', 'true')
 
+    // The save wrote the happening and the links it moved: named by the happening, counting the
+    // rest of the rows.
+    const [[rowsWritten]] = await queryApp(
+      page,
+      `SELECT COUNT(DISTINCT target_table || ':' || target_id) FROM deltas WHERE action_id = ?`,
+      [actionId],
+    )
+    const save = { name: 'The alley ambush', count: (rowsWritten as number) - 1 }
     await goToReader(page)
     await chrome.actionsTrigger(page).click()
-    await reader.undoRow(page).click()
+    await reader.undoRow(page, undoText('menu', 'rows', save)).click()
+    await expect(reader.undoConfirm(page, undoText('title', 'rows', save))).toBeVisible()
+    await reader.undoConfirmUndo(page).click()
 
     const revertedState = async () => {
       const [[description]] = await queryApp(
@@ -505,7 +520,11 @@ test.describe.serial('Plot panel', () => {
 
     await goToReader(page)
     await chrome.actionsTrigger(page).click()
-    await reader.undoRow(page).click()
+    await reader.undoRow(page, undoText('menu', 'deleted', { name: title })).click()
+    await expect(
+      reader.undoConfirm(page, undoText('title', 'deleted', { name: title })),
+    ).toBeVisible()
+    await reader.undoConfirmUndo(page).click()
     // Vectors aren't delta-logged: the restored row comes back stale (the seed's value already)
     // and re-embeds at the next sync.
     await expect

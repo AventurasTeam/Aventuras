@@ -7,7 +7,7 @@ import { headTurnEntries } from '@/lib/head-turn'
 
 import { loadHeadTurn } from './head-turn'
 import { PAYLOAD_META_PREFIX } from '../delta/delta-encoding'
-import type { DbCtx } from '../types'
+import { UNDO_KIND_KEY, type DbCtx } from '../types'
 import { classifierWatermarkClampOps } from './prose-reversal'
 
 export type InvalidationScope = { entryIds: string[]; editedPosition: number }
@@ -95,7 +95,9 @@ export async function resolveContentEditInvalidation(
 /** A content delta's undo payload; `metadata` and the scope are absent, not null, when unset. */
 export type ContentEditUndoPayload = Pick<StoryEntry, 'content' | 'contentTokens'> & {
   metadata?: Record<string, unknown>
-} & { [K in typeof INVALIDATION_SCOPE_KEY]?: InvalidationScope }
+} & { [K in typeof INVALIDATION_SCOPE_KEY]?: InvalidationScope } & {
+  [K in typeof UNDO_KIND_KEY]: 'entryText'
+}
 
 /** The content delta's payload: prior prose and count, the metadata undo if written, the scope. */
 export function contentEditUndoPayload(
@@ -108,6 +110,7 @@ export function contentEditUndoPayload(
     contentTokens: previous.contentTokens,
     ...(metadataUndo !== undefined ? { metadata: metadataUndo } : {}),
     ...(scope ? { [INVALIDATION_SCOPE_KEY]: scope } : {}),
+    [UNDO_KIND_KEY]: 'entryText',
   }
 }
 

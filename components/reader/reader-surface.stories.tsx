@@ -96,6 +96,7 @@ const noopHandlers = {
   onFixSystemEntry: async () => {},
   onFixCutOff: async () => {},
   onEntryLanded: async () => {},
+  onEditSession: async () => {},
 }
 
 const HEAD_TURN_ROWS = ROWS.slice(0, 3)
@@ -3162,5 +3163,222 @@ export const JumpHighlightSkipsTheRowMemo: Story = {
     await waitFor(() => expect(entryRow(JUMP_TARGET)).toHaveAttribute('data-landed'))
     await nextFrame()
     expect(contentReads.count).toBe(before)
+  },
+}
+
+// reader-composer.md → Inline edit session: an open editor holds the other entries' actions.
+
+const HELD = () => t('reader:editFocus.held')
+
+function focusRows(): StoryEntry[] {
+  return [
+    ...PASS_ROWS,
+    entry({
+      id: 'p6',
+      kind: 'system',
+      content: FAILED_PASS.content,
+      position: 6,
+      metadata: {
+        ...BASE_META,
+        systemFailure: toPassFailureMeta({ held: false, error: FAILED_PASS_ERROR }, undefined),
+      },
+    }),
+  ]
+}
+
+async function openEditor(id: string) {
+  await userEvent.click(rowButton(id, t('reader:entryCard.editEntry')))
+  return waitFor(() => screen.getByRole('textbox', { name: t('reader:entryCard.editContent') }))
+}
+
+/** Every other row's cluster and a system row's Retry wait, named by the edit; nothing else does. */
+export const EditFocusHoldsOtherRows: Story = {
+  args: { ...PASS_IN_FLIGHT_ARGS, rows: focusRows() },
+  play: async () => {
+    await openEditor('p2')
+
+    for (const id of ['p3', 'p4', 'p5']) {
+      const held = within(entryRow(id)).getAllByRole('button', { name: HELD() })
+      for (const button of held) expect(button).toBeDisabled()
+    }
+    expect(within(entryRow('p3')).getAllByRole('button', { name: HELD() })).toHaveLength(3)
+    expect(within(entryRow('p5')).getAllByRole('button', { name: HELD() })).toHaveLength(3)
+    const retry = within(entryRow('p6')).getByRole('button', { name: /Retry/ })
+    expect(retry).toBeDisabled()
+    expect(retry.closest('[title]')?.getAttribute('title')).toBe(HELD())
+
+    expect(within(entryRow('p6')).getByRole('button', { name: /Dismiss/ })).not.toBeDisabled()
+    expect(
+      within(entryRow('p5')).getByRole('button', { name: t('reader:worldTimeEdit.title') }),
+    ).not.toBeDisabled()
+    await userEvent.click(rowButton('p5', t('reader:entryCard.showState')))
+    expect(
+      within(entryRow('p5')).getByRole('button', { name: t('reader:entryCard.stateEditScene') }),
+    ).not.toBeDisabled()
+  },
+}
+
+/** Cancelling the edit wouldn't free a control the gate holds, so the gate's reason shows there. */
+export const EditFocusGateReasonOutranks: Story = {
+  args: {
+    ...PASS_IN_FLIGHT_ARGS,
+    editGate: 'interruptible',
+    gateReason: t('generationGate.updatingMemory'),
+  },
+  play: async () => {
+    await openEditor('p5')
+    const gate = t('generationGate.updatingMemory')
+
+    const p3 = entryRow('p3')
+    expect(within(p3).getByRole('button', { name: gate })).toBeDisabled()
+    expect(within(p3).getAllByRole('button', { name: HELD() })).toHaveLength(2)
+    // The head turn's pencil passes the interruptible gate, so only the edit holds it.
+    expect(within(entryRow('p4')).getAllByRole('button', { name: HELD() })).toHaveLength(2)
+  },
+}
+
+export const EditFocusReleasesOnCancel: Story = {
+  args: { ...PASS_IN_FLIGHT_ARGS },
+  play: async () => {
+    await openEditor('p2')
+    await userEvent.click(screen.getByRole('button', { name: t('cancel') }))
+    await waitFor(() =>
+      expect(rowButton('p3', t('reader:entryCard.regenerate'))).not.toBeDisabled(),
+    )
+    expect(screen.queryByRole('button', { name: HELD() })).not.toBeInTheDocument()
+  },
+}
+
+/** Transitions only: opening, a dirty flip and closing report; a keystroke that keeps dirty doesn't. */
+export const EditSessionReportsTransitions: Story = {
+  args: { ...PASS_IN_FLIGHT_ARGS, onEditSession: fn(async () => {}) },
+  play: async ({ args }) => {
+    const report = args.onEditSession as ReturnType<typeof fn>
+    await waitFor(() => expect(report).toHaveBeenLastCalledWith(null))
+    report.mockClear()
+
+    const textarea = await openEditor('p2')
+    await waitFor(() => expect(report).toHaveBeenLastCalledWith({ entryId: 'p2', dirty: false }))
+    await userEvent.type(textarea, '!')
+    await waitFor(() => expect(report).toHaveBeenLastCalledWith({ entryId: 'p2', dirty: true }))
+    const calls = report.mock.calls.length
+    await userEvent.type(textarea, '?')
+    await waitFor(() => expect(textarea).toHaveValue(`${PASS_ROWS[1].content}!?`))
+    expect(report.mock.calls.length).toBe(calls)
+
+    await userEvent.click(screen.getByRole('button', { name: t('cancel') }))
+    await waitFor(() => expect(report).toHaveBeenLastCalledWith(null))
+  },
+}
+
+function RowLeavesHarness(props: ComponentProps<typeof ReaderSurface>) {
+  const [dropped, setDropped] = useState(false)
+  const rows = dropped ? props.rows.filter((row) => row.id !== 'p2') : props.rows
+  return (
+    <>
+      <button type="button" onClick={() => setDropped((prev) => !prev)}>
+        toggle p2
+      </button>
+      <ReaderSurface {...props} rows={rows} />
+    </>
+  )
+}
+
+/** A row leaving the loaded set closes its editor; a redo restoring it shows the row, not the draft. */
+export const EditorRowLeavingDropsDraft: Story = {
+  args: { ...PASS_IN_FLIGHT_ARGS, onEditSession: fn(async () => {}) },
+  render: (args) => <RowLeavesHarness {...args} />,
+  play: async ({ args }) => {
+    const textarea = await openEditor('p2')
+    await userEvent.type(textarea, ' Then I wait.')
+
+    await userEvent.click(screen.getByRole('button', { name: 'toggle p2' }))
+    await waitFor(() => expect(args.onEditSession).toHaveBeenLastCalledWith(null))
+    expect(screen.queryByRole('textbox', { name: t('reader:entryCard.editContent') })).toBeNull()
+
+    await userEvent.click(screen.getByRole('button', { name: 'toggle p2' }))
+    await waitFor(() =>
+      expect(within(entryRow('p2')).getByText(PASS_ROWS[1].content)).toBeVisible(),
+    )
+    expect(screen.queryByRole('textbox', { name: t('reader:entryCard.editContent') })).toBeNull()
+    expect(rowButton('p3', t('reader:entryCard.regenerate'))).not.toBeDisabled()
+  },
+}
+
+function HandleHarness(props: ComponentProps<typeof ReaderSurface>) {
+  const ref = useRef<ReaderSurfaceHandle>(null)
+  const [answer, setAnswer] = useState('')
+  return (
+    <>
+      <button type="button" onClick={() => setAnswer(JSON.stringify(ref.current?.editSession()))}>
+        read session
+      </button>
+      <button
+        type="button"
+        onClick={() => void ref.current?.commitDraft().then((r) => setAnswer(JSON.stringify(r)))}
+      >
+        commit draft
+      </button>
+      <button type="button" onClick={() => ref.current?.discardDraft()}>
+        discard draft
+      </button>
+      <output aria-label="answer">{answer}</output>
+      <ReaderSurface {...props} ref={ref} />
+    </>
+  )
+}
+
+/** The leave guard's handle: a session read, the plain commit, and a discard. */
+export const EditHandleAnswersTheGuard: Story = {
+  args: { ...PASS_IN_FLIGHT_ARGS, onCommitEdit: fn(async () => ({ ok: true })) },
+  render: (args) => <HandleHarness {...args} />,
+  play: async ({ args }) => {
+    const answer = () => screen.getByRole('status', { name: 'answer' })
+    await userEvent.click(screen.getByRole('button', { name: 'commit draft' }))
+    await waitFor(() => expect(answer()).toHaveTextContent('{"ok":true}'))
+    expect(args.onCommitEdit).not.toHaveBeenCalled()
+
+    const textarea = await openEditor('p2')
+    await userEvent.click(screen.getByRole('button', { name: 'read session' }))
+    await waitFor(() => expect(answer()).toHaveTextContent('{"entryId":"p2","dirty":false}'))
+    await userEvent.type(textarea, '!')
+    await userEvent.click(screen.getByRole('button', { name: 'read session' }))
+    await waitFor(() => expect(answer()).toHaveTextContent('{"entryId":"p2","dirty":true}'))
+
+    await userEvent.click(screen.getByRole('button', { name: 'commit draft' }))
+    await waitFor(() =>
+      expect(args.onCommitEdit).toHaveBeenCalledWith('p2', `${PASS_ROWS[1].content}!`),
+    )
+    await waitFor(() =>
+      expect(screen.queryByRole('textbox', { name: t('reader:entryCard.editContent') })).toBeNull(),
+    )
+
+    await openEditor('p2')
+    await userEvent.click(screen.getByRole('button', { name: 'discard draft' }))
+    await waitFor(() =>
+      expect(screen.queryByRole('textbox', { name: t('reader:entryCard.editContent') })).toBeNull(),
+    )
+  },
+}
+
+/** A refused commit keeps the draft and hands back the refusal's code. */
+export const EditHandleRefusedCommitKeepsDraft: Story = {
+  args: {
+    ...PASS_IN_FLIGHT_ARGS,
+    onCommitEdit: fn(async () => ({ ok: false as const, code: 'gated' })),
+  },
+  render: (args) => <HandleHarness {...args} />,
+  play: async () => {
+    const textarea = await openEditor('p2')
+    await userEvent.type(textarea, '!')
+    await userEvent.click(screen.getByRole('button', { name: 'commit draft' }))
+    await waitFor(() =>
+      expect(screen.getByRole('status', { name: 'answer' })).toHaveTextContent(
+        '{"ok":false,"code":"gated"}',
+      ),
+    )
+    expect(screen.getByRole('textbox', { name: t('reader:entryCard.editContent') })).toHaveValue(
+      `${PASS_ROWS[1].content}!`,
+    )
   },
 }

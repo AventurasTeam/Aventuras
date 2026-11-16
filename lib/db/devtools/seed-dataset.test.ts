@@ -1,7 +1,7 @@
 import { desc, eq } from 'drizzle-orm'
 import { afterEach, describe, expect, it } from 'vitest'
 
-import { getRollbackCounts, readRowGuard, undoLastAction } from '@/lib/actions'
+import { getRollbackCounts, readRowGuard, UNDO_KIND_KEY, undoLastAction } from '@/lib/actions'
 import { REF_COLUMNS, rowRefs } from '@/lib/actions/delta/live-refs'
 import { isContentEditDelta } from '@/lib/actions/story-entries/classifier-facts'
 import { ENTRIES_WINDOW_SIZE } from '@/lib/actions/story-entries/recent-window'
@@ -738,6 +738,12 @@ describe('seeded content tokens', () => {
       const payload = edit.undoPayload as { content: string; contentTokens?: number }
       expect(payload.contentTokens, edit.id).toBe(countTokens(payload.content))
     }
+  })
+
+  // An untagged seeded edit would read as unseen, so its undo would ask first.
+  it('tags every seeded content edit as the reader shows it', () => {
+    const edits = (rowsOf('deltas') as unknown as Delta[]).filter(isContentEditDelta)
+    for (const edit of edits) expect(edit.undoPayload?.[UNDO_KIND_KEY], edit.id).toBe('entryText')
   })
 })
 

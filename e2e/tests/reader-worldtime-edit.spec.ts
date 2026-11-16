@@ -5,7 +5,7 @@ import { launchApp, type LaunchedApp } from '../harness/launch'
 import { createSeededUserDataDir, removeUserDataDir } from '../harness/seed'
 import { chrome } from '../locators/chrome'
 import { home } from '../locators/home'
-import { reader } from '../locators/reader'
+import { reader, undoText } from '../locators/reader'
 
 // Retime an entry from its world-time footer — the seam unit tests can't reach:
 // the Popover form's recomputed seconds travel renderer → IPC → SQLite as one
@@ -119,9 +119,17 @@ test.describe('reader — edit an entry world time', () => {
     expect(await editDeltaCount(TARGET_ID)).toBe(1)
     await expect(reader.monotonicityIndicator(app.window, TARGET_ID)).toBeVisible()
 
-    // Undo restores the seconds and prunes the delta with them.
+    // Undo restores the seconds and prunes the delta with them; the reader shows the time in
+    // place, so the label names the entry and nothing asks first.
+    const [[targetAt]] = await queryApp(
+      app.window,
+      `SELECT position FROM story_entries WHERE id = ?`,
+      [TARGET_ID],
+    )
     await chrome.actionsTrigger(app.window).click()
-    await reader.undoRow(app.window).click()
+    await reader
+      .undoRow(app.window, undoText('menu', 'entryTime', { entry: targetAt as number }))
+      .click()
     await expect.poll(() => worldTimeOf(TARGET_ID), { timeout: 15_000 }).toBe(SEEDED_WORLD_TIME)
     expect(await editDeltaCount(TARGET_ID)).toBe(0)
     await expect(reader.monotonicityIndicator(app.window, TARGET_ID)).toHaveCount(0)

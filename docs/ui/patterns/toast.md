@@ -206,6 +206,11 @@ The first argument is the message; the second optional argument is
 context plumbing; matches sonner / react-hot-toast / sonner-native
 conventions.
 
+Each severity method returns the toast's id, and `toast.dismiss(id)`
+removes that toast early. A surface whose newer toast replaces an older
+one keeps the id and dismisses it first, as the reader's undo notice
+does.
+
 Backed by:
 
 - A singleton emitter / store (Zustand or a tiny custom emitter —

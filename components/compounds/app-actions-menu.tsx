@@ -33,6 +33,8 @@ type AppActionsMenuProps = {
    * no signal distinguishes a confirm worth trapping from any other overlay.
    */
   blocked?: boolean
+  /** Passed through to `ActionsMenu`: the reader resolves its Undo label as the menu opens. */
+  onOpenChange?: (open: boolean) => void
 }
 
 // Connected variant of AppActionsMenuPure: reads the diagnostics gate via selector
@@ -43,6 +45,7 @@ export function AppActionsMenu({
   beforeNavigate,
   beforeLeaveStory,
   blocked,
+  onOpenChange,
 }: AppActionsMenuProps) {
   const router = useRouter()
   const surfaceNavigate = useSurfaceNavigate()
@@ -67,6 +70,7 @@ export function AppActionsMenu({
       goTo={story != null ? buildGoToGroup(story, navigateGoTo) : undefined}
       hotkeyEnabled={hotkeyEnabled}
       blocked={blocked}
+      onOpenChange={onOpenChange}
     />
   )
 }

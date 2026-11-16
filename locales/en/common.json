@@ -62,7 +62,7 @@
     "chapterClose": "Chapter close in progress. Cancel to edit.",
     "suggestionRefresh": "Refreshing suggestions. Cancel to edit."
   },
-  "deleteUndoHint": "You can undo this from the reader: {{action}} in its menu, or Cmd/Ctrl-Z.",
+  "deleteUndoHint": "You can undo this from the reader's menu, or with Cmd/Ctrl-Z.",
   "contextWindowSource": {
     "configured": "set by you",
     "detected": "detected"

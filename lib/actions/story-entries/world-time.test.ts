@@ -1,7 +1,14 @@
 import { and, eq } from 'drizzle-orm'
 import { afterEach, describe, expect, it } from 'vitest'
 
-import { applyDeltaAction, undoLastAction, updateEntryWorldTime } from '@/lib/actions'
+import {
+  applyDeltaAction,
+  isPayloadMetaKey,
+  redoLastAction,
+  UNDO_KIND_KEY,
+  undoLastAction,
+  updateEntryWorldTime,
+} from '@/lib/actions'
 import { MAX_WORLD_TIME_SECONDS } from '@/lib/calendar'
 import { branches, deltas, stories, storyEntries, type EntryMetadata } from '@/lib/db'
 import { createTestDb } from '@/lib/db/__tests__/test-db'
@@ -107,7 +114,7 @@ describe('updateEntryWorldTime', () => {
       source: 'user_edit',
     })
     // Column-keyed reversal payload carrying the pre-edit value.
-    expect(rows[0].undoPayload).toEqual({ metadata: { worldTime: 120 } })
+    expect(rows[0].undoPayload).toEqual({ metadata: { worldTime: 120 }, $undoKind: 'entryTime' })
 
     expect((await storedMetadata(db, 'e2'))?.worldTime).toBe(45)
     expect((await storedMetadata(db, 'e1'))?.worldTime).toBe(60)
@@ -427,5 +434,27 @@ describe('updateStoryEntryMetadata partial merge', () => {
     const restored = await storedMetadata(db, 'e2')
     expect(restored?.summary).toBe('s')
     expect(restored?.worldTime).toBe(120)
+  })
+})
+
+describe('the undo-kind tag', () => {
+  it('is payload metadata, which no reversal walk reads as a column', () => {
+    expect(isPayloadMetaKey(UNDO_KIND_KEY)).toBe(true)
+  })
+
+  it('survives an undo and a redo, the edit restoring and re-applying around it', async () => {
+    const { db, runInTransaction } = await createTestDb()
+    const ctx = { db, runInTransaction }
+    await seed(db)
+    expect((await updateEntryWorldTime('b1', 'e2', 45, ctx)).status).toBe('ok')
+
+    expect((await undoLastAction('b1', ctx)).status).toBe('ok')
+    expect((await storedMetadata(db, 'e2'))?.worldTime).toBe(120)
+    expect(await branchDeltas(db)).toHaveLength(0)
+
+    expect((await redoLastAction('b1', ctx)).status).toBe('ok')
+    expect((await storedMetadata(db, 'e2'))?.worldTime).toBe(45)
+    const [redone] = await branchDeltas(db)
+    expect(redone.undoPayload).toEqual({ metadata: { worldTime: 120 }, $undoKind: 'entryTime' })
   })
 })

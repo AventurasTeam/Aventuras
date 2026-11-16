@@ -11,7 +11,7 @@ import { suppressNativeUnloadDialogRace } from '../harness/reload'
 import { createSeededUserDataDir, removeUserDataDir } from '../harness/seed'
 import { chrome } from '../locators/chrome'
 import { home } from '../locators/home'
-import { reader } from '../locators/reader'
+import { reader, undoText } from '../locators/reader'
 import { world } from '../locators/world'
 
 const HERO_STORY = 'story_hero'
@@ -203,7 +203,13 @@ test.describe.serial('World delete', () => {
       ),
     ).toBe(1)
 
-    await undoFromReader(page)
+    // The reader can't show a World delete, so the undo names it and asks first, though the
+    // delete also rewrote the tail entry's scene.
+    await undoFromReader(
+      page,
+      undoText('menu', 'deleted', { name: 'Mira' }),
+      undoText('title', 'deleted', { name: 'Mira' }),
+    )
     await expect
       .poll(() => snapshot(page, branchId, id), { timeout: 30_000 })
       .toEqual({
@@ -227,7 +233,7 @@ test.describe.serial('World delete', () => {
     expect(preRedo.vec8).toBe(1)
 
     await chrome.actionsTrigger(page).click()
-    await reader.redoRow(page).click()
+    await reader.redoRow(page, undoText('redoMenu', 'deleted', { name: 'Mira' })).click()
     await expect
       .poll(() => snapshot(page, branchId, id), { timeout: 30_000 })
       .toEqual({

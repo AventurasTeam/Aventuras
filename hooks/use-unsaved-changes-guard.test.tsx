@@ -12,6 +12,7 @@ const navigation = vi.hoisted(() => ({
 
 vi.mock('@react-navigation/native', () => ({
   useNavigation: () => ({ dispatch: navigation.dispatch }),
+  useRoute: () => ({ key: 'route' }),
   usePreventRemove: (
     preventRemove: boolean,
     callback: (event: { data: { action: unknown } }) => void,

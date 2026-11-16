@@ -56,6 +56,12 @@
     }
   },
   "editFailed": "Couldn't save your edit. Please try again.",
+  "editFocus": {
+    "held": "Finish or cancel the edit first."
+  },
+  "editGuard": {
+    "unresponsive": "The editor isn't responding."
+  },
   "rollbackFailed": "Couldn't roll back the story. Please try again.",
   "rollbackCountsChanged": "The counts changed while this was open. Check them before confirming.",
   "regenerateFailed": "Couldn't regenerate the reply. Please try again.",
@@ -282,6 +288,85 @@
     "blockedWhileGenerating": "Unavailable while generating.",
     "blockedWhileSwapping": "Unavailable while the embedder switch finishes.",
     "unknownCalendar": "This story's calendar isn't available, so world time can't be edited."
+  },
+  "undo": {
+    "menu": {
+      "turn": "Undo the turn at {{entry}}",
+      "entryText": "Undo your edit to {{entry}}",
+      "entryScene": "Undo {{entry}}'s scene",
+      "entryTime": "Undo {{entry}}'s time",
+      "suggestionRefresh": "Undo the suggestion refresh at {{entry}}",
+      "close": "Undo chapter {{number}}'s close…",
+      "rerun": "Undo chapter {{number}}'s re-run…",
+      "keptClose": "Undo the kept close work at {{entry}}…",
+      "created": "Undo adding {{name}}…",
+      "deleted": "Undo deleting {{name}}…",
+      "edited": "Undo your edit to {{name}}…",
+      "rows": "Undo your changes to {{name}} and {{count}} more…",
+      "latest": "Undo the latest change…"
+    },
+    "title": {
+      "close": "Undo chapter {{number}}'s close?",
+      "rerun": "Undo chapter {{number}}'s re-run?",
+      "keptClose": "Undo the kept close work at {{entry}}?",
+      "created": "Undo adding {{name}}?",
+      "deleted": "Undo deleting {{name}}?",
+      "edited": "Undo your edit to {{name}}?",
+      "rows": "Undo your changes to {{name}} and {{count}} more?",
+      "latest": "Undo the latest change?"
+    },
+    "notice": {
+      "turn": "Undid the turn at {{entry}}",
+      "entryText": "Undid your edit to {{entry}}",
+      "entryScene": "Undid {{entry}}'s scene",
+      "entryTime": "Undid {{entry}}'s time",
+      "suggestionRefresh": "Undid the suggestion refresh at {{entry}}",
+      "close": "Undid chapter {{number}}'s close",
+      "rerun": "Undid chapter {{number}}'s re-run",
+      "keptClose": "Undid the kept close work at {{entry}}",
+      "created": "Undid adding {{name}}",
+      "deleted": "Undid deleting {{name}}",
+      "edited": "Undid your edit to {{name}}",
+      "rows": "Undid your changes to {{name}} and {{count}} more",
+      "latest": "Undid the latest change"
+    },
+    "redoMenu": {
+      "turn": "Redo the turn at {{entry}}",
+      "entryText": "Redo your edit to {{entry}}",
+      "entryScene": "Redo {{entry}}'s scene",
+      "entryTime": "Redo {{entry}}'s time",
+      "suggestionRefresh": "Redo the suggestion refresh at {{entry}}",
+      "close": "Redo chapter {{number}}'s close",
+      "rerun": "Redo chapter {{number}}'s re-run",
+      "keptClose": "Redo the kept close work at {{entry}}",
+      "created": "Redo adding {{name}}",
+      "deleted": "Redo deleting {{name}}",
+      "edited": "Redo your edit to {{name}}",
+      "rows": "Redo your changes to {{name}} and {{count}} more",
+      "latest": "Redo the latest change"
+    },
+    "redoNotice": {
+      "turn": "Redid the turn at {{entry}}",
+      "entryText": "Redid your edit to {{entry}}",
+      "entryScene": "Redid {{entry}}'s scene",
+      "entryTime": "Redid {{entry}}'s time",
+      "suggestionRefresh": "Redid the suggestion refresh at {{entry}}",
+      "close": "Redid chapter {{number}}'s close",
+      "rerun": "Redid chapter {{number}}'s re-run",
+      "keptClose": "Redid the kept close work at {{entry}}",
+      "created": "Redid adding {{name}}",
+      "deleted": "Redid deleting {{name}}",
+      "edited": "Redid your edit to {{name}}",
+      "rows": "Redid your changes to {{name}} and {{count}} more",
+      "latest": "Redid the latest change"
+    },
+    "chapterName": "chapter {{number}}",
+    "linkRow": "{{name}} · {{link}}",
+    "row": "{{row}}: {{change}}",
+    "moreRows": "and {{count}} more",
+    "confirm": "Undo",
+    "targetMoved": "A newer change landed, so nothing was undone.",
+    "noticeRedo": "Redo"
   },
   "sceneEdit": {
     "title": "Edit scene",

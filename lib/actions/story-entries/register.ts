@@ -8,7 +8,7 @@ import { PLACE_REFUSAL } from '@/lib/world'
 
 import { computeUndoPayload } from '../delta/delta-encoding'
 import { register, type ActionHandler, TARGET_NOT_FOUND } from '../delta/registry'
-import type { DeltaSource } from '../types'
+import { UNDO_KIND_KEY, type DeltaSource, type UndoKind } from '../types'
 
 export const STORY_ENTRY_REJECTION = {
   openingPosition: 'opening-position',
@@ -38,7 +38,13 @@ declare module '@/lib/actions/action-map' {
       // claims the fields it computed. A whole-column payload built from a read the
       // caller took earlier drags every stale sibling field along with it — the
       // pipeline's phase-start `tail` snapshot is exactly that read.
-      payload: { branchId: string; id: string; metadata: Partial<EntryMetadata> }
+      payload: {
+        branchId: string
+        id: string
+        metadata: Partial<EntryMetadata>
+        /** Set only by a writer whose result the reader shows in place; tags its undo payload. */
+        undoKind?: UndoKind
+      }
     }
     stampEntryChapter: {
       source: DeltaSource
@@ -96,7 +102,7 @@ const updateHandler: ActionHandler = async (action, branchId, ctx) => {
     throw new Error(
       `handler/kind mismatch: expected 'updateStoryEntryMetadata', got '${action.kind}'`,
     )
-  const { branchId: bid, id, metadata } = action.payload
+  const { branchId: bid, id, metadata, undoKind } = action.payload
   if (bid !== branchId)
     return {
       status: 'rejected',
@@ -139,6 +145,7 @@ const updateHandler: ActionHandler = async (action, branchId, ctx) => {
               current.metadata as Record<string, unknown>,
               merged,
             ),
+      ...(undoKind !== undefined ? { [UNDO_KIND_KEY]: undoKind } : {}),
     },
     ops: [
       ctx.db
