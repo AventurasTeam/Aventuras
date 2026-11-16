@@ -166,9 +166,12 @@ for the placement rule.
   item 9: traversal walked from the chrome into the surface, and
   explore-by-touch worked), so this is a regression since. The mount's
   props, `expo`, `react-native` and `react-native-webview` are the same
-  as then. Cause not found. The sliding reader window's PR (#752)
-  doesn't change the mount or the WebView's props (read from its diff);
-  not tried on main, with Google's TalkBack, or on an emulator. Once TalkBack reaches the
+  as then. Cause not found. Last seen working at `ae316a2e9` (#371);
+  seen failing on a release build of `bc1785a78`, on the sliding reader
+  window's branch (#752). Check `f5366181b`, that branch's base on main,
+  first: if it fails there too, #752 isn't the cause. #752 doesn't
+  change the mount or the WebView's props (read from its diff). Not
+  tried with Google's TalkBack or on an emulator. Once TalkBack reaches the
   document, check that its linear navigation extends the slice at the
   bottom shimmer, which that PR's acceptance asked for and couldn't run.
   Raised 2026-11-16 by its Fold session (developer decision).
