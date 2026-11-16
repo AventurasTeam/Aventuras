@@ -195,6 +195,23 @@ describe('useInlineEditGuard', () => {
     expect(second).toHaveBeenCalledOnce()
   })
 
+  it('runs every queued leave even when one throws', async () => {
+    const answer = deferred<QueryAnswer>()
+    const port = { ...fakePort(null), query: vi.fn(() => answer.promise) }
+    const r = render(port)
+    const second = vi.fn()
+    act(() =>
+      r.result.current.guard(() => {
+        throw new Error('navigator gone')
+      }),
+    )
+    act(() => r.result.current.guard(second))
+
+    await act(async () => answer.resolve(null))
+
+    expect(second).toHaveBeenCalledOnce()
+  })
+
   it('drops a held leave when the screen loses focus', async () => {
     const r = render(fakePort(DIRTY))
     const proceed = await leave(r)

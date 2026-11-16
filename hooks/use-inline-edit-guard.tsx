@@ -75,7 +75,16 @@ export function useInlineEditGuard({
     const intents = intentsRef.current
     intentsRef.current = []
     show(null)
-    for (const proceed of intents) proceed()
+    // As World's leave queue: one leave that throws must not strand the ones behind it.
+    for (const proceed of intents) {
+      try {
+        proceed()
+      } catch (error) {
+        logger.error('reader.edit_guard_leave_failed', {
+          error: error instanceof Error ? error.message : String(error),
+        })
+      }
+    }
   }, [show])
 
   const requestLeave = useCallback(

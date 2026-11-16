@@ -1,6 +1,7 @@
 import { expect, test } from '@playwright/test'
 
 import { currentBranchId, queryApp } from '../harness/db'
+import { t } from '../harness/i18n'
 import { launchApp, type LaunchedApp } from '../harness/launch'
 import { createSeededUserDataDir, removeUserDataDir } from '../harness/seed'
 import { chrome } from '../locators/chrome'
@@ -121,9 +122,49 @@ test.describe('reader — edit an entry', () => {
       )[0]
     const draft = 'E2E-GUARD the action was rewritten before leaving.'
 
+    // A saved edit heads the log first: an undo of it is seen, so an unheld CTRL-Z would land at
+    // once rather than open a confirm.
+    const replyId = (
+      await queryApp(
+        app.window,
+        `SELECT id FROM story_entries WHERE branch_id = ? AND kind = 'ai_reply' ORDER BY position DESC LIMIT 1`,
+        [branchId],
+      )
+    )[0][0] as string
+    const headEdit = 'E2E-HEAD the reply was rewritten first.'
+    const replyContent = async (): Promise<string> =>
+      (
+        (
+          await queryApp(app.window, `SELECT content FROM story_entries WHERE id = ?`, [replyId])
+        )[0] as [string]
+      )[0]
+    await reader.row(app.window, replyId).scrollIntoViewIfNeeded()
+    await reader.editEntry(app.window, replyId).click()
+    await reader.editTextarea(app.window).fill(headEdit)
+    await reader.saveEdit(app.window).click()
+    await expect.poll(replyContent, { timeout: 15_000 }).toBe(headEdit)
+    await expect(reader.editTextarea(app.window)).toHaveCount(0)
+
     await reader.row(app.window, entryId).scrollIntoViewIfNeeded()
     await reader.editEntry(app.window, entryId).click()
     await reader.editTextarea(app.window).fill(draft)
+
+    // An open editor holds undo: the shortcut is refused silently, and the menu's row waits on it.
+    await app.window.evaluate(() => (document.activeElement as HTMLElement | null)?.blur())
+    await app.window.keyboard.press('Control+z')
+    // A seen undo commits well inside this; a silent refusal shows nothing at all.
+    await app.window.waitForTimeout(1_500)
+    expect(await replyContent()).toBe(headEdit)
+    // Scoped to the menu's rows: the other entries' held controls carry the same reason.
+    await chrome.actionsTrigger(app.window).click()
+    await expect(
+      app.window
+        .getByRole('option')
+        .getByTitle(t('reader:editFocus.held'), { exact: true })
+        .first(),
+    ).toBeVisible()
+    await app.window.keyboard.press('Escape')
+    await expect(reader.editTextarea(app.window)).toHaveValue(draft)
 
     await chrome.back(app.window).click()
     await expect(saveSession.unsavedDialog(app.window)).toBeVisible()
