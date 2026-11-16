@@ -3780,6 +3780,29 @@ export const SliceChangeAboveWaitsUnderAFinger: Story = {
   },
 }
 
+/** A change held when another screen covered the reader lands once the reader shows again. */
+export const SliceHeldChangeLandsWhenShownAgain: Story = {
+  render: (args) => <SliceHostHarness {...args} />,
+  play: async () => {
+    const scroller = scrollerOf('s71')
+    await settleLanding(scroller)
+    await scrollTo(scroller, 1_200)
+    dispatchTouch(scroller, 'touchstart')
+    press('Extend up')
+    await frames(3)
+    expect(isShown('s46')).toBe(false)
+    const box = scroller.parentElement?.parentElement
+    if (box == null) throw new Error('no reader box')
+    box.style.display = 'none'
+    dispatchTouch(scroller, 'touchend')
+    // Its rest comes and goes while nothing is laid out.
+    await new Promise((resolve) => setTimeout(resolve, 400))
+    expect(isShown('s46')).toBe(false)
+    box.style.display = ''
+    await waitFor(() => expect(isShown('s46')).toBe(true), SLICE_WAIT)
+  },
+}
+
 /** A chapter break mounting above the viewport waits for rest the same way. */
 export const SliceBreakAboveWaitsUnderAFinger: Story = {
   render: (args) => <SliceHostHarness {...args} />,

@@ -591,15 +591,26 @@ export function ReaderSurface({
   // applied to scrollTop. Chrome's scroll anchoring skips this tree (desktop-observed), so the
   // scroller opts out via overflow-anchor:none and this rule is the sole authority; split per-cause
   // compensations fought each other here. When that row is gone, the surviving row nearest it
-  // stands in. The short hold loop absorbs late layout of inserted content. A scroll drops the
-  // memo, so a commit never undoes one: each
-  // props change records afresh in its first commit, which changes nothing.
+  // stands in. The short hold loop absorbs late layout of inserted content. It runs on each slice
+  // adopted; the adoption records the memo just before, and a scroll drops it, so a commit never
+  // undoes one.
   const anchorMemoRef = useRef<AnchorMemo | null>(null)
   // Where the anchor rule last wrote scrollTop: that scroll event is the reader's own write, not the
   // user scrolling (reader-composer.md → Autoscroll), so it moves neither autoscroll nor the memo.
   const anchorWriteRef = useRef<number | null>(null)
   const anchorHoldRafRef = useRef(0)
   useEffect(() => () => cancelAnimationFrame(anchorHoldRafRef.current), [])
+  const recordAnchor = useCallback(() => {
+    const el = scrollRef.current
+    if (el == null || el.getClientRects().length === 0) return
+    anchorMemoRef.current = readAnchor(el, rowElementsOf(el), shownRef.current.branchKey)
+  }, [])
+  // Marks a write as the reader's own only if it moved the scroll: a clamped one fires no event.
+  const writeAnchorScroll = useCallback((el: HTMLElement, top: number) => {
+    const before = el.scrollTop
+    el.scrollTop = top
+    if (el.scrollTop !== before) anchorWriteRef.current = el.scrollTop
+  }, [])
   useLayoutEffect(() => {
     const el = scrollRef.current
     if (el == null || el.getClientRects().length === 0) return
@@ -621,8 +632,12 @@ export function ReaderSurface({
         }
       }
       if (anchor != null && anchor.deltaPx !== 0) {
-        el.scrollTop = Math.max(0, memo.scrollTop + anchor.deltaPx)
-        anchorWriteRef.current = el.scrollTop
+        // Content that shrank under a reader at the bottom has clamped scrollTop already; any
+        // other change since the memo is the reader's own write, which stands.
+        const clamped =
+          el.scrollTop < memo.scrollTop && el.scrollTop >= el.scrollHeight - el.clientHeight - 1
+        const base = clamped ? memo.scrollTop : el.scrollTop
+        writeAnchorScroll(el, Math.max(0, base + anchor.deltaPx))
         const anchorEl = anchor.el
         const targetTop = anchorEl.getBoundingClientRect().top
         cancelAnimationFrame(anchorHoldRafRef.current)
@@ -635,8 +650,7 @@ export function ReaderSurface({
           // can never fully clear — without it this loop would spin to the cap.
           const drift = anchorEl.getBoundingClientRect().top - targetTop
           if (Math.abs(drift) >= 1) {
-            el.scrollTop += drift
-            anchorWriteRef.current = el.scrollTop
+            writeAnchorScroll(el, el.scrollTop + drift)
             stableFrames = 0
           } else {
             stableFrames += 1
@@ -652,7 +666,7 @@ export function ReaderSurface({
       }
     }
     anchorMemoRef.current = readAnchor(el, rowEls, shownBranch)
-  })
+  }, [shown, writeAnchorScroll])
 
   // Adoption: after the anchor rule has recorded the row the reader is on, a props change is
   // adopted before paint, unless it adds or removes rows or breaks above that row, or flips the
@@ -678,6 +692,8 @@ export function ReaderSurface({
     }
     sourceRef.current = incoming
     heldRef.current = false
+    // The row the reader is on, before the change moves anything.
+    recordAnchor()
     const current = shownRef.current
     const landing = landingRef.current
     const pendingBottom = pendingBottomRef.current
@@ -707,7 +723,7 @@ export function ReaderSurface({
         ? sliceFieldsOf(current)
         : composeHeld(current, incoming, anchorId)),
     })
-  }, [incoming, midGesture, armRest])
+  }, [incoming, midGesture, armRest, recordAnchor])
 
   const landingRafRef = useRef(0)
   // A fresh object per landing, so a repeat landing on the same row restarts the clear timer.
@@ -861,7 +877,7 @@ export function ReaderSurface({
     const el = scrollRef.current
     if (el == null || el.getClientRects().length === 0) return
     // Before adopting: the gesture's scrolls dropped the memo the held change would compensate by.
-    anchorMemoRef.current = readAnchor(el, rowElementsOf(el), shownRef.current.branchKey)
+    recordAnchor()
     if (adoptHeld()) return
     if (requestInFlightRef.current) return
     const current = shownRef.current
@@ -886,7 +902,7 @@ export function ReaderSurface({
       const keepId = end === 'top' ? keepTop() : keepBottom()
       if (keepId != null) send(current.onTrim({ end, sliceKey: current.sliceKey, keepId }))
     }
-  }, [adoptHeld, midGesture])
+  }, [adoptHeld, midGesture, recordAnchor])
   useLayoutEffect(() => {
     onRestRef.current = onRest
   })
@@ -1063,6 +1079,8 @@ export function ReaderSurface({
     if (el == null) return
     let lastClientHeight = el.clientHeight
     const observer = new ResizeObserver(() => {
+      // Shown again after another screen: a change held meanwhile is adopted at the next rest.
+      armRest()
       const previousClientHeight = lastClientHeight
       lastClientHeight = el.clientHeight
       if (el.clientHeight >= previousClientHeight || gestureActiveRef.current) return
@@ -1089,7 +1107,7 @@ export function ReaderSurface({
     })
     observer.observe(el)
     return () => observer.disconnect()
-  }, [])
+  }, [armRest])
 
   const jumpToBottom = useCallback(
     (key: number) => {
