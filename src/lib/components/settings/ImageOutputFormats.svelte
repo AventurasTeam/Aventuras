@@ -74,34 +74,34 @@
             <Button
               variant="ghost"
               size="icon"
-              class="h-8 w-8"
+              class="size-8"
               disabled={index === 0}
               aria-label="Prefer {entry.format} more"
               title="Move up"
               onclick={() => onChange(moveImageOutput(value, index, -1))}
             >
-              <ArrowUp class="h-4 w-4" />
+              <ArrowUp class="size-4" />
             </Button>
             <Button
               variant="ghost"
               size="icon"
-              class="h-8 w-8"
+              class="size-8"
               disabled={index === value.length - 1}
               aria-label="Prefer {entry.format} less"
               title="Move down"
               onclick={() => onChange(moveImageOutput(value, index, 1))}
             >
-              <ArrowDown class="h-4 w-4" />
+              <ArrowDown class="size-4" />
             </Button>
             <Button
               variant="ghost"
               size="icon"
-              class="h-8 w-8"
+              class="size-8"
               aria-label="Remove {entry.format}"
               title="Remove"
               onclick={() => onChange(removeImageOutput(value, index))}
             >
-              <X class="h-4 w-4" />
+              <X class="size-4" />
             </Button>
           </div>
         </li>
@@ -118,7 +118,7 @@
           class="uppercase"
           onclick={() => onChange(addImageOutput(value, format))}
         >
-          <Plus class="h-3.5 w-3.5" />
+          <Plus class="size-3.5" />
           {format}
         </Button>
       {/each}
