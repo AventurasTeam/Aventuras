@@ -3,8 +3,9 @@
 import '@/global.css'
 
 import { useDOMImperativeHandle, type DOMImperativeFactory, type DOMProps } from 'expo/dom'
-import { useCallback, useEffect, useRef, type MouseEvent, type Ref } from 'react'
+import { useCallback, useEffect, useLayoutEffect, useRef, type MouseEvent, type Ref } from 'react'
 
+import type { EditBridgeAnswer } from '@/components/reader/edit-bridge-requests'
 import type {
   ReaderSurfaceHandle,
   ReaderSurfaceProps,
@@ -19,6 +20,10 @@ export interface ReaderDocumentRef extends DOMImperativeFactory {
   jumpToBottom: () => void
   // The factory's index signature takes any JSONValue, so a `string` parameter won't compile.
   jumpToEntry: (entryId: DOMImperativeArg) => void
+  // These return nothing over the bridge: each answers its request id through onEditAnswer.
+  queryEditSession: (requestId: DOMImperativeArg) => void
+  commitDraft: (requestId: DOMImperativeArg) => void
+  discardDraft: () => void
 }
 
 type ReaderDocumentProps = ReaderSurfaceProps & {
@@ -27,6 +32,8 @@ type ReaderDocumentProps = ReaderSurfaceProps & {
   syncNonce: number
   onReady: () => Promise<void>
   onFirstPaint: () => Promise<void>
+  /** Answers the host's edit requests by id. Must settle, never reject. */
+  onEditAnswer: (requestId: string, answer: EditBridgeAnswer) => Promise<void>
   ref: Ref<ReaderDocumentRef>
   dom?: DOMProps
 }
@@ -52,16 +59,34 @@ export default function ReaderDocument({
   syncNonce: _syncNonce,
   onReady,
   onFirstPaint,
+  onEditAnswer,
   ref,
   ...surfaceProps
 }: ReaderDocumentProps) {
   const surfaceRef = useRef<ReaderSurfaceHandle>(null)
+  // Each bridge emission hands the document a fresh callback proxy; the handle reads the latest.
+  const onEditAnswerRef = useRef(onEditAnswer)
+  useLayoutEffect(() => {
+    onEditAnswerRef.current = onEditAnswer
+  })
 
   useDOMImperativeHandle(
     ref,
     () => ({
       jumpToBottom: () => surfaceRef.current?.jumpToBottom(),
       jumpToEntry: (entryId) => surfaceRef.current?.jumpToEntry(String(entryId)),
+      queryEditSession: (requestId) => {
+        const session = surfaceRef.current?.editSession() ?? null
+        void onEditAnswerRef.current(String(requestId), { kind: 'query', session })
+      },
+      commitDraft: (requestId) => {
+        // A rejection here would re-reject inside the WebView unlogged; answering lets the host
+        // keep its dialog up with a reason.
+        void (surfaceRef.current?.commitDraft() ?? Promise.resolve({ ok: true as const }))
+          .catch(() => ({ ok: false as const }))
+          .then((result) => onEditAnswerRef.current(String(requestId), { kind: 'commit', result }))
+      },
+      discardDraft: () => surfaceRef.current?.discardDraft(),
     }),
     [],
   )

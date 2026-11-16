@@ -52,3 +52,25 @@ export function rowReversalFlags(args: {
     reversalDisabled: closed,
   }
 }
+
+/**
+ * reader-composer.md → Inline edit session: the leave guard's Save is the editor's own, held by
+ * the same gate with the same reason, so a head-turn edit stays savable through a pass.
+ */
+export function inlineEditSaveGate(args: {
+  entryId: string | null
+  headTurnIds: ReadonlySet<string>
+  editGate: EditGate
+  reasons: { gate: string | undefined; headReversal: string | undefined }
+}): { disabled: boolean; reason: string | undefined } {
+  if (args.entryId == null) return { disabled: false, reason: undefined }
+  const { editDisabled } = rowReversalFlags({
+    rowId: args.entryId,
+    headTurnIds: args.headTurnIds,
+    editGate: args.editGate,
+  })
+  return {
+    disabled: editDisabled,
+    reason: editDisabled ? rowGateReason(args.editGate, args.reasons) : undefined,
+  }
+}

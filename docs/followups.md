@@ -271,41 +271,6 @@ for the placement rule.
   down. Both from 5.3's slice review, 2026-11-03, in stories, not on a
   device. Routed from triage 2026-11-05.
 
-- **The reader's inline edit session isn't built.**
-  [`reader-composer.md → Inline edit session`](./ui/screens/reader-composer/reader-composer.md#inline-edit-session)
-  is the spec. A dirty inline editor raises the navigate-away guard on
-  every leave. While an editor is open, the other entries' actions, a
-  system entry's `Retry`, and undo and redo all wait. Today the draft
-  (`editingId`, `editDraft` in `components/reader/reader-surface.tsx`)
-  has no guard at all. Build notes from the design:
-  - `ReaderSurface` keeps the draft and reports only transitions
-    (`open`, `dirty`) to the route. Its handle's `commitDraft()`
-    returns the commit's result, so the dialog can show a refusal's
-    reason. With no open editor, it counts as clean.
-  - On Android, the document's imperative `commitDraft` answers
-    through a callback, since `useDOMImperativeHandle` documents no
-    return value.
-    - The route arms its guard when an editor opens, and asks the
-      document at leave time whether the draft is dirty. This closes
-      the race a dirty report still in flight would leave. Desktop
-      arms on dirty.
-    - The route clears its session on each document boot
-      (`onReady`), since a crash takes the draft with it.
-  - The route composes the guard as World does:
-    - `useUnsavedChangesGuard` for pops and the window;
-    - `beforeNavigate` on the Actions menu;
-    - `useOverlaySurface` with the guard, for review-row presses and
-      for Slice 5.10's close modal, which runs it first;
-    - a guarded wrapper for its own links: `surfaceNavigate`, the
-      status pill's Memory, the system-entry and cut-off fixes.
-  - Edit-mode focus belongs in `ReaderSurface`, and the undo and redo
-    gate in the route.
-  - A row leaving `rows` clears `editingId`; today only a branch
-    change does.
-
-  Raised in 5.11's review. Developer decision 2026-11-15; designed
-  2026-11-16.
-
 - **Undo doesn't say what it reverses.**
   [`reader-composer.md → Undo and redo`](./ui/screens/reader-composer/reader-composer.md#undo-and-redo)
   is the spec. Each undo and redo names its target. An unseen target,

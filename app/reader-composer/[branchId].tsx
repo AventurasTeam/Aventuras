@@ -21,8 +21,10 @@ import {
   type RollbackRefusal,
 } from '@/components/reader/confirm-refusal'
 import { useContentEditing } from '@/components/reader/content-editing'
+import { createEditRequests, type EditBridgeAnswer } from '@/components/reader/edit-bridge-requests'
 import { EntryJumpVeil } from '@/components/reader/entry-jump-veil'
 import { readerPillPhase } from '@/components/reader/generation-phase'
+import { nativeEditPort, webEditPort } from '@/components/reader/inline-edit-port'
 import { routeJumpToBottom } from '@/components/reader/jump-to-bottom'
 import {
   draftSubmission,
@@ -58,7 +60,12 @@ import {
   settleWithDroppedHandback,
 } from '@/components/reader/regenerate-outcome'
 import { RollbackConfirmModal } from '@/components/reader/rollback-confirm'
-import { editGateOf, rowGateReason } from '@/components/reader/row-reversal-flags'
+import {
+  editGateOf,
+  headTurnIdsOf,
+  inlineEditSaveGate,
+  rowGateReason,
+} from '@/components/reader/row-reversal-flags'
 import { SceneEditSheet } from '@/components/reader/scene-edit-sheet'
 import { useSceneEditing } from '@/components/reader/scene-editing'
 import {
@@ -109,12 +116,12 @@ import { EmptyState } from '@/components/ui/empty-state'
 import { KeyboardInsetColumn } from '@/components/ui/keyboard-inset-column'
 import { useChapterProgress } from '@/hooks/use-chapter-progress'
 import { useGlobalHotkey } from '@/hooks/use-global-hotkey'
+import { useInlineEditGuard } from '@/hooks/use-inline-edit-guard'
 import { useLeaveFailedStoryOpen } from '@/hooks/use-leave-failed-story-open'
 import { useSwapState } from '@/hooks/use-memory-health'
 import { useOverlaySurface } from '@/hooks/use-overlay-surface'
 import { useRouteLink } from '@/hooks/use-route-link'
 import { useStoryLeaveGuard } from '@/hooks/use-story-leave-guard'
-import { useSurfaceNavigate } from '@/hooks/use-surface-navigate'
 import { useTier } from '@/hooks/use-tier'
 import {
   clearSystemEntry,
@@ -180,6 +187,11 @@ import { resolveLead } from '@/lib/world'
 
 const ctx = { db, runInTransaction }
 
+// A live document answers within frames; one that can't in this long can't save the draft either.
+const EDIT_QUERY_TIMEOUT_MS = 2_000
+// A commit can wait on a pass it interrupts, so it gets longer before it reads as unanswered.
+const EDIT_COMMIT_TIMEOUT_MS = 10_000
+
 const loadRollbackCounts = (branchId: string, targetId: string) =>
   getRollbackCounts(branchId, targetId, ctx)
 
@@ -234,9 +246,6 @@ function readerPlaceholder(state: {
 
 export default function ReaderComposerRoute() {
   const router = useRouter()
-  const surfaceNavigate = useSurfaceNavigate()
-  // No pane to guard, so the default guard (C7).
-  useOverlaySurface()
   const tier = useTier()
   const showRail = tier !== 'phone'
   const isFocused = useIsFocused()
@@ -759,6 +768,58 @@ export default function ReaderComposerRoute() {
     headReversal: headReversalRunKind,
     pill: gateRunKind,
   })
+
+  // reader-composer.md → Inline edit session: every leave runs this guard. Armed on dirty on web;
+  // on native on an open editor, since a dirty report can still be crossing the bridge.
+  const editRequests = useMemo(
+    () =>
+      createEditRequests({
+        queryTimeoutMs: EDIT_QUERY_TIMEOUT_MS,
+        commitTimeoutMs: EDIT_COMMIT_TIMEOUT_MS,
+      }),
+    [],
+  )
+  const editPort = useMemo(
+    () =>
+      Platform.OS === 'web'
+        ? webEditPort(() => surfaceRef.current)
+        : nativeEditPort(editRequests, () => documentRef.current),
+    [editRequests],
+  )
+  const editHeadTurnIds = useMemo(() => headTurnIdsOf(entries, tailEntryId), [entries, tailEntryId])
+  const {
+    guard,
+    navigateGuarded,
+    dialog: editGuardDialog,
+  } = useInlineEditGuard({
+    port: editPort,
+    armed: Platform.OS === 'web' ? editSession?.dirty === true : editSession != null,
+    saveGate: inlineEditSaveGate({
+      entryId: editSession?.entryId ?? null,
+      headTurnIds: editHeadTurnIds,
+      editGate,
+      reasons: { gate: gateReason, headReversal: headReversalReason },
+    }),
+  })
+  // C7: review-row presses and the close modal run it first.
+  useOverlaySurface(guard)
+  // Stable for every row's handlers: the guard's own identity follows each session transition.
+  const guardRef = useRef(guard)
+  useLayoutEffect(() => {
+    guardRef.current = guard
+  })
+  const guardEdit = useCallback((proceed: () => void) => guardRef.current(proceed), [])
+  const guardedStripFix = useMemo(
+    () =>
+      stripErrorFix == null
+        ? undefined
+        : { ...stripErrorFix, onPress: () => guardEdit(stripErrorFix.onPress) },
+    [stripErrorFix, guardEdit],
+  )
+  const handleEditAnswer = useCallback(
+    async (requestId: string, answer: EditBridgeAnswer) => editRequests.answer(requestId, answer),
+    [editRequests],
+  )
 
   const runSubmit = useCallback(
     async (content: string, composerMode: string, raw?: { text: string; mode: ComposerMode }) => {
@@ -1451,7 +1512,10 @@ export default function ReaderComposerRoute() {
     documentPaintedRef.current = false
     setDocumentPainted(false)
     setSyncNonce((n) => n + 1)
-  }, [])
+    // A boot took any open editor with it: what waited on the old document resolves as clean.
+    editRequests.resetAll()
+    setEditSession(null)
+  }, [editRequests])
 
   const handleFirstPaint = useCallback(async () => {
     documentPaintedRef.current = true
@@ -1601,10 +1665,16 @@ export default function ReaderComposerRoute() {
   )
 
   const handleRetrySystemEntry = useCallback(async () => retrySystemEntry?.(), [retrySystemEntry])
-  const handleFixSystemEntry = useCallback(async () => fixAction?.onPress(), [fixAction])
+  const handleFixSystemEntry = useCallback(
+    async () => guardEdit(() => fixAction?.onPress()),
+    [fixAction, guardEdit],
+  )
   // One stable action for every row's notice: useProfileFixAction keeps its identity.
   const cutOffFix = useProfileFixAction(true, guardLeave)
-  const handleFixCutOff = useCallback(async () => cutOffFix?.onPress(), [cutOffFix])
+  const handleFixCutOff = useCallback(
+    async () => guardEdit(() => cutOffFix?.onPress()),
+    [cutOffFix, guardEdit],
+  )
   // Editable-target exclusion keeps End moving the caret inside the composer.
   useGlobalHotkey(matchesJumpToBottomShortcut, jumpToBottom, {
     ignoreEditableTargets: true,
@@ -1738,7 +1808,7 @@ export default function ReaderComposerRoute() {
             progress={chapterProgress}
             isFocused={isFocused}
             onJumpToEntry={followEntry}
-            onManageChapters={() => surfaceNavigate(`/chapter-timeline/${branchId}`)}
+            onManageChapters={() => navigateGuarded(`/chapter-timeline/${branchId}`)}
             onOpenChange={setChapterPopoverOpen}
           />
         ) : undefined
@@ -1755,18 +1825,19 @@ export default function ReaderComposerRoute() {
             storyId={storyId}
             blocked={actionsBlocked}
             blockedReason={gateReason}
-            onNavigate={surfaceNavigate}
+            onNavigate={navigateGuarded}
           />
         ) : undefined
       }
       onBack={() => router.back()}
       onOpenStorySettings={() => {
-        if (storyId != null) surfaceNavigate(`/story-settings/${storyId}`)
+        if (storyId != null) navigateGuarded(`/story-settings/${storyId}`)
       }}
       actions={
         <AppActionsMenu
           contextual={contextualActions}
           story={storyId != null ? { storyId, branchId, surface: 'reader' } : undefined}
+          beforeNavigate={guardEdit}
           beforeLeaveStory={guardLeave}
           blocked={rollback != null || timeEdit != null}
         />
@@ -1782,7 +1853,8 @@ export default function ReaderComposerRoute() {
             ? { onCancel: handleCancelPill }
             : {})}
           onOpenMemory={() => {
-            if (storyId != null) router.push(`/story-settings/${storyId}?tab=memory`)
+            if (storyId != null)
+              guardEdit(() => router.push(`/story-settings/${storyId}?tab=memory`))
           }}
         />
       }
@@ -1805,6 +1877,7 @@ export default function ReaderComposerRoute() {
                   syncNonce={syncNonce}
                   onReady={handleReady}
                   onFirstPaint={handleFirstPaint}
+                  onEditAnswer={handleEditAnswer}
                   dom={{
                     scrollEnabled: false,
                     style: { flex: 1 },
@@ -1829,7 +1902,7 @@ export default function ReaderComposerRoute() {
               chips={chips}
               categories={suggestionCategories}
               errorMessage={stripErrorMessage}
-              errorFix={stripErrorFix}
+              errorFix={guardedStripFix}
               canRefresh={canRefreshSuggestions}
               onTapChip={handleTapChip}
               onRefresh={handleRefreshSuggestions}
@@ -1870,7 +1943,7 @@ export default function ReaderComposerRoute() {
               storyId={storyId}
               blocked={actionsBlocked}
               blockedReason={gateReason}
-              onNavigate={surfaceNavigate}
+              onNavigate={navigateGuarded}
             />
           </>
         ) : null}
@@ -1924,6 +1997,7 @@ export default function ReaderComposerRoute() {
           onClose={closeSceneEdit}
         />
       ) : null}
+      {editGuardDialog}
       {storyLeaveDialog}
     </ScreenShell>
   )
